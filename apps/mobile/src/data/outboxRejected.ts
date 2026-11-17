@@ -19,7 +19,7 @@ export const REJECTED_KEEP_MS = 30 * 24 * 3600_000;
 
 /** module: a batch of an add-on module's changes the server refused because the module is not active (spec 33 П21.1);
  *  estimate: a send the server refused for a known reason (REJECT_REASONS) */
-export type RejectedWhat = "deposit" | "invoice" | "payment" | "expense" | "module" | "estimate" | "merge";
+export type RejectedWhat = "deposit" | "invoice" | "payment" | "expense" | "module" | "estimate" | "merge" | "price";
 /**
  * The server's refusals we can explain: its hint (a code we chose in a migration) → our own words. Only these: the
  * server's text is never shown (review #259). estimate_lines_mismatch — the lock check of a version (migration
@@ -73,6 +73,9 @@ export interface RejectedOp {
   /** the server's text, kept for support; never shown (our own words on the card, review #259) */
   error: string;
   at: string;
+  /** what = price (#1913): the group whose price someone changed first, the item it was written through, the price the
+   *  person meant (the screen offers «Поставить $X» — a new write against the price the server has now) */
+  groupPrice?: { group: string; itemId: string; mineCents: number; placeholder: boolean };
 }
 
 /**
@@ -171,6 +174,31 @@ export function dropTemplateOps(items: readonly OwnedItem[], templateId: string,
   const isGone = (x: OwnedItem) =>
     mine.has(x.id) && x.op.k === "est.template.save" && x.op.template.id === templateId;
   return { kept: items.filter((x) => !isGone(x)), gone: items.filter(isGone) };
+}
+
+/**
+ * #1913 (the price-key spec, §4.6): a group's price refused as «someone changed it first» (row_version_conflict):
+ * it and every later waiting price write of the same group go — each was built on this one's expected price.
+ */
+export function dropGroupPriceOps(items: readonly OwnedItem[], group: string, who: Owner | null): { kept: OwnedItem[]; gone: OwnedItem[] } {
+  const mine = new Set(mineOf(items, who).map((x) => x.id));
+  const isGone = (x: OwnedItem) => mine.has(x.id) && x.op.k === "catalog.groupPrice" && x.op.group === group;
+  return { kept: items.filter((x) => !isGone(x)), gone: items.filter(isGone) };
+}
+
+/** the one card per group and person «the group's price was changed by someone else — yours $X is not saved»: the last
+ *  price meant (the latest of the dropped writes) */
+export function groupPriceRejected(prev: readonly RejectedOp[], gone: readonly OwnedItem[], error: string, now: number, who: Owner | null): RejectedOp[] {
+  const last = [...gone].reverse().find((x) => x.op.k === "catalog.groupPrice");
+  if (!last || last.op.k !== "catalog.groupPrice") return [...prev];
+  const op = last.op;
+  const id = `groupPrice.${op.group}.${who?.userId ?? ""}.${who?.companyId ?? ""}`;
+  const owner = last.owner ?? who ?? undefined;
+  const rec: RejectedOp = {
+    id, ...(owner ? { owner } : {}), kind: "catalog.groupPrice", what: "price", href: `/catalog/${op.itemId}`, labelKey: "price.group.rejConflict",
+    groupPrice: { group: op.group, itemId: op.itemId, mineCents: op.priceCents, placeholder: op.placeholder }, error, at: new Date(now).toISOString(),
+  };
+  return [...freshRejected(prev, now).filter((x) => x.id !== id), rec];
 }
 
 /** the card «the template was not saved: changed on another phone» — it opens «Шаблоны смет» (spec 07 §12.7) */

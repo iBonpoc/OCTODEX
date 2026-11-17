@@ -4445,6 +4445,9 @@ export const en: Dict = {
   "photoUp.retried": "Sending the photo again",
   "photoUp.a11y": "not uploaded",
   // spec 53 — quick price of one catalog item (wave 53-1)
+  // #1913: one price for a price group
+  "price.group.rejConflict": "The group price was not saved: it was changed on another phone. Open the item and set the price again",
+  "att.rejected.price": "Group price not saved",
   // #1807 (53-0б): a price counted by the server from the cost
   "price.recalc.att": "{name}: {who} set {sent} — {kept} from the cost was kept",
   "price.recalc.attNoWho": "{name}: {sent} was sent — {kept} from the cost was kept",

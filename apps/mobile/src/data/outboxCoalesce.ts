@@ -30,6 +30,17 @@ const madeIn = (o: OwnedItem) => lower([...createdOf(o), ...(o.op.k === "module.
 
 /** where the op merges into the queue, or -1 (append) */
 export function coalesceAt(items: readonly OwnedItem[], op: Op, who: Owner | null, inFlight: string | null): number {
+  // #1913: two price writes of one group offline are one write (it makes nothing, nothing is tied to it): the last
+  // waiting one of the same group and person, never the one on its way
+  if (op.k === "catalog.groupPrice") {
+    if (!who) return -1;
+    for (let i = items.length - 1; i >= 0; i--) {
+      const x = items[i]!;
+      if (x.id === inFlight || x.op.k !== "catalog.groupPrice" || x.op.group !== op.group) continue;
+      return x.owner && sameOwner(x.owner, who) ? i : -1;
+    }
+    return -1;
+  }
   if (op.k !== "module.op" || !op.coalesceKey || !who) return -1;
   for (let i = items.length - 1; i >= 0; i--) {
     const x = items[i]!;
@@ -47,6 +58,11 @@ export function coalesceAt(items: readonly OwnedItem[], op: Op, who: Owner | nul
 
 /** the newer op in the older one's place: tries start again (it is a new change), what both make stays made */
 export function coalesced(older: OwnedItem, newer: OwnedItem): OwnedItem {
+  // #1913: the values of the newer, what the phone saw of the older (the server compares with what was there before both)
+  if (older.op.k === "catalog.groupPrice" && newer.op.k === "catalog.groupPrice") {
+    const o = older.op;
+    return { ...newer, op: { ...newer.op, expectedPriceCents: o.expectedPriceCents, expectedCostCents: o.expectedCostCents, expectedTaxBps: o.expectedTaxBps, expectedMarkupBps: o.expectedMarkupBps } };
+  }
   const ids = (o: OwnedItem) => [...(o.made ?? []), ...(o.op.k === "module.op" ? o.op.made ?? [] : [])];
   const made = [...lower([...ids(older), ...ids(newer)])];
   const op = newer.op.k === "module.op" && made.length ? { ...newer.op, made } : newer.op;
