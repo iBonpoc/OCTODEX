@@ -54,6 +54,7 @@ declare
   v_src text := coalesce(current_setting('app.cost_source', true), '');
   -- the peers' t32 / t31 clear «price due» as they go: the writer's own row still needs it (code review of #1913, Б1)
   v_due text := coalesce(current_setting('app.item_price_due', true), '');
+  v_mark text := coalesce(current_setting('app.price_group_spreading', true), '');
 begin
   if p_group is null then return; end if;
   select i.unit_price_cents, i.is_placeholder_price into src from public.catalog_items i where i.id = p_from and i.company_id = p_company;
@@ -91,7 +92,7 @@ begin
        and i.id::text <> coalesce(current_setting('app.item_costs_moving', true), '')
        and (i.unit_price_cents, i.is_placeholder_price) is distinct from (src.unit_price_cents, src.is_placeholder_price);
   end if;
-  perform set_config('app.price_group_spreading', '', true);
+  perform set_config('app.price_group_spreading', v_mark, true);
   perform set_config('app.cost_source', v_src, true);
   perform set_config('app.item_price_due', v_due, true);
 end;
@@ -128,6 +129,7 @@ begin
   -- itself right after this trigger)
   if pg_trigger_depth() = 1 then
     perform set_config('app.item_costs_moving', '', true);
+    perform set_config('app.price_group_spreading', '', true);
   end if;
   -- an upsert of a row that is there (old builds: INSERT … ON CONFLICT DO UPDATE) is not a new item: its BEFORE UPDATE
   -- decides with the real old row (code review of #1913, Б2)
@@ -136,9 +138,13 @@ begin
   end if;
   -- who does not see our costs does not put an item that HAS a cost into another group: joining copies the group's cost
   -- over the item's own (security check of #1913, Б1) — the group stays as it was; a new item or one without a cost joins
-  if tg_op = 'UPDATE' and app.price_group(new.attributes) is distinct from app.price_group(old.attributes)
+  if tg_op = 'UPDATE' and app.price_group(new.attributes) is not null
+     and app.price_group(new.attributes) is distinct from app.price_group(old.attributes)
      and auth.uid() is not null and not app.can_view_costs(new.company_id)
-     and exists (select 1 from public.catalog_item_costs c where c.item_id = old.id and c.company_id = new.company_id) then
+     and exists (select 1 from public.catalog_item_costs c where c.item_id = old.id and c.company_id = new.company_id)
+     and exists (select 1 from public.catalog_items i join public.catalog_item_costs c on c.item_id = i.id and c.company_id = i.company_id
+                  where i.company_id = new.company_id and app.price_group(i.attributes) = app.price_group(new.attributes)
+                    and i.deleted_at is null and i.id <> old.id) then
     new.attributes := case when app.price_group(old.attributes) is null then new.attributes - 'priceGroup'
                            else jsonb_set(new.attributes, '{priceGroup}', to_jsonb(old.attributes ->> 'priceGroup')) end;
   end if;
@@ -146,7 +152,9 @@ begin
                          case when tg_op = 'UPDATE' then old.deleted_at end, new.deleted_at) then
     return new;
   end if;
-  -- a group has at most 200 items: a spread is per item of the group (security check of #1913, S1)
+  -- a group has at most 200 items: a spread is per item of the group (security check of #1913, S1); two writers adding to
+  -- one group count one after the other
+  perform pg_advisory_xact_lock(hashtext(new.company_id::text || '/' || app.price_group(new.attributes)));
   if (select count(*) from public.catalog_items i
        where i.company_id = new.company_id and app.price_group(i.attributes) = app.price_group(new.attributes)
          and i.deleted_at is null and i.id <> new.id) >= 200 then
@@ -232,6 +240,22 @@ drop trigger if exists t98_group_cost on public.catalog_item_costs;
 create trigger t98_group_cost after insert or update on public.catalog_item_costs
   for each row execute function app.tg_group_after_cost();
 
+-- ---- a client's own write of the costs never carries a flag in (set by hand they would make a spread skip a row) -----
+create or replace function app.tg_costs_clear_flags()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if pg_trigger_depth() = 1 then
+    perform set_config('app.item_costs_moving', '', true);
+    perform set_config('app.price_group_spreading', '', true);
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app.tg_costs_clear_flags() from public, anon, authenticated;
+drop trigger if exists t09_clear_flags on public.catalog_item_costs;
+create trigger t09_clear_flags before insert or update on public.catalog_item_costs
+  for each row execute function app.tg_costs_clear_flags();
+
 -- ---- the new app's write: one price for the whole group, compared with what the phone saw ----------------------------
 -- p_cost / p_tax_bps / p_markup_bps and their expected values: only for who sees our costs (others pass null).
 -- Returns the number of items whose price or placeholder changed (0 — nothing differed; a counted material's price follows
@@ -247,6 +271,7 @@ declare
   v_costs boolean;
   k       record;
   v_n     integer := 0;
+  v_before jsonb;
   v_was   text := coalesce(current_setting('app.cost_source', true), '');
 begin
   select * into it from public.catalog_items i where i.id = p_item_id and i.deleted_at is null;
@@ -282,6 +307,10 @@ begin
     raise exception 'the group''s price changed meanwhile' using errcode = '40001', hint = 'row_version_conflict';
   end if;
 
+  -- each item's price before (the answer counts the items that changed, each against its own)
+  select coalesce(jsonb_object_agg(i.id::text, jsonb_build_array(i.unit_price_cents, i.is_placeholder_price)), '{}'::jsonb) into v_before
+    from public.catalog_items i
+   where i.company_id = it.company_id and app.price_group(i.attributes) = v_group and i.deleted_at is null;
   perform set_config('app.cost_source', 'module', true);
   -- the cost first (who sees it): each material then counts its price from it (t32 / t31)
   if v_costs and (p_cost_cents is not null or p_tax_bps is not null or p_markup_bps is not null) then
@@ -304,7 +333,8 @@ begin
   -- the answer: the items whose price or placeholder is different now than before the call (not the rows touched)
   select count(*) into v_n from public.catalog_items i
    where i.company_id = it.company_id and app.price_group(i.attributes) = v_group and i.deleted_at is null
-     and (i.unit_price_cents, i.is_placeholder_price) is distinct from (it.unit_price_cents, it.is_placeholder_price);
+     and v_before ? i.id::text
+     and jsonb_build_array(i.unit_price_cents, i.is_placeholder_price) is distinct from v_before -> i.id::text;
   perform set_config('app.cost_source', v_was, true);
   return v_n;
 end;

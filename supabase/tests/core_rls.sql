@@ -16476,4 +16476,52 @@ select tst.fails($q$select public.catalog_set_group_price('53620000-0000-4000-80
   'T362 sales cannot set the price of a group that has a counted material, through any of its items');
 \echo 'T362 a mixed group ok'
 
+
+-- T362 (more): the answer counts each item against its own price (a group that differs today); a markup-only call keeps
+-- the cost; a forged «spreading» marker does not stop a cost spread of an old build; a group has at most 200 items
+:as_super
+do $t$ begin
+  set local session_replication_role = replica;
+  update public.catalog_items set unit_price_cents = 100 where id = '53510000-0000-4000-8000-0000000000a1';
+  update public.catalog_items set unit_price_cents = 150 where id = '53510000-0000-4000-8000-0000000000a2';
+  set local session_replication_role = origin;
+end $t$;
+:as_office_a
+select tst.ok(public.catalog_set_group_price('53510000-0000-4000-8000-0000000000a1', 150, false, null, null, null, 100) = 1
+          and pg_temp.p351('53510000-0000-4000-8000-0000000000a1') = 150,
+  'T362 a group that differs today: the count is of the items that changed, each against its own price');
+:as_super
+do $t$ begin
+  set local session_replication_role = replica;
+  update public.catalog_items set unit_price_cents = 150 where id = '53510000-0000-4000-8000-0000000000a1';
+  update public.catalog_items set unit_price_cents = 100 where id in ('53510000-0000-4000-8000-0000000000a2');
+  set local session_replication_role = origin;
+end $t$;
+:as_office_a
+select tst.ok(public.catalog_set_group_price('53510000-0000-4000-8000-0000000000a1', 100, false, null, null, null, 150) = 1,
+  'T362 …also when the named item is the one that changes nothing else (b was 100 already, a changed)');
+select tst.ok(public.catalog_set_group_price('53520000-0000-4000-8000-0000000000c1', 1400, false, null, null, 10000, 1400, 700, 0, 10000) >= 0
+          and (select bool_and(unit_cost_cents = 700) from public.catalog_item_costs where item_id in ('53520000-0000-4000-8000-0000000000c1','53520000-0000-4000-8000-0000000000c2')),
+  'T362 a markup-only call keeps the group''s cost ($7.00), it does not wipe it');
+do $t$ begin
+  perform set_config('app.price_group_spreading', 'ca000000-0000-0000-0000-000000000000/t352:mat', true);
+  update public.catalog_items set unit_cost_cents = 800 where id = '53520000-0000-4000-8000-0000000000c1';
+end $t$;
+select tst.ok((select bool_and(unit_cost_cents = 800) from public.catalog_item_costs where item_id in ('53520000-0000-4000-8000-0000000000c1','53520000-0000-4000-8000-0000000000c2')),
+  'T362 a forged «spreading» marker does not stop an old build''s cost spread');
+do $t$ begin
+  perform set_config('app.item_costs_moving', '53520000-0000-4000-8000-0000000000c2', true);
+  update public.catalog_item_costs set unit_cost_cents = 900 where item_id = '53520000-0000-4000-8000-0000000000c1';
+end $t$;
+select tst.ok((select bool_and(unit_cost_cents = 900) from public.catalog_item_costs where item_id in ('53520000-0000-4000-8000-0000000000c1','53520000-0000-4000-8000-0000000000c2'))
+          and pg_temp.p351('53520000-0000-4000-8000-0000000000c2') = 1800,
+  'T362 a forged «moving» flag on a direct cost write skips no item');
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes)
+select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'service', 'T362 full ' || g, 'ea', 1, '{"priceGroup":"t362:full"}'
+  from generate_series(1, 200) g;
+select tst.fails($q$insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes)
+  values ('53620000-0000-4000-8000-0000000000e9', 'ca000000-0000-0000-0000-000000000000', 'service', 'T362 one too many', 'ea', 1, '{"priceGroup":"t362:full"}')$q$,
+  'T362 a group has at most 200 items (54000)');
+\echo 'T362 more ok'
+
 \echo 'ALL TESTS PASSED'
