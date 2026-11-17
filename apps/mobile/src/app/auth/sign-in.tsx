@@ -9,11 +9,11 @@ import { useStore } from "@/data/store";
 import { emailTypoFix } from "@/features/emailTypo";
 import { LegalAgree } from "@/features/LegalAgree";
 import { legalErrorKey, PENDING_LEGAL_KEY, rememberAgreement } from "@/features/legal";
-import { codeDigits, CODE_LENGTH, CODE_MIN, errPlace, needsSupport, nextReadyAt, resendLeft, signInError, type SignInErr } from "@/features/signIn";
+import { codeAfterFail, codeDigits, CODE_LENGTH, CODE_MIN, errPlace, needsSupport, nextReadyAt, resendLeft, signInError, type SignInErr } from "@/features/signIn";
 import { useI18n } from "@/i18n";
 import { Button, TextField } from "@/ui/controls";
 import { Sheet } from "@/ui/overlays";
-import { Press, T } from "@/ui/primitives";
+import { T } from "@/ui/primitives";
 import { FieldError } from "@/ui/requiredForm";
 import { haptics } from "@/ui/haptics";
 import { FieldGroup, FormMain, ListRow, Screen } from "@/ui/surfaces";
@@ -42,6 +42,8 @@ export default function SignIn() {
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
+  // grows after a wrong code: the code field takes the focus and its digits are selected (spec 52 §6)
+  const [selectCode, setSelectCode] = useState(0);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<Shown | null>(null);
@@ -161,9 +163,9 @@ export default function SignIn() {
     if (busy) return;
     if (digits.length < CODE_MIN) return setErr({ text: t("auth.need.code", { n: String(CODE_LENGTH) }), place: "code" });
     setDoing("check");
-    // a wrong or old code is cleared: the next one is typed or put in by iOS over nothing (review PR-1 Ж2)
+    // a wrong or old code stays, its digits selected: the person checks them, the next code is typed over them (spec 52 §6, С1)
     return act(() => auth.verifyCode(sentTo, digits), done, (r) => {
-      if (r.key === "auth.err.code") setCode("");
+      if (codeAfterFail(r.key) === "select") setSelectCode((n) => n + 1);
     });
   };
   const onCode = (v: string) => {
@@ -200,7 +202,6 @@ export default function SignIn() {
   const support = () => void Linking.openURL(mailto(SUPPORT_EMAIL, t("auth.title")));
 
   // a text link is a real 44-high box (DS §7.1; the web has no hitSlop — §11 п.18)
-  const hitBox = { minHeight: component.button.hit, justifyContent: "center" as const, alignSelf: "flex-start" as const };
   const label = (text: string) => (
     <T v="caption" w="semibold" tone="mut">
       {text}
@@ -242,11 +243,7 @@ export default function SignIn() {
                 onSubmit={step === "email" ? sendCode : undefined}
               />
               {typo ? (
-                <Press testID="auth-typo" onPress={() => setEmail(typo)} accessibilityRole="button" accessibilityLabel={t("auth.typo", { email: typo })} style={hitBox}>
-                  <T v="caption" w="semibold" style={{ textDecorationLine: "underline" }}>
-                    {t("auth.typo", { email: typo })}
-                  </T>
-                </Press>
+                <Button label={t("auth.typo", { email: typo })} variant="ghost" onPress={() => setEmail(typo)} testID="auth-typo" />
               ) : null}
             </View>
             <View style={{ gap: space[1] }}>
@@ -272,11 +269,7 @@ export default function SignIn() {
                     {sentTo}
                   </T>
                 </View>
-                <Press testID="auth-change-email" onPress={changeEmail} accessibilityRole="button" accessibilityLabel={t("auth.change")} style={hitBox}>
-                  <T v="body" w="semibold" style={{ textDecorationLine: "underline" }}>
-                    {t("auth.change")}
-                  </T>
-                </Press>
+                <Button label={t("auth.change")} variant="ghost" onPress={changeEmail} testID="auth-change-email" />
               </View>
             </View>
             <View style={{ gap: space[1] }}>
@@ -290,6 +283,7 @@ export default function SignIn() {
                 testID="auth-code"
                 autoFocus
                 selectOnFocus
+                focusNow={selectCode}
                 error={under("code")}
                 onSubmit={() => void verify()}
               />
@@ -358,20 +352,15 @@ export default function SignIn() {
             {t("auth.demoNote")}
           </T>
           <Button label={t("auth.demoGo")} variant="ghost" onPress={() => router.replace("/")} testID="auth-demo" />
-          <Press
-            testID="auth-use-password"
+          <Button
+            label={t("auth.usePassword")}
+            variant="ghost"
             onPress={() => {
               setErr(null);
               setStep("password");
             }}
-            accessibilityRole="button"
-            accessibilityLabel={t("auth.usePassword")}
-            style={hitBox}
-          >
-            <T v="caption" tone="mut" style={{ textDecorationLine: "underline" }}>
-              {t("auth.usePassword")}
-            </T>
-          </Press>
+            testID="auth-use-password"
+          />
         </View>
       ) : null}
       <Sheet visible={noMail} onClose={() => setNoMail(false)} title={t("auth.noMail")}>

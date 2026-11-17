@@ -9,7 +9,7 @@
  * - «Отправить ещё раз» only after the pause (a countdown before), a new code clears the field and says so;
  * - «Не пришло письмо?» — a sheet with what to check; «Изменить» → step 1, the pause stays;
  * - the server's own wait → «через N с»; the built-in mail refusing an address → plain words, never its English;
- * - a wrong code is cleared: the next one is typed over nothing and checked;
+ * - a wrong code stays with its digits selected (spec 52 §6, С1): the next one is typed over it and checked;
  * - without the network «Получить код» says «Нужна сеть» and sends nothing;
  * - no password sign-up anywhere.
  */
@@ -72,11 +72,18 @@ exports.run = async (h) => {
   await tid("auth-code").getByText(/Код неверный или устарел/).waitFor({ timeout: 6000 });
   h.expect(verifyCalls === 1, `the ${LEN}th digit checked the code by itself (${verifyCalls})`);
   h.expect(/\/auth\/sign-in/.test(p.url()), "stays on the sign-in");
-  h.expect((await codeIn.inputValue()) === "", "a wrong code is cleared");
+  // spec 52 §6, С1: a wrong code stays, its digits selected — the next one is typed over them
+  h.expect((await codeIn.inputValue()) === "12345678".slice(0, LEN), "a wrong code stays in the field");
+  await p.waitForFunction(
+    ([el, n]) => document.activeElement === el && el.selectionStart === 0 && el.selectionEnd === n,
+    [await codeIn.elementHandle(), LEN],
+    { timeout: 4000 },
+  );
   await h.shot("wrong-code");
-  await Promise.all([p.waitForRequest("**/auth/v1/verify*", { timeout: 6000 }), codeIn.fill("87654321".slice(0, LEN))]);
+  await Promise.all([p.waitForRequest("**/auth/v1/verify*", { timeout: 6000 }), codeIn.pressSequentially("87654321".slice(0, LEN))]);
   await tid("auth-code").getByText(/Код неверный или устарел/).waitFor({ timeout: 6000 });
-  h.expect(verifyCalls === 2, `a new code over the cleared field is checked (${verifyCalls})`);
+  h.expect(verifyCalls === 2, `a new code typed over the selected one is checked (${verifyCalls})`);
+  h.expect((await codeIn.inputValue()) === "87654321".slice(0, LEN), "the new code replaced the old one");
 
   // after the pause: «Отправить ещё раз» → a new code, the field cleared, the screen says so
   await p.clock.fastForward(61_000);

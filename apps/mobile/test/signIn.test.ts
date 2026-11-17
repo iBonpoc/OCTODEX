@@ -3,7 +3,7 @@
  * The messages are GoTrue's own (they reach the screen as error.message).
  */
 import { describe, it, expect } from "vitest";
-import { codeDigits, CODE_LENGTH, errPlace, needsSupport, nextReadyAt, RESEND_S, resendLeft, signInError } from "@/features/signIn";
+import { codeAfterFail, codeDigits, CODE_LENGTH, errPlace, needsSupport, nextReadyAt, RESEND_S, resendLeft, signInError } from "@/features/signIn";
 import { en } from "@/i18n/en";
 import { ru } from "@/i18n/ru";
 import { es } from "@/i18n/es";
@@ -85,5 +85,18 @@ describe("the code as typed", () => {
     expect(codeDigits("1234 5678")).toBe("12345678");
     expect(codeDigits(" 12-34-56-78-9")).toBe("12345678");
     expect(codeDigits("abc")).toBe("");
+  });
+});
+
+// spec 52 §6, С1: ДАНО код отправлен; КОГДА введён неверный или устаревший код; ТОГДА цифры остаются и выделены,
+// новый код набирается поверх. Другие отказы (сеть, лимиты) цифры не трогают и не выделяют.
+describe("С1: the code field after a refused check", () => {
+  it("a wrong or old code stays selected", () => {
+    expect(codeAfterFail(signInError("Token has expired or is invalid").key)).toBe("select");
+    expect(codeAfterFail(signInError("otp_expired").key)).toBe("select");
+  });
+  it("other refusals keep the digits as they are", () => {
+    for (const m of ["Failed to fetch", "Too many requests", "email rate limit exceeded", "Error sending magic link email", "something else"])
+      expect(codeAfterFail(signInError(m).key)).toBe("keep");
   });
 });

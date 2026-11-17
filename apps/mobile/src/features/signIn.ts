@@ -80,3 +80,12 @@ export function needsSupport(key: SignInErrKey): boolean {
 export function codeDigits(s: string): string {
   return s.replace(/\D/g, "").slice(0, CODE_LENGTH);
 }
+
+/**
+ * what the code field does after a refused check (spec 52 §6, С1): a wrong or old code stays with its digits selected —
+ * the person sees what was typed, the next code is typed over it; any other refusal (network, limits) keeps the digits as
+ * they are, so «Войти» checks them again
+ */
+export function codeAfterFail(key: SignInErrKey): "select" | "keep" {
+  return key === "auth.err.code" ? "select" : "keep";
+}
