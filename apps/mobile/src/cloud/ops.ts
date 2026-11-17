@@ -1104,8 +1104,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       const it = op.item;
       // #1958 (а): an item already there whose cost this save changed — the cost goes over what the phone saw
       // (catalog_set_item_costs), never in the item's row (t30 would put it over whatever is there)
-      const seen = op.costsSeen && !op.onlyNew && Object.keys(catalogCostCols(op)).length ? op.costsSeen : undefined;
-      const costCols = seen ? {} : catalogCostCols(op);
+      let seen = op.costsSeen && !op.onlyNew && Object.keys(catalogCostCols(op)).length ? op.costsSeen : undefined;
+      let costCols = seen ? {} : catalogCostCols(op);
       const card = catalogCardCols(it);
       const seenWrite = async () => {
         const r = await supabase.rpc("catalog_set_item_costs", { p_item_id: it.id, p_costs: catalogCostCols(op), p_seen: costColsOf(seen!) });
@@ -1115,9 +1115,9 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           if (k.error && !["42501", "42P01", "PGRST205"].includes(k.error.code ?? "")) await run(Promise.resolve(k));
           return;
         }
-        // no right to our costs (42501 no_costs: the right was taken meanwhile) — the item itself is saved, as the side
-        // table's refusal below (sales never changes a cost on the phone: nothing of it was shown to them)
-        if (r.error?.code === "42501") return;
+        // no right to our costs (42501 no_costs: the right was taken meanwhile), or the item went to the Trash (P0002) —
+        // the item itself is saved, as the side table's refusal below (code review of #1958 №5)
+        if (r.error?.code === "42501" || r.error?.code === "P0002") return;
         await run(Promise.resolve(r));
       };
       // spec 53-0 (PRD 04 §9 «merge by field»): an item already there gets only the columns this save changed — a save
@@ -1150,8 +1150,13 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           r = await update(row);
         }
         await run(Promise.resolve(r));
-        // no row updated (not on the server yet, or not ours to change) — the whole row, as before: the server decides
-        if (!(Array.isArray(r.data) && r.data.length)) r = null;
+        // no row updated (not on the server yet, or not ours to change) — the whole row, as before: the server decides;
+        // its cost goes with it (a new row: nothing there to be changed meanwhile — code review of #1958 №3)
+        if (!(Array.isArray(r.data) && r.data.length)) {
+          r = null;
+          seen = undefined;
+          costCols = catalogCostCols(op);
+        }
       }
       const upsertItem = (cardCols: Record<string, string | null>) =>
         supabase.from("catalog_items").upsert(

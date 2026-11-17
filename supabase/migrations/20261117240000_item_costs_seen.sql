@@ -56,9 +56,12 @@ begin
   select c.unit_cost_cents, c.vendor_tax_bps, c.markup_bps into k
     from public.catalog_item_costs c where c.item_id = it.id and c.company_id = it.company_id for update;
   v_now := jsonb_build_object('unit_cost_cents', k.unit_cost_cents, 'vendor_tax_bps', k.vendor_tax_bps, 'markup_bps', k.markup_bps);
-  -- what the phone saw is still there, field by field — or someone changed it first: nothing is written
+  -- what the phone saw is still there, field by field — or someone changed it first: nothing is written. A field that
+  -- already holds the value sent counts as matching: the same call again (its answer lost, the queue retries) or a
+  -- group peer the spread already wrote (a batch over one price group) is no conflict (code review of #1958 №1, №2)
   for v_key in select jsonb_object_keys(p_costs) loop
-    if (v_now -> v_key) is distinct from coalesce(p_seen -> v_key, 'null'::jsonb) then
+    if (v_now -> v_key) is distinct from coalesce(p_seen -> v_key, 'null'::jsonb)
+       and (v_now -> v_key) is distinct from (p_costs -> v_key) then
       raise exception 'the item''s cost changed meanwhile' using errcode = '40001', hint = 'row_version_conflict';
     end if;
   end loop;

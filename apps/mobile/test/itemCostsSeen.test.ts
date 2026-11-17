@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type Call = { kind: "update" | "upsert" | "rpc"; table: string; row?: Record<string, unknown>; args?: Record<string, unknown> };
 const calls: Call[] = [];
-const next = { rpc: null as null | { message: string; code?: string; hint?: string } };
+const next = { rpc: null as null | { message: string; code?: string; hint?: string }, updateRows: [{ id: "i1" }] as unknown[] };
 vi.mock("@/cloud/client", () => {
   const chain = (data: unknown) => {
     const q: Record<string, unknown> = {};
@@ -21,7 +21,7 @@ vi.mock("@/cloud/client", () => {
   return {
     supabase: {
       from: (table: string) => ({
-        update: (row: Record<string, unknown>) => (calls.push({ kind: "update", table, row }), chain([{ id: "i1" }])),
+        update: (row: Record<string, unknown>) => (calls.push({ kind: "update", table, row }), chain(next.updateRows)),
         upsert: (row: Record<string, unknown>) => (calls.push({ kind: "upsert", table, row }), chain(null)),
         select: () => chain({ id: "i1", deleted_at: null }),
       }),
@@ -41,6 +41,7 @@ const hasCost = (row?: Record<string, unknown>) => !!row && COST.some((c) => c i
 beforeEach(() => {
   calls.length = 0;
   next.rpc = null;
+  next.updateRows = [{ id: "i1" }];
 });
 
 describe("unit:itemCostsSeen — #1958 (а)", () => {
@@ -89,6 +90,20 @@ describe("unit:itemCostsSeen — #1958 (а)", () => {
     const e = await applyOp({ k: "catalog.save", item: item({ costCents: 500 }), costs: { costCents: 500 }, costsSeen: { costCents: 400 }, fields: [] }, "c1", "u1").catch((x: unknown) => x);
     expect(classify(e)).toBe("refusal");
     expect(isRowConflict(e)).toBe(true);
+  });
+
+  it("С8: the field update finds no row (not on the server yet): the whole row with its cost, no check against nothing", async () => {
+    next.updateRows = [];
+    await applyOp({ k: "catalog.save", item: item({ name: "Coil 2 (test)", costCents: 500 }), costs: { costCents: 500 }, costsSeen: { costCents: 400 }, fields: ["name"] }, "c1", "u1");
+    expect(calls.some((c) => c.kind === "rpc")).toBe(false);
+    expect(calls.some((c) => c.kind === "upsert" && c.table === "catalog_items" && c.row?.unit_cost_cents === 500)).toBe(true);
+  });
+
+  it("С5: the right to our costs taken meanwhile (42501) or the item in the Trash (P0002): the item is saved, the cost quietly not", async () => {
+    for (const code of ["42501", "P0002"]) {
+      next.rpc = { message: "no", code };
+      await expect(applyOp({ k: "catalog.save", item: item({ costCents: 500 }), costs: { costCents: 500 }, costsSeen: { costCents: 400 }, fields: [] }, "c1", "u1")).resolves.toBeUndefined();
+    }
   });
 
   it("С9: a server before the migration (PGRST202): the side table as before", async () => {

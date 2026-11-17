@@ -16860,6 +16860,10 @@ select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-
 select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') = '[500, 0, 10000]'::jsonb
           and (select unit_price_cents = 1000 from public.catalog_items where id = '53650000-0000-4000-8000-0000000000a1'),
   'T367 С2: the cost and the price stay as the other one wrote them');
+-- the same call again (its answer lost, the queue retries): the server already holds the value sent — no conflict
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": 500}', '{"unit_cost_cents": 400}')$q$) = 'ok'
+          and pg_temp.k365('53650000-0000-4000-8000-0000000000a1') = '[500, 0, 10000]'::jsonb,
+  'T367 С2: a retry of a call that was written is no conflict (idempotent)');
 
 -- T368: field by field — only the fields sent are compared and written (a markup over a cost changed by another is fine)
 \echo 'T368 only the fields sent'
@@ -16881,6 +16885,12 @@ select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a3') = '[300, null
   'T370 С7: both colours: $3.00 + 100% — $6.00');
 select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a3', '{"unit_cost_cents": 350}', '{"unit_cost_cents": null}')$q$) = '40001',
   'T370 С7: the other colour''s phone that saw none: 40001 (the group has a cost now)');
+-- a batch over one group (a supplier's tax for every item of it): the second item's call meets the value the first one
+-- already spread — no conflict
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a2', '{"vendor_tax_bps": 500}', '{"vendor_tax_bps": null}')$q$) = 'ok'
+          and pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a3', '{"vendor_tax_bps": 500}', '{"vendor_tax_bps": null}')$q$) = 'ok'
+          and pg_temp.k365('53650000-0000-4000-8000-0000000000a3') = '[300, 500, 10000]'::jsonb,
+  'T370 С7: a batch over one group — the peer already holds the value sent: no conflict');
 rollback;
 \echo 'T365–T370 ok'
 
