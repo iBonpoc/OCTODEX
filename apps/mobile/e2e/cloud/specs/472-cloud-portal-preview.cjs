@@ -35,12 +35,17 @@ exports.run = async (h, { seed, admin }) => {
   const C = uuid(); const P = uuid();
   const est = [{ e: uuid(), v: uuid(), o: uuid(), dep: '{"kind":"none"}', title: `Nightly 472 sign ${run}` },
                { e: uuid(), v: uuid(), o: uuid(), dep: '{"kind":"pct","bps":1000}', title: `Nightly 472 pay ${run}` }];
+  const docOf = (x) => JSON.stringify({
+    options: [{ id: x.o, name: "Only", recommended: true, lines: [{ id: uuid(), group: "labor", name: "Nightly 472 line", quantity: "1", unit: "ea", unitPriceCents: 20000 }] }],
+    settings: { discount: null, tax: { enabled: false, rateBps: 0, groups: { service: true, labor: true, material: true } }, deposit: JSON.parse(x.dep).kind === "pct" ? { kind: "pct", bps: 1000 } : { kind: "none" }, caHic: true },
+  });
   const sql = [
     `insert into public.customers (id, company_id, display_name) values ('${C}', '${A}', 'Nightly 472 ${run}');`,
     `insert into public.properties (id, company_id, customer_id, address_line1, address_city) values ('${P}', '${A}', '${C}', '472 Cloud St', 'Pasadena');`,
     ...est.flatMap((x) => [
       `insert into public.estimates (id, company_id, customer_id, property_id, title) values ('${x.e}', '${A}', '${C}', '${P}', '${x.title}');`,
-      `insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values ('${x.v}', '${A}', '${x.e}', 1, '${x.dep}');`,
+      // the doc the app reads (calc_inputs, as ops.ts writes it): without it the estimate has no «⋯» menu on the phone
+      `insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule, calc_inputs) values ('${x.v}', '${A}', '${x.e}', 1, '${x.dep}', '${docOf(x)}');`,
       `update public.estimates set current_version_id = '${x.v}' where id = '${x.e}';`,
       `insert into public.estimate_options (id, company_id, version_id, name) values ('${x.o}', '${A}', '${x.v}', 'Only');`,
       `insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents) values ('${A}', '${x.o}', 'labor', 'Nightly 472 line', 1, 20000);`,
