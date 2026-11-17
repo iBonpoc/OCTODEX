@@ -123,6 +123,7 @@ exports.run = async (h) => {
   await tid("module-gutters-stale-update").getByRole("button").click();
   // the review asks first: an estimate is changed only by a press (opening a link never writes)
   await tid("view-estimate-ask").waitFor({ timeout: 8000 });
+  h.expect(Number((await lineOf(eid, g.id))?.quantity) === q1, "the link alone changed nothing: the quantity is the one before");
   await tid("view-estimate-ask-action").getByRole("button").click();
   await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 8000 });
   h.expect(new URL(p.url()).searchParams.get("id") === eid, "the same estimate");

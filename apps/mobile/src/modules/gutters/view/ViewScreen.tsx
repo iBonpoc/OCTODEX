@@ -69,7 +69,7 @@ export default function ViewScreen() {
 
 /**
  * The body of «Просмотр замера»: the screen above and the 1280 panel of «Замеры». `estimate` — «Смета из замера» /
- * «Обновить из замера» came with estimate=1: done once; `from` — "draw": «Править чертёж» goes back to that canvas.
+ * «Обновить из замера» came with estimate=1: asked once (a press writes); `from` — "draw": «Править чертёж» goes back to that canvas.
  */
 export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, panel }: { mid: string; estimate?: boolean; from?: string; /** the measurement was deleted from its card */ onGone: () => void; /** in the 1280 panel beside «Замеры»: one column */ panel?: boolean }) {
   const store = useStore();
@@ -250,6 +250,16 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
             the rest on the right (П25.3 Б); a phone and the 1280 panel — one column, the same order */}
         <View style={cols ? { flexDirection: "row", alignItems: "flex-start", gap: space[4] } : { gap: space[4] }}>
         <View style={{ gap: space[4], ...(cols ? { flex: 1, minWidth: 0 } : {}) }}>
+        {/* came by a link to make / update the estimate: the question on top, above the content (DS Б9) — a press writes */}
+        {ask && (action.kind === "make" || action.kind === "update") ? (
+          <Banner
+            tone="info"
+            testID="view-estimate-ask"
+            title={t(action.kind === "make" ? "mod.gutters.view.askMake" : "mod.gutters.view.askUpdate")}
+            action={{ label: t(action.kind === "make" ? "mod.gutters.est.make" : "mod.gutters.est.update"), onPress: () => { setAsk(false); doEstimate(); } }}
+            onClose={() => setAsk(false)}
+          />
+        ) : null}
         {/* the drawing whole — to look at only: no gestures, nothing to tap */}
         <View testID="view-drawing" pointerEvents="none" onLayout={(e) => setW(Math.round(e.nativeEvent.layout.width))}>
           {sheet ? <DocSheet sheet={sheet} testID="view-svg" /> : null}
@@ -258,17 +268,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
           <View testID="view-empty"><T tone="mut">{t("mod.gutters.view.empty")}</T></View>
         ) : null}
 
-        {/* the main action by the state (#699) and «Править чертёж»; came by a link to make / update the estimate — asked first */}
-        {ask && (action.kind === "make" || action.kind === "update") ? (
-          <Banner
-            tone="info"
-            testID="view-estimate-ask"
-            title={t(action.kind === "make" ? "mod.gutters.view.askMake" : "mod.gutters.view.askUpdate")}
-            action={{ label: t(action.kind === "make" ? "mod.gutters.est.make" : "mod.gutters.est.update"), onPress: () => { setAsk(false); doEstimate(); } }}
-            onClose={() => setAsk(false)}
-            closeLabel={t("common.close")}
-          />
-        ) : null}
+        {/* the main action by the state (#699) and «Править чертёж» */}
         <View style={{ gap: space[2] }}>
           {money$ && action.kind === "needLead" ? (
             <View testID="view-action-link"><Button label={t("mod.gutters.view.link")} icon="user" onPress={() => setLinkOpen(true)} /></View>

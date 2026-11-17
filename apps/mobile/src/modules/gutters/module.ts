@@ -12,7 +12,7 @@ import { starterWant } from "./prices";
 import { benchOfferedHere } from "./bench/visible";
 
 const draw = moduleHref("gutters", "draw");
-/** «Просмотр замера» (#698): the drawing whole, its list, the estimate by the state; estimate=1 does the estimate at once */
+/** «Просмотр замера» (#698): the drawing whole, its list, the estimate by the state; estimate=1 asks to make / update it (a press writes) */
 const view = moduleHref("gutters", "view");
 /** «Замер желобов» on a lead, an address or a visit: its newest measurement's card opens, else a new one linked to it on the canvas (S4g, П24, П25.3 В) */
 function measure(data: unknown, by: { leadId?: string; propertyId?: string; leadIds?: readonly string[] }) {

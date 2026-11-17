@@ -42,6 +42,10 @@ exports.run = async (h) => {
   h.expect(!/\/estimate\//.test(p.url()), "still on the review: no estimate editor opened by itself");
   h.expect((await estimatesOf(mid)).length === 0, "opening the link made no estimate");
   await h.shot("ask");
+  // «✕» closes the question: nothing made either
+  await tid("view-estimate-ask").getByRole("button", { name: "Скрыть" }).click();
+  await tid("view-estimate-ask").waitFor({ state: "detached", timeout: 5000 });
+  h.expect((await estimatesOf(mid)).length === 0, "the question closed: no estimate");
   // the same link on the canvas (an old one) goes to the review and asks the same
   await h.go(`/module/gutters/draw?m=${encodeURIComponent(mid)}&estimate=1`);
   await tid("view-estimate-ask").waitFor({ timeout: 8000 });
