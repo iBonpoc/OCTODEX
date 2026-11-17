@@ -9,7 +9,7 @@ exports.run = async (h) => {
   await h.go("/settings/design-system/notices");
   await vis("showcase-crash").waitFor({ timeout: 8000 });
   const text = (await vis("crash-view").innerText()).replace(/\s+/g, " ");
-  h.expect(/Что-то пошло не так/.test(text), `says: ${text}`);
+  h.expect(/Приложение остановилось/.test(text), `says: ${text}`);
   h.expect(/неотправленные изменения целы/.test(text), `says nothing is lost: ${text}`);
   await vis("crash-retry").getByRole("button", { name: "Повторить" }).click();
   const last = async () => (await vis("showcase-state-pressed").innerText()).replace(/\s+/g, " ").trim();
