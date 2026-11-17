@@ -26,27 +26,39 @@ export const ERASE_FUNCTIONS = [
   "public.storage_erase_fail",
 ];
 
+/** every function in the migrations whose name says «erase»: nobody has to remember to list a new one */
+export function eraseFunctionsIn(sqls: string[]): string[] {
+  const names = new Set<string>(ERASE_FUNCTIONS);
+  for (const sql of sqls)
+    for (const m of sql.matchAll(/create (?:or replace )?function ((?:app|public)\.[a-z_0-9]*erase[a-z_0-9]*)\s*\(/gi)) names.add(m[1]!.toLowerCase());
+  return [...names].sort();
+}
+
 /** the body (head to the closing `$$;`) of the function's definition in one migration, or null */
 export function definitionIn(sql: string, fn: string): string | null {
   const re = new RegExp(`create (?:or replace )?function ${fn.replace(".", "\\.")}\\s*\\(`, "gi");
   let last: string | null = null;
   for (const m of sql.matchAll(re)) {
     const end = sql.indexOf("\n$$;", m.index!);
-    last = sql.slice(m.index!, end === -1 ? undefined : end + 4);
+    // another delimiter ($f$, $body$) would cut the body wrong and let a printed text pass: refuse it
+    if (end === -1) throw new Error(`${fn}: no «$$;» end of the body found — use the plain $$ delimiter`);
+    last = sql.slice(m.index!, end + 4);
   }
   return last;
 }
 
-/** the printed error text: sqlerrm, or message_text read from get stacked diagnostics */
+/** the printed error text: sqlerrm, or message_text / pg_exception_detail / _hint / _context read from the error */
 export function printsErrorText(body: string): boolean {
   const code = body.split("\n").map((l) => l.replace(/--.*$/, "")).join("\n");
-  return /\bsqlerrm\b/i.test(code) || /\bmessage_text\b/i.test(code);
+  return /\bsqlerrm\b/i.test(code) || /\b(?:message_text|pg_exception_(?:detail|hint|context))\b/i.test(code);
 }
 
 describe("erasure logs carry SQLSTATE only", () => {
   it("the last definition of every erasure function prints no error text", () => {
     const files = fs.readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();
-    for (const fn of ERASE_FUNCTIONS) {
+    const all = files.map((f) => fs.readFileSync(path.join(DIR, f), "utf8"));
+    expect(eraseFunctionsIn(all).length).toBeGreaterThanOrEqual(ERASE_FUNCTIONS.length);
+    for (const fn of eraseFunctionsIn(all)) {
       let last: { f: string; body: string } | null = null;
       for (const f of files) {
         const body = definitionIn(fs.readFileSync(path.join(DIR, f), "utf8"), fn);
@@ -59,6 +71,8 @@ describe("erasure logs carry SQLSTATE only", () => {
   it("the fixtures: an error text is caught, sqlstate and a comment about it pass", () => {
     expect(printsErrorText("raise warning 'x: % %', sqlstate, sqlerrm;")).toBe(true);
     expect(printsErrorText("get stacked diagnostics v = message_text;")).toBe(true);
+    expect(printsErrorText("get stacked diagnostics v = pg_exception_detail;")).toBe(true);
+    expect(() => definitionIn("create function app.g() returns void language plpgsql as $f$ begin end; $f$;", "app.g")).toThrow(/no «\$\$;»/);
     expect(printsErrorText("raise warning 'x: %', sqlstate;")).toBe(false);
     expect(printsErrorText("-- the text (sqlerrm) is not logged\nraise warning 'x: %', sqlstate;")).toBe(false);
     // the last definition wins: an older one with sqlerrm does not count once a later one is clean
