@@ -113,8 +113,8 @@ describe("every derived part says why (§2.13)", () => {
       expect(sum, `${p.key} ${w.rule}`).toBe(Number(p.qty));
     }
   });
-  it("the counts are not changed by it: the parts version stays as #1818 left it, 4 (the quantities are held by gutterParts.test.ts; 5 comes with PR-1)", () => {
-    expect(GUTTER_PARTS_VERSION).toBe("4");
+  it("the parts version is 5: «Расход v2» PR-1б changes what a drawing counts (bends on site, the round default, Д1)", () => {
+    expect(GUTTER_PARTS_VERSION).toBe("5");
   });
   it("a big drawing still fits the revision (the server takes elements + parts up to 512 KB): the parts of 200 runs and 200 downspouts stay under 384 KB", () => {
     const colors = ["white", "brown", "black", "almond", "bronze"];

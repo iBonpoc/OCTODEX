@@ -116,6 +116,11 @@ export interface MeasuredDownspout {
   elbows?: { style: string; qty: number }[];
   /** offsets, inches: standard ones by the rules (1, 2, 4); anything else is a custom part */
   offsets?: { lengthIn: number; qty: number }[];
+  /**
+   * The elbows are bent on site (`field`) or ready-made (`ready`) — one for the whole downspout (spec 33-gutters-consumption §2.1).
+   * Unset: `bendOf` decides (a plain rectangular one with no elbows of its own is bent on site). Old phones do not know it.
+   */
+  elbowBend?: ElbowBend;
   /** size changes on the way down, e.g. 3x4 → 2x3 */
   reducers?: { to: string; qty: number }[];
   bottom: { kind: DsBottomKind; lengthIn?: number; color?: string; /** drain pipe size, inches */ pipe?: string };
@@ -132,6 +137,8 @@ export interface MeasuredDownspout {
   /** half round: an end section with an outlet at this end of the run replaces the end cap and the outlet */
   endOutlet?: "start" | "end";
 }
+
+export type ElbowBend = "field" | "ready";
 
 export interface MeasuredChain {
   id: string;
@@ -215,8 +222,19 @@ export interface GutterRules {
   defaultElbows: { style: string; qty: number }[];
   /** …of a plain (smooth) rectangular one: founder 16.11 «у прямого водостока стандартно колен 0» — it is bent on site (#1776) */
   defaultElbowsPlain: { style: string; qty: number }[];
-  /** …of a round one (45°…90°; «A» is not a round elbow, #871): not set — as many 45° as `defaultElbows` has elbows */
-  defaultElbowsRound?: { style: string; qty: number }[];
+  /** …of a round one (30°…90°; «A» is not a round elbow, #871): founder 16.11 «колено только одно», 75° or 45° (§2.15 №2) */
+  defaultElbowsRound: { style: string; qty: number }[];
+  /** offsets of a round one without its own: founder 16.11 «и офсет тоже один», 2″ (§2.15 №2) */
+  defaultOffsetsRound: { lengthIn: number; qty: number }[];
+  /** bends of a downspout bent on site when it has no elbows of its own (spec §2.1, Н2) */
+  fieldBends: number;
+  /** downspout one bend on site takes, inches, by its size «2x3» (founder 16.11 «зависит от размера водостока», §2.15 №3, Н7) */
+  bendInBySize: Record<string, number>;
+  /** …of a size not in the table */
+  bendInDefault: number;
+  /** a downspout's estimate line is rounded up to this many feet, each downspout on its own; the sticks are not (Д1, Н8; 1 — whole
+   *  feet, 0 — as drawn) */
+  dsRoundUpFt: number;
   /** offsets sold ready-made; others are marked custom */
   stdOffsetsIn: number[];
   /** advice: max gutter length one downspout drains */
@@ -260,6 +278,12 @@ export const DEFAULT_GUTTER_RULES: GutterRules = {
   sidedCapProfiles: ["k", "fascia"],
   defaultElbows: [{ style: "A", qty: 3 }],
   defaultElbowsPlain: [],
+  defaultElbowsRound: [{ style: "75", qty: 1 }],
+  defaultOffsetsRound: [{ lengthIn: 2, qty: 1 }],
+  fieldBends: 3,
+  bendInBySize: { "2x3": 6, "3x4": 6, "4x5": 6 },
+  bendInDefault: 6,
+  dsRoundUpFt: 10,
   stdOffsetsIn: [1, 2, 4],
   maxRunPerDownspoutIn: 480,
   expansionJointIn: 600,
@@ -298,6 +322,7 @@ export function resolveGutterRules(over?: GutterRulesOverride): GutterRules {
       Object.entries({ ...d.kitLengthIn, ...o.kitLengthIn }).map(([part, t]) => [part, Object.fromEntries(Object.entries(t ?? {}).filter(([, v]) => typeof v === "string" && v.trim() !== ""))]),
     ),
     woodScrew: { ...d.woodScrew, ...o.woodScrew },
+    bendInBySize: { ...d.bendInBySize, ...o.bendInBySize },
   };
   r.woodScrew = { ...r.woodScrew, washer: r.woodScrew.washer === true };
   if (typeof r.sealantByColor !== "boolean") r.sealantByColor = d.sealantByColor;
@@ -309,6 +334,15 @@ export function resolveGutterRules(over?: GutterRulesOverride): GutterRules {
   if (!Number.isInteger(r.wasteFt) || r.wasteFt < 0) r.wasteFt = d.wasteFt;
   if (!Number.isInteger(r.cutCornerAllowanceIn) || r.cutCornerAllowanceIn < 0) r.cutCornerAllowanceIn = d.cutCornerAllowanceIn;
   if (!Number.isInteger(r.cutCornerOutAllowanceIn) || r.cutCornerOutAllowanceIn < 0) r.cutCornerOutAllowanceIn = d.cutCornerOutAllowanceIn;
+  // whole and ≥ 0, else the default (a blank field is 0 — for these 0 is a real choice: no bends, nothing eaten, no rounding)
+  const wholeOr = (v: unknown, def: number) => (typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : def);
+  r.fieldBends = wholeOr(r.fieldBends, d.fieldBends);
+  r.bendInDefault = wholeOr(r.bendInDefault, d.bendInDefault);
+  r.dsRoundUpFt = wholeOr(r.dsRoundUpFt, d.dsRoundUpFt);
+  r.bendInBySize = Object.fromEntries(Object.entries(r.bendInBySize).map(([k, v]) => [k, wholeOr(v, d.bendInBySize[k] ?? r.bendInDefault)]));
+  const list = <T extends { qty: number }>(v: unknown, def: T[]): T[] => (Array.isArray(v) && v.every((x) => x && typeof x === "object" && Number.isInteger((x as T).qty) && (x as T).qty >= 0) ? (v as T[]) : def);
+  r.defaultElbowsRound = list(r.defaultElbowsRound, d.defaultElbowsRound);
+  r.defaultOffsetsRound = list(r.defaultOffsetsRound, d.defaultOffsetsRound).filter((o) => Number.isInteger(o.lengthIn) && o.lengthIn > 0);
   return r;
 }
 
@@ -527,16 +561,56 @@ export function purchaseQty(qty: DecLike, packSize: DecLike): Dec {
  * (a part, its quantity, an elbow rule — as #871 did). Not for a change in the core's money (a line, a discount): that is
  * `ENGINE_VERSION`, and it must not mark every estimate as «расчёт изменился». Estimates remember it in their lines.
  */
-export const GUTTER_PARTS_VERSION = "4"; // 4: a plain rectangular downspout has no elbows by default, a corrugated one 3 × A, #1776; 3: the waste is a fixed 10 ft for every gutter stock by default, #1355; 2: waste 10% by default and a separate allowance for an outside corner (14″), #1355
+export const GUTTER_PARTS_VERSION = "5"; // 5: «Расход v2» PR-1б — a plain rectangular downspout bent on site (3 bends, +6″ each, «гиб по месту»), a round one 1 × 75° and a 2″ offset, the estimate's downspout rounded up to 10 ft each (spec 33-gutters-consumption §2.1, §2.15 №1–6); 4: a plain rectangular downspout has no elbows by default, a corrugated one 3 × A, #1776; 3: the waste is a fixed 10 ft for every gutter stock by default, #1355; 2: waste 10% by default and a separate allowance for an outside corner (14″), #1355
 
 /**
- * The elbows a downspout gets when it has none of its own (#1776, founder 16.11): a rectangular plain one — none (bent on
- * site), a corrugated one — 3 × A; a round one — as many 45° as the corrugated default has (as before, #871; round ones
- * wait for the founder's word). The app reads its default from here: one rule, not two copies.
+ * How a downspout's elbows are made (spec 33-gutters-consumption §2.1 п.2, founder 16.11 «гнут по месту только гладкий
+ * прямоугольный»): its own `elbowBend`; else bent on site when it is rectangular, explicitly plain and has no elbows of its own;
+ * else ready-made — an old drawing without `dsStyle` and elbows set by hand keep their parts (rule 16).
  */
-export function defaultElbowsFor(ds: Pick<MeasuredDownspout, "shape" | "dsStyle">, rules: Pick<GutterRules, "defaultElbows" | "defaultElbowsPlain" | "defaultElbowsRound"> = DEFAULT_GUTTER_RULES): { style: string; qty: number }[] {
-  if (ds.shape === "round") return rules.defaultElbowsRound ?? [{ style: "45", qty: rules.defaultElbows.reduce((n, x) => n + Math.max(0, x.qty), 0) }];
+export function bendOf(ds: Pick<MeasuredDownspout, "shape" | "dsStyle" | "elbows" | "elbowBend">): ElbowBend {
+  if (ds.elbowBend === "field" || ds.elbowBend === "ready") return ds.elbowBend;
+  return ds.shape === "rect" && ds.dsStyle === "plain" && ds.elbows === undefined ? "field" : "ready";
+}
+
+/**
+ * The elbows a downspout gets when it has none of its own (#1776, founder 16.11; §2.1, §2.15 №2): one bent on site — the
+ * company's bends (3) as «A», a style the drawing shows; a corrugated rectangular one — 3 × A ready; a plain rectangular one
+ * made ready or without a kind — none; a round one — 1 × 75°. The app reads its default from here: one rule, not two copies.
+ */
+export function defaultElbowsFor(ds: Pick<MeasuredDownspout, "shape" | "dsStyle" | "elbowBend">, rules: Pick<GutterRules, "defaultElbows" | "defaultElbowsPlain" | "defaultElbowsRound" | "fieldBends"> = DEFAULT_GUTTER_RULES): { style: string; qty: number }[] {
+  if (ds.shape === "round") return rules.defaultElbowsRound;
+  if (bendOf({ ...ds, elbows: undefined }) === "field") return rules.fieldBends > 0 ? [{ style: "A", qty: rules.fieldBends }] : [];
   return ds.dsStyle === "corrugated" ? rules.defaultElbows : rules.defaultElbowsPlain;
+}
+
+/** The offsets a downspout gets when it has none of its own: a round one — 1 × 2″ (§2.15 №2), others none. */
+export function defaultOffsetsFor(ds: Pick<MeasuredDownspout, "shape">, rules: Pick<GutterRules, "defaultOffsetsRound"> = DEFAULT_GUTTER_RULES): { lengthIn: number; qty: number }[] {
+  return ds.shape === "round" ? rules.defaultOffsetsRound : [];
+}
+
+/**
+ * What bending on site does to a downspout (§2.1 п.3, §2.2, Д6, Д7, Р4): each elbow is one bend, each offset two bends and its
+ * own length; each bend takes the company's inches for the size. Ready-made elbows — nothing (they are parts).
+ */
+export function fieldBendOf(ds: Pick<MeasuredDownspout, "shape" | "size" | "dsStyle" | "elbows" | "offsets" | "elbowBend">, rules: Pick<GutterRules, "defaultElbows" | "defaultElbowsPlain" | "defaultElbowsRound" | "defaultOffsetsRound" | "fieldBends" | "bendInBySize" | "bendInDefault"> = DEFAULT_GUTTER_RULES): { bends: number; perBendIn: number; offsetIn: number; addedIn: number } {
+  const perBendIn = rules.bendInBySize[ds.size] ?? rules.bendInDefault;
+  if (bendOf(ds) !== "field") return { bends: 0, perBendIn, offsetIn: 0, addedIn: 0 };
+  let bends = 0;
+  let offsetIn = 0;
+  for (const e of ds.elbows ?? defaultElbowsFor(ds, rules)) bends += Math.max(0, e.qty);
+  for (const o of ds.offsets ?? defaultOffsetsFor(ds, rules)) {
+    if (o.qty <= 0) continue;
+    bends += 2 * o.qty;
+    offsetIn += Math.max(0, o.lengthIn) * o.qty;
+  }
+  return { bends, perBendIn, offsetIn, addedIn: bends * perBendIn + offsetIn };
+}
+
+/** a downspout's estimate length: rounded up to the step, inches (Д1); 0 or less — as it is */
+export function dsRoundedIn(lengthIn: number, stepFt: number): number {
+  const step = stepFt * 12;
+  return step > 0 ? Math.ceil(lengthIn / step) * step : lengthIn;
 }
 
 export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOverride): GutterPartsResult {
@@ -747,16 +821,23 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     if (!run) { advice.push({ code: "downspout_without_run", downspoutId: ds.id }); continue; }
     dsPerRun.set(run.id, (dsPerRun.get(run.id) ?? 0) + 1);
     if (ds.bottom.kind === "lower_roof" && run.story <= 1 && ds.heightIn === undefined) advice.push({ code: "lower_roof_from_first_story", downspoutId: ds.id });
+    // the wall's length (fasteners) and the downspout's: bending on site eats downspout (§2.2), the estimate rounds it up (Д1)
     const lenIn = downspoutLengthIn(ds, run.story, rules);
-    const len = dec(lenIn);
+    const fb = fieldBendOf(ds, rules);
+    const pipeIn = lenIn + fb.addedIn;
+    const billIn = dsRoundedIn(pipeIn, rules.dsRoundUpFt);
     const sz = [ds.shape, ds.size, ...(ds.dsStyle ? [ds.dsStyle] : [])].join(".");
     const color = ds.color ?? "-";
     const dsAttrs = { shape: ds.shape, size: ds.size, ...(ds.dsStyle ? { dsStyle: ds.dsStyle } : {}), material: ds.material, ...(ds.gauge ? { gauge: ds.gauge } : {}), ...(ds.finish ? { finish: ds.finish } : {}), ...(ds.color ? { color: ds.color } : {}) };
     const dsKey = [sz, ds.material, ...(ds.gauge ? [seg(ds.gauge)] : []), color].join(".");
-    acc.add({ key: `ds.${dsKey}`, section: "downspouts", unit: "ft", use: "estimate", kind: "material", attrs: dsAttrs }, ft(len));
+    acc.add({ key: `ds.${dsKey}`, section: "downspouts", unit: "ft", use: "estimate", kind: "material", attrs: dsAttrs }, ft(dec(billIn)),
+      billIn !== pipeIn ? { rule: "ds_round_up", params: { downspouts: 1, lengthIn: pipeIn, stepFt: rules.dsRoundUpFt, ft: billIn / 12 }, setting: "dsRoundUpFt" } : undefined);
     const kind = sticksByKind.get(dsKey);
-    if (kind) kind.lengths.push(lenIn);
-    else sticksByKind.set(dsKey, { attrs: { ...dsAttrs, stickIn: String(rules.dsStickIn) }, lengths: [lenIn] });
+    if (kind) kind.lengths.push(pipeIn);
+    else sticksByKind.set(dsKey, { attrs: { ...dsAttrs, stickIn: String(rules.dsStickIn) }, lengths: [pipeIn] });
+    if (fb.bends > 0)
+      acc.add({ key: "labor.bend", section: "labor", unit: "ea", use: "estimate", kind: "labor", attrs: { work: "bend" } }, fb.bends,
+        { rule: "bend_in_place", params: { downspouts: 1, bends: fb.bends, perBendIn: fb.perBendIn, addedIn: fb.addedIn }, setting: "bendInBySize" });
 
     // wall fasteners: the kit for this shape and wall, 2 per 10 ft
     const wall = ds.wall ?? rules.defaultWall;
@@ -773,14 +854,16 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     }
     joint("outlet", run);
 
-    // downspout joints: every stick, elbow, offset, reducer and the bottom piece joins the one above
-    let pieces = Math.ceil(lenIn / rules.dsStickIn);
-    for (const e of ds.elbows ?? defaultElbowsFor(ds, rules)) {
+    // downspout joints: every stick, elbow, offset, reducer and the bottom piece joins the one above; a bend on site is no piece
+    // and no part (§2.1 п.3, п.5)
+    let pieces = Math.ceil(pipeIn / rules.dsStickIn);
+    const ready = bendOf(ds) === "ready";
+    for (const e of ready ? ds.elbows ?? defaultElbowsFor(ds, rules) : []) {
       if (e.qty <= 0) continue;
       pieces += e.qty;
       acc.add({ key: `elbow.${e.style}.${dsKey}`, section: "downspouts", unit: "ea", use: "both", kind: "material", attrs: { ...dsAttrs, part: "elbow", style: e.style } }, e.qty);
     }
-    for (const o of ds.offsets ?? []) {
+    for (const o of ready ? ds.offsets ?? defaultOffsetsFor(ds, rules) : []) {
       if (o.qty <= 0) continue;
       pieces += o.qty;
       const std = rules.stdOffsetsIn.includes(o.lengthIn);
