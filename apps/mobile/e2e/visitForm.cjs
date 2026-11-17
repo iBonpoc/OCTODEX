@@ -12,9 +12,9 @@ async function pickVisitDay(page, offset, scope) {
   if ((await root.getByTestId("vf-date-panel").locator("visible=true").count()) === 0) await vis(root.getByTestId("vf-date-row-button")).click();
   const panel = vis(root.getByTestId("vf-date-panel"));
   await panel.waitFor({ timeout: 4000 });
-  // a day beyond this month: the calendar's «Вперёд» until it is drawn
+  // a day beyond this month: the calendar's «Следующий месяц» until it is drawn
   for (let i = 0; i < 3 && (await root.getByTestId(`vf-date-day-${key}`).locator("visible=true").count()) === 0; i++) {
-    await panel.getByRole("button", { name: /^(Вперёд|Next|Siguiente)$/ }).first().click();
+    await vis(root.getByTestId("vf-date-day-next")).click();
   }
   await vis(root.getByTestId(`vf-date-day-${key}`)).click();
   await panel.waitFor({ state: "hidden", timeout: 4000 });

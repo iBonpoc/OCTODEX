@@ -34,7 +34,7 @@ exports.run = async (h) => {
   h.expect(/\/job\/schedule/.test(p.url()), `the form for the job opens (${p.url()})`);
   await p.getByTestId("vf-date-row-button").locator("visible=true").first().click(); // the day — DateField (spec 56 wave 5б)
   await p.getByTestId("vf-date-panel").locator("visible=true").first().waitFor({ timeout: 4000 });
-  await p.getByTestId("vf-date-panel").locator("visible=true").first().getByRole("button", { name: "Вперёд" }).click();
+  await p.getByTestId("vf-date-day-next").locator("visible=true").first().click(); // «Следующий месяц»
   // next month of the company's calendar, the 15th (a day key: labelled in UTC, as the calendar does — П4b)
   const [ny, nm] = todayKey().split("-").map(Number);
   const nextKey = new Date(Date.UTC(ny, nm, 15)).toISOString().slice(0, 10);

@@ -61,11 +61,11 @@ exports.run = async (h) => {
   h.expect(/Сегодня/.test(await tid("showcase-date-row-button").innerText()), "С2 «Сегодня» in one tap");
   // С10: the focus is back on the row after a pick (web)
   await p.waitForFunction(() => document.activeElement?.getAttribute("data-testid") === "showcase-date-row-button", null, { timeout: 3000 }).then(() => h.expect(true, "С10 the focus is back on the row"), () => h.expect(false, "С10 the focus is back on the row"));
-  // a calendar day: today + 5 (in this month or the next: «Вперёд»)
+  // a calendar day: today + 5 (in this month or the next: «Следующий месяц»)
   const later = addDays(today, 5);
   await tid("showcase-date-row-button").click();
   for (let i = 0; i < 2 && (await p.getByTestId(`showcase-date-day-${later}`).locator("visible=true").count()) === 0; i++)
-    await tid("showcase-date-panel").getByRole("button", { name: "Вперёд" }).click();
+    await tid("showcase-date-day-next").click();
   const laterLabel = await tid(`showcase-date-day-${later}`).getAttribute("aria-label");
   await tid(`showcase-date-day-${later}`).click();
   await tid("showcase-date-panel").waitFor({ state: "hidden", timeout: 4000 });
