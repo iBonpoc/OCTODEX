@@ -26,6 +26,8 @@
 --                            into the other items of its group (their prices then follow by t32 / t31).
 --     No «spreading» flag (a flag set by hand would switch the spread off — T358): every write goes «only where it
 --     differs», so a spread that reaches the group again finds it equal and stops (one change — one spread, T353).
+-- Deadlocks: catalog_set_group_price locks a group in one order; two old builds' plain updates of two items of one group
+-- at once can still deadlock (each holds its own row first) — 40P01, which the queue retries (outboxRetry: transient).
 -- Rule 16: no column or table changes; new functions, triggers and an index. Old phones keep working: what they send is
 -- spread (a stale whole row of an old build is spread too — the new phone shows it, spec §4.6; PR2 / PR3).
 
@@ -37,6 +39,7 @@ $$;
 revoke all on function app.price_group(jsonb) from public, anon, authenticated;
 -- the index below is computed as the writer: whoever writes catalog_items runs it (pure: reads only the given json)
 grant execute on function app.price_group(jsonb) to authenticated;
+-- the index below uses it: a change of its body needs `reindex index public.catalog_items_price_group_idx`
 
 -- the group's items of a company are found by this (catalog_items is not a big table — migrationGuard BIG_TABLES)
 create index if not exists catalog_items_price_group_idx on public.catalog_items (company_id, (app.price_group(attributes)))
@@ -49,12 +52,17 @@ declare
   src record;
   k   record;
   v_src text := coalesce(current_setting('app.cost_source', true), '');
+  -- the peers' t32 / t31 clear «price due» as they go: the writer's own row still needs it (code review of #1913, Б1)
+  v_due text := coalesce(current_setting('app.item_price_due', true), '');
 begin
   if p_group is null then return; end if;
   select i.unit_price_cents, i.is_placeholder_price into src from public.catalog_items i where i.id = p_from and i.company_id = p_company;
   if not found then return; end if;
   -- what the spread writes is seen as a spread in the history (source «module»), the writer's own row keeps its own source
   perform set_config('app.cost_source', 'module', true);
+  -- the rows this spread writes do not spread again (one change — one pass, not n × n: security check S1). The marker
+  -- counts only inside a trigger (pg_trigger_depth() > 1 in the triggers below): set by hand at the top level it skips nothing
+  perform set_config('app.price_group_spreading', p_company::text || '/' || p_group, true);
   -- the group's rows locked in one order (id): two spreads at once wait, never deadlock each other
   perform 1 from public.catalog_items i
    where i.company_id = p_company and app.price_group(i.attributes) = p_group and i.deleted_at is null
@@ -83,12 +91,15 @@ begin
        and i.id::text <> coalesce(current_setting('app.item_costs_moving', true), '')
        and (i.unit_price_cents, i.is_placeholder_price) is distinct from (src.unit_price_cents, src.is_placeholder_price);
   end if;
+  perform set_config('app.price_group_spreading', '', true);
   perform set_config('app.cost_source', v_src, true);
+  perform set_config('app.item_price_due', v_due, true);
 end;
 $$;
 revoke all on function app.spread_group_price(uuid, text, uuid, boolean, boolean) from public, anon, authenticated;
 
--- a live item of the group other than this one (the group is one price: any of them); null — none
+-- a live item of the group other than this one (the group is one price: any of them — the last changed one, so in a group
+-- that differs today it is the newest price); null — none
 create or replace function app.group_peer(p_company uuid, p_group text, p_not uuid)
 returns uuid language sql stable security definer set search_path = '' as $$
   select i.id from public.catalog_items i
@@ -113,9 +124,33 @@ create or replace function app.tg_group_price_in()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare v_peer uuid; p record;
 begin
+  -- a client's own command never carries a «moving» flag in (set by hand it would make a spread skip a row; t30 sets it
+  -- itself right after this trigger)
+  if pg_trigger_depth() = 1 then
+    perform set_config('app.item_costs_moving', '', true);
+  end if;
+  -- an upsert of a row that is there (old builds: INSERT … ON CONFLICT DO UPDATE) is not a new item: its BEFORE UPDATE
+  -- decides with the real old row (code review of #1913, Б2)
+  if tg_op = 'INSERT' and exists (select 1 from public.catalog_items i where i.id = new.id) then
+    return new;
+  end if;
+  -- who does not see our costs does not put an item that HAS a cost into another group: joining copies the group's cost
+  -- over the item's own (security check of #1913, Б1) — the group stays as it was; a new item or one without a cost joins
+  if tg_op = 'UPDATE' and app.price_group(new.attributes) is distinct from app.price_group(old.attributes)
+     and auth.uid() is not null and not app.can_view_costs(new.company_id)
+     and exists (select 1 from public.catalog_item_costs c where c.item_id = old.id and c.company_id = new.company_id) then
+    new.attributes := case when app.price_group(old.attributes) is null then new.attributes - 'priceGroup'
+                           else jsonb_set(new.attributes, '{priceGroup}', to_jsonb(old.attributes ->> 'priceGroup')) end;
+  end if;
   if not app.group_joins(tg_op, case when tg_op = 'UPDATE' then old.attributes end, new.attributes,
                          case when tg_op = 'UPDATE' then old.deleted_at end, new.deleted_at) then
     return new;
+  end if;
+  -- a group has at most 200 items: a spread is per item of the group (security check of #1913, S1)
+  if (select count(*) from public.catalog_items i
+       where i.company_id = new.company_id and app.price_group(i.attributes) = app.price_group(new.attributes)
+         and i.deleted_at is null and i.id <> new.id) >= 200 then
+    raise exception 'a price group has at most 200 items' using errcode = '54000', hint = 'price_group_full';
   end if;
   v_peer := app.group_peer(new.company_id, app.price_group(new.attributes), new.id);
   if v_peer is null then return new; end if;  -- the first item of its group: its own price is the group's
@@ -140,6 +175,10 @@ returns trigger language plpgsql security definer set search_path = '' as $$
 declare v_group text := app.price_group(new.attributes); v_peer uuid; k record;
 begin
   if v_group is null or new.deleted_at is not null then
+    return null;
+  end if;
+  -- a row written by a spread of this very group: no second pass
+  if pg_trigger_depth() > 1 and coalesce(current_setting('app.price_group_spreading', true), '') = new.company_id::text || '/' || v_group then
     return null;
   end if;
   if app.group_joins(tg_op, case when tg_op = 'UPDATE' then old.attributes end, new.attributes,
@@ -181,6 +220,9 @@ begin
   select app.price_group(i.attributes) into v_group from public.catalog_items i
    where i.id = new.item_id and i.company_id = new.company_id and i.deleted_at is null;
   if v_group is null then return null; end if;
+  if pg_trigger_depth() > 1 and coalesce(current_setting('app.price_group_spreading', true), '') = new.company_id::text || '/' || v_group then
+    return null;
+  end if;
   perform app.spread_group_price(new.company_id, v_group, new.item_id, false, true);
   return null;
 end;
@@ -192,7 +234,8 @@ create trigger t98_group_cost after insert or update on public.catalog_item_cost
 
 -- ---- the new app's write: one price for the whole group, compared with what the phone saw ----------------------------
 -- p_cost / p_tax_bps / p_markup_bps and their expected values: only for who sees our costs (others pass null).
--- Returns the number of items written (0 — nothing differed).
+-- Returns the number of items whose price or placeholder changed (0 — nothing differed; a counted material's price follows
+-- its cost, so a cost-only change counts the items whose price changed with it).
 create or replace function public.catalog_set_group_price(
   p_item_id uuid, p_price_cents bigint, p_placeholder boolean,
   p_cost_cents bigint, p_tax_bps int, p_markup_bps int,
@@ -205,7 +248,6 @@ declare
   k       record;
   v_n     integer := 0;
   v_was   text := coalesce(current_setting('app.cost_source', true), '');
-  n       integer;
 begin
   select * into it from public.catalog_items i where i.id = p_item_id and i.deleted_at is null;
   if it.id is null or not app.is_staff(it.company_id) then
@@ -226,8 +268,11 @@ begin
   select * into it from public.catalog_items i where i.id = p_item_id;
   select c.unit_cost_cents, c.vendor_tax_bps, c.markup_bps into k from public.catalog_item_costs c
    where c.item_id = it.id and c.company_id = it.company_id;
-  -- a group counted from its cost (53-0б): who does not see our costs does not set its price (never a formula back)
-  if not v_costs and it.kind = 'material' and k.unit_cost_cents is not null then
+  -- a group counted from its cost (53-0б): who does not see our costs does not set its price (never a formula back) —
+  -- also when they name a hand-priced item of a group that has a counted material (security check S4)
+  if not v_costs and exists (select 1 from public.catalog_items i join public.catalog_item_costs c on c.item_id = i.id and c.company_id = i.company_id
+                              where i.company_id = it.company_id and app.price_group(i.attributes) = v_group and i.deleted_at is null
+                                and i.kind = 'material' and c.unit_cost_cents is not null) then
     raise exception 'the price is counted from the cost' using errcode = '42501', hint = 'price_from_cost';
   end if;
   -- what the phone saw is still there — or someone changed it first: nothing is written, the phone asks the person
@@ -241,24 +286,25 @@ begin
   -- the cost first (who sees it): each material then counts its price from it (t32 / t31)
   if v_costs and (p_cost_cents is not null or p_tax_bps is not null or p_markup_bps is not null) then
     insert into public.catalog_item_costs as c (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps, updated_by)
-    select i.id, it.company_id, p_cost_cents, p_tax_bps, p_markup_bps, auth.uid()
+    select i.id, it.company_id, coalesce(p_cost_cents, k.unit_cost_cents), coalesce(p_tax_bps, k.vendor_tax_bps), coalesce(p_markup_bps, k.markup_bps), auth.uid()
       from public.catalog_items i
      where i.company_id = it.company_id and app.price_group(i.attributes) = v_group and i.deleted_at is null
      order by i.id
+    -- null = «not sent» (as t30): only the values given change; the rest is the named item's
     on conflict (item_id) do update
       set unit_cost_cents = excluded.unit_cost_cents, vendor_tax_bps = excluded.vendor_tax_bps, markup_bps = excluded.markup_bps,
           updated_at = now(), updated_by = auth.uid()
       where (c.unit_cost_cents, c.vendor_tax_bps, c.markup_bps) is distinct from (excluded.unit_cost_cents, excluded.vendor_tax_bps, excluded.markup_bps);
-    get diagnostics n = row_count;
-    v_n := v_n + n;
   end if;
   -- the price and the placeholder (an item priced by hand; a counted material keeps the price from its cost — t31)
   update public.catalog_items i
      set unit_price_cents = p_price_cents, is_placeholder_price = coalesce(p_placeholder, i.is_placeholder_price)
    where i.company_id = it.company_id and app.price_group(i.attributes) = v_group and i.deleted_at is null
      and (i.unit_price_cents, i.is_placeholder_price) is distinct from (p_price_cents, coalesce(p_placeholder, i.is_placeholder_price));
-  get diagnostics n = row_count;
-  v_n := v_n + n;
+  -- the answer: the items whose price or placeholder is different now than before the call (not the rows touched)
+  select count(*) into v_n from public.catalog_items i
+   where i.company_id = it.company_id and app.price_group(i.attributes) = v_group and i.deleted_at is null
+     and (i.unit_price_cents, i.is_placeholder_price) is distinct from (it.unit_price_cents, it.is_placeholder_price);
   perform set_config('app.cost_source', v_was, true);
   return v_n;
 end;

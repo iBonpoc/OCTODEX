@@ -16336,7 +16336,7 @@ select tst.ok((select count(*) = 1 and bool_and(source = 'module') from public.c
 -- (t95 → t30) joins and takes the group's cost, (3) a direct write of catalog_item_costs
 update public.catalog_items set unit_cost_cents = 600 where id = '53520000-0000-4000-8000-0000000000c1';
 select tst.ok((select bool_and(unit_cost_cents = 600) from public.catalog_item_costs where item_id in ('53520000-0000-4000-8000-0000000000c1','53520000-0000-4000-8000-0000000000c2'))
-          and pg_temp.p351('53520000-0000-4000-8000-0000000000c2') = 1200,
+          and pg_temp.p351('53520000-0000-4000-8000-0000000000c2') = 1200 and pg_temp.p351('53520000-0000-4000-8000-0000000000c1') = 1200,
   'T354 (1) the cost an old build sends on the item: the group $6.00 / $12.00');
 insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, unit_cost_cents, vendor_tax_bps, markup_bps, attributes) values
   ('53520000-0000-4000-8000-0000000000c3', 'ca000000-0000-0000-0000-000000000000', 'material', 'T352 gutter black', 'ft', 1, 99, 0, 0, '{"priceGroup":"t352:mat"}');
@@ -16380,13 +16380,14 @@ select tst.ok((select bool_and(unit_price_cents = 1500) from public.catalog_item
   'T357 without a JWT the group follows ($15.00)');
 \echo 'T357 no JWT ok'
 
--- T358: the flag set by hand at the top level skips nothing (a spread is not switched off from outside)
+-- T358: flags set by hand at the top level skip nothing (a spread is not switched off from outside)
 :as_office_a
 do $t$ begin
-  perform set_config('app.price_group_spread', '1', true);
+  perform set_config('app.item_costs_moving', '53510000-0000-4000-8000-0000000000a2', true);
+  perform set_config('app.price_group_spreading', 'ca000000-0000-0000-0000-000000000000/t351:hand', true);
   update public.catalog_items set unit_price_cents = 1600 where id = '53510000-0000-4000-8000-0000000000a1';
 end $t$;
-select tst.ok(pg_temp.p351('53510000-0000-4000-8000-0000000000a2') = 1600, 'T358 a forged «spreading» flag does not stop the spread');
+select tst.ok(pg_temp.p351('53510000-0000-4000-8000-0000000000a2') = 1600, 'T358 forged «moving» and «spreading» flags do not stop the spread');
 \echo 'T358 the flag ok'
 
 -- T359: two writers at once — the same order of locks: the second waits and gets the conflict, no deadlock (40P01)
@@ -16425,5 +16426,54 @@ select tst.ok((select bool_and(unit_price_cents = 1700) from public.catalog_item
                 where attributes ->> 'priceGroup' = 't351:hand' and company_id = 'ca000000-0000-0000-0000-000000000000' and deleted_at is null),
   'T359 the first writer''s $17.00 in the whole group');
 \echo 'T359 two writers ok'
+
+
+-- T360: an old build's upsert (INSERT … ON CONFLICT DO UPDATE) of an item already in a group: its price is spread, not lost
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('53510000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'service', 'T351 haul white', 'ea', 2500, '{"priceGroup":"t351:hand"}')
+  on conflict (id) do update set name = excluded.name, unit_price_cents = excluded.unit_price_cents, attributes = excluded.attributes;
+select tst.ok(pg_temp.p351('53510000-0000-4000-8000-0000000000a1') = 2500 and pg_temp.p351('53510000-0000-4000-8000-0000000000a2') = 2500,
+  'T360 an upsert of a group item with a new price ($25.00): kept and spread');
+\echo 'T360 the upsert ok'
+
+-- T361: who does not see our costs does not move an item that has a cost into a group (it would take the group's cost over
+-- its own); who sees costs does, and the item gets the group's cost and price
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('53610000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T361 own cost', 'ft', 0, '{}');
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
+  ('53610000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', 50, 0, 10000);
+:as_sales_a
+update public.catalog_items set attributes = '{"priceGroup":"t352:mat"}' where id = '53610000-0000-4000-8000-0000000000d1';
+:as_super
+select tst.ok((select app.price_group(attributes) is null from public.catalog_items where id = '53610000-0000-4000-8000-0000000000d1')
+          and (select unit_cost_cents = 50 from public.catalog_item_costs where item_id = '53610000-0000-4000-8000-0000000000d1')
+          and (select bool_and(unit_cost_cents = 700) from public.catalog_item_costs where item_id in ('53520000-0000-4000-8000-0000000000c1','53520000-0000-4000-8000-0000000000c2')),
+  'T361 sales cannot put an item with a cost into a group: its cost $0.50 and the group''s $7.00 stay');
+:as_office_a
+update public.catalog_items set attributes = '{"priceGroup":"t352:mat"}' where id = '53610000-0000-4000-8000-0000000000d1';
+select tst.ok((select unit_cost_cents = 700 from public.catalog_item_costs where item_id = '53610000-0000-4000-8000-0000000000d1')
+          and pg_temp.p351('53610000-0000-4000-8000-0000000000d1') = 1400
+          and (select bool_and(unit_cost_cents = 700) from public.catalog_item_costs where item_id in ('53520000-0000-4000-8000-0000000000c1','53520000-0000-4000-8000-0000000000c2')),
+  'T361 the office moves it: the group''s cost $7.00 and price $14.00; the group is not overwritten by the item''s own');
+-- a material of the group back from the Trash with its own cost: the group's
+:as_super
+update public.catalog_items set deleted_at = now() where id = '53610000-0000-4000-8000-0000000000d1';
+update public.catalog_item_costs set unit_cost_cents = 50 where item_id = '53610000-0000-4000-8000-0000000000d1';
+update public.catalog_items set deleted_at = null where id = '53610000-0000-4000-8000-0000000000d1';
+select tst.ok((select bool_and(unit_cost_cents = 700) from public.catalog_item_costs where item_id in ('53610000-0000-4000-8000-0000000000d1','53520000-0000-4000-8000-0000000000c1'))
+          and pg_temp.p351('53610000-0000-4000-8000-0000000000d1') = 1400,
+  'T361 back from the Trash with its own cost: the group''s cost and price');
+\echo 'T361 joining with a cost ok'
+
+-- T362: sales names a hand-priced item of a group that also has a counted material — refused (no price pushed at it)
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('53620000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'service', 'T362 service in a counted group', 'ea', 1400, '{"priceGroup":"t352:mat"}');
+:as_sales_a
+select tst.fails($q$select public.catalog_set_group_price('53620000-0000-4000-8000-0000000000e1', 9999, false, null, null, null, 1400)$q$,
+  'T362 sales cannot set the price of a group that has a counted material, through any of its items');
+\echo 'T362 a mixed group ok'
 
 \echo 'ALL TESTS PASSED'
