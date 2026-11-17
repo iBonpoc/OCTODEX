@@ -1,6 +1,7 @@
 import type { Mode } from "@/data/store";
 import { timing, type StatusName } from "@octo/design-tokens";
 import { seeCosts } from "./access";
+import { invoiceOwes } from "@octo/estimating-engine";
 import { daysOverdue, daysSince, isOverdue, minutesSince, visitContext } from "@/data/selectors";
 import type { DB, ID, Role, Task } from "@/data/types";
 import { canSeeLead, isBackFromSnooze, leadTurn } from "./leads";
@@ -239,7 +240,7 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
     if (!isOverdue(i.dueDate, now, tz)) continue;
     const d = daysOverdue(i.dueDate, now, tz);
     const c = db.customers.find((x) => x.id === i.customerId);
-    out.push({ id: `inv-${i.id}`, kind: "overdue", refId: i.id, name: c?.name ?? "", label: "att.overdue", params: { name: c?.name ?? "" }, chip: "st.overdue", status: "bad", amountCents: i.totalCents - i.paidCents, score: 800 + d });
+    out.push({ id: `inv-${i.id}`, kind: "overdue", refId: i.id, name: c?.name ?? "", label: "att.overdue", params: { name: c?.name ?? "" }, chip: "st.overdue", status: "bad", amountCents: invoiceOwes(i), score: 800 + d });
   }
   const office = role === "director" || role === "dispatcher";
   // «valid until» is a calendar day of the company (the server decides by it too)
