@@ -1,39 +1,52 @@
-import { useCallback, useEffect, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { Platform, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
-import { space } from "@octo/design-tokens";
 import { fadedEdges } from "./viewTabsLogic";
-
-/** how tall the fade at a scroll edge is (DS Б1): `space[6]` */
-export const SCROLL_FADE = space[6];
+import { fadeMask, SCROLL_FADE } from "./scrollFadeLogic";
 
 /**
  * A vertical scroll fades at an edge that has more content past it (DS Б1: the body of a sheet; the same rule as the row
- * of view tabs, А1п — `fadedEdges`). The web: the content itself fades (a mask on the scroll node) — right over glass;
- * a phone draws a gradient of `color` (what is behind the scroll) over the edge. Wire `onLayout`, `onContentSizeChange`
- * and `onScroll` of the ScrollView in `ref`, and put `overlay` in a box around it (position: relative).
+ * of view tabs, А1п — `fadedEdges`). The web: the content itself fades (a mask on the scroll node; the scroll bar's strip
+ * `keepRight` stays whole) — right over glass; a phone draws a gradient of `color` over the edge (⬜ to check on a device).
+ * Only the two flags are state: a scroll frame that does not change them renders nothing. Wire `onLayout`,
+ * `onContentSizeChange` and `onScroll` of the ScrollView in `ref`, and put `overlay` in a box around it (position: relative).
  */
-export function useScrollFade(ref: RefObject<unknown>, color: string) {
-  const [view, setView] = useState(0);
-  const [content, setContent] = useState(0);
-  const [offset, setOffset] = useState(0);
-  const e = fadedEdges(offset, view, content);
-  const top = e.left;
-  const bottom = e.right;
+export function useScrollFade(ref: RefObject<unknown>, color: string, keepRight = 0) {
+  const m = useRef({ view: 0, content: 0, offset: 0 });
+  const [edges, setEdges] = useState({ top: false, bottom: false });
+  const update = useCallback(() => {
+    const e = fadedEdges(m.current.offset, m.current.view, m.current.content);
+    setEdges((s) => (s.top === e.left && s.bottom === e.right ? s : { top: e.left, bottom: e.right }));
+  }, []);
+  const { top, bottom } = edges;
   useEffect(() => {
     if (Platform.OS !== "web") return;
     const node = (ref.current as { getScrollableNode?: () => HTMLElement | null } | null)?.getScrollableNode?.();
     if (!node) return;
-    const t = top ? SCROLL_FADE : 0;
-    const b = bottom ? SCROLL_FADE : 0;
-    const mask = t || b ? `linear-gradient(to bottom, transparent 0, #000 ${t}px, #000 calc(100% - ${b}px), transparent 100%)` : "none";
-    node.style.maskImage = mask;
-    node.style.setProperty("-webkit-mask-image", mask);
+    const mask = fadeMask(top, bottom, keepRight);
+    for (const [k, v] of [
+      ["mask-image", mask?.image ?? "none"],
+      ["mask-size", mask?.size ?? ""],
+      ["mask-position", mask?.position ?? ""],
+      ["mask-repeat", mask ? "no-repeat" : ""],
+    ] as const) {
+      node.style.setProperty(k, v);
+      node.style.setProperty(`-webkit-${k}`, v);
+    }
     node.dataset.fade = `${top ? "top" : ""}${top && bottom ? " " : ""}${bottom ? "bottom" : ""}` || "none";
-  }, [ref, top, bottom]);
-  const onLayout = useCallback((ev: LayoutChangeEvent) => setView(ev.nativeEvent.layout.height), []);
-  const onContentSizeChange = useCallback((_w: number, h: number) => setContent(h), []);
-  const onScroll = useCallback((ev: NativeSyntheticEvent<NativeScrollEvent>) => setOffset(ev.nativeEvent.contentOffset.y), []);
+  }, [ref, top, bottom, keepRight]);
+  const onLayout = useCallback((ev: LayoutChangeEvent) => {
+    m.current.view = ev.nativeEvent.layout.height;
+    update();
+  }, [update]);
+  const onContentSizeChange = useCallback((_w: number, h: number) => {
+    m.current.content = h;
+    update();
+  }, [update]);
+  const onScroll = useCallback((ev: NativeSyntheticEvent<NativeScrollEvent>) => {
+    m.current.offset = ev.nativeEvent.contentOffset.y;
+    update();
+  }, [update]);
   const edge = (side: "top" | "bottom") => (
     <View key={side} pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, [side]: 0, height: SCROLL_FADE }}>
       <Svg width="100%" height={SCROLL_FADE}>
@@ -48,5 +61,5 @@ export function useScrollFade(ref: RefObject<unknown>, color: string) {
     </View>
   );
   const overlay = Platform.OS === "web" ? null : [top ? edge("top") : null, bottom ? edge("bottom") : null];
-  return { onLayout, onContentSizeChange, onScroll, overlay, edges: { top, bottom } };
+  return { onLayout, onContentSizeChange, onScroll, overlay, edges };
 }

@@ -55,6 +55,9 @@ exports.run = async (h) => {
   const sc = await scroll.evaluate((el) => ({ h: el.scrollHeight, c: el.clientHeight, fade: el.dataset.fade }));
   h.expect(sc.h > sc.c + 1, `the body scrolls (${sc.h} > ${sc.c})`);
   h.expect(sc.fade === "bottom", `the body fades at the bottom, where there is more (${sc.fade})`);
+  // the mask leaves the scroll bar's strip (the side inset, #1339) whole: a second, solid layer on the right
+  const mask = await scroll.evaluate((el) => ({ size: el.style.getPropertyValue("mask-size") || el.style.getPropertyValue("-webkit-mask-size"), pos: el.style.getPropertyValue("mask-position") || el.style.getPropertyValue("-webkit-mask-position") }));
+  h.expect(/,\s*16px 100%/.test(mask.size) && /100% 0/.test(mask.pos), `the scroll bar's strip is not faded (${mask.size} / ${mask.pos})`);
   await shot("content");
 
   // the content's own state and a place it was scrolled to
@@ -75,6 +78,7 @@ exports.run = async (h) => {
   h.expect((await top().getByTestId("sheet-back").count()) === 1, "the help page has «‹ Назад»");
   h.expect((await top().getByTestId("sheet-help").count()) === 0, "no «?» on the help page");
   h.expect((await page.innerText()).includes("Позиции — работы и материалы"), "the help says what it is");
+  h.expect((await top().getByTestId("sheet-title").innerText()).trim() === "Справка: Позиции сметы", "the help page's title is «Справка: Позиции сметы»");
   const link = top().getByTestId("sheet-help-to");
   h.expect((await link.count()) === 1 && (await link.getAttribute("role")) === "link", "the way to the catalog is a link at the bottom");
   h.expect((await top().getByRole("button", { name: "Сохранить", exact: true }).count()) === 0, "the content's footer is not on the help page");
@@ -96,5 +100,42 @@ exports.run = async (h) => {
   await top().getByTestId("sheet-help-page").waitFor({ timeout: 3000 });
   await pressEscUntilClosed(p, top().getByTestId("sheet-help-page"));
   h.expect((await dialogs()) === 1 && (await top().getByTestId("sheet-help").count()) === 1, "Esc on the help page returns to the content; the sheet stays");
+  await pressEscUntilClosed(p);
+
+  // with motion: the help slides in from the right and the window's height glides — no jump in one frame
+  await p.emulateMedia({ reducedMotion: "no-preference" });
+  await p.reload();
+  await p.getByTestId("showcase-windows").locator("visible=true").first().waitFor({ timeout: 8000 });
+  const opener2 = p.getByTestId("showcase-sheet-help").locator("visible=true").first();
+  await opener2.scrollIntoViewIfNeeded();
+  await opener2.getByRole("button").first().click();
+  await top().getByTestId("sheet-help").waitFor({ timeout: 5000 });
+  await p.waitForFunction((sel) => {
+    const el = [...document.querySelectorAll(sel)].pop()?.querySelector('[data-testid="sheet-panel"]');
+    return el && getComputedStyle(el).opacity === "1" && !/matrix\(1, 0, 0, 1, 0, [1-9]/.test(getComputedStyle(el).transform);
+  }, MODAL, { timeout: 3000 });
+  await p.evaluate((sel) => {
+    const w = window;
+    w.__sheetFrames = [];
+    const tick = () => {
+      const m = [...document.querySelectorAll(sel)].pop();
+      const panel = m?.querySelector('[data-testid="sheet-panel"]');
+      const pg = m?.querySelector('[data-testid="sheet-help-page"]');
+      w.__sheetFrames.push({ h: panel ? panel.getBoundingClientRect().height : 0, x: pg ? new DOMMatrix(getComputedStyle(pg).transform).m41 : null });
+      if (w.__sheetFrames.length < 60) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, MODAL);
+  await top().getByTestId("sheet-help").click();
+  await p.waitForFunction(() => window.__sheetFrames && window.__sheetFrames.length >= 60, null, { timeout: 5000 });
+  const frames = await p.evaluate(() => window.__sheetFrames);
+  const hs = frames.map((f) => f.h);
+  const total = Math.abs(hs[hs.length - 1] - hs[0]);
+  const step = Math.max(...hs.slice(1).map((v, i) => Math.abs(v - hs[i])));
+  h.expect(total > 50, `the window changes height for the short help (${Math.round(hs[0])} → ${Math.round(hs[hs.length - 1])})`);
+  h.expect(step < total * 0.6, `the height glides, no jump in one frame (largest step ${Math.round(step)} of ${Math.round(total)})`);
+  const xs = frames.map((f) => f.x).filter((x) => x !== null);
+  h.expect(xs.length > 0 && Math.max(...xs) > 20 && Math.abs(xs[xs.length - 1]) < 1, `the help slides in from the right (x from ${Math.round(Math.max(...xs, 0))} to ${xs.length ? Math.round(xs[xs.length - 1]) : "—"})`);
+  await pressEscUntilClosed(p, top().getByTestId("sheet-help-page"));
   await pressEscUntilClosed(p);
 };

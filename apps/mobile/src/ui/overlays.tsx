@@ -10,7 +10,7 @@ import { GestureDetector, GestureHandlerRootView, GestureStateManager, State, us
 import { menuPick } from "./menuPick";
 import { exitDuration, scrimLevel, swipeCloses, swipeStart, swipeStep, type SwipeState } from "./sheetSwipe";
 import { leaveBefore } from "./sheetLeave";
-import { helpBack, helpClosed, helpOpen, sheetHeader, type HelpPage } from "./sheetHelp";
+import { helpBack, helpClosed, helpOpen, pageSwitch, sheetHeader, type HelpPage } from "./sheetHelp";
 import { useScrollFade } from "./scrollFade";
 import Svg, { Rect } from "react-native-svg";
 import { BlurView } from "expo-blur";
@@ -303,22 +303,65 @@ export function Sheet({
   const seen = useRef({ title: titleNow, children: childrenNow, footer: footerNow, height: heightNow, onBack: onBackNow, help: helpNow });
   if (visible) seen.current = { title: titleNow, children: childrenNow, footer: footerNow, height: heightNow, onBack: onBackNow, help: helpNow };
   const { title: ownTitle, children, footer: ownFooterSeen, height, onBack: ownBack, help } = seen.current;
+  const { c } = useTheme();
+  const { wide } = useDevice();
+  const insets = useSafeAreaInsets();
+  const reduce = useReducedMotion();
+  const { t } = useI18n();
+  const { height: winH } = useWindowDimensions();
   // the help page (DS Б1): the content stays mounted under it (its state is kept), its scroll is given back on «‹»
   const [helpPage, setHelpPage] = useState<HelpPage>(helpClosed);
   const bodyRef = useRef<ScrollViewInstance>(null);
   const bodyTop = useRef(0);
   const restoreTo = useRef<number | null>(null);
-  const hdr = sheetHeader(helpPage, { title: ownTitle, hasBack: !!ownBack, help });
+  const hdr = sheetHeader(helpPage, { title: ownTitle, hasBack: !!ownBack, help }, t("common.help"));
   const title = hdr.title;
+  // the way between the pages (DS Б1, like a page of the sheet): the new page slides in over durBase and the body's height
+  // goes from the old page's to the new one's — the window never jumps in one frame; reduced motion: no slide, no glide
+  const slideX = useSharedValue(0);
+  const bodyFixH = useSharedValue(-1); // ≥ 0 while the height glides: the body is held at it
+  const bodyBox = useRef({ w: 0, h: 0 });
+  const switching = useRef<null | "in" | "back">(null);
+  const releaseBody = useCallback(() => {
+    switching.current = null;
+    bodyFixH.value = -1;
+  }, [bodyFixH]);
+  const startSwitch = (dir: "in" | "back") => {
+    if (reduce) return;
+    switching.current = dir;
+    bodyFixH.value = bodyBox.current.h;
+    slideX.value = dir === "in" ? bodyBox.current.w : -bodyBox.current.w;
+    slideX.value = withTiming(0, { duration: motion.durBase, easing: Easing.bezier(...motion.easeOut) });
+    // the new page has not told its size (the same as the old): the body is let go after the way
+    setTimeout(() => {
+      if (switching.current === dir) releaseBody();
+    }, motion.durBase * 2);
+  };
+  // the new page's size is known: the body glides from the old height to the new, then is let go
+  const pageSized = (contentH: number) => {
+    const dir = switching.current;
+    if (!dir) return;
+    switching.current = null;
+    const room = (wide ? winH - insets.top - insets.bottom - space[8] * 2 : maxH) - (sheetH.value || 0);
+    const sw = pageSwitch(dir, bodyBox.current.w, bodyBox.current.h, room, contentH);
+    bodyFixH.value = withTiming(sw.toH, { duration: motion.durBase, easing: Easing.bezier(...motion.easeOut) }, (done) => {
+      "worklet";
+      if (done) bodyFixH.value = -1;
+    });
+  };
   const openHelp = () => {
+    startSwitch("in");
     setHelpPage((s) => helpOpen(s, bodyTop.current));
     restoreTo.current = 0;
   };
   const closeHelp = () => {
+    startSwitch("back");
     const r = helpBack(helpPage);
     setHelpPage(r.state);
     restoreTo.current = r.restore;
   };
+  const pageSlide = useAnimatedStyle(() => ({ transform: [{ translateX: slideX.value }] }));
+  const bodyHold = useAnimatedStyle(() => (bodyFixH.value >= 0 ? { height: bodyFixH.value, flexShrink: 0 } : {}));
   const onBack = hdr.back === "help" ? closeHelp : ownBack;
   const footer = helpPage.on ? null : ownFooterSeen;
   useEffect(() => {
@@ -331,14 +374,9 @@ export function Sheet({
   }, [helpPage.on]);
   // the help's way (`to`) is taken after the sheet has gone (onExited), never while it slides out (rule 27)
   const goTo = useRef<Href | null>(null);
-  const { c } = useTheme();
-  const { wide } = useDevice();
-  const insets = useSafeAreaInsets();
-  const reduce = useReducedMotion();
-  const { t } = useI18n();
-  const { height: winH } = useWindowDimensions();
   const drag = useSharedValue(0);
-  const edgeFade = useScrollFade(bodyRef, c.ov);
+  const sideR = wide ? space[4] : Math.max(insets.right, space[4]);
+  const edgeFade = useScrollFade(bodyRef, c.ov, sideR);
   const fade = useSharedValue(1); // the sheet and its scrim dissolve (reduce motion, the centred window): 1 → 0
   const sheetH = useSharedValue(0); // the sheet's own height: how far it has to go, and how the scrim follows
   const leaving = useRef(false); // a close is asked or under way: one onClose per close, whatever is pressed meanwhile
@@ -378,6 +416,9 @@ export function Sheet({
       setAsk(false);
       setHelpPage(helpClosed);
       goTo.current = null;
+      switching.current = null;
+      slideX.value = 0;
+      bodyFixH.value = -1;
     }
   }, [visible, drag, fade]);
   // iOS: the owner closed it (by itself, or at a moment of its own while the sheet was going out): the exit that was under
@@ -616,7 +657,7 @@ export function Sheet({
             !wide && height !== "fit" ? { flexBasis: maxH, flexShrink: 1 } : null, follow]}
           accessibilityViewIsModal
         >
-          <SheetInset.Provider value={{ l: wide ? space[4] : Math.max(insets.left, space[4]), r: wide ? space[4] : Math.max(insets.right, space[4]) }}>
+          <SheetInset.Provider value={{ l: wide ? space[4] : Math.max(insets.left, space[4]), r: sideR }}>
           <Glass
             strong
             style={{
@@ -717,7 +758,13 @@ export function Sheet({
             ) : (
               /* the form scrolls when the keyboard leaves less room than the sheet needs */
               <GestureDetector gesture={bodyPan}>
-              <View style={{ flexShrink: 1, flexGrow: !wide && height !== "fit" ? 1 : 0 }} testID="sheet-body">
+              <Animated.View
+                style={[{ flexShrink: 1, flexGrow: !wide && height !== "fit" ? 1 : 0 }, bodyHold]}
+                testID="sheet-body"
+                onLayout={(e) => {
+                  bodyBox.current = { w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height };
+                }}
+              >
                 <GestureDetector gesture={scrollNative}>
                 <SheetScroll
                   ref={bodyRef}
@@ -728,7 +775,10 @@ export function Sheet({
                   bounces={false}
                   scrollEventThrottle={16}
                   onLayout={edgeFade.onLayout}
-                  onContentSizeChange={edgeFade.onContentSizeChange}
+                  onContentSizeChange={(w, h) => {
+                    edgeFade.onContentSizeChange(w, h);
+                    pageSized(h);
+                  }}
                   onScroll={(e) => {
                     scrollTop.current = e.nativeEvent.contentOffset.y;
                     if (!helpPage.on) bodyTop.current = e.nativeEvent.contentOffset.y;
@@ -736,18 +786,18 @@ export function Sheet({
                   }}
                 >
                   {/* the content stays mounted under the help page (its fields, its choices are kept) */}
-                  <View style={{ gap: space[3], display: helpPage.on ? "none" : "flex" }} testID="sheet-content">
+                  <Animated.View style={[{ gap: space[3], display: helpPage.on ? "none" : "flex" }, pageSlide]} testID="sheet-content">
                     <SheetHold.Provider value={held}>{children}</SheetHold.Provider>
-                  </View>
+                  </Animated.View>
                   {helpPage.on && help ? (
-                    <View testID="sheet-help-page" style={{ gap: space[3] }}>
+                    <Animated.View testID="sheet-help-page" style={[{ gap: space[3] }, pageSlide]}>
                       {typeof help.body === "string" ? <T v="body">{help.body}</T> : help.body}
-                    </View>
+                    </Animated.View>
                   ) : null}
                 </SheetScroll>
                 </GestureDetector>
                 {edgeFade.overlay}
-              </View>
+              </Animated.View>
               </GestureDetector>
             )}
             {helpPage.on && help?.to && !ask ? (

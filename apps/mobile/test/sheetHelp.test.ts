@@ -5,15 +5,17 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { helpBack, helpClosed, helpOpen, sheetHeader } from "../src/ui/sheetHelp";
+import { helpBack, helpClosed, helpOpen, pageSwitch, sheetHeader } from "../src/ui/sheetHelp";
+import { fadeMask, SCROLL_FADE } from "../src/ui/scrollFadeLogic";
 
 const help = { body: "what it is" };
 
 describe("sheet help page", () => {
-  it("«?» opens the help inside: its title, «‹» goes back to the content, no «?» on the help page", () => {
+  it("«?» opens the help inside: «Справка: <title>» (as the screen reader says), «‹» back to the content, no «?» on the help page", () => {
     const s = helpOpen(helpClosed, 0);
     expect(s.on).toBe(true);
-    expect(sheetHeader(s, { title: "Позиции", hasBack: false, help })).toEqual({ title: "Позиции", back: "help", showHelp: false });
+    expect(sheetHeader(s, { title: "Позиции", hasBack: false, help }, "Справка")).toEqual({ title: "Справка: Позиции", back: "help", showHelp: false });
+    expect(sheetHeader(s, { title: "Items", hasBack: false, help }, "Help").title).toBe("Help: Items");
     expect(sheetHeader(s, { title: "Позиции", hasBack: false, help: { ...help, title: "Что такое позиции" } }).title).toBe("Что такое позиции");
   });
   it("the content page: its own title, «?» shown, its own back only if the sheet has one", () => {
@@ -36,6 +38,24 @@ describe("sheet help page", () => {
     expect(helpOpen(s, 0)).toBe(s);
     expect(helpBack(helpClosed)).toEqual({ state: helpClosed, restore: null });
     expect(helpOpen(helpClosed, -5).keep).toBe(0);
+  });
+  it("the way between the pages: in from the right, back from the left; the height never past the window's room", () => {
+    expect(pageSwitch("in", 380, 600, 0, 120)).toEqual({ fromX: 380, fromH: 600, toH: 120 });
+    expect(pageSwitch("back", 380, 120, 480, 1400)).toEqual({ fromX: -380, fromH: 120, toH: 600 });
+    expect(pageSwitch("back", 380, 120, -5, 1400).toH).toBe(120);
+  });
+  it("the scroll's edge fades on the web, but the scroll bar's strip (the side inset, #1339) stays whole", () => {
+    expect(fadeMask(false, false, 16)).toBeNull();
+    const m = fadeMask(true, true, 16)!;
+    expect(m.image).toMatch(new RegExp(`#000 ${SCROLL_FADE}px.*calc\\(100% - ${SCROLL_FADE}px\\).*, linear-gradient\\(#000, #000\\)$`));
+    expect(m.size).toBe("100% 100%, 16px 100%");
+    expect(m.position).toBe("0 0, 100% 0");
+    expect(fadeMask(false, true, 0)!.image).toMatch(/#000 0px/);
+  });
+  it("the fade keeps only its two flags as state: a scroll frame that changes nothing renders nothing", () => {
+    const src = readFileSync(join(__dirname, "../src/ui/scrollFade.tsx"), "utf8");
+    expect(src.match(/useState\(/g)?.length).toBe(1);
+    expect(src).toMatch(/s\.top === e\.left && s\.bottom === e\.right \? s :/);
   });
   it("the Sheet keeps the content mounted under the help page and never opens a second sheet for it", () => {
     const src = readFileSync(join(__dirname, "../src/ui/overlays.tsx"), "utf8");
