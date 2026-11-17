@@ -6,7 +6,7 @@ import { haptics } from "@/ui/haptics";
 import { component, motion, space, size } from "@octo/design-tokens";
 import { LINE_GROUPS, activeLines, countedSections, discountBps, ppmToPctText, sectionSubtotals, taxRatePpm, type TaxSettings, type EstimateSection, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
-import { canMakeEstimateAt, canSeeEstimate } from "@/features/access";
+import { canMakeEstimateAt, canSeeEstimate, seeCosts as seesCosts } from "@/features/access";
 import type { CatalogItem, EstimateDoc, EstimateTemplate } from "@/data/types";
 import { appendTemplate, canEditEstimateTemplates, clearedCosts, editedTemplate, fromTemplate, removeAppended, pickableTemplates, templateForEdit, templateFromCents } from "@/features/estimateTemplate";
 import { useI18n, type DictKey } from "@/i18n";
@@ -89,7 +89,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const [customerId, setCustomerId] = useState(existing?.customerId ?? draft?.customerId ?? params.customerId);
   const [propertyId, setPropertyId] = useState(existing?.propertyId ?? draft?.propertyId ?? params.propertyId);
   // E3 (S5t): a template to start from — given by the templates screen, or picked in «С чего начать?»
-  const seeCosts = db.costsVisible ?? store.role !== "tech";
+  const seeCosts = seesCosts(db, store.role, store.mode);
   const templates = pickableTemplates(db.estimateTemplates ?? []);
   const given = !existing && params.template ? templates.find((x) => x.id === params.template) : undefined;
   // §12 №10: the builder edits a template's lines (no client; «Сохранить шаблон») — the director and the office only

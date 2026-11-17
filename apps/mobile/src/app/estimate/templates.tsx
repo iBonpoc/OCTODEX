@@ -4,6 +4,7 @@
  * 5 s, rule 5), copy them and edit their lines in the builder (/estimate/new?editTemplate=, §12 №10, №11). A template
  * is made from an estimate («Сохранить как шаблон») or added from a module's starters («Шаблоны модулей», §12, E3c).
  */
+import { seeCosts as seesCosts } from "@/features/access";
 import { useRef, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
@@ -36,7 +37,7 @@ export default function EstimateTemplates() {
   const live = pickableTemplates(all);
   const archived = all.filter((x) => x.archivedAt);
   const edit = canEditEstimateTemplates(store.role);
-  const seeCosts = store.db.costsVisible ?? store.role !== "tech";
+  const seeCosts = seesCosts(store.db, store.role, store.mode);
   // the module's name, not its key (a module the app no longer has — its key as is)
   const moduleName = (key: string) => {
     const d = moduleDef(key);

@@ -23,7 +23,7 @@ import { canSeeSuppliers, historyOf, pickSupplier, supplierOf, supplierTaxAsk, t
 import { SupplierTaxAsk } from "@/features/SupplierTaxAsk";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { CostHistory, SupplierPicker } from "@/features/SupplierParts";
-import { canEditCatalog } from "@/features/access";
+import { canEditCatalog, seeCosts } from "@/features/access";
 
 const KINDS: CatalogKind[] = ["service", "labor", "material", "kit"];
 /** the id of the choice «Своя…» in the unit list (as on an estimate line) */
@@ -69,7 +69,7 @@ export default function CatalogItemScreen() {
   const back = () => (router.canGoBack() ? router.back() : router.replace("/catalog"));
   // 19 §9: who does not get our costs (sales without view_costs) edits a material's price as it is — counting it from
   // a cost the phone does not have would overwrite the real price
-  const noCosts = store.db.costsVisible === false;
+  const noCosts = !seeCosts(store.db, store.role, store.mode);
   const isMat = countsFromCost(it, noCosts);
   // by the stored item: switching the kind on this screen does not unlock its price (the store keeps the kind too)
   const locked = priceLocked(found ?? it, noCosts, store.db.catalog);

@@ -21,7 +21,7 @@ import { defaultLeadAssignee } from "@/features/leadAssignee";
 import { keepLast, stepPending } from "@/features/location";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
-import { canMakeEstimateAt, leadEstimatePropertyId } from "@/features/access";
+import { canMakeEstimateAt, leadEstimatePropertyId, seeCosts } from "@/features/access";
 import { signTotalFor } from "@/cloud/legacyTotals";
 import { leadStatusToDb } from "@/cloud/statusMap";
 
@@ -770,6 +770,10 @@ export function StoreProvider({
 
   const availableRoles: Role[] = mode === "cloud" ? appRoles(company!.role) : ["tech", "dispatcher", "director", "sales"];
   const role = effectiveRole(savedRole, availableRoles);
+  // #1837: who sees our costs — one rule for the whole app (features/access.ts); the role of now, not of a closure
+  const appRoleRef = useRef(role);
+  appRoleRef.current = role;
+  const sees = (d: Pick<DB, "costsVisible"> = dbRef.current) => seeCosts(d, appRoleRef.current, modeRef.current);
   useEffect(() => {
     if (savedRole !== role) setRole(role);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -958,7 +962,7 @@ export function StoreProvider({
         try {
           // #1913: a group's price write of someone who does not see our costs (now — a role may have changed since it was
           // queued) never carries costs to the server
-          const sent = await applyOp(dbRef.current.costsVisible === true ? item.op : withoutGroupCosts(item.op), w.companyId, w.userId);
+          const sent = await applyOp(sees() ? item.op : withoutGroupCosts(item.op), w.companyId, w.userId);
           inFlight.current = null;
           setSendingId(null);
           // the device was wiped while it was sent: the outbox is not this person's any more — never write it back
@@ -1303,7 +1307,7 @@ export function StoreProvider({
     const group = priceGroupOf(prev);
     if (!group) return NO_UNDO;
     // only a «yes» is a yes (unknown is no, as the screens: review of PR2 №1); the local data of a demo has no server to refuse
-    const seesCosts = d0.costsVisible === true || modeRef.current !== "cloud";
+    const seesCosts = sees(d0);
     const inGroup = (x: CatalogItem) => priceGroupOf(x) === group;
     if (!seesCosts && groupPriceLocked(d0.catalog, prev)) return NO_UNDO;
     const placeholder = v.placeholder ?? !!prev.placeholder;
@@ -1574,7 +1578,7 @@ export function StoreProvider({
   const saveItemsBoth = (pairs: { prev: CatalogItem; next: CatalogItem }[]): GuardedUndo => {
     if (!pairs.length) return noop;
     const go = (from: CatalogItem, to: CatalogItem, at: string) => {
-      const hist = dbRef.current.costsVisible === false ? null : localHistoryEntry(from, to, uid(), at);
+      const hist = !sees() ? null : localHistoryEntry(from, to, uid(), at);
       return mutate(
         "catalog.save",
         (d) => ({ ...d, catalog: d.catalog.map((c) => (c.id === to.id ? to : c)), ...(hist ? { costHistory: [hist, ...(d.costHistory ?? [])] } : {}) }),
@@ -2692,7 +2696,7 @@ export function StoreProvider({
         const it1 = cleanCardFields(cleanSupplierLink(cleanCatalogItem(it0)), prev, dbRef.current);
         // #1807 (53-0б-2): a material whose price the server counts from a cost this person does not see keeps its price and
         // its kind, from any caller (the server would keep its own; the phone must not show another one meanwhile)
-        const locked = dbRef.current.costsVisible === false && prev?.kind === "material" && !!prev.priceFromCost;
+        const locked = !sees() && prev?.kind === "material" && !!prev.priceFromCost;
         const it2a = locked && prev ? { ...it1, kind: prev.kind, priceCents: prev.priceCents, placeholder: prev.placeholder } : it1;
         // #1913: joining a group, the item takes the group's price (the server does the same; review of PR2)
         const it2 = modeRef.current === "cloud" ? joinedGroup(dbRef.current.catalog, prev, it2a) : it2a;
@@ -2712,10 +2716,10 @@ export function StoreProvider({
         // 19 §9: only the cost fields changed here go to the server — a phone without costs never erases them
         const costs = catalogCostChange(prev, it);
         // spec 36: the phone's own history row, shown at once (the server writes its own; the next read replaces the list)
-        const hist = dbRef.current.costsVisible === false ? null : localHistoryEntry(prev, it, uid(), new Date().toISOString());
+        const hist = !sees() ? null : localHistoryEntry(prev, it, uid(), new Date().toISOString());
         // РС-10: the price and markup change too (the card shows «было → стало» at once, offline as well)
         const now = new Date().toISOString();
-        const priceHist = dbRef.current.costsVisible === false ? [] : localPriceEntries(prev, it, uid, now, dbRef.current.me ?? undefined);
+        const priceHist = !sees() ? [] : localPriceEntries(prev, it, uid, now, dbRef.current.me ?? undefined);
         // on the phone: changed now, by me (the server writes its own); in the queue: never these columns
         const local: CatalogItem = { ...it, updatedAt: now, ...(dbRef.current.me ? { updatedBy: dbRef.current.me } : {}), ...(prev ? {} : { createdAt: now, ...(dbRef.current.me ? { createdBy: dbRef.current.me } : {}) }) };
         const undoItem = mutate(
@@ -2769,7 +2773,7 @@ export function StoreProvider({
       makeJobOrders: (jobId) => {
         const d0 = dbRef.current;
         if (!canEditOrders(role) || d0.purchaseOrdersLegacy) return { ids: [], made: 0, undo: noop };
-        const groups = draftsForJob(d0, jobId, modulePurchaseLines(d0, jobId), d0.costsVisible !== false);
+        const groups = draftsForJob(d0, jobId, modulePurchaseLines(d0, jobId), sees(d0));
         const job = d0.jobs.find((j) => j.id === jobId);
         const addr = job ? d0.properties.find((x) => x.id === job.propertyId) : undefined;
         const ids: ID[] = [];
@@ -2843,7 +2847,7 @@ export function StoreProvider({
       },
       loadCostHistory: (where) => {
         const cid = whoRef.current?.companyId;
-        if (modeRef.current !== "cloud" || !cid || !onlineRef.current || dbRef.current.costsVisible === false) return;
+        if (modeRef.current !== "cloud" || !cid || !onlineRef.current || !sees()) return;
         void loadCostHistory(cid, where)
           .then((rows) => {
             // another company signed in meanwhile: nothing
@@ -2855,7 +2859,7 @@ export function StoreProvider({
       },
       loadPriceHistory: (itemId) => {
         const cid = whoRef.current?.companyId;
-        if (modeRef.current !== "cloud" || !cid || !onlineRef.current || dbRef.current.costsVisible === false) return;
+        if (modeRef.current !== "cloud" || !cid || !onlineRef.current || !sees()) return;
         void loadPriceHistory(cid, itemId)
           .then((rows) => {
             if (whoRef.current?.companyId !== cid) return;
@@ -2869,7 +2873,7 @@ export function StoreProvider({
       applySupplierTax: (id) => {
         const d0 = dbRef.current;
         const x = (d0.suppliers ?? []).find((y) => y.id === id);
-        if (!x || x.taxBps === undefined || !canSeeSuppliers(role) || d0.costsVisible === false) return noop;
+        if (!x || x.taxBps === undefined || !canSeeSuppliers(role) || !sees(d0)) return noop;
         return saveItemsBoth(itemsWithOtherTax(d0, x).map((it) => ({ prev: it, next: { ...it, vendorTaxBps: x.taxBps } })));
       },
       saveCatalogItems: (items, opts) => {
@@ -2879,7 +2883,7 @@ export function StoreProvider({
         const undos = fresh.map((x) => cleanCardFields(cleanCatalogItem(x), dbRef.current.catalog.find((c) => c.id === x.id), dbRef.current)).map((it) => {
           const prev = dbRef.current.catalog.find((x) => x.id === it.id);
           // РС-10: a change of an item there (not onlyNew) shows its price / markup row at once too
-          const priceHist = onlyNew || dbRef.current.costsVisible === false ? [] : localPriceEntries(prev, it, uid, new Date().toISOString(), dbRef.current.me ?? undefined);
+          const priceHist = onlyNew || !sees() ? [] : localPriceEntries(prev, it, uid, new Date().toISOString(), dbRef.current.me ?? undefined);
           return mutate(
             "catalog.save",
             (d) => ({

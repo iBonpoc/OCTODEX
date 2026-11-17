@@ -63,3 +63,22 @@ export function leadEstimatePropertyId(db: Pick<DB, "properties">, l: Pick<Lead,
 export const canMakeEstimateAt = (db: Pick<DB, "visits" | "jobs" | "leads">, w: Who, propertyId: ID | undefined): boolean => free(w) || isPropertyAssignee(db, w, propertyId);
 /** the price list is the office's to change (catalog_items_update — staff); the tech only reads it */
 export const canEditCatalog = (role: Role) => role !== "tech";
+
+/**
+ * #1837 (spec 54 §4 №5): who sees our costs — the server's app.can_view_costs (19 §9) is the only truth; every screen
+ * and the store ask this one function, never db.costsVisible itself (guard: test/seeCostsGuard.test.ts).
+ * - a server role, as app.can_view_costs: owner, admin, office — yes; tech, subcontractor — no; sales — only with
+ *   view_costs; a membership that is not active — no (cloud/repo.ts costsVisibleFor; db T364–T366);
+ * - the phone: what the last load said (DB.costsVisible). Not known yet in the cloud (an old cache, before the first
+ *   load) — no: a cost is shown and written only on the server's «yes»; the demo (no server) by its role, the tech no.
+ */
+export function roleSeesCosts(role: string, viewCosts: boolean, active = true): boolean {
+  if (!active) return false;
+  if (role === "owner" || role === "admin" || role === "office") return true;
+  if (role === "sales") return viewCosts;
+  return false;
+}
+export function seeCosts(db: Pick<DB, "costsVisible">, role: Role, mode: Mode): boolean {
+  if (typeof db.costsVisible === "boolean") return db.costsVisible;
+  return mode === "cloud" ? false : role !== "tech";
+}

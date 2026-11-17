@@ -1,4 +1,5 @@
 import { timing, type StatusName } from "@octo/design-tokens";
+import { seeCosts } from "./access";
 import { daysOverdue, daysSince, isOverdue, minutesSince, visitContext } from "@/data/selectors";
 import type { DB, ID, Role, Task } from "@/data/types";
 import { canSeeLead, isBackFromSnooze, leadTurn } from "./leads";
@@ -295,7 +296,9 @@ export const PRICE_RECALC_DAYS = 7;
  */
 export function priceRecalcItems(db: Pick<DB, "priceRecalc" | "catalog" | "members" | "costsVisible">, role: Role, now: number): AttentionItem[] {
   // a cache that is not a list (an old or broken one) is no reason
-  if (role === "tech" || db.costsVisible === false || !Array.isArray(db.priceRecalc) || !db.priceRecalc.length) return [];
+  // #1837: who sees our costs (features/access.ts). These rows come only with a load that also says who sees costs;
+  // without it (the demo, e2e fixtures) — by role, as every other screen there
+  if (role === "tech" || !seeCosts(db, role, "demo") || !Array.isArray(db.priceRecalc) || !db.priceRecalc.length) return [];
   const since = now - PRICE_RECALC_DAYS * 864e5;
   const last = new Map<ID, NonNullable<DB["priceRecalc"]>[number]>();
   for (const r of db.priceRecalc) {

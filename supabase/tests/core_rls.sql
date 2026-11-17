@@ -16706,4 +16706,44 @@ select tst.fails($q$insert into public.catalog_items (id, company_id, kind, name
   'T362 a group has at most 200 items (54000)');
 \echo 'T362 more ok'
 
+-- ---------------------------------------------------------------- T364 (#1837): who sees our costs — the phone's table
+-- is the server's. The rows are the same as TABLE in apps/mobile/test/seeCosts.test.ts (features/access.ts roleSeesCosts):
+-- change both together.
+\echo 'T364 app.can_view_costs by role and view_costs = the phone''s table'
+:as_super
+do $t$
+declare
+  r record; v_got boolean; i int := 0;
+begin
+  for r in select * from (values
+    ('owner',         false, 'active', true),
+    ('admin',         false, 'active', true),
+    ('office',        false, 'active', true),
+    ('sales',         false, 'active', false),
+    ('sales',         true,  'active', true),
+    ('tech',          false, 'active', false),
+    ('tech',          true,  'active', false),
+    ('subcontractor', false, 'active', false),
+    ('subcontractor', true,  'active', false),
+    ('office',        false, 'invited', false),
+    ('sales',         true,  'invited', false)
+  ) as x(role, view_costs, status, sees) loop
+    i := i + 1;
+    -- a company of its own per row: no limit on owners or seats is in the way
+    insert into auth.users (id, email, raw_user_meta_data)
+      values (('36400000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid, 't364-' || i || '@a.test', '{"full_name":"T364"}');
+    insert into public.companies (id, name)
+      values (('36410000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid, 'T364 co ' || i);
+    delete from public.memberships where company_id = ('36410000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid;
+    insert into public.memberships (company_id, user_id, role, status, permissions_override)
+      values (('36410000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid, ('36400000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid,
+              r.role, r.status, case when r.view_costs then '{"view_costs": true}'::jsonb else '{}'::jsonb end);
+    perform set_config('request.jwt.claim.sub', '36400000-0000-4000-8000-' || lpad(i::text, 12, '0'), true);
+    v_got := app.can_view_costs(('36410000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid);
+    perform set_config('request.jwt.claim.sub', '', true);
+    perform tst.ok(v_got = r.sees, format('T364 %s view_costs=%s %s: %s', r.role, r.view_costs, r.status, r.sees));
+  end loop;
+end $t$;
+\echo 'T364 ok'
+
 \echo 'ALL TESTS PASSED'

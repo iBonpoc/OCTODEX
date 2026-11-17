@@ -4,6 +4,7 @@
  * a service and who does not see costs: the client price. Saved by the store's own item save (by field, wave 53-0),
  * with «Отменить». The rules are pure in features/quickPrice.ts. A kit is never priced here (the full editor).
  */
+import { seeCosts } from "./access";
 import { useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
@@ -37,7 +38,7 @@ export function QuickPriceSheet({ item, visible, onClose, onExited }: { item: Ca
   const outerRo = useReadOnly();
   if (!item) return null;
 
-  const noCosts = store.db.costsVisible === false;
+  const noCosts = !seeCosts(store.db, store.role, store.mode);
   const asksCost = quickAsksCost(item, noCosts);
   const locked = priceLocked(item, noCosts, store.db.catalog);
   const next = quickPriceItem(item, input, store.db.catalog, noCosts);
