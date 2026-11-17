@@ -5344,6 +5344,39 @@ select tst.ok((select count(*) = 1 from public.catalog_cost_history where by = '
 set role service_role;
 select tst.ok(app.erase_queue_run() = 0, 'T240 a second run does nothing');
 reset role;
+-- a failure of one person does not stop the others, leaves him waiting with a failed try, and a later run finishes him
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a2300000-0000-4000-8000-000000000003', 't230c@x.test', '{"full_name":"T230 Failing"}'),
+  ('a2300000-0000-4000-8000-000000000004', 't230d@x.test', '{"full_name":"T230 Fine"}');
+insert into public.catalog_cost_history (company_id, item_id, unit_cost_cents, source, by) values
+  ('ca000000-0000-0000-0000-000000000000', 'a2300000-0000-4000-8000-0000000000c1', 70, 'manual', 'a2300000-0000-4000-8000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', 'a2300000-0000-4000-8000-0000000000c1', 80, 'manual', 'a2300000-0000-4000-8000-000000000004');
+insert into app.erase_queue (user_id, at) values
+  ('a2300000-0000-4000-8000-000000000003', now() - interval '1 hour'),
+  ('a2300000-0000-4000-8000-000000000004', now());
+create function tst.boom() returns trigger language plpgsql as $$ begin
+  if old."by" = 'a2300000-0000-4000-8000-000000000003' then raise exception 'T240 planted failure'; end if;
+  return new;
+end $$;
+create trigger t_boom before update on public.catalog_cost_history for each row execute function tst.boom();
+set role service_role;
+select app.erase_queue_run() as t240_done \gset
+reset role;
+select tst.ok(:t240_done = 1, format('T240 one person failed, the other was done in the same run (done=%s, waiting=%s)', :t240_done, (select string_agg(user_id::text || ':' || tries, ',') from app.erase_queue where done_at is null)));
+select tst.ok((select done_at is null and tries = 1 from app.erase_queue where user_id = 'a2300000-0000-4000-8000-000000000003'), 'T240 the failing one waits, with one failed try');
+select tst.ok((select done_at is not null and tries = 0 from app.erase_queue where user_id = 'a2300000-0000-4000-8000-000000000004')
+              and not exists (select 1 from public.catalog_cost_history where by = 'a2300000-0000-4000-8000-000000000004'), 'T240 the other one is done and clean');
+drop trigger t_boom on public.catalog_cost_history;
+set role service_role;
+select app.erase_queue_run() as t240_done2 \gset
+reset role;
+select tst.ok(:t240_done2 = 1 and (select done_at is not null from app.erase_queue where user_id = 'a2300000-0000-4000-8000-000000000003'), 'T240 the next run finishes the one that failed');
+update app.erase_queue set tries = 5, done_at = null where user_id = 'a2300000-0000-4000-8000-000000000003';
+set role service_role;
+select tst.ok(app.erase_queue_run() = 0, 'T240 after 5 failed tries a row is left alone (50-6 raises an alarm on it)');
+reset role;
+drop function tst.boom();
 \echo 'T230 + T240 (50-2): the erasure queue and the job ok'
 -- ---------------------------------------------------------------- T59: a row never moves to another company (security #2, 19 §7.1)
 :as_super
