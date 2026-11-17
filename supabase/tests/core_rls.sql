@@ -5378,6 +5378,92 @@ select tst.ok(app.erase_queue_run() = 0, 'T240 after 5 failed tries a row is lef
 reset role;
 drop function tst.boom();
 \echo 'T230 + T240 (50-2): the erasure queue and the job ok'
+-- ---------------------------------------------------------------- T239 (spec 50, PR 50-3): the profile picture's object goes to the Storage queue
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a2390000-0000-4000-8000-000000000005', 't239a@x.test', '{"full_name":"T239 Own"}'),
+  ('a2390000-0000-4000-8000-000000000006', 't239b@x.test', '{"full_name":"T239 Other"}');
+insert into public.files (id, company_id, kind, storage_key, created_by) values
+  ('a2390000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', 'photo', 'ca000000-0000-0000-0000-000000000000/avatar-own.jpg', 'a2390000-0000-4000-8000-000000000005'),
+  ('a2390000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', 'document', 'ca000000-0000-0000-0000-000000000000/work-doc.pdf', 'a2390000-0000-4000-8000-000000000006'),
+  ('a2390000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', 'photo', 'ca000000-0000-0000-0000-000000000000/someone-elses.jpg', 'a2390000-0000-4000-8000-000000000006');
+-- the profile of the other person points at a WORK file and at someone else's photo (the server's role may write it; the guard is for the app)
+update public.users set avatar_file_id = 'a2390000-0000-4000-8000-0000000000f1' where id = 'a2390000-0000-4000-8000-000000000005';
+update public.users set avatar_file_id = 'a2390000-0000-4000-8000-0000000000f2' where id = 'a2390000-0000-4000-8000-000000000006';
+reset role; set request.jwt.claim.sub = 'a2390000-0000-4000-8000-000000000005'; reset request.jwt.claims; set role authenticated;
+select tst.fresh(2);
+select tst.ok((public.delete_account('DELETE') ->> 'deleted')::boolean, 'T239 the person with a picture deletes the account');
+:as_super
+select tst.ok((select avatar_file_id = 'a2390000-0000-4000-8000-0000000000f1' from app.erase_queue where user_id = 'a2390000-0000-4000-8000-000000000005'), 'T239 the queue remembers the picture''s file');
+reset role; set request.jwt.claim.sub = 'a2390000-0000-4000-8000-000000000006'; reset request.jwt.claims; set role authenticated;
+select tst.fresh(2);
+select tst.ok((public.delete_account('DELETE') ->> 'deleted')::boolean, 'T239 the other person deletes the account');
+:as_super
+set role service_role;
+select app.erase_queue_run() >= 2 as t239_ran \gset
+reset role;
+select tst.ok(:'t239_ran'::boolean, 'T239 the job ran');
+select tst.ok((select count(*) = 1 from app.storage_erase_queue where path = 'ca000000-0000-0000-0000-000000000000/avatar-own.jpg' and bucket = 'files' and done_at is null), 'T239 the own picture''s object is queued');
+select tst.ok(not exists (select 1 from public.files where id = 'a2390000-0000-4000-8000-0000000000f1'), 'T239 the own picture''s file row is gone');
+select tst.ok(not exists (select 1 from app.storage_erase_queue where path like '%work-doc.pdf' or path like '%someone-elses.jpg'), 'T239 a work file and someone else''s photo are never queued');
+select tst.ok((select count(*) = 2 from public.files where id in ('a2390000-0000-4000-8000-0000000000f2', 'a2390000-0000-4000-8000-0000000000f3')), 'T239 the work files stay (#1603)');
+select tst.ok((select count(*) = 2 from app.erase_queue where user_id in ('a2390000-0000-4000-8000-000000000005', 'a2390000-0000-4000-8000-000000000006') and done_at is not null), 'T239 both people are done');
+-- the path check: only <company uuid>/<name> in the bucket «files»
+select tst.fails($q$insert into app.storage_erase_queue (bucket, path) values ('files', '../x')$q$, 'T239 no «..» path');
+select tst.fails($q$insert into app.storage_erase_queue (bucket, path) values ('files', '/x')$q$, 'T239 no rooted path');
+select tst.fails($q$insert into app.storage_erase_queue (bucket, path) values ('files', 'ca000000-0000-0000-0000-000000000000/')$q$, 'T239 no bare prefix');
+select tst.fails($q$insert into app.storage_erase_queue (bucket, path) values ('files', 'ca000000-0000-0000-0000-000000000000/../cb000000-0000-0000-0000-000000000000/x')$q$, 'T239 no path that climbs out');
+select tst.fails($q$insert into app.storage_erase_queue (bucket, path) values ('files', 'not-a-uuid/x.jpg')$q$, 'T239 the first part is a company uuid');
+select tst.fails($q$insert into app.storage_erase_queue (bucket, path) values ('other', 'ca000000-0000-0000-0000-000000000000/x.jpg')$q$, 'T239 only the bucket files');
+-- the edge function's calls: people cannot, service_role can
+select tst.ok(not has_function_privilege('anon', 'public.storage_erase_claim(int)', 'EXECUTE') and not has_function_privilege('authenticated', 'public.storage_erase_claim(int)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'public.storage_erase_done(uuid[])', 'EXECUTE') and not has_function_privilege('authenticated', 'public.storage_erase_fail(uuid[])', 'EXECUTE')
+              and has_function_privilege('service_role', 'public.storage_erase_claim(int)', 'EXECUTE') and has_function_privilege('service_role', 'public.storage_erase_done(uuid[])', 'EXECUTE')
+              and has_function_privilege('service_role', 'public.storage_erase_fail(uuid[])', 'EXECUTE'), 'T238 the Storage queue calls are for service_role only');
+select tst.ok(not has_table_privilege('authenticated', 'app.storage_erase_queue', 'SELECT') and not has_table_privilege('anon', 'app.storage_erase_queue', 'SELECT')
+              and (select relrowsecurity and relforcerowsecurity from pg_class where oid = 'app.storage_erase_queue'::regclass), 'T238 the Storage queue is closed to the API (row security on and forced)');
+set role authenticated;
+select tst.fails($q$select * from public.storage_erase_claim(10)$q$, 'T239 authenticated cannot claim');
+reset role; set role service_role;
+select id as t239_id from public.storage_erase_claim(10) limit 1 \gset
+select tst.ok(:'t239_id' <> '', 'T239 service_role claims the waiting object');
+select tst.ok(public.storage_erase_fail(array[:'t239_id'::uuid]) = 1, 'T239 a failed removal counts a try');
+select tst.ok(public.storage_erase_done(array[:'t239_id'::uuid]) = 1, 'T239 a removed object is marked done');
+select tst.ok(public.storage_erase_done(array[:'t239_id'::uuid]) = 0, 'T239 and only once');
+select tst.ok((select count(*) = 0 from public.storage_erase_claim(10)), 'T239 nothing is left to claim');
+reset role;
+-- an own photo that is linked to something (a client) is not a profile picture: never queued, never deleted; an odd key is left for a person
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a2390000-0000-4000-8000-000000000007', 't239c@x.test', '{"full_name":"T239 Linked"}'),
+  ('a2390000-0000-4000-8000-000000000008', 't239d@x.test', '{"full_name":"T239 Odd key"}');
+insert into public.files (id, company_id, kind, storage_key, created_by, customer_id) values
+  ('a2390000-0000-4000-8000-0000000000f4', 'ca000000-0000-0000-0000-000000000000', 'photo', 'ca000000-0000-0000-0000-000000000000/linked-own.jpg', 'a2390000-0000-4000-8000-000000000007', 'c3900000-0000-4000-8000-000000000001');
+insert into public.files (id, company_id, kind, storage_key, created_by) values
+  ('a2390000-0000-4000-8000-0000000000f5', 'ca000000-0000-0000-0000-000000000000', 'photo', 'ca000000-0000-0000-0000-000000000000/Odd Name.jpg', 'a2390000-0000-4000-8000-000000000008');
+update public.users set avatar_file_id = 'a2390000-0000-4000-8000-0000000000f4' where id = 'a2390000-0000-4000-8000-000000000007';
+update public.users set avatar_file_id = 'a2390000-0000-4000-8000-0000000000f5' where id = 'a2390000-0000-4000-8000-000000000008';
+reset role; set request.jwt.claim.sub = 'a2390000-0000-4000-8000-000000000007'; reset request.jwt.claims; set role authenticated;
+select tst.fresh(2);
+select tst.ok((public.delete_account('DELETE') ->> 'deleted')::boolean, 'T239 the person whose picture is linked to a client deletes the account');
+reset role; set request.jwt.claim.sub = 'a2390000-0000-4000-8000-000000000008'; reset request.jwt.claims; set role authenticated;
+select tst.fresh(2);
+select tst.ok((public.delete_account('DELETE') ->> 'deleted')::boolean, 'T239 the person with an odd key deletes the account');
+:as_super
+set role service_role;
+select app.erase_queue_run() >= 2 as t239_ran2 \gset
+reset role;
+select tst.ok(:'t239_ran2'::boolean, 'T239 the job ran again');
+select tst.ok(exists (select 1 from public.files where id = 'a2390000-0000-4000-8000-0000000000f4'), 'T239 an own photo linked to a client stays (it is the client''s record)');
+select tst.ok(not exists (select 1 from app.storage_erase_queue where path like '%linked-own.jpg'), 'T239 and is not queued');
+select tst.ok(exists (select 1 from public.files where id = 'a2390000-0000-4000-8000-0000000000f5') and not exists (select 1 from app.storage_erase_queue where path like '%Odd Name%'),
+              'T239 an odd key: not queued, the row stays with its reference');
+select tst.ok((select count(*) = 2 from app.erase_queue where user_id in ('a2390000-0000-4000-8000-000000000007', 'a2390000-0000-4000-8000-000000000008') and done_at is not null and tries = 0),
+              'T239 the rest of the erasure of both people is done (one odd file never fails it)');
+set role service_role;
+select tst.ok(app.erase_queue_run() = 0, 'T239 a repeat of the job changes nothing');
+reset role;
+\echo 'T239 (50-3): the Storage erase queue ok'
 -- ---------------------------------------------------------------- T59: a row never moves to another company (security #2, 19 §7.1)
 :as_super
 -- (1) guard: every table with company_id, in every non-system schema, has the immutable trigger
