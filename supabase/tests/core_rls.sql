@@ -5201,6 +5201,11 @@ select tst.ok(not has_function_privilege('anon', 'public.transfer_ownership(uuid
 select tst.ok(has_function_privilege('authenticated', 'public.delete_account(text,uuid[])', 'EXECUTE'), 'authenticated: delete_account');
 select tst.ok(not has_function_privilege('authenticated', 'app.signed_in_recently(int)', 'EXECUTE'), 'internal: signed_in_recently');
 select tst.ok(not has_function_privilege('authenticated', 'app.erase_personal_rows(uuid)', 'EXECUTE'), 'internal: erase_personal_rows');
+-- 50-1 (spec 50 §3.2, rule 18): the erasure itself is behind delete_account — nobody calls it directly
+select tst.ok(not has_function_privilege('anon', 'app.erase_account(uuid,uuid[])', 'EXECUTE'), 'anon: no erase_account');
+select tst.ok(not has_function_privilege('authenticated', 'app.erase_account(uuid,uuid[])', 'EXECUTE'), 'internal: erase_account (only delete_account calls it)');
+select tst.ok(not has_function_privilege('public', 'app.erase_account(uuid,uuid[])', 'EXECUTE'), 'public: no erase_account');
+select tst.ok((select prosecdef from pg_proc where oid = 'app.erase_account(uuid,uuid[])'::regprocedure), 'erase_account is security definer (the wrapper delete_account calls it as the owner)');
 select tst.ok(not has_function_privilege('authenticated', 'app.tg_user_erased_guard()', 'EXECUTE'), 'internal: the users guard');
 -- the watchman: every column that points to a person is classified — a new table must say what happens on deletion
 select coalesce(string_agg(format('%s.%s', t, c), ', ' order by t, c), '') as t50_unclassified from (
