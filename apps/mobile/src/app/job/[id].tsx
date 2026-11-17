@@ -37,6 +37,7 @@ import { T } from "@/ui/primitives";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { fabItems } from "@/nav/sections";
 import { CardGrid, ListCard } from "@/ui/listCard";
+import { FilterBar } from "@/ui/filterBar";
 import { memberLabel, memberName } from "@/features/team";
 import { canSeeJob } from "@/features/access";
 import { invoiceTitle } from "@/features/invoiceTitle";
@@ -407,17 +408,19 @@ export default function JobScreen() {
   const items = filterJobHistory(jobHistory(db, j.id, store.role), filter);
   const historyTab = (
     <>
-      <Segmented
-        full
-        value={filter}
-        onChange={setFilter}
-        items={[
-          { key: "all", label: t("job3.f.all") },
-          { key: "action", label: t("job3.f.action") },
-          { key: "note", label: t("job3.f.note") },
-          { key: "call", label: t("job3.f.call") },
-        ]}
-      />
+      {/* a filter over the history list — the list's filter lane (spec 56 §3.1), not segments */}
+      <View testID="job-history-filter">
+        <FilterBar<JobHistoryFilter>
+          value={filter}
+          onChange={setFilter}
+          items={[
+            { key: "all", label: t("job3.f.all") },
+            { key: "action", label: t("job3.f.action") },
+            { key: "note", label: t("job3.f.note") },
+            { key: "call", label: t("job3.f.call") },
+          ]}
+        />
+      </View>
       {items.length ? (
         <CardGrid>
           {items.map((e) => (

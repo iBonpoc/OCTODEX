@@ -32,7 +32,8 @@ exports.run = async (h) => {
   h.expect((await sheet.getByRole("button", { name: "Сохранить", exact: true }).last().isDisabled()) === true, "no save before «к чему» and the title");
   await sheet.getByText("Sarah Mitchell", { exact: true }).first().click(); await p.waitForTimeout(300);
   await sheet.getByPlaceholder("Например: перезвонить и уточнить объём").fill(TITLE);
-  await sheet.getByText("Со временем", { exact: true }).last().click(); await p.waitForTimeout(300);
+  await sheet.getByTestId("task-plan-mode-button").click(); // «В плане ⌄» is a row with a menu (spec 56 wave 5а)
+  await p.getByTestId("task-plan-mode-time").locator("visible=true").first().click(); await p.waitForTimeout(300);
   await h.shot("form");
   await sheet.getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(700);
   let db = await h.db();
