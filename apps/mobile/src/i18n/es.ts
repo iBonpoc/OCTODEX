@@ -2307,7 +2307,7 @@ export const es: Dict = {
   "legal.err.needed": "Primero acepte los Términos del servicio y la Política de privacidad.",
   "legal.err.outdated": "Los términos cambiaron. Actualice la aplicación para ver el texto nuevo.",
   "legal.err.network": "Revise la conexión e inténtelo de nuevo para guardar.",
-  "legal.gate.firstTitle": "Términos y privacidad",
+  "legal.gate.firstTitle": "Términos",
   "legal.gate.firstBody": "Antes de continuar, lea y acepte los Términos del servicio y la Política de privacidad.",
   "legal.gate.changedTitle": "Los términos cambiaron",
   "legal.gate.changedBody": "Actualizamos los Términos del servicio o la Política de privacidad. Para seguir trabajando, lea y acepte la nueva edición.",

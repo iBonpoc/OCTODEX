@@ -63,8 +63,8 @@ exports.run = async (h) => {
   // #1274 (founder 12.11): the toolbar has pictures only — the words are the cells' names (screen reader), not drawn under them
   const bar = await tid("draw-toolbar").innerText();
   const phone = (h.layout?.width ?? 390) < 600;
-  h.expect(!/Желоб|Водосток|Назад|Вперёд|Этаж|Свойства/.test(bar), `no words on the toolbar (${bar.replace(/\n/g, " | ")})`);
-  for (const [id, w] of [["draw-tool-line", "Желоб"], ["draw-tool-ds", "Водосток"], ["draw-story", "Этаж"], ["draw-undo", "Назад"], ["draw-redo", "Вперёд"]]) {
+  h.expect(!/Gutter|Downspout|Назад|Вперёд|Этаж|Свойства/.test(bar), `no words on the toolbar (${bar.replace(/\n/g, " | ")})`);
+  for (const [id, w] of [["draw-tool-line", "Gutter"], ["draw-tool-ds", "Downspout"], ["draw-story", "Этаж"], ["draw-undo", "Назад"], ["draw-redo", "Вперёд"]]) {
     const name = (await tid(id).getByRole("button").getAttribute("aria-label")) || "";
     h.expect(name.includes(w), `${id} is named «${w}» (${name})`);
   }
@@ -83,7 +83,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await count("line")) === 1, "one run drawn");
   // one storey: the label is the length alone (no «· эт 1», founder 12.11, #1275)
   await waitFor(async () => (await labels()).some((t) => /^\d+(′|″)/.test(t) && !/эт/.test(t)), "its label: the length alone (one storey)");
-  h.expect(/^Желоб · [^·]+$/.test((await tid("draw-selected").innerText()).trim()), "the new run is picked: «Желоб · <length>», no «эт 1» with one storey (#1666)");
+  h.expect(/^Gutter · [^·]+$/.test((await tid("draw-selected").innerText()).trim()), "the new run is picked: «Gutter · <length>», no «эт 1» with one storey (#1666)");
   h.expect((await tid("draw-empty").count()) === 0, "the empty hint is gone");
 
   // a second run from near its end: sticks to it → a corner, more $
@@ -110,7 +110,7 @@ exports.run = async (h) => {
   // a tap with «Желоб» picks (#687: no «Выбрать»)
   await tid("draw-tool-line").getByRole("button").click();
   await p.mouse.click(x0 + (x1 - x0) * 0.2, y);
-  await waitFor(async () => /Желоб/.test(await tid("draw-selected").innerText().catch(() => "")), "picked the run");
+  await waitFor(async () => /Gutter/.test(await tid("draw-selected").innerText().catch(() => "")), "picked the run");
   const before = new Set(await svg().locator("line:not([id^=halo])").evaluateAll((ls) => ls.map((l) => l.getAttribute("stroke"))));
   await tid("draw-story").click();
   await waitFor(async () => /2/.test(await tid("draw-story").innerText()), "the story button says 2");
@@ -181,7 +181,7 @@ exports.run = async (h) => {
   // the chip says what is picked while the new gutter is; the hint «Дальше: водостоки» is for nothing picked (#1274): a tap on the empty canvas
   await p.mouse.click(b2.x + b2.width * 0.5, b2.y + b2.height * 0.65);
   await tid("draw-next").waitFor({ timeout: 3000 });
-  h.expect(/Дальше: водостоки/.test(await tid("draw-next").innerText()), "what next: the downspouts (in the summary chip)");
+  h.expect(/Дальше: downspout/.test(await tid("draw-next").innerText()), "what next: the downspouts (in the summary chip)");
   await h.shot("next");
   await tid("draw-next").click(); // the hint is the chip: a tap puts the downspout tool on
   await tid("draw-hint").waitFor({ timeout: 3000 });

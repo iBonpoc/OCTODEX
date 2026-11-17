@@ -39,18 +39,18 @@ exports.run = async (h) => {
 
   // one storey: no «эт»
   await stroke(y1);
-  await summaryIs(/^Желоб · [^·]+$/, "one storey: «Желоб · <length>», no «эт 1»");
+  await summaryIs(/^Gutter · [^·]+$/, "one storey: «Gutter · <length>», no «эт 1»");
 
   // the next gutter on storey 2: now two storeys — the word is there
   await tid("draw-story").click();
   await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="draw-story"]')].some((e) => e.offsetParent && (e.textContent || "").includes("2")), null, { timeout: 5000 });
   await stroke(y2);
-  await summaryIs(/^Желоб · .+ · эт 2$/, "two storeys: the new gutter says «эт 2»");
+  await summaryIs(/^Gutter · .+ · эт 2$/, "two storeys: the new gutter says «эт 2»");
   await h.shot("two");
 
   // the first one picked again: «эт 1»
   await tid("draw-tool-line").getByRole("button").click();
   await canvasAt(p, b.x + b.width * 0.35, y1);
   await p.mouse.click(b.x + b.width * 0.35, y1);
-  await summaryIs(/^Желоб · .+ · эт 1$/, "two storeys: the first gutter says «эт 1»");
+  await summaryIs(/^Gutter · .+ · эт 1$/, "two storeys: the first gutter says «эт 1»");
 };
