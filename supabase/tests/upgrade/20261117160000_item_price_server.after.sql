@@ -12,6 +12,10 @@ begin
      or exists (select 1 from public.catalog_price_recalc where company_id = 'cacc0000-0000-4000-8000-000000000322') then
     raise exception 'UPGRADE 322: the migration wrote a price row';
   end if;
+  if exists (select 1 from public.catalog_items i join public._upg322 u on u.id = i.id
+              where i.updated_at is distinct from u.updated_at or i.row_version is distinct from u.row_version) then
+    raise exception 'UPGRADE 322: the backfill moved updated_at / row_version (an item would look changed)';
+  end if;
 end $$;
 do $$
 declare r record;
@@ -23,5 +27,6 @@ begin
     execute format('delete from %s where %I = %L', r.tbl, r.col, 'cacc0000-0000-4000-8000-000000000322');
   end loop;
   delete from public.companies where id = 'cacc0000-0000-4000-8000-000000000322';
+  drop table public._upg322;
   set local session_replication_role = origin;
 end $$;

@@ -18,7 +18,8 @@
 --   * t32_item_price_from_cost — AFTER INSERT OR UPDATE on catalog_item_costs: a real change of the cost, tax or markup
 --     written directly (new phone, a price import) re-counts the item; written by t30 of the same item (flag
 --     app.item_costs_moving AND a nested trigger) it only raises app.item_price_due — the price of that row is t31's
---     (an update of the row from here would be error 27000).
+--     (an update of the row from here would be error 27000). Flags set by hand do nothing: t32 skips only inside a trigger,
+--     and t30 wipes a «price due» flag at the top of a client's own command.
 --   * t97_price_history — without a column list: a price set by t31 in a command that did not list the price is logged too.
 -- Only materials: labor and service keep their hand price until spec 55 (markup_mode, 55-0б); a kit's price is 0 here and
 -- counted on the phone from its parts.
@@ -70,6 +71,11 @@ create policy catalog_price_recalc_select on public.catalog_price_recalc for sel
 create or replace function app.tg_catalog_costs_move()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
+  -- #1807: a client's own command (depth 1) never carries a «price due» flag in: one set by hand is wiped here, before t31
+  -- reads it (t30 always runs before t31). t32's nested update (depth 2) keeps its own flag.
+  if pg_trigger_depth() = 1 then
+    perform set_config('app.item_price_due', '', true);
+  end if;
   -- moved only for who may set costs (sales without view_costs edit the price list but not our costs: just blanked);
   -- a migration (no JWT) moves what is stored. old.id: the key of the row as it is (an id change cannot aim elsewhere).
   if (new.unit_cost_cents is not null or new.vendor_tax_bps is not null or new.markup_bps is not null)
@@ -138,7 +144,7 @@ begin
     select exists (
       select 1 from (select h.prev_unit_price_cents from public.catalog_price_history h
                       where h.company_id = new.company_id and h.item_id = old.id and h.unit_price_cents is not null
-                      order by h.at desc limit 1) last
+                      order by h.at desc, h.id desc limit 1) last
        where last.prev_unit_price_cents = new.unit_price_cents) into v_echo;
     if not v_echo then
       insert into public.catalog_price_recalc (company_id, item_id, sent_price_cents, server_price_cents, by)
@@ -222,6 +228,14 @@ grant execute on function app.catalog_price_drift(uuid) to authenticated;
 
 -- ---- what is stored: price_from_cost of every material with a cost (prices are NOT re-counted: an off-formula price
 -- stays until its cost changes, §5.3б п.2) ------------------------------------------------------------------------------
-update public.catalog_items i set price_from_cost = true
- where i.kind = 'material' and not i.price_from_cost
-   and exists (select 1 from public.catalog_item_costs c where c.company_id = i.company_id and c.item_id = i.id and c.unit_cost_cents is not null);
+-- with the table's own triggers off, in one block (all or nothing): only this flag is set — no updated_at / row_version
+-- bump (an item would look «changed today»), no vendor rewrite by t20, no price row. The table owner runs migrations
+-- (no superuser needed, unlike session_replication_role); the lock is held for this one small update.
+do $$
+begin
+  alter table public.catalog_items disable trigger user;
+  update public.catalog_items i set price_from_cost = true
+   where i.kind = 'material' and not i.price_from_cost
+     and exists (select 1 from public.catalog_item_costs c where c.company_id = i.company_id and c.item_id = i.id and c.unit_cost_cents is not null);
+  alter table public.catalog_items enable trigger user;
+end $$;

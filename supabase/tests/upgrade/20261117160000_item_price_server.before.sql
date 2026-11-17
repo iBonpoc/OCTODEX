@@ -8,3 +8,6 @@ insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_c
 insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
   ('cacc0000-0000-4000-8000-0000000003c1', 'cacc0000-0000-4000-8000-000000000322', 1000, 1025, 1000),
   ('cacc0000-0000-4000-8000-0000000003c3', 'cacc0000-0000-4000-8000-000000000322', 4500, 0, 500);
+-- the rows' stamps before the migration (the backfill must not move them)
+create table if not exists public._upg322 as
+  select id, updated_at, row_version from public.catalog_items where company_id = 'cacc0000-0000-4000-8000-000000000322';

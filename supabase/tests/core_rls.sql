@@ -16005,10 +16005,28 @@ select tst.ok((select unit_price_cents from public.catalog_items where id = '532
 -- the «moving» flag set by hand at the top level skips nothing
 do $t$ begin
   perform set_config('app.item_costs_moving', '53220000-0000-4000-8000-0000000000c6', true);
-  perform set_config('app.item_price_due', '53220000-0000-4000-8000-0000000000c7', true);
   update public.catalog_item_costs set unit_cost_cents = 300 where item_id = '53220000-0000-4000-8000-0000000000c6';
 end $t$;
-select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c6') = 600, 'T331 a forged flag does not skip the count');
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c6') = 600, 'T331 a forged «moving» flag does not skip the count');
+-- the «price due» flag set by hand counts nothing: an off-formula price stays on a rename — for sales (no formula back,
+-- check 2 Б1) and for the office
+:as_super
+select pg_temp.drift322('53220000-0000-4000-8000-0000000000c6', 999);
+select pg_temp.drift322('53220000-0000-4000-8000-0000000000c7', 888);
+:as_sales_a
+do $t$ begin
+  perform set_config('app.item_price_due', '53220000-0000-4000-8000-0000000000c6', true);
+  update public.catalog_items set name = 'T331 a renamed' where id = '53220000-0000-4000-8000-0000000000c6';
+end $t$;
+:as_office_a
+do $t$ begin
+  perform set_config('app.item_price_due', '53220000-0000-4000-8000-0000000000c7', true);
+  update public.catalog_items set name = 'T331 b renamed' where id = '53220000-0000-4000-8000-0000000000c7';
+end $t$;
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c6') = 999
+          and (select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c7') = 888,
+  'T331 a forged «price due» flag counts nothing: sales gets no formula, the office''s rename keeps the price');
+:as_office_a
 select tst.fails($q$update public.catalog_item_costs set unit_cost_cents = 100000001 where item_id = '53220000-0000-4000-8000-0000000000c6'$q$,
   'T331 a cost above $1 000 000 a unit is refused');
 :as_super
