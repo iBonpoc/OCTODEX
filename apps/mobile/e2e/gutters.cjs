@@ -203,4 +203,26 @@ async function pickDsKind(p, key) {
   await p.waitForFunction((k) => document.querySelector(`[data-testid="attr-ds-kind-${k}"]`)?.getAttribute("aria-checked") === "true", key, { timeout: 5000 });
 }
 
-module.exports = { pickDsKind, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
+// The window of a gutter / downspout works on a copy (#1858, v6): a choice changes the window only; «Сохранить» at its bottom writes it.
+// On the phone «Сохранить» closes the sheet; wider the panel stays on what is picked.
+async function saveAttrs(p) {
+  const btn = p.getByTestId("attr-save").locator("visible=true").first();
+  await btn.getByRole("button").click();
+  if ((p.viewportSize()?.width ?? 0) <= 390) await p.getByTestId("attr-panel").locator("visible=true").first().waitFor({ state: "detached", timeout: 5000 });
+}
+
+// a menu row of the window (SelectField): opens its menu at the row, picks the item by its key
+async function chooseAttr(p, field, key) {
+  await p.getByTestId(`${field}-button`).locator("visible=true").first().click();
+  const item = p.getByTestId(`${field}-${key}`).locator("visible=true").first();
+  await item.waitFor({ timeout: 5000 });
+  await item.click();
+  await item.waitFor({ state: "detached", timeout: 5000 });
+}
+
+// what a menu row of the window shows now (its value, or «Выберите»)
+async function attrValue(p, field) {
+  return (await p.getByTestId(`${field}-button`).locator("visible=true").first().innerText()).trim();
+}
+
+module.exports = { saveAttrs, chooseAttr, attrValue, pickDsKind, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };

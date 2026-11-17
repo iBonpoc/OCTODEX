@@ -11,6 +11,7 @@
  */
 import { sizeText } from "../sizeText";
 import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
+import { applyDraft, draftOf, isDirty, patchDraft, setDraftLen, type AttrDraft, type LenFields } from "./attrDraft";
 import { useWindowDimensions, View } from "react-native";
 import { router, Stack, useLocalSearchParams, type Href } from "expo-router";
 import * as Crypto from "expo-crypto";
@@ -224,6 +225,12 @@ export default function DrawScreen() {
   const [swing, setSwing] = useState<{ a: P; b: P; deg: number } | null>(null);
   /** 390: the attribute sheet is open (820/1280 show the panel whenever something is picked) */
   const [sheet, setSheet] = useState(false);
+  /** the window's copy of the picked element (#1858, `attrDraft.ts`): its rows change this, «Сохранить» writes it; `base` — the drawing it was taken from */
+  const [attrWin, setWin] = useState<{ dr: AttrDraft; base: Drawing } | null>(null);
+  /** «Сохранить» found the typed length not a number: the line under the field, the window stays */
+  const [lenBad, setLenBad] = useState(false);
+  /** 820/1280: another element picked (or the panel closed) over an unsaved window — what to do after the question */
+  const [askNext, setAskNext] = useState<{ next: string | null } | null>(null);
   /** the properties of NEW gutters / downspouts of this drawing (#1563 PR B): set by two taps on a tool; none — the company's defaults */
   const [newDef, setNewDef] = useState<NewDefaults>({});
   /** «Новые желоба» / «Новые водостоки» open (a sheet on the phone, the side column wider) */
@@ -758,17 +765,83 @@ export default function DrawScreen() {
   /** the picked downspout's kind icon on the bottom bar (#929): the kind seen at a glance, no colour */
   const selDsIcon = sel && !("a" in sel) ? dsKindOf(sel.shape, sel.dsStyle).icon : null;
 
-  // the attribute panel (П21.8): one choice = one edit of the drawing, taken back by «Назад»
-  const onRunAttrs = (p: Partial<RunAttrs>) => {
-    const id = cur.current.selected;
-    if (!id) return;
-    if (p.story !== undefined) setStoryN(storyOf(p.story));
-    commit(setRunAttrs(cur.current.drawing, id, p, cur.current.ch));
+  // the window's copy follows the pick, and the drawing while nothing is typed into it (an end dragged, «Назад»); an unsaved copy stays.
+  // 820/1280: another element picked over an unsaved panel — the pick goes back and the question is asked (the phone's sheet covers the canvas)
+  const winRef = useRef(attrWin);
+  winRef.current = attrWin;
+  useEffect(() => {
+    const w = winRef.current;
+    if (wide && w && w.dr.id !== selected && isDirty(w.base, w.dr) && draftOf(drawing, w.dr.id)) {
+      setAskNext({ next: selected });
+      setSelected(w.dr.id);
+      return;
+    }
+    if (w && w.dr.id === selected && isDirty(w.base, w.dr)) return;
+    const dr = selected ? draftOf(drawing, selected) : null;
+    setWin(dr ? { dr, base: drawing } : null);
+    setLenBad(false);
+  }, [selected, drawing, wide]);
+  // the window (v6, #1858): every choice changes its copy; «Сохранить» writes the copy as one edit (one step of «Назад»), «Закрыть» drops it
+  const winFor = attrWin && attrWin.dr.id === selected ? attrWin : null;
+  const dirty = isDirty(winFor?.base ?? drawing, winFor?.dr ?? null);
+  const onRunAttrs = (p: Partial<RunAttrs>) => setWin((w) => (w ? { ...w, dr: patchDraft(w.dr, p, cur.current.ch) } : w));
+  const onDsAttrs = (p: Partial<DsAttrs>) => setWin((w) => (w ? { ...w, dr: patchDraft(w.dr, p, cur.current.ch) } : w));
+  const onLen = (x: Partial<LenFields>) => {
+    setLenBad(false);
+    setWin((w) => (w ? { ...w, dr: setDraftLen(w.dr, x) } : w));
   };
-  const onDsAttrs = (p: Partial<DsAttrs>) => {
-    const id = cur.current.selected;
-    if (id) commit(setDsAttrs(cur.current.drawing, id, p, cur.current.ch));
+  /** «Сохранить»: the copy into the drawing; false — the length is not a number, the window stays */
+  const saveWin = (): boolean => {
+    if (!winFor) return true;
+    const { drawing: next, bad } = applyDraft(cur.current.drawing, winFor.dr);
+    if (bad) {
+      setLenBad(true);
+      return false;
+    }
+    const was = cur.current.drawing.runs.find((r) => r.id === winFor.dr.id)?.attrs.story;
+    if (winFor.dr.kind === "run" && storyOf(winFor.dr.attrs.story) !== storyOf(was)) setStoryN(storyOf(winFor.dr.attrs.story));
+    const changed = next !== cur.current.drawing;
+    commit(next);
+    if (changed) haptics.success(); // one write of the window (DS §15.6)
+    // the copy starts again from what is saved (wider the panel stays on this element)
+    const fresh = draftOf(cur.current.drawing, winFor.dr.id);
+    setWin(fresh ? { dr: fresh, base: cur.current.drawing } : null);
+    setLenBad(false);
+    return true;
   };
+  /** the window goes: the phone's sheet closes (the pick stays), wider the panel lets the pick go */
+  const leaveWin = () => {
+    // the copy starts again from what is saved: the pick may stay (the phone), the window opens on it again
+    const id = cur.current.selected;
+    const fresh = id ? draftOf(cur.current.drawing, id) : null;
+    setWin(fresh ? { dr: fresh, base: cur.current.drawing } : null);
+    setLenBad(false);
+    if (wide) setSelected(null);
+    else setSheet(false);
+  };
+  /** «Сохранить»: the phone's sheet closes; wider the panel stays on what is picked, saved (a second element is one tap away) */
+  const onWinSave = () => {
+    if (saveWin() && !wide) setSheet(false);
+  };
+  const onWinClose = () => {
+    if (wide && dirty) return setAskNext({ next: null });
+    leaveWin();
+  };
+  /** 820/1280: the answer to «Сохранить изменения?» over the panel — saved or dropped, then the pick asked for (none: «Закрыть»); «Назад» stays */
+  const resolveAsk = (a: "save" | "discard" | "back") => {
+    const next = askNext?.next ?? null;
+    setAskNext(null);
+    if (a === "back") return;
+    if (a === "save" && !saveWin()) return;
+    const fresh = next ? draftOf(cur.current.drawing, next) : null;
+    setWin(fresh ? { dr: fresh, base: cur.current.drawing } : null);
+    setLenBad(false);
+    setSelected(next);
+  };
+  // TEMP (#1858): the question over the panel comes from the core (Экраны №9, after #1964/#1975) — until then the copy is dropped
+  useEffect(() => {
+    if (askNext) resolveAsk("discard");
+  }, [askNext]); // eslint-disable-line react-hooks/exhaustive-deps
   // the corners of the picked run (M7c): stored on its runs, else the company's method
   const runCorners: RunCorner[] =
     sel && "a" in sel
@@ -780,10 +853,6 @@ export default function DrawScreen() {
           })
       : [];
   const onCorner = (f: FoundCorner, method: CornerChoice["method"] | null) => commit(setCornerMethod(cur.current.drawing, f, method));
-  const onLength = (lengthIn: number | null) => {
-    const id = cur.current.selected;
-    if (id) commit(setLength(cur.current.drawing, id, lengthIn));
-  };
   const quick = quickRun ? drawing.runs.find((r) => r.id === quickRun) : undefined;
   const editRun = lenEdit ? drawing.runs.find((r) => r.id === lenEdit) : undefined;
   /** «Отменить» or a tap outside the length sheet (founder 09.11): the gutter just drawn goes — no step left to undo */
@@ -819,11 +888,24 @@ export default function DrawScreen() {
     ) : null;
   const photoN = m ? photosOf(store.db, m.id).length : 0;
   const mPhotos = m && mStored && (canSave || has()) ? <MeasurePhotos measurementId={m.id} testID="draw-photos" onRemoved={() => setPhotoSheet(false)} readOnly={!canSave} /> : null;
-  const attrs = !sel ? null : (
+  const dr = winFor?.dr;
+  const runN = dr?.kind === "run" ? drawing.runs.findIndex((r) => r.id === dr.id) + 1 : 0;
+  const attrs = !sel || !dr ? null : (
     <>
-      {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} compact={!wide} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} ch={ch} compact={!wide} run={drawing.runs.find((r) => r.id === sel.runId)?.attrs} />}
+      {dr.kind === "run" && "a" in sel ? (
+        <RunAttrsView run={{ ...sel, attrs: dr.attrs }} n={runN} onAttrs={onRunAttrs} len={dr.len} onLen={onLen} lenBad={lenBad} ch={ch} corners={runCorners} onCorner={onCorner} />
+      ) : dr.kind === "ds" && !("a" in sel) ? (
+        <DsAttrsView ds={{ ...dr.attrs, id: sel.id, runId: sel.runId, atIn: sel.atIn }} onAttrs={onDsAttrs} ch={ch} compact={!wide} run={drawing.runs.find((r) => r.id === sel.runId)?.attrs} />
+      ) : null}
       {elPhotos}
     </>
+  );
+  /** «Закрыть | Сохранить» at the bottom of the window (DS §7.3 exception of Gutters): 44 each, half the width, no «✕» on top */
+  const winFoot = (
+    <View style={{ flexDirection: "row", gap: space[3] }} testID="attr-foot">
+      <View style={{ flex: 1 }} testID="attr-close"><Button label={t("mod.gutters.win.close")} variant="secondary" size="bar" full onPress={onWinClose} /></View>
+      <View style={{ flex: 1 }} testID="attr-save"><Button label={t("mod.gutters.win.save")} size="bar" full onPress={onWinSave} /></View>
+    </View>
   );
   // «Новые желоба» / «Новые водостоки» (#1563 PR B): the rows of a gutter's / downspout's properties, for the new ones of this drawing
   const newTitle = newSheet === "line" ? t("mod.gutters.draw.newDefaults.runs") : t("mod.gutters.draw.newDefaults.ds");
@@ -844,7 +926,7 @@ export default function DrawScreen() {
         <T v="caption" tone="mut">{t("mod.gutters.draw.newDefaults.hint")}</T>
       </View>
       {newSheet === "line" ? (
-        <RunAttrsView forNew run={{ id: "new-run", a: [0, 0], b: [0, 0], attrs: runFor(ch, story, newDef) }} onAttrs={(p) => setNewDef((x) => patchRun(ch, x, p))} onLength={() => {}} ch={ch} compact={!wide} />
+        <RunAttrsView forNew run={{ id: "new-run", a: [0, 0], b: [0, 0], attrs: runFor(ch, story, newDef) }} onAttrs={(p) => setNewDef((x) => patchRun(ch, x, p))} ch={ch} />
       ) : (
         <DsAttrsView forNew ds={{ ...dsFor(ch, newDef), id: "new-ds", runId: "", atIn: 0 }} onAttrs={(p) => setNewDef((x) => patchDs(ch, x, p))} ch={ch} compact={!wide} run={runFor(ch, story, newDef)} />
       )}
@@ -1406,10 +1488,9 @@ export default function DrawScreen() {
             </>
           ) : attrs ? (
             <>
-              <RowView style={{ justifyContent: "flex-end" }}>
-                <View testID="draw-panel-close"><IconButton icon="close" label={t("mod.gutters.attr.close")} onPress={() => setSelected(null)} /></View>
-              </RowView>
+              {/* the window in the column (v6): no «✕» on top — «Закрыть | Сохранить» at its bottom, the rows scroll above them */}
               <AttrBody>{attrs}</AttrBody>
+              {winFoot}
             </>
           ) : (
             <View style={{ flex: 1, gap: space[4] }}>
@@ -1421,7 +1502,8 @@ export default function DrawScreen() {
           )}
         </View>
       ) : null}
-      <Sheet visible={!wide && sheet && !!attrs && !newSheet} onClose={() => setSheet(false)}>
+      {/* 390: no title (no «✕»: «Закрыть | Сохранить» pinned at the bottom, DS §7.3 exception); a swipe, the scrim or «Закрыть» over an unsaved copy ask first */}
+      <Sheet visible={!wide && sheet && !!attrs && !newSheet} onClose={leaveWin} dirty={dirty} onSave={onWinSave} footer={winFoot}>
         <AttrBody inSheet>{attrs}</AttrBody>
       </Sheet>
       <Sheet visible={!wide && !!newSheet} onClose={() => setNewSheet(null)} title={newSheet ? newTitle : undefined}>

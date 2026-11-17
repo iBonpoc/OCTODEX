@@ -1,8 +1,9 @@
 /**
  * The attribute panel of the canvas (docs/specs/33-gutters-screens.md П21.8 M5c): what the picked run or downspout
  * is made of. One component: on 390 it sits in the core's Sheet, on 820/1280 it is the column on the right of the
- * canvas. Every choice is one edit of the drawing at once (the canvas's «Назад» takes it back, saved 1 s later) —
- * no «Save» button, like the storey. The tape: feet + inches, «Применить» → confidence `taped` (icon + word, rule 2).
+ * canvas. Window v6 (spec 33-gutters-windows §3.17, #1858): the rows change the window's COPY (`attrDraft.ts`); «Сохранить»
+ * at the bottom writes it as one edit, «Закрыть» drops it (DrawScreen owns the copy and the buttons). The length is typed into
+ * the copy too — ft · in, the fraction keys, the tape — and saved with the rest (no «Применить»).
  * Colours are words, never swatches (rule 2). The lists are what the company installs and its palette (settings, M7b);
  * an element's own value the company no longer offers stays as one more chip «нет в списке» (spec 33 П22.2 №7).
  */
@@ -15,6 +16,8 @@ import { component, radius, size as sizes, space } from "@octo/design-tokens";
 import type { DictKey } from "@/i18n";
 import { useI18n } from "@/i18n";
 import { Button, ChoiceChips, StatusChip, Stepper, TextField, Toggle } from "@/ui/controls";
+import { FracKeys, FRAC_KEYS, type FracKey } from "@/ui/fracKeys";
+import { SelectField } from "@/ui/selectField";
 import { Icon, Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Menu } from "@/ui/overlays";
@@ -28,11 +31,15 @@ import { inchesComplete, inchesTooBig, nextStage, type EntryStage } from "./leng
 import { MM_SCALE, SIXTEENTHS_SCALE, SIXTEENTHS_SCALE_IN, Tape as TapeStrip } from "./Tape";
 import { DENOM, fmtLen, fracLabel, LEN_UNITS, MM_OF, MM_PER_IN, type LenFormat, type LenUnit } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
+import type { LenFields } from "./attrDraft";
 import { drawnLengthIn, type CornerChoice, type DrawnDownspout, type DrawnRun, type FoundCorner } from "../geometry";
 
 const k = (s: string) => `mod.gutters.attr.${s}` as DictKey;
+const w = (s: string) => `mod.gutters.win.${s}` as DictKey;
 const inch = (s: string) => `${s}″`;
 const dsSize = sizeText; // one format everywhere (#1916)
+/** a gauge in words (DS §8.14): «.027» → «0.027″»; a gauge number («26 ga») as it is */
+const gaugeText = (g: string) => (/^\.\d+$/.test(g) ? `0${g}″` : g);
 const elbow = (s: string) => (/^\d+$/.test(s) ? `${s}°` : s);
 
 /** a colour: the module's own words are translated; the company's palette names are its supplier's words (data) */
@@ -134,46 +141,31 @@ const split = (n: number) => {
   return { ft: Math.floor(e / 192), inch: Math.floor((e % 192) / 16), sixteenths: e % 16 };
 };
 
-/** the tape: feet and inches; «Применить» sets the length, «По рисунку» puts the drawn one back */
-function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | null) => void }) {
+/** a fraction key ↔ sixteenths: ⅜ = 6/16; an odd sixteenth (from the tape) is no key */
+const keyOf = (e16: number): FracKey | null => (e16 % 2 ? null : (FRAC_KEYS[e16 / 2] ?? null));
+const e16Of = (k: FracKey) => FRAC_KEYS.indexOf(k) * 2;
+
+/**
+ * The length of the window (v6 б): feet, inches, the fraction keys with «0» always in view, the tape under it (1/16″ a mark).
+ * It writes the window's copy only; «Сохранить» saves it with the rest. Not a number — the line under it, the copy is not saved.
+ */
+function LengthRow({ len, onLen, bad }: { len: LenFields; onLen: (x: Partial<LenFields>) => void; bad?: boolean }) {
   const { t } = useI18n();
-  const cur = run.lengthIn ?? drawnLengthIn(run);
-  // the fields show the length as it is, to the sixteenth: feet, inches and sixteenths
-  const f0 = unitFields(cur, "ftin");
-  const [ft, setFt] = useState(f0.ft);
-  const [inc, setInc] = useState(f0.inc);
-  const [e16, setE16] = useState(f0.e16);
-  const [bad, setBad] = useState(false);
-  // another run picked, «Назад», or a dragged end: the fields show the length it has now
-  useEffect(() => {
-    const x = unitFields(cur, "ftin");
-    setFt(x.ft);
-    setInc(x.inc);
-    setE16(x.e16);
-    setBad(false);
-  }, [run.id, cur]);
-  const apply = () => {
-    const n = tapeIn(ft, inc, e16);
-    setBad(n === null);
-    if (n !== null) onLength(n);
-  };
-  const taped = run.lengthIn !== undefined;
   return (
     <Field label={t(k("length"))} testID="attr-length">
-      <RowView style={{ gap: space[2], flexWrap: "wrap", alignItems: "center" }}>
+      <RowView style={{ gap: space[2], alignItems: "center" }}>
         <View style={{ width: component.qtyFieldW }} testID="attr-length-ft">
-          <TextField type="integer" value={ft} onChangeText={setFt} label={t(k("ft"))} onSubmit={apply} />
+          <TextField type="integer" value={len.ft} onChangeText={(ft) => onLen({ ft })} label={t(k("ft"))} selectOnFocus />
         </View>
         <T v="body" tone="mut">{t(k("ft"))}</T>
         <View style={{ width: component.qtyFieldW }} testID="attr-length-in">
-          <TextField type="number" value={inc} onChangeText={setInc} label={t(k("in"))} onSubmit={apply} />
+          <TextField type="number" value={len.inc} onChangeText={(inc) => onLen({ inc })} label={t(k("in"))} selectOnFocus />
         </View>
-        <FracText value={e16} testID="attr-length-frac" />
+        <FracText value={len.e16} testID="attr-length-frac" />
         <T v="body" tone="mut">{t(k("in"))}</T>
-        <View testID="attr-length-apply"><Button label={t(k("apply"))} size="sm" variant="secondary" onPress={apply} /></View>
-        {taped ? <View testID="attr-length-reset"><Button label={t(k("reset"))} size="sm" variant="ghost" onPress={() => onLength(null)} /></View> : null}
       </RowView>
-      <Pull ft={ft} inc={inc} e16={e16} onPull={(x) => { setFt(String(x.ft)); setInc(String(x.inch)); setE16(x.sixteenths); setBad(false); }} testID="attr-length-tape" />
+      <FracKeys value={keyOf(len.e16)} onKey={(key) => onLen({ e16: e16Of(key) })} testID="attr-length-fracs" />
+      <Pull ft={len.ft} inc={len.inc} e16={len.e16} onPull={(x) => onLen({ ft: String(x.ft), inc: String(x.inch), e16: x.sixteenths })} testID="attr-length-tape" />
       {bad ? <View testID="attr-length-bad"><StatusChip status="warn" label={t(k("badLength"))} soft /></View> : null}
     </Field>
   );
@@ -326,28 +318,13 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
 }
 
 /**
- * A choice folded into one row (founder 09.11: «выпадающее меню»): the field's name and what is picked; a tap opens the
- * choices, a pick closes them. For the long lists — the size and the colour.
+ * A choice folded into one row (founder 09.11: «выпадающее меню»; v6 г): the core's `SelectField` — the menu at the row, more
+ * than 12 a sheet with search. A value the company no longer offers stays, marked by a word (spec 33 П22.2 №7).
  */
-function Select<K extends string>({ label, testID, items, value, onChange, offered, fit }: { fit?: boolean; label: string; testID: string; items: { key: K; label: string }[]; value: K; onChange: (v: K) => void; offered?: readonly string[] }) {
+function Select<K extends string>({ label, testID, items, value, onChange, offered, above }: { label: string; testID: string; items: { key: K; label: string }[]; value: K; onChange: (v: K) => void; offered?: readonly string[]; /** the label over the field: three in one row (v6 в) */ above?: boolean }) {
   const { t } = useI18n();
-  const { c } = useTheme();
-  const [open, setOpen] = useState(false);
   const off = (it: { key: K; label: string }) => (offered && !offered.includes(it.key) ? { ...it, label: `${it.label} · ${t(k("notOffered"))}` } : it);
-  const cur = items.find((it) => it.key === value);
-  return (
-    <Field label={label} testID={testID}>
-      <View style={fit ? { alignSelf: "flex-start" } : undefined}>
-      <Press testID={`${testID}-open`} onPress={() => setOpen((x) => !x)} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open }}>
-        <RowView style={{ justifyContent: "space-between", gap: space[2], minHeight: sizes.hitMin, paddingHorizontal: space[3], borderRadius: radius.field, borderWidth: component.hairline, borderColor: c.bd, backgroundColor: c.in }}>
-          <View testID={`${testID}-value`} style={fit ? undefined : { flex: 1 }}><T v="body">{cur ? off(cur).label : value}</T></View>
-          <Icon name="chevronDown" s={sizes.iconSm} color={c.mut} />
-        </RowView>
-      </Press>
-      </View>
-      {open ? <ChoiceChips items={items.map(off)} value={value} onChange={(v) => { setOpen(false); onChange(v); }} /> : null}
-    </Field>
-  );
+  return <SelectField label={label} testID={testID} items={items.map(off)} value={value} onChange={onChange} labelAbove={above} />;
 }
 
 /**
@@ -355,7 +332,7 @@ function Select<K extends string>({ label, testID, items, value, onChange, offer
  * picked is painted). A downspout also has «Как у желоба» — its gutter's colour, the default, and it follows the gutter.
  * Copper and zinc are bare only.
  */
-function ColorPick<A extends { material: string; finish?: "mill" | "painted"; color?: string }>({ a, set, ch, run }: { a: A; set: (p: Partial<A>) => void; ch: Choices; run?: { finish?: "mill" | "painted"; color?: string; material: string } }) {
+function ColorPick<A extends { material: string; finish?: "mill" | "painted"; color?: string }>({ a, set, ch, run, above }: { a: A; set: (p: Partial<A>) => void; ch: Choices; run?: { finish?: "mill" | "painted"; color?: string; material: string }; above?: boolean }) {
   const { t } = useI18n();
   const colorLabel = useColorLabel();
   if (MILL_ONLY.has(a.material)) return null;
@@ -370,7 +347,7 @@ function ColorPick<A extends { material: string; finish?: "mill" | "painted"; co
     ...palette.map((c) => ({ key: c, label: colorLabel(c) })),
   ];
   return (
-    <Select label={t(k("color"))} testID="attr-color" offered={["@run", "@mill", ...ch.palette]} items={items} value={value} onChange={(v) => {
+    <Select above={above} label={t(k("color"))} testID="attr-color" offered={["@run", "@mill", ...ch.palette]} items={items} value={value} onChange={(v) => {
       if (v === "@run" && run) set((runBare ? { finish: "mill" } : { finish: "painted", color: run.color }) as Partial<A>);
       else if (v === "@mill") set({ finish: "mill" } as Partial<A>);
       else set({ finish: "painted", color: v } as Partial<A>);
@@ -389,7 +366,7 @@ function Stock<A extends { material: string; gauge?: string; finish?: "mill" | "
   return (
     <>
       {rest ? <Select label={t(k("material"))} testID="attr-material" offered={ch.offer.materials} items={materials.map((m) => ({ key: m, label: t(k(`m.${m}`)) }))} value={a.material} onChange={(material) => set({ material } as Partial<A>)} /> : null}
-      {rest && gauges.length ? <Select label={t(k("gauge"))} testID="attr-gauge" offered={ch.offer.gauges[a.material]} items={gauges.map((g) => ({ key: g, label: g }))} value={a.gauge ?? gauges[0]!} onChange={(gauge) => set({ gauge } as Partial<A>)} /> : null}
+      {rest && gauges.length ? <Select label={t(k("gauge"))} testID="attr-gauge" offered={ch.offer.gauges[a.material]} items={gauges.map((g) => ({ key: g, label: gaugeText(g) }))} value={a.gauge ?? gauges[0]!} onChange={(gauge) => set({ gauge } as Partial<A>)} /> : null}
       {/* the colour: one folded choice with «Без покраски» among them (founder 09.11) */}
       {color && !mill ? <ColorPick a={a} set={set} ch={ch} run={run} /> : null}
     </>
@@ -428,47 +405,49 @@ function More({ open0, id, label, children }: { open0: boolean; id: string; labe
   return <View style={{ gap: space[4] }} testID="attr-more-open">{children}</View>;
 }
 
+/**
+ * The window of a gutter (v6, spec 33-gutters-windows §3.17): «Gutter № N» and its length on top; the profile; size · colour ·
+ * storey in one row; the length (ft · in · fraction keys · tape); material and gauge; the mounting — roof edge and hangers; the
+ * corners of this line. The same rows on every width; on 390 the window scrolls between its title and «Закрыть | Сохранить».
+ */
 export function RunAttrsView({
-  run, onAttrs, onLength, ch = MODULE_CHOICES, corners = [], onCorner, compact, forNew,
-}: { run: DrawnRun; onAttrs: (p: Partial<RunAttrs>) => void; onLength: (lengthIn: number | null) => void; ch?: Choices; corners?: RunCorner[]; onCorner?: (f: FoundCorner, m: CornerChoice["method"] | null) => void; /** 390: what is changed often on top, the rest under «Ещё» (П20.9) */ compact?: boolean; /** «Новые желоба» of this drawing (#1563 PR B): no length, story, corners — the same rows otherwise */ forNew?: boolean; }) {
+  run, n, onAttrs, len, onLen, lenBad, ch = MODULE_CHOICES, corners = [], onCorner, forNew,
+}: { run: DrawnRun; /** its number on the drawing: «Gutter № 2» */ n?: number; onAttrs: (p: Partial<RunAttrs>) => void; /** the length in the window's copy */ len?: LenFields; onLen?: (x: Partial<LenFields>) => void; /** «Сохранить» found the length not a number */ lenBad?: boolean; ch?: Choices; corners?: RunCorner[]; onCorner?: (f: FoundCorner, m: CornerChoice["method"] | null) => void; /** «Новые желоба» of this drawing (#1563 PR B): no title, length, story, corners — the same rows otherwise */ forNew?: boolean }) {
   const { t } = useI18n();
   const a = run.attrs;
   const profiles = withCurrent(ch.offer.profiles, a.profile);
   const sizes = withCurrent(ch.offer.sizes[a.profile] ?? [], a.size);
   const kits = withCurrent(hangerKitsFor(a.profile, ch), a.hanger);
+  const mill = MILL_ONLY.has(a.material);
   return (
     <>
       {/* «Для новых желобов»: its title, «Сбросить» and the line under it are the owner's (DrawScreen), above these rows */}
-      {forNew ? null : <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
-        <T v="heading" w="semibold">{`${t(k("run"))} · ${fmtLen(run.lengthIn ?? drawnLengthIn(run), ch.lenFormat)}`}</T>
-        {/* no «рулетка / нарисовано» per line any more: how the drawing was measured is one choice (П20.16) */}
-      </RowView>}
-      {compact ? (
-        <>
-      {forNew ? null : <Pick label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />}
-      <Select fit label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
-        <Stock a={a} set={onAttrs} ch={ch} part="color" />
-      {forNew ? null : <Tape run={run} onLength={onLength} />}
-          <More open0={false} id={run.id} label={t(k("moreRun"))}>
-      <Select label={t(k("profile"))} testID="attr-profile" offered={ch.offer.profiles} items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)) }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
-            <Stock a={a} set={onAttrs} ch={ch} part="rest" />
-      <Pick label={t(k("mount"))} testID="attr-mount" items={MOUNTS.map((m) => ({ key: m, label: t(k(`mt.${m}`)) }))} value={a.mount ?? "fascia"} onChange={(mount) => onAttrs({ mount })} />
-      <Pick label={t(k("hanger"))} testID="attr-hanger" offered={hangerKitsFor(a.profile, ch)} items={kits.map((id) => ({ key: id, label: t(k(`k.${id}`)) }))} value={a.hanger} onChange={(hanger) => onAttrs({ hanger })} />
-      {onCorner && !forNew ? <Corners corners={corners} onCorner={onCorner} /> : null}
-          </More>
-        </>
-      ) : (
-        <>
-      {forNew ? null : <Tape run={run} onLength={onLength} />}
-      {forNew ? null : <Pick label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />}
-      <Select label={t(k("profile"))} testID="attr-profile" offered={ch.offer.profiles} items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)) }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
-      <Select fit label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
-      <Stock a={a} set={onAttrs} ch={ch} />
-      <Pick label={t(k("mount"))} testID="attr-mount" items={MOUNTS.map((m) => ({ key: m, label: t(k(`mt.${m}`)) }))} value={a.mount ?? "fascia"} onChange={(mount) => onAttrs({ mount })} />
-      <Pick label={t(k("hanger"))} testID="attr-hanger" offered={hangerKitsFor(a.profile, ch)} items={kits.map((id) => ({ key: id, label: t(k(`k.${id}`)) }))} value={a.hanger} onChange={(hanger) => onAttrs({ hanger })} />
-      {onCorner && !forNew ? <Corners corners={corners} onCorner={onCorner} /> : null}
-        </>
+      {forNew ? null : (
+        <View style={{ gap: space[1] }} testID="attr-title">
+          <T v="heading" w="semibold">{n ? t(w("runN"), { n }) : t(k("run"))}</T>
+          <T v="caption" tone="mut">{fmtLen(run.lengthIn ?? drawnLengthIn(run), ch.lenFormat)}</T>
+        </View>
       )}
+      <Select label={t(k("profile"))} testID="attr-profile" offered={ch.offer.profiles} items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)) }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
+      {/* size · colour · storey: one row of three (v6 в); copper and zinc have no colour */}
+      <View style={{ flexDirection: "row", gap: space[2], alignItems: "flex-start" }} testID="attr-row3">
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Select above label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
+        </View>
+        {mill ? null : <View style={{ flex: 1.4, minWidth: 0 }}><ColorPick a={a} set={onAttrs} ch={ch} above /></View>}
+        {forNew ? null : (
+          <View style={{ flex: 0.8, minWidth: 0 }}>
+            <Select above label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((x) => ({ key: x, label: x }))} value={String(storyOf(a.story)) as "1"} onChange={(x) => onAttrs({ story: Number(x) })} />
+          </View>
+        )}
+      </View>
+      {forNew || !len || !onLen ? null : <LengthRow len={len} onLen={onLen} bad={lenBad} />}
+      <Stock a={a} set={onAttrs} ch={ch} part="rest" />
+      <Field label={t(w("mounting"))} testID="attr-mounting">
+        <Select label={t(k("mount"))} testID="attr-mount" items={MOUNTS.map((m) => ({ key: m, label: t(k(`mt.${m}`)) }))} value={a.mount ?? "fascia"} onChange={(mount) => onAttrs({ mount })} />
+        <Select label={t(w("hangers"))} testID="attr-hanger" offered={hangerKitsFor(a.profile, ch)} items={kits.map((id) => ({ key: id, label: t(k(`k.${id}`)) }))} value={a.hanger} onChange={(hanger) => onAttrs({ hanger })} />
+      </Field>
+      {onCorner && !forNew ? <Corners corners={corners} onCorner={onCorner} /> : null}
     </>
   );
 }
@@ -540,7 +519,7 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact, run, fo
       {forNew ? null : <T v="heading" w="semibold">{t(k("ds"))}</T>}
       {compact ? (
         <>
-      <Select fit label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
+      <Select label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
           <Stock a={ds} set={onAttrs} ch={ch} part="color" run={run} />
           <DsLength ds={ds} onAttrs={onAttrs} />
       <Elbows ds={ds} onAttrs={onAttrs} />
@@ -557,7 +536,7 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact, run, fo
       ) : (
         <>
       <DsKindPick ds={ds} onAttrs={onAttrs} ch={ch} />
-      <Select fit label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
+      <Select label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
       <Stock a={ds} set={onAttrs} ch={ch} run={run} />
       <DsLength ds={ds} onAttrs={onAttrs} />
       <Elbows ds={ds} onAttrs={onAttrs} />
@@ -584,7 +563,6 @@ function DsLength({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<Ds
   fts.sort((x, y) => x - y);
   return (
     <Select
-      fit
       label={t(k("dsLength"))}
       testID="attr-ds-length"
       items={[{ key: "0", label: t(k("heightAuto")) }, ...fts.map((n) => ({ key: String(n), label: `${n}′` }))]}
