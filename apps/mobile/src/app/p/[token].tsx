@@ -15,7 +15,7 @@ import { EstimateView } from "@/features/EstimateView";
 import { SignBlock } from "@/features/SignBlock";
 import { mainOption, optionTotals, withAddons } from "@/features/estimateDoc";
 import { estimateFileName, estimateHtml, saveEstimatePdf } from "@/features/estimatePdf";
-import { Button, StatusChip } from "@/ui/controls";
+import { Button, ReadOnly, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, CardList, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
@@ -30,7 +30,8 @@ export default function ClientEstimatePage() {
   const { token } = useLocalSearchParams<{ token: string }>();
   const store = useStore();
   const { t } = useI18n();
-  const local = localPortal(store.db, token ?? "", store.companyName ?? APP_NAME);
+  // the phone's own data: the demo works as the client's page; a cloud company's «open as client» only shows (preview)
+  const local = localPortal(store.db, token ?? "", store.companyName ?? APP_NAME, store.mode === "demo");
   const [remote, setRemote] = useState<PortalData | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -128,6 +129,8 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
   const deposit = approved ? data.approval!.depositCents ?? tot.deposit : tot.deposit;
 
   const sign = async (name: string, svg: string) => {
+    // the office's preview never signs: the client signs by the link (the server refuses a member's portal signature too)
+    if (data.preview) return;
     setBusy(true);
     try {
       if (data.source === "local" && data.estimateId) {
@@ -143,7 +146,7 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
   };
   const payingInv = data.invoices.find((i) => i.id === paying);
   const paySim = async () => {
-    if (!payingInv) return;
+    if (!payingInv || data.preview) return;
     try {
       if (data.source === "local") {
         store.recordPayment(payingInv.id, invoiceOwes(payingInv), "card", "stripe-simulated", true);
@@ -258,6 +261,11 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
                           <T v="caption" tone="mut">
                             {t("pay.online.webOnly")}
                           </T>
+                        ) : toPay > 0 && !sent && data.preview ? (
+                          // the office's preview: the button is where the client will see it, but does not pay
+                          <View testID={`portal-pay-preview-${inv.id}`}>
+                            <Button label={t("pay.payByCard")} icon="wallet" full disabled onPress={() => {}} />
+                          </View>
                         ) : toPay > 0 && !sent && !data.onlinePay && data.simulatedPay ? (
                           <Button label={t("pay.payByCard")} icon="wallet" full onPress={() => setPaying(inv.id)} />
                         ) : null}
@@ -291,7 +299,17 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
                 <SectionTitle title={t("portal.sign")} />
               </View>
               <Card>
-                <SignBlock onSign={sign} busy={busy} />
+                {data.preview ? (
+                  <View testID="portal-preview-note">
+                    <T v="caption" tone="mut">
+                      {t("portalPreview.sign")}
+                    </T>
+                  </View>
+                ) : null}
+                {/* the office's preview: the block as the client will see it, nothing in it answers */}
+                <ReadOnly value={!!data.preview}>
+                  <SignBlock onSign={sign} busy={busy} />
+                </ReadOnly>
               </Card>
             </>
           )}

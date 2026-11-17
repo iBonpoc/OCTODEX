@@ -792,7 +792,7 @@ begin
   perform tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000088'$q$);
   perform tst.server($q$update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000088' where id = '0e1a0000-0000-0000-0000-000000000088'$q$);
 end $$;
-set role anon;
+reset role; reset request.jwt.claim.sub; set role anon;
 select public.portal_accept('tok_inv_0123456789abcdef', '0e3a0000-0000-0000-0000-000000000088', null, 'Client', 'M0 0 L5 5', true) is not null as signed;
 reset role;
 :as_owner_a
@@ -2720,7 +2720,7 @@ insert into public.properties (id, company_id, customer_id, address_line1, addre
 -- an estimate sent and signed by the client (the caller signs on the page by its token); p_both: the company signs too
 create function tst.t37_estimate(p_customer uuid, p_property uuid, p_title text, p_both boolean default true)
 returns uuid language plpgsql as $$
-declare e uuid; v uuid; o uuid; tok text;
+declare e uuid; v uuid; o uuid; tok text; me text;
 begin
   insert into public.estimates (id, company_id, customer_id, property_id, title) values
     (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', p_customer, p_property, p_title) returning id into e;
@@ -2729,7 +2729,11 @@ begin
   insert into public.estimate_options (id, company_id, version_id, name) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', v, 'Only') returning id into o;
   insert into public.estimate_line_items (id, company_id, option_id, line_group, name, quantity, unit_price_cents) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', o, 'labor', 'Work', 1, 40000);
   tok := public.send_estimate(e);
+  -- the client signs by the link: no company person behind it (#2020: a member signs by the link — refused)
+  me := current_setting('request.jwt.claim.sub', true);
+  perform set_config('request.jwt.claim.sub', '', true);
   perform public.portal_accept(tok, o, null, 'T37 Signer', 'M0 0 L7 7', true);
+  perform set_config('request.jwt.claim.sub', me, true);
   if p_both then
     perform tst.ok(public.countersign_estimate(e, 'M1 1 L7 7') = 'approved', 'T37 fixture: both signed');
   end if;
@@ -16758,5 +16762,81 @@ begin
 end $t$;
 rollback;
 \echo 'T364 ok'
+
+-- ---------------------------------------------------------------- T379 (#2020): the client's link is signed by the client
+-- S3 (spec: the client's page): a person of the company signs only on site; by the link (portal) the server refuses (42501,
+-- hint member_portal_sign); the client (anon, by the token) signs as before; on site — as before; a signature already made
+-- answers «repeat» as before. Three estimates of company A, each sent with its own token.
+\echo 'T379 the link is the client''s'
+begin;
+:as_owner_a
+do $t$
+declare i int;
+begin
+  for i in 1..3 loop
+    insert into public.estimates (id, company_id, number, customer_id, property_id, title) values
+      (('37900000-0000-4000-8000-00000000000' || i)::uuid, 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001',
+       'd1a00000-0000-0000-0000-000000000001', 'T379 ' || i);
+    perform tst.set_token(('37900000-0000-4000-8000-00000000000' || i)::uuid, 'tok_t379_' || i || '_0123456789abcdef');
+    insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+      (('37910000-0000-4000-8000-00000000000' || i)::uuid, 'ca000000-0000-0000-0000-000000000000', ('37900000-0000-4000-8000-00000000000' || i)::uuid, 1);
+    update public.estimates set current_version_id = ('37910000-0000-4000-8000-00000000000' || i)::uuid where id = ('37900000-0000-4000-8000-00000000000' || i)::uuid;
+    insert into public.estimate_options (id, company_id, version_id, name) values
+      (('37920000-0000-4000-8000-00000000000' || i)::uuid, 'ca000000-0000-0000-0000-000000000000', ('37910000-0000-4000-8000-00000000000' || i)::uuid, 'Standard');
+    insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
+      ('ca000000-0000-0000-0000-000000000000', ('37920000-0000-4000-8000-00000000000' || i)::uuid, 'labor', 'Porch', 1, 100000, false);
+    perform tst.server(format($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = %L$q$, '37910000-0000-4000-8000-00000000000' || i));
+    perform tst.server(format($q$update public.estimates set status = 'sent', sent_version_id = %L where id = %L$q$,
+                              '37910000-0000-4000-8000-00000000000' || i, '37900000-0000-4000-8000-00000000000' || i));
+  end loop;
+end $t$;
+
+-- the office and the owner, by the link (channel portal, and the default channel): refused, the estimate stays open
+:as_office_a
+select tst.fails_like($q$select public.portal_accept('tok_t379_1_0123456789abcdef', '37920000-0000-4000-8000-000000000001', null, 'Office', 'M0 0 L5 5', true, 'portal')$q$,
+  '%not by the client''s link%', 'T379 the office signs by the link: refused');
+:as_owner_a
+select tst.fails_like($q$select public.portal_accept('tok_t379_1_0123456789abcdef', '37920000-0000-4000-8000-000000000001', null, 'Owner', 'M0 0 L5 5', true)$q$,
+  '%not by the client''s link%', 'T379 the owner signs by the link (default channel): refused');
+do $t$
+declare v_hint text;
+begin
+  begin
+    perform public.portal_accept('tok_t379_1_0123456789abcdef', '37920000-0000-4000-8000-000000000001', null, 'Owner', 'M0 0 L5 5', true, 'portal');
+  exception when others then
+    get stacked diagnostics v_hint = pg_exception_hint;
+    perform tst.ok(sqlstate = '42501' and v_hint = 'member_portal_sign', 'T379 the refusal: 42501, hint member_portal_sign');
+    return;
+  end;
+  perform tst.ok(false, 'T379 the owner''s portal signature must be refused');
+end $t$;
+:as_super
+select tst.ok((select status from public.estimates where id = '37900000-0000-4000-8000-000000000001') = 'sent'
+          and not exists (select 1 from public.estimate_approvals where estimate_id = '37900000-0000-4000-8000-000000000001'),
+  'T379 after the refusals: still sent, no signature');
+
+-- the client: anonymous, by the token — signs as before
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok(public.portal_accept('tok_t379_1_0123456789abcdef', '37920000-0000-4000-8000-000000000001', null, 'T379 Client', 'M0 0 L5 5', true) ->> 'status'
+              = 'awaiting_countersign', 'T379 the client signs by the link');
+
+-- on site, on the owner's device: as before
+:as_owner_a
+select public.portal_accept('tok_t379_2_0123456789abcdef', '37920000-0000-4000-8000-000000000002', null, 'T379 On site', 'M0 0 L5 5', true, 'on_site') is not null as t379_on_site;
+:as_super
+select tst.ok((select status from public.estimates where id = '37900000-0000-4000-8000-000000000002') = 'awaiting_countersign'
+          and (select channel from public.estimate_approvals where estimate_id = '37900000-0000-4000-8000-000000000002') = 'on_site',
+  'T379 on site: signed, channel on_site');
+
+-- a signature already made (before this check existed) sent again from an old phone's queue: «repeat», nothing changes
+reset role; reset request.jwt.claim.sub; set role anon;
+select public.portal_accept('tok_t379_3_0123456789abcdef', '37920000-0000-4000-8000-000000000003', null, 'T379 Earlier', 'M0 0 L5 5', true) is not null as t379_first;
+:as_office_a
+select tst.ok(public.portal_accept('tok_t379_3_0123456789abcdef', '37920000-0000-4000-8000-000000000003', null, 'T379 Earlier', 'M0 0 L5 5', true, 'portal') ->> 'status'
+              = 'awaiting_countersign', 'T379 a repeat of a signature already made: answered as before, no refusal');
+:as_super
+select tst.ok((select count(*) from public.estimate_approvals where estimate_id = '37900000-0000-4000-8000-000000000003') = 1, 'T379 the repeat doubles nothing');
+rollback;
+\echo 'T379 ok'
 
 \echo 'ALL TESTS PASSED'

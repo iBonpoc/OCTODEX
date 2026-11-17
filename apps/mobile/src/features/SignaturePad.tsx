@@ -4,7 +4,7 @@ import Svg, { Path } from "react-native-svg";
 import { radius, space, component } from "@octo/design-tokens";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { Button, IconButton } from "@/ui/controls";
+import { Button, IconButton, useReadOnly } from "@/ui/controls";
 import { useDevice } from "@/theme/ThemeProvider";
 import { SignatureFullscreen } from "./SignatureFullscreen";
 import { T } from "@/ui/primitives";
@@ -16,6 +16,9 @@ import { SIG_BOX, fitSignature, normalizeSignature } from "./signaturePath";
 export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent = "visit.signConsent" }: { onConfirm: (path: string) => void; disabled?: boolean; confirmLabel?: string; /** who signs: «Клиент расписывается здесь» by default */ label?: string; /** the line under the pad — what the signature confirms: the visit's completed work by default; the estimate — its own; null — none (#1104 п.5) */ consent?: DictKey | null }) {
   const { c } = useTheme();
   const { t } = useI18n();
+  // inside <ReadOnly value> (the office's «open as client» preview): the pad is shown as the client will see it, but
+  // takes no stroke, no full screen and no confirm — the gestures themselves are not changed
+  const ro = useReadOnly();
   const [d, setD] = useState("");
   // rule А (docs/specs/28; the director's decision on #274): no bottom bar while a signature is being drawn here —
   // from the first stroke until it is confirmed, cleared or the screen is left; before that the bar stays
@@ -74,7 +77,7 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
         }}
         accessibilityLabel={(label ?? t("visit.signHere"))}
         testID="signature-pad"
-        {...pan.panHandlers}
+        {...(ro ? null : pan.panHandlers)}
       >
         {!d ? (
           <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, alignItems: "center", justifyContent: "center", paddingHorizontal: space[4] }} pointerEvents="none">
@@ -93,11 +96,11 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
         </T>
       ) : null}
       <RowView>
-        {device === "phone" ? <IconButton icon="expand" label={t("fix.sign.expand")} onPress={() => setFull(true)} /> : null}
+        {device === "phone" && !ro ? <IconButton icon="expand" label={t("fix.sign.expand")} onPress={() => setFull(true)} /> : null}
         <View testID="signature-clear">
           <Button label={t("visit.clear")} variant="secondary" onPress={clear} disabled={!d} />
         </View>
-        <Button label={confirmLabel ?? t("visit.confirmSign")} icon="check" onPress={() => onConfirm(normalizeSignature(d, w, h))} disabled={disabled || d.length < 20} />
+        <Button label={confirmLabel ?? t("visit.confirmSign")} icon="check" onPress={() => onConfirm(normalizeSignature(d, w, h))} disabled={ro || disabled || d.length < 20} />
       </RowView>
       <SignatureFullscreen
         visible={full}
