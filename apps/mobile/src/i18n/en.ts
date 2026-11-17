@@ -4551,4 +4551,10 @@ export const en: Dict = {
   "ds.ch.meta.status": "Client",
   "ds.ch.meta.tapped": "Tags tapped",
   "cw4.reasonTitle": "Do not service: the reason",
+  "crash.title": "The app stopped",
+  "crash.body": "Data on the phone and unsent changes are safe. Tap “Retry”; if that doesn’t help, tap “Restart”.",
+  "crash.retry": "Retry",
+  "crash.restart": "Restart",
+  "ds.crash.title": "Crash screen",
+  "ds.crash.hint": "Drawn by the root ErrorBoundary when the app itself fails (§13): no raw error text, “Retry” draws the screen again, “Restart” reloads the app. Outside the app's theme and language: it takes the system's.",
 };

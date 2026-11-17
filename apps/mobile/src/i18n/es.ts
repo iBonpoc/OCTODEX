@@ -4551,4 +4551,10 @@ export const es: Dict = {
   "ds.ch.meta.status": "Cliente",
   "ds.ch.meta.tapped": "Etiquetas tocadas",
   "cw4.reasonTitle": "No atender: el motivo",
+  "crash.title": "La app se detuvo",
+  "crash.body": "Los datos del teléfono y los cambios sin enviar están a salvo. Toca «Reintentar»; si no ayuda, toca «Reiniciar».",
+  "crash.retry": "Reintentar",
+  "crash.restart": "Reiniciar",
+  "ds.crash.title": "Pantalla de fallo",
+  "ds.crash.hint": "La dibuja el ErrorBoundary de la raíz cuando la app misma falla (§13): sin texto de error crudo, «Reintentar» dibuja la pantalla otra vez, «Reiniciar» recarga la app. Fuera del tema y del idioma de la app: toma los del sistema.",
 };
