@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Волна Н1: главное действие</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
+<style>
+/* Прототип этапа 0 волны Н1 (#2031). «Было» — снимки приложения (before/), «Стало» — макет на токенах «Наряда»
+   (packages/design-tokens, DS §2.2: шрифт 28/22/17/15/15/13/11, отступы 4…32, радиусы 24/18/12, кнопки 28/32/36, зона 44).
+   Правило — design/naryad-ds/DESIGN-SYSTEM.md §8.9а–§8.9в. Светлая тёплая — :root, тёмная графитовая — [data-theme=dark]. */
+:root{
+  --acc:#FBFF00;--on-acc:#0B0C0F;--font:'Onest',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --r:24px;--ri:18px;--rf:12px;
+  --fs-display:28px;--fs-title:22px;--fs-heading:17px;--fs-body:15px;--fs-btn:15px;--fs-caption:13px;--fs-micro:11px;
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s8:32px;
+  --c-sm:28px;--c-md:32px;--c-lg:36px;--hit:44px;--field-phone:44px;--field:34px;--chip-h:24px;
+  --tabbar-h:56px;--rail:72px;--panel-w:360px;--form-max:560px;--content-max:1200px;--thumb:72px;--step-bar:4px;
+  --st-ok:#7CE08A;--st-info:#8FA2FF;--st-warn:#FF8A3D;--st-bad:#FF6B6B;--st-on:#0B0C0F;
+  --page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--in:rgba(255,255,255,.55);
+  --bd:rgba(20,22,30,.1);--track:rgba(20,22,30,.09);--sh:0 10px 28px rgba(60,50,40,.12);--ov:rgba(250,248,244,.78);--ring:#15161A;
+  --st-ok-t:#176428;--st-info-t:#3647C4;--st-warn-t:#944600;--st-bad-t:#B4232A;
+}
+[data-theme="dark"]{
+  --page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--in:rgba(255,255,255,.05);
+  --bd:rgba(255,255,255,.14);--track:rgba(255,255,255,.12);--sh:0 10px 30px rgba(0,0,0,.3);--ov:rgba(38,41,48,.72);--ring:#FBFF00;
+  --st-ok-t:#9CF0A8;--st-info-t:#C2CCFF;--st-warn-t:#FFB47E;--st-bad-t:#FFAAAA;color-scheme:dark;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--in:rgba(255,255,255,.05);
+  --bd:rgba(255,255,255,.14);--track:rgba(255,255,255,.12);--sh:0 10px 30px rgba(0,0,0,.3);--ov:rgba(38,41,48,.72);--ring:#FBFF00;
+  --st-ok-t:#9CF0A8;--st-info-t:#C2CCFF;--st-warn-t:#FFB47E;--st-bad-t:#FFAAAA;color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--page);color:var(--ink);font-family:var(--font);font-size:var(--fs-body);line-height:1.45}
+body{padding:var(--s4) max(16px,env(safe-area-inset-right,0px)) var(--s8) max(16px,env(safe-area-inset-left,0px))}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+button:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+h1{font-size:var(--fs-title);margin:0 0 var(--s1)}
+.lead{color:var(--mut);margin:0 0 var(--s4);max-width:760px}
+.bar{display:flex;flex-wrap:wrap;gap:var(--s3);align-items:center;margin-bottom:var(--s4)}
+.seg{display:inline-flex;background:var(--track);border-radius:999px;padding:4px;gap:2px;flex-wrap:wrap}
+.seg button{min-height:var(--c-md);padding:0 var(--s3);border-radius:999px;font-size:var(--fs-caption);font-weight:600;color:var(--mut)}
+.seg button[aria-pressed="true"]{background:var(--surf2);color:var(--ink);box-shadow:var(--sh)}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:var(--s4)}
+@media (max-width:900px){.cols{grid-template-columns:1fr}}
+.pane h2{font-size:var(--fs-heading);margin:0 0 var(--s2)}
+.stage{background:var(--track);border-radius:var(--r);padding:var(--s3);overflow:hidden}
+.scaler{transform-origin:0 0}
+.before img{display:block;width:100%;height:auto;border-radius:var(--ri)}
+.notes{margin-top:var(--s4);background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:var(--s4)}
+.notes h3{font-size:var(--fs-heading);margin:0 0 var(--s2)}
+.notes li{margin-bottom:var(--s1)}
+
+/* ===== устройство ===== */
+.dev{position:relative;background:var(--bg);color:var(--ink);overflow:hidden;border-radius:var(--ri);display:flex}
+.dev[data-w="390"]{width:390px;height:844px}
+.dev[data-w="820"]{width:820px;height:900px}
+.dev[data-w="1280"]{width:1280px;height:900px}
+.rail{width:var(--rail);flex:none;border-right:1px solid var(--bd);display:flex;flex-direction:column;align-items:center;gap:var(--s2);padding-top:var(--s4)}
+.rail .ri{width:56px;min-height:48px;border-radius:var(--rf);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:var(--fs-micro);color:var(--mut);gap:2px}
+.rail .ri.on{background:var(--surf2);color:var(--ink);font-weight:600}
+.main{flex:1;min-width:0;position:relative;display:flex;flex-direction:column}
+.scroll{flex:1;overflow:hidden;padding:var(--s4)}
+.dev[data-w="820"] .scroll,.dev[data-w="1280"] .scroll{padding:var(--s4) var(--s6)}
+.wrap{max-width:var(--content-max);margin:0 auto}
+.ver{font-size:var(--fs-micro);color:var(--mut);margin-bottom:var(--s2)}
+.back{display:inline-flex;align-items:center;gap:2px;min-height:var(--hit);color:var(--mut);font-size:var(--fs-body);font-weight:500}
+.hdr{display:flex;align-items:flex-start;gap:var(--s2)}
+.hdr h2{font-size:var(--fs-display);line-height:1.15;margin:0;font-weight:700}
+.q{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--mut);color:var(--mut);font-size:11px;display:inline-flex;align-items:center;justify-content:center;margin-top:8px;flex:none}
+.sp{flex:1}
+.ib{width:var(--c-lg);height:var(--c-lg);border-radius:999px;background:var(--surf2);border:1px solid var(--bd);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.sub{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s2);margin:var(--s2) 0 var(--s6);color:var(--mut)}
+.chip{white-space:nowrap;display:inline-flex;align-items:center;gap:6px;height:var(--chip-h);padding:0 10px;border-radius:999px;font-size:var(--fs-caption);font-weight:600;border:1px solid var(--bd);background:var(--surf2);color:var(--ink)}
+.chip.warn{color:var(--st-warn-t);border-color:var(--st-warn)}
+.chip.info{color:var(--st-info-t);border-color:var(--st-info)}
+.chip.ok{color:var(--st-ok-t);border-color:var(--st-ok)}
+.card{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:var(--s4);margin-bottom:var(--s3);box-shadow:var(--sh)}
+.now{font-size:var(--fs-body);margin:0 0 var(--s3)}
+.stitle{font-size:var(--fs-heading);font-weight:600;margin:var(--s3) 0 var(--s2);display:flex;align-items:center;gap:var(--s2)}
+.row{display:flex;align-items:center;gap:var(--s3);min-height:var(--hit);border-bottom:1px solid var(--bd);padding:var(--s1) 0}
+.row:last-child{border-bottom:0}
+.row .k{color:var(--mut);width:96px;flex:none;font-size:var(--fs-caption)}
+.row .v{flex:1;min-width:0}
+.row .chev{color:var(--mut)}
+.money{display:flex;align-items:baseline;justify-content:space-between;gap:var(--s2);margin-bottom:var(--s3)}
+.money .lbl{color:var(--mut);font-size:var(--fs-caption)}
+.money .sum{font-size:var(--fs-title);font-weight:600;font-variant-numeric:tabular-nums}
+.steps{display:grid;grid-template-columns:repeat(5,1fr);gap:var(--s1);margin:var(--s2) 0 var(--s3)}
+.steps .st{display:flex;flex-direction:column;gap:6px;font-size:var(--fs-caption);color:var(--mut)}
+.steps .st i{display:block;height:var(--step-bar);border-radius:999px;background:var(--track)}
+.steps .st.done{color:var(--ink)}
+.steps .st.done i{background:var(--ink)}
+.steps .st.cur{color:var(--ink);font-weight:600}
+.steps .st.cur i{background:var(--acc);outline:1px solid var(--bd)}
+.contact{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s2)}
+.contact button{min-height:var(--hit);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:var(--fs-caption);font-weight:500;border-radius:var(--rf);background:var(--in);border:1px solid var(--bd)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--s2);min-height:var(--hit);padding:0 var(--s4);border-radius:999px;font-weight:600;font-size:var(--fs-btn)}
+.btn.pri{background:var(--acc);color:var(--on-acc)}
+.btn.sec{background:var(--surf2);border:1px solid var(--bd)}
+.btn.sm{min-height:var(--c-md);font-size:var(--fs-caption);padding:0 var(--s3)}
+.tabs{display:flex;gap:var(--s1);overflow:hidden;margin:var(--s2) 0 var(--s3)}
+.tabs span{min-height:30px;padding:0 var(--s3);display:inline-flex;align-items:center;border-radius:999px;font-size:var(--fs-caption);font-weight:600;color:var(--mut);white-space:nowrap}
+.tabs span.on{background:var(--surf2);color:var(--ink);box-shadow:var(--sh)}
+.thumbs{display:flex;gap:var(--s2);flex-wrap:wrap}
+.thumbs b{width:var(--thumb);height:var(--thumb);border-radius:var(--rf);background:var(--track);border:1px solid var(--bd);display:flex;align-items:flex-end;padding:4px;font-size:var(--fs-micro);font-weight:500;color:var(--mut)}
+ul.todo{margin:0;padding-left:var(--s5)}
+ul.todo li{margin-bottom:var(--s1)}
+.field{margin-bottom:var(--s3)}
+.field label{display:block;font-size:var(--fs-caption);font-weight:500;color:var(--mut);margin-bottom:var(--s1)}
+.field .inp{height:var(--field-phone);border-radius:var(--rf);background:var(--in);border:1px solid var(--bd);display:flex;align-items:center;padding:0 var(--s3);font-size:17px}
+.dev:not([data-w="390"]) .field .inp{height:var(--field)}
+.field .inp.ph{color:var(--mut)}
+.form{max-width:var(--form-max)}
+
+/* панели действия */
+.dock{position:absolute;left:0;right:0;bottom:0;padding:0 var(--s3) var(--s3);display:flex;flex-direction:column;gap:var(--s2);z-index:2}
+.actionbar{background:var(--ov);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid var(--bd);border-radius:var(--r);padding:var(--s3) var(--s4);display:flex;flex-direction:column;gap:var(--s2);box-shadow:var(--sh)}
+.actionbar .r{display:flex;gap:var(--s2)}
+.actionbar .r .btn{flex:1}
+.actionbar .r .btn.g2{flex:2}.actionbar .r .btn.g3{flex:3}
+.tabpill{height:var(--tabbar-h);background:var(--ov);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid var(--bd);border-radius:999px;display:flex;align-items:center;justify-content:space-around;box-shadow:var(--sh)}
+.tabpill span{display:flex;flex-direction:column;align-items:center;font-size:var(--fs-micro);color:var(--mut);gap:2px;min-width:60px}
+.tabpill span.on{color:var(--ink);font-weight:600}
+.dev[data-w="390"] .room{height:150px}
+.dev[data-w="390"] .room.tall{height:200px}
+/* полоса 820 — шириной колонки */
+.strip{position:absolute;bottom:0;left:var(--s6);right:var(--s6);padding-bottom:var(--s3);z-index:2}
+.strip .actionbar{flex-direction:row;justify-content:flex-end;align-items:center;max-width:var(--content-max);margin:0 auto}
+.strip.formw{right:auto;width:var(--form-max)}
+.strip .actionbar .btn{min-width:160px;max-width:280px}
+.strip .info{margin-right:auto;font-size:var(--fs-caption);color:var(--mut)}
+/* 1280 — две колонки */
+.two{display:grid;grid-template-columns:minmax(0,1fr) var(--panel-w);gap:var(--s6);align-items:start}
+.side .btn{width:100%}
+.side .card{margin-bottom:var(--s3)}
+.menu{position:absolute;z-index:5;background:var(--ov);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid var(--bd);border-radius:var(--rf);box-shadow:var(--sh);width:240px;padding:var(--s1) 0}
+.menu div{min-height:var(--hit);display:flex;align-items:center;padding:0 var(--s4);gap:var(--s2)}
+.menu .bad{color:var(--st-bad-t)}
+.menu hr{border:0;border-top:1px solid var(--bd);margin:var(--s1) 0}
+svg.i{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+svg.i.m{width:20px;height:20px}
+</style>
+</head>
+<body>
+<h1>Волна Н1 — главное действие и выезд</h1>
+<p class="lead">Этап 0 задачи #2031. Слева — как сейчас (снимки приложения), справа — как станет по правилу DS §8.9а–§8.9в. Демо-данные; роль переключается в экране «Выезд».</p>
+
+<div class="bar" role="group" aria-label="Настройки показа">
+  <div class="seg" id="scr" aria-label="Экран">
+    <button data-v="visitM" aria-pressed="true">Выезд — назначенный</button>
+    <button data-v="visitO" aria-pressed="false">Выезд — офис</button>
+    <button data-v="job" aria-pressed="false">Работа</button>
+    <button data-v="lead" aria-pressed="false">Новый лид (форма)</button>
+  </div>
+  <div class="seg" id="wid" aria-label="Ширина">
+    <button data-v="390" aria-pressed="true">390</button>
+    <button data-v="820" aria-pressed="false">820</button>
+    <button data-v="1280" aria-pressed="false">1280</button>
+  </div>
+  <div class="seg" id="thm" aria-label="Тема">
+    <button data-v="dark" aria-pressed="true">Тёмная</button>
+    <button data-v="light" aria-pressed="false">Светлая</button>
+  </div>
+  <div class="seg" id="mnu" aria-label="Меню ⋯">
+    <button data-v="0" aria-pressed="true">⋯ закрыто</button>
+    <button data-v="1" aria-pressed="false">⋯ открыто</button>
+  </div>
+</div>
+
+<div class="cols">
+  <section class="pane"><h2>Было</h2><div class="stage before"><img id="beforeImg" alt="Снимок экрана сейчас"></div></section>
+  <section class="pane"><h2>Стало</h2><div class="stage" id="afterStage"><div class="scaler" id="scaler"></div></div></section>
+</div>
+
+<div class="notes" id="notes"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-nav" viewBox="0 0 24 24"><path d="M3 11l19-9-9 19-2-8-8-2z"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></symbol>
+  <symbol id="i-cam" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></symbol>
+  <symbol id="i-rcpt" viewBox="0 0 24 24"><path d="M4 2v20l3-2 3 2 2-2 2 2 3-2 3 2V2l-3 2-3-2-2 2-2-2-3 2z"/><path d="M8 9h8M8 13h6"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></symbol>
+</svg>
+
+<script>
+const BEFORE = { visitM: "visit_v1", visitO: "visit_v1", job: "job_j1", lead: "lead_new" };
+const S = { scr: "visitM", wid: "390", thm: "dark", mnu: "0" };
+const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+
+function rail(on) {
+  const items = [["home", "Главная"], ["cal", "План"], ["msg", "Сообщения"], ["users", "Клиенты"], ["rcpt", "Работы"]];
+  return `<nav class="rail" aria-label="Разделы">${items.map(([i, t]) => `<div class="ri ${t === on ? "on" : ""}">${ic(i, "m")}${t}</div>`).join("")}</nav>`;
+}
+function tabpill(on) {
+  const items = [["home", "Главная"], ["cal", "План"], ["msg", "Сообщения"], ["users", "Клиенты"], ["more", "Ещё"]];
+  return `<div class="tabpill" aria-label="Вкладки">${items.map(([i, t]) => `<span class="${t === on ? "on" : ""}">${ic(i, "m")}${t}</span>`).join("")}</div>`;
+}
+const head = (back, title, extra = "") => `
+  <div class="ver">GoRix v1.0.0 · 18</div>
+  <button class="back">${ic("back")}${back}</button>
+  <div class="hdr"><h2>${title}</h2><span class="q" aria-label="Подсказка">?</span><span class="sp"></span>${extra}<button class="ib" aria-label="Ещё действия">${ic("more")}</button></div>`;
+const contact = `<div class="contact"><button>${ic("phone")}Позвонить</button><button>${ic("msg")}Написать</button><button>${ic("nav")}Маршрут</button></div>`;
+
+function visitStatus(master) {
+  return `<div class="card" aria-label="Статус выезда">
+    <span class="chip warn">${ic("alert")}Опаздывает · не выехал</span>
+    <div class="money" style="margin-top:12px"><span class="lbl">К оплате</span><span class="sum">$3,078</span></div>
+    <div class="steps" aria-label="Шаги выезда">
+      <div class="st cur"><i></i>В пути</div><div class="st"><i></i>На месте</div><div class="st"><i></i>Работа</div><div class="st"><i></i>Подпись</div><div class="st"><i></i>Оплата</div>
+    </div>
+    <p class="now">${master ? "Сейчас: выехать к клиенту — начало в 8:30 AM." : "Шаги ведёт Alex Petrov · ещё не выехал, начало в 8:30 AM."}</p>
+    ${contact}
+  </div>`;
+}
+function visitBody() {
+  return `<div class="card" aria-label="Когда и кто">
+      <div class="stitle" style="margin-top:0">Когда и кто</div>
+      <div class="row"><span class="k">Когда</span><span class="v">вт, 17 нояб. · 8:30 AM – 12:30 PM</span><span class="chev">${ic("chev")}</span></div>
+      <div class="row"><span class="k">Мастер</span><span class="v">Alex Petrov</span><span class="chev">${ic("chev")}</span></div>
+      <div class="row"><span class="k">Адрес</span><span class="v">1420 Oak Grove Ave, Pasadena, CA 91103</span></div>
+    </div>
+    <div class="card"><div class="stitle" style="margin-top:0">Что сделать</div>
+      <ul class="todo"><li>Remove old vanity and toilet</li><li>Tile backsplash, 24 sq ft</li><li>Install new vanity, faucet</li></ul></div>`;
+}
+function visitMenu(master, x, y) {
+  return `<div class="menu" style="left:${x}px;top:${y}px" role="menu">
+    ${master ? `<div>${ic("undo")}Вернуть шаг…</div>` : ""}
+    <div>${ic("msg")}Сообщение клиенту</div><div>${ic("rcpt")}Открыть работу</div><div>${ic("users")}Лид</div><hr>
+    <div class="bad">${ic("x")}Отменить выезд…</div></div>`;
+}
+
+function render() {
+  const w = +S.wid, master = S.scr === "visitM", menuOpen = S.mnu === "1";
+  let content = "", dock = "", side = "";
+  const isVisit = S.scr.startsWith("visit");
+  if (isVisit) {
+    const h = head("Работа JOB-0001", "Sarah Mitchell");
+    const sub = `<div class="sub"><span class="chip">${ic("cal")}Выезд</span>8:30 AM · Bathroom remodel: vanity, toilet, tile</div>`;
+    const mainBtns = master
+      ? { pri: `<button class="btn pri">${ic("nav")}Я в пути</button>`, sec: `<button class="btn sec">${ic("rcpt")}Расход</button><button class="btn sec">${ic("cam")}Фото</button>` }
+      : { pri: `<button class="btn sec">${ic("cal")}Перенести</button>`, sec: "" };
+    if (w === 390) {
+      content = h + sub + visitStatus(master) + visitBody() + `<div class="room ${master ? "tall" : ""}"></div>`;
+      dock = `<div class="dock"><div class="actionbar"><div class="r">${mainBtns.pri.replace('class="btn', 'class="btn g3')}</div>${mainBtns.sec ? `<div class="r">${mainBtns.sec}</div>` : ""}</div></div>`;
+    } else if (w === 820) {
+      content = h + sub + visitStatus(master) + visitBody() + `<div style="height:96px"></div>`;
+      dock = `<div class="strip"><div class="actionbar"><span class="info">${master ? "Шаг 1 из 5 · В пути" : "Выезд ещё не начат"}</span>${mainBtns.sec}${mainBtns.pri}</div></div>`;
+    } else {
+      content = h + sub + `<div class="two"><div>${visitStatusLeft(master)}${visitBody()}</div><aside class="side" aria-label="Сводка">
+        <div class="card"><span class="chip warn">${ic("alert")}Опаздывает · не выехал</span>
+        <div class="money" style="margin-top:12px"><span class="lbl">К оплате</span><span class="sum">$3,078</span></div>
+        ${master ? mainBtns.pri : `<p class="now">Шаги ведёт Alex Petrov.</p>${mainBtns.pri}`}
+        ${master ? `<div class="r" style="display:flex;gap:8px;margin-top:8px">${mainBtns.sec.replace(/class="btn sec"/g, 'class="btn sec" style="flex:1"')}</div>` : ""}
+        <div style="margin-top:12px">${contact}</div></div>
+        <div class="card"><div class="stitle" style="margin-top:0">Связано</div>
+        <div class="row"><span class="v">${ic("rcpt")} Работа JOB-0001</span><span class="chev">${ic("chev")}</span></div>
+        <div class="row"><span class="v">${ic("users")} Sarah Mitchell</span><span class="chev">${ic("chev")}</span></div></div>
+      </aside></div>`;
+    }
+    if (menuOpen) side = visitMenu(master, w - (w === 390 ? 260 : 300), 150);
+  } else if (S.scr === "job") {
+    const h = head("Sarah Mitchell", "Работа JOB-0001");
+    const sub = w === 1280 ? `<div class="sub">вт, 17 нояб. · Bathroom remodel: vanity, toilet, tile</div>` : `<div class="sub"><span class="chip info">${ic("cal")}Запланирована</span>вт, 17 нояб. · $3,078</div>`;
+    const now = `<p class="now">Сегодня выезд в 8:30 AM — Alex Petrov ещё не выехал.</p>`;
+    const tabs = `<div class="tabs" role="tablist"><span class="on">Обзор</span><span>Выезды · 2</span><span>Деньги</span><span>Фото · 7</span><span>История</span></div>`;
+    const photos = `<div class="stitle">Фото выездов</div><div class="card"><div class="lbl" style="color:var(--mut);font-size:13px;margin-bottom:8px">вт, 10 нояб. · осмотр · до 3 · после 4</div><div class="thumbs"><b>до</b><b>до</b><b>до</b><b>после</b><b>после</b><b>после</b><b>после</b></div></div>`;
+    const visits = `<div class="stitle">Выезды</div><div class="card"><div class="row"><span class="v"><b>вт, 17 нояб. · 8:30 AM</b><br><span style="color:var(--mut)">Alex Petrov · 4 ч</span></span><span class="chip warn">${ic("alert")}Опаздывает</span><span class="chev">${ic("chev")}</span></div><div class="row"><span class="v"><b>чт, 19 нояб. · 9:00 AM</b><br><span style="color:var(--mut)">Alex Petrov · 1 ч 30 мин</span></span><span class="chip">Назначен</span><span class="chev">${ic("chev")}</span></div></div>`;
+    const pri = `<button class="btn pri">${ic("nav")}Открыть выезд</button>`;
+    if (w === 390) {
+      content = h + sub + now + contact + tabs + visits + photos + `<div class="room"></div>`;
+      dock = `<div class="dock"><div class="actionbar"><div class="r">${pri}</div></div>${tabpill("Клиенты")}</div>`;
+    } else if (w === 820) {
+      content = h + sub + now + contact + tabs + visits + photos + `<div style="height:96px"></div>`;
+      dock = `<div class="strip"><div class="actionbar"><span class="info">Ближайший выезд — сегодня 8:30 AM</span>${pri}</div></div>`;
+    } else {
+      content = h + sub + `<div class="two"><div>${tabs}${visits}${photos}</div><aside class="side" aria-label="Сводка"><div class="card">
+        <span class="chip info">${ic("cal")}Запланирована</span><p class="now" style="margin-top:12px">Сегодня выезд в 8:30 AM — Alex Petrov ещё не выехал.</p>${pri}
+        <div class="money" style="margin-top:12px"><span class="lbl">Сумма работы</span><span class="sum">$3,078</span></div>
+        <div class="money"><span class="lbl">Оплачено</span><span style="font-variant-numeric:tabular-nums">$0.00</span></div>${contact}</div>
+        <div class="card"><div class="stitle" style="margin-top:0">Связано</div><div class="row"><span class="v">${ic("users")} Sarah Mitchell</span><span class="chev">${ic("chev")}</span></div><div class="row"><span class="v">${ic("rcpt")} EST-0012 · Подписана · $3,078.00</span><span class="chev">${ic("chev")}</span></div></div></aside></div>`;
+    }
+  } else {
+    const h = `<div class="ver">GoRix v1.0.0 · 18</div><button class="back">${ic("back")}Отмена</button><div class="hdr"><h2>Новый лид</h2><span class="q">?</span></div><div style="height:24px"></div>`;
+    const f = (l, v, ph) => `<div class="field"><label>${l}</label><div class="inp ${ph ? "ph" : ""}">${v}</div></div>`;
+    const form = `<div class="form">${f("Имя", "Kevin Brooks")}${f("Телефон", "(626) 555-0148")}${f("Адрес работ", "Улица, дом", 1)}${f("Что нужно", "Gutter cleaning, 2 stories", 0)}${f("Откуда пришёл", "Выберите источник", 1)}</div>`;
+    const pri = `<button class="btn pri">Сохранить лид</button>`;
+    content = h + form + `<div style="height:${w === 390 ? 120 : 96}px"></div>`;
+    dock = w === 390 ? `<div class="dock"><div class="actionbar"><div class="r">${pri}</div></div></div>`
+      : `<div class="strip formw"><div class="actionbar"><button class="btn sec">Отмена</button>${pri}</div></div>`;
+  }
+  const hasRail = w > 390;
+  const dev = `<div class="dev" data-w="${w}" data-theme="${S.thm}">${hasRail ? rail(S.scr === "lead" ? "Главная" : "Клиенты") : ""}
+    <div class="main"><div class="scroll"><div class="wrap">${content}</div></div>${dock}${side}</div></div>`;
+  const sc = document.getElementById("scaler");
+  sc.innerHTML = dev;
+  const stage = document.getElementById("afterStage");
+  const avail = stage.clientWidth - 24, k = Math.min(1, avail / w);
+  sc.style.transform = `scale(${k})`;
+  sc.style.height = (w === 390 ? 844 : 900) * k + "px";
+  sc.style.width = w + "px";
+  stage.style.height = (w === 390 ? 844 : 900) * k + 24 + "px";
+  const img = document.getElementById("beforeImg");
+  img.src = `before/${BEFORE[S.scr]}-${w}-${S.thm}.jpg`;
+  img.alt = `Сейчас: ${BEFORE[S.scr]}, ${w}, ${S.thm === "dark" ? "тёмная" : "светлая"}`;
+  document.getElementById("notes").innerHTML = NOTES[S.scr];
+}
+function visitStatusLeft(master) {
+  return `<div class="card"><div class="steps"><div class="st cur"><i></i>В пути</div><div class="st"><i></i>На месте</div><div class="st"><i></i>Работа</div><div class="st"><i></i>Подпись</div><div class="st"><i></i>Оплата</div></div>
+    <p class="now" style="margin:0">${master ? "Сейчас: выехать к клиенту — начало в 8:30 AM." : "Шаги ведёт Alex Petrov · ещё не выехал."}</p></div>`;
+}
+const NOTES = {
+  visitM: `<h3>Выезд — тот, на кого он назначен (мастер или владелец-одиночка)</h3><ul>
+    <li><b>390:</b> шаг «Я в пути» — жёлтая кнопка в закреплённой панели под большим пальцем, под ней «Расход · Фото» (§8.9). Было: кнопки шага нет вовсе, четыре кнопки в три ряда (РБ-13, РБ-14).</li>
+    <li><b>Шкала:</b> подписи 13 вместо 11, текущий шаг жирным, «К оплате $3,078» с подписью (РБ-15, РБ-05).</li>
+    <li><b>«Когда и кто»</b> — строки «›»: нажал «Когда» — перенос, «Мастер» — назначение. «Сообщить клиенту» — это «Написать» в строке связи. «Отменить выезд» — последним в «⋯», красным, с подтверждением; там же «Вернуть шаг…» (РБ-16).</li>
+    <li><b>820:</b> та же панель — полоса внизу шириной колонки, кнопки справа, слева «Шаг 1 из 5». <b>1280:</b> справа колонка 360 — статус, «К оплате», шаг, «Расход · Фото», связь; полосы внизу нет (Ш-16).</li>
+    <li>После «Готово» вверху появится «Итог»: чек-лист 7 из 8, фото до/после, подпись, оплата (РБ-29) — в прототипе не показан, правило §8.9б.</li></ul>`,
+  visitO: `<h3>Выезд — офис (или владелец, когда выезд не на нём)</h3><ul>
+    <li>Шаги ведёт назначенный; офис видит шаг словами: «Шаги ведёт Alex Petrov · ещё не выехал» (П1).</li>
+    <li>Пока выезд не начат — в панели одна вторичная «Перенести»; жёлтой нет: у офиса здесь нет главного шага. Когда мастер выехал — панели нет совсем.</li>
+    <li>«Отменить выезд» — в «⋯», красным, последним (откройте «⋯»).</li></ul>`,
+  job: `<h3>Работа</h3><ul>
+    <li>«Начать выезд» со значком «✓» посреди карточки → «Открыть выезд» в панели (П1, §8.9в): на телефоне панель стоит <b>над пилюлей вкладок</b>, как «аксессуар» вкладок iOS 26 — вкладки остаются (правило «вкладки везде», спека 28), действие под пальцем (РБ-03, О-06).</li>
+    <li>Вкладка и раздел «Фото выездов»: снимки всех выездов работы по выездам (РБ-06).</li>
+    <li><b>820:</b> полоса внизу; <b>1280:</b> справа сводка 360 — статус, «что сейчас», кнопка, деньги, связь; слева вкладки (Ш-15).</li></ul>`,
+  lead: `<h3>Форма «Новый лид» (и все формы: клиент, позиция каталога, удаление аккаунта)</h3><ul>
+    <li><b>390:</b> «Сохранить лид» — в закреплённой панели, а не в конце формы (КЛ-35, ВХ-11, О-06).</li>
+    <li><b>820 и 1280:</b> полоса под колонкой 560, на её линии; «Отмена» слева, «Сохранить лид» справа; кнопки не растянуты во всю ширину.</li></ul>`,
+};
+for (const id of ["scr", "wid", "thm", "mnu"]) {
+  document.getElementById(id).addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    S[id] = b.dataset.v;
+    for (const x of e.currentTarget.querySelectorAll("button")) x.setAttribute("aria-pressed", String(x === b));
+    render();
+  });
+}
+addEventListener("resize", render);
+render();
+</script>
+</body>
+</html>
