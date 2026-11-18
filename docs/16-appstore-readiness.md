@@ -396,7 +396,8 @@ WHAT TO TRY (about 5 minutes)
 OPTIONAL MODULES
 Trade modules (Gutters) are turned on per company in Company > Modules.
 The Gutters module is included in this build and is enabled on the review
-account. There are no hidden or disabled features in this build.
+account [#2169: on the demo account with the subscription; the second demo
+account has none and shows the purchase screen]. There are no hidden or disabled features in this build.
 [#2169: the purchase code ships only in a build where the subscription
 product is ready; no switched-off paid code in the store build (2.5.19).]
 
