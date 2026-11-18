@@ -5,7 +5,7 @@ project_id = "octodex"
 [auth.email]
 enable_confirmations = true
 # the sign-in code (docs/specs/52 §4 Р3): 8 digits, 10 minutes — the same in the hosted project (Authentication → Providers → Email)
-otp_length = 8
+otp_length = 6
 otp_expiry = 600
 
 # 7а-2a (S22): «Удалить аккаунт» — only with a valid user JWT (the person deletes themselves; the uid is never in the body).

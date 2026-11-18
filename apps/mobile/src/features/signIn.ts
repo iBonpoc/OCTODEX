@@ -24,11 +24,11 @@ export interface SignInErr {
 }
 
 /** digits of the email code — equals `otp_length` in supabase/config.toml and the hosted project (spec 52 Р3; guard: authEmails.test.ts) */
-export const CODE_LENGTH = 8;
+export const CODE_LENGTH = 6;
 /**
- * the fewest digits «Войти» sends: a 6-digit code still works while the hosted project is moved from 6 to 8 (the app
- * update reaches phones at once, the setting is changed by hand — security-check of PR-1); the last digit signs in by
- * itself only at CODE_LENGTH
+ * the fewest digits «Войти» sends — the code is exactly CODE_LENGTH since the founder's decision of 18.11 (6 digits,
+ * 10 minutes); the hosted project's «Email OTP Length» is set to 6 BEFORE this build goes out (an 8-digit code cannot be
+ * typed into a 6-digit field)
  */
 export const CODE_MIN = 6;
 

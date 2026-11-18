@@ -81,9 +81,9 @@ describe("where a refusal stands", () => {
 
 describe("the code as typed", () => {
   it("digits only, at most CODE_LENGTH", () => {
-    expect(CODE_LENGTH).toBe(8);
-    expect(codeDigits("1234 5678")).toBe("12345678");
-    expect(codeDigits(" 12-34-56-78-9")).toBe("12345678");
+    expect(CODE_LENGTH).toBe(6); // the founder, 18.11: «код входа — 6 цифр»
+    expect(codeDigits("123 456")).toBe("123456");
+    expect(codeDigits(" 12-34-56-78")).toBe("123456"); // never more than CODE_LENGTH
     expect(codeDigits("abc")).toBe("");
   });
 });

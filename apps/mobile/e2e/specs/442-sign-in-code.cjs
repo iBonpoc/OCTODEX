@@ -15,7 +15,7 @@
  */
 const { pressEscUntilClosed } = require("../sheet.cjs");
 
-const LEN = 8; // CODE_LENGTH (src/features/signIn.ts) = otp_length (supabase/config.toml) — test/authEmails.test.ts
+const LEN = 6; // CODE_LENGTH (src/features/signIn.ts) = otp_length (supabase/config.toml) — test/authEmails.test.ts
 
 exports.run = async (h) => {
   const p = h.page;
