@@ -7,7 +7,12 @@
  *  - in a changed spec, every section whose heading the PR added (the outermost added heading, with all its subsections)
  *    has at least one scenario; edits inside an old section without a new heading are not checked;
  *  - a section (or file) may opt out with the comment `<!-- без сценариев: <причина> -->` (a research note, a comparison);
- *  - the PR added scenarios AND added test files: at least one added test names a scenario «С<n>» (Cyrillic or Latin C).
+ *  - the PR added scenarios AND added test files: at least one added test names a scenario «С<n>» (Cyrillic or Latin C);
+ *    a PR without new test files (docs only, a stage 0) is not asked this.
+ * Sections: a heading of ANY level (#…######) the PR added starts a section; it runs to the next heading of the same or a
+ * higher level. Only the outermost added heading is checked (its added subsections are inside it): a new «## 9» with «### 9.1…
+ * 9.9» needs one scenario somewhere in it; a new «### 5.3б» inside an old «## 5» needs its own (a new step's plan is a section).
+ * Every opt-out used is printed in the report (seen in the PR's log), with its reason.
  *
  * `decide` is pure (file texts and added line numbers are passed in); the CLI part reads them from git (BASE_SHA … HEAD_SHA).
  */
@@ -64,22 +69,24 @@ function addedSections(text, added) {
 
 /**
  * files: [{ path, status: "A" | "M" | ..., text (after), added: line numbers added (1-based, after) }]
- * -> { ok, problems: string[], found: number[] }
+ * -> { ok, problems: string[], found: number[], skipped: string[] (the opt-outs used, with their reasons) }
  */
 function decide(files) {
   const problems = [];
   const found = [];
+  const skipped = [];
+  const optOut = (where, text) => { const m = text.match(OPT_OUT); if (m) skipped.push(`${where}: ${m[0]}`); return !!m; };
   for (const f of files) {
     if (!SPEC.test(f.path) || f.status === "D" || f.text == null) continue;
     if (f.status === "A") {
-      if (OPT_OUT.test(f.text)) continue;
+      if (optOut(f.path, f.text)) continue;
       const s = scenarios(f.text);
       if (!s.length) problems.push(`${f.path}: новая спека без сценариев «С1. ДАНО … КОГДА … ТОГДА …» (story-map §7 п.9)`);
       found.push(...s);
       continue;
     }
     for (const sec of addedSections(f.text, new Set(f.added))) {
-      if (OPT_OUT.test(sec.text)) continue;
+      if (optOut(`${f.path}:${sec.line} «${sec.title}»`, sec.text)) continue;
       const s = scenarios(sec.text);
       if (!s.length) problems.push(`${f.path}:${sec.line} «${sec.title}»: новый раздел без сценариев «С1. ДАНО … КОГДА … ТОГДА …» (или пометка <!-- без сценариев: причина -->)`);
       found.push(...s);
@@ -89,7 +96,7 @@ function decide(files) {
   if (found.length && tests.length && !tests.some((t) => /(?:^|[^\p{L}\p{N}])[СC]\d+(?![\p{L}\p{N}])/u.test(t.text))) {
     problems.push(`новые тесты (${tests.map((t) => t.path).join(", ")}) не называют ни одного сценария «С<n>» из спеки — номер сценария в названии теста (story-map §7 п.9)`);
   }
-  return { ok: problems.length === 0, problems, found };
+  return { ok: problems.length === 0, problems, found, skipped };
 }
 
 /** the added line numbers (after) of one file from `git diff -U0` output */
@@ -119,6 +126,7 @@ if (require.main === module) {
     return { path, status: s, text: git("show", `${head}:${path}`), added: addedLines(git("diff", "-U0", from, head, "--", path)) };
   });
   const res = decide(files);
+  for (const x of res.skipped) console.log(`::notice::без сценариев — ${x}`);
   if (res.ok) { console.log(`ok: сценарии ${res.found.length ? res.found.map((n) => `С${n}`).join(", ") : "— (новых разделов спек нет)"}`); process.exit(0); }
   for (const p of res.problems) console.log(`::error::${p}`);
   process.exit(1);

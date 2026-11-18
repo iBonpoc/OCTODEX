@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 const require = createRequire(import.meta.url);
 type F = { path: string; status: string; text: string | null; added: number[] };
 const { decide, scenarios, addedLines } = require("../../../scripts/scenarioGuard.cjs") as {
-  decide: (f: F[]) => { ok: boolean; problems: string[]; found: number[] };
+  decide: (f: F[]) => { ok: boolean; problems: string[]; found: number[]; skipped: string[] };
   scenarios: (t: string) => number[];
   addedLines: (d: string) => number[];
 };
@@ -52,7 +52,9 @@ describe("decide", () => {
   });
 
   it("С5: the opt-out comment with a reason lets a section through; without a reason it does not", () => {
-    expect(decide([grown(["## 2. Ресёрч", "<!-- без сценариев: сравнение образцов, правил нет -->"])]).ok).toBe(true);
+    const opt = decide([grown(["## 2. Ресёрч", "<!-- без сценариев: сравнение образцов, правил нет -->"])]);
+    expect(opt.ok).toBe(true);
+    expect(opt.skipped).toEqual(["docs/specs/33-x.md:6 «## 2. Ресёрч»: <!-- без сценариев: сравнение образцов, правил нет -->"]); // printed in the PR's log
     expect(decide([grown(["## 2. Ресёрч", "<!-- без сценариев: -->"])]).ok).toBe(false);
   });
 
@@ -69,6 +71,10 @@ describe("decide", () => {
     expect(decide([spec, { path: "apps/mobile/test/foo.test.ts", status: "A", text: "it('C1: works')", added: [1] }]).ok).toBe(true); // Latin C too
     // a test changed (not added) is not asked
     expect(decide([spec, { path: "apps/mobile/test/foo.test.ts", status: "M", text: "it('works')", added: [1] }]).ok).toBe(true);
+  });
+
+  it("С9: a docs-only PR (no new test files) with scenarios is not asked for a test", () => {
+    expect(decide([grown(["## 2. Новое", SC]), { path: "docs/ai/BOARD.md", status: "M", text: "x", added: [1] }]).ok).toBe(true);
   });
 
   it("С8: a deleted spec is not checked", () => {
