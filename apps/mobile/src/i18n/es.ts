@@ -4072,7 +4072,7 @@ export const es: Dict = {
   "intake.set.ready.none": "Sin formulario",
   "intake.set.ready.off": "Apagado",
   "intake.set.ready.held": "Las solicitudes esperan revisión",
-  "intake.set.readyHint.held": "El formulario pide un captcha que la página aún no muestra: cada solicitud llega aquí como «Espera decisión»; acéptela o recházela.",
+  "intake.set.readyHint.held": "El formulario pide un captcha que la página aún no muestra: cada solicitud llega aquí como «En espera»; acéptela o recházela.",
   "intake.set.ready.on": "Recibe solicitudes",
   "intake.set.readyHint.unknown": "Lo comprobaremos cuando el servidor responda. Revise la conexión.",
   "intake.set.readyHint.noSecret": "La recepción de solicitudes aún no está activada: el formulario no recibe solicitudes por ahora. Escriba a soporte y la activamos.",

@@ -9638,6 +9638,14 @@ select tst.ok(tst.intake('form', 'form', 'cap413bot', '{"phone":"(818) 555-0413"
   'T413 the trap field is refused even without a captcha');
 select tst.ok(tst.intake('form', 'form', 'cap413junk', '{"phone":"(818) 555-0414"}', '9.9.4.14', '{"captcha":"maybe"}') ->> 'status' = 'held',
   'T413 an unknown captcha answer is held, not passed');
+select tst.ok(tst.intake('form', 'form', 'cap413fast', '{"phone":"(818) 555-0415"}', '9.9.4.15', '{"bot":"time"}') ->> 'status' = 'held',
+  'T413 too fast and no captcha: held');
+select tst.ok(tst.intake('webhook', 'hook', 'cap413hook', '{"phone":"(818) 555-0416"}') ->> 'status' = 'accepted',
+  'T413 the form''s captcha does not hold the webhook''s leads');
+:as_super
+select tst.ok((select reason = 'no_captcha' from public.intake_events where event_key = 'cap413junk'), 'T413 no other sign — the reason is «no captcha»');
+select tst.ok((select reason = 'too_fast' from public.intake_events where event_key = 'cap413fast'),
+  'T413 a sharper reason wins over «no captcha» (the person sees «too fast»)');
 :as_owner_a
 select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => false, p_daily_limit => 1);
 

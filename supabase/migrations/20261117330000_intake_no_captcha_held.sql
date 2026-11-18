@@ -63,8 +63,6 @@ begin
     v_status := 'rejected'; v_reason := 'flood';            -- past ten days' worth in a day: not even kept
   elsif v_old_link then
     v_status := 'held'; v_reason := 'old_link';
-  elsif ep.captcha_required and coalesce(p_checks ->> 'captcha', 'none') <> 'ok' then
-    v_status := 'held'; v_reason := 'no_captcha';           -- no captcha answer (the page has no widget yet, В3): a person decides
   elsif v_bot = 'time' then
     v_status := 'held'; v_reason := 'too_fast';             -- only the fill time says «bot»: a person may be wrongly judged
   elsif p_kind = 'form' and (p_ip_hash is null or p_ip_hash !~ '^[0-9a-f]{64}$') then
@@ -78,6 +76,9 @@ begin
   elsif (select count(*) from public.intake_events x where x.endpoint_id = ep.id and x.status in ('accepted', 'merged', 'held')
           and x.received_at > now() - interval '1 day') >= ep.daily_limit then
     v_status := 'held'; v_reason := 'daily_limit';
+  elsif ep.captcha_required and coalesce(p_checks ->> 'captcha', 'none') <> 'ok' then
+    -- last: a sharper reason (too fast, no IP, one address, the day's limit) tells the person more than «no captcha»
+    v_status := 'held'; v_reason := 'no_captcha';           -- no captcha answer (the page has no widget yet, В3): a person decides
   end if;
 
   insert into public.intake_events (company_id, endpoint_id, event_key, payload_hash, ip_hash, net_hash, status, reason, payload,

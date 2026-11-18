@@ -4072,7 +4072,7 @@ export const en: Dict = {
   "intake.set.ready.none": "No form",
   "intake.set.ready.off": "Off",
   "intake.set.ready.held": "Requests wait for review",
-  "intake.set.readyHint.held": "The form asks for a captcha the page does not show yet: every request comes here as «Waits for a decision» — accept or decline it.",
+  "intake.set.readyHint.held": "The form asks for a captcha the page does not show yet: every request comes here as «Waiting» — accept or refuse it.",
   "intake.set.ready.on": "Taking requests",
   "intake.set.readyHint.unknown": "We will check readiness when the server answers. Check the connection.",
   "intake.set.readyHint.noSecret": "Taking requests is not switched on yet: the form does not accept requests for now. Contact support and we will turn it on.",

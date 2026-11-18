@@ -4,7 +4,7 @@
  * requests come first, the rows of the journal keep only what the screen shows.
  */
 import { describe, expect, it } from "vitest";
-import { endpointFromRow, eventFromRow, formLink, heldFirst, readiness, READINESS_TONE, siteSnippet, type IntakeEndpoint } from "../src/features/intakeSettings";
+import { endpointFromRow, eventFromRow, formLink, heldFirst, heldReasonKey, readiness, READINESS_TONE, siteSnippet, type IntakeEndpoint } from "../src/features/intakeSettings";
 
 const form = (enabled: boolean): IntakeEndpoint => ({ id: "e1", kind: "form", publicToken: "f".padEnd(33, "a"), tokenHint: "aaaa", sourceId: "s1", enabled, smsConsent: false, captcha: false, dailyLimit: 100 });
 
@@ -30,6 +30,12 @@ describe("intake settings", () => {
     expect(READINESS_TONE.held).toBe("warn");
     expect(readiness({ ipSecret: true }, { ...cap, enabled: false })).toBe("off"); // switched off says so first
     expect(readiness({ ipSecret: false }, cap)).toBe("noSecret"); // no secret still beats everything
+  });
+  it("a held request's reason: known ones have words, an unknown one (a newer server) says «отложена», never its key", () => {
+    expect(heldReasonKey("no_captcha")).toBe("intake.set.reason.no_captcha");
+    expect(heldReasonKey("ip_limit")).toBe("intake.set.reason.ip_limit");
+    expect(heldReasonKey("something_new")).toBe("intake.set.reason.other");
+    expect(heldReasonKey(null)).toBe("intake.set.reason.other");
   });
   it("the form link and the site code: a plain link in a new tab, escaped", () => {
     const link = formLink("https://gorix.expo.app/", "fabc");
