@@ -1,5 +1,6 @@
 import { ModulePlaces } from "@/modules/ModulePlaces";
 import { visitDueCents } from "@/features/visitDue";
+import { contractInvoices } from "@/features/contractKind";
 import { signedAction } from "@/features/visitSignedAction";
 import { lateAfterOf } from "@/features/scheduleSettings";
 import { useState } from "react";
@@ -96,6 +97,8 @@ export default function VisitScreen() {
 
   // #2018: what «Подпись» offers — never a dead end, never «Принять оплату» on $0
   const signed = signedAction(store.role, visitDueCents(db, v));
+  // #2018 С2: the job already has a final invoice with money left on it — the office takes the payment by that invoice
+  const officeByInvoice = !!v.jobId && contractInvoices(db, v.jobId).some((i) => i.kind === "final" && i.totalCents > i.paidCents);
   const advance = (msg: string) => {
     haptic();
     const undo = store.advanceVisit(v.id);
@@ -295,6 +298,29 @@ export default function VisitScreen() {
               toast.show(queuedHint() ?? t("toast.step", { step: t("st.done") }), store.payVisit(v.id, method));
             }}
           />
+        </View>
+      ) : null}
+      {/* #2018 С2: who may not take the payment (sales), money still due — never a dead end: the office takes it (by the
+          job's invoice when there is one), the visit closes with no payment written */}
+      {v.step === "signed" && signed === "closeOffice" ? (
+        <View testID="visit-close-office">
+          <Card>
+            <T v="body">
+              {t(officeByInvoice ? "visit.officeTakesByInvoice" : "visit.officeTakes", { amount: money(visitDueCents(db, v)) })}
+            </T>
+            <Button
+              testID="visit-close-office-button"
+              label={t("visit.close")}
+              icon="check"
+              full
+              onPress={() => {
+                // asked again at the press: the right or the amount may have changed since the screen drew it (a sync)
+                if (signedAction(store.role, visitDueCents(store.db, v)) !== "closeOffice") return toast.show(t("visit.dueChanged"));
+                haptic();
+                toast.show(queuedHint() ?? t("toast.step", { step: t("st.done") }), store.closeVisitForOffice(v.id));
+              }}
+            />
+          </Card>
         </View>
       ) : null}
       {v.step === "signed" && signed === "pay" ? (

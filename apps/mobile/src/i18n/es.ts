@@ -257,6 +257,8 @@ export const es: Dict = {
   "visit.signConsent": "Al firmar, el cliente confirma el trabajo realizado y el monto.",
   "visit.amountDue": "Monto a pagar",
   "visit.close": "Cerrar la visita",
+  "visit.officeTakes": "La oficina cobrará: {amount}",
+  "visit.officeTakesByInvoice": "La oficina cobrará con la factura del trabajo: {amount}",
   "visit.dueChanged": "El monto a pagar cambió: revíselo",
   "visit.method": "Método de pago",
   "visit.payCard": "Tarjeta",
