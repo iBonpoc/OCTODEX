@@ -15,7 +15,7 @@ import { useAuth, type DbRole } from "@/cloud/auth";
 import { MEMBERSHIP_REREAD_MS, memberMatches } from "@/cloud/membershipSync";
 import { appRoles, loadCompanyDB, loadCompanyModule, loadCostHistory, loadPriceHistory } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
-import { applyOp, catalogCostChange, catalogItemChange, renewSession, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
+import { applyOp, catalogCostChange, catalogItemChange, renewSession, sendVisitPoint, withCostsSeen, type Op, type OutboxItem } from "@/cloud/ops";
 import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
 import { defaultLeadAssignee } from "@/features/leadAssignee";
 import { keepLast, stepPending } from "@/features/location";
@@ -54,7 +54,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { backoffMs, classify, isAccessDenied, isModuleInactive, isUnknownOp, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, liveOf, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
-import { dropGroupPriceOps, dropModuleOps, dropSettingsOps, dropSupplierTaxOps, dropTemplateOps, groupPriceRejected, supplierTaxRejected, templateRejected, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
+import { dropGroupPriceOps, dropModuleOps, dropSettingsOps, dropSupplierTaxOps, dropTemplateOps, groupPriceRejected, itemCostRejected, supplierTaxRejected, templateRejected, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
 import type { DictKey } from "@/i18n";
 import { onAppActive, onAppLeave } from "./appActive";
 import { adoptLegacy, mineOf, onSharedForget, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
@@ -1120,6 +1120,19 @@ export function StoreProvider({
           // the same group go now (each was built on this one's expected price), one card with the price meant; the
           // truth is read again (the screen offers «Поставить $X» against the price the server has now)
           // …and the same for «not yours to price» (42501 price_from_cost: a group counted from its cost): no five tries
+          // #1958 (а): an item's cost changed meanwhile (another phone, a price-list upload): the rest of the save is on the
+          // server, the cost is not — no five tries (each would be refused the same), one card per item, the truth read again
+          // …and «the tax of this item is its supplier's» (22023 hint supplier_tax, #1834): a refusal the same every time
+          const supplierTax = (e as { hint?: unknown } | null)?.hint === "supplier_tax";
+          if (item.op.k === "catalog.save" && (isRowConflict(e) || supplierTax)) {
+            outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
+            opPause.current.delete(item.id);
+            deadOps.current.add(item.id);
+            dropped = true;
+            setRejected((prev) => itemCostRejected(freshRejected(prev, Date.now()), item, msg, Date.now(), w, supplierTax ? "price.cost.rejSupplierTax" : undefined));
+            setOutbox(outboxRef.current);
+            continue;
+          }
           if (item.op.k === "catalog.groupPrice" && (isRowConflict(e) || groupDenied)) {
             const { kept, gone } = dropGroupPriceOps(outboxRef.current, item.op.group, w);
             outboxRef.current = kept;
@@ -1598,7 +1611,7 @@ export function StoreProvider({
       return mutate(
         "catalog.save",
         (d) => ({ ...d, catalog: d.catalog.map((c) => (c.id === to.id ? to : c)), ...(hist ? { costHistory: [hist, ...(d.costHistory ?? [])] } : {}) }),
-        { k: "catalog.save", item: to, costs: catalogCostChange(from, to), ...withFields(from, to) },
+        { k: "catalog.save", item: to, costs: catalogCostChange(from, to), ...withCostsSeen(from, catalogCostChange(from, to)), ...withFields(from, to) },
       );
     };
     const at = new Date().toISOString();
@@ -2746,7 +2759,8 @@ export function StoreProvider({
             ...(hist ? { costHistory: [hist, ...(d.costHistory ?? [])] } : {}),
             ...(priceHist.length ? { priceHistory: [...priceHist, ...(d.priceHistory ?? [])] } : {}),
           }),
-          { k: "catalog.save", item: itemForSave(it), costs, ...withFields(prev, it) },
+          // #1958 (а): the cost goes over what the phone saw (catalog_set_item_costs), never over whatever is there
+          { k: "catalog.save", item: itemForSave(it), costs, ...withCostsSeen(prev, costs), ...withFields(prev, it) },
         );
         if (!groupUndo) return undoItem;
         return undoTogether([undoItem, groupUndo()]);
@@ -2925,7 +2939,7 @@ export function StoreProvider({
             }),
             onlyNew
               ? { k: "catalog.save", item: itemForSave(it), onlyNew: true, costs: catalogCostChange(undefined, it) }
-              : { k: "catalog.save", item: itemForSave(it), costs: catalogCostChange(prev, it), ...withFields(prev, it) },
+              : { k: "catalog.save", item: itemForSave(it), costs: catalogCostChange(prev, it), ...withCostsSeen(prev, catalogCostChange(prev, it)), ...withFields(prev, it) },
           );
         });
         // all of them or none (DS §15.2)

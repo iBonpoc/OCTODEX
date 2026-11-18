@@ -24,6 +24,7 @@ import { useListPanel } from "@/nav/listPanel";
 import { ClientCardBody } from "@/features/client/ClientCard";
 import { space } from "@octo/design-tokens";
 import type { Customer, CustomerStatus } from "@/data/types";
+import { groupByLetter } from "@/features/clientGroups";
 
 type Filter = "all" | "owes" | "estimate" | "prospect" | "archived";
 
@@ -91,7 +92,8 @@ export default function Clients() {
     if (move.how === "form") return router.push(`/client/${c.id}`);
     toast.show(`${c.name}: ${t(clientStatusChip[s].l)}`, store.setCustomerStatus(c.id, s));
   };
-  const groups = [...list.reduce((m, c) => m.set(c.name[0]!.toUpperCase(), [...(m.get(c.name[0]!.toUpperCase()) ?? []), c]), new Map<string, Customer[]>())];
+  // #2014: an empty name (CSV, the server, an old version) brought the whole list down — it goes to «#» now
+  const groups = groupByLetter(list);
   const card = (c: Customer) => {
     const props = db.properties.filter((p) => p.customerId === c.id);
     const money = office ? clientMoneyOf(db, c.id) : null;
