@@ -158,10 +158,11 @@ describe("serverContract — the parser itself", () => {
 });
 
 describe("serverContract — every rpc of the app exists as it is called", () => {
-  // the edge function runs public.delete_account with the PERSON's token (verify_jwt) — the same rule as the app
+  // the edge function runs public.delete_account with the PERSON's token (verify_jwt) — the same rule as the app.
+  // erase-storage (50-3) calls only with the SERVICE key: its three functions are granted to service_role, never to authenticated (rule 18)
   for (const c of CALLS) {
     it(`${c.fn} — ${c.where}`, () => {
-      expect(checkCall(c, FNS)).toEqual([]);
+      expect(checkCall(c, FNS, { serviceRole: c.where.startsWith("supabase/functions/erase-storage/") })).toEqual([]);
     });
   }
 });

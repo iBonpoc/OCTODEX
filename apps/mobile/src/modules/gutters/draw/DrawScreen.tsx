@@ -9,6 +9,8 @@
  * `?m=<id>` opens a measurement, none — a new one; a module that is off or past its
  * trial draws but saves nothing, and says so before the work starts (§6, founder О2). Delete → «Отменить» 5 s (rule 5).
  */
+import { canvasUnsaved, unsentAfter } from "./unsent";
+import { registerDirtySheet } from "@/ui/dirtySheets";
 import { sizeText } from "../sizeText";
 import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
 import { useWindowDimensions, View } from "react-native";
@@ -53,7 +55,7 @@ import { MeasurePhotos } from "./Photos";
 import { fmtLen } from "../canvas/format";
 import { dropHaptic, forgetOldDraft, loadToolbarPlace, placeAt, saveToolbarPlace, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
 import { makeModuleStore } from "../canvas/moduleStore";
-import { gutterData, measurementOf, photosOf, relink, removeMeasurement } from "../data";
+import { gutterData, measurementOf, photosOf, relink } from "../data";
 import { makeSaver } from "../canvas/draftStore";
 import { onAppLeave } from "@/data/appActive";
 import { LinkSheet } from "./LinkSheet";
@@ -65,7 +67,9 @@ import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { GridLayer } from "../canvas/GridLayer";
 import { useJsGestureConfig } from "../canvas/jsGestureConfig";
 import { listPreview, partName } from "../prices";
-import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, signedOn } from "../estimateLink";
+import { clientLangOf, deleteBlock, estimateAction, estimateOfMeasurement, estimatesOn, makeEstimate, removeMeasurementDetached } from "../estimateLink";
+import { DeleteMeasurementSheet, NO_ESTIMATES } from "../view/DeleteMeasurementSheet";
+import type { ModuleEstimateStore } from "@/modules/registry";
 import { tFor } from "@/i18n/translate";
 import { cornerChoiceOf, cornerCut, findCorners, capSide, houseSides, splashOff, runEnds, runLengthIn, toMeasurement, withoutDuplicates, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
 import { localUndo, type GuardedUndo } from "@/data/undo";
@@ -196,6 +200,8 @@ export default function DrawScreen() {
   useHideTabBar(flat);
   const toast = useToast();
   const store = useStore();
+  /** who deletes a measurement (#2013: a tech changes only the estimates he made) */
+  const who = { role: store.role, me: store.db.me };
   const params = useLocalSearchParams<{ m?: string; lead?: string; property?: string; estimate?: string }>();
   const ins = useSafeAreaInsets();
   const access = moduleState(store.db.company?.modules?.gutters).access;
@@ -332,6 +338,15 @@ export default function DrawScreen() {
   }, [view, m, size, drawing, fit]);
 
   const later = useRef<() => void>(() => {});
+  // #1912: «Обновить» must not reload under a stroke or an unwritten change: while one lasts, this screen is a sheet with unsaved work
+  const [touching, setTouching] = useState(false);
+  const [unsent, setUnsent] = useState(false);
+  const unsavedNow = canvasUnsaved({ touching, unsent });
+  useEffect(() => {
+    if (!unsavedNow) return;
+    return registerDirtySheet({ ask: () => flushRef.current() });
+  }, [unsavedNow]);
+  const flushRef = useRef<() => void>(() => {});
   /** the address gets the measurement's id at its first edit (a reload opens it again) — only while this screen is shown */
   const nameIt = () => {
     const mm = cur.current.m;
@@ -342,7 +357,9 @@ export default function DrawScreen() {
   const flush = useCallback(() => {
     const { drawing: d, m: mm, canSave: ok } = cur.current;
     if (!mm || !ok) return;
+    if (shown.current) setUnsent(true);
     void saver.flush(mm, toElements(d, mm.id)).then((r) => {
+      if (shown.current) setUnsent(unsentAfter(r)); // #1912: a failed write stays «unsent» until it lands
       if (r === "saved") {
         if (!shown.current) return;
         setSavedOnce(true);
@@ -356,9 +373,11 @@ export default function DrawScreen() {
       else if (r === "failed") later.current();
     });
   }, [saver]);
+  flushRef.current = flush;
   // a gesture ended: write 1 s later (the queue gets one write per gesture, not per movement — П14.2 №5)
   later.current = () => {
     if (timer.current) clearTimeout(timer.current);
+    if (shown.current) setUnsent(true);
     timer.current = setTimeout(flush, SAVE_AFTER_MS);
   };
   useEffect(() => () => {
@@ -444,6 +463,7 @@ export default function DrawScreen() {
     maxPointers: 1,
     simultaneousWith: [canvas.pinch, canvas.pan],
     onBegin: (e) => {
+      setTouching(true);
       downAt.current = [e.x, e.y];
       downTime.current = Date.now();
       threeShown.current = false;
@@ -455,6 +475,7 @@ export default function DrawScreen() {
       holdTimer.current = setTimeout(liftAtHold, motion.longPressMs);
     },
     onFinalize: () => {
+      setTouching(false);
       clearHold(); // let go without moving, or a second finger: nothing changes, no «medium» (the drawing is untouched)
       hold.current = holdCancel(hold.current).hold;
       setLifted(null);
@@ -1046,15 +1067,32 @@ export default function DrawScreen() {
     flush();
     if (k === "relink") setLinkSheet(true);
     else if (k === "unlink") toast.show(t("mod.gutters.link.unlinked"), relink(store, m.id, null) ?? undefined);
-    else if (signedOn(store.db, m.id)) toast.show(t("mod.gutters.draw.deleteSigned"));
-    else {
-      const undo = removeMeasurement(store, m.id);
-      flush();
-      // to the list of measurements (founder 16.11, #1819: he stayed on an empty canvas «Замер»): the canvas of a deleted one is
-      // never shown — the list below is popped to, else it takes this screen's place (goTo); «Отменить» brings it back there
-      goTo(moduleHref("gutters", "list"));
-      toast.show(t("mod.gutters.draw.mDeleted"), undo ?? undefined);
+    else if (deleteBlock(store.db, m.id, who)) toast.show(t(deleteBlock(store.db, m.id, who) === "signed" ? "mod.gutters.draw.deleteSigned" : "mod.gutters.del.notYours"));
+    // an open estimate stands on it: asked first (#2013), the question holds what it said while it goes out
+    else if (estimatesOn(store.db, m.id).drafts.length || estimatesOn(store.db, m.id).sent.length) setAskDelete(estimatesOn(store.db, m.id));
+    else deleteNow();
+  };
+  const [askDelete, setAskDelete] = useState<ReturnType<typeof estimatesOn> | null>(null);
+  /** one deletion at a time (rule 5: a second press never puts an empty «Отменить» over the first one's) */
+  const deleting = useRef(false);
+  const deleteNow = () => {
+    setAskDelete(null);
+    const mm = cur.current.m;
+    if (!mm || deleting.current) return;
+    // asked again at the press: signed meanwhile or not this person's to change — never deleted
+    const block = deleteBlock(store.db, mm.id, who);
+    if (block) return toast.show(t(block === "signed" ? "mod.gutters.draw.deleteSigned" : "mod.gutters.del.notYours"));
+    deleting.current = true;
+    const undo = removeMeasurementDetached(store as unknown as ModuleEstimateStore, mm.id, who);
+    if (!undo) {
+      deleting.current = false;
+      return toast.show(t("mod.gutters.est.off"));
     }
+    flush();
+    // to the list of measurements (founder 16.11, #1819: he stayed on an empty canvas «Замер»): the canvas of a deleted one is
+    // never shown — the list below is popped to, else it takes this screen's place (goTo); «Отменить» brings it back there
+    goTo(moduleHref("gutters", "list"));
+    toast.show(t("mod.gutters.draw.mDeleted"), undo);
   };
   // the toast stands above what lies at the bottom of the canvas — the hints, the chips and the toolbar (#1819: «Замер удалён ·
   // Отменить» lay on the toolbar); the same lane the pinned action bar gives (ui/footerInset), gone with the screen
@@ -1428,6 +1466,7 @@ export default function DrawScreen() {
         <AttrBody inSheet>{newBody(false)}</AttrBody>
       </Sheet>
       {m ? <LinkSheet visible={linkSheet} onClose={() => setLinkSheet(false)} measurementId={m.id} /> : null}
+      <DeleteMeasurementSheet visible={!!askDelete} on={askDelete ?? NO_ESTIMATES} onDelete={deleteNow} onClose={() => setAskDelete(null)} />
       <Menu visible={!!whoAt} anchor={whoAt} items={whoItems} onSelect={onWho} onClose={() => setWhoAt(null)} />
       <InputWindow visible={canSave && !!editRun} onClose={() => setLenEdit(null)}>
         {editRun ? <QuickLength key={editRun.id} fmt={ch.lenFormat} run={editRun} start={runLengthIn(editRun)} onLength={(n) => commit(setLength(cur.current.drawing, editRun.id, n))} onDone={() => setLenEdit(null)} onCancel={() => setLenEdit(null)} /> : null}

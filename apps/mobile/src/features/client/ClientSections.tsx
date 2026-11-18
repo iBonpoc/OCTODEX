@@ -69,7 +69,7 @@ export function PersonRows({ p, onCall }: { p: Person; onCall?: (p: Person) => v
   );
 }
 
-export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
+export function ClientSection({ c, s, noAdd }: { c: Customer; s: ClientRow; /** the screen puts «＋ Объект» by the section's title itself (the card's «Обзор», spec 56 §3а.6) */ noAdd?: boolean }) {
   const store = useStore();
   const { db, role } = store;
   const { t, money, day } = useI18n();
@@ -88,7 +88,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
     case "properties":
       return (
         <>
-          {office && r.properties.length ? <Button label={t("prop.add")} icon="plus" variant="secondary" onPress={() => setNewProp(newProperty(c.id))} /> : null}
+          {office && r.properties.length && !noAdd ? <Button label={t("prop.add")} icon="plus" variant="secondary" onPress={() => setNewProp(newProperty(c.id))} /> : null}
           {r.properties.length === 0 ? (
             // an empty list says what to do: the button to make the first one stands in it (S-42, #882)
             <Empty

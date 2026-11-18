@@ -75,6 +75,24 @@ describe("unit:techNoCosts — read (loadCompanyDB)", () => {
     expect(db.catalog[0]).toMatchObject({ priceCents: 1213, costCents: 1000, vendorTaxBps: 1025, markupBps: 1000 });
     expect(db.estimates[0]!.marginPct).toBe("41.2");
   });
+  it("#1807: price_from_cost → priceFromCost; catalog_price_recalc → priceRecalc; a server without them — none (rule 16)", async () => {
+    rows = {
+      ...base("sales"),
+      catalog_items: [
+        { id: "i1", kind: "material", name: "Counted (test)", unit: "ft", unit_price_cents: 6000, price_from_cost: true },
+        { id: "i2", kind: "material", name: "Hand (test)", unit: "ft", unit_price_cents: 700, price_from_cost: false },
+        { id: "i3", kind: "material", name: "Old server (test)", unit: "ft", unit_price_cents: 700 },
+      ],
+      catalog_price_recalc: [{ id: "r1", item_id: "i1", sent_price_cents: 6500, server_price_cents: 6000, by: "u-sam", at: "2026-11-17T10:00:00Z" }],
+    };
+    const db = await loadCompanyDB("co-1", "u-me");
+    expect(db.catalog.find((c) => c.id === "i1")!.priceFromCost).toBe(true);
+    expect(db.catalog.find((c) => c.id === "i2")!.priceFromCost).toBeUndefined();
+    expect(db.catalog.find((c) => c.id === "i3")!.priceFromCost).toBeUndefined();
+    expect(db.priceRecalc).toEqual([{ id: "r1", itemId: "i1", sentCents: 6500, serverCents: 6000, by: "u-sam", at: "2026-11-17T10:00:00Z" }]);
+    missing = new Set(["catalog_price_recalc"]);
+    expect((await loadCompanyDB("co-1", "u-me")).priceRecalc).toEqual([]);
+  });
   it("a margin of null in the side table (costs not complete) is null, not the old totals", async () => {
     rows = {
       ...base("office"),
@@ -156,10 +174,14 @@ describe("unit:techNoCosts — write (catalog.save)", () => {
     expect(writes.map((w) => w.table)).toEqual(["catalog_items"]);
     for (const col of ["unit_cost_cents", "vendor_tax_bps", "markup_bps"]) expect(writes[0]!.row).not.toHaveProperty(col);
   });
-  it("a new item sends what it has; an op queued by an older build (no costs) writes every cost column as it did", async () => {
+  it("a new item sends what it has; an op queued by an older build (no costs) writes no cost column (#1958)", async () => {
     expect(catalogCostChange(undefined, item({ costCents: 5 }))).toEqual({ costCents: 5 });
+    await applyOp({ k: "catalog.save", item: item({ costCents: 5 }), costs: { costCents: 5 } }, "co-1", "u-1");
+    expect(writes[0]!.row).toMatchObject({ unit_cost_cents: 5 });
+    writes.length = 0;
+    // #1958: its three cached fields would put back a cost changed meanwhile on another phone (t30's coalesce)
     await applyOp({ k: "catalog.save", item: item({ costCents: 5 }) }, "co-1", "u-1");
-    expect(writes[0]!.row).toMatchObject({ unit_cost_cents: 5, vendor_tax_bps: null, markup_bps: null });
+    expect(writes.some((w) => ["unit_cost_cents", "vendor_tax_bps", "markup_bps"].some((c) => c in (w.row as Record<string, unknown>)))).toBe(false);
   });
   it("no right to see costs (sales, 42501) or no table yet: the item is saved, no error", async () => {
     writeErr.catalog_item_costs = { code: "42501" };

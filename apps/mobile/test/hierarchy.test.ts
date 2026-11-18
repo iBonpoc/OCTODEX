@@ -138,5 +138,9 @@ describe("navigation hierarchy: back = one level up", () => {
   it("the design showcase (#1150): its list goes back to the settings, a section — to the list (not to «Профиль и аккаунт»)", () => {
     expect(navContext("/settings/design-system", {}, db, "director")).toMatchObject({ section: "settings", up: { href: "/settings" } });
     expect(navContext("/settings/design-system/buttons", {}, db, "director")).toMatchObject({ section: "settings", up: { href: "/settings/design-system" } });
+    // #2040 (audit С-07): a section's own link is its name, not «Дизайн-система» again
+    expect(navContext("/settings/design-system/buttons", {}, db, "director").kind).toBe("ds.scr.buttons");
+    expect(navContext("/settings/design-system/selectors", {}, db, "director").kind).toBe("ds.sec.selectors");
+    expect(navContext("/settings/design-system", {}, db, "director").kind).toBe("ds.title");
   });
 });

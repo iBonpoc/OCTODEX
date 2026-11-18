@@ -105,9 +105,10 @@ exports.run = async (h) => {
   await waitFor(async () => (await els()).filter((e) => e.kind === "downspout").length === 1, "one downspout in the store");
   if (!wide) await closeSheet();
 
-  // «Назад» / «Вперёд»: the kind picked above goes back first (a plain one: no fittings word), then the downspout
+  // «Назад» / «Вперёд»: the kind picked above goes back first (a plain one is bent on site: its 3 bends «AAA» stay over it,
+  // «Расход v2»), then the downspout
   await tid("draw-undo").getByRole("button").click();
-  await waitFor(async () => (await els()).some((e) => e.kind === "downspout" && e.attrs?.dsStyle !== "corrugated") && (await svg().locator('[id^="lbl-ds:"]').count()) === 0, "«Назад»: the kind goes back (plain, no word)");
+  await waitFor(async () => (await els()).some((e) => e.kind === "downspout" && e.attrs?.dsStyle !== "corrugated") && (await svg().locator('[id^="lbl-ds:"]').evaluateAll((gs) => gs.map((g) => (g.textContent || "").trim()))).join() === "AAA", "«Назад»: the kind goes back (plain: its bends «AAA»)");
   await tid("draw-undo").getByRole("button").click();
   await waitFor(async () => (await svg().locator("circle").count()) === 0, "«Назад»: the downspout goes");
   await tid("draw-redo").getByRole("button").click();

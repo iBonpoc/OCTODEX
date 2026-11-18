@@ -64,7 +64,9 @@ export function checkCatalog(cat: Catalog, calls: AppCall[], tables: { t: string
       errs.push(`${c.where}: public.${c.fn}{${(c.keys ?? []).join(", ")}} fits no signature ${fs_.map((f) => `(${f.args})`).join(" | ")}`);
       continue;
     }
-    if (!fit.some((f) => f.authenticated)) errs.push(`${c.where}: public.${c.fn} has no EXECUTE for authenticated (rule 18)`);
+    // erase-storage (50-3) calls only with the SERVICE key: its functions are granted to service_role, never to authenticated (rule 18; rights in T238)
+    const service = c.where.startsWith("supabase/functions/erase-storage/");
+    if (!service && !fit.some((f) => f.authenticated)) errs.push(`${c.where}: public.${c.fn} has no EXECUTE for authenticated (rule 18)`);
   }
   for (const f of cat.functions)
     if (f.anon && !ANON_OK.has(f.name)) errs.push(`public.${f.name}(${f.args}) is EXECUTE for anon (only ${[...ANON_OK].join(", ")} may be)`);
@@ -113,6 +115,11 @@ describe("serverCatalog — the guard itself (a fixture that must fail)", () => 
     expect(errs[1]).toMatch(/public\.f\{p_b\} fits no signature/); // the required p_a left out
     expect(errs[2]).toMatch(/public\.g has no EXECUTE for authenticated/);
     expect(errs[3]).toMatch(/public\.h\(\) is EXECUTE for anon/);
+  });
+  it("a service-key call site (erase-storage) needs no EXECUTE for authenticated", () => {
+    const svc = appCalls("supabase/functions/erase-storage/deps.ts", `x.rpc("g", { p_a: id });`);
+    expect(checkCatalog(ok, svc, [])).toEqual([]);
+    expect(checkCatalog(ok, appCalls("app.ts", `x.rpc("g", { p_a: id });`), [])).toHaveLength(1); // the same call from the app still fails
   });
   it("tables: missing, no SELECT, anon rights, RLS off", () => {
     const t: Catalog = {

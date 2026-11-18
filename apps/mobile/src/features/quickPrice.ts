@@ -6,7 +6,7 @@
  * untouched test price never makes it a real one (the full editor does the same, catalog/[id].tsx `set`).
  */
 import type { CatalogItem } from "@/data/types";
-import { countsFromCost, editClean } from "./catalogEdit";
+import { countsFromCost, editClean, priceLocked } from "./catalogEdit";
 
 export type QuickPriceInput = { costCents?: number; markupBps?: number; priceCents?: number };
 
@@ -14,7 +14,10 @@ export type QuickPriceInput = { costCents?: number; markupBps?: number; priceCen
 export const quickAsksCost = (it: Pick<CatalogItem, "kind">, noCosts: boolean) => countsFromCost(it, noCosts);
 
 /** the typed fields that differ from the item */
-function changedOf(it: CatalogItem, input: QuickPriceInput, noCosts: boolean): Partial<CatalogItem> {
+function changedOf(it: CatalogItem, input: QuickPriceInput, noCosts: boolean, catalog?: readonly CatalogItem[]): Partial<CatalogItem> {
+  // #1807: a price counted by the server from a cost this person does not see is not changed here (no save, no «saved»)
+  // #1913: …and with the catalog, any item of a price group that has such a material
+  if (priceLocked(it, noCosts, catalog)) return {};
   const want: Partial<CatalogItem> = quickAsksCost(it, noCosts)
     ? { costCents: input.costCents ?? it.costCents, markupBps: input.markupBps ?? it.markupBps }
     : { priceCents: input.priceCents ?? it.priceCents };
@@ -26,11 +29,12 @@ function changedOf(it: CatalogItem, input: QuickPriceInput, noCosts: boolean): P
 }
 
 /** was anything typed that changes the item */
-export const quickChanged = (it: CatalogItem, input: QuickPriceInput, noCosts: boolean) => Object.keys(changedOf(it, input, noCosts)).length > 0;
+export const quickChanged = (it: CatalogItem, input: QuickPriceInput, noCosts: boolean, catalog?: readonly CatalogItem[]) =>
+  Object.keys(changedOf(it, input, noCosts, catalog)).length > 0;
 
 /** the item «Сохранить» stores: the typed fields, the price as the engine counts it, the test mark gone only on a change */
 export function quickPriceItem(it: CatalogItem, input: QuickPriceInput, catalog: CatalogItem[], noCosts: boolean): CatalogItem {
-  const patch = changedOf(it, input, noCosts);
+  const patch = changedOf(it, input, noCosts, catalog);
   const changed = Object.keys(patch).length > 0;
   return editClean({ ...it, ...patch, placeholder: changed ? false : it.placeholder }, catalog, noCosts);
 }
