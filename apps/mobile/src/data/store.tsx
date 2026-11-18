@@ -2258,7 +2258,8 @@ export function StoreProvider({
         return mutate(
           "expense.add",
           (d) => ({ ...d, expenses: [{ ...x, ...receipt, id, at: new Date().toISOString(), memberId: d.me }, ...(d.expenses ?? [])] }),
-          { k: "expense.add", id, jobId: x.jobId, vendor: x.vendor, category: x.category, amountCents: x.amountCents, ...receipt },
+          // #2008: the receipt's day goes with it (a receipt of yesterday is yesterday's), else the server's today
+          { k: "expense.add", id, jobId: x.jobId, vendor: x.vendor, category: x.category, amountCents: x.amountCents, ...(x.date ? { date: x.date } : {}), ...receipt },
         );
       },
       payInvoice: (id, method) => {

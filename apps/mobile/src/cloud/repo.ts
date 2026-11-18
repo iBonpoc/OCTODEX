@@ -683,6 +683,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     category: expenseCategoryFromDb(s(x.category)),
     amountCents: n(x.amount_cents),
     at: s(x.created_at),
+    ...(typeof x.date === "string" && x.date ? { date: x.date.slice(0, 10) } : {}),
     memberId: s(x.created_by),
     // #1538: the receipt in the cloud — taken (its picture on another phone with #1080) or refused; one still on its way
     // to the cloud is not «есть чек» yet (its phone keeps its own copy, keepReceiptLocal)

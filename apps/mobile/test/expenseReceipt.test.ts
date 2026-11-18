@@ -67,6 +67,16 @@ describe("expense.add — the receipt goes with the expense (#1538)", () => {
     expect(writes[0]!.row).not.toHaveProperty("receipt_file_id");
     expect(uploads).toEqual([]);
   });
+  it("#2008 С3: the receipt's day goes with the expense; an older op without one leaves the server's today; junk is not sent", async () => {
+    await applyOp({ ...base, date: "2026-11-16" }, "c1", "u1");
+    expect(writes[0]!.row).toMatchObject({ id: "x1", date: "2026-11-16" });
+    writes.length = 0;
+    await applyOp(base, "c1", "u1");
+    expect(writes[0]!.row).not.toHaveProperty("date");
+    writes.length = 0;
+    await applyOp({ ...base, date: "16.11.2026" }, "c1", "u1");
+    expect(writes[0]!.row).not.toHaveProperty("date");
+  });
 });
 
 describe("keepReceiptLocal — a reload keeps the receipt's file on this phone", () => {
