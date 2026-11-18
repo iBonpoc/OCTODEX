@@ -689,6 +689,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     // moment it was made unless it is the company's today too (the picker has no day after today).
     ...(typeof x.date === "string" && x.date && x.date.slice(0, 10) !== s(x.created_at).slice(0, 10) ? { date: x.date.slice(0, 10) } : {}),
     memberId: s(x.created_by),
+    ...(typeof x.row_version === "number" ? { rowVersion: x.row_version } : {}),
     // #1538: the receipt in the cloud — taken (its picture on another phone with #1080) or refused; one still on its way
     // to the cloud is not «есть чек» yet (its phone keeps its own copy, keepReceiptLocal)
     ...receiptOf(x.receipt_file_id),

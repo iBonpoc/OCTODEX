@@ -1036,6 +1036,8 @@ export interface Expense {
   receiptFailed?: PhotoFail;
   /** who paid; reimbursements later */
   memberId: ID;
+  /** #2009: the server's row_version the phone read — an edit is saved only over it («someone changed it first» otherwise) */
+  rowVersion?: number;
 }
 
 export interface QueuedAction {

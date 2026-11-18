@@ -396,6 +396,10 @@ interface StoreCtx {
   sendEstimate: (id: ID, token?: string) => Undo;
   payInvoice: (id: ID, method: PaymentMethod) => Undo;
   addExpense: (x: Omit<Expense, "id" | "at" | "memberId">) => Undo;
+  /** #2009: an edit of an expense (amount, vendor, category, job, day) — over the version the phone read */
+  updateExpense: (id: ID, x: Pick<Expense, "jobId" | "vendor" | "category" | "amountCents"> & { date?: string }) => Undo;
+  /** #2009: an expense to the Trash («Вернуть» while it has not left the phone) */
+  removeExpense: (id: ID) => Undo;
   signEstimate: (id: ID, path: string) => Undo;
   /** fromClient: paid on the client page → unread notice for the office */
   payDeposit: (id: ID, method: PaymentMethod, fromClient?: boolean) => Undo;
@@ -2262,6 +2266,19 @@ export function StoreProvider({
           { k: "expense.add", id, jobId: x.jobId, vendor: x.vendor, category: x.category, amountCents: x.amountCents, ...(x.date ? { date: x.date } : {}), ...receipt },
         );
       },
+      updateExpense: (id, x) => {
+        const cur = (dbRef.current.expenses ?? []).find((e) => e.id === id);
+        if (!cur) return NO_UNDO;
+        const base = cur.rowVersion;
+        return mutate(
+          "expense.update",
+          // the version the server will have after this edit (its trigger counts every update): a second edit on this phone
+          // before a reload is not «someone changed it first»
+          (d) => ({ ...d, expenses: (d.expenses ?? []).map((e) => (e.id === id ? { ...e, ...x, ...(base !== undefined ? { rowVersion: base + 1 } : {}) } : e)) }),
+          { k: "expense.update", id, jobId: x.jobId, vendor: x.vendor, category: x.category, amountCents: x.amountCents, ...(x.date ? { date: x.date } : {}), ...(base !== undefined ? { baseRowVersion: base } : {}) },
+        );
+      },
+      removeExpense: (id) => mutate("expense.remove", (d) => ({ ...d, expenses: (d.expenses ?? []).filter((e) => e.id !== id) }), { k: "expense.remove", id }),
       payInvoice: (id, method) => {
         const inv = dbRef.current.invoices.find((i) => i.id === id);
         return inv ? recordPayment(id, invoiceOwes(inv), method) : NO_UNDO;

@@ -119,6 +119,9 @@ export function rejectedOf(item: OwnedItem, error: string, now: number, who: Own
     // the tech's words — the office records it (record_visit_payment, #857 О1)
     case "visit.pay": return { ...base, what: "payment", href: `/visit/${op.visitId}`, amountCents: op.amountCents, labelKey: "visit.rej.moneyInHand" };
     case "expense.add": return { ...base, what: "expense", href: op.jobId ? `/job/${op.jobId}` : "/settings/profile", amountCents: op.amountCents };
+    // #2009: an edit or a removal the server did not take — the expense stays as the server has it; its screen says why
+    case "expense.update": return { ...base, what: "expense", href: `/expense/${op.id}`, amountCents: op.amountCents, ...(reason ? { reason } : {}) };
+    case "expense.remove": return { ...base, what: "expense", href: `/expense/${op.id}`, ...(reason ? { reason } : {}) };
     default: return null;
   }
 }

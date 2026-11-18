@@ -310,6 +310,10 @@ export type Op =
     }
   | { k: "invoice.pay"; invoiceId: string; paymentId: string; customerId: string; amountCents: number; method: PaymentMethod }
   /** #1538: receiptFileId + receiptUri — the receipt's files row, then its bytes (an older op has neither: as before) */
+  /** #2009: an edit of an expense — over the row_version the phone read (else «someone changed it first», never a retry) */
+  | { k: "expense.update"; id: string; jobId: string | null; vendor: string; category: ExpenseCategory; amountCents: number; date?: string; baseRowVersion?: number }
+  /** #2009: an expense to the Trash (trash_items: the server checks who may, writes the Trash's note) */
+  | { k: "expense.remove"; id: string }
   | { k: "expense.add"; id: string; jobId: string | null; vendor: string; category: ExpenseCategory; amountCents: number; date?: string; receiptFileId?: string; receiptUri?: string };
 
 export interface OutboxItem {
@@ -1293,6 +1297,25 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       );
       // the phone is told whether the cloud took the receipt (a refusal or a vanished file is shown on the card)
       if (op.receiptFileId && op.receiptUri) return { receipt: { expenseId: op.id, failed: await uploadPhoto(c, op.receiptFileId, op.receiptUri) } };
+      return;
+    }
+    case "expense.update": {
+      const upd = {
+        job_id: realJob(op.jobId), vendor: op.vendor, category: expenseCategoryToDb[op.category], amount_cents: op.amountCents,
+        ...(op.date && /^\d{4}-\d{2}-\d{2}$/.test(op.date) ? { date: op.date } : {}),
+      };
+      if (op.baseRowVersion === undefined) return run(supabase.from("expenses").update(upd).eq("id", op.id).eq("company_id", c));
+      const { data, error, status } = await supabase.from("expenses").update(upd).eq("id", op.id).eq("company_id", c).eq("row_version", op.baseRowVersion).select("id");
+      if (error) return run(Promise.resolve({ error, status }));
+      if (!data?.length) throw new PermanentError("the expense was changed on another phone", 409, "40001", "row_version_conflict");
+      return;
+    }
+    case "expense.remove": {
+      const { data, error, status } = await supabase.rpc("trash_items", { p_kind: "expense", p_ids: [op.id] });
+      if (error) return run(Promise.resolve({ error, status }));
+      const r = (data as { ok: boolean; reason: string | null }[] | null)?.[0];
+      // in the Trash already (a replay) is ok; refused (not yours, the job removed: noRight, refused, …) — said, never a retry
+      if (r && !r.ok) throw new PermanentError(`the expense was not removed: ${r.reason}`, 403, "42501", r.reason ?? "refused");
       return;
     }
     default:
