@@ -54,6 +54,7 @@ vi.mock("@/data/outboxRetry", async (orig) => ({ ...(await orig<object>()), back
 import { render, settle, type Root } from "./support/miniReact";
 import { StoreProvider } from "../src/data/store";
 import { makeSeed } from "../src/data/seed";
+import { visitStatus } from "../src/features/visitStatus";
 import type { CatalogItem, DB, EstimateDoc, EstimateTemplate, Supplier } from "../src/data/types";
 import { DEFAULT_SETTINGS } from "../src/features/estimateDoc";
 
@@ -139,7 +140,8 @@ describe("unit:closeVisitForOffice — #2018 С2", () => {
     call(r, "closeVisitForOffice", v0.id);
     await settle();
     const v1 = valueOf(r).db.visits.find((x) => x.id === v0.id)!;
-    expect(v1.step).toBe("done");
+    expect(v1.step).toBe("paid"); // as the server's «completed» with no payment loads
+    expect(visitStatus(v1, valueOf(r).db.members).label).toBe("st.done"); // «Готово», not «Оплачено»
     expect(v1.payment).toBeUndefined();
     expect(valueOf(r).db.payments.length).toBe(pays);
     expect(valueOf(r).db.invoices.length).toBe(invs);
@@ -150,7 +152,7 @@ describe("unit:closeVisitForOffice — #2018 С2", () => {
   });
   it("only a signed visit: another step is left as it is", async () => {
     const r = await signedIn(setup(), "sales");
-    const other = valueOf(r).db.visits.find((x) => x.step !== "signed" && x.step !== "done")!;
+    const other = valueOf(r).db.visits.find((x) => x.step !== "signed" && x.step !== "done" && x.step !== "paid")!;
     call(r, "closeVisitForOffice", other.id);
     await settle();
     expect(valueOf(r).db.visits.find((x) => x.id === other.id)!.step).toBe(other.step);

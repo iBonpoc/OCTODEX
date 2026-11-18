@@ -22,6 +22,8 @@ export function visitStatus(v: Visit, members: People, now: number = Date.now(),
   };
   // #2055: «Подпись» with nothing to pay waits for «Закрыть выезд», not for a payment; a visit closed so took no money
   if (v.step === "signed" && dueCents !== undefined && !(dueCents > 0)) return { status: "info", label: "st.signedToClose" };
-  if (v.step === "paid" && v.payment && !(v.payment.amountCents > 0)) return { status: "ok", label: "st.done" };
+  // «Оплачено» only with money actually taken (else «Готово»): a visit closed with no payment — $0 due (#2055), or sales closing it for the
+  // office to take the money (#2018 С2), or the server's «completed» with no payment row after a reload — is «Готово»
+  if (v.step === "paid" && !(v.payment && v.payment.amountCents > 0)) return { status: "ok", label: "st.done" };
   return map[v.step];
 }

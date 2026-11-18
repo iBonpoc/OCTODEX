@@ -46,9 +46,12 @@ exports.run = async (h) => {
   h.expect(/Оплату примет офис: \$500(\.00)?/.test(await text()), `С2а the office takes it: ${await text()}`);
   await h.shot("close-office");
   await p.getByTestId("visit-close-office-button").locator("visible=true").first().click();
-  await p.waitForFunction(([k, id]) => JSON.parse(localStorage.getItem(k) || "null")?.db?.visits?.find((x) => x.id === id)?.step === "done", [KEY, a.id], { timeout: 8000 });
+  await p.waitForFunction(([k, id]) => JSON.parse(localStorage.getItem(k) || "null")?.db?.visits?.find((x) => x.id === id)?.step === "paid", [KEY, a.id], { timeout: 8000 });
   const db = await h.db();
   h.expect((db.payments || []).length === pays0, `С2а no payment written (${(db.payments || []).length} / ${pays0})`);
   h.expect(db.invoices.length === invs0, `С2а no invoice made (${db.invoices.length} / ${invs0})`);
   h.expect(!db.visits.find((x) => x.id === a.id).payment, "С2а the visit took no money");
+  // review: no «Оплачено» on a visit where the money is still owed
+  await p.getByText("Готово", { exact: true }).locator("visible=true").first().waitFor({ timeout: 8000 });
+  h.expect((await p.getByText("Оплачено", { exact: true }).locator("visible=true").count()) === 0, "С2а the closed visit is «Готово», not «Оплачено»");
 };
