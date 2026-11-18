@@ -29,8 +29,8 @@ const m = { id: M, status: "ready" as const, leadId: "l", propertyId: null };
 describe("#1355: the parts version went up, old estimates are told, never recounted", () => {
   const LAST = "1"; // what the lines of an estimate made before #1355 carry
   const old = (status: Estimate["status"] = "draft") => estimate(linesAt(LAST) as ModuleLine[], status);
-  it("the parts version is 5 («Расход v2» PR-1б: bends on site, the round default, Д1; 4: elbows by default by kind; 3: a fixed 10 ft of waste; 2: an outside corner 14″)", () => {
-    expect(ENGINE_VERSION).toBe("5");
+  it("the parts version is 6 («Расход v2» PR-2: soldering kit, fasteners' metal, expansion by metal; 5: PR-1б: bends on site, the round default, Д1; 4: elbows by default by kind; 3: a fixed 10 ft of waste; 2: an outside corner 14″)", () => {
+    expect(ENGINE_VERSION).toBe("6");
     expect(engineOlder(LAST)).toBe(true);
   });
   it("an estimate made before it says «Расчёт изменился», and its lines are exactly what they were (no silent recount)", () => {

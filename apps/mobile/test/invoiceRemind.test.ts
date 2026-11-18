@@ -39,10 +39,11 @@ describe("reminder text — client's language", () => {
     expect(m.text).toMatch(/^Acme: a friendly reminder about invoice INV-0101 — balance \$1,840, due /);
     expect(m.text).not.toContain("past due");
   });
-  it("ru; no payment details → «—»", () => {
+  it("ru; no payment details → no «How to pay» line at all (#2017, was «Как оплатить: —»)", () => {
     const m = reminderMessage({ company: null } as never, inv, "Acme", "ru", NOW);
     expect(m.text).toContain("просрочен на 9 дн");
-    expect(m.text).toContain("Как оплатить: —");
+    expect(m.text).not.toContain("Как оплатить");
+    expect(m.text).not.toContain("—");
   });
 });
 

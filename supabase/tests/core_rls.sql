@@ -4070,7 +4070,7 @@ begin
                         'set_job_tags(uuid,uuid[])', 'set_location_consent(uuid,boolean)', 'set_member_status(uuid,uuid,text)',
                         'set_my_prefs(uuid,boolean)', 'set_push_kind(uuid,text,boolean)', 'set_share_location(uuid,boolean)',
                         'sign_estimate_on_site(uuid,text,text)', 'sign_estimate_on_site(uuid,text,text,bigint)',
-                        'stop_member_location(uuid,uuid)', 'transfer_ownership(uuid,uuid)', 'trash_items(text,uuid[])', 'trash_list(uuid)',
+                        'stop_member_location(uuid,uuid)', 'supplier_set_tax(uuid,integer,integer)', 'transfer_ownership(uuid,uuid)', 'trash_items(text,uuid[])', 'trash_list(uuid)',
                         'trash_restore(text,uuid[])', 'undo_customer_import(uuid)', 'uuid_generate_v7()']::text[]);
   perform tst.ok(bad is null, 'authenticated runs only the listed functions in public: ' || coalesce(bad, ''));
 
@@ -16771,6 +16771,148 @@ end $t$;
 rollback;
 \echo 'T364 ok'
 
+-- ---------------------------------------------------------------- T436, T372–T378 (#1834, spec 54 §13): the supplier's tax lives at the supplier
+\echo 'T436 the supplier tax (server)'
+:as_super
+insert into public.suppliers (id, company_id, name, purchase_tax_bps) values
+  ('37100000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'T436 Supplier', 825),
+  ('37100000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'T436 No rate', null),
+  ('37100000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', 'T436 Other', 600);
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, supplier_id) values
+  ('37100000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T436 one', 'ea', 0, '37100000-0000-4000-8000-0000000000a1'),
+  ('37100000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'material', 'T436 two', 'ea', 0, '37100000-0000-4000-8000-0000000000a1'),
+  ('37100000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'material', 'T436 three', 'ea', 0, '37100000-0000-4000-8000-0000000000a1'),
+  ('37100000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', 'material', 'T436 own rate', 'ea', 0, null);
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps)
+select id, company_id, 1000, 825, 3000 from public.catalog_items where name in ('T436 one', 'T436 two', 'T436 three');
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
+  ('37100000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', 1000, 500, 3000);
+delete from public.catalog_cost_history where item_id::text like '37100000-%';
+-- С1: the owner changes the rate: the supplier, every item's rate, the price of each and one history row per item
+:as_owner_a
+select public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 900, 825) as t371_n \gset
+:as_super
+select tst.ok(:t371_n = 3, 'T436 С1 three items followed the supplier');
+select tst.ok((select purchase_tax_bps = 900 from public.suppliers where id = '37100000-0000-4000-8000-0000000000a1')
+              and (select count(*) = 3 from public.catalog_item_costs where item_id::text in ('37100000-0000-4000-8000-0000000000b1', '37100000-0000-4000-8000-0000000000b2', '37100000-0000-4000-8000-0000000000b3') and vendor_tax_bps = 900),
+  'T436 С1 the supplier and its three items are on 9 %');
+select tst.ok((select count(*) = 3 from public.catalog_items where name in ('T436 one', 'T436 two', 'T436 three') and unit_price_cents = app.item_price_cents(1000, 900, 3000)),
+  'T436 С1 the price of each material is recounted from the cost and the new rate');
+select tst.ok((select count(*) = 3 from public.catalog_cost_history where item_id::text like '37100000-%' and source = 'supplier_tax' and vendor_tax_bps = 900),
+  'T436 С1 one history row per item, source supplier_tax');
+\echo 'T372 stale rate'
+-- С2: the phone saw 8,25 %, the server has 9 %: nothing changes
+:as_owner_a
+select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 1000, 825)$q$, 'T372 С2 a stale rate is refused (40001)');
+:as_super
+select tst.ok((select purchase_tax_bps = 900 from public.suppliers where id = '37100000-0000-4000-8000-0000000000a1')
+              and (select count(*) = 3 from public.catalog_item_costs where item_id::text like '37100000-%' and vendor_tax_bps = 900), 'T372 С2 nothing changed');
+do $$ declare v text; begin
+  perform set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-000000000001', true);
+  begin
+    perform public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 1000, 825);
+  exception when others then v := sqlstate;
+  end;
+  perform tst.ok(v = '40001', 'T372 С2 the refusal is SQLSTATE 40001, got ' || coalesce(v, 'none'));
+  perform set_config('request.jwt.claim.sub', '', true);
+end $$;
+\echo 'T373 the old phone cannot bring its own rate'
+-- С3: both paths — straight into catalog_item_costs and through catalog_items (t30 moves it)
+:as_owner_a
+update public.catalog_item_costs set vendor_tax_bps = 500 where item_id = '37100000-0000-4000-8000-0000000000b1';
+:as_super
+select tst.ok((select vendor_tax_bps = 900 from public.catalog_item_costs where item_id = '37100000-0000-4000-8000-0000000000b1'), 'T373 С3 a rate sent straight to the costs is brought back to the supplier''s');
+:as_owner_a
+update public.catalog_items set vendor_tax_bps = 500, unit_price_cents = unit_price_cents where id = '37100000-0000-4000-8000-0000000000b2';
+:as_super
+select tst.ok((select vendor_tax_bps = 900 from public.catalog_item_costs where item_id = '37100000-0000-4000-8000-0000000000b2')
+              and (select unit_price_cents = app.item_price_cents(1000, 900, 3000) from public.catalog_items where id = '37100000-0000-4000-8000-0000000000b2'),
+  'T373 С3 a rate sent through catalog_items (t30) is brought back too, the price stays from 9 %');
+\echo 'T374 an item takes the rate of the supplier it gets'
+-- С4 (server side): an item without a supplier keeps its own rate; getting a supplier with a rate takes it; one without keeps it
+:as_super
+update public.catalog_items set supplier_id = '37100000-0000-4000-8000-0000000000a2' where id = '37100000-0000-4000-8000-0000000000b4';
+select tst.ok((select vendor_tax_bps = 500 from public.catalog_item_costs where item_id = '37100000-0000-4000-8000-0000000000b4'),
+  'T374 С4 a supplier without a rate leaves the item''s own rate');
+update public.catalog_items set supplier_id = '37100000-0000-4000-8000-0000000000a3' where id = '37100000-0000-4000-8000-0000000000b4';
+select tst.ok((select vendor_tax_bps = 600 from public.catalog_item_costs where item_id = '37100000-0000-4000-8000-0000000000b4')
+              and (select unit_price_cents = app.item_price_cents(1000, 600, 3000) from public.catalog_items where id = '37100000-0000-4000-8000-0000000000b4'),
+  'T374 С4 an item that gets a supplier with a rate takes it and is repriced');
+\echo 'T375 who may change the rate'
+-- С5: the rule of «who sees our costs» (#1837): staff + can_view_costs. The office and the owner do; the tech and a sales person without view_costs do not; a sales person with it does
+:as_office_a
+select tst.ok(public.supplier_set_tax('37100000-0000-4000-8000-0000000000a3', 650, 600) = 1, 'T375 С5 the office changes the rate');
+:as_tech_a
+select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000000000a3', 700, 650)$q$, 'T375 С5 the tech may not');
+:as_sales_a
+select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000000000a3', 700, 650)$q$, 'T375 С5 sales without view_costs may not');
+:as_super
+update public.memberships set permissions_override = coalesce(permissions_override, '{}'::jsonb) || '{"view_costs": true}'
+ where user_id = 'a0000000-0000-0000-0000-000000000005';
+:as_sales_a
+select tst.ok(public.supplier_set_tax('37100000-0000-4000-8000-0000000000a3', 700, 650) = 1, 'T375 С5 sales WITH view_costs may (one rule with #1837)');
+:as_super
+update public.memberships set permissions_override = permissions_override - 'view_costs' where user_id = 'a0000000-0000-0000-0000-000000000005';
+:as_owner_b
+select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000000000a3', 800, 700)$q$, 'T375 С5 another company''s owner may not (the supplier is not found)');
+-- a second wall: the table itself — a sales person or the tech cannot update a supplier at all (0 rows), the items stay
+:as_sales_a
+update public.suppliers set purchase_tax_bps = 1 where id = '37100000-0000-4000-8000-0000000000a3';
+:as_tech_a
+update public.suppliers set purchase_tax_bps = 1 where id = '37100000-0000-4000-8000-0000000000a3';
+:as_super
+select tst.ok((select purchase_tax_bps = 700 from public.suppliers where id = '37100000-0000-4000-8000-0000000000a3')
+              and (select vendor_tax_bps = 700 from public.catalog_item_costs where item_id = '37100000-0000-4000-8000-0000000000b4'),
+  'T375 С5 sales and the tech cannot update a supplier: the rate and the items are as they were');
+\echo 'T376 the rate has one writer'
+-- С6: a phone's own upsert (a stale whole row, an old build, the offline queue) neither changes nor rolls back the rate; the rest is saved
+:as_owner_a
+update public.suppliers set purchase_tax_bps = 825, phone = '555-T376' where id = '37100000-0000-4000-8000-0000000000a1';
+:as_super
+select tst.ok((select purchase_tax_bps = 900 and phone = '555-T376' from public.suppliers where id = '37100000-0000-4000-8000-0000000000a1')
+              and (select count(*) = 3 from public.catalog_item_costs where item_id::text in ('37100000-0000-4000-8000-0000000000b1', '37100000-0000-4000-8000-0000000000b2', '37100000-0000-4000-8000-0000000000b3') and vendor_tax_bps = 900),
+  'T376 С6 a phone''s upsert with an old rate does not roll the rate back nor move it to the items; its other fields are saved');
+:as_owner_a
+select tst.ok(public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 900, 900) = 0, 'T376 С6 the same rate changes nothing');
+select tst.ok(public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 1200, 900) = 3, 'T376 С6 a new rate moves to the three items');
+insert into public.suppliers (id, company_id, name, purchase_tax_bps) values ('37100000-0000-4000-8000-0000000000a9', 'ca000000-0000-0000-0000-000000000000', 'T376 new with a rate', 725);
+select tst.ok((select purchase_tax_bps = 725 from public.suppliers where id = '37100000-0000-4000-8000-0000000000a9'), 'T376 С6 a new supplier made with a rate (insert) keeps it');
+:as_super
+select tst.ok((select purchase_tax_bps = 1200 from public.suppliers where id = '37100000-0000-4000-8000-0000000000a1')
+              and (select count(*) = 3 from public.catalog_item_costs where item_id::text in ('37100000-0000-4000-8000-0000000000b1', '37100000-0000-4000-8000-0000000000b2', '37100000-0000-4000-8000-0000000000b3') and vendor_tax_bps = 1200),
+  'T376 С6 the three items follow the door');
+\echo 'T377 the order of locks'
+-- С7: the supplier, then its items, then their costs — the same as catalog_set_item_costs; the right is checked before any lock
+do $$ declare d text; a int; b int; c int; begin
+  d := pg_get_functiondef('app.tg_supplier_tax_moves()'::regprocedure);
+  a := position('from public.catalog_items i' in d);
+  b := position('from public.catalog_item_costs k' in d);
+  perform tst.ok(a > 0 and b > a, 'T377 С7 locks in t95: items, then costs (the supplier is locked by the update that fires it)');
+  perform tst.ok(d ~ 'order by i\.id for update' and d ~ 'order by k\.item_id for update', 'T377 С7 each set locked in key order');
+  d := pg_get_functiondef('public.supplier_set_tax(uuid,integer,integer)'::regprocedure);
+  perform tst.ok(position('app.is_staff' in d) > 0 and position('app.is_staff' in d) < position('for no key update' in d),
+                 'T377 С7 the right is checked before the lock, the lock is NO KEY UPDATE (a phone''s foreign key waits crosswise with FOR UPDATE)');
+end $$;
+\echo 'T378 rights'
+select tst.ok(has_function_privilege('authenticated', 'public.supplier_set_tax(uuid,integer,integer)', 'EXECUTE')
+              and not has_function_privilege('anon', 'public.supplier_set_tax(uuid,integer,integer)', 'EXECUTE')
+              and (select prosecdef and proconfig @> array['search_path=""'] from pg_proc where oid = 'public.supplier_set_tax(uuid,integer,integer)'::regprocedure),
+  'T378 С8 supplier_set_tax: authenticated only, security definer, empty search_path');
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_tax_follows_supplier()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.tg_item_supplier_tax()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_supplier_tax_moves()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.tg_supplier_tax_door()', 'EXECUTE'),
+  'T378 С8 the trigger functions are for nobody');
+-- С9: one supplier with more than 1000 items is refused (no half-done change, the rate stays)
+:as_super
+insert into public.suppliers (id, company_id, name, purchase_tax_bps) values ('37100000-0000-4000-8000-0000000000aa', 'ca000000-0000-0000-0000-000000000000', 'T378 big', 500);
+insert into public.catalog_items (company_id, kind, name, unit, unit_price_cents, supplier_id)
+select 'ca000000-0000-0000-0000-000000000000', 'material', 'T378 item ' || g, 'ea', 0, '37100000-0000-4000-8000-0000000000aa' from generate_series(1, 1001) g;
+:as_owner_a
+select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000000000aa', 600, 500)$q$, 'T378 С9 more than 1000 items: refused');
+:as_super
+select tst.ok((select purchase_tax_bps = 500 from public.suppliers where id = '37100000-0000-4000-8000-0000000000aa'), 'T378 С9 the refused change left the rate as it was');
+delete from public.catalog_items where name like 'T378 item %';
+\echo 'T436, T372–T378 ok'
+
 -- ================================================================ T365–T370: a cost is written only over what the phone saw
 -- (#1958 (а), migration 20261117340000). catalog_set_item_costs(item, the changed fields, what the phone had in them).
 -- Its own items, rolled back at the end: nothing stays for the tests after it.
@@ -17147,6 +17289,73 @@ select tst.ok((public.portal_accept('tok_t381_2_0123456789abcdef', '38120000-000
 select tst.ok((select count(*) from public.estimate_approvals where estimate_id = '38100000-0000-4000-8000-000000000002') = 1, 'T381 the repeat doubles nothing');
 rollback;
 \echo 'T381 ok'
+
+-- ---------------------------------------------------------------- T399–T402 (#1834 × #1958): t13 and the checked write of «Прайс»
+-- catalog_set_item_costs marks the item it writes (app.costs_checked_write = its id): a tax that really changes there is refused
+-- (22023, hint supplier_tax); a neighbour, the cost alone and an old build stay quiet — the supplier's rate wins.
+\echo 'T399 the checked write: a changed tax is refused ok'
+:as_super
+insert into public.suppliers (id, company_id, name, purchase_tax_bps) values
+  ('39900000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'T399 Supplier', 800);
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, supplier_id) values
+  ('39900000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T399 one', 'ea', 0, '39900000-0000-4000-8000-0000000000a1'),
+  ('39900000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'material', 'T399 two', 'ea', 0, '39900000-0000-4000-8000-0000000000a1'),
+  ('39900000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'material', 'T399 no supplier', 'ea', 0, null);
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
+  ('39900000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 1000, 800, 3000),
+  ('39900000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 2000, 800, 3000),
+  ('39900000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 3000, 500, 3000);
+do $$ declare h text; begin
+  perform set_config('app.costs_checked_write', '39900000-0000-4000-8000-0000000000b1', true);
+  begin
+    update public.catalog_item_costs set vendor_tax_bps = 500 where item_id = '39900000-0000-4000-8000-0000000000b1';
+    perform tst.ok(false, 'T399 the changed tax of the marked item is refused');
+  exception when sqlstate '22023' then
+    get stacked diagnostics h = pg_exception_hint;
+    perform tst.ok(h = 'supplier_tax', 'T399 refused with the hint supplier_tax');
+  end;
+  perform tst.ok((select vendor_tax_bps = 800 from public.catalog_item_costs where item_id = '39900000-0000-4000-8000-0000000000b1'), 'T399 nothing written');
+end $$;
+\echo 'T400 the cost alone passes ok'
+-- an item left with an old tax before the supplier's rate came (a desync of old data): a change of the COST alone is no change of the tax
+alter table public.catalog_item_costs disable trigger t13_tax_follows_supplier;
+update public.catalog_item_costs set vendor_tax_bps = 500 where item_id = '39900000-0000-4000-8000-0000000000b1';
+alter table public.catalog_item_costs enable trigger t13_tax_follows_supplier;
+do $$ begin
+  perform set_config('app.costs_checked_write', '39900000-0000-4000-8000-0000000000b1', true);
+  update public.catalog_item_costs set unit_cost_cents = 1100 where item_id = '39900000-0000-4000-8000-0000000000b1';
+  perform tst.ok((select unit_cost_cents = 1100 and vendor_tax_bps = 800 from public.catalog_item_costs where item_id = '39900000-0000-4000-8000-0000000000b1'),
+    'T400 the cost alone is written, no false refusal; the tax comes to the supplier''s');
+end $$;
+\echo 'T401 a neighbour of the group stays quiet ok'
+-- the write of the item b1 moves the neighbour b2 (another item, same supplier): b2 is not marked — the supplier's rate wins quietly
+do $$ begin
+  perform set_config('app.costs_checked_write', '39900000-0000-4000-8000-0000000000b1', true);
+  update public.catalog_item_costs set vendor_tax_bps = 100 where item_id = '39900000-0000-4000-8000-0000000000b2';
+  perform tst.ok((select vendor_tax_bps = 800 from public.catalog_item_costs where item_id = '39900000-0000-4000-8000-0000000000b2'), 'T401 the neighbour keeps the supplier''s rate, no refusal');
+end $$;
+\echo 'T402 an old build stays quiet ok'
+-- no mark (a whole-row upsert of an old build): the supplier's rate wins without a word; an item with no supplier keeps its own, even marked
+update public.catalog_item_costs set vendor_tax_bps = 100 where item_id = '39900000-0000-4000-8000-0000000000b1';
+select tst.ok((select vendor_tax_bps = 800 from public.catalog_item_costs where item_id = '39900000-0000-4000-8000-0000000000b1'), 'T402 an old build: no error, the supplier''s rate');
+do $$ begin
+  perform set_config('app.costs_checked_write', '39900000-0000-4000-8000-0000000000b3', true);
+  update public.catalog_item_costs set vendor_tax_bps = 600 where item_id = '39900000-0000-4000-8000-0000000000b3';
+  perform tst.ok((select vendor_tax_bps = 600 from public.catalog_item_costs where item_id = '39900000-0000-4000-8000-0000000000b3'), 'T402 an item without a supplier keeps its own tax even when marked');
+end $$;
+
+\echo 'T436 the door opens only inside the function ok'
+-- the flag alone is no key (CHECKS №47): a session of the phone (authenticated) that sets it and updates the rate directly is still given the old rate
+:as_owner_a
+do $$ begin
+  perform set_config('app.supplier_tax_door', 'on', true);
+  update public.suppliers set purchase_tax_bps = 777 where id = '39900000-0000-4000-8000-0000000000a1';
+end $$;
+:as_super
+select tst.ok((select purchase_tax_bps = 800 from public.suppliers where id = '39900000-0000-4000-8000-0000000000a1'), 'T436 a phone with the flag set does not change the rate by a direct update');
+:as_owner_a
+select tst.ok(public.supplier_set_tax('39900000-0000-4000-8000-0000000000a1', 810, 800) = 2, 'T436 the door itself still changes it (the owner of the function)');
+:as_super
 
 -- ---------------------------------------------------------------- T414–T416 (#2075): invoices and the money of a job are the office's
 -- The roles decision (В9): sales do not issue or change invoices — the deposit at the signature stays theirs through the
