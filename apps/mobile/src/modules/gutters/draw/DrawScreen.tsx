@@ -1355,7 +1355,7 @@ export default function DrawScreen() {
       {!drawing.runs.length && !ghost ? (
         <View pointerEvents="none" style={{ position: "absolute", left: space[6], right: space[6] + panelSide, top: 0, bottom: 0, alignItems: "center", justifyContent: "center" }} testID="draw-empty">
           {/* «Как рисовать» (founder 18.11, #2186): the four steps while the canvas is empty; every touch goes through to the canvas */}
-          <EmptyHelp />
+          <EmptyHelp lineIcon={lineIcon} dsIcon={dsIcon} />
         </View>
       ) : null}
       {/* the live length beside the line being drawn (founder 09.11, #689), not at the top of the screen */}

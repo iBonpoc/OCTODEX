@@ -12,10 +12,11 @@ import { Icon, T, type IconKey } from "@/ui/primitives";
 import { Card, RowView } from "@/ui/surfaces";
 
 const k = (s: string) => `mod.gutters.draw.help.${s}` as DictKey;
-/** the steps, in the order of the work */
-export const HELP_STEPS: { key: string; icon: IconKey }[] = [
-  { key: "line", icon: "channel" },
-  { key: "ds", icon: "downspout" },
+/** the steps, in the order of the work; a gutter's and a downspout's picture is the toolbar's own (design review #2186:
+ *  the person looks for the same picture below — DS §19а, the tool's icon is the chosen profile / kind) */
+export const HELP_STEPS: { key: string; icon: IconKey | "tool:line" | "tool:ds" }[] = [
+  { key: "line", icon: "tool:line" },
+  { key: "ds", icon: "tool:ds" },
   { key: "len", icon: "pencil" },
   { key: "zoom", icon: "search" },
 ];
@@ -24,7 +25,7 @@ export const HELP_STEPS: { key: string; icon: IconKey }[] = [
 export const helpText = (t: (k: DictKey) => string) => HELP_STEPS.map((s, i) => `${i + 1}. ${t(k(s.key))}`).join("\n");
 
 /** the card on the empty canvas: never takes a touch — drawing starts through it */
-export function EmptyHelp() {
+export function EmptyHelp({ lineIcon, dsIcon }: { lineIcon: IconKey; dsIcon: IconKey }) {
   const { t } = useI18n();
   return (
     <View pointerEvents="none" testID="draw-empty-help" style={{ width: "100%", maxWidth: component.modalW }}>
@@ -33,7 +34,7 @@ export function EmptyHelp() {
         {HELP_STEPS.map((s) => (
           <View key={s.key} testID={`draw-help-${s.key}`}>
             <RowView style={{ gap: space[3], alignItems: "flex-start" }}>
-              <Icon name={s.icon} />
+              <Icon name={s.icon === "tool:line" ? lineIcon : s.icon === "tool:ds" ? dsIcon : s.icon} />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <T v="body">{t(k(s.key))}</T>
               </View>

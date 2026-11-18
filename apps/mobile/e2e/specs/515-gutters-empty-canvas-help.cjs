@@ -46,6 +46,6 @@ exports.run = async (h) => {
   const sheet = p.locator('[aria-modal="true"]').last();
   await sheet.waitFor({ timeout: 5000 });
   const said = await sheet.innerText();
-  h.expect(/Как пользоваться чертежом/.test(said) && /Downspout/.test(said) && /Двумя пальцами/.test(said), `«?»: the same steps (${said.slice(0, 160)})`);
+  h.expect(/Как рисовать/.test(said) && /Downspout/.test(said) && /Двумя пальцами/.test(said), `«?»: the same steps (${said.slice(0, 160)})`);
   await h.shot("help");
 };
