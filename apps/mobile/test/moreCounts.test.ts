@@ -22,9 +22,15 @@ describe("moreCounts", () => {
     expect(m.leads?.n ?? 0).toBe(by(["lead", "leadBack", "leadNoStep", "leadIdle", "leadOrphan"]));
     expect(m.invoices?.n ?? 0).toBe(by(["overdue"]));
     expect(m.estimates?.n ?? 0).toBe(by(["estimateSign"]));
-    expect(m.jobs?.n ?? 0).toBe(by(["schedule", "jobDone"]));
+    expect(m.jobs?.n ?? 0).toBe(by(["schedule", "jobDone", "jobNotInvoiced"]));
     expect(m.invoices?.n).toBeGreaterThan(0); // the demo has an overdue invoice
     for (const [k, v] of Object.entries(m)) expect(!!v!.bad).toBe(k === "invoices");
+  });
+  it("#2048: a done job not invoiced counts in «Работы»", () => {
+    const j = { ...db.jobs[0]!, id: "j2048c", status: "done" as const, amountCents: 40000 };
+    const d2 = { ...db, jobs: [...db.jobs, j] } as DB;
+    const before = moreCounts(db, "director", NOW, TZ).jobs?.n ?? 0;
+    expect(moreCounts(d2, "director", NOW, TZ).jobs?.n ?? 0).toBe(before + 1);
   });
   it("zero → no counter at all", () => {
     const empty = { ...db, leads: [], invoices: [], estimates: [], jobs: [], tasks: [], visits: [] } as DB;
