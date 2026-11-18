@@ -4628,4 +4628,11 @@ export const es: Dict = {
   "ds.crash.hint": "La dibuja el ErrorBoundary de la raíz cuando la app misma falla (§13): sin texto de error crudo, «Reintentar» dibuja la pantalla otra vez, «Reiniciar» recarga la app. Fuera del tema y del idioma de la app: toma los del sistema.",
   // «Портал: предпросмотр клиента»: the office's «open as client» only shows
   "portalPreview.sign": "Así lo verá el cliente. Solo el cliente puede firmar y pagar, con su propio enlace.",
+  // #2017: the invoice message — no «How to pay: —», the client page link
+  "invMsg.sendNoHow": "{company}: factura {number} por {amount}, vence {date}.",
+  "invMsg.dueNoHow": "{company}: le recordamos la factura {number} — saldo {amount}, vence el {date}.",
+  "invMsg.overdueNoHow": "{company}: le recordamos que la factura {number} tiene {days} días de atraso. Saldo pendiente {amount} (vencía el {date}).",
+  "invMsg.payLink": "Ver y pagar: {link}",
+  "invMsg.noHow": "Aún no hay formas de pago: el mensaje no dirá al cliente cómo pagar",
+  "invMsg.fill": "Añadir formas de pago",
 };
