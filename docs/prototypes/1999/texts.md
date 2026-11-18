@@ -12,7 +12,7 @@
 - **Заголовок:** Your GoRix sign-in code
 - **Текст:** Enter this code in the GoRix app. It expires in 10 minutes.
 - **Безопасность:** Didn’t ask for a code? You can ignore this email — no one can sign in without it. Don’t share this code. No one from GoRix will ever ask for it.
-- **Подвал:** GoRix · Sent to `{{ .Email }}` because a sign-in was requested. Questions? Reply to this email. ← вторая фраза — только если есть ящик для ответов
+- **Подвал:** GoRix · Sent to `{{ .Email }}` because a sign-in was requested.
 
 ## ES
 - **Тема:** `{{ .Token }} es su código para iniciar sesión en GoRix`
@@ -20,7 +20,7 @@
 - **Заголовок:** Su código para iniciar sesión en GoRix
 - **Текст:** Ingrese este código en la app de GoRix. Vence en 10 minutos.
 - **Безопасность:** ¿No pidió un código? No tiene que hacer nada: nadie puede entrar sin él. No comparta este código. Nadie de GoRix se lo pedirá.
-- **Подвал:** GoRix · Enviado a `{{ .Email }}` porque se solicitó iniciar sesión. ¿Preguntas? Responda a este correo.
+- **Подвал:** GoRix · Enviado a `{{ .Email }}` porque se solicitó iniciar sesión.
 
 ## RU
 - **Тема:** `{{ .Token }} — код для входа в GoRix`
@@ -28,7 +28,7 @@
 - **Заголовок:** Код для входа в GoRix
 - **Текст:** Введите этот код в приложении GoRix. Он действует 10 минут.
 - **Безопасность:** Не запрашивали код? Ничего делать не нужно — без кода войти нельзя. Никому не сообщайте код: сотрудники GoRix его никогда не спрашивают.
-- **Подвал:** GoRix · Отправлено на `{{ .Email }}`, потому что запрошен вход. Вопросы? Ответьте на это письмо.
+- **Подвал:** GoRix · Отправлено на `{{ .Email }}`, потому что запрошен вход.
 
 ## Текстовая версия (EN; так же для ES и RU)
 ```
@@ -47,5 +47,5 @@ GoRix · Sent to {{ .Email }} because a sign-in was requested.
 
 ## Чего в письме нет
 - «Click here», «Verify», кнопок и ссылок: в письме входа ссылок нет. Мошенники копируют письма входа со ссылкой, а код вводится только в приложении.
-- «Do not reply» и адреса noreply: ответить можно (подвал), если основатель даст ящик поддержки (вопрос в README).
+- Строки «ответьте на это письмо» и заголовка `Reply-To`: ответа на письмо входа не ждём (основатель, 18.11).
 - Рекламы, соцсетей, «Download the app»: письмо транзакционное. По CAN-SPAM реклама делает письмо коммерческим и требует отписки, а Gmail уводит такие письма в «Промоакции».
