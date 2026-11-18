@@ -10,6 +10,7 @@ import { GestureDetector, GestureHandlerRootView, GestureStateManager, State, us
 import { menuPick } from "./menuPick";
 import { exitDuration, scrimLevel, swipeCloses, swipeStart, swipeStep, type SwipeState } from "./sheetSwipe";
 import { leaveBefore } from "./sheetLeave";
+import { noteQuestionCancelled, registerDirtySheet } from "./dirtySheets";
 import Svg, { Rect } from "react-native-svg";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -479,6 +480,11 @@ export function Sheet({
   );
   // what `useSheetClose()` gives the body and the footer: the person's close (asks when dirty)
   const closeAsked = useCallback(() => requestClose(), [requestClose]);
+  // #1912: while the sheet holds unsaved work, «Обновить» asks it through its own question and never reloads over it
+  useEffect(() => {
+    if (!visible || !dirty) return;
+    return registerDirtySheet({ ask: () => requestClose() });
+  }, [visible, dirty, requestClose]);
   const pan = useMemo(
     () =>
       PanResponder.create({
@@ -661,7 +667,7 @@ export function Sheet({
                 text={askText}
                 onSave={onSave ? () => { setAsk(false); onSave(); } : undefined}
                 onDiscard={() => { setAsk(false); requestClose(0, true); }}
-                onBack={() => setAsk(false)}
+                onBack={() => { setAsk(false); noteQuestionCancelled(); }}
               />
             ) : (
               /* the form scrolls when the keyboard leaves less room than the sheet needs */

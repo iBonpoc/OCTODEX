@@ -4,6 +4,7 @@
  * 5 s, rule 5), copy them and edit their lines in the builder (/estimate/new?editTemplate=, §12 №10, №11). A template
  * is made from an estimate («Сохранить как шаблон») or added from a module's starters («Шаблоны модулей», §12, E3c).
  */
+import { keepCosts } from "@/features/access";
 import { useRef, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
@@ -36,7 +37,8 @@ export default function EstimateTemplates() {
   const live = pickableTemplates(all);
   const archived = all.filter((x) => x.archivedAt);
   const edit = canEditEstimateTemplates(store.role);
-  const seeCosts = store.db.costsVisible ?? store.role !== "tech";
+  // #1837: a starter or a copy carries the costs the phone holds unless the server said «no» (features/access.ts)
+  const keep = keepCosts(store.db);
   // the module's name, not its key (a module the app no longer has — its key as is)
   const moduleName = (key: string) => {
     const d = moduleDef(key);
@@ -55,7 +57,7 @@ export default function EstimateTemplates() {
     const want = (m: Record<string, string>) => moduleDef(module)?.starterWant?.(store.db.company?.modules?.[module]?.settings, m) ?? m;
     const tpl = starterEstimateTemplate(module, starter, {
       id, catalog: store.db.catalog, tApp: t, tDoc: tFor(store.db.company?.docLanguage ?? "en"),
-      depositBps: store.db.company?.estimate.depositBps, costsVisible: seeCosts, want,
+      depositBps: store.db.company?.estimate.depositBps, costsVisible: keep, want,
     });
     if (!tpl) return;
     // #1336: no line of the starter priced (an empty price list, or several equally fitting items): not added, the way is said
@@ -74,7 +76,7 @@ export default function EstimateTemplates() {
     toast.show(store.online ? msg : t("offline.queued"), withAfter(undo, () => pressed.current.delete(id)));
   };
   const copy = (x: EstimateTemplate) => {
-    const c = copyTemplate(x, t("est.tpl.copyName", { name: x.name }), seeCosts);
+    const c = copyTemplate(x, t("est.tpl.copyName", { name: x.name }), keep);
     if (!c) return;
     const undo = store.saveEstimateTemplate(c);
     toast.show(store.online ? t("est.tpl.copied", { name: c.name }) : t("offline.queued"), undo);

@@ -174,10 +174,14 @@ describe("unit:techNoCosts — write (catalog.save)", () => {
     expect(writes.map((w) => w.table)).toEqual(["catalog_items"]);
     for (const col of ["unit_cost_cents", "vendor_tax_bps", "markup_bps"]) expect(writes[0]!.row).not.toHaveProperty(col);
   });
-  it("a new item sends what it has; an op queued by an older build (no costs) writes every cost column as it did", async () => {
+  it("a new item sends what it has; an op queued by an older build (no costs) writes no cost column (#1958)", async () => {
     expect(catalogCostChange(undefined, item({ costCents: 5 }))).toEqual({ costCents: 5 });
+    await applyOp({ k: "catalog.save", item: item({ costCents: 5 }), costs: { costCents: 5 } }, "co-1", "u-1");
+    expect(writes[0]!.row).toMatchObject({ unit_cost_cents: 5 });
+    writes.length = 0;
+    // #1958: its three cached fields would put back a cost changed meanwhile on another phone (t30's coalesce)
     await applyOp({ k: "catalog.save", item: item({ costCents: 5 }) }, "co-1", "u-1");
-    expect(writes[0]!.row).toMatchObject({ unit_cost_cents: 5, vendor_tax_bps: null, markup_bps: null });
+    expect(writes.some((w) => ["unit_cost_cents", "vendor_tax_bps", "markup_bps"].some((c) => c in (w.row as Record<string, unknown>)))).toBe(false);
   });
   it("no right to see costs (sales, 42501) or no table yet: the item is saved, no error", async () => {
     writeErr.catalog_item_costs = { code: "42501" };
