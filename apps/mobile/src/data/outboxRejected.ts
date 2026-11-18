@@ -19,7 +19,7 @@ export const REJECTED_KEEP_MS = 30 * 24 * 3600_000;
 
 /** module: a batch of an add-on module's changes the server refused because the module is not active (spec 33 П21.1);
  *  estimate: a send the server refused for a known reason (REJECT_REASONS) */
-export type RejectedWhat = "deposit" | "invoice" | "payment" | "expense" | "module" | "estimate" | "merge" | "price";
+export type RejectedWhat = "deposit" | "invoice" | "payment" | "expense" | "module" | "estimate" | "merge" | "price" | "supplier";
 /**
  * The server's refusals we can explain: its hint (a code we chose in a migration) → our own words. Only these: the
  * server's text is never shown (review #259). estimate_lines_mismatch — the lock check of a version (migration
@@ -190,6 +190,26 @@ export function dropGroupPriceOps(items: readonly OwnedItem[], group: string, wh
   return { kept: items.filter((x) => !isGone(x)), gone: items.filter(isGone) };
 }
 
+/**
+ * #1834: a supplier's tax refused as «someone changed it first» (row_version_conflict): it and every later waiting tax write of
+ * the same supplier go — each was built on the rate this one saw; sending them would quietly overwrite the other office's rate.
+ */
+export function dropSupplierTaxOps(items: readonly OwnedItem[], supplierId: string, who: Owner | null): { kept: OwnedItem[]; gone: OwnedItem[] } {
+  const mine = new Set(mineOf(items, who).map((x) => x.id));
+  const isGone = (x: OwnedItem) => mine.has(x.id) && x.op.k === "supplier.tax" && x.op.supplierId === supplierId;
+  return { kept: items.filter((x) => !isGone(x)), gone: items.filter(isGone) };
+}
+
+/** the card «the supplier's tax was not saved: someone changed it first» — it opens the supplier; one card per supplier and person */
+export function supplierTaxRejected(prev: readonly RejectedOp[], gone: readonly OwnedItem[], error: string, now: number, who: Owner | null): RejectedOp[] {
+  const last = [...gone].reverse().find((x) => x.op.k === "supplier.tax");
+  if (!last || last.op.k !== "supplier.tax") return [...prev];
+  const id = `supplierTax.${last.op.supplierId}.${who?.userId ?? ""}.${who?.companyId ?? ""}`;
+  const owner = last.owner ?? who ?? undefined;
+  const rec: RejectedOp = { id, ...(owner ? { owner } : {}), kind: "supplier.tax", what: "supplier", href: `/suppliers/${last.op.supplierId}`, labelKey: "sup.rej.taxStale", error, at: new Date(now).toISOString() };
+  return [...freshRejected(prev, now).filter((x) => x.id !== id), rec];
+}
+
 /** the one card per group and person «the group's price was changed by someone else — yours $X is not saved»: the last
  *  price meant (the latest of the dropped writes) */
 export function groupPriceRejected(prev: readonly RejectedOp[], gone: readonly OwnedItem[], error: string, now: number, who: Owner | null, labelKey = "price.group.rejConflict"): RejectedOp[] {
@@ -206,6 +226,23 @@ export function groupPriceRejected(prev: readonly RejectedOp[], gone: readonly O
 }
 
 /** the card «the template was not saved: changed on another phone» — it opens «Шаблоны смет» (spec 07 §12.7) */
+/**
+ * #1958 (а): an item's cost refused as «changed meanwhile» (catalog_set_item_costs, row_version_conflict — another phone
+ * or a price-list upload changed it first): one card per item and person, the newest refusal; it opens the item, and the
+ * truth is read again. The rest of the save (name, unit…) was written — only the cost was not. The same card, other words,
+ * for «the tax of this item is its supplier's» (hint supplier_tax, #1834).
+ */
+export function itemCostRejected(prev: readonly RejectedOp[], item: OwnedItem, error: string, now: number, who: Owner | null, labelKey = "price.cost.rejConflict"): RejectedOp[] {
+  if (item.op.k !== "catalog.save") return [...prev];
+  const owner = item.owner ?? who ?? undefined;
+  const id = `cost.${item.op.item.id}.${owner?.userId ?? ""}.${owner?.companyId ?? ""}`;
+  const rec: RejectedOp = {
+    id, ...(owner ? { owner } : {}), kind: "catalog.save", what: "price", href: `/catalog/${item.op.item.id}`,
+    labelKey, error, at: new Date(now).toISOString(),
+  };
+  return [...prev.filter((x) => x.id !== id), rec];
+}
+
 export function templateRejected(item: OwnedItem, error: string, now: number, who: Owner | null): RejectedOp {
   const owner = item.owner ?? who ?? undefined;
   return { id: item.id, ...(owner ? { owner } : {}), kind: item.op.k, what: "estimate", href: "/estimate/templates", labelKey: "est.tpl.rejConflict", error, at: new Date(now).toISOString() };

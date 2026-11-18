@@ -50,6 +50,9 @@ export default function Triage() {
         return <Button label={t("fr7.handOver")} icon="user" onPress={() => router.push(attentionHref(it))} />;
       case "taskOrphan":
         return <Button label={t("lead.open")} icon="chevronRight" onPress={() => router.push(attentionHref(it))} />;
+      // #2048: the job done with money not invoiced — open the job, where its «Выставить остаток» is
+      case "jobNotInvoiced":
+        return <Button label={t("att.notInvoicedOpen")} icon="invoice" onPress={() => router.push(attentionHref(it))} />;
       case "schedule":
         return <Button label={t("sch.title")} icon="calendar" onPress={() => router.push(`/job/schedule?jobId=${it.refId}`)} />;
       case "unassigned":

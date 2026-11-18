@@ -61,6 +61,12 @@ describe("группа цены (§4.1, §6 №1, 10, 14, 19)", () => {
     expect(k).toBe("gutters:v1:7abd3a42cb111fc2");
     expect(priceGroupKey({ unit: "ft", attributes: { part: "gutter", color: "white" } })).toBe(priceGroupKey({ unit: "FT ", attributes: { color: "brown", part: "gutter", finish: "painted" } }));
   });
+  it("регистр и пробелы значений не делят группу: «Aluminum» и « aluminum», « Painted» и painted — одна группа; эталонный ключ модуля прежний", () => {
+    const mod = it_("w", "white", { attributes: { part: "gutter", profile: "k", size: "5", material: "aluminum", gauge: ".027", color: "white" } });
+    const imp = it_("b", "Black", { attributes: { part: "gutter", profile: "K", size: " 5", material: "Aluminum ", gauge: ".027", color: "Black", finish: " Painted" } });
+    expect(priceGroupKey(imp)).toBe(priceGroupKey(mod));
+    expect(priceGroupKey(mod)).toBe("gutters:v1:7abd3a42cb111fc2");
+  });
   it("groupAttrs: без color и priceGroup, finish выведен", () => {
     expect(groupAttrs({ part: "gutter", color: "white", priceGroup: "x" })).toEqual({ part: "gutter", finish: "painted" });
   });

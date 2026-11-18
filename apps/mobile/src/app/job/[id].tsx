@@ -265,7 +265,7 @@ export default function JobScreen() {
       {visits.length ? (
         <CardGrid>
           {visits.map((v) => {
-            const vs = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
+            const vs = visitStatus(v, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, v));
             const tech = db.members.find((m) => m.id === v.techId);
             return (
               // the job's own visits (06 «Серия B», B4): when — the title, who · how long under it, the visit's status chip

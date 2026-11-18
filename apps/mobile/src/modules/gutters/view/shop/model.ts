@@ -4,6 +4,7 @@
  * plan (A, B, C …), the downspouts. Pure; quantities are the estimate's (the engine's parts), not counted here. Nothing is invented: what the measurement does not say is
  * `undefined` here and «TBD» / «VERIFY» on the sheet.
  */
+import { bendOf, defaultElbowsFor, defaultOffsetsFor, fieldBendOf, resolveGutterRules, type GutterRulesOverride } from "@octo/estimating-engine";
 import { capSide, cornerChoiceOf, findCorners, houseSides, runEnds, runLengthIn, withoutDuplicates, type CornerChoice, type Drawing, type DrawnRun, type FoundCorner, type P } from "../../geometry";
 
 export interface ShopEnd {
@@ -50,6 +51,8 @@ export interface ShopDs {
   /** elbows by style, as measured */
   elbows?: { style: string; qty: number }[];
   offsets?: { lengthIn: number; qty: number }[];
+  /** bent on site (#1973, the engine's `bendOf`): the bends — the elbows are not parts then */
+  bends?: number;
   dropIn?: number;
 }
 export interface ShopTag { tag: string; kind: "capL" | "capR" | "miter"; cornerKind?: FoundCorner["kind"]; angleDeg?: number; outward: number; inward: number; qty: number; /** of them cut on site from the gutter (the rest are parts of the estimate) */ cut: number }
@@ -95,7 +98,9 @@ function walk(runs: DrawnRun[]): { run: DrawnRun; forward: boolean }[][] {
   return out;
 }
 
-export function shopModel(d0: Drawing, storyFt?: number, corner: CornerChoice["method"] = "cut"): ShopModel {
+export function shopModel(d0: Drawing, storyFt?: number, corner: CornerChoice["method"] = "cut", engine?: GutterRulesOverride): ShopModel {
+  // the downspout's elbows and offsets as the engine counts them (#1973): its own, else the engine's default by its kind
+  const rules = resolveGutterRules(engine);
   // as the estimate reads the drawing: a gutter lying on another is counted once (#1256)
   const d = withoutDuplicates(d0);
   const side = houseSides(d);
@@ -158,7 +163,10 @@ export function shopModel(d0: Drawing, storyFt?: number, corner: CornerChoice["m
     return {
       n: i + 1, tag: `DS${i + 1}`, seg, at: [seg.a[0] + (seg.b[0] - seg.a[0]) * t, seg.a[1] + (seg.b[1] - seg.a[1]) * t],
       fromEndIn: Math.min(along, seg.lengthIn - along), size: String(x.size), color: x.color, material: x.material,
-      elbows: x.elbows?.filter((e) => e.qty > 0), offsets: x.offsets?.filter((o) => o.qty > 0), dropIn: drop,
+      elbows: (x.elbows ?? defaultElbowsFor(x, rules)).filter((e) => e.qty > 0),
+      offsets: (x.offsets ?? defaultOffsetsFor(x, rules)).filter((o) => o.qty > 0),
+      ...(bendOf(x) === "field" ? { bends: fieldBendOf(x, rules).bends } : {}),
+      dropIn: drop,
     };
   });
   return { chains, ds, tags, stories: [...new Set(chains.map((c) => c.story))].sort((a, b) => a - b) };
