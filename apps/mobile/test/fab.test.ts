@@ -67,6 +67,10 @@ describe("unit:fab — the sets (13 §2.4, only what works)", () => {
     expect(items[1]!.href).toBe("/estimate/new?customerId=c1&propertyId=p1&leadId=l1");
     expect(ids("job", "sales", FULL)).toEqual(["estimate"]);
     expect(ids("job", "tech", FULL)).toEqual(["expense"]);
+    // #2008: from a job or a visit the expense goes on that job; from home it starts on none
+    expect(fabItems("job", "tech", FULL).find((i) => i.id === "expense")!.href).toBe("/expense/new?jobId=j1");
+    expect(fabItems("visit", "tech", FULL).find((i) => i.id === "expense")!.href).toBe("/expense/new?jobId=j1");
+    expect(fabItems("home", "tech").find((i) => i.id === "expense")!.href).toBe("/expense/new");
   });
   it("Выезд: tech — Фото · Лид · Расход; on an inspection also Смета; the office — Смета on an inspection only", () => {
     expect(ids("visit", "tech", FULL)).toEqual(["photo", "lead", "expense"]);

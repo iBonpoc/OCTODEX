@@ -17,9 +17,10 @@ import { SelectedCheck } from "@/ui/selectedCheck";
 /**
  * «Другая дата» in the visit form (docs/specs/03 §7.1, wave П3b): a month calendar. Past days cannot be picked; days off
  * are paler but can be picked (an emergency on Saturday is normal). The picked day has an ink frame — the one yellow of
- * the form stays the save button (rule 2).
+ * the form stays the save button (rule 2). `range="past"` (the day of a receipt, #2008): today and earlier only — the days
+ * after today cannot be picked and the months go back without end.
  */
-export function DatePick({ value, onPick }: { value: DayKey; onPick: (k: DayKey) => void }) {
+export function DatePick({ value, onPick, range = "future" }: { value: DayKey; onPick: (k: DayKey) => void; range?: "future" | "past" }) {
   // days off of the company are paler (its hours by weekday, «Компания → Расписание»)
   const hours = businessHoursOf(useStore().db.company);
   const { t, lang } = useI18n();
@@ -32,12 +33,13 @@ export function DatePick({ value, onPick }: { value: DayKey; onPick: (k: DayKey)
   const title = formatDayKey(month, { month: "long", year: "numeric" }, loc);
   const today = todayKey();
   const thisMonth = month.slice(0, 7) <= today.slice(0, 7);
+  const lastMonth = month.slice(0, 7) >= today.slice(0, 7);
   return (
     <View style={{ gap: space[1] }}>
       <RowView style={{ justifyContent: "space-between" }}>
-        <IconButton icon="chevronLeft" label={t("plan.prev")} onPress={() => { if (!thisMonth) setMonth(addMonths(month, -1)); }} />
+        <IconButton icon="chevronLeft" label={t("plan.prev")} onPress={() => { if (range === "past" || !thisMonth) setMonth(addMonths(month, -1)); }} />
         <T v="body" w="semibold">{title}</T>
-        <IconButton icon="chevronRight" label={t("plan.next")} onPress={() => setMonth(addMonths(month, 1))} />
+        <IconButton icon="chevronRight" label={t("plan.next")} onPress={() => { if (range === "future" || !lastMonth) setMonth(addMonths(month, 1)); }} />
       </RowView>
       <View style={{ flexDirection: "row", gap: space[1] }}>
         {weeks[0]!.map((x) => (
@@ -49,7 +51,8 @@ export function DatePick({ value, onPick }: { value: DayKey; onPick: (k: DayKey)
       {weeks.map((row) => (
         <View key={row[0]!.key} style={{ flexDirection: "row", gap: space[1] }}>
           {row.map((x) => {
-            const past = x.key < today;
+            // a day that cannot be picked: before today for a visit, after today for a receipt
+            const past = range === "past" ? x.key > today : x.key < today;
             const off = !isWorkday(x.key, hours);
             const selected = x.key === value;
             return (

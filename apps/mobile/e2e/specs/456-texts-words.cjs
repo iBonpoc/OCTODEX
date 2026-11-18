@@ -64,10 +64,11 @@ exports.run = async (h) => {
   h.expect(/· 4 ч(?!\S)/.test(vt) && !/240 мин/.test(vt), `the visit says «4 ч» (${vt})`);
 
   // 053: «К какой работе» — the job, not the client
-  await h.go("/expense/new");
+  // (#2008: opened from the job, the expense starts on it)
+  await h.go("/expense/new?jobId=j1");
   const jt = await textOf("expense-job");
-  const today = db.visits.find((v) => v.jobId && db.jobs.find((j) => j.id === v.jobId)?.number && jt.includes(db.jobs.find((j) => j.id === v.jobId).number));
-  h.expect(!!today, `the job's number is offered (${jt})`);
+  const j1 = db.jobs.find((j) => j.id === "j1");
+  h.expect(!!j1.number && jt.includes(j1.number) && jt.includes(j1.title), `the job's number and title are offered (${jt})`);
 
   // 041: a negative amount — «−$», not «-$» (a planted expense bigger than the job's money)
   const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));

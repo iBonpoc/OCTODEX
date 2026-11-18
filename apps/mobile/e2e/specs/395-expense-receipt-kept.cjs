@@ -5,6 +5,7 @@
  */
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 const AMOUNT = "47.31";
+const { pickVendor } = require("../expenseForm.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -18,6 +19,7 @@ exports.run = async (h) => {
   await chooser.setFiles({ name: "receipt.png", mimeType: "image/png", buffer: PNG });
   await p.locator('img[src^="blob:"]').first().waitFor({ timeout: 8000 }); // the receipt is shown on the form
   await p.getByTestId("field-amount").locator("input").locator("visible=true").first().fill(AMOUNT);
+  await pickVendor(p);
   await p.getByTestId("expense-save").locator("visible=true").first().click();
 
   // the expense is saved with its receipt's file (it goes to the cloud)

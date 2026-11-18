@@ -3,6 +3,7 @@
  * («Добавить фото»), by «Создать» → «Фото» and as an expense receipt is kept with the long side ≤ 2048 px, as a JPEG, and
  * much lighter than the picked file; a small picture is not made larger. Every view. Waits on what it checks.
  */
+const { pickVendor } = require("../expenseForm.cjs");
 exports.run = async (h) => {
   const p = h.page;
   // waits in the page on the phone's copy of the data: the visit has n photos with an address
@@ -97,6 +98,7 @@ exports.run = async (h) => {
   await ch4.setFiles({ name: "receipt.jpg", mimeType: "image/jpeg", buffer: big });
   await p.locator('img[src^="blob:"]').locator("visible=true").first().waitFor({ timeout: 8000 });
   await vis("field-amount").locator("input, textarea").first().fill("12.50");
+  await pickVendor(p);
   await vis("expense-save").click();
   await p.waitForURL((u) => !/\/expense\/new/.test(u.pathname), { timeout: 8000 });
   await p.waitForFunction((n) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.expenses ?? []).length === n + 1, before, { timeout: 8000 });

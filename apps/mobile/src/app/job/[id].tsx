@@ -333,7 +333,7 @@ export default function JobScreen() {
       {j.amountCents > 0 ? <ContractStatement jobId={j.id} /> : null}
       <JobLinesBlock job={j} />
       <View style={{ gap: space[2] }}>
-        <SectionTitle title={t("jobs.costs")} right={<Button label={t("quick.receipt")} icon="plus" size="sm" variant="ghost" onPress={() => router.push("/expense/new")} />} />
+        <SectionTitle title={t("jobs.costs")} right={<Button label={t("quick.receipt")} icon="plus" size="sm" variant="ghost" onPress={() => router.push(`/expense/new?jobId=${encodeURIComponent(j.id)}`)} />} />
         {expenses.length ? (
           <CardGrid>
             {expenses.map((x) => (
