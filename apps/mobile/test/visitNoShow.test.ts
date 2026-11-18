@@ -82,6 +82,17 @@ describe("#2066 С3 the office plans it again", () => {
     // another reason (the client cancelled) is not this card
     expect(noShowsToPlan(db([], { status: "unscheduled" }, [gone({ cancelReason: "client_cancelled" })]))).toEqual([]);
   });
+  it("anything after the no-show answers it: a later visit done, or cancelled for another reason — no stale card", () => {
+    // multi-day job: day 2 a no-show, the office booked a new day, it was done and paid; the job is still «in progress»
+    const done = visit("nv4", { step: "paid", closed: true, start: "2026-11-20T17:00:00.000Z" });
+    expect(noShowsToPlan(db([done], { status: "in_progress" }, [gone()]))).toEqual([]);
+    // a new visit, then the client cancelled it: the job waits for a date — «Запланировать», not the old no-show
+    const d = db([], { status: "unscheduled" }, [gone(), gone({ id: "nv5", cancelReason: "client_cancelled", start: "2026-11-21T17:00:00.000Z", cancelledAt: "2026-11-19T10:00:00.000Z" })]);
+    expect(noShowsToPlan(d)).toEqual([]);
+    expect(buildAttention(d, "director").filter((i) => i.refId === "j2066").map((i) => i.kind)).toEqual(["schedule"]);
+    // an earlier visit (before the no-show) does not answer it
+    expect(noShowsToPlan(db([visit("nv6", { step: "paid", closed: true, start: "2026-11-10T17:00:00.000Z" })], { status: "in_progress" }, [gone()])).map((v) => v.id)).toEqual(["nv1"]);
+  });
   it("an inspection's lead in contact: the no-show card is the lead's one card, it opens the lead", () => {
     const d = db([], {}, []);
     const lead = d.leads[0]!;
@@ -92,5 +103,16 @@ describe("#2066 С3 the office plans it again", () => {
     expect(items.map((i) => i.kind)).toContain("visitNoShow");
     expect(items.some((i) => i.kind === "leadNoStep" || i.kind === "leadIdle")).toBe(false);
     expect(attentionHref(items.find((i) => i.kind === "visitNoShow")!)).toBe(`/lead/${lead.id}`);
+  });
+  it("the lead's one card: snoozed — none; a new message from the client — «Ответить» instead", () => {
+    const d = db([], {}, []);
+    const lead = d.leads[0]!;
+    d.visits = d.visits.filter((v) => v.leadId !== lead.id);
+    d.cancelledVisits = [gone({ jobId: undefined, leadId: lead.id, kind: "inspection" })];
+    d.leads = d.leads.map((l) => (l.id === lead.id ? { ...l, status: "replied", archivedAt: undefined, snoozedUntil: "2099-01-01T00:00:00.000Z" } : l));
+    expect(buildAttention(d, "director").filter((i) => i.refId === lead.id)).toEqual([]);
+    d.leads = d.leads.map((l) => (l.id === lead.id ? { ...l, snoozedUntil: undefined } : l));
+    const cards = buildAttention(d, "director").filter((i) => i.refId === lead.id);
+    expect(cards.length).toBe(1);
   });
 });

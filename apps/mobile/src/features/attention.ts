@@ -101,9 +101,10 @@ export const rejectedHint = (r: Pick<RejectedOp, "what" | "href"> & { kind?: Rej
 /** «Открыть» on a refused change: only where this role may go (a module's card for a tech: nowhere — review M5a №3) */
 export const rejectedOpens = (r: Pick<RejectedOp, "href">, role: Role) => canOpen(role, r.href);
 
-/** #2066 «Клиента нет дома» to plan again: the latest no-show of each job / lead that has no open visit since and is still
- *  open (a job waiting for a date or in progress; a lead in contact). One card per job / lead — it stands for its
- *  «Запланировать» / «нет шага» card. */
+/** #2066 «Клиента нет дома» to plan again: the latest no-show of each job / lead, while nothing happened after it (no
+ *  visit of the same job / lead later than it — open, done or cancelled: once a new visit is booked the no-show is
+ *  answered) and the job / lead is still open (a job waiting for a date or in progress; a lead in contact). One card
+ *  per job / lead — it stands for its «Запланировать» / «нет шага» card. */
 export function noShowsToPlan(db: Pick<DB, "visits" | "cancelledVisits" | "jobs" | "leads">): CancelledVisit[] {
   const latest = new Map<string, CancelledVisit>();
   for (const v of db.cancelledVisits ?? []) {
@@ -113,7 +114,10 @@ export function noShowsToPlan(db: Pick<DB, "visits" | "cancelledVisits" | "jobs"
     const had = latest.get(key);
     if (!had || had.cancelledAt < v.cancelledAt) latest.set(key, v);
   }
+  const same = (a: Pick<CancelledVisit, "jobId" | "leadId">, b: Pick<CancelledVisit, "jobId" | "leadId">) => (a.jobId ? a.jobId === b.jobId : !!a.leadId && !b.jobId && a.leadId === b.leadId);
+  const later = (v: CancelledVisit) => [...db.visits, ...(db.cancelledVisits ?? [])].some((o) => o.id !== v.id && same(v, o) && o.start > v.start);
   return [...latest.values()].filter((v) => {
+    if (later(v)) return false;
     if (v.jobId) {
       const j = db.jobs.find((x) => x.id === v.jobId);
       return !!j && (j.status === "unscheduled" || j.status === "in_progress") && !db.visits.some((o) => o.jobId === j.id && isOpenVisit(o));
@@ -150,17 +154,18 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
   // #2066 «Клиента не было дома»: the people who plan (director, dispatcher); the card stands for the job's / lead's own
   const noShows = canPlan([role]) ? noShowsToPlan(db) : [];
   const noShowJob = new Set(noShows.filter((v) => v.jobId).map((v) => v.jobId!));
-  const noShowLead = new Set(noShows.filter((v) => !v.jobId && v.leadId).map((v) => v.leadId!));
+  const noShowLead = new Map(noShows.filter((v) => !v.jobId && v.leadId).map((v) => [v.leadId!, v]));
+  const noShowCard = (v: CancelledVisit, name: string, amountCents?: number): AttentionItem => ({
+    id: `noshow-${v.id}`, kind: "visitNoShow", refId: (v.jobId ?? v.leadId)!, name, label: "noShow.att", params: { name, note: v.cancelText ?? "" },
+    chip: "noShow.chip", status: "warn", amountCents, score: 940,
+    href: v.jobId ? `/job/schedule?jobId=${v.jobId}` : `/lead/${v.leadId}`,
+  });
+  // a job's card here; a lead's — in the lead loop, as the lead's one card
   for (const v of noShows) {
-    const lead = !v.jobId ? db.leads.find((l) => l.id === v.leadId) : undefined;
-    const job = v.jobId ? db.jobs.find((j) => j.id === v.jobId) : undefined;
-    const p = job ? db.properties.find((x) => x.id === job.propertyId) : undefined;
-    const name = lead?.name ?? db.customers.find((c) => c.id === p?.customerId)?.name ?? "";
-    out.push({
-      id: `noshow-${v.id}`, kind: "visitNoShow", refId: (v.jobId ?? v.leadId)!, name, label: "noShow.att", params: { name, note: v.cancelText ?? "" },
-      chip: "noShow.chip", status: "warn", amountCents: job?.amountCents, score: 940,
-      href: job ? `/job/schedule?jobId=${job.id}` : `/lead/${lead!.id}`,
-    });
+    if (!v.jobId) continue;
+    const job = db.jobs.find((j) => j.id === v.jobId)!;
+    const p = db.properties.find((x) => x.id === job.propertyId);
+    out.push(noShowCard(v, db.customers.find((c) => c.id === p?.customerId)?.name ?? "", job.amountCents));
   }
   for (const l of db.leads) {
     if (!canSeeLead(role, db.me, l)) continue;
@@ -177,8 +182,12 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
       }
       continue;
     }
-    // #2066: the no-show card is this lead's one card (a new message from the client still comes first)
-    if (noShowLead.has(l.id) && turn.kind !== "reply") continue;
+    // #2066: the no-show card is this lead's one card (a new message from the client comes instead; snoozed — none)
+    const ns = noShowLead.get(l.id);
+    if (ns && turn.kind !== "reply") {
+      if (turn.kind !== "snoozed" && turn.kind !== "done") out.push(noShowCard(ns, l.name));
+      continue;
+    }
     if (isBackFromSnooze(l) && turn.kind !== "reply") {
       out.push({ id: `back-${l.id}`, kind: "leadBack", refId: l.id, name: l.name, label: "att.leadBack", params: { name: l.name }, chip: "lead.backChip", status: "info", score: 630 });
     } else if (turn.kind === "reply") {

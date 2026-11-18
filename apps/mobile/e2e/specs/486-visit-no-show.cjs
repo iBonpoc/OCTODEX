@@ -34,10 +34,17 @@ exports.run = async (h) => {
   await p.getByTestId("visit-screen").first().waitFor({ timeout: 8000 });
   h.expect((await p.getByTestId("visit-no-show").count()) === 0, `С3 ${JSON.stringify(h.layout)}: no «Клиента нет дома» at work`);
 
-  // С1: on site — the sheet, a note, «Отметить»
+  // С1: on site — «Не отмечать» leaves the visit as it is
   await h.go("/visit/e2e-486-door");
   await p.getByTestId("visit-no-show").locator("visible=true").first().getByRole("button").click();
-  const sheet = h.sheet();
+  let sheet = h.sheet();
+  await sheet.getByTestId("no-show-sheet").waitFor({ timeout: 5000 });
+  await sheet.getByTestId("no-show-keep").getByRole("button").click();
+  await sheetGone(p);
+  h.expect((await h.db()).visits.some((v) => v.id === "e2e-486-door"), `С1 ${JSON.stringify(h.layout)}: «Не отмечать» — the visit stays`);
+  // the sheet, a note, «Отметить»
+  await p.getByTestId("visit-no-show").locator("visible=true").first().getByRole("button").click();
+  sheet = h.sheet();
   await sheet.getByTestId("no-show-sheet").waitFor({ timeout: 5000 });
   await h.shot("no-show-sheet");
   await sheet.getByRole("textbox").first().fill("Left a note on the door");
@@ -57,7 +64,7 @@ exports.run = async (h) => {
   // С2: the dispatcher's queue
   await h.seed("octo.role.v1", "dispatcher");
   await h.go("/triage");
-  await h.expectText(new RegExp(`${client.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}: клиента не было дома — перенести выезд|клиента не было дома — перенести выезд`),
+  await h.expectText(new RegExp(`${client.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}: клиента не было дома — перенести выезд`),
     `С2 ${JSON.stringify(h.layout)}: «перенести выезд» for the office`);
   await h.shot("dispatcher-triage");
 };

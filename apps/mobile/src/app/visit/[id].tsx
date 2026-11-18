@@ -2,7 +2,7 @@ import { ModulePlaces } from "@/modules/ModulePlaces";
 import { visitDueCents } from "@/features/visitDue";
 import { signedAction } from "@/features/visitSignedAction";
 import { lateAfterOf } from "@/features/scheduleSettings";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space, size } from "@octo/design-tokens";
@@ -57,6 +57,8 @@ export default function VisitScreen() {
   // #2066 «Клиента нет дома»: the confirmation sheet (rule 5) and its optional note
   const [noShow, setNoShow] = useState(false);
   const [noShowNote, setNoShowNote] = useState("");
+  // a second tap in the same frame: one mark, one toast, one «back»
+  const noShowSent = useRef(false);
   const v = db.visits.find((x) => x.id === id);
   // wave 7б-2: the location question comes before the first «On the way» on my own visit (docs/specs/03 §12)
   const consent = useConsentQuestion(v);
@@ -126,6 +128,8 @@ export default function VisitScreen() {
   // #2066: at the door — the visit's own person or the office, before the work (server: visit_no_show)
   const noShowOk = canNoShow(v) && mayMarkNoShow(store.role, db.me, v);
   const markNoShow = () => {
+    if (noShowSent.current) return;
+    noShowSent.current = true;
     haptic();
     setNoShow(false);
     // no «Отменить»: once sent the server has closed the visit (the sheet was the confirmation)
@@ -410,7 +414,9 @@ export default function VisitScreen() {
           <View testID="no-show-confirm">
             <Button label={t("noShow.confirm")} icon="check" full onPress={markNoShow} />
           </View>
-          <Button label={t("noShow.keep")} variant="secondary" full onPress={() => setNoShow(false)} />
+          <View testID="no-show-keep">
+            <Button label={t("noShow.keep")} variant="secondary" full onPress={() => setNoShow(false)} />
+          </View>
         </View>
       </Sheet>
       <CallSheet preset={calling} onClose={() => setCalling(null)} />

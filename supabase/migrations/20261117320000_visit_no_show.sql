@@ -4,7 +4,8 @@
 -- Now public.visit_no_show: the visit's assignee (a tech, or sales on their own inspection) or the office, from
 -- scheduled / en_route / on_site before the work started; the same roll-backs as a cancel (S4a lead, S9a job).
 -- Who and when: cancelled_by / cancelled_at, stamped by t06_visit_cancel_stamp as for any cancel. Nothing is dropped
--- or renamed (rule 16): public.cancel_visit stays as it is; the two guards learn the marker this function sets.
+-- or renamed (rule 16): public.cancel_visit stays as it is; t04_visit_cancel_guard already reads the marker this
+-- function sets (20261105300000), the tech guard learns it here; a started job goes back only through this function.
 
 -- ---- the transition ------------------------------------------------------------------------------------------------
 -- on_site → no_show: the tech came, the door stayed shut. in_progress → draft: reaching «on site» started the job
