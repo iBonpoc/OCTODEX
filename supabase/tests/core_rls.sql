@@ -792,7 +792,7 @@ begin
   perform tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000088'$q$);
   perform tst.server($q$update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000088' where id = '0e1a0000-0000-0000-0000-000000000088'$q$);
 end $$;
-set role anon;
+reset role; reset request.jwt.claim.sub; set role anon;
 select public.portal_accept('tok_inv_0123456789abcdef', '0e3a0000-0000-0000-0000-000000000088', null, 'Client', 'M0 0 L5 5', true) is not null as signed;
 reset role;
 :as_owner_a
@@ -2720,7 +2720,7 @@ insert into public.properties (id, company_id, customer_id, address_line1, addre
 -- an estimate sent and signed by the client (the caller signs on the page by its token); p_both: the company signs too
 create function tst.t37_estimate(p_customer uuid, p_property uuid, p_title text, p_both boolean default true)
 returns uuid language plpgsql as $$
-declare e uuid; v uuid; o uuid; tok text;
+declare e uuid; v uuid; o uuid; tok text; me text;
 begin
   insert into public.estimates (id, company_id, customer_id, property_id, title) values
     (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', p_customer, p_property, p_title) returning id into e;
@@ -2729,7 +2729,11 @@ begin
   insert into public.estimate_options (id, company_id, version_id, name) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', v, 'Only') returning id into o;
   insert into public.estimate_line_items (id, company_id, option_id, line_group, name, quantity, unit_price_cents) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', o, 'labor', 'Work', 1, 40000);
   tok := public.send_estimate(e);
+  -- the client signs by the link: no company person behind it (#2020: a member signs by the link — refused)
+  me := current_setting('request.jwt.claim.sub', true);
+  perform set_config('request.jwt.claim.sub', '', true);
   perform public.portal_accept(tok, o, null, 'T37 Signer', 'M0 0 L7 7', true);
+  perform set_config('request.jwt.claim.sub', me, true);
   if p_both then
     perform tst.ok(public.countersign_estimate(e, 'M1 1 L7 7') = 'approved', 'T37 fixture: both signed');
   end if;
@@ -16758,5 +16762,224 @@ begin
 end $t$;
 rollback;
 \echo 'T364 ok'
+
+-- ---------------------------------------------------------------- T379 (#2020): the client's link is signed by the client
+-- S3 (spec: the client's page): a person of the company signs only on site; by the link (portal) the server refuses (42501,
+-- hint member_portal_sign); the client (anon, by the token) signs as before; on site — as before; a signature already made
+-- answers «repeat» as before. Three estimates of company A, each sent with its own token.
+\echo 'T379 the link is the client''s'
+begin;
+:as_owner_a
+do $t$
+declare i int;
+begin
+  for i in 1..4 loop
+    insert into public.estimates (id, company_id, number, customer_id, property_id, title) values
+      (('37900000-0000-4000-8000-00000000000' || i)::uuid, 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001',
+       'd1a00000-0000-0000-0000-000000000001', 'T379 ' || i);
+    perform tst.set_token(('37900000-0000-4000-8000-00000000000' || i)::uuid, 'tok_t379_' || i || '_0123456789abcdef');
+    insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+      (('37910000-0000-4000-8000-00000000000' || i)::uuid, 'ca000000-0000-0000-0000-000000000000', ('37900000-0000-4000-8000-00000000000' || i)::uuid, 1);
+    update public.estimates set current_version_id = ('37910000-0000-4000-8000-00000000000' || i)::uuid where id = ('37900000-0000-4000-8000-00000000000' || i)::uuid;
+    insert into public.estimate_options (id, company_id, version_id, name) values
+      (('37920000-0000-4000-8000-00000000000' || i)::uuid, 'ca000000-0000-0000-0000-000000000000', ('37910000-0000-4000-8000-00000000000' || i)::uuid, 'Standard');
+    insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
+      ('ca000000-0000-0000-0000-000000000000', ('37920000-0000-4000-8000-00000000000' || i)::uuid, 'labor', 'Porch', 1, 100000, false);
+    perform tst.server(format($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = %L$q$, '37910000-0000-4000-8000-00000000000' || i));
+    perform tst.server(format($q$update public.estimates set status = 'sent', sent_version_id = %L where id = %L$q$,
+                              '37910000-0000-4000-8000-00000000000' || i, '37900000-0000-4000-8000-00000000000' || i));
+  end loop;
+end $t$;
+
+-- the office and the owner, by the link (channel portal, and the default channel): refused, the estimate stays open
+:as_office_a
+select tst.fails_like($q$select public.portal_accept('tok_t379_1_0123456789abcdef', '37920000-0000-4000-8000-000000000001', null, 'Office', 'M0 0 L5 5', true, 'portal')$q$,
+  '%not by the client''s link%', 'T379 the office signs by the link: refused');
+:as_owner_a
+select tst.fails_like($q$select public.portal_accept('tok_t379_1_0123456789abcdef', '37920000-0000-4000-8000-000000000001', null, 'Owner', 'M0 0 L5 5', true)$q$,
+  '%not by the client''s link%', 'T379 the owner signs by the link (default channel): refused');
+do $t$
+declare v_hint text;
+begin
+  begin
+    perform public.portal_accept('tok_t379_1_0123456789abcdef', '37920000-0000-4000-8000-000000000001', null, 'Owner', 'M0 0 L5 5', true, 'portal');
+  exception when others then
+    get stacked diagnostics v_hint = pg_exception_hint;
+    perform tst.ok(sqlstate = '42501' and v_hint = 'member_portal_sign', 'T379 the refusal: 42501, hint member_portal_sign');
+    return;
+  end;
+  perform tst.ok(false, 'T379 the owner''s portal signature must be refused');
+end $t$;
+:as_super
+select tst.ok((select status from public.estimates where id = '37900000-0000-4000-8000-000000000001') = 'sent'
+          and not exists (select 1 from public.estimate_approvals where estimate_id = '37900000-0000-4000-8000-000000000001'),
+  'T379 after the refusals: still sent, no signature');
+
+-- a tech of the company, by the link: refused too (any person of the company)
+:as_tech_a
+select tst.fails_like($q$select public.portal_accept('tok_t379_1_0123456789abcdef', '37920000-0000-4000-8000-000000000001', null, 'Tech', 'M0 0 L5 5', true, 'portal')$q$,
+  '%not by the client''s link%', 'T379 a tech signs by the link: refused');
+
+-- a person of ANOTHER company is only a client here: signs by the link
+:as_owner_b
+select tst.ok(public.portal_accept('tok_t379_4_0123456789abcdef', '37920000-0000-4000-8000-000000000004', null, 'T379 Other co', 'M0 0 L5 5', true) ->> 'status'
+              = 'awaiting_countersign', 'T379 a member of another company signs as a client');
+
+-- the client: anonymous, by the token — signs as before
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok(public.portal_accept('tok_t379_1_0123456789abcdef', '37920000-0000-4000-8000-000000000001', null, 'T379 Client', 'M0 0 L5 5', true) ->> 'status'
+              = 'awaiting_countersign', 'T379 the client signs by the link');
+
+-- on site, on the owner's device: as before
+:as_owner_a
+select public.portal_accept('tok_t379_2_0123456789abcdef', '37920000-0000-4000-8000-000000000002', null, 'T379 On site', 'M0 0 L5 5', true, 'on_site') is not null as t379_on_site;
+:as_super
+select tst.ok((select status from public.estimates where id = '37900000-0000-4000-8000-000000000002') = 'awaiting_countersign'
+          and (select channel from public.estimate_approvals where estimate_id = '37900000-0000-4000-8000-000000000002') = 'on_site',
+  'T379 on site: signed, channel on_site');
+
+-- a signature already made (before this check existed) sent again from an old phone's queue: «repeat», nothing changes
+reset role; reset request.jwt.claim.sub; set role anon;
+select public.portal_accept('tok_t379_3_0123456789abcdef', '37920000-0000-4000-8000-000000000003', null, 'T379 Earlier', 'M0 0 L5 5', true) is not null as t379_first;
+:as_office_a
+select tst.ok(public.portal_accept('tok_t379_3_0123456789abcdef', '37920000-0000-4000-8000-000000000003', null, 'T379 Earlier', 'M0 0 L5 5', true, 'portal') ->> 'status'
+              = 'awaiting_countersign', 'T379 a repeat of a signature already made: answered as before, no refusal');
+:as_super
+select tst.ok((select count(*) from public.estimate_approvals where estimate_id = '37900000-0000-4000-8000-000000000003') = 1, 'T379 the repeat doubles nothing');
+rollback;
+\echo 'T379 ok'
+
+-- ---------------------------------------------------------------- T380 (#2020): by the client's link the client pays
+-- A sent estimate of company A with a 10% deposit, signed by the client (anon) and by the owner: its deposit invoice.
+-- The company simulates payments (a demo company). The owner and the office pay by the token: 42501, hint member_portal_pay,
+-- no payment; the client (anonymous, by the token) pays as before.
+\echo 'T380 the client pays by the link'
+begin;
+:as_super
+insert into app.company_flags (company_id, simulated_payments) values ('ca000000-0000-0000-0000-000000000000', true)
+  on conflict (company_id) do update set simulated_payments = true;
+:as_owner_a
+do $t$
+begin
+  insert into public.customers (id, company_id, display_name) values ('38000000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'T380 Client');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('38000000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', '38000000-0000-4000-8000-0000000000c1', '380 Pay St', 'Pasadena');
+  insert into public.estimates (id, company_id, number, customer_id, property_id, title) values
+    ('38000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', '38000000-0000-4000-8000-0000000000c1', '38000000-0000-4000-8000-0000000000d1', 'T380');
+  perform tst.set_token('38000000-0000-4000-8000-000000000001', 'tok_t380_0123456789abcdef');
+  insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+    ('38010000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '38000000-0000-4000-8000-000000000001', 1, '{"kind":"pct","bps":1000}');
+  update public.estimates set current_version_id = '38010000-0000-4000-8000-000000000001' where id = '38000000-0000-4000-8000-000000000001';
+  insert into public.estimate_options (id, company_id, version_id, name) values
+    ('38020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '38010000-0000-4000-8000-000000000001', 'Standard');
+  insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
+    ('ca000000-0000-0000-0000-000000000000', '38020000-0000-4000-8000-000000000001', 'labor', 'Porch', 1, 100000, false);
+  perform tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = '38010000-0000-4000-8000-000000000001'$q$);
+  perform tst.server($q$update public.estimates set status = 'sent', sent_version_id = '38010000-0000-4000-8000-000000000001' where id = '38000000-0000-4000-8000-000000000001'$q$);
+end $t$;
+reset role; reset request.jwt.claim.sub; set role anon;
+select public.portal_accept('tok_t380_0123456789abcdef', '38020000-0000-4000-8000-000000000001', null, 'T380 Client', 'M0 0 L5 5', true) is not null as t380_signed;
+:as_owner_a
+select public.countersign_estimate('38000000-0000-4000-8000-000000000001', 'M0 0 L3 3') = 'approved' as t380_countersigned;
+:as_super
+select set_config('tst.t380_inv', coalesce((select i.id::text from public.invoices i join public.jobs j on j.id = i.job_id
+                                    where j.estimate_id = '38000000-0000-4000-8000-000000000001' and i.status = 'sent' limit 1), ''), false) is not null as t380_inv_set;
+select tst.ok(current_setting('tst.t380_inv') <> '', 'T380 fixture: the deposit invoice is issued');
+:as_owner_a
+select tst.fails_like(format($q$select public.portal_pay_simulated('tok_t380_0123456789abcdef', %L)$q$, current_setting('tst.t380_inv')),
+  '%does not pay by the client''s link%', 'T380 the owner pays by the link: refused');
+:as_office_a
+do $t$
+declare v_hint text;
+begin
+  begin
+    perform public.portal_pay_simulated('tok_t380_0123456789abcdef', current_setting('tst.t380_inv')::uuid);
+  exception when others then
+    get stacked diagnostics v_hint = pg_exception_hint;
+    perform tst.ok(sqlstate = '42501' and v_hint = 'member_portal_pay', 'T380 the office: 42501, hint member_portal_pay');
+    return;
+  end;
+  perform tst.ok(false, 'T380 the office''s simulated payment must be refused');
+end $t$;
+:as_super
+select tst.ok(not exists (select 1 from public.payments where invoice_id = current_setting('tst.t380_inv')::uuid)
+          and not exists (select 1 from public.notifications where invoice_id = current_setting('tst.t380_inv')::uuid and kind in ('deposit.paid', 'invoice.paid')),
+  'T380 after the refusals: no payment, no «paid» notice');
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok((select (x ->> 'paid')::bigint > 0 from jsonb_array_elements(public.portal_pay_simulated('tok_t380_0123456789abcdef', current_setting('tst.t380_inv')::uuid) -> 'invoices') x
+                where x ->> 'id' = current_setting('tst.t380_inv')), 'T380 the client pays by the link as before');
+-- a person of ANOTHER company is only a client here: not refused (the invoice is paid already — nothing doubles)
+:as_owner_b
+select public.portal_pay_simulated('tok_t380_0123456789abcdef', current_setting('tst.t380_inv')::uuid) is not null as t380_other_company_not_refused;
+:as_super
+select tst.ok((select count(*) from public.payments where invoice_id = current_setting('tst.t380_inv')::uuid) = 1, 'T380 one payment in all');
+rollback;
+\echo 'T380 ok'
+
+-- ---------------------------------------------------------------- T381 (#2020): on site by the token — only who reads the estimate
+-- An old app signs on site through portal_accept by the token (rule 16, T142). A tech who may sign contracts but does not
+-- read this estimate (not his, not on his property) is refused as accept_on_site refuses him; a tech who made the estimate
+-- signs on site as before (channel on_site, on his device).
+\echo 'T381 on site by the token'
+begin;
+:as_super
+-- both techs active and allowed to sign contracts (the second was switched off by an earlier test; rolled back below)
+update public.memberships set can_sign_contracts = true, status = 'active' where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id in
+  ('a0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000004');
+:as_super
+insert into public.customers (id, company_id, display_name) values ('38100000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'T381 Client');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('38100000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', '38100000-0000-4000-8000-0000000000c1', '381 Site St', 'Pasadena');
+-- the second estimate is the tech's own (he made it on site): inserted as the server, so created_by is his (core.sql:269)
+insert into public.estimates (id, company_id, number, customer_id, property_id, title, created_by) values
+  ('38100000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', '38100000-0000-4000-8000-0000000000c1', '38100000-0000-4000-8000-0000000000d1', 'T381 2',
+   'a0000000-0000-0000-0000-000000000003');
+:as_owner_a
+do $t$
+declare i int;
+begin
+  for i in 1..2 loop
+    if i = 1 then insert into public.estimates (id, company_id, number, customer_id, property_id, title) values
+      (('38100000-0000-4000-8000-00000000000' || i)::uuid, 'ca000000-0000-0000-0000-000000000000', '', '38100000-0000-4000-8000-0000000000c1', '38100000-0000-4000-8000-0000000000d1', 'T381 ' || i); end if;
+    perform tst.set_token(('38100000-0000-4000-8000-00000000000' || i)::uuid, 'tok_t381_' || i || '_0123456789abcdef');
+    insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+      (('38110000-0000-4000-8000-00000000000' || i)::uuid, 'ca000000-0000-0000-0000-000000000000', ('38100000-0000-4000-8000-00000000000' || i)::uuid, 1);
+    update public.estimates set current_version_id = ('38110000-0000-4000-8000-00000000000' || i)::uuid where id = ('38100000-0000-4000-8000-00000000000' || i)::uuid;
+    insert into public.estimate_options (id, company_id, version_id, name) values
+      (('38120000-0000-4000-8000-00000000000' || i)::uuid, 'ca000000-0000-0000-0000-000000000000', ('38110000-0000-4000-8000-00000000000' || i)::uuid, 'Standard');
+    insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
+      ('ca000000-0000-0000-0000-000000000000', ('38120000-0000-4000-8000-00000000000' || i)::uuid, 'labor', 'Porch', 1, 100000, false);
+    perform tst.server(format($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = %L$q$, '38110000-0000-4000-8000-00000000000' || i));
+    perform tst.server(format($q$update public.estimates set status = 'sent', sent_version_id = %L where id = %L$q$,
+                              '38110000-0000-4000-8000-00000000000' || i, '38100000-0000-4000-8000-00000000000' || i));
+  end loop;
+end $t$;
+:as_tech2_a
+select tst.fails_like($q$select public.portal_accept('tok_t381_1_0123456789abcdef', '38120000-0000-4000-8000-000000000001', null, 'T381 X', 'M0 0 L5 5', true, 'on_site')$q$,
+  '%not found%', 'T381 a tech who does not read the estimate: on site by the token refused');
+-- a person of ANOTHER company reads nothing here: on site by the token — not found
+:as_owner_b
+select tst.fails_like($q$select public.portal_accept('tok_t381_1_0123456789abcdef', '38120000-0000-4000-8000-000000000001', null, 'T381 B', 'M0 0 L5 5', true, 'on_site')$q$,
+  '%not found%', 'T381 another company on site by the token: not found');
+:as_super
+select tst.ok((select status from public.estimates where id = '38100000-0000-4000-8000-000000000001') = 'sent', 'T381 …and it stays unsigned');
+-- the owner (staff) on site by the token: as before
+:as_owner_a
+select tst.ok((public.portal_accept('tok_t381_1_0123456789abcdef', '38120000-0000-4000-8000-000000000001', null, 'T381 Client', 'M0 0 L5 5', true, 'on_site') ->> 'status')
+              = 'awaiting_countersign', 'T381 the owner signs the client on site by the token, as before');
+:as_tech_a
+select tst.ok((public.portal_accept('tok_t381_2_0123456789abcdef', '38120000-0000-4000-8000-000000000002', null, 'T381 Client', 'M0 0 L5 5', true, 'on_site') ->> 'status')
+              = 'awaiting_countersign', 'T381 the tech who made the estimate signs the client on site by the token, as before');
+:as_super
+select tst.ok((select channel = 'on_site' and signer_user_id = 'a0000000-0000-0000-0000-000000000003' from public.estimate_approvals
+                where estimate_id = '38100000-0000-4000-8000-000000000002'), 'T381 …on site, on the tech''s device');
+-- the old phone's queue sends the same signature again after the tech lost the estimate (another tech): «repeat», not an error
+:as_tech2_a
+select tst.ok((public.portal_accept('tok_t381_2_0123456789abcdef', '38120000-0000-4000-8000-000000000002', null, 'T381 Client', 'M0 0 L5 5', true, 'on_site') ->> 'status')
+              = 'awaiting_countersign', 'T381 a repeat of a signature already made answers as before');
+:as_super
+select tst.ok((select count(*) from public.estimate_approvals where estimate_id = '38100000-0000-4000-8000-000000000002') = 1, 'T381 the repeat doubles nothing');
+rollback;
+\echo 'T381 ok'
 
 \echo 'ALL TESTS PASSED'

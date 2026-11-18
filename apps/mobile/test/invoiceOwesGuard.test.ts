@@ -2,22 +2,19 @@
  * invoiceOwesGuard — what an invoice still owes is counted by the engine only (#1898, rule 8). The screens and the data
  * selectors must not write `total − paid` or `Math.max(0, total − paid)` themselves: the engine's `invoiceOwes` (one invoice)
  * and `invoicesOwe` (a list) are the one rule, so the screen, the receipt, the page of the client and the PDF show the same sum.
- * Not covered on purpose: the amount the store books for a payment (data/store.tsx; acceptPayment clamps it) and the two
- * reasoned places in ALLOWED below.
+ * #1995 closed the store (what «Принять оплату» books) and «Требует внимания»; the one reasoned place left is in ALLOWED below.
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const SRC = join(__dirname, "..", "src");
-/** where the balance is shown or summed: the screens, the features and the selectors */
-const ROOTS = [join(SRC, "app"), join(SRC, "features"), join(SRC, "data", "selectors.ts")];
+/** where the balance is shown or summed: the screens, the features, the selectors and the store */
+const ROOTS = [join(SRC, "app"), join(SRC, "features"), join(SRC, "data", "selectors.ts"), join(SRC, "data", "store.tsx")];
 /** places that may subtract, each with its reason (a new one says why here) */
 const ALLOWED: Record<string, string> = {
   // what an invoice may still take ONLINE: its balance minus the payments on their way (app.invoice_online_balance) — another number
   "features/payments/advance.ts": "invoiceRoom: balance minus online payments on their way",
-  // the overdue line of «Требует внимания»: guarded by `continue` when paid ≥ total; to move to invoiceOwes with the next change of attention.ts (shared file)
-  "features/attention.ts": "overdue amount, guarded by paid < total above",
 };
 
 const files = (p: string): string[] =>
