@@ -4,6 +4,7 @@
  * real), nothing is saved and the screen stays; a filled wrong value keeps its error until it is right.
  * Lead: phone, name (source has a default); expense: amount; supplier: name, email.
  */
+const { pickVendor } = require("../expenseForm.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const vis = (id) => p.getByTestId(id).locator("visible=true").first();
@@ -50,6 +51,11 @@ exports.run = async (h) => {
   h.expect(/\/expense\/new/.test(p.url()), "expense: the screen stays");
   h.expect((((await h.db()).expenses ?? []).length) === expBefore, "expense: nothing saved");
   await input("field-amount").fill("12.50");
+  // #2008: «Где купили» is required too — saved without it, its error under it and nothing saved
+  await saveExp.click();
+  await vis("field-vendor-error").waitFor({ timeout: 3000 });
+  h.expect((((await h.db()).expenses ?? []).length) === expBefore, "expense: no vendor — nothing saved");
+  await pickVendor(p);
   await saveExp.click();
   await p.waitForURL((u) => !/\/expense\/new/.test(u.pathname), { timeout: 5000 });
   await p.waitForFunction((n) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.expenses ?? []).length === n + 1, expBefore, { timeout: 5000 });

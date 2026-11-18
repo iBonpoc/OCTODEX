@@ -4,6 +4,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { Button, ChoiceChips, ReadOnly, TextField } from "@/ui/controls";
 import { Anchored, useRequiredForm } from "@/ui/requiredForm";
 import { SelectField } from "@/ui/selectField";
+import { PickerSheet } from "@/ui/pickerSheet";
 import { T } from "@/ui/primitives";
 import { Card, FieldGroup, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
@@ -37,6 +38,10 @@ export function SelectorsSection() {
   const [long, setLong] = useState<(typeof MANY)[number] | null>(null);
   const [tenth, setTenth] = useState<(typeof MANY)[number] | null>("a10");
   const [twenty, setTwenty] = useState<string | null>(null);
+  // DS А3 «＋ Создать „…“» (#2008): a value typed in the search becomes the choice — the sheet itself creates nothing
+  const [own, setOwn] = useState<string | null>(null);
+  const [ownList, setOwnList] = useState<string[]>(["Home Depot", "Lowe's", "ABC Supply"]);
+  const [ownOpen, setOwnOpen] = useState(false);
   const items = UNITS.map((u) => ({ key: u, label: u }));
   const [few, setFew] = useState<"a" | "b" | "c">("a");
   const [vtab, setVtab] = useState<VTab>("overview");
@@ -70,6 +75,21 @@ export function SelectorsSection() {
         <SelectField testID="showcase-select-long" label={t("ds.select.twelve")} value={long} items={MANY.map((m) => ({ key: m, label: m }))} onChange={setLong} />
         <SelectField testID="showcase-select-tenth" label={t("ds.select.tenth")} value={tenth} items={MANY.map((m) => ({ key: m, label: m }))} onChange={setTenth} />
         <SelectField testID="showcase-select-search" label={t("ds.select.twenty")} value={twenty} items={TWENTY.map((m) => ({ key: m, label: m }))} onChange={setTwenty} />
+      </Card>
+      <Card>
+        <T v="heading">{t("ds.picker.ownTitle")}</T>
+        <T v="caption" tone="mut">{t("ds.picker.ownHint")}</T>
+        <SelectField testID="showcase-picker-own" label={t("exp.vendor")} value={own} items={ownList.map((v) => ({ key: v, label: v }))} onChange={setOwn} onOpen={() => setOwnOpen(true)} />
+        <PickerSheet
+          visible={ownOpen}
+          title={t("exp.vendorPick")}
+          items={ownList.map((v) => ({ key: v, label: v }))}
+          value={own}
+          onSelect={setOwn}
+          onCreate={(v) => { setOwnList((l) => [...l, v]); setOwn(v); }}
+          onClose={() => setOwnOpen(false)}
+          testID="showcase-picker-own-sheet"
+        />
       </Card>
       <Card>
         <T v="heading">{t("ds.choice.title")}</T>

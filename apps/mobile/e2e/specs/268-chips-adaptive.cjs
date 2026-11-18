@@ -23,7 +23,7 @@ exports.run = async (h) => {
   h.expect((await p.getByRole("menu").locator("visible=true").count()) === 0, "a read-only field does not open its menu");
 
   await h.go("/expense/new");
-  for (const id of ["expense-vendor", "expense-category", "expense-job"]) {
+  for (const id of ["field-vendor", "expense-category", "expense-job"]) {
     h.expect((await vis(`${id}-button`).count()) === 1, `${id} is a field`);
   }
   h.expect((await p.getByRole("radio").locator("visible=true").count()) === 0, "no chips on «Новый расход»");

@@ -42,7 +42,7 @@ export const REQUIRED_FORMS: RequiredForm[] = [
     ],
     e2e: "278-required-fields.cjs",
   },
-  { file: "expense/new.tsx", route: "/expense/new", status: "done", fields: [{ id: "amount", errorKey: "form.req.amount" }], e2e: "278-required-fields.cjs" },
+  { file: "expense/new.tsx", route: "/expense/new", status: "done", fields: [{ id: "amount", errorKey: "form.req.amount" }, { id: "vendor", errorKey: "exp.vendorNeed" }], e2e: "278-required-fields.cjs" },
   {
     file: "suppliers/[id].tsx",
     route: "/suppliers/[id]",

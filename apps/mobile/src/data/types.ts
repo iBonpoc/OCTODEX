@@ -1026,6 +1026,9 @@ export interface Expense {
   category: ExpenseCategory;
   amountCents: number;
   at: string;
+  /** #2008: the day of the receipt, the company's calendar day (YYYY-MM-DD; `expenses.date`); an expense from an older build
+   * has none — its day is the day of `at` */
+  date?: string;
   receiptUri?: string;
   /** #1538: the receipt's files row in the cloud (kind 'receipt') — the receipt is there on every phone and after a reload */
   receiptFileId?: ID;

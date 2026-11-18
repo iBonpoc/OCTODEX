@@ -62,9 +62,9 @@ describe("ChoiceChips name their field (#1095)", () => {
     expect(/\blabel=""/.test(sample('<ChoiceChips label="" items={x} />'))).toBe(true);
   });
   it("the parser sees the chips (guards the guard)", () => {
-    // 80 → 75: the accuracy choice left the canvas and the card (#768, #1764); 75 → 70: spec 56 wave 4 (client) took 8 away; 70 → 67: wave 4б took 3; 67 → 61: wave 5а took 5 (job/new 2, task sheet 3);
+    // 80 → 75: the accuracy choice left the canvas and the card (#768, #1764); 75 → 70: spec 56 wave 4 (client) took 8 away; 70 → 67: wave 4б took 3; 67 → 61: wave 5а took 5 (job/new 2, task sheet 3); 61 → 58: the expense form (#2008) took 3 (vendor, category, job → SelectField / PickerSheet);
     // the parser still sees every chip
-    expect(all).toBeGreaterThan(61);
+    expect(all).toBeGreaterThan(58);
     expect(all - legacy.length).toBeGreaterThanOrEqual(5);
   });
 });

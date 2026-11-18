@@ -107,7 +107,8 @@ export function SelectField<K extends string>({
           }}
         >
           {labelAbove ? null : (
-            <T v="body" style={{ flex: 1 }} numberOfLines={1}>
+            // the label never shrinks to «К.» — the value is what gets cut (DS А2: the label says what the field is, #2008)
+            <T v="body" style={{ flexGrow: 1, flexShrink: 0 }} numberOfLines={1}>
               {label}
             </T>
           )}

@@ -134,10 +134,17 @@ describe("loadCompanyDB — other fields (wave П-1)", () => {
       { id: "x1", company_id: CO, vendor: "Depot", category: "materials", amount_cents: 100, receipt_file_id: "r1", created_at: "2026-11-05T12:00:00Z", created_by: "u1" },
       { id: "x2", company_id: CO, vendor: "Depot", category: "materials", amount_cents: 100, receipt_file_id: "r2", created_at: "2026-11-05T12:00:00Z", created_by: "u1" },
       { id: "x3", company_id: CO, vendor: "Depot", category: "materials", amount_cents: 100, receipt_file_id: "r3", created_at: "2026-11-05T12:00:00Z", created_by: "u1" },
-      { id: "x4", company_id: CO, vendor: "Depot", category: "materials", amount_cents: 100, receipt_file_id: null, created_at: "2026-11-05T12:00:00Z", created_by: "u1" },
+      { id: "x4", company_id: CO, vendor: "Depot", category: "materials", amount_cents: 100, receipt_file_id: null, created_at: "2026-11-05T12:00:00Z", created_by: "u1", date: "2026-11-03" },
+      // an older row: the server's default — the UTC day of created_at (an evening in Los Angeles, the 31st there)
+      { id: "x5", company_id: CO, vendor: "Depot", category: "materials", amount_cents: 100, receipt_file_id: null, created_at: "2026-11-01T01:00:00Z", created_by: "u1", date: "2026-11-01" },
     ];
     const db = await loadCompanyDB(CO, "u1");
     const x = (id: string) => db.expenses!.find((e) => e.id === id)!;
+    // #2008: the receipt's day is read; a row without it has none (its day is the day it was made)
+    expect(x("x4").date).toBe("2026-11-03");
+    expect(x("x1").date).toBeUndefined();
+    // the server's UTC default is not a picked day: its day is the company's day of created_at (Oct 31 in LA)
+    expect(x("x5").date).toBeUndefined();
     expect(x("x1").receiptFileId).toBe("r1");
     expect(x("x1").receiptFailed).toBeUndefined();
     expect(x("x2")).toMatchObject({ receiptFileId: "r2", receiptFailed: "refused" });

@@ -1,4 +1,5 @@
 import { lateAfterOf } from "@/features/scheduleSettings";
+import { expenseDay } from "@/features/expenseForm";
 import { visitDueCents } from "@/features/visitDue";
 import { useRef, useState, type ComponentRef } from "react";
 import { Linking, View } from "react-native";
@@ -50,7 +51,7 @@ export default function JobScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const store = useStore();
   const { db } = store;
-  const { t, money, day, time, duration } = useI18n();
+  const { t, money, day, dayOf, time, duration } = useI18n();
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("details");
   const [filter, setFilter] = useState<JobHistoryFilter>("all");
@@ -333,7 +334,7 @@ export default function JobScreen() {
       {j.amountCents > 0 ? <ContractStatement jobId={j.id} /> : null}
       <JobLinesBlock job={j} />
       <View style={{ gap: space[2] }}>
-        <SectionTitle title={t("jobs.costs")} right={<Button label={t("quick.receipt")} icon="plus" size="sm" variant="ghost" onPress={() => router.push("/expense/new")} />} />
+        <SectionTitle title={t("jobs.costs")} right={<Button label={t("quick.receipt")} icon="plus" size="sm" variant="ghost" onPress={() => router.push(`/expense/new?jobId=${encodeURIComponent(j.id)}`)} />} />
         {expenses.length ? (
           <CardGrid>
             {expenses.map((x) => (
@@ -343,7 +344,7 @@ export default function JobScreen() {
                 testID={`job-expense-${x.id}`}
                 lead={{ kind: "icon", icon: "wallet" }}
                 title={x.vendor}
-                when={`${t(`exp.cat.${x.category}` as DictKey)} · ${day(x.at)}`}
+                when={`${t(`exp.cat.${x.category}` as DictKey)} · ${dayOf(expenseDay(x))}`}
                 value={money(x.amountCents)}
               />
             ))}

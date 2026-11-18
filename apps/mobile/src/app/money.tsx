@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { expenseDay } from "@/features/expenseForm";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
@@ -14,14 +15,13 @@ import { FilterBar } from "@/ui/filterBar";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, Empty, ListRow, Screen, SectionTitle } from "@/ui/surfaces";
-import { dayKeyIn, formatDayKey } from "@/features/zone";
+import { formatDayKey } from "@/features/zone";
 import { memberName } from "@/features/team";
 import { matchExpense } from "@/features/moneyLists";
 
 /** desktop row columns for expenses */
 const EXP_COLUMNS: FactKey[] = ["work", "by"];
 /** the month of an expense on the company's calendar (П4b), not the UTC month of its moment */
-const monthKey = (iso: string) => dayKeyIn(iso).slice(0, 7);
 /** the month's name in the app's language, as «План» and the date picker write it (#1427 041: not «November 2026» in RU) */
 const monthOf = (key: string, lang: Lang) => {
   const s = formatDayKey(`${key}-01`, { month: "long", year: "numeric" }, lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU");
@@ -30,7 +30,7 @@ const monthOf = (key: string, lang: Lang) => {
 
 /** Owner's money view: overdue → awaiting → paid. Manual payments now, Stripe in wave 4. */
 export default function Money() {
-  const { t, money, day, lang } = useI18n();
+  const { t, money, dayOf, lang } = useI18n();
   const { db } = useStore();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
@@ -39,7 +39,8 @@ export default function Money() {
   // the search (spec 31, one rule): vendor, category, work, client, who paid; not kept
   const [q, setQ] = useState("");
   const shown = db.expenses.filter((x) => matchExpense(db, x, q, t(`exp.cat.${x.category}`)));
-  const months = [...shown.slice().sort((a, b) => b.at.localeCompare(a.at)).reduce((m, x) => m.set(monthKey(x.at), [...(m.get(monthKey(x.at)) ?? []), x]), new Map<string, Expense[]>())];
+  // #2008: by the receipt's day (an expense entered today for last month's receipt is last month's)
+  const months = [...shown.slice().sort((a, b) => expenseDay(b).localeCompare(expenseDay(a)) || b.at.localeCompare(a.at)).reduce((m, x) => m.set(expenseDay(x).slice(0, 7), [...(m.get(expenseDay(x).slice(0, 7)) ?? []), x]), new Map<string, Expense[]>())];
   /** an expense has no screen to open yet: the card has no tap and no contact buttons, nothing is written from it */
   const expenseCard = (x: Expense) => {
     const job = x.jobId ? db.jobs.find((j) => j.id === x.jobId) : undefined;
@@ -50,7 +51,7 @@ export default function Money() {
       <ListCard
         key={x.id}
         title={x.vendor}
-        when={day(x.at)}
+        when={dayOf(expenseDay(x))}
         lead={{ kind: "icon", icon: receipt ? "camera" : "dollar" }}
         value={`−${money(x.amountCents)}`}
         // category first, «no receipt» as a grey tag: not a status (map §5 has no expense status)

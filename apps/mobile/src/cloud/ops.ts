@@ -310,7 +310,7 @@ export type Op =
     }
   | { k: "invoice.pay"; invoiceId: string; paymentId: string; customerId: string; amountCents: number; method: PaymentMethod }
   /** #1538: receiptFileId + receiptUri — the receipt's files row, then its bytes (an older op has neither: as before) */
-  | { k: "expense.add"; id: string; jobId: string | null; vendor: string; category: ExpenseCategory; amountCents: number; receiptFileId?: string; receiptUri?: string };
+  | { k: "expense.add"; id: string; jobId: string | null; vendor: string; category: ExpenseCategory; amountCents: number; date?: string; receiptFileId?: string; receiptUri?: string };
 
 export interface OutboxItem {
   id: string;
@@ -1287,6 +1287,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         ins("expenses", {
           id: op.id, company_id: c, job_id: realJob(op.jobId), vendor: op.vendor, category: expenseCategoryToDb[op.category],
           amount_cents: op.amountCents, idempotency_key: op.id, ...(op.receiptFileId ? { receipt_file_id: op.receiptFileId } : {}),
+          // #2008: the receipt's day (an op queued by an older build has none — the column's default, the server's today)
+          ...(op.date && /^\d{4}-\d{2}-\d{2}$/.test(op.date) ? { date: op.date } : {}),
         }),
       );
       // the phone is told whether the cloud took the receipt (a refusal or a vanished file is shown on the card)

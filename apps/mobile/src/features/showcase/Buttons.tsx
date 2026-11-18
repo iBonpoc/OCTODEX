@@ -114,6 +114,10 @@ export function ButtonsSection() {
             <IconButton icon="star" label={t("ds.btn.iconButtonActive")} active={active} onPress={() => { setActive((v) => !v); press(); }} />
             <T v="caption" tone="mut">{t("ds.btn.toggle")}</T>
           </View>
+          <View testID="showcase-btn-iconbutton-disabled" style={{ gap: space[1] }}>
+            <IconButton icon="chevronRight" label={t("ds.btn.iconButtonDisabled")} disabled onPress={press} />
+            <T v="caption" tone="mut">{t("ds.btn.iconButtonDisabled")}</T>
+          </View>
         </RowView>
         {sample("fab", t("ds.btn.fabNote", { fab: component.fab }), <Fab placement="header" set="home" />)}
       </Card>

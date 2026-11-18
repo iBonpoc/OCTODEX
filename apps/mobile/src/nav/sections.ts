@@ -222,7 +222,8 @@ const lead: FabDef = { id: "lead", href: () => "/lead/new" };
 const client: FabDef = { id: "client", roles: OFFICE, href: () => "/client/edit" };
 // «Новая работа» one form (S17): tied to the screen's client and property when it has them; not the technician
 const job: FabDef = { id: "job", roles: OFFICE, href: (c) => `/job/new${q({ customerId: c.customerId, propertyId: c.propertyId })}` };
-const expense = (roles?: readonly Role[]): FabDef => ({ id: "expense", roles, href: () => "/expense/new" });
+// #2008: from a job or a visit the expense goes on that job (the form reads ?jobId=)
+const expense = (roles?: readonly Role[]): FabDef => ({ id: "expense", roles, href: (c) => `/expense/new${q({ jobId: c.jobId })}` });
 const estimate = (roles: readonly Role[] | undefined, needs?: FabDef["needs"]): FabDef => ({
   id: "estimate",
   roles,

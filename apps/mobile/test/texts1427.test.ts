@@ -10,7 +10,6 @@ import { en } from "../src/i18n/en";
 import { es } from "../src/i18n/es";
 import { invoiceStatusView, INVOICE_PAID } from "../src/features/invoiceStatus";
 import { invoiceTitle } from "../src/features/invoiceTitle";
-import { expenseJobChoices } from "../src/features/expenseJobs";
 import type { DB } from "../src/data/types";
 
 const dicts = { ru, en, es } as Record<string, Record<string, string>>;
@@ -108,14 +107,4 @@ describe("dictionary nouns", () => {
   });
 });
 
-describe("«К какой работе» offers the job, not the client (#1427 053)", () => {
-  it("job number + title, one choice per job", () => {
-    const db = {
-      jobs: [{ id: "j1", number: "JOB-0001", title: "Bathroom remodel", propertyId: "p1" }],
-      properties: [{ id: "p1", customerId: "c1" }],
-      customers: [{ id: "c1", name: "Sarah Mitchell" }],
-    } as unknown as DB;
-    const items = expenseJobChoices(db, [{ jobId: "j1" }, { jobId: "j1" }, { jobId: null }]);
-    expect(items).toEqual([{ key: "j1", label: "JOB-0001 · Bathroom remodel" }]);
-  });
-});
+// «К какой работе» offers the job, not the client (#1427 053): now test/expenseForm.test.ts (#2008) and e2e 456
