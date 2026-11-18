@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import * as Crypto from "expo-crypto";
 import { useStore } from "@/data/store";
+import { companyState } from "@/features/companySetup";
 import { PROPERTY_KINDS, type Property, type PropertyKind } from "@/data/types";
 import { peopleOf } from "@/data/people";
 import { canSaveProperty, placeOf } from "@/features/properties";
@@ -24,7 +25,8 @@ export const newProperty = (customerId: string): Property => ({
   customerId,
   address: "",
   city: "",
-  place: { city: "", state: "CA", zip: "" },
+  // the state is the company's, filled in by the sheet (#2065: no «CA» in the core)
+  place: { city: "", state: "", zip: "" },
   stories: 1,
   contactIds: [],
 });
@@ -36,7 +38,9 @@ export function PropertySheet({ value, onClose }: { value: Property | null; onCl
   const [d, setD] = useState<Property | null>(value);
   const [d0, setD0] = useState<string>("");
   useEffect(() => {
-    const v = value ? { ...value, place: placeOf(value) } : null;
+    const pl = value ? placeOf(value) : undefined;
+    // a new address starts in the company's state (#2065); a saved one keeps its own
+    const v = value ? { ...value, place: pl && !pl.state ? { ...pl, state: companyState(store.db.company) } : pl } : null;
     setD(v);
     setD0(JSON.stringify(v));
   }, [value]);
@@ -63,7 +67,7 @@ export function PropertySheet({ value, onClose }: { value: Property | null; onCl
       </Labeled>
       <RowView>
         <Labeled label={t("co.state")}>
-          <TextField type="state" value={place.state ?? ""} onChangeText={(v) => setPlace({ state: v })} placeholder="CA" label={t("co.state")} />
+          <TextField type="state" value={place.state ?? ""} onChangeText={(v) => setPlace({ state: v })} placeholder={companyState(store.db.company) || t("co.state")} label={t("co.state")} />
         </Labeled>
         <Labeled label={t("lead.missing.zip")}>
           <TextField type="zip" value={place.zip ?? ""} onChangeText={(v) => setPlace({ zip: v })} placeholder="91103" label={t("lead.missing.zip")} />

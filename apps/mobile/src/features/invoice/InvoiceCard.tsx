@@ -3,6 +3,7 @@ import { findJob } from "@/data/jobs";
 import { useState, type ReactElement, type ReactNode } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
+import { canOpen } from "@/nav/roles";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { Invoice, PaymentMethod } from "@/data/types";
@@ -10,11 +11,11 @@ import { useI18n, type DictKey } from "@/i18n";
 import { companyForPortal } from "@/cloud/portal";
 import { invoiceChip } from "@/features/ContractStatement";
 import { invoiceNext } from "@/features/invoice/invoiceNext";
-import { invoiceHtml, invoiceMessage } from "@/features/docPdf";
+import { invoiceHtml, invoiceMessage, invoicePageToken, paymentHow } from "@/features/docPdf";
 import { docLanguageFor } from "@/data/people";
 import { saveEstimatePdf } from "@/features/estimatePdf";
 import { Labeled, MoneyField } from "@/features/fields";
-import { openEmail, openSms } from "@/features/sendEstimate";
+import { clientLink, openEmail, openSms } from "@/features/sendEstimate";
 import { invoiceBalance } from "@/features/invoiceStatus";
 import { reminderMessage, remindersOf } from "@/features/invoiceRemind";
 import { DOC_LANG_LABEL } from "@/i18n/translate";
@@ -71,9 +72,25 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
   // one word of status in the list and on the card (#1495): the one source of truth is `invoiceChip`
   const chipLabel = t(chip.l, chip.p);
   const company = companyForPortal(db, store.companyName ?? APP_NAME);
-  const msg = () => invoiceMessage(db, inv, company, docLanguageFor(db, { customerId: inv.customerId }));
+  // #2017: the client sees and pays the invoice on the page of the job's signed estimate (none without an estimate: #2082)
+  const pageToken = invoicePageToken(db, inv);
+  const link = pageToken ? clientLink(pageToken) : undefined;
+  const msg = () => invoiceMessage(db, inv, company, docLanguageFor(db, { customerId: inv.customerId }), link);
   const lang = docLanguageFor(db, { customerId: inv.customerId });
-  const reminder = () => reminderMessage(db, inv, company.name, lang);
+  const reminder = () => reminderMessage(db, inv, company.name, lang, Date.now(), link);
+  // #2017: no Zelle / «checks payable to» — the message says nothing of how to pay; the office is told before it sends
+  // only the office is told (it sends the messages); only the director can fill the methods in (the screen is read-only to others)
+  const noHow = balance > 0 && !paymentHow(db, t) && canOpen(store.role, "/company/documents");
+  const howHint = (inSheet: boolean) => noHow ? (
+    <View testID={inSheet ? "remind-no-how" : "invoice-no-how"} style={{ gap: space[2] }}>
+      <StatusNote tone="warn">{t("invMsg.noHow")}</StatusNote>
+      {store.role === "director" ? (
+        <View testID={inSheet ? "remind-fill-how" : "invoice-fill-how"}>
+          <Button label={t("invMsg.fill")} icon="wallet" variant="secondary" size="sm" onPress={() => { if (inSheet) setRemind(false); router.push("/company/documents"); }} />
+        </View>
+      ) : null}
+    </View>
+  ) : null;
   const lastReminder = remindersOf(db, inv.id)[0];
   /** S20: open the phone's SMS / mail with the text in the client's language, and log it in the client's feed (undo 5 s) */
   const sendReminder = (channel: "sms" | "email") => {
@@ -178,6 +195,7 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
           {inv.sentAt ? ` · ${t("inv.sentOn", { date: day(inv.sentAt) })}` : ""}
           {lastReminder ? ` · ${t("mny.remind.last", { date: day(lastReminder.at) })}` : ""}
         </T>
+        {howHint(false)}
       </Card>
 
       {inline && (payButton(false) || remindButton(false)) ? (
@@ -216,8 +234,9 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
         <View style={{ gap: space[3] }}>
           <T v="caption" tone="mut">{t("mny.remind.lang", { lang: DOC_LANG_LABEL[lang] })}</T>
           <Card>
-            <T v="body">{reminder().text}</T>
+            <View testID="remind-text"><T v="body">{reminder().text}</T></View>
           </Card>
+          {howHint(true)}
           {cust?.phone ? <Button label={t("mny.remind.sms")} icon="sms" full onPress={() => sendReminder("sms")} /> : null}
           {cust?.email ? <Button label={t("mny.remind.email")} icon="mail" variant={cust?.phone ? "secondary" : "primary"} full onPress={() => sendReminder("email")} /> : null}
         </View>

@@ -20,11 +20,18 @@ on:
     - cron: '17 10 * * *'
   workflow_dispatch:
 
-# A new push to a PR stops the run of its older version (saves GitHub minutes). Pushes to main are never cancelled:
-# each gets its own group (run_id).
+# A new push to a PR stops the run of its older version (saves GitHub minutes). #2192: a new push to main stops the
+# older push run of main too (group checks-main): the queue held 26 full push runs. Nothing is lost — release.yml
+# releases the newest green commit of main, which carries every change before it (its gate: a cancelled run is «no
+# release», and «a newer app commit on main releases itself»); the release counts no Checks runs (no build number from
+# them). The nightly and a manual run each keep their own group (run_id) and are never cancelled.
+# no secret of the repository is used here; jobs that need more declare their own rights
+permissions:
+  contents: read
+
 concurrency:
-  group: checks-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: checks-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.event_name == 'push' && 'main' || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 jobs:
   # Pipeline pause (#1087, rule 26): while a task labelled «остановка» is open, a pull request without the label «починка» stops
@@ -40,6 +47,8 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: No open stop (or the PR is a fix)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -60,6 +69,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - id: diff
         name: App files changed?
         run: |
@@ -99,6 +109,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -156,6 +168,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -194,6 +208,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -222,6 +238,8 @@ jobs:
         part: [1, 2]
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -270,6 +288,8 @@ jobs:
       issues: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: PR refers to a до-1.0 task in an epic
         env:
           GH_TOKEN: ${{ github.token }}
