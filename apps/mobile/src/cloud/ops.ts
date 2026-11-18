@@ -1071,7 +1071,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         supabase.from("properties").upsert(
           {
             id: p.id, company_id: c, customer_id: p.customerId, address_line1: p.address || "—", address_unit: p.unit ?? null,
-            address_city: place.city || "—", address_state: place.state || "", // #2065: the store fills the company's state; never a guessed «CA» (the column is NOT NULL) address_zip: place.zip || null,
+            // #2065: the store fills the company's state; never a guessed «CA» (the column is NOT NULL)
+            address_city: place.city || "—", address_state: place.state || "", address_zip: place.zip || null,
             label: p.label ?? null, kind: p.kind ?? null, access_notes: p.accessNotes ?? null, contact_ids: p.contactIds ?? [], stories: p.stories || 1,
           },
           { onConflict: "id" },

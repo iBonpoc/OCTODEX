@@ -8,7 +8,6 @@ import { Linking, View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import { companyState } from "@/features/companySetup";
 import type { ContactWay, Lead, LostReason, Person, Task, Timeframe } from "@/data/types";
 import { peopleForLead } from "@/data/people";
 import { PeopleEditSheet } from "@/features/client/ClientSheets";
@@ -274,7 +273,7 @@ function AddressSheet({ l, visible, onClose }: { l: Lead; visible: boolean; onCl
   const store = useStore();
   const { t } = useI18n();
   const saved = useSaved();
-  const [d, setD] = useState({ address: l.address ?? "", city: l.city, state: l.state ?? companyState(store.db.company), zip: l.zip ?? "" });
+  const [d, setD] = useState({ address: l.address ?? "", city: l.city, state: l.state ?? "CA", zip: l.zip ?? "" });
   const set = (p: Partial<typeof d>) => setD((x) => ({ ...x, ...p }));
   const [d0] = useState(d);
   const save = () => {
@@ -291,7 +290,7 @@ function AddressSheet({ l, visible, onClose }: { l: Lead; visible: boolean; onCl
       </Labeled>
       <RowView>
         <Labeled label={t("co.state")}>
-          <TextField type="state" value={d.state} onChangeText={(v) => set({ state: v })} placeholder={companyState(store.db.company) || t("co.state")} />
+          <TextField type="state" value={d.state} onChangeText={(v) => set({ state: v })} placeholder="CA" />
         </Labeled>
         <Labeled label="ZIP">
           <TextField type="zip" value={d.zip} onChangeText={(v) => set({ zip: v })} placeholder="91103" />
