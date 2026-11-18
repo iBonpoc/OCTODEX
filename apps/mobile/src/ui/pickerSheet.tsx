@@ -31,6 +31,7 @@ export function PickerSheet<K extends string>({
   onSelect,
   onClose,
   onExited,
+  onCreate,
   testID = "picker-sheet",
 }: {
   visible: boolean;
@@ -41,6 +42,9 @@ export function PickerSheet<K extends string>({
   onClose: () => void;
   /** the sheet is gone (what the pick opens next — a row, a field — takes its focus only now, DS Б1) */
   onExited?: () => void;
+  /** a value typed in the search becomes the choice (DS А3 «＋ Создать „…“»): a row on top while the search is not one of
+   * the items; the caller decides what it is (a free text, a new object) — the sheet creates nothing itself */
+  onCreate?: (text: string) => void;
   testID?: string;
 }) {
   const { c } = useTheme();
@@ -62,6 +66,26 @@ export function PickerSheet<K extends string>({
     setQ("");
     onClose();
   };
+  const typed = q.trim();
+  const canCreate = !!onCreate && !!typed && !items.some((i) => i.label.trim().toLowerCase() === typed.toLowerCase());
+  const create = canCreate ? (
+    <Card>
+      <View testID={`${testID}-create`}>
+        <ListRow
+          title={t("ui.picker.create", { q: typed })}
+          left={<Icon name="plus" color={c.ink} />}
+          chevron={false}
+          minHeight={component.rowOption}
+          lines={2}
+          onPress={() => {
+            setQ("");
+            onCreate!(typed);
+            onClose();
+          }}
+        />
+      </View>
+    </Card>
+  ) : null;
   return (
     // Esc: the first press clears the search, the second closes (DS А3)
     <Sheet visible={visible} onClose={close} onExited={onExited} title={title} height="large" onEscape={() => (qNow.current ? (change(""), true) : Date.now() - clearedAt.current < ESC_AFTER_CLEAR_MS)}>
@@ -69,6 +93,7 @@ export function PickerSheet<K extends string>({
         <View testID={`${testID}-search`} accessibilityRole="search">
           <TextField type="search" icon="search" value={q} onChangeText={change} placeholder={t("ui.picker.search")} label={t("ui.picker.search")} />
         </View>
+        {create}
         {found.length === 0 ? (
           <View testID={`${testID}-empty`} accessibilityLiveRegion="polite">
             <T v="body" tone="mut">
