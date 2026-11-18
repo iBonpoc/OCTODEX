@@ -9,6 +9,7 @@
  */
 import { APP_NAME } from "@/config/product";
 import { findJob } from "@/data/jobs";
+import { contractInvoices } from "@/features/contractKind";
 import { print as P, type PrintStyleName } from "@octo/design-tokens";
 import { contractStatement, invoiceOwes } from "@octo/estimating-engine";
 import { licenseLine, type PortalData } from "@/cloud/portal";
@@ -141,7 +142,9 @@ export function invoiceHtml(db: DB, inv: Invoice, company: PortalData["company"]
   const job = findJob(db, inv.jobId);
   const prop = db.properties.find((p) => p.id === job?.propertyId);
   const pays = db.payments.filter((p) => p.invoiceId === inv.id);
-  const jobInvoices = db.invoices.filter((i) => i.jobId === inv.jobId);
+  // #2061: the contract's own invoices — a final «less» lists only them (a standalone one is extra work, not a part paid
+  // of this contract), as the server's app.job_contract_billed
+  const jobInvoices = inv.jobId ? contractInvoices(db, inv.jobId) : [];
   const st = job ? contractStatement(job.amountCents, jobInvoices) : null;
   const prior = jobInvoices.filter((i) => i.id !== inv.id && (i.sentAt ?? "") <= (inv.sentAt ?? "~"));
   const body = `
