@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { FieldBinding } from "./requiredForm";
+import { useFieldScroll, type FieldBinding } from "./requiredForm";
 import { View } from "react-native";
 import { component, radius, size, space } from "@octo/design-tokens";
 import { Platform } from "react-native";
@@ -74,6 +74,7 @@ export function SelectField<K extends string>({
     opener.current = null;
     if (Platform.OS === "web" && el && typeof el.focus === "function") requestAnimationFrame(() => el.isConnected && el.focus());
   };
+  useFieldScroll(field);
   const open = () => (onOpen ? onOpen() : long ? openPicker() : ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h })));
   return (
     <View ref={field?.anchorRef} collapsable={false} style={{ gap: space[1] }} testID={testID ?? field?.testID}>
