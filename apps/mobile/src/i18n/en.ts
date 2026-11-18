@@ -4597,4 +4597,6 @@ export const en: Dict = {
   "ds.crash.hint": "Drawn by the root ErrorBoundary when the app itself fails (§13): no raw error text, “Retry” draws the screen again, “Restart” reloads the app. Outside the app's theme and language: it takes the system's.",
   // «Портал: предпросмотр клиента»: the office's «open as client» only shows
   "portalPreview.sign": "This is what the client will see. Only the client can sign and pay, by their own link.",
+  // #2016: a property of a client this role does not see
+  "propGuard.noAccess": "You don't have access to this property",
 };

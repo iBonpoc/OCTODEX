@@ -16,7 +16,7 @@ import { PropertySection, propertyRowLabel, RowCount } from "@/features/client/P
 import { AddObject } from "@/features/client/AddObject";
 import { AccessSheet, PropertySheet } from "@/features/client/PropertySheets";
 import { jobStatusView } from "@/features/jobs";
-import { canServe } from "@/features/clients";
+import { canServe, visibleClients } from "@/features/clients";
 import { Button, IconButton, StatusChip } from "@/ui/controls";
 import { ActionTile } from "@/features/ActionTile";
 import { useDevice } from "@/theme/ThemeProvider";
@@ -58,6 +58,15 @@ export default function PropertyScreen() {
     return (
       <Screen title={t("prop.card")} back={back}>
         <Empty icon="home2" title={t("client.empty.properties")} />
+      </Screen>
+    );
+  // #2016: the same rule as the client's card — a property of a client this role does not see is closed
+  if (!visibleClients(db, role).some((x) => x.id === p.customerId))
+    return (
+      <Screen title={t("prop.card")} back={back}>
+        <View testID="property-no-access">
+          <Empty icon="home2" title={t("propGuard.noAccess")} />
+        </View>
       </Screen>
     );
   const c = db.customers.find((x) => x.id === p.customerId);

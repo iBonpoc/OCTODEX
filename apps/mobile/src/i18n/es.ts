@@ -4597,4 +4597,6 @@ export const es: Dict = {
   "ds.crash.hint": "La dibuja el ErrorBoundary de la raíz cuando la app misma falla (§13): sin texto de error crudo, «Reintentar» dibuja la pantalla otra vez, «Reiniciar» recarga la app. Fuera del tema y del idioma de la app: toma los del sistema.",
   // «Портал: предпросмотр клиента»: the office's «open as client» only shows
   "portalPreview.sign": "Así lo verá el cliente. Solo el cliente puede firmar y pagar, con su propio enlace.",
+  // #2016: a property of a client this role does not see
+  "propGuard.noAccess": "No tienes acceso a esta propiedad",
 };
