@@ -4638,6 +4638,8 @@ export const ru = {
   "ds.crash.hint": "Его рисует ErrorBoundary корня, когда приложение само упало (§13): без сырого текста ошибки, «Повторить» рисует экран заново, «Перезапустить» перезагружает приложение. Вне тем и языка приложения: берёт тему и язык системы.",
   // «Портал: предпросмотр клиента»: the office's «open as client» only shows
   "portalPreview.sign": "Так увидит клиент. Подписать и оплатить может только клиент по своей ссылке.",
+  // #2016: a property of a client this role does not see
+  "propGuard.noAccess": "Нет доступа к этому объекту",
   // #2017: the invoice message — no «How to pay: —», the client page link
   "invMsg.sendNoHow": "{company}: счёт {number} на {amount}, оплатить до {date}.",
   "invMsg.dueNoHow": "{company}: напоминаем о счёте {number} — остаток {amount}, оплатить до {date}.",
