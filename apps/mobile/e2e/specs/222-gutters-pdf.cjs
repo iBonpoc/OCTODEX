@@ -97,6 +97,8 @@ exports.run = async (h) => {
   h.expect(!c.includes("At the face") && !c.includes("По лицевой"), "no cut for the client");
 
   // for the crew
+  // the web has no «Отправить» beside «Открыть» (#2157: the browser's print preview saves the file itself; a phone shows it)
+  h.expect((await p.locator('[data-testid$="-send"][data-testid^="view-pdf-"]').count()) === 0, "the web: no «Отправить» icon in «Документы»");
   const w = await printVia("view-pdf-crew", "crew");
   h.expect(w.includes("Раскрой для бригады"), "the crew's PDF in the app's language");
   h.expect(w.includes("По стене") && w.includes("По лицевой"), "along the wall and along the face");

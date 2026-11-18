@@ -37,3 +37,18 @@ describe("unit:pdfOpenPreview — «Открыть» shows, «Отправить
     expect(calls).toEqual(["file", "share"]);
   });
 });
+
+describe("unit:pdfOpenPreview — the web: «Открыть» is the browser's print preview, as before", () => {
+  it("openPdfPreview on the web goes through saveEstimatePdf (no printAsync)", async () => {
+    vi.resetModules();
+    vi.doMock("react-native", () => ({ Platform: { OS: "web" }, Linking: {}, Share: {} }));
+    const writes: string[] = [];
+    const frame = { style: {}, contentWindow: { document: { open: () => {}, write: (h: string) => writes.push(h), close: () => {}, title: "" }, focus: () => {}, print: () => {} }, remove: () => {} };
+    (globalThis as unknown as { document: unknown }).document = { createElement: () => frame, body: { appendChild: () => {} } };
+    const { openPdfPreview } = await import("../src/features/estimatePdf");
+    await openPdfPreview("<p>web</p>", "Doc");
+    expect(writes).toEqual(["<p>web</p>"]);
+    expect(calls).toEqual([]);
+    vi.doUnmock("react-native");
+  });
+});
