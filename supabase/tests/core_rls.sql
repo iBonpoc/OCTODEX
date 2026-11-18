@@ -16866,6 +16866,9 @@ insert into public.properties (id, company_id, customer_id, address_line1, addre
 insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
   ('39300000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'T393 job', '39300000-0000-4000-8000-0000000000c1', '39300000-0000-4000-8000-0000000000d1', 'draft'),
   ('39300000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'T397 job', '39300000-0000-4000-8000-0000000000c1', '39300000-0000-4000-8000-0000000000d1', 'draft');
+insert into public.leads (id, company_id, source_id, contact_name, phone)
+  select '39300000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', id, 'T394 Lead', '(818) 555-0394'
+    from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' order by created_at limit 1;
 -- an install visit the office made (sales must not change it)
 insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values
   ('39300000-0000-4000-8000-0000000000f9', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000e1', 'install', now() + interval '2 days', now() + interval '2 days 3 hours');
@@ -16880,6 +16883,11 @@ select tst.fails_like($q$insert into public.visits (id, company_id, job_id, kind
 insert into public.visits (id, company_id, property_id, kind, starts_at, ends_at) values
   ('39300000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000d1', 'inspection', now() + interval '1 day', now() + interval '1 day 1 hour');
 update public.visits set starts_at = now() + interval '3 days', ends_at = now() + interval '3 days 1 hour' where id = '39300000-0000-4000-8000-0000000000f2';
+-- T394: the app's own path for sales (ops.ts lead.visit): a visit of the lead at its property, no job; the lead moves on
+insert into public.visits (id, company_id, lead_id, property_id, kind, starts_at, ends_at, scope) values
+  ('39300000-0000-4000-8000-0000000000f5', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000a1', '39300000-0000-4000-8000-0000000000d1', 'inspection',
+   now() + interval '2 days', now() + interval '2 days 45 minutes', '{}');
+update public.leads set status = 'inspection_scheduled', property_id = '39300000-0000-4000-8000-0000000000d1' where id = '39300000-0000-4000-8000-0000000000a1';
 -- T395: sales — an inspection turned into an install, or the office's install moved: refused / not reached
 select tst.fails_like($q$update public.visits set kind = 'install', job_id = '39300000-0000-4000-8000-0000000000e1', property_id = null where id = '39300000-0000-4000-8000-0000000000f2'$q$, '%sales change only an inspection%',
   'T395 sales: an inspection does not become an install');
@@ -16896,6 +16904,9 @@ select tst.fails_like($q$update public.jobs set status = 'scheduled' where id = 
 select tst.ok(not exists (select 1 from public.visits where id = '39300000-0000-4000-8000-0000000000f1'), 'T393 …no install visit written');
 select tst.ok((select kind = 'inspection' and starts_at > now() + interval '2 days' from public.visits where id = '39300000-0000-4000-8000-0000000000f2'), 'T394 sales: the inspection is booked and moved');
 select tst.ok((select kind = 'inspection' from public.visits where id = '39300000-0000-4000-8000-0000000000f2'), 'T395 …still an inspection');
+select tst.ok((select kind = 'inspection' and job_id is null and lead_id = '39300000-0000-4000-8000-0000000000a1' from public.visits where id = '39300000-0000-4000-8000-0000000000f5')
+          and (select status from public.leads where id = '39300000-0000-4000-8000-0000000000a1') = 'inspection_scheduled',
+  'T394 sales book an inspection of a lead the way the app does (lead.visit)');
 select tst.ok((select kind = 'install' and deleted_at is null and starts_at < now() + interval '3 days' from public.visits where id = '39300000-0000-4000-8000-0000000000f9'),
   'T395 sales: the office''s install visit is not moved, turned or dropped');
 select tst.ok(not exists (select 1 from public.visits where id = '39300000-0000-4000-8000-0000000000f4'), 'T393 …no inspection on a job written');
