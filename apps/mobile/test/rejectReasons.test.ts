@@ -43,6 +43,7 @@ describe("unit:rejectReasons — a refusal we can explain", () => {
       job_invoice_open: "job.cancel.rej.invoiceOpen",
       job_visit_on_site: "job.cancel.rej.onSite",
       job_done: "job.cancel.rej.done",
+      job_restore_no_service: "job.restore.rej.noService",
       // #1913: a price group has at most 200 items (migration 20261117210000, db T362)
       price_group_full: "price.group.rejFull",
     });

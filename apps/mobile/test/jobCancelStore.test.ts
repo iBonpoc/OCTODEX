@@ -55,7 +55,7 @@ import { StoreProvider } from "../src/data/store";
 import { makeSeed } from "../src/data/seed";
 import type { DB } from "../src/data/types";
 
-type Value = { db: DB; mode: string; role: string; cancelJob: (id: string, reason: string) => string | null };
+type Value = { db: DB; mode: string; role: string; cancelJob: (id: string, reason: string) => string | null; restoreJob: (id: string) => string | null };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: Value } }).props.value;
 let root: Root<P> | null = null;
@@ -144,5 +144,26 @@ describe("unit:jobCancelStore — #2015", () => {
     expect(after.cancelledVisits!.find((v) => v.id === "v-open")).toMatchObject({ cancelReason: "we_cancelled" });
     expect(after.visits.some((v) => v.id === "v-done")).toBe(true);
     expect(after.estimates).toEqual(before.estimates);
+  });
+  it("С5 (#2050). ДАНО отменённая работа. КОГДА «Вернуть». ТОГДА она в jobs «ждёт даты», без причины и времени; выезд и счёт не оживают; повтор — «gone»", async () => {
+    const r = await open((d) => ({ ...d, invoices: d.invoices.filter((i) => i.jobId !== d.jobs[0]!.id) }));
+    const id = valueOf(r).db.jobs[0]!.id;
+    expect(valueOf(r).cancelJob(id, "Client left")).toBeNull();
+    await settle();
+    const cancelled = valueOf(r).db;
+    expect(cancelled.jobs.some((j) => j.id === id)).toBe(false);
+    expect(valueOf(r).restoreJob(id)).toBeNull();
+    await settle();
+    const back = valueOf(r).db;
+    const job = back.jobs.find((j) => j.id === id)!;
+    expect(job).toBeTruthy();
+    expect(job.status).toBe("unscheduled");
+    expect(job.cancelReason).toBeUndefined();
+    expect(job.cancelledAt).toBeUndefined();
+    expect((back.cancelledJobs ?? []).some((j) => j.id === id)).toBe(false);
+    // what went with the cancel stays as it was
+    expect(back.cancelledVisits).toEqual(cancelled.cancelledVisits);
+    expect(back.voidInvoices).toEqual(cancelled.voidInvoices);
+    expect(valueOf(r).restoreJob(id)).toBe("gone");
   });
 });

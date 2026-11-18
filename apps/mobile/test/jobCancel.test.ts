@@ -3,7 +3,7 @@
  * app.job_cancel_reason, db T383–T390): the phone tells at once, the server judges.
  */
 import { describe, expect, it } from "vitest";
-import { jobCancelRefusal } from "../src/features/jobCancel";
+import { jobCancelRefusal, jobRestoreRefusal } from "../src/features/jobCancel";
 import type { DB, Invoice, Job, Visit } from "../src/data/types";
 
 const job = (p: Partial<Job> = {}): Job => ({ id: "j1", propertyId: "p1", title: "Roof", status: "scheduled", amountCents: 1000, ...p });
@@ -38,5 +38,25 @@ describe("unit:jobCancel — #2015", () => {
     expect(jobCancelRefusal(db(), "j1", "x".repeat(500), "director")).toBeNull();
     expect(jobCancelRefusal(db(), "j1", "x".repeat(501), "director")).toBe("long");
     expect(jobCancelRefusal(db(), "nope", "x", "director")).toBe("gone");
+  });
+});
+
+describe("unit:jobRestore — #2050 (spec 38 §12.1)", () => {
+  const cdb = (status?: string) => ({
+    cancelledJobs: [job({ cancelReason: "x" })],
+    customers: [{ id: "c1", status: status ?? "active" }] as never,
+    properties: [{ id: "p1", customerId: "c1" }] as never,
+  });
+  it("С2. the director and the dispatcher may; sales and tech never", () => {
+    expect(jobRestoreRefusal(cdb(), "j1", "director")).toBeNull();
+    expect(jobRestoreRefusal(cdb(), "j1", "dispatcher")).toBeNull();
+    expect(jobRestoreRefusal(cdb(), "j1", "sales")).toBe("role");
+    expect(jobRestoreRefusal(cdb(), "j1", "tech")).toBe("role");
+  });
+  it("С2. a job that is not among the cancelled is «gone» (a live one: nothing to bring back)", () => {
+    expect(jobRestoreRefusal(cdb(), "nope", "director")).toBe("gone");
+  });
+  it("С4. a client «do not service»: refused, as the server (job_restore_no_service)", () => {
+    expect(jobRestoreRefusal(cdb("do_not_service"), "j1", "director")).toBe("noService");
   });
 });

@@ -54,7 +54,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { backoffMs, classify, isAccessDenied, isModuleInactive, isUnknownOp, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, liveOf, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
-import { jobCancelRefusal, type JobCancelRefusal } from "@/features/jobCancel";
+import { jobCancelRefusal, jobRestoreRefusal, type JobCancelRefusal, type JobRestoreRefusal } from "@/features/jobCancel";
 import { dropGroupPriceOps, dropModuleOps, dropSettingsOps, dropTemplateOps, groupPriceRejected, templateRejected, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
 import type { DictKey } from "@/i18n";
 import { onAppActive, onAppLeave } from "./appActive";
@@ -421,6 +421,10 @@ interface StoreCtx {
    *  its unpaid invoices voided with it; it moves to cancelledJobs with the reason. No «Отменить» (the server never lets it back).
    *  null — done; else why not (the screen says). Server: public.cancel_job (db T383–T390). */
   cancelJob: (id: ID, reason: string) => JobCancelRefusal | null;
+  /** #2050 (spec 38 §12.1): bring a cancelled job back — the same job, waiting for a date (the server brings it to the status before
+   *  the cancel and the next read corrects it); its cancelled visits and voided invoices stay. null — done; else why not.
+   *  Server: public.restore_job (db T403–T406). */
+  restoreJob: (id: ID) => JobRestoreRefusal | null;
   /** #1304 (docs/specs/40 §6): the Terms a new estimate starts with — the company's default in the client's language */
   estimateTerms: (at: TermsFor) => { text: string; lang: DocLang };
   /** #1304: the client of a draft changed — the untouched default follows the new client's language, an edited text stays */
@@ -2315,6 +2319,25 @@ export function StoreProvider({
             };
           },
           { k: "job.cancel", jobId: id, reason: why },
+        );
+        return null;
+      },
+      restoreJob: (id) => {
+        const refusal = jobRestoreRefusal(dbRef.current, id, role);
+        if (refusal) return refusal;
+        mutate(
+          "job.restore",
+          (d) => {
+            const job = (d.cancelledJobs ?? []).find((x) => x.id === id);
+            if (!job) return d;
+            const { cancelReason: _r, cancelledAt: _a, ...live } = job;
+            return {
+              ...d,
+              cancelledJobs: (d.cancelledJobs ?? []).filter((x) => x.id !== id),
+              jobs: [...d.jobs.filter((x) => x.id !== id), { ...live, status: "unscheduled" }],
+            };
+          },
+          { k: "job.restore", jobId: id },
         );
         return null;
       },

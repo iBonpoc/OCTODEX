@@ -4043,7 +4043,7 @@ begin
                         'accept_invitation(text)', 'accept_legal(jsonb,text,text)',
                         'accept_on_site(uuid,uuid,uuid[],text,text,boolean,uuid,uuid)',
                         'accept_on_site(uuid,uuid,uuid[],text,text,boolean,uuid,uuid,bigint)', 'advance_apply(uuid,uuid)',
-                        'assign_visit(uuid,uuid[])', 'cancel_job(uuid,text)', 'cancel_visit(uuid,text,text)', 'company_location_sharing(uuid)', 'complete_job(uuid)',
+                        'assign_visit(uuid,uuid[])', 'cancel_job(uuid,text)', 'cancel_visit(uuid,text,text)', 'company_location_sharing(uuid)', 'complete_job(uuid)', 'restore_job(uuid)',
                         'countersign_estimate(uuid,text,uuid,uuid,uuid)', 'create_job(uuid,uuid,uuid,text,text,uuid,uuid)',
                         'decline_countersign(uuid,text)', 'delete_account(text,uuid[])', 'estimate_link(uuid)', 'estimate_links(uuid)',
                         'forget_push_device(text)', 'import_customers(uuid,jsonb)', 'import_customers_finish(uuid)',
@@ -16963,5 +16963,141 @@ select tst.ok((select paid_cents = 0 from public.invoices where id = '39200000-0
 select tst.ok((public.cancel_job('39200000-0000-4000-8000-000000000001', 'Refunded, client left')) ->> 'invoices' = '1', 'T392 refunded in full: the job is cancelled and its invoice voided');
 :as_super
 select tst.ok((select status = 'void' from public.invoices where id = '39200000-0000-4000-8000-0000000000b1') and (select status = 'cancelled' from public.jobs where id = '39200000-0000-4000-8000-000000000001'), 'T392 the invoice void, the job cancelled');
+
+-- ---------------------------------------------------------------- T403–T406 (#2050, spec 38 §12.1): restore a cancelled job — public.restore_job
+\echo 'T403 restore a job ok'
+:as_super
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('40300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T403 waiting', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('40300000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T403 in progress', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('40300000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T403 with visit and invoice', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+update public.jobs set status = 'scheduled' where id = '40300000-0000-4000-8000-000000000002';
+update public.jobs set status = 'in_progress' where id = '40300000-0000-4000-8000-000000000002';
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('40300000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', '40300000-0000-4000-8000-000000000003', now() + interval '2 days');
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('40300000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '40300000-0000-4000-8000-000000000003', 'final', 4000);
+update public.invoices set status = 'sent', sent_at = now() where id = '40300000-0000-4000-8000-0000000000b3';
+:as_owner_a
+select public.cancel_job('40300000-0000-4000-8000-000000000001', 'T403 one');
+select public.cancel_job('40300000-0000-4000-8000-000000000002', 'T403 two');
+select public.cancel_job('40300000-0000-4000-8000-000000000003', 'T403 three');
+-- С1: a job that waited for a date comes back waiting; a job in progress — in progress
+select tst.ok((public.restore_job('40300000-0000-4000-8000-000000000001')) = jsonb_build_object('status', 'draft', 'repeat', false), 'T403 С1 a waiting job comes back as draft');
+select tst.ok((public.restore_job('40300000-0000-4000-8000-000000000002')) = jsonb_build_object('status', 'in_progress', 'repeat', false), 'T403 С1 a job in progress comes back in progress');
+select tst.ok((public.restore_job('40300000-0000-4000-8000-000000000003')) ->> 'status' = 'draft', 'T403 С1 a job whose visits were cancelled comes back waiting for a date');
+:as_super
+select tst.ok((select count(*) = 3 from public.jobs where id::text like '40300000-0000-4000-8000-00000000000%' and cancel_reason is null and cancelled_at is null and status <> 'cancelled'),
+  'T403 С1 reason and time are cleared, none is cancelled');
+select tst.ok(exists (select 1 from public.status_events where entity_type = 'job' and entity_id = '40300000-0000-4000-8000-000000000001' and from_status = 'cancelled' and to_status = 'draft' and reason = 'job_restored'),
+  'T403 С1 the journal has the way back');
+select tst.ok((select status = 'cancelled' from public.visits where id = '40300000-0000-4000-8000-0000000000a3')
+              and (select status = 'void' from public.invoices where id = '40300000-0000-4000-8000-0000000000b3'),
+  'T403 С1 the cancelled visit and the voided invoice do not come back');
+
+\echo 'T404 who restores ok'
+-- С2: the office restores; sales, the tech, another company, a job that is gone, a deleted job — one answer; a live job — repeat
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('40400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T404 office', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('40400000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T404 deleted', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+:as_owner_a
+select public.cancel_job('40400000-0000-4000-8000-000000000001', 'T404 cancelled');
+:as_office_a
+select tst.ok((public.restore_job('40400000-0000-4000-8000-000000000001')) ->> 'status' = 'draft', 'T404 С2 the office restores');
+:as_owner_a
+select public.cancel_job('40400000-0000-4000-8000-000000000001', 'T404 again');
+:as_sales_a
+select tst.fails_like($q$select public.restore_job('40400000-0000-4000-8000-000000000001')$q$, '%only the office%', 'T404 С2 sales does not restore');
+:as_tech_a
+select tst.fails_like($q$select public.restore_job('40400000-0000-4000-8000-000000000001')$q$, '%only the office%', 'T404 С2 the tech does not');
+:as_owner_b
+select tst.fails_like($q$select public.restore_job('40400000-0000-4000-8000-000000000001')$q$, '%only the office%', 'T404 С2 another company: the same answer');
+select tst.fails_like($q$select public.restore_job('40400000-0000-4000-8000-0000000000ff')$q$, '%only the office%', 'T404 С2 no such job: the same answer (no oracle)');
+:as_super
+update public.jobs set deleted_at = now() where id = '40400000-0000-4000-8000-000000000002';
+:as_owner_a
+select tst.fails_like($q$select public.restore_job('40400000-0000-4000-8000-000000000002')$q$, '%only the office%', 'T404 С2 a deleted job: the same answer');
+select public.restore_job('40400000-0000-4000-8000-000000000001');
+select tst.ok((public.restore_job('40400000-0000-4000-8000-000000000001')) = jsonb_build_object('status', 'draft', 'repeat', true), 'T404 С2 a live job: repeat, nothing changes');
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+
+\echo 'T405 money works again ok'
+-- С3: after the restore a payment on its visit and a new invoice go through (t07 is shut for a cancelled job only); it can be cancelled again
+:as_super
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('40500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T405 money', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+:as_owner_a
+select public.cancel_job('40500000-0000-4000-8000-000000000001', 'T405 cancelled');
+:as_super
+select tst.fails_like($q$insert into public.invoices (company_id, customer_id, job_id, kind, total_cents)
+  values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '40500000-0000-4000-8000-000000000001', 'final', 100)$q$, 'job:cancelled%', 'T405 С3 a cancelled job takes no invoice');
+:as_owner_a
+select public.restore_job('40500000-0000-4000-8000-000000000001');
+:as_super
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents)
+values ('40500000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '40500000-0000-4000-8000-000000000001', 'final', 100);
+select tst.ok(exists (select 1 from public.invoices where id = '40500000-0000-4000-8000-0000000000b1'), 'T405 С3 after the restore a new invoice goes through');
+update public.invoices set status = 'void', void_reason = 'T405' where id = '40500000-0000-4000-8000-0000000000b1';
+:as_owner_a
+select tst.ok((public.cancel_job('40500000-0000-4000-8000-000000000001', 'T405 again')) ->> 'status' = 'cancelled', 'T405 С3 and it can be cancelled again with a new reason');
+:as_super
+
+\echo 'T406 the guard, do not service, the last cancel ok'
+-- С4: a direct update out of «cancelled» is refused (red before the guard learned it); do-not-service; the last cancel wins; scheduled with an open visit
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('40600000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T406 guard', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('40600000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T406 old phone', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+:as_owner_a
+select public.cancel_job('40600000-0000-4000-8000-000000000001', 'T406 one');
+select tst.fails_like($q$update public.jobs set status = 'draft' where id = '40600000-0000-4000-8000-000000000001'$q$, 'job:restoreOnlyByFunction%', 'T406 С4 a phone does not bring a job back by a direct update');
+:as_super
+select tst.ok((select status = 'cancelled' from public.jobs where id = '40600000-0000-4000-8000-000000000001'), 'T406 С4 the job stays cancelled');
+-- the last cancel wins: waiting → cancel → restore → in progress → cancel → restore = in progress
+select set_config('app.status_reason', '', false);
+update public.jobs set status = 'scheduled' where id = '40600000-0000-4000-8000-000000000002';
+update public.jobs set status = 'in_progress' where id = '40600000-0000-4000-8000-000000000002';
+:as_owner_a
+select public.cancel_job('40600000-0000-4000-8000-000000000002', 'T406 two');
+select public.restore_job('40600000-0000-4000-8000-000000000002');
+select tst.ok((public.restore_job('40600000-0000-4000-8000-000000000002')) ->> 'repeat' = 'true', 'T406 С4 restored once');
+select public.cancel_job('40600000-0000-4000-8000-000000000002', 'T406 three');
+select tst.ok((public.restore_job('40600000-0000-4000-8000-000000000002')) ->> 'status' = 'in_progress', 'T406 С4 the last cancel decides: in progress');
+-- an old phone cancelled by a direct update with its visit still open (scheduled → cancelled): the job comes back scheduled, not draft
+:as_super
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('40600000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T406 open visit', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('40600000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', '40600000-0000-4000-8000-000000000003', now() + interval '3 days');
+update public.jobs set status = 'scheduled' where id = '40600000-0000-4000-8000-000000000003';
+update public.jobs set status = 'cancelled' where id = '40600000-0000-4000-8000-000000000003';
+:as_owner_a
+select tst.ok((public.restore_job('40600000-0000-4000-8000-000000000003')) ->> 'status' = 'scheduled', 'T406 С4 an open visit and from scheduled: back as scheduled (S9a)');
+-- a client who is «do not service»
+:as_super
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('40600000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'T406 no service', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+:as_owner_a
+select public.cancel_job('40600000-0000-4000-8000-000000000004', 'T406 four');
+:as_super
+select status as t406_cs from public.customers where id = 'c1a00000-0000-0000-0000-000000000002' \gset
+update public.customers set status = 'do_not_service', do_not_service_reason = 'T406' where id = 'c1a00000-0000-0000-0000-000000000002';
+:as_owner_a
+select tst.fails_like($q$select public.restore_job('40600000-0000-4000-8000-000000000004')$q$, 'job:noService%', 'T406 С4 a «do not service» client: the job is not brought back');
+:as_super
+update public.customers set status = :'t406_cs', do_not_service_reason = null where id = 'c1a00000-0000-0000-0000-000000000002';
+select tst.ok((select status = 'cancelled' from public.jobs where id = '40600000-0000-4000-8000-000000000004'), 'T406 С4 it stays cancelled');
+-- rights and the order of locks
+select tst.ok(not has_function_privilege('anon', 'public.restore_job(uuid)', 'EXECUTE')
+          and not has_function_privilege('public', 'public.restore_job(uuid)', 'EXECUTE')
+          and has_function_privilege('authenticated', 'public.restore_job(uuid)', 'EXECUTE'), 'T406 С4 authenticated only');
+select tst.ok((select prosecdef and proconfig @> array['search_path=""'] from pg_proc where oid = 'public.restore_job(uuid)'::regprocedure), 'T406 С4 security definer, empty search_path');
+do $$ declare d text; a int; b int; begin
+  d := pg_get_functiondef('public.restore_job(uuid)'::regprocedure);
+  a := position('from public.visits v' in d);
+  b := position('from public.jobs where id = p_job and company_id = v_company and deleted_at is null for update' in d);
+  perform tst.ok(a > 0 and b > a, 'T406 С4 the visits are locked before the job (as cancel_job)');
+end $$;
 
 \echo 'ALL TESTS PASSED'

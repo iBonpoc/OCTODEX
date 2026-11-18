@@ -33,4 +33,16 @@ describe("unit:jobCancelOp — #2015", () => {
       expect(rejectReasonKey(rejectReasonOf(hint)!)).toBe(key);
     });
   }
+  it("С5 (#2050). the restore calls restore_job with the job; «do not service» (23514) is for good and the card says why", async () => {
+    calls.length = 0;
+    next.error = null;
+    await applyOp({ k: "job.restore", jobId: "j1" }, "c1", "u1");
+    expect(calls).toEqual([{ name: "restore_job", args: { p_job: "j1" } }]);
+    const err = { code: "23514", message: "job:noService", hint: "job_restore_no_service", status: 400 };
+    expect(classify(err)).toBe("refusal");
+    const restore = { id: "o2", tries: 0, op: { k: "job.restore", jobId: "j1" }, owner: who } as unknown as OwnedItem;
+    const card = rejectedOf(restore, "job:noService", Date.parse("2026-11-18T10:00:00Z"), who, "job_restore_no_service")!;
+    expect(card).toMatchObject({ kind: "job.restore", what: "job", href: "/job/j1", labelKey: "job.restore.rej.title", reason: "job_restore_no_service" });
+    expect(rejectReasonKey(rejectReasonOf("job_restore_no_service")!)).toBe("job.restore.rej.noService");
+  });
 });

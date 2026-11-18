@@ -4,6 +4,7 @@
  * no «Отменить» toast (rule 5: a confirmation instead, as for a void invoice).
  */
 import type { DB, ID, Role } from "@/data/types";
+import { jobServable } from "@/features/jobs";
 
 /** why a job is not cancelled — every one has a sentence (job.cancel.why.*) */
 export type JobCancelRefusal = "role" | "gone" | "done" | "onSite" | "paid" | "invoiceOpen" | "reason" | "long";
@@ -35,4 +36,14 @@ export function jobCancelRefusal(d: D, jobId: ID, reason: string, role: Role): J
   if (!why) return "reason";
   if (why.length > JOB_CANCEL_REASON_MAX) return "long";
   return null;
+}
+
+/** why a cancelled job is not brought back (job.restore.why.*) */
+export type JobRestoreRefusal = "role" | "gone" | "noService";
+/** null — may be brought back (#2050, spec 38 §12.1): the director and the dispatcher; the job is among the cancelled; its client is served */
+export function jobRestoreRefusal(d: Pick<DB, "cancelledJobs" | "customers" | "properties">, jobId: ID, role: Role): JobRestoreRefusal | null {
+  if (role !== "director" && role !== "dispatcher") return "role";
+  const job = (d.cancelledJobs ?? []).find((j) => j.id === jobId);
+  if (!job) return "gone";
+  return jobServable(d, job) ? null : "noService";
 }

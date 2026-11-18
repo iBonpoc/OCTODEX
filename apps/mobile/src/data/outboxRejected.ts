@@ -52,6 +52,8 @@ export const REJECT_REASONS = {
   job_invoice_open: "job.cancel.rej.invoiceOpen",
   job_visit_on_site: "job.cancel.rej.onSite",
   job_done: "job.cancel.rej.done",
+  // #2050 (migration 20261117310000, restore_job): a client «do not service» — the job is not brought back
+  job_restore_no_service: "job.restore.rej.noService",
   // #1913 (migration 20261117210000): a price group has at most 200 items
   price_group_full: "price.group.rejFull",
 } as const;
@@ -106,6 +108,8 @@ export function rejectedOf(item: OwnedItem, error: string, now: number, who: Own
   if (op.k === "customer.merge") return { ...base, what: "merge", href: `/client/${op.keepId}`, ...(reason ? { reason } : {}) };
   // #1913: an item that did not go into its price group (full): never dropped silently
   if (op.k === "catalog.save" && reason === "price_group_full") return { ...base, what: "price", href: `/catalog/${op.item.id}`, labelKey: "price.group.rejFull", reason };
+  // #2050: the job the server did not bring back — it is cancelled again in the list; the card says why (not money: no MONEY_KINDS)
+  if (op.k === "job.restore") return { ...base, what: "job", href: `/job/${op.jobId}`, labelKey: "job.restore.rej.title", ...(reason ? { reason } : {}) };
   if (!isMoneyOp(item, MONEY_KINDS)) return null;
   switch (op.k) {
     case "estimate.deposit": return { ...base, what: "deposit", href: `/estimate/${op.id}`, amountCents: op.depositCents };

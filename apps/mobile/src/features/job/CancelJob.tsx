@@ -9,7 +9,7 @@ import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { Job } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
-import { JOB_CANCEL_REASON_MAX } from "@/features/jobCancel";
+import { JOB_CANCEL_REASON_MAX, jobRestoreRefusal } from "@/features/jobCancel";
 import { RelatedBlock } from "@/features/RelatedBlock";
 import { Button, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -63,8 +63,14 @@ export function CancelJobSheet({ jobId, visible, onClose }: { jobId: string; vis
 
 /** a cancelled job's own screen: «Отменена», why and when — no steps, no visits, no money buttons */
 export function CancelledJobBody({ job }: { job: Job }) {
-  const { db } = useStore();
+  const store = useStore();
+  const { db } = store;
   const { t, day } = useI18n();
+  const [restoring, setRestoring] = useState(false);
+  // the button is there for the director and the dispatcher; a refusal («do not service») is told, not hidden (П7: no dead ends)
+  const canRestore = store.role === "director" || store.role === "dispatcher";
+  const blocked = jobRestoreRefusal(db, job.id, store.role);
+  const toast = useToast();
   const p = db.properties.find((x) => x.id === job.propertyId);
   const c = db.customers.find((x) => x.id === (job.customerId ?? p?.customerId));
   return (
@@ -95,6 +101,47 @@ export function CancelledJobBody({ job }: { job: Job }) {
           </T>
         ) : null}
       </Card>
+      {canRestore ? (
+        <View testID="job-restore">
+          <Button
+            label={t("job.restore.btn")}
+            icon="check"
+            variant="secondary"
+            onPress={() => (blocked ? toast.show(t(`job.restore.why.${blocked}` as DictKey)) : setRestoring(true))}
+          />
+        </View>
+      ) : null}
+      <RestoreJobSheet jobId={job.id} visible={restoring} onClose={() => setRestoring(false)} />
     </>
+  );
+}
+
+/** #2050 (spec 38 §12.1): «Вернуть работу» — one sheet of confirmation, no reason (it is not a loss); no «Отменить» toast: a new cancel needs its reason */
+export function RestoreJobSheet({ jobId, visible, onClose }: { jobId: string; visible: boolean; onClose: () => void }) {
+  const store = useStore();
+  const { t } = useI18n();
+  const toast = useToast();
+  const confirm = () => {
+    const why = store.restoreJob(jobId);
+    onClose();
+    // a second tap while the sheet is closing: the job is back already — nothing to say
+    if (why === "gone") return;
+    toast.show(t(why ? (`job.restore.why.${why}` as DictKey) : "job.restore.done"));
+  };
+  return (
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title={t("job.restore.title")}
+      footer={
+        <View testID="job-restore-confirm">
+          <Button label={t("job.restore.confirm")} icon="check" variant="primary" full onPress={confirm} />
+        </View>
+      }
+    >
+      <T v="body" tone="mut">
+        {t("job.restore.body")}
+      </T>
+    </Sheet>
   );
 }
