@@ -1,0 +1,109 @@
+# Puts the built web copy of a PR online (see preview.yml). Runs from main after the build workflow, so the PR cannot change this
+# file; it uses only static files from the build artifact and the code of main, never runs code of the PR.
+# The key lives in the environment `preview-web` (only branch main may use it).
+# eas-cli pinned to 27.4.1 (05.11.2026): 27.5.0 was published broken (ETARGET @expo/turtle-spawn@27.5.0).
+# Raise the pin deliberately after checking a new version, never back to @latest.
+name: Preview deploy
+
+on:
+  workflow_run:
+    workflows: [Preview]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
+concurrency:
+  group: preview-deploy-${{ github.event.workflow_run.pull_requests[0].number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.pull_requests[0] != null &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    environment: preview-web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: The PR number and the commit look right
+        run: |
+          [[ "$PR" =~ ^[0-9]+$ ]] || { echo "::error::bad PR number"; exit 1; }
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::bad commit"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Take the built files of the PR (static files only)
+        uses: actions/download-artifact@v4
+        with:
+          name: preview-dist
+          path: apps/mobile/dist
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - name: The built files are a plain static site
+        working-directory: apps/mobile
+        run: |
+          # the artifact comes from the PR: only static files go online (no server code, no links, an index page, a sane size)
+          [ -f dist/index.html ] || { echo "::error::dist has no index.html"; exit 1; }
+          [ ! -e dist/server ] || { echo "::error::dist has server files"; exit 1; }
+          [ -z "$(find dist -type l)" ] || { echo "::error::dist has symbolic links"; exit 1; }
+          size_mb="$(du -sm dist | cut -f1)"
+          [ "$size_mb" -le 300 ] || { echo "::error::dist is $size_mb MB"; exit 1; }
+      - name: Deploy the web copy (its own deployment URL)
+        id: web
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          set -o pipefail
+          npx eas-cli@27.4.1 deploy --non-interactive | tee deploy.log
+          # the unique deployment URL looks like https://<project>--<id>.expo.app (never the production site)
+          url="$(grep -oE 'https://[a-z0-9-]+--[a-z0-9-]+\.expo\.app' deploy.log | head -1)"
+          # a preview without a working link is a failed preview — never a green step with a dead link
+          [ -n "$url" ] || { echo "::error::eas deploy printed no deployment URL"; exit 1; }
+          for i in $(seq 1 12); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' "$url")"; [ "$code" = "200" ] && break; sleep 5
+          done
+          [ "$code" = "200" ] || { echo "::error::$url answers $code"; exit 1; }
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Does the PR change the database?
+        id: mig
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate --jq '.[].filename' | grep -q '^supabase/migrations/'; then echo "has=1" >> "$GITHUB_OUTPUT"; else echo "has=0" >> "$GITHUB_OUTPUT"; fi
+      - name: Put the links in the PR description (no comment, so no notification e-mail)
+        uses: actions/github-script@v7
+        env:
+          HAS_MIG: ${{ steps.mig.outputs.has }}
+          WEB_URL: ${{ steps.web.outputs.url }}
+        with:
+          script: |
+            // founder 05.11.2026: a bot comment on every push e-mailed him every few minutes. Editing the PR body sends
+            // no e-mail, so the link lives in a marked block at the end of the description (and in the job summary).
+            const pr = Number(process.env.PR);
+            const sha = process.env.HEAD_SHA.slice(0, 7);
+            const web = process.env.WEB_URL;
+            const mig = process.env.HAS_MIG === "1"
+              ? "\n\n⚠ В этом PR есть изменения базы. В предпросмотре они ещё не применены: проверяйте экраны в демо-режиме, облачные данные заработают после слияния."
+              : "";
+            const block = `<!-- octodex-preview -->\n### Предпросмотр PR #${pr} (\`${sha}\`) — ещё не влит\n\n` +
+              `- **Сайт:** ${web}\n\n` +
+              `Только сайт: в Expo Go появляется лишь то, что влито в main.${mig}\n<!-- /octodex-preview -->`;
+            const { data } = await github.rest.pulls.get({ ...context.repo, pull_number: pr });
+            const old = data.body || "";
+            const re = /<!-- octodex-preview -->[\s\S]*?<!-- \/octodex-preview -->/;
+            const body = re.test(old) ? old.replace(re, block) : `${old}\n\n${block}`;
+            await github.rest.pulls.update({ ...context.repo, pull_number: pr, body });
+            await core.summary.addRaw(block).write();
