@@ -6172,10 +6172,11 @@ select tst.ok((select count(*) = 1 from public.jobs where estimate_id = '0e47000
 insert into public.customers (id, company_id, display_name) values ('c7300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T73 Client');
 insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
   ('d7300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', '73 Deposit St', 'Pasadena');
-insert into public.estimates (id, company_id, customer_id, property_id, title) values
-  ('0e730000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 signed'),
-  ('0e730000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 not signed'),
-  ('0e730000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 no deposit');
+-- #2075 (20261117380000): sales take the deposit of their own deal — the signed estimate is the sales person's (T424: not another's)
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+  ('0e730000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 signed', 'a0000000-0000-0000-0000-000000000005'),
+  ('0e730000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 not signed', null),
+  ('0e730000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 no deposit', null);
 insert into public.jobs (id, company_id, number, title, customer_id, property_id, estimate_id) values
   ('e7300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'T73 job', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e730000-0000-4000-8000-000000000001'),
   ('e7300000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'T73 job 3', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e730000-0000-4000-8000-000000000003');
@@ -12888,10 +12889,11 @@ select tst.ok(tst.cnt($q$select 1 from public.payments where idempotency_key = '
 -- the deposit at the signing stays sales' (17): the server's deposit function on the deposit the signature made (approved,
 -- the signed version, the client's deposit); a deposit invoice sales put in themselves, or of another sum, is refused
 -- (security-check of #1061 В-1: an own «deposit» of $99 999 was paid)
-insert into public.estimates (id, company_id, customer_id, property_id, title) values
-  ('0e191000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed'),
-  ('0e191000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed, no deposit'),
-  ('0e191000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed, another sum');
+-- #2075 (20261117380000): the estimates are the sales person's own deals, so each refusal below is the rule it names
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+  ('0e191000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed', 'a0000000-0000-0000-0000-000000000005'),
+  ('0e191000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed, no deposit', 'a0000000-0000-0000-0000-000000000005'),
+  ('0e191000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed, another sum', 'a0000000-0000-0000-0000-000000000005');
 insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
   ('51910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000001', 1, '{"kind":"none"}'),
   ('51910000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000002', 1, '{"kind":"none"}'),
@@ -12947,11 +12949,12 @@ select tst.ok(true, 'T191 sales take no payment on a visit (record_visit_payment
 -- С-1: a draft progress invoice of their own turned «deposit» of the signed version by an update: refused
 insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
   ('11910000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f2', 'progress', 'draft', 'T191 draft', 9999900, 9999900);
--- refused (tg_invoice_guard, 42501) — or, since #2075 (20261117380000), not even seen: the draft is not of his deal
 do $$ begin
   update public.invoices set kind = 'deposit', source_estimate_version_id = '51910000-0000-4000-8000-000000000002' where id = '11910000-0000-4000-8000-000000000006';
+  raise exception 'FAILED: T191 sales turned a draft into a deposit';
 exception when insufficient_privilege then null;
 end $$;
+select tst.ok(true, 'T191 sales do not change what an invoice is (kind, version: tg_invoice_guard, 42501)');
 :as_super
 select tst.ok((select kind = 'progress' and source_estimate_version_id is null from public.invoices where id = '11910000-0000-4000-8000-000000000006'), 'T191 the draft stays a progress invoice');
 select tst.ok(tst.cnt($q$select 1 from public.payments where id = 'a1910000-0000-4000-8000-000000000005'$q$) = 0, 'T191 no payment from sales on the visit');
@@ -13626,8 +13629,9 @@ select tst.ok((select status = 'sent' and total_cents = 20000 and paid_cents = 2
               'T197 the draft final is billed as the rest of the contract ($200) and paid');
 select tst.ok((select discount_cents = 0 and subtotal_cents + tax_cents = total_cents from public.invoices where id = '01970000-0000-4000-8000-000000000008'),
               'T197 billed as the rest: no discount of the draft''s own left, subtotal + tax = total (security-check of #1203 №2)');
--- never born removed: such a row would pass the contract check and come back later (security-check of #1203 №1)
-:as_sales_a
+-- never born removed: such a row would pass the contract check and come back later (security-check of #1203 №1); as the
+-- office since #2075 (20261117380000: sales write only inside their deals, refused before this check)
+:as_office_a
 select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, total_cents, sent_at, deleted_at) values
          ('ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'progress', 'sent', 'T197 hidden', 999900, now(), now())$q$,
        '%created removed%', 'T197 an invoice is never inserted removed (the way past the cap)');
@@ -17031,8 +17035,8 @@ select tst.ok(exists (select 1 from public.invoices where id = 'a4203000-0000-40
 select tst.ok(exists (select 1 from public.invoices where id = 'a4203000-0000-4000-8000-000000000002'), 'T420 the deposit of the estimate of the lead he leads');
 select tst.ok(not exists (select 1 from public.invoices where id in ('a4203000-0000-4000-8000-000000000003', 'a4203000-0000-4000-8000-000000000004')),
   'T420 not the office''s job, not a standalone invoice');
-select tst.ok(not exists (select 1 from public.customer_balances b where b.customer_id = 'c1a00000-0000-0000-0000-000000000001' and b.balance_cents >= 47000),
-  'T420 the client''s balance shows him only what his deals bill');
+select tst.ok((select sum(b.balance_cents) from public.customer_balances b where b.customer_id = 'c1a00000-0000-0000-0000-000000000001') = 34000,
+  'T420 the client''s balance shows him only what his deals bill (29000 + 5000)');
 
 -- T421: payments — of his deals and those he took himself
 select tst.ok(tst.cnt($q$select 1 from public.payments where id::text like 'a4204000-%'$q$) = 2, 'T421 sales see two payments');
@@ -17058,7 +17062,25 @@ select tst.ok(tst.cnt($q$select 1 from public.invoices where id::text like 'a420
 update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4200000-0000-4000-8000-0000000000a1';
 :as_sales_a
 select tst.ok(not exists (select 1 from public.invoices where id = 'a4203000-0000-4000-8000-000000000002'), 'T423 the lead handed over: its deposit is no longer his');
+-- T424: the deposit at the signature — sales take it on their own deal only (record_estimate_deposit)
+:as_sales_a
+select tst.fails_like($q$select public.record_estimate_deposit('a4200000-0000-4000-8000-0000000000e3', 'a4204000-0000-4000-8000-0000000000d3', 'cash')$q$,
+  '%only the office takes a deposit%', 'T424 sales do not take the deposit of another''s estimate');
+-- what sales write stays inside their deals, refused before any check of a sum (no answer about another deal's sums)
+select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'a4202000-0000-4000-8000-0000000000e3', 'progress', 'sent', 'T424 probe', 9999900, 9999900, now())$q$,
+  '%not a deal of yours%', 'T424 sales issue no invoice on another''s job (refused before the contract cap)');
+select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'standalone', 'draft', 'T424 standalone', 100, 100)$q$,
+  '%not a deal of yours%', 'T424 sales issue no invoice without a job');
+select tst.fails_like($q$insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4203000-0000-4000-8000-000000000003', 'c1a00000-0000-0000-0000-000000000001', 'cash', 9999900, 'succeeded', 't424-probe')$q$,
+  '%not a deal of yours%', 'T424 sales take no payment on another''s invoice (refused before the balance check)');
+select tst.fails_like($q$update public.invoices set due_date = '2030-01-01'$q$,
+  '%not a deal of yours%', 'T424 sales change no invoice of another''s deal, even without a where');
+:as_super
+select tst.ok(not exists (select 1 from public.invoices where due_date = '2030-01-01'), 'T424 no invoice moved');
 rollback;
-\echo 'T420 T421 T422 T423 ok'
+\echo 'T420 T421 T422 T423 T424 ok'
 
 \echo 'ALL TESTS PASSED'
