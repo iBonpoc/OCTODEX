@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { component, motion, radius, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useAuth } from "@/cloud/auth";
+import { openCompanies, useCanSwitch } from "@/features/CompanySwitcher";
 import { useI18n, type DictKey } from "@/i18n";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { ALL_ORIENTATIONS, Glass } from "@/ui/overlays";
@@ -112,6 +113,7 @@ function Drawer({ visible, onClose, onChoose, onCreate }: { visible: boolean; on
     openSection(sectionHref(id, role));
   };
   const who = mode === "cloud" ? (companyName ?? "") : t(`role.${role}`);
+  const canSwitch = useCanSwitch();
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={() => onClose()} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
       <Animated.View entering={reduce ? undefined : FadeIn.duration(motion.durBase)} exiting={reduce ? undefined : FadeOut.duration(motion.durFast)} style={StyleSheet.absoluteFill}>
@@ -161,6 +163,18 @@ function Drawer({ visible, onClose, onChoose, onCreate }: { visible: boolean; on
             ))}
             {/* profile: name, role (or company) — opens My settings (13 v2 §4: one role per person, no «Сменить роль») */}
             <View style={{ height: component.hairline, backgroundColor: c.bd, marginVertical: space[2], marginHorizontal: space[2] }} />
+            {/* spec 42 S34: two or more companies — «Компании» (the sheet; the drawer closes first) */}
+            {canSwitch ? (
+              <MenuRow
+                icon="home2"
+                label={companyName ?? t("people.switch.title")}
+                testID="menu-company-switch"
+                onPress={() => {
+                  onChoose();
+                  openCompanies();
+                }}
+              />
+            ) : null}
             <Press
               onPress={() => {
                 onChoose();

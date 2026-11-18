@@ -25,7 +25,8 @@ module.exports = { pickRuns, waitFor };
 if (require.main === module) {
   const { execFileSync } = require("node:child_process");
   const repo = process.env.GITHUB_REPOSITORY;
-  const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  // maxBuffer: the open PR list (100 per page) is larger than the 1 MB default (ENOBUFS, 18.11.2026 #2192)
+  const gh = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 256 * 1024 * 1024 });
   const api = (p, extra = []) => JSON.parse(gh(["api", "-X", "GET", ...extra, p]) || "null");
   const only = process.env.ONLY_PR ? Number(process.env.ONLY_PR) : null;
   const stops = api(`repos/${repo}/issues`, ["-f", "labels=остановка", "-f", "state=open", "-f", "per_page=100"]).filter((i) => !i.pull_request);

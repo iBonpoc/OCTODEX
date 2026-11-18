@@ -22,14 +22,36 @@ export const nextStoryOf = (s: Story): Story => ((s % 4) + 1) as Story;
 export const toScreen = (v: View, p: P): [number, number] => [p[0] * v.k + v.ox, -p[1] * v.k + v.oy];
 export const toPlan = (v: View, s: [number, number]): P => [(s[0] - v.ox) / v.k, -(s[1] - v.oy) / v.k];
 
-/** the view that fits plan points into a viewport with a margin (an empty drawing: 40 ft across, centred) */
-export function fitView(pts: readonly P[], vp: { w: number; h: number }, margin: number): View {
+/** margins from each edge of the viewport, px: what lies over the canvas there (the header, the toolbar, the summary chips — #1667) */
+export interface Insets { t: number; r: number; b: number; l: number }
+
+/**
+ * The view that fits plan points into a viewport with a margin (an empty drawing: 40 ft across, centred). A number — the
+ * same on every side; `Insets` — each side its own (#1667: the header on top, the toolbar and the chips at the bottom),
+ * the drawing centred in the space left free. A free space under 1 px each way counts as 1 (never 0 or less).
+ */
+export function fitView(pts: readonly P[], vp: { w: number; h: number }, margin: number | Insets): View {
+  const m = typeof margin === "number" ? { t: margin, r: margin, b: margin, l: margin } : margin;
   const xs = pts.map((p) => p[0]);
   const ys = pts.map((p) => p[1]);
   const [x0, x1] = pts.length ? [Math.min(...xs), Math.max(...xs)] : [0, 480];
   const [y0, y1] = pts.length ? [Math.min(...ys), Math.max(...ys)] : [0, 480];
-  const k = Math.min((vp.w - 2 * margin) / Math.max(x1 - x0, 1), (vp.h - 2 * margin) / Math.max(y1 - y0, 1));
-  return { k, ox: vp.w / 2 - ((x0 + x1) / 2) * k, oy: vp.h / 2 + ((y0 + y1) / 2) * k };
+  const fw = Math.max(vp.w - m.l - m.r, 1), fh = Math.max(vp.h - m.t - m.b, 1);
+  const k = Math.min(fw / Math.max(x1 - x0, 1), fh / Math.max(y1 - y0, 1));
+  return { k, ox: m.l + fw / 2 - ((x0 + x1) / 2) * k, oy: m.t + fh / 2 + ((y0 + y1) / 2) * k };
+}
+
+/**
+ * The view while the drawing fits itself (#1667): until a finger first touches the screen the view follows the fit of
+ * the moment (the summary chips, the toolbar's place and the header come after the first frame — the fit follows them);
+ * from the first touch it is the person's and never moves by itself (rule 27: no jump under the finger).
+ */
+export function autoFitView(touched: boolean, view: View | null, fitted: View | null): View | null {
+  if (!fitted) return view;
+  if (!view) return fitted; // no view yet: the first one is always the fit
+  if (touched) return view;
+  if (view && Math.abs(view.k - fitted.k) < 1e-9 && Math.abs(view.ox - fitted.ox) < 0.01 && Math.abs(view.oy - fitted.oy) < 0.01) return view;
+  return fitted;
 }
 
 /**
