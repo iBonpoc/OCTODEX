@@ -276,9 +276,28 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: node scripts/rule22.cjs
 
+  # #2068 (rule #2001, story-map §7 п.9): a new spec of a step, or a new section of one, has scenarios «С<n>. ДАНО … КОГДА …
+  # ТОГДА …»; new tests then name a С<n>. Old specs are not checked (only what the PR adds). Runs on docs-only PRs too.
+  scenarios:
+    name: Scenarios in specs (С1 ДАНО/КОГДА/ТОГДА)
+    needs: pause
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: New spec sections have scenarios
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/scenarioGuard.cjs
+
   checks:
     name: checks
-    needs: [pause, changes, fast, bundle, build-web, e2e, rule22]
+    needs: [pause, changes, fast, bundle, build-web, e2e, rule22, scenarios]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -295,6 +314,8 @@ jobs:
           if [ "$docs" = true ] && [ "$bundle" = "skipped" ]; then bundle=success; fi
           # rule22 runs on pull requests only: "skipped" on push/schedule is fine, failure is not
           [ "${{ needs.rule22.result }}" != "failure" ] && [ "${{ needs.rule22.result }}" != "cancelled" ] || { echo "::error::rule22=${{ needs.rule22.result }}"; exit 1; }
+          # scenarios (#2068) runs on pull requests only, like rule22
+          [ "${{ needs.scenarios.result }}" != "failure" ] && [ "${{ needs.scenarios.result }}" != "cancelled" ] || { echo "::error::scenarios=${{ needs.scenarios.result }}"; exit 1; }
           [ "${{ needs.fast.result }}" = "success" ] && [ "$e2e" = "success" ] && [ "$bundle" = "success" ] || { echo "::error::changes=${{ needs.changes.result }} fast=${{ needs.fast.result }} bundle=${{ needs.bundle.result }} build-web=${{ needs.build-web.result }} e2e=${{ needs.e2e.result }}"; exit 1; }
 
   # A red nightly run opens (or adds to) one issue, so the director sees it in the morning (docs/ai/CHECKS.md §1).
