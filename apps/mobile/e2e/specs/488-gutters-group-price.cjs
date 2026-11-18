@@ -70,6 +70,11 @@ exports.run = async (h) => {
   // С9: the price screen makes the black item in the group, at $10
   await h.go("/module/gutters/prices");
   await tid("gpr-missing-n").waitFor({ timeout: 8000 });
+  // the black gutter is a «нет позиции» row of the list too: the banner's N is what is seen (review #2000 №3)
+  const row = p.locator('[data-testid^="gpr-miss-gutter"][data-testid$="-black"]').locator("visible=true").first();
+  await row.waitFor({ timeout: 8000 });
+  await row.scrollIntoViewIfNeeded();
+  await h.shot("colour-row");
   await tid("gpr-missing-n-action").getByRole("button").click();
   await p.waitForFunction((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.catalog || []).some((x) => x.attributes?.color === "black" && x.attributes?.part === "gutter" && x.attributes?.size === "5"), KEY, { timeout: 8000 });
   const d1 = await db();
