@@ -17666,6 +17666,17 @@ select tst.fails_like($q$update public.estimates set lead_id = 'a4250000-0000-40
 select tst.fails_like($q$update public.estimates set lead_id = 'a4250000-0000-4000-8000-0000000000a2' where id = 'a4250000-0000-4000-8000-0000000000e2'$q$,
   '%not a deal of yours%', 'T425 sales do not put their estimate on the office''s lead');
 select tst.ok(not app.sales_deal_estimate('a4250000-0000-4000-8000-0000000000e1'), 'T425 after the refusals the office''s deal is still not his');
+-- brought by him, given by the office to another: no longer his
+:as_super
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4250000-0000-4000-8000-0000000000a3';
+:as_sales_a
+select tst.fails_like($q$update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000005' where id = 'a4250000-0000-4000-8000-0000000000a3'$q$,
+  '%not a lead of yours%', 'T425 sales do not take back the lead they brought once the office gave it to another');
+select tst.fails_like($q$update public.estimates set lead_id = 'a4250000-0000-4000-8000-0000000000a3' where id = 'a4250000-0000-4000-8000-0000000000e2'$q$,
+  '%not a deal of yours%', 'T425 …nor put their estimate on it');
+:as_super
+update public.leads set assigned_to = null where id = 'a4250000-0000-4000-8000-0000000000a3';
+:as_sales_a
 -- his own: as before
 update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000005' where id = 'a4250000-0000-4000-8000-0000000000a3';
 select tst.ok((select assigned_to = 'a0000000-0000-0000-0000-000000000005' from public.leads where id = 'a4250000-0000-4000-8000-0000000000a3'), 'T425 sales take the lead they brought');

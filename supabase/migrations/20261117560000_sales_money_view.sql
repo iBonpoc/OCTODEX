@@ -112,7 +112,8 @@ create trigger t00_sales_deal_guard before insert on public.payments
   for each row execute function app.tg_sales_deal_guard();
 
 -- a deal of sales is his estimate or an estimate of his lead: so sales do not make another's deal theirs. A lead is
--- given or taken (assigned_to) by sales only when it is already his (assigned to him or brought by him) — another's or
+-- given or taken (assigned_to) by sales only when it is already his (assigned to him, or brought by him and given to
+-- nobody yet; once the office gave it to another, it is his no longer) — another's or
 -- a free lead is given by the office (roles decision, docs/audit/2026-11-18-roles); the lead of an estimate (lead_id)
 -- is changed by sales only on his own estimate and only to his own lead (or to none). Server functions and the service
 -- role pass (their own checks). db T425.
@@ -127,14 +128,15 @@ begin
   end if;
   if tg_table_name = 'leads' then
     if new.assigned_to is distinct from old.assigned_to
-       and old.assigned_to is distinct from (select auth.uid()) and old.created_by is distinct from (select auth.uid()) then
+       and old.assigned_to is distinct from (select auth.uid())
+       and not (old.assigned_to is null and old.created_by = (select auth.uid())) then
       raise exception 'not a lead of yours' using errcode = '42501';
     end if;
   elsif new.lead_id is distinct from old.lead_id then   -- estimates
     if old.created_by is distinct from (select auth.uid())
        or (new.lead_id is not null
            and not exists (select 1 from public.leads l where l.id = new.lead_id and l.company_id = old.company_id
-                                                        and (l.assigned_to = (select auth.uid()) or l.created_by = (select auth.uid())))) then
+                                                        and (l.assigned_to = (select auth.uid()) or (l.assigned_to is null and l.created_by = (select auth.uid()))))) then
       raise exception 'not a deal of yours' using errcode = '42501';
     end if;
   end if;
