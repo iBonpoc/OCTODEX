@@ -198,6 +198,7 @@ export const ru = {
   "st.approved": "Одобрена",
   "st.declined": "Отказ",
   "st.awaiting": "Ждёт оплаты",
+  "st.signedToClose": "Подписан · закрыть",
   "st.inspection": "Осмотр",
   "st.unassigned": "Не назначен",
   "st.late": "Опаздывает",
