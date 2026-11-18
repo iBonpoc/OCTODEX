@@ -26,7 +26,8 @@ import { CardGrid, ListCard, ListCardHeader } from "@/ui/listCard";
 import { useToast, Sheet } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { CardList, ListRow, Screen } from "@/ui/surfaces";
-import { bindable, bindItem, findItem, laborRows, materialRows, missingItems, partName, type PriceRow, priceFromOtherDegree } from "../prices";
+import { bindable, bindItem, findItem, laborRows, materialRows, measuredColourRows, missingItems, partName, type PriceRow, priceFromOtherDegree } from "../prices";
+import { gutterData } from "../data";
 import { withAfter } from "@/data/undo";
 import { QuickPriceSheet } from "@/features/QuickPriceSheet";
 import { quickSheetKey } from "@/features/quickPrice";
@@ -62,7 +63,10 @@ export default function GutterPricesScreen() {
 
   /** the item's name in the app's language at the moment it is made: company data from then on (the owner renames it) */
   const nameOf = (p: PartQty): string => partName(t, p);
-  const missing = useMemo(() => missingItems(companyId, [...labor, ...parts], catalog, nameOf), [companyId, labor, parts, catalog, t]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the colours the company's measurements use without an item of their own (#2000 §10.2 п.4): made by the same banner, in their group
+  const measured = store.db.moduleData?.gutters;
+  const colours = useMemo(() => measuredColourRows(gutterData(store.db), raw, catalog), [measured, raw, catalog]); // eslint-disable-line react-hooks/exhaustive-deps
+  const missing = useMemo(() => missingItems(companyId, [...labor, ...parts, ...colours], catalog, nameOf), [companyId, labor, parts, colours, catalog, t]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** ids made from this page and not taken back: a second press before the page redraws makes nothing and never puts
    *  an empty «Отменить» in place of the first one's (review M7d №2, rule 5) */

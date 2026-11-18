@@ -70,7 +70,7 @@ export interface TransitionGroup {
 /** what the person sees of a price: what the estimate takes and whether it is a sample one (two costs to one price are one price, review PR3 №3) */
 const priceSig = (it: CatalogItem) => `${catalogUnitPrice(it)}|${it.placeholder ? 1 : 0}`;
 /** later changed first; the same moment or none — the lower id (by character code) */
-const newer = (a: CatalogItem, b: CatalogItem) => {
+export const newer = (a: CatalogItem, b: CatalogItem) => {
   const ta = a.updatedAt ?? "", tb = b.updatedAt ?? "";
   if (ta !== tb) return ta > tb ? -1 : 1;
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;

@@ -15,7 +15,7 @@
 import { dec, jobLineQty, type CustomLine, type LineSource as CoreLineSource, type PartQty } from "@octo/estimating-engine";
 import type { CatalogItem } from "@/data/types";
 import { catalogUnitCost, catalogUnitPrice } from "@/features/estimateDoc";
-import { findItem, matchKey, priceFromOtherDegree } from "./prices";
+import { matchKey, priceFromOtherDegree, priceItemOf } from "./prices";
 
 /** the engine's sections in the order the estimate shows them; labor last (О4) */
 export const SECTION_ORDER = ["gutter", "corners_caps", "fasteners", "downspouts", "adapters", "ds_bottom", "guards", "consumables", "labor"] as const;
@@ -41,6 +41,9 @@ export interface LineSource extends CoreLineSource {
   unit: string;
   /** no price: no item in the price list, or its price is broken, or a $0 TEST price — price 0 until someone sets it */
   noPrice?: true;
+  /** #2000: no item of this colour — the price (and cost) of its group's item, this id (no `catalogItemId`; no mark, no C5: the
+   *  founder — the colour never changes the price). «Обновить смету» after the item is made binds the line to it */
+  groupPrice?: string;
   /** the item's price is a TEST one (rule 9): the check before sending says so (C5) */
   testPrice?: true;
   /** gone from the measurement, kept because someone changed it by hand */
@@ -78,17 +81,19 @@ export function linesFromParts(parts: readonly PartQty[], catalog: readonly Cata
   }
   const rows = [...byKey.entries()].sort(([, a], [, b]) => sectionAt(a.part.section) - sectionAt(b.part.section));
   return rows.map(([key, { part, qty }]) => {
-    const it = findItem(catalog, part);
+    // its own item; none — its group's item gives the price and the cost, the line stays unbound (#2000, spec 33-price-key §10)
+    const { it, group } = priceItemOf(catalog, part);
+    const priced = it ?? group;
     const quantity = billQty(qty.toString(), part.unit);
     // the core's price and cost of an item (a material: cost × supplier tax × markup) — as a line picked from the list
-    const listPrice = it ? catalogUnitPrice(it) : undefined;
+    const listPrice = priced ? catalogUnitPrice(priced) : undefined;
     const valid = listPrice !== undefined && Number.isSafeInteger(listPrice) && listPrice >= 0;
     const priceCents = valid ? listPrice : 0;
     // never a silent $0 (П23.1): no item, a broken price, or a $0 test price is «нет цены»; a real $0 is the company's choice
-    const noPrice = !it || !valid || (priceCents === 0 && !!it.placeholder);
+    const noPrice = !priced || !valid || (priceCents === 0 && !!priced.placeholder);
     // a price borrowed from another degree's elbow (§2.7) keeps the part's own name: the client never reads «45°» on a 75° elbow
     const lineName = it && !priceFromOtherDegree(catalog, part) ? it.name : name(part);
-    const cost = it ? catalogUnitCost(it) : undefined;
+    const cost = priced ? catalogUnitCost(priced) : undefined;
     return {
       id: uid(),
       name: lineName,
@@ -100,7 +105,7 @@ export function linesFromParts(parts: readonly PartQty[], catalog: readonly Cata
       ...(it ? { catalogItemId: it.id } : {}),
       source: {
         module: "gutters", key, section: part.section, qty: quantity, priceCents, name: lineName, unit: part.unit,
-        ...(noPrice ? { noPrice: true as const } : {}), ...(it?.placeholder ? { testPrice: true as const } : {}), ...(revisionId ? { revisionId } : {}), ...(measurementId ? { measurementId } : {}), ...(at ? { at } : {}), ...(engineVersion ? { engineVersion } : {}),
+        ...(noPrice ? { noPrice: true as const } : {}), ...(priced?.placeholder ? { testPrice: true as const } : {}), ...(group ? { groupPrice: group.id } : {}), ...(revisionId ? { revisionId } : {}), ...(measurementId ? { measurementId } : {}), ...(at ? { at } : {}), ...(engineVersion ? { engineVersion } : {}),
       },
     };
   });

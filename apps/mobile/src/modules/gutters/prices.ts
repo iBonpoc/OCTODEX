@@ -20,7 +20,11 @@ import { fmtLen, type LenFormat } from "./canvas/format";
 import { TEST_RATES } from "./canvas/testRates";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "./settings";
 import { uuidV5 } from "./uuid5";
-import { priceGroupKey } from "./prices/groups";
+import { colouredPart, groupAttrs, newer, priceGroupKey } from "./prices/groups";
+import { priceGroupOf } from "@/data/priceGroup";
+import type { GutterData } from "./data";
+import { fromElements } from "./canvas/model";
+import { toMeasurement } from "./geometry";
 
 /** what a part is, for the parts the engine leaves without `part` (their key's first word says it) */
 const PART_BY_KEY: Record<string, string> = { gutter: "gutter", ds: "downspout", guard: "guard_run", coil: "gutter", section: "gutter", dsstick: "downspout" };
@@ -59,6 +63,61 @@ export function findItem(catalog: readonly CatalogItem[], p: Pick<PartQty, "key"
     if (it) return it;
   }
   return undefined;
+}
+
+/**
+ * #2000 (spec 33-gutters-price-key §10): a coloured part without an item of its own colour takes the price of its group — the same
+ * part in the company's other colours (the founder: «цвет не влияет на стоимость»). The group: coloured items whose properties without
+ * the colour (a colour meaning «painted», `groupAttrs`) have the part's ones — a subset, as `findItem`; the database's group first
+ * (`priceGroup` of the part's key), then the one changed last (then the lower id: before the transition the colours may differ).
+ * The round elbow's old degrees (`LEGACY_ROUND_ELBOW`) too. An item without a colour is never a source (§9 Б2). None — undefined.
+ */
+export function groupSource(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): CatalogItem | undefined {
+  const want = matchAttrs(p);
+  if (p.kind === "labor" || !want.color?.trim() || !PART_WORDS.has(want.part ?? "")) return undefined;
+  const unit = p.unit.trim().toLowerCase();
+  const pool = catalog.filter((it) => live(it) && it.unit.trim().toLowerCase() === unit && colouredPart(it));
+  for (const w of [want, ...ROUND_ELBOW_FALLBACK(want)]) {
+    const g = groupAttrs(w);
+    const key = priceGroupKey({ unit: p.unit, attributes: w });
+    const hits = pool.filter((it) => {
+      const a = groupAttrs(it.attributes ?? {});
+      return Object.entries(g).every(([k, v]) => a[k] === v);
+    });
+    if (hits.length) return [...hits].sort((a, b) => Number(priceGroupOf(b) === key) - Number(priceGroupOf(a) === key) || newer(a, b))[0];
+  }
+  return undefined;
+}
+
+/** the item a part's price comes from: its own (`findItem`), else its group's (#2000); with which of the two it is */
+export function priceItemOf(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): { it?: CatalogItem; group?: CatalogItem } {
+  const it = findItem(catalog, p);
+  if (it) return { it };
+  const group = groupSource(catalog, p);
+  return group ? { group } : {};
+}
+
+/**
+ * The coloured parts of the company's measurements that have no item of their colour but have a group (#2000 §10.2 п.4): the price
+ * screen's «Создать позиции сразу (N)» makes them too, in the group and at its price (`missingItems`). One row per part (matchKey).
+ */
+export function measuredColourRows(g: GutterData, raw: unknown, catalog: readonly CatalogItem[]): PriceRow[] {
+  const rules = readRules(raw);
+  const over = toRulesOverride(raw);
+  const byM = new Map<string, GutterData["elements"]>();
+  for (const e of g.elements) byM.set(e.measurementId, [...(byM.get(e.measurementId) ?? []), e]);
+  const seen = new Map<string, PriceRow>();
+  for (const m of g.measurements) {
+    const d = fromElements(byM.get(m.id) ?? []);
+    if (!d.runs.length) continue;
+    for (const part of computeGutterParts(toMeasurement(d, { method: rules.corner }), over).parts) {
+      if (part.kind === "labor" || part.use === "purchase") continue;
+      const key = matchKey(part);
+      if (seen.has(key) || findItem(catalog, part) || !groupSource(catalog, part)) continue;
+      seen.set(key, { key, part });
+    }
+  }
+  return [...seen.values()];
 }
 
 /**
@@ -207,7 +266,9 @@ export function missingItems(companyId: string, rows: readonly PriceRow[], catal
     // a colour of a part whose group is there: the group's price, as the store and the server give a joining item (in every mode —
     // the store does it only in the cloud; review of PR3 №6)
     const g = made.attributes?.priceGroup;
-    const peer = g ? catalog.find((c) => c.attributes?.priceGroup === g) : undefined;
+    // before the transition the colours have no `priceGroup` yet: the price the estimate's line takes now (#2000 — «Обновить смету»
+    // after «Создать» never moves the line's price)
+    const peer = g ? catalog.find((c) => c.attributes?.priceGroup === g) ?? groupSource(catalog, part) : undefined;
     out.set(id, peer ? { ...made, priceCents: peer.priceCents, placeholder: peer.placeholder, costCents: peer.costCents, vendorTaxBps: peer.vendorTaxBps, markupBps: peer.markupBps } : made);
   }
   return [...out.values()];
@@ -237,7 +298,9 @@ export function listPreview(parts: readonly PartQty[], catalog: readonly Catalog
   let test = false;
   const priced = catalog.filter(live);
   const r = gutterPreview(parts, rates, (p) => {
-    const it = findItem(priced, p);
+    // its own item, else its group's (#2000): the same price the estimate's line takes
+    const { it: own, group } = priceItemOf(priced, p);
+    const it = own ?? group;
     if (!it) return undefined;
     if (it.placeholder) test = true;
     // the core's price of an item (a material: cost × supplier tax × markup, as the estimate's line from the list)
