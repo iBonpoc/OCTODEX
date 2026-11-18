@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
 <!--
   Прототип спеки 61 (docs/specs/61-gutters-prices.md §4.1–4.3), этап 0, только картинка.
-  Параметры: ?w=390|820|1280 &theme=light|dark &state=screen|sheet|search &lane=all|gutter|downspout|guards|consumables|labor
+  Параметры: ?w=390|820|1280 &theme=light|dark &state=screen|menu|search &lane=all|missing|gutter|downspout|guards|consumables
   Все значения — токены «Наряда»: блоки ниже — копия design/naryad-ds/tokens/{foundation,theme,components,status}.css
   (нужная часть, без правок) и последний блок — зеркало значений packages/design-tokens/src/index.ts, которых нет в CSS.
   Демо-цены (правило 9): примерные, не цены поставщиков.
@@ -193,6 +193,17 @@ svg.i{fill:none;stroke:currentColor;stroke-width:var(--icon-stroke);stroke-linec
 .mi .ck{width:var(--icon-md);height:var(--icon-md);color:var(--ink)}
 .mi.on{font-weight:var(--fw-semibold)}
 .mi + .mi{border-top:var(--hairline) solid var(--bd)}
+
+/* «?» у заголовка (Б7): видимый 18, значок 11, зона 44 */
+.ttl{display:flex;align-items:center;gap:var(--space-2)}
+.help{position:relative;width:var(--help-visible);height:var(--help-visible);border-radius:var(--radius-pill);display:grid;place-items:center;
+  background:var(--surf2);border:var(--hairline) solid var(--bd);color:var(--ink);flex:none}
+.help::after{content:"";position:absolute;inset:calc((var(--help-visible) - var(--hit-min)) / 2)}
+.help svg{width:var(--help-icon);height:var(--help-icon);stroke-width:2.5}
+.syscap{padding:var(--space-2) var(--space-4) var(--space-3);font-size:var(--fs-caption);color:var(--mut);border-top:var(--hairline) solid var(--bd)}
+.lane{-webkit-mask-image:linear-gradient(to right,var(--ink) calc(100% - var(--tab-fade-w)),transparent);mask-image:linear-gradient(to right,var(--ink) calc(100% - var(--tab-fade-w)),transparent)}
+:root{--tab-fade-w:var(--space-8)}
+.other{max-width:var(--form-max)}
 </style>
 </head>
 <body>
@@ -224,21 +235,22 @@ const PATHS = {
   cal:'<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
   file:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8M16 13H8M16 17H8"/>',
   inbox:'<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
-  plus:'<path d="M5 12h14M12 5v14"/>', menu:'<path d="M4 6h16M4 12h16M4 18h16"/>'
+  plus:'<path d="M5 12h14M12 5v14"/>', help:'<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>', menu:'<path d="M4 6h16M4 12h16M4 18h16"/>'
 };
 // размеры значков — токены iconXs/Sm/Md (12/16/20)
 const ic = (n, s = 'md') => `<svg class="i" style="width:var(--icon-${s});height:var(--icon-${s})" viewBox="0 0 24 24" aria-hidden="true">${PATHS[n]}</svg>`;
 
 const SYS = { gutter: '5″ K-Style', ds: '2×3', mat: 'Aluminum' };
-const SYS_LABEL = `${SYS.gutter} · ${SYS.ds} · ${SYS.mat}`;
+const NB = ' ';
+const nb = (t) => t.replace(/эт (\d)/g, 'эт' + NB + '$1').replace(/End Cap – (Left|Right)/g, `End${NB}Cap${NB}–${NB}$1`);
 const SECTIONS = [
   ['gutter', 'Желоб'], ['corners_caps', 'Углы и заглушки'], ['fasteners', 'Крепёж'], ['downspouts', 'Водосток'],
   ['adapters', 'Переходники'], ['ds_bottom', 'Низ водостока'], ['guards', 'Guards'], ['consumables', 'Расходники']
 ];
-// лента из 6 (спека 61 §4.2): чип → разделы сметы; «Работа» — список работы; «Все» — по умолчанию и последним
+// лента из 6 (спека 61 §4.2): «Без цены» первым, «Все» — по умолчанию и последним
 const LANES = [
-  ['gutter', 'Желоб', ['gutter', 'corners_caps', 'fasteners']], ['downspout', 'Водосток', ['downspouts', 'adapters', 'ds_bottom']],
-  ['guards', 'Guards', ['guards']], ['consumables', 'Расходники', ['consumables']], ['labor', 'Работа', []], ['all', 'Все', null]
+  ['missing', 'Без цены', null], ['gutter', 'Желоб', ['gutter', 'corners_caps', 'fasteners']], ['downspout', 'Водосток', ['downspouts', 'adapters', 'ds_bottom']],
+  ['guards', 'Guards', ['guards']], ['consumables', 'Расходники', ['consumables']], ['all', 'Все', null]
 ];
 // демо-цены (правило 9); price null — позиции в прайсе нет
 const LABOR = [
@@ -260,21 +272,30 @@ const PARTS = [
   ['guards', '5″ Gutter Guard', null, 'ft'],
   ['consumables', 'Gutter Sealant', 780, 'ea'],
 ];
+const OTHER_SYSTEMS_HITS = 1; // «cap» в других системах (напр. 6″ Fascia End Cap)
 const money = (c) => '$' + (c / 100).toLocaleString('en-US', { minimumFractionDigits: 2 });
 const missing = LABOR.filter((r) => r[1] == null).length + PARTS.filter((r) => r[2] == null).length;
 const match = (name) => !Q || name.toLowerCase().includes(Q);
 
+// что показывает чип: детали и работа (работа — только под «Все» и «Без цены»)
+function rowsFor(lane) {
+  const secs = (LANES.find((l) => l[0] === lane) || LANES[5])[2];
+  const parts = PARTS.filter((p) => (!secs || secs.includes(p[0])) && (lane !== 'missing' || p[2] == null) && match(p[1]));
+  const labor = lane === 'all' || lane === 'missing' ? LABOR.filter((r) => (lane !== 'missing' || r[1] == null) && match(r[0])) : [];
+  return { parts, labor };
+}
+const cur = rowsFor(LANE);
+
 function listCard(icon, title, price, unit) {
-  const found = price != null;
-  const chip = found ? `<span class="chip ok">${ic('check', 'xs')}В прайсе</span>` : '';
-  const val = found ? `<span class="vl tab">${money(price)} / ${unit}</span>` : `<span class="vl no tab">— / ${unit}</span>`;
+  const val = price != null ? `<span class="vl tab">${money(price)} / ${unit}</span>` : `<span class="vl no tab">— / ${unit}</span>`;
   return `<div class="lc" role="button"><span class="av">${ic(icon, DEV === 'desktop' ? 'sm' : 'md')}</span>
-    <div class="bd"><span class="tt">${title}</span>${chip}</div>${val}</div>`;
+    <div class="bd"><span class="tt">${nb(title)}</span></div>${val}</div>`;
 }
 const header = () => DEV === 'desktop' ? `<div class="lch"><span class="c1">Позиция</span><span>Цена</span></div>` : '';
 
 function filterBar() {
-  const chips = LANES.filter(([k, , secs]) => k === LANE || k === 'all' || k === 'labor' || PARTS.some((p) => secs.includes(p[0])))
+  // нулевые скрыты (кроме выбранного), нули — с учётом поиска
+  const chips = LANES.filter(([k]) => k === LANE || k === 'all' || (() => { const r = rowsFor(k); return r.parts.length + r.labor.length > 0; })())
     .map(([k, l]) => `<button class="chipf${k === LANE ? ' on' : ''}" role="radio" aria-checked="${k === LANE}">${l}</button>`).join('');
   const lane = `<div class="lane" id="lane" role="radiogroup" aria-label="Раздел">${chips}</div>`;
   const closed = `<button class="srch" aria-label="Поиск">${ic('search', 'sm')}</button>`;
@@ -284,62 +305,53 @@ function filterBar() {
   return DEV === 'phone' ? `<div class="fb"><div class="r1">${open}</div>${lane}</div>` : `<div class="fb"><div class="r1">${open}${lane}</div></div>`;
 }
 
-const laneSecs = (LANES.find((l) => l[0] === LANE) || LANES[5])[2];
-const partRows = LANE === 'labor' ? [] : PARTS.filter((p) => (!laneSecs || laneSecs.includes(p[0])) && match(p[1]));
-const laborRows = LANE === 'all' || LANE === 'labor' ? LABOR.filter((r) => match(r[0])) : [];
-function partsList() {
-  const rows = partRows;
+function partsSec() {
+  if (!cur.parts.length) return '';
   let html = '';
   for (const [k, l] of SECTIONS) {
-    const g = rows.filter((p) => p[0] === k);
+    const g = cur.parts.filter((p) => p[0] === k);
     if (!g.length) continue;
-    html += `<div class="grp">${l}</div>`;
-    html += g.map((p) => listCard('box', p[1], p[2], p[3])).join('');
+    html += `<div class="grp">${l}</div>` + g.map((p) => listCard('box', p[1], p[2], p[3])).join('');
   }
-  return `${header()}<div class="grid">${html}</div>`;
+  return `<section class="sec"><h2>Детали <span class="n">· ${cur.parts.length}</span></h2>${header()}<div class="grid">${html}</div></section>`;
+}
+function laborSec() {
+  if (!cur.labor.length) return '';
+  return `<section class="sec"><h2>Работа <span class="n">· ${cur.labor.length}</span></h2>
+    <p class="hint">Отдельными строками сметы; от системы не зависит.</p>${header()}
+    <div class="grid">${cur.labor.map((r) => listCard('wrench', r[0], r[1], r[2])).join('')}</div></section>`;
+}
+
+function systemCard() {
+  const items = ['5″ K-Style', '6″ K-Style', '5″ Fascia', '6″ Fascia', '5″ Half Round'];
+  const open = STATE === 'menu';
+  const menu = open ? `<div class="menu" role="menu" style="top:calc(var(--field-phone) - var(--space-1))">${items.map((x) =>
+    `<div class="mi${x === SYS.gutter ? ' on' : ''}" role="menuitemradio" aria-checked="${x === SYS.gutter}"><span class="ck">${x === SYS.gutter ? ic('check') : ''}</span>${x}</div>`).join('')}</div>` : '';
+  const sel = (l, v, o) => `<button class="sel${o ? ' open' : ''}" aria-haspopup="menu" aria-expanded="${!!o}"><span>${l}</span><span class="lv">${v}</span><span class="mut">${ic('down', 'sm')}</span></button>`;
+  return `<div class="card form sys" data-testid="gpr-system" role="group" aria-label="Система">
+    ${sel('Желоб', SYS.gutter, open)}${sel('Водосток', SYS.ds)}${sel('Материал', SYS.mat)}
+    <div class="syscap">Цена одна на все цвета</div>${menu}</div>`;
 }
 
 function screen() {
-  const labor = laborRows;
-  const found = Q ? `<div class="found">Найдено: ${labor.length + partRows.length} — работа ${labor.length}, детали ${partRows.length}</div>` : '';
-  const partsSec = partRows.length ? `<section class="sec"><h2>Детали <span class="n">· ${partRows.length}</span></h2>
-    <p class="hint">Детали работы системы ${SYS_LABEL}. Цена одна на все цвета.</p>
-    ${partsList()}
-  </section>` : '';
-  const laborSec = labor.length ? `<section class="sec"><h2>Работа <span class="n">· ${labor.length}</span></h2>
-      <p class="hint">Отдельными строками сметы; от системы не зависит.</p>${header()}
-      <div class="grid">${labor.map((r) => listCard('wrench', r[0], r[1], r[2])).join('')}</div></section>` : '';
+  const n = cur.parts.length + cur.labor.length;
+  const found = Q ? `<div class="found">Найдено: ${n}</div>
+    <div class="card other"><button class="lrow"><span>В других системах: ${OTHER_SYSTEMS_HITS}</span><span class="lv"></span><span class="mut">${ic('right')}</span></button></div>` : '';
   return `
   <div class="ver">GoRix v1.0.0 · dev</div>
   <button class="back">${ic('left')}Gutters</button>
-  <div class="hd"><h1>Цены и прайс</h1><div class="sub">Gutters</div></div>
-  <p class="intro">Какая позиция прайса стоит за каждой работой и деталью. Смета берёт цену отсюда; чтобы поменять цену, нажмите на позицию.</p>
-  <div class="card sys"><button class="lrow" data-testid="gpr-system" aria-haspopup="dialog"><span class="lt">Система</span><span class="lv">${SYS_LABEL}</span><span class="mut">${ic('right')}</span></button></div>
+  <div class="hd ttl"><h1>Цены и прайс</h1><button class="help" aria-label="Справка: Цены и прайс">${ic('help')}</button></div>
+  ${systemCard()}
   <div class="banner" role="status" data-testid="gpr-missing-n"><span class="bi">${ic('alert')}</span>
-    <div class="bb"><span class="sr">Предупреждение.</span><div class="bt">Нет цены: ${missing} — ${SYS_LABEL}</div>
-      <div class="bh">Добавит недостающие позиции с примерными ценами — поправьте под себя. Повторно дублей не создаёт.</div>
+    <div class="bb"><span class="sr">Предупреждение.</span><div class="bt">Нет цены: ${missing}</div>
+      <div class="bh">В этой системе и в работе; добавит позиции с примерными ценами.</div>
       ${DEV === 'phone' ? `<button class="btn">Создать позиции сразу</button>` : ''}</div>
     ${DEV === 'phone' ? '' : `<button class="btn">Создать позиции сразу</button>`}
   </div>
   ${filterBar()}
   ${found}
-  ${laborSec}
-  ${partsSec}`;
-}
-
-function sheet() {
-  const items = ['5″ K-Style', '6″ K-Style', '5″ Fascia', '6″ Fascia', '5″ Half Round'];
-  const pos = DEV === 'phone' ? 'bottom:calc(100% + var(--space-1))' : 'top:calc(var(--row-min) - var(--space-1))';
-  const menu = `<div class="menu" role="menu" style="${pos}">${items.map((x) =>
-    `<div class="mi${x === SYS.gutter ? ' on' : ''}" role="menuitemradio" aria-checked="${x === SYS.gutter}"><span class="ck">${x === SYS.gutter ? ic('check') : ''}</span>${x}</div>`).join('')}</div>`;
-  const sel = (l, v, open) => `<button class="sel${open ? ' open' : ''}" aria-haspopup="menu" aria-expanded="${!!open}"><span>${l}</span><span class="lv">${v}</span><span class="mut">${ic('down', 'sm')}</span></button>`;
-  return `<div class="scrim"></div>
-  <div class="sheet" role="dialog" aria-modal="true" aria-label="Система">
-    ${DEV === 'phone' ? '<div class="grab" role="adjustable"></div>' : ''}
-    <div class="sh-h"><h3>Система</h3><button class="iconbtn" aria-label="Закрыть">${ic('close', 'sm')}</button></div>
-    <p class="sh-hint">Цены на экране — для этой системы. Цвет не выбирают: цена одна на все цвета.</p>
-    <div class="card form">${sel('Желоб', SYS.gutter, true)}${sel('Водосток', SYS.ds)}${sel('Материал', SYS.mat)}${menu}</div>
-  </div>`;
+  ${partsSec()}
+  ${laborSec()}`;
 }
 
 const TABS = [['home', 'Главная'], ['clip', 'Gutters'], ['msg', 'Сообщения'], ['users', 'Клиенты'], ['more', 'Ещё']];
@@ -348,10 +360,10 @@ const nav = DEV === 'phone'
   ? `<nav class="tabbar">${TABS.map(([i, l]) => `<div class="ti${l === 'Gutters' ? ' on' : ''}">${ic(i)}${l}</div>`).join('')}</nav>`
   : `<nav class="rail"><div class="ri">${ic('menu')}</div><div class="new" aria-label="Создать">${ic('plus')}</div>${RAIL.map(([i, l]) => `<div class="ri${l === 'Gutters' ? ' on' : ''}">${ic(i)}${l}</div>`).join('')}</nav>`;
 
-document.getElementById('root').innerHTML = `<div class="app">${DEV === 'phone' ? '' : nav}<main class="main"><div class="col">${screen()}</div></main>${DEV === 'phone' ? nav : ''}</div>${STATE === 'sheet' ? sheet() : ''}`;
-// выбранный чип ленты виден (как прокрутка к выбранному в приложении)
+document.getElementById('root').innerHTML = `<div class="app">${DEV === 'phone' ? '' : nav}<main class="main"><div class="col">${screen()}</div></main>${DEV === 'phone' ? nav : ''}</div>`;
+// лента: при «Все» стоит в начале (спека 61 §4.2); иначе выбранный чип прокручен в вид
 const on = document.querySelector('.chipf.on'), lane = document.getElementById('lane');
-if (on && lane) lane.scrollLeft = Math.max(0, on.offsetLeft + on.offsetWidth - lane.clientWidth);
+if (on && lane && LANE !== 'all') lane.scrollLeft = Math.max(0, on.offsetLeft + on.offsetWidth - lane.clientWidth);
 </script>
 </body>
 </html>
