@@ -1288,7 +1288,10 @@ export default function DrawScreen() {
               <T v="heading" w="semibold">{t("mod.gutters.draw.title")}</T>
             )}
             {/* «?» beside the name (DS §12.2): the same steps as on the empty canvas, any time (#2186) */}
-            <HelpButton title={t("mod.gutters.draw.help.q")} text={helpText(t)} testID="draw-help" />
+            {/* a gap of a whole step from the name button: their touch zones (44) never overlap (rule 3; second design review) */}
+            <View style={{ marginLeft: space[3] }}>
+              <HelpButton title={t("mod.gutters.draw.help.q")} text={helpText(t)} testID="draw-help" />
+            </View>
             {/* no cloud when all is saved and sent: only «on the phone» (not sent yet / no connection), a tap says it in words (#507 → #1274) */}
             {canSave && !flat && (mark === "sending" || mark === "phone") ? (
               <View testID="draw-local">

@@ -23,7 +23,7 @@ exports.run = async (h) => {
   await tid("draw-empty-help").waitFor({ timeout: 5000 });
   for (const s of ["line", "ds", "len", "zoom"]) h.expect((await tid(`draw-help-${s}`).count()) === 1, `the step «${s}» is there`);
   const card = await tid("draw-empty-help").innerText();
-  h.expect(/Как рисовать/.test(card) && /Downspout/.test(card) && /Двумя пальцами/.test(card), `the steps in words (${card.slice(0, 120)})`);
+  h.expect(/Как рисовать/.test(card) && /downspout/i.test(card) && /Двумя пальцами/.test(card), `the steps in words (${card.slice(0, 120)})`);
   await h.shot("empty");
 
   // the first stroke right through the card's middle: it draws, the card goes
@@ -41,11 +41,15 @@ exports.run = async (h) => {
   await p.waitForFunction(() => !document.querySelector('[data-testid="draw-empty-help"]'), null, { timeout: 5000 })
     .catch(() => h.expect(false, "after the first line the card is gone"));
 
+  // «?» stands a whole step off the name button: the two touch zones (44) never overlap (rule 3; second design review)
+  const name = (await tid("draw-to-lead").count()) ? await tid("draw-to-lead").boundingBox() : null;
+  const q = await tid("draw-help").boundingBox();
+  if (name && q) h.expect(q.x - (name.x + name.width) >= 12, `«?» is ≥ 12 px off «Привязать» (${Math.round(q.x - (name.x + name.width))})`);
   // «?» shows the same steps
   await tid("draw-help").click();
   const sheet = p.locator('[aria-modal="true"]').last();
   await sheet.waitFor({ timeout: 5000 });
   const said = await sheet.innerText();
-  h.expect(/Как рисовать/.test(said) && /Downspout/.test(said) && /Двумя пальцами/.test(said), `«?»: the same steps (${said.slice(0, 160)})`);
+  h.expect(/Как рисовать/.test(said) && /downspout/i.test(said) && /Двумя пальцами/.test(said), `«?»: the same steps (${said.slice(0, 160)})`);
   await h.shot("help");
 };

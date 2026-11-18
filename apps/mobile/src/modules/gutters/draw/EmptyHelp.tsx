@@ -3,13 +3,15 @@
  * должна быть инструкция, как пользоваться чертежом»). Four steps, a picture and a line each: draw a gutter, put a
  * downspout on it, the length, two fingers to zoom and move. On an empty canvas it stands in the middle and lets every
  * touch through (the first stroke draws at once); gone after the first line; the same steps under «?» in the header.
- * Built of src/ui only (rule 29): Card, RowView, Icon, T.
+ * Built of src/ui (RowView, Icon, T) on the canvas's own plate — `ov` with a hairline, as the hints and the summary chip over
+ * the drawing (DS §6.4, §19а: the grid must not show through the words — second design review of #2186; `Card`'s `surf` let it).
  */
 import { View } from "react-native";
-import { component, space } from "@octo/design-tokens";
+import { component, radius, space } from "@octo/design-tokens";
+import { useTheme } from "@/theme/ThemeProvider";
 import { useI18n, type DictKey } from "@/i18n";
 import { Icon, T, type IconKey } from "@/ui/primitives";
-import { Card, RowView } from "@/ui/surfaces";
+import { RowView } from "@/ui/surfaces";
 
 const k = (s: string) => `mod.gutters.draw.help.${s}` as DictKey;
 /** the steps, in the order of the work; a gutter's and a downspout's picture is the toolbar's own (design review #2186:
@@ -27,9 +29,10 @@ export const helpText = (t: (k: DictKey) => string) => HELP_STEPS.map((s, i) => 
 /** the card on the empty canvas: never takes a touch — drawing starts through it */
 export function EmptyHelp({ lineIcon, dsIcon }: { lineIcon: IconKey; dsIcon: IconKey }) {
   const { t } = useI18n();
+  const { c } = useTheme();
   return (
     <View pointerEvents="none" testID="draw-empty-help" style={{ width: "100%", maxWidth: component.modalW }}>
-      <Card style={{ gap: space[3] }}>
+      <View style={{ gap: space[3], padding: space[4], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
         <T v="heading" w="semibold">{t(k("title"))}</T>
         {HELP_STEPS.map((s) => (
           <View key={s.key} testID={`draw-help-${s.key}`}>
@@ -42,7 +45,7 @@ export function EmptyHelp({ lineIcon, dsIcon }: { lineIcon: IconKey; dsIcon: Ico
           </View>
         ))}
         <T v="caption" tone="mut">{t(k("more"))}</T>
-      </Card>
+      </View>
     </View>
   );
 }
