@@ -85,6 +85,9 @@ exports.run = async (h) => {
   // «Обновить из замера»: the same estimate, the current version, no words
   await h.go(`/estimate/${eid}`);
   await tid("module-gutters-engine-update").getByRole("button").click();
+  // the review asks first: an estimate is changed only by a press (opening a link never writes)
+  await tid("view-estimate-ask").waitFor({ timeout: 8000 });
+  await tid("view-estimate-ask-action").getByRole("button").click();
   await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 8000 });
   h.expect(new URL(p.url()).searchParams.get("id") === eid, "the same estimate");
   await p.waitForFunction(([k, id, v]) => { const e = ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.estimates || []).find((x) => x.id === id); const vs = (e?.doc?.options || []).flatMap((o) => o.lines).filter((l) => l.source && l.source.module === "gutters").map((l) => l.source.engineVersion); return vs.length > 0 && vs.every((x) => x === v); }, [DB_KEY, eid, now], { timeout: 8000 });
