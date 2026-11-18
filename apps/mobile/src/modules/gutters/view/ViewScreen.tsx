@@ -20,6 +20,7 @@ import { canSeeClientMoney } from "@/features/clients";
 import { EstimateListCard } from "@/features/listCards";
 import { moduleActive, moduleHref } from "@/modules/registry";
 import { Button, StatusChip } from "@/ui/controls";
+import { Banner } from "@/ui/banner";
 import { Icon, T } from "@/ui/primitives";
 import { HelpButton, Menu, useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, ListRow, RowView, Screen } from "@/ui/surfaces";
@@ -68,7 +69,7 @@ export default function ViewScreen() {
 
 /**
  * The body of «Просмотр замера»: the screen above and the 1280 panel of «Замеры». `estimate` — «Смета из замера» /
- * «Обновить из замера» came with estimate=1: done once; `from` — "draw": «Править чертёж» goes back to that canvas.
+ * «Обновить из замера» came with estimate=1: asked once (a press writes); `from` — "draw": «Править чертёж» goes back to that canvas.
  */
 export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, panel }: { mid: string; estimate?: boolean; from?: string; /** the measurement was deleted from its card */ onGone: () => void; /** in the 1280 panel beside «Замеры»: one column */ panel?: boolean }) {
   const store = useStore();
@@ -140,12 +141,15 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     toast.show(t(r.updated ? "mod.gutters.est.updated" : "mod.gutters.est.made"), r.undo);
     router.push(`/estimate/new?id=${encodeURIComponent(r.estimateId)}` as Href);
   };
-  // «Смета из замера» (the lead) and «Обновить из замера» (the estimate's note) come here with estimate=1: done once
+  // «Смета из замера» (the lead) and «Обновить из замера» (the estimate's note) come here with estimate=1. Opening a link never writes:
+  // an estimate to open is opened (nothing changes); one to make or update is ASKED — the person presses (the question on top)
   const auto = useRef(!!autoEstimate);
+  const [ask, setAsk] = useState(false);
   useEffect(() => {
     if (!auto.current || !m || !money$) return;
     auto.current = false;
-    if (action.kind === "make" || action.kind === "update" || action.kind === "open") doEstimate();
+    if (action.kind === "open") doEstimate();
+    else if (action.kind === "make" || action.kind === "update") setAsk(true);
   });
 
   // «чертёж как на бумаге» (founder 10.11, #739): a drawing sheet, not the canvas — the same one the PDFs carry
@@ -217,7 +221,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     const set = shopSheets(drawing, {
       t: tt,
       job: shopJob(company, { client: who, address: addr ? [addr.address, addr.city].filter(Boolean).join(", ") : undefined, date: docDay(new Date().toISOString(), company.timezone) }),
-      rules: { hangerSpacingIn: r.hangerSpacingIn, hangerExtra: r.hangerExtra, wasteFt: r.wasteFt, dsStickFt: r.dsStickFt, storyFt: r.storyFt, corner: r.corner },
+      rules: { hangerSpacingIn: r.hangerSpacingIn, hangerExtra: r.hangerExtra, wasteFt: r.wasteFt, dsStickFt: r.dsStickFt, storyFt: r.storyFt, corner: r.corner, engine: rules.over },
       parts,
       fmt,
     });
@@ -246,6 +250,16 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
             the rest on the right (П25.3 Б); a phone and the 1280 panel — one column, the same order */}
         <View style={cols ? { flexDirection: "row", alignItems: "flex-start", gap: space[4] } : { gap: space[4] }}>
         <View style={{ gap: space[4], ...(cols ? { flex: 1, minWidth: 0 } : {}) }}>
+        {/* came by a link to make / update the estimate: the question on top, above the content (DS Б9) — a press writes */}
+        {ask && (action.kind === "make" || action.kind === "update") ? (
+          <Banner
+            tone="info"
+            testID="view-estimate-ask"
+            title={t(action.kind === "make" ? "mod.gutters.view.askMake" : "mod.gutters.view.askUpdate")}
+            action={{ label: t(action.kind === "make" ? "mod.gutters.est.make" : "mod.gutters.est.update"), onPress: () => { setAsk(false); doEstimate(); } }}
+            onClose={() => setAsk(false)}
+          />
+        ) : null}
         {/* the drawing whole — to look at only: no gestures, nothing to tap */}
         <View testID="view-drawing" pointerEvents="none" onLayout={(e) => setW(Math.round(e.nativeEvent.layout.width))}>
           {sheet ? <DocSheet sheet={sheet} testID="view-svg" /> : null}
