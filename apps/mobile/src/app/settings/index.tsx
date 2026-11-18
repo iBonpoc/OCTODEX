@@ -57,7 +57,7 @@ export default function Settings() {
       {canSeeShowcase(mode, role) ? (
         <Card>
           <View testID="settings-design-system">
-            <ListRow title={t("ds.title")} subtitle={t("ds.rowHint")} onPress={() => router.push("/settings/design-system")} />
+            <ListRow title={t("ds.title")} subtitle={t("ds.rowHint")} lines={0} onPress={() => router.push("/settings/design-system")} />
           </View>
         </Card>
       ) : null}

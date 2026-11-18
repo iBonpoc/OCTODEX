@@ -4,6 +4,7 @@
  * a service and who does not see costs: the client price. Saved by the store's own item save (by field, wave 53-0),
  * with «Отменить». The rules are pure in features/quickPrice.ts. A kit is never priced here (the full editor).
  */
+import { seeCosts } from "./access";
 import { useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
@@ -12,11 +13,12 @@ import { useStore } from "@/data/store";
 import type { CatalogItem } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { formatBps } from "@/ui/numberInput";
-import { Button } from "@/ui/controls";
+import { Button, ReadOnly, useReadOnly } from "@/ui/controls";
 import { NumberField } from "@/ui/numberField";
 import { Sheet, useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { StatusNote } from "@/ui/statusNote";
+import { priceLocked } from "./catalogEdit";
 import { quickAsksCost, quickChanged, quickNeed, quickNoMarkup, quickPack, quickPriceItem, type QuickPriceInput } from "./quickPrice";
 
 /** a rate as the US writes it (rule 7: numbers en-US in every language) */
@@ -33,12 +35,14 @@ export function QuickPriceSheet({ item, visible, onClose, onExited }: { item: Ca
   const [input, setInput] = useState<QuickPriceInput>({});
   /** «Сохранить» was pressed with something missing: the hint under the field (the button is never pale, DS §11 п.3) */
   const [need, setNeed] = useState(false);
+  const outerRo = useReadOnly();
   if (!item) return null;
 
-  const noCosts = store.db.costsVisible === false;
+  const noCosts = !seeCosts(store.db, store.role, store.mode);
   const asksCost = quickAsksCost(item, noCosts);
+  const locked = priceLocked(item, noCosts, store.db.catalog);
   const next = quickPriceItem(item, input, store.db.catalog, noCosts);
-  const changed = quickChanged(item, input, noCosts);
+  const changed = quickChanged(item, input, noCosts, store.db.catalog);
   const missing = quickNeed(item, input, noCosts);
   const pack = asksCost ? quickPack(item) : null;
   const unit = item.unit;
@@ -124,8 +128,16 @@ export function QuickPriceSheet({ item, visible, onClose, onExited }: { item: Ca
         ) : (
           <>
             <View testID="qp-price">
-              <NumberField kind="money" label={t("price.quick.price", { unit })} unitWord={t("est.row.dollars")} cents={input.priceCents ?? item.priceCents} onChange={(c) => set({ priceCents: c })} />
+              {/* #1807: counted by the server from a cost this person does not see — shown, not changed */}
+              <ReadOnly value={locked || outerRo}>
+                <NumberField kind="money" label={t("price.quick.price", { unit })} unitWord={t("est.row.dollars")} cents={input.priceCents ?? item.priceCents} onChange={(c) => set({ priceCents: c })} />
+              </ReadOnly>
             </View>
+            {locked ? (
+              <View testID="qp-price-locked">
+                <T v="caption" tone="mut">{t("price.fromCost.locked")}</T>
+              </View>
+            ) : null}
             {need && missing === "price" ? <StatusNote tone="warn" testID="qp-need">{t("price.quick.needPrice")}</StatusNote> : null}
           </>
         )}

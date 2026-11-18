@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { View } from "react-native";
-import { space, size } from "@octo/design-tokens";
+import { space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { SignaturePad } from "./SignaturePad";
-import { TextField, Toggle } from "@/ui/controls";
+import { TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { RowView } from "@/ui/surfaces";
+import { ToggleRow } from "@/ui/toggleRow";
 
 /** Client name + E-SIGN consent + finger signature (client page and on-site signing). */
 export function SignBlock({ onSign, defaultName = "", busy }: { onSign: (name: string, svg: string) => void; defaultName?: string; busy?: boolean }) {
@@ -16,12 +16,8 @@ export function SignBlock({ onSign, defaultName = "", busy }: { onSign: (name: s
   return (
     <View style={{ gap: space[3] }}>
       <TextField type="name" value={name} onChangeText={setName} placeholder={t("portal.name")} icon="user" />
-      <RowView style={{ minHeight: size.hitMin, alignItems: "center" }}>
-        <T v="caption" style={{ flex: 1 }}>
-          {t("portal.consent")}
-        </T>
-        <Toggle label={t("portal.consent")} on={consent} onChange={setConsent} />
-      </RowView>
+      {/* E-SIGN consent: a row with its switch, off by default, the full text as its label (spec 56 §3 row 1) */}
+      <ToggleRow testID="sign-consent" label={t("portal.consent")} value={consent} onChange={setConsent} />
       {!ready ? (
         <T v="caption" tone="mut">
           {t("portal.need")}

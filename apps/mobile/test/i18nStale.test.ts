@@ -32,20 +32,47 @@ const needlesOf = (v: string) => v.split(/\{[^}]*\}/).map((s) => s.trim()).filte
 // comment lines (a doc block, `// …`) explain the change; code lines are what runs
 const isComment = (l: string) => /^\s*(\/\/|\*|\/\*)/.test(l);
 
+/**
+ * What a line of a spec looks for by its start or middle (#1961: `/Убран лишний желоб/` for «Убран лишний желоб, лежавший поверх
+ * другого» — the whole old text is not on the line, so the needle above does not see it): the plain runs of its regex literals
+ * and of the strings it gives `getByText` / `expectText`, at least PART letters — the regex's own signs split a run.
+ */
+const PART = 8;
+export function lookedFor(line: string): string[] {
+  const out: string[] = [];
+  const runs = (body: string) => {
+    for (const r of body.replace(/\\([()[\]{}.*+?^$|/\\-])/g, "\u0000$1").split(/\\[a-zA-Z]|[()[\]{}.*+?^$|]/)) {
+      const t = r.replace(/\u0000/g, "").trim();
+      if (t.length >= PART) out.push(t);
+    }
+  };
+  for (const m of line.matchAll(/(?:^|[(,=:!&|?\s])\/((?:[^/\\\n]|\\.)+)\/[a-z]*/g)) runs(m[1]!);
+  for (const m of line.matchAll(/(?:getByText|expectText)\(\s*"((?:[^"\\]|\\.)*)"/g)) if (m[1]!.length >= PART) out.push(m[1]!);
+  return out;
+}
+
 export function staleLabels(before: Record<string, Dict>, after: Record<string, Dict>, specs: Spec[]): Stale[] {
   const shown = Object.values(after).flatMap((d) => Object.values(d));
   const out: Stale[] = [];
+  const lines = specs.flatMap((s) => s.text.split("\n").map((l, i) => ({ s, l, i, parts: isComment(l) || /i18n-old: ok/.test(l) ? [] : lookedFor(l) })));
   for (const [lang, old] of Object.entries(before)) {
     for (const [key, was] of Object.entries(old)) {
       const now = after[lang]?.[key] ?? null;
       if (now === was) continue;
+      const hit = new Set<string>();
+      const add = (s: Spec, i: number, needle: string) => {
+        const id = `${s.file}:${i}`;
+        if (hit.has(id)) return;
+        hit.add(id);
+        out.push({ file: s.file, line: i + 1, key, lang, old: was, now, needle });
+      };
       for (const needle of needlesOf(was)) {
         if (shown.some((v) => v.includes(needle))) continue; // still on some screen
-        for (const s of specs)
-          s.text.split("\n").forEach((l, i) => {
-            if (!isComment(l) && !/i18n-old: ok/.test(l) && l.includes(needle)) out.push({ file: s.file, line: i + 1, key, lang, old: was, now, needle });
-          });
+        for (const { s, l, i } of lines) if (!isComment(l) && !/i18n-old: ok/.test(l) && l.includes(needle)) add(s, i, needle);
       }
+      // a part of the old text the line looks for, shown nowhere any more
+      for (const { s, i, parts } of lines)
+        for (const part of parts) if (was.includes(part) && !shown.some((v) => v.includes(part))) add(s, i, part);
     }
   }
   return out;
@@ -99,6 +126,8 @@ describe("e2e: no old label after an i18n change (#621)", () => {
     ["a removed label", { "m.s": "Мои настройки" }, {}, "h.expect((await p.getByText(\"Мои настройки\").count()) === 0);"],
     ["a part between placeholders", { "inv.due": "Ожидает оплаты · {n}" }, { "inv.due": "К оплате · {n}" }, "await h.expectText(/Ожидает оплаты · \\d+/);"],
     ["in a cloud spec too", { "r.m": "Роль Мастер" }, { "r.m": "Мастер" }, 'await h.expectText(/Роль Мастер/);'],
+    ["the start of the old text in a regex (#1961)", { "d.c": "Убран лишний желоб, лежавший поверх другого" }, { "d.c": "Убран лишний gutter, лежавший поверх другого" }, "await h.expectText(/Убран лишний желоб/);"],
+    ["the start of the old text in getByText", { "d.r": "Такой желоб уже есть — линия не добавлена" }, { "d.r": "Такой gutter уже есть — линия не добавлена" }, "await p.getByText(/Такой желоб уже есть/).first().waitFor();"],
   ])("red on %s", (_w, b, a, code) => expect(staleLabels(ru(b), ru(a), spec(code)).length).toBe(1));
   it.each([
     ["the old text still shown by another key", { "a": "Готово", "b": "Готово" }, { "a": "Сделано", "b": "Готово" }, 'await h.click("Готово");'],
@@ -107,5 +136,7 @@ describe("e2e: no old label after an i18n change (#621)", () => {
     ["a line marked on purpose", { "m.s": "Мои настройки" }, { "m.s": "Профиль" }, 'h.expect(n === 0, "no «Мои настройки» any more"); // i18n-old: ok'],
     ["too short to tell", { "x": "Да" }, { "x": "Ок" }, 'await h.click("Да");'],
     ["the old text is a part of the new one (the known gap)", { "e": "Смета" }, { "e": "Смета клиента" }, 'await h.click("Смета");'],
+    ["a regex part still shown by the new text", { "d.c": "Убран лишний желоб" }, { "d.c": "Убран лишний gutter" }, "await h.expectText(/Убран лишний/);"],
+    ["a regex of the new text", { "d.c": "Убран лишний желоб" }, { "d.c": "Убран лишний gutter" }, "await h.expectText(/Убран лишний gutter/);"],
   ])("green on %s", (_w, b, a, code) => expect(staleLabels(ru(b), ru(a), spec(code))).toEqual([]));
 });

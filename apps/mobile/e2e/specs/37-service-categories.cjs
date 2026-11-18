@@ -71,7 +71,7 @@ exports.run = async (h) => {
   await p.waitForTimeout(700);
   await p.getByRole("button", { name: "Направление" }).first().click();
   await p.waitForTimeout(300);
-  await h.sheet().getByRole("button", { name: "Pressure washing" }).click();
+  await h.sheet().getByRole("radio", { name: "Pressure washing" }).click(); // option rows (spec 56 wave 5а)
   await p.waitForTimeout(350);
   db = await h.db();
   const lead = db.leads.find((l) => l.name === "Kevin Brooks");
@@ -91,7 +91,7 @@ exports.run = async (h) => {
   await h.go("/job/j1");
   await p.getByRole("button", { name: "Направление" }).first().click();
   await p.waitForTimeout(300);
-  await h.sheet().getByRole("button", { name: "Кровля" }).click();
+  await h.sheet().getByRole("radio", { name: "Кровля" }).click();
   await p.waitForTimeout(350);
   db = await h.db();
   const roof = db.serviceCategories.find((c) => c.seedKey === "roofing");

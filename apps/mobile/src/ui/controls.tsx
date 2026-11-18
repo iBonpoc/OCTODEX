@@ -675,6 +675,9 @@ export function TextField({
         aria-invalid={shownError ? true : undefined}
         style={{
           flex: 1,
+          // the browser's <input> keeps its own width (~20 characters) and pushed the unit out of a narrow frame (#1990);
+          // a phone's TextInput already shrinks — 0 changes nothing there
+          minWidth: 0,
           minHeight: minH,
           // the browser's textarea does not grow by itself; a phone's multi-line field does (minHeight is enough there)
           height: multi && Platform.OS === "web" ? Math.max(minH, textH) : undefined,

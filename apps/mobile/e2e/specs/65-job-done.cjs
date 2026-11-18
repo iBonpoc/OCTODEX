@@ -39,7 +39,7 @@ exports.run = async (h) => {
   await p.waitForTimeout(500);
   h.expect(new URL(p.url()).pathname === "/job/schedule", `«Нужен ещё выезд» → the visit form (${p.url()})`);
   await p.getByRole("radiogroup").first().getByRole("radio").nth(workdayOffset(2)).click();
-  await p.getByRole("button", { name: "Ivan Sokolov" }).last().click();
+  await p.getByRole("option", { name: "Ivan Sokolov" }).last().click();
   await p.getByRole("radio", { name: /^1:00/ }).last().click();
   await p.getByRole("button", { name: "Запланировать", exact: true }).last().click();
   await p.waitForTimeout(600);

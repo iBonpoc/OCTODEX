@@ -112,7 +112,7 @@ exports.run = async (h) => {
     await p.getByTestId("draw-who").locator("visible=true").getByRole("button").click();
     await p.getByText(re).last().click();
   };
-  await menuRow(/^Конец желоба · [LR]$/);
+  await menuRow(/^Конец gutter · [LR]$/);
   await tid("end-sheet").waitFor({ timeout: 5000 });
   await closeSheet();
   if (!wide) {

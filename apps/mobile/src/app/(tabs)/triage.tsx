@@ -20,12 +20,12 @@ import { localUndo } from "@/data/undo";
 export default function Triage() {
   useTick();
   const { t, money } = useI18n();
-  const { db, role, rejectedOps, dismissRejected, online, reviewVisitMissed } = useStore();
+  const { db, role, rejectedOps, dismissRejected, online, reviewVisitMissed, mode } = useStore();
   const toast = useToast();
   const [snoozed, setSnoozed] = useState<string[]>([]);
   const [reply, setReply] = useState<string | null>(null);
   const [assign, setAssign] = useState<string | null>(null);
-  const all = buildAttention(db, role, undefined, { rejected: rejectedOps }).filter((x) => !snoozed.includes(x.id));
+  const all = buildAttention(db, role, undefined, { rejected: rejectedOps, mode }).filter((x) => !snoozed.includes(x.id));
   const cur = all[0];
   // the top card also shows how to reach the client and how many other reasons this client has (spec 06, PR7)
   const curSubject = cur ? subjectOf(db, cur) : {};

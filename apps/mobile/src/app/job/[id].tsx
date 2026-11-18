@@ -20,7 +20,7 @@ import { enRouteSms, filterJobHistory, jobHistory, nextOpenVisit, type JobHistor
 import { canSeeGateCode } from "@/features/properties";
 import { canPlan, visitWhen } from "@/features/schedule";
 import { completeBlock, jobAwaitingClose } from "@/features/jobDone";
-import { contractStatement } from "@octo/estimating-engine";
+import { contractStatement, invoiceOwes, invoicesOwe } from "@octo/estimating-engine";
 import { RelatedBlock } from "@/features/RelatedBlock";
 import { JobLinesBlock, canEditJobLines } from "@/features/JobLinesBlock";
 import { JobTypeTags } from "@/features/JobTypeTags";
@@ -37,6 +37,7 @@ import { T } from "@/ui/primitives";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { fabItems } from "@/nav/sections";
 import { CardGrid, ListCard } from "@/ui/listCard";
+import { FilterBar } from "@/ui/filterBar";
 import { memberLabel, memberName } from "@/features/team";
 import { canSeeJob } from "@/features/access";
 import { invoiceTitle } from "@/features/invoiceTitle";
@@ -102,7 +103,7 @@ export default function JobScreen() {
   const addr = [p?.address, p?.city].filter(Boolean).join(", ");
   const showMoney = canSeeProfit(store.role);
   const invoices = db.invoices.filter((i) => i.jobId === j.id);
-  const dueCents = invoices.reduce((s, i) => s + Math.max(0, i.totalCents - i.paidCents), 0);
+  const dueCents = invoicesOwe(invoices);
   const openInvoice = invoices.find((i) => i.totalCents > i.paidCents);
   const team = [...new Set(visits.flatMap((v) => v.assigneeIds ?? (v.techId ? [v.techId] : [])))]
     .map((mid) => memberName(db, mid, t))
@@ -393,7 +394,7 @@ export default function JobScreen() {
               lead={{ kind: "icon", icon: "invoice" }}
               title={(i.title && invoiceTitle(i, t)) || i.number || t("inv.title")}
               when={i.title ? i.number : undefined}
-              value={money(Math.max(0, i.totalCents - i.paidCents))}
+              value={money(invoiceOwes(i))}
               onPress={() => router.push(`/invoice/${i.id}`)}
             />
           ))}
@@ -407,17 +408,19 @@ export default function JobScreen() {
   const items = filterJobHistory(jobHistory(db, j.id, store.role), filter);
   const historyTab = (
     <>
-      <Segmented
-        full
-        value={filter}
-        onChange={setFilter}
-        items={[
-          { key: "all", label: t("job3.f.all") },
-          { key: "action", label: t("job3.f.action") },
-          { key: "note", label: t("job3.f.note") },
-          { key: "call", label: t("job3.f.call") },
-        ]}
-      />
+      {/* a filter over the history list — the list's filter lane (spec 56 §3.1), not segments */}
+      <View testID="job-history-filter">
+        <FilterBar<JobHistoryFilter>
+          value={filter}
+          onChange={setFilter}
+          items={[
+            { key: "all", label: t("job3.f.all") },
+            { key: "action", label: t("job3.f.action") },
+            { key: "note", label: t("job3.f.note") },
+            { key: "call", label: t("job3.f.call") },
+          ]}
+        />
+      </View>
       {items.length ? (
         <CardGrid>
           {items.map((e) => (

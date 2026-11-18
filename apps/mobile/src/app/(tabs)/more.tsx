@@ -35,7 +35,7 @@ export default function More() {
   const auth = useAuth();
   const me = db.members.find((m) => m.id === db.me);
   const who = mode === "cloud" ? (companyName ?? "") : t(`role.${role}`);
-  const counts = moreCounts(db, role);
+  const counts = moreCounts(db, role, undefined, undefined, mode);
   // on 820/1280 the side menu has the tabs too; here only what is not a tab
   const groups: { key: string; title?: DictKey; items: Section[] }[] = menuGroups(role, false, meIsSub(db), moduleTabs(db.company, role).length > 0)
     .flatMap((g) =>
