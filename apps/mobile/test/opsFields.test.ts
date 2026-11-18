@@ -180,3 +180,18 @@ describe("ops: «Весь день» of a visit (3b-3, 17-job §11.1)", () => {
     expect(visits.map((c) => [c.how, c.row.id, c.row.all_day])).toEqual([["upsert", "v9", true], ["upsert", "v10", false]]);
   });
 });
+
+describe("ops: property.save — the address parts reach the server (#2065)", () => {
+  it("the zip and the state go as typed; no state is never a guessed «CA»", async () => {
+    const prop = { id: "p1", customerId: "c1", address: "1 Main St", city: "Austin, TX 78701", place: { city: "Austin", state: "TX", zip: "78701" } };
+    await applyOp({ k: "property.save", property: prop } as never, "co", "u");
+    const row = calls.find((c) => c.table === "properties")!.row;
+    expect(row.address_zip).toBe("78701");
+    expect(row.address_state).toBe("TX");
+    calls.splice(0);
+    await applyOp({ k: "property.save", property: { ...prop, place: { city: "Austin", zip: "78701" } } } as never, "co", "u");
+    const r2 = calls.find((c) => c.table === "properties")!.row;
+    expect(r2.address_state).not.toBe("CA");
+    expect(r2.address_zip).toBe("78701");
+  });
+});

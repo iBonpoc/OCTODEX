@@ -939,6 +939,7 @@ export const en: Dict = {
   "co.done": "Done",
   "co.todo": "To do",
   "co.skipped": "Skipped",
+  "co.optional": "Optional",
   "co.stepOf": "Step {i} of {n}",
   "co.saved": "Saved",
   "co.saveNext": "Save and continue",
@@ -1053,7 +1054,6 @@ export const en: Dict = {
   // forms: the main button is never pale — what is missing (#1728, Экраны)
   "form.need.trade": "Pick a trade or type your own",
   "form.need.invite": "Enter a name and an email",
-  "ue.noCslb": "No valid CSLB license. In California its number is required on estimates and contracts — add it in Company → Licenses.",
   "lead.st.estimate": "Estimate sent",
   "lead.st.won": "Client",
   "lead.funnel": "Funnel",
@@ -3434,6 +3434,7 @@ export const en: Dict = {
   "mod.gutters.pr.w.install": "Gutter install",
   "mod.gutters.pr.w.downspout": "Downspout install",
   "mod.gutters.pr.w.bend": "Bend on site",
+  "mod.gutters.pr.w.solder": "Soldering",
   "mod.gutters.pr.w.corner_cut": "Corner cut",
   "mod.gutters.pr.w.tearoff": "Tear-off of old gutter",
   "mod.gutters.pr.w.tile": "Tile roof labor",
@@ -3498,6 +3499,7 @@ export const en: Dict = {
   "mod.gutters.pr.p.touch_up_paint": "Touch Up Paint",
   "mod.gutters.pr.p.flux": "Flux",
   "mod.gutters.pr.p.solder": "Solder",
+  "mod.gutters.pr.p.soldering_kit": "Soldering kit",
   "mod.gutters.pr.p.strip_miter": "Strip Miter",
   "mod.gutters.pr.p.wedge": "Gutter Wedge",
   "mod.gutters.pr.p.guard": "Gutter Guard",
@@ -4628,4 +4630,11 @@ export const en: Dict = {
   "ds.crash.hint": "Drawn by the root ErrorBoundary when the app itself fails (§13): no raw error text, “Retry” draws the screen again, “Restart” reloads the app. Outside the app's theme and language: it takes the system's.",
   // «Портал: предпросмотр клиента»: the office's «open as client» only shows
   "portalPreview.sign": "This is what the client will see. Only the client can sign and pay, by their own link.",
+  // #2017: the invoice message — no «How to pay: —», the client page link
+  "invMsg.sendNoHow": "{company}: invoice {number} for {amount}, due {date}.",
+  "invMsg.dueNoHow": "{company}: a friendly reminder about invoice {number} — balance {amount}, due {date}.",
+  "invMsg.overdueNoHow": "{company}: a friendly reminder that invoice {number} is {days} days past due. Balance due {amount} (was due {date}).",
+  "invMsg.payLink": "View and pay: {link}",
+  "invMsg.noHow": "No payment methods yet — the message won't tell the client how to pay",
+  "invMsg.fill": "Add payment methods",
 };

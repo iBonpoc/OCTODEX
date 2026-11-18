@@ -939,6 +939,7 @@ export const es: Dict = {
   "co.done": "Listo",
   "co.todo": "Pendiente",
   "co.skipped": "Omitido",
+  "co.optional": "Opcional",
   "co.stepOf": "Paso {i} de {n}",
   "co.saved": "Guardado",
   "co.saveNext": "Guardar y seguir",
@@ -1053,7 +1054,6 @@ export const es: Dict = {
   // forms: the main button is never pale — what is missing (#1728, Экраны)
   "form.need.trade": "Elija un oficio o escriba el suyo",
   "form.need.invite": "Escriba un nombre y un email",
-  "ue.noCslb": "Sin licencia CSLB vigente. En California su número es obligatorio — añádala en Empresa → Licencias.",
   "lead.st.estimate": "Presupuesto enviado",
   "lead.st.won": "Cliente",
   "lead.funnel": "Embudo",
@@ -3434,6 +3434,7 @@ export const es: Dict = {
   "mod.gutters.pr.w.install": "Instalación de canaleta",
   "mod.gutters.pr.w.downspout": "Instalación de bajante",
   "mod.gutters.pr.w.bend": "Doblez en obra",
+  "mod.gutters.pr.w.solder": "Soldadura de uniones",
   "mod.gutters.pr.w.corner_cut": "Corte de esquina",
   "mod.gutters.pr.w.tearoff": "Retiro de canaleta vieja",
   "mod.gutters.pr.w.tile": "Trabajo en techo de teja",
@@ -3498,6 +3499,7 @@ export const es: Dict = {
   "mod.gutters.pr.p.touch_up_paint": "Pintura de retoque",
   "mod.gutters.pr.p.flux": "Fundente",
   "mod.gutters.pr.p.solder": "Soldadura",
+  "mod.gutters.pr.p.soldering_kit": "Kit de soldadura",
   "mod.gutters.pr.p.strip_miter": "Strip miter",
   "mod.gutters.pr.p.wedge": "Wedge",
   "mod.gutters.pr.p.guard": "Protector de canaleta",
@@ -4628,4 +4630,11 @@ export const es: Dict = {
   "ds.crash.hint": "La dibuja el ErrorBoundary de la raíz cuando la app misma falla (§13): sin texto de error crudo, «Reintentar» dibuja la pantalla otra vez, «Reiniciar» recarga la app. Fuera del tema y del idioma de la app: toma los del sistema.",
   // «Портал: предпросмотр клиента»: the office's «open as client» only shows
   "portalPreview.sign": "Así lo verá el cliente. Solo el cliente puede firmar y pagar, con su propio enlace.",
+  // #2017: the invoice message — no «How to pay: —», the client page link
+  "invMsg.sendNoHow": "{company}: factura {number} por {amount}, vence {date}.",
+  "invMsg.dueNoHow": "{company}: le recordamos la factura {number} — saldo {amount}, vence el {date}.",
+  "invMsg.overdueNoHow": "{company}: le recordamos que la factura {number} tiene {days} días de atraso. Saldo pendiente {amount} (vencía el {date}).",
+  "invMsg.payLink": "Ver y pagar: {link}",
+  "invMsg.noHow": "Aún no hay formas de pago: el mensaje no dirá al cliente cómo pagar",
+  "invMsg.fill": "Añadir formas de pago",
 };

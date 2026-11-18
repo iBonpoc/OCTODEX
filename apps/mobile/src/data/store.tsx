@@ -2681,8 +2681,13 @@ export function StoreProvider({
       },
       updateCustomer: (id, patch) =>
         mutate("customer.update", (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? applyCustomerPatch(c, patch) : c)) }), { k: "customer.update", id, ...patch }),
-      saveProperty: (p) => {
+      saveProperty: (p0) => {
+        // #2065: an address with no state takes the company's (the server's column defaults to «CA» — no state of the core)
+        const cs = (dbRef.current.company?.address.state ?? "").trim().toUpperCase();
+        const p = p0.place && !p0.place.state?.trim() && cs ? { ...p0, place: { ...p0.place, state: cs } } : p0;
         const city = p.place ? cityLine(p.place) : p.city;
+        // a quick address with no parts (a new job): the server row still gets the company's state, the city line stays as typed
+        const opPlace = p.place ?? (cs ? { city: p.city, state: cs } : undefined);
         const next: Property = { ...p, city, address: p.address.trim(), unit: p.unit?.trim() || undefined, label: p.label?.trim() || undefined, accessNotes: p.accessNotes?.trim() || undefined };
         const { gateCode: _g, ...row } = next;
         return mutate(
@@ -2693,7 +2698,7 @@ export function StoreProvider({
               ? d.properties.map((x) => (x.id === p.id ? { ...next, gateCode: x.gateCode } : x))
               : [...d.properties, next],
           }),
-          { k: "property.save", property: row },
+          { k: "property.save", property: opPlace && !row.place ? { ...row, place: opPlace } : row },
         );
       },
       setGateCode: (propertyId, code) =>

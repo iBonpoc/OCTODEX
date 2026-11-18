@@ -938,6 +938,7 @@ export const ru = {
   "co.done": "Заполнено",
   "co.todo": "Не заполнено",
   "co.skipped": "Пропущено",
+  "co.optional": "Необязательно",
   "co.stepOf": "Шаг {i} из {n}",
   "co.saved": "Сохранено",
   "co.saveNext": "Сохранить и дальше",
@@ -1052,7 +1053,6 @@ export const ru = {
   // forms: the main button is never pale — what is missing (#1728, Экраны)
   "form.need.trade": "Выберите направление или впишите своё",
   "form.need.invite": "Укажите имя и email",
-  "ue.noCslb": "Нет действующей лицензии CSLB. В Калифорнии её номер обязателен в смете и договоре — добавьте в «Компания → Лицензии».",
   "lead.st.estimate": "Смета отправлена",
   "lead.st.won": "Клиент",
   "lead.funnel": "Воронка",
@@ -3434,6 +3434,7 @@ export const ru = {
   "mod.gutters.pr.w.install": "Монтаж gutter",
   "mod.gutters.pr.w.downspout": "Монтаж downspout",
   "mod.gutters.pr.w.bend": "Гиб по месту",
+  "mod.gutters.pr.w.solder": "Пайка швов",
   "mod.gutters.pr.w.corner_cut": "Вырезка угла",
   "mod.gutters.pr.w.tearoff": "Демонтаж старого",
   "mod.gutters.pr.w.tile": "Работа на черепице",
@@ -3498,6 +3499,7 @@ export const ru = {
   "mod.gutters.pr.p.touch_up_paint": "Touch Up Paint",
   "mod.gutters.pr.p.flux": "Flux",
   "mod.gutters.pr.p.solder": "Solder",
+  "mod.gutters.pr.p.soldering_kit": "Soldering kit",
   "mod.gutters.pr.p.strip_miter": "Strip Miter",
   "mod.gutters.pr.p.wedge": "Gutter Wedge",
   "mod.gutters.pr.p.guard": "Gutter Guard",
@@ -4628,6 +4630,13 @@ export const ru = {
   "ds.crash.hint": "Его рисует ErrorBoundary корня, когда приложение само упало (§13): без сырого текста ошибки, «Повторить» рисует экран заново, «Перезапустить» перезагружает приложение. Вне тем и языка приложения: берёт тему и язык системы.",
   // «Портал: предпросмотр клиента»: the office's «open as client» only shows
   "portalPreview.sign": "Так увидит клиент. Подписать и оплатить может только клиент по своей ссылке.",
+  // #2017: the invoice message — no «How to pay: —», the client page link
+  "invMsg.sendNoHow": "{company}: счёт {number} на {amount}, оплатить до {date}.",
+  "invMsg.dueNoHow": "{company}: напоминаем о счёте {number} — остаток {amount}, оплатить до {date}.",
+  "invMsg.overdueNoHow": "{company}: напоминаем, что счёт {number} просрочен на {days} дн. Остаток к оплате {amount} (срок был {date}).",
+  "invMsg.payLink": "Счёт и оплата: {link}",
+  "invMsg.noHow": "Способы оплаты не заполнены — в сообщении клиент не увидит, как оплатить",
+  "invMsg.fill": "Заполнить способы оплаты",
 } as const;
 
 export type DictKey = keyof typeof ru;
