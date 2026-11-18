@@ -9,7 +9,9 @@
 -- So this migration only gives every company whose module is switched on, and is not paid, 30 days from today: its
 -- trial_ends_at moves to now() + 30 days (never earlier than it already was). It is a stopgap until payment (step
 -- «Оплаты») exists — not a new rule: a module switched on for the first time after this migration gets the usual 7 days.
--- A switched-off module is not touched (switching it on again keeps its own trial end, as before).
+-- A module whose payment once ran out (paid_until in the past) counts as unpaid and gets the 30 days too.
+-- A switched-off module is not touched (switching it on again keeps its own trial end, as before) — the lead's question
+-- to the founder whether it should get them too (security-check №3).
 -- paid_until is not touched: it stays billing's own column.
 --
 -- rule 16: nothing is renamed or dropped; an old build reads trial_ends_at as before and simply sees the trial running.
@@ -18,7 +20,8 @@
 
 update public.company_modules
    set trial_ends_at = now() + interval '30 days',
-       updated_at = now()
+       updated_at = now(),
+       updated_by = null  -- the system, not the last person who changed the module (security-check)
  where enabled
    and (paid_until is null or paid_until <= now())
    and (trial_ends_at is null or trial_ends_at < now() + interval '30 days');
