@@ -90,8 +90,12 @@ describe("«Прибыль» by right (docs/specs/13 §3.4, §4)", () => {
 
 describe("the payment buttons ask the role (#868, #1061: the screens are wired to the rules)", () => {
   const src = (f: string) => fs.readFileSync(path.join(__dirname, "..", f), "utf8");
+  // #2018: the card goes through signedAction(store.role, due) — «pay» only with canTakeVisitPayment(role)
   it("the visit's payment card shows only when canTakeVisitPayment(store.role)", () => {
-    expect(src("src/app/visit/[id].tsx")).toMatch(/v\.step === "signed" && canTakeVisitPayment\(store\.role\)/);
+    const screen = src("src/app/visit/[id].tsx");
+    expect(screen).toMatch(/signedAction\(store\.role, /);
+    expect(screen).toMatch(/v\.step === "signed" && signed === "pay"/);
+    expect(src("src/features/visitSignedAction.ts")).toMatch(/canTakeVisitPayment\(role\) \? "pay"/);
   });
   it("«Принять оплату» on an invoice shows only when paymentRight is not «none»", () => {
     const f = src("src/features/invoice/InvoiceCard.tsx");

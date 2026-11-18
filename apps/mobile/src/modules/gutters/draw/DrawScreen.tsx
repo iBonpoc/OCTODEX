@@ -9,6 +9,9 @@
  * `?m=<id>` opens a measurement, none — a new one; a module that is off or past its
  * trial draws but saves nothing, and says so before the work starts (§6, founder О2). Delete → «Отменить» 5 s (rule 5).
  */
+import { canvasUnsaved, unsentAfter } from "./unsent";
+import { registerDirtySheet } from "@/ui/dirtySheets";
+import { sizeText } from "../sizeText";
 import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
 import { useWindowDimensions, View } from "react-native";
 import { router, Stack, useLocalSearchParams, type Href } from "expo-router";
@@ -30,7 +33,7 @@ import { Banner } from "@/ui/banner";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { goTo } from "@/nav/go";
-import { setFooterInset } from "@/ui/footerInset";
+import { setFooterInset, setToastRight } from "@/ui/footerInset";
 import { fillStyle } from "@/ui/fill";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { isDoubleTap, tapRule, type LastTap } from "../canvas/doubleTap";
@@ -52,7 +55,7 @@ import { MeasurePhotos } from "./Photos";
 import { fmtLen } from "../canvas/format";
 import { dropHaptic, forgetOldDraft, loadToolbarPlace, placeAt, saveToolbarPlace, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
 import { makeModuleStore } from "../canvas/moduleStore";
-import { gutterData, measurementOf, photosOf, relink, removeMeasurement } from "../data";
+import { gutterData, measurementOf, photosOf, relink } from "../data";
 import { makeSaver } from "../canvas/draftStore";
 import { onAppLeave } from "@/data/appActive";
 import { LinkSheet } from "./LinkSheet";
@@ -64,7 +67,9 @@ import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { GridLayer } from "../canvas/GridLayer";
 import { useJsGestureConfig } from "../canvas/jsGestureConfig";
 import { listPreview, partName } from "../prices";
-import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, signedOn } from "../estimateLink";
+import { clientLangOf, deleteBlock, estimateAction, estimateOfMeasurement, estimatesOn, makeEstimate, removeMeasurementDetached } from "../estimateLink";
+import { DeleteMeasurementSheet, NO_ESTIMATES } from "../view/DeleteMeasurementSheet";
+import type { ModuleEstimateStore } from "@/modules/registry";
 import { tFor } from "@/i18n/translate";
 import { cornerChoiceOf, cornerCut, findCorners, capSide, houseSides, splashOff, runEnds, runLengthIn, toMeasurement, withoutDuplicates, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
 import { localUndo, type GuardedUndo } from "@/data/undo";
@@ -145,7 +150,7 @@ function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow, disabl
 }
 
 /** a downspout size for the bar: «3×4», a round one «3″» */
-const dsSizeText = (s: string) => (s.includes("x") ? s.replace("x", "×") : `${s}″`);
+const dsSizeText = sizeText; // one format everywhere (#1916)
 
 const NO_VIEW: PlanView = { k: 1, ox: 0, oy: 0 };
 
@@ -195,6 +200,8 @@ export default function DrawScreen() {
   useHideTabBar(flat);
   const toast = useToast();
   const store = useStore();
+  /** who deletes a measurement (#2013: a tech changes only the estimates he made) */
+  const who = { role: store.role, me: store.db.me };
   const params = useLocalSearchParams<{ m?: string; lead?: string; property?: string; estimate?: string }>();
   const ins = useSafeAreaInsets();
   const access = moduleState(store.db.company?.modules?.gutters).access;
@@ -331,6 +338,15 @@ export default function DrawScreen() {
   }, [view, m, size, drawing, fit]);
 
   const later = useRef<() => void>(() => {});
+  // #1912: «Обновить» must not reload under a stroke or an unwritten change: while one lasts, this screen is a sheet with unsaved work
+  const [touching, setTouching] = useState(false);
+  const [unsent, setUnsent] = useState(false);
+  const unsavedNow = canvasUnsaved({ touching, unsent });
+  useEffect(() => {
+    if (!unsavedNow) return;
+    return registerDirtySheet({ ask: () => flushRef.current() });
+  }, [unsavedNow]);
+  const flushRef = useRef<() => void>(() => {});
   /** the address gets the measurement's id at its first edit (a reload opens it again) — only while this screen is shown */
   const nameIt = () => {
     const mm = cur.current.m;
@@ -341,7 +357,9 @@ export default function DrawScreen() {
   const flush = useCallback(() => {
     const { drawing: d, m: mm, canSave: ok } = cur.current;
     if (!mm || !ok) return;
+    if (shown.current) setUnsent(true);
     void saver.flush(mm, toElements(d, mm.id)).then((r) => {
+      if (shown.current) setUnsent(unsentAfter(r)); // #1912: a failed write stays «unsent» until it lands
       if (r === "saved") {
         if (!shown.current) return;
         setSavedOnce(true);
@@ -355,9 +373,11 @@ export default function DrawScreen() {
       else if (r === "failed") later.current();
     });
   }, [saver]);
+  flushRef.current = flush;
   // a gesture ended: write 1 s later (the queue gets one write per gesture, not per movement — П14.2 №5)
   later.current = () => {
     if (timer.current) clearTimeout(timer.current);
+    if (shown.current) setUnsent(true);
     timer.current = setTimeout(flush, SAVE_AFTER_MS);
   };
   useEffect(() => () => {
@@ -443,6 +463,7 @@ export default function DrawScreen() {
     maxPointers: 1,
     simultaneousWith: [canvas.pinch, canvas.pan],
     onBegin: (e) => {
+      setTouching(true);
       downAt.current = [e.x, e.y];
       downTime.current = Date.now();
       threeShown.current = false;
@@ -454,6 +475,7 @@ export default function DrawScreen() {
       holdTimer.current = setTimeout(liftAtHold, motion.longPressMs);
     },
     onFinalize: () => {
+      setTouching(false);
       clearHold(); // let go without moving, or a second finger: nothing changes, no «medium» (the drawing is untouched)
       hold.current = holdCancel(hold.current).hold;
       setLifted(null);
@@ -800,10 +822,6 @@ export default function DrawScreen() {
     later.current();
   };
   const tape = m?.accuracy === "tape";
-  const setAccuracy = (a: "rough" | "tape") => {
-    setM((x) => (x ? { ...x, accuracy: a } : x));
-    later.current();
-  };
   const endRun = endSheet ? drawing.runs.find((r) => r.id === endSheet.id) : undefined;
   const corner = cornerSheet ? findCorners(drawing).find((f) => f.id === cornerSheet) : undefined;
   const cut = corner ? cornerCut(drawing, corner) : null;
@@ -1031,9 +1049,7 @@ export default function DrawScreen() {
     // gutter / downspout, and «Конец желоба» of each of its free ends (named by the letter the cap carries on the canvas)
     ...(canSave && sel && !wide ? [{ key: "props" as const, label: t("mod.gutters.attr.props") }] : []),
     ...endRows.map((r) => ({ key: `end${r.end}` as const, label: `${t("mod.gutters.end.title")} · ${r.side}` })),
-    // how exact the lengths are, and where the toolbar sits — two items, each says what it is (#739; was one
-    // «Как мерили, панель» the founder did not understand)
-    ...(canSave && m ? [{ key: "acc" as const, label: t("mod.gutters.draw.accItem") }] : []),
+    // where the toolbar sits (#739); «Точность замера» is gone — nothing is written about how it was measured (#768, #1764)
     { key: "place", label: t("mod.gutters.draw.placeItem") },
     { key: "layers", label: t("mod.gutters.draw.layersItem") },
     // a measurement from before the automatic downspouts gets them only when asked (#1246): not silently, the estimate would change
@@ -1045,21 +1061,38 @@ export default function DrawScreen() {
     if (k === "fit") { if (size.w) setView(fit(drawing, size)); return; }
     if (k === "props") return setSheet(true);
     if (k === "end0" || k === "end1") return setEndSheet(endRun0 ? { id: endRun0.id, end: k === "end1" ? 1 : 0 } : null);
-    if (k === "acc" || k === "place" || k === "layers") return setMoreSheet(k);
+    if (k === "place" || k === "layers") return setMoreSheet(k);
     if (k === "autods") return placeAutoDs();
     if (!m) return;
     flush();
     if (k === "relink") setLinkSheet(true);
     else if (k === "unlink") toast.show(t("mod.gutters.link.unlinked"), relink(store, m.id, null) ?? undefined);
-    else if (signedOn(store.db, m.id)) toast.show(t("mod.gutters.draw.deleteSigned"));
-    else {
-      const undo = removeMeasurement(store, m.id);
-      flush();
-      // to the list of measurements (founder 16.11, #1819: he stayed on an empty canvas «Замер»): the canvas of a deleted one is
-      // never shown — the list below is popped to, else it takes this screen's place (goTo); «Отменить» brings it back there
-      goTo(moduleHref("gutters", "list"));
-      toast.show(t("mod.gutters.draw.mDeleted"), undo ?? undefined);
+    else if (deleteBlock(store.db, m.id, who)) toast.show(t(deleteBlock(store.db, m.id, who) === "signed" ? "mod.gutters.draw.deleteSigned" : "mod.gutters.del.notYours"));
+    // an open estimate stands on it: asked first (#2013), the question holds what it said while it goes out
+    else if (estimatesOn(store.db, m.id).drafts.length || estimatesOn(store.db, m.id).sent.length) setAskDelete(estimatesOn(store.db, m.id));
+    else deleteNow();
+  };
+  const [askDelete, setAskDelete] = useState<ReturnType<typeof estimatesOn> | null>(null);
+  /** one deletion at a time (rule 5: a second press never puts an empty «Отменить» over the first one's) */
+  const deleting = useRef(false);
+  const deleteNow = () => {
+    setAskDelete(null);
+    const mm = cur.current.m;
+    if (!mm || deleting.current) return;
+    // asked again at the press: signed meanwhile or not this person's to change — never deleted
+    const block = deleteBlock(store.db, mm.id, who);
+    if (block) return toast.show(t(block === "signed" ? "mod.gutters.draw.deleteSigned" : "mod.gutters.del.notYours"));
+    deleting.current = true;
+    const undo = removeMeasurementDetached(store as unknown as ModuleEstimateStore, mm.id, who);
+    if (!undo) {
+      deleting.current = false;
+      return toast.show(t("mod.gutters.est.off"));
     }
+    flush();
+    // to the list of measurements (founder 16.11, #1819: he stayed on an empty canvas «Замер»): the canvas of a deleted one is
+    // never shown — the list below is popped to, else it takes this screen's place (goTo); «Отменить» brings it back there
+    goTo(moduleHref("gutters", "list"));
+    toast.show(t("mod.gutters.draw.mDeleted"), undo);
   };
   // the toast stands above what lies at the bottom of the canvas — the hints, the chips and the toolbar (#1819: «Замер удалён ·
   // Отменить» lay on the toolbar); the same lane the pinned action bar gives (ui/footerInset), gone with the screen
@@ -1068,6 +1101,11 @@ export default function DrawScreen() {
     setFooterInset(barH);
     return () => setFooterInset(0);
   }, [barH]);
+  // from 820 the side panel of properties stands at the right over the whole height: the toast is centred in the canvas, not on it (#1895)
+  useEffect(() => {
+    setToastRight(panelSide);
+    return () => setToastRight(0);
+  }, [panelSide]);
   const back = () => {
     flush();
     if (router.canGoBack()) router.back();
@@ -1231,7 +1269,9 @@ export default function DrawScreen() {
           </View>
           {mPhotos && !wide && !flat && canSave ? (
             <View testID="draw-photos-open">
-              <Press onPress={() => setPhotoSheet(true)} accessibilityRole="button" accessibilityLabel={t("mod.gutters.photo.open")} visibleHeight={sizes.hitMin} style={{ flexDirection: "row", alignItems: "center", gap: space[1], minHeight: sizes.hitMin, paddingHorizontal: space[1] }}>
+              {/* the same round plate as «⋯» (IconButton: dockBtn, surf2, a hairline border; founder 16.11, #1752: «фотоаппарат не в единой
+                  системе»); with photos the count stands in it and the plate grows into a pill */}
+              <Press onPress={() => setPhotoSheet(true)} accessibilityRole="button" accessibilityLabel={photoN ? `${t("mod.gutters.photo.open")} · ${photoN}` : t("mod.gutters.photo.open")} visibleHeight={component.dockBtn} style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space[1], height: component.dockBtn, minWidth: component.dockBtn, paddingHorizontal: photoN ? space[3] : 0, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd }}>
                 <Icon name="camera" s={sizes.iconMd} color={c.ink} />
                 {photoN ? <T v="caption" w="semibold">{photoN}</T> : null}
               </Press>
@@ -1243,7 +1283,8 @@ export default function DrawScreen() {
             </View>
           ) : null}
           {inStore ? (
-            <View testID="draw-done"><Button label={t("mod.gutters.view.done")} size="sm" onPress={() => void done()} /></View>
+            // the header's buttons are one height (DS §19а: «высота кнопки 36»; founder 16.11, #1752: «Готово другого размера»)
+            <View testID="draw-done"><Button label={t("mod.gutters.view.done")} size="phone" onPress={() => void done()} /></View>
           ) : null}
         </RowView>
         {canSave ? null : (
@@ -1425,6 +1466,7 @@ export default function DrawScreen() {
         <AttrBody inSheet>{newBody(false)}</AttrBody>
       </Sheet>
       {m ? <LinkSheet visible={linkSheet} onClose={() => setLinkSheet(false)} measurementId={m.id} /> : null}
+      <DeleteMeasurementSheet visible={!!askDelete} on={askDelete ?? NO_ESTIMATES} onDelete={deleteNow} onClose={() => setAskDelete(null)} />
       <Menu visible={!!whoAt} anchor={whoAt} items={whoItems} onSelect={onWho} onClose={() => setWhoAt(null)} />
       <InputWindow visible={canSave && !!editRun} onClose={() => setLenEdit(null)}>
         {editRun ? <QuickLength key={editRun.id} fmt={ch.lenFormat} run={editRun} start={runLengthIn(editRun)} onLength={(n) => commit(setLength(cur.current.drawing, editRun.id, n))} onDone={() => setLenEdit(null)} onCancel={() => setLenEdit(null)} /> : null}
@@ -1468,18 +1510,6 @@ export default function DrawScreen() {
       </Sheet>
       <Sheet visible={moreSheet !== null} onClose={() => setMoreSheet(null)}>
         <View testID="draw-more-sheet" style={{ gap: space[2] }}>
-          {/* how it was measured — one choice for the whole drawing (founder 08.11, П20.16) */}
-          {moreSheet === "acc" && canSave && m ? (
-            <View testID="draw-accuracy-pick" style={{ gap: space[1] }}>
-              <T v="caption" tone="mut">{t("mod.gutters.draw.accTitle")}</T>
-              <ChoiceChips
-                items={(["rough", "tape"] as const).map((a) => ({ key: a, label: t(a === "tape" ? "mod.gutters.draw.accTape" : "mod.gutters.draw.accRough") }))}
-                value={tape ? "tape" : "rough"}
-                onChange={(a) => setAccuracy(a)}
-              />
-              <View testID="draw-accuracy-hint"><T v="caption" tone="mut">{t("mod.gutters.draw.accHint")}</T></View>
-            </View>
-          ) : null}
           {moreSheet === "layers" ? (
             <View testID="draw-layers" style={{ gap: space[2] }}>
               <T v="heading">{t("mod.gutters.draw.layersTitle")}</T>

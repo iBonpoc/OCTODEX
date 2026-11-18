@@ -1,5 +1,6 @@
 import { ModulePlaces } from "@/modules/ModulePlaces";
 import { visitDueCents } from "@/features/visitDue";
+import { signedAction } from "@/features/visitSignedAction";
 import { lateAfterOf } from "@/features/scheduleSettings";
 import { useState } from "react";
 import { Linking, View } from "react-native";
@@ -27,13 +28,14 @@ import { PhotoStrip } from "@/features/PhotoStrip";
 import { canEditVisitItems, checklistGate, visitSettings } from "@/features/checklist";
 import { ChecklistCard, ChecklistEditor, MissingSheet } from "@/features/VisitChecklist";
 import { OfficeLocation, TechLocation, useConsentQuestion } from "@/features/LocationParts";
-import { Button, IconButton, Segmented, StatusChip, Steps } from "@/ui/controls";
+import { Button, IconButton, StatusChip, Steps } from "@/ui/controls";
+import { SelectField } from "@/ui/selectField";
 import { Icon, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { canSeeVisit } from "@/features/access";
-import { canTakeVisitPayment } from "@/features/moneyLists";
 import { StatusNote } from "@/ui/statusNote";
+import { signedText } from "@/i18n/translate";
 
 const haptic = () => haptics.medium();
 
@@ -79,7 +81,7 @@ export default function VisitScreen() {
     );
 
   const { job, property, customer } = visitContext(db, v);
-  const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
+  const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, v));
   const idx = stepIndex(v.step);
   const before = v.photos.filter((p) => p.kind === "before");
   const after = v.photos.filter((p) => p.kind === "after");
@@ -92,6 +94,8 @@ export default function VisitScreen() {
   // «Перенести / Отменить»: the office only (owner / admin / office ↔ director / dispatcher), like cancel_visit on the server
   const office = canPlan([store.role]);
 
+  // #2018: what «Подпись» offers — never a dead end, never «Принять оплату» on $0
+  const signed = signedAction(store.role, visitDueCents(db, v));
   const advance = (msg: string) => {
     haptic();
     const undo = store.advanceVisit(v.id);
@@ -275,7 +279,25 @@ export default function VisitScreen() {
         </>
       ) : null}
 
-      {v.step === "signed" && canTakeVisitPayment(store.role) ? (
+      {/* #2018 С1: nothing to pay (the job is paid by invoice) — «Закрыть выезд», no «$0.00» and no payment step; the same
+          payVisit, which on $0 writes no payment and ends the visit on the server */}
+      {v.step === "signed" && signed === "close" ? (
+        <View testID="visit-close">
+          <Button
+            label={t("visit.close")}
+            icon="check"
+            full
+            onPress={() => {
+              // review of #2018: «Закрыть выезд» never takes money — if the amount changed since the screen drew it (a sync),
+              // nothing is sent and the screen shows the amount with «Принять оплату» again
+              if (visitDueCents(store.db, v) > 0) return toast.show(t("visit.dueChanged"));
+              haptic();
+              toast.show(queuedHint() ?? t("toast.step", { step: t("st.done") }), store.payVisit(v.id, method));
+            }}
+          />
+        </View>
+      ) : null}
+      {v.step === "signed" && signed === "pay" ? (
         <Card>
           <T v="caption" tone="mut">
             {t("visit.amountDue")}
@@ -285,12 +307,10 @@ export default function VisitScreen() {
               {money(visitDueCents(db, v))}
             </T>
           </View>
-          <T v="caption" tone="mut">
-            {t("visit.method")}
-          </T>
-          <Segmented
-            full
+          {/* the method — a value of the form, a row with a menu (spec 56 §3 row 4); the same codes go into the payment */}
+          <SelectField<typeof method>
             testID="visit-method"
+            label={t("visit.method")}
             value={method}
             onChange={setMethod}
             items={[
@@ -302,7 +322,7 @@ export default function VisitScreen() {
           />
           <View testID="visit-record-payment">
             <Button
-              label={t("visit.recordPayment")}
+              label={t("money.receive")}
               icon="dollar"
               full
               onPress={() => {
@@ -329,7 +349,7 @@ export default function VisitScreen() {
             </T>
           </RowView>
           <T v="body" tone="mut">
-            {t("visit.completedHint")}
+            {t(v.payment && v.payment.amountCents > 0 ? "visit.completedHint" : "visit.completedHintSigned")}
           </T>
           {job && canSeeProfit(store.role) ? (() => {
             const p = jobProfit(db, job.id);
@@ -338,7 +358,7 @@ export default function VisitScreen() {
                 <RowView style={{ justifyContent: "space-between" }}>
                   <T v="body" tone="mut">{t("job.profit")}</T>
                   <T v="heading" tabular tone={p.profit >= 0 ? "ok" : "bad"}>
-                    {money(p.profit)}{p.marginPct !== null ? ` · ${p.marginPct}%` : ""}
+                    {money(p.profit)}{p.marginPct !== null ? ` · ${signedText(p.marginPct)}%` : ""}
                   </T>
                 </RowView>
                 <T v="caption" tone="mut">
@@ -347,7 +367,8 @@ export default function VisitScreen() {
               </View>
             );
           })() : null}
-          {v.payment ? (
+          {/* a visit closed with nothing to pay keeps no «$0.00 · Карта» line (#2018) */}
+          {v.payment && v.payment.amountCents > 0 ? (
             <T v="body" tabular>
               {money(v.payment.amountCents)} · {t(`visit.pay${v.payment.method[0].toUpperCase()}${v.payment.method.slice(1)}` as "visit.payCard")}
             </T>

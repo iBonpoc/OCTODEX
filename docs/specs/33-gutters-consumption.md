@@ -255,37 +255,41 @@
 
 | `rule` | `params` | Строка |
 |---|---|---|
-| `sealant_points` | endcaps, outlets, corners, bentDownspouts, points, perTube, tubes | Sealant |
-| `solder_points` | points, perLb, lb | Solder |
-| `flux_per_solder` | lb, perCan, cans | Flux |
+| `sealant_points` | стыки по видам: sections/perSection, endcaps/perEndcap, outlets/perOutlet, dsJoints/perDsJoint, cutCorners/perCutCorner, stripCorners/perStripCorner, prefabCorners/perPrefabCorner; points, perTube, tubes (bentDownspouts — с гибом, PR-1) | Sealant |
+| `solder_points` | стыки по видам (как у sealant); points, perLb, lb | Solder |
+| `flux_per_solder` | lb, perJob, cans | Flux |
 | `gas_per_points` | points, perCylinder, cylinders | Gas (MAPP / propane) |
 | `abrasive_per_points` | points, perPack, packs | Abrasive |
 | `soda_per_job` | — | Baking soda |
-| `rivets_per_joints` | corners, perCorner, outlets, perOutlet, sections, rivets | Rivets #42 (стыки желоба при «заклёпки») |
-| `ds_joint_screws` | elbows, bends, otherJoints, perJoint, screws | Zip screws (колена, загибы, стыки водостока) |
+| `rivets_per_joints` | стыки по видам (как у sealant); rivets | Rivets #42 (стыки желоба при «заклёпки») |
+| `ds_joint_screws` | joints, perJoint, screws (elbows, bends, otherJoints — PR-1) | Zip screws (колена, загибы, стыки водостока) |
 | `joint_screws` | corners, perCorner, outlets, perOutlet, sections, screws | Zip screws (стыки желоба при «саморезы») |
-| `kit_screws` | part, units, perUnit, screws | Zip screws / Gutter screws в наборе (хомут, кронштейн, кусок защиты) |
+| `kit_screws` | part, screw, units, perUnit, screws | Zip screws / Gutter screws в наборе (хомут, кронштейн, кусок защиты) |
 | `kit_anchors` | wall, units, perUnit, anchors | Anchors |
-| `hangers_spacing` | lengthIn, spacingIn, atEnds, hangers | Hangers |
+| `hangers_spacing` | runs, lengthIn, spacingIn, atEnds, hangers | Hangers |
 | `kit_per_hanger` | part, hangers, per | Wedges, ferrules, spikes, circles, bolts |
-| `ds_straps_per_ds` | downspouts, perDs, straps | D/S straps |
+| `ds_straps_per_ds` | downspouts, lengthIn, everyIn, straps — **до PR-2**: код считает по длине (шаг `dsFastenerSpacingIn`); правило основателя §2.14 п.7 — 2 на водосток (Н1 «Хомутов на водосток»), тогда params — downspouts, perDs, straps | D/S straps |
 | `flat_coil_straps` | straps, perStrapIn, ft | Flat coil (хомуты из рулона) |
 | `touch_up_per_color` | color | Touch-up paint |
 | `corner_allowance` | outCount, outIn, inCount, inIn | Corner allowance |
 | `coil_reserve` | runs, reserveFt | Coil reserve |
 | `bend_in_place` | elbows, offsets, perBendIn, addIn | Bent-in-place elbows |
 | `ds_round_up` | lengthIn, stepFt, roundedFt | Rounding up of downspout |
-| `ds_sticks` | downspouts, stickFt, shared, sticks | Downspout sticks |
-| `slip_joints` | sections, joints | Slip joints |
+| `ds_sticks` | downspouts, lengthIn, stickIn, shared, sticks | Downspout sticks |
+| `slip_joints` | sections, sectionIn, joints | Slip joints |
 | `outlet_per_ds` | downspouts | Outlet |
-| `endcap_free_end` | side | End cap |
+| `endcap_free_end` | side, ends | End cap |
 | `splash_guard_inside` | corners | Splash guard |
-| `expansion_joint` | lengthIn, everyIn, joints | Expansion joint |
-| `guard_pieces` | coveredIn, pieceIn, pieces | Guard pieces |
+| `expansion_joint` | runs, lengthIn, everyIn, joints | Expansion joint |
+| `guard_pieces` | runs, coveredIn, pieceIn, pieces | Guard pieces |
+| `adapter_per_bottom` | part, bottoms | Drain adapter, rain chain adapter (по одному на низ «drain» и на цепь) |
 
 **Данные из движка (PR-1, PR-2 — код Gutters №22).**
 - Каждая деталь, которую движок вывел сам, получает отдельное поле `PartQty.why?: { rule: WhyRule; params: Record<string, string | number>; setting?: string }`, где `WhyRule` — union из таблицы выше. Это код правила, числа для текста и ключ поля настройки. Деталь, которую дают несколько правил (заклёпки с разных стыков), несёт сумму в `params`; строка одна.
-- `coilBreakdown` (§2.12) — частный случай `why` для строки рулона.
+- `coilBreakdown` (§2.12) — раскладка строки рулона и секций; у самой строки `why` = `coil_reserve` (runs, reserveFt), прибавки на углы — `corner_allowance` в `also`.
+- **Итог причины — это количество строки** (hangers, pieces, joints, straps, sticks, rivets, tubes, lb, ft): экран показывает его, а не пересчитывает. Счёт округляется по каждому участку или водостоку, поэтому сумма длин ÷ шаг может не совпасть с итогом — число групп (`runs`, `downspouts`) говорит, сколько их (ревью PR-1а, 16.11).
+- **Одна строка, несколько правил** — `why.also`: например, саморезы #8 хомутов и кусков защиты. Одно правило с другой ставкой (`per…`, шаг, длина куска) — тоже отдельная группа в `also`; счёты одного правила с той же ставкой складываются. Сторож движка: сумма итогов групп правила = количество строки.
+- **«С чертежа» без `why`** (явный список в `test/gutterWhy.test.ts`): угол готовый (`miter`) и полоса угла (`strip_miter` — следует способу угла), колено, офсет, переходник, воронка, конденсатор, отвод, eave box, сетка выпуска, низ водостока (удлинитель, splash block, гибкий, дренаж, поддон), тройник, цепь. Остальное — с `why`.
 - **Не в `attrs`**: `attrs` — свойства подбора цены.
 - Текст строки собирает экран (i18n RU/EN/ES; названия деталей английские, как у поставщика). Движок даёт только правило и числа.
 
@@ -395,9 +399,9 @@
 | Д2 ✅ | водосток в закупке | палки 10/15/20 ft, раскрой, остатки одного вида вместе | палка 10 ft | д (есть) |
 | Д3 ✅ | своя высота водостока | `heightIn` + выдвиг | — | д (есть) |
 | Д4 ✅ | на нижнюю крышу | (этажи − 1) × высота | — | д (есть) |
-| Д5 ✎ | колена по умолчанию (своих `elbows` нет) | по `bendOf` (§2.1 п. 2): гладкий прямоуг. со `dsStyle: "plain"` — 3 гиба по месту; ребристый прямоуг. и прямоуг. без `dsStyle` — 3 × A готовые; круглый (гладкий и ребристый) — 1 колено G + 1 офсет O готовые; явные колена без `elbowBend` — готовые | 3 / 3×A / 1×G + 1×O (G, O — вопрос 2) | д: гладкий без колен → 0 строк `elbow`, длина +18″; прямоуг. без `dsStyle` → 3 `elbow.A` (правило 16); гладкий с явными 3 × A без `elbowBend` → 3 `elbow.A`; круглый → 1 `elbow.<G>` + 1 `offset.<O>` |
+| Д5 ✎ | колена по умолчанию (своих `elbows` нет) | по `bendOf` (§2.1 п. 2): гладкий прямоуг. со `dsStyle: "plain"` — 3 гиба по месту; ребристый прямоуг. — 3 × A готовые; прямоуг. без `dsStyle` — без колен, как с #1818 (правило 16: сумма старого замера не меняется; PR-1б); круглый (гладкий и ребристый) — 1 колено G + 1 офсет O готовые; явные колена без `elbowBend` — готовые | 3 / 3×A / 1×G + 1×O (G, O — вопрос 2) | д: гладкий без колен → 0 строк `elbow`, длина +18″; прямоуг. без `dsStyle` → 0 строк `elbow` (как с #1818, правило 16; PR-1б); гладкий с явными 3 × A без `elbowBend` → 3 `elbow.A`; круглый → 1 `elbow.<G>` + 1 `offset.<O>` |
 | Д6 ✚ | колено «по месту» (`bendOf = field`) | +N″ водостока за колено из `elbows` (или 3 по умолчанию); деталей `elbow` нет; стыка не даёт | N = 6″ (тест., вопрос 3) | д (выдвиг 0): 1 этаж, `elbows: [{A:2}]`, field → 120″ + 12″ = 132″; в смете при шаге 10 → 20 ft; палок 10 ft — 2; работа «гиб» 2 |
-| Д7 ✎ | офсет | готовый: 1 шт, стандарт или «по заказу» (есть); **при `field` — каждый офсет гнётся: +2 × N″ + `lengthIn` за штуку, 2 гиба, деталей `offset` нет** | стандартные 1, 2, 4″ (основатель 16.11) | д: field, офсет 4″ × 1 → +16″, гибов 2; field, офсеты 2″ и 4″ → +12″ + 16″ = +28″, гибов 4; ready, офсеты 2″ и 4″ → 2 строки `offset` |
+| Д7 ✎ | офсет | готовый: 1 шт, стандарт или «по заказу» (есть); **при `field` — каждый офсет гнётся: +2 × N″ + `lengthIn` за штуку, 2 гиба, деталей `offset` нет** | стандартные 1, 2, 4″ (основатель 16.11) | д: field, офсет 4″ × 1 → +16″, гибов 2; field, офсеты 2″ и 4″ → +14″ + 16″ = +30″, гибов 4 (было «+12″ + 16″ = +28″» — описка: по формуле +2 × 6″ + длина офсета 2″ даёт +14″; исправлено в PR-1б); ready, офсеты 2″ и 4″ → 2 строки `offset` |
 | Д8 ✅ | выпуск, торцевой выпуск | 1 на водосток | 4 заклёпки, 1 точка | д (есть) |
 | Д9 ✎ | хомуты | **2 на водосток** (§2.14 п.7) | «Хомутов на водосток» — 2 (Н1) | д: водосток 10 ft и 20 ft → по 2 хомута |
 | Д10 ✎ | крепёж хомута | 2 самореза #8 × ½″ + 1 в стену (анкер + винт #10 на штукатурке и кирпиче, винт #10 на дереве) (§2.14 п.4) | Н5 | §2.14 п.4 |
@@ -471,7 +475,7 @@
 
 | № | Что | Правило | Тест |
 |---|---|---|---|
-| Т1 | `GUTTER_PARTS_VERSION` 3 → 4 делает #1818 (умолчания колен, #1776, Gutters №22); расход v2 — 4 → 5 (своя версия расчёта Gutters, `gutterParts.ts:461–463`; общий `ENGINE_VERSION` не растёт — ядро смет не меняется) | сметы, выданные раньше, получают «Расчёт изменился» (`engineOlder`, `estimateLink.ts:66`, #1165) — **и подписанные тоже** (пометка; сама смета не пересчитывается) — сказать основателю (вопрос 15); в комментарии к версии — причина | д: версия; e2e 167 (есть) |
+| Т1 | `GUTTER_PARTS_VERSION` 3 → 4 делает #1818 (умолчания колен, #1776, Gutters №22); расход v2 — 4 → 5 (своя версия расчёта Gutters, `gutterParts.ts:461–463`; общий `ENGINE_VERSION` не растёт — ядро смет не меняется) | сметы, выданные раньше, получают «Расчёт изменился» (`engineOlder`, `estimateLink.ts:66`, #1165) — **только черновик** (#1776, руководитель №13 16.11: отправленная остаётся, как ушла клиенту, подписанная только открывается; PR-1б это сохраняет); сама смета не пересчитывается; в комментарии к версии — причина | д: версия; e2e 167 (есть) |
 | Т2 | деньги | только `@octo/estimating-engine`, центы; сумма сметы с новыми строками на сервере равна сумме в приложении | денежный сценарий движка: смета медного дома с демонтажем; db — существующий тест итога сметы зелёный с новыми строками |
 | Т3 | смета ↔ закупка | строки `use: estimate` и `use: purchase` не смешиваются; колено «по месту» нигде не стоит штукой | д |
 
@@ -530,7 +534,7 @@
 12. ~~Демонтаж в новом замере~~ — **решено 06:45:** выключен, но обязательный вопрос «Нужен демонтаж?» (§2.15 п.10).
 13. ~~Офсеты в наличии~~ — **решено основателем 16.11:** 1, 2 и 4″ в наличии, остальное — поле, вбивается, «под заказ».
 14. ~~«Гладкий»~~ — **решено 06:45:** гнут только гладкий прямоугольный.
-15. **Старые сметы:** после обновления расчёта у выданных **и подписанных** смет появится пометка «Расчёт изменился» (подписанная сама не меняется, только пометка) — так можно?
+15. ~~Старые сметы~~ — **решено руководителем №13 16.11 (#1776, влито в #1818):** «Расчёт изменился» и «Обновить» — только у черновика и только если «Обновить» правда меняет строки сметы. У отправленной и подписанной сметы пометки нет, она остаётся такой, какой ушла клиенту. Основателя не спрашиваем.
 
 16. ~~Герметик~~ — **решено основателем 16.11 ~05:20:** 1 тюбик на 20 точек (тестовое: «я ещё замерю, проверю»); точка — заглушка, выпуск, угол, гладкий водосток с подрезкой по месту (§2.14 п.8).
 17. ~~Хомуты водостока~~ — **решено основателем 16.11:** хомуты по умолчанию режем из рулона — умолчание набора стены `coil_strap` (`gutterKits.ts:119`; полоса 2×3 — 12″, 3×4 — 16″, 3″ — 12″, 4″ — 15″ — «проверить», `33-gutters-parts.md:144`). Смена умолчания `DEFAULT_WALL_KIT_BY_WALL` (прямоугольный и круглый на дереве) — в PR-1, версия 5.

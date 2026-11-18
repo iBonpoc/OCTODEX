@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
 import { toastArmed, toastExpires, toastIdFor } from "./toastArm";
-import { toastBottom, useFooterInset, wideToastBottom } from "./footerInset";
+import { toastBottom, useFooterInset, useToastRight, wideToastBottom } from "./footerInset";
 import { menuListHeight, menuScrollTo } from "./menuLayout";
 import { Fragment, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ScreenScrollCtx } from "./requiredForm";
@@ -10,6 +10,7 @@ import { GestureDetector, GestureHandlerRootView, GestureStateManager, State, us
 import { menuPick } from "./menuPick";
 import { exitDuration, scrimLevel, swipeCloses, swipeStart, swipeStep, type SwipeState } from "./sheetSwipe";
 import { leaveBefore } from "./sheetLeave";
+import { noteQuestionCancelled, registerDirtySheet } from "./dirtySheets";
 import Svg, { Rect } from "react-native-svg";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,6 +18,7 @@ import Animated, { FadeIn, FadeOut, SlideInDown, useAnimatedProps, useAnimatedSt
 import { component, motion, radius, size, space } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
+import { router, type Href } from "expo-router";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import type { GuardedUndo } from "@/data/undo";
 
@@ -58,6 +60,8 @@ export interface MenuItem<K extends string> {
   destructive?: boolean;
   /** pale (`dimOpacity`) but pressable: the press explains why it cannot be done */
   dim?: boolean;
+  /** the first item of its own group (after a line): actions after the choices of a label menu — «Сделать основным» (DS §9 А14а) */
+  group?: boolean;
   testID?: string;
 }
 export function Menu<K extends string>({
@@ -184,7 +188,7 @@ export function Menu<K extends string>({
           {items.map((it, i) => (
             <Fragment key={it.key}>
             {/* the dangerous ones are the last group, after a line (DS Б4): drawn before the first of them when others come before */}
-            {it.destructive && i > 0 && !items[i - 1]!.destructive ? (
+            {(it.destructive && i > 0 && !items[i - 1]!.destructive) || (it.group && i > 0) ? (
               <View testID="menu-divider" style={{ height: component.hairline, backgroundColor: c.bd, marginVertical: space[1], marginHorizontal: space[4] }} />
             ) : null}
             <Press
@@ -456,6 +460,11 @@ export function Sheet({
     },
     [drag, before, animateOut],
   );
+  // #1912: while the sheet holds unsaved work, «Обновить» asks it through its own question and never reloads over it
+  useEffect(() => {
+    if (!visible || !dirty) return;
+    return registerDirtySheet({ ask: () => requestClose() });
+  }, [visible, dirty, requestClose]);
   const pan = useMemo(
     () =>
       PanResponder.create({
@@ -653,7 +662,7 @@ export function Sheet({
                   <T v="button" tone="bad">{t("sheet.discard")}</T>
                 </Press>
                 <Press
-                  onPress={() => setAsk(false)}
+                  onPress={() => { setAsk(false); noteQuestionCancelled(); }}
                   visibleHeight={component.button.phone}
                   accessibilityRole="button"
                   accessibilityLabel={t("common.cancel")}
@@ -700,11 +709,28 @@ export function Sheet({
 
 /* ---------- "?" help: visible 18, hit 44 ---------- */
 /** «?» (DS Б7). `onPress` — the screen opens its own sheet (several steps, not one text): the same «?», the same place */
-export function HelpButton({ title, text, where, onPress, testID }: { title: string; text?: string; where?: string; onPress?: () => void; testID?: string }) {
+/**
+ * «?» (DS Б7, founder 16.11, #1843, #1853): it stands right after the words it explains — a screen's title, a section's, a field's,
+ * a row's — never alone in a corner. Inside: what it is, then a way to it — `to` opens the place where the value is set (a
+ * company or module setting) or where the thing is made (suppliers, catalog items). A value that can be set has `to`.
+ */
+export function HelpButton({ title, text, to, onPress, testID }: { title: string; text?: string; to?: { href: Href; label?: string }; onPress?: () => void; testID?: string }) {
   const [open, setOpen] = useState(false);
   const { c } = useTheme();
   const { t } = useI18n();
   const s = component.help.visible;
+  const leaving = useRef(false);
+  // the way is taken after the sheet has gone (onExited), never while it slides out: a Modal closing under a new screen
+  // jumps on iPhone (rule 27)
+  const go = () => {
+    leaving.current = true;
+    setOpen(false);
+  };
+  const exited = () => {
+    if (!leaving.current) return;
+    leaving.current = false;
+    if (to) router.push(to.href);
+  };
   return (
     <>
       <Press onPress={onPress ?? (() => setOpen(true))} visibleHeight={s} accessibilityRole="button" accessibilityLabel={`${t("common.help")}: ${title}`} testID={testID}>
@@ -725,12 +751,31 @@ export function HelpButton({ title, text, where, onPress, testID }: { title: str
           </T>
         </View>
       </Press>
-      <Sheet visible={open} onClose={() => setOpen(false)} title={title}>
+      <Sheet visible={open} onClose={() => setOpen(false)} onExited={exited} title={title}>
         <T v="body">{text}</T>
-        {where ? (
-          <T v="caption" tone="mut">
-            {t("common.whereToSet", { where })}
-          </T>
+        {to ? (
+          // the way to where it is set or made: a secondary button (DS Б7), the whole row is the target
+          <Press onPress={go} visibleHeight={component.button.phone} accessibilityRole="link" testID={testID ? `${testID}-to` : undefined}>
+            <View
+              style={{
+                minHeight: component.button.phone,
+                borderRadius: radius.pill,
+                borderWidth: 1,
+                borderColor: c.bdField,
+                backgroundColor: c.surf2,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: space[1],
+                paddingHorizontal: space[4],
+              }}
+            >
+              <T v="body" w="semibold">
+                {to.label ?? t("common.helpSettings")}
+              </T>
+              <Icon name="chevronRight" s={size.iconSm} />
+            </View>
+          </Press>
         ) : null}
       </Sheet>
     </>
@@ -792,6 +837,8 @@ function ToastView({ item, onDone, onLate }: { item: ToastItem | null; onDone: (
   const insets = useSafeAreaInsets();
   const reduce = useReducedMotion();
   const bar = useFooterInset();
+  // a panel the screen keeps at its right edge (from 820): the toast is centred in the rest (#1895)
+  const side = useToastRight();
   if (!item) return null;
   // above the screen's pinned action bar when it has one (the toast must not cover «Сохранить»), on every width (DS §15.2; a
   // module's full-screen canvas gives the height of its bottom bar the same way — #1819: from 820 the toast lay on it too)
@@ -802,7 +849,7 @@ function ToastView({ item, onDone, onLate }: { item: ToastItem | null; onDone: (
       entering={reduce ? undefined : SlideInDown.duration(motion.durBase)}
       exiting={reduce ? undefined : FadeOut.duration(motion.durFast)}
       pointerEvents="box-none"
-      style={{ position: "absolute", left: Math.max(insets.left, space[4]), right: Math.max(insets.right, space[4]), bottom, alignItems: "center", zIndex: 100 }}
+      style={{ position: "absolute", left: Math.max(insets.left, space[4]), right: Math.max(insets.right, space[4]) + side, bottom, alignItems: "center", zIndex: 100 }}
       accessibilityLiveRegion="polite"
     >
       <Glass

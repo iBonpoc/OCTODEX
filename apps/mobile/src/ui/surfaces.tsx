@@ -1,6 +1,7 @@
 import { BlurView } from "expo-blur";
 import { VersionBadge } from "@/features/version";
 import { DemoBadge } from "@/features/DemoBadge";
+import { UpdateBar } from "@/features/UpdateBar";
 import { ScreenScrollCtx, type ScreenScroll } from "./requiredForm";
 import { coveredBottomOf, scrollTargetY } from "./requiredLogic";
 import { scrollBottom, setFooterInset } from "./footerInset";
@@ -234,7 +235,7 @@ export function ListRow({
   chevron?: boolean;
   /** the row's least height (`rowMax` 52; a choice row — `rowOption` 48) */
   minHeight?: number;
-  /** how many lines the title and the subtitle may take (default 1; long addresses — 2) */
+  /** how many lines the title and the subtitle may take (default 1; long addresses — 2; 0 — no limit, the text wraps whole) */
   lines?: number;
 }) {
   const { c } = useTheme();
@@ -409,6 +410,7 @@ function Breadcrumbs({ trail, current, go }: { trail: Crumb[]; current?: string;
     return (
       <Press
         key={cr.href}
+        testID={`crumb-${cr.href}`}
         onPress={() => go(cr.href)}
         visibleHeight={component.dockBtn}
         accessibilityRole="button"
@@ -451,8 +453,9 @@ function Breadcrumbs({ trail, current, go }: { trail: Crumb[]; current?: string;
     <View accessibilityRole="toolbar" accessibilityLabel={t("nav.trail")} style={{ flex: 1, minWidth: 0 }}>
       <RowView gap={space[1]} style={{ minHeight: size.hitMin }}>
         {items}
+        {/* where I am takes only the room the links leave (no width of its own): the links keep their names first (#1427) */}
         {current ? (
-          <T v="caption" tone="mut" numberOfLines={1} style={{ flexShrink: 2 }}>
+          <T v="caption" tone="mut" numberOfLines={1} style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0 }}>
             {current}
           </T>
         ) : null}
@@ -690,6 +693,7 @@ export function Screen({
     <View style={{ gap: space[2], marginBottom: space[3] }}>
       <VersionBadge />
       <DemoBadge />
+      <UpdateBar />
       {hasUp ? (
         <>
           {/* detail screen: the trail "Home › … › Parent › This", actions on the right, then the title.
@@ -697,7 +701,7 @@ export function Screen({
               Tablet/desktop: the same row is pinned above the scroll (addressBar). */}
           {pinned ? null : addressRow}
           <RowView style={{ gap: space[1] }}>
-            <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={[{ flexShrink: 1 }, noFocusRing]}>
+            <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={[{ flexShrink: 1 }, noFocusRing]} testID="screen-title">
               <T v="title" numberOfLines={2}>
                 {title}
               </T>
@@ -729,7 +733,7 @@ export function Screen({
           ) : null}
         <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin, flexWrap: "wrap", rowGap: space[2] }}>
           <RowView style={{ flexGrow: 1, flexShrink: 0, maxWidth: "100%", gap: space[1] }}>
-            <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={[{ flexShrink: 1 }, noFocusRing]}>
+            <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={[{ flexShrink: 1 }, noFocusRing]} testID="screen-title">
               <T v="display" numberOfLines={1}>
                 {title}
               </T>

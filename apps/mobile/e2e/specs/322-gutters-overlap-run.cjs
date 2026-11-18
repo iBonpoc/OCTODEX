@@ -43,7 +43,7 @@ exports.run = async (h) => {
   for (let i = 1; i <= 12; i++) await p.mouse.move(left[0] + ((mid[0] - left[0]) * i) / 12, left[1]);
   await p.mouse.up();
   // (the toast has no testID of its own on this branch: its words)
-  await p.getByText(/Линия лежит вдоль желоба/).first().waitFor({ timeout: 5000 });
+  await p.getByText(/Линия лежит вдоль gutter/).first().waitFor({ timeout: 5000 });
   h.expect((await runs()) === 1, `no second gutter on the first (${await runs()} stored)`);
   h.expect((await tid("quick-length").count()) === 0, "no length sheet of a new gutter");
 };

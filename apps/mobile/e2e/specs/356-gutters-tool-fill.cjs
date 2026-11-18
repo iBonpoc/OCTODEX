@@ -64,5 +64,5 @@ exports.run = async (h) => {
   await p.waitForFunction(() => document.querySelector('[data-testid="draw-tool-ds"] [role="button"]')?.getAttribute("aria-pressed") === "true", null, { timeout: 5000 });
   line = await look("draw-tool-line");
   ds = await look("draw-tool-ds");
-  h.expect(ds.selected && ds.filled && !ds.yellow && !line.filled, `after the pick: «Водосток» filled, «Желоб» not (${JSON.stringify({ line, ds })})`);
+  h.expect(ds.selected && ds.filled && !ds.yellow && !line.filled, `after the pick: «Downspout» filled, «Gutter» not (${JSON.stringify({ line, ds })})`);
 };

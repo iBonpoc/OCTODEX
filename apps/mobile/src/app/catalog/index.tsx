@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { seeCosts } from "@/features/access";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
@@ -23,7 +24,7 @@ const KIND_ICON: Record<CatalogKind, IconKey> = { service: "route", labor: "cloc
 
 /** Company catalog: services, labor, materials and kits used in estimates. */
 export default function Catalog() {
-  const { db, role } = useStore();
+  const { db, role, mode } = useStore();
   const { t, money } = useI18n();
   const [q, setQ] = useState("");
   // spec 31 §6 п.7: the kind is kept on this device for this list; the search is not
@@ -39,6 +40,8 @@ export default function Catalog() {
     [db.catalog, q, kind],
   );
   const canEdit = role !== "tech";
+  // #1837: the cost, the margin and «в убыток» only for who sees our costs (the server's app.can_view_costs), not by role
+  const costs = seeCosts(db, role, mode);
   const { device } = useDevice();
   // groups by kind only when «All» is chosen (otherwise the chip already says the kind)
   const groups = KINDS.filter((k): k is CatalogKind => k !== "all").map((k) => [k, items.filter((x) => x.kind === k)] as const).filter(([, xs]) => xs.length);
@@ -53,9 +56,9 @@ export default function Catalog() {
         title={it.name}
         lead={{ kind: "icon", icon: KIND_ICON[it.kind] }}
         value={`${money(eco.priceCents)} / ${it.unit}`}
-        signs={canEdit && loss ? [{ tone: "bad", label: t("card.sign.loss") }] : undefined}
-        edge={canEdit && loss ? "bad" : null}
-        tags={[t(kindLabel(it.kind)), ...(it.placeholder ? [t("cat.placeholder")] : [])]}
+        signs={costs && loss ? [{ tone: "bad", label: t("card.sign.loss") }] : undefined}
+        edge={costs && loss ? "bad" : null}
+        tags={[t(kindLabel(it.kind))]}
         facts={{
           // spec 36: the supplier's name from the list, else the old text
           supplier: supplierName(db, it) ? [supplierName(db, it), tax].filter(Boolean).join(" · ") : undefined,
@@ -63,7 +66,7 @@ export default function Catalog() {
           desc: it.description,
         }}
         // both tiles always, «—» when unknown: rows of equal height on the tablet grid
-        figures={canEdit ? [
+        figures={costs ? [
           { label: t("card.fig.cost"), value: eco.costCents === null ? "—" : money(eco.costCents) },
           { label: t("card.fig.margin"), value: eco.marginPct === null ? "—" : `${eco.marginPct}%`, tone: loss ? "bad" : undefined },
         ] : undefined}

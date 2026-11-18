@@ -1,0 +1,40 @@
+# СИНТЕТИЧЕСКИЙ ОБРАЗЕЦ (спека 53 §8а.11). Всё выдумано: поставщик, люди, адреса, номера, карта, цены.
+# Повторяет только СТРУКТУРУ: счёт на 2 страницы (страница 1 снята дважды) + слип оплаты картой. Настоящих реквизитов нет.
+
+=== Снимок 1 — страница 1 (палец закрывает Ticket #; снизу видна вторая бумага; фон — салон машины) ===
+[фон: сиденье машины, рука]
+SAMPLE ELECTRIC SUPPLY CO.                               INVOICE          Page 1 of 2
+Sold to: DEMO GUTTERS LLC          Customer #: 000777        Sales Rep: A. EXAMPLE
+Customer PO#: MARIA TEST KITCHEN   Ticket #: [закрыто пальцем]  Date: 11/04/2026
+Station: 03     Terms: C.O.D.
+Ln | Item                 | Description                         | Qty | Selling Unit | Price | Ext
+1  | THHN12-BLK-500       | WIRE THHN 12 AWG BLACK 500FT REEL   | 1   | EACH         | 89.00 | 89.00
+2  | THHN12-WHT-500       | WIRE THHN 12 AWG WHITE 500FT REEL   | 1   | EACH         | 87.50 | 87.50
+3  | WN-YEL               | WIRE NUT YELLOW                     | 10  | 100          | 0.23  | 2.25
+4  | SCR-6X1              | SCREW #6 X 1 IN                     | 250 | 1000         | 0.04  | 10.30
+5  | TAPE-RED             | ELECTRICAL TAPE RED 3/4 IN          | 3   | EACH         | 1.98  | 5.94
+6  | BOX-1G-OW            | OLD WORK BOX 1-GANG                 | 4   | EACH         | 0.99  | 3.96
+[вторая бумага под листом, видна полоса] ... 2 | FLYER COUPON 10% OFF ...
+
+=== Снимок 2 — страница 1 повторно (всё видно) ===
+SAMPLE ELECTRIC SUPPLY CO.                               INVOICE          Page 1 of 2
+Sold to: DEMO GUTTERS LLC          Customer #: 000777        Sales Rep: A. EXAMPLE
+Customer PO#: MARIA TEST KITCHEN   Ticket #: T-55501         Date: 11/04/2026
+Station: 03     Terms: C.O.D.
+(строки 1–6 те же)
+
+=== Снимок 3 — страница 2 (строк нет, только итоги; зажим закрывает поле Station) ===
+SAMPLE ELECTRIC SUPPLY CO.                               INVOICE          Page 2 of 2
+Ticket #: T-55501     Station: [закрыто зажимом]
+Total line items: 6
+Subtotal: 198.95      Tax: 15.42      Total: 214.37
+Tender: VISA 214.37
+All sales subject to terms at example.com/terms. Returns within 30 days with receipt. [мелкий юридический текст]
+[штрихкод] |||| ||| || |||| T-55501
+*** Duplicate Customer Copy ***
+
+=== Снимок 4 — слип оплаты картой ===
+SAMPLE ELECTRIC SUPPLY CO.   11/04/2026 10:42
+VISA  ****1111   SALE   $214.37
+Approval Code: 000000   Tran ID: 9999-0000   Merchant ID: 0000000000
+CUSTOMER COPY

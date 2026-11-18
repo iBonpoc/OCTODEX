@@ -39,7 +39,7 @@ exports.run = async (h) => {
   await h.go(`/module/gutters/draw?m=${mid}`);
   await tid("draw-not-saved").waitFor({ timeout: 8000 });
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="draw-svg"] [id^="cap:"]').length === 2, null, { timeout: 8000 });
-  h.expect((await p.getByText(/Убран лишний желоб/).count()) === 0, "read only: no toast «Убран лишний желоб»");
+  h.expect((await p.getByText(/Убран лишний gutter/).count()) === 0, "read only: no toast «Убран лишний gutter»");
   h.expect((await live()) === 2, "read only: nothing is written — both rows are still stored");
   await h.shot("read-only");
 };

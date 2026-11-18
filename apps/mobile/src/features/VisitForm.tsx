@@ -23,7 +23,9 @@ import { DatePick, dayOffsetOf } from "@/features/DatePick";
 import { addDays, isoDayKey, todayKey, type DayKey } from "@/features/calendar";
 import { formDayOffset } from "@/features/planFeed";
 import { minuteIn } from "@/features/zone";
-import { Button, ChoiceChips, IconButton, Segmented, Stepper, TextField } from "@/ui/controls";
+import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
+import { OptionRows } from "@/ui/optionRow";
+import { ToggleRow } from "@/ui/toggleRow";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, ListRow, RowView } from "@/ui/surfaces";
@@ -101,7 +103,7 @@ export function useVisitForm(init: { durationMin: number; techId?: ID | null; te
 export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof useVisitForm>; noteLabel?: boolean }) {
   const { db, role } = useStore();
   const planner = canPlan([role]);
-  const { t, day, dayOf, time } = useI18n();
+  const { t, tn, day, dayOf, time } = useI18n();
   const [calendar, setCalendar] = useState(false);
   const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
   const days = useMemo(() => {
@@ -113,7 +115,7 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
   const range = (v: Visit) => visitWhen(v, time, t("plan5.allDay"));
   const load = (id: ID) => {
     const vs = dayVisits(db, id, f.day, f.exceptId);
-    return vs.length ? t("vf.load", { n: vs.length, ranges: vs.map(range).join(", ") }) : t("vf.free");
+    return vs.length ? tn("vf.load", vs.length, { ranges: vs.map(range).join(", ") }) : t("vf.free");
   };
   return (
     <View style={{ gap: space[3] }}>
@@ -144,23 +146,28 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
       <Field label={t("sch.tech")}>
         {/* sales books, the office assigns (the server refuses sales: public.assign_visit) */}
         {!planner ? <T v="body" tone="mut">{t("vf.dispatcherAssigns")}</T> : <T v="caption" tone="mut">{t("vf.techsHint")}</T>}
-        {planner ? <View>
-          <ListRow title={`${f.techIds.length === 0 ? "✓ " : ""}${t("vf.dispatcherAssigns")}`} onPress={() => f.setTechId(null)} />
-          {techs.map((m) => (
-            <ListRow key={m.id} title={`${f.techIds.includes(m.id) ? "✓ " : ""}${m.name}`} subtitle={load(m.id)} onPress={() => { f.toggleTech(m.id); f.setMinute(null); }} />
-          ))}
-        </View> : null}
+        {/* several people — rows with a check, the day's load under each (spec 56 §3 row 7); none chosen — the dispatcher assigns */}
+        {planner ? (
+          <OptionRows<string>
+            multiple
+            testID="vf-tech"
+            label={t("sch.tech")}
+            items={techs.map((m) => ({ key: m.id, title: m.name, subtitle: load(m.id) }))}
+            value={f.techIds}
+            onChange={(ids) => {
+              const added = ids.find((id) => !f.techIds.includes(id));
+              const removed = f.techIds.find((id) => !ids.includes(id));
+              const id = added ?? removed;
+              if (id) f.toggleTech(id);
+              f.setMinute(null);
+            }}
+          />
+        ) : null}
+        {planner && f.techIds.length === 0 ? <View testID="vf-tech-none"><T v="caption" tone="mut">{t("vf.dispatcherAssigns")}</T></View> : null}
       </Field>
       {f.allowAllDay ? (
-        <Segmented
-          full
-          value={f.allDay ? "allDay" : "time"}
-          onChange={(k) => f.setAllDay(k === "allDay")}
-          items={[
-            { key: "time", label: t("job5.byTime") },
-            { key: "allDay", label: t("plan5.allDay") },
-          ]}
-        />
+        // on / off — a row with a switch (spec 56 §3 row 2: «Весь день»)
+        <ToggleRow testID="vf-all-day" label={t("plan5.allDay")} value={f.allDay} onChange={(on) => f.setAllDay(on)} />
       ) : null}
       {f.allDay ? null : (<>
       <Field label={t("sch.start")}>

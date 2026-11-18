@@ -31,14 +31,14 @@ exports.run = async (h) => {
   await tid("gpr-missing-n-action").getByRole("button").click();
   await waitDb((d) => d.catalog.some((it) => it.placeholder && it.attributes?.work === "cleaning"), "the test labor item of the cleaning is made");
   const clean = (await db()).catalog.find((it) => it.attributes?.work === "cleaning");
-  h.expect(clean.placeholder === true && clean.priceCents > 0, "a test item: marked, with a test price");
+  h.expect(clean.placeholder === true && clean.priceCents > 0, "a sample item: marked in the data, with a sample price");
 
   // «Шаблоны смет»: three starters of the module
   await h.go("/estimate/templates");
   for (const k of ["clean", "guards", "replace"]) await tid(`est-starter-gutters-${k}`).waitFor({ timeout: 8000 });
-  h.expect(/Чистка желобов/.test(await tid("est-starter-gutters-clean").innerText()), "«Чистка желобов»");
+  h.expect(/Чистка gutters/.test(await tid("est-starter-gutters-clean").innerText()), "«Чистка gutters»");
   h.expect(/Только guards/.test(await tid("est-starter-gutters-guards").innerText()), "«Только guards»");
-  h.expect(/Замена желобов/.test(await tid("est-starter-gutters-replace").innerText()), "«Замена желобов»");
+  h.expect(/Замена gutters/.test(await tid("est-starter-gutters-replace").innerText()), "«Замена gutters»");
   await h.shot("starters");
 
   // «Отменить» on the toast of the add (#1336): the template goes and the starter is offered again. The toast ignores a tap in its first

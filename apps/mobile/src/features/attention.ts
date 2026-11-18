@@ -1,4 +1,7 @@
+import type { Mode } from "@/data/store";
 import { timing, type StatusName } from "@octo/design-tokens";
+import { seeCosts } from "./access";
+import { invoiceOwes } from "@octo/estimating-engine";
 import { daysOverdue, daysSince, isOverdue, minutesSince, visitContext } from "@/data/selectors";
 import type { DB, ID, Role, Task } from "@/data/types";
 import { canSeeLead, isBackFromSnooze, leadTurn } from "./leads";
@@ -14,6 +17,7 @@ import { rejectReasonKey, type RejectedOp } from "@/data/outboxRejected";
 import { canOpen } from "@/nav/roles";
 import { canReview, missedCount, visitMissed, visitSettings } from "./checklist";
 import { failedPhotos } from "@/data/photoUpload";
+import { moneyText } from "@/i18n/translate";
 
 /** #1431: photos the cloud did not take are only on one phone — just under a lead waiting for a reply, above the rest */
 export const PHOTO_FAILED_SCORE = 990;
@@ -32,7 +36,10 @@ export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "la
   /* docs/specs/08 §8 (CH2b): a finished visit left required items or photos undone — until «Просмотрено» or done */
   | "visitMissed"
   /* #1431: the cloud did not take photos of a visit — they are only on the phone that made them */
-  | "photoFailed";
+  | "photoFailed"
+  /* #1807 (spec 53 §5.3б п.4): a price someone sent for a material counted from its cost — the server kept the one from
+     the cost (an old build, sales without our costs) */
+  | "priceRecalc";
 export interface AttentionItem {
   id: string;
   kind: AttentionKind;
@@ -71,6 +78,7 @@ export function attentionHref(it: AttentionItem): string {
     case "late":
     case "visitMissed":
     case "photoFailed": return `/visit/${it.refId}`;
+    case "priceRecalc": return `/catalog/${it.refId}`;
     default: return `/lead/${it.refId}`;
   }
 }
@@ -93,7 +101,7 @@ export const rejectedOpens = (r: Pick<RejectedOp, "href">, role: Role) => canOpe
 /** "Требует внимания" / triage queue: everything that needs a human decision now, most urgent first. */
 /** a refused money change is always first: above every other score (a lead waiting N minutes is 1000 + N, review #263 №1) */
 export const REJECTED_SCORE = Number.MAX_SAFE_INTEGER;
-export function buildAttention(db: DB, role: Role = "director", now: number = Date.now(), extra: { rejected?: readonly RejectedOp[] } = {}): AttentionItem[] {
+export function buildAttention(db: DB, role: Role = "director", now: number = Date.now(), extra: { rejected?: readonly RejectedOp[]; mode?: Mode } = {}): AttentionItem[] {
   const out: AttentionItem[] = [];
   // a money change the server refused (the store's list — the signed-in person's own): first, the phone showed it as done
   for (const r of extra.rejected ?? []) {
@@ -232,7 +240,7 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
     if (!isOverdue(i.dueDate, now, tz)) continue;
     const d = daysOverdue(i.dueDate, now, tz);
     const c = db.customers.find((x) => x.id === i.customerId);
-    out.push({ id: `inv-${i.id}`, kind: "overdue", refId: i.id, name: c?.name ?? "", label: "att.overdue", params: { name: c?.name ?? "" }, chip: "st.overdue", status: "bad", amountCents: i.totalCents - i.paidCents, score: 800 + d });
+    out.push({ id: `inv-${i.id}`, kind: "overdue", refId: i.id, name: c?.name ?? "", label: "att.overdue", params: { name: c?.name ?? "" }, chip: "st.overdue", status: "bad", amountCents: invoiceOwes(i), score: 800 + d });
   }
   const office = role === "director" || role === "dispatcher";
   // «valid until» is a calendar day of the company (the server decides by it too)
@@ -275,6 +283,43 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
     const date = v ? new Date(v.start).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz }) : "";
     out.push({ id: `photo-${visitId}`, kind: "photoFailed", refId: visitId, name, label: "photoUp.att", params: { n, name, date }, chip: "photoUp.chip", status: "bad", score: PHOTO_FAILED_SCORE });
   }
+  out.push(...priceRecalcItems(db, role, now, extra.mode));
   return out.sort((a, b) => b.score - a.score);
+}
+
+/** #1807: below an estimate without a reply (700 +) and an inspection without an estimate (680): a price, not a client */
+export const PRICE_RECALC_SCORE = 650;
+/** how long a replaced price stays a reason (no «Понятно»: it goes by itself; the item's own history keeps it) */
+export const PRICE_RECALC_DAYS = 7;
+/**
+ * #1807 (spec 53 §5.3б п.4): one reason per material whose sent price the server replaced with the one from its cost, the
+ * last of the past 7 days. Only who sees our costs (the rows come only to them — catalog_price_recalc's RLS — and not to a
+ * tech in any case). The words: who sent what and what stayed.
+ */
+/** `mode`: the store's (the screens pass it); a pure caller without one — the demo's rule */
+export function priceRecalcItems(db: Pick<DB, "priceRecalc" | "catalog" | "members" | "costsVisible">, role: Role, now: number, mode: Mode = "demo"): AttentionItem[] {
+  // a cache that is not a list (an old or broken one) is no reason
+  // #1837: who sees our costs (features/access.ts) — the tech view never
+  if (!seeCosts(db, role, mode) || !Array.isArray(db.priceRecalc) || !db.priceRecalc.length) return [];
+  const since = now - PRICE_RECALC_DAYS * 864e5;
+  const last = new Map<ID, NonNullable<DB["priceRecalc"]>[number]>();
+  for (const r of db.priceRecalc) {
+    if (!(Date.parse(r.at) >= since)) continue;
+    const had = last.get(r.itemId);
+    if (!had || Date.parse(r.at) > Date.parse(had.at)) last.set(r.itemId, r);
+  }
+  const out: AttentionItem[] = [];
+  for (const r of last.values()) {
+    const item = db.catalog.find((c) => c.id === r.itemId);
+    if (!item) continue;
+    const who = (r.by && db.members.find((m) => m.id === r.by)?.name) || "";
+    out.push({
+      id: `recalc-${r.itemId}`, kind: "priceRecalc", refId: r.itemId, name: item.name,
+      label: who ? "price.recalc.att" : "price.recalc.attNoWho",
+      params: { name: item.name, who, sent: moneyText(r.sentCents), kept: moneyText(r.serverCents) },
+      chip: "price.recalc.chip", status: "warn", score: PRICE_RECALC_SCORE,
+    });
+  }
+  return out;
 }
 

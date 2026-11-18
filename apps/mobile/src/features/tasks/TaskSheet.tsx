@@ -13,7 +13,8 @@ import { eventRange } from "@/features/planFeed";
 import { dayAtHour } from "@/features/lead/bookRules";
 import { atMinute, SCHEDULE_DEFAULTS } from "@/features/schedule";
 import { minuteIn, getZone } from "@/features/zone";
-import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
+import { Button, IconButton, Stepper, TextField } from "@/ui/controls";
+import { SelectField } from "@/ui/selectField";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast, SheetScroll } from "@/ui/overlays";
 import { Divider, ListRow, RowView } from "@/ui/surfaces";
@@ -145,21 +146,26 @@ function TaskSheetBody({ value, onClose, visible, onExited }: { value: TaskDraft
         <Field label={t("task.what")}>
           <TextField type="title" value={title} onChangeText={setTitle} placeholder={t("task.whatPh")} />
         </Field>
-        <Field label={t("task.when")}>
-          <ChoiceChips<string>
-            value={WHEN.find((w) => dueAt === dayAtHour(w.n, w.h))?.key ?? (dueAt ? "" : "none")}
+        <View style={{ gap: space[1] }}>
+          {/* quick dates and «Без даты» — a value of the form, a row with a menu (spec 56 §3 row 4); a date set elsewhere shows as is */}
+          <SelectField<string>
+            testID="task-when"
+            label={t("task.when")}
+            value={WHEN.find((w) => dueAt === dayAtHour(w.n, w.h))?.key ?? (dueAt ? null : "none")}
+            placeholder={dueAt ? dayText(dueAt) : undefined}
             onChange={(k) => {
               if (k === "none") return setDueAt(undefined);
               const w = WHEN.find((x) => x.key === k);
               if (w) setDueAt(dayAtHour(w.n, w.h));
             }}
-            items={[...WHEN.map((w) => ({ key: w.key, label: t(`task.when.${w.key}` as DictKey) })), { key: "none", label: t("task.noDate") }]}
+            items={[...WHEN.map((w) => ({ key: w.key as string, label: t(`task.when.${w.key}` as DictKey) })), { key: "none", label: t("task.noDate") }]}
           />
           {dueAt ? <T v="caption" tone="mut">{`${dayText(dueAt)} ${time(dueAt)}`}</T> : null}
-        </Field>
-        <Field label={t("w6.task.inPlan")}>
-          {/* chips, not a switch: the form keeps one yellow — «Сохранить» (rule 2) */}
-          <ChoiceChips<PlanMode>
+        </View>
+          {/* three named values — a row with a menu (spec 56 §3 row 4), not chips */}
+          <SelectField<PlanMode>
+            testID="task-plan-mode"
+            label={t("w6.task.inPlan")}
             value={mode}
             onChange={setMode}
             items={[
@@ -168,7 +174,6 @@ function TaskSheetBody({ value, onClose, visible, onExited }: { value: TaskDraft
               { key: "time", label: t("plan5.withTime") },
             ]}
           />
-        </Field>
         {mode !== "none" ? (
           <>
             <Field label={t("plan5.ev.day")}>
@@ -199,9 +204,8 @@ function TaskSheetBody({ value, onClose, visible, onExited }: { value: TaskDraft
         <Field label={t("plan5.ev.description")}>
           <TextField type="note" value={description} onChangeText={setDescription} placeholder={t("w6.task.descriptionPh")} />
         </Field>
-        <Field label={t("task.who")}>
-          <ChoiceChips<string> value={assigneeId ?? ""} onChange={setAssigneeId} items={people.map((m) => ({ key: m.id, label: m.name }))} />
-        </Field>
+          {/* a person — a row (spec 56 §3 row 3): a menu for a team this size, the list with search from 13 people (SelectField) */}
+          <SelectField<string> testID="task-who" label={t("task.who")} value={assigneeId ?? null} onChange={setAssigneeId} items={people.map((m) => ({ key: m.id, label: m.name }))} />
         <Button label={t("ue.save")} icon="check" variant="primary" full disabled={!ok} onPress={save} />
         {value.id ? <Button label={t(draft.doneAt ? "task.undo" : "task.done")} icon={draft.doneAt ? "undo" : "check"} variant="secondary" full onPress={toggleDone} /> : null}
       </View>

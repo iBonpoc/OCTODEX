@@ -124,6 +124,24 @@ describe("unit:catalogCardStore — РС-10", () => {
     const op = server.sends.find((x) => x.op.k === "catalog.save")!.op as unknown as { item: Record<string, unknown> };
     expect(["createdAt", "createdBy", "updatedAt", "updatedBy"].filter((k) => k in op.item)).toEqual([]);
   });
+  it("#1807: a material counted from the cost — who does not see costs keeps its price and kind, from any caller", async () => {
+    const counted = (it: CatalogItem): CatalogItem => ({ ...it, priceCents: 6000, costCents: undefined, vendorTaxBps: undefined, markupBps: undefined, priceFromCost: true });
+    const r = await signedIn({ costsVisible: false, catalog: company().catalog.map((x) => (x.id === ITEM ? counted(x) : x)) });
+    valueOf(r).saveCatalogItem({ ...itemOf(r), name: "Bracket renamed (test)", priceCents: 6500, kind: "service" });
+    await settle();
+    expect(itemOf(r)).toMatchObject({ name: "Bracket renamed (test)", priceCents: 6000, kind: "material" });
+    await tick();
+    const op = server.sends.find((x) => x.op.k === "catalog.save")!.op as unknown as { item: CatalogItem; fields?: string[] };
+    expect(op.item.priceCents).toBe(6000);
+    expect(op.fields ?? []).not.toContain("unit_price_cents");
+    expect(op.fields ?? []).not.toContain("kind");
+  });
+  it("#1807: who sees costs, or an item not counted — the price is the one saved, as before", async () => {
+    const r = await signedIn({ costsVisible: false });
+    valueOf(r).saveCatalogItem({ ...itemOf(r), priceCents: 6500 });
+    await settle();
+    expect(itemOf(r).priceCents).toBe(6500);
+  });
   it("who does not see costs gets no price row; loadPriceHistory does not ask the server for them", async () => {
     const r = await signedIn({ costsVisible: false });
     valueOf(r).saveCatalogItem({ ...itemOf(r), priceCents: 1213 });

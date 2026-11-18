@@ -83,7 +83,7 @@ exports.run = async (h) => {
   const job = (await h.db()).jobs.find((j) => j.estimateId === "e6");
   await h.go(`/job/schedule?jobId=${job.id}`);
   await p.getByRole("radiogroup").first().getByRole("radio").nth(require("../companyTime.cjs").workdayOffset(3)).click();
-  await p.getByRole("button", { name: "Ivan Sokolov" }).last().click();
+  await p.getByRole("option", { name: "Ivan Sokolov" }).last().click();
   await p.getByRole("radio", { name: /^1:00/ }).last().click();
   await p.getByRole("button", { name: "Запланировать", exact: true }).last().click();
   await p.getByRole("button", { name: "Не сейчас" }).last().waitFor({ timeout: 8000 });
@@ -103,7 +103,7 @@ exports.run = async (h) => {
   await h.clickText("Задачи");
   await h.click("Что дальше?");
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).click();
-  await h.sheet().getByRole("button", { name: "Ivan Sokolov" }).click();
+  await h.sheet().getByRole("option", { name: "Ivan Sokolov" }).click();
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).last().click();
   await p.waitForFunction(([k, id]) => (JSON.parse(localStorage.getItem(k)).db.visits || []).some((v) => v.leadId === id), ["octo.db.v5", angela.id], { timeout: 8000 });
   const iv = (await h.db()).visits.find((x) => x.leadId === angela.id);

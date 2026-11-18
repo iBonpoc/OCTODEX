@@ -13,7 +13,8 @@ const pay = async (h, visitId) => {
   const due = p.getByTestId("visit-amount-due").last();
   await due.waitFor();
   const shown = (await due.innerText()).trim();
-  await h.clickText("Наличные");
+  await p.getByTestId("visit-method-button").locator("visible=true").first().click(); // the method is a row with a menu (spec 56 wave 5а)
+  await p.getByTestId("visit-method-cash").locator("visible=true").first().click();
   await p.getByTestId("visit-record-payment").last().getByRole("button").click();
   // wait for what is checked: the visit is paid in the store (CHECKS §9 п.3 — no fixed seconds)
   await p.waitForFunction((id) => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.visits?.find((x) => x.id === id)?.step === "paid", visitId);

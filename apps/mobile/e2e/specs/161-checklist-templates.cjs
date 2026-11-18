@@ -12,7 +12,7 @@ exports.run = async (h) => {
   await h.go("/company");
   await p.getByTestId("company-checklists").last().click();
   await p.getByTestId("chk-tpl-tpl-job").last().waitFor();
-  h.expect(/Every job visit/.test(await p.getByTestId("chk-tpl-tpl-job").last().innerText()), "the demo template's card");
+  h.expect(/Каждый выезд на работу/.test(await p.getByTestId("chk-tpl-tpl-job").last().innerText()), "the demo template's card");
   await h.shot("list");
 
   // a template without a name is refused on the phone (the server would refuse it and hold the queue)
@@ -47,7 +47,7 @@ exports.run = async (h) => {
   // S9: a visit scheduled now gets the snapshot of both templates and the minimum of photos after
   await h.go("/job/schedule?jobId=j2");
   await p.getByRole("radiogroup").first().getByRole("radio").nth(workdayOffset(3)).click();
-  await p.getByRole("button", { name: "Ivan Sokolov" }).last().click();
+  await p.getByRole("option", { name: "Ivan Sokolov" }).last().click();
   await p.getByRole("radio", { name: /^1:00/ }).last().click();
   await p.getByRole("button", { name: "Запланировать", exact: true }).last().click();
   await h.sheet().getByRole("button", { name: "Не сейчас" }).waitFor();
@@ -59,8 +59,8 @@ exports.run = async (h) => {
   h.expect(!!v, "the new visit of the job");
   const labels = v.checklist.map((x) => x.label);
   h.expect(
-    labels.join("|") === "Protect floors and furniture|Confirm scope with the client|Clean up the work area|Walk through with the client|Check the attic vents|Photo of the attic",
-    `the snapshot: «Every job visit», then «Attic check»: ${labels.join("|")}`,
+    labels.join("|") === "Защитить пол и мебель|Согласовать объём работ с клиентом|Убрать рабочее место|Пройти по работе с клиентом|Check the attic vents|Photo of the attic",
+    `the snapshot: «Каждый выезд на работу», then «Attic check»: ${labels.join("|")}`,
   );
   h.expect(v.checklist.every((x) => !x.done) && v.checklist.find((x) => x.label === "Photo of the attic").kind === "photo", "items not done; the photo item is a photo item");
   h.expect(v.photoMins && v.photoMins.after === 2, `the template's minimum comes with the visit: ${JSON.stringify(v.photoMins)}`);
