@@ -1297,6 +1297,8 @@ export const en: Dict = {
   "client.h.payment": "Payment",
   "client.h.note": "Note",
   "client.h.call": "Call",
+  "client.h.noServiceSet": "Marked: do not service",
+  "client.h.noServiceLifted": "«Do not service» lifted",
   "client.h.sms": "SMS",
   "client.h.email": "Email",
   "client.h.taskDone": "Task done",
@@ -2258,6 +2260,14 @@ export const en: Dict = {
   "client.import.fail.undo": "The import was not undone — no connection to the server",
   // wave 4b-1 «Лиды и клиенты»: do not service
   "client.noServiceHint": "No new jobs, estimates or visits",
+  // #2098: «не обслуживаем» обратимо
+  "client.serveAgain": "Serve again",
+  "client.serveAgain.title": "Serve {name} again?",
+  "client.serveAgain.body": "New jobs, estimates and visits can be made again. The reason of the mark stays in the history.",
+  "client.serveAgain.links": "Old links will not work again — send the documents anew.",
+  "client.serveAgain.yes": "Serve again",
+  "client.serveAgain.yesTo": "Lift the mark · {status}",
+  "client.servedAgain": "{name}: served again",
   "lead.noService": "Do not service: {name}",
   "lead.noServiceHint": "This phone or email belongs to a client marked «Do not service»",
   // wave 5 «План» — Лента (Работы и выезды)

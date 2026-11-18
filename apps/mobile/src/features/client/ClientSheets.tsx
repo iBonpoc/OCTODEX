@@ -286,3 +286,40 @@ export function StatusSheet({ visible, customer, onClose, preset }: { visible: b
     </Sheet>
   );
 }
+
+/**
+ * #2098 (founder 18.11): «не обслуживаем» is reversible — «Снова обслуживать» asks once, on every path (the card's
+ * button and the status chooser): new jobs and estimates open again, the reason and the history stay in the timeline,
+ * the client's old links do not come back. «Отменить» is the store's own undo: while the lift waits in the queue it is
+ * taken back with the mark and its reason as they were (nothing reaches the server); once sent, the toast says it is too
+ * late — the mark is set again by hand (a new line in the history), never a half undo.
+ */
+export function ServeAgainSheet({ customer, to, onClose }: { customer: Customer | null; to: CustomerStatus; onClose: () => void }) {
+  const store = useStore();
+  const { t } = useI18n();
+  const toast = useToast();
+  const confirm = () => {
+    if (!customer) return;
+    toast.show(t(to === "active" ? "client.servedAgain" : "client.statusSaved", { name: customer.name }), store.setCustomerStatus(customer.id, to));
+    onClose();
+  };
+  return (
+    <Sheet visible={!!customer} onClose={onClose} title={t("client.serveAgain.title", { name: customer?.name ?? "" })}>
+      <View testID="client-serve-again-sheet" style={{ gap: space[3] }}>
+        <T v="body">{t("client.serveAgain.body")}</T>
+        {customer?.statusReason ? (
+          <T v="caption" tone="mut">
+            {t("client.reason", { r: customer.statusReason })}
+          </T>
+        ) : null}
+        <T v="caption" tone="mut">
+          {t("client.serveAgain.links")}
+        </T>
+        <RowView style={{ flexWrap: "wrap" }}>
+          <Button testID="client-serve-again-yes" label={t(to === "active" ? "client.serveAgain.yes" : "client.serveAgain.yesTo", { status: t(clientStatusChip[to].l) })} icon="check" onPress={confirm} />
+          <Button label={t("common.cancel")} variant="secondary" onPress={onClose} />
+        </RowView>
+      </View>
+    </Sheet>
+  );
+}

@@ -1297,6 +1297,8 @@ export const es: Dict = {
   "client.h.payment": "Pago",
   "client.h.note": "Nota",
   "client.h.call": "Llamada",
+  "client.h.noServiceSet": "Marcado: no atender",
+  "client.h.noServiceLifted": "Marca «no atender» quitada",
   "client.h.sms": "SMS",
   "client.h.email": "Correo",
   "client.h.taskDone": "Tarea hecha",
@@ -2258,6 +2260,14 @@ export const es: Dict = {
   "client.import.fail.undo": "La importación no se deshizo: sin conexión con el servidor",
   // wave 4b-1 «Лиды и клиенты»: do not service
   "client.noServiceHint": "Sin trabajos, presupuestos ni visitas nuevos",
+  // #2098: «не обслуживаем» обратимо
+  "client.serveAgain": "Volver a atender",
+  "client.serveAgain.title": "¿Volver a atender a {name}?",
+  "client.serveAgain.body": "Se podrán crear trabajos, presupuestos y visitas otra vez. El motivo de la marca queda en el historial.",
+  "client.serveAgain.links": "Los enlaces anteriores no vuelven a funcionar: envíe los documentos de nuevo.",
+  "client.serveAgain.yes": "Volver a atender",
+  "client.serveAgain.yesTo": "Quitar la marca · {status}",
+  "client.servedAgain": "{name}: se atiende de nuevo",
   "lead.noService": "No atender: {name}",
   "lead.noServiceHint": "Este teléfono o email es de un cliente marcado «No atender»",
   // wave 5 «План» — Лента (Работы и выезды)

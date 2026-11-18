@@ -72,6 +72,9 @@ exports.run = async (h) => {
   await h.go("/client/c3");
   await p.getByRole("button", { name: /^Статус клиента:/ }).first().click(); await p.waitForTimeout(300);
   await p.getByText("Клиент", { exact: true }).last().click(); await p.waitForTimeout(600);
+  // #2098: lifting the mark asks once, on this path too
+  await p.getByTestId("client-serve-again-yes").locator("visible=true").first().click();
+  await p.waitForFunction(() => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.customers?.find((c) => c.id === "c3")?.status === "active", null, { timeout: 8000 });
   h.expect((await h.db()).customers.find((c) => c.id === "c3").status === "active", "Linda is active again");
   h.expect((await make().count()) === 1, "«Создать смету» is back");
 

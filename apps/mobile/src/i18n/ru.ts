@@ -1296,6 +1296,8 @@ export const ru = {
   "client.h.payment": "Оплата",
   "client.h.note": "Заметка",
   "client.h.call": "Звонок",
+  "client.h.noServiceSet": "Пометка: не обслуживаем",
+  "client.h.noServiceLifted": "Пометка «не обслуживаем» снята",
   "client.h.sms": "SMS",
   "client.h.email": "Письмо",
   "client.h.taskDone": "Задача выполнена",
@@ -2257,6 +2259,14 @@ export const ru = {
   "client.import.fail.undo": "Импорт не отменён — нет связи с сервером",
   // wave 4b-1 «Лиды и клиенты»: do not service
   "client.noServiceHint": "Новые работы, сметы и выезды не назначаются",
+  // #2098: «не обслуживаем» обратимо
+  "client.serveAgain": "Снова обслуживать",
+  "client.serveAgain.title": "Снова обслуживать {name}?",
+  "client.serveAgain.body": "Можно будет создавать работы, сметы и выезды. Причина пометки останется в истории.",
+  "client.serveAgain.links": "Старые ссылки клиенту не вернутся — отправьте документы заново.",
+  "client.serveAgain.yes": "Снова обслуживать",
+  "client.serveAgain.yesTo": "Снять пометку · {status}",
+  "client.servedAgain": "{name}: снова обслуживаем",
   "lead.noService": "Не обслуживаем: {name}",
   "lead.noServiceHint": "Этот телефон или email — у клиента с пометкой «Не обслуживаем»",
   // wave 5 «План» — Лента (Работы и выезды)
