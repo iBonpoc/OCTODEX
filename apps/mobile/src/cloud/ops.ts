@@ -203,6 +203,8 @@ export type Op =
   | { k: "calendarEvent.remove"; id: string }
   /** wave 7б-1: my personal settings in this company (public.set_my_prefs: only for yourself) */
   | { k: "me.prefs"; prefs: MemberPrefs }
+  /** #2097: a reason of «Разбор дел» put off until a day (null — back now), for the company */
+  | { k: "attention.snooze"; itemId: string; until: string | null }
   /** wave 7б-2: my location consent (public.set_location_consent: only for yourself; on — after the notice) */
   | { k: "me.location"; on: boolean }
   /** step 18 P4b: my push switch of one group (public.set_push_kind: only for yourself, an active member) */
@@ -807,6 +809,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "me.prefs":
       return run(supabase.rpc("set_my_prefs", { p_company_id: c, p_plan_show_done: op.prefs.planShowDone }));
+    case "attention.snooze":
+      return run(supabase.rpc("snooze_attention", { p_company_id: c, p_item_id: op.itemId, p_until: op.until }));
     case "me.location":
       return run(supabase.rpc("set_location_consent", { p_company_id: c, p_on: op.on }));
     case "me.name":

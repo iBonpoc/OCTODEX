@@ -369,6 +369,12 @@ export const ru = {
   "triage.done": "Всё разобрано",
   "triage.doneHint": "Новые дела появятся здесь сами.",
   "triage.later": "Позже",
+  // #2097: «Позже» до даты, для всей компании
+  "triage.laterTitle": "Отложить до",
+  "triage.later.tomorrow": "Завтра · {date}",
+  "triage.later.days3": "Через 3 дня · {date}",
+  "triage.later.week": "Через неделю · {date}",
+  "triage.laterSaved": "Отложено до {date} — вернётся само",
 
   "inbox.title": "Входящие",
   "inbox.waiting": "Ждёт ответа {m} мин",

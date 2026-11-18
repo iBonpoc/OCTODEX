@@ -10,6 +10,7 @@ import { canCountersign } from "./estimateSign";
 import { canPlan, inspectionsNoEstimate, liveAssignees, dayDiffIn, isOpenVisit, lateToday, unassignedSoon, visitWho } from "./schedule";
 import { businessHoursOf, companyTz, scheduleSettingsOf } from "./scheduleSettings";
 import { dayKeyIn } from "./zone";
+import { isSnoozed } from "@/features/attentionSnooze";
 import { jobAwaitingClose } from "@/features/jobDone";
 import { goneId } from "./team";
 import type { DictKey } from "@/i18n";
@@ -284,7 +285,8 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
     out.push({ id: `photo-${visitId}`, kind: "photoFailed", refId: visitId, name, label: "photoUp.att", params: { n, name, date }, chip: "photoUp.chip", status: "bad", score: PHOTO_FAILED_SCORE });
   }
   out.push(...priceRecalcItems(db, role, now, extra.mode));
-  return out.sort((a, b) => b.score - a.score);
+  // #2097: a reason the office put off («Позже») is not shown — nor counted — until its day; then it is back by itself
+  return out.filter((x) => !isSnoozed(db, x.id, now)).sort((a, b) => b.score - a.score);
 }
 
 /** #1807: below an estimate without a reply (700 +) and an inspection without an estimate (680): a price, not a client */
