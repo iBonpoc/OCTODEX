@@ -1,6 +1,6 @@
 /** What the shop drawings print beside the measurement (#1349): the company, the job, the company's rules, the words. */
 import { sizeText } from "../../sizeText";
-import type { PartQty } from "@octo/estimating-engine";
+import type { GutterRulesOverride, PartQty } from "@octo/estimating-engine";
 import type { DictKey } from "@/i18n";
 import { fmtLen, type LenFormat } from "../../canvas/format";
 import { fi } from "./model";
@@ -31,6 +31,9 @@ export interface ShopRules {
   storyFt: number;
   /** how a corner is made when the drawing does not say */
   corner: "cut" | "strip" | "prefab";
+  /** the company's engine rules (#1973): a downspout without its own elbows shows the engine's default (bent on site, 3 × A, 1 × 75°
+   *  and a 2″ offset), never «TBD» */
+  engine?: GutterRulesOverride;
 }
 
 export interface ShopCtx {
