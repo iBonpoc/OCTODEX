@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Волна Н2: шапка и ширина</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
+<style>
+/* Прототип этапа 0 волны Н1 (#2031). «Было» — снимки приложения (before/), «Стало» — макет на токенах «Наряда»
+   (packages/design-tokens, DS §2.2: шрифт 28/22/17/15/15/13/11, отступы 4…32, радиусы 24/18/12, кнопки 28/32/36, зона 44).
+   Правило — design/naryad-ds/DESIGN-SYSTEM.md §8.9а–§8.9в. Светлая тёплая — :root, тёмная графитовая — [data-theme=dark]. */
+:root{
+  --acc:#FBFF00;--on-acc:#0B0C0F;--font:'Onest',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --r:24px;--ri:18px;--rf:12px;
+  --fs-display:28px;--fs-title:22px;--fs-heading:17px;--fs-body:15px;--fs-btn:15px;--fs-caption:13px;--fs-micro:11px;
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s8:32px;
+  --c-sm:28px;--c-md:32px;--c-lg:36px;--hit:44px;--field-phone:44px;--field:34px;--chip-h:24px;
+  --tabbar-h:56px;--rail:72px;--panel-w:360px;--form-max:560px;--content-max:1200px;--thumb:72px;--step-bar:4px;
+  --st-ok:#7CE08A;--st-info:#8FA2FF;--st-warn:#FF8A3D;--st-bad:#FF6B6B;--st-on:#0B0C0F;
+  --page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--in:rgba(255,255,255,.55);
+  --bd:rgba(20,22,30,.1);--track:rgba(20,22,30,.09);--sh:0 10px 28px rgba(60,50,40,.12);--ov:rgba(250,248,244,.78);--ring:#15161A;
+  --st-ok-t:#176428;--st-info-t:#3647C4;--st-warn-t:#944600;--st-bad-t:#B4232A;
+}
+[data-theme="dark"]{
+  --page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--in:rgba(255,255,255,.05);
+  --bd:rgba(255,255,255,.14);--track:rgba(255,255,255,.12);--sh:0 10px 30px rgba(0,0,0,.3);--ov:rgba(38,41,48,.72);--ring:#FBFF00;
+  --st-ok-t:#9CF0A8;--st-info-t:#C2CCFF;--st-warn-t:#FFB47E;--st-bad-t:#FFAAAA;color-scheme:dark;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--in:rgba(255,255,255,.05);
+  --bd:rgba(255,255,255,.14);--track:rgba(255,255,255,.12);--sh:0 10px 30px rgba(0,0,0,.3);--ov:rgba(38,41,48,.72);--ring:#FBFF00;
+  --st-ok-t:#9CF0A8;--st-info-t:#C2CCFF;--st-warn-t:#FFB47E;--st-bad-t:#FFAAAA;color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--page);color:var(--ink);font-family:var(--font);font-size:var(--fs-body);line-height:1.45}
+body{padding:var(--s4) max(16px,env(safe-area-inset-right,0px)) var(--s8) max(16px,env(safe-area-inset-left,0px))}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+button:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+h1{font-size:var(--fs-title);margin:0 0 var(--s1)}
+.lead{color:var(--mut);margin:0 0 var(--s4);max-width:760px}
+.bar{display:flex;flex-wrap:wrap;gap:var(--s3);align-items:center;margin-bottom:var(--s4)}
+.seg{display:inline-flex;background:var(--track);border-radius:999px;padding:4px;gap:2px;flex-wrap:wrap}
+.seg button{min-height:var(--c-md);padding:0 var(--s3);border-radius:999px;font-size:var(--fs-caption);font-weight:600;color:var(--mut)}
+.seg button[aria-pressed="true"]{background:var(--surf2);color:var(--ink);box-shadow:var(--sh)}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:var(--s4)}
+@media (max-width:900px){.cols{grid-template-columns:1fr}}
+.pane h2{font-size:var(--fs-heading);margin:0 0 var(--s2)}
+.stage{background:var(--track);border-radius:var(--r);padding:var(--s3);overflow:hidden}
+.scaler{transform-origin:0 0}
+.before img{display:block;width:100%;height:auto;border-radius:var(--ri)}
+.notes{margin-top:var(--s4);background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:var(--s4)}
+.notes h3{font-size:var(--fs-heading);margin:0 0 var(--s2)}
+.notes li{margin-bottom:var(--s1)}
+
+/* ===== устройство ===== */
+.dev{position:relative;background:var(--bg);color:var(--ink);overflow:hidden;border-radius:var(--ri);display:flex}
+.dev[data-w="390"]{width:390px;height:844px}
+.dev[data-w="820"]{width:820px;height:900px}
+.dev[data-w="1280"]{width:1280px;height:900px}
+.rail{width:var(--rail);flex:none;border-right:1px solid var(--bd);display:flex;flex-direction:column;align-items:center;gap:var(--s2);padding-top:var(--s4)}
+.rail .ri{width:56px;min-height:48px;border-radius:var(--rf);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:var(--fs-micro);color:var(--mut);gap:2px}
+.rail .ri.on{background:var(--surf2);color:var(--ink);font-weight:600}
+.main{flex:1;min-width:0;position:relative;display:flex;flex-direction:column}
+.scroll{flex:1;overflow:hidden;padding:var(--s4)}
+.dev[data-w="820"] .scroll,.dev[data-w="1280"] .scroll{padding:var(--s4) var(--s6)}
+.wrap{max-width:var(--content-max);margin:0 auto}
+.ver{font-size:var(--fs-micro);color:var(--mut);margin-bottom:var(--s2)}
+.back{display:inline-flex;align-items:center;gap:2px;min-height:var(--hit);color:var(--mut);font-size:var(--fs-body);font-weight:500}
+.hdr{display:flex;align-items:flex-start;gap:var(--s2)}
+.hdr h2{font-size:var(--fs-display);line-height:1.15;margin:0;font-weight:700}
+.q{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--mut);color:var(--mut);font-size:11px;display:inline-flex;align-items:center;justify-content:center;margin-top:8px;flex:none}
+.sp{flex:1}
+.ib{width:var(--c-lg);height:var(--c-lg);border-radius:999px;background:var(--surf2);border:1px solid var(--bd);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.sub{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s2);margin:var(--s2) 0 var(--s6);color:var(--mut)}
+.chip{white-space:nowrap;display:inline-flex;align-items:center;gap:6px;height:var(--chip-h);padding:0 10px;border-radius:999px;font-size:var(--fs-caption);font-weight:600;border:1px solid var(--bd);background:var(--surf2);color:var(--ink)}
+.chip.warn{color:var(--st-warn-t);border-color:var(--st-warn)}
+.chip.info{color:var(--st-info-t);border-color:var(--st-info)}
+.chip.ok{color:var(--st-ok-t);border-color:var(--st-ok)}
+.card{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:var(--s4);margin-bottom:var(--s3);box-shadow:var(--sh)}
+.now{font-size:var(--fs-body);margin:0 0 var(--s3)}
+.stitle{font-size:var(--fs-heading);font-weight:600;margin:var(--s3) 0 var(--s2);display:flex;align-items:center;gap:var(--s2)}
+.row{display:flex;align-items:center;gap:var(--s3);min-height:var(--hit);border-bottom:1px solid var(--bd);padding:var(--s1) 0}
+.row:last-child{border-bottom:0}
+.row .k{color:var(--mut);width:96px;flex:none;font-size:var(--fs-caption)}
+.row .v{flex:1;min-width:0}
+.row .chev{color:var(--mut)}
+.money{display:flex;align-items:baseline;justify-content:space-between;gap:var(--s2);margin-bottom:var(--s3)}
+.money .lbl{color:var(--mut);font-size:var(--fs-caption)}
+.money .sum{font-size:var(--fs-title);font-weight:600;font-variant-numeric:tabular-nums}
+.steps{display:grid;grid-template-columns:repeat(5,1fr);gap:var(--s1);margin:var(--s2) 0 var(--s3)}
+.steps .st{display:flex;flex-direction:column;gap:6px;font-size:var(--fs-caption);color:var(--mut)}
+.steps .st i{display:block;height:var(--step-bar);border-radius:999px;background:var(--track)}
+.steps .st.done{color:var(--ink)}
+.steps .st.done i{background:var(--ink)}
+.steps .st.cur{color:var(--ink);font-weight:600}
+.steps .st.cur i{background:var(--acc);outline:1px solid var(--bd)}
+.contact{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s2)}
+.contact button{min-height:var(--hit);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:var(--fs-caption);font-weight:500;border-radius:var(--rf);background:var(--in);border:1px solid var(--bd)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--s2);min-height:var(--hit);padding:0 var(--s4);border-radius:999px;font-weight:600;font-size:var(--fs-btn)}
+.btn.pri{background:var(--acc);color:var(--on-acc)}
+.btn.sec{background:var(--surf2);border:1px solid var(--bd)}
+.btn.sm{min-height:var(--c-md);font-size:var(--fs-caption);padding:0 var(--s3)}
+.tabs{display:flex;gap:var(--s1);overflow:hidden;margin:var(--s2) 0 var(--s3)}
+.tabs span{min-height:30px;padding:0 var(--s3);display:inline-flex;align-items:center;border-radius:999px;font-size:var(--fs-caption);font-weight:600;color:var(--mut);white-space:nowrap}
+.tabs span.on{background:var(--surf2);color:var(--ink);box-shadow:var(--sh)}
+.thumbs{display:flex;gap:var(--s2);flex-wrap:wrap}
+.thumbs b{width:var(--thumb);height:var(--thumb);border-radius:var(--rf);background:var(--track);border:1px solid var(--bd);display:flex;align-items:flex-end;padding:4px;font-size:var(--fs-micro);font-weight:500;color:var(--mut)}
+ul.todo{margin:0;padding-left:var(--s5)}
+ul.todo li{margin-bottom:var(--s1)}
+.field{margin-bottom:var(--s3)}
+.field label{display:block;font-size:var(--fs-caption);font-weight:500;color:var(--mut);margin-bottom:var(--s1)}
+.field .inp{height:var(--field-phone);border-radius:var(--rf);background:var(--in);border:1px solid var(--bd);display:flex;align-items:center;padding:0 var(--s3);font-size:17px}
+.dev:not([data-w="390"]) .field .inp{height:var(--field)}
+.field .inp.ph{color:var(--mut)}
+.form{max-width:var(--form-max)}
+
+/* панели действия */
+.dock{position:absolute;left:0;right:0;bottom:0;padding:0 var(--s3) var(--s3);display:flex;flex-direction:column;gap:var(--s2);z-index:2}
+.actionbar{background:var(--ov);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid var(--bd);border-radius:var(--r);padding:var(--s3) var(--s4);display:flex;flex-direction:column;gap:var(--s2);box-shadow:var(--sh)}
+.actionbar .r{display:flex;gap:var(--s2)}
+.actionbar .r .btn{flex:1}
+.actionbar .r .btn.g2{flex:2}.actionbar .r .btn.g3{flex:3}
+.tabpill{height:var(--tabbar-h);background:var(--ov);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid var(--bd);border-radius:999px;display:flex;align-items:center;justify-content:space-around;box-shadow:var(--sh)}
+.tabpill span{display:flex;flex-direction:column;align-items:center;font-size:var(--fs-micro);color:var(--mut);gap:2px;min-width:60px}
+.tabpill span.on{color:var(--ink);font-weight:600}
+.dev[data-w="390"] .room{height:150px}
+.dev[data-w="390"] .room.tall{height:200px}
+/* полоса 820 — шириной колонки */
+.strip{position:absolute;bottom:0;left:var(--s6);right:var(--s6);padding-bottom:var(--s3);z-index:2}
+.strip .actionbar{flex-direction:row;justify-content:flex-end;align-items:center;max-width:var(--content-max);margin:0 auto}
+.strip.formw{right:auto;width:var(--form-max)}
+.strip .actionbar .btn{min-width:160px;max-width:280px}
+.strip .info{margin-right:auto;font-size:var(--fs-caption);color:var(--mut)}
+/* 1280 — две колонки */
+.two{display:grid;grid-template-columns:minmax(0,1fr) var(--panel-w);gap:var(--s6);align-items:start}
+.side .btn{width:100%}
+.side .card{margin-bottom:var(--s3)}
+.menu{position:absolute;z-index:5;background:var(--ov);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid var(--bd);border-radius:var(--rf);box-shadow:var(--sh);width:240px;padding:var(--s1) 0}
+.menu div{min-height:var(--hit);display:flex;align-items:center;padding:0 var(--s4);gap:var(--s2)}
+.menu .bad{color:var(--st-bad-t)}
+.menu hr{border:0;border-top:1px solid var(--bd);margin:var(--s1) 0}
+svg.i{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+svg.i.m{width:20px;height:20px}
+
+/* правки после ревью 18.11 */
+.dev.full{height:auto!important}
+.dev.full .scroll{overflow:visible}
+.scroll{overflow:auto}
+.rail{gap:2px;padding-top:var(--s3);overflow:hidden}
+.rail .logo{font-weight:700;font-size:var(--fs-heading);margin-bottom:var(--s2)}
+.rail .ri{min-height:44px}
+.rail .av{width:var(--c-md);height:var(--c-md);border-radius:999px;background:var(--surf2);display:flex;align-items:center;justify-content:center;font-size:var(--fs-micro);margin-top:auto;margin-bottom:var(--s3)}
+.field .inp{border-color:var(--bd-field)}
+.field .inp.multi{height:88px;align-items:flex-start;padding-top:var(--s2)}
+.field .inp .act{margin-left:auto;color:var(--mut);display:inline-flex}
+.field2{display:grid;grid-template-columns:1fr 96px 120px;gap:var(--s2)}
+.btn.sec{border-color:var(--bd-field)}
+.contact{display:flex;gap:var(--s2);flex-wrap:wrap}
+.contact button{flex:1;min-width:0;min-height:var(--c-lg);flex-direction:row;border-radius:999px;border:1px solid var(--bd-field);background:var(--surf2);font-size:var(--fs-caption);font-weight:600;gap:6px;position:relative}
+.contact button::after{content:"";position:absolute;inset:-4px 0}
+.steps .st.done{color:var(--ink)}
+.steps .st.done i{background:var(--ink)}
+.steps .st.next{color:var(--ink);font-weight:600}
+.steps .st.next i{background:var(--track);outline:1px solid var(--bd-field)}
+.steps .st span{display:inline-flex;align-items:center;gap:2px}
+.lc{display:flex;align-items:center;gap:var(--s3);min-height:var(--hit);background:var(--surf);border:1px solid var(--bd);border-radius:var(--ri);padding:var(--s2) var(--s3);margin-bottom:var(--s2)}
+.lc .t{flex:1;min-width:0}
+.lc .t b{display:block;font-weight:600}
+.lc .t small{color:var(--mut);font-size:var(--fs-caption)}
+.detail{max-width:var(--form-max)}
+.detail .row .k{width:72px}
+.side .btn{min-height:var(--c-md);font-size:var(--fs-caption)}
+.side .contact button{min-height:var(--c-md)}
+.dock{padding-bottom:max(var(--s3),34px)}
+.dock.acc .actionbar{background:none;border:0;box-shadow:none;padding:0;backdrop-filter:none;-webkit-backdrop-filter:none}
+.dock.acc .btn{box-shadow:var(--sh)}
+.strip.formw{position:sticky;left:auto;right:auto;margin-top:var(--s4);padding:0}
+.chk{display:flex;align-items:center;gap:var(--s2);min-height:var(--hit);border-bottom:1px solid var(--bd)}
+.chk:last-child{border-bottom:0}
+.dc{width:22px;height:22px;border-radius:999px;border:1.5px solid var(--bd-field);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.dc.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.addph{width:var(--thumb);height:var(--thumb);border-radius:var(--rf);border:1.5px dashed var(--bd-field);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:var(--fs-micro);color:var(--mut);gap:2px}
+.tabs{position:relative;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 32px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 32px),transparent)}
+.stitle .add{margin-left:auto}
+.st-n{color:var(--st-warn-t)}
+.field .inp.multi{height:88px!important}
+.strip.formw .actionbar{background:none;border:0;box-shadow:none;padding:0;backdrop-filter:none;-webkit-backdrop-filter:none}
+</style>
+<style>
+.nav{width:232px;flex:none;border-right:1px solid var(--bd);display:flex;flex-direction:column;padding:var(--s3) var(--s2);gap:2px}
+.nav .top{display:flex;align-items:center;justify-content:space-between;padding:0 var(--s2) var(--s2)}
+.nav .top b{font-size:var(--fs-heading)}
+.nav .create{min-height:var(--c-md);border-radius:999px;background:var(--surf2);border:1px solid var(--bd-field);display:flex;align-items:center;gap:var(--s2);padding:0 var(--s3);font-weight:600;font-size:var(--fs-caption);margin-bottom:var(--s2)}
+.nav .it{min-height:36px;display:flex;align-items:center;gap:var(--s3);padding:0 var(--s3);border-radius:var(--rf);color:var(--mut);font-size:var(--fs-body)}
+.nav .it.on{background:var(--surf2);color:var(--ink);font-weight:600}
+.nav .me{margin-top:auto;display:flex;align-items:center;gap:var(--s2);padding:var(--s2)}
+.rail{overflow:hidden;position:relative}
+.rail .ri{width:64px}
+.rail .fade{position:absolute;left:0;right:0;bottom:56px;height:32px;background:linear-gradient(transparent,var(--bg))}
+.backrow{height:var(--hit);display:flex;align-items:center}
+.svc{display:flex;align-items:center;gap:var(--s2);min-height:20px}
+.demo{display:inline-flex;align-items:center;gap:6px;height:var(--chip-h);padding:0 10px;border-radius:999px;font-size:var(--fs-caption);font-weight:600;border:1px solid var(--st-warn);color:var(--st-warn-t)}
+.hdr .ttl{display:flex;align-items:flex-start;gap:var(--s2);min-width:0}
+.hdr h2{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.filters{display:flex;gap:var(--s2);margin:var(--s3) 0;flex-wrap:nowrap;overflow:hidden}
+.fchip{min-height:var(--c-md);padding:0 var(--s3);border-radius:999px;display:inline-flex;align-items:center;font-size:var(--fs-caption);font-weight:600;border:1px solid var(--bd);white-space:nowrap}
+.fchip.on{background:var(--surf2);border-color:var(--bd-field)}
+.lrow,.lhead{display:grid;grid-template-columns:2fr 2fr 1.2fr 1fr;gap:var(--s3);align-items:center;padding:0 var(--s3)}
+.lrow{min-height:52px;border:1px solid var(--bd);background:var(--surf);border-radius:var(--rf);margin-bottom:var(--s2)}
+.lhead{font-size:var(--fs-caption);color:var(--mut);margin-bottom:var(--s1)}
+.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)}
+.lcard{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:var(--s4)}
+.lcard .top{display:flex;justify-content:space-between;gap:var(--s2)}
+.lcard b{font-size:var(--fs-heading)}
+.menu.hist div small{color:var(--mut);margin-left:auto;font-size:var(--fs-caption)}
+.srow{display:flex;align-items:center;gap:var(--s3);min-height:52px;border-bottom:1px solid var(--bd);padding:0 var(--s3)}
+.srow:last-child{border-bottom:0}
+.srow .v{flex:1}
+.list560{max-width:var(--form-max);background:var(--surf);border:1px solid var(--bd);border-radius:var(--r)}
+.prose{max-width:680px;color:var(--mut)}
+</style>
+
+</head>
+<body>
+<h1>Волна Н2 — шапка и ширина</h1>
+<p class="lead">Этап 0 задачи #2032. Слева — как сейчас (снимки приложения), справа — как станет по DS §12.2а, §12.2б, §5.2–§5.3. Демо-данные.</p>
+<div class="bar" role="group" aria-label="Настройки показа">
+  <div class="seg" id="scr"><button data-v="list" aria-pressed="true">Список «Сметы» (из «Ещё»)</button><button data-v="detail" aria-pressed="false">Карточка сметы</button><button data-v="settings" aria-pressed="false">Настройки компании</button><button data-v="form" aria-pressed="false">Новый клиент (форма)</button></div>
+  <div class="seg" id="wid"><button data-v="390" aria-pressed="true">390</button><button data-v="820" aria-pressed="false">820</button><button data-v="1280" aria-pressed="false">1280</button></div>
+  <div class="seg" id="thm"><button data-v="dark" aria-pressed="true">Тёмная</button><button data-v="light" aria-pressed="false">Светлая</button></div>
+  <div class="seg" id="mnu"><button data-v="0" aria-pressed="true">«‹» обычно</button><button data-v="1" aria-pressed="false">долгое нажатие на «‹»</button></div>
+  <div class="seg" id="nav"><button data-v="1" aria-pressed="true">1280: меню открыто</button><button data-v="0" aria-pressed="false">свёрнуто</button></div>
+</div>
+<div class="cols">
+  <section class="pane"><h2>Было</h2><div class="stage before"><img id="beforeImg" alt="Снимок экрана сейчас"></div></section>
+  <section class="pane"><h2>Стало</h2><div class="stage" id="afterStage"><div class="scaler" id="scaler"></div></div></section>
+</div>
+<div class="notes" id="notes"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-nav" viewBox="0 0 24 24"><path d="M3 11l19-9-9 19-2-8-8-2z"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></symbol>
+  <symbol id="i-cam" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></symbol>
+  <symbol id="i-rcpt" viewBox="0 0 24 24"><path d="M4 2v20l3-2 3 2 2-2 2 2 3-2 3 2V2l-3 2-3-2-2 2-2-2-3 2z"/><path d="M8 9h8M8 13h6"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-paste" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+  <symbol id="i-chevd" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-burger" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></symbol>
+</svg>
+
+<script>
+const BEFORE = { list: "estimates", detail: "estimate_e5", settings: "company", form: "client_edit" };
+const S = { scr: "list", wid: "390", thm: "dark", mnu: "0", nav: "1" };
+const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+const NAV = [["home","Главная"],["msg","Сообщения"],["cal","План"],["note","Лиды"],["rcpt","Работы"],["users","Клиенты"],["phone","Звонки"],["check","Задачи"],["note","Сметы"],["rcpt","Счета"],["note","Каталог"],["home","Настройки"]];
+function rail(on) {
+  return `<nav class="rail" aria-label="Разделы"><div class="logo">GR</div><div class="ri">${ic("burger","m")}Меню</div><div class="ri">${ic("plus","m")}Создать</div>${NAV.map(([i,t]) => `<div class="ri ${t === on ? "on" : ""}">${ic(i,"m")}${t}</div>`).join("")}<div class="fade"></div><div class="av">AP</div></nav>`;
+}
+function nav(on) {
+  return `<nav class="nav" aria-label="Разделы"><div class="top"><b>GoRix</b><button class="ib" aria-label="Свернуть меню">${ic("burger")}</button></div><div class="create">${ic("plus")}Создать</div>${NAV.map(([i,t]) => `<div class="it ${t === on ? "on" : ""}">${ic(i)}${t}</div>`).join("")}<div class="me"><span class="av" style="margin:0">AP</span>Alex Petrov</div></nav>`;
+}
+function head({ back, title, plus, more = true, under = "" }) {
+  return `<div class="svc"><span class="ver" style="margin:0">GoRix v1.0.0 · 18</span><span class="demo">${ic("alert")}Демо</span></div>
+  <div class="backrow">${back ? `<button class="back" title="Esc — назад">${ic("back")}${back}</button>` : ""}</div>
+  <div class="hdr"><div class="ttl"><h2>${title}</h2><span class="q" aria-label="Подсказка">?</span></div><span class="sp"></span>${plus ? `<button class="btn sec sm">${ic("plus")}${plus}</button>` : ""}${more ? `<button class="ib" aria-label="Ещё действия">${ic("more")}</button>` : ""}</div>${under}`;
+}
+const chip = (t, k, i) => `<span class="chip ${k}">${ic(i)}${t}</span>`;
+const EST = [["Emily Park","520 W Olive Ave, Burbank","$2,980",chip("Отправлена","info","clock")],["Linda Alvarez","2207 Ocean Park Blvd","$2,640",chip("Без ответа 6 дн","warn","alert")],["Sarah Mitchell","1420 Oak Grove Ave","$3,420",chip("Одобрена","ok","check")],["Kevin Brooks","88 Pine St, Altadena","$1,150",chip("Черновик","","note")]];
+function render() {
+  const w = +S.wid; let content = "", side = "", railOn = "Сметы";
+  const filters = `<div class="filters"><span class="fchip on">Открытые · 3</span><span class="fchip">Закрытые · 3</span><span class="fchip">Все · 6</span></div>`;
+  if (S.scr === "list") {
+    content = head({ back: w === 390 ? "Ещё" : "", title: "Сметы", plus: "Смета" }) + `<div style="color:var(--mut);margin-top:4px">Ждут ответа · $5,620</div>` + filters;
+    if (w === 1280) content += `<div class="lhead"><span>Клиент</span><span>Адрес</span><span>Статус</span><span class="num">Сумма</span></div>` + EST.map(e => `<div class="lrow"><b>${e[0]}</b><span>${e[1]}</span><span>${e[3]}</span><span class="num">${e[2]}</span></div>`).join("");
+    else content += `<div class="${w === 820 ? "grid2" : ""}">${EST.map(e => `<div class="lcard" style="margin-bottom:8px"><div class="top"><b>${e[0]}</b><span class="num">${e[2]}</span></div><div style="color:var(--mut);margin:4px 0 8px">${e[1]}</div>${e[3]}</div>`).join("")}</div>`;
+  } else if (S.scr === "detail") {
+    const under = w === 1280 ? `<div class="sub">EST-0005 · Sarah Mitchell · 1420 Oak Grove Ave</div>` : `<div class="sub">${chip("Одобрена","ok","check")}EST-0005 · $3,420</div>`;
+    const h = head({ back: "Sarah Mitchell", title: "Bathroom remodel", under });
+    const stmt = `<div class="stitle">Выписка по договору</div><div class="card detail"><div class="row"><span class="k">Договор</span><span class="v num">$3,420</span></div><div class="row"><span class="k">Выставлено</span><span class="v num">$342</span></div><div class="row"><span class="k">Оплачено</span><span class="v num">$342</span></div><div class="row"><span class="k" style="color:var(--ink);font-weight:600">Осталось</span><span class="v num">$3,078</span></div></div>`;
+    const lines = `<div class="stitle">Позиции</div><div class="card detail"><div class="row"><span class="v">Remove old vanity and toilet</span><span class="num">$420</span></div><div class="row"><span class="v">Tile backsplash, 24 sq ft</span><span class="num">$1,180</span></div><div class="row"><span class="v">Install vanity, faucet</span><span class="num">$1,820</span></div></div>`;
+    const rel = `<div class="stitle">Связано</div><div class="lc">${ic("users","m")}<div class="t"><b>Sarah Mitchell</b></div>${ic("chev")}</div><div class="lc">${ic("rcpt","m")}<div class="t"><b>INV-0105</b><small>Депозит · Оплачен · $342</small></div>${ic("chev")}</div>`;
+    const pri = `<button class="btn pri">${ic("rcpt")}Подписать договор</button>`;
+    if (w === 1280) content = h + `<div class="two"><div>${lines}${stmt}</div><aside class="side"><div class="card">${chip("Одобрена","ok","check")}<p class="now" style="margin-top:12px">Клиент одобрил 5 нояб. — подпишите договор.</p>${pri}<div class="money" style="margin-top:12px"><span class="lbl">Осталось получить</span><span class="sum">$3,078</span></div></div>${rel}</aside></div>`;
+    else content = h + `<p class="now">Клиент одобрил 5 нояб. — подпишите договор.</p>` + lines + stmt + rel + `<div style="height:110px"></div>`;
+    if (w < 1280) side = w === 390 ? `<div class="dock"><div class="actionbar"><div class="r">${pri}</div></div></div>` : `<div class="strip"><div class="actionbar">${pri}</div></div>`;
+    if (S.mnu === "1") side += `<div class="menu hist" style="left:${w === 390 ? 16 : (w === 1280 && S.nav === "1" ? 24 : 24)}px;top:104px" role="menu"><div>${ic("home")}Главная</div><div>${ic("users")}Клиенты</div><div>${ic("users")}Sarah Mitchell<small>‹ сейчас</small></div></div>`;
+  } else if (S.scr === "settings") {
+    railOn = "Настройки";
+    const rows = [["Профиль компании", chip("Заполнено","ok","check")],["Онлайн-оплата", chip("Не подключено","warn","alert")],["Лиды и сроки",""],["Чек-листы",""],["Модули",""],["Лицензии", chip("Не заполнено","warn","alert")]];
+    content = head({ back: w === 390 ? "Ещё" : "", title: "Настройки компании", more: false }) + `<p class="prose" style="margin:8px 0 16px">Данные компании для смет, счетов и страницы клиента.</p><div class="list560">${rows.map(r => `<div class="srow"><span class="v">${r[0]}</span>${r[1]}${ic("chev")}</div>`).join("")}</div>`;
+  } else {
+    railOn = "Клиенты";
+    const f = (l, v, o = {}) => `<div class="field"><label>${l}</label><div class="inp ${o.ph ? "ph" : ""}">${v}${o.act ? `<span class="act">${ic(o.act)}</span>` : ""}</div></div>`;
+    content = head({ back: "Отмена", title: "Новый клиент", more: false }) + `<div style="height:16px"></div><div class="form">${f("Телефон","(213) 555-0199",{act:"paste"})}${f("Имя","Maria Gonzalez")}${f("Email","Почта клиента",{ph:1})}${f("Улица и дом","Улица и номер дома",{ph:1})}<div class="field2">${f("Город","Город",{ph:1})}${f("Штат","CA")}${f("ZIP","ZIP",{ph:1})}</div>${w > 390 ? `<div class="strip formw"><div class="actionbar"><button class="btn pri">Сохранить клиента</button></div></div>` : ""}</div><div style="height:${w === 390 ? 110 : 16}px"></div>`;
+    if (w === 390) side = `<div class="dock"><div class="actionbar"><div class="r"><button class="btn pri">Сохранить клиента</button></div></div></div>`;
+  }
+  const left = w === 390 ? "" : (w === 1280 && S.nav === "1" ? nav(railOn) : rail(railOn));
+  const tabs = w === 390 && (S.scr === "list" || S.scr === "settings") ? `<div class="dock"><div class="tabpill"><span>${ic("home","m")}Главная</span><span>${ic("cal","m")}План</span><span>${ic("msg","m")}Сообщения</span><span>${ic("users","m")}Клиенты</span><span class="on">${ic("more","m")}Ещё</span></div></div>` : "";
+  const dev = `<div class="dev" data-w="${w}" data-theme="${S.thm}">${left}<div class="main"><div class="scroll"><div class="wrap">${content}</div></div>${side}${tabs}</div></div>`;
+  const sc = document.getElementById("scaler"); sc.innerHTML = dev;
+  const stage = document.getElementById("afterStage"), hgt = sc.firstElementChild.offsetHeight;
+  const k = Math.min(1, (stage.clientWidth - 24) / w);
+  sc.style.transform = `scale(${k})`; sc.style.width = w + "px"; sc.style.height = hgt * k + "px"; stage.style.height = hgt * k + 24 + "px";
+  const img = document.getElementById("beforeImg"); img.src = `before/${BEFORE[S.scr]}-${w}-${S.thm}.jpg`; img.alt = `Сейчас: ${BEFORE[S.scr]}, ${w}`;
+  document.getElementById("notes").innerHTML = NOTES[S.scr];
+}
+const NOTES = {
+  list: `<h3>Список из «Ещё»</h3><ul><li>Шапка одинакова на всех ширинах: служебная строка (версия, «Демо») сверху; строка «‹» — на 390 «‹ Ещё», на 820/1280 пустая (раздел в меню слева), но её высота сохраняется — заголовок не прыгает; «?» у заголовка; справа «＋ Смета» (вторичная) и «⋯». Цепочки, круглой «‹» и «Esc на уровень вверх» нет.</li><li>Строка-итог «Ждут ответа · $5,620» — то, чего нет в фильтрах.</li><li>1280: меню слева открыто по умолчанию (В-ш1), «Сметы» выделены; список — строки с подписями колонок. 820 и «свёрнуто»: полоса прокручивается, выбранное видно, у края затухание.</li></ul>`,
+  detail: `<h3>Карточка сметы</h3><ul><li>«‹ Sarah Mitchell» — одна кнопка-текст, подпись = заголовок родителя. Полный путь — долгим нажатием на «‹» (переключатель вверху), как кнопка «Назад» в iOS.</li><li>Под заголовком — статус и главный факт; «Что сейчас» одним предложением.</li><li>390/820 — одна колонка, строки «подпись — значение» не шире 560; 1280 — справа колонка 360: статус, что дальше, «Подписать договор», «Осталось», «Связано». Было: одна колонка 1176, суммы в 1100 px от подписей.</li></ul>`,
+  settings: `<h3>Корень настроек компании</h3><ul><li>Строки в колонке 560 (<code>menuListMax</code>): статус рядом с названием, а не в 1000 px. Пояснение — не шире 680 (<code>proseMax</code>).</li><li>Внутри раздела «‹ Настройки компании», заголовок — «Онлайн-оплата» (было «Настройки компании › Настройки компании»).</li></ul>`,
+  form: `<h3>Форма «Новый клиент»</h3><ul><li>«‹ Отмена» вместо цепочки (КЛ-21); колонка 560; «Сохранить клиента» — на 390 в закреплённой панели, на 820/1280 сразу под формой (Н1 §8.9а).</li></ul>`,
+};
+for (const id of ["scr","wid","thm","mnu","nav"]) document.getElementById(id).addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; S[id] = b.dataset.v; for (const x of e.currentTarget.querySelectorAll("button")) x.setAttribute("aria-pressed", String(x === b)); render(); });
+addEventListener("resize", render); render();
+</script>
+
+</body>
+</html>
