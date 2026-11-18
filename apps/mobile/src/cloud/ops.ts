@@ -66,6 +66,8 @@ export type Op =
   | { k: "chk.template.save"; template: ChecklistTemplate; ifNew?: boolean }
   /** spec 36: a supplier made, changed, archived or restored (the whole row) */
   | { k: "supplier.save"; supplier: Supplier }
+  /** #1834: the supplier's purchase tax through the one door (supplier_set_tax); seenBps — the rate the phone saw (a stale one → «changed first») */
+  | { k: "supplier.tax"; supplierId: string; taxBps: number | null; seenBps: number | null }
   /** spec 37: a purchase order made or changed (header, its lines, the lines taken out) */
   | { k: "po.save"; order: PurchaseOrder; removedLineIds: string[] }
   /** spec 37: what came, line by line (public.po_receive) */
@@ -669,6 +671,10 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "supplier.save":
       return run(supabase.from("suppliers").upsert(supplierToRow(op.supplier, c), { onConflict: "id" }));
+    case "supplier.tax": {
+      const { error, status } = await supabase.rpc("supplier_set_tax", { p_supplier: op.supplierId, p_tax_bps: op.taxBps, p_seen_bps: op.seenBps });
+      return run(Promise.resolve({ error, status }));
+    }
     case "chk.template.save":
       return run(supabase.from("checklist_templates").upsert(templateToDb(op.template, c), { onConflict: "id", ...(op.ifNew ? { ignoreDuplicates: true } : {}) }));
     case "company.visitSettings":
@@ -1075,7 +1081,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         supabase.from("properties").upsert(
           {
             id: p.id, company_id: c, customer_id: p.customerId, address_line1: p.address || "—", address_unit: p.unit ?? null,
-            address_city: place.city || "—", address_state: place.state || "CA", address_zip: place.zip || null,
+            // #2065: the store fills the company's state; never a guessed «CA» (the column is NOT NULL)
+            address_city: place.city || "—", address_state: place.state || "", address_zip: place.zip || null,
             label: p.label ?? null, kind: p.kind ?? null, access_notes: p.accessNotes ?? null, contact_ids: p.contactIds ?? [], stories: p.stories || 1,
           },
           { onConflict: "id" },

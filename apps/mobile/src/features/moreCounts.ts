@@ -35,7 +35,7 @@ export function moreCounts(db: DB, role: Role, now: number = Date.now(), tz: str
   const out: Partial<Record<SectionId, MoreCount>> = {
     leads: { n: kinds((k) => LEAD_KINDS.has(k)), label: "fix.more.leads" },
     tasks: { n: tasks, label: "fix.more.tasks" },
-    jobs: { n: kinds((k) => k === "schedule" || k === "jobDone"), label: "fix.more.jobs" },
+    jobs: { n: kinds((k) => k === "schedule" || k === "jobDone" || k === "jobNotInvoiced"), label: "fix.more.jobs" },
     estimates: { n: kinds((k) => k === "estimateSign"), label: "fix.more.estimates" },
     invoices: { n: kinds((k) => k === "overdue"), label: "fix.more.invoices", bad: true },
   };

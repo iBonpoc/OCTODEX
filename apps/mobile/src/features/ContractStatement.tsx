@@ -6,6 +6,7 @@ import { contractStatement, progressAmount } from "@octo/estimating-engine";
 import { isOverdue, useStore } from "@/data/store";
 import { daysOverdue } from "@/data/selectors";
 import type { Invoice } from "@/data/types";
+import { canBill } from "@/features/billRights";
 import { useI18n, type DictKey } from "@/i18n";
 import { MoneyField, PctField } from "./fields";
 import { Button, Segmented, TextField } from "@/ui/controls";
@@ -108,7 +109,7 @@ export function ContractStatement({ jobId }: { jobId: string }) {
         </CardGrid>
       ) : null}
       <VoidInvoiceCards list={(db.voidInvoices ?? []).filter((i) => i.jobId === jobId)} testPrefix="statement" />
-      {st.toInvoice > 0 ? (
+      {st.toInvoice > 0 && canBill(store.role) ? (
         <RowView style={{ flexWrap: "wrap" }}>
           {!hasFinal ? (
             <Button
