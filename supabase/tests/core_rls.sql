@@ -3419,9 +3419,9 @@ update public.jobs set status = 'cancelled' where id = 'e4100000-0000-4000-8000-
 select tst.fails($q$insert into public.job_line_items (company_id, job_id, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000002', 'T41 late', 1, 100)$q$, 'a cancelled job takes no new lines');
 select tst.fails($q$update public.job_line_items set unit_price_cents = 1 where job_id = 'e4100000-0000-4000-8000-000000000002'$q$, 'the lines of a cancelled job do not change');
 :as_sales_a
-insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', 3, 'T41 sales line', 1, 100);
-select tst.ok((select contract_total_cents from public.jobs where id = 'e4100000-0000-4000-8000-000000000001') = 18931, 'sales adds a line, the total follows');
-update public.job_line_items set deleted_at = now() where name = 'T41 sales line';
+-- #2075 (20261117360000): the lines of a job make its contract total — the office's, not sales'
+select tst.fails($q$insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', 3, 'T41 sales line', 1, 100)$q$, 'sales do not add a line to a job');
+select tst.fails($q$update public.job_line_items set unit_price_cents = 1 where job_id = 'e4100000-0000-4000-8000-000000000001'$q$, 'sales do not change the price of a job line');
 :as_office_a
 :as_super
 select tst.fails($q$insert into public.job_tags (company_id, job_id, tag_id) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', (select id from public.tags where company_id = 'cb000000-0000-0000-0000-000000000000' limit 1))$q$, 'a tag of another company does not go on our job');
@@ -3955,8 +3955,12 @@ select tst.fails($q$update public.jobs set completed_at = now() where id = 'e470
 update public.jobs set description = 'T47 note', job_type_id = (select id from public.job_types where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'repair') where id = 'e4700000-0000-4000-8000-000000000001';
 select tst.ok((select description = 'T47 note' and job_type_id is not null from public.jobs where id = 'e4700000-0000-4000-8000-000000000001'), 'update: what the app changes still changes (job.update)');
 -- the other live paths of the app (ops.ts): job.update money, job.category, advanceJob, lead.visit
+-- #2075 (20261117360000): the tax of a job is the office's — sales are refused, the office still changes it
+select tst.fails($q$update public.jobs set tax_enabled = true, tax_rate_bps = 825 where id = 'e4700000-0000-4000-8000-000000000001'$q$, 'job.update: sales do not change the tax of a job');
+:as_office_a
 update public.jobs set tax_enabled = true, tax_rate_bps = 825 where id = 'e4700000-0000-4000-8000-000000000001';
-select tst.ok((select tax_enabled and tax_rate_bps = 825 from public.jobs where id = 'e4700000-0000-4000-8000-000000000001'), 'job.update: the tax of a job still changes');
+select tst.ok((select tax_enabled and tax_rate_bps = 825 from public.jobs where id = 'e4700000-0000-4000-8000-000000000001'), 'job.update: the tax of a job still changes (office)');
+:as_sales_a
 update public.jobs set service_category_id = null where id = 'e4700000-0000-4000-8000-000000000001';
 select tst.ok((select service_category_id is null from public.jobs where id = 'e4700000-0000-4000-8000-000000000001'), 'job.category still changes');
 update public.jobs set status = 'scheduled' where id = 'e4700000-0000-4000-8000-000000000001';
@@ -4066,7 +4070,7 @@ begin
                         'set_job_tags(uuid,uuid[])', 'set_location_consent(uuid,boolean)', 'set_member_status(uuid,uuid,text)',
                         'set_my_prefs(uuid,boolean)', 'set_push_kind(uuid,text,boolean)', 'set_share_location(uuid,boolean)',
                         'sign_estimate_on_site(uuid,text,text)', 'sign_estimate_on_site(uuid,text,text,bigint)',
-                        'stop_member_location(uuid,uuid)', 'transfer_ownership(uuid,uuid)', 'trash_items(text,uuid[])', 'trash_list(uuid)',
+                        'stop_member_location(uuid,uuid)', 'supplier_set_tax(uuid,integer,integer)', 'transfer_ownership(uuid,uuid)', 'trash_items(text,uuid[])', 'trash_list(uuid)',
                         'trash_restore(text,uuid[])', 'undo_customer_import(uuid)', 'uuid_generate_v7()']::text[]);
   perform tst.ok(bad is null, 'authenticated runs only the listed functions in public: ' || coalesce(bad, ''));
 
@@ -12947,15 +12951,18 @@ do $$ begin
 exception when insufficient_privilege then null;
 end $$;
 select tst.ok(true, 'T191 sales take no payment on a visit (record_visit_payment, 42501)');
--- С-1: a draft progress invoice of their own turned «deposit» of the signed version by an update: refused
+-- С-1: a draft progress invoice turned «deposit» of the signed version by an update: refused (tg_invoice_guard answers
+-- first, «only the office changes what an invoice is»). Since #2075 (20261117360000) sales insert no invoice at all (RLS),
+-- so the draft is the office's here; it stays as it was
+select tst.fails($q$insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
+  ('11910000-0000-4000-8000-000000000016', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f2', 'progress', 'draft', 'T191 draft', 9999900, 9999900)$q$,
+  'T191 sales do not insert an invoice (#2075)');
+:as_office_a
 insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
   ('11910000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f2', 'progress', 'draft', 'T191 draft', 9999900, 9999900);
-do $$ begin
-  update public.invoices set kind = 'deposit', source_estimate_version_id = '51910000-0000-4000-8000-000000000002' where id = '11910000-0000-4000-8000-000000000006';
-  raise exception 'FAILED: T191 sales turned a draft into a deposit';
-exception when insufficient_privilege then null;
-end $$;
-select tst.ok(true, 'T191 sales do not change what an invoice is (kind, version: tg_invoice_guard, 42501)');
+:as_sales_a
+select tst.fails($q$update public.invoices set kind = 'deposit', source_estimate_version_id = '51910000-0000-4000-8000-000000000002' where id = '11910000-0000-4000-8000-000000000006'$q$,
+  'T191 sales do not change what an invoice is (kind, version)');
 :as_super
 select tst.ok((select kind = 'progress' and source_estimate_version_id is null from public.invoices where id = '11910000-0000-4000-8000-000000000006'), 'T191 the draft stays a progress invoice');
 select tst.ok(tst.cnt($q$select 1 from public.payments where id = 'a1910000-0000-4000-8000-000000000005'$q$) = 0, 'T191 no payment from sales on the visit');
@@ -12978,6 +12985,7 @@ select tst.ok(true, 'T191 a deposit invoice the office made by hand (no signed v
 :as_super
 insert into public.estimates (id, company_id, customer_id, property_id, title) values
   ('0e191000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 another version');
+update public.estimates set created_by = 'a0000000-0000-0000-0000-000000000005' where id = '0e191000-0000-4000-8000-000000000007';  -- his deal: refused by the version rule, not by #2075
 insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
   ('51910000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000007', 1, '{"kind":"none"}'),
   ('51910000-0000-4000-8000-000000000017', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000007', 2, '{"kind":"none"}');
@@ -13002,6 +13010,7 @@ select tst.ok(true, 'T191 another version than the client signed, the same sum: 
 insert into public.estimates (id, company_id, customer_id, property_id, title) values
   ('0e191000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 not approved'),
   ('0e191000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 ACH on its way');
+update public.estimates set created_by = 'a0000000-0000-0000-0000-000000000005' where id = '0e191000-0000-4000-8000-000000000004';  -- his deal: refused as not approved, not by #2075
 insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
   ('51910000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000004', 1, '{"kind":"none"}'),
   ('51910000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000005', 1, '{"kind":"none"}');
@@ -15702,7 +15711,7 @@ select tst.ok((select assigned_to = 'a5600000-0000-4000-8000-000000000002' from 
 -- the team as the caller — every member sees the team, so the check holds for them)
 :as_tech281
 select tst.fails_like($q$update public.leads set assigned_to = 'a5600000-0000-4000-8000-000000000002' where id = 'a2810000-0000-4000-8000-000000000c03'$q$,
-                      '%not given to a subcontractor%', 'T282 a tech does not give his lead to a subcontractor');
+                      '%given to someone else by the office%', 'T282 a tech does not give his lead to a subcontractor (since #2075 to nobody else: t12_lead_member_guard)');
 -- a tech's task is his own whoever he names (t04_task_who): never the subcontractor's
 insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id) values ('a2820000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c03', 'T282 t', 'a5600000-0000-4000-8000-000000000002');
 select tst.ok((select assignee_id = 'a2810000-0000-4000-8000-000000000001' from public.tasks where id = 'a2820000-0000-4000-8000-000000000001'),
@@ -16768,6 +16777,148 @@ end $t$;
 rollback;
 \echo 'T364 ok'
 
+-- ---------------------------------------------------------------- T436, T372–T378 (#1834, spec 54 §13): the supplier's tax lives at the supplier
+\echo 'T436 the supplier tax (server)'
+:as_super
+insert into public.suppliers (id, company_id, name, purchase_tax_bps) values
+  ('37100000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'T436 Supplier', 825),
+  ('37100000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'T436 No rate', null),
+  ('37100000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', 'T436 Other', 600);
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, supplier_id) values
+  ('37100000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T436 one', 'ea', 0, '37100000-0000-4000-8000-0000000000a1'),
+  ('37100000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'material', 'T436 two', 'ea', 0, '37100000-0000-4000-8000-0000000000a1'),
+  ('37100000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'material', 'T436 three', 'ea', 0, '37100000-0000-4000-8000-0000000000a1'),
+  ('37100000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', 'material', 'T436 own rate', 'ea', 0, null);
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps)
+select id, company_id, 1000, 825, 3000 from public.catalog_items where name in ('T436 one', 'T436 two', 'T436 three');
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
+  ('37100000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', 1000, 500, 3000);
+delete from public.catalog_cost_history where item_id::text like '37100000-%';
+-- С1: the owner changes the rate: the supplier, every item's rate, the price of each and one history row per item
+:as_owner_a
+select public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 900, 825) as t371_n \gset
+:as_super
+select tst.ok(:t371_n = 3, 'T436 С1 three items followed the supplier');
+select tst.ok((select purchase_tax_bps = 900 from public.suppliers where id = '37100000-0000-4000-8000-0000000000a1')
+              and (select count(*) = 3 from public.catalog_item_costs where item_id::text in ('37100000-0000-4000-8000-0000000000b1', '37100000-0000-4000-8000-0000000000b2', '37100000-0000-4000-8000-0000000000b3') and vendor_tax_bps = 900),
+  'T436 С1 the supplier and its three items are on 9 %');
+select tst.ok((select count(*) = 3 from public.catalog_items where name in ('T436 one', 'T436 two', 'T436 three') and unit_price_cents = app.item_price_cents(1000, 900, 3000)),
+  'T436 С1 the price of each material is recounted from the cost and the new rate');
+select tst.ok((select count(*) = 3 from public.catalog_cost_history where item_id::text like '37100000-%' and source = 'supplier_tax' and vendor_tax_bps = 900),
+  'T436 С1 one history row per item, source supplier_tax');
+\echo 'T372 stale rate'
+-- С2: the phone saw 8,25 %, the server has 9 %: nothing changes
+:as_owner_a
+select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 1000, 825)$q$, 'T372 С2 a stale rate is refused (40001)');
+:as_super
+select tst.ok((select purchase_tax_bps = 900 from public.suppliers where id = '37100000-0000-4000-8000-0000000000a1')
+              and (select count(*) = 3 from public.catalog_item_costs where item_id::text like '37100000-%' and vendor_tax_bps = 900), 'T372 С2 nothing changed');
+do $$ declare v text; begin
+  perform set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-000000000001', true);
+  begin
+    perform public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 1000, 825);
+  exception when others then v := sqlstate;
+  end;
+  perform tst.ok(v = '40001', 'T372 С2 the refusal is SQLSTATE 40001, got ' || coalesce(v, 'none'));
+  perform set_config('request.jwt.claim.sub', '', true);
+end $$;
+\echo 'T373 the old phone cannot bring its own rate'
+-- С3: both paths — straight into catalog_item_costs and through catalog_items (t30 moves it)
+:as_owner_a
+update public.catalog_item_costs set vendor_tax_bps = 500 where item_id = '37100000-0000-4000-8000-0000000000b1';
+:as_super
+select tst.ok((select vendor_tax_bps = 900 from public.catalog_item_costs where item_id = '37100000-0000-4000-8000-0000000000b1'), 'T373 С3 a rate sent straight to the costs is brought back to the supplier''s');
+:as_owner_a
+update public.catalog_items set vendor_tax_bps = 500, unit_price_cents = unit_price_cents where id = '37100000-0000-4000-8000-0000000000b2';
+:as_super
+select tst.ok((select vendor_tax_bps = 900 from public.catalog_item_costs where item_id = '37100000-0000-4000-8000-0000000000b2')
+              and (select unit_price_cents = app.item_price_cents(1000, 900, 3000) from public.catalog_items where id = '37100000-0000-4000-8000-0000000000b2'),
+  'T373 С3 a rate sent through catalog_items (t30) is brought back too, the price stays from 9 %');
+\echo 'T374 an item takes the rate of the supplier it gets'
+-- С4 (server side): an item without a supplier keeps its own rate; getting a supplier with a rate takes it; one without keeps it
+:as_super
+update public.catalog_items set supplier_id = '37100000-0000-4000-8000-0000000000a2' where id = '37100000-0000-4000-8000-0000000000b4';
+select tst.ok((select vendor_tax_bps = 500 from public.catalog_item_costs where item_id = '37100000-0000-4000-8000-0000000000b4'),
+  'T374 С4 a supplier without a rate leaves the item''s own rate');
+update public.catalog_items set supplier_id = '37100000-0000-4000-8000-0000000000a3' where id = '37100000-0000-4000-8000-0000000000b4';
+select tst.ok((select vendor_tax_bps = 600 from public.catalog_item_costs where item_id = '37100000-0000-4000-8000-0000000000b4')
+              and (select unit_price_cents = app.item_price_cents(1000, 600, 3000) from public.catalog_items where id = '37100000-0000-4000-8000-0000000000b4'),
+  'T374 С4 an item that gets a supplier with a rate takes it and is repriced');
+\echo 'T375 who may change the rate'
+-- С5: the rule of «who sees our costs» (#1837): staff + can_view_costs. The office and the owner do; the tech and a sales person without view_costs do not; a sales person with it does
+:as_office_a
+select tst.ok(public.supplier_set_tax('37100000-0000-4000-8000-0000000000a3', 650, 600) = 1, 'T375 С5 the office changes the rate');
+:as_tech_a
+select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000000000a3', 700, 650)$q$, 'T375 С5 the tech may not');
+:as_sales_a
+select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000000000a3', 700, 650)$q$, 'T375 С5 sales without view_costs may not');
+:as_super
+update public.memberships set permissions_override = coalesce(permissions_override, '{}'::jsonb) || '{"view_costs": true}'
+ where user_id = 'a0000000-0000-0000-0000-000000000005';
+:as_sales_a
+select tst.ok(public.supplier_set_tax('37100000-0000-4000-8000-0000000000a3', 700, 650) = 1, 'T375 С5 sales WITH view_costs may (one rule with #1837)');
+:as_super
+update public.memberships set permissions_override = permissions_override - 'view_costs' where user_id = 'a0000000-0000-0000-0000-000000000005';
+:as_owner_b
+select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000000000a3', 800, 700)$q$, 'T375 С5 another company''s owner may not (the supplier is not found)');
+-- a second wall: the table itself — a sales person or the tech cannot update a supplier at all (0 rows), the items stay
+:as_sales_a
+update public.suppliers set purchase_tax_bps = 1 where id = '37100000-0000-4000-8000-0000000000a3';
+:as_tech_a
+update public.suppliers set purchase_tax_bps = 1 where id = '37100000-0000-4000-8000-0000000000a3';
+:as_super
+select tst.ok((select purchase_tax_bps = 700 from public.suppliers where id = '37100000-0000-4000-8000-0000000000a3')
+              and (select vendor_tax_bps = 700 from public.catalog_item_costs where item_id = '37100000-0000-4000-8000-0000000000b4'),
+  'T375 С5 sales and the tech cannot update a supplier: the rate and the items are as they were');
+\echo 'T376 the rate has one writer'
+-- С6: a phone's own upsert (a stale whole row, an old build, the offline queue) neither changes nor rolls back the rate; the rest is saved
+:as_owner_a
+update public.suppliers set purchase_tax_bps = 825, phone = '555-T376' where id = '37100000-0000-4000-8000-0000000000a1';
+:as_super
+select tst.ok((select purchase_tax_bps = 900 and phone = '555-T376' from public.suppliers where id = '37100000-0000-4000-8000-0000000000a1')
+              and (select count(*) = 3 from public.catalog_item_costs where item_id::text in ('37100000-0000-4000-8000-0000000000b1', '37100000-0000-4000-8000-0000000000b2', '37100000-0000-4000-8000-0000000000b3') and vendor_tax_bps = 900),
+  'T376 С6 a phone''s upsert with an old rate does not roll the rate back nor move it to the items; its other fields are saved');
+:as_owner_a
+select tst.ok(public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 900, 900) = 0, 'T376 С6 the same rate changes nothing');
+select tst.ok(public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 1200, 900) = 3, 'T376 С6 a new rate moves to the three items');
+insert into public.suppliers (id, company_id, name, purchase_tax_bps) values ('37100000-0000-4000-8000-0000000000a9', 'ca000000-0000-0000-0000-000000000000', 'T376 new with a rate', 725);
+select tst.ok((select purchase_tax_bps = 725 from public.suppliers where id = '37100000-0000-4000-8000-0000000000a9'), 'T376 С6 a new supplier made with a rate (insert) keeps it');
+:as_super
+select tst.ok((select purchase_tax_bps = 1200 from public.suppliers where id = '37100000-0000-4000-8000-0000000000a1')
+              and (select count(*) = 3 from public.catalog_item_costs where item_id::text in ('37100000-0000-4000-8000-0000000000b1', '37100000-0000-4000-8000-0000000000b2', '37100000-0000-4000-8000-0000000000b3') and vendor_tax_bps = 1200),
+  'T376 С6 the three items follow the door');
+\echo 'T377 the order of locks'
+-- С7: the supplier, then its items, then their costs — the same as catalog_set_item_costs; the right is checked before any lock
+do $$ declare d text; a int; b int; c int; begin
+  d := pg_get_functiondef('app.tg_supplier_tax_moves()'::regprocedure);
+  a := position('from public.catalog_items i' in d);
+  b := position('from public.catalog_item_costs k' in d);
+  perform tst.ok(a > 0 and b > a, 'T377 С7 locks in t95: items, then costs (the supplier is locked by the update that fires it)');
+  perform tst.ok(d ~ 'order by i\.id for update' and d ~ 'order by k\.item_id for update', 'T377 С7 each set locked in key order');
+  d := pg_get_functiondef('public.supplier_set_tax(uuid,integer,integer)'::regprocedure);
+  perform tst.ok(position('app.is_staff' in d) > 0 and position('app.is_staff' in d) < position('for no key update' in d),
+                 'T377 С7 the right is checked before the lock, the lock is NO KEY UPDATE (a phone''s foreign key waits crosswise with FOR UPDATE)');
+end $$;
+\echo 'T378 rights'
+select tst.ok(has_function_privilege('authenticated', 'public.supplier_set_tax(uuid,integer,integer)', 'EXECUTE')
+              and not has_function_privilege('anon', 'public.supplier_set_tax(uuid,integer,integer)', 'EXECUTE')
+              and (select prosecdef and proconfig @> array['search_path=""'] from pg_proc where oid = 'public.supplier_set_tax(uuid,integer,integer)'::regprocedure),
+  'T378 С8 supplier_set_tax: authenticated only, security definer, empty search_path');
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_tax_follows_supplier()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.tg_item_supplier_tax()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_supplier_tax_moves()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.tg_supplier_tax_door()', 'EXECUTE'),
+  'T378 С8 the trigger functions are for nobody');
+-- С9: one supplier with more than 1000 items is refused (no half-done change, the rate stays)
+:as_super
+insert into public.suppliers (id, company_id, name, purchase_tax_bps) values ('37100000-0000-4000-8000-0000000000aa', 'ca000000-0000-0000-0000-000000000000', 'T378 big', 500);
+insert into public.catalog_items (company_id, kind, name, unit, unit_price_cents, supplier_id)
+select 'ca000000-0000-0000-0000-000000000000', 'material', 'T378 item ' || g, 'ea', 0, '37100000-0000-4000-8000-0000000000aa' from generate_series(1, 1001) g;
+:as_owner_a
+select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000000000aa', 600, 500)$q$, 'T378 С9 more than 1000 items: refused');
+:as_super
+select tst.ok((select purchase_tax_bps = 500 from public.suppliers where id = '37100000-0000-4000-8000-0000000000aa'), 'T378 С9 the refused change left the rate as it was');
+delete from public.catalog_items where name like 'T378 item %';
+\echo 'T436, T372–T378 ok'
+
 -- ================================================================ T365–T370: a cost is written only over what the phone saw
 -- (#1958 (а), migration 20261117340000). catalog_set_item_costs(item, the changed fields, what the phone had in them).
 -- Its own items, rolled back at the end: nothing stays for the tests after it.
@@ -17248,9 +17399,240 @@ select tst.fails_like($q$insert into public.payments (company_id, invoice_id, cu
   '%not a deal of yours%', 'T424 sales take no payment on another''s invoice (refused before the balance check)');
 select tst.fails_like($q$update public.invoices set due_date = '2030-01-01'$q$,
   '%not a deal of yours%', 'T424 sales change no invoice of another''s deal, even without a where');
+select tst.fails_like($q$update public.invoices set title = 'T424 sales' where id = 'a4203000-0000-4000-8000-000000000001'$q$,
+  '%row-level security%', 'T424 sales change no invoice of their own deal either: a refusal (42501), not «0 rows» an old phone''s queue would take for done');
 :as_super
 select tst.ok(not exists (select 1 from public.invoices where due_date = '2030-01-01'), 'T424 no invoice moved');
 rollback;
 \echo 'T420 T421 T422 T423 T424 ok'
+
+-- ---------------------------------------------------------------- T399–T402 (#1834 × #1958): t13 and the checked write of «Прайс»
+-- catalog_set_item_costs marks the item it writes (app.costs_checked_write = its id): a tax that really changes there is refused
+-- (22023, hint supplier_tax); a neighbour, the cost alone and an old build stay quiet — the supplier's rate wins.
+\echo 'T399 the checked write: a changed tax is refused ok'
+:as_super
+insert into public.suppliers (id, company_id, name, purchase_tax_bps) values
+  ('39900000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'T399 Supplier', 800);
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, supplier_id) values
+  ('39900000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T399 one', 'ea', 0, '39900000-0000-4000-8000-0000000000a1'),
+  ('39900000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'material', 'T399 two', 'ea', 0, '39900000-0000-4000-8000-0000000000a1'),
+  ('39900000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'material', 'T399 no supplier', 'ea', 0, null);
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
+  ('39900000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 1000, 800, 3000),
+  ('39900000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 2000, 800, 3000),
+  ('39900000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 3000, 500, 3000);
+do $$ declare h text; begin
+  perform set_config('app.costs_checked_write', '39900000-0000-4000-8000-0000000000b1', true);
+  begin
+    update public.catalog_item_costs set vendor_tax_bps = 500 where item_id = '39900000-0000-4000-8000-0000000000b1';
+    perform tst.ok(false, 'T399 the changed tax of the marked item is refused');
+  exception when sqlstate '22023' then
+    get stacked diagnostics h = pg_exception_hint;
+    perform tst.ok(h = 'supplier_tax', 'T399 refused with the hint supplier_tax');
+  end;
+  perform tst.ok((select vendor_tax_bps = 800 from public.catalog_item_costs where item_id = '39900000-0000-4000-8000-0000000000b1'), 'T399 nothing written');
+end $$;
+\echo 'T400 the cost alone passes ok'
+-- an item left with an old tax before the supplier's rate came (a desync of old data): a change of the COST alone is no change of the tax
+alter table public.catalog_item_costs disable trigger t13_tax_follows_supplier;
+update public.catalog_item_costs set vendor_tax_bps = 500 where item_id = '39900000-0000-4000-8000-0000000000b1';
+alter table public.catalog_item_costs enable trigger t13_tax_follows_supplier;
+do $$ begin
+  perform set_config('app.costs_checked_write', '39900000-0000-4000-8000-0000000000b1', true);
+  update public.catalog_item_costs set unit_cost_cents = 1100 where item_id = '39900000-0000-4000-8000-0000000000b1';
+  perform tst.ok((select unit_cost_cents = 1100 and vendor_tax_bps = 800 from public.catalog_item_costs where item_id = '39900000-0000-4000-8000-0000000000b1'),
+    'T400 the cost alone is written, no false refusal; the tax comes to the supplier''s');
+end $$;
+\echo 'T401 a neighbour of the group stays quiet ok'
+-- the write of the item b1 moves the neighbour b2 (another item, same supplier): b2 is not marked — the supplier's rate wins quietly
+do $$ begin
+  perform set_config('app.costs_checked_write', '39900000-0000-4000-8000-0000000000b1', true);
+  update public.catalog_item_costs set vendor_tax_bps = 100 where item_id = '39900000-0000-4000-8000-0000000000b2';
+  perform tst.ok((select vendor_tax_bps = 800 from public.catalog_item_costs where item_id = '39900000-0000-4000-8000-0000000000b2'), 'T401 the neighbour keeps the supplier''s rate, no refusal');
+end $$;
+\echo 'T402 an old build stays quiet ok'
+-- no mark (a whole-row upsert of an old build): the supplier's rate wins without a word; an item with no supplier keeps its own, even marked
+update public.catalog_item_costs set vendor_tax_bps = 100 where item_id = '39900000-0000-4000-8000-0000000000b1';
+select tst.ok((select vendor_tax_bps = 800 from public.catalog_item_costs where item_id = '39900000-0000-4000-8000-0000000000b1'), 'T402 an old build: no error, the supplier''s rate');
+do $$ begin
+  perform set_config('app.costs_checked_write', '39900000-0000-4000-8000-0000000000b3', true);
+  update public.catalog_item_costs set vendor_tax_bps = 600 where item_id = '39900000-0000-4000-8000-0000000000b3';
+  perform tst.ok((select vendor_tax_bps = 600 from public.catalog_item_costs where item_id = '39900000-0000-4000-8000-0000000000b3'), 'T402 an item without a supplier keeps its own tax even when marked');
+end $$;
+
+\echo 'T436 the door opens only inside the function ok'
+-- the flag alone is no key (CHECKS №47): a session of the phone (authenticated) that sets it and updates the rate directly is still given the old rate
+:as_owner_a
+do $$ begin
+  perform set_config('app.supplier_tax_door', 'on', true);
+  update public.suppliers set purchase_tax_bps = 777 where id = '39900000-0000-4000-8000-0000000000a1';
+end $$;
+:as_super
+select tst.ok((select purchase_tax_bps = 800 from public.suppliers where id = '39900000-0000-4000-8000-0000000000a1'), 'T436 a phone with the flag set does not change the rate by a direct update');
+:as_owner_a
+select tst.ok(public.supplier_set_tax('39900000-0000-4000-8000-0000000000a1', 810, 800) = 2, 'T436 the door itself still changes it (the owner of the function)');
+:as_super
+
+-- ---------------------------------------------------------------- T414–T416 (#2075): invoices and the money of a job are the office's
+-- The roles decision (В9): sales do not issue or change invoices — the deposit at the signature stays theirs through the
+-- server functions (T73, T191). The lines and the tax of a job make its contract total: the office's too (20261117360000).
+\echo 'T414 invoices and the money of a job: the office'
+begin;
+:as_office_a
+insert into public.jobs (id, company_id, number, title, customer_id, property_id) values
+  ('e4140000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'T414 job', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001');
+insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('e4141000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e4140000-0000-4000-8000-000000000001', 1, 'T414 line', 1, 10000, false);
+select tst.ok((select contract_total_cents from public.jobs where id = 'e4140000-0000-4000-8000-000000000001') = 10000, 'T414 the office adds a line, the total follows');
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('e4142000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'e4140000-0000-4000-8000-000000000001', 'progress', 'sent', 'T414 office', 5000, 5000, now());
+select tst.ok(exists (select 1 from public.invoices where id = 'e4142000-0000-4000-8000-000000000001'), 'T414 the office issues an invoice');
+
+-- T414: sales issue no invoice — of any kind, sent or draft, with or without a job
+:as_sales_a
+select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'standalone', 'sent', 'T414 sales', 999900, 999900, now())$q$,
+  '%not a deal of yours%', 'T414 sales do not issue a standalone invoice');
+select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'standalone', 'draft', 'T414 sales draft', 100, 100)$q$,
+  '%not a deal of yours%', 'T414 sales do not make a draft invoice');
+select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'e4140000-0000-4000-8000-000000000001', 'final', 'sent', 'T414 sales final', 5000, 5000, now())$q$,
+  '%not a deal of yours%', 'T414 sales do not bill the balance of a job');
+
+-- T415: sales change no invoice. The office's invoice is not of his deal (#2075): he no longer sees it and changes
+-- nothing; the refusal of a change on the invoice of his own deal (42501, not «0 rows») — T424.
+select tst.blocked($q$update public.invoices set title = 'T415 sales' where id = 'e4142000-0000-4000-8000-000000000001'$q$,
+  'T415 sales do not rename an invoice');
+select tst.blocked($q$update public.invoices set due_date = tst.today() + 60 where id = 'e4142000-0000-4000-8000-000000000001'$q$,
+  'T415 sales do not move the due date');
+select tst.ok((select count(*) from public.invoices where id = 'e4142000-0000-4000-8000-000000000001') = 0, 'T415 sales do not see the office''s invoice');
+:as_super
+select tst.ok((select title = 'T414 office' and due_date is distinct from tst.today() + 60 from public.invoices where id = 'e4142000-0000-4000-8000-000000000001'),
+  'T415 the invoice is as the office left it');
+:as_office_a
+update public.invoices set title = 'T415 office' where id = 'e4142000-0000-4000-8000-000000000001';
+select tst.ok((select title from public.invoices where id = 'e4142000-0000-4000-8000-000000000001') = 'T415 office', 'T415 the office still changes what may change');
+
+-- T416: the contract total of a job — sales neither add, change nor remove a line, nor switch the tax
+:as_sales_a
+select tst.fails_like($q$insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents) values
+  ('ca000000-0000-0000-0000-000000000000', 'e4140000-0000-4000-8000-000000000001', 2, 'T416 sales', 1, 990000)$q$,
+  '%row-level security%', 'T416 sales do not add a line to a job');
+select tst.fails_like($q$update public.job_line_items set unit_price_cents = 990000 where id = 'e4141000-0000-4000-8000-000000000001'$q$,
+  '%row-level security%', 'T416 sales do not change a line price');
+select tst.fails_like($q$update public.job_line_items set deleted_at = now() where id = 'e4141000-0000-4000-8000-000000000001'$q$,
+  '%row-level security%', 'T416 sales do not remove a line');
+select tst.fails_like($q$update public.jobs set tax_enabled = true, tax_rate_bps = 1000 where id = 'e4140000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes the tax of a job%', 'T416 sales do not switch on the tax of a job');
+select tst.fails_like($q$update public.jobs set tax_rate_ppm = 100000 where id = 'e4140000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes the tax of a job%', 'T416 sales do not change the tax rate of a job');
+select tst.fails($q$update public.jobs set contract_total_cents = 990000 where id = 'e4140000-0000-4000-8000-000000000001'$q$, 'T416 sales do not set the total');
+-- what sales still change on a job: its description (job.update)
+update public.jobs set description = 'T416 sales note' where id = 'e4140000-0000-4000-8000-000000000001';
+select tst.ok((select description = 'T416 sales note' and contract_total_cents = 10000 and not tax_enabled from public.jobs where id = 'e4140000-0000-4000-8000-000000000001'),
+  'T416 sales still note a job; its total and tax stay the office''s');
+-- a new job of sales comes without a tax: one with it is refused, a plain one is made
+select tst.fails_like($q$insert into public.jobs (id, company_id, number, title, customer_id, property_id, tax_enabled, tax_rate_bps) values
+  ('e4140000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'T416 taxed', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', true, 10000)$q$,
+  '%only the office changes the tax of a job%', 'T416 sales do not make a job with a tax');
+select tst.fails_like($q$insert into public.jobs (id, company_id, number, title, customer_id, property_id, tax_rate_ppm) values
+  ('e4140000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'T416 rate', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 50000)$q$,
+  '%only the office changes the tax of a job%', 'T416 sales do not make a job with a tax rate');
+insert into public.jobs (id, company_id, number, title, customer_id, property_id) values
+  ('e4140000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'T416 plain', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001');
+select tst.ok(exists (select 1 from public.jobs where id = 'e4140000-0000-4000-8000-000000000003' and not tax_enabled), 'T416 sales still make a plain job (lead.book)');
+-- the tech: no invoice, no line, no tax either
+:as_tech_a
+select tst.fails($q$insert into public.invoices (company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'standalone', 'draft', 'T416 tech', 100, 100)$q$, 'T416 the tech issues no invoice');
+select tst.fails($q$insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents) values
+  ('ca000000-0000-0000-0000-000000000000', 'e4140000-0000-4000-8000-000000000001', 3, 'T416 tech', 1, 100)$q$, 'T416 the tech adds no line');
+select tst.blocked($q$update public.jobs set tax_enabled = true where id = 'e4140000-0000-4000-8000-000000000001'$q$, 'T416 the tech switches no tax');
+:as_office_a
+update public.jobs set tax_enabled = true, tax_rate_bps = 1000 where id = 'e4140000-0000-4000-8000-000000000001';
+update public.job_line_items set taxable = true where id = 'e4141000-0000-4000-8000-000000000001';
+select tst.ok((select tax_enabled and contract_total_cents = 11000 from public.jobs where id = 'e4140000-0000-4000-8000-000000000001'), 'T416 the office switches the tax, the total follows');
+rollback;
+\echo 'T414 T415 T416 ok'
+
+-- ---------------------------------------------------------------- T417–T419 (#2075): a tech's own lead — his to work, the rest the office's
+-- The roles decision (audit of roles #2064): a member who is not staff works his lead (contact fields, the next step,
+-- close / reopen / snooze, the first reply); he gives it to nobody else, and its source, price, client, number, links
+-- and «won» stay the office's (leads_update WITH CHECK = USING, t12_lead_member_guard, 20261117370000).
+\echo 'T417 a tech''s own lead'
+begin;
+:as_tech_a
+insert into public.leads (id, company_id, source_id, contact_name, phone) values
+  ('a4170000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000',
+   (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T417 Neighbor', '(818) 555-4170');
+:as_office_a
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000003' where id = 'a4170000-0000-4000-8000-000000000001';
+
+-- T417: he gives it to nobody else, and the lead stays his after his change
+:as_tech_a
+select tst.fails_like($q$update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%given to someone else by the office%', 'T417 a tech does not give his lead to the office');
+select tst.fails_like($q$update public.leads set assigned_to = null where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%given to someone else by the office%', 'T417 a tech does not leave his lead without anyone');
+select tst.fails($q$update public.leads set created_by = 'a0000000-0000-0000-0000-000000000002', assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  'T417 a tech does not hand the lead out of his reach');
+:as_office_a
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001';
+:as_tech_a
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000003' where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select assigned_to from public.leads where id = 'a4170000-0000-4000-8000-000000000001') = 'a0000000-0000-0000-0000-000000000003', 'T417 a tech takes a lead he brought back to himself');
+
+-- T418: the office's fields of a lead do not change by his hand
+select tst.fails_like($q$update public.leads set source_id = (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name <> 'Referral' limit 1) where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T418 a tech does not change the source');
+select tst.fails_like($q$update public.leads set cost_cents = 99900 where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T418 a tech does not set the lead price');
+select tst.fails_like($q$update public.leads set customer_id = 'c1a00000-0000-0000-0000-000000000001' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office%', 'T418 a tech does not tie the lead to a client (t06_lead_place_guard answers first)');
+select tst.fails_like($q$update public.leads set number = 'LEA-9999' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T418 a tech does not renumber the lead');
+select tst.fails_like($q$update public.leads set received_at = now() - interval '30 days' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T418 a tech does not move the receipt time');
+-- what is his: the contact fields, the next step, close and reopen
+update public.leads set contact_name = 'T417 Neighbor Jr', service_requested = 'Gutter cleaning', snoozed_until = now() + interval '3 days', snooze_reason = 'client_away' where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select contact_name = 'T417 Neighbor Jr' and service_requested = 'Gutter cleaning' from public.leads where id = 'a4170000-0000-4000-8000-000000000001'), 'T418 a tech still works his lead (fields, snooze)');
+update public.leads set snoozed_until = null, snooze_reason = null where id = 'a4170000-0000-4000-8000-000000000001';
+update public.leads set status = 'lost', lost_reason = 'no_response' where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select status from public.leads where id = 'a4170000-0000-4000-8000-000000000001') = 'lost', 'T418 a tech closes his lead');
+update public.leads set status = 'contacted', lost_reason = null, lost_reason_text = null where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select status from public.leads where id = 'a4170000-0000-4000-8000-000000000001') = 'contacted', 'T418 a tech reopens his lead');
+
+-- T419: «won» (making a client) is the office's; the office still changes what the tech may not
+select tst.fails_like($q$update public.leads set status = 'won', won_via = 'manual' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office%', 'T419 a tech does not make his lead won');
+-- archived, «referred by», a first reply moved: the office's too
+update public.leads set status = 'lost', lost_reason = 'no_response' where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.fails_like($q$update public.leads set status = 'archived' where id = 'a4170000-0000-4000-8000-000000000001'$q$, '%only the office%', 'T419 a tech does not archive his lead');
+update public.leads set status = 'contacted', lost_reason = null where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.fails_like($q$update public.leads set referred_by_customer_id = 'c1a00000-0000-0000-0000-000000000001' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T419 a tech does not mark the lead «referred by» a client');
+update public.leads set first_response_at = now(), first_response_kind = 'manual' where id = 'a4170000-0000-4000-8000-000000000001' and first_response_at is null;
+select tst.ok((select first_response_at is not null from public.leads where id = 'a4170000-0000-4000-8000-000000000001'), 'T419 a tech marks the first reply once');
+select tst.fails_like($q$update public.leads set first_response_at = now() - interval '100 days' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T419 a tech does not move the first reply');
+-- a new lead of his is a plain new one
+select tst.fails_like($q$insert into public.leads (company_id, source_id, contact_name, phone, status, won_via) values
+  ('ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T419 won', '(818) 555-4191', 'won', 'manual')$q$,
+  '%only the office makes a lead like this%', 'T419 a tech does not bring a lead already won');
+select tst.fails_like($q$insert into public.leads (company_id, source_id, contact_name, phone, provider, provider_ref) values
+  ('ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T419 market', '(818) 555-4192', 'thumbtack', 'T419-ref')$q$,
+  '%only the office makes a lead like this%', 'T419 a tech does not bring a lead with a marketplace reference');
+insert into public.leads (id, company_id, source_id, contact_name, phone, received_at) values
+  ('a4170000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'),
+   'T419 back-dated', '(818) 555-4193', now() - interval '90 days');
+select tst.ok((select received_at > now() - interval '1 minute' and status = 'new' from public.leads where id = 'a4170000-0000-4000-8000-000000000002'),
+  'T419 a lead he brings is received now, whatever the phone says');
+:as_sales_a
+update public.leads set source_id = (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name <> 'Referral' limit 1),
+                        assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select assigned_to from public.leads where id = 'a4170000-0000-4000-8000-000000000001') = 'a0000000-0000-0000-0000-000000000002', 'T419 sales (staff) still give a lead and change its source');
+rollback;
+\echo 'T417 T418 T419 ok'
 
 \echo 'ALL TESTS PASSED'
