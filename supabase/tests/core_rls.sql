@@ -17229,11 +17229,20 @@ select tst.ok(public.portal_invoice('tok_t431_1_0123456789abcdef') ->> 'status' 
 update public.companies set closed_at = null where id = 'ca000000-0000-0000-0000-000000000000';
 set local app.accepting_invite = 'off';
 
--- T434: a client marked «do not service» gets no new link
+-- T434: a client marked «do not service» gets no new link; a link already given lives on (they still owe the balance)
+:as_office_a
+select public.invoice_link_set('43100000-0000-4000-8000-0000000000f4', 'tok_t434_0_0123456789abcdef') is not null as t434_given;
+:as_super
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, tax_cents, total_cents, sent_at, due_date) values
+  ('43100000-0000-4000-8000-0000000000f6', 'ca000000-0000-0000-0000-000000000000', '', '43100000-0000-4000-8000-0000000000c2', 'standalone', 'sent', 'T434 second', 4000, 0, 4000, now(), tst.today() + 7);
 :as_owner_a
 update public.customers set status = 'do_not_service', do_not_service_reason = 'T434' where id = '43100000-0000-4000-8000-0000000000c2';
 :as_office_a
-select tst.fails_like($q$select public.invoice_link_set('43100000-0000-4000-8000-0000000000f4', 'tok_t434_1_0123456789abcdef')$q$, '%customer_do_not_service%', 'T434 «do not service»: no new link');
+select tst.fails_like($q$select public.invoice_link_set('43100000-0000-4000-8000-0000000000f6', 'tok_t434_1_0123456789abcdef')$q$, '%customer_do_not_service%', 'T434 «do not service»: no new link');
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok(public.portal_invoice('tok_t434_0_0123456789abcdef') ->> 'status' = 'open'
+          and (public.portal_invoice('tok_t434_0_0123456789abcdef') -> 'invoice' ->> 'balance')::bigint = 9000,
+  'T434 the link given before «do not service» lives: the client sees what they owe');
 
 -- T435: a token once revoked never comes back (an old phone's queue); a paid invoice — «paid» with its payment
 :as_office_a
@@ -17243,7 +17252,7 @@ reset role; reset request.jwt.claim.sub; set role anon;
 select tst.ok(public.portal_invoice('tok_t435_1_0123456789abcdef') ->> 'status' = 'paid'
           and jsonb_array_length(public.portal_invoice('tok_t435_1_0123456789abcdef') -> 'payments') = 1
           and (public.portal_invoice('tok_t435_1_0123456789abcdef') -> 'payments' -> 0 ->> 'amount')::bigint = 3000,
-  'T435 paid: status and the payment');
+  'T435 paid: the link stays (their receipt) — status and the payment');
 :as_office_a
 rollback;
 \echo 'T431-T435 ok'
