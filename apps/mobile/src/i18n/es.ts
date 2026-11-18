@@ -3766,6 +3766,7 @@ export const es: Dict = {
   "mod.gutters.pdf.color": "Color",
   "mod.gutters.pdf.dsCount": "Bajantes: {n}",
   "mod.gutters.pdf.date": "Fecha",
+  "mod.gutters.pdf.draft": "Borrador · sin dirección",
   "mod.gutters.view.pdfClient": "PDF para el cliente",
   "mod.gutters.view.pdfCrew": "PDF para el equipo",
   // shop drawings G-1 / G-2 and the material order (#1349)
