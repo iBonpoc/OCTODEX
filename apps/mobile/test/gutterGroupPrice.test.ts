@@ -87,6 +87,27 @@ describe("цена группы для цвета без позиции (#2000, 
     expect(groupSource(cat, part("black"))?.id).toBe("w");
   });
 
+  it("С4б (ревью №1): позиция с лишним свойством новее точной — цена точной; ближайшие двух разных деталей (толщина) — «нет цены», не угадываем", () => {
+    const cat = [
+      item("w", "white", { priceCents: 1000, updatedAt: "2026-11-01T00:00:00Z" }),
+      item("w2", "white", { priceCents: 1500, updatedAt: "2026-11-10T00:00:00Z", attributes: { coating: "premium" } }),
+    ];
+    expect(groupSource(cat, part("black"))?.id).toBe("w");
+    expect(one([part("black")], cat).unitPriceCents).toBe(1000);
+    const noGauge = part("black", { attrs: { profile: "k", size: "5", material: "aluminum", color: "black" } } as Partial<PartQty>);
+    const gauges = [item("a", "white", { priceCents: 1000, updatedAt: "2026-11-01T00:00:00Z" }), item("b", "brown", { priceCents: 1400, updatedAt: "2026-11-10T00:00:00Z", attributes: { gauge: ".032" } })];
+    expect(groupSource(gauges, noGauge)).toBeUndefined();
+    expect(one([noGauge], gauges).source?.noPrice).toBe(true);
+  });
+
+  it("С4в (ревью №2, №3): настоящая цена раньше тестовой; регистр и пробелы в свойствах — как у своей позиции", () => {
+    const cat = [item("w", "white", { priceCents: 1000, updatedAt: "2026-11-01T00:00:00Z" }), item("b", "brown", { priceCents: 500, placeholder: true, updatedAt: "2026-11-10T00:00:00Z" })];
+    expect(groupSource(cat, part("black"))?.id).toBe("w");
+    expect(one([part("black")], cat).source?.testPrice).toBeUndefined();
+    const caps = [item("c", "White", { attributes: { material: "Aluminum " } })];
+    expect(groupSource(caps, part("black"))?.id).toBe("c");
+  });
+
   it("С5: у детали нет ни одной позиции — «нет цены», как сейчас", () => {
     const l = one([part("black")], []);
     expect(l.unitPriceCents).toBe(0);

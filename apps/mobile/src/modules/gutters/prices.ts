@@ -13,14 +13,14 @@
  */
 import { bendOf, computeGutterParts, DEFAULT_GUTTER_RULES, gutterPreview, type MeasurementInput, type PartQty, type PreviewRates } from "@octo/estimating-engine";
 import type { CatalogItem } from "@/data/types";
-import { catalogMatch } from "@/features/catalogMatch";
+import { catalogMatch, propertyCount } from "@/features/catalogMatch";
 import type { DictKey } from "@/i18n";
 import { catalogUnitPrice } from "@/features/estimateDoc";
 import { fmtLen, type LenFormat } from "./canvas/format";
 import { TEST_RATES } from "./canvas/testRates";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "./settings";
 import { uuidV5 } from "./uuid5";
-import { colouredPart, groupAttrs, newer, priceGroupKey } from "./prices/groups";
+import { colouredPart, groupAttrs, groupText, newer, priceGroupKey } from "./prices/groups";
 import { priceGroupOf } from "@/data/priceGroup";
 import type { GutterData } from "./data";
 import { fromElements } from "./canvas/model";
@@ -67,24 +67,33 @@ export function findItem(catalog: readonly CatalogItem[], p: Pick<PartQty, "key"
 
 /**
  * #2000 (spec 33-gutters-price-key §10): a coloured part without an item of its own colour takes the price of its group — the same
- * part in the company's other colours (the founder: «цвет не влияет на стоимость»). The group: coloured items whose properties without
- * the colour (a colour meaning «painted», `groupAttrs`) have the part's ones — a subset, as `findItem`; the database's group first
- * (`priceGroup` of the part's key), then the one changed last (then the lower id: before the transition the colours may differ).
- * The round elbow's old degrees (`LEGACY_ROUND_ELBOW`) too. An item without a colour is never a source (§9 Б2). None — undefined.
+ * part in the company's other colours (the founder: «цвет не влияет на стоимость»). The group's items are found as a part finds its
+ * own (`catalogMatch` on their properties without the colour, a colour meaning «painted»): case ignored, the closest first. The closest
+ * of two different parts (an extra gauge either way) — no price, never a guess. Among the closest: a real price before a sample one,
+ * the database's group (`priceGroup`), then the one changed last (then the lower id). The round elbow's old degrees too
+ * (`LEGACY_ROUND_ELBOW`). An item without a colour is never a source (§9 Б2). None — undefined.
  */
 export function groupSource(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): CatalogItem | undefined {
   const want = matchAttrs(p);
   if (p.kind === "labor" || !want.color?.trim() || !PART_WORDS.has(want.part ?? "")) return undefined;
   const unit = p.unit.trim().toLowerCase();
   const pool = catalog.filter((it) => live(it) && it.unit.trim().toLowerCase() === unit && colouredPart(it));
+  // each item seen by its group's properties (no colour, «painted» for a colour without finish) — the same match as its own item:
+  // case and spaces ignored, the closest first (the fewest properties beyond the part's; review #2000 №1, №3)
+  const view = pool.map((it) => ({ ...it, attributes: { ...groupAttrs(it.attributes ?? {}), ...(priceGroupOf(it) ? { priceGroup: priceGroupOf(it)! } : {}) } }));
+  const byId = new Map(pool.map((it) => [it.id, it]));
   for (const w of [want, ...ROUND_ELBOW_FALLBACK(want)]) {
     const g = groupAttrs(w);
+    const hits = catalogMatch(view, g);
+    if (!hits.length) continue;
+    const extra = (it: CatalogItem) => propertyCount(it.attributes) - Object.keys(g).length;
+    const closest = hits.filter((it) => extra(it) === extra(hits[0]!));
+    // the closest are of two parts (a part without a gauge, items .027 and .032): which price is its is not known — no price, never a guess
+    if (new Set(closest.map((it) => groupText(it))).size > 1) return undefined;
     const key = priceGroupKey({ unit: p.unit, attributes: w });
-    const hits = pool.filter((it) => {
-      const a = groupAttrs(it.attributes ?? {});
-      return Object.entries(g).every(([k, v]) => a[k] === v);
-    });
-    if (hits.length) return [...hits].sort((a, b) => Number(priceGroupOf(b) === key) - Number(priceGroupOf(a) === key) || newer(a, b))[0];
+    const items = closest.map((it) => byId.get(it.id)!);
+    // a real price before a sample one (as the transition suggests it — review #2000 №2), the database's group, then the last changed
+    return [...items].sort((a, b) => Number(!!a.placeholder) - Number(!!b.placeholder) || Number(priceGroupOf(b) === key) - Number(priceGroupOf(a) === key) || newer(a, b))[0];
   }
   return undefined;
 }
