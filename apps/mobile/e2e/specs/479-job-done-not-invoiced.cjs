@@ -2,7 +2,7 @@
  * e2e 479 — #2048 (S11 job → invoice): a done job with part of its contract on no invoice is a reason in «Требует внимания»
  * for the office, with the amount not invoiced; it opens the job; it goes when an invoice covers the contract.
  * С1 ДАНО работа выполнена, счёта нет, договор $500; КОГДА директор открывает «Требует внимания»; ТОГДА там «{клиент}: работа
- *    выполнена, счёт не выставлен» и $500, нажатие открывает работу.
+ *    выполнена, счёт не выставлен» с названием работы и $500, нажатие открывает работу.
  * С2 ДАНО по этой работе выставлен счёт на $500; ТОГДА причины нет.
  * Every view; seeded from a page without the app (h.seed).
  */
@@ -20,7 +20,7 @@ exports.run = async (h) => {
 
   // С1
   await h.go("/triage");
-  const row = p.getByText(new RegExp(`${cust.name}: работа выполнена, счёт не выставлен`)).locator("visible=true").first();
+  const row = p.getByText(new RegExp(`${cust.name} · Gutter clean 479: работа выполнена, счёт не выставлен`)).locator("visible=true").first();
   await row.waitFor({ timeout: 8000 });
   h.expect(true, "С1 the reason is in «Требует внимания»");
   // the amount in the reason's own card, not anywhere on the page

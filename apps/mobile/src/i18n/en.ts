@@ -2161,7 +2161,7 @@ export const en: Dict = {
   "job3.new.create": "Create job",
   "job3.new.created": "Job created",
   "job3.att.done": "{name}: is the job done?",
-  "att.notInvoiced": "{name}: job done, not invoiced",
+  "att.notInvoiced": "{name} · {title}: job done, not invoiced",
   "att.notInvoicedChip": "Not invoiced",
   "att.notInvoicedOpen": "Open the job",
   "job3.att.doneChip": "Done?",
