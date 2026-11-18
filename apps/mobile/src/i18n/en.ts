@@ -3703,6 +3703,8 @@ export const en: Dict = {
   "mod.gutters.sheet.scale": "Scale: {len}",
   "mod.gutters.sheet.panel": "Contour {n} · gutters {runs}",
   "mod.gutters.view.estimates": "Estimates from this measurement",
+  "mod.gutters.view.askMake": "Make the estimate from this measurement?",
+  "mod.gutters.view.askUpdate": "Update the estimate from this measurement?",
   "mod.gutters.view.stale": "The drawing changed after the estimate: quantities will update, your own edits stay",
   "mod.gutters.view.link": "Link to a client or lead",
   "mod.gutters.view.empty": "Nothing drawn yet — draw the gutters",
