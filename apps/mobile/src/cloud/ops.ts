@@ -97,7 +97,7 @@ export type Op =
   | { k: "visit.inspection"; leadId?: string; propertyId: string; visitId: string; start: string; durationMin: number; techId: string | null; assigneeIds?: string[]; note?: string; scope: string[] }
   /** the office cancels a visit with a reason; S4a / S9a roll the lead / job back when nothing open is left */
   | { k: "visit.cancel"; visitId: string; reason: CancelReason; text?: string; leadBack?: string; jobBack?: string }
-  /** #2066 «Клиента нет дома»: the visit's own tech (or the office) at the door — public.visit_no_show (20261117320000) */
+  /** #2066 «Клиента нет дома»: the visit's own tech (or the office) at the door — public.visit_no_show (20261117470000) */
   | { k: "visit.noShow"; visitId: string; note?: string; leadBack?: string; jobBack?: string }
   /** the office moves a visit (time, length); the status does not change */
   | { k: "visit.reschedule"; visitId: string; start: string; durationMin: number; allDay?: boolean }
