@@ -16,21 +16,87 @@ const ds = (o: Partial<MeasuredDownspout> & { id: string; runId: string }): Meas
 const q = (parts: PartQty[], key: string) => parts.find((p) => p.key === key)?.qty;
 const job = (runs: MeasuredRun[], downspouts: MeasuredDownspout[] = [], corners: MeasurementInput["corners"] = []): MeasurementInput => ({ runs, corners, downspouts });
 const copper = { material: "copper", color: undefined } as const;
+/** the parts of an aluminum and a steel job as version 5 (main before PR-2) counted them — rule 16: their keys and prices stay */
+const V5_AL_STEEL: Record<string, string> = {
+  "A:coil.k.6.alu_032.white": "70",
+  "A:coil.k.6.steel.brown": "60",
+  "A:gutter.k.6.alu_032.white": "60",
+  "A:gutter.k.6.steel.brown": "50",
+  "A:endcap.L.k.6.alu_032.white": "1",
+  "A:endcap.L.k.6.steel.brown": "1",
+  "A:endcap.R.k.6.alu_032.white": "1",
+  "A:endcap.R.k.6.steel.brown": "1",
+  "A:ds_strap.aluminum.rect.3x4": "2",
+  "A:ds_strap.steel.rect.3x4": "2",
+  "A:hanger.fascia_strap.aluminum.k.6": "31",
+  "A:hanger.hidden.steel.k.6": "26",
+  "A:ds.rect.3x4.corrugated.alu.white": "10",
+  "A:ds.rect.3x4.corrugated.steel.brown": "10",
+  "A:dsstick.rect.3x4.corrugated.alu.white": "1",
+  "A:dsstick.rect.3x4.corrugated.steel.brown": "1",
+  "A:elbow.A.rect.3x4.corrugated.alu.white": "3",
+  "A:elbow.A.rect.3x4.corrugated.steel.brown": "3",
+  "A:outlet.k.6.alu_032.white.rect.3x4": "1",
+  "A:outlet.k.6.steel.brown.rect.3x4": "1",
+  "A:bottom.extension.rect.3x4": "2",
+  "A:anchor.masonry": "4",
+  "A:rivet.42.aluminum.painted.white": "18",
+  "A:rivet.42.steel.painted.brown": "18",
+  "A:screw.10x15": "70",
+  "A:screw.8x05": "8",
+  "A:sealant": "1",
+  "A:labor.downspout.story1": "2",
+  "A:labor.install.story1": "110",
+  "B:coil.k.6.alu_032.white": "70",
+  "B:coil.k.6.steel.brown": "60",
+  "B:gutter.k.6.alu_032.white": "60",
+  "B:gutter.k.6.steel.brown": "50",
+  "B:endcap.L.k.6.alu_032.white": "1",
+  "B:endcap.L.k.6.steel.brown": "1",
+  "B:endcap.R.k.6.alu_032.white": "1",
+  "B:endcap.R.k.6.steel.brown": "1",
+  "B:expjoint.k.6.alu_032.white": "1",
+  "B:ds_strap.aluminum.rect.3x4": "2",
+  "B:flat_coil": "3",
+  "B:hanger.fascia_strap.aluminum.k.6": "31",
+  "B:hanger.hidden.steel.k.6": "26",
+  "B:ds.rect.3x4.corrugated.alu.white": "10",
+  "B:ds.rect.3x4.corrugated.steel.brown": "10",
+  "B:dsstick.rect.3x4.corrugated.alu.white": "1",
+  "B:dsstick.rect.3x4.corrugated.steel.brown": "1",
+  "B:elbow.A.rect.3x4.corrugated.alu.white": "3",
+  "B:elbow.A.rect.3x4.corrugated.steel.brown": "3",
+  "B:outlet.k.6.alu_032.white.rect.3x4": "1",
+  "B:outlet.k.6.steel.brown.rect.3x4": "1",
+  "B:bottom.extension.rect.3x4": "2",
+  "B:anchor.masonry": "4",
+  "B:rivet.42.aluminum.painted.white": "8",
+  "B:rivet.42.steel.painted.brown": "8",
+  "B:screw.10x15": "70",
+  "B:screw.8x05": "28",
+  "B:sealant": "1",
+  "B:labor.downspout.story1": "2",
+  "B:labor.install.story1": "110"
+};
 
 describe("пайка меди и цинка (М1–М7)", () => {
-  it("С1: медный желоб 240″, 2 заглушки, медный водосток (ребристый, 3 × A, удлинитель): точки = 3 + стыки водостока × 1; один набор; работа = точкам", () => {
+  it("С1: медный желоб 240″, 2 заглушки, медный водосток (ребристый, 3 × A, удлинитель): точки 3 + 5 стыков водостока = 8; один набор; работа = 8", () => {
     const i = job([run({ id: "r", lengthIn: 240, ...copper })], [ds({ id: "d", runId: "r", ...copper })]);
     const { parts } = computeGutterParts(i);
     const kit = parts.find((p) => p.key === "soldering_kit")!;
-    // the downspout's joints: what the aluminum one gets rivets for (joint "ds": the stick joints, elbows, the extension)
-    const dsJoints = Number(q(computeGutterParts(job([run({ id: "r", lengthIn: 240 })], [ds({ id: "d", runId: "r" })])).parts, "rivet.42.aluminum.painted.white")!) - 2 * 2 - 4;
-    const points = 2 + 1 + dsJoints / 2; // 2 end caps, 1 outlet, each downspout joint 1 point (2 rivets a joint)
+    // version 5 (main): 3 points — 2 end caps and the outlet; the downspout's 5 joints (sticks, 3 elbows, the extension) were not soldered
     expect(kit.qty).toBe("1");
     expect(kit.use).toBe("both");
-    expect(kit.why).toMatchObject({ rule: "soldering_kit", params: { points, solderLb: Math.ceil(points / 10), fluxCans: 1, gasCylinders: 1, abrasivePacks: 1, soda: 1 } });
-    expect(q(parts, "labor.solder")).toBe(String(points));
+    expect(kit.why).toMatchObject({ rule: "soldering_kit", params: { points: 8, solderLb: 1, fluxCans: 1, gasCylinders: 1, abrasivePacks: 1, soda: 1 } });
+    expect(q(parts, "labor.solder")).toBe("8");
     expect(q(parts, "solder")).toBeUndefined();
     expect(q(parts, "flux")).toBeUndefined();
+    expect(parts.some((p) => p.attrs.part === "sealant")).toBe(false);
+  });
+
+  it("С1а: «copper_16oz» — медь: паяется, как её крепёж и компенсатор (ревью PR-2 №4)", () => {
+    const { parts } = computeGutterParts(job([run({ id: "r", lengthIn: 240, material: "copper_16oz", color: undefined })]));
+    expect(q(parts, "soldering_kit")).toBe("1");
     expect(parts.some((p) => p.attrs.part === "sealant")).toBe(false);
   });
 
@@ -41,7 +107,14 @@ describe("пайка меди и цинка (М1–М7)", () => {
     expect(parts.some((p) => p.attrs.part === "sealant")).toBe(false);
   });
 
-  it("С3: алюминиевый замер — те же ключи, что раньше: набора и работы пайки нет, герметик есть, у винтов нет metal", () => {
+  it("С3: алюминий и сталь — снимок деталей версии 5 (движок main, 18.11): все ключи и количества те же, при двух наборах правил", () => {
+    const j = job([run({ id: "a", lengthIn: 720, hanger: "fascia_strap" }), run({ id: "s", lengthIn: 600, material: "steel", color: "brown" })], [ds({ id: "d", runId: "a", wall: "stucco" }), ds({ id: "e", runId: "s", material: "steel", color: "brown" })]);
+    const out: Record<string, string> = {};
+    for (const over of [undefined, { dsJoin: "screw" as const, wallKitByWall: { rect: { wood: "coil_strap" } }, expansionJointPart: true }]) for (const p of computeGutterParts(j, over).parts) out[`${over ? "B:" : "A:"}${p.key}`] = p.qty;
+    expect(out).toEqual(V5_AL_STEEL);
+  });
+
+  it("С3а: алюминиевый замер — набора и работы пайки нет, герметик есть, у винтов нет metal", () => {
     const { parts } = computeGutterParts(job([run({ id: "r", lengthIn: 240, hanger: "fascia_strap" })], [ds({ id: "d", runId: "r" })]));
     expect(q(parts, "soldering_kit")).toBeUndefined();
     expect(q(parts, "labor.solder")).toBeUndefined();
@@ -87,6 +160,10 @@ describe("металл крепежа (М8)", () => {
     expect(cu.some((p) => p.attrs.part === "anchor")).toBe(true);
     const zn = computeGutterParts(job([run({ id: "r", lengthIn: 240, hanger: "fascia_strap", material: "zinc", color: undefined })])).parts;
     expect(zn.filter((p) => p.attrs.part === "screw").every((p) => p.attrs.metal === "stainless")).toBe(true);
+    const znDs = computeGutterParts(job([run({ id: "r", lengthIn: 240, material: "zinc", color: undefined })], [ds({ id: "d", runId: "r", material: "zinc", color: undefined }), ds({ id: "e", runId: "r", material: "zinc", color: undefined, wall: "stucco" })]), strap).parts;
+    const znFast = znDs.filter((p) => ["screw", "anchor", "flat_coil"].includes(p.attrs.part ?? ""));
+    expect(new Set(znFast.map((p) => p.attrs.part))).toEqual(new Set(["screw", "anchor", "flat_coil"]));
+    expect(znFast.every((p) => p.attrs.metal === "stainless")).toBe(true);
     const al = computeGutterParts(job([run({ id: "r", lengthIn: 240, hanger: "fascia_strap" })], [ds({ id: "d", runId: "r" })]), strap).parts;
     expect(al.filter((p) => ["screw", "anchor", "flat_coil"].includes(p.attrs.part ?? "")).every((p) => p.attrs.metal === undefined)).toBe(true);
   });
@@ -111,6 +188,8 @@ describe("компенсатор по металлу (Ж6)", () => {
     expect(resolveGutterRules({ expansionJointIn: 360 }).expansionJointInByMetal).toMatchObject({ aluminum: 360, copper: 480, zinc: 396 });
     expect(resolveGutterRules({ expansionJointIn: 360, expansionJointInByMetal: { aluminum: 500 } }).expansionJointInByMetal.aluminum).toBe(500);
     expect(computeGutterParts(job([run({ id: "v", lengthIn: 2000, material: "vinyl" })])).advice.some((a) => a.code === "expansion_joint")).toBe(false);
+    // a blank field (0) is the default, not «none» (review PR-2 №5)
+    expect(resolveGutterRules({ expansionJointInByMetal: { aluminum: 0, copper: -1 } }).expansionJointInByMetal).toMatchObject({ aluminum: 600, copper: 480 });
   });
 });
 
@@ -126,6 +205,8 @@ describe("разные металлы рядом (galvanic_pair)", () => {
       [{ id: "c", kind: "out", method: "prefab", profile: "k", size: "6", material: "copper", story: 1 }],
     )).advice;
     expect(corner).toContainEqual({ code: "galvanic_pair", ids: ["a", "b"], metals: ["copper", "steel"] });
+    // an unknown material (vinyl) is no metal: no advice (review PR-2 №5)
+    expect(computeGutterParts(job([run({ id: "r", lengthIn: 240, ...copper })], [ds({ id: "d", runId: "r", material: "vinyl" })])).advice.some((a) => a.code === "galvanic_pair")).toBe(false);
     // aluminum with steel is not this advice (copper is the one that corrodes the others)
     const alSt = computeGutterParts(job([run({ id: "r", lengthIn: 240 })], [ds({ id: "d", runId: "r", material: "steel" })])).advice;
     expect(alSt.some((a) => a.code === "galvanic_pair")).toBe(false);

@@ -1,7 +1,7 @@
 /**
  * e2e 495 — «Расход v2» PR-2 «Металлы и пайка» (spec 33-gutters-consumption §5а С11). Every view.
  * A lead's copper measurement (a gutter and a downspout on it): «Сделать смету» — the estimate has ONE «Soldering kit» line and the
- * soldering work «Пайка швов» by the points; no sealant; the copper screws carry their metal. Seeded on the app's own data (as e2e 488);
+ * soldering work by the points (named in the client's language); no sealant, no separate solder or flux. Seeded on the app's own data (as e2e 488);
  * by testID and the store; waits on what it checks.
  */
 const KEY = "octo.db.v5";
@@ -61,8 +61,8 @@ exports.run = async (h) => {
   h.expect(!ls.some((l) => /part=(solder|flux)(\||$)/.test(l.source.key)), "С11: no separate solder or flux line");
   // the lines are in the client's language (rule 7; a US client — English): the work has a word, not its code
   h.expect(!/solder$|^labor/.test(work[0].name) && work[0].name.trim().length > 0, `С11: the work's name in words (${work[0].name})`);
-  // the estimate on screen has the kit and the work
-  await p.getByText(/Soldering kit/).locator("visible=true").first().waitFor({ timeout: 8000 });
-  await p.getByText(work[0].name, { exact: false }).locator("visible=true").first().waitFor({ timeout: 8000 });
+  // the estimate on screen has the kit and the work: their lines by testID (each module line has its marks, «Из замера»)
+  await p.getByTestId(`ue-line-marks-${kit[0].id}`).locator("visible=true").first().waitFor({ timeout: 8000 });
+  await p.getByTestId(`ue-line-marks-${work[0].id}`).locator("visible=true").first().waitFor({ timeout: 8000 });
   await h.shot("estimate");
 };

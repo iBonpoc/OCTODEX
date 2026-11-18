@@ -48,8 +48,10 @@ const live = (it: CatalogItem) => it.kind !== "kit";
 /** the company's item for a part: its properties and its unit; the closest first (catalogMatch), else undefined */
 export function findItem(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): CatalogItem | undefined {
   const unit = p.unit.trim().toLowerCase();
-  const pool = catalog.filter((it) => live(it) && it.unit.trim().toLowerCase() === unit);
   const want = matchAttrs(p);
+  // a fastener of another metal is never this one's (review PR-2 №1): an aluminum job's screw never takes the copper screw's item
+  const metalOk = (it: CatalogItem) => !METAL_FALLBACK_PARTS.has(want.part ?? "") || !it.attributes?.metal || it.attributes.metal === want.metal;
+  const pool = catalog.filter((it) => live(it) && it.unit.trim().toLowerCase() === unit && metalOk(it));
   const own = catalogMatch(pool, want)[0];
   if (own) return own;
   // #871: before the fix the engine counted «A» for a round downspout's elbows by default, and a company priced that row
@@ -83,8 +85,12 @@ const ROUND_ELBOW_FALLBACK = (w: Record<string, string>): Record<string, string>
 /** the line's item is another degree's (see findItem): the estimate says «проверьте цену» for it */
 export function priceFromOtherDegree(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): boolean {
   const it = findItem(catalog, p);
+  if (!it) return false;
+  // М8 (review PR-2): a copper fastener priced by the same fastener without a metal borrows its price too — its own name in the line, and
+  // the price list still shows its own item missing («Создать позиции сразу» makes it; its price is then its own)
+  if (p.attrs.metal && METAL_FALLBACK_PARTS.has(p.attrs.part ?? "") && it.attributes?.metal !== p.attrs.metal) return true;
   // the #871 «A» name of the 45° elbow is the same elbow under its old name — not another degree
-  return !!it && p.attrs.part === "elbow" && p.attrs.shape === "round" && ROUND_DEFAULT_STYLES.has(p.attrs.style ?? "") && it.attributes?.style !== p.attrs.style;
+  return p.attrs.part === "elbow" && p.attrs.shape === "round" && ROUND_DEFAULT_STYLES.has(p.attrs.style ?? "") && it.attributes?.style !== p.attrs.style;
 }
 
 /** parts with a word of their own; any other part (a kit's) shows its code — data, like an item's name */

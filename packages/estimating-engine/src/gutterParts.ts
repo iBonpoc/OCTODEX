@@ -369,7 +369,8 @@ export function resolveGutterRules(over?: GutterRulesOverride): GutterRules {
   r.solderSodaPerJob = wholeOr(r.solderSodaPerJob, d.solderSodaPerJob);
   if (!Array.isArray(r.solderedMaterials) || !r.solderedMaterials.every((m) => typeof m === "string")) r.solderedMaterials = d.solderedMaterials;
   // a spacing of a metal that is not a whole number > 0 is none for it (no joints), never a division by 0
-  r.expansionJointInByMetal = Object.fromEntries(Object.entries(r.expansionJointInByMetal).filter(([, v]) => okPos(v)));
+  // a blank field (0) is the default, as every other norm (review PR-2 №5); a metal without a default and without a number — none
+  r.expansionJointInByMetal = Object.fromEntries(Object.entries(r.expansionJointInByMetal).map(([k, v]) => [k, okPos(v) ? v : d.expansionJointInByMetal[k]] as const).filter((e): e is readonly [string, number] => okPos(e[1])));
   r.fastenerMetal = Object.fromEntries(Object.entries(r.fastenerMetal).filter(([, v]) => typeof v === "string" && v.trim() !== ""));
   r.bendInDefault = wholeOr(r.bendInDefault, d.bendInDefault);
   // the estimate's downspout step is one of 1 / 5 / 10 ft (Н8): a blank field (0) or anything else never stops the rounding silently
@@ -481,6 +482,13 @@ export function metalOf(material: string): string {
   if (material.startsWith("zinc")) return "zinc";
   if (/^(steel|galv|bond)/.test(material)) return "steel";
   return "aluminum";
+}
+/** the metal of a material only when it is known (an unknown material — vinyl, blank — is no metal: no galvanic advice for it) */
+export function knownMetal(material: string | undefined): string | undefined {
+  if (!material) return undefined;
+  if (material.startsWith("alu")) return "aluminum";
+  const m = metalOf(material);
+  return m === "aluminum" ? undefined : m;
 }
 /** fasteners every kit and joint share (screws, anchors): one section whatever brought them first */
 const CONSUMABLE_PARTS = new Set(["screw", "anchor"]);
@@ -716,7 +724,8 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
       acc.add({ key: `rivet.42.${metal}.${finish}.${color}`, section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "rivet", rivet: "42", material: metal, finish, ...(color !== "-" ? { color } : {}) } }, j.rivets * n,
         { rule: "rivets_per_joints", params: { [cnt]: n, [per]: j.rivets, rivets: j.rivets * n }, setting: "joints" });
     }
-    if (rules.solderedMaterials.includes(s.material)) {
+    // a soldered metal by its family too («copper_16oz» is copper — as its fasteners and expansion joints; review PR-2 №4)
+    if (rules.solderedMaterials.includes(s.material) || rules.solderedMaterials.includes(knownMetal(s.material) ?? "")) {
       // a downspout joint of a soldered metal is soldered too (М2) — unless it is screwed (dsJoin)
       const pts = kind === "ds" ? (screwed ? 0 : rules.solderPointsPerDsJoint) : j.sealant;
       solderPts += pts * n;
@@ -1037,11 +1046,12 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
       { rule: "solder_work", params: { points: solderPts } });
   }
   // copper next to aluminum or steel corrodes (§2.7, `galvanic_pair`): a downspout on a gutter, two gutters at a corner. Advice only:
-  // the estimate is never held (question 10)
+  // the estimate is never held (question 10). A straight join of two gutters («join» end) names no neighbour in the input — not seen yet
+  // (spec §5а: when the join carries its neighbour)
   const pairs = new Set<string>();
   const galvanic = (aId: string, aMat: string, bId: string, bMat: string) => {
-    const ma = metalOf(aMat), mb = metalOf(bMat);
-    if ((ma === "copper") === (mb === "copper") || !["aluminum", "steel"].includes(ma === "copper" ? mb : ma)) return;
+    const ma = knownMetal(aMat), mb = knownMetal(bMat);
+    if (!ma || !mb || (ma === "copper") === (mb === "copper") || !["aluminum", "steel"].includes(ma === "copper" ? mb : ma)) return;
     const k = [aId, bId].sort().join("|");
     if (pairs.has(k)) return;
     pairs.add(k);

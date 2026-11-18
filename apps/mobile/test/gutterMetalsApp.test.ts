@@ -13,7 +13,7 @@ vi.mock("../src/cloud/client", () => ({ supabase: {} }));
 vi.mock("@/config/backend", () => ({ WEB_APP_URL: "https://example.test" }));
 import { computeGutterParts, DEFAULT_TAX, type CustomLine, type PartQty } from "@octo/estimating-engine";
 import type { CatalogItem, DB, Estimate, EstimateDoc } from "../src/data/types";
-import { findItem, LABOR_PARTS, PART_WORDS, WORK_WORDS } from "../src/modules/gutters/prices";
+import { findItem, LABOR_PARTS, missingItems, PART_WORDS, priceFromOtherDegree, WORK_WORDS } from "../src/modules/gutters/prices";
 import { linesFromParts, type ModuleLine } from "../src/modules/gutters/estimate";
 import { engineChangedFor } from "../src/modules/gutters/estimateLink";
 import { toElements } from "../src/modules/gutters/canvas/model";
@@ -31,6 +31,19 @@ describe("металл крепежа в прайсе (М8, С7)", () => {
     const l = linesFromParts([{ ...copperScrew, use: "both" } as PartQty], [screw("plain", {})], () => "Screw", () => "l1")[0]!;
     expect(l.unitPriceCents).toBe(10);
     expect(l.source?.noPrice).toBeUndefined();
+    // the borrowed item's name never goes into the line (review PR-2 №1): the part's own name
+    const named = linesFromParts([{ ...copperScrew, use: "both" } as PartQty], [{ ...screw("plain", {}), name: "Screw 10x1.5 aluminum" }], () => "Screw 10x1.5 · copper", () => "l1")[0]!;
+    expect(named.name).toBe("Screw 10x1.5 · copper");
+    expect(priceFromOtherDegree([screw("plain", {})], copperScrew)).toBe(true);
+    expect(priceFromOtherDegree([screw("cu", { metal: "copper" })], copperScrew)).toBe(false);
+  });
+  it("С7а (ревью PR-2): алюминиевый винт не берёт медную или нержавеющую позицию; медная своя позиция создаётся «Создать позиции сразу», хотя цена уже занята у простой", () => {
+    const alScrew = { ...copperScrew, key: "screw.10x15", attrs: { part: "screw", screw: "10x1.5" } } as unknown as PartQty;
+    expect(findItem([screw("cu", { metal: "copper" }), screw("ss", { metal: "stainless" })], alScrew)).toBeUndefined();
+    expect(findItem([screw("cu", { metal: "copper" }), screw("plain", {})], alScrew)?.id).toBe("plain");
+    const made = missingItems("c1", [{ key: "k", part: copperScrew }], [screw("plain", {})], () => "Screw copper");
+    expect(made).toHaveLength(1);
+    expect(made[0]!.attributes).toMatchObject({ part: "screw", metal: "copper" });
   });
   it("новые деталь и работа названы словами и есть в прайсе работ", () => {
     expect(PART_WORDS.has("soldering_kit")).toBe(true);
