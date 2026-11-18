@@ -16764,7 +16764,7 @@ rollback;
 \echo 'T364 ok'
 
 -- ================================================================ T365–T370: a cost is written only over what the phone saw
--- (#1958 (а), migration 20261117270000). catalog_set_item_costs(item, the changed fields, what the phone had in them).
+-- (#1958 (а), migration 20261117340000). catalog_set_item_costs(item, the changed fields, what the phone had in them).
 -- Its own items, rolled back at the end: nothing stays for the tests after it.
 :as_super
 begin;
