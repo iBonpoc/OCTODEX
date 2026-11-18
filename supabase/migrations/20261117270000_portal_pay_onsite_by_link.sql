@@ -3,7 +3,7 @@
 --     estimate's company (signed in) gets 42501, hint 'member_portal_pay'; the client (anonymous, by the token) pays as before.
 --   * public.portal_accept — the same body as in 20261110030000; with p_channel 'on_site' (an old app on site, by the token:
 --     rule 16, T142) the caller must read the estimate as accept_on_site asks (staff, or the estimate is one they read —
---     app.can_read_estimate), else 'estimate not found'. The right to sign contracts and a closed company are checked in
+--     app.can_read_estimate), else 'estimate not found' (a signature already made still answers «repeat»). The right to sign contracts and a closed company are checked in
 --     app.estimate_client_accept, as before. Removing on_site from this door is step 2 (#2026).
 -- Rule 16: create or replace, nothing renamed or dropped. Rule 18: the rights are set again exactly as they were.
 
@@ -13,14 +13,16 @@ create or replace function public.portal_accept(p_token text, p_option_id uuid, 
  SECURITY DEFINER
  SET search_path TO ''
 AS $$
-declare v_id uuid; v_company uuid;
+declare v_id uuid; v_company uuid; v_status text;
 begin
-  select id, company_id into v_id, v_company from public.estimates where id = app.estimate_of_token(p_token) and deleted_at is null;
+  select id, company_id, status into v_id, v_company, v_status from public.estimates where id = app.estimate_of_token(p_token) and deleted_at is null;
   if not found or p_token is null then
     raise exception 'estimate not found' using errcode = 'P0002';
   end if;
-  -- on site by the token (an old app): only someone who reads this estimate, as accept_on_site (#2020)
-  if p_channel = 'on_site' and not (app.is_staff(v_company) or app.can_read_estimate(v_id)) then
+  -- on site by the token (an old app): only someone who reads this estimate, as accept_on_site (#2020);
+  -- a signature already made goes on to the «repeat» answer as before (an old phone's queue, rule 16)
+  if p_channel = 'on_site' and v_status not in ('awaiting_countersign', 'approved')
+     and not (app.is_staff(v_company) or app.can_read_estimate(v_id)) then
     raise exception 'estimate not found' using errcode = 'P0002';
   end if;
   perform app.estimate_client_accept(v_id, p_token, p_option_id, p_addon_ids, p_signer, p_svg, p_consent, p_channel, p_job_id, p_invoice_id);

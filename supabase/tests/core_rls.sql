@@ -16882,8 +16882,9 @@ select public.portal_accept('tok_t380_0123456789abcdef', '38020000-0000-4000-800
 :as_owner_a
 select public.countersign_estimate('38000000-0000-4000-8000-000000000001', 'M0 0 L3 3') = 'approved' as t380_countersigned;
 :as_super
-select set_config('tst.t380_inv', (select i.id::text from public.invoices i join public.jobs j on j.id = i.job_id
-                                    where j.estimate_id = '38000000-0000-4000-8000-000000000001' and i.status = 'sent' limit 1), false) is not null as t380_inv;
+select set_config('tst.t380_inv', coalesce((select i.id::text from public.invoices i join public.jobs j on j.id = i.job_id
+                                    where j.estimate_id = '38000000-0000-4000-8000-000000000001' and i.status = 'sent' limit 1), ''), false) is not null as t380_inv_set;
+select tst.ok(current_setting('tst.t380_inv') <> '', 'T380 fixture: the deposit invoice is issued');
 :as_owner_a
 select tst.fails_like(format($q$select public.portal_pay_simulated('tok_t380_0123456789abcdef', %L)$q$, current_setting('tst.t380_inv')),
   '%does not pay by the client''s link%', 'T380 the owner pays by the link: refused');
@@ -16901,10 +16902,17 @@ begin
   perform tst.ok(false, 'T380 the office''s simulated payment must be refused');
 end $t$;
 :as_super
-select tst.ok(not exists (select 1 from public.payments where invoice_id = current_setting('tst.t380_inv')::uuid), 'T380 after the refusals: no payment');
+select tst.ok(not exists (select 1 from public.payments where invoice_id = current_setting('tst.t380_inv')::uuid)
+          and not exists (select 1 from public.notifications where invoice_id = current_setting('tst.t380_inv')::uuid and kind in ('deposit.paid', 'invoice.paid')),
+  'T380 after the refusals: no payment, no «paid» notice');
 reset role; reset request.jwt.claim.sub; set role anon;
 select tst.ok((select (x ->> 'paid')::bigint > 0 from jsonb_array_elements(public.portal_pay_simulated('tok_t380_0123456789abcdef', current_setting('tst.t380_inv')::uuid) -> 'invoices') x
                 where x ->> 'id' = current_setting('tst.t380_inv')), 'T380 the client pays by the link as before');
+-- a person of ANOTHER company is only a client here: not refused (the invoice is paid already — nothing doubles)
+:as_owner_b
+select public.portal_pay_simulated('tok_t380_0123456789abcdef', current_setting('tst.t380_inv')::uuid) is not null as t380_other_company_not_refused;
+:as_super
+select tst.ok((select count(*) from public.payments where invoice_id = current_setting('tst.t380_inv')::uuid) = 1, 'T380 one payment in all');
 rollback;
 \echo 'T380 ok'
 
@@ -16949,14 +16957,28 @@ end $t$;
 :as_tech2_a
 select tst.fails_like($q$select public.portal_accept('tok_t381_1_0123456789abcdef', '38120000-0000-4000-8000-000000000001', null, 'T381 X', 'M0 0 L5 5', true, 'on_site')$q$,
   '%not found%', 'T381 a tech who does not read the estimate: on site by the token refused');
+-- a person of ANOTHER company reads nothing here: on site by the token — not found
+:as_owner_b
+select tst.fails_like($q$select public.portal_accept('tok_t381_1_0123456789abcdef', '38120000-0000-4000-8000-000000000001', null, 'T381 B', 'M0 0 L5 5', true, 'on_site')$q$,
+  '%not found%', 'T381 another company on site by the token: not found');
 :as_super
 select tst.ok((select status from public.estimates where id = '38100000-0000-4000-8000-000000000001') = 'sent', 'T381 …and it stays unsigned');
+-- the owner (staff) on site by the token: as before
+:as_owner_a
+select tst.ok((public.portal_accept('tok_t381_1_0123456789abcdef', '38120000-0000-4000-8000-000000000001', null, 'T381 Client', 'M0 0 L5 5', true, 'on_site') ->> 'status')
+              = 'awaiting_countersign', 'T381 the owner signs the client on site by the token, as before');
 :as_tech_a
 select tst.ok((public.portal_accept('tok_t381_2_0123456789abcdef', '38120000-0000-4000-8000-000000000002', null, 'T381 Client', 'M0 0 L5 5', true, 'on_site') ->> 'status')
               = 'awaiting_countersign', 'T381 the tech who made the estimate signs the client on site by the token, as before');
 :as_super
 select tst.ok((select channel = 'on_site' and signer_user_id = 'a0000000-0000-0000-0000-000000000003' from public.estimate_approvals
                 where estimate_id = '38100000-0000-4000-8000-000000000002'), 'T381 …on site, on the tech''s device');
+-- the old phone's queue sends the same signature again after the tech lost the estimate (another tech): «repeat», not an error
+:as_tech2_a
+select tst.ok((public.portal_accept('tok_t381_2_0123456789abcdef', '38120000-0000-4000-8000-000000000002', null, 'T381 Client', 'M0 0 L5 5', true, 'on_site') ->> 'status')
+              = 'awaiting_countersign', 'T381 a repeat of a signature already made answers as before');
+:as_super
+select tst.ok((select count(*) from public.estimate_approvals where estimate_id = '38100000-0000-4000-8000-000000000002') = 1, 'T381 the repeat doubles nothing');
 rollback;
 \echo 'T381 ok'
 
