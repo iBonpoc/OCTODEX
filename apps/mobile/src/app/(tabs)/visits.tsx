@@ -21,7 +21,7 @@ import { overlapSigns } from "@/features/listSigns";
 /** Technician home ("my day"): progress and money collected, the visit in progress or the next one, the rest of today, then the week. */
 export default function Visits() {
   useTick();
-  const { t, day, moneyWhole, money, time } = useI18n();
+  const { t, tn, day, moneyWhole, money, time } = useI18n();
   const { db } = useStore();
   const d = techDay(db, db.me);
   const focus = d.current ?? d.next;
@@ -61,7 +61,7 @@ export default function Visits() {
   };
 
   return (
-    <Screen title={t("visits.title")} help={t("help.visits")} hintKey="visits" fab="home" home subtitle={`${day(new Date().toISOString())} · ${t("visits.count", { n: d.visits.length })}`}>
+    <Screen title={t("visits.title")} help={t("help.visits")} hintKey="visits" fab="home" home subtitle={`${day(new Date().toISOString())} · ${tn("visits.today", d.visits.length)}`}>
       {d.visits.length === 0 ? (
         <Empty icon="calendar" title={t("visits.empty")} hint={t("visits.emptyHint")} />
       ) : (
@@ -71,7 +71,14 @@ export default function Visits() {
               <T v="caption" tone="mut">
                 {t("tday.title")}
               </T>
-              <T v="heading">{d.done === d.visits.length ? `✓ ${t("tday.allDone")}` : t("tday.progress", { done: d.done, n: d.visits.length })}</T>
+              {/* all done — the status chip (icon + word, rule 2), no «✓ » in the text (spec 56 §9.3 №4) */}
+              {d.done === d.visits.length ? (
+                <View testID="visits-all-done" style={{ alignItems: "flex-start" }}>
+                  <StatusChip status="ok" label={t("tday.allDone")} />
+                </View>
+              ) : (
+                <T v="heading">{t("tday.progress", { done: d.done, n: d.visits.length })}</T>
+              )}
             </View>
             <View style={{ alignItems: "flex-end", gap: space[1] }}>
               <T v="caption" tone="mut">

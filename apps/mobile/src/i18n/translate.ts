@@ -22,5 +22,48 @@ export function translate(lang: Lang, key: DictKey, params?: Params): string {
   return s.replace(/(?<!\.)\.\.(?!\.)/g, ".");
 }
 
+/** the app's language as I18nProvider holds it (null before it); the store seeds the demo in it (#1223) */
+let appLang: Lang | null = null;
+export const setAppLang = (l: Lang) => {
+  appLang = l;
+};
+export const appLangNow = (): Lang | null => appLang;
+
 /** A translator for a client's language: tFor(docLanguageFor(db, …))("key"). */
 export const tFor = (lang: DocLang) => (key: DictKey, params?: Params) => translate(lang, key, params);
+
+/** the forms a counted phrase has in the dictionaries: «<base>.one / .few / .many / .other» (the same four keys in RU, EN, ES) */
+export type PluralForm = "one" | "few" | "many" | "other";
+/** the bases of counted phrases: «vf.load» for «vf.load.one» … «vf.load.other» */
+export type PluralBase = { [K in DictKey]: K extends `${infer B}.one` ? (`${B}.few` extends DictKey ? B : never) : never }[DictKey];
+const LOCALE: Record<Lang, string> = { en: "en-US", ru: "ru-RU", es: "es-US" };
+const rules = new Map<Lang, Intl.PluralRules | null>();
+/** The form of a number in a language — Intl.PluralRules (DS §4.2: never «выезд(а)», «visit(s)»); without Intl — the RU/EN rule by hand. */
+export function pluralForm(lang: Lang, n: number): PluralForm {
+  if (!rules.has(lang)) rules.set(lang, typeof Intl !== "undefined" && typeof Intl.PluralRules === "function" ? new Intl.PluralRules(LOCALE[lang]) : null);
+  const r = rules.get(lang);
+  const c = r ? r.select(n) : lang !== "ru" ? (n === 1 ? "one" : "other") : n % 10 === 1 && n % 100 !== 11 ? "one" : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? "few" : "many";
+  return c === "one" || c === "few" || c === "many" ? c : "other";
+}
+/** A counted phrase: plural("ru", "vf.load", 3, { ranges }) → «3 выезда · …»; {n} is the number. */
+export function plural(lang: Lang, base: PluralBase, n: number, params?: Params): string {
+  return translate(lang, `${base}.${pluralForm(lang, n)}` as DictKey, { ...params, n });
+}
+
+/** A length of time in minutes, in words: «45 мин», «4 ч», «1 ч 30 мин» (DS §4.5 «Длительность»; not «240 мин»). */
+export function durationText(lang: Lang, min: number): string {
+  const m = Math.max(0, Math.round(min));
+  if (m < 60) return translate(lang, "time.min", { n: m });
+  return m % 60 === 0 ? translate(lang, "time.h", { h: m / 60 }) : translate(lang, "time.hmin", { h: Math.floor(m / 60), m: m % 60 });
+}
+
+/** Money in US format (rule 7): «$1,234» when whole, «$1,234.56» with cents; a negative amount takes the minus sign «−» (U+2212, DS §4.5), not a hyphen. */
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+const usdCents = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+export function moneyText(cents: number): string {
+  const a = Math.abs(cents);
+  const s = a % 100 === 0 ? usd.format(a / 100) : usdCents.format(a / 100);
+  return cents < 0 ? `−${s}` : s;
+}
+/** A signed number for a percent or a count: «−218.2», not «-218.2» (the minus sign U+2212, DS §4.5) */
+export const signedText = (n: number): string => (n < 0 ? `−${String(-n)}` : String(n));

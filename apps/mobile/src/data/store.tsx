@@ -15,13 +15,13 @@ import { useAuth, type DbRole } from "@/cloud/auth";
 import { MEMBERSHIP_REREAD_MS, memberMatches } from "@/cloud/membershipSync";
 import { appRoles, loadCompanyDB, loadCompanyModule, loadCostHistory, loadPriceHistory } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
-import { applyOp, catalogCostChange, catalogItemChange, renewSession, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
+import { applyOp, catalogCostChange, catalogItemChange, renewSession, sendVisitPoint, withCostsSeen, type Op, type OutboxItem } from "@/cloud/ops";
 import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
 import { defaultLeadAssignee } from "@/features/leadAssignee";
 import { keepLast, stepPending } from "@/features/location";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
-import { canMakeEstimateAt, leadEstimatePropertyId } from "@/features/access";
+import { canMakeEstimateAt, keepCosts, leadEstimatePropertyId, serverSaysCosts } from "@/features/access";
 import { signTotalFor } from "@/cloud/legacyTotals";
 import { leadStatusToDb } from "@/cloud/statusMap";
 
@@ -30,7 +30,7 @@ const dbStatus = (s: LeadStatus): string => leadStatusToDb[s];
 import { makeSeed } from "./seed";
 import { normalizeDB } from "./normalize";
 import { cleanPeople, docLanguageFor, leadPeopleOf, mainContact, nextClientNumber } from "./people";
-import { tFor, type DocLang } from "@/i18n/translate";
+import { appLangNow, tFor, type DocLang } from "@/i18n/translate";
 import { findJob, jobOfEstimate, nextJobNumber } from "./jobs";
 import { visitDueCents } from "@/features/visitDue";
 import { withNewJob, type NewJobInput } from "@/features/newJob";
@@ -45,7 +45,7 @@ import { docForSave, newToken, normalizeDoc, storedDoc, summarize } from "@/feat
 import { syncCompanyTerms, termsForNew, termsOnClientChange, withFrozenTerms, type TermsFor } from "@/features/estimateTerms";
 import { contractInvoice, contractInvoices, voidRefusal, withTaxSplit, type VoidRefusal } from "@/features/contractInvoice";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
-import { acceptPayment, sumCents, visitPayment } from "@octo/estimating-engine";
+import { acceptPayment, invoiceOwes, sumCents, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
 import { canRetry, keepPhotoLocal, keepReceiptLocal, markPhoto, markReceipt } from "./photoUpload";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
@@ -54,7 +54,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { backoffMs, classify, isAccessDenied, isModuleInactive, isUnknownOp, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, liveOf, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
-import { dropModuleOps, dropSettingsOps, dropTemplateOps, templateRejected, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
+import { dropGroupPriceOps, dropModuleOps, dropSettingsOps, dropSupplierTaxOps, dropTemplateOps, groupPriceRejected, itemCostRejected, supplierTaxRejected, templateRejected, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
 import type { DictKey } from "@/i18n";
 import { onAppActive, onAppLeave } from "./appActive";
 import { adoptLegacy, mineOf, onSharedForget, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
@@ -66,6 +66,7 @@ import { enabledLocally, keepModuleData, moduleActive, moduleDef, modulePurchase
 import { cleanCatalogItem } from "@/features/catalogExtras";
 import { sameValue, undoOwn } from "@/data/undoOwn";
 import { markOf, markUndo, NO_UNDO, type GuardedUndo } from "@/data/undo";
+import { groupPriceChanged, groupPriceLocked, joinedGroup, priceGroupOf, withoutGroupCosts, type GroupPriceInput } from "./priceGroup";
 import { cleanCardFields, itemForSave, localPriceEntries, mergePriceHistory } from "@/features/catalogCard";
 import { canEditOrders, canMove, canReceive, draftsForJob, linesEditable, openDraft, statusAfterReceive } from "@/features/purchaseOrders";
 import { canSeeSuppliers, cleanSupplier, cleanSupplierLink, itemsOfSupplier, itemsWithOtherTax, keepCostHistory, localHistoryEntry, mergeHistory } from "@/features/suppliers";
@@ -488,9 +489,14 @@ interface StoreCtx {
   /** «Команда → Сотрудник»: title, HIS number; the right to sign — owner only */
   updateMember: (id: ID, patch: { title?: string; hisNumber?: string; canSignContracts?: boolean }) => Undo;
   saveCatalogItem: (it: CatalogItem) => Undo;
+  /** #1913: one price for the whole price group of the item (catalog.groupPrice); not in a group — nothing */
+  saveGroupPrice: (itemId: ID, v: GroupPriceInput) => Undo;
   removeCatalogItem: (id: ID) => Undo;
   /** spec 36: make or change a supplier (owner / admin / office); null name — nothing */
   saveSupplier: (x: Supplier) => GuardedUndo;
+  /** #1834: change the supplier's purchase tax through the server door (supplier_set_tax); its items follow at once on the phone,
+   *  on the server in the same transaction; null/undefined — no rate. Owner / admin / office who see costs; «Отменить» 5 s */
+  setSupplierTax: (id: ID, taxBps: number | undefined) => GuardedUndo;
   /** spec 36: archive or bring back a supplier («Отменить» 5 s) */
   setSupplierActive: (id: ID, active: boolean) => GuardedUndo;
   /** spec 36: the supplier's purchase tax into its items that have another one (new estimate lines follow) */
@@ -590,7 +596,8 @@ export function StoreProvider({
   // of the server.
   const [saved, setSaved, dbReady, dbHealth] = usePersistentState<{ day: string; db: DB; role?: DbRole }>(
     cacheKey,
-    () => (mode === "cloud" ? { day: "cloud", db: emptyDB(auth.userId ?? "") } : { day: todayKey(), db: makeSeed() }),
+    // the demo's own texts (its checklist template) come in the app's language at the moment it starts (#1223)
+    () => (mode === "cloud" ? { day: "cloud", db: emptyDB(auth.userId ?? "") } : { day: todayKey(), db: makeSeed(appLangNow() ?? "en") }),
     {
       // #1189: only the shape — the record is an object of this mode; a list it lacks (an older version's record) is filled
       // by normalizeDB, never a reason to start the demo over (that wiped the person's own records)
@@ -766,6 +773,9 @@ export function StoreProvider({
 
   const availableRoles: Role[] = mode === "cloud" ? appRoles(company!.role) : ["tech", "dispatcher", "director", "sales"];
   const role = effectiveRole(savedRole, availableRoles);
+  // #1837: does the server give this person our costs — one rule (features/access.ts); the data's rule, not the view's
+  // (a cost change queued in the office view keeps its costs when sent from the tech view)
+  const sees = (d: Pick<DB, "costsVisible"> = dbRef.current) => serverSaysCosts(d, modeRef.current);
   useEffect(() => {
     if (savedRole !== role) setRole(role);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -952,7 +962,9 @@ export function StoreProvider({
         inFlight.current = item.id;
         setSendingId(item.id);
         try {
-          const sent = await applyOp(item.op, w.companyId, w.userId);
+          // #1913: a group's price write of someone who does not see our costs (now — a role may have changed since it was
+          // queued) never carries costs to the server
+          const sent = await applyOp(sees() ? item.op : withoutGroupCosts(item.op), w.companyId, w.userId);
           inFlight.current = null;
           setSendingId(null);
           // the device was wiped while it was sent: the outbox is not this person's any more — never write it back
@@ -1024,7 +1036,11 @@ export function StoreProvider({
           // #1633 A2: «no rights» (42501) may mean the person was just removed from the company or given another role: no
           // try is spent until the memberships are read again (a removed person's ops are never dropped by it — they wait
           // for «Убрать»); confirmed since and still here — a «no» like any other
-          if (isAccessDenied(e) && accessDeniedRef.current && stampRef.current !== undefined) {
+          // #1913: «a group counted from its cost is not yours to price» (42501, hint price_from_cost) is about the group,
+          // not the membership: no reread of the memberships for it (handled with the group conflicts below)
+          const groupDenied =
+            item.op.k === "catalog.groupPrice" && isAccessDenied(e) && (e as { hint?: unknown } | null)?.hint === "price_from_cost";
+          if (!groupDenied && isAccessDenied(e) && accessDeniedRef.current && stampRef.current !== undefined) {
             const at = deniedAt.current.get(item.id);
             // the memberships were just read again on such a signal and I am still here: a plain «no» (e2e 118)
             const checked = checkedAtRef.current;
@@ -1097,6 +1113,49 @@ export function StoreProvider({
             dropped = true;
             const rej = templateRejected(item, msg, Date.now(), w);
             setRejected((prev) => [...freshRejected(prev, Date.now()).filter((x) => x.id !== rej.id), rej]);
+            setOutbox(outboxRef.current);
+            continue;
+          }
+          // #1913: a group's price changed on another phone first (row_version_conflict): this write and the later ones of
+          // the same group go now (each was built on this one's expected price), one card with the price meant; the
+          // truth is read again (the screen offers «Поставить $X» against the price the server has now)
+          // …and the same for «not yours to price» (42501 price_from_cost: a group counted from its cost): no five tries
+          // #1958 (а): an item's cost changed meanwhile (another phone, a price-list upload): the rest of the save is on the
+          // server, the cost is not — no five tries (each would be refused the same), one card per item, the truth read again
+          // …and «the tax of this item is its supplier's» (22023 hint supplier_tax, #1834): a refusal the same every time
+          const supplierTax = (e as { hint?: unknown } | null)?.hint === "supplier_tax";
+          if (item.op.k === "catalog.save" && (isRowConflict(e) || supplierTax)) {
+            outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
+            opPause.current.delete(item.id);
+            deadOps.current.add(item.id);
+            dropped = true;
+            setRejected((prev) => itemCostRejected(freshRejected(prev, Date.now()), item, msg, Date.now(), w, supplierTax ? "price.cost.rejSupplierTax" : undefined));
+            setOutbox(outboxRef.current);
+            continue;
+          }
+          if (item.op.k === "catalog.groupPrice" && (isRowConflict(e) || groupDenied)) {
+            const { kept, gone } = dropGroupPriceOps(outboxRef.current, item.op.group, w);
+            outboxRef.current = kept;
+            for (const g of gone) {
+              opPause.current.delete(g.id);
+              deadOps.current.add(g.id);
+            }
+            dropped = true;
+            setRejected((prev) => groupPriceRejected(prev, gone, msg, Date.now(), w, groupDenied ? "price.group.rejRights" : undefined));
+            setOutbox(outboxRef.current);
+            continue;
+          }
+          // #1834: the supplier's tax changed by another office first (row_version_conflict): this write and the later ones for the
+          // same supplier go now, one card; the truth is read again (the supplier and its items with the other rate)
+          if (item.op.k === "supplier.tax" && isRowConflict(e)) {
+            const { kept, gone } = dropSupplierTaxOps(outboxRef.current, item.op.supplierId, w);
+            outboxRef.current = kept;
+            for (const g of gone) {
+              opPause.current.delete(g.id);
+              deadOps.current.add(g.id);
+            }
+            dropped = true;
+            setRejected((prev) => supplierTaxRejected(prev, gone, msg, Date.now(), w));
             setOutbox(outboxRef.current);
             continue;
           }
@@ -1265,6 +1324,43 @@ export function StoreProvider({
     },
     [runnable, setQueue, setOutbox],
   );
+
+  /**
+   * #1913 (the price-key spec, §4.6): one price for the whole price group of `prev` — on the phone at once (every live
+   * item of the group: price, placeholder; costs only for who sees them), to the server as one op catalog.groupPrice
+   * against what the phone saw (`prev`): someone else changed it first → the server says so (40001), nothing is lost.
+   * A group counted from its cost and a person who does not see costs: nothing (the price is not theirs to set — 53-0б).
+   */
+  const groupPriceWrite = (prev: CatalogItem, v: GroupPriceInput): GuardedUndo => {
+    const d0 = dbRef.current;
+    const group = priceGroupOf(prev);
+    if (!group) return NO_UNDO;
+    // only a «yes» is a yes (unknown is no, as the screens: review of PR2 №1); the local data of a demo has no server to refuse
+    const seesCosts = sees(d0);
+    const inGroup = (x: CatalogItem) => priceGroupOf(x) === group;
+    if (!seesCosts && groupPriceLocked(d0.catalog, prev)) return NO_UNDO;
+    const placeholder = v.placeholder ?? !!prev.placeholder;
+    const cost = seesCosts ? { costCents: v.costCents ?? prev.costCents, vendorTaxBps: v.vendorTaxBps ?? prev.vendorTaxBps, markupBps: v.markupBps ?? prev.markupBps } : {};
+    const now = new Date().toISOString();
+    const op: Op = {
+      k: "catalog.groupPrice", itemId: prev.id, group, priceCents: v.priceCents, placeholder,
+      expectedPriceCents: prev.priceCents,
+      ...(seesCosts
+        ? {
+            costCents: cost.costCents ?? null, vendorTaxBps: cost.vendorTaxBps ?? null, markupBps: cost.markupBps ?? null,
+            expectedCostCents: prev.costCents ?? null, expectedTaxBps: prev.vendorTaxBps ?? null, expectedMarkupBps: prev.markupBps ?? null,
+          }
+        : {}),
+    };
+    return mutate(
+      "catalog.groupPrice",
+      (d) => ({
+        ...d,
+        catalog: d.catalog.map((x) => (inGroup(x) ? { ...x, priceCents: v.priceCents, placeholder, ...cost, updatedAt: now, ...(d.me ? { updatedBy: d.me } : {}) } : x)),
+      }),
+      op,
+    );
+  };
 
   const patchVisit = (d: DB, id: ID, fn: (v: Visit) => Visit): DB => ({
     ...d,
@@ -1511,11 +1607,11 @@ export function StoreProvider({
   const saveItemsBoth = (pairs: { prev: CatalogItem; next: CatalogItem }[]): GuardedUndo => {
     if (!pairs.length) return noop;
     const go = (from: CatalogItem, to: CatalogItem, at: string) => {
-      const hist = dbRef.current.costsVisible === false ? null : localHistoryEntry(from, to, uid(), at);
+      const hist = !sees() ? null : localHistoryEntry(from, to, uid(), at);
       return mutate(
         "catalog.save",
         (d) => ({ ...d, catalog: d.catalog.map((c) => (c.id === to.id ? to : c)), ...(hist ? { costHistory: [hist, ...(d.costHistory ?? [])] } : {}) }),
-        { k: "catalog.save", item: to, costs: catalogCostChange(from, to), ...withFields(from, to) },
+        { k: "catalog.save", item: to, costs: catalogCostChange(from, to), ...withCostsSeen(from, catalogCostChange(from, to)), ...withFields(from, to) },
       );
     };
     const at = new Date().toISOString();
@@ -2184,7 +2280,7 @@ export function StoreProvider({
       },
       payInvoice: (id, method) => {
         const inv = dbRef.current.invoices.find((i) => i.id === id);
-        return inv ? recordPayment(id, inv.totalCents - inv.paidCents, method) : NO_UNDO;
+        return inv ? recordPayment(id, invoiceOwes(inv), method) : NO_UNDO;
       },
       recordPayment: (invoiceId, amountCents, method, reference, fromClient) => recordPayment(invoiceId, amountCents, method, reference, fromClient),
       refundPaymentDemo: (paymentId, amountCents) => {
@@ -2626,17 +2722,36 @@ export function StoreProvider({
       saveCatalogItem: (it0) => {
         const prev = dbRef.current.catalog.find((x) => x.id === it0.id);
         // РС-10: the link, the barcode and the direction as the server will keep them (the phone and the server the same)
-        const it = cleanCardFields(cleanSupplierLink(cleanCatalogItem(it0)), prev, dbRef.current);
+        const it1 = cleanCardFields(cleanSupplierLink(cleanCatalogItem(it0)), prev, dbRef.current);
+        // #1807 (53-0б-2): a material whose price the server counts from a cost this person does not see keeps its price and
+        // its kind, from any caller (the server would keep its own; the phone must not show another one meanwhile)
+        const locked = !sees() && prev?.kind === "material" && !!prev.priceFromCost;
+        const it2a = locked && prev ? { ...it1, kind: prev.kind, priceCents: prev.priceCents, placeholder: prev.placeholder } : it1;
+        // #1913: joining a group, the item takes the group's price (the server does the same; review of PR2)
+        const it2 = modeRef.current === "cloud" ? joinedGroup(dbRef.current.catalog, prev, it2a) : it2a;
+        // #1913: an item of a price group — its price goes through the group (catalog.groupPrice: the whole group, against
+        // what the phone saw); the rest of the item goes as before, without the price fields
+        const viaGroup = modeRef.current === "cloud" && !!prev && !!priceGroupOf(prev) && priceGroupOf(it2) === priceGroupOf(prev) && groupPriceChanged(prev, it2);
+        // a cost cleared (it had one, now none) is not a group write: the item's own save clears it and the server spreads that
+        // to the group (catalog_set_group_price keeps a value it is not given — review of PR2 №2)
+        const cleared = !!prev && ((prev.costCents != null && it2.costCents == null) || (prev.vendorTaxBps != null && it2.vendorTaxBps == null) || (prev.markupBps != null && it2.markupBps == null));
+        const it = viaGroup && prev
+          ? { ...it2, priceCents: prev.priceCents, placeholder: prev.placeholder, ...(cleared ? {} : { costCents: prev.costCents, vendorTaxBps: prev.vendorTaxBps, markupBps: prev.markupBps }) }
+          : it2;
+        const groupUndo = viaGroup && prev
+          ? () => groupPriceWrite(cleared ? { ...prev, costCents: it2.costCents, vendorTaxBps: it2.vendorTaxBps, markupBps: it2.markupBps } : prev,
+              cleared ? { priceCents: it2.priceCents, placeholder: !!it2.placeholder } : { priceCents: it2.priceCents, placeholder: !!it2.placeholder, costCents: it2.costCents, vendorTaxBps: it2.vendorTaxBps, markupBps: it2.markupBps })
+          : null;
         // 19 §9: only the cost fields changed here go to the server — a phone without costs never erases them
         const costs = catalogCostChange(prev, it);
         // spec 36: the phone's own history row, shown at once (the server writes its own; the next read replaces the list)
-        const hist = dbRef.current.costsVisible === false ? null : localHistoryEntry(prev, it, uid(), new Date().toISOString());
+        const hist = !sees() ? null : localHistoryEntry(prev, it, uid(), new Date().toISOString());
         // РС-10: the price and markup change too (the card shows «было → стало» at once, offline as well)
         const now = new Date().toISOString();
-        const priceHist = dbRef.current.costsVisible === false ? [] : localPriceEntries(prev, it, uid, now, dbRef.current.me ?? undefined);
+        const priceHist = !sees() ? [] : localPriceEntries(prev, it, uid, now, dbRef.current.me ?? undefined);
         // on the phone: changed now, by me (the server writes its own); in the queue: never these columns
         const local: CatalogItem = { ...it, updatedAt: now, ...(dbRef.current.me ? { updatedBy: dbRef.current.me } : {}), ...(prev ? {} : { createdAt: now, ...(dbRef.current.me ? { createdBy: dbRef.current.me } : {}) }) };
-        return mutate(
+        const undoItem = mutate(
           "catalog.save",
           (d) => ({
             ...d,
@@ -2644,8 +2759,15 @@ export function StoreProvider({
             ...(hist ? { costHistory: [hist, ...(d.costHistory ?? [])] } : {}),
             ...(priceHist.length ? { priceHistory: [...priceHist, ...(d.priceHistory ?? [])] } : {}),
           }),
-          { k: "catalog.save", item: itemForSave(it), costs, ...withFields(prev, it) },
+          // #1958 (а): the cost goes over what the phone saw (catalog_set_item_costs), never over whatever is there
+          { k: "catalog.save", item: itemForSave(it), costs, ...withCostsSeen(prev, costs), ...withFields(prev, it) },
         );
+        if (!groupUndo) return undoItem;
+        return undoTogether([undoItem, groupUndo()]);
+      },
+      saveGroupPrice: (itemId, v) => {
+        const prev = dbRef.current.catalog.find((x) => x.id === itemId);
+        return prev ? groupPriceWrite(prev, v) : NO_UNDO;
       },
       saveSupplier: (x0) => {
         const x = cleanSupplier(x0);
@@ -2671,6 +2793,22 @@ export function StoreProvider({
         // «Отменить» (rule 5): the supplier and its items' new name, all or none (Б1)
         return undoTogether([undoSup, undoItems]);
       },
+      setSupplierTax: (id, taxBps) => {
+        const d0 = dbRef.current;
+        const x = (d0.suppliers ?? []).find((y) => y.id === id);
+        if (!x || !canSeeSuppliers(role) || !sees(d0) || d0.suppliersLegacy || x.taxBps === taxBps) return noop;
+        const seen = x.taxBps ?? null;
+        // the items that carry a cost follow the supplier at once (the server does the same in the transaction of the op: t95)
+        return mutate(
+          "supplier.tax",
+          (d) => ({
+            ...d,
+            suppliers: (d.suppliers ?? []).map((y) => (y.id === id ? { ...y, taxBps } : y)),
+            catalog: taxBps === undefined ? d.catalog : d.catalog.map((c) => (c.supplierId === id && c.costCents !== undefined ? { ...c, vendorTaxBps: taxBps } : c)),
+          }),
+          { k: "supplier.tax", supplierId: id, taxBps: taxBps ?? null, seenBps: seen },
+        );
+      },
       setSupplierActive: (id, active) => {
         const x = (dbRef.current.suppliers ?? []).find((y) => y.id === id);
         if (!x || !canSeeSuppliers(role) || dbRef.current.suppliersLegacy) return noop;
@@ -2681,7 +2819,7 @@ export function StoreProvider({
       makeJobOrders: (jobId) => {
         const d0 = dbRef.current;
         if (!canEditOrders(role) || d0.purchaseOrdersLegacy) return { ids: [], made: 0, undo: noop };
-        const groups = draftsForJob(d0, jobId, modulePurchaseLines(d0, jobId), d0.costsVisible !== false);
+        const groups = draftsForJob(d0, jobId, modulePurchaseLines(d0, jobId), keepCosts(d0));
         const job = d0.jobs.find((j) => j.id === jobId);
         const addr = job ? d0.properties.find((x) => x.id === job.propertyId) : undefined;
         const ids: ID[] = [];
@@ -2755,7 +2893,7 @@ export function StoreProvider({
       },
       loadCostHistory: (where) => {
         const cid = whoRef.current?.companyId;
-        if (modeRef.current !== "cloud" || !cid || !onlineRef.current || dbRef.current.costsVisible === false) return;
+        if (modeRef.current !== "cloud" || !cid || !onlineRef.current || !sees()) return;
         void loadCostHistory(cid, where)
           .then((rows) => {
             // another company signed in meanwhile: nothing
@@ -2767,7 +2905,7 @@ export function StoreProvider({
       },
       loadPriceHistory: (itemId) => {
         const cid = whoRef.current?.companyId;
-        if (modeRef.current !== "cloud" || !cid || !onlineRef.current || dbRef.current.costsVisible === false) return;
+        if (modeRef.current !== "cloud" || !cid || !onlineRef.current || !sees()) return;
         void loadPriceHistory(cid, itemId)
           .then((rows) => {
             if (whoRef.current?.companyId !== cid) return;
@@ -2781,7 +2919,7 @@ export function StoreProvider({
       applySupplierTax: (id) => {
         const d0 = dbRef.current;
         const x = (d0.suppliers ?? []).find((y) => y.id === id);
-        if (!x || x.taxBps === undefined || !canSeeSuppliers(role) || d0.costsVisible === false) return noop;
+        if (!x || x.taxBps === undefined || !canSeeSuppliers(role) || !sees(d0)) return noop;
         return saveItemsBoth(itemsWithOtherTax(d0, x).map((it) => ({ prev: it, next: { ...it, vendorTaxBps: x.taxBps } })));
       },
       saveCatalogItems: (items, opts) => {
@@ -2791,7 +2929,7 @@ export function StoreProvider({
         const undos = fresh.map((x) => cleanCardFields(cleanCatalogItem(x), dbRef.current.catalog.find((c) => c.id === x.id), dbRef.current)).map((it) => {
           const prev = dbRef.current.catalog.find((x) => x.id === it.id);
           // РС-10: a change of an item there (not onlyNew) shows its price / markup row at once too
-          const priceHist = onlyNew || dbRef.current.costsVisible === false ? [] : localPriceEntries(prev, it, uid, new Date().toISOString(), dbRef.current.me ?? undefined);
+          const priceHist = onlyNew || !sees() ? [] : localPriceEntries(prev, it, uid, new Date().toISOString(), dbRef.current.me ?? undefined);
           return mutate(
             "catalog.save",
             (d) => ({
@@ -2801,7 +2939,7 @@ export function StoreProvider({
             }),
             onlyNew
               ? { k: "catalog.save", item: itemForSave(it), onlyNew: true, costs: catalogCostChange(undefined, it) }
-              : { k: "catalog.save", item: itemForSave(it), costs: catalogCostChange(prev, it), ...withFields(prev, it) },
+              : { k: "catalog.save", item: itemForSave(it), costs: catalogCostChange(prev, it), ...withCostsSeen(prev, catalogCostChange(prev, it)), ...withFields(prev, it) },
           );
         });
         // all of them or none (DS §15.2)
@@ -2933,7 +3071,7 @@ export function StoreProvider({
         if (!e || !e.depositCents) return NO_UNDO;
         const job0 = jobOfEstimate(dbRef.current, id);
         const depInv = job0 ? dbRef.current.invoices.find((i) => i.jobId === job0.id && i.kind === "deposit") : undefined;
-        if (depInv) return recordPayment(depInv.id, depInv.totalCents - depInv.paidCents, method, undefined, fromClient);
+        if (depInv) return recordPayment(depInv.id, invoiceOwes(depInv), method, undefined, fromClient);
         const now = new Date().toISOString();
         const existingJob = jobOfEstimate(dbRef.current, id);
         const jobId = existingJob?.id ?? uid();
@@ -2965,7 +3103,7 @@ export function StoreProvider({
           },
         );
       },
-      resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : NO_UNDO),
+      resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed(appLangNow() ?? "en")) : NO_UNDO),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [db, mode, company, role, online, link, pendingQueue.length, unsentAll, removedKey, notSavedOnDevice, outbox, rejected, sendingId, syncError, loading, mutate, undoTogether, setRole, setQueue, refresh, flush, auth.userId],

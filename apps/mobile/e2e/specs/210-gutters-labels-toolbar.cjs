@@ -9,7 +9,7 @@
  * - the toolbar dropped at the top → it stands at the top.
  * Finds things by testID / id; waits on what it checks.
  */
-const { openProps, savedOnce, skipLength, sheetGone, openDsMenu } = require("../gutters.cjs");
+const { pickDsKind, openProps, savedOnce, skipLength, sheetGone, openDsMenu } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -56,7 +56,7 @@ exports.run = async (h) => {
   // no cloud when all is saved and sent (#1274, founder 12.11): the data is saved, nothing is drawn for it at the top
   await savedOnce(p);
   h.expect((await tid("draw-local").count()) === 0, "all saved: no save mark at the top");
-  h.expect((await tid("draw-accuracy").count()) === 0, "no «Примерно — не для резки» at the top (#681)");
+  h.expect((await tid("draw-accuracy").count()) === 0, "no «Примерно — не для резки» at the top (#681)"); // i18n-old: ok — checks the old words are gone
   // «Свойства» on the toolbar of the phone (#687)
   if (!wide) {
     h.expect((await tid("draw-props").count()) === 0 && (await tid("draw-tool-select").count()) === 0, "no «Свойства» and no «Выбрать» on the toolbar (a double tap opens the properties, #1273)");
@@ -88,6 +88,7 @@ exports.run = async (h) => {
   await tid("draw-tool-ds").getByRole("button").click();
   await p.mouse.click((x0 + x1) / 2, y0 + 2);
   await tid("attr-panel").waitFor({ timeout: 5000 });
+  await pickDsKind(p, "rectRibbed"); // a corrugated one has a fittings word by default (3 × A); a plain one none (#1776)
   if (!wide) await closeSheet();
   await waitFor(async () => (await svg().locator('[id^="lbl-ds:"]').count()) === 1, "its fittings word");
   await p.mouse.click(...(await centre(svg().locator('[id^="lbl-ds:"]').first())));
@@ -104,7 +105,10 @@ exports.run = async (h) => {
   await waitFor(async () => (await els()).filter((e) => e.kind === "downspout").length === 1, "one downspout in the store");
   if (!wide) await closeSheet();
 
-  // «Назад» / «Вперёд»
+  // «Назад» / «Вперёд»: the kind picked above goes back first (a plain one is bent on site: its 3 bends «AAA» stay over it,
+  // «Расход v2»), then the downspout
+  await tid("draw-undo").getByRole("button").click();
+  await waitFor(async () => (await els()).some((e) => e.kind === "downspout" && e.attrs?.dsStyle !== "corrugated") && (await svg().locator('[id^="lbl-ds:"]').evaluateAll((gs) => gs.map((g) => (g.textContent || "").trim()))).join() === "AAA", "«Назад»: the kind goes back (plain: its bends «AAA»)");
   await tid("draw-undo").getByRole("button").click();
   await waitFor(async () => (await svg().locator("circle").count()) === 0, "«Назад»: the downspout goes");
   await tid("draw-redo").getByRole("button").click();

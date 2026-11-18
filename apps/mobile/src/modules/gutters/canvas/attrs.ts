@@ -7,7 +7,7 @@
  * Changing a choice another one depends on (profile → size and hanger kit, material → gauge and finish, shape →
  * size and elbows, mount → the default kit, wall → the default wall kit) fixes the dependent fields in the same step.
  */
-import { DEFAULT_HANGER_KITS, DEFAULT_WALL_KIT_BY_WALL, DEFAULT_WALL_KITS, defaultHangerKit, GUTTER_MOUNTS, type DsBottomKind, type GutterMount, type GutterProfile } from "@octo/estimating-engine";
+import { DEFAULT_HANGER_KITS, DEFAULT_WALL_KIT_BY_WALL, DEFAULT_WALL_KITS, bendOf, defaultElbowsFor, defaultHangerKit, defaultOffsetsFor, GUTTER_MOUNTS, type DsBottomKind, type GutterMount, type GutterProfile } from "@octo/estimating-engine";
 import type { DrawnDownspout, DrawnRun } from "../geometry";
 import type { Choices } from "../settings";
 import { DENOM, MM_OF, MM_PER_IN, type LenUnit } from "./format";
@@ -66,9 +66,8 @@ export const DS_KINDS = [
 export type DsKind = (typeof DS_KINDS)[number];
 export const dsKindOf = (shape: string, style?: string): DsKind => DS_KINDS.find((x) => x.shape === shape && x.style === (style ?? "plain")) ?? DS_KINDS[0];
 /** elbow styles by shape; rect A/B, round by angle */
-export const ELBOW_STYLES: Record<(typeof DS_SHAPES)[number], readonly string[]> = { rect: ["A", "B"], round: ["45", "60", "75", "90"] };
-/** without `elbows` the engine counts 3 × A (П18.10) */
-export const DEFAULT_ELBOWS = 3;
+// a round elbow from 30° (spec 33-gutters-consumption §2.1 п.7)
+export const ELBOW_STYLES: Record<(typeof DS_SHAPES)[number], readonly string[]> = { rect: ["A", "B"], round: ["30", "45", "60", "75", "90"] };
 export const DS_BOTTOMS: readonly DsBottomKind[] = ["extension", "splash_block", "flex", "drain", "lower_roof", "none"];
 export const WALLS = ["wood", "stucco", "brick"] as const;
 export type Wall = (typeof WALLS)[number];
@@ -189,10 +188,11 @@ export function changeDs(a: DsAttrs, patch: Partial<DsAttrs>, ch?: Choices): DsA
   else if (ch && shapeChanged && n.wall !== undefined && !(WALLS as readonly string[]).includes(n.wall) && !WALLS.some((w) => wallKitsFor(shape, w).includes(n.wall!))) {
     n.wall = wallValue(shape, wallOf(a.shape, a.wall).wall, ch);
   }
-  // elbows of the other shape (A on a round one) become this shape's first style, the count stays
+  // elbows of the other shape (A on a round one) become this shape's default style (a round one 75°, «Расход v2»), the count stays
   if (n.elbows?.some((e) => !ELBOW_STYLES[shape].includes(e.style))) {
     const qty = n.elbows.reduce((s, e) => s + e.qty, 0);
-    n.elbows = [{ style: ELBOW_STYLES[shape][0]!, qty }];
+    const own = shape === "round" ? defaultElbowsFor({ shape: "round" })[0]?.style : undefined;
+    n.elbows = [{ style: own && ELBOW_STYLES.round.includes(own) ? own : ELBOW_STYLES[shape][0]!, qty }];
   }
   // a reducer goes to a smaller size of the same shape: another shape's size, its own or a larger one — gone
   if (n.reducers?.some((r) => !smallerSizes(shape, n.size).includes(r.to))) delete n.reducers;
@@ -204,24 +204,29 @@ export function changeDs(a: DsAttrs, patch: Partial<DsAttrs>, ch?: Choices): DsA
   return same(a, n) ? a : n;
 }
 
-/** elbows as the panel shows them: one style and a count (the engine's default 3 × A / 3 × 45° when unset) */
-export function elbowsOf(a: Pick<DsAttrs, "shape" | "elbows">): { style: string; qty: number } {
-  const shape = a.shape === "round" ? "round" : "rect";
-  const e = a.elbows?.[0];
-  return e ? { style: e.style, qty: a.elbows!.reduce((s, x) => s + x.qty, 0) } : { style: ELBOW_STYLES[shape][0]!, qty: DEFAULT_ELBOWS };
-}
-
-/** elbows by style (founder 08.11: «A 2 шт, B 1 шт»): every style of the shape, 0 where none; unset — the engine's default */
-export function elbowCounts(a: Pick<DsAttrs, "shape" | "elbows">): Record<string, number> {
+/**
+ * elbows by style (founder 08.11: «A 2 шт, B 1 шт»): every style of the shape, 0 where none. Unset — the engine's default by kind
+ * (`defaultElbowsFor`, #1776, «Расход v2»): a plain rectangular one bent on site 3 × A (the bends), a corrugated one 3 × A, a round
+ * one 1 × 75°
+ */
+export function elbowCounts(a: Pick<DsAttrs, "shape" | "dsStyle" | "elbows" | "elbowBend">): Record<string, number> {
   const shape = a.shape === "round" ? "round" : "rect";
   const out: Record<string, number> = Object.fromEntries(ELBOW_STYLES[shape].map((s) => [s, 0]));
-  if (!a.elbows) out[ELBOW_STYLES[shape][0]!] = DEFAULT_ELBOWS;
-  else for (const e of a.elbows) if (e.style in out) out[e.style] = (out[e.style] ?? 0) + e.qty;
+  for (const e of a.elbows ?? defaultElbowsFor({ shape, ...(a.dsStyle ? { dsStyle: a.dsStyle } : {}), ...(a.elbowBend ? { elbowBend: a.elbowBend } : {}) })) if (e.style in out) out[e.style] = (out[e.style] ?? 0) + e.qty;
   return out;
 }
 
+/**
+ * One style's count changed in the window: the patch. A downspout bent on site stays bent on site — its count is of bends
+ * (review of PR-1б: an elbow list without `elbowBend` reads as ready-made, `bendOf`, and the estimate would swap bends for parts).
+ */
+export function elbowPatch(a: Pick<DsAttrs, "shape" | "dsStyle" | "elbows" | "elbowBend">, style: string, qty: number): Pick<DsAttrs, "elbows" | "elbowBend"> {
+  const elbows = withElbowQty(a, style, qty);
+  return bendOf(a) === "field" ? { elbows, elbowBend: "field" } : { elbows };
+}
+
 /** one style's count changed: the list the engine reads (styles with 0 left out; all 0 — one style at 0, not the default) */
-export function withElbowQty(a: Pick<DsAttrs, "shape" | "elbows">, style: string, qty: number): NonNullable<DsAttrs["elbows"]> {
+export function withElbowQty(a: Pick<DsAttrs, "shape" | "dsStyle" | "elbows" | "elbowBend">, style: string, qty: number): NonNullable<DsAttrs["elbows"]> {
   const n = { ...elbowCounts(a), [style]: Math.max(0, Math.round(qty)) };
   const list = Object.entries(n).filter(([, q]) => q > 0).map(([s, q]) => ({ style: s, qty: q }));
   return list.length ? list : [{ style, qty: 0 }];
@@ -235,7 +240,7 @@ const sup = (n: number) => String(n).split("").map((d) => SUP[Number(d)] ?? d).j
  * (A 2 + B 1 → «AAB»); round ones by angle with the count small on top («45°²»); an offset — «O» and its inches small
  * on top («O⁴»), one per piece. Nothing — "".
  */
-export function dsCode(a: Pick<DsAttrs, "shape" | "elbows" | "offsets">): string {
+export function dsCode(a: Pick<DsAttrs, "shape" | "dsStyle" | "elbows" | "offsets" | "elbowBend">): string {
   const counts = elbowCounts(a);
   const round = a.shape === "round";
   let s = "";
@@ -243,7 +248,7 @@ export function dsCode(a: Pick<DsAttrs, "shape" | "elbows" | "offsets">): string
     if (q <= 0) continue;
     s += round ? `${style}°${q > 1 ? sup(q) : ""}` : style.repeat(q);
   }
-  for (const o of a.offsets ?? []) if (o.qty > 0) s += `O${sup(o.lengthIn)}`.repeat(o.qty);
+  for (const o of a.offsets ?? defaultOffsetsFor({ shape: round ? "round" : "rect" })) if (o.qty > 0) s += `O${sup(o.lengthIn)}`.repeat(o.qty);
   return s;
 }
 
@@ -291,8 +296,9 @@ export function smallerSizes(shape: string, size: string): string[] {
   return i > 0 ? list.slice(0, i) : [];
 }
 
-/** offsets the panel offers (founder 09.11: 1″ to 5″); what the engine does not stock (rule stdOffsetsIn) it marks custom */
-export const OFFSETS_IN = [1, 2, 3, 4, 5] as const;
+/** offsets the panel offers — the ones in stock (founder 16.11: «офсеты в наличии 1, 2, 4», Н4; the engine's `stdOffsetsIn`); any other
+ *  is typed in «Свой» and goes as custom */
+export const OFFSETS_IN = [1, 2, 4] as const;
 export const DS_HEADS = ["none", "funnel", "conductor"] as const;
 /** the panel's «Своя высота», feet: 0 = by the storey */
 export const MAX_DS_HEIGHT_FT = 60;

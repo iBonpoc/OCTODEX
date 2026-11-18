@@ -57,7 +57,7 @@ exports.run = async (h) => {
   }
   // nothing was edited: no toast about a count of downspouts, and «Назад» has nothing of the story button's to take back
   const toasts = await p.getByTestId("toast-text").locator("visible=true").allInnerTexts();
-  h.expect(!toasts.some((x) => /Водостоков|downspouts|bajantes/i.test(x)), `no toast «Водостоков стало N» after the story button (${JSON.stringify(toasts)})`);
+  h.expect(!toasts.some((x) => /Downspout стало|downspouts|bajantes/i.test(x)), `no toast «Downspout стало N» after the story button (${JSON.stringify(toasts)})`);
   await h.shot("story-back");
 
   // a gutter goes to another story by its properties (the «Этаж» row): the picked one → 2, the button follows; «Назад» takes it back

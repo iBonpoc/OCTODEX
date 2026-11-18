@@ -42,6 +42,11 @@ function sha1(bytes: Uint8Array): Uint8Array {
   return out;
 }
 
+/** SHA-1 of a text (UTF-8) as lowercase hex — a stable key on every phone (the price group's key, #1913); never for anything secret */
+export function sha1Hex(text: string): string {
+  return Array.from(sha1(new TextEncoder().encode(text)), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 const HEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** UUID v5 of `name` in `namespace` (a UUID); a namespace that is not a UUID throws (a bug, never data) */

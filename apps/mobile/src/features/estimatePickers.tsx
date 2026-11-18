@@ -49,7 +49,7 @@ export function CatalogPicker({ visible, onClose, onPick, exclude }: { visible: 
                 {i > 0 ? <Divider /> : null}
                 <ListRow
                   title={it.name}
-                  subtitle={`${t(kindLabel(it.kind))} · ${money(itemPrice(it, db.catalog))} / ${it.unit}${it.placeholder ? ` · ${t("cat.placeholder")}` : ""}`}
+                  subtitle={`${t(kindLabel(it.kind))} · ${money(itemPrice(it, db.catalog))} / ${it.unit}`}
                   onPress={() => onPick(it)}
                 />
               </View>

@@ -116,6 +116,11 @@ export interface MeasuredDownspout {
   elbows?: { style: string; qty: number }[];
   /** offsets, inches: standard ones by the rules (1, 2, 4); anything else is a custom part */
   offsets?: { lengthIn: number; qty: number }[];
+  /**
+   * The elbows are bent on site (`field`) or ready-made (`ready`) — one for the whole downspout (spec 33-gutters-consumption §2.1).
+   * Unset: `bendOf` decides (a plain rectangular one with no elbows of its own is bent on site). Old phones do not know it.
+   */
+  elbowBend?: ElbowBend;
   /** size changes on the way down, e.g. 3x4 → 2x3 */
   reducers?: { to: string; qty: number }[];
   bottom: { kind: DsBottomKind; lengthIn?: number; color?: string; /** drain pipe size, inches */ pipe?: string };
@@ -132,6 +137,8 @@ export interface MeasuredDownspout {
   /** half round: an end section with an outlet at this end of the run replaces the end cap and the outlet */
   endOutlet?: "start" | "end";
 }
+
+export type ElbowBend = "field" | "ready";
 
 export interface MeasuredChain {
   id: string;
@@ -211,10 +218,23 @@ export interface GutterRules {
   touchUpPaint: boolean;
   /** end caps of these profiles come left and right */
   sidedCapProfiles: string[];
-  /** elbows of a downspout without its own (a rectangular one: A, B) */
+  /** elbows of a corrugated rectangular downspout without its own (A, B): founder 16.11 «у ребристого 3 штуки A» (#1776) */
   defaultElbows: { style: string; qty: number }[];
-  /** …of a round one (45°…90°; «A» is not a round elbow, #871): not set — as many 45° as `defaultElbows` has elbows */
-  defaultElbowsRound?: { style: string; qty: number }[];
+  /** …of a plain (smooth) rectangular one: founder 16.11 «у прямого водостока стандартно колен 0» — it is bent on site (#1776) */
+  defaultElbowsPlain: { style: string; qty: number }[];
+  /** …of a round one (30°…90°; «A» is not a round elbow, #871): founder 16.11 «колено только одно», 75° or 45° (§2.15 №2) */
+  defaultElbowsRound: { style: string; qty: number }[];
+  /** offsets of a round one without its own: founder 16.11 «и офсет тоже один», 2″ (§2.15 №2) */
+  defaultOffsetsRound: { lengthIn: number; qty: number }[];
+  /** bends of a downspout bent on site when it has no elbows of its own (spec §2.1, Н2) */
+  fieldBends: number;
+  /** downspout one bend on site takes, inches, by its size «2x3» (founder 16.11 «зависит от размера водостока», §2.15 №3, Н7) */
+  bendInBySize: Record<string, number>;
+  /** …of a size not in the table */
+  bendInDefault: number;
+  /** a downspout's estimate line is rounded up to this many feet, each downspout on its own; the sticks are not (Д1, Н8; 1 — whole
+   *  feet, 0 — as drawn) */
+  dsRoundUpFt: number;
   /** offsets sold ready-made; others are marked custom */
   stdOffsetsIn: number[];
   /** advice: max gutter length one downspout drains */
@@ -257,11 +277,21 @@ export const DEFAULT_GUTTER_RULES: GutterRules = {
   touchUpPaint: true,
   sidedCapProfiles: ["k", "fascia"],
   defaultElbows: [{ style: "A", qty: 3 }],
+  defaultElbowsPlain: [],
+  defaultElbowsRound: [{ style: "75", qty: 1 }],
+  defaultOffsetsRound: [{ lengthIn: 2, qty: 1 }],
+  fieldBends: 3,
+  bendInBySize: { "2x3": 6, "3x4": 6, "4x5": 6 },
+  bendInDefault: 6,
+  dsRoundUpFt: 10,
   stdOffsetsIn: [1, 2, 4],
   maxRunPerDownspoutIn: 480,
   expansionJointIn: 600,
   expansionJointPart: false,
 };
+
+/** the steps the estimate's downspout may be rounded up to, feet (Н8) */
+export const DS_ROUND_STEPS_FT: readonly number[] = [1, 5, 10];
 
 /** Company rule overrides: kit maps merge with the defaults by id, the wall table by shape and wall, joints by field. */
 export type GutterRulesOverride = Partial<Omit<GutterRules, "joints">> & {
@@ -295,6 +325,7 @@ export function resolveGutterRules(over?: GutterRulesOverride): GutterRules {
       Object.entries({ ...d.kitLengthIn, ...o.kitLengthIn }).map(([part, t]) => [part, Object.fromEntries(Object.entries(t ?? {}).filter(([, v]) => typeof v === "string" && v.trim() !== ""))]),
     ),
     woodScrew: { ...d.woodScrew, ...o.woodScrew },
+    bendInBySize: { ...d.bendInBySize, ...o.bendInBySize },
   };
   r.woodScrew = { ...r.woodScrew, washer: r.woodScrew.washer === true };
   if (typeof r.sealantByColor !== "boolean") r.sealantByColor = d.sealantByColor;
@@ -306,6 +337,17 @@ export function resolveGutterRules(over?: GutterRulesOverride): GutterRules {
   if (!Number.isInteger(r.wasteFt) || r.wasteFt < 0) r.wasteFt = d.wasteFt;
   if (!Number.isInteger(r.cutCornerAllowanceIn) || r.cutCornerAllowanceIn < 0) r.cutCornerAllowanceIn = d.cutCornerAllowanceIn;
   if (!Number.isInteger(r.cutCornerOutAllowanceIn) || r.cutCornerOutAllowanceIn < 0) r.cutCornerOutAllowanceIn = d.cutCornerOutAllowanceIn;
+  // whole and ≥ 0, else the default (a blank field is 0 — for these 0 is a real choice: no bends, nothing eaten, no rounding)
+  const wholeOr = (v: unknown, def: number) => (typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : def);
+  r.fieldBends = wholeOr(r.fieldBends, d.fieldBends);
+  r.bendInDefault = wholeOr(r.bendInDefault, d.bendInDefault);
+  // the estimate's downspout step is one of 1 / 5 / 10 ft (Н8): a blank field (0) or anything else never stops the rounding silently
+  if (!DS_ROUND_STEPS_FT.includes(r.dsRoundUpFt)) r.dsRoundUpFt = d.dsRoundUpFt;
+  r.bendInBySize = Object.fromEntries(Object.entries(r.bendInBySize).map(([k, v]) => [k, wholeOr(v, d.bendInBySize[k] ?? r.bendInDefault)]));
+  const list = <T extends { qty: number }>(v: unknown, def: T[], ok: (x: T) => boolean): T[] =>
+    Array.isArray(v) && v.every((x) => !!x && typeof x === "object" && Number.isInteger((x as T).qty) && (x as T).qty >= 0 && ok(x as T)) ? (v as T[]) : def;
+  r.defaultElbowsRound = list(r.defaultElbowsRound, d.defaultElbowsRound, (e) => typeof e.style === "string" && e.style.trim() !== "");
+  r.defaultOffsetsRound = list(r.defaultOffsetsRound, d.defaultOffsetsRound, (o) => Number.isInteger(o.lengthIn) && o.lengthIn > 0);
   return r;
 }
 
@@ -325,6 +367,41 @@ export interface PartQty {
   kind: "material" | "labor";
   /** what to look up in the price list (profile, size, material, color, …) */
   attrs: Record<string, string>;
+  /**
+   * Why the engine added it (spec 33-gutters-consumption §2.13, «ничего молча», founder 16.11): the rule, its numbers and the company
+   * setting where the number changes. Every part the engine derived itself has it; a part of the drawing (a gutter, a downspout, an
+   * elbow, …) has none. Never in `attrs` — those pick the price item. The screen writes the words (i18n `mod.gutters.why.<rule>`).
+   */
+  why?: PartWhy;
+  /** the gutter stock line (coil or sections): its inches by where they come from — drawn, corner allowances, reserve (§2.12) */
+  coilBreakdown?: CoilBreakdown;
+}
+
+/** the closed list of reasons (spec 33-gutters-consumption §2.13: a new rule is a row there first) */
+export const WHY_RULES = [
+  "sealant_points", "solder_points", "flux_per_solder", "gas_per_points", "abrasive_per_points", "soda_per_job",
+  "rivets_per_joints", "ds_joint_screws", "joint_screws", "kit_screws", "kit_anchors", "hangers_spacing", "kit_per_hanger",
+  "ds_straps_per_ds", "flat_coil_straps", "touch_up_per_color", "corner_allowance", "coil_reserve", "bend_in_place",
+  "ds_round_up", "ds_sticks", "slip_joints", "outlet_per_ds", "endcap_free_end", "splash_guard_inside", "expansion_joint",
+  "guard_pieces", "adapter_per_bottom",
+] as const;
+export type WhyRule = (typeof WHY_RULES)[number];
+export interface PartWhy {
+  rule: WhyRule;
+  /** the numbers of the text: lengths in inches (`…In`) or feet (`…Ft`) as the name says, counts whole */
+  params: Record<string, string | number>;
+  /** the company setting's field where the number changes */
+  setting?: string;
+  /** one line, more rules (a #8 screw of the downspout joints and of the straps): each with its own numbers */
+  also?: PartWhy[];
+}
+export interface CoilBreakdown {
+  /** the runs of this stock as drawn */
+  drawnIn: number;
+  /** the corner allowances (cut on site) of this stock */
+  cornersIn: number;
+  /** the reserve */
+  wasteIn: number;
 }
 
 export type GutterAdvice =
@@ -398,12 +475,41 @@ function kitPart(p: KitPart, ctx: KitCtx, rules: Pick<GutterRules, "woodScrew" |
   return { key, attrs: { part: p.part, ...attrs } };
 }
 
+/** a rate, not a count: the same on every addition (a «per…», a spacing, a length of a piece) — never summed */
+const RATE = /^(per|per[A-Z]\w*|spacingIn|stickIn|stepFt|everyIn|pieceIn|reserveFt|sectionIn|atEnds|outIn|inIn)$/;
+/** the same rule on the same line: counts add up; rates and words must be equal, else it is another group of the rule */
+function mergeWhy(into: PartWhy | undefined, w: PartWhy | undefined): PartWhy | undefined {
+  if (!w) return into;
+  const copy = (x: PartWhy): PartWhy => ({ ...x, params: { ...x.params } });
+  if (!into) return copy(w);
+  const fits = (x: PartWhy) =>
+    x.rule === w.rule && x.setting === w.setting &&
+    Object.entries(w.params).every(([k, v]) => !(k in x.params) || ((typeof v === "number" && typeof x.params[k] === "number" && !RATE.test(k)) || x.params[k] === v));
+  const t = [into, ...(into.also ?? [])].find(fits);
+  if (!t) {
+    (into.also ??= []).push(copy(w));
+    return into;
+  }
+  for (const [k, v] of Object.entries(w.params)) {
+    const c = t.params[k];
+    t.params[k] = typeof v === "number" && typeof c === "number" && !RATE.test(k) ? c + v : (c ?? v);
+  }
+  return into;
+}
+
+/** the totals of a rule added once at the end (tubes, pounds) and its setting */
+const withParams = (w: PartWhy | undefined, more: Record<string, number>, setting?: string): PartWhy | undefined =>
+  w ? { ...w, params: { ...w.params, ...more }, ...(setting ? { setting } : {}) } : undefined;
+
 class Acc {
   private m = new Map<string, PartQty & { _q: Dec }>();
-  add(p: Omit<PartQty, "qty">, q: DecLike) {
+  add(p: Omit<PartQty, "qty" | "why">, q: DecLike, why?: PartWhy) {
     const cur = this.m.get(p.key);
-    if (cur) cur._q = cur._q.add(dec(q));
-    else this.m.set(p.key, { ...p, qty: "", _q: dec(q) });
+    if (cur) {
+      cur._q = cur._q.add(dec(q));
+      const w = mergeWhy(cur.why, why);
+      if (w) cur.why = w;
+    } else this.m.set(p.key, { ...p, qty: "", _q: dec(q), ...(why ? { why: mergeWhy(undefined, why)! } : {}) });
   }
   list(): PartQty[] {
     const order = (s: GutterSection) => GUTTER_SECTIONS.indexOf(s);
@@ -460,7 +566,61 @@ export function purchaseQty(qty: DecLike, packSize: DecLike): Dec {
  * (a part, its quantity, an elbow rule — as #871 did). Not for a change in the core's money (a line, a discount): that is
  * `ENGINE_VERSION`, and it must not mark every estimate as «расчёт изменился». Estimates remember it in their lines.
  */
-export const GUTTER_PARTS_VERSION = "3"; // 3: the waste is a fixed 10 ft for every gutter stock by default, #1355; 2: waste 10% by default and a separate allowance for an outside corner (14″), #1355
+export const GUTTER_PARTS_VERSION = "5"; // 5: «Расход v2» PR-1б — a plain rectangular downspout bent on site (3 bends, +6″ each, «гиб по месту»), a round one 1 × 75° and a 2″ offset, the estimate's downspout rounded up to 10 ft each (spec 33-gutters-consumption §2.1, §2.15 №1–6); 4: a plain rectangular downspout has no elbows by default, a corrugated one 3 × A, #1776; 3: the waste is a fixed 10 ft for every gutter stock by default, #1355; 2: waste 10% by default and a separate allowance for an outside corner (14″), #1355
+
+/**
+ * How a downspout's elbows are made (spec 33-gutters-consumption §2.1 п.2, founder 16.11 «гнут по месту только гладкий
+ * прямоугольный»): its own `elbowBend`; else bent on site when it is rectangular, explicitly plain and has no elbows of its own;
+ * else ready-made — an old drawing without `dsStyle` and elbows set by hand keep their parts (rule 16).
+ */
+export function bendOf(ds: Pick<MeasuredDownspout, "shape" | "dsStyle" | "elbows" | "elbowBend">): ElbowBend {
+  if (ds.elbowBend === "field" || ds.elbowBend === "ready") return ds.elbowBend;
+  return ds.shape === "rect" && ds.dsStyle === "plain" && ds.elbows === undefined ? "field" : "ready";
+}
+
+/**
+ * The elbows a downspout gets when it has none of its own (#1776, founder 16.11; §2.1, §2.15 №2): one bent on site — the
+ * company's bends (3) as «A», a style the drawing shows; a corrugated rectangular one — 3 × A ready; a plain rectangular one
+ * made ready or without a kind — none; a round one — 1 × 75°. The app reads its default from here: one rule, not two copies.
+ */
+export function defaultElbowsFor(ds: Pick<MeasuredDownspout, "shape" | "dsStyle" | "elbowBend">, rules: Pick<GutterRules, "defaultElbows" | "defaultElbowsPlain" | "defaultElbowsRound" | "fieldBends"> = DEFAULT_GUTTER_RULES): { style: string; qty: number }[] {
+  if (ds.shape === "round") return rules.defaultElbowsRound;
+  if (bendOf({ ...ds, elbows: undefined }) === "field") return rules.fieldBends > 0 ? [{ style: "A", qty: rules.fieldBends }] : [];
+  return ds.dsStyle === "corrugated" ? rules.defaultElbows : rules.defaultElbowsPlain;
+}
+
+/** The offsets a downspout gets when it has none of its own: a round one — 1 × 2″ (§2.15 №2), others none. */
+export function defaultOffsetsFor(ds: Pick<MeasuredDownspout, "shape">, rules: Pick<GutterRules, "defaultOffsetsRound"> = DEFAULT_GUTTER_RULES): { lengthIn: number; qty: number }[] {
+  return ds.shape === "round" ? rules.defaultOffsetsRound : [];
+}
+
+/**
+ * What bending on site does to a downspout (§2.1 п.3, §2.2, Д6, Д7, Р4): each elbow is one bend, each offset two bends and its
+ * own length; each bend takes the company's inches for the size. Ready-made elbows — nothing (they are parts).
+ */
+export function fieldBendOf(ds: Pick<MeasuredDownspout, "shape" | "size" | "dsStyle" | "elbows" | "offsets" | "elbowBend">, rules: Pick<GutterRules, "defaultElbows" | "defaultElbowsPlain" | "defaultElbowsRound" | "defaultOffsetsRound" | "fieldBends" | "bendInBySize" | "bendInDefault"> = DEFAULT_GUTTER_RULES): { bends: number; perBendIn: number; offsetIn: number; addedIn: number } {
+  // own keys only: a size like «constructor» never reads the object's prototype (as catalogMatch, security check C3 №5)
+  const perBendIn = Object.prototype.hasOwnProperty.call(rules.bendInBySize, ds.size) ? rules.bendInBySize[ds.size]! : rules.bendInDefault;
+  if (bendOf(ds) !== "field") return { bends: 0, perBendIn, offsetIn: 0, addedIn: 0 };
+  let bends = 0;
+  let offsetIn = 0;
+  // a count or a length that is not a number is none (an old or broken record never gives NaN inches)
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.max(0, v) : 0);
+  for (const e of ds.elbows ?? defaultElbowsFor(ds, rules)) bends += num(e.qty);
+  for (const o of ds.offsets ?? defaultOffsetsFor(ds, rules)) {
+    const q = num(o.qty);
+    if (q <= 0) continue;
+    bends += 2 * q;
+    offsetIn += num(o.lengthIn) * q;
+  }
+  return { bends, perBendIn, offsetIn, addedIn: bends * perBendIn + offsetIn };
+}
+
+/** a downspout's estimate length: rounded up to the step, inches (Д1); a step of 0 or less — as it is */
+export function dsRoundedIn(lengthIn: number, stepFt: number): number {
+  const step = stepFt * 12;
+  return step > 0 ? Math.ceil(lengthIn / step) * step : lengthIn;
+}
 
 export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOverride): GutterPartsResult {
   const rules = resolveGutterRules(over);
@@ -492,6 +652,13 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
   /* joints: rivets by metal and color, sealant or solder points, touch-up colors */
   const sealantPts = new Map<string, number>();
   let solderPts = 0;
+  // where the points of each tube colour (and of the solder) come from, for its «why» (§2.13): joints by kind
+  const sealantWhy = new Map<string, PartWhy>();
+  let solderWhy: PartWhy | undefined;
+  const JW: Record<JointKind, [string, string]> = {
+    section: ["sections", "perSection"], endcap: ["endcaps", "perEndcap"], outlet: ["outlets", "perOutlet"], ds: ["dsJoints", "perDsJoint"],
+    corner_prefab: ["prefabCorners", "perPrefabCorner"], corner_cut: ["cutCorners", "perCutCorner"], corner_strip: ["stripCorners", "perStripCorner"],
+  } as Record<JointKind, [string, string]>;
   const paintColors = new Set<string>();
   const joint = (kind: JointKind, s: { material: string; finish?: string; color?: string }, n = 1) => {
     if (n <= 0) return;
@@ -499,20 +666,35 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     const finish = painted(s) ? "painted" : "mill";
     const metal = metalOf(s.material);
     const color = finish === "painted" && s.color ? s.color : "-";
+    const [cnt, per] = JW[kind] ?? [`${kind}s`, `per_${kind}`];
     if (kind === "ds" && rules.dsJoin === "screw") {
-      acc.add({ key: "screw.8x05", section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "screw", screw: "8x0.5" } }, j.rivets * n);
+      acc.add({ key: "screw.8x05", section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "screw", screw: "8x0.5" } }, j.rivets * n,
+        { rule: "ds_joint_screws", params: { joints: n, perJoint: j.rivets, screws: j.rivets * n }, setting: "dsJoin" });
     } else if (j.rivets > 0) {
-      acc.add({ key: `rivet.42.${metal}.${finish}.${color}`, section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "rivet", rivet: "42", material: metal, finish, ...(color !== "-" ? { color } : {}) } }, j.rivets * n);
+      acc.add({ key: `rivet.42.${metal}.${finish}.${color}`, section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "rivet", rivet: "42", material: metal, finish, ...(color !== "-" ? { color } : {}) } }, j.rivets * n,
+        { rule: "rivets_per_joints", params: { [cnt]: n, [per]: j.rivets, rivets: j.rivets * n }, setting: "joints" });
     }
-    if (rules.solderedMaterials.includes(s.material)) solderPts += j.sealant * n;
-    else if (j.sealant > 0) {
+    if (rules.solderedMaterials.includes(s.material)) {
+      solderPts += j.sealant * n;
+      if (j.sealant > 0) solderWhy = mergeWhy(solderWhy, { rule: "solder_points", params: { [cnt]: n, [per]: j.sealant, points: j.sealant * n } });
+    } else if (j.sealant > 0) {
       const sc = rules.sealantByColor ? color : "-";
       sealantPts.set(sc, (sealantPts.get(sc) ?? 0) + j.sealant * n);
+      sealantWhy.set(sc, mergeWhy(sealantWhy.get(sc), { rule: "sealant_points", params: { [cnt]: n, [per]: j.sealant, points: j.sealant * n } })!);
     }
     if (j.paint && finish === "painted" && s.color) paintColors.add(s.color);
   };
 
-  const kitParts = (parts: KitPart[], section: GutterSection, n: DecLike, ctx: KitCtx, strips?: Map<string, { attrs: Record<string, string>; inches: Dec }>, dsId?: string) => {
+  /** the reason of a kit's part: its main piece by the kit's own rule, a screw / an anchor by the pieces it fastens, the rest one per piece */
+  type KitHost = { main: (n: number) => PartWhy; host: string; wall?: string };
+  const kitWhy = (p: KitPart, n: number, h: KitHost): PartWhy => {
+    if (p.use === "both" || p.part === "hanger") return h.main(n * p.per);
+    // only the wood screw is the company's choice (woodScrew); a #8 is not
+    if (p.part === "screw") return { rule: "kit_screws", params: { part: h.host, screw: p.attrs?.screw ?? "-", units: n, perUnit: p.per, screws: n * p.per }, ...(p.attrs?.screw === WOOD_SCREW ? { setting: "woodScrew" } : {}) };
+    if (p.part === "anchor") return { rule: "kit_anchors", params: { wall: h.wall ?? "-", units: n, perUnit: p.per, anchors: n * p.per }, setting: "anchor" };
+    return { rule: "kit_per_hanger", params: { part: p.part, hangers: n, per: p.per } };
+  };
+  const kitParts = (parts: KitPart[], section: GutterSection, n: DecLike, ctx: KitCtx, strips?: Map<string, { attrs: Record<string, string>; inches: Dec; straps: number; perStrapIn: number }>, dsId?: string, host?: KitHost) => {
     for (const p of parts) {
       const { key, attrs } = kitPart(p, ctx, rules);
       if (p.stripInBySize) {
@@ -523,21 +705,27 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
         }
         const cur = strips.get(key);
         const inches = dec(per).mul(p.per).mul(dec(n));
-        if (cur) cur.inches = cur.inches.add(inches);
-        else strips.set(key, { attrs, inches });
+        const straps = dec(n).mul(p.per).toNumber();
+        if (cur) { cur.inches = cur.inches.add(inches); cur.straps += straps; }
+        else strips.set(key, { attrs, inches, straps, perStrapIn: per });
         continue;
       }
-      acc.add({ key, section: CONSUMABLE_PARTS.has(p.part) ? "consumables" : section, unit: "ea", use: p.use ?? "purchase", kind: "material", attrs }, dec(n).mul(p.per));
+      acc.add({ key, section: CONSUMABLE_PARTS.has(p.part) ? "consumables" : section, unit: "ea", use: p.use ?? "purchase", kind: "material", attrs }, dec(n).mul(p.per), host ? kitWhy(p, dec(n).toNumber(), host) : undefined);
     }
   };
 
   /* gutter by stock: the client sees the installed length; the supplier gets length + corners + waste */
-  const purchaseIn = new Map<string, { stock: GutterStock; inches: Dec }>();
-  const addPurchase = (s: GutterStock, inches: DecLike) => {
+  // by stock: the drawn length, the corner allowances (how many outside / inside, of how much) and the runs — the line's breakdown (§2.12)
+  type Buy = { stock: GutterStock; inches: Dec; drawnIn: number; cornersIn: number; runs: number; outN: number; inN: number };
+  const purchaseIn = new Map<string, Buy>();
+  const addPurchase = (s: GutterStock, inches: DecLike, from: "run" | "out" | "in") => {
     const k = stockKey(s);
-    const cur = purchaseIn.get(k);
-    if (cur) cur.inches = cur.inches.add(dec(inches));
-    else purchaseIn.set(k, { stock: s, inches: dec(inches) });
+    const cur = purchaseIn.get(k) ?? { stock: s, inches: dec(0), drawnIn: 0, cornersIn: 0, runs: 0, outN: 0, inN: 0 };
+    purchaseIn.set(k, cur);
+    cur.inches = cur.inches.add(dec(inches));
+    const n = dec(inches).toNumber();
+    if (from === "run") { cur.drawnIn += n; cur.runs += 1; }
+    else { cur.cornersIn += n; if (from === "out") cur.outN += 1; else cur.inN += 1; }
   };
 
   // ends replaced by an end section with an outlet (half round "D")
@@ -557,11 +745,11 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
   for (const r of input.runs) {
     const len = dec(r.lengthIn);
     acc.add({ key: `gutter.${stockKey(r)}`, section: "gutter", unit: "ft", use: "estimate", kind: "material", attrs: stockAttrs(r) }, ft(len));
-    addPurchase(r, len);
+    addPurchase(r, len, "run");
     if (!rules.seamless) {
       const joins = Math.max(Math.ceil(r.lengthIn / rules.sectionLengthIn) - 1, 0);
       if (joins > 0) {
-        acc.add({ key: `slipjoint.${stockKey(r)}`, section: "corners_caps", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(r), part: "slip_joint" } }, joins);
+        acc.add({ key: `slipjoint.${stockKey(r)}`, section: "corners_caps", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(r), part: "slip_joint" } }, joins, { rule: "slip_joints", params: { sections: joins + 1, sectionIn: rules.sectionLengthIn, joints: joins }, setting: "sectionLengthIn" });
         joint("section", r, joins);
       }
     }
@@ -574,9 +762,9 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
         // standing outside and facing the house: with the house on the right of the drawing direction,
         // the start of the run is on your right (right cap) and the end on your left; mirrored for the house on the left
         const side = (i === 0) === (r.houseSide === "R") ? "R" : "L";
-        acc.add({ key: `endcap.${side}.${stockKey(r)}`, section: "corners_caps", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(r), part: "end_cap", side } }, 1);
+        acc.add({ key: `endcap.${side}.${stockKey(r)}`, section: "corners_caps", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(r), part: "end_cap", side } }, 1, { rule: "endcap_free_end", params: { side, ends: 1 } });
       } else {
-        acc.add({ key: `endcap.-.${stockKey(r)}`, section: "corners_caps", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(r), part: "end_cap" } }, 1);
+        acc.add({ key: `endcap.-.${stockKey(r)}`, section: "corners_caps", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(r), part: "end_cap" } }, 1, { rule: "endcap_free_end", params: { side: "-", ends: 1 } });
       }
       joint("endcap", r);
     });
@@ -585,12 +773,15 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     const kit = rules.hangerKits[r.hanger];
     const spacing = [r.hangerSpacingIn, rules.hangerSpacingIn[r.hanger], kit?.spacingIn].find(okPos) ?? 24;
     const hangers = len.gt(0) ? (rules.hangerAtEnds ? len.div(spacing).floor().add(1) : len.div(spacing).ceil()) : dec(0);
-    if (kit) kitParts(kit.parts, "fasteners", hangers, { gutter: r, kitId: r.hanger });
+    // rounded on every run: the line is the sum of the runs' own counts — `runs` says how many, `hangers` is the line (never recount it)
+    const hangerWhy = (h: number): PartWhy => ({ rule: "hangers_spacing", params: { runs: 1, lengthIn: r.lengthIn, spacingIn: spacing, atEnds: rules.hangerAtEnds ? 1 : 0, hangers: h }, setting: "hangerSpacingIn" });
+    const hn = hangers.toNumber();
+    if (kit) kitParts(kit.parts, "fasteners", hangers, { gutter: r, kitId: r.hanger }, undefined, undefined, { main: hangerWhy, host: "hanger" });
     else {
       advice.push({ code: "hanger_kit_unknown", runId: r.id, hanger: r.hanger });
-      acc.add({ key: `hanger.${seg(r.hanger)}.${r.profile}.${r.size}`, section: "fasteners", unit: "ea", use: "both", kind: "material", attrs: { part: "hanger", hanger: r.hanger, profile: r.profile, size: r.size } }, hangers);
+      acc.add({ key: `hanger.${seg(r.hanger)}.${r.profile}.${r.size}`, section: "fasteners", unit: "ea", use: "both", kind: "material", attrs: { part: "hanger", hanger: r.hanger, profile: r.profile, size: r.size } }, hangers, hangerWhy(hn));
     }
-    if (r.wedges) acc.add({ key: `wedge.${r.profile}.${r.size}`, section: "fasteners", unit: "ea", use: "purchase", kind: "material", attrs: { part: "wedge", profile: r.profile, size: r.size } }, hangers);
+    if (r.wedges) acc.add({ key: `wedge.${r.profile}.${r.size}`, section: "fasteners", unit: "ea", use: "purchase", kind: "material", attrs: { part: "wedge", profile: r.profile, size: r.size } }, hangers, { rule: "kit_per_hanger", params: { part: "wedge", hangers: hn, per: 1 } });
 
     if (r.guardsIn && r.guardsIn > 0) {
       const g = Math.min(r.guardsIn, r.lengthIn);
@@ -599,8 +790,9 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
       const gk = rules.guardKits[type];
       if (gk && okPos(gk.pieceIn)) {
         const pieces = Math.ceil(g / gk.pieceIn);
-        acc.add({ key: `guardpiece.${type}.${r.profile}.${r.size}`, section: "guards", unit: "ea", use: "purchase", kind: "material", attrs: { part: "guard", guard: type, profile: r.profile, size: r.size, lengthIn: String(gk.pieceIn) } }, pieces);
-        kitParts(gk.parts, "guards", pieces, { gutter: r });
+        const guardWhy = (n: number): PartWhy => ({ rule: "guard_pieces", params: { runs: 1, coveredIn: g, pieceIn: gk.pieceIn, pieces: n } });
+        acc.add({ key: `guardpiece.${type}.${r.profile}.${r.size}`, section: "guards", unit: "ea", use: "purchase", kind: "material", attrs: { part: "guard", guard: type, profile: r.profile, size: r.size, lengthIn: String(gk.pieceIn) } }, pieces, guardWhy(pieces));
+        kitParts(gk.parts, "guards", pieces, { gutter: r }, undefined, undefined, { main: guardWhy, host: "guard" });
       } else advice.push({ code: "guard_kit_unknown", runId: r.id, guard: type });
     }
 
@@ -613,7 +805,7 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     if (r.material.startsWith("alu") && r.lengthIn > rules.expansionJointIn) {
       const n = Math.ceil(r.lengthIn / rules.expansionJointIn) - 1;
       advice.push({ code: "expansion_joint", runId: r.id, joints: n });
-      if (rules.expansionJointPart) acc.add({ key: `expjoint.${stockKey(r)}`, section: "corners_caps", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(r), part: "expansion_joint" } }, n);
+      if (rules.expansionJointPart) acc.add({ key: `expjoint.${stockKey(r)}`, section: "corners_caps", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(r), part: "expansion_joint" } }, n, { rule: "expansion_joint", params: { runs: 1, lengthIn: r.lengthIn, everyIn: rules.expansionJointIn, joints: n }, setting: "expansionJointIn" });
     }
   }
 
@@ -624,55 +816,64 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     } else {
       if (c.method === "strip") acc.add({ key: `stripmiter.${stockKey(c)}`, section: "corners_caps", unit: "ea", use: "purchase", kind: "material", attrs: { ...stockAttrs(c), part: "strip_miter" } }, 1);
       acc.add({ key: "labor.corner_cut", section: "labor", unit: "ea", use: "estimate", kind: "labor", attrs: { work: "corner_cut" } }, 1);
-      addPurchase(c, c.kind === "out" ? rules.cutCornerOutAllowanceIn : rules.cutCornerAllowanceIn); // an outside corner takes more than an inside one or a bay (#1355)
+      addPurchase(c, c.kind === "out" ? rules.cutCornerOutAllowanceIn : rules.cutCornerAllowanceIn, c.kind === "out" ? "out" : "in"); // an outside corner takes more than an inside one or a bay (#1355)
       joint(c.method === "strip" ? "corner_strip" : "corner_cut", c);
     }
-    if (c.splashGuard) acc.add({ key: `splashguard.${c.profile}.${c.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { part: "splash_guard", profile: c.profile, size: c.size } }, 1);
+    if (c.splashGuard) acc.add({ key: `splashguard.${c.profile}.${c.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { part: "splash_guard", profile: c.profile, size: c.size } }, 1, { rule: "splash_guard_inside", params: { corners: 1 } });
   }
 
   const dsPerRun = new Map<string, number>();
   const sticksByKind = new Map<string, { attrs: Record<string, string>; lengths: number[] }>();
-  const strips = new Map<string, { attrs: Record<string, string>; inches: Dec }>();
+  const strips = new Map<string, { attrs: Record<string, string>; inches: Dec; straps: number; perStrapIn: number }>();
   for (const ds of input.downspouts) {
     const run = runs.get(ds.runId);
     if (!run) { advice.push({ code: "downspout_without_run", downspoutId: ds.id }); continue; }
     dsPerRun.set(run.id, (dsPerRun.get(run.id) ?? 0) + 1);
     if (ds.bottom.kind === "lower_roof" && run.story <= 1 && ds.heightIn === undefined) advice.push({ code: "lower_roof_from_first_story", downspoutId: ds.id });
+    // the wall's length (fasteners) and the downspout's: bending on site eats downspout (§2.2), the estimate rounds it up (Д1)
     const lenIn = downspoutLengthIn(ds, run.story, rules);
-    const len = dec(lenIn);
+    const fb = fieldBendOf(ds, rules);
+    const pipeIn = lenIn + fb.addedIn;
+    const billIn = dsRoundedIn(pipeIn, rules.dsRoundUpFt);
     const sz = [ds.shape, ds.size, ...(ds.dsStyle ? [ds.dsStyle] : [])].join(".");
     const color = ds.color ?? "-";
     const dsAttrs = { shape: ds.shape, size: ds.size, ...(ds.dsStyle ? { dsStyle: ds.dsStyle } : {}), material: ds.material, ...(ds.gauge ? { gauge: ds.gauge } : {}), ...(ds.finish ? { finish: ds.finish } : {}), ...(ds.color ? { color: ds.color } : {}) };
     const dsKey = [sz, ds.material, ...(ds.gauge ? [seg(ds.gauge)] : []), color].join(".");
-    acc.add({ key: `ds.${dsKey}`, section: "downspouts", unit: "ft", use: "estimate", kind: "material", attrs: dsAttrs }, ft(len));
+    acc.add({ key: `ds.${dsKey}`, section: "downspouts", unit: "ft", use: "estimate", kind: "material", attrs: dsAttrs }, ft(dec(billIn)),
+      // every downspout of the line says it (one that needed no rounding too): the reason's feet are always the line's (§2.13)
+      rules.dsRoundUpFt > 1 ? { rule: "ds_round_up", params: { downspouts: 1, lengthIn: pipeIn, stepFt: rules.dsRoundUpFt, ft: billIn / 12 }, setting: "dsRoundUpFt" } : undefined);
     const kind = sticksByKind.get(dsKey);
-    if (kind) kind.lengths.push(lenIn);
-    else sticksByKind.set(dsKey, { attrs: { ...dsAttrs, stickIn: String(rules.dsStickIn) }, lengths: [lenIn] });
+    if (kind) kind.lengths.push(pipeIn);
+    else sticksByKind.set(dsKey, { attrs: { ...dsAttrs, stickIn: String(rules.dsStickIn) }, lengths: [pipeIn] });
+    if (fb.bends > 0)
+      acc.add({ key: "labor.bend", section: "labor", unit: "ea", use: "estimate", kind: "labor", attrs: { work: "bend" } }, fb.bends,
+        { rule: "bend_in_place", params: { downspouts: 1, bends: fb.bends, perBendIn: fb.perBendIn, addedIn: fb.addedIn }, setting: "bendInBySize" });
 
     // wall fasteners: the kit for this shape and wall, 2 per 10 ft
     const wall = ds.wall ?? rules.defaultWall;
     const wallKitId = rules.wallKitByWall[ds.shape]?.[wall] ?? wall;
     const wk = rules.wallKits[wallKitId];
     const fasteners = Math.max(1, Math.ceil(lenIn / rules.dsFastenerSpacingIn));
-    if (wk) kitParts(wk.parts, "fasteners", fasteners, { ds }, strips, ds.id);
+    if (wk) kitParts(wk.parts, "fasteners", fasteners, { ds }, strips, ds.id, { main: (n) => ({ rule: "ds_straps_per_ds", params: { downspouts: 1, lengthIn: lenIn, everyIn: rules.dsFastenerSpacingIn, straps: n }, setting: "dsFastenerSpacingIn" }), host: wk.parts.find((x) => x.use === "both")?.part ?? (wk.parts.some((x) => x.stripInBySize) ? "flat_coil" : "ds_strap"), wall });
     else advice.push({ code: "wall_kit_unknown", downspoutId: ds.id, wall });
 
     if (ds.endOutlet && endOutlets.get(`${run.id}:${ds.endOutlet === "start" ? 0 : 1}`) === ds.id) {
-      acc.add({ key: `endoutlet.${stockKey(run)}.${ds.shape}.${ds.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(run), part: "end_outlet", gutterSize: run.size, shape: ds.shape, size: ds.size } }, 1);
+      acc.add({ key: `endoutlet.${stockKey(run)}.${ds.shape}.${ds.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(run), part: "end_outlet", gutterSize: run.size, shape: ds.shape, size: ds.size } }, 1, { rule: "outlet_per_ds", params: { downspouts: 1 } });
     } else {
-      acc.add({ key: `outlet.${stockKey(run)}.${ds.shape}.${ds.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(run), part: "outlet", gutterSize: run.size, shape: ds.shape, size: ds.size } }, 1);
+      acc.add({ key: `outlet.${stockKey(run)}.${ds.shape}.${ds.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(run), part: "outlet", gutterSize: run.size, shape: ds.shape, size: ds.size } }, 1, { rule: "outlet_per_ds", params: { downspouts: 1 } });
     }
     joint("outlet", run);
 
-    // downspout joints: every stick, elbow, offset, reducer and the bottom piece joins the one above
-    let pieces = Math.ceil(lenIn / rules.dsStickIn);
-    const byDefault = ds.shape === "round" ? rules.defaultElbowsRound ?? [{ style: "45", qty: rules.defaultElbows.reduce((n, x) => n + Math.max(0, x.qty), 0) }] : rules.defaultElbows;
-    for (const e of ds.elbows ?? byDefault) {
+    // downspout joints: every stick, elbow, offset, reducer and the bottom piece joins the one above; a bend on site is no piece
+    // and no part (§2.1 п.3, п.5)
+    let pieces = Math.ceil(pipeIn / rules.dsStickIn);
+    const ready = bendOf(ds) === "ready";
+    for (const e of ready ? ds.elbows ?? defaultElbowsFor(ds, rules) : []) {
       if (e.qty <= 0) continue;
       pieces += e.qty;
       acc.add({ key: `elbow.${e.style}.${dsKey}`, section: "downspouts", unit: "ea", use: "both", kind: "material", attrs: { ...dsAttrs, part: "elbow", style: e.style } }, e.qty);
     }
-    for (const o of ds.offsets ?? []) {
+    for (const o of ready ? ds.offsets ?? defaultOffsetsFor(ds, rules) : []) {
       if (o.qty <= 0) continue;
       pieces += o.qty;
       const std = rules.stdOffsetsIn.includes(o.lengthIn);
@@ -699,7 +900,7 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     } else if (b.kind === "flex" || b.kind === "drain") {
       acc.add({ key: `bottom.${b.kind}.${ds.shape}.${ds.size}${bc}`, section: "ds_bottom", unit: "ft", use: "both", kind: "material", attrs: { part: b.kind, ...bAttrs } }, ft(dec(b.lengthIn ?? 0)));
       pieces += 1;
-      if (b.kind === "drain") acc.add({ key: `bottom.drain_adapter.${ds.shape}.${ds.size}${b.pipe ? `.${b.pipe}` : ""}`, section: "ds_bottom", unit: "ea", use: "both", kind: "material", attrs: { part: "drain_adapter", shape: ds.shape, size: ds.size, ...(b.pipe ? { pipe: b.pipe } : {}) } }, 1);
+      if (b.kind === "drain") acc.add({ key: `bottom.drain_adapter.${ds.shape}.${ds.size}${b.pipe ? `.${b.pipe}` : ""}`, section: "ds_bottom", unit: "ea", use: "both", kind: "material", attrs: { part: "drain_adapter", shape: ds.shape, size: ds.size, ...(b.pipe ? { pipe: b.pipe } : {}) } }, 1, { rule: "adapter_per_bottom", params: { part: "drain_adapter", bottoms: 1 } });
     } else if (b.kind === "lower_roof") {
       acc.add({ key: "bottom.splash_pan", section: "ds_bottom", unit: "ea", use: "both", kind: "material", attrs: { part: "splash_pan" } }, 1);
     }
@@ -709,10 +910,12 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
 
   for (const { attrs, lengths } of sticksByKind.values()) {
     const key = `dsstick.${[attrs.shape, attrs.size, ...(attrs.dsStyle ? [attrs.dsStyle] : []), attrs.material, ...(attrs.gauge ? [seg(attrs.gauge)] : []), attrs.color ?? "-"].join(".")}`;
-    acc.add({ key, section: "downspouts", unit: "ea", use: "purchase", kind: "material", attrs }, downspoutSticks(lengths, rules.dsStickIn, rules.dsShareOffcuts));
+    const sticks = downspoutSticks(lengths, rules.dsStickIn, rules.dsShareOffcuts);
+    acc.add({ key, section: "downspouts", unit: "ea", use: "purchase", kind: "material", attrs }, sticks, { rule: "ds_sticks", params: { downspouts: lengths.length, lengthIn: lengths.reduce((a, b) => a + b, 0), stickIn: rules.dsStickIn, shared: rules.dsShareOffcuts ? 1 : 0, sticks }, setting: "dsStickIn" });
   }
-  for (const [key, { attrs, inches }] of strips) {
-    acc.add({ key, section: "fasteners", unit: "ft", use: "purchase", kind: "material", attrs }, ft(inches).ceil());
+  for (const [key, { attrs, inches, straps, perStrapIn }] of strips) {
+    const f = ft(inches).ceil();
+    acc.add({ key, section: "fasteners", unit: "ft", use: "purchase", kind: "material", attrs }, f, { rule: "flat_coil_straps", params: { straps, perStrapIn, ft: f.toNumber() } });
   }
 
   const dsById = new Map(input.downspouts.map((d) => [d.id, d]));
@@ -731,7 +934,7 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     dsPerRun.set(run.id, (dsPerRun.get(run.id) ?? 0) + 1);
     const len = dec(ch.lengthIn ?? ch.story * rules.storyHeightIn);
     acc.add({ key: "rainchain", section: "downspouts", unit: "ft", use: "both", kind: "material", attrs: { part: "rain_chain" } }, ft(len));
-    acc.add({ key: `rainchain_adapter.${run.profile}.${run.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { part: "rain_chain_adapter", profile: run.profile, size: run.size } }, 1);
+    acc.add({ key: `rainchain_adapter.${run.profile}.${run.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { part: "rain_chain_adapter", profile: run.profile, size: run.size } }, 1, { rule: "adapter_per_bottom", params: { part: "rain_chain_adapter", bottoms: 1 } });
   }
 
   for (const r of input.runs) {
@@ -743,14 +946,21 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
   // purchase: gutter stock with corner allowance and waste, whole feet (seamless coil) or sections.
   // Waste (#1355, founder 14.11: «на каждый вид желоба берём 10 фит запас»): a FIXED length for every stock (profile, size, material, gauge, colour — each coil or
   // section line); 0 — none.
-  for (const { stock, inches: base } of purchaseIn.values()) {
-    const inches = base.add(dec(rules.wasteFt).mul(12));
+  for (const b of purchaseIn.values()) {
+    const { stock, inches: base } = b;
+    const wasteIn = dec(rules.wasteFt).mul(12);
+    const inches = base.add(wasteIn);
     const attrs = stockAttrs(stock);
+    // the line's inches by where they come from (§2.12: drawn + corners + reserve = the line before rounding up), and why — the reserve,
+    // and the corner allowances when there are any
+    const breakdown: CoilBreakdown = { drawnIn: b.drawnIn, cornersIn: b.cornersIn, wasteIn: wasteIn.toNumber() };
+    const corners: PartWhy[] = b.outN + b.inN > 0 ? [{ rule: "corner_allowance", params: { outCount: b.outN, outIn: rules.cutCornerOutAllowanceIn, inCount: b.inN, inIn: rules.cutCornerAllowanceIn } }] : [];
+    const why: PartWhy = { rule: "coil_reserve", params: { runs: b.runs, reserveFt: Number(rules.wasteFt) }, setting: "wasteFt", ...(corners.length ? { also: corners } : {}) };
     if (rules.seamless) {
       const blank = rules.coilBlankIn[`${stock.profile}.${stock.size}`];
-      acc.add({ key: `coil.${stockKey(stock)}`, section: "gutter", unit: "ft", use: "purchase", kind: "material", attrs: { ...attrs, buy: "coil", ...(blank ? { blankIn: blank } : {}) } }, ft(inches).ceil());
+      acc.add({ key: `coil.${stockKey(stock)}`, section: "gutter", unit: "ft", use: "purchase", kind: "material", attrs: { ...attrs, buy: "coil", ...(blank ? { blankIn: blank } : {}) }, coilBreakdown: breakdown }, ft(inches).ceil(), why);
     } else {
-      acc.add({ key: `section.${stockKey(stock)}`, section: "gutter", unit: "ea", use: "purchase", kind: "material", attrs: { ...attrs, buy: "section", lengthIn: String(rules.sectionLengthIn) } }, inches.div(rules.sectionLengthIn).ceil());
+      acc.add({ key: `section.${stockKey(stock)}`, section: "gutter", unit: "ea", use: "purchase", kind: "material", attrs: { ...attrs, buy: "section", lengthIn: String(rules.sectionLengthIn) }, coilBreakdown: breakdown }, inches.div(rules.sectionLengthIn).ceil(), why);
     }
   }
 
@@ -758,12 +968,14 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
   // a tube is one color: tubes by color (mill / unpainted joints: plain sealant, the key of older versions)
   for (const [c, pts] of [...sealantPts].sort(([a], [b]) => a.localeCompare(b)))
     if (pts > 0)
-      acc.add({ key: c === "-" ? "sealant" : `sealant.${seg(c)}`, section: "consumables", unit: "ea", use: "both", kind: "material", attrs: { part: "sealant", ...(c !== "-" ? { color: c } : {}) } }, Math.ceil(pts / rules.jointsPerSealantTube));
+      acc.add({ key: c === "-" ? "sealant" : `sealant.${seg(c)}`, section: "consumables", unit: "ea", use: "both", kind: "material", attrs: { part: "sealant", ...(c !== "-" ? { color: c } : {}) } }, Math.ceil(pts / rules.jointsPerSealantTube),
+        withParams(sealantWhy.get(c), { points: pts, perTube: rules.jointsPerSealantTube, tubes: Math.ceil(pts / rules.jointsPerSealantTube) }, "jointsPerSealantTube"));
   if (solderPts > 0) {
-    acc.add({ key: "solder", section: "consumables", unit: "lb", use: "purchase", kind: "material", attrs: { part: "solder" } }, Math.ceil(solderPts / rules.solderPointsPerLb));
-    acc.add({ key: "flux", section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "flux" } }, 1);
+    const lb = Math.ceil(solderPts / rules.solderPointsPerLb);
+    acc.add({ key: "solder", section: "consumables", unit: "lb", use: "purchase", kind: "material", attrs: { part: "solder" } }, lb, withParams(solderWhy, { points: solderPts, perLb: rules.solderPointsPerLb, lb }, "solderPointsPerLb"));
+    acc.add({ key: "flux", section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "flux" } }, 1, { rule: "flux_per_solder", params: { lb, perJob: 1, cans: 1 } });
   }
-  if (rules.touchUpPaint) for (const c of paintColors) acc.add({ key: `paint.${c}`, section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "touch_up_paint", color: c } }, 1);
+  if (rules.touchUpPaint) for (const c of paintColors) acc.add({ key: `paint.${c}`, section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "touch_up_paint", color: c } }, 1, { rule: "touch_up_per_color", params: { color: c }, setting: "touchUpPaint" });
 
   return { parts: acc.list(), advice };
 }

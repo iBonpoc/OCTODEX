@@ -68,7 +68,12 @@ export function TokenSection({ s }: { s: ShowcaseSection }) {
             <View testID={`token-group-${g}`}>
               <T v="heading">{g}</T>
             </View>
-            {MODULE_ONLY.test(g) || rows.some(([p]) => MODULE_ONLY.test(p)) ? <T v="caption" tone="mut">{t("ds.moduleOnly")}</T> : null}
+            {/* a group of the module only says so; a group where only some rows are the module's (themes: the base colours and drawing.*, tape.*) names those rows (#1427 062) */}
+            {MODULE_ONLY.test(g) || (rows.length > 0 && rows.every(([p]) => MODULE_ONLY.test(p))) ? (
+              <T v="caption" tone="mut">{t("ds.moduleOnly")}</T>
+            ) : rows.some(([p]) => MODULE_ONLY.test(p)) ? (
+              <T v="caption" tone="mut">{t("ds.moduleOnlySome")}</T>
+            ) : null}
             {rows.map(([p, v], i) => (
               <Fragment key={`${p}-${i}`}>
                 {i ? <Divider /> : null}

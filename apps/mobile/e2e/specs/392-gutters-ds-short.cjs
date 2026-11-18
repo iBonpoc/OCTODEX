@@ -52,7 +52,7 @@ exports.run = async (h) => {
 
   // «Поставить водосток»: the downspout is back (automatic), the warning is gone
   await tid("draw-ds-short-action").getByRole("button").click();
-  await dsCount(1, "«Поставить водосток» puts the downspout back");
+  await dsCount(1, "«Поставить downspout» puts the downspout back");
   await p.getByTestId("draw-ds-short").first().waitFor({ state: "detached", timeout: 5000 });
   const back = (await els()).find((e) => e.kind === "downspout");
   h.expect(back.attrs.auto === true, "the downspout put back is automatic (the same rule)");

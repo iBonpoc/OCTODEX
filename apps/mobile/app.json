@@ -109,8 +109,8 @@
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false,
           "isAndroidForegroundServiceEnabled": false,
-          "locationAlwaysAndWhenInUsePermission": "GoRix never uses your location in the background: only while the app is open, during your visit and with your consent.",
-          "locationAlwaysPermission": "GoRix never uses your location in the background: only while the app is open, during your visit and with your consent.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
           "motionUsagePermission": false,
           "locationFullAccuracyPermission": false
         }

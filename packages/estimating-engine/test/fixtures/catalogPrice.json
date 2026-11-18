@@ -1,0 +1,141 @@
+{
+ "_": "One formula in the engine and in the database (spec 53 §5.3б п.1, #1807): packages/estimating-engine/test/catalogPrice.fixture.test.ts (catalogPrice) and T322 in supabase/tests/core_rls.sql (app.item_price_cents) read this same file. Expected prices counted independently (Python Decimal, ROUND_HALF_UP).",
+ "cases": [
+  {
+   "cost": 1000,
+   "taxBps": 1025,
+   "markupBps": 1000,
+   "price": 1213,
+   "note": "$10.00, 10.25 % tax, 10 % markup = $12.13 (12.1275)"
+  },
+  {
+   "cost": 1000,
+   "taxBps": 0,
+   "markupBps": 0,
+   "price": 1000,
+   "note": "no tax, no markup"
+  },
+  {
+   "cost": 0,
+   "taxBps": 1025,
+   "markupBps": 1000,
+   "price": 0,
+   "note": "zero cost"
+  },
+  {
+   "cost": 1,
+   "taxBps": 0,
+   "markupBps": 5000,
+   "price": 2,
+   "note": "1.5 ¢ → 2 ¢ (half up)"
+  },
+  {
+   "cost": 3,
+   "taxBps": 0,
+   "markupBps": 5000,
+   "price": 5,
+   "note": "4.5 ¢ → 5 ¢"
+  },
+  {
+   "cost": 5,
+   "taxBps": 0,
+   "markupBps": 1000,
+   "price": 6,
+   "note": "5.5 ¢ → 6 ¢"
+  },
+  {
+   "cost": 1,
+   "taxBps": 0,
+   "markupBps": 4900,
+   "price": 1,
+   "note": "1.49 ¢ → 1 ¢"
+  },
+  {
+   "cost": 1000,
+   "taxBps": 888,
+   "markupBps": 0,
+   "price": 1089,
+   "note": "8.875 % as 888 bps (rounded from ppm)"
+  },
+  {
+   "cost": 1000,
+   "taxBps": 887,
+   "markupBps": 1000,
+   "price": 1198
+  },
+  {
+   "cost": 2250,
+   "taxBps": 0,
+   "markupBps": 1000,
+   "price": 2475,
+   "note": "22.50 ¢ a unit… 24.75 → 25 (spec 53 §8а.12)"
+  },
+  {
+   "cost": 500000,
+   "taxBps": 1025,
+   "markupBps": 10000,
+   "price": 1102500,
+   "note": "$5 000.00, 100 % markup"
+  },
+  {
+   "cost": 500000,
+   "taxBps": 0,
+   "markupBps": 100000,
+   "price": 5500000,
+   "note": "$5 000.00, 1000 % markup"
+  },
+  {
+   "cost": 1999,
+   "taxBps": 725,
+   "markupBps": 3333,
+   "price": 2858
+  },
+  {
+   "cost": 12345,
+   "taxBps": 950,
+   "markupBps": 1250,
+   "price": 15207
+  },
+  {
+   "cost": 7,
+   "taxBps": 625,
+   "markupBps": 0,
+   "price": 7,
+   "note": "7 × 1.0625 = 7.4375 → 7"
+  },
+  {
+   "cost": 8,
+   "taxBps": 625,
+   "markupBps": 0,
+   "price": 9,
+   "note": "8.5 → 9"
+  },
+  {
+   "cost": 100000000,
+   "taxBps": 10000,
+   "markupBps": 100000,
+   "price": 2200000000,
+   "note": "the bound: $1 000 000 a unit, 100 % tax, 1000 % markup"
+  },
+  {
+   "cost": 333,
+   "taxBps": 1000,
+   "markupBps": 1000,
+   "price": 403,
+   "note": "402.93 → 403"
+  },
+  {
+   "cost": 45,
+   "taxBps": 0,
+   "markupBps": 10000,
+   "price": 90,
+   "note": "100 % markup: 90"
+  },
+  {
+   "cost": 1213,
+   "taxBps": 0,
+   "markupBps": 0,
+   "price": 1213
+  }
+ ]
+}

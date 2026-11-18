@@ -61,7 +61,8 @@ exports.run = async (h) => {
   await h.clickText("Задачи");
   await h.click("Новая задача");
   await h.sheet().getByPlaceholder(/перезвонить/).fill("Call back about the date");
-  await h.sheet().getByText("Завтра 9:00", { exact: true }).click();
+  await h.sheet().getByTestId("task-when-button").click(); // «Когда ⌄» is a row with a menu (spec 56 wave 5а)
+  await p.getByTestId("task-when-tomorrow").locator("visible=true").first().click();
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();
   await p.waitForTimeout(400);
   db = await h.db();
@@ -88,9 +89,9 @@ exports.run = async (h) => {
   // edit the contact: email + second phone (people sheet, L2 part 2)
   await h.clickText("Обзор");
   await h.click("Телефоны, email и люди");
-  await h.sheet().getByRole("button", { name: "Email", exact: true }).first().click();
+  await h.sheet().getByTestId("people-0-emails-add").click();
   await h.sheet().getByPlaceholder("Email", { exact: true }).first().fill("maria@example.com");
-  await h.sheet().getByRole("button", { name: "Телефон", exact: true }).first().click();
+  await h.sheet().getByTestId("people-0-phones-add").click();
   await h.sheet().getByPlaceholder("Телефон", { exact: true }).nth(1).pressSequentially("6265550112");
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();
   await p.waitForTimeout(300);

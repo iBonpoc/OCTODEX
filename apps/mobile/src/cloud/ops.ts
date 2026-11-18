@@ -66,6 +66,8 @@ export type Op =
   | { k: "chk.template.save"; template: ChecklistTemplate; ifNew?: boolean }
   /** spec 36: a supplier made, changed, archived or restored (the whole row) */
   | { k: "supplier.save"; supplier: Supplier }
+  /** #1834: the supplier's purchase tax through the one door (supplier_set_tax); seenBps — the rate the phone saw (a stale one → «changed first») */
+  | { k: "supplier.tax"; supplierId: string; taxBps: number | null; seenBps: number | null }
   /** spec 37: a purchase order made or changed (header, its lines, the lines taken out) */
   | { k: "po.save"; order: PurchaseOrder; removedLineIds: string[] }
   /** spec 37: what came, line by line (public.po_receive) */
@@ -263,11 +265,22 @@ export type Op =
    *  phone or a second send never overwrites a price someone already set */
   /**
    * costs: the cost fields this save changed (19 §9) — only these are written; a field left out keeps the server's value
-   * (a cache without costs never erases them). No `costs` (an op queued by an older build): every cost field as before.
+   * (a cache without costs never erases them). No `costs` (an op queued by an older build): no cost field at all (#1958 —
+   * its three cached fields would put back a cost changed meanwhile; a cost change queued before the update is not sent),
+   * but onlyNew as before (an insert only).
+   * costsSeen (#1958 (а)): what the phone had in the same fields before the change — the server writes them only over
+   * that (catalog_set_item_costs), else 40001 row_version_conflict and nothing; none (a new item) — as before.
    */
   /** fields (spec 53-0): the item's columns this save changed (catalogItemChange) — an item already on the server gets only
    *  these (PRD 04 §9, merge by field); none (a new item, an op queued by an older build) — the whole row */
-  | { k: "catalog.save"; item: CatalogItem; onlyNew?: true; costs?: CatalogCostChange; fields?: string[] }
+  | { k: "catalog.save"; item: CatalogItem; onlyNew?: true; costs?: CatalogCostChange; costsSeen?: CatalogCostChange; fields?: string[] }
+  /** #1913 (the price-key spec, §4.6): one price for the whole price group of `itemId` (catalog_set_group_price).
+   *  `expected*` — the item's values on the phone before the change: someone else changed them first → 40001
+   *  row_version_conflict, nothing written. Costs only for who sees them (absent otherwise). `group` — its priceGroup, for
+   *  merging and dropping in the queue. */
+  | { k: "catalog.groupPrice"; itemId: string; group: string; priceCents: number; placeholder: boolean;
+      costCents?: number | null; vendorTaxBps?: number | null; markupBps?: number | null;
+      expectedPriceCents: number; expectedCostCents?: number | null; expectedTaxBps?: number | null; expectedMarkupBps?: number | null }
   | { k: "catalog.remove"; id: string }
   | { k: "notice.read"; ids: string[] }
   /** sent: the estimate was already sent when the client signed on the phone (#1126; an older app's op has none);
@@ -640,6 +653,15 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return saveEstimateTemplate(op.template, c, { ifNew: op.ifNew, baseRowVersion: op.baseRowVersion, clearCosts: op.clearCosts });
     case "po.save":
       return savePurchaseOrder(op, c);
+    case "catalog.groupPrice": {
+      const { error, status } = await supabase.rpc("catalog_set_group_price", {
+        p_item_id: op.itemId, p_price_cents: op.priceCents, p_placeholder: op.placeholder,
+        p_cost_cents: op.costCents ?? null, p_tax_bps: op.vendorTaxBps ?? null, p_markup_bps: op.markupBps ?? null,
+        p_expected_price_cents: op.expectedPriceCents,
+        p_expected_cost_cents: op.expectedCostCents ?? null, p_expected_tax_bps: op.expectedTaxBps ?? null, p_expected_markup_bps: op.expectedMarkupBps ?? null,
+      });
+      return run(Promise.resolve({ error, status }));
+    }
     case "po.receive": {
       const { error, status } = await supabase.rpc("po_receive", {
         p_po_id: op.id, p_lines: op.lines.map((l) => ({ id: l.id, received: Number(l.received) })),
@@ -649,6 +671,10 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "supplier.save":
       return run(supabase.from("suppliers").upsert(supplierToRow(op.supplier, c), { onConflict: "id" }));
+    case "supplier.tax": {
+      const { error, status } = await supabase.rpc("supplier_set_tax", { p_supplier: op.supplierId, p_tax_bps: op.taxBps, p_seen_bps: op.seenBps });
+      return run(Promise.resolve({ error, status }));
+    }
     case "chk.template.save":
       return run(supabase.from("checklist_templates").upsert(templateToDb(op.template, c), { onConflict: "id", ...(op.ifNew ? { ignoreDuplicates: true } : {}) }));
     case "company.visitSettings":
@@ -1082,8 +1108,24 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "catalog.save": {
       const it = op.item;
-      const costCols = catalogCostCols(op);
+      // #1958 (а): an item already there whose cost this save changed — the cost goes over what the phone saw
+      // (catalog_set_item_costs), never in the item's row (t30 would put it over whatever is there)
+      let seen = op.costsSeen && !op.onlyNew && Object.keys(catalogCostCols(op)).length ? op.costsSeen : undefined;
+      let costCols = seen ? {} : catalogCostCols(op);
       const card = catalogCardCols(it);
+      const seenWrite = async () => {
+        const r = await supabase.rpc("catalog_set_item_costs", { p_item_id: it.id, p_costs: catalogCostCols(op), p_seen: costColsOf(seen!) });
+        // a server before the migration (no such function, PGRST202): the side table as before
+        if (r.error?.code === "PGRST202") {
+          const k = await supabase.from("catalog_item_costs").upsert({ item_id: it.id, company_id: c, ...catalogCostCols(op) }, { onConflict: "item_id" });
+          if (k.error && !["42501", "42P01", "PGRST205"].includes(k.error.code ?? "")) await run(Promise.resolve(k));
+          return;
+        }
+        // no right to our costs (42501 no_costs: the right was taken meanwhile), or the item went to the Trash (P0002) —
+        // the item itself is saved, as the side table's refusal below (code review of #1958 №5)
+        if (r.error?.code === "42501" || r.error?.code === "P0002") return;
+        await run(Promise.resolve(r));
+      };
       // spec 53-0 (PRD 04 §9 «merge by field»): an item already there gets only the columns this save changed — a save
       // queued on another phone before a price update never puts back the fields its person did not touch. A new item,
       // onlyNew and an op queued by an older build (no `fields`): the whole row, as before (rule 16)
@@ -1097,7 +1139,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         });
         const update = (row: Record<string, unknown>) => supabase.from("catalog_items").update(row).eq("id", it.id).eq("company_id", c).select("id");
         let row = pick();
-        if (!Object.keys(row).length) return; // nothing changed: nothing written
+        if (!Object.keys(row).length) return seen ? seenWrite() : undefined; // nothing else changed: only the cost
         r = await update(row);
         // the card's fields never cost the save (as the upsert below): a refused direction — without it alone; a server
         // before the migration (no such column) — without the card's fields
@@ -1110,12 +1152,17 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         if (refused) {
           row = pick(refused);
           // only the card's fields changed and the server takes none of them: nothing else to write
-          if (!Object.keys(row).length) return;
+          if (!Object.keys(row).length) return seen ? seenWrite() : undefined;
           r = await update(row);
         }
         await run(Promise.resolve(r));
-        // no row updated (not on the server yet, or not ours to change) — the whole row, as before: the server decides
-        if (!(Array.isArray(r.data) && r.data.length)) r = null;
+        // no row updated (not on the server yet, or not ours to change) — the whole row, as before: the server decides;
+        // its cost goes with it (a new row: nothing there to be changed meanwhile — code review of #1958 №3)
+        if (!(Array.isArray(r.data) && r.data.length)) {
+          r = null;
+          seen = undefined;
+          costCols = catalogCostCols(op);
+        }
       }
       const upsertItem = (cardCols: Record<string, string | null>) =>
         supabase.from("catalog_items").upsert(
@@ -1125,6 +1172,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         );
       if (op.fields && !op.onlyNew && r) {
         // written by field: the side table of costs as below
+        if (seen) return seenWrite();
         if (!op.costs || !Object.keys(costCols).length) return;
         const k = await supabase.from("catalog_item_costs").upsert({ item_id: it.id, company_id: c, ...costCols }, { onConflict: "item_id" });
         if (k.error && !["42501", "42P01", "PGRST205"].includes(k.error.code ?? "")) await run(Promise.resolve(k));
@@ -1146,6 +1194,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         // phones); the changed fields go to the side table as they are, so a cost can be cleared. Nothing changed —
         // nothing written (an upsert sets only the columns it sends). No right to see costs (42501, sales) or a server
         // before the migration (no table) — the item itself is saved.
+        if (seen) return seenWrite();
         if (!op.costs || !Object.keys(costCols).length) return;
         const r = await supabase.from("catalog_item_costs").upsert({ item_id: it.id, company_id: c, ...costCols }, { onConflict: "item_id" });
         if (r.error && !["42501", "42P01", "PGRST205"].includes(r.error.code ?? "")) await run(Promise.resolve(r));
@@ -1323,11 +1372,30 @@ export function catalogCostChange(prev: CatalogItem | undefined, it: CatalogItem
   }
   return out;
 }
-/** the cost columns a save writes: the changed ones; an old op without `costs` — all of them, as it did */
+/**
+ * the cost columns a save writes: the changed ones. An old op without `costs`: none (#1958 — its three cached fields
+ * would put back a cost changed meanwhile), but an onlyNew one all three as before (an insert that never touches a row
+ * already there: ON CONFLICT DO NOTHING moves no cost — T99)
+ */
 function catalogCostCols(op: Extract<Op, { k: "catalog.save" }>): Record<string, number | null> {
-  const ch: CatalogCostChange = op.costs ?? { costCents: op.item.costCents ?? null, vendorTaxBps: op.item.vendorTaxBps ?? null, markupBps: op.item.markupBps ?? null };
-  return Object.fromEntries((Object.keys(ch) as (keyof typeof COST_COL)[]).map((f) => [COST_COL[f], ch[f] ?? null]));
+  if (!op.costs && op.onlyNew) return costColsOf({ costCents: op.item.costCents ?? null, vendorTaxBps: op.item.vendorTaxBps ?? null, markupBps: op.item.markupBps ?? null });
+  return costColsOf(op.costs ?? {});
 }
+const costColsOf = (ch: CatalogCostChange): Record<string, number | null> =>
+  Object.fromEntries((Object.keys(ch).filter((f) => f in COST_COL) as (keyof typeof COST_COL)[]).map((f) => [COST_COL[f], ch[f] ?? null]));
+/**
+ * #1958 (а): what the phone had in the fields it changed, before the change — from the item as the phone saw it. Only for
+ * an item already there (a new one has nothing to be changed meanwhile).
+ */
+export function catalogCostSeen(prev: CatalogItem | undefined, costs: CatalogCostChange): CatalogCostChange | undefined {
+  if (!prev || !Object.keys(costs).length) return undefined;
+  return Object.fromEntries((Object.keys(costs) as (keyof CatalogCostChange)[]).map((f) => [f, prev[f] ?? null]));
+}
+/** the op's `costsSeen` field, or nothing (a new item, no cost change) */
+export const withCostsSeen = (prev: CatalogItem | undefined, costs: CatalogCostChange): { costsSeen?: CatalogCostChange } => {
+  const seen = catalogCostSeen(prev, costs);
+  return seen ? { costsSeen: seen } : {};
+};
 
 /**
  * Draft estimate → database: estimate row, an unlocked version (a new one if the current is already sent),

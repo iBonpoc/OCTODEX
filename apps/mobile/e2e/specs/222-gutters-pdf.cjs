@@ -105,7 +105,8 @@ exports.run = async (h) => {
   // #1090: the parts read as words and feet-inches (founder, build 1039: «73.16666666666667 фт», «coil · 11.875», «touch_up_paint»)
   const parts = w.slice(w.indexOf("Детали"));
   h.expect(parts.includes("′"), "the parts' lengths are feet-inches");
-  h.expect(!/\d\.\d{3,}/.test(parts), "no long decimal in the parts: " + (parts.match(/\d+\.\d{3,}[^<]*/) || [""])[0]);
+  // a metal's thickness «0.027″» is a size, not a long decimal (#1766: it was «.027», a code)
+  h.expect(!/\d\.\d{3,}(?!\d*″)/.test(parts), "no long decimal in the parts: " + (parts.match(/\d+\.\d{3,}(?!\d*″)[^<]*/) || [""])[0]);
   h.expect(!/touch_up_paint|dsstick|aluminum|(>|· )(coil|rivet)( ·|<)/.test(parts), "no bare code in a part's name");
   h.expect(!/ фт\b/.test(parts) || !/\d\.\d/.test(parts), "no «N.N фт»");
   await h.shot("view-pdf");

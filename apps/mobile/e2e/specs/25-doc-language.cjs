@@ -17,7 +17,10 @@ exports.run = async (h) => {
   await h.go(`/lead/${tom.id}`);
   await h.clickText("Обзор");
   await h.click("Телефоны, email и люди");
-  await h.sheet().getByRole("radio", { name: "Русский" }).first().click();
+  // «Язык · Любой ⌄» — a row with a menu (spec 56 §3а.3)
+  await h.sheet().getByTestId("people-0-lang-button").click();
+  await p.getByTestId("people-0-lang-ru").click();
+  await p.getByRole("menu").waitFor({ state: "detached" });
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();
   await p.waitForTimeout(400);
   db = await h.db();
