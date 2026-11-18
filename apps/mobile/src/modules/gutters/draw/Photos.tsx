@@ -15,7 +15,7 @@ import { useI18n } from "@/i18n";
 import { T } from "@/ui/primitives";
 import { Card, SectionTitle } from "@/ui/surfaces";
 import { useToast } from "@/ui/overlays";
-import { addPhoto, photosOf, removePhoto } from "../data";
+import { addPhoto, photosOf, removePhoto, retryPhoto } from "../data";
 import { liveUri, madeHere } from "../photoUri";
 
 export function MeasurePhotos({ measurementId, elementId, testID, onRemoved, readOnly, framed }: { measurementId: string; elementId?: string; testID: string; readOnly?: boolean; /** on a screen of cards («Просмотр замера»): a heading and a card like its neighbours; the count only when there are photos */ framed?: boolean; /** a sheet that holds the strip closes: the toast with «Отменить» is under it otherwise */ onRemoved?: () => void }) {
@@ -23,10 +23,14 @@ export function MeasurePhotos({ measurementId, elementId, testID, onRemoved, rea
   const toast = useToast();
   const { t } = useI18n();
   const title = t(elementId ? "mod.gutters.photo.element" : "mod.gutters.photo.measurement");
-  const photos = photosOf(store.db, measurementId, elementId).map((f) => ({ id: f.id, kind: "before" as const, uri: liveUri(f.uri) }));
+  // #1441: a photo the cloud refused carries its mark, as a visit's (the strip shows it and «Повторить»)
+  const photos = photosOf(store.db, measurementId, elementId).map((f) => ({ id: f.id, kind: "before" as const, uri: liveUri(f.uri), ...(f.upload ? { upload: f.upload } : {}) }));
   const add = (uri?: string) => {
     madeHere(uri);
     addPhoto(store, { id: Crypto.randomUUID(), measurementId, elementId, uri, at: new Date().toISOString() });
+  };
+  const retry = (id: string) => {
+    retryPhoto(store, id);
   };
   const remove = (id: string) => {
     const undo = removePhoto(store, id);
@@ -38,7 +42,7 @@ export function MeasurePhotos({ measurementId, elementId, testID, onRemoved, rea
       <View style={{ gap: space[2] }} testID={testID}>
         <SectionTitle title={photos.length ? `${title} · ${photos.length}` : title} />
         <Card>
-          <PhotoStrip photos={photos} onAdd={readOnly ? undefined : add} onRemove={readOnly ? undefined : remove} title={title} />
+          <PhotoStrip photos={photos} onAdd={readOnly ? undefined : add} onRemove={readOnly ? undefined : remove} onRetry={readOnly ? undefined : retry} title={title} />
         </Card>
       </View>
     );
@@ -46,7 +50,7 @@ export function MeasurePhotos({ measurementId, elementId, testID, onRemoved, rea
   return (
     <View style={{ gap: space[2] }} testID={testID}>
       <T v="caption" tone="mut" w="semibold">{`${title} · ${photos.length}`}</T>
-      <PhotoStrip photos={photos} onAdd={readOnly ? undefined : add} onRemove={readOnly ? undefined : remove} title={title} />
+      <PhotoStrip photos={photos} onAdd={readOnly ? undefined : add} onRemove={readOnly ? undefined : remove} onRetry={readOnly ? undefined : retry} title={title} />
     </View>
   );
 }
