@@ -4036,7 +4036,7 @@ begin
   select string_agg(p.proname, ', ') into bad
     from pg_proc p
    where p.pronamespace = 'public'::regnamespace and has_function_privilege('anon', p.oid, 'EXECUTE')
-     and p.proname not in ('portal_estimate', 'portal_accept', 'portal_pay_simulated', 'uuid_generate_v7');
+     and p.proname not in ('portal_estimate', 'portal_accept', 'portal_pay_simulated', 'portal_invoice', 'uuid_generate_v7');
   perform tst.ok(bad is null, 'anon runs only the client-link functions in public: ' || coalesce(bad, ''));
 
   -- authenticated: only the functions on this list, by full signature (a new RPC or overload is added here by its PR — review of 14.11)
@@ -4067,7 +4067,7 @@ begin
                         'set_my_prefs(uuid,boolean)', 'set_push_kind(uuid,text,boolean)', 'set_share_location(uuid,boolean)',
                         'sign_estimate_on_site(uuid,text,text)', 'sign_estimate_on_site(uuid,text,text,bigint)',
                         'stop_member_location(uuid,uuid)', 'transfer_ownership(uuid,uuid)', 'trash_items(text,uuid[])', 'trash_list(uuid)',
-                        'trash_restore(text,uuid[])', 'undo_customer_import(uuid)', 'uuid_generate_v7()']::text[]);
+                        'trash_restore(text,uuid[])', 'undo_customer_import(uuid)', 'uuid_generate_v7()', 'invoice_link(uuid)', 'invoice_link_set(uuid,text)', 'portal_invoice(text)']::text[]);
   perform tst.ok(bad is null, 'authenticated runs only the listed functions in public: ' || coalesce(bad, ''));
 
   -- schema extensions: the API creates nothing there (nor in public / app), and no definer function there runs for it
@@ -6749,6 +6749,7 @@ update public.push_devices set user_id = 'a8200000-0000-4000-8000-000000000001' 
 -- a closed company sends nothing
 insert into public.notifications (id, company_id, kind, invoice_id) values ('08200000-0000-4000-8000-000000000008', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
 alter table public.companies disable trigger t06_company_closed_guard;
+set local app.accepting_invite = 'on';
 update public.companies set closed_at = now() where id = 'ca000000-0000-0000-0000-000000000000';
 reset role; set role service_role;
 select public.push_claim(100);
@@ -17139,5 +17140,112 @@ select tst.ok((public.portal_accept('tok_t381_2_0123456789abcdef', '38120000-000
 select tst.ok((select count(*) from public.estimate_approvals where estimate_id = '38100000-0000-4000-8000-000000000002') = 1, 'T381 the repeat doubles nothing');
 rollback;
 \echo 'T381 ok'
+
+-- ---------------------------------------------------------------- T431–T435 (#2082, spec 60): the client's page of an invoice
+-- An invoice without a signed estimate gets its own link (/i/<token>): the office puts the token the phone made, anyone
+-- holding it reads only the client's part. Before: no link at all — the client got text with nothing to open.
+\echo 'T431-T435 invoice page'
+begin;
+:as_super
+update public.memberships set status = 'active' where company_id = 'ca000000-0000-0000-0000-000000000000'
+   and user_id in ('a0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000005');
+update public.memberships set role = 'tech' where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003';
+update public.memberships set role = 'sales' where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000005';
+update public.companies set payment_settings = payment_settings || '{"zelle": "pay@a.test", "check_payable_to": "Acme Gutters"}'::jsonb
+ where id = 'ca000000-0000-0000-0000-000000000000';
+insert into public.customers (id, company_id, display_name) values
+  ('43100000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'T431 Client'),
+  ('43100000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', 'T434 Client');
+insert into public.contacts (id, company_id, customer_id, name, role, is_primary, preferred_language) values
+  ('43100000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', '43100000-0000-4000-8000-0000000000c1', 'Ana', 'main', true, 'es');
+update public.customers set primary_contact_id = '43100000-0000-4000-8000-0000000000a1' where id = '43100000-0000-4000-8000-0000000000c1';
+-- i1 sent, i2 draft, i3 sent then void, i4 sent of the T434 client, i5 sent and paid
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, tax_cents, total_cents, sent_at, due_date) values
+  ('43100000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', '', '43100000-0000-4000-8000-0000000000c1', 'standalone', 'sent', 'Gutter cleaning', 20000, 1900, 21900, now(), tst.today() + 14),
+  ('43100000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', '', '43100000-0000-4000-8000-0000000000c1', 'standalone', 'draft', 'Draft', 5000, 0, 5000, null, null),
+  ('43100000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', '', '43100000-0000-4000-8000-0000000000c1', 'standalone', 'sent', 'To void', 7000, 0, 7000, now(), tst.today() + 7),
+  ('43100000-0000-4000-8000-0000000000f4', 'ca000000-0000-0000-0000-000000000000', '', '43100000-0000-4000-8000-0000000000c2', 'standalone', 'sent', 'T434', 9000, 0, 9000, now(), tst.today() + 7),
+  ('43100000-0000-4000-8000-0000000000f5', 'ca000000-0000-0000-0000-000000000000', '', '43100000-0000-4000-8000-0000000000c1', 'standalone', 'sent', 'Paid one', 3000, 0, 3000, now(), tst.today() + 7);
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, received_by)
+  values ('ca000000-0000-0000-0000-000000000000', '43100000-0000-4000-8000-0000000000f5', '43100000-0000-4000-8000-0000000000c1', 'zelle', 3000, 'succeeded', 't435-paid', 'a0000000-0000-0000-0000-000000000002');
+
+-- T431: the office puts the link; a repeat and a second token answer with the live one; draft — refused; a tech, sales,
+-- another company and a missing invoice — one «not found»
+:as_office_a
+select tst.ok(public.invoice_link_set('43100000-0000-4000-8000-0000000000f1', 'tok_t431_1_0123456789abcdef') = 'tok_t431_1_0123456789abcdef', 'T431 the office puts the link');
+select tst.ok(public.invoice_link_set('43100000-0000-4000-8000-0000000000f1', 'tok_t431_1_0123456789abcdef') = 'tok_t431_1_0123456789abcdef', 'T431 a repeat: the same link');
+select tst.ok(public.invoice_link_set('43100000-0000-4000-8000-0000000000f1', 'tok_t431_other_0123456789ab') = 'tok_t431_1_0123456789abcdef', 'T431 a second phone''s token: the live one, one link per invoice');
+select tst.fails_like($q$select public.invoice_link_set('43100000-0000-4000-8000-0000000000f2', 'tok_t431_2_0123456789abcdef')$q$, '%only a sent invoice%', 'T431 a draft: no link');
+select tst.fails_like($q$select public.invoice_link_set('43100000-0000-4000-8000-0000000000f5', 'bad token!')$q$, '%link token is%', 'T431 a token not of letters / digits: refused');
+select tst.ok(public.invoice_link('43100000-0000-4000-8000-0000000000f1') = 'tok_t431_1_0123456789abcdef', 'T431 the office reads the live link');
+:as_tech_a
+select tst.fails_like($q$select public.invoice_link_set('43100000-0000-4000-8000-0000000000f5', 'tok_t431_3_0123456789abcdef')$q$, '%invoice not found%', 'T431 a tech: «not found»');
+select tst.ok(public.invoice_link('43100000-0000-4000-8000-0000000000f1') is null, 'T431 a tech reads no link');
+:as_sales_a
+select tst.fails_like($q$select public.invoice_link_set('43100000-0000-4000-8000-0000000000f5', 'tok_t431_3_0123456789abcdef')$q$, '%invoice not found%', 'T431 sales: «not found»');
+:as_owner_b
+select tst.fails_like($q$select public.invoice_link_set('43100000-0000-4000-8000-0000000000f5', 'tok_t431_3_0123456789abcdef')$q$, '%invoice not found%', 'T431 another company: «not found»');
+select tst.fails_like($q$select public.invoice_link_set('43100000-0000-4000-8000-0000000000ff', 'tok_t431_3_0123456789abcdef')$q$, '%invoice not found%', 'T431 a missing invoice: the same answer');
+select tst.ok(public.invoice_link('43100000-0000-4000-8000-0000000000f1') is null, 'T431 another company reads no link');
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails($q$select public.invoice_link_set('43100000-0000-4000-8000-0000000000f5', 'tok_t431_3_0123456789abcdef')$q$, 'T431 anon: no execute of invoice_link_set');
+select tst.fails($q$select public.invoice_link('43100000-0000-4000-8000-0000000000f1')$q$, 'T431 anon: no execute of invoice_link');
+select tst.fails($q$select * from app.invoice_tokens$q$, 'T431 anon: the links table is closed');
+:as_office_a
+select tst.fails($q$select * from app.invoice_tokens$q$, 'T431 the office: the links table is closed too (only the functions)');
+
+-- T432: the client (anon) reads only their part, in their language; a made-up token — null
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok((public.portal_invoice('tok_t431_1_0123456789abcdef') -> 'invoice' ->> 'balance')::bigint = 21900
+          and public.portal_invoice('tok_t431_1_0123456789abcdef') ->> 'status' = 'open'
+          and public.portal_invoice('tok_t431_1_0123456789abcdef') ->> 'doc_language' = 'es'
+          and public.portal_invoice('tok_t431_1_0123456789abcdef') -> 'company' ->> 'zelle' = 'pay@a.test'
+          and public.portal_invoice('tok_t431_1_0123456789abcdef') -> 'company' ->> 'check_payable_to' = 'Acme Gutters'
+          and public.portal_invoice('tok_t431_1_0123456789abcdef') -> 'customer' ->> 'name' = 'T431 Client',
+  'T432 the client: balance, status, language, how to pay, their name');
+select tst.ok(not (public.portal_invoice('tok_t431_1_0123456789abcdef')::text ~* 'cost|note|margin|created_by|T434|Draft|Paid one'),
+  'T432 nothing else: no costs, notes, other invoices or clients');
+select tst.ok(public.portal_invoice('tok_t431_nope_0123456789abcd') is null and public.portal_invoice(null) is null, 'T432 a made-up token: nothing');
+
+-- T433: void ends the link (the page: «revoked»); a closed company — its name only
+:as_office_a
+select public.invoice_link_set('43100000-0000-4000-8000-0000000000f3', 'tok_t433_1_0123456789abcdef') is not null as t433_link;
+:as_owner_a
+update public.invoices set status = 'void', void_reason = 'T433 wrong client' where id = '43100000-0000-4000-8000-0000000000f3';
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok(public.portal_invoice('tok_t433_1_0123456789abcdef') ->> 'status' = 'revoked'
+          and public.portal_invoice('tok_t433_1_0123456789abcdef') - 'status' = '{}'::jsonb, 'T433 void: the link ended, the page says «revoked» and nothing else');
+:as_office_a
+select tst.fails_like($q$select public.invoice_link_set('43100000-0000-4000-8000-0000000000f3', 'tok_t433_1_0123456789abcdef')$q$, '%only a sent invoice%', 'T433 a void invoice: no new link');
+:as_super
+set local app.accepting_invite = 'on';
+update public.companies set closed_at = now() where id = 'ca000000-0000-0000-0000-000000000000';
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok(public.portal_invoice('tok_t431_1_0123456789abcdef') ->> 'status' = 'closed'
+          and public.portal_invoice('tok_t431_1_0123456789abcdef') - 'status' - 'company' = '{}'::jsonb
+          and (public.portal_invoice('tok_t431_1_0123456789abcdef') -> 'company') - 'name' = '{}'::jsonb,
+  'T433 a closed company: only its name');
+:as_super
+update public.companies set closed_at = null where id = 'ca000000-0000-0000-0000-000000000000';
+set local app.accepting_invite = 'off';
+
+-- T434: a client marked «do not service» gets no new link
+:as_owner_a
+update public.customers set status = 'do_not_service', do_not_service_reason = 'T434' where id = '43100000-0000-4000-8000-0000000000c2';
+:as_office_a
+select tst.fails_like($q$select public.invoice_link_set('43100000-0000-4000-8000-0000000000f4', 'tok_t434_1_0123456789abcdef')$q$, '%customer_do_not_service%', 'T434 «do not service»: no new link');
+
+-- T435: a token once revoked never comes back (an old phone's queue); a paid invoice — «paid» with its payment
+:as_office_a
+select tst.fails_like($q$select public.invoice_link_set('43100000-0000-4000-8000-0000000000f5', 'tok_t433_1_0123456789abcdef')$q$, '%cannot be used%', 'T435 a revoked token is not put again');
+select public.invoice_link_set('43100000-0000-4000-8000-0000000000f5', 'tok_t435_1_0123456789abcdef') is not null as t435_link;
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok(public.portal_invoice('tok_t435_1_0123456789abcdef') ->> 'status' = 'paid'
+          and jsonb_array_length(public.portal_invoice('tok_t435_1_0123456789abcdef') -> 'payments') = 1
+          and (public.portal_invoice('tok_t435_1_0123456789abcdef') -> 'payments' -> 0 ->> 'amount')::bigint = 3000,
+  'T435 paid: status and the payment');
+:as_office_a
+rollback;
+\echo 'T431-T435 ok'
 
 \echo 'ALL TESTS PASSED'
