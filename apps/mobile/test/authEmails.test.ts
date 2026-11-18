@@ -1,5 +1,5 @@
 /**
- * #1756 — the sign-in emails carry the 8-digit code and no link. A new address gets «confirmation», a known one
+ * #1756 — the sign-in emails carry the code (CODE_LENGTH digits) and no link. A new address gets «confirmation», a known one
  * «magic_link» (signInWithOtp): if either has no {{ .Token }} the screen asks for a code the email does not have, and a
  * link signs in on the website instead of the app. The hosted project takes the same texts by hand.
  */

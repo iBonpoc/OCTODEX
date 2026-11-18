@@ -32,6 +32,8 @@ async function expectCompany(h, name, notName) {
   if (notName) h.expect(!t.includes(notName), `nothing of ${notName}`);
 }
 
+// the code's length = otp_length in supabase/config.toml = CODE_LENGTH (src/features/signIn.ts; 6 since the founder's 18.11)
+const LEN = Number(/\notp_length = (\d+)/.exec(require("node:fs").readFileSync(require("node:path").join(__dirname, "../../../../../supabase/config.toml"), "utf8"))[1]);
 exports.run = async (h, { seed, mailpit }) => {
   const p = h.page;
   const { a1, b1 } = seed.users;
@@ -72,9 +74,9 @@ exports.run = async (h, { seed, mailpit }) => {
   await h2.click("Получить код");
   await h2.expectText(/Код отправлен/, "the code is sent");
   const mail = await mailpit(b1.email, { after: asked });
-  const code = /\b(\d{8})\b/.exec(mail)?.[1];
-  h.expect(!!code, `an 8-digit code in the email:\n${mail.slice(0, 300)}`);
-  // the 8th digit signs in by itself (spec 52 §6)
+  const code = new RegExp(`\\b(\\d{${LEN}})\\b`).exec(mail)?.[1];
+  h.expect(!!code, `a ${LEN}-digit code in the email:\n${mail.slice(0, 300)}`);
+  // the last digit signs in by itself (spec 52 §6)
   await p2.getByTestId("auth-code").locator("input").last().fill(code);
   await expectCompany(h2, b1.company, a1.company);
   h.expect(!errors.length, `no page errors for b1: ${errors.join("; ")}`);
@@ -89,8 +91,8 @@ exports.run = async (h, { seed, mailpit }) => {
   await h2.click("Получить код");
   await h2.expectText(/Код отправлен/, "the code to a new email is sent");
   const mailNew = await mailpit(fresh, { after: askedNew });
-  const codeNew = /\b(\d{8})\b/.exec(mailNew)?.[1];
-  h.expect(!!codeNew, `a new email gets an 8-digit code too:\n${mailNew.slice(0, 300)}`);
+  const codeNew = new RegExp(`\\b(\\d{${LEN}})\\b`).exec(mailNew)?.[1];
+  h.expect(!!codeNew, `a new email gets a ${LEN}-digit code too:\n${mailNew.slice(0, 300)}`);
   h.expect(!/https?:\/\//.test(mailNew), `no link in the sign-up email:\n${mailNew.slice(0, 300)}`);
   await p2.getByTestId("auth-code").locator("input").last().fill(codeNew);
   await p2.waitForURL(/\/auth\/company/, { timeout: 10000 });
