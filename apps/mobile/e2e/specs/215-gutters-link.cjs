@@ -11,6 +11,7 @@
  * Finds things by testID; waits on what it checks.
  */
 const { skipLength } = require("../gutters.cjs");
+const { undo } = require("../estimateLine.cjs");
 const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -116,6 +117,9 @@ exports.run = async (h) => {
   await p.waitForURL(/\/module\/gutters\/list/, { timeout: 5000 }).catch(() => h.expect(false, `after «Удалить замер»: the list of measurements (${p.url()})`));
   // the deletion's own toast (not the «Отвязано» one still fading): its «Отменить»
   await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="toast-text"]')].some((e) => e.getClientRects().length && /Замер удалён/.test(e.textContent || "")), null, { timeout: 5000 });
-  await tid("toast-undo").click();
+  // one click was lost on CI (820 light, #2086): «Отменить» works only motion.toastArmMs after the toast showed, and from 820
+  // the toast moves right as the canvas leaves (its side panel's lane, setToastRight, goes with it) — press until the toast
+  // goes (the shared helper), then check the store
+  h.expect(await undo(h), "«Отменить» pressed: the toast is gone");
   await waitFor(async () => !!(await mOf(m2)), "«Отменить»: back");
 };
