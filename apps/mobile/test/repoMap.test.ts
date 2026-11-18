@@ -360,3 +360,20 @@ describe("loadCompanyDB — a photo the cloud refused (#1431)", () => {
     expect(db.visits.find((v) => v.id === "v1")!.photos).toEqual([{ id: "f1", kind: "after", uri: undefined }]);
   });
 });
+
+// #2075 (20261117380000): sales load only the money of their deals — a payment whose invoice they do not see, an invoice
+// whose job they do not see; the load goes through and keeps what it got (an old phone simply gets fewer rows)
+describe("loadCompanyDB — a partial set of money (#2075)", () => {
+  it("a payment without its invoice and an invoice without its job do not break the load", async () => {
+    rows.invoices = [
+      { id: "i-seen", customer_id: "c1", job_id: "j-unseen", number: "INV-0007", kind: "progress", status: "sent", total_cents: 5000, paid_cents: 0, balance_cents: 5000, due_date: "2026-11-30", sent_at: "2026-11-10T10:00:00Z" },
+    ];
+    rows.payments = [
+      { id: "pay-orphan", invoice_id: "i-unseen", customer_id: "c1", method: "cash", amount_cents: 3000, refunded_cents: 0, status: "succeeded", received_at: "2026-11-11T10:00:00Z", idempotency_key: "k1" },
+    ];
+    rows.notifications = [];
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.invoices.map((i) => i.id)).toContain("i-seen");
+    expect(db.payments.map((p) => p.id)).toContain("pay-orphan");
+  });
+});

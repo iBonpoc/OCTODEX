@@ -4131,9 +4131,10 @@ rollback;
 
 
 -- ---------------------------------------------------------------- T53: the money of a sent invoice does not change directly (security audit 06.11, item 1)
+-- #2075 (20261117360000): invoices are the office's — these checks write as the office (sales wrote here before)
 :as_owner_a
 insert into public.customers (id, company_id, display_name) values ('c5300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T53 Client');
-:as_sales_a
+:as_office_a
 -- as the app makes it (invoice.issue / visit.pay): inserted already sent, subtotal = total
 insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
   ('15300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T53 sent', 10000, 10000, now());
@@ -4143,10 +4144,10 @@ select tst.fails($q$insert into public.invoices (company_id, number, customer_id
 :as_office_a
 insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
   ('15310000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000001', 'c5300000-0000-4000-8000-000000000001', 'cash', 4000, 'succeeded', 't53-pay-1');
-:as_sales_a
+:as_office_a
 select tst.ok((select paid_cents = 4000 and payment_status = 'partially_paid' from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'T53: a payment still lowers the balance');
-select tst.fails($q$update public.invoices set total_cents = -100 where id = '15300000-0000-4000-8000-000000000001'$q$, 'sales do not set a negative total on a sent invoice');
-select tst.fails($q$update public.invoices set total_cents = 3000, subtotal_cents = 3000 where id = '15300000-0000-4000-8000-000000000001'$q$, 'sales do not set the total below what is paid');
+select tst.fails($q$update public.invoices set total_cents = -100 where id = '15300000-0000-4000-8000-000000000001'$q$, 'the office does not set a negative total on a sent invoice');
+select tst.fails($q$update public.invoices set total_cents = 3000, subtotal_cents = 3000 where id = '15300000-0000-4000-8000-000000000001'$q$, 'the office does not set the total below what is paid');
 select tst.fails($q$update public.invoices set total_cents = 20000, subtotal_cents = 20000 where id = '15300000-0000-4000-8000-000000000001'$q$, 'the total of a sent invoice does not change at all');
 do $$ begin
   update public.invoices set total_cents = 20000, subtotal_cents = 20000 where id = '15300000-0000-4000-8000-000000000001';
@@ -4176,7 +4177,7 @@ select tst.ok((select paid_cents = 4000 and payment_status = 'partially_paid' fr
 :as_office_a
 insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
   ('15310000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000001', 'c5300000-0000-4000-8000-000000000001', 'check', 6000, 'succeeded', 't53-pay-2');
-:as_sales_a
+:as_office_a
 select tst.ok((select paid_cents = 10000 and payment_status = 'paid' and total_cents = 10000 from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'the last payment closes the invoice (recalc passes the guard)');
 -- a draft still changes, but not below what is paid; once sent it is frozen
 insert into public.invoices (id, company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values
@@ -4188,7 +4189,7 @@ select tst.fails($q$update public.invoices set total_cents = -1 where id = '1530
 :as_office_a
 insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
   ('15310000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000002', 'c5300000-0000-4000-8000-000000000001', 'cash', 3000, 'succeeded', 't53-pay-3');
-:as_sales_a
+:as_office_a
 do $$ begin
   update public.invoices set subtotal_cents = 1000, total_cents = 1000 where id = '15300000-0000-4000-8000-000000000002';
   raise exception 'FAILED: a draft went below what is paid';
@@ -4203,7 +4204,7 @@ do $$ begin
   update public.invoices set subtotal_cents = 1000, total_cents = 1000 where id = '15300000-0000-4000-8000-000000000002';
   perform set_config('app.invoice_recalc', '', true);
 end $$;
-:as_sales_a
+:as_office_a
 update public.invoices set due_date = tst.today() + 7 where id = '15300000-0000-4000-8000-000000000002';
 select tst.ok((select due_date = tst.today() + 7 and total_cents = 1000 and paid_cents = 3000 from public.invoices where id = '15300000-0000-4000-8000-000000000002'),
               'an old invoice with total below paid still takes a new due date');
@@ -12946,12 +12947,11 @@ select tst.ok(true, 'T191 sales take no payment on a visit (record_visit_payment
 -- С-1: a draft progress invoice of their own turned «deposit» of the signed version by an update: refused
 insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
   ('11910000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f2', 'progress', 'draft', 'T191 draft', 9999900, 9999900);
+-- refused (tg_invoice_guard, 42501) — or, since #2075 (20261117380000), not even seen: the draft is not of his deal
 do $$ begin
   update public.invoices set kind = 'deposit', source_estimate_version_id = '51910000-0000-4000-8000-000000000002' where id = '11910000-0000-4000-8000-000000000006';
-  raise exception 'FAILED: T191 sales turned a draft into a deposit';
 exception when insufficient_privilege then null;
 end $$;
-select tst.ok(true, 'T191 sales do not change what an invoice is (kind, version: tg_invoice_guard, 42501)');
 :as_super
 select tst.ok((select kind = 'progress' and source_estimate_version_id is null from public.invoices where id = '11910000-0000-4000-8000-000000000006'), 'T191 the draft stays a progress invoice');
 select tst.ok(tst.cnt($q$select 1 from public.payments where id = 'a1910000-0000-4000-8000-000000000005'$q$) = 0, 'T191 no payment from sales on the visit');
@@ -13540,7 +13540,7 @@ end $$;
 :as_super
 update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
 :as_sales_a
-select tst.fails($q$update public.invoices set status = 'void', void_reason = 'T197 sales' where id = '01970000-0000-4000-8000-000000000002'$q$, 'T197 sales do not void');
+select tst.blocked($q$update public.invoices set status = 'void', void_reason = 'T197 sales' where id = '01970000-0000-4000-8000-000000000002'$q$, 'T197 sales do not void (since #2075 they do not even see an invoice of another''s deal)');
 :as_owner_a
 select tst.fails($q$update public.invoices set status = 'void' where id = '01970000-0000-4000-8000-000000000002'$q$, 'T197 no void without a reason');
 update public.invoices set status = 'void', void_reason = 'T197 wrong amount: $900 instead of $90' where id = '01970000-0000-4000-8000-000000000002';
@@ -16981,5 +16981,84 @@ select tst.ok((public.portal_accept('tok_t381_2_0123456789abcdef', '38120000-000
 select tst.ok((select count(*) from public.estimate_approvals where estimate_id = '38100000-0000-4000-8000-000000000002') = 1, 'T381 the repeat doubles nothing');
 rollback;
 \echo 'T381 ok'
+
+-- ---------------------------------------------------------------- T420–T423 (#2075): sales see the money of their deals only
+-- The founder's answer to В4 (audit of roles #2064): sales do not see the company's money, only the sums of their own
+-- estimates and leads. «His deal»: an estimate he made, or one of a lead he leads; its job; that job's / version's invoices
+-- (20261117380000). Three estimates of company A: E1 by sales, E2 by the office on a lead sales leads, E3 by the office.
+\echo 'T420 sales and the money of the company'
+begin;
+:as_super
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
+  ('a4200000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000',
+   (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T420 lead', '(818) 555-4200',
+   'a0000000-0000-0000-0000-000000000005');
+insert into public.estimates (id, company_id, number, customer_id, property_id, title, created_by, lead_id) values
+  ('a4200000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T420 E1 sales', 'a0000000-0000-0000-0000-000000000005', null),
+  ('a4200000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T420 E2 his lead', 'a0000000-0000-0000-0000-000000000002', 'a4200000-0000-4000-8000-0000000000a1'),
+  ('a4200000-0000-4000-8000-0000000000e3', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T420 E3 office', 'a0000000-0000-0000-0000-000000000002', null);
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+  ('a4201000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'a4200000-0000-4000-8000-0000000000e2', 1);
+insert into public.jobs (id, company_id, number, title, customer_id, property_id, estimate_id, contract_total_cents) values
+  ('a4202000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', '', 'T420 J1', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'a4200000-0000-4000-8000-0000000000e1', 100000),
+  ('a4202000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', '', 'T420 J2', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'a4200000-0000-4000-8000-0000000000e2', 100000),
+  ('a4202000-0000-4000-8000-0000000000e3', 'ca000000-0000-0000-0000-000000000000', '', 'T420 J3', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'a4200000-0000-4000-8000-0000000000e3', 100000);
+insert into public.invoices (id, company_id, number, customer_id, job_id, source_estimate_version_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('a4203000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'a4202000-0000-4000-8000-0000000000e1', null, 'progress', 'sent', 'T420 his job', 30000, 30000, now()),
+  ('a4203000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'a4202000-0000-4000-8000-0000000000e2', 'a4201000-0000-4000-8000-0000000000e2', 'deposit', 'sent', 'T420 his lead deposit', 5000, 5000, now()),
+  ('a4203000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'a4202000-0000-4000-8000-0000000000e3', null, 'progress', 'sent', 'T420 office job', 40000, 40000, now()),
+  ('a4203000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', null, null, 'standalone', 'sent', 'T420 standalone', 7000, 7000, now());
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, received_by) values
+  ('a4204000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'a4203000-0000-4000-8000-000000000001', 'c1a00000-0000-0000-0000-000000000001', 'cash', 1000, 'succeeded', 't420-p1', 'a0000000-0000-0000-0000-000000000002'),
+  ('a4204000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'a4203000-0000-4000-8000-000000000003', 'c1a00000-0000-0000-0000-000000000001', 'cash', 2000, 'succeeded', 't420-p3', 'a0000000-0000-0000-0000-000000000002'),
+  ('a4204000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'a4203000-0000-4000-8000-000000000004', 'c1a00000-0000-0000-0000-000000000001', 'check', 3000, 'succeeded', 't420-p4', 'a0000000-0000-0000-0000-000000000005');
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('a4205000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', 'a4200000-0000-4000-8000-0000000000e1'),
+  ('a4205000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'estimate.approved', 'a4200000-0000-4000-8000-0000000000e2'),
+  ('a4205000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', 'a4200000-0000-4000-8000-0000000000e3'),
+  ('a4205000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'deposit.paid', null);
+insert into public.stripe_accounts (company_id, account_id) values ('ca000000-0000-0000-0000-000000000000', 'acct_T420test')
+  on conflict do nothing;
+insert into public.payment_attempts (company_id, invoice_id, customer_id, amount_cents, attempt_no, idempotency_key, stripe_account_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4203000-0000-4000-8000-000000000001', 'c1a00000-0000-0000-0000-000000000001', 1000, 1, 't420-attempt', 'acct_T420test');
+insert into public.refunds (company_id, payment_id, amount_cents, idempotency_key) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4204000-0000-4000-8000-000000000001', 100, 't420-refund');
+
+-- T420: invoices — his estimate's job, his lead's estimate; not the office's, not a standalone one
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.invoices where id::text like 'a4203000-%'$q$) = 2, 'T420 sales see the invoices of their two deals only');
+select tst.ok(exists (select 1 from public.invoices where id = 'a4203000-0000-4000-8000-000000000001'), 'T420 the invoice of the job of his estimate');
+select tst.ok(exists (select 1 from public.invoices where id = 'a4203000-0000-4000-8000-000000000002'), 'T420 the deposit of the estimate of the lead he leads');
+select tst.ok(not exists (select 1 from public.invoices where id in ('a4203000-0000-4000-8000-000000000003', 'a4203000-0000-4000-8000-000000000004')),
+  'T420 not the office''s job, not a standalone invoice');
+select tst.ok(not exists (select 1 from public.customer_balances b where b.customer_id = 'c1a00000-0000-0000-0000-000000000001' and b.balance_cents >= 47000),
+  'T420 the client''s balance shows him only what his deals bill');
+
+-- T421: payments — of his deals and those he took himself
+select tst.ok(tst.cnt($q$select 1 from public.payments where id::text like 'a4204000-%'$q$) = 2, 'T421 sales see two payments');
+select tst.ok(exists (select 1 from public.payments where id = 'a4204000-0000-4000-8000-000000000001'), 'T421 a payment of his deal (the office took it)');
+select tst.ok(exists (select 1 from public.payments where id = 'a4204000-0000-4000-8000-000000000004'), 'T421 a payment he took himself');
+select tst.ok(not exists (select 1 from public.payments where id = 'a4204000-0000-4000-8000-000000000003'), 'T421 not a payment of the office''s deal');
+
+-- T422: refunds, payment attempts, the Stripe account — none; notifications of his estimates only
+select tst.ok(tst.cnt($q$select 1 from public.refunds$q$) = 0, 'T422 sales see no refunds');
+select tst.ok(tst.cnt($q$select 1 from public.payment_attempts$q$) = 0, 'T422 sales see no payment attempts');
+select tst.ok(tst.cnt($q$select 1 from public.stripe_accounts$q$) = 0, 'T422 sales do not see the Stripe account');
+select tst.ok(tst.cnt($q$select 1 from public.notifications where id::text like 'a4205000-%'$q$) = 2, 'T422 sales see the notifications of their two estimates only');
+select tst.blocked($q$update public.notifications set read_at = now() where id = 'a4205000-0000-4000-8000-000000000003'$q$, 'T422 sales do not mark another''s notification read');
+update public.notifications set read_at = now() where id = 'a4205000-0000-4000-8000-000000000001';
+select tst.ok((select read_at is not null from public.notifications where id = 'a4205000-0000-4000-8000-000000000001'), 'T422 sales mark their own notification read');
+
+-- T423: the office sees everything as before; the lead handed to the office takes its deal from sales
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.invoices where id::text like 'a4203000-%'$q$) = 4
+          and tst.cnt($q$select 1 from public.payments where id::text like 'a4204000-%'$q$) = 3
+          and tst.cnt($q$select 1 from public.refunds$q$) >= 1 and tst.cnt($q$select 1 from public.stripe_accounts$q$) >= 1
+          and tst.cnt($q$select 1 from public.notifications where id::text like 'a4205000-%'$q$) = 4, 'T423 the office sees all the money as before');
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4200000-0000-4000-8000-0000000000a1';
+:as_sales_a
+select tst.ok(not exists (select 1 from public.invoices where id = 'a4203000-0000-4000-8000-000000000002'), 'T423 the lead handed over: its deposit is no longer his');
+rollback;
+\echo 'T420 T421 T422 T423 ok'
 
 \echo 'ALL TESTS PASSED'
