@@ -1,7 +1,8 @@
 import type { Mode } from "@/data/store";
 import { timing, type StatusName } from "@octo/design-tokens";
 import { seeCosts } from "./access";
-import { invoiceOwes } from "@octo/estimating-engine";
+import { contractStatement, invoiceOwes } from "@octo/estimating-engine";
+import { contractInvoices } from "./contractKind";
 import { daysOverdue, daysSince, isOverdue, minutesSince, visitContext } from "@/data/selectors";
 import type { DB, ID, Role, Task } from "@/data/types";
 import { canSeeLead, isBackFromSnooze, leadTurn } from "./leads";
@@ -27,6 +28,8 @@ export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "la
   | "estimateSign" | "estimateExpired" | "estimateDeclined"
   /* wave 3c (S10, S15): the last visit is over — is the job done? (docs/specs/17-job.md §4) */
   | "jobDone"
+  /* #2048: the job is done and part of its contract is not invoiced — the money must not be lost (S11 job → invoice) */
+  | "jobNotInvoiced"
   /* docs/specs/22 §2 (S22c): the person on a lead / a task is not at work any more — the office hands it over */
   | "leadOrphan" | "taskOrphan"
   /* docs/specs/23 §3 («Лиды и клиенты»): a money change the server refused — not written, the phone showed it */
@@ -65,7 +68,8 @@ export interface AttentionItem {
 export function attentionHref(it: AttentionItem): string {
   switch (it.kind) {
     case "schedule": return `/job/schedule?jobId=${it.refId}`;
-    case "jobDone": return `/job/${it.refId}`;
+    case "jobDone":
+    case "jobNotInvoiced": return `/job/${it.refId}`;
     case "rejected":
     case "inspectionNoEstimate": return it.href ?? `/lead/${it.refId}`;
     case "taskOrphan": return `${SUBJECT_PATH[it.subject ?? "lead"]}/${it.refId}`;
@@ -220,6 +224,15 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
       if (!jobAwaitingClose(db, j)) continue;
       const c = db.customers.find((x) => x.id === (j.customerId ?? db.properties.find((p) => p.id === j.propertyId)?.customerId));
       out.push({ id: `done-${j.id}`, kind: "jobDone", refId: j.id, name: c?.name ?? "", label: "job3.att.done", params: { name: c?.name ?? "", title: j.title }, chip: "job3.att.doneChip", status: "info", amountCents: j.amountCents, score: 900 });
+    }
+    // #2048: done, and part of the contract is still not on any invoice (the engine's contract statement: contract − invoiced).
+    // It goes away when an invoice covers the whole contract. A visit closed with no payment (#2018) lands here too.
+    for (const j of db.jobs) {
+      if (j.status !== "done") continue;
+      const left = contractStatement(j.amountCents, contractInvoices(db, j.id)).toInvoice;
+      if (left <= 0) continue;
+      const c = db.customers.find((x) => x.id === (j.customerId ?? db.properties.find((p) => p.id === j.propertyId)?.customerId));
+      out.push({ id: `noinv-${j.id}`, kind: "jobNotInvoiced", refId: j.id, name: c?.name ?? "", label: "att.notInvoiced", params: { name: c?.name ?? "", title: j.title }, chip: "att.notInvoicedChip", status: "warn", amountCents: left, score: 820 });
     }
   }
   // a task of a person who is not at work: its own card, it opens the task's subject (never the general list)
