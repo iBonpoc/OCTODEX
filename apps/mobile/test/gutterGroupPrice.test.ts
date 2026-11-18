@@ -82,8 +82,8 @@ describe("цена группы для цвета без позиции (#2000, 
     expect(groupSource(tie, part("black"))?.id).toBe("a");
   });
 
-  it("С4а: группа базы впереди позиции, выпавшей из группы (старый телефон сохранил без priceGroup)", () => {
-    const cat = [grouped("w", "white", { priceCents: 1000 }), item("old", "brown", { priceCents: 1200, updatedAt: "2026-11-19T00:00:00Z" })];
+  it("С4а: группа базы впереди позиции, выпавшей из группы (старый телефон сохранил без priceGroup), даже если та изменена позже", () => {
+    const cat = [grouped("w", "white", { priceCents: 1000 }), item("old", "brown", { priceCents: 1200, updatedAt: "2026-11-19T00:00:00Z" }) /* changed after the group's item: a fixed date, the clock is not read */];
     expect(groupSource(cat, part("black"))?.id).toBe("w");
   });
 
@@ -106,6 +106,26 @@ describe("цена группы для цвета без позиции (#2000, 
     expect(one([part("black")], cat).source?.testPrice).toBeUndefined();
     const caps = [item("c", "White", { attributes: { material: "Aluminum " } })];
     expect(groupSource(caps, part("black"))?.id).toBe("c");
+  });
+
+  it("С1а: тестовый источник — testPrice; тестовый за $0 — «нет цены» (§10.2 п.1)", () => {
+    const sample = [grouped("w", "white", { priceCents: 1000, placeholder: true })];
+    expect(one([part("black")], sample).source?.testPrice).toBe(true);
+    const zero = [grouped("w", "white", { priceCents: 0, costCents: 0, placeholder: true })];
+    expect(one([part("black")], zero).source?.noPrice).toBe(true);
+  });
+
+  it("С9б (ревью №2): источник другого ключа (старое колено «A» для 45°) — созданная позиция в ГРУППЕ ИСТОЧНИКА, не в своей отдельной", () => {
+    const elA = (id: string, color: string) =>
+      ({ ...item(id, color), unit: "ea", attributes: { part: "elbow", shape: "round", size: "3", material: "aluminum", style: "A", color } }) as CatalogItem;
+    const p45 = { key: "elbow", section: "downspouts", qty: "2", unit: "ea", use: "estimate", kind: "material", attrs: { part: "elbow", shape: "round", size: "3", material: "aluminum", style: "45", color: "black" } } as unknown as PartQty;
+    const inGroup = { ...elA("aw", "white"), attributes: { ...elA("aw", "white").attributes!, priceGroup: priceGroupKey(elA("aw", "white")) } };
+    const made = missingItems("c1", [{ key: "k", part: p45 }], [inGroup], name)[0]!;
+    expect(priceGroupKey({ unit: "ea", attributes: made.attributes! })).not.toBe(inGroup.attributes.priceGroup); // the part's own key differs
+    expect(made.attributes?.priceGroup).toBe(inGroup.attributes.priceGroup);
+    expect(made.priceCents).toBe(1000);
+    // before the transition (no priceGroup): the source's own key — the transition gathers them
+    expect(missingItems("c1", [{ key: "k", part: p45 }], [elA("aw", "white")], name)[0]!.attributes?.priceGroup).toBe(priceGroupKey(elA("aw", "white")));
   });
 
   it("С5: у детали нет ни одной позиции — «нет цены», как сейчас", () => {
@@ -154,8 +174,9 @@ describe("цена группы для цвета без позиции (#2000, 
     expect(made[0]!.attributes?.priceGroup).toBe(WB[0]!.attributes!.priceGroup);
     expect(made[0]!.priceCents).toBe(1000);
     expect(made[0]!.placeholder).toBe(false);
-    // a colour with its own item, or a part without any group, is not offered
+    // a part without any group, or a colour with its own item, is not offered
     expect(measuredColourRows(g, undefined, []).length).toBe(0);
+    expect(measuredColourRows(g, undefined, [...WB, grouped("own", "black")]).some((r) => r.part.key.startsWith("gutter") && r.part.attrs.color === "black" && r.part.unit === "ft" && r.part.attrs.size === "5" && r.part.section === "gutter")).toBe(false);
   });
 
   it("С9а: до перехода созданная позиция берёт ту же цену, что строка сметы (последнюю изменённую), а не тестовую", () => {

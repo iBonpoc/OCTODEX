@@ -26,7 +26,7 @@ import { CardGrid, ListCard, ListCardHeader } from "@/ui/listCard";
 import { useToast, Sheet } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { CardList, ListRow, Screen } from "@/ui/surfaces";
-import { bindable, bindItem, findItem, laborRows, materialRows, measuredColourRows, missingItems, partName, type PriceRow, priceFromOtherDegree } from "../prices";
+import { bindable, bindItem, findItem, laborRows, materialRows, colourRowsFor, measuredParts, missingItems, partName, type PriceRow, priceFromOtherDegree } from "../prices";
 import { gutterData } from "../data";
 import { withAfter } from "@/data/undo";
 import { QuickPriceSheet } from "@/features/QuickPriceSheet";
@@ -65,7 +65,8 @@ export default function GutterPricesScreen() {
   const nameOf = (p: PartQty): string => partName(t, p);
   // the colours the company's measurements use without an item of their own (#2000 §10.2 п.4): made by the same banner, in their group
   const measured = store.db.moduleData?.gutters;
-  const colours = useMemo(() => measuredColourRows(gutterData(store.db), raw, catalog), [measured, raw, catalog]); // eslint-disable-line react-hooks/exhaustive-deps
+  const drawn = useMemo(() => measuredParts(gutterData(store.db), raw), [measured, raw]); // eslint-disable-line react-hooks/exhaustive-deps
+  const colours = useMemo(() => colourRowsFor(drawn, catalog), [drawn, catalog]);
   const missing = useMemo(() => missingItems(companyId, [...labor, ...parts, ...colours], catalog, nameOf), [companyId, labor, parts, colours, catalog, t]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** ids made from this page and not taken back: a second press before the page redraws makes nothing and never puts
@@ -137,7 +138,7 @@ export default function GutterPricesScreen() {
     return (
       <ListCard
         key={row.key}
-        testID={`gpr-miss-${row.part.key}`}
+        testID={colours.includes(row) ? `gpr-miss-${row.part.key}-${row.part.attrs.color}` : `gpr-miss-${row.part.key}`}
         title={title}
         lead={{ kind: "icon", icon: row.part.kind === "labor" ? "wrench" : "box" }}
         value={`— / ${unit}`}
@@ -201,7 +202,8 @@ export default function GutterPricesScreen() {
         <View style={{ gap: space[2] }} testID="gpr-parts">
           <T v="heading">{t(k("parts"))}</T>
           <T v="caption" tone="mut">{t(k("partsHint"))}</T>
-          {list(parts)}
+          {/* the colours of the measurements without an item of their own are «нет позиции» rows too: the banner's N is what is seen (review #2000 №3) */}
+          {list([...parts, ...colours])}
         </View>
       </View>
 

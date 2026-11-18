@@ -107,10 +107,10 @@ export function priceItemOf(catalog: readonly CatalogItem[], p: Pick<PartQty, "k
 }
 
 /**
- * The coloured parts of the company's measurements that have no item of their colour but have a group (#2000 §10.2 п.4): the price
- * screen's «Создать позиции сразу (N)» makes them too, in the group and at its price (`missingItems`). One row per part (matchKey).
+ * The coloured parts the company's measurements use, one row per part (matchKey) — counted from the drawings only, so a price saved on
+ * the price screen never counts every drawing again (review #2000 №4); `colourRowsFor` then keeps the ones the catalog lacks.
  */
-export function measuredColourRows(g: GutterData, raw: unknown, catalog: readonly CatalogItem[]): PriceRow[] {
+export function measuredParts(g: GutterData, raw: unknown): PriceRow[] {
   const rules = readRules(raw);
   const over = toRulesOverride(raw);
   const byM = new Map<string, GutterData["elements"]>();
@@ -120,14 +120,22 @@ export function measuredColourRows(g: GutterData, raw: unknown, catalog: readonl
     const d = fromElements(byM.get(m.id) ?? []);
     if (!d.runs.length) continue;
     for (const part of computeGutterParts(toMeasurement(d, { method: rules.corner }), over).parts) {
-      if (part.kind === "labor" || part.use === "purchase") continue;
+      if (part.kind === "labor" || part.use === "purchase" || !part.attrs.color?.trim()) continue;
       const key = matchKey(part);
-      if (seen.has(key) || findItem(catalog, part) || !groupSource(catalog, part)) continue;
-      seen.set(key, { key, part });
+      if (!seen.has(key)) seen.set(key, { key, part });
     }
   }
   return [...seen.values()];
 }
+
+/**
+ * The colours of the measurements without an item of their own but with a group (#2000 §10.2 п.4): rows of the price screen («нет
+ * позиции»), made by the same «Создать позиции сразу (N)», in their group and at its price (`missingItems`).
+ */
+export const colourRowsFor = (rows: readonly PriceRow[], catalog: readonly CatalogItem[]): PriceRow[] =>
+  rows.filter(({ part }) => !findItem(catalog, part) && !!groupSource(catalog, part));
+
+export const measuredColourRows = (g: GutterData, raw: unknown, catalog: readonly CatalogItem[]): PriceRow[] => colourRowsFor(measuredParts(g, raw), catalog);
 
 /**
  * The round elbow of the engine's DEFAULT degree (75°, «Расход v2») the company has not priced takes its round elbow of the same
@@ -275,10 +283,13 @@ export function missingItems(companyId: string, rows: readonly PriceRow[], catal
     // a colour of a part whose group is there: the group's price, as the store and the server give a joining item (in every mode —
     // the store does it only in the cloud; review of PR3 №6)
     const g = made.attributes?.priceGroup;
-    // before the transition the colours have no `priceGroup` yet: the price the estimate's line takes now (#2000 — «Обновить смету»
-    // after «Создать» never moves the line's price)
-    const peer = g ? catalog.find((c) => c.attributes?.priceGroup === g) ?? groupSource(catalog, part) : undefined;
-    out.set(id, peer ? { ...made, priceCents: peer.priceCents, placeholder: peer.placeholder, costCents: peer.costCents, vendorTaxBps: peer.vendorTaxBps, markupBps: peer.markupBps } : made);
+    // the item the estimate's line takes its price from now (#2000): the new colour joins ITS group — the database's one, or (before the
+    // transition) the source's own key, so the transition gathers them — and takes its price («Обновить смету» never moves the line's
+    // price; review #2000 №2: a source found by a subset or an old elbow «A» is another key than the part's). None — the part's group.
+    const src = g ? groupSource(catalog, part) ?? catalog.find((c) => c.attributes?.priceGroup === g) : undefined;
+    const group = src ? priceGroupOf(src) ?? priceGroupKey(src) : g;
+    const joined = group && group !== g ? { ...made, attributes: { ...made.attributes!, priceGroup: group } } : made;
+    out.set(id, src ? { ...joined, priceCents: src.priceCents, placeholder: src.placeholder, costCents: src.costCents, vendorTaxBps: src.vendorTaxBps, markupBps: src.markupBps } : joined);
   }
   return [...out.values()];
 }
