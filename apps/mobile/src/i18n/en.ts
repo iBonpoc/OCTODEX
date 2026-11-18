@@ -4605,4 +4605,11 @@ export const en: Dict = {
   "ds.crash.hint": "Drawn by the root ErrorBoundary when the app itself fails (§13): no raw error text, “Retry” draws the screen again, “Restart” reloads the app. Outside the app's theme and language: it takes the system's.",
   // «Портал: предпросмотр клиента»: the office's «open as client» only shows
   "portalPreview.sign": "This is what the client will see. Only the client can sign and pay, by their own link.",
+  // #2017: the invoice message — no «How to pay: —», the client page link
+  "invMsg.sendNoHow": "{company}: invoice {number} for {amount}, due {date}.",
+  "invMsg.dueNoHow": "{company}: a friendly reminder about invoice {number} — balance {amount}, due {date}.",
+  "invMsg.overdueNoHow": "{company}: a friendly reminder that invoice {number} is {days} days past due. Balance due {amount} (was due {date}).",
+  "invMsg.payLink": "View and pay: {link}",
+  "invMsg.noHow": "No payment methods yet — the message won't tell the client how to pay",
+  "invMsg.fill": "Add payment methods",
 };

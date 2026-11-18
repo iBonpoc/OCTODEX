@@ -4605,6 +4605,13 @@ export const ru = {
   "ds.crash.hint": "Его рисует ErrorBoundary корня, когда приложение само упало (§13): без сырого текста ошибки, «Повторить» рисует экран заново, «Перезапустить» перезагружает приложение. Вне тем и языка приложения: берёт тему и язык системы.",
   // «Портал: предпросмотр клиента»: the office's «open as client» only shows
   "portalPreview.sign": "Так увидит клиент. Подписать и оплатить может только клиент по своей ссылке.",
+  // #2017: the invoice message — no «How to pay: —», the client page link
+  "invMsg.sendNoHow": "{company}: счёт {number} на {amount}, оплатить до {date}.",
+  "invMsg.dueNoHow": "{company}: напоминаем о счёте {number} — остаток {amount}, оплатить до {date}.",
+  "invMsg.overdueNoHow": "{company}: напоминаем, что счёт {number} просрочен на {days} дн. Остаток к оплате {amount} (срок был {date}).",
+  "invMsg.payLink": "Счёт и оплата: {link}",
+  "invMsg.noHow": "Способы оплаты не заполнены — в сообщении клиент не увидит, как оплатить",
+  "invMsg.fill": "Заполнить способы оплаты",
 } as const;
 
 export type DictKey = keyof typeof ru;
