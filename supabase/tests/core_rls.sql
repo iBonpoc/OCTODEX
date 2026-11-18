@@ -17692,7 +17692,34 @@ update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000005' whe
 select tst.ok((select assigned_to = 'a0000000-0000-0000-0000-000000000005' from public.leads where id = 'a4250000-0000-4000-8000-0000000000a1'), 'T425 the office gives a free lead to sales');
 update public.estimates set lead_id = 'a4250000-0000-4000-8000-0000000000a1' where id = 'a4250000-0000-4000-8000-0000000000e1';
 select tst.ok((select lead_id = 'a4250000-0000-4000-8000-0000000000a1' from public.estimates where id = 'a4250000-0000-4000-8000-0000000000e1'), 'T425 the office changes the lead of an estimate');
+-- T426: the other ways to make another's deal his are shut by the older guards — proved here
+:as_super
+insert into public.estimates (id, company_id, number, customer_id, property_id, title, created_by, lead_id) values
+  ('a4260000-0000-4000-8000-0000000000e3', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T426 office E', 'a0000000-0000-0000-0000-000000000002', null);
+insert into public.jobs (id, company_id, number, title, customer_id, property_id, estimate_id) values
+  ('a4260000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', '', 'T426 office job', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'a4260000-0000-4000-8000-0000000000e3'),
+  ('a4260000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', '', 'T426 plain job', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', null);
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+  ('a4260000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a4260000-0000-4000-8000-0000000000e3', 1);
+:as_sales_a
+select tst.ok(not app.sales_deal_estimate('a4260000-0000-4000-8000-0000000000e3'), 'T426 fixture: the office''s estimate is not his deal');
+-- (1) the estimate of a job: not changed by the app (no column right), nor a new job made with one (t-guard 20261106046000)
+select tst.fails_like($q$update public.jobs set estimate_id = 'a4250000-0000-4000-8000-0000000000e2' where id = 'a4260000-0000-4000-8000-0000000000f2'$q$,
+  '%permission denied for table jobs%', 'T426 sales do not put their estimate on a job (the column is the server''s)');
+select tst.fails_like($q$insert into public.jobs (company_id, number, title, customer_id, property_id, estimate_id) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'T426 probe', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'a4260000-0000-4000-8000-0000000000e3')$q$,
+  '%made by its signature%', 'T426 sales make no job with an estimate (another''s or their own)');
+-- (2) the author of an estimate is the server's (t10_service_fields keeps it)
+update public.estimates set created_by = 'a0000000-0000-0000-0000-000000000005' where id = 'a4260000-0000-4000-8000-0000000000e3';
+select tst.ok(not app.sales_deal_estimate('a4260000-0000-4000-8000-0000000000e3'), 'T426 sales do not make themselves the author of another''s estimate');
+-- (3) a version stays with its estimate (t06_version_lock_by_send); the source version of an invoice is the office's (T424)
+select tst.fails_like($q$update public.estimate_versions set estimate_id = 'a4250000-0000-4000-8000-0000000000e2' where id = 'a4260000-0000-4000-8000-0000000000b1'$q$,
+  '%stays with its estimate%', 'T426 sales do not move a version of another''s estimate to theirs');
+:as_super
+select tst.ok((select estimate_id = 'a4260000-0000-4000-8000-0000000000e3' from public.estimate_versions where id = 'a4260000-0000-4000-8000-0000000000b1')
+              and (select estimate_id = 'a4260000-0000-4000-8000-0000000000e3' from public.jobs where id = 'a4260000-0000-4000-8000-0000000000f1')
+              and (select estimate_id is null from public.jobs where id = 'a4260000-0000-4000-8000-0000000000f2'), 'T426 nothing moved');
 rollback;
-\echo 'T425 ok'
+\echo 'T425 T426 ok'
 
 \echo 'ALL TESTS PASSED'
