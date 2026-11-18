@@ -16872,17 +16872,23 @@ insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) val
 
 :as_sales_a
 -- T393: sales — an install visit: refused
-select tst.fails($q$insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values ('39300000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000e1', 'install', now() + interval '1 day', now() + interval '1 day 3 hours')$q$,
+select tst.fails_like($q$insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values ('39300000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000e1', 'install', now() + interval '1 day', now() + interval '1 day 3 hours')$q$, '%row-level security%',
   'T393 sales: an install visit is refused');
+select tst.fails_like($q$insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values ('39300000-0000-4000-8000-0000000000f4', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000e1', 'inspection', now() + interval '1 day', now() + interval '1 day 1 hour')$q$, '%row-level security%',
+  'T393 sales: an «inspection» on a job is refused (an inspection is a lead''s visit without a job)');
 -- T394: sales — an inspection: as before
 insert into public.visits (id, company_id, property_id, kind, starts_at, ends_at) values
   ('39300000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000d1', 'inspection', now() + interval '1 day', now() + interval '1 day 1 hour');
 update public.visits set starts_at = now() + interval '3 days', ends_at = now() + interval '3 days 1 hour' where id = '39300000-0000-4000-8000-0000000000f2';
 -- T395: sales — an inspection turned into an install, or the office's install moved: refused / not reached
-select tst.fails($q$update public.visits set kind = 'install', job_id = '39300000-0000-4000-8000-0000000000e1', property_id = null where id = '39300000-0000-4000-8000-0000000000f2'$q$,
+select tst.fails_like($q$update public.visits set kind = 'install', job_id = '39300000-0000-4000-8000-0000000000e1', property_id = null where id = '39300000-0000-4000-8000-0000000000f2'$q$, '%sales change only an inspection%',
   'T395 sales: an inspection does not become an install');
-select tst.fails($q$update public.visits set starts_at = now() + interval '9 days' where id = '39300000-0000-4000-8000-0000000000f9'$q$,
+select tst.fails_like($q$update public.visits set starts_at = now() + interval '9 days' where id = '39300000-0000-4000-8000-0000000000f9'$q$, '%sales change only an inspection%',
   'T395 sales: the office''s install visit is not moved (a refusal, not a silent «0 rows»)');
+select tst.fails_like($q$update public.visits set kind = 'inspection', starts_at = now() + interval '9 days' where id = '39300000-0000-4000-8000-0000000000f9'$q$,
+  '%sales change only an inspection%', 'T395 sales: the office''s install does not become an «inspection»');
+select tst.fails($q$update public.visits set deleted_at = now() where id = '39300000-0000-4000-8000-0000000000f9'$q$,
+  'T395 sales: the office''s install is not dropped');
 -- T396: sales — a job «scheduled»: refused
 select tst.fails_like($q$update public.jobs set status = 'scheduled' where id = '39300000-0000-4000-8000-0000000000e1'$q$, '%only the office schedules a job%',
   'T396 sales: a job does not become «scheduled»');
@@ -16890,7 +16896,9 @@ select tst.fails_like($q$update public.jobs set status = 'scheduled' where id = 
 select tst.ok(not exists (select 1 from public.visits where id = '39300000-0000-4000-8000-0000000000f1'), 'T393 …no install visit written');
 select tst.ok((select kind = 'inspection' and starts_at > now() + interval '2 days' from public.visits where id = '39300000-0000-4000-8000-0000000000f2'), 'T394 sales: the inspection is booked and moved');
 select tst.ok((select kind = 'inspection' from public.visits where id = '39300000-0000-4000-8000-0000000000f2'), 'T395 …still an inspection');
-select tst.ok((select starts_at < now() + interval '3 days' from public.visits where id = '39300000-0000-4000-8000-0000000000f9'), 'T395 sales: the office''s install visit is not moved');
+select tst.ok((select kind = 'install' and deleted_at is null and starts_at < now() + interval '3 days' from public.visits where id = '39300000-0000-4000-8000-0000000000f9'),
+  'T395 sales: the office''s install visit is not moved, turned or dropped');
+select tst.ok(not exists (select 1 from public.visits where id = '39300000-0000-4000-8000-0000000000f4'), 'T393 …no inspection on a job written');
 select tst.ok((select status from public.jobs where id = '39300000-0000-4000-8000-0000000000e1') = 'draft', 'T396 …the job stays a draft');
 
 -- T397: the office plans as before — an install visit, the job «scheduled», the visit moved

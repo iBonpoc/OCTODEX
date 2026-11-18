@@ -6,7 +6,8 @@
  * С2 ДАНО the technician, КОГДА he opens /property/<id> of a client none of his visits is for, ТОГДА «Нет доступа к этому
  *    объекту»; the dispatcher sees the property.
  */
-const setRole = (h, role) => h.page.evaluate((r) => localStorage.setItem("octo.role.v1", JSON.stringify(r)), role);
+// the role is put in from a page without the app (h.seed, CHECKS §9 №12)
+const setRole = (h, role) => h.seed("octo.role.v1", role);
 const at = (h) => new URL(h.page.url()).pathname;
 
 exports.run = async (h) => {
@@ -33,12 +34,12 @@ exports.run = async (h) => {
     await h.go(`/job/schedule?jobId=${jobId}`);
     await h.expectText(/Нет доступа к этому экрану/, `С1 ${role} ${h.layout}: «Нет доступа»`);
     h.expect(!at(h).startsWith("/job/schedule"), `С1 ${role}: back to the home screen (${at(h)})`);
-    h.expect((await p.getByRole("button", { name: "Запланировать" }).count()) === 0, `С1 ${role}: no «Запланировать» form`);
+    h.expect((await p.getByTestId("sch-save").count()) === 0, `С1 ${role}: no «Запланировать» form`);
   }
   // С1: the dispatcher — the form
   await setRole(h, "dispatcher");
   await h.go(`/job/schedule?jobId=${jobId}`);
-  await p.getByRole("button", { name: "Запланировать" }).last().waitFor({ timeout: 8000 });
+  await p.getByTestId("sch-save").locator("visible=true").first().waitFor({ timeout: 8000 });
   h.expect(at(h).startsWith("/job/schedule"), "С1 dispatcher: the screen opens");
   await h.shot("dispatcher-schedule");
 
@@ -51,6 +52,6 @@ exports.run = async (h) => {
   // С2: the dispatcher sees it
   await setRole(h, "dispatcher");
   await h.go(`/property/${propertyId}`);
-  await p.getByText(/Объект|Property/).first().waitFor({ timeout: 8000 });
+  await p.getByTestId("prop-tiles").locator("visible=true").first().waitFor({ timeout: 8000 });
   h.expect((await p.getByTestId("property-no-access").count()) === 0, "С2 dispatcher: the property opens");
 };
