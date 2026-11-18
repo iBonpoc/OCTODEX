@@ -21,7 +21,8 @@ import { Card, Empty, FieldGroup, RowView, Screen } from "@/ui/surfaces";
 import { StatusNote } from "@/ui/statusNote";
 
 const ENTITY: EntityType[] = ["llc", "corporation", "sole_proprietor", "partnership", "other"];
-const LIC: LicenseKind[] = ["cslb", "city_business", "his", "other"];
+// license kinds are examples, not a rule of any state (#2065): «other» first, a California one is just one of them
+const LIC: LicenseKind[] = ["other", "city_business", "cslb", "his"];
 const emptyAddr: Address = { line1: "", city: "", state: "", zip: "" };
 
 /**
@@ -445,7 +446,7 @@ function LicensesEditor() {
           icon="plus"
           variant="secondary"
           full
-          onPress={() => setEdit({ id: uid(), kind: "cslb", number: "", classes: [], onDocuments: true, exp: "", cls: "" })}
+          onPress={() => setEdit({ id: uid(), kind: "other", number: "", classes: [], onDocuments: true, exp: "", cls: "" })}
         />
       )}
     </>

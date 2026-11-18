@@ -938,6 +938,7 @@ export const ru = {
   "co.done": "Заполнено",
   "co.todo": "Не заполнено",
   "co.skipped": "Пропущено",
+  "co.optional": "Необязательно",
   "co.stepOf": "Шаг {i} из {n}",
   "co.saved": "Сохранено",
   "co.saveNext": "Сохранить и дальше",
@@ -1052,7 +1053,6 @@ export const ru = {
   // forms: the main button is never pale — what is missing (#1728, Экраны)
   "form.need.trade": "Выберите направление или впишите своё",
   "form.need.invite": "Укажите имя и email",
-  "ue.noCslb": "Нет действующей лицензии CSLB. В Калифорнии её номер обязателен в смете и договоре — добавьте в «Компания → Лицензии».",
   "lead.st.estimate": "Смета отправлена",
   "lead.st.won": "Клиент",
   "lead.funnel": "Воронка",

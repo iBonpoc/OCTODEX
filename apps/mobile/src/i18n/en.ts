@@ -939,6 +939,7 @@ export const en: Dict = {
   "co.done": "Done",
   "co.todo": "To do",
   "co.skipped": "Skipped",
+  "co.optional": "Optional",
   "co.stepOf": "Step {i} of {n}",
   "co.saved": "Saved",
   "co.saveNext": "Save and continue",
@@ -1053,7 +1054,6 @@ export const en: Dict = {
   // forms: the main button is never pale — what is missing (#1728, Экраны)
   "form.need.trade": "Pick a trade or type your own",
   "form.need.invite": "Enter a name and an email",
-  "ue.noCslb": "No valid CSLB license. In California its number is required on estimates and contracts — add it in Company → Licenses.",
   "lead.st.estimate": "Estimate sent",
   "lead.st.won": "Client",
   "lead.funnel": "Funnel",
