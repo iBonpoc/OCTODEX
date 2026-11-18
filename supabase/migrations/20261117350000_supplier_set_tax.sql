@@ -107,12 +107,15 @@ create trigger t94_item_supplier_tax after update of supplier_id on public.catal
   execute function app.tg_item_supplier_tax();
 
 -- ---- t14: the rate has one writer ---------------------------------------------------------------------------------------
+-- Security INVOKER on purpose (as app.tg_job_cancel_guard): current_user is then the role of the session — a phone is
+-- «authenticated», the door (supplier_set_tax, security definer) runs as its owner. The flag alone is no key: any session can
+-- set a setting; it opens only inside a function of the server (CHECKS №47, as cancel_visit / visit_no_show).
 create or replace function app.tg_supplier_tax_door()
-returns trigger language plpgsql security definer set search_path = '' as $$
+returns trigger language plpgsql set search_path = '' as $$
 begin
   if new.purchase_tax_bps is distinct from old.purchase_tax_bps
      and auth.uid() is not null
-     and coalesce(current_setting('app.supplier_tax_door', true), '') <> 'on' then
+     and not (current_user not in ('authenticated', 'anon') and coalesce(current_setting('app.supplier_tax_door', true), '') = 'on') then
     new.purchase_tax_bps := old.purchase_tax_bps;  -- the old phone's rate is not saved: «update the app» (a debt task, #1834)
   end if;
   return new;

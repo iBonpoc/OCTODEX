@@ -16763,20 +16763,20 @@ end $t$;
 rollback;
 \echo 'T364 ok'
 
--- ---------------------------------------------------------------- T398, T372–T378 (#1834, spec 54 §13): the supplier's tax lives at the supplier
-\echo 'T398 the supplier tax (server)'
+-- ---------------------------------------------------------------- T436, T372–T378 (#1834, spec 54 §13): the supplier's tax lives at the supplier
+\echo 'T436 the supplier tax (server)'
 :as_super
 insert into public.suppliers (id, company_id, name, purchase_tax_bps) values
-  ('37100000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'T398 Supplier', 825),
-  ('37100000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'T398 No rate', null),
-  ('37100000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', 'T398 Other', 600);
+  ('37100000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'T436 Supplier', 825),
+  ('37100000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'T436 No rate', null),
+  ('37100000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', 'T436 Other', 600);
 insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, supplier_id) values
-  ('37100000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T398 one', 'ea', 0, '37100000-0000-4000-8000-0000000000a1'),
-  ('37100000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'material', 'T398 two', 'ea', 0, '37100000-0000-4000-8000-0000000000a1'),
-  ('37100000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'material', 'T398 three', 'ea', 0, '37100000-0000-4000-8000-0000000000a1'),
-  ('37100000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', 'material', 'T398 own rate', 'ea', 0, null);
+  ('37100000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T436 one', 'ea', 0, '37100000-0000-4000-8000-0000000000a1'),
+  ('37100000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'material', 'T436 two', 'ea', 0, '37100000-0000-4000-8000-0000000000a1'),
+  ('37100000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'material', 'T436 three', 'ea', 0, '37100000-0000-4000-8000-0000000000a1'),
+  ('37100000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', 'material', 'T436 own rate', 'ea', 0, null);
 insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps)
-select id, company_id, 1000, 825, 3000 from public.catalog_items where name in ('T398 one', 'T398 two', 'T398 three');
+select id, company_id, 1000, 825, 3000 from public.catalog_items where name in ('T436 one', 'T436 two', 'T436 three');
 insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
   ('37100000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', 1000, 500, 3000);
 delete from public.catalog_cost_history where item_id::text like '37100000-%';
@@ -16784,14 +16784,14 @@ delete from public.catalog_cost_history where item_id::text like '37100000-%';
 :as_owner_a
 select public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 900, 825) as t371_n \gset
 :as_super
-select tst.ok(:t371_n = 3, 'T398 С1 three items followed the supplier');
+select tst.ok(:t371_n = 3, 'T436 С1 three items followed the supplier');
 select tst.ok((select purchase_tax_bps = 900 from public.suppliers where id = '37100000-0000-4000-8000-0000000000a1')
               and (select count(*) = 3 from public.catalog_item_costs where item_id::text in ('37100000-0000-4000-8000-0000000000b1', '37100000-0000-4000-8000-0000000000b2', '37100000-0000-4000-8000-0000000000b3') and vendor_tax_bps = 900),
-  'T398 С1 the supplier and its three items are on 9 %');
-select tst.ok((select count(*) = 3 from public.catalog_items where name in ('T398 one', 'T398 two', 'T398 three') and unit_price_cents = app.item_price_cents(1000, 900, 3000)),
-  'T398 С1 the price of each material is recounted from the cost and the new rate');
+  'T436 С1 the supplier and its three items are on 9 %');
+select tst.ok((select count(*) = 3 from public.catalog_items where name in ('T436 one', 'T436 two', 'T436 three') and unit_price_cents = app.item_price_cents(1000, 900, 3000)),
+  'T436 С1 the price of each material is recounted from the cost and the new rate');
 select tst.ok((select count(*) = 3 from public.catalog_cost_history where item_id::text like '37100000-%' and source = 'supplier_tax' and vendor_tax_bps = 900),
-  'T398 С1 one history row per item, source supplier_tax');
+  'T436 С1 one history row per item, source supplier_tax');
 \echo 'T372 stale rate'
 -- С2: the phone saw 8,25 %, the server has 9 %: nothing changes
 :as_owner_a
@@ -16903,7 +16903,7 @@ select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000
 :as_super
 select tst.ok((select purchase_tax_bps = 500 from public.suppliers where id = '37100000-0000-4000-8000-0000000000aa'), 'T378 С9 the refused change left the rate as it was');
 delete from public.catalog_items where name like 'T378 item %';
-\echo 'T398, T372–T378 ok'
+\echo 'T436, T372–T378 ok'
 
 -- ================================================================ T365–T370: a cost is written only over what the phone saw
 -- (#1958 (а), migration 20261117340000). catalog_set_item_costs(item, the changed fields, what the phone had in them).
@@ -17335,5 +17335,18 @@ do $$ begin
   update public.catalog_item_costs set vendor_tax_bps = 600 where item_id = '39900000-0000-4000-8000-0000000000b3';
   perform tst.ok((select vendor_tax_bps = 600 from public.catalog_item_costs where item_id = '39900000-0000-4000-8000-0000000000b3'), 'T402 an item without a supplier keeps its own tax even when marked');
 end $$;
+
+\echo 'T436 the door opens only inside the function ok'
+-- the flag alone is no key (CHECKS №47): a session of the phone (authenticated) that sets it and updates the rate directly is still given the old rate
+:as_owner_a
+do $$ begin
+  perform set_config('app.supplier_tax_door', 'on', true);
+  update public.suppliers set purchase_tax_bps = 777 where id = '39900000-0000-4000-8000-0000000000a1';
+end $$;
+:as_super
+select tst.ok((select purchase_tax_bps = 800 from public.suppliers where id = '39900000-0000-4000-8000-0000000000a1'), 'T436 a phone with the flag set does not change the rate by a direct update');
+:as_owner_a
+select tst.ok(public.supplier_set_tax('39900000-0000-4000-8000-0000000000a1', 810, 800) = 2, 'T436 the door itself still changes it (the owner of the function)');
+:as_super
 
 \echo 'ALL TESTS PASSED'
