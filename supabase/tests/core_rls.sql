@@ -6172,7 +6172,7 @@ select tst.ok((select count(*) = 1 from public.jobs where estimate_id = '0e47000
 insert into public.customers (id, company_id, display_name) values ('c7300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T73 Client');
 insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
   ('d7300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', '73 Deposit St', 'Pasadena');
--- #2075 (20261117490000): sales take the deposit of their own deal — the signed estimate is the sales person's (T424: not another's)
+-- #2075 (20261117560000): sales take the deposit of their own deal — the signed estimate is the sales person's (T424: not another's)
 insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
   ('0e730000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 signed', 'a0000000-0000-0000-0000-000000000005'),
   ('0e730000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 not signed', null),
@@ -11746,7 +11746,7 @@ select tst.ok((select public_token is null from public.estimates where id = 'e14
 select tst.ok((select token from public.estimate_links('ca000000-0000-0000-0000-000000000000') where estimate_id = 'e1470000-0000-4000-8000-000000000001') = :'t147_first',
   'T147 the director gets the link through estimate_links');
 :as_sales_a
--- since #2075 (20261117490000) sales get the links of their own deals only: this estimate is the tech's
+-- since #2075 (20261117560000) sales get the links of their own deals only: this estimate is the tech's
 select tst.ok(not exists (select 1 from public.estimate_links('ca000000-0000-0000-0000-000000000000') where estimate_id = 'e1470000-0000-4000-8000-000000000001'), 'T147 …sales: not of another''s estimate (#2075)');
 :as_tech_a
 select tst.ok((select public_token is null from public.estimates where id = 'e1470000-0000-4000-8000-000000000001'), 'T147 the tech reads his estimate — without its link');
@@ -12890,7 +12890,7 @@ select tst.ok(tst.cnt($q$select 1 from public.payments where idempotency_key = '
 -- the deposit at the signing stays sales' (17): the server's deposit function on the deposit the signature made (approved,
 -- the signed version, the client's deposit); a deposit invoice sales put in themselves, or of another sum, is refused
 -- (security-check of #1061 В-1: an own «deposit» of $99 999 was paid)
--- #2075 (20261117490000): the estimates are the sales person's own deals, so each refusal below is the rule it names
+-- #2075 (20261117560000): the estimates are the sales person's own deals, so each refusal below is the rule it names
 insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
   ('0e191000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed', 'a0000000-0000-0000-0000-000000000005'),
   ('0e191000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed, no deposit', 'a0000000-0000-0000-0000-000000000005'),
@@ -13631,7 +13631,7 @@ select tst.ok((select status = 'sent' and total_cents = 20000 and paid_cents = 2
 select tst.ok((select discount_cents = 0 and subtotal_cents + tax_cents = total_cents from public.invoices where id = '01970000-0000-4000-8000-000000000008'),
               'T197 billed as the rest: no discount of the draft''s own left, subtotal + tax = total (security-check of #1203 №2)');
 -- never born removed: such a row would pass the contract check and come back later (security-check of #1203 №1); as the
--- office since #2075 (20261117490000: sales write only inside their deals, refused before this check)
+-- office since #2075 (20261117560000: sales write only inside their deals, refused before this check)
 :as_office_a
 select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, total_cents, sent_at, deleted_at) values
          ('ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'progress', 'sent', 'T197 hidden', 999900, now(), now())$q$,
@@ -17148,7 +17148,7 @@ rollback;
 -- ---------------------------------------------------------------- T420–T423 (#2075): sales see the money of their deals only
 -- The founder's answer to В4 (audit of roles #2064): sales do not see the company's money, only the sums of their own
 -- estimates and leads. «His deal»: an estimate he made, or one of a lead he leads; its job; that job's / version's invoices
--- (20261117490000). Three estimates of company A: E1 by sales, E2 by the office on a lead sales leads, E3 by the office.
+-- (20261117560000). Three estimates of company A: E1 by sales, E2 by the office on a lead sales leads, E3 by the office.
 \echo 'T420 sales and the money of the company'
 begin;
 :as_super

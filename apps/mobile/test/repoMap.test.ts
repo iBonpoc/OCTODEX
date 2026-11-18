@@ -361,7 +361,7 @@ describe("loadCompanyDB — a photo the cloud refused (#1431)", () => {
   });
 });
 
-// #2075 (20261117490000): sales load only the money of their deals — a payment whose invoice they do not see, an invoice
+// #2075 (20261117560000): sales load only the money of their deals — a payment whose invoice they do not see, an invoice
 // whose job they do not see; the load goes through and keeps what it got (an old phone simply gets fewer rows)
 describe("loadCompanyDB — a partial set of money (#2075)", () => {
   it("a payment without its invoice and an invoice without its job do not break the load", async () => {
