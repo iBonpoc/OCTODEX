@@ -17,6 +17,8 @@ export interface DeleteDeps {
   deleteAsUser: (jwt: string, confirm: string, closeCompanies: string[]) => Promise<{ data?: unknown; error?: DbError | null }>;
   /** auth.admin.updateUserById(uid, {user_metadata: cleared}) then auth.admin.deleteUser(uid, true), service role */
   closeSignIn: (uid: string) => Promise<{ error?: { message: string } | null }>;
+  /** 50-3: after the deletion, one try to remove the Storage objects the erasure queued (never changes the answer; a failure is only logged) */
+  eraseStorage?: () => Promise<unknown>;
   log?: (msg: string) => void;
   /** the pause between the tries of closeSignIn (ms); tests pass a no-op */
   wait?: (ms: number) => Promise<void>;
@@ -113,9 +115,20 @@ async function handleDeleteInner(req: Req, deps: DeleteDeps): Promise<Res> {
     if (i > 0) await wait(300 * i);
     closed = await deps.closeSignIn(uid).catch((e: Error) => ({ error: { message: e.message } }));
   }
+  await tryEraseStorage(deps, wait);
   if (closed.error) {
     deps.log?.("delete-account: auth soft delete pending");
     return json(200, { deleted: true, auth: "pending", result: r.data ?? null });
   }
   return json(200, { deleted: true, auth: "done", result: r.data ?? null });
+}
+
+/** 50-3: one bounded try (3 s) to remove the queued Storage objects; the answer to the person never depends on it */
+async function tryEraseStorage(deps: DeleteDeps, wait: (ms: number) => Promise<void>): Promise<void> {
+  if (!deps.eraseStorage) return;
+  try {
+    await Promise.race([deps.eraseStorage().catch(() => deps.log?.("delete-account: storage erase failed")), wait(3000)]);
+  } catch {
+    deps.log?.("delete-account: storage erase failed");
+  }
 }

@@ -5,7 +5,7 @@
  * - a 2nd storey gutter and a 3rd storey one from its end: no corner, a cap at each end (four);
  * - a downspout put → its menu opens by itself; size and colour are folded rows; the colour is «Как у желоба»;
  *   the gutter turns black → the downspout's colour follows; «Без покраски» is one of the colours (no painted/bare pair);
- * - offsets: 1, then 3″, then its own 2½″;
+ * - offsets: 1, then 4″ (the stocked ones are 1, 2, 4″), then its own 2½″;
  * - the grip: while dragged it says where to let go.
  * Finds things by testID / id; waits on what it checks.
  */
@@ -73,7 +73,7 @@ exports.run = async (h) => {
   await panel().waitFor({ timeout: 5000 });
   await tid("attr-ds-size").waitFor({ timeout: 3000 });
   h.expect((await tid("attr-ds-size-value").count()) === 1 && (await tid("attr-color-value").count()) === 1, "size and colour are folded rows");
-  h.expect(/^Как у желоба/.test(await tid("attr-color-value").innerText()), "the colour: «Как у желоба»");
+  h.expect(/^Как у gutter/.test(await tid("attr-color-value").innerText()), "the colour: «Как у gutter»");
   h.expect((await tid("attr-finish").count()) === 0, "no painted / bare pair");
 
   // the length is a dropdown now (#1276: size, colour and length are folded rows): «по этажу» by default, a number of feet on a pick, back to «по этажу»
@@ -85,10 +85,10 @@ exports.run = async (h) => {
   await p.getByText("По этажу", { exact: true }).last().click();
   await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.heightIn === undefined, "«По этажу»: no own height");
 
-  // offsets: 1, then 3″, then its own 2½″
+  // offsets: 1, then 4″ (the chips are the stocked 1, 2, 4″ — «Расход v2» Н4), then its own 2½″
   await tid("attr-offset-qty").getByRole("button", { name: /\+1$/ }).click();
-  await tid("attr-offset-len").getByRole("radio", { name: "3″", exact: true }).click();
-  await waitFor(async () => JSON.stringify((await els()).find((e) => e.kind === "downspout")?.attrs.offsets) === JSON.stringify([{ lengthIn: 3, qty: 1 }]), "one 3″ offset");
+  await tid("attr-offset-len").getByRole("radio", { name: "4″", exact: true }).click();
+  await waitFor(async () => JSON.stringify((await els()).find((e) => e.kind === "downspout")?.attrs.offsets) === JSON.stringify([{ lengthIn: 4, qty: 1 }]), "one 4″ offset");
   await tid("attr-offset-len").getByRole("radio", { name: "Свой", exact: true }).click();
   await tid("attr-offset-own").locator("input").fill("2.5");
   await tid("attr-offset-own-apply").getByRole("button").click();

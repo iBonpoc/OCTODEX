@@ -63,8 +63,8 @@ exports.run = async (h) => {
   await pastDoubleTap(p);
   await p.mouse.click(m[0], m[1]);
   await pastDoubleTap(p);
-  if (!wide) h.expect(!(await panelShown()), "«Желоб», one tap on a downspout: no menu");
+  if (!wide) h.expect(!(await panelShown()), "«Gutter», one tap on a downspout: no menu");
   await openDsMenu(p, m);
-  h.expect(await panelShown(), "«Желоб», two taps on a downspout: its menu — the same rule");
+  h.expect(await panelShown(), "«Gutter», two taps on a downspout: its menu — the same rule");
   await h.shot("taps");
 };

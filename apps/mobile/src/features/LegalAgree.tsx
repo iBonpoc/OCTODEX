@@ -51,9 +51,9 @@ export function LegalAgree({ on, onChange, testID = "legal-agree" }: { on: boole
       </Press>
       <View style={{ flex: 1, flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: space[1] }}>
         <T v="caption">{t("legal.agree.pre")}</T>
-        {link("terms", t("legal.terms.title"))}
+        {link("terms", t("legal.agree.terms"))}
         <T v="caption">{t("legal.agree.and")}</T>
-        {link("privacy", t("legal.privacy.title"))}
+        {link("privacy", t("legal.agree.privacy"))}
       </View>
     </View>
   );

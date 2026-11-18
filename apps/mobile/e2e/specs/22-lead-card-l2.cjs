@@ -38,7 +38,7 @@ exports.run = async (h) => {
   // the visit form (docs/specs/03 §7.1): day → person (with the day's load) → a free slot → note
   const chips = h.sheet().getByRole("radio");
   await chips.nth(workdayOffset(2)).click();
-  await h.sheet().getByRole("button", { name: "Ivan Sokolov" }).click();
+  await h.sheet().getByRole("option", { name: "Ivan Sokolov" }).click();
   await h.sheet().getByRole("radio", { name: /^10:30/ }).click();
   await h.sheet().getByPlaceholder(/Собака во дворе, где парковаться/).fill("Dog in the yard");
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).last().click(); await p.waitForTimeout(500);

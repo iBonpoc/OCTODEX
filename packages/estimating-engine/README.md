@@ -4,9 +4,8 @@
 
 - Деньги — целые центы, вся промежуточная арифметика в `decimal.js`, округление round half up.
 - `formula.ts` — безопасный язык формул сборок (без eval).
-- `gutters.ts` — количества модуля Gutters и геометрия чертежа (PRD 06 §7).
+- `gutterParts.ts`, `gutterKits.ts` — детали и работа модуля Gutters из замера (спека 33-gutters-parts, 33-gutters-consumption).
 - `estimate.ts` — итоги варианта, налоговые режимы, депозит с лимитом CA, распределение возврата (PRD 05 §7.2, PRD 19, PRD 18 §K).
-- `gutterEstimate.ts` — строки сметы из количеств и прайса, пресеты Good/Better/Best.
 
 ```
 npm install

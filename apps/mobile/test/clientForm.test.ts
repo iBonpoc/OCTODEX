@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
 import type { Customer } from "../src/data/types";
 import { applyCustomerPatch } from "../src/data/customerPatch";
-import { billingLine, billingOk, displayName, mainEmailOf, mainPhonesOf, nameOk, namePartsOf, phoneOk, withMainContacts } from "../src/features/clientForm";
+import { billingLine, billingOk, displayName, mainEmailOf, mainEmailsOf, mainPhonesOf, markPrimaryFirst, nameOk, namePartsOf, phoneOk, primaryFirst, withMainContacts, withMainContactsAll } from "../src/features/clientForm";
+import type { Person } from "../src/data/types";
 
 const db = makeSeed();
 const c1 = db.customers.find((c) => c.id === "c1")!;
@@ -85,5 +86,48 @@ describe("billing address", () => {
   });
   it("one line for the row", () => {
     expect(billingLine({ line1: "100 Main St", unit: "4", city: "Pasadena", state: "CA", zip: "91101" })).toBe("100 Main St, #4, Pasadena, CA 91101");
+  });
+});
+
+/** spec 56 §3а.3 / DS §9 А14а «Основной — первым»: the model keeps the flag, the sheet keeps the order (wave 4) */
+describe("the primary phone and email are the first ones", () => {
+  const ana: Person = {
+    id: "a",
+    name: "Ana",
+    role: "main",
+    phones: [{ number: "(323) 555-0102", label: "home" }, { number: "(323) 555-0101", label: "mobile", primary: true }],
+    emails: [{ address: "b@example.com" }, { address: "a@example.com", primary: true }],
+  };
+  it("shown: the primary stands first", () => {
+    const [p] = primaryFirst([ana]);
+    expect(p!.phones.map((x) => x.number)).toEqual(["(323) 555-0101", "(323) 555-0102"]);
+    expect(p!.emails.map((x) => x.address)).toEqual(["a@example.com", "b@example.com"]);
+  });
+  it("on save the flag goes to the first phone and the first email, and only to them", () => {
+    // «Сделать основным» moved the home number up: it is the primary one now
+    const moved: Person = { ...ana, phones: [ana.phones[0]!, ana.phones[1]!], emails: [ana.emails[0]!, ana.emails[1]!] };
+    const [p] = markPrimaryFirst([moved]);
+    expect(p!.phones).toEqual([
+      { number: "(323) 555-0102", label: "home", primary: true },
+      { number: "(323) 555-0101", label: "mobile", primary: undefined },
+    ]);
+    expect(p!.emails.map((x) => [x.address, x.primary])).toEqual([
+      ["b@example.com", true],
+      ["a@example.com", undefined],
+    ]);
+  });
+  it("each person keeps one primary; a person with no phone has none", () => {
+    const out = markPrimaryFirst([ana, { id: "t", name: "Tom", role: "spouse", phones: [], emails: [{ address: "t@example.com" }] }]);
+    expect(out.map((p) => p.phones.filter((x) => x.primary).length)).toEqual([1, 0]);
+    expect(out[1]!.emails[0]!.primary).toBe(true);
+  });
+  it("the client form: all phones and emails, empty lines dropped, the first of each primary; other people untouched", () => {
+    expect(mainEmailsOf(c1)[0]).toBe(mainEmailOf(c1));
+    const people = withMainContactsAll(c1, [{ number: " ", label: "mobile" }, { number: "(626) 555-0177", label: "work" }, ...mainPhonesOf(c1)], ["", "new@example.com", ...mainEmailsOf(c1)]);
+    expect(people[0]!.phones[0]).toEqual({ number: "(626) 555-0177", label: "work", primary: true });
+    expect(people[0]!.phones.filter((x) => x.primary)).toHaveLength(1);
+    expect(people[0]!.emails[0]).toEqual({ address: "new@example.com", primary: true });
+    expect(people[0]!.emails.filter((x) => x.primary)).toHaveLength(1);
+    expect(people.slice(1)).toEqual(c1.people!.slice(1));
   });
 });

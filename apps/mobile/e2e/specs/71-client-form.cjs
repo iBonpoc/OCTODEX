@@ -1,6 +1,6 @@
 /**
  * Wave 4 (docs/specs/13-app-structure.md §3.3 «Изменить»): one form — first name, last name, company; the main person's
- * phones («+ Номер») and email; source; the billing address (one per client, default = the property). Saved offline
+ * phones and emails (as iPhone «Контакты»); «Источник ⌄»; «Счета на другой адрес» (one per client, off = the property). Saved offline
  * with «Отменить»; the client card shows the new name and the billing row.
  */
 exports.run = async (h) => {
@@ -28,16 +28,16 @@ exports.run = async (h) => {
   await field("Фамилия").fill("Kim");
   await field("Если клиент — фирма").fill("Kim Remodeling");
 
-  // + Номер: a second phone of the main person
-  await h.click("Номер");
-  await p.getByPlaceholder("(555) 555-0100").last().fill("(818) 555-0177");
+  // «⊕ Добавить телефон» (MultiValueField, spec 56 §3а.5): a second phone of the main person
+  await p.getByTestId("client-phones-add").click();
+  await p.getByTestId("client-phones-row-1-value").locator("input").fill("(818) 555-0177");
 
   // source
   await p.getByRole("button", { name: new RegExp(src0 ? src0.name : "Выберите источник") }).last().click(); await p.waitForTimeout(300);
   await h.sheet().getByText("Google", { exact: true }).click(); await p.waitForTimeout(300);
 
-  // billing: another address
-  await p.getByRole("radio", { name: "Другой адрес" }).click();
+  // billing: «Счета на другой адрес» — a switch, the address fields right under it
+  await p.getByRole("switch", { name: /^Счета на другой адрес/ }).click();
   await p.waitForTimeout(200);
   h.expect(await save.isDisabled(), "another address needs a street and a city");
   await field("Улица и дом").fill("PO Box 4512");
@@ -74,7 +74,7 @@ exports.run = async (h) => {
 
   // back to «same as the property»: billing cleared
   await h.go("/client/edit?id=c2");
-  await p.getByRole("radio", { name: "Как у объекта" }).click();
+  await p.getByRole("switch", { name: /^Счета на другой адрес/ }).click();
   await p.getByRole("button", { name: "Сохранить", exact: true }).last().click();
   await p.waitForTimeout(600);
   h.expect(!(await h.db()).customers.find((x) => x.id === "c2").billing, "billing cleared = the property address");

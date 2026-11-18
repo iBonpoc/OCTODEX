@@ -42,7 +42,7 @@ exports.run = async (h) => {
   // the toolbar: pictures only — no word of the cells on the screen; the names are there for the screen reader
   const bar = tid("draw-toolbar");
   const words = (await bar.innerText()).replace(/\s+/g, " ").trim();
-  h.expect(!/Желоб|Водосток|Назад|Вперёд|Удалить|Этаж/.test(words), `the toolbar has no words (${JSON.stringify(words)})`);
+  h.expect(!/Gutter|Downspout|Назад|Вперёд|Удалить|Этаж/.test(words), `the toolbar has no words (${JSON.stringify(words)})`);
   for (const id of ["draw-tool-line", "draw-tool-ds", "draw-undo", "draw-redo", "draw-delete"]) {
     const name = await tid(id).getByRole("button").getAttribute("aria-label");
     h.expect(!!name && name.length > 1, `${id}: has its name for the screen reader (${name})`);
@@ -51,7 +51,7 @@ exports.run = async (h) => {
   // nothing picked: the chip says what next (no downspout yet); the bin is dimmed
   await p.mouse.click(b.x + b.width * 0.5, b.y + b.height * 0.8); // the empty canvas: nothing picked
   await tid("draw-next").waitFor({ timeout: 5000 });
-  h.expect(/Дальше: водостоки/.test(await tid("draw-next").innerText()), "no downspout: «Дальше: водостоки» in the chip");
+  h.expect(/Дальше: downspout/.test(await tid("draw-next").innerText()), "no downspout: «Дальше: downspout» in the chip");
   h.expect((await tid("draw-delete").getAttribute("aria-disabled")) === "true", "nothing picked: the bin is dimmed");
   // a long press on the dimmed bin still says what it is (it is not locked out of the screen reader's and the finger's help)
   const binBox = await tid("draw-delete").boundingBox();
@@ -66,10 +66,10 @@ exports.run = async (h) => {
   // pick the gutter: the chip says it, the bin wakes
   await p.mouse.click(b.x + b.width * 0.25, b.y + b.height * 0.4);
   await tid("draw-selected").waitFor({ timeout: 5000 });
-  h.expect(/Желоб/.test(await tid("draw-selected").innerText()), "picked: the chip says «Желоб · …»");
+  h.expect(/Gutter/.test(await tid("draw-selected").innerText()), "picked: the chip says «Gutter · …»");
   // …and under it «Дальше: водостоки» stays until the first downspout (founder 12.11)
   await tid("draw-summary-next").waitFor({ timeout: 5000 });
-  h.expect(/Дальше: водостоки/.test(await tid("draw-summary-next").innerText()), "picked, no downspout yet: «Дальше: водостоки» under the picked one");
+  h.expect(/Дальше: downspout/.test(await tid("draw-summary-next").innerText()), "picked, no downspout yet: «Дальше: downspout» under the picked one");
   const sb = await tid("draw-selected").boundingBox(), nb = await tid("draw-summary-next").boundingBox();
   h.expect(nb.y > sb.y + sb.height - 2, "the hint is a second line under the picked one");
   h.expect((await tid("draw-delete").getAttribute("aria-disabled")) !== "true", "picked: the bin is active");

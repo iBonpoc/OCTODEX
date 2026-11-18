@@ -14,6 +14,8 @@ const WORD: Record<RelatedKind, DictKey> = {
   job: "job3.rel.job",
   invoice: "job3.rel.invoice",
 };
+/** the client and the property are known by their icon and name — the word is only for the screen reader (founder 16.11, #1844) */
+const NAMED: RelatedKind[] = ["customer", "property"];
 const ICON: Record<RelatedKind, IconKey> = { lead: "inbox", customer: "user", property: "pin", estimate: "invoice", job: "wrench", invoice: "dollar" };
 
 /** «Связано» under the header (13 §2.7): «Работа JOB-0012 › · Клиент Smith › · 12 Oak St ›», and the one thing it lacks, if the screen names it (`action`). Nothing to show → nothing. */
@@ -26,10 +28,11 @@ export function RelatedBlock({ of, action }: { of: RelatedOf; action?: { label: 
     <RowView style={{ flexWrap: "wrap" }}>
       {links.map((l) => {
         const label = [t(WORD[l.kind]), l.text].filter(Boolean).join(" ");
+        const shown = NAMED.includes(l.kind) && l.text ? l.text : label;
         // a parent is a chip with a plate and «›» — it reads as a thing to press (DS §12.3 п.6, #1495)
-        return <Button key={l.kind} testID={`related-${l.kind}`} label={`${label} ›`} icon={ICON[l.kind]} size="sm" variant="secondary" accessibilityLabel={`${t("job3.rel.title")}: ${label}`} onPress={() => router.push(l.href as never)} />;
+        return <Button key={l.kind} testID={`related-${l.kind}`} label={`${shown} ›`} icon={ICON[l.kind]} size="sm" variant="secondary" accessibilityLabel={`${t("job3.rel.title")}: ${label}`} onPress={() => router.push(l.href as never)} />;
       })}
-      {/* what is missing here, named in reach of the thumb (#1664): «Создать смету» of a job with no estimate */}
+      {/* what is missing here, named in reach of the thumb (#1664) */}
       {action ? <Button testID={action.testID} label={`${action.label} ›`} icon="plus" size="sm" variant="ghost" onPress={action.onPress} /> : null}
     </RowView>
   );

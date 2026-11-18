@@ -30,6 +30,7 @@ export default function DesignSystemShowcase() {
               <ListRow
                 title={t(s.title)}
                 subtitle={`${t(s.hint)} · ${s.ds}`}
+                lines={0}
                 left={<Icon name={s.icon} />}
                 onPress={() => router.push(`/settings/design-system/${s.id}`)}
               />

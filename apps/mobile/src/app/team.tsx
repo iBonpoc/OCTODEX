@@ -1,3 +1,4 @@
+import { visitDueCents } from "@/features/visitDue";
 import { lateAfterOf } from "@/features/scheduleSettings";
 import { useState } from "react";
 import { Platform, View } from "react-native";
@@ -30,7 +31,7 @@ type LinkFor = { name: string; link: string } | null;
 export default function Team() {
   const store = useStore();
   const { db } = store;
-  const { t } = useI18n();
+  const { t, tn } = useI18n();
   const toast = useToast();
   const auth = useAuth();
   const [open, setOpen] = useState(false);
@@ -91,7 +92,7 @@ export default function Team() {
     const tech = m.roles.includes("tech") && state === "active";
     const vs = tech ? todayVisits(db, m.id) : [];
     const { current, next } = crewNow(vs);
-    const st = current ? visitStatus(current, db.members, Date.now(), lateAfterOf(db)) : next ? visitStatus(next, db.members, Date.now(), lateAfterOf(db)) : null;
+    const st = current ? visitStatus(current, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, current)) : next ? visitStatus(next, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, next)) : null;
     const now = current ? visitContext(db, current) : null;
     const status =
       state === "pending" ? { tone: "neutral" as const, label: t("team.pending") }
@@ -103,7 +104,7 @@ export default function Team() {
       <ListCard
         key={m.id}
         title={m.name}
-        when={tech ? t("visits.count", { n: vs.length }) : undefined}
+        when={tech ? tn("visits.today", vs.length) : undefined}
         lead={{ kind: "initials", text: m.initials, dashed: m.kind === "sub" }}
         status={status}
         tags={[...m.roles.map((r) => t(`role.${r}`)), ...(m.kind === "sub" ? [t("team.sub")] : []), ...(m.id === db.me ? [t("team.you")] : [])]}
