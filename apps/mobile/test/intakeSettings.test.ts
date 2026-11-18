@@ -22,6 +22,15 @@ describe("intake settings", () => {
     expect(READINESS_TONE.noSecret).toBe("bad");
     expect(READINESS_TONE.on).toBe("ok");
   });
+  // #2012, С4: ДАНО у формы включена капча, а виджета на странице нет (В3); КОГДА директор открывает «Приём заявок»;
+  // ТОГДА видит «Заявки ждут проверки» (warn), а не «Принимает заявки»
+  it("С4: a form that asks for a captcha is «requests wait for review», never a silent «on»", () => {
+    const cap = { ...form(true), captcha: true };
+    expect(readiness({ ipSecret: true }, cap)).toBe("held");
+    expect(READINESS_TONE.held).toBe("warn");
+    expect(readiness({ ipSecret: true }, { ...cap, enabled: false })).toBe("off"); // switched off says so first
+    expect(readiness({ ipSecret: false }, cap)).toBe("noSecret"); // no secret still beats everything
+  });
   it("the form link and the site code: a plain link in a new tab, escaped", () => {
     const link = formLink("https://gorix.expo.app/", "fabc");
     expect(link).toBe("https://gorix.expo.app/f/fabc");

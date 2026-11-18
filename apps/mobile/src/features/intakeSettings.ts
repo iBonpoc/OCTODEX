@@ -42,11 +42,12 @@ export function siteSnippet(link: string, label: string): string {
   return `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(label)}</a>`;
 }
 
-export type Readiness = "checking" | "unknown" | "noSecret" | "none" | "off" | "on" | "notMine";
+export type Readiness = "checking" | "unknown" | "noSecret" | "none" | "off" | "on" | "held" | "notMine";
 /**
  * One line on top of the screen (the director's rule 08.11: a form without the IP secret is never silently «on»):
  * unknown — the function did not answer (offline); noSecret — the operator has not set INTAKE_IP_SECRET, the form takes
- * nothing; none — no form yet; off — switched off; on — takes requests.
+ * nothing; none — no form yet; off — switched off; on — takes requests; held — the form asks for a captcha the page has no
+ * widget for yet (В3): every request waits in the journal for a person (#2012), never a silent «on».
  */
 export function readiness(status: { ipSecret: boolean } | null | undefined, form: IntakeEndpoint | undefined, director = true): Readiness {
   if (status === undefined) return "checking"; // the function has not answered yet — not «no connection»
@@ -54,9 +55,10 @@ export function readiness(status: { ipSecret: boolean } | null | undefined, form
   if (!status.ipSecret) return "noSecret";
   if (!director) return "notMine"; // the office does not read the ways in (owner / admin only): never «no form»
   if (!form) return "none";
-  return form.enabled ? "on" : "off";
+  if (!form.enabled) return "off";
+  return form.captcha ? "held" : "on";
 }
-export const READINESS_TONE: Record<Readiness, StatusName> = { checking: "neutral", unknown: "neutral", noSecret: "bad", none: "neutral", off: "warn", on: "ok", notMine: "neutral" };
+export const READINESS_TONE: Record<Readiness, StatusName> = { checking: "neutral", unknown: "neutral", noSecret: "bad", none: "neutral", off: "warn", on: "ok", held: "warn", notMine: "neutral" };
 
 /** held requests first (they wait for a decision), newest first */
 export const heldFirst = (events: IntakeEvent[]) =>
