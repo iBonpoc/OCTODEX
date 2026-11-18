@@ -619,6 +619,12 @@ export const ru = {
   "exp.photo": "Фото чека",
   "exp.save": "Сохранить расход",
   "exp.saved": "Расход {amount} сохранён",
+  // #2009: an expense's own screen — open, fix, remove
+  "exp.one": "Расход",
+  "exp.notFound": "Расход не найден",
+  "exp.remove": "Удалить расход",
+  "exp.removed": "Расход {amount} удалён",
+  "exp.readOnly": "Расход внёс {name}. Изменить его может он или офис.",
   // #2008: the day of a receipt, where it was bought (a picker with its own text), the job (a picker)
   "exp.date": "Дата чека",
   "exp.vendorNeed": "Укажите, где купили",

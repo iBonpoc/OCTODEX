@@ -26,6 +26,8 @@ export interface RequiredForm {
   fields: RequiredField[];
   /** `done` only: the e2e spec (in e2e/specs) that presses the main button on an empty form */
   e2e?: string;
+  /** the fields live in a shared component (under src), bound there: two screens of one object (#2009) */
+  fieldsFile?: string;
 }
 
 export const fieldTestID = (id: string) => `field-${id}`;
@@ -42,7 +44,9 @@ export const REQUIRED_FORMS: RequiredForm[] = [
     ],
     e2e: "278-required-fields.cjs",
   },
-  { file: "expense/new.tsx", route: "/expense/new", status: "done", fields: [{ id: "amount", errorKey: "form.req.amount" }, { id: "vendor", errorKey: "exp.vendorNeed" }], e2e: "278-required-fields.cjs" },
+  { file: "expense/new.tsx", route: "/expense/new", status: "done", fields: [{ id: "amount", errorKey: "form.req.amount" }, { id: "vendor", errorKey: "exp.vendorNeed" }], e2e: "278-required-fields.cjs", fieldsFile: "features/ExpenseFields.tsx" },
+  // #2009: the expense's own screen — the same fields (features/ExpenseFields), the same rule
+  { file: "expense/[id].tsx", route: "/expense/[id]", status: "done", fields: [{ id: "amount", errorKey: "form.req.amount" }, { id: "vendor", errorKey: "exp.vendorNeed" }], e2e: "278-required-fields.cjs", fieldsFile: "features/ExpenseFields.tsx" },
   {
     file: "suppliers/[id].tsx",
     route: "/suppliers/[id]",

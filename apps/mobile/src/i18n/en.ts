@@ -620,6 +620,12 @@ export const en: Dict = {
   "exp.photo": "Receipt photo",
   "exp.save": "Save expense",
   "exp.saved": "Expense {amount} saved",
+  // #2009: an expense's own screen — open, fix, remove
+  "exp.one": "Expense",
+  "exp.notFound": "Expense not found",
+  "exp.remove": "Delete expense",
+  "exp.removed": "Expense {amount} deleted",
+  "exp.readOnly": "{name} entered this expense. They or the office can change it.",
   // #2008: the day of a receipt, where it was bought (a picker with its own text), the job (a picker)
   "exp.date": "Receipt date",
   "exp.vendorNeed": "Say where it was bought",

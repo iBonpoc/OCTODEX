@@ -66,3 +66,11 @@ export function vendorChoices(db: Pick<DB, "suppliers" | "expenses" | "me">, cur
 export function expenseDay(x: Pick<Expense, "date" | "at">, zone?: string): DayKey {
   return x.date && /^\d{4}-\d{2}-\d{2}$/.test(x.date) ? x.date : zone ? dayKeyIn(x.at, zone) : dayKeyIn(x.at);
 }
+
+/**
+ * #2009: who may change or remove an expense — as the server (expenses_update, trash_own_ok('expense')): the owner, the
+ * admin and the office anyone's; everyone else (sales, a technician) only his own.
+ */
+export function canEditExpense(role: Role, me: ID | null | undefined, x: Pick<Expense, "memberId">): boolean {
+  return role === "director" || role === "dispatcher" || (!!me && x.memberId === me);
+}

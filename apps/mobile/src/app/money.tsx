@@ -41,7 +41,7 @@ export default function Money() {
   const shown = db.expenses.filter((x) => matchExpense(db, x, q, t(`exp.cat.${x.category}`)));
   // #2008: by the receipt's day (an expense entered today for last month's receipt is last month's)
   const months = [...shown.slice().sort((a, b) => expenseDay(b).localeCompare(expenseDay(a)) || b.at.localeCompare(a.at)).reduce((m, x) => m.set(expenseDay(x).slice(0, 7), [...(m.get(expenseDay(x).slice(0, 7)) ?? []), x]), new Map<string, Expense[]>())];
-  /** an expense has no screen to open yet: the card has no tap and no contact buttons, nothing is written from it */
+  /** #2009: the card opens the expense's own screen (fix, remove); no contact buttons */
   const expenseCard = (x: Expense) => {
     const job = x.jobId ? db.jobs.find((j) => j.id === x.jobId) : undefined;
     const client = job ? db.customers.find((c) => c.id === db.properties.find((p) => p.id === job.propertyId)?.customerId) : undefined;
@@ -50,6 +50,7 @@ export default function Money() {
     return (
       <ListCard
         key={x.id}
+        onPress={() => router.push(`/expense/${x.id}`)}
         title={x.vendor}
         when={dayOf(expenseDay(x))}
         lead={{ kind: "icon", icon: receipt ? "camera" : "dollar" }}

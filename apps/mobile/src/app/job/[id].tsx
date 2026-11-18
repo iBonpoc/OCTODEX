@@ -342,6 +342,7 @@ export default function JobScreen() {
                 key={x.id}
                 density="compact"
                 testID={`job-expense-${x.id}`}
+                onPress={() => router.push(`/expense/${x.id}?jobId=${encodeURIComponent(j.id)}`)}
                 lead={{ kind: "icon", icon: "wallet" }}
                 title={x.vendor}
                 when={`${t(`exp.cat.${x.category}` as DictKey)} · ${dayOf(expenseDay(x))}`}

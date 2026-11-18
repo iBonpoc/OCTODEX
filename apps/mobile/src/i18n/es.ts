@@ -620,6 +620,12 @@ export const es: Dict = {
   "exp.photo": "Foto del recibo",
   "exp.save": "Guardar gasto",
   "exp.saved": "Gasto {amount} guardado",
+  // #2009: an expense's own screen — open, fix, remove
+  "exp.one": "Gasto",
+  "exp.notFound": "Gasto no encontrado",
+  "exp.remove": "Eliminar gasto",
+  "exp.removed": "Gasto {amount} eliminado",
+  "exp.readOnly": "{name} registró este gasto. Puede cambiarlo esa persona o la oficina.",
   // #2008: the day of a receipt, where it was bought (a picker with its own text), the job (a picker)
   "exp.date": "Fecha del recibo",
   "exp.vendorNeed": "Indique dónde se compró",

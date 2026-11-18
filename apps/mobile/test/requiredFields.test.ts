@@ -44,7 +44,7 @@ describe("required fields registry", () => {
   });
   for (const f of REQUIRED_FORMS.filter((x) => x.status === "done")) {
     it(`${f.route}: converted — fields, error keys, e2e`, () => {
-      const src = read(f.file);
+      const src = read(f.file) + (f.fieldsFile ? readFileSync(join(APP, "..", f.fieldsFile), "utf8") : "");
       expect(src).toMatch(/useRequiredForm\(\)/);
       expect(src).toMatch(/form\.submit\(/);
       expect(src, `${f.route}: the main button stays enabled`).not.toMatch(OLD);

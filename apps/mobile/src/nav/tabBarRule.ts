@@ -25,6 +25,8 @@ export const NO_TAB_BAR = [
   // a receipt: its next step pinned at the bottom (ActionBar, #1474), as the estimate
   "receipt/[id]",
   "expense/new",
+  // #2009: an expense's own screen is a form («Сохранить»): a tab would drop what is not saved
+  "expense/[id]",
   // the request page of a company (docs/specs/34): a homeowner without the app — no app menu
   "f/[token]",
   "job/new", "job/schedule",

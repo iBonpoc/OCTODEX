@@ -14540,6 +14540,28 @@ select tst.ok((select job_id = 'e2070000-0000-4000-8000-000000000002' from publi
               'T207 sales put their own expense on any job, as on insert');
 \echo 'T207 an expense moves only to a job its author may add it to ok'
 
+-- T440: #2009 — the author fixes the day and the amount of his expense; another person's expense is not his to change;
+-- an edit over a stale version changes nothing (the phone says «someone changed it first»)
+:as_super
+insert into public.expenses (id, company_id, vendor, amount_cents, category, created_by, date) values
+  ('e4400000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'T440 office vendor', 2000, 'materials', 'a0000000-0000-0000-0000-000000000001', '2026-01-05');
+:as_tech_a
+insert into public.expenses (id, company_id, vendor, amount_cents, category) values
+  ('e4400000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'T440 vendor', 1500, 'materials');
+update public.expenses set date = '2026-01-04', amount_cents = 1400 where id = 'e4400000-0000-4000-8000-0000000000e1';
+update public.expenses set date = '2026-01-01' where id = 'e4400000-0000-4000-8000-0000000000e2';
+:as_super
+select tst.ok((select date = '2026-01-04' and amount_cents = 1400 from public.expenses where id = 'e4400000-0000-4000-8000-0000000000e1'),
+              'T440 the author moves his receipt to yesterday and fixes its amount');
+select tst.ok((select date = '2026-01-05' from public.expenses where id = 'e4400000-0000-4000-8000-0000000000e2'),
+              'T440 another person''s expense is not his to change');
+select tst.ok((select row_version from public.expenses where id = 'e4400000-0000-4000-8000-0000000000e1') = 2, 'T440 one edit, one version up');
+:as_tech_a
+update public.expenses set amount_cents = 1 where id = 'e4400000-0000-4000-8000-0000000000e1' and row_version = 1;
+:as_super
+select tst.ok((select amount_cents = 1400 from public.expenses where id = 'e4400000-0000-4000-8000-0000000000e1'), 'T440 an edit over a stale version changes nothing');
+\echo 'T440 an expense is fixed by its author, over the version read ok'
+
 -- T208: trash_items locks no row of a company the caller is not in
 begin;
 :as_owner_b
