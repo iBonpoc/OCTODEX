@@ -110,3 +110,13 @@ export function propertyPhotos(db: DB, propertyId: string): { visit: Visit; phot
     .sort((a, b) => b.start.localeCompare(a.start))
     .flatMap((v) => v.photos.map((photo) => ({ visit: v, photo })));
 }
+
+/**
+ * #2016: who may open a property card — the office every live property of a visible client; the technician a property of a
+ * client he sees (visibleClients) or one his own visit is at — an inspection without a job too (the server:
+ * app.is_customer_assignee counts the visit's job, lead and property).
+ */
+export function canSeeProperty(db: DB, role: Role, p: Property, visible: (db: DB, role: Role) => { id: string }[]): boolean {
+  if (visible(db, role).some((c) => c.id === p.customerId)) return true;
+  return role === "tech" && db.visits.some((v) => isAssigned(v, db.me) && visitPropertyId(db, v) === p.id);
+}

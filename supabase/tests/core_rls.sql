@@ -3419,9 +3419,9 @@ update public.jobs set status = 'cancelled' where id = 'e4100000-0000-4000-8000-
 select tst.fails($q$insert into public.job_line_items (company_id, job_id, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000002', 'T41 late', 1, 100)$q$, 'a cancelled job takes no new lines');
 select tst.fails($q$update public.job_line_items set unit_price_cents = 1 where job_id = 'e4100000-0000-4000-8000-000000000002'$q$, 'the lines of a cancelled job do not change');
 :as_sales_a
-insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', 3, 'T41 sales line', 1, 100);
-select tst.ok((select contract_total_cents from public.jobs where id = 'e4100000-0000-4000-8000-000000000001') = 18931, 'sales adds a line, the total follows');
-update public.job_line_items set deleted_at = now() where name = 'T41 sales line';
+-- #2075 (20261117360000): the lines of a job make its contract total — the office's, not sales'
+select tst.fails($q$insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', 3, 'T41 sales line', 1, 100)$q$, 'sales do not add a line to a job');
+select tst.fails($q$update public.job_line_items set unit_price_cents = 1 where job_id = 'e4100000-0000-4000-8000-000000000001'$q$, 'sales do not change the price of a job line');
 :as_office_a
 :as_super
 select tst.fails($q$insert into public.job_tags (company_id, job_id, tag_id) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', (select id from public.tags where company_id = 'cb000000-0000-0000-0000-000000000000' limit 1))$q$, 'a tag of another company does not go on our job');
@@ -3955,13 +3955,22 @@ select tst.fails($q$update public.jobs set completed_at = now() where id = 'e470
 update public.jobs set description = 'T47 note', job_type_id = (select id from public.job_types where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'repair') where id = 'e4700000-0000-4000-8000-000000000001';
 select tst.ok((select description = 'T47 note' and job_type_id is not null from public.jobs where id = 'e4700000-0000-4000-8000-000000000001'), 'update: what the app changes still changes (job.update)');
 -- the other live paths of the app (ops.ts): job.update money, job.category, advanceJob, lead.visit
+-- #2075 (20261117360000): the tax of a job is the office's — sales are refused, the office still changes it
+select tst.fails($q$update public.jobs set tax_enabled = true, tax_rate_bps = 825 where id = 'e4700000-0000-4000-8000-000000000001'$q$, 'job.update: sales do not change the tax of a job');
+:as_office_a
 update public.jobs set tax_enabled = true, tax_rate_bps = 825 where id = 'e4700000-0000-4000-8000-000000000001';
-select tst.ok((select tax_enabled and tax_rate_bps = 825 from public.jobs where id = 'e4700000-0000-4000-8000-000000000001'), 'job.update: the tax of a job still changes');
+select tst.ok((select tax_enabled and tax_rate_bps = 825 from public.jobs where id = 'e4700000-0000-4000-8000-000000000001'), 'job.update: the tax of a job still changes (office)');
+:as_sales_a
 update public.jobs set service_category_id = null where id = 'e4700000-0000-4000-8000-000000000001';
 select tst.ok((select service_category_id is null from public.jobs where id = 'e4700000-0000-4000-8000-000000000001'), 'job.category still changes');
+-- advanceJob: planning a job is the office's (#2016) — sales are refused «scheduled», the office moves it on
+select tst.fails_like($q$update public.jobs set status = 'scheduled' where id = 'e4700000-0000-4000-8000-000000000001'$q$, '%only the office schedules a job%',
+  'advanceJob: sales do not schedule a job (#2016)');
+:as_office_a
 update public.jobs set status = 'scheduled' where id = 'e4700000-0000-4000-8000-000000000001';
 update public.jobs set status = 'in_progress' where id = 'e4700000-0000-4000-8000-000000000001';
-select tst.ok((select status from public.jobs where id = 'e4700000-0000-4000-8000-000000000001') = 'in_progress', 'advanceJob: a job still moves draft → scheduled → in progress');
+select tst.ok((select status from public.jobs where id = 'e4700000-0000-4000-8000-000000000001') = 'in_progress', 'advanceJob: a job still moves draft → scheduled → in progress (the office)');
+:as_sales_a
 insert into public.jobs (id, company_id, customer_id, property_id, title, type, number) values
   ('e4700000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c4700000-0000-4000-8000-000000000002', 'd4700000-0000-4000-8000-000000000002', 'Estimate visit', 'inspection', '')
   on conflict (id) do nothing;
@@ -4131,9 +4140,10 @@ rollback;
 
 
 -- ---------------------------------------------------------------- T53: the money of a sent invoice does not change directly (security audit 06.11, item 1)
+-- #2075 (20261117360000): invoices are the office's — these checks write as the office (sales wrote here before)
 :as_owner_a
 insert into public.customers (id, company_id, display_name) values ('c5300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T53 Client');
-:as_sales_a
+:as_office_a
 -- as the app makes it (invoice.issue / visit.pay): inserted already sent, subtotal = total
 insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
   ('15300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T53 sent', 10000, 10000, now());
@@ -4143,10 +4153,10 @@ select tst.fails($q$insert into public.invoices (company_id, number, customer_id
 :as_office_a
 insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
   ('15310000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000001', 'c5300000-0000-4000-8000-000000000001', 'cash', 4000, 'succeeded', 't53-pay-1');
-:as_sales_a
+:as_office_a
 select tst.ok((select paid_cents = 4000 and payment_status = 'partially_paid' from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'T53: a payment still lowers the balance');
-select tst.fails($q$update public.invoices set total_cents = -100 where id = '15300000-0000-4000-8000-000000000001'$q$, 'sales do not set a negative total on a sent invoice');
-select tst.fails($q$update public.invoices set total_cents = 3000, subtotal_cents = 3000 where id = '15300000-0000-4000-8000-000000000001'$q$, 'sales do not set the total below what is paid');
+select tst.fails($q$update public.invoices set total_cents = -100 where id = '15300000-0000-4000-8000-000000000001'$q$, 'the office does not set a negative total on a sent invoice');
+select tst.fails($q$update public.invoices set total_cents = 3000, subtotal_cents = 3000 where id = '15300000-0000-4000-8000-000000000001'$q$, 'the office does not set the total below what is paid');
 select tst.fails($q$update public.invoices set total_cents = 20000, subtotal_cents = 20000 where id = '15300000-0000-4000-8000-000000000001'$q$, 'the total of a sent invoice does not change at all');
 do $$ begin
   update public.invoices set total_cents = 20000, subtotal_cents = 20000 where id = '15300000-0000-4000-8000-000000000001';
@@ -4176,7 +4186,7 @@ select tst.ok((select paid_cents = 4000 and payment_status = 'partially_paid' fr
 :as_office_a
 insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
   ('15310000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000001', 'c5300000-0000-4000-8000-000000000001', 'check', 6000, 'succeeded', 't53-pay-2');
-:as_sales_a
+:as_office_a
 select tst.ok((select paid_cents = 10000 and payment_status = 'paid' and total_cents = 10000 from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'the last payment closes the invoice (recalc passes the guard)');
 -- a draft still changes, but not below what is paid; once sent it is frozen
 insert into public.invoices (id, company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values
@@ -4188,7 +4198,7 @@ select tst.fails($q$update public.invoices set total_cents = -1 where id = '1530
 :as_office_a
 insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
   ('15310000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000002', 'c5300000-0000-4000-8000-000000000001', 'cash', 3000, 'succeeded', 't53-pay-3');
-:as_sales_a
+:as_office_a
 do $$ begin
   update public.invoices set subtotal_cents = 1000, total_cents = 1000 where id = '15300000-0000-4000-8000-000000000002';
   raise exception 'FAILED: a draft went below what is paid';
@@ -4203,7 +4213,7 @@ do $$ begin
   update public.invoices set subtotal_cents = 1000, total_cents = 1000 where id = '15300000-0000-4000-8000-000000000002';
   perform set_config('app.invoice_recalc', '', true);
 end $$;
-:as_sales_a
+:as_office_a
 update public.invoices set due_date = tst.today() + 7 where id = '15300000-0000-4000-8000-000000000002';
 select tst.ok((select due_date = tst.today() + 7 and total_cents = 1000 and paid_cents = 3000 from public.invoices where id = '15300000-0000-4000-8000-000000000002'),
               'an old invoice with total below paid still takes a new due date');
@@ -8813,10 +8823,10 @@ select tst.ok((select v.checklist = app.chk_items_json(v.id) and jsonb_array_len
 update public.visits set checklist = '[{"id":"c1030000-0000-4000-8000-0000000000a1","label":"x","done":false}]' where id = 'c1030000-0000-4000-8000-0000000000f1';
 select tst.ok((select not done from public.visit_checklist_items where id = 'c1030000-0000-4000-8000-0000000000a1'), 'T103 an old phone takes off its own tick');
 update public.visits set checklist = '[{"id":"c1030000-0000-4000-8000-0000000000a1","label":"x","done":true}]' where id = 'c1030000-0000-4000-8000-0000000000f1';
--- sales writing an old array changes no item
+-- sales writing an old array changes no item (since #2016 sales do not write a work visit at all: a refusal)
 :as_sales_a
-update public.visits set checklist = '[{"id":"c1030000-0000-4000-8000-0000000000a1","label":"x","done":false},{"id":"c1030000-0000-4000-8000-0000000000a8","label":"sales item","done":false}]'
- where id = 'c1030000-0000-4000-8000-0000000000f1';
+select tst.fails($q$update public.visits set checklist = '[{"id":"c1030000-0000-4000-8000-0000000000a1","label":"x","done":false},{"id":"c1030000-0000-4000-8000-0000000000a8","label":"sales item","done":false}]'
+ where id = 'c1030000-0000-4000-8000-0000000000f1'$q$, 'T103 sales: no write to a work visit (#2016)');
 :as_super
 select tst.ok((select done from public.visit_checklist_items where id = 'c1030000-0000-4000-8000-0000000000a1')
           and tst.cnt($q$select 1 from public.visit_checklist_items where id = 'c1030000-0000-4000-8000-0000000000a8'$q$) = 0
@@ -8935,10 +8945,9 @@ do $$ begin
   perform tst.fails($q$insert into public.visits (id, company_id, job_id, starts_at, checklist_min_photos_before) values
     ('c1040000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', 'c1040000-0000-4000-8000-0000000000e1', now(), 5)$q$, 'T104 sales does not make a visit with minimums');
 end $$;
--- a visit without minimums: sales books it as before
-insert into public.visits (id, company_id, job_id, starts_at) values
-  ('c1040000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', 'c1040000-0000-4000-8000-0000000000e1', now());
-select tst.ok(tst.cnt($q$select 1 from public.visits where id = 'c1040000-0000-4000-8000-0000000000f3'$q$) = 1, 'T104 sales makes a visit without minimums as before');
+-- a work visit without minimums: since #2016 planning a job is the office's — sales are refused (they book inspections, T394)
+select tst.fails($q$insert into public.visits (id, company_id, job_id, starts_at) values
+  ('c1040000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', 'c1040000-0000-4000-8000-0000000000e1', now())$q$, 'T104 sales do not make a work visit (#2016)');
 :as_super
 select tst.ok((select checklist_min_photos_before = 2 and checklist_min_photos_after = 4 and notes = 'tech note' from public.visits where id = 'c1040000-0000-4000-8000-0000000000f1'),
   'T104 the tech''s other edit of the visit passes, the minimums stay');
@@ -12943,15 +12952,18 @@ do $$ begin
 exception when insufficient_privilege then null;
 end $$;
 select tst.ok(true, 'T191 sales take no payment on a visit (record_visit_payment, 42501)');
--- С-1: a draft progress invoice of their own turned «deposit» of the signed version by an update: refused
+-- С-1: a draft progress invoice turned «deposit» of the signed version by an update: refused (tg_invoice_guard answers
+-- first, «only the office changes what an invoice is»). Since #2075 (20261117360000) sales insert no invoice at all (RLS),
+-- so the draft is the office's here; it stays as it was
+select tst.fails($q$insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
+  ('11910000-0000-4000-8000-000000000016', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f2', 'progress', 'draft', 'T191 draft', 9999900, 9999900)$q$,
+  'T191 sales do not insert an invoice (#2075)');
+:as_office_a
 insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
   ('11910000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f2', 'progress', 'draft', 'T191 draft', 9999900, 9999900);
-do $$ begin
-  update public.invoices set kind = 'deposit', source_estimate_version_id = '51910000-0000-4000-8000-000000000002' where id = '11910000-0000-4000-8000-000000000006';
-  raise exception 'FAILED: T191 sales turned a draft into a deposit';
-exception when insufficient_privilege then null;
-end $$;
-select tst.ok(true, 'T191 sales do not change what an invoice is (kind, version: tg_invoice_guard, 42501)');
+:as_sales_a
+select tst.fails($q$update public.invoices set kind = 'deposit', source_estimate_version_id = '51910000-0000-4000-8000-000000000002' where id = '11910000-0000-4000-8000-000000000006'$q$,
+  'T191 sales do not change what an invoice is (kind, version)');
 :as_super
 select tst.ok((select kind = 'progress' and source_estimate_version_id is null from public.invoices where id = '11910000-0000-4000-8000-000000000006'), 'T191 the draft stays a progress invoice');
 select tst.ok(tst.cnt($q$select 1 from public.payments where id = 'a1910000-0000-4000-8000-000000000005'$q$) = 0, 'T191 no payment from sales on the visit');
@@ -15697,7 +15709,7 @@ select tst.ok((select assigned_to = 'a5600000-0000-4000-8000-000000000002' from 
 -- the team as the caller — every member sees the team, so the check holds for them)
 :as_tech281
 select tst.fails_like($q$update public.leads set assigned_to = 'a5600000-0000-4000-8000-000000000002' where id = 'a2810000-0000-4000-8000-000000000c03'$q$,
-                      '%not given to a subcontractor%', 'T282 a tech does not give his lead to a subcontractor');
+                      '%given to someone else by the office%', 'T282 a tech does not give his lead to a subcontractor (since #2075 to nobody else: t12_lead_member_guard)');
 -- a tech's task is his own whoever he names (t04_task_who): never the subcontractor's
 insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id) values ('a2820000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c03', 'T282 t', 'a5600000-0000-4000-8000-000000000002');
 select tst.ok((select assignee_id = 'a2810000-0000-4000-8000-000000000001' from public.tasks where id = 'a2820000-0000-4000-8000-000000000001'),
@@ -17149,6 +17161,85 @@ select tst.ok((select count(*) from public.estimate_approvals where estimate_id 
 rollback;
 \echo 'T379 ok'
 
+-- ---------------------------------------------------------------- T393–T398 (#2016): planning a job is the office's
+-- Sales book inspections only; an install visit, its change and a job «scheduled» are owner / admin / office.
+-- Before: sales wrote the install visit and the job «scheduled», only assign_visit refused — half a write.
+\echo 'T393-T398 planning rights'
+begin;
+:as_super
+update public.memberships set role = 'sales', status = 'active' where user_id = 'a0000000-0000-0000-0000-000000000005' and company_id = 'ca000000-0000-0000-0000-000000000000';
+insert into public.customers (id, company_id, display_name) values ('39300000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'T393 Client');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('39300000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000c1', '393 Plan St', 'Pasadena');
+insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+  ('39300000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'T393 job', '39300000-0000-4000-8000-0000000000c1', '39300000-0000-4000-8000-0000000000d1', 'draft'),
+  ('39300000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'T397 job', '39300000-0000-4000-8000-0000000000c1', '39300000-0000-4000-8000-0000000000d1', 'draft');
+insert into public.leads (id, company_id, source_id, contact_name, phone)
+  select '39300000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', id, 'T394 Lead', '(818) 555-0394'
+    from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' order by created_at limit 1;
+-- an install visit the office made (sales must not change it)
+insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values
+  ('39300000-0000-4000-8000-0000000000f9', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000e1', 'install', now() + interval '2 days', now() + interval '2 days 3 hours');
+
+:as_sales_a
+-- T393: sales — an install visit: refused
+select tst.fails_like($q$insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values ('39300000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000e1', 'install', now() + interval '1 day', now() + interval '1 day 3 hours')$q$, '%row-level security%',
+  'T393 sales: an install visit is refused');
+select tst.fails_like($q$insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values ('39300000-0000-4000-8000-0000000000f4', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000e1', 'inspection', now() + interval '1 day', now() + interval '1 day 1 hour')$q$, '%row-level security%',
+  'T393 sales: an «inspection» on a job is refused (an inspection is a lead''s visit without a job)');
+-- T394: sales — an inspection: as before
+insert into public.visits (id, company_id, property_id, kind, starts_at, ends_at) values
+  ('39300000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000d1', 'inspection', now() + interval '1 day', now() + interval '1 day 1 hour');
+update public.visits set starts_at = now() + interval '3 days', ends_at = now() + interval '3 days 1 hour' where id = '39300000-0000-4000-8000-0000000000f2';
+-- T394: the app's own path for sales (ops.ts lead.visit): a visit of the lead at its property, no job; the lead moves on
+insert into public.visits (id, company_id, lead_id, property_id, kind, starts_at, ends_at, scope) values
+  ('39300000-0000-4000-8000-0000000000f5', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000a1', '39300000-0000-4000-8000-0000000000d1', 'inspection',
+   now() + interval '2 days', now() + interval '2 days 45 minutes', '{}');
+update public.leads set status = 'inspection_scheduled', property_id = '39300000-0000-4000-8000-0000000000d1' where id = '39300000-0000-4000-8000-0000000000a1';
+-- T395: sales — an inspection turned into an install, or the office's install moved: refused / not reached
+select tst.fails_like($q$update public.visits set kind = 'install', job_id = '39300000-0000-4000-8000-0000000000e1', property_id = null where id = '39300000-0000-4000-8000-0000000000f2'$q$, '%sales change only an inspection%',
+  'T395 sales: an inspection does not become an install');
+select tst.fails_like($q$update public.visits set starts_at = now() + interval '9 days' where id = '39300000-0000-4000-8000-0000000000f9'$q$, '%sales change only an inspection%',
+  'T395 sales: the office''s install visit is not moved (a refusal, not a silent «0 rows»)');
+select tst.fails_like($q$update public.visits set kind = 'inspection', starts_at = now() + interval '9 days' where id = '39300000-0000-4000-8000-0000000000f9'$q$,
+  '%sales change only an inspection%', 'T395 sales: the office''s install does not become an «inspection»');
+select tst.fails($q$update public.visits set deleted_at = now() where id = '39300000-0000-4000-8000-0000000000f9'$q$,
+  'T395 sales: the office''s install is not dropped');
+-- T396: sales — a job «scheduled»: refused
+select tst.fails_like($q$update public.jobs set status = 'scheduled' where id = '39300000-0000-4000-8000-0000000000e1'$q$, '%only the office schedules a job%',
+  'T396 sales: a job does not become «scheduled»');
+:as_super
+select tst.ok(not exists (select 1 from public.visits where id = '39300000-0000-4000-8000-0000000000f1'), 'T393 …no install visit written');
+select tst.ok((select kind = 'inspection' and starts_at > now() + interval '2 days' from public.visits where id = '39300000-0000-4000-8000-0000000000f2'), 'T394 sales: the inspection is booked and moved');
+select tst.ok((select kind = 'inspection' from public.visits where id = '39300000-0000-4000-8000-0000000000f2'), 'T395 …still an inspection');
+select tst.ok((select kind = 'inspection' and job_id is null and lead_id = '39300000-0000-4000-8000-0000000000a1' from public.visits where id = '39300000-0000-4000-8000-0000000000f5')
+          and (select status from public.leads where id = '39300000-0000-4000-8000-0000000000a1') = 'inspection_scheduled',
+  'T394 sales book an inspection of a lead the way the app does (lead.visit)');
+select tst.ok((select kind = 'install' and deleted_at is null and starts_at < now() + interval '3 days' from public.visits where id = '39300000-0000-4000-8000-0000000000f9'),
+  'T395 sales: the office''s install visit is not moved, turned or dropped');
+select tst.ok(not exists (select 1 from public.visits where id = '39300000-0000-4000-8000-0000000000f4'), 'T393 …no inspection on a job written');
+select tst.ok((select status from public.jobs where id = '39300000-0000-4000-8000-0000000000e1') = 'draft', 'T396 …the job stays a draft');
+
+-- T397: the office plans as before — an install visit, the job «scheduled», the visit moved
+:as_office_a
+insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values
+  ('39300000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000e2', 'install', now() + interval '1 day', now() + interval '1 day 3 hours');
+update public.jobs set status = 'scheduled' where id = '39300000-0000-4000-8000-0000000000e2';
+update public.visits set starts_at = now() + interval '4 days', ends_at = now() + interval '4 days 3 hours' where id = '39300000-0000-4000-8000-0000000000f3';
+:as_super
+select tst.ok((select status from public.jobs where id = '39300000-0000-4000-8000-0000000000e2') = 'scheduled'
+          and (select starts_at > now() + interval '3 days' from public.visits where id = '39300000-0000-4000-8000-0000000000f3'),
+  'T397 the office: install visit, job scheduled, visit moved');
+
+-- T398: the tech — no visit of any kind
+:as_tech_a
+select tst.fails($q$insert into public.visits (company_id, property_id, kind, starts_at) values ('ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000d1', 'inspection', now())$q$,
+  'T398 tech: no inspection');
+select tst.fails($q$insert into public.visits (company_id, job_id, kind, starts_at) values ('ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000e1', 'install', now())$q$,
+  'T398 tech: no install visit');
+rollback;
+\echo 'T393-T398 ok'
+
 -- ---------------------------------------------------------------- T380 (#2020): by the client's link the client pays
 -- A sent estimate of company A with a 10% deposit, signed by the client (anon) and by the owner: its deposit invoice.
 -- The company simulates payments (a demo company). The owner and the office pay by the token: 42501, hint member_portal_pay,
@@ -17348,5 +17439,163 @@ select tst.ok((select purchase_tax_bps = 800 from public.suppliers where id = '3
 :as_owner_a
 select tst.ok(public.supplier_set_tax('39900000-0000-4000-8000-0000000000a1', 810, 800) = 2, 'T436 the door itself still changes it (the owner of the function)');
 :as_super
+
+-- ---------------------------------------------------------------- T414–T416 (#2075): invoices and the money of a job are the office's
+-- The roles decision (В9): sales do not issue or change invoices — the deposit at the signature stays theirs through the
+-- server functions (T73, T191). The lines and the tax of a job make its contract total: the office's too (20261117360000).
+\echo 'T414 invoices and the money of a job: the office'
+begin;
+:as_office_a
+insert into public.jobs (id, company_id, number, title, customer_id, property_id) values
+  ('e4140000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'T414 job', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001');
+insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('e4141000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e4140000-0000-4000-8000-000000000001', 1, 'T414 line', 1, 10000, false);
+select tst.ok((select contract_total_cents from public.jobs where id = 'e4140000-0000-4000-8000-000000000001') = 10000, 'T414 the office adds a line, the total follows');
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('e4142000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'e4140000-0000-4000-8000-000000000001', 'progress', 'sent', 'T414 office', 5000, 5000, now());
+select tst.ok(exists (select 1 from public.invoices where id = 'e4142000-0000-4000-8000-000000000001'), 'T414 the office issues an invoice');
+
+-- T414: sales issue no invoice — of any kind, sent or draft, with or without a job
+:as_sales_a
+select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'standalone', 'sent', 'T414 sales', 999900, 999900, now())$q$,
+  '%row-level security%', 'T414 sales do not issue a standalone invoice');
+select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'standalone', 'draft', 'T414 sales draft', 100, 100)$q$,
+  '%row-level security%', 'T414 sales do not make a draft invoice');
+select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'e4140000-0000-4000-8000-000000000001', 'final', 'sent', 'T414 sales final', 5000, 5000, now())$q$,
+  '%row-level security%', 'T414 sales do not bill the balance of a job');
+
+-- T415: sales change no invoice: a refusal (42501), not «0 rows» an old phone's queue would take for done
+select tst.fails_like($q$update public.invoices set title = 'T415 sales' where id = 'e4142000-0000-4000-8000-000000000001'$q$,
+  '%row-level security%', 'T415 sales do not rename an invoice');
+select tst.fails_like($q$update public.invoices set due_date = tst.today() + 60 where id = 'e4142000-0000-4000-8000-000000000001'$q$,
+  '%row-level security%', 'T415 sales do not move the due date');
+select tst.ok((select count(*) from public.invoices where id = 'e4142000-0000-4000-8000-000000000001') = 1, 'T415 sales still see the invoice');
+:as_office_a
+update public.invoices set title = 'T415 office' where id = 'e4142000-0000-4000-8000-000000000001';
+select tst.ok((select title from public.invoices where id = 'e4142000-0000-4000-8000-000000000001') = 'T415 office', 'T415 the office still changes what may change');
+
+-- T416: the contract total of a job — sales neither add, change nor remove a line, nor switch the tax
+:as_sales_a
+select tst.fails_like($q$insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents) values
+  ('ca000000-0000-0000-0000-000000000000', 'e4140000-0000-4000-8000-000000000001', 2, 'T416 sales', 1, 990000)$q$,
+  '%row-level security%', 'T416 sales do not add a line to a job');
+select tst.fails_like($q$update public.job_line_items set unit_price_cents = 990000 where id = 'e4141000-0000-4000-8000-000000000001'$q$,
+  '%row-level security%', 'T416 sales do not change a line price');
+select tst.fails_like($q$update public.job_line_items set deleted_at = now() where id = 'e4141000-0000-4000-8000-000000000001'$q$,
+  '%row-level security%', 'T416 sales do not remove a line');
+select tst.fails_like($q$update public.jobs set tax_enabled = true, tax_rate_bps = 1000 where id = 'e4140000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes the tax of a job%', 'T416 sales do not switch on the tax of a job');
+select tst.fails_like($q$update public.jobs set tax_rate_ppm = 100000 where id = 'e4140000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes the tax of a job%', 'T416 sales do not change the tax rate of a job');
+select tst.fails($q$update public.jobs set contract_total_cents = 990000 where id = 'e4140000-0000-4000-8000-000000000001'$q$, 'T416 sales do not set the total');
+-- what sales still change on a job: its description (job.update)
+update public.jobs set description = 'T416 sales note' where id = 'e4140000-0000-4000-8000-000000000001';
+select tst.ok((select description = 'T416 sales note' and contract_total_cents = 10000 and not tax_enabled from public.jobs where id = 'e4140000-0000-4000-8000-000000000001'),
+  'T416 sales still note a job; its total and tax stay the office''s');
+-- a new job of sales comes without a tax: one with it is refused, a plain one is made
+select tst.fails_like($q$insert into public.jobs (id, company_id, number, title, customer_id, property_id, tax_enabled, tax_rate_bps) values
+  ('e4140000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'T416 taxed', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', true, 10000)$q$,
+  '%only the office changes the tax of a job%', 'T416 sales do not make a job with a tax');
+select tst.fails_like($q$insert into public.jobs (id, company_id, number, title, customer_id, property_id, tax_rate_ppm) values
+  ('e4140000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'T416 rate', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 50000)$q$,
+  '%only the office changes the tax of a job%', 'T416 sales do not make a job with a tax rate');
+insert into public.jobs (id, company_id, number, title, customer_id, property_id) values
+  ('e4140000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'T416 plain', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001');
+select tst.ok(exists (select 1 from public.jobs where id = 'e4140000-0000-4000-8000-000000000003' and not tax_enabled), 'T416 sales still make a plain job (lead.book)');
+-- the tech: no invoice, no line, no tax either
+:as_tech_a
+select tst.fails($q$insert into public.invoices (company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'standalone', 'draft', 'T416 tech', 100, 100)$q$, 'T416 the tech issues no invoice');
+select tst.fails($q$insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents) values
+  ('ca000000-0000-0000-0000-000000000000', 'e4140000-0000-4000-8000-000000000001', 3, 'T416 tech', 1, 100)$q$, 'T416 the tech adds no line');
+select tst.blocked($q$update public.jobs set tax_enabled = true where id = 'e4140000-0000-4000-8000-000000000001'$q$, 'T416 the tech switches no tax');
+:as_office_a
+update public.jobs set tax_enabled = true, tax_rate_bps = 1000 where id = 'e4140000-0000-4000-8000-000000000001';
+update public.job_line_items set taxable = true where id = 'e4141000-0000-4000-8000-000000000001';
+select tst.ok((select tax_enabled and contract_total_cents = 11000 from public.jobs where id = 'e4140000-0000-4000-8000-000000000001'), 'T416 the office switches the tax, the total follows');
+rollback;
+\echo 'T414 T415 T416 ok'
+
+-- ---------------------------------------------------------------- T417–T419 (#2075): a tech's own lead — his to work, the rest the office's
+-- The roles decision (audit of roles #2064): a member who is not staff works his lead (contact fields, the next step,
+-- close / reopen / snooze, the first reply); he gives it to nobody else, and its source, price, client, number, links
+-- and «won» stay the office's (leads_update WITH CHECK = USING, t12_lead_member_guard, 20261117370000).
+\echo 'T417 a tech''s own lead'
+begin;
+:as_tech_a
+insert into public.leads (id, company_id, source_id, contact_name, phone) values
+  ('a4170000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000',
+   (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T417 Neighbor', '(818) 555-4170');
+:as_office_a
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000003' where id = 'a4170000-0000-4000-8000-000000000001';
+
+-- T417: he gives it to nobody else, and the lead stays his after his change
+:as_tech_a
+select tst.fails_like($q$update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%given to someone else by the office%', 'T417 a tech does not give his lead to the office');
+select tst.fails_like($q$update public.leads set assigned_to = null where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%given to someone else by the office%', 'T417 a tech does not leave his lead without anyone');
+select tst.fails($q$update public.leads set created_by = 'a0000000-0000-0000-0000-000000000002', assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  'T417 a tech does not hand the lead out of his reach');
+:as_office_a
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001';
+:as_tech_a
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000003' where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select assigned_to from public.leads where id = 'a4170000-0000-4000-8000-000000000001') = 'a0000000-0000-0000-0000-000000000003', 'T417 a tech takes a lead he brought back to himself');
+
+-- T418: the office's fields of a lead do not change by his hand
+select tst.fails_like($q$update public.leads set source_id = (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name <> 'Referral' limit 1) where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T418 a tech does not change the source');
+select tst.fails_like($q$update public.leads set cost_cents = 99900 where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T418 a tech does not set the lead price');
+select tst.fails_like($q$update public.leads set customer_id = 'c1a00000-0000-0000-0000-000000000001' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office%', 'T418 a tech does not tie the lead to a client (t06_lead_place_guard answers first)');
+select tst.fails_like($q$update public.leads set number = 'LEA-9999' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T418 a tech does not renumber the lead');
+select tst.fails_like($q$update public.leads set received_at = now() - interval '30 days' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T418 a tech does not move the receipt time');
+-- what is his: the contact fields, the next step, close and reopen
+update public.leads set contact_name = 'T417 Neighbor Jr', service_requested = 'Gutter cleaning', snoozed_until = now() + interval '3 days', snooze_reason = 'client_away' where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select contact_name = 'T417 Neighbor Jr' and service_requested = 'Gutter cleaning' from public.leads where id = 'a4170000-0000-4000-8000-000000000001'), 'T418 a tech still works his lead (fields, snooze)');
+update public.leads set snoozed_until = null, snooze_reason = null where id = 'a4170000-0000-4000-8000-000000000001';
+update public.leads set status = 'lost', lost_reason = 'no_response' where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select status from public.leads where id = 'a4170000-0000-4000-8000-000000000001') = 'lost', 'T418 a tech closes his lead');
+update public.leads set status = 'contacted', lost_reason = null, lost_reason_text = null where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select status from public.leads where id = 'a4170000-0000-4000-8000-000000000001') = 'contacted', 'T418 a tech reopens his lead');
+
+-- T419: «won» (making a client) is the office's; the office still changes what the tech may not
+select tst.fails_like($q$update public.leads set status = 'won', won_via = 'manual' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office%', 'T419 a tech does not make his lead won');
+-- archived, «referred by», a first reply moved: the office's too
+update public.leads set status = 'lost', lost_reason = 'no_response' where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.fails_like($q$update public.leads set status = 'archived' where id = 'a4170000-0000-4000-8000-000000000001'$q$, '%only the office%', 'T419 a tech does not archive his lead');
+update public.leads set status = 'contacted', lost_reason = null where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.fails_like($q$update public.leads set referred_by_customer_id = 'c1a00000-0000-0000-0000-000000000001' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T419 a tech does not mark the lead «referred by» a client');
+update public.leads set first_response_at = now(), first_response_kind = 'manual' where id = 'a4170000-0000-4000-8000-000000000001' and first_response_at is null;
+select tst.ok((select first_response_at is not null from public.leads where id = 'a4170000-0000-4000-8000-000000000001'), 'T419 a tech marks the first reply once');
+select tst.fails_like($q$update public.leads set first_response_at = now() - interval '100 days' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T419 a tech does not move the first reply');
+-- a new lead of his is a plain new one
+select tst.fails_like($q$insert into public.leads (company_id, source_id, contact_name, phone, status, won_via) values
+  ('ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T419 won', '(818) 555-4191', 'won', 'manual')$q$,
+  '%only the office makes a lead like this%', 'T419 a tech does not bring a lead already won');
+select tst.fails_like($q$insert into public.leads (company_id, source_id, contact_name, phone, provider, provider_ref) values
+  ('ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T419 market', '(818) 555-4192', 'thumbtack', 'T419-ref')$q$,
+  '%only the office makes a lead like this%', 'T419 a tech does not bring a lead with a marketplace reference');
+insert into public.leads (id, company_id, source_id, contact_name, phone, received_at) values
+  ('a4170000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'),
+   'T419 back-dated', '(818) 555-4193', now() - interval '90 days');
+select tst.ok((select received_at > now() - interval '1 minute' and status = 'new' from public.leads where id = 'a4170000-0000-4000-8000-000000000002'),
+  'T419 a lead he brings is received now, whatever the phone says');
+:as_sales_a
+update public.leads set source_id = (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name <> 'Referral' limit 1),
+                        assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select assigned_to from public.leads where id = 'a4170000-0000-4000-8000-000000000001') = 'a0000000-0000-0000-0000-000000000002', 'T419 sales (staff) still give a lead and change its source');
+rollback;
+\echo 'T417 T418 T419 ok'
 
 \echo 'ALL TESTS PASSED'
