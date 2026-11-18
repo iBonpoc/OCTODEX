@@ -19,6 +19,15 @@ export const stepIcon: Record<SetupStep, IconKey> = {
 export const stepTitle = (s: SetupStep): DictKey => `co.step.${s}` as DictKey;
 export const stepHint = (s: SetupStep): DictKey => `co.hint.${s}` as DictKey;
 
+/**
+ * #2007 (founder 17.11: «один и тот же экран показывается дважды»): the first run asks «Чем вы занимаетесь?» (auth/trade) and then
+ * the wizard asked the same at its step «Направления». The wizard skips that step when the company already has an active
+ * direction — unless the person stands on it now (it stays in the list while shown).
+ */
+export function wizardSteps(c: Company, cats: ServiceCategory[], current?: SetupStep): SetupStep[] {
+  return SETUP_STEPS.filter((s) => s !== "trades" || s === current || !stepDone(c, "trades", cats));
+}
+
 /** `cats` — the company's directions (docs/specs/11-trade.md): the "trades" step is done with at least one active */
 export function stepDone(c: Company, s: SetupStep, cats: ServiceCategory[] = []): boolean {
   switch (s) {

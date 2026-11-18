@@ -9,7 +9,7 @@ import type { Address, Company, CompanyContact, CompanyLicense, EntityType, Lice
 import { DOC_LANG_LABEL, DOC_LANGS, useI18n, type DictKey, type DocLang } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
 import { Labeled, PctField } from "@/features/fields";
-import { SETUP_STEPS, stepHint, stepTitle, type SetupStep } from "@/features/companySetup";
+import { SETUP_STEPS, stepHint, stepTitle, wizardSteps, type SetupStep } from "@/features/companySetup";
 import { tzLabel } from "@/features/scheduleSettings";
 import { logoFit } from "@/features/logoFit";
 import { ServiceCategoryEditor } from "@/features/ServiceCategoryPicker";
@@ -42,7 +42,8 @@ export default function CompanySection() {
   const leaving = useRef(false);
   const step = SETUP_STEPS.includes(section) ? section : "profile";
   const isWizard = wizard === "1";
-  const steps = SETUP_STEPS;
+  // the wizard's steps: «Направления» only when no direction was chosen at the first run (#2007)
+  const steps = c ? wizardSteps(c, store.db.serviceCategories, step) : SETUP_STEPS;
   const idx = steps.indexOf(step);
   // spec 26 §3 (07.11): the office sees the company settings, only the director changes them
   const ro = store.role !== "director";
