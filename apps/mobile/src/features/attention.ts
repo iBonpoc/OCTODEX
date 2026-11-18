@@ -11,6 +11,7 @@ import { canPlan, inspectionsNoEstimate, liveAssignees, dayDiffIn, isOpenVisit, 
 import { businessHoursOf, companyTz, scheduleSettingsOf } from "./scheduleSettings";
 import { dayKeyIn } from "./zone";
 import { jobAwaitingClose } from "@/features/jobDone";
+import { isContractKind } from "@/features/contractKind";
 import { goneId } from "./team";
 import type { DictKey } from "@/i18n";
 import { rejectReasonKey, type RejectedOp } from "@/data/outboxRejected";
@@ -225,12 +226,13 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
       out.push({ id: `done-${j.id}`, kind: "jobDone", refId: j.id, name: c?.name ?? "", label: "job3.att.done", params: { name: c?.name ?? "", title: j.title }, chip: "job3.att.doneChip", status: "info", amountCents: j.amountCents, score: 900 });
     }
     // #2048: done, and part of the job's price is still not on any invoice (the engine's contract statement: price −
-    // invoiced). The same invoices as the job's own screen and its «Выставить остаток» — the office can always clear it.
-    // It goes away when invoices cover the price. A visit closed with no payment (#2018) lands here too.
+    // invoiced). #2061 (rule А, the lead 18.11): the contract's own invoices only — deposit / progress / final, as the
+    // server's app.job_contract_billed; a standalone or recurring one is extra work and does not cover the contract.
+    // It goes away when contract invoices cover the price. A visit closed with no payment (#2018) lands here too.
     const done = db.jobs.filter((j) => j.status === "done" && Number.isFinite(j.amountCents) && j.amountCents > 0);
     if (done.length) {
       const byJob = new Map<ID, typeof db.invoices>();
-      for (const i of db.invoices) if (i.jobId) byJob.set(i.jobId, [...(byJob.get(i.jobId) ?? []), i]);
+      for (const i of db.invoices) if (i.jobId && isContractKind(i.kind)) byJob.set(i.jobId, [...(byJob.get(i.jobId) ?? []), i]);
       for (const j of done) {
         const left = contractStatement(j.amountCents, byJob.get(j.id) ?? []).toInvoice;
         if (!(left > 0)) continue;

@@ -34,10 +34,16 @@ describe("«работа выполнена, счёта нет» (#2048)", () =>
     expect(reason(withJob({}, [{ totalCents: 50000, paidCents: 0 }]).db, "j2048")).toBeUndefined();
     expect(reason(withJob({}, [{ totalCents: 50000, paidCents: 50000 }]).db, "j2048")).toBeUndefined();
   });
-  it("the same invoices as the job's screen and its «Выставить остаток»: a standalone one counts too — the office can clear it", () => {
-    // review of #2048: counting the contract invoices only left a reason the job screen gave no way to clear
-    const { db, id } = withJob({}, [{ kind: "standalone" as Invoice["kind"], totalCents: 20000 }, { totalCents: 30000 }]);
-    expect(reason(db, id)).toBeUndefined();
+  it("#2061 rule А: a standalone $200 does not lower «не выставлено» — the contract's own invoices only, as the server", () => {
+    const only = withJob({}, [{ kind: "standalone" as Invoice["kind"], totalCents: 20000, paidCents: 20000 }]);
+    expect(reason(only.db, only.id)?.amountCents).toBe(50000);
+    const both = withJob({}, [{ kind: "standalone" as Invoice["kind"], totalCents: 20000 }, { totalCents: 30000 }]);
+    expect(reason(both.db, both.id)?.amountCents).toBe(20000);
+    const rec = withJob({}, [{ kind: "recurring" as Invoice["kind"], totalCents: 50000 }]);
+    expect(reason(rec.db, rec.id)?.amountCents).toBe(50000);
+  });
+  it("an older final with no kind counts against the contract", () => {
+    expect(reason(withJob({}, [{ kind: undefined, totalCents: 50000 }]).db, "j2048")).toBeUndefined();
   });
   it("old saved data with no price: no reason, no NaN", () => {
     expect(reason(withJob({ amountCents: undefined as unknown as number }, []).db, "j2048")).toBeUndefined();
