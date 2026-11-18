@@ -2262,7 +2262,7 @@ export const ru = {
   // #2098: «не обслуживаем» обратимо
   "client.serveAgain": "Снова обслуживать",
   "client.serveAgain.title": "Снова обслуживать {name}?",
-  "client.serveAgain.body": "Можно будет создавать работы, сметы и выезды. Причина пометки останется в истории.",
+  "client.serveAgain.body": "Можно будет создавать работы, сметы и выезды.",
   "client.serveAgain.links": "Старые ссылки клиенту не вернутся — отправьте документы заново.",
   "client.serveAgain.yes": "Снова обслуживать",
   "client.serveAgain.yesTo": "Снять пометку · {status}",

@@ -2263,7 +2263,7 @@ export const en: Dict = {
   // #2098: «не обслуживаем» обратимо
   "client.serveAgain": "Serve again",
   "client.serveAgain.title": "Serve {name} again?",
-  "client.serveAgain.body": "New jobs, estimates and visits can be made again. The reason of the mark stays in the history.",
+  "client.serveAgain.body": "New jobs, estimates and visits can be made again.",
   "client.serveAgain.links": "Old links will not work again — send the documents anew.",
   "client.serveAgain.yes": "Serve again",
   "client.serveAgain.yesTo": "Lift the mark · {status}",

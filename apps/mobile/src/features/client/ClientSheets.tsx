@@ -18,6 +18,7 @@ import { OptionRows } from "@/ui/optionRow";
 import { SelectField } from "@/ui/selectField";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
+import { useHeldSheet } from "@/ui/heldSheet";
 import { Card, RowView, SectionTitle } from "@/ui/surfaces";
 import { localUndo, type GuardedUndo } from "@/data/undo";
 
@@ -294,7 +295,10 @@ export function StatusSheet({ visible, customer, onClose, preset }: { visible: b
  * taken back with the mark and its reason as they were (nothing reaches the server); once sent, the toast says it is too
  * late — the mark is set again by hand (a new line in the history), never a half undo.
  */
-export function ServeAgainSheet({ customer, to, onClose }: { customer: Customer | null; to: CustomerStatus; onClose: () => void }) {
+export function ServeAgainSheet({ customer: open, to, onClose }: { customer: Customer | null; to: CustomerStatus; onClose: () => void }) {
+  // the sheet keeps its client while it goes out (#1163): no «Снова обслуживать ?» with an empty name in the exit
+  const held = useHeldSheet(open);
+  const customer = held.value;
   const store = useStore();
   const { t } = useI18n();
   const toast = useToast();
@@ -304,7 +308,7 @@ export function ServeAgainSheet({ customer, to, onClose }: { customer: Customer 
     onClose();
   };
   return (
-    <Sheet visible={!!customer} onClose={onClose} title={t("client.serveAgain.title", { name: customer?.name ?? "" })}>
+    <Sheet visible={held.visible} onExited={held.onExited} onClose={onClose} title={t("client.serveAgain.title", { name: customer?.name ?? "" })}>
       <View testID="client-serve-again-sheet" style={{ gap: space[3] }}>
         <T v="body">{t("client.serveAgain.body")}</T>
         {customer?.statusReason ? (
