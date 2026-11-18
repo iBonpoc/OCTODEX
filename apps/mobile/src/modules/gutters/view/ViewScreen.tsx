@@ -27,6 +27,7 @@ import { Card, CardList, Divider, ListRow, RowView, Screen } from "@/ui/surfaces
 import { NotFound } from "@/ui/emptyStates";
 import { blueprint, sheetPage } from "./blueprint";
 import { DocSheet } from "@/features/DocPagesView";
+import { gutterDocLang } from "../docLang";
 import { docWho } from "../docWho";
 import { fmtLen } from "../canvas/format";
 import { fromElements } from "../canvas/model";
@@ -77,7 +78,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   const { device } = useDevice();
   const { c } = useTheme();
   const cols = device !== "phone" && !panel;
-  const { t, money, lang } = useI18n();
+  const { t, money } = useI18n();
   const toast = useToast();
   const g = gutterData(store.db);
   const found = mid ? measurementOf(g, mid) : null;
@@ -192,8 +193,9 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   const clientLang = clientLangOf(store.db, m);
   const pdf = (kind: "client" | "crew") => {
     const company = companyForPortal(store.db, store.companyName ?? APP_NAME);
-    const docLang = kind === "client" ? clientLangOf(store.db, m) : lang;
-    const tt = kind === "client" ? tFor(docLang) : t;
+    // the client's — the client's language, the crew's — the company's (#2158, rule 7: never the app's own)
+    const docLang = gutterDocLang(store.db, m, kind);
+    const tt = tFor(docLang);
     // whose and where — or «Черновик · без адреса» (#2159), in the document's language
     const dw = docWho(store.db, m, tt("mod.gutters.pdf.draft"));
     const html = drawingPdfHtml({
@@ -217,7 +219,8 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   // supplier's order in English (spec 36 №19). A sheet with overlapping labels is still given, with a warning.
   const shop = (kind: "drawings" | "order", paper: ShopPaper) => {
     const company = companyForPortal(store.db, store.companyName ?? APP_NAME);
-    const tt = kind === "order" ? tFor("en") : t;
+    // the crew's sheets — the company's language, the supplier's order — en (#2158; spec 36 №19)
+    const tt = tFor(gutterDocLang(store.db, m, kind === "order" ? "supplier" : "crew"));
     // whose and where on every sheet — or «Черновик · без адреса» (#2159), in the sheet's language
     const dw = docWho(store.db, m, tt("mod.gutters.pdf.draft"));
     const r = readRules(settings);

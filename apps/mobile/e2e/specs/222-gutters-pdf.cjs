@@ -2,7 +2,8 @@
  * e2e 222 — «Чертёж в PDF» (основатель 09.11, #509; docs/specs/33-gutters-canvas.md П20.25 п.4). Every view.
  * - «Просмотр замера» → «PDF клиенту»: the drawing (an SVG), the gutters with their lengths — no $, no cut, in the
  *   client's language (a draft for nobody: the company's language, en in the US);
- * - «PDF бригаде»: the drawing, «По стене» / «По лицевой», the corner, the parts — in the app's language (ru), no $.
+ * - «PDF бригаде»: the drawing, «At the wall» / «At the face», the corner, the parts — in the company's document language (en;
+ *   never the app's — ru here, #2158 rule 7), no $.
  * The web prints from a hidden frame: the spec catches the frame's HTML instead of the print dialog.
  */
 const { skipLength, openView } = require("../gutters.cjs");
@@ -98,16 +99,18 @@ exports.run = async (h) => {
 
   // for the crew
   const w = await printVia("view-pdf-crew", "crew");
-  h.expect(w.includes("Раскрой для бригады"), "the crew's PDF in the app's language");
-  h.expect(w.includes("По стене") && w.includes("По лицевой"), "along the wall and along the face");
-  h.expect(w.includes("Углы") && w.includes("Детали"), "the corner's cut and the parts");
+  // the company's document language (en), never the app's (ru here) — #2158, rule 7
+  h.expect(w.includes("Cut list for the crew") && !w.includes("Раскрой для бригады"), "the crew's PDF in the company's language, not the app's"); // i18n-old: ok — the app's words must be absent
+  h.expect(w.includes("At the wall") && w.includes("At the face"), "along the wall and along the face");
+  h.expect(w.includes("Corners") && w.includes("Parts"), "the corner's cut and the parts");
   h.expect(!/\$\s?\d/.test(w), "no prices for the crew");
   // #1090: the parts read as words and feet-inches (founder, build 1039: «73.16666666666667 фт», «coil · 11.875», «touch_up_paint»)
-  const parts = w.slice(w.indexOf("Детали"));
+  const parts = w.slice(w.indexOf("Parts"));
   h.expect(parts.includes("′"), "the parts' lengths are feet-inches");
   // a metal's thickness «0.027″» is a size, not a long decimal (#1766: it was «.027», a code)
   h.expect(!/\d\.\d{3,}(?!\d*″)/.test(parts), "no long decimal in the parts: " + (parts.match(/\d+\.\d{3,}(?!\d*″)[^<]*/) || [""])[0]);
   h.expect(!/touch_up_paint|dsstick|aluminum|(>|· )(coil|rivet)( ·|<)/.test(parts), "no bare code in a part's name");
-  h.expect(!/ фт\b/.test(parts) || !/\d\.\d/.test(parts), "no «N.N фт»");
+  h.expect(!/ (фт|ft)\b/.test(parts) || !/\d\.\d/.test(parts), "no «N.N ft»");
+  h.expect(!/[А-Яа-яЁё]/.test(w.replace(/<style[\s\S]*?<\/style>/g, "")), "no Russian word in the crew's PDF (the app is in Russian)");
   await h.shot("view-pdf");
 };
