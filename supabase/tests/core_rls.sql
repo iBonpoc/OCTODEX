@@ -16899,6 +16899,28 @@ select tst.ok((select status from public.leads where id = 'a4170000-0000-4000-80
 -- T419: «won» (making a client) is the office's; the office still changes what the tech may not
 select tst.fails_like($q$update public.leads set status = 'won', won_via = 'manual' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
   '%only the office%', 'T419 a tech does not make his lead won');
+-- archived, «referred by», a first reply moved: the office's too
+update public.leads set status = 'lost', lost_reason = 'no_response' where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.fails_like($q$update public.leads set status = 'archived' where id = 'a4170000-0000-4000-8000-000000000001'$q$, '%only the office%', 'T419 a tech does not archive his lead');
+update public.leads set status = 'contacted', lost_reason = null where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.fails_like($q$update public.leads set referred_by_customer_id = 'c1a00000-0000-0000-0000-000000000001' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T419 a tech does not mark the lead «referred by» a client');
+update public.leads set first_response_at = now(), first_response_kind = 'manual' where id = 'a4170000-0000-4000-8000-000000000001' and first_response_at is null;
+select tst.ok((select first_response_at is not null from public.leads where id = 'a4170000-0000-4000-8000-000000000001'), 'T419 a tech marks the first reply once');
+select tst.fails_like($q$update public.leads set first_response_at = now() - interval '100 days' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T419 a tech does not move the first reply');
+-- a new lead of his is a plain new one
+select tst.fails_like($q$insert into public.leads (company_id, source_id, contact_name, phone, status, won_via) values
+  ('ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T419 won', '(818) 555-4191', 'won', 'manual')$q$,
+  '%only the office makes a lead like this%', 'T419 a tech does not bring a lead already won');
+select tst.fails_like($q$insert into public.leads (company_id, source_id, contact_name, phone, provider, provider_ref) values
+  ('ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T419 market', '(818) 555-4192', 'thumbtack', 'T419-ref')$q$,
+  '%only the office makes a lead like this%', 'T419 a tech does not bring a lead with a marketplace reference');
+insert into public.leads (id, company_id, source_id, contact_name, phone, received_at) values
+  ('a4170000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'),
+   'T419 back-dated', '(818) 555-4193', now() - interval '90 days');
+select tst.ok((select received_at > now() - interval '1 minute' and status = 'new' from public.leads where id = 'a4170000-0000-4000-8000-000000000002'),
+  'T419 a lead he brings is received now, whatever the phone says');
 :as_sales_a
 update public.leads set source_id = (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name <> 'Referral' limit 1),
                         assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001';
