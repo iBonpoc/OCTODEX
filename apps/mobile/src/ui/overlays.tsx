@@ -867,6 +867,7 @@ function ToastView({ item, onDone, onLate }: { item: ToastItem | null; onDone: (
         {item.undo ? (
           <UndoButton
             key={item.at}
+            shownAt={item.at}
             onPress={() => {
               // the second tap of the double tap that made the thing is not «Отменить» (item.at = when it showed or grew)
               if (!toastArmed(item.at, Date.now())) return;
@@ -884,10 +885,19 @@ function ToastView({ item, onDone, onLate }: { item: ToastItem | null; onDone: (
 const ARect = Animated.createAnimatedComponent(Rect);
 
 /** "Undo" with a ring around it that burns down over the 5 seconds the toast stays (reduced motion: static ring). */
-function UndoButton({ onPress }: { onPress: () => void }) {
+function UndoButton({ onPress, shownAt }: { onPress: () => void; shownAt: number }) {
   const { c } = useTheme();
   const { t } = useI18n();
   const reduce = useReducedMotion();
+  // not yet armed (toastArmMs after the toast showed, see toastArm.ts): said as «busy» — a screen reader and an e2e know when a
+  // press counts (#2086, #2134: a test pressed once at once; it waits for this, never for seconds)
+  const [armed, setArmed] = useState(() => toastArmed(shownAt, Date.now()));
+  useEffect(() => {
+    if (armed) return;
+    const left = Math.max(0, motion.toastArmMs - (Date.now() - shownAt));
+    const id = setTimeout(() => setArmed(true), left);
+    return () => clearTimeout(id);
+  }, [armed, shownAt]);
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const left = useSharedValue(1);
   useEffect(() => {
@@ -906,6 +916,7 @@ function UndoButton({ onPress }: { onPress: () => void }) {
       visibleHeight={component.button.md}
       accessibilityRole="button"
       accessibilityLabel={t("common.undo")}
+      aria-busy={!armed}
       onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
       style={{
         height: component.button.md,
