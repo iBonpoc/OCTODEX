@@ -1,8 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { AppState, Platform } from "react-native";
+import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { WEB_APP_URL } from "@/config/backend";
 import { LEGAL_RETRY_MS, legalState, legalTickets, PENDING_LEGAL_KEY, resolveLegal, type LegalState } from "@/features/legal";
 import { supabase } from "./client";
 import { forgetThisPhone } from "@/features/pushNative";
@@ -13,8 +12,6 @@ import { lastCompanyKey, orderMemberships, parseMemberships, pendingLastKey, pic
 import { authEventPlan, goneChecker } from "@/features/deleteAccount";
 import { closedAnswerCounts, parseClosed, type ClosedCompany } from "@/features/closedCompany";
 
-/** Where email links (confirm / magic link) return. Must be in Supabase Auth → URL Configuration. */
-const redirectTo = () => (Platform.OS === "web" && typeof window !== "undefined" ? window.location.origin : WEB_APP_URL);
 
 export type { DbRole, Membership } from "./membershipSync";
 
@@ -66,7 +63,6 @@ interface AuthCtx {
   sendCode: (email: string) => Promise<string | null>;
   verifyCode: (email: string, code: string) => Promise<string | null>;
   signInPassword: (email: string, password: string) => Promise<string | null>;
-  signUpPassword: (email: string, password: string, name: string) => Promise<string | null>;
   createCompany: (name: string) => Promise<string | null>;
   /** #1662: `wipeDrafts` — «Выйти и стереть» in the sign-out window (the person's estimate drafts go too); otherwise kept */
   signOut: (o?: { wipeDrafts?: boolean }) => Promise<void>;
@@ -450,7 +446,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       memberships,
       company: memberships[0] ?? null,
       sendCode: async (email) => {
-        const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: redirectTo() } });
+        // the code only, no link (docs/specs/52 Р1): the first code makes the account and confirms the address
+        const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
         return error?.message ?? null;
       },
       verifyCode: async (email, code) => {
@@ -461,10 +458,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signInPassword: async (email, password) => {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (!error) await reloadMemberships();
-        return error?.message ?? null;
-      },
-      signUpPassword: async (email, password, name) => {
-        const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name }, emailRedirectTo: redirectTo() } });
         return error?.message ?? null;
       },
       legal,
