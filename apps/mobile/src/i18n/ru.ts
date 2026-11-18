@@ -3189,6 +3189,7 @@ export const ru = {
   "mod.gutters.card.docCrew": "Для бригады",
   "mod.gutters.card.docCrewSub": "Чертёж с раскроем · деталей: {n}",
   "mod.gutters.card.open": "Открыть",
+  "mod.gutters.card.send": "Отправить",
   "mod.gutters.card.details": "Подробно",
   "mod.gutters.card.detailsHide": "Свернуть",
   "mod.gutters.link.title": "Привязать замер",

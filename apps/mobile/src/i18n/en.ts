@@ -3189,6 +3189,7 @@ export const en: Dict = {
   "mod.gutters.card.docCrew": "For the crew",
   "mod.gutters.card.docCrewSub": "Drawing with the cut · parts: {n}",
   "mod.gutters.card.open": "Open",
+  "mod.gutters.card.send": "Send",
   "mod.gutters.card.details": "Details",
   "mod.gutters.card.detailsHide": "Hide details",
   "mod.gutters.link.title": "Link the measurement",
