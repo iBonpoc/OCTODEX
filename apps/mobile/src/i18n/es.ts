@@ -651,6 +651,7 @@ export const es: Dict = {
   "company.create": "Crear empresa",
   "company.hint": "Usted será el dueño. Invite a técnicos y despachador después.",
   "account.title": "Cuenta",
+  "account.createAnother": "Crear otra empresa",
   "account.demo": "Modo demo: datos de prueba, solo en este dispositivo.",
   "demo.badge": "Demo · los datos solo están en este dispositivo",
   "demo.badgeAction": "Iniciar sesión o crear una empresa",

@@ -74,6 +74,17 @@ export default function Profile() {
               <Button label={t("account.refresh")} icon="sync" variant="secondary" disabled={loading} onPress={refresh} />
               <Button testID="account-sign-out" label={t("account.signOut")} variant="ghost" onPress={signOutAsk.ask} />
             </RowView>
+            {/* #1673 (founder's check 18.11): a person with one company had no way to a second one — the switcher and its
+                «＋ Создать компанию» show only with two or more */}
+            {auth.memberships.length >= 1 ? (
+              <Button
+                testID="account-create-company"
+                label={t("account.createAnother")}
+                icon="plus"
+                variant="secondary"
+                onPress={() => router.push("/auth/company?new=1")}
+              />
+            ) : null}
           </>
         ) : auth.session ? (
           <>

@@ -59,6 +59,15 @@ exports.run = async (h, { seed }) => {
   h.expect(typeof token === "string" && token.length > 20, "an invitation link");
 
   await signIn(h, { ...a1, email, userId: pat.id });
+  // one company: the switcher is not there, but «Профиль и аккаунт» leads to a second company (founder's check 18.11)
+  await h.go("/settings/profile");
+  const another = p.getByTestId("account-create-company").locator("visible=true").first();
+  await another.waitFor({ timeout: 15000 });
+  await another.click();
+  await p.waitForURL(/\/auth\/company\?new=1/, { timeout: 10000 });
+  await p.getByTestId("company-fields").locator("visible=true").first().waitFor({ timeout: 10000 });
+  h.expect(/\/auth\/company/.test(new URL(p.url()).pathname), `the company form stays open with a company (${p.url()})`);
+  await h.shot("create-another");
   await h.go("/");
   await h.go(`/auth/invite?token=${token}`);
   await textHas(`Вас добавили в «${b1.company}»`, "the toast «Вас добавили в «B»»", 15000);

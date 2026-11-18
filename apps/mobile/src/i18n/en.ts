@@ -651,6 +651,7 @@ export const en: Dict = {
   "company.create": "Create company",
   "company.hint": "You become the owner. Invite technicians and the dispatcher later.",
   "account.title": "Account",
+  "account.createAnother": "Create another company",
   "account.demo": "Demo mode: test data, stored only on this device.",
   "demo.badge": "Demo · data stays on this device only",
   "demo.badgeAction": "Sign in or create a company",
