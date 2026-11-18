@@ -14,7 +14,7 @@ vi.mock("@/cloud/client", () => ({ supabase: {} }));
 vi.mock("@/config/backend", () => ({ WEB_APP_URL: "https://example.test" }));
 
 import { makeSeed } from "../src/data/seed";
-import { contractInvoice } from "../src/features/contractInvoice";
+import { contractInvoice, secondFinal } from "../src/features/contractInvoice";
 import { contractToInvoiceCents, restInvoiceKind } from "../src/features/contractKind";
 import { visitDueCents } from "../src/features/visitDue";
 import { invoiceHtml } from "../src/features/docPdf";
@@ -96,5 +96,16 @@ describe("#2061 one rule: the contract's own invoices", () => {
     const fin = db.invoices.find((i) => i.title === "Old final 2061")!;
     const company = portalFromEstimate(db, { ...db.estimates[0]!, customerId: fin.customerId }, "Acme").company;
     expect(invoiceHtml(db, fin, company, { lang: "en" })).toContain("Deposit 2061");
+  });
+  it("one live final per job, as the server's unique index: a second final is refused, a progress is not", () => {
+    const none = withInvoices([{ kind: "deposit", totalCents: 15000 }]);
+    expect(secondFinal(none.db, JOB, "final")).toBe(false);
+    const one = withInvoices([{ kind: "final", totalCents: 30000 }]);
+    expect(secondFinal(one.db, JOB, "final")).toBe(true);
+    expect(secondFinal(one.db, JOB, "progress")).toBe(false);
+    // another job's final does not count
+    expect(secondFinal(one.db, "other-job", "final")).toBe(false);
+    // the rest after a final is issued as a progress invoice (restInvoiceKind), so it is never refused by this rule
+    expect(secondFinal(one.db, JOB, restInvoiceKind(one.db, JOB))).toBe(false);
   });
 });
