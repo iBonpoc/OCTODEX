@@ -54,7 +54,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { backoffMs, classify, isAccessDenied, isModuleInactive, isUnknownOp, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, liveOf, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
-import { dropGroupPriceOps, dropModuleOps, dropSettingsOps, dropTemplateOps, groupPriceRejected, itemCostRejected, templateRejected, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
+import { dropGroupPriceOps, dropModuleOps, dropSettingsOps, dropSupplierTaxOps, dropTemplateOps, groupPriceRejected, itemCostRejected, supplierTaxRejected, templateRejected, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
 import type { DictKey } from "@/i18n";
 import { onAppActive, onAppLeave } from "./appActive";
 import { adoptLegacy, mineOf, onSharedForget, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
@@ -497,6 +497,9 @@ interface StoreCtx {
   removeCatalogItem: (id: ID) => Undo;
   /** spec 36: make or change a supplier (owner / admin / office); null name — nothing */
   saveSupplier: (x: Supplier) => GuardedUndo;
+  /** #1834: change the supplier's purchase tax through the server door (supplier_set_tax); its items follow at once on the phone,
+   *  on the server in the same transaction; null/undefined — no rate. Owner / admin / office who see costs; «Отменить» 5 s */
+  setSupplierTax: (id: ID, taxBps: number | undefined) => GuardedUndo;
   /** spec 36: archive or bring back a supplier («Отменить» 5 s) */
   setSupplierActive: (id: ID, active: boolean) => GuardedUndo;
   /** spec 36: the supplier's purchase tax into its items that have another one (new estimate lines follow) */
@@ -1142,6 +1145,20 @@ export function StoreProvider({
             }
             dropped = true;
             setRejected((prev) => groupPriceRejected(prev, gone, msg, Date.now(), w, groupDenied ? "price.group.rejRights" : undefined));
+            setOutbox(outboxRef.current);
+            continue;
+          }
+          // #1834: the supplier's tax changed by another office first (row_version_conflict): this write and the later ones for the
+          // same supplier go now, one card; the truth is read again (the supplier and its items with the other rate)
+          if (item.op.k === "supplier.tax" && isRowConflict(e)) {
+            const { kept, gone } = dropSupplierTaxOps(outboxRef.current, item.op.supplierId, w);
+            outboxRef.current = kept;
+            for (const g of gone) {
+              opPause.current.delete(g.id);
+              deadOps.current.add(g.id);
+            }
+            dropped = true;
+            setRejected((prev) => supplierTaxRejected(prev, gone, msg, Date.now(), w));
             setOutbox(outboxRef.current);
             continue;
           }
@@ -2675,8 +2692,13 @@ export function StoreProvider({
       },
       updateCustomer: (id, patch) =>
         mutate("customer.update", (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? applyCustomerPatch(c, patch) : c)) }), { k: "customer.update", id, ...patch }),
-      saveProperty: (p) => {
+      saveProperty: (p0) => {
+        // #2065: an address with no state takes the company's (the server's column defaults to «CA» — no state of the core)
+        const cs = (dbRef.current.company?.address.state ?? "").trim().toUpperCase();
+        const p = p0.place && !p0.place.state?.trim() && cs ? { ...p0, place: { ...p0.place, state: cs } } : p0;
         const city = p.place ? cityLine(p.place) : p.city;
+        // a quick address with no parts (a new job): the server row still gets the company's state, the city line stays as typed
+        const opPlace = p.place ?? (cs ? { city: p.city, state: cs } : undefined);
         const next: Property = { ...p, city, address: p.address.trim(), unit: p.unit?.trim() || undefined, label: p.label?.trim() || undefined, accessNotes: p.accessNotes?.trim() || undefined };
         const { gateCode: _g, ...row } = next;
         return mutate(
@@ -2687,7 +2709,7 @@ export function StoreProvider({
               ? d.properties.map((x) => (x.id === p.id ? { ...next, gateCode: x.gateCode } : x))
               : [...d.properties, next],
           }),
-          { k: "property.save", property: row },
+          { k: "property.save", property: opPlace && !row.place ? { ...row, place: opPlace } : row },
         );
       },
       setGateCode: (propertyId, code) =>
@@ -2786,6 +2808,22 @@ export function StoreProvider({
         const undoItems = saveItemsBoth(renamed);
         // «Отменить» (rule 5): the supplier and its items' new name, all or none (Б1)
         return undoTogether([undoSup, undoItems]);
+      },
+      setSupplierTax: (id, taxBps) => {
+        const d0 = dbRef.current;
+        const x = (d0.suppliers ?? []).find((y) => y.id === id);
+        if (!x || !canSeeSuppliers(role) || !sees(d0) || d0.suppliersLegacy || x.taxBps === taxBps) return noop;
+        const seen = x.taxBps ?? null;
+        // the items that carry a cost follow the supplier at once (the server does the same in the transaction of the op: t95)
+        return mutate(
+          "supplier.tax",
+          (d) => ({
+            ...d,
+            suppliers: (d.suppliers ?? []).map((y) => (y.id === id ? { ...y, taxBps } : y)),
+            catalog: taxBps === undefined ? d.catalog : d.catalog.map((c) => (c.supplierId === id && c.costCents !== undefined ? { ...c, vendorTaxBps: taxBps } : c)),
+          }),
+          { k: "supplier.tax", supplierId: id, taxBps: taxBps ?? null, seenBps: seen },
+        );
       },
       setSupplierActive: (id, active) => {
         const x = (dbRef.current.suppliers ?? []).find((y) => y.id === id);
