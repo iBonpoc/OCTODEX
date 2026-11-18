@@ -10,13 +10,13 @@ import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
-import { canSeeGateCode, propertyMapQuery, propertyNow, propertyTitle } from "@/features/properties";
+import { canSeeGateCode, canSeeProperty, propertyMapQuery, propertyNow, propertyTitle } from "@/features/properties";
 import { isPropertyRow, propertyCounts, propertyRecords, propertyRowsFor, type PropertyRow } from "@/features/propertyRows";
 import { PropertySection, propertyRowLabel, RowCount } from "@/features/client/PropertySections";
 import { AddObject } from "@/features/client/AddObject";
 import { AccessSheet, PropertySheet } from "@/features/client/PropertySheets";
 import { jobStatusView } from "@/features/jobs";
-import { canServe } from "@/features/clients";
+import { canServe, visibleClients } from "@/features/clients";
 import { Button, IconButton, StatusChip } from "@/ui/controls";
 import { ActionTile } from "@/features/ActionTile";
 import { useDevice } from "@/theme/ThemeProvider";
@@ -58,6 +58,15 @@ export default function PropertyScreen() {
     return (
       <Screen title={t("prop.card")} back={back}>
         <Empty icon="home2" title={t("client.empty.properties")} />
+      </Screen>
+    );
+  // #2016: a property of a client this role does not see is closed (the tech: also his own inspection's address)
+  if (!canSeeProperty(db, role, p, visibleClients))
+    return (
+      <Screen title={t("prop.card")} back={back}>
+        <View testID="property-no-access">
+          <Empty icon="home2" title={t("propGuard.noAccess")} />
+        </View>
       </Screen>
     );
   const c = db.customers.find((x) => x.id === p.customerId);
