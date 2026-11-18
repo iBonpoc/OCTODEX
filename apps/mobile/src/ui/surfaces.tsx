@@ -18,6 +18,7 @@ import { useAuth } from "@/cloud/auth";
 import { useTabBarHidden } from "@/nav/tabBarHide";
 import { Fab } from "@/nav/Fab";
 import { HomeHeader } from "@/nav/HomeHeader";
+import { CompanyLine, CompanyWaiting } from "@/features/CompanySwitcher";
 import { SearchEntry } from "@/nav/SearchEntry";
 import { LIST_FABS, type FabCtx, type FabItem, type FabSet } from "@/nav/sections";
 import { badgeState } from "@/data/syncLink";
@@ -756,6 +757,9 @@ export function Screen({
           {subtitle}
         </T>
       ) : null}
+      {/* spec 42 S34: the company's name ▾ (two or more companies); a company not loaded here yet, offline — what to do */}
+      {home ? <CompanyLine /> : null}
+      {home ? <CompanyWaiting /> : null}
       {home ? null : <SyncBadge />}
       {/* «Искать везде» on «Главная» (13 v2 §2.2) */}
       {home ? <SearchEntry /> : null}
