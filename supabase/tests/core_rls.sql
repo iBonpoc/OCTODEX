@@ -3963,9 +3963,14 @@ select tst.ok((select tax_enabled and tax_rate_bps = 825 from public.jobs where 
 :as_sales_a
 update public.jobs set service_category_id = null where id = 'e4700000-0000-4000-8000-000000000001';
 select tst.ok((select service_category_id is null from public.jobs where id = 'e4700000-0000-4000-8000-000000000001'), 'job.category still changes');
+-- advanceJob: planning a job is the office's (#2016) — sales are refused «scheduled», the office moves it on
+select tst.fails_like($q$update public.jobs set status = 'scheduled' where id = 'e4700000-0000-4000-8000-000000000001'$q$, '%only the office schedules a job%',
+  'advanceJob: sales do not schedule a job (#2016)');
+:as_office_a
 update public.jobs set status = 'scheduled' where id = 'e4700000-0000-4000-8000-000000000001';
 update public.jobs set status = 'in_progress' where id = 'e4700000-0000-4000-8000-000000000001';
-select tst.ok((select status from public.jobs where id = 'e4700000-0000-4000-8000-000000000001') = 'in_progress', 'advanceJob: a job still moves draft → scheduled → in progress');
+select tst.ok((select status from public.jobs where id = 'e4700000-0000-4000-8000-000000000001') = 'in_progress', 'advanceJob: a job still moves draft → scheduled → in progress (the office)');
+:as_sales_a
 insert into public.jobs (id, company_id, customer_id, property_id, title, type, number) values
   ('e4700000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c4700000-0000-4000-8000-000000000002', 'd4700000-0000-4000-8000-000000000002', 'Estimate visit', 'inspection', '')
   on conflict (id) do nothing;
@@ -8818,10 +8823,10 @@ select tst.ok((select v.checklist = app.chk_items_json(v.id) and jsonb_array_len
 update public.visits set checklist = '[{"id":"c1030000-0000-4000-8000-0000000000a1","label":"x","done":false}]' where id = 'c1030000-0000-4000-8000-0000000000f1';
 select tst.ok((select not done from public.visit_checklist_items where id = 'c1030000-0000-4000-8000-0000000000a1'), 'T103 an old phone takes off its own tick');
 update public.visits set checklist = '[{"id":"c1030000-0000-4000-8000-0000000000a1","label":"x","done":true}]' where id = 'c1030000-0000-4000-8000-0000000000f1';
--- sales writing an old array changes no item
+-- sales writing an old array changes no item (since #2016 sales do not write a work visit at all: a refusal)
 :as_sales_a
-update public.visits set checklist = '[{"id":"c1030000-0000-4000-8000-0000000000a1","label":"x","done":false},{"id":"c1030000-0000-4000-8000-0000000000a8","label":"sales item","done":false}]'
- where id = 'c1030000-0000-4000-8000-0000000000f1';
+select tst.fails($q$update public.visits set checklist = '[{"id":"c1030000-0000-4000-8000-0000000000a1","label":"x","done":false},{"id":"c1030000-0000-4000-8000-0000000000a8","label":"sales item","done":false}]'
+ where id = 'c1030000-0000-4000-8000-0000000000f1'$q$, 'T103 sales: no write to a work visit (#2016)');
 :as_super
 select tst.ok((select done from public.visit_checklist_items where id = 'c1030000-0000-4000-8000-0000000000a1')
           and tst.cnt($q$select 1 from public.visit_checklist_items where id = 'c1030000-0000-4000-8000-0000000000a8'$q$) = 0
@@ -8940,10 +8945,9 @@ do $$ begin
   perform tst.fails($q$insert into public.visits (id, company_id, job_id, starts_at, checklist_min_photos_before) values
     ('c1040000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', 'c1040000-0000-4000-8000-0000000000e1', now(), 5)$q$, 'T104 sales does not make a visit with minimums');
 end $$;
--- a visit without minimums: sales books it as before
-insert into public.visits (id, company_id, job_id, starts_at) values
-  ('c1040000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', 'c1040000-0000-4000-8000-0000000000e1', now());
-select tst.ok(tst.cnt($q$select 1 from public.visits where id = 'c1040000-0000-4000-8000-0000000000f3'$q$) = 1, 'T104 sales makes a visit without minimums as before');
+-- a work visit without minimums: since #2016 planning a job is the office's — sales are refused (they book inspections, T394)
+select tst.fails($q$insert into public.visits (id, company_id, job_id, starts_at) values
+  ('c1040000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', 'c1040000-0000-4000-8000-0000000000e1', now())$q$, 'T104 sales do not make a work visit (#2016)');
 :as_super
 select tst.ok((select checklist_min_photos_before = 2 and checklist_min_photos_after = 4 and notes = 'tech note' from public.visits where id = 'c1040000-0000-4000-8000-0000000000f1'),
   'T104 the tech''s other edit of the visit passes, the minimums stay');
@@ -17156,6 +17160,85 @@ select tst.ok(public.portal_accept('tok_t379_3_0123456789abcdef', '37920000-0000
 select tst.ok((select count(*) from public.estimate_approvals where estimate_id = '37900000-0000-4000-8000-000000000003') = 1, 'T379 the repeat doubles nothing');
 rollback;
 \echo 'T379 ok'
+
+-- ---------------------------------------------------------------- T393–T398 (#2016): planning a job is the office's
+-- Sales book inspections only; an install visit, its change and a job «scheduled» are owner / admin / office.
+-- Before: sales wrote the install visit and the job «scheduled», only assign_visit refused — half a write.
+\echo 'T393-T398 planning rights'
+begin;
+:as_super
+update public.memberships set role = 'sales', status = 'active' where user_id = 'a0000000-0000-0000-0000-000000000005' and company_id = 'ca000000-0000-0000-0000-000000000000';
+insert into public.customers (id, company_id, display_name) values ('39300000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'T393 Client');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('39300000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000c1', '393 Plan St', 'Pasadena');
+insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+  ('39300000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'T393 job', '39300000-0000-4000-8000-0000000000c1', '39300000-0000-4000-8000-0000000000d1', 'draft'),
+  ('39300000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'T397 job', '39300000-0000-4000-8000-0000000000c1', '39300000-0000-4000-8000-0000000000d1', 'draft');
+insert into public.leads (id, company_id, source_id, contact_name, phone)
+  select '39300000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', id, 'T394 Lead', '(818) 555-0394'
+    from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' order by created_at limit 1;
+-- an install visit the office made (sales must not change it)
+insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values
+  ('39300000-0000-4000-8000-0000000000f9', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000e1', 'install', now() + interval '2 days', now() + interval '2 days 3 hours');
+
+:as_sales_a
+-- T393: sales — an install visit: refused
+select tst.fails_like($q$insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values ('39300000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000e1', 'install', now() + interval '1 day', now() + interval '1 day 3 hours')$q$, '%row-level security%',
+  'T393 sales: an install visit is refused');
+select tst.fails_like($q$insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values ('39300000-0000-4000-8000-0000000000f4', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000e1', 'inspection', now() + interval '1 day', now() + interval '1 day 1 hour')$q$, '%row-level security%',
+  'T393 sales: an «inspection» on a job is refused (an inspection is a lead''s visit without a job)');
+-- T394: sales — an inspection: as before
+insert into public.visits (id, company_id, property_id, kind, starts_at, ends_at) values
+  ('39300000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000d1', 'inspection', now() + interval '1 day', now() + interval '1 day 1 hour');
+update public.visits set starts_at = now() + interval '3 days', ends_at = now() + interval '3 days 1 hour' where id = '39300000-0000-4000-8000-0000000000f2';
+-- T394: the app's own path for sales (ops.ts lead.visit): a visit of the lead at its property, no job; the lead moves on
+insert into public.visits (id, company_id, lead_id, property_id, kind, starts_at, ends_at, scope) values
+  ('39300000-0000-4000-8000-0000000000f5', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000a1', '39300000-0000-4000-8000-0000000000d1', 'inspection',
+   now() + interval '2 days', now() + interval '2 days 45 minutes', '{}');
+update public.leads set status = 'inspection_scheduled', property_id = '39300000-0000-4000-8000-0000000000d1' where id = '39300000-0000-4000-8000-0000000000a1';
+-- T395: sales — an inspection turned into an install, or the office's install moved: refused / not reached
+select tst.fails_like($q$update public.visits set kind = 'install', job_id = '39300000-0000-4000-8000-0000000000e1', property_id = null where id = '39300000-0000-4000-8000-0000000000f2'$q$, '%sales change only an inspection%',
+  'T395 sales: an inspection does not become an install');
+select tst.fails_like($q$update public.visits set starts_at = now() + interval '9 days' where id = '39300000-0000-4000-8000-0000000000f9'$q$, '%sales change only an inspection%',
+  'T395 sales: the office''s install visit is not moved (a refusal, not a silent «0 rows»)');
+select tst.fails_like($q$update public.visits set kind = 'inspection', starts_at = now() + interval '9 days' where id = '39300000-0000-4000-8000-0000000000f9'$q$,
+  '%sales change only an inspection%', 'T395 sales: the office''s install does not become an «inspection»');
+select tst.fails($q$update public.visits set deleted_at = now() where id = '39300000-0000-4000-8000-0000000000f9'$q$,
+  'T395 sales: the office''s install is not dropped');
+-- T396: sales — a job «scheduled»: refused
+select tst.fails_like($q$update public.jobs set status = 'scheduled' where id = '39300000-0000-4000-8000-0000000000e1'$q$, '%only the office schedules a job%',
+  'T396 sales: a job does not become «scheduled»');
+:as_super
+select tst.ok(not exists (select 1 from public.visits where id = '39300000-0000-4000-8000-0000000000f1'), 'T393 …no install visit written');
+select tst.ok((select kind = 'inspection' and starts_at > now() + interval '2 days' from public.visits where id = '39300000-0000-4000-8000-0000000000f2'), 'T394 sales: the inspection is booked and moved');
+select tst.ok((select kind = 'inspection' from public.visits where id = '39300000-0000-4000-8000-0000000000f2'), 'T395 …still an inspection');
+select tst.ok((select kind = 'inspection' and job_id is null and lead_id = '39300000-0000-4000-8000-0000000000a1' from public.visits where id = '39300000-0000-4000-8000-0000000000f5')
+          and (select status from public.leads where id = '39300000-0000-4000-8000-0000000000a1') = 'inspection_scheduled',
+  'T394 sales book an inspection of a lead the way the app does (lead.visit)');
+select tst.ok((select kind = 'install' and deleted_at is null and starts_at < now() + interval '3 days' from public.visits where id = '39300000-0000-4000-8000-0000000000f9'),
+  'T395 sales: the office''s install visit is not moved, turned or dropped');
+select tst.ok(not exists (select 1 from public.visits where id = '39300000-0000-4000-8000-0000000000f4'), 'T393 …no inspection on a job written');
+select tst.ok((select status from public.jobs where id = '39300000-0000-4000-8000-0000000000e1') = 'draft', 'T396 …the job stays a draft');
+
+-- T397: the office plans as before — an install visit, the job «scheduled», the visit moved
+:as_office_a
+insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values
+  ('39300000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000e2', 'install', now() + interval '1 day', now() + interval '1 day 3 hours');
+update public.jobs set status = 'scheduled' where id = '39300000-0000-4000-8000-0000000000e2';
+update public.visits set starts_at = now() + interval '4 days', ends_at = now() + interval '4 days 3 hours' where id = '39300000-0000-4000-8000-0000000000f3';
+:as_super
+select tst.ok((select status from public.jobs where id = '39300000-0000-4000-8000-0000000000e2') = 'scheduled'
+          and (select starts_at > now() + interval '3 days' from public.visits where id = '39300000-0000-4000-8000-0000000000f3'),
+  'T397 the office: install visit, job scheduled, visit moved');
+
+-- T398: the tech — no visit of any kind
+:as_tech_a
+select tst.fails($q$insert into public.visits (company_id, property_id, kind, starts_at) values ('ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000d1', 'inspection', now())$q$,
+  'T398 tech: no inspection');
+select tst.fails($q$insert into public.visits (company_id, job_id, kind, starts_at) values ('ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000e1', 'install', now())$q$,
+  'T398 tech: no install visit');
+rollback;
+\echo 'T393-T398 ok'
 
 -- ---------------------------------------------------------------- T380 (#2020): by the client's link the client pays
 -- A sent estimate of company A with a 10% deposit, signed by the client (anon) and by the owner: its deposit invoice.
