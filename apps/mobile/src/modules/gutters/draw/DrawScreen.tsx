@@ -13,7 +13,7 @@ import { canvasUnsaved, unsentAfter } from "./unsent";
 import { registerDirtySheet } from "@/ui/dirtySheets";
 import { sizeText } from "../sizeText";
 import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
-import { useWindowDimensions, View } from "react-native";
+import { useWindowDimensions, View, type LayoutChangeEvent } from "react-native";
 import { router, Stack, useLocalSearchParams, type Href } from "expo-router";
 import * as Crypto from "expo-crypto";
 import Svg, { Line } from "react-native-svg";
@@ -63,7 +63,7 @@ import { LinkSheet } from "./LinkSheet";
 import { summaryOf } from "./summary";
 import { fromElements, toElements, type MeasurementRow } from "../canvas/model";
 import { choicesFor, readRules, toRulesOverride } from "../settings";
-import { buildScene, fitView, manyStories, nextStoryOf, storyOf, toPlan, toScreen, zoomLimits, type Scene, type Story, type View as PlanView } from "../canvas/scene";
+import { autoFitView, buildScene, fitView, manyStories, nextStoryOf, storyOf, toPlan, toScreen, zoomLimits, type Insets, type Scene, type Story, type View as PlanView } from "../canvas/scene";
 import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { GridLayer } from "../canvas/GridLayer";
 import { useJsGestureConfig } from "../canvas/jsGestureConfig";
@@ -296,7 +296,14 @@ export default function DrawScreen() {
   // cancels the stroke — founder 09.11: the pinch never came once the first finger had moved)
   // the limits of the scale (#1281): the whole drawing in a quarter of the screen at the farthest, 1″ as big as a finger's target at the nearest
   const zoomLim = useMemo(() => zoomLimits(drawing.runs.flatMap((r) => [r.a, r.b]), size.w > 0 ? size : { w: 390, h: 844 }, space[8], sizes.hitMin), [drawing.runs, size]);
-  const canvas = useCanvasGestures(viewNow, setView, live, 2, { lim: zoomLim, viewport: size.w > 0 ? size : { w: 390, h: 844 }, onEdge: () => haptics.selection() });
+  /** a finger (or the mouse) touched the screen: from now the view is the person's, it never fits itself again (rule 27) */
+  const touched = useRef(false);
+  const onTouchView = useCallback((v: PlanView) => {
+    touched.current = true;
+    setView(v);
+  }, []);
+  // a pinch or a pan commits through `onTouchView`: the view is the person's even if the touch never reached the JS responder (#1667 review)
+  const canvas = useCanvasGestures(viewNow, onTouchView, live, 2, { lim: zoomLim, viewport: size.w > 0 ? size : { w: 390, h: 844 }, onEdge: () => haptics.selection() });
 
   // the latest values for gesture callbacks and the delayed save
   const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch, layers, autoDs, size, newDef });
@@ -344,10 +351,17 @@ export default function DrawScreen() {
     };
   }, []);
 
-  const fit = useCallback((d: Drawing, s: { w: number; h: number }) => fitView(d.runs.flatMap((r) => [r.a, r.b]), s, space[8]), []);
-  useEffect(() => {
-    if (!view && m && size.w > 0 && size.h > 0) setView(fit(drawing, size));
-  }, [view, m, size, drawing, fit]);
+  // «вписать» keeps the drawing clear of what lies over the canvas (#1667): the header on top, the toolbar and the summary
+  // chips at the bottom, the toolbar at a side — measured below (`covers`), plus the old margin
+  const coverRef = useRef<Insets>({ t: 0, r: 0, b: 0, l: 0 });
+  const fit = useCallback((d: Drawing, s: { w: number; h: number }) => {
+    const c = coverRef.current;
+    // the old margin (room for the length labels beside a line) and one step more where something lies over the canvas, so a
+    // label never touches the header, the toolbar or the chips (#1667 design review: it was 6–9 px off the toolbar)
+    const g = space[8];
+    const e = (x: number) => (x > 0 ? x + space[4] : 0);
+    return fitView(d.runs.flatMap((r) => [r.a, r.b]), s, { t: e(c.t) + g, r: e(c.r) + g, b: e(c.b) + g, l: e(c.l) + g });
+  }, []);
 
   const later = useRef<() => void>(() => {});
   // #1912: «Обновить» must not reload under a stroke or an unwritten change: while one lasts, this screen is a sheet with unsaved work
@@ -1068,7 +1082,7 @@ export default function DrawScreen() {
     const found = findCorners(drawing), kinds = runEnds(drawing, found)[endRun0.id], hs = houseSides(drawing)(endRun0);
     return ([0, 1] as const).filter((e) => !!endRun0.noCap?.[e] || kinds?.[e]?.kind === "cap").map((e) => ({ end: e, side: capSide(e, hs) }));
   })();
-  const whoItems: { key: WhoKey; label: string; destructive?: boolean }[] = [
+  const whoItems: { key: WhoKey; label: string; destructive?: boolean; testID?: string }[] = [
     // «вписать» left the header (#1273): the whole drawing is a double tap on the empty place, and a row here
     { key: "fit", label: t("mod.gutters.draw.fit") },
     // what a double tap opens, as rows too (a screen reader has no double tap, a phone on its side has no panel): the properties of the picked
@@ -1076,7 +1090,7 @@ export default function DrawScreen() {
     ...(canSave && sel && !wide ? [{ key: "props" as const, label: t("mod.gutters.attr.props") }] : []),
     ...endRows.map((r) => ({ key: `end${r.end}` as const, label: `${t("mod.gutters.end.title")} · ${r.side}` })),
     // where the toolbar sits (#739); «Точность замера» is gone — nothing is written about how it was measured (#768, #1764)
-    { key: "place", label: t("mod.gutters.draw.placeItem") },
+    { key: "place", label: t("mod.gutters.draw.placeItem"), testID: "draw-who-place" },
     { key: "layers", label: t("mod.gutters.draw.layersItem") },
     // a measurement from before the automatic downspouts gets them only when asked (#1246): not silently, the estimate would change
     ...(canSave && autoDs && drawing.runs.length > 0 && !autoManaged(drawing) ? [{ key: "autods" as const, label: t("mod.gutters.draw.autoDsItem") }] : []),
@@ -1166,6 +1180,38 @@ export default function DrawScreen() {
   const row = side || flat;
   /** in that row the toolbar is at the left edge (the left side; lying, unless put on the right) */
   const toolsFirst = at === "left" || (flat && at !== "right");
+
+  // what lies over the canvas, measured (#1667): the header's bottom; the bottom column's top, its toolbar (at the bottom
+  // edge) and its summary chips; the toolbar's width at a side edge. The chips and the toolbar's place come after the
+  // first frame — until a finger touches, the drawing fits itself again as they come (`autoFitView`), then never
+  const lay = useRef({ header: 0, colY: -1, sumY: -1, tbW: 0 });
+  const [layN, setLayN] = useState(0);
+  const onLay = useCallback((k: "header" | "colY" | "sumY" | "tbW", f: (l: LayoutChangeEvent["nativeEvent"]["layout"]) => number) => (e: LayoutChangeEvent) => {
+    const v = Math.round(f(e.nativeEvent.layout));
+    if (lay.current[k] !== v) {
+      lay.current[k] = v;
+      setLayN((n) => n + 1);
+    }
+  }, []);
+  // since #1630 the bottom column holds the hints, the chips and (at the bottom) the toolbar, pressed to the bottom: its top is
+  // where the drawing ends. On a side the toolbar stands in one row with the chips: it covers its side (its width), the
+  // chips only their own height at the bottom
+  const covers = useMemo((): Insets => {
+    const L = lay.current;
+    const H = size.h;
+    if (!H || L.colY < 0) return { t: L.header, r: 0, b: 0, l: 0 };
+    if (side) {
+      const w = L.tbW + space[3];
+      return { t: L.header, b: Math.max(0, H - (L.colY + Math.max(L.sumY, 0))), l: at === "left" ? w + ins.left : 0, r: at === "right" ? w + ins.right : 0 };
+    }
+    return { t: L.header, b: Math.max(0, H - L.colY), l: 0, r: 0 };
+  }, [layN, size.h, at, side, ins.left, ins.right]);
+  coverRef.current = covers;
+  useEffect(() => {
+    if (!m || size.w <= 0 || size.h <= 0) return;
+    const next = autoFitView(touched.current, view, fit(drawing, size));
+    if (next !== view) setView(next);
+  }, [view, m, size, drawing, fit, covers]);
   // the grip (founder 08.11): drag the toolbar, let go — it sticks to the nearest edge
   const grip = (
     <GestureDetector gesture={gripPan}>
@@ -1180,7 +1226,7 @@ export default function DrawScreen() {
   const lineIcon = PROFILE_ICON[(runFor(ch, story, newDef).profile as GutterProfile)] ?? "channel";
   const dsIcon = (() => { const a = dsFor(ch, newDef); return dsKindOf(a.shape, a.dsStyle).icon; })();
   const tools = (
-    <View testID="draw-toolbar" style={{ flexDirection: side ? "column" : "row", alignSelf: grow ? "stretch" : undefined, gap: space[1], alignItems: "center", padding: space[2], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: gripping ? dt.runW / 2 : 1, borderColor: gripping ? c.ink : c.bd, flexShrink: 0, transform: [{ translateX: gripAt[0] }, { translateY: gripAt[1] }] }}>
+    <View testID="draw-toolbar" onLayout={onLay("tbW", (l) => l.width)} style={{ flexDirection: side ? "column" : "row", alignSelf: grow ? "stretch" : undefined, gap: space[1], alignItems: "center", padding: space[2], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: gripping ? dt.runW / 2 : 1, borderColor: gripping ? c.ink : c.bd, flexShrink: 0, transform: [{ translateX: gripAt[0] }, { translateY: gripAt[1] }] }}>
       {grip}
       <View testID="draw-tool-line" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon={lineIcon} label={t("mod.gutters.draw.line")} active={tool === "line"} onPress={() => toolPress("line")} grow={grow} below={at === "top"} /></View>
       <View testID="draw-tool-ds" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon={dsIcon} label={t("mod.gutters.draw.downspout")} active={tool === "ds"} onPress={() => toolPress("ds")} grow={grow} below={at === "top"} /></View>
@@ -1230,14 +1276,14 @@ export default function DrawScreen() {
   const gB = ghost && view ? toScreen(view, ghost.b) : null;
 
   return (
-    <View style={{ flex: 1, backgroundColor: c.bg }} testID="draw-screen">
+    <View style={{ flex: 1, backgroundColor: c.bg }} testID="draw-screen" onStartShouldSetResponderCapture={() => { touched.current = true; return false; }}>
       {/* no edge swipe back on the canvas (founder 09.11): drawing from the left edge left the screen */}
       <Stack.Screen options={{ gestureEnabled: false, fullScreenGestureEnabled: false }} />
       {/* the drawing under everything */}
       <View style={{ position: "absolute", left: 0, right: panelSide, top: 0, bottom: 0 }}>
         <CanvasView
           view={viewNow}
-          onView={setView}
+          onView={onTouchView}
           live={live}
           size={size}
           onSize={setSize}
@@ -1264,7 +1310,7 @@ export default function DrawScreen() {
       {/* top, ONE row (#1274, founder 12.11: «шапка — в одну строку»): back · the name (a lead, an address, «Привязать»; «Замер» before it is saved)
           · a small mark when the drawing is only on the phone (no cloud when all is saved) · fit · photos · «⋯» · «Готово»; a module that is off or
           past the trial says it under the row before the work starts */}
-      <View pointerEvents="box-none" style={{ paddingTop: ins.top + space[2], paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, gap: space[2] }}>
+      <View pointerEvents="box-none" onLayout={onLay("header", (l) => l.y + l.height)} style={{ paddingTop: ins.top + space[2], paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, gap: space[2] }}>
         <RowView style={{ alignItems: "center", gap: space[1] }}>
           <View testID="draw-back"><IconButton icon="chevronLeft" label={t("mod.title")} onPress={back} /></View>
           <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space[1] }}>
@@ -1393,12 +1439,20 @@ export default function DrawScreen() {
           }}
         />
       ) : null}
-      <View pointerEvents="box-none" onLayout={(e) => setBarH(Math.round(e.nativeEvent.layout.height))} style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, paddingBottom: ins.bottom + space[3], gap: space[2] }}>
+      <View
+        pointerEvents="box-none"
+        // its top is where the drawing ends (#1667, «вписать»); its height is the toast's lane above it (#1819)
+        onLayout={(e) => {
+          onLay("colY", (l) => l.y)(e);
+          setBarH(Math.round(e.nativeEvent.layout.height));
+        }}
+        style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, paddingBottom: ins.bottom + space[3], gap: space[2] }}
+      >
         {/* the toolbar keeps its place (#1630): below the chip and the hints when at the bottom; beside them, at its own edge, when on a side
             or when the phone lies on its side — the chip coming and going never moves it under the finger */}
         <View pointerEvents="box-none" style={row ? { flexDirection: "row", alignItems: "flex-end", gap: space[2] } : { gap: space[2] }}>
         {row && toolsFirst ? tools : null}
-        <View pointerEvents="box-none" style={row ? { flex: 1, alignItems: toolsFirst ? "flex-end" : "flex-start", gap: space[2] } : { gap: space[2] }}>
+        <View pointerEvents="box-none" onLayout={onLay("sumY", (l) => l.y)} style={row ? { flex: 1, alignItems: toolsFirst ? "flex-end" : "flex-start", gap: space[2] } : { gap: space[2] }}>
         {gripping ? (
           <View pointerEvents="none" testID="draw-grip-hint" style={{ alignSelf: "center", paddingVertical: space[2], paddingHorizontal: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
             <T v="caption" w="semibold" center>{t("mod.gutters.draw.gripHint")}</T>
