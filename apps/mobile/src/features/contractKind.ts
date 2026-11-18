@@ -21,3 +21,12 @@ export function contractToInvoiceCents(d: Pick<DB, "invoices">, job: Pick<Job, "
   if (!Number.isFinite(job.amountCents) || !(job.amountCents > 0)) return 0;
   return contractStatement(job.amountCents, contractInvoices(d, job.id)).toInvoice;
 }
+
+/**
+ * review of #2061: what kind the rest of the contract is issued as — a final, unless the job already has a live one
+ * (the server keeps one final per job: invoices_one_deposit_final_idx, and refuses a second) → then a progress invoice,
+ * as the job's «Договор» block offers «Счёт за этап» once a final exists. An older final with no kind counts as a final.
+ */
+export function restInvoiceKind(d: Pick<DB, "invoices">, jobId: ID): "final" | "progress" {
+  return contractInvoices(d, jobId).some((i) => i.kind === "final" || i.kind === undefined) ? "progress" : "final";
+}

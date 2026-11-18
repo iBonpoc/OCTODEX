@@ -9,7 +9,7 @@
  */
 import { APP_NAME } from "@/config/product";
 import { findJob } from "@/data/jobs";
-import { contractInvoices } from "@/features/contractKind";
+import { contractInvoices, isContractKind } from "@/features/contractKind";
 import { print as P, type PrintStyleName } from "@octo/design-tokens";
 import { contractStatement, invoiceOwes } from "@octo/estimating-engine";
 import { licenseLine, type PortalData } from "@/cloud/portal";
@@ -143,7 +143,8 @@ export function invoiceHtml(db: DB, inv: Invoice, company: PortalData["company"]
   const prop = db.properties.find((p) => p.id === job?.propertyId);
   const pays = db.payments.filter((p) => p.invoiceId === inv.id);
   // #2061: the contract's own invoices — a final «less» lists only them (a standalone one is extra work, not a part paid
-  // of this contract), as the server's app.job_contract_billed
+  // of this contract), as the server's app.job_contract_billed; a standalone / recurring invoice shows no «Договор» line,
+  // and an older final with no kind lists its «less» lines as a final
   const jobInvoices = inv.jobId ? contractInvoices(db, inv.jobId) : [];
   const st = job ? contractStatement(job.amountCents, jobInvoices) : null;
   const prior = jobInvoices.filter((i) => i.id !== inv.id && (i.sentAt ?? "") <= (inv.sentAt ?? "~"));
@@ -151,8 +152,8 @@ export function invoiceHtml(db: DB, inv: Invoice, company: PortalData["company"]
 <p><b>${esc(t("portal.for"))}:</b> ${esc(cust?.name ?? "")}<br>${esc([prop?.address, prop?.city].filter(Boolean).join(", "))}</p>
 <h2>${esc(inv.title || t(kindKey(inv)))}</h2>
 <table>
-${job && st && inv.kind !== "deposit" ? `<tr><td>${esc(t("inv.contract"))}: ${esc(job.title)}</td><td class="r">${money(st.contract)}</td></tr>` : ""}
-${inv.kind === "final" ? prior.map((i) => `<tr><td class="mut">${esc(t("inv.less"))} ${esc(i.number ?? "")} ${esc(i.title ?? "")}</td><td class="r mut">−${money(i.totalCents)}</td></tr>`).join("") : ""}
+${job && st && isContractKind(inv.kind) && inv.kind !== "deposit" ? `<tr><td>${esc(t("inv.contract"))}: ${esc(job.title)}</td><td class="r">${money(st.contract)}</td></tr>` : ""}
+${inv.kind === "final" || inv.kind === undefined ? prior.map((i) => `<tr><td class="mut">${esc(t("inv.less"))} ${esc(i.number ?? "")} ${esc(i.title ?? "")}</td><td class="r mut">−${money(i.totalCents)}</td></tr>`).join("") : ""}
 <tr class="tot"><td>${esc(t("inv.amount"))}</td><td class="r">${money(inv.totalCents)}</td></tr>
 ${pays.map((p) => `<tr><td class="mut">${esc(t("inv.paymentOn", { date: day(p.at) }))} · ${esc(t(`pay.${p.method}` as DictKey))}${p.receiptNumber ? ` · ${esc(p.receiptNumber)}` : ""}</td><td class="r mut">−${money(p.amountCents)}</td></tr>`).join("")}
 <tr class="tot"><td>${esc(t("inv.balance"))}</td><td class="r">${money(invoiceOwes(inv))}</td></tr>

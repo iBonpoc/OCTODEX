@@ -21,7 +21,7 @@ import { canSeeGateCode } from "@/features/properties";
 import { canPlan, visitWhen } from "@/features/schedule";
 import { completeBlock, jobAwaitingClose } from "@/features/jobDone";
 import { invoiceOwes, invoicesOwe } from "@octo/estimating-engine";
-import { contractToInvoiceCents } from "@/features/contractKind";
+import { contractToInvoiceCents, restInvoiceKind } from "@/features/contractKind";
 import { RelatedBlock } from "@/features/RelatedBlock";
 import { JobLinesBlock, canEditJobLines } from "@/features/JobLinesBlock";
 import { JobTypeTags } from "@/features/JobTypeTags";
@@ -141,7 +141,8 @@ export default function JobScreen() {
     // one tap = one balance invoice (a double tap before the re-render made two)
     if (restSent) return;
     setRestSent(true);
-    const undo = store.issueInvoice(j.id, "final", rest, t("job3.done.restTitle"));
+    // review of #2061: one final per job (the server refuses a second) — with a final already, the rest is a progress invoice
+    const undo = store.issueInvoice(j.id, restInvoiceKind(db, j.id), rest, t("job3.done.restTitle"));
     // #865: refused (above the contract) — said so, nothing to undo; the button works again
     if (!undo) {
       setRestSent(false);

@@ -15,7 +15,7 @@ vi.mock("@/config/backend", () => ({ WEB_APP_URL: "https://example.test" }));
 
 import { makeSeed } from "../src/data/seed";
 import { contractInvoice } from "../src/features/contractInvoice";
-import { contractToInvoiceCents } from "../src/features/contractKind";
+import { contractToInvoiceCents, restInvoiceKind } from "../src/features/contractKind";
 import { visitDueCents } from "../src/features/visitDue";
 import { invoiceHtml } from "../src/features/docPdf";
 import { portalFromEstimate } from "../src/cloud/portal";
@@ -37,25 +37,29 @@ function withInvoices(invs: Partial<Invoice>[], price = 50000): { db: DB; job: J
 const S = (t: number, p = 0) => ({ kind: "standalone" as const, totalCents: t, paidCents: p });
 const R = (t: number) => ({ kind: "recurring" as const, totalCents: t });
 
-/** [case, invoices, what is still to invoice on the contract] */
-const CASES: [string, Partial<Invoice>[], number][] = [
-  ["no invoice", [], 50000],
-  ["a deposit", [{ kind: "deposit", totalCents: 15000, paidCents: 15000 }], 35000],
-  ["a deposit + a progress", [{ kind: "deposit", totalCents: 15000 }, { kind: "progress", totalCents: 10000 }], 25000],
-  ["a standalone $200 alone", [S(20000, 20000)], 50000],
-  ["a recurring for the whole price", [R(50000)], 50000],
-  ["a standalone $200 + a deposit $150", [S(20000), { kind: "deposit", totalCents: 15000 }], 35000],
-  ["a partial final, half paid", [{ kind: "final", totalCents: 30000, paidCents: 15000 }], 20000],
-  ["an older final with no kind", [{ kind: undefined, totalCents: 50000 }], 0],
-  ["overbilled (old data)", [{ kind: "deposit", totalCents: 60000 }], 0],
+/** [case, invoices, what is still to invoice on the contract, the kind the rest is issued as] */
+const CASES: [string, Partial<Invoice>[], number, "final" | "progress"][] = [
+  ["no invoice", [], 50000, "final"],
+  ["a deposit", [{ kind: "deposit", totalCents: 15000, paidCents: 15000 }], 35000, "final"],
+  ["a deposit + a progress", [{ kind: "deposit", totalCents: 15000 }, { kind: "progress", totalCents: 10000 }], 25000, "final"],
+  ["a standalone $200 alone", [S(20000, 20000)], 50000, "final"],
+  ["a recurring for the whole price", [R(50000)], 50000, "final"],
+  ["a standalone $200 + a deposit $150", [S(20000), { kind: "deposit", totalCents: 15000 }], 35000, "final"],
+  // one final per job on the server: the rest after a final is a progress invoice
+  ["a partial final, half paid", [{ kind: "final", totalCents: 30000, paidCents: 15000 }], 20000, "progress"],
+  // an old final issued under the old rule (price − deposit − standalone): the gap is billed as a progress invoice
+  ["an old final short by a standalone", [{ kind: "deposit", totalCents: 15000 }, S(20000), { kind: "final", totalCents: 15000 }], 20000, "progress"],
+  ["an older final with no kind", [{ kind: undefined, totalCents: 50000 }], 0, "progress"],
+  ["overbilled (old data)", [{ kind: "deposit", totalCents: 60000 }], 0, "final"],
 ];
 
 describe("#2061 one rule: the contract's own invoices", () => {
-  for (const [name, invs, left] of CASES) {
+  for (const [name, invs, left, kind] of CASES) {
     it(`${name}: still to invoice ${left / 100}`, () => {
       const { db, job } = withInvoices(invs);
       // the job screen's «Выставить остаток»
       expect(contractToInvoiceCents(db, job)).toBe(left);
+      expect(restInvoiceKind(db, JOB)).toBe(kind);
       // the limit of a new invoice: the rest goes through, a cent more is refused
       if (left > 0) expect(contractInvoice(db, job, left)).not.toBeNull();
       expect(contractInvoice(db, job, left + 1)).toBeNull();
@@ -80,5 +84,17 @@ describe("#2061 one rule: the contract's own invoices", () => {
     const html = invoiceHtml(db, fin, company, { lang: "en" });
     expect(html).toContain("Deposit 2061");
     expect(html).not.toContain("Extra 2061");
+  });
+  it("a standalone invoice's PDF has no «Contract» line — extra work is outside the contract", () => {
+    const { db } = withInvoices([{ ...S(20000), title: "Extra 2061" }]);
+    const inv = db.invoices.find((i) => i.title === "Extra 2061")!;
+    const company = portalFromEstimate(db, { ...db.estimates[0]!, customerId: inv.customerId }, "Acme").company;
+    expect(invoiceHtml(db, inv, company, { lang: "en" })).not.toContain("$500.00");
+  });
+  it("an older final with no kind lists the contract's earlier invoices as «less»", () => {
+    const { db } = withInvoices([{ kind: "deposit", totalCents: 15000, title: "Deposit 2061" }, { kind: undefined, totalCents: 35000, title: "Old final 2061" }]);
+    const fin = db.invoices.find((i) => i.title === "Old final 2061")!;
+    const company = portalFromEstimate(db, { ...db.estimates[0]!, customerId: fin.customerId }, "Acme").company;
+    expect(invoiceHtml(db, fin, company, { lang: "en" })).toContain("Deposit 2061");
   });
 });
