@@ -13,7 +13,8 @@
 --   * estimate_links — sales get the client links of their deals only.
 --   * record_estimate_deposit — sales take the deposit of their own deal only (the same body as 20261111140000, one
 --     condition added to the rights check; the same signature and rights).
--- db T420–T424. Rule 16: policies altered in place, new functions; nothing renamed or dropped.
+--   * t00_sales_lead_owner (leads assigned_to, estimates lead_id): sales do not make another's deal theirs.
+-- db T420–T425. Rule 16: policies altered in place, new functions; nothing renamed or dropped.
 -- Rule 18: the new functions — revoke all from public, anon; execute to authenticated (the policies call them); the
 -- trigger function — for nobody.
 
@@ -109,6 +110,44 @@ create trigger t00_sales_deal_guard before insert or update on public.invoices
 drop trigger if exists t00_sales_deal_guard on public.payments;
 create trigger t00_sales_deal_guard before insert on public.payments
   for each row execute function app.tg_sales_deal_guard();
+
+-- a deal of sales is his estimate or an estimate of his lead: so sales do not make another's deal theirs. A lead is
+-- given or taken (assigned_to) by sales only when it is already his (assigned to him or brought by him) — another's or
+-- a free lead is given by the office (roles decision, docs/audit/2026-11-18-roles); the lead of an estimate (lead_id)
+-- is changed by sales only on his own estimate and only to his own lead (or to none). Server functions and the service
+-- role pass (their own checks). db T425.
+create or replace function app.tg_sales_lead_owner()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if current_user not in ('authenticated', 'anon') then
+    return new;
+  end if;
+  if not app.has_role(old.company_id, array['sales']) then
+    return new;
+  end if;
+  if tg_table_name = 'leads' then
+    if new.assigned_to is distinct from old.assigned_to
+       and old.assigned_to is distinct from (select auth.uid()) and old.created_by is distinct from (select auth.uid()) then
+      raise exception 'not a lead of yours' using errcode = '42501';
+    end if;
+  elsif new.lead_id is distinct from old.lead_id then   -- estimates
+    if old.created_by is distinct from (select auth.uid())
+       or (new.lead_id is not null
+           and not exists (select 1 from public.leads l where l.id = new.lead_id and l.company_id = old.company_id
+                                                        and (l.assigned_to = (select auth.uid()) or l.created_by = (select auth.uid())))) then
+      raise exception 'not a deal of yours' using errcode = '42501';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app.tg_sales_lead_owner() from public, anon, authenticated;
+drop trigger if exists t00_sales_lead_owner on public.leads;
+create trigger t00_sales_lead_owner before update of assigned_to on public.leads
+  for each row execute function app.tg_sales_lead_owner();
+drop trigger if exists t00_sales_lead_owner on public.estimates;
+create trigger t00_sales_lead_owner before update of lead_id on public.estimates
+  for each row execute function app.tg_sales_lead_owner();
 
 -- the client links the app loads (estimate_links): sales — of their deals only; a link opens the client's page with the
 -- invoices of the deal (body as 20261110030000, one condition added; the same signature and rights)

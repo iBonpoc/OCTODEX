@@ -17629,10 +17629,59 @@ insert into public.leads (id, company_id, source_id, contact_name, phone, receiv
 select tst.ok((select received_at > now() - interval '1 minute' and status = 'new' from public.leads where id = 'a4170000-0000-4000-8000-000000000002'),
   'T419 a lead he brings is received now, whatever the phone says');
 :as_sales_a
-update public.leads set source_id = (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name <> 'Referral' limit 1),
-                        assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001';
-select tst.ok((select assigned_to from public.leads where id = 'a4170000-0000-4000-8000-000000000001') = 'a0000000-0000-0000-0000-000000000002', 'T419 sales (staff) still give a lead and change its source');
+update public.leads set source_id = (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name <> 'Referral' limit 1)
+ where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select source_id <> (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral')
+                 from public.leads where id = 'a4170000-0000-4000-8000-000000000001'), 'T419 sales (staff) still change the source of a lead');
+-- the tech's lead is not his: given to another by the office only (#2075, T425)
+select tst.fails_like($q$update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%not a lead of yours%', 'T419 sales do not give the tech''s lead to another');
 rollback;
 \echo 'T417 T418 T419 ok'
+
+-- ---------------------------------------------------------------- T425 (#2075): sales do not make another's deal theirs
+-- a deal of sales is his estimate or an estimate of his lead; the lead is given or taken by sales only when it is his,
+-- the lead of an estimate is changed only on his own estimate and only to his own lead
+\echo 'T425 sales and another''s deal'
+begin;
+:as_super
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to, created_by) values
+  ('a4250000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T425 free', '(818) 555-4251', null, 'a0000000-0000-0000-0000-000000000002'),
+  ('a4250000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T425 office''s', '(818) 555-4252', 'a0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002'),
+  ('a4250000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T425 brought by him', '(818) 555-4253', null, 'a0000000-0000-0000-0000-000000000005'),
+  ('a4250000-0000-4000-8000-0000000000a4', 'ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T425 his', '(818) 555-4254', 'a0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000002');
+insert into public.estimates (id, company_id, number, customer_id, property_id, title, created_by, lead_id) values
+  ('a4250000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T425 office E', 'a0000000-0000-0000-0000-000000000002', 'a4250000-0000-4000-8000-0000000000a2'),
+  ('a4250000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T425 his E', 'a0000000-0000-0000-0000-000000000005', null);
+:as_sales_a
+select tst.ok(not app.sales_deal_estimate('a4250000-0000-4000-8000-0000000000e1'), 'T425 fixture: the office''s estimate is not his deal');
+select tst.fails_like($q$update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000005' where id = 'a4250000-0000-4000-8000-0000000000a2'$q$,
+  '%not a lead of yours%', 'T425 sales do not take the office''s lead');
+select tst.fails_like($q$update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000005' where id = 'a4250000-0000-4000-8000-0000000000a1'$q$,
+  '%not a lead of yours%', 'T425 sales do not take a free lead (the office gives it)');
+select tst.fails_like($q$update public.leads set assigned_to = null where id = 'a4250000-0000-4000-8000-0000000000a2'$q$,
+  '%not a lead of yours%', 'T425 sales do not take another''s lead from him');
+select tst.fails_like($q$update public.estimates set lead_id = 'a4250000-0000-4000-8000-0000000000a4' where id = 'a4250000-0000-4000-8000-0000000000e1'$q$,
+  '%not a deal of yours%', 'T425 sales do not put the office''s estimate on their lead');
+select tst.fails_like($q$update public.estimates set lead_id = 'a4250000-0000-4000-8000-0000000000a2' where id = 'a4250000-0000-4000-8000-0000000000e2'$q$,
+  '%not a deal of yours%', 'T425 sales do not put their estimate on the office''s lead');
+select tst.ok(not app.sales_deal_estimate('a4250000-0000-4000-8000-0000000000e1'), 'T425 after the refusals the office''s deal is still not his');
+-- his own: as before
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000005' where id = 'a4250000-0000-4000-8000-0000000000a3';
+select tst.ok((select assigned_to = 'a0000000-0000-0000-0000-000000000005' from public.leads where id = 'a4250000-0000-4000-8000-0000000000a3'), 'T425 sales take the lead they brought');
+update public.leads set contact_name = 'T425 his renamed', assigned_to = 'a0000000-0000-0000-0000-000000000005' where id = 'a4250000-0000-4000-8000-0000000000a4';
+select tst.ok((select contact_name = 'T425 his renamed' from public.leads where id = 'a4250000-0000-4000-8000-0000000000a4'), 'T425 a change of his lead that keeps the person passes');
+update public.estimates set lead_id = 'a4250000-0000-4000-8000-0000000000a4' where id = 'a4250000-0000-4000-8000-0000000000e2';
+select tst.ok((select lead_id = 'a4250000-0000-4000-8000-0000000000a4' from public.estimates where id = 'a4250000-0000-4000-8000-0000000000e2'), 'T425 sales put their estimate on their lead');
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4250000-0000-4000-8000-0000000000a4';
+select tst.ok((select assigned_to = 'a0000000-0000-0000-0000-000000000002' from public.leads where id = 'a4250000-0000-4000-8000-0000000000a4'), 'T425 sales give their lead to the office');
+-- the office gives any lead, as before
+:as_office_a
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000005' where id = 'a4250000-0000-4000-8000-0000000000a1';
+select tst.ok((select assigned_to = 'a0000000-0000-0000-0000-000000000005' from public.leads where id = 'a4250000-0000-4000-8000-0000000000a1'), 'T425 the office gives a free lead to sales');
+update public.estimates set lead_id = 'a4250000-0000-4000-8000-0000000000a1' where id = 'a4250000-0000-4000-8000-0000000000e1';
+select tst.ok((select lead_id = 'a4250000-0000-4000-8000-0000000000a1' from public.estimates where id = 'a4250000-0000-4000-8000-0000000000e1'), 'T425 the office changes the lead of an estimate');
+rollback;
+\echo 'T425 ok'
 
 \echo 'ALL TESTS PASSED'
