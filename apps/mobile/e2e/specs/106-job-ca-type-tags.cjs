@@ -70,7 +70,7 @@ exports.run = async (h) => {
   await h.shot("tech");
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
 
-  // sales change lines, type and tags too (the server's is_staff, S17)
+  // sales change the type and tags too (the server's is_staff, S17); the lines and the tax are the office's (#2075, spec 494)
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("sales")));
   await h.go("/job/j3");
   await p.getByText("Тип работы", { exact: true }).first().click(); await p.waitForTimeout(400);
