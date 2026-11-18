@@ -4608,4 +4608,16 @@ export const es: Dict = {
   "ds.crash.hint": "La dibuja el ErrorBoundary de la raíz cuando la app misma falla (§13): sin texto de error crudo, «Reintentar» dibuja la pantalla otra vez, «Reiniciar» recarga la app. Fuera del tema y del idioma de la app: toma los del sistema.",
   // «Портал: предпросмотр клиента»: the office's «open as client» only shows
   "portalPreview.sign": "Así lo verá el cliente. Solo el cliente puede firmar y pagar, con su propio enlace.",
+  // #2066 «Клиента нет дома»: the visit's own tech at the door; the office plans it again
+  "noShow.btn": "El cliente no está",
+  "noShow.title": "¿El cliente no está?",
+  "noShow.hint": "La visita se cierra y la oficina la reprogramará. Al cliente no se le envía nada.",
+  "noShow.photo": "Foto en el lugar — opcional",
+  "noShow.note": "Nota — opcional",
+  "noShow.notePh": "Por ejemplo: dejé una nota en la puerta",
+  "noShow.confirm": "Marcar",
+  "noShow.keep": "No marcar",
+  "noShow.toast": "Marcado: el cliente no estaba",
+  "noShow.att": "{name}: el cliente no estaba — reprogramar la visita",
+  "noShow.chip": "No estaba",
 };

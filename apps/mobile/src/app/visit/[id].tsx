@@ -14,7 +14,7 @@ import { useI18n } from "@/i18n";
 import { CancelNotifySheet, WhenWho } from "@/features/VisitForm";
 import { NotesBlock } from "@/features/NotesBlock";
 import { RelatedBlock } from "@/features/RelatedBlock";
-import { canPlan } from "@/features/schedule";
+import { canNoShow, canPlan, mayMarkNoShow } from "@/features/schedule";
 import { visitServable } from "@/features/jobs";
 import { peopleOf } from "@/data/people";
 import { cleanPhone, telHref } from "@/features/contactLinks";
@@ -28,10 +28,10 @@ import { PhotoStrip } from "@/features/PhotoStrip";
 import { canEditVisitItems, checklistGate, visitSettings } from "@/features/checklist";
 import { ChecklistCard, ChecklistEditor, MissingSheet } from "@/features/VisitChecklist";
 import { OfficeLocation, TechLocation, useConsentQuestion } from "@/features/LocationParts";
-import { Button, IconButton, StatusChip, Steps } from "@/ui/controls";
+import { Button, IconButton, StatusChip, Steps, TextField } from "@/ui/controls";
 import { SelectField } from "@/ui/selectField";
 import { Icon, T } from "@/ui/primitives";
-import { useToast } from "@/ui/overlays";
+import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { canSeeVisit } from "@/features/access";
 import { StatusNote } from "@/ui/statusNote";
@@ -54,6 +54,9 @@ export default function VisitScreen() {
   const [writing, setWriting] = useState<MessagePreset | null>(null);
   // «Сообщить клиенту об отмене?» (docs/specs/03 §13): asked here, because the cancelled visit leaves `visits`
   const [cancelled, setCancelled] = useState<string | null>(null);
+  // #2066 «Клиента нет дома»: the confirmation sheet (rule 5) and its optional note
+  const [noShow, setNoShow] = useState(false);
+  const [noShowNote, setNoShowNote] = useState("");
   const v = db.visits.find((x) => x.id === id);
   // wave 7б-2: the location question comes before the first «On the way» on my own visit (docs/specs/03 §12)
   const consent = useConsentQuestion(v);
@@ -120,6 +123,16 @@ export default function VisitScreen() {
     else sign(a.path);
   };
   const isInspection = v.kind === "inspection" || (!v.jobId && !!v.leadId);
+  // #2066: at the door — the visit's own person or the office, before the work (server: visit_no_show)
+  const noShowOk = canNoShow(v) && mayMarkNoShow(store.role, db.me, v);
+  const markNoShow = () => {
+    haptic();
+    setNoShow(false);
+    // no «Отменить»: once sent the server has closed the visit (the sheet was the confirmation)
+    store.markNoShow(v.id, noShowNote);
+    toast.show(queuedHint() ?? t("noShow.toast"));
+    back();
+  };
   const makeEstimate = () => {
     if (v.leadId) {
       const target = store.leadEstimateTarget(v.leadId);
@@ -226,6 +239,12 @@ export default function VisitScreen() {
       ) : null}
       {v.step === "en_route" ? (
         <Button label={t("step.on_site")} icon="pin" full onPress={() => advance(t("toast.step", { step: t("step.on_site") }))} />
+      ) : null}
+
+      {noShowOk ? (
+        <View testID="visit-no-show">
+          <Button label={t("noShow.btn")} icon="alert" variant="secondary" full onPress={() => setNoShow(true)} />
+        </View>
       ) : null}
 
       {/* an inspection with a checklist (В6): ticked on site, checked before «Готово» */}
@@ -377,6 +396,23 @@ export default function VisitScreen() {
       ) : null}
       {job ? <NotesBlock subjectType="job" subjectId={job.id} /> : v.leadId ? <NotesBlock subjectType="lead" subjectId={v.leadId} /> : null}
       <MissingSheet v={v} missing={gate.missing} open={!!ask} step={ask?.step ?? "sign"} onFill={() => setAsk(null)} onSkip={skipAndGo} />
+      <Sheet visible={noShow} onClose={() => setNoShow(false)} title={t("noShow.title")}>
+        <View testID="no-show-sheet" style={{ gap: space[3] }}>
+          <T v="body" tone="mut">{t("noShow.hint")}</T>
+          <T v="caption" tone="mut">{t("noShow.photo")}</T>
+          <PhotoStrip
+            photos={before}
+            onAdd={(uri) => toast.show(queuedHint() ?? t("toast.photo"), store.addPhoto(v.id, "before", uri))}
+            onRemove={removePhoto}
+            onRetry={retryPhoto}
+          />
+          <TextField type="note" label={t("noShow.note")} placeholder={t("noShow.notePh")} value={noShowNote} onChangeText={setNoShowNote} />
+          <View testID="no-show-confirm">
+            <Button label={t("noShow.confirm")} icon="check" full onPress={markNoShow} />
+          </View>
+          <Button label={t("noShow.keep")} variant="secondary" full onPress={() => setNoShow(false)} />
+        </View>
+      </Sheet>
       <CallSheet preset={calling} onClose={() => setCalling(null)} />
       <MessageSheet preset={writing} onClose={() => setWriting(null)} />
     </Screen>

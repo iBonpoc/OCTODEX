@@ -4608,4 +4608,16 @@ export const en: Dict = {
   "ds.crash.hint": "Drawn by the root ErrorBoundary when the app itself fails (§13): no raw error text, “Retry” draws the screen again, “Restart” reloads the app. Outside the app's theme and language: it takes the system's.",
   // «Портал: предпросмотр клиента»: the office's «open as client» only shows
   "portalPreview.sign": "This is what the client will see. Only the client can sign and pay, by their own link.",
+  // #2066 «Клиента нет дома»: the visit's own tech at the door; the office plans it again
+  "noShow.btn": "Client not home",
+  "noShow.title": "Client not home?",
+  "noShow.hint": "The visit closes and the office will reschedule it. Nothing is sent to the client.",
+  "noShow.photo": "Photo at the site — optional",
+  "noShow.note": "Note — optional",
+  "noShow.notePh": "For example: left a note on the door",
+  "noShow.confirm": "Mark",
+  "noShow.keep": "Don't mark",
+  "noShow.toast": "Marked: client not home",
+  "noShow.att": "{name}: client was not home — reschedule the visit",
+  "noShow.chip": "Not home",
 };

@@ -71,6 +71,12 @@ export const isOpenVisit = (v: Visit) => !v.closed && v.step !== "paid" && v.ste
 export const canReschedule = (v: Visit) => isOpenVisit(v) && (v.step === "scheduled" || v.step === "en_route");
 export const canCancel = canReschedule;
 
+/** #2066 «Клиента нет дома»: at the door — before the work and the signature, «on site» too (server: visit_no_show) */
+export const canNoShow = (v: Visit) => isOpenVisit(v) && (v.step === "scheduled" || v.step === "en_route" || v.step === "on_site");
+/** who marks it: a person on the visit (a tech; sales on their inspection), or the office — as visit_no_show answers */
+export const mayMarkNoShow = (role: Role, me: ID | null | undefined, v: Visit) =>
+  canPlan([role]) || ((role === "tech" || role === "sales") && isAssigned(v, me));
+
 /** who may plan, move, cancel or assign (§8.1): director and dispatcher; a tech only walks the steps */
 export const canPlan = (roles: Role[]) => roles.includes("director") || roles.includes("dispatcher");
 
@@ -188,6 +194,19 @@ export function jobRollsBack(db: Db, cancelledId: ID): ID | null {
   if (!job || job.status !== "scheduled") return null;
   const other = db.visits.some((x) => x.id !== cancelledId && x.jobId === job.id && isOpenVisit(x));
   return other ? null : job.id;
+}
+
+/** #2066: after a no-show, does its job go back to «waits for a date»? As jobRollsBack, and also from «in progress» that
+ *  only this visit's «on site» started (no other visit of the job was worked or finished) — the server's rule */
+export function noShowJobRollsBack(db: Db, visitId: ID): ID | null {
+  const v = db.visits.find((x) => x.id === visitId);
+  if (!v?.jobId) return null;
+  const job = db.jobs.find((j) => j.id === v.jobId);
+  if (!job) return null;
+  const mine = (x: Visit) => x.id !== visitId && x.jobId === job.id;
+  const worked = db.visits.some((x) => mine(x) && (x.step === "working" || x.step === "signed" || x.step === "paid" || x.step === "done"));
+  if (job.status !== "scheduled" && !(job.status === "in_progress" && !worked)) return null;
+  return db.visits.some((x) => mine(x) && isOpenVisit(x)) ? null : job.id;
 }
 
 /** one planned inspection of a lead at a time (double tap, second booking): reschedule lives in the Plan */

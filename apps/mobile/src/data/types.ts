@@ -252,7 +252,13 @@ export type VisitKind = "inspection" | "install" | "service" | "follow_up";
 export const CANCEL_REASONS = ["client_cancelled", "no_show", "reschedule_later", "we_cancelled", "other"] as const;
 export type CancelReason = (typeof CANCEL_REASONS)[number];
 /** a visit the office cancelled: the visit as it was + why and when */
-export type CancelledVisit = Visit & { cancelReason: CancelReason; cancelText?: string; cancelledAt: string };
+export type CancelledVisit = Visit & {
+  cancelReason: CancelReason;
+  cancelText?: string;
+  cancelledAt: string;
+  /** who closed it (server: visits.cancelled_by) — #2066: the tech at the door, or the office */
+  cancelledBy?: ID;
+};
 
 /** a checklist item: a tick, or a photo (docs/specs/08 §3.2) */
 export type ChecklistItemKind = "check" | "photo";
