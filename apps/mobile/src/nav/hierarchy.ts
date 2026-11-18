@@ -12,6 +12,7 @@ import type { DB, Role } from "@/data/types";
 import type { DictKey } from "@/i18n";
 import { SETUP_STEPS, stepTitle, type SetupStep } from "@/features/companySetup";
 import { asReport, REPORT_TITLE } from "@/features/reports";
+import { SCREENS } from "@/features/showcase/registry";
 import { roleHome } from "./roles";
 import { hasSection, sectionOfHref, sectionOfRoute, type SectionId } from "./sections";
 
@@ -183,8 +184,9 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
       if (id === "profile") return { section: "settings", kind: "fix.settings.profile" };
       // «Дизайн-система» (#1093, #1150): its list goes back to the settings, a section — to the list
       if (id === "design-system") {
+        // a section's last link is its own name, not «Дизайн-система» again (audit #2004 С-07, DS §12.2; #2040)
         return seg[2]
-          ? { section: "settings", kind: "ds.title", up: { href: "/settings/design-system", label: K("ds.title") } }
+          ? { section: "settings", kind: SCREENS.find((x) => x.id === seg[2])?.title ?? "ds.title", up: { href: "/settings/design-system", label: K("ds.title") } }
           : { section: "settings", kind: "ds.title", up: { href: "/settings", label: K("settings.title") } };
       }
       // «Удалить аккаунт» lives in the profile now: back goes to «Профиль и аккаунт» (LOG п.17, spec 26)

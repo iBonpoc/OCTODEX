@@ -4059,7 +4059,7 @@ begin
                         'intake_endpoint_rotate(uuid)', 'intake_endpoint_set(uuid,boolean,uuid,uuid,boolean,boolean,boolean,integer,boolean)',
                         'intake_event_decide(uuid,boolean)', 'invite_member(uuid,text,text,text,boolean)', 'legal_status()',
                         'mark_not_duplicate(uuid,uuid)', 'merge_customers(uuid,uuid)', 'module_disable(uuid,text)', 'module_enable(uuid,text)',
-                        'module_save_settings(uuid,text,jsonb,integer)', 'my_closed_companies()', 'po_receive(uuid,jsonb,bigint)', 'catalog_set_group_price(uuid,bigint,boolean,bigint,integer,integer,bigint,bigint,integer,integer)',
+                        'module_save_settings(uuid,text,jsonb,integer)', 'my_closed_companies()', 'po_receive(uuid,jsonb,bigint)', 'catalog_set_group_price(uuid,bigint,boolean,bigint,integer,integer,bigint,bigint,integer,integer)', 'catalog_set_item_costs(uuid,jsonb,jsonb)',
                         'portal_accept(text,uuid,uuid[],text,text,boolean,text,uuid,uuid,uuid)', 'portal_estimate(text)',
                         'portal_pay_simulated(text,uuid)', 'record_estimate_deposit(uuid,uuid,text)',
                         'record_visit_payment(uuid,uuid,uuid,text,date,bigint)', 'refund_record(uuid,bigint,text,text,text)',
@@ -16771,6 +16771,164 @@ end $t$;
 rollback;
 \echo 'T364 ok'
 
+-- ================================================================ T365–T370: a cost is written only over what the phone saw
+-- (#1958 (а), migration 20261117340000). catalog_set_item_costs(item, the changed fields, what the phone had in them).
+-- Its own items, rolled back at the end: nothing stays for the tests after it.
+:as_super
+begin;
+create or replace function pg_temp.st(p_sql text) returns text language plpgsql as $f$
+begin
+  execute p_sql;
+  return 'ok';
+exception when others then
+  return sqlstate;
+end $f$;
+grant execute on function pg_temp.st(text) to public;
+create or replace function pg_temp.k365(p_id uuid) returns jsonb language sql security definer as $f$
+  select jsonb_build_array(c.unit_cost_cents, c.vendor_tax_bps, c.markup_bps) from public.catalog_item_costs c where c.item_id = p_id $f$;
+grant execute on function pg_temp.k365(uuid) to public;
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('53650000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T365 coil', 'ft', 100, '{}'),
+  ('53650000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'material', 'T365 group white', 'ft', 100, '{"priceGroup":"t365:g"}'),
+  ('53650000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', 'material', 'T365 group brown', 'ft', 100, '{"priceGroup":"t365:g"}');
+:as_owner_b
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('53650000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'material', 'T365 rival', 'ft', 100, '{}');
+
+-- T365: who may — the office (sees our costs); sales without view_costs no (42501), a tech / another company / a
+-- deleted or unknown item: not found (P0002); bad input 22023; anon cannot run it
+\echo 'T365 catalog_set_item_costs: who may'
+:as_sales_a
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": 400}', '{"unit_cost_cents": null}')$q$) = '42501',
+  'T365 С5: sales without view_costs: 42501');
+:as_tech_a
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": 400}', '{"unit_cost_cents": null}')$q$) = 'P0002',
+  'T365 С5: a tech: not found');
+:as_office_a
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000b1', '{"unit_cost_cents": 400}', '{"unit_cost_cents": null}')$q$) = 'P0002',
+  'T365 С5: another company''s item: not found');
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000ff', '{"unit_cost_cents": 400}', null)$q$) = 'P0002',
+  'T365 С5: an unknown item: not found');
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{}', null)$q$) = '22023'
+          and pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_price_cents": 1}', null)$q$) = '22023'
+          and pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '[1]', null)$q$) = '22023',
+  'T365 С5: nothing, a field that is not a cost, not an object: 22023');
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.catalog_set_item_costs(uuid,jsonb,jsonb)', 'EXECUTE')
+          and has_function_privilege('authenticated', 'public.catalog_set_item_costs(uuid,jsonb,jsonb)', 'EXECUTE'),
+  'T365 С5: rule 18: authenticated only');
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes, deleted_at) values
+  ('53650000-0000-4000-8000-0000000000a7', 'ca000000-0000-0000-0000-000000000000', 'material', 'T365 deleted', 'ft', 100, '{}', now());
+set local role anon;
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": 400}', null)$q$) = '42501',
+  'T365 С5: anon cannot run it');
+reset role;
+:as_office_a
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a7', '{"unit_cost_cents": 400}', null)$q$) = 'P0002',
+  'T365 С5: an item in the Trash: not found');
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": -1}', '{"unit_cost_cents": null}')$q$) not in ('ok')
+          and pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": "x"}', '{"unit_cost_cents": null}')$q$) = '22P02',
+  'T365 С5: a negative or not-a-number cost is refused');
+:as_super
+select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') is null, 'T365 С5: nothing written by the refusals');
+-- the owner and sales WITH view_costs may (on an item of their own; the office's cases follow in T366)
+update public.memberships set permissions_override = coalesce(permissions_override, '{}'::jsonb) || '{"view_costs": true}'
+ where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000005';
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('53650000-0000-4000-8000-0000000000a5', 'ca000000-0000-0000-0000-000000000000', 'service', 'T365 sales may', 'ea', 100, '{}'),
+  ('53650000-0000-4000-8000-0000000000a6', 'ca000000-0000-0000-0000-000000000000', 'service', 'T365 owner may', 'ea', 100, '{}');
+:as_sales_a
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a5', '{"unit_cost_cents": 70}', '{"unit_cost_cents": null}')$q$) = 'ok',
+  'T365 С5: sales with view_costs may');
+:as_owner_a
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a6', '{"unit_cost_cents": 80}', '{"unit_cost_cents": null}')$q$) = 'ok',
+  'T365 С5: the owner may');
+:as_super
+select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a5') = '[70, null, null]'::jsonb and pg_temp.k365('53650000-0000-4000-8000-0000000000a6') = '[80, null, null]'::jsonb,
+  'T365 С5: written for them');
+
+-- T366: the first cost (the phone saw none), then a change over what it saw; the material's price follows (53-0б)
+\echo 'T366 written over what the phone saw; the price counts from it'
+:as_office_a
+select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1',
+  '{"unit_cost_cents": 400, "vendor_tax_bps": 0, "markup_bps": 10000}', '{"unit_cost_cents": null, "vendor_tax_bps": null, "markup_bps": null}');
+select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') = '[400, 0, 10000]'::jsonb
+          and (select unit_price_cents = 800 from public.catalog_items where id = '53650000-0000-4000-8000-0000000000a1'),
+  'T366 С1: the first cost: $4.00 + 100% — the price $8.00');
+select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": 500}', '{"unit_cost_cents": 400}');
+select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') = '[500, 0, 10000]'::jsonb
+          and (select unit_price_cents = 1000 from public.catalog_items where id = '53650000-0000-4000-8000-0000000000a1'),
+  'T366 С1: $4.00 → $5.00 over what the phone saw; tax and markup untouched; the price $10.00');
+select tst.ok((select source = 'manual' from public.catalog_cost_history where item_id = '53650000-0000-4000-8000-0000000000a1' order by at desc limit 1),
+  'T366 С1: the cost history writes «manual»');
+
+-- T367: someone changed it first (another phone, a price-list upload): 40001, nothing written — also an old phone's view
+\echo 'T367 a cost changed meanwhile: 40001, nothing written'
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": 450}', '{"unit_cost_cents": 400}')$q$) = '40001',
+  'T367 С2: the phone saw $4.00, the server has $5.00: 40001');
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": 450}', null)$q$) = '40001',
+  'T367 С2: «saw nothing» while there is a cost: 40001');
+select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') = '[500, 0, 10000]'::jsonb
+          and (select unit_price_cents = 1000 from public.catalog_items where id = '53650000-0000-4000-8000-0000000000a1'),
+  'T367 С2: the cost and the price stay as the other one wrote them');
+-- the same call again (its answer lost, the queue retries): the server already holds the value sent — no conflict
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": 500}', '{"unit_cost_cents": 400}')$q$) = 'ok'
+          and pg_temp.k365('53650000-0000-4000-8000-0000000000a1') = '[500, 0, 10000]'::jsonb,
+  'T367 С2: a retry of a call that was written is no conflict (idempotent)');
+
+-- T368: field by field — only the fields sent are compared and written (a markup over a cost changed by another is fine)
+\echo 'T368 only the fields sent'
+select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"markup_bps": 5000}', '{"markup_bps": 10000}');
+select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') = '[500, 0, 5000]'::jsonb
+          and (select unit_price_cents = 750 from public.catalog_items where id = '53650000-0000-4000-8000-0000000000a1'),
+  'T368 С3: the markup 100% → 50% over what the phone saw; the cost $5.00 kept; the price $7.50');
+
+-- T369: a null clears (the old path could not: t30 reads null as «not sent»)
+\echo 'T369 a cleared field'
+select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"vendor_tax_bps": null}', '{"vendor_tax_bps": 0}');
+select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') = '[500, null, 5000]'::jsonb, 'T369 С4: the tax cleared, the rest kept');
+
+-- T370: an item of a price group — its cost goes to the group (#1913 t98), checked against the named item only
+\echo 'T370 a price group gets the cost'
+select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a2', '{"unit_cost_cents": 300, "markup_bps": 10000}', '{"unit_cost_cents": null, "markup_bps": null}');
+select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a3') = '[300, null, 10000]'::jsonb
+          and (select bool_and(unit_price_cents = 600) from public.catalog_items where id in ('53650000-0000-4000-8000-0000000000a2', '53650000-0000-4000-8000-0000000000a3')),
+  'T370 С7: both colours: $3.00 + 100% — $6.00');
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a3', '{"unit_cost_cents": 350}', '{"unit_cost_cents": null}')$q$) = '40001',
+  'T370 С7: the other colour''s phone that saw none: 40001 (the group has a cost now)');
+-- a batch over one group (a supplier's tax for every item of it): the second item's call meets the value the first one
+-- already spread — no conflict
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a2', '{"vendor_tax_bps": 500}', '{"vendor_tax_bps": null}')$q$) = 'ok'
+          and pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a3', '{"vendor_tax_bps": 500}', '{"vendor_tax_bps": null}')$q$) = 'ok'
+          and pg_temp.k365('53650000-0000-4000-8000-0000000000a3') = '[300, 500, 10000]'::jsonb,
+  'T370 С7: a batch over one group — the peer already holds the value sent: no conflict');
+
+-- T371 (С11): the «checked write» mark — the named item's id while its own row is written, so a trigger of the side
+-- table (the supplier's tax, #1834) refuses that row instead of changing it silently; a group peer written by the spread
+-- inside the same statement does not carry it; cleared after
+\echo 'T371 the checked-write mark'
+:as_super
+create table pg_temp.t371 (item_id uuid, mark text);
+grant all on pg_temp.t371 to public;
+create function pg_temp.t371_seen() returns trigger language plpgsql as $f$
+begin
+  insert into pg_temp.t371 values (new.item_id, coalesce(current_setting('app.costs_checked_write', true), ''));
+  return new;
+end $f$;
+create trigger t371_probe before insert or update on public.catalog_item_costs for each row execute function pg_temp.t371_seen();
+:as_office_a
+select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a2', '{"unit_cost_cents": 320}', '{"unit_cost_cents": 300}');
+:as_super
+select tst.ok((select mark from pg_temp.t371 where item_id = '53650000-0000-4000-8000-0000000000a2' limit 1) = '53650000-0000-4000-8000-0000000000a2'
+          and (select bool_and(mark is distinct from item_id::text) from pg_temp.t371 where item_id = '53650000-0000-4000-8000-0000000000a3')
+          and (select count(*) from pg_temp.t371 where item_id = '53650000-0000-4000-8000-0000000000a3') >= 1
+          and coalesce(current_setting('app.costs_checked_write', true), '') = '',
+  'T371 С11: the mark is the named item''s while its row is written; the group peer''s row does not carry it; cleared after');
+drop trigger t371_probe on public.catalog_item_costs;
+rollback;
+\echo 'T365–T371 ok'
+
 -- ---------------------------------------------------------------- T379 (#2020): the client's link is signed by the client
 -- S3 (spec: the client's page): a person of the company signs only on site; by the link (portal) the server refuses (42501,
 -- hint member_portal_sign); the client (anon, by the token) signs as before; on site — as before; a signature already made
@@ -16856,6 +17014,139 @@ select tst.ok(public.portal_accept('tok_t379_3_0123456789abcdef', '37920000-0000
 select tst.ok((select count(*) from public.estimate_approvals where estimate_id = '37900000-0000-4000-8000-000000000003') = 1, 'T379 the repeat doubles nothing');
 rollback;
 \echo 'T379 ok'
+
+-- ---------------------------------------------------------------- T380 (#2020): by the client's link the client pays
+-- A sent estimate of company A with a 10% deposit, signed by the client (anon) and by the owner: its deposit invoice.
+-- The company simulates payments (a demo company). The owner and the office pay by the token: 42501, hint member_portal_pay,
+-- no payment; the client (anonymous, by the token) pays as before.
+\echo 'T380 the client pays by the link'
+begin;
+:as_super
+insert into app.company_flags (company_id, simulated_payments) values ('ca000000-0000-0000-0000-000000000000', true)
+  on conflict (company_id) do update set simulated_payments = true;
+:as_owner_a
+do $t$
+begin
+  insert into public.customers (id, company_id, display_name) values ('38000000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'T380 Client');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('38000000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', '38000000-0000-4000-8000-0000000000c1', '380 Pay St', 'Pasadena');
+  insert into public.estimates (id, company_id, number, customer_id, property_id, title) values
+    ('38000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', '38000000-0000-4000-8000-0000000000c1', '38000000-0000-4000-8000-0000000000d1', 'T380');
+  perform tst.set_token('38000000-0000-4000-8000-000000000001', 'tok_t380_0123456789abcdef');
+  insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+    ('38010000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '38000000-0000-4000-8000-000000000001', 1, '{"kind":"pct","bps":1000}');
+  update public.estimates set current_version_id = '38010000-0000-4000-8000-000000000001' where id = '38000000-0000-4000-8000-000000000001';
+  insert into public.estimate_options (id, company_id, version_id, name) values
+    ('38020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '38010000-0000-4000-8000-000000000001', 'Standard');
+  insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
+    ('ca000000-0000-0000-0000-000000000000', '38020000-0000-4000-8000-000000000001', 'labor', 'Porch', 1, 100000, false);
+  perform tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = '38010000-0000-4000-8000-000000000001'$q$);
+  perform tst.server($q$update public.estimates set status = 'sent', sent_version_id = '38010000-0000-4000-8000-000000000001' where id = '38000000-0000-4000-8000-000000000001'$q$);
+end $t$;
+reset role; reset request.jwt.claim.sub; set role anon;
+select public.portal_accept('tok_t380_0123456789abcdef', '38020000-0000-4000-8000-000000000001', null, 'T380 Client', 'M0 0 L5 5', true) is not null as t380_signed;
+:as_owner_a
+select public.countersign_estimate('38000000-0000-4000-8000-000000000001', 'M0 0 L3 3') = 'approved' as t380_countersigned;
+:as_super
+select set_config('tst.t380_inv', coalesce((select i.id::text from public.invoices i join public.jobs j on j.id = i.job_id
+                                    where j.estimate_id = '38000000-0000-4000-8000-000000000001' and i.status = 'sent' limit 1), ''), false) is not null as t380_inv_set;
+select tst.ok(current_setting('tst.t380_inv') <> '', 'T380 fixture: the deposit invoice is issued');
+:as_owner_a
+select tst.fails_like(format($q$select public.portal_pay_simulated('tok_t380_0123456789abcdef', %L)$q$, current_setting('tst.t380_inv')),
+  '%does not pay by the client''s link%', 'T380 the owner pays by the link: refused');
+:as_office_a
+do $t$
+declare v_hint text;
+begin
+  begin
+    perform public.portal_pay_simulated('tok_t380_0123456789abcdef', current_setting('tst.t380_inv')::uuid);
+  exception when others then
+    get stacked diagnostics v_hint = pg_exception_hint;
+    perform tst.ok(sqlstate = '42501' and v_hint = 'member_portal_pay', 'T380 the office: 42501, hint member_portal_pay');
+    return;
+  end;
+  perform tst.ok(false, 'T380 the office''s simulated payment must be refused');
+end $t$;
+:as_super
+select tst.ok(not exists (select 1 from public.payments where invoice_id = current_setting('tst.t380_inv')::uuid)
+          and not exists (select 1 from public.notifications where invoice_id = current_setting('tst.t380_inv')::uuid and kind in ('deposit.paid', 'invoice.paid')),
+  'T380 after the refusals: no payment, no «paid» notice');
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok((select (x ->> 'paid')::bigint > 0 from jsonb_array_elements(public.portal_pay_simulated('tok_t380_0123456789abcdef', current_setting('tst.t380_inv')::uuid) -> 'invoices') x
+                where x ->> 'id' = current_setting('tst.t380_inv')), 'T380 the client pays by the link as before');
+-- a person of ANOTHER company is only a client here: not refused (the invoice is paid already — nothing doubles)
+:as_owner_b
+select public.portal_pay_simulated('tok_t380_0123456789abcdef', current_setting('tst.t380_inv')::uuid) is not null as t380_other_company_not_refused;
+:as_super
+select tst.ok((select count(*) from public.payments where invoice_id = current_setting('tst.t380_inv')::uuid) = 1, 'T380 one payment in all');
+rollback;
+\echo 'T380 ok'
+
+-- ---------------------------------------------------------------- T381 (#2020): on site by the token — only who reads the estimate
+-- An old app signs on site through portal_accept by the token (rule 16, T142). A tech who may sign contracts but does not
+-- read this estimate (not his, not on his property) is refused as accept_on_site refuses him; a tech who made the estimate
+-- signs on site as before (channel on_site, on his device).
+\echo 'T381 on site by the token'
+begin;
+:as_super
+-- both techs active and allowed to sign contracts (the second was switched off by an earlier test; rolled back below)
+update public.memberships set can_sign_contracts = true, status = 'active' where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id in
+  ('a0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000004');
+:as_super
+insert into public.customers (id, company_id, display_name) values ('38100000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'T381 Client');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('38100000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', '38100000-0000-4000-8000-0000000000c1', '381 Site St', 'Pasadena');
+-- the second estimate is the tech's own (he made it on site): inserted as the server, so created_by is his (core.sql:269)
+insert into public.estimates (id, company_id, number, customer_id, property_id, title, created_by) values
+  ('38100000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', '38100000-0000-4000-8000-0000000000c1', '38100000-0000-4000-8000-0000000000d1', 'T381 2',
+   'a0000000-0000-0000-0000-000000000003');
+:as_owner_a
+do $t$
+declare i int;
+begin
+  for i in 1..2 loop
+    if i = 1 then insert into public.estimates (id, company_id, number, customer_id, property_id, title) values
+      (('38100000-0000-4000-8000-00000000000' || i)::uuid, 'ca000000-0000-0000-0000-000000000000', '', '38100000-0000-4000-8000-0000000000c1', '38100000-0000-4000-8000-0000000000d1', 'T381 ' || i); end if;
+    perform tst.set_token(('38100000-0000-4000-8000-00000000000' || i)::uuid, 'tok_t381_' || i || '_0123456789abcdef');
+    insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+      (('38110000-0000-4000-8000-00000000000' || i)::uuid, 'ca000000-0000-0000-0000-000000000000', ('38100000-0000-4000-8000-00000000000' || i)::uuid, 1);
+    update public.estimates set current_version_id = ('38110000-0000-4000-8000-00000000000' || i)::uuid where id = ('38100000-0000-4000-8000-00000000000' || i)::uuid;
+    insert into public.estimate_options (id, company_id, version_id, name) values
+      (('38120000-0000-4000-8000-00000000000' || i)::uuid, 'ca000000-0000-0000-0000-000000000000', ('38110000-0000-4000-8000-00000000000' || i)::uuid, 'Standard');
+    insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
+      ('ca000000-0000-0000-0000-000000000000', ('38120000-0000-4000-8000-00000000000' || i)::uuid, 'labor', 'Porch', 1, 100000, false);
+    perform tst.server(format($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = %L$q$, '38110000-0000-4000-8000-00000000000' || i));
+    perform tst.server(format($q$update public.estimates set status = 'sent', sent_version_id = %L where id = %L$q$,
+                              '38110000-0000-4000-8000-00000000000' || i, '38100000-0000-4000-8000-00000000000' || i));
+  end loop;
+end $t$;
+:as_tech2_a
+select tst.fails_like($q$select public.portal_accept('tok_t381_1_0123456789abcdef', '38120000-0000-4000-8000-000000000001', null, 'T381 X', 'M0 0 L5 5', true, 'on_site')$q$,
+  '%not found%', 'T381 a tech who does not read the estimate: on site by the token refused');
+-- a person of ANOTHER company reads nothing here: on site by the token — not found
+:as_owner_b
+select tst.fails_like($q$select public.portal_accept('tok_t381_1_0123456789abcdef', '38120000-0000-4000-8000-000000000001', null, 'T381 B', 'M0 0 L5 5', true, 'on_site')$q$,
+  '%not found%', 'T381 another company on site by the token: not found');
+:as_super
+select tst.ok((select status from public.estimates where id = '38100000-0000-4000-8000-000000000001') = 'sent', 'T381 …and it stays unsigned');
+-- the owner (staff) on site by the token: as before
+:as_owner_a
+select tst.ok((public.portal_accept('tok_t381_1_0123456789abcdef', '38120000-0000-4000-8000-000000000001', null, 'T381 Client', 'M0 0 L5 5', true, 'on_site') ->> 'status')
+              = 'awaiting_countersign', 'T381 the owner signs the client on site by the token, as before');
+:as_tech_a
+select tst.ok((public.portal_accept('tok_t381_2_0123456789abcdef', '38120000-0000-4000-8000-000000000002', null, 'T381 Client', 'M0 0 L5 5', true, 'on_site') ->> 'status')
+              = 'awaiting_countersign', 'T381 the tech who made the estimate signs the client on site by the token, as before');
+:as_super
+select tst.ok((select channel = 'on_site' and signer_user_id = 'a0000000-0000-0000-0000-000000000003' from public.estimate_approvals
+                where estimate_id = '38100000-0000-4000-8000-000000000002'), 'T381 …on site, on the tech''s device');
+-- the old phone's queue sends the same signature again after the tech lost the estimate (another tech): «repeat», not an error
+:as_tech2_a
+select tst.ok((public.portal_accept('tok_t381_2_0123456789abcdef', '38120000-0000-4000-8000-000000000002', null, 'T381 Client', 'M0 0 L5 5', true, 'on_site') ->> 'status')
+              = 'awaiting_countersign', 'T381 a repeat of a signature already made answers as before');
+:as_super
+select tst.ok((select count(*) from public.estimate_approvals where estimate_id = '38100000-0000-4000-8000-000000000002') = 1, 'T381 the repeat doubles nothing');
+rollback;
+\echo 'T381 ok'
 
 -- ---------------------------------------------------------------- T414–T416 (#2075): invoices and the money of a job are the office's
 -- The roles decision (В9): sales do not issue or change invoices — the deposit at the signature stays theirs through the
