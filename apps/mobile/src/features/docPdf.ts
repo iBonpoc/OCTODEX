@@ -203,10 +203,12 @@ export function paymentHow(db: Pick<DB, "company">, t: (k: DictKey, p?: Record<s
 
 /** #2017: the client page where this invoice is seen and paid — the page of the job's signed estimate (/p/<token> lists its
  *  invoices); none for an invoice without an estimate (its own page is #2082) or when the office revoked the link */
-export function invoicePageToken(db: Pick<DB, "jobs" | "estimates">, inv: Pick<Invoice, "jobId">): string | undefined {
+export function invoicePageToken(db: Pick<DB, "jobs" | "estimates">, inv: Pick<Invoice, "jobId" | "customerId">): string | undefined {
   const job = inv.jobId ? db.jobs.find((j) => j.id === inv.jobId) : undefined;
   const e = job?.estimateId ? db.estimates.find((x) => x.id === job.estimateId) : undefined;
-  return e?.token && !e.linkRevokedAt ? e.token : undefined;
+  // only the invoice's own client, only a signed estimate (its page shows the job's invoices), only a live link
+  if (!e || e.customerId !== inv.customerId || (e.status !== "approved" && e.status !== "awaiting_countersign")) return undefined;
+  return e.token && !e.linkRevokedAt ? e.token : undefined;
 }
 
 /** SMS / email text for an invoice — in the CLIENT's language (rule 7); `link` — the client page of the invoice (#2017). */

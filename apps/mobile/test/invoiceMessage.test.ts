@@ -3,7 +3,8 @@
  * С1 ДАНО the company filled in no payment method, КОГДА the office sends an invoice (or a reminder), ТОГДА the text has no
  *    «How to pay: —» line; with Zelle / «checks payable to» the line is there as before.
  * С2 ДАНО an invoice of a job of a signed estimate, КОГДА it is sent, ТОГДА the text carries the client page link (/p/<token>),
- *    where the client sees and pays it; an invoice without an estimate, or with a revoked link — no link.
+ *    where the client sees and pays it; an invoice without an estimate, with a revoked link, of another client's estimate
+ *    or of an unsigned one — no link.
  * С3 ДАНО a client in es (or en, ru), КОГДА the invoice is sent, ТОГДА the text and the link line are in the client's language.
  */
 import { describe, expect, it, vi } from "vitest";
@@ -24,11 +25,12 @@ import type { DB, Invoice } from "../src/data/types";
 const company = { name: "Acme", contacts: [], licenses: [] } as never;
 const inv = { id: "i1", number: "INV-0001", totalCents: 50000, paidCents: 0, dueDate: "2026-11-20", jobId: "j2017", customerId: "c1", kind: "final" } as unknown as Invoice;
 
-function db(payment?: { zelle?: string; checkPayableTo?: string }, estimate?: { token?: string; linkRevokedAt?: string }): DB {
+type Est = { token?: string; linkRevokedAt?: string; customerId?: string; status?: string };
+function db(payment?: { zelle?: string; checkPayableTo?: string }, estimate?: Est): DB {
   const d = makeSeed();
   d.company = d.company ? { ...d.company, payment: payment ?? {} } : d.company;
   d.jobs = [...d.jobs, { id: "j2017", estimateId: estimate ? "e2017" : undefined } as never];
-  d.estimates = estimate ? [...d.estimates, { id: "e2017", ...estimate } as never] : d.estimates;
+  d.estimates = estimate ? [...d.estimates, { id: "e2017", customerId: "c1", status: "approved", ...estimate } as never] : d.estimates;
   return d;
 }
 
@@ -52,6 +54,9 @@ describe("#2017 the invoice message", () => {
     expect(invoicePageToken(db(undefined, { token: "tok123" }), inv)).toBe("tok123");
     expect(invoicePageToken(db(), inv)).toBeUndefined();
     expect(invoicePageToken(db(undefined, { token: "tok123", linkRevokedAt: "2026-11-01T00:00:00Z" }), inv)).toBeUndefined();
+    expect(invoicePageToken(db(undefined, { token: "tok123", status: "awaiting_countersign" }), inv)).toBe("tok123");
+    expect(invoicePageToken(db(undefined, { token: "tok123", customerId: "c-other" }), inv), "another client's estimate").toBeUndefined();
+    for (const status of ["draft", "sent", "declined"]) expect(invoicePageToken(db(undefined, { token: "tok123", status }), inv), status).toBeUndefined();
     const m = invoiceMessage(db(), inv, company, "en", "https://example.test/p/tok123");
     expect(m.text).toContain("View and pay: https://example.test/p/tok123");
     expect(invoiceMessage(db(), inv, company, "en").text).not.toContain("/p/");
@@ -62,5 +67,19 @@ describe("#2017 the invoice message", () => {
     expect(m.text).toContain("Cómo pagar: Zelle pay@acme.test");
     expect(m.text).toContain("Ver y pagar: https://example.test/p/tok123");
     expect(invoiceMessage(db(), inv, company, "es").text).not.toContain("Cómo pagar");
+  });
+  it("С1–С3 the reminder: no «How to pay» without methods, the link line, in the client's language (due and overdue)", () => {
+    const link = "https://example.test/p/tok123";
+    for (const now of [Date.parse("2026-11-18T20:00:00Z"), Date.parse("2026-11-25T20:00:00Z")]) {
+      const es = reminderMessage(db(), inv, "Acme", "es", now, link);
+      expect(es.text).toContain("INV-0001");
+      expect(es.text).not.toContain("Cómo pagar");
+      expect(es.text).not.toContain(": —");
+      expect(es.text).toContain(`Ver y pagar: ${link}`);
+      expect(es.text).not.toBe(reminderMessage(db(), inv, "Acme", "en", now, link).text);
+      expect(reminderMessage(db({ zelle: "pay@acme.test" }), inv, "Acme", "en", now).text).toContain("How to pay: Zelle pay@acme.test");
+    }
+    expect(reminderMessage(db(), inv, "Acme", "es", Date.parse("2026-11-18T20:00:00Z")).text)
+      .not.toBe(reminderMessage(db(), inv, "Acme", "es", Date.parse("2026-11-25T20:00:00Z")).text);
   });
 });

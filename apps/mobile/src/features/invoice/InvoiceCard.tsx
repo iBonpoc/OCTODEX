@@ -79,12 +79,15 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
   const lang = docLanguageFor(db, { customerId: inv.customerId });
   const reminder = () => reminderMessage(db, inv, company.name, lang, Date.now(), link);
   // #2017: no Zelle / «checks payable to» — the message says nothing of how to pay; the office is told before it sends
-  const noHow = balance > 0 && !paymentHow(db, t);
-  const howHint = noHow ? (
-    <View testID="invoice-no-how" style={{ gap: space[2] }}>
+  // only the office is told (it sends the messages); only the director can fill the methods in (the screen is read-only to others)
+  const noHow = balance > 0 && !paymentHow(db, t) && canOpen(store.role, "/company/documents");
+  const howHint = (inSheet: boolean) => noHow ? (
+    <View testID={inSheet ? "remind-no-how" : "invoice-no-how"} style={{ gap: space[2] }}>
       <StatusNote tone="warn">{t("invMsg.noHow")}</StatusNote>
-      {canOpen(store.role, "/company/documents") ? (
-        <Button label={t("invMsg.fill")} icon="wallet" variant="secondary" size="sm" onPress={() => router.push("/company/documents")} />
+      {store.role === "director" ? (
+        <View testID={inSheet ? "remind-fill-how" : "invoice-fill-how"}>
+          <Button label={t("invMsg.fill")} icon="wallet" variant="secondary" size="sm" onPress={() => { if (inSheet) setRemind(false); router.push("/company/documents"); }} />
+        </View>
       ) : null}
     </View>
   ) : null;
@@ -192,7 +195,7 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
           {inv.sentAt ? ` · ${t("inv.sentOn", { date: day(inv.sentAt) })}` : ""}
           {lastReminder ? ` · ${t("mny.remind.last", { date: day(lastReminder.at) })}` : ""}
         </T>
-        {howHint}
+        {howHint(false)}
       </Card>
 
       {inline && (payButton(false) || remindButton(false)) ? (
@@ -231,9 +234,9 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
         <View style={{ gap: space[3] }}>
           <T v="caption" tone="mut">{t("mny.remind.lang", { lang: DOC_LANG_LABEL[lang] })}</T>
           <Card>
-            <T v="body">{reminder().text}</T>
+            <View testID="remind-text"><T v="body">{reminder().text}</T></View>
           </Card>
-          {howHint}
+          {howHint(true)}
           {cust?.phone ? <Button label={t("mny.remind.sms")} icon="sms" full onPress={() => sendReminder("sms")} /> : null}
           {cust?.email ? <Button label={t("mny.remind.email")} icon="mail" variant={cust?.phone ? "secondary" : "primary"} full onPress={() => sendReminder("email")} /> : null}
         </View>
