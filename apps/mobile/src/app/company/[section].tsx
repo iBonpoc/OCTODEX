@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Image, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
@@ -36,9 +36,14 @@ export default function CompanySection() {
   const toast = useToast();
   const c = store.db.company;
   const [draft, setDraft] = useState<Company | null>(c ? (JSON.parse(JSON.stringify(c)) as Company) : null);
+  // #2002 review: «Назад» saves only what was typed HERE — compared with the step as it opened, not with a company that
+  // changed meanwhile (a sync, another director); and one tap goes once
+  const opened = useRef(draft ? JSON.stringify(draft) : "");
+  const leaving = useRef(false);
   const step = SETUP_STEPS.includes(section) ? section : "profile";
-  const idx = SETUP_STEPS.indexOf(step);
   const isWizard = wizard === "1";
+  const steps = SETUP_STEPS;
+  const idx = steps.indexOf(step);
   // spec 26 §3 (07.11): the office sees the company settings, only the director changes them
   const ro = store.role !== "director";
   const back = () => (router.canGoBack() ? router.back() : router.replace("/company"));
@@ -52,7 +57,7 @@ export default function CompanySection() {
   }
   const set = (p: Partial<Company>) => setDraft((d) => (d ? { ...d, ...p } : d));
   const goNext = () => {
-    const next = SETUP_STEPS[idx + 1];
+    const next = steps[idx + 1];
     if (isWizard && next) router.replace(`/company/${next}?wizard=1`);
     else if (isWizard) router.replace("/today");
     else back();
@@ -65,18 +70,32 @@ export default function CompanySection() {
     toast.show(store.online ? t("co.saved") : t("offline.queued"), undo);
     goNext();
   };
+  const listSection = step === "contacts" || step === "licenses";
+  // #2002 (founder 17.11): «Назад» to the step before — what is typed here is kept (saved as «Сохранить» saves it, quietly),
+  // the step before opens with its own fields and its own «Сохранить и дальше» (its required fields are asked there again)
+  const prev = isWizard && idx > 0 ? steps[idx - 1] : undefined;
+  const goPrev = () => {
+    if (!prev || leaving.current) return;
+    leaving.current = true;
+    // the name is on step 1 only: an empty name (step 1 skipped) does not stop what is typed on this step from being kept
+    const changed = !listSection && JSON.stringify(draft) !== opened.current;
+    if (changed && !ro) {
+      const { licenses: _l, contacts: _c, id: _i, timezone: _tz, scheduleSettings: _s, businessHours: _h, leadDefaultAssigneeId: _a, ...patch } = draft;
+      store.saveCompany({ ...patch, skipped: draft.skipped.filter((s) => s !== step) });
+    }
+    router.replace(`/company/${prev}?wizard=1`);
+  };
   const skip = () => {
     store.saveCompany({ skipped: Array.from(new Set([...c.skipped, step])) });
     goNext();
   };
-  const listSection = step === "contacts" || step === "licenses";
 
   return (
     <Screen
       form
       title={t(stepTitle(step))}
       back={back}
-      subtitle={isWizard ? t("co.stepOf", { i: idx + 1, n: SETUP_STEPS.length }) : undefined}
+      subtitle={isWizard ? t("co.stepOf", { i: idx + 1, n: steps.length }) : undefined}
     >
       {ro ? <StatusChip status="info" label={t("fix.co.readOnly")} soft /> : null}
       <T v="body" tone="mut">
@@ -216,14 +235,23 @@ export default function CompanySection() {
       ) : null}
 
       </ReadOnly>
-      {ro ? null : listSection ? (
-        isWizard ? (
-          <Button label={SETUP_STEPS[idx + 1] ? t("co.next") : t("co.finish")} icon="chevronRight" full onPress={goNext} />
-        ) : null
-      ) : (
-        <View testID="co-save">
-          <Button label={isWizard ? (SETUP_STEPS[idx + 1] ? t("co.saveNext") : t("co.finish")) : t("ue.save")} icon="check" full disabled={!draft.name.trim()} onPress={save} />
-        </View>
+      {ro || (listSection && !isWizard) ? null : (
+        // the wizard: «‹ Назад» (secondary) on the left of the main one, from the 2nd step (DS §7.3: in a row the way back on the
+        // left, the step forward on the right; one secondary next to the main one in a screen's bar)
+        <RowView>
+          {prev ? (
+            <View testID="co-wizard-back">
+              <Button label={t("co.back")} icon="chevronLeft" variant="secondary" onPress={goPrev} />
+            </View>
+          ) : null}
+          <View style={{ flex: 1 }} testID={listSection ? "co-next" : "co-save"}>
+            {listSection ? (
+              <Button label={steps[idx + 1] ? t("co.next") : t("co.finish")} icon="chevronRight" full onPress={goNext} />
+            ) : (
+              <Button label={isWizard ? (steps[idx + 1] ? t("co.saveNext") : t("co.finish")) : t("ue.save")} icon="check" full disabled={!draft.name.trim()} onPress={save} />
+            )}
+          </View>
+        </RowView>
       )}
       {isWizard && !ro ? <Button label={t("co.skip")} variant="ghost" full onPress={skip} /> : null}
     </Screen>
