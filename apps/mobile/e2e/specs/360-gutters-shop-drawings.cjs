@@ -2,7 +2,7 @@
  * e2e 360 — «Рабочие чертежи» (основатель 13.11, #1349; docs/specs/33-gutters-shop-drawings.md). Every view.
  * «Просмотр замера» → «Документы»:
  * - «Рабочие чертежи» → the menu «Бумага» (one row, founder 13.11: «объединить в одну»): «11×17» — a page of 11 × 17
- *   sheets, the plan G-1 (the app's language, ru) and the schedules G-2; «Letter» — the same sheets reduced whole;
+ *   sheets, the plan G-1 and the schedules G-2 — in the company's document language (en; never the app's — ru here, #2158); «Letter» — the same sheets reduced whole;
  * - «Заказ материалов»: the supplier's order, in English, on Letter.
  * The web prints from a hidden frame: the spec catches the frame's HTML instead of the print dialog. Finds things by
  * testID; waits on what it checks (no pauses).
@@ -87,14 +87,15 @@ exports.run = async (h) => {
   await openView(p);
   await tid("view-doc-shop").waitFor({ timeout: 8000 });
 
-  // the drawings at their own size: the plan, then the schedules — in the app's language
+  // the drawings at their own size: the plan, then the schedules — in the company's language (en), not the app's (ru) — #2158
   const d = await printVia("view-pdf-shop", "view-shop-paper-ansiB");
   h.expect(d.includes("@page{size:11in 17in"), "11 × 17 pages");
   h.expect((d.match(/<svg/g) || []).length >= 2, "a plan sheet and a schedules sheet");
   h.expect(d.includes(">G-1<") && d.includes(">G-2<"), "sheets G-1 and G-2");
-  h.expect(d.includes("ПЛАН GUTTERS — ЭТАЖ 1") && d.includes("ВЕДОМОСТЬ GUTTERS"), "the plan and the schedule, in the app's language");
+  h.expect(/GUTTER LAYOUT PLAN/i.test(d) && /GUTTER SCHEDULE/i.test(d), "the plan and the schedule, in the company's language (en)");
+  h.expect(!/[А-Яа-яЁё]/.test(d.replace(/<style[\s\S]*?<\/style>/g, "")), "no Russian word on the crew's sheets (the app is in Russian)");
   h.expect(d.includes(">1-1<") && d.includes(">1-2<") && d.includes(">90°<"), "two segments and the corner's angle");
-  h.expect(d.includes("НЕ ДЛЯ РАЗРЕШЕНИЯ"), "«not for permit»");
+  h.expect(/NOT FOR PERMIT/i.test(d), "«not for permit»");
   h.expect(!/\$\s?\d/.test(d), "no prices on the drawings");
   const pts = [...d.matchAll(/font-size="([\d.]+)"/g)].map((m) => (Number(m[1]) / 96) * 72);
   h.expect(Math.min(...pts) >= 10.99, `no text below 11 pt (${Math.min(...pts).toFixed(2)})`);
@@ -103,7 +104,7 @@ exports.run = async (h) => {
   h.expect((await p.getByTestId("view-docs").locator('[data-testid^="view-doc-"]').count()) === 4, "four documents: the client's, the crew's, the shop drawings (one row), the order");
   const l = await printVia("view-pdf-shop", "view-shop-paper-letter");
   h.expect(l.includes("@page{size:8.5in 11in"), "Letter pages");
-  h.expect(l.includes('height="11.000in"') && l.includes("ПЛАН GUTTERS"), "the whole sheet reduced to the page");
+  h.expect(l.includes('height="11.000in"') && /GUTTER LAYOUT PLAN/i.test(l), "the whole sheet reduced to the page");
 
   // the supplier's order: English, on Letter
   const o = await printVia("view-pdf-shop-order");
