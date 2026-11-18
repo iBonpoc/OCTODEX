@@ -155,7 +155,8 @@ export default function VisitScreen() {
       <Card>
         <RowView style={{ justifyContent: "space-between" }}>
           <StatusChip status={st.status} label={t(st.label)} />
-          {visitDueCents(db, v) > 0 ? (
+          {/* a closed visit shows no bare amount beside «Готово» (#2018 С2 review): what is still owed is said in its card below */}
+          {visitDueCents(db, v) > 0 && v.step !== "paid" && v.step !== "done" ? (
             <T v="title" tabular>
               {money(visitDueCents(db, v))}
             </T>
@@ -377,6 +378,14 @@ export default function VisitScreen() {
           <T v="body" tone="mut">
             {t(v.payment && v.payment.amountCents > 0 ? "visit.completedHint" : "visit.completedHintSigned")}
           </T>
+          {/* #2018 С2: closed with money still owed (sales closed it) — who takes it */}
+          {!(v.payment && v.payment.amountCents > 0) && visitDueCents(db, v) > 0 ? (
+            <View testID="visit-closed-office">
+              <T v="body">
+                {t(officeByInvoice ? "visit.officeTakesByInvoice" : "visit.officeTakes", { amount: money(visitDueCents(db, v)) })}
+              </T>
+            </View>
+          ) : null}
           {job && canSeeProfit(store.role) ? (() => {
             const p = jobProfit(db, job.id);
             return (

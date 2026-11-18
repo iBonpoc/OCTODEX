@@ -54,4 +54,7 @@ exports.run = async (h) => {
   // review: no «Оплачено» on a visit where the money is still owed
   await p.getByText("Готово", { exact: true }).locator("visible=true").first().waitFor({ timeout: 8000 });
   h.expect((await p.getByText("Оплачено", { exact: true }).locator("visible=true").count()) === 0, "С2а the closed visit is «Готово», not «Оплачено»");
+  // review: the closed card says who takes the money still owed
+  const closed = (await p.getByTestId("visit-closed-office").locator("visible=true").first().innerText()).replace(/\s+/g, " ");
+  h.expect(/Оплату примет офис: \$500(\.00)?/.test(closed), `С2а the closed visit says the office takes $500: ${closed}`);
 };
