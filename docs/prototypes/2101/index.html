@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Страница клиента</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
+<style>
+/* Прототип #2101 — страница клиента /p/ как «продающая». Значения — токены packages/design-tokens.
+   Параметры: ?w=390|820|1280 &theme=light|dark &state=sent|signed|done &brand=on|off
+   Страница — для клиента подрядчика: бренд компании, а не GoRix; язык клиента (здесь EN — рынок США). Данные вымышленные, цены примерные. */
+:root{
+  --font:'Onest',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s8:32px;
+  --r-card:24px;--r-inner:18px;--r-field:12px;--r-pill:999px;
+  --fs-display:28px;--fs-title:22px;--fs-heading:17px;--fs-body:15px;--fs-caption:13px;--fs-micro:11px;
+  --btn:36px;--hit:44px;--bar:44px;--chip:24px;--icon:20px;--icon-sm:16px;--panel:360px;--form:560px;
+  --st-ok:#7CE08A;--st-info:#8FA2FF;--st-warn:#FF8A3D;--st-bad:#FF6B6B;--st-on:#0B0C0F;--acc:#FBFF00;--on-acc:#0B0C0F;
+  --brand:#1F6FB2; /* фирменный цвет компании (Company.brand.color) — только полоса и акценты, DS §19.1 п.7 */
+  --page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--solid:#F9F7F5;
+  --bd:rgba(20,22,30,.1);--bdf:rgba(20,22,30,.5);--ov:rgba(250,248,244,.78);
+  --t-ok:#176428;--t-info:#3647C4;--t-warn:#944600;--t-bad:#B4232A;--n-fill:rgba(20,22,30,.09);
+  --shadow:0 10px 28px rgba(60,50,40,.12);--shadow-sm:0 2px 8px rgba(60,50,40,.25);
+}
+[data-theme=dark]{
+  --page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--solid:#33363C;
+  --bd:rgba(255,255,255,.14);--bdf:rgba(255,255,255,.38);--ov:rgba(38,41,48,.72);
+  --t-ok:#9CF0A8;--t-info:#C2CCFF;--t-warn:#FFB47E;--t-bad:#FFAAAA;--n-fill:rgba(255,255,255,.11);
+  --shadow:0 10px 30px rgba(0,0,0,.3);--shadow-sm:0 2px 8px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box;margin:0}
+html,body{background:#8a8780;font-family:var(--font);-webkit-font-smoothing:antialiased}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;padding:12px 16px;background:#1d1f23;color:#eee;font-size:13px;align-items:center}
+.ctl b{margin-right:4px}.ctl button{font:inherit;padding:4px 10px;border-radius:8px;border:1px solid #555;background:#2b2e33;color:#eee;cursor:pointer}
+.ctl button[aria-pressed=true]{background:#eee;color:#111}
+.stage{display:flex;justify-content:center;padding:24px 16px}
+.dev{position:relative;background:var(--bg);color:var(--ink);overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.w390{width:390px;height:844px;border-radius:36px}.w820{width:820px;height:1100px;border-radius:24px}.w1280{width:1280px;height:900px;border-radius:16px}
+.scroll{position:absolute;inset:0;overflow:auto;padding-bottom:120px}
+.w390 .scroll{padding-top:47px}
+.glow{position:absolute;inset:0;pointer-events:none;background:radial-gradient(600px 420px at 6% 0%,rgba(124,224,138,.18),transparent 70%),radial-gradient(700px 500px at 100% 100%,rgba(255,160,60,.14),transparent 70%)}
+[data-theme=dark] .glow{opacity:.35}
+.wrap{position:relative;margin:0 auto;padding:0 var(--s4);display:grid;gap:var(--s4)}
+.w820 .wrap{max-width:var(--form);padding:0}
+.w1280 .wrap{max-width:1048px;grid-template-columns:minmax(0,1fr) var(--panel);align-items:start;column-gap:var(--s6);padding:0}
+.w1280 .main{display:grid;gap:var(--s4)}
+.w390 .main,.w820 .main{display:contents}
+.side{display:contents}
+.w1280 .side{display:grid;gap:var(--s4);position:sticky;top:var(--s6)}
+/* бренд-полоса */
+.brandbar{height:6px;background:var(--brand)}
+.nobrand .brandbar{display:none}
+.card{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r-card);padding:var(--s4);box-shadow:var(--shadow);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+.co{display:grid;grid-template-columns:auto 1fr;gap:var(--s3);align-items:center}
+.logo{width:48px;height:48px;border-radius:var(--r-field);background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:700;font-size:var(--fs-heading)}
+.co h1{font-size:var(--fs-heading);font-weight:700;line-height:1.25}
+.meta{font-size:var(--fs-caption);color:var(--mut);line-height:1.4}
+.stars{color:var(--ink);font-weight:600}
+.contact{display:flex;gap:var(--s2);margin-top:var(--s3);grid-column:1/-1}
+.btn{height:var(--btn);padding:0 var(--s4);border-radius:var(--r-pill);font:600 var(--fs-caption)/1 var(--font);display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid transparent;cursor:pointer;color:var(--ink);background:none;white-space:nowrap;text-decoration:none}
+.btn.sec{background:var(--surf2);border-color:var(--bdf)}
+.btn.pri{background:var(--acc);color:var(--on-acc)}
+.btn.full{width:100%}
+.btn.bar{height:var(--bar);font-size:var(--fs-body)}
+.btn svg{width:var(--icon-sm);height:var(--icon-sm)}
+.contact .btn{flex:1}
+h2{font-size:var(--fs-title);font-weight:700;letter-spacing:-.01em}
+h3{font-size:var(--fs-heading);font-weight:600}
+.sec-t{display:flex;align-items:baseline;justify-content:space-between;gap:var(--s2);margin-top:var(--s2)}
+.sec-t .meta{white-space:nowrap}
+/* «что дальше» */
+.next{border-left:3px solid var(--ink)}
+.chip{white-space:nowrap;height:var(--chip);padding:0 10px;border-radius:var(--r-pill);display:inline-flex;align-items:center;gap:4px;font-size:var(--fs-caption);font-weight:600}
+.chip svg{width:12px;height:12px}
+.chip.warn{background:color-mix(in srgb,var(--st-warn) 22%,transparent);color:var(--t-warn)}
+.chip.ok{background:color-mix(in srgb,var(--st-ok) 22%,transparent);color:var(--t-ok)}
+.chip.info{background:color-mix(in srgb,var(--st-info) 22%,transparent);color:var(--t-info)}
+.chip.neutral{background:var(--n-fill);color:var(--mut)}
+.big{font-size:var(--fs-display);font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+/* фото объекта */
+.hero{height:168px;border-radius:var(--r-inner);background:linear-gradient(160deg,#9bb4c8,#5f7d93 55%,#3e5566);position:relative;overflow:hidden}
+.hero::after{content:"";position:absolute;left:8%;right:8%;bottom:22%;height:40%;background:linear-gradient(#e9e3d8,#cfc6b8);clip-path:polygon(0 35%,50% 0,100% 35%,100% 100%,0 100%)}
+.hero span{position:absolute;left:var(--s3);bottom:var(--s3);z-index:1;background:rgba(0,0,0,.55);color:#fff;font-size:var(--fs-micro);padding:3px 8px;border-radius:var(--r-pill)}
+/* варианты */
+.opts{display:grid;gap:var(--s3)}
+.w820 .opts,.w1280 .opts{grid-template-columns:repeat(3,1fr)}
+.opt{border:1px solid var(--bd);border-radius:var(--r-inner);padding:var(--s3);background:var(--solid);cursor:pointer;position:relative;display:grid;gap:4px}
+.opt.on{background:var(--surf2);box-shadow:var(--shadow-sm);outline:2px solid var(--ink);outline-offset:-2px}
+.opt .nm{font-weight:600;font-size:var(--fs-body)}
+.opt .pr{font-size:var(--fs-title);font-weight:700;font-variant-numeric:tabular-nums}
+.opt .rec{justify-self:start}
+.opt ul{padding-left:18px;font-size:var(--fs-caption);color:var(--mut);line-height:1.5}
+.opt .ck{position:absolute;top:var(--s2);right:var(--s2);width:var(--icon);height:var(--icon);display:none}
+.opt.on .ck{display:block}
+/* допуслуги */
+.add{display:grid;grid-template-columns:auto 1fr auto;gap:var(--s3);align-items:center;padding:var(--s3) 0;border-top:1px solid var(--bd)}
+.add:first-of-type{border-top:0}
+.thumb{width:56px;height:56px;border-radius:var(--r-field);background:linear-gradient(135deg,#a9b9a0,#6e8467)}
+.add .nm{font-weight:600;font-size:var(--fs-body)}
+.add .why{font-size:var(--fs-caption);color:var(--mut)}
+.add .pr{font-size:var(--fs-caption);font-weight:600;font-variant-numeric:tabular-nums;margin-top:2px}
+.tog{width:42px;height:24px;border-radius:var(--r-pill);background:var(--n-fill);border:1px solid var(--bd);position:relative;cursor:pointer;flex:none}
+.tog::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:var(--ink);transition:left .16s}
+.tog.on{background:var(--acc);border-color:transparent}.tog.on::after{left:20px;background:var(--on-acc)}
+/* итог */
+.tot{display:grid;gap:var(--s2)}
+.row{display:flex;justify-content:space-between;gap:var(--s3);font-size:var(--fs-body)}
+.row.m{color:var(--mut);font-size:var(--fs-caption)}
+.row b{font-variant-numeric:tabular-nums}
+.trust{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4);font-size:var(--fs-caption);color:var(--mut)}
+.trust span{display:inline-flex;gap:6px;align-items:center}
+.trust svg{width:var(--icon-sm);height:var(--icon-sm);color:var(--ink)}
+/* документы */
+.docs{display:grid;gap:var(--s2)}
+.doc{display:grid;grid-template-columns:auto 1fr auto;gap:var(--s3);align-items:center;padding:var(--s3);border-radius:var(--r-inner);background:var(--solid);border:1px solid var(--bd)}
+.doc .ic{width:36px;height:36px;border-radius:var(--r-field);background:var(--surf2);display:grid;place-items:center}
+.doc .ic svg{width:var(--icon);height:var(--icon)}
+.doc .nm{font-weight:600;font-size:var(--fs-body)}
+.doc .sub{font-size:var(--fs-caption);color:var(--mut)}
+.doc .r{display:grid;justify-items:end;gap:4px}
+.doc .amt{font-weight:600;font-variant-numeric:tabular-nums;font-size:var(--fs-body)}
+/* фото до/после, отзывы, услуги */
+.ba{display:grid;grid-template-columns:1fr 1fr;gap:var(--s2)}
+.ph{height:110px;border-radius:var(--r-field);position:relative;background:linear-gradient(160deg,#8a9aa6,#566874)}
+.ph.after{background:linear-gradient(160deg,#9ec2d6,#4f7f99)}
+.ph span{position:absolute;left:6px;top:6px;background:rgba(0,0,0,.55);color:#fff;font-size:var(--fs-micro);padding:2px 8px;border-radius:var(--r-pill)}
+.revs{display:grid;gap:var(--s3)}
+.w820 .revs{grid-template-columns:1fr 1fr}
+.rev{padding:var(--s3);border-radius:var(--r-inner);background:var(--solid);border:1px solid var(--bd);font-size:var(--fs-caption);line-height:1.5;display:grid;gap:6px}
+.rev .who{color:var(--mut)}
+.svcs{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)}
+.w1280 .main .svcs,.w820 .svcs{grid-template-columns:repeat(3,1fr)}
+.svc{border-radius:var(--r-inner);background:var(--solid);border:1px solid var(--bd);overflow:hidden;display:grid}
+.svc .im{height:84px;background:linear-gradient(135deg,#b7a98f,#7d6d55)}
+.svc:nth-child(2) .im{background:linear-gradient(135deg,#9fb6c9,#5d7a91)}
+.svc:nth-child(3) .im{background:linear-gradient(135deg,#a9c0a0,#647f5c)}
+.svc .b{padding:var(--s3);display:grid;gap:4px}
+.svc .nm{font-weight:600;font-size:var(--fs-caption)}
+.svc .from{font-size:var(--fs-micro);color:var(--mut)}
+.svc .btn{height:28px;margin-top:4px;font-size:var(--fs-micro);justify-self:start}
+.foot{font-size:var(--fs-micro);color:var(--mut);text-align:center;padding:var(--s6) 0 var(--s2);line-height:1.6}
+/* нижняя панель решения (телефон) */
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:var(--s3) var(--s4) 34px;background:var(--ov);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid var(--bd);border-radius:var(--r-card) var(--r-card) 0 0;display:grid;grid-template-columns:auto 1fr;gap:var(--s3);align-items:center}
+.pbar .sum{display:grid}
+.pbar .sum .meta{font-size:var(--fs-micro)}
+.pbar .sum b{font-size:var(--fs-heading);font-variant-numeric:tabular-nums}
+.w820 .pbar{left:50%;right:auto;width:var(--form);margin-left:calc(var(--form) / -2);padding-bottom:var(--s4)}
+.w1280 .pbar{display:none}
+.hide{display:none!important}
+.full .dev{height:auto!important}.full .scroll{position:relative;inset:auto}
+.stars-row{display:flex;gap:2px;color:var(--ink)}
+.stars-row svg{width:var(--icon-sm);height:var(--icon-sm)}
+.note{max-width:900px;margin:0 auto 32px;padding:0 16px;font-size:13px;line-height:1.5;color:#1b1b1b}
+</style>
+</head>
+<body>
+<div class="ctl" role="toolbar" aria-label="Вид">
+ <b>Ширина</b><button data-k="w" data-v="390">390</button><button data-k="w" data-v="820">820</button><button data-k="w" data-v="1280">1280</button>
+ <b>Тема</b><button data-k="theme" data-v="light">светлая</button><button data-k="theme" data-v="dark">тёмная</button>
+ <b>Шаг</b><button data-k="state" data-v="sent">смета ждёт решения</button><button data-k="state" data-v="signed">подписана · задаток</button><button data-k="state" data-v="done">работа сделана</button>
+</div>
+<div class="stage"><div class="dev" id="dev"><div class="glow"></div><div class="scroll" id="scroll"></div><div class="pbar" id="pbar"></div></div></div>
+<div class="note">Прототип #2101. Пункты страницы и порядок — README. Нажимается: варианты, допуслуги (итог пересчитывается), шаги вверху. Цены примерные; имена вымышленные.</div>
+<script>
+const I={
+ phone:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a1 1 0 01-1 1A16 16 0 014 5a1 1 0 011-1z"/></svg>',
+ sms:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg>',
+ mail:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>',
+ check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+ clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>',
+ invoice:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>',
+ note:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5"/></svg>',
+ wallet:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M16 12h2"/></svg>',
+ shield:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/></svg>',
+ star:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>',
+ cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
+ camera:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+ pdf:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h9l4 4v14H6z"/><path d="M12 10v6M9 13l3 3 3-3"/></svg>',
+};
+const P=new URLSearchParams(location.search);
+if(P.get('full'))document.documentElement.classList.add('full');
+const st={w:P.get('w')||'390',theme:P.get('theme')||'light',state:P.get('state')||'sent',opt:'better',adds:new Set(['guards'])};
+const OPTS=[
+ {id:'good',nm:'Good',sub:'5″ K-style, 0.027″',pr:3480,li:['124 ft seamless gutters','4 downspouts','Haul-away of old gutters']},
+ {id:'better',nm:'Better',sub:'6″ K-style, 0.032″',pr:4260,rec:true,li:['124 ft seamless gutters, 6″','5 oversized downspouts','Hidden hangers every 24″','10-year workmanship warranty']},
+ {id:'best',nm:'Best',sub:'6″ half-round, copper look',pr:5980,li:['Everything in Better','Half-round profile','Lifetime workmanship warranty']},
+];
+const ADDS=[
+ {id:'guards',nm:'Leaf guards',why:'No more cleaning — fits the new gutters',pr:860},
+ {id:'fascia',nm:'Fascia repair, 16 ft',why:'Rot found during the visit — photo in the estimate',pr:420},
+ {id:'clean',nm:'Yearly gutter check',why:'Every fall: clean, check, fix small leaks',pr:149,per:'/yr'},
+];
+const money=c=>'$'+c.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+function totals(){const o=OPTS.find(x=>x.id===st.opt);const a=ADDS.filter(x=>st.adds.has(x.id)&&!x.per).reduce((s,x)=>s+x.pr,0);const sub=o.pr+a;const tax=Math.round(sub*0.0)/1;const t=sub;return {o,a,t,dep:Math.round(t*0.3)};}
+function contact(){return `<div class="contact"><a class="btn sec" href="#">${I.phone}Call</a><a class="btn sec" href="#">${I.sms}Text</a><a class="btn sec" href="#">${I.mail}Email</a></div>`;}
+function company(){return `<section class="card co" aria-label="Company">
+  <div class="logo" aria-hidden="true">BG</div>
+  <div><h1>Brightline Gutters &amp; Exteriors</h1>
+   <div class="meta"><span class="stars">★ 4.9</span> · 128 Google reviews · CSLB Lic. #1048XXX · Insured</div></div>
+  ${contact()}</section>`;}
+function next(){
+  const t=totals();
+  if(st.state==='sent')return `<section class="card next" aria-label="What’s next">
+   <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="chip warn">${I.clock}Your decision</span><span class="meta">Valid until 12/01/2026</span></div>
+   <h2 style="margin-top:12px">Hi Sam — your gutter estimate</h2>
+   <p class="meta" style="margin-top:4px">1420 Oak St, Pasadena · EST-0042 · sent 11/18/2026</p></section>`;
+  if(st.state==='signed')return `<section class="card next" aria-label="What’s next">
+   <span class="chip ok">${I.check}Signed 11/18/2026</span>
+   <h2 style="margin-top:12px">Next: pay the deposit to book your install</h2>
+   <div class="row" style="margin-top:12px"><span>Deposit (30%)</span><b class="big">${money(t.dep)}</b></div>
+   <p class="meta" style="margin-top:4px">First open day: Tue 11/25 · 8–10 AM. We call you to confirm.</p>
+   <div style="margin-top:12px"><button class="btn pri bar full">${I.wallet}Pay ${money(t.dep)}</button></div>
+   <p class="meta" style="margin-top:8px">Card or bank (ACH). The receipt comes to your email.</p></section>`;
+  return `<section class="card next" aria-label="What’s next">
+   <span class="chip ok">${I.check}Job done 11/26/2026</span>
+   <h2 style="margin-top:12px">All paid — thank you, Sam!</h2>
+   <p class="meta" style="margin-top:4px">Your 10-year warranty is active until 11/2036.</p>
+   <div style="display:grid;gap:8px;margin-top:12px"><button class="btn pri bar full">${I.star}Rate us on Google</button></div>
+   <p class="meta" style="margin-top:8px">It takes 30 seconds and helps a small local business.</p></section>`;
+}
+function estimate(){
+  const t=totals(); const lock=st.state!=='sent';
+  return `<section class="card" aria-label="Estimate" style="display:grid;gap:12px">
+   <div class="hero"><span>${I.camera?'':''}Your home · photo from the visit</span></div>
+   <div class="sec-t"><h2>Choose your option</h2><span class="meta">${lock?'Your choice':'Tap to compare'}</span></div>
+   <div class="opts">${OPTS.map(o=>`<div class="opt ${o.id===st.opt?'on':''}" data-opt="${o.id}" role="radio" aria-checked="${o.id===st.opt}" tabindex="0">
+     <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+     ${o.rec?`<span class="chip info rec">${I.star}Recommended</span>`:''}
+     <div class="nm">${o.nm}</div><div class="meta">${o.sub}</div><div class="pr">${money(o.pr)}</div>
+     <ul>${o.li.map(x=>`<li>${x}</li>`).join('')}</ul></div>`).join('')}</div>
+   <div class="sec-t"><h3>Add to your project</h3><span class="meta">Optional</span></div>
+   <div>${ADDS.map(a=>`<div class="add"><div class="thumb" aria-hidden="true"></div><div><div class="nm">${a.nm}</div><div class="why">${a.why}</div><div class="pr">+${money(a.pr)}${a.per||''}</div></div><div class="tog ${st.adds.has(a.id)?'on':''}" data-add="${a.id}" role="switch" aria-checked="${st.adds.has(a.id)}" aria-label="${a.nm}" tabindex="0"></div></div>`).join('')}</div>
+   <div class="tot" style="border-top:1px solid var(--bd);padding-top:12px">
+    <div class="row m"><span>${t.o.nm} option</span><b>${money(t.o.pr)}</b></div>
+    ${ADDS.filter(a=>st.adds.has(a.id)).map(a=>`<div class="row m"><span>${a.nm}</span><b>+${money(a.pr)}${a.per||''}</b></div>`).join('')}
+    <div class="row" style="align-items:baseline"><span style="font-weight:600">Total</span><b class="big">${money(t.t)}</b></div>
+    <div class="row m"><span>Deposit to book (30%)</span><b>${money(t.dep)}</b></div>
+   </div>
+   <div class="trust"><span>${I.shield}10-year warranty</span><span>${I.check}Licensed &amp; insured</span><span>${I.clock}Install in 1 day</span></div>
+   ${st.state==='sent'?`<div class="side-sign"><button class="btn pri bar full">Choose ${t.o.nm} &amp; sign</button><p class="meta" style="margin-top:8px;text-align:center">Questions first? Call or text us — buttons at the top.</p></div>`:''}
+  </section>`;
+}
+function docs(){
+  const t=totals();
+  const rows=[
+   ['note','Estimate EST-0042',st.state==='sent'?'Sent 11/18 · valid until 12/01':'Signed 11/18 · PDF',st.state==='sent'?'<span class="chip warn">'+I.clock+'To decide</span>':'<span class="chip ok">'+I.check+'Signed</span>',money(t.t)],
+  ];
+  if(st.state!=='sent')rows.push(['invoice','Invoice INV-0017 · Deposit',st.state==='signed'?'Due on booking':'Paid 11/19 · Receipt',st.state==='signed'?'<span class="chip warn">'+I.clock+'To pay</span>':'<span class="chip ok">'+I.check+'Paid</span>',money(t.dep)]);
+  if(st.state==='done'){rows.push(['invoice','Invoice INV-0021 · Final','Paid 11/26 · Receipt','<span class="chip ok">'+I.check+'Paid</span>',money(t.t-t.dep)]);rows.push(['shield','Warranty certificate','10 years · until 11/2036','<span class="chip neutral">'+I.pdf+'PDF</span>','']);}
+  rows.push(['note','Inspection report','Visit 11/14 · 12 photos','<span class="chip neutral">'+I.pdf+'PDF</span>','']);
+  return `<section class="card" aria-label="Your documents" style="display:grid;gap:12px">
+   <div class="sec-t"><h2>Your documents</h2><span class="meta">${rows.length}</span></div>
+   <div class="docs">${rows.map(([ic,nm,sub,chip,amt])=>`<div class="doc"><div class="ic">${I[ic]}</div><div><div class="nm">${nm}</div><div class="sub">${sub}</div></div><div class="r">${chip}${amt?`<span class="amt">${amt}</span>`:''}</div></div>`).join('')}</div></section>`;
+}
+function photos(){
+  return `<section class="card" aria-label="Before and after" style="display:grid;gap:12px">
+   <div class="sec-t"><h2>${st.state==='done'?'Your home — before &amp; after':'Our recent work nearby'}</h2><span class="meta">${st.state==='done'?'8 photos':'Pasadena'}</span></div>
+   <div class="ba"><div class="ph"><span>Before</span></div><div class="ph after"><span>After</span></div></div></section>`;
+}
+function reviews(){
+  const R=[['“On time, clean, and the gutters look great. They found a rotten fascia board and fixed it the same day.”','Maria G. · Altadena · Google'],['“Clear estimate with options, no pressure. Paid online in a minute.”','David K. · Pasadena · Google']];
+  return `<section class="card" aria-label="Reviews" style="display:grid;gap:12px">
+   <div class="sec-t"><h2>What neighbors say</h2><span class="meta stars">★ 4.9 · 128</span></div>
+   <div class="revs">${R.map(([q,w])=>`<div class="rev"><div class="stars-row">${I.star.repeat(5)}</div><div>${q}</div><div class="who">${w}</div></div>`).join('')}</div></section>`;
+}
+function services(){
+  const S=[['Roof tune-up','from $350'],['Window cleaning','from $180'],['Solar panel cleaning','from $220']];
+  return `<section class="card" aria-label="We also do" style="display:grid;gap:12px">
+   <div class="sec-t"><h2>We also do</h2><span class="meta">For your home</span></div>
+   <div class="svcs">${S.map(([n,f])=>`<div class="svc"><div class="im" aria-hidden="true"></div><div class="b"><div class="nm">${n}</div><div class="from">${f}</div><a class="btn sec" href="#">Ask for a quote</a></div></div>`).join('')}</div></section>`;
+}
+function foot(){return `<div class="foot">Brightline Gutters &amp; Exteriors · 2200 E Colorado Blvd, Pasadena, CA · (626) 555-0142<br>Questions about this page? Call or text us.</div>`;}
+function bar(){
+  const t=totals();const b=document.getElementById('pbar');
+  if(st.state!=='sent'){b.classList.add('hide');return;}
+  b.classList.remove('hide');
+  b.innerHTML=`<div class="sum"><span class="meta">${t.o.nm}${st.adds.size?' + '+[...st.adds].filter(x=>ADDS.find(a=>a.id===x&&!a.per)).length+' add-on':''}</span><b>${money(t.t)}</b></div><button class="btn pri bar full">Choose &amp; sign</button>`;
+}
+function render(){
+  const d=document.getElementById('dev');d.className='dev w'+st.w;d.dataset.theme=st.theme;
+  document.querySelectorAll('[data-k]').forEach(x=>x.setAttribute('aria-pressed',st[x.dataset.k]===x.dataset.v));
+  const main=st.state==='done'?[next(),photos(),docs(),reviews(),services()]:st.state==='signed'?[next(),estimate(),docs(),reviews(),services()]:[next(),estimate(),photos(),reviews(),services()];
+  const side=st.state==='sent'?[docs()]:[];
+  const wide=st.w==='1280';
+  const sc=document.getElementById('scroll');
+  sc.innerHTML=`<div class="brandbar"></div><div style="height:16px"></div><div class="wrap">${wide?`<div class="main">${main.join('')}</div><aside class="side">${company()}${side.join('')}</aside>`:company()+main.join('')+side.join('')}${foot()}</div>`;
+  sc.querySelectorAll('[data-opt]').forEach(e=>e.onclick=()=>{if(st.state!=='sent')return;st.opt=e.dataset.opt;render();});
+  sc.querySelectorAll('[data-add]').forEach(e=>e.onclick=()=>{if(st.state!=='sent')return;const id=e.dataset.add;st.adds.has(id)?st.adds.delete(id):st.adds.add(id);render();});
+  bar();
+}
+document.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{st[b.dataset.k]=b.dataset.v;render();});
+render();
+</script>
+</body>
+</html>
