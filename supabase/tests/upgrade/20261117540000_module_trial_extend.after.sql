@@ -23,6 +23,16 @@ begin
                   and trial_ends_at > now() + interval '59 days') then
     raise exception 'FAILED T441 upgrade 20261117540000: a longer trial was shortened';
   end if;
+  if (select count(*) from public.company_modules where company_id in ('c5400000-0000-4000-8000-0000000000e5', 'c5400000-0000-4000-8000-0000000000e6',
+        'c5400000-0000-4000-8000-0000000000e7') and trial_ends_at between now() + interval '29 days 23 hours' and now() + interval '30 days 1 minute') <> 3 then
+    raise exception 'FAILED T441 upgrade 20261117540000: a short, an empty or a run-out-payment trial is not 30 days on';
+  end if;
+  if not exists (select 1 from public.company_modules where company_id = 'c5400000-0000-4000-8000-0000000000e7' and paid_until < now()) then
+    raise exception 'FAILED T441 upgrade 20261117540000: the run-out payment was touched';
+  end if;
+  if exists (select 1 from public.company_modules where company_id::text like 'c5400000-%' and updated_by is not null) then
+    raise exception 'FAILED T441 upgrade 20261117540000: the extension is not the system''s (updated_by)';
+  end if;
 end $$;
 -- the extended module is active again for a member (app.module_active itself is unchanged)
 insert into auth.users (id, email, raw_user_meta_data) values ('c5400000-0000-4000-8000-0000000000aa', 'upgrade540@x.test', '{"full_name":"Upgrade Owner 540"}');

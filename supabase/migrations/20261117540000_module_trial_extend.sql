@@ -7,7 +7,8 @@
 -- the price and app.module_active / module_enable stay AS THEY ARE.
 --
 -- So this migration only gives every company whose module is switched on, and is not paid, 30 days from today: its
--- trial_ends_at moves to now() + 30 days (never earlier than it already was). It is a stopgap until payment (step
+-- trial_ends_at moves to now() + 30 days (never earlier than it already was) — also a trial still running with fewer days
+-- left, and a row with no trial end at all. It is a stopgap until payment (step
 -- «Оплаты») exists — not a new rule: a module switched on for the first time after this migration gets the usual 7 days.
 -- A module whose payment once ran out (paid_until in the past) counts as unpaid and gets the 30 days too.
 -- A switched-off module is not touched (switching it on again keeps its own trial end, as before) — the lead's question
