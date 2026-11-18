@@ -315,6 +315,9 @@ interface StoreCtx {
   setVisitSettings: (patch: Partial<VisitSettings>) => Undo;
   signVisit: (visitId: ID, path: string) => Undo;
   payVisit: (visitId: ID, method: PaymentMethod) => Undo;
+  /** #2018 С2: who may not take the payment (sales) closes a signed visit with money still due — no payment, no invoice;
+   *  the office takes it by the job's invoice («Ждёт оплаты» / «Просрочено») or bills it («не выставлено», #2048) */
+  closeVisitForOffice: (visitId: ID) => Undo;
   /** "I replied" (no call/SMS from the app): stops the reply timer */
   replyLead: (id: ID) => Undo;
   /** call / SMS / email / marketplace from the card: history line + first response + new → in touch */
@@ -1863,6 +1866,12 @@ export function StoreProvider({
       addCheckItem: (visitId, label) => addVisitItemFn(visitId, label, false),
       signVisit: (visitId, path) =>
         mutate("visit.sign", (d) => patchVisit(d, visitId, (v) => ({ ...v, signature: path, step: "signed" })), { k: "visit.sign", visitId, svg: path }),
+      closeVisitForOffice: (visitId) => {
+        const v = dbRef.current.visits.find((x) => x.id === visitId);
+        if (!v || v.step !== "signed") return NO_UNDO;
+        // the same op as a visit with nothing to pay: the visit ends on the server (visits_update_staff: sales are staff)
+        return mutate("visit.step", (d) => patchVisit(d, visitId, (x) => ({ ...x, step: "done" })), { k: "visit.step", visitId, to: "done" });
+      },
       payVisit: (visitId, method) => {
         const d0 = dbRef.current;
         const v = d0.visits.find((x) => x.id === visitId);
