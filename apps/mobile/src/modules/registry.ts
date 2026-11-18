@@ -356,7 +356,8 @@ export const moduleFullScreen = (key: string | undefined, screen: string | undef
   !!key && !!screen && !!defs.get(key)?.fullScreen?.includes(screen);
 /** a module's screen by its address parts; unknown module or screen → undefined */
 export const moduleScreen = (key: string | undefined, screen: string | undefined): (() => import("react").ComponentType) | undefined =>
-  key && screen ? defs.get(key)?.screens?.[screen] : undefined;
+  // #2043: only its own screens — «constructor», «toString», «__proto__» are not screens (they came from Object.prototype)
+  key && screen && defs.get(key)?.screens && Object.hasOwn(defs.get(key)!.screens!, screen) ? defs.get(key)!.screens![screen] : undefined;
 export const moduleHref = (key: string, screen: string) => `/module/${key}/${screen}`;
 
 type Ctx = { keys(): string[]; (id: string): { default?: ModuleDef } };

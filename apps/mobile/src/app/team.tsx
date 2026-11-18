@@ -1,3 +1,4 @@
+import { visitDueCents } from "@/features/visitDue";
 import { lateAfterOf } from "@/features/scheduleSettings";
 import { useState } from "react";
 import { Platform, View } from "react-native";
@@ -91,7 +92,7 @@ export default function Team() {
     const tech = m.roles.includes("tech") && state === "active";
     const vs = tech ? todayVisits(db, m.id) : [];
     const { current, next } = crewNow(vs);
-    const st = current ? visitStatus(current, db.members, Date.now(), lateAfterOf(db)) : next ? visitStatus(next, db.members, Date.now(), lateAfterOf(db)) : null;
+    const st = current ? visitStatus(current, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, current)) : next ? visitStatus(next, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, next)) : null;
     const now = current ? visitContext(db, current) : null;
     const status =
       state === "pending" ? { tone: "neutral" as const, label: t("team.pending") }

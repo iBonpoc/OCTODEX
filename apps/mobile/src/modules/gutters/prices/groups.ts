@@ -26,14 +26,18 @@ const NOT_KEY = new Set(["color", "priceGroup", "custom", "side"]);
 export function groupAttrs(attrs: Readonly<Record<string, string>>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(attrs)) if (!NOT_KEY.has(k)) out[k] = v;
-  if (attrs.color?.trim() && !out.finish) out.finish = "painted";
+  if (attrs.color?.trim() && !out.finish?.trim()) out.finish = "painted";
   return out;
 }
 
-/** the readable key of a group (before the hash): unit and the sorted properties */
+/**
+ * The readable key of a group (before the hash): unit and the sorted properties — values with case and spaces ignored, as an item is
+ * matched (`catalogMatch`): «Aluminum» from an import and the module's «aluminum» are one group. The values the module writes are
+ * lower case already, so their key (and every key the database keeps) is the same as before; the server only reads the written key.
+ */
 export function groupText(it: Pick<CatalogItem, "unit" | "attributes">): string {
   const a = groupAttrs(it.attributes ?? {});
-  return [it.unit.trim().toLowerCase(), ...Object.keys(a).sort().map((k) => `${k}=${a[k]}`)].join("|");
+  return [it.unit.trim().toLowerCase(), ...Object.keys(a).sort().map((k) => `${k}=${a[k]!.trim().toLowerCase()}`)].join("|");
 }
 
 /** `attributes.priceGroup` of a coloured part: «gutters:v1:<16 hex of sha1>» — within the 120 characters of the database's check */
