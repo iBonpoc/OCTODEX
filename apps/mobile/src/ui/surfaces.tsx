@@ -678,10 +678,9 @@ export function Screen({
                 </T>
               </RowView>
             ) : null}
-            {right || headerFab || help ? (
+            {right || headerFab ? (
               <RowView gap={space[2]} style={{ flexShrink: 0 }}>
-                {/* DS §12.2, Б4: «?» · «＋» · «⋯» — «?» first on the right (#1648), «⋯» always the last (#1474) */}
-                {help ? <HelpButton title={title} text={help} /> : null}
+                {/* DS §12.2, Б4: «＋» · «⋯» — «⋯» always the last (#1474); «?» is at the title (Б7, #2132) */}
                 {headerFab}
                 {right}
               </RowView>
@@ -704,6 +703,8 @@ export function Screen({
                 {title}
               </T>
             </View>
+            {/* DS Б7, §12.2 (#2132): the screen's «?» right after its title, never among the actions on the right */}
+            {help ? <HelpButton title={title} text={help} testID="screen-help" /> : null}
           </RowView>
         </>
       ) : (
@@ -736,11 +737,12 @@ export function Screen({
                 {title}
               </T>
             </View>
+            {/* DS Б7, §12.2 (#2132): the screen's «?» right after its title, never among the actions on the right */}
+            {help ? <HelpButton title={title} text={help} testID="screen-help" /> : null}
           </RowView>
-          {right || headerFab || home || help ? (
+          {right || headerFab || home ? (
             <RowView gap={space[2]} style={{ marginLeft: "auto" }}>
-              {/* DS §12.2: «?» · «＋» · «⋯» — «?» first on the right (#1648) */}
-              {help ? <HelpButton title={title} text={help} /> : null}
+              {/* DS §12.2: «＋» · «⋯» on the right; «?» is at the title (Б7) */}
               {headerFab}
               {right}
               {home ? <HomeHeader /> : null}
