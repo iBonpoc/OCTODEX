@@ -54,11 +54,12 @@ export interface ModuleOpIn {
   kind: string;
   payload: Record<string, unknown>;
 }
-/** sends one module.op to the server; `run` turns a supabase result into the queue's errors (cloud/ops.ts) */
+/** sends one module.op to the server; `run` turns a supabase result into the queue's errors (cloud/ops.ts). A photo's
+ *  file sent (#1441) says how it went — the same answer as the core's photo ops (`OpResult.photo`): the store marks it */
 export type ModuleOpHandler = (
   op: ModuleOpIn,
   ctx: { companyId: string; userId: string; run: (p: PromiseLike<{ error: { message: string; code?: string; hint?: string } | null; status?: number }>) => Promise<void> },
-) => Promise<void>;
+) => Promise<void | { photo?: { id: string; failed: import("@/data/types").PhotoFail | null } }>;
 
 /** what a module's hook gets of the store (store.tsx): the data and the module's own change */
 export interface ModuleStore {

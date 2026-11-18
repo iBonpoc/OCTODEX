@@ -239,6 +239,9 @@ export interface FileItem {
   elementId?: ID;
   /** the photo on this phone until it is uploaded (never sent as a field) */
   uri?: string;
+  /** #1441: the cloud refused the file — the same mark as a visit's photo (Photo.upload): shown with «Повторить». Optional:
+   *  a record from an older build has none (rule 16) */
+  upload?: { failed: PhotoFail; at: string };
 }
 
 export type VisitStep = "scheduled" | "en_route" | "on_site" | "working" | "signed" | "paid" | "done";

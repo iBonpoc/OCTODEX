@@ -665,6 +665,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     customerId: (f.customer_id as string | null) ?? undefined, stage: (f.stage as FileItem["stage"] | null) ?? undefined,
     storageKey: (f.storage_key as string | null) ?? undefined, at: s(f.created_at),
     measurementId: (f.measurement_id as string | null) ?? undefined, elementId: (f.element_id as string | null) ?? undefined,
+    // #1441: a module's photo the cloud refused — as a visit's (the server knows only «failed»; the phone keeps its reason)
+    ...(f.upload_status === "failed" ? { upload: { failed: "refused" as const, at: s(f.created_at) } } : {}),
   }));
   const billingOf = (c: Row): BillingAddress | undefined =>
     c.billing_address_line1
