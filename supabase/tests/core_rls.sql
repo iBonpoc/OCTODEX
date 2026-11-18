@@ -4064,7 +4064,7 @@ begin
                         'save_customer_people(uuid,jsonb)', 'save_estimate_version(uuid,uuid,text,jsonb,jsonb,jsonb,jsonb)',
                         'save_lead_people(uuid,jsonb)', 'send_estimate(uuid,text)', 'set_customer_tags(uuid,uuid[])',
                         'set_job_tags(uuid,uuid[])', 'set_location_consent(uuid,boolean)', 'set_member_status(uuid,uuid,text)',
-                        'set_my_prefs(uuid,boolean)', 'set_push_kind(uuid,text,boolean)', 'set_share_location(uuid,boolean)',
+                        'set_my_prefs(uuid,boolean)', 'snooze_attention(uuid,text,timestamp with time zone)', 'set_push_kind(uuid,text,boolean)', 'set_share_location(uuid,boolean)',
                         'sign_estimate_on_site(uuid,text,text)', 'sign_estimate_on_site(uuid,text,text,bigint)',
                         'stop_member_location(uuid,uuid)', 'transfer_ownership(uuid,uuid)', 'trash_items(text,uuid[])', 'trash_list(uuid)',
                         'trash_restore(text,uuid[])', 'undo_customer_import(uuid)', 'uuid_generate_v7()']::text[]);
@@ -17139,5 +17139,68 @@ select tst.ok((public.portal_accept('tok_t381_2_0123456789abcdef', '38120000-000
 select tst.ok((select count(*) from public.estimate_approvals where estimate_id = '38100000-0000-4000-8000-000000000002') = 1, 'T381 the repeat doubles nothing');
 rollback;
 \echo 'T381 ok'
+
+-- ---------------------------------------------------------------- T437 (#2097): «Позже» — a reason put off for the company
+-- Only the office (is_staff: owner, admin, office, sales) puts a reason off, only in its own company; «by» is the server's.
+\echo 'T437 attention_snoozes: who writes'
+begin;
+:as_office_a
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t437', '2026-11-20T08:00:00Z');
+:as_super
+select tst.ok((select until = '2026-11-20T08:00:00Z' and by = 'a0000000-0000-0000-0000-000000000002' from public.attention_snoozes
+                where company_id = 'ca000000-0000-0000-0000-000000000000' and item_id = 'sch-t437'), 'T437 the office puts a reason off; «by» is the caller');
+:as_tech_a
+select tst.fails($q$select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t437', null)$q$, 'T437 a tech does not (no «Разбор дел»)');
+:as_owner_b
+select tst.fails($q$select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t437', null)$q$, 'T437 another company does not write');
+:as_super
+-- the second tech was switched off by an earlier test: active again, as sales (rolled back below)
+update public.memberships set role = 'sales', status = 'active' where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000004';
+:as_tech2_a
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'done-t437', '2026-11-21T08:00:00Z');
+:as_super
+select tst.ok((select count(*) from public.attention_snoozes where item_id = 'done-t437') = 1, 'T437 sales see «Разбор дел» and put off too');
+select tst.fails($q$select public.snooze_attention('ca000000-0000-0000-0000-000000000000', '', null)$q$, 'T437 an empty item_id is refused');
+rollback;
+\echo 'T437 ok'
+
+-- ---------------------------------------------------------------- T438 (#2097): a repeat and two phones — one row, the last wins
+\echo 'T438 attention_snoozes: one row'
+begin;
+:as_office_a
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t438', '2026-11-20T08:00:00Z');
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t438', '2026-11-20T08:00:00Z');
+:as_owner_a
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t438', '2026-11-25T08:00:00Z');
+:as_super
+select tst.ok((select count(*) from public.attention_snoozes where item_id = 'sch-t438') = 1, 'T438 a repeat from the queue and a second phone: one row');
+select tst.ok((select until = '2026-11-25T08:00:00Z' and by = 'a0000000-0000-0000-0000-000000000001' from public.attention_snoozes where item_id = 'sch-t438'),
+  'T438 the last write wins, «by» follows it');
+-- lifting («Отменить», put back): until = null, the row stays (no delete)
+:as_office_a
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t438', null);
+:as_super
+select tst.ok((select until is null from public.attention_snoozes where item_id = 'sch-t438'), 'T438 lifted: until = null');
+rollback;
+\echo 'T438 ok'
+
+-- ---------------------------------------------------------------- T439 (#2097): no direct writes, another company reads nothing
+\echo 'T439 attention_snoozes: rights'
+begin;
+:as_office_a
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t439', '2026-11-20T08:00:00Z');
+select tst.ok(tst.cnt($q$select 1 from public.attention_snoozes where item_id = 'sch-t439'$q$) = 1, 'T439 the office reads its company''s');
+select tst.fails($q$insert into public.attention_snoozes (company_id, item_id, until) values ('ca000000-0000-0000-0000-000000000000', 'x439', null)$q$, 'T439 no direct insert');
+select tst.fails($q$update public.attention_snoozes set until = null$q$, 'T439 no direct update');
+select tst.fails($q$delete from public.attention_snoozes$q$, 'T439 no delete');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.attention_snoozes$q$) = 0, 'T439 another company reads nothing');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.attention_snoozes$q$) = 0, 'T439 a tech reads nothing');
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.snooze_attention(uuid,text,timestamptz)', 'EXECUTE'), 'T439 anon: no snooze_attention');
+select tst.ok(not has_table_privilege('anon', 'public.attention_snoozes', 'SELECT'), 'T439 anon: no select');
+rollback;
+\echo 'T439 ok'
 
 \echo 'ALL TESTS PASSED'
