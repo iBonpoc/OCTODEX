@@ -84,5 +84,6 @@ export const UI_NOT_SHOWN: Record<string, string> = {
   "OneColumn": "a context, not a component: the 360 panel makes every CardGrid inside it one column (#1343) — seen as the client's panel at 1280, e2e 158",
   "Background": "the screen background under everything; seen on every sample",
   "ScreenScrollCtx": "context that lets a form scroll its screen to a wrong field; nothing to see",
+  "FieldAnchor": "the place of a required field the screen draws itself (the scroll goes to it); nothing to see — its frame and words are FieldError / Anchored",
   "Scrim": "the dim layer of a sheet; seen in the sheet sample",
 };

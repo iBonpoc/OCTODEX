@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import type { FieldBinding } from "./requiredForm";
+import { useFieldScroll, type FieldBinding } from "./requiredForm";
 import { Platform, ScrollView, TextInput, View, type LayoutChangeEvent, type ScrollViewInstance, type StyleProp, type ViewStyle } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -620,6 +620,7 @@ export function TextField({
     const id = setTimeout(() => input.current?.focus(), plan.focusAfterMs);
     return () => clearTimeout(id);
   }, [plan.focusAfterMs]);
+  useFieldScroll(field);
   return (
     <View ref={field?.anchorRef} testID={tid} collapsable={false} style={{ gap: space[1] }}>
     <View
