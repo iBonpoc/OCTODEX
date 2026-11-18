@@ -21,7 +21,8 @@ export interface MoreCount {
 const LEAD_KINDS = new Set<AttentionItem["kind"]>(["lead", "leadBack", "leadNoStep", "leadIdle", "leadOrphan"]);
 /** «Работы»: what is to schedule, and what is done and waits for the office (#2060) */
 const JOB_PLAN_KINDS = new Set<AttentionItem["kind"]>(["schedule"]);
-const JOB_CHECK_KINDS = new Set<AttentionItem["kind"]>(["jobDone"]);
+// #2048: a done job with part of its price on no invoice is the office's to check too
+const JOB_CHECK_KINDS = new Set<AttentionItem["kind"]>(["jobDone", "jobNotInvoiced"]);
 
 /**
  * The word of the «Работы» counter says what is counted (#2060): only jobs to schedule → «К плану: N»,

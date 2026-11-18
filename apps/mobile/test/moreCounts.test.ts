@@ -22,9 +22,15 @@ describe("moreCounts", () => {
     expect(m.leads?.n ?? 0).toBe(by(["lead", "leadBack", "leadNoStep", "leadIdle", "leadOrphan"]));
     expect(m.invoices?.n ?? 0).toBe(by(["overdue"]));
     expect(m.estimates?.n ?? 0).toBe(by(["estimateSign"]));
-    expect(m.jobs?.n ?? 0).toBe(by(["schedule", "jobDone"]));
+    expect(m.jobs?.n ?? 0).toBe(by(["schedule", "jobDone", "jobNotInvoiced"]));
     expect(m.invoices?.n).toBeGreaterThan(0); // the demo has an overdue invoice
     for (const [k, v] of Object.entries(m)) expect(!!v!.bad).toBe(k === "invoices");
+  });
+  it("#2048: a done job not invoiced counts in «Работы»", () => {
+    const j = { ...db.jobs[0]!, id: "j2048c", status: "done" as const, amountCents: 40000 };
+    const d2 = { ...db, jobs: [...db.jobs, j] } as DB;
+    const before = moreCounts(db, "director", NOW, TZ).jobs?.n ?? 0;
+    expect(moreCounts(d2, "director", NOW, TZ).jobs?.n ?? 0).toBe(before + 1);
   });
   it("zero → no counter at all", () => {
     const empty = { ...db, leads: [], invoices: [], estimates: [], jobs: [], tasks: [], visits: [] } as DB;
@@ -76,6 +82,13 @@ describe("moreCounts", () => {
     it("С3 both → «Требуют внимания: N», the sum", () => {
       const m = moreCounts({ ...base, jobs: [...plan(1), ...check(2)], visits: visits(2) } as DB, "director", NOW, TZ);
       expect(m.jobs).toEqual({ n: 3, label: "fix.more.jobsAll" });
+    });
+    it("#2048 «работа выполнена, счёт не выставлен» is counted under «Проверить»", () => {
+      const done = (id: string): Job => ({ ...db.jobs[0], id, status: "done", amountCents: 50000 }) as Job;
+      const m = moreCounts({ ...base, jobs: [done("ni1"), done("ni2")], visits: [], invoices: [] } as DB, "director", NOW, TZ);
+      expect(m.jobs).toEqual({ n: 2, label: "fix.more.jobsCheck" });
+      const mixed = moreCounts({ ...base, jobs: [...plan(1), done("ni1")], visits: [], invoices: [] } as DB, "director", NOW, TZ);
+      expect(mixed.jobs).toEqual({ n: 2, label: "fix.more.jobsAll" });
     });
     it("the rule itself", () => {
       expect(jobsCountLabel(1, 0)).toBe("fix.more.jobs");

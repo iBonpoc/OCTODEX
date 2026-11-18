@@ -2,7 +2,7 @@ import { lateAfterOf } from "@/features/scheduleSettings";
 import { visitDueCents } from "@/features/visitDue";
 import { View } from "react-native";
 import { router } from "expo-router";
-import { component, size, space, type StatusName } from "@octo/design-tokens";
+import { component, size, space } from "@octo/design-tokens";
 import { visitContext, useStore } from "@/data/store";
 import type { DB, Visit, VisitStep } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
@@ -11,30 +11,13 @@ import { Avatar, StatusChip } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { Card, RowView } from "@/ui/surfaces";
 import { wasJustDragged } from "./dnd";
-import { assigneesOf, isAssigned, lateKind, liveAssignees, type People, visitWhen } from "@/features/schedule";
+import { assigneesOf, isAssigned, visitWhen } from "@/features/schedule";
 import { isoDayKey, todayKey } from "@/features/calendar";
 import { overlapSigns } from "@/features/listSigns";
 import { memberLabel } from "@/features/team";
 
-/** Visit status → DS status color (4+1) and word. */
-export function visitStatus(v: Visit, members: People, now: number = Date.now(), lateAfterMin?: number): { status: StatusName; label: DictKey } {
-  // nobody who can come — nobody, or only someone switched off or deleted (S22): one rule everywhere (schedule.ts)
-  if (!liveAssignees(v, members).length) return { status: "warn", label: "st.unassigned" };
-  // one rule for the chip, the list sign, «Требует внимания» and the office notice (docs/specs/03 П3c)
-  const late = lateKind(v, members, now, lateAfterMin);
-  if (late) return { status: "warn", label: late === "en_route" ? "late.enRoute" : "late.notLeft" };
-  const map: Record<VisitStep, { status: StatusName; label: DictKey }> = {
-    scheduled: { status: "neutral", label: "st.scheduled" },
-    en_route: { status: "info", label: "st.en_route" },
-    on_site: { status: "info", label: "st.on_site" },
-    working: { status: "info", label: "st.working" },
-    signed: { status: "warn", label: "st.awaiting" },
-    paid: { status: "ok", label: "st.paid" },
-    // an inspection ends with "done" (no signature, no payment)
-    done: { status: "ok", label: "st.done" },
-  };
-  return map[v.step];
-}
+import { visitStatus } from "./visitStatus";
+export { visitStatus };
 
 /** The technician-facing step labels, in order (scheduled is the start, not a step). */
 export const STEP_LABELS: DictKey[] = ["step.en_route", "step.on_site", "step.working", "step.sign", "step.pay"];
@@ -47,7 +30,7 @@ export function VisitCard({ v, showTech }: { v: Visit; showTech?: boolean }) {
   const { t, time, money } = useI18n();
   const { c } = useTheme();
   const { job, property, customer, tech } = visitContext(db, v);
-  const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
+  const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, v));
   const people = assigneesOf(v).map((id) => db.members.find((m) => m.id === id)).filter((m): m is NonNullable<typeof m> => !!m);
   return (
     <Card
