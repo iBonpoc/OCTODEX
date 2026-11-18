@@ -10,6 +10,7 @@
 -- customer_balances is security_invoker: it follows invoices. An old phone of sales simply loads fewer rows.
 --   * t00_sales_deal_guard (invoices insert/update, payments insert): what sales write stays inside their deals, refused
 --     with 42501 before any check of a sum.
+--   * estimate_links — sales get the client links of their deals only.
 --   * record_estimate_deposit — sales take the deposit of their own deal only (the same body as 20261111140000, one
 --     condition added to the rights check; the same signature and rights).
 -- db T420–T424. Rule 16: policies altered in place, new functions; nothing renamed or dropped.
@@ -85,7 +86,7 @@ begin
   if current_user not in ('authenticated', 'anon') then
     return new;
   end if;
-  if not app.has_role(new.company_id, array['sales']) then
+  if not app.has_role(case when tg_op = 'UPDATE' then old.company_id else new.company_id end, array['sales']) then
     return new;
   end if;
   if tg_table_name = 'invoices' then
@@ -108,6 +109,19 @@ create trigger t00_sales_deal_guard before insert or update on public.invoices
 drop trigger if exists t00_sales_deal_guard on public.payments;
 create trigger t00_sales_deal_guard before insert on public.payments
   for each row execute function app.tg_sales_deal_guard();
+
+-- the client links the app loads (estimate_links): sales — of their deals only; a link opens the client's page with the
+-- invoices of the deal (body as 20261110030000, one condition added; the same signature and rights)
+create or replace function public.estimate_links(p_company_id uuid)
+returns table (estimate_id uuid, token text) language sql stable security definer set search_path = '' as $$
+  select k.estimate_id, (array_agg(k.token order by k.created_at desc, k.token))[1]
+    from app.estimate_tokens k join public.estimates e on e.id = k.estimate_id
+   where k.company_id = p_company_id and e.deleted_at is null and app.is_staff(p_company_id)
+     and (not app.has_role(p_company_id, array['sales']) or app.sales_deal_estimate(k.estimate_id))
+   group by k.estimate_id;
+$$;
+revoke all on function public.estimate_links(uuid) from public, anon;
+grant execute on function public.estimate_links(uuid) to authenticated;
 
 -- the deposit at the signature: sales — of his deal only (body as 20261111140000; one condition in the rights check)
 create or replace function public.record_estimate_deposit(p_estimate_id uuid, p_payment_id uuid, p_method text)

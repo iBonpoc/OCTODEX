@@ -11746,7 +11746,8 @@ select tst.ok((select public_token is null from public.estimates where id = 'e14
 select tst.ok((select token from public.estimate_links('ca000000-0000-0000-0000-000000000000') where estimate_id = 'e1470000-0000-4000-8000-000000000001') = :'t147_first',
   'T147 the director gets the link through estimate_links');
 :as_sales_a
-select tst.ok(exists (select 1 from public.estimate_links('ca000000-0000-0000-0000-000000000000') where estimate_id = 'e1470000-0000-4000-8000-000000000001'), 'T147 …sales too');
+-- since #2075 (20261117380000) sales get the links of their own deals only: this estimate is the tech's
+select tst.ok(not exists (select 1 from public.estimate_links('ca000000-0000-0000-0000-000000000000') where estimate_id = 'e1470000-0000-4000-8000-000000000001'), 'T147 …sales: not of another''s estimate (#2075)');
 :as_tech_a
 select tst.ok((select public_token is null from public.estimates where id = 'e1470000-0000-4000-8000-000000000001'), 'T147 the tech reads his estimate — without its link');
 select tst.ok((select count(*) from public.estimate_links('ca000000-0000-0000-0000-000000000000')) = 0, 'T147 estimate_links gives a tech nothing');
@@ -17224,6 +17225,17 @@ select tst.ok(not exists (select 1 from public.invoices where id = 'a4203000-000
 :as_sales_a
 select tst.fails_like($q$select public.record_estimate_deposit('a4200000-0000-4000-8000-0000000000e3', 'a4204000-0000-4000-8000-0000000000d3', 'cash')$q$,
   '%only the office takes a deposit%', 'T424 sales do not take the deposit of another''s estimate');
+-- the client links the app loads: sales — of their deals only
+:as_super
+select tst.set_token('a4200000-0000-4000-8000-0000000000e1', 'tok_t424_mine_0123456789abcdef');
+select tst.set_token('a4200000-0000-4000-8000-0000000000e3', 'tok_t424_office_0123456789abcd');
+:as_sales_a
+select tst.ok(exists (select 1 from public.estimate_links('ca000000-0000-0000-0000-000000000000') x where x.estimate_id = 'a4200000-0000-4000-8000-0000000000e1')
+          and not exists (select 1 from public.estimate_links('ca000000-0000-0000-0000-000000000000') x where x.estimate_id = 'a4200000-0000-4000-8000-0000000000e3'),
+  'T424 sales get the client link of their estimate, not of the office''s');
+:as_office_a
+select tst.ok(exists (select 1 from public.estimate_links('ca000000-0000-0000-0000-000000000000') x where x.estimate_id = 'a4200000-0000-4000-8000-0000000000e3'), 'T424 the office gets every link');
+:as_sales_a
 -- what sales write stays inside their deals, refused before any check of a sum (no answer about another deal's sums)
 select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
   ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'a4202000-0000-4000-8000-0000000000e3', 'progress', 'sent', 'T424 probe', 9999900, 9999900, now())$q$,
