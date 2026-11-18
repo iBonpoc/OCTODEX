@@ -9,6 +9,8 @@
  * `?m=<id>` opens a measurement, none — a new one; a module that is off or past its
  * trial draws but saves nothing, and says so before the work starts (§6, founder О2). Delete → «Отменить» 5 s (rule 5).
  */
+import { canvasUnsaved, unsentAfter } from "./unsent";
+import { registerDirtySheet } from "@/ui/dirtySheets";
 import { sizeText } from "../sizeText";
 import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
 import { useWindowDimensions, View } from "react-native";
@@ -336,6 +338,15 @@ export default function DrawScreen() {
   }, [view, m, size, drawing, fit]);
 
   const later = useRef<() => void>(() => {});
+  // #1912: «Обновить» must not reload under a stroke or an unwritten change: while one lasts, this screen is a sheet with unsaved work
+  const [touching, setTouching] = useState(false);
+  const [unsent, setUnsent] = useState(false);
+  const unsavedNow = canvasUnsaved({ touching, unsent });
+  useEffect(() => {
+    if (!unsavedNow) return;
+    return registerDirtySheet({ ask: () => flushRef.current() });
+  }, [unsavedNow]);
+  const flushRef = useRef<() => void>(() => {});
   /** the address gets the measurement's id at its first edit (a reload opens it again) — only while this screen is shown */
   const nameIt = () => {
     const mm = cur.current.m;
@@ -346,7 +357,9 @@ export default function DrawScreen() {
   const flush = useCallback(() => {
     const { drawing: d, m: mm, canSave: ok } = cur.current;
     if (!mm || !ok) return;
+    if (shown.current) setUnsent(true);
     void saver.flush(mm, toElements(d, mm.id)).then((r) => {
+      if (shown.current) setUnsent(unsentAfter(r)); // #1912: a failed write stays «unsent» until it lands
       if (r === "saved") {
         if (!shown.current) return;
         setSavedOnce(true);
@@ -360,9 +373,11 @@ export default function DrawScreen() {
       else if (r === "failed") later.current();
     });
   }, [saver]);
+  flushRef.current = flush;
   // a gesture ended: write 1 s later (the queue gets one write per gesture, not per movement — П14.2 №5)
   later.current = () => {
     if (timer.current) clearTimeout(timer.current);
+    if (shown.current) setUnsent(true);
     timer.current = setTimeout(flush, SAVE_AFTER_MS);
   };
   useEffect(() => () => {
@@ -448,6 +463,7 @@ export default function DrawScreen() {
     maxPointers: 1,
     simultaneousWith: [canvas.pinch, canvas.pan],
     onBegin: (e) => {
+      setTouching(true);
       downAt.current = [e.x, e.y];
       downTime.current = Date.now();
       threeShown.current = false;
@@ -459,6 +475,7 @@ export default function DrawScreen() {
       holdTimer.current = setTimeout(liftAtHold, motion.longPressMs);
     },
     onFinalize: () => {
+      setTouching(false);
       clearHold(); // let go without moving, or a second finger: nothing changes, no «medium» (the drawing is untouched)
       hold.current = holdCancel(hold.current).hold;
       setLifted(null);

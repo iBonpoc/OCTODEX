@@ -18,6 +18,7 @@ import { GuardedScreen, RouteGuard } from "@/nav/RouteGuard";
 import { NavMenuProvider } from "@/nav/NavMenu";
 import { SideNav } from "@/nav/SideNav";
 import { TabBar } from "@/nav/TabBar";
+import { UpdateDriver } from "@/features/UpdateBar";
 import { ClosedCompanyNotice } from "@/nav/ClosedCompanyNotice";
 import { SlashToSearch } from "@/nav/SearchEntry";
 import { LegalGate } from "@/nav/LegalGate";
@@ -51,6 +52,8 @@ function Shell() {
               <NameAsk />
               {/* #1669: removed from a company — its unsent changes are still here */}
               <RemovedCompanyNotice />
+              {/* #1912: looks for an over-the-air update (phone builds only) */}
+              <UpdateDriver />
             </View>
           </View>
         </NavMenuProvider>
