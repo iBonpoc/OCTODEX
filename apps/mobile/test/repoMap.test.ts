@@ -354,6 +354,18 @@ describe("loadCompanyDB — a photo the cloud refused (#1431)", () => {
       { id: "f4", kind: "before", uri: undefined },
     ]);
   });
+  it("#1441: a module's photo (measurement_id) with upload_status 'failed' is marked in db.files; uploaded and local are not", async () => {
+    rows.files = [
+      { id: "g1", kind: "photo", measurement_id: "m1", element_id: null, storage_key: "co-1/g1.jpg", created_at: "2026-11-18T10:00:00Z", upload_status: "uploaded" },
+      { id: "g2", kind: "photo", measurement_id: "m1", element_id: "e1", storage_key: null, created_at: "2026-11-18T11:00:00Z", upload_status: "failed" },
+      { id: "g3", kind: "photo", measurement_id: "m1", element_id: null, storage_key: null, created_at: "2026-11-18T12:00:00Z", upload_status: "local" },
+    ];
+    const db = await loadCompanyDB(CO, "u1");
+    const f = (id: string) => db.files!.find((x) => x.id === id)!;
+    expect(f("g1").upload).toBeUndefined();
+    expect(f("g2")).toMatchObject({ measurementId: "m1", elementId: "e1", upload: { failed: "refused", at: "2026-11-18T11:00:00Z" } });
+    expect(f("g3").upload).toBeUndefined();
+  });
   it("a server without the column reads the photos as before (rule 16)", async () => {
     missing.add("files.upload_status");
     const db = await loadCompanyDB(CO, "u1");
