@@ -1,6 +1,6 @@
 /**
  * unit:itemCostsSeen — #1958 (а): a cost an item already on the server changes goes over what the phone saw
- * (catalog_set_item_costs, migration 20261117240000, db T365–T370), never in the item's row nor a plain upsert — both
+ * (catalog_set_item_costs, migration 20261117270000, db T365–T370), never in the item's row nor a plain upsert — both
  * put it over whatever is there (t30's coalesce, the side table's upsert). An op queued by an older build (no `costs`)
  * sends no cost field at all. «Changed meanwhile» (40001 row_version_conflict) is a refusal, not «try later».
  * Scenarios С1–С10: docs/specs/53-price-update.md §5.3в.

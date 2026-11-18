@@ -18,7 +18,7 @@ describe("client page: the card button only where the server allows it", () => {
   it("a demo company (simulated_pay true): the button", () => {
     expect(fromRaw({ ...base, simulated_pay: true }).simulatedPay).toBe(true);
   });
-  it("an older server without the field: as before", () => {
-    expect(fromRaw(base).simulatedPay).toBe(true);
+  it("an older server without the field: closed by default — no button (#2020)", () => {
+    expect(fromRaw(base).simulatedPay).toBe(false);
   });
 });
