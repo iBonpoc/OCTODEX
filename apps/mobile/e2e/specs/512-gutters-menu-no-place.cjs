@@ -33,7 +33,7 @@ exports.run = async (h) => {
   await menu.waitFor({ timeout: 4000 });
   const names = await menu.getByRole("menuitem").allInnerTexts();
   const all = names.map((x) => x.trim()).join(" | ");
-  h.expect(!/Где панель/.test(all), `no «Где панель» (${all})`);
+  h.expect(!/Где панель/.test(all), `no «Где панель» (${all})`); // i18n-old: ok — the removed item must be gone
   h.expect(/Весь рисунок/.test(all) && /Слои/.test(all) && /Удалить замер/.test(all), `the rest stays: «Весь рисунок», «Слои…», «Удалить замер» (${all})`);
   await h.shot("menu");
 };
