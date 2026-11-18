@@ -58,8 +58,18 @@ export function findItem(catalog: readonly CatalogItem[], p: Pick<PartQty, "key"
     const it = catalogMatch(pool, alt)[0];
     if (it) return it;
   }
+  // М8 («Расход v2» PR-2): a copper or zinc job's screw, anchor or strap strip carries its metal; a company that priced the same fastener
+  // without a metal keeps that price until it prices the metal's own (no mark — the director's decision on §5а №2, as #2000). Only an
+  // item WITHOUT a metal: a stainless screw never prices a copper one
+  if (want.metal && METAL_FALLBACK_PARTS.has(want.part ?? "")) {
+    const { metal: _m, ...plain } = want;
+    const it = catalogMatch(pool.filter((x) => !x.attributes?.metal), plain)[0];
+    if (it) return it;
+  }
   return undefined;
 }
+/** the fasteners whose metal follows the gutter's (the engine's METAL_FASTENERS) */
+const METAL_FALLBACK_PARTS = new Set(["screw", "anchor", "flat_coil"]);
 
 /**
  * The round elbow of the engine's DEFAULT degree (75°, «Расход v2») the company has not priced takes its round elbow of the same
@@ -81,12 +91,12 @@ export function priceFromOtherDegree(catalog: readonly CatalogItem[], p: Pick<Pa
 export const PART_WORDS = new Set([
   "gutter", "downspout", "end_cap", "hanger", "ds_strap", "elbow", "outlet", "end_outlet", "extension", "splash_block", "flex", "drain", "drain_adapter", "splash_pan", "sealant",
   "shank", "spike", "circle", "bolt", "screw", "anchor", "ferrule", "flat_coil",
-  "rivet", "touch_up_paint", "flux", "solder", "strip_miter", "wedge", "guard",
+  "rivet", "touch_up_paint", "flux", "solder", "soldering_kit", "strip_miter", "wedge", "guard",
   "slip_joint", "miter", "splash_guard", "expansion_joint", "guard_run", "offset", "reducer", "funnel", "conductor_head", "diverter", "eave_box", "outlet_screen", "wye", "rain_chain", "rain_chain_adapter",
   // a downspout's wall fasteners: the kit is named by its part (#1805: they were shown as codes)
   "sickle_hook", "u_bracket", "conductor_bracket", "brick_hook", "brick_hook_hd", "conductor_band", "hinged_hook", "pipe_cleat",
 ]);
-export const WORK_WORDS = new Set(["install", "downspout", "corner_cut", "bend", "tearoff", "tile", "cleaning", "flush", "guard_install"]);
+export const WORK_WORDS = new Set(["install", "downspout", "corner_cut", "bend", "solder", "tearoff", "tile", "cleaning", "flush", "guard_install"]);
 
 /* ---------- the parts the company prices ---------- */
 
@@ -101,6 +111,8 @@ export const LABOR_PARTS: readonly PartQty[] = [
   labor("labor.corner_cut", "ea", { work: "corner_cut" }),
   // «Гиб по месту» (Р4, «Расход v2»): a plain rectangular downspout's elbows bent on site, each
   labor("labor.bend", "ea", { work: "bend" }),
+  // «Пайка швов» (М7, «Расход v2» PR-2): a copper or zinc job's solder points, each
+  labor("labor.solder", "ea", { work: "solder" }),
   labor("labor.tearoff", "ft", { work: "tearoff" }),
   labor("labor.tile", "ft", { work: "tile" }),
   // the starter estimates (#1323): a cleaning, a downspout flush and a guard installation are priced like the rest of the labor
