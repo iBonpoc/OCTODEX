@@ -4489,6 +4489,7 @@ export const es: Dict = {
   "price.group.rejRights": "El precio del grupo no se guardó: la app lo calcula según el costo. Lo puede cambiar quien ve el costo",
   "price.group.rejFull": "El artículo no se guardó: su grupo de precio ya tiene 200 artículos. Quite algunos del grupo y guarde otra vez",
   "price.group.rejConflict": "El precio del grupo no se guardó: lo cambiaron en otro teléfono. Abra el artículo y ponga el precio otra vez",
+  "sup.rej.taxStale": "El impuesto del proveedor no se guardó: alguien lo cambió antes. Abra al proveedor y repita",
   "price.cost.rejConflict": "Costo no guardado: se cambió en otro teléfono o al cargar una lista de precios. Abra el artículo y revíselo",
   "price.cost.rejSupplierTax": "Impuesto no guardado: este artículo toma el impuesto de su proveedor. Cambie la tasa en el proveedor",
   "att.rejected.price": "Precio del grupo no guardado",
