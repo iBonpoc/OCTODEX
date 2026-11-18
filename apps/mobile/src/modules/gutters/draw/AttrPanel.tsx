@@ -6,6 +6,8 @@
  * Colours are words, never swatches (rule 2). The lists are what the company installs and its palette (settings, M7b);
  * an element's own value the company no longer offers stays as one more chip «нет в списке» (spec 33 П22.2 №7).
  */
+import { sizeText } from "../sizeText";
+import { defaultOffsetsFor } from "@octo/estimating-engine";
 import { useEffect, useRef, useState } from "react";
 import { Keyboard, ScrollView, useWindowDimensions, View } from "react-native";
 import { measureAfterKeyboard } from "./afterKeyboard";
@@ -19,7 +21,7 @@ import { Menu } from "@/ui/overlays";
 import { fillStyle } from "@/ui/fill";
 import { SelectedCheck } from "@/ui/selectedCheck";
 import { RowView } from "@/ui/surfaces";
-import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, elbowCounts, elbowPatch, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
 import { FracPicker } from "./FracPicker";
 import { inchesComplete, inchesTooBig, nextStage, type EntryStage } from "./lengthEntry";
@@ -30,7 +32,7 @@ import { drawnLengthIn, type CornerChoice, type DrawnDownspout, type DrawnRun, t
 
 const k = (s: string) => `mod.gutters.attr.${s}` as DictKey;
 const inch = (s: string) => `${s}″`;
-const dsSize = (s: string) => (s.includes("x") ? s.replace("x", "×") : inch(s));
+const dsSize = sizeText; // one format everywhere (#1916)
 const elbow = (s: string) => (/^\d+$/.test(s) ? `${s}°` : s);
 
 /** a colour: the module's own words are translated; the company's palette names are its supplier's words (data) */
@@ -427,8 +429,8 @@ function More({ open0, id, label, children }: { open0: boolean; id: string; labe
 }
 
 export function RunAttrsView({
-  run, onAttrs, onLength, ch = MODULE_CHOICES, corners = [], onCorner, compact,
-}: { run: DrawnRun; onAttrs: (p: Partial<RunAttrs>) => void; onLength: (lengthIn: number | null) => void; ch?: Choices; corners?: RunCorner[]; onCorner?: (f: FoundCorner, m: CornerChoice["method"] | null) => void; /** 390: what is changed often on top, the rest under «Ещё» (П20.9) */ compact?: boolean; }) {
+  run, onAttrs, onLength, ch = MODULE_CHOICES, corners = [], onCorner, compact, forNew,
+}: { run: DrawnRun; onAttrs: (p: Partial<RunAttrs>) => void; onLength: (lengthIn: number | null) => void; ch?: Choices; corners?: RunCorner[]; onCorner?: (f: FoundCorner, m: CornerChoice["method"] | null) => void; /** 390: what is changed often on top, the rest under «Ещё» (П20.9) */ compact?: boolean; /** «Новые желоба» of this drawing (#1563 PR B): no length, story, corners — the same rows otherwise */ forNew?: boolean; }) {
   const { t } = useI18n();
   const a = run.attrs;
   const profiles = withCurrent(ch.offer.profiles, a.profile);
@@ -436,34 +438,35 @@ export function RunAttrsView({
   const kits = withCurrent(hangerKitsFor(a.profile, ch), a.hanger);
   return (
     <>
-      <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
+      {/* «Для новых желобов»: its title, «Сбросить» and the line under it are the owner's (DrawScreen), above these rows */}
+      {forNew ? null : <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
         <T v="heading" w="semibold">{`${t(k("run"))} · ${fmtLen(run.lengthIn ?? drawnLengthIn(run), ch.lenFormat)}`}</T>
         {/* no «рулетка / нарисовано» per line any more: how the drawing was measured is one choice (П20.16) */}
-      </RowView>
+      </RowView>}
       {compact ? (
         <>
-      <Pick label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />
+      {forNew ? null : <Pick label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />}
       <Select fit label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
         <Stock a={a} set={onAttrs} ch={ch} part="color" />
-      <Tape run={run} onLength={onLength} />
+      {forNew ? null : <Tape run={run} onLength={onLength} />}
           <More open0={false} id={run.id} label={t(k("moreRun"))}>
       <Select label={t(k("profile"))} testID="attr-profile" offered={ch.offer.profiles} items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)) }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
             <Stock a={a} set={onAttrs} ch={ch} part="rest" />
       <Pick label={t(k("mount"))} testID="attr-mount" items={MOUNTS.map((m) => ({ key: m, label: t(k(`mt.${m}`)) }))} value={a.mount ?? "fascia"} onChange={(mount) => onAttrs({ mount })} />
       <Pick label={t(k("hanger"))} testID="attr-hanger" offered={hangerKitsFor(a.profile, ch)} items={kits.map((id) => ({ key: id, label: t(k(`k.${id}`)) }))} value={a.hanger} onChange={(hanger) => onAttrs({ hanger })} />
-      {onCorner ? <Corners corners={corners} onCorner={onCorner} /> : null}
+      {onCorner && !forNew ? <Corners corners={corners} onCorner={onCorner} /> : null}
           </More>
         </>
       ) : (
         <>
-      <Tape run={run} onLength={onLength} />
-      <Pick label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />
+      {forNew ? null : <Tape run={run} onLength={onLength} />}
+      {forNew ? null : <Pick label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />}
       <Select label={t(k("profile"))} testID="attr-profile" offered={ch.offer.profiles} items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)) }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
       <Select fit label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
       <Stock a={a} set={onAttrs} ch={ch} />
       <Pick label={t(k("mount"))} testID="attr-mount" items={MOUNTS.map((m) => ({ key: m, label: t(k(`mt.${m}`)) }))} value={a.mount ?? "fascia"} onChange={(mount) => onAttrs({ mount })} />
       <Pick label={t(k("hanger"))} testID="attr-hanger" offered={hangerKitsFor(a.profile, ch)} items={kits.map((id) => ({ key: id, label: t(k(`k.${id}`)) }))} value={a.hanger} onChange={(hanger) => onAttrs({ hanger })} />
-      {onCorner ? <Corners corners={corners} onCorner={onCorner} /> : null}
+      {onCorner && !forNew ? <Corners corners={corners} onCorner={onCorner} /> : null}
         </>
       )}
     </>
@@ -478,7 +481,7 @@ function Elbows({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAt
     <Field label={t(k("elbows"))} testID="attr-elbow-qty">
       {Object.entries(counts).map(([style, qty]) => (
         <View key={style} testID={`attr-elbow-${style}`}>
-          <Stepper label={elbow(style)} value={qty} min={0} max={12} onChange={(n) => onAttrs({ elbows: withElbowQty(ds, style, n) })} />
+          <Stepper label={elbow(style)} value={qty} min={0} max={12} onChange={(n) => onAttrs(elbowPatch(ds, style, n))} />
         </View>
       ))}
     </Field>
@@ -526,7 +529,7 @@ function DsKindPick({ ds, onAttrs, ch }: { ds: DrawnDownspout; onAttrs: (p: Part
   );
 }
 
-export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact, run }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void; ch?: Choices; compact?: boolean; /** its gutter: «Как у желоба» */ run?: DrawnRun["attrs"] }) {
+export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact, run, forNew }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void; ch?: Choices; compact?: boolean; /** its gutter: «Как у желоба» */ run?: DrawnRun["attrs"]; /** «Новые водостоки» of this drawing (#1563 PR B): the same rows, its own title */ forNew?: boolean }) {
   const { t } = useI18n();
   const w = wallOf(ds.shape, ds.wall);
   const sizes = withCurrent(ch.offer.dsSizes[ds.shape], ds.size);
@@ -534,7 +537,7 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact, run }: 
   const wallKits = withCurrent(wallKitsFor(ds.shape, w.wall, ch), w.kit);
   return (
     <>
-      <T v="heading" w="semibold">{t(k("ds"))}</T>
+      {forNew ? null : <T v="heading" w="semibold">{t(k("ds"))}</T>}
       {compact ? (
         <>
       <Select fit label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
@@ -597,7 +600,8 @@ function DsLength({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<Ds
  */
 function Offsets({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void }) {
   const { t } = useI18n();
-  const off = ds.offsets?.[0];
+  // unset — the engine's default (a round one 1 × 2″, «Расход v2»): the window shows what the estimate counts
+  const off = ds.offsets ? ds.offsets[0] : defaultOffsetsFor({ shape: ds.shape })[0];
   const len = off?.lengthIn ?? OFFSETS_IN[0];
   const std = (OFFSETS_IN as readonly number[]).includes(len);
   const [own, setOwn] = useState(std ? "" : String(len));

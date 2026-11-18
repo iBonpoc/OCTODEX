@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  computeCustomOption, computeAllOptional, catalogCost, catalogPrice, depositAmount, depositSettingFromRule, caDepositLimit, parseMoneyToCents, parsePctToBps, parseQty, partsCost, marginPctOf,
+  computeCustomOption, computeAllOptional, catalogCost, catalogPrice, costWithoutTax, depositAmount, depositSettingFromRule, caDepositLimit, parseMoneyToCents, parsePctToBps, parseQty, partsCost, marginPctOf,
   DEFAULT_TAX, type CustomLine, type CustomSettings,
 } from "../src/custom.js";
 
@@ -227,5 +227,18 @@ describe("computeAllOptional: the total if the client ticks every add-on", () =>
   });
   it("a blank add-on (no name, no price) does not count as one", () => {
     expect(computeAllOptional({ ...base, lines: [base.lines[0]!, L("service", "1", 0, { name: "", optional: true })] }, S())).toBeNull();
+  });
+});
+
+describe("costWithoutTax (#1835)", () => {
+  it("$108.00 at 8 % → $100.00; one rounding, half up; back with the tax — the same give or take a cent", () => {
+    expect(costWithoutTax(10800, 800)).toBe(10000);
+    expect(costWithoutTax(11025, 1025)).toBe(10000);
+    expect(costWithoutTax(1, 1025)).toBe(1); // 0.907 → 1
+    expect(costWithoutTax(5, 1000)).toBe(5); // 4.545 → 5
+    expect(costWithoutTax(10, 1000)).toBe(9); // 9.0909 → 9
+    expect(costWithoutTax(0, 950)).toBe(0);
+    for (let g = 1; g < 3000; g += 37)
+      for (const t of [625, 800, 950, 1025]) expect(Math.abs(catalogCost(costWithoutTax(g, t), t) - g)).toBeLessThanOrEqual(1);
   });
 });

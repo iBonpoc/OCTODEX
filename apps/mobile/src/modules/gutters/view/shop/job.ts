@@ -1,4 +1,5 @@
 /** What the shop drawings print beside the measurement (#1349): the company, the job, the company's rules, the words. */
+import { sizeText } from "../../sizeText";
 import type { PartQty } from "@octo/estimating-engine";
 import type { DictKey } from "@/i18n";
 import { fmtLen, type LenFormat } from "../../canvas/format";
@@ -54,8 +55,8 @@ export const attrWord = (t: Tr, group: "p" | "m" | "c" | "sh", v: string) => {
 };
 /** a length on the sheet: feet-inches as a drawing writes them (44'-6"), or the company's metric format */
 export const lenText = (inches: number, fmt: LenFormat) => (fmt === "ftin" ? fi(inches) : fmtLen(inches, fmt));
-/** 2x3 → 2"×3" */
-export const dsSizeText = (s: string) => s.split(/x/i).map((p) => `${p}"`).join("×");
+/** the cross-section — one format everywhere (#1916): «2×3», a round «3″» */
+export const dsSizeText = sizeText;
 
 /** the title block's company lines and the job's fields, from what the app knows; the rest stays blank on the sheet */
 export function shopJob(company: { name: string; address?: string; phone?: string; licenses?: { kind: string; number: string }[] }, x: { client?: string; address?: string; date: string }): ShopJob {

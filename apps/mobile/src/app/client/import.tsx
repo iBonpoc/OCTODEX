@@ -246,7 +246,7 @@ export default function ImportClients() {
       : [t(SKIP_LABEL[a.reason ?? "noName"], { who: a.who ?? "", max: IMPORT_MAX_ROWS }), a.who_status ? t(clientStatusChip[a.who_status].l) : null].filter(Boolean).join(" · ");
 
   return (
-    <Screen title={t("client.import.title")} back={back}>
+    <Screen form title={t("client.import.title")} back={back}>
       <T v="body" tone="mut">
         {t("client.import.hint", { max: IMPORT_MAX_ROWS })}
       </T>

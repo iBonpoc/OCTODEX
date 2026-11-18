@@ -95,17 +95,17 @@ describe("shop drawings: the sheets of the reference job", () => {
     const rows = materialRows(x, shopModel(REF));
     const qty = (key: string) => Number(x.parts.find((p) => p.key.startsWith(key))!.qty);
     const row = (re: RegExp) => rows.find((r) => re.test(r.item))!;
-    expect(row(/^Hanger/).qty).toBe(`${qty("hanger.")} ea`);
-    expect(row(/^Hanger/).basis).toBe('24" o.c. + ends');
-    expect(row(/Seamless coil/).qty).toBe(fi(qty("coil.") * 12));
-    expect(row(/Seamless coil/).basis).toBe("251'-4\" + 10 ft waste per gutter stock");
+    expect(row(/Hanger/).qty).toBe(`${qty("hanger.")} ea`);
+    expect(row(/Hanger/).basis).toBe('24" o.c. + ends');
+    expect(row(/^Coil /).qty).toBe(fi(qty("coil.") * 12));
+    expect(row(/^Coil /).basis).toBe("251'-4\" + 10 ft waste per gutter stock");
     expect(rows.slice(0, 4).map((r) => [r.tag, r.qty, r.basis])).toEqual([["A", "2 ea", "Plan tag A"], ["B", "2 ea", "Plan tag B"], ["C", "2 ea", "45° cut each side"], ["D", "2 ea", "27° cut each side"]]);
     // every material of the estimate is on the list, none twice
     expect(rows.length).toBe(x.parts.filter((p) => p.kind === "material" && Number(p.qty) > 0).length + 2);
   });
   it("the order: what is bought (the coil, the sticks), not the finished lengths; in a Letter page's shape", () => {
     const rows = orderRows(x, shopModel(REF));
-    expect(rows.some((r) => /Seamless coil/.test(r.item))).toBe(true);
+    expect(rows.some((r) => /^Coil /.test(r.item))).toBe(true);
     expect(rows.some((r) => r.basis === "Sum of segments" || r.basis === "Sum of drops")).toBe(false);
     // only what the engine says is bought (review of #1349): none of the estimate-only rows
     expect(rows.length).toBe(x.parts.filter((p) => p.kind === "material" && Number(p.qty) > 0 && p.use !== "estimate").length);
@@ -237,7 +237,7 @@ describe("shop drawings: the check before saving", () => {
   it("a text's width is counted from Arial's metrics: Latin, Russian, the drawing's signs", () => {
     expect(textW("44'-6\"", 0.716)).toBeCloseTo((556 * 3 + 191 + 333 + 355) / 1000, 3);
     expect(textW("Ж", 0.716, true)).toBeGreaterThan(0.8);
-    expect(tFor("ru")("mod.gutters.shop.planTitle")).toBe("План водостоков");
+    expect(tFor("ru")("mod.gutters.shop.planTitle")).toBe("План gutters");
   });
 });
 
@@ -245,7 +245,7 @@ describe("#1355: the coil's basis says the waste the engine counts", () => {
   const basisOf = (wasteFt: number) => {
     const c = ctxOf(REF);
     const x2 = { ...c, rules: { ...c.rules, wasteFt } };
-    return materialRows(x2, shopModel(REF)).find((r) => /Seamless coil/.test(r.item))!.basis;
+    return materialRows(x2, shopModel(REF)).find((r) => /^Coil /.test(r.item))!.basis;
   };
   it("10 ft of waste for every gutter stock", () => expect(basisOf(10)).toBe("251'-4\" + 10 ft waste per gutter stock"));
   it("no waste: «no waste», not «+ 0 ft»", () => expect(basisOf(0)).toBe("251'-4\", no waste"));
@@ -253,8 +253,8 @@ describe("#1355: the coil's basis says the waste the engine counts", () => {
     // run 2 (104'-9") in white 6", run 1 (146'-7") stays black 5"
     const d = { ...REF, runs: REF.runs.map((r) => (r.id === "e" || r.id === "f" ? { ...r, attrs: { ...r.attrs, size: "6", color: "white" } } : r)) } as Drawing;
     const x2 = ctxOf(d);
-    const coils = materialRows(x2, shopModel(d)).filter((r) => /Seamless coil/.test(r.item));
+    const coils = materialRows(x2, shopModel(d)).filter((r) => /^Coil /.test(r.item));
     expect(coils.map((r) => [r.color, r.basis]).sort()).toEqual([["Black", "146'-7\" + 10 ft waste per gutter stock"], ["White", "104'-9\" + 10 ft waste per gutter stock"]]);
-    expect(orderRows(x2, shopModel(d)).filter((r) => /Seamless coil/.test(r.item)).map((r) => r.basis).sort()).toEqual(["104'-9\" + 10 ft waste per gutter stock", "146'-7\" + 10 ft waste per gutter stock"]);
+    expect(orderRows(x2, shopModel(d)).filter((r) => /^Coil /.test(r.item)).map((r) => r.basis).sort()).toEqual(["104'-9\" + 10 ft waste per gutter stock", "146'-7\" + 10 ft waste per gutter stock"]);
   });
 });

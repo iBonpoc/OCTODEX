@@ -43,7 +43,8 @@ export function TabBar() {
   const [ask, setAsk] = useState<Href | null>(null);
   const own = activeSection(pathname, params, store.db, store.role);
   // a section that is not a tab (Leads, Jobs… opened from «Ещё») lights «Ещё» (13 v2 §2.1, variant Б)
-  const sec = own && !tabs(store.role).some((s) => s.id === own) ? "more" : own;
+  // with a module's tab «План» is not a tab (#1487): the Plan opened from «Ещё» lights «Ещё»
+  const sec = own && !tabs(store.role, moduleTabs(store.db.company, store.role).length > 0).some((s) => s.id === own) ? "more" : own;
   // every phone screen but forms, the signature, sign-in, /p and the legal texts (docs/specs/28)
   // a module's own screens hide the bar (the canvas needs the whole screen) — but not the one that is a tab of its own
   // («Замеры», place «tab»)
@@ -98,14 +99,14 @@ function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: Secti
   const reduce = useReducedMotion();
   /** on a phone the floating bar would sit on top of the keyboard and cover the field: hide it while typing */
   const kb = useKeyboardHeight();
-  // the core's tabs, the usable modules' sections before «Ещё» (place «tab», founder 09.11 «Замеры»)
-  const core = tabs(role);
+  // the core's tabs; a usable module's section (place «tab», founder 09.11 «Замеры») takes the place of «План», which goes
+  // to «Ещё» — five tabs, not six (founder 16.11, #1487; DS §5.3)
   const mods = moduleTabs(db.company, role);
-  const items: { id: string; label: string; icon: (typeof core)[number]["icon"]; onPress: () => void }[] = [
-    ...core.filter((s) => s.id !== "more").map((s) => ({ id: s.id as string, label: (s.tabLabel ?? s.label) as string, icon: s.icon, onPress: () => onGo(s.id) })),
-    ...mods.map((m) => ({ id: m.tabId, label: m.labelKey as string, icon: m.icon, onPress: () => onGoHref(m.href as Href) })),
-    ...core.filter((s) => s.id === "more").map((s) => ({ id: s.id as string, label: s.label as string, icon: s.icon, onPress: () => onGo(s.id) })),
-  ];
+  const core = tabs(role, mods.length > 0);
+  type Item = { id: string; label: string; icon: (typeof core)[number]["icon"]; onPress: () => void };
+  const coreItem = (s: (typeof core)[number]): Item => ({ id: s.id as string, label: s.label as string, icon: s.icon, onPress: () => onGo(s.id) });
+  const modItems: Item[] = mods.map((m) => ({ id: m.tabId, label: m.labelKey as string, icon: m.icon, onPress: () => onGoHref(m.href as Href) }));
+  const items: Item[] = core.flatMap((s, i) => (i === 1 && modItems.length ? [...modItems, coreItem(s)] : [coreItem(s)]));
   const modNow = mods.find((m) => path === m.href || path.startsWith(`${m.href}/`));
   const current: string | undefined = modNow ? modNow.tabId : sectionNow;
 

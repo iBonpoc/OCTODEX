@@ -227,7 +227,10 @@ describe("M7c: правила и расходники компании → дв�
     expect(qty(base, (x) => x.attrs.part === "hanger")).toBe(2 * (Math.floor(480 / 24) + 1));
   });
   it("высота этажа 12 ft — даунспот 12 ft; крюк по краям по умолчанию, выключается", () => {
-    expect(qty(parts({ rules: { storyFt: 12 } }), (x) => x.section === "downspouts" && x.unit === "ft")).toBe(12);
+    // 144″ of downspout; the estimate's line goes up to 20 ft (Д1, each downspout up to 10 ft) and says why
+    const tall = parts({ rules: { storyFt: 12 } }).filter((x) => x.section === "downspouts" && x.unit === "ft");
+    expect(tall.reduce((s, x) => s + Number(x.qty), 0)).toBe(20);
+    expect(tall[0]!.why?.params.lengthIn).toBe(144);
     expect(readRules({}).hangerExtra).toBe(true); // not set in the stored settings → the default: yes
     expect(qty(parts({}), (x) => x.attrs.part === "hanger")).toBe(2 * 21);
     expect(qty(parts({ rules: { hangerExtra: false } }), (x) => x.attrs.part === "hanger")).toBe(2 * 20);
@@ -270,7 +273,8 @@ describe("M7c: редкие поля даунспота", () => {
     const ds = { ...DEFAULT_DS_ATTRS, id: "d", runId: "r", atIn: 10, heightIn: 216, offsets: [{ lengthIn: 2, qty: 2 }], head: "conductor" as const, diverter: true };
     const D2: Drawing = { runs: [{ id: "r", a: [0, 0], b: [240, 0], attrs: { ...DEFAULT_RUN_ATTRS } }], downspouts: [ds] };
     const p = computeGutterParts(toMeasurement(D2)).parts;
-    expect(p.filter((x) => x.section === "downspouts" && x.unit === "ft").reduce((s, x) => s + Number(x.qty), 0)).toBe(18);
+    // 216″ (18 ft) → 20 ft in the estimate (Д1)
+    expect(p.filter((x) => x.section === "downspouts" && x.unit === "ft").reduce((s, x) => s + Number(x.qty), 0)).toBe(20);
     expect(p.some((x) => x.key.startsWith("offset.2."))).toBe(true);
     expect(p.some((x) => x.key.startsWith("conductorhead."))).toBe(true);
     expect(p.some((x) => x.key.startsWith("diverter."))).toBe(true);

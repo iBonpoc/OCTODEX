@@ -31,6 +31,9 @@ export default function TradeStep() {
   const shown = presets.filter((k) => picked.includes(k) || tradeMatches(label(k), q));
   const ownName = own.trim();
   const ownTaken = !!ownName && nameTaken(list, ownName, undefined, t);
+  /** something to save: a trade picked, or an own one that is not taken */
+  const ready = picked.length > 0 || (!!ownName && !ownTaken);
+  const [need, setNeed] = useState(false);
   const next = () => router.replace("/company/profile?wizard=1");
   const save = () => {
     const add = pickTrades(picked, ownTaken ? "" : ownName);
@@ -59,7 +62,9 @@ export default function TradeStep() {
             {t("co.tradesNote")}
           </T>
         </FieldGroup>
-        <Button label={t("first.trade.next")} icon="check" full disabled={!picked.length && (!ownName || ownTaken)} onPress={save} />
+        {/* the main button is always there to press (DS §11 п.3, #1728): with nothing chosen it says what is missing */}
+        {need && !ready ? <StatusNote tone="warn">{t("form.need.trade")}</StatusNote> : null}
+        <Button label={t("first.trade.next")} icon="check" full onPress={() => (ready ? save() : setNeed(true))} />
         <Button label={t("co.skip")} variant="ghost" full onPress={next} />
       </View>
     </Screen>

@@ -1,11 +1,13 @@
 /**
  * Catalog on the new list cards (step 10а, PR6), every view (3 widths × 2 themes).
- * - card: name, «$X / unit», kind and «тестовая цена» as grey tags, supplier, description; no «…»; edges aligned;
+ * - card: name, «$X / unit», kind as a grey tag, supplier, description; no «…»; edges aligned; a sample price carries no
+ *   mark of its own (#1873, the founder 16.11: «Нигде нет её. Надписи этой»);
  * - the office sees «Себестоимость» and «Маржа» tiles (always both); the technician sees the price but never cost or margin
  *   (spec 06 §7.6 exception for the catalog: the price is needed for an estimate on site);
  * - groups by kind under «All»;
  * - «В убытке» (catalogItemEconomics, #98): a service priced below its cost → the office sees the sign, a red edge and a
- *   negative margin; other cards have a real cost and margin, not «—»; the technician sees no sign.
+ *   negative margin; other cards have a real cost and margin, not «—»; the technician sees no sign;
+ * - #1837: sales without our costs (db.costsVisible false) sees neither the tiles nor the sign (one rule, not the role).
  */
 const { checkCardAlignment } = require("../cardsAlignment.cjs");
 
@@ -19,7 +21,7 @@ exports.run = async (h) => {
   const txt = await card.innerText();
   h.expect(txt.includes(it.name) && new RegExp(`\\$[\\d,.]+ / ${it.unit}`).test(txt), `name and «$X / ${it.unit}»: ${txt.slice(0, 200)}`);
   if (it.vendor) h.expect(txt.includes(it.vendor), "supplier on the card");
-  if (it.placeholder) h.expect(txt.includes("тестовая цена"), "«тестовая цена» tag");
+  h.expect(!/тестовая цена/.test(txt), "no «test price» tag on a card (#1873)"); // i18n-old: ok — the old tag must be gone
   h.expect(txt.includes("Себестоимость") && txt.includes("Маржа"), "office: cost and margin tiles");
   h.expect(!/…|\.\.\./.test(await p.locator("body").innerText()), "no «…»");
   await h.expectText(/Материал · \d+|Услуга · \d+/, "groups by kind under «All»");
@@ -63,4 +65,19 @@ exports.run = async (h) => {
   h.expect(/\$[\d,.]+ \//.test(body), "tech sees the selling price");
   h.expect(!body.includes("Себестоимость") && !body.includes("Маржа"), "tech never sees cost or margin");
   h.expect(body.includes(LOSS) && !body.includes("В убытке"), "tech never sees «В убытке»");
+
+  // #1837: sales without our costs (the server's app.can_view_costs said no) edits the list but sees no cost, no margin,
+  // no «В убытке» — the one rule (features/access.ts seeCosts), not the role
+  const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));
+  raw.db.costsVisible = false;
+  await h.seed("octo.db.v5", raw);
+  await h.seed("octo.role.v1", "sales");
+  await h.go("/catalog");
+  const salesCard = p.locator('[data-testid="list-card"]').filter({ hasText: LOSS }).first();
+  await salesCard.waitFor({ timeout: 8000 });
+  const sb = await p.locator("body").innerText();
+  h.expect(/\$[\d,.]+ \//.test(sb), "sales sees the selling price");
+  h.expect(!sb.includes("Себестоимость") && !sb.includes("Маржа") && !sb.includes("В убытке"), "sales without costs: no cost, margin or loss sign");
+  h.expect(!(await hasEdge(salesCard)), "no red edge either");
+  await h.shot("sales-no-costs");
 };

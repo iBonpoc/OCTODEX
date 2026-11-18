@@ -3,6 +3,7 @@
  * their costs; archive with «Отменить» (rule 5). Owner, admin, office only (nav/roles.ts). «new» (or any id
  * not on the phone) — a new supplier.
  */
+import { seeCosts } from "@/features/access";
 import { useRequiredForm } from "@/ui/requiredForm";
 import { useEffect, useRef, useState } from "react";
 import { Linking, View } from "react-native";
@@ -49,7 +50,7 @@ export default function SupplierScreen() {
       ],
       save,
     );
-  const costs = store.db.costsVisible !== false;
+  const costs = seeCosts(store.db, store.role, store.mode);
   const items = found ? itemsOfSupplier(store.db, found.id) : [];
   // spec 36: the newest history rows of this supplier from the server, when opened (director's check of #459 Н4)
   const loadHistory = store.loadCostHistory;
@@ -99,7 +100,7 @@ export default function SupplierScreen() {
   const terms: TermsKey = s.terms ?? "none";
 
   return (
-    <Screen title={found ? t("sup.edit") : t("sup.new")} back={back}>
+    <Screen form title={found ? t("sup.edit") : t("sup.new")} back={back}>
       <FieldGroup>
         <View testID="sup-name">
           <TextField type="company" value={s.name} onChangeText={(v) => set({ name: v })} placeholder={t("sup.name")} label={t("sup.nameLabel")} field={form.field("name")} />

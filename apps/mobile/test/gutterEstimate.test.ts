@@ -1,6 +1,6 @@
 /** Смета из замера (docs/specs/33-gutters-estimate.md П23, M8a): строки по разделам из прайса, деньги в центах, «Обновить смету». */
 import { describe, expect, it } from "vitest";
-import { computeCustomOption, computeGutterParts, DEFAULT_TAX, type PartQty } from "@octo/estimating-engine";
+import { computeCustomOption, computeGutterParts, dec, DEFAULT_TAX, type PartQty } from "@octo/estimating-engine";
 import type { CatalogItem } from "../src/data/types";
 import { billQty, goneLines, handChanges, linesFromParts, noPriceLines, resyncLines, sectionAt, SECTION_ORDER, testPriceLines, type LineSource, type ModuleLine } from "../src/modules/gutters/estimate";
 import { findItem, laborRows, materialRows, missingItems, sampleJob } from "../src/modules/gutters/prices";
@@ -68,19 +68,27 @@ describe("строки сметы из замера", () => {
     expect(lines.every((l) => l.unitPriceCents === 0 && ours(l).noPrice)).toBe(true);
     expect(noPriceLines(linesFromParts(parts, list(), name, uid))).toEqual([]);
   });
-  it("футы — сотые, половина вверх (230″ = 19.17 ft); штуки — целые", () => {
-    expect(billQty(String(230 / 12), "ft")).toBe("19.17");
-    expect(billQty("19.165", "ft")).toBe("19.17");
+  it("футы — 4 знака, как numeric(14,4) базы, половина вверх (230″ = 19.1667 ft); штуки — целые (#817)", () => {
+    expect(billQty(String(230 / 12), "ft")).toBe("19.1667");
+    expect(billQty(String(485 / 12), "ft")).toBe("40.4167"); // 40′ 5″ (it was 40.42 = 40′ 5 1/16″)
+    expect(billQty("19.16665", "ft")).toBe("19.1667");
+    expect(billQty("40", "ft")).toBe("40");
     expect(billQty("3", "ea")).toBe("3");
+  });
+  it("#817 (решение основателя 11.11, G-15): длина в смете — как на чертеже, до 1/16″: каждая длина 1″…200′ с шагом 1/16″ возвращается в дюймы с ошибкой < 1/32″", () => {
+    for (let s16 = 16; s16 <= 200 * 12 * 16; s16 += 1) {
+      const inches = s16 / 16;
+      const back = Number(billQty(String(inches / 12), "ft")) * 12;
+      expect(Math.abs(back - inches), `${inches}″`).toBeLessThan(1 / 32);
+    }
   });
   it("деньги через движок: сумма = Σ floor(qty × цена + 0.5), в центах, без float", () => {
     const one = (qty: string): PartQty => ({ key: "gutter.x", section: "gutter", qty, unit: "ft", use: "estimate", kind: "material", attrs: { profile: "k" } });
     const item: CatalogItem = { id: "g", kind: "material", name: "Gutter", unit: "ft", priceCents: 1199, attributes: { part: "gutter", profile: "k" } };
     const lines = linesFromParts([one(String(230 / 12))], [item], name, uid);
-    expect(lines[0]!.quantity).toBe("19.17");
+    expect(lines[0]!.quantity).toBe("19.1667");
     const t = computeCustomOption({ id: "o", name: "Good", lines }, settings);
-    expect(t.total).toBe(Math.floor(19.17 * 1199 + 0.5)); // 22984.83 → 22985
-    expect(t.total).toBe(22985);
+    expect(t.total).toBe(22981); // 19.1667 × 1199 = 22980.87 → 22981 (it was 19.17 → 22985, #817)
     // the whole sample at $12.34: the engine's total, whole cents
     const all = linesFromParts(parts, list(1234), name, uid);
     const tt = computeCustomOption({ id: "o", name: "Good", lines: all }, settings);
@@ -102,6 +110,28 @@ describe("«Обновить смету» — правки руками и св�
     expect(r.map((l) => l.id)).toEqual(old.map((l) => l.id));
     const g = r.find((l) => ours(l).section === "gutter")!;
     expect(g.quantity).toBe(next.find((l) => ours(l).key === ours(g).key)!.quantity);
+  });
+  it("#817 старая смета (2 знака): «Обновить» без правок руками — новое количество 4 знака, не ручная правка", () => {
+    const old = base();
+    const g = old.find((l) => ours(l).section === "gutter")!;
+    const two = (q: Parameters<typeof dec>[0]) => dec(q).toDecimalPlaces(2).toString(); // how the app wrote feet before #817
+    const was = old.map((l) => (l.id === g.id ? { ...l, quantity: two(l.quantity), source: { ...ours(l), qty: two(ours(l).qty) } } : l));
+    const next = linesFromParts(parts, list(1000), name, uid);
+    const r = resyncLines(was, next);
+    const g2 = r.find((l) => l.id === g.id)!;
+    const want = next.find((l) => ours(l).key === ours(g).key)!.quantity;
+    expect(g2.quantity).toBe(want);
+    expect(ours(g2).qty).toBe(want);
+    expect(handChanges(g2 as never).qty).toBe(false);
+  });
+  it("#817 человек вписал 2 знака поверх 4 знаков модуля — это его правка, «Обновить» её не трогает", () => {
+    const old = base();
+    const g = old.find((l) => ours(l).section === "gutter")!;
+    // the module wrote 40′ 5″ = 40.4167; the person typed 40.42 over it
+    const edited = old.map((l) => (l.id === g.id ? { ...l, quantity: "40.42", source: { ...ours(l), qty: "40.4167" } } : l));
+    expect(handChanges(edited.find((l) => l.id === g.id) as never).qty).toBe(true);
+    const r = resyncLines(edited, linesFromParts(parts, list(1000), name, uid));
+    expect(r.find((l) => l.id === g.id)!.quantity).toBe("40.42");
   });
   it("количество и цена руками остаются; имя руками остаётся; база для следующего раза — расчёт модуля", () => {
     const old = base();

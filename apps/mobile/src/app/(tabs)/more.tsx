@@ -14,6 +14,7 @@ import { useTick } from "@/features/sheets";
 import { Avatar, StatusChip } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Card, Divider, Screen, SyncBadge } from "@/ui/surfaces";
+import { moduleTabs } from "@/modules/registry";
 
 /** the director's «Команда · Настройки компании» get their own group «Компания» (spec 25); sections.ts is not changed */
 const COMPANY: ReadonlySet<SectionId> = new Set<SectionId>(["team", "company"]);
@@ -34,9 +35,9 @@ export default function More() {
   const auth = useAuth();
   const me = db.members.find((m) => m.id === db.me);
   const who = mode === "cloud" ? (companyName ?? "") : t(`role.${role}`);
-  const counts = moreCounts(db, role);
+  const counts = moreCounts(db, role, undefined, undefined, mode);
   // on 820/1280 the side menu has the tabs too; here only what is not a tab
-  const groups: { key: string; title?: DictKey; items: Section[] }[] = menuGroups(role, false, meIsSub(db))
+  const groups: { key: string; title?: DictKey; items: Section[] }[] = menuGroups(role, false, meIsSub(db), moduleTabs(db.company, role).length > 0)
     .flatMap((g) =>
       g.group === "bottom"
         ? [

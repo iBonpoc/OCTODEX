@@ -7,22 +7,23 @@
  * total, the estimates, the estimate action — canSeeClientMoney).
  */
 import { APP_NAME } from "@/config/product";
-import { useEffect, useMemo, useRef, useState, type ElementRef, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type ElementRef, type ReactNode, type RefObject } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams, type Href } from "expo-router";
 import { computeGutterParts, type PartQty } from "@octo/estimating-engine";
-import { drawingPrint as DP, space } from "@octo/design-tokens";
+import { component, drawingPrint as DP, layout, radius, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import { useDevice } from "@/theme/ThemeProvider";
+import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n, type DictKey } from "@/i18n";
 import { tFor } from "@/i18n/translate";
 import { canSeeClientMoney } from "@/features/clients";
 import { EstimateListCard } from "@/features/listCards";
 import { moduleActive, moduleHref } from "@/modules/registry";
 import { Button, StatusChip } from "@/ui/controls";
+import { Banner } from "@/ui/banner";
 import { Icon, T } from "@/ui/primitives";
-import { Menu, useToast } from "@/ui/overlays";
-import { Card, CardList, ListRow, RowView, Screen } from "@/ui/surfaces";
+import { HelpButton, Menu, useToast } from "@/ui/overlays";
+import { Card, CardList, Divider, ListRow, RowView, Screen } from "@/ui/surfaces";
 import { NotFound } from "@/ui/emptyStates";
 import { blueprint, sheetPage } from "./blueprint";
 import { DocSheet } from "@/features/DocPagesView";
@@ -33,11 +34,10 @@ import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, ofMe
 import { CardHead } from "./CardHead";
 import { MeasurePhotos } from "../draw/Photos";
 import { toMeasurement } from "../geometry";
-import { dsLine, listPreview, partName, partQty } from "../prices";
-import { dsSizeText } from "./shop/job";
+import { dsLine, listPreview, PART_WORDS, partName, partQty, partView, sizeText } from "../prices";
 import { readLenFormat, readRules, toRulesOverride } from "../settings";
 import { LinkSheet } from "../draw/LinkSheet";
-import { measureSpec } from "./spec";
+import { dsNumbers, dsTotals, measureSpec, partGroups } from "./spec";
 import { drawingPdfHtml, drawingPdfName } from "./drawingPdf";
 import { shopFileName, shopHtml, shopJob, shopPagePt, shopSheets, type ShopPaper } from "./shop";
 import { saveShopPdf } from "./shop/savePdf";
@@ -69,11 +69,12 @@ export default function ViewScreen() {
 
 /**
  * The body of «Просмотр замера»: the screen above and the 1280 panel of «Замеры». `estimate` — «Смета из замера» /
- * «Обновить из замера» came with estimate=1: done once; `from` — "draw": «Править чертёж» goes back to that canvas.
+ * «Обновить из замера» came with estimate=1: asked once (a press writes); `from` — "draw": «Править чертёж» goes back to that canvas.
  */
 export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, panel }: { mid: string; estimate?: boolean; from?: string; /** the measurement was deleted from its card */ onGone: () => void; /** in the 1280 panel beside «Замеры»: one column */ panel?: boolean }) {
   const store = useStore();
   const { device } = useDevice();
+  const { c } = useTheme();
   const cols = device !== "phone" && !panel;
   const { t, money, lang } = useI18n();
   const toast = useToast();
@@ -86,8 +87,9 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   // #1092: the company's format of lengths — the sheet, the lists, the parts and the PDFs follow it
   const fmt = readLenFormat((settings as { lenFormat?: unknown } | undefined)?.lenFormat);
   const rules = useMemo(() => ({ over: toRulesOverride(settings), corner: readRules(settings).corner }), [settings]);
-  const parts = useMemo<PartQty[]>(() => (drawing.runs.length ? computeGutterParts(toMeasurement(drawing, { method: rules.corner }), rules.over).parts : []), [drawing, rules]);
-  const spec = useMemo(() => measureSpec(drawing, parts), [drawing, parts]);
+  const measured = useMemo(() => (drawing.runs.length ? toMeasurement(drawing, { method: rules.corner }) : undefined), [drawing, rules]);
+  const parts = useMemo<PartQty[]>(() => (measured ? computeGutterParts(measured, rules.over).parts : []), [measured, rules]);
+  const spec = useMemo(() => measureSpec(drawing, parts, { rules: rules.over, ...(measured ? { m: measured } : {}) }), [drawing, parts, rules, measured]);
   const preview = useMemo(() => (parts.length ? listPreview(parts, store.db.catalog) : null), [parts, store.db.catalog]);
   const money$ = canSeeClientMoney(store.role);
   const action = m ? estimateAction(store.db, m, drawing.runs.length > 0) : ({ kind: "none" } as const);
@@ -139,12 +141,15 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     toast.show(t(r.updated ? "mod.gutters.est.updated" : "mod.gutters.est.made"), r.undo);
     router.push(`/estimate/new?id=${encodeURIComponent(r.estimateId)}` as Href);
   };
-  // «Смета из замера» (the lead) and «Обновить из замера» (the estimate's note) come here with estimate=1: done once
+  // «Смета из замера» (the lead) and «Обновить из замера» (the estimate's note) come here with estimate=1. Opening a link never writes:
+  // an estimate to open is opened (nothing changes); one to make or update is ASKED — the person presses (the question on top)
   const auto = useRef(!!autoEstimate);
+  const [ask, setAsk] = useState(false);
   useEffect(() => {
     if (!auto.current || !m || !money$) return;
     auto.current = false;
-    if (action.kind === "make" || action.kind === "update" || action.kind === "open") doEstimate();
+    if (action.kind === "open") doEstimate();
+    else if (action.kind === "make" || action.kind === "update") setAsk(true);
   });
 
   // «чертёж как на бумаге» (founder 10.11, #739): a drawing sheet, not the canvas — the same one the PDFs carry
@@ -245,15 +250,22 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
             the rest on the right (П25.3 Б); a phone and the 1280 panel — one column, the same order */}
         <View style={cols ? { flexDirection: "row", alignItems: "flex-start", gap: space[4] } : { gap: space[4] }}>
         <View style={{ gap: space[4], ...(cols ? { flex: 1, minWidth: 0 } : {}) }}>
+        {/* came by a link to make / update the estimate: the question on top, above the content (DS Б9) — a press writes */}
+        {ask && (action.kind === "make" || action.kind === "update") ? (
+          <Banner
+            tone="info"
+            testID="view-estimate-ask"
+            title={t(action.kind === "make" ? "mod.gutters.view.askMake" : "mod.gutters.view.askUpdate")}
+            action={{ label: t(action.kind === "make" ? "mod.gutters.est.make" : "mod.gutters.est.update"), onPress: () => { setAsk(false); doEstimate(); } }}
+            onClose={() => setAsk(false)}
+          />
+        ) : null}
         {/* the drawing whole — to look at only: no gestures, nothing to tap */}
         <View testID="view-drawing" pointerEvents="none" onLayout={(e) => setW(Math.round(e.nativeEvent.layout.width))}>
           {sheet ? <DocSheet sheet={sheet} testID="view-svg" /> : null}
         </View>
         {!drawing.runs.length ? (
           <View testID="view-empty"><T tone="mut">{t("mod.gutters.view.empty")}</T></View>
-        ) : null}
-        {rough && drawing.runs.length ? (
-          <View testID="view-rough"><StatusChip status="warn" label={t("mod.gutters.view.rough")} soft /></View>
         ) : null}
 
         {/* the main action by the state (#699) and «Править чертёж» */}
@@ -309,7 +321,6 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
               <T v="caption" tone="mut">{t("mod.gutters.draw.moneyCaption")}</T>
               <T v="heading" w="bold" tabular>{money(preview.totalCents)}</T>
             </View>
-            {preview.test ? <View testID="view-test-prices"><StatusChip status="info" label={t("mod.gutters.draw.test")} soft /></View> : null}
             <T v="micro" tone="mut">{t("mod.gutters.draw.totalNote")}</T>
           </Card>
         ) : null}
@@ -326,10 +337,10 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
             {spec.runs.map((r) => (
               <View key={r.id} testID={`view-run-${r.n}`} style={{ gap: space[1] }}>
                 <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
-                  <T v="body" w="semibold">{t("mod.gutters.draw.cutRun", { n: r.n })}</T>
-                  <T v="caption" tone="mut">{[t("mod.gutters.story", { n: r.story }), `${word(`mod.gutters.attr.p.${r.profile}`, r.profile)} ${r.size}″`, r.color ? word(`mod.gutters.attr.c.${r.color}`, r.color) : null].filter(Boolean).join(" · ")}</T>
+                  <T v="body" w="semibold">{t("mod.gutters.view.runN", { n: r.n })}</T>
+                  <T v="caption" tone="mut">{[spec.manyStories ? t("mod.gutters.story", { n: r.story }) : null, `${sizeText(r.size)} ${word(`mod.gutters.pr.prof.${r.profile}`, r.profile)}`, r.color ? word(`mod.gutters.attr.c.${r.color}`, r.color) : null].filter(Boolean).join(" · ")}</T>
                 </RowView>
-                <T v="body" tabular>{t("mod.gutters.view.runLine", { back: fmtLen(r.backIn, fmt), front: fmtLen(r.frontIn, fmt) })}</T>
+                <T v="body">{t("mod.gutters.view.runLine", { back: fmtLen(r.backIn, fmt), front: fmtLen(r.frontIn, fmt) })}</T>
               </View>
             ))}
           </Card>
@@ -342,7 +353,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
               <View key={c.id} testID={`view-corner-${c.id}`} style={{ gap: space[1] }}>
                 <T v="body" w="semibold">{t("mod.gutters.view.cornerTitle", { k: kindWord(c.kind), deg: c.angleDeg })}</T>
                 {c.runs.map((x) => (
-                  <T key={x.n} v="caption" tabular>{t("mod.gutters.view.cornerRun", { n: x.n, back: fmtLen(x.backIn, fmt), front: fmtLen(x.frontIn, fmt) })}</T>
+                  <T key={x.n} v="caption">{t("mod.gutters.view.cornerRun", { n: x.n, back: fmtLen(x.backIn, fmt), front: fmtLen(x.frontIn, fmt) })}</T>
                 ))}
               </View>
             ))}
@@ -350,27 +361,55 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
         ) : null}
 
         {details && spec.ds.length ? (
-          <Card style={{ gap: space[2] }}>
+          <Card style={{ gap: space[2], ...(cols ? { maxWidth: layout.formMax } : {}) }}>
             <T v="heading" w="semibold">{t("mod.gutters.view.ds")}</T>
-            {spec.ds.map((d) => (
-              <View key={d.id} testID={`view-ds-${d.n}`}>
-                <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
-                  <T v="body" w="semibold">{`${t("mod.gutters.ds", { n: d.n })} · ${t("mod.gutters.story", { n: d.story })} · ${dsSizeText(d.size)}`}</T>
-                  {dsLine(t, d.elbows, d.offsets) ? <View testID={`view-ds-line-${d.n}`}><T v="caption" tone="mut">{dsLine(t, d.elbows, d.offsets)}</T></View> : null}
-                </RowView>
-              </View>
-            ))}
+            {/* #1800 (founder 16.11: «водостоки — общее количество»): one row per kind of downspout — the supplier's name,
+                the total length on the right, how many; below, the elbows by style, the offsets and what is at the feet */}
+            {dsTotals(spec.ds).map((g, i) => {
+              const v = partView(t, { key: "ds", kind: "material", attrs: { shape: g.shape, size: g.size, ...(g.dsStyle ? { dsStyle: g.dsStyle } : {}), ...(g.material ? { material: g.material } : {}), ...(g.color ? { color: g.color } : {}) } }, fmt);
+              const how = [
+                dsLine(t, { shape: g.shape, ...(g.bent ? { bent: true } : {}), elbows: g.elbows, offsets: g.offsets }),
+                ...g.bottoms.map((b) => `${PART_WORDS.has(b.kind) ? t(`mod.gutters.pr.p.${b.kind}` as DictKey) : word(`mod.gutters.attr.b.${b.kind}`, b.kind)} × ${b.qty}`),
+              ].filter(Boolean).join(" · ");
+              const n0 = g.ns[0]!;
+              return (
+                <View key={g.key} testID={`view-ds-${n0}`} style={{ gap: space[2] }}>
+                  {i ? <Divider /> : null}
+                  <PartLine
+                    title={v.title}
+                    props={[...v.props, `${dsNumbers(t, g.ns)} · ${partQty(t, { qty: String(g.ns.length), unit: "ea" }, fmt)}`]}
+                    more={how ? <View testID={`view-ds-line-${n0}`}><T v="caption" tone="mut" numberOfLines={2}>{how}</T></View> : null}
+                    qty={fmtLen(g.lengthIn, fmt)}
+                    testID={`view-ds-${n0}`}
+                  />
+                </View>
+              );
+            })}
           </Card>
         ) : null}
 
         {details && spec.parts.length ? (
-          <Card style={{ gap: space[1] }}>
-            <View testID="view-parts"><T v="heading" w="semibold">{t("mod.gutters.view.parts")}</T></View>
-            {spec.parts.map((p) => (
-              <RowView key={p.key} style={{ justifyContent: "space-between", gap: space[2] }}>
-                <T v="caption" style={{ flexShrink: 1 }}>{partName(t, p, fmt)}</T>
-                <T v="caption" tabular>{partQty(t, p, fmt)}</T>
-              </RowView>
+          <Card style={{ gap: space[5], ...(cols ? { maxWidth: layout.formMax } : {}) }}>
+            <View testID="view-parts"><RowView style={{ alignItems: "center", gap: space[2] }}>
+              <T v="heading" w="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>{t("mod.gutters.view.parts")}</T>
+              {/* the list's «?», right after its title (DS Б7, #1843): what the list is, and what «для заказа» means (#1800) */}
+              <HelpButton title={t("mod.gutters.view.parts")} text={t("mod.gutters.view.partsHelp")} testID="view-parts-help" />
+            </RowView></View>
+            {/* DS §8.14 (#1766): three groups, a name in one line, the properties below, the quantity on its own column */}
+            {partGroups(t, spec.parts, fmt).map((g) => (
+              <View key={g.key} testID={`view-parts-${g.key}`} style={{ gap: space[2] }}>
+                {/* a subgroup stands out (founder 16.11): its own band, the title as a section's, not a grey caption */}
+                <RowView style={{ alignItems: "center", gap: space[2], backgroundColor: c.surf2, borderRadius: radius.field, paddingHorizontal: space[2], paddingVertical: space[1] }}>
+                  <T v="body" w="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>{g.title}</T>
+                  <HelpButton title={g.title} text={g.help} to={{ href: "/module/gutters/settings" }} testID={`view-parts-${g.key}-help`} />
+                </RowView>
+                {g.rows.map((r, i) => (
+                  <View key={r.key} testID={`view-part-${r.key}`} style={{ gap: space[2] }}>
+                    {i ? <Divider /> : null}
+                    <PartLine title={r.title} props={r.props} qty={r.qty} testID={`view-part-${r.key}`} />
+                  </View>
+                ))}
+              </View>
             ))}
           </Card>
         ) : null}
@@ -407,5 +446,24 @@ function DocRow({ id, title, sub, openTestID, onOpen, anchorRef }: { id: string;
         right={<View testID={openTestID} ref={anchorRef} collapsable={false}><Button label={t("mod.gutters.card.open")} variant="secondary" size="sm" onPress={onOpen} /></View>}
       />
     </View>
+  );
+}
+
+/**
+ * A row of «Состав замера» / «Водостоки» (DS §8.14, #1766): the name in one line, the properties grey below (up to two
+ * lines), the quantity in its own column — never wrapped, the number and its unit held together.
+ */
+function PartLine({ title, props, qty, more, testID }: { title: string; props: string[]; qty: string; more?: ReactNode; testID?: string }) {
+  return (
+    <RowView style={{ alignItems: "flex-start", gap: space[3] }}>
+      <View style={{ flex: 1, minWidth: 0, gap: space[1] }}>
+        <View testID={testID ? `${testID}-title` : undefined}><T v="body" w="semibold" numberOfLines={1}>{title}</T></View>
+        {props.length ? <T v="caption" tone="mut" numberOfLines={2}>{props.join(" · ")}</T> : null}
+        {more}
+      </View>
+      <View testID={testID ? `${testID}-qty` : undefined} style={{ minWidth: component.estRow.qty, flexShrink: 0 }}>
+        <T v="body" w="semibold" tabular numberOfLines={1} style={{ textAlign: "right" }}>{qty.replace(/ /g, "\u00a0")}</T>
+      </View>
+    </RowView>
   );
 }

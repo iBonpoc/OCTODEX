@@ -317,6 +317,8 @@
 `supplier_id`, `supplier_sku` (уникален в рамках поставщика), `name`, `unit` (текст поставщика: roll, box, lb, stick), `cost_cents` (**без налога**, v0.3), `pack_size` (сколько **единиц каталога** в одной единице поставщика: коробка 50 hangers → 50), `valid_from`, `valid_to` (текущая = `valid_to IS NULL`; смена цены = новая запись), `price_source` (v0.3: `manual`, `import_file`, `ai_scan`, `shelf_tag`, `rfq_quote`, `ai_command`), `import_job_id` → ImportJob (v0.3, вместо `source_import_id`).
 
 ### ImportJob — массовый импорт и обновление цен (v0.3, вместо PriceListImport)
+
+> **Уточнено** (16.11.2026, спека 53 §3 №3): понятие одно, таблицы разные. Импорт клиентов — `import_jobs` / `import_rows` (`20261109180000_import_customers.sql`). Прайс поставщика → себестоимость — свои `price_imports` / `price_import_rows` (`docs/specs/53-price-update.md` §5): у таблиц клиентов обязательный источник лида, свои классы строк и один открытый импорт на компанию. Файл CSV/XLSX на сервер не загружается (`file_id` не заводим), хранятся имя и SHA-256. `ImportMapping` и `sku_aliases` не заводим: артикул поставщика запоминается в позиции (`supplier_sku`).
 Один конвейер для всех источников: файл, AI-скан прайса, ценник, команда помощника, ответ поставщика на RFQ (PRD 04 §7.6–7.7).
 | Поле | Тип | Описание |
 |---|---|---|

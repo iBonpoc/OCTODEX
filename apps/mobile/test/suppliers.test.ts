@@ -112,6 +112,20 @@ describe("unit:suppliers — history", () => {
     expect(historyOf(db, { itemId: "i1" }, 5).map((h) => h.id)).toEqual(["b", "a"]);
     expect(historyOf(db, { supplierId: "s1" }, 1).map((h) => h.id)).toEqual(["b"]);
   });
+  it("#1836: a supplier's history also shows what was bought from it for an item whose main supplier is another", () => {
+    const db = {
+      ...makeSeed(),
+      catalog: [mat({ supplierId: "s1" }), mat({ id: "i2", supplierId: "s2" })],
+      costHistory: [
+        { id: "a", itemId: "i1", source: "manual", at: "2026-11-01T00:00:00Z", costCents: 900 },
+        { id: "r", itemId: "i2", supplierId: "s1", source: "receipt", at: "2026-11-07T00:00:00Z", costCents: 334 },
+        { id: "o", itemId: "i2", supplierId: "s2", source: "manual", at: "2026-11-08T00:00:00Z", costCents: 300 },
+      ],
+    } as DB;
+    expect(historyOf(db, { supplierId: "s1" }, 5).map((h) => h.id)).toEqual(["r", "a"]);
+    // the item's main supplier keeps seeing all of its item's rows, as before
+    expect(historyOf(db, { supplierId: "s2" }, 5).map((h) => h.id)).toEqual(["o", "r"]);
+  });
 });
 
 describe("unit:suppliers — the server's rows on open (director's check of #459 Н4)", () => {

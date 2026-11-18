@@ -13,9 +13,15 @@ exports.run = async (h) => {
   const others = d.members.filter((m) => m.id !== d.me && !m.pending);
   h.expect(me && others.length >= 2, "the demo has the signed-in person and others on the team");
   const chip = (sheet, name) => sheet.getByRole("radio", { name, exact: true }).or(sheet.getByRole("button", { name, exact: true }));
+  // «Кто ⌄» is a row with a menu (spec 56 wave 5а): open it, read its items, close it
   const who = async (sheet) => {
+    await sheet.getByTestId("task-who-button").click();
+    await p.getByRole("menu").waitFor({ timeout: 4000 });
     const out = [];
-    for (const m of [me, ...others]) if (await chip(sheet, m.name).first().isVisible().catch(() => false)) out.push(m.id);
+    for (const m of [me, ...others]) if ((await p.getByTestId(`task-who-${m.id}`).locator("visible=true").count()) > 0) out.push(m.id);
+    // close the menu by choosing me (an Esc would be eaten by the sheet under it — CHECKS §9); «Кто» is the signed-in person anyway
+    await p.getByTestId(`task-who-${me.id}`).locator("visible=true").first().click();
+    await p.getByRole("menu").waitFor({ state: "detached", timeout: 4000 });
     return out;
   };
 

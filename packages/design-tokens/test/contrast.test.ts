@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { print, themes, type ThemeName } from "../src/index";
+import { component, print, themes, type ThemeName } from "../src/index";
 
 /** WCAG 2.x contrast. Translucent colours are composited over the solid background first. */
 type RGBA = [number, number, number, number];
@@ -122,4 +122,29 @@ describe("print contrast on paper (documents for the client: text ≥ 4.5:1)", (
   it.each([["ink", print.ink], ["mut", print.mut], ["okText", print.okText]])("%s on paper", (_n, c) => {
     expect(ratio(parse(c), paper)).toBeGreaterThanOrEqual(4.5);
   });
+});
+
+/**
+ * The switch (DS §9 А5, §21.2 п.27.13, spec 56 §3.3): the knob stands out from its track ≥ 3:1 (WCAG 1.4.11) — off (`track` +
+ * knob `ink`) on a card (`surf`) and on a raised settings group (`surf2`, §11 п.17), on (`acc` + knob `onAcc`), and switched off
+ * (`dimOpacity` over the whole switch). The track is translucent: it is laid over the surface, the surface over the screen.
+ * Switched off falls under 3:1 (measured 16.11.2026, knob 18: dark 3.00 / 2.81 off on surf / surf2, light 2.69 / 2.71 off and
+ * 3.01 / 2.98 on): WCAG 1.4.11 does not ask it of an inactive control, so the floor there is `DISABLED_MIN` until the DS decides
+ * (a reported question of wave 1а, not a passed 3:1). The live pairs — off and on — hold 3:1.
+ */
+const DISABLED_MIN = 2.5;
+describe.each(names)("%s switch (DS §9 А5: knob ≥ 3:1 to its track, off / on ≥ 3, disabled ≥ DISABLED_MIN)", (name) => {
+  const c = themes[name];
+  const dim = component.dimOpacity;
+  /** a colour of the switch seen through `dimOpacity` over what is under the switch */
+  const dimmed = (fg: RGBA, under: RGBA): RGBA => [fg[0] * dim + under[0] * (1 - dim), fg[1] * dim + under[1] * (1 - dim), fg[2] * dim + under[2] * (1 - dim), 1];
+  const grounds = { surf: over(c.surf, c.bg), surf2: over(c.surf2, c.bg) };
+  for (const [gname, g] of Object.entries(grounds)) {
+    const toRgb = (x: RGBA) => `rgb(${x[0]},${x[1]},${x[2]})`;
+    const offTrack = over(c.track, toRgb(g));
+    it(`off on ${gname}: knob ink to the track`, () => expect(ratio(parse(c.ink), offTrack)).toBeGreaterThanOrEqual(3));
+    it(`disabled off on ${gname}: the dimmed knob to the dimmed track`, () => expect(ratio(dimmed(parse(c.ink), g), dimmed(offTrack, g))).toBeGreaterThanOrEqual(DISABLED_MIN));
+    it(`disabled on on ${gname}: the dimmed knob to the dimmed yellow track`, () => expect(ratio(dimmed(parse(c.onAcc), g), dimmed(parse(c.acc), g))).toBeGreaterThanOrEqual(DISABLED_MIN));
+  }
+  it("on: knob onAcc to the yellow track", () => expect(ratio(parse(c.onAcc), parse(c.acc))).toBeGreaterThanOrEqual(3));
 });

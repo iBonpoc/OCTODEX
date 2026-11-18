@@ -15,9 +15,9 @@ exports.run = async (h) => {
 
   // one sheet: + phone for Tom, + spouse Ann with her phone
   await h.click("Телефоны, email и люди");
-  await h.sheet().getByRole("button", { name: "Телефон", exact: true }).first().click();
+  await h.sheet().getByTestId("people-0-phones-add").click();
   await h.sheet().getByPlaceholder("Телефон", { exact: true }).nth(1).pressSequentially("6265550199");
-  await h.sheet().getByRole("button", { name: /Дополнительный контакт/ }).click();
+  await h.sheet().getByRole("button", { name: /Добавить контакт/ }).click();
   await h.sheet().getByPlaceholder("Имя", { exact: true }).last().fill("Ann Becker");
   await h.sheet().getByPlaceholder("Телефон", { exact: true }).nth(2).pressSequentially("6265550177");
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();
@@ -47,7 +47,8 @@ exports.run = async (h) => {
   h.expect(!!client && client.people && client.people.map((x) => x.name).join() === "Tom Becker,Ann Becker", "client has the lead's people");
   h.expect(client.people[0].phones.length === 2, "and both of Tom's phones");
   await h.go(`/client/${client.id}`);
-  await h.expectText(/Ann Becker/, "spouse on the client card");
+  // «Контакты · 2 ›» on the card (spec 56 §3а.6): Tom and Ann
+  h.expect(/Контакты[\s\S]*Ann Becker[\s\S]*\b2\b/.test(await p.getByTestId("client-people").locator("visible=true").first().innerText()), "spouse among the client's contacts");
   await h.go(`/lead/${tom.id}`);
   await h.clickText("Обзор");
   await h.expectText(/Контакты клиента/, "the lead card shows the client's people");

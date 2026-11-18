@@ -104,6 +104,8 @@ const savedOnce = (p, timeout = 8000) => p.waitForFunction(() => { const g = (JS
 // opens them; wider, the panel is beside the canvas already. The tool is «Желоб» first (with «Водосток» a tap on a gutter puts a downspout).
 async function openProps(p, { force = false } = {}) {
   if (!force && (p.viewportSize()?.width ?? 0) > 390) return; // wider: the panel is beside the canvas already (a phone on its side asks with force)
+  // the spec may have tapped «Желоб» just before: two taps on a tool open «Для новых желобов» (#1563 PR B) — this one is a first tap again
+  await pastDoubleTap(p);
   await p.getByTestId("draw-tool-line").locator("visible=true").getByRole("button").click();
   const at = await p.evaluate(() => {
     const dots = [...document.querySelectorAll('[data-testid="draw-svg"] circle')].map((c) => { const r = c.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; });
@@ -189,4 +191,16 @@ async function fitAll(p) {
   await p.evaluate(() => { delete globalThis.__fitW; });
 }
 
-module.exports = { openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
+/** the open downspout's kind (its menu is open): «Ещё» first where the phone folds it (as e2e 253); `key` — rectPlain, rectRibbed, … */
+async function pickDsKind(p, key) {
+  const tid = (id) => p.getByTestId(id).locator("visible=true");
+  await tid("attr-panel").first().waitFor({ timeout: 5000 });
+  if (!(await tid(`attr-ds-kind-${key}`).count()) && (await tid("attr-more").count())) {
+    await tid("attr-more").getByRole("button").click();
+    await tid("attr-more-open").waitFor({ timeout: 5000 });
+  }
+  await tid(`attr-ds-kind-${key}`).click();
+  await p.waitForFunction((k) => document.querySelector(`[data-testid="attr-ds-kind-${k}"]`)?.getAttribute("aria-checked") === "true", key, { timeout: 5000 });
+}
+
+module.exports = { pickDsKind, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };

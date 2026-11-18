@@ -40,9 +40,6 @@ export interface Section {
   group: MenuGroup;
   /** a bottom tab (phone) — the same 5 for every role; a tab is not repeated in «Ещё» */
   tab?: boolean;
-  /** a shorter name under the bottom tab (a module's tab makes six: «Сообщения» did not fit at 390); the side menu and
-   *  the screen keep `label` */
-  tabLabel?: DictKey;
   /** the phone's «Ещё» tab itself: never a section in «Ещё» or in the side menu */
   phoneOnly?: boolean;
   /** who sees it (13 §4); undefined = everyone */
@@ -58,7 +55,7 @@ const PLANNERS: readonly Role[] = ["director", "dispatcher"];
 export const SECTIONS: readonly Section[] = [
   { id: "home", label: "nav.home", icon: "home", group: "top", tab: true },
   { id: "plan", label: "nav.plan", icon: "calendar", group: "work", tab: true },
-  { id: "messages", label: "nav.messages", tabLabel: "tab.messages.short", icon: "sms", group: "top", tab: true },
+  { id: "messages", label: "nav.messages", icon: "sms", group: "top", tab: true },
   // the tech sees his own leads — assigned to him or brought by him (13 §2.3, §4; canSeeLead and RLS leads_select);
   // a subcontractor does not (he never gets leads: features/leadAssignee.ts)
   { id: "leads", label: "nav.leads", icon: "inbox", group: "work", roles: [...OFFICE, "tech"], noSub: true },
@@ -113,17 +110,24 @@ const visible = (s: Section, role: Role, sub = false) =>
 /** this person works in the company as a subcontractor (Member.kind; the app role is «tech» all the same) */
 export const meIsSub = (db: { me: string; members: readonly { id: string; kind: string }[] }) => db.members.some((m) => m.id === db.me && m.kind === "sub");
 
-/** The 5 bottom tabs: the same set for every role (13 §2.1) — what is inside is filtered by rights. */
-export const tabs = (_role: Role): Section[] => SECTIONS.filter((s) => s.tab);
+/** the tab a module's own tab takes the place of (founder 16.11, #1487: «давай план уберём и сделаем замеры»; DS §5.3) —
+ *  «План» goes to «Ещё»; the bar stays at 5 */
+export const MODULE_TAB_REPLACES: SectionId = "plan";
+/** a bottom tab now: `modTab` — the company has a module's tab (moduleTabs), it stands where «План» was */
+const isTab = (s: Section, modTab: boolean) => !!s.tab && !(modTab && s.id === MODULE_TAB_REPLACES);
+
+/** The 5 bottom tabs: the same set for every role (13 §2.1) — what is inside is filtered by rights. With a module's tab
+ *  (`modTab`) «План» is not a tab: the module's tab takes its place (TabBar puts it there), «План» is a tile in «Ещё». */
+export const tabs = (_role: Role, modTab = false): Section[] => SECTIONS.filter((s) => isTab(s, modTab));
 
 /**
  * The sections by group for this role, in order (13 v2 §2.3); a group with nothing the role may open is left out.
  * Phone (`wide` = false): the tiles of «Ещё» — the tabs are not repeated there. 820/1280: the side menu — everything but «Ещё».
  */
-export function menuGroups(role: Role, wide = false, sub = false): { group: MenuGroup; items: Section[] }[] {
+export function menuGroups(role: Role, wide = false, sub = false, modTab = false): { group: MenuGroup; items: Section[] }[] {
   const order: MenuGroup[] = ["top", "work", "docs", "money", "bottom"];
   return order
-    .map((group) => ({ group, items: SECTIONS.filter((s) => s.group === group && !s.phoneOnly && (wide || !s.tab) && visible(s, role, sub)) }))
+    .map((group) => ({ group, items: SECTIONS.filter((s) => s.group === group && !s.phoneOnly && (wide || !isTab(s, modTab)) && visible(s, role, sub)) }))
     .filter((g) => g.items.length > 0);
 }
 

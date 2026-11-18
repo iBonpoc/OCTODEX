@@ -8,7 +8,9 @@ import { categoryLabel } from "@/features/serviceCategories";
 import {
   attribution, browserLang, canSend, fetchIntakeForm, newNonce, submitIntake, type IntakeFields, type IntakeForm,
 } from "@/cloud/intake";
-import { Button, ChoiceChips, TextField, Toggle } from "@/ui/controls";
+import { Button, TextField } from "@/ui/controls";
+import { SelectField } from "@/ui/selectField";
+import { ToggleRow } from "@/ui/toggleRow";
 import { Icon, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Card, CardList, Empty, FieldGroup, FormMain, RowView, Screen } from "@/ui/surfaces";
@@ -117,10 +119,12 @@ function IntakeBody({ token, form, lang, setLang, back, search }: {
   };
   const langs: { key: DocLang; label: string }[] = [{ key: "en", label: "English" }, { key: "es", label: "Español" }, { key: "ru", label: "Русский" }];
   return (
-    <Screen form title={t("intake.title")} back={back}>
+    <Screen form="center" title={t("intake.title")} back={back}>
       <CardList>
-        <View testID="intake-lang" style={{ marginBottom: space[2] }}>
-          <ChoiceChips items={langs} value={lang} onChange={setLang} />
+        {/* one rhythm under the title: languages → the company's card → the fields, 20 each (#1728; was 16 and 20) */}
+        {/* the language of the form and of what the company sends back — a form value, a row with a menu (spec 56 §3 row 4) */}
+        <View style={{ marginBottom: space[3] }}>
+          <SelectField testID="intake-lang" label={t("intake.lang")} value={lang} items={langs} onChange={setLang} />
         </View>
         <Card>
           <T v="heading">{form.company}</T>
@@ -137,14 +141,13 @@ function IntakeBody({ token, form, lang, setLang, back, search }: {
             <View style={{ flex: 1 }}><TextField type="zip" value={f.zip} onChangeText={set("zip")} placeholder={t("intake.zip")} label={t("intake.zip")} /></View>
           </RowView>
           {form.categories.length > 1 ? (
-            <View testID="intake-category" style={{ gap: space[2] }}>
-              <T v="caption" tone="mut">{t("intake.service")}</T>
-              <ChoiceChips
-                items={form.categories.map((c) => ({ key: c.id, label: categoryLabel({ id: c.id, seedKey: c.key, name: c.name, position: 0 }, t as never) }))}
-                value={categoryId}
-                onChange={setCategoryId}
-              />
-            </View>
+            <SelectField
+              testID="intake-category"
+              label={t("intake.service")}
+              value={categoryId || null}
+              items={form.categories.map((c) => ({ key: c.id, label: categoryLabel({ id: c.id, seedKey: c.key, name: c.name, position: 0 }, t as never) }))}
+              onChange={setCategoryId}
+            />
           ) : null}
           <View testID="intake-message"><TextField type="note" value={f.message} onChangeText={set("message")} placeholder={t("intake.message")} label={t("intake.message")} /></View>
           {/* people never see this field; a bot fills every field it finds */}
@@ -155,11 +158,8 @@ function IntakeBody({ token, form, lang, setLang, back, search }: {
         </FieldGroup>
         {form.smsConsent ? (
           <Card>
-            {/* the consent text is on the screen, next to its switch, off by default (TCPA: clear and separate) */}
-            <View testID="intake-consent" style={{ flexDirection: "row", alignItems: "center", gap: space[3] }}>
-              <View style={{ flex: 1 }}><T v="caption">{t("intake.consent", { company: form.company })}</T></View>
-              <Toggle on={consent} onChange={setConsent} label={t("intake.consent", { company: form.company })} />
-            </View>
+            {/* the consent text is on the screen as the label of its switch, off by default (TCPA: clear and separate; spec 56 §3 row 1) */}
+            <ToggleRow testID="intake-consent" label={t("intake.consent", { company: form.company })} value={consent} onChange={setConsent} />
           </Card>
         ) : null}
         {!ready ? <T v="caption" tone="mut">{t("intake.needContact")}</T> : null}

@@ -27,6 +27,27 @@ describe("bottom tabs: the same 5 for every role (13 v2 §2.1, variant Б)", () 
   });
 });
 
+describe("a module's tab takes the place of «План» (founder 16.11, #1487; DS §5.3)", () => {
+  it("with a module's tab: four core tabs — «План» is not one; the bar stays at five with the module's", () => {
+    for (const r of ROLES) expect(tabs(r, true).map((s) => s.id), r).toEqual(["home", "messages", "clients", "more"]);
+  });
+  it("«План» is a tile in «Ещё» then, and only then; the side menu (820/1280) has it either way", () => {
+    for (const r of ROLES) {
+      const tiles = (mod: boolean) => menuGroups(r, false, false, mod).flatMap((g) => g.items.map((i) => i.id));
+      expect(tiles(true), r).toContain("plan");
+      expect(tiles(false), r).not.toContain("plan");
+      const side = (mod: boolean) => menuGroups(r, true, false, mod).flatMap((g) => g.items.map((i) => i.id));
+      expect(side(true), r).toEqual(side(false));
+    }
+  });
+  it("one word for the messages: the tab has no shorter name of its own («Чаты» / «Сообщения» was two words)", () => {
+    const m = SECTIONS.find((s) => s.id === "messages")!;
+    expect(Object.keys(m)).not.toContain("tabLabel");
+    const src = fs.readFileSync(path.join(__dirname, "../src/nav/TabBar.tsx"), "utf8");
+    expect(src).not.toMatch(/tabLabel/);
+  });
+});
+
 describe("«Ещё» (phone) and the side menu (820/1280) by rights (13 §2.3, §4)", () => {
   it("owner/admin «Ещё»: everything but the tabs", () => {
     expect(menu("director")).toEqual(["leads", "jobs", "calls", "tasks", "estimates", "invoices", "catalog", "suppliers", "purchase-orders", "payments", "reports", "money", "team", "company", "settings", "help"]);

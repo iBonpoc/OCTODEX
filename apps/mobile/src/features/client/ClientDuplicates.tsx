@@ -7,7 +7,8 @@ import type { Customer } from "@/data/types";
 import { canMarkNotDuplicate, canMergeClients, canSeeClientDups, defaultKeep, duplicatesOf, mergeSummary, type ClientDup } from "@/features/clientDuplicates";
 import { statusOf } from "@/features/clients";
 import { useI18n, type DictKey } from "@/i18n";
-import { Button, ChoiceChips } from "@/ui/controls";
+import { Button } from "@/ui/controls";
+import { OptionRows } from "@/ui/optionRow";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { CardGrid, ListCard } from "@/ui/listCard";
@@ -80,11 +81,8 @@ function MergeSheet({ here, other, onClose, visible, onExited }: { here: Custome
       <T v="caption" tone="mut">
         {t("clientDup.keep")}
       </T>
-      <ChoiceChips<string>
-        value={keep}
-        onChange={setKeep}
-        items={[here, other].map((x) => ({ key: x.id, label: [x.name, x.number].filter(Boolean).join(" · ") }))}
-      />
+      {/* which card stays — rows with a check (DS §9 А2а), the number under the name */}
+      <OptionRows<string> testID="client-dup-keep" label={t("clientDup.keep")} value={keep} onChange={setKeep} items={[here, other].map((x) => ({ key: x.id, title: x.name, subtitle: x.number }))} />
       <T v="body">{t("clientDup.moves", { name: kept.name, what: what || t("clientDup.n.none") })}</T>
       <T v="caption" tone="mut">
         {t("clientDup.fill")}

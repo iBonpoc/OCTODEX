@@ -1,7 +1,8 @@
 /**
- * e2e 258 — a round downspout without elbows of its own gets 45° ones, not «A» (#871, X-07). Every view.
- * A measurement with a rectangular and a round downspout, put straight into the store: the crew's PDF lists the elbows
- * of the round one as 45° and «A» only for the rectangular one.
+ * e2e 258 — a round downspout without elbows of its own gets one 75° elbow, never «A» (#871, X-07; «Расход v2» §2.15 №2). Every view.
+ * A measurement with a corrugated rectangular, a plain rectangular and a round downspout, put straight into the store: the
+ * crew's PDF lists the elbows of the round one as 75° and «A» only for the corrugated rectangular one; a 2×3 one without a kind has none by
+ * default (#1776, founder 16.11: «у прямого водостока стандартно колен 0, у ребристого 3 штуки A»).
  * Finds things by testID; waits on what it checks (no pauses).
  */
 const { stands } = require("../gutters.cjs");
@@ -17,11 +18,11 @@ exports.run = async (h) => {
   const st = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)), KEY);
   const place = st.db.properties[0];
   const run = (id, a, b) => ({ id, measurementId: "e2e258", kind: "run", geom: { a, b }, attrs: {}, confidence: "drawn" });
-  const ds = (id, runId, shape, size) => ({ id, measurementId: "e2e258", kind: "downspout", geom: { runId, atIn: 60 }, attrs: { shape, size }, confidence: "drawn" });
+  const ds = (id, runId, shape, size, more = {}, atIn = 60) => ({ id, measurementId: "e2e258", kind: "downspout", geom: { runId, atIn }, attrs: { shape, size, ...more }, confidence: "drawn" });
   st.db.moduleData = st.db.moduleData || {};
   st.db.moduleData.gutters = {
     measurements: [{ id: "e2e258", label: null, status: "ready", propertyId: place.id, leadId: null, accuracy: "tape", updatedAt: new Date().toISOString() }],
-    elements: [run("e2e258-a", [0, 0], [240, 0]), run("e2e258-b", [240, 0], [240, 240]), ds("e2e258-d1", "e2e258-a", "rect", "3x4"), ds("e2e258-d2", "e2e258-b", "round", "3")],
+    elements: [run("e2e258-a", [0, 0], [240, 0]), run("e2e258-b", [240, 0], [240, 240]), ds("e2e258-d1", "e2e258-a", "rect", "3x4", { dsStyle: "corrugated" }), ds("e2e258-d2", "e2e258-b", "round", "3"), ds("e2e258-d3", "e2e258-a", "rect", "2x3", {}, 180)],
   };
   await h.seed(KEY, st);
 
@@ -49,10 +50,14 @@ exports.run = async (h) => {
     { timeout: 10000 },
   );
   const html = await p.evaluate(() => window.__pdf);
-  // the elbow lines by their shape and style, not by the word «Колено» (that is the dictionary's): «… · A» / «… · 45»
-  const rows = [...html.matchAll(/<td>([^<]*· (?:A|45))<\/td><td class="r">([^<]*)<\/td>/g)].map((m) => `${m[1]} = ${m[2]}`);
-  h.expect(rows.length === 2, "two elbow lines (a rectangular one and a round one): " + rows.join(" | "));
-  h.expect(rows.some((r) => /(rect|Прямоугольный)/.test(r) && /· A = 3 \S+$/.test(r)), "the rectangular: 3 × A — " + rows.join(" | "));
-  h.expect(rows.some((r) => /(round|Круглый)/.test(r) && /· 45 = 3 \S+$/.test(r)), "the round: 3 × 45°, no «A» — " + rows.join(" | "));
+  // the elbow lines (#1766, #1800: a row is «<b>the supplier's name</b><br>properties | qty»): the corrugated rectangular one by
+  // its style «A Elbow 75°», the round one by its angle «Round Elbow 75°» (one, «Расход v2») — never «A»; the plain 2×3 one has none (#1776)
+  const rows = [...html.matchAll(/<td><b>([^<]*)<\/b>(?:<br>([^<]*))?<\/td><td class="r">([^<]*)<\/td>/g)]
+    .filter((m) => /Elbow \d+°$/.test(m[1]))
+    .map((m) => `${m[1]} · ${m[2] || ""} = ${m[3]}`);
+  h.expect(rows.length === 2, "two elbow lines (the corrugated rectangular one and the round one; the plain one has none): " + rows.join(" | "));
+  h.expect(!rows.some((r) => /^2×3 /.test(r)), "no elbow line of the plain 2×3 one (#1776): " + rows.join(" | "));
+  h.expect(rows.some((r) => /^3×4 A Elbow 75° · [^=]*= 3 \S+$/.test(r)), "the rectangular: 3 × A 75° — " + rows.join(" | "));
+  h.expect(rows.some((r) => /^\d″ Round Elbow 75° · [^=]*= 1 \S+$/.test(r)), "the round: 1 × 75°, no «A» — " + rows.join(" | "));
   await h.shot("round-elbows");
 };
