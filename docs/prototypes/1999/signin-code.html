@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="{{ if eq .Data.lang "es" }}es{{ else if eq .Data.lang "ru" }}ru{{ else }}en{{ end }}" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<title>{{ if eq .Data.lang "es" }}Código de GoRix{{ else if eq .Data.lang "ru" }}Код для входа в GoRix{{ else }}GoRix sign-in code{{ end }}</title>
+<!--
+  #1999 — письмо с кодом входа GoRix. Макет для чата «Вход»: шаблон Supabase Auth (Go templates), отправка — Resend,
+  отправитель auth.gorix.app. Тексты трёх языков — texts.md; язык — {{ .Data.lang }} (user_metadata), иначе en.
+  Цвета: светлая — print (DS §19.2: бумага #FFFFFF, ink #15161A, mut #575C68); тёмная — тема «Наряда» dark
+  (page #181A1E, bg #24272D, surfSolid #33363C, ink #F2F3F5, mut #CDD1DA). Шрифт — системный (веб-шрифты в почте ненадёжны).
+  Ссылок нет (защита от фишинга). Код — текстом (не картинкой), одним словом без пробелов (автоподстановка iOS, «Copy code» Gmail).
+-->
+<style>
+  :root{color-scheme:light dark;supported-color-schemes:light dark}
+  body{margin:0;padding:0;-webkit-text-size-adjust:100%}
+  .code{-webkit-user-select:all;user-select:all}
+  @media (prefers-color-scheme:dark){
+    .bg-page{background:#181A1E!important}
+    .bg-card{background:#24272D!important;border-color:rgba(255,255,255,.14)!important}
+    .bg-code{background:#33363C!important;border-color:rgba(255,255,255,.14)!important}
+    .ink{color:#F2F3F5!important}
+    .mut{color:#CDD1DA!important}
+    .rule{border-color:rgba(255,255,255,.14)!important}
+  }
+  /* Outlook.com / Outlook app — своя тёмная тема */
+  [data-ogsc] .ink{color:#F2F3F5!important}
+  [data-ogsc] .mut{color:#CDD1DA!important}
+  [data-ogsb] .bg-page{background:#181A1E!important}
+  [data-ogsb] .bg-card{background:#24272D!important}
+  [data-ogsb] .bg-code{background:#33363C!important}
+  @media (max-width:480px){ .pad{padding:24px 20px!important} .code{font-size:32px!important;letter-spacing:6px!important} }
+</style>
+</head>
+<body class="bg-page" style="margin:0;padding:0;background:#F4F2EE;">
+<!-- Скрытая строка превью в списке писем (preheader) -->
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#F4F2EE;opacity:0;">
+  {{ .Token }} — {{ if eq .Data.lang "es" }}tu código de GoRix. Vence en 10 minutos.{{ else if eq .Data.lang "ru" }}код для входа в GoRix. Действует 10 минут.{{ else }}your GoRix sign-in code. It expires in 10 minutes.{{ end }}&#8199;&#65279;&#847;&#8199;&#65279;&#847;&#8199;&#65279;&#847;&#8199;&#65279;&#847;
+</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="bg-page" style="background:#F4F2EE;">
+<tr><td align="center" style="padding:32px 12px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="bg-card" style="max-width:480px;background:#FFFFFF;border:1px solid #E6E2DB;border-radius:24px;">
+  <tr><td class="pad" style="padding:32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+    <!-- Знак GoRix: иконка приложения (свой тёмный фон — одинаково видна в светлой и тёмной почте, почтовик её не перекрашивает). Картинки выключены — alt словом. -->
+    <img src="https://gorix.app/email/gorix-icon-80.png" width="40" height="40" alt="GoRix" style="display:block;width:40px;height:40px;border:0;border-radius:9px;font:600 12px/40px -apple-system,Segoe UI,Arial,sans-serif;color:#15161A;">
+    <h1 class="ink" style="margin:24px 0 8px;font-size:20px;line-height:26px;font-weight:700;color:#15161A;">{{ if eq .Data.lang "es" }}Tu código para entrar en GoRix{{ else if eq .Data.lang "ru" }}Код для входа в GoRix{{ else }}Your GoRix sign-in code{{ end }}</h1>
+    <p class="mut" style="margin:0 0 24px;font-size:15px;line-height:22px;color:#575C68;">{{ if eq .Data.lang "es" }}Escribe este código en la app GoRix. Vence en 10&nbsp;minutos.{{ else if eq .Data.lang "ru" }}Введите этот код в приложении GoRix. Он действует 10&nbsp;минут.{{ else }}Enter this code in the GoRix app. It expires in 10&nbsp;minutes.{{ end }}</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr><td class="bg-code" align="center" style="background:#F4F2EE;border:1px solid #E6E2DB;border-radius:18px;padding:20px 12px;">
+        <div class="code ink" style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,'Courier New',monospace;font-size:36px;line-height:44px;font-weight:700;letter-spacing:8px;color:#15161A;-webkit-user-select:all;user-select:all;">{{ .Token }}</div>
+      </td></tr>
+    </table>
+    <p class="mut" style="margin:24px 0 24px;font-size:13px;line-height:20px;color:#575C68;">{{ if eq .Data.lang "es" }}¿No pediste un código? Ignora este correo: nadie puede entrar sin él. No compartas este código. GoRix nunca te lo pedirá.{{ else if eq .Data.lang "ru" }}Не запрашивали код? Просто не обращайте внимания на письмо — без кода войти нельзя. Никому не сообщайте код: GoRix никогда его не спрашивает.{{ else }}Didn’t ask for a code? Ignore this email — no one can sign in without it. Never share this code. GoRix will never ask you for it.{{ end }}</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td class="rule" style="border-top:1px solid #E6E2DB;padding-top:16px;margin-top:24px;font-size:0;line-height:0;">&nbsp;</td></tr></table>
+    <p class="mut" style="margin:8px 0 0;font-size:11.5px;line-height:17px;color:#575C68;">GoRix · {{ if eq .Data.lang "es" }}Enviado a {{ .Email }} porque se pidió entrar.<br>¿Preguntas? Responde a este correo.{{ else if eq .Data.lang "ru" }}Отправлено на {{ .Email }}, потому что кто-то запросил вход.<br>Вопросы? Ответьте на это письмо.{{ else }}Sent to {{ .Email }} because a sign-in was requested.<br>Questions? Reply to this email.{{ end }}</p>
+  </td></tr>
+  </table>
+</td></tr>
+</table>
+</body>
+</html>

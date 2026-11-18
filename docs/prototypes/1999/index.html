@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Письмо входа GoRix</title>
+<style>
+/* Просмотр макета #1999: шаблон signin-code.html с подставленным кодом, тремя языками, светлой и тёмной почтой,
+   выключенными картинками; ширина телефона 390 и компьютера 720. Параметры: ?lang=en|es|ru&theme=light|dark&img=on|off&w=390|720&subject=1 */
+body{margin:0;font:13px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;background:#8a8780;color:#111}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;padding:12px 16px;background:#1d1f23;color:#eee;align-items:center}
+.ctl b{margin-right:4px}.ctl button{font:inherit;padding:4px 10px;border-radius:8px;border:1px solid #555;background:#2b2e33;color:#eee;cursor:pointer}
+.ctl button[aria-pressed=true]{background:#eee;color:#111}
+.stage{display:flex;justify-content:center;padding:24px 16px}
+.client{background:#fff;border-radius:24px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.client.dark{background:#000}
+.inbox{padding:14px 16px;border-bottom:1px solid rgba(0,0,0,.1);font-size:13px}
+.client.dark .inbox{border-color:rgba(255,255,255,.15);color:#eee}
+.inbox .from{font-weight:600}.inbox .subj{font-weight:600;margin-top:2px}.inbox .pre{color:#777;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+iframe{display:block;border:0;width:100%}
+</style>
+</head>
+<body>
+<div class="ctl" role="toolbar" aria-label="Вид">
+ <b>Язык</b><button data-k="lang" data-v="en">EN</button><button data-k="lang" data-v="es">ES</button><button data-k="lang" data-v="ru">RU</button>
+ <b>Тема почты</b><button data-k="theme" data-v="light">светлая</button><button data-k="theme" data-v="dark">тёмная</button>
+ <b>Картинки</b><button data-k="img" data-v="on">вкл</button><button data-k="img" data-v="off">выкл</button>
+ <b>Ширина</b><button data-k="w" data-v="390">390</button><button data-k="w" data-v="720">720</button>
+</div>
+<div class="stage"><div class="client" id="client"><div class="inbox" id="inbox"></div><iframe id="f" title="Письмо"></iframe></div></div>
+<script>
+const P=new URLSearchParams(location.search);
+const st={lang:P.get('lang')||'en',theme:P.get('theme')||'light',img:P.get('img')||'on',w:P.get('w')||'390'};
+const SUBJ={en:'482913 is your GoRix sign-in code',es:'482913 es tu código para entrar en GoRix',ru:'482913 — код для входа в GoRix'};
+let tpl='';
+function fill(){
+  let h=tpl.replace(/\{\{ if eq \.Data\.lang "es" \}\}([\s\S]*?)\{\{ else if eq \.Data\.lang "ru" \}\}([\s\S]*?)\{\{ else \}\}([\s\S]*?)\{\{ end \}\}/g,(m,es,ru,en)=>({es,ru,en})[st.lang]);
+  h=h.replaceAll('{{ .Token }}','482913').replaceAll('{{ .Email }}','sam@example.com');
+  h=h.replace('https://gorix.app/email/gorix-icon-80.png',st.img==='on'?'gorix-icon-80.png':'about:blank#off');
+  if(st.img==='off')h=h.replace('<img ','<img data-off="1" ');
+  // тема почтовика: prefers-color-scheme внутри фрейма следует color-scheme страницы просмотра
+  h=h.replace('<head>',`<head><meta name="x-preview" content="${st.theme}"><style>:root{color-scheme:${st.theme}!important}</style>`);
+  return h;
+}
+function render(){
+  document.querySelectorAll('[data-k]').forEach(b=>b.setAttribute('aria-pressed',st[b.dataset.k]===b.dataset.v));
+  const c=document.getElementById('client');c.className='client '+st.theme;c.style.width=st.w+'px';
+  document.getElementById('inbox').innerHTML=`<div class="from">GoRix</div><div class="subj">${SUBJ[st.lang]}</div><div class="pre">${st.lang==='ru'?'482913 — код для входа в GoRix. Действует 10 минут.':st.lang==='es'?'482913 — tu código de GoRix. Vence en 10 minutos.':'482913 — your GoRix sign-in code. It expires in 10 minutes.'}</div>`;
+  const f=document.getElementById('f');f.style.colorScheme=st.theme;f.srcdoc=fill();f.onload=()=>{f.style.height=f.contentDocument.documentElement.scrollHeight+'px';};
+}
+document.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{st[b.dataset.k]=b.dataset.v;render();});
+fetch('signin-code.html').then(r=>r.text()).then(t=>{tpl=t;render();}).catch(()=>{document.getElementById('inbox').textContent='Откройте через сервер (file:// не читает шаблон): npx serve docs/prototypes/1999';});
+</script>
+</body>
+</html>
