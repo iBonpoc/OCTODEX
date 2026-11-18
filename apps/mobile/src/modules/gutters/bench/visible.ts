@@ -1,8 +1,8 @@
 /**
  * Where «Проверка скорости» (the canvas speed check, /module/gutters/bench) is offered (#1426, design audit 14.11: «служебный стенд
  * показан владельцу»; DS §12.8 — a developer's screen). The founder runs it in Expo Go (spec 33: Expo Go → Модули → Gutters →
- * «Проверка скорости»), a developer in a local build; a company owner in the store build and on the web never sees it. The route
- * itself stays (a link still opens it). Pure: the caller gives the execution environment (expo-constants) and __DEV__.
+ * «Проверка скорости»), a developer in a local build; a company owner in the store build and on the web never sees it. The route is
+ * registered only where it is offered (module.ts): a link to it elsewhere is «нет такого экрана». Pure: the caller gives the execution environment (expo-constants) and __DEV__.
  */
 export function benchOffered(executionEnvironment: string | undefined, dev: boolean): boolean {
   return dev || executionEnvironment === "storeClient";
