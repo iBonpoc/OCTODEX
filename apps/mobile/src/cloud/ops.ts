@@ -715,7 +715,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       // a repeat after a partial failure changes nothing
       return run(supabase.rpc("cancel_visit", { p_visit_id: op.visitId, p_reason: op.reason, p_text: op.text ?? null }));
     case "job.cancel":
-      // public.cancel_job (migration 20261117280000): rights, the same refusals as the guard, the visits and invoices of the job;
+      // public.cancel_job (migration 20261117460000): rights, the same refusals as the guard, the visits and invoices of the job;
       // a repeat on a cancelled job changes nothing
       return run(supabase.rpc("cancel_job", { p_job: op.jobId, p_reason: op.reason }));
     case "visit.notified":

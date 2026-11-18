@@ -47,7 +47,7 @@ export const REJECT_REASONS = {
   invoice_void_forbidden: "inv.void.rej.role",
   // a payment into an invoice voided meanwhile (migration 20261112090000, t06_payment_not_void)
   invoice_void: "inv.void.rej.payment",
-  // #2015 (migration 20261117280000, cancel_job): the cancel the server refused — the job stays as it was
+  // #2015 (migration 20261117460000, cancel_job): the cancel the server refused — the job stays as it was
   job_paid: "job.cancel.rej.paid",
   job_invoice_open: "job.cancel.rej.invoiceOpen",
   job_visit_on_site: "job.cancel.rej.onSite",
