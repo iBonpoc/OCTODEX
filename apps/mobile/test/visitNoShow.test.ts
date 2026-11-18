@@ -32,12 +32,13 @@ describe("#2066 С1 who marks a no-show, and when", () => {
     for (const step of ["working", "signed", "paid", "done"] as VisitStep[]) expect(canNoShow(visit("v", { step })), step).toBe(false);
     expect(canNoShow(visit("v", { closed: true }))).toBe(false);
   });
-  it("the visit's own tech, sales on their inspection, the office — yes; another tech — no", () => {
+  it("the visit's own tech, sales on their inspection, the office — yes; another tech, sales on an install — no", () => {
     const v = visit("v");
     expect(mayMarkNoShow("tech", "t1", v)).toBe(true);
     expect(mayMarkNoShow("tech", "t2", v)).toBe(false);
-    expect(mayMarkNoShow("sales", "t1", v)).toBe(true);
-    expect(mayMarkNoShow("sales", "s9", v)).toBe(false);
+    expect(mayMarkNoShow("sales", "t1", v), "sales on an install").toBe(false);
+    expect(mayMarkNoShow("sales", "t1", visit("v", { kind: "inspection", jobId: undefined }))).toBe(true);
+    expect(mayMarkNoShow("sales", "s9", visit("v", { kind: "inspection", jobId: undefined }))).toBe(false);
     expect(mayMarkNoShow("director", "x", v)).toBe(true);
     expect(mayMarkNoShow("dispatcher", "x", v)).toBe(true);
   });

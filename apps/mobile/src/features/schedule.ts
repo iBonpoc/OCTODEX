@@ -73,9 +73,10 @@ export const canCancel = canReschedule;
 
 /** #2066 «Клиента нет дома»: at the door — before the work and the signature, «on site» too (server: visit_no_show) */
 export const canNoShow = (v: Visit) => isOpenVisit(v) && (v.step === "scheduled" || v.step === "en_route" || v.step === "on_site");
-/** who marks it: a person on the visit (a tech; sales on their inspection), or the office — as visit_no_show answers */
+/** who marks it: a person on the visit (a tech; sales only on an inspection — the office plans installs), or the office —
+ *  as visit_no_show answers */
 export const mayMarkNoShow = (role: Role, me: ID | null | undefined, v: Visit) =>
-  canPlan([role]) || ((role === "tech" || role === "sales") && isAssigned(v, me));
+  canPlan([role]) || ((role === "tech" || (role === "sales" && v.kind === "inspection")) && isAssigned(v, me));
 
 /** who may plan, move, cancel or assign (§8.1): director and dispatcher; a tech only walks the steps */
 export const canPlan = (roles: Role[]) => roles.includes("director") || roles.includes("dispatcher");

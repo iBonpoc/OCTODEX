@@ -16878,13 +16878,20 @@ insert into public.visits (id, company_id, job_id, lead_id, property_id, kind, s
   ('40700000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', null, '40700000-0000-4000-8000-0000000000a1', '40700000-0000-4000-8000-0000000000d1', 'inspection', now(), now() + interval '1 hour'),
   ('40700000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now(), now() + interval '3 hours'),
   ('40700000-0000-4000-8000-0000000000f4', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now() + interval '1 day', now() + interval '1 day 3 hours'),
-  ('40700000-0000-4000-8000-0000000000f5', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now() + interval '2 days', now() + interval '2 days 3 hours');
+  ('40700000-0000-4000-8000-0000000000f5', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now() + interval '2 days', now() + interval '2 days 3 hours'),
+  ('40700000-0000-4000-8000-0000000000f6', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now() + interval '3 days', now() + interval '3 days 3 hours'),
+  ('40700000-0000-4000-8000-0000000000f9', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now() + interval '4 days', now() + interval '4 days 3 hours');
 insert into public.visit_assignees (company_id, visit_id, user_id) values
   ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f1', 'a0000000-0000-0000-0000-000000000003'),
   ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f2', 'a0000000-0000-0000-0000-000000000005'),
   ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f3', 'a0000000-0000-0000-0000-000000000003'),
   ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f4', 'a0000000-0000-0000-0000-000000000004'),
-  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f5', 'a0000000-0000-0000-0000-000000000003');
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f5', 'a0000000-0000-0000-0000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f6', 'a0000000-0000-0000-0000-000000000005'),
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f9', 'a0000000-0000-0000-0000-000000000003');
+-- f9: the office took a payment before the visit (record_visit_payment allows it) — the client paid, not a no-show
+insert into public.payments (company_id, customer_id, visit_id, method, amount_cents, status, idempotency_key, received_by)
+  values ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000c1', '40700000-0000-4000-8000-0000000000f9', 'cash', 5000, 'succeeded', 't409-paid', 'a0000000-0000-0000-0000-000000000002');
 update public.visits set status = 'on_site' where id in ('40700000-0000-4000-8000-0000000000f1', '40700000-0000-4000-8000-0000000000f3');
 update public.visits set work_started_at = now() where id = '40700000-0000-4000-8000-0000000000f3';
 
@@ -16908,8 +16915,9 @@ select tst.ok((select count(*) from public.status_events where entity_type = 'vi
           and (select cancel_reason_text from public.visits where id = '40700000-0000-4000-8000-0000000000f1') = 'Nobody home, left a card',
   'T407 the repeat changes nothing');
 
--- T408: sales on their own inspection — no-show: the lead goes back to «in contact» (S4a)
+-- T408: sales on their own inspection — no-show: the lead goes back to «in contact» (S4a); on an install — «not found»
 :as_sales_a
+select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f6')$q$, '%visit not found%', 'T408 sales on an install visit: «not found» (the office plans)');
 select tst.ok(public.visit_no_show('40700000-0000-4000-8000-0000000000f2') ->> 'lead_back' = '40700000-0000-4000-8000-0000000000a1',
   'T408 sales on their inspection: no-show, the lead rolls back');
 :as_super
@@ -16922,6 +16930,7 @@ select tst.ok((select status from public.leads where id = '40700000-0000-4000-80
 select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f3')$q$, '%client was there%', 'T409 at work: not a no-show');
 select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f4')$q$, '%visit not found%', 'T409 another tech''s visit: «not found»');
 select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000ff')$q$, '%visit not found%', 'T409 a visit that does not exist: the same answer');
+select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f9')$q$, '%has a payment%', 'T409 a visit with a payment: not a no-show');
 select tst.fails($q$update public.visits set status = 'no_show' where id = '40700000-0000-4000-8000-0000000000f5'$q$, 'T409 a direct no_show by the tech: refused');
 select tst.fails($q$update public.visits set cancel_reason = 'no_show' where id = '40700000-0000-4000-8000-0000000000f5'$q$, 'T409 a direct reason by the tech: refused');
 :as_owner_b
@@ -16951,6 +16960,13 @@ update public.visits set status = 'on_site' where id = '40700000-0000-4000-8000-
 select tst.ok(public.visit_no_show('40700000-0000-4000-8000-0000000000f8') ->> 'job_back' is null, 'T410 day 2 of a started job: no roll-back');
 :as_super
 select tst.ok((select status from public.jobs where id = '40700000-0000-4000-8000-0000000000e3') = 'in_progress', 'T410 the started job stays «in progress»');
+-- a started job back to planning by a direct write: refused for everyone (only visit_no_show does it, after its checks)
+:as_office_a
+select tst.fails_like($q$update public.jobs set status = 'draft' where id = '40700000-0000-4000-8000-0000000000e3'$q$, '%only through a no-show%', 'T410 the office: a direct «in progress» → draft refused');
+:as_sales_a
+select tst.fails($q$update public.jobs set status = 'draft' where id = '40700000-0000-4000-8000-0000000000e3'$q$, 'T410 sales: a direct «in progress» → draft refused');
+:as_super
+select tst.ok((select status from public.jobs where id = '40700000-0000-4000-8000-0000000000e3') = 'in_progress', 'T410 after the refusals: still «in progress»');
 
 -- T410: the office marks a no-show too (another tech's visit, scheduled); a tech of the company still cannot touch the time
 :as_office_a
