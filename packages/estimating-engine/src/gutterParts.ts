@@ -211,9 +211,20 @@ export interface GutterRules {
   woodScrew: { screw: string; washer: boolean };
   /** the masonry anchor of the kits: "masonry" (any) or a size */
   anchor: string;
-  /** soldered metals take solder instead of sealant */
+  /** soldered metals take solder instead of sealant (М1: copper and zinc) */
   solderedMaterials: string[];
   solderPointsPerLb: number;
+  /** solder points of one downspout joint of a soldered metal (М2, founder 16.11: 1); none when the downspout joints are screwed */
+  solderPointsPerDsJoint: number;
+  /** the soldering kit's parts (М4–М6, Н10): pounds of solder a can of flux does, points a gas cylinder does, points a pack of
+   *  abrasive does, cans of soda a job */
+  solderLbPerFluxCan: number;
+  solderPointsPerGas: number;
+  solderPointsPerAbrasive: number;
+  solderSodaPerJob: number;
+  /** the metal of the screws, anchors and strap strip on a gutter or downspout of this metal (М8; founder 16.11 «винты к меди —
+   *  медные»); a metal not listed keeps its fasteners as they were (no `metal` — the keys and prices of aluminum and steel stay) */
+  fastenerMetal: Record<string, string>;
   /** one touch-up can per painted color with field cuts */
   touchUpPaint: boolean;
   /** end caps of these profiles come left and right */
@@ -239,8 +250,10 @@ export interface GutterRules {
   stdOffsetsIn: number[];
   /** advice: max gutter length one downspout drains */
   maxRunPerDownspoutIn: number;
-  /** advice: aluminum expansion joint spacing */
+  /** advice: aluminum expansion joint spacing (the old single number; it is `expansionJointInByMetal.aluminum` unless that is set) */
   expansionJointIn: number;
+  /** expansion joint spacing by metal (Ж6, Н9; founder 16.11: copper 40 ft, zinc 33 ft, steel none, aluminum as before) */
+  expansionJointInByMetal: Record<string, number>;
   /** add the expansion joints as parts, not only as advice */
   expansionJointPart: boolean;
 }
@@ -272,8 +285,14 @@ export const DEFAULT_GUTTER_RULES: GutterRules = {
   kitLengthIn: {},
   woodScrew: { screw: WOOD_SCREW, washer: false },
   anchor: "masonry",
-  solderedMaterials: ["copper"],
+  solderedMaterials: ["copper", "zinc"],
   solderPointsPerLb: 10,
+  solderPointsPerDsJoint: 1,
+  solderLbPerFluxCan: 4,
+  solderPointsPerGas: 40,
+  solderPointsPerAbrasive: 40,
+  solderSodaPerJob: 1,
+  fastenerMetal: { copper: "copper", zinc: "stainless" },
   touchUpPaint: true,
   sidedCapProfiles: ["k", "fascia"],
   defaultElbows: [{ style: "A", qty: 3 }],
@@ -287,6 +306,7 @@ export const DEFAULT_GUTTER_RULES: GutterRules = {
   stdOffsetsIn: [1, 2, 4],
   maxRunPerDownspoutIn: 480,
   expansionJointIn: 600,
+  expansionJointInByMetal: { aluminum: 600, copper: 480, zinc: 396 },
   expansionJointPart: false,
 };
 
@@ -299,7 +319,7 @@ export type GutterRulesOverride = Partial<Omit<GutterRules, "joints">> & {
 };
 
 /** rules that divide: must be whole inches / counts > 0, else the default (a blank field on a screen is 0) */
-const POSITIVE: (keyof GutterRules)[] = ["storyHeightIn", "dsStickIn", "sectionLengthIn", "dsFastenerSpacingIn", "jointsPerSealantTube", "solderPointsPerLb", "maxRunPerDownspoutIn", "expansionJointIn"];
+const POSITIVE: (keyof GutterRules)[] = ["storyHeightIn", "dsStickIn", "sectionLengthIn", "dsFastenerSpacingIn", "jointsPerSealantTube", "solderPointsPerLb", "maxRunPerDownspoutIn", "expansionJointIn", "solderLbPerFluxCan", "solderPointsPerGas", "solderPointsPerAbrasive"];
 const okPos = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v > 0;
 
 export function resolveGutterRules(over?: GutterRulesOverride): GutterRules {
@@ -326,12 +346,17 @@ export function resolveGutterRules(over?: GutterRulesOverride): GutterRules {
     ),
     woodScrew: { ...d.woodScrew, ...o.woodScrew },
     bendInBySize: { ...d.bendInBySize, ...o.bendInBySize },
+    fastenerMetal: { ...d.fastenerMetal, ...o.fastenerMetal },
+    // the old single spacing a company set is its aluminum's (Н9: «старое expansionFt читается как шаг алюминия»)
+    expansionJointInByMetal: { ...d.expansionJointInByMetal, ...o.expansionJointInByMetal },
   };
   r.woodScrew = { ...r.woodScrew, washer: r.woodScrew.washer === true };
   if (typeof r.sealantByColor !== "boolean") r.sealantByColor = d.sealantByColor;
   if (typeof r.woodScrew.screw !== "string" || !r.woodScrew.screw.trim()) r.woodScrew = { ...r.woodScrew, screw: d.woodScrew.screw };
   if (typeof r.anchor !== "string" || !r.anchor.trim()) r.anchor = d.anchor;
   for (const k of POSITIVE) if (!okPos(r[k])) (r as unknown as Record<string, unknown>)[k] = d[k];
+  // the old single spacing a company set is its aluminum's (Н9: «старое expansionFt читается как шаг алюминия»), unless it set aluminum's own
+  if (o.expansionJointIn !== undefined && o.expansionJointInByMetal?.aluminum === undefined) r.expansionJointInByMetal = { ...r.expansionJointInByMetal, aluminum: r.expansionJointIn };
   if (typeof r.hangerAtEnds !== "boolean") r.hangerAtEnds = d.hangerAtEnds;
   if (!Number.isInteger(r.dsExtensionIn) || r.dsExtensionIn < 0) r.dsExtensionIn = 0;
   if (!Number.isInteger(r.wasteFt) || r.wasteFt < 0) r.wasteFt = d.wasteFt;
@@ -340,6 +365,13 @@ export function resolveGutterRules(over?: GutterRulesOverride): GutterRules {
   // whole and ≥ 0, else the default (a blank field is 0 — for these 0 is a real choice: no bends, nothing eaten, no rounding)
   const wholeOr = (v: unknown, def: number) => (typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : def);
   r.fieldBends = wholeOr(r.fieldBends, d.fieldBends);
+  r.solderPointsPerDsJoint = wholeOr(r.solderPointsPerDsJoint, d.solderPointsPerDsJoint);
+  r.solderSodaPerJob = wholeOr(r.solderSodaPerJob, d.solderSodaPerJob);
+  if (!Array.isArray(r.solderedMaterials) || !r.solderedMaterials.every((m) => typeof m === "string")) r.solderedMaterials = d.solderedMaterials;
+  // a spacing of a metal that is not a whole number > 0 is none for it (no joints), never a division by 0
+  // a blank field (0) is the default, as every other norm (review PR-2 №5); a metal without a default and without a number — none
+  r.expansionJointInByMetal = Object.fromEntries(Object.entries(r.expansionJointInByMetal).map(([k, v]) => [k, okPos(v) ? v : d.expansionJointInByMetal[k]] as const).filter((e): e is readonly [string, number] => okPos(e[1])));
+  r.fastenerMetal = Object.fromEntries(Object.entries(r.fastenerMetal).filter(([, v]) => typeof v === "string" && v.trim() !== ""));
   r.bendInDefault = wholeOr(r.bendInDefault, d.bendInDefault);
   // the estimate's downspout step is one of 1 / 5 / 10 ft (Н8): a blank field (0) or anything else never stops the rounding silently
   if (!DS_ROUND_STEPS_FT.includes(r.dsRoundUpFt)) r.dsRoundUpFt = d.dsRoundUpFt;
@@ -383,7 +415,7 @@ export const WHY_RULES = [
   "rivets_per_joints", "ds_joint_screws", "joint_screws", "kit_screws", "kit_anchors", "hangers_spacing", "kit_per_hanger",
   "ds_straps_per_ds", "flat_coil_straps", "touch_up_per_color", "corner_allowance", "coil_reserve", "bend_in_place",
   "ds_round_up", "ds_sticks", "slip_joints", "outlet_per_ds", "endcap_free_end", "splash_guard_inside", "expansion_joint",
-  "guard_pieces", "adapter_per_bottom",
+  "guard_pieces", "adapter_per_bottom", "soldering_kit", "solder_work",
 ] as const;
 export type WhyRule = (typeof WHY_RULES)[number];
 export interface PartWhy {
@@ -420,6 +452,8 @@ export type GutterAdvice =
   | { code: "wye_same_downspout"; wyeId: string }
   | { code: "end_outlet_taken"; downspoutId: string }
   | { code: "strip_size_unknown"; downspoutId: string; size: string }
+  /** copper next to aluminum or steel (a downspout on a gutter, two gutters at a corner): the metals corrode each other (§2.7) */
+  | { code: "galvanic_pair"; ids: [string, string]; metals: [string, string] }
   /** a length or spacing that was not a whole number of inches ≥ 0 (or > 0 for spacing) was fixed */
   | { code: "input_fixed"; id: string; field: string };
 
@@ -449,10 +483,22 @@ export function metalOf(material: string): string {
   if (/^(steel|galv|bond)/.test(material)) return "steel";
   return "aluminum";
 }
+/** the metal of a material only when it is known (an unknown material — vinyl, blank — is no metal: no galvanic advice for it) */
+export function knownMetal(material: string | undefined): string | undefined {
+  if (!material) return undefined;
+  if (material.startsWith("alu")) return "aluminum";
+  const m = metalOf(material);
+  return m === "aluminum" ? undefined : m;
+}
 /** fasteners every kit and joint share (screws, anchors): one section whatever brought them first */
 const CONSUMABLE_PARTS = new Set(["screw", "anchor"]);
 
 interface KitCtx { gutter?: GutterStock; ds?: { shape: string; size: string; material: string }; kitId?: string }
+/** the fasteners whose metal follows the gutter's or the downspout's (М8) */
+const METAL_FASTENERS = new Set(["screw", "anchor", "flat_coil"]);
+/** a fastener's metal on this material (М8): copper — copper, zinc — stainless; other metals none (their keys stay as they were) */
+const fastenerMetalOf = (material: string | undefined, rules: Pick<GutterRules, "fastenerMetal">): string | undefined =>
+  material ? rules.fastenerMetal[metalOf(material)] : undefined;
 
 /** a kit part's attributes and key: part + attribute values in key-name order */
 /** the company's fastener choices (spec П18.15): the kits' wood screw and anchor, a part's length by gutter size */
@@ -464,8 +510,10 @@ function companyAttrs(p: KitPart, ctx: KitCtx, rules: Pick<GutterRules, "woodScr
   return len ? { ...(p.attrs ?? {}), lengthIn: len } : { ...(p.attrs ?? {}) };
 }
 
-function kitPart(p: KitPart, ctx: KitCtx, rules: Pick<GutterRules, "woodScrew" | "anchor" | "kitLengthIn">) {
+function kitPart(p: KitPart, ctx: KitCtx, rules: Pick<GutterRules, "woodScrew" | "anchor" | "kitLengthIn" | "fastenerMetal">) {
+  const fm = METAL_FASTENERS.has(p.part) ? fastenerMetalOf(ctx.gutter?.material ?? ctx.ds?.material, rules) : undefined;
   const attrs: Record<string, string> = {
+    ...(fm ? { metal: fm } : {}),
     ...companyAttrs(p, ctx, rules),
     ...(p.byKit && ctx.kitId ? { [p.part]: ctx.kitId } : {}),
     ...(p.bySize && ctx.gutter ? { profile: ctx.gutter.profile, size: ctx.gutter.size, metal: metalOf(ctx.gutter.material) } : {}),
@@ -566,7 +614,7 @@ export function purchaseQty(qty: DecLike, packSize: DecLike): Dec {
  * (a part, its quantity, an elbow rule — as #871 did). Not for a change in the core's money (a line, a discount): that is
  * `ENGINE_VERSION`, and it must not mark every estimate as «расчёт изменился». Estimates remember it in their lines.
  */
-export const GUTTER_PARTS_VERSION = "5"; // 5: «Расход v2» PR-1б — a plain rectangular downspout bent on site (3 bends, +6″ each, «гиб по месту»), a round one 1 × 75° and a 2″ offset, the estimate's downspout rounded up to 10 ft each (spec 33-gutters-consumption §2.1, §2.15 №1–6); 4: a plain rectangular downspout has no elbows by default, a corrugated one 3 × A, #1776; 3: the waste is a fixed 10 ft for every gutter stock by default, #1355; 2: waste 10% by default and a separate allowance for an outside corner (14″), #1355
+export const GUTTER_PARTS_VERSION = "6"; // 6: «Расход v2» PR-2 — zinc soldered too, a soldered downspout joint 1 point, ONE «Soldering kit» (solder, flux, gas, abrasive, soda inside) instead of solder and flux, the soldering work, copper / zinc fasteners with their metal, expansion joints by metal (spec 33-gutters-consumption §5а); // 5: «Расход v2» PR-1б — a plain rectangular downspout bent on site (3 bends, +6″ each, «гиб по месту»), a round one 1 × 75° and a 2″ offset, the estimate's downspout rounded up to 10 ft each (spec 33-gutters-consumption §2.1, §2.15 №1–6); 4: a plain rectangular downspout has no elbows by default, a corrugated one 3 × A, #1776; 3: the waste is a fixed 10 ft for every gutter stock by default, #1355; 2: waste 10% by default and a separate allowance for an outside corner (14″), #1355
 
 /**
  * How a downspout's elbows are made (spec 33-gutters-consumption §2.1 п.2, founder 16.11 «гнут по месту только гладкий
@@ -667,16 +715,21 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     const metal = metalOf(s.material);
     const color = finish === "painted" && s.color ? s.color : "-";
     const [cnt, per] = JW[kind] ?? [`${kind}s`, `per_${kind}`];
-    if (kind === "ds" && rules.dsJoin === "screw") {
-      acc.add({ key: "screw.8x05", section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "screw", screw: "8x0.5" } }, j.rivets * n,
+    const screwed = kind === "ds" && rules.dsJoin === "screw";
+    if (screwed) {
+      const fm = fastenerMetalOf(s.material, rules);
+      acc.add({ key: fm ? `screw.${seg(fm)}.8x05` : "screw.8x05", section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "screw", ...(fm ? { metal: fm } : {}), screw: "8x0.5" } }, j.rivets * n,
         { rule: "ds_joint_screws", params: { joints: n, perJoint: j.rivets, screws: j.rivets * n }, setting: "dsJoin" });
     } else if (j.rivets > 0) {
       acc.add({ key: `rivet.42.${metal}.${finish}.${color}`, section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "rivet", rivet: "42", material: metal, finish, ...(color !== "-" ? { color } : {}) } }, j.rivets * n,
         { rule: "rivets_per_joints", params: { [cnt]: n, [per]: j.rivets, rivets: j.rivets * n }, setting: "joints" });
     }
-    if (rules.solderedMaterials.includes(s.material)) {
-      solderPts += j.sealant * n;
-      if (j.sealant > 0) solderWhy = mergeWhy(solderWhy, { rule: "solder_points", params: { [cnt]: n, [per]: j.sealant, points: j.sealant * n } });
+    // a soldered metal by its family too («copper_16oz» is copper — as its fasteners and expansion joints; review PR-2 №4)
+    if (rules.solderedMaterials.includes(s.material) || rules.solderedMaterials.includes(knownMetal(s.material) ?? "")) {
+      // a downspout joint of a soldered metal is soldered too (М2) — unless it is screwed (dsJoin)
+      const pts = kind === "ds" ? (screwed ? 0 : rules.solderPointsPerDsJoint) : j.sealant;
+      solderPts += pts * n;
+      if (pts > 0) solderWhy = mergeWhy(solderWhy, { rule: "solder_points", params: { [cnt]: n, [per]: pts, points: pts * n }, ...(kind === "ds" ? { setting: "solderPointsPerDsJoint" } : {}) });
     } else if (j.sealant > 0) {
       const sc = rules.sealantByColor ? color : "-";
       sealantPts.set(sc, (sealantPts.get(sc) ?? 0) + j.sealant * n);
@@ -802,10 +855,14 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     if (kit?.laborWork) acc.add({ key: `labor.${kit.laborWork}`, section: "labor", unit: "ft", use: "estimate", kind: "labor", attrs: { work: kit.laborWork } }, ft(len));
 
     // expansion joints on long aluminum runs: advice, and a part if the company adds them
-    if (r.material.startsWith("alu") && r.lengthIn > rules.expansionJointIn) {
-      const n = Math.ceil(r.lengthIn / rules.expansionJointIn) - 1;
+    // by metal (Ж6): aluminum 50 ft, copper 40 ft, zinc 33 ft; steel none
+    // aluminum is «alu…» only, as before (an unknown material is not given aluminum's spacing)
+    const m = metalOf(r.material);
+    const every = m === "aluminum" && !r.material.startsWith("alu") ? undefined : rules.expansionJointInByMetal[m];
+    if (every && r.lengthIn > every) {
+      const n = Math.ceil(r.lengthIn / every) - 1;
       advice.push({ code: "expansion_joint", runId: r.id, joints: n });
-      if (rules.expansionJointPart) acc.add({ key: `expjoint.${stockKey(r)}`, section: "corners_caps", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(r), part: "expansion_joint" } }, n, { rule: "expansion_joint", params: { runs: 1, lengthIn: r.lengthIn, everyIn: rules.expansionJointIn, joints: n }, setting: "expansionJointIn" });
+      if (rules.expansionJointPart) acc.add({ key: `expjoint.${stockKey(r)}`, section: "corners_caps", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(r), part: "expansion_joint" } }, n, { rule: "expansion_joint", params: { runs: 1, lengthIn: r.lengthIn, everyIn: every, joints: n }, setting: "expansionJointInByMetal" });
     }
   }
 
@@ -970,11 +1027,44 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     if (pts > 0)
       acc.add({ key: c === "-" ? "sealant" : `sealant.${seg(c)}`, section: "consumables", unit: "ea", use: "both", kind: "material", attrs: { part: "sealant", ...(c !== "-" ? { color: c } : {}) } }, Math.ceil(pts / rules.jointsPerSealantTube),
         withParams(sealantWhy.get(c), { points: pts, perTube: rules.jointsPerSealantTube, tubes: Math.ceil(pts / rules.jointsPerSealantTube) }, "jointsPerSealantTube"));
+  // М3–М7 (founder 16.11 №19: «один пункт Набор для пайки, внутри состав по отдельности»): ONE «Soldering kit» on the job, its make-up
+  // (solder, flux, gas, abrasive, soda) in its «why» for the order and the check; the soldering work by the points
   if (solderPts > 0) {
-    const lb = Math.ceil(solderPts / rules.solderPointsPerLb);
-    acc.add({ key: "solder", section: "consumables", unit: "lb", use: "purchase", kind: "material", attrs: { part: "solder" } }, lb, withParams(solderWhy, { points: solderPts, perLb: rules.solderPointsPerLb, lb }, "solderPointsPerLb"));
-    acc.add({ key: "flux", section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "flux" } }, 1, { rule: "flux_per_solder", params: { lb, perJob: 1, cans: 1 } });
+    const solderLb = Math.ceil(solderPts / rules.solderPointsPerLb);
+    const kit = {
+      points: solderPts,
+      solderLb,
+      fluxCans: Math.max(1, Math.ceil(solderLb / rules.solderLbPerFluxCan)),
+      gasCylinders: Math.max(1, Math.ceil(solderPts / rules.solderPointsPerGas)),
+      abrasivePacks: Math.max(1, Math.ceil(solderPts / rules.solderPointsPerAbrasive)),
+      soda: rules.solderSodaPerJob,
+      perLb: rules.solderPointsPerLb,
+    };
+    acc.add({ key: "soldering_kit", section: "consumables", unit: "ea", use: "both", kind: "material", attrs: { part: "soldering_kit" } }, 1,
+      { rule: "soldering_kit", params: kit, setting: "solderPointsPerLb", ...(solderWhy ? { also: [solderWhy] } : {}) });
+    acc.add({ key: "labor.solder", section: "labor", unit: "ea", use: "estimate", kind: "labor", attrs: { work: "solder" } }, solderPts,
+      { rule: "solder_work", params: { points: solderPts } });
   }
+  // copper next to aluminum or steel corrodes (§2.7, `galvanic_pair`): a downspout on a gutter, two gutters at a corner. Advice only:
+  // the estimate is never held (question 10). A straight join of two gutters («join» end) names no neighbour in the input — not seen yet
+  // (spec §5а: when the join carries its neighbour)
+  const pairs = new Set<string>();
+  const galvanic = (aId: string, aMat: string, bId: string, bMat: string) => {
+    const ma = knownMetal(aMat), mb = knownMetal(bMat);
+    if (!ma || !mb || (ma === "copper") === (mb === "copper") || !["aluminum", "steel"].includes(ma === "copper" ? mb : ma)) return;
+    const k = [aId, bId].sort().join("|");
+    if (pairs.has(k)) return;
+    pairs.add(k);
+    advice.push({ code: "galvanic_pair", ids: [aId, bId], metals: [ma, mb] });
+  };
+  for (const d of input.downspouts) {
+    const r = runs.get(d.runId);
+    if (r) galvanic(r.id, r.material, d.id, d.material);
+  }
+  const atCorner = new Map<string, MeasuredRun[]>();
+  for (const r of input.runs) for (const e of r.ends) if (e.kind === "corner") atCorner.set(e.cornerId, [...(atCorner.get(e.cornerId) ?? []), r]);
+  for (const rs of atCorner.values()) for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) galvanic(rs[i]!.id, rs[i]!.material, rs[j]!.id, rs[j]!.material);
+
   if (rules.touchUpPaint) for (const c of paintColors) acc.add({ key: `paint.${c}`, section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "touch_up_paint", color: c } }, 1, { rule: "touch_up_per_color", params: { color: c }, setting: "touchUpPaint" });
 
   return { parts: acc.list(), advice };
