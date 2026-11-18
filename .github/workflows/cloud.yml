@@ -26,6 +26,10 @@ on:
       - 'apps/mobile/src/features/**'
       - '.github/workflows/cloud.yml'
 
+# no secret of the repository is used here; jobs that need more declare their own rights
+permissions:
+  contents: read
+
 concurrency:
   group: cloud-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -37,6 +41,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22

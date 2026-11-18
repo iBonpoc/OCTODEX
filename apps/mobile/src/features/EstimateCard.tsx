@@ -16,7 +16,6 @@ import { SignBlock } from "@/features/SignBlock";
 import { SignaturePad, SignaturePreview } from "@/features/SignaturePad";
 import { clientDoc, issueCount, isUniversal, mainOption, marginView, newToken, SEND_ISSUE_KINDS, sendIssues, uid, type SendIssues } from "@/features/estimateDoc";
 import { canEditEstimateTemplates, cleanEstimateTemplate, ESTIMATE_TEMPLATE_NAME_MAX, toTemplateDoc } from "@/features/estimateTemplate";
-import { hasValidCslb } from "@/features/companySetup";
 import { ContractStatement } from "@/features/ContractStatement";
 import { estimateFileName, estimateHtml, saveEstimatePdf } from "@/features/estimatePdf";
 import { beforeSend, clientLink, copyText, estimateMessage, openEmail, openSms } from "@/features/sendEstimate";
@@ -476,9 +475,6 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
         <T v="caption" tone="mut">
           {t("ue.sendNote")}
         </T>
-        {!hasValidCslb(store.db.company) ? (
-          <StatusNote tone="warn">{t("ue.noCslb")}</StatusNote>
-        ) : null}
         {store.mode === "demo" ? (
           <StatusNote tone="warn">{t("ue.demoLink")}</StatusNote>
         ) : null}

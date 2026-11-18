@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="ru" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Цены и прайс Gutters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
+<!--
+  Прототип спеки 61 (docs/specs/61-gutters-prices.md §4.1–4.3), этап 0, только картинка.
+  Параметры: ?w=390|820|1280 &theme=light|dark &state=screen|menu|search &lane=all|missing|gutter|downspout|guards|consumables
+  Все значения — токены «Наряда»: блоки ниже — копия design/naryad-ds/tokens/{foundation,theme,components,status}.css
+  (нужная часть, без правок) и последний блок — зеркало значений packages/design-tokens/src/index.ts, которых нет в CSS.
+  Демо-цены (правило 9): примерные, не цены поставщиков.
+-->
+<style>
+/* ── foundation.css (выписка) ── */
+:root{
+ --font:'Onest',system-ui,sans-serif;
+ --fs-display:28px;--fs-title:22px;--fs-heading:17px;--fs-body:15px;--fs-btn:15px;--fs-caption:13px;--fs-micro:11px;--fs-input:17px;
+ --lh-tight:1.15;--lh-body:1.45;--lh-snug:1.35;
+ --fw-regular:400;--fw-medium:500;--fw-semibold:600;--fw-bold:700;
+ --space-hair:2px;--space-tight:6px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;
+ --radius-pill:999px;--radius-field:12px;--radius-chip:999px;
+ --control-sm:28px;--control-md:32px;--control-lg:36px;--field:34px;--hit-min:44px;
+ --control-md-phone:36px;--field-phone:44px;
+ --icon-xs:12px;--icon-sm:16px;--icon-md:20px;--icon-lg:24px;--icon-stroke:1.75;
+ --statusbar-h:44px;--tabbar-h:56px;--safe-bottom:34px;--fab:36px;--sheet-radius:24px;
+ --dur-fast:160ms;--dur-base:220ms;--ease-out:cubic-bezier(.2,.8,.2,1);
+ --scrim:rgba(0,0,0,.42);--shadow-pop:0 20px 60px rgba(0,0,0,.45);--shadow-sheet:0 -10px 40px rgba(0,0,0,.4);
+ --shadow-sm:0 2px 8px rgba(0,0,0,.25);
+ --z-nav:2;--z-scrim:5;--z-sheet:6;--z-modal:7;
+}
+/* ── theme.css ── */
+:root{--acc:#FBFF00;--on-acc:#0B0C0F;--r:24px;--ri:18px;--blur:20px;--blurov:24px}
+[data-theme="dark"]{--page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--surf-solid:#33363C;--in:rgba(255,255,255,.05);--bd:rgba(255,255,255,.14);--bd-field:rgba(255,255,255,.38);--track:rgba(255,255,255,.12);--sh:0 10px 30px rgba(0,0,0,.3);--ov:rgba(38,41,48,.72);--ov-solid:#262930;
+  --glow:radial-gradient(600px 420px at 6% 0%,rgba(124,224,138,.08),transparent 60%),radial-gradient(700px 500px at 100% 100%,rgba(255,160,60,.07),transparent 60%),radial-gradient(520px 420px at 60% 35%,rgba(143,162,255,.06),transparent 60%);color-scheme:dark}
+[data-theme="light"]{--page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--surf-solid:#F9F7F5;--in:rgba(255,255,255,.55);--bd:rgba(20,22,30,.1);--bd-field:rgba(20,22,30,.5);--track:rgba(20,22,30,.09);--sh:0 10px 28px rgba(60,50,40,.12);--ov:rgba(250,248,244,.78);--ov-solid:#FAF8F4;
+  --glow:radial-gradient(600px 420px at 6% 0%,rgba(124,224,138,.3),transparent 60%),radial-gradient(700px 500px at 100% 100%,rgba(255,160,60,.24),transparent 60%),radial-gradient(520px 420px at 60% 35%,rgba(143,162,255,.2),transparent 60%);color-scheme:light}
+/* ── status.css ── */
+:root{--st-ok:#7CE08A;--st-info:#8FA2FF;--st-warn:#FF8A3D;--st-bad:#FF6B6B;--st-on:#0B0C0F}
+[data-theme="dark"]{--st-ok-text:#9CF0A8;--st-info-text:#C2CCFF;--st-warn-text:#FFB47E;--st-bad-text:#FFAAAA}
+[data-theme="light"]{--st-ok-text:#176428;--st-info-text:#3647C4;--st-warn-text:#944600;--st-bad-text:#B4232A}
+/* ── components.css (выписка) ── */
+:root{--btn-sm:var(--control-sm);--btn-md:var(--control-md);--btn-phone-visible:var(--control-lg);--field-h:var(--field);
+ --chip-h:24px;--chip-px:10px;--dock-btn:var(--control-lg);--modal-w:380px;--panel-w:360px;--popover-w:360px;--row-option:48px}
+/* ── зеркало packages/design-tokens/src/index.ts (значения, которых нет в CSS) ── */
+:root{--row-min:44px;--row-max:52px;--menu-w:240px;--nav-rail:72px;--content-max:1200px;--form-max:560px;
+ --dialog-w:calc(var(--modal-w) + 2 * var(--space-8)) /* layout.dialog 444 = modalW + 2×space[8], DS §5.2 */;
+ --grabber-w:36px;--grabber-h:4px;--hairline:1px;--avatar-md:36px;--avatar-sm:28px}
+
+/* ── база ── */
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);background-image:var(--glow);background-attachment:fixed;color:var(--ink);
+  font:var(--fw-regular) var(--fs-body)/var(--lh-body) var(--font);-webkit-font-smoothing:antialiased;min-height:100vh}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+svg.i{fill:none;stroke:currentColor;stroke-width:var(--icon-stroke);stroke-linecap:round;stroke-linejoin:round;flex:none}
+.mut{color:var(--mut)}
+.tab{font-variant-numeric:tabular-nums}
+
+/* оболочка */
+.app{display:flex;min-height:100vh;position:relative}
+/* снимок всей длины (?shot=full): вкладки — у низа страницы, как при прокрутке до конца */
+[data-shot="full"] .tabbar{position:absolute}
+[data-shot="full"] .rail{position:static;height:auto;align-self:stretch}
+[data-shot="full"]{background-attachment:scroll}
+.main{flex:1;min-width:0;padding:var(--space-4) var(--space-4) var(--space-8)}
+.col{max-width:var(--content-max);display:flex;flex-direction:column;gap:var(--space-3)}
+[data-dev="phone"] .main{padding-bottom:calc(var(--tabbar-h) + var(--safe-bottom) + var(--space-8))}
+
+/* меню слева — полоса navRail (планшет и десктоп) */
+.rail{width:var(--nav-rail);flex:none;display:flex;flex-direction:column;align-items:center;gap:var(--space-2);padding:var(--space-4) 0;
+  background:var(--ov-solid);border-right:var(--hairline) solid var(--bd);position:sticky;top:0;height:100vh}
+.rail .ri{width:calc(var(--nav-rail) - var(--space-2) * 2);display:flex;flex-direction:column;align-items:center;gap:var(--space-hair);
+  padding:var(--space-1) 0;border-radius:var(--radius-field);color:var(--mut);font-size:var(--fs-micro);line-height:var(--lh-tight)}
+.rail .ri.on{background:var(--surf2);box-shadow:var(--shadow-sm);color:var(--ink);font-weight:var(--fw-semibold)}
+.rail .new{width:var(--control-lg);height:var(--control-lg);border-radius:var(--radius-pill);display:grid;place-items:center;
+  background:var(--surf2);border:var(--hairline) solid var(--bd)}
+
+/* нижние вкладки телефона — плавающая пилюля, сплошная ovSolid (DS §6.4) */
+.tabbar{position:fixed;left:var(--space-4);right:var(--space-4);bottom:var(--space-6);height:var(--tabbar-h);z-index:var(--z-nav);
+  display:flex;align-items:center;padding:0 var(--space-1);border-radius:var(--radius-pill);background:var(--ov-solid);
+  border:var(--hairline) solid var(--bd);box-shadow:var(--sh)}
+.tabbar .ti{flex:1;height:calc(var(--tabbar-h) - var(--space-2));display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:var(--space-hair);font-size:var(--fs-micro);color:var(--mut);border-radius:var(--radius-pill)}
+.tabbar .ti.on{background:var(--surf2);color:var(--ink);font-weight:var(--fw-semibold)}
+
+/* шапка экрана (DS §12.2) */
+.ver{font-size:var(--fs-micro);color:var(--mut)}
+.back{display:inline-flex;align-items:center;gap:var(--space-1);min-height:var(--hit-min);font-size:var(--fs-body);color:var(--ink);align-self:flex-start}
+.hd h1{margin:0;font-size:var(--fs-title);line-height:var(--lh-tight);font-weight:var(--fw-semibold)}
+.hd .sub{margin-top:var(--space-1);color:var(--mut)}
+.hd{margin-bottom:calc(var(--space-6) - var(--space-3))}
+.intro{margin:0;color:var(--mut);max-width:var(--form-max)}
+
+/* Card + ListRow */
+.card{background:var(--surf);border:var(--hairline) solid var(--bd);border-radius:var(--ri)}
+.lrow{display:flex;align-items:center;gap:var(--space-3);min-height:var(--row-max);padding:var(--space-2) var(--space-4);width:100%;text-align:left}
+.lrow .lt{font-weight:var(--fw-semibold)}
+.lrow .lv{margin-left:auto;color:var(--mut);text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sys{max-width:var(--form-max)}
+
+/* Banner (Б9) */
+.banner{display:flex;gap:var(--space-3);padding:var(--space-3);background:var(--surf);border:var(--hairline) solid var(--st-warn);border-radius:var(--ri)}
+.banner .bi{color:var(--st-warn-text);padding-top:var(--space-hair)}
+.banner .bt{font-weight:var(--fw-semibold)}
+.banner .bh{font-size:var(--fs-caption);color:var(--mut);line-height:var(--lh-snug);margin-top:var(--space-hair)}
+.banner .bb{flex:1;min-width:0}
+[data-dev="phone"] .banner .btn{margin-top:var(--space-3)}
+[data-dev="tablet"] .banner,[data-dev="desktop"] .banner{align-items:center}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* Button secondary */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-1);height:var(--btn-phone-visible);padding:0 var(--space-4);
+  border-radius:var(--radius-pill);background:var(--surf2);border:var(--hairline) solid var(--bd);font-size:var(--fs-btn);font-weight:var(--fw-semibold);white-space:nowrap}
+[data-dev="tablet"] .btn,[data-dev="desktop"] .btn{height:var(--btn-sm);padding:0 var(--space-3)}
+.iconbtn{width:var(--dock-btn);height:var(--dock-btn);border-radius:var(--radius-pill);display:grid;place-items:center;background:var(--surf2);border:var(--hairline) solid var(--bd);flex:none}
+
+/* SectionTitle */
+.sec{display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-3)}
+.sec h2{margin:0;font-size:var(--fs-heading);font-weight:var(--fw-semibold);line-height:var(--lh-snug)}
+.sec h2 .n{color:var(--mut);font-weight:var(--fw-regular)}
+.sec .hint{margin:calc(var(--space-1) * -1) 0 0;font-size:var(--fs-caption);color:var(--mut);line-height:var(--lh-snug)}
+.grp{font-size:var(--fs-caption);font-weight:var(--fw-semibold);color:var(--mut);margin-top:var(--space-2)}
+
+/* ListCard / CardGrid / ListCardHeader */
+.grid{display:grid;grid-template-columns:1fr;gap:var(--space-2)}
+[data-dev="tablet"] .grid{grid-template-columns:1fr 1fr}
+.grid .grp{grid-column:1/-1}
+.lc{display:flex;gap:var(--space-3);align-items:flex-start;padding:var(--space-3) var(--space-4);background:var(--surf);border:var(--hairline) solid var(--bd);border-radius:var(--r);min-height:var(--row-max)}
+.lc .av{width:var(--avatar-md);height:var(--avatar-md);border-radius:var(--radius-pill);display:grid;place-items:center;background:var(--surf2);border:var(--hairline) solid var(--bd);color:var(--mut);flex:none}
+.lc .bd{flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--space-1);padding-top:var(--space-1)}
+.lc .tt{font-weight:var(--fw-semibold);line-height:var(--lh-snug)}
+.lc .vl{font-weight:var(--fw-semibold);white-space:nowrap;padding-top:var(--space-1)}
+.lc .vl.no{color:var(--mut);font-weight:var(--fw-regular)}
+.chip{display:inline-flex;align-items:center;gap:var(--space-1);height:var(--chip-h);padding:0 var(--chip-px);border-radius:var(--radius-chip);
+  border:var(--hairline) solid var(--bd);background:var(--surf);font-size:var(--fs-caption);font-weight:var(--fw-semibold);align-self:flex-start}
+.chip.ok{color:var(--st-ok-text)}
+/* десктоп: ListCard «row» под ListCardHeader */
+.lch{display:flex;align-items:center;gap:var(--space-3);padding:0 var(--space-4);font-size:var(--fs-caption);color:var(--mut)}
+.lch .c1{padding-left:calc(var(--avatar-sm) + var(--space-3));flex:1}
+[data-dev="desktop"] .lc{align-items:center;padding:var(--space-2) var(--space-4)}
+[data-dev="desktop"] .lc .av{width:var(--avatar-sm);height:var(--avatar-sm)}
+[data-dev="desktop"] .lc .bd{flex-direction:row;align-items:center;gap:var(--space-3);padding-top:0}
+[data-dev="desktop"] .lc .vl{padding-top:0}
+[data-dev="desktop"] .lc .chip{align-self:center}
+
+/* FilterBar (DS §5.5) */
+.fb{display:flex;flex-direction:column;gap:var(--space-2)}
+.fb .r1{display:flex;align-items:center;gap:var(--space-2)}
+.srch{width:var(--btn-phone-visible);height:var(--btn-phone-visible);border-radius:var(--radius-pill);display:grid;place-items:center;border:var(--hairline) solid var(--bd);flex:none;position:relative}
+.srch::after,.chipf::after{content:"";position:absolute;inset:calc((var(--btn-phone-visible) - var(--hit-min)) / 2)}
+.lane{position:relative;display:flex;gap:var(--space-2);overflow-x:auto;scrollbar-width:none;flex:1;min-width:0;padding:var(--space-1) 0}
+.lane::-webkit-scrollbar{display:none}
+.chipf{position:relative;flex:none;height:var(--btn-md);padding:0 var(--space-3);border-radius:var(--radius-pill);border:var(--hairline) solid var(--bd);
+  display:inline-flex;align-items:center;font-size:var(--fs-btn);color:var(--mut);white-space:nowrap}
+.chipf.on{background:var(--surf2);box-shadow:var(--shadow-sm);border-color:transparent;color:var(--ink);font-weight:var(--fw-semibold)}
+.sfield{flex:1;display:flex;align-items:center;gap:var(--space-2);height:var(--field-phone);padding-left:var(--space-3);border-radius:var(--radius-field);
+  border:var(--hairline) solid var(--ink);background:var(--in);color:var(--mut)}
+.sfield .q{flex:1;color:var(--ink);font-size:var(--fs-input)}
+.sfield .q::after{content:"";display:inline-block;width:2px;height:1.1em;background:var(--ink);vertical-align:text-bottom;margin-left:1px}
+.sfield .x{width:var(--btn-phone-visible);height:var(--btn-phone-visible);display:grid;place-items:center}
+.found{font-size:var(--fs-caption);color:var(--mut)}
+[data-dev="tablet"] .srch,[data-dev="desktop"] .srch{width:var(--btn-md);height:var(--btn-md)}
+[data-dev="tablet"] .sfield,[data-dev="desktop"] .sfield{flex:none;width:var(--panel-w);height:var(--field-h)}
+[data-dev="tablet"] .sfield .x,[data-dev="desktop"] .sfield .x{width:var(--btn-md);height:var(--btn-md)}
+[data-dev="desktop"] .chipf{height:var(--btn-sm)}
+
+/* шторка «Система» (Б1) и меню у строки (А2) */
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:var(--z-scrim)}
+.sheet{position:fixed;z-index:var(--z-sheet);background:var(--ov);backdrop-filter:blur(var(--blurov));-webkit-backdrop-filter:blur(var(--blurov));
+  border:var(--hairline) solid var(--bd);display:flex;flex-direction:column;gap:var(--space-3)}
+[data-dev="phone"] .sheet{left:0;right:0;bottom:0;border-radius:var(--sheet-radius) var(--sheet-radius) 0 0;border-bottom:0;
+  padding:var(--space-2) var(--space-4) calc(var(--safe-bottom) + var(--space-4));box-shadow:var(--shadow-sheet)}
+[data-dev="tablet"] .sheet,[data-dev="desktop"] .sheet{left:50%;top:50%;transform:translate(-50%,-50%);width:var(--dialog-w);
+  border-radius:var(--sheet-radius);padding:var(--space-4);box-shadow:var(--shadow-pop)}
+.grab{width:var(--grabber-w);height:var(--grabber-h);border-radius:var(--radius-pill);background:var(--bd-field);align-self:center;margin-bottom:var(--space-1)}
+.sh-h{display:flex;align-items:center;gap:var(--space-3)}
+.sh-h h3{margin:0;flex:1;font-size:var(--fs-heading);font-weight:var(--fw-semibold)}
+.sh-hint{margin:0;font-size:var(--fs-caption);color:var(--mut);line-height:var(--lh-snug)}
+.form{position:relative}
+.sel{display:flex;align-items:center;gap:var(--space-2);min-height:var(--field-phone);padding:0 var(--space-4);width:100%;text-align:left}
+[data-dev="tablet"] .sel,[data-dev="desktop"] .sel{min-height:var(--row-min)}
+.sel + .sel{border-top:var(--hairline) solid var(--bd)}
+.sel .lv{margin-left:auto;color:var(--mut)}
+.sel.open .lv{color:var(--ink);font-weight:var(--fw-semibold)}
+.menu{position:absolute;right:var(--space-2);width:var(--menu-w);z-index:var(--z-modal);background:var(--ov);backdrop-filter:blur(var(--blurov));-webkit-backdrop-filter:blur(var(--blurov));
+  border:var(--hairline) solid var(--bd);border-radius:var(--ri);box-shadow:var(--shadow-pop);padding:var(--space-1) 0}
+.menu{background:var(--ov-solid)} /* меню лежит на полях шторки: сплошное, текст под ним не просвечивает (DS §6.4, запасной вид) */
+[data-theme="light"] .sheet{background:var(--ov-solid)}
+.mi{display:flex;align-items:center;gap:var(--space-2);min-height:var(--hit-min);padding:0 var(--space-4) 0 var(--space-3)}
+.mi .ck{width:var(--icon-md);height:var(--icon-md);color:var(--ink)}
+.mi.on{font-weight:var(--fw-semibold)}
+.mi + .mi{border-top:var(--hairline) solid var(--bd)}
+
+/* «?» у заголовка (Б7): видимый 18, значок 11, зона 44 */
+.ttl{display:flex;align-items:center;gap:var(--space-2)}
+.help{position:relative;width:var(--help-visible);height:var(--help-visible);border-radius:var(--radius-pill);display:grid;place-items:center;
+  background:var(--surf2);border:var(--hairline) solid var(--bd);color:var(--ink);flex:none}
+.help::after{content:"";position:absolute;inset:calc((var(--help-visible) - var(--hit-min)) / 2)}
+.help svg{width:var(--help-icon);height:var(--help-icon);stroke-width:2.5}
+.syscap{padding:var(--space-2) var(--space-4) var(--space-3);font-size:var(--fs-caption);color:var(--mut);border-top:var(--hairline) solid var(--bd)}
+.lane{-webkit-mask-image:linear-gradient(to right,var(--ink) calc(100% - var(--tab-fade-w)),transparent);mask-image:linear-gradient(to right,var(--ink) calc(100% - var(--tab-fade-w)),transparent)}
+:root{--tab-fade-w:var(--space-8)}
+.other{max-width:var(--form-max)}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const P = new URLSearchParams(location.search);
+const W = +(P.get('w') || window.innerWidth || 390);
+const DEV = W >= 1280 ? 'desktop' : W >= 820 ? 'tablet' : 'phone';
+const THEME = P.get('theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+const STATE = P.get('state') || 'screen';
+const LANE = P.get('lane') || 'all';
+const Q = STATE === 'search' ? 'cap' : '';
+document.documentElement.dataset.theme = THEME;
+document.body.dataset.dev = DEV;
+if (P.get('shot')) document.body.dataset.shot = P.get('shot');
+
+const PATHS = {
+  left:'<path d="m15 18-6-6 6-6"/>', right:'<path d="m9 18 6-6-6-6"/>', down:'<path d="m6 9 6 6 6-6"/>',
+  search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>', close:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  alert:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  wrench:'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+  box:'<path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+  home:'<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>',
+  clip:'<rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
+  msg:'<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+  users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  cal:'<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  file:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8M16 13H8M16 17H8"/>',
+  inbox:'<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  plus:'<path d="M5 12h14M12 5v14"/>', help:'<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>', menu:'<path d="M4 6h16M4 12h16M4 18h16"/>'
+};
+// размеры значков — токены iconXs/Sm/Md (12/16/20)
+const ic = (n, s = 'md') => `<svg class="i" style="width:var(--icon-${s});height:var(--icon-${s})" viewBox="0 0 24 24" aria-hidden="true">${PATHS[n]}</svg>`;
+
+const SYS = { gutter: '5″ K-Style', ds: '2×3', mat: 'Aluminum' };
+const NB = ' ';
+const nb = (t) => t.replace(/эт (\d)/g, 'эт' + NB + '$1').replace(/End Cap – (Left|Right)/g, `End${NB}Cap${NB}–${NB}$1`);
+const SECTIONS = [
+  ['gutter', 'Желоб'], ['corners_caps', 'Углы и заглушки'], ['fasteners', 'Крепёж'], ['downspouts', 'Водосток'],
+  ['adapters', 'Переходники'], ['ds_bottom', 'Низ водостока'], ['guards', 'Guards'], ['consumables', 'Расходники']
+];
+// лента из 6 (спека 61 §4.2): «Без цены» первым, «Все» — по умолчанию и последним
+const LANES = [
+  ['missing', 'Без цены', null], ['gutter', 'Желоб', ['gutter', 'corners_caps', 'fasteners']], ['downspout', 'Водосток', ['downspouts', 'adapters', 'ds_bottom']],
+  ['guards', 'Guards', ['guards']], ['consumables', 'Расходники', ['consumables']], ['all', 'Все', null]
+];
+// демо-цены (правило 9); price null — позиции в прайсе нет
+const LABOR = [
+  ['Монтаж желоба · эт 1', 850, 'ft'], ['Монтаж водостока · эт 1', 2500, 'ea'],
+  ['Замена End Cap', 1200, 'ea'], ['Вырезка угла', null, 'ea'], ['Демонтаж старого', null, 'ft']
+];
+const PARTS = [
+  ['gutter', '5″ K-Style Gutter · Aluminum 0.027″', 420, 'ft'],
+  ['corners_caps', '5″ K-Style Inside Corner', 950, 'ea'],
+  ['corners_caps', '5″ K-Style Outside Corner', 950, 'ea'],
+  ['corners_caps', '5″ K-Style End Cap – Left', 210, 'ea'],
+  ['corners_caps', '5″ K-Style End Cap – Right', null, 'ea'],
+  ['fasteners', '5″ Hidden Hanger', 115, 'ea'],
+  ['fasteners', 'Gutter Screw #10 × 3/4″', null, 'ea'],
+  ['downspouts', '2×3 Downspout · Aluminum', 340, 'ft'],
+  ['adapters', '2×3 Elbow A', 325, 'ea'],
+  ['adapters', '2×3 Outlet', null, 'ea'],
+  ['ds_bottom', 'Downspout Extension', null, 'ea'],
+  ['guards', '5″ Gutter Guard', null, 'ft'],
+  ['consumables', 'Gutter Sealant', 780, 'ea'],
+];
+const OTHER_SYSTEMS_HITS = 1; // «cap» в других системах (напр. 6″ Fascia End Cap)
+const money = (c) => '$' + (c / 100).toLocaleString('en-US', { minimumFractionDigits: 2 });
+const missing = LABOR.filter((r) => r[1] == null).length + PARTS.filter((r) => r[2] == null).length;
+const match = (name) => !Q || name.toLowerCase().includes(Q);
+
+// что показывает чип: детали и работа (работа — только под «Все» и «Без цены»)
+function rowsFor(lane) {
+  const secs = (LANES.find((l) => l[0] === lane) || LANES[5])[2];
+  const parts = PARTS.filter((p) => (!secs || secs.includes(p[0])) && (lane !== 'missing' || p[2] == null) && match(p[1]));
+  const labor = lane === 'all' || lane === 'missing' ? LABOR.filter((r) => (lane !== 'missing' || r[1] == null) && match(r[0])) : [];
+  return { parts, labor };
+}
+const cur = rowsFor(LANE);
+
+function listCard(icon, title, price, unit) {
+  const val = price != null ? `<span class="vl tab">${money(price)} / ${unit}</span>` : `<span class="vl no tab">— / ${unit}</span>`;
+  return `<div class="lc" role="button"><span class="av">${ic(icon, DEV === 'desktop' ? 'sm' : 'md')}</span>
+    <div class="bd"><span class="tt">${nb(title)}</span></div>${val}</div>`;
+}
+const header = () => DEV === 'desktop' ? `<div class="lch"><span class="c1">Позиция</span><span>Цена</span></div>` : '';
+
+function filterBar() {
+  // нулевые скрыты (кроме выбранного), нули — с учётом поиска
+  const chips = LANES.filter(([k]) => k === LANE || k === 'all' || (() => { const r = rowsFor(k); return r.parts.length + r.labor.length > 0; })())
+    .map(([k, l]) => `<button class="chipf${k === LANE ? ' on' : ''}" role="radio" aria-checked="${k === LANE}">${l}</button>`).join('');
+  const lane = `<div class="lane" id="lane" role="radiogroup" aria-label="Раздел">${chips}</div>`;
+  const closed = `<button class="srch" aria-label="Поиск">${ic('search', 'sm')}</button>`;
+  const open = `<div class="sfield">${ic('search', 'sm')}<span class="q">${Q}</span><button class="x" aria-label="Очистить поиск">${ic('close', 'sm')}</button></div>`;
+  if (!Q) return `<div class="fb"><div class="r1">${closed}${lane}</div></div>`;
+  // телефон: открытое поле занимает ряд 1, лента — ряд 2; планшет и десктоп: поле panelW в одном ряду с лентой
+  return DEV === 'phone' ? `<div class="fb"><div class="r1">${open}</div>${lane}</div>` : `<div class="fb"><div class="r1">${open}${lane}</div></div>`;
+}
+
+function partsSec() {
+  if (!cur.parts.length) return '';
+  let html = '';
+  for (const [k, l] of SECTIONS) {
+    const g = cur.parts.filter((p) => p[0] === k);
+    if (!g.length) continue;
+    html += `<div class="grp">${l}</div>` + g.map((p) => listCard('box', p[1], p[2], p[3])).join('');
+  }
+  return `<section class="sec"><h2>Детали <span class="n">· ${cur.parts.length}</span></h2>${header()}<div class="grid">${html}</div></section>`;
+}
+function laborSec() {
+  if (!cur.labor.length) return '';
+  return `<section class="sec"><h2>Работа <span class="n">· ${cur.labor.length}</span></h2>
+    <p class="hint">Отдельными строками сметы; от системы не зависит.</p>${header()}
+    <div class="grid">${cur.labor.map((r) => listCard('wrench', r[0], r[1], r[2])).join('')}</div></section>`;
+}
+
+function systemCard() {
+  const items = ['5″ K-Style', '6″ K-Style', '5″ Fascia', '6″ Fascia', '5″ Half Round'];
+  const open = STATE === 'menu';
+  const menu = open ? `<div class="menu" role="menu" style="top:calc(var(--field-phone) - var(--space-1))">${items.map((x) =>
+    `<div class="mi${x === SYS.gutter ? ' on' : ''}" role="menuitemradio" aria-checked="${x === SYS.gutter}"><span class="ck">${x === SYS.gutter ? ic('check') : ''}</span>${x}</div>`).join('')}</div>` : '';
+  const sel = (l, v, o) => `<button class="sel${o ? ' open' : ''}" aria-haspopup="menu" aria-expanded="${!!o}"><span>${l}</span><span class="lv">${v}</span><span class="mut">${ic('down', 'sm')}</span></button>`;
+  return `<div class="card form sys" data-testid="gpr-system" role="group" aria-label="Система">
+    ${sel('Желоб', SYS.gutter, open)}${sel('Водосток', SYS.ds)}${sel('Материал', SYS.mat)}
+    <div class="syscap">Цена одна на все цвета</div>${menu}</div>`;
+}
+
+function screen() {
+  const n = cur.parts.length + cur.labor.length;
+  const found = Q ? `<div class="found">Найдено: ${n}</div>
+    <div class="card other"><button class="lrow"><span>В других системах: ${OTHER_SYSTEMS_HITS}</span><span class="lv"></span><span class="mut">${ic('right')}</span></button></div>` : '';
+  return `
+  <div class="ver">GoRix v1.0.0 · dev</div>
+  <button class="back">${ic('left')}Gutters</button>
+  <div class="hd ttl"><h1>Цены и прайс</h1><button class="help" aria-label="Справка: Цены и прайс">${ic('help')}</button></div>
+  ${systemCard()}
+  <div class="banner" role="status" data-testid="gpr-missing-n"><span class="bi">${ic('alert')}</span>
+    <div class="bb"><span class="sr">Предупреждение.</span><div class="bt">Нет цены: ${missing}</div>
+      <div class="bh">В этой системе и в работе; добавит позиции с примерными ценами.</div>
+      ${DEV === 'phone' ? `<button class="btn">Создать позиции сразу</button>` : ''}</div>
+    ${DEV === 'phone' ? '' : `<button class="btn">Создать позиции сразу</button>`}
+  </div>
+  ${filterBar()}
+  ${found}
+  ${partsSec()}
+  ${laborSec()}`;
+}
+
+const TABS = [['home', 'Главная'], ['clip', 'Gutters'], ['msg', 'Сообщения'], ['users', 'Клиенты'], ['more', 'Ещё']];
+const RAIL = [['home', 'Главная'], ['msg', 'Сообщения'], ['cal', 'План'], ['inbox', 'Лиды'], ['users', 'Клиенты'], ['file', 'Сметы'], ['clip', 'Gutters']];
+const nav = DEV === 'phone'
+  ? `<nav class="tabbar">${TABS.map(([i, l]) => `<div class="ti${l === 'Gutters' ? ' on' : ''}">${ic(i)}${l}</div>`).join('')}</nav>`
+  : `<nav class="rail"><div class="ri">${ic('menu')}</div><div class="new" aria-label="Создать">${ic('plus')}</div>${RAIL.map(([i, l]) => `<div class="ri${l === 'Gutters' ? ' on' : ''}">${ic(i)}${l}</div>`).join('')}</nav>`;
+
+document.getElementById('root').innerHTML = `<div class="app">${DEV === 'phone' ? '' : nav}<main class="main"><div class="col">${screen()}</div></main>${DEV === 'phone' ? nav : ''}</div>`;
+// лента: при «Все» стоит в начале (спека 61 §4.2); иначе выбранный чип прокручен в вид
+const on = document.querySelector('.chipf.on'), lane = document.getElementById('lane');
+if (on && lane && LANE !== 'all') lane.scrollLeft = Math.max(0, on.offsetLeft + on.offsetWidth - lane.clientWidth);
+</script>
+</body>
+</html>

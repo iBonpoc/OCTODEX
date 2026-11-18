@@ -77,7 +77,7 @@ const CREATES: Creates = {
   "visit.step": none, "photo.add": (o) => [o.id], "photo.remove": none, "photo.retry": none, "visit.checklist": none, "visit.sign": none,
   "chk.item.set": none, "chk.item.add": (o) => [o.item.id], "chk.item.remove": none, "chk.item.edit": none, "chk.visit.review": none, "chk.visit.mins": none,
   "chk.template.save": (o) => [o.template.id], "est.template.save": (o) => [o.template.id], "company.visitSettings": none,
-  "supplier.save": (o) => [o.supplier.id],
+  "supplier.save": (o) => [o.supplier.id], "supplier.tax": none,
   "po.save": (o) => [o.order.id, ...o.order.lines.map((l) => l.id)], "po.receive": none,
   "visit.pay": (o) => [o.invoiceId, o.paymentId], "lead.reply": none,
   "lead.book": (o) => [o.customerId, o.contactId, o.propertyId, o.jobId, o.visitId],
