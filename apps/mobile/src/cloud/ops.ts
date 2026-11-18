@@ -1307,6 +1307,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       if (op.baseRowVersion === undefined) return run(supabase.from("expenses").update(upd).eq("id", op.id).eq("company_id", c));
       const { data, error, status } = await supabase.from("expenses").update(upd).eq("id", op.id).eq("company_id", c).eq("row_version", op.baseRowVersion).select("id");
       if (error) return run(Promise.resolve({ error, status }));
+      // no row: changed on another phone first (or no longer this person's / in the Trash) — one card, no retry
       if (!data?.length) throw new PermanentError("the expense was changed on another phone", 409, "40001", "row_version_conflict");
       return;
     }
@@ -1315,7 +1316,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       if (error) return run(Promise.resolve({ error, status }));
       const r = (data as { ok: boolean; reason: string | null }[] | null)?.[0];
       // in the Trash already (a replay) is ok; refused (not yours, the job removed: noRight, refused, …) — said, never a retry
-      if (r && !r.ok) throw new PermanentError(`the expense was not removed: ${r.reason}`, 403, "42501", r.reason ?? "refused");
+      // a refusal about this expense (not the membership: no 42501, the queue does not re-read memberships for it)
+      if (r && !r.ok) throw new PermanentError(`the expense was not removed: ${r.reason}`, 409, "P0001", "expense_not_removed");
       return;
     }
     default:

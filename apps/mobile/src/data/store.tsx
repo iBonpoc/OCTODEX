@@ -54,7 +54,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { backoffMs, classify, isAccessDenied, isModuleInactive, isUnknownOp, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, liveOf, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
-import { dropGroupPriceOps, dropModuleOps, dropSettingsOps, dropTemplateOps, groupPriceRejected, itemCostRejected, templateRejected, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
+import { dropExpenseOps, expenseRejected, dropGroupPriceOps, dropModuleOps, dropSettingsOps, dropTemplateOps, groupPriceRejected, itemCostRejected, templateRejected, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
 import type { DictKey } from "@/i18n";
 import { onAppActive, onAppLeave } from "./appActive";
 import { adoptLegacy, mineOf, onSharedForget, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
@@ -1100,6 +1100,21 @@ export function StoreProvider({
             // the phone's settings and version of this module are not the server's: no new save until this module is read
             // again — now, not after the whole queue (a live op in it holds the company's reload, review #374 №1)
             void rereadSettings(mod, w?.companyId);
+            continue;
+          }
+          // #2009: an expense changed on another phone first, or its removal refused: this op and the later ones of the same
+          // expense go now (each was built on this one), one card in the person's words, the truth read again — no five tries
+          if ((item.op.k === "expense.update" && isRowConflict(e)) || (item.op.k === "expense.remove" && (e as { hint?: unknown } | null)?.hint === "expense_not_removed")) {
+            const { kept, gone } = dropExpenseOps(outboxRef.current, item.op.id, w);
+            outboxRef.current = kept;
+            for (const g of gone) {
+              opPause.current.delete(g.id);
+              deadOps.current.add(g.id);
+            }
+            dropped = true;
+            const rej = expenseRejected(item, msg, Date.now(), w);
+            setRejected((prev) => [...freshRejected(prev, Date.now()).filter((x) => x.id !== rej.id), rej]);
+            setOutbox(outboxRef.current);
             continue;
           }
           // an estimate template changed on another phone first (spec 07 §12.7): this save and the later ones of the same

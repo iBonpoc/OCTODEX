@@ -52,7 +52,7 @@ describe("expense.update / expense.remove (#2009)", () => {
     await applyOp({ k: "expense.remove", id: "x1" }, "c1", "u1");
     expect(calls).toContainEqual({ what: "rpc.trash_items", args: { p_kind: "expense", p_ids: ["x1"] } });
     answer.trash = [{ id: "x1", ok: false, reason: "noRight" }];
-    await expect(applyOp({ k: "expense.remove", id: "x1" }, "c1", "u1")).rejects.toMatchObject({ hint: "noRight" });
+    await expect(applyOp({ k: "expense.remove", id: "x1" }, "c1", "u1")).rejects.toMatchObject({ hint: "expense_not_removed" });
   });
   it("who may: the owner and the office anyone's; sales and a technician only their own", () => {
     const x = { memberId: "m1" };
@@ -63,5 +63,22 @@ describe("expense.update / expense.remove (#2009)", () => {
     expect(canEditExpense("tech", "m1", x)).toBe(true);
     expect(canEditExpense("sales", "m1", x)).toBe(true);
     expect(canEditExpense("tech", null, x)).toBe(false);
+  });
+});
+
+describe("the queue's refusal of an expense's edit or removal (#2009 С4)", async () => {
+  const { dropExpenseOps, expenseRejected } = await import("../src/data/outboxRejected");
+  const who = { userId: "u1", companyId: "c1" };
+  const item = (id: string, op: Record<string, unknown>) => ({ id, op, at: "2026-11-18T10:00:00Z", tries: 0, owner: who }) as never;
+  it("a conflict drops this edit and the later edits and removal of the same expense — not another expense's", () => {
+    const items = [item("a", { ...upd, baseRowVersion: 1 }), item("b", { ...upd, baseRowVersion: 2 }), item("c", { k: "expense.remove", id: "x1" }), item("d", { ...upd, id: "x2" })];
+    const { kept, gone } = dropExpenseOps(items, "x1", who);
+    expect((gone as { id: string }[]).map((x) => x.id)).toEqual(["a", "b", "c"]);
+    expect((kept as { id: string }[]).map((x) => x.id)).toEqual(["d"]);
+  });
+  it("the card says it in the person's words: changed elsewhere / not removed, and opens the expense", () => {
+    const now = Date.parse("2026-11-18T10:00:00Z");
+    expect(expenseRejected(item("a", upd), "x", now, who)).toMatchObject({ what: "expense", href: "/expense/x1", labelKey: "exp.rej.conflict" });
+    expect(expenseRejected(item("c", { k: "expense.remove", id: "x1" }), "x", now, who)).toMatchObject({ labelKey: "exp.rej.remove" });
   });
 });

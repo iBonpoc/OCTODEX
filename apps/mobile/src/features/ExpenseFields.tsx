@@ -13,6 +13,7 @@ import { PickerSheet } from "@/ui/pickerSheet";
 import { SelectField } from "@/ui/selectField";
 import type { useRequiredForm } from "@/ui/requiredForm";
 import { DatePick } from "@/features/DatePick";
+import { Labeled } from "@/features/fields";
 import { expenseAmountCents } from "@/features/expenseAmount";
 import { expenseJobsFor, vendorChoices } from "@/features/expenseForm";
 import { companyToday } from "@/features/zone";
@@ -59,7 +60,10 @@ export function useExpenseFields(draft: ReturnType<typeof useExpenseDraft>, form
   const jobs = [{ key: "none", label: t("exp.noJob") }, ...kept, ...allowed];
   const fields = (
     <>
-      <TextField type="money" value={d.amount} onChangeText={(v) => set("amount", v)} label={t("exp.amount")} placeholder="0.00" icon="dollar" field={form.field("amount")} />
+      {/* the label above the field (DS §11 п.5): the placeholder is only an example */}
+      <Labeled label={t("exp.amount")}>
+        <TextField type="money" value={d.amount} onChangeText={(v) => set("amount", v)} label={t("exp.amount")} placeholder="0.00" icon="dollar" field={form.field("amount")} />
+      </Labeled>
       {/* where it was bought — an object: a row that opens the list with search and «Указать „…“» (DS А3, #2008) */}
       <SelectField<string>
         label={t("exp.vendor")}

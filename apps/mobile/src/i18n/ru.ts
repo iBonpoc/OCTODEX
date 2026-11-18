@@ -624,7 +624,10 @@ export const ru = {
   "exp.notFound": "Расход не найден",
   "exp.remove": "Удалить расход",
   "exp.removed": "Расход {amount} удалён",
+  "exp.by": "Внёс {name}",
   "exp.readOnly": "Расход внёс {name}. Изменить его может он или офис.",
+  "exp.rej.conflict": "Расход не изменён: его уже изменили на другом телефоне. Откройте и проверьте.",
+  "exp.rej.remove": "Расход не удалён: сервер не дал его удалить. Откройте и проверьте.",
   // #2008: the day of a receipt, where it was bought (a picker with its own text), the job (a picker)
   "exp.date": "Дата чека",
   "exp.vendorNeed": "Укажите, где купили",

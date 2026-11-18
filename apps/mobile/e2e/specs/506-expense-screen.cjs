@@ -1,9 +1,10 @@
 /**
  * e2e 506 — an expense's own screen (#2009): open from «Расходы», fix, remove.
- * С1: a card in «Расходы» opens the expense; its amount fixed $884.00 → $900.00 and its day moved to yesterday — saved,
+ * С1: a card in «Расходы» opens the expense; its amount fixed $884.00 → $900.00 and its day moved two days back — saved,
  *     the list shows the new amount.
  * С2: «Удалить расход» → it leaves the list, the toast «Отменить» brings it back (rule 5).
- * С3: a technician opens another person's expense — read only, who entered it is said, no «Сохранить»; his own — editable.
+ * С3: a technician opens another person's expense — its details as rows, who entered it is said, no «Сохранить», no «⋯»;
+ *     his own — editable.
  * An unknown expense — «Расход не найден». Every view (h.layout); the days come from the page's clock.
  */
 const { dayKey, addDays } = require("../companyTime.cjs");
@@ -17,7 +18,8 @@ exports.run = async (h) => {
   await h.seed("octo.role.v1", "director");
   await h.go("/money");
   const today = dayKey(await p.evaluate(() => Date.now()));
-  const yesterday = addDays(today, -1);
+  // the demo's x2 is yesterday's already: the day picked is the day before, so the check proves the pick
+  const yesterday = addDays(today, -2);
 
   // С1: open from the list, fix the amount and the day
   await card("ABC Supply").click();
@@ -37,7 +39,7 @@ exports.run = async (h) => {
   await vis("expense-save").click();
   await p.waitForFunction(() => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.expenses ?? []).some((y) => y.id === "x2" && y.amountCents === 90000), null, { timeout: 8000 });
   const x2 = ((await h.db()).expenses ?? []).find((y) => y.id === "x2");
-  h.expect(x2.date === yesterday, `С1: its day is yesterday (${x2.date})`);
+  h.expect(x2.date === yesterday, `С1: its day is the one picked (${x2.date})`);
   await h.go("/money");
   await card("ABC Supply").waitFor({ timeout: 8000 });
   const card2 = await card("ABC Supply").innerText();
@@ -46,7 +48,9 @@ exports.run = async (h) => {
   // С2: remove — gone from the list; «Отменить» brings it back
   await card("Chevron").click();
   await vis("expense-screen").waitFor({ timeout: 8000 });
-  await vis("expense-remove").click();
+  // «Удалить расход» is in «⋯» (DS §12.2)
+  await vis("expense-more").getByRole("button").first().click();
+  await p.getByTestId("expense-remove").locator("visible=true").first().click();
   await p.waitForURL((u) => u.pathname === "/money", { timeout: 8000 });
   await p.locator('[data-testid="list-card"]').locator("visible=true").filter({ hasText: "Chevron" }).first().waitFor({ state: "detached", timeout: 8000 });
   // С2: the expense is removed (waits for the phone's saved copy, not a fixed time)
@@ -61,9 +65,10 @@ exports.run = async (h) => {
   await h.go("/expense/x1");
   await vis("expense-screen").waitFor({ timeout: 8000 });
   await vis("expense-readonly").waitFor({ timeout: 5000 });
-  h.expect(/Иван|Ivan/.test(await vis("expense-readonly").innerText()), "С3: who entered it is said");
+  h.expect(/Иван|Ivan/.test(await vis("expense-screen").innerText()), "С3: who entered it is said");
   h.expect((await p.getByTestId("expense-save").locator("visible=true").count()) === 0, "С3: no «Сохранить» on another person's expense");
-  h.expect((await p.getByTestId("expense-remove").locator("visible=true").count()) === 0, "С3: no «Удалить» either");
+  h.expect((await p.getByTestId("expense-more").locator("visible=true").count()) === 0, "С3: no «⋯» (no «Удалить») either");
+  h.expect((await p.getByTestId("field-amount").locator("visible=true").count()) === 0, "С3: details as rows, not pale fields");
   await h.shot("expense-readonly");
   await h.go("/expense/x2");
   await vis("expense-save").waitFor({ timeout: 8000 });

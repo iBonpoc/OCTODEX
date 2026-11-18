@@ -119,9 +119,9 @@ export function rejectedOf(item: OwnedItem, error: string, now: number, who: Own
     // the tech's words — the office records it (record_visit_payment, #857 О1)
     case "visit.pay": return { ...base, what: "payment", href: `/visit/${op.visitId}`, amountCents: op.amountCents, labelKey: "visit.rej.moneyInHand" };
     case "expense.add": return { ...base, what: "expense", href: op.jobId ? `/job/${op.jobId}` : "/settings/profile", amountCents: op.amountCents };
-    // #2009: an edit or a removal the server did not take — the expense stays as the server has it; its screen says why
-    case "expense.update": return { ...base, what: "expense", href: `/expense/${op.id}`, amountCents: op.amountCents, ...(reason ? { reason } : {}) };
-    case "expense.remove": return { ...base, what: "expense", href: `/expense/${op.id}`, ...(reason ? { reason } : {}) };
+    // #2009: an edit or a removal the server did not take (any other refusal than the conflict, which has its own card)
+    case "expense.update": return { ...base, what: "expense", href: `/expense/${op.id}`, amountCents: op.amountCents, labelKey: "exp.rej.conflict" };
+    case "expense.remove": return { ...base, what: "expense", href: `/expense/${op.id}`, labelKey: "exp.rej.remove" };
     default: return null;
   }
 }
@@ -181,6 +181,24 @@ export function dropTemplateOps(items: readonly OwnedItem[], templateId: string,
   const isGone = (x: OwnedItem) =>
     mine.has(x.id) && x.op.k === "est.template.save" && x.op.template.id === templateId;
   return { kept: items.filter((x) => !isGone(x)), gone: items.filter(isGone) };
+}
+
+/**
+ * #2009: an expense's edit refused as «changed on another phone first» or its removal refused: it and every later waiting
+ * edit or removal of the same expense go (each was built on this one) — one card, the truth read again.
+ */
+export function dropExpenseOps(items: readonly OwnedItem[], expenseId: string, who: Owner | null): { kept: OwnedItem[]; gone: OwnedItem[] } {
+  const mine = new Set(mineOf(items, who).map((x) => x.id));
+  const isGone = (x: OwnedItem) => mine.has(x.id) && (x.op.k === "expense.update" || x.op.k === "expense.remove") && x.op.id === expenseId;
+  return { kept: items.filter((x) => !isGone(x)), gone: items.filter(isGone) };
+}
+
+/** #2009: the card of an expense's edit or removal the server did not take — said in the person's words */
+export function expenseRejected(item: OwnedItem, error: string, now: number, who: Owner | null): RejectedOp {
+  const owner = item.owner ?? who ?? undefined;
+  const id = item.op.k === "expense.update" || item.op.k === "expense.remove" ? item.op.id : "";
+  const labelKey = item.op.k === "expense.remove" ? "exp.rej.remove" : "exp.rej.conflict";
+  return { id: item.id, ...(owner ? { owner } : {}), kind: item.op.k, what: "expense", href: `/expense/${id}`, labelKey, error, at: new Date(now).toISOString() };
 }
 
 /**

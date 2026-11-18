@@ -625,7 +625,10 @@ export const es: Dict = {
   "exp.notFound": "Gasto no encontrado",
   "exp.remove": "Eliminar gasto",
   "exp.removed": "Gasto {amount} eliminado",
+  "exp.by": "Registró {name}",
   "exp.readOnly": "{name} registró este gasto. Puede cambiarlo esa persona o la oficina.",
+  "exp.rej.conflict": "Gasto no cambiado: ya lo cambiaron en otro teléfono. Ábralo y revíselo.",
+  "exp.rej.remove": "Gasto no eliminado: el servidor no lo permitió. Ábralo y revíselo.",
   // #2008: the day of a receipt, where it was bought (a picker with its own text), the job (a picker)
   "exp.date": "Fecha del recibo",
   "exp.vendorNeed": "Indique dónde se compró",
