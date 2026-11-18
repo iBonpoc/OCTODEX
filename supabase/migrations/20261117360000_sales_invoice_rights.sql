@@ -3,7 +3,8 @@
 --   * invoices_insert / invoices_update — owner, admin, office. The server functions (execute_estimate, countersign,
 --     record_estimate_deposit, record_visit_payment, the payment recalc) are security definer and keep their own checks.
 --   * job_line_items_insert / job_line_items_update — owner, admin, office: the lines of a job make its contract total.
---   * the tax of a job (tax_enabled, tax_rate_bps, tax_rate_ppm) — owner, admin, office (trigger t13_job_tax_rights);
+--   * the tax of a job (tax_enabled, tax_rate_bps, tax_rate_ppm), set on a new job or changed — owner, admin, office
+--     (trigger t13_job_tax_rights);
 --     the server functions are not touched (current_user is the owner of the function there).
 -- The app hides the same buttons for sales (ContractStatement, JobLinesBlock). An old phone's queued write is refused with
 -- 42501 and shown in «Требует внимания» (outboxRetry isAccessDenied). db T414–T416.
@@ -30,8 +31,10 @@ begin
   if current_user not in ('authenticated', 'anon') then
     return new;   -- a server function or the service role
   end if;
-  if (new.tax_enabled is distinct from old.tax_enabled or new.tax_rate_bps is distinct from old.tax_rate_bps
-      or new.tax_rate_ppm is distinct from old.tax_rate_ppm)
+  -- a new job of the app comes without a tax (the column defaults: off, 0, none); a change of it is the office's
+  if (case when tg_op = 'INSERT' then new.tax_enabled or new.tax_rate_bps <> 0 or new.tax_rate_ppm is not null
+           else new.tax_enabled is distinct from old.tax_enabled or new.tax_rate_bps is distinct from old.tax_rate_bps
+                or new.tax_rate_ppm is distinct from old.tax_rate_ppm end)
      and not app.has_role(new.company_id, array['owner', 'admin', 'office']) then
     raise exception 'only the office changes the tax of a job' using errcode = '42501';
   end if;
@@ -42,5 +45,5 @@ revoke all on function app.tg_job_tax_rights() from public, anon, authenticated;
 
 -- t13: before the write guard (t14) and the money (t18), so a refused change recounts nothing
 drop trigger if exists t13_job_tax_rights on public.jobs;
-create trigger t13_job_tax_rights before update of tax_enabled, tax_rate_bps, tax_rate_ppm on public.jobs
+create trigger t13_job_tax_rights before insert or update of tax_enabled, tax_rate_bps, tax_rate_ppm on public.jobs
   for each row execute function app.tg_job_tax_rights();

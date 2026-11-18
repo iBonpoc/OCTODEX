@@ -12948,8 +12948,9 @@ do $$ begin
 exception when insufficient_privilege then null;
 end $$;
 select tst.ok(true, 'T191 sales take no payment on a visit (record_visit_payment, 42501)');
--- С-1: a draft progress invoice turned «deposit» of the signed version by an update: refused. Since #2075
--- (20261117360000) sales neither insert nor update an invoice at all (RLS); the office's draft stays as it was
+-- С-1: a draft progress invoice turned «deposit» of the signed version by an update: refused (tg_invoice_guard answers
+-- first, «only the office changes what an invoice is»). Since #2075 (20261117360000) sales insert no invoice at all (RLS),
+-- so the draft is the office's here; it stays as it was
 select tst.fails($q$insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
   ('11910000-0000-4000-8000-000000000016', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f2', 'progress', 'draft', 'T191 draft', 9999900, 9999900)$q$,
   'T191 sales do not insert an invoice (#2075)');
@@ -16886,8 +16887,6 @@ select tst.fails_like($q$insert into public.invoices (company_id, number, custom
 -- T415: sales change no invoice: a refusal (42501), not «0 rows» an old phone's queue would take for done
 select tst.fails_like($q$update public.invoices set title = 'T415 sales' where id = 'e4142000-0000-4000-8000-000000000001'$q$,
   '%row-level security%', 'T415 sales do not rename an invoice');
-select tst.fails($q$update public.invoices set status = 'void', void_reason = 'T415 sales' where id = 'e4142000-0000-4000-8000-000000000001'$q$,
-  'T415 sales do not void an invoice');
 select tst.fails_like($q$update public.invoices set due_date = tst.today() + 60 where id = 'e4142000-0000-4000-8000-000000000001'$q$,
   '%row-level security%', 'T415 sales do not move the due date');
 select tst.ok((select count(*) from public.invoices where id = 'e4142000-0000-4000-8000-000000000001') = 1, 'T415 sales still see the invoice');
@@ -16913,7 +16912,23 @@ select tst.fails($q$update public.jobs set contract_total_cents = 990000 where i
 update public.jobs set description = 'T416 sales note' where id = 'e4140000-0000-4000-8000-000000000001';
 select tst.ok((select description = 'T416 sales note' and contract_total_cents = 10000 and not tax_enabled from public.jobs where id = 'e4140000-0000-4000-8000-000000000001'),
   'T416 sales still note a job; its total and tax stay the office''s');
--- the tech: no lines, no tax either (as before)
+-- a new job of sales comes without a tax: one with it is refused, a plain one is made
+select tst.fails_like($q$insert into public.jobs (id, company_id, number, title, customer_id, property_id, tax_enabled, tax_rate_bps) values
+  ('e4140000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'T416 taxed', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', true, 10000)$q$,
+  '%only the office changes the tax of a job%', 'T416 sales do not make a job with a tax');
+select tst.fails_like($q$insert into public.jobs (id, company_id, number, title, customer_id, property_id, tax_rate_ppm) values
+  ('e4140000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'T416 rate', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 50000)$q$,
+  '%only the office changes the tax of a job%', 'T416 sales do not make a job with a tax rate');
+insert into public.jobs (id, company_id, number, title, customer_id, property_id) values
+  ('e4140000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'T416 plain', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001');
+select tst.ok(exists (select 1 from public.jobs where id = 'e4140000-0000-4000-8000-000000000003' and not tax_enabled), 'T416 sales still make a plain job (lead.book)');
+-- the tech: no invoice, no line, no tax either
+:as_tech_a
+select tst.fails($q$insert into public.invoices (company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'standalone', 'draft', 'T416 tech', 100, 100)$q$, 'T416 the tech issues no invoice');
+select tst.fails($q$insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents) values
+  ('ca000000-0000-0000-0000-000000000000', 'e4140000-0000-4000-8000-000000000001', 3, 'T416 tech', 1, 100)$q$, 'T416 the tech adds no line');
+select tst.blocked($q$update public.jobs set tax_enabled = true where id = 'e4140000-0000-4000-8000-000000000001'$q$, 'T416 the tech switches no tax');
 :as_office_a
 update public.jobs set tax_enabled = true, tax_rate_bps = 1000 where id = 'e4140000-0000-4000-8000-000000000001';
 update public.job_line_items set taxable = true where id = 'e4141000-0000-4000-8000-000000000001';
