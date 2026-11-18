@@ -10,6 +10,7 @@ import { GestureDetector, GestureHandlerRootView, GestureStateManager, State, us
 import { menuPick } from "./menuPick";
 import { exitDuration, scrimLevel, swipeCloses, swipeStart, swipeStep, type SwipeState } from "./sheetSwipe";
 import { leaveBefore } from "./sheetLeave";
+import { noteQuestionCancelled, registerDirtySheet } from "./dirtySheets";
 import Svg, { Rect } from "react-native-svg";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -459,6 +460,11 @@ export function Sheet({
     },
     [drag, before, animateOut],
   );
+  // #1912: while the sheet holds unsaved work, «Обновить» asks it through its own question and never reloads over it
+  useEffect(() => {
+    if (!visible || !dirty) return;
+    return registerDirtySheet({ ask: () => requestClose() });
+  }, [visible, dirty, requestClose]);
   const pan = useMemo(
     () =>
       PanResponder.create({
@@ -663,7 +669,7 @@ export function Sheet({
                   <T v="button" tone="bad">{t("sheet.discard")}</T>
                 </Press>
                 <Press
-                  onPress={() => setAsk(false)}
+                  onPress={() => { setAsk(false); noteQuestionCancelled(); }}
                   visibleHeight={component.button.phone}
                   accessibilityRole="button"
                   accessibilityLabel={t("common.cancel")}

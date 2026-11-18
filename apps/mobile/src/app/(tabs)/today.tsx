@@ -1,3 +1,4 @@
+import { visitDueCents } from "@/features/visitDue";
 import { useEffect, useMemo, useState } from "react";
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
 import { lateAfterOf } from "@/features/scheduleSettings";
@@ -169,7 +170,7 @@ export default function Today() {
   }, [animate, shown]);
   const appearStyle = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ translateY: (1 - shown.value) * space[2] }] }));
   const { t, tn, day, time } = useI18n();
-  const { db, role, rejectedOps } = useStore();
+  const { db, role, rejectedOps, mode } = useStore();
   const [period, setPeriod] = usePersistentState<Period>("octo.todayPeriod.v1", "today");
   // the company's day and zone are part of the key: left open overnight (useTick re-renders), the numbers move to
   // the new day at midnight, not when db changes next (review #270); a new company zone re-sorts the payments
@@ -182,7 +183,7 @@ export default function Today() {
   // every number opens exactly the records it counts, for the same period (founder 05.11); back → Today
   const open = (f: Figure) => router.push(`/figures/${f}?period=${period}`);
   // a money change the server refused is first here too (docs/specs/23 §3)
-  const attention = buildAttention(db, role, undefined, { rejected: rejectedOps });
+  const attention = buildAttention(db, role, undefined, { rejected: rejectedOps, mode });
   // invited or switched off people are not a crew (7-2)
   const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
   const aw = awaitingCounts(db);
@@ -269,7 +270,7 @@ export default function Today() {
             {techs.map((m) => {
               const vs = todayVisits(db, m.id);
               const { current, next } = crewNow(vs);
-              const st = current ? visitStatus(current, db.members, Date.now(), lateAfterOf(db)) : next ? visitStatus(next, db.members, Date.now(), lateAfterOf(db)) : null;
+              const st = current ? visitStatus(current, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, current)) : next ? visitStatus(next, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, next)) : null;
               const where = (v: typeof current) => {
                 if (!v) return undefined;
                 const { customer, property } = visitContext(db, v);

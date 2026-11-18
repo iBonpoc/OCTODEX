@@ -71,7 +71,14 @@ export default function Visits() {
               <T v="caption" tone="mut">
                 {t("tday.title")}
               </T>
-              <T v="heading">{d.done === d.visits.length ? `✓ ${t("tday.allDone")}` : t("tday.progress", { done: d.done, n: d.visits.length })}</T>
+              {/* all done — the status chip (icon + word, rule 2), no «✓ » in the text (spec 56 §9.3 №4) */}
+              {d.done === d.visits.length ? (
+                <View testID="visits-all-done" style={{ alignItems: "flex-start" }}>
+                  <StatusChip status="ok" label={t("tday.allDone")} />
+                </View>
+              ) : (
+                <T v="heading">{t("tday.progress", { done: d.done, n: d.visits.length })}</T>
+              )}
             </View>
             <View style={{ alignItems: "flex-end", gap: space[1] }}>
               <T v="caption" tone="mut">

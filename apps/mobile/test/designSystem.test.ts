@@ -88,6 +88,7 @@ describe("design system: components", () => {
   });
   // a Press drawn as a button / tile / chip by the screen itself: its own background, radius or border in the tag
   const RULE29_STYLED_PRESS: Record<string, number> = {
+    "features/LegalAgree.tsx": 1, // the Terms / Privacy links drawn as underlined text (#2022); spec 56 §11.1 waits for the lawyer
     "features/DatePick.tsx": 1,
     "features/PhotoStrip.tsx": 2,
     "features/PlanParts.tsx": 1,
@@ -105,7 +106,23 @@ describe("design system: components", () => {
     "nav/SideNav.tsx": 2,
     "nav/TabBar.tsx": 1,
   };
+  // #2022: an own look is also a style kept in a variable (`style={hitBox}`), a link drawn in the child text (`textDecorationLine`),
+  // or a button-sized Press (`accessibilityRole="button"` + `minHeight: component.button…`) — not only a background in the tag
+  const OWN_LOOK = /backgroundColor|borderRadius|borderWidth|fillStyle\(/;
   const styledPress = (src: string) => {
+    // what the file's own `const name = { … }` objects hold (a style kept in a variable)
+    const objOf = (name: string): string => {
+      const m = new RegExp(`\\b(?:const|let)\\s+${name}\\s*(?::[^=]+)?=\\s*\\{`).exec(src);
+      if (!m) return "";
+      let depth = 0;
+      let i = m.index + m[0].length - 1;
+      const start = i;
+      for (; i < src.length; i++) {
+        if (src[i] === "{") depth++;
+        else if (src[i] === "}" && --depth === 0) break;
+      }
+      return src.slice(start, i + 1);
+    };
     let n = 0;
     for (const m of src.matchAll(/<Press\b/g)) {
       let depth = 0;
@@ -116,7 +133,17 @@ describe("design system: components", () => {
         else if (ch === "}") depth--;
         else if (ch === ">" && depth === 0) break;
       }
-      if (/backgroundColor|borderRadius|borderWidth|fillStyle\(/.test(src.slice(m.index!, i))) n++;
+      const tag = src.slice(m.index!, i);
+      // the style's own names: style={x} / style={[x, …]} → the objects they name in this file
+      const styleExpr = /\bstyle=\{([\s\S]*)\}/.exec(tag)?.[1] ?? "";
+      const named = [...styleExpr.matchAll(/(?:^|[\s[,(])([a-z][A-Za-z0-9]*)\b(?!\s*[.:(])/g)].map((x) => objOf(x[1]!)).join(" ");
+      const look = tag + " " + named;
+      // the element's own children (up to its closing tag; a self-closing Press has none)
+      const selfClosing = src[i - 1] === "/";
+      const end = selfClosing ? i : src.indexOf("</Press>", i);
+      const children = selfClosing || end < 0 ? "" : src.slice(i, end);
+      const buttonSized = /accessibilityRole=["{]+button/.test(tag) && /minHeight:\s*component\.button\./.test(look);
+      if (OWN_LOOK.test(look) || /textDecorationLine:\s*["'`]underline/.test(children) || buttonSized) n++;
     }
     return n;
   };
@@ -130,6 +157,46 @@ describe("design system: components", () => {
     const less = Object.entries(RULE29_STYLED_PRESS).filter(([k, n]) => (now[k] ?? 0) < n).map(([k, n]) => `${k}: ${now[k] ?? 0} < ${n} — lower the list`);
     expect(over, `own button-looking Press outside src/ui (rule 29, DS §8.0):\n${over.join("\n")}`).toEqual([]);
     expect(less, less.join("\n")).toEqual([]);
+  });
+  // #1997: inside src/ui too. A ui component is built from ui components; its own look (a Press with a background, radius
+  // or border) belongs only to the component that defines that look — listed here by file, with what it defines. A new file,
+  // or one more in a listed file, is an own button hidden in ui (as the old «Сохранить изменения?» of Sheet was, #1996).
+  const UI_OWN_STYLED_PRESS: Record<string, number> = {
+    "ui/controls.tsx": 7, // Button, IconButton, Toggle, Segmented, TagChip, TextField's action; + a style kept in a variable (#2022)
+    "ui/filterBar.tsx": 4, // FilterBar (chip, «Фильтр», «Сброс»), FilterRow
+    "ui/fracKeys.tsx": 1, // FracKeys — the key
+    "ui/listCard.tsx": 2, // ListCard, its open panel
+    "ui/optionTile.tsx": 1, // OptionTile
+    "ui/overlays.tsx": 3, // Menu row; LEGACY ×2 — the old unsaved question of Sheet, goes with #1996 (UnsavedAsk from Button)
+    "ui/pctUsdField.tsx": 1, // PctUsdField — the «% | $» switch
+    "ui/selectField.tsx": 1, // SelectField — the row
+    "ui/surfaces.tsx": 3, // Card (pressable, its `base` style — seen since #2022), ListRow
+  };
+  it("rule 29 inside src/ui (#1997): an own look only in the component that defines it; the list only goes down", () => {
+    const now: Record<string, number> = {};
+    for (const f of code.filter((x) => x.includes(join("src", "ui")))) {
+      const n = styledPress(readFileSync(f, "utf8"));
+      if (n) now[relative(ROOT, f).split("\\").join("/")] = n;
+    }
+    const over = Object.entries(now).filter(([k, n]) => n > (UI_OWN_STYLED_PRESS[k] ?? 0)).map(([k, n]) => `${k}: ${n} > ${UI_OWN_STYLED_PRESS[k] ?? 0}`);
+    const less = Object.entries(UI_OWN_STYLED_PRESS).filter(([k, n]) => (now[k] ?? 0) < n).map(([k, n]) => `${k}: ${now[k] ?? 0} < ${n} — lower the list`);
+    expect(over, `an own button-looking Press inside src/ui — build it from Button / ListRow / OptionRow …, or add the component that defines the look with a reason (rule 29, DS §8.0):\n${over.join("\n")}`).toEqual([]);
+    expect(less, less.join("\n")).toEqual([]);
+  });
+  it("the styled-Press counter sees what it must (guards the guard)", () => {
+    expect(styledPress(`<Press onPress={go} style={{ backgroundColor: c.surf2, borderRadius: radius.pill }}><T>x</T></Press>`)).toBe(1);
+    expect(styledPress(`<Press onPress={go} accessibilityRole="button"><T>x</T></Press>`)).toBe(0);
+    expect(styledPress(`<Press style={[a, { borderWidth: 1 }]} onPress={() => { if (x) y(); }}>z</Press>`)).toBe(1);
+    // #2022 С1: a button-sized Press with its style in a variable and a link look in the child text
+    expect(styledPress(`const hitBox = { minHeight: component.button.hit, justifyContent: "center" };\n<Press accessibilityRole="button" style={hitBox}><T style={{ textDecorationLine: "underline" }}>x</T></Press>`)).toBe(1);
+    // С2: the look kept in a variable
+    expect(styledPress(`const s = { borderRadius: radius.pill };\n<Press style={s} onPress={go}><T>x</T></Press>`)).toBe(1);
+    expect(styledPress(`const s = { borderRadius: radius.pill };\n<Press style={[s, { flex: 1 }]} onPress={go}><T>x</T></Press>`)).toBe(1);
+    // the link look in the child alone
+    expect(styledPress(`<Press onPress={go}><T style={{ textDecorationLine: "underline" }}>x</T></Press>`)).toBe(1);
+    // С3: a plain Press (a row, a card from src/ui inside) stays green
+    expect(styledPress(`<Press onPress={go} accessibilityRole="button"><T>x</T></Press>`)).toBe(0);
+    expect(styledPress(`const pad = { padding: space[2] };\n<Press onPress={go} style={pad}><T>x</T></Press>`)).toBe(0);
   });
   it("vibration only through ui/haptics.ts (no expo-haptics anywhere else; the «Вибрация» switch must work, DS §15.6)", () => {
     const hits = code.filter((f) => !f.endsWith(join("ui", "haptics.ts")) && /from "expo-haptics"/.test(readFileSync(f, "utf8"))).map((f) => relative(ROOT, f));
@@ -437,7 +504,7 @@ describe("design system: a form's fields have no plate (#1411)", () => {
     "app/job/[id].tsx": { n: 1, why: "«Добавить» заметку — отправляет набранное" },
     "features/JobLinesBlock.tsx": { n: 1, why: "«Сохранить» ставку налога" },
     "features/VisitChecklist.tsx": { n: 2, why: "«Добавить» пункт чек-листа" },
-    "features/client/ClientSheets.tsx": { n: 2, why: "«Удалить» человека; «Добавить» метку" },
+    "features/client/ClientSheets.tsx": { n: 1, why: "«Добавить» метку" },
   };
   it("a field's helper action is an icon inside it: no worded button in one row with a field", () => {
     const bad: string[] = [];

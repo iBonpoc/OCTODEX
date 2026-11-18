@@ -1,7 +1,7 @@
 /**
  * e2e 170 — водосток на холсте и продолжение линии (просьба основателя 08.11; docs/specs/33-gutters-canvas.md П20.11).
  * Every view.
- * - a downspout put on a gutter: «D1» inside its mark; over it the fittings in one word (a corrugated one by default 3 × A → «AAA»; a plain one none, #1776);
+ * - a downspout put on a gutter: «D1» inside its mark; over it the fittings in one word (a corrugated one by default 3 × A → «AAA»; a plain one its 3 bends on site → «AAA» too, «Расход v2»);
  * - elbows by style in the panel: B +1 → «AAAB», A −1 → «AAB»;
  * - dragged by the finger, it slides along its run (the store's atIn changes, it stays on the run);
  * - «Желоб»: a plain drag from a free end → a new gutter from that end (a corner). A LONG press on an end takes it instead
@@ -48,12 +48,13 @@ exports.run = async (h) => {
   await drag([x0, y], [x1, y]);
   await waitFor(async () => (await live("run")).length === 1, "one gutter");
 
-  // a downspout: «D1» inside; a plain one has no elbows by default — nothing over it (#1776); a corrugated one «AAA»
+  // a downspout: «D1» inside; a plain one is bent on site by default — its 3 bends over it, «AAA» («Расход v2» §2.1 п.6: the
+  // drawing shows what the engine counts)
   await tid("draw-tool-ds").getByRole("button").click();
   await p.mouse.click(x0 + (x1 - x0) * 0.3, y + 2);
   await waitFor(async () => (await svg().locator("circle").count()) === 1, "a downspout mark");
   await waitFor(async () => (await texts()).includes("D1"), "«D1» inside the mark");
-  h.expect(!(await texts()).some((s) => /^[AB]+$/.test(s)), `a plain one: no fittings word over it (${(await texts()).join(" ")})`);
+  h.expect((await texts()).includes("AAA"), `a plain one: its bends over it, «AAA» (${(await texts()).join(" ")})`);
 
   // elbows by style
   // the menu opened by itself when it was put (founder 09.11)

@@ -29,6 +29,7 @@ export function SelectField<K extends string>({
   disabled,
   field,
   labelAbove,
+  onOpen,
 }: {
   label: string;
   value: K | null | undefined;
@@ -45,6 +46,9 @@ export function SelectField<K extends string>({
   /** the label over the field, as a number field has it (a row of narrow fields, DS §8.3 «Кол-во · Ед. · Цена»); the
    *  field itself shows only the value */
   labelAbove?: boolean;
+  /** the owner's own sheet opens instead of the menu — a list with groups and «＋ Новый …» (the sources, spec 56 §3а.5); `items` then
+   *  only name the chosen value */
+  onOpen?: () => void;
 }) {
   const { c } = useTheme();
   const { t } = useI18n();
@@ -70,7 +74,7 @@ export function SelectField<K extends string>({
     opener.current = null;
     if (Platform.OS === "web" && el && typeof el.focus === "function") requestAnimationFrame(() => el.isConnected && el.focus());
   };
-  const open = () => (long ? openPicker() : ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h })));
+  const open = () => (onOpen ? onOpen() : long ? openPicker() : ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h })));
   return (
     <View ref={field?.anchorRef} collapsable={false} style={{ gap: space[1] }} testID={testID ?? field?.testID}>
       {labelAbove ? (
@@ -89,7 +93,7 @@ export function SelectField<K extends string>({
           accessibilityLabel={Platform.OS === "web" ? `${label}, ${shown}` : label}
           accessibilityValue={{ text: shown }}
           accessibilityState={{ expanded: !!anchor || picker, disabled: !!(disabled || ro) }}
-          aria-haspopup={long ? "dialog" : "menu"}
+          aria-haspopup={long || onOpen ? "dialog" : "menu"}
           style={{
             minHeight: size.fieldPhone,
             flexDirection: "row",

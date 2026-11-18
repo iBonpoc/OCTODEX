@@ -118,7 +118,9 @@ describe("a downspout's fittings in one word (founder 08.11)", () => {
     expect(dsCode({ shape: "rect", elbows: [{ style: "A", qty: 2 }, { style: "B", qty: 1 }], offsets: [{ lengthIn: 4, qty: 1 }] })).toBe("AABO⁴");
   });
   it("unset elbows are the engine's default (3 × A); none at all → empty", () => {
-    expect(dsCode({ shape: "rect" })).toBe(""); // a plain one: bent on site, no elbows by default (#1776)
+    expect(dsCode({ shape: "rect" })).toBe(""); // an old one without a kind: no elbows (rule 16)
+    expect(dsCode({ shape: "rect", dsStyle: "plain" })).toBe("AAA"); // a plain one: its 3 bends on site («Расход v2»)
+    expect(dsCode({ shape: "round" })).toBe("75°O²"); // a round one: 1 × 75° and a 2″ offset
     expect(dsCode({ shape: "rect", dsStyle: "corrugated" })).toBe("AAA");
     expect(dsCode({ shape: "rect", elbows: [{ style: "A", qty: 0 }] })).toBe("");
   });

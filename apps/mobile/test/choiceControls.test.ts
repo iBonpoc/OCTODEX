@@ -43,7 +43,6 @@ describe("choice controls (DS §21.2 п.27, spec 56 §9.3)", () => {
   const CHECKED_ALLOWED = ["ui/doneCircle.tsx", "ui/toggleRow.tsx"];
   const CHECKED_LEGACY: Record<string, number> = {
     "features/LegalAgree.tsx": 2,
-    "features/VisitChecklist.tsx": 2,
     "features/estimate/OptionsCard.tsx": 2,
     "features/showcase/Rows.tsx": 1,
     "modules/gutters/draw/AttrPanel.tsx": 1,
@@ -76,23 +75,18 @@ describe("choice controls (DS §21.2 п.27, spec 56 §9.3)", () => {
 
   // п.27.6: the switch stands only in its row (ToggleRow: the whole row presses, the label is the switch's). Old places by file.
   const TOGGLE_LEGACY: Record<string, number> = {
-    "app/client/edit.tsx": 1,
     "app/company/[section].tsx": 5,
     "app/company/checklist/[id].tsx": 5,
     "app/company/checklists.tsx": 2,
     "app/company/intake.tsx": 3,
     "app/company/schedule.tsx": 1,
     "app/estimate/new.tsx": 1,
-    "app/f/[token].tsx": 1,
     "app/purchase-order/[id].tsx": 1,
     "app/settings/delete-account.tsx": 1,
     "app/settings/index.tsx": 2,
     "app/team.tsx": 1,
     "features/EstimateView.tsx": 1,
-    "features/JobLinesBlock.tsx": 2,
     "features/PushSettings.tsx": 2,
-    "features/SignBlock.tsx": 1,
-    "features/VisitChecklist.tsx": 2,
     "features/estimate/LineRow.tsx": 4,
     "features/showcase/Haptics.tsx": 1,
     "features/showcase/Rows.tsx": 2,

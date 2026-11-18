@@ -10,7 +10,9 @@ import { peopleOf } from "@/data/people";
 import { canSaveProperty, placeOf } from "@/features/properties";
 import { Labeled } from "@/features/fields";
 import { useI18n, type DictKey } from "@/i18n";
-import { Button, ChoiceChips, MultiChips, TextField } from "@/ui/controls";
+import { Button, TextField } from "@/ui/controls";
+import { OptionRows } from "@/ui/optionRow";
+import { SelectField } from "@/ui/selectField";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
@@ -70,13 +72,14 @@ export function PropertySheet({ value, onClose }: { value: Property | null; onCl
       <Labeled label={t("prop.label")}>
         <TextField type="text" value={d.label ?? ""} onChangeText={(v) => set({ label: v })} placeholder={t("prop.labelHint")} label={t("prop.label")} />
       </Labeled>
-      <Labeled label={t("prop.kind")}>
-        <ChoiceChips<PropertyKind | "">
-          value={d.kind ?? ""}
-          onChange={(v) => set({ kind: v || undefined })}
-          items={[{ key: "", label: t("lead.any") }, ...PROPERTY_KINDS.map((k) => ({ key: k, label: t(`prop.kind.${k}` as DictKey) }))]}
-        />
-      </Labeled>
+      {/* «Тип · Любой ⌄» — a value of the form, a row with a menu (DS §9 А2, spec 56 wave 4) */}
+      <SelectField<PropertyKind | "any">
+        testID="prop-kind"
+        label={t("prop.kind")}
+        value={d.kind ?? "any"}
+        onChange={(v) => set({ kind: v === "any" ? undefined : v })}
+        items={[{ key: "any", label: t("lead.any") }, ...PROPERTY_KINDS.map((k) => ({ key: k, label: t(`prop.kind.${k}` as DictKey) }))]}
+      />
       <Button label={t("ue.save")} icon="check" full disabled={!ok} onPress={save} />
     </Sheet>
   );
@@ -138,7 +141,8 @@ export function PropertyPeopleSheet({ value, onClose }: { value: Property | null
       <T v="caption" tone="mut">
         {t("prop.peopleHint")}
       </T>
-      <MultiChips<string> value={sel} onChange={setSel} items={people.map((p) => ({ key: p.id, label: `${p.name || "—"} · ${t(`person.role.${p.role}` as DictKey)}` }))} />
+      {/* which of them — rows with a check (DS §9 А4), the role under the name */}
+      <OptionRows<string> multiple testID="prop-people-rows" label={t("prop.people")} value={sel} onChange={setSel} items={people.map((p) => ({ key: p.id, title: p.name || "—", subtitle: t(`person.role.${p.role}` as DictKey) }))} />
       <Button label={t("ue.save")} icon="check" full disabled={!dirty} onPress={save} />
     </Sheet>
   );

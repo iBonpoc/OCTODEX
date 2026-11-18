@@ -1,3 +1,4 @@
+import type { Mode } from "@/data/store";
 import type { DB, Role } from "@/data/types";
 import { hasSection, type SectionId } from "@/nav/sections";
 import type { DictKey } from "@/i18n";
@@ -19,8 +20,8 @@ export interface MoreCount {
 
 const LEAD_KINDS = new Set<AttentionItem["kind"]>(["lead", "leadBack", "leadNoStep", "leadIdle", "leadOrphan"]);
 
-export function moreCounts(db: DB, role: Role, now: number = Date.now(), tz: string = getZone()): Partial<Record<SectionId, MoreCount>> {
-  const att = buildAttention(db, role, now);
+export function moreCounts(db: DB, role: Role, now: number = Date.now(), tz: string = getZone(), mode?: Mode): Partial<Record<SectionId, MoreCount>> {
+  const att = buildAttention(db, role, now, { mode });
   const kinds = (pass: (k: AttentionItem["kind"]) => boolean) => att.filter((a) => pass(a.kind)).length;
   const today = dayKeyIn(now, tz);
   // my tasks for today: overdue or due / starting today (not done)
