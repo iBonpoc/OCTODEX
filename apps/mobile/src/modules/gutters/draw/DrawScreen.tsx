@@ -28,7 +28,8 @@ import { moduleHref, moduleState } from "@/modules/registry";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Button, ChoiceChips, IconButton, StatusChip, Toggle } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
-import { Menu, Sheet, useToast } from "@/ui/overlays";
+import { HelpButton, Menu, Sheet, useToast } from "@/ui/overlays";
+import { EmptyHelp, helpText } from "./EmptyHelp";
 import { Banner } from "@/ui/banner";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
@@ -1286,6 +1287,8 @@ export default function DrawScreen() {
             ) : (
               <T v="heading" w="semibold">{t("mod.gutters.draw.title")}</T>
             )}
+            {/* «?» beside the name (DS §12.2): the same steps as on the empty canvas, any time (#2186) */}
+            <HelpButton title={t("mod.gutters.draw.help.q")} text={helpText(t)} testID="draw-help" />
             {/* no cloud when all is saved and sent: only «on the phone» (not sent yet / no connection), a tap says it in words (#507 → #1274) */}
             {canSave && !flat && (mark === "sending" || mark === "phone") ? (
               <View testID="draw-local">
@@ -1351,9 +1354,8 @@ export default function DrawScreen() {
 
       {!drawing.runs.length && !ghost ? (
         <View pointerEvents="none" style={{ position: "absolute", left: space[6], right: space[6] + panelSide, top: 0, bottom: 0, alignItems: "center", justifyContent: "center" }} testID="draw-empty">
-          <T tone="mut" center>{t("mod.gutters.draw.empty")}</T>
-          {/* the tools carry pictures only (#1274): where their words are, said while the drawing is still empty (the first opening) */}
-          <T v="caption" tone="mut" center>{t("mod.gutters.draw.emptyTools")}</T>
+          {/* «Как рисовать» (founder 18.11, #2186): the four steps while the canvas is empty; every touch goes through to the canvas */}
+          <EmptyHelp />
         </View>
       ) : null}
       {/* the live length beside the line being drawn (founder 09.11, #689), not at the top of the screen */}
