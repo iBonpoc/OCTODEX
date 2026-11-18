@@ -1,6 +1,7 @@
 import { BlurView } from "expo-blur";
 import { VersionBadge } from "@/features/version";
 import { DemoBadge } from "@/features/DemoBadge";
+import { UpdateBar } from "@/features/UpdateBar";
 import { ScreenScrollCtx, type ScreenScroll } from "./requiredForm";
 import { coveredBottomOf, scrollTargetY } from "./requiredLogic";
 import { scrollBottom, setFooterInset } from "./footerInset";
@@ -692,6 +693,7 @@ export function Screen({
     <View style={{ gap: space[2], marginBottom: space[3] }}>
       <VersionBadge />
       <DemoBadge />
+      <UpdateBar />
       {hasUp ? (
         <>
           {/* detail screen: the trail "Home › … › Parent › This", actions on the right, then the title.
