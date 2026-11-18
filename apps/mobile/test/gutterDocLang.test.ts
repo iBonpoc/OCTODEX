@@ -14,6 +14,8 @@ vi.mock("@/config/backend", () => ({ WEB_APP_URL: "https://example.test" }));
 import { gutterDocLang } from "../src/modules/gutters/docLang";
 import type { DB } from "../src/data/types";
 
+/** a measurement for nobody yet */
+const NONE = { propertyId: null, leadId: null };
 /** a company, a client with one property — enough for the language rule */
 const base = (): DB =>
   ({
@@ -30,15 +32,15 @@ describe("unit:gutterDocLang — the reader's language (rule 7)", () => {
     // the client's main person speaks Spanish (the client's language lives on its people)
     const withEs: DB = { ...db, customers: db.customers.map((x) => (x.id === c.id ? { ...x, people: [{ id: "pp1", name: "Ann", role: "main", phones: [], emails: [], language: "es" }] } : x)) } as DB;
     const prop = withEs.properties.find((p) => p.customerId === c.id)!;
-    expect(gutterDocLang(withEs, { propertyId: prop.id }, "client")).toBe("es");
+    expect(gutterDocLang(withEs, { propertyId: prop.id, leadId: null }, "client")).toBe("es");
   });
   it("the crew's: the company's document language (en, es…), never ru by the app", () => {
     const db = base();
-    expect(gutterDocLang({ ...db, company: { ...db.company!, docLanguage: "es" } }, {}, "crew")).toBe("es");
-    expect(gutterDocLang({ ...db, company: { ...db.company!, docLanguage: undefined } }, {}, "crew")).toBe("en");
+    expect(gutterDocLang({ ...db, company: { ...db.company!, docLanguage: "es" } }, NONE, "crew")).toBe("es");
+    expect(gutterDocLang({ ...db, company: { ...db.company!, docLanguage: undefined } }, NONE, "crew")).toBe("en");
   });
   it("the supplier's: en (a US supplier), whatever the company's", () => {
     const db = base();
-    expect(gutterDocLang({ ...db, company: { ...db.company!, docLanguage: "ru" } }, {}, "supplier")).toBe("en");
+    expect(gutterDocLang({ ...db, company: { ...db.company!, docLanguage: "ru" } }, NONE, "supplier")).toBe("en");
   });
 });
