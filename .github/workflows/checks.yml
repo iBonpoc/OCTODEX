@@ -1,8 +1,10 @@
 # Every PR and push to main: types, unit tests (engine money scenarios, design-system guard, tokens contrast, story map),
-# database tests (RLS, money safety, client page), then the end-to-end browser runs, each view in 2 parallel parts:
-# a PR runs every spec at 390 dark, 820 light and 1280 dark (each width and both themes; 08-layouts checks every screen
-# at all 6 views); a push to main runs only 390 dark (#906 п.6, audit variant C, 11.11) — the 3 views already ran on the PR.
-# Nightly on main (and by hand): every spec at all 3 widths × 2 themes (CLAUDE.md rule 4, docs/ai/CHECKS.md §1).
+# database tests (RLS, money safety, client page), then the end-to-end browser runs (scripts/e2eScope.cjs decides which):
+# - push to main, nightly, by hand, and a PR labelled «к-влитию»: the FULL matrix — every spec at all 3 widths × 2 themes,
+#   each view in 2 parallel parts (CLAUDE.md rule 4, docs/ai/CHECKS.md §1); 08-layouts checks every screen at all 6 views;
+# - a PR without the label: only the specs it added or changed, at all 6 views in one job; none — no e2e (stop of 18.11,
+#   rule 26: 9 PRs × the full matrix held every runner). Putting the label on («labeled») starts the full run; the lead
+#   merges only after it.
 # The job "checks" is green only when all of them are — that is the one branch protection requires, and the release
 # (release.yml) starts only after it is green on main.
 # Docs-only changes (every changed file is under docs/ or ends in .md) skip the browser runs: they cannot change the app
@@ -12,6 +14,8 @@ name: Checks
 
 on:
   pull_request:
+    # «labeled»: putting «к-влитию» on starts the full e2e matrix (scripts/e2eScope.cjs)
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [main]
   # Nightly on main: every spec at all 3 widths × 2 themes (docs/ai/CHECKS.md §1). 10:17 UTC = 2:17 AM in Los Angeles,
@@ -61,10 +65,17 @@ jobs:
     name: What changed
     needs: pause
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
     outputs:
       app: ${{ steps.diff.outputs.app }}
       deps: ${{ steps.deps.outputs.deps }}
+      e2e: ${{ steps.views.outputs.mode }}
       views: ${{ steps.views.outputs.views }}
+      parts: ${{ steps.views.outputs.parts }}
+      specs: ${{ steps.views.outputs.specs }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -86,21 +97,18 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: node scripts/depsChanged.cjs
-      # PR: every spec at 3 views that cover each width and both themes (08-layouts checks every screen at all 6 views by
-      # itself, in 390-dark only). Push to main: 390-dark only. Nightly and by hand: all 6 views. 2 parallel parts (--shard).
+      # Full matrix (all 6 views × 2 parts): push to main, nightly, by hand, a PR labelled «к-влитию». A PR without it: only
+      # its added / changed specs at all 6 views in one job (view «all»), or no e2e when it changed none (stop of 18.11).
       - id: views
-        name: Which views
-        run: |
-          # push to main: ONE view (390-dark; it also carries 08-layouts, which checks all 6 views by itself) — the full 3-view
-          # run already ran on the PR, and all 6 views run every night (#906 п.6, audit "yes" 11.11 to variant C, conditions 2–5)
-          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            v='["390-dark","390-light","820-dark","820-light","1280-dark","1280-light"]'
-          elif [ "${{ github.event_name }}" = "push" ]; then
-            v='["390-dark"]'
-          else
-            v='["390-dark","820-light","1280-dark"]'
-          fi
-          echo "views=$v" >> "$GITHUB_OUTPUT"
+        name: Which e2e (full matrix only with the label к-влитию)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/e2eScope.cjs
 
   fast:
     name: Types, unit and database tests
@@ -203,7 +211,7 @@ jobs:
   build-web:
     name: Web build (once for all e2e jobs)
     needs: changes
-    if: needs.changes.outputs.app == 'true'
+    if: needs.changes.outputs.app == 'true' && needs.changes.outputs.e2e != 'none'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -228,14 +236,15 @@ jobs:
   e2e:
     name: End-to-end ${{ matrix.view }} part ${{ matrix.part }}
     needs: [changes, build-web]
-    if: needs.changes.outputs.app == 'true'
+    if: needs.changes.outputs.app == 'true' && needs.changes.outputs.e2e != 'none'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45  # a part takes ~10 min; the limit only catches a hung run
+    # a part takes ~10 min; the limit only catches a hung run. View «all» (a PR's own specs × 6 views in one job) gets more.
+    timeout-minutes: ${{ matrix.view == 'all' && 120 || 45 }}
     strategy:
       fail-fast: false
       matrix:
         view: ${{ fromJSON(needs.changes.outputs.views) }}
-        part: [1, 2]
+        part: ${{ fromJSON(needs.changes.outputs.parts) }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -260,10 +269,18 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.v }}
       - name: End-to-end (browser)
         working-directory: apps/mobile
+        env:
+          SPECS: ${{ needs.changes.outputs.specs }}
         run: |
           bash ../../scripts/aptRetries.sh
           bash ../../scripts/playwrightInstall.sh
           view="${{ matrix.view }}"
+          # a PR without «к-влитию»: only its specs, all 6 views in this one job (08-layouts runs at the first view only)
+          if [ "$view" = "all" ]; then
+            [ -n "$SPECS" ] || { echo "::error::view all without specs"; exit 1; }
+            node e2e/run.cjs --no-build --all-layouts $SPECS
+            exit $?
+          fi
           # 08-layouts checks all 6 views by itself: run it in one view only
           [ "$view" = "390-dark" ] || export E2E_OWN_LAYOUTS=0
           node e2e/run.cjs --no-build --width="${view%-*}" --theme="${view#*-}" --shard=${{ matrix.part }}/2
@@ -312,6 +329,10 @@ jobs:
           docs=false
           if [ "${{ needs.changes.result }}" = "success" ] && [ "${{ needs.changes.outputs.app }}" = "false" ]; then docs=true; fi
           if [ "$docs" = true ] && [ "$e2e" = "skipped" ]; then e2e=success; fi
+          # a PR without «к-влитию» that changed no spec runs no e2e (scripts/e2eScope.cjs mode none); the full matrix
+          # (mode full) skipped is red — the lead merges only after the full run of the label
+          if [ "${{ needs.changes.outputs.e2e }}" = "none" ] && [ "$e2e" = "skipped" ] && [ "${{ needs.build-web.result }}" = "skipped" ]; then e2e=success; fi
+          echo "e2e mode: ${{ needs.changes.outputs.e2e }}"
           if [ "$docs" = true ] && [ "$bundle" = "skipped" ]; then bundle=success; fi
           # rule22 runs on pull requests only: "skipped" on push/schedule is fine, failure is not
           [ "${{ needs.rule22.result }}" != "failure" ] && [ "${{ needs.rule22.result }}" != "cancelled" ] || { echo "::error::rule22=${{ needs.rule22.result }}"; exit 1; }
