@@ -25,8 +25,8 @@ describe("unit:expenseForm — #2008", () => {
   it("С1: opened from job A, the expense starts on job A — not on today's visit's job", () => {
     const choices = [{ key: "A", label: "A" }, { key: "B", label: "B" }];
     expect(startJob(choices, "A", ["B"])).toBe("A");
-    // a job the person may not use is not taken from the link
-    expect(startJob(choices, "Z", ["B"])).toBe("B");
+    // a job of the link the person may not use: none — never today's other job
+    expect(startJob(choices, "Z", ["B"])).toBe(null);
     // from home: the one job of today's visits; two different ones — none, the person picks
     expect(startJob(choices, undefined, ["B", "B"])).toBe("B");
     expect(startJob(choices, undefined, ["A", "B"])).toBe(null);

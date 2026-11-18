@@ -4,7 +4,7 @@
  */
 exports.pickVendor = async (p, { vendor = "Home Depot", own } = {}) => {
   const vis = (id) => p.getByTestId(id).locator("visible=true").first();
-  await vis("expense-vendor-button").click();
+  await vis("field-vendor-button").click();
   await vis("expense-vendor-picker").waitFor({ timeout: 5000 });
   if (own) {
     await vis("expense-vendor-picker-search").locator("input").fill(own);

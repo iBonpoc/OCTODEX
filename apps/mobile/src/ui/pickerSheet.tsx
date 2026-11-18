@@ -94,7 +94,7 @@ export function PickerSheet<K extends string>({
           <TextField type="search" icon="search" value={q} onChangeText={change} placeholder={t("ui.picker.search")} label={t("ui.picker.search")} />
         </View>
         {create}
-        {found.length === 0 ? (
+        {found.length === 0 && canCreate ? null : found.length === 0 ? (
           <View testID={`${testID}-empty`} accessibilityLiveRegion="polite">
             <T v="body" tone="mut">
               {t("ui.picker.empty", { q: q.trim() })}

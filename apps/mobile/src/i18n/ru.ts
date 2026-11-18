@@ -2532,6 +2532,7 @@ export const ru = {
   "ds.btn.waitingNote": "«Ждёт» (кнопка с индикатором) появится с Н-49 (#953).",
   "ds.btn.round": "Круглые",
   "ds.btn.iconButton": "Позвонить",
+  "ds.btn.iconButtonDisabled": "Недоступна",
   "ds.btn.iconButtonActive": "Избранное",
   "ds.btn.toggle": "Нажмите: включена / выключена",
   "ds.btn.fabNote": "«＋» в шапке (от 820); на телефоне — круг {fab} справа внизу",

@@ -9,7 +9,7 @@ import { makeSeed } from "../src/data/seed";
 import type { CatalogItem, DB, Supplier } from "../src/data/types";
 import { catalogUnitPrice } from "../src/features/estimateDoc";
 import {
-  canSeeSuppliers, cleanSupplier, cleanSupplierLink, emailBad, expenseVendors, historyFromRow, historyOf, itemsOfSupplier,
+  canSeeSuppliers, cleanSupplier, cleanSupplierLink, emailBad, historyFromRow, historyOf, itemsOfSupplier,
   itemsWithOtherTax, keepCostHistory, localHistoryEntry, mergeHistory, pickSupplier, supplierFromRow, supplierName, supplierToRow,
 } from "../src/features/suppliers";
 
@@ -155,10 +155,6 @@ describe("unit:suppliers — the server's rows on open (director's check of #459
 });
 
 describe("unit:suppliers — expense chips and server rows", () => {
-  it("the company's active suppliers first, then the usual, no doubles", () => {
-    const db = { ...makeSeed(), suppliers: [sup({ name: "Home Depot" }), sup({ id: "s2", name: "Zed Lumber" }), sup({ id: "s3", name: "Old", active: false })] } as DB;
-    expect(expenseVendors(db, ["home depot", "Chevron"])).toEqual(["Home Depot", "Zed Lumber", "Chevron"]);
-  });
   it("a supplier there and back", () => {
     const x = sup({ phone: "555", terms: "net_30", taxBps: 1025, active: false });
     const row = supplierToRow(x, "c1");

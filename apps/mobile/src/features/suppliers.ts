@@ -211,14 +211,7 @@ export function historyFromRow(r: Record<string, unknown>): CostHistoryEntry {
   };
 }
 
-/** the vendor chips of a new expense: the company's active suppliers first, then the usual ones; no doubles; at most 8 */
-export function expenseVendors(db: DB, usual: readonly string[]): string[] {
-  const out: string[] = [];
-  for (const n of [...sortedSuppliers(suppliersOf(db).filter((x) => x.active)).map((x) => x.name), ...usual]) {
-    if (!out.some((x) => x.toLowerCase() === n.toLowerCase())) out.push(n);
-  }
-  return out.slice(0, 8);
-}
+// the vendors of a new expense: features/expenseForm.ts vendorChoices (#2008)
 
 /**
  * The server's rows of one item / one supplier into the phone's history: they replace what the phone holds for that

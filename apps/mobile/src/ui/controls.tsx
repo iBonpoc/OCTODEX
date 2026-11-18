@@ -109,12 +109,15 @@ export function IconButton({
   active,
   tone,
   bare,
+  disabled,
   testID,
 }: {
   icon: IconKey;
   onPress?: () => void;
   label: string;
   active?: boolean;
+  /** nothing to do here (the calendar's arrow past its last month, #2008): pale and «unavailable» to a screen reader (DS §7.4) */
+  disabled?: boolean;
   /** «bad»: a dangerous small action (the «⊖» of a repeated value, DS §9 А14а) — the icon `status.bad.text` */
   tone?: "acc" | "plain" | "bad";
   /** no plate: the icon alone, visible `valueIcon` 22, the box 36 × 44 (iOS Contacts' «⊖», DS §9 А14а) */
@@ -143,6 +146,7 @@ export function IconButton({
     <Press
       testID={testID}
       onPress={onPress}
+      disabled={disabled}
       visibleHeight={s}
       accessibilityRole="button"
       accessibilityLabel={label}

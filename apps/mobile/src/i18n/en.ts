@@ -2533,6 +2533,7 @@ export const en: Dict = {
   "ds.btn.waitingNote": "«Waiting» (a button with an indicator) comes with Н-49 (#953).",
   "ds.btn.round": "Round",
   "ds.btn.iconButton": "Call",
+  "ds.btn.iconButtonDisabled": "Unavailable",
   "ds.btn.iconButtonActive": "Favourite",
   "ds.btn.toggle": "Press: on / off",
   "ds.btn.fabNote": "«＋» in the header (from 820); on a phone — a {fab} circle bottom right",

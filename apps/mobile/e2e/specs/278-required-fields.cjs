@@ -53,7 +53,7 @@ exports.run = async (h) => {
   await input("field-amount").fill("12.50");
   // #2008: «Где купили» is required too — saved without it, its error under it and nothing saved
   await saveExp.click();
-  await vis("expense-vendor-error").waitFor({ timeout: 3000 });
+  await vis("field-vendor-error").waitFor({ timeout: 3000 });
   h.expect((((await h.db()).expenses ?? []).length) === expBefore, "expense: no vendor — nothing saved");
   await pickVendor(p);
   await saveExp.click();

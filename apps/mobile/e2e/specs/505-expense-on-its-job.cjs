@@ -34,20 +34,20 @@ exports.run = async (h) => {
   h.expect(jt.includes(jobA.number), `the form starts on job A (${jt})`);
 
   // С2: nothing chosen for the person
-  const vt = await vis("expense-vendor").innerText();
+  const vt = await vis("field-vendor").innerText();
   h.expect(!/Home Depot/.test(vt), `no vendor is chosen by itself (${vt})`);
   await vis("field-amount").locator("input, textarea").first().fill("23.45");
   await vis("expense-save").click();
-  await vis("expense-vendor-error").waitFor({ timeout: 4000 });
+  await vis("field-vendor-error").waitFor({ timeout: 4000 });
   h.expect((((await h.db()).expenses ?? []).length) === expensesBefore, "no vendor — nothing saved");
   // a vendor of its own, typed in the search
-  await vis("expense-vendor-button").click();
+  await vis("field-vendor-button").click();
   await vis("expense-vendor-picker").waitFor({ timeout: 5000 });
   await vis("expense-vendor-picker-search").locator("input").fill("Corner Hardware 505");
   await vis("expense-vendor-picker-create").getByRole("button").first().click();
   await p.getByTestId("expense-vendor-picker").locator("visible=true").waitFor({ state: "detached", timeout: 5000 });
-  h.expect(/Corner Hardware 505/.test(await vis("expense-vendor").innerText()), "the typed vendor is chosen");
-  h.expect((await vis("expense-vendor-error").count()) === 0, "its error is gone");
+  h.expect(/Corner Hardware 505/.test(await vis("field-vendor").innerText()), "the typed vendor is chosen");
+  h.expect((await vis("field-vendor-error").count()) === 0, "its error is gone");
   await h.shot("vendor-own");
 
   // С3: the receipt's day — yesterday; tomorrow cannot be picked
@@ -56,7 +56,10 @@ exports.run = async (h) => {
   const label = (k) => p.evaluate((x) => new Date(`${x}T12:00:00Z`).toLocaleDateString("ru-RU", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" }), k);
   const tomorrowBtn = vis("expense-date-calendar").getByRole("button", { name: await label(addDays(today, 1)), exact: true });
   if (await tomorrowBtn.count()) h.expect(await tomorrowBtn.isDisabled(), "a day after today cannot be picked");
-  await vis("expense-date-calendar").getByRole("button", { name: await label(yesterday), exact: true }).click();
+  // yesterday may be last month (today the 1st on the grid's first day): go back a month when it is not on the grid
+  const yBtn = vis("expense-date-calendar").getByRole("button", { name: await label(yesterday), exact: true });
+  if ((await yBtn.count()) === 0) await vis("expense-date-calendar").getByRole("button", { name: "Назад" }).first().click();
+  await yBtn.click();
   await vis("expense-date-calendar").waitFor({ state: "detached", timeout: 5000 });
   await h.shot("date-yesterday");
 
@@ -68,9 +71,7 @@ exports.run = async (h) => {
   h.expect(x?.vendor === "Corner Hardware 505", "С2: the typed vendor is kept as text");
   h.expect((db1.suppliers ?? []).length === suppliersBefore, "С2: no supplier is made by it");
   h.expect(x?.date === yesterday, `С3: the receipt's day is yesterday (${x?.date} vs ${yesterday})`);
-  const queued = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.queue ?? []);
-  const op = queued.find((o) => o?.op?.k === "expense.add" && o.op.amountCents === 2345)?.op ?? queued.find((o) => o?.k === "expense.add" && o.amountCents === 2345);
-  if (op) h.expect(op.date === yesterday, "С3: the day goes to the server with the expense");
+  // (the day sent to the server with the expense: unit test/expenseReceipt «#2008 С3»)
 
   // the job's costs show it
   await h.go(`/job/${jobA.id}`);
@@ -81,9 +82,10 @@ exports.run = async (h) => {
   await h.go("/expense/new");
   await vis("expense-job-button").click();
   await vis("expense-job-picker").waitFor({ timeout: 5000 });
-  const officeRows = await p.getByTestId("expense-job-picker").locator("visible=true").locator('[data-testid^="expense-job-picker-"]').count();
+  const missing = [];
+  for (const j of db1.jobs) if ((await p.getByTestId(`expense-job-picker-${j.id}`).locator("visible=true").count()) !== 1) missing.push(j.number ?? j.id);
   await pressEscUntilClosed(p, p.getByTestId("expense-job-picker").locator("visible=true").first());
-  h.expect(officeRows >= db1.jobs.length, `the office sees every job (${officeRows} rows for ${db1.jobs.length} jobs)`);
+  h.expect(missing.length === 0, `the office sees every job (missing: ${missing.join(", ")})`);
   await h.seed("octo.role.v1", "tech");
   await h.go("/expense/new");
   await vis("expense-job-button").click();

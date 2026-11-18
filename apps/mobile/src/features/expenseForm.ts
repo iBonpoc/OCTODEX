@@ -35,11 +35,12 @@ export function expenseJobsFor(db: Pick<DB, "jobs" | "visits" | "properties" | "
 
 /**
  * The job a new expense starts on: the one it was opened from (the job's or a visit's screen) when the person may use it;
- * else the job of the person's visit today, if there is exactly one; else none — the person picks (never a guess between two).
+ * a job of the link the person may not use — none; without a link, the job of the person's visit today, if there is exactly
+ * one; else none — the person picks (never a guess between two).
  */
 export function startJob(choices: ExpenseJobChoice[], opened: ID | undefined, todaysJobs: ID[]): ID | null {
   const allowed = new Set(choices.map((c) => c.key));
-  if (opened && allowed.has(opened)) return opened;
+  if (opened) return allowed.has(opened) ? opened : null; // a job of the link the person may not use: none, never another job
   const today = [...new Set(todaysJobs)].filter((j) => allowed.has(j));
   return today.length === 1 ? today[0]! : null;
 }

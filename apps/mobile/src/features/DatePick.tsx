@@ -37,9 +37,9 @@ export function DatePick({ value, onPick, range = "future" }: { value: DayKey; o
   return (
     <View style={{ gap: space[1] }}>
       <RowView style={{ justifyContent: "space-between" }}>
-        <IconButton icon="chevronLeft" label={t("plan.prev")} onPress={() => { if (range === "past" || !thisMonth) setMonth(addMonths(month, -1)); }} />
+        <IconButton icon="chevronLeft" label={t("plan.prev")} disabled={range === "future" && thisMonth} onPress={() => { if (range === "past" || !thisMonth) setMonth(addMonths(month, -1)); }} />
         <T v="body" w="semibold">{title}</T>
-        <IconButton icon="chevronRight" label={t("plan.next")} onPress={() => { if (range === "future" || !lastMonth) setMonth(addMonths(month, 1)); }} />
+        <IconButton icon="chevronRight" label={t("plan.next")} disabled={range === "past" && lastMonth} onPress={() => { if (range === "future" || !lastMonth) setMonth(addMonths(month, 1)); }} />
       </RowView>
       <View style={{ flexDirection: "row", gap: space[1] }}>
         {weeks[0]!.map((x) => (
@@ -53,7 +53,8 @@ export function DatePick({ value, onPick, range = "future" }: { value: DayKey; o
           {row.map((x) => {
             // a day that cannot be picked: before today for a visit, after today for a receipt
             const past = range === "past" ? x.key > today : x.key < today;
-            const off = !isWorkday(x.key, hours);
+            // days off are paler only for a visit (a receipt of a Sunday is normal: a pale day reads «cannot be picked», §7.4)
+            const off = range === "future" && !isWorkday(x.key, hours);
             const selected = x.key === value;
             return (
               <Press

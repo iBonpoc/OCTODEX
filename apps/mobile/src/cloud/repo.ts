@@ -683,7 +683,11 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     category: expenseCategoryFromDb(s(x.category)),
     amountCents: n(x.amount_cents),
     at: s(x.created_at),
-    ...(typeof x.date === "string" && x.date ? { date: x.date.slice(0, 10) } : {}),
+    // #2008: the receipt's day. The column's default is the server's current_date — the UTC day — for every row an older
+    // build or this one before #2008 made: such a day says nothing (an evening expense in Los Angeles is UTC's tomorrow),
+    // the day is then the company's day of created_at (expenseDay). A day the person picked is never UTC's day of the
+    // moment it was made unless it is the company's today too (the picker has no day after today).
+    ...(typeof x.date === "string" && x.date && x.date.slice(0, 10) !== s(x.created_at).slice(0, 10) ? { date: x.date.slice(0, 10) } : {}),
     memberId: s(x.created_by),
     // #1538: the receipt in the cloud — taken (its picture on another phone with #1080) or refused; one still on its way
     // to the cloud is not «есть чек» yet (its phone keeps its own copy, keepReceiptLocal)

@@ -16,7 +16,7 @@ import { companyToday } from "@/features/zone";
 import { expenseJobsFor, startJob, vendorChoices } from "@/features/expenseForm";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { FieldGroup, Screen } from "@/ui/surfaces";
+import { FieldGroup, FormMain, Screen } from "@/ui/surfaces";
 import { isAssigned } from "@/features/schedule";
 import { shrinkPicked } from "@/data/photoShrink";
 
@@ -70,11 +70,11 @@ export default function NewExpense() {
         <T v="caption" tone="mut">
           {t("exp.aiNote")}
         </T>
-        <TextField type="money" value={amount} onChangeText={setAmount} placeholder={t("exp.amount")} icon="dollar" field={form.field("amount")} />
+        <TextField type="money" value={amount} onChangeText={setAmount} label={t("exp.amount")} placeholder="0.00" icon="dollar" field={form.field("amount")} />
         {/* where it was bought — an object: a row that opens the list with search and «Указать „…“» (DS А3, #2008) */}
         <SelectField<string>
           label={t("exp.vendor")}
-          testID="expense-vendor"
+          testID="field-vendor"
           value={vendor}
           items={VENDORS.map((v) => ({ key: v, label: v }))}
           onChange={(v) => setVendor(v)}
@@ -90,19 +90,22 @@ export default function NewExpense() {
           </View>
         ) : null}
       </FieldGroup>
-      <Button
-        label={t("exp.save")}
-        icon="check"
-        full
-        testID="expense-save"
-        onPress={() =>
-          form.submit([...(ok ? [] : [{ id: "amount", text: t("form.req.amount") }]), ...(vendor ? [] : [{ id: "vendor", text: t("exp.vendorNeed") }])], () => {
-          const undo = addExpense({ jobId: jobId === "none" ? null : jobId, vendor: vendor!, category, amountCents: cents, receiptUri: photo, date });
-          toast.show(online ? t("exp.saved", { amount: money(cents) }) : t("offline.queued"), undo);
-          back();
-          })
-        }
-      />
+      {/* the main button stands apart from the last field (DS §11 п.17) */}
+      <FormMain>
+        <Button
+          label={t("exp.save")}
+          icon="check"
+          full
+          testID="expense-save"
+          onPress={() =>
+            form.submit([...(ok ? [] : [{ id: "amount", text: t("form.req.amount") }]), ...(vendor ? [] : [{ id: "vendor", text: t("exp.vendorNeed") }])], () => {
+            const undo = addExpense({ jobId: jobId === "none" ? null : jobId, vendor: vendor!, category, amountCents: cents, receiptUri: photo, date });
+            toast.show(online ? t("exp.saved", { amount: money(cents) }) : t("offline.queued"), undo);
+            back();
+            })
+          }
+        />
+      </FormMain>
       <PickerSheet<string>
         visible={vendorOpen}
         title={t("exp.vendorPick")}
