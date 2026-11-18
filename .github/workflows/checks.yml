@@ -20,11 +20,14 @@ on:
     - cron: '17 10 * * *'
   workflow_dispatch:
 
-# A new push to a PR stops the run of its older version (saves GitHub minutes). Pushes to main are never cancelled:
-# each gets its own group (run_id).
+# A new push to a PR stops the run of its older version (saves GitHub minutes). #2192: a new push to main stops the
+# older push run of main too (group checks-main): the queue held 26 full push runs. Nothing is lost — release.yml
+# releases the newest green commit of main, which carries every change before it (its gate: a cancelled run is «no
+# release», and «a newer app commit on main releases itself»); the release counts no Checks runs (no build number from
+# them). The nightly and a manual run each keep their own group (run_id) and are never cancelled.
 concurrency:
-  group: checks-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: checks-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.event_name == 'push' && 'main' || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 jobs:
   # Pipeline pause (#1087, rule 26): while a task labelled «остановка» is open, a pull request without the label «починка» stops
