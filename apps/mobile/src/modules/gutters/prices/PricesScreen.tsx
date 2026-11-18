@@ -57,6 +57,9 @@ export default function GutterPricesScreen() {
   const [bindFor, setBindFor] = useState<PriceRow | null>(null);
   /** spec 53 §6.3 (53-1): the price of a found item in a sheet — two taps (a kit keeps the full editor) */
   const [quickId, setQuickId] = useState<string | null>(null);
+  /** the item just made from a row's sheet: its «Цена» opens when that sheet has left (never two sheets at once — #743;
+   *  founder 18.11, #2155: «она создалась и не спросила меня цену») */
+  const priceNext = useRef<string | null>(null);
   // held while the sheet goes out (DS Б1, #1163); an item deleted meanwhile (another phone) — the sheet goes out
   const quick = useHeldSheet(quickId ? catalog.find((x) => x.id === quickId) ?? null : null);
 
@@ -203,7 +206,16 @@ export default function GutterPricesScreen() {
 
       <TransitionSheet visible={pgOpen && canGroup && groups.length > 0} groups={groups} onClose={() => setPgOpen(false)} onDone={doGroups} />
       <QuickPriceSheet key={quickSheetKey(quick.opening, quick.value)} item={quick.value} visible={quick.visible} onExited={quick.onExited} onClose={() => setQuickId(null)} />
-      <Sheet visible={!!bindFor} onClose={() => setBindFor(null)} title={bindFor ? nameOf(bindFor.part) : ""}>
+      <Sheet
+        visible={!!bindFor}
+        onClose={() => setBindFor(null)}
+        onExited={() => {
+          const id = priceNext.current;
+          priceNext.current = null;
+          if (id) setQuickId(id);
+        }}
+        title={bindFor ? nameOf(bindFor.part) : ""}
+      >
         <View style={{ gap: space[3] }} testID="gpr-bind">
           <T v="caption" tone="mut">{t(k("bindHint"))}</T>
           {bindFor
@@ -218,6 +230,7 @@ export default function GutterPricesScreen() {
                       onPress={() => {
                         setBindFor(null);
                         make([own]);
+                        priceNext.current = own.id;
                       }}
                     />
                   </View>

@@ -14,6 +14,8 @@ const { skipLength, viewTotal } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 
+const { sheetGone } = require("../sheet.cjs");
+
 exports.run = async (h) => {
   const p = h.page;
   const tid = (id) => p.getByTestId(id).locator("visible=true");
@@ -69,6 +71,10 @@ exports.run = async (h) => {
   // one row: a test item
   await card("miss", "labor.tile").click();
   await tid("gpr-bind-make").getByRole("button").click();
+  // #2155: its «Цена» opens at once — «Сохранить» untouched keeps the sample price (rule 9)
+  await tid("qp-sheet").waitFor({ timeout: 8000 });
+  await tid("qp-save").getByRole("button").click();
+  await sheetGone(p);
   await waitFor(async () => (await gutterItems()).filter((x) => x.attributes.work === "tile" && x.placeholder === true).length === 1, "tile: one test item");
   await card("test", "labor.tile").waitFor({ timeout: 5000 });
 
