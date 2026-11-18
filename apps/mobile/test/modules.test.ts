@@ -358,3 +358,21 @@ describe("unit:modules — places in core screens (C2b)", () => {
     expect(placeActions("lead", { modules: { place_demo: cm({ enabled: false, trialEndsAt: iso(NOW + DAY) }) } }, { role: "director", leadId: "l1" }, NOW)).toEqual([]);
   });
 });
+
+import { moduleTabs as tabsOf } from "../src/modules/registry";
+describe("unit:modules — the module's tab never goes silently (founder 18.11: «вместо модуля появилась вкладка „План“»)", () => {
+  const co = (m?: CompanyModule) => ({ modules: m ? { gutters: m } : undefined });
+  it("the trial over, not paid: the tab stays (its screen says «Пробный период закончился»); the module is still not usable", () => {
+    const over = cm({ trialEndsAt: iso(NOW - 7 * DAY) });
+    expect(moduleState(over, NOW).access).toBe("expired");
+    expect(moduleActive(co(over), "gutters", NOW)).toBe(false);
+    expect(tabsOf(co(over), "director", NOW).map((x) => x.tabId)).toEqual(["module-gutters-list"]);
+    expect(tabsOf(co(over), "tech", NOW).map((x) => x.tabId)).toEqual(["module-gutters-list"]);
+  });
+  it("in the trial or paid — the tab; switched off or never on — no tab («План» is back, «Модули» says «Отключён»)", () => {
+    expect(tabsOf(co(cm({ trialEndsAt: iso(NOW + DAY) })), "director", NOW)).toHaveLength(1);
+    expect(tabsOf(co(cm({ trialEndsAt: iso(NOW - DAY), paidUntil: iso(NOW + DAY) })), "director", NOW)).toHaveLength(1);
+    expect(tabsOf(co(cm({ enabled: false, trialEndsAt: iso(NOW + DAY) })), "director", NOW)).toEqual([]);
+    expect(tabsOf(co(), "director", NOW)).toEqual([]);
+  });
+});
