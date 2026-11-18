@@ -6181,10 +6181,11 @@ select tst.ok((select count(*) = 1 from public.jobs where estimate_id = '0e47000
 insert into public.customers (id, company_id, display_name) values ('c7300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T73 Client');
 insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
   ('d7300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', '73 Deposit St', 'Pasadena');
-insert into public.estimates (id, company_id, customer_id, property_id, title) values
-  ('0e730000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 signed'),
-  ('0e730000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 not signed'),
-  ('0e730000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 no deposit');
+-- #2075 (20261117560000): sales take the deposit of their own deal — the signed estimate is the sales person's (T424: not another's)
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+  ('0e730000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 signed', 'a0000000-0000-0000-0000-000000000005'),
+  ('0e730000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 not signed', null),
+  ('0e730000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 no deposit', null);
 insert into public.jobs (id, company_id, number, title, customer_id, property_id, estimate_id) values
   ('e7300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'T73 job', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e730000-0000-4000-8000-000000000001'),
   ('e7300000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'T73 job 3', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e730000-0000-4000-8000-000000000003');
@@ -11753,7 +11754,8 @@ select tst.ok((select public_token is null from public.estimates where id = 'e14
 select tst.ok((select token from public.estimate_links('ca000000-0000-0000-0000-000000000000') where estimate_id = 'e1470000-0000-4000-8000-000000000001') = :'t147_first',
   'T147 the director gets the link through estimate_links');
 :as_sales_a
-select tst.ok(exists (select 1 from public.estimate_links('ca000000-0000-0000-0000-000000000000') where estimate_id = 'e1470000-0000-4000-8000-000000000001'), 'T147 …sales too');
+-- since #2075 (20261117560000) sales get the links of their own deals only: this estimate is the tech's
+select tst.ok(not exists (select 1 from public.estimate_links('ca000000-0000-0000-0000-000000000000') where estimate_id = 'e1470000-0000-4000-8000-000000000001'), 'T147 …sales: not of another''s estimate (#2075)');
 :as_tech_a
 select tst.ok((select public_token is null from public.estimates where id = 'e1470000-0000-4000-8000-000000000001'), 'T147 the tech reads his estimate — without its link');
 select tst.ok((select count(*) from public.estimate_links('ca000000-0000-0000-0000-000000000000')) = 0, 'T147 estimate_links gives a tech nothing');
@@ -12896,10 +12898,11 @@ select tst.ok(tst.cnt($q$select 1 from public.payments where idempotency_key = '
 -- the deposit at the signing stays sales' (17): the server's deposit function on the deposit the signature made (approved,
 -- the signed version, the client's deposit); a deposit invoice sales put in themselves, or of another sum, is refused
 -- (security-check of #1061 В-1: an own «deposit» of $99 999 was paid)
-insert into public.estimates (id, company_id, customer_id, property_id, title) values
-  ('0e191000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed'),
-  ('0e191000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed, no deposit'),
-  ('0e191000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed, another sum');
+-- #2075 (20261117560000): the estimates are the sales person's own deals, so each refusal below is the rule it names
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+  ('0e191000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed', 'a0000000-0000-0000-0000-000000000005'),
+  ('0e191000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed, no deposit', 'a0000000-0000-0000-0000-000000000005'),
+  ('0e191000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed, another sum', 'a0000000-0000-0000-0000-000000000005');
 insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
   ('51910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000001', 1, '{"kind":"none"}'),
   ('51910000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000002', 1, '{"kind":"none"}'),
@@ -12986,6 +12989,7 @@ select tst.ok(true, 'T191 a deposit invoice the office made by hand (no signed v
 :as_super
 insert into public.estimates (id, company_id, customer_id, property_id, title) values
   ('0e191000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 another version');
+update public.estimates set created_by = 'a0000000-0000-0000-0000-000000000005' where id = '0e191000-0000-4000-8000-000000000007';  -- his deal: refused by the version rule, not by #2075
 insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
   ('51910000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000007', 1, '{"kind":"none"}'),
   ('51910000-0000-4000-8000-000000000017', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000007', 2, '{"kind":"none"}');
@@ -13010,6 +13014,7 @@ select tst.ok(true, 'T191 another version than the client signed, the same sum: 
 insert into public.estimates (id, company_id, customer_id, property_id, title) values
   ('0e191000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 not approved'),
   ('0e191000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 ACH on its way');
+update public.estimates set created_by = 'a0000000-0000-0000-0000-000000000005' where id = '0e191000-0000-4000-8000-000000000004';  -- his deal: refused as not approved, not by #2075
 insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
   ('51910000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000004', 1, '{"kind":"none"}'),
   ('51910000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000005', 1, '{"kind":"none"}');
@@ -13552,7 +13557,7 @@ end $$;
 :as_super
 update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
 :as_sales_a
-select tst.fails($q$update public.invoices set status = 'void', void_reason = 'T197 sales' where id = '01970000-0000-4000-8000-000000000002'$q$, 'T197 sales do not void');
+select tst.blocked($q$update public.invoices set status = 'void', void_reason = 'T197 sales' where id = '01970000-0000-4000-8000-000000000002'$q$, 'T197 sales do not void (since #2075 they do not even see an invoice of another''s deal)');
 :as_owner_a
 select tst.fails($q$update public.invoices set status = 'void' where id = '01970000-0000-4000-8000-000000000002'$q$, 'T197 no void without a reason');
 update public.invoices set status = 'void', void_reason = 'T197 wrong amount: $900 instead of $90' where id = '01970000-0000-4000-8000-000000000002';
@@ -13638,8 +13643,9 @@ select tst.ok((select status = 'sent' and total_cents = 20000 and paid_cents = 2
               'T197 the draft final is billed as the rest of the contract ($200) and paid');
 select tst.ok((select discount_cents = 0 and subtotal_cents + tax_cents = total_cents from public.invoices where id = '01970000-0000-4000-8000-000000000008'),
               'T197 billed as the rest: no discount of the draft''s own left, subtotal + tax = total (security-check of #1203 №2)');
--- never born removed: such a row would pass the contract check and come back later (security-check of #1203 №1)
-:as_sales_a
+-- never born removed: such a row would pass the contract check and come back later (security-check of #1203 №1); as the
+-- office since #2075 (20261117560000: sales write only inside their deals, refused before this check)
+:as_office_a
 select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, total_cents, sent_at, deleted_at) values
          ('ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'progress', 'sent', 'T197 hidden', 999900, now(), now())$q$,
        '%created removed%', 'T197 an invoice is never inserted removed (the way past the cap)');
@@ -17373,6 +17379,116 @@ select tst.ok((select count(*) from public.estimate_approvals where estimate_id 
 rollback;
 \echo 'T381 ok'
 
+-- ---------------------------------------------------------------- T420–T423 (#2075): sales see the money of their deals only
+-- The founder's answer to В4 (audit of roles #2064): sales do not see the company's money, only the sums of their own
+-- estimates and leads. «His deal»: an estimate he made, or one of a lead he leads; its job; that job's / version's invoices
+-- (20261117560000). Three estimates of company A: E1 by sales, E2 by the office on a lead sales leads, E3 by the office.
+\echo 'T420 sales and the money of the company'
+begin;
+:as_super
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
+  ('a4200000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000',
+   (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T420 lead', '(818) 555-4200',
+   'a0000000-0000-0000-0000-000000000005');
+insert into public.estimates (id, company_id, number, customer_id, property_id, title, created_by, lead_id) values
+  ('a4200000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T420 E1 sales', 'a0000000-0000-0000-0000-000000000005', null),
+  ('a4200000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T420 E2 his lead', 'a0000000-0000-0000-0000-000000000002', 'a4200000-0000-4000-8000-0000000000a1'),
+  ('a4200000-0000-4000-8000-0000000000e3', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T420 E3 office', 'a0000000-0000-0000-0000-000000000002', null);
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+  ('a4201000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'a4200000-0000-4000-8000-0000000000e2', 1);
+insert into public.jobs (id, company_id, number, title, customer_id, property_id, estimate_id, contract_total_cents) values
+  ('a4202000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', '', 'T420 J1', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'a4200000-0000-4000-8000-0000000000e1', 100000),
+  ('a4202000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', '', 'T420 J2', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'a4200000-0000-4000-8000-0000000000e2', 100000),
+  ('a4202000-0000-4000-8000-0000000000e3', 'ca000000-0000-0000-0000-000000000000', '', 'T420 J3', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'a4200000-0000-4000-8000-0000000000e3', 100000);
+insert into public.invoices (id, company_id, number, customer_id, job_id, source_estimate_version_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('a4203000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'a4202000-0000-4000-8000-0000000000e1', null, 'progress', 'sent', 'T420 his job', 30000, 30000, now()),
+  ('a4203000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'a4202000-0000-4000-8000-0000000000e2', 'a4201000-0000-4000-8000-0000000000e2', 'deposit', 'sent', 'T420 his lead deposit', 5000, 5000, now()),
+  ('a4203000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'a4202000-0000-4000-8000-0000000000e3', null, 'progress', 'sent', 'T420 office job', 40000, 40000, now()),
+  ('a4203000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', null, null, 'standalone', 'sent', 'T420 standalone', 7000, 7000, now());
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, received_by) values
+  ('a4204000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'a4203000-0000-4000-8000-000000000001', 'c1a00000-0000-0000-0000-000000000001', 'cash', 1000, 'succeeded', 't420-p1', 'a0000000-0000-0000-0000-000000000002'),
+  ('a4204000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'a4203000-0000-4000-8000-000000000003', 'c1a00000-0000-0000-0000-000000000001', 'cash', 2000, 'succeeded', 't420-p3', 'a0000000-0000-0000-0000-000000000002'),
+  ('a4204000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'a4203000-0000-4000-8000-000000000004', 'c1a00000-0000-0000-0000-000000000001', 'check', 3000, 'succeeded', 't420-p4', 'a0000000-0000-0000-0000-000000000005');
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('a4205000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', 'a4200000-0000-4000-8000-0000000000e1'),
+  ('a4205000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'estimate.approved', 'a4200000-0000-4000-8000-0000000000e2'),
+  ('a4205000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', 'a4200000-0000-4000-8000-0000000000e3'),
+  ('a4205000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'deposit.paid', null);
+insert into public.stripe_accounts (company_id, account_id) values ('ca000000-0000-0000-0000-000000000000', 'acct_T420test')
+  on conflict do nothing;
+insert into public.payment_attempts (company_id, invoice_id, customer_id, amount_cents, attempt_no, idempotency_key, stripe_account_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4203000-0000-4000-8000-000000000001', 'c1a00000-0000-0000-0000-000000000001', 1000, 1, 't420-attempt', 'acct_T420test');
+insert into public.refunds (company_id, payment_id, amount_cents, idempotency_key) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4204000-0000-4000-8000-000000000001', 100, 't420-refund');
+
+-- T420: invoices — his estimate's job, his lead's estimate; not the office's, not a standalone one
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.invoices where id::text like 'a4203000-%'$q$) = 2, 'T420 sales see the invoices of their two deals only');
+select tst.ok(exists (select 1 from public.invoices where id = 'a4203000-0000-4000-8000-000000000001'), 'T420 the invoice of the job of his estimate');
+select tst.ok(exists (select 1 from public.invoices where id = 'a4203000-0000-4000-8000-000000000002'), 'T420 the deposit of the estimate of the lead he leads');
+select tst.ok(not exists (select 1 from public.invoices where id in ('a4203000-0000-4000-8000-000000000003', 'a4203000-0000-4000-8000-000000000004')),
+  'T420 not the office''s job, not a standalone invoice');
+select tst.ok((select sum(b.balance_cents) from public.customer_balances b where b.customer_id = 'c1a00000-0000-0000-0000-000000000001') = 34000,
+  'T420 the client''s balance shows him only what his deals bill (29000 + 5000)');
+
+-- T421: payments — of his deals and those he took himself
+select tst.ok(tst.cnt($q$select 1 from public.payments where id::text like 'a4204000-%'$q$) = 2, 'T421 sales see two payments');
+select tst.ok(exists (select 1 from public.payments where id = 'a4204000-0000-4000-8000-000000000001'), 'T421 a payment of his deal (the office took it)');
+select tst.ok(exists (select 1 from public.payments where id = 'a4204000-0000-4000-8000-000000000004'), 'T421 a payment he took himself');
+select tst.ok(not exists (select 1 from public.payments where id = 'a4204000-0000-4000-8000-000000000003'), 'T421 not a payment of the office''s deal');
+
+-- T422: refunds, payment attempts, the Stripe account — none; notifications of his estimates only
+select tst.ok(tst.cnt($q$select 1 from public.refunds$q$) = 0, 'T422 sales see no refunds');
+select tst.ok(tst.cnt($q$select 1 from public.payment_attempts$q$) = 0, 'T422 sales see no payment attempts');
+select tst.ok(tst.cnt($q$select 1 from public.stripe_accounts$q$) = 0, 'T422 sales do not see the Stripe account');
+select tst.ok(tst.cnt($q$select 1 from public.notifications where id::text like 'a4205000-%'$q$) = 2, 'T422 sales see the notifications of their two estimates only');
+select tst.blocked($q$update public.notifications set read_at = now() where id = 'a4205000-0000-4000-8000-000000000003'$q$, 'T422 sales do not mark another''s notification read');
+update public.notifications set read_at = now() where id = 'a4205000-0000-4000-8000-000000000001';
+select tst.ok((select read_at is not null from public.notifications where id = 'a4205000-0000-4000-8000-000000000001'), 'T422 sales mark their own notification read');
+
+-- T423: the office sees everything as before; the lead handed to the office takes its deal from sales
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.invoices where id::text like 'a4203000-%'$q$) = 4
+          and tst.cnt($q$select 1 from public.payments where id::text like 'a4204000-%'$q$) = 3
+          and tst.cnt($q$select 1 from public.refunds$q$) >= 1 and tst.cnt($q$select 1 from public.stripe_accounts$q$) >= 1
+          and tst.cnt($q$select 1 from public.notifications where id::text like 'a4205000-%'$q$) = 4, 'T423 the office sees all the money as before');
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4200000-0000-4000-8000-0000000000a1';
+:as_sales_a
+select tst.ok(not exists (select 1 from public.invoices where id = 'a4203000-0000-4000-8000-000000000002'), 'T423 the lead handed over: its deposit is no longer his');
+-- T424: the deposit at the signature — sales take it on their own deal only (record_estimate_deposit)
+:as_sales_a
+select tst.fails_like($q$select public.record_estimate_deposit('a4200000-0000-4000-8000-0000000000e3', 'a4204000-0000-4000-8000-0000000000d3', 'cash')$q$,
+  '%only the office takes a deposit%', 'T424 sales do not take the deposit of another''s estimate');
+-- the client links the app loads: sales — of their deals only
+:as_super
+select tst.set_token('a4200000-0000-4000-8000-0000000000e1', 'tok_t424_mine_0123456789abcdef');
+select tst.set_token('a4200000-0000-4000-8000-0000000000e3', 'tok_t424_office_0123456789abcd');
+:as_sales_a
+select tst.ok(exists (select 1 from public.estimate_links('ca000000-0000-0000-0000-000000000000') x where x.estimate_id = 'a4200000-0000-4000-8000-0000000000e1')
+          and not exists (select 1 from public.estimate_links('ca000000-0000-0000-0000-000000000000') x where x.estimate_id = 'a4200000-0000-4000-8000-0000000000e3'),
+  'T424 sales get the client link of their estimate, not of the office''s');
+:as_office_a
+select tst.ok(exists (select 1 from public.estimate_links('ca000000-0000-0000-0000-000000000000') x where x.estimate_id = 'a4200000-0000-4000-8000-0000000000e3'), 'T424 the office gets every link');
+:as_sales_a
+-- what sales write stays inside their deals, refused before any check of a sum (no answer about another deal's sums)
+select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'a4202000-0000-4000-8000-0000000000e3', 'progress', 'sent', 'T424 probe', 9999900, 9999900, now())$q$,
+  '%not a deal of yours%', 'T424 sales issue no invoice on another''s job (refused before the contract cap)');
+select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'standalone', 'draft', 'T424 standalone', 100, 100)$q$,
+  '%not a deal of yours%', 'T424 sales issue no invoice without a job');
+select tst.fails_like($q$insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4203000-0000-4000-8000-000000000003', 'c1a00000-0000-0000-0000-000000000001', 'cash', 9999900, 'succeeded', 't424-probe')$q$,
+  '%not a deal of yours%', 'T424 sales take no payment on another''s invoice (refused before the balance check)');
+select tst.fails_like($q$update public.invoices set due_date = '2030-01-01'$q$,
+  '%not a deal of yours%', 'T424 sales change no invoice of another''s deal, even without a where');
+select tst.fails_like($q$update public.invoices set title = 'T424 sales' where id = 'a4203000-0000-4000-8000-000000000001'$q$,
+  '%row-level security%', 'T424 sales change no invoice of their own deal either: a refusal (42501), not «0 rows» an old phone''s queue would take for done');
+:as_super
+select tst.ok(not exists (select 1 from public.invoices where due_date = '2030-01-01'), 'T424 no invoice moved');
+rollback;
+\echo 'T420 T421 T422 T423 T424 ok'
+
 -- ---------------------------------------------------------------- T399–T402 (#1834 × #1958): t13 and the checked write of «Прайс»
 -- catalog_set_item_costs marks the item it writes (app.costs_checked_write = its id): a tax that really changes there is refused
 -- (22023, hint supplier_tax); a neighbour, the cost alone and an old build stay quiet — the supplier's rate wins.
@@ -17459,20 +17575,24 @@ select tst.ok(exists (select 1 from public.invoices where id = 'e4142000-0000-40
 :as_sales_a
 select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
   ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'standalone', 'sent', 'T414 sales', 999900, 999900, now())$q$,
-  '%row-level security%', 'T414 sales do not issue a standalone invoice');
+  '%not a deal of yours%', 'T414 sales do not issue a standalone invoice');
 select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents) values
   ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'standalone', 'draft', 'T414 sales draft', 100, 100)$q$,
-  '%row-level security%', 'T414 sales do not make a draft invoice');
+  '%not a deal of yours%', 'T414 sales do not make a draft invoice');
 select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
   ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'e4140000-0000-4000-8000-000000000001', 'final', 'sent', 'T414 sales final', 5000, 5000, now())$q$,
-  '%row-level security%', 'T414 sales do not bill the balance of a job');
+  '%not a deal of yours%', 'T414 sales do not bill the balance of a job');
 
--- T415: sales change no invoice: a refusal (42501), not «0 rows» an old phone's queue would take for done
-select tst.fails_like($q$update public.invoices set title = 'T415 sales' where id = 'e4142000-0000-4000-8000-000000000001'$q$,
-  '%row-level security%', 'T415 sales do not rename an invoice');
-select tst.fails_like($q$update public.invoices set due_date = tst.today() + 60 where id = 'e4142000-0000-4000-8000-000000000001'$q$,
-  '%row-level security%', 'T415 sales do not move the due date');
-select tst.ok((select count(*) from public.invoices where id = 'e4142000-0000-4000-8000-000000000001') = 1, 'T415 sales still see the invoice');
+-- T415: sales change no invoice. The office's invoice is not of his deal (#2075): he no longer sees it and changes
+-- nothing; the refusal of a change on the invoice of his own deal (42501, not «0 rows») — T424.
+select tst.blocked($q$update public.invoices set title = 'T415 sales' where id = 'e4142000-0000-4000-8000-000000000001'$q$,
+  'T415 sales do not rename an invoice');
+select tst.blocked($q$update public.invoices set due_date = tst.today() + 60 where id = 'e4142000-0000-4000-8000-000000000001'$q$,
+  'T415 sales do not move the due date');
+select tst.ok((select count(*) from public.invoices where id = 'e4142000-0000-4000-8000-000000000001') = 0, 'T415 sales do not see the office''s invoice');
+:as_super
+select tst.ok((select title = 'T414 office' and due_date is distinct from tst.today() + 60 from public.invoices where id = 'e4142000-0000-4000-8000-000000000001'),
+  'T415 the invoice is as the office left it');
 :as_office_a
 update public.invoices set title = 'T415 office' where id = 'e4142000-0000-4000-8000-000000000001';
 select tst.ok((select title from public.invoices where id = 'e4142000-0000-4000-8000-000000000001') = 'T415 office', 'T415 the office still changes what may change');
@@ -17592,10 +17712,97 @@ insert into public.leads (id, company_id, source_id, contact_name, phone, receiv
 select tst.ok((select received_at > now() - interval '1 minute' and status = 'new' from public.leads where id = 'a4170000-0000-4000-8000-000000000002'),
   'T419 a lead he brings is received now, whatever the phone says');
 :as_sales_a
-update public.leads set source_id = (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name <> 'Referral' limit 1),
-                        assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001';
-select tst.ok((select assigned_to from public.leads where id = 'a4170000-0000-4000-8000-000000000001') = 'a0000000-0000-0000-0000-000000000002', 'T419 sales (staff) still give a lead and change its source');
+update public.leads set source_id = (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name <> 'Referral' limit 1)
+ where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select source_id <> (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral')
+                 from public.leads where id = 'a4170000-0000-4000-8000-000000000001'), 'T419 sales (staff) still change the source of a lead');
+-- the tech's lead is not his: given to another by the office only (#2075, T425)
+select tst.fails_like($q$update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%not a lead of yours%', 'T419 sales do not give the tech''s lead to another');
 rollback;
 \echo 'T417 T418 T419 ok'
+
+-- ---------------------------------------------------------------- T425 (#2075): sales do not make another's deal theirs
+-- a deal of sales is his estimate or an estimate of his lead; the lead is given or taken by sales only when it is his,
+-- the lead of an estimate is changed only on his own estimate and only to his own lead
+\echo 'T425 sales and another''s deal'
+begin;
+:as_super
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to, created_by) values
+  ('a4250000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T425 free', '(818) 555-4251', null, 'a0000000-0000-0000-0000-000000000002'),
+  ('a4250000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T425 office''s', '(818) 555-4252', 'a0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002'),
+  ('a4250000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T425 brought by him', '(818) 555-4253', null, 'a0000000-0000-0000-0000-000000000005'),
+  ('a4250000-0000-4000-8000-0000000000a4', 'ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T425 his', '(818) 555-4254', 'a0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000002');
+insert into public.estimates (id, company_id, number, customer_id, property_id, title, created_by, lead_id) values
+  ('a4250000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T425 office E', 'a0000000-0000-0000-0000-000000000002', 'a4250000-0000-4000-8000-0000000000a2'),
+  ('a4250000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T425 his E', 'a0000000-0000-0000-0000-000000000005', null);
+:as_sales_a
+select tst.ok(not app.sales_deal_estimate('a4250000-0000-4000-8000-0000000000e1'), 'T425 fixture: the office''s estimate is not his deal');
+select tst.fails_like($q$update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000005' where id = 'a4250000-0000-4000-8000-0000000000a2'$q$,
+  '%not a lead of yours%', 'T425 sales do not take the office''s lead');
+select tst.fails_like($q$update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000005' where id = 'a4250000-0000-4000-8000-0000000000a1'$q$,
+  '%not a lead of yours%', 'T425 sales do not take a free lead (the office gives it)');
+select tst.fails_like($q$update public.leads set assigned_to = null where id = 'a4250000-0000-4000-8000-0000000000a2'$q$,
+  '%not a lead of yours%', 'T425 sales do not take another''s lead from him');
+select tst.fails_like($q$update public.estimates set lead_id = 'a4250000-0000-4000-8000-0000000000a4' where id = 'a4250000-0000-4000-8000-0000000000e1'$q$,
+  '%not a deal of yours%', 'T425 sales do not put the office''s estimate on their lead');
+select tst.fails_like($q$update public.estimates set lead_id = 'a4250000-0000-4000-8000-0000000000a2' where id = 'a4250000-0000-4000-8000-0000000000e2'$q$,
+  '%not a deal of yours%', 'T425 sales do not put their estimate on the office''s lead');
+select tst.ok(not app.sales_deal_estimate('a4250000-0000-4000-8000-0000000000e1'), 'T425 after the refusals the office''s deal is still not his');
+-- brought by him, given by the office to another: no longer his
+:as_super
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4250000-0000-4000-8000-0000000000a3';
+:as_sales_a
+select tst.fails_like($q$update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000005' where id = 'a4250000-0000-4000-8000-0000000000a3'$q$,
+  '%not a lead of yours%', 'T425 sales do not take back the lead they brought once the office gave it to another');
+select tst.fails_like($q$update public.estimates set lead_id = 'a4250000-0000-4000-8000-0000000000a3' where id = 'a4250000-0000-4000-8000-0000000000e2'$q$,
+  '%not a deal of yours%', 'T425 …nor put their estimate on it');
+:as_super
+update public.leads set assigned_to = null where id = 'a4250000-0000-4000-8000-0000000000a3';
+:as_sales_a
+-- his own: as before
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000005' where id = 'a4250000-0000-4000-8000-0000000000a3';
+select tst.ok((select assigned_to = 'a0000000-0000-0000-0000-000000000005' from public.leads where id = 'a4250000-0000-4000-8000-0000000000a3'), 'T425 sales take the lead they brought');
+update public.leads set contact_name = 'T425 his renamed', assigned_to = 'a0000000-0000-0000-0000-000000000005' where id = 'a4250000-0000-4000-8000-0000000000a4';
+select tst.ok((select contact_name = 'T425 his renamed' from public.leads where id = 'a4250000-0000-4000-8000-0000000000a4'), 'T425 a change of his lead that keeps the person passes');
+update public.estimates set lead_id = 'a4250000-0000-4000-8000-0000000000a4' where id = 'a4250000-0000-4000-8000-0000000000e2';
+select tst.ok((select lead_id = 'a4250000-0000-4000-8000-0000000000a4' from public.estimates where id = 'a4250000-0000-4000-8000-0000000000e2'), 'T425 sales put their estimate on their lead');
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4250000-0000-4000-8000-0000000000a4';
+select tst.ok((select assigned_to = 'a0000000-0000-0000-0000-000000000002' from public.leads where id = 'a4250000-0000-4000-8000-0000000000a4'), 'T425 sales give their lead to the office');
+-- the office gives any lead, as before
+:as_office_a
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000005' where id = 'a4250000-0000-4000-8000-0000000000a1';
+select tst.ok((select assigned_to = 'a0000000-0000-0000-0000-000000000005' from public.leads where id = 'a4250000-0000-4000-8000-0000000000a1'), 'T425 the office gives a free lead to sales');
+update public.estimates set lead_id = 'a4250000-0000-4000-8000-0000000000a1' where id = 'a4250000-0000-4000-8000-0000000000e1';
+select tst.ok((select lead_id = 'a4250000-0000-4000-8000-0000000000a1' from public.estimates where id = 'a4250000-0000-4000-8000-0000000000e1'), 'T425 the office changes the lead of an estimate');
+-- T426: the other ways to make another's deal his are shut by the older guards — proved here
+:as_super
+insert into public.estimates (id, company_id, number, customer_id, property_id, title, created_by, lead_id) values
+  ('a4260000-0000-4000-8000-0000000000e3', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T426 office E', 'a0000000-0000-0000-0000-000000000002', null);
+insert into public.jobs (id, company_id, number, title, customer_id, property_id, estimate_id) values
+  ('a4260000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', '', 'T426 office job', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'a4260000-0000-4000-8000-0000000000e3'),
+  ('a4260000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', '', 'T426 plain job', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', null);
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+  ('a4260000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a4260000-0000-4000-8000-0000000000e3', 1);
+:as_sales_a
+select tst.ok(not app.sales_deal_estimate('a4260000-0000-4000-8000-0000000000e3'), 'T426 fixture: the office''s estimate is not his deal');
+-- (1) the estimate of a job: not changed by the app (no column right), nor a new job made with one (t-guard 20261106046000)
+select tst.fails_like($q$update public.jobs set estimate_id = 'a4250000-0000-4000-8000-0000000000e2' where id = 'a4260000-0000-4000-8000-0000000000f2'$q$,
+  '%permission denied for table jobs%', 'T426 sales do not put their estimate on a job (the column is the server''s)');
+select tst.fails_like($q$insert into public.jobs (company_id, number, title, customer_id, property_id, estimate_id) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'T426 probe', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'a4260000-0000-4000-8000-0000000000e3')$q$,
+  '%made by its signature%', 'T426 sales make no job with an estimate (another''s or their own)');
+-- (2) the author of an estimate is the server's (t10_service_fields keeps it)
+update public.estimates set created_by = 'a0000000-0000-0000-0000-000000000005' where id = 'a4260000-0000-4000-8000-0000000000e3';
+select tst.ok(not app.sales_deal_estimate('a4260000-0000-4000-8000-0000000000e3'), 'T426 sales do not make themselves the author of another''s estimate');
+-- (3) a version stays with its estimate (t06_version_lock_by_send); the source version of an invoice is the office's (T424)
+select tst.fails_like($q$update public.estimate_versions set estimate_id = 'a4250000-0000-4000-8000-0000000000e2' where id = 'a4260000-0000-4000-8000-0000000000b1'$q$,
+  '%stays with its estimate%', 'T426 sales do not move a version of another''s estimate to theirs');
+:as_super
+select tst.ok((select estimate_id = 'a4260000-0000-4000-8000-0000000000e3' from public.estimate_versions where id = 'a4260000-0000-4000-8000-0000000000b1')
+              and (select estimate_id = 'a4260000-0000-4000-8000-0000000000e3' from public.jobs where id = 'a4260000-0000-4000-8000-0000000000f1')
+              and (select estimate_id is null from public.jobs where id = 'a4260000-0000-4000-8000-0000000000f2'), 'T426 nothing moved');
+rollback;
+\echo 'T425 T426 ok'
 
 \echo 'ALL TESTS PASSED'
