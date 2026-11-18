@@ -112,11 +112,12 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
 
   /** one press at a time; the screen is left after a made estimate (a second press would make a second one) */
   const busy = useRef(false);
-  /** where it is: the object's address, else the lead's name (the sheet's title block) */
-  const placeText = () => {
-    const placeAddr = m?.propertyId ? store.db.properties.find((p) => p.id === m.propertyId) : undefined;
-    const placeLead = m?.leadId ? store.db.leads.find((l) => l.id === m.leadId) : undefined;
-    return placeAddr ? [placeAddr.address, placeAddr.city].filter(Boolean).join(", ") : placeLead?.name;
+  /** where it is, on the drawing sheet's title block (the screen's and the estimate's page): the job's address (the object's,
+   *  else the lead's own), else the name, else «Черновик · без адреса» — in the sheet's language (#2159, code review) */
+  const placeText = (tt: (k: DictKey) => string) => {
+    if (!m) return undefined;
+    const d = docWho(store.db, m, tt("mod.gutters.pdf.draft"));
+    return d.address ?? d.who;
   };
   const doEstimate = () => {
     if (!m || busy.current) return;
@@ -130,7 +131,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
           pageIdOf(m.id),
           tc("mod.gutters.pdf.title"),
           // one sheet for the phone (/p/) and the paper: built for the narrow one (pageW), the PDF scales it up
-          blueprint(drawing, tc, { company: company.name, address: placeText(), date: docDay(new Date().toISOString(), company.timezone), rough: m.accuracy !== "tape", fmt }, DP.pageW),
+          blueprint(drawing, tc, { company: company.name, address: placeText(tc), date: docDay(new Date().toISOString(), company.timezone), rough: m.accuracy !== "tape", fmt }, DP.pageW),
         )
       : undefined;
     const r = makeEstimate(store, { m, elements: elements ?? [], parts, catalog: store.db.catalog, name: (p) => partName(tc, p, fmt), fallbackTitle: tc("mod.gutters.title"), ...(page ? { page } : {}) });
@@ -160,7 +161,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     const company = companyForPortal(store.db, store.companyName ?? APP_NAME);
     return blueprint(drawing, t, {
       company: company.name,
-      address: placeText(),
+      address: placeText(t),
       date: docDay(new Date().toISOString(), company.timezone),
       rough: m?.accuracy !== "tape",
       fmt,

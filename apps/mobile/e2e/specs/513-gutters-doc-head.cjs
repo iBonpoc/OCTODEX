@@ -90,6 +90,8 @@ exports.run = async (h) => {
   const draftWord = /Черновик · без адреса|Draft · no address|Borrador · sin dirección/i;
   for (const [k, v] of Object.entries(draft)) h.expect(draftWord.test(v), `a draft: the ${k} document says «Черновик · без адреса» (${v.slice(0, 160)})`);
   h.expect(/Draft · no address/i.test(draft.order), "the supplier's order says it in English");
+  // the client's document of a draft is in the company's language (en): the exact phrase, not any language's (code review)
+  h.expect(/Draft · no address/.test(draft.client), "the client's document says it in its own language (en)");
   await h.shot("draft");
 
   // tied to the lead: its name and its own address on every document

@@ -27,6 +27,12 @@ describe("unit:gutterDocWho — whose and where on a Gutters document", () => {
   it("a lead without an address: the name, no address line", () => {
     expect(docWho(db, { leadId: "l2", propertyId: null }, DRAFT)).toEqual({ who: "No Address Lead", draft: false });
   });
+  it("a lead's measurement on the client's object: the lead's name, the object's address (the job's place)", () => {
+    expect(docWho(db, { leadId: "l1", propertyId: "p1" }, DRAFT)).toEqual({ who: "Linda Alvarez", address: "5 Elm Ave, Clovis", draft: false });
+  });
+  it("the lead gone, the object there: the client's name and the object's address", () => {
+    expect(docWho(db, { leadId: "gone", propertyId: "p1" }, DRAFT)).toEqual({ who: "Mark Cole", address: "5 Elm Ave, Clovis", draft: false });
+  });
   it("tied to nobody: «Черновик · без адреса», never an empty head", () => {
     expect(docWho(db, { leadId: null, propertyId: null }, DRAFT)).toEqual({ who: DRAFT, draft: true });
     expect(docWho(db, { leadId: "gone", propertyId: null }, DRAFT)).toEqual({ who: DRAFT, draft: true });
