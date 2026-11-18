@@ -155,7 +155,7 @@
 1. **Small Business Program — первым шагом, до заведения подписок.** developer.apple.com/app-store/small-business-program → **Enroll**. С программой Apple берёт 15% вместо 30%. Без неё тариф Company в худшем случае убыточен (спека 44 §4.5). Ответ Apple приходит письмом.
 2. **Договор и банк.** App Store Connect → **Business** (раньше «Agreements, Tax, and Banking») → **Paid Apps**: принять договор, внести банк и налоговые формы. Без этого покупки не работают даже в песочнице.
 3. **Подписка.** App Store Connect → GoRix → **Monetization → Subscriptions** → группа подписок (одна) → продукты **только месячные**. Цены — по решению в #2169. Каждую цену выберите в сетке Apple, своих чисел там нет. **Family Sharing** — выключить.
-4. **Пробный 7 дней** (если основатель подтвердит вопрос В2 спеки 62): в продукте → **Subscription Prices → Introductory Offers** → Free, 1 week, США.
+4. **Пробный Apple (Introductory Offers) — НЕ заводить.** Пробный 14 дней без карты даёт само приложение (решение 18.11). Если Apple при проверке попросит пробный через покупки, руководитель скажет, что включить (спека 62 §5.3).
 5. **Billing Grace Period** — включить (срок по ответу на вопрос В5 спеки 62).
 6. **Ключ для сервера.** App Store Connect → **Users and Access → Integrations → In-App Purchase** → сгенерировать ключ. Файл `.p8` скачивается **один раз**. Его, Key ID и Issuer ID передайте руководителю для секретов Supabase. В чат, задачи и репозиторий их не вставлять.
 7. **Адрес уведомлений.** GoRix → **App Information → App Store Server Notifications** → Version 2, адреса Production и Sandbox. Адрес даст руководитель после влития PR-2 спеки 62.
