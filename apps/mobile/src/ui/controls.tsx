@@ -40,11 +40,14 @@ export function Button({
   full,
   style,
   accessibilityLabel,
+  selected,
   testID,
 }: {
   label: string;
   onPress?: () => void;
   variant?: BtnVariant;
+  /** a quick choice that is the chosen one (DateField's «Завтра»): read as pressed / selected */
+  selected?: boolean;
   /** "bar": a button of the pinned action bar (DS §8.9) — 44 high, a label in two lines grows it instead of being cut */
   size?: "sm" | "md" | "phone" | "bar";
   icon?: IconKey;
@@ -69,6 +72,7 @@ export function Button({
       visibleHeight={h}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
+      {...(selected !== undefined ? ({ accessibilityState: { selected, disabled: !!disabled }, "aria-pressed": selected } as object) : null)}
       style={[
         {
           minHeight: h,

@@ -149,7 +149,7 @@
  "e2e/specs/40-book-inspection.cjs": 6,
  "e2e/specs/41-plan-reschedule-cancel.cjs": 12,
  "e2e/specs/42-plan-assign.cjs": 7,
- "e2e/specs/43-plan-waiting.cjs": 14,
+ "e2e/specs/43-plan-waiting.cjs": 11,
  "e2e/specs/44-jobs-list-cards.cjs": 3,
  "e2e/specs/45-notice-list-cards.cjs": 4,
  "e2e/specs/46-crew-list-cards.cjs": 2,
