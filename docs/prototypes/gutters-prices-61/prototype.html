@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
 <!--
   Прототип спеки 61 (docs/specs/61-gutters-prices.md §4.1–4.3), этап 0, только картинка.
-  Параметры: ?w=390|820|1280 &theme=light|dark &state=screen|sheet|search &lane=all|gutter|corners_caps|…
+  Параметры: ?w=390|820|1280 &theme=light|dark &state=screen|sheet|search &lane=all|gutter|downspout|guards|consumables|labor
   Все значения — токены «Наряда»: блоки ниже — копия design/naryad-ds/tokens/{foundation,theme,components,status}.css
   (нужная часть, без правок) и последний блок — зеркало значений packages/design-tokens/src/index.ts, которых нет в CSS.
   Демо-цены (правило 9): примерные, не цены поставщиков.
@@ -233,12 +233,17 @@ const SYS = { gutter: '5″ K-Style', ds: '2×3', mat: 'Aluminum' };
 const SYS_LABEL = `${SYS.gutter} · ${SYS.ds} · ${SYS.mat}`;
 const SECTIONS = [
   ['gutter', 'Желоб'], ['corners_caps', 'Углы и заглушки'], ['fasteners', 'Крепёж'], ['downspouts', 'Водосток'],
-  ['adapters', 'Переходники'], ['ds_bottom', 'Низ водостока'], ['guards', 'Guards'], ['consumables', 'Расходники'], ['all', 'Все']
+  ['adapters', 'Переходники'], ['ds_bottom', 'Низ водостока'], ['guards', 'Guards'], ['consumables', 'Расходники']
+];
+// лента из 6 (спека 61 §4.2): чип → разделы сметы; «Работа» — список работы; «Все» — по умолчанию и последним
+const LANES = [
+  ['gutter', 'Желоб', ['gutter', 'corners_caps', 'fasteners']], ['downspout', 'Водосток', ['downspouts', 'adapters', 'ds_bottom']],
+  ['guards', 'Guards', ['guards']], ['consumables', 'Расходники', ['consumables']], ['labor', 'Работа', []], ['all', 'Все', null]
 ];
 // демо-цены (правило 9); price null — позиции в прайсе нет
 const LABOR = [
   ['Монтаж желоба · эт 1', 850, 'ft'], ['Монтаж водостока · эт 1', 2500, 'ea'],
-  ['Вырезка угла', null, 'ea'], ['Демонтаж старого', null, 'ft']
+  ['Замена End Cap', 1200, 'ea'], ['Вырезка угла', null, 'ea'], ['Демонтаж старого', null, 'ft']
 ];
 const PARTS = [
   ['gutter', '5″ K-Style Gutter · Aluminum 0.027″', 420, 'ft'],
@@ -269,7 +274,7 @@ function listCard(icon, title, price, unit) {
 const header = () => DEV === 'desktop' ? `<div class="lch"><span class="c1">Позиция</span><span>Цена</span></div>` : '';
 
 function filterBar() {
-  const chips = SECTIONS.filter(([k]) => k === 'all' || PARTS.some((p) => p[0] === k))
+  const chips = LANES.filter(([k, , secs]) => k === LANE || k === 'all' || k === 'labor' || PARTS.some((p) => secs.includes(p[0])))
     .map(([k, l]) => `<button class="chipf${k === LANE ? ' on' : ''}" role="radio" aria-checked="${k === LANE}">${l}</button>`).join('');
   const lane = `<div class="lane" id="lane" role="radiogroup" aria-label="Раздел">${chips}</div>`;
   const closed = `<button class="srch" aria-label="Поиск">${ic('search', 'sm')}</button>`;
@@ -279,21 +284,28 @@ function filterBar() {
   return DEV === 'phone' ? `<div class="fb"><div class="r1">${open}</div>${lane}</div>` : `<div class="fb"><div class="r1">${open}${lane}</div></div>`;
 }
 
+const laneSecs = (LANES.find((l) => l[0] === LANE) || LANES[5])[2];
+const partRows = LANE === 'labor' ? [] : PARTS.filter((p) => (!laneSecs || laneSecs.includes(p[0])) && match(p[1]));
+const laborRows = LANE === 'all' || LANE === 'labor' ? LABOR.filter((r) => match(r[0])) : [];
 function partsList() {
-  let rows = PARTS.filter((p) => (LANE === 'all' || p[0] === LANE) && match(p[1]));
+  const rows = partRows;
   let html = '';
   for (const [k, l] of SECTIONS) {
     const g = rows.filter((p) => p[0] === k);
     if (!g.length) continue;
-    if (LANE === 'all') html += `<div class="grp">${l}</div>`;
+    html += `<div class="grp">${l}</div>`;
     html += g.map((p) => listCard('box', p[1], p[2], p[3])).join('');
   }
-  const found = Q ? `<div class="found">Найдено: ${rows.length} · в работе — нет совпадений</div>` : '';
-  return `${found}${header()}<div class="grid">${html}</div>`;
+  return `${header()}<div class="grid">${html}</div>`;
 }
 
 function screen() {
-  const labor = LABOR.filter((r) => match(r[0]));
+  const labor = laborRows;
+  const found = Q ? `<div class="found">Найдено: ${labor.length + partRows.length} — работа ${labor.length}, детали ${partRows.length}</div>` : '';
+  const partsSec = partRows.length ? `<section class="sec"><h2>Детали <span class="n">· ${partRows.length}</span></h2>
+    <p class="hint">Детали работы системы ${SYS_LABEL}. Цена одна на все цвета.</p>
+    ${partsList()}
+  </section>` : '';
   const laborSec = labor.length ? `<section class="sec"><h2>Работа <span class="n">· ${labor.length}</span></h2>
       <p class="hint">Отдельными строками сметы; от системы не зависит.</p>${header()}
       <div class="grid">${labor.map((r) => listCard('wrench', r[0], r[1], r[2])).join('')}</div></section>` : '';
@@ -309,12 +321,10 @@ function screen() {
       ${DEV === 'phone' ? `<button class="btn">Создать позиции сразу</button>` : ''}</div>
     ${DEV === 'phone' ? '' : `<button class="btn">Создать позиции сразу</button>`}
   </div>
+  ${filterBar()}
+  ${found}
   ${laborSec}
-  <section class="sec"><h2>Детали <span class="n">· ${PARTS.length}</span></h2>
-    <p class="hint">Детали работы системы ${SYS_LABEL}. Цена одна на все цвета.</p>
-    ${filterBar()}
-    ${partsList()}
-  </section>`;
+  ${partsSec}`;
 }
 
 function sheet() {
