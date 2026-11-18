@@ -1005,6 +1005,7 @@ export const en: Dict = {
   "co.noLogo": "No logo yet",
   "co.pickLogo": "Choose a logo",
   "co.changeLogo": "Replace",
+  "co.removeLogo": "Remove logo",
   "co.color": "Brand color",
   "co.colorNote": "HEX, e.g. #1E6FD9. Used only on client documents.",
   "co.tradesNote": "A direction doesn't change estimates, clients or invoices: they work the same for everyone. Choose one on a lead, estimate or job to see which direction earns more.",
@@ -4597,4 +4598,6 @@ export const en: Dict = {
   "crash.restart": "Restart",
   "ds.crash.title": "Crash screen",
   "ds.crash.hint": "Drawn by the root ErrorBoundary when the app itself fails (§13): no raw error text, “Retry” draws the screen again, “Restart” reloads the app. Outside the app's theme and language: it takes the system's.",
+  // «Портал: предпросмотр клиента»: the office's «open as client» only shows
+  "portalPreview.sign": "This is what the client will see. Only the client can sign and pay, by their own link.",
 };

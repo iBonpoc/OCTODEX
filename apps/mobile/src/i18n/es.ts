@@ -1005,6 +1005,7 @@ export const es: Dict = {
   "co.noLogo": "Aún sin logo",
   "co.pickLogo": "Elegir logo",
   "co.changeLogo": "Cambiar",
+  "co.removeLogo": "Quitar logotipo",
   "co.color": "Color de marca",
   "co.colorNote": "HEX, p. ej. #1E6FD9. Solo en documentos para el cliente.",
   "co.tradesNote": "La línea de trabajo no cambia presupuestos, clientes ni facturas: funcionan igual para todos. Elíjala en el lead, el presupuesto o el trabajo para ver cuál rinde más.",
@@ -4597,4 +4598,6 @@ export const es: Dict = {
   "crash.restart": "Reiniciar",
   "ds.crash.title": "Pantalla de fallo",
   "ds.crash.hint": "La dibuja el ErrorBoundary de la raíz cuando la app misma falla (§13): sin texto de error crudo, «Reintentar» dibuja la pantalla otra vez, «Reiniciar» recarga la app. Fuera del tema y del idioma de la app: toma los del sistema.",
+  // «Портал: предпросмотр клиента»: the office's «open as client» only shows
+  "portalPreview.sign": "Así lo verá el cliente. Solo el cliente puede firmar y pagar, con su propio enlace.",
 };

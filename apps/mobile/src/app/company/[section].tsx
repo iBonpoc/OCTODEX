@@ -11,6 +11,7 @@ import { uid } from "@/features/estimateDoc";
 import { Labeled, PctField } from "@/features/fields";
 import { SETUP_STEPS, stepHint, stepTitle, type SetupStep } from "@/features/companySetup";
 import { tzLabel } from "@/features/scheduleSettings";
+import { logoFit } from "@/features/logoFit";
 import { ServiceCategoryEditor } from "@/features/ServiceCategoryPicker";
 import { CompanyTerms } from "@/features/CompanyTerms";
 import { Button, ChoiceChips, IconButton, ReadOnly, Segmented, StatusChip, Stepper, TextField, Toggle, useReadOnly } from "@/ui/controls";
@@ -428,12 +429,16 @@ function BrandEditor({ draft, set }: { draft: Company; set: (p: Partial<Company>
   const { t } = useI18n();
   const toast = useToast();
   const pick = async () => {
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, aspect: [1, 1], quality: 1 }).catch(() => null);
-    const uri = res && !res.canceled ? res.assets[0]?.uri : undefined;
+    // no square crop on picking (#2003: a wide logo was cut or squeezed); the crop itself is #2005
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 1 }).catch(() => null);
+    const asset = res && !res.canceled ? res.assets[0] : undefined;
+    const uri = asset?.uri;
     if (!uri) return;
     try {
-      // small square logo kept as a data URI in the company profile (shows on the client page and in PDFs)
-      const out = await ImageManipulator.manipulateAsync(uri, [{ resize: { width: component.logoPx, height: component.logoPx } }], {
+      // the logo keeps its proportions: the longer side at most logoPx (#2003), kept as a data URI in the company profile
+      // (shows on the client page and in PDFs)
+      const fit = logoFit(asset.width, asset.height, component.logoPx);
+      const out = await ImageManipulator.manipulateAsync(uri, [{ resize: fit }], {
         compress: 0.8,
         format: ImageManipulator.SaveFormat.PNG,
         base64: true,
@@ -450,7 +455,7 @@ function BrandEditor({ draft, set }: { draft: Company; set: (p: Partial<Company>
     <>
       <FieldGroup title={t("co.logo")} testID="co-group-logo">
         {draft.brand.logo ? (
-          <Image source={{ uri: draft.brand.logo }} style={{ width: component.logo, height: component.logo, borderRadius: radius.inner }} accessibilityLabel={t("co.logo")} />
+          <Image testID="co-logo-image" source={{ uri: draft.brand.logo }} resizeMode="contain" style={{ width: component.logo, height: component.logo, borderRadius: radius.inner }} accessibilityLabel={t("co.logo")} />
         ) : (
           <T v="caption" tone="mut">
             {t("co.noLogo")}
@@ -458,7 +463,7 @@ function BrandEditor({ draft, set }: { draft: Company; set: (p: Partial<Company>
         )}
         {ro ? null : <RowView>
           <Button label={draft.brand.logo ? t("co.changeLogo") : t("co.pickLogo")} icon="camera" variant="secondary" onPress={pick} />
-          {draft.brand.logo ? <Button label={t("cat.remove")} variant="ghost" onPress={() => set({ brand: { ...draft.brand, logo: undefined } })} /> : null}
+          {draft.brand.logo ? <Button label={t("co.removeLogo")} variant="ghost" onPress={() => set({ brand: { ...draft.brand, logo: undefined } })} /> : null}
         </RowView>}
       </FieldGroup>
       <FieldGroup title={t("co.color")} testID="co-group-color">
