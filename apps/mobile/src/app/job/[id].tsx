@@ -193,7 +193,7 @@ export default function JobScreen() {
           </T>
           <RowView style={{ flexWrap: "wrap" }}>
             <Button label={t("job3.done.yes")} icon="check" variant="primary" size="sm" onPress={complete} />
-            {servable ? <Button label={t("job3.done.more")} icon="calendar" variant="secondary" size="sm" onPress={() => router.push(`/job/schedule?jobId=${j.id}`)} /> : null}
+            {servable && office ? <Button label={t("job3.done.more")} icon="calendar" variant="secondary" size="sm" onPress={() => router.push(`/job/schedule?jobId=${j.id}`)} /> : null}
           </RowView>
         </Card>
       ) : null}
@@ -252,7 +252,7 @@ export default function JobScreen() {
       ) : null}
       <SectionTitle
         title={t("job3.schedule")}
-        right={j.status === "done" || !servable ? undefined : <Button label={visits.length ? t("sch.another") : t("sch.title")} icon="calendar" size="sm" variant={visits.length ? "ghost" : "primary"} onPress={() => router.push(`/job/schedule?jobId=${j.id}`)} />}
+        right={j.status === "done" || !servable || !office ? undefined : <Button label={visits.length ? t("sch.another") : t("sch.title")} icon="calendar" size="sm" variant={visits.length ? "ghost" : "primary"} onPress={() => router.push(`/job/schedule?jobId=${j.id}`)} />}
       />
       {next ? (
         <T v="body" tone="mut">
