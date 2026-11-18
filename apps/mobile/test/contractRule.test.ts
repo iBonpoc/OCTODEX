@@ -18,6 +18,7 @@ import { contractInvoice, secondFinal } from "../src/features/contractInvoice";
 import { contractToInvoiceCents, restInvoiceKind } from "../src/features/contractKind";
 import { visitDueCents } from "../src/features/visitDue";
 import { invoiceHtml } from "../src/features/docPdf";
+import { buildAttention } from "../src/features/attention";
 import { portalFromEstimate } from "../src/cloud/portal";
 import type { DB, Invoice, Job } from "../src/data/types";
 
@@ -60,6 +61,9 @@ describe("#2061 one rule: the contract's own invoices", () => {
       // the job screen's «Выставить остаток»
       expect(contractToInvoiceCents(db, job)).toBe(left);
       expect(restInvoiceKind(db, JOB)).toBe(kind);
+      // «Требует внимания»: «работа выполнена, счёт не выставлен» (#2048) — the same amount, or no reason at 0
+      const reason = buildAttention(db, "director").find((i) => i.kind === "jobNotInvoiced" && i.refId === JOB);
+      expect(reason?.amountCents ?? 0).toBe(left);
       // the limit of a new invoice: the rest goes through, a cent more is refused
       if (left > 0) expect(contractInvoice(db, job, left)).not.toBeNull();
       expect(contractInvoice(db, job, left + 1)).toBeNull();
