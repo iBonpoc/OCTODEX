@@ -2,7 +2,6 @@ import type { Mode } from "@/data/store";
 import { timing, type StatusName } from "@octo/design-tokens";
 import { seeCosts } from "./access";
 import { contractStatement, invoiceOwes } from "@octo/estimating-engine";
-import { contractInvoices } from "./contractKind";
 import { daysOverdue, daysSince, isOverdue, minutesSince, visitContext } from "@/data/selectors";
 import type { DB, ID, Role, Task } from "@/data/types";
 import { canSeeLead, isBackFromSnooze, leadTurn } from "./leads";
@@ -225,14 +224,19 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
       const c = db.customers.find((x) => x.id === (j.customerId ?? db.properties.find((p) => p.id === j.propertyId)?.customerId));
       out.push({ id: `done-${j.id}`, kind: "jobDone", refId: j.id, name: c?.name ?? "", label: "job3.att.done", params: { name: c?.name ?? "", title: j.title }, chip: "job3.att.doneChip", status: "info", amountCents: j.amountCents, score: 900 });
     }
-    // #2048: done, and part of the contract is still not on any invoice (the engine's contract statement: contract − invoiced).
-    // It goes away when an invoice covers the whole contract. A visit closed with no payment (#2018) lands here too.
-    for (const j of db.jobs) {
-      if (j.status !== "done") continue;
-      const left = contractStatement(j.amountCents, contractInvoices(db, j.id)).toInvoice;
-      if (left <= 0) continue;
-      const c = db.customers.find((x) => x.id === (j.customerId ?? db.properties.find((p) => p.id === j.propertyId)?.customerId));
-      out.push({ id: `noinv-${j.id}`, kind: "jobNotInvoiced", refId: j.id, name: c?.name ?? "", label: "att.notInvoiced", params: { name: c?.name ?? "", title: j.title }, chip: "att.notInvoicedChip", status: "warn", amountCents: left, score: 820 });
+    // #2048: done, and part of the job's price is still not on any invoice (the engine's contract statement: price −
+    // invoiced). The same invoices as the job's own screen and its «Выставить остаток» — the office can always clear it.
+    // It goes away when invoices cover the price. A visit closed with no payment (#2018) lands here too.
+    const done = db.jobs.filter((j) => j.status === "done" && Number.isFinite(j.amountCents) && j.amountCents > 0);
+    if (done.length) {
+      const byJob = new Map<ID, typeof db.invoices>();
+      for (const i of db.invoices) if (i.jobId) byJob.set(i.jobId, [...(byJob.get(i.jobId) ?? []), i]);
+      for (const j of done) {
+        const left = contractStatement(j.amountCents, byJob.get(j.id) ?? []).toInvoice;
+        if (!(left > 0)) continue;
+        const c = db.customers.find((x) => x.id === (j.customerId ?? db.properties.find((p) => p.id === j.propertyId)?.customerId));
+        out.push({ id: `noinv-${j.id}`, kind: "jobNotInvoiced", refId: j.id, name: c?.name ?? "", label: "att.notInvoiced", params: { name: c?.name ?? "", title: j.title }, chip: "att.notInvoicedChip", status: "warn", amountCents: left, score: 820 });
+      }
     }
   }
   // a task of a person who is not at work: its own card, it opens the task's subject (never the general list)

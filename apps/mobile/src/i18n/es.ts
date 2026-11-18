@@ -2163,6 +2163,7 @@ export const es: Dict = {
   "job3.att.done": "{name}: ¿trabajo terminado?",
   "att.notInvoiced": "{name}: trabajo hecho, sin facturar",
   "att.notInvoicedChip": "Sin facturar",
+  "att.notInvoicedOpen": "Abrir el trabajo",
   "job3.att.doneChip": "¿Terminado?",
   "job3.done.ask": "¿Trabajo terminado?",
   "job3.done.askHint": "Todas las visitas terminaron. ¿Cerrar el trabajo o hace falta otra visita?",

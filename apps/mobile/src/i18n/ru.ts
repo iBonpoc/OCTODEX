@@ -2162,6 +2162,7 @@ export const ru = {
   "job3.att.done": "{name}: работа выполнена?",
   "att.notInvoiced": "{name}: работа выполнена, счёт не выставлен",
   "att.notInvoicedChip": "Не выставлено",
+  "att.notInvoicedOpen": "Открыть работу",
   "job3.att.doneChip": "Выполнена?",
   "job3.done.ask": "Работа выполнена?",
   "job3.done.askHint": "Все выезды закончены. Закрыть работу или нужен ещё выезд?",

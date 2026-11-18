@@ -23,11 +23,20 @@ exports.run = async (h) => {
   const row = p.getByText(new RegExp(`${cust.name}: работа выполнена, счёт не выставлен`)).locator("visible=true").first();
   await row.waitFor({ timeout: 8000 });
   h.expect(true, "С1 the reason is in «Требует внимания»");
-  await h.expectText(/\$500(\.00)?/, "С1 with the amount not invoiced");
+  // the amount in the reason's own card, not anywhere on the page
+  const card = p.locator('[data-testid^="att-"], [data-testid^="list-card"]').filter({ hasText: /работа выполнена, счёт не выставлен/ }).locator("visible=true").first();
+  h.expect(/\$500(\.00)?/.test(await card.innerText()), `С1 with the amount not invoiced in its card: ${(await card.innerText()).replace(/\s+/g, " ").slice(0, 120)}`);
   await h.shot("reason");
   await row.click();
   await p.waitForURL((u) => u.pathname === "/job/j479", { timeout: 8000 });
   h.expect(true, "С1 it opens the job");
+
+  // the dispatcher sees it too
+  await h.seed("octo.role.v1", "dispatcher");
+  await h.go("/triage");
+  await p.getByText(/работа выполнена, счёт не выставлен/).locator("visible=true").first().waitFor({ timeout: 8000 });
+  h.expect(true, "С1 the dispatcher sees it too");
+  await h.seed("octo.role.v1", "director");
 
   // С2: an invoice for the whole contract — no reason
   const raw2 = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)), KEY);

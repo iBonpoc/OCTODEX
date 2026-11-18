@@ -34,8 +34,13 @@ describe("«работа выполнена, счёта нет» (#2048)", () =>
     expect(reason(withJob({}, [{ totalCents: 50000, paidCents: 0 }]).db, "j2048")).toBeUndefined();
     expect(reason(withJob({}, [{ totalCents: 50000, paidCents: 50000 }]).db, "j2048")).toBeUndefined();
   });
-  it("a void invoice does not count", () => {
-    expect(reason(withJob({}, [{ totalCents: 50000, paidCents: 0, void: true }]).db, "j2048")?.amountCents).toBe(50000);
+  it("the same invoices as the job's screen and its «Выставить остаток»: a standalone one counts too — the office can clear it", () => {
+    // review of #2048: counting the contract invoices only left a reason the job screen gave no way to clear
+    const { db, id } = withJob({}, [{ kind: "standalone" as Invoice["kind"], totalCents: 20000 }, { totalCents: 30000 }]);
+    expect(reason(db, id)).toBeUndefined();
+  });
+  it("old saved data with no price: no reason, no NaN", () => {
+    expect(reason(withJob({ amountCents: undefined as unknown as number }, []).db, "j2048")).toBeUndefined();
   });
   it("not done, or a job of $0: no reason", () => {
     expect(reason(withJob({ status: "in_progress" }, []).db, "j2048")).toBeUndefined();
