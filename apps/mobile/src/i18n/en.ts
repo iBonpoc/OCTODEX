@@ -3111,6 +3111,8 @@ export const en: Dict = {
   "mod.gutters.draw.select": "Select",
   "mod.gutters.draw.undo": "Undo",
   "mod.gutters.draw.delete": "Delete",
+  "mod.gutters.draw.selCap": "End cap",
+  "mod.gutters.draw.capRemoved": "End cap removed",
   "mod.gutters.draw.deleted": "Deleted",
   "mod.gutters.draw.story": "Story {n}",
   "mod.gutters.draw.storyShort": "St {n}",

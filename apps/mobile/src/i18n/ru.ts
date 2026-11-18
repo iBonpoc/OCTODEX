@@ -3111,6 +3111,8 @@ export const ru = {
   "mod.gutters.draw.select": "Выбрать",
   "mod.gutters.draw.undo": "Назад",
   "mod.gutters.draw.delete": "Удалить",
+  "mod.gutters.draw.selCap": "End cap",
+  "mod.gutters.draw.capRemoved": "End cap снята",
   "mod.gutters.draw.deleted": "Удалено",
   "mod.gutters.draw.story": "Этаж {n}",
   "mod.gutters.draw.storyShort": "Эт {n}",
