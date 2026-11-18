@@ -107,9 +107,11 @@ exports.run = async (h) => {
   h.expect(l.includes('height="11.000in"') && /GUTTER LAYOUT PLAN/i.test(l), "the whole sheet reduced to the page");
 
   // the supplier's order: English, on Letter
+  h.expect(!/[А-Яа-яЁё]/.test(l.replace(/<style[\s\S]*?<\/style>/g, "")), "no Russian word on the Letter sheets either (the app is in Russian)");
   const o = await printVia("view-pdf-shop-order");
   h.expect(o.includes("MATERIAL ORDER") && o.includes("SUPPLIER") && o.includes(">MO-1<"), "the order, in English");
   h.expect(o.includes("@page{size:8.5in 11in"), "the order on Letter");
+  h.expect(!/[А-Яа-яЁё]/.test(o.replace(/<style[\s\S]*?<\/style>/g, "")), "no Russian word in the supplier's order (en)");
   h.expect(!/\$\s?\d/.test(o), "no prices in the order");
   await h.shot("view-shop-docs");
 };
