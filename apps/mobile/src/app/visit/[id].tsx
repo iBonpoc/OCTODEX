@@ -81,7 +81,7 @@ export default function VisitScreen() {
     );
 
   const { job, property, customer } = visitContext(db, v);
-  const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
+  const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, v));
   const idx = stepIndex(v.step);
   const before = v.photos.filter((p) => p.kind === "before");
   const after = v.photos.filter((p) => p.kind === "after");

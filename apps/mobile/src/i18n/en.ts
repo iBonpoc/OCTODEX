@@ -199,6 +199,7 @@ export const en: Dict = {
   "st.approved": "Approved",
   "st.declined": "Declined",
   "st.awaiting": "Awaiting payment",
+  "st.signedToClose": "Signed · to close",
   "st.inspection": "Estimate visit",
   "st.unassigned": "Unassigned",
   "st.late": "Running late",
