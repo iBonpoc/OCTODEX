@@ -27,6 +27,7 @@ import { Card, CardList, Divider, ListRow, RowView, Screen } from "@/ui/surfaces
 import { NotFound } from "@/ui/emptyStates";
 import { blueprint, sheetPage } from "./blueprint";
 import { DocSheet } from "@/features/DocPagesView";
+import { docWho } from "../docWho";
 import { fmtLen } from "../canvas/format";
 import { fromElements } from "../canvas/model";
 import { gutterData, KEY, measurementOf } from "../data";
@@ -111,11 +112,12 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
 
   /** one press at a time; the screen is left after a made estimate (a second press would make a second one) */
   const busy = useRef(false);
-  /** where it is: the object's address, else the lead's name (the sheet's title block) */
-  const placeText = () => {
-    const placeAddr = m?.propertyId ? store.db.properties.find((p) => p.id === m.propertyId) : undefined;
-    const placeLead = m?.leadId ? store.db.leads.find((l) => l.id === m.leadId) : undefined;
-    return placeAddr ? [placeAddr.address, placeAddr.city].filter(Boolean).join(", ") : placeLead?.name;
+  /** where it is, on the drawing sheet's title block (the screen's and the estimate's page): the job's address (the object's,
+   *  else the lead's own), else the name, else «Черновик · без адреса» — in the sheet's language (#2159, code review) */
+  const placeText = (tt: (k: DictKey) => string) => {
+    if (!m) return undefined;
+    const d = docWho(store.db, m, tt("mod.gutters.pdf.draft"));
+    return d.address ?? d.who;
   };
   const doEstimate = () => {
     if (!m || busy.current) return;
@@ -129,7 +131,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
           pageIdOf(m.id),
           tc("mod.gutters.pdf.title"),
           // one sheet for the phone (/p/) and the paper: built for the narrow one (pageW), the PDF scales it up
-          blueprint(drawing, tc, { company: company.name, address: placeText(), date: docDay(new Date().toISOString(), company.timezone), rough: m.accuracy !== "tape", fmt }, DP.pageW),
+          blueprint(drawing, tc, { company: company.name, address: placeText(tc), date: docDay(new Date().toISOString(), company.timezone), rough: m.accuracy !== "tape", fmt }, DP.pageW),
         )
       : undefined;
     const r = makeEstimate(store, { m, elements: elements ?? [], parts, catalog: store.db.catalog, name: (p) => partName(tc, p, fmt), fallbackTitle: tc("mod.gutters.title"), ...(page ? { page } : {}) });
@@ -159,7 +161,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     const company = companyForPortal(store.db, store.companyName ?? APP_NAME);
     return blueprint(drawing, t, {
       company: company.name,
-      address: placeText(),
+      address: placeText(t),
       date: docDay(new Date().toISOString(), company.timezone),
       rough: m?.accuracy !== "tape",
       fmt,
@@ -182,11 +184,8 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
       </View>
     );
   }
-  const lead = m.leadId ? store.db.leads.find((l) => l.id === m.leadId) : undefined;
-  const addr = m.propertyId ? store.db.properties.find((p) => p.id === m.propertyId) : undefined;
   const rough = m.accuracy !== "tape";
   // «Чертёж в PDF» (#509): the client's — no prices, in the client's language; the crew's — the cut, in the app's
-  const who = lead?.name ?? (addr ? store.db.customers.find((c) => c.id === addr.customerId)?.name : undefined);
   // the client's document: their estimate when there is one (its PDF carries the drawing's page, P4b) — only to those
   // who see the client's money; else the drawing without prices
   const clientEst = money$ ? estimateOfMeasurement(store.db, m.id) : undefined;
@@ -195,6 +194,8 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     const company = companyForPortal(store.db, store.companyName ?? APP_NAME);
     const docLang = kind === "client" ? clientLangOf(store.db, m) : lang;
     const tt = kind === "client" ? tFor(docLang) : t;
+    // whose and where — or «Черновик · без адреса» (#2159), in the document's language
+    const dw = docWho(store.db, m, tt("mod.gutters.pdf.draft"));
     const html = drawingPdfHtml({
       kind,
       drawing,
@@ -202,13 +203,13 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
       t: tt,
       opts: { lang: docLang },
       company,
-      who,
-      address: addr ? [addr.address, addr.city].filter(Boolean).join(", ") : undefined,
+      who: dw.who,
+      address: dw.address,
       rough,
       date: docDay(new Date().toISOString(), company.timezone),
       fmt,
     });
-    saveEstimatePdf(html, drawingPdfName(kind, tt, who)).catch(() => toast.show(t("err.pdfSave")));
+    saveEstimatePdf(html, drawingPdfName(kind, tt, dw.who)).catch(() => toast.show(t("err.pdfSave")));
   };
 
   // «Рабочие чертежи» (#1349): the plan sheets G-1 …, the schedules and the supplier's order — 11 × 17, or the same
@@ -217,10 +218,12 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   const shop = (kind: "drawings" | "order", paper: ShopPaper) => {
     const company = companyForPortal(store.db, store.companyName ?? APP_NAME);
     const tt = kind === "order" ? tFor("en") : t;
+    // whose and where on every sheet — or «Черновик · без адреса» (#2159), in the sheet's language
+    const dw = docWho(store.db, m, tt("mod.gutters.pdf.draft"));
     const r = readRules(settings);
     const set = shopSheets(drawing, {
       t: tt,
-      job: shopJob(company, { client: who, address: addr ? [addr.address, addr.city].filter(Boolean).join(", ") : undefined, date: docDay(new Date().toISOString(), company.timezone) }),
+      job: shopJob(company, { client: dw.who, address: dw.address, date: docDay(new Date().toISOString(), company.timezone) }),
       rules: { hangerSpacingIn: r.hangerSpacingIn, hangerExtra: r.hangerExtra, wasteFt: r.wasteFt, dsStickFt: r.dsStickFt, storyFt: r.storyFt, corner: r.corner, engine: rules.over },
       parts,
       fmt,
@@ -228,7 +231,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     const sheets = kind === "order" ? set.order : set.drawings;
     const problems = kind === "order" ? set.orderProblems : set.problems;
     if (problems.length) toast.show(t("mod.gutters.shop.problems", { n: problems.length }));
-    saveShopPdf(shopHtml(sheets, shopFileName(tt, kind, who), paper), shopFileName(tt, kind, who), shopPagePt(sheets, paper)).catch(() => toast.show(t("err.pdfSave")));
+    saveShopPdf(shopHtml(sheets, shopFileName(tt, kind, dw.who), paper), shopFileName(tt, kind, dw.who), shopPagePt(sheets, paper)).catch(() => toast.show(t("err.pdfSave")));
   };
 
   return (

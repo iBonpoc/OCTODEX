@@ -3808,6 +3808,7 @@ export const ru = {
   "mod.gutters.pdf.color": "Цвет",
   "mod.gutters.pdf.dsCount": "Downspouts: {n}",
   "mod.gutters.pdf.date": "Дата",
+  "mod.gutters.pdf.draft": "Черновик · без адреса",
   "mod.gutters.view.pdfClient": "PDF клиенту",
   "mod.gutters.view.pdfCrew": "PDF бригаде",
   // shop drawings G-1 / G-2 and the material order (#1349)
