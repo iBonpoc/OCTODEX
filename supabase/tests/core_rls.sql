@@ -15705,7 +15705,7 @@ select tst.ok((select assigned_to = 'a5600000-0000-4000-8000-000000000002' from 
 -- the team as the caller — every member sees the team, so the check holds for them)
 :as_tech281
 select tst.fails_like($q$update public.leads set assigned_to = 'a5600000-0000-4000-8000-000000000002' where id = 'a2810000-0000-4000-8000-000000000c03'$q$,
-                      '%not given to a subcontractor%', 'T282 a tech does not give his lead to a subcontractor');
+                      '%given to someone else by the office%', 'T282 a tech does not give his lead to a subcontractor (since #2075 to nobody else: t12_lead_member_guard)');
 -- a tech's task is his own whoever he names (t04_task_who): never the subcontractor's
 insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id) values ('a2820000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c03', 'T282 t', 'a5600000-0000-4000-8000-000000000002');
 select tst.ok((select assignee_id = 'a2810000-0000-4000-8000-000000000001' from public.tasks where id = 'a2820000-0000-4000-8000-000000000001'),
@@ -17435,5 +17435,84 @@ update public.job_line_items set taxable = true where id = 'e4141000-0000-4000-8
 select tst.ok((select tax_enabled and contract_total_cents = 11000 from public.jobs where id = 'e4140000-0000-4000-8000-000000000001'), 'T416 the office switches the tax, the total follows');
 rollback;
 \echo 'T414 T415 T416 ok'
+
+-- ---------------------------------------------------------------- T417–T419 (#2075): a tech's own lead — his to work, the rest the office's
+-- The roles decision (audit of roles #2064): a member who is not staff works his lead (contact fields, the next step,
+-- close / reopen / snooze, the first reply); he gives it to nobody else, and its source, price, client, number, links
+-- and «won» stay the office's (leads_update WITH CHECK = USING, t12_lead_member_guard, 20261117370000).
+\echo 'T417 a tech''s own lead'
+begin;
+:as_tech_a
+insert into public.leads (id, company_id, source_id, contact_name, phone) values
+  ('a4170000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000',
+   (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T417 Neighbor', '(818) 555-4170');
+:as_office_a
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000003' where id = 'a4170000-0000-4000-8000-000000000001';
+
+-- T417: he gives it to nobody else, and the lead stays his after his change
+:as_tech_a
+select tst.fails_like($q$update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%given to someone else by the office%', 'T417 a tech does not give his lead to the office');
+select tst.fails_like($q$update public.leads set assigned_to = null where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%given to someone else by the office%', 'T417 a tech does not leave his lead without anyone');
+select tst.fails($q$update public.leads set created_by = 'a0000000-0000-0000-0000-000000000002', assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  'T417 a tech does not hand the lead out of his reach');
+:as_office_a
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001';
+:as_tech_a
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000003' where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select assigned_to from public.leads where id = 'a4170000-0000-4000-8000-000000000001') = 'a0000000-0000-0000-0000-000000000003', 'T417 a tech takes a lead he brought back to himself');
+
+-- T418: the office's fields of a lead do not change by his hand
+select tst.fails_like($q$update public.leads set source_id = (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name <> 'Referral' limit 1) where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T418 a tech does not change the source');
+select tst.fails_like($q$update public.leads set cost_cents = 99900 where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T418 a tech does not set the lead price');
+select tst.fails_like($q$update public.leads set customer_id = 'c1a00000-0000-0000-0000-000000000001' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office%', 'T418 a tech does not tie the lead to a client (t06_lead_place_guard answers first)');
+select tst.fails_like($q$update public.leads set number = 'LEA-9999' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T418 a tech does not renumber the lead');
+select tst.fails_like($q$update public.leads set received_at = now() - interval '30 days' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T418 a tech does not move the receipt time');
+-- what is his: the contact fields, the next step, close and reopen
+update public.leads set contact_name = 'T417 Neighbor Jr', service_requested = 'Gutter cleaning', snoozed_until = now() + interval '3 days', snooze_reason = 'client_away' where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select contact_name = 'T417 Neighbor Jr' and service_requested = 'Gutter cleaning' from public.leads where id = 'a4170000-0000-4000-8000-000000000001'), 'T418 a tech still works his lead (fields, snooze)');
+update public.leads set snoozed_until = null, snooze_reason = null where id = 'a4170000-0000-4000-8000-000000000001';
+update public.leads set status = 'lost', lost_reason = 'no_response' where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select status from public.leads where id = 'a4170000-0000-4000-8000-000000000001') = 'lost', 'T418 a tech closes his lead');
+update public.leads set status = 'contacted', lost_reason = null, lost_reason_text = null where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select status from public.leads where id = 'a4170000-0000-4000-8000-000000000001') = 'contacted', 'T418 a tech reopens his lead');
+
+-- T419: «won» (making a client) is the office's; the office still changes what the tech may not
+select tst.fails_like($q$update public.leads set status = 'won', won_via = 'manual' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office%', 'T419 a tech does not make his lead won');
+-- archived, «referred by», a first reply moved: the office's too
+update public.leads set status = 'lost', lost_reason = 'no_response' where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.fails_like($q$update public.leads set status = 'archived' where id = 'a4170000-0000-4000-8000-000000000001'$q$, '%only the office%', 'T419 a tech does not archive his lead');
+update public.leads set status = 'contacted', lost_reason = null where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.fails_like($q$update public.leads set referred_by_customer_id = 'c1a00000-0000-0000-0000-000000000001' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T419 a tech does not mark the lead «referred by» a client');
+update public.leads set first_response_at = now(), first_response_kind = 'manual' where id = 'a4170000-0000-4000-8000-000000000001' and first_response_at is null;
+select tst.ok((select first_response_at is not null from public.leads where id = 'a4170000-0000-4000-8000-000000000001'), 'T419 a tech marks the first reply once');
+select tst.fails_like($q$update public.leads set first_response_at = now() - interval '100 days' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T419 a tech does not move the first reply');
+-- a new lead of his is a plain new one
+select tst.fails_like($q$insert into public.leads (company_id, source_id, contact_name, phone, status, won_via) values
+  ('ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T419 won', '(818) 555-4191', 'won', 'manual')$q$,
+  '%only the office makes a lead like this%', 'T419 a tech does not bring a lead already won');
+select tst.fails_like($q$insert into public.leads (company_id, source_id, contact_name, phone, provider, provider_ref) values
+  ('ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T419 market', '(818) 555-4192', 'thumbtack', 'T419-ref')$q$,
+  '%only the office makes a lead like this%', 'T419 a tech does not bring a lead with a marketplace reference');
+insert into public.leads (id, company_id, source_id, contact_name, phone, received_at) values
+  ('a4170000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'),
+   'T419 back-dated', '(818) 555-4193', now() - interval '90 days');
+select tst.ok((select received_at > now() - interval '1 minute' and status = 'new' from public.leads where id = 'a4170000-0000-4000-8000-000000000002'),
+  'T419 a lead he brings is received now, whatever the phone says');
+:as_sales_a
+update public.leads set source_id = (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name <> 'Referral' limit 1),
+                        assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select assigned_to from public.leads where id = 'a4170000-0000-4000-8000-000000000001') = 'a0000000-0000-0000-0000-000000000002', 'T419 sales (staff) still give a lead and change its source');
+rollback;
+\echo 'T417 T418 T419 ok'
 
 \echo 'ALL TESTS PASSED'
