@@ -70,7 +70,7 @@ exports.run = async (h) => {
   await h.sheet().getByTestId("photo-upload-retry").click();
   await sheetGone(p);
   await waitMark("e501-here", null);
-  await p.waitForFunction(() => /Не загрузились в облако: 2/.test(document.body.innerText), null, { timeout: 5000 });
+  await vis("photo-upload-failed").filter({ hasText: "Не загрузились в облако: 2" }).waitFor({ timeout: 5000 });
   h.expect((await markOf("e501-far")) === "refused" && (await markOf("e501-big")) === "tooBig", "the other photos keep their marks");
 
   // a reload keeps the marks on this phone

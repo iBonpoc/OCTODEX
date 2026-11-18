@@ -22,7 +22,8 @@ import { PermanentError, uploadPhoto } from "@/cloud/ops";
 import type { ModuleOpHandler, ModuleRead, ModuleStore } from "../registry";
 import type { ElementRow, MeasurementRow } from "./canvas/model";
 import { type GuardedUndo, markOf, NO_UNDO, TOO_LATE } from "@/data/undo";
-import { markPhoto } from "@/data/photoUpload";
+import { canRetry, markPhoto } from "@/data/photoUpload";
+import { liveUri } from "./photoUri";
 
 export const KEY = "gutters";
 export const K = { mSave: "measurement.save", mRemove: "measurement.remove", eSave: "element.save", eRemove: "element.remove", pAdd: "photo.add", pRemove: "photo.remove", pRetry: "photo.retry", rAdd: "revision.add" } as const;
@@ -337,9 +338,10 @@ export function addPhoto(store: ModuleStore, x: { id: string; measurementId: str
  */
 export function retryPhoto(store: ModuleStore, id: string) {
   const f = (store.db.files ?? []).find((x) => x.id === id);
-  if (!f || !f.uri || f.upload?.failed !== "refused") return null;
-  const uri = f.uri;
-  return store.moduleOp(KEY, { kind: K.pRetry, payload: { id, uri }, apply: (d) => markPhoto(d, id, null, "") });
+  // the same rule as a visit's photo (`canRetry`), on the file this page can still read (a dead `blob:` of another page — nothing to send)
+  const uri = liveUri(f?.uri);
+  if (!f || !uri || !canRetry({ id: f.id, kind: "before", uri, ...(f.upload ? { upload: f.upload } : {}) })) return null;
+  return asUndo(store.moduleOp(KEY, { kind: K.pRetry, payload: { id, uri }, apply: (d) => markPhoto(d, id, null, "") }));
 }
 
 /** a photo removed (deleted_at); the returned undo puts it back (rule 5) */

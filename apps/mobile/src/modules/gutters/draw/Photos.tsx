@@ -29,8 +29,10 @@ export function MeasurePhotos({ measurementId, elementId, testID, onRemoved, rea
     madeHere(uri);
     addPhoto(store, { id: Crypto.randomUUID(), measurementId, elementId, uri, at: new Date().toISOString() });
   };
+  // as a visit's photo (#1431): what happens is said — sent again, or queued without the network (rule 6), with «Отменить»
   const retry = (id: string) => {
-    retryPhoto(store, id);
+    const undo = retryPhoto(store, id);
+    if (undo) toast.show(store.online ? t("photoUp.retried") : t("offline.queued"), undo);
   };
   const remove = (id: string) => {
     const undo = removePhoto(store, id);
