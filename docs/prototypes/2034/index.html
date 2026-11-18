@@ -259,6 +259,15 @@ svg.i.m{width:20px;height:20px}
 .canvas.bad{border-color:var(--st-bad)}
 .offline{display:flex;gap:var(--s2);align-items:center;background:var(--surf);border:1px solid var(--bd);border-radius:var(--ri);padding:var(--s3) var(--s4);max-width:var(--form-max)}
 .dev.full{height:auto!important}
+.field .err{color:var(--st-bad-t)}
+.field .inp.bad,.canvas.bad{border-color:var(--st-bad-t)}
+.empty{margin:var(--s4) 0;text-align:left}
+.dev[data-w="390"] .empty{max-width:none}
+.btn{min-height:var(--c-lg)}
+.dev:not([data-w="390"]) .btn{min-height:var(--c-md);font-size:var(--fs-caption)}
+.dock .btn,.strip .btn{min-height:var(--hit)!important;font-size:var(--fs-btn)!important}
+.btn.badtxt{background:var(--surf2);border:1px solid var(--bd-field);color:var(--st-bad-t)}
+.co{display:flex;gap:var(--s3);align-items:center;background:var(--surf);border:1px solid var(--bd);border-radius:var(--ri);padding:var(--s3)}
 </style>
 
 </head>
@@ -267,7 +276,7 @@ svg.i.m{width:20px;height:20px}
 <p class="lead">Этап 0 задачи #2034. Слева — как сейчас, справа — по DS §11а и §13а. Содержимое — как в приложении; шапка — по Н2 (#2087), статусы — по Н3 (#2095). Демо-данные.</p>
 <div class="bar" role="group" aria-label="Настройки показа">
   <div class="seg" id="scr"><button data-v="item" aria-pressed="true">Позиция каталога</button><button data-v="del" aria-pressed="false">Удалить учётную запись</button><button data-v="imports" aria-pressed="false">Импорты</button><button data-v="pay" aria-pressed="false">Онлайн-оплата</button><button data-v="sign" aria-pressed="false">Моя подпись</button></div>
-  <div class="seg" id="st"><button data-v="0" aria-pressed="true">обычное</button><button data-v="1" aria-pressed="false">особое состояние</button></div>
+  <div class="seg" id="st"><button data-v="0" aria-pressed="true">состояние 1</button><button data-v="1" aria-pressed="false">состояние 2</button><button data-v="2" aria-pressed="false">состояние 3</button></div>
   <div class="seg" id="wid"><button data-v="390" aria-pressed="true">390</button><button data-v="820" aria-pressed="false">820</button><button data-v="1280" aria-pressed="false">1280</button></div>
   <div class="seg" id="thm"><button data-v="dark" aria-pressed="true">Тёмная</button><button data-v="light" aria-pressed="false">Светлая</button></div>
 </div>
@@ -311,11 +320,13 @@ svg.i.m{width:20px;height:20px}
   <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></symbol>
   <symbol id="i-expand" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></symbol>
+  <symbol id="i-wifiOff" viewBox="0 0 24 24"><path d="M1 1l22 22M16.7 11.1A10.9 10.9 0 0 1 19 12.5M5 12.5a11 11 0 0 1 5.2-2.8M10.7 5a16 16 0 0 1 12.3 3.6M1 8.6a16 16 0 0 1 4.7-2.9M8.5 16a5 5 0 0 1 7 0M12 20h.01"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></symbol>
 </svg>
 <script>
 const BEFORE = { item: "catalog_cat-haul", del: "settings_delete-account", imports: "client_imports", pay: "company_payments", sign: "estimate_signature" };
-const ST = { item: "особое: «Своя» единица выбрана, нажато «Сохранить» без цены", del: "особое: настоящий аккаунт (не демо), шаг кода", imports: "особое: нет сети и данных в телефоне", pay: "—", sign: "особое: нажато «Сохранить подпись» без подписи" };
+const ST = { item: ["обычное","после нажатия «Сохранить позицию» с пустой ценой","= 2"], del: ["демо","настоящий аккаунт, первый экран","настоящий аккаунт, шаг кода — нажато «Проверить код» с пустым полем"], imports: ["пусто","облачный аккаунт: нет сети и нет данных в телефоне","= 2"], pay: ["демо","= 1","= 1"], sign: ["обычное","после нажатия «Сохранить подпись» с пустым холстом","= 2"] };
 const S = { scr: "item", st: "0", wid: "390", thm: "dark" };
 const ic = (n, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const RAIL = [["home","Главная"],["msg","Сообщения"],["cal","План"],["inbox","Лиды"],["wrench","Работы"],["users","Клиенты"],["phone","Звонки"],["check","Задачи"],["note","Сметы"],["wallet","Счета"],["burger","Ещё"]];
@@ -323,51 +334,58 @@ const rail = (on) => `<nav class="railx">${RAIL.map(([i,t]) => `<div class="ri $
 const tabs = (on) => `<div class="dock"><div class="tabpill">${[["home","Главная"],["cal","План"],["msg","Сообщения"],["users","Клиенты"],["burger","Ещё"]].map(([i,t]) => `<span class="${t===on?"on":""}">${ic(i,"m")}${t}</span>`).join("")}</div></div>`;
 function head(back, title, opts = {}) {
   const w = +S.wid;
-  const svc = `<span class="ver" style="margin:0">GoRix v1.0.0 · 18 · 18 нояб.</span><span class="demo">${ic("alert")}Демо · данные только на этом телефоне</span>`;
+  const svc = `<span class="ver" style="margin:0">GoRix v1.0.0 · 18 · 18 нояб.</span>${opts.demo===false?"":`<span class="demo">${ic("alert")}Демо · данные только на этом телефоне</span>`}`;
   const b = opts.cancel ? `<button class="back" style="padding-left:0">Отмена</button>` : back ? `<button class="back">${ic("back")}${back}</button>` : "";
   const top = w === 390 ? `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;margin-bottom:10px">${svc}</div><div class="backrow">${b}</div>` : `<div class="backrow">${b}<span style="flex:1"></span><span style="display:flex;gap:8px;align-items:center">${svc}</span></div>`;
   return top + `<div class="hdr"><h2>${title}</h2><span class="q">?</span><span class="sp"></span>${opts.more===false?"":`<button class="ib" aria-label="Ещё действия">${ic("more")}</button>`}</div>${opts.sub ? `<p class="small" style="margin:8px 0 0;max-width:680px">${opts.sub}</p>` : ""}`;
 }
 const fld = (l, v, o = {}) => o.sel ? `<div class="field"><div class="inp"><span>${l}</span><span class="val">${v} ${ic("chevd")}</span></div></div>` : `<div class="field"><label>${l}</label><div class="inp ${o.ph?"ph":""} ${o.bad?"bad":""}">${o.lead?`<span style="color:var(--mut);display:inline-flex;margin-right:8px">${ic(o.lead)}</span>`:""}${o.sel?`<span class="val">${v} ${ic("chevd")}</span>`:v}${o.act?`<span class="act" aria-label="${o.actLabel||""}">${ic(o.act)}</span>`:""}</div>${o.err?`<div class="err">${ic("alertc")}${o.err}</div>`:""}</div>`;
 function render() {
-  const w = +S.wid, sp = S.st === "1"; let c = "", dock = "", full = false, railOn = "Ещё", noRail = false, tabOn = "";
-  document.getElementById("stHint").textContent = "Особое состояние: " + ST[S.scr];
+  const w = +S.wid, sp = S.st !== "0"; let c = "", dock = "", full = false, railOn = "Ещё", noRail = false, tabOn = "";
+  document.getElementById("stHint").textContent = "Состояния: 1 — " + ST[S.scr][0] + "; 2 — " + ST[S.scr][1] + "; 3 — " + ST[S.scr][2];
+  const st = +S.st;
   if (S.scr === "item") {
-    const save = `<button class="btn pri">Сохранить</button>`;
-    c = head("Каталог", "Позиция каталога", { more: true }) + `<div style="height:16px"></div><div class="form">
+    const save = `<button class="btn pri">Сохранить позицию</button>`;
+    c = head("", "Debris haul-away", { cancel: true }) + `<div style="height:16px"></div><div class="form">
       ${fld("Тип", "Услуга", { sel: 1 })}${fld("Название (видит клиент)", "Debris haul-away (pickup load)")}
-      ${fld("Единица", sp ? "Своя" : "Своя", { sel: 1 })}${fld("Своя единица", "flat")}
-      ${fld("Цена клиенту за единицу (flat), $", sp ? "" : "150", sp ? { bad: 1, err: "Впишите цену — клиент увидит её в смете" } : {})}
-      ${w>390?`<div style="margin-top:28px;display:flex;gap:12px;align-items:center">${save}<button class="back" style="color:var(--st-bad-t)">${ic("trash")}Удалить из каталога</button></div>`:`<div style="margin-top:16px"><button class="back" style="color:var(--st-bad-t)">${ic("trash")}Удалить из каталога</button></div>`}</div>`;
+      ${fld("Единица", "Своя", { sel: 1 })}${fld("Своя единица", "flat")}
+      ${fld("Цена клиенту, $ за flat", sp ? "" : "150", sp ? { bad: 1, err: "Впишите цену — клиент увидит её в смете" } : {})}
+      ${w>390?`<div style="margin-top:28px">${save}</div>`:""}</div><p class="small" style="margin-top:16px">«Удалить из каталога» — в «⋯» (красным, тост «Отменить» 5 с).</p>`;
     if (w === 390) dock = `<div class="dock"><div class="actionbar"><div class="r">${save}</div></div></div>`;
   } else if (S.scr === "del") {
     const gone = ["Ваше имя, email и телефон","Вход в приложение","Личные настройки","Местоположение","Личные заметки"];
-    const stays = ["Работы, сметы, счета, оплаты, выезды, общие заметки, сообщения и файлы, которые вы добавили, — с подписью «Удалённый пользователь»","История изменений","Имя и подпись на уже подписанных документах","Запись о согласии с Условиями — без IP-адреса"];
+    const stays = ["Работы, сметы, счета, оплаты, выезды, общие заметки, сообщения и файлы, которые вы добавили, — с подписью «Удалённый пользователь»","История изменений (в ней прежние должность, номер HIS — лицензии на ремонт жилья — и цвет)","Имя и подпись на уже подписанных документах","Запись о согласии с Условиями — без IP-адреса","Контакт компании с вашими данными, если он был","Отпуска и выходные в календаре"];
     const list = (a) => `<div class="card" style="max-width:560px">${a.map(t => `<div class="dot">${t}</div>`).join("")}</div>`;
-    if (!sp) {
-      c = head("Профиль и аккаунт", "Удалить учётную запись", { more: false }) + `<div style="height:16px"></div><div class="form"><div class="card" style="display:flex;gap:12px">${ic("info","m")}<div><b>В демо аккаунта нет — удалять нечего.</b><div class="small" style="margin-top:4px">Так этот экран выглядит у настоящего аккаунта.</div><button class="btn sec sm inbody" style="margin-top:12px">Войти или создать компанию</button></div></div>
-      <div class="stitle">Что удалится</div>${list(gone)}<div class="stitle">Что останется у компании</div>${list(stays)}</div>`;
+    const lists = `<div class="stitle">Что удалится</div>${list(gone)}<div class="stitle">Что останется у компании</div>${list(stays)}<p class="small" style="max-width:560px">Служебный журнал входов хранится у поставщика сервера по его правилам.</p>`;
+    if (st === 0) {
+      c = head("Профиль и аккаунт", "Удалить учётную запись", { more: false }) + `<div style="height:16px"></div><div class="form"><div class="empty" style="margin-top:0">${ic("info","m")}<b style="margin-top:8px">В демо учётной записи нет — удалять нечего</b><div class="small" style="margin-bottom:16px">Так этот экран выглядит у настоящей учётной записи.</div><button class="btn pri">Войти или создать компанию</button></div>${lists}</div>`;
+    } else if (st === 1) {
+      c = head("Профиль и аккаунт", "Удалить учётную запись", { more: false, demo: false }) + `<div style="height:16px"></div><div class="form">${lists}
+        <div class="stitle">Ваши компании</div><div class="co">${ic("home","m")}<div style="flex:1"><b>GoRix Demo Home Services</b><div class="small">Владелец · вы последний владелец</div></div><span class="chip f warn">${ic("alert")}Нужно решение</span></div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn sec sm">Передать компанию</button><button class="btn sec sm">Закрыть компанию</button></div>
+        <div style="margin-top:28px"><button class="btn badtxt">${ic("trash")}Удалить учётную запись</button></div></div>`;
     } else {
-      c = head("Профиль и аккаунт", "Удалить учётную запись", { more: false }) + `<div style="height:16px"></div><div class="form"><p>Мы отправили код на <b>a.petrov@…</b>. Письмо придёт от <b>no-reply@gorix.app</b>.</p>${fld("Код из письма", "", { ph: 1, err: "Впишите код из письма" , bad: 1})}<p class="small">Не пришло? Проверьте «Спам» · запросить снова через 0:42</p>
-      <div class="stitle">Что удалится</div>${list(gone)}</div>`;
+      c = head("Профиль и аккаунт", "Код из письма", { more: false, demo: false }) + `<div style="height:16px"></div><div class="form"><p>Мы отправили код на <b>alex.petrov@gorixdemo-homeservices.com</b>. Письмо придёт от <b>no-reply@gorix.app</b>. Так мы знаем, что удаляете именно вы.</p>
+        ${fld("Код из письма — N цифр (длина по спеке 50)", "", { ph: 1, bad: 1, err: "Впишите код из письма", act: "paste", actLabel: "Вставить" })}
+        <div class="stitle" style="font-size:15px">Не пришло письмо?</div><div class="dot">Проверьте папку «Спам» и «Промоакции»</div><div class="dot">Подождите минуту — письмо может задержаться</div>
+        <div style="margin-top:12px;display:flex;gap:12px;align-items:center"><button class="btn sec sm">Запросить снова</button><span class="small">доступно через 0:42</span></div>
+        ${w>390?`<div style="margin-top:28px"><button class="btn pri">Проверить код</button></div>`:""}<p class="small" style="margin-top:16px">Дальше — слово подтверждения и «Удалить навсегда» (спека 50).</p></div>`;
+      if (w === 390) dock = `<div class="dock"><div class="actionbar"><div class="r"><button class="btn pri">Проверить код</button></div></div></div>`;
     }
-    const btn = `<button class="btn" style="background:var(--st-bad);color:var(--st-on)">${ic("trash")}Удалить учётную запись</button>`;
-    if (w === 390) dock = `<div class="dock"><div class="actionbar"><div class="r">${btn}</div></div></div>`; else c += `<div style="margin-top:24px">${btn}</div>`;
-    if (!sp && w === 390) dock = "";
   } else if (S.scr === "imports") {
     railOn = "Клиенты"; tabOn = "Клиенты";
-    c = head("Клиенты", "Импорты", { sub: "Импорты клиентов из CSV. Незаконченный — «Продолжить»; готовый можно отменить 30 дней." });
-    c += sp ? `<div style="height:16px"></div><div class="offline">${ic("alert","m")}<div style="flex:1"><b>Нет сети</b><div class="small">Список импортов появится, когда телефон подключится.</div></div><button class="btn sec sm inbody">Повторить</button></div>`
-      : `<div class="empty"><span class="ico">${ic("note","m")}</span><b>Импортов ещё не было</b><div class="small" style="margin-bottom:16px">Загрузите CSV из таблицы или старой CRM — клиенты появятся в списке.</div><button class="btn pri inbody">${ic("plus")}Импортировать клиентов</button></div>`;
+    c = head("Клиенты", "Импорты", { demo: !sp, sub: "Импорты клиентов из CSV. Подробнее — «?»: незаконченный — «Продолжить» и тот же файл; готовый можно отменить 30 дней." }) + (sp ? `<div class="small" style="margin-top:8px;display:flex;gap:6px;align-items:center">${ic("wifiOff")}Нет сети — изменения отправятся позже</div>` : "");
+    c += sp ? `<div class="empty"><span class="ico">${ic("wifiOff","m")}</span><b>Нет сети</b><div class="small" style="margin-bottom:16px">Список импортов появится, когда телефон подключится.</div><button class="btn sec sm">Повторить</button></div>`
+      : `<div class="empty"><span class="ico">${ic("upload","m")}</span><b>Импортов ещё не было</b><div class="small" style="margin-bottom:16px">Загрузите CSV из таблицы или старой CRM — клиенты появятся в списке.</div><button class="btn pri">${ic("plus")}Импортировать клиентов</button></div>`;
   } else if (S.scr === "pay") {
     tabOn = "Ещё";
-    c = head("Настройки компании", "Онлайн-оплата", { more: false, sub: "Приём карт на странице клиента: клиент платит по ссылке из счёта." }) + `<div class="empty"><span class="ico">${ic("wallet","m")}</span><b>Работает в облачном аккаунте компании</b><div class="small" style="margin-bottom:16px">Stripe подключается на сервере — в демо его нет. Войдите или создайте компанию, чтобы принимать карты.</div><button class="btn pri inbody">Войти или создать компанию</button></div>`;
+    c = head("Настройки компании", "Онлайн-оплата", { more: false, sub: "Приём карт на странице клиента: клиент платит по ссылке из счёта." }) + `<div class="empty">${ic("info","m")}<b style="margin-top:8px">Онлайн-оплата работает в облачном аккаунте компании</b><div class="small" style="margin-bottom:16px">Карты принимаются через Stripe — он работает только в облачном аккаунте. Войдите или создайте компанию.</div><button class="btn pri">Войти или создать компанию</button></div>`;
   } else {
-    noRail = w > 390; full = false;
     const save = `<button class="btn pri">Сохранить подпись</button>`;
-    c = head("Профиль и аккаунт", "Моя подпись", { more: false, sub: "Подписи ещё нет. Нарисуйте её — она будет на договорах от имени компании." }) + `<div style="height:16px"></div><div class="form" style="${w>390?"max-width:none":""}">${fld("Имя на документах", "Alex Petrov", { lead: "user" })}${fld("Должность", "Должность", { ph: 1 })}
-      <label class="small" style="display:block;margin-bottom:4px">Подпись</label><div class="canvas ${sp?"bad":""}" style="${w>390?"height:320px":""}">Распишитесь здесь пальцем${w>390?" или мышью":""}</div>${sp?`<div class="field"><div class="err">${ic("alertc")}Распишитесь в рамке</div></div>`:""}
-      <div style="display:flex;gap:8px;margin-top:12px"><button class="btn sec sm inbody">${ic("x")}Очистить</button><button class="btn sec sm inbody" aria-label="Во весь экран">${ic("expand")}Во весь экран</button>${w>390?`<span style="flex:1"></span>${save}`:""}</div></div>`;
+    c = head("Профиль и аккаунт", "Моя подпись", { more: false, sub: "Подписи ещё нет. Нарисуйте её — она будет на договорах от имени компании." }) + `<div style="height:16px"></div><div class="form">${fld("Имя на документах", "Alex Petrov", { lead: "user" })}${fld("Должность", "Например: Owner", { ph: 1 })}
+      <label class="small" style="display:block;margin-bottom:4px">Подпись</label><div class="canvas ${sp?"bad":""}">Распишитесь здесь пальцем${w>390?" или мышью":""}</div>${sp?`<div class="field"><div class="err">${ic("alertc")}Распишитесь в рамке</div></div>`:""}
+      <div style="display:flex;gap:8px;margin-top:12px"><button class="btn sec sm">${ic("expand")}Во весь экран</button></div>${w>390?`<div style="margin-top:28px">${save}</div>`:""}
+      <p class="small" style="margin-top:12px">«Очистить» появится после первого штриха. «Во весь экран» — полноэкранный режим Б11 («Отмена / Готово», без меню и прокрутки, смахивание «назад» выключено).</p></div>`;
     if (w === 390) dock = `<div class="dock"><div class="actionbar"><div class="r">${save}</div></div></div>`;
   }
   if (w === 390 && tabOn && !dock) dock = tabs(tabOn);
@@ -381,7 +399,7 @@ function render() {
 }
 const NOTES = {
   item: `<h3>Позиция каталога</h3><ul><li>У каждого поля подпись (СМ-27, О-15): «flat» было полем без подписи — стало «Своя единица»; «Единица · Своя ⌄» не обрезана; единица — в подписи цены.</li><li>«Сохранить» всегда активна: пустая цена → ошибка вплотную под полем (§11 п.3). На 390 — панель (Н1), на широком — под формой; колонка 560 (Н2).</li></ul>`,
-  del: `<h3>Удалить учётную запись</h3><ul><li>Демо: справка нейтральная (без синей кромки, Н3) и кнопка «Войти или создать компанию»; шага кода нет — было «Пришлём код на —» (ВХ-15) и выключенные кнопки (ВХ-04).</li><li>Настоящий аккаунт: один экран → «Удалить учётную запись» (тон danger, всегда активна) → код из письма; адрес отправителя словом (ВХ-09); ошибка под полем кода. Перечни — списком с маркерами (ВХ-19).</li></ul>`,
+  del: `<h3>Удалить учётную запись</h3><ul><li>1 — демо: справка облачной функции (как «Онлайн-оплата»), главная «Войти или создать компанию»; кнопки удаления и шага кода нет ни на одной ширине (ВХ-15, ВХ-04).</li><li>2 — настоящая учётная запись: перечни раскрытия полностью, как сейчас, списком с маркерами (ВХ-19); «Ваши компании» с «Передать / Закрыть»; «Удалить учётную запись» — вторичная с красным текстом (danger — только на шаге слова).</li><li>3 — шаг кода: адрес целиком, отправитель словом (ВХ-09), «6 цифр», «Вставить», советы списком, «Запросить снова» — кнопка. Дальше по спеке 50 — слово и «Удалить навсегда».</li></ul>`,
   imports: `<h3>Импорты</h3><ul><li>«Пусто» с действием здесь же: «Импортировать клиентов» (О-18); карточка не шире 560 по центру.</li><li>Нет сети и данных — одна строка «Нет сети» и «Повторить» вместо «Импортов нет» (КЛ-26).</li></ul>`,
   pay: `<h3>Онлайн-оплата</h3><ul><li>Облачная функция в демо — не тупик: кнопка «Войти или создать компанию» (НК-11). Заголовок — «Онлайн-оплата», «‹ Настройки компании» (Н2).</li></ul>`,
   sign: `<h3>Моя подпись</h3><ul><li>Подписи у полей «Имя на документах», «Должность», «Подпись» (СМ-11). «Во весь экран» — словом, не значком. На широком — без меню слева (Б11).</li><li>«Сохранить подпись» активна всегда: пустой холст → «Распишитесь в рамке» под ним (О-16).</li></ul>`,
