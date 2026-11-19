@@ -4071,7 +4071,7 @@ begin
                         'register_push_device(text,text,text,text)', 'reissue_estimate_link(uuid)', 'reopen_estimate(uuid,text)',
                         'resend_invitation(uuid)', 'resend_signed_copy(uuid)', 'revoke_estimate_link(uuid)', 'revoke_invitation(uuid)',
                         'save_customer_people(uuid,jsonb)', 'save_estimate_version(uuid,uuid,text,jsonb,jsonb,jsonb,jsonb)',
-                        'save_lead_people(uuid,jsonb)', 'send_estimate(uuid,text)', 'set_customer_tags(uuid,uuid[])',
+                        'save_lead_people(uuid,jsonb)', 'send_estimate(uuid,text)', 'set_customer_tags(uuid,uuid[])', 'set_gate_code(uuid,text)',
                         'set_job_tags(uuid,uuid[])', 'set_location_consent(uuid,boolean)', 'set_member_status(uuid,uuid,text)',
                         'set_my_prefs(uuid,boolean)', 'set_push_kind(uuid,text,boolean)', 'set_share_location(uuid,boolean)',
                         'sign_estimate_on_site(uuid,text,text)', 'sign_estimate_on_site(uuid,text,text,bigint)',
@@ -18059,7 +18059,45 @@ select tst.ok(not app.can_see_gate_code('d4340000-0000-4000-8000-000000000004') 
 :as_tech_a
 select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000001'$q$) = 1, 'T434 the tech: his visit today → the code, as before');
 select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd4340000%'$q$) = 0, 'T434 the tech: not the codes of sales'' inspections');
--- (who writes a code — pending the lead's choice, Р-3 п.2)
+-- who writes a code: the table — the office; sales — through public.set_gate_code, and they do not read it back
+:as_sales_a
+select tst.fails_like($q$insert into public.property_secrets (property_id, company_id, gate_code, deleted_at) values
+  ('d4340000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '#x', null)
+  on conflict (property_id) do update set gate_code = excluded.gate_code$q$,
+  '%row-level security%', 'T434 sales: not the table (an old build''s upsert is refused)');
+select tst.blocked($q$update public.property_secrets set gate_code = '#x' where property_id = 'd4340000-0000-4000-8000-000000000002'$q$,
+  'T434 sales: no update of the table, even in the visit window');
+select public.set_gate_code('d4340000-0000-4000-8000-000000000004', ' #new4 ');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000004'$q$) = 0,
+  'T434 sales set a code through the function and still do not read it outside the window');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('d4340000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'c4340000-0000-4000-8000-000000000001', '9 T434 St', 'Pasadena');
+select public.set_gate_code('d4340000-0000-4000-8000-000000000009', '#4349');
+-- a removed code comes back with the new one; an empty code clears it
+select public.set_gate_code('d4340000-0000-4000-8000-000000000001', '#back1');
+select public.set_gate_code('d4340000-0000-4000-8000-000000000003', '');
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000004', repeat('9', 65))$q$, '%at most 64%', 'T434 the function: at most 64 characters');
+:as_tech_a
+select tst.fails_like($q$select public.set_gate_code('d2000000-0000-4000-8000-000000000001', '#tech')$q$, '%not allowed%', 'T434 the tech: not through the function');
+:as_owner_b
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000004', '#b')$q$, '%not allowed%', 'T434 another company: not through the function');
+:as_super
+update public.properties set deleted_at = now() where id = 'd4340000-0000-4000-8000-000000000006';
+:as_owner_a
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000006', '#gone')$q$, '%not allowed%', 'T434 the function: not on a removed property');
+-- the office still writes the table (an upsert as before) and through the function
+:as_office_a
+insert into public.property_secrets (property_id, company_id, gate_code, deleted_at) values
+  ('d4340000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '#off5', null)
+  on conflict (property_id) do update set gate_code = excluded.gate_code, deleted_at = excluded.deleted_at;
+select public.set_gate_code('d4340000-0000-4000-8000-000000000002', '#off2');
+select tst.ok((select gate_code = '#new4' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000004')
+              and (select gate_code = '#4349' and created_by = 'a0000000-0000-0000-0000-000000000005' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000009')
+              and (select gate_code = '#back1' and deleted_at is null from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000001')
+              and (select gate_code is null from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000003')
+              and (select gate_code = '#off5' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000005')
+              and (select gate_code = '#off2' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000002'),
+  'T434 the codes are written: sales through the function (trimmed, a removed one back, an empty one cleared), the office as before');
 rollback;
 \echo 'T434 ok'
 
