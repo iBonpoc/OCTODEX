@@ -1,8 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { AppState, Platform } from "react-native";
+import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { WEB_APP_URL } from "@/config/backend";
 import { LEGAL_RETRY_MS, legalState, legalTickets, PENDING_LEGAL_KEY, resolveLegal, type LegalState } from "@/features/legal";
 import { supabase } from "./client";
 import { forgetThisPhone } from "@/features/pushNative";
@@ -13,8 +12,6 @@ import { lastCompanyKey, orderMemberships, parseMemberships, pendingLastKey, pic
 import { authEventPlan, goneChecker } from "@/features/deleteAccount";
 import { closedAnswerCounts, parseClosed, type ClosedCompany } from "@/features/closedCompany";
 
-/** Where email links (confirm / magic link) return. Must be in Supabase Auth → URL Configuration. */
-const redirectTo = () => (Platform.OS === "web" && typeof window !== "undefined" ? window.location.origin : WEB_APP_URL);
 
 export type { DbRole, Membership } from "./membershipSync";
 
@@ -66,7 +63,6 @@ interface AuthCtx {
   sendCode: (email: string) => Promise<string | null>;
   verifyCode: (email: string, code: string) => Promise<string | null>;
   signInPassword: (email: string, password: string) => Promise<string | null>;
-  signUpPassword: (email: string, password: string, name: string) => Promise<string | null>;
   createCompany: (name: string) => Promise<string | null>;
   /** #1662: `wipeDrafts` — «Выйти и стереть» in the sign-out window (the person's estimate drafts go too); otherwise kept */
   signOut: (o?: { wipeDrafts?: boolean }) => Promise<void>;
@@ -123,15 +119,35 @@ export interface CompanySwitch {
   at: number;
 }
 
+/**
+ * The last switch, outside React: the switch remounts the app down to the root layout (e2e 432/433 caught that the
+ * providers mount again — this provider's state with them), so the notice «Вы в «B»» would be lost with it. Read as the
+ * initial state of a provider mounted again; cleared once said (clearSwitched) or on sign-out.
+ */
+let lastSwitch: CompanySwitch | null = null;
+/**
+ * The memberships as last set, outside React for the same reason: the provider mounted again by a switch starts with
+ * them (the company just chosen first) — without the network too (rule 6: a switch offline to a company already loaded
+ * here must open it, not the demo). Only for the same person (checked against the session on start); cleared on sign-out.
+ */
+let memCache: { uid: string; list: Membership[] } | null = null;
+/** the tests' fresh start (a new app process has neither) */
+export function forgetAuthMemory(): void {
+  memCache = null;
+  lastSwitch = null;
+}
+
 const Ctx = createContext<AuthCtx | null>(null);
 
 /** Email sign-in (code or password), the user's companies and roles (docs/04 §1 User, Company, Membership). */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
-  const [memberships, setMemberships] = useState<Membership[]>([]);
+  // a provider mounted again by a switch starts with the memberships it had (memCache)
+  const boot = useRef(memCache).current;
+  const [memberships, setMemberships] = useState<Membership[]>(() => boot?.list ?? []);
   /** #1633 A2: the memberships as last set (an answer equal to it keeps the same array: no reload for nothing) */
-  const memRef = useRef<Membership[]>([]);
+  const memRef = useRef<Membership[]>(boot?.list ?? []);
   const setMems = (list: Membership[]) => {
     if (sameMemberships(memRef.current, list)) return;
     memRef.current = list;
@@ -155,6 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     lastSignalRead.current = null;
     activeRef.current = new Set();
     setMems([]);
+    memCache = null;
     setMembershipsFor(null);
     setMembershipCheckedAt(null);
     setSwitched(null);
@@ -164,7 +181,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [legalChecked, setLegalChecked] = useState(false);
   const [accountDeleted, setAccountDeleted] = useState(false);
   const [closedCompanies, setClosedCompanies] = useState<ClosedCompany[]>([]);
-  const [switched, setSwitched] = useState<CompanySwitch | null>(null);
+  const [switched, setSwitchedState] = useState<CompanySwitch | null>(() => lastSwitch);
+  const setSwitched = useCallback((v: CompanySwitch | null) => {
+    lastSwitch = v;
+    setSwitchedState(v);
+  }, []);
   /**
    * a company to open that a read was asked for (joined, created): kept until a confirmed answer has it — a newer read
    * (a refusal's re-read, a token refresh) takes it over instead of dropping it (code-review of the wave №1)
@@ -230,6 +251,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!s.session) {
       if (ticket === memTicket.current) {
         setMems([]);
+        memCache = null;
         activeRef.current = new Set();
         setMembershipsFor(null);
         clearClosed();
@@ -273,6 +295,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const list = orderMemberships(parsed, pick);
     const before = memRef.current[0] ?? null;
     setMems(list);
+    memCache = { uid, list };
     // a company just joined or created opened over another one: the screens say so and offer the way back
     if (prefer && list[0]?.companyId === prefer && before && before.companyId !== prefer)
       setSwitched({ to: list[0], back: before, why, at: Date.now() });
@@ -298,7 +321,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const to = list.find((m) => m.companyId === companyId);
     if (!uid || !to) return false;
     if (list[0]?.companyId === companyId) return true;
-    setMems(orderMemberships(list, companyId));
+    const next = orderMemberships(list, companyId);
+    setMems(next);
+    memCache = { uid, list: next };
     setSwitched({ to, back, why, at: Date.now() });
     void AsyncStorage.setItem(lastCompanyKey(uid), companyId).catch(() => {});
     void writeLastActive(uid, companyId);
@@ -347,6 +372,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // #1633: a sign-out wipe the app did not finish (never of the person signed in now)
       void wipeSignOutIfPending(data.session?.user.id ?? null);
       if (!alive) return;
+      // the memberships kept from before the remount are this person's only
+      if (boot && boot.uid !== data.session?.user.id) {
+        memCache = null;
+        lastSwitch = null;
+        setSwitchedState(null);
+        setMems([]);
+      }
       if (data.session) signedUid.current = data.session.user.id;
       setSession(data.session);
       if (data.session) await afterSession(data.session);
@@ -414,7 +446,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       memberships,
       company: memberships[0] ?? null,
       sendCode: async (email) => {
-        const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: redirectTo() } });
+        // the code only, no link (docs/specs/52 Р1): the first code makes the account and confirms the address
+        const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
         return error?.message ?? null;
       },
       verifyCode: async (email, code) => {
@@ -425,10 +458,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signInPassword: async (email, password) => {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (!error) await reloadMemberships();
-        return error?.message ?? null;
-      },
-      signUpPassword: async (email, password, name) => {
-        const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name }, emailRedirectTo: redirectTo() } });
         return error?.message ?? null;
       },
       legal,
