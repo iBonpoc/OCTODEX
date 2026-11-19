@@ -18870,4 +18870,239 @@ select tst.ok((select count(*) from public.catalog_items where id::text like '44
 rollback;
 \echo 'T446 ok'
 
+-- ================================================================ T450–T459: the exact cost of a unit in thousandths of a cent
+-- (#1926, spec 53 §8а.12, variant (а″), migration 20261117630000). unit_cost_millicents is the truth (22 500 = 22.5 ¢, a
+-- supplier's «$22.50 for 100»); unit_cost_cents stays the mirror old builds read and write, half up, kept by the server.
+-- Its own items, rolled back at the end.
+:as_super
+begin;
+create or replace function pg_temp.st(p_sql text) returns text language plpgsql as $f$
+begin
+  execute p_sql;
+  return 'ok';
+exception when others then
+  return sqlstate;
+end $f$;
+grant execute on function pg_temp.st(text) to public;
+-- the cost row as the server holds it: [millicents, cents, tax, markup]
+create or replace function pg_temp.k450(p_id uuid) returns jsonb language sql security definer as $f$
+  select jsonb_build_array(c.unit_cost_millicents, c.unit_cost_cents, c.vendor_tax_bps, c.markup_bps)
+    from public.catalog_item_costs c where c.item_id = p_id $f$;
+grant execute on function pg_temp.k450(uuid) to public;
+create or replace function pg_temp.p450(p_id uuid) returns bigint language sql security definer as $f$
+  select i.unit_price_cents from public.catalog_items i where i.id = p_id $f$;
+grant execute on function pg_temp.p450(uuid) to public;
+create or replace function pg_temp.h450(p_id uuid) returns jsonb language sql security definer as $f$
+  select coalesce(jsonb_agg(jsonb_build_array(h.unit_cost_millicents, h.unit_cost_cents) order by h.at, h.id), '[]'::jsonb)
+    from public.catalog_cost_history h where h.item_id = p_id $f$;
+grant execute on function pg_temp.h450(uuid) to public;
+
+-- T450: one formula in the engine and in the database for the exact cost (packages/estimating-engine/test/fixtures/
+-- catalogPrice.json «millicents», read by millicents.test.ts too); the old examples in cents ×1000 give their old price
+\echo 'T450 app.item_price_millicents = the engine''s catalogPrice({ millicents })'
+select tst.ok(coalesce(string_agg(x::text, '; '), '') = '', format('T450 app.item_price_millicents = the engine: %s', coalesce(string_agg(x::text, '; '), '')))
+  from jsonb_array_elements((:'price_json')::jsonb -> 'millicents') x
+ where app.item_price_millicents((x ->> 'costMillicents')::bigint, (x ->> 'taxBps')::int, (x ->> 'markupBps')::int) is distinct from (x ->> 'price')::bigint;
+select tst.ok(jsonb_array_length((:'price_json')::jsonb -> 'millicents') >= 10, 'T450 the shared set has the examples of #1926');
+select tst.ok(not exists (select 1 from jsonb_array_elements((:'price_json')::jsonb -> 'cases') x
+                           where app.item_price_millicents((x ->> 'cost')::bigint * 1000, (x ->> 'taxBps')::int, (x ->> 'markupBps')::int)
+                                 is distinct from (x ->> 'price')::bigint),
+  'T450 every old example in cents, as thousandths: the same price as before');
+select tst.ok(not has_function_privilege('authenticated', 'app.item_price_millicents(bigint, int, int)', 'execute')
+          and not has_function_privilege('anon', 'app.item_price_millicents(bigint, int, int)', 'execute'),
+  'T450 nobody executes the formula directly — only the server''s triggers');
+select tst.ok((select data_type from information_schema.columns where table_schema = 'public' and table_name = 'catalog_item_costs' and column_name = 'unit_cost_millicents') = 'bigint'
+          and (select data_type from information_schema.columns where table_schema = 'public' and table_name = 'catalog_cost_history' and column_name = 'unit_cost_millicents') = 'bigint',
+  'T450 the exact cost is a bigint on the cost row and in its history');
+\echo 'T450 one formula ok'
+
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('54500000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T450 rivet', 'ea', 0, '{}'),
+  ('54500000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'material', 'T450 anchor', 'ea', 0, '{}'),
+  ('54500000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', 'material', 'T450 old phone', 'ea', 0, '{}'),
+  ('54500000-0000-4000-8000-0000000000a4', 'ca000000-0000-0000-0000-000000000000', 'material', 'T450 group white', 'ea', 0, '{"priceGroup":"t450:g"}'),
+  ('54500000-0000-4000-8000-0000000000a5', 'ca000000-0000-0000-0000-000000000000', 'material', 'T450 group brown', 'ea', 0, '{"priceGroup":"t450:g"}'),
+  ('54500000-0000-4000-8000-0000000000a6', 'ca000000-0000-0000-0000-000000000000', 'material', 'T450 via rpc', 'ea', 0, '{}');
+
+-- T451: the exact cost written → the mirror half up, the price counted from the exact cost (not from the mirror)
+\echo 'T451 the exact cost is the truth, the mirror follows it'
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_millicents, vendor_tax_bps, markup_bps) values
+  ('54500000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 22500, 0, 1000),
+  ('54500000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 1499, 0, 10000);
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a1') = '[22500, 23, 0, 1000]',
+  format('T451 22 500 m¢ → the mirror 23 ¢ (half up): %s', pg_temp.k450('54500000-0000-4000-8000-0000000000a1')));
+select tst.ok(pg_temp.p450('54500000-0000-4000-8000-0000000000a1') = 25, 'T451 22.5 ¢ + 10 % = 24.75 → 25 ¢');
+select tst.ok(pg_temp.p450('54500000-0000-4000-8000-0000000000a2') = 3,
+  format('T451 1.499 ¢ + 100 %% = 3 ¢ — counted from the exact cost, not from the mirror 1 ¢ (2 ¢): %s', pg_temp.p450('54500000-0000-4000-8000-0000000000a2')));
+update public.catalog_item_costs set unit_cost_millicents = 4120 where item_id = '54500000-0000-4000-8000-0000000000a1';
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a1') = '[4120, 4, 0, 1000]', 'T451 4 120 m¢ → 4 ¢');
+update public.catalog_item_costs set unit_cost_millicents = 22500 where item_id = '54500000-0000-4000-8000-0000000000a1';
+\echo 'T451 ok'
+
+-- T452: an old phone writes the mirror only. The same mirror (an echo of what it read, or an old op without «costs») does
+-- not wipe the exact cost; a different mirror is a real change: exact = mirror × 1000. The same through the item row (t30).
+\echo 'T452 an old phone: the echo keeps the exact cost, a change replaces it'
+update public.catalog_item_costs set unit_cost_cents = 23 where item_id = '54500000-0000-4000-8000-0000000000a1';
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a1') = '[22500, 23, 0, 1000]',
+  format('T452 the mirror sent back unchanged: 22 500 stays, not 23 000: %s', pg_temp.k450('54500000-0000-4000-8000-0000000000a1')));
+update public.catalog_items set unit_cost_cents = 23, markup_bps = 1000 where id = '54500000-0000-4000-8000-0000000000a1';
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a1') = '[22500, 23, 0, 1000]',
+  format('T452 an old phone''s cost on the item row (t30), the same mirror: 22 500 stays: %s', pg_temp.k450('54500000-0000-4000-8000-0000000000a1')));
+update public.catalog_item_costs set unit_cost_cents = 30 where item_id = '54500000-0000-4000-8000-0000000000a1';
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a1') = '[30000, 30, 0, 1000]', 'T452 a different mirror (30 ¢): exact = 30 000');
+update public.catalog_items set unit_cost_cents = 24 where id = '54500000-0000-4000-8000-0000000000a1';
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a1') = '[24000, 24, 0, 1000]' and pg_temp.p450('54500000-0000-4000-8000-0000000000a1') = 26,
+  'T452 a different mirror through the item row (t30): exact = 24 000, the price 24 + 10 % = 26 ¢');
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
+  ('54500000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', 1850, 0, 0);
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a3') = '[1850000, 1850, 0, 0]', 'T452 an old phone''s new cost in cents: exact = cents × 1000');
+update public.catalog_item_costs set unit_cost_cents = null where item_id = '54500000-0000-4000-8000-0000000000a3';
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a3') = '[null, null, 0, 0]', 'T452 the cost cleared by an old phone: both empty');
+update public.catalog_item_costs set unit_cost_millicents = 22500, unit_cost_cents = 99 where item_id = '54500000-0000-4000-8000-0000000000a3';
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a3') = '[22500, 23, 0, 0]', 'T452 both sent: the exact cost wins, the mirror is the server''s (23, not 99)');
+\echo 'T452 ok'
+
+-- T453: the history sees a change of the exact cost that keeps the mirror (22 500 → 22 600, both 23 ¢); a row the server
+-- writes in cents (as po_receive does until PR 3/4) gets its thousandths
+\echo 'T453 the history of the exact cost'
+-- the rows of one transaction share «at»: their order is the id's (uuid v7, milliseconds of the clock) — a pause between the
+-- writes so two of them never fall in one millisecond (else the order is the random part's: CI of #2247, 19.11)
+select pg_sleep(0.005);
+update public.catalog_item_costs set unit_cost_millicents = 22500 where item_id = '54500000-0000-4000-8000-0000000000a1';
+select pg_sleep(0.005);
+update public.catalog_item_costs set unit_cost_millicents = 22600 where item_id = '54500000-0000-4000-8000-0000000000a1';
+select tst.ok(pg_temp.h450('54500000-0000-4000-8000-0000000000a1') -> -1 = '[22600, 23]' and pg_temp.h450('54500000-0000-4000-8000-0000000000a1') -> -2 = '[22500, 23]',
+  format('T453 22 500 → 22 600 with the same mirror: a history row each: %s', pg_temp.h450('54500000-0000-4000-8000-0000000000a1')));
+select jsonb_array_length(pg_temp.h450('54500000-0000-4000-8000-0000000000a1')) as n453 \gset
+update public.catalog_item_costs set unit_cost_cents = 23 where item_id = '54500000-0000-4000-8000-0000000000a1';
+select tst.ok(jsonb_array_length(pg_temp.h450('54500000-0000-4000-8000-0000000000a1')) = :n453
+          and pg_temp.h450('54500000-0000-4000-8000-0000000000a1') -> -1 = '[22600, 23]',
+  'T453 an echo of the mirror writes no history row');
+:as_super
+select pg_sleep(0.005);
+insert into public.catalog_cost_history (company_id, item_id, unit_cost_cents, vendor_tax_bps, source)
+values ('ca000000-0000-0000-0000-000000000000', '54500000-0000-4000-8000-0000000000a3', 740, 0, 'manual');
+select tst.ok(pg_temp.h450('54500000-0000-4000-8000-0000000000a3') -> -1 = '[740000, 740]', 'T453 a history row written in cents gets its thousandths (× 1000)');
+select tst.ok(not exists (select 1 from public.catalog_item_costs where unit_cost_cents is not null and unit_cost_millicents is null)
+          and not exists (select 1 from public.catalog_cost_history where unit_cost_cents is not null and unit_cost_millicents is null)
+          and not exists (select 1 from public.catalog_item_costs where unit_cost_cents is distinct from round(unit_cost_millicents::numeric / 1000)::bigint),
+  'T453 every stored cost has its exact value and its mirror half up (the migration filled the old rows)');
+\echo 'T453 ok'
+
+-- T454: the price follows a change of the exact cost that keeps the mirror (t32): 11 ¢ ×4 = 4 ¢ → 14 ¢ ×4 = 6 ¢, mirror 1 ¢
+\echo 'T454 the price follows the exact cost'
+:as_office_a
+update public.catalog_item_costs set unit_cost_millicents = 1100, markup_bps = 30000 where item_id = '54500000-0000-4000-8000-0000000000a2';
+select tst.ok(pg_temp.p450('54500000-0000-4000-8000-0000000000a2') = 4, 'T454 1.1 ¢ + 300 % = 4.4 → 4 ¢');
+update public.catalog_item_costs set unit_cost_millicents = 1400 where item_id = '54500000-0000-4000-8000-0000000000a2';
+select tst.ok(pg_temp.p450('54500000-0000-4000-8000-0000000000a2') = 6 and pg_temp.k450('54500000-0000-4000-8000-0000000000a2') ->> 1 = '1',
+  format('T454 1.4 ¢ + 300 %% = 5.6 → 6 ¢ with the same mirror 1 ¢: %s', pg_temp.p450('54500000-0000-4000-8000-0000000000a2')));
+:as_super
+select tst.ok(tst.cnt($q$select 1 from app.catalog_price_drift('ca000000-0000-0000-0000-000000000000') d where d.item_id::text like '54500000-%'$q$) = 0,
+  'T454 the drift check (a server job) counts from the exact cost: no false drift');
+:as_office_a
+\echo 'T454 ok'
+
+-- T455: catalog_set_item_costs takes the exact cost and checks it against what the phone saw (#1958 (а))
+\echo 'T455 catalog_set_item_costs and the exact cost'
+select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": 22500, "markup_bps": 1000}', '{"unit_cost_millicents": null, "markup_bps": null}');
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a6') = '[22500, 23, null, 1000]' and pg_temp.p450('54500000-0000-4000-8000-0000000000a6') = 25,
+  format('T455 the exact cost through the function: 22 500 → mirror 23, price 25: %s', pg_temp.k450('54500000-0000-4000-8000-0000000000a6')));
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": 22600}', '{"unit_cost_millicents": 22400}')$q$) = '40001',
+  'T455 the phone saw another exact cost: 40001, nothing written');
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": 22600, "unit_cost_cents": 23}', '{"unit_cost_millicents": 22500, "unit_cost_cents": 23}')$q$) = '22023',
+  'T455 the exact cost and the mirror together: 22023 (one of them)');
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": 22600.5}', '{"unit_cost_millicents": 22500}')$q$) = '22023'
+          and pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": -1}', '{"unit_cost_millicents": 22500}')$q$) = '22023'
+          and pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": 1e30}', '{"unit_cost_millicents": 22500}')$q$) = '22023'
+          and pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": "22600"}', '{"unit_cost_millicents": 22500}')$q$) = '22023',
+  'T455 a fraction, a negative, a huge number, a string: 22023, nothing written');
+select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": 22600}', '{"unit_cost_millicents": 22500}');
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a6') = '[22600, 23, null, 1000]', 'T455 22 500 → 22 600 over what was seen');
+select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"markup_bps": 2000}', '{"markup_bps": 1000}');
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a6') = '[22600, 23, null, 2000]', 'T455 the markup changed: the exact cost stays 22 600');
+select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_cents": 23}', '{"unit_cost_cents": 23}');
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a6') = '[22600, 23, null, 2000]', 'T455 an old build sends the same mirror: 22 600 stays');
+select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_cents": 25}', '{"unit_cost_cents": 23}');
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a6') = '[25000, 25, null, 2000]', 'T455 an old build changes the cost: exact = 25 000');
+\echo 'T455 ok'
+
+-- T456: a price group shares one exact cost: the spread and a joining item carry the thousandths, not the mirror × 1000
+\echo 'T456 a price group carries the exact cost'
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_millicents, vendor_tax_bps, markup_bps) values
+  ('54500000-0000-4000-8000-0000000000a4', 'ca000000-0000-0000-0000-000000000000', 22500, 0, 1000);
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a5') = '[22500, 23, 0, 1000]',
+  format('T456 the group peer gets 22 500, not 23 000: %s', pg_temp.k450('54500000-0000-4000-8000-0000000000a5')));
+update public.catalog_item_costs set unit_cost_millicents = 22600 where item_id = '54500000-0000-4000-8000-0000000000a4';
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a5') = '[22600, 23, 0, 1000]', 'T456 22 500 → 22 600 with the same mirror spreads too');
+update public.catalog_items set attributes = '{"priceGroup":"t450:g"}' where id = '54500000-0000-4000-8000-0000000000a3';
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a3') = '[22600, 23, 0, 1000]',
+  format('T456 an item joining the group gets the group''s exact cost: %s', pg_temp.k450('54500000-0000-4000-8000-0000000000a3')));
+select public.catalog_set_group_price('54500000-0000-4000-8000-0000000000a4', 25, false, null, null, 2000, 25, 23, 0, 1000);
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a5') = '[22600, 23, 0, 2000]' and pg_temp.k450('54500000-0000-4000-8000-0000000000a4') = '[22600, 23, 0, 2000]',
+  format('T456 the group''s markup set without a cost: the exact cost 22 600 stays on every item: %s', pg_temp.k450('54500000-0000-4000-8000-0000000000a5')));
+-- as every build calls it: the cost it has (the mirror 23) is sent with the new markup — an echo, the exact cost stays
+select public.catalog_set_group_price('54500000-0000-4000-8000-0000000000a4', pg_temp.p450('54500000-0000-4000-8000-0000000000a4'), false, 23, 0, 3000,
+                                      pg_temp.p450('54500000-0000-4000-8000-0000000000a4'), 23, 0, 2000);
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a5') = '[22600, 23, 0, 3000]' and pg_temp.k450('54500000-0000-4000-8000-0000000000a3') = '[22600, 23, 0, 3000]',
+  format('T456 the group''s markup with the mirror sent back (23): 22 600 stays on every item, not 23 000: %s', pg_temp.k450('54500000-0000-4000-8000-0000000000a5')));
+select public.catalog_set_group_price('54500000-0000-4000-8000-0000000000a4', pg_temp.p450('54500000-0000-4000-8000-0000000000a4'), false, 24, 0, 3000,
+                                      pg_temp.p450('54500000-0000-4000-8000-0000000000a4'), 23, 0, 3000);
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a5') = '[24000, 24, 0, 3000]' and pg_temp.k450('54500000-0000-4000-8000-0000000000a4') = '[24000, 24, 0, 3000]',
+  'T456 a different cost for the group (24 ¢): exact = 24 000 on every item');
+\echo 'T456 ok'
+
+-- T457: who does not see our costs sees no exact cost either, and cannot write it
+\echo 'T457 the exact cost: only who sees our costs'
+:as_sales_a
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a1', '{"unit_cost_millicents": 1}', '{"unit_cost_millicents": 22600}')$q$) = '42501',
+  'T457 sales without view_costs: catalog_set_item_costs with the exact cost — 42501');
+:as_tech_a
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a1', '{"unit_cost_millicents": 1}', '{"unit_cost_millicents": 22600}')$q$) = 'P0002',
+  'T457 a tech: catalog_set_item_costs — not found');
+:as_owner_b
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a1', '{"unit_cost_millicents": 1}', '{"unit_cost_millicents": 22600}')$q$) = 'P0002'
+          and tst.cnt($q$select 1 from public.catalog_item_costs where item_id::text like '54500000-%'$q$) = 0,
+  'T457 another company: not found, no row seen');
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.catalog_item_costs where item_id::text like '54500000-%'$q$) = 0
+          and tst.cnt($q$select 1 from public.catalog_cost_history where item_id::text like '54500000-%'$q$) = 0,
+  'T457 sales without view_costs: no cost row, no history');
+update public.catalog_item_costs set unit_cost_millicents = 1 where item_id = '54500000-0000-4000-8000-0000000000a1';
+select tst.ok(pg_temp.st($q$insert into public.catalog_item_costs (item_id, company_id, unit_cost_millicents) values ('54500000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 1) on conflict (item_id) do update set unit_cost_millicents = 1$q$) = '42501',
+  'T457 sales without view_costs cannot write an exact cost (42501, the insert policy)');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.catalog_item_costs where item_id::text like '54500000-%'$q$) = 0
+          and tst.cnt($q$select 1 from public.catalog_cost_history where item_id::text like '54500000-%'$q$) = 0,
+  'T457 a tech: no cost row, no history');
+update public.catalog_item_costs set unit_cost_millicents = 1 where item_id = '54500000-0000-4000-8000-0000000000a1';
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a1') ->> 0 = '22600', 'T457 neither sales nor a tech changed the exact cost');
+\echo 'T457 ok'
+
+-- T458: the bounds — a negative or above $1 000 000 a unit is refused (the mirror bound × 1000)
+\echo 'T458 the bounds of the exact cost'
+:as_office_a
+select tst.ok(pg_temp.st($q$update public.catalog_item_costs set unit_cost_millicents = -1 where item_id = '54500000-0000-4000-8000-0000000000a1'$q$) = '23514',
+  'T458 a negative exact cost: 23514');
+select tst.ok(pg_temp.st($q$update public.catalog_item_costs set unit_cost_millicents = 100000000001 where item_id = '54500000-0000-4000-8000-0000000000a1'$q$) = '23514',
+  'T458 above $1 000 000 a unit: 23514');
+select tst.ok(pg_temp.st($q$update public.catalog_item_costs set unit_cost_millicents = 100000000000 where item_id = '54500000-0000-4000-8000-0000000000a1'$q$) = 'ok',
+  'T458 the bound itself is allowed');
+\echo 'T458 ok'
+
+-- T459: the exact cost moves with the item as the old cost does — the side table only (t30 never puts it on the item row,
+-- the item row has no such column: no cost leaks to who reads catalog_items)
+\echo 'T459 the exact cost is never on the item row'
+:as_super
+select tst.ok(not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'catalog_items' and column_name like '%millicents%'),
+  'T459 catalog_items has no exact-cost column (only the side table that RLS hides)');
+select tst.ok(has_column_privilege('authenticated', 'public.catalog_item_costs', 'unit_cost_millicents', 'UPDATE')
+          and has_column_privilege('authenticated', 'public.catalog_item_costs', 'unit_cost_millicents', 'INSERT')
+          and not has_column_privilege('anon', 'public.catalog_item_costs', 'unit_cost_millicents', 'SELECT')
+          and not has_column_privilege('authenticated', 'public.catalog_cost_history', 'unit_cost_millicents', 'UPDATE'),
+  'T459 the grants: a member writes the exact cost (RLS decides who), anon nothing, the history only the server');
+rollback;
+\echo 'T450–T459 ok'
+
 \echo 'ALL TESTS PASSED'

@@ -1,4 +1,4 @@
-import { dec, bps, bpsFromPpm, roundCents, type DecLike } from "./decimal.js";
+import { D, dec, bps, bpsFromPpm, roundCents, type DecLike } from "./decimal.js";
 import { computeOption, lineCost, lineTotal, type Discount, type Line, type OptionTotals } from "./estimate.js";
 import { jobLineQty } from "./jobLines.js";
 
@@ -205,11 +205,48 @@ export function computeAllOptional(option: CustomOption, s: CustomSettings): Cus
 }
 
 /**
- * Catalog price of a bought item: supplier price + supplier sales tax, then our markup.
- * $10.00 at 10.25% tax = $11.03 cost; +10% markup = $12.13. No intermediate rounding.
+ * The cost of a unit (#1926, spec 53 §8а.12, variant (а″)): whole cents — the old input and the mirror old builds read —
+ * or the exact cost in thousandths of a cent, `{ millicents }`: a supplier's «$22.50 for 100» is 22.5 ¢ a unit = 22 500.
+ * Whole cents give exactly the results they gave before (the guard in test/millicents.test.ts).
  */
-export function catalogCost(costCents: number, vendorTaxBps = 0): number {
-  return roundCents(dec(costCents).mul(bps(vendorTaxBps).add(1)));
+export type UnitCost = number | { millicents: number };
+const MILLI = 1000;
+/** thousandths of a cent: a whole number, never a JS fraction (#1926 Ж6) */
+function wholeMillicents(m: number): number {
+  if (!Number.isSafeInteger(m)) throw new RangeError(`millicents must be a whole number: ${m}`);
+  return m;
+}
+/** the cost of a unit in cents as a decimal (22 500 m¢ → 22.5) — for counting, never stored */
+export function unitCostDec(cost: UnitCost): ReturnType<typeof dec> {
+  return typeof cost === "number" ? dec(cost) : dec(wholeMillicents(cost.millicents)).div(MILLI);
+}
+/** the mirror in whole cents, half up as all money: 22 500 → 23, 22 499 → 22 */
+export function millicentsToCents(millicents: number): number {
+  return roundCents(dec(wholeMillicents(millicents)).div(MILLI));
+}
+/** whole cents in thousandths, exact: 23 → 23 000 */
+export function centsToMillicents(cents: number): number {
+  if (!Number.isSafeInteger(cents)) throw new RangeError(`cents must be a whole number: ${cents}`);
+  return wholeMillicents(cents * MILLI);
+}
+/**
+ * The exact cost of a unit from a document line: its total ÷ its quantity, in thousandths of a cent, half up (#1926 (г)).
+ * The total is the truth, not the printed price: «0.23 for 100», 10 pcs, Ext $2.25 → 22 500.
+ */
+export function exactUnitCost(extCents: number, qty: DecLike): number {
+  if (!Number.isSafeInteger(extCents) || extCents < 0) throw new RangeError(`a line total in whole cents ≥ 0: ${extCents}`);
+  const q = dec(qty);
+  if (!q.isFinite() || q.lte(0)) throw new RangeError(`a quantity > 0: ${String(qty)}`);
+  return wholeMillicents(dec(extCents).mul(MILLI).div(q).toDecimalPlaces(0, D.ROUND_HALF_UP).toNumber());
+}
+
+/**
+ * Catalog price of a bought item: supplier price + supplier sales tax, then our markup.
+ * $10.00 at 10.25% tax = $11.03 cost; +10% markup = $12.13. No intermediate rounding. The cost may be exact (`{ millicents }`):
+ * 22.5 ¢ + 10 % = 25 ¢ — the price is whole cents, counted once from the exact cost (#1926 (а)).
+ */
+export function catalogCost(cost: UnitCost, vendorTaxBps = 0): number {
+  return roundCents(unitCostDec(cost).mul(bps(vendorTaxBps).add(1)));
 }
 /**
  * A cost that already has the supplier's tax in it, without that tax (#1835): $108.00 at 8 % → $100.00. One rounding, half
@@ -218,8 +255,12 @@ export function catalogCost(costCents: number, vendorTaxBps = 0): number {
 export function costWithoutTax(grossCents: number, vendorTaxBps: number): number {
   return roundCents(dec(grossCents).div(bps(vendorTaxBps).add(1)));
 }
-export function catalogPrice(costCents: number, vendorTaxBps = 0, markupBps = 0): number {
-  return roundCents(dec(costCents).mul(bps(vendorTaxBps).add(1)).mul(bps(markupBps).add(1)));
+/** the same in thousandths of a cent, so taking the tax off does not drop the exact cost to whole cents (#1926) */
+export function costWithoutTaxMillicents(gross: UnitCost, vendorTaxBps: number): number {
+  return wholeMillicents(roundCents(unitCostDec(gross).mul(MILLI).div(bps(vendorTaxBps).add(1))));
+}
+export function catalogPrice(cost: UnitCost, vendorTaxBps = 0, markupBps = 0): number {
+  return roundCents(unitCostDec(cost).mul(bps(vendorTaxBps).add(1)).mul(bps(markupBps).add(1)));
 }
 
 /** "12.5" → 1250 cents; "" / garbage → null. Accepts "$1,234.5". */
