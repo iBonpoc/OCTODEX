@@ -1283,9 +1283,9 @@ select tst.ok((select status from public.visits where id = 'f2000000-0000-4000-8
 :as_super
 update public.visits set starts_at = starts_at + interval '1 hour' where id = 'f2000000-0000-4000-8000-000000000003';
 select tst.ok((select count(*) from public.visits where id = 'f2000000-0000-4000-8000-000000000003' and starts_at > now() + interval '3 days') = 1, 'no user (server, cron): the visit moves');
--- sales is office staff (app.is_staff): sees the code like the dispatcher
+-- sales read a code as a tech does, on the visit day of their own (Р-3, 20261117568000; T434): not a tech's visit in 3 days
 reset role; set request.jwt.claim.sub = 'a0000000-0000-0000-0000-000000000005'; set role authenticated;
-select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000003'$q$) = 1, 'sales (office staff) sees the gate code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000003'$q$) = 0, 'sales: no code of a visit that is not theirs');
 -- a tech of another company sees nothing; another company cannot change a code
 reset role; set request.jwt.claim.sub = 'b0000000-0000-0000-0000-000000000002'; set role authenticated;
 select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd2000000%'$q$) = 0, 'tech of another company: no codes');
@@ -4071,7 +4071,7 @@ begin
                         'register_push_device(text,text,text,text)', 'reissue_estimate_link(uuid)', 'reopen_estimate(uuid,text)',
                         'resend_invitation(uuid)', 'resend_signed_copy(uuid)', 'revoke_estimate_link(uuid)', 'revoke_invitation(uuid)',
                         'save_customer_people(uuid,jsonb)', 'save_estimate_version(uuid,uuid,text,jsonb,jsonb,jsonb,jsonb)',
-                        'save_lead_people(uuid,jsonb)', 'send_estimate(uuid,text)', 'set_customer_tags(uuid,uuid[])',
+                        'save_lead_people(uuid,jsonb)', 'send_estimate(uuid,text)', 'set_customer_tags(uuid,uuid[])', 'set_gate_code(uuid,text)',
                         'set_job_tags(uuid,uuid[])', 'set_location_consent(uuid,boolean)', 'set_member_status(uuid,uuid,text)',
                         'set_my_prefs(uuid,boolean)', 'set_push_kind(uuid,text,boolean)', 'set_share_location(uuid,boolean)',
                         'sign_estimate_on_site(uuid,text,text)', 'sign_estimate_on_site(uuid,text,text,bigint)',
@@ -18131,6 +18131,106 @@ select tst.ok((select count(*) = 8 from public.expenses where id::text like 'e43
   'T433 the office writes any client and a negative sum, as before');
 rollback;
 \echo 'T433 ok'
+
+-- ---------------------------------------------------------------- T434 (Р-3): who reads a gate code
+\echo 'T434 a gate code: the office always; sales, as a tech, on the day of their own visit and the day before'
+begin;
+:as_owner_a
+do $$
+declare v_src uuid; v_c uuid := 'c4340000-0000-4000-8000-000000000001'; k int; v_p uuid; v_l uuid; v_v uuid;
+  -- property → inspection of sales in days (null: none), cancelled?
+  plan text[][] := array[['0','n'], ['1','n'], ['3','n'], [null,'n'], ['0','c'], ['-1','n'], ['0','n']];
+begin
+  select id into v_src from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral';
+  insert into public.customers (id, company_id, display_name) values (v_c, 'ca000000-0000-0000-0000-000000000000', 'T434 Client');
+  for k in 1..7 loop
+    v_p := ('d4340000-0000-4000-8000-00000000000' || k)::uuid;
+    insert into public.properties (id, company_id, customer_id, address_line1, address_city) values (v_p, 'ca000000-0000-0000-0000-000000000000', v_c, k || ' T434 St', 'Pasadena');
+    insert into public.property_secrets (company_id, property_id, gate_code) values ('ca000000-0000-0000-0000-000000000000', v_p, '#434' || k);
+    if plan[k][1] is not null then
+      v_l := ('b4340000-0000-4000-8000-00000000000' || k)::uuid;
+      v_v := ('f4340000-0000-4000-8000-00000000000' || k)::uuid;
+      insert into public.leads (id, company_id, source_id, contact_name, phone, customer_id, property_id)
+      values (v_l, 'ca000000-0000-0000-0000-000000000000', v_src, 'T434 Lead ' || k, '(818) 555-434' || k, v_c, v_p);
+      insert into public.visits (id, company_id, lead_id, property_id, kind, starts_at)
+      values (v_v, 'ca000000-0000-0000-0000-000000000000', v_l, v_p, 'inspection', now() + (plan[k][1] || ' days')::interval);
+      insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000005');
+      if plan[k][2] = 'c' then perform public.cancel_visit(v_v, 'we_cancelled'); end if;
+    end if;
+  end loop;
+  -- a removed code (soft delete)
+  update public.property_secrets set deleted_at = now() where property_id = 'd4340000-0000-4000-8000-000000000001';
+end $$;
+-- the office: every code, the removed one too
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd4340000%'$q$) = 7, 'T434 the office sees every code, the removed one too');
+:as_owner_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd4340000%'$q$) = 7, 'T434 the owner sees every code');
+-- sales: only on the day of their inspection and the day before, a live visit, a live code
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000007'$q$) = 1, 'T434 sales: inspection today → the code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000002'$q$) = 1, 'T434 sales: inspection tomorrow → the code the day before');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000001'$q$) = 0, 'T434 sales: a visit today that is the tech''s, not theirs → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000003'$q$) = 0, 'T434 sales: inspection in 3 days → no code yet');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000004'$q$) = 0, 'T434 sales: no visit of theirs → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000005'$q$) = 0, 'T434 sales: a cancelled inspection today → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000006'$q$) = 0, 'T434 sales: inspection was yesterday → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000001'$q$) = 0, 'T434 sales: a removed code — no, even on the visit day');
+select tst.ok(not app.can_see_gate_code('d4340000-0000-4000-8000-000000000004') and app.can_see_gate_code('d4340000-0000-4000-8000-000000000002'),
+  'T434 app.can_see_gate_code: sales by the visit window');
+-- the code of another property: the tech's rule is unchanged (T20: his visit today)
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000001'$q$) = 1, 'T434 the tech: his visit today → the code, as before');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd4340000%'$q$) = 0, 'T434 the tech: not the codes of sales'' inspections');
+-- who writes a code: the table — the office; sales — through public.set_gate_code, and they do not read it back
+:as_sales_a
+select tst.fails_like($q$insert into public.property_secrets (property_id, company_id, gate_code, deleted_at) values
+  ('d4340000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '#x', null)
+  on conflict (property_id) do update set gate_code = excluded.gate_code$q$,
+  '%row-level security%', 'T434 sales: not the table (an old build''s upsert is refused)');
+select tst.blocked($q$update public.property_secrets set gate_code = '#x' where property_id = 'd4340000-0000-4000-8000-000000000002'$q$,
+  'T434 sales: no update of the table, even in the visit window');
+select public.set_gate_code('d4340000-0000-4000-8000-000000000004', ' #new4 ');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000004'$q$) = 0,
+  'T434 sales set a code through the function and still do not read it outside the window');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('d4340000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'c4340000-0000-4000-8000-000000000001', '9 T434 St', 'Pasadena');
+select public.set_gate_code('d4340000-0000-4000-8000-000000000009', '#4349');
+-- sales do not clear a code, and do not bring back one the office removed
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000003', '')$q$, '%only the office clears%', 'T434 sales: not an empty code');
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000003', '   ')$q$, '%only the office clears%', 'T434 sales: …nor blanks');
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000007', null)$q$, '%only the office clears%', 'T434 sales: …nor null');
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000001', '#back1')$q$, '%removed by the office%', 'T434 sales: not over a code the office removed');
+-- the office: a removed code comes back with the new one; an empty or null code clears it
+:as_office_a
+select public.set_gate_code('d4340000-0000-4000-8000-000000000001', '#back1');
+select public.set_gate_code('d4340000-0000-4000-8000-000000000003', '');
+select public.set_gate_code('d4340000-0000-4000-8000-000000000007', null);
+:as_sales_a
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000004', repeat('9', 65))$q$, '%at most 64%', 'T434 the function: at most 64 characters');
+:as_tech_a
+select tst.fails_like($q$select public.set_gate_code('d2000000-0000-4000-8000-000000000001', '#tech')$q$, '%not allowed%', 'T434 the tech: not through the function');
+:as_owner_b
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000004', '#b')$q$, '%not allowed%', 'T434 another company: not through the function');
+:as_super
+update public.properties set deleted_at = now() where id = 'd4340000-0000-4000-8000-000000000006';
+:as_owner_a
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000006', '#gone')$q$, '%not allowed%', 'T434 the function: not on a removed property');
+-- the office still writes the table (an upsert as before) and through the function
+:as_office_a
+insert into public.property_secrets (property_id, company_id, gate_code, deleted_at) values
+  ('d4340000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '#off5', null)
+  on conflict (property_id) do update set gate_code = excluded.gate_code, deleted_at = excluded.deleted_at;
+select public.set_gate_code('d4340000-0000-4000-8000-000000000002', '#off2');
+select tst.ok((select gate_code = '#new4' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000004')
+              and (select gate_code = '#4349' and created_by = 'a0000000-0000-0000-0000-000000000005' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000009')
+              and (select gate_code = '#back1' and deleted_at is null from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000001')
+              and (select count(*) = 2 from public.property_secrets where property_id in ('d4340000-0000-4000-8000-000000000003', 'd4340000-0000-4000-8000-000000000007') and gate_code is null)
+              and (select gate_code = '#off5' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000005')
+              and (select gate_code = '#off2' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000002'),
+  'T434 the codes are written: sales through the function (trimmed), the office brings a removed one back and clears with an empty or null one');
+rollback;
+\echo 'T434 ok'
 
 -- ---------------------------------------------------------------- T435 (Р-8b): each person's own «read»
 \echo 'T435 a notification read by one person stays unread for the others'
