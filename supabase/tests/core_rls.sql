@@ -1283,9 +1283,9 @@ select tst.ok((select status from public.visits where id = 'f2000000-0000-4000-8
 :as_super
 update public.visits set starts_at = starts_at + interval '1 hour' where id = 'f2000000-0000-4000-8000-000000000003';
 select tst.ok((select count(*) from public.visits where id = 'f2000000-0000-4000-8000-000000000003' and starts_at > now() + interval '3 days') = 1, 'no user (server, cron): the visit moves');
--- sales is office staff (app.is_staff): sees the code like the dispatcher
+-- sales read a code as a tech does, on the visit day of their own (Р-3, 20261117568000; T434): not a tech's visit in 3 days
 reset role; set request.jwt.claim.sub = 'a0000000-0000-0000-0000-000000000005'; set role authenticated;
-select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000003'$q$) = 1, 'sales (office staff) sees the gate code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000003'$q$) = 0, 'sales: no code of a visit that is not theirs');
 -- a tech of another company sees nothing; another company cannot change a code
 reset role; set request.jwt.claim.sub = 'b0000000-0000-0000-0000-000000000002'; set role authenticated;
 select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd2000000%'$q$) = 0, 'tech of another company: no codes');
@@ -4056,7 +4056,7 @@ begin
                         'accept_invitation(text)', 'accept_legal(jsonb,text,text)',
                         'accept_on_site(uuid,uuid,uuid[],text,text,boolean,uuid,uuid)',
                         'accept_on_site(uuid,uuid,uuid[],text,text,boolean,uuid,uuid,bigint)', 'advance_apply(uuid,uuid)',
-                        'assign_visit(uuid,uuid[])', 'cancel_visit(uuid,text,text)', 'company_location_sharing(uuid)', 'complete_job(uuid)',
+                        'assign_visit(uuid,uuid[])', 'cancel_job(uuid,text)', 'cancel_visit(uuid,text,text)', 'company_location_sharing(uuid)', 'complete_job(uuid)',
                         'countersign_estimate(uuid,text,uuid,uuid,uuid)', 'create_job(uuid,uuid,uuid,text,text,uuid,uuid)',
                         'decline_countersign(uuid,text)', 'delete_account(text,uuid[])', 'estimate_link(uuid)', 'estimate_links(uuid)',
                         'forget_push_device(text)', 'import_customers(uuid,jsonb)', 'import_customers_finish(uuid)',
@@ -4064,19 +4064,19 @@ begin
                         'intake_endpoint_rotate(uuid)', 'intake_endpoint_set(uuid,boolean,uuid,uuid,boolean,boolean,boolean,integer,boolean)',
                         'intake_event_decide(uuid,boolean)', 'invite_member(uuid,text,text,text,boolean)', 'legal_status()',
                         'mark_not_duplicate(uuid,uuid)', 'merge_customers(uuid,uuid)', 'module_disable(uuid,text)', 'module_enable(uuid,text)',
-                        'module_save_settings(uuid,text,jsonb,integer)', 'my_closed_companies()', 'po_receive(uuid,jsonb,bigint)', 'catalog_set_group_price(uuid,bigint,boolean,bigint,integer,integer,bigint,bigint,integer,integer)', 'catalog_set_item_costs(uuid,jsonb,jsonb)',
+                        'module_save_settings(uuid,text,jsonb,integer)', 'mark_notifications_read(uuid[])', 'my_closed_companies()', 'notifications_split_at()', 'po_receive(uuid,jsonb,bigint)', 'catalog_set_group_price(uuid,bigint,boolean,bigint,integer,integer,bigint,bigint,integer,integer)', 'catalog_set_item_costs(uuid,jsonb,jsonb)', 'catalog_set_variant(uuid,text,text,jsonb)',
                         'portal_accept(text,uuid,uuid[],text,text,boolean,text,uuid,uuid,uuid)', 'portal_estimate(text)',
                         'portal_pay_simulated(text,uuid)', 'record_estimate_deposit(uuid,uuid,text)',
                         'record_visit_payment(uuid,uuid,uuid,text,date,bigint)', 'refund_record(uuid,bigint,text,text,text)',
                         'register_push_device(text,text,text,text)', 'reissue_estimate_link(uuid)', 'reopen_estimate(uuid,text)',
                         'resend_invitation(uuid)', 'resend_signed_copy(uuid)', 'revoke_estimate_link(uuid)', 'revoke_invitation(uuid)',
                         'save_customer_people(uuid,jsonb)', 'save_estimate_version(uuid,uuid,text,jsonb,jsonb,jsonb,jsonb)',
-                        'save_lead_people(uuid,jsonb)', 'send_estimate(uuid,text)', 'set_customer_tags(uuid,uuid[])',
+                        'save_lead_people(uuid,jsonb)', 'send_estimate(uuid,text)', 'set_customer_tags(uuid,uuid[])', 'set_gate_code(uuid,text)',
                         'set_job_tags(uuid,uuid[])', 'set_location_consent(uuid,boolean)', 'set_member_status(uuid,uuid,text)',
-                        'set_my_prefs(uuid,boolean)', 'set_push_kind(uuid,text,boolean)', 'set_share_location(uuid,boolean)',
+                        'set_my_prefs(uuid,boolean)', 'snooze_attention(uuid,text,timestamp with time zone)', 'set_push_kind(uuid,text,boolean)', 'set_share_location(uuid,boolean)',
                         'sign_estimate_on_site(uuid,text,text)', 'sign_estimate_on_site(uuid,text,text,bigint)',
                         'stop_member_location(uuid,uuid)', 'supplier_set_tax(uuid,integer,integer)', 'transfer_ownership(uuid,uuid)', 'trash_items(text,uuid[])', 'trash_list(uuid)',
-                        'trash_restore(text,uuid[])', 'undo_customer_import(uuid)', 'uuid_generate_v7()']::text[]);
+                        'trash_restore(text,uuid[])', 'undo_customer_import(uuid)', 'uuid_generate_v7()', 'visit_no_show(uuid,text)']::text[]);
   perform tst.ok(bad is null, 'authenticated runs only the listed functions in public: ' || coalesce(bad, ''));
 
   -- schema extensions: the API creates nothing there (nor in public / app), and no definer function there runs for it
@@ -5245,6 +5245,7 @@ where c not in ('created_by', 'updated_by')   -- history of who wrote a row: kep
     'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id', 'intake_events.decided_by', 'import_jobs.undone_by', 'trash_entries.deleted_by', 'trash_entries.restored_by',
     -- erased (app.erase_personal_rows)
     'member_prefs.user_id', 'user_locations.user_id', 'push_devices.user_id', 'push_outbox.user_id', 'push_prefs.user_id',
+    'notification_reads.user_id',
     -- unlinked (set to null)
     'company_contacts.user_id', 'companies.lead_default_assignee_id') \gset
 select tst.ok(:'t50_unclassified' = '', format('every person column is classified in T50 (kept / erased / unlinked): %s', :'t50_unclassified'));
@@ -5256,7 +5257,7 @@ select coalesce(string_agg(e, ', '), '') as t50_stale from unnest(array[
     'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
     'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by',
     'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id', 'intake_events.decided_by', 'import_jobs.undone_by', 'trash_entries.deleted_by', 'trash_entries.restored_by',
-    'member_prefs.user_id', 'user_locations.user_id', 'company_contacts.user_id', 'companies.lead_default_assignee_id']) e
+    'member_prefs.user_id', 'user_locations.user_id', 'notification_reads.user_id', 'company_contacts.user_id', 'companies.lead_default_assignee_id']) e
  where not exists (select 1 from information_schema.columns c where c.table_schema = 'public'
                      and format('%s.%s', c.table_name, c.column_name) = e) \gset
 select tst.ok(:'t50_stale' = '', format('no stale entries in the T50 lists: %s', :'t50_stale'));
@@ -9577,7 +9578,7 @@ select tst.ok((select parse_status = 'needs_review' and email = 'big@example.com
                  from public.leads l where l.provider = 'angi'), 'T115 a price over $500 is dropped, the lead marked for review');
 select tst.ok((select payload is null from public.intake_events where event_key = 'z115d'), 'T115 a refused request keeps no fields');
 
--- T116: limits — a request is held, never lost; bots and a missing captcha are refused
+-- T116: limits — a request is held, never lost; bots are refused, a missing captcha is held (#2012)
 :as_service
 do $$ declare i int; begin
   for i in 1..5 loop
@@ -9590,7 +9591,7 @@ end $$;
 :as_owner_a
 select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => true);
 :as_service
-select tst.ok(tst.intake('form', 'form', 'cap116', '{"phone":"(818) 555-0196"}', '9.9.9.6') ->> 'status' = 'rejected', 'T116 the captcha is required and missing');
+select tst.ok(tst.intake('form', 'form', 'cap116', '{"phone":"(818) 555-0196"}', '9.9.9.6') ->> 'status' = 'held', 'T116 the captcha is required and missing — held for a person (#2012)');
 select tst.ok(tst.intake('form', 'form', 'cap116ok', '{"phone":"(818) 555-0195"}', '9.9.9.6', '{"captcha":"ok"}') ->> 'status' = 'accepted', 'T116 a solved captcha passes');
 :as_owner_a
 select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => false, p_daily_limit => 2);
@@ -9624,6 +9625,41 @@ select tst.ok(not has_column_privilege('authenticated', 'public.intake_events', 
 -- parallel requests: the advisory lock serialises the count (two sessions are not possible here; the lock is checked to exist)
 select tst.ok(position('pg_advisory_xact_lock' in pg_get_functiondef('app.intake_lead(text, text, text, text, text, jsonb, jsonb)'::regprocedure)) > 0,
   'T116 the limits are counted under the company''s lock');
+
+-- T411–T413: a form that asks for a captcha never loses a request (#2012, spec 34 §3д): the page has no widget yet (В3)
+-- T411: no captcha answer → held / no_captcha with its fields, no lead until a person accepts
+:as_super
+select tst.ok((select status = 'held' and reason = 'no_captcha' and payload ->> 'phone' = '(818) 555-0196' and lead_id is null
+                 from public.intake_events where event_key = 'cap116'), 'T411 no captcha answer: held with its fields, no lead yet');
+:as_office_a
+select tst.ok(public.intake_event_decide((select id from public.intake_events where event_key = 'cap116'), true) ->> 'status' = 'accepted',
+  'T411 the office accepts it from the journal');
+:as_super
+select tst.ok((select count(*) from public.leads where phone = '(818) 555-0196') = 1, 'T411 the accepted request made one lead');
+-- T412: a captcha that answered «fail» (a widget said «bot») → refused, no fields kept
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => true, p_daily_limit => 100);
+:as_service
+select tst.ok(tst.intake('form', 'form', 'cap412', '{"phone":"(818) 555-0412"}', '9.9.4.12', '{"captcha":"fail"}') ->> 'status' = 'rejected',
+  'T412 a failed captcha is refused');
+:as_super
+select tst.ok((select reason = 'captcha' and payload is null from public.intake_events where event_key = 'cap412'), 'T412 a failed captcha keeps no fields');
+-- T413: the trap still comes first; an unknown captcha answer is not taken for «ok»
+:as_service
+select tst.ok(tst.intake('form', 'form', 'cap413bot', '{"phone":"(818) 555-0413"}', '9.9.4.13', '{"bot":"trap"}') ->> 'status' = 'rejected',
+  'T413 the trap field is refused even without a captcha');
+select tst.ok(tst.intake('form', 'form', 'cap413junk', '{"phone":"(818) 555-0414"}', '9.9.4.14', '{"captcha":"maybe"}') ->> 'status' = 'held',
+  'T413 an unknown captcha answer is held, not passed');
+select tst.ok(tst.intake('form', 'form', 'cap413fast', '{"phone":"(818) 555-0415"}', '9.9.4.15', '{"bot":"time"}') ->> 'status' = 'held',
+  'T413 too fast and no captcha: held');
+select tst.ok(tst.intake('webhook', 'hook', 'cap413hook', '{"phone":"(818) 555-0416"}') ->> 'status' = 'accepted',
+  'T413 the form''s captcha does not hold the webhook''s leads');
+:as_super
+select tst.ok((select reason = 'no_captcha' from public.intake_events where event_key = 'cap413junk'), 'T413 no other sign — the reason is «no captcha»');
+select tst.ok((select reason = 'too_fast' from public.intake_events where event_key = 'cap413fast'),
+  'T413 a sharper reason wins over «no captcha» (the person sees «too fast»)');
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => false, p_daily_limit => 1);
 
 -- T117: who gets the lead — the chosen person while active, else the owner
 :as_owner_a
@@ -16923,6 +16959,210 @@ select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000
 select tst.ok((select purchase_tax_bps = 500 from public.suppliers where id = '37100000-0000-4000-8000-0000000000aa'), 'T378 С9 the refused change left the rate as it was');
 delete from public.catalog_items where name like 'T378 item %';
 \echo 'T436, T372–T378 ok'
+-- ---------------------------------------------------------------- T383–T390 (#2015, spec 38 §12): cancel a job — public.cancel_job
+\echo 'T383 cancel a job ok'
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('38300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T383 plain', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('38300000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T383 invoiced', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('38300000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T383 paid', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('38300000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'T383 effects', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('38300000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'T383 on site', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('38300000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', 'T383 old phone', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+-- С1: a plain job
+:as_owner_a
+select tst.ok((public.cancel_job('38300000-0000-4000-8000-000000000001', '  Client changed his mind  ')) ->> 'repeat' = 'false', 'T383 С1 the owner cancels a plain job');
+:as_super
+select tst.ok((select status = 'cancelled' and cancel_reason = 'Client changed his mind' and cancelled_at is not null from public.jobs where id = '38300000-0000-4000-8000-000000000001'),
+  'T383 С1 cancelled, the reason (trimmed) and the time saved');
+select tst.ok(exists (select 1 from public.status_events where entity_type = 'job' and entity_id = '38300000-0000-4000-8000-000000000001' and to_status = 'cancelled'),
+  'T383 С1 the status journal has the move');
+
+\echo 'T384 a payment: refund first ok'
+-- С2: a job with a payment (a payment in transit and a cash payment on a visit without an invoice count too)
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('38400000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '38300000-0000-4000-8000-000000000002', 'final', 10000),
+  ('38400000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '38300000-0000-4000-8000-000000000003', 'final', 10000);
+update public.invoices set status = 'sent', sent_at = now() where id in ('38400000-0000-4000-8000-000000000002', '38400000-0000-4000-8000-000000000003');
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('38400000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', '38300000-0000-4000-8000-000000000003', now() + interval '3 days');
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+values ('ca000000-0000-0000-0000-000000000000', '38400000-0000-4000-8000-000000000003', 'c1a00000-0000-0000-0000-000000000002', 'cash', 5000, 'succeeded', 't384-pay');
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000003', 'no')$q$, 'job:paid%', 'T384 С2 a paid job is not cancelled (refund first)');
+:as_super
+select tst.ok((select status = 'draft' and cancel_reason is null from public.jobs where id = '38300000-0000-4000-8000-000000000003')
+              and (select status = 'scheduled' from public.visits where id = '38400000-0000-4000-8000-0000000000a3')
+              and (select status = 'sent' from public.invoices where id = '38400000-0000-4000-8000-000000000003'),
+  'T384 С2 nothing changed: the job, its visit and its invoice are as they were');
+
+\echo 'T385 who cancels ok'
+-- С3: the office cancels a job without an invoice; with one — «invoiceOpen»; sales, the tech and another company — «no right»
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('38500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T385 office plain', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+:as_office_a
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000002', 'no')$q$, 'job:invoiceOpen%', 'T385 С3 the office: not a job with an invoice');
+select tst.ok((public.cancel_job('38500000-0000-4000-8000-000000000001', 'Duplicate')) ->> 'status' = 'cancelled', 'T385 С3 the office cancels a job without an invoice');
+:as_sales_a
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000004', 'no')$q$, '%only the office%', 'T385 С3 sales does not cancel');
+:as_tech_a
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000004', 'no')$q$, '%only the office%', 'T385 С3 the tech does not cancel');
+:as_owner_b
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000004', 'no')$q$, '%only the office%', 'T385 С3 another company: the same answer as «not found»');
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-0000000000ff', 'no')$q$, '%only the office%', 'T385 С3 a job that does not exist: the same answer (no oracle)');
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+
+\echo 'T386 what goes with the job ok'
+-- С4: two open visits, an unpaid advance and an unpaid final invoice, an approved estimate and a won lead stay as they are
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('38600000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', '38300000-0000-4000-8000-000000000004', now() + interval '2 days'),
+  ('38600000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', '38300000-0000-4000-8000-000000000004', now() + interval '4 days');
+update public.visits set status = 'en_route' where id = '38600000-0000-4000-8000-0000000000a2';
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('38600000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '38300000-0000-4000-8000-000000000004', 'deposit', 3000),
+  ('38600000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '38300000-0000-4000-8000-000000000004', 'final', 7000);
+update public.invoices set status = 'sent', sent_at = now() where id = '38600000-0000-4000-8000-0000000000b1';
+:as_owner_a
+select tst.ok((public.cancel_job('38300000-0000-4000-8000-000000000004', 'Client cancelled the work')) = jsonb_build_object('status', 'cancelled', 'repeat', false, 'visits', 2, 'invoices', 2),
+  'T386 С4 two visits cancelled, two invoices voided');
+:as_super
+select tst.fails($q$insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+  values ('ca000000-0000-0000-0000-000000000000', '38600000-0000-4000-8000-0000000000b2', 'c1a00000-0000-0000-0000-000000000002', 'cash', 100, 'succeeded', 't386-late')$q$,
+  'T386 С4 a payment into the voided invoice of a cancelled job is refused (the payment link is dead)');
+select tst.ok((select count(*) = 2 from public.visits where job_id = '38300000-0000-4000-8000-000000000004' and status = 'cancelled')
+              and (select count(*) = 2 from public.invoices where job_id = '38300000-0000-4000-8000-000000000004' and status = 'void' and void_reason = 'job cancelled')
+              and (select status = 'cancelled' from public.jobs where id = '38300000-0000-4000-8000-000000000004'),
+  'T386 С4 the visits cancelled, the invoices void with the reason, the job cancelled');
+
+\echo 'T387 not every job ok'
+-- С5: a visit on site; a done job; a repeat
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('38700000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', '38300000-0000-4000-8000-000000000005', now());
+update public.visits set status = 'en_route' where id = '38700000-0000-4000-8000-0000000000a1';
+update public.visits set status = 'on_site' where id = '38700000-0000-4000-8000-0000000000a1';
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000005', 'no')$q$, 'job:visitOnSite%', 'T387 С5 a visit on site: finish or cancel it first');
+select tst.ok((public.cancel_job('38300000-0000-4000-8000-000000000001', 'again')) = jsonb_build_object('status', 'cancelled', 'repeat', true, 'visits', 0, 'invoices', 0),
+  'T387 С5 a repeat on a cancelled job changes nothing');
+:as_super
+select tst.ok((select cancel_reason = 'Client changed his mind' from public.jobs where id = '38300000-0000-4000-8000-000000000001'), 'T387 С5 the repeat kept the first reason');
+update public.visits set status = 'completed' where id = '38700000-0000-4000-8000-0000000000a1';
+update public.jobs set status = 'scheduled' where id = '38300000-0000-4000-8000-000000000005';
+update public.jobs set status = 'in_progress' where id = '38300000-0000-4000-8000-000000000005';
+update public.jobs set status = 'completed', completed_at = now() where id = '38300000-0000-4000-8000-000000000005';
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000005', 'no')$q$, 'job:done%', 'T387 С5 a done job is not cancelled');
+
+\echo 'T388 an old phone ok'
+-- С6: the direct update of an old build is still caught by the guard t13 (the new function is no way round it)
+:as_sales_a
+select tst.fails_like($q$update public.jobs set status = 'cancelled' where id = '38300000-0000-4000-8000-000000000006'$q$, 'job:noRight%', 'T388 С6 sales: the direct update is refused');
+:as_super
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('38800000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '38300000-0000-4000-8000-000000000006', 'final', 1000);
+update public.invoices set status = 'sent', sent_at = now() where id = '38800000-0000-4000-8000-0000000000b1';
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+select tst.fails_like($q$update public.jobs set status = 'cancelled' where id = '38300000-0000-4000-8000-000000000006'$q$, 'job:invoiceOpen%', 'T388 С6 the office with an invoice: the direct update is refused');
+select tst.fails($q$update public.jobs set cancel_reason = 'x' where id = '38300000-0000-4000-8000-000000000006'$q$, 'T388 С6 the phone does not write the reason itself (no grant)');
+:as_super
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+values ('ca000000-0000-0000-0000-000000000000', '38800000-0000-4000-8000-0000000000b1', 'c1a00000-0000-0000-0000-000000000002', 'cash', 500, 'succeeded', 't388-pay');
+:as_office_a
+select tst.fails_like($q$update public.jobs set status = 'cancelled' where id = '38300000-0000-4000-8000-000000000006'$q$, 'job:%', 'T388 С6 the office with a payment: the direct update is refused');
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+
+\echo 'T389 rights of the function and the reason ok'
+-- С7
+select tst.ok(not has_function_privilege('anon', 'public.cancel_job(uuid,text)', 'EXECUTE')
+          and not has_function_privilege('public', 'public.cancel_job(uuid,text)', 'EXECUTE')
+          and has_function_privilege('authenticated', 'public.cancel_job(uuid,text)', 'EXECUTE'), 'T389 С7 authenticated only');
+select tst.ok((select prosecdef and proconfig @> array['search_path=""'] from pg_proc where oid = 'public.cancel_job(uuid,text)'::regprocedure), 'T389 С7 security definer, empty search_path');
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('38900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T389 reason', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('38900000-0000-4000-8000-000000000001', '')$q$, '%1 to 500%', 'T389 С7 an empty reason');
+select tst.fails_like($q$select public.cancel_job('38900000-0000-4000-8000-000000000001', '    ')$q$, '%1 to 500%', 'T389 С7 a reason of spaces');
+select tst.fails_like($q$select public.cancel_job('38900000-0000-4000-8000-000000000001', null)$q$, '%1 to 500%', 'T389 С7 no reason');
+select tst.fails_like($q$select public.cancel_job('38900000-0000-4000-8000-000000000001', repeat('x', 501))$q$, '%1 to 500%', 'T389 С7 a reason over 500 characters');
+select tst.ok((public.cancel_job('38900000-0000-4000-8000-000000000001', repeat('x', 500))) ->> 'status' = 'cancelled', 'T389 С7 500 characters are fine');
+:as_super
+
+\echo 'T390 the order of locks ok'
+-- С8: the visits first (by id), then the job — as cancel_visit (visit → job)
+do $$ declare d text; a int; b int; begin
+  d := pg_get_functiondef('public.cancel_job(uuid,text)'::regprocedure);
+  a := position('from public.visits v' in d);
+  b := position('from public.jobs where id = p_job and company_id = v_company and deleted_at is null for update' in d);
+  perform tst.ok(a > 0 and b > a, 'T390 С8 the visits of the job are locked before the job');
+  perform tst.ok(d ~ 'order by v\.id for update', 'T390 С8 the visits locked in key order');
+  perform tst.ok(position('job_cancel_reason' in d) > b, 'T390 С8 the guard''s rule is asked after the lock (a guard does not run in a definer)');
+end $$;
+
+\echo 'T391 no new money on a cancelled job ok'
+-- a visit finished before the cancel is paid later (record_visit_payment would make an invoice and a payment): both doors are shut
+:as_super
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('39100000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T391 finished visit', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('39100000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T391 pending payment', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('39100000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T391 deleted', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('39100000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', '39100000-0000-4000-8000-000000000001', now());
+update public.visits set status = 'en_route' where id = '39100000-0000-4000-8000-0000000000a1';
+update public.visits set status = 'on_site' where id = '39100000-0000-4000-8000-0000000000a1';
+update public.visits set status = 'completed' where id = '39100000-0000-4000-8000-0000000000a1';
+update public.jobs set status = 'scheduled' where id = '39100000-0000-4000-8000-000000000001';
+update public.jobs set status = 'in_progress' where id = '39100000-0000-4000-8000-000000000001';
+:as_owner_a
+select tst.ok((public.cancel_job('39100000-0000-4000-8000-000000000001', 'Client left')) ->> 'status' = 'cancelled', 'T391 a job with a finished visit and no money is cancelled');
+:as_super
+select tst.fails_like($q$insert into public.invoices (company_id, customer_id, job_id, kind, total_cents)
+  values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '39100000-0000-4000-8000-000000000001', 'final', 100)$q$,
+  'job:cancelled%', 'T391 no invoice for a cancelled job');
+select tst.fails_like($q$insert into public.payments (company_id, visit_id, customer_id, method, amount_cents, status, idempotency_key)
+  values ('ca000000-0000-0000-0000-000000000000', '39100000-0000-4000-8000-0000000000a1', 'c1a00000-0000-0000-0000-000000000002', 'cash', 100, 'succeeded', 't391-visit')$q$,
+  'job:cancelled%', 'T391 no payment on the finished visit of a cancelled job');
+-- a payment in transit counts as money (T384 the paid one, here the pending one)
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('39100000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '39100000-0000-4000-8000-000000000002', 'final', 5000);
+update public.invoices set status = 'sent', sent_at = now() where id = '39100000-0000-4000-8000-0000000000b2';
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+values ('ca000000-0000-0000-0000-000000000000', '39100000-0000-4000-8000-0000000000b2', 'c1a00000-0000-0000-0000-000000000002', 'ach', 5000, 'pending', 't391-pending');
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('39100000-0000-4000-8000-000000000002', 'no')$q$, 'job:paid%', 'T391 a payment in transit: refund first');
+-- a deleted job answers as «not found»
+:as_super
+update public.jobs set deleted_at = now() where id = '39100000-0000-4000-8000-000000000003';
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('39100000-0000-4000-8000-000000000003', 'no')$q$, '%only the office%', 'T391 a deleted job: the same answer as «not found»');
+:as_super
+
+\echo 'T392 pay, refund in full, then cancel ok'
+-- a payment refunded in full does not hold the cancel (job_cancel_reason counts amount − refunded) and the void of the invoice
+-- goes through tg_invoice_guard (paid_cents is back to 0 after the refund)
+:as_super
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('39200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T392 refunded in full', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('39200000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '39200000-0000-4000-8000-000000000001', 'final', 5000);
+update public.invoices set status = 'sent', sent_at = now() where id = '39200000-0000-4000-8000-0000000000b1';
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+values ('39200000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', '39200000-0000-4000-8000-0000000000b1', 'c1a00000-0000-0000-0000-000000000002', 'cash', 5000, 'succeeded', 't392-pay');
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('39200000-0000-4000-8000-000000000001', 'no')$q$, 'job:paid%', 'T392 a paid job: refund first');
+:as_super
+select set_config('app.invoice_recalc', 'on', false);
+update public.payments set refunded_cents = 5000, status = 'refunded' where id = '39200000-0000-4000-8000-0000000000c1';
+select set_config('app.invoice_recalc', '', false);
+select tst.ok((select paid_cents = 0 from public.invoices where id = '39200000-0000-4000-8000-0000000000b1'), 'T392 the refund took the payment off the invoice (paid_cents 0)');
+:as_owner_a
+select tst.ok((public.cancel_job('39200000-0000-4000-8000-000000000001', 'Refunded, client left')) ->> 'invoices' = '1', 'T392 refunded in full: the job is cancelled and its invoice voided');
+:as_super
+select tst.ok((select status = 'void' from public.invoices where id = '39200000-0000-4000-8000-0000000000b1') and (select status = 'cancelled' from public.jobs where id = '39200000-0000-4000-8000-000000000001'), 'T392 the invoice void, the job cancelled');
 
 -- ================================================================ T365–T370: a cost is written only over what the phone saw
 -- (#1958 (а), migration 20261117340000). catalog_set_item_costs(item, the changed fields, what the phone had in them).
@@ -17247,6 +17487,135 @@ select tst.fails($q$insert into public.visits (company_id, job_id, kind, starts_
 rollback;
 \echo 'T393-T398 ok'
 
+-- ---------------------------------------------------------------- T407–T410 (#2066): «Клиента нет дома»
+-- The visit's own tech marks a no-show at the door (scheduled / en_route / on_site, before work); the office can too.
+-- Before: only the office (cancel_visit), and not on_site — the tech at a locked door could not close the visit.
+\echo 'T407-T410 visit no-show'
+begin;
+:as_super
+update public.memberships set status = 'active' where company_id = 'ca000000-0000-0000-0000-000000000000'
+   and user_id in ('a0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000005');
+update public.memberships set role = 'tech' where company_id = 'ca000000-0000-0000-0000-000000000000'
+   and user_id in ('a0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000004');
+update public.memberships set role = 'sales' where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000005';
+insert into public.customers (id, company_id, display_name) values ('40700000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'T407 Client');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('40700000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000c1', '407 Door St', 'Pasadena');
+insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+  ('40700000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'T407 job', '40700000-0000-4000-8000-0000000000c1', '40700000-0000-4000-8000-0000000000d1', 'draft'),
+  ('40700000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'T409 job', '40700000-0000-4000-8000-0000000000c1', '40700000-0000-4000-8000-0000000000d1', 'draft');
+update public.jobs set status = 'scheduled' where id in ('40700000-0000-4000-8000-0000000000e1', '40700000-0000-4000-8000-0000000000e2');
+insert into public.leads (id, company_id, source_id, contact_name, phone, property_id)
+  select '40700000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', id, 'T408 Lead', '(818) 555-0407', '40700000-0000-4000-8000-0000000000d1'
+    from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' order by created_at limit 1;
+update public.leads set status = 'inspection_scheduled' where id = '40700000-0000-4000-8000-0000000000a1';
+-- f1: the job's install visit, tech on site; f2: the lead's inspection, sales on it; f3: at work; f4: another tech's;
+-- f5: a second open visit of job e2 (the job keeps «scheduled»); f6: its sibling
+insert into public.visits (id, company_id, job_id, lead_id, property_id, kind, starts_at, ends_at) values
+  ('40700000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e1', null, null, 'install', now(), now() + interval '3 hours'),
+  ('40700000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', null, '40700000-0000-4000-8000-0000000000a1', '40700000-0000-4000-8000-0000000000d1', 'inspection', now(), now() + interval '1 hour'),
+  ('40700000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now(), now() + interval '3 hours'),
+  ('40700000-0000-4000-8000-0000000000f4', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now() + interval '1 day', now() + interval '1 day 3 hours'),
+  ('40700000-0000-4000-8000-0000000000f5', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now() + interval '2 days', now() + interval '2 days 3 hours'),
+  ('40700000-0000-4000-8000-0000000000f6', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now() + interval '3 days', now() + interval '3 days 3 hours'),
+  ('40700000-0000-4000-8000-0000000000f9', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now() + interval '4 days', now() + interval '4 days 3 hours');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f1', 'a0000000-0000-0000-0000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f2', 'a0000000-0000-0000-0000-000000000005'),
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f3', 'a0000000-0000-0000-0000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f4', 'a0000000-0000-0000-0000-000000000004'),
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f5', 'a0000000-0000-0000-0000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f6', 'a0000000-0000-0000-0000-000000000005'),
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f9', 'a0000000-0000-0000-0000-000000000003');
+-- f9: the office took a payment before the visit (record_visit_payment allows it) — the client paid, not a no-show
+insert into public.payments (company_id, customer_id, visit_id, method, amount_cents, status, idempotency_key, received_by)
+  values ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000c1', '40700000-0000-4000-8000-0000000000f9', 'cash', 5000, 'succeeded', 't409-paid', 'a0000000-0000-0000-0000-000000000002');
+update public.visits set status = 'on_site' where id in ('40700000-0000-4000-8000-0000000000f1', '40700000-0000-4000-8000-0000000000f3');
+update public.visits set work_started_at = now() where id = '40700000-0000-4000-8000-0000000000f3';
+
+-- T407: the tech on site — no-show: the visit closes with the reason, who and when; the job waits for a date again
+select tst.ok((select status from public.jobs where id = '40700000-0000-4000-8000-0000000000e1') = 'in_progress', 'T407 «on site» started the job');
+:as_tech_a
+select tst.ok(public.visit_no_show('40700000-0000-4000-8000-0000000000f1', '  Nobody home, left a card  ') ->> 'job_back'
+              = '40700000-0000-4000-8000-0000000000e1', 'T407 the tech on site: no-show, the job rolls back');
+:as_super
+select tst.ok((select status = 'no_show' and cancel_reason = 'no_show' and cancel_reason_text = 'Nobody home, left a card'
+                      and cancelled_by = 'a0000000-0000-0000-0000-000000000003' and cancelled_at is not null
+                 from public.visits where id = '40700000-0000-4000-8000-0000000000f1'), 'T407 the visit: no_show, the note, who and when');
+select tst.ok((select status from public.jobs where id = '40700000-0000-4000-8000-0000000000e1') = 'draft', 'T407 the job: waits for a date (S9a)');
+select tst.ok(exists (select 1 from public.status_events where entity_type = 'visit' and entity_id = '40700000-0000-4000-8000-0000000000f1'
+                       and from_status = 'on_site' and to_status = 'no_show' and reason = 'no_show'), 'T407 the status journal: on_site → no_show, reason no_show');
+-- a repeat from the offline queue: answered, nothing doubles
+:as_tech_a
+select tst.ok((public.visit_no_show('40700000-0000-4000-8000-0000000000f1') ->> 'repeat')::boolean, 'T407 a repeat: answered as a repeat');
+:as_super
+select tst.ok((select count(*) from public.status_events where entity_type = 'visit' and entity_id = '40700000-0000-4000-8000-0000000000f1' and to_status = 'no_show') = 1
+          and (select cancel_reason_text from public.visits where id = '40700000-0000-4000-8000-0000000000f1') = 'Nobody home, left a card',
+  'T407 the repeat changes nothing');
+
+-- T408: sales on their own inspection — no-show: the lead goes back to «in contact» (S4a); on an install — «not found»
+:as_sales_a
+select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f6')$q$, '%visit not found%', 'T408 sales on an install visit: «not found» (the office plans)');
+select tst.ok(public.visit_no_show('40700000-0000-4000-8000-0000000000f2') ->> 'lead_back' = '40700000-0000-4000-8000-0000000000a1',
+  'T408 sales on their inspection: no-show, the lead rolls back');
+:as_super
+select tst.ok((select status from public.leads where id = '40700000-0000-4000-8000-0000000000a1') = 'contacted'
+          and (select status from public.visits where id = '40700000-0000-4000-8000-0000000000f2') = 'no_show', 'T408 the lead: contacted; the visit: no_show');
+
+-- T409: refusals — at work; another tech's visit («not found», as a visit that does not exist); a direct update still refused;
+-- a person of another company; the job with another open visit keeps «scheduled»
+:as_tech_a
+select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f3')$q$, '%client was there%', 'T409 at work: not a no-show');
+select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f4')$q$, '%visit not found%', 'T409 another tech''s visit: «not found»');
+select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000ff')$q$, '%visit not found%', 'T409 a visit that does not exist: the same answer');
+select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f9')$q$, '%has a payment%', 'T409 a visit with a payment: not a no-show');
+select tst.fails($q$update public.visits set status = 'no_show' where id = '40700000-0000-4000-8000-0000000000f5'$q$, 'T409 a direct no_show by the tech: refused');
+select tst.fails($q$update public.visits set cancel_reason = 'no_show' where id = '40700000-0000-4000-8000-0000000000f5'$q$, 'T409 a direct reason by the tech: refused');
+:as_owner_b
+select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f5')$q$, '%visit not found%', 'T409 another company: «not found»');
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f5')$q$, 'T409 anon: no execute');
+:as_tech_a
+select tst.ok(public.visit_no_show('40700000-0000-4000-8000-0000000000f5') ->> 'job_back' is null, 'T409 the job has another open visit: no roll-back');
+:as_super
+select tst.ok((select status from public.jobs where id = '40700000-0000-4000-8000-0000000000e2') = 'in_progress'
+          and (select status from public.visits where id = '40700000-0000-4000-8000-0000000000f3') = 'on_site', 'T409 the job keeps going; the visit at work is untouched');
+
+-- T410: a multi-day job — day 1 finished, day 2 a no-show: the job stays «in progress» (not «waits for a date»)
+:as_super
+insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+  ('40700000-0000-4000-8000-0000000000e3', 'ca000000-0000-0000-0000-000000000000', 'T410 job', '40700000-0000-4000-8000-0000000000c1', '40700000-0000-4000-8000-0000000000d1', 'draft');
+update public.jobs set status = 'scheduled' where id = '40700000-0000-4000-8000-0000000000e3';
+insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values
+  ('40700000-0000-4000-8000-0000000000f7', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e3', 'install', now() - interval '1 day', now() - interval '21 hours'),
+  ('40700000-0000-4000-8000-0000000000f8', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e3', 'install', now(), now() + interval '3 hours');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f8', 'a0000000-0000-0000-0000-000000000003');
+update public.visits set status = 'on_site', work_started_at = now() - interval '1 day' where id = '40700000-0000-4000-8000-0000000000f7';
+update public.visits set status = 'completed' where id = '40700000-0000-4000-8000-0000000000f7';
+update public.visits set status = 'on_site' where id = '40700000-0000-4000-8000-0000000000f8';
+:as_tech_a
+select tst.ok(public.visit_no_show('40700000-0000-4000-8000-0000000000f8') ->> 'job_back' is null, 'T410 day 2 of a started job: no roll-back');
+:as_super
+select tst.ok((select status from public.jobs where id = '40700000-0000-4000-8000-0000000000e3') = 'in_progress', 'T410 the started job stays «in progress»');
+-- a started job back to planning by a direct write: refused for everyone (only visit_no_show does it, after its checks)
+:as_office_a
+select tst.fails_like($q$update public.jobs set status = 'draft' where id = '40700000-0000-4000-8000-0000000000e3'$q$, '%only through a no-show%', 'T410 the office: a direct «in progress» → draft refused');
+:as_sales_a
+select tst.fails($q$update public.jobs set status = 'draft' where id = '40700000-0000-4000-8000-0000000000e3'$q$, 'T410 sales: a direct «in progress» → draft refused');
+:as_super
+select tst.ok((select status from public.jobs where id = '40700000-0000-4000-8000-0000000000e3') = 'in_progress', 'T410 after the refusals: still «in progress»');
+
+-- T410: the office marks a no-show too (another tech's visit, scheduled); a tech of the company still cannot touch the time
+:as_office_a
+select tst.ok(public.visit_no_show('40700000-0000-4000-8000-0000000000f4') ->> 'status' = 'no_show', 'T410 the office: no-show of a scheduled visit');
+:as_super
+select tst.ok((select cancelled_by from public.visits where id = '40700000-0000-4000-8000-0000000000f4') = 'a0000000-0000-0000-0000-000000000002', 'T410 who: the office');
+:as_tech_a
+select tst.fails($q$update public.visits set starts_at = now() + interval '5 days' where id = '40700000-0000-4000-8000-0000000000f3'$q$, 'T410 the guard still: a tech does not move a visit');
+rollback;
+\echo 'T407-T410 ok'
+
 -- ---------------------------------------------------------------- T380 (#2020): by the client's link the client pays
 -- A sent estimate of company A with a 10% deposit, signed by the client (anon) and by the owner: its deposit invoice.
 -- The company simulates payments (a demo company). The owner and the office pay by the token: 42501, hint member_portal_pay,
@@ -17444,8 +17813,10 @@ select tst.ok(tst.cnt($q$select 1 from public.payment_attempts$q$) = 0, 'T422 sa
 select tst.ok(tst.cnt($q$select 1 from public.stripe_accounts$q$) = 0, 'T422 sales do not see the Stripe account');
 select tst.ok(tst.cnt($q$select 1 from public.notifications where id::text like 'a4205000-%'$q$) = 2, 'T422 sales see the notifications of their two estimates only');
 select tst.blocked($q$update public.notifications set read_at = now() where id = 'a4205000-0000-4000-8000-000000000003'$q$, 'T422 sales do not mark another''s notification read');
-update public.notifications set read_at = now() where id = 'a4205000-0000-4000-8000-000000000001';
-select tst.ok((select read_at is not null from public.notifications where id = 'a4205000-0000-4000-8000-000000000001'), 'T422 sales mark their own notification read');
+-- Р-8b (20261117569000, T435): sales mark a notification read for themselves (notification_reads), not the shared column
+select tst.blocked($q$update public.notifications set read_at = now() where id = 'a4205000-0000-4000-8000-000000000001'$q$, 'T422 sales do not put out the shared mark of their own notification');
+insert into public.notification_reads (notification_id, company_id) values ('a4205000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000');
+select tst.ok(exists (select 1 from public.notification_reads where notification_id = 'a4205000-0000-4000-8000-000000000001'), 'T422 sales mark their own notification read (for themselves)');
 
 -- T423: the office sees everything as before; the lead handed to the office takes its deal from sales
 :as_office_a
@@ -18010,5 +18381,493 @@ select tst.ok((select name = 'T432 Co' and lead_default_assignee_id is null from
   'T432 a stored assignee who left does not block saving; «nobody» (the owner) is always allowed');
 rollback;
 \echo 'T431 T432 ok'
+
+-- ---------------------------------------------------------------- T433 (Р-8a): who writes which expense
+\echo 'T433 an expense: the client of its job, a sum not below zero, a subcontractor only on a job of his'
+begin;
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a4330000-0000-4000-8000-000000000001', 'sub433@a.test', '{"full_name":"Sam Sub433"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4330000-0000-4000-8000-000000000001', 'subcontractor', 'active');
+-- the subcontractor works a visit of job 2 (the HOA's)
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f1a00000-0000-0000-0000-000000000002', 'a4330000-0000-4000-8000-000000000001');
+\set as_sub433 'reset role; set request.jwt.claim.sub = ''a4330000-0000-4000-8000-000000000001''; set role authenticated;'
+-- the fixtures this test stands on: the tech works job 1 (client Petrov), not job 2 (client HOA)
+:as_tech_a
+select tst.ok(app.is_job_assignee('e1a00000-0000-0000-0000-000000000001') and not app.is_job_assignee('e1a00000-0000-0000-0000-000000000002'),
+  'T433 fixtures: the tech works job 1 only');
+-- what the app sends (cloud/ops.ts expense.add): no client, a job of his own or none, a sum ≥ 0 — taken
+insert into public.expenses (id, company_id, job_id, vendor, amount_cents, category) values
+  ('e4330000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', null, 'T433 fuel', 4500, 'fuel'),
+  ('e4330000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', 'T433 nails', 1200, 'materials');
+-- the client of his own job: taken
+insert into public.expenses (id, company_id, job_id, customer_id, vendor, amount_cents, category) values
+  ('e4330000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001',
+   'c1a00000-0000-0000-0000-000000000001', 'T433 job client', 100, 'other');
+-- another client: not without a job, not on his job
+select tst.fails_like($q$insert into public.expenses (company_id, customer_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'T433', 100, 'other')$q$,
+  '%row-level security%', 'T433 the tech: no client of the company without a job');
+select tst.fails_like($q$insert into public.expenses (company_id, job_id, customer_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', 'c1a00000-0000-0000-0000-000000000002', 'T433', 100, 'other')$q$,
+  '%row-level security%', 'T433 the tech: not another client on his own job');
+-- a sum below zero
+select tst.fails_like($q$insert into public.expenses (company_id, job_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', 'T433', -500000, 'materials')$q$,
+  '%row-level security%', 'T433 the tech: no expense below zero');
+select tst.fails_like($q$insert into public.expenses (company_id, vendor, amount_cents, tax_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'T433', 100, -50, 'materials')$q$,
+  '%row-level security%', 'T433 the tech: no tax below zero');
+-- the same through a change of his own expense
+select tst.fails_like($q$update public.expenses set amount_cents = -500000 where id = 'e4330000-0000-4000-8000-000000000002'$q$,
+  '%row-level security%', 'T433 the tech: his expense is not changed to below zero');
+select tst.fails_like($q$update public.expenses set tax_cents = -1 where id = 'e4330000-0000-4000-8000-000000000002'$q$,
+  '%row-level security%', 'T433 the tech: nor its tax');
+select tst.fails_like($q$update public.expenses set customer_id = 'c1a00000-0000-0000-0000-000000000002' where id = 'e4330000-0000-4000-8000-000000000002'$q$,
+  '%row-level security%', 'T433 the tech: his expense does not go to another client');
+select tst.fails_like($q$update public.expenses set customer_id = 'c1a00000-0000-0000-0000-000000000002' where id = 'e4330000-0000-4000-8000-000000000001'$q$,
+  '%row-level security%', 'T433 the tech: …nor an expense without a job');
+-- his ordinary edits stay
+update public.expenses set amount_cents = 5000, vendor = 'T433 fuel+' where id = 'e4330000-0000-4000-8000-000000000001';
+select tst.ok((select amount_cents = 5000 from public.expenses where id = 'e4330000-0000-4000-8000-000000000001'), 'T433 the tech changes the sum of his expense');
+-- sales: the same limits (sales may put an expense on any job, as before)
+:as_sales_a
+insert into public.expenses (company_id, job_id, vendor, amount_cents, category) values
+  ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000002', 'T433 sales', 300, 'marketing');
+select tst.fails_like($q$insert into public.expenses (company_id, job_id, customer_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000002', 'c1a00000-0000-0000-0000-000000000001', 'T433', 100, 'other')$q$,
+  '%row-level security%', 'T433 sales: not a client other than the job''s');
+select tst.fails_like($q$insert into public.expenses (company_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'T433', -1, 'other')$q$,
+  '%row-level security%', 'T433 sales: no expense below zero');
+select tst.fails_like($q$insert into public.expenses (company_id, vendor, amount_cents, tax_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'T433', 100, -1, 'other')$q$,
+  '%row-level security%', 'T433 sales: nor a tax below zero');
+-- sales move their expense with the job's client: the client goes with the job, not to another job or to none
+insert into public.expenses (id, company_id, job_id, customer_id, vendor, amount_cents, category) values
+  ('e4330000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001',
+   'c1a00000-0000-0000-0000-000000000001', 'T433 sales job client', 100, 'other');
+select tst.fails_like($q$update public.expenses set job_id = 'e1a00000-0000-0000-0000-000000000002' where id = 'e4330000-0000-4000-8000-000000000007'$q$,
+  '%row-level security%', 'T433 sales: an expense with a client does not move to a job of another client');
+select tst.fails_like($q$update public.expenses set job_id = null where id = 'e4330000-0000-4000-8000-000000000007'$q$,
+  '%row-level security%', 'T433 sales: …nor off its job with the client');
+select tst.fails_like($q$update public.expenses set amount_cents = -1 where id = 'e4330000-0000-4000-8000-000000000007'$q$,
+  '%row-level security%', 'T433 sales: their expense is not changed to below zero');
+update public.expenses set job_id = 'e1a00000-0000-0000-0000-000000000002', customer_id = 'c1a00000-0000-0000-0000-000000000002'
+ where id = 'e4330000-0000-4000-8000-000000000007';
+-- the subcontractor: only on a job he works
+:as_sub433
+insert into public.expenses (id, company_id, job_id, vendor, amount_cents, category) values
+  ('e4330000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000002', 'T433 sub', 700, 'materials');
+select tst.fails_like($q$insert into public.expenses (company_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'T433 sub', 700, 'other')$q$,
+  '%row-level security%', 'T433 the subcontractor: no expense without a job');
+select tst.fails_like($q$insert into public.expenses (company_id, job_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', 'T433 sub', 700, 'other')$q$,
+  '%row-level security%', 'T433 the subcontractor: not on a job he does not work');
+-- the client of his job — yes (he does not read jobs: the policy reads the job's client itself); another client — no
+insert into public.expenses (id, company_id, job_id, customer_id, vendor, amount_cents, category) values
+  ('e4330000-0000-4000-8000-000000000008', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000002',
+   'c1a00000-0000-0000-0000-000000000002', 'T433 sub job client', 700, 'materials');
+select tst.fails_like($q$insert into public.expenses (company_id, job_id, customer_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000002', 'c1a00000-0000-0000-0000-000000000001', 'T433 sub', 700, 'other')$q$,
+  '%row-level security%', 'T433 the subcontractor: not another client on his job');
+select tst.fails_like($q$insert into public.expenses (company_id, job_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000002', 'T433 sub', -700, 'other')$q$,
+  '%row-level security%', 'T433 the subcontractor: no expense below zero');
+-- (he does not read his expenses at all — expenses_select: nothing to change)
+select tst.blocked($q$update public.expenses set job_id = null where id = 'e4330000-0000-4000-8000-000000000004'$q$,
+  'T433 the subcontractor: his expense is not taken off the job');
+-- the office: as before — any client, any sign (a supplier's credit note)
+:as_office_a
+insert into public.expenses (id, company_id, job_id, customer_id, vendor, amount_cents, tax_cents, category) values
+  ('e4330000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001',
+   'c1a00000-0000-0000-0000-000000000002', 'T433 credit note', -2500, -200, 'materials'),
+  ('e4330000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', null,
+   'c1a00000-0000-0000-0000-000000000002', 'T433 office', 900, 0, 'other');
+update public.expenses set amount_cents = -3000 where id = 'e4330000-0000-4000-8000-000000000005';
+:as_owner_a
+update public.expenses set customer_id = 'c1a00000-0000-0000-0000-000000000001' where id = 'e4330000-0000-4000-8000-000000000006';
+:as_owner_b
+select tst.ok(app.job_customer('e1a00000-0000-0000-0000-000000000001') is null, 'T433 app.job_customer: nothing of another company''s job');
+:as_super
+select tst.ok((select count(*) = 8 from public.expenses where id::text like 'e4330000-%')
+              and (select customer_id = 'c1a00000-0000-0000-0000-000000000002' from public.expenses where id = 'e4330000-0000-4000-8000-000000000007')
+              and (select amount_cents = -3000 from public.expenses where id = 'e4330000-0000-4000-8000-000000000005'),
+  'T433 the office writes any client and a negative sum, as before');
+rollback;
+\echo 'T433 ok'
+
+-- ---------------------------------------------------------------- T434 (Р-3): who reads a gate code
+\echo 'T434 a gate code: the office always; sales, as a tech, on the day of their own visit and the day before'
+begin;
+:as_owner_a
+do $$
+declare v_src uuid; v_c uuid := 'c4340000-0000-4000-8000-000000000001'; k int; v_p uuid; v_l uuid; v_v uuid;
+  -- property → inspection of sales in days (null: none), cancelled?
+  plan text[][] := array[['0','n'], ['1','n'], ['3','n'], [null,'n'], ['0','c'], ['-1','n'], ['0','n']];
+begin
+  select id into v_src from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral';
+  insert into public.customers (id, company_id, display_name) values (v_c, 'ca000000-0000-0000-0000-000000000000', 'T434 Client');
+  for k in 1..7 loop
+    v_p := ('d4340000-0000-4000-8000-00000000000' || k)::uuid;
+    insert into public.properties (id, company_id, customer_id, address_line1, address_city) values (v_p, 'ca000000-0000-0000-0000-000000000000', v_c, k || ' T434 St', 'Pasadena');
+    insert into public.property_secrets (company_id, property_id, gate_code) values ('ca000000-0000-0000-0000-000000000000', v_p, '#434' || k);
+    if plan[k][1] is not null then
+      v_l := ('b4340000-0000-4000-8000-00000000000' || k)::uuid;
+      v_v := ('f4340000-0000-4000-8000-00000000000' || k)::uuid;
+      insert into public.leads (id, company_id, source_id, contact_name, phone, customer_id, property_id)
+      values (v_l, 'ca000000-0000-0000-0000-000000000000', v_src, 'T434 Lead ' || k, '(818) 555-434' || k, v_c, v_p);
+      insert into public.visits (id, company_id, lead_id, property_id, kind, starts_at)
+      values (v_v, 'ca000000-0000-0000-0000-000000000000', v_l, v_p, 'inspection', now() + (plan[k][1] || ' days')::interval);
+      insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000005');
+      if plan[k][2] = 'c' then perform public.cancel_visit(v_v, 'we_cancelled'); end if;
+    end if;
+  end loop;
+  -- a removed code (soft delete)
+  update public.property_secrets set deleted_at = now() where property_id = 'd4340000-0000-4000-8000-000000000001';
+end $$;
+-- the office: every code, the removed one too
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd4340000%'$q$) = 7, 'T434 the office sees every code, the removed one too');
+:as_owner_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd4340000%'$q$) = 7, 'T434 the owner sees every code');
+-- sales: only on the day of their inspection and the day before, a live visit, a live code
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000007'$q$) = 1, 'T434 sales: inspection today → the code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000002'$q$) = 1, 'T434 sales: inspection tomorrow → the code the day before');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000001'$q$) = 0, 'T434 sales: a visit today that is the tech''s, not theirs → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000003'$q$) = 0, 'T434 sales: inspection in 3 days → no code yet');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000004'$q$) = 0, 'T434 sales: no visit of theirs → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000005'$q$) = 0, 'T434 sales: a cancelled inspection today → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000006'$q$) = 0, 'T434 sales: inspection was yesterday → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000001'$q$) = 0, 'T434 sales: a removed code — no, even on the visit day');
+select tst.ok(not app.can_see_gate_code('d4340000-0000-4000-8000-000000000004') and app.can_see_gate_code('d4340000-0000-4000-8000-000000000002'),
+  'T434 app.can_see_gate_code: sales by the visit window');
+-- the code of another property: the tech's rule is unchanged (T20: his visit today)
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000001'$q$) = 1, 'T434 the tech: his visit today → the code, as before');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd4340000%'$q$) = 0, 'T434 the tech: not the codes of sales'' inspections');
+-- who writes a code: the table — the office; sales — through public.set_gate_code, and they do not read it back
+:as_sales_a
+select tst.fails_like($q$insert into public.property_secrets (property_id, company_id, gate_code, deleted_at) values
+  ('d4340000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '#x', null)
+  on conflict (property_id) do update set gate_code = excluded.gate_code$q$,
+  '%row-level security%', 'T434 sales: not the table (an old build''s upsert is refused)');
+select tst.blocked($q$update public.property_secrets set gate_code = '#x' where property_id = 'd4340000-0000-4000-8000-000000000002'$q$,
+  'T434 sales: no update of the table, even in the visit window');
+select public.set_gate_code('d4340000-0000-4000-8000-000000000004', ' #new4 ');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000004'$q$) = 0,
+  'T434 sales set a code through the function and still do not read it outside the window');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('d4340000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'c4340000-0000-4000-8000-000000000001', '9 T434 St', 'Pasadena');
+select public.set_gate_code('d4340000-0000-4000-8000-000000000009', '#4349');
+-- sales do not clear a code, and do not bring back one the office removed
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000003', '')$q$, '%only the office clears%', 'T434 sales: not an empty code');
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000003', '   ')$q$, '%only the office clears%', 'T434 sales: …nor blanks');
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000007', null)$q$, '%only the office clears%', 'T434 sales: …nor null');
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000001', '#back1')$q$, '%removed by the office%', 'T434 sales: not over a code the office removed');
+-- the office: a removed code comes back with the new one; an empty or null code clears it
+:as_office_a
+select public.set_gate_code('d4340000-0000-4000-8000-000000000001', '#back1');
+select public.set_gate_code('d4340000-0000-4000-8000-000000000003', '');
+select public.set_gate_code('d4340000-0000-4000-8000-000000000007', null);
+:as_sales_a
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000004', repeat('9', 65))$q$, '%at most 64%', 'T434 the function: at most 64 characters');
+:as_tech_a
+select tst.fails_like($q$select public.set_gate_code('d2000000-0000-4000-8000-000000000001', '#tech')$q$, '%not allowed%', 'T434 the tech: not through the function');
+:as_owner_b
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000004', '#b')$q$, '%not allowed%', 'T434 another company: not through the function');
+:as_super
+update public.properties set deleted_at = now() where id = 'd4340000-0000-4000-8000-000000000006';
+:as_owner_a
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000006', '#gone')$q$, '%not allowed%', 'T434 the function: not on a removed property');
+-- the office still writes the table (an upsert as before) and through the function
+:as_office_a
+insert into public.property_secrets (property_id, company_id, gate_code, deleted_at) values
+  ('d4340000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '#off5', null)
+  on conflict (property_id) do update set gate_code = excluded.gate_code, deleted_at = excluded.deleted_at;
+select public.set_gate_code('d4340000-0000-4000-8000-000000000002', '#off2');
+select tst.ok((select gate_code = '#new4' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000004')
+              and (select gate_code = '#4349' and created_by = 'a0000000-0000-0000-0000-000000000005' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000009')
+              and (select gate_code = '#back1' and deleted_at is null from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000001')
+              and (select count(*) = 2 from public.property_secrets where property_id in ('d4340000-0000-4000-8000-000000000003', 'd4340000-0000-4000-8000-000000000007') and gate_code is null)
+              and (select gate_code = '#off5' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000005')
+              and (select gate_code = '#off2' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000002'),
+  'T434 the codes are written: sales through the function (trimmed), the office brings a removed one back and clears with an empty or null one');
+rollback;
+\echo 'T434 ok'
+
+-- ---------------------------------------------------------------- T435 (Р-8b): each person's own «read»
+\echo 'T435 a notification read by one person stays unread for the others'
+begin;
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a4350000-0000-4000-8000-000000000001', 'office435@a.test', '{"full_name":"Olive Office435"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4350000-0000-4000-8000-000000000001', 'office', 'active');
+\set as_office435 'reset role; set request.jwt.claim.sub = ''a4350000-0000-4000-8000-000000000001''; set role authenticated;'
+-- an estimate of sales (his deal) and its notice; a notice of the office's estimate (not his)
+:as_sales_a
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('a4350000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T435 sales deal');
+:as_super
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('a4350000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', 'a4350000-0000-4000-8000-0000000000e1'),
+  ('a4350000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', '0e1a0000-0000-0000-0000-000000000002');
+-- the cut of the split is a constant of the migration (not the clock of the call)
+select tst.ok(public.notifications_split_at() is not null and public.notifications_split_at() <= now()
+              and (select provolatile = 'i' and prosrc !~* 'now|clock|current_' from pg_proc where oid = 'public.notifications_split_at()'::regprocedure),
+  'T435 the split moment is the migration''s: a constant, not a clock');
+-- what the app sends (cloud/ops.ts notice.read): the ids of the notices it shows, a phone's own one and one not his among
+-- them; who, the company and the time are the server's
+:as_sales_a
+select public.mark_notifications_read(array['a4350000-0000-4000-8000-0000000000a1', 'a4350000-0000-4000-8000-0000000000a2',
+                                            'a4350000-0000-4000-8000-0000000000ff']::uuid[]);
+select public.mark_notifications_read(array['a4350000-0000-4000-8000-0000000000a1']::uuid[]);
+select public.mark_notifications_read(null);
+select tst.ok(tst.cnt($q$select 1 from public.notification_reads where notification_id = 'a4350000-0000-4000-8000-0000000000a1'$q$) = 1
+              and tst.cnt($q$select 1 from public.notification_reads$q$) = 1,
+  'T435 sales: his mark, once (a repeat is nothing); an unknown id and a notice he does not see are left out, the rest marked');
+-- not a notice he does not see; not in another person's name
+select tst.fails_like($q$insert into public.notification_reads (notification_id, company_id) values ('a4350000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000')$q$,
+  '%row-level security%', 'T435 sales: not a notice he does not see');
+select tst.fails_like($q$insert into public.notification_reads (notification_id, user_id, company_id) values ('a4350000-0000-4000-8000-0000000000a1', 'a0000000-0000-0000-0000-000000000002', 'ca000000-0000-0000-0000-000000000000')$q$,
+  '%permission denied%', 'T435 sales: not in another person''s name');
+-- an old sales build marks the shared column: 0 rows, no refusal
+do $$ declare n int; begin
+  update public.notifications set read_at = now() where id = 'a4350000-0000-4000-8000-0000000000a1';
+  get diagnostics n = row_count;
+  perform tst.ok(n = 0, 'T435 an old sales build: the shared mark goes to 0 rows, without a refusal');
+end $$;
+:as_super
+select tst.ok((select read_at is null from public.notifications where id = 'a4350000-0000-4000-8000-0000000000a1'), 'T435 …and the shared column is untouched');
+-- the office: nothing is read for them; one dispatcher reads — the other does not see it read
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.notification_reads$q$) = 0, 'T435 the office: sales'' mark is not theirs (unread)');
+insert into public.notification_reads (notification_id, company_id) values ('a4350000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000');
+:as_office435
+select tst.ok(tst.cnt($q$select 1 from public.notification_reads$q$) = 0, 'T435 the second dispatcher: the first one''s mark is not his');
+-- his own mark: the company is the notice's, whatever the phone sends
+insert into public.notification_reads (notification_id, company_id) values ('a4350000-0000-4000-8000-0000000000a2', 'cb000000-0000-0000-0000-000000000000');
+select tst.ok((select company_id = 'ca000000-0000-0000-0000-000000000000' from public.notification_reads where notification_id = 'a4350000-0000-4000-8000-0000000000a2'),
+  'T435 a mark takes the notice''s company, not the one sent');
+:as_owner_b
+select tst.fails_like($q$insert into public.notification_reads (notification_id, company_id) values ('a4350000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000')$q$,
+  '%row-level security%', 'T435 another company: not a notice of this one');
+-- an old office build: the shared column takes the server's time and never goes back to null
+:as_office_a
+update public.notifications set read_at = '2001-01-01' where id = 'a4350000-0000-4000-8000-0000000000a2';
+update public.notifications set read_at = null where id = 'a4350000-0000-4000-8000-0000000000a2';
+:as_super
+select tst.ok((select read_at > '2020-01-01' from public.notifications where id = 'a4350000-0000-4000-8000-0000000000a2'),
+  'T435 an old build''s mark: the server''s time, not the phone''s, and not unread again');
+select tst.ok((select count(*) = 3 from public.notification_reads where notification_id in ('a4350000-0000-4000-8000-0000000000a1', 'a4350000-0000-4000-8000-0000000000a2')),
+  'T435 three marks: sales, and each dispatcher his own');
+-- a deleted account's marks go with its other own rows
+select app.erase_personal_rows('a0000000-0000-0000-0000-000000000005');
+select tst.ok(not exists (select 1 from public.notification_reads where user_id = 'a0000000-0000-0000-0000-000000000005')
+              and exists (select 1 from public.notification_reads where user_id = 'a0000000-0000-0000-0000-000000000002'),
+  'T435 erasing a person erases his marks only');
+rollback;
+\echo 'T435 ok'
+
+-- ---------------------------------------------------------------- T437 (#2097): «Позже» — a reason put off for the company
+-- Only the office (is_staff: owner, admin, office, sales) puts a reason off, only in its own company; «by» is the server's.
+\echo 'T437 attention_snoozes: who writes'
+begin;
+:as_office_a
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t437', '2026-11-20T08:00:00Z');
+:as_super
+select tst.ok((select until = '2026-11-20T08:00:00Z' and by = 'a0000000-0000-0000-0000-000000000002' from public.attention_snoozes
+                where company_id = 'ca000000-0000-0000-0000-000000000000' and item_id = 'sch-t437'), 'T437 the office puts a reason off; «by» is the caller');
+:as_tech_a
+select tst.fails($q$select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t437', null)$q$, 'T437 a tech does not (no «Разбор дел»)');
+:as_owner_b
+select tst.fails($q$select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t437', null)$q$, 'T437 another company does not write');
+:as_super
+-- the second tech was switched off by an earlier test: active again, as sales (rolled back below)
+update public.memberships set role = 'sales', status = 'active' where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000004';
+:as_tech2_a
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'done-t437', '2026-11-21T08:00:00Z');
+:as_super
+select tst.ok((select count(*) from public.attention_snoozes where item_id = 'done-t437') = 1, 'T437 sales see «Разбор дел» and put off too');
+select tst.fails($q$select public.snooze_attention('ca000000-0000-0000-0000-000000000000', '', null)$q$, 'T437 an empty item_id is refused');
+rollback;
+\echo 'T437 ok'
+
+-- ---------------------------------------------------------------- T438 (#2097): a repeat and two phones — one row, the last wins
+\echo 'T438 attention_snoozes: one row'
+begin;
+:as_office_a
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t438', '2026-11-20T08:00:00Z');
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t438', '2026-11-20T08:00:00Z');
+:as_owner_a
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t438', '2026-11-25T08:00:00Z');
+:as_super
+select tst.ok((select count(*) from public.attention_snoozes where item_id = 'sch-t438') = 1, 'T438 a repeat from the queue and a second phone: one row');
+select tst.ok((select until = '2026-11-25T08:00:00Z' and by = 'a0000000-0000-0000-0000-000000000001' from public.attention_snoozes where item_id = 'sch-t438'),
+  'T438 the last write wins, «by» follows it');
+-- lifting («Отменить», put back): until = null, the row stays (no delete)
+:as_office_a
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t438', null);
+:as_super
+select tst.ok((select until is null from public.attention_snoozes where item_id = 'sch-t438'), 'T438 lifted: until = null');
+rollback;
+\echo 'T438 ok'
+
+-- ---------------------------------------------------------------- T439 (#2097): no direct writes, another company reads nothing
+\echo 'T439 attention_snoozes: rights'
+begin;
+:as_office_a
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t439', '2026-11-20T08:00:00Z');
+select tst.ok(tst.cnt($q$select 1 from public.attention_snoozes where item_id = 'sch-t439'$q$) = 1, 'T439 the office reads its company''s');
+select tst.fails($q$insert into public.attention_snoozes (company_id, item_id, until) values ('ca000000-0000-0000-0000-000000000000', 'x439', null)$q$, 'T439 no direct insert');
+select tst.fails($q$update public.attention_snoozes set until = null$q$, 'T439 no direct update');
+select tst.fails($q$delete from public.attention_snoozes$q$, 'T439 no delete');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.attention_snoozes$q$) = 0, 'T439 another company reads nothing');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.attention_snoozes$q$) = 0, 'T439 a tech reads nothing');
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.snooze_attention(uuid,text,timestamptz)', 'EXECUTE'), 'T439 anon: no snooze_attention');
+select tst.ok(not has_table_privilege('anon', 'public.attention_snoozes', 'SELECT'), 'T439 anon: no select');
+rollback;
+\echo 'T439 ok'
+
+-- ---------------------------------------------------------------- T442–T447 (#2227, spec 33-price-key §11.5, §11.7): variants of an item
+-- One item for every colour; the colour's sku (and supplier, pack) lives at the item as a variant. The core knows no «colour».
+\echo 'T442 catalog_set_variant: one value, the others kept'
+begin;
+:as_super
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price) values
+  ('44200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T442 Gutter 5in K', 'ft', 800, false),
+  ('44200000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'material', 'T442 Rival gutter', 'ft', 800, false);
+insert into public.suppliers (id, company_id, name) values
+  ('44200000-0000-4000-8000-0000000000a5', 'ca000000-0000-0000-0000-000000000000', 'T442 Supplier A'),
+  ('44200000-0000-4000-8000-0000000000b5', 'cb000000-0000-0000-0000-000000000000', 'T442 Supplier B');
+:as_office_a
+select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', ' White ', '{"sku":"W-1"}');
+-- «another phone» writes brown after it: white is not erased (a whole-row write would erase it)
+select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', 'brown', '{"sku":"B-1","supplierId":"44200000-0000-4000-8000-0000000000A5","packSize":"10"}');
+:as_super
+select tst.ok((select variant_skus = '{"color":{"white":{"sku":"W-1"},"brown":{"sku":"B-1","supplierId":"44200000-0000-4000-8000-0000000000A5","packSize":"10"}}}'::jsonb
+                 from public.catalog_items where id = '44200000-0000-4000-8000-000000000001'), 'T442 both colours kept, the value lower-cased and trimmed; a supplier id in capitals is found (as uuid)');
+:as_office_a
+-- a colour without data yet is still a variant (its sku is set later); null data removes it
+select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', 'black', '{"sku":""}');
+select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', 'white', null);
+:as_super
+select tst.ok((select variant_skus = '{"color":{"black":{},"brown":{"sku":"B-1","supplierId":"44200000-0000-4000-8000-0000000000A5","packSize":"10"}}}'::jsonb
+                 from public.catalog_items where id = '44200000-0000-4000-8000-000000000001'), 'T442 an empty sku is «not set», null data removes the value');
+:as_office_a
+select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', 'black', null);
+select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', 'brown', null);
+:as_super
+select tst.ok((select variant_skus = '{"color":{}}'::jsonb from public.catalog_items where id = '44200000-0000-4000-8000-000000000001'),
+              'T442 the last value removed keeps the property (which one is the variant stays known)');
+rollback;
+\echo 'T442 ok'
+
+\echo 'T443 catalog_set_variant: who, which supplier, one property'
+begin;
+:as_super
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price) values
+  ('44300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T443 Gutter', 'ft', 800, false),
+  ('44300000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'material', 'T443 Rival', 'ft', 800, false);
+insert into public.suppliers (id, company_id, name) values ('44300000-0000-4000-8000-0000000000b5', 'cb000000-0000-0000-0000-000000000000', 'T443 Supplier B');
+:as_tech_a
+select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-000000000001', 'color', 'white', '{"sku":"W"}')$q$, '%not found%', 'T443 a tech does not write variants');
+:as_sales_a
+select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-000000000001', 'color', 'white', '{"sku":"W"}')$q$, '%catalog item not found%', 'T443 sales does not write variants (supplier data: owner, admin, office — SUP1 №2), told nothing about ids');
+:as_owner_a
+select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-0000000000b1', 'color', 'white', '{"sku":"W"}')$q$, '%not found%', 'T443 not another company''s item');
+select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-000000000001', 'color', 'white', '{"supplierId":"44300000-0000-4000-8000-0000000000b5"}')$q$, '%supplier not found%', 'T443 not another company''s supplier');
+select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-000000000001', 'color', 'white', '{"sku":"W","price":"1"}')$q$, '%variant_skus_check%', 'T443 only sku, supplierId, purchaseUnit, packSize');
+select public.catalog_set_variant('44300000-0000-4000-8000-000000000001', 'color', 'white', '{"sku":"W"}');
+select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-000000000001', 'size', '5', '{"sku":"S"}')$q$, '%another property%', 'T443 one property per item');
+select tst.fails_like($q$select public.catalog_set_variant('00000000-0000-4000-8000-000000000000', 'color', 'white', '{"sku":"W"}')$q$, '%not found%', 'T443 no item yet (the queue waits) — P0002');
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.catalog_set_variant(uuid,text,text,jsonb)', 'execute'), 'T443 anon does not run it');
+rollback;
+\echo 'T443 ok'
+
+\echo 'T444 the shape of variant_skus; an old build''s whole row keeps it'
+begin;
+:as_super
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price, variant_skus) values
+  ('44400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T444 Gutter', 'ft', 800, false, '{"color":{"white":{"sku":"W-1"}}}');
+select tst.fails_like($q$update public.catalog_items set variant_skus = '{"color":{"White":{}}}' where id = '44400000-0000-4000-8000-000000000001'$q$, '%variant_skus_check%', 'T444 a value is lower case');
+select tst.fails_like($q$update public.catalog_items set variant_skus = '{"color":{"white":{}},"size":{"5":{}}}' where id = '44400000-0000-4000-8000-000000000001'$q$, '%variant_skus_check%', 'T444 one property');
+select tst.fails_like($q$update public.catalog_items set variant_skus = '{"color":{"white":{"packSize":"0"}}}' where id = '44400000-0000-4000-8000-000000000001'$q$, '%variant_skus_check%', 'T444 a pack size > 0');
+select tst.fails_like($q$update public.catalog_items set variant_skus = '["white"]' where id = '44400000-0000-4000-8000-000000000001'$q$, '%variant_skus_check%', 'T444 an object');
+:as_office_a
+-- an old build saves the whole row it knows (catalog.save upsert): variant_skus is not among its columns
+insert into public.catalog_items as c (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price, supplier_sku)
+values ('44400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T444 Gutter renamed', 'ft', 800, false, 'G-1')
+on conflict (id) do update set name = excluded.name, unit = excluded.unit, unit_price_cents = excluded.unit_price_cents,
+  is_placeholder_price = excluded.is_placeholder_price, supplier_sku = excluded.supplier_sku;
+:as_super
+select tst.ok((select variant_skus = '{"color":{"white":{"sku":"W-1"}}}'::jsonb and name = 'T444 Gutter renamed'
+                 from public.catalog_items where id = '44400000-0000-4000-8000-000000000001'), 'T444 the old build''s whole row does not erase variant_skus');
+-- a direct write of the column (the table's update grant): sales keeps the stored value, as t20 does for the supplier
+:as_sales_a
+update public.catalog_items set variant_skus = '{"color":{"white":{"sku":"HACK"}}}' where id = '44400000-0000-4000-8000-000000000001';
+:as_super
+select tst.ok((select variant_skus = '{"color":{"white":{"sku":"W-1"}}}'::jsonb from public.catalog_items where id = '44400000-0000-4000-8000-000000000001'),
+              'T444 a direct write by sales keeps the stored variants');
+insert into public.suppliers (id, company_id, name) values ('44400000-0000-4000-8000-0000000000b5', 'cb000000-0000-0000-0000-000000000000', 'T444 Supplier B');
+:as_office_a
+select tst.fails_like($q$update public.catalog_items set variant_skus = '{"color":{"white":{"supplierId":"44400000-0000-4000-8000-0000000000b5"}}}' where id = '44400000-0000-4000-8000-000000000001'$q$,
+  '%supplier not found%', 'T444 a direct write by office with another company''s supplier is refused');
+rollback;
+\echo 'T444 ok'
+
+\echo 'T445 an old build edits the sku of an old per-colour item: into the new item''s variant'
+begin;
+:as_super
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price, variant_skus, attributes) values
+  ('44500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T445 Gutter', 'ft', 800, false, '{"color":{"white":{"sku":"W-1"}}}', '{"part":"gutter"}'),
+  ('44500000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'material', 'T445 Gutter · Brown', 'ft', 800, false, null,
+   '{"part":"gutter","color":"Brown","mergedInto":"44500000-0000-4000-8000-000000000001"}'),
+  ('44500000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'material', 'T445 Other', 'ft', 800, false, null, '{"part":"gutter"}'),
+  ('44500000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'material', 'T445 Other · Red', 'ft', 800, false, null,
+   '{"part":"gutter","color":"red","mergedInto":"44500000-0000-4000-8000-000000000003"}'),
+  ('44500000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'material', 'T445 Rival gutter', 'ft', 800, false, '{"color":{"white":{"sku":"RB-1"}}}', '{"part":"gutter"}'),
+  ('44500000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'material', 'T445 Points abroad · White', 'ft', 800, false, null,
+   '{"part":"gutter","color":"white","mergedInto":"44500000-0000-4000-8000-0000000000b1"}');
+:as_office_a
+update public.catalog_items set supplier_sku = 'B-9' where id = '44500000-0000-4000-8000-000000000002';
+update public.catalog_items set supplier_sku = 'R-9' where id = '44500000-0000-4000-8000-000000000004';
+update public.catalog_items set supplier_sku = 'X-9' where id = '44500000-0000-4000-8000-000000000005';
+:as_super
+select tst.ok((select variant_skus = '{"color":{"white":{"sku":"W-1"},"brown":{"sku":"B-9"}}}'::jsonb
+                 from public.catalog_items where id = '44500000-0000-4000-8000-000000000001'), 'T445 the brown sku is in the new item''s variant, white kept');
+select tst.ok((select variant_skus is null from public.catalog_items where id = '44500000-0000-4000-8000-000000000003'),
+              'T445 the new item without variants: nothing is written (which property is the variant is not known)');
+select tst.ok((select variant_skus = '{"color":{"white":{"sku":"RB-1"}}}'::jsonb from public.catalog_items where id = '44500000-0000-4000-8000-0000000000b1'),
+              'T445 mergedInto pointing at another company''s item: nothing is written there');
+rollback;
+\echo 'T445 ok'
+
+\echo 'T446 a merged per-colour item is never put in the Trash'
+begin;
+:as_super
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price, attributes) values
+  ('44600000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T446 Gutter', 'ft', 800, false, '{"part":"gutter"}'),
+  ('44600000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'material', 'T446 Gutter · White', 'ft', 800, false,
+   '{"part":"gutter","color":"white","mergedInto":"44600000-0000-4000-8000-000000000001"}');
+:as_owner_a
+select tst.fails_like($q$update public.catalog_items set deleted_at = now() where id = '44600000-0000-4000-8000-000000000002'$q$, '%merged item is kept%', 'T446 the merged item stays');
+-- the new item itself (the undo of the transition takes mergedInto off first) goes to the Trash as any item
+update public.catalog_items set attributes = attributes - 'mergedInto' where id = '44600000-0000-4000-8000-000000000002';
+update public.catalog_items set deleted_at = now() where id = '44600000-0000-4000-8000-000000000001';
+update public.catalog_items set deleted_at = now() where id = '44600000-0000-4000-8000-000000000002';
+:as_super
+select tst.ok((select count(*) from public.catalog_items where id::text like '44600000-%' and deleted_at is not null) = 2, 'T446 without mergedInto both go to the Trash');
+rollback;
+\echo 'T446 ok'
 
 \echo 'ALL TESTS PASSED'

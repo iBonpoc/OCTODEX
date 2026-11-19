@@ -8,7 +8,7 @@ import { useStore } from "@/data/store";
 import { companyState } from "@/features/companySetup";
 import { PROPERTY_KINDS, type Property, type PropertyKind } from "@/data/types";
 import { peopleOf } from "@/data/people";
-import { canSaveProperty, placeOf } from "@/features/properties";
+import { canSaveProperty, canSeeGateCode, placeOf } from "@/features/properties";
 import { Labeled } from "@/features/fields";
 import { useI18n, type DictKey } from "@/i18n";
 import { Button, TextField } from "@/ui/controls";
@@ -96,17 +96,20 @@ export function AccessSheet({ value, onClose }: { value: Property | null; onClos
   const toast = useToast();
   const [notes, setNotes] = useState("");
   const [gate, setGate] = useState("");
+  // the code only by the same rule as the property's card (canSeeGateCode, server app.can_see_gate_code): a code loaded in
+  // the visit window is not shown after it (sales, a tech) — the field is empty and only a new code is sent (Р-3)
+  const known = value && canSeeGateCode(store.db, store.role, value.id) ? (value.gateCode ?? "") : "";
   useEffect(() => {
     setNotes(value?.accessNotes ?? "");
-    setGate(value?.gateCode ?? "");
-  }, [value]);
+    setGate(known);
+  }, [value, known]);
   if (!value) return <Sheet visible={false} onClose={onClose}>{null}</Sheet>;
-  const dirty = notes !== (value.accessNotes ?? "") || gate !== (value.gateCode ?? "");
+  const dirty = notes !== (value.accessNotes ?? "") || gate !== known;
   const save = () => {
     const undos: GuardedUndo[] = [];
     if (notes !== (value.accessNotes ?? "")) undos.push(store.saveProperty({ ...value, accessNotes: notes }));
-    if (gate !== (value.gateCode ?? "")) undos.push(store.setGateCode(value.id, gate));
-    toast.show(gate !== (value.gateCode ?? "") ? t("prop.gateSaved") : t("prop.saved"), store.undoTogether(undos));
+    if (gate !== known) undos.push(store.setGateCode(value.id, gate));
+    toast.show(gate !== known ? t("prop.gateSaved") : t("prop.saved"), store.undoTogether(undos));
     onClose();
   };
   return (

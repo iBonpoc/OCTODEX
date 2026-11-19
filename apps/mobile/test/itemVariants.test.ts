@@ -9,7 +9,7 @@ vi.mock("@/cloud/client", () => ({ supabase: {} }));
 import { makeSeed } from "../src/data/seed";
 import type { CatalogItem, DB, Estimate, Job } from "../src/data/types";
 import { draftsForJob, jobMaterialNeeds } from "../src/features/purchaseOrders";
-import { catalogMatch, mergedInto, propertyCount, resolveMerged, usableItems } from "../src/features/catalogMatch";
+import { catalogMatch, mergedInto, propertyCount, resolveMerged, usableItems, variantOk } from "../src/features/catalogMatch";
 import { variantsFromRow } from "../src/cloud/repo";
 
 const words = { variantNotSet: (a: string) => `${a} not set`, variantSkuNotSet: (a: string) => `${a} code not set`, attrWord: (a: string) => (a === "color" ? "Color" : a) };
@@ -116,5 +116,49 @@ describe("unit:itemVariants — the core never names the module's property (spec
     const { readFileSync } = await import("node:fs");
     const code = (f: string) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
     for (const f of ["features/purchaseOrders.ts", "features/catalogMatch.ts"]) expect(code(f)).not.toMatch(/colou?r|gutter/i);
+  });
+});
+
+describe("unit:itemVariants — review #2241 (№1, №2, limits)", () => {
+  const oldOf = (id: string, color: string): CatalogItem => ({ id, kind: "material", name: `Gutter · ${color}`, unit: "ft", priceCents: 800, supplierSku: `OLD-${color}`, attributes: { part: "gutter", color, mergedInto: "g" } });
+  it("№1: two merged colours into an item with an empty property ({color:{}}): two lines, each «Color code not set», no code", () => {
+    const target = gutter({ variants: variantsFromRow({ color: {} }) });
+    expect(target.variants).toEqual({ color: {} });
+    const db = company([line("a", "gW", "30"), line("b", "gB", "10")], [target, oldOf("gW", "White"), oldOf("gB", "Brown")]);
+    const ls = draftsForJob(db, "jV", [], false, words).flatMap((g) => g.lines);
+    expect(ls.map((l) => [l.name, l.supplierSku, l.note])).toEqual([["Gutter 5in K · brown", undefined, "Color code not set"], ["Gutter 5in K · white", undefined, "Color code not set"]]);
+  });
+  it("№1: the new item names no property — the old one stands for itself (never the new one without a variant)", () => {
+    const old = oldOf("gW", "White");
+    expect(resolveMerged([gutter({ variants: undefined }), old], old)).toEqual({ item: old });
+    const { color: _c, ...noColour } = old.attributes!;
+    const bare = { ...old, attributes: noColour };
+    expect(resolveMerged([gutter(), bare], bare)).toEqual({ item: bare });
+  });
+  it("№2: a line with a variant on an item without variants — no code at all, «code not set»; it never mixes with the bare line", () => {
+    const plain = gutter({ variants: undefined });
+    const ls = draftsForJob(company([line("a", "g", "10", "white"), line("b", "g", "5")], [plain]), "jV", [], false, words).flatMap((g) => g.lines);
+    expect(ls.map((l) => [l.name, l.supplierSku, l.note, l.bomQty])).toEqual([["Gutter 5in K", "G-ANY", undefined, "5"], ["Gutter 5in K · white", undefined, "Color code not set", "10"]]);
+  });
+  it("a module's line naming no variant replaces the core's lines of that item with a variant too (never ordered twice)", () => {
+    const db = company([line("a", "g", "100", "white"), line("b", "g", "40", "brown")], [gutter()]);
+    const ls = draftsForJob(db, "jV", [{ catalogItemId: "g", qty: "7" }], false, words).flatMap((g) => g.lines);
+    expect(ls.map((l) => [l.name, l.bomQty])).toEqual([["Gutter 5in K", "7"]]);
+    // with a variant it replaces only its own
+    const two = draftsForJob(db, "jV", [{ catalogItemId: "g", qty: "7", variant: { attr: "color", value: "white" } }], false, words).flatMap((g) => g.lines);
+    expect(two.map((l) => [l.name, l.bomQty]).sort()).toEqual([["Gutter 5in K · brown", "40"], ["Gutter 5in K · white", "7"]]);
+  });
+  it("the server's keys are lowered and trimmed (an old or hand-written key is still found)", () => {
+    expect(variantsFromRow({ color: { " White ": { sku: "W-1" } } })).toEqual({ color: { white: { sku: "W-1" } } });
+  });
+  it("variantOk mirrors app.variant_skus_ok", () => {
+    expect(variantOk("white", { sku: "W-1", packSize: "10", purchaseUnit: "pc" }, 1)).toBe(true);
+    expect(variantOk("White", null, 1)).toBe(false);
+    expect(variantOk("x".repeat(121), null, 1)).toBe(false);
+    expect(variantOk("w", { sku: "S".repeat(61) }, 1)).toBe(false);
+    expect(variantOk("w", {}, 51)).toBe(false);
+    expect(variantOk("w", { packSize: "0" }, 1)).toBe(false);
+    expect(variantOk("w", { supplierId: "not-a-uuid" }, 1)).toBe(false);
+    expect(variantOk("w", { purchaseUnit: " pc" }, 1)).toBe(false);
   });
 });
