@@ -3021,7 +3021,7 @@ export function StoreProvider({
         // #1304: the old single Terms and the English default stay one (the server's t08 the same) — a screen that still
         // edits estimate.terms is not lost behind termsByLang.en
         const next = { ...cur, ...patch, estimate: syncCompanyTerms(cur.estimate, { ...cur, ...patch }.estimate) };
-        return mutate("company.save", (d) => ({ ...d, company: next }), { k: "company.save", company: next, einChanged: patch.ein !== undefined, tzChanged: patch.timezone !== undefined });
+        return mutate("company.save", (d) => ({ ...d, company: next }), { k: "company.save", company: next, einChanged: patch.ein !== undefined, tzChanged: patch.timezone !== undefined, assigneeChanged: patch.leadDefaultAssigneeId !== undefined });
       },
       saveLicense: (l) =>
         mutate(
