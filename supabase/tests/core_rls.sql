@@ -17813,20 +17813,33 @@ insert into auth.users (id, email, raw_user_meta_data) values
   ('a4270000-0000-4000-8000-000000000001', 'sub427@a.test', '{"full_name":"Sam Sub427"}'),
   ('a4270000-0000-4000-8000-000000000002', 'inv427@a.test', '{"full_name":"Ivy Invited427"}'),
   ('a4270000-0000-4000-8000-000000000003', 'del427@a.test', '{"full_name":"Del Deleted427"}'),
-  ('a4270000-0000-4000-8000-000000000004', 'gone427@a.test', '{"full_name":"Gil Gone427"}');
+  ('a4270000-0000-4000-8000-000000000004', 'gone427@a.test', '{"full_name":"Gil Gone427"}'),
+  ('a4270000-0000-4000-8000-000000000005', 'tech427@a.test', '{"full_name":"Tom Tech427"}');
 insert into public.memberships (company_id, user_id, role, status) values
   ('ca000000-0000-0000-0000-000000000000', 'a4270000-0000-4000-8000-000000000001', 'subcontractor', 'active'),
   ('ca000000-0000-0000-0000-000000000000', 'a4270000-0000-4000-8000-000000000002', 'tech', 'invited'),
   ('ca000000-0000-0000-0000-000000000000', 'a4270000-0000-4000-8000-000000000003', 'tech', 'deleted'),
-  ('ca000000-0000-0000-0000-000000000000', 'a4270000-0000-4000-8000-000000000004', 'tech', 'disabled');
+  ('ca000000-0000-0000-0000-000000000000', 'a4270000-0000-4000-8000-000000000004', 'tech', 'disabled'),
+  ('ca000000-0000-0000-0000-000000000000', 'a4270000-0000-4000-8000-000000000005', 'tech', 'active'),
+  -- the same subcontractor is a tech in another company (B)
+  ('cb000000-0000-0000-0000-000000000000', 'a4270000-0000-4000-8000-000000000001', 'tech', 'active');
+-- visit 1: the subcontractor with Mike Tech; visit 2 (then cancelled): with Luis Tech; visit 3 (then deleted): with Tom Tech427
 insert into public.visits (id, company_id, job_id, starts_at, ends_at) values
-  ('f4270000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', now(), now() + interval '2 hours');
+  ('f4270000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', now(), now() + interval '2 hours'),
+  ('f4270000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', now() + interval '1 day', now() + interval '1 day 2 hours'),
+  ('f4270000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', now() + interval '2 days', now() + interval '2 days 2 hours');
 insert into public.visit_assignees (company_id, visit_id, user_id) values
   ('ca000000-0000-0000-0000-000000000000', 'f4270000-0000-4000-8000-000000000001', 'a4270000-0000-4000-8000-000000000001'),
-  ('ca000000-0000-0000-0000-000000000000', 'f4270000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003');
+  ('ca000000-0000-0000-0000-000000000000', 'f4270000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', 'f4270000-0000-4000-8000-000000000002', 'a4270000-0000-4000-8000-000000000001'),
+  ('ca000000-0000-0000-0000-000000000000', 'f4270000-0000-4000-8000-000000000002', 'a0000000-0000-0000-0000-000000000004'),
+  ('ca000000-0000-0000-0000-000000000000', 'f4270000-0000-4000-8000-000000000003', 'a4270000-0000-4000-8000-000000000001'),
+  ('ca000000-0000-0000-0000-000000000000', 'f4270000-0000-4000-8000-000000000003', 'a4270000-0000-4000-8000-000000000005');
+update public.visits set status = 'cancelled' where id = 'f4270000-0000-4000-8000-000000000002';
+update public.visits set deleted_at = now() where id = 'f4270000-0000-4000-8000-000000000003';
 -- the office: everyone, as before
 :as_office_a
-select tst.ok((select count(*) from public.memberships where user_id::text like 'a4270000-%') = 4, 'T427 the office sees the whole team, invited and deleted too');
+select tst.ok((select count(*) from public.memberships where user_id::text like 'a4270000-%' and company_id = 'ca000000-0000-0000-0000-000000000000') = 5, 'T427 the office sees the whole team, invited and deleted too');
 -- a tech: himself and the colleagues who joined (active, disabled, deleted); not the invited
 :as_tech_a
 select tst.ok(exists (select 1 from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000003'), 'T427 a tech sees his own row');
@@ -17844,6 +17857,16 @@ select tst.ok(exists (select 1 from public.memberships where user_id = 'a4270000
 select tst.ok(exists (select 1 from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000003'), 'T427 a subcontractor sees the tech on his visit');
 select tst.ok(not exists (select 1 from public.memberships where user_id in ('a0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000004', 'a4270000-0000-4000-8000-000000000004')),
   'T427 a subcontractor does not see the owner or the people not on his visits');
+select tst.ok(not exists (select 1 from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000004')
+              and not exists (select 1 from public.users where id = 'a0000000-0000-0000-0000-000000000004'), 'T427 a cancelled visit: the subcontractor does not see the colleague');
+select tst.ok(not exists (select 1 from public.memberships where user_id = 'a4270000-0000-4000-8000-000000000005')
+              and not exists (select 1 from public.users where id = 'a4270000-0000-4000-8000-000000000005'), 'T427 a deleted visit: the subcontractor does not see the colleague');
+-- two companies: a subcontractor in A, a tech in B — the team of B by the tech's rule, the team of A by the subcontractor's
+select tst.ok(exists (select 1 from public.memberships where company_id = 'cb000000-0000-0000-0000-000000000000' and user_id = 'b0000000-0000-0000-0000-000000000001')
+              and exists (select 1 from public.users where id = 'b0000000-0000-0000-0000-000000000001'), 'T427 two companies: a tech in B sees the team of B');
+select tst.ok(not exists (select 1 from public.memberships where user_id in ('a0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002'))
+              and not exists (select 1 from public.users where id in ('a0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002')),
+  'T427 two companies: being a tech in B does not open the team of A, where he is a subcontractor');
 :as_super
 update public.visit_assignees set deleted_at = now() where visit_id = 'f4270000-0000-4000-8000-000000000001' and user_id = 'a4270000-0000-4000-8000-000000000001';
 reset role; set request.jwt.claim.sub = 'a4270000-0000-4000-8000-000000000001'; set role authenticated;
@@ -17864,7 +17887,8 @@ select tst.ok(not exists (select 1 from public.users where id in ('a0000000-0000
   'T430 a subcontractor does not see the owner, the people not on his visits, the invited (name, e-mail, phone)');
 -- another company: nothing, as before
 :as_owner_b
-select tst.ok(not exists (select 1 from public.users where id = 'a4270000-0000-4000-8000-000000000001'), 'T430 another company does not see the people');
+select tst.ok(not exists (select 1 from public.users where id in ('a4270000-0000-4000-8000-000000000003', 'a4270000-0000-4000-8000-000000000005')), 'T430 another company does not see the people');
+select tst.ok(exists (select 1 from public.users where id = 'a4270000-0000-4000-8000-000000000001'), 'T430 …but its own tech, who is also a subcontractor in A');
 select tst.ok(not exists (select 1 from public.memberships where company_id = 'ca000000-0000-0000-0000-000000000000'), 'T427 another company sees none of the team');
 rollback;
 \echo 'T427 ok'
@@ -17876,6 +17900,9 @@ select tst.ok(not exists (select 1 from public.memberships where invite_token_ha
 :as_owner_a
 select tst.fails_like($q$update public.memberships set invite_token_hash = 'T428 hash' where company_id = 'ca000000-0000-0000-0000-000000000000'$q$,
   '%permission denied for table memberships%', 'T428 the app does not write an invite token (no right to that column)');
+select tst.ok(not has_function_privilege('authenticated', 'app.shares_company(uuid)', 'execute'), 'T428 app.shares_company: nobody asks through it who is in his companies');
+:as_tech_a
+select tst.fails_like($q$select app.shares_company('a0000000-0000-0000-0000-000000000001')$q$, '%permission denied for function shares_company%', 'T428 a member cannot call app.shares_company');
 rollback;
 \echo 'T428 ok'
 
@@ -17883,12 +17910,15 @@ rollback;
 begin;
 :as_super
 select tst.ok(not exists (select 1 from public.companies where stripe_account_id is not null), 'T429 no company row keeps the Stripe account');
-insert into public.company_secrets (company_id, stripe_account_id) values ('ca000000-0000-0000-0000-000000000000', 'acct_T429') on conflict (company_id) do update set stripe_account_id = excluded.stripe_account_id;
+select tst.ok(not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'company_secrets' and column_name = 'stripe_account_id'),
+  'T429 no copy in the company secrets (the source of truth is stripe_accounts, written by the server)');
 :as_owner_a
 update public.companies set stripe_account_id = 'acct_T429_phone', name = name where id = 'ca000000-0000-0000-0000-000000000000';
-select tst.ok((select stripe_account_id = 'acct_T429' from public.company_secrets where company_id = 'ca000000-0000-0000-0000-000000000000'), 'T429 the owner reads it in the company secrets');
 :as_super
 select tst.ok((select stripe_account_id is null from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'T429 the app does not write it on the company row');
+update public.companies set stripe_account_id = 'acct_T429_server' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select stripe_account_id = 'acct_T429_server' from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'T429 the server is not stopped by the trigger');
+update public.companies set stripe_account_id = null where id = 'ca000000-0000-0000-0000-000000000000';
 :as_tech_a
 select tst.ok((select count(*) from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 1, 'T429 a tech still reads the company row (every column: an old phone''s select)');
 select tst.ok(not exists (select 1 from public.company_secrets where company_id = 'ca000000-0000-0000-0000-000000000000'), 'T429 a tech does not read the company secrets');
