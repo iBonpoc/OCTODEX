@@ -39,10 +39,11 @@ import { jobStatusAfterSchedule, jobStatusAfterStep, withJobDone } from "@/featu
 import { applyCustomerPatch, type CustomerPatch } from "./customerPatch";
 import { statusAfterManualWin } from "@/features/clientRows";
 import { inheritCategory } from "@/features/serviceCategories";
-import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
+import { rescheduled, canCancel, canNoShow, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, mayMarkNoShow, noShowJobRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { docForSave, newToken, normalizeDoc, storedDoc, summarize } from "@/features/estimateDoc";
 import { syncCompanyTerms, termsForNew, termsOnClientChange, withFrozenTerms, type TermsFor } from "@/features/estimateTerms";
+import { withSnooze } from "@/features/attentionSnooze";
 import { contractInvoice, contractInvoices, voidRefusal, withTaxSplit, type VoidRefusal } from "@/features/contractInvoice";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment, invoiceOwes, sumCents, visitPayment } from "@octo/estimating-engine";
@@ -54,6 +55,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { backoffMs, classify, isAccessDenied, isModuleInactive, isUnknownOp, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, liveOf, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
+import { jobCancelRefusal, type JobCancelRefusal } from "@/features/jobCancel";
 import { dropGroupPriceOps, dropModuleOps, dropSettingsOps, dropSupplierTaxOps, dropTemplateOps, groupPriceRejected, itemCostRejected, supplierTaxRejected, templateRejected, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
 import type { DictKey } from "@/i18n";
 import { onAppActive, onAppLeave } from "./appActive";
@@ -62,13 +64,14 @@ import { removedUnsent, unsentIn as unsentInOf, withoutUnsentIn, type RemovedUns
 export { mineOf, type OwnedItem } from "./outboxOwner";
 import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
-import { enabledLocally, keepModuleData, moduleActive, moduleDef, modulePurchaseLines } from "@/modules/registry";
+import { enabledLocally, keepModuleData, moduleActive, moduleDef, modulePurchaseLines, variantWordOf } from "@/modules/registry";
 import { cleanCatalogItem } from "@/features/catalogExtras";
 import { sameValue, undoOwn } from "@/data/undoOwn";
 import { markOf, markUndo, NO_UNDO, type GuardedUndo } from "@/data/undo";
 import { groupPriceChanged, groupPriceLocked, joinedGroup, priceGroupOf, withoutGroupCosts, type GroupPriceInput } from "./priceGroup";
 import { cleanCardFields, itemForSave, localPriceEntries, mergePriceHistory } from "@/features/catalogCard";
 import { canEditOrders, canMove, canReceive, draftsForJob, linesEditable, openDraft, statusAfterReceive } from "@/features/purchaseOrders";
+import { variantOk } from "@/features/catalogMatch";
 import { canSeeSuppliers, cleanSupplier, cleanSupplierLink, itemsOfSupplier, itemsWithOtherTax, keepCostHistory, localHistoryEntry, mergeHistory } from "@/features/suppliers";
 import { coalesceAt, coalesced } from "./outboxCoalesce";
 import {
@@ -120,6 +123,7 @@ import {
   type VisitSettings,
   type Supplier,
   type PurchaseOrder,
+  type ItemVariant,
 } from "./types";
 import { cleanEstimateTemplate, canEditEstimateTemplates } from "@/features/estimateTemplate";
 import { cleanName } from "@/features/nameAsk";
@@ -350,6 +354,8 @@ interface StoreCtx {
   removeCalendarEvent: (id: ID) => Undo;
   /** wave 7б-1: my personal settings, the same on every device (locally at once, then public.set_my_prefs) */
   setPrefs: (patch: Partial<MemberPrefs>) => Undo;
+  /** #2097: «Позже» — a reason of «Разбор дел» put off until `until` (ISO; null — back now), for the whole company */
+  snoozeAttention: (itemId: string, until: string | null) => Undo;
   /** step 18 P4b: my push switch of one group, the same on every device (locally at once, then public.set_push_kind
    *  through the offline queue — rule 6) */
   setPushKind: (kind: PushGroup, enabled: boolean) => Undo;
@@ -382,6 +388,8 @@ interface StoreCtx {
   bookLead: (id: ID, at: BookAt) => Undo;
   /** the office cancels a visit before the tech is on site; S4a / S9a roll the lead / job back (docs/specs/03 §4) */
   cancelVisit: (id: ID, reason: CancelReason, text?: string) => Undo;
+  /** #2066 «Клиента нет дома»: the visit's own tech (or the office), at the door — before the work; no undo after it is sent */
+  markNoShow: (id: ID, note?: string) => Undo;
   /** the office moves a visit (time, length) before the tech is on site; the status does not change */
   rescheduleVisit: (id: ID, start: string, durationMin: number, allDay?: boolean) => Undo;
   /** «+ Осмотр» on a client / property (a returning client wants a new estimate): an inspection without a lead */
@@ -416,6 +424,10 @@ interface StoreCtx {
    *  invoice moves to voidInvoices (no sum counts it); no «Отменить»: the server never lets it back. null — done;
    *  else why not (the screen shows it). Server: tg_invoice_guard (db T197). */
   voidInvoice: (id: ID, reason: string) => VoidRefusal | null;
+  /** #2015 (spec 38 §12): cancel a job for good — director; dispatcher: a job without an invoice. Its open visits are cancelled and
+   *  its unpaid invoices voided with it; it moves to cancelledJobs with the reason. No «Отменить» (the server never lets it back).
+   *  null — done; else why not (the screen says). Server: public.cancel_job (db T383–T390). */
+  cancelJob: (id: ID, reason: string) => JobCancelRefusal | null;
   /** #1304 (docs/specs/40 §6): the Terms a new estimate starts with — the company's default in the client's language */
   estimateTerms: (at: TermsFor) => { text: string; lang: DocLang };
   /** #1304: the client of a draft changed — the untouched default follows the new client's language, an edited text stays */
@@ -492,6 +504,9 @@ interface StoreCtx {
   /** #1913: one price for the whole price group of the item (catalog.groupPrice); not in a group — nothing */
   saveGroupPrice: (itemId: ID, v: GroupPriceInput) => Undo;
   removeCatalogItem: (id: ID) => Undo;
+  /** #2227: one value of the item's variant (a module's colour) — its supplier code, supplier, pack; null — the value removed.
+   *  Staff only; «Отменить» puts the value back as it was */
+  setItemVariant: (itemId: ID, attr: string, value: string, data: ItemVariant | null) => Undo;
   /** spec 36: make or change a supplier (owner / admin / office); null name — nothing */
   saveSupplier: (x: Supplier) => GuardedUndo;
   /** #1834: change the supplier's purchase tax through the server door (supplier_set_tax); its items follow at once on the phone,
@@ -2041,6 +2056,7 @@ export function StoreProvider({
         );
         return { id, undo };
       },
+      snoozeAttention: (itemId, until) => mutate("attention.snooze", (d) => withSnooze(d, itemId, until), { k: "attention.snooze", itemId, until }),
       setPrefs: (patch) => {
         const prefs: MemberPrefs = { ...MEMBER_PREFS_DEFAULT, ...dbRef.current.prefs, ...patch };
         return mutate("me.prefs", (d) => ({ ...d, prefs }), { k: "me.prefs", prefs });
@@ -2207,6 +2223,26 @@ export function StoreProvider({
           { k: "visit.cancel", visitId: id, reason, text: text?.trim() || undefined, leadBack: leadBack ?? undefined, jobBack: jobBack ?? undefined },
         );
       },
+      markNoShow: (id, note) => {
+        const d0 = dbRef.current;
+        const v = d0.visits.find((x) => x.id === id);
+        if (!v || !canNoShow(v) || !mayMarkNoShow(role, d0.me, v)) return NO_UNDO;
+        const leadBack = leadRollsBack(d0, id);
+        const jobBack = noShowJobRollsBack(d0, id);
+        const text = note?.trim() || undefined;
+        return mutate(
+          "visit.noShow",
+          (d) => ({
+            ...d,
+            // as a cancel: the visit leaves the day and the Plan, and stays in the feed with its reason (§5.2)
+            visits: d.visits.filter((x) => x.id !== id),
+            cancelledVisits: [...(d.cancelledVisits ?? []), { ...v, cancelReason: "no_show", cancelText: text, cancelledAt: new Date().toISOString(), cancelledBy: d.me }],
+            leads: leadBack ? d.leads.map((l) => (l.id === leadBack ? { ...l, status: "replied" } : l)) : d.leads,
+            jobs: jobBack ? d.jobs.map((j) => (j.id === jobBack ? { ...j, status: "unscheduled" } : j)) : d.jobs,
+          }),
+          { k: "visit.noShow", visitId: id, note: text, leadBack: leadBack ?? undefined, jobBack: jobBack ?? undefined },
+        );
+      },
       addInspection: (propertyId, at) => {
         const id = at.visitId ?? uid();
         const people = peopleOf(at);
@@ -2313,6 +2349,33 @@ export function StoreProvider({
             };
           },
           { k: "invoice.void", id, jobId: inv.jobId, reason: why, totalCents: inv.totalCents },
+        );
+        return null;
+      },
+      cancelJob: (id, reason) => {
+        const refusal = jobCancelRefusal(dbRef.current, id, reason, role);
+        if (refusal) return refusal;
+        const why = reason.trim();
+        const at = new Date().toISOString();
+        mutate(
+          "job.cancel",
+          (d) => {
+            const job = d.jobs.find((x) => x.id === id);
+            if (!job) return d;
+            // the visits not started go with it (the server: cancel_visit, reason «we_cancelled»); a finished one stays
+            const gone = d.visits.filter((v) => v.jobId === id && canCancel(v));
+            const owed = d.invoices.filter((i) => i.jobId === id);
+            return {
+              ...d,
+              jobs: d.jobs.filter((x) => x.id !== id),
+              cancelledJobs: [...(d.cancelledJobs ?? []).filter((x) => x.id !== id), { ...job, cancelReason: why, cancelledAt: at }],
+              visits: d.visits.filter((v) => !gone.some((g) => g.id === v.id)),
+              cancelledVisits: [...(d.cancelledVisits ?? []), ...gone.map((v) => ({ ...v, cancelReason: "we_cancelled" as const, cancelledAt: at }))],
+              invoices: d.invoices.filter((i) => i.jobId !== id),
+              voidInvoices: [...(d.voidInvoices ?? []), ...owed.map((i) => ({ ...i, status: "void" as const, voidReason: "job cancelled", voidedAt: at }))],
+            };
+          },
+          { k: "job.cancel", jobId: id, reason: why },
         );
         return null;
       },
@@ -2824,7 +2887,14 @@ export function StoreProvider({
       makeJobOrders: (jobId) => {
         const d0 = dbRef.current;
         if (!canEditOrders(role) || d0.purchaseOrdersLegacy) return { ids: [], made: 0, undo: noop };
-        const groups = draftsForJob(d0, jobId, modulePurchaseLines(d0, jobId), keepCosts(d0));
+        // #2227: the order's words in the supplier's language (en, rule 7); the variant property's word from its module
+        const en = tFor("en");
+        const words = {
+          variantNotSet: (w: string) => en("po.variantNotSet", { what: w }),
+          variantSkuNotSet: (w: string) => en("po.variantSkuNotSet", { what: w }),
+          attrWord: (attr: string) => variantWordOf(d0, attr, (k) => en(k)),
+        };
+        const groups = draftsForJob(d0, jobId, modulePurchaseLines(d0, jobId), keepCosts(d0), words);
         const job = d0.jobs.find((j) => j.id === jobId);
         const addr = job ? d0.properties.find((x) => x.id === job.propertyId) : undefined;
         const ids: ID[] = [];
@@ -2949,6 +3019,36 @@ export function StoreProvider({
         });
         // all of them or none (DS §15.2)
         return undoTogether(undos);
+      },
+      setItemVariant: (itemId, attr, value0, data) => {
+        const d0 = dbRef.current;
+        const prev = d0.catalog.find((x) => x.id === itemId);
+        const value = value0.trim().toLowerCase();
+        // review #2241 №3: who sees suppliers (owner / admin / office), as the server's catalog_set_variant
+        if (!prev || !canSeeSuppliers(role) || !value || !/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/.test(attr)) return NO_UNDO;
+        // one property per item (the server refuses another: other_variant_attr)
+        const have = Object.keys(prev.variants ?? {});
+        if (have.length && !have.includes(attr)) return NO_UNDO;
+        const clean = data ? Object.fromEntries(Object.entries(data).filter(([, v]) => typeof v === "string" && v.trim()).map(([k, v]) => [k, (v as string).trim()])) as ItemVariant : null;
+        // the server's limits (app.variant_skus_ok), checked before the queue: a refused op would stay in it
+        const count = Object.keys({ ...(prev.variants?.[attr] ?? {}), [value]: 1 }).length;
+        if (!variantOk(value, clean, count)) return NO_UNDO;
+        const next = (vs: CatalogItem["variants"]): CatalogItem["variants"] => {
+          const one = { ...(vs?.[attr] ?? {}) };
+          if (clean) one[value] = clean;
+          else delete one[value];
+          // review #2241 №1: the last value gone, the property stays ({"color":{}}), as the server keeps it
+          return { [attr]: one };
+        };
+        const put = (x: CatalogItem, vs: CatalogItem["variants"]): CatalogItem => {
+          const { variants: _v, ...rest } = x;
+          return vs ? { ...rest, variants: vs } : rest;
+        };
+        return mutate(
+          "catalog.variant",
+          (d) => ({ ...d, catalog: d.catalog.map((x) => (x.id === itemId ? put(x, next(x.variants)) : x)) }),
+          { k: "catalog.variant", itemId, attr, value, data: clean },
+        );
       },
       removeCatalogItem: (id) => mutate("catalog.remove", (d) => ({ ...d, catalog: d.catalog.filter((x) => x.id !== id) }), { k: "catalog.remove", id }),
       scheduleJob: (jobId, sch) => {
