@@ -226,6 +226,22 @@ export function Menu<K extends string>({
 const SheetHold = createContext<{ current: boolean }>({ current: false });
 export const useSheetHold = () => useContext(SheetHold);
 
+const SheetEscapeCtx = createContext<{ add: (f: () => boolean) => () => void } | null>(null);
+/**
+ * Inside a `Sheet`: `onEscape` runs first on Esc / Android «Назад»; it returns true when it closed something of its own (an open
+ * calendar) — then the sheet stays. Outside a sheet nothing happens (a screen's Esc is its own).
+ */
+export function useSheetEscape(onEscape: (() => boolean) | null) {
+  const api = useContext(SheetEscapeCtx);
+  const live = useRef(onEscape);
+  live.current = onEscape;
+  const on = !!onEscape;
+  useEffect(() => {
+    if (!api || !on) return;
+    return api.add(() => live.current?.() ?? false);
+  }, [api, on]);
+}
+
 /**
  * The side insets of the open sheet (its left / right padding). A list inside a sheet scrolls in `SheetScroll`: the scroll view spans
  * the insets (negative margin) and pads its content back by the same, so the scroll indicator stands in the inset — not over the
@@ -329,6 +345,15 @@ export function Sheet({
   const [full, setFull] = useState(false);
   const [ask, setAsk] = useState(false);
   const live = useRef({ dirty, onClose, onExited, onEscape, canClose });
+  // what is open inside the sheet takes Esc and Android «Назад» first (DateField's calendar, DS А7): the first press closes it,
+  // the next one the sheet; the newest one asks first
+  const childEscape = useRef<(() => boolean)[]>([]);
+  const escapeApi = useMemo(() => ({
+    add: (f: () => boolean) => {
+      childEscape.current = [f, ...childEscape.current];
+      return () => { childEscape.current = childEscape.current.filter((x) => x !== f); };
+    },
+  }), []);
   live.current = { dirty, onClose, onExited, onEscape, canClose };
   useEffect(() => {
     if (visible) {
@@ -548,9 +573,10 @@ export function Sheet({
   );
   const maxH = full || height === "large" ? fullH : height === "medium" ? winH * component.sheetMediumRatio : winH * component.sheetHeightRatio;
   return (
-    <Modal visible={open} transparent animationType="none" onRequestClose={onBack ? () => { if (!leaving.current) onBack(); } : () => { if (!leaving.current && !live.current.onEscape?.()) requestClose(); }} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
+    <Modal visible={open} transparent animationType="none" onRequestClose={() => { if (leaving.current || childEscape.current.some((f) => f())) return; if (onBack) onBack(); else if (!live.current.onEscape?.()) requestClose(); }} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
       {/* a form in a sheet scrolls the sheet's own body, never the screen under it (DS §11 п.3) */}
       <ScreenScrollCtx.Provider value={null}>
+      <SheetEscapeCtx.Provider value={escapeApi}>
       {/* a Modal is its own native root: gestures in it need their own root view (Gesture Handler) */}
       <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardAvoidingView
@@ -715,6 +741,7 @@ export function Sheet({
       {/* the toast of what is done in the sheet («⊖» → «Вернуть») stands over the sheet, not under its Modal */}
       <SheetToast hostKey={toastKey} footerUp={footer && !ask ? footerUp : undefined} />
       </GestureHandlerRootView>
+    </SheetEscapeCtx.Provider>
     </ScreenScrollCtx.Provider>
     </Modal>
   );
@@ -938,7 +965,7 @@ function ToastView({ item, onDone, onLate, bottomAt }: { item: ToastItem | null;
         {item.undo ? (
           <UndoButton
             key={item.at}
-            at={item.at}
+            shownAt={item.at}
             onPress={() => {
               // the second tap of the double tap that made the thing is not «Отменить» (item.at = when it showed or grew)
               if (!toastArmed(item.at, Date.now())) return;
@@ -956,17 +983,26 @@ function ToastView({ item, onDone, onLate, bottomAt }: { item: ToastItem | null;
 const ARect = Animated.createAnimatedComponent(Rect);
 
 /** "Undo" with a ring around it that burns down over the 5 seconds the toast stays (reduced motion: static ring). */
-function UndoButton({ onPress, at }: { onPress: () => void; /** when the toast showed: the ring goes on from where it is (a toast handed over is not restarted) */ at: number }) {
+function UndoButton({ onPress, shownAt }: { onPress: () => void; /** when the toast showed: the ring goes on from where it is (a toast handed over is not restarted) */ shownAt: number }) {
   const { c } = useTheme();
   const { t } = useI18n();
   const reduce = useReducedMotion();
+  // not yet armed (toastArmMs after the toast showed, see toastArm.ts): said as «busy» — a screen reader and an e2e know when a
+  // press counts (#2086, #2134: a test pressed once at once; it waits for this, never for seconds)
+  const [armed, setArmed] = useState(() => toastArmed(shownAt, Date.now()));
+  useEffect(() => {
+    if (armed) return;
+    const left = Math.max(0, motion.toastArmMs - (Date.now() - shownAt));
+    const id = setTimeout(() => setArmed(true), left);
+    return () => clearTimeout(id);
+  }, [armed, shownAt]);
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const left = useSharedValue(1);
   useEffect(() => {
-    const gone = Math.min(Math.max(Date.now() - at, 0), motion.toastUndoMs);
+    const gone = Math.min(Math.max(Date.now() - shownAt, 0), motion.toastUndoMs);
     left.value = 1 - gone / motion.toastUndoMs;
     if (!reduce) left.value = withTiming(0, { duration: motion.toastUndoMs - gone, easing: Easing.linear });
-  }, [left, reduce, at]);
+  }, [left, reduce, shownAt]);
   const ring = component.toastRing;
   const w = (box?.w ?? 0) - ring;
   const h = (box?.h ?? 0) - ring;
@@ -979,6 +1015,7 @@ function UndoButton({ onPress, at }: { onPress: () => void; /** when the toast s
       visibleHeight={component.button.md}
       accessibilityRole="button"
       accessibilityLabel={t("common.undo")}
+      aria-busy={!armed}
       onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
       style={{
         height: component.button.md,

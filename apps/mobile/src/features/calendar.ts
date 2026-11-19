@@ -25,10 +25,12 @@ export const addMonths = (k: DayKey, n: number): DayKey => {
 /** Monday of the week containing k. */
 export const weekStart = (k: DayKey): DayKey => addDays(k, -((weekdayOf(k) + 6) % 7));
 export const weekDays = (k: DayKey): DayKey[] => Array.from({ length: 7 }, (_, i) => addDays(weekStart(k), i));
-/** 6 × 7 cells starting on the Monday on/before the 1st; inMonth marks days of k's month. */
-export function monthGrid(k: DayKey): { key: DayKey; inMonth: boolean }[] {
+/** 6 × 7 cells starting on the Monday (or, `sundayFirst`, the Sunday — en-US, DateField) on/before the 1st; inMonth marks days
+ *  of k's month. The Plan keeps Monday (it does not pass `sundayFirst`). */
+export function monthGrid(k: DayKey, sundayFirst = false): { key: DayKey; inMonth: boolean }[] {
   const month = k.slice(0, 7);
-  const start = weekStart(`${month}-01`);
+  const first = `${month}-01`;
+  const start = sundayFirst ? addDays(first, -weekdayOf(first)) : weekStart(first);
   return Array.from({ length: 42 }, (_, i) => {
     const key = addDays(start, i);
     return { key, inMonth: key.startsWith(month) };

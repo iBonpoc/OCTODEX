@@ -39,7 +39,7 @@ export function chipTags(src: string): { tag: string; line: number }[] {
 }
 
 /** how many <ChoiceChips> are still the old chips (no `label`). Lower it as screens move over; never raise it. */
-const LEGACY_MAX = 52; // 72 → 59: spec 56 wave 4 (client) took 8 old chips away; 59 → 56: wave 4б (/f/, «Местоположение»); 56 → 55: the catalog item type (§3а.4); 55 → 52: wave 5а (task sheet)
+const LEGACY_MAX = 50; // 72 → 59: spec 56 wave 4 (client) took 8 old chips away; 59 → 56: wave 4б (/f/, «Местоположение»); 56 → 55: the catalog item type (§3а.4); 55 → 52: wave 5а (task sheet); 52 → 50: wave 5б (the visit day and start — DateField, SelectField)
 
 describe("ChoiceChips name their field (#1095)", () => {
   const legacy: string[] = [];
@@ -62,9 +62,9 @@ describe("ChoiceChips name their field (#1095)", () => {
     expect(/\blabel=""/.test(sample('<ChoiceChips label="" items={x} />'))).toBe(true);
   });
   it("the parser sees the chips (guards the guard)", () => {
-    // 80 → 75: the accuracy choice left the canvas and the card (#768, #1764); 75 → 70: spec 56 wave 4 (client) took 8 away; 70 → 67: wave 4б took 3; 67 → 61: wave 5а took 5 (job/new 2, task sheet 3);
+    // 80 → 75: the accuracy choice left the canvas and the card (#768, #1764); 75 → 70: spec 56 wave 4 (client) took 8 away; 70 → 67: wave 4б took 3; 67 → 61: wave 5а took 5 (job/new 2, task sheet 3); 61 → 58: wave 5б (the visit day and start);
     // the parser still sees every chip
-    expect(all).toBeGreaterThan(61);
+    expect(all).toBeGreaterThan(58);
     expect(all - legacy.length).toBeGreaterThanOrEqual(5);
   });
 });
