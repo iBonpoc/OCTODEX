@@ -5152,7 +5152,7 @@ select tst.ok((select closed_at is not null from public.companies where id = 'c5
 select tst.ok((select every(status = 'deleted') from public.memberships where company_id = 'c5000000-0000-4000-8000-000000000002'), 'nobody works in it any more');
 select tst.ok(app.retention_years() = 7, 'records are kept 7 years by default');
 :as_adam50
-select tst.fails_like($q$update public.companies set closed_at = now() where id = 'c5000000-0000-4000-8000-000000000001'$q$, '%permission denied for table companies%', 'an owner does not close a company by hand');
+select tst.fails_like($q$update public.companies set closed_at = now() where id = 'c5000000-0000-4000-8000-000000000001'$q$, '%permission denied for table companies%', 'an owner does not close a company by hand (Р-7: the grant refuses it before t06; t06 itself — the super case below)');
 :as_super
 select tst.fails_like($q$update public.companies set closed_at = null where id = 'c5000000-0000-4000-8000-000000000002'$q$, '%closed only with its last owner%', 'nor reopen it (only delete_account sets it)');
 :as_eve50

@@ -19,7 +19,7 @@ grant update (
   mailing_address_line1, mailing_address_city, mailing_address_state, mailing_address_zip,
   timezone, doc_language, brand, contract_settings, estimate_settings, payment_settings, onboarding_state,
   lead_default_assignee_id, lead_settings, schedule_settings, business_hours, visit_settings,
-  trades -- written by the builds before directions (S16, ed5d902f): an old phone's queued save
+  trades -- companyToDb wrote it from ca9d6efe (Wave 7) until ed5d902f (S16, directions): an old phone's queued save
 ) on public.companies to authenticated;
 
 create or replace function app.tg_company_lead_assignee()
