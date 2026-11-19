@@ -5,12 +5,14 @@ import { madeHere } from "@/features/photoUri";
 import { shrinkPicked } from "@/data/photoShrink";
 import { router, type Href } from "expo-router";
 import { component, radius, size, space, z } from "@octo/design-tokens";
-import { useStore } from "@/data/store";
+import { isToday, useStore } from "@/data/store";
+import { canStartExpense, expenseJobOptions } from "@/features/expenseJobs";
+import { isAssigned } from "@/features/schedule";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { fabItems, LIST_FABS, type FabCtx, type FabItem, type FabSet } from "./sections";
+import { fabItems, LIST_FABS, meIsSub, type FabCtx, type FabItem, type FabSet } from "./sections";
 import type { DictKey } from "@/i18n/ru";
 import { placeActions } from "@/modules/registry";
 
@@ -30,7 +32,9 @@ export interface FabProps {
 /** the items this screen offers this role, with the actions the screen did not wire left out */
 export function useFabItems({ set, ctx, on }: FabProps): FabItem[] {
   const { role, db } = useStore();
-  const all = fabItems(set, role, ctx).filter((it) => !it.act || it.act === "photo" || !!on?.[it.act]);
+  // a subcontractor's expense goes only to a job of his today (Р-8a): without one, no «Расход» in the «＋»
+  const subNoJob = meIsSub(db) && !canStartExpense(expenseJobOptions(db, db.visits.filter((v) => isToday(v.start) && isAssigned(v, db.me)), true));
+  const all = fabItems(set, role, ctx).filter((it) => (!it.act || it.act === "photo" || !!on?.[it.act]) && !(subNoJob && it.id === "expense"));
   // «Работа без сметы» is always the last line, after a module's items too (main-path spec §2.2 п.4)
   const core = all.filter((it) => it.id !== "job");
   const tail = all.filter((it) => it.id === "job");

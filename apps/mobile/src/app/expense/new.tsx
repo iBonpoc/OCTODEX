@@ -6,7 +6,8 @@ import * as ImagePicker from "expo-image-picker";
 import { radius, space, component } from "@octo/design-tokens";
 import { expenseAmountCents } from "@/features/expenseAmount";
 import { isToday, useStore } from "@/data/store";
-import { expenseJobChoices } from "@/features/expenseJobs";
+import { canStartExpense, expenseJobOptions } from "@/features/expenseJobs";
+import { meIsSub } from "@/nav/sections";
 import type { ExpenseCategory } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { Button, ChoiceChips, TextField } from "@/ui/controls";
@@ -31,7 +32,10 @@ export default function NewExpense() {
   const [vendor, setVendor] = useState(VENDORS[0] ?? "Home Depot");
   const [category, setCategory] = useState<ExpenseCategory>("materials");
   const todays = db.visits.filter((v) => isToday(v.start) && isAssigned(v, db.me));
-  const [jobId, setJobId] = useState<string>(todays[0]?.jobId ?? "none");
+  // a subcontractor: only a job of his today, never «Общий расход» (Р-8a: the server refuses it)
+  const opts = expenseJobOptions(db, todays, meIsSub(db));
+  const [jobId, setJobId] = useState<string>((opts.allowNone ? todays[0]?.jobId : opts.jobs[0]?.key) ?? "none");
+  const can = canStartExpense(opts);
   const [photo, setPhoto] = useState<string | undefined>();
   // money through the engine, the app's one money parser (rule 8, #1537; features/expenseAmount)
   const cents = expenseAmountCents(amount);
@@ -45,12 +49,17 @@ export default function NewExpense() {
     if (uri) setPhoto(uri);
   };
   const jobs = [
-    { key: "none", label: t("exp.noJob") },
+    ...(opts.allowNone ? [{ key: "none", label: t("exp.noJob") }] : []),
     // the job by its number and title, not the client's name (#1427 053)
-    ...expenseJobChoices(db, todays),
+    ...opts.jobs,
   ];
   return (
     <Screen form title={t("exp.title")} back={back}>
+      {!can ? (
+        <T v="body" tone="mut">
+          {t("exp.subNoJob")}
+        </T>
+      ) : null}
       {/* the fields straight on the background, no card around them (DS §11 п.17, #1411) */}
       <FieldGroup>
         <Button label={t("exp.photo")} icon="camera" variant="secondary" onPress={pick} testID="expense-photo" />
@@ -63,19 +72,21 @@ export default function NewExpense() {
         <ChoiceChips<ExpenseCategory> label={t("exp.category")} testID="expense-category" value={category} onChange={setCategory} items={CATS.map((c) => ({ key: c, label: t(`exp.cat.${c}`) }))} />
         <ChoiceChips label={t("exp.job")} testID="expense-job" value={jobId} onChange={setJobId} items={jobs} />
       </FieldGroup>
-      <Button
-        label={t("exp.save")}
-        icon="check"
-        full
-        testID="expense-save"
-        onPress={() =>
-          form.submit(ok ? [] : [{ id: "amount", text: t("form.req.amount") }], () => {
-          const undo = addExpense({ jobId: jobId === "none" ? null : jobId, vendor, category, amountCents: cents, receiptUri: photo });
-          toast.show(online ? t("exp.saved", { amount: money(cents) }) : t("offline.queued"), undo);
-          back();
-          })
-        }
-      />
+      {can ? (
+        <Button
+          label={t("exp.save")}
+          icon="check"
+          full
+          testID="expense-save"
+          onPress={() =>
+            form.submit(ok ? [] : [{ id: "amount", text: t("form.req.amount") }], () => {
+            const undo = addExpense({ jobId: jobId === "none" ? null : jobId, vendor, category, amountCents: cents, receiptUri: photo });
+            toast.show(online ? t("exp.saved", { amount: money(cents) }) : t("offline.queued"), undo);
+            back();
+            })
+          }
+        />
+      ) : null}
     </Screen>
   );
 }

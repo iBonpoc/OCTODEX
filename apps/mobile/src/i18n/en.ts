@@ -617,6 +617,7 @@ export const en: Dict = {
   "exp.category": "Category",
   "exp.job": "For which job",
   "exp.noJob": "General expense",
+  "exp.subNoJob": "A subcontractor's expense goes only to a job of your visit today. You have no visits today.",
   "exp.photo": "Receipt photo",
   "exp.save": "Save expense",
   "exp.saved": "Expense {amount} saved",
