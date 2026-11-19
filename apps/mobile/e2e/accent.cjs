@@ -20,6 +20,9 @@ exports.accentCount = (page, within) =>
       // background on ? var(--acc)) — the state of a setting, not the main action (spec 27 §4.12, decision of the lead 07.11).
       // A second yellow BUTTON next to switches is still counted (e2e 125 checks it).
       if (el.closest('[role="switch"]')) continue;
+      // the toast's «Отменить» (#1975): a passing layer drawn inside the open sheet's Modal since DS §15.2, not the form's
+      // main action — before it stood outside the sheet and was never counted inside it
+      if (el.closest('[data-testid="toast-undo"], [data-testid="toast"]')) continue;
       if (seen.some((s) => s.contains(el) || el.contains(s))) continue;
       seen.push(el);
     }

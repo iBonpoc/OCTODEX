@@ -37,7 +37,8 @@ exports.run = async (h) => {
   await h.shot("added");
   // a second time: «Добавлен», no doubles
   await p.getByTestId("chk-from-template").last().getByRole("button").click();
-  await h.sheet().getByText("Добавлен").waitFor();
+  // exact: since #1975 the toast «Добавлено пунктов: N» is drawn inside the open sheet too
+  await h.sheet().getByText("Добавлен", { exact: true }).waitFor();
   h.expect((await h.sheet().getByRole("button", { name: "Каждый выезд на работу" }).count()) === 0, "an added template is not pressed again");
   // close by its own button and wait for it: Escape may not reach the sheet, and a swallowed wait hid that (CHECKS §9 п.3, сборка #419)
   await h.sheet().getByRole("button", { name: "Закрыть", exact: true }).last().click();
