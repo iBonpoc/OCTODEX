@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import type { FieldBinding } from "./requiredForm";
+import { useFieldScroll, type FieldBinding } from "./requiredForm";
 import { Platform, ScrollView, TextInput, View, type LayoutChangeEvent, type ScrollViewInstance, type StyleProp, type ViewStyle } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -40,6 +40,7 @@ export function Button({
   full,
   style,
   accessibilityLabel,
+  selected,
   testID,
   tone,
 }: {
@@ -48,6 +49,8 @@ export function Button({
   variant?: BtnVariant;
   /** "bad": the word in `status.bad.text` on a secondary or ghost button — «Не сохранять» of the unsaved question (DS Б3) */
   tone?: "bad";
+  /** a quick choice that is the chosen one (DateField's «Завтра»): read as pressed / selected */
+  selected?: boolean;
   /** "bar": a button of the pinned action bar (DS §8.9) — 44 high, a label in two lines grows it instead of being cut */
   size?: "sm" | "md" | "phone" | "bar";
   icon?: IconKey;
@@ -72,6 +75,7 @@ export function Button({
       visibleHeight={h}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
+      {...(selected !== undefined ? ({ accessibilityState: { selected, disabled: !!disabled }, "aria-pressed": selected } as object) : null)}
       style={[
         {
           minHeight: h,
@@ -619,6 +623,7 @@ export function TextField({
     const id = setTimeout(() => input.current?.focus(), plan.focusAfterMs);
     return () => clearTimeout(id);
   }, [plan.focusAfterMs]);
+  useFieldScroll(field);
   return (
     <View ref={field?.anchorRef} testID={tid} collapsable={false} style={{ gap: space[1] }}>
     <View
