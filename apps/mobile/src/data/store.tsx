@@ -21,7 +21,7 @@ import { defaultLeadAssignee } from "@/features/leadAssignee";
 import { keepLast, stepPending } from "@/features/location";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
-import { canMakeEstimateAt, keepCosts, leadEstimatePropertyId, serverSaysCosts } from "@/features/access";
+import { canEditCatalog, canMakeEstimateAt, keepCosts, leadEstimatePropertyId, serverSaysCosts } from "@/features/access";
 import { signTotalFor } from "@/cloud/legacyTotals";
 import { leadStatusToDb } from "@/cloud/statusMap";
 
@@ -62,7 +62,7 @@ import { removedUnsent, unsentIn as unsentInOf, withoutUnsentIn, type RemovedUns
 export { mineOf, type OwnedItem } from "./outboxOwner";
 import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
-import { enabledLocally, keepModuleData, moduleActive, moduleDef, modulePurchaseLines } from "@/modules/registry";
+import { enabledLocally, keepModuleData, moduleActive, moduleDef, modulePurchaseLines, variantWordOf } from "@/modules/registry";
 import { cleanCatalogItem } from "@/features/catalogExtras";
 import { sameValue, undoOwn } from "@/data/undoOwn";
 import { markOf, markUndo, NO_UNDO, type GuardedUndo } from "@/data/undo";
@@ -120,6 +120,7 @@ import {
   type VisitSettings,
   type Supplier,
   type PurchaseOrder,
+  type ItemVariant,
 } from "./types";
 import { cleanEstimateTemplate, canEditEstimateTemplates } from "@/features/estimateTemplate";
 import { cleanName } from "@/features/nameAsk";
@@ -492,6 +493,9 @@ interface StoreCtx {
   /** #1913: one price for the whole price group of the item (catalog.groupPrice); not in a group — nothing */
   saveGroupPrice: (itemId: ID, v: GroupPriceInput) => Undo;
   removeCatalogItem: (id: ID) => Undo;
+  /** #2227: one value of the item's variant (a module's colour) — its supplier code, supplier, pack; null — the value removed.
+   *  Staff only; «Отменить» puts the value back as it was */
+  setItemVariant: (itemId: ID, attr: string, value: string, data: ItemVariant | null) => Undo;
   /** spec 36: make or change a supplier (owner / admin / office); null name — nothing */
   saveSupplier: (x: Supplier) => GuardedUndo;
   /** #1834: change the supplier's purchase tax through the server door (supplier_set_tax); its items follow at once on the phone,
@@ -2824,7 +2828,14 @@ export function StoreProvider({
       makeJobOrders: (jobId) => {
         const d0 = dbRef.current;
         if (!canEditOrders(role) || d0.purchaseOrdersLegacy) return { ids: [], made: 0, undo: noop };
-        const groups = draftsForJob(d0, jobId, modulePurchaseLines(d0, jobId), keepCosts(d0));
+        // #2227: the order's words in the supplier's language (en, rule 7); the variant property's word from its module
+        const en = tFor("en");
+        const words = {
+          variantNotSet: (w: string) => en("po.variantNotSet", { what: w }),
+          variantSkuNotSet: (w: string) => en("po.variantSkuNotSet", { what: w }),
+          attrWord: (attr: string) => variantWordOf(d0, attr, (k) => en(k)),
+        };
+        const groups = draftsForJob(d0, jobId, modulePurchaseLines(d0, jobId), keepCosts(d0), words);
         const job = d0.jobs.find((j) => j.id === jobId);
         const addr = job ? d0.properties.find((x) => x.id === job.propertyId) : undefined;
         const ids: ID[] = [];
@@ -2949,6 +2960,31 @@ export function StoreProvider({
         });
         // all of them or none (DS §15.2)
         return undoTogether(undos);
+      },
+      setItemVariant: (itemId, attr, value0, data) => {
+        const d0 = dbRef.current;
+        const prev = d0.catalog.find((x) => x.id === itemId);
+        const value = value0.trim().toLowerCase();
+        if (!prev || !canEditCatalog(role) || !value || !/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/.test(attr)) return NO_UNDO;
+        // one property per item (the server refuses another: other_variant_attr)
+        const have = Object.keys(prev.variants ?? {});
+        if (have.length && !have.includes(attr)) return NO_UNDO;
+        const clean = data ? Object.fromEntries(Object.entries(data).filter(([, v]) => typeof v === "string" && v.trim())) as ItemVariant : null;
+        const next = (vs: CatalogItem["variants"]): CatalogItem["variants"] => {
+          const one = { ...(vs?.[attr] ?? {}) };
+          if (clean) one[value] = clean;
+          else delete one[value];
+          return Object.keys(one).length ? { [attr]: one } : undefined;
+        };
+        const put = (x: CatalogItem, vs: CatalogItem["variants"]): CatalogItem => {
+          const { variants: _v, ...rest } = x;
+          return vs ? { ...rest, variants: vs } : rest;
+        };
+        return mutate(
+          "catalog.variant",
+          (d) => ({ ...d, catalog: d.catalog.map((x) => (x.id === itemId ? put(x, next(x.variants)) : x)) }),
+          { k: "catalog.variant", itemId, attr, value, data: clean },
+        );
       },
       removeCatalogItem: (id) => mutate("catalog.remove", (d) => ({ ...d, catalog: d.catalog.filter((x) => x.id !== id) }), { k: "catalog.remove", id }),
       scheduleJob: (jobId, sch) => {

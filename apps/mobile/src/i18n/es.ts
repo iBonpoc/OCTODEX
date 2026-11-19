@@ -4702,4 +4702,7 @@ export const es: Dict = {
   "invMsg.payLink": "Ver y pagar: {link}",
   "invMsg.noHow": "Aún no hay formas de pago: el mensaje no dirá al cliente cómo pagar",
   "invMsg.fill": "Añadir formas de pago",
+  // #2227 (spec 33-price-key §11.4): an item's variant on a supplier order (the order is in en, rule 7)
+  "po.variantNotSet": "{what} sin indicar",
+  "po.variantSkuNotSet": "{what}: código del proveedor sin indicar",
 };

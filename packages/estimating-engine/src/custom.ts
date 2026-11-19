@@ -30,6 +30,12 @@ export interface LineSource {
   testPrice?: true;
   /** no longer in the module's data, kept because someone changed it by hand */
   gone?: true;
+  /**
+   * #2227 (spec 33-price-key §11.3.6): the item's VARIANT this line is — one of the values of ONE property of the item (a
+   * module chooses which; Gutters — the colour). The supplier order sums by item + variant and takes the variant's sku.
+   * Kept in calc_inputs as the rest of the source; never the client's (the client reads the colour in the line's name)
+   */
+  variant?: { attr: string; value: string };
 }
 
 export interface CustomLine {

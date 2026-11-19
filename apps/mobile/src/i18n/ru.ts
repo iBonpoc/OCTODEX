@@ -4702,6 +4702,9 @@ export const ru = {
   "invMsg.payLink": "Счёт и оплата: {link}",
   "invMsg.noHow": "Способы оплаты не заполнены — в сообщении клиент не увидит, как оплатить",
   "invMsg.fill": "Заполнить способы оплаты",
+  // #2227 (spec 33-price-key §11.4): an item's variant on a supplier order (the order is in en, rule 7)
+  "po.variantNotSet": "{what} не указан",
+  "po.variantSkuNotSet": "{what}: код поставщика не задан",
 } as const;
 
 export type DictKey = keyof typeof ru;
