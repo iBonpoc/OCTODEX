@@ -206,14 +206,6 @@ export interface ItemVariant {
   packSize?: string;
 }
 
-/** #2227: the supplier's data of one variant of an item (catalog_items.variant_skus); absent — the item's own */
-export interface ItemVariant {
-  sku?: string;
-  supplierId?: ID;
-  purchaseUnit?: string;
-  packSize?: string;
-}
-
 /** A line of a job made without an estimate (wave П-2a, server: job_line_items). The server owns the totals:
  *  totalCents = floor(qty × price + 0.5), the job's amountCents = @octo/estimating-engine jobLinesTotals. */
 export interface JobLineItem {

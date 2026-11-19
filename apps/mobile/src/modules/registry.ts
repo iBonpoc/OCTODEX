@@ -332,15 +332,6 @@ export function variantWordOf(db: import("@/data/types").DB, attr: string, t: (k
 }
 
 /** S11g: the lines every active module adds to a job's supplier order (a module that fails adds none) */
-/** #2227: the word of a variant property from the modules that know it, else the property's own name */
-export function variantWordOf(db: import("@/data/types").DB, attr: string, t: (k: import("@/i18n").DictKey) => string, now = Date.now()): string {
-  for (const d of activeModules(db.company, now)) {
-    const w = d.variantWord?.(attr, t);
-    if (w) return w;
-  }
-  return attr;
-}
-
 export function modulePurchaseLines(db: import("@/data/types").DB, jobId: string, now = Date.now()): import("@/features/purchaseOrders").ModulePurchaseLine[] {
   const job = db.jobs.find((j) => j.id === jobId);
   if (!job) return [];
