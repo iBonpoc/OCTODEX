@@ -70,6 +70,9 @@ revoke all on function public.mark_notifications_read(uuid[]) from public, anon,
 grant execute on function public.mark_notifications_read(uuid[]) to authenticated;
 
 -- 2 ---------------------------------------------------------------------------------------------------------------------
+-- declared here (the app's calls are checked against the migrations' text), its body is the moment itself, written below
+create or replace function public.notifications_split_at()
+returns timestamptz language sql immutable set search_path = '' as $$ select null::timestamptz $$;
 do $do$
 begin
   execute format($f$create or replace function public.notifications_split_at()
