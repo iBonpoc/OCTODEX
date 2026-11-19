@@ -1651,6 +1651,10 @@ export const ru = {
   "task.overdue": "Просрочено",
   "task.what": "Что сделать",
   "task.whatPh": "Например: перезвонить и уточнить объём",
+  // #2220: the task form says what is missing only after «Сохранить» (useRequiredForm)
+  "task.req.subject": "Выберите, к чему задача",
+  "task.req.title": "Напишите, что сделать",
+  "task.req.who": "Выберите, кто сделает",
   "task.when": "Когда",
   "task.when.today": "Сегодня 17:00",
   "task.when.tomorrow": "Завтра 9:00",
