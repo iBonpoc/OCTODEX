@@ -26,7 +26,7 @@ import { CardGrid, ListCard, ListCardHeader } from "@/ui/listCard";
 import { useToast, Sheet } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { CardList, ListRow, Screen } from "@/ui/surfaces";
-import { bindable, bindItem, findItem, laborRows, materialRows, colourRowsFor, measuredParts, missingItems, partName, type PriceRow, priceFromOtherDegree } from "../prices";
+import { bindable, bindItem, findItem, laborRows, materialRows, colourRowsFor, measuredParts, missingItems, newColourRows, partName, type PriceRow, priceFromOtherDegree } from "../prices";
 import { gutterData } from "../data";
 import { withAfter } from "@/data/undo";
 import { QuickPriceSheet } from "@/features/QuickPriceSheet";
@@ -69,7 +69,8 @@ export default function GutterPricesScreen() {
   // the colours the company's measurements use without an item of their own (#2000 §10.2 п.4): made by the same banner, in their group
   const measured = store.db.moduleData?.gutters;
   const drawn = useMemo(() => measuredParts(gutterData(store.db), raw), [measured, raw]); // eslint-disable-line react-hooks/exhaustive-deps
-  const colours = useMemo(() => colourRowsFor(drawn, catalog), [drawn, catalog]);
+  // a colour row that is a part row already shows once (one card, one key; the banner's N is what is seen — review of #2086)
+  const colours = useMemo(() => newColourRows(parts, colourRowsFor(drawn, catalog)), [parts, drawn, catalog]);
   const missing = useMemo(() => missingItems(companyId, [...labor, ...parts, ...colours], catalog, nameOf), [companyId, labor, parts, colours, catalog, t]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** ids made from this page and not taken back: a second press before the page redraws makes nothing and never puts

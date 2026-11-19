@@ -81,8 +81,8 @@ const METAL_FALLBACK_PARTS = new Set(["screw", "anchor", "flat_coil"]);
  * #2000 (spec 33-gutters-price-key §10): a coloured part without an item of its own colour takes the price of its group — the same
  * part in the company's other colours (the founder: «цвет не влияет на стоимость»). The group's items are found as a part finds its
  * own (`catalogMatch` on their properties without the colour, a colour meaning «painted»): case ignored, the closest first. The closest
- * of two different parts (an extra gauge either way) — no price, never a guess. Among the closest: a real price before a sample one,
- * the database's group (`priceGroup`), then the one changed last (then the lower id). The round elbow's old degrees too
+ * of two different parts (an extra gauge either way) — no price, never a guess. Among the closest: the database's group (`priceGroup`)
+ * first, then inside it a real price before a sample one, then the one changed last (then the lower id). The round elbow's old degrees too
  * (`LEGACY_ROUND_ELBOW`). An item without a colour is never a source (§9 Б2). None — undefined.
  */
 export function groupSource(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): CatalogItem | undefined {
@@ -104,8 +104,10 @@ export function groupSource(catalog: readonly CatalogItem[], p: Pick<PartQty, "k
     if (new Set(closest.map((it) => groupText(it))).size > 1) return undefined;
     const key = priceGroupKey({ unit: p.unit, attributes: w });
     const items = closest.map((it) => byId.get(it.id)!);
-    // a real price before a sample one (as the transition suggests it — review #2000 №2), the database's group, then the last changed
-    return [...items].sort((a, b) => Number(!!a.placeholder) - Number(!!b.placeholder) || Number(priceGroupOf(b) === key) - Number(priceGroupOf(a) === key) || newer(a, b))[0];
+    // the database's group first — «Создать» puts the colour into it, so the price shown must be the group's, or the next «Обновить
+    // смету» changes the sum (С10; review of #2086, К1); inside one group a real price before a sample one (review #2000 №2), then
+    // the last changed
+    return [...items].sort((a, b) => Number(priceGroupOf(b) === key) - Number(priceGroupOf(a) === key) || Number(!!a.placeholder) - Number(!!b.placeholder) || newer(a, b))[0];
   }
   return undefined;
 }
@@ -148,6 +150,15 @@ export const colourRowsFor = (rows: readonly PriceRow[], catalog: readonly Catal
   rows.filter(({ part }) => !findItem(catalog, part) && !!groupSource(catalog, part));
 
 export const measuredColourRows = (g: GutterData, raw: unknown, catalog: readonly CatalogItem[]): PriceRow[] => colourRowsFor(measuredParts(g, raw), catalog);
+
+/**
+ * The colour rows not already among the price list's part rows (same matchKey): a row seen twice made two cards with one React key,
+ * and the cards on the screen were more than the banner's N (§10.5а; review of #2086).
+ */
+export const newColourRows = (parts: readonly PriceRow[], colours: readonly PriceRow[]): PriceRow[] => {
+  const have = new Set(parts.map((r) => r.key));
+  return colours.filter((r) => !have.has(r.key) && (have.add(r.key), true));
+};
 
 /**
  * The round elbow of the engine's DEFAULT degree (75°, «Расход v2») the company has not priced takes its round elbow of the same

@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import type { PartQty } from "@octo/estimating-engine";
 import type { CatalogItem } from "../src/data/types";
-import { groupSource, listPreview, measuredColourRows, missingItems } from "../src/modules/gutters/prices";
+import { groupSource, listPreview, measuredColourRows, missingItems, newColourRows } from "../src/modules/gutters/prices";
 import { priceGroupKey } from "../src/modules/gutters/prices/groups";
 import { linesFromParts, resyncLines, type ModuleLine } from "../src/modules/gutters/estimate";
 import { toElements } from "../src/modules/gutters/canvas/model";
@@ -106,6 +106,27 @@ describe("цена группы для цвета без позиции (#2000, 
     expect(one([part("black")], cat).source?.testPrice).toBeUndefined();
     const caps = [item("c", "White", { attributes: { material: "Aluminum " } })];
     expect(groupSource(caps, part("black"))?.id).toBe("c");
+  });
+
+  it("С10б (ревью #2086, К1): группа базы раньше «настоящей цены» вне группы — цена строки до «Создать» та же, что после «Обновить смету»", () => {
+    // G after the transition still has the sample price; beside it an item with the same properties, no priceGroup, a real $12
+    const cat = [grouped("g", "white", { priceCents: 1000, placeholder: true }), item("x", "brown", { priceCents: 1200, updatedAt: "2026-11-18T10:00:00Z" })];
+    expect(groupSource(cat, part("black"))?.id).toBe("g");
+    const before = one([part("black")], cat);
+    const made = missingItems("c1", [{ key: "k", part: part("black") }], cat, name);
+    expect(made[0]!.attributes?.priceGroup).toBe(cat[0]!.attributes!.priceGroup);
+    const after = one([part("black")], [...cat, ...made]);
+    expect(after.catalogItemId).toBe(made[0]!.id);
+    expect(after.unitPriceCents).toBe(before.unitPriceCents);
+  });
+
+  it("§10.5а (ревью #2086): строка цвета, что уже есть среди строк деталей, показывается один раз — ключи разные, N баннера = числу строк", () => {
+    const r = (c: string) => ({ key: `gutter|${c}`, part: part(c) });
+    const parts = [r("white"), r("black")];
+    const cols = newColourRows(parts, [r("black"), r("brown"), r("brown")]);
+    expect(cols.map((x) => x.key)).toEqual(["gutter|brown"]);
+    const shown = [...parts, ...cols].map((x) => x.key);
+    expect(new Set(shown).size).toBe(shown.length);
   });
 
   it("С1а: тестовый источник — testPrice; тестовый за $0 — «нет цены» (§10.2 п.1)", () => {
