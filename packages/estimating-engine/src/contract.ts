@@ -44,6 +44,15 @@ export function progressAmount(contractCents: number, alreadyInvoiced: number, b
   return Math.max(0, Math.min(want, contractCents - alreadyInvoiced));
 }
 
+/** What is still owed on one invoice: total − paid, never below 0 (an overpayment owes nothing; PRD 18). The one rule for
+ *  the invoice card, the reminder text and the invoice PDF (#1550, rule 8). */
+export const invoiceOwes = (invoice: Pick<InvoiceLike, "totalCents" | "paidCents">): number => Math.max(0, invoice.totalCents - invoice.paidCents);
+
+/** What a list of invoices still owes together (a job's, a client's): the sum of invoiceOwes, so an overpaid invoice never
+ *  takes from another one. The one rule for the job screen, the client's balance and the page of the client (#1898, rule 8). */
+export const invoicesOwe = (invoices: readonly Pick<InvoiceLike, "totalCents" | "paidCents">[]): number =>
+  invoices.reduce((s, i) => s + invoiceOwes(i), 0);
+
 /** A payment can't exceed the invoice balance; returns the accepted amount (0 if nothing is due). */
 export const acceptPayment = (invoice: InvoiceLike, amountCents: number): number =>
   Math.max(0, Math.min(amountCents, invoice.totalCents - invoice.paidCents));

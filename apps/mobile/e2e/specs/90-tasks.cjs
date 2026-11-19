@@ -29,10 +29,13 @@ exports.run = async (h) => {
   await plus().click(); await p.waitForTimeout(500);
   const sheet = h.sheet();
   await sheet.getByPlaceholder("Клиент, лид, работа или адрес").fill("Sarah"); await p.waitForTimeout(300);
-  h.expect((await sheet.getByRole("button", { name: "Сохранить", exact: true }).last().isDisabled()) === true, "no save before «к чему» and the title");
+  // #2220: «Сохранить» is live; a try without «к чему» says so under it and saves nothing (e2e 517 in detail)
+  await sheet.getByRole("button", { name: "Сохранить", exact: true }).last().click();
+  await h.expectText(/Выберите, к чему задача/, "a try without «к чему» says what is missing");
   await sheet.getByText("Sarah Mitchell", { exact: true }).first().click(); await p.waitForTimeout(300);
   await sheet.getByPlaceholder("Например: перезвонить и уточнить объём").fill(TITLE);
-  await sheet.getByText("Со временем", { exact: true }).last().click(); await p.waitForTimeout(300);
+  await sheet.getByTestId("task-plan-mode-button").click(); // «В плане ⌄» is a row with a menu (spec 56 wave 5а)
+  await p.getByTestId("task-plan-mode-time").locator("visible=true").first().click(); await p.waitForTimeout(300);
   await h.shot("form");
   await sheet.getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(700);
   let db = await h.db();

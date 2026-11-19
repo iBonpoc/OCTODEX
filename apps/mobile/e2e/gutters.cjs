@@ -191,4 +191,16 @@ async function fitAll(p) {
   await p.evaluate(() => { delete globalThis.__fitW; });
 }
 
-module.exports = { openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
+/** the open downspout's kind (its menu is open): «Ещё» first where the phone folds it (as e2e 253); `key` — rectPlain, rectRibbed, … */
+async function pickDsKind(p, key) {
+  const tid = (id) => p.getByTestId(id).locator("visible=true");
+  await tid("attr-panel").first().waitFor({ timeout: 5000 });
+  if (!(await tid(`attr-ds-kind-${key}`).count()) && (await tid("attr-more").count())) {
+    await tid("attr-more").getByRole("button").click();
+    await tid("attr-more-open").waitFor({ timeout: 5000 });
+  }
+  await tid(`attr-ds-kind-${key}`).click();
+  await p.waitForFunction((k) => document.querySelector(`[data-testid="attr-ds-kind-${k}"]`)?.getAttribute("aria-checked") === "true", key, { timeout: 5000 });
+}
+
+module.exports = { pickDsKind, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };

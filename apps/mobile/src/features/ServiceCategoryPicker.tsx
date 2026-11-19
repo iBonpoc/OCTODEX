@@ -16,6 +16,10 @@ import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Empty, FieldGroup, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { StatusNote } from "@/ui/statusNote";
+import { OptionRows } from "@/ui/optionRow";
+
+/** «Без направления» in the list */
+const NONE = "__none";
 
 /** "Direction: Plumbing ›" — hidden while the company has no directions; read-only when the only one is already set */
 export function ServiceCategoryRow({
@@ -44,22 +48,14 @@ export function ServiceCategoryRow({
     <Box>
       <ListRow title={t("dir.title")} subtitle={label} onPress={fixed ? undefined : () => setOpen(true)} />
       <Sheet visible={open} onClose={() => setOpen(false)} title={t("dir.title")}>
-        {options.map((c) => (
-          <ListRow
-            key={c.id}
-            title={`${c.id === value ? "✓ " : ""}${categoryLabel(c, t)}`}
-            subtitle={c.archivedAt ? t("dir.archived") : undefined}
-            onPress={() => {
-              onChange(c.id);
-              setOpen(false);
-            }}
-          />
-        ))}
-        <Divider />
-        <ListRow
-          title={`${!value ? "✓ " : ""}${t("dir.none")}`}
-          onPress={() => {
-            onChange(undefined);
+        {/* the sheet's one question — rows, a tap picks and closes, `CheckMark` at the chosen (spec 56 §3 row 5) */}
+        <OptionRows<string>
+          testID="dir-options"
+          label={t("dir.title")}
+          items={[...options.map((c) => ({ key: c.id as string, title: categoryLabel(c, t), subtitle: c.archivedAt ? t("dir.archived") : undefined })), { key: NONE, title: t("dir.none") }]}
+          value={value ?? NONE}
+          onChange={(k) => {
+            onChange(k === NONE ? undefined : k);
             setOpen(false);
           }}
         />
@@ -104,21 +100,19 @@ export function ServiceCategoryEditor() {
         </Card>
       ) : null}
       <FieldGroup title={t("dir.addOwn")}>
-        <RowView>
-          <View style={{ flex: 1 }}>
-            <TextField type="title" value={own} onChangeText={setOwn} placeholder={t("dir.ownPlaceholder")} />
-          </View>
-          <Button
-            label={t("dir.add")}
-            icon="plus"
-            variant="secondary"
-            disabled={!own.trim() || ownTaken}
-            onPress={() => {
-              toast.show(t("dir.added"), store.saveServiceCategory({ name: own.trim() }).undo);
-              setOwn("");
-            }}
-          />
-        </RowView>
+        {/* the field takes the whole column, the button stands under it (#1427: in one row the placeholder was cut, the button overlapped) */}
+        <TextField type="title" value={own} onChangeText={setOwn} placeholder={t("dir.ownPlaceholder")} testID="dir-own" />
+        <Button
+          label={t("dir.add")}
+          icon="plus"
+          testID="dir-add"
+          variant="secondary"
+          disabled={!own.trim() || ownTaken}
+          onPress={() => {
+            toast.show(t("dir.added"), store.saveServiceCategory({ name: own.trim() }).undo);
+            setOwn("");
+          }}
+        />
         {ownTaken ? (
           <StatusNote tone="warn">{t("dir.taken")}</StatusNote>
         ) : null}

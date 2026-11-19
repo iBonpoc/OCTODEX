@@ -3,7 +3,7 @@ import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
-import { SETUP_STEPS, setupProgress, stepDone, stepHint, stepIcon, stepTitle } from "@/features/companySetup";
+import { SETUP_STEPS, isOptionalStep, setupProgress, stepDone, stepHint, stepIcon, stepTitle } from "@/features/companySetup";
 import { Button, StatusChip } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { Card, Empty, RowView, Screen } from "@/ui/surfaces";
@@ -56,7 +56,7 @@ export default function CompanyScreen() {
                     {t(stepHint(s))}
                   </T>
                 </View>
-                <StatusChip status={done ? "ok" : c.skipped.includes(s) ? "neutral" : "warn"} label={done ? t("co.done") : c.skipped.includes(s) ? t("co.skipped") : t("co.todo")} />
+                <StatusChip status={done ? "ok" : c.skipped.includes(s) || isOptionalStep(s) ? "neutral" : "warn"} label={done ? t("co.done") : isOptionalStep(s) ? t("co.optional") : c.skipped.includes(s) ? t("co.skipped") : t("co.todo")} />
               </RowView>
             </Card>
           );

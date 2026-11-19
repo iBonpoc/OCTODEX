@@ -205,6 +205,13 @@ export function computeAllOptional(option: CustomOption, s: CustomSettings): Cus
 export function catalogCost(costCents: number, vendorTaxBps = 0): number {
   return roundCents(dec(costCents).mul(bps(vendorTaxBps).add(1)));
 }
+/**
+ * A cost that already has the supplier's tax in it, without that tax (#1835): $108.00 at 8 % → $100.00. One rounding, half
+ * up — so catalogCost(costWithoutTax(g, t), t) is g give or take a cent.
+ */
+export function costWithoutTax(grossCents: number, vendorTaxBps: number): number {
+  return roundCents(dec(grossCents).div(bps(vendorTaxBps).add(1)));
+}
 export function catalogPrice(costCents: number, vendorTaxBps = 0, markupBps = 0): number {
   return roundCents(dec(costCents).mul(bps(vendorTaxBps).add(1)).mul(bps(markupBps).add(1)));
 }

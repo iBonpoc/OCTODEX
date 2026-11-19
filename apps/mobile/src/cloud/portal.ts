@@ -48,6 +48,9 @@ export interface PortalData {
   terms: string;
   /** «Pay by card» (simulated until Stripe): only for a demo company (portal_estimate.simulated_pay, audit 06.11) */
   simulatedPay: boolean;
+  /** «Open as client» in a cloud company: the office's own look at the page — it only shows; signing and paying are the
+   *  client's, by the link (the server refuses a company member's portal signature too). The demo keeps working as before. */
+  preview?: boolean;
   /** 20в: the company's Stripe takes charges — the page shows the real Payment Element (portal_estimate.online_pay) */
   onlinePay: boolean;
   /* ---- wave E2a (docs/specs/07 §2.2) ---- */
@@ -113,9 +116,9 @@ export function fromRaw(r: Raw): PortalData {
     depositPaid: !!r.deposit_paid,
     lang,
     terms: termsForClient(r.doc ?? undefined, defaults, lang, !!r.approval || r.status === "approved" || r.status === "awaiting_countersign"),
-    // an older server has no field: keep the button as before; a newer one says false for a real company
-    // a closed company (7а-3) has no field either: never the button
-    simulatedPay: r.status !== "closed" && r.simulated_pay !== false,
+    // closed by default: only a server's explicit «yes» offers the simulated card (an older server, no field — no button)
+    // a closed company (7а-3) never gets it
+    simulatedPay: r.status !== "closed" && r.simulated_pay === true,
     // an older server has neither: no online payment, nothing on its way
     onlinePay: r.status !== "closed" && r.online_pay === true,
     invoices: (r.invoices ?? []).map((i) => ({
@@ -125,22 +128,24 @@ export function fromRaw(r: Raw): PortalData {
   };
 }
 
-export function localPortal(db: DB, token: string, companyName: string): PortalData | null {
+/** `demo`: the phone's demo data (no cloud) — the page works as the client's; otherwise («open as client» of a cloud
+ *  company) it is a preview that only shows (`preview`, no simulated card). Off by default: a preview unless told demo. */
+export function localPortal(db: DB, token: string, companyName: string, demo = false): PortalData | null {
   const e = db.estimates.find((x) => x.token === token);
   // the same rule as the server (founder 05.11): revoked → nothing; past "valid until" (unsigned) → only who to call (E2b)
   if (!e) return null;
   // the same as the server: a declined estimate shows only who declined and who to call
   if (e.status === "declined" && linkOpen(e, new Date())) {
-    const p = portalFromEstimate(db, e, companyName);
+    const p = portalFromEstimate(db, e, companyName, demo);
     return { ...p, doc: null, title: "", customer: { name: "" }, property: { address: "" }, approval: null, countersign: null, invoices: [] };
   }
-  if (linkOpen(e, new Date())) return portalFromEstimate(db, e, companyName);
-  if (e.linkRevokedAt) return { ...portalFromEstimate(db, e, companyName), status: "revoked", doc: null, approval: null, countersign: null, invoices: [] };
-  const p = portalFromEstimate(db, e, companyName);
+  if (linkOpen(e, new Date())) return portalFromEstimate(db, e, companyName, demo);
+  if (e.linkRevokedAt) return { ...portalFromEstimate(db, e, companyName, demo), status: "revoked", doc: null, approval: null, countersign: null, invoices: [] };
+  const p = portalFromEstimate(db, e, companyName, demo);
   return { ...p, status: "expired", doc: null, title: "", customer: { name: "" }, property: { address: "" }, approval: null, countersign: null, invoices: [] };
 }
 
-export function portalFromEstimate(db: DB, e: Estimate, companyName: string): PortalData {
+export function portalFromEstimate(db: DB, e: Estimate, companyName: string, demo = false): PortalData {
   const cust = db.customers.find((c) => c.id === e.customerId);
   const prop = db.properties.find((p) => p.id === e.propertyId);
   return {
@@ -169,7 +174,8 @@ export function portalFromEstimate(db: DB, e: Estimate, companyName: string): Po
     depositPaid: !!e.depositPaidAt,
     lang: docLanguageFor(db, { customerId: e.customerId, leadId: e.leadId }),
     terms: termsForClient(e.doc, db.company, docLanguageFor(db, { customerId: e.customerId, leadId: e.leadId }), !!e.approval || e.status === "approved" || e.status === "awaiting_countersign"),
-    simulatedPay: true, // the demo on this phone
+    simulatedPay: demo, // the demo on this phone only: a cloud company's preview never records a payment
+    preview: !demo,
     onlinePay: false, // Stripe needs the server
     invoices: (() => {
       const job = db.jobs.find((x) => x.estimateId === e.id);

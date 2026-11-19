@@ -21,9 +21,12 @@ export function SupplierPicker({
   onClose,
   onPick,
   onNew,
+  onExited,
 }: {
   visible: boolean;
   onClose: () => void;
+  /** the sheet has left (the next sheet opens then, never two at once) */
+  onExited?: () => void;
   onPick: (s: Supplier | null) => void;
   onNew: () => void;
 }) {
@@ -35,7 +38,7 @@ export function SupplierPicker({
     [db, q],
   );
   return (
-    <Sheet visible={visible} onClose={onClose} title={t("sup.pickTitle")}>
+    <Sheet visible={visible} onClose={onClose} onExited={onExited} title={t("sup.pickTitle")}>
       <View style={{ gap: space[3] }}>
         <TextField type="search" value={q} onChangeText={setQ} placeholder={t("sup.search")} icon="search" />
         <SheetScroll style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
@@ -64,7 +67,7 @@ export function SupplierPicker({
 
 const SOURCE: Record<string, DictKey> = {
   manual: "sup.src.manual", initial: "sup.src.initial", import_file: "sup.src.import_file",
-  ai_scan: "sup.src.ai_scan", shelf_tag: "sup.src.shelf_tag", module: "sup.src.module",
+  ai_scan: "sup.src.ai_scan", shelf_tag: "sup.src.shelf_tag", module: "sup.src.module", receipt: "sup.src.receipt",
 };
 
 /** «История цен»: the cost with the supplier's tax, when, from whom; newest first */

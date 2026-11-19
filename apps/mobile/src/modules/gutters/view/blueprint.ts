@@ -462,7 +462,7 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
   }
 
   // the title block, a row each (a phone is narrow): company, address, how it was measured; the date and the scale bar
-  const rows = [stamp.company && { s: stamp.company, fs: DP.font }, stamp.address && { s: stamp.address, fs: DP.fontSm }, { s: t(stamp.rough ? "mod.gutters.view.rough" : "mod.gutters.sheet.tape"), fs: DP.fontSm }].filter(Boolean) as { s: string; fs: number }[];
+  const rows = [stamp.company && { s: stamp.company, fs: DP.font }, stamp.address && { s: stamp.address, fs: DP.fontSm }].filter(Boolean) as { s: string; fs: number }[];
   let y = stampY + DP.font * 1.5;
   for (const r of rows) {
     text(m, y, r.s, r.fs, "start");

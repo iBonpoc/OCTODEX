@@ -52,7 +52,9 @@ const THEMES = ["dark", "light"];
 const layouts = args.includes("--all-layouts")
   ? THEMES.flatMap((theme) => WIDTHS.map((width) => ({ width, theme })))
   : [{ width: Number(opt("width") || process.env.E2E_WIDTH || 390), theme: opt("theme") || process.env.E2E_THEME || "dark" }];
-if (!args.includes("--no-build")) execSync("npx expo export --platform web", { cwd: APP, stdio: "inherit" });
+// locally the build skips Metro's cache (CHECKS §9 №43: in a git worktree the shared cache gave an old build of a changed
+// file); CI starts with an empty cache of its own, so it keeps the faster build
+if (!args.includes("--no-build")) execSync(`npx expo export --platform web${process.env.CI ? "" : " --clear"}`, { cwd: APP, stdio: "inherit" });
 fs.mkdirSync(OUT, { recursive: true });
 
 // The demo is reseeded when the company's day changes (store.tsx, «day» of octo.db.v5): a spec running across the company's
@@ -135,7 +137,9 @@ async function waitPastCompanyMidnight() {
     }
     try {
       await spec.run(h, { browser, BASE, layout, layouts, installClock });
-      if (errors.length) throw new Error(errors.join("\n"));
+      // a spec that puts in a server refusal (page.route 4xx) lists the console lines it expects (as e2e/cloud does)
+      const left = errors.filter((e) => !(spec.allowConsole || []).some((re) => e.startsWith("console:") && re.test(e)));
+      if (left.length) throw new Error(left.join("\n"));
       console.log(`✓ ${tag} (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
     } catch (e) {
       failed++;

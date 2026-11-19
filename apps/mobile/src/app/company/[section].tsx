@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Image, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
@@ -9,8 +9,9 @@ import type { Address, Company, CompanyContact, CompanyLicense, EntityType, Lice
 import { DOC_LANG_LABEL, DOC_LANGS, useI18n, type DictKey, type DocLang } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
 import { Labeled, PctField } from "@/features/fields";
-import { SETUP_STEPS, stepHint, stepTitle, type SetupStep } from "@/features/companySetup";
+import { SETUP_STEPS, stepHint, stepTitle, wizardSteps, type SetupStep } from "@/features/companySetup";
 import { tzLabel } from "@/features/scheduleSettings";
+import { logoFit } from "@/features/logoFit";
 import { ServiceCategoryEditor } from "@/features/ServiceCategoryPicker";
 import { CompanyTerms } from "@/features/CompanyTerms";
 import { Button, ChoiceChips, IconButton, ReadOnly, Segmented, StatusChip, Stepper, TextField, Toggle, useReadOnly } from "@/ui/controls";
@@ -20,7 +21,8 @@ import { Card, Empty, FieldGroup, RowView, Screen } from "@/ui/surfaces";
 import { StatusNote } from "@/ui/statusNote";
 
 const ENTITY: EntityType[] = ["llc", "corporation", "sole_proprietor", "partnership", "other"];
-const LIC: LicenseKind[] = ["cslb", "city_business", "his", "other"];
+// license kinds are examples, not a rule of any state (#2065): «other» first, a California one is just one of them
+const LIC: LicenseKind[] = ["other", "city_business", "cslb", "his"];
 const emptyAddr: Address = { line1: "", city: "", state: "", zip: "" };
 
 /**
@@ -34,9 +36,15 @@ export default function CompanySection() {
   const toast = useToast();
   const c = store.db.company;
   const [draft, setDraft] = useState<Company | null>(c ? (JSON.parse(JSON.stringify(c)) as Company) : null);
+  // #2002 review: «Назад» saves only what was typed HERE — compared with the step as it opened, not with a company that
+  // changed meanwhile (a sync, another director); and one tap goes once
+  const opened = useRef(draft ? JSON.stringify(draft) : "");
+  const leaving = useRef(false);
   const step = SETUP_STEPS.includes(section) ? section : "profile";
-  const idx = SETUP_STEPS.indexOf(step);
   const isWizard = wizard === "1";
+  // the wizard's steps: «Направления» only when no direction was chosen at the first run (#2007)
+  const steps = c ? wizardSteps(c, store.db.serviceCategories, step) : SETUP_STEPS;
+  const idx = steps.indexOf(step);
   // spec 26 §3 (07.11): the office sees the company settings, only the director changes them
   const ro = store.role !== "director";
   const back = () => (router.canGoBack() ? router.back() : router.replace("/company"));
@@ -50,7 +58,7 @@ export default function CompanySection() {
   }
   const set = (p: Partial<Company>) => setDraft((d) => (d ? { ...d, ...p } : d));
   const goNext = () => {
-    const next = SETUP_STEPS[idx + 1];
+    const next = steps[idx + 1];
     if (isWizard && next) router.replace(`/company/${next}?wizard=1`);
     else if (isWizard) router.replace("/today");
     else back();
@@ -63,18 +71,32 @@ export default function CompanySection() {
     toast.show(store.online ? t("co.saved") : t("offline.queued"), undo);
     goNext();
   };
+  const listSection = step === "contacts" || step === "licenses";
+  // #2002 (founder 17.11): «Назад» to the step before — what is typed here is kept (saved as «Сохранить» saves it, quietly),
+  // the step before opens with its own fields and its own «Сохранить и дальше» (its required fields are asked there again)
+  const prev = isWizard && idx > 0 ? steps[idx - 1] : undefined;
+  const goPrev = () => {
+    if (!prev || leaving.current) return;
+    leaving.current = true;
+    // the name is on step 1 only: an empty name (step 1 skipped) does not stop what is typed on this step from being kept
+    const changed = !listSection && JSON.stringify(draft) !== opened.current;
+    if (changed && !ro) {
+      const { licenses: _l, contacts: _c, id: _i, timezone: _tz, scheduleSettings: _s, businessHours: _h, leadDefaultAssigneeId: _a, ...patch } = draft;
+      store.saveCompany({ ...patch, skipped: draft.skipped.filter((s) => s !== step) });
+    }
+    router.replace(`/company/${prev}?wizard=1`);
+  };
   const skip = () => {
     store.saveCompany({ skipped: Array.from(new Set([...c.skipped, step])) });
     goNext();
   };
-  const listSection = step === "contacts" || step === "licenses";
 
   return (
     <Screen
       form
       title={t(stepTitle(step))}
       back={back}
-      subtitle={isWizard ? t("co.stepOf", { i: idx + 1, n: SETUP_STEPS.length }) : undefined}
+      subtitle={isWizard ? t("co.stepOf", { i: idx + 1, n: steps.length }) : undefined}
     >
       {ro ? <StatusChip status="info" label={t("fix.co.readOnly")} soft /> : null}
       <T v="body" tone="mut">
@@ -214,14 +236,23 @@ export default function CompanySection() {
       ) : null}
 
       </ReadOnly>
-      {ro ? null : listSection ? (
-        isWizard ? (
-          <Button label={SETUP_STEPS[idx + 1] ? t("co.next") : t("co.finish")} icon="chevronRight" full onPress={goNext} />
-        ) : null
-      ) : (
-        <View testID="co-save">
-          <Button label={isWizard ? (SETUP_STEPS[idx + 1] ? t("co.saveNext") : t("co.finish")) : t("ue.save")} icon="check" full disabled={!draft.name.trim()} onPress={save} />
-        </View>
+      {ro || (listSection && !isWizard) ? null : (
+        // the wizard: «‹ Назад» (secondary) on the left of the main one, from the 2nd step (DS §7.3: in a row the way back on the
+        // left, the step forward on the right; one secondary next to the main one in a screen's bar)
+        <RowView>
+          {prev ? (
+            <View testID="co-wizard-back">
+              <Button label={t("co.back")} icon="chevronLeft" variant="secondary" onPress={goPrev} />
+            </View>
+          ) : null}
+          <View style={{ flex: 1 }} testID={listSection ? "co-next" : "co-save"}>
+            {listSection ? (
+              <Button label={steps[idx + 1] ? t("co.next") : t("co.finish")} icon="chevronRight" full onPress={goNext} />
+            ) : (
+              <Button label={isWizard ? (steps[idx + 1] ? t("co.saveNext") : t("co.finish")) : t("ue.save")} icon="check" full disabled={!draft.name.trim()} onPress={save} />
+            )}
+          </View>
+        </RowView>
       )}
       {isWizard && !ro ? <Button label={t("co.skip")} variant="ghost" full onPress={skip} /> : null}
     </Screen>
@@ -416,7 +447,7 @@ function LicensesEditor() {
           icon="plus"
           variant="secondary"
           full
-          onPress={() => setEdit({ id: uid(), kind: "cslb", number: "", classes: [], onDocuments: true, exp: "", cls: "" })}
+          onPress={() => setEdit({ id: uid(), kind: "other", number: "", classes: [], onDocuments: true, exp: "", cls: "" })}
         />
       )}
     </>
@@ -428,12 +459,16 @@ function BrandEditor({ draft, set }: { draft: Company; set: (p: Partial<Company>
   const { t } = useI18n();
   const toast = useToast();
   const pick = async () => {
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, aspect: [1, 1], quality: 1 }).catch(() => null);
-    const uri = res && !res.canceled ? res.assets[0]?.uri : undefined;
+    // no square crop on picking (#2003: a wide logo was cut or squeezed); the crop itself is #2005
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 1 }).catch(() => null);
+    const asset = res && !res.canceled ? res.assets[0] : undefined;
+    const uri = asset?.uri;
     if (!uri) return;
     try {
-      // small square logo kept as a data URI in the company profile (shows on the client page and in PDFs)
-      const out = await ImageManipulator.manipulateAsync(uri, [{ resize: { width: component.logoPx, height: component.logoPx } }], {
+      // the logo keeps its proportions: the longer side at most logoPx (#2003), kept as a data URI in the company profile
+      // (shows on the client page and in PDFs)
+      const fit = logoFit(asset.width, asset.height, component.logoPx);
+      const out = await ImageManipulator.manipulateAsync(uri, [{ resize: fit }], {
         compress: 0.8,
         format: ImageManipulator.SaveFormat.PNG,
         base64: true,
@@ -450,7 +485,7 @@ function BrandEditor({ draft, set }: { draft: Company; set: (p: Partial<Company>
     <>
       <FieldGroup title={t("co.logo")} testID="co-group-logo">
         {draft.brand.logo ? (
-          <Image source={{ uri: draft.brand.logo }} style={{ width: component.logo, height: component.logo, borderRadius: radius.inner }} accessibilityLabel={t("co.logo")} />
+          <Image testID="co-logo-image" source={{ uri: draft.brand.logo }} resizeMode="contain" style={{ width: component.logo, height: component.logo, borderRadius: radius.inner }} accessibilityLabel={t("co.logo")} />
         ) : (
           <T v="caption" tone="mut">
             {t("co.noLogo")}
@@ -458,7 +493,7 @@ function BrandEditor({ draft, set }: { draft: Company; set: (p: Partial<Company>
         )}
         {ro ? null : <RowView>
           <Button label={draft.brand.logo ? t("co.changeLogo") : t("co.pickLogo")} icon="camera" variant="secondary" onPress={pick} />
-          {draft.brand.logo ? <Button label={t("cat.remove")} variant="ghost" onPress={() => set({ brand: { ...draft.brand, logo: undefined } })} /> : null}
+          {draft.brand.logo ? <Button label={t("co.removeLogo")} variant="ghost" onPress={() => set({ brand: { ...draft.brand, logo: undefined } })} /> : null}
         </RowView>}
       </FieldGroup>
       <FieldGroup title={t("co.color")} testID="co-group-color">

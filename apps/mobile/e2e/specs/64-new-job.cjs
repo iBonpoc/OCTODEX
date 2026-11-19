@@ -9,6 +9,7 @@ const { minuteOf, workdayOffset } = require("../companyTime.cjs");
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 const path = (h) => new URL(h.page.url()).pathname;
 
+const { pickVisitDay, pickVisitStart } = require("../visitForm.cjs");
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/today");
@@ -36,11 +37,11 @@ exports.run = async (h) => {
   // «Тип работы» — five options: a field with a menu at the row (#1095)
   await p.getByTestId("job-new-type-button").locator("visible=true").last().click();
   await p.getByTestId("job-new-type-jt-repair").locator("visible=true").last().click();
-  await p.getByRole("tab", { name: "Дата и время", exact: true }).last().click();
+  await p.getByRole("switch", { name: "Назначить дату" }).last().click(); // «Назначить дату» is a row with a switch (spec 56 wave 5а)
   const dayOffset = workdayOffset(3);
-  await p.getByRole("radiogroup").filter({ has: p.getByRole("radio", { name: "Сегодня" }) }).first().getByRole("radio").nth(dayOffset).click();
-  await p.getByRole("button", { name: "Ivan Sokolov" }).last().click();
-  await p.getByRole("radio", { name: /^1:00/ }).last().click();
+  await pickVisitDay(p, dayOffset); // the day — DateField (spec 56 wave 5б)
+  await p.getByRole("option", { name: "Ivan Sokolov" }).last().click();
+  await pickVisitStart(p, 13 * 60); // «Начало ⌄» — 1:00 PM
   await h.shot("filled");
   await h.click("Создать работу");
   await p.waitForTimeout(600);
@@ -82,7 +83,7 @@ exports.run = async (h) => {
   // 3. sales: no date
   await setRole(h, "sales");
   await h.go("/job/new");
-  h.expect((await p.getByRole("tab", { name: "Дата и время", exact: true }).count()) === 0, "sales: no date block");
+  h.expect((await p.getByRole("switch", { name: "Назначить дату" }).count()) === 0, "sales: no date block");
   await h.expectText(/Дату и мастеров назначит офис/, "sales: why there is no date");
   await h.click("Выбрать клиента");
   await h.sheet().getByPlaceholder("Имя, телефон или адрес").fill(client.name);

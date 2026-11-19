@@ -46,7 +46,8 @@ exports.run = async (h) => {
   await p.getByText(new RegExp(`^Оплачен · ${paid.length}$`)).last().click();
   await p.waitForTimeout(400);
   h.expect((await cards.count()) === paid.length, `«Оплачен» lists ${paid.length} paid invoices`);
-  h.expect((await cards.first().innerText()).includes("Оплачено"), "paid card says «Оплачено»");
+  const paidCard = await cards.first().innerText();
+  h.expect(paidCard.includes("Оплачен") && !paidCard.includes("Оплачено"), `paid card says «Оплачен», one word (#1427): ${paidCard.slice(0, 160)}`);
 
   // one client's debts
   const c = db.customers.find((x) => owed.some((i) => i.customerId === x.id));

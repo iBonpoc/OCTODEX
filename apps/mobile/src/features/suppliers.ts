@@ -2,6 +2,7 @@
  * Suppliers (docs/specs/36-suppliers.md, SUP1): the same rules as the server's CHECKs (migration 20261110000000), who
  * sees them, picking a supplier for a price-list item and the history of an item's cost. Pure (no React).
  */
+import { catalogPrice, costWithoutTax } from "@octo/estimating-engine";
 import type { CatalogItem, CostHistoryEntry, DB, PaymentTerms, Role, Supplier } from "@/data/types";
 import { orElse, type GuardedUndo } from "@/data/undo";
 
@@ -82,10 +83,51 @@ export function itemsOfSupplier(db: DB, supplierId: string): CatalogItem[] {
  * into the item's supplier tax when the supplier has one (the engine counts from the item's own — new estimate lines
  * follow, old ones keep their snapshot). null — no supplier: the link goes, `vendor` stays as typed before.
  */
-export function pickSupplier(it: CatalogItem, s: Supplier | null): CatalogItem {
+export function pickSupplier(it: CatalogItem, s: Supplier | null, answer?: TaxAnswer, asked?: Pick<SupplierTaxAsk, "costCents" | "netCents">): CatalogItem {
   // "" = cleared (the save sends null); never-set stays absent
   if (!s) return it.supplierId ? { ...it, supplierId: "", supplierSku: it.supplierSku === undefined ? undefined : "" } : it;
-  return { ...it, supplierId: s.id, vendor: s.name, ...(s.taxBps !== undefined ? { vendorTaxBps: s.taxBps } : {}) };
+  // «Да, с налогом»: the cost typed was with the supplier's tax — kept without it, so the client's price stays (#1835). Only
+  // for the cost the question named (the prices it showed are the ones saved — review #1904 №2)
+  const ask = asked ?? supplierTaxAsk(it, s);
+  const cost = ask && answer === "withTax" && it.costCents === ask.costCents ? { costCents: ask.netCents } : {};
+  return { ...it, supplierId: s.id, vendor: s.name, ...(s.taxBps !== undefined ? { vendorTaxBps: s.taxBps } : {}), ...cost };
+}
+
+/** the answer to «Закупка $108.00 — это уже с налогом поставщика (8 %)?» */
+export type TaxAnswer = "withTax" | "withoutTax";
+export interface SupplierTaxAsk {
+  /** the cost as typed (maybe with the tax in it) */
+  costCents: number;
+  taxBps: number;
+  /** «Да, с налогом»: the cost without the tax; the client's price after it (the same as now, ± 1 ¢) */
+  netCents: number;
+  priceWithTax: number;
+  /** «Нет, без налога»: the cost stays; the client's price after it (the tax is added on top) */
+  priceWithoutTax: number;
+  /** the client's price now */
+  priceNow: number;
+}
+/**
+ * #1835 (the audit's variant Б, 16.11): a material's cost was typed with no supplier — it may already have the supplier's
+ * tax in it («Сохранить в каталог» puts the line's cost, which is with the tax). Picking a supplier with a tax would add the
+ * tax a second time (100 → 108 → 140.40 became 116.64 / 151.63). So it is asked ONCE, and only when it matters: a material
+ * with a cost and no tax on it yet (with or without a supplier before), the supplier's tax above 0. No default: closing the question attaches nothing.
+ */
+export function supplierTaxAsk(it: CatalogItem, s: Supplier): SupplierTaxAsk | null {
+  const tax = s.taxBps ?? 0;
+  // a tax already on the item: its cost is clearly without it — nothing to ask. No tax on it — whether it had a supplier
+  // (a supplier with no tax, then another with 8 %) or none — the cost may have the tax in it (review #1904 №1)
+  if (it.kind !== "material" || !(it.costCents && it.costCents > 0) || tax <= 0 || (it.vendorTaxBps ?? 0) > 0) return null;
+  const markup = it.markupBps ?? 0;
+  const net = costWithoutTax(it.costCents, tax);
+  return {
+    costCents: it.costCents,
+    taxBps: tax,
+    netCents: net,
+    priceWithTax: catalogPrice(net, tax, markup),
+    priceWithoutTax: catalogPrice(it.costCents, tax, markup),
+    priceNow: catalogPrice(it.costCents, it.vendorTaxBps ?? 0, markup),
+  };
 }
 
 /** the items of a supplier whose supplier tax differs from the supplier's own («Применить к N позициям?») */
@@ -99,11 +141,12 @@ export function supplierName(db: DB, it: CatalogItem): string | undefined {
   return supplierOf(db, it.supplierId)?.name ?? (it.vendor?.trim() || undefined);
 }
 
-/** the history of one item (newest first), or of every item of a supplier; at most `limit` */
+/** the history of one item (newest first), or of a supplier: its items' rows and every row bought from it (an order's
+ *  receipt is the ORDER's supplier, who need not be the item's main one — #1836 review); at most `limit` */
 export function historyOf(db: DB, where: { itemId?: string; supplierId?: string }, limit: number): CostHistoryEntry[] {
   const items = where.supplierId ? new Set(itemsOfSupplier(db, where.supplierId).map((x) => x.id)) : null;
   return (db.costHistory ?? [])
-    .filter((h) => (where.itemId ? h.itemId === where.itemId : items ? items.has(h.itemId) : false))
+    .filter((h) => (where.itemId ? h.itemId === where.itemId : items ? items.has(h.itemId) || h.supplierId === where.supplierId : false))
     .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
     .slice(0, limit);
 }

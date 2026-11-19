@@ -1,8 +1,8 @@
 /**
- * Wave 7а-2b — «Удалить аккаунт» (story map S22; docs/specs/19 §6.10–§6.12; Apple 5.1.1(v)). Demo mode: there is no
+ * Wave 7а-2b — «Удалить учётную запись» (story map S22; docs/specs/19 §6.10–§6.12; Apple 5.1.1(v)). Demo mode: there is no
  * account, so the screen explains it and never deletes. The cloud side is db T50, deleteAccountFn.test.ts (the edge
  * function), unit deleteAccount.test.ts (words, the repeat, the last owner, the device wipe) and the manual pass §6.8.
- * - «Мои настройки»: the very last row «Удалить аккаунт» → /settings/delete-account;
+ * - «Мои настройки»: the very last row «Удалить учётную запись» → /settings/delete-account;
  * - the screen: «Что удалится» and «Что останется у компании» (the business records, the history, the signed documents,
  *   the consent without the IP); the demo note;
  * - «Удалить навсегда» is off: no code, no account; the word of another language does not count;
@@ -26,9 +26,9 @@ exports.run = async (h) => {
     const sig = [...document.querySelectorAll("button, [role=button]")].filter((e) => e.offsetParent !== null && /Моя подпись для договоров/.test(e.textContent || "")).pop();
     return { sig: !!sig && !!(sig.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING) };
   });
-  h.expect(order.sig, `«Удалить аккаунт» is the last row of «Профиль и аккаунт» (${JSON.stringify(order)})`);
-  await h.expectText(/Удалить аккаунт/, "the row");
-  await row.getByText("Удалить аккаунт").click();
+  h.expect(order.sig, `«Удалить учётную запись» is the last row of «Профиль и аккаунт» (${JSON.stringify(order)})`);
+  await h.expectText(/Удалить учётную запись/, "the row");
+  await row.getByText("Удалить учётную запись").click();
   await p.waitForTimeout(600);
   h.expect(new URL(p.url()).pathname === "/settings/delete-account", `opens the screen (${p.url()})`);
 
@@ -65,7 +65,7 @@ exports.run = async (h) => {
   await p.waitForTimeout(700);
   const row2 = p.getByTestId("settings-delete-account").locator("visible=true").last();
   await row2.scrollIntoViewIfNeeded();
-  await row2.getByText("Удалить аккаунт").click();
+  await row2.getByText("Удалить учётную запись").click();
   await p.waitForTimeout(600);
   await btn("Получить код").click();
   await h.expectText(/Нужна сеть/, "without the network: «Нужна сеть»");

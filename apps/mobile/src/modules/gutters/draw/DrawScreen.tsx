@@ -9,8 +9,11 @@
  * `?m=<id>` opens a measurement, none — a new one; a module that is off or past its
  * trial draws but saves nothing, and says so before the work starts (§6, founder О2). Delete → «Отменить» 5 s (rule 5).
  */
+import { canvasUnsaved, unsentAfter } from "./unsent";
+import { registerDirtySheet } from "@/ui/dirtySheets";
+import { sizeText } from "../sizeText";
 import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
-import { useWindowDimensions, View } from "react-native";
+import { useWindowDimensions, View, type LayoutChangeEvent } from "react-native";
 import { router, Stack, useLocalSearchParams, type Href } from "expo-router";
 import * as Crypto from "expo-crypto";
 import Svg, { Line } from "react-native-svg";
@@ -29,9 +32,12 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { Banner } from "@/ui/banner";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
+import { goTo } from "@/nav/go";
+import { setFooterInset, setToastRight } from "@/ui/footerInset";
 import { fillStyle } from "@/ui/fill";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { isDoubleTap, tapRule, type LastTap } from "../canvas/doubleTap";
+import { deleteTarget, hasCap, type PickedEnd } from "../canvas/endPick";
 import { adopt, dsFor, patchDs, patchRun, pruneStored, readDefaults, resetKind, runFor, storeDefaults, type NewDefaults } from "../canvas/toolDefaults";
 import { CornerSheet } from "./CornerSheet";
 import { EndSheet } from "./EndSheet";
@@ -48,21 +54,23 @@ import { InputWindow } from "./InputWindow";
 import { AttrBody, DsAttrsView, QuickLength, RunAttrsView, type RunCorner } from "./AttrPanel";
 import { MeasurePhotos } from "./Photos";
 import { fmtLen } from "../canvas/format";
-import { dropHaptic, forgetOldDraft, loadToolbarPlace, placeAt, saveToolbarPlace, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
+import { dropHaptic, forgetOldDraft, loadToolbarPlace, placeAt, saveToolbarPlace, type ToolbarPlace } from "../canvas/localStore";
 import { makeModuleStore } from "../canvas/moduleStore";
-import { gutterData, measurementOf, photosOf, relink, removeMeasurement } from "../data";
+import { gutterData, measurementOf, photosOf, relink } from "../data";
 import { makeSaver } from "../canvas/draftStore";
 import { onAppLeave } from "@/data/appActive";
 import { LinkSheet } from "./LinkSheet";
 import { summaryOf } from "./summary";
 import { fromElements, toElements, type MeasurementRow } from "../canvas/model";
 import { choicesFor, readRules, toRulesOverride } from "../settings";
-import { buildScene, fitView, manyStories, nextStoryOf, storyOf, toPlan, toScreen, zoomLimits, type Scene, type Story, type View as PlanView } from "../canvas/scene";
+import { autoFitView, buildScene, fitView, manyStories, nextStoryOf, storyOf, toPlan, toScreen, zoomLimits, type Insets, type Scene, type Story, type View as PlanView } from "../canvas/scene";
 import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { GridLayer } from "../canvas/GridLayer";
 import { useJsGestureConfig } from "../canvas/jsGestureConfig";
 import { listPreview, partName } from "../prices";
-import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, signedOn } from "../estimateLink";
+import { clientLangOf, deleteBlock, estimateAction, estimateOfMeasurement, estimatesOn, makeEstimate, removeMeasurementDetached } from "../estimateLink";
+import { DeleteMeasurementSheet, NO_ESTIMATES } from "../view/DeleteMeasurementSheet";
+import type { ModuleEstimateStore } from "@/modules/registry";
 import { tFor } from "@/i18n/translate";
 import { cornerChoiceOf, cornerCut, findCorners, capSide, houseSides, splashOff, runEnds, runLengthIn, toMeasurement, withoutDuplicates, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
 import { localUndo, type GuardedUndo } from "@/data/undo";
@@ -143,7 +151,7 @@ function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow, disabl
 }
 
 /** a downspout size for the bar: «3×4», a round one «3″» */
-const dsSizeText = (s: string) => (s.includes("x") ? s.replace("x", "×") : `${s}″`);
+const dsSizeText = sizeText; // one format everywhere (#1916)
 
 const NO_VIEW: PlanView = { k: 1, ox: 0, oy: 0 };
 
@@ -193,6 +201,8 @@ export default function DrawScreen() {
   useHideTabBar(flat);
   const toast = useToast();
   const store = useStore();
+  /** who deletes a measurement (#2013: a tech changes only the estimates he made) */
+  const who = { role: store.role, me: store.db.me };
   const params = useLocalSearchParams<{ m?: string; lead?: string; property?: string; estimate?: string }>();
   const ins = useSafeAreaInsets();
   const access = moduleState(store.db.company?.modules?.gutters).access;
@@ -212,6 +222,17 @@ export default function DrawScreen() {
   const [tool, setTool] = useState<Tool>("line");
   const [story, setStoryN] = useState<Story>(1);
   const [selected, setSelected] = useState<string | null>(null);
+  /** a cap picked on its own (#1855): the gutter is `selected`, this end its picked cap; gone when another thing is picked */
+  const [pickedEnd, setPickedEnd] = useState<PickedEnd>(null);
+  useEffect(() => { if (pickedEnd && pickedEnd.id !== selected) setPickedEnd(null); }, [selected, pickedEnd]);
+  // the drawing changed (a gutter drawn, an end pulled, the length set): what is picked is the gutter, not its cap — the lift of a
+  // stroke on the web is a tap on its end
+  const drawnAt = useRef<{ d: unknown; at: number }>({ d: null, at: 0 });
+  useEffect(() => {
+    if (drawnAt.current.d === drawing) return;
+    drawnAt.current = { d: drawing, at: Date.now() };
+    setPickedEnd(null);
+  }, [drawing]);
   const [place, setPlace] = useState<ToolbarPlace>("bottom");
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [view, setView] = useState<PlanView | null>(null);
@@ -228,8 +249,8 @@ export default function DrawScreen() {
   /** 390: the sheet of the measurement's photos */
   const [photoSheet, setPhotoSheet] = useState(false);
   /** «Ещё»: «Вернуть» and where the toolbar sits — rare, off the main row (П20.8) */
-  // «⋯» → «Точность замера» or «Где панель инструментов» (founder 10.11, #739: «что такое „как мерили“?»)
-  const [moreSheet, setMoreSheet] = useState<"acc" | "place" | "layers" | null>(null);
+  // «⋯» → «Слои» (the place of the toolbar is by its grip since #2156; «Точность замера» gone, #1764)
+  const [moreSheet, setMoreSheet] = useState<"acc" | "layers" | null>(null);
   // the layers of the view (#930): on this screen only, not saved with the measurement; all on to begin with
   const [layers, setLayers] = useState({ grid: true, labels: true, ds: true });
   /** the gutter just drawn: its length by hand at once (просьба основателя 08.11) */
@@ -275,7 +296,14 @@ export default function DrawScreen() {
   // cancels the stroke — founder 09.11: the pinch never came once the first finger had moved)
   // the limits of the scale (#1281): the whole drawing in a quarter of the screen at the farthest, 1″ as big as a finger's target at the nearest
   const zoomLim = useMemo(() => zoomLimits(drawing.runs.flatMap((r) => [r.a, r.b]), size.w > 0 ? size : { w: 390, h: 844 }, space[8], sizes.hitMin), [drawing.runs, size]);
-  const canvas = useCanvasGestures(viewNow, setView, live, 2, { lim: zoomLim, viewport: size.w > 0 ? size : { w: 390, h: 844 }, onEdge: () => haptics.selection() });
+  /** a finger (or the mouse) touched the screen: from now the view is the person's, it never fits itself again (rule 27) */
+  const touched = useRef(false);
+  const onTouchView = useCallback((v: PlanView) => {
+    touched.current = true;
+    setView(v);
+  }, []);
+  // a pinch or a pan commits through `onTouchView`: the view is the person's even if the touch never reached the JS responder (#1667 review)
+  const canvas = useCanvasGestures(viewNow, onTouchView, live, 2, { lim: zoomLim, viewport: size.w > 0 ? size : { w: 390, h: 844 }, onEdge: () => haptics.selection() });
 
   // the latest values for gesture callbacks and the delayed save
   const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch, layers, autoDs, size, newDef });
@@ -323,12 +351,28 @@ export default function DrawScreen() {
     };
   }, []);
 
-  const fit = useCallback((d: Drawing, s: { w: number; h: number }) => fitView(d.runs.flatMap((r) => [r.a, r.b]), s, space[8]), []);
-  useEffect(() => {
-    if (!view && m && size.w > 0 && size.h > 0) setView(fit(drawing, size));
-  }, [view, m, size, drawing, fit]);
+  // «вписать» keeps the drawing clear of what lies over the canvas (#1667): the header on top, the toolbar and the summary
+  // chips at the bottom, the toolbar at a side — measured below (`covers`), plus the old margin
+  const coverRef = useRef<Insets>({ t: 0, r: 0, b: 0, l: 0 });
+  const fit = useCallback((d: Drawing, s: { w: number; h: number }) => {
+    const c = coverRef.current;
+    // the old margin (room for the length labels beside a line) and one step more where something lies over the canvas, so a
+    // label never touches the header, the toolbar or the chips (#1667 design review: it was 6–9 px off the toolbar)
+    const g = space[8];
+    const e = (x: number) => (x > 0 ? x + space[4] : 0);
+    return fitView(d.runs.flatMap((r) => [r.a, r.b]), s, { t: e(c.t) + g, r: e(c.r) + g, b: e(c.b) + g, l: e(c.l) + g });
+  }, []);
 
   const later = useRef<() => void>(() => {});
+  // #1912: «Обновить» must not reload under a stroke or an unwritten change: while one lasts, this screen is a sheet with unsaved work
+  const [touching, setTouching] = useState(false);
+  const [unsent, setUnsent] = useState(false);
+  const unsavedNow = canvasUnsaved({ touching, unsent });
+  useEffect(() => {
+    if (!unsavedNow) return;
+    return registerDirtySheet({ ask: () => flushRef.current() });
+  }, [unsavedNow]);
+  const flushRef = useRef<() => void>(() => {});
   /** the address gets the measurement's id at its first edit (a reload opens it again) — only while this screen is shown */
   const nameIt = () => {
     const mm = cur.current.m;
@@ -339,7 +383,9 @@ export default function DrawScreen() {
   const flush = useCallback(() => {
     const { drawing: d, m: mm, canSave: ok } = cur.current;
     if (!mm || !ok) return;
+    if (shown.current) setUnsent(true);
     void saver.flush(mm, toElements(d, mm.id)).then((r) => {
+      if (shown.current) setUnsent(unsentAfter(r)); // #1912: a failed write stays «unsent» until it lands
       if (r === "saved") {
         if (!shown.current) return;
         setSavedOnce(true);
@@ -353,9 +399,11 @@ export default function DrawScreen() {
       else if (r === "failed") later.current();
     });
   }, [saver]);
+  flushRef.current = flush;
   // a gesture ended: write 1 s later (the queue gets one write per gesture, not per movement — П14.2 №5)
   later.current = () => {
     if (timer.current) clearTimeout(timer.current);
+    if (shown.current) setUnsent(true);
     timer.current = setTimeout(flush, SAVE_AFTER_MS);
   };
   useEffect(() => () => {
@@ -441,6 +489,7 @@ export default function DrawScreen() {
     maxPointers: 1,
     simultaneousWith: [canvas.pinch, canvas.pan],
     onBegin: (e) => {
+      setTouching(true);
       downAt.current = [e.x, e.y];
       downTime.current = Date.now();
       threeShown.current = false;
@@ -452,6 +501,7 @@ export default function DrawScreen() {
       holdTimer.current = setTimeout(liftAtHold, motion.longPressMs);
     },
     onFinalize: () => {
+      setTouching(false);
       clearHold(); // let go without moving, or a second finger: nothing changes, no «medium» (the drawing is untouched)
       hold.current = holdCancel(hold.current).hold;
       setLifted(null);
@@ -688,6 +738,9 @@ export default function DrawScreen() {
       if (tapped.act.do === "pick") {
         if ((h ? h.id : null) !== cur.current.selected) haptics.selection();
         setSelected(h ? h.id : null);
+        // a tap on a free end with a cap picks the cap: 🗑 takes it off, not the gutter (#1855)
+        // (not the lift of a drag: a gutter just drawn or an end just pulled is the gutter picked, its end under the finger is not a tap on the cap)
+        setPickedEnd(h?.kind === "end" && freeEnd && !liftTap.current && Date.now() - drawnAt.current.at > motion.doubleTapMs && hasCap(d, h.id, h.end) ? { id: h.id, end: h.end } : null);
         return;
       }
       haptics.light();
@@ -747,9 +800,12 @@ export default function DrawScreen() {
   const sel = selected ? drawing.runs.find((r) => r.id === selected) ?? drawing.downspouts.find((s) => s.id === selected) : undefined;
   // «· эт N» only with more than one storey on the drawing (#1666, DS §19а — as the lengths on the canvas, #1275)
   const many = manyStories(drawing.runs);
+  const capPicked = !!sel && "a" in sel && !!pickedEnd && pickedEnd.id === sel.id && hasCap(drawing, pickedEnd.id, pickedEnd.end);
   const selText = !sel
     ? null
-    : "a" in sel
+    : capPicked
+      ? t("mod.gutters.draw.selCap")
+      : "a" in sel
       ? t(many ? "mod.gutters.draw.selRun" : "mod.gutters.draw.selRunOne", { len: fmtLen(runLengthIn(sel), ch.lenFormat), n: storyOf(sel.attrs.story) })
       : t(many ? "mod.gutters.draw.selDsKind" : "mod.gutters.draw.selDsKindOne", { kind: t(`mod.gutters.attr.kind.${dsKindOf(sel.shape, sel.dsStyle).key}`).replace("\n", " "), size: dsSizeText(sel.size), n: storyOf(drawing.runs.find((r) => r.id === sel.runId)?.attrs.story) });
   /** the picked downspout's kind icon on the bottom bar (#929): the kind seen at a glance, no colour */
@@ -798,10 +854,6 @@ export default function DrawScreen() {
     later.current();
   };
   const tape = m?.accuracy === "tape";
-  const setAccuracy = (a: "rough" | "tape") => {
-    setM((x) => (x ? { ...x, accuracy: a } : x));
-    later.current();
-  };
   const endRun = endSheet ? drawing.runs.find((r) => r.id === endSheet.id) : undefined;
   const corner = cornerSheet ? findCorners(drawing).find((f) => f.id === cornerSheet) : undefined;
   const cut = corner ? cornerCut(drawing, corner) : null;
@@ -873,6 +925,14 @@ export default function DrawScreen() {
   };
   const doDelete = () => {
     if (!selected) return;
+    const target = deleteTarget(drawing, selected, pickedEnd);
+    if (target?.kind === "cap") {
+      // the cap only (#1855): the end stays a free end without one, the gutter stays picked; «Отменить» puts the cap back
+      commit(setCapOff(drawing, target.id, target.end, true));
+      setPickedEnd(null);
+      toast.show(t("mod.gutters.draw.capRemoved"), localUndo(() => { const now = cur.current.drawing; commit(setCapOff(now, target.id, target.end, false), now, true); }));
+      return;
+    }
     const before = drawing;
     commit(removeElement(drawing, selected));
     setSelected(null);
@@ -914,11 +974,6 @@ export default function DrawScreen() {
       void saveToolbarPlace(p);
     },
   });
-  const pickPlace = (p: ToolbarPlace) => {
-    setPlace(p);
-    setMoreSheet(null);
-    void saveToolbarPlace(p);
-  };
   /** a layer on or off (#930): off with the downspouts — no downspout stays picked, and the downspout tool gives way to «Желоб» */
   const toggleLayer = (l: "grid" | "labels" | "ds", on: boolean) => {
     setLayers((x) => ({ ...x, [l]: on }));
@@ -1013,7 +1068,7 @@ export default function DrawScreen() {
   // «⋯» (founder 09.11, #692 #690; spec 33 П24 Б5, Б6): link to another, unlink back to the drafts, delete the measurement
   const whoRef = useRef<React.ComponentRef<typeof View>>(null);
   const [whoAt, setWhoAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  type WhoKey = "fit" | "props" | "end0" | "end1" | "acc" | "place" | "layers" | "autods" | "relink" | "unlink" | "delete";
+  type WhoKey = "fit" | "props" | "end0" | "end1" | "acc" | "layers" | "autods" | "relink" | "unlink" | "delete";
   const linked = !!leadId || !!placeId;
   // the free ends of the picked gutter (a corner and a butted end have no cap to talk about; «без заглушки» stays one)
   const endRun0 = canSave ? drawing.runs.find((r) => r.id === selected) : undefined;
@@ -1022,17 +1077,14 @@ export default function DrawScreen() {
     const found = findCorners(drawing), kinds = runEnds(drawing, found)[endRun0.id], hs = houseSides(drawing)(endRun0);
     return ([0, 1] as const).filter((e) => !!endRun0.noCap?.[e] || kinds?.[e]?.kind === "cap").map((e) => ({ end: e, side: capSide(e, hs) }));
   })();
-  const whoItems: { key: WhoKey; label: string; destructive?: boolean }[] = [
+  const whoItems: { key: WhoKey; label: string; destructive?: boolean; testID?: string }[] = [
     // «вписать» left the header (#1273): the whole drawing is a double tap on the empty place, and a row here
     { key: "fit", label: t("mod.gutters.draw.fit") },
     // what a double tap opens, as rows too (a screen reader has no double tap, a phone on its side has no panel): the properties of the picked
     // gutter / downspout, and «Конец желоба» of each of its free ends (named by the letter the cap carries on the canvas)
     ...(canSave && sel && !wide ? [{ key: "props" as const, label: t("mod.gutters.attr.props") }] : []),
     ...endRows.map((r) => ({ key: `end${r.end}` as const, label: `${t("mod.gutters.end.title")} · ${r.side}` })),
-    // how exact the lengths are, and where the toolbar sits — two items, each says what it is (#739; was one
-    // «Как мерили, панель» the founder did not understand)
-    ...(canSave && m ? [{ key: "acc" as const, label: t("mod.gutters.draw.accItem") }] : []),
-    { key: "place", label: t("mod.gutters.draw.placeItem") },
+    // no «Где панель» (founder 18.11, #2156: «Зачем она там?») — the toolbar moves by its grip; no «Точность замера» (#768, #1764)
     { key: "layers", label: t("mod.gutters.draw.layersItem") },
     // a measurement from before the automatic downspouts gets them only when asked (#1246): not silently, the estimate would change
     ...(canSave && autoDs && drawing.runs.length > 0 && !autoManaged(drawing) ? [{ key: "autods" as const, label: t("mod.gutters.draw.autoDsItem") }] : []),
@@ -1043,19 +1095,51 @@ export default function DrawScreen() {
     if (k === "fit") { if (size.w) setView(fit(drawing, size)); return; }
     if (k === "props") return setSheet(true);
     if (k === "end0" || k === "end1") return setEndSheet(endRun0 ? { id: endRun0.id, end: k === "end1" ? 1 : 0 } : null);
-    if (k === "acc" || k === "place" || k === "layers") return setMoreSheet(k);
+    if (k === "layers") return setMoreSheet(k);
     if (k === "autods") return placeAutoDs();
     if (!m) return;
     flush();
     if (k === "relink") setLinkSheet(true);
     else if (k === "unlink") toast.show(t("mod.gutters.link.unlinked"), relink(store, m.id, null) ?? undefined);
-    else if (signedOn(store.db, m.id)) toast.show(t("mod.gutters.draw.deleteSigned"));
-    else {
-      const undo = removeMeasurement(store, m.id);
-      back();
-      toast.show(t("mod.gutters.draw.mDeleted"), undo ?? undefined);
-    }
+    else if (deleteBlock(store.db, m.id, who)) toast.show(t(deleteBlock(store.db, m.id, who) === "signed" ? "mod.gutters.draw.deleteSigned" : "mod.gutters.del.notYours"));
+    // an open estimate stands on it: asked first (#2013), the question holds what it said while it goes out
+    else if (estimatesOn(store.db, m.id).drafts.length || estimatesOn(store.db, m.id).sent.length) setAskDelete(estimatesOn(store.db, m.id));
+    else deleteNow();
   };
+  const [askDelete, setAskDelete] = useState<ReturnType<typeof estimatesOn> | null>(null);
+  /** one deletion at a time (rule 5: a second press never puts an empty «Отменить» over the first one's) */
+  const deleting = useRef(false);
+  const deleteNow = () => {
+    setAskDelete(null);
+    const mm = cur.current.m;
+    if (!mm || deleting.current) return;
+    // asked again at the press: signed meanwhile or not this person's to change — never deleted
+    const block = deleteBlock(store.db, mm.id, who);
+    if (block) return toast.show(t(block === "signed" ? "mod.gutters.draw.deleteSigned" : "mod.gutters.del.notYours"));
+    deleting.current = true;
+    const undo = removeMeasurementDetached(store as unknown as ModuleEstimateStore, mm.id, who);
+    if (!undo) {
+      deleting.current = false;
+      return toast.show(t("mod.gutters.est.off"));
+    }
+    flush();
+    // to the list of measurements (founder 16.11, #1819: he stayed on an empty canvas «Замер»): the canvas of a deleted one is
+    // never shown — the list below is popped to, else it takes this screen's place (goTo); «Отменить» brings it back there
+    goTo(moduleHref("gutters", "list"));
+    toast.show(t("mod.gutters.draw.mDeleted"), undo);
+  };
+  // the toast stands above what lies at the bottom of the canvas — the hints, the chips and the toolbar (#1819: «Замер удалён ·
+  // Отменить» lay on the toolbar); the same lane the pinned action bar gives (ui/footerInset), gone with the screen
+  const [barH, setBarH] = useState(0);
+  useEffect(() => {
+    setFooterInset(barH);
+    return () => setFooterInset(0);
+  }, [barH]);
+  // from 820 the side panel of properties stands at the right over the whole height: the toast is centred in the canvas, not on it (#1895)
+  useEffect(() => {
+    setToastRight(panelSide);
+    return () => setToastRight(0);
+  }, [panelSide]);
   const back = () => {
     flush();
     if (router.canGoBack()) router.back();
@@ -1090,6 +1174,38 @@ export default function DrawScreen() {
   const row = side || flat;
   /** in that row the toolbar is at the left edge (the left side; lying, unless put on the right) */
   const toolsFirst = at === "left" || (flat && at !== "right");
+
+  // what lies over the canvas, measured (#1667): the header's bottom; the bottom column's top, its toolbar (at the bottom
+  // edge) and its summary chips; the toolbar's width at a side edge. The chips and the toolbar's place come after the
+  // first frame — until a finger touches, the drawing fits itself again as they come (`autoFitView`), then never
+  const lay = useRef({ header: 0, colY: -1, sumY: -1, tbW: 0 });
+  const [layN, setLayN] = useState(0);
+  const onLay = useCallback((k: "header" | "colY" | "sumY" | "tbW", f: (l: LayoutChangeEvent["nativeEvent"]["layout"]) => number) => (e: LayoutChangeEvent) => {
+    const v = Math.round(f(e.nativeEvent.layout));
+    if (lay.current[k] !== v) {
+      lay.current[k] = v;
+      setLayN((n) => n + 1);
+    }
+  }, []);
+  // since #1630 the bottom column holds the hints, the chips and (at the bottom) the toolbar, pressed to the bottom: its top is
+  // where the drawing ends. On a side the toolbar stands in one row with the chips: it covers its side (its width), the
+  // chips only their own height at the bottom
+  const covers = useMemo((): Insets => {
+    const L = lay.current;
+    const H = size.h;
+    if (!H || L.colY < 0) return { t: L.header, r: 0, b: 0, l: 0 };
+    if (side) {
+      const w = L.tbW + space[3];
+      return { t: L.header, b: Math.max(0, H - (L.colY + Math.max(L.sumY, 0))), l: at === "left" ? w + ins.left : 0, r: at === "right" ? w + ins.right : 0 };
+    }
+    return { t: L.header, b: Math.max(0, H - L.colY), l: 0, r: 0 };
+  }, [layN, size.h, at, side, ins.left, ins.right]);
+  coverRef.current = covers;
+  useEffect(() => {
+    if (!m || size.w <= 0 || size.h <= 0) return;
+    const next = autoFitView(touched.current, view, fit(drawing, size));
+    if (next !== view) setView(next);
+  }, [view, m, size, drawing, fit, covers]);
   // the grip (founder 08.11): drag the toolbar, let go — it sticks to the nearest edge
   const grip = (
     <GestureDetector gesture={gripPan}>
@@ -1104,7 +1220,7 @@ export default function DrawScreen() {
   const lineIcon = PROFILE_ICON[(runFor(ch, story, newDef).profile as GutterProfile)] ?? "channel";
   const dsIcon = (() => { const a = dsFor(ch, newDef); return dsKindOf(a.shape, a.dsStyle).icon; })();
   const tools = (
-    <View testID="draw-toolbar" style={{ flexDirection: side ? "column" : "row", alignSelf: grow ? "stretch" : undefined, gap: space[1], alignItems: "center", padding: space[2], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: gripping ? dt.runW / 2 : 1, borderColor: gripping ? c.ink : c.bd, flexShrink: 0, transform: [{ translateX: gripAt[0] }, { translateY: gripAt[1] }] }}>
+    <View testID="draw-toolbar" onLayout={onLay("tbW", (l) => l.width)} style={{ flexDirection: side ? "column" : "row", alignSelf: grow ? "stretch" : undefined, gap: space[1], alignItems: "center", padding: space[2], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: gripping ? dt.runW / 2 : 1, borderColor: gripping ? c.ink : c.bd, flexShrink: 0, transform: [{ translateX: gripAt[0] }, { translateY: gripAt[1] }] }}>
       {grip}
       <View testID="draw-tool-line" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon={lineIcon} label={t("mod.gutters.draw.line")} active={tool === "line"} onPress={() => toolPress("line")} grow={grow} below={at === "top"} /></View>
       <View testID="draw-tool-ds" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon={dsIcon} label={t("mod.gutters.draw.downspout")} active={tool === "ds"} onPress={() => toolPress("ds")} grow={grow} below={at === "top"} /></View>
@@ -1154,14 +1270,14 @@ export default function DrawScreen() {
   const gB = ghost && view ? toScreen(view, ghost.b) : null;
 
   return (
-    <View style={{ flex: 1, backgroundColor: c.bg }} testID="draw-screen">
+    <View style={{ flex: 1, backgroundColor: c.bg }} testID="draw-screen" onStartShouldSetResponderCapture={() => { touched.current = true; return false; }}>
       {/* no edge swipe back on the canvas (founder 09.11): drawing from the left edge left the screen */}
       <Stack.Screen options={{ gestureEnabled: false, fullScreenGestureEnabled: false }} />
       {/* the drawing under everything */}
       <View style={{ position: "absolute", left: 0, right: panelSide, top: 0, bottom: 0 }}>
         <CanvasView
           view={viewNow}
-          onView={setView}
+          onView={onTouchView}
           live={live}
           size={size}
           onSize={setSize}
@@ -1188,7 +1304,7 @@ export default function DrawScreen() {
       {/* top, ONE row (#1274, founder 12.11: «шапка — в одну строку»): back · the name (a lead, an address, «Привязать»; «Замер» before it is saved)
           · a small mark when the drawing is only on the phone (no cloud when all is saved) · fit · photos · «⋯» · «Готово»; a module that is off or
           past the trial says it under the row before the work starts */}
-      <View pointerEvents="box-none" style={{ paddingTop: ins.top + space[2], paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, gap: space[2] }}>
+      <View pointerEvents="box-none" onLayout={onLay("header", (l) => l.y + l.height)} style={{ paddingTop: ins.top + space[2], paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, gap: space[2] }}>
         <RowView style={{ alignItems: "center", gap: space[1] }}>
           <View testID="draw-back"><IconButton icon="chevronLeft" label={t("mod.title")} onPress={back} /></View>
           <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space[1] }}>
@@ -1219,7 +1335,9 @@ export default function DrawScreen() {
           </View>
           {mPhotos && !wide && !flat && canSave ? (
             <View testID="draw-photos-open">
-              <Press onPress={() => setPhotoSheet(true)} accessibilityRole="button" accessibilityLabel={t("mod.gutters.photo.open")} visibleHeight={sizes.hitMin} style={{ flexDirection: "row", alignItems: "center", gap: space[1], minHeight: sizes.hitMin, paddingHorizontal: space[1] }}>
+              {/* the same round plate as «⋯» (IconButton: dockBtn, surf2, a hairline border; founder 16.11, #1752: «фотоаппарат не в единой
+                  системе»); with photos the count stands in it and the plate grows into a pill */}
+              <Press onPress={() => setPhotoSheet(true)} accessibilityRole="button" accessibilityLabel={photoN ? `${t("mod.gutters.photo.open")} · ${photoN}` : t("mod.gutters.photo.open")} visibleHeight={component.dockBtn} style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space[1], height: component.dockBtn, minWidth: component.dockBtn, paddingHorizontal: photoN ? space[3] : 0, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd }}>
                 <Icon name="camera" s={sizes.iconMd} color={c.ink} />
                 {photoN ? <T v="caption" w="semibold">{photoN}</T> : null}
               </Press>
@@ -1231,7 +1349,8 @@ export default function DrawScreen() {
             </View>
           ) : null}
           {inStore ? (
-            <View testID="draw-done"><Button label={t("mod.gutters.view.done")} size="sm" onPress={() => void done()} /></View>
+            // the header's buttons are one height (DS §19а: «высота кнопки 36»; founder 16.11, #1752: «Готово другого размера»)
+            <View testID="draw-done"><Button label={t("mod.gutters.view.done")} size="phone" onPress={() => void done()} /></View>
           ) : null}
         </RowView>
         {canSave ? null : (
@@ -1314,12 +1433,20 @@ export default function DrawScreen() {
           }}
         />
       ) : null}
-      <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, paddingBottom: ins.bottom + space[3], gap: space[2] }}>
+      <View
+        pointerEvents="box-none"
+        // its top is where the drawing ends (#1667, «вписать»); its height is the toast's lane above it (#1819)
+        onLayout={(e) => {
+          onLay("colY", (l) => l.y)(e);
+          setBarH(Math.round(e.nativeEvent.layout.height));
+        }}
+        style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, paddingBottom: ins.bottom + space[3], gap: space[2] }}
+      >
         {/* the toolbar keeps its place (#1630): below the chip and the hints when at the bottom; beside them, at its own edge, when on a side
             or when the phone lies on its side — the chip coming and going never moves it under the finger */}
         <View pointerEvents="box-none" style={row ? { flexDirection: "row", alignItems: "flex-end", gap: space[2] } : { gap: space[2] }}>
         {row && toolsFirst ? tools : null}
-        <View pointerEvents="box-none" style={row ? { flex: 1, alignItems: toolsFirst ? "flex-end" : "flex-start", gap: space[2] } : { gap: space[2] }}>
+        <View pointerEvents="box-none" onLayout={onLay("sumY", (l) => l.y)} style={row ? { flex: 1, alignItems: toolsFirst ? "flex-end" : "flex-start", gap: space[2] } : { gap: space[2] }}>
         {gripping ? (
           <View pointerEvents="none" testID="draw-grip-hint" style={{ alignSelf: "center", paddingVertical: space[2], paddingHorizontal: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
             <T v="caption" w="semibold" center>{t("mod.gutters.draw.gripHint")}</T>
@@ -1413,6 +1540,7 @@ export default function DrawScreen() {
         <AttrBody inSheet>{newBody(false)}</AttrBody>
       </Sheet>
       {m ? <LinkSheet visible={linkSheet} onClose={() => setLinkSheet(false)} measurementId={m.id} /> : null}
+      <DeleteMeasurementSheet visible={!!askDelete} on={askDelete ?? NO_ESTIMATES} onDelete={deleteNow} onClose={() => setAskDelete(null)} />
       <Menu visible={!!whoAt} anchor={whoAt} items={whoItems} onSelect={onWho} onClose={() => setWhoAt(null)} />
       <InputWindow visible={canSave && !!editRun} onClose={() => setLenEdit(null)}>
         {editRun ? <QuickLength key={editRun.id} fmt={ch.lenFormat} run={editRun} start={runLengthIn(editRun)} onLength={(n) => commit(setLength(cur.current.drawing, editRun.id, n))} onDone={() => setLenEdit(null)} onCancel={() => setLenEdit(null)} /> : null}
@@ -1456,18 +1584,6 @@ export default function DrawScreen() {
       </Sheet>
       <Sheet visible={moreSheet !== null} onClose={() => setMoreSheet(null)}>
         <View testID="draw-more-sheet" style={{ gap: space[2] }}>
-          {/* how it was measured — one choice for the whole drawing (founder 08.11, П20.16) */}
-          {moreSheet === "acc" && canSave && m ? (
-            <View testID="draw-accuracy-pick" style={{ gap: space[1] }}>
-              <T v="caption" tone="mut">{t("mod.gutters.draw.accTitle")}</T>
-              <ChoiceChips
-                items={(["rough", "tape"] as const).map((a) => ({ key: a, label: t(a === "tape" ? "mod.gutters.draw.accTape" : "mod.gutters.draw.accRough") }))}
-                value={tape ? "tape" : "rough"}
-                onChange={(a) => setAccuracy(a)}
-              />
-              <View testID="draw-accuracy-hint"><T v="caption" tone="mut">{t("mod.gutters.draw.accHint")}</T></View>
-            </View>
-          ) : null}
           {moreSheet === "layers" ? (
             <View testID="draw-layers" style={{ gap: space[2] }}>
               <T v="heading">{t("mod.gutters.draw.layersTitle")}</T>
@@ -1482,16 +1598,6 @@ export default function DrawScreen() {
               ))}
               <View testID="draw-layers-hint"><T v="caption" tone="mut">{t("mod.gutters.draw.layersHint")}</T></View>
             </View>
-          ) : null}
-          {moreSheet === "place" ? (
-            <>
-              <T v="caption" tone="mut">{t("mod.gutters.draw.placeTitle")}</T>
-              {TOOLBAR_PLACES.map((p) => (
-                <View key={p} testID={`draw-place-${p}`}>
-                  <ListRow title={t(`mod.gutters.draw.place.${p}`)} left={<Icon name={p === place ? "check" : "sliders"} s={sizes.iconMd} color={p === place ? c.ink : c.mut} />} onPress={() => pickPlace(p)} />
-                </View>
-              ))}
-            </>
           ) : null}
         </View>
       </Sheet>

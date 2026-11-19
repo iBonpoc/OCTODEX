@@ -20,12 +20,12 @@ import { localUndo } from "@/data/undo";
 export default function Triage() {
   useTick();
   const { t, money } = useI18n();
-  const { db, role, rejectedOps, dismissRejected, online, reviewVisitMissed } = useStore();
+  const { db, role, rejectedOps, dismissRejected, online, reviewVisitMissed, mode } = useStore();
   const toast = useToast();
   const [snoozed, setSnoozed] = useState<string[]>([]);
   const [reply, setReply] = useState<string | null>(null);
   const [assign, setAssign] = useState<string | null>(null);
-  const all = buildAttention(db, role, undefined, { rejected: rejectedOps }).filter((x) => !snoozed.includes(x.id));
+  const all = buildAttention(db, role, undefined, { rejected: rejectedOps, mode }).filter((x) => !snoozed.includes(x.id));
   const cur = all[0];
   // the top card also shows how to reach the client and how many other reasons this client has (spec 06, PR7)
   const curSubject = cur ? subjectOf(db, cur) : {};
@@ -50,6 +50,9 @@ export default function Triage() {
         return <Button label={t("fr7.handOver")} icon="user" onPress={() => router.push(attentionHref(it))} />;
       case "taskOrphan":
         return <Button label={t("lead.open")} icon="chevronRight" onPress={() => router.push(attentionHref(it))} />;
+      // #2048: the job done with money not invoiced — open the job, where its «Выставить остаток» is
+      case "jobNotInvoiced":
+        return <Button label={t("att.notInvoicedOpen")} icon="invoice" onPress={() => router.push(attentionHref(it))} />;
       case "schedule":
         return <Button label={t("sch.title")} icon="calendar" onPress={() => router.push(`/job/schedule?jobId=${it.refId}`)} />;
       case "unassigned":

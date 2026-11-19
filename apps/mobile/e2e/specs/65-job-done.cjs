@@ -9,6 +9,7 @@
 const { workdayOffset } = require("../companyTime.cjs");
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 
+const { pickVisitDay, pickVisitStart } = require("../visitForm.cjs");
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/today");
@@ -38,9 +39,9 @@ exports.run = async (h) => {
   await h.click("Нужен ещё выезд");
   await p.waitForTimeout(500);
   h.expect(new URL(p.url()).pathname === "/job/schedule", `«Нужен ещё выезд» → the visit form (${p.url()})`);
-  await p.getByRole("radiogroup").first().getByRole("radio").nth(workdayOffset(2)).click();
-  await p.getByRole("button", { name: "Ivan Sokolov" }).last().click();
-  await p.getByRole("radio", { name: /^1:00/ }).last().click();
+  await pickVisitDay(p, workdayOffset(2)); // the day — DateField (spec 56 wave 5б)
+  await p.getByRole("option", { name: "Ivan Sokolov" }).last().click();
+  await pickVisitStart(p, 13 * 60); // «Начало ⌄» — 1:00 PM
   await p.getByRole("button", { name: "Запланировать", exact: true }).last().click();
   await p.waitForTimeout(600);
   await h.sheet().getByRole("button", { name: "Не сейчас" }).click();

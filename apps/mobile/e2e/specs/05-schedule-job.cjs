@@ -14,6 +14,7 @@ async function countersign(h, estimateId) {
 // a working day (П4a: by default Mon–Sat, Sunday off = no slots); the form counts days on the company's calendar (П4b)
 const { minuteOf, workdayOffset } = require("../companyTime.cjs");
 
+const { pickVisitDay, pickVisitStart } = require("../visitForm.cjs");
 exports.run = async (h) => {
   await h.go("/p/demo0handyman0estimate0000000001");
   await h.sign("Linda Alvarez");
@@ -23,10 +24,10 @@ exports.run = async (h) => {
   h.expect(job && job.status === "unscheduled" && !db.visits.some((v) => v.jobId === job.id), "no automatic visit");
   await h.go(`/job/schedule?jobId=${job.id}`);
   const dayOffset = workdayOffset(3);
-  await h.page.getByRole("radiogroup").first().getByRole("radio").nth(dayOffset).click();
+  await pickVisitDay(h.page, dayOffset); // the day — DateField (spec 56 wave 5б)
   // the visit form (docs/specs/03 §7.1): person, a free slot, length, note
-  await h.page.getByRole("button", { name: "Ivan Sokolov" }).last().click();
-  await h.page.getByRole("radio", { name: /^1:00/ }).last().click();
+  await h.page.getByRole("option", { name: "Ivan Sokolov" }).last().click();
+  await pickVisitStart(h.page, 13 * 60); // «Начало ⌄» — 1:00 PM
   await h.page.getByRole("button", { name: "Длительность +15" }).last().click();
   await h.page.getByPlaceholder(/Собака во дворе/).last().fill("Gate code at the office");
   await h.page.getByRole("button", { name: "Запланировать", exact: true }).last().click(); await h.page.waitForTimeout(600);
