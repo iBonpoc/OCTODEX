@@ -4064,7 +4064,7 @@ begin
                         'intake_endpoint_rotate(uuid)', 'intake_endpoint_set(uuid,boolean,uuid,uuid,boolean,boolean,boolean,integer,boolean)',
                         'intake_event_decide(uuid,boolean)', 'invite_member(uuid,text,text,text,boolean)', 'legal_status()',
                         'mark_not_duplicate(uuid,uuid)', 'merge_customers(uuid,uuid)', 'module_disable(uuid,text)', 'module_enable(uuid,text)',
-                        'module_save_settings(uuid,text,jsonb,integer)', 'my_closed_companies()', 'notifications_split_at()', 'po_receive(uuid,jsonb,bigint)', 'catalog_set_group_price(uuid,bigint,boolean,bigint,integer,integer,bigint,bigint,integer,integer)', 'catalog_set_item_costs(uuid,jsonb,jsonb)',
+                        'module_save_settings(uuid,text,jsonb,integer)', 'mark_notifications_read(uuid[])', 'my_closed_companies()', 'notifications_split_at()', 'po_receive(uuid,jsonb,bigint)', 'catalog_set_group_price(uuid,bigint,boolean,bigint,integer,integer,bigint,bigint,integer,integer)', 'catalog_set_item_costs(uuid,jsonb,jsonb)',
                         'portal_accept(text,uuid,uuid[],text,text,boolean,text,uuid,uuid,uuid)', 'portal_estimate(text)',
                         'portal_pay_simulated(text,uuid)', 'record_estimate_deposit(uuid,uuid,text)',
                         'record_visit_payment(uuid,uuid,uuid,text,date,bigint)', 'refund_record(uuid,bigint,text,text,text)',
@@ -18032,23 +18032,30 @@ insert into public.notifications (id, company_id, kind, estimate_id) values
   ('a4350000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', 'a4350000-0000-4000-8000-0000000000e1'),
   ('a4350000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', '0e1a0000-0000-0000-0000-000000000002');
 -- the cut of the split is a constant of the migration (not the clock of the call)
-select tst.ok(public.notifications_split_at() is not null and public.notifications_split_at() <= now(), 'T435 the split moment is the migration''s');
--- what the app sends (cloud/ops.ts notice.read): the id and the company; who, the company and the time are the server's
+select tst.ok(public.notifications_split_at() is not null and public.notifications_split_at() <= now()
+              and (select provolatile = 'i' and prosrc !~* 'now|clock|current_' from pg_proc where oid = 'public.notifications_split_at()'::regprocedure),
+  'T435 the split moment is the migration''s: a constant, not a clock');
+-- what the app sends (cloud/ops.ts notice.read): the ids of the notices it shows, a phone's own one and one not his among
+-- them; who, the company and the time are the server's
 :as_sales_a
-insert into public.notification_reads (notification_id, company_id) values ('a4350000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000')
-  on conflict (notification_id, user_id) do nothing;
-insert into public.notification_reads (notification_id, company_id) values ('a4350000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000')
-  on conflict (notification_id, user_id) do nothing;
-select tst.ok(tst.cnt($q$select 1 from public.notification_reads where notification_id = 'a4350000-0000-4000-8000-0000000000a1'$q$) = 1,
-  'T435 sales: his mark, once (a repeat is nothing)');
+select public.mark_notifications_read(array['a4350000-0000-4000-8000-0000000000a1', 'a4350000-0000-4000-8000-0000000000a2',
+                                            'a4350000-0000-4000-8000-0000000000ff']::uuid[]);
+select public.mark_notifications_read(array['a4350000-0000-4000-8000-0000000000a1']::uuid[]);
+select public.mark_notifications_read(null);
+select tst.ok(tst.cnt($q$select 1 from public.notification_reads where notification_id = 'a4350000-0000-4000-8000-0000000000a1'$q$) = 1
+              and tst.cnt($q$select 1 from public.notification_reads$q$) = 1,
+  'T435 sales: his mark, once (a repeat is nothing); an unknown id and a notice he does not see are left out, the rest marked');
 -- not a notice he does not see; not in another person's name
 select tst.fails_like($q$insert into public.notification_reads (notification_id, company_id) values ('a4350000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000')$q$,
   '%row-level security%', 'T435 sales: not a notice he does not see');
 select tst.fails_like($q$insert into public.notification_reads (notification_id, user_id, company_id) values ('a4350000-0000-4000-8000-0000000000a1', 'a0000000-0000-0000-0000-000000000002', 'ca000000-0000-0000-0000-000000000000')$q$,
   '%permission denied%', 'T435 sales: not in another person''s name');
 -- an old sales build marks the shared column: 0 rows, no refusal
-select tst.blocked($q$update public.notifications set read_at = now() where id = 'a4350000-0000-4000-8000-0000000000a1'$q$,
-  'T435 an old sales build: the shared mark does not go through (0 rows)');
+do $$ declare n int; begin
+  update public.notifications set read_at = now() where id = 'a4350000-0000-4000-8000-0000000000a1';
+  get diagnostics n = row_count;
+  perform tst.ok(n = 0, 'T435 an old sales build: the shared mark goes to 0 rows, without a refusal');
+end $$;
 :as_super
 select tst.ok((select read_at is null from public.notifications where id = 'a4350000-0000-4000-8000-0000000000a1'), 'T435 …and the shared column is untouched');
 -- the office: nothing is read for them; one dispatcher reads — the other does not see it read
@@ -18071,8 +18078,8 @@ update public.notifications set read_at = null where id = 'a4350000-0000-4000-80
 :as_super
 select tst.ok((select read_at > '2020-01-01' from public.notifications where id = 'a4350000-0000-4000-8000-0000000000a2'),
   'T435 an old build''s mark: the server''s time, not the phone''s, and not unread again');
-select tst.ok((select count(*) = 3 and bool_and(read_at > '2020-01-01') from public.notification_reads where notification_id in ('a4350000-0000-4000-8000-0000000000a1', 'a4350000-0000-4000-8000-0000000000a2')),
-  'T435 the marks carry the server''s time');
+select tst.ok((select count(*) = 3 from public.notification_reads where notification_id in ('a4350000-0000-4000-8000-0000000000a1', 'a4350000-0000-4000-8000-0000000000a2')),
+  'T435 three marks: sales, and each dispatcher his own');
 -- a deleted account's marks go with its other own rows
 select app.erase_personal_rows('a0000000-0000-0000-0000-000000000005');
 select tst.ok(not exists (select 1 from public.notification_reads where user_id = 'a0000000-0000-0000-0000-000000000005')

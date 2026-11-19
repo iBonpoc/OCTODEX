@@ -1228,12 +1228,12 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "notice.read": {
       // Р-8b (20261117569000): read for me only — my own marks; the server sets who and when. A server before the migration
       // (no such table): the shared column, as before
-      if (!op.ids.length) return;
-      const r = await supabase
-        .from("notification_reads")
-        .upsert(op.ids.map((id) => ({ notification_id: id, company_id: c })), { onConflict: "notification_id,user_id", ignoreDuplicates: true });
-      if (r.error?.code === "PGRST205" || r.error?.code === "42P01")
-        return run(supabase.from("notifications").update({ read_at: new Date().toISOString() }).in("id", op.ids));
+      // (public.mark_notifications_read: an id the server does not know, or one not visible, is left out, the others marked)
+      // (only server ids: a notice made on the phone has no uuid and never reaches the server)
+      const ids = op.ids.filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+      if (!ids.length) return;
+      const r = await supabase.rpc("mark_notifications_read", { p_ids: ids });
+      if (r.error?.code === "PGRST202") return run(supabase.from("notifications").update({ read_at: new Date().toISOString() }).in("id", ids));
       return run(Promise.resolve(r));
     }
     case "estimate.send": {

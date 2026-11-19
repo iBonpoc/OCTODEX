@@ -9,7 +9,7 @@
 --      mark goes to 0 rows, no refusal); its value is the server's time (now()) and never back to null.
 --      Step 2 (read_at is not written or read) — a separate PR when no old build is left.
 -- Rule 18: the new functions — revoke, then execute to authenticated where the app calls them; the trigger functions — for
--- nobody. A deleted account's marks are erased with its other own rows (app.erase_personal_rows, 4). App: cloud/ops.ts
+-- nobody. The app marks through public.mark_notifications_read (1). A deleted account's marks are erased with its other own rows (app.erase_personal_rows, 4). App: cloud/ops.ts
 -- notice.read, cloud/repo.ts (noticeRead). Test T435.
 
 -- 1 ---------------------------------------------------------------------------------------------------------------------
@@ -57,6 +57,18 @@ revoke all on public.notification_reads from anon, authenticated;
 grant select on public.notification_reads to authenticated;
 grant insert (notification_id, company_id) on public.notification_reads to authenticated;
 
+-- what the app calls (cloud/ops.ts notice.read): my marks for the notices I see; an id the server does not know (a notice
+-- made on the phone), one removed or no longer visible is left out quietly — the others are marked, nothing is refused.
+-- Invoker: the notices are read, and the marks written, under the caller's own rules.
+create or replace function public.mark_notifications_read(p_ids uuid[])
+returns void language sql security invoker set search_path = '' as $$
+  insert into public.notification_reads (notification_id, company_id)
+  select n.id, n.company_id from public.notifications n where n.id = any (coalesce(p_ids, '{}'::uuid[]))
+  on conflict (notification_id, user_id) do nothing;
+$$;
+revoke all on function public.mark_notifications_read(uuid[]) from public, anon, authenticated;
+grant execute on function public.mark_notifications_read(uuid[]) to authenticated;
+
 -- 2 ---------------------------------------------------------------------------------------------------------------------
 do $do$
 begin
@@ -68,6 +80,9 @@ revoke all on function public.notifications_split_at() from public, anon, authen
 grant execute on function public.notifications_split_at() to authenticated;
 
 -- 3 ---------------------------------------------------------------------------------------------------------------------
+-- the shared column so far was the phone's clock: a mark «from the future» (a phone ahead) would count as written after
+-- the split and light up again — such marks take the server's time first (few rows; the trigger below is not there yet)
+update public.notifications set read_at = now() where read_at > now();
 alter policy notifications_update on public.notifications
   using (app.has_role(company_id, array['owner', 'admin', 'office']))
   with check (app.has_role(company_id, array['owner', 'admin', 'office']));
