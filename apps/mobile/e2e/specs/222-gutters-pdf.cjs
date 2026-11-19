@@ -98,6 +98,8 @@ exports.run = async (h) => {
   h.expect(!c.includes("At the face") && !c.includes("По лицевой"), "no cut for the client");
 
   // for the crew
+  // the web has no «Отправить» beside «Открыть» (#2157: the browser's print preview saves the file itself; a phone shows it)
+  h.expect((await p.locator('[data-testid$="-send"][data-testid^="view-pdf-"]').count()) === 0, "the web: no «Отправить» icon in «Документы»");
   const w = await printVia("view-pdf-crew", "crew");
   // the company's document language (en), never the app's (ru here) — #2158, rule 7
   h.expect(w.includes("Cut list for the crew") && !w.includes("Раскрой для бригады"), "the crew's PDF in the company's language, not the app's"); // i18n-old: ok — the app's words must be absent
