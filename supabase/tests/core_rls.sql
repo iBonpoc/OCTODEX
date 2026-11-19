@@ -19162,6 +19162,12 @@ select tst.ok((select count(*) = 3 from pg_index i join pg_class c on c.oid = i.
 select tst.ok(not has_table_privilege('authenticated', 'public.catalog_cost_history', 'insert')
           and not has_table_privilege('authenticated', 'public.catalog_price_history', 'insert')
           and not has_table_privilege('authenticated', 'public.catalog_price_recalc', 'update')
+          and not has_table_privilege('authenticated', 'public.catalog_cost_history', 'update')
+          and not has_table_privilege('authenticated', 'public.catalog_price_history', 'update')
+          and not has_table_privilege('authenticated', 'public.catalog_price_recalc', 'insert')
+          and not has_column_privilege('authenticated', 'public.catalog_cost_history', 'seq', 'update')
+          and not has_column_privilege('authenticated', 'public.catalog_price_history', 'seq', 'update')
+          and not has_column_privilege('authenticated', 'public.catalog_price_recalc', 'seq', 'update')
           and not has_column_privilege('anon', 'public.catalog_cost_history', 'seq', 'select'),
   'T469 nobody but the server writes the histories (no grant); anon reads nothing');
 :as_office_a
