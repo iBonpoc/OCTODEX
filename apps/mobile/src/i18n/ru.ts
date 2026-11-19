@@ -4748,6 +4748,9 @@ export const ru = {
   "noShow.toast": "Отмечено: клиента нет дома",
   "noShow.att": "{name}: клиента не было дома — перенести выезд",
   "noShow.chip": "Нет дома",
+  // #2227 (spec 33-price-key §11.4): an item's variant on a supplier order (the order is in en, rule 7)
+  "po.variantNotSet": "{what} не указан",
+  "po.variantSkuNotSet": "{what}: код поставщика не задан",
 } as const;
 
 export type DictKey = keyof typeof ru;

@@ -194,6 +194,11 @@ export interface ModuleDef {
    * Pure; `data` — DB.moduleData[key]. The core makes the order; the module never knows the supplier.
    */
   purchaseLines?: (job: import("@/data/types").Job, db: import("@/data/types").DB, data: unknown) => import("@/features/purchaseOrders").ModulePurchaseLine[];
+  /**
+   * #2227: the module's word for an item's variant property it uses (a module: «color» → «Color»), in the language asked —
+   * the supplier order names it («Color code not set»). Undefined — not the module's property
+   */
+  variantWord?: (attr: string, t: (k: import("@/i18n").DictKey) => string) => string | undefined;
   /** starter checklist templates the office may add (optional; a module without them adds none) */
   checklistTemplates?: StarterChecklist[];
   /** starter estimate templates the office may add (optional; docs/specs/07 §12) */
@@ -315,6 +320,15 @@ export function moduleTabs(company: Pick<Company, "modules"> | null | undefined,
 export function estimateNotes(db: import("@/data/types").DB, e: import("@/data/types").Estimate, now = Date.now()): (ModuleNote & { module: string })[] {
   if (e.status !== "draft" && e.status !== "sent") return [];
   return activeModules(db.company, now).flatMap((d) => (d.estimateNotes?.(e, db, db.moduleData?.[d.key]) ?? []).map((n) => ({ ...n, module: d.key })));
+}
+
+/** #2227: the word of a variant property from the modules that know it, else the property's own name */
+export function variantWordOf(db: import("@/data/types").DB, attr: string, t: (k: import("@/i18n").DictKey) => string, now = Date.now()): string {
+  for (const d of activeModules(db.company, now)) {
+    const w = d.variantWord?.(attr, t);
+    if (w) return w;
+  }
+  return attr;
 }
 
 /** S11g: the lines every active module adds to a job's supplier order (a module that fails adds none) */

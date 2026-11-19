@@ -4748,4 +4748,7 @@ export const en: Dict = {
   "noShow.toast": "Marked: client not home",
   "noShow.att": "{name}: client was not home — reschedule the visit",
   "noShow.chip": "Not home",
+  // #2227 (spec 33-price-key §11.4): an item's variant on a supplier order (the order is in en, rule 7)
+  "po.variantNotSet": "{what} not set",
+  "po.variantSkuNotSet": "{what} code not set",
 };

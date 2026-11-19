@@ -903,8 +903,37 @@ export function catalogCardFromRow(r: Row): Pick<CatalogItem, "sku" | "barcode" 
 }
 
 /** catalog_items.attributes / purchase_unit / pack_size → the item's own fields; a broken value is left out */
-export function catalogExtrasFromRow(r: Row): Pick<CatalogItem, "attributes" | "purchaseUnit" | "packSize"> {
-  const out: Pick<CatalogItem, "attributes" | "purchaseUnit" | "packSize"> = {};
+/** #2227: catalog_items.variant_skus → CatalogItem.variants (strings only; anything else is dropped, never guessed) */
+export function variantsFromRow(raw: unknown): CatalogItem["variants"] | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const out: NonNullable<CatalogItem["variants"]> = {};
+  for (const [attr, values] of Object.entries(raw as Record<string, unknown>)) {
+    if (!values || typeof values !== "object" || Array.isArray(values)) continue;
+    const one: Record<string, import("@/data/types").ItemVariant> = {};
+    for (const [value0, d] of Object.entries(values as Record<string, unknown>)) {
+      // the value as the server keeps it (catalog_set_variant lowers it): an old or hand-written key is still found
+      const value = value0.trim().toLowerCase();
+      if (!value) continue;
+      const o = d && typeof d === "object" && !Array.isArray(d) ? (d as Record<string, unknown>) : {};
+      const str = (k: string) => (typeof o[k] === "string" && (o[k] as string).trim() ? (o[k] as string) : undefined);
+      one[value] = {
+        ...(str("sku") ? { sku: str("sku") } : {}),
+        ...(str("supplierId") ? { supplierId: str("supplierId") } : {}),
+        ...(str("purchaseUnit") ? { purchaseUnit: str("purchaseUnit") } : {}),
+        ...(str("packSize") ? { packSize: str("packSize") } : {}),
+      };
+    }
+    // review #2241 №1: a property with no values yet ({"color":{}}) is kept — it says WHICH property a merged item's value is
+    out[attr] = one;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+export function catalogExtrasFromRow(r: Row): Pick<CatalogItem, "attributes" | "purchaseUnit" | "packSize" | "variants"> {
+  const out: Pick<CatalogItem, "attributes" | "purchaseUnit" | "packSize" | "variants"> = {};
+  // #2227: the variants (absent before the migration and for items without them); only the shape the server keeps
+  const vs = variantsFromRow(r.variant_skus);
+  if (vs) out.variants = vs;
   const a = r.attributes;
   if (a && typeof a === "object" && !Array.isArray(a)) {
     const attrs = Object.fromEntries(Object.entries(a as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === "string" && e[1] !== ""));

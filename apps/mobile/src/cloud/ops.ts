@@ -288,6 +288,9 @@ export type Op =
   | { k: "catalog.groupPrice"; itemId: string; group: string; priceCents: number; placeholder: boolean;
       costCents?: number | null; vendorTaxBps?: number | null; markupBps?: number | null;
       expectedPriceCents: number; expectedCostCents?: number | null; expectedTaxBps?: number | null; expectedMarkupBps?: number | null }
+  /** #2227 (spec 33-price-key §11.5): ONE value of the item's variant property (catalog_set_variant); null data — removed.
+   *  One value at a time: two phones writing two colours never erase each other */
+  | { k: "catalog.variant"; itemId: string; attr: string; value: string; data: { sku?: string; supplierId?: string; purchaseUnit?: string; packSize?: string } | null }
   | { k: "catalog.remove"; id: string }
   | { k: "notice.read"; ids: string[] }
   /** sent: the estimate was already sent when the client signed on the phone (#1126; an older app's op has none);
@@ -667,6 +670,10 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         p_expected_price_cents: op.expectedPriceCents,
         p_expected_cost_cents: op.expectedCostCents ?? null, p_expected_tax_bps: op.expectedTaxBps ?? null, p_expected_markup_bps: op.expectedMarkupBps ?? null,
       });
+      return run(Promise.resolve({ error, status }));
+    }
+    case "catalog.variant": {
+      const { error, status } = await supabase.rpc("catalog_set_variant", { p_item: op.itemId, p_attr: op.attr, p_value: op.value, p_data: op.data });
       return run(Promise.resolve({ error, status }));
     }
     case "po.receive": {

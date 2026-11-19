@@ -198,6 +198,14 @@ export interface Job {
   cancelledAt?: string;
 }
 
+/** #2227: the supplier's data of one variant of an item (catalog_items.variant_skus); absent — the item's own */
+export interface ItemVariant {
+  sku?: string;
+  supplierId?: ID;
+  purchaseUnit?: string;
+  packSize?: string;
+}
+
 /** A line of a job made without an estimate (wave П-2a, server: job_line_items). The server owns the totals:
  *  totalCents = floor(qty × price + 0.5), the job's amountCents = @octo/estimating-engine jobLinesTotals. */
 export interface JobLineItem {
@@ -741,6 +749,12 @@ export interface CatalogItem {
   supplierId?: ID;
   /** the supplier's own code of the item */
   supplierSku?: string;
+  /**
+   * #2227 (spec 33-price-key §11.5; catalog_items.variant_skus): the item's variants — the values of ONE property (the
+   * module chooses which; the core never names it), one price for all, the supplier's data per value. Values lower-cased
+   * and trimmed. Absent = no variants. Written only by catalog.variant (one value at a time), never by catalog.save
+   */
+  variants?: Record<string, Record<string, ItemVariant>>;
   /* ---- РС-10 (the item's card, spec 2026-11-12-estimate-editor Р11): absent = not set, and not sent ---- */
   /** our own code of the item (catalog_items.sku) */
   sku?: string;

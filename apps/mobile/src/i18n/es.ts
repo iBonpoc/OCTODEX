@@ -4748,4 +4748,7 @@ export const es: Dict = {
   "noShow.toast": "Marcado: el cliente no estaba",
   "noShow.att": "{name}: el cliente no estaba — reprogramar la visita",
   "noShow.chip": "No estaba",
+  // #2227 (spec 33-price-key §11.4): an item's variant on a supplier order (the order is in en, rule 7)
+  "po.variantNotSet": "{what} sin indicar",
+  "po.variantSkuNotSet": "{what}: código del proveedor sin indicar",
 };
