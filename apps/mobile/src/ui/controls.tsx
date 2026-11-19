@@ -42,10 +42,13 @@ export function Button({
   accessibilityLabel,
   selected,
   testID,
+  tone,
 }: {
   label: string;
   onPress?: () => void;
   variant?: BtnVariant;
+  /** "bad": the word in `status.bad.text` on a secondary or ghost button — «Не сохранять» of the unsaved question (DS Б3) */
+  tone?: "bad";
   /** a quick choice that is the chosen one (DateField's «Завтра»): read as pressed / selected */
   selected?: boolean;
   /** "bar": a button of the pinned action bar (DS §8.9) — 44 high, a label in two lines grows it instead of being cut */
@@ -63,7 +66,7 @@ export function Button({
   const h = bar ? component.button.hit : component.button[size ?? (wide ? "md" : "phone")];
   const bg =
     variant === "primary" ? c.acc : variant === "secondary" ? c.surf2 : variant === "danger" ? c.status.bad.fill : "transparent";
-  const fg = variant === "primary" ? c.onAcc : variant === "danger" ? c.status.bad.on : c.ink;
+  const fg = variant === "primary" ? c.onAcc : variant === "danger" ? c.status.bad.on : tone === "bad" ? c.status.bad.text : c.ink;
   return (
     <Press
       testID={testID}

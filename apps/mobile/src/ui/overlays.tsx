@@ -20,6 +20,8 @@ import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { router, type Href } from "expo-router";
 import { Icon, Press, T, type IconKey } from "./primitives";
+import { UnsavedAsk } from "./unsavedAsk";
+export { UnsavedAsk } from "./unsavedAsk";
 import type { GuardedUndo } from "@/data/undo";
 
 /**
@@ -248,6 +250,14 @@ export function useSheetEscape(onEscape: (() => boolean) | null) {
  * arrows «›» at the end of the rows (founder 13.11, #1339; DS Б1).
  */
 const SheetInset = createContext<{ l: number; r: number }>({ l: 0, r: 0 });
+/** the enclosing sheet's close, as ✕ / the scrim do it: asks first when there are unsaved changes (`dirty`) */
+const SheetCloseCtx = createContext<(() => void) | null>(null);
+/**
+ * Closes the sheet this is inside, the way a person closes it: with unsaved changes (`dirty`) the question first, without —
+ * at once. For a «Закрыть» of the sheet's own (a module's property window: «Закрыть | Сохранить» in the `footer`, DS §7.3). Outside
+ * a sheet it returns `undefined`.
+ */
+export const useSheetClose = () => useContext(SheetCloseCtx) ?? undefined;
 export function SheetScroll({ style, contentContainerStyle, ...rest }: ComponentProps<typeof ScrollView>) {
   const g = useContext(SheetInset);
   return (
@@ -286,6 +296,8 @@ export function Sheet({
   footer: footerNow,
   height: heightNow = "fit",
   onBack: onBackNow,
+  askBack,
+  askText,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -302,6 +314,12 @@ export function Sheet({
   dirty?: boolean;
   /** "Save" in the unsaved-changes question */
   onSave?: () => void;
+  /** a property window of a module (DS §7.3): «Закрыть | Сохранить» in its `footer` (`useSheetClose()`), so no «✕» in the header;
+   *  the unsaved-changes question has the window's words — «Не сохранять» `ghost`, «Назад». Esc, Android «Назад», the scrim
+   *  and the swipe close or ask as in every sheet. */
+  askBack?: boolean;
+  /** the line under «Сохранить изменения?» — what was changed («Изменены длина и цвет») */
+  askText?: string;
   /** the sheet has left the screen (after the way out): an owner that mounts it by data lets the data go now (`useHeldSheet`) */
   onExited?: () => void;
   /** Esc / Android «Назад» first asks the content: true — it took the key (a search to clear), the sheet stays (DS А3) */
@@ -485,6 +503,8 @@ export function Sheet({
     },
     [drag, before, animateOut],
   );
+  // what `useSheetClose()` gives the body and the footer: the person's close (asks when dirty)
+  const closeAsked = useCallback(() => requestClose(), [requestClose]);
   // #1912: while the sheet holds unsaved work, «Обновить» asks it through its own question and never reloads over it
   useEffect(() => {
     if (!visible || !dirty) return;
@@ -603,6 +623,7 @@ export function Sheet({
             !wide && height !== "fit" ? { flexBasis: maxH, flexShrink: 1 } : null, follow]}
           accessibilityViewIsModal
         >
+          <SheetCloseCtx.Provider value={closeAsked}>
           <SheetInset.Provider value={{ l: wide ? space[4] : Math.max(insets.left, space[4]), r: wide ? space[4] : Math.max(insets.right, space[4]) }}>
           <Glass
             strong
@@ -644,6 +665,8 @@ export function Sheet({
                   <View testID="sheet-title" style={{ flex: 1 }}>
                     <T v="title" numberOfLines={2}>{title ?? ""}</T>
                   </View>
+                  {/* a property window of a module (`askBack`) closes by «Закрыть» in its footer — no «✕» here (DS §7.3) */}
+                  {askBack ? null : (
                   <Press testID="sheet-close" onPress={() => requestClose()} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("common.close")}>
                     <View
                       style={{
@@ -658,45 +681,20 @@ export function Sheet({
                       <Icon name="close" s={size.iconSm} />
                     </View>
                   </Press>
+                  )}
                 </View>
               ) : (
                 <View style={{ height: space[2] }} />
               )}
             </View>
             {ask ? (
-              <View style={{ gap: space[3] }} accessibilityLiveRegion="polite">
-                <T v="heading">{t("sheet.unsavedTitle")}</T>
-                <T v="body" tone="mut">{t("sheet.unsavedText")}</T>
-                {onSave ? (
-                  <Press
-                    onPress={() => { setAsk(false); onSave(); }}
-                    visibleHeight={component.button.phone}
-                    accessibilityRole="button"
-                    accessibilityLabel={t("ue.save")}
-                    style={{ height: component.button.phone, borderRadius: radius.pill, backgroundColor: c.acc, alignItems: "center", justifyContent: "center" }}
-                  >
-                    <T v="button" style={{ color: c.onAcc }}>{t("ue.save")}</T>
-                  </Press>
-                ) : null}
-                <Press
-                  onPress={() => { setAsk(false); requestClose(0, true); }}
-                  visibleHeight={component.button.phone}
-                  accessibilityRole="button"
-                  accessibilityLabel={t("sheet.discard")}
-                  style={{ height: component.button.phone, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}
-                >
-                  <T v="button" tone="bad">{t("sheet.discard")}</T>
-                </Press>
-                <Press
-                  onPress={() => { setAsk(false); noteQuestionCancelled(); }}
-                  visibleHeight={component.button.phone}
-                  accessibilityRole="button"
-                  accessibilityLabel={t("common.cancel")}
-                  style={{ height: component.button.phone, alignItems: "center", justifyContent: "center" }}
-                >
-                  <T v="button">{t("common.cancel")}</T>
-                </Press>
-              </View>
+              <UnsavedAsk
+                words={askBack ? "back" : "default"}
+                text={askText}
+                onSave={onSave ? () => { setAsk(false); onSave(); } : undefined}
+                onDiscard={() => { setAsk(false); requestClose(0, true); }}
+                onBack={() => { setAsk(false); noteQuestionCancelled(); }}
+              />
             ) : (
               /* the form scrolls when the keyboard leaves less room than the sheet needs */
               <GestureDetector gesture={bodyPan}>
@@ -725,11 +723,55 @@ export function Sheet({
             ) : null}
           </Glass>
           </SheetInset.Provider>
+          </SheetCloseCtx.Provider>
         </Animated.View>
       </KeyboardAvoidingView>
       </GestureHandlerRootView>
     </SheetEscapeCtx.Provider>
     </ScreenScrollCtx.Provider>
+    </Modal>
+  );
+}
+
+/**
+ * «Сохранить изменения?» on its own (DS §7.3, Б3; #1858): for a window of a module that is not a Sheet — a module's window
+ * is a column beside the canvas from 820. The same `UnsavedAsk` with the words of the exception («Не сохранять» `ghost`,
+ * «Назад»), in a centred window over a scrim; the scrim, Esc and Android «Назад» are «Назад». ⬜ native (rule 27).
+ */
+export function UnsavedDialog({
+  visible,
+  onSave,
+  onDiscard,
+  onBack,
+  text,
+}: {
+  visible: boolean;
+  onSave: () => void;
+  onDiscard: () => void;
+  onBack: () => void;
+  /** the line under the heading («Изменён цвет») */
+  text?: string;
+}) {
+  const insets = useSafeAreaInsets();
+  const reduce = useReducedMotion();
+  if (!visible) return null;
+  return (
+    <Modal visible transparent animationType="none" onRequestClose={onBack} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingTop: insets.top + space[4], paddingBottom: insets.bottom + space[4], paddingHorizontal: space[4] }}>
+        <Animated.View entering={reduce ? undefined : FadeIn.duration(motion.durFast)} style={StyleSheet.absoluteFill}>
+          <Scrim onPress={onBack} />
+        </Animated.View>
+        <Animated.View
+          entering={reduce ? undefined : FadeIn.duration(motion.durFast)}
+          style={{ width: component.modalW, maxWidth: "100%" }}
+          accessibilityViewIsModal
+          testID="unsaved-dialog"
+        >
+          <Glass strong style={{ borderRadius: component.sheetRadius, padding: space[4] }}>
+            <UnsavedAsk words="back" onSave={onSave} onDiscard={onDiscard} onBack={onBack} text={text} />
+          </Glass>
+        </Animated.View>
+      </View>
     </Modal>
   );
 }

@@ -166,7 +166,7 @@ describe("design system: components", () => {
     "ui/fracKeys.tsx": 1, // FracKeys — the key
     "ui/listCard.tsx": 2, // ListCard, its open panel
     "ui/optionTile.tsx": 1, // OptionTile
-    "ui/overlays.tsx": 3, // Menu row; LEGACY ×2 — the old unsaved question of Sheet, goes with #1996 (UnsavedAsk from Button)
+    "ui/overlays.tsx": 1, // Menu row (the old unsaved question of Sheet is UnsavedAsk from Button since #1996)
     "ui/pctUsdField.tsx": 1, // PctUsdField — the «% | $» switch
     "ui/selectField.tsx": 1, // SelectField — the row
     "ui/surfaces.tsx": 3, // Card (pressable, its `base` style — seen since #2022), ListRow
