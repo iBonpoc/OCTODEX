@@ -71,8 +71,10 @@ export function jobMaterialNeeds(db: DB, jobId: ID): { catalogItemId: ID; varian
   const by = new Map<string, { item: CatalogItem; variant?: { attr: string; value: string }; qs: string[] }>();
   for (const r of raw) {
     const found = r.catalogItemId ? db.catalog.find((c) => c.id === r.catalogItemId) : undefined;
-    if (!found || found.kind !== "material") continue;
+    if (!found) continue;
     const m = resolveMerged(db.catalog, found);
+    // the kind of the item it counts as (review #2241: the merged one's target)
+    if (m.item.kind !== "material") continue;
     const variant = r.variant ?? m.variant;
     const k = needKey(m.item.id, variant);
     const had = by.get(k);
@@ -147,7 +149,8 @@ export function draftsForJob(db: DB, jobId: ID, moduleLines: ModulePurchaseLine[
     const g = groups.get(key) ?? { ...(key ? { supplierId: key } : {}), lines: [] };
     const cost = withCosts && n.item.costCents !== undefined ? packCostCents(n.item.costCents, packSize) : undefined;
     // the item's own code only for an item without variants; a variant's code only its own (never another colour's)
-    const sku = vAttr ? vd?.sku : n.item.supplierSku;
+    // review #2241 №2: a line with a variant takes ONLY the variant's code, also on an item that has no variants at all
+    const sku = n.variant ? vd?.sku : vAttr ? undefined : n.item.supplierSku;
     const marks = [
       vAttr && !n.variant ? words.variantNotSet(words.attrWord?.(vAttr) ?? vAttr) : undefined,
       n.variant && !vd?.sku ? words.variantSkuNotSet(words.attrWord?.(n.variant.attr) ?? n.variant.attr) : undefined,

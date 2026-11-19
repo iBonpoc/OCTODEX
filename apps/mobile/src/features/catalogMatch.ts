@@ -31,7 +31,24 @@ export function resolveMerged(catalog: readonly CatalogItem[], it: CatalogItem):
   if (!target) return { item: it };
   const attr = Object.keys(target.variants ?? {})[0];
   const value = attr ? it.attributes?.[attr]?.trim().toLowerCase() : undefined;
-  return { item: target, ...(attr && value ? { variant: { attr, value } } : {}) };
+  // review #2241 №1: the new item names no property, or the old one has no value of it — the old item stands for itself, never
+  // the new one without a variant (two old values would fold into one line with the item's code)
+  if (!attr || !value) return { item: it };
+  return { item: target, variant: { attr, value } };
+}
+/**
+ * #2227 (review #2241): a variant as the server takes it (app.variant_skus_ok) — checked on the phone before the queue, so a
+ * write the server would refuse never waits in it. `values` — how many values the property has with this one.
+ */
+export function variantOk(value: string, d: import("@/data/types").ItemVariant | null, values: number): boolean {
+  if (!value || value !== value.trim().toLowerCase() || value.length > 120 || /[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/.test(value)) return false;
+  if (!d) return true;
+  if (values > 50) return false;
+  if (d.sku !== undefined && (d.sku.length > 60 || /[\u0000-\u001f\u007f]/.test(d.sku))) return false;
+  if (d.supplierId !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(d.supplierId)) return false;
+  if (d.purchaseUnit !== undefined && (d.purchaseUnit !== d.purchaseUnit.trim() || d.purchaseUnit.length > 20 || /[\u0000-\u001f\u007f]/.test(d.purchaseUnit))) return false;
+  if (d.packSize !== undefined && (!/^[0-9]{1,9}(\.[0-9]{1,4})?$/.test(d.packSize) || Number(d.packSize) <= 0)) return false;
+  return true;
 }
 /** how many own properties an item has (its service ones not counted) */
 export const propertyCount = (a: Record<string, string> | undefined): number =>

@@ -15,6 +15,7 @@ import { canEditTemplates, cleanTemplate, LABEL_MAX, TEMPLATE_NAME_MAX } from "@
 import { uid as newId } from "@/features/estimateDoc";
 import { Button, ChoiceChips, IconButton, ReadOnly, StatusChip, Stepper, TextField, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
+import { usableItems } from "@/features/catalogMatch";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Empty, FieldGroup, RowView, Screen } from "@/ui/surfaces";
 
@@ -71,7 +72,8 @@ function TemplateForm({ saved, isNew }: { saved?: ChecklistTemplate; isNew: bool
   const kindOn = (k: ChecklistVisitKind) => tpl.appliesTo.visitKinds.includes(k);
   const toggleKind = (k: ChecklistVisitKind, on: boolean) =>
     setApplies({ visitKinds: on ? [...tpl.appliesTo.visitKinds.filter((x) => x !== k), k] : tpl.appliesTo.visitKinds.filter((x) => x !== k) });
-  const catalog = store.db.catalog;
+  // #2227: an item merged into another is not offered again
+  const catalog = usableItems(store.db.catalog);
   const picked = tpl.appliesTo.catalogItemIds.map((cid) => catalog.find((c) => c.id === cid)?.name).filter((n): n is string => !!n);
 
   const save = () => {

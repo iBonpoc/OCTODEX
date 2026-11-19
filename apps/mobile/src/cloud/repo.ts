@@ -895,7 +895,10 @@ export function variantsFromRow(raw: unknown): CatalogItem["variants"] | undefin
   for (const [attr, values] of Object.entries(raw as Record<string, unknown>)) {
     if (!values || typeof values !== "object" || Array.isArray(values)) continue;
     const one: Record<string, import("@/data/types").ItemVariant> = {};
-    for (const [value, d] of Object.entries(values as Record<string, unknown>)) {
+    for (const [value0, d] of Object.entries(values as Record<string, unknown>)) {
+      // the value as the server keeps it (catalog_set_variant lowers it): an old or hand-written key is still found
+      const value = value0.trim().toLowerCase();
+      if (!value) continue;
       const o = d && typeof d === "object" && !Array.isArray(d) ? (d as Record<string, unknown>) : {};
       const str = (k: string) => (typeof o[k] === "string" && (o[k] as string).trim() ? (o[k] as string) : undefined);
       one[value] = {
@@ -905,7 +908,8 @@ export function variantsFromRow(raw: unknown): CatalogItem["variants"] | undefin
         ...(str("packSize") ? { packSize: str("packSize") } : {}),
       };
     }
-    if (Object.keys(one).length) out[attr] = one;
+    // review #2241 №1: a property with no values yet ({"color":{}}) is kept — it says WHICH property a merged item's value is
+    out[attr] = one;
   }
   return Object.keys(out).length ? out : undefined;
 }

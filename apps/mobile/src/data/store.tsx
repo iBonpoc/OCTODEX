@@ -21,7 +21,7 @@ import { defaultLeadAssignee } from "@/features/leadAssignee";
 import { keepLast, stepPending } from "@/features/location";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
-import { canEditCatalog, canMakeEstimateAt, keepCosts, leadEstimatePropertyId, serverSaysCosts } from "@/features/access";
+import { canMakeEstimateAt, keepCosts, leadEstimatePropertyId, serverSaysCosts } from "@/features/access";
 import { signTotalFor } from "@/cloud/legacyTotals";
 import { leadStatusToDb } from "@/cloud/statusMap";
 
@@ -69,6 +69,7 @@ import { markOf, markUndo, NO_UNDO, type GuardedUndo } from "@/data/undo";
 import { groupPriceChanged, groupPriceLocked, joinedGroup, priceGroupOf, withoutGroupCosts, type GroupPriceInput } from "./priceGroup";
 import { cleanCardFields, itemForSave, localPriceEntries, mergePriceHistory } from "@/features/catalogCard";
 import { canEditOrders, canMove, canReceive, draftsForJob, linesEditable, openDraft, statusAfterReceive } from "@/features/purchaseOrders";
+import { variantOk } from "@/features/catalogMatch";
 import { canSeeSuppliers, cleanSupplier, cleanSupplierLink, itemsOfSupplier, itemsWithOtherTax, keepCostHistory, localHistoryEntry, mergeHistory } from "@/features/suppliers";
 import { coalesceAt, coalesced } from "./outboxCoalesce";
 import {
@@ -2965,16 +2966,21 @@ export function StoreProvider({
         const d0 = dbRef.current;
         const prev = d0.catalog.find((x) => x.id === itemId);
         const value = value0.trim().toLowerCase();
-        if (!prev || !canEditCatalog(role) || !value || !/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/.test(attr)) return NO_UNDO;
+        // review #2241 №3: who sees suppliers (owner / admin / office), as the server's catalog_set_variant
+        if (!prev || !canSeeSuppliers(role) || !value || !/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/.test(attr)) return NO_UNDO;
         // one property per item (the server refuses another: other_variant_attr)
         const have = Object.keys(prev.variants ?? {});
         if (have.length && !have.includes(attr)) return NO_UNDO;
-        const clean = data ? Object.fromEntries(Object.entries(data).filter(([, v]) => typeof v === "string" && v.trim())) as ItemVariant : null;
+        const clean = data ? Object.fromEntries(Object.entries(data).filter(([, v]) => typeof v === "string" && v.trim()).map(([k, v]) => [k, (v as string).trim()])) as ItemVariant : null;
+        // the server's limits (app.variant_skus_ok), checked before the queue: a refused op would stay in it
+        const count = Object.keys({ ...(prev.variants?.[attr] ?? {}), [value]: 1 }).length;
+        if (!variantOk(value, clean, count)) return NO_UNDO;
         const next = (vs: CatalogItem["variants"]): CatalogItem["variants"] => {
           const one = { ...(vs?.[attr] ?? {}) };
           if (clean) one[value] = clean;
           else delete one[value];
-          return Object.keys(one).length ? { [attr]: one } : undefined;
+          // review #2241 №1: the last value gone, the property stays ({"color":{}}), as the server keeps it
+          return { [attr]: one };
         };
         const put = (x: CatalogItem, vs: CatalogItem["variants"]): CatalogItem => {
           const { variants: _v, ...rest } = x;
