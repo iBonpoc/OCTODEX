@@ -1652,6 +1652,10 @@ export const en: Dict = {
   "task.overdue": "Overdue",
   "task.what": "What to do",
   "task.whatPh": "e.g. call back and confirm the scope",
+  // #2220: the task form says what is missing only after «Сохранить» (useRequiredForm)
+  "task.req.subject": "Choose what the task is for",
+  "task.req.title": "Write what to do",
+  "task.req.who": "Choose who will do it",
   "task.when": "When",
   "task.when.today": "Today 5 PM",
   "task.when.tomorrow": "Tomorrow 9 AM",
