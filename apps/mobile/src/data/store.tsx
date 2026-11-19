@@ -43,6 +43,7 @@ import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBa
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { docForSave, newToken, normalizeDoc, storedDoc, summarize } from "@/features/estimateDoc";
 import { syncCompanyTerms, termsForNew, termsOnClientChange, withFrozenTerms, type TermsFor } from "@/features/estimateTerms";
+import { withSnooze } from "@/features/attentionSnooze";
 import { contractInvoice, contractInvoices, voidRefusal, withTaxSplit, type VoidRefusal } from "@/features/contractInvoice";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment, invoiceOwes, sumCents, visitPayment } from "@octo/estimating-engine";
@@ -350,6 +351,8 @@ interface StoreCtx {
   removeCalendarEvent: (id: ID) => Undo;
   /** wave 7б-1: my personal settings, the same on every device (locally at once, then public.set_my_prefs) */
   setPrefs: (patch: Partial<MemberPrefs>) => Undo;
+  /** #2097: «Позже» — a reason of «Разбор дел» put off until `until` (ISO; null — back now), for the whole company */
+  snoozeAttention: (itemId: string, until: string | null) => Undo;
   /** step 18 P4b: my push switch of one group, the same on every device (locally at once, then public.set_push_kind
    *  through the offline queue — rule 6) */
   setPushKind: (kind: PushGroup, enabled: boolean) => Undo;
@@ -2041,6 +2044,7 @@ export function StoreProvider({
         );
         return { id, undo };
       },
+      snoozeAttention: (itemId, until) => mutate("attention.snooze", (d) => withSnooze(d, itemId, until), { k: "attention.snooze", itemId, until }),
       setPrefs: (patch) => {
         const prefs: MemberPrefs = { ...MEMBER_PREFS_DEFAULT, ...dbRef.current.prefs, ...patch };
         return mutate("me.prefs", (d) => ({ ...d, prefs }), { k: "me.prefs", prefs });

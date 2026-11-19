@@ -371,6 +371,12 @@ export const es: Dict = {
   "triage.done": "Todo al día",
   "triage.doneHint": "Los nuevos pendientes aparecerán aquí.",
   "triage.later": "Después",
+  // #2097: «Позже» до даты, для всей компании
+  "triage.laterTitle": "Posponer hasta",
+  "triage.later.tomorrow": "Mañana · {date}",
+  "triage.later.days3": "En 3 días · {date}",
+  "triage.later.week": "En una semana · {date}",
+  "triage.laterSaved": "Pospuesto hasta {date} — volverá solo",
 
   "inbox.title": "Entrada",
   "inbox.waiting": "Espera {m} min",
