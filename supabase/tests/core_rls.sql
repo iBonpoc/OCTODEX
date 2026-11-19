@@ -5152,7 +5152,7 @@ select tst.ok((select closed_at is not null from public.companies where id = 'c5
 select tst.ok((select every(status = 'deleted') from public.memberships where company_id = 'c5000000-0000-4000-8000-000000000002'), 'nobody works in it any more');
 select tst.ok(app.retention_years() = 7, 'records are kept 7 years by default');
 :as_adam50
-select tst.fails_like($q$update public.companies set closed_at = now() where id = 'c5000000-0000-4000-8000-000000000001'$q$, '%closed only with its last owner%', 'an owner does not close a company by hand');
+select tst.fails_like($q$update public.companies set closed_at = now() where id = 'c5000000-0000-4000-8000-000000000001'$q$, '%permission denied for table companies%', 'an owner does not close a company by hand');
 :as_super
 select tst.fails_like($q$update public.companies set closed_at = null where id = 'c5000000-0000-4000-8000-000000000002'$q$, '%closed only with its last owner%', 'nor reopen it (only delete_account sets it)');
 :as_eve50
@@ -5202,7 +5202,7 @@ select tst.ok((select count(*) from public.memberships where company_id = :'t50_
 select tst.ok((select count(*) from public.companies where id = :'t50_twin') = 0, 'the creator who left does not see the company');
 -- a company is never created already closed
 reset role; set request.jwt.claim.sub = 'a5000000-0000-4000-8000-000000000007'; set role authenticated;
-select tst.fails_like($q$insert into public.companies (name, closed_at) values ('Closed From Birth Co', now())$q$, '%closed only with its last owner%', 'no company is created closed');
+select tst.fails_like($q$insert into public.companies (name, closed_at) values ('Closed From Birth Co', now())$q$, '%permission denied for table companies%', 'no company is created closed');
 
 -- the consent journal: even with the erasing flag, a client edits nothing
 set app.erasing_user = 'on';
@@ -7505,7 +7505,8 @@ select tst.agree('a7700000-0000-4000-8000-000000000004');
 \set as_with77  'reset role; set request.jwt.claim.sub = ''a7700000-0000-4000-8000-000000000002''; reset request.jwt.claims; set role authenticated;'
 \set as_off77   'reset role; set request.jwt.claim.sub = ''a7700000-0000-4000-8000-000000000003''; reset request.jwt.claims; set role authenticated;'
 :as_owner77
-insert into public.companies (id, name, dba) values ('c7700000-0000-4000-8000-000000000001', 'T77 Legal LLC', '');
+insert into public.companies (id, name) values ('c7700000-0000-4000-8000-000000000001', 'T77 Legal LLC');
+update public.companies set dba = '' where id = 'c7700000-0000-4000-8000-000000000001';
 :as_super
 insert into public.memberships (company_id, user_id, role, status, deleted_at) values
   ('c7700000-0000-4000-8000-000000000001', 'a7700000-0000-4000-8000-000000000001', 'tech', 'deleted', now() - interval '1 day');
@@ -17804,5 +17805,88 @@ select tst.ok((select estimate_id = 'a4260000-0000-4000-8000-0000000000e3' from 
               and (select estimate_id is null from public.jobs where id = 'a4260000-0000-4000-8000-0000000000f2'), 'T426 nothing moved');
 rollback;
 \echo 'T425 T426 ok'
+
+
+-- ---------------------------------------------------------------- T431–T432 (Р-7): what the app writes on the company row
+\echo 'T431 the company row: only the columns the app writes'
+begin;
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a4310000-0000-4000-8000-000000000001', 'admin431@a.test', '{"full_name":"Ada Admin431"}'),
+  ('a4310000-0000-4000-8000-000000000002', 'office431@a.test', '{"full_name":"Otis Office431"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4310000-0000-4000-8000-000000000001', 'admin', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a4310000-0000-4000-8000-000000000002', 'office', 'active');
+\set as_admin431 'reset role; set request.jwt.claim.sub = ''a4310000-0000-4000-8000-000000000001''; set role authenticated;'
+\set as_office431 'reset role; set request.jwt.claim.sub = ''a4310000-0000-4000-8000-000000000002''; set role authenticated;'
+-- every column any build of the app writes (companyToDb, company.save with the time zone, the visit settings, old trades)
+:as_owner_a
+update public.companies set name = name, dba = dba, legal_name = legal_name, entity_type = entity_type, phone = phone, email = email,
+  website = website, address_line1 = address_line1, address_city = address_city, address_state = address_state, address_zip = address_zip,
+  mailing_address_line1 = mailing_address_line1, mailing_address_city = mailing_address_city, mailing_address_state = mailing_address_state,
+  mailing_address_zip = mailing_address_zip, timezone = timezone, doc_language = doc_language, brand = brand,
+  contract_settings = contract_settings, estimate_settings = estimate_settings, payment_settings = payment_settings,
+  onboarding_state = onboarding_state, lead_default_assignee_id = 'a0000000-0000-0000-0000-000000000003', lead_settings = lead_settings,
+  schedule_settings = schedule_settings, business_hours = business_hours, visit_settings = visit_settings, trades = trades
+ where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select lead_default_assignee_id = 'a0000000-0000-0000-0000-000000000003' from public.companies where id = 'ca000000-0000-0000-0000-000000000000'),
+  'T431 the owner saves every setting the app sends (an old phone''s queued save too)');
+:as_admin431
+update public.companies set name = 'T431 Admin Co', trades = trades, visit_settings = visit_settings where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select name = 'T431 Admin Co' from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'T431 the admin saves the settings, as the owner');
+-- what the app never writes: the server's
+:as_owner_a
+select tst.fails_like($q$update public.companies set deleted_at = now() where id = 'ca000000-0000-0000-0000-000000000000'$q$, '%permission denied for table companies%', 'T431 the owner does not hide the company by hand');
+select tst.fails_like($q$update public.companies set numbering = '{}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, '%permission denied for table companies%', 'T431 nor rewrite the numbering');
+select tst.fails_like($q$update public.companies set public_slug = 'T431-slug' where id = 'ca000000-0000-0000-0000-000000000000'$q$, '%permission denied for table companies%', 'T431 nor the public link name');
+select tst.fails_like($q$update public.companies set id = 'ca000000-0000-0000-0000-0000000004a1' where id = 'ca000000-0000-0000-0000-000000000000'$q$, '%permission denied for table companies%', 'T431 nor the id');
+:as_admin431
+select tst.fails_like($q$update public.companies set tax_settings = '{}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, '%permission denied for table companies%', 'T431 the admin: not the tax settings');
+select tst.fails_like($q$update public.companies set gutter_settings = '{}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, '%permission denied for table companies%', 'T431 …nor the module''s settings');
+select tst.fails_like($q$update public.companies set checklist_since = now() where id = 'ca000000-0000-0000-0000-000000000000'$q$, '%permission denied for table companies%', 'T431 …nor checklist_since');
+-- a new company: the name (and its id), nothing else
+:as_owner_a
+select tst.fails_like($q$insert into public.companies (id, name, public_slug) values ('ca000000-0000-0000-0000-0000000004a2', 'T431 Co', 'T431-new')$q$, '%permission denied for table companies%', 'T431 a new company: only the name');
+-- the other roles: the policy, as before
+:as_office431
+update public.companies set name = 'T431 by office' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_tech_a
+update public.companies set name = 'T431 by tech' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_sales_a
+update public.companies set name = 'T431 by sales' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_super
+select tst.ok((select name = 'T431 Admin Co' from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'T431 office, tech and sales do not change the company');
+rollback;
+\echo 'T431 ok'
+
+\echo 'T432 the default lead assignee: a member of this company'
+begin;
+:as_owner_a
+select tst.fails_like($q$update public.companies set lead_default_assignee_id = 'b0000000-0000-0000-0000-000000000001' where id = 'ca000000-0000-0000-0000-000000000000'$q$,
+  '%active member of the company%', 'T432 not a person of another company');
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a4320000-0000-4000-8000-000000000001', 'sub432@a.test', '{"full_name":"Sid Sub432"}'),
+  ('a4320000-0000-4000-8000-000000000002', 'off432@a.test', '{"full_name":"Olga Off432"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4320000-0000-4000-8000-000000000001', 'subcontractor', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a4320000-0000-4000-8000-000000000002', 'tech', 'disabled');
+:as_owner_a
+select tst.fails_like($q$update public.companies set lead_default_assignee_id = 'a4320000-0000-4000-8000-000000000001' where id = 'ca000000-0000-0000-0000-000000000000'$q$,
+  '%active member of the company%', 'T432 not a subcontractor (new leads never go to one)');
+select tst.fails_like($q$update public.companies set lead_default_assignee_id = 'a4320000-0000-4000-8000-000000000002' where id = 'ca000000-0000-0000-0000-000000000000'$q$,
+  '%active member of the company%', 'T432 not someone switched off');
+update public.companies set lead_default_assignee_id = 'a0000000-0000-0000-0000-000000000003' where id = 'ca000000-0000-0000-0000-000000000000';
+-- the chosen one leaves: saving the other settings still works (the stored value is not checked again)
+:as_super
+update public.memberships set status = 'disabled' where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003';
+:as_owner_a
+update public.companies set name = 'T432 Co', lead_default_assignee_id = 'a0000000-0000-0000-0000-000000000003' where id = 'ca000000-0000-0000-0000-000000000000';
+update public.companies set lead_default_assignee_id = null where id = 'ca000000-0000-0000-0000-000000000000';
+:as_super
+select tst.ok((select name = 'T432 Co' and lead_default_assignee_id is null from public.companies where id = 'ca000000-0000-0000-0000-000000000000'),
+  'T432 a stored assignee who left does not block saving; «nobody» (the owner) is always allowed');
+rollback;
+\echo 'T431 T432 ok'
 
 \echo 'ALL TESTS PASSED'
