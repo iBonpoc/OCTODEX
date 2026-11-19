@@ -57,14 +57,14 @@ exports.run = async (h) => {
   h.expect(tiles.every((b) => b.height >= 44), "each tile is a 44 tap zone");
   await h.shot("card");
 
-  // «⋯»: В пути · Оплата (when there is money to take) · Создать смету (the card has no «＋», #1395) · Заметка · Файл; nothing dangerous, no line
+  // «⋯»: В пути · Оплата (when there is money to take) · Создать смету (the card has no «＋», #1395) · Заметка · Файл; then «Отменить работу…» (#2015, red, the director and the dispatcher only)
   await openMenu();
   const order = await menuOrder();
-  const want = ["job-act-enRoute", ...(order.includes("job-act-pay") ? ["job-act-pay"] : []), "job-act-estimate", "job-act-note", "job-act-file"];
+  const want = ["job-act-enRoute", ...(order.includes("job-act-pay") ? ["job-act-pay"] : []), "job-act-estimate", "job-act-note", "job-act-file", "job-act-cancel"];
   h.expect(JSON.stringify(order) === JSON.stringify(want), `the menu: ${order.join(", ")}`);
   const words = await p.evaluate(() => [...document.querySelectorAll('[data-testid^="job-act-"]')].filter((e) => e.offsetParent !== null).map((e) => e.innerText.trim()));
   for (const w of ["Сообщить «В пути»", "Создать смету", "Добавить заметку…", "Добавить фото на выезде…"]) h.expect(words.includes(w), `a verb in «⋯»: «${w}» (${words.join(" | ")})`);
-  h.expect((await p.getByTestId("menu-divider").locator("visible=true").count()) === 0, "no line: nothing dangerous in this menu");
+  h.expect((await p.getByTestId("menu-divider").locator("visible=true").count()) === 1, "one line, before the only dangerous item («Отменить работу…», #2015)");
   await h.shot("menu");
   // «Заметка» → «История» with the note field
   await tid("job-act-note").click();
@@ -96,7 +96,7 @@ exports.run = async (h) => {
   h.expect((await tid("job-main").innerText()).includes("Принять оплату"), "no open visit, money owed: the main step is «Принять оплату»");
   await openMenu();
   const order2 = await menuOrder();
-  h.expect(JSON.stringify(order2) === JSON.stringify(["job-act-estimate", "job-act-note"]), `no visit: «Создать смету» and «Заметка» in «⋯», no second «Оплата» (${order2.join(", ")})`);
+  h.expect(JSON.stringify(order2) === JSON.stringify(["job-act-estimate", "job-act-note", "job-act-cancel"]), `no visit: «Создать смету» and «Заметка» and «Отменить работу» in «⋯», no second «Оплата» (${order2.join(", ")})`);
   await pressEscUntilClosed(p, p.getByTestId("menu-items").locator("visible=true").first());
   await tid("job-main").getByRole("button").click();
   await p.waitForURL((u) => u.pathname.startsWith("/invoice/"), { timeout: 5000 });

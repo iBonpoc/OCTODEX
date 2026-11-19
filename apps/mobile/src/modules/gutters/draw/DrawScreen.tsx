@@ -54,7 +54,7 @@ import { InputWindow } from "./InputWindow";
 import { AttrBody, DsAttrsView, QuickLength, RunAttrsView, type RunCorner } from "./AttrPanel";
 import { MeasurePhotos } from "./Photos";
 import { fmtLen } from "../canvas/format";
-import { dropHaptic, forgetOldDraft, loadToolbarPlace, placeAt, saveToolbarPlace, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
+import { dropHaptic, forgetOldDraft, loadToolbarPlace, placeAt, saveToolbarPlace, type ToolbarPlace } from "../canvas/localStore";
 import { makeModuleStore } from "../canvas/moduleStore";
 import { gutterData, measurementOf, photosOf, relink } from "../data";
 import { makeSaver } from "../canvas/draftStore";
@@ -249,8 +249,8 @@ export default function DrawScreen() {
   /** 390: the sheet of the measurement's photos */
   const [photoSheet, setPhotoSheet] = useState(false);
   /** «Ещё»: «Вернуть» and where the toolbar sits — rare, off the main row (П20.8) */
-  // «⋯» → «Точность замера» or «Где панель инструментов» (founder 10.11, #739: «что такое „как мерили“?»)
-  const [moreSheet, setMoreSheet] = useState<"acc" | "place" | "layers" | null>(null);
+  // «⋯» → «Слои» (the place of the toolbar is by its grip since #2156; «Точность замера» gone, #1764)
+  const [moreSheet, setMoreSheet] = useState<"acc" | "layers" | null>(null);
   // the layers of the view (#930): on this screen only, not saved with the measurement; all on to begin with
   const [layers, setLayers] = useState({ grid: true, labels: true, ds: true });
   /** the gutter just drawn: its length by hand at once (просьба основателя 08.11) */
@@ -974,11 +974,6 @@ export default function DrawScreen() {
       void saveToolbarPlace(p);
     },
   });
-  const pickPlace = (p: ToolbarPlace) => {
-    setPlace(p);
-    setMoreSheet(null);
-    void saveToolbarPlace(p);
-  };
   /** a layer on or off (#930): off with the downspouts — no downspout stays picked, and the downspout tool gives way to «Желоб» */
   const toggleLayer = (l: "grid" | "labels" | "ds", on: boolean) => {
     setLayers((x) => ({ ...x, [l]: on }));
@@ -1073,7 +1068,7 @@ export default function DrawScreen() {
   // «⋯» (founder 09.11, #692 #690; spec 33 П24 Б5, Б6): link to another, unlink back to the drafts, delete the measurement
   const whoRef = useRef<React.ComponentRef<typeof View>>(null);
   const [whoAt, setWhoAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  type WhoKey = "fit" | "props" | "end0" | "end1" | "acc" | "place" | "layers" | "autods" | "relink" | "unlink" | "delete";
+  type WhoKey = "fit" | "props" | "end0" | "end1" | "acc" | "layers" | "autods" | "relink" | "unlink" | "delete";
   const linked = !!leadId || !!placeId;
   // the free ends of the picked gutter (a corner and a butted end have no cap to talk about; «без заглушки» stays one)
   const endRun0 = canSave ? drawing.runs.find((r) => r.id === selected) : undefined;
@@ -1089,8 +1084,7 @@ export default function DrawScreen() {
     // gutter / downspout, and «Конец желоба» of each of its free ends (named by the letter the cap carries on the canvas)
     ...(canSave && sel && !wide ? [{ key: "props" as const, label: t("mod.gutters.attr.props") }] : []),
     ...endRows.map((r) => ({ key: `end${r.end}` as const, label: `${t("mod.gutters.end.title")} · ${r.side}` })),
-    // where the toolbar sits (#739); «Точность замера» is gone — nothing is written about how it was measured (#768, #1764)
-    { key: "place", label: t("mod.gutters.draw.placeItem"), testID: "draw-who-place" },
+    // no «Где панель» (founder 18.11, #2156: «Зачем она там?») — the toolbar moves by its grip; no «Точность замера» (#768, #1764)
     { key: "layers", label: t("mod.gutters.draw.layersItem") },
     // a measurement from before the automatic downspouts gets them only when asked (#1246): not silently, the estimate would change
     ...(canSave && autoDs && drawing.runs.length > 0 && !autoManaged(drawing) ? [{ key: "autods" as const, label: t("mod.gutters.draw.autoDsItem") }] : []),
@@ -1101,7 +1095,7 @@ export default function DrawScreen() {
     if (k === "fit") { if (size.w) setView(fit(drawing, size)); return; }
     if (k === "props") return setSheet(true);
     if (k === "end0" || k === "end1") return setEndSheet(endRun0 ? { id: endRun0.id, end: k === "end1" ? 1 : 0 } : null);
-    if (k === "place" || k === "layers") return setMoreSheet(k);
+    if (k === "layers") return setMoreSheet(k);
     if (k === "autods") return placeAutoDs();
     if (!m) return;
     flush();
@@ -1604,16 +1598,6 @@ export default function DrawScreen() {
               ))}
               <View testID="draw-layers-hint"><T v="caption" tone="mut">{t("mod.gutters.draw.layersHint")}</T></View>
             </View>
-          ) : null}
-          {moreSheet === "place" ? (
-            <>
-              <T v="caption" tone="mut">{t("mod.gutters.draw.placeTitle")}</T>
-              {TOOLBAR_PLACES.map((p) => (
-                <View key={p} testID={`draw-place-${p}`}>
-                  <ListRow title={t(`mod.gutters.draw.place.${p}`)} left={<Icon name={p === place ? "check" : "sliders"} s={sizes.iconMd} color={p === place ? c.ink : c.mut} />} onPress={() => pickPlace(p)} />
-                </View>
-              ))}
-            </>
           ) : null}
         </View>
       </Sheet>

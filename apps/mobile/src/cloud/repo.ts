@@ -20,6 +20,7 @@ import { posFromRows } from "@/features/purchaseOrderRows";
 import type { CostHistoryEntry, Photo, PriceHistoryEntry } from "@/data/types";
 import { priceHistoryFromRow } from "@/features/catalogCard";
 import { roleSeesCosts } from "@/features/access";
+import { noticeRead } from "./noticeRead";
 
 type Row = Record<string, unknown>;
 const s = (v: unknown) => (v == null ? "" : String(v));
@@ -201,6 +202,14 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   // step 18 P4b: my push switches (RLS: only my own rows); no rows or no table yet → the defaults
   const pushRows = await pages<Row>(() => supabase.from("push_prefs").select("kind, enabled").eq("company_id", companyId).eq("user_id", userId), key("kind")).catch(() => [] as Row[]);
   const pushPrefs = pushPrefsFromRows(pushRows);
+  // Р-8b: my own «read» marks of the notices loaded (RLS: only my own rows) and the moment of the split (a constant of the
+  // migration, public.notifications_split_at); a server before the migration has neither — the shared read_at as before
+  const noticeIds = notifications.map((r) => s(r.id));
+  const [readRows, noticeSplitAt] = await Promise.all([
+    noticeIds.length ? q<Row>(supabase.from("notification_reads").select("notification_id").in("notification_id", noticeIds)).catch(() => [] as Row[]) : Promise.resolve([] as Row[]),
+    Promise.resolve(supabase.rpc("notifications_split_at")).then((r) => (r.error ? null : ((r.data as string | null) ?? null)), () => null),
+  ]);
+  const readByMe = new Set(readRows.map((r) => s(r.notification_id)));
   // spec 33 П15 (C2a): the company's add-on modules; empty before the migration company_modules (C1) or if a read fails
   const moduleRows = await every<Row>("company_modules", "module_key, enabled, trial_ends_at, paid_until, settings, row_version", key("module_key")).catch(() => [] as Row[]);
   const companyModules = companyModulesFromRows(moduleRows);
@@ -325,7 +334,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     live<Row>("contact_emails", "contact_id, address, is_primary, position").catch(() => [] as Row[]),
     // directions of the business (docs/specs/11-trade.md): no deleted_at, archived ones stay; empty before the migration
     every<Row>("service_categories", "id, seed_key, name, position, archived_at").catch(() => [] as Row[]),
-    // C2: gate codes — RLS gives the office all of them, a tech only on the visit days (app.can_see_gate_code)
+    // C2: gate codes — RLS gives the office all of them, a tech and sales only on their visit days (app.can_see_gate_code)
     live<Row>("property_secrets", "property_id, gate_code", key("property_id")).catch(() => [] as Row[]),
   ]);
   const people = peopleByCustomer(contacts, phoneRows, emailRows);
@@ -465,6 +474,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       cancelReason: ((v.cancel_reason as CancelReason | null) ?? (v.status === "no_show" ? "no_show" : "other")),
       cancelText: (v.cancel_reason_text as string | null) ?? undefined,
       cancelledAt: s(v.cancelled_at) || s(v.updated_at),
+      cancelledBy: (v.cancelled_by as string | null) ?? undefined,
     }));
 
   const versionOf = new Map(versions.map((v) => [s(v.id), v]));
@@ -641,6 +651,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     taxRateBps: j.tax_rate_bps == null ? undefined : n(j.tax_rate_bps),
     taxRatePpm: j.tax_rate_ppm == null ? undefined : n(j.tax_rate_ppm),
     status: jobStatus[s(j.status)] ?? "scheduled",
+    ...(jobDbCancelled.includes(s(j.status)) ? { cancelReason: s(j.cancel_reason) || undefined, cancelledAt: s(j.cancelled_at) || s(j.updated_at) || undefined } : {}),
     amountCents: n(j.contract_total_cents),
     ...contractTaxOfRow(j),
     estimateId: (j.estimate_id as string | null) ?? undefined,
@@ -843,7 +854,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       return {
         id: s(r.id), kind: s(r.kind) as Notice["kind"], estimateId: (r.estimate_id as string | null) ?? undefined, jobId: (r.job_id as string | null) ?? undefined,
         invoiceId: (r.invoice_id as string | null) ?? undefined, visitId: (r.visit_id as string | null) ?? undefined, customer: p.customer ?? "",
-        totalCents: p.total, depositCents: p.deposit, at: s(r.created_at), read: !!r.read_at,
+        totalCents: p.total, depositCents: p.deposit, at: s(r.created_at), read: noticeRead(r.read_at as string | null, readByMe.has(s(r.id)), noticeSplitAt),
       };
     }),
   };

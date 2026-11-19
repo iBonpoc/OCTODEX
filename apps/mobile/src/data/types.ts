@@ -155,7 +155,7 @@ export interface Property {
   kind?: PropertyKind;
   /** dog, side gate, parking — whoever sees the property sees these */
   accessNotes?: string;
-  /** office always; a tech only on the day of their visit and the day before (server: app.can_see_gate_code) */
+  /** office always; a tech and sales only on the day of their visit and the day before (server: app.can_see_gate_code) */
   gateCode?: string;
   /** people of the property: links to the client's people (tenant, property manager) */
   contactIds?: ID[];
@@ -193,6 +193,9 @@ export interface Job {
   taxRateBps?: number;
   /** #1219: the rate in ppm (8.875 % = 88750; server jobs.tax_rate_ppm) — the rate when set; absent — the basis points */
   taxRatePpm?: number;
+  /** #2015 (spec 38 §12): a cancelled job (db.cancelledJobs) — why and when (server: jobs.cancel_reason / cancelled_at) */
+  cancelReason?: string;
+  cancelledAt?: string;
 }
 
 /** A line of a job made without an estimate (wave П-2a, server: job_line_items). The server owns the totals:
@@ -252,7 +255,13 @@ export type VisitKind = "inspection" | "install" | "service" | "follow_up";
 export const CANCEL_REASONS = ["client_cancelled", "no_show", "reschedule_later", "we_cancelled", "other"] as const;
 export type CancelReason = (typeof CANCEL_REASONS)[number];
 /** a visit the office cancelled: the visit as it was + why and when */
-export type CancelledVisit = Visit & { cancelReason: CancelReason; cancelText?: string; cancelledAt: string };
+export type CancelledVisit = Visit & {
+  cancelReason: CancelReason;
+  cancelText?: string;
+  cancelledAt: string;
+  /** who closed it (server: visits.cancelled_by) — #2066: the tech at the door, or the office */
+  cancelledBy?: ID;
+};
 
 /** a checklist item: a tick, or a photo (docs/specs/08 §3.2) */
 export type ChecklistItemKind = "check" | "photo";
