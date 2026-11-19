@@ -4064,7 +4064,7 @@ begin
                         'intake_endpoint_rotate(uuid)', 'intake_endpoint_set(uuid,boolean,uuid,uuid,boolean,boolean,boolean,integer,boolean)',
                         'intake_event_decide(uuid,boolean)', 'invite_member(uuid,text,text,text,boolean)', 'legal_status()',
                         'mark_not_duplicate(uuid,uuid)', 'merge_customers(uuid,uuid)', 'module_disable(uuid,text)', 'module_enable(uuid,text)',
-                        'module_save_settings(uuid,text,jsonb,integer)', 'my_closed_companies()', 'po_receive(uuid,jsonb,bigint)', 'catalog_set_group_price(uuid,bigint,boolean,bigint,integer,integer,bigint,bigint,integer,integer)', 'catalog_set_item_costs(uuid,jsonb,jsonb)',
+                        'module_save_settings(uuid,text,jsonb,integer)', 'my_closed_companies()', 'po_receive(uuid,jsonb,bigint)', 'catalog_set_group_price(uuid,bigint,boolean,bigint,integer,integer,bigint,bigint,integer,integer)', 'catalog_set_item_costs(uuid,jsonb,jsonb)', 'catalog_set_variant(uuid,text,text,jsonb)',
                         'portal_accept(text,uuid,uuid[],text,text,boolean,text,uuid,uuid,uuid)', 'portal_estimate(text)',
                         'portal_pay_simulated(text,uuid)', 'record_estimate_deposit(uuid,uuid,text)',
                         'record_visit_payment(uuid,uuid,uuid,text,date,bigint)', 'refund_record(uuid,bigint,text,text,text)',
@@ -18010,5 +18010,115 @@ select tst.ok((select name = 'T432 Co' and lead_default_assignee_id is null from
   'T432 a stored assignee who left does not block saving; «nobody» (the owner) is always allowed');
 rollback;
 \echo 'T431 T432 ok'
+
+
+-- ---------------------------------------------------------------- T442–T447 (#2227, spec 33-price-key §11.5, §11.7): variants of an item
+-- One item for every colour; the colour's sku (and supplier, pack) lives at the item as a variant. The core knows no «colour».
+\echo 'T442 catalog_set_variant: one value, the others kept'
+begin;
+:as_super
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price) values
+  ('44200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T442 Gutter 5in K', 'ft', 800, false),
+  ('44200000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'material', 'T442 Rival gutter', 'ft', 800, false);
+insert into public.suppliers (id, company_id, name) values
+  ('44200000-0000-4000-8000-0000000000a5', 'ca000000-0000-0000-0000-000000000000', 'T442 Supplier A'),
+  ('44200000-0000-4000-8000-0000000000b5', 'cb000000-0000-0000-0000-000000000000', 'T442 Supplier B');
+:as_office_a
+select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', ' White ', '{"sku":"W-1"}');
+-- «another phone» writes brown after it: white is not erased (a whole-row write would erase it)
+select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', 'brown', '{"sku":"B-1","supplierId":"44200000-0000-4000-8000-0000000000a5","packSize":"10"}');
+:as_super
+select tst.ok((select variant_skus = '{"color":{"white":{"sku":"W-1"},"brown":{"sku":"B-1","supplierId":"44200000-0000-4000-8000-0000000000a5","packSize":"10"}}}'::jsonb
+                 from public.catalog_items where id = '44200000-0000-4000-8000-000000000001'), 'T442 both colours kept, the value lower-cased and trimmed');
+:as_office_a
+-- a colour without data yet is still a variant (its sku is set later); null data removes it
+select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', 'black', '{"sku":""}');
+select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', 'white', null);
+:as_super
+select tst.ok((select variant_skus = '{"color":{"black":{},"brown":{"sku":"B-1","supplierId":"44200000-0000-4000-8000-0000000000a5","packSize":"10"}}}'::jsonb
+                 from public.catalog_items where id = '44200000-0000-4000-8000-000000000001'), 'T442 an empty sku is «not set», null data removes the value');
+rollback;
+\echo 'T442 ok'
+
+\echo 'T443 catalog_set_variant: who, which supplier, one property'
+begin;
+:as_super
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price) values
+  ('44300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T443 Gutter', 'ft', 800, false),
+  ('44300000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'material', 'T443 Rival', 'ft', 800, false);
+insert into public.suppliers (id, company_id, name) values ('44300000-0000-4000-8000-0000000000b5', 'cb000000-0000-0000-0000-000000000000', 'T443 Supplier B');
+:as_tech_a
+select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-000000000001', 'color', 'white', '{"sku":"W"}')$q$, '%not found%', 'T443 a tech does not write variants');
+:as_owner_a
+select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-0000000000b1', 'color', 'white', '{"sku":"W"}')$q$, '%not found%', 'T443 not another company''s item');
+select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-000000000001', 'color', 'white', '{"supplierId":"44300000-0000-4000-8000-0000000000b5"}')$q$, '%supplier not found%', 'T443 not another company''s supplier');
+select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-000000000001', 'color', 'white', '{"sku":"W","price":"1"}')$q$, '%variant_skus_check%', 'T443 only sku, supplierId, purchaseUnit, packSize');
+select public.catalog_set_variant('44300000-0000-4000-8000-000000000001', 'color', 'white', '{"sku":"W"}');
+select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-000000000001', 'size', '5', '{"sku":"S"}')$q$, '%another property%', 'T443 one property per item');
+select tst.fails_like($q$select public.catalog_set_variant('00000000-0000-4000-8000-000000000000', 'color', 'white', '{"sku":"W"}')$q$, '%not found%', 'T443 no item yet (the queue waits) — P0002');
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.catalog_set_variant(uuid,text,text,jsonb)', 'execute'), 'T443 anon does not run it');
+rollback;
+\echo 'T443 ok'
+
+\echo 'T444 the shape of variant_skus; an old build''s whole row keeps it'
+begin;
+:as_super
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price, variant_skus) values
+  ('44400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T444 Gutter', 'ft', 800, false, '{"color":{"white":{"sku":"W-1"}}}');
+select tst.fails_like($q$update public.catalog_items set variant_skus = '{"color":{"White":{}}}' where id = '44400000-0000-4000-8000-000000000001'$q$, '%variant_skus_check%', 'T444 a value is lower case');
+select tst.fails_like($q$update public.catalog_items set variant_skus = '{"color":{"white":{}},"size":{"5":{}}}' where id = '44400000-0000-4000-8000-000000000001'$q$, '%variant_skus_check%', 'T444 one property');
+select tst.fails_like($q$update public.catalog_items set variant_skus = '{"color":{"white":{"packSize":"0"}}}' where id = '44400000-0000-4000-8000-000000000001'$q$, '%variant_skus_check%', 'T444 a pack size > 0');
+select tst.fails_like($q$update public.catalog_items set variant_skus = '["white"]' where id = '44400000-0000-4000-8000-000000000001'$q$, '%variant_skus_check%', 'T444 an object');
+:as_office_a
+-- an old build saves the whole row it knows (catalog.save upsert): variant_skus is not among its columns
+insert into public.catalog_items as c (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price, supplier_sku)
+values ('44400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T444 Gutter renamed', 'ft', 800, false, 'G-1')
+on conflict (id) do update set name = excluded.name, unit = excluded.unit, unit_price_cents = excluded.unit_price_cents,
+  is_placeholder_price = excluded.is_placeholder_price, supplier_sku = excluded.supplier_sku;
+:as_super
+select tst.ok((select variant_skus = '{"color":{"white":{"sku":"W-1"}}}'::jsonb and name = 'T444 Gutter renamed'
+                 from public.catalog_items where id = '44400000-0000-4000-8000-000000000001'), 'T444 the old build''s whole row does not erase variant_skus');
+rollback;
+\echo 'T444 ok'
+
+\echo 'T445 an old build edits the sku of an old per-colour item: into the new item''s variant'
+begin;
+:as_super
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price, variant_skus, attributes) values
+  ('44500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T445 Gutter', 'ft', 800, false, '{"color":{"white":{"sku":"W-1"}}}', '{"part":"gutter"}'),
+  ('44500000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'material', 'T445 Gutter · Brown', 'ft', 800, false, null,
+   '{"part":"gutter","color":"Brown","mergedInto":"44500000-0000-4000-8000-000000000001"}'),
+  ('44500000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'material', 'T445 Other', 'ft', 800, false, null, '{"part":"gutter"}'),
+  ('44500000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'material', 'T445 Other · Red', 'ft', 800, false, null,
+   '{"part":"gutter","color":"red","mergedInto":"44500000-0000-4000-8000-000000000003"}');
+:as_office_a
+update public.catalog_items set supplier_sku = 'B-9' where id = '44500000-0000-4000-8000-000000000002';
+update public.catalog_items set supplier_sku = 'R-9' where id = '44500000-0000-4000-8000-000000000004';
+:as_super
+select tst.ok((select variant_skus = '{"color":{"white":{"sku":"W-1"},"brown":{"sku":"B-9"}}}'::jsonb
+                 from public.catalog_items where id = '44500000-0000-4000-8000-000000000001'), 'T445 the brown sku is in the new item''s variant, white kept');
+select tst.ok((select variant_skus is null from public.catalog_items where id = '44500000-0000-4000-8000-000000000003'),
+              'T445 the new item without variants: nothing is written (which property is the variant is not known)');
+rollback;
+\echo 'T445 ok'
+
+\echo 'T446 a merged per-colour item is never put in the Trash'
+begin;
+:as_super
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price, attributes) values
+  ('44600000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T446 Gutter', 'ft', 800, false, '{"part":"gutter"}'),
+  ('44600000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'material', 'T446 Gutter · White', 'ft', 800, false,
+   '{"part":"gutter","color":"white","mergedInto":"44600000-0000-4000-8000-000000000001"}');
+:as_owner_a
+select tst.fails_like($q$update public.catalog_items set deleted_at = now() where id = '44600000-0000-4000-8000-000000000002'$q$, '%merged item is kept%', 'T446 the merged item stays');
+-- the new item itself (the undo of the transition takes mergedInto off first) goes to the Trash as any item
+update public.catalog_items set attributes = attributes - 'mergedInto' where id = '44600000-0000-4000-8000-000000000002';
+update public.catalog_items set deleted_at = now() where id = '44600000-0000-4000-8000-000000000001';
+update public.catalog_items set deleted_at = now() where id = '44600000-0000-4000-8000-000000000002';
+:as_super
+select tst.ok((select count(*) from public.catalog_items where id::text like '44600000-%' and deleted_at is not null) = 2, 'T446 without mergedInto both go to the Trash');
+rollback;
+\echo 'T446 ok'
 
 \echo 'ALL TESTS PASSED'
