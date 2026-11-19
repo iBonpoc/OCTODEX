@@ -155,7 +155,7 @@ export interface Property {
   kind?: PropertyKind;
   /** dog, side gate, parking — whoever sees the property sees these */
   accessNotes?: string;
-  /** office always; a tech only on the day of their visit and the day before (server: app.can_see_gate_code) */
+  /** office always; a tech and sales only on the day of their visit and the day before (server: app.can_see_gate_code) */
   gateCode?: string;
   /** people of the property: links to the client's people (tenant, property manager) */
   contactIds?: ID[];

@@ -1,6 +1,6 @@
 # Доска руководителя
 
-Руководитель: «Главный чат с управлением агентами» №15 (`session_015CqH68Rt8LpPcjVA6GX6o8`), с 18.11.2026. Прежние — №14 (`session_015CqH65o614ndso8xbBmoBd`, 18.11.2026), №13 (`session_015CqH68we3V2ZEL83FBrvTb`, 15–18.11.2026), №12 (`session_015CqH69sCAvBQ4JiRs3NqAf`), №11 (`session_015CqH68GWKQ59fgFc9evnJ5`), №10 (`session_015CqH68ruXPjcwa2xZVyogr`), №9 (`session_015CqH687aYpUm4g8RYH2mco`), №8 (`session_015CqH67dLvVBU9EZg9nRT4P`), №7 (`session_015CqH6A3Nqxoz61qLQ1Rtwd`), №6 (`session_015CqH68XVUZYbUeZtamvLEE`), №5 (`session_015CqH6AYWnjNhg5RZy2re5D`), архив. Чат аудита (личный чат основателя, проверяет этапы) — №2 `session_015CqH69kqSBDGCrDMube5oe` (с 11.11.2026; №1 `session_015CqH65zYaCaecNrBxcPr1v` — архив).
+Руководитель: «Главный чат с управлением агентами» №16 (`session_015CqH694Nr21kphaaPEHD6m`), с 19.11.2026 ~14:30 UTC. Прежние — №15 (`session_015CqH68Rt8LpPcjVA6GX6o8`, 18–19.11.2026), №14 (`session_015CqH65o614ndso8xbBmoBd`, 18.11.2026), №13 (`session_015CqH68we3V2ZEL83FBrvTb`, 15–18.11.2026), №12 (`session_015CqH69sCAvBQ4JiRs3NqAf`), №11 (`session_015CqH68GWKQ59fgFc9evnJ5`), №10 (`session_015CqH68ruXPjcwa2xZVyogr`), №9 (`session_015CqH687aYpUm4g8RYH2mco`), №8 (`session_015CqH67dLvVBU9EZg9nRT4P`), №7 (`session_015CqH6A3Nqxoz61qLQ1Rtwd`), №6 (`session_015CqH68XVUZYbUeZtamvLEE`), №5 (`session_015CqH6AYWnjNhg5RZy2re5D`), архив. Чат аудита (личный чат основателя, проверяет этапы) — №2 `session_015CqH69kqSBDGCrDMube5oe` (с 11.11.2026; №1 `session_015CqH65zYaCaecNrBxcPr1v` — архив).
 
 Здесь только живое: кто чем занят, очередь вливания, номера. Что осталось сделать — **только Issues** (правило 21). Старые памятки — `docs/ai/BOARD-archive.md`; журнал — `docs/ai/LOG.md`.
 
@@ -28,6 +28,20 @@
 | Э7. Копилка идей Gutters | #776 |
 | Э8. Остальное | #777 |
 | Э9. Сайт и маркетинг | #778 |
+
+## Передача №15 → №16, 19.11.2026 (~14:30 UTC)
+
+Руководитель №16 — `session_015CqH694Nr21kphaaPEHD6m`, открыт чатом аудита №2. №15 (`session_015CqH68Rt8LpPcjVA6GX6o8`) сдал дела и уходит в архив. Режим экономии 18.11 — без изменений.
+
+### Влито 19.11 (№15)
+#2206, #2222, #2225, #2230, #2180, #2236, #2231, #2237, #2240, #1831 (main `3b5a65e5`).
+
+### Очередь вливания (порядок обязателен, по одному)
+1. #2242 (без миграции) → 2. #2243 (569000) → 3. цепочка Gutters: #2228 (570000; после — закрыть #2049) → #2229 (580000) → #2234 (590000) → #2235 (600000) → #2168 (610000) → 4. #2239 (620000) → 5. #2241 (после — PR3 Gutters, два ревьюера) → 6. #2247 (#1926 ч. 1/4, 630000).
+Перед каждым — влить `main` в PR и сверить голову с GitHub.
+
+### Натив — только в окно основателя
+Окно А: остаток #2057, #1964, #1975, #1996. Окно Б: #2196. Отдельное окно: #2224. Время окна даёт аудит.
 
 ## Передача №14 → №15, 18.11.2026 (10:52 UTC)
 

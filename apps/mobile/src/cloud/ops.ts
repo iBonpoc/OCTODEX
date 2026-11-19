@@ -1108,8 +1108,9 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       );
     }
     case "property.gate":
-      // kept apart from the property (migration 20261105160000): the office writes it, a tech reads it only on the visit days
-      return run(supabase.from("property_secrets").upsert({ property_id: op.id, company_id: c, gate_code: op.code || null, deleted_at: null }, { onConflict: "property_id" }));
+      // kept apart from the property (migration 20261105160000); written through the server's function (20261117568000):
+      // sales set the code without reading it back, a tech and sales read it only on the visit days
+      return run(supabase.rpc("set_gate_code", { p_property_id: op.id, p_code: op.code || "" }));
     case "property.update": {
       const patch: Record<string, string> = {};
       if (op.address !== undefined) patch.address_line1 = op.address || "—";
@@ -1231,8 +1232,17 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "catalog.remove":
       return run(supabase.from("catalog_items").update({ deleted_at: new Date().toISOString(), is_active: false }).eq("id", op.id));
-    case "notice.read":
-      return run(supabase.from("notifications").update({ read_at: new Date().toISOString() }).in("id", op.ids));
+    case "notice.read": {
+      // Р-8b (20261117569000): read for me only — my own marks; the server sets who and when. A server before the migration
+      // (no such table): the shared column, as before
+      // (public.mark_notifications_read: an id the server does not know, or one not visible, is left out, the others marked)
+      // (only server ids: a notice made on the phone has no uuid and never reaches the server)
+      const ids = op.ids.filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+      if (!ids.length) return;
+      const r = await supabase.rpc("mark_notifications_read", { p_ids: ids });
+      if (r.error?.code === "PGRST202") return run(supabase.from("notifications").update({ read_at: new Date().toISOString() }).in("id", ids));
+      return run(Promise.resolve(r));
+    }
     case "estimate.send": {
       // E2a, security-check 05.11: the server locks the version, sets "valid until" and the link token
       // (it takes the phone's token only if it was never revoked; otherwise makes its own — the next refresh brings it)
