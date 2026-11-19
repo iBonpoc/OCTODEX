@@ -19329,6 +19329,23 @@ select tst.ok(not jsonb_path_exists((select calc_inputs from public.estimate_ver
 select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where unit_cost_millicents is not null$q$) = 0, 'T467 the tech reads no exact cost');
 :as_sales_a
 select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where unit_cost_millicents is not null$q$) = 0, 'T467 sales without view_costs reads no exact cost');
+-- the client's document (the PDF and /p/) passes only the keys it lists: no exact cost
+select tst.ok(not (app.client_doc('{"options":[{"id":"o","name":"A","lines":[{"id":"l","name":"Rivet","group":"material","quantity":"37","unit":"ea","unitPriceCents":25,"unitCostMillicents":22500,"unitCostCents":23}]}]}')
+                   -> 'options' -> 0 -> 'lines' -> 0) ?| array['unitCostMillicents', 'unitCostCents'],
+  'T467 the client''s document (PDF, /p/) has no exact cost');
+-- who sees no costs: a save carrying an exact cost writes none (the lines are saved), the kept exact values closed
+:as_sales_a
+select tst.t460_save(:'l460', '[{"line_item_id": "54600000-0000-4000-8000-0000000000b1", "unit_cost_millicents": 1}]');
+select tst.blocked('select * from public.estimate_line_cost_exact', 'T467 sales reads the kept exact values');
+:as_office_a
+select tst.blocked('select * from public.estimate_line_cost_exact', 'T467 the office reads the kept exact values');
+do $$ begin
+  perform tst.fails($q$insert into public.estimate_line_cost_exact (line_item_id, company_id, unit_cost_millicents)
+    values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 1)$q$, 'T467 nobody writes the kept exact values directly');
+end $$;
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]',
+  format('T467 sales'' save with an exact cost: the office''s 22 500 stays (his value not written): %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b1')));
 \echo 'T467 ok'
 rollback;
 \echo 'T460–T467 ok'
