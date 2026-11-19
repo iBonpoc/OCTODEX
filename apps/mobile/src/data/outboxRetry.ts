@@ -49,9 +49,11 @@ export function classify(e: unknown): Failure {
   return NETWORK.test(msg) ? "network" : "refusal";
 }
 /** #1633 A2: the server's «no rights» (42501) — not a module that is off (its own card) */
-export const isAccessDenied = (e: unknown) => String(field(e, "code") ?? "") === "42501" && !isModuleInactive(e);
+export const isAccessDenied = (e: unknown) => String(field(e, "code") ?? "") === "42501" && !isModuleInactive(e) && field(e, "hint") !== LEAD_ASSIGNEE_GONE;
 /** the hint of a refused module.op whose module is not active on the server (cloud/ops.ts; spec 33 П21.1) */
 export const MODULE_INACTIVE = "module_inactive";
+/** Р-7: company.save saved the settings, but the chosen default lead assignee has left the team */
+export const LEAD_ASSIGNEE_GONE = "lead_assignee_gone";
 export const isModuleInactive = (e: unknown) => field(e, "hint") === MODULE_INACTIVE;
 /** «someone else changed it first» (module_save_settings: 40001 + hint row_version_conflict) */
 export const isRowConflict = (e: unknown) => field(e, "hint") === "row_version_conflict";
