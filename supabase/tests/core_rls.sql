@@ -18014,6 +18014,124 @@ select tst.ok((select name = 'T432 Co' and lead_default_assignee_id is null from
 rollback;
 \echo 'T431 T432 ok'
 
+-- ---------------------------------------------------------------- T433 (Р-8a): who writes which expense
+\echo 'T433 an expense: the client of its job, a sum not below zero, a subcontractor only on a job of his'
+begin;
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a4330000-0000-4000-8000-000000000001', 'sub433@a.test', '{"full_name":"Sam Sub433"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4330000-0000-4000-8000-000000000001', 'subcontractor', 'active');
+-- the subcontractor works a visit of job 2 (the HOA's)
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f1a00000-0000-0000-0000-000000000002', 'a4330000-0000-4000-8000-000000000001');
+\set as_sub433 'reset role; set request.jwt.claim.sub = ''a4330000-0000-4000-8000-000000000001''; set role authenticated;'
+-- the fixtures this test stands on: the tech works job 1 (client Petrov), not job 2 (client HOA)
+:as_tech_a
+select tst.ok(app.is_job_assignee('e1a00000-0000-0000-0000-000000000001') and not app.is_job_assignee('e1a00000-0000-0000-0000-000000000002'),
+  'T433 fixtures: the tech works job 1 only');
+-- what the app sends (cloud/ops.ts expense.add): no client, a job of his own or none, a sum ≥ 0 — taken
+insert into public.expenses (id, company_id, job_id, vendor, amount_cents, category) values
+  ('e4330000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', null, 'T433 fuel', 4500, 'fuel'),
+  ('e4330000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', 'T433 nails', 1200, 'materials');
+-- the client of his own job: taken
+insert into public.expenses (id, company_id, job_id, customer_id, vendor, amount_cents, category) values
+  ('e4330000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001',
+   'c1a00000-0000-0000-0000-000000000001', 'T433 job client', 100, 'other');
+-- another client: not without a job, not on his job
+select tst.fails_like($q$insert into public.expenses (company_id, customer_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'T433', 100, 'other')$q$,
+  '%row-level security%', 'T433 the tech: no client of the company without a job');
+select tst.fails_like($q$insert into public.expenses (company_id, job_id, customer_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', 'c1a00000-0000-0000-0000-000000000002', 'T433', 100, 'other')$q$,
+  '%row-level security%', 'T433 the tech: not another client on his own job');
+-- a sum below zero
+select tst.fails_like($q$insert into public.expenses (company_id, job_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', 'T433', -500000, 'materials')$q$,
+  '%row-level security%', 'T433 the tech: no expense below zero');
+select tst.fails_like($q$insert into public.expenses (company_id, vendor, amount_cents, tax_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'T433', 100, -50, 'materials')$q$,
+  '%row-level security%', 'T433 the tech: no tax below zero');
+-- the same through a change of his own expense
+select tst.fails_like($q$update public.expenses set amount_cents = -500000 where id = 'e4330000-0000-4000-8000-000000000002'$q$,
+  '%row-level security%', 'T433 the tech: his expense is not changed to below zero');
+select tst.fails_like($q$update public.expenses set tax_cents = -1 where id = 'e4330000-0000-4000-8000-000000000002'$q$,
+  '%row-level security%', 'T433 the tech: nor its tax');
+select tst.fails_like($q$update public.expenses set customer_id = 'c1a00000-0000-0000-0000-000000000002' where id = 'e4330000-0000-4000-8000-000000000002'$q$,
+  '%row-level security%', 'T433 the tech: his expense does not go to another client');
+select tst.fails_like($q$update public.expenses set customer_id = 'c1a00000-0000-0000-0000-000000000002' where id = 'e4330000-0000-4000-8000-000000000001'$q$,
+  '%row-level security%', 'T433 the tech: …nor an expense without a job');
+-- his ordinary edits stay
+update public.expenses set amount_cents = 5000, vendor = 'T433 fuel+' where id = 'e4330000-0000-4000-8000-000000000001';
+select tst.ok((select amount_cents = 5000 from public.expenses where id = 'e4330000-0000-4000-8000-000000000001'), 'T433 the tech changes the sum of his expense');
+-- sales: the same limits (sales may put an expense on any job, as before)
+:as_sales_a
+insert into public.expenses (company_id, job_id, vendor, amount_cents, category) values
+  ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000002', 'T433 sales', 300, 'marketing');
+select tst.fails_like($q$insert into public.expenses (company_id, job_id, customer_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000002', 'c1a00000-0000-0000-0000-000000000001', 'T433', 100, 'other')$q$,
+  '%row-level security%', 'T433 sales: not a client other than the job''s');
+select tst.fails_like($q$insert into public.expenses (company_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'T433', -1, 'other')$q$,
+  '%row-level security%', 'T433 sales: no expense below zero');
+select tst.fails_like($q$insert into public.expenses (company_id, vendor, amount_cents, tax_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'T433', 100, -1, 'other')$q$,
+  '%row-level security%', 'T433 sales: nor a tax below zero');
+-- sales move their expense with the job's client: the client goes with the job, not to another job or to none
+insert into public.expenses (id, company_id, job_id, customer_id, vendor, amount_cents, category) values
+  ('e4330000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001',
+   'c1a00000-0000-0000-0000-000000000001', 'T433 sales job client', 100, 'other');
+select tst.fails_like($q$update public.expenses set job_id = 'e1a00000-0000-0000-0000-000000000002' where id = 'e4330000-0000-4000-8000-000000000007'$q$,
+  '%row-level security%', 'T433 sales: an expense with a client does not move to a job of another client');
+select tst.fails_like($q$update public.expenses set job_id = null where id = 'e4330000-0000-4000-8000-000000000007'$q$,
+  '%row-level security%', 'T433 sales: …nor off its job with the client');
+select tst.fails_like($q$update public.expenses set amount_cents = -1 where id = 'e4330000-0000-4000-8000-000000000007'$q$,
+  '%row-level security%', 'T433 sales: their expense is not changed to below zero');
+update public.expenses set job_id = 'e1a00000-0000-0000-0000-000000000002', customer_id = 'c1a00000-0000-0000-0000-000000000002'
+ where id = 'e4330000-0000-4000-8000-000000000007';
+-- the subcontractor: only on a job he works
+:as_sub433
+insert into public.expenses (id, company_id, job_id, vendor, amount_cents, category) values
+  ('e4330000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000002', 'T433 sub', 700, 'materials');
+select tst.fails_like($q$insert into public.expenses (company_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'T433 sub', 700, 'other')$q$,
+  '%row-level security%', 'T433 the subcontractor: no expense without a job');
+select tst.fails_like($q$insert into public.expenses (company_id, job_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', 'T433 sub', 700, 'other')$q$,
+  '%row-level security%', 'T433 the subcontractor: not on a job he does not work');
+-- the client of his job — yes (he does not read jobs: the policy reads the job's client itself); another client — no
+insert into public.expenses (id, company_id, job_id, customer_id, vendor, amount_cents, category) values
+  ('e4330000-0000-4000-8000-000000000008', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000002',
+   'c1a00000-0000-0000-0000-000000000002', 'T433 sub job client', 700, 'materials');
+select tst.fails_like($q$insert into public.expenses (company_id, job_id, customer_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000002', 'c1a00000-0000-0000-0000-000000000001', 'T433 sub', 700, 'other')$q$,
+  '%row-level security%', 'T433 the subcontractor: not another client on his job');
+select tst.fails_like($q$insert into public.expenses (company_id, job_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000002', 'T433 sub', -700, 'other')$q$,
+  '%row-level security%', 'T433 the subcontractor: no expense below zero');
+-- (he does not read his expenses at all — expenses_select: nothing to change)
+select tst.blocked($q$update public.expenses set job_id = null where id = 'e4330000-0000-4000-8000-000000000004'$q$,
+  'T433 the subcontractor: his expense is not taken off the job');
+-- the office: as before — any client, any sign (a supplier's credit note)
+:as_office_a
+insert into public.expenses (id, company_id, job_id, customer_id, vendor, amount_cents, tax_cents, category) values
+  ('e4330000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001',
+   'c1a00000-0000-0000-0000-000000000002', 'T433 credit note', -2500, -200, 'materials'),
+  ('e4330000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', null,
+   'c1a00000-0000-0000-0000-000000000002', 'T433 office', 900, 0, 'other');
+update public.expenses set amount_cents = -3000 where id = 'e4330000-0000-4000-8000-000000000005';
+:as_owner_a
+update public.expenses set customer_id = 'c1a00000-0000-0000-0000-000000000001' where id = 'e4330000-0000-4000-8000-000000000006';
+:as_owner_b
+select tst.ok(app.job_customer('e1a00000-0000-0000-0000-000000000001') is null, 'T433 app.job_customer: nothing of another company''s job');
+:as_super
+select tst.ok((select count(*) = 8 from public.expenses where id::text like 'e4330000-%')
+              and (select customer_id = 'c1a00000-0000-0000-0000-000000000002' from public.expenses where id = 'e4330000-0000-4000-8000-000000000007')
+              and (select amount_cents = -3000 from public.expenses where id = 'e4330000-0000-4000-8000-000000000005'),
+  'T433 the office writes any client and a negative sum, as before');
+rollback;
+\echo 'T433 ok'
+
 -- ---------------------------------------------------------------- T435 (Р-8b): each person's own «read»
 \echo 'T435 a notification read by one person stays unread for the others'
 begin;
