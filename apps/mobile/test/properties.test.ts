@@ -56,6 +56,15 @@ describe("gate code: office always, a tech only on the visit day and the day bef
     done.jobs = done.jobs.map((j) => (j.id === "jX" ? { ...j, status: "done" } : j));
     expect(canSeeGateCode(done, "tech", "pX", NOW)).toBe(false);
   });
+  it("sales: as a tech — their own visit today or tomorrow (an inspection), not any day (Р-3)", () => {
+    expect(canSeeGateCode(withVisit("2026-11-05T22:00:00Z"), "sales", "pX", NOW)).toBe(true);
+    expect(canSeeGateCode(withVisit("2026-11-07T06:30:00Z"), "sales", "pX", NOW)).toBe(true);
+    expect(canSeeGateCode(withVisit("2026-11-20T17:00:00Z"), "sales", "pX", NOW)).toBe(false);
+    expect(canSeeGateCode(withVisit("2026-11-05T22:00:00Z", { techId: "m-other" }), "sales", "pX", NOW)).toBe(false);
+    expect(canSeeGateCode(withVisit("2026-11-05T22:00:00Z", { closed: true }), "sales", "pX", NOW)).toBe(false);
+    const insp = withVisit("2026-11-05T22:00:00Z", { jobId: undefined, propertyId: "pX" } as Partial<Visit>);
+    expect(canSeeGateCode(insp, "sales", "pX", NOW)).toBe(true);
+  });
   it("by the company's time zone, not the phone's: 00:30 today far ahead of UTC is still today", () => {
     // Kiritimati is UTC+14: now there it is Nov 6, 07:00; a visit at 00:30 Nov 6 local = Nov 5, 10:30 UTC
     expect(canSeeGateCode(withVisit("2026-11-05T10:30:00Z", {}, "Pacific/Kiritimati"), "tech", "pX", NOW)).toBe(true);

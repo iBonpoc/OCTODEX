@@ -12,7 +12,7 @@ import type { DictKey } from "@/i18n";
 
 /** where a module may add its own actions in the core screens (estimate and job — with their first content, П15.3) */
 /** `tab` (founder 09.11): a section of the module in the bottom tabs (phone, before «Ещё») and in the side menu (820/1280) —
- *  only while the module is usable; the core's own 5 tabs stay as they are. `client` and `visit` (09.11, spec 33 П24 А3,
+ *  while the module is switched on, usable or its trial over (founder 18.11: never gone silently; `moduleTabs`); the core's own 5 tabs stay as they are. `client` and `visit` (09.11, spec 33 П24 А3,
  *  А7): the client's card and a visit's screen — the module decides what its buttons do there */
 export type ModulePlace = "lead" | "property" | "client" | "visit" | "home" | "estimate" | "job" | "settings" | "tab";
 
@@ -305,9 +305,15 @@ export function placeActions(place: ModulePlace, company: Pick<Company, "modules
   return activeModules(company, now).flatMap((d) => (d.places?.[place]?.(ctx, moduleData?.[d.key]) ?? []).map((a) => ({ ...a, module: d.key })));
 }
 
-/** the usable modules' sections in the tabs and the side menu (place «tab»): id `module-<key>-<id>` */
+/**
+ * The modules' tabs: every SWITCHED-ON module's, usable or not (founder 18.11.2026: «вместо [модуля] появилась вкладка
+ * „План“» — the trial ran out and the tab went silently). A module whose trial is over keeps its tab; its screen says
+ * «Пробный период закончился» and why (nothing is saved, drafts open). Switched off — no tab, «План» is back. id `module-<key>-<id>`.
+ */
 export function moduleTabs(company: Pick<Company, "modules"> | null | undefined, role: import("@/data/types").Role, now = Date.now()) {
-  return placeActions("tab", company, { role }, now).map((a) => ({ ...a, tabId: `module-${a.module}-${a.id}` }));
+  return allModules()
+    .filter((d) => moduleState(company?.modules?.[d.key], now).access !== "off")
+    .flatMap((d) => (d.places?.tab?.({ role }, undefined) ?? []).map((a) => ({ ...a, module: d.key, tabId: `module-${d.key}-${a.id}` })));
 }
 
 /** the usable modules' words on an estimate; only an open one (draft / sent) — a signed one is a copy, more is a change order */

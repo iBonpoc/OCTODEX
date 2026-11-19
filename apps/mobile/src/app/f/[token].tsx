@@ -31,8 +31,9 @@ export default function IntakePage() {
   useEffect(() => {
     setFailed(false);
     fetchIntakeForm(token)
-      // a form that requires a captcha cannot be sent from here yet (no widget until В3): «not available», not a lost request
-      .then((f) => setForm(f && !f.captcha ? f : null))
+      // a form that asks for a captcha opens too: the page has no widget yet (В3), its request waits in the journal
+      // for a person (held / no_captcha, #2012) — never «not available», never dropped
+      .then((f) => setForm(f))
       .catch(() => setFailed(true));
   }, [token, attempt]);
   const back = router.canGoBack() ? () => router.back() : undefined;
