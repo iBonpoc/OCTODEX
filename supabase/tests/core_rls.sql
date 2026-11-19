@@ -17805,7 +17805,7 @@ select tst.ok((select estimate_id = 'a4260000-0000-4000-8000-0000000000e3' from 
 rollback;
 \echo 'T425 T426 ok'
 
--- ---------------------------------------------------------------- T427–T429 (Р-6): who sees whom in the team, the company row
+-- ---------------------------------------------------------------- T427–T430 (Р-6): who sees whom in the team, the company row
 \echo 'T427 the team by roles'
 begin;
 :as_super
@@ -17827,16 +17827,17 @@ insert into public.visit_assignees (company_id, visit_id, user_id) values
 -- the office: everyone, as before
 :as_office_a
 select tst.ok((select count(*) from public.memberships where user_id::text like 'a4270000-%') = 4, 'T427 the office sees the whole team, invited and deleted too');
--- a tech: himself, the active and the former colleagues; not the invited or the deleted
+-- a tech: himself and the colleagues who joined (active, disabled, deleted); not the invited
 :as_tech_a
 select tst.ok(exists (select 1 from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000003'), 'T427 a tech sees his own row');
 select tst.ok(exists (select 1 from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000004'), 'T427 a tech sees an active colleague');
 select tst.ok(exists (select 1 from public.memberships where user_id = 'a4270000-0000-4000-8000-000000000004'), 'T427 a tech sees a former colleague (his name on the history)');
-select tst.ok(not exists (select 1 from public.memberships where user_id in ('a4270000-0000-4000-8000-000000000002', 'a4270000-0000-4000-8000-000000000003')), 'T427 a tech does not see the invited or the suspended');
+select tst.ok(exists (select 1 from public.memberships where user_id = 'a4270000-0000-4000-8000-000000000003'), 'T427 a tech sees a deleted colleague (named «Удалённый пользователь» on the history)');
+select tst.ok(not exists (select 1 from public.memberships where user_id = 'a4270000-0000-4000-8000-000000000002'), 'T427 a tech does not see the invited');
 select tst.ok((select count(*) from public.memberships) > 0, 'T427 an old phone''s select of every column still loads (no column refused)');
 :as_sales_a
 select tst.ok(exists (select 1 from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000001')
-              and not exists (select 1 from public.memberships where user_id in ('a4270000-0000-4000-8000-000000000002', 'a4270000-0000-4000-8000-000000000003')), 'T427 sales: the active colleagues, not the invited or the deleted');
+              and not exists (select 1 from public.memberships where user_id = 'a4270000-0000-4000-8000-000000000002'), 'T427 sales: the colleagues, not the invited');
 -- a subcontractor: himself and who he is on a visit with
 reset role; set request.jwt.claim.sub = 'a4270000-0000-4000-8000-000000000001'; set role authenticated;
 select tst.ok(exists (select 1 from public.memberships where user_id = 'a4270000-0000-4000-8000-000000000001'), 'T427 a subcontractor sees his own row');
@@ -17847,8 +17848,23 @@ select tst.ok(not exists (select 1 from public.memberships where user_id in ('a0
 update public.visit_assignees set deleted_at = now() where visit_id = 'f4270000-0000-4000-8000-000000000001' and user_id = 'a4270000-0000-4000-8000-000000000001';
 reset role; set request.jwt.claim.sub = 'a4270000-0000-4000-8000-000000000001'; set role authenticated;
 select tst.ok(not exists (select 1 from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000003'), 'T427 …and no longer once he is off the visit');
+-- T430: the people of the team (users) — the same rule
+:as_super
+update public.visit_assignees set deleted_at = null where visit_id = 'f4270000-0000-4000-8000-000000000001' and user_id = 'a4270000-0000-4000-8000-000000000001';
+:as_office_a
+select tst.ok(exists (select 1 from public.users where id = 'a4270000-0000-4000-8000-000000000002'), 'T430 the office sees the person invited');
+:as_tech_a
+select tst.ok(exists (select 1 from public.users where id = 'a0000000-0000-0000-0000-000000000004')
+              and exists (select 1 from public.users where id = 'a4270000-0000-4000-8000-000000000003'), 'T430 a tech sees his colleagues, a deleted one too');
+select tst.ok(not exists (select 1 from public.users where id = 'a4270000-0000-4000-8000-000000000002'), 'T430 a tech does not see the person invited');
+reset role; set request.jwt.claim.sub = 'a4270000-0000-4000-8000-000000000001'; set role authenticated;
+select tst.ok(exists (select 1 from public.users where id = 'a4270000-0000-4000-8000-000000000001'), 'T430 a subcontractor sees himself');
+select tst.ok(exists (select 1 from public.users where id = 'a0000000-0000-0000-0000-000000000003'), 'T430 a subcontractor sees the tech on his visit');
+select tst.ok(not exists (select 1 from public.users where id in ('a0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000004', 'a4270000-0000-4000-8000-000000000002')),
+  'T430 a subcontractor does not see the owner, the people not on his visits, the invited (name, e-mail, phone)');
 -- another company: nothing, as before
 :as_owner_b
+select tst.ok(not exists (select 1 from public.users where id = 'a4270000-0000-4000-8000-000000000001'), 'T430 another company does not see the people');
 select tst.ok(not exists (select 1 from public.memberships where company_id = 'ca000000-0000-0000-0000-000000000000'), 'T427 another company sees none of the team');
 rollback;
 \echo 'T427 ok'
@@ -17859,7 +17875,7 @@ begin;
 select tst.ok(not exists (select 1 from public.memberships where invite_token_hash is not null), 'T428 no membership keeps an invite token');
 :as_owner_a
 select tst.fails_like($q$update public.memberships set invite_token_hash = 'T428 hash' where company_id = 'ca000000-0000-0000-0000-000000000000'$q$,
-  '%permission denied for table memberships%', 'T428 the app does not write an invite token (no right to write memberships)');
+  '%permission denied for table memberships%', 'T428 the app does not write an invite token (no right to that column)');
 rollback;
 \echo 'T428 ok'
 
