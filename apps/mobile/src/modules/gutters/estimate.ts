@@ -15,7 +15,7 @@
 import { dec, jobLineQty, type CustomLine, type LineSource as CoreLineSource, type PartQty } from "@octo/estimating-engine";
 import type { CatalogItem } from "@/data/types";
 import { catalogUnitCost, catalogUnitPrice } from "@/features/estimateDoc";
-import { findPriced, matchKey, priceFromOtherDegree } from "./prices";
+import { findPriced, matchKey, priceFromOtherDegree, VARIANT_ATTR } from "./prices";
 import { mergedInto, resolveMerged } from "@/features/catalogMatch";
 
 /** the engine's sections in the order the estimate shows them; labor last (О4) */
@@ -52,6 +52,9 @@ export interface LineSource extends CoreLineSource {
   measurementId?: string;
   /** when «Смета» / «Обновить смету» wrote it (ISO): the measurement's newest estimate is the one written last (review M8b №3) */
   at?: string;
+  /** #2227 (§11.4, review #2249 №2): the line was made on an old per-colour item, merged since; its name stays the one the draft
+   *  was written with, at every «Обновить смету» (the PDF of the draft does not change) */
+  keepName?: true;
 }
 export type ModuleLine = Omit<CustomLine, "source"> & { source?: LineSource };
 
@@ -152,7 +155,11 @@ export function resyncLines(old: readonly ModuleLine[], next: readonly ModuleLin
     old.filter((l) => !isOurs(l) && !other(l) && l.catalogItemId).flatMap((l) => {
       const it = catalog.find((c) => c.id === l.catalogItemId);
       const r = it ? resolveMerged(catalog, it) : undefined;
-      return r && r.item.id !== l.catalogItemId ? [pairOf(r.item.id, r.variant), l.catalogItemId!] : [l.catalogItemId!];
+      if (r && r.item.id !== l.catalogItemId) return [pairOf(r.item.id, r.variant), l.catalogItemId!];
+      // review #2249 №4: the new item has no variants written yet — the module still knows the old item's colour
+      const to = it ? mergedInto(it) : undefined;
+      const colour = it?.attributes?.[VARIANT_ATTR]?.trim().toLowerCase();
+      return to && colour ? [pairOf(to, { attr: VARIANT_ATTR, value: colour }), l.catalogItemId!] : [l.catalogItemId!];
     }),
   );
   // #2227 (§11.4, audit №5): a line on an old per-colour item that is merged now keeps its name — the draft's PDF stays the same
@@ -181,14 +188,17 @@ export function resyncLines(old: readonly ModuleLine[], next: readonly ModuleLin
     }
     seen.add(l.source.key);
     const ch = handChanges(l);
-    const { gone: _g, ...src } = n.source!;
+    const { gone: _g, keepName: _k, ...src } = n.source!;
+    // review #2249 №2: a line of an old per-colour item keeps its name at this and every later update, and its source says that
+    // name — the line is not «changed by hand» for it (else a part gone from the measurement would stay as «gone»)
+    const keep = !ch.name && (onMerged(l) || !!l.source.keepName);
     const merged: ModuleLine = {
       ...l,
       quantity: ch.qty ? l.quantity : n.quantity,
-      name: ch.name || onMerged(l) ? l.name : n.name,
+      name: ch.name || keep ? l.name : n.name,
       unitPriceCents: ch.price ? l.unitPriceCents : n.unitPriceCents,
       // what the module computed now: the base for the next update
-      source: src as LineSource,
+      source: (keep ? { ...src, name: l.name, keepName: true } : src) as LineSource,
     };
     if (!ch.price) {
       // the item's price, cost and link — or none, when the item is gone from the list (review M8a №8)

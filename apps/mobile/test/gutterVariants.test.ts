@@ -22,7 +22,7 @@ import { draftsForJob } from "../src/features/purchaseOrders";
 import { tFor } from "../src/i18n/translate";
 import { linesFromParts, resyncLines, type LineSource, type ModuleLine } from "../src/modules/gutters/estimate";
 import gutters from "../src/modules/gutters/module";
-import { colourlessPart, findPriced, matchKey, missingItems, stableItemId } from "../src/modules/gutters/prices";
+import { colourlessPart, findPriced, matchKey, missingItems, priceFromOtherDegree, stableItemId } from "../src/modules/gutters/prices";
 
 const C = "11111111-1111-4111-8111-111111111111";
 const gutterPart = (color: string, qty = "100"): PartQty =>
@@ -176,5 +176,62 @@ describe("unit:gutterVariants — test 16: a colour that is the product itself k
     const tp = (c?: string): PartQty => ({ key: "tp", section: "seal", qty: "1", unit: "ea", use: "estimate", kind: "material", attrs: { part: "touch_up_paint", ...(c ? { color: c } : {}) } }) as unknown as PartQty;
     const plain: CatalogItem = { id: "tp0", kind: "material", name: "Touch-up", unit: "ea", priceCents: 500, attributes: { part: "touch_up_paint" } };
     expect(findPriced([plain], tp("White")).variant).toBeUndefined();
+  });
+});
+
+describe("unit:gutterVariants — review #2249", () => {
+  const elbow = (style: string, color = "White"): PartQty =>
+    ({ key: `elbow.${style}`, section: "downspout", qty: "4", unit: "ea", use: "estimate", kind: "material", attrs: { part: "elbow", shape: "round", size: "3", material: "aluminum", style, color } }) as unknown as PartQty;
+  const item = (id: string, attrs: Record<string, string>, o: Partial<CatalogItem> = {}): CatalogItem =>
+    ({ id, kind: "material", name: id, unit: "ea", priceCents: 500, placeholder: false, attributes: attrs, ...o });
+  it("№1: a placeholder of the same colour (an old build made it) gives way to the priced item for every colour", () => {
+    const one = { ...transition([perColour("w", "White", 900)])[0]!, id: "one", placeholder: false };
+    const stub = { ...perColour("stubB", "Brown", 300), placeholder: true };
+    expect(findPriced([one, stub], gutterPart("Brown"))).toEqual({ it: one, variant: { attr: "color", value: "brown" } });
+    // a priced item of that colour still wins (before the transition nothing moves)
+    const real = perColour("realB", "Brown", 950);
+    expect(findPriced([one, real], gutterPart("Brown"))).toEqual({ it: real });
+  });
+  it("№3: a round elbow of the default degree (75°) takes the exact item without colour before the white 45° through the fallback", () => {
+    const one75 = item("one75", { part: "elbow", shape: "round", size: "3", material: "aluminum", style: "75", finish: "painted" });
+    const white45 = item("w45", { part: "elbow", shape: "round", size: "3", material: "aluminum", style: "45", color: "White" });
+    expect(findPriced([white45, one75], elbow("75"))).toEqual({ it: one75, variant: { attr: "color", value: "white" } });
+    expect(priceFromOtherDegree([white45, one75], elbow("75"))).toBe(false);
+    // only the 45° one without colour: it still prices the 75° (the old fallback), and says «проверьте цену»
+    const one45 = { ...one75, id: "one45", attributes: { ...one75.attributes!, style: "45" } };
+    expect(findPriced([one45], elbow("75")).it?.id).toBe("one45");
+    expect(priceFromOtherDegree([one45], elbow("75"))).toBe(true);
+  });
+  it("№3: a copper screw takes the item without metal and colour through the old fallback", () => {
+    const screw: PartQty = { key: "screw", section: "fastener", qty: "10", unit: "ea", use: "estimate", kind: "material", attrs: { part: "screw", metal: "copper", color: "White" } } as unknown as PartQty;
+    const plain = item("scr", { part: "screw", finish: "painted" });
+    expect(findPriced([plain], screw).it?.id).toBe("scr");
+  });
+  it("№3: a coloured part without a finish takes only a «painted» item — never a mill or a company's plain item", () => {
+    const base = { part: "gutter", profile: "k", size: "5", material: "aluminum", gauge: ".027" };
+    const mill = { ...perColour("mill", "x", 500), attributes: { ...base, finish: "mill" } };
+    const plain = { ...perColour("plain", "x", 500), attributes: { ...base } };
+    expect(findPriced([mill], gutterPart("White")).it).toBeUndefined();
+    expect(findPriced([plain], gutterPart("White")).it).toBeUndefined();
+    expect(missingItems(C, [{ key: "g", part: gutterPart("White") }], [mill, plain], name)).toHaveLength(1);
+  });
+  it("№2: the name of a line made on an old per-colour item stays at the 4th update too, and the line is not «changed by hand»", () => {
+    const before = [{ ...perColour("w", "White", 900), name: "Seamless 5in gutter — white (shop)" }];
+    const parts = [gutterPart("White", "120")];
+    let ls = linesFromParts(parts, before, name, uid);
+    expect(ls[0]!.name).toBe("Seamless 5in gutter — white (shop)"); // the item's own name, not name(part)
+    const cat = transition(before);
+    for (let i = 0; i < 4; i++) ls = resyncLines(ls, linesFromParts(parts, cat, name, uid), () => false, cat);
+    expect(ls.map((l) => [l.name, l.catalogItemId, ours(l).name])).toEqual([["Seamless 5in gutter — white (shop)", "one", "Seamless 5in gutter — white (shop)"]]);
+    // the part leaves the measurement: the line goes (it is not kept as «gone» — nothing was changed by hand)
+    expect(resyncLines(ls, [], () => false, cat)).toEqual([]);
+  });
+  it("№4: a person's line on the old white holds back the white module line even when the new item has no variants written", () => {
+    const [one, ...old] = transition([perColour("w", "White", 900)]);
+    const bare = { ...one!, variants: undefined };
+    const cat = [bare, ...old];
+    const mine: ModuleLine = { id: "mine", name: "My white", group: "material", quantity: "10", unit: "ft", unitPriceCents: 900, catalogItemId: "w" };
+    const r = resyncLines([mine], linesFromParts([gutterPart("White"), gutterPart("Brown")], cat, name, uid), () => false, cat);
+    expect(r.map((l) => [l.catalogItemId, (l.source as LineSource | undefined)?.variant?.value])).toEqual([["w", undefined], ["one", "brown"]]);
   });
 });

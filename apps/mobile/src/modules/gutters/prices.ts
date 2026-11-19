@@ -93,27 +93,37 @@ export function colourlessPart<P extends Pick<PartQty, "key" | "kind" | "attrs" 
 }
 
 /**
- * #2227: the item of a part and the variant of its line. Order (spec §11.3.4, audit 19.11 №1):
- *   1. a coloured part: the item WITHOUT a colour (its properties less the colour; a part with a colour and no finish takes
- *      an item that is painted or says no finish — never «mill»), the line's variant = the part's colour;
- *   2. else the old way, unchanged (`findItem`: the item of the SAME colour — before the company's transition);
- *   never another colour's item. `matchAttrs` / `matchKey` are not changed: old items and line keys stay as they are.
+ * #2227: the item of a part and the variant of its line (spec §11.3.4, редакция 5 — review #2249 №1, №3). Step by step, the
+ * part's own properties first, then the old fallbacks of `findItem` (a round elbow's other degree, a fastener without metal):
+ *   in each step the item of the SAME colour (the old way, before the company's transition), then the item WITHOUT a colour
+ *   (a coloured part without a finish takes only a «painted» one — never «mill» or a company's plain item), its colour the
+ *   line's variant. A placeholder of the same colour gives way to a priced item without colour (an old build made it while the
+ *   colourless one has the company's price). Never another colour's item. `matchAttrs` / `matchKey` are not changed.
  */
 export function findPriced(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): { it?: CatalogItem; variant?: { attr: string; value: string } } {
-  if (colourVariantPart(p)) {
-    // before the transition (and for a colour priced on its own) the item of that very colour wins — the same line as before #2227
-    const own = findItem(catalog, p);
-    const lc = (v?: string) => v?.trim().toLowerCase() ?? "";
-    if (own && lc(own.attributes?.color) && lc(own.attributes?.color) === lc(p.attrs.color)) return { it: own };
-    const unit = p.unit.trim().toLowerCase();
-    const { color, ...want } = matchAttrs(p);
-    const pool = catalog.filter((it) => live(it) && it.unit.trim().toLowerCase() === unit && !it.attributes?.color?.trim());
-    const finishOk = (it: CatalogItem) => !!want.finish || !it.attributes?.finish || it.attributes.finish.trim().toLowerCase() === "painted";
-    const it = catalogMatch(pool, want).filter(finishOk)[0];
-    if (it) return { it, variant: { attr: VARIANT_ATTR, value: color!.trim().toLowerCase() } };
+  if (!colourVariantPart(p)) {
+    const it = findItem(catalog, p);
+    return it ? { it } : {};
   }
-  const it = findItem(catalog, p);
-  return it ? { it } : {};
+  const unit = p.unit.trim().toLowerCase();
+  const want = matchAttrs(p);
+  const value = want.color!.trim().toLowerCase();
+  const metalOk = (it: CatalogItem) => !METAL_FALLBACK_PARTS.has(want.part ?? "") || !it.attributes?.metal || it.attributes.metal === want.metal;
+  const base = catalog.filter((it) => live(it) && it.unit.trim().toLowerCase() === unit);
+  const steps: { w: Record<string, string>; pool: CatalogItem[] }[] = [
+    { w: want, pool: base.filter(metalOk) },
+    ...ROUND_ELBOW_FALLBACK(want).map((w) => ({ w, pool: base.filter(metalOk) })),
+    ...(want.metal && METAL_FALLBACK_PARTS.has(want.part ?? "") ? [{ w: (({ metal: _m, ...x }) => x)(want), pool: base.filter((x) => !x.attributes?.metal) }] : []),
+  ];
+  const painted = (it: CatalogItem) => !!want.finish || it.attributes?.finish?.trim().toLowerCase() === "painted";
+  for (const { w, pool } of steps) {
+    const own = catalogMatch(pool, w)[0];
+    const { color: _c, ...plain } = w;
+    const one = catalogMatch(pool.filter((it) => !it.attributes?.color?.trim()), plain).filter(painted)[0];
+    if (own && !(own.placeholder && one && !one.placeholder)) return { it: own };
+    if (one) return { it: one, variant: { attr: VARIANT_ATTR, value } };
+  }
+  return {};
 }
 /** the fasteners whose metal follows the gutter's (the engine's METAL_FASTENERS) */
 const METAL_FALLBACK_PARTS = new Set(["screw", "anchor", "flat_coil"]);
@@ -129,7 +139,8 @@ const ROUND_ELBOW_FALLBACK = (w: Record<string, string>): Record<string, string>
   w.part !== "elbow" || w.shape !== "round" ? [] : w.style === "45" ? [{ ...w, style: "A" }] : ROUND_DEFAULT_STYLES.has(w.style ?? "") ? [{ ...w, style: "45" }, { ...w, style: "A" }] : [];
 /** the line's item is another degree's (see findItem): the estimate says «проверьте цену» for it */
 export function priceFromOtherDegree(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): boolean {
-  const it = findItem(catalog, p);
+  // #2227 (review #2249 №3): the item the line really takes — of its colour or the one for every colour, by the same steps
+  const it = findPriced(catalog, p).it;
   if (!it) return false;
   // М8 (review PR-2): a copper fastener priced by the same fastener without a metal borrows its price too — its own name in the line, and
   // the price list still shows its own item missing («Создать позиции сразу» makes it; its price is then its own)
@@ -268,12 +279,13 @@ export function missingItems(companyId: string, rows: readonly PriceRow[], catal
       // a material's price is cost × tax × markup in the core's editor (catalog/[id]): cost = the price, no tax, no markup
       ...(part.kind === "labor" ? {} : { costCents: testPriceCents(part), vendorTaxBps: 0, markupBps: 0 }),
       placeholder: true,
-      attributes: plain ? matchAttrs(plain) : withGroup(part.unit, matchAttrs(part)),
+      // review #2249 №1 (§11.6): the item for every colour is in the price group of the old per-colour items — one price for all
+      attributes: plain ? { ...matchAttrs(plain), priceGroup: priceGroupKey({ unit: part.unit, attributes: withGroup(part.unit, matchAttrs(part)) }) } : withGroup(part.unit, matchAttrs(part)),
     };
     // a colour of a part whose group is there: the group's price, as the store and the server give a joining item (in every mode —
     // the store does it only in the cloud; review of PR3 №6)
     // #2227: the one item for every colour takes the price of a colour already in that group, the same way
-    const g = plain ? priceGroupKey({ unit: part.unit, attributes: withGroup(part.unit, matchAttrs(part)) }) : made.attributes?.priceGroup;
+    const g = made.attributes?.priceGroup;
     const peer = g ? catalog.find((c) => c.attributes?.priceGroup === g) : undefined;
     out.set(id, peer ? { ...made, priceCents: peer.priceCents, placeholder: peer.placeholder, costCents: peer.costCents, vendorTaxBps: peer.vendorTaxBps, markupBps: peer.markupBps } : made);
   }
