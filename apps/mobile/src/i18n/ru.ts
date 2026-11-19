@@ -3066,6 +3066,8 @@ export const ru = {
   // fix.sign.* — the full-screen signature (spec 29)
   "fix.sign.expand": "Развернуть на весь экран",
   "fix.sign.done": "Готово",
+  // sign.* — the signature pad (#2215)
+  "sign.undoStroke": "Отменить штрих",
   // fix.co.* — company settings read-only for the office (spec 26 §3)
   "fix.co.readOnly": "Только просмотр — менять может директор",
   // 7а-3 «в»: the people of a closed company (docs/specs/22 §3.6)
