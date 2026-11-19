@@ -14,7 +14,7 @@ export interface IntakeForm {
   company: string;
   language: DocLang;
   smsConsent: boolean;
-  /** the company requires a captcha — the page has no widget yet (В3): it shows «not available» rather than lose requests */
+  /** the form asks for a captcha — the page has no widget yet (В3): its requests wait in the journal (held / no_captcha, #2012) */
   captcha: boolean;
   categories: { id: string; key?: string; name?: string }[];
 }

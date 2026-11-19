@@ -9578,7 +9578,7 @@ select tst.ok((select parse_status = 'needs_review' and email = 'big@example.com
                  from public.leads l where l.provider = 'angi'), 'T115 a price over $500 is dropped, the lead marked for review');
 select tst.ok((select payload is null from public.intake_events where event_key = 'z115d'), 'T115 a refused request keeps no fields');
 
--- T116: limits — a request is held, never lost; bots and a missing captcha are refused
+-- T116: limits — a request is held, never lost; bots are refused, a missing captcha is held (#2012)
 :as_service
 do $$ declare i int; begin
   for i in 1..5 loop
@@ -9591,7 +9591,7 @@ end $$;
 :as_owner_a
 select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => true);
 :as_service
-select tst.ok(tst.intake('form', 'form', 'cap116', '{"phone":"(818) 555-0196"}', '9.9.9.6') ->> 'status' = 'rejected', 'T116 the captcha is required and missing');
+select tst.ok(tst.intake('form', 'form', 'cap116', '{"phone":"(818) 555-0196"}', '9.9.9.6') ->> 'status' = 'held', 'T116 the captcha is required and missing — held for a person (#2012)');
 select tst.ok(tst.intake('form', 'form', 'cap116ok', '{"phone":"(818) 555-0195"}', '9.9.9.6', '{"captcha":"ok"}') ->> 'status' = 'accepted', 'T116 a solved captcha passes');
 :as_owner_a
 select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => false, p_daily_limit => 2);
@@ -9625,6 +9625,41 @@ select tst.ok(not has_column_privilege('authenticated', 'public.intake_events', 
 -- parallel requests: the advisory lock serialises the count (two sessions are not possible here; the lock is checked to exist)
 select tst.ok(position('pg_advisory_xact_lock' in pg_get_functiondef('app.intake_lead(text, text, text, text, text, jsonb, jsonb)'::regprocedure)) > 0,
   'T116 the limits are counted under the company''s lock');
+
+-- T411–T413: a form that asks for a captcha never loses a request (#2012, spec 34 §3д): the page has no widget yet (В3)
+-- T411: no captcha answer → held / no_captcha with its fields, no lead until a person accepts
+:as_super
+select tst.ok((select status = 'held' and reason = 'no_captcha' and payload ->> 'phone' = '(818) 555-0196' and lead_id is null
+                 from public.intake_events where event_key = 'cap116'), 'T411 no captcha answer: held with its fields, no lead yet');
+:as_office_a
+select tst.ok(public.intake_event_decide((select id from public.intake_events where event_key = 'cap116'), true) ->> 'status' = 'accepted',
+  'T411 the office accepts it from the journal');
+:as_super
+select tst.ok((select count(*) from public.leads where phone = '(818) 555-0196') = 1, 'T411 the accepted request made one lead');
+-- T412: a captcha that answered «fail» (a widget said «bot») → refused, no fields kept
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => true, p_daily_limit => 100);
+:as_service
+select tst.ok(tst.intake('form', 'form', 'cap412', '{"phone":"(818) 555-0412"}', '9.9.4.12', '{"captcha":"fail"}') ->> 'status' = 'rejected',
+  'T412 a failed captcha is refused');
+:as_super
+select tst.ok((select reason = 'captcha' and payload is null from public.intake_events where event_key = 'cap412'), 'T412 a failed captcha keeps no fields');
+-- T413: the trap still comes first; an unknown captcha answer is not taken for «ok»
+:as_service
+select tst.ok(tst.intake('form', 'form', 'cap413bot', '{"phone":"(818) 555-0413"}', '9.9.4.13', '{"bot":"trap"}') ->> 'status' = 'rejected',
+  'T413 the trap field is refused even without a captcha');
+select tst.ok(tst.intake('form', 'form', 'cap413junk', '{"phone":"(818) 555-0414"}', '9.9.4.14', '{"captcha":"maybe"}') ->> 'status' = 'held',
+  'T413 an unknown captcha answer is held, not passed');
+select tst.ok(tst.intake('form', 'form', 'cap413fast', '{"phone":"(818) 555-0415"}', '9.9.4.15', '{"bot":"time"}') ->> 'status' = 'held',
+  'T413 too fast and no captcha: held');
+select tst.ok(tst.intake('webhook', 'hook', 'cap413hook', '{"phone":"(818) 555-0416"}') ->> 'status' = 'accepted',
+  'T413 the form''s captcha does not hold the webhook''s leads');
+:as_super
+select tst.ok((select reason = 'no_captcha' from public.intake_events where event_key = 'cap413junk'), 'T413 no other sign — the reason is «no captcha»');
+select tst.ok((select reason = 'too_fast' from public.intake_events where event_key = 'cap413fast'),
+  'T413 a sharper reason wins over «no captcha» (the person sees «too fast»)');
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => false, p_daily_limit => 1);
 
 -- T117: who gets the lead — the chosen person while active, else the owner
 :as_owner_a
