@@ -42,12 +42,15 @@ alter policy property_secrets_update on public.property_secrets
   using (app.has_role(company_id, array['owner', 'admin', 'office']))
   with check (app.has_role(company_id, array['owner', 'admin', 'office']));
 
--- set (or clear: an empty code) the gate code of a property; returns nothing — not the code before either
+-- set (the office also clears: an empty code) the gate code of a property; returns nothing — not the code before either.
+-- Sales put down a code the client tells them: a non-empty one only, and not over a code the office removed
+-- (deleted_at is the office's: only the office brings a removed code back).
 create or replace function public.set_gate_code(p_property_id uuid, p_code text)
 returns void language plpgsql security definer set search_path = '' as $$
 declare
   v_company uuid;
   v_code text := nullif(btrim(coalesce(p_code, '')), '');
+  v_office boolean;
 begin
   select p.company_id into v_company from public.properties p where p.id = p_property_id and p.deleted_at is null;
   if v_company is null or not app.has_role(v_company, array['owner', 'admin', 'office', 'sales']) then
@@ -55,6 +58,14 @@ begin
   end if;
   if v_code is not null and length(v_code) > 64 then
     raise exception 'set_gate_code: at most 64 characters' using errcode = '22023';
+  end if;
+  v_office := app.has_role(v_company, array['owner', 'admin', 'office']);
+  if not v_office and v_code is null then
+    raise exception 'set_gate_code: only the office clears a code' using errcode = '22023';
+  end if;
+  if not v_office and exists (select 1 from public.property_secrets s
+                               where s.property_id = p_property_id and s.deleted_at is not null) then
+    raise exception 'set_gate_code: the code was removed by the office' using errcode = '42501';
   end if;
   insert into public.property_secrets (property_id, company_id, gate_code, deleted_at)
   values (p_property_id, v_company, v_code, null)

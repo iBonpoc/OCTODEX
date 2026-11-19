@@ -18075,10 +18075,17 @@ select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id
 insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
   ('d4340000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'c4340000-0000-4000-8000-000000000001', '9 T434 St', 'Pasadena');
 select public.set_gate_code('d4340000-0000-4000-8000-000000000009', '#4349');
--- a removed code comes back with the new one; an empty code clears it
+-- sales do not clear a code, and do not bring back one the office removed
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000003', '')$q$, '%only the office clears%', 'T434 sales: not an empty code');
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000003', '   ')$q$, '%only the office clears%', 'T434 sales: …nor blanks');
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000007', null)$q$, '%only the office clears%', 'T434 sales: …nor null');
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000001', '#back1')$q$, '%removed by the office%', 'T434 sales: not over a code the office removed');
+-- the office: a removed code comes back with the new one; an empty or null code clears it
+:as_office_a
 select public.set_gate_code('d4340000-0000-4000-8000-000000000001', '#back1');
 select public.set_gate_code('d4340000-0000-4000-8000-000000000003', '');
 select public.set_gate_code('d4340000-0000-4000-8000-000000000007', null);
+:as_sales_a
 select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000004', repeat('9', 65))$q$, '%at most 64%', 'T434 the function: at most 64 characters');
 :as_tech_a
 select tst.fails_like($q$select public.set_gate_code('d2000000-0000-4000-8000-000000000001', '#tech')$q$, '%not allowed%', 'T434 the tech: not through the function');
@@ -18100,7 +18107,7 @@ select tst.ok((select gate_code = '#new4' from public.property_secrets where pro
               and (select count(*) = 2 from public.property_secrets where property_id in ('d4340000-0000-4000-8000-000000000003', 'd4340000-0000-4000-8000-000000000007') and gate_code is null)
               and (select gate_code = '#off5' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000005')
               and (select gate_code = '#off2' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000002'),
-  'T434 the codes are written: sales through the function (trimmed, a removed one back, an empty or null one cleared), the office as before');
+  'T434 the codes are written: sales through the function (trimmed), the office brings a removed one back and clears with an empty or null one');
 rollback;
 \echo 'T434 ok'
 
