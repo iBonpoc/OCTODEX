@@ -79,3 +79,19 @@ describe("unit:opsErrors — the connection drops in the middle of an op (review
     expect(classify(e)).toBe("transient");
   });
 });
+
+describe("unit:opsErrors — notice.read: my own mark (Р-8b)", () => {
+  it("writes notification_reads, not the shared column", async () => {
+    await applyOp({ k: "notice.read", ids: ["n1", "n2"] } as Parameters<typeof applyOp>[0], "co", "u");
+    expect(asked).toEqual(["from:notification_reads"]);
+  });
+  it("a server before the migration (no such table): the shared column, as before", async () => {
+    answers.push({ error: { message: "Could not find the table", code: "PGRST205" }, status: 404 });
+    await applyOp({ k: "notice.read", ids: ["n1"] } as Parameters<typeof applyOp>[0], "co", "u");
+    expect(asked).toEqual(["from:notification_reads", "from:notifications"]);
+  });
+  it("nothing to mark: no request", async () => {
+    await applyOp({ k: "notice.read", ids: [] } as unknown as Parameters<typeof applyOp>[0], "co", "u");
+    expect(asked).toEqual([]);
+  });
+});

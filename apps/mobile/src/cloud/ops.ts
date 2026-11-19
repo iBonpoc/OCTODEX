@@ -1225,8 +1225,17 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "catalog.remove":
       return run(supabase.from("catalog_items").update({ deleted_at: new Date().toISOString(), is_active: false }).eq("id", op.id));
-    case "notice.read":
-      return run(supabase.from("notifications").update({ read_at: new Date().toISOString() }).in("id", op.ids));
+    case "notice.read": {
+      // Р-8b (20261117569000): read for me only — my own marks; the server sets who and when. A server before the migration
+      // (no such table): the shared column, as before
+      if (!op.ids.length) return;
+      const r = await supabase
+        .from("notification_reads")
+        .upsert(op.ids.map((id) => ({ notification_id: id, company_id: c })), { onConflict: "notification_id,user_id", ignoreDuplicates: true });
+      if (r.error?.code === "PGRST205" || r.error?.code === "42P01")
+        return run(supabase.from("notifications").update({ read_at: new Date().toISOString() }).in("id", op.ids));
+      return run(Promise.resolve(r));
+    }
     case "estimate.send": {
       // E2a, security-check 05.11: the server locks the version, sets "valid until" and the link token
       // (it takes the phone's token only if it was never revoked; otherwise makes its own — the next refresh brings it)
