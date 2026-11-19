@@ -19195,6 +19195,24 @@ on conflict (line_item_id) do update set unit_cost_cents = excluded.unit_cost_ce
 :as_super
 select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]',
   format('T462 the ops.ts path (delete, insert, upsert of the cents): 22 500 stays: %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b1')));
+-- review 2: another company holds a kept row under our line id (the id is free once a line is deleted): ours is kept
+-- beside it and comes back to us; theirs stays theirs
+:as_super
+insert into public.estimate_line_cost_exact (line_item_id, company_id, unit_cost_millicents)
+  values ('54600000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 99999);
+:as_office_a
+update public.estimate_line_costs set unit_cost_millicents = 22500 where line_item_id = '54600000-0000-4000-8000-0000000000b1';
+delete from public.estimate_line_items where id = '54600000-0000-4000-8000-0000000000b1';
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
+  ('54600000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000a1', 'Rivet', 37, 25);
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values
+  ('54600000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 23);
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]'
+          and (select unit_cost_millicents = 99999 from public.estimate_line_cost_exact
+                where line_item_id = '54600000-0000-4000-8000-0000000000b1' and company_id = 'cb000000-0000-0000-0000-000000000000'),
+  format('T462 another company''s row under our line id: our 22 500 is kept and comes back, theirs untouched: %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b1')));
+delete from public.estimate_line_cost_exact where company_id = 'cb000000-0000-0000-0000-000000000000';
 \echo 'T462 ok'
 
 -- T463: the row edited in place: the echo of the mirror keeps the exact value, a new exact value with the same mirror is

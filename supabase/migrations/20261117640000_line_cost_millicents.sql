@@ -67,10 +67,12 @@ create trigger t08_cost_millicents before insert or update on public.estimate_te
 -- old save). No one reads or writes it but the triggers below. A row lives at most 30 days: the cleanup is at write —
 -- each keep and each use deletes what is older (as estimate_line_costs_kept); no pg_cron, no job.
 create table public.estimate_line_cost_exact (
-  line_item_id          uuid primary key,
+  line_item_id          uuid not null,
   company_id            uuid not null references public.companies (id) on delete cascade,
   unit_cost_millicents  bigint not null check (unit_cost_millicents between 0 and 100000000000000),
-  kept_at               timestamptz not null default now()
+  kept_at               timestamptz not null default now(),
+  -- one row per line AND company: another company that reuses a deleted line id never takes A's place (review 2)
+  primary key (line_item_id, company_id)
 );
 revoke all on public.estimate_line_cost_exact from anon, authenticated;
 create index estimate_line_cost_exact_company_idx on public.estimate_line_cost_exact (company_id);  -- the FK; a new table
@@ -90,9 +92,7 @@ begin
     delete from public.estimate_line_cost_exact where kept_at < now() - interval '30 days';
     insert into public.estimate_line_cost_exact as k (line_item_id, company_id, unit_cost_millicents)
     values (old.line_item_id, old.company_id, old.unit_cost_millicents)
-    on conflict (line_item_id) do update set unit_cost_millicents = excluded.unit_cost_millicents, kept_at = now()
-      -- a row kept for another company is never overwritten (the line id is free once deleted, as t35_cost_keep)
-      where k.company_id = excluded.company_id;
+    on conflict (line_item_id, company_id) do update set unit_cost_millicents = excluded.unit_cost_millicents, kept_at = now();
   end if;
   return old;
 end;
