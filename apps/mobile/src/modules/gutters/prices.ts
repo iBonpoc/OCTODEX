@@ -52,8 +52,10 @@ const live = (it: CatalogItem) => it.kind !== "kit";
 /** the company's item for a part: its properties and its unit; the closest first (catalogMatch), else undefined */
 export function findItem(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): CatalogItem | undefined {
   const unit = p.unit.trim().toLowerCase();
-  const pool = catalog.filter((it) => live(it) && it.unit.trim().toLowerCase() === unit);
   const want = matchAttrs(p);
+  // a fastener of another metal is never this one's (review PR-2 №1): an aluminum job's screw never takes the copper screw's item
+  const metalOk = (it: CatalogItem) => !METAL_FALLBACK_PARTS.has(want.part ?? "") || !it.attributes?.metal || it.attributes.metal === want.metal;
+  const pool = catalog.filter((it) => live(it) && it.unit.trim().toLowerCase() === unit && metalOk(it));
   const own = catalogMatch(pool, want)[0];
   if (own) return own;
   // #871: before the fix the engine counted «A» for a round downspout's elbows by default, and a company priced that row
@@ -62,8 +64,18 @@ export function findItem(catalog: readonly CatalogItem[], p: Pick<PartQty, "key"
     const it = catalogMatch(pool, alt)[0];
     if (it) return it;
   }
+  // М8 («Расход v2» PR-2): a copper or zinc job's screw, anchor or strap strip carries its metal; a company that priced the same fastener
+  // without a metal keeps that price until it prices the metal's own (no mark — the director's decision on §5а №2, as #2000). Only an
+  // item WITHOUT a metal: a stainless screw never prices a copper one
+  if (want.metal && METAL_FALLBACK_PARTS.has(want.part ?? "")) {
+    const { metal: _m, ...plain } = want;
+    const it = catalogMatch(pool.filter((x) => !x.attributes?.metal), plain)[0];
+    if (it) return it;
+  }
   return undefined;
 }
+/** the fasteners whose metal follows the gutter's (the engine's METAL_FASTENERS) */
+const METAL_FALLBACK_PARTS = new Set(["screw", "anchor", "flat_coil"]);
 
 /**
  * #2000 (spec 33-gutters-price-key §10): a coloured part without an item of its own colour takes the price of its group — the same
@@ -149,20 +161,24 @@ const ROUND_ELBOW_FALLBACK = (w: Record<string, string>): Record<string, string>
 /** the line's item is another degree's (see findItem): the estimate says «проверьте цену» for it */
 export function priceFromOtherDegree(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): boolean {
   const it = findItem(catalog, p);
+  if (!it) return false;
+  // М8 (review PR-2): a copper fastener priced by the same fastener without a metal borrows its price too — its own name in the line, and
+  // the price list still shows its own item missing («Создать позиции сразу» makes it; its price is then its own)
+  if (p.attrs.metal && METAL_FALLBACK_PARTS.has(p.attrs.part ?? "") && it.attributes?.metal !== p.attrs.metal) return true;
   // the #871 «A» name of the 45° elbow is the same elbow under its old name — not another degree
-  return !!it && p.attrs.part === "elbow" && p.attrs.shape === "round" && ROUND_DEFAULT_STYLES.has(p.attrs.style ?? "") && it.attributes?.style !== p.attrs.style;
+  return p.attrs.part === "elbow" && p.attrs.shape === "round" && ROUND_DEFAULT_STYLES.has(p.attrs.style ?? "") && it.attributes?.style !== p.attrs.style;
 }
 
 /** parts with a word of their own; any other part (a kit's) shows its code — data, like an item's name */
 export const PART_WORDS = new Set([
   "gutter", "downspout", "end_cap", "hanger", "ds_strap", "elbow", "outlet", "end_outlet", "extension", "splash_block", "flex", "drain", "drain_adapter", "splash_pan", "sealant",
   "shank", "spike", "circle", "bolt", "screw", "anchor", "ferrule", "flat_coil",
-  "rivet", "touch_up_paint", "flux", "solder", "strip_miter", "wedge", "guard",
+  "rivet", "touch_up_paint", "flux", "solder", "soldering_kit", "strip_miter", "wedge", "guard",
   "slip_joint", "miter", "splash_guard", "expansion_joint", "guard_run", "offset", "reducer", "funnel", "conductor_head", "diverter", "eave_box", "outlet_screen", "wye", "rain_chain", "rain_chain_adapter",
   // a downspout's wall fasteners: the kit is named by its part (#1805: they were shown as codes)
   "sickle_hook", "u_bracket", "conductor_bracket", "brick_hook", "brick_hook_hd", "conductor_band", "hinged_hook", "pipe_cleat",
 ]);
-export const WORK_WORDS = new Set(["install", "downspout", "corner_cut", "bend", "tearoff", "tile", "cleaning", "flush", "guard_install"]);
+export const WORK_WORDS = new Set(["install", "downspout", "corner_cut", "bend", "solder", "tearoff", "tile", "cleaning", "flush", "guard_install"]);
 
 /* ---------- the parts the company prices ---------- */
 
@@ -177,6 +193,8 @@ export const LABOR_PARTS: readonly PartQty[] = [
   labor("labor.corner_cut", "ea", { work: "corner_cut" }),
   // «Гиб по месту» (Р4, «Расход v2»): a plain rectangular downspout's elbows bent on site, each
   labor("labor.bend", "ea", { work: "bend" }),
+  // «Пайка швов» (М7, «Расход v2» PR-2): a copper or zinc job's solder points, each
+  labor("labor.solder", "ea", { work: "solder" }),
   labor("labor.tearoff", "ft", { work: "tearoff" }),
   labor("labor.tile", "ft", { work: "tile" }),
   // the starter estimates (#1323): a cleaning, a downspout flush and a guard installation are priced like the rest of the labor

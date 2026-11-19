@@ -100,7 +100,8 @@ export function markPrimaryFirst(people: Person[]): Person[] {
   }));
 }
 
-export const EMPTY_BILLING: BillingAddress = { line1: "", unit: "", city: "", state: "CA", zip: "" };
+/** an empty billing address in the given state — the company's (#2065: no «CA» in the core) */
+export const emptyBilling = (state = ""): BillingAddress => ({ line1: "", unit: "", city: "", state, zip: "" });
 /** a billing address is saved only with a street and a city; otherwise invoices go to the property address */
 export const billingOk = (b: BillingAddress) => b.line1.trim().length > 0 && b.city.trim().length > 0;
 /** one line for the row «Адрес для счетов» */

@@ -10,6 +10,7 @@ import { GestureDetector, GestureHandlerRootView, GestureStateManager, State, us
 import { menuPick } from "./menuPick";
 import { exitDuration, scrimLevel, swipeCloses, swipeStart, swipeStep, type SwipeState } from "./sheetSwipe";
 import { leaveBefore } from "./sheetLeave";
+import { noteQuestionCancelled, registerDirtySheet } from "./dirtySheets";
 import Svg, { Rect } from "react-native-svg";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -225,6 +226,22 @@ export function Menu<K extends string>({
 const SheetHold = createContext<{ current: boolean }>({ current: false });
 export const useSheetHold = () => useContext(SheetHold);
 
+const SheetEscapeCtx = createContext<{ add: (f: () => boolean) => () => void } | null>(null);
+/**
+ * Inside a `Sheet`: `onEscape` runs first on Esc / Android «Назад»; it returns true when it closed something of its own (an open
+ * calendar) — then the sheet stays. Outside a sheet nothing happens (a screen's Esc is its own).
+ */
+export function useSheetEscape(onEscape: (() => boolean) | null) {
+  const api = useContext(SheetEscapeCtx);
+  const live = useRef(onEscape);
+  live.current = onEscape;
+  const on = !!onEscape;
+  useEffect(() => {
+    if (!api || !on) return;
+    return api.add(() => live.current?.() ?? false);
+  }, [api, on]);
+}
+
 /**
  * The side insets of the open sheet (its left / right padding). A list inside a sheet scrolls in `SheetScroll`: the scroll view spans
  * the insets (negative margin) and pads its content back by the same, so the scroll indicator stands in the inset — not over the
@@ -328,6 +345,15 @@ export function Sheet({
   const [full, setFull] = useState(false);
   const [ask, setAsk] = useState(false);
   const live = useRef({ dirty, onClose, onExited, onEscape, canClose });
+  // what is open inside the sheet takes Esc and Android «Назад» first (DateField's calendar, DS А7): the first press closes it,
+  // the next one the sheet; the newest one asks first
+  const childEscape = useRef<(() => boolean)[]>([]);
+  const escapeApi = useMemo(() => ({
+    add: (f: () => boolean) => {
+      childEscape.current = [f, ...childEscape.current];
+      return () => { childEscape.current = childEscape.current.filter((x) => x !== f); };
+    },
+  }), []);
   live.current = { dirty, onClose, onExited, onEscape, canClose };
   useEffect(() => {
     if (visible) {
@@ -459,6 +485,11 @@ export function Sheet({
     },
     [drag, before, animateOut],
   );
+  // #1912: while the sheet holds unsaved work, «Обновить» asks it through its own question and never reloads over it
+  useEffect(() => {
+    if (!visible || !dirty) return;
+    return registerDirtySheet({ ask: () => requestClose() });
+  }, [visible, dirty, requestClose]);
   const pan = useMemo(
     () =>
       PanResponder.create({
@@ -535,9 +566,10 @@ export function Sheet({
   const fullH = winH - insets.top - space[2];
   const maxH = full || height === "large" ? fullH : height === "medium" ? winH * component.sheetMediumRatio : winH * component.sheetHeightRatio;
   return (
-    <Modal visible={open} transparent animationType="none" onRequestClose={onBack ? () => { if (!leaving.current) onBack(); } : () => { if (!leaving.current && !live.current.onEscape?.()) requestClose(); }} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
+    <Modal visible={open} transparent animationType="none" onRequestClose={() => { if (leaving.current || childEscape.current.some((f) => f())) return; if (onBack) onBack(); else if (!live.current.onEscape?.()) requestClose(); }} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
       {/* a form in a sheet scrolls the sheet's own body, never the screen under it (DS §11 п.3) */}
       <ScreenScrollCtx.Provider value={null}>
+      <SheetEscapeCtx.Provider value={escapeApi}>
       {/* a Modal is its own native root: gestures in it need their own root view (Gesture Handler) */}
       <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardAvoidingView
@@ -656,7 +688,7 @@ export function Sheet({
                   <T v="button" tone="bad">{t("sheet.discard")}</T>
                 </Press>
                 <Press
-                  onPress={() => setAsk(false)}
+                  onPress={() => { setAsk(false); noteQuestionCancelled(); }}
                   visibleHeight={component.button.phone}
                   accessibilityRole="button"
                   accessibilityLabel={t("common.cancel")}
@@ -696,6 +728,7 @@ export function Sheet({
         </Animated.View>
       </KeyboardAvoidingView>
       </GestureHandlerRootView>
+    </SheetEscapeCtx.Provider>
     </ScreenScrollCtx.Provider>
     </Modal>
   );

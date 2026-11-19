@@ -34,6 +34,8 @@ export function classify(e: unknown): Failure {
   if (field(e, "hint") === "row_version_conflict") return "refusal";
   // #1913: a price group is full (54000, 200 items) — the same write is refused every time, it is no «try later»
   if (field(e, "hint") === "price_group_full") return "refusal";
+  // #1834: a supplier has more than 1000 items (54000) — the same change is refused every time (a queue stuck on it otherwise)
+  if (field(e, "hint") === "supplier_tax_too_many") return "refusal";
   if (e instanceof Error && e.name === UNKNOWN_OP) return "transient";
   if (code && TRANSIENT_CODE.test(code)) return "transient";
   if (status) return status >= 500 || TRANSIENT_STATUS.has(status) ? "transient" : "refusal";
