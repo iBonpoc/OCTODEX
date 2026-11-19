@@ -15,13 +15,13 @@ import { linesEditable as poLinesEditable } from "@/features/purchaseOrders";
 import { realJob } from "./inspectionBridge";
 import { ENGINE_VERSION, bpsFromPpm, jobLineQty, taxRatePpm } from "@octo/estimating-engine";
 import type { PhotoFail, PurchaseOrder, EstimateTemplate, BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep, Supplier } from "@/data/types";
-import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
+import { assigneeToSend, COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb, pages } from "./repo";
 import { classify } from "@/data/outboxRetry";
 import { photoFailOf, storageNotNow, tooBig } from "@/data/photoUpload";
 import { companyModulesFromRows, moduleDef, moduleState } from "@/modules/registry";
-import { MODULE_INACTIVE, unknownOp } from "@/data/outboxRetry";
+import { LEAD_ASSIGNEE_GONE, MODULE_INACTIVE, unknownOp } from "@/data/outboxRetry";
 import { withSendablePages } from "@/features/docPages";
 import { versionRows } from "./estimateRows";
 
@@ -172,8 +172,11 @@ export type Op =
   | { k: "invoice.issue"; id: string; jobId: string; customerId: string; kind: "progress" | "final"; title: string; totalCents: number; dueDate?: string }
   /** В1-5 (#1107): void a sent invoice without payments, with the reason (owner / admin; the server checks the same) */
   | { k: "invoice.void"; id: string; jobId: string; reason: string; totalCents: number }
+  /** #2015 (spec 38 §12): cancel a job — the visits, the unpaid invoices and the job in one server transaction */
+  | { k: "job.cancel"; jobId: string; reason: string }
   | { k: "job.schedule"; jobId: string; visitId: string; start: string; end: string; techId: string | null; assigneeIds?: string[]; note?: string; scope: string[]; allDay?: boolean }
-  | { k: "company.save"; company: Company; einChanged: boolean; /** the zone was chosen (docs/specs/22 §1.3); absent in older ops */ tzChanged?: boolean }
+  | { k: "company.save"; company: Company; einChanged: boolean; /** the zone was chosen (docs/specs/22 §1.3); absent in older ops */ tzChanged?: boolean;
+      /** Р-7: the default lead assignee was chosen in this save; absent in older ops */ assigneeChanged?: boolean }
   | { k: "license.save"; license: CompanyLicense }
   | { k: "license.remove"; id: string }
   | { k: "contact.save"; contact: CompanyContact }
@@ -727,6 +730,10 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "visit.noShow":
       // one server function: the no-show, who and when, and the roll-backs (S4a / S9a); a repeat from the queue changes nothing
       return run(supabase.rpc("visit_no_show", { p_visit_id: op.visitId, p_note: op.note ?? null }));
+    case "job.cancel":
+      // public.cancel_job (migration 20261117570000): rights, the same refusals as the guard, the visits and invoices of the job;
+      // a repeat on a cancelled job changes nothing
+      return run(supabase.rpc("cancel_job", { p_job: op.jobId, p_reason: op.reason }));
     case "visit.notified":
       // the time is the server's (t07_visit_notified_stamp sets now()); any non-null value only marks «told»
       return run(supabase.from("visits").update({ customer_notified_at: new Date(0).toISOString() }).eq("id", op.visitId));
@@ -945,8 +952,19 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return assignPeople(op.visitId, op.assigneeIds ?? (op.techId ? [op.techId] : []));
     }
     case "company.save": {
-      const { data: stored } = await read(supabase.from("companies").select([...COMPANY_STORED_COLUMNS, "timezone"].join(", ")).eq("id", c).maybeSingle());
-      await run(supabase.from("companies").update(companyToDb(op.company, (stored ?? {}) as Record<string, unknown>, op.tzChanged)).eq("id", c));
+      const { data: stored } = await read(supabase.from("companies").select([...COMPANY_STORED_COLUMNS, "timezone", "lead_default_assignee_id"].join(", ")).eq("id", c).maybeSingle());
+      const st = (stored ?? {}) as Record<string, unknown>;
+      await run(supabase.from("companies").update(companyToDb(op.company, st, op.tzChanged)).eq("id", c));
+      // Р-7: the lead assignee by its own request, after the rest — the server refuses one who has left the team
+      // (42501), and that drops only the assignee, not the name, hours and brand saved above
+      if (assigneeToSend(op.company.leadDefaultAssigneeId, st.lead_default_assignee_id, op.assigneeChanged)) {
+        try {
+          await run(supabase.from("companies").update({ lead_default_assignee_id: op.company.leadDefaultAssigneeId ?? null }).eq("id", c));
+        } catch (e) {
+          if (e instanceof PermanentError && e.code === "42501") throw new PermanentError("the default lead assignee is no longer on the team", e.status, "42501", LEAD_ASSIGNEE_GONE);
+          throw e;
+        }
+      }
       if (op.einChanged) {
         const ein = op.company.ein?.trim() || null;
         await run(supabase.from("company_secrets").upsert({ company_id: c, ein }, { onConflict: "company_id" }));
@@ -1095,8 +1113,9 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       );
     }
     case "property.gate":
-      // kept apart from the property (migration 20261105160000): the office writes it, a tech reads it only on the visit days
-      return run(supabase.from("property_secrets").upsert({ property_id: op.id, company_id: c, gate_code: op.code || null, deleted_at: null }, { onConflict: "property_id" }));
+      // kept apart from the property (migration 20261105160000); written through the server's function (20261117568000):
+      // sales set the code without reading it back, a tech and sales read it only on the visit days
+      return run(supabase.rpc("set_gate_code", { p_property_id: op.id, p_code: op.code || "" }));
     case "property.update": {
       const patch: Record<string, string> = {};
       if (op.address !== undefined) patch.address_line1 = op.address || "—";
@@ -1218,8 +1237,17 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "catalog.remove":
       return run(supabase.from("catalog_items").update({ deleted_at: new Date().toISOString(), is_active: false }).eq("id", op.id));
-    case "notice.read":
-      return run(supabase.from("notifications").update({ read_at: new Date().toISOString() }).in("id", op.ids));
+    case "notice.read": {
+      // Р-8b (20261117569000): read for me only — my own marks; the server sets who and when. A server before the migration
+      // (no such table): the shared column, as before
+      // (public.mark_notifications_read: an id the server does not know, or one not visible, is left out, the others marked)
+      // (only server ids: a notice made on the phone has no uuid and never reaches the server)
+      const ids = op.ids.filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+      if (!ids.length) return;
+      const r = await supabase.rpc("mark_notifications_read", { p_ids: ids });
+      if (r.error?.code === "PGRST202") return run(supabase.from("notifications").update({ read_at: new Date().toISOString() }).in("id", ids));
+      return run(Promise.resolve(r));
+    }
     case "estimate.send": {
       // E2a, security-check 05.11: the server locks the version, sets "valid until" and the link token
       // (it takes the phone's token only if it was never revoked; otherwise makes its own — the next refresh brings it)
