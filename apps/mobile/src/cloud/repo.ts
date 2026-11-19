@@ -322,7 +322,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     live<Row>("contact_emails", "contact_id, address, is_primary, position").catch(() => [] as Row[]),
     // directions of the business (docs/specs/11-trade.md): no deleted_at, archived ones stay; empty before the migration
     every<Row>("service_categories", "id, seed_key, name, position, archived_at").catch(() => [] as Row[]),
-    // C2: gate codes — RLS gives the office all of them, a tech only on the visit days (app.can_see_gate_code)
+    // C2: gate codes — RLS gives the office all of them, a tech and sales only on their visit days (app.can_see_gate_code)
     live<Row>("property_secrets", "property_id, gate_code", key("property_id")).catch(() => [] as Row[]),
   ]);
   const people = peopleByCustomer(contacts, phoneRows, emailRows);
