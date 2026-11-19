@@ -54,6 +54,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { backoffMs, classify, isAccessDenied, isModuleInactive, isUnknownOp, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, liveOf, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
+import { jobCancelRefusal, type JobCancelRefusal } from "@/features/jobCancel";
 import { dropGroupPriceOps, dropModuleOps, dropSettingsOps, dropSupplierTaxOps, dropTemplateOps, groupPriceRejected, itemCostRejected, supplierTaxRejected, templateRejected, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
 import type { DictKey } from "@/i18n";
 import { onAppActive, onAppLeave } from "./appActive";
@@ -416,6 +417,10 @@ interface StoreCtx {
    *  invoice moves to voidInvoices (no sum counts it); no «Отменить»: the server never lets it back. null — done;
    *  else why not (the screen shows it). Server: tg_invoice_guard (db T197). */
   voidInvoice: (id: ID, reason: string) => VoidRefusal | null;
+  /** #2015 (spec 38 §12): cancel a job for good — director; dispatcher: a job without an invoice. Its open visits are cancelled and
+   *  its unpaid invoices voided with it; it moves to cancelledJobs with the reason. No «Отменить» (the server never lets it back).
+   *  null — done; else why not (the screen says). Server: public.cancel_job (db T383–T390). */
+  cancelJob: (id: ID, reason: string) => JobCancelRefusal | null;
   /** #1304 (docs/specs/40 §6): the Terms a new estimate starts with — the company's default in the client's language */
   estimateTerms: (at: TermsFor) => { text: string; lang: DocLang };
   /** #1304: the client of a draft changed — the untouched default follows the new client's language, an edited text stays */
@@ -2313,6 +2318,33 @@ export function StoreProvider({
             };
           },
           { k: "invoice.void", id, jobId: inv.jobId, reason: why, totalCents: inv.totalCents },
+        );
+        return null;
+      },
+      cancelJob: (id, reason) => {
+        const refusal = jobCancelRefusal(dbRef.current, id, reason, role);
+        if (refusal) return refusal;
+        const why = reason.trim();
+        const at = new Date().toISOString();
+        mutate(
+          "job.cancel",
+          (d) => {
+            const job = d.jobs.find((x) => x.id === id);
+            if (!job) return d;
+            // the visits not started go with it (the server: cancel_visit, reason «we_cancelled»); a finished one stays
+            const gone = d.visits.filter((v) => v.jobId === id && canCancel(v));
+            const owed = d.invoices.filter((i) => i.jobId === id);
+            return {
+              ...d,
+              jobs: d.jobs.filter((x) => x.id !== id),
+              cancelledJobs: [...(d.cancelledJobs ?? []).filter((x) => x.id !== id), { ...job, cancelReason: why, cancelledAt: at }],
+              visits: d.visits.filter((v) => !gone.some((g) => g.id === v.id)),
+              cancelledVisits: [...(d.cancelledVisits ?? []), ...gone.map((v) => ({ ...v, cancelReason: "we_cancelled" as const, cancelledAt: at }))],
+              invoices: d.invoices.filter((i) => i.jobId !== id),
+              voidInvoices: [...(d.voidInvoices ?? []), ...owed.map((i) => ({ ...i, status: "void" as const, voidReason: "job cancelled", voidedAt: at }))],
+            };
+          },
+          { k: "job.cancel", jobId: id, reason: why },
         );
         return null;
       },

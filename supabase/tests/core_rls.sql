@@ -4056,7 +4056,7 @@ begin
                         'accept_invitation(text)', 'accept_legal(jsonb,text,text)',
                         'accept_on_site(uuid,uuid,uuid[],text,text,boolean,uuid,uuid)',
                         'accept_on_site(uuid,uuid,uuid[],text,text,boolean,uuid,uuid,bigint)', 'advance_apply(uuid,uuid)',
-                        'assign_visit(uuid,uuid[])', 'cancel_visit(uuid,text,text)', 'company_location_sharing(uuid)', 'complete_job(uuid)',
+                        'assign_visit(uuid,uuid[])', 'cancel_job(uuid,text)', 'cancel_visit(uuid,text,text)', 'company_location_sharing(uuid)', 'complete_job(uuid)',
                         'countersign_estimate(uuid,text,uuid,uuid,uuid)', 'create_job(uuid,uuid,uuid,text,text,uuid,uuid)',
                         'decline_countersign(uuid,text)', 'delete_account(text,uuid[])', 'estimate_link(uuid)', 'estimate_links(uuid)',
                         'forget_push_device(text)', 'import_customers(uuid,jsonb)', 'import_customers_finish(uuid)',
@@ -16924,6 +16924,210 @@ select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000
 select tst.ok((select purchase_tax_bps = 500 from public.suppliers where id = '37100000-0000-4000-8000-0000000000aa'), 'T378 С9 the refused change left the rate as it was');
 delete from public.catalog_items where name like 'T378 item %';
 \echo 'T436, T372–T378 ok'
+-- ---------------------------------------------------------------- T383–T390 (#2015, spec 38 §12): cancel a job — public.cancel_job
+\echo 'T383 cancel a job ok'
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('38300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T383 plain', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('38300000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T383 invoiced', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('38300000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T383 paid', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('38300000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'T383 effects', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('38300000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'T383 on site', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('38300000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', 'T383 old phone', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+-- С1: a plain job
+:as_owner_a
+select tst.ok((public.cancel_job('38300000-0000-4000-8000-000000000001', '  Client changed his mind  ')) ->> 'repeat' = 'false', 'T383 С1 the owner cancels a plain job');
+:as_super
+select tst.ok((select status = 'cancelled' and cancel_reason = 'Client changed his mind' and cancelled_at is not null from public.jobs where id = '38300000-0000-4000-8000-000000000001'),
+  'T383 С1 cancelled, the reason (trimmed) and the time saved');
+select tst.ok(exists (select 1 from public.status_events where entity_type = 'job' and entity_id = '38300000-0000-4000-8000-000000000001' and to_status = 'cancelled'),
+  'T383 С1 the status journal has the move');
+
+\echo 'T384 a payment: refund first ok'
+-- С2: a job with a payment (a payment in transit and a cash payment on a visit without an invoice count too)
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('38400000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '38300000-0000-4000-8000-000000000002', 'final', 10000),
+  ('38400000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '38300000-0000-4000-8000-000000000003', 'final', 10000);
+update public.invoices set status = 'sent', sent_at = now() where id in ('38400000-0000-4000-8000-000000000002', '38400000-0000-4000-8000-000000000003');
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('38400000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', '38300000-0000-4000-8000-000000000003', now() + interval '3 days');
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+values ('ca000000-0000-0000-0000-000000000000', '38400000-0000-4000-8000-000000000003', 'c1a00000-0000-0000-0000-000000000002', 'cash', 5000, 'succeeded', 't384-pay');
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000003', 'no')$q$, 'job:paid%', 'T384 С2 a paid job is not cancelled (refund first)');
+:as_super
+select tst.ok((select status = 'draft' and cancel_reason is null from public.jobs where id = '38300000-0000-4000-8000-000000000003')
+              and (select status = 'scheduled' from public.visits where id = '38400000-0000-4000-8000-0000000000a3')
+              and (select status = 'sent' from public.invoices where id = '38400000-0000-4000-8000-000000000003'),
+  'T384 С2 nothing changed: the job, its visit and its invoice are as they were');
+
+\echo 'T385 who cancels ok'
+-- С3: the office cancels a job without an invoice; with one — «invoiceOpen»; sales, the tech and another company — «no right»
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('38500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T385 office plain', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+:as_office_a
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000002', 'no')$q$, 'job:invoiceOpen%', 'T385 С3 the office: not a job with an invoice');
+select tst.ok((public.cancel_job('38500000-0000-4000-8000-000000000001', 'Duplicate')) ->> 'status' = 'cancelled', 'T385 С3 the office cancels a job without an invoice');
+:as_sales_a
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000004', 'no')$q$, '%only the office%', 'T385 С3 sales does not cancel');
+:as_tech_a
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000004', 'no')$q$, '%only the office%', 'T385 С3 the tech does not cancel');
+:as_owner_b
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000004', 'no')$q$, '%only the office%', 'T385 С3 another company: the same answer as «not found»');
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-0000000000ff', 'no')$q$, '%only the office%', 'T385 С3 a job that does not exist: the same answer (no oracle)');
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+
+\echo 'T386 what goes with the job ok'
+-- С4: two open visits, an unpaid advance and an unpaid final invoice, an approved estimate and a won lead stay as they are
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('38600000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', '38300000-0000-4000-8000-000000000004', now() + interval '2 days'),
+  ('38600000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', '38300000-0000-4000-8000-000000000004', now() + interval '4 days');
+update public.visits set status = 'en_route' where id = '38600000-0000-4000-8000-0000000000a2';
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('38600000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '38300000-0000-4000-8000-000000000004', 'deposit', 3000),
+  ('38600000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '38300000-0000-4000-8000-000000000004', 'final', 7000);
+update public.invoices set status = 'sent', sent_at = now() where id = '38600000-0000-4000-8000-0000000000b1';
+:as_owner_a
+select tst.ok((public.cancel_job('38300000-0000-4000-8000-000000000004', 'Client cancelled the work')) = jsonb_build_object('status', 'cancelled', 'repeat', false, 'visits', 2, 'invoices', 2),
+  'T386 С4 two visits cancelled, two invoices voided');
+:as_super
+select tst.fails($q$insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+  values ('ca000000-0000-0000-0000-000000000000', '38600000-0000-4000-8000-0000000000b2', 'c1a00000-0000-0000-0000-000000000002', 'cash', 100, 'succeeded', 't386-late')$q$,
+  'T386 С4 a payment into the voided invoice of a cancelled job is refused (the payment link is dead)');
+select tst.ok((select count(*) = 2 from public.visits where job_id = '38300000-0000-4000-8000-000000000004' and status = 'cancelled')
+              and (select count(*) = 2 from public.invoices where job_id = '38300000-0000-4000-8000-000000000004' and status = 'void' and void_reason = 'job cancelled')
+              and (select status = 'cancelled' from public.jobs where id = '38300000-0000-4000-8000-000000000004'),
+  'T386 С4 the visits cancelled, the invoices void with the reason, the job cancelled');
+
+\echo 'T387 not every job ok'
+-- С5: a visit on site; a done job; a repeat
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('38700000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', '38300000-0000-4000-8000-000000000005', now());
+update public.visits set status = 'en_route' where id = '38700000-0000-4000-8000-0000000000a1';
+update public.visits set status = 'on_site' where id = '38700000-0000-4000-8000-0000000000a1';
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000005', 'no')$q$, 'job:visitOnSite%', 'T387 С5 a visit on site: finish or cancel it first');
+select tst.ok((public.cancel_job('38300000-0000-4000-8000-000000000001', 'again')) = jsonb_build_object('status', 'cancelled', 'repeat', true, 'visits', 0, 'invoices', 0),
+  'T387 С5 a repeat on a cancelled job changes nothing');
+:as_super
+select tst.ok((select cancel_reason = 'Client changed his mind' from public.jobs where id = '38300000-0000-4000-8000-000000000001'), 'T387 С5 the repeat kept the first reason');
+update public.visits set status = 'completed' where id = '38700000-0000-4000-8000-0000000000a1';
+update public.jobs set status = 'scheduled' where id = '38300000-0000-4000-8000-000000000005';
+update public.jobs set status = 'in_progress' where id = '38300000-0000-4000-8000-000000000005';
+update public.jobs set status = 'completed', completed_at = now() where id = '38300000-0000-4000-8000-000000000005';
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000005', 'no')$q$, 'job:done%', 'T387 С5 a done job is not cancelled');
+
+\echo 'T388 an old phone ok'
+-- С6: the direct update of an old build is still caught by the guard t13 (the new function is no way round it)
+:as_sales_a
+select tst.fails_like($q$update public.jobs set status = 'cancelled' where id = '38300000-0000-4000-8000-000000000006'$q$, 'job:noRight%', 'T388 С6 sales: the direct update is refused');
+:as_super
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('38800000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '38300000-0000-4000-8000-000000000006', 'final', 1000);
+update public.invoices set status = 'sent', sent_at = now() where id = '38800000-0000-4000-8000-0000000000b1';
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+select tst.fails_like($q$update public.jobs set status = 'cancelled' where id = '38300000-0000-4000-8000-000000000006'$q$, 'job:invoiceOpen%', 'T388 С6 the office with an invoice: the direct update is refused');
+select tst.fails($q$update public.jobs set cancel_reason = 'x' where id = '38300000-0000-4000-8000-000000000006'$q$, 'T388 С6 the phone does not write the reason itself (no grant)');
+:as_super
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+values ('ca000000-0000-0000-0000-000000000000', '38800000-0000-4000-8000-0000000000b1', 'c1a00000-0000-0000-0000-000000000002', 'cash', 500, 'succeeded', 't388-pay');
+:as_office_a
+select tst.fails_like($q$update public.jobs set status = 'cancelled' where id = '38300000-0000-4000-8000-000000000006'$q$, 'job:%', 'T388 С6 the office with a payment: the direct update is refused');
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+
+\echo 'T389 rights of the function and the reason ok'
+-- С7
+select tst.ok(not has_function_privilege('anon', 'public.cancel_job(uuid,text)', 'EXECUTE')
+          and not has_function_privilege('public', 'public.cancel_job(uuid,text)', 'EXECUTE')
+          and has_function_privilege('authenticated', 'public.cancel_job(uuid,text)', 'EXECUTE'), 'T389 С7 authenticated only');
+select tst.ok((select prosecdef and proconfig @> array['search_path=""'] from pg_proc where oid = 'public.cancel_job(uuid,text)'::regprocedure), 'T389 С7 security definer, empty search_path');
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('38900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T389 reason', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('38900000-0000-4000-8000-000000000001', '')$q$, '%1 to 500%', 'T389 С7 an empty reason');
+select tst.fails_like($q$select public.cancel_job('38900000-0000-4000-8000-000000000001', '    ')$q$, '%1 to 500%', 'T389 С7 a reason of spaces');
+select tst.fails_like($q$select public.cancel_job('38900000-0000-4000-8000-000000000001', null)$q$, '%1 to 500%', 'T389 С7 no reason');
+select tst.fails_like($q$select public.cancel_job('38900000-0000-4000-8000-000000000001', repeat('x', 501))$q$, '%1 to 500%', 'T389 С7 a reason over 500 characters');
+select tst.ok((public.cancel_job('38900000-0000-4000-8000-000000000001', repeat('x', 500))) ->> 'status' = 'cancelled', 'T389 С7 500 characters are fine');
+:as_super
+
+\echo 'T390 the order of locks ok'
+-- С8: the visits first (by id), then the job — as cancel_visit (visit → job)
+do $$ declare d text; a int; b int; begin
+  d := pg_get_functiondef('public.cancel_job(uuid,text)'::regprocedure);
+  a := position('from public.visits v' in d);
+  b := position('from public.jobs where id = p_job and company_id = v_company and deleted_at is null for update' in d);
+  perform tst.ok(a > 0 and b > a, 'T390 С8 the visits of the job are locked before the job');
+  perform tst.ok(d ~ 'order by v\.id for update', 'T390 С8 the visits locked in key order');
+  perform tst.ok(position('job_cancel_reason' in d) > b, 'T390 С8 the guard''s rule is asked after the lock (a guard does not run in a definer)');
+end $$;
+
+\echo 'T391 no new money on a cancelled job ok'
+-- a visit finished before the cancel is paid later (record_visit_payment would make an invoice and a payment): both doors are shut
+:as_super
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('39100000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T391 finished visit', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('39100000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T391 pending payment', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('39100000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T391 deleted', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('39100000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', '39100000-0000-4000-8000-000000000001', now());
+update public.visits set status = 'en_route' where id = '39100000-0000-4000-8000-0000000000a1';
+update public.visits set status = 'on_site' where id = '39100000-0000-4000-8000-0000000000a1';
+update public.visits set status = 'completed' where id = '39100000-0000-4000-8000-0000000000a1';
+update public.jobs set status = 'scheduled' where id = '39100000-0000-4000-8000-000000000001';
+update public.jobs set status = 'in_progress' where id = '39100000-0000-4000-8000-000000000001';
+:as_owner_a
+select tst.ok((public.cancel_job('39100000-0000-4000-8000-000000000001', 'Client left')) ->> 'status' = 'cancelled', 'T391 a job with a finished visit and no money is cancelled');
+:as_super
+select tst.fails_like($q$insert into public.invoices (company_id, customer_id, job_id, kind, total_cents)
+  values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '39100000-0000-4000-8000-000000000001', 'final', 100)$q$,
+  'job:cancelled%', 'T391 no invoice for a cancelled job');
+select tst.fails_like($q$insert into public.payments (company_id, visit_id, customer_id, method, amount_cents, status, idempotency_key)
+  values ('ca000000-0000-0000-0000-000000000000', '39100000-0000-4000-8000-0000000000a1', 'c1a00000-0000-0000-0000-000000000002', 'cash', 100, 'succeeded', 't391-visit')$q$,
+  'job:cancelled%', 'T391 no payment on the finished visit of a cancelled job');
+-- a payment in transit counts as money (T384 the paid one, here the pending one)
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('39100000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '39100000-0000-4000-8000-000000000002', 'final', 5000);
+update public.invoices set status = 'sent', sent_at = now() where id = '39100000-0000-4000-8000-0000000000b2';
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+values ('ca000000-0000-0000-0000-000000000000', '39100000-0000-4000-8000-0000000000b2', 'c1a00000-0000-0000-0000-000000000002', 'ach', 5000, 'pending', 't391-pending');
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('39100000-0000-4000-8000-000000000002', 'no')$q$, 'job:paid%', 'T391 a payment in transit: refund first');
+-- a deleted job answers as «not found»
+:as_super
+update public.jobs set deleted_at = now() where id = '39100000-0000-4000-8000-000000000003';
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('39100000-0000-4000-8000-000000000003', 'no')$q$, '%only the office%', 'T391 a deleted job: the same answer as «not found»');
+:as_super
+
+\echo 'T392 pay, refund in full, then cancel ok'
+-- a payment refunded in full does not hold the cancel (job_cancel_reason counts amount − refunded) and the void of the invoice
+-- goes through tg_invoice_guard (paid_cents is back to 0 after the refund)
+:as_super
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('39200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T392 refunded in full', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('39200000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '39200000-0000-4000-8000-000000000001', 'final', 5000);
+update public.invoices set status = 'sent', sent_at = now() where id = '39200000-0000-4000-8000-0000000000b1';
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+values ('39200000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', '39200000-0000-4000-8000-0000000000b1', 'c1a00000-0000-0000-0000-000000000002', 'cash', 5000, 'succeeded', 't392-pay');
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('39200000-0000-4000-8000-000000000001', 'no')$q$, 'job:paid%', 'T392 a paid job: refund first');
+:as_super
+select set_config('app.invoice_recalc', 'on', false);
+update public.payments set refunded_cents = 5000, status = 'refunded' where id = '39200000-0000-4000-8000-0000000000c1';
+select set_config('app.invoice_recalc', '', false);
+select tst.ok((select paid_cents = 0 from public.invoices where id = '39200000-0000-4000-8000-0000000000b1'), 'T392 the refund took the payment off the invoice (paid_cents 0)');
+:as_owner_a
+select tst.ok((public.cancel_job('39200000-0000-4000-8000-000000000001', 'Refunded, client left')) ->> 'invoices' = '1', 'T392 refunded in full: the job is cancelled and its invoice voided');
+:as_super
+select tst.ok((select status = 'void' from public.invoices where id = '39200000-0000-4000-8000-0000000000b1') and (select status = 'cancelled' from public.jobs where id = '39200000-0000-4000-8000-000000000001'), 'T392 the invoice void, the job cancelled');
 
 -- ================================================================ T365–T370: a cost is written only over what the phone saw
 -- (#1958 (а), migration 20261117340000). catalog_set_item_costs(item, the changed fields, what the phone had in them).
