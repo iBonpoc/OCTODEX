@@ -3022,6 +3022,8 @@ export const ru = {
   "fix.more.leads": "Ждут: {n}",
   "fix.more.tasks": "На сегодня: {n}",
   "fix.more.jobs": "К плану: {n}",
+  "fix.more.jobsCheck": "Проверить: {n}",
+  "fix.more.jobsAll": "Требуют внимания: {n}",
   "fix.more.estimates": "На подпись: {n}",
   "fix.more.invoices": "Просрочено: {n}",
   // ---- push (docs/specs/27-push.md) ----

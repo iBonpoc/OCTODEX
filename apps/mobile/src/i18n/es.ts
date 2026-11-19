@@ -3023,6 +3023,8 @@ export const es: Dict = {
   "fix.more.leads": "Esperan: {n}",
   "fix.more.tasks": "Para hoy: {n}",
   "fix.more.jobs": "Por programar: {n}",
+  "fix.more.jobsCheck": "Por revisar: {n}",
+  "fix.more.jobsAll": "Requieren atención: {n}",
   "fix.more.estimates": "Por firmar: {n}",
   "fix.more.invoices": "Vencidas: {n}",
   // ---- push (docs/specs/27-push.md) ----
