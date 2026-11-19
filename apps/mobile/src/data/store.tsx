@@ -39,7 +39,7 @@ import { jobStatusAfterSchedule, jobStatusAfterStep, withJobDone } from "@/featu
 import { applyCustomerPatch, type CustomerPatch } from "./customerPatch";
 import { statusAfterManualWin } from "@/features/clientRows";
 import { inheritCategory } from "@/features/serviceCategories";
-import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
+import { rescheduled, canCancel, canNoShow, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, mayMarkNoShow, noShowJobRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { docForSave, newToken, normalizeDoc, storedDoc, summarize } from "@/features/estimateDoc";
 import { syncCompanyTerms, termsForNew, termsOnClientChange, withFrozenTerms, type TermsFor } from "@/features/estimateTerms";
@@ -382,6 +382,8 @@ interface StoreCtx {
   bookLead: (id: ID, at: BookAt) => Undo;
   /** the office cancels a visit before the tech is on site; S4a / S9a roll the lead / job back (docs/specs/03 §4) */
   cancelVisit: (id: ID, reason: CancelReason, text?: string) => Undo;
+  /** #2066 «Клиента нет дома»: the visit's own tech (or the office), at the door — before the work; no undo after it is sent */
+  markNoShow: (id: ID, note?: string) => Undo;
   /** the office moves a visit (time, length) before the tech is on site; the status does not change */
   rescheduleVisit: (id: ID, start: string, durationMin: number, allDay?: boolean) => Undo;
   /** «+ Осмотр» on a client / property (a returning client wants a new estimate): an inspection without a lead */
@@ -2205,6 +2207,26 @@ export function StoreProvider({
             jobs: jobBack ? d.jobs.map((j) => (j.id === jobBack ? { ...j, status: "unscheduled" } : j)) : d.jobs,
           }),
           { k: "visit.cancel", visitId: id, reason, text: text?.trim() || undefined, leadBack: leadBack ?? undefined, jobBack: jobBack ?? undefined },
+        );
+      },
+      markNoShow: (id, note) => {
+        const d0 = dbRef.current;
+        const v = d0.visits.find((x) => x.id === id);
+        if (!v || !canNoShow(v) || !mayMarkNoShow(role, d0.me, v)) return NO_UNDO;
+        const leadBack = leadRollsBack(d0, id);
+        const jobBack = noShowJobRollsBack(d0, id);
+        const text = note?.trim() || undefined;
+        return mutate(
+          "visit.noShow",
+          (d) => ({
+            ...d,
+            // as a cancel: the visit leaves the day and the Plan, and stays in the feed with its reason (§5.2)
+            visits: d.visits.filter((x) => x.id !== id),
+            cancelledVisits: [...(d.cancelledVisits ?? []), { ...v, cancelReason: "no_show", cancelText: text, cancelledAt: new Date().toISOString(), cancelledBy: d.me }],
+            leads: leadBack ? d.leads.map((l) => (l.id === leadBack ? { ...l, status: "replied" } : l)) : d.leads,
+            jobs: jobBack ? d.jobs.map((j) => (j.id === jobBack ? { ...j, status: "unscheduled" } : j)) : d.jobs,
+          }),
+          { k: "visit.noShow", visitId: id, note: text, leadBack: leadBack ?? undefined, jobBack: jobBack ?? undefined },
         );
       },
       addInspection: (propertyId, at) => {
