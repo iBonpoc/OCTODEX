@@ -19237,6 +19237,12 @@ insert into public.estimate_line_items (id, company_id, option_id, name, quantit
   ('54600000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000a1', 'Rivet', 37, 25);
 :as_super
 select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]', 'T464 the line comes back: 22 500, not 23 000');
+-- sales without the right to costs saves with an exact cost: nothing of his is written
+:as_sales_a
+select tst.t460_save(:'l460', '[{"line_item_id": "54600000-0000-4000-8000-0000000000b1", "unit_cost_millicents": 1}]');
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]',
+  format('T464 sales'' save with an exact cost: the office''s 22 500 stays (his value not written): %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b1')));
 \echo 'T464 ok'
 
 -- T465: a new version of a sent estimate (copied_from_line_id): who sees no costs gets the exact value copied (t96); the
@@ -19266,6 +19272,27 @@ insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cent
 select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000c2') = '[22500, 23]',
   format('T465 the office''s old build writes 23 ¢ for the copy: the source''s 22 500: %s', pg_temp.c460('54600000-0000-4000-8000-0000000000c2')));
 select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000c3') = '[24000, 24]', 'T465 another mirror (24 ¢): its own 24 000');
+-- review 1: a new build set the copy to a whole 23 000; an old office build saves it again (delete, insert, cents 23):
+-- the kept 23 000 comes back, not the copied-from line's 22 500
+:as_office_a
+update public.estimate_line_costs set unit_cost_millicents = 23000 where line_item_id = '54600000-0000-4000-8000-0000000000c2';
+delete from public.estimate_line_items where id = '54600000-0000-4000-8000-0000000000c2';
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id) values
+  ('54600000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000a2', 'Rivet', 40, 25, '54600000-0000-4000-8000-0000000000b1');
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values
+  ('54600000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', 23);
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000c2') = '[23000, 23]',
+  format('T465 a whole 23 000 set by a new build survives an old save: %s', pg_temp.c460('54600000-0000-4000-8000-0000000000c2')));
+-- review 2: copied_from_line_id pointing at a line that is no source under t96's rules (another name) gives nothing
+:as_office_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id) values
+  ('54600000-0000-4000-8000-0000000000c4', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000a2', 'Other', 1, 25, '54600000-0000-4000-8000-0000000000b1');
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values
+  ('54600000-0000-4000-8000-0000000000c4', 'ca000000-0000-0000-0000-000000000000', 23);
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000c4') = '[23000, 23]',
+  'T465 a «copy» of another name is no source: cents × 1000, not 22 500');
 \echo 'T465 ok'
 
 -- T466: a template line carries the exact cost: it goes to the template's costs, never into the stored document; an old
@@ -19330,12 +19357,12 @@ select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where unit_cos
 :as_sales_a
 select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where unit_cost_millicents is not null$q$) = 0, 'T467 sales without view_costs reads no exact cost');
 -- the client's document (the PDF and /p/) passes only the keys it lists: no exact cost
+:as_super
 select tst.ok(not (app.client_doc('{"options":[{"id":"o","name":"A","lines":[{"id":"l","name":"Rivet","group":"material","quantity":"37","unit":"ea","unitPriceCents":25,"unitCostMillicents":22500,"unitCostCents":23}]}]}')
                    -> 'options' -> 0 -> 'lines' -> 0) ?| array['unitCostMillicents', 'unitCostCents'],
   'T467 the client''s document (PDF, /p/) has no exact cost');
 -- who sees no costs: a save carrying an exact cost writes none (the lines are saved), the kept exact values closed
 :as_sales_a
-select tst.t460_save(:'l460', '[{"line_item_id": "54600000-0000-4000-8000-0000000000b1", "unit_cost_millicents": 1}]');
 select tst.blocked('select * from public.estimate_line_cost_exact', 'T467 sales reads the kept exact values');
 :as_office_a
 select tst.blocked('select * from public.estimate_line_cost_exact', 'T467 the office reads the kept exact values');
@@ -19343,9 +19370,6 @@ do $$ begin
   perform tst.fails($q$insert into public.estimate_line_cost_exact (line_item_id, company_id, unit_cost_millicents)
     values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 1)$q$, 'T467 nobody writes the kept exact values directly');
 end $$;
-:as_super
-select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]',
-  format('T467 sales'' save with an exact cost: the office''s 22 500 stays (his value not written): %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b1')));
 \echo 'T467 ok'
 rollback;
 \echo 'T460–T467 ok'

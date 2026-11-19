@@ -63,8 +63,9 @@ create trigger t08_cost_millicents before insert or update on public.estimate_te
   for each row execute function app.tg_cost_millicents();
 
 -- the exact value of a deleted line cost, kept aside for the line's next cost (a save: delete, then insert the same id).
--- Only when it is not whole cents (× 1000 of the mirror is what an old build's cents give anyway). No one reads or writes
--- it but the triggers below; a row lives at most 30 days, as estimate_line_costs_kept.
+-- Whole cents too (review 1: a new build's 23 000 must not be replaced by the copied-from line's 22 500 on the next
+-- old save). No one reads or writes it but the triggers below. A row lives at most 30 days: the cleanup is at write —
+-- each keep and each use deletes what is older (as estimate_line_costs_kept); no pg_cron, no job.
 create table public.estimate_line_cost_exact (
   line_item_id          uuid primary key,
   company_id            uuid not null references public.companies (id) on delete cascade,
@@ -80,11 +81,12 @@ alter table public.estimate_line_cost_exact enable row level security;
 alter table public.estimate_line_cost_exact force row level security;
 -- no policy: the tables' owner (the triggers, security definer) only
 
--- BEFORE DELETE of a line cost (anyone's, a cascade from its line too): a fractional exact value is kept aside
+-- BEFORE DELETE of a line cost (anyone's, a cascade from its line too): its exact value is kept aside. Not when the
+-- company itself is going (a cascade from companies: its row is gone, the keep would break its foreign key — review 2)
 create or replace function app.tg_line_cost_exact_keep()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
-  if old.unit_cost_millicents is not null and old.unit_cost_millicents is distinct from old.unit_cost_cents * 1000 then
+  if old.unit_cost_millicents is not null and exists (select 1 from public.companies c where c.id = old.company_id) then
     delete from public.estimate_line_cost_exact where kept_at < now() - interval '30 days';
     insert into public.estimate_line_cost_exact as k (line_item_id, company_id, unit_cost_millicents)
     values (old.line_item_id, old.company_id, old.unit_cost_millicents)
@@ -97,26 +99,37 @@ end;
 $$;
 
 -- t08 of estimate_line_costs: the catalog's rule, and on INSERT of the cents alone (an old build) the exact value it
--- had — kept aside at its delete, or the cost of the line it was copied from (an edit after sending) — when the cents
--- are that value's mirror; else exact = cents × 1000. The kept value is used up either way.
+-- had — kept aside at its delete, or, when nothing was kept for it, the cost of the line it was copied from under
+-- t96_cost_copy's own conditions (an earlier locked version of the same estimate, the same name and unit, nothing
+-- deleted — review 2: a tech cannot point copied_from_line_id anywhere) — when the cents are that value's mirror; else
+-- exact = cents × 1000. The kept value is used up either way.
 create or replace function app.tg_line_cost_millicents()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare
   v_exact bigint;
+  v_kept  boolean;
 begin
   if tg_op = 'INSERT' then
+    delete from public.estimate_line_cost_exact k where k.kept_at < now() - interval '30 days';
     delete from public.estimate_line_cost_exact k
      where k.line_item_id = new.line_item_id and k.company_id = new.company_id
     returning k.unit_cost_millicents into v_exact;
+    v_kept := found;
     if new.unit_cost_millicents is not null then
       new.unit_cost_cents := round(new.unit_cost_millicents::numeric / 1000, 0)::bigint;
     elsif new.unit_cost_cents is not null then
-      if v_exact is null then
+      if not v_kept then
         select c.unit_cost_millicents into v_exact
           from public.estimate_line_items li
-          join public.estimate_line_costs c on c.line_item_id = li.copied_from_line_id and c.company_id = li.company_id
-                                            and c.deleted_at is null
-         where li.id = new.line_item_id and li.company_id = new.company_id and li.copied_from_line_id is distinct from li.id;
+          join public.estimate_options nopt on nopt.id = li.option_id and nopt.company_id = li.company_id and nopt.deleted_at is null
+          join public.estimate_versions nv on nv.id = nopt.version_id and nv.company_id = li.company_id and nv.deleted_at is null
+          join public.estimate_line_items src on src.id = li.copied_from_line_id and src.company_id = li.company_id and src.deleted_at is null
+          join public.estimate_line_costs c on c.line_item_id = src.id and c.company_id = src.company_id and c.deleted_at is null
+          join public.estimate_options so on so.id = src.option_id and so.company_id = src.company_id and so.deleted_at is null
+          join public.estimate_versions sv on sv.id = so.version_id and sv.company_id = src.company_id and sv.deleted_at is null
+         where li.id = new.line_item_id and li.company_id = new.company_id and li.copied_from_line_id is distinct from li.id
+           and sv.estimate_id = nv.estimate_id and sv.version_no < nv.version_no and sv.locked_at is not null
+           and lower(btrim(src.name)) = lower(btrim(li.name)) and src.unit is not distinct from li.unit;
       end if;
       if v_exact is not null and round(v_exact::numeric / 1000, 0)::bigint = new.unit_cost_cents then
         new.unit_cost_millicents := v_exact;
