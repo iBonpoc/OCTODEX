@@ -4,10 +4,19 @@
  * «Обновить смету» the estimate is the same — lines, names, sums. Sealant and touch-up paint keep a colour of their own (COLOUR_IS_PRODUCT).
  */
 import { describe, expect, it, vi } from "vitest";
+vi.mock("react-native", () => ({ Platform: { OS: "web" }, Linking: {}, Share: {} }));
+vi.mock("expo-print", () => ({}));
+vi.mock("expo-sharing", () => ({}));
+vi.mock("expo-clipboard", () => ({}));
 vi.mock("@/cloud/client", () => ({ supabase: {} }));
+vi.mock("../src/cloud/client", () => ({ supabase: {} }));
+vi.mock("@/config/backend", () => ({ WEB_APP_URL: "https://example.test" }));
 import type { PartQty } from "@octo/estimating-engine";
 import type { CatalogItem, DB, Estimate, Job } from "../src/data/types";
 import { makeSeed } from "../src/data/seed";
+import { DEFAULT_TAX } from "@octo/estimating-engine";
+import { portalFromEstimate } from "../src/cloud/portal";
+import { estimateHtml } from "../src/features/estimatePdf";
 import { catalogMatch } from "../src/features/catalogMatch";
 import { draftsForJob } from "../src/features/purchaseOrders";
 import { tFor } from "../src/i18n/translate";
@@ -64,6 +73,23 @@ describe("unit:gutterVariants — test 12: the estimate is the same before the t
     expect(r.map((l) => l.name)).toEqual(old.map((l) => l.name));
     expect(r.map((l) => String(l.quantity))).toEqual(["120", "40"]);
     expect(total(r)).toBe(total(old));
+  });
+  it("audit блок. 3: the client's PDF is the same in the three points — before, after the transition, after «Обновить смету» (own line, a price edited by hand)", () => {
+    const db = makeSeed();
+    const e = db.estimates.find((x) => x.doc?.options?.length)!;
+    const own: ModuleLine = { id: "own1", name: "Haul away", group: "service", quantity: "1", unit: "ea", unitPriceCents: 5000 };
+    const pdf = (lines: readonly ModuleLine[]) =>
+      estimateHtml(portalFromEstimate(db, { ...e, doc: { options: [{ id: "o1", name: "Option", lines: lines as never }], settings: { discount: null, tax: DEFAULT_TAX, deposit: { kind: "none" } } } }, "Co"), { lang: "en" });
+    let k = 0;
+    const ids = () => `p${++k}`;
+    const made = linesFromParts(parts, before, name, ids);
+    const draft = [...made.map((l, i) => (i === 1 ? { ...l, unitPriceCents: 950 } : l)), own]; // brown priced by hand
+    const cat = transition(before);
+    const resynced = resyncLines(draft, linesFromParts(parts, cat, name, ids), () => false, cat);
+    expect(resynced.find((l) => l.id === draft[1]!.id)!.unitPriceCents).toBe(950);
+    expect(pdf(resynced)).toBe(pdf(draft)); // after «Обновить смету»
+    // after the transition alone nothing in the estimate changes (it writes only the catalog): the same PDF by construction
+    expect(pdf(draft)).toContain("5in K Gutter White");
   });
   it("a person's own line on the old white item holds back only the white module line, never the brown", () => {
     const cat = transition(before);
