@@ -24,6 +24,7 @@ import { SlashToSearch } from "@/nav/SearchEntry";
 import { LegalGate } from "@/nav/LegalGate";
 import { NameAsk } from "@/nav/NameAsk";
 import { RemovedCompanyNotice } from "@/nav/RemovedCompanyNotice";
+import { CompanySheetHost, CompanySwitchNotice } from "@/features/CompanySwitcher";
 import { BootRoot, useBootDone } from "@/features/boot";
 
 function Shell() {
@@ -52,6 +53,9 @@ function Shell() {
               <NameAsk />
               {/* #1669: removed from a company — its unsent changes are still here */}
               <RemovedCompanyNotice />
+              {/* spec 42 S34: the sheet «Компании» and «Вы в «B»» after a switch (#1673) */}
+              <CompanySheetHost />
+              <CompanySwitchNotice />
               {/* #1912: looks for an over-the-air update (phone builds only) */}
               <UpdateDriver />
             </View>

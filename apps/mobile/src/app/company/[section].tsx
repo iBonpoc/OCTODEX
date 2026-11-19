@@ -9,7 +9,7 @@ import type { Address, Company, CompanyContact, CompanyLicense, EntityType, Lice
 import { DOC_LANG_LABEL, DOC_LANGS, useI18n, type DictKey, type DocLang } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
 import { Labeled, PctField } from "@/features/fields";
-import { SETUP_STEPS, stepHint, stepTitle, type SetupStep } from "@/features/companySetup";
+import { SETUP_STEPS, stepHint, stepTitle, wizardSteps, type SetupStep } from "@/features/companySetup";
 import { tzLabel } from "@/features/scheduleSettings";
 import { logoFit } from "@/features/logoFit";
 import { ServiceCategoryEditor } from "@/features/ServiceCategoryPicker";
@@ -21,7 +21,8 @@ import { Card, Empty, FieldGroup, RowView, Screen } from "@/ui/surfaces";
 import { StatusNote } from "@/ui/statusNote";
 
 const ENTITY: EntityType[] = ["llc", "corporation", "sole_proprietor", "partnership", "other"];
-const LIC: LicenseKind[] = ["cslb", "city_business", "his", "other"];
+// license kinds are examples, not a rule of any state (#2065): «other» first, a California one is just one of them
+const LIC: LicenseKind[] = ["other", "city_business", "cslb", "his"];
 const emptyAddr: Address = { line1: "", city: "", state: "", zip: "" };
 
 /**
@@ -41,7 +42,8 @@ export default function CompanySection() {
   const leaving = useRef(false);
   const step = SETUP_STEPS.includes(section) ? section : "profile";
   const isWizard = wizard === "1";
-  const steps = SETUP_STEPS;
+  // the wizard's steps: «Направления» only when no direction was chosen at the first run (#2007)
+  const steps = c ? wizardSteps(c, store.db.serviceCategories, step) : SETUP_STEPS;
   const idx = steps.indexOf(step);
   // spec 26 §3 (07.11): the office sees the company settings, only the director changes them
   const ro = store.role !== "director";
@@ -445,7 +447,7 @@ function LicensesEditor() {
           icon="plus"
           variant="secondary"
           full
-          onPress={() => setEdit({ id: uid(), kind: "cslb", number: "", classes: [], onDocuments: true, exp: "", cls: "" })}
+          onPress={() => setEdit({ id: uid(), kind: "other", number: "", classes: [], onDocuments: true, exp: "", cls: "" })}
         />
       )}
     </>
