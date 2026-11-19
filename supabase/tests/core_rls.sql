@@ -18267,8 +18267,11 @@ select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-
   'T455 the phone saw another exact cost: 40001, nothing written');
 select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": 22600, "unit_cost_cents": 23}', '{"unit_cost_millicents": 22500, "unit_cost_cents": 23}')$q$) = '22023',
   'T455 the exact cost and the mirror together: 22023 (one of them)');
-select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": 22600.5}', '{"unit_cost_millicents": 22500}')$q$) <> 'ok',
-  'T455 a fraction of a thousandth: refused');
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": 22600.5}', '{"unit_cost_millicents": 22500}')$q$) = '22023'
+          and pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": -1}', '{"unit_cost_millicents": 22500}')$q$) = '22023'
+          and pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": 1e30}', '{"unit_cost_millicents": 22500}')$q$) = '22023'
+          and pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": "22600"}', '{"unit_cost_millicents": 22500}')$q$) = '22023',
+  'T455 a fraction, a negative, a huge number, a string: 22023, nothing written');
 select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": 22600}', '{"unit_cost_millicents": 22500}');
 select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a6') = '[22600, 23, null, 1000]', 'T455 22 500 → 22 600 over what was seen');
 select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"markup_bps": 2000}', '{"markup_bps": 1000}');
@@ -18306,6 +18309,16 @@ select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a5') = '[24000, 24
 
 -- T457: who does not see our costs sees no exact cost either, and cannot write it
 \echo 'T457 the exact cost: only who sees our costs'
+:as_sales_a
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a1', '{"unit_cost_millicents": 1}', '{"unit_cost_millicents": 22600}')$q$) = '42501',
+  'T457 sales without view_costs: catalog_set_item_costs with the exact cost — 42501');
+:as_tech_a
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a1', '{"unit_cost_millicents": 1}', '{"unit_cost_millicents": 22600}')$q$) = 'P0002',
+  'T457 a tech: catalog_set_item_costs — not found');
+:as_owner_b
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a1', '{"unit_cost_millicents": 1}', '{"unit_cost_millicents": 22600}')$q$) = 'P0002'
+          and tst.cnt($q$select 1 from public.catalog_item_costs where item_id::text like '54500000-%'$q$) = 0,
+  'T457 another company: not found, no row seen');
 :as_sales_a
 select tst.ok(tst.cnt($q$select 1 from public.catalog_item_costs where item_id::text like '54500000-%'$q$) = 0
           and tst.cnt($q$select 1 from public.catalog_cost_history where item_id::text like '54500000-%'$q$) = 0,

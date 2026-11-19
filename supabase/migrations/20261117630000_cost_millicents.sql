@@ -3,7 +3,8 @@
 --   unit_cost_millicents bigint — the truth (22 500 = 22.5 ¢; 4.12 ¢ = 4 120; 1/3 ¢ = 333, error < 0.001 ¢);
 --   unit_cost_cents             — stays, the MIRROR old builds read and write: round(millicents / 1000), half up, kept by
 --                                 the server (t08). An old phone's echo of the mirror does not wipe the exact cost.
--- The client's price stays whole cents, counted once from the exact cost (app.item_price_millicents).
+-- The client's price stays whole cents, counted once from the exact cost (app.item_price_millicents); round() of a
+-- numeric ≥ 0 is half up.
 -- PR 1/4: the catalog — catalog_item_costs, catalog_cost_history, the triggers and functions that copy a cost there.
 -- Estimate lines and templates (PR 2/4), purchase orders (3/4) and the phone (4/4) follow; until then they read the mirror.
 -- rule16: step 1 — only new columns and new behaviour; nothing renamed or dropped, unit_cost_cents stays as it is.
@@ -378,8 +379,10 @@ begin
   if p_costs ? 'unit_cost_cents' and v_exact then
     raise exception 'costs: unit_cost_cents or unit_cost_millicents, not both' using errcode = '22023';
   end if;
-  if v_exact and jsonb_typeof(p_costs -> 'unit_cost_millicents') not in ('number', 'null') then
-    raise exception 'costs: unit_cost_millicents is a whole number' using errcode = '22023';
+  -- a whole number of thousandths ≥ 0 (up to 12 digits; the table's bound checks the rest), or null; anything else — 22023
+  if v_exact and jsonb_typeof(p_costs -> 'unit_cost_millicents') <> 'null'
+     and not (jsonb_typeof(p_costs -> 'unit_cost_millicents') = 'number' and (p_costs ->> 'unit_cost_millicents') ~ '^[0-9]{1,12}$') then
+    raise exception 'costs: unit_cost_millicents is a whole number ≥ 0' using errcode = '22023';
   end if;
   if p_seen is not null and jsonb_typeof(p_seen) <> 'object' then
     raise exception 'seen: an object' using errcode = '22023';
