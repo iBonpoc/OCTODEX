@@ -1102,8 +1102,9 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       );
     }
     case "property.gate":
-      // kept apart from the property (migration 20261105160000): the office writes it, a tech reads it only on the visit days
-      return run(supabase.from("property_secrets").upsert({ property_id: op.id, company_id: c, gate_code: op.code || null, deleted_at: null }, { onConflict: "property_id" }));
+      // kept apart from the property (migration 20261105160000); written through the server's function (20261117568000):
+      // sales set the code without reading it back, a tech and sales read it only on the visit days
+      return run(supabase.rpc("set_gate_code", { p_property_id: op.id, p_code: op.code || "" }));
     case "property.update": {
       const patch: Record<string, string> = {};
       if (op.address !== undefined) patch.address_line1 = op.address || "—";

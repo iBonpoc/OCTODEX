@@ -44,12 +44,12 @@ export function propertyNow(db: DB, propertyId: string, now = Date.now()): Prope
 /** Calendar day number of a moment in a time zone — lives with the schedule settings (one rule for the whole app) */
 export { dayIn };
 /**
- * May this person see the gate code? The office always; a tech only on the day of a visit of theirs at the property
- * or the day before, by the company's time zone, and not for a visit that is over (paid, completed, no-show).
- * The same rule as app.can_see_gate_code on the server, which decides in the cloud.
+ * May this person see the gate code? The office always; a tech and sales only on the day of a visit of theirs at the
+ * property (for sales: their inspection) or the day before, by the company's time zone, and not for a visit that is over
+ * (paid, completed, no-show). The same rule as app.can_see_gate_code on the server, which decides in the cloud (Р-3).
  */
 export function canSeeGateCode(db: DB, role: Role, propertyId: string, now = Date.now()): boolean {
-  if (role !== "tech") return true;
+  if (role !== "tech" && role !== "sales") return true;
   const tz = db.company?.timezone || "America/Los_Angeles";
   // a visit of a live job, or an inspection (no job) at this property
   const doneJobs = new Set(db.jobs.filter((j) => j.status === "done").map((j) => j.id));
