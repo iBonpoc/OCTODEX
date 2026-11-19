@@ -18026,17 +18026,23 @@ insert into public.suppliers (id, company_id, name) values
 :as_office_a
 select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', ' White ', '{"sku":"W-1"}');
 -- «another phone» writes brown after it: white is not erased (a whole-row write would erase it)
-select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', 'brown', '{"sku":"B-1","supplierId":"44200000-0000-4000-8000-0000000000a5","packSize":"10"}');
+select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', 'brown', '{"sku":"B-1","supplierId":"44200000-0000-4000-8000-0000000000A5","packSize":"10"}');
 :as_super
-select tst.ok((select variant_skus = '{"color":{"white":{"sku":"W-1"},"brown":{"sku":"B-1","supplierId":"44200000-0000-4000-8000-0000000000a5","packSize":"10"}}}'::jsonb
-                 from public.catalog_items where id = '44200000-0000-4000-8000-000000000001'), 'T442 both colours kept, the value lower-cased and trimmed');
+select tst.ok((select variant_skus = '{"color":{"white":{"sku":"W-1"},"brown":{"sku":"B-1","supplierId":"44200000-0000-4000-8000-0000000000A5","packSize":"10"}}}'::jsonb
+                 from public.catalog_items where id = '44200000-0000-4000-8000-000000000001'), 'T442 both colours kept, the value lower-cased and trimmed; a supplier id in capitals is found (as uuid)');
 :as_office_a
 -- a colour without data yet is still a variant (its sku is set later); null data removes it
 select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', 'black', '{"sku":""}');
 select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', 'white', null);
 :as_super
-select tst.ok((select variant_skus = '{"color":{"black":{},"brown":{"sku":"B-1","supplierId":"44200000-0000-4000-8000-0000000000a5","packSize":"10"}}}'::jsonb
+select tst.ok((select variant_skus = '{"color":{"black":{},"brown":{"sku":"B-1","supplierId":"44200000-0000-4000-8000-0000000000A5","packSize":"10"}}}'::jsonb
                  from public.catalog_items where id = '44200000-0000-4000-8000-000000000001'), 'T442 an empty sku is «not set», null data removes the value');
+:as_office_a
+select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', 'black', null);
+select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', 'brown', null);
+:as_super
+select tst.ok((select variant_skus = '{"color":{}}'::jsonb from public.catalog_items where id = '44200000-0000-4000-8000-000000000001'),
+              'T442 the last value removed keeps the property (which one is the variant stays known)');
 rollback;
 \echo 'T442 ok'
 
@@ -18049,6 +18055,8 @@ insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_c
 insert into public.suppliers (id, company_id, name) values ('44300000-0000-4000-8000-0000000000b5', 'cb000000-0000-0000-0000-000000000000', 'T443 Supplier B');
 :as_tech_a
 select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-000000000001', 'color', 'white', '{"sku":"W"}')$q$, '%not found%', 'T443 a tech does not write variants');
+:as_sales_a
+select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-000000000001', 'color', 'white', '{"sku":"W"}')$q$, '%catalog item not found%', 'T443 sales does not write variants (supplier data: owner, admin, office — SUP1 №2), told nothing about ids');
 :as_owner_a
 select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-0000000000b1', 'color', 'white', '{"sku":"W"}')$q$, '%not found%', 'T443 not another company''s item');
 select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-000000000001', 'color', 'white', '{"supplierId":"44300000-0000-4000-8000-0000000000b5"}')$q$, '%supplier not found%', 'T443 not another company''s supplier');
@@ -18079,6 +18087,16 @@ on conflict (id) do update set name = excluded.name, unit = excluded.unit, unit_
 :as_super
 select tst.ok((select variant_skus = '{"color":{"white":{"sku":"W-1"}}}'::jsonb and name = 'T444 Gutter renamed'
                  from public.catalog_items where id = '44400000-0000-4000-8000-000000000001'), 'T444 the old build''s whole row does not erase variant_skus');
+-- a direct write of the column (the table's update grant): sales keeps the stored value, as t20 does for the supplier
+:as_sales_a
+update public.catalog_items set variant_skus = '{"color":{"white":{"sku":"HACK"}}}' where id = '44400000-0000-4000-8000-000000000001';
+:as_super
+select tst.ok((select variant_skus = '{"color":{"white":{"sku":"W-1"}}}'::jsonb from public.catalog_items where id = '44400000-0000-4000-8000-000000000001'),
+              'T444 a direct write by sales keeps the stored variants');
+insert into public.suppliers (id, company_id, name) values ('44400000-0000-4000-8000-0000000000b5', 'cb000000-0000-0000-0000-000000000000', 'T444 Supplier B');
+:as_office_a
+select tst.fails_like($q$update public.catalog_items set variant_skus = '{"color":{"white":{"supplierId":"44400000-0000-4000-8000-0000000000b5"}}}' where id = '44400000-0000-4000-8000-000000000001'$q$,
+  '%supplier not found%', 'T444 a direct write by office with another company''s supplier is refused');
 rollback;
 \echo 'T444 ok'
 
@@ -18091,15 +18109,21 @@ insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_c
    '{"part":"gutter","color":"Brown","mergedInto":"44500000-0000-4000-8000-000000000001"}'),
   ('44500000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'material', 'T445 Other', 'ft', 800, false, null, '{"part":"gutter"}'),
   ('44500000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'material', 'T445 Other · Red', 'ft', 800, false, null,
-   '{"part":"gutter","color":"red","mergedInto":"44500000-0000-4000-8000-000000000003"}');
+   '{"part":"gutter","color":"red","mergedInto":"44500000-0000-4000-8000-000000000003"}'),
+  ('44500000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'material', 'T445 Rival gutter', 'ft', 800, false, '{"color":{"white":{"sku":"RB-1"}}}', '{"part":"gutter"}'),
+  ('44500000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'material', 'T445 Points abroad · White', 'ft', 800, false, null,
+   '{"part":"gutter","color":"white","mergedInto":"44500000-0000-4000-8000-0000000000b1"}');
 :as_office_a
 update public.catalog_items set supplier_sku = 'B-9' where id = '44500000-0000-4000-8000-000000000002';
 update public.catalog_items set supplier_sku = 'R-9' where id = '44500000-0000-4000-8000-000000000004';
+update public.catalog_items set supplier_sku = 'X-9' where id = '44500000-0000-4000-8000-000000000005';
 :as_super
 select tst.ok((select variant_skus = '{"color":{"white":{"sku":"W-1"},"brown":{"sku":"B-9"}}}'::jsonb
                  from public.catalog_items where id = '44500000-0000-4000-8000-000000000001'), 'T445 the brown sku is in the new item''s variant, white kept');
 select tst.ok((select variant_skus is null from public.catalog_items where id = '44500000-0000-4000-8000-000000000003'),
               'T445 the new item without variants: nothing is written (which property is the variant is not known)');
+select tst.ok((select variant_skus = '{"color":{"white":{"sku":"RB-1"}}}'::jsonb from public.catalog_items where id = '44500000-0000-4000-8000-0000000000b1'),
+              'T445 mergedInto pointing at another company''s item: nothing is written there');
 rollback;
 \echo 'T445 ok'
 

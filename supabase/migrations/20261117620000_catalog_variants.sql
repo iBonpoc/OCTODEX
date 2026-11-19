@@ -10,7 +10,10 @@
 --                                       1..120 characters (as an attributes value); sku as supplier_sku (≤ 60).
 --   public.catalog_set_variant(item, property, value, data)  — writes ONE value (null data — removes it), the row locked:
 --                                       two phones writing two colours do not erase each other (a whole-row write would).
---   t29_variant_sku_from_merged       — an OLD build edits the supplier_sku of an old per-colour item (attributes.mergedInto
+--   t21_variant_guard                  — a direct write of variant_skus (the table's update grant): who is not owner /
+--                                       admin / office keeps the stored value (as t20 for supplier / sku, SUP1 №2); every
+--                                       supplierId must be a live supplier of the same company (review of #2239 №1, №2).
+--   t99_variant_sku_from_merged       — an OLD build edits the supplier_sku of an old per-colour item (attributes.mergedInto
 --                                       = the new item): the sku goes into the new item's variant of that value (§11.5).
 --   t05_merged_item_keep               — a hidden per-colour item another item points at (attributes.mergedInto) is never
 --                                       put in the Trash: accepted estimates still name it (§11.7.7, hint merged_item).
@@ -57,6 +60,49 @@ alter table public.catalog_items add column if not exists variant_skus jsonb;
 alter table public.catalog_items add constraint catalog_items_variant_skus_check check (app.variant_skus_ok(variant_skus)) not valid;
 alter table public.catalog_items validate constraint catalog_items_variant_skus_check;
 
+-- ---- a variant's supplier: a live supplier of the same company (compared as uuid) ------------------------------------
+create or replace function app.variant_supplier_ok(p_company uuid, p_supplier text)
+returns boolean language plpgsql stable security definer set search_path = '' as $$
+declare
+  v uuid;
+begin
+  begin
+    v := p_supplier::uuid;
+  exception when invalid_text_representation then
+    return false;
+  end;
+  return exists (select 1 from public.suppliers s where s.id = v and s.company_id = p_company and s.deleted_at is null);
+end $$;
+revoke all on function app.variant_supplier_ok(uuid, text) from public, anon, authenticated;
+
+-- ---- a direct write of variant_skus (the table's update grant): who and which suppliers (review of #2239 №1, №2) --------
+create or replace function app.tg_variant_guard()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  d record;
+begin
+  if tg_op = 'UPDATE' and new.variant_skus is not distinct from old.variant_skus then return new; end if;
+  -- not owner / admin / office (sales, tech) with a JWT: the stored value stays (an insert gets none) — as t20 for the
+  -- supplier and sku; never a refusal (an old phone's whole save must not stop). No JWT (migrations, server) — as sent
+  if auth.uid() is not null and not app.has_role(new.company_id, array['owner', 'admin', 'office']) then
+    new.variant_skus := case when tg_op = 'INSERT' then null else old.variant_skus end;
+    return new;
+  end if;
+  -- every variant's supplier: a live supplier of the same company, for every writer
+  -- (a value of another shape is the check's business — catalog_items_variant_skus_check — not a crash here)
+  if new.variant_skus is null or jsonb_typeof(new.variant_skus) <> 'object' then return new; end if;
+  for d in select v.value as data from jsonb_each(new.variant_skus) a, jsonb_each(case when jsonb_typeof(a.value) = 'object' then a.value else '{}'::jsonb end) v loop
+    if jsonb_typeof(d.data) = 'object' and d.data ? 'supplierId' and not app.variant_supplier_ok(new.company_id, d.data ->> 'supplierId') then
+      raise exception 'supplier not found' using errcode = 'P0002', hint = 'supplier';
+    end if;
+  end loop;
+  return new;
+end $$;
+revoke all on function app.tg_variant_guard() from public, anon, authenticated;
+drop trigger if exists t21_variant_guard on public.catalog_items;
+create trigger t21_variant_guard before insert or update of variant_skus on public.catalog_items
+  for each row execute function app.tg_variant_guard();
+
 -- ---- the write of one value -------------------------------------------------------------------------------------------
 create or replace function public.catalog_set_variant(p_item uuid, p_attr text, p_value text, p_data jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$
@@ -68,8 +114,9 @@ declare
   v_new jsonb;
 begin
   select * into it from public.catalog_items i where i.id = p_item and i.deleted_at is null;
-  -- one answer for «no such item», «another company's» and «not staff» (as catalog_set_group_price)
-  if it.id is null or not app.is_staff(it.company_id) then
+  -- the supplier's data of an item: owner / admin / office only (as t20_supplier_guard, SUP1 №2 — sales reads no suppliers);
+  -- one answer for «no such item», «another company's» and «not yours to write» (nothing is told about ids)
+  if it.id is null or not app.has_role(it.company_id, array['owner', 'admin', 'office']) then
     raise exception 'catalog item not found' using errcode = 'P0002';
   end if;
   if p_attr is null or p_attr !~ '^[a-zA-Z][a-zA-Z0-9_]{0,39}$' then
@@ -82,12 +129,15 @@ begin
     raise exception 'variant data: an object' using errcode = '22023';
   end if;
   -- a supplier of this company only
-  if p_data ? 'supplierId' and not exists (
-       select 1 from public.suppliers s where s.id::text = p_data ->> 'supplierId' and s.company_id = it.company_id) then
+  if p_data ? 'supplierId' and not app.variant_supplier_ok(it.company_id, p_data ->> 'supplierId') then
     raise exception 'supplier not found' using errcode = 'P0002', hint = 'supplier';
   end if;
-  -- the row locked, then read again: two writers of two values wait for each other, neither is lost
-  select * into it from public.catalog_items i where i.id = p_item for update;
+  -- the row locked, then read again: two writers of two values wait for each other, neither is lost; put in the Trash
+  -- meanwhile — the same «not found»
+  select * into it from public.catalog_items i where i.id = p_item and i.deleted_at is null for update;
+  if it.id is null then
+    raise exception 'catalog item not found' using errcode = 'P0002';
+  end if;
   v_all := coalesce(it.variant_skus, '{}'::jsonb);
   -- one property per item: another one is a mistake of the caller, never a silent second axis
   if v_all <> '{}'::jsonb and not v_all ? p_attr then
@@ -101,7 +151,8 @@ begin
       from jsonb_each(v_new) e where not (jsonb_typeof(e.value) = 'string' and btrim(e.value #>> '{}') = '');
   end if;
   v_one := case when v_new is null then v_one - v_val else jsonb_set(v_one, array[v_val], v_new, true) end;
-  v_all := case when v_one = '{}'::jsonb then null else jsonb_build_object(p_attr, v_one) end;
+  -- the last value removed keeps the property ({"color": {}}): which property is the variant stays known (t99 for old builds)
+  v_all := jsonb_build_object(p_attr, v_one);
   update public.catalog_items set variant_skus = v_all, updated_at = now(), updated_by = auth.uid() where id = it.id;
   return v_all;
 end $$;
@@ -135,13 +186,17 @@ begin
   v_one := coalesce(v_all -> v_attr -> v_val, '{}'::jsonb);
   v_one := case when nullif(btrim(coalesce(new.supplier_sku, '')), '') is null then v_one - 'sku'
                 else jsonb_set(v_one, '{sku}', to_jsonb(btrim(new.supplier_sku)), true) end;
-  update public.catalog_items set variant_skus = jsonb_set(v_all, array[v_attr, v_val], v_one, true)
-   where id = v_to;
+  v_all := jsonb_set(v_all, array[v_attr, v_val], v_one, true);
+  -- a value the shape does not take (a 51st colour, a control character): skipped — never a failed save of an old build
+  if not app.variant_skus_ok(v_all) then return null; end if;
+  update public.catalog_items set variant_skus = v_all, updated_at = now(), updated_by = auth.uid() where id = v_to;
   return null;
 end $$;
 revoke all on function app.tg_variant_sku_from_merged() from public, anon, authenticated;
-drop trigger if exists t29_variant_sku_from_merged on public.catalog_items;
-create trigger t29_variant_sku_from_merged after update of supplier_sku on public.catalog_items
+-- locks: the old item (the update), then the new one (for update above). In one price group this order can meet
+-- catalog_set_group_price (which locks the group by id) — a 40P01, which the queue retries (outboxRetry: transient).
+drop trigger if exists t99_variant_sku_from_merged on public.catalog_items;
+create trigger t99_variant_sku_from_merged after update of supplier_sku on public.catalog_items
   for each row execute function app.tg_variant_sku_from_merged();
 
 -- ---- a hidden per-colour item is never put in the Trash (accepted estimates still name it) ----------------------------
@@ -151,7 +206,7 @@ begin
   -- only the Trash (deleted_at): a hard delete is the company's erasure (cascade) — never held here
   if old.deleted_at is null and new.deleted_at is not null
      and nullif(btrim(coalesce(new.attributes ->> 'mergedInto', '')), '') is not null then
-    raise exception 'a merged item is kept' using errcode = 'P0001', hint = 'merged_item';
+    raise exception 'trash:mergedItem (a merged item is kept: accepted estimates name it)' using errcode = 'P0001', hint = 'merged_item';
   end if;
   return new;
 end $$;
