@@ -20,6 +20,7 @@ import { posFromRows } from "@/features/purchaseOrderRows";
 import type { CostHistoryEntry, Photo, PriceHistoryEntry } from "@/data/types";
 import { priceHistoryFromRow } from "@/features/catalogCard";
 import { roleSeesCosts } from "@/features/access";
+import { noticeRead } from "./noticeRead";
 
 type Row = Record<string, unknown>;
 const s = (v: unknown) => (v == null ? "" : String(v));
@@ -198,6 +199,14 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   // step 18 P4b: my push switches (RLS: only my own rows); no rows or no table yet → the defaults
   const pushRows = await pages<Row>(() => supabase.from("push_prefs").select("kind, enabled").eq("company_id", companyId).eq("user_id", userId), key("kind")).catch(() => [] as Row[]);
   const pushPrefs = pushPrefsFromRows(pushRows);
+  // Р-8b: my own «read» marks of the notices loaded (RLS: only my own rows) and the moment of the split (a constant of the
+  // migration, public.notifications_split_at); a server before the migration has neither — the shared read_at as before
+  const noticeIds = notifications.map((r) => s(r.id));
+  const [readRows, noticeSplitAt] = await Promise.all([
+    noticeIds.length ? q<Row>(supabase.from("notification_reads").select("notification_id").in("notification_id", noticeIds)).catch(() => [] as Row[]) : Promise.resolve([] as Row[]),
+    Promise.resolve(supabase.rpc("notifications_split_at")).then((r) => (r.error ? null : ((r.data as string | null) ?? null)), () => null),
+  ]);
+  const readByMe = new Set(readRows.map((r) => s(r.notification_id)));
   // spec 33 П15 (C2a): the company's add-on modules; empty before the migration company_modules (C1) or if a read fails
   const moduleRows = await every<Row>("company_modules", "module_key, enabled, trial_ends_at, paid_until, settings, row_version", key("module_key")).catch(() => [] as Row[]);
   const companyModules = companyModulesFromRows(moduleRows);
@@ -839,7 +848,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       return {
         id: s(r.id), kind: s(r.kind) as Notice["kind"], estimateId: (r.estimate_id as string | null) ?? undefined, jobId: (r.job_id as string | null) ?? undefined,
         invoiceId: (r.invoice_id as string | null) ?? undefined, visitId: (r.visit_id as string | null) ?? undefined, customer: p.customer ?? "",
-        totalCents: p.total, depositCents: p.deposit, at: s(r.created_at), read: !!r.read_at,
+        totalCents: p.total, depositCents: p.deposit, at: s(r.created_at), read: noticeRead(r.read_at as string | null, readByMe.has(s(r.id)), noticeSplitAt),
       };
     }),
   };

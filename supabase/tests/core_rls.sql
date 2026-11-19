@@ -4064,7 +4064,7 @@ begin
                         'intake_endpoint_rotate(uuid)', 'intake_endpoint_set(uuid,boolean,uuid,uuid,boolean,boolean,boolean,integer,boolean)',
                         'intake_event_decide(uuid,boolean)', 'invite_member(uuid,text,text,text,boolean)', 'legal_status()',
                         'mark_not_duplicate(uuid,uuid)', 'merge_customers(uuid,uuid)', 'module_disable(uuid,text)', 'module_enable(uuid,text)',
-                        'module_save_settings(uuid,text,jsonb,integer)', 'my_closed_companies()', 'po_receive(uuid,jsonb,bigint)', 'catalog_set_group_price(uuid,bigint,boolean,bigint,integer,integer,bigint,bigint,integer,integer)', 'catalog_set_item_costs(uuid,jsonb,jsonb)',
+                        'module_save_settings(uuid,text,jsonb,integer)', 'mark_notifications_read(uuid[])', 'my_closed_companies()', 'notifications_split_at()', 'po_receive(uuid,jsonb,bigint)', 'catalog_set_group_price(uuid,bigint,boolean,bigint,integer,integer,bigint,bigint,integer,integer)', 'catalog_set_item_costs(uuid,jsonb,jsonb)',
                         'portal_accept(text,uuid,uuid[],text,text,boolean,text,uuid,uuid,uuid)', 'portal_estimate(text)',
                         'portal_pay_simulated(text,uuid)', 'record_estimate_deposit(uuid,uuid,text)',
                         'record_visit_payment(uuid,uuid,uuid,text,date,bigint)', 'refund_record(uuid,bigint,text,text,text)',
@@ -5245,6 +5245,7 @@ where c not in ('created_by', 'updated_by')   -- history of who wrote a row: kep
     'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id', 'intake_events.decided_by', 'import_jobs.undone_by', 'trash_entries.deleted_by', 'trash_entries.restored_by',
     -- erased (app.erase_personal_rows)
     'member_prefs.user_id', 'user_locations.user_id', 'push_devices.user_id', 'push_outbox.user_id', 'push_prefs.user_id',
+    'notification_reads.user_id',
     -- unlinked (set to null)
     'company_contacts.user_id', 'companies.lead_default_assignee_id') \gset
 select tst.ok(:'t50_unclassified' = '', format('every person column is classified in T50 (kept / erased / unlinked): %s', :'t50_unclassified'));
@@ -5256,7 +5257,7 @@ select coalesce(string_agg(e, ', '), '') as t50_stale from unnest(array[
     'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
     'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by',
     'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id', 'intake_events.decided_by', 'import_jobs.undone_by', 'trash_entries.deleted_by', 'trash_entries.restored_by',
-    'member_prefs.user_id', 'user_locations.user_id', 'company_contacts.user_id', 'companies.lead_default_assignee_id']) e
+    'member_prefs.user_id', 'user_locations.user_id', 'notification_reads.user_id', 'company_contacts.user_id', 'companies.lead_default_assignee_id']) e
  where not exists (select 1 from information_schema.columns c where c.table_schema = 'public'
                      and format('%s.%s', c.table_name, c.column_name) = e) \gset
 select tst.ok(:'t50_stale' = '', format('no stale entries in the T50 lists: %s', :'t50_stale'));
@@ -17444,8 +17445,10 @@ select tst.ok(tst.cnt($q$select 1 from public.payment_attempts$q$) = 0, 'T422 sa
 select tst.ok(tst.cnt($q$select 1 from public.stripe_accounts$q$) = 0, 'T422 sales do not see the Stripe account');
 select tst.ok(tst.cnt($q$select 1 from public.notifications where id::text like 'a4205000-%'$q$) = 2, 'T422 sales see the notifications of their two estimates only');
 select tst.blocked($q$update public.notifications set read_at = now() where id = 'a4205000-0000-4000-8000-000000000003'$q$, 'T422 sales do not mark another''s notification read');
-update public.notifications set read_at = now() where id = 'a4205000-0000-4000-8000-000000000001';
-select tst.ok((select read_at is not null from public.notifications where id = 'a4205000-0000-4000-8000-000000000001'), 'T422 sales mark their own notification read');
+-- Р-8b (20261117569000, T435): sales mark a notification read for themselves (notification_reads), not the shared column
+select tst.blocked($q$update public.notifications set read_at = now() where id = 'a4205000-0000-4000-8000-000000000001'$q$, 'T422 sales do not put out the shared mark of their own notification');
+insert into public.notification_reads (notification_id, company_id) values ('a4205000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000');
+select tst.ok(exists (select 1 from public.notification_reads where notification_id = 'a4205000-0000-4000-8000-000000000001'), 'T422 sales mark their own notification read (for themselves)');
 
 -- T423: the office sees everything as before; the lead handed to the office takes its deal from sales
 :as_office_a
@@ -18228,5 +18231,79 @@ select tst.ok((select gate_code = '#new4' from public.property_secrets where pro
   'T434 the codes are written: sales through the function (trimmed), the office brings a removed one back and clears with an empty or null one');
 rollback;
 \echo 'T434 ok'
+
+-- ---------------------------------------------------------------- T435 (Р-8b): each person's own «read»
+\echo 'T435 a notification read by one person stays unread for the others'
+begin;
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a4350000-0000-4000-8000-000000000001', 'office435@a.test', '{"full_name":"Olive Office435"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4350000-0000-4000-8000-000000000001', 'office', 'active');
+\set as_office435 'reset role; set request.jwt.claim.sub = ''a4350000-0000-4000-8000-000000000001''; set role authenticated;'
+-- an estimate of sales (his deal) and its notice; a notice of the office's estimate (not his)
+:as_sales_a
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('a4350000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T435 sales deal');
+:as_super
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('a4350000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', 'a4350000-0000-4000-8000-0000000000e1'),
+  ('a4350000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', '0e1a0000-0000-0000-0000-000000000002');
+-- the cut of the split is a constant of the migration (not the clock of the call)
+select tst.ok(public.notifications_split_at() is not null and public.notifications_split_at() <= now()
+              and (select provolatile = 'i' and prosrc !~* 'now|clock|current_' from pg_proc where oid = 'public.notifications_split_at()'::regprocedure),
+  'T435 the split moment is the migration''s: a constant, not a clock');
+-- what the app sends (cloud/ops.ts notice.read): the ids of the notices it shows, a phone's own one and one not his among
+-- them; who, the company and the time are the server's
+:as_sales_a
+select public.mark_notifications_read(array['a4350000-0000-4000-8000-0000000000a1', 'a4350000-0000-4000-8000-0000000000a2',
+                                            'a4350000-0000-4000-8000-0000000000ff']::uuid[]);
+select public.mark_notifications_read(array['a4350000-0000-4000-8000-0000000000a1']::uuid[]);
+select public.mark_notifications_read(null);
+select tst.ok(tst.cnt($q$select 1 from public.notification_reads where notification_id = 'a4350000-0000-4000-8000-0000000000a1'$q$) = 1
+              and tst.cnt($q$select 1 from public.notification_reads$q$) = 1,
+  'T435 sales: his mark, once (a repeat is nothing); an unknown id and a notice he does not see are left out, the rest marked');
+-- not a notice he does not see; not in another person's name
+select tst.fails_like($q$insert into public.notification_reads (notification_id, company_id) values ('a4350000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000')$q$,
+  '%row-level security%', 'T435 sales: not a notice he does not see');
+select tst.fails_like($q$insert into public.notification_reads (notification_id, user_id, company_id) values ('a4350000-0000-4000-8000-0000000000a1', 'a0000000-0000-0000-0000-000000000002', 'ca000000-0000-0000-0000-000000000000')$q$,
+  '%permission denied%', 'T435 sales: not in another person''s name');
+-- an old sales build marks the shared column: 0 rows, no refusal
+do $$ declare n int; begin
+  update public.notifications set read_at = now() where id = 'a4350000-0000-4000-8000-0000000000a1';
+  get diagnostics n = row_count;
+  perform tst.ok(n = 0, 'T435 an old sales build: the shared mark goes to 0 rows, without a refusal');
+end $$;
+:as_super
+select tst.ok((select read_at is null from public.notifications where id = 'a4350000-0000-4000-8000-0000000000a1'), 'T435 …and the shared column is untouched');
+-- the office: nothing is read for them; one dispatcher reads — the other does not see it read
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.notification_reads$q$) = 0, 'T435 the office: sales'' mark is not theirs (unread)');
+insert into public.notification_reads (notification_id, company_id) values ('a4350000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000');
+:as_office435
+select tst.ok(tst.cnt($q$select 1 from public.notification_reads$q$) = 0, 'T435 the second dispatcher: the first one''s mark is not his');
+-- his own mark: the company is the notice's, whatever the phone sends
+insert into public.notification_reads (notification_id, company_id) values ('a4350000-0000-4000-8000-0000000000a2', 'cb000000-0000-0000-0000-000000000000');
+select tst.ok((select company_id = 'ca000000-0000-0000-0000-000000000000' from public.notification_reads where notification_id = 'a4350000-0000-4000-8000-0000000000a2'),
+  'T435 a mark takes the notice''s company, not the one sent');
+:as_owner_b
+select tst.fails_like($q$insert into public.notification_reads (notification_id, company_id) values ('a4350000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000')$q$,
+  '%row-level security%', 'T435 another company: not a notice of this one');
+-- an old office build: the shared column takes the server's time and never goes back to null
+:as_office_a
+update public.notifications set read_at = '2001-01-01' where id = 'a4350000-0000-4000-8000-0000000000a2';
+update public.notifications set read_at = null where id = 'a4350000-0000-4000-8000-0000000000a2';
+:as_super
+select tst.ok((select read_at > '2020-01-01' from public.notifications where id = 'a4350000-0000-4000-8000-0000000000a2'),
+  'T435 an old build''s mark: the server''s time, not the phone''s, and not unread again');
+select tst.ok((select count(*) = 3 from public.notification_reads where notification_id in ('a4350000-0000-4000-8000-0000000000a1', 'a4350000-0000-4000-8000-0000000000a2')),
+  'T435 three marks: sales, and each dispatcher his own');
+-- a deleted account's marks go with its other own rows
+select app.erase_personal_rows('a0000000-0000-0000-0000-000000000005');
+select tst.ok(not exists (select 1 from public.notification_reads where user_id = 'a0000000-0000-0000-0000-000000000005')
+              and exists (select 1 from public.notification_reads where user_id = 'a0000000-0000-0000-0000-000000000002'),
+  'T435 erasing a person erases his marks only');
+rollback;
+\echo 'T435 ok'
 
 \echo 'ALL TESTS PASSED'
