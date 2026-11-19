@@ -118,6 +118,9 @@ export function draftsForJob(db: DB, jobId: ID, moduleLines: ModulePurchaseLine[
     const r = resolveMerged(db.catalog, found);
     const variant = normVariant(m.variant) ?? r.variant;
     const k = needKey(r.item.id, variant);
+    // review #2241: a module's line naming no variant stands for the whole item, as before variants — the core's lines of that
+    // item with a variant go too (else the item is ordered twice)
+    if (!variant) for (const key of [...needs.keys()]) if (key.startsWith(`${r.item.id}|`) && !fromModule.has(key)) needs.delete(key);
     const had = fromModule.has(k) ? needs.get(k) : undefined;
     try {
       const qty = had ? sumQty([had.packed ?? had.qty, m.qty]) : sumQty([m.qty]);

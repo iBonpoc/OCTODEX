@@ -140,6 +140,14 @@ describe("unit:itemVariants — review #2241 (№1, №2, limits)", () => {
     const ls = draftsForJob(company([line("a", "g", "10", "white"), line("b", "g", "5")], [plain]), "jV", [], false, words).flatMap((g) => g.lines);
     expect(ls.map((l) => [l.name, l.supplierSku, l.note, l.bomQty])).toEqual([["Gutter 5in K", "G-ANY", undefined, "5"], ["Gutter 5in K · white", undefined, "Color code not set", "10"]]);
   });
+  it("a module's line naming no variant replaces the core's lines of that item with a variant too (never ordered twice)", () => {
+    const db = company([line("a", "g", "100", "white"), line("b", "g", "40", "brown")], [gutter()]);
+    const ls = draftsForJob(db, "jV", [{ catalogItemId: "g", qty: "7" }], false, words).flatMap((g) => g.lines);
+    expect(ls.map((l) => [l.name, l.bomQty])).toEqual([["Gutter 5in K", "7"]]);
+    // with a variant it replaces only its own
+    const two = draftsForJob(db, "jV", [{ catalogItemId: "g", qty: "7", variant: { attr: "color", value: "white" } }], false, words).flatMap((g) => g.lines);
+    expect(two.map((l) => [l.name, l.bomQty]).sort()).toEqual([["Gutter 5in K · brown", "40"], ["Gutter 5in K · white", "7"]]);
+  });
   it("the server's keys are lowered and trimmed (an old or hand-written key is still found)", () => {
     expect(variantsFromRow({ color: { " White ": { sku: "W-1" } } })).toEqual({ color: { white: { sku: "W-1" } } });
   });
