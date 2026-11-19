@@ -196,6 +196,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   // wave 7б-1: my personal settings (RLS: only my own row); no row or no table yet → the defaults
   const prefRows = await pages<Row>(() => supabase.from("member_prefs").select("plan_show_done").eq("company_id", companyId).eq("user_id", userId), key("user_id")).catch(() => [] as Row[]);
   const prefs: MemberPrefs = { planShowDone: prefRows[0]?.plan_show_done === true };
+  // #2097: reasons the office put off (RLS: the office of the company; a tech reads none); no table yet → none
+  const snoozeRows = await every<Row>("attention_snoozes", "item_id, until", key("item_id")).catch(() => [] as Row[]);
+  const attentionSnoozes = snoozeRows.filter((r) => typeof r.until === "string").map((r) => ({ itemId: String(r.item_id), until: String(r.until) }));
   // step 18 P4b: my push switches (RLS: only my own rows); no rows or no table yet → the defaults
   const pushRows = await pages<Row>(() => supabase.from("push_prefs").select("kind, enabled").eq("company_id", companyId).eq("user_id", userId), key("kind")).catch(() => [] as Row[]);
   const pushPrefs = pushPrefsFromRows(pushRows);
@@ -775,6 +778,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     jobLines,
     calendarEvents,
     prefs,
+    attentionSnoozes,
     pushPrefs,
     location,
     visitPoints,

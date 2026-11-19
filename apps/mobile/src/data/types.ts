@@ -1060,6 +1060,12 @@ export interface ServiceCategory {
 }
 
 /** wave 7б-1 (docs/specs/03 §12): personal settings (server table member_prefs, one row per person in a company) */
+/** #2097: a reason of «Разбор дел» (AttentionItem.id) hidden until `until` (ISO) — then it comes back by itself */
+export interface AttentionSnooze {
+  itemId: string;
+  until: string;
+}
+
 export interface MemberPrefs {
   /** «Показывать выполненные» in the Plan */
   planShowDone: boolean;
@@ -1140,6 +1146,9 @@ export interface DB {
   customFieldValues?: CustomFieldValue[];
   /** wave 7б-1: the personal settings of `me` in this company, the same on every device (absent in old saved data → defaults) */
   prefs?: MemberPrefs;
+  /** #2097: reasons of «Разбор дел» put off by the office until a day, for the whole company (public.attention_snoozes;
+   *  absent in old saved data → none). Only the ones still put off; a lifted one is not kept */
+  attentionSnoozes?: AttentionSnooze[];
   /** step 18 P4b: my push switches by group here (absent in old saved data → the defaults) */
   pushPrefs?: PushPrefs;
   /** wave 7б-2: my location consent here (absent in old saved data → off) */

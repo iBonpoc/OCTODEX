@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, type ComponentRef } from "react";
 import { router, type Href } from "expo-router";
 import { Linking } from "react-native";
 import { useStore, visitContext } from "@/data/store";
@@ -11,16 +11,17 @@ import { telHref } from "@/features/contactLinks";
 import { AssignSheet, ReplySheet, useTick } from "@/features/sheets";
 import { Button, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { useToast } from "@/ui/overlays";
+import { Menu, useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, Empty, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { View } from "react-native";
 import { localUndo } from "@/data/undo";
+import { SNOOZE_DAYS, snoozeDay, snoozeUntil, type SnoozeKey } from "@/features/attentionSnooze";
 
 /** Dispatcher home: one item at a time, most urgent first; resolve with one tap or snooze. */
 export default function Triage() {
   useTick();
-  const { t, money } = useI18n();
-  const { db, role, rejectedOps, dismissRejected, online, reviewVisitMissed, mode } = useStore();
+  const { t, money, dayOf } = useI18n();
+  const { db, role, rejectedOps, dismissRejected, online, reviewVisitMissed, mode, snoozeAttention } = useStore();
   const toast = useToast();
   const [snoozed, setSnoozed] = useState<string[]>([]);
   const [reply, setReply] = useState<string | null>(null);
@@ -35,6 +36,14 @@ export default function Triage() {
   const curWho = cur && (curC || curL) ? { phone: curC?.phone ?? curL?.phone, addr: curProp ? `${curProp.address}, ${curProp.city}` : curL?.address } : undefined;
   const curMore = cur ? all.filter((x) => x !== cur && JSON.stringify(subjectOf(db, x)) === JSON.stringify(curSubject) && (curSubject.customerId || curSubject.leadId)).length : 0;
 
+  // #2097: «Позже» — put the reason off until a day, for the whole company (the server keeps it; back by itself that day)
+  const laterRef = useRef<ComponentRef<typeof View>>(null);
+  const [laterAt, setLaterAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const later = (it: AttentionItem, k: SnoozeKey) => {
+    const day = snoozeDay(SNOOZE_DAYS.find((x) => x.key === k)!.days);
+    const undo = snoozeAttention(it.id, snoozeUntil(day));
+    toast.show(online ? t("triage.laterSaved", { date: dayOf(day) }) : t("offline.queued"), undo);
+  };
   const snooze = (it: AttentionItem, msg: string) => {
     setSnoozed((s) => [...s, it.id]);
     toast.show(msg, localUndo(() => setSnoozed((s) => s.filter((x) => x !== it.id))));
@@ -118,7 +127,13 @@ export default function Triage() {
           ) : null}
           <RowView style={{ flexWrap: "wrap" }}>
             {actions(cur)}
-            <Button label={t("triage.later")} variant="secondary" onPress={() => snooze(cur, t("toast.later"))} />
+            <View ref={laterRef} collapsable={false} testID="triage-later">
+              <Button
+                label={t("triage.later")}
+                variant="secondary"
+                onPress={() => laterRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setLaterAt({ x, y, w, h }))}
+              />
+            </View>
           </RowView>
         </Card>
       )}
@@ -129,6 +144,17 @@ export default function Triage() {
           <AttentionRows items={all.slice(1)} />
         </>
       ) : null}
+      <Menu
+        visible={!!laterAt && !!cur}
+        anchor={laterAt}
+        title={t("triage.laterTitle")}
+        items={SNOOZE_DAYS.map((x) => ({ key: x.key, label: t(`triage.later.${x.key}`, { date: dayOf(snoozeDay(x.days)) }), testID: `triage-later-${x.key}` }))}
+        onSelect={(k) => {
+          setLaterAt(null);
+          if (cur) later(cur, k);
+        }}
+        onClose={() => setLaterAt(null)}
+      />
       <ReplySheet leadId={reply} onClose={() => setReply(null)} />
       <AssignSheet visitId={assign} onClose={() => setAssign(null)} />
     </Screen>

@@ -93,7 +93,7 @@ const CREATES: Creates = {
   "activity.call": (o) => [o.activityId], "invoice.remind": (o) => [o.activityId], "lead.close": (o) => [o.activityId],
   "lead.reopen": (o) => [o.activityId], "lead.assign": (o) => [o.activityId], "lead.cost": none,
   "lead.contactSave": (o) => [o.contact.id], "lead.contactRemove": none, "task.save": (o) => [o.task.id],
-  "calendarEvent.save": (o) => (o.isNew ? [o.event.id] : []), "calendarEvent.remove": none, "me.prefs": none, "me.location": none, "me.pushKind": none, "me.name": none,
+  "calendarEvent.save": (o) => (o.isNew ? [o.event.id] : []), "calendarEvent.remove": none, "me.prefs": none, "attention.snooze": none, "me.location": none, "me.pushKind": none, "me.name": none,
   "module.enable": none, "module.disable": none, "module.saveSettings": none, "module.op": (o) => o.made ?? [],
   "customField.save": (o) => (o.isNew ? [o.field.id] : []), "customFieldValue.save": (o) => (o.isNew ? [o.value.id] : []),
   "customFieldValue.remove": none, "source.save": (o) => [o.source.id],

@@ -371,6 +371,12 @@ export const en: Dict = {
   "triage.done": "All caught up",
   "triage.doneHint": "New items will appear here automatically.",
   "triage.later": "Later",
+  // #2097: «Позже» до даты, для всей компании
+  "triage.laterTitle": "Put off until",
+  "triage.later.tomorrow": "Tomorrow · {date}",
+  "triage.later.days3": "In 3 days · {date}",
+  "triage.later.week": "In a week · {date}",
+  "triage.laterSaved": "Put off until {date} — it comes back by itself",
 
   "inbox.title": "Inbox",
   "inbox.waiting": "Waiting {m} min",
