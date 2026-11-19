@@ -1283,9 +1283,9 @@ select tst.ok((select status from public.visits where id = 'f2000000-0000-4000-8
 :as_super
 update public.visits set starts_at = starts_at + interval '1 hour' where id = 'f2000000-0000-4000-8000-000000000003';
 select tst.ok((select count(*) from public.visits where id = 'f2000000-0000-4000-8000-000000000003' and starts_at > now() + interval '3 days') = 1, 'no user (server, cron): the visit moves');
--- sales is office staff (app.is_staff): sees the code like the dispatcher
+-- sales read a code as a tech does, on the visit day of their own (Р-3, 20261117568000; T434): not a tech's visit in 3 days
 reset role; set request.jwt.claim.sub = 'a0000000-0000-0000-0000-000000000005'; set role authenticated;
-select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000003'$q$) = 1, 'sales (office staff) sees the gate code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000003'$q$) = 0, 'sales: no code of a visit that is not theirs');
 -- a tech of another company sees nothing; another company cannot change a code
 reset role; set request.jwt.claim.sub = 'b0000000-0000-0000-0000-000000000002'; set role authenticated;
 select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd2000000%'$q$) = 0, 'tech of another company: no codes');
@@ -18010,5 +18010,57 @@ select tst.ok((select name = 'T432 Co' and lead_default_assignee_id is null from
   'T432 a stored assignee who left does not block saving; «nobody» (the owner) is always allowed');
 rollback;
 \echo 'T431 T432 ok'
+
+-- ---------------------------------------------------------------- T434 (Р-3): who reads a gate code
+\echo 'T434 a gate code: the office always; sales, as a tech, on the day of their own visit and the day before'
+begin;
+:as_owner_a
+do $$
+declare v_src uuid; v_c uuid := 'c4340000-0000-4000-8000-000000000001'; k int; v_p uuid; v_l uuid; v_v uuid;
+  -- property → inspection of sales in days (null: none), cancelled?
+  plan text[][] := array[['0','n'], ['1','n'], ['3','n'], [null,'n'], ['0','c'], ['-1','n']];
+begin
+  select id into v_src from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral';
+  insert into public.customers (id, company_id, display_name) values (v_c, 'ca000000-0000-0000-0000-000000000000', 'T434 Client');
+  for k in 1..6 loop
+    v_p := ('d4340000-0000-4000-8000-00000000000' || k)::uuid;
+    insert into public.properties (id, company_id, customer_id, address_line1, address_city) values (v_p, 'ca000000-0000-0000-0000-000000000000', v_c, k || ' T434 St', 'Pasadena');
+    insert into public.property_secrets (company_id, property_id, gate_code) values ('ca000000-0000-0000-0000-000000000000', v_p, '#434' || k);
+    if plan[k][1] is not null then
+      v_l := ('b4340000-0000-4000-8000-00000000000' || k)::uuid;
+      v_v := ('f4340000-0000-4000-8000-00000000000' || k)::uuid;
+      insert into public.leads (id, company_id, source_id, contact_name, phone, customer_id, property_id)
+      values (v_l, 'ca000000-0000-0000-0000-000000000000', v_src, 'T434 Lead ' || k, '(818) 555-434' || k, v_c, v_p);
+      insert into public.visits (id, company_id, lead_id, property_id, kind, starts_at)
+      values (v_v, 'ca000000-0000-0000-0000-000000000000', v_l, v_p, 'inspection', now() + (plan[k][1] || ' days')::interval);
+      insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000005');
+      if plan[k][2] = 'c' then perform public.cancel_visit(v_v, 'we_cancelled'); end if;
+    end if;
+  end loop;
+  -- a removed code (soft delete)
+  update public.property_secrets set deleted_at = now() where property_id = 'd4340000-0000-4000-8000-000000000001';
+end $$;
+-- the office: every code, the removed one too
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd4340000%'$q$) = 6, 'T434 the office sees every code, the removed one too');
+:as_owner_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd4340000%'$q$) = 6, 'T434 the owner sees every code');
+-- sales: only on the day of their inspection and the day before, a live visit, a live code
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000002'$q$) = 1, 'T434 sales: inspection tomorrow → the code the day before');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000003'$q$) = 0, 'T434 sales: inspection in 3 days → no code yet');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000004'$q$) = 0, 'T434 sales: no visit of theirs → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000005'$q$) = 0, 'T434 sales: a cancelled inspection today → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000006'$q$) = 0, 'T434 sales: inspection was yesterday → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000001'$q$) = 0, 'T434 sales: a removed code — no, even on the visit day');
+select tst.ok(not app.can_see_gate_code('d4340000-0000-4000-8000-000000000004') and app.can_see_gate_code('d4340000-0000-4000-8000-000000000002'),
+  'T434 app.can_see_gate_code: sales by the visit window');
+-- the code of another property: the tech's rule is unchanged (T20: his visit today)
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000001'$q$) = 1, 'T434 the tech: his visit today → the code, as before');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd4340000%'$q$) = 0, 'T434 the tech: not the codes of sales'' inspections');
+-- (who writes a code — pending the lead's choice, Р-3 п.2)
+rollback;
+\echo 'T434 ok'
 
 \echo 'ALL TESTS PASSED'
