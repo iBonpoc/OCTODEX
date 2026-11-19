@@ -3,7 +3,9 @@
  * title («JOB-0001 · Bathroom remodel») — not by the client, and each job once (two visits of one job are one choice).
  * Pure; tested in test/texts1427.test.ts.
  */
-import type { DB, ID } from "@/data/types";
+import type { DB, ID, Visit } from "@/data/types";
+import { isToday } from "@/data/selectors";
+import { isAssigned } from "@/features/schedule";
 
 export function expenseJobChoices(db: Pick<DB, "jobs" | "properties" | "customers">, visits: { jobId?: ID | null }[]): { key: ID; label: string }[] {
   const seen = new Set<ID>();
@@ -35,3 +37,6 @@ export function expenseJobOptions(
 
 /** may this person start a new expense at all (a subcontractor: only with a job of his today) */
 export const canStartExpense = (o: { jobs: unknown[]; allowNone: boolean }) => o.allowNone || o.jobs.length > 0;
+
+/** the visits of this person today — what a new expense is offered for (the form and the «＋» read the same list) */
+export const myVisitsToday = (db: Pick<DB, "visits" | "me">): Visit[] => db.visits.filter((v) => isToday(v.start) && isAssigned(v, db.me));
