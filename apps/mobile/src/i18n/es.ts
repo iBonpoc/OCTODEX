@@ -617,6 +617,8 @@ export const es: Dict = {
   "exp.category": "Categoría",
   "exp.job": "Para qué trabajo",
   "exp.noJob": "Gasto general",
+  "exp.subNoJob": "Un gasto va solo a un trabajo de su visita de hoy",
+  "exp.subNoJobHint": "Un subcontratista registra el gasto en el trabajo de su visita. Hoy no tiene visita a un trabajo.",
   "exp.photo": "Foto del recibo",
   "exp.save": "Guardar gasto",
   "exp.saved": "Gasto {amount} guardado",
