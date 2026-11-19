@@ -15,7 +15,8 @@ alter table public.catalog_cost_history add column if not exists unit_cost_milli
 -- the old rows get their exact value = the cents they had × 1000. Not through the triggers: nothing changed for a person
 -- (no history row, no repricing, no «changed today» on every phone). In one block (all or nothing); the table owner runs
 -- migrations. rule16: small (catalog_item_costs and catalog_cost_history are not big tables — migrationGuard BIG_TABLES;
--- ALTER TABLE … DISABLE TRIGGER takes a table lock only for this one update; the phones' writes wait for it, none fails)
+-- ALTER TABLE … DISABLE TRIGGER takes a table lock held to the end of the migration's transaction; the phones' writes wait
+-- for it, none fails)
 do $$
 begin
   alter table public.catalog_item_costs disable trigger user;
@@ -56,6 +57,8 @@ $$;
 revoke all on function app.item_price_millicents(bigint, int, int) from public, anon, authenticated;
 
 -- ---- t08: who writes the cost — the exact value is the truth, the mirror follows ------------------------------------
+-- The contract for a new build (PR 4/4): it sends the exact cost ONLY (catalog_set_item_costs refuses both). A row with an
+-- unchanged exact cost and a changed mirror is read as an old build's change (review 1 of #1926, п.4).
 -- INSERT: the exact cost sent → the mirror from it; only the mirror (an old build) → exact = mirror × 1000.
 -- UPDATE: the exact cost changed → the mirror from it (a mirror sent with it is ignored); else a mirror DIFFERENT from the
 -- stored one is an old build's real change → exact = mirror × 1000; the same mirror (an echo of what it read, an old op
@@ -324,9 +327,11 @@ begin
   perform set_config('app.cost_source', 'module', true);
   -- the cost first (who sees it): each material then counts its price from it (t32 / t31)
   if v_costs and (p_cost_cents is not null or p_tax_bps is not null or p_markup_bps is not null) then
-    -- #1926: a cost in cents (this function's input) is exact × 1000; no cost sent — the named item's exact cost, not its mirror
+    -- #1926: this function's input is cents (every build sends the cost it has, store.tsx «v.costCents ?? prev.costCents»):
+    -- no cost, or the named item's own mirror sent back (an echo) — the named item's EXACT cost, not mirror × 1000;
+    -- a different mirror is a real change — exact = cents × 1000 (review 1 of #1926, block 1)
     insert into public.catalog_item_costs as c (item_id, company_id, unit_cost_cents, unit_cost_millicents, vendor_tax_bps, markup_bps, updated_by)
-    select i.id, it.company_id, coalesce(p_cost_cents, k.unit_cost_cents), coalesce(p_cost_cents * 1000, k.unit_cost_millicents),
+    select i.id, it.company_id, coalesce(p_cost_cents, k.unit_cost_cents), case when p_cost_cents is null or p_cost_cents is not distinct from k.unit_cost_cents then k.unit_cost_millicents else p_cost_cents * 1000 end,
            coalesce(p_tax_bps, k.vendor_tax_bps), coalesce(p_markup_bps, k.markup_bps), auth.uid()
       from public.catalog_items i
      where i.company_id = it.company_id and app.price_group(i.attributes) = v_group and i.deleted_at is null
