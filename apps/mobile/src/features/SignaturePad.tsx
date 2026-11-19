@@ -11,6 +11,7 @@ import { T } from "@/ui/primitives";
 import { RowView, useScrollLock } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { SIG_BOX, fitSignature, normalizeSignature } from "./signaturePath";
+import { strokeController, undoStroke } from "./signaturePen";
 
 /** Finger signature. Output is SVG path data (stored with the visit; PDF in wave 3). */
 export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent = "visit.signConsent" }: { onConfirm: (path: string) => void; disabled?: boolean; confirmLabel?: string; /** who signs: «Клиент расписывается здесь» by default */ label?: string; /** the line under the pad — what the signature confirms: the visit's completed work by default; the estimate — its own; null — none (#1104 п.5) */ consent?: DictKey | null }) {
@@ -33,6 +34,16 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
   const lockScroll = useScrollLock();
   const lockRef = useRef(lockScroll);
   lockRef.current = lockScroll;
+  // the pen (#2215): the finger sets a target, the pen follows on a spring; what is drawn is what is stored
+  const stroke = useRef(
+    strokeController(
+      () => dRef.current,
+      (v) => {
+        dRef.current = v;
+        setD(v);
+      },
+    ),
+  ).current;
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -40,19 +51,23 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: (e) => {
         lockRef.current(true);
-        const { locationX: x, locationY: y } = e.nativeEvent;
-        dRef.current += `M${x.toFixed(1)} ${y.toFixed(1)} `;
-        setD(dRef.current);
+        stroke.down({ x: e.nativeEvent.locationX, y: e.nativeEvent.locationY }, e.nativeEvent.timestamp);
       },
-      onPanResponderMove: (e) => {
-        const { locationX: x, locationY: y } = e.nativeEvent;
-        dRef.current += `L${x.toFixed(1)} ${y.toFixed(1)} `;
-        setD(dRef.current);
+      onPanResponderMove: (e) => stroke.move({ x: e.nativeEvent.locationX, y: e.nativeEvent.locationY }, e.nativeEvent.timestamp),
+      onPanResponderRelease: () => {
+        stroke.up();
+        lockRef.current(false);
       },
-      onPanResponderRelease: () => lockRef.current(false),
-      onPanResponderTerminate: () => lockRef.current(false),
+      onPanResponderTerminate: () => {
+        stroke.up();
+        lockRef.current(false);
+      },
     }),
   ).current;
+  const undo = () => {
+    dRef.current = undoStroke(dRef.current);
+    setD(dRef.current);
+  };
   const clear = () => {
     dRef.current = "";
     setD("");
@@ -98,6 +113,9 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
       ) : null}
       <RowView>
         {device === "phone" && !ro ? <IconButton icon="expand" label={t("fix.sign.expand")} onPress={() => setFull(true)} /> : null}
+        <View testID="signature-undo">
+          <Button label={t("sign.undoStroke")} variant="secondary" onPress={undo} disabled={!d} />
+        </View>
         <View testID="signature-clear">
           <Button label={t("visit.clear")} variant="secondary" onPress={clear} disabled={!d} />
         </View>
