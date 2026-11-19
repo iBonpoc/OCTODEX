@@ -19150,12 +19150,7 @@ select tst.ok((select count(*) = 3 from information_schema.columns where table_s
                  and is_nullable = 'NO' and is_identity = 'YES'
                  and table_name in ('catalog_cost_history', 'catalog_price_history', 'catalog_price_recalc')),
   'T469 seq is a not null bigint identity on the cost history, the price history and the recalc notes');
-select tst.ok(not exists (select 1 from public.catalog_cost_history a join public.catalog_cost_history b on a.at < b.at and a.seq > b.seq)
-          and not exists (select 1 from public.catalog_price_history a join public.catalog_price_history b on a.at < b.at and a.seq > b.seq
-                           where a.item_id <> '54680000-0000-4000-8000-0000000000a1' and b.item_id <> '54680000-0000-4000-8000-0000000000a1')
-          and not exists (select 1 from public.catalog_price_recalc a join public.catalog_price_recalc b on a.at < b.at and a.seq > b.seq
-                           where a.item_id <> '54680000-0000-4000-8000-0000000000a1' and b.item_id <> '54680000-0000-4000-8000-0000000000a1'),
-  'T469 a row written later in time never has a smaller seq (the old rows numbered by (at, id))');
+-- the old rows numbered by (at, id): supabase/tests/upgrade/20261117650000_history_seq.after.sql (UPG468)
 select tst.ok((select count(*) = 3 from pg_index i join pg_class c on c.oid = i.indexrelid
                 where i.indisunique and c.relname in ('catalog_cost_history_seq_key', 'catalog_price_history_seq_key', 'catalog_price_recalc_seq_key')),
   'T469 one seq once');
