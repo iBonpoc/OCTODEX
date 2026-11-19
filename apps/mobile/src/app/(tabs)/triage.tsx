@@ -55,6 +55,9 @@ export default function Triage() {
         return <Button label={t("att.notInvoicedOpen")} icon="invoice" onPress={() => router.push(attentionHref(it))} />;
       case "schedule":
         return <Button label={t("sch.title")} icon="calendar" onPress={() => router.push(`/job/schedule?jobId=${it.refId}`)} />;
+      // #2066 «Клиента не было дома»: plan the visit again (a job — its planning; an inspection — its lead)
+      case "visitNoShow":
+        return <Button label={t("sch.title")} icon="calendar" onPress={() => router.push(attentionHref(it) as Href)} />;
       case "unassigned":
         return <Button label={t("triage.assign")} icon="user" onPress={() => setAssign(it.refId)} />;
       // a money change the server refused (docs/specs/23 §3): open the record it was about

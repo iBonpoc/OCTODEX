@@ -35,6 +35,9 @@ export function useAttentionVerbs() {
         return { label: t("triage.assign"), onPress: () => setAssign(it.refId) };
       case "schedule":
         return { label: t("sch.title"), onPress: () => router.push(`/job/schedule?jobId=${it.refId}`) };
+      // #2066 «Клиента не было дома»: plan it again (a job — its planning; an inspection — its lead)
+      case "visitNoShow":
+        return { label: t("sch.title"), onPress: () => router.push(attentionHref(it)) };
       case "late": {
         const v = db.visits.find((x) => x.id === it.refId);
         const phone = v ? visitContext(db, v).customer?.phone?.replace(/[^\d+]/g, "") : undefined;

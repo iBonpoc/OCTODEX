@@ -4076,7 +4076,7 @@ begin
                         'set_my_prefs(uuid,boolean)', 'set_push_kind(uuid,text,boolean)', 'set_share_location(uuid,boolean)',
                         'sign_estimate_on_site(uuid,text,text)', 'sign_estimate_on_site(uuid,text,text,bigint)',
                         'stop_member_location(uuid,uuid)', 'supplier_set_tax(uuid,integer,integer)', 'transfer_ownership(uuid,uuid)', 'trash_items(text,uuid[])', 'trash_list(uuid)',
-                        'trash_restore(text,uuid[])', 'undo_customer_import(uuid)', 'uuid_generate_v7()']::text[]);
+                        'trash_restore(text,uuid[])', 'undo_customer_import(uuid)', 'uuid_generate_v7()', 'visit_no_show(uuid,text)']::text[]);
   perform tst.ok(bad is null, 'authenticated runs only the listed functions in public: ' || coalesce(bad, ''));
 
   -- schema extensions: the API creates nothing there (nor in public / app), and no definer function there runs for it
@@ -17451,6 +17451,135 @@ select tst.fails($q$insert into public.visits (company_id, job_id, kind, starts_
   'T398 tech: no install visit');
 rollback;
 \echo 'T393-T398 ok'
+
+-- ---------------------------------------------------------------- T407–T410 (#2066): «Клиента нет дома»
+-- The visit's own tech marks a no-show at the door (scheduled / en_route / on_site, before work); the office can too.
+-- Before: only the office (cancel_visit), and not on_site — the tech at a locked door could not close the visit.
+\echo 'T407-T410 visit no-show'
+begin;
+:as_super
+update public.memberships set status = 'active' where company_id = 'ca000000-0000-0000-0000-000000000000'
+   and user_id in ('a0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000005');
+update public.memberships set role = 'tech' where company_id = 'ca000000-0000-0000-0000-000000000000'
+   and user_id in ('a0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000004');
+update public.memberships set role = 'sales' where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000005';
+insert into public.customers (id, company_id, display_name) values ('40700000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'T407 Client');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('40700000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000c1', '407 Door St', 'Pasadena');
+insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+  ('40700000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'T407 job', '40700000-0000-4000-8000-0000000000c1', '40700000-0000-4000-8000-0000000000d1', 'draft'),
+  ('40700000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'T409 job', '40700000-0000-4000-8000-0000000000c1', '40700000-0000-4000-8000-0000000000d1', 'draft');
+update public.jobs set status = 'scheduled' where id in ('40700000-0000-4000-8000-0000000000e1', '40700000-0000-4000-8000-0000000000e2');
+insert into public.leads (id, company_id, source_id, contact_name, phone, property_id)
+  select '40700000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', id, 'T408 Lead', '(818) 555-0407', '40700000-0000-4000-8000-0000000000d1'
+    from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' order by created_at limit 1;
+update public.leads set status = 'inspection_scheduled' where id = '40700000-0000-4000-8000-0000000000a1';
+-- f1: the job's install visit, tech on site; f2: the lead's inspection, sales on it; f3: at work; f4: another tech's;
+-- f5: a second open visit of job e2 (the job keeps «scheduled»); f6: its sibling
+insert into public.visits (id, company_id, job_id, lead_id, property_id, kind, starts_at, ends_at) values
+  ('40700000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e1', null, null, 'install', now(), now() + interval '3 hours'),
+  ('40700000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', null, '40700000-0000-4000-8000-0000000000a1', '40700000-0000-4000-8000-0000000000d1', 'inspection', now(), now() + interval '1 hour'),
+  ('40700000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now(), now() + interval '3 hours'),
+  ('40700000-0000-4000-8000-0000000000f4', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now() + interval '1 day', now() + interval '1 day 3 hours'),
+  ('40700000-0000-4000-8000-0000000000f5', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now() + interval '2 days', now() + interval '2 days 3 hours'),
+  ('40700000-0000-4000-8000-0000000000f6', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now() + interval '3 days', now() + interval '3 days 3 hours'),
+  ('40700000-0000-4000-8000-0000000000f9', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now() + interval '4 days', now() + interval '4 days 3 hours');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f1', 'a0000000-0000-0000-0000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f2', 'a0000000-0000-0000-0000-000000000005'),
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f3', 'a0000000-0000-0000-0000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f4', 'a0000000-0000-0000-0000-000000000004'),
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f5', 'a0000000-0000-0000-0000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f6', 'a0000000-0000-0000-0000-000000000005'),
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f9', 'a0000000-0000-0000-0000-000000000003');
+-- f9: the office took a payment before the visit (record_visit_payment allows it) — the client paid, not a no-show
+insert into public.payments (company_id, customer_id, visit_id, method, amount_cents, status, idempotency_key, received_by)
+  values ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000c1', '40700000-0000-4000-8000-0000000000f9', 'cash', 5000, 'succeeded', 't409-paid', 'a0000000-0000-0000-0000-000000000002');
+update public.visits set status = 'on_site' where id in ('40700000-0000-4000-8000-0000000000f1', '40700000-0000-4000-8000-0000000000f3');
+update public.visits set work_started_at = now() where id = '40700000-0000-4000-8000-0000000000f3';
+
+-- T407: the tech on site — no-show: the visit closes with the reason, who and when; the job waits for a date again
+select tst.ok((select status from public.jobs where id = '40700000-0000-4000-8000-0000000000e1') = 'in_progress', 'T407 «on site» started the job');
+:as_tech_a
+select tst.ok(public.visit_no_show('40700000-0000-4000-8000-0000000000f1', '  Nobody home, left a card  ') ->> 'job_back'
+              = '40700000-0000-4000-8000-0000000000e1', 'T407 the tech on site: no-show, the job rolls back');
+:as_super
+select tst.ok((select status = 'no_show' and cancel_reason = 'no_show' and cancel_reason_text = 'Nobody home, left a card'
+                      and cancelled_by = 'a0000000-0000-0000-0000-000000000003' and cancelled_at is not null
+                 from public.visits where id = '40700000-0000-4000-8000-0000000000f1'), 'T407 the visit: no_show, the note, who and when');
+select tst.ok((select status from public.jobs where id = '40700000-0000-4000-8000-0000000000e1') = 'draft', 'T407 the job: waits for a date (S9a)');
+select tst.ok(exists (select 1 from public.status_events where entity_type = 'visit' and entity_id = '40700000-0000-4000-8000-0000000000f1'
+                       and from_status = 'on_site' and to_status = 'no_show' and reason = 'no_show'), 'T407 the status journal: on_site → no_show, reason no_show');
+-- a repeat from the offline queue: answered, nothing doubles
+:as_tech_a
+select tst.ok((public.visit_no_show('40700000-0000-4000-8000-0000000000f1') ->> 'repeat')::boolean, 'T407 a repeat: answered as a repeat');
+:as_super
+select tst.ok((select count(*) from public.status_events where entity_type = 'visit' and entity_id = '40700000-0000-4000-8000-0000000000f1' and to_status = 'no_show') = 1
+          and (select cancel_reason_text from public.visits where id = '40700000-0000-4000-8000-0000000000f1') = 'Nobody home, left a card',
+  'T407 the repeat changes nothing');
+
+-- T408: sales on their own inspection — no-show: the lead goes back to «in contact» (S4a); on an install — «not found»
+:as_sales_a
+select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f6')$q$, '%visit not found%', 'T408 sales on an install visit: «not found» (the office plans)');
+select tst.ok(public.visit_no_show('40700000-0000-4000-8000-0000000000f2') ->> 'lead_back' = '40700000-0000-4000-8000-0000000000a1',
+  'T408 sales on their inspection: no-show, the lead rolls back');
+:as_super
+select tst.ok((select status from public.leads where id = '40700000-0000-4000-8000-0000000000a1') = 'contacted'
+          and (select status from public.visits where id = '40700000-0000-4000-8000-0000000000f2') = 'no_show', 'T408 the lead: contacted; the visit: no_show');
+
+-- T409: refusals — at work; another tech's visit («not found», as a visit that does not exist); a direct update still refused;
+-- a person of another company; the job with another open visit keeps «scheduled»
+:as_tech_a
+select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f3')$q$, '%client was there%', 'T409 at work: not a no-show');
+select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f4')$q$, '%visit not found%', 'T409 another tech''s visit: «not found»');
+select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000ff')$q$, '%visit not found%', 'T409 a visit that does not exist: the same answer');
+select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f9')$q$, '%has a payment%', 'T409 a visit with a payment: not a no-show');
+select tst.fails($q$update public.visits set status = 'no_show' where id = '40700000-0000-4000-8000-0000000000f5'$q$, 'T409 a direct no_show by the tech: refused');
+select tst.fails($q$update public.visits set cancel_reason = 'no_show' where id = '40700000-0000-4000-8000-0000000000f5'$q$, 'T409 a direct reason by the tech: refused');
+:as_owner_b
+select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f5')$q$, '%visit not found%', 'T409 another company: «not found»');
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f5')$q$, 'T409 anon: no execute');
+:as_tech_a
+select tst.ok(public.visit_no_show('40700000-0000-4000-8000-0000000000f5') ->> 'job_back' is null, 'T409 the job has another open visit: no roll-back');
+:as_super
+select tst.ok((select status from public.jobs where id = '40700000-0000-4000-8000-0000000000e2') = 'in_progress'
+          and (select status from public.visits where id = '40700000-0000-4000-8000-0000000000f3') = 'on_site', 'T409 the job keeps going; the visit at work is untouched');
+
+-- T410: a multi-day job — day 1 finished, day 2 a no-show: the job stays «in progress» (not «waits for a date»)
+:as_super
+insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+  ('40700000-0000-4000-8000-0000000000e3', 'ca000000-0000-0000-0000-000000000000', 'T410 job', '40700000-0000-4000-8000-0000000000c1', '40700000-0000-4000-8000-0000000000d1', 'draft');
+update public.jobs set status = 'scheduled' where id = '40700000-0000-4000-8000-0000000000e3';
+insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values
+  ('40700000-0000-4000-8000-0000000000f7', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e3', 'install', now() - interval '1 day', now() - interval '21 hours'),
+  ('40700000-0000-4000-8000-0000000000f8', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e3', 'install', now(), now() + interval '3 hours');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f8', 'a0000000-0000-0000-0000-000000000003');
+update public.visits set status = 'on_site', work_started_at = now() - interval '1 day' where id = '40700000-0000-4000-8000-0000000000f7';
+update public.visits set status = 'completed' where id = '40700000-0000-4000-8000-0000000000f7';
+update public.visits set status = 'on_site' where id = '40700000-0000-4000-8000-0000000000f8';
+:as_tech_a
+select tst.ok(public.visit_no_show('40700000-0000-4000-8000-0000000000f8') ->> 'job_back' is null, 'T410 day 2 of a started job: no roll-back');
+:as_super
+select tst.ok((select status from public.jobs where id = '40700000-0000-4000-8000-0000000000e3') = 'in_progress', 'T410 the started job stays «in progress»');
+-- a started job back to planning by a direct write: refused for everyone (only visit_no_show does it, after its checks)
+:as_office_a
+select tst.fails_like($q$update public.jobs set status = 'draft' where id = '40700000-0000-4000-8000-0000000000e3'$q$, '%only through a no-show%', 'T410 the office: a direct «in progress» → draft refused');
+:as_sales_a
+select tst.fails($q$update public.jobs set status = 'draft' where id = '40700000-0000-4000-8000-0000000000e3'$q$, 'T410 sales: a direct «in progress» → draft refused');
+:as_super
+select tst.ok((select status from public.jobs where id = '40700000-0000-4000-8000-0000000000e3') = 'in_progress', 'T410 after the refusals: still «in progress»');
+
+-- T410: the office marks a no-show too (another tech's visit, scheduled); a tech of the company still cannot touch the time
+:as_office_a
+select tst.ok(public.visit_no_show('40700000-0000-4000-8000-0000000000f4') ->> 'status' = 'no_show', 'T410 the office: no-show of a scheduled visit');
+:as_super
+select tst.ok((select cancelled_by from public.visits where id = '40700000-0000-4000-8000-0000000000f4') = 'a0000000-0000-0000-0000-000000000002', 'T410 who: the office');
+:as_tech_a
+select tst.fails($q$update public.visits set starts_at = now() + interval '5 days' where id = '40700000-0000-4000-8000-0000000000f3'$q$, 'T410 the guard still: a tech does not move a visit');
+rollback;
+\echo 'T407-T410 ok'
 
 -- ---------------------------------------------------------------- T380 (#2020): by the client's link the client pays
 -- A sent estimate of company A with a 10% deposit, signed by the client (anon) and by the owner: its deposit invoice.

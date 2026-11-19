@@ -471,6 +471,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       cancelReason: ((v.cancel_reason as CancelReason | null) ?? (v.status === "no_show" ? "no_show" : "other")),
       cancelText: (v.cancel_reason_text as string | null) ?? undefined,
       cancelledAt: s(v.cancelled_at) || s(v.updated_at),
+      cancelledBy: (v.cancelled_by as string | null) ?? undefined,
     }));
 
   const versionOf = new Map(versions.map((v) => [s(v.id), v]));

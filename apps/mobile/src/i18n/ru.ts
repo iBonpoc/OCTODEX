@@ -4727,6 +4727,18 @@ export const ru = {
   "invMsg.payLink": "Счёт и оплата: {link}",
   "invMsg.noHow": "Способы оплаты не заполнены — в сообщении клиент не увидит, как оплатить",
   "invMsg.fill": "Заполнить способы оплаты",
+  // #2066 «Клиента нет дома»: the visit's own tech at the door; the office plans it again
+  "noShow.btn": "Клиента нет дома",
+  "noShow.title": "Клиента нет дома?",
+  "noShow.hint": "Выезд закроется, офис перенесёт его. Клиенту ничего не отправится.",
+  "noShow.photo": "Фото на месте — по желанию",
+  "noShow.note": "Заметка — по желанию",
+  "noShow.notePh": "Например: оставил записку на двери",
+  "noShow.confirm": "Отметить",
+  "noShow.keep": "Не отмечать",
+  "noShow.toast": "Отмечено: клиента нет дома",
+  "noShow.att": "{name}: клиента не было дома — перенести выезд",
+  "noShow.chip": "Нет дома",
 } as const;
 
 export type DictKey = keyof typeof ru;

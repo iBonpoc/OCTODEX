@@ -99,6 +99,8 @@ export type Op =
   | { k: "visit.inspection"; leadId?: string; propertyId: string; visitId: string; start: string; durationMin: number; techId: string | null; assigneeIds?: string[]; note?: string; scope: string[] }
   /** the office cancels a visit with a reason; S4a / S9a roll the lead / job back when nothing open is left */
   | { k: "visit.cancel"; visitId: string; reason: CancelReason; text?: string; leadBack?: string; jobBack?: string }
+  /** #2066 «Клиента нет дома»: the visit's own tech (or the office) at the door — public.visit_no_show (20261117580000) */
+  | { k: "visit.noShow"; visitId: string; note?: string; leadBack?: string; jobBack?: string }
   /** the office moves a visit (time, length); the status does not change */
   | { k: "visit.reschedule"; visitId: string; start: string; durationMin: number; allDay?: boolean }
   /** estimate visit for a lead whose client and property already exist (lead.prospect or earlier); replaced by visit.inspection */
@@ -725,6 +727,9 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       // one server function for S4a / S9a (migration 20261105300000): the cancel and the roll-backs in one transaction;
       // a repeat after a partial failure changes nothing
       return run(supabase.rpc("cancel_visit", { p_visit_id: op.visitId, p_reason: op.reason, p_text: op.text ?? null }));
+    case "visit.noShow":
+      // one server function: the no-show, who and when, and the roll-backs (S4a / S9a); a repeat from the queue changes nothing
+      return run(supabase.rpc("visit_no_show", { p_visit_id: op.visitId, p_note: op.note ?? null }));
     case "job.cancel":
       // public.cancel_job (migration 20261117570000): rights, the same refusals as the guard, the visits and invoices of the job;
       // a repeat on a cancelled job changes nothing

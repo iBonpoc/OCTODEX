@@ -4727,4 +4727,16 @@ export const es: Dict = {
   "invMsg.payLink": "Ver y pagar: {link}",
   "invMsg.noHow": "Aún no hay formas de pago: el mensaje no dirá al cliente cómo pagar",
   "invMsg.fill": "Añadir formas de pago",
+  // #2066 «Клиента нет дома»: the visit's own tech at the door; the office plans it again
+  "noShow.btn": "El cliente no está",
+  "noShow.title": "¿El cliente no está?",
+  "noShow.hint": "La visita se cierra y la oficina la reprogramará. Al cliente no se le envía nada.",
+  "noShow.photo": "Foto en el lugar — opcional",
+  "noShow.note": "Nota — opcional",
+  "noShow.notePh": "Por ejemplo: dejé una nota en la puerta",
+  "noShow.confirm": "Marcar",
+  "noShow.keep": "No marcar",
+  "noShow.toast": "Marcado: el cliente no estaba",
+  "noShow.att": "{name}: el cliente no estaba — reprogramar la visita",
+  "noShow.chip": "No estaba",
 };
