@@ -18018,11 +18018,11 @@ begin;
 do $$
 declare v_src uuid; v_c uuid := 'c4340000-0000-4000-8000-000000000001'; k int; v_p uuid; v_l uuid; v_v uuid;
   -- property → inspection of sales in days (null: none), cancelled?
-  plan text[][] := array[['0','n'], ['1','n'], ['3','n'], [null,'n'], ['0','c'], ['-1','n']];
+  plan text[][] := array[['0','n'], ['1','n'], ['3','n'], [null,'n'], ['0','c'], ['-1','n'], ['0','n']];
 begin
   select id into v_src from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral';
   insert into public.customers (id, company_id, display_name) values (v_c, 'ca000000-0000-0000-0000-000000000000', 'T434 Client');
-  for k in 1..6 loop
+  for k in 1..7 loop
     v_p := ('d4340000-0000-4000-8000-00000000000' || k)::uuid;
     insert into public.properties (id, company_id, customer_id, address_line1, address_city) values (v_p, 'ca000000-0000-0000-0000-000000000000', v_c, k || ' T434 St', 'Pasadena');
     insert into public.property_secrets (company_id, property_id, gate_code) values ('ca000000-0000-0000-0000-000000000000', v_p, '#434' || k);
@@ -18042,12 +18042,14 @@ begin
 end $$;
 -- the office: every code, the removed one too
 :as_office_a
-select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd4340000%'$q$) = 6, 'T434 the office sees every code, the removed one too');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd4340000%'$q$) = 7, 'T434 the office sees every code, the removed one too');
 :as_owner_a
-select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd4340000%'$q$) = 6, 'T434 the owner sees every code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd4340000%'$q$) = 7, 'T434 the owner sees every code');
 -- sales: only on the day of their inspection and the day before, a live visit, a live code
 :as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000007'$q$) = 1, 'T434 sales: inspection today → the code');
 select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000002'$q$) = 1, 'T434 sales: inspection tomorrow → the code the day before');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000001'$q$) = 0, 'T434 sales: a visit today that is the tech''s, not theirs → no code');
 select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000003'$q$) = 0, 'T434 sales: inspection in 3 days → no code yet');
 select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000004'$q$) = 0, 'T434 sales: no visit of theirs → no code');
 select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000005'$q$) = 0, 'T434 sales: a cancelled inspection today → no code');
@@ -18076,6 +18078,7 @@ select public.set_gate_code('d4340000-0000-4000-8000-000000000009', '#4349');
 -- a removed code comes back with the new one; an empty code clears it
 select public.set_gate_code('d4340000-0000-4000-8000-000000000001', '#back1');
 select public.set_gate_code('d4340000-0000-4000-8000-000000000003', '');
+select public.set_gate_code('d4340000-0000-4000-8000-000000000007', null);
 select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000004', repeat('9', 65))$q$, '%at most 64%', 'T434 the function: at most 64 characters');
 :as_tech_a
 select tst.fails_like($q$select public.set_gate_code('d2000000-0000-4000-8000-000000000001', '#tech')$q$, '%not allowed%', 'T434 the tech: not through the function');
@@ -18094,10 +18097,10 @@ select public.set_gate_code('d4340000-0000-4000-8000-000000000002', '#off2');
 select tst.ok((select gate_code = '#new4' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000004')
               and (select gate_code = '#4349' and created_by = 'a0000000-0000-0000-0000-000000000005' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000009')
               and (select gate_code = '#back1' and deleted_at is null from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000001')
-              and (select gate_code is null from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000003')
+              and (select count(*) = 2 from public.property_secrets where property_id in ('d4340000-0000-4000-8000-000000000003', 'd4340000-0000-4000-8000-000000000007') and gate_code is null)
               and (select gate_code = '#off5' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000005')
               and (select gate_code = '#off2' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000002'),
-  'T434 the codes are written: sales through the function (trimmed, a removed one back, an empty one cleared), the office as before');
+  'T434 the codes are written: sales through the function (trimmed, a removed one back, an empty or null one cleared), the office as before');
 rollback;
 \echo 'T434 ok'
 

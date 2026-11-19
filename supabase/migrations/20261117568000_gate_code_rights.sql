@@ -4,8 +4,8 @@
 -- Writing: the table itself — owner, admin, office; the code is set through public.set_gate_code (owner, admin, office,
 -- sales): sales still put down the code the client tells them at the inspection, without reading it back. An upsert on the
 -- table needs the read rule (ON CONFLICT DO UPDATE checks the row against the select policy), so the app writes only
--- through the function (cloud/ops.ts property.gate); an old build of sales that sends the upsert gets a refusal (42501,
--- «отклонённые»). app.can_see_gate_code keeps its signature (rule 16); rule 18 — revoke, then the same grant as before.
+-- through the function (cloud/ops.ts property.gate); an old build of sales that sends the upsert gets a refusal (42501:
+-- the queue drops the op, the code is not saved until the app is updated). app.can_see_gate_code keeps its signature (rule 16); rule 18 — revoke, then the same grant as before.
 -- The app's canSeeGateCode (features/properties.ts) follows the same rule. Test T434.
 
 create or replace function app.can_see_gate_code(p_property_id uuid)
