@@ -18966,7 +18966,11 @@ select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a3') = '[22500, 23
 -- T453: the history sees a change of the exact cost that keeps the mirror (22 500 → 22 600, both 23 ¢); a row the server
 -- writes in cents (as po_receive does until PR 3/4) gets its thousandths
 \echo 'T453 the history of the exact cost'
+-- the rows of one transaction share «at»: their order is the id's (uuid v7, milliseconds of the clock) — a pause between the
+-- writes so two of them never fall in one millisecond (else the order is the random part's: CI of #2247, 19.11)
+select pg_sleep(0.005);
 update public.catalog_item_costs set unit_cost_millicents = 22500 where item_id = '54500000-0000-4000-8000-0000000000a1';
+select pg_sleep(0.005);
 update public.catalog_item_costs set unit_cost_millicents = 22600 where item_id = '54500000-0000-4000-8000-0000000000a1';
 select tst.ok(pg_temp.h450('54500000-0000-4000-8000-0000000000a1') -> -1 = '[22600, 23]' and pg_temp.h450('54500000-0000-4000-8000-0000000000a1') -> -2 = '[22500, 23]',
   format('T453 22 500 → 22 600 with the same mirror: a history row each: %s', pg_temp.h450('54500000-0000-4000-8000-0000000000a1')));
@@ -18976,6 +18980,7 @@ select tst.ok(jsonb_array_length(pg_temp.h450('54500000-0000-4000-8000-000000000
           and pg_temp.h450('54500000-0000-4000-8000-0000000000a1') -> -1 = '[22600, 23]',
   'T453 an echo of the mirror writes no history row');
 :as_super
+select pg_sleep(0.005);
 insert into public.catalog_cost_history (company_id, item_id, unit_cost_cents, vendor_tax_bps, source)
 values ('ca000000-0000-0000-0000-000000000000', '54500000-0000-4000-8000-0000000000a3', 740, 0, 'manual');
 select tst.ok(pg_temp.h450('54500000-0000-4000-8000-0000000000a3') -> -1 = '[740000, 740]', 'T453 a history row written in cents gets its thousandths (× 1000)');
