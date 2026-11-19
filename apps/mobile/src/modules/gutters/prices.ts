@@ -70,6 +70,51 @@ export function findItem(catalog: readonly CatalogItem[], p: Pick<PartQty, "key"
   }
   return undefined;
 }
+
+/**
+ * #2227 (spec 33-price-key §11.3.4, §11.10): parts whose colour IS the product (a tube of sealant, a can of paint) keep an
+ * item per colour until the founder answers (№48) — never searched without their colour, never merged by the transition
+ */
+export const COLOUR_IS_PRODUCT: ReadonlySet<string> = new Set(["sealant", "touch_up_paint"]);
+/** the property of a Gutters item's variant (the core never names it: registry variantWord) */
+export const VARIANT_ATTR = "color";
+
+/** a coloured part whose item may be one for every colour (not a colour-is-the-product part, not labor) */
+export function colourVariantPart(p: Pick<PartQty, "key" | "kind" | "attrs">): boolean {
+  if (p.kind === "labor" || !p.attrs.color?.trim()) return false;
+  const part = matchAttrs(p).part ?? "";
+  return PART_WORDS.has(part) && !COLOUR_IS_PRODUCT.has(part);
+}
+
+/** #2227: the part as its one item for every colour sees it: no colour, «painted» when it had a colour and no finish */
+export function colourlessPart<P extends Pick<PartQty, "key" | "kind" | "attrs" | "unit">>(p: P): P {
+  const { color, ...attrs } = p.attrs;
+  return { ...p, attrs: color?.trim() && !attrs.finish ? { ...attrs, finish: "painted" } : attrs };
+}
+
+/**
+ * #2227: the item of a part and the variant of its line. Order (spec §11.3.4, audit 19.11 №1):
+ *   1. a coloured part: the item WITHOUT a colour (its properties less the colour; a part with a colour and no finish takes
+ *      an item that is painted or says no finish — never «mill»), the line's variant = the part's colour;
+ *   2. else the old way, unchanged (`findItem`: the item of the SAME colour — before the company's transition);
+ *   never another colour's item. `matchAttrs` / `matchKey` are not changed: old items and line keys stay as they are.
+ */
+export function findPriced(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): { it?: CatalogItem; variant?: { attr: string; value: string } } {
+  if (colourVariantPart(p)) {
+    // before the transition (and for a colour priced on its own) the item of that very colour wins — the same line as before #2227
+    const own = findItem(catalog, p);
+    const lc = (v?: string) => v?.trim().toLowerCase() ?? "";
+    if (own && lc(own.attributes?.color) && lc(own.attributes?.color) === lc(p.attrs.color)) return { it: own };
+    const unit = p.unit.trim().toLowerCase();
+    const { color, ...want } = matchAttrs(p);
+    const pool = catalog.filter((it) => live(it) && it.unit.trim().toLowerCase() === unit && !it.attributes?.color?.trim());
+    const finishOk = (it: CatalogItem) => !!want.finish || !it.attributes?.finish || it.attributes.finish.trim().toLowerCase() === "painted";
+    const it = catalogMatch(pool, want).filter(finishOk)[0];
+    if (it) return { it, variant: { attr: VARIANT_ATTR, value: color!.trim().toLowerCase() } };
+  }
+  const it = findItem(catalog, p);
+  return it ? { it } : {};
+}
 /** the fasteners whose metal follows the gutter's (the engine's METAL_FASTENERS) */
 const METAL_FALLBACK_PARTS = new Set(["screw", "anchor", "flat_coil"]);
 
@@ -208,23 +253,27 @@ export function missingItems(companyId: string, rows: readonly PriceRow[], catal
   const out = new Map<string, CatalogItem>();
   for (const { key, part } of rows) {
     // a part priced only by another degree's item (§2.7) still gets its own: the price list shows it missing until there is one
-    if (findItem(catalog, part) && !priceFromOtherDegree(catalog, part)) continue;
-    const id = stableItemId(companyId, key);
+    if (findPriced(catalog, part).it && !priceFromOtherDegree(catalog, part)) continue;
+    // #2227 (§11.3.4.1, §11.8): a coloured part gets ONE item for every colour — its properties less the colour, «painted» when
+    // it has a colour and no finish; its id from that key, so every colour and every build make the same id (no duplicates)
+    const plain = colourVariantPart(part) ? colourlessPart(part) : undefined;
+    const id = stableItemId(companyId, plain ? matchKey(plain) : key);
     if (ids.has(id) || out.has(id)) continue;
     const made: CatalogItem = {
       id,
       kind: part.kind === "labor" ? "labor" : "material",
-      name: name(part).slice(0, 200),
+      name: name(plain ?? part).slice(0, 200),
       unit: part.unit,
       priceCents: testPriceCents(part),
       // a material's price is cost × tax × markup in the core's editor (catalog/[id]): cost = the price, no tax, no markup
       ...(part.kind === "labor" ? {} : { costCents: testPriceCents(part), vendorTaxBps: 0, markupBps: 0 }),
       placeholder: true,
-      attributes: withGroup(part.unit, matchAttrs(part)),
+      attributes: plain ? matchAttrs(plain) : withGroup(part.unit, matchAttrs(part)),
     };
     // a colour of a part whose group is there: the group's price, as the store and the server give a joining item (in every mode —
     // the store does it only in the cloud; review of PR3 №6)
-    const g = made.attributes?.priceGroup;
+    // #2227: the one item for every colour takes the price of a colour already in that group, the same way
+    const g = plain ? priceGroupKey({ unit: part.unit, attributes: withGroup(part.unit, matchAttrs(part)) }) : made.attributes?.priceGroup;
     const peer = g ? catalog.find((c) => c.attributes?.priceGroup === g) : undefined;
     out.set(id, peer ? { ...made, priceCents: peer.priceCents, placeholder: peer.placeholder, costCents: peer.costCents, vendorTaxBps: peer.vendorTaxBps, markupBps: peer.markupBps } : made);
   }
@@ -255,7 +304,7 @@ export function listPreview(parts: readonly PartQty[], catalog: readonly Catalog
   let test = false;
   const priced = catalog.filter(live);
   const r = gutterPreview(parts, rates, (p) => {
-    const it = findItem(priced, p);
+    const it = findPriced(priced, p).it;
     if (!it) return undefined;
     if (it.placeholder) test = true;
     // the core's price of an item (a material: cost × supplier tax × markup, as the estimate's line from the list)
