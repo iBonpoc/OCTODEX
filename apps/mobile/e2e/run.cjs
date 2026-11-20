@@ -137,7 +137,9 @@ async function waitPastCompanyMidnight() {
     }
     try {
       await spec.run(h, { browser, BASE, layout, layouts, installClock });
-      if (errors.length) throw new Error(errors.join("\n"));
+      // a spec that puts in a server refusal (page.route 4xx) lists the console lines it expects (as e2e/cloud does)
+      const left = errors.filter((e) => !(spec.allowConsole || []).some((re) => e.startsWith("console:") && re.test(e)));
+      if (left.length) throw new Error(left.join("\n"));
       console.log(`✓ ${tag} (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
     } catch (e) {
       failed++;
