@@ -82,7 +82,8 @@ exports.run = async (h) => {
     await p.waitForURL((u) => u.pathname === `/client/${many.id}`, { timeout: 8000 });
   }
 
-  // no address → the line under the button, nowhere to go
+  // no address → the line under the button, nowhere to go. The demo has no client without an address (each has one): this part
+  // runs only when one is there; the rule itself is unit:gutterLink «#2271 … no address»
   const none = d0.customers.find((c) => placesOf(c).length === 0 && c.status !== "archived" && !c.mergedIntoId);
   if (none) {
     await h.go(`/client/${none.id}`);

@@ -3,7 +3,7 @@
  * here. No module switched on (or the trial over — founder О2) → nothing, the screen is as before. Home is «＋»
  * (nav/Fab.tsx), estimate and job get their place with their first content (C4b, C8).
  */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { router, type Href } from "expo-router";
 import { space } from "@octo/design-tokens";
@@ -23,14 +23,20 @@ export function ModulePlaces({ place, ctx }: { place: Exclude<ModulePlace, "home
   const [picking, setPicking] = useState<(ModuleAction & { module: string }) | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const goAfter = useRef<string | null>(null);
+  const noted = actions.find((a) => `${a.module}-${a.id}` === note);
+  // the line belongs to the press that asked for it: once that action goes somewhere (an address added) it is gone for good
+  useEffect(() => {
+    if (note && !noted?.noteKey) setNote(null);
+  }, [note, noted?.noteKey]);
   if (!actions.length) return null;
   const press = (a: ModuleAction & { module: string }) => {
     if (a.noteKey) return setNote(`${a.module}-${a.id}`);
     setNote(null);
+    // a choice left from a sheet that was reopened while leaving (its exit never came) never goes off later
+    goAfter.current = null;
     if (a.pick) return setPicking(a);
     router.push(a.href as Href);
   };
-  const noted = actions.find((a) => `${a.module}-${a.id}` === note);
   return (
     <View style={{ gap: space[2] }}>
       <View testID={`module-place-${place}`} style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
