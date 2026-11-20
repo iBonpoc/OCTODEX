@@ -5,7 +5,7 @@
  * «Как сейчас» and the numbered variants at once, all of them live. Behind the pilot switch (flag.ts); nothing here applies to
  * the app. «Готовятся» — a plain list at the end. Phone 390 first; from 820 the column stays ≤ `sheet.maxWidth`, centred.
  */
-import { useRef, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { ScrollView, View } from "react-native";
 import { graphite } from "@octo/design-tokens";
 import { size, space } from "@octo/design-tokens";
@@ -14,9 +14,12 @@ import { Button } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useScreenScroll, type ScreenScroll, type ViewNode } from "@/ui/requiredForm";
 import { Card, ListRow, Screen, SectionTitle } from "@/ui/surfaces";
+import { HapticsSection } from "../../Haptics";
+import { TokenSections } from "../../Tokens";
 import { GraphiteSection } from "../GraphiteSection";
 import { useGrFonts } from "../fonts";
 import { GraphiteProvider } from "../theme";
+import { BasicsBlocks } from "./BasicsBlocks";
 import { ButtonsBlocks } from "./ButtonsBlocks";
 
 interface SheetSection {
@@ -27,9 +30,35 @@ interface SheetSection {
 
 /** the sections that are on the sheet now, in the order of the plan (spec 63 §5.3); a section is added by its own PR */
 const SECTIONS: SheetSection[] = [
+  { id: "base", title: "ds.gr.sheet.s.base", body: <BasicsBlocks /> },
   { id: "buttons", title: "ds.gr.sheet.s.buttons", body: <ButtonsBlocks /> },
+  // the vibration check is the showcase's own, as it is (DS §15.6): a button per response
+  { id: "haptics", title: "ds.gr.sheet.s.haptics", body: <HapticsSection /> },
   { id: "pilot", title: "ds.gr.sheet.s.pilot", body: <GraphiteSection /> },
 ];
+
+/** the one fold of the sheet: the service values (colours, numbers, the module's own tokens) for the developer, at the very end */
+function DevFold() {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  return (
+    <Card>
+      <View testID="gr-dev" style={{ gap: space[2] }}>
+        <T v="caption" tone="mut">
+          {t("ds.gr.sheet.devNote")}
+        </T>
+        <Button testID="gr-dev-toggle" size="sm" variant="secondary" icon={open ? "chevronUp" : "chevronDown"} label={t(open ? "ds.gr.sheet.devHide" : "ds.gr.sheet.devShow")} onPress={() => setOpen((v) => !v)} />
+        {open ? (
+          <View testID="gr-dev-body">
+            <TokenSections screen="base" />
+            <TokenSections screen="spacing" />
+            <TokenSections screen="motion" />
+          </View>
+        ) : null}
+      </View>
+    </Card>
+  );
+}
 
 /** «Готовятся»: not on the sheet yet — a list, not a link */
 const SOON: DictKey[] = [
@@ -67,6 +96,7 @@ export function GraphiteSheet({ title, caption, onBack }: { title: string; capti
           <Button key={s.id} testID={`gr-jump-${s.id}`} size="sm" variant="secondary" label={t(s.title)} onPress={() => jump(s.id)} />
         ))}
         <Button testID="gr-jump-soon" size="sm" variant="secondary" label={t("ds.gr.sheet.soon")} onPress={() => jump("soon")} />
+        <Button testID="gr-jump-dev" size="sm" variant="secondary" label={t("ds.gr.sheet.s.dev")} onPress={() => jump("dev")} />
       </ScrollView>
     </View>
   );
@@ -98,6 +128,8 @@ export function GraphiteSheet({ title, caption, onBack }: { title: string; capti
               ))}
             </View>
           </Card>
+          {heading("dev", t("ds.gr.sheet.s.dev"))}
+          <DevFold />
         </View>
       }>
         <GrabScroll into={scroll} />

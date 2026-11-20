@@ -6,6 +6,8 @@
  * С3 SWEEP: every shown button of every block, in every variant, is pressed — the block's counter goes up by one each time;
  * С4 «Загрузка»: the spinner shows (after the delay) on the variants, «Как сейчас» says it cannot wait; «Выключено» stops presses;
  * С5 the round button switches on and off (aria-pressed), «Как сейчас» too;
+ * С2b «Основа» on examples: the theme switch, status / accent / surface, spacing and corners as three cards, the vibration block;
+ * С5b the one fold «Для разработчиков» is shut, opens and shuts;
  * С6 «Готовятся» is a plain list at the end; the pilot screen is still opened by its own button.
  */
 const BLOCKS = [
@@ -48,7 +50,7 @@ exports.run = async (h) => {
   await vis("showcase-row-graphite").click();
   await vis("gr-sheet-page").waitFor({ timeout: 10000 });
   h.expect((await p.getByTestId("gr-sheet-page").getByRole("tab").count()) + (await vis("gr-sheet-strip").getByRole("tab").count()) === 0, "С1: no tabs on the sheet");
-  h.expect((await p.getByTestId("gr-block-main").count()) === 1, "С1: the first block is on the same page");
+  h.expect((await p.getByTestId("gr-block-main").count()) === 1 && (await p.getByTestId("gr-block-theme").count()) === 1, "С1: «Основа» and «Кнопки» are on the same page");
   const stripBox = async () => vis("gr-sheet-strip").boundingBox();
   const inView = async (id) => {
     const b = await vis(id).boundingBox();
@@ -78,6 +80,32 @@ exports.run = async (h) => {
       h.expect(box && box.x >= 0 && box.x + box.width <= width + 1, `С2: ${id} is inside the window (${box && Math.round(box.x)}+${box && Math.round(box.width)} / ${width})`);
     }
   }
+
+  // С2b — «Основа»: colour and measures are seen on examples; the theme switch flips the whole app; the spacing and the corners are three cards
+  await center("gr-block-theme");
+  const surface = () => vis("gr-surface-now").evaluate((e) => getComputedStyle(e.querySelector("[style*='background-color']") ?? e).backgroundColor);
+  const light0 = await surface();
+  await vis("gr-theme-switch").click();
+  await until("С2b the theme changed", (was) => {
+    const e = document.querySelector('[data-testid="gr-surface-now"]');
+    return getComputedStyle(e.querySelector("[style*='background-color']") ?? e).backgroundColor !== was;
+  }, light0);
+  await vis("gr-theme-switch").click();
+  await until("С2b the theme is back", (was) => {
+    const e = document.querySelector('[data-testid="gr-surface-now"]');
+    return getComputedStyle(e.querySelector("[style*='background-color']") ?? e).backgroundColor === was;
+  }, light0);
+  for (const id of ["gr-status-now", "gr-status-v1", "gr-space-now-dense", "gr-space-now-mid", "gr-space-now-loose", "gr-space-v1-dense", "gr-space-v1-loose", "gr-radius-now-c1", "gr-radius-now-c3", "gr-radius-v1-c1", "gr-radius-v1-c3"]) {
+    await center(id);
+    h.expect(await vis(id).isVisible(), `С2b: ${id} is on the sheet`);
+  }
+  // the loose card is taller than the tight one: the spacing is seen, not read
+  const hs = async (id) => (await vis(id).boundingBox()).height;
+  h.expect((await hs("gr-space-now-loose")) > (await hs("gr-space-now-dense")), "С2b: «свободно» is taller than «плотно» (Как сейчас)");
+  h.expect((await hs("gr-space-v1-loose")) > (await hs("gr-space-v1-dense")), "С2b: «свободно» is taller than «плотно» (Вариант 1)");
+  // the vibration check is on the sheet as it is
+  await center("showcase-haptics");
+  h.expect(await vis("showcase-haptics").isVisible(), "С2b: the vibration block is on the sheet");
 
   // С3 — SWEEP: every button, every variant; a Gr button waits (busy) after its press, then the next one is pressed
   for (const b of BLOCKS) {
@@ -146,6 +174,17 @@ exports.run = async (h) => {
       return `${e.getAttribute("aria-pressed")}/${getComputedStyle(e.firstElementChild).backgroundColor}` !== w;
     }, [id, was]);
   }
+
+  // С5b — the one fold: the service values, shut by default, opened by its button, shut again
+  await vis("gr-jump-dev").click();
+  await vis("gr-dev-toggle").waitFor({ timeout: 4000 });
+  h.expect((await p.getByTestId("gr-dev-body").count()) === 0, "С5b: the service values are folded by default");
+  await center("gr-dev-toggle");
+  await vis("gr-dev-toggle").click();
+  await vis("gr-dev-body").waitFor({ timeout: 4000 });
+  h.expect((await p.getByTestId("token-group-themes").count()) === 1, "С5b: the colours by name are in the fold");
+  await vis("gr-dev-toggle").click();
+  await p.getByTestId("gr-dev-body").waitFor({ state: "detached", timeout: 4000 });
 
   // С6 — «Готовятся» and the pilot screen
   await vis("gr-jump-soon").click();
