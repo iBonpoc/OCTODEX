@@ -35,6 +35,8 @@ export interface GraphiteColors {
   text2: string;
   /** scale ticks and handles only — never text */
   text3: string;
+  /** the hint in an empty field: paler than `text2` and the typed text, still ≥ 4.5 on the field */
+  placeholder: string;
   acc: string;
   onAcc: string;
   sel: string;
@@ -97,6 +99,7 @@ export const graphiteThemes: Record<ThemeName, GraphiteColors> = {
     text: "#F2F3F4",
     text2: "#CDD1D5",
     text3: "#8F9499",
+    placeholder: "#A6ACB2",
     acc: "#FBFF00",
     onAcc: "#040505",
     sel: "#ECEDEE",
@@ -154,6 +157,7 @@ export const graphiteThemes: Record<ThemeName, GraphiteColors> = {
     text: "#16181A",
     text2: "#3C4045",
     text3: "#6B7076",
+    placeholder: "#5A5F66",
     acc: "#FBFF00",
     onAcc: "#040505",
     sel: "#FFFFFF",

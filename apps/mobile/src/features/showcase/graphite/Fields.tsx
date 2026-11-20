@@ -68,7 +68,7 @@ export function GrTextField({
       autoComplete={kind === "phone" ? "tel" : undefined}
       keyboardAppearance={name}
       placeholder={placeholder}
-      placeholderTextColor={g.text2}
+      placeholderTextColor={g.placeholder}
       selectionColor={g.focus}
       accessibilityLabel={label}
       aria-invalid={error ? true : undefined}

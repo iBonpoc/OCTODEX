@@ -35,12 +35,12 @@ const SECTIONS: SheetSection[] = [
   { id: "buttons", title: "ds.gr.sheet.s.buttons", body: <ButtonsBlocks /> },
   { id: "fields", title: "ds.gr.sheet.s.fields", body: <FieldsBlocks /> },
   // the vibration check is the showcase's own, as it is (DS §15.6): a button per response
-  { id: "haptics", title: "ds.gr.sheet.s.haptics", body: <HapticsSection /> },
+  { id: "haptics", title: "ds.gr.sheet.s.haptics", body: <HapticsSection bare /> },
   { id: "pilot", title: "ds.gr.sheet.s.pilot", body: <GraphiteSection /> },
 ];
 
 /** the one fold of the sheet: the service values (colours, numbers, the module's own tokens) for the developer, at the very end */
-function DevFold() {
+function DevFold({ caption }: { caption: string }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   return (
@@ -49,9 +49,14 @@ function DevFold() {
         <T v="caption" tone="mut">
           {t("ds.gr.sheet.devNote")}
         </T>
+
         <Button testID="gr-dev-toggle" size="sm" variant="secondary" icon={open ? "chevronUp" : "chevronDown"} label={t(open ? "ds.gr.sheet.devHide" : "ds.gr.sheet.devShow")} onPress={() => setOpen((v) => !v)} />
         {open ? (
           <View testID="gr-dev-body">
+            {/* the rule line of the showcase and the pilot's footing: service words, for the developer — only in the fold */}
+            <T v="caption" tone="mut">
+              {`${caption} · ${t("ds.gr.sheet.devPilot")}`}
+            </T>
             <TokenSections screen="base" />
             <TokenSections screen="spacing" />
             <TokenSections screen="motion" />
@@ -110,6 +115,9 @@ export function GraphiteSheet({ title, caption, onBack }: { title: string; capti
     <GraphiteProvider>
       <Screen title={title} back={onBack} tabs={strip} tabKey="gr-sheet" below={
         <View testID="gr-sheet-page" style={column}>
+          <View testID="showcase-screen-graphite">
+            <T v="body">{t("ds.gr.sheet.intro")}</T>
+          </View>
           {loaded
             ? SECTIONS.map((s) => (
                 <View key={s.id} style={{ gap: space[3] }}>
@@ -130,14 +138,10 @@ export function GraphiteSheet({ title, caption, onBack }: { title: string; capti
             </View>
           </Card>
           {heading("dev", t("ds.gr.sheet.s.dev"))}
-          <DevFold />
+          <DevFold caption={caption} />
         </View>
       }>
         <GrabScroll into={scroll} />
-        <View testID="showcase-screen-graphite" style={{ gap: space[1] }}>
-          <T v="caption" tone="mut">{caption}</T>
-          <T v="body">{t("ds.gr.sheet.intro")}</T>
-        </View>
       </Screen>
     </GraphiteProvider>
   );
