@@ -1,6 +1,6 @@
 # Доска руководителя
 
-Руководитель: «Главный чат с управлением агентами» №19 (`session_015CqH6A2W1f2tHNEDbCHFnG`), с 20.11.2026 ~06:30 UTC (открыт аудитом №2). Прежние — №18 (`session_015CqH69oWQgnyyHkabXt8ez`, 20.11.2026), №17 (`session_015CqH67cJRZuq1Qycw6NGXz`, 20.11.2026), №16 (`session_015CqH694Nr21kphaaPEHD6m`, 19–20.11.2026), №15 (`session_015CqH68Rt8LpPcjVA6GX6o8`, 18–19.11.2026), №14 (`session_015CqH65o614ndso8xbBmoBd`, 18.11.2026), №13 (`session_015CqH68we3V2ZEL83FBrvTb`, 15–18.11.2026), №12 (`session_015CqH69sCAvBQ4JiRs3NqAf`), №11 (`session_015CqH68GWKQ59fgFc9evnJ5`), №10 (`session_015CqH68ruXPjcwa2xZVyogr`), №9 (`session_015CqH687aYpUm4g8RYH2mco`), №8 (`session_015CqH67dLvVBU9EZg9nRT4P`), №7 (`session_015CqH6A3Nqxoz61qLQ1Rtwd`), №6 (`session_015CqH68XVUZYbUeZtamvLEE`), №5 (`session_015CqH6AYWnjNhg5RZy2re5D`), архив. Чат аудита (личный чат основателя, проверяет этапы) — №2 `session_015CqH69kqSBDGCrDMube5oe` (с 11.11.2026; №1 `session_015CqH65zYaCaecNrBxcPr1v` — архив).
+Руководитель: «Главный чат с управлением агентами» №19 (`session_015CqH6A2W1f2tHNEDbCHFnG`), с 20.11.2026 ~06:30 UTC (открыт аудитом №2). Прежние — №18 (`session_015CqH69oWQgnyyHkabXt8ez`, 20.11.2026), №17 (`session_015CqH67cJRZuq1Qycw6NGXz`, 20.11.2026), №16 (`session_015CqH694Nr21kphaaPEHD6m`, 19–20.11.2026), №15 (`session_015CqH68Rt8LpPcjVA6GX6o8`, 18–19.11.2026), №14 (`session_015CqH65o614ndso8xbBmoBd`, 18.11.2026), №13 (`session_015CqH68we3V2ZEL83FBrvTb`, 15–18.11.2026), №12 (`session_015CqH69sCAvBQ4JiRs3NqAf`), №11 (`session_015CqH68GWKQ59fgFc9evnJ5`), №10 (`session_015CqH68ruXPjcwa2xZVyogr`), №9 (`session_015CqH687aYpUm4g8RYH2mco`), №8 (`session_015CqH67dLvVBU9EZg9nRT4P`), №7 (`session_015CqH6A3Nqxoz61qLQ1Rtwd`), №6 (`session_015CqH68XVUZYbUeZtamvLEE`), №5 (`session_015CqH6AYWnjNhg5RZy2re5D`), архив. Чат аудита (личный чат основателя, проверяет этапы) — №3 «Чат аудита №3 — директор» `session_015CqH66kwYQRKmzc611nmBA` (с 20.11.2026; №2 `session_015CqH69kqSBDGCrDMube5oe` — 11–20.11.2026; №1 `session_015CqH65zYaCaecNrBxcPr1v` — архив).
 
 Здесь только живое: кто чем занят, очередь вливания, номера. Что осталось сделать — **только Issues** (правило 21). Старые памятки — `docs/ai/BOARD-archive.md`; журнал — `docs/ai/LOG.md`.
 
@@ -30,6 +30,8 @@
 | Э9. Сайт и маркетинг | #778 |
 
 ## Памятка №19 → №20, 20.11.2026 (~09:15 UTC)
+
+**Аудит сменился 20.11 ~09:48 UTC:** дела аудита принял «Чат аудита №3 — директор» `session_015CqH66kwYQRKmzc611nmBA` (№2 переполнен). Отчёты и вопросы — ему; он открывает №20. #2196 проверен на стенде — можно вливать; находки — #2331, #2332.
 
 **Первым делом новый руководитель вызывает `confirm_repository_trust`** (с `content_digest` из отказа `send_message` аудиту), иначе не сможет писать аудиту №2: с 20.11 чат аудита подключён к Mac основателя и принимает сообщения только от чатов с подтверждённым доверенным устройством. У №19 в отказе digest не было — ответы аудиту шли комментариями в #2302, #2314, #2320, #2292; аудит читает ленту сам.
 
