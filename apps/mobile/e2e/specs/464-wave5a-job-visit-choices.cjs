@@ -26,7 +26,7 @@ exports.run = async (h) => {
   await h.go("/lead/l1");
   await h.clickText("Переписка");
   await p.getByPlaceholder("Собака во дворе, где парковаться…").locator("visible=true").fill(NOTE);
-  h.expect(/Для команды/.test(await tid("note-visibility-button").innerText()), "«Видно · Для команды» by default");
+  h.expect(/Для команды/.test((await tid("note-visibility-button").getAttribute("aria-label")) || ""), "«Видно: Для команды» by default (the eye inside the composer)");
   await tid("note-visibility-button").click();
   await tid("note-visibility-private").click();
   await h.click("Добавить заметку");

@@ -481,7 +481,8 @@ export default function VisitScreen() {
           </View>
         </View>
       </Sheet>
-      <RelatedBlock of={{ type: "visit", id: v.id }} />
+      {/* under the notes: one quiet line; the client and the address are the screen's header already (#2350) */}
+      <RelatedBlock line hide={["customer", "property"]} of={{ type: "visit", id: v.id }} />
       <Menu
         visible={!!moreAt}
         anchor={moreAt}

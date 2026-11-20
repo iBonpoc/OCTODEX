@@ -414,19 +414,18 @@ export function WhenWho({ visitId }: { visitId: ID }) {
   const open = canReschedule(v);
   return (
     <Card>
-      <T v="heading">{t("vw.title")}</T>
-      <T v="body" tabular>{`${day(v.start)} · ${visitWhen(v, time, t("plan5.allDay"))} · ${who}`}</T>
-      {v.customerNotifiedAt ? (
-        <T v="caption" tone="mut">{t("vw.notified", { date: day(v.customerNotifiedAt) })}</T>
-      ) : (
-        <Button label={t("vw.notify")} icon="send" variant="secondary" size="sm" onPress={() => setSheet("notify")} />
-      )}
-      {open ? (
-        <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
-          <Button label={t("vw.reschedule")} icon="calendar" variant="secondary" size="sm" onPress={() => setSheet("move")} />
-          <Button label={t("plan.assign")} icon="user" variant="secondary" size="sm" onPress={() => setSheet("assign")} />
+      {/* the actions are icons in the card's header (founder 21.11, #2350: «Сообщить клиенту, Перенести, Назначить… их слишком
+          много… растягиваются»): send · calendar · user, their words for the screen reader and the hover hint */}
+      <RowView style={{ justifyContent: "space-between", alignItems: "center" }}>
+        <T v="heading" style={{ flex: 1 }}>{t("vw.title")}</T>
+        <RowView gap={space[1]}>
+          {v.customerNotifiedAt ? null : <IconButton icon="send" label={t("vw.notify")} testID="vw-notify" onPress={() => setSheet("notify")} />}
+          {open ? <IconButton icon="calendar" label={t("vw.reschedule")} testID="vw-reschedule" onPress={() => setSheet("move")} /> : null}
+          {open ? <IconButton icon="user" label={t("plan.assign")} testID="vw-assign" onPress={() => setSheet("assign")} /> : null}
         </RowView>
-      ) : null}
+      </RowView>
+      <T v="body" tabular>{`${day(v.start)} · ${visitWhen(v, time, t("plan5.allDay"))} · ${who}`}</T>
+      {v.customerNotifiedAt ? <T v="caption" tone="mut">{t("vw.notified", { date: day(v.customerNotifiedAt) })}</T> : null}
       {moveHeld.value ? (
         <VisitFormSheet
           key={moveHeld.opening}

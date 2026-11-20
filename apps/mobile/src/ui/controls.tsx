@@ -520,6 +520,20 @@ export function Steps({ labels, current }: { labels: string[]; current: number }
 
 /* ---------- TextField (phone 44, wide 34) ---------- */
 
+/**
+ * an icon inside a field on the right (DS §11 п.18): a helper («Вставить», «Очистить») or, in a composer, the field's own
+ * «Отправить» (`strong` — `ink`, the rest `mut`; `disabled` — nothing typed yet) and a menu button (`menu`: «Кто видит»)
+ */
+export interface FieldAction {
+  icon: IconKey;
+  label: string;
+  onPress: () => void;
+  testID?: string;
+  disabled?: boolean;
+  strong?: boolean;
+  menu?: boolean;
+}
+
 export function TextField({
   value,
   onChangeText,
@@ -586,7 +600,7 @@ export function TextField({
    * the field's helper action («Вставить», «Очистить», «Показать»): an icon inside the field on the right, no words, no plate;
    * a real 44 × 44 touch box (the web has no hitSlop), `label` for the screen reader and the web's hover hint (DS §11 п.18, #1411)
    */
-  action?: { icon: IconKey; label: string; onPress: () => void; testID?: string };
+  action?: FieldAction | FieldAction[];
 }) {
   const ro = useReadOnly();
   const { c } = useTheme();
@@ -696,22 +710,30 @@ export function TextField({
         } as object}
       />
       {suffix ? <T tone="mut">{suffix}</T> : null}
-      {action ? (
+      {(action ? (Array.isArray(action) ? action : [action]) : []).map((a, i, all) => (
         <Press
-          onPress={action.onPress}
-          disabled={ro}
+          key={a.testID ?? a.label}
+          onPress={a.onPress}
+          disabled={ro || a.disabled}
           visibleHeight={sizes.hitMin}
           accessibilityRole="button"
-          accessibilityLabel={action.label}
-          testID={action.testID}
-          {...({ title: action.label } as object)}
-          // the touch box is 44 × 44 even in a 34 field (it overhangs the frame), the icon sits `space[3]` from the frame's edge
-          containerStyle={{ marginVertical: (Math.min(h, sizes.hitMin) - sizes.hitMin) / 2, marginRight: -space[3], alignSelf: multi ? "flex-start" : "center" }}
+          accessibilityLabel={a.label}
+          accessibilityState={a.disabled ? { disabled: true } : undefined}
+          testID={a.testID}
+          {...({ title: a.label, ...(a.menu ? { "aria-haspopup": "menu" } : null) } as object)}
+          // the touch box is 44 × 44 even in a 34 field (it overhangs the frame), the icon sits `space[3]` from the frame's edge;
+          // two icons (a composer: who sees it · send) touch each other's boxes, no gap between them
+          containerStyle={{
+            marginVertical: (Math.min(h, sizes.hitMin) - sizes.hitMin) / 2,
+            marginRight: i === all.length - 1 ? -space[3] : 0,
+            marginLeft: i > 0 ? -space[2] : 0,
+            alignSelf: multi ? "flex-start" : "center",
+          }}
           style={{ width: sizes.hitMin, height: sizes.hitMin, alignItems: "center", justifyContent: "center" }}
         >
-          <Icon name={action.icon} s={sizes.iconMd} color={c.mut} />
+          <Icon name={a.icon} s={sizes.iconMd} color={a.disabled ? c.bd : a.strong ? c.ink : c.mut} />
         </Press>
-      ) : null}
+      ))}
     </View>
     {shownError ? (
       <View style={{ flexDirection: "row", alignItems: "center", gap: space[1] }} accessibilityLiveRegion="polite" testID={tid ? `${tid}-error` : undefined}>
