@@ -74,7 +74,7 @@ exports.run = async (h) => {
   raw.db.expenses = [...(raw.db.expenses ?? []), { id: "e2e-456-x", jobId: "j1", vendor: "Home Depot", category: "materials", amountCents: 999999, at: new Date().toISOString(), memberId: raw.db.me }];
   await h.seed("octo.db.v5", raw);
   await h.go("/job/j1");
-  await tid("job-tab-money").click();
+  await tid("job-tab-expenses").click();
   const profit = await textOf("job-profit");
   h.expect(/^−\$/.test(profit) && !/-\$|-\d/.test(profit), `a loss with «−» (U+2212): ${profit}`);
   await h.shot("profit");

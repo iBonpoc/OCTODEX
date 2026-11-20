@@ -43,7 +43,7 @@ exports.run = async (h) => {
   await h.sheet().getByRole("button", { name: "Отменить выезд", exact: true }).last().click();
   await p.waitForTimeout(600);
   await h.go(`/job/${job.id}`);
-  await p.getByRole("tab", { name: "История", exact: true }).locator("visible=true").click();
+  await p.getByTestId("job-tab-notes").locator("visible=true").click();
   await h.expectText(/Выезд отменён[\s\S]*Клиент отменил/, "the cancelled visit with its reason in the job's history");
   const d2 = await h.db();
   h.expect(d2.jobs.find((j) => j.id === job.id).status === "unscheduled", "the last visit cancelled → the job waits for a date (S9a)");

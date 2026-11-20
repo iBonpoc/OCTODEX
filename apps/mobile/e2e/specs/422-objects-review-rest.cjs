@@ -13,26 +13,25 @@ exports.run = async (h) => {
   const vis = (id) => p.getByTestId(id).locator("visible=true");
   const tid = (id) => vis(id).first();
 
-  /** the job's «Деньги» tab (the tab is there for who sees the money) */
+  /** the job's «Сметы» section (it is there for who sees the money) */
   const money = async () => {
     await tid("job-screen").waitFor({ timeout: 8000 });
-    if (await vis("job-tab-money").count()) await tid("job-tab-money").click();
+    if (await vis("job-tab-estimates").count()) await tid("job-tab-estimates").click();
   };
 
   // 1) j2 has no estimate
   await h.go("/job/j2");
   await tid("job-screen").waitFor({ timeout: 8000 });
-  // «Связано»: icon + name, no «Клиент» / «Объект»; and no «Создать смету» there any more
-  for (const k of ["customer", "property"]) {
-    const text = (await tid(`related-${k}`).innerText()).trim();
-    h.expect(!/^(Клиент|Объект)\b/.test(text), `«Связано»: ${k} without the word (${text})`);
-    h.expect(/^(Связано|Related)/.test((await tid(`related-${k}`).getAttribute("aria-label")) || ""), `«Связано»: ${k} keeps its word for the screen reader`);
-  }
-  await tid("job-rel-new-estimate").waitFor({ timeout: 8000 });
-  // «Деньги»: «Сметы нет», and still one «Создать смету» on the screen
+  // the head (LAYOUT-RULES §3, #2350): the client is one link with its name, the word only for the screen reader; the address is not
+  // repeated in «Связано» (П7)
+  const client = (await tid("job-client").innerText()).trim();
+  h.expect(!/^Клиент\b/.test(client), `the head: the client without the word (${client})`);
+  h.expect(/^(Клиент|Client)/.test((await tid("job-client").getAttribute("aria-label")) || ""), "the head: the client keeps its word for the screen reader");
+  h.expect((await vis("related-customer").count()) + (await vis("related-property").count()) === 0, "«Связано» does not repeat the client and the address");
+  // «Сметы»: «Сметы нет» and the one «Создать смету» on the screen
   await money();
   await tid("job-money-no-estimate").waitFor({ timeout: 8000 });
-  h.expect((await vis("job-rel-new-estimate").count()) === 1, "one «Создать смету» on the screen (not a second one in «Деньги»)");
+  h.expect((await vis("job-rel-new-estimate").count()) === 1, "one «Создать смету» on the screen");
   await h.shot("job-j2");
   await tid("job-rel-new-estimate").click();
   await p.waitForURL(/\/estimate\/new\?customerId=c2&propertyId=p2/, { timeout: 8000 });
@@ -62,7 +61,7 @@ exports.run = async (h) => {
   await h.seed("octo.role.v1", "tech");
   await h.go("/job/j2");
   await tid("job-screen").waitFor({ timeout: 8000 });
-  h.expect((await vis("job-rel-new-estimate").count()) === 0, "the technician: no «Создать смету»");
+  h.expect((await vis("job-tab-estimates").count()) === 0 && (await vis("job-rel-new-estimate").count()) === 0, "the technician: no «Сметы», no «Создать смету»");
   // …nor in a client's or an address's list (the header slot stays empty on every width)
   for (const [path, id] of [["/client/c2?s=jobs", "client-section-new-job"], ["/property/p2?s=estimates", "property-section-new-estimate"]]) {
     await h.go(path);
@@ -73,12 +72,13 @@ exports.run = async (h) => {
   // 4) «не обслуживаем» (Linda, c3: job j3 with no estimate, address p3): neither the chip nor the list buttons (any role of the office)
   await h.seed("octo.role.v1", "director");
   await h.go("/job/j3");
+  await money();
   await tid("job-rel-new-estimate").waitFor({ timeout: 8000 });
   const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));
   raw.db.customers.find((c) => c.id === "c3").status = "do_not_service";
   await h.seed("octo.db.v5", raw);
   await h.go("/job/j3");
-  await tid("job-screen").waitFor({ timeout: 8000 });
+  await money();
   h.expect((await vis("job-rel-new-estimate").count()) === 0, "«не обслуживаем»: no «Создать смету»");
   for (const [path, id] of [["/client/c3?s=jobs", "client-section-new-job"], ["/property/p3?s=jobs", "property-section-new-job"]]) {
     await h.go(path);

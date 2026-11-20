@@ -15,15 +15,15 @@ import { invoiceHtml, invoiceMessage, invoicePageToken, paymentHow } from "@/fea
 import { docLanguageFor } from "@/data/people";
 import { saveEstimatePdf } from "@/features/estimatePdf";
 import { Labeled, MoneyField } from "@/features/fields";
-import { clientLink, openEmail, openSms } from "@/features/sendEstimate";
+import { clientLink, copyText, openEmail, openSms } from "@/features/sendEstimate";
 import { invoiceBalance } from "@/features/invoiceStatus";
 import { reminderMessage, remindersOf } from "@/features/invoiceRemind";
 import { DOC_LANG_LABEL } from "@/i18n/translate";
 import { RelatedBlock } from "@/features/RelatedBlock";
 import { ActionBar } from "@/ui/actionBar";
-import { VoidInvoiceMenu, type InvoiceMoreItem } from "@/features/invoice/VoidInvoice";
-import { Button, ChoiceChips, StatusChip, TextField } from "@/ui/controls";
-import { ButtonPair } from "@/ui/pairs";
+import { VoidInvoiceMenu } from "@/features/invoice/VoidInvoice";
+import { Button, IconButton, Segmented, StatusChip, TextField } from "@/ui/controls";
+import { ButtonPair, FieldRow } from "@/ui/pairs";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Empty, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
@@ -103,106 +103,136 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
   };
   const pdf = () =>
     saveEstimatePdf(invoiceHtml(db, inv, company, { lang: docLanguageFor(db, { customerId: inv.customerId }) }), `Invoice ${inv.number ?? ""}`.trim()).catch(() => toast.show(t("err.pdfSave")));
+  const sendSms = cust?.phone ? () => void openSms(cust.phone, msg().text).catch(() => {}) : undefined;
+  const sendEmail = cust?.email ? () => void openEmail(cust.email!, msg().subject, msg().text).catch(() => {}) : undefined;
 
-  // #1412/#1474: one main button — take the payment — and «⋯» with the rest; no row of pills under the card
+  // LAYOUT-RULES §3 «Объект» (#2350): шапка (связи, статус, сумма к оплате) → вторичные действия значками в ряд → одна главная
+  // кнопка «следующий шаг», закреплённая внизу на телефоне → оплаты списком. «⋯» — только редкое и опасное («Аннулировать…»).
+  const payCents = right === "wholeDeposit" ? balance : Math.max(0, balance - pendingCents);
   const takePay = () => {
     // ACH on its way: the rest, not the whole balance (review 20в №7); sales — the whole deposit
-    setAmount(right === "wholeDeposit" ? balance : Math.max(0, balance - pendingCents));
+    setAmount(payCents);
     setPay(true);
   };
-  const payButton = (bar: boolean) =>
-    balance > 0 && right !== "none" ? (
+  const canPay = balance > 0 && right !== "none";
+  // not sent yet: the next step is to send it (the office; the tech takes the payment on site and does not send, as before)
+  const send = sendSms ?? sendEmail;
+  const sendFirst = !inv.sentAt && balance > 0 && store.role !== "tech" && !!send;
+  const payButton = (bar: boolean, second = false) =>
+    canPay ? (
       <View testID="invoice-take-payment">
-        <Button label={t("inv.takePayment")} icon="dollar" size={bar ? "bar" : undefined} full={bar} onPress={takePay} />
+        <Button
+          label={second ? t("inv.takePayment") : `${t("inv.takePayment")} · ${money(payCents)}`}
+          icon="dollar"
+          variant={second ? "secondary" : undefined}
+          size={bar ? "bar" : undefined}
+          full={bar}
+          onPress={takePay}
+        />
       </View>
     ) : null;
-  // the second button (§12.3: «Принять оплату», the second — send / remind): reminders are the office's (S20); the tech takes the
-  // payment on site and does not chase debts
+  const sendButton = (bar: boolean) =>
+    sendFirst ? (
+      <View testID="invoice-send">
+        <Button label={t("ue.send")} icon="send" size={bar ? "bar" : undefined} full={bar} onPress={send!} />
+      </View>
+    ) : null;
+  const mainButton = (bar: boolean) => sendButton(bar) ?? payButton(bar);
+  const secondButton = (bar: boolean) => (sendFirst ? payButton(bar, true) : null);
+  // reminders are the office's (S20); the tech takes the payment on site and does not chase debts
   const canRemind = balance > 0 && store.role !== "tech" && !!(cust?.phone || cust?.email);
-  const remindButton = (bar: boolean) =>
-    canRemind ? (
-      <View testID="invoice-remind">
-        <Button label={t("mny.remind")} icon="bell" variant="secondary" size={bar ? "bar" : undefined} full={bar} onPress={() => setRemind(true)} />
-      </View>
-    ) : null;
-  const items: InvoiceMoreItem[] = [
-    // Б4: PDF first, then the ways to send it; «Аннулировать…» last (VoidInvoiceMenu)
-    { key: "pdf", label: t("ue.pdf"), icon: "invoice" as const, testID: "invoice-act-pdf", onPress: pdf },
-    ...(balance > 0 && cust?.phone ? [{ key: "sms", label: t("ue.sendSms"), icon: "message" as const, testID: "invoice-act-sms", onPress: () => void openSms(cust.phone, msg().text).catch(() => {}) }] : []),
-    ...(balance > 0 && cust?.email ? [{ key: "email", label: t("ue.sendEmail"), icon: "send" as const, testID: "invoice-act-email", onPress: () => void openEmail(cust.email!, msg().subject, msg().text).catch(() => {}) }] : []),
+  // the secondary actions — icons in one row, each with its VoiceOver label (LAYOUT-RULES П6)
+  const icons = [
+    ...(balance > 0 && sendSms ? [{ key: "sms", label: t("ue.sendSms"), icon: "sms" as const, onPress: sendSms }] : []),
+    ...(balance > 0 && sendEmail ? [{ key: "email", label: t("ue.sendEmail"), icon: "mail" as const, onPress: sendEmail }] : []),
+    ...(link ? [{ key: "copy", label: t("ue.copyLink"), icon: "link" as const, onPress: () => void copyText(link).then(() => toast.show(t("team.copied"))).catch(() => {}) }] : []),
+    { key: "pdf", label: t("ue.pdf"), icon: "invoice" as const, onPress: () => void pdf() },
   ];
-  const more = <VoidInvoiceMenu inv={inv} items={items} />;
-  // the card's three parts (#1495 Б): `head` — what next and the parents; `summary` — status, money, the main action (the side column
-  // 360 from 1100, DS §12.3); `rest` — receipts and the sheets
-  const head = (
-    <>
-      {/* #1495 (DS §12.3 п.2): what is now and what next, one line under the title */}
-      <View testID="invoice-next">
-        <T v="body">
-          {(() => {
-            const n = invoiceNext(inv, lastReminder ? day(lastReminder.at) : undefined, day(inv.dueDate));
-            return t(n.key, n.params);
-          })()}
+  const actions = (
+    <View testID="invoice-actions">
+    <RowView gap={space[2]}>
+      {icons.map((a) => (
+        <View key={a.key} testID={`invoice-act-${a.key}`}>
+          <IconButton icon={a.icon} label={a.label} onPress={a.onPress} />
+        </View>
+      ))}
+      {canRemind ? (
+        <View testID="invoice-remind">
+          <IconButton icon="bell" label={t("mny.remind")} onPress={() => setRemind(true)} />
+        </View>
+      ) : null}
+    </RowView>
+    </View>
+  );
+  const more = <VoidInvoiceMenu inv={inv} />;
+  const next = invoiceNext(inv, lastReminder ? day(lastReminder.at) : undefined, day(inv.dueDate));
+  const nextText = t(next.key, next.params);
+  // one status, icon + word (rule 2): the chip's word with what next («Просрочен 9 дн · напоминание не отправлялось»), never twice
+  const statusText = next.key === "inv.next.paid" || nextText.startsWith(chipLabel) ? nextText : `${chipLabel} · ${nextText}`;
+  // the due day, the sent day and the last reminder — once: the status line already names what it names
+  const paid = balance <= 0;
+  const dated = paid || next.key === "inv.next.waiting" || next.key === "inv.next.notSent";
+  const meta = [
+    dated ? undefined : t("money.due", { date: day(inv.dueDate) }),
+    inv.sentAt ? t("inv.sentOn", { date: day(inv.sentAt) }) : undefined,
+    lastReminder && next.key !== "inv.next.overdueReminded" ? t("mny.remind.last", { date: day(lastReminder.at) }) : undefined,
+  ].filter(Boolean).join(" · ");
+  const line = (label: string, v: string, testID?: string) => (
+    <RowView style={{ justifyContent: "space-between" }}>
+      <T v="body" tone="mut" style={{ flex: 1 }} numberOfLines={1}>
+        {label}
+      </T>
+      <View testID={testID}>
+        <T v="body" tabular>
+          {v}
         </T>
       </View>
-      {/* «Связано» (13 §2.7, 15-flows §2): job, estimate, client — the parents of the invoice */}
+    </RowView>
+  );
+  // the card's three parts (#1495 Б): `head` — the links and the status; `summary` — the money, the icons, the main action (the side
+  // column 360 from 1100, DS §12.3); `rest` — the payments and the sheets
+  const head = (
+    <>
+      {/* the job, the estimate, the client — chips in one row (DS §12.3 п.6), the client by name: not a second time under the title */}
       <RelatedBlock of={{ type: "invoice", id: inv.id }} />
+      <View testID="invoice-next" style={{ alignSelf: "flex-start" }}>
+        <StatusChip status={chip.s} label={statusText} />
+      </View>
     </>
   );
   const summary = (
     <>
-      <Card status={chip.s}>
-        <RowView style={{ justifyContent: "space-between" }}>
-          <T v="heading" style={{ flex: 1 }}>
-            {invoiceTitle(inv, t)}
-          </T>
-          <StatusChip status={chip.s} label={chipLabel} />
-        </RowView>
-        {job ? (
+      <Card>
+        <View testID="invoice-balance" style={{ gap: space[1] }}>
+          {/* the large sum is what matters now: owed, or — paid in full — what came in */}
           <T v="caption" tone="mut">
-            {job.title}
+            {t(paid ? "inv.paid" : "inv.balance")}
           </T>
-        ) : null}
-        <RowView style={{ justifyContent: "space-between" }}>
-          <T v="body" tone="mut">
-            {t("inv.amount")}
+          <T v="display" tabular>
+            {money(paid ? inv.paidCents : balance)}
           </T>
-          <T v="body" tabular>
-            {money(inv.totalCents)}
-          </T>
-        </RowView>
-        <RowView style={{ justifyContent: "space-between" }}>
-          <T v="body" tone="mut">
-            {t("inv.paid")}
-          </T>
-          <T v="body" tabular>
-            {money(inv.paidCents)}
-          </T>
-        </RowView>
+          {meta ? (
+            <T v="caption" tone="mut">
+              {meta}
+            </T>
+          ) : null}
+        </View>
+        <Divider />
+        {/* the invoice's lines, quiet: what it is for and what came in */}
+        {line(invoiceTitle(inv, t), money(inv.totalCents), "invoice-total")}
+        {paid ? null : line(t("inv.paid"), money(inv.paidCents), "invoice-paid")}
         {pendingCents > 0 ? (
           <View testID="invoice-ach-pending">
             <StatusChip status="info" label={t("pay.online.pending", { amount: money(pendingCents) })} />
           </View>
         ) : null}
-        <Divider />
-        <RowView style={{ justifyContent: "space-between" }}>
-          <T v="title">{t("inv.balance")}</T>
-          <T v="display" tabular>
-            {money(balance)}
-          </T>
-        </RowView>
-        <T v="caption" tone="mut">
-          {t("money.due", { date: day(inv.dueDate) })}
-          {inv.sentAt ? ` · ${t("inv.sentOn", { date: day(inv.sentAt) })}` : ""}
-          {lastReminder ? ` · ${t("mny.remind.last", { date: day(lastReminder.at) })}` : ""}
-        </T>
         {howHint(false)}
       </Card>
-
-      {inline && (payButton(false) || remindButton(false)) ? (
+      {actions}
+      {inline && (mainButton(false) || secondButton(false)) ? (
         <RowView style={{ flexWrap: "wrap" }}>
-          {payButton(false)}
-          {remindButton(false)}
+          {mainButton(false)}
+          {secondButton(false)}
         </RowView>
       ) : null}
     </>
@@ -228,7 +258,7 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
           ))}
         </CardGrid>
       ) : (
-        <View testID="invoice-no-receipts"><Empty icon="dollar" title={t("rcpt.none")} hint={balance > 0 && right !== "none" ? t("rcpt.noneHint") : undefined} /></View>
+        <View testID="invoice-no-receipts"><Empty icon="dollar" title={t("rcpt.none")} hint={canPay ? t("rcpt.noneHint") : undefined} /></View>
       )}
 
       <Sheet visible={remind} onClose={() => setRemind(false)} title={t("mny.remind.title")}>
@@ -248,18 +278,39 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
         </View>
       </Sheet>
 
+      {/* taking a payment — LAYOUT-RULES §3 «Редактор»: what is owed large, the way to pay one segmented line, amount · reference in a
+          row, one button with the sum */}
       <Sheet visible={pay} onClose={() => setPay(false)} title={t("inv.takePayment")}>
-        <View style={{ gap: space[3] }}>
+        <View testID="pay-sheet" style={{ gap: space[3] }}>
+          <View testID="pay-owed" style={{ gap: space[1] }}>
+            <T v="caption" tone="mut">
+              {t("inv.balance")}
+            </T>
+            <T v="display" tabular>
+              {money(balance)}
+            </T>
+          </View>
+          <Segmented
+            radio
+            label={t("rcpt.method")}
+            testID="pay-method"
+            value={method}
+            onChange={setMethod}
+            items={METHODS.map((m) => ({ key: m, label: t(`pay.${m}` as DictKey) }))}
+          />
           {right === "wholeDeposit" ? null : (
-            <Labeled label={t("inv.payAmount", { max: money(balance) })}>
-              <MoneyField cents={amount} onChange={setAmount} />
-            </Labeled>
+            <FieldRow>
+              <Labeled label={t("rcpt.amount")}>
+                <MoneyField cents={amount} onChange={setAmount} />
+              </Labeled>
+              <Labeled label={t("card.fact.num")}>
+                <TextField type="identifier" value={ref} onChangeText={setRef} label={t("inv.reference")} />
+              </Labeled>
+            </FieldRow>
           )}
           {amount > balance ? (
             <StatusNote tone="warn">{t("inv.capped", { max: money(balance) })}</StatusNote>
           ) : null}
-          <ChoiceChips value={method} onChange={setMethod} items={METHODS.map((m) => ({ key: m, label: t(`pay.${m}` as DictKey) }))} />
-          {right === "wholeDeposit" ? null : <TextField type="identifier" value={ref} onChangeText={setRef} placeholder={t("inv.reference")} />}
           <Button
             label={t("inv.record", { amount: money(Math.min(amount, balance)) })}
             icon="check"
@@ -283,8 +334,8 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
       {rest}
     </>
   );
-  const barMain = inline ? null : payButton(true);
-  const bar = barMain || (!inline && canRemind) ? <ActionBar testID="invoice-actionbar" main={barMain ?? remindButton(true)} second={barMain ? remindButton(true) : undefined} /> : null;
+  const barMain = inline ? null : mainButton(true);
+  const bar = barMain ? <ActionBar testID="invoice-actionbar" main={barMain} second={secondButton(true) ?? undefined} /> : null;
   if (frame) return frame({ more, bar, body, head, summary, rest });
   return (
     <>

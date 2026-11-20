@@ -40,7 +40,8 @@ export default function InvoiceScreen() {
         <VoidInvoiceBody inv={inv} />
       </Screen>
     );
-  // #1474 (DS §7.3, §8.9, Б4): «⋯» in the header, «Принять оплату» pinned at the bottom on a phone, at the top of the content from 820
+  // LAYOUT-RULES §3 «Объект» (#2350): the client is a link in the card's first line (not a second time under the title); «⋯» — only
+  // «Аннулировать…»; «Принять оплату · $X» (or «Отправить») pinned at the bottom on a phone, after the money from 820
   return (
     <InvoiceCardBody
       inv={live}
@@ -49,7 +50,7 @@ export default function InvoiceScreen() {
         device === "desktop" ? (
           // desktop (DS §12.3 «Десктоп», #1495 Б): the receipts on the left, the summary — status, money, the main action — in the
           // side column 360 on the right, as on the client's card (#1416)
-          <Screen testID="invoice-screen" title={title} back={back} subtitle={cust?.name} right={more}>
+          <Screen testID="invoice-screen" title={title} back={back} right={more}>
             {head}
             <View style={{ flexDirection: "row-reverse", alignItems: "flex-start", gap: space[6] }}>
               <View testID="invoice-side" style={{ width: component.panelW, gap: space[3] }}>
@@ -59,7 +60,7 @@ export default function InvoiceScreen() {
             </View>
           </Screen>
         ) : (
-          <Screen testID="invoice-screen" title={title} back={back} subtitle={cust?.name} right={more} footer={bar ?? undefined}>
+          <Screen testID="invoice-screen" title={title} back={back} right={more} footer={bar ?? undefined}>
             {body}
           </Screen>
         )

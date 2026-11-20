@@ -20,7 +20,7 @@ exports.run = async (h) => {
     return (await tid(id).innerText()).replace(/\s+/g, " ");
   };
   for (const [path, id, where, tab] of [
-    ["/job/j2", "statement-invoice-i1", "job", "job-tab-money"],
+    ["/job/j2", "statement-invoice-i1", "job", "job-tab-invoices"],
     ["/client/c2", "client-invoice-i1", "client", "client-tabs-invoices"],
     ["/property/p2?s=invoices", "property-invoice-i1", "property"],
   ]) {

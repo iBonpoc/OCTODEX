@@ -16,7 +16,7 @@ exports.run = async (h) => {
   await h.shot("crumb");
 
   await h.go("/job/j3");
-  await p.getByRole("tab", { name: "Деньги", exact: true }).locator("visible=true").click();
+  await p.getByTestId("job-tab-overview").locator("visible=true").click();
   await p.waitForTimeout(300);
   await p.getByRole("button", { name: "Позиция", exact: true }).first().click();
   await p.waitForTimeout(400);

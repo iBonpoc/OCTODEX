@@ -156,6 +156,7 @@ exports.run = async (h) => {
   await p.waitForURL(/\/estimate\/new/, { timeout: 5000 });
   h.expect(new URL(p.url()).searchParams.get("customerId"), `job «⋯» → «Создать смету» for the job's client (${p.url()})`);
   await h.go("/job/j1");
+  await vis("job-tab-visits").first().click();
   await p.getByRole("button", { name: /^(Ещё один выезд|Запланировать работу)$/ }).locator("visible=true").first().click();
   await p.waitForURL(/\/job\/schedule/, { timeout: 5000 });
   h.expect(new URL(p.url()).searchParams.get("jobId") === "j1", `job «Запланировать работу» → schedule j1 (${p.url()})`);
