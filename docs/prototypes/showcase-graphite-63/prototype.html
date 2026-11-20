@@ -86,12 +86,12 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stro
 .picker{display:flex;gap:4px;padding:4px;border-radius:999px;background:var(--gl);box-shadow:0 0 0 1px var(--rim);margin:0 0 12px;overflow-x:auto}
 .picker button{flex:1;min-height:44px;padding:0 14px;border-radius:999px;font-size:15px;white-space:nowrap;color:var(--text2);transition:background .12s var(--ease),color .12s var(--ease)}
 .picker button[aria-pressed="true"]{background:var(--sel);color:var(--onSel);font-weight:500}
-.stage{position:relative;min-height:300px;padding:24px 16px;display:grid;place-items:center;gap:16px}
+.stage{position:relative;min-height:340px;padding:24px 16px;display:grid;place-items:center;gap:16px}
 .cur{position:absolute;top:12px;left:12px}
 .big{font-size:22px;line-height:28px;text-align:center;margin:4px 0 12px}
 .big b{font-weight:500}
 .states{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
-.states button{min-height:36px;padding:0 12px;border-radius:999px;background:var(--chip);font-size:13px}
+.states button{min-height:44px;padding:0 12px;border-radius:999px;background:var(--chip);font-size:13px}
 .states button[aria-pressed="true"]{background:var(--chipOn);color:var(--onSel)}
 details{margin-top:12px}
 summary{min-height:44px;display:flex;align-items:center;font-size:15px;color:var(--text2);cursor:pointer}
@@ -110,7 +110,8 @@ th{color:var(--text2);font-weight:400}
 .gbtn{min-height:52px;padding:0 24px;border-radius:16px;background:var(--acc);color:var(--onAcc);font-weight:500;font-size:17px;transition:transform .08s var(--ease),filter .15s var(--ease)}
 .gbtn.pillish{border-radius:999px}
 .st-press .gbtn,.st-press .nbtn{transform:scale(.97);filter:brightness(.84)}
-.st-off .gbtn,.st-off .nbtn{opacity:.4}
+.st-off .gbtn,.st-off .nbtn,.st-off .gfield,.st-off .nfield{opacity:.4}
+.st-load .gbtn,.st-load .nbtn{color:transparent;position:relative}.st-load .gbtn::after,.st-load .nbtn::after{content:"";position:absolute;inset:0;margin:auto;width:20px;height:20px;border-radius:50%;border:2px solid var(--onAcc);border-right-color:transparent}
 .gbtn2{min-height:52px;padding:0 24px;border-radius:16px;background:var(--tile2);border:1px solid var(--panelEdge);font-size:17px}
 .nfield{width:260px;min-height:44px;border-radius:12px;border:1px solid var(--nBdField);background:var(--nIn);padding:0 12px;display:flex;align-items:center;font-size:15px;color:var(--nInk)}
 .gfield{width:280px;min-height:44px;border-radius:12px;border:1px solid var(--fieldEdge);background:var(--fieldBg);padding:0 14px;display:flex;align-items:center;font-size:15px}
@@ -131,7 +132,6 @@ th{color:var(--text2);font-weight:400}
 .tg::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .25s var(--ease)}
 .tg.on::after{transform:translateX(20px)}
 .tg.on{background:var(--sel)} .tg.on::after{background:var(--onSel)}
-.tg.y.on{background:var(--acc)} .tg.y.on::after{background:#040505}
 .ntg{width:42px;height:24px;border-radius:999px;background:var(--nSurf2);position:relative;border:1px solid var(--nBd)}
 .ntg::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:999px;background:var(--nMut)}
 .ntg.on{background:var(--acc)}.ntg.on::after{left:20px;background:#0B0C0F}
@@ -169,8 +169,20 @@ th{color:var(--text2);font-weight:400}
 .sheet h4{font-weight:400;font-size:22px;line-height:28px;margin:0 0 8px;display:flex;justify-content:space-between;align-items:center}
 .nsheet{width:320px;border-radius:24px 24px 0 0;background:var(--nBg);border:1px solid var(--nBd);padding:10px 16px 16px}
 .placeholder{max-width:320px;text-align:center;font-size:15px;line-height:20px;color:var(--text2)}
-.tbar{position:fixed;right:12px;bottom:12px;z-index:5;display:flex;gap:8px}
-.tbar .circle{width:auto;padding:0 14px;font-size:13px}
+.hint{display:flex;gap:6px;align-items:center;font-size:15px;line-height:20px;color:var(--text2);margin:8px 4px}
+.nowplate{display:inline-flex;align-items:center;gap:6px;font-size:15px;line-height:20px;padding:6px 12px;border-radius:999px;background:var(--sel);color:var(--onSel)}
+.cols{display:none}
+@media (min-width:820px){.one{display:none}.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+ .picker.sm{display:none}}
+.col{display:grid;grid-template-rows:auto 1fr;gap:8px;text-align:left;cursor:pointer}
+.col .ch{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;padding:0 12px;border-radius:12px;font-size:17px}
+.col[aria-pressed="true"] .ch{background:var(--sel);color:var(--onSel);font-weight:500}
+.col .stage{min-height:320px;padding:12px;align-content:start;gap:12px}
+.col .stage *{max-width:100%}
+.col .stage .gsel,.col .stage .nsel,.col .stage .menu,.col .stage .gfield,.col .stage .nfield,.col .stage .sheet,.col .stage .nsheet,.col .stage .toast,.col .stage .alert,.col .stage .asheet,.col .stage .scatter,.col .stage .trow,.col .stage .gp{width:100%}
+.col .stage .nav,.col .stage .ntab{width:100%;min-width:0}
+.ready{color:var(--text)}
+.ibtn{width:44px;height:44px;display:grid;place-items:center;border-radius:999px}
 </style>
 </head>
 <body>
@@ -178,7 +190,6 @@ th{color:var(--text2);font-weight:400}
   <section class="pane list" id="list"></section>
   <section class="pane el" id="el"></section>
 </div>
-<div class="tbar"><button class="circle" id="theme" aria-label="Сменить тему">Тема</button></div>
 
 <script>
 /* Иконки: линия 1.5, сетка 20 (пакет §2.3) */
@@ -198,81 +209,95 @@ const I = {
   warn:'<path d="M10 4l7 12H3z"/><path d="M10 9v3M10 14v.1"/>',
   check:'<path d="M5 10l3 3 7-7"/>', x:'<path d="M6 6l8 8M14 6l-8 8"/>',
   today:'<circle cx="10" cy="10" r="6"/><path d="M10 7v3l2 2"/>', plan:'<rect x="4" y="5" width="12" height="11" rx="2"/><path d="M4 9h12"/>',
+  mic:'<rect x="8" y="3" width="4" height="9" rx="2"/><path d="M5 10a5 5 0 0 0 10 0M10 15v2"/>',
   people:'<circle cx="10" cy="7" r="3"/><path d="M4 16c1-3 3-4 6-4s5 1 6 4"/>', chat:'<path d="M4 5h12v8H8l-4 3z"/>'
 };
 const ic = (k,cls='') => `<svg class="i ${cls}" viewBox="0 0 20 20" aria-hidden="true">${I[k]}</svg>`;
 
 /* Разделы витрины: простые названия, где в приложении, сколько мест (спека 63 §2, §3а) */
 const GROUPS = [
- ['Основа','base',[
-  ['colors','Цвета','фон, панели, текст, жёлтый акцент, статусы'],
-  ['type','Шрифт','заголовки, текст, цифры'],
-  ['space','Отступы и скругления','поля экрана, между блоками, углы'],
-  ['icons','Значки','все значки приложения'],
-  ['motion','Движение','скорость окон, шторок, переходов'],
-  ['haptics','Вибрация','отклик на нажатие и успех'] ]],
  ['Нажать','tap',[
-  ['button','Кнопка','139 мест: «Сохранить», «Отправить клиенту»…'],
+  ['button','Кнопка','139 мест: «Сохранить», «Отправить клиенту»'],
   ['iconbtn','Кнопка-значок','40 мест: «⋯», «?», закрыть'],
   ['plus','Кнопка «＋ Создать»','в нижнем меню'],
   ['actionbar','Панель действий внизу','смета, счёт, выезд'] ]],
+ ['Выбрать','pick',[
+  ['select','Выбор из списка','15 мест: статус, источник, налог'],
+  ['chips','Выбор кнопками-чипами','58 мест: уходит по решению 16.11'],
+  ['toggle','Переключатель да / нет','43 места: вибрация, налог'],
+  ['check','Отметка галочкой','чек-лист, задачи'],
+  ['segment','Переключатель режимов','16 мест: «День · Неделя»'],
+  ['viewtabs','Вкладки экрана','«Активные · Архив»'],
+  ['filter','Фильтр над списком','клиенты, сметы'],
+  ['search','Поиск','клиенты, каталог'],
+  ['statuspick','Смена статуса','смета, лид, работа'] ]],
  ['Ввести','type',[
   ['field','Поле','65 мест: имя, адрес, заметка'],
   ['phone','Телефон и почта','карточка клиента'],
   ['money','Число и деньги','цены, количество, проценты'],
   ['date','Дата и время','выезд, срок счёта'] ]],
- ['Выбрать','pick',[
-  ['select','Выбор из списка','15 мест: статус, источник, налог'],
-  ['toggle','Переключатель','43 места: да / нет'],
-  ['check','Отметка','чек-лист, задачи'],
-  ['segment','Сегмент','16 мест: режим экрана'],
-  ['filter','Фильтр','над списками'] ]],
  ['Окна','win',[
-  ['sheet','Шторка','74 места: формы, выбор'],
+  ['sheet','Шторка снизу','74 места: формы, выбор'],
   ['confirm','Окно «Точно удалить?»','удаление, отправка, возврат денег'],
+  ['inputwin','Окно с полем','переименовать, ввести число'],
   ['menu','Меню «⋯»','действия у кнопки'],
-  ['tip','Подсказка «ⓘ»','пояснение к числу или правилу'] ]],
+  ['tip','Подсказка «ⓘ»','пояснение к числу или правилу'],
+  ['hint','Подсказка при первом входе','«Смахните вправо — позвоним»'] ]],
  ['Сообщения','msg',[
-  ['toast','Тост «Вернуть»','после удаления и других действий'],
-  ['banner','Баннер','«Нет сети», «Счёт просрочен»'],
-  ['status','Статус','«Оплачено», «Просрочено» — значок и слово'],
-  ['badge','Счётчик','число на «Чатах»'] ]],
+  ['toast','Всплывающее сообщение «Вернуть»','после удаления и других действий'],
+  ['banner','Плашка-предупреждение','«Нет сети», «Счёт просрочен»'],
+  ['status','Статус','«Оплачено», «Просрочено»: значок и слово'],
+  ['badge','Счётчик на значке','число на «Чатах»'],
+  ['sync','Сохранено и синхронизация','«Всё сохранено · 10:12»'] ]],
  ['Списки','list',[
-  ['card','Карточка','клиент, смета, счёт в списке'],
+  ['card','Карточка в списке','клиент, смета, счёт'],
   ['row','Строка','внутри карточки и в меню выбора'],
+  ['avatar','Аватар и метка','клиент, сотрудник, тег'],
+  ['swipe','Смахнуть строку','«Удалить», «Позвонить»'],
+  ['drag','Перетащить','порядок строк сметы'],
+  ['expand','Раскрыть строку','детали позиции'],
   ['empty','Пустой список','«Клиентов пока нет»'] ]],
- ['Ожидание и переходы','wait',[
-  ['loading','Загрузка','кружок и серые заготовки'],
-  ['pull','Потянуть вниз — обновить','корневые списки'],
-  ['push','Переход между экранами','открыть клиента, назад'] ]],
  ['Навигация','nav',[
   ['tabbar','Нижнее меню','Сегодня, План, ＋, Клиенты, Чаты'],
   ['header','Шапка экрана','заголовок, назад, «?»'],
   ['side','Боковое меню','планшет и компьютер'] ]],
+ ['Ожидание и переходы','wait',[
+  ['loading','Загрузка','кружок и серые заготовки'],
+  ['progress','Прогресс и шаги','«Шаг 2 из 4», выезд по шагам'],
+  ['pull','Потянуть вниз, чтобы обновить','списки на главных вкладках'],
+  ['push','Переход между экранами','открыть клиента, назад'],
+  ['error','Ошибка и нет сети','«Не удалось · Повторить»'] ]],
  ['Шаблоны экранов','tpl',[
-  ['t-list','Список','клиенты, сметы, счета'],
-  ['t-card','Карточка объекта','клиент, работа, смета'],
-  ['t-form','Форма','новый клиент, новый выезд'],
-  ['t-wizard','Мастер','первый запуск'],
+  ['t-list','Экран со списком','клиенты, сметы, счета'],
+  ['t-card','Экран объекта','клиент, работа, смета'],
+  ['t-form','Экран-форма','новый клиент, новый выезд'],
+  ['t-wizard','Мастер по шагам','первый запуск'],
   ['t-doc','Документ','смета, счёт, чек'],
   ['t-set','Настройки','компания, профиль'] ]],
  ['Особые места','spec',[
-  ['x-draw','Холст рисунка Gutters','исключение: рисунок пальцем'],
-  ['x-tape','Рулетка Gutters','исключение: протяжка числа'],
-  ['x-sign','Подпись клиента','исключение: рисование'],
+  ['x-draw','Холст рисунка Gutters','своё: рисунок пальцем'],
+  ['x-tape','Рулетка Gutters','своё: протяжка числа'],
+  ['x-sign','Подпись клиента','своё: рисование'],
   ['x-launch','Запуск приложения','знак GoRix'],
-  ['x-pdf','PDF сметы и счёта','печатный вид'] ]]
+  ['x-pdf','PDF сметы и счёта','печатный вид'] ]],
+ ['Основа','base',[
+  ['colors','Цвета','фон, панели, текст, жёлтый, статусы'],
+  ['type','Шрифт','заголовки, текст, цифры'],
+  ['space','Отступы и скругления','поля экрана, между блоками, углы'],
+  ['icons','Значки','все значки приложения'],
+  ['motion','Движение','скорость окон, шторок, переходов'],
+  ['haptics','Вибрация','отклик на нажатие и успех'] ]]
 ];
 const ALL = Object.fromEntries(GROUPS.flatMap(([,,els])=>els.map(e=>[e[0],{id:e[0],name:e[1],where:e[2]}])));
 
 /* Образцы: «Сейчас» (вид «Наряд» в приложении) и варианты 1–2. Варианты 2 — заготовки для показа структуры. */
 const S = {
- button:{states:['Покой','Нажато','Выключено'],
+ button:{states:['Покой','Нажато','Выключено','Загрузка'],
   now:()=>`<div class="naryad"><button class="nbtn">Отправить клиенту</button></div>`,
   v:[['«Графит»: жёлтая 52, угол 16',()=>`<div style="display:grid;gap:12px;justify-items:center"><button class="gbtn">Отправить клиенту</button><button class="gbtn2">Сохранить черновик</button></div>`],
      ['«Графит»: жёлтая 52, пилюля',()=>`<div style="display:grid;gap:12px;justify-items:center"><button class="gbtn pillish">Отправить клиенту</button><button class="gbtn2" style="border-radius:999px">Сохранить черновик</button></div>`]],
   dev:[['высота','36','52'],['угол','12','16 / 999'],['шрифт','Onest 600 · 15','Jost 500 · 17'],['нажатие','80 мс, пружина','80 / 150 мс, scale .97']]},
- field:{states:['Покой','Фокус','Ошибка'],
+ field:{states:['Покой','Фокус','Ошибка','Выключено'],
   now:()=>`<div class="naryad"><div class="lbl" style="color:var(--nMut)">Имя клиента</div><div class="nfield">Майкл Чен</div><div class="err">${ic('warn')} Укажите имя</div></div>`,
   v:[['«Графит»: подпись над полем',()=>`<div><div class="lbl">Имя клиента</div><div class="gfield">Майкл Чен</div><div class="err">${ic('warn')} Укажите имя</div></div>`],
      ['«Графит»: подпись внутри поля',()=>`<div><div class="gfield float"><small>Имя клиента</small>Майкл Чен</div><div class="err">${ic('warn')} Укажите имя</div></div>`]],
@@ -280,12 +305,12 @@ const S = {
  select:{states:['Закрыто','Открыто'],
   now:o=>`<div class="naryad"><div class="lbl" style="color:var(--nMut)">Статус сметы</div><div class="nsel">Отправлена <span>⌄</span></div>${o?'<div class="nsel" style="margin-top:6px;flex-direction:column;align-items:stretch;padding:4px 12px"><div style="min-height:36px;display:flex;align-items:center">Черновик</div><div style="min-height:36px;display:flex;align-items:center">Отправлена ✓</div><div style="min-height:36px;display:flex;align-items:center">Подписана</div></div>':''}</div>`,
   v:[['«Графит»: меню под строкой',o=>`<div><div class="gp" style="width:300px"><div class="gsel" style="background:none"><span>Статус сметы</span><span style="color:var(--text2)">Отправлена ${ic('pick')}</span></div></div>${o?`<div class="menu"><div>Черновик</div><div>Отправлена ${ic('check')}</div><div>Подписана</div><div>Отклонена</div></div>`:''}</div>`],
-     ['«Графит»: шторка со списком',o=>`<div><div class="gp" style="width:300px"><div class="gsel" style="background:none"><span>Статус сметы</span><span style="color:var(--text2)">Отправлена ${ic('chev')}</span></div></div>${o?`<div class="sheet" style="margin-top:10px"><div class="grab"></div><h4>Статус сметы <span class="circle" style="width:36px;height:36px">${ic('x')}</span></h4><div class="trow" style="width:auto;padding:0">Черновик</div><div class="trow" style="width:auto;padding:0;border-top:.5px solid var(--div)">Отправлена ${ic('check')}</div><div class="trow" style="width:auto;padding:0;border-top:.5px solid var(--div)">Подписана</div></div>`:''}</div>`]],
+     ['«Графит»: шторка со списком',o=>`<div><div class="gp" style="width:300px"><div class="gsel" style="background:none"><span>Статус сметы</span><span style="color:var(--text2)">Отправлена ${ic('chev')}</span></div></div>${o?`<div class="sheet" style="margin-top:10px"><div class="grab"></div><h4>Статус сметы <span class="ibtn" aria-label="Закрыть">${ic('x')}</span></h4><div class="trow" style="width:auto;padding:0">Черновик</div><div class="trow" style="width:auto;padding:0;border-top:.5px solid var(--div)">Отправлена ${ic('check')}</div><div class="trow" style="width:auto;padding:0;border-top:.5px solid var(--div)">Подписана</div></div>`:''}</div>`]],
   dev:[['вид','SelectField: меню / PickerSheet','строка + меню (blur 6) / шторка ¼'],['пунктов в меню','до 8','5–8, больше — шторка']]},
  toggle:{states:['Выкл.','Вкл.'],
   now:o=>`<div class="naryad" style="display:flex;align-items:center;gap:12px;font-size:15px">Вибрация <span class="ntg ${o?'on':''}"></span></div>`,
   v:[['«Графит»: белый бегунок',o=>`<div class="gp"><div class="trow">Вибрация <span class="tg ${o?'on':''}"></span></div></div>`],
-     ['«Графит»: жёлтая дорожка',o=>`<div class="gp"><div class="trow">Вибрация <span class="tg y ${o?'on':''}"></span></div></div>`]],
+     ['«Графит»: с пояснением в строке',o=>`<div class="gp"><div class="trow" style="min-height:64px"><span>Вибрация<div style="font-size:13px;color:var(--text2)">Отклик при нажатии</div></span><span class="tg ${o?'on':''}"></span></div></div>`]],
   dev:[['размер','42×24','51×31'],['всегда в строке','нет (33 места без строки)','да'],['бегунок','—','250 мс']]},
  confirm:{states:['Покой'],
   now:()=>`<div class="scatter"><div>Сейчас общего окна нет: подтверждение сделано пятью разными способами.</div><div>1. Шторка с красной кнопкой</div><div>2. Тост «Отменить» без вопроса</div><div>3. Системное окно браузера на вебе</div><div>4. Вопрос внутри карточки</div><div>5. Сегмент «Да / Нет»</div></div>`,
@@ -304,7 +329,7 @@ const S = {
   dev:[['стекло','своя пилюля','жидкое стекло'],['выбор','пилюля, пружина','луч 320 мс + вес 500']]},
  sheet:{states:['Половина'],
   now:()=>`<div class="naryad"><div class="nsheet"><div class="grab"></div><div style="font-size:17px;font-weight:600;margin-bottom:8px">Новый выезд</div><div class="nfield" style="width:auto">Завтра, 9:00</div></div></div>`,
-  v:[['«Графит»: плавает над низом',()=>`<div class="sheet"><div class="grab"></div><h4>Новый выезд <span class="circle" style="width:36px;height:36px">${ic('x')}</span></h4><div class="gfield" style="width:auto">Завтра, 9:00</div></div>`]],
+  v:[['«Графит»: плавает над низом',()=>`<div class="sheet"><div class="grab"></div><h4>Новый выезд <span class="ibtn" aria-label="Закрыть">${ic('x')}</span></h4><div class="gfield" style="width:auto">Завтра, 9:00</div></div>`]],
   dev:[['угол','24 сверху','16, поля 8, над низом 8'],['высоты','fit / ½ / large','¼ / ½ / полная'],['движение','350 мс, пружина','320 вверх / 240 вниз']]}
 };
 
@@ -313,43 +338,49 @@ const qs = new URLSearchParams(location.search);
 if (qs.get('theme')) theme = qs.get('theme');
 document.documentElement.dataset.theme = theme;
 
+const TOTAL = GROUPS.reduce((n,g)=>n+g[2].length,0);
+const themeBtn = () => `<button class="circle" id="theme" aria-label="Сменить тему" style="margin-left:auto">${ic(theme==='dark'?'today':'today')}</button>`;
 function renderList(){
   const L = document.getElementById('list');
-  L.innerHTML = `<div class="head"></div><h1 class="title">Дизайн-система</h1>
-  <p class="sub">Каждый элемент приложения. Нажмите на элемент — увидите, как он выглядит сейчас, и варианты нового вида «Графит».</p>` +
+  L.innerHTML = `<div class="head">${themeBtn()}</div><h1 class="title">Дизайн-система</h1>
+  <p class="sub">Каждый элемент приложения. Откройте элемент: «Как сейчас» — вид в приложении сегодня, «Вариант 1, 2» — новый вид «Графит». Назовите голосом, что берёте: «кнопка, вариант 1» или «кнопка, как сейчас».</p>` +
   GROUPS.map(([g,icon,els])=>`<div class="h2">${g}</div><div class="gp">${els.map(([id,n,w])=>{
-    const has = !!S[id]; const cnt = has ? (S[id].v.length+' вар.') : 'скоро';
-    return `<button class="row" data-id="${id}" ${cur===id?'aria-current="true"':''}><span class="gi">${ic(icon)}</span><span class="t"><div class="n">${n}</div><div class="w">${w}</div></span><span class="r">${cnt}</span>${ic('chev','chev')}</button>`}).join('')}</div>`).join('') +
-  `<p class="note">Всего 47 элементов в 11 разделах. «Особые места» — то, что остаётся своим (исключение), но тоже показано здесь.</p>`;
+    const has = !!S[id]; const cnt = has ? `<span class="pill on">Сейчас + ${S[id].v.length}</span>` : 'готовятся';
+    return `<button class="row" data-id="${id}" ${cur===id?'aria-current="true"':''}><span class="t"><div class="n ${has?'ready':''}">${n}</div><div class="w">${w}</div></span><span class="r">${cnt}</span>${ic('chev','chev')}</button>`}).join('')}</div>`).join('') +
+  `<p class="note">Всего ${TOTAL} элементов в ${GROUPS.length} разделах. «Особые места» остаются своими, но тоже показаны здесь.</p>`;
   L.querySelectorAll('.row').forEach(b=>b.onclick=()=>open(b.dataset.id));
+  document.getElementById('theme').onclick=toggleTheme;
 }
+const STK = {'Нажато':'press','Выключено':'off','Фокус':'focus','Ошибка':'error','Загрузка':'load'};
+function sample(s,k,on){return k==='now'?s.now(on):s.v[+k-1][1](on)}
+function nameOf(k){return k==='now'?'Как сейчас':'Вариант '+k}
 function renderEl(){
   const E = document.getElementById('el');
   if(!cur){E.innerHTML = `<div class="head"></div><div class="gp hide-sm" style="padding:24px"><div class="big">Выберите элемент слева</div><p class="note" style="text-align:center">Например, «Выбор из списка»</p></div>`;return;}
   const e = ALL[cur], s = S[cur];
-  if(!s){E.innerHTML = `<div class="head"><button class="circle back" id="bk" aria-label="Назад">${ic('back')}</button></div><h1 class="title">${e.name}</h1><p class="sub">${e.where}</p><div class="gp stage"><div class="placeholder">Образец появится в PR этого раздела (спека 63 §5.3). В прототипе показаны: Кнопка, Поле, Выбор из списка, Переключатель, Шторка, Окно «Точно удалить?», Тост, Нижнее меню.</div></div>`;
-    const b=document.getElementById('bk'); if(b) b.onclick=back; return;}
-  const opts = [['now','Сейчас'], ...s.v.map((_,i)=>[String(i+1),'Вариант '+(i+1)])];
-  const on = state>0;
-  const body = variant==='now' ? s.now(on) : s.v[+variant-1][1](on);
-  const label = variant==='now' ? `<b>${e.name}</b> · сейчас в приложении` : `<b>${e.name}</b> · вариант ${variant}`;
-  const desc = variant==='now' ? 'Так выглядит в приложении сейчас' : s.v[+variant-1][0];
-  E.innerHTML = `<div class="head"><button class="circle back" id="bk" aria-label="Назад">${ic('back')}</button></div>
-  <h1 class="title">${e.name}</h1><p class="sub">${e.where}</p>
-  <div class="picker" role="group" aria-label="Варианты">${opts.map(([k,t])=>`<button aria-pressed="${variant===k}" data-v="${k}">${t}</button>`).join('')}</div>
-  <div class="big" aria-live="polite">${label}</div>
-  <div class="gp stage st-${['idle','press','off','focus','error'][stateKey(s,state)]}">${variant==='now'?'<span class="pill on cur">Сейчас в приложении</span>':''}${body}</div>
-  <p class="note">${desc}. Назовите голосом: «${e.name.toLowerCase()}, ${variant==='now'?'оставить как сейчас':'вариант '+variant}».</p>
-  ${s.states.length>1?`<div class="states" role="group" aria-label="Состояния">${s.states.map((t,i)=>`<button aria-pressed="${state===i}" data-s="${i}">${t}</button>`).join('')}</div>`:''}
+  const head = `<div class="head"><button class="circle back" id="bk" aria-label="Назад">${ic('back')}</button></div><h1 class="title">${e.name}</h1><p class="sub">${e.where}</p>`;
+  if(!s){E.innerHTML = head+`<div class="gp stage"><div class="placeholder">Варианты готовятся. Пока можно посмотреть: Кнопка, Поле, Выбор из списка, Переключатель да / нет, Шторка снизу, Окно «Точно удалить?», Всплывающее сообщение, Нижнее меню.</div></div>`;
+    document.getElementById('bk').onclick=back; return;}
+  const keys = ['now', ...s.v.map((_,i)=>String(i+1))];
+  const on = state>0, stk = STK[s.states[state]]||'idle';
+  const plate = k => k==='now' ? `<span class="nowplate">${ic('check')} Сейчас в приложении</span>` : `<span class="nowplate" style="background:var(--tile2);color:var(--text)">Вариант ${k}: «Графит»</span>`;
+  const loadOv = stk==='load' ? `<div class="note" style="text-align:center">${ic('wait')} Кнопка держит ширину, второй тап не срабатывает</div>` : '';
+  E.innerHTML = head + `
+  <div class="picker sm" role="group" aria-label="Варианты">${keys.map(k=>`<button aria-pressed="${variant===k}" data-v="${k}">${k==='now'?'Как сейчас ●':'Вариант '+k}</button>`).join('')}</div>
+  ${s.states.length>1?`<div class="states" role="group" aria-label="Состояние">${s.states.map((t,i)=>`<button aria-pressed="${state===i}" data-s="${i}">${t}</button>`).join('')}</div>`:''}
+  <div class="one"><div class="big" aria-live="polite"><b>${nameOf(variant)}</b></div>
+    <div class="gp stage st-${stk}"><div style="position:absolute;top:12px;left:12px">${plate(variant)}</div><div style="padding-top:36px">${sample(s,variant,on)}</div></div>${loadOv}</div>
+  <div class="cols" style="--n:${keys.length}">${keys.map(k=>`<div class="col" role="button" tabindex="0" data-v="${k}" aria-pressed="${variant===k}"><div class="ch">${nameOf(k)}${k==='now'?' ●':''}</div><div class="gp stage st-${stk}" style="display:grid;justify-items:center"><div style="justify-self:start;min-height:32px">${k==='now'?`<span class="nowplate">${ic('check')} В приложении</span>`:''}</div><div style="width:100%;display:grid;justify-items:center">${sample(s,k,on)}</div></div></div>`).join('')}</div>
+  <p class="hint">${ic('mic')} Скажите: «${e.name.toLowerCase()}, ${variant==='now'?'как сейчас':'вариант '+variant}»</p>
+  <p class="note">${variant==='now'?'Так выглядит в приложении сейчас.':s.v[+variant-1][0]+'.'} Нажатие ничего не меняет в приложении — только называет вариант.</p>
   <details><summary>Подробнее для разработчика</summary><div class="gp" style="padding:4px 8px"><table><tr><th></th><th>Сейчас</th><th>«Графит»</th></tr>${s.dev.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}</table></div></details>`;
   E.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{variant=b.dataset.v;renderEl()});
   E.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{state=+b.dataset.s;renderEl()});
   document.getElementById('bk').onclick=back;
 }
-function stateKey(s,i){const t=s.states[i]||'';return t==='Нажато'?1:t==='Выключено'?2:t==='Фокус'?3:t==='Ошибка'?4:0}
+function toggleTheme(){theme=theme==='dark'?'light':'dark';document.documentElement.dataset.theme=theme}
 function open(id){cur=id;variant='now';state=0;document.getElementById('app').className='app view-el';renderList();renderEl();window.scrollTo(0,0)}
 function back(){document.getElementById('app').className='app view-list';cur=null;renderList();renderEl()}
-document.getElementById('theme').onclick=()=>{theme=theme==='dark'?'light':'dark';document.documentElement.dataset.theme=theme};
 renderList(); renderEl();
 if(qs.get('el')){open(qs.get('el')); if(qs.get('v')){variant=qs.get('v');} if(qs.get('s')){state=+qs.get('s');} renderEl();}
 </script>
