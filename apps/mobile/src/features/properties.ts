@@ -44,18 +44,17 @@ export function propertyNow(db: DB, propertyId: string, now = Date.now()): Prope
 /** Calendar day number of a moment in a time zone — lives with the schedule settings (one rule for the whole app) */
 export { dayIn };
 /**
- * May this person see the gate code? The office always; a tech and sales only on the day of a visit of theirs at the
- * property (for sales: their inspection) or the day before, by the company's time zone, and not for a visit that is over
- * (paid, completed, no-show). The same rule as app.can_see_gate_code on the server, which decides in the cloud (Р-3).
+ * May this person see the gate code? The office always; a tech (a subcontractor too — his app role is tech) and sales for as
+ * long as they are assigned to the work at the property (#2263, the founder 20.11.2026: «показывает всегда, пока он назначен
+ * на работу»): on a visit there of a job that goes on (not done; a cancelled job is not loaded) — a finished visit of that
+ * job counts too — or on an inspection (no job) that is still open. Any day, no day window. Cancelled and no-show visits are
+ * not in db.visits. The same rule as app.can_see_gate_code on the server, which decides in the cloud.
  */
-export function canSeeGateCode(db: DB, role: Role, propertyId: string, now = Date.now()): boolean {
+export function canSeeGateCode(db: DB, role: Role, propertyId: string): boolean {
   if (role !== "tech" && role !== "sales") return true;
-  const tz = db.company?.timezone || "America/Los_Angeles";
-  // a visit of a live job, or an inspection (no job) at this property
-  const doneJobs = new Set(db.jobs.filter((j) => j.status === "done").map((j) => j.id));
-  const today = dayIn(now, tz);
+  const liveJobs = new Set(db.jobs.filter((j) => j.status !== "done").map((j) => j.id));
   return db.visits.some(
-    (v) => visitPropertyId(db, v) === propertyId && !(v.jobId && doneJobs.has(v.jobId)) && isAssigned(v, db.me) && isOpenVisit(v) && !v.closed && [today, today + 1].includes(dayIn(new Date(v.start).getTime(), tz)),
+    (v) => visitPropertyId(db, v) === propertyId && isAssigned(v, db.me) && (v.jobId ? liveJobs.has(v.jobId) : isOpenVisit(v)),
   );
 }
 

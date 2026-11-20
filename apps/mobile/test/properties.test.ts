@@ -26,51 +26,49 @@ describe("address lines", () => {
   });
 });
 
-describe("gate code: office always, a tech only on the visit day and the day before (company time zone)", () => {
-  // now: Nov 5, 2026, 09:00 in Los Angeles (17:00 UTC)
-  const NOW = Date.parse("2026-11-05T17:00:00Z");
-  const withVisit = (startIso: string, extra: Partial<Visit> = {}, tz = "America/Los_Angeles"): DB => {
+describe("gate code: office always, a tech or sales while assigned to the work (#2263)", () => {
+  const withVisit = (startIso: string, extra: Partial<Visit> = {}): DB => {
     const d = base();
     d.me = "m-ivan";
-    d.company = d.company ? { ...d.company, timezone: tz } : d.company;
     d.properties = [...d.properties, prop()];
     d.jobs = [...d.jobs, { id: "jX", propertyId: "pX", title: "Gate job", status: "scheduled", amountCents: 0 }];
     d.visits = [...d.visits, { id: "vX", jobId: "jX", techId: "m-ivan", start: startIso, durationMin: 60, step: "scheduled", scope: [], checklist: [], photos: [], amountDueCents: 0, ...extra }];
     return d;
   };
   it("office roles see it any day", () => {
-    expect(canSeeGateCode(withVisit("2026-11-20T17:00:00Z"), "director", "pX", NOW)).toBe(true);
-    expect(canSeeGateCode(withVisit("2026-11-20T17:00:00Z"), "dispatcher", "pX", NOW)).toBe(true);
+    expect(canSeeGateCode(withVisit("2026-11-20T17:00:00Z"), "director", "pX")).toBe(true);
+    expect(canSeeGateCode(withVisit("2026-11-20T17:00:00Z"), "dispatcher", "pX")).toBe(true);
   });
-  it("tech: today and tomorrow yes; the day after, yesterday — no", () => {
-    expect(canSeeGateCode(withVisit("2026-11-05T22:00:00Z"), "tech", "pX", NOW)).toBe(true); // today 14:00
-    expect(canSeeGateCode(withVisit("2026-11-07T06:30:00Z"), "tech", "pX", NOW)).toBe(true); // tomorrow 22:30 LA (already Nov 7 in UTC)
-    expect(canSeeGateCode(withVisit("2026-11-07T17:00:00Z"), "tech", "pX", NOW)).toBe(false); // +2 days
-    expect(canSeeGateCode(withVisit("2026-11-04T17:00:00Z"), "tech", "pX", NOW)).toBe(false); // yesterday
+  it("С1 tech: assigned — any day, past or far ahead (no day window)", () => {
+    expect(canSeeGateCode(withVisit("2026-11-05T22:00:00Z"), "tech", "pX")).toBe(true);
+    expect(canSeeGateCode(withVisit("2027-03-01T17:00:00Z"), "tech", "pX")).toBe(true);
+    expect(canSeeGateCode(withVisit("2026-10-01T17:00:00Z"), "tech", "pX")).toBe(true);
   });
-  it("tech: a visit that is over, someone else's, or of a finished job — no", () => {
-    expect(canSeeGateCode(withVisit("2026-11-05T22:00:00Z", { step: "paid" }), "tech", "pX", NOW)).toBe(false);
-    expect(canSeeGateCode(withVisit("2026-11-05T22:00:00Z", { closed: true }), "tech", "pX", NOW)).toBe(false);
-    expect(canSeeGateCode(withVisit("2026-11-05T22:00:00Z", { techId: "m-other" }), "tech", "pX", NOW)).toBe(false);
+  it("С1 tech: a finished visit of a job that goes on still counts", () => {
+    expect(canSeeGateCode(withVisit("2026-11-05T22:00:00Z", { step: "paid" }), "tech", "pX")).toBe(true);
+    expect(canSeeGateCode(withVisit("2026-11-05T22:00:00Z", { closed: true }), "tech", "pX")).toBe(true);
+  });
+  it("С2 taken off the visit, someone else's visit — no", () => {
+    expect(canSeeGateCode(withVisit("2026-11-05T22:00:00Z", { techId: "m-other" }), "tech", "pX")).toBe(false);
+    expect(canSeeGateCode(withVisit("2026-11-05T22:00:00Z", { techId: null, assigneeIds: [] }), "tech", "pX")).toBe(false);
+  });
+  it("С3 the job is done or cancelled (not loaded) — no", () => {
     const done = withVisit("2026-11-05T22:00:00Z");
     done.jobs = done.jobs.map((j) => (j.id === "jX" ? { ...j, status: "done" } : j));
-    expect(canSeeGateCode(done, "tech", "pX", NOW)).toBe(false);
+    expect(canSeeGateCode(done, "tech", "pX")).toBe(false);
+    const cancelled = withVisit("2026-11-05T22:00:00Z");
+    cancelled.jobs = cancelled.jobs.filter((j) => j.id !== "jX");
+    expect(canSeeGateCode(cancelled, "tech", "pX")).toBe(false);
   });
-  it("sales: as a tech — their own visit today or tomorrow (an inspection), not any day (Р-3)", () => {
-    expect(canSeeGateCode(withVisit("2026-11-05T22:00:00Z"), "sales", "pX", NOW)).toBe(true);
-    expect(canSeeGateCode(withVisit("2026-11-07T06:30:00Z"), "sales", "pX", NOW)).toBe(true);
-    expect(canSeeGateCode(withVisit("2026-11-20T17:00:00Z"), "sales", "pX", NOW)).toBe(false);
-    expect(canSeeGateCode(withVisit("2026-11-05T22:00:00Z", { techId: "m-other" }), "sales", "pX", NOW)).toBe(false);
-    expect(canSeeGateCode(withVisit("2026-11-05T22:00:00Z", { closed: true }), "sales", "pX", NOW)).toBe(false);
-    const insp = withVisit("2026-11-05T22:00:00Z", { jobId: undefined, propertyId: "pX" } as Partial<Visit>);
-    expect(canSeeGateCode(insp, "sales", "pX", NOW)).toBe(true);
+  it("С4 another property — no", () => {
+    expect(canSeeGateCode(withVisit("2026-11-05T22:00:00Z"), "tech", "pOther")).toBe(false);
   });
-  it("by the company's time zone, not the phone's: 00:30 today far ahead of UTC is still today", () => {
-    // Kiritimati is UTC+14: now there it is Nov 6, 07:00; a visit at 00:30 Nov 6 local = Nov 5, 10:30 UTC
-    expect(canSeeGateCode(withVisit("2026-11-05T10:30:00Z", {}, "Pacific/Kiritimati"), "tech", "pX", NOW)).toBe(true);
-    // 12 hours behind UTC (now Nov 5, 05:00 there) the same moment was yesterday; 22:30 tonight there is today
-    expect(canSeeGateCode(withVisit("2026-11-05T10:30:00Z", {}, "Etc/GMT+12"), "tech", "pX", NOW)).toBe(false);
-    expect(canSeeGateCode(withVisit("2026-11-06T10:30:00Z", {}, "Etc/GMT+12"), "tech", "pX", NOW)).toBe(true);
+  it("sales: as a tech — an inspection while it is open; a finished inspection — no", () => {
+    const insp = (extra: Partial<Visit> = {}) => withVisit("2026-11-20T17:00:00Z", { jobId: undefined, propertyId: "pX", ...extra } as Partial<Visit>);
+    expect(canSeeGateCode(insp(), "sales", "pX")).toBe(true);
+    expect(canSeeGateCode(insp({ step: "done" }), "sales", "pX")).toBe(false);
+    expect(canSeeGateCode(insp({ closed: true }), "sales", "pX")).toBe(false);
+    expect(canSeeGateCode(insp({ techId: "m-other" }), "sales", "pX")).toBe(false);
   });
 });
 
