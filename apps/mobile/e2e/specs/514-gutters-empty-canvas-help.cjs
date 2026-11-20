@@ -1,5 +1,5 @@
 /**
- * e2e 515 — #2186 (founder 18.11: «когда я открываю чертеж, то обязательно на пустом экране должна быть инструкция, как
+ * e2e 514 — #2186 (founder 18.11: «когда я открываю чертеж, то обязательно на пустом экране должна быть инструкция, как
  * пользоваться чертежом»). Every view.
  * - an empty canvas: «Как рисовать» — four steps (a gutter, a downspout, the length, two fingers); the first stroke draws
  *   THROUGH it (the card takes no touch);
