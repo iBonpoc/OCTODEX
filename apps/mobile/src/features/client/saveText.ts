@@ -3,6 +3,9 @@ import { Platform } from "react-native";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
+/** not an animation: the download has started by then, the temporary address can go, ms */
+const REVOKE_URL_MS = 1000;
+
 export async function saveText(name: string, text: string, mimeType = "text/csv"): Promise<void> {
   if (Platform.OS === "web") {
     const url = URL.createObjectURL(new Blob([text], { type: mimeType }));
@@ -10,7 +13,7 @@ export async function saveText(name: string, text: string, mimeType = "text/csv"
     a.href = url;
     a.download = name;
     a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setTimeout(() => URL.revokeObjectURL(url), REVOKE_URL_MS);
     return;
   }
   const f = new File(Paths.cache, name);

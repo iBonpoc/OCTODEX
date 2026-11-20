@@ -594,3 +594,29 @@ describe("design system: a record's card has no row of pill buttons (#1412)", ()
     expect(bad, "one main button (ActionBar / the top of the content from 820) and «⋯» with the rest (Б4)").toEqual([]);
   });
 });
+
+/**
+ * Ш III-1 (спека 63 §3а, #2292): «ноль значений по месту» for what the eye sees in motion — a bezier curve, the duration
+ * of an animation, a layer. The scan is the codemod's own (scripts/codemod/motionLiterals.cjs, TypeScript API): the guard and
+ * the tool cannot disagree. `DEBT` is the places an open PR holds right now; each batch shortens it, a new place is red.
+ */
+describe("design system: no curve, animation time or layer written in place (Ш III-1)", () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { scan } = require("../../../scripts/codemod/motionLiterals.cjs") as { scan: () => { file: string; line: number; kind: string; text: string; hasToken: boolean }[] };
+  const DEBT = new Set([
+    "src/ui/overlays.tsx zIndex 100", // PR 1996 / 1975 / 1964 hold the file; the toast layer has no token yet (z.toast is 8, the toast is above the modal)
+    "src/ui/surfaces.tsx zIndex 10", // PR 2141 holds the file
+    "src/ui/surfaces.tsx zIndex 0",
+  ]);
+  const left = () => scan().map((h) => ({ ...h, key: `${h.file.split("\\").join("/")} ${h.kind} ${h.text}` }));
+  it("every literal that has a token is already written as the token", () => {
+    expect(left().filter((h) => h.hasToken && !DEBT.has(h.key)).map((h) => `${h.file}:${h.line} ${h.kind} ${h.text}`)).toEqual([]);
+  });
+  it("a literal without a token needs its token first (or a line of DEBT, with the PR that holds the file)", () => {
+    expect(left().filter((h) => !h.hasToken && !DEBT.has(h.key)).map((h) => `${h.file}:${h.line} ${h.kind} ${h.text}`)).toEqual([]);
+  });
+  it("DEBT has no line that is already paid", () => {
+    const keys = new Set(left().map((h) => h.key));
+    expect([...DEBT].filter((k) => !keys.has(k))).toEqual([]);
+  });
+});
