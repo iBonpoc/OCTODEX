@@ -29,6 +29,8 @@ const SLOTS: { id: string; label: DictKey; icon: IconKey }[] = [
   { id: "chats", label: "ds.gr.tab.chats", icon: "message" },
 ];
 const PLUS = 2;
+/** how far the cone spreads past the line on each side, as a share of the line */
+const CONE_SPREAD = 0.2;
 const S = graphite.size;
 
 export function SpotlightNav({
@@ -187,7 +189,12 @@ export function SpotlightNav({
               shadowOffset: { width: 0, height: 0 },
             }}
           />
-          <Svg width={bw} height={graphite.beam.cone}>
+          {/* the cone spreads down: the svg is wider than the line by `spread` on each side */}
+          <Svg
+            width={bw * (1 + 2 * CONE_SPREAD)}
+            height={graphite.beam.cone}
+            style={{ marginLeft: -bw * CONE_SPREAD }}
+          >
             <Defs>
               <LinearGradient id="grCone" x1="0" y1="0" x2="0" y2="1">
                 <Stop
@@ -203,7 +210,7 @@ export function SpotlightNav({
               </LinearGradient>
             </Defs>
             <Path
-              d={`M0 0 H${bw} L${bw * 1.1} ${graphite.beam.cone} H${-bw * 0.1} Z`}
+              d={`M${bw * CONE_SPREAD} 0 H${bw * (1 + CONE_SPREAD)} L${bw * (1 + 2 * CONE_SPREAD)} ${graphite.beam.cone} H0 Z`}
               fill="url(#grCone)"
             />
           </Svg>
