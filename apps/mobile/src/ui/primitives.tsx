@@ -107,7 +107,7 @@ export function Press({
       style={containerStyle}
       hitSlop={visibleHeight ? hitSlopFor(visibleHeight) : undefined}
       onPressIn={(e) => {
-        if (!reduce) s.value = withTiming(motion.pressScale, { duration: 80 });
+        if (!reduce) s.value = withTiming(motion.pressScale, { duration: motion.durPress });
         rest.onPressIn?.(e);
       }}
       onPressOut={(e) => {

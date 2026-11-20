@@ -19,6 +19,10 @@ export interface ShowcaseScreen {
   ds: string;
   /** «где в приложении»: the screens where this is seen */
   where: DictKey;
+  /** a pilot behind a switch of the showcase (#2254): the row and the screen show only when it is on */
+  pilot?: "graphite";
+  /** not a row of the list: the token tables of the founder-unfriendly kind live folded at the end of the «Графит» sheet (#2292); the address still works */
+  hidden?: boolean;
 }
 
 export interface ShowcaseSection {
@@ -37,18 +41,20 @@ export interface ShowcaseSection {
 
 /** the rows of the showcase's first screen, in the order of the founder's list (#1093 comment 12.11.2026) */
 export const SCREENS: ShowcaseScreen[] = [
-  { id: "base", title: "ds.scr.base", hint: "ds.scr.baseHint", icon: "star", ds: "§3–§4", where: "ds.where.base" },
+  { id: "base", title: "ds.scr.base", hint: "ds.scr.baseHint", icon: "star", ds: "§3–§4", where: "ds.where.base", hidden: true },
   { id: "buttons", title: "ds.scr.buttons", hint: "ds.scr.buttonsHint", icon: "cursor", ds: "§7", where: "ds.where.buttons" },
   { id: "selectors", title: "ds.sec.selectors", hint: "ds.scr.selectorsHint", icon: "sliders", ds: "§9", where: "ds.where.selectors" },
   { id: "windows", title: "ds.sec.windows", hint: "ds.scr.windowsHint", icon: "copy", ds: "§10", where: "ds.where.windows" },
   { id: "notices", title: "ds.scr.notices", hint: "ds.scr.noticesHint", icon: "bell", ds: "§15", where: "ds.where.notices" },
-  { id: "motion", title: "ds.sec.motion", hint: "ds.scr.motionHint", icon: "refresh", ds: "§14", where: "ds.where.motion" },
+  { id: "motion", title: "ds.sec.motion", hint: "ds.scr.motionHint", icon: "refresh", ds: "§14", where: "ds.where.motion", hidden: true },
   { id: "choice", title: "ds.scr.choice", hint: "ds.scr.choiceHint", icon: "check", ds: "§9", where: "ds.where.choice" },
   { id: "fields", title: "ds.scr.fields", hint: "ds.scr.fieldsHint", icon: "pencil", ds: "§9", where: "ds.where.fields" },
   { id: "rows", title: "ds.scr.rows", hint: "ds.scr.rowsHint", icon: "note", ds: "§8.3", where: "ds.where.rows" },
   { id: "haptics", title: "ds.scr.haptics", hint: "ds.scr.hapticsHint", icon: "phone", ds: "§15.6", where: "ds.where.haptics" },
-  { id: "spacing", title: "ds.sec.layout", hint: "ds.scr.spacingHint", icon: "route", ds: "§5", where: "ds.where.spacing" },
+  { id: "spacing", title: "ds.sec.layout", hint: "ds.scr.spacingHint", icon: "route", ds: "§5", where: "ds.where.spacing", hidden: true },
   { id: "brand", title: "ds.brand.title", hint: "ds.scr.brandHint", icon: "star", ds: "§18.2", where: "ds.where.brand" },
+  // «Графит» — пилот, не правило (#2254): behind the switch on the showcase's first screen, off by default
+  { id: "graphite", title: "ds.gr.title", hint: "ds.gr.hint", icon: "sun", ds: "§25", where: "ds.gr.where", pilot: "graphite" },
 ];
 
 export const SECTIONS: ShowcaseSection[] = [
@@ -65,6 +71,7 @@ export const SECTIONS: ShowcaseSection[] = [
   { id: "tokens-text", screen: "base", ds: "§4", title: "ds.sec.text", tokenGroups: ["font"], components: [] },
   { id: "tokens-layout", screen: "spacing", ds: "§5", title: "ds.sec.layout", tokenGroups: ["space", "spaceHalf", "radius", "size", "breakpoint", "layout", "z", "component"], components: [] },
   { id: "tokens-motion", screen: "motion", ds: "§14", title: "ds.sec.motion", tokenGroups: ["motion", "timing"], components: [] },
+  { id: "graphite", screen: "graphite", ds: "§25", title: "ds.gr.title", tokenGroups: [], components: [] },
   { id: "tokens-print", screen: "base", ds: "§19", title: "ds.sec.print", tokenGroups: ["print", "drawingPrint", "shopSheet"], components: [] },
 ];
 

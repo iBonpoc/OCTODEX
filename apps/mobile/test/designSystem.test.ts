@@ -32,6 +32,14 @@ const rules: { name: string; re: RegExp }[] = [
 ];
 
 const outsideUi = code.filter((f) => !f.includes(`${join("src", "ui")}`));
+/**
+ * «Графит» — пилот витрины #2254, НЕ ПРАВИЛО (условие аудита 1; DS §8.0 и §25): ONE named exception — its own folder may
+ * have its own Text, Pressable, TextInput and Modal (the pilot does not touch src/ui). Every tokens-only rule below still
+ * holds there, through the `graphite` tokens. Roll-back = delete the folder (and this line).
+ */
+const PILOT_GRAPHITE = join("src", "features", "showcase", "graphite");
+const inPilot = (f: string) => f.includes(PILOT_GRAPHITE);
+const outsideUiAndPilot = outsideUi.filter((f) => !inPilot(f));
 
 /** #816 (C-08): the general rule lets a bare 0 and 1 through; the module's screens carry no such border — `component.hairline` */
 describe("design system: the module's hairline is a token", () => {
@@ -50,14 +58,14 @@ describe("design system: the module's hairline is a token", () => {
 
 describe("design system: components", () => {
   it("text only through <T> (no raw react-native Text outside src/ui)", () => {
-    const hits = outsideUi.filter((f) => {
+    const hits = outsideUiAndPilot.filter((f) => {
       const imp = readFileSync(f, "utf8").split("\n").find((l) => /from "react-native"/.test(l) && /\bText\b/.test(l) && !l.includes("ds-allow"));
       return !!imp;
     });
     expect(hits.map((f) => relative(ROOT, f))).toEqual([]);
   });
   it("taps only through Press / Button / IconButton / Card (44 pt hit area), no raw Pressable / Touchable* outside src/ui", () => {
-    const hits = outsideUi.filter((f) =>
+    const hits = outsideUiAndPilot.filter((f) =>
       readFileSync(f, "utf8")
         .split("\n")
         .some((l) => /from "react-native"/.test(l) && /\b(Pressable|TouchableOpacity|TouchableHighlight|TouchableWithoutFeedback)\b/.test(l) && !l.includes("ds-allow")),
@@ -75,7 +83,7 @@ describe("design system: components", () => {
   const countIn = (src: string, re: RegExp) => (src.match(re) || []).length;
   it("rule 29: no own Modal outside src/ui (sheets and windows — Sheet / InputDialog of src/ui); the old ones only go down", () => {
     const now: Record<string, number> = {};
-    for (const f of outsideUi) {
+    for (const f of outsideUiAndPilot) {
       const src = readFileSync(f, "utf8");
       if (!/import\s*\{[^}]*\bModal\b[^}]*\}\s*from\s*"react-native"/.test(src)) continue;
       const n = countIn(src, /<Modal\b/g);
@@ -284,7 +292,7 @@ describe("design system: components", () => {
     for (const f of ["SortableList.tsx", "dnd.tsx"]) expect(readFileSync(join(ROOT, "features", f), "utf8")).toMatch(/holdConfig\(/);
   });
   it("text fields only through <TextField> (no raw TextInput outside src/ui)", () => {
-    const hits = outsideUi.filter((f) =>
+    const hits = outsideUiAndPilot.filter((f) =>
       readFileSync(f, "utf8")
         .split("\n")
         .some((l) => /from "react-native"/.test(l) && /\bTextInput\b/.test(l) && !l.includes("ds-allow")),
@@ -314,6 +322,22 @@ describe("design system: components", () => {
         });
     }
     expect(hits, hits.join("\n")).toEqual([]);
+  });
+});
+
+describe("design system: «Графит» stays a pilot (#2254)", () => {
+  const REL = (f: string) => relative(ROOT, f).split("\\").join("/");
+  it("the `graphite` tokens are read only inside the pilot folder", () => {
+    const hits = code.filter((f) => !inPilot(f) && /\bgraphite(Themes)?\b[^\n]*from "@octo\/design-tokens"|from "@octo\/design-tokens"[^\n]*\bgraphite\b/.test(readFileSync(f, "utf8"))).map(REL);
+    expect(hits).toEqual([]);
+  });
+  it("the pilot folder is opened only by the showcase (its first screen and its section screen)", () => {
+    const hits = code.filter((f) => !inPilot(f) && /features\/showcase\/graphite\//.test(readFileSync(f, "utf8"))).map(REL);
+    expect(hits.sort()).toEqual(["app/settings/design-system/[section].tsx", "app/settings/design-system/index.tsx"]);
+  });
+  it("Jost is loaded only by the pilot (the app's start is not touched)", () => {
+    const hits = code.filter((f) => !inPilot(f) && /@expo-google-fonts\/jost/.test(readFileSync(f, "utf8"))).map(REL);
+    expect(hits).toEqual([]);
   });
 });
 
@@ -568,5 +592,31 @@ describe("design system: a record's card has no row of pill buttons (#1412)", ()
       if (n !== allowed) bad.push(`${rel}: ${n} row(s) of pill buttons, the list says ${allowed}`);
     }
     expect(bad, "one main button (ActionBar / the top of the content from 820) and «⋯» with the rest (Б4)").toEqual([]);
+  });
+});
+
+/**
+ * Ш III-1 (спека 63 §3а, #2292): «ноль значений по месту» for what the eye sees in motion — a bezier curve, the duration
+ * of an animation, a layer. The scan is the codemod's own (scripts/codemod/motionLiterals.cjs, TypeScript API): the guard and
+ * the tool cannot disagree. `DEBT` is the places an open PR holds right now; each batch shortens it, a new place is red.
+ */
+describe("design system: no curve, animation time or layer written in place (Ш III-1)", () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { scan } = require("../../../scripts/codemod/motionLiterals.cjs") as { scan: () => { file: string; line: number; kind: string; text: string; hasToken: boolean }[] };
+  const DEBT = new Set([
+    "src/ui/overlays.tsx zIndex 100", // PR 1996 / 1975 / 1964 hold the file; the toast layer has no token yet (z.toast is 8, the toast is above the modal)
+    "src/ui/surfaces.tsx zIndex 10", // PR 2141 holds the file
+    "src/ui/surfaces.tsx zIndex 0",
+  ]);
+  const left = () => scan().map((h) => ({ ...h, key: `${h.file.split("\\").join("/")} ${h.kind} ${h.text}` }));
+  it("every literal that has a token is already written as the token", () => {
+    expect(left().filter((h) => h.hasToken && !DEBT.has(h.key)).map((h) => `${h.file}:${h.line} ${h.kind} ${h.text}`)).toEqual([]);
+  });
+  it("a literal without a token needs its token first (or a line of DEBT, with the PR that holds the file)", () => {
+    expect(left().filter((h) => !h.hasToken && !DEBT.has(h.key)).map((h) => `${h.file}:${h.line} ${h.kind} ${h.text}`)).toEqual([]);
+  });
+  it("DEBT has no line that is already paid", () => {
+    const keys = new Set(left().map((h) => h.key));
+    expect([...DEBT].filter((k) => !keys.has(k))).toEqual([]);
   });
 });

@@ -566,7 +566,7 @@ function Item({ k, index, dragKind, open, children }: { k: string; index: number
         { scale: on ? 1 + (motion.liftScale - 1) * lift.value : 1 },
         { rotate: on ? `${motion.liftTilt * lift.value}deg` : "0deg" },
       ],
-      zIndex: on ? z.lift : 0,
+      zIndex: on ? z.lift : z.under,
       shadowOpacity: on ? component.liftShadow * lift.value : 0,
       shadowRadius: c.shadow.radius,
       shadowOffset: { width: 0, height: component.dragHandle },
