@@ -32,7 +32,7 @@
 ## №18 — по ходу (20.11, с ~04:15 UTC)
 - Принял от №17; влито №18: #2291.
 - Рабочие чаты (режим экономии, ≤3): механик `session_015CqH67LKzNhmyy74szkcpJ` (sonnet, только merge main в PR очереди); «Дизайн Графит» `session_015CqH69V6tXC7o5qUoeyRTz` (opus, #2292, с ~04:31 UTC).
-- **Раздел зон:** очередь вливания первая. «Дизайн Графит» правит только `apps/mobile/src/features/showcase/graphite/**`, `apps/mobile/src/app/settings/design-system/**`, свою спеку описи в `docs/specs/` и строки витрины; действующие экраны, `packages/design-tokens`, `design/naryad-ds/tokens` и файлы открытых PR очереди не трогает (пересечение — сначала руководителю). Механик правит только ветки PR очереди.
+- **Раздел зон:** очередь вливания первая. «Дизайн Графит» правит только `apps/mobile/src/features/showcase/graphite/**`, `apps/mobile/src/app/settings/design-system/**`, `apps/mobile/src/features/showcase/registry.ts`, пилотные токены `packages/design-tokens/src/graphite.ts` и `design/naryad-ds/tokens/graphite.css`, спеку описи `docs/specs/63-graphite-inventory.md`, свой блок i18n (с сообщением); действующие экраны, остальные токены и файлы открытых PR очереди не трогает (пересечение — сначала руководителю). Механик правит только ветки PR очереди.
 
 ## Памятка №17 → №18, 20.11.2026 (~04:15 UTC)
 
