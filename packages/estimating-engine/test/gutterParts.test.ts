@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveGutterRules, computeGutterParts, defaultElbowsFor, sizeGutterRun, pitchFactor, downspoutLengthIn, downspoutSticks, purchaseQty, DEFAULT_GUTTER_RULES, type MeasuredRun, type MeasuredDownspout, type MeasurementInput, type PartQty } from "../src/gutterParts.js";
+import { resolveGutterRules, computeGutterParts, defaultElbowsFor, bendOf, fieldBendOf, dsRoundedIn, defaultOffsetsFor, sizeGutterRun, pitchFactor, downspoutLengthIn, downspoutSticks, purchaseQty, DEFAULT_GUTTER_RULES, type MeasuredRun, type MeasuredDownspout, type MeasurementInput, type PartQty } from "../src/gutterParts.js";
 
 /** docs/specs/33-gutters-module.md §9 S5g — parts from a measurement, lengths in inches. */
 
@@ -317,12 +317,17 @@ describe("П18: half round, copper", () => {
     expect(q(parts, "shank.copper.half_round.10.6")).toBe("11");
     expect(q(parts, "circle.copper.half_round.6")).toBe("11");
     expect(q(parts, "bolt.10-24x075")).toBe("11");
-    expect(q(parts, "screw.10x15")).toBe("22");
+    // М8 (founder 16.11 «винты к меди — медные»): a copper gutter's screws carry their metal
+    expect(q(parts, "screw.copper.10x15")).toBe("22");
+    expect(q(parts, "screw.10x15")).toBeUndefined();
     expect(q(parts, "endcap.-.half_round.6.copper.-")).toBe("2");
     expect(keys(parts).some((k) => k.startsWith("endcap.L") || k.startsWith("endcap.R"))).toBe(false);
-    expect(q(parts, "solder")).toBe("1");
-    expect(parts.find((p) => p.key === "solder")!.unit).toBe("lb");
-    expect(q(parts, "flux")).toBe("1");
+    // М3–М7 (founder 16.11 №19): ONE soldering kit with its make-up inside, the soldering work by the points; no solder / flux lines
+    expect(q(parts, "soldering_kit")).toBe("1");
+    expect(parts.find((p) => p.key === "soldering_kit")!.why).toMatchObject({ rule: "soldering_kit", params: { points: 2, solderLb: 1, fluxCans: 1, gasCylinders: 1, abrasivePacks: 1, soda: 1 } });
+    expect(q(parts, "labor.solder")).toBe("2");
+    expect(q(parts, "solder")).toBeUndefined();
+    expect(q(parts, "flux")).toBeUndefined();
     expect(q(parts, "sealant")).toBeUndefined();
     expect(q(parts, "rivet.42.copper.mill.-")).toBe("4");
   });
@@ -361,7 +366,9 @@ describe("П18: downspouts — style, sticks with offcuts, extension", () => {
   });
   it("company extension adds to every downspout", () => {
     const { parts } = one({}, [{}], { dsExtensionIn: 12 });
-    expect(q(parts, "ds.rect.3x4.alu.white")).toBe("11");
+    // 132″ in the estimate goes up to 20 ft (Д1, each downspout up to 10 ft); the sticks take the 132″ as they are
+    expect(q(parts, "ds.rect.3x4.alu.white")).toBe("20");
+    expect(q(one({}, [{}], { dsExtensionIn: 12, dsRoundUpFt: 1 }).parts, "ds.rect.3x4.alu.white")).toBe("11");
     expect(q(parts, "dsstick.rect.3x4.alu.white")).toBe("2");
   });
   it("downspout joints with screws instead of rivets", () => {
@@ -514,9 +521,11 @@ describe("fittings carry metal and color", () => {
       corners: [],
       downspouts: [ds({ id: "a", runId: "1", shape: "round", size: "3", material: "aluminum", color: undefined }), ds({ id: "b", runId: "2", shape: "round", size: "3", material: "copper", color: undefined })],
     });
-    // #871: a round downspout without elbows of its own gets 45° ones — «A» is a rectangular elbow
-    expect(q(parts, "elbow.45.round.3.aluminum.-")).toBe("3");
-    expect(q(parts, "elbow.45.round.3.copper.-")).toBe("3");
+    // a round downspout without elbows of its own: one 75° elbow and one 2″ offset (§2.15 №2) — «A» is a rectangular elbow (#871)
+    expect(q(parts, "elbow.75.round.3.aluminum.-")).toBe("1");
+    expect(q(parts, "elbow.75.round.3.copper.-")).toBe("1");
+    expect(q(parts, "offset.2.round.3.aluminum.-")).toBe("1");
+    expect(q(parts, "offset.2.round.3.copper.-")).toBe("1");
     expect(q(parts, "outlet.k.6.copper.-.round.3")).toBe("1");
     expect(q(parts, "hanger.hidden.copper.k.6")).toBe("11");
     expect(q(parts, "hinged_hook.copper.round.3")).toBe("2");
@@ -585,8 +594,9 @@ describe("elbows by default follow the shape (#871, X-07) and the style (#1776)"
     downspouts: [ds({ id: "d", runId: "1", elbows: undefined, ...(shape === "round" ? { shape: "round", size: "3" } : shape === "ribbed" ? { dsStyle: "corrugated" } : {}), ...extra })],
   });
   const elbowKeys = (i: MeasurementInput, rules?: Parameters<typeof computeGutterParts>[1]) => computeGutterParts(i, rules).parts.filter((p) => p.attrs.part === "elbow").map((p) => `${p.key}=${p.qty}`);
-  it("round without elbows: 3 × 45°, no «A» anywhere", () => {
-    expect(elbowKeys(job("round"))).toEqual(["elbow.45.round.3.alu.white=3"]);
+  it("round without elbows: 1 × 75° and a 2″ offset (§2.15 №2), no «A» anywhere", () => {
+    expect(elbowKeys(job("round"))).toEqual(["elbow.75.round.3.alu.white=1"]);
+    expect(computeGutterParts(job("round")).parts.filter((p) => p.attrs.part === "offset").map((p) => `${p.key}=${p.qty}`)).toEqual(["offset.2.round.3.alu.white=1"]);
     expect(keys(computeGutterParts(job("round")).parts).some((k) => k.startsWith("elbow.A.round"))).toBe(false);
   });
   it("a plain rectangular one without elbows: none (founder 16.11: «у прямого водостока стандартно колен 0», #1776)", () => {
@@ -602,24 +612,27 @@ describe("elbows by default follow the shape (#871, X-07) and the style (#1776)"
     expect(rivets(given)).toBeGreaterThan(rivets(plain));
   });
   it("defaultElbowsFor: one rule for the engine and the app", () => {
+    // an old drawing without a kind: no elbows, as before (rule 16)
     expect(defaultElbowsFor({ shape: "rect" })).toEqual([]);
-    expect(defaultElbowsFor({ shape: "rect", dsStyle: "plain" })).toEqual([]);
+    // a plain one is bent on site: 3 bends, shown as «A»; made ready by hand — no elbows of its own, none
+    expect(defaultElbowsFor({ shape: "rect", dsStyle: "plain" })).toEqual([{ style: "A", qty: 3 }]);
+    expect(defaultElbowsFor({ shape: "rect", dsStyle: "plain", elbowBend: "ready" })).toEqual([]);
     expect(defaultElbowsFor({ shape: "rect", dsStyle: "corrugated" })).toEqual([{ style: "A", qty: 3 }]);
-    expect(defaultElbowsFor({ shape: "round" })).toEqual([{ style: "45", qty: 3 }]);
-    expect(defaultElbowsFor({ shape: "round", dsStyle: "corrugated" })).toEqual([{ style: "45", qty: 3 }]);
+    expect(defaultElbowsFor({ shape: "round" })).toEqual([{ style: "75", qty: 1 }]);
+    expect(defaultElbowsFor({ shape: "round", dsStyle: "corrugated" })).toEqual([{ style: "75", qty: 1 }]);
   });
-  it("the company's number of elbows carries to the round one, the style is 45°", () => {
-    expect(elbowKeys(job("round"), { defaultElbows: [{ style: "A", qty: 5 }] })).toEqual(["elbow.45.round.3.alu.white=5"]);
-    expect(elbowKeys(job("round"), { defaultElbows: [{ style: "A", qty: 2 }, { style: "B", qty: 1 }] })).toEqual(["elbow.45.round.3.alu.white=3"]);
+  it("the corrugated default stays its own: the round one has its own default, a plain one is bent on site", () => {
+    // the round one does not take the corrugated number any more (founder 16.11 «колено только одно»)
+    expect(elbowKeys(job("round"), { defaultElbows: [{ style: "A", qty: 5 }] })).toEqual(["elbow.75.round.3.alu.white=1"]);
     expect(elbowKeys(job("ribbed"), { defaultElbows: [{ style: "A", qty: 5 }] })).toEqual(["elbow.A.rect.3x4.corrugated.alu.white=5"]);
     // the corrugated default is not the plain one's
     expect(elbowKeys(job("rect"), { defaultElbows: [{ style: "A", qty: 5 }] })).toEqual([]);
-    // a company may give plain ones a default of their own
-    expect(elbowKeys(job("rect"), { defaultElbowsPlain: [{ style: "B", qty: 1 }] })).toEqual(["elbow.B.rect.3x4.alu.white=1"]);
+    // a plain one made ready by hand takes the company's plain default
+    expect(elbowKeys(job("rect", { dsStyle: "plain", elbowBend: "ready" }), { defaultElbowsPlain: [{ style: "B", qty: 1 }] })).toEqual(["elbow.B.rect.3x4.plain.alu.white=1"]);
   });
   it("a round default of its own wins; zero elbows is none", () => {
     expect(elbowKeys(job("round"), { defaultElbowsRound: [{ style: "90", qty: 2 }] })).toEqual(["elbow.90.round.3.alu.white=2"]);
-    expect(elbowKeys(job("round"), { defaultElbows: [{ style: "A", qty: 0 }] })).toEqual([]);
+    expect(elbowKeys(job("round"), { defaultElbowsRound: [{ style: "45", qty: 0 }] })).toEqual([]);
   });
   it("elbows given by the drawing are not touched (rect A/B, round 75/90)", () => {
     expect(elbowKeys(job("rect", { elbows: [{ style: "A", qty: 2 }, { style: "B", qty: 1 }] }))).toEqual(["elbow.A.rect.3x4.alu.white=2", "elbow.B.rect.3x4.alu.white=1"]);
@@ -630,12 +643,14 @@ describe("elbows by default follow the shape (#871, X-07) and the style (#1776)"
   });
   it("mixed shapes on one job: each has its own", () => {
     const i: MeasurementInput = { runs: [run({ id: "1", lengthIn: 240 }), run({ id: "2", lengthIn: 240 })], corners: [], downspouts: [ds({ id: "a", runId: "1", elbows: undefined }), ds({ id: "b", runId: "2", shape: "round", size: "3" }), ds({ id: "c", runId: "2", elbows: undefined, dsStyle: "corrugated" })] };
-    expect(elbowKeys(i).sort()).toEqual(["elbow.45.round.3.alu.white=3", "elbow.A.rect.3x4.corrugated.alu.white=3"]);
+    expect(elbowKeys(i).sort()).toEqual(["elbow.75.round.3.alu.white=1", "elbow.A.rect.3x4.corrugated.alu.white=3"]);
   });
-  it("the joints count the 45° elbows as pieces, like the A ones of a corrugated one (the same number of joints)", () => {
+  it("the joints count the round one's elbow and offset as pieces, like the A ones of a corrugated one", () => {
     const a = computeGutterParts(job("ribbed")).parts, b = computeGutterParts(job("round")).parts;
     const rivets = (ps: PartQty[]) => ps.filter((p) => p.attrs.part === "rivet").map((p) => p.qty).join();
-    expect(rivets(b)).toBe(rivets(a));
+    // three ready A elbows are three pieces; one elbow and one offset are two — the same as three ready A minus one
+    expect(rivets(b)).toBe(rivets(computeGutterParts(job("ribbed", { elbows: [{ style: "A", qty: 2 }] })).parts));
+    expect(rivets(a)).not.toBe(rivets(b));
   });
 });
 
@@ -711,5 +726,181 @@ describe("#1355: waste (a fixed length for every stock) and the allowance of a f
     expect(resolveGutterRules({ cutCornerOutAllowanceIn: -1 }).cutCornerOutAllowanceIn).toBe(14); // not a number of inches: the default
     expect(resolveGutterRules({ cutCornerOutAllowanceIn: 20 }).cutCornerOutAllowanceIn).toBe(20);
     expect(resolveGutterRules({ wasteFt: -3 })).toMatchObject({ wasteFt: 10 }); // nonsense is the default
+  });
+});
+
+/* ---------------- «Расход v2» PR-1б: bends on site, the round default, the estimate's downspout (spec 33-gutters-consumption) ---------------- */
+
+describe("«Расход v2» PR-1б: bendOf (§2.1 п.2)", () => {
+  it("its own word wins; else a plain rectangular one without elbows of its own is bent on site; else ready", () => {
+    expect(bendOf({ shape: "rect", dsStyle: "plain" })).toBe("field");
+    expect(bendOf({ shape: "rect", dsStyle: "plain", elbowBend: "ready" })).toBe("ready");
+    expect(bendOf({ shape: "rect", dsStyle: "corrugated", elbowBend: "field" })).toBe("field");
+    // elbows set by hand without a word: ready, as they were (rule 16)
+    expect(bendOf({ shape: "rect", dsStyle: "plain", elbows: [{ style: "A", qty: 3 }] })).toBe("ready");
+    // an old drawing without a kind: ready (rule 16 — its sum does not change)
+    expect(bendOf({ shape: "rect" })).toBe("ready");
+    expect(bendOf({ shape: "rect", dsStyle: "corrugated" })).toBe("ready");
+    expect(bendOf({ shape: "round", dsStyle: "plain" })).toBe("ready");
+  });
+});
+
+describe("«Расход v2» PR-1б: Д1 — the estimate's downspout up to 10 ft, each on its own; the sticks as they are", () => {
+  const job = (dss: Partial<MeasuredDownspout>[], over?: Parameters<typeof computeGutterParts>[1]) =>
+    computeGutterParts({ runs: [run({ id: "1", lengthIn: 480, story: 2 })], corners: [], downspouts: dss.map((x, i) => ds({ id: `d${i}`, runId: "1", ...x })) }, over).parts;
+  it("22 ft → 30 ft in the estimate; 3 sticks of 10 ft from 22 ft", () => {
+    const ps = job([{ heightIn: 264 }]);
+    expect(q(ps, "ds.rect.3x4.alu.white")).toBe("30");
+    expect(q(ps, "dsstick.rect.3x4.alu.white")).toBe("3");
+    const why = ps.find((p) => p.key === "ds.rect.3x4.alu.white")!.why!;
+    expect(why).toEqual({ rule: "ds_round_up", params: { downspouts: 1, lengthIn: 264, stepFt: 10, ft: 30 }, setting: "dsRoundUpFt" });
+  });
+  it("the sticks come from the real lengths, not the rounded ones: two of 22 ft → 60 ft in the estimate, 5 sticks (from 30 ft each — 6)", () => {
+    const ps = job([{ heightIn: 264 }, { heightIn: 264 }]);
+    expect(q(ps, "ds.rect.3x4.alu.white")).toBe("60");
+    expect(q(ps, "dsstick.rect.3x4.alu.white")).toBe("5");
+    expect(ps.find((p) => p.key === "dsstick.rect.3x4.alu.white")!.use).toBe("purchase");
+  });
+  it("each downspout on its own: 22 ft + 12 ft → 30 + 20 = 50 ft (not 34 → 40)", () => {
+    const ps = job([{ heightIn: 264 }, { heightIn: 144 }]);
+    expect(q(ps, "ds.rect.3x4.alu.white")).toBe("50");
+    expect(ps.find((p) => p.key === "ds.rect.3x4.alu.white")!.why!.params).toMatchObject({ downspouts: 2, lengthIn: 408, ft: 50 });
+  });
+  it("a corrugated one of 2 stories with ready elbows: 20 ft, nothing to round — the reason still holds the line's feet", () => {
+    const ps = job([{ dsStyle: "corrugated" }]);
+    expect(q(ps, "ds.rect.3x4.corrugated.alu.white")).toBe("20");
+    expect(ps.find((p) => p.key === "ds.rect.3x4.corrugated.alu.white")!.why!.params).toMatchObject({ downspouts: 1, lengthIn: 240, ft: 20 });
+  });
+  it("the reason adds up to the line: 240″ and 264″ of one kind → 50 ft, «2 downspouts, 504″, 50 ft» (§2.13)", () => {
+    const ps = job([{ heightIn: 240 }, { heightIn: 264 }]);
+    expect(q(ps, "ds.rect.3x4.alu.white")).toBe("50");
+    expect(ps.find((p) => p.key === "ds.rect.3x4.alu.white")!.why!.params).toEqual({ downspouts: 2, lengthIn: 504, stepFt: 10, ft: 50 });
+  });
+  it("Н8: the step is 1, 5 or 10 ft; a blank field (0) or another number is the default 10 — never «not rounded» by mistake", () => {
+    expect(q(job([{ heightIn: 264 }], { dsRoundUpFt: 5 }), "ds.rect.3x4.alu.white")).toBe("25");
+    expect(q(job([{ heightIn: 264 }], { dsRoundUpFt: 0 }), "ds.rect.3x4.alu.white")).toBe("30");
+    expect(q(job([{ heightIn: 264 }], { dsRoundUpFt: 7 }), "ds.rect.3x4.alu.white")).toBe("30");
+    // whole feet: no reason (nothing to say beyond the feet)
+    expect(job([{ heightIn: 264 }], { dsRoundUpFt: 1 }).find((p) => p.key === "ds.rect.3x4.alu.white")!.why).toBeUndefined();
+  });
+  it("a plain one of 2 stories, bent on site by default: 240″ + 3 × 6″ = 258″ → 30 ft (step 10), 22 ft (step 1); 3 sticks; straps from 240″", () => {
+    const plain = { dsStyle: "plain" as const, elbows: undefined };
+    const ps = job([plain]);
+    expect(q(ps, "ds.rect.3x4.plain.alu.white")).toBe("30");
+    expect(q(job([plain], { dsRoundUpFt: 1 }), "ds.rect.3x4.plain.alu.white")).toBe("22");
+    expect(q(ps, "dsstick.rect.3x4.plain.alu.white")).toBe("3");
+    // the wall fasteners count the wall, not the bends: 240″ at 60″ → 4 (from 258″ it would be 5)
+    expect(ps.find((p) => p.why?.rule === "ds_straps_per_ds")!.why!.params).toMatchObject({ lengthIn: 240, straps: 4 });
+  });
+});
+
+describe("«Расход v2» PR-1б: Д5 — the default elbows by kind", () => {
+  const parts = (d: Partial<MeasuredDownspout>) => computeGutterParts({ runs: [run({ id: "1", lengthIn: 240 })], corners: [], downspouts: [ds({ id: "d", runId: "1", ...d })] }).parts;
+  const elbows = (ps: PartQty[]) => ps.filter((p) => p.attrs.part === "elbow" || p.attrs.part === "offset").map((p) => `${p.key}=${p.qty}`);
+  it("plain without elbows: no elbow lines, +18″ of downspout", () => {
+    const ps = parts({ dsStyle: "plain", elbows: undefined });
+    expect(elbows(ps)).toEqual([]);
+    expect(ps.find((p) => p.key === "ds.rect.3x4.plain.alu.white")!.why!.params.lengthIn).toBe(138);
+  });
+  it("rectangular without a kind and without elbows: none, as before (rule 16)", () => {
+    expect(elbows(parts({ elbows: undefined }))).toEqual([]);
+    expect(q(parts({ elbows: undefined }), "labor.bend")).toBeUndefined();
+  });
+  it("plain with 3 × A set by hand, no word: 3 ready elbows", () => {
+    expect(elbows(parts({ dsStyle: "plain", elbows: [{ style: "A", qty: 3 }] }))).toEqual(["elbow.A.rect.3x4.plain.alu.white=3"]);
+  });
+  it("round: 1 × 75° and 1 × 2″ (a stocked one: no «custom»)", () => {
+    const ps = parts({ shape: "round", size: "3" });
+    expect(elbows(ps)).toEqual(["elbow.75.round.3.alu.white=1", "offset.2.round.3.alu.white=1"]);
+    expect(ps.find((p) => p.key === "offset.2.round.3.alu.white")!.attrs.custom).toBeUndefined();
+  });
+  it("round: the company's own default (45°) and an offset it does not stock (3″ — custom)", () => {
+    const ps = computeGutterParts({ runs: [run({ id: "1", lengthIn: 240 })], corners: [], downspouts: [ds({ id: "d", runId: "1", shape: "round", size: "3" })] },
+      { defaultElbowsRound: [{ style: "45", qty: 1 }], defaultOffsetsRound: [{ lengthIn: 3, qty: 1 }] }).parts;
+    expect(elbows(ps)).toEqual(["elbow.45.round.3.alu.white=1", "offset.3.round.3.alu.white=1"]);
+    expect(ps.find((p) => p.key === "offset.3.round.3.alu.white")!.attrs.custom).toBe("1");
+  });
+  it("round with offsets of its own: they, not the default", () => {
+    expect(elbows(parts({ shape: "round", size: "3", offsets: [] }))).toEqual(["elbow.75.round.3.alu.white=1"]);
+  });
+});
+
+describe("«Расход v2» PR-1б: Д6, Д7, Р4 — bends on site", () => {
+  const parts = (d: Partial<MeasuredDownspout>, over?: Parameters<typeof computeGutterParts>[1]) =>
+    computeGutterParts({ runs: [run({ id: "1", lengthIn: 240 })], corners: [], downspouts: [ds({ id: "d", runId: "1", dsStyle: "plain", ...d })] }, over).parts;
+  const dsLine = (ps: PartQty[]) => ps.find((p) => p.key === "ds.rect.3x4.plain.alu.white")!;
+  it("Д6: 1 story, 2 elbows on site → 120″ + 12″ = 132″ → 20 ft; 2 sticks; 2 bends; no elbow part, no piece", () => {
+    const ps = parts({ elbowBend: "field", elbows: [{ style: "A", qty: 2 }] });
+    expect(dsLine(ps).qty).toBe("20");
+    expect(dsLine(ps).why!.params.lengthIn).toBe(132);
+    expect(q(ps, "dsstick.rect.3x4.plain.alu.white")).toBe("2");
+    expect(q(ps, "labor.bend")).toBe("2");
+    expect(ps.find((p) => p.key === "labor.bend")!.why).toEqual({ rule: "bend_in_place", params: { downspouts: 1, bends: 2, perBendIn: 6, addedIn: 12 }, setting: "bendInBySize" });
+    expect(ps.some((p) => p.attrs.part === "elbow")).toBe(false);
+    // a bend is no piece: the joints are those of the same downspout made of 2 sticks with no elbows
+    const rivets = (x: PartQty[]) => x.filter((p) => p.attrs.part === "rivet").map((p) => `${p.key}=${p.qty}`).join();
+    expect(rivets(ps)).toBe(rivets(parts({ elbowBend: "ready", elbows: [], heightIn: 132 })));
+  });
+  it("Р4: plain without elbows → 3 bends; 2 elbows + 1 offset on site → 4", () => {
+    expect(q(parts({ elbows: undefined }), "labor.bend")).toBe("3");
+    expect(q(parts({ elbowBend: "field", elbows: [{ style: "A", qty: 2 }], offsets: [{ lengthIn: 2, qty: 1 }] }), "labor.bend")).toBe("4");
+  });
+  // the spec's «2″ and 4″ → +12″ + 16″ = +28″» slipped: by its own formula (+2 × 6″ + the offset's length) a 2″ one is +14″ — +30″ in all
+  it("Д7: an offset on site is 2 bends and its length — 4″ × 1 → +16″; 2″ and 4″ → +14″ + 16″ = +30″, 4 bends; no offset parts", () => {
+    const one = parts({ elbowBend: "field", elbows: [], offsets: [{ lengthIn: 4, qty: 1 }] });
+    expect(q(one, "labor.bend")).toBe("2");
+    expect(one.find((p) => p.key === "labor.bend")!.why!.params.addedIn).toBe(16);
+    const two = parts({ elbowBend: "field", elbows: [], offsets: [{ lengthIn: 2, qty: 1 }, { lengthIn: 4, qty: 1 }] });
+    expect(q(two, "labor.bend")).toBe("4");
+    expect(dsLine(two).why!.params.lengthIn).toBe(150);
+    expect(two.some((p) => p.attrs.part === "offset")).toBe(false);
+  });
+  it("Д7: ready offsets 2″ and 4″ → two offset lines, no bends", () => {
+    const ps = parts({ elbowBend: "ready", elbows: [], offsets: [{ lengthIn: 2, qty: 1 }, { lengthIn: 4, qty: 1 }] });
+    expect(ps.filter((p) => p.attrs.part === "offset").map((p) => p.key)).toEqual(["offset.2.rect.3x4.plain.alu.white", "offset.4.rect.3x4.plain.alu.white"]);
+    expect(q(ps, "labor.bend")).toBeUndefined();
+  });
+  it("§2.15 №3: the inches of a bend are the company's, by size — 3×4, 3 bends → +18″; 3×4 at 8″ → +24″; a size not in the table — the default", () => {
+    expect(dsLine(parts({ elbows: undefined })).why!.params.lengthIn).toBe(138);
+    expect(dsLine(parts({ elbows: undefined }, { bendInBySize: { "3x4": 8 } })).why!.params.lengthIn).toBe(144);
+    // the table is merged: 2x3 keeps its 6″ when the company changes 3x4
+    expect(resolveGutterRules({ bendInBySize: { "3x4": 8 } }).bendInBySize).toEqual({ "2x3": 6, "3x4": 8, "4x5": 6 });
+    const odd = computeGutterParts({ runs: [run({ id: "1", lengthIn: 240 })], corners: [], downspouts: [ds({ id: "d", runId: "1", dsStyle: "plain", size: "5x6", elbows: undefined })] }, { bendInDefault: 7 }).parts;
+    expect(odd.find((p) => p.key === "ds.rect.5x6.plain.alu.white")!.why!.params.lengthIn).toBe(141);
+    // a size named like an object's own word never reads the prototype: the default, not NaN
+    const proto = computeGutterParts({ runs: [run({ id: "1", lengthIn: 240 })], corners: [], downspouts: [ds({ id: "d", runId: "1", dsStyle: "plain", size: "constructor", elbows: undefined })] }).parts;
+    expect(proto.find((p) => p.key === "ds.rect.constructor.plain.alu.white")!.why!.params.lengthIn).toBe(138);
+    // broken counts and lengths are none, never NaN
+    const broken = computeGutterParts({ runs: [run({ id: "1", lengthIn: 240 })], corners: [], downspouts: [ds({ id: "d", runId: "1", dsStyle: "plain", elbowBend: "field", elbows: [{ style: "A", qty: Number.NaN }], offsets: [{ lengthIn: Number.NaN, qty: 1 }, { lengthIn: 4, qty: "x" as never }] })] }).parts;
+    expect(q(broken, "labor.bend")).toBe("2");
+    expect(broken.find((p) => p.key === "ds.rect.3x4.plain.alu.white")!.why!.params.lengthIn).toBe(132);
+  });
+  it("the company's bends of a plain one (Н2): 2 → +12″, 2 bends; 0 → none", () => {
+    expect(q(parts({ elbows: undefined }, { fieldBends: 2 }), "labor.bend")).toBe("2");
+    expect(q(parts({ elbows: undefined }, { fieldBends: 0 }), "labor.bend")).toBeUndefined();
+  });
+  it("a blank or broken setting is the default, never NaN (a field left empty is a number on the screen)", () => {
+    const r = resolveGutterRules({ fieldBends: -1, bendInDefault: 1.5, dsRoundUpFt: Number.NaN, bendInBySize: { "3x4": -2 } } as never);
+    expect([r.fieldBends, r.bendInDefault, r.dsRoundUpFt, r.bendInBySize["3x4"]]).toEqual([3, 6, 10, 6]);
+    // broken round defaults: the defaults, not an empty list
+    const rr = resolveGutterRules({ defaultOffsetsRound: [{ lengthIn: -2, qty: 1 }], defaultElbowsRound: [{ style: 75 as never, qty: 1 }] });
+    expect([rr.defaultOffsetsRound, rr.defaultElbowsRound]).toEqual([[{ lengthIn: 2, qty: 1 }], [{ style: "75", qty: 1 }]]);
+  });
+  it("bends and the estimate's downspout are «use: estimate» — never in the supplier order (Т3)", () => {
+    const ps = parts({ elbows: undefined });
+    expect(ps.find((p) => p.key === "labor.bend")!.use).toBe("estimate");
+    expect(dsLine(ps).use).toBe("estimate");
+  });
+});
+
+describe("«Расход v2» PR-1б: the helpers the app reads", () => {
+  it("fieldBendOf and dsRoundedIn", () => {
+    expect(fieldBendOf({ shape: "rect", size: "3x4", dsStyle: "plain" })).toEqual({ bends: 3, perBendIn: 6, offsetIn: 0, addedIn: 18 });
+    expect(fieldBendOf({ shape: "rect", size: "3x4", dsStyle: "corrugated" })).toEqual({ bends: 0, perBendIn: 6, offsetIn: 0, addedIn: 0 });
+    expect(dsRoundedIn(264, 10)).toBe(360);
+    expect(dsRoundedIn(240, 10)).toBe(240);
+    expect(dsRoundedIn(258, 0)).toBe(258);
+    expect(defaultOffsetsFor({ shape: "round" })).toEqual([{ lengthIn: 2, qty: 1 }]);
+    expect(defaultOffsetsFor({ shape: "rect" })).toEqual([]);
   });
 });

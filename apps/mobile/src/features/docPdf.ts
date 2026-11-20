@@ -194,14 +194,32 @@ ${inv ? `<tr><td>${esc(t("rcpt.balanceAfter"))}</td><td class="r">${money(balanc
   return docPage({ title, meta: [`${t("rcpt.date")}: ${day(p.at)}`], footer: [title, company.name].filter(Boolean).join(" · "), company, body, opts });
 }
 
-/** SMS / email text for an invoice — in the CLIENT's language (rule 7). */
-export function invoiceMessage(db: DB, inv: Invoice, company: PortalData["company"], lang: DocLang): { text: string; subject: string } {
-  const t = tFor(lang);
+/** «How to pay» of the company in the client's language: Zelle and «checks payable to»; "" when neither is filled in
+ *  (#2017: then the line is left out of the message — never «How to pay: —») */
+export function paymentHow(db: Pick<DB, "company">, t: (k: DictKey, p?: Record<string, string | number>) => string): string {
   const p = db.company?.payment;
-  const how = [p?.zelle ? `Zelle ${p.zelle}` : "", p?.checkPayableTo ? `${t("inv.checkTo")} ${p.checkPayableTo}` : ""].filter(Boolean).join(", ");
+  return [p?.zelle ? `Zelle ${p.zelle}` : "", p?.checkPayableTo ? `${t("inv.checkTo")} ${p.checkPayableTo}` : ""].filter(Boolean).join(", ");
+}
+
+/** #2017: the client page where this invoice is seen and paid — the page of the job's signed estimate (/p/<token> lists its
+ *  invoices); none for an invoice without an estimate (its own page is #2082) or when the office revoked the link */
+export function invoicePageToken(db: Pick<DB, "jobs" | "estimates">, inv: Pick<Invoice, "jobId" | "customerId">): string | undefined {
+  const job = inv.jobId ? db.jobs.find((j) => j.id === inv.jobId) : undefined;
+  const e = job?.estimateId ? db.estimates.find((x) => x.id === job.estimateId) : undefined;
+  // only the invoice's own client, only a signed estimate (its page shows the job's invoices), only a live link
+  if (!e || e.customerId !== inv.customerId || (e.status !== "approved" && e.status !== "awaiting_countersign")) return undefined;
+  return e.token && !e.linkRevokedAt ? e.token : undefined;
+}
+
+/** SMS / email text for an invoice — in the CLIENT's language (rule 7); `link` — the client page of the invoice (#2017). */
+export function invoiceMessage(db: DB, inv: Invoice, company: PortalData["company"], lang: DocLang, link?: string): { text: string; subject: string } {
+  const t = tFor(lang);
+  const how = paymentHow(db, t);
   const balance = invoiceOwes(inv);
+  const params = { company: company.name, number: inv.number ?? "", amount: docMoney(balance), date: docDay(inv.dueDate), how };
+  const text = how ? t("inv.sendText", params) : t("invMsg.sendNoHow", params);
   return {
-    text: t("inv.sendText", { company: company.name, number: inv.number ?? "", amount: docMoney(balance), date: docDay(inv.dueDate), how: how || "—" }),
+    text: link ? `${text} ${t("invMsg.payLink", { link })}` : text,
     subject: `${t("inv.title")} ${inv.number ?? ""}`.trim(),
   };
 }

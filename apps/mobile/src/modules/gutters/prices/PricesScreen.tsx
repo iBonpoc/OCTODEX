@@ -9,7 +9,7 @@
  * The director and the office (catalog rights, staff) change them; only while the module is active (founder О2).
  * Every object is a card (rule 12); the bind picker in a sheet lists rows.
  */
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
@@ -26,11 +26,14 @@ import { CardGrid, ListCard, ListCardHeader } from "@/ui/listCard";
 import { useToast, Sheet } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { CardList, ListRow, Screen } from "@/ui/surfaces";
-import { bindable, bindItem, findItem, laborRows, materialRows, missingItems, partName, type PriceRow } from "../prices";
+import { bindable, bindItem, findPriced, laborRows, materialRows, missingItems, partName, type PriceRow, priceFromOtherDegree } from "../prices";
 import { withAfter } from "@/data/undo";
 import { QuickPriceSheet } from "@/features/QuickPriceSheet";
 import { quickSheetKey } from "@/features/quickPrice";
 import { useHeldSheet } from "@/ui/heldSheet";
+import { seeCosts } from "@/features/access";
+import { groupPriceOf, transitionGroups, transitionWrites } from "./groups";
+import { TransitionSheet } from "./TransitionSheet";
 
 const k = (s: string) => `mod.gutters.pr.${s}` as DictKey;
 export default function GutterPricesScreen() {
@@ -54,6 +57,9 @@ export default function GutterPricesScreen() {
   const [bindFor, setBindFor] = useState<PriceRow | null>(null);
   /** spec 53 §6.3 (53-1): the price of a found item in a sheet — two taps (a kit keeps the full editor) */
   const [quickId, setQuickId] = useState<string | null>(null);
+  /** the item just made from a row's sheet: its «Цена» opens when that sheet has left (never two sheets at once — #743;
+   *  founder 18.11, #2155: «она создалась и не спросила меня цену») */
+  const priceNext = useRef<string | null>(null);
   // held while the sheet goes out (DS Б1, #1163); an item deleted meanwhile (another phone) — the sheet goes out
   const quick = useHeldSheet(quickId ? catalog.find((x) => x.id === quickId) ?? null : null);
 
@@ -72,6 +78,30 @@ export default function GutterPricesScreen() {
     // too late (false): the items stay made — a second press must not make them again (#1244)
     toast.show(store.online ? t(k("made"), { n: fresh.length }) : t("offline.queued"), withAfter(undo, () => fresh.forEach((it) => made.current.delete(it.id))));
   };
+  // «Одна цена на все цвета» (#1913 PR3): the company's coloured items gathered into price groups once; done by who sees our costs
+  const groups = useMemo(() => (active ? transitionGroups(catalog) : []), [active, catalog]);
+  const canGroup = staff && seeCosts(store.db, store.role, store.mode);
+  const [pgOpen, setPgOpen] = useState(false);
+  /** one «Сделать одну цену» at a time: a second press before the page redraws writes nothing and never puts an empty «Отменить»
+   *  in place of the first one's (rule 5; review of PR3 №2, as `made` above) */
+  const grouping = useRef(false);
+  const doGroups = (choice: Record<string, number>) => {
+    setPgOpen(false);
+    if (grouping.current) return;
+    grouping.current = true;
+    const sees = seeCosts(store.db, store.role, store.mode);
+    const undos = groups.flatMap((g) => {
+      const c = choice[g.key] ?? g.suggested;
+      // a group the database keeps already: its price first (the store's group write), then the others join it and take that price
+      const head = g.insideId ? [store.saveGroupPrice(g.insideId, groupPriceOf(g, c, sees))] : [];
+      return [...head, ...transitionWrites(g, c, sees).map((it) => store.saveCatalogItem(it))];
+    });
+    toast.show(store.online ? t("mod.gutters.pg.done", { n: groups.length }) : t("offline.queued"), withAfter(store.undoTogether(undos), () => { grouping.current = false; }));
+  };
+  // the page has redrawn with what was written (these groups are gone, or «Отменить» brought them back): the next press is a new one
+  useEffect(() => {
+    grouping.current = false;
+  }, [groups]);
   const bind = (it: CatalogItem, row: PriceRow) => {
     setBindFor(null);
     const undo = store.saveCatalogItem(bindItem(it, row.part));
@@ -82,7 +112,9 @@ export default function GutterPricesScreen() {
   const keep = (x: string) => x.replace(/ · /g, "\u00a0· ").replace(/ (\d+)$/, "\u00a0$1");
   const desktop = device === "desktop";
   const card = (row: PriceRow) => {
-    const it = findItem(catalog, row.part);
+    // a part priced only by another degree's elbow (§2.7) is shown missing here: the company prices its own
+    // #2227: a coloured part is priced by the one item of every colour (findPriced), as its estimate line is
+    const it = priceFromOtherDegree(catalog, row.part) ? undefined : findPriced(catalog, row.part).it;
     const title = keep(it ? it.name : nameOf(row.part));
     const unit = row.part.unit;
     if (it) {
@@ -149,7 +181,13 @@ export default function GutterPricesScreen() {
         ) : !staff ? (
           <Banner tone="info" testID="gpr-ro" title={t(k("askOffice"))} />
         ) : missing.length ? (
+          // the most urgent first (DS §15.3, design review of #1913 PR3): parts with no item (warn) before «one price» (info)
           <Banner tone="warn" testID="gpr-missing-n" title={t(k("missingN"), { n: missing.length })} hint={t(k("makeHint"))} action={{ label: t(k("makeAll"), { n: missing.length }), onPress: () => make(missing) }} />
+        ) : groups.length && !canGroup ? (
+          // the transition is the owner's or the office's (it moves prices with our costs): the others are told who does it
+          <Banner tone="info" testID="gpr-pg-ask" title={t("mod.gutters.pg.askOwner")} />
+        ) : groups.length ? (
+          <Banner tone="info" testID="gpr-pg" title={t("mod.gutters.pg.banner", { n: groups.length })} hint={t("mod.gutters.pg.bannerHint")} action={{ label: t("mod.gutters.pg.open"), onPress: () => setPgOpen(true) }} />
         ) : (
           // everything is in the price list (#1873: sample prices carry no mark)
           <Banner tone="ok" testID="gpr-all-found" title={t(k("allFound"))} />
@@ -167,13 +205,23 @@ export default function GutterPricesScreen() {
         </View>
       </View>
 
+      <TransitionSheet visible={pgOpen && canGroup && groups.length > 0} groups={groups} onClose={() => setPgOpen(false)} onDone={doGroups} />
       <QuickPriceSheet key={quickSheetKey(quick.opening, quick.value)} item={quick.value} visible={quick.visible} onExited={quick.onExited} onClose={() => setQuickId(null)} />
-      <Sheet visible={!!bindFor} onClose={() => setBindFor(null)} title={bindFor ? nameOf(bindFor.part) : ""}>
+      <Sheet
+        visible={!!bindFor}
+        onClose={() => setBindFor(null)}
+        onExited={() => {
+          const id = priceNext.current;
+          priceNext.current = null;
+          if (id) setQuickId(id);
+        }}
+        title={bindFor ? nameOf(bindFor.part) : ""}
+      >
         <View style={{ gap: space[3] }} testID="gpr-bind">
           <T v="caption" tone="mut">{t(k("bindHint"))}</T>
           {bindFor
             ? (() => {
-                const own = missing.find((m) => findItem([m], bindFor.part));
+                const own = missing.find((m) => findPriced([m], bindFor.part).it);
                 return own ? (
                   <View testID="gpr-bind-make">
                     <Button
@@ -183,6 +231,7 @@ export default function GutterPricesScreen() {
                       onPress={() => {
                         setBindFor(null);
                         make([own]);
+                        priceNext.current = own.id;
                       }}
                     />
                   </View>

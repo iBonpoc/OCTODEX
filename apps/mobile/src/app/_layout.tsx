@@ -1,4 +1,4 @@
-import { Stack } from "expo-router";
+import { Stack, type ErrorBoundaryProps } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -8,6 +8,7 @@ import { ThemeProvider, useTheme } from "@/theme/ThemeProvider";
 import { I18nProvider } from "@/i18n";
 import { StoreProvider } from "@/data/store";
 import { StorageReadError } from "@/features/StorageReadError";
+import { CrashScreen } from "@/features/CrashScreen";
 import { AuthProvider } from "@/cloud/auth";
 import { ToastProvider } from "@/ui/overlays";
 import { HintsProvider } from "@/ui/hints";
@@ -17,11 +18,13 @@ import { GuardedScreen, RouteGuard } from "@/nav/RouteGuard";
 import { NavMenuProvider } from "@/nav/NavMenu";
 import { SideNav } from "@/nav/SideNav";
 import { TabBar } from "@/nav/TabBar";
+import { UpdateDriver } from "@/features/UpdateBar";
 import { ClosedCompanyNotice } from "@/nav/ClosedCompanyNotice";
 import { SlashToSearch } from "@/nav/SearchEntry";
 import { LegalGate } from "@/nav/LegalGate";
 import { NameAsk } from "@/nav/NameAsk";
 import { RemovedCompanyNotice } from "@/nav/RemovedCompanyNotice";
+import { CompanySheetHost, CompanySwitchNotice } from "@/features/CompanySwitcher";
 import { BootRoot, useBootDone } from "@/features/boot";
 
 function Shell() {
@@ -50,12 +53,22 @@ function Shell() {
               <NameAsk />
               {/* #1669: removed from a company — its unsent changes are still here */}
               <RemovedCompanyNotice />
+              {/* spec 42 S34: the sheet «Компании» and «Вы в «B»» after a switch (#1673) */}
+              <CompanySheetHost />
+              <CompanySwitchNotice />
+              {/* #1912: looks for an over-the-air update (phone builds only) */}
+              <UpdateDriver />
             </View>
           </View>
         </NavMenuProvider>
       </ToastProvider>
     </View>
   );
+}
+
+/** a failure anywhere under the root: the crash screen, not a white one (#1555; it stands outside the providers, so it needs none) */
+export function ErrorBoundary(props: ErrorBoundaryProps) {
+  return <CrashScreen {...props} />;
 }
 
 export default function RootLayout() {

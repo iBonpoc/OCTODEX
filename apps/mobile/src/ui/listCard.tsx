@@ -6,9 +6,10 @@
  * Touch targets: 44 pt on iOS/web (App Store), 48 dp on Android (Google Play). Tokens only.
  * Layout rules are pure functions in ./listCardLayout (unit-tested); this file only draws them.
  */
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { Linking, Platform, Pressable, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native"; // ds-allow: src/ui primitive
 import { useReducedMotion } from "react-native-reanimated";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { component, font, layout, radius, size, space, spaceHalf, statusIcon, motion, type StatusName } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
@@ -33,14 +34,48 @@ type Variant = keyof typeof font.size;
 function Txt({ v = "body", w = "regular", color, lines, style, children, tabular }: {
   v?: Variant; w?: keyof typeof font.families; color: string; lines?: number; style?: StyleProp<TextStyle>; children: ReactNode; tabular?: boolean;
 }) {
+  const { c } = useTheme();
   const lh = Math.round(font.size[v] * font.lineHeight.snug);
+  // a text longer than N lines: its last line fades out, so the cut is seen (#1427: it ended mid-sentence like a whole text)
+  const [over, setOver] = useState(false);
+  const clip = useRef<ComponentRef<typeof View>>(null);
+  const max = lines ? lh * lines : 0;
+  useEffect(() => {
+    if (Platform.OS !== "web" || !lines) return;
+    const node = clip.current as unknown as HTMLElement | null;
+    if (!node?.style) return;
+    const mask = over ? `linear-gradient(to bottom, #000 calc(100% - ${lh}px), transparent 100%)` : "none";
+    node.style.maskImage = mask;
+    node.style.setProperty("-webkit-mask-image", mask);
+  }, [over, lines, lh]);
   const text = (
-    <Text style={[{ fontFamily: font.families[w], fontSize: font.size[v], lineHeight: lh, color, fontVariant: tabular ? ["tabular-nums"] : undefined }, style]}>
+    <Text
+      onLayout={lines ? (e) => setOver(e.nativeEvent.layout.height > max + 1) : undefined}
+      style={[{ fontFamily: font.families[w], fontSize: font.size[v], lineHeight: lh, color, fontVariant: tabular ? ["tabular-nums"] : undefined }, style]}
+    >
       {children}
     </Text>
   );
-  // clipped by height, never "…" (founder): the rest is in the opened card
-  return lines ? <View style={{ maxHeight: lh * lines, overflow: "hidden" }}>{text}</View> : text;
+  if (!lines) return text;
+  // clipped by height, never "…" (founder): the last line fades (web: a mask on any background; a phone: into the card), the rest is in the opened card
+  return (
+    <View ref={clip} collapsable={false} style={{ maxHeight: max, overflow: "hidden" }}>
+      {text}
+      {over && Platform.OS !== "web" ? (
+        <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: max - lh, height: lh }}>
+          <Svg width="100%" height={lh}>
+            <Defs>
+              <LinearGradient id="fact-fade" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor={c.surf} stopOpacity={0} />
+                <Stop offset="1" stopColor={c.surf} stopOpacity={1} />
+              </LinearGradient>
+            </Defs>
+            <Rect x="0" y="0" width="100%" height={lh} fill="url(#fact-fade)" />
+          </Svg>
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 /* ---------- small tap target: visible size stays, touch area grows to 44 / 48 ---------- */

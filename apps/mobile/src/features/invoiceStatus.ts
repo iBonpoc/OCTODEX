@@ -10,10 +10,12 @@ import type { DictKey } from "@/i18n";
 import type { Invoice } from "@/data/types";
 
 export type InvoiceState = "unpaid" | "partial" | "paid";
+/** a paid invoice: one word on the chip, the filter and the group (DS §4.4 п.1, dictionary 2.40 «Оплачен») */
+export const INVOICE_PAID: DictKey = "inv.st.paid";
 const VIEW: Record<InvoiceState, { s: StatusName; l: DictKey }> = {
   unpaid: { s: "info", l: "money.awaiting" },
   partial: { s: "info", l: "card.st.partial" },
-  paid: { s: "ok", l: "st.paid" },
+  paid: { s: "ok", l: INVOICE_PAID },
 };
 
 /** owes = total − paid, never below 0 (an overpayment owes nothing; the extra is the client's credit, PRD 18) */

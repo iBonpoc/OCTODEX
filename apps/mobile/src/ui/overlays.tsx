@@ -10,6 +10,7 @@ import { GestureDetector, GestureHandlerRootView, GestureStateManager, State, us
 import { menuPick } from "./menuPick";
 import { exitDuration, scrimLevel, swipeCloses, swipeStart, swipeStep, type SwipeState } from "./sheetSwipe";
 import { leaveBefore } from "./sheetLeave";
+import { noteQuestionCancelled, registerDirtySheet } from "./dirtySheets";
 import Svg, { Rect } from "react-native-svg";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -59,6 +60,8 @@ export interface MenuItem<K extends string> {
   destructive?: boolean;
   /** pale (`dimOpacity`) but pressable: the press explains why it cannot be done */
   dim?: boolean;
+  /** the first item of its own group (after a line): actions after the choices of a label menu — «Сделать основным» (DS §9 А14а) */
+  group?: boolean;
   testID?: string;
 }
 export function Menu<K extends string>({
@@ -185,7 +188,7 @@ export function Menu<K extends string>({
           {items.map((it, i) => (
             <Fragment key={it.key}>
             {/* the dangerous ones are the last group, after a line (DS Б4): drawn before the first of them when others come before */}
-            {it.destructive && i > 0 && !items[i - 1]!.destructive ? (
+            {(it.destructive && i > 0 && !items[i - 1]!.destructive) || (it.group && i > 0) ? (
               <View testID="menu-divider" style={{ height: component.hairline, backgroundColor: c.bd, marginVertical: space[1], marginHorizontal: space[4] }} />
             ) : null}
             <Press
@@ -222,6 +225,22 @@ export function Menu<K extends string>({
  */
 const SheetHold = createContext<{ current: boolean }>({ current: false });
 export const useSheetHold = () => useContext(SheetHold);
+
+const SheetEscapeCtx = createContext<{ add: (f: () => boolean) => () => void } | null>(null);
+/**
+ * Inside a `Sheet`: `onEscape` runs first on Esc / Android «Назад»; it returns true when it closed something of its own (an open
+ * calendar) — then the sheet stays. Outside a sheet nothing happens (a screen's Esc is its own).
+ */
+export function useSheetEscape(onEscape: (() => boolean) | null) {
+  const api = useContext(SheetEscapeCtx);
+  const live = useRef(onEscape);
+  live.current = onEscape;
+  const on = !!onEscape;
+  useEffect(() => {
+    if (!api || !on) return;
+    return api.add(() => live.current?.() ?? false);
+  }, [api, on]);
+}
 
 /**
  * The side insets of the open sheet (its left / right padding). A list inside a sheet scrolls in `SheetScroll`: the scroll view spans
@@ -326,6 +345,15 @@ export function Sheet({
   const [full, setFull] = useState(false);
   const [ask, setAsk] = useState(false);
   const live = useRef({ dirty, onClose, onExited, onEscape, canClose });
+  // what is open inside the sheet takes Esc and Android «Назад» first (DateField's calendar, DS А7): the first press closes it,
+  // the next one the sheet; the newest one asks first
+  const childEscape = useRef<(() => boolean)[]>([]);
+  const escapeApi = useMemo(() => ({
+    add: (f: () => boolean) => {
+      childEscape.current = [f, ...childEscape.current];
+      return () => { childEscape.current = childEscape.current.filter((x) => x !== f); };
+    },
+  }), []);
   live.current = { dirty, onClose, onExited, onEscape, canClose };
   useEffect(() => {
     if (visible) {
@@ -457,6 +485,11 @@ export function Sheet({
     },
     [drag, before, animateOut],
   );
+  // #1912: while the sheet holds unsaved work, «Обновить» asks it through its own question and never reloads over it
+  useEffect(() => {
+    if (!visible || !dirty) return;
+    return registerDirtySheet({ ask: () => requestClose() });
+  }, [visible, dirty, requestClose]);
   const pan = useMemo(
     () =>
       PanResponder.create({
@@ -533,9 +566,10 @@ export function Sheet({
   const fullH = winH - insets.top - space[2];
   const maxH = full || height === "large" ? fullH : height === "medium" ? winH * component.sheetMediumRatio : winH * component.sheetHeightRatio;
   return (
-    <Modal visible={open} transparent animationType="none" onRequestClose={onBack ? () => { if (!leaving.current) onBack(); } : () => { if (!leaving.current && !live.current.onEscape?.()) requestClose(); }} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
+    <Modal visible={open} transparent animationType="none" onRequestClose={() => { if (leaving.current || childEscape.current.some((f) => f())) return; if (onBack) onBack(); else if (!live.current.onEscape?.()) requestClose(); }} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
       {/* a form in a sheet scrolls the sheet's own body, never the screen under it (DS §11 п.3) */}
       <ScreenScrollCtx.Provider value={null}>
+      <SheetEscapeCtx.Provider value={escapeApi}>
       {/* a Modal is its own native root: gestures in it need their own root view (Gesture Handler) */}
       <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardAvoidingView
@@ -654,7 +688,7 @@ export function Sheet({
                   <T v="button" tone="bad">{t("sheet.discard")}</T>
                 </Press>
                 <Press
-                  onPress={() => setAsk(false)}
+                  onPress={() => { setAsk(false); noteQuestionCancelled(); }}
                   visibleHeight={component.button.phone}
                   accessibilityRole="button"
                   accessibilityLabel={t("common.cancel")}
@@ -694,6 +728,7 @@ export function Sheet({
         </Animated.View>
       </KeyboardAvoidingView>
       </GestureHandlerRootView>
+    </SheetEscapeCtx.Provider>
     </ScreenScrollCtx.Provider>
     </Modal>
   );
@@ -865,6 +900,7 @@ function ToastView({ item, onDone, onLate }: { item: ToastItem | null; onDone: (
         {item.undo ? (
           <UndoButton
             key={item.at}
+            shownAt={item.at}
             onPress={() => {
               // the second tap of the double tap that made the thing is not «Отменить» (item.at = when it showed or grew)
               if (!toastArmed(item.at, Date.now())) return;
@@ -882,10 +918,19 @@ function ToastView({ item, onDone, onLate }: { item: ToastItem | null; onDone: (
 const ARect = Animated.createAnimatedComponent(Rect);
 
 /** "Undo" with a ring around it that burns down over the 5 seconds the toast stays (reduced motion: static ring). */
-function UndoButton({ onPress }: { onPress: () => void }) {
+function UndoButton({ onPress, shownAt }: { onPress: () => void; shownAt: number }) {
   const { c } = useTheme();
   const { t } = useI18n();
   const reduce = useReducedMotion();
+  // not yet armed (toastArmMs after the toast showed, see toastArm.ts): said as «busy» — a screen reader and an e2e know when a
+  // press counts (#2086, #2134: a test pressed once at once; it waits for this, never for seconds)
+  const [armed, setArmed] = useState(() => toastArmed(shownAt, Date.now()));
+  useEffect(() => {
+    if (armed) return;
+    const left = Math.max(0, motion.toastArmMs - (Date.now() - shownAt));
+    const id = setTimeout(() => setArmed(true), left);
+    return () => clearTimeout(id);
+  }, [armed, shownAt]);
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const left = useSharedValue(1);
   useEffect(() => {
@@ -904,6 +949,7 @@ function UndoButton({ onPress }: { onPress: () => void }) {
       visibleHeight={component.button.md}
       accessibilityRole="button"
       accessibilityLabel={t("common.undo")}
+      aria-busy={!armed}
       onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
       style={{
         height: component.button.md,

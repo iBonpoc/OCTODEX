@@ -64,7 +64,7 @@ exports.run = async (h) => {
   h.expect((await tid("view-parts").count()) === 0, "the parts are folded");
   await pressWhenStill(tid("view-details").getByRole("button"));
   await tid("view-parts").waitFor({ timeout: 5000 });
-  for (const id of ["view-run-1", "view-run-2", "view-ds-1", "view-parts", "view-rough"]) h.expect((await tid(id).count()) === 1, `the review has ${id}`);
+  for (const id of ["view-run-1", "view-run-2", "view-ds-1", "view-parts"]) h.expect((await tid(id).count()) === 1, `the review has ${id}`);
   h.expect(/по стене .* по лицевой/.test(await tid("view-run-1").innerText()), "a gutter: along the wall and along the face");
   // one storey: «эт N» tells nothing and is not written (#1275, #1766)
   h.expect(!/эт \d/.test(await tid("view-run-1").innerText()), "a gutter of a one-storey drawing: no storey word");
@@ -73,7 +73,8 @@ exports.run = async (h) => {
   const total = Number((await tid("view-total").innerText()).replace(/[^\d.]/g, ""));
   h.expect(total > 0, `the total (${total})`);
   h.expect((await tid("view-test-prices").count()) === 0, "no «test prices» mark on the view (#1873, rule 9)"); // i18n-old: ok — the old mark must be gone
-  h.expect(/перед резкой промерьте/.test(await tid("view-rough").innerText()), "the rough drawing says to measure before cutting");
+  // #768, #1764 (founder 16.11: «этой надписи не должно быть»): nothing about how it was measured
+  h.expect((await tid("view-rough").count()) === 0 && !/промер|перемер|можно резать/.test(await tid("view-screen").innerText()), "no «measure before cutting» note");
   // nobody linked: one main action — link it
   h.expect((await tid("view-action-link").count()) === 1, "nobody linked → «Привязать к клиенту или лиду»");
   h.expect((await p.locator('[data-testid^="view-action-"]').locator("visible=true").count()) === 1, "one main action");

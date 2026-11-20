@@ -8,7 +8,7 @@
  */
 import { APP_NAME } from "@/config/product";
 import { useEffect, useMemo, useRef, useState, type ElementRef, type ReactNode, type RefObject } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { router, useLocalSearchParams, type Href } from "expo-router";
 import { computeGutterParts, type PartQty } from "@octo/estimating-engine";
 import { component, drawingPrint as DP, layout, radius, space } from "@octo/design-tokens";
@@ -19,13 +19,16 @@ import { tFor } from "@/i18n/translate";
 import { canSeeClientMoney } from "@/features/clients";
 import { EstimateListCard } from "@/features/listCards";
 import { moduleActive, moduleHref } from "@/modules/registry";
-import { Button, StatusChip } from "@/ui/controls";
+import { Button, IconButton, StatusChip } from "@/ui/controls";
+import { Banner } from "@/ui/banner";
 import { Icon, T } from "@/ui/primitives";
 import { HelpButton, Menu, useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, ListRow, RowView, Screen } from "@/ui/surfaces";
 import { NotFound } from "@/ui/emptyStates";
 import { blueprint, sheetPage } from "./blueprint";
 import { DocSheet } from "@/features/DocPagesView";
+import { gutterDocLang } from "../docLang";
+import { docWho } from "../docWho";
 import { fmtLen } from "../canvas/format";
 import { fromElements } from "../canvas/model";
 import { gutterData, KEY, measurementOf } from "../data";
@@ -39,10 +42,10 @@ import { LinkSheet } from "../draw/LinkSheet";
 import { dsNumbers, dsTotals, measureSpec, partGroups } from "./spec";
 import { drawingPdfHtml, drawingPdfName } from "./drawingPdf";
 import { shopFileName, shopHtml, shopJob, shopPagePt, shopSheets, type ShopPaper } from "./shop";
-import { saveShopPdf } from "./shop/savePdf";
+import { openShopPdf, saveShopPdf } from "./shop/savePdf";
 import { companyForPortal } from "@/cloud/portal";
 import { docDay } from "@/features/docPdf";
-import { saveEstimatePdf } from "@/features/estimatePdf";
+import { openPdfPreview, saveEstimatePdf } from "@/features/estimatePdf";
 
 /** the drawing's box: as tall as three quarters of its width */
 
@@ -68,14 +71,14 @@ export default function ViewScreen() {
 
 /**
  * The body of «Просмотр замера»: the screen above and the 1280 panel of «Замеры». `estimate` — «Смета из замера» /
- * «Обновить из замера» came with estimate=1: done once; `from` — "draw": «Править чертёж» goes back to that canvas.
+ * «Обновить из замера» came with estimate=1: asked once (a press writes); `from` — "draw": «Править чертёж» goes back to that canvas.
  */
 export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, panel }: { mid: string; estimate?: boolean; from?: string; /** the measurement was deleted from its card */ onGone: () => void; /** in the 1280 panel beside «Замеры»: one column */ panel?: boolean }) {
   const store = useStore();
   const { device } = useDevice();
   const { c } = useTheme();
   const cols = device !== "phone" && !panel;
-  const { t, money, lang } = useI18n();
+  const { t, money } = useI18n();
   const toast = useToast();
   const g = gutterData(store.db);
   const found = mid ? measurementOf(g, mid) : null;
@@ -98,6 +101,12 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   // a measurement that goes (deleted, a copy undone) must not change their count
   const shopRef = useRef<ElementRef<typeof View>>(null);
   const [shopAt, setShopAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  /** what the paper menu of the shop drawings is for: «Открыть» or «Отправить» (#2157) */
+  const [shopHow, setShopHow] = useState<"open" | "send">("open");
+  const shopMenu = (how: "open" | "send") => {
+    setShopHow(how);
+    shopRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setShopAt({ x, y, w, h }));
+  };
   // «Подробно» (П25.3 Б7): what the drawing is made of — folded; the sheet, the action and the documents come first
   const [details, setDetails] = useState(false);
 
@@ -110,11 +119,12 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
 
   /** one press at a time; the screen is left after a made estimate (a second press would make a second one) */
   const busy = useRef(false);
-  /** where it is: the object's address, else the lead's name (the sheet's title block) */
-  const placeText = () => {
-    const placeAddr = m?.propertyId ? store.db.properties.find((p) => p.id === m.propertyId) : undefined;
-    const placeLead = m?.leadId ? store.db.leads.find((l) => l.id === m.leadId) : undefined;
-    return placeAddr ? [placeAddr.address, placeAddr.city].filter(Boolean).join(", ") : placeLead?.name;
+  /** where it is, on the drawing sheet's title block (the screen's and the estimate's page): the job's address (the object's,
+   *  else the lead's own), else the name, else «Черновик · без адреса» — in the sheet's language (#2159, code review) */
+  const placeText = (tt: (k: DictKey) => string) => {
+    if (!m) return undefined;
+    const d = docWho(store.db, m, tt("mod.gutters.pdf.draft"));
+    return d.address ?? d.who;
   };
   const doEstimate = () => {
     if (!m || busy.current) return;
@@ -128,7 +138,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
           pageIdOf(m.id),
           tc("mod.gutters.pdf.title"),
           // one sheet for the phone (/p/) and the paper: built for the narrow one (pageW), the PDF scales it up
-          blueprint(drawing, tc, { company: company.name, address: placeText(), date: docDay(new Date().toISOString(), company.timezone), rough: m.accuracy !== "tape", fmt }, DP.pageW),
+          blueprint(drawing, tc, { company: company.name, address: placeText(tc), date: docDay(new Date().toISOString(), company.timezone), rough: m.accuracy !== "tape", fmt }, DP.pageW),
         )
       : undefined;
     const r = makeEstimate(store, { m, elements: elements ?? [], parts, catalog: store.db.catalog, name: (p) => partName(tc, p, fmt), fallbackTitle: tc("mod.gutters.title"), ...(page ? { page } : {}) });
@@ -140,12 +150,15 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     toast.show(t(r.updated ? "mod.gutters.est.updated" : "mod.gutters.est.made"), r.undo);
     router.push(`/estimate/new?id=${encodeURIComponent(r.estimateId)}` as Href);
   };
-  // «Смета из замера» (the lead) and «Обновить из замера» (the estimate's note) come here with estimate=1: done once
+  // «Смета из замера» (the lead) and «Обновить из замера» (the estimate's note) come here with estimate=1. Opening a link never writes:
+  // an estimate to open is opened (nothing changes); one to make or update is ASKED — the person presses (the question on top)
   const auto = useRef(!!autoEstimate);
+  const [ask, setAsk] = useState(false);
   useEffect(() => {
     if (!auto.current || !m || !money$) return;
     auto.current = false;
-    if (action.kind === "make" || action.kind === "update" || action.kind === "open") doEstimate();
+    if (action.kind === "open") doEstimate();
+    else if (action.kind === "make" || action.kind === "update") setAsk(true);
   });
 
   // «чертёж как на бумаге» (founder 10.11, #739): a drawing sheet, not the canvas — the same one the PDFs carry
@@ -155,7 +168,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     const company = companyForPortal(store.db, store.companyName ?? APP_NAME);
     return blueprint(drawing, t, {
       company: company.name,
-      address: placeText(),
+      address: placeText(t),
       date: docDay(new Date().toISOString(), company.timezone),
       rough: m?.accuracy !== "tape",
       fmt,
@@ -178,19 +191,20 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
       </View>
     );
   }
-  const lead = m.leadId ? store.db.leads.find((l) => l.id === m.leadId) : undefined;
-  const addr = m.propertyId ? store.db.properties.find((p) => p.id === m.propertyId) : undefined;
   const rough = m.accuracy !== "tape";
   // «Чертёж в PDF» (#509): the client's — no prices, in the client's language; the crew's — the cut, in the app's
-  const who = lead?.name ?? (addr ? store.db.customers.find((c) => c.id === addr.customerId)?.name : undefined);
   // the client's document: their estimate when there is one (its PDF carries the drawing's page, P4b) — only to those
   // who see the client's money; else the drawing without prices
   const clientEst = money$ ? estimateOfMeasurement(store.db, m.id) : undefined;
   const clientLang = clientLangOf(store.db, m);
-  const pdf = (kind: "client" | "crew") => {
+  /** «Открыть» — look first (#2157), «Отправить» — the file to send at once (a phone) */
+  const pdf = (kind: "client" | "crew", how: "open" | "send" = "open") => {
     const company = companyForPortal(store.db, store.companyName ?? APP_NAME);
-    const docLang = kind === "client" ? clientLangOf(store.db, m) : lang;
-    const tt = kind === "client" ? tFor(docLang) : t;
+    // the client's — the client's language, the crew's — the company's (#2158, rule 7: never the app's own)
+    const docLang = gutterDocLang(store.db, m, kind);
+    const tt = tFor(docLang);
+    // whose and where — or «Черновик · без адреса» (#2159), in the document's language
+    const dw = docWho(store.db, m, tt("mod.gutters.pdf.draft"));
     const html = drawingPdfHtml({
       kind,
       drawing,
@@ -198,33 +212,36 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
       t: tt,
       opts: { lang: docLang },
       company,
-      who,
-      address: addr ? [addr.address, addr.city].filter(Boolean).join(", ") : undefined,
+      who: dw.who,
+      address: dw.address,
       rough,
       date: docDay(new Date().toISOString(), company.timezone),
       fmt,
     });
-    saveEstimatePdf(html, drawingPdfName(kind, tt, who)).catch(() => toast.show(t("err.pdfSave")));
+    (how === "open" ? openPdfPreview : saveEstimatePdf)(html, drawingPdfName(kind, tt, dw.who)).catch(() => toast.show(t("err.pdfSave")));
   };
 
   // «Рабочие чертежи» (#1349): the plan sheets G-1 …, the schedules and the supplier's order — 11 × 17, or the same
   // sheets reduced to Letter; the quantities are the estimate's (`parts`). The crew's are in the app's language, the
   // supplier's order in English (spec 36 №19). A sheet with overlapping labels is still given, with a warning.
-  const shop = (kind: "drawings" | "order", paper: ShopPaper) => {
+  const shop = (kind: "drawings" | "order", paper: ShopPaper, how: "open" | "send" = "open") => {
     const company = companyForPortal(store.db, store.companyName ?? APP_NAME);
-    const tt = kind === "order" ? tFor("en") : t;
+    // the crew's sheets — the company's language, the supplier's order — en (#2158; spec 36 №19)
+    const tt = tFor(gutterDocLang(store.db, m, kind === "order" ? "supplier" : "crew"));
+    // whose and where on every sheet — or «Черновик · без адреса» (#2159), in the sheet's language
+    const dw = docWho(store.db, m, tt("mod.gutters.pdf.draft"));
     const r = readRules(settings);
     const set = shopSheets(drawing, {
       t: tt,
-      job: shopJob(company, { client: who, address: addr ? [addr.address, addr.city].filter(Boolean).join(", ") : undefined, date: docDay(new Date().toISOString(), company.timezone) }),
-      rules: { hangerSpacingIn: r.hangerSpacingIn, hangerExtra: r.hangerExtra, wasteFt: r.wasteFt, dsStickFt: r.dsStickFt, storyFt: r.storyFt, corner: r.corner },
+      job: shopJob(company, { client: dw.who, address: dw.address, date: docDay(new Date().toISOString(), company.timezone) }),
+      rules: { hangerSpacingIn: r.hangerSpacingIn, hangerExtra: r.hangerExtra, wasteFt: r.wasteFt, dsStickFt: r.dsStickFt, storyFt: r.storyFt, corner: r.corner, engine: rules.over },
       parts,
       fmt,
     });
     const sheets = kind === "order" ? set.order : set.drawings;
     const problems = kind === "order" ? set.orderProblems : set.problems;
     if (problems.length) toast.show(t("mod.gutters.shop.problems", { n: problems.length }));
-    saveShopPdf(shopHtml(sheets, shopFileName(tt, kind, who), paper), shopFileName(tt, kind, who), shopPagePt(sheets, paper)).catch(() => toast.show(t("err.pdfSave")));
+    (how === "open" ? openShopPdf : saveShopPdf)(shopHtml(sheets, shopFileName(tt, kind, dw.who), paper), shopFileName(tt, kind, dw.who), shopPagePt(sheets, paper)).catch(() => toast.show(t("err.pdfSave")));
   };
 
   return (
@@ -237,7 +254,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
           { key: "ansiB" as const, label: t("mod.gutters.shop.paperB"), testID: "view-shop-paper-ansiB" },
           { key: "letter" as const, label: t("mod.gutters.shop.paperLetter"), testID: "view-shop-paper-letter" },
         ]}
-        onSelect={(k) => shop("drawings", k)}
+        onSelect={(k) => shop("drawings", k, shopHow)}
         onClose={() => setShopAt(null)}
       />
       <View testID="view-screen" style={{ gap: space[4] }}>
@@ -246,15 +263,22 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
             the rest on the right (П25.3 Б); a phone and the 1280 panel — one column, the same order */}
         <View style={cols ? { flexDirection: "row", alignItems: "flex-start", gap: space[4] } : { gap: space[4] }}>
         <View style={{ gap: space[4], ...(cols ? { flex: 1, minWidth: 0 } : {}) }}>
+        {/* came by a link to make / update the estimate: the question on top, above the content (DS Б9) — a press writes */}
+        {ask && (action.kind === "make" || action.kind === "update") ? (
+          <Banner
+            tone="info"
+            testID="view-estimate-ask"
+            title={t(action.kind === "make" ? "mod.gutters.view.askMake" : "mod.gutters.view.askUpdate")}
+            action={{ label: t(action.kind === "make" ? "mod.gutters.est.make" : "mod.gutters.est.update"), onPress: () => { setAsk(false); doEstimate(); } }}
+            onClose={() => setAsk(false)}
+          />
+        ) : null}
         {/* the drawing whole — to look at only: no gestures, nothing to tap */}
         <View testID="view-drawing" pointerEvents="none" onLayout={(e) => setW(Math.round(e.nativeEvent.layout.width))}>
           {sheet ? <DocSheet sheet={sheet} testID="view-svg" /> : null}
         </View>
         {!drawing.runs.length ? (
           <View testID="view-empty"><T tone="mut">{t("mod.gutters.view.empty")}</T></View>
-        ) : null}
-        {rough && drawing.runs.length ? (
-          <View testID="view-rough"><StatusChip status="warn" label={t("mod.gutters.view.rough")} soft /></View>
         ) : null}
 
         {/* the main action by the state (#699) and «Править чертёж» */}
@@ -291,11 +315,13 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
               sub={clientEst ? t("mod.gutters.card.docClientEst", { n: clientEst.number ?? "", lang: clientLang.toUpperCase() }) : t("mod.gutters.card.docClientDrawing", { lang: clientLang.toUpperCase() })}
               openTestID="view-pdf-client"
               onOpen={() => (clientEst ? router.push(`/estimate/${clientEst.id}` as Href) : pdf("client"))}
+              // the estimate is sent from its own screen; the drawing alone — from here
+              onSend={clientEst ? undefined : () => pdf("client", "send")}
             />
-            <DocRow id="crew" title={t("mod.gutters.card.docCrew")} sub={t("mod.gutters.card.docCrewSub", { n: spec.parts.length })} openTestID="view-pdf-crew" onOpen={() => pdf("crew")} />
+            <DocRow id="crew" title={t("mod.gutters.card.docCrew")} sub={t("mod.gutters.card.docCrewSub", { n: spec.parts.length })} openTestID="view-pdf-crew" onOpen={() => pdf("crew")} onSend={() => pdf("crew", "send")} />
             {/* one row, the paper is chosen on the press (founder 13.11: «объединить в одну»): 11 × 17, or the same sheets reduced to Letter */}
-            <DocRow id="shop" title={t("mod.gutters.shop.doc")} sub={t("mod.gutters.shop.docSize")} openTestID="view-pdf-shop" anchorRef={shopRef} onOpen={() => shopRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setShopAt({ x, y, w, h }))} />
-            <DocRow id="shop-order" title={t("mod.gutters.shop.docOrder")} sub={t("mod.gutters.shop.docOrderSub")} openTestID="view-pdf-shop-order" onOpen={() => shop("order", "letter")} />
+            <DocRow id="shop" title={t("mod.gutters.shop.doc")} sub={t("mod.gutters.shop.docSize")} openTestID="view-pdf-shop" anchorRef={shopRef} onOpen={() => shopMenu("open")} onSend={() => shopMenu("send")} />
+            <DocRow id="shop-order" title={t("mod.gutters.shop.docOrder")} sub={t("mod.gutters.shop.docOrderSub")} openTestID="view-pdf-shop-order" onOpen={() => shop("order", "letter")} onSend={() => shop("order", "letter", "send")} />
           </Card>
           </View>
         ) : null}
@@ -357,7 +383,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
             {dsTotals(spec.ds).map((g, i) => {
               const v = partView(t, { key: "ds", kind: "material", attrs: { shape: g.shape, size: g.size, ...(g.dsStyle ? { dsStyle: g.dsStyle } : {}), ...(g.material ? { material: g.material } : {}), ...(g.color ? { color: g.color } : {}) } }, fmt);
               const how = [
-                dsLine(t, { shape: g.shape, elbows: g.elbows, offsets: g.offsets }),
+                dsLine(t, { shape: g.shape, ...(g.bent ? { bent: true } : {}), elbows: g.elbows, offsets: g.offsets }),
                 ...g.bottoms.map((b) => `${PART_WORDS.has(b.kind) ? t(`mod.gutters.pr.p.${b.kind}` as DictKey) : word(`mod.gutters.attr.b.${b.kind}`, b.kind)} × ${b.qty}`),
               ].filter(Boolean).join(" · ");
               const n0 = g.ns[0]!;
@@ -423,16 +449,23 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
 }
 
 /** a row of «Документы»: who reads it, what it is, «Открыть» (rule 12: rows of one object inside its card) */
-/** `anchorRef` — the place of the button, for a menu that opens at it */
-function DocRow({ id, title, sub, openTestID, onOpen, anchorRef }: { id: string; title: string; sub: string; openTestID: string; onOpen: () => void; anchorRef?: RefObject<ElementRef<typeof View> | null> }) {
+/** `anchorRef` — the place of the button, for a menu that opens at it. `onSend` — «Отправить» beside it, on a phone only (#2157:
+ *  «Открыть» shows the document; on the web the print preview already saves it) */
+function DocRow({ id, title, sub, openTestID, onOpen, onSend, anchorRef }: { id: string; title: string; sub: string; openTestID: string; onOpen: () => void; onSend?: () => void; anchorRef?: RefObject<ElementRef<typeof View> | null> }) {
   const { t } = useI18n();
+  const send = onSend && Platform.OS !== "web";
   return (
     <View testID={`view-doc-${id}`}>
       <ListRow
         title={title}
         subtitle={sub}
         left={<Icon name="invoice" />}
-        right={<View testID={openTestID} ref={anchorRef} collapsable={false}><Button label={t("mod.gutters.card.open")} variant="secondary" size="sm" onPress={onOpen} /></View>}
+        right={
+          <RowView style={{ gap: space[1] }}>
+            {send ? <View testID={`${openTestID}-send`}><IconButton icon="send" label={`${t("mod.gutters.card.send")}: ${title}`} onPress={onSend} /></View> : null}
+            <View testID={openTestID} ref={anchorRef} collapsable={false}><Button label={t("mod.gutters.card.open")} variant="secondary" size="sm" onPress={onOpen} /></View>
+          </RowView>
+        }
       />
     </View>
   );

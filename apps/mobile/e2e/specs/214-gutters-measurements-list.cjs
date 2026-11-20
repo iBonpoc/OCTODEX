@@ -56,7 +56,7 @@ exports.run = async (h) => {
   await fab("list");
   await waitFor(async () => (await cards().count()) === 1, "one card in «Замеры»");
   const text = await cards().first().innerText();
-  h.expect(/Без клиента/.test(text) && /Желобов: 2/.test(text) && /Черновик/.test(text), `the draft's card (${text.replace(/\n/g, " | ")})`);
+  h.expect(/Без клиента/.test(text) && /Gutter: 2/.test(text) && /Черновик/.test(text), `the draft's card (${text.replace(/\n/g, " | ")})`);
   await h.shot("list");
   await cards().first().click();
   await tid("view-screen").waitFor({ timeout: 8000 });
@@ -74,5 +74,5 @@ exports.run = async (h) => {
   await waitFor(async () => (await lines()) === 1, "one gutter in the new one");
   await fab("list");
   await waitFor(async () => (await cards().count()) === 2, "two cards");
-  h.expect(/Желобов: 1/.test(await cards().first().innerText()), "the newest first");
+  h.expect(/Gutter: 1/.test(await cards().first().innerText()), "the newest first");
 };

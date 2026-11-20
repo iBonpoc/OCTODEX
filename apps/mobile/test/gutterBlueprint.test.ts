@@ -66,9 +66,11 @@ describe("unit:gutterBlueprint — the drawing as on paper", () => {
       expect(y).toBeLessThanOrEqual(s.h);
     }
     const all = texts(s.items);
-    expect(all).toEqual(expect.arrayContaining(["Test Gutters LLC", "4512 Ventura Canyon Ave", "11/10/2026", t("mod.gutters.view.rough")]));
+    expect(all).toEqual(expect.arrayContaining(["Test Gutters LLC", "4512 Ventura Canyon Ave", "11/10/2026"]));
+    // #768, #1764 (founder 16.11: «этой надписи не должно быть»): nothing about how it was measured on the sheet
+    expect(all.filter((x) => /промер|перемер|рулетк|можно резать|примерн/i.test(x))).toEqual([]);
     expect(all.some((x) => x.startsWith("Масштаб:"))).toBe(true);
-    expect(texts(blueprint(d, t, { ...stamp, rough: false }).items)).toContain(t("mod.gutters.sheet.tape"));
+    expect(texts(blueprint(d, t, { ...stamp, rough: false }).items)).toEqual(all);
   });
 
   it("no prices on the sheet", () => {

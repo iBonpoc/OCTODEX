@@ -43,6 +43,7 @@ exports.run = async (h) => {
 
   await h.go(`/visit/${visit.id}`);
   await p.getByTestId("visit-amount-due").last().waitFor({ state: "visible", timeout: 15000 });
+  await p.getByTestId("visit-method-button").locator("visible=true").first().click(); // the method is a row with a menu (spec 56 wave 5а)
   await p.getByTestId("visit-method-cash").last().click();
   await p.getByTestId("visit-record-payment").last().getByRole("button").click();
   // wait for what is checked: the visit is paid in the store (CHECKS §9 п.3)

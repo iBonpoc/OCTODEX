@@ -65,9 +65,12 @@ describe("the drawing as a PDF", () => {
     const gutters = new Set([...h.matchAll(/<line[^>]*stroke="([^"]+)" stroke-width="2.5"/g)].map((m) => m[1]));
     expect([...gutters]).toEqual([print.ink]);
   });
-  it("rough → «measure again before cutting»; by tape → no such note", () => {
-    expect(make("crew", "en", true)).toContain("measure again before cutting");
-    expect(make("crew", "en", false)).not.toContain("measure again before cutting");
+  it("#768 #1764: nothing about how it was measured — rough or taped, for the crew or the client", () => {
+    for (const rough of [true, false]) for (const kind of ["crew", "client"] as const) {
+      const h = make(kind, "en", rough);
+      expect(h).not.toMatch(/measure again|ok to cut|can cut|rough measure/i);
+      expect(make(kind, "ru", rough)).not.toMatch(/промер|перемер|можно резать|примерн/i);
+    }
   });
   it("a text a person typed is escaped", () => {
     const h = drawingPdfHtml({ kind: "client", drawing: d, spec, t: tFor("en"), opts: { lang: "en" }, company, who: "<b>x</b>", rough: false, date: "11/10/2026" });

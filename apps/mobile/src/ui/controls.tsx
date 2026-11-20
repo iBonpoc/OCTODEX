@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import type { FieldBinding } from "./requiredForm";
+import { useFieldScroll, type FieldBinding } from "./requiredForm";
 import { Platform, ScrollView, TextInput, View, type LayoutChangeEvent, type ScrollViewInstance, type StyleProp, type ViewStyle } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -40,11 +40,14 @@ export function Button({
   full,
   style,
   accessibilityLabel,
+  selected,
   testID,
 }: {
   label: string;
   onPress?: () => void;
   variant?: BtnVariant;
+  /** a quick choice that is the chosen one (DateField's «Завтра»): read as pressed / selected */
+  selected?: boolean;
   /** "bar": a button of the pinned action bar (DS §8.9) — 44 high, a label in two lines grows it instead of being cut */
   size?: "sm" | "md" | "phone" | "bar";
   icon?: IconKey;
@@ -69,6 +72,7 @@ export function Button({
       visibleHeight={h}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
+      {...(selected !== undefined ? ({ accessibilityState: { selected, disabled: !!disabled }, "aria-pressed": selected } as object) : null)}
       style={[
         {
           minHeight: h,
@@ -108,20 +112,40 @@ export function IconButton({
   label,
   active,
   tone,
+  bare,
+  testID,
 }: {
   icon: IconKey;
   onPress?: () => void;
   label: string;
   active?: boolean;
-  tone?: "acc" | "plain";
+  /** «bad»: a dangerous small action (the «⊖» of a repeated value, DS §9 А14а) — the icon `status.bad.text` */
+  tone?: "acc" | "plain" | "bad";
+  /** no plate: the icon alone, visible `valueIcon` 22, the box 36 × 44 (iOS Contacts' «⊖», DS §9 А14а) */
+  bare?: boolean;
+  testID?: string;
 }) {
   const { c } = useTheme();
   const s = component.dockBtn;
+  if (bare)
+    return (
+      <Press
+        testID={testID}
+        onPress={onPress}
+        visibleHeight={s}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        style={{ width: s, minHeight: sizes.hitMin, alignItems: "center", justifyContent: "center" }}
+      >
+        <Icon name={icon} s={component.valueIcon} color={tone === "bad" ? c.status.bad.text : c.ink} />
+      </Press>
+    );
   // yellow is the main action only (tone «acc»); a switched-on button (a pinned note) is «Заливка», like every chosen thing (DS §9,
   // «Выделение выбранного», #1416)
   const filled = tone === "acc";
   return (
     <Press
+      testID={testID}
       onPress={onPress}
       visibleHeight={s}
       accessibilityRole="button"
@@ -141,7 +165,7 @@ export function IconButton({
         ...(active && !filled ? fillStyle(c) : null),
       }}
     >
-      <Icon name={icon} s={sizes.iconMd} color={filled ? c.onAcc : active === false ? c.mut : c.ink} />
+      <Icon name={icon} s={sizes.iconMd} color={filled ? c.onAcc : tone === "bad" ? c.status.bad.text : active === false ? c.mut : c.ink} />
     </Press>
   );
 }
@@ -182,21 +206,45 @@ export function StatusChip({ status, label, soft }: { status: StatusName; label:
 }
 
 /* ---------- Toggle (spring knob) ---------- */
-export function Toggle({ on, onChange, label, disabled }: { on: boolean; onChange: (v: boolean) => void; label: string; /** the switch is there but does not answer (a client without tax): pale, skipped by Tab, read as «disabled» */ disabled?: boolean }) {
+/**
+ * The switch (DS §9 А5): 42 × 24, knob 18 (`component.switch`), on — the yellow track and the dark knob `onAcc` (≈ 18:1; white on
+ * yellow ≈ 1.08:1 — never). Only inside `ToggleRow` (spec 56 wave 1а, guard choiceControls.test.ts): the row is the one element
+ * a finger and the screen reader meet; there the switch is `part` — drawn, not pressed. The old places alone keep the pressable one.
+ */
+export function Toggle({ on, onChange, label, disabled, part }: { on: boolean; onChange?: (v: boolean) => void; label: string; /** the switch is there but does not answer (a client without tax): pale, skipped by Tab, read as «disabled» */ disabled?: boolean; /** drawn inside `ToggleRow`: the row presses and speaks, the switch is a picture */ part?: boolean }) {
   const { c } = useTheme();
   const ro = useReadOnly();
   const reduce = useReducedMotion();
   const { w, h, knob } = component.switch;
+  // inside the 1-px edge: (24 − 18) / 2 − 1 = 2 on each side; the knob travels the rest of the width
   const pad = (h - knob) / 2 - 1;
-  const x = useSharedValue(on ? w - knob - pad * 2 - 2 : 0);
+  const travel = w - knob - pad * 2 - 2;
+  const x = useSharedValue(on ? travel : 0);
   useEffect(() => {
-    const to = on ? w - knob - pad * 2 - 2 : 0;
+    const to = on ? travel : 0;
     x.value = reduce ? to : withSpring(to, motion.spring);
-  }, [on, reduce, w, knob, pad, x]);
+  }, [on, reduce, travel, x]);
   const a = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
+  const track: ViewStyle = {
+    width: w,
+    height: h,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: c.bd,
+    backgroundColor: on ? c.acc : c.track,
+    padding: pad,
+    justifyContent: "center",
+  };
+  const knobView = <Animated.View style={[{ width: knob, height: knob, borderRadius: knob / 2, backgroundColor: on ? c.onAcc : c.ink }, a]} />;
+  if (part)
+    return (
+      <View testID="toggle-part" pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={track}>
+        {knobView}
+      </View>
+    );
   return (
     <Press
-      onPress={() => onChange(!on)}
+      onPress={() => onChange?.(!on)}
       disabled={ro || disabled}
       visibleHeight={h}
       accessibilityRole="switch"
@@ -204,21 +252,9 @@ export function Toggle({ on, onChange, label, disabled }: { on: boolean; onChang
       // web: a switch is read by aria-checked (as the radio below); without it the state is silent there (P4c)
       {...({ "aria-checked": on, "aria-disabled": ro || !!disabled || undefined } as object)}
       accessibilityLabel={label}
-      style={{
-        width: w,
-        height: h,
-        borderRadius: radius.pill,
-        borderWidth: 1,
-        borderColor: c.bd,
-        backgroundColor: on ? c.acc : c.track,
-        padding: pad,
-        justifyContent: "center",
-        opacity: disabled ? component.dimOpacity : 1,
-      }}
+      style={[track, { opacity: disabled ? component.dimOpacity : 1 }]}
     >
-      <Animated.View
-        style={[{ width: knob, height: knob, borderRadius: knob / 2, backgroundColor: on ? c.onAcc : c.ink }, a]}
-      />
+      {knobView}
     </Press>
   );
 }
@@ -584,6 +620,7 @@ export function TextField({
     const id = setTimeout(() => input.current?.focus(), plan.focusAfterMs);
     return () => clearTimeout(id);
   }, [plan.focusAfterMs]);
+  useFieldScroll(field);
   return (
     <View ref={field?.anchorRef} testID={tid} collapsable={false} style={{ gap: space[1] }}>
     <View
@@ -643,6 +680,9 @@ export function TextField({
         aria-invalid={shownError ? true : undefined}
         style={{
           flex: 1,
+          // the browser's <input> keeps its own width (~20 characters) and pushed the unit out of a narrow frame (#1990);
+          // a phone's TextInput already shrinks — 0 changes nothing there
+          minWidth: 0,
           minHeight: minH,
           // the browser's textarea does not grow by itself; a phone's multi-line field does (minHeight is enough there)
           height: multi && Platform.OS === "web" ? Math.max(minH, textH) : undefined,

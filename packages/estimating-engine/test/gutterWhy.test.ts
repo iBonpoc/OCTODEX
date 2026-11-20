@@ -44,7 +44,13 @@ const PARAMS: Partial<Record<string, string[]>> = {
   coil_reserve: ["runs", "reserveFt"],
   corner_allowance: ["outCount", "outIn", "inCount", "inIn"],
   adapter_per_bottom: ["part", "bottoms"],
+  ds_round_up: ["downspouts", "lengthIn", "stepFt", "ft"],
+  bend_in_place: ["downspouts", "bends", "perBendIn", "addedIn"],
+  soldering_kit: ["points", "solderLb", "fluxCans", "gasCylinders", "abrasivePacks", "soda", "perLb"],
+  solder_work: ["points"],
 };
+/** a line of the drawing whose quantity the engine changed says how («Расход v2»: the downspout rounded up, the bends on site) */
+const DRAWN_WITH_REASON = new Set(["ds_round_up", "bend_in_place", "solder_work"]);
 const JOINT_KEYS = ["sections", "perSection", "endcaps", "perEndcap", "outlets", "perOutlet", "dsJoints", "perDsJoint", "cutCorners", "perCutCorner", "stripCorners", "perStripCorner", "prefabCorners", "perPrefabCorner"];
 PARAMS.rivets_per_joints = [...JOINT_KEYS, "rivets"];
 PARAMS.sealant_points = [...JOINT_KEYS, "points", "perTube", "tubes"];
@@ -81,8 +87,8 @@ describe("every derived part says why (§2.13)", () => {
       const { parts } = computeGutterParts(rich(), over as never);
       const silent = parts.filter((p) => !fromDrawing(p) && !p.why).map((p) => p.key);
       expect(silent).toEqual([]);
-      // the drawing's own parts say nothing
-      expect(parts.filter((p) => fromDrawing(p) && p.why).map((p) => p.key)).toEqual([]);
+      // the drawing's own parts say nothing — but the ones whose quantity the engine changed (the rounded downspout, the bends)
+      expect(parts.filter((p) => fromDrawing(p) && p.why && !DRAWN_WITH_REASON.has(p.why.rule)).map((p) => p.key)).toEqual([]);
     });
   }
   it("every reason is a rule of the closed list, its numbers are numbers or words, and it is never in attrs", () => {
@@ -101,7 +107,7 @@ describe("every derived part says why (§2.13)", () => {
   });
   it("the reasons cover what the job has: hangers, screws, anchors, straps, rivets, sealant, solder, paint, sticks, outlets, caps, guards", () => {
     const rules = new Set(computeGutterParts(rich()).parts.flatMap((p) => (p.why ? [p.why, ...(p.why.also ?? [])] : [])).map((w) => w.rule));
-    for (const r of ["hangers_spacing", "kit_screws", "kit_anchors", "kit_per_hanger", "ds_straps_per_ds", "rivets_per_joints", "sealant_points", "solder_points", "flux_per_solder", "touch_up_per_color", "ds_sticks", "outlet_per_ds", "endcap_free_end", "guard_pieces", "splash_guard_inside", "coil_reserve", "corner_allowance"])
+    for (const r of ["hangers_spacing", "kit_screws", "kit_anchors", "kit_per_hanger", "ds_straps_per_ds", "rivets_per_joints", "sealant_points", "solder_points", "soldering_kit", "touch_up_per_color", "ds_sticks", "outlet_per_ds", "endcap_free_end", "guard_pieces", "splash_guard_inside", "coil_reserve", "corner_allowance"])
       expect(rules, r).toContain(r);
   });
   it("the line's count is the reason's total: hangers, pieces, joints, straps, sticks, screws, rivets, tubes, pounds — never a recount", () => {
@@ -113,8 +119,8 @@ describe("every derived part says why (§2.13)", () => {
       expect(sum, `${p.key} ${w.rule}`).toBe(Number(p.qty));
     }
   });
-  it("the counts are not changed by it: the parts version stays as #1818 left it, 4 (the quantities are held by gutterParts.test.ts; 5 comes with PR-1)", () => {
-    expect(GUTTER_PARTS_VERSION).toBe("4");
+  it("the parts version is 6: «Расход v2» PR-2 changes what a copper or zinc drawing counts (the soldering kit and work, fasteners' metal, expansion joints by metal)", () => {
+    expect(GUTTER_PARTS_VERSION).toBe("6");
   });
   it("a big drawing still fits the revision (the server takes elements + parts up to 512 KB): the parts of 200 runs and 200 downspouts stay under 384 KB", () => {
     const colors = ["white", "brown", "black", "almond", "bronze"];

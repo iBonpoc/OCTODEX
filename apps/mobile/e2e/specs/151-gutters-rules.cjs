@@ -151,7 +151,7 @@ exports.run = async (h) => {
     return [r.x + (n("x1") + n("x2")) / 2, r.y + (n("y1") + n("y2")) / 2];
   });
   await p.mouse.click(mid[0], mid[1]);
-  await waitFor(async () => /Желоб/.test((await tid("draw-selected").count()) ? await tid("draw-selected").innerText() : ""), "a run picked");
+  await waitFor(async () => /Gutter/.test((await tid("draw-selected").count()) ? await tid("draw-selected").innerText() : ""), "a run picked");
   await openAttrs();
   await more();
   await tid("attr-corner-0").waitFor({ timeout: 5000 });

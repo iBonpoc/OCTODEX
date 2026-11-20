@@ -7,7 +7,7 @@ import { DEFAULT_TAX, parseQty, sectionIdOk, type CustomLine, type CustomOption 
 import type { CatalogItem, EstimateDoc, EstimateTemplate } from "@/data/types";
 import type { DictKey } from "@/i18n";
 import type { StarterEstimate } from "@/modules/registry";
-import { catalogMatch } from "./catalogMatch";
+import { catalogMatch, propertyCount } from "./catalogMatch";
 import { canEditTemplates, stableUuid } from "./checklist";
 import { MAX_OPTIONS, catalogUnitCost, catalogUnitPrice, clientSectionsOf, markedHidden, mainOption, newDoc, nextOptionName, normalizeDoc, optionTotals, uid } from "./estimateDoc";
 
@@ -293,7 +293,7 @@ export function starterLookup(catalog: readonly CatalogItem[], match: Record<str
   const pool = catalog.filter((it) => it.kind !== "kit" && it.unit.trim().toLowerCase() === unit.trim().toLowerCase());
   const only = (hits: CatalogItem[]): { item?: CatalogItem; why: "found" | "none" | "several" } => {
     if (!hits.length) return { why: "none" };
-    const n = (it: CatalogItem) => Object.keys(it.attributes ?? {}).length;
+    const n = (it: CatalogItem) => propertyCount(it.attributes);
     const top = hits.filter((h) => n(h) === n(hits[0]!)); // catalogMatch sorts the closest first
     return top.length === 1 ? { item: top[0]!, why: "found" } : { why: "several" };
   };

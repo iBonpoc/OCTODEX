@@ -1,5 +1,6 @@
 import { APP_NAME } from "@/config/product";
-import { visitWhen } from "@/features/schedule";
+import { keepCosts, seeCosts } from "./access";
+import { canPlan, visitWhen } from "@/features/schedule";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { useEffect, useMemo, useRef, useState, type ComponentRef, type ReactElement, type ReactNode } from "react";
 import { View } from "react-native";
@@ -15,7 +16,6 @@ import { SignBlock } from "@/features/SignBlock";
 import { SignaturePad, SignaturePreview } from "@/features/SignaturePad";
 import { clientDoc, issueCount, isUniversal, mainOption, marginView, newToken, SEND_ISSUE_KINDS, sendIssues, uid, type SendIssues } from "@/features/estimateDoc";
 import { canEditEstimateTemplates, cleanEstimateTemplate, ESTIMATE_TEMPLATE_NAME_MAX, toTemplateDoc } from "@/features/estimateTemplate";
-import { hasValidCslb } from "@/features/companySetup";
 import { ContractStatement } from "@/features/ContractStatement";
 import { estimateFileName, estimateHtml, saveEstimatePdf } from "@/features/estimatePdf";
 import { beforeSend, clientLink, copyText, estimateMessage, openEmail, openSms } from "@/features/sendEstimate";
@@ -72,10 +72,15 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
   const st = estimateStatusView(e.status);
   const q = (msg: string) => (store.online ? msg : t("offline.queued"));
   const universal = isUniversal(e);
+  const facts = [
+    e.depositCents ? t("est.deposit", { amount: money(e.depositCents) }) : null,
+    e.sentAt ? `${t("st.sent")} ${day(e.sentAt)}` : null,
+    universal ? t("ue.nOptions", { n: e.doc.options.length }) : null,
+  ].filter(Boolean);
   const tplHeld = useHeldSheet(universal && tplOpen ? e : null); // the sheet goes out before it is unmounted (#1163)
   // the office: the margin, or why it is not counted (debt 5); who may not see costs (a tech, sales without view_costs —
-  // the server's app.can_view_costs, db.costsVisible) never sees it: their lines come without costs (review PR-A №1)
-  const margin = store.role === "tech" || db.costsVisible === false ? null : marginView(e);
+  // the server's app.can_view_costs, features/access.ts seeCosts) never sees it: their lines come without costs (review PR-A №1)
+  const margin = seeCosts(db, store.role, store.mode) ? marginView(e) : null;
   const job = db.jobs.find((j) => j.estimateId === e.id);
 
   // C5 for the PDF (spec 33 П23.10): an unsigned estimate's PDF goes to the client by hand — the same check as «Отправить»
@@ -161,19 +166,10 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
               <StatusChip status="warn" soft label={t("est.marginMissing", { n: margin.lines })} />
             </View>
           ) : null}
-          {e.depositCents ? (
+          {/* the facts joined by «·» between them, not before the first one (#1427 031) */}
+          {facts.length ? (
             <T v="caption" tone="mut">
-              · {t("est.deposit", { amount: money(e.depositCents) })}
-            </T>
-          ) : null}
-          {e.sentAt ? (
-            <T v="caption" tone="mut">
-              · {t("st.sent")} {day(e.sentAt)}
-            </T>
-          ) : null}
-          {universal ? (
-            <T v="caption" tone="mut">
-              · {t("ue.nOptions", { n: e.doc.options.length })}
+              {facts.join(" · ")}
             </T>
           ) : null}
         </RowView>
@@ -297,7 +293,9 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
 
 function ApprovedCard({ e, jobId }: { e: Estimate; jobId?: string }) {
   const { t, day, time } = useI18n();
-  const { db } = useStore();
+  const { db, role } = useStore();
+  // #2016: «Запланировать» opens a screen of the planners only — the others see where the job stands, not the button
+  const planner = canPlan([role]);
   const visits = jobId ? db.visits.filter((v) => v.jobId === jobId).sort((x, y) => x.start.localeCompare(y.start)) : [];
   const a = e.approval!;
   const doc = e.doc!;
@@ -313,7 +311,7 @@ function ApprovedCard({ e, jobId }: { e: Estimate; jobId?: string }) {
             <T v="caption" tone="mut">
               {t("ue.toSchedule")}
             </T>
-            <Button label={t("sch.title")} icon="calendar" onPress={() => router.push(`/job/schedule?jobId=${jobId}`)} />
+            {planner ? <Button label={t("sch.title")} icon="calendar" onPress={() => router.push(`/job/schedule?jobId=${jobId}`)} /> : null}
           </>
         ) : null}
         {visits.map((v) => (
@@ -321,7 +319,7 @@ function ApprovedCard({ e, jobId }: { e: Estimate; jobId?: string }) {
             {t("ue.scheduledOn", { date: day(v.start), time: visitWhen(v, time, t("plan5.allDay"), false) })}
           </T>
         ))}
-        {jobId && visits.length ? (
+        {jobId && visits.length && planner ? (
           <Button label={t("sch.another")} icon="plus" variant="ghost" size="sm" onPress={() => router.push(`/job/schedule?jobId=${jobId}`)} />
         ) : null}
       </Card>
@@ -477,9 +475,6 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
         <T v="caption" tone="mut">
           {t("ue.sendNote")}
         </T>
-        {!hasValidCslb(store.db.company) ? (
-          <StatusNote tone="warn">{t("ue.noCslb")}</StatusNote>
-        ) : null}
         {store.mode === "demo" ? (
           <StatusNote tone="warn">{t("ue.demoLink")}</StatusNote>
         ) : null}
@@ -771,9 +766,10 @@ function SaveTemplateSheet({ e, onClose, visible, onExited }: { e: Estimate; onC
   const [done, setDone] = useState(false);
   const save = () => {
     if (!e.doc || done || !name.trim()) return;
-    const seeCosts = store.db.costsVisible ?? store.role !== "tech";
+    // #1837: the template keeps the costs the phone holds unless the server said «no» (a write, not a view)
+    const costsSeen = keepCosts(store.db);
     const exempt = !!store.db.customers.find((c) => c.id === e.customerId)?.taxExempt;
-    const tpl = { id: uid(), name, doc: toTemplateDoc(e.doc, seeCosts, exempt) };
+    const tpl = { id: uid(), name, doc: toTemplateDoc(e.doc, costsSeen, exempt) };
     // what the server would refuse is never queued: say so instead of «сохранён»
     if (!cleanEstimateTemplate(tpl)) {
       toast.show(t("est.tpl.cannot"));
