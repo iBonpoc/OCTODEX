@@ -524,7 +524,6 @@ describe("design system: a form's fields have no plate (#1411)", () => {
    * exact counts by file (a new row with a button beside a field fails: a helper goes into the field as an icon).
    */
   const SUBMIT_ROWS: Record<string, { n: number; why: string }> = {
-    "app/job/[id].tsx": { n: 1, why: "«Добавить» заметку — отправляет набранное" },
     "features/JobLinesBlock.tsx": { n: 1, why: "«Сохранить» ставку налога" },
     "features/VisitChecklist.tsx": { n: 2, why: "«Добавить» пункт чек-листа" },
     "features/client/ClientSheets.tsx": { n: 1, why: "«Добавить» метку" },

@@ -4936,4 +4936,10 @@ export const es: Dict = {
   "contact.writeTo": "Escribir a {name}",
   "contact.sms": "SMS",
   "contact.email": "Correo",
+  "job6.tabs": "Secciones del trabajo",
+  "job6.s.orders": "Pedidos",
+  "job6.why.rest": "Trabajo terminado — falta facturar parte del contrato",
+  "job6.why.pay": "El cliente debe {amount}",
+  "job6.noInvoices": "Aún no hay facturas",
+  "job6.noPhotos": "Aún no hay fotos — se toman en la visita",
 };

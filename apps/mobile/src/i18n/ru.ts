@@ -4936,6 +4936,12 @@ export const ru = {
   "contact.writeTo": "Написать: {name}",
   "contact.sms": "SMS",
   "contact.email": "Почта",
+  "job6.tabs": "Разделы работы",
+  "job6.s.orders": "Заказы",
+  "job6.why.rest": "Работа выполнена — по договору ещё не выставлено",
+  "job6.why.pay": "Клиент должен {amount}",
+  "job6.noInvoices": "Счетов пока нет",
+  "job6.noPhotos": "Фото пока нет — их снимают на выезде",
 } as const;
 
 export type DictKey = keyof typeof ru;

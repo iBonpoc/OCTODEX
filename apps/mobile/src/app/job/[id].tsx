@@ -6,9 +6,10 @@ import { router, useLocalSearchParams } from "expo-router";
 import { component, space } from "@octo/design-tokens";
 import { jobProfit, useStore } from "@/data/store";
 import { findJob } from "@/data/jobs";
-import type { DB, Job } from "@/data/types";
+import type { Estimate } from "@/data/types";
 import { canSeeProfit } from "@/nav/roles";
 import { JobOrdersBlock } from "@/features/JobOrdersBlock";
+import { canEditOrders, ordersOfJob } from "@/features/purchaseOrders";
 import { useI18n, type DictKey } from "@/i18n";
 import { ContractStatement } from "@/features/ContractStatement";
 import { jobServable, jobStatusView } from "@/features/jobs";
@@ -27,17 +28,19 @@ import { JobTypeTags } from "@/features/JobTypeTags";
 import { jobChecklistVisit } from "@/features/checklist";
 import { ChecklistEditor } from "@/features/VisitChecklist";
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
+import { PhotoStrip } from "@/features/PhotoStrip";
+import { estView } from "@/features/boards";
 import { smsWithBody } from "@/features/sms";
 import { Menu, useToast } from "@/ui/overlays";
 import { useDevice } from "@/theme/ThemeProvider";
-import { ActionTile } from "@/features/ActionTile";
 import { visitStatus } from "@/features/visits";
-import { Button, IconButton, Segmented, StatusChip, TextField } from "@/ui/controls";
-import { T } from "@/ui/primitives";
+import { Button, IconButton, StatusChip, TextField } from "@/ui/controls";
+import { Press, T, type IconKey } from "@/ui/primitives";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { fabItems } from "@/nav/sections";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { FilterBar } from "@/ui/filterBar";
+import { ViewTabs } from "@/ui/viewTabs";
 import { memberLabel, memberName } from "@/features/team";
 import { canSeeJob } from "@/features/access";
 import { invoiceTitle } from "@/features/invoiceTitle";
@@ -45,16 +48,33 @@ import { signedText } from "@/i18n/translate";
 import { jobCancelRefusal } from "@/features/jobCancel";
 import { CancelJobSheet, CancelledJobBody } from "@/features/job/CancelJob";
 
-type Tab = "details" | "money" | "history";
+/** the job's sections, in the line under the head (LAYOUT-RULES §3 «Объект», #2350) */
+type Section = "overview" | "visits" | "estimates" | "invoices" | "expenses" | "orders" | "photos" | "notes";
+const SECTION_LABEL: Record<Section, DictKey> = {
+  overview: "client.tab.overview",
+  visits: "jobs.visits",
+  estimates: "client.estimates",
+  invoices: "client.invoices",
+  expenses: "jobs.expenses",
+  orders: "job6.s.orders",
+  photos: "cc.photos",
+  notes: "client.row.notes",
+};
 
-/** Job (13 §3.4, 17-job §7.1): «Связано», then Детали · Деньги · История. */
+/**
+ * Job — the «Объект» template (docs/design/LAYOUT-RULES.md §3; the client's card is the sample): the head (the job's name, the
+ * client as one link with call / text as icons, one line «status · contract», the address small — it opens the route), ONE main
+ * button «the next step» with its reason under it (visit → close → bill the rest → take the payment; the tab bar is under the
+ * card, so it stands right under the head, П3), then the sections in one line that scrolls sideways — «Обзор · Выезды · Сметы ·
+ * Счета · Расходы · Заказы · Фото · Заметки» with their numbers — and the open section under it. Rare and dangerous — «⋯».
+ */
 export default function JobScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const store = useStore();
   const { db } = store;
   const { t, money, day, time, duration } = useI18n();
   const toast = useToast();
-  const [tab, setTab] = useState<Tab>("details");
+  const [tab, setTab] = useState<Section>("overview");
   const [filter, setFilter] = useState<JobHistoryFilter>("all");
   const [noteText, setNoteText] = useState("");
   const [focusNote, setFocusNote] = useState(false);
@@ -111,10 +131,14 @@ export default function JobScreen() {
     Linking.openURL(smsWithBody(tel, "")).catch(() => {});
   };
   const addr = [p?.address, p?.city].filter(Boolean).join(", ");
+  const route = () => Linking.openURL(`https://maps.apple.com/?daddr=${encodeURIComponent(addr)}`).catch(() => {});
   const showMoney = canSeeProfit(store.role);
   const invoices = db.invoices.filter((i) => i.jobId === j.id);
   const dueCents = invoicesOwe(invoices);
   const openInvoice = invoices.find((i) => i.totalCents > i.paidCents);
+  const estimates = db.estimates.filter((e) => e.id === j.estimateId);
+  const orders = ordersOfJob(db, j.id).filter((o) => o.status !== "cancelled");
+  const photos = visits.flatMap((v) => v.photos ?? []);
   const team = [...new Set(visits.flatMap((v) => v.assigneeIds ?? (v.techId ? [v.techId] : [])))]
     .map((mid) => memberName(db, mid, t))
     .filter(Boolean)
@@ -158,26 +182,45 @@ export default function JobScreen() {
     }
     toast.show(store.online ? t("job3.done.invoiced") : t("offline.queued"), undo);
   };
+  const canSchedule = office && servable && j.status !== "done";
+  const schedule = () => router.push(`/job/schedule?jobId=${j.id}`);
 
   // where «Оплата» leads: the open invoice, else the visit that takes money on site
   const payTo = openInvoice ? `/invoice/${openInvoice.id}` : next && visitDueCents(db, next) > 0 ? `/visit/${next.id}` : null;
   const restShown = office && j.status === "done" && rest > 0 && !restSent;
-  // the one yellow button (rule 2): the «выполнена?» card and «Выставить остаток» are the main step themselves when shown
-  const mainStep: { key: "start" | "pay"; label: DictKey; icon: "check" | "dollar"; onPress: () => void } | null =
-    (office && awaiting) || restShown
-      ? null
-      : next
-        ? { key: "start", label: "job3.main.start", icon: "check", onPress: () => router.push(`/visit/${next.id}`) }
-        : payTo
-          ? { key: "pay", label: "job3.main.pay", icon: "dollar", onPress: () => router.push(payTo as never) }
-          : null;
-  // the technician on his way: «В пути» stays in sight beside the main step (Jobber/HCP «On my way»); the office has it in «⋯»
-  const enRouteShown = !!next && !!mainStep && mainStep.key === "start" && !office;
+  /**
+   * The ONE next step (LAYOUT-RULES П2, 06-decision п.3) along the job's chain, by the rights and actions the card had:
+   * the office closes a job whose visits are over → bills the rest → the open visit is started → the money is taken → a job
+   * with no visit gets one. Its reason stands under it.
+   */
+  type Step = { key: "close" | "rest" | "start" | "pay" | "schedule"; label: string; icon: IconKey; why?: string; onPress: () => void };
+  const step: Step | null =
+    office && awaiting
+      ? { key: "close", label: t("job3.done.yes"), icon: "check", why: `${t("job3.done.ask")} ${t("job3.done.askHint")}`, onPress: complete }
+      : restShown
+        ? { key: "rest", label: t("job3.done.invoiceRest", { amount: money(rest) }), icon: "invoice", why: t("job6.why.rest"), onPress: invoiceRest }
+        : next
+          ? { key: "start", label: t("job3.main.start"), icon: "check", why: t("job3.next", { date: day(next.start), time: visitWhen(next, time, t("plan5.allDay"), false) }), onPress: () => router.push(`/visit/${next.id}`) }
+          : payTo
+            ? { key: "pay", label: t("job3.main.pay"), icon: "dollar", why: dueCents > 0 ? t("job6.why.pay", { amount: money(dueCents) }) : undefined, onPress: () => router.push(payTo as never) }
+            : canSchedule && !visits.length
+              ? { key: "schedule", label: t("sch.title"), icon: "calendar", why: t("job3.noVisit"), onPress: schedule }
+              : null;
+  // the technician on his way: «В пути» stays in sight beside the main step as an icon (Jobber/HCP «On my way»); the office has it in «⋯»
+  const enRouteShown = !!next && step?.key === "start" && !office;
   const cancelBlocked = jobCancelRefusal(db, j.id, "x", store.role);
+  // «＋ Создать смету» of a job with no estimate — in its empty «Сметы» (the only button on the page, 422)
+  const newEstimate =
+    office && servable && c && !j.estimateId && fabItems("job", store.role, { customerId: c.id }).some((i) => i.id === "estimate")
+      ? () => router.push(`/estimate/new?customerId=${c.id}${p ? `&propertyId=${p.id}` : ""}`)
+      : undefined;
   const moreItems = [
     ...(next && !enRouteShown ? [{ key: "enRoute", label: t("job3.more.enRoute"), icon: "navigate" as const, testID: "job-act-enRoute" }] : []),
-    ...(payTo && mainStep?.key !== "pay" ? [{ key: "pay", label: t("job3.more.pay"), icon: "dollar" as const, testID: "job-act-pay" }] : []),
-    // the estimate for this job's client and address: the card has no «＋» any more (#1395) — it is named here
+    ...(payTo && step?.key !== "pay" ? [{ key: "pay", label: t("job3.more.pay"), icon: "dollar" as const, testID: "job-act-pay" }] : []),
+    // «Нужен ещё выезд» of the «выполнена?» step, and «Завершить работу» before all the visits are over (S10)
+    ...(office && awaiting && servable ? [{ key: "more", label: t("job3.done.more"), icon: "calendar" as const, testID: "job-act-more" }] : []),
+    ...(office && j.status !== "done" && j.status !== "unscheduled" && !awaiting ? [{ key: "complete", label: t("job3.done.complete"), icon: "check" as const, testID: "job-act-complete" }] : []),
+    // the estimate for this job's client and address (#1395); a job with none has it named in «Сметы» too
     ...(servable && c && fabItems("job", store.role, { customerId: c.id }).some((i) => i.id === "estimate") ? [{ key: "estimate", label: t("path.estimateNew"), icon: "invoice" as const, testID: "job-act-estimate" }] : []),
     { key: "note", label: t("job3.more.note"), icon: "note" as const, testID: "job-act-note" },
     ...(next ? [{ key: "file", label: t("job3.more.file"), icon: "camera" as const, testID: "job-act-file" }] : []),
@@ -196,64 +239,91 @@ export default function JobScreen() {
     </View>
   );
 
-  const details = (
-    <>
-
-      {office && awaiting ? (
-        // S10 (13 §3.4.1): the last visit is over — the office decides; the technician is never asked
-        <Card status="info">
-          <T v="heading">{t("job3.done.ask")}</T>
-          <T v="body" tone="mut">
-            {t("job3.done.askHint")}
-          </T>
-          <RowView style={{ flexWrap: "wrap" }}>
-            <Button label={t("job3.done.yes")} icon="check" variant="primary" size="sm" onPress={complete} />
-            {servable && office ? <Button label={t("job3.done.more")} icon="calendar" variant="secondary" size="sm" onPress={() => router.push(`/job/schedule?jobId=${j.id}`)} /> : null}
+  /* ---------- the head: name, the client as one link + call / text icons, «status · contract», the address ---------- */
+  const head = (
+    <View testID="job-head" style={{ gap: space[2] }}>
+      <T v="heading">{j.title}</T>
+      {c || tel ? (
+        <View testID="job-contact" style={{ maxWidth: wide ? component.panelW : undefined }}>
+          <RowView style={{ justifyContent: "space-between" }}>
+          {c ? (
+            // a ghost button's own side padding is pulled out: the name stands on the head's left edge
+            <View style={{ flexShrink: 1, marginLeft: -space[4] }}>
+              <Button testID="job-client" label={`${c.name} ›`} icon="user" size="sm" variant="ghost" accessibilityLabel={`${t("job3.rel.customer")}: ${c.name}`} onPress={() => router.push(`/client/${c.id}`)} />
+            </View>
+          ) : (
+            <View />
+          )}
+          {tel ? (
+            <RowView gap={space[1]}>
+              <View testID="job-call">
+                <IconButton icon="phone" label={`${t("client.call")}: ${c?.name ?? tel}`} onPress={call} />
+              </View>
+              <View testID="job-write">
+                <IconButton icon="sms" label={`${t("visit.message")}: ${c?.name ?? tel}`} onPress={sms} />
+              </View>
+            </RowView>
+          ) : null}
           </RowView>
-        </Card>
+        </View>
       ) : null}
-      {restShown ? (
-        <Button label={t("job3.done.invoiceRest", { amount: money(rest) })} icon="invoice" variant="primary" full onPress={invoiceRest} />
-      ) : null}
-
-      <Card status={st.status}>
-        <RowView style={{ justifyContent: "space-between" }}>
-          <T v="heading" style={{ flex: 1 }}>
-            {j.title}
-          </T>
-          <StatusChip status={st.status} label={t(st.label)} />
-        </RowView>
-        {j.description ? <T v="body">{j.description}</T> : null}
-        {office && j.status !== "done" && j.status !== "unscheduled" && !awaiting ? (
-          <Button label={t("job3.done.complete")} icon="check" size="sm" variant="ghost" onPress={complete} />
+      <View testID="job-headline">
+        <RowView style={{ flexWrap: "nowrap" }}>
+        <StatusChip status={st.status} label={t(st.label)} />
+        {showMoney && j.amountCents > 0 ? (
+          <>
+            <T v="body" tone="mut">
+              ·
+            </T>
+            <View testID="job-contract">
+              <T v="heading" tabular numberOfLines={1}>
+                {money(j.amountCents)}
+              </T>
+            </View>
+          </>
         ) : null}
-        {addr ? (
-          <T v="body" tone="mut">
+        </RowView>
+      </View>
+      {addr ? (
+        // the address, small — a tap opens the route (LAYOUT-RULES §3: «адрес мелко — нажимается»)
+        <Press testID="job-route" onPress={route} accessibilityRole="link" accessibilityLabel={`${t("jobs.route")}: ${addr}`} style={{ alignSelf: "flex-start" }}>
+          <T v="caption" tone="mut" numberOfLines={2}>
             {addr}
           </T>
-        ) : null}
-        {/* Позвонить · Написать · Маршрут — round tiles with a word, as on the client's card (#1343, #1474) */}
-        {tel || addr ? (
-          <View testID="job-contact" style={{ flexDirection: "row", gap: space[2], maxWidth: wide ? component.panelW : undefined }}>
-            {tel ? <ActionTile testID="job-call" icon="phone" label={t("client.call")} onPress={call} /> : null}
-            {tel ? <ActionTile testID="job-write" icon="sms" label={t("visit.message")} onPress={sms} /> : null}
-            {addr ? <ActionTile testID="job-route" icon="route" label={t("jobs.route")} onPress={() => Linking.openURL(`https://maps.apple.com/?daddr=${encodeURIComponent(addr)}`)} /> : null}
+        </Press>
+      ) : null}
+    </View>
+  );
+
+  /* ---------- the one main button, its reason under it ---------- */
+  const stepBlock = step ? (
+    <View style={{ gap: space[1], alignSelf: wide ? "flex-start" : "stretch", maxWidth: wide ? component.panelW : undefined, width: wide ? "100%" : undefined }}>
+      <RowView>
+        <View testID="job-main" style={{ flex: 1 }}>
+          <Button testID={`job-next-${step.key}`} label={step.label} icon={step.icon} variant="primary" full onPress={step.onPress} />
+        </View>
+        {enRouteShown ? (
+          <View testID="job-enroute">
+            <IconButton icon="navigate" label={t("job3.more.enRoute")} onPress={enRoute} />
           </View>
         ) : null}
-      </Card>
-
-      {p?.accessNotes || (p?.gateCode && gate) ? (
-        <Card>
-          <T v="heading">{t("job3.access")}</T>
-          {p.accessNotes ? <T v="body">{p.accessNotes}</T> : null}
-          {p.gateCode && gate ? (
-            <T v="body" tabular>
-              {t("prop.gate")}: {p.gateCode}
-            </T>
-          ) : null}
-        </Card>
+      </RowView>
+      {step.why ? (
+        <View testID="job-next-why">
+          <T v="caption" tone="mut" center={!wide} numberOfLines={2}>
+            {step.why}
+          </T>
+        </View>
       ) : null}
+    </View>
+  ) : null;
 
+  /* ---------- sections ---------- */
+  const overview = (
+    <>
+      {/* «Связано»: what the head does not name already (the lead); the client and the address are in the head (П7) */}
+      <RelatedBlock of={{ type: "job", id: j.id }} hide={["customer", "property", "estimate", "invoice"]} />
+      {j.description ? <T v="body">{j.description}</T> : null}
       {!servable ? (
         <Card status="warn">
           <RowView>
@@ -265,15 +335,46 @@ export default function JobScreen() {
           </T>
         </Card>
       ) : null}
+      {p?.accessNotes || (p?.gateCode && gate) ? (
+        <Card>
+          <T v="heading">{t("job3.access")}</T>
+          {p.accessNotes ? <T v="body">{p.accessNotes}</T> : null}
+          {p.gateCode && gate ? (
+            <T v="body" tabular>
+              {t("prop.gate")}: {p.gateCode}
+            </T>
+          ) : null}
+        </Card>
+      ) : null}
+      {/* what to do: the job's own lines (the technician reads them, changes nothing — server: app.is_staff) */}
+      <JobLinesBlock job={j} />
+      <Card>
+        <JobTypeTags job={j} canEdit={canEditJobLines(store.role)} />
+        <RowView style={{ justifyContent: "space-between" }}>
+          <T v="body" tone="mut">
+            {t("job3.team")}
+          </T>
+          <T v="body" style={{ flexShrink: 1, textAlign: "right" }}>
+            {team || t("job3.noTeam")}
+          </T>
+        </RowView>
+      </Card>
+      <ServiceCategoryRow value={j.serviceCategoryId} onChange={(cid) => toast.show(t("dir.changed"), store.setJobCategory(j.id, cid))} />
+    </>
+  );
+
+  const visitsSection = (
+    <>
       <SectionTitle
         title={t("job3.schedule")}
-        right={j.status === "done" || !servable || !office ? undefined : <Button label={visits.length ? t("sch.another") : t("sch.title")} icon="calendar" size="sm" variant={visits.length ? "ghost" : "primary"} onPress={() => router.push(`/job/schedule?jobId=${j.id}`)} />}
+        right={
+          canSchedule && (visits.length || step?.key !== "schedule") ? (
+            <View testID="job-schedule">
+              <IconButton icon="plus" label={visits.length ? t("sch.another") : t("sch.title")} onPress={schedule} />
+            </View>
+          ) : undefined
+        }
       />
-      {next ? (
-        <T v="body" tone="mut">
-          {t("job3.next", { date: day(next.start), time: visitWhen(next, time, t("plan5.allDay"), false) })}
-        </T>
-      ) : null}
       {visits.length ? (
         <CardGrid>
           {visits.map((v) => {
@@ -295,96 +396,48 @@ export default function JobScreen() {
           })}
         </CardGrid>
       ) : (
-        <T v="caption" tone="mut">
-          {t("job3.noVisit")}
-        </T>
+        <Empty icon="calendar" title={t("job3.noVisit")} />
       )}
       {/* #606: the office edits the checklist of the job's first visit not started yet — the same editor as on the visit */}
       {chkVisit ? <ChecklistEditor key={chkVisit.id} v={chkVisit} title={t("chk4.jobVisit", { date: `${day(chkVisit.start)} · ${visitWhen(chkVisit, time, t("plan5.allDay"), false)}` })} /> : null}
-
-      {/* spec 37: the job's supplier orders (the office makes them; the tech sees where to pick up, no prices) */}
-      <JobOrdersBlock job={j} />
-
-      <Card>
-        <JobTypeTags job={j} canEdit={canEditJobLines(store.role)} />
-        <RowView style={{ justifyContent: "space-between" }}>
-          <T v="body" tone="mut">
-            {t("job3.team")}
-          </T>
-          <T v="body" style={{ flexShrink: 1, textAlign: "right" }}>
-            {team || t("job3.noTeam")}
-          </T>
-        </RowView>
-      </Card>
-      <ServiceCategoryRow value={j.serviceCategoryId} onChange={(cid) => toast.show(t("dir.changed"), store.setJobCategory(j.id, cid))} />
     </>
   );
 
-  // «＋ Создать смету» of a job with no estimate stays in «Связано» (DS §12.3 п.6; independent design review of #1844)
-  const newEstimate =
-    office && servable && c && !j.estimateId && fabItems("job", store.role, { customerId: c.id }).some((i) => i.id === "estimate")
-      ? () => router.push(`/estimate/new?customerId=${c.id}${p ? `&propertyId=${p.id}` : ""}`)
-      : undefined;
-  const moneyTab = showMoney ? (
-    <>
-      {/* a job with no estimate says so here — the one «Создать смету» is in «Связано» (independent design review of #1844) */}
-      {!j.estimateId ? (
-        <View testID="job-money-no-estimate">
-          <T v="body" tone="mut">
-            {t("visitP2.att.noEstimateChip")}
-          </T>
-        </View>
-      ) : null}
-      <Card>
-        <RowView style={{ justifyContent: "space-between" }}>
-          <T v="body" tone="mut">
-            {c?.name ?? ""}
-          </T>
-          <T v="title" tabular>
-            {money(j.amountCents)}
-          </T>
-        </RowView>
-      </Card>
-      {j.amountCents > 0 ? <ContractStatement jobId={j.id} /> : null}
-      <JobLinesBlock job={j} />
-      <View style={{ gap: space[2] }}>
-        <SectionTitle title={t("jobs.costs")} right={<Button label={t("quick.receipt")} icon="plus" size="sm" variant="ghost" onPress={() => router.push("/expense/new")} />} />
-        {expenses.length ? (
-          <CardGrid>
-            {expenses.map((x) => (
-              <ListCard
-                key={x.id}
-                density="compact"
-                testID={`job-expense-${x.id}`}
-                lead={{ kind: "icon", icon: "wallet" }}
-                title={x.vendor}
-                when={`${t(`exp.cat.${x.category}` as DictKey)} · ${day(x.at)}`}
-                value={money(x.amountCents)}
-              />
-            ))}
-          </CardGrid>
-        ) : null}
-        <Card>
-          <RowView style={{ justifyContent: "space-between" }}>
-            <T v="body" tone="mut">
-              {t("jobs.expenses")}
-            </T>
-            <T v="body" tabular>
-              {money(pr.expenses)}
-            </T>
-          </RowView>
-          <RowView style={{ justifyContent: "space-between" }}>
-            <T v="heading">{t("jobs.profit")}</T>
-            <View testID="job-profit">
-              <T v="title" tabular tone={pr.profit < 0 ? "bad" : "ink"}>
-                {money(pr.profit)}
-                {pr.marginPct !== null ? ` · ${signedText(pr.marginPct)}%` : ""}
-              </T>
-            </View>
-          </RowView>
-        </Card>
-      </View>
-    </>
+  const estimateCard = (e: Estimate) => {
+    const v = estView[e.status];
+    return (
+      <ListCard
+        key={e.id}
+        density="compact"
+        testID={`job-estimate-${e.id}`}
+        lead={{ kind: "icon", icon: "invoice" }}
+        title={e.title || e.number || t("cc.kind.estimate")}
+        when={e.title ? e.number : undefined}
+        value={money(e.totalCents)}
+        status={{ tone: v.s, label: t(v.l) }}
+        onPress={() => router.push(`/estimate/${e.id}`)}
+      />
+    );
+  };
+  const estimatesSection = estimates.length ? (
+    <CardGrid>{estimates.map(estimateCard)}</CardGrid>
+  ) : (
+    <View testID="job-money-no-estimate">
+      <Empty
+        icon="invoice"
+        title={t("visitP2.att.noEstimateChip")}
+        action={newEstimate ? <Button testID="job-rel-new-estimate" label={t("path.estimateNew")} icon="plus" size="sm" variant="secondary" onPress={newEstimate} /> : undefined}
+      />
+    </View>
+  );
+
+  const invoicesSection = showMoney ? (
+    j.amountCents > 0 ? (
+      // the contract sum is in the head (П7): the statement starts at «Выставлено»
+      <ContractStatement jobId={j.id} hideContract quiet />
+    ) : (
+      <Empty icon="invoice" title={t("job6.noInvoices")} />
+    )
   ) : (
     // the technician: only «К оплате» and the invoices of his job (13 §3.4 «Деньги», 15-flows §4 в. 3)
     <>
@@ -415,15 +468,76 @@ export default function JobScreen() {
           ))}
         </CardGrid>
       ) : null}
-      {/* the technician reads the job's own lines (what to do), changes nothing (server: app.is_staff) */}
-      <JobLinesBlock job={j} />
     </>
   );
 
-  const items = filterJobHistory(jobHistory(db, j.id, store.role), filter);
-  const historyTab = (
+  const expensesSection = (
     <>
-      {/* a filter over the history list — the list's filter lane (spec 56 §3.1), not segments */}
+      {/* the result first: spent and the profit (one card), then the receipts */}
+      <Card>
+        <RowView style={{ justifyContent: "space-between" }}>
+          <T v="body" tone="mut">
+            {t("jobs.expenses")}
+          </T>
+          <T v="body" tabular>
+            {money(pr.expenses)}
+          </T>
+        </RowView>
+        <RowView style={{ justifyContent: "space-between" }}>
+          <T v="heading">{t("jobs.profit")}</T>
+          <View testID="job-profit">
+            <T v="title" tabular tone={pr.profit < 0 ? "bad" : "ink"}>
+              {money(pr.profit)}
+              {pr.marginPct !== null ? ` · ${signedText(pr.marginPct)}%` : ""}
+            </T>
+          </View>
+        </RowView>
+      </Card>
+      <SectionTitle
+        title={t("jobs.costs")}
+        right={
+          <View testID="job-add-expense">
+            <IconButton icon="plus" label={t("quick.receipt")} onPress={() => router.push("/expense/new")} />
+          </View>
+        }
+      />
+      {expenses.length ? (
+        <CardGrid>
+          {expenses.map((x) => (
+            <ListCard
+              key={x.id}
+              density="compact"
+              testID={`job-expense-${x.id}`}
+              lead={{ kind: "icon", icon: "wallet" }}
+              title={x.vendor}
+              when={`${t(`exp.cat.${x.category}` as DictKey)} · ${day(x.at)}`}
+              value={money(x.amountCents)}
+            />
+          ))}
+        </CardGrid>
+      ) : null}
+    </>
+  );
+
+  const photosSection = photos.length ? (
+    // the photos of the job's visits, shown only (they are taken on the visit: «⋯ → Добавить фото на выезде»)
+    <PhotoStrip photos={photos} />
+  ) : (
+    <Empty icon="camera" title={t("job6.noPhotos")} />
+  );
+
+  const items = filterJobHistory(jobHistory(db, j.id, store.role), filter);
+  const notesSection = (
+    <>
+      {/* the note composer on top, the job's history under it (one list, 17-job §7.1); the lane filters it (spec 56 §3.1) */}
+      <TextField
+        type="note"
+        autoFocus={focusNote}
+        value={noteText}
+        onChangeText={setNoteText}
+        placeholder={t("notes.placeholder")}
+        action={{ icon: "send", label: t("notes.add"), onPress: addNote }}
+      />
       <View testID="job-history-filter">
         <FilterBar<JobHistoryFilter>
           value={filter}
@@ -454,50 +568,69 @@ export default function JobScreen() {
       ) : (
         <Empty icon="history" title={t("job3.h.empty")} />
       )}
-      {/* the note goes into this history (one list, 17-job §7.1): only the field here, no second list */}
-      <RowView>
-        <View style={{ flex: 1 }}>
-          <TextField type="note" autoFocus={focusNote} value={noteText} onChangeText={setNoteText} placeholder={t("notes.placeholder")} />
-        </View>
-        <Button label={t("notes.add")} icon="send" size="sm" variant="secondary" disabled={!noteText.trim()} onPress={addNote} />
-      </RowView>
     </>
   );
 
+  /* ---------- the sections' line: what is seen by the role, with its number ---------- */
+  const shown: Record<Section, boolean> = {
+    overview: true,
+    visits: true,
+    estimates: showMoney,
+    invoices: true,
+    expenses: showMoney,
+    orders: (canEditOrders(store.role) && !db.purchaseOrdersLegacy) || orders.length > 0,
+    photos: true,
+    notes: true,
+  };
+  const counts: Partial<Record<Section, number>> = {
+    visits: visits.length,
+    estimates: estimates.length,
+    invoices: invoices.filter((i) => i.status !== "void").length,
+    expenses: expenses.length,
+    orders: orders.length,
+    photos: photos.length,
+    notes: filterJobHistory(jobHistory(db, j.id, store.role), "note").length,
+  };
+  const keys = (Object.keys(SECTION_LABEL) as Section[]).filter((k) => shown[k]);
+  const current: Section = shown[tab] ? tab : "overview";
+  const open = (k: Section) => {
+    setFocusNote(false);
+    setTab(k);
+  };
+  const body =
+    current === "overview"
+      ? overview
+      : current === "visits"
+        ? visitsSection
+        : current === "estimates"
+          ? estimatesSection
+          : current === "invoices"
+            ? invoicesSection
+            : current === "expenses"
+              ? expensesSection
+              : current === "orders"
+                ? <JobOrdersBlock job={j} />
+                : current === "photos"
+                  ? photosSection
+                  : notesSection;
+
   return (
-    <Screen testID="job-screen" title={title} back={back} right={more} subtitle={[j.title, c?.name].filter(Boolean).join(" · ")}>
-      <RelatedBlock
-        of={{ type: "job", id: j.id }}
-        action={newEstimate ? { label: t("path.estimateNew"), testID: "job-rel-new-estimate", onPress: newEstimate } : undefined}
-      />
-      {/* #1474: one next step for the whole card, above the tabs (DS §7.3, §12.3); the rest — in «⋯» */}
-      {mainStep ? (
-        <RowView style={{ alignSelf: wide ? "flex-start" : "stretch" }}>
-          <View testID="job-main" style={{ flex: wide ? undefined : 1 }}>
-            <Button label={t(mainStep.label)} icon={mainStep.icon} variant="primary" full={!wide} onPress={mainStep.onPress} />
-          </View>
-          {enRouteShown ? (
-            <View testID="job-enroute">
-              <Button label={t("job3.more.enRoute")} icon="navigate" variant="secondary" onPress={enRoute} />
-            </View>
-          ) : null}
-        </RowView>
-      ) : null}
-      <Segmented
-        full
-        testID="job-tab"
-        value={tab}
-        onChange={(k) => {
-          setFocusNote(false);
-          setTab(k);
-        }}
-        items={[
-          { key: "details", label: t("job3.tab.details") },
-          { key: "money", label: t("job3.tab.money") },
-          { key: "history", label: t("job3.tab.history") },
-        ]}
-      />
-      {tab === "details" ? details : tab === "money" ? moneyTab : historyTab}
+    <Screen testID="job-screen" title={title} back={back} right={more}>
+      <View style={{ gap: space[3] }}>
+        {head}
+        {stepBlock}
+        {/* the sections in one line that scrolls sideways (DS §9 А1п), not tabs of three and a sheet of blocks (#2350) */}
+        <ViewTabs<Section>
+          testID="job-tab"
+          label={t("job6.tabs")}
+          value={current}
+          onChange={open}
+          items={keys.map((k) => ({ key: k, label: t(SECTION_LABEL[k]), count: counts[k] || undefined }))}
+        />
+        <View testID={`job-section-${current}`} style={{ gap: space[3] }}>
+          {body}
+        </View>
+      </View>
       <CallSheet preset={calling} onClose={() => setCalling(null)} />
       <MessageSheet preset={writing} onClose={() => setWriting(null)} />
       <CancelJobSheet jobId={j.id} visible={cancelOpen} onClose={() => setCancelOpen(false)} />
@@ -510,12 +643,13 @@ export default function JobScreen() {
           setMoreAt(null);
           if (k === "enRoute") enRoute();
           else if (k === "pay" && payTo) router.push(payTo as never);
+          else if (k === "more") schedule();
+          else if (k === "complete") complete();
           else if (k === "estimate" && c) router.push(`/estimate/new?customerId=${c.id}${p ? `&propertyId=${p.id}` : ""}`);
           else if (k === "note") {
             setFocusNote(true);
-            setTab("history");
-          }
-          else if (k === "file" && next) router.push(`/visit/${next.id}`);
+            setTab("notes");
+          } else if (k === "file" && next) router.push(`/visit/${next.id}`);
           else if (k === "cancel") {
             if (cancelBlocked) toast.show(t(`job.cancel.why.${cancelBlocked}` as DictKey));
             else setCancelOpen(true);
