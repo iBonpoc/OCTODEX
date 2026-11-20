@@ -26,15 +26,11 @@ export function HomeHeader() {
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
       <SyncBadge compact />
-      <Press
-        testID="home-accent"
-        onPress={nextAccent}
-        visibleHeight={component.dockBtn}
-        accessibilityRole="button"
-        accessibilityLabel={t("more.accent")}
-        style={{ width: component.dockBtn, height: component.dockBtn, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd, alignItems: "center", justifyContent: "center" }}
-      >
-        <View style={{ width: size.iconMd, height: size.iconMd, borderRadius: radius.pill, backgroundColor: c.acc }} />
+      {/* prototype #2350: the colour dot — goes away when the founder picks the accent; the look lives in the dot itself */}
+      <Press testID="home-accent" onPress={nextAccent} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("more.accent")}>
+        <View style={{ width: component.dockBtn, height: component.dockBtn, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd, alignItems: "center", justifyContent: "center" }}>
+          <View style={{ width: size.iconMd, height: size.iconMd, borderRadius: radius.pill, backgroundColor: c.acc }} />
+        </View>
       </Press>
       {role !== "tech" ? (
         <Press

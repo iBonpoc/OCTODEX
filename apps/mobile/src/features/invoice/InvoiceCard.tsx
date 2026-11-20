@@ -23,6 +23,7 @@ import { RelatedBlock } from "@/features/RelatedBlock";
 import { ActionBar } from "@/ui/actionBar";
 import { VoidInvoiceMenu, type InvoiceMoreItem } from "@/features/invoice/VoidInvoice";
 import { Button, ChoiceChips, StatusChip, TextField } from "@/ui/controls";
+import { ButtonPair } from "@/ui/pairs";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Empty, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
@@ -237,8 +238,13 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
             <View testID="remind-text"><T v="body">{reminder().text}</T></View>
           </Card>
           {howHint(true)}
-          {cust?.phone ? <Button label={t("mny.remind.sms")} icon="sms" full onPress={() => sendReminder("sms")} /> : null}
-          {cust?.email ? <Button label={t("mny.remind.email")} icon="mail" variant={cust?.phone ? "secondary" : "primary"} full onPress={() => sendReminder("email")} /> : null}
+          {/* SMS and email side by side when both are there (#2350); the one there is — the whole width */}
+          {cust?.phone || cust?.email ? (
+            <ButtonPair
+              main={cust?.phone ? { label: t("mny.remind.sms"), icon: "sms", onPress: () => sendReminder("sms") } : { label: t("mny.remind.email"), icon: "mail", variant: "primary", onPress: () => sendReminder("email") }}
+              second={cust?.phone && cust?.email ? { label: t("mny.remind.email"), icon: "mail", variant: "secondary", onPress: () => sendReminder("email") } : null}
+            />
+          ) : null}
         </View>
       </Sheet>
 

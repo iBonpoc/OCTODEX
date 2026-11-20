@@ -17,6 +17,7 @@ import { isClosedLead, isOpenLead, isSnoozed, leadStatusView, missingForEstimate
 import { leadSettingsOf } from "@/features/leadSettings";
 import { bookStart, dayAtHour, snoozeUntil, SNOOZE_MONTHS, BOOK_DAYS } from "@/features/lead/bookRules";
 import { Button, ChoiceChips, IconButton, Stepper, Steps, TextField } from "@/ui/controls";
+import { ButtonPair } from "@/ui/pairs";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, RowView } from "@/ui/surfaces";
@@ -77,10 +78,10 @@ export function NextStepSheet({
   return (
     <Sheet visible={visible} onClose={onClose} title={t("lead.next.title")}>
       {office ? (
-        <>
-          <Button label={t("lead.next.book")} icon="calendar" full onPress={() => { onClose(); onBook(); }} />
-          <Button label={t("lead.next.estimate")} icon="invoice" variant="secondary" full onPress={() => { onClose(); onEstimate(); }} />
-        </>
+        <ButtonPair
+          main={{ label: t("lead.next.book"), icon: "calendar", onPress: () => { onClose(); onBook(); } }}
+          second={{ label: t("lead.next.estimate"), icon: "invoice", variant: "secondary", onPress: () => { onClose(); onEstimate(); } }}
+        />
       ) : null}
       <Labeled label={t("lead.next.remind")}>
         <RowView style={{ flexWrap: "wrap" }}>

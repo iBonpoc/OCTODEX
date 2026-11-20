@@ -14,6 +14,7 @@ import type { Job, JobLineItem, Role } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { caContractWarning, jobClientExempt, lineChangeRefusal, linesEditable, linesOf, nextLinePosition, jobRateText, percentToRate, shownLineQty, totalOf, withJobLine, withJobTax, withoutJobLine, type LineRefusal } from "@/features/jobLines";
 import { Button, StatusChip, TextField } from "@/ui/controls";
+import { ButtonPair } from "@/ui/pairs";
 import { ToggleRow } from "@/ui/toggleRow";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -178,8 +179,10 @@ export function JobLinesBlock({ job }: { job: Job }) {
               </View>
             </RowView>
             <ToggleRow testID="job-line-taxable" label={t("job5.lines.taxable")} value={draft.taxable} onChange={(taxable) => setDraft({ ...draft, taxable })} />
-            <Button label={t("ue.save")} icon="check" full disabled={!ready} onPress={save} />
-            {!draft.isNew ? <Button label={t("job5.lines.remove")} icon="trash" variant="ghost" full onPress={remove} /> : null}
+            <ButtonPair
+              main={{ label: t("ue.save"), icon: "check", disabled: !ready, onPress: save }}
+              second={!draft.isNew ? { label: t("job5.lines.remove"), icon: "trash", variant: "ghost", onPress: remove } : null}
+            />
           </View>
         ) : null}
       </Sheet>
