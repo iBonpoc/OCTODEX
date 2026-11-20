@@ -14,6 +14,7 @@ import { portalFromEstimate } from "@/cloud/portal";
 import { EstimateView } from "@/features/EstimateView";
 import { SignBlock } from "@/features/SignBlock";
 import { SignaturePad, SignaturePreview } from "@/features/SignaturePad";
+import { StackBackGestureOff } from "@/nav/StackBackGestureOff";
 import { clientDoc, issueCount, isUniversal, mainOption, marginView, newToken, SEND_ISSUE_KINDS, sendIssues, uid, type SendIssues } from "@/features/estimateDoc";
 import { canEditEstimateTemplates, cleanEstimateTemplate, ESTIMATE_TEMPLATE_NAME_MAX, toTemplateDoc } from "@/features/estimateTemplate";
 import { ContractStatement } from "@/features/ContractStatement";
@@ -626,6 +627,7 @@ function LegacyBody({ e }: { e: Estimate }) {
             </T>
             <StatusNote tone="warn">{t("est.rescission")}</StatusNote>
             <View testID="est-sign-on-site">
+              <StackBackGestureOff />
               <SignaturePad
                 consent="est.signConsent"
                 onConfirm={(path) => {
@@ -694,6 +696,7 @@ function CountersignCard({ e }: { e: Estimate }) {
             <T v="caption" tone="mut">
               {mine ? t("est.countersign.orDraw") : t("est.countersign.becomesSaved")}
             </T>
+            <StackBackGestureOff />
             <SignaturePad
               label={t("est.countersign.padLabel")}
               consent={null}
