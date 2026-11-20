@@ -121,7 +121,8 @@ export function GrSheet({
           testID="gr-sheet-scrim"
           accessibilityRole="button"
           accessibilityLabel={t("ds.gr.close")}
-          style={StyleSheet.absoluteFill}
+          outer={StyleSheet.absoluteFill}
+          style={{ flex: 1 }}
           onPress={onClose}
         >
           <View />

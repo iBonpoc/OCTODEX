@@ -155,10 +155,13 @@ export function GrPress({
   children,
   style,
   visible,
+  outer,
   ...rest
 }: Omit<PressableProps, "style" | "children"> & {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
+  /** the touch target's own layout (flex, a full-cover layer) */
+  outer?: StyleProp<ViewStyle>;
   visible?: number;
 }) {
   const { reduceMotion } = useGr();
@@ -175,6 +178,7 @@ export function GrPress({
   return (
     <Pressable
       {...rest}
+      style={outer}
       hitSlop={
         pad ? { top: pad, bottom: pad, left: pad, right: pad } : undefined
       }
