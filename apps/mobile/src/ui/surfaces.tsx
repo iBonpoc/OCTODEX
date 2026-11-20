@@ -764,23 +764,25 @@ export function Screen({
       {/* «Искать везде» on «Главная» (13 v2 §2.2) */}
       {home ? <SearchEntry /> : null}
       {help && hintKey && !hints.seen(hintKey) ? (
-        <Card style={{ borderColor: c.acc }}>
-          <RowView style={{ alignItems: "flex-start" }}>
-            <Icon name="help" s={size.iconMd} />
-            <T v="body" style={{ flex: 1 }}>
-              {help}
-            </T>
-          </RowView>
+        // redesign #2348 (К6 п.4): a quiet one-line hint, not a half-screen card with an accent frame — the word, then ×
+        <RowView
+          testID="screen-hint"
+          style={{ alignItems: "center", gap: space[2], paddingLeft: space[3], paddingVertical: space[1], borderRadius: radius.inner, backgroundColor: c.surf2 }}
+        >
+          <Icon name="help" s={size.iconSm} color={c.mut} />
+          <T v="caption" tone="mut" style={{ flex: 1 }}>
+            {help}
+          </T>
           <Press
             onPress={() => hints.dismiss(hintKey)}
             visibleHeight={component.button.sm}
             accessibilityRole="button"
             accessibilityLabel={t("common.gotIt")}
-            style={{ alignSelf: "flex-end", height: component.button.sm, paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: c.surf2, justifyContent: "center" }}
+            style={{ width: size.hitMin, height: component.button.sm, alignItems: "center", justifyContent: "center" }}
           >
-            <T v="button">{t("common.gotIt")}</T>
+            <Icon name="close" s={size.iconSm} color={c.mut} />
           </Press>
-        </Card>
+        </RowView>
       ) : null}
     </View>
   );

@@ -101,7 +101,8 @@ function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: Secti
   const kb = useKeyboardHeight();
   // the core's tabs; a usable module's section (place «tab», founder 09.11 «Замеры») takes the place of «План», which goes
   // to «Ещё» — five tabs, not six (founder 16.11, #1487; DS §5.3)
-  const mods = moduleTabs(db.company, role);
+  // redesign #2348: a module lives in the job and in «＋», not in the bar
+  const mods: ReturnType<typeof moduleTabs> = [];
   const core = tabs(role, mods.length > 0);
   type Item = { id: string; label: string; icon: (typeof core)[number]["icon"]; onPress: () => void };
   const coreItem = (s: (typeof core)[number]): Item => ({ id: s.id as string, label: s.label as string, icon: s.icon, onPress: () => onGo(s.id) });

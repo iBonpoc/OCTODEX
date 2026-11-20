@@ -51,7 +51,7 @@ function Txt({ v = "body", w = "regular", color, lines, style, children, tabular
   const text = (
     <Text
       onLayout={lines ? (e) => setOver(e.nativeEvent.layout.height > max + 1) : undefined}
-      style={[{ fontFamily: font.families[w], fontSize: font.size[v], lineHeight: lh, color, fontVariant: tabular ? ["tabular-nums"] : undefined }, style]}
+      style={[{ fontFamily: font.families[w], fontWeight: font.weight[w], fontSize: font.size[v], lineHeight: lh, color, fontVariant: tabular ? ["tabular-nums"] : undefined }, style]}
     >
       {children}
     </Text>

@@ -50,6 +50,8 @@ export function T({
       style={[
         {
           fontFamily: font.families[w ?? defaultWeight[v]],
+          // the system font takes its weight from fontWeight (redesign #2348)
+          fontWeight: font.weight[w ?? defaultWeight[v]],
           fontSize: fs,
           lineHeight: Math.round(fs * lh),
           color,

@@ -1,6 +1,9 @@
 import { Stack, type ErrorBoundaryProps } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { View } from "react-native";
+import { LogBox, View } from "react-native";
+
+// PROTOTYPE #2348 (simulator review): the dev warnings bar covers the tab bar — off in this branch
+if (__DEV__) LogBox.ignoreAllLogs();
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useFonts, Onest_400Regular, Onest_500Medium, Onest_600SemiBold, Onest_700Bold } from "@expo-google-fonts/onest";

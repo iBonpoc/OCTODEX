@@ -30,7 +30,9 @@ export type SectionId =
   | "company"
   | "settings"
   | "help"
-  | "more";
+  | "more"
+  | "finance"
+  | "search";
 export type MenuGroup = "top" | "work" | "docs" | "money" | "bottom";
 
 export interface Section {
@@ -55,12 +57,16 @@ const PLANNERS: readonly Role[] = ["director", "dispatcher"];
 export const SECTIONS: readonly Section[] = [
   { id: "home", label: "nav.home", icon: "home", group: "top", tab: true },
   { id: "plan", label: "nav.plan", icon: "calendar", group: "work", tab: true },
-  { id: "messages", label: "nav.messages", icon: "sms", group: "top", tab: true },
+  { id: "messages", label: "nav.messages", icon: "sms", group: "top" },
   // the tech sees his own leads — assigned to him or brought by him (13 §2.3, §4; canSeeLead and RLS leads_select);
   // a subcontractor does not (he never gets leads: features/leadAssignee.ts)
   { id: "leads", label: "nav.leads", icon: "inbox", group: "work", roles: [...OFFICE, "tech"], noSub: true },
   { id: "jobs", label: "nav.jobs", icon: "wrench", group: "work" },
   { id: "clients", label: "nav.clients", icon: "users", group: "work", tab: true },
+  // redesign #2348: «Деньги» — estimates, invoices, payments behind one tab (a segment switches them)
+  { id: "finance", label: "nav.money", icon: "invoice", group: "docs", tab: true, phoneOnly: true },
+  // redesign #2348: search is its own tab, on the right (HIG iOS 26)
+  { id: "search", label: "nav.searchTab", icon: "search", group: "top", tab: true, phoneOnly: true },
   // «Звонки» is not a tab until the company has its own number (founder 06.11, variant Б; 13 v2 §2.1)
   { id: "calls", label: "nav.calls", icon: "phone", group: "work" },
   // wave 6 (20 §7): every role; the technician sees his own (RLS)
@@ -83,7 +89,7 @@ export const SECTIONS: readonly Section[] = [
   { id: "settings", label: "nav.mySettings", icon: "sliders", group: "bottom" },
   // «Помощь и поддержка» (7а-1; App Store 1.5): for everyone, last in the menu
   { id: "help", label: "support.title", icon: "help", group: "bottom" },
-  { id: "more", label: "nav.more", icon: "more", group: "bottom", tab: true, phoneOnly: true },
+  { id: "more", label: "nav.more", icon: "more", group: "bottom", phoneOnly: true },
 ];
 
 /** Where a section opens for this role. Home = the role's own home screen; Leads, Estimates, Invoices — each its own screen. */
@@ -95,6 +101,8 @@ export function sectionHref(id: SectionId, role: Role): string {
       return "/leads?tab=leads";
     case "estimates":
       // a section of its own for every role (founder 07.11, spec 31 §7а); /leads holds the leads only
+      return "/estimates";
+    case "finance":
       return "/estimates";
     case "invoices":
       // the one path to debts (18 §1): the list opens on «Не оплачен · Просрочен»
@@ -141,7 +149,8 @@ export const hasSection = (role: Role, id: SectionId) => tabs(role).some((s) => 
 export function sectionOfRoute(route: string): SectionId | undefined {
   if (HOME_ROUTES.has(route) || route === "figures") return "home";
   if (route === "inbox") return "leads";
-  if (route === "invoice") return "invoices";
+  // redesign #2348: the three money lists light «Деньги»
+  if (route === "estimates" || route === "invoice" || route === "payments") return "finance";
   return SECTIONS.some((s) => s.id === route) ? (route as SectionId) : undefined;
 }
 
