@@ -110,8 +110,9 @@ exports.run = async (h) => {
   await vis("gr-theme").click(); // light → system
   h.expect(light === "rgb(236, 237, 238)", `С7: light scene (${light})`);
   h.expect((await sceneBg()) === before, "С7: back to the system theme");
-  const yellow = await vis("gr-screen").evaluate((root, y) => [...root.querySelectorAll("*")].filter((n) => getComputedStyle(n).backgroundColor === y).length, YELLOW);
-  h.expect(yellow === 2, `С7: yellow fill only on the main button and «＋» (${yellow})`);
+  const yellow = await vis("gr-screen").evaluate((root, y) => [...root.querySelectorAll("*")].filter((n) => getComputedStyle(n).backgroundColor === y && !n.closest('[data-testid="gr-nav-beam"]')).map((n) => n.closest("[data-testid]")?.getAttribute("data-testid") ?? "?"), YELLOW);
+  // the beam is a glow, not a fill (handoff v2 §3 п.3): it is left out
+  h.expect(yellow.length === 2, `С7: yellow fill only on the main button and «＋» (${yellow.join(", ")})`);
   await h.shot("pilot");
 
   await vis("gr-close").click();
