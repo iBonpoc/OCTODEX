@@ -519,8 +519,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     setFocusRow({ id, field: "qty" });
     setOpenId(id);
   };
-  const latest = useRef({ openRow, leaveRow, patchLine, rowAction, openInCatalog, sectionAction, nextQty });
-  latest.current = { openRow, leaveRow, patchLine, rowAction, openInCatalog, sectionAction, nextQty };
+  const latest = useRef({ openRow, leaveRow, patchLine, rowAction, openInCatalog, sectionAction, nextQty, doMove });
+  latest.current = { openRow, leaveRow, patchLine, rowAction, openInCatalog, sectionAction, nextQty, doMove };
   const sectionApi = useMemo<SectionApi>(
     () => ({
       // folding a section closes the open row first: a wrong row speaks and stays, the section does not fold over it
@@ -549,6 +549,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       wantCatalog: (id, on) => setWantCatalog((ids) => (on ? [...ids.filter((x) => x !== id), id] : ids.filter((x) => x !== id))),
       openInCatalog: (id) => latest.current.openInCatalog(id),
       nextQty: (id) => latest.current.nextQty(id),
+      // «⋯ → Выше / Ниже»: the same move as the sheet's «Выше» / «Ниже» (its «Вернуть»)
+      shift: (id, dir) => latest.current.doMove(id, dir < 0 ? "__up__" : "__down__"),
     }),
     [],
   );
@@ -759,13 +761,13 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const discValue = !s.discount ? t("ue.add") : s.discount.kind === "pct" ? `${discountBps(s.discount.value) / 100}%` : money(s.discount.cents);
   const depValue = s.deposit.kind === "none" ? t("ue.none") : s.deposit.kind === "pct" ? `${s.deposit.bps / 100}% · ${money(totals.deposit)}` : money(totals.deposit);
 
-  /** «Сохранить и отправить» (the office: sending is theirs, #1113) and «Сохранить»: always active — a press with something missing says what */
-  // the pinned bar: in one row, «Сохранить» 2 : 3 «Сохранить и отправить», 44 high; the tech has one «Сохранить» across (DS §8.9)
+  /** «Отправить клиенту» (the office: sending is theirs, #1113 — the same save-and-send as before) and «Сохранить»: always active — a
+   *  press with something missing says what */
   const canSend = canSeeClientLink(store.role);
-  const sendButton = (bar: boolean) => (canSend ? <View testID="ue-save-send"><Button label={t("ue.saveSend")} icon="send" size={bar ? "bar" : undefined} full onPress={() => save(true)} /></View> : null);
-  const saveButton = (bar: boolean) => (
+  const sendButton = (bar: boolean) => (canSend ? <View testID="ue-save-send"><Button label={t("ue.send")} icon="send" size={bar ? "bar" : undefined} full onPress={() => save(true)} /></View> : null);
+  const saveButton = (bar: boolean, main = !canSend) => (
     <View testID="ue-save">
-      <Button label={t("ue.save")} icon="check" size={bar ? "bar" : undefined} variant={canSend ? "secondary" : "primary"} full onPress={() => save(false)} />
+      <Button label={t("ue.save")} icon="check" size={bar ? "bar" : undefined} variant={main ? "primary" : "secondary"} full onPress={() => save(false)} />
     </View>
   );
   const saveButtons = (
@@ -774,6 +776,21 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       {saveButton(false)}
     </>
   );
+  // the pinned bar's ONE main button is the next step (direction 20.11 §3): no line yet — «Добавить позицию» (the price list
+  // when there is one, else a line of its own); lines — «Отправить клиенту» (the office) or «Сохранить» (the tech)
+  const firstLine = !signed && !hasContent(doc);
+  const addFirst = () => (db.catalog.length ? openCatalog() : addNew());
+  const barMain = firstLine ? (
+    <View testID="est-bar-add">
+      <Button label={t("ue.addItem")} icon="plus" size="bar" full onPress={addFirst} />
+    </View>
+  ) : canSend ? sendButton(true) : saveButton(true, true);
+  // the office's «Сохранить» (without sending) stands in the header, as «Готово» of an iOS editor: the bar keeps ONE button
+  const headerSave = canSend && !wide ? (
+    <View testID="ue-save">
+      <Button label={t("ue.save")} variant="ghost" size="sm" onPress={() => save(false)} />
+    </View>
+  ) : null;
 
   return (
     <Screen onScrollBegin={() => {
@@ -784,9 +801,12 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       // the page scrolls from a finger on the open row (to its lower fields): the row stays open; anywhere else it folds
       if (!inOpen) void leaveRow(true);
     }} title={tplEdit ? t("est.tpl.editTitle") : existing ? t("ue.title") : t("ue.newTitle")} back={back} help={t("ue.help")} hintKey="estimate-builder" right={tplEdit ? undefined : (
-      <View ref={estMenuRef} collapsable={false} testID="est-menu">
-        <IconButton icon="more" label={t("est.actions")} onPress={() => estMenuRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setEstMenu({ x, y, w, h }))} />
-      </View>
+      <RowView gap={space[1]}>
+        {headerSave}
+        <View ref={estMenuRef} collapsable={false} testID="est-menu">
+          <IconButton icon="more" label={t("est.actions")} onPress={() => estMenuRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setEstMenu({ x, y, w, h }))} />
+        </View>
+      </RowView>
     )} footer={tplEdit ? undefined : (
       <ActionBar testID="est-actionbar" summary={(
         <View style={{ gap: space[1] }}>
@@ -802,17 +822,17 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
             testID="est-bar-total"
           >
             <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin }}>
-              <T v="body" tone="mut">{t("ue.total")}</T>
               <RowView gap={space[1]}>
-                <T v="body" w="semibold" tabular>{money(totals.total)}</T>
+                <T v="body" tone="mut">{t("ue.total")}</T>
                 <Icon name={totalOpen ? "chevronUp" : "chevronDown"} s={size.iconSm} />
               </RowView>
+              <T v="display" tabular numberOfLines={1}>{money(totals.total)}</T>
             </RowView>
           </Press>
           {/* the tech saves; the office sends (#1113, DS §8.9) */}
           {canSend ? null : <View testID="est-bar-office"><T v="caption" tone="mut">{t("est2.bar.officeSends")}</T></View>}
         </View>
-      )} second={canSend ? saveButton(true) : undefined} main={canSend ? sendButton(true) : saveButton(true)} />
+      )} main={barMain} />
     )}>
       <RevealOnTick tick={revealTick} target={missing === "client" ? clientRef : linesRef} />
       {clientScreen ? (
@@ -963,7 +983,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           </View>
           <RowView>
             <View style={{ flex: 1 }} testID="est-add-new">
-              <Button label={t("est.row.addNew")} icon="plus" variant="secondary" full onPress={() => addNew()} />
+              <Button label={t("est.row.addShort")} accessibilityLabel={t("est.row.addNew")} icon="plus" variant="secondary" full onPress={() => addNew()} />
             </View>
             <View style={{ flex: 1 }} testID="est-add-catalog">
               <Button label={t("est.row.addCatalog")} icon="search" variant="secondary" full onPress={openCatalog} />
@@ -975,16 +995,6 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               <Button label={t("est.tplIn.from")} icon="doc" variant="secondary" full onPress={openTemplates} />
             </View>
           ) : null}
-          {signed ? null : (
-            <RowView>
-              <View style={{ flex: 1 }} testID="est-group-by-kind">
-                <Button label={t("est.sec.layout")} variant="ghost" full onPress={layoutBtn} />
-              </View>
-              <View style={{ flex: 1 }} testID="est-add-section">
-                <Button label={`＋ ${t("est.sec.addSection")}`} variant="ghost" full onPress={() => addSectionBtn()} />
-              </View>
-            </RowView>
-          )}
         </View>
 
         <View style={{ gap: space[3] }}>
@@ -1277,12 +1287,17 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         title={t("est.actions")}
         items={[
           { key: "client" as const, label: t("est.client.on"), icon: "eye" as const, selected: clientScreen, testID: "est-menu-client" },
+          // the layout of the list (DS §8.5) — once two quiet buttons under the list, now here: the list keeps only its add buttons
+          ...(!signed ? [{ key: "section" as const, label: t("est.sec.addSectionMenu"), icon: "plus" as const, testID: "est-add-section" }] : []),
+          ...(!signed && option.lines.length ? [{ key: "layout" as const, label: t("est.sec.layout"), icon: "menu" as const, testID: "est-group-by-kind" }] : []),
           // a typed estimate: a template only adds to it (the empty one has «Из шаблона…» under the add buttons)
           ...(!signed && hasContent(doc) ? [{ key: "template" as const, label: t("est.tplIn.add"), icon: "doc" as const, testID: "est-menu-template" }] : []),
         ]}
         onSelect={(k) => {
           setEstMenu(null);
           if (k === "template") openTemplates();
+          else if (k === "section") addSectionBtn();
+          else if (k === "layout") layoutBtn();
           else toggleClientScreen(!clientScreen);
         }}
         onClose={() => setEstMenu(null)}

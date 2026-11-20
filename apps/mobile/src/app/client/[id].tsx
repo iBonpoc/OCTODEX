@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
-import { canServe, visibleClients } from "@/features/clients";
+import { visibleClients } from "@/features/clients";
 import { mergedTarget } from "@/features/clientDuplicates";
 import { clientRecords, clientRowsFor, isClientSection, isClientTab } from "@/features/clientRows";
 import { AddObject } from "@/features/client/AddObject";
@@ -14,12 +14,12 @@ import { Empty, Screen } from "@/ui/surfaces";
 import { View } from "react-native";
 import { component, space } from "@octo/design-tokens";
 import { useDevice } from "@/theme/ThemeProvider";
+import { showsTabBar } from "@/nav/tabBarRule";
 
 /**
- * Client card (docs/specs/13-app-structure.md §3.3; prototype v6 approved by the founder 14.11, #1343). Header: name;
- * one line "CLT-0001 · status · tags"; Позвонить · Написать · Маршрут; «Создать смету»; money (office). Below — view tabs
- * (DS §9 А1п): Обзор · Сметы · Счета · Работы · Задачи · Заметки · Файлы · История, the number — what waits. An old link
- * `/client/<id>?s=<row>` still opens that row's own list.
+ * Client card — one page (redesign 20.11.2026, docs/design/2026-11-20-direction/06-decision.md; body — features/client/ClientCard):
+ * the name, the address, «Позвонить · SMS · Маршрут»; «Сейчас»; «История»; notes; photos; «О клиенте»; one main button «the next
+ * step» pinned at the bottom of a phone. A row's own list is `/client/<id>?s=<row>`; an old `?tab=<tab>` link opens the same list.
  */
 export default function ClientScreen() {
   const { id, s, tab } = useLocalSearchParams<{ id: string; s?: string; tab?: string }>();
@@ -64,8 +64,13 @@ export default function ClientScreen() {
       </Screen>
     );
   const office = role !== "tech";
-  // the open tab is in the address: back from a document returns to it
-  const onTab = (k: string) => router.setParams({ tab: k });
+  // an old link to a view tab (`?tab=estimates`) opens that list: the card is one page now, its lists are `?s=<row>`
+  if (isClientTab(tab) && tab !== "overview" && isClientSection(tab) && rows.includes(tab))
+    return (
+      <Screen title={t(`client.row.${tab}` as DictKey)} subtitle={c.name} back={back}>
+        <ClientSection c={c} s={tab} />
+      </Screen>
+    );
   // «⋯» on the right of the header, «Изменить» its first item (spec 56 §3а.6, DS §12.2): the card has no worded «✎ Изменить» any more
   const edit = office ? (
     <View ref={moreRef} collapsable={false} testID="client-more">
@@ -80,32 +85,35 @@ export default function ClientScreen() {
       />
     </View>
   ) : undefined;
-  // no yellow round «＋» on the client card (prototype v6, founder 14.11, #1343): «Создать смету» and «＋ Новая …» in the tabs
+  const pinBar = !showsTabBar("client/[id]");
+  // one page (redesign 20.11.2026, 06-decision.md п.3): the next step pinned at the bottom of a phone, in the page from 820
   return (
     <ClientCardBody
       c={c}
-      tab={isClientTab(tab) ? tab : undefined}
-      onTab={onTab}
-      frame={({ summary, tabs, content, rest, mini }) =>
+      frame={({ summary, content, rest, next, bar }) =>
         device === "desktop" ? (
-          // desktop (DS §12.3, #1416): the tabs and their content on the left, the summary in a side column 360 on the right
+          // desktop (DS §12.3, #1416): the page on the left, the summary and the next step in a side column 360 on the right
           <Screen title={c.name} help={t("cw4.cardHelp")} back={back} right={edit}>
-            {/* the summary first for a screen reader and the Tab key (DS §12.3: header, summary, then the tabs), on the right to the eye */}
+            {/* the summary first for a screen reader and the Tab key (DS §12.3), on the right to the eye */}
             <View style={{ flexDirection: "row-reverse", alignItems: "flex-start", gap: space[6] }}>
               <View testID="client-side" style={{ width: component.panelW, gap: space[3] }}>
                 {summary}
+                {next}
               </View>
-              <View style={{ flex: 1, minWidth: 0, gap: space[3] }}>
-                {tabs}
-                {content}
-              </View>
+              <View style={{ flex: 1, minWidth: 0, gap: space[3] }}>{content}</View>
             </View>
             {rest}
           </Screen>
         ) : (
-          // phone, tablet: the tabs stick under a mini header (name · call · write · route) while the page scrolls (DS §9 А1п)
-          <Screen title={c.name} help={t("cw4.cardHelp")} back={back} right={edit} tabs={tabs} tabKey={isClientTab(tab) ? tab : undefined} tabsMini={mini} below={<>{content}{rest}</>}>
-            {summary}
+          // the pinned bar stands only where the phone has no tab bar under it (Screen `footer`); while «Клиенты» keeps its tab bar on
+          // the card (nav/tabBarRule), the next step stands in the page right under the quick actions
+          <Screen title={c.name} help={t("cw4.cardHelp")} back={back} right={edit} footer={pinBar ? bar : undefined}>
+            <View style={{ gap: space[3] }}>
+              {summary}
+              {pinBar && device === "phone" ? null : next}
+              {content}
+            </View>
+            {rest}
           </Screen>
         )
       }

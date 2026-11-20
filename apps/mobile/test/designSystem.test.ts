@@ -177,7 +177,7 @@ describe("design system: components", () => {
     "ui/overlays.tsx": 3, // Menu row; LEGACY ×2 — the old unsaved question of Sheet, goes with #1996 (UnsavedAsk from Button)
     "ui/pctUsdField.tsx": 1, // PctUsdField — the «% | $» switch
     "ui/selectField.tsx": 1, // SelectField — the row
-    "ui/surfaces.tsx": 3, // Card (pressable, its `base` style — seen since #2022), ListRow
+    "ui/surfaces.tsx": 2, // Card (pressable, its `base` style — seen since #2022), ListRow
   };
   it("rule 29 inside src/ui (#1997): an own look only in the component that defines it; the list only goes down", () => {
     const now: Record<string, number> = {};

@@ -772,7 +772,8 @@ export function Screen({
           style={{ alignItems: "center", gap: space[2], paddingLeft: space[3], paddingVertical: space[1], borderRadius: radius.inner, backgroundColor: c.surf2 }}
         >
           <Icon name="help" s={size.iconSm} color={c.mut} />
-          <T v="caption" tone="mut" style={{ flex: 1 }}>
+          <T v="caption" tone="mut" style={{ flex: 1 }} // ds-allow: a hint line, the icon is beside the text, not above it
+          >
             {help}
           </T>
           <Press
