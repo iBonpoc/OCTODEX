@@ -24,6 +24,7 @@ import { MessageSheet, type MessagePreset } from "@/features/comms/MessageSheet"
 import { useTheme } from "@/theme/ThemeProvider";
 import { STEP_LABELS, stepIndex, visitStatus } from "@/features/visits";
 import { SignaturePad } from "@/features/SignaturePad";
+import { StackBackGestureOff } from "@/nav/StackBackGestureOff";
 import { PhotoStrip } from "@/features/PhotoStrip";
 import { canEditVisitItems, checklistGate, visitSettings } from "@/features/checklist";
 import { ChecklistCard, ChecklistEditor, MissingSheet } from "@/features/VisitChecklist";
@@ -297,6 +298,7 @@ export default function VisitScreen() {
           </Card>
           <SectionTitle title={t("step.sign")} />
           <Card>
+            <StackBackGestureOff />
             <SignaturePad onConfirm={goSign} />
           </Card>
         </>
