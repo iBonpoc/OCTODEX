@@ -62,6 +62,9 @@ export interface GraphiteColors {
   warnIc: string;
   infoIc: string;
   okIc: string;
+  /** the grey status «Черновик» (founder, 20.11): the word and its icon */
+  neutral: string;
+  neutralIc: string;
   danBg: string;
   onDan: string;
   toast: string;
@@ -123,6 +126,8 @@ export const graphiteThemes: Record<ThemeName, GraphiteColors> = {
     warnIc: "#F49D4F",
     infoIc: "#4FA6E8",
     okIc: "#7AD8A2",
+    neutral: "#B4BAC0",
+    neutralIc: "#9AA1A8",
     danBg: "#FF9C8A",
     onDan: "#040505",
     toast: "#2A2D31",
@@ -181,6 +186,8 @@ export const graphiteThemes: Record<ThemeName, GraphiteColors> = {
     warnIc: "#A85A12",
     infoIc: "#1F6FC0",
     okIc: "#2E8A50",
+    neutral: "#464B52",
+    neutralIc: "#6B7076",
     danBg: "#9E1C16",
     onDan: "#FFFFFF",
     toast: "#FFFFFF",

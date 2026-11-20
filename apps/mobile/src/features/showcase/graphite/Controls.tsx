@@ -272,7 +272,8 @@ export function GrPhoneField({ testID }: { testID?: string }) {
   );
 }
 
-const STATUS_ICON: Record<"ok" | "info" | "warn" | "bad", IconKey> = {
+const STATUS_ICON: Record<"ok" | "info" | "warn" | "bad" | "neutral", IconKey> = {
+  neutral: "note",
   ok: "check",
   info: "star",
   warn: "clock",
@@ -285,7 +286,7 @@ export function GrStatus({
   label,
   testID,
 }: {
-  tone: "ok" | "info" | "warn" | "bad";
+  tone: "ok" | "info" | "warn" | "bad" | "neutral";
   label: string;
   testID?: string;
 }) {

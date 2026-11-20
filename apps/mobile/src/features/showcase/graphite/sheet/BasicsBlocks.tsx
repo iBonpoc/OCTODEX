@@ -67,9 +67,7 @@ function StatusBlock() {
           {tones.map((s) => (
             <GrStatus key={s} tone={s} label={t(labels[s])} />
           ))}
-          <GrText v="caption" tone="text2">
-            {t("ds.gr.base.noNeutral")}
-          </GrText>
+          <GrStatus tone="neutral" label={t("ds.gr.base.draft")} testID="gr-status-neutral" />
         </View>,
       ]}
     />

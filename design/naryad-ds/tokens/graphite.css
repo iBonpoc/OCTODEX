@@ -138,6 +138,8 @@
   --gr-warn-ic:#F49D4F;
   --gr-info-ic:#4FA6E8;
   --gr-ok-ic:#7AD8A2;
+  --gr-neutral:#B4BAC0;
+  --gr-neutral-ic:#9AA1A8;
   --gr-dan-bg:#FF9C8A;
   --gr-on-dan:#040505;
   --gr-toast:#2A2D31;
@@ -196,6 +198,8 @@
   --gr-warn-ic:#A85A12;
   --gr-info-ic:#1F6FC0;
   --gr-ok-ic:#2E8A50;
+  --gr-neutral:#464B52;
+  --gr-neutral-ic:#6B7076;
   --gr-dan-bg:#9E1C16;
   --gr-on-dan:#FFFFFF;
   --gr-toast:#FFFFFF;

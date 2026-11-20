@@ -5,7 +5,7 @@
  * «Как сейчас» and the numbered variants at once, all of them live. Behind the pilot switch (flag.ts); nothing here applies to
  * the app. «Готовятся» — a plain list at the end. Phone 390 first; from 820 the column stays ≤ `sheet.maxWidth`, centred.
  */
-import { useRef, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import { ScrollView, View } from "react-native";
 import { graphite } from "@octo/design-tokens";
 import { size, space } from "@octo/design-tokens";
@@ -89,13 +89,15 @@ export function GraphiteSheet({ title, caption, onBack }: { title: string; capti
   const loaded = useGrFonts();
   const scroll = useRef<ScreenScroll | null>(null);
   const anchors = useRef<Record<string, ViewNode | null>>({});
-  const jump = (id: string) => {
+  const jump = useCallback((id: string) => {
     const node = anchors.current[id];
     // the heading stops under the sticky strip
     if (node) scroll.current?.scrollToNode(node, size.hitMin + space[4], true);
-  };
+  }, []);
   const column = { width: "100%" as const, maxWidth: graphite.sheet.maxWidth, alignSelf: "center" as const, gap: space[3] };
-  const strip = (
+  // one element for the whole life of the screen: a new one on every render would be read as a new `tabs`
+  const strip = useMemo(
+    () => (
     <View testID="gr-sheet-strip" style={{ width: "100%", maxWidth: graphite.sheet.maxWidth, alignSelf: "center" }}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space[2] }} accessibilityLabel={t("ds.gr.sheet.jump")}>
         {SECTIONS.map((s) => (
@@ -105,6 +107,8 @@ export function GraphiteSheet({ title, caption, onBack }: { title: string; capti
         <Button testID="gr-jump-dev" size="sm" variant="secondary" label={t("ds.gr.sheet.s.dev")} onPress={() => jump("dev")} />
       </ScrollView>
     </View>
+    ),
+    [t, jump],
   );
   const heading = (id: string, text: string) => (
     <View key={id} testID={`gr-section-${id}`} collapsable={false} ref={(n) => void (anchors.current[id] = n)}>

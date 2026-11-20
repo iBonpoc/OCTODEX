@@ -6,3 +6,12 @@
 export function stickyShift(stuck: boolean, safeTop: number): number {
   return stuck && safeTop > 0 ? safeTop : 0;
 }
+
+/**
+ * Whether the page glides back so the tabs sit at the top: only when the TAB changed (`tabKey`) and the page is scrolled past the
+ * tabs. A re-render of the screen builds a new `tabs` element every time — that is not a tab change, and the page must stay where
+ * the person scrolled it (the audit's report: the sheet wound itself back to the top in the middle of reading).
+ */
+export function glideBack(prevKey: string | undefined, key: string | undefined, hasTabs: boolean, offset: number, tabsY: number): boolean {
+  return hasTabs && prevKey !== key && offset > tabsY;
+}

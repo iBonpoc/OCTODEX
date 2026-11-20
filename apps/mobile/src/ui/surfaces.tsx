@@ -3,7 +3,7 @@ import { VersionBadge } from "@/features/version";
 import { DemoBadge } from "@/features/DemoBadge";
 import { UpdateBar } from "@/features/UpdateBar";
 import { ScreenScrollCtx, type ScreenScroll } from "./requiredForm";
-import { stickyShift } from "./stickyTop";
+import { glideBack, stickyShift } from "./stickyTop";
 import { coveredBottomOf, scrollTargetY } from "./requiredLogic";
 import { scrollBottom, setFooterInset } from "./footerInset";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
@@ -865,8 +865,12 @@ export function Screen({
       });
     },
   }).current;
+  // the page glides back to the tabs only when the TAB changed — not whenever the screen re-renders and builds a new `tabs` element
+  const prevTabKey = useRef(tabKey);
   useEffect(() => {
-    if (tabs && offset.current > tabsY.current) scrollRef.current?.scrollTo({ y: tabsY.current, animated: true });
+    const was = prevTabKey.current;
+    prevTabKey.current = tabKey;
+    if (glideBack(was, tabKey, !!tabs, offset.current, tabsY.current)) scrollRef.current?.scrollTo({ y: tabsY.current, animated: true });
   }, [tabKey, tabs]);
   const column = { width: "100%" as const, maxWidth: layout.contentMax, alignSelf: "center" as const };
   const top = pinned ? space[3] : navInsets.top;

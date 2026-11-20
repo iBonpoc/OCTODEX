@@ -8,6 +8,7 @@
  * С5 the round button switches on and off (aria-pressed), «Как сейчас» too;
  * С2b «Основа» on examples: the theme switch, status / accent / surface, spacing and corners as three cards, the vibration block;
  * С7 «Поля»: every field of every variant types (phone mask, money format, errors with words, switched off), the date row opens;
+ * С2c the sheet keeps its scroll place when the screen re-renders (it used to wind itself back to the strip);
  * С5b the one fold «Для разработчиков» is shut, opens and shuts;
  * С6 «Готовятся» is a plain list at the end; the pilot screen is still opened by its own button.
  */
@@ -129,6 +130,22 @@ exports.run = async (h) => {
     await vis(`showcase-hap-${k}`).getByRole("button").click();
     await until(`С2b ${k} answered`, (kind) => /./.test(document.querySelector('[data-testid="showcase-hap-last"]')?.innerText || ""), k);
   }
+
+  // С2c — the sheet never scrolls itself back (the founder: «пролистал до середины, потом бах — перемотала всё назад»): scrolled far down,
+  // a re-render of the screen (the store changes when the network goes — a real one on a phone, any minute) leaves the place where it is
+  const pageScroller = () => p.evaluate(() => { for (const e of document.querySelectorAll("*")) if (e.scrollHeight > e.clientHeight + 200 && /(auto|scroll)/.test(getComputedStyle(e).overflowY) && e.querySelector('[data-testid="gr-sheet-page"]')) return e.scrollTop; return -1; });
+  await center("gr-block-bar");
+  await frames();
+  const placeBefore = await pageScroller();
+  h.expect(placeBefore > 300, `С2c: the page is scrolled far down (${placeBefore})`);
+  await p.context().setOffline(true);
+  await frames();
+  await frames();
+  await p.context().setOffline(false);
+  await frames();
+  await frames();
+  const placeAfter = await pageScroller();
+  h.expect(Math.abs(placeAfter - placeBefore) < 3, `С2c: the sheet keeps its place when the screen re-renders (${placeBefore} → ${placeAfter})`);
 
   // С3 — SWEEP: every button, every variant; a Gr button waits (busy) after its press, then the next one is pressed
   for (const b of BLOCKS) {
