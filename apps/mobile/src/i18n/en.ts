@@ -4816,7 +4816,7 @@ export const en: Dict = {
   "ds.gr.base.accent": "Colour: the main action",
   "ds.gr.base.accentNote": "Yellow is only the main button of a screen, nowhere else.",
   "ds.gr.base.surface": "Background and card",
-  "ds.gr.base.surfaceNote": "Any block of a screen is a card on the background.",
+  "ds.gr.base.surfaceNote": "Any block of a screen is a card on the background. Option 1 — matte glass: a blur under a see-through fill; on a plain background it is hardly seen and the card looks solid. Option 2 — an honestly solid panel.",
   "ds.gr.base.space": "Spacing",
   "ds.gr.base.spaceNote": "The same card: tight, medium, loose. The numbers are small, for reference only.",
   "ds.gr.base.dense": "Tight",

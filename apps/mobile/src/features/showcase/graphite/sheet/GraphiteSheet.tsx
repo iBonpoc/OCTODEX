@@ -133,7 +133,7 @@ export function GraphiteSheet({ title, caption, onBack }: { title: string; capti
                 {t("ds.gr.sheet.soonHint")}
               </T>
               {SOON.map((k) => (
-                <ListRow key={k} title={t(k)} chevron={false} />
+                <ListRow key={k} title={t(k)} chevron={false} lines={0} />
               ))}
             </View>
           </Card>

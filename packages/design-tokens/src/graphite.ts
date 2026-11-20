@@ -211,6 +211,8 @@ export const graphite = {
     lightFrom: 22,
     /** the system text scale stops here in buttons (Dynamic Type; the button grows in height, the label wraps) */
     maxScaleButton: 1.6,
+    /** the bottom bar's captions stop here: a fixed-height bar, a longer word is cut or torn */
+    maxScaleNav: 1.2,
   },
   space: { 1: 4, 2: 8, 3: 12, 4: 16, 6: 24, 8: 32, 12: 48 },
   radius: { xs: 6, sm: 9, control: 12, tile: 12, card: 14, main: 16, sheet: 16, icon: 10, pill: 999 },

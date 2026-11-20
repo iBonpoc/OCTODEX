@@ -29,6 +29,7 @@ export function GrMatte({
   still,
   flat,
   sheet,
+  solid: forceSolid,
   style,
   children,
   testID,
@@ -40,12 +41,14 @@ export function GrMatte({
   flat?: boolean;
   /** the sheet / alert / menu body: the denser `sheetBg` over the blur (v2 §2.1) */
   sheet?: boolean;
+  /** a plain opaque panel (`panelSolid`), as under «Понизить прозрачность» — chosen on purpose */
+  solid?: boolean;
   style?: StyleProp<ViewStyle>;
   children?: ReactNode;
   testID?: string;
 }) {
   const { g, name, reduceTransparency } = useGr();
-  const solid = reduceTransparency;
+  const solid = reduceTransparency || !!forceSolid;
   return (
     <View
       testID={testID}

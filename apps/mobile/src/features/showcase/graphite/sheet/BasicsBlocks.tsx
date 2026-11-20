@@ -105,7 +105,14 @@ function SurfaceBlock() {
         </Card>
       }
       variants={[
-        <GrMatte key="1" style={{ padding: SP[4], gap: SP[1] }}>
+        // variant 1: the matte glass — a blur under a see-through fill; variant 2: the same card plain and opaque
+        <GrMatte key="1" testID="gr-surface-v1" style={{ padding: SP[4], gap: SP[1] }}>
+          <GrText v="title">{t("ds.gr.row1")}</GrText>
+          <GrText v="caption" tone="text2">
+            {t("ds.gr.row1Sub")}
+          </GrText>
+        </GrMatte>,
+        <GrMatte key="2" solid testID="gr-surface-v2" style={{ padding: SP[4], gap: SP[1] }}>
           <GrText v="title">{t("ds.gr.row1")}</GrText>
           <GrText v="caption" tone="text2">
             {t("ds.gr.row1Sub")}

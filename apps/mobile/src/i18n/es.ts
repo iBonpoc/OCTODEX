@@ -4816,7 +4816,7 @@ export const es: Dict = {
   "ds.gr.base.accent": "Color: la acción principal",
   "ds.gr.base.accentNote": "El amarillo es solo el botón principal de una pantalla, en ningún otro sitio.",
   "ds.gr.base.surface": "Fondo y tarjeta",
-  "ds.gr.base.surfaceNote": "Cualquier bloque de una pantalla es una tarjeta sobre el fondo.",
+  "ds.gr.base.surfaceNote": "Cualquier bloque de una pantalla es una tarjeta sobre el fondo. Opción 1 — vidrio mate: un desenfoque bajo un relleno translúcido; sobre un fondo liso casi no se ve y la tarjeta parece sólida. Opción 2 — un panel sólido sin disimulo.",
   "ds.gr.base.space": "Espacios",
   "ds.gr.base.spaceNote": "La misma tarjeta: compacta, media, amplia. Las cifras son pequeñas, solo de referencia.",
   "ds.gr.base.dense": "Compacta",

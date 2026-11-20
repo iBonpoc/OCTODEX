@@ -7,6 +7,7 @@
  */
 import { useRef, useState } from "react";
 import { ImageBackground, ScrollView, StyleSheet, View } from "react-native";
+import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { graphite } from "@octo/design-tokens";
 import { fmtUsd } from "@octo/estimating-engine";
@@ -154,6 +155,8 @@ export function GraphiteScreen({ onClose }: { onClose: () => void }) {
 
   return (
     <View testID="gr-screen" style={{ flex: 1, backgroundColor: g.bg }}>
+      {/* the pilot has its own theme (the switch in its header): the clock and the icons follow it, not the app's */}
+      <StatusBar style={name === "dark" ? "light" : "dark"} />
       <ImageBackground
         source={RELIEF[name]}
         resizeMode="cover"

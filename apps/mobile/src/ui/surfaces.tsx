@@ -3,6 +3,7 @@ import { VersionBadge } from "@/features/version";
 import { DemoBadge } from "@/features/DemoBadge";
 import { UpdateBar } from "@/features/UpdateBar";
 import { ScreenScrollCtx, type ScreenScroll } from "./requiredForm";
+import { stickyShift } from "./stickyTop";
 import { coveredBottomOf, scrollTargetY } from "./requiredLogic";
 import { scrollBottom, setFooterInset } from "./footerInset";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
@@ -930,7 +931,7 @@ export function Screen({
                 <View
                   // glass (--ov + blur), not a solid plate: in the light theme the bar blends with the page (unslop 05.11)
                   // the glass only once the row has stuck (DS А1п «Прилипание»): in its place on the page it is a plain row, no band (#1416)
-                  style={{ backgroundColor: stuck ? c.ov : undefined, overflow: "hidden", paddingVertical: space[2], marginHorizontal: -space[4], paddingHorizontal: space[4] }}
+                  style={{ backgroundColor: stuck ? c.ov : undefined, overflow: "hidden", paddingVertical: space[2], marginHorizontal: -space[4], paddingHorizontal: space[4], transform: [{ translateY: stickyShift(stuck, navInsets.safeTop) }] }}
                 >
                   {stuck ? <BlurView intensity={c.blur * 3} tint={c.blurTint} style={StyleSheet.absoluteFill} /> : null}
                   {/* the mini header appears at once when the tabs stick (no motion: it is the same name that scrolled away, §14.3) */}
