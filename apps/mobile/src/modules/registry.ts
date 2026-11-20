@@ -39,6 +39,16 @@ export interface PlaceCtx {
   /** the leads of this address or client (a lead that got the address: what was made on the lead shows here too —
    *  spec 33 П24 Б4, S4h) */
   leadIds?: string[];
+  /** #2271: the addresses of the screen's object (a client's card): what an action needs to know its target at the press —
+   *  each with the leads on it */
+  places?: PlaceAddress[];
+}
+/** an address as a module's place sees it (#2271) */
+export interface PlaceAddress {
+  id: string;
+  address: string;
+  city?: string;
+  leadIds: string[];
 }
 /** one action of a module in a core screen: a button (lead, property) or an item of «＋» (home) */
 export interface ModuleAction {
@@ -47,6 +57,11 @@ export interface ModuleAction {
   labelKey: DictKey;
   icon: import("@/ui/primitives").IconKey;
   href: string;
+  /** #2271: a choice before going (several addresses): the press opens a sheet of rows, a row goes to its `href` — one
+   *  transition, no screen in between. `href` is then unused */
+  pick?: { titleKey: DictKey; items: { id: string; title: string; subtitle?: string; href: string }[] };
+  /** #2271: nowhere to go yet (no address): the press shows this line under the buttons instead of a transition */
+  noteKey?: DictKey;
 }
 
 /** a module's change as the queue carries it (Op "module.op"): what to do and with what */

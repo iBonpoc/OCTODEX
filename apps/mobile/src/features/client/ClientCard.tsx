@@ -211,7 +211,7 @@ export function ClientCardBody({ c, tab: tabNow, onTab, frame }: { c: Customer; 
         ) : null}
 
         {/* add-on modules' place (spec 33 П24 А3): nothing unless a module is switched on */}
-        <ModulePlaces place="client" ctx={{ customerId: c.id, leadIds: db.leads.filter((l) => l.customerId === c.id).map((l) => l.id) }} />
+        <ModulePlaces place="client" ctx={{ customerId: c.id, leadIds: db.leads.filter((l) => l.customerId === c.id).map((l) => l.id), places: db.properties.filter((p) => p.customerId === c.id).map((p) => ({ id: p.id, address: p.address, ...(p.city ? { city: p.city } : {}), leadIds: db.leads.filter((l) => l.propertyId === p.id).map((l) => l.id) })) }} />
 
         {canSeeClientMoney(role) ? (
           // money only, three equal tiles on one line — unslop 05.11
