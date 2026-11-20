@@ -1,8 +1,10 @@
+import { useRef, useState } from "react";
 import { Platform, View } from "react-native";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
 import { languages, useI18n, type Lang } from "@/i18n";
 import { useTheme, type ThemePref } from "@/theme/ThemeProvider";
+import { ToggleRow } from "@/ui/toggleRow";
 import { Button, ChoiceChips, Segmented, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
@@ -28,7 +30,15 @@ import { BrandLogo } from "@/ui/brand";
 export default function Settings() {
   const { t, lang, setLang } = useI18n();
   const { online, setOnline, resetDemo, mode, role } = useStore();
-  const { pref, setPref } = useTheme();
+  const { pref, setPref, skin, setSkin } = useTheme();
+  // the hidden developer card (#2292): seven quick taps on the version line open it; the colour set is kept on this device
+  const [devOpen, setDevOpen] = useState(false);
+  const taps = useRef({ n: 0, at: 0 });
+  const tapVersion = () => {
+    const now = Date.now();
+    taps.current = { n: now - taps.current.at < 1500 ? taps.current.n + 1 : 1, at: now };
+    if (taps.current.n >= 7) setDevOpen(true);
+  };
   const toast = useToast();
   const hints = useHints();
   const [showDone, setShowDone] = usePlanShowDone();
@@ -105,7 +115,7 @@ export default function Settings() {
       <Card>
         <View testID="settings-about">
           {/* GoRix «О приложении» (DS §18.2): the logo, the version and the build — still, no move */}
-          <View testID="about-brand" style={{ alignItems: "center", gap: space[2], paddingVertical: space[4] }}>
+          <View testID="about-brand" onTouchEnd={tapVersion} style={{ alignItems: "center", gap: space[2], paddingVertical: space[4] }}>
             <BrandLogo width={component.brand.about} />
             <T v="caption" tone="mut" tabular>
               {t("brand.about.version", { v: Constants.expoConfig?.version ?? "1.0.0", b: BUILD || "dev" })}
@@ -120,6 +130,15 @@ export default function Settings() {
           <ListRow title={t("support.title")} subtitle={t("support.subtitle")} onPress={() => router.push("/help")} />
         </View>
       </Card>
+
+      {devOpen ? (
+        <View testID="settings-dev">
+          <SectionTitle title={t("dev.title")} />
+          <Card>
+            <ToggleRow testID="dev-skin-graphite" label={t("dev.skin")} caption={t("dev.skinHint")} value={skin === "graphite"} onChange={(v) => setSkin(v ? "graphite" : "naryad")} />
+          </Card>
+        </View>
+      ) : null}
 
       {mode === "demo" ? (
         <>

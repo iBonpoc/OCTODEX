@@ -4,6 +4,7 @@
  * 20261106200000) and the edge function supabase/functions/delete-account (handler.ts).
  */
 import type { Lang } from "@/i18n";
+import { SKIN_KEY } from "@/theme/skin";
 
 /* ---------- the word ---------- */
 /** the word typed to confirm, in the language of the app (the server accepts exactly these three) */
@@ -172,7 +173,7 @@ export async function deleteWithRepeat(
 /** the keys of this person on this device (the cloud cache of every company, the outbox, the role, the Plan's person, …) */
 // octo.storageLog.v1 — records the phone started over without a copy (persist.ts noteStorageLoss, #1189): the key names
 // carry the company and the person
-export const DEVICE_KEYS: readonly string[] = ["octo.outbox.v1", "octo.queue.v1", "octo.invite.token.v1", "octo.role.v1", "octo.planWho.v1", "octo.legal.pending.v1", "octo.storageLog.v1", "octo.signoutWipe.v1", "octo.signoutDrafts.v1"];
+export const DEVICE_KEYS: readonly string[] = ["octo.outbox.v1", "octo.queue.v1", "octo.invite.token.v1", "octo.role.v1", "octo.planWho.v1", "octo.legal.pending.v1", "octo.storageLog.v1", "octo.signoutWipe.v1", "octo.signoutDrafts.v1", SKIN_KEY];
 // octo.drafts.v1. — unsaved estimates on the phone (estimateDraft.ts, #760): the client's data among them
 // octo.broken. — a broken record kept aside (persist.ts brokenKeyOf: the outbox, review of #910 №1; a cache, #1189)
 // octo.mod. — what a module keeps on the phone with no owner (the old canvas draft of an earlier build, #1044, among it): it is

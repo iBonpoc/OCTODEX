@@ -327,8 +327,10 @@ describe("design system: components", () => {
 
 describe("design system: «Графит» stays a pilot (#2254)", () => {
   const REL = (f: string) => relative(ROOT, f).split("\\").join("/");
-  it("the `graphite` tokens are read only inside the pilot folder", () => {
-    const hits = code.filter((f) => !inPilot(f) && /\bgraphite(Themes)?\b[^\n]*from "@octo\/design-tokens"|from "@octo\/design-tokens"[^\n]*\bgraphite\b/.test(readFileSync(f, "utf8"))).map(REL);
+  /** #2292 Ш2: the one place outside the pilot that may read the `graphite` tokens — the theme provider's choice of the colour set */
+  const SKIN_USERS = [join("src", "theme", "skin.ts")];
+  it("the `graphite` tokens are read only inside the pilot folder (and the colour-set choice, src/theme/skin.ts)", () => {
+    const hits = code.filter((f) => !inPilot(f) && !SKIN_USERS.some((u) => f.endsWith(u)) && /\bgraphite(Themes)?\b[^\n]*from "@octo\/design-tokens"|from "@octo\/design-tokens"[^\n]*\bgraphite\b/.test(readFileSync(f, "utf8"))).map(REL);
     expect(hits).toEqual([]);
   });
   it("the pilot folder is opened only by the showcase (its first screen and its section screen)", () => {

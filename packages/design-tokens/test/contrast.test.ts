@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { component, graphite, print, themes, type ThemeName } from "../src/index";
+import { component, graphite, graphiteThemes, graphiteToTheme, print, themes, type ThemeName } from "../src/index";
 
 /** WCAG 2.x contrast. Translucent colours are composited over the solid background first. */
 type RGBA = [number, number, number, number];
@@ -209,4 +209,47 @@ describe.each(names)("«Графит» %s contrast (#2254)", (name) => {
   it("§2.9: the selected nav label on the glass ≥ 7", () => {
     for (const s of scene) expect(ratio(parse(g.text), over(g.glDim, rgb(over(g.gl, s))))).toBeGreaterThanOrEqual(7);
   });
+});
+
+/**
+ * the «Графит» colour set as the app gets it (graphiteToTheme): the same text rules as «Наряд» on every surface the scene can show.
+ * KNOWN_SHORT — pairs of the design package's own palette (graphite.ts, not of the mapping) that are under the rule today;
+ * each is told to the design chat (#2292). The set of pairs under the rule must be EXACTLY this list: a new short pair is red,
+ * and a pair that got fixed is red too (delete its line).
+ */
+const KNOWN_SHORT = [
+  "dark field frame to the scene", "dark ink and mut on low", "dark status bad on field", "dark status bad on low", "dark status bad on mid",
+  "dark status bad on raised", "dark status info on low", "dark status info on raised", "dark status neutral on low", "dark status ok on low",
+  "dark status warn on low", "light field frame to the scene", "light status bad on low", "light status info on low", "light status ok on low",
+  "light status warn on low",
+];
+describe.each(names)("%s «Графит» mapped set contrast (text ≥ 4.5:1, frames ≥ 3:1)", (name) => {
+  const c = graphiteToTheme(themes[name], graphiteThemes[name]);
+  const scene = { bg: parse(c.bg), mid: parse(c.scene!.mid), low: parse(c.scene!.low) };
+  const surfaces: Record<string, RGBA> = {
+    ...scene,
+    card: over(c.surf, c.bg),
+    raised: over(c.surf2, c.bg),
+    field: over(c.in, c.bg),
+    overlay: over(c.ov, c.bg),
+    overlaySolid: parse(c.ovSolid),
+    surfSolid: parse(c.surfSolid),
+  };
+  /** every pair → [ratio, the least it must be] */
+  const pairs: Record<string, [number, number]> = {};
+  for (const [sname, s] of Object.entries(surfaces)) {
+    pairs[`ink and mut on ${sname}`] = [Math.min(ratio(parse(c.ink), s), ratio(parse(c.mut), s)), 4.5];
+    for (const st of ["ok", "info", "warn", "bad", "neutral"] as const) pairs[`status ${st} on ${sname}`] = [ratio(over(c.status[st].text, c.bg), s), 4.5];
+  }
+  pairs["onAcc on acc"] = [ratio(parse(c.onAcc), parse(c.acc)), 4.5];
+  pairs["tape text on tape fill"] = [ratio(parse(c.tape.markText), parse(c.tape.markFill)), 4.5];
+  for (const st of ["ok", "info", "warn", "bad"] as const) pairs[`status ${st} on its fill`] = [ratio(parse(c.status[st].on), parse(c.status[st].fill)), 4.5];
+  pairs["status neutral on its fill"] = [ratio(over(c.status.neutral.on, c.bg), over(c.status.neutral.fill, c.bg)), 4.5];
+  pairs["field frame to the scene"] = [Math.min(...Object.values(scene).map((s) => ratio(over(c.bdField, c.bg), s))), 3];
+  pairs["field frame to its fill"] = [ratio(over(c.bdField, c.bg), over(c.in, c.bg)), 2.5];
+  it("the pairs under the rule are exactly the known ones", () => {
+    const short = Object.entries(pairs).filter(([, [v, min]]) => v < min).map(([k]) => `${name} ${k}`).sort();
+    expect(short).toEqual(KNOWN_SHORT.filter((k) => k.startsWith(`${name} `)).sort());
+  });
+  it("the solid overlay is opaque", () => expect(parse(c.ovSolid)[3]).toBe(1));
 });

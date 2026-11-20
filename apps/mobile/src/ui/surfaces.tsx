@@ -27,7 +27,7 @@ import { breadcrumbs, collapseCrumbs, navContext, type Crumb, type Label } from 
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance, type StyleProp, type ViewStyle } from "react-native";
 import { avoidBehavior, useKeyboardHeight } from "./keyboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from "react-native-svg";
+import Svg, { Defs, Ellipse, LinearGradient, RadialGradient, Rect, Stop } from "react-native-svg";
 import { component, layout, motion, radius, size, space, z, type StatusName } from "@octo/design-tokens";
 import Animated, { FadeIn, FadeOut, useReducedMotion } from "react-native-reanimated";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
@@ -53,7 +53,20 @@ export function Background() {
             </RadialGradient>
           ))}
         </Defs>
-        <Rect width={width} height={height} fill={c.bg} />
+        {c.scene ? (
+          <>
+            <Defs>
+              <LinearGradient id={`scene${name}`} x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor={c.bg} />
+                <Stop offset="0.55" stopColor={c.scene.mid} />
+                <Stop offset="1" stopColor={c.scene.low} />
+              </LinearGradient>
+            </Defs>
+            <Rect width={width} height={height} fill={`url(#scene${name})`} />
+          </>
+        ) : (
+          <Rect width={width} height={height} fill={c.bg} />
+        )}
         {c.glow.map((g, i) => (
           <Ellipse key={i} cx={g.cx * width} cy={g.cy * height} rx={g.rx} ry={g.ry} fill={`url(#g${name}${i})`} />
         ))}
