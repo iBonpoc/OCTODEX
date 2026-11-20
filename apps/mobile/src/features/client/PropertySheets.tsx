@@ -5,9 +5,10 @@
 import { useEffect, useState } from "react";
 import * as Crypto from "expo-crypto";
 import { useStore } from "@/data/store";
+import { companyState } from "@/features/companySetup";
 import { PROPERTY_KINDS, type Property, type PropertyKind } from "@/data/types";
 import { peopleOf } from "@/data/people";
-import { canSaveProperty, placeOf } from "@/features/properties";
+import { canSaveProperty, canSeeGateCode, placeOf } from "@/features/properties";
 import { Labeled } from "@/features/fields";
 import { useI18n, type DictKey } from "@/i18n";
 import { Button, TextField } from "@/ui/controls";
@@ -24,7 +25,8 @@ export const newProperty = (customerId: string): Property => ({
   customerId,
   address: "",
   city: "",
-  place: { city: "", state: "CA", zip: "" },
+  // the state is the company's, filled in by the sheet (#2065: no «CA» in the core)
+  place: { city: "", state: "", zip: "" },
   stories: 1,
   contactIds: [],
 });
@@ -36,7 +38,9 @@ export function PropertySheet({ value, onClose }: { value: Property | null; onCl
   const [d, setD] = useState<Property | null>(value);
   const [d0, setD0] = useState<string>("");
   useEffect(() => {
-    const v = value ? { ...value, place: placeOf(value) } : null;
+    const pl = value ? placeOf(value) : undefined;
+    // a new address starts in the company's state (#2065); a saved one keeps its own
+    const v = value ? { ...value, place: pl && !pl.state ? { ...pl, state: companyState(store.db.company) } : pl } : null;
     setD(v);
     setD0(JSON.stringify(v));
   }, [value]);
@@ -63,7 +67,7 @@ export function PropertySheet({ value, onClose }: { value: Property | null; onCl
       </Labeled>
       <RowView>
         <Labeled label={t("co.state")}>
-          <TextField type="state" value={place.state ?? ""} onChangeText={(v) => setPlace({ state: v })} placeholder="CA" label={t("co.state")} />
+          <TextField type="state" value={place.state ?? ""} onChangeText={(v) => setPlace({ state: v })} placeholder={companyState(store.db.company) || t("co.state")} label={t("co.state")} />
         </Labeled>
         <Labeled label={t("lead.missing.zip")}>
           <TextField type="zip" value={place.zip ?? ""} onChangeText={(v) => setPlace({ zip: v })} placeholder="91103" label={t("lead.missing.zip")} />
@@ -92,17 +96,20 @@ export function AccessSheet({ value, onClose }: { value: Property | null; onClos
   const toast = useToast();
   const [notes, setNotes] = useState("");
   const [gate, setGate] = useState("");
+  // the code only by the same rule as the property's card (canSeeGateCode, server app.can_see_gate_code): a code loaded in
+  // the visit window is not shown after it (sales, a tech) — the field is empty and only a new code is sent (Р-3)
+  const known = value && canSeeGateCode(store.db, store.role, value.id) ? (value.gateCode ?? "") : "";
   useEffect(() => {
     setNotes(value?.accessNotes ?? "");
-    setGate(value?.gateCode ?? "");
-  }, [value]);
+    setGate(known);
+  }, [value, known]);
   if (!value) return <Sheet visible={false} onClose={onClose}>{null}</Sheet>;
-  const dirty = notes !== (value.accessNotes ?? "") || gate !== (value.gateCode ?? "");
+  const dirty = notes !== (value.accessNotes ?? "") || gate !== known;
   const save = () => {
     const undos: GuardedUndo[] = [];
     if (notes !== (value.accessNotes ?? "")) undos.push(store.saveProperty({ ...value, accessNotes: notes }));
-    if (gate !== (value.gateCode ?? "")) undos.push(store.setGateCode(value.id, gate));
-    toast.show(gate !== (value.gateCode ?? "") ? t("prop.gateSaved") : t("prop.saved"), store.undoTogether(undos));
+    if (gate !== known) undos.push(store.setGateCode(value.id, gate));
+    toast.show(gate !== known ? t("prop.gateSaved") : t("prop.saved"), store.undoTogether(undos));
     onClose();
   };
   return (

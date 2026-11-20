@@ -167,7 +167,7 @@ export function estimateAction(db: Pick<DB, "estimates"> & Partial<Pick<DB, "mod
  * (review M8b №5). A line someone deleted comes back on «Обновить» — to keep a part out, set its quantity to 0
  * (a hand change: it stays 0); spec П23.8.
  */
-export function docWithLines(prev: EstimateDoc | undefined, next: readonly ModuleLine[], measurementId: string, fresh: () => EstimateDoc): EstimateDoc {
+export function docWithLines(prev: EstimateDoc | undefined, next: readonly ModuleLine[], measurementId: string, fresh: () => EstimateDoc, catalog: readonly CatalogItem[] = []): EstimateDoc {
   if (!prev) {
     const d = fresh();
     return { ...d, options: d.options.map((o, i) => (i === 0 ? { ...o, lines: [...(next as EstimateDoc["options"][number]["lines"])] } : o)) };
@@ -179,7 +179,7 @@ export function docWithLines(prev: EstimateDoc | undefined, next: readonly Modul
       const mine = o.lines.some((l) => ofMeasurement(l, measurementId));
       // no option has lines of it (they were all removed by hand): the first option gets them again
       if (!mine && (touched || i > 0)) return o;
-      const out = resyncLines(o.lines as ModuleLine[], next, (l) => sourceOf(l)?.module === KEY && !ofMeasurement(l, measurementId));
+      const out = resyncLines(o.lines as ModuleLine[], next, (l) => sourceOf(l)?.module === KEY && !ofMeasurement(l, measurementId), catalog);
       return { ...o, lines: out as typeof o.lines };
     }),
   };
@@ -272,7 +272,7 @@ export function makeEstimate(store: ModuleEstimateStore, x: MakeInput): MakeResu
   const undoReady = store.moduleOp(KEY, { kind: K.mSave, payload: { m: row }, apply: (d) => withGutterData(d, putMeasurement({ ...was, status: "ready" })), coalesceKey: was.id, made: [was.id] });
 
   const lines = linesFromParts(x.parts, x.catalog, x.name, uid, revisionId, x.m.id, (x.now ?? (() => new Date().toISOString()))(), GUTTER_PARTS_VERSION);
-  const withLines = docWithLines(e?.doc, lines, x.m.id, () => newDoc(db.company?.estimate?.depositBps));
+  const withLines = docWithLines(e?.doc, lines, x.m.id, () => newDoc(db.company?.estimate?.depositBps), x.catalog);
   // the drawing of this revision goes with the estimate (S6g): the client sees on /p/ and in the PDF what it was counted from
   const doc = x.page ? withMeasurementPage(withLines, x.m.id, x.page) : withLines;
   const estimateId = e?.id ?? uid();

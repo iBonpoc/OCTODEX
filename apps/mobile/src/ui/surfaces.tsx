@@ -1,6 +1,7 @@
 import { BlurView } from "expo-blur";
 import { VersionBadge } from "@/features/version";
 import { DemoBadge } from "@/features/DemoBadge";
+import { UpdateBar } from "@/features/UpdateBar";
 import { ScreenScrollCtx, type ScreenScroll } from "./requiredForm";
 import { coveredBottomOf, scrollTargetY } from "./requiredLogic";
 import { scrollBottom, setFooterInset } from "./footerInset";
@@ -17,6 +18,7 @@ import { useAuth } from "@/cloud/auth";
 import { useTabBarHidden } from "@/nav/tabBarHide";
 import { Fab } from "@/nav/Fab";
 import { HomeHeader } from "@/nav/HomeHeader";
+import { CompanyLine, CompanyWaiting } from "@/features/CompanySwitcher";
 import { SearchEntry } from "@/nav/SearchEntry";
 import { LIST_FABS, type FabCtx, type FabItem, type FabSet } from "@/nav/sections";
 import { badgeState } from "@/data/syncLink";
@@ -692,6 +694,7 @@ export function Screen({
     <View style={{ gap: space[2], marginBottom: space[3] }}>
       <VersionBadge />
       <DemoBadge />
+      <UpdateBar />
       {hasUp ? (
         <>
           {/* detail screen: the trail "Home › … › Parent › This", actions on the right, then the title.
@@ -754,6 +757,9 @@ export function Screen({
           {subtitle}
         </T>
       ) : null}
+      {/* spec 42 S34: the company's name ▾ (two or more companies); a company not loaded here yet, offline — what to do */}
+      {home ? <CompanyLine /> : null}
+      {home ? <CompanyWaiting /> : null}
       {home ? null : <SyncBadge />}
       {/* «Искать везде» on «Главная» (13 v2 §2.2) */}
       {home ? <SearchEntry /> : null}

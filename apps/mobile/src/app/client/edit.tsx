@@ -2,6 +2,7 @@ import { space } from "@octo/design-tokens";
 import { useRef, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
+import { companyState } from "@/features/companySetup";
 import type { BillingAddress, PhoneLabel } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { Labeled } from "@/features/fields";
@@ -10,7 +11,7 @@ import { sourceOf } from "@/features/leads";
 import {
   billingOk,
   displayName,
-  EMPTY_BILLING,
+  emptyBilling,
   mainEmailsOf,
   mainPhonesOf,
   nameOk,
@@ -54,7 +55,7 @@ export default function EditClient() {
   const [city, setCity] = useState(p?.city ?? "");
   const [sourceId, setSourceId] = useState(c?.sourceId ?? store.db.sources.find((x) => x.active && x.name === "Referral")?.id ?? store.db.sources[0]?.id ?? "");
   const [billingOwn, setBillingOwn] = useState(!!c?.billing);
-  const [billing, setBilling] = useState<BillingAddress>(c?.billing ?? EMPTY_BILLING);
+  const [billing, setBilling] = useState<BillingAddress>(c?.billing ?? emptyBilling(companyState(store.db.company)));
   const [taxExempt, setTaxExempt] = useState(!!c?.taxExempt);
   const [taxNote, setTaxNote] = useState(c?.taxExemptNote ?? "");
   const back = () => (router.canGoBack() ? router.back() : router.replace(id ? `/client/${id}` : "/clients"));
@@ -214,7 +215,7 @@ export default function EditClient() {
                 </Labeled>
                 <RowView>
                   <Labeled label={t("co.state")}>
-                    <TextField type="state" value={billing.state ?? ""} onChangeText={setB("state")} placeholder="CA" label={t("co.state")} />
+                    <TextField type="state" value={billing.state ?? ""} onChangeText={setB("state")} placeholder={companyState(store.db.company) || t("co.state")} label={t("co.state")} />
                   </Labeled>
                   <Labeled label={t("lead.missing.zip")}>
                     <TextField type="zip" value={billing.zip ?? ""} onChangeText={setB("zip")} placeholder="91103" label={t("lead.missing.zip")} />

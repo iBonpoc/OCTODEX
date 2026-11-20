@@ -6,10 +6,13 @@
 import { Platform } from "react-native";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
-import { saveEstimatePdf } from "@/features/estimatePdf";
+import { openPdfPreview, saveEstimatePdf } from "@/features/estimatePdf";
 
 export async function saveShopPdf(html: string, fileName: string, pagePt: { width: number; height: number }): Promise<void> {
   if (Platform.OS === "web") return saveEstimatePdf(html, fileName);
   const { uri } = await Print.printToFileAsync({ html, width: pagePt.width, height: pagePt.height, margins: { top: 0, bottom: 0, left: 0, right: 0 } });
   if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: fileName });
 }
+
+/** «Открыть» the shop drawings: to look at them first, at their own page size (#2157); the web — the print preview */
+export const openShopPdf = (html: string, fileName: string, pagePt: { width: number; height: number }): Promise<void> => openPdfPreview(html, fileName, pagePt);

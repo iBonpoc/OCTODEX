@@ -155,7 +155,7 @@ export interface Property {
   kind?: PropertyKind;
   /** dog, side gate, parking — whoever sees the property sees these */
   accessNotes?: string;
-  /** office always; a tech only on the day of their visit and the day before (server: app.can_see_gate_code) */
+  /** office always; a tech and sales only on the day of their visit and the day before (server: app.can_see_gate_code) */
   gateCode?: string;
   /** people of the property: links to the client's people (tenant, property manager) */
   contactIds?: ID[];
@@ -193,6 +193,17 @@ export interface Job {
   taxRateBps?: number;
   /** #1219: the rate in ppm (8.875 % = 88750; server jobs.tax_rate_ppm) — the rate when set; absent — the basis points */
   taxRatePpm?: number;
+  /** #2015 (spec 38 §12): a cancelled job (db.cancelledJobs) — why and when (server: jobs.cancel_reason / cancelled_at) */
+  cancelReason?: string;
+  cancelledAt?: string;
+}
+
+/** #2227: the supplier's data of one variant of an item (catalog_items.variant_skus); absent — the item's own */
+export interface ItemVariant {
+  sku?: string;
+  supplierId?: ID;
+  purchaseUnit?: string;
+  packSize?: string;
 }
 
 /** A line of a job made without an estimate (wave П-2a, server: job_line_items). The server owns the totals:
@@ -255,7 +266,13 @@ export type VisitKind = "inspection" | "install" | "service" | "follow_up";
 export const CANCEL_REASONS = ["client_cancelled", "no_show", "reschedule_later", "we_cancelled", "other"] as const;
 export type CancelReason = (typeof CANCEL_REASONS)[number];
 /** a visit the office cancelled: the visit as it was + why and when */
-export type CancelledVisit = Visit & { cancelReason: CancelReason; cancelText?: string; cancelledAt: string };
+export type CancelledVisit = Visit & {
+  cancelReason: CancelReason;
+  cancelText?: string;
+  cancelledAt: string;
+  /** who closed it (server: visits.cancelled_by) — #2066: the tech at the door, or the office */
+  cancelledBy?: ID;
+};
 
 /** a checklist item: a tick, or a photo (docs/specs/08 §3.2) */
 export type ChecklistItemKind = "check" | "photo";
@@ -735,6 +752,12 @@ export interface CatalogItem {
   supplierId?: ID;
   /** the supplier's own code of the item */
   supplierSku?: string;
+  /**
+   * #2227 (spec 33-price-key §11.5; catalog_items.variant_skus): the item's variants — the values of ONE property (the
+   * module chooses which; the core never names it), one price for all, the supplier's data per value. Values lower-cased
+   * and trimmed. Absent = no variants. Written only by catalog.variant (one value at a time), never by catalog.save
+   */
+  variants?: Record<string, Record<string, ItemVariant>>;
   /* ---- РС-10 (the item's card, spec 2026-11-12-estimate-editor Р11): absent = not set, and not sent ---- */
   /** our own code of the item (catalog_items.sku) */
   sku?: string;
@@ -1054,6 +1077,12 @@ export interface ServiceCategory {
 }
 
 /** wave 7б-1 (docs/specs/03 §12): personal settings (server table member_prefs, one row per person in a company) */
+/** #2097: a reason of «Разбор дел» (AttentionItem.id) hidden until `until` (ISO) — then it comes back by itself */
+export interface AttentionSnooze {
+  itemId: string;
+  until: string;
+}
+
 export interface MemberPrefs {
   /** «Показывать выполненные» in the Plan */
   planShowDone: boolean;
@@ -1134,6 +1163,9 @@ export interface DB {
   customFieldValues?: CustomFieldValue[];
   /** wave 7б-1: the personal settings of `me` in this company, the same on every device (absent in old saved data → defaults) */
   prefs?: MemberPrefs;
+  /** #2097: reasons of «Разбор дел» put off by the office until a day, for the whole company (public.attention_snoozes;
+   *  absent in old saved data → none). Only the ones still put off; a lifted one is not kept */
+  attentionSnoozes?: AttentionSnooze[];
   /** step 18 P4b: my push switches by group here (absent in old saved data → the defaults) */
   pushPrefs?: PushPrefs;
   /** wave 7б-2: my location consent here (absent in old saved data → off) */
