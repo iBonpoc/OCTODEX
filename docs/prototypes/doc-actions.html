@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Документ поставщика</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
+<style>
+/* Прототип спеки 53 (ред. 2 — после design-reviewer). Значения — токены «Наряда» (design/naryad-ds/tokens/*.css,
+   packages/design-tokens): checkbox 22/7/1.5, banner — рамка тона, toast — пилюля Glass strong с кольцом.
+   Цены тестовые (правило 9), поставщик и строки прайса вымышлены. */
+:root{
+  --acc:#FBFF00;--on-acc:#0B0C0F;--font:'Onest',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --r:24px;--ri:18px;--rf:12px;--pill:999px;
+  --fs-display:28px;--fs-title:20px;--fs-heading:15px;--fs-body:13px;--fs-btn:12.5px;--fs-caption:11.5px;
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s8:32px;
+  --c-sm:28px;--c-md:32px;--c-lg:36px;--hit:44px;--field-phone:44px;--bar-btn:44px;
+  --cb:22px;--cb-r:7px;--cb-b:1.5px;--icon:16px;
+  --st-ok:#7CE08A;--st-info:#8FA2FF;--st-warn:#FF8A3D;--st-bad:#FF6B6B;--scrim:rgba(0,0,0,.42);
+  --page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--in:rgba(255,255,255,.55);
+  --bd:rgba(20,22,30,.1);--sh:0 10px 28px rgba(60,50,40,.12);--sh-sm:0 1px 3px rgba(20,22,30,.14);--ov:rgba(250,248,244,.94);
+  --st-ok-t:#176428;--st-info-t:#3647C4;--st-warn-t:#944600;--st-bad-t:#B4232A;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--in:rgba(255,255,255,.05);
+  --bd:rgba(255,255,255,.14);--sh:0 10px 30px rgba(0,0,0,.3);--sh-sm:0 1px 3px rgba(0,0,0,.5);--ov:rgba(38,41,48,.97);
+  --st-ok-t:#9CF0A8;--st-info-t:#C2CCFF;--st-warn-t:#FFB47E;--st-bad-t:#FFAAAA;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--in:rgba(255,255,255,.05);
+  --bd:rgba(255,255,255,.14);--sh:0 10px 30px rgba(0,0,0,.3);--sh-sm:0 1px 3px rgba(0,0,0,.5);--ov:rgba(38,41,48,.97);
+  --st-ok-t:#9CF0A8;--st-info-t:#C2CCFF;--st-warn-t:#FFB47E;--st-bad-t:#FFAAAA;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:400 var(--fs-body)/1.4 var(--font);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:var(--s6)}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+svg.i{width:var(--icon);height:var(--icon);flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.wrap{max-width:1300px;margin:0 auto;display:grid;gap:var(--s5)}
+h1{font-size:var(--fs-display);margin:0}
+.lede{color:var(--mut);max-width:72ch;margin:var(--s2) 0 0}
+.bar{display:flex;flex-wrap:wrap;gap:var(--s3);align-items:center}
+.seg{display:inline-flex;background:var(--surf);border:1px solid var(--bd);border-radius:var(--pill);padding:4px;gap:2px}
+.seg button{border:0;background:none;border-radius:var(--pill);min-height:var(--c-md);padding:0 var(--s3);cursor:pointer;font-weight:500;color:var(--mut)}
+.seg button[aria-pressed="true"]{background:var(--surf2);color:var(--ink);font-weight:600}
+.lbl{font-size:var(--fs-caption);color:var(--mut);letter-spacing:.04em;text-transform:uppercase;margin-right:var(--s1)}
+.cols{display:grid;gap:var(--s6);grid-template-columns:repeat(auto-fit,minmax(min(100%,390px),1fr));align-items:start}
+.col{display:grid;gap:var(--s2);justify-items:start;min-width:0}
+.col h2{font-size:var(--fs-heading);margin:0}
+.col p{margin:0;color:var(--mut);font-size:var(--fs-caption);max-width:390px}
+
+/* ---------- телефон ---------- */
+.dev{width:390px;max-width:100%;height:844px;background:var(--bg);border:1px solid var(--bd);border-radius:var(--r);position:relative;overflow:hidden;display:flex;flex-direction:column}
+.top{display:flex;align-items:center;gap:var(--s2);padding:var(--s4) var(--s4) var(--s2)}
+.iconbtn{width:var(--c-lg);height:var(--c-lg);border-radius:var(--pill);border:1px solid var(--bd);background:var(--surf2);display:grid;place-items:center;cursor:pointer;position:relative;flex:none}
+.iconbtn::after{content:"";position:absolute;inset:-4px}
+.ttl{font-size:var(--fs-title);font-weight:700;line-height:1.2}
+.sub{font-size:var(--fs-caption);color:var(--mut)}
+.body{flex:1;overflow:auto;padding:var(--s2) var(--s4) var(--s4);display:grid;gap:var(--s3);align-content:start}
+.card{background:var(--surf);border:1px solid var(--bd);border-radius:var(--ri);padding:var(--s3) var(--s4)}
+.src{display:flex;justify-content:space-between;gap:var(--s2);align-items:center}
+.btn{min-height:var(--c-lg);border-radius:var(--pill);border:1px solid var(--bd);background:var(--surf2);font-weight:600;font-size:var(--fs-btn);padding:0 var(--s4);display:inline-flex;align-items:center;justify-content:center;gap:var(--s2);cursor:pointer;position:relative}
+.btn::after{content:"";position:absolute;inset:-4px 0}
+.btn.primary{background:var(--acc);color:var(--on-acc);border-color:transparent}
+.btn.full{width:100%}
+.btn.bar{min-height:var(--bar-btn)}
+.btn.ghost{background:none;border-color:transparent;text-decoration:underline}
+/* баннер DS Б9: рамка тона, значок тона, заголовок, пояснение, одно действие под текстом */
+.banner{border-radius:var(--ri);padding:var(--s3);background:var(--surf);border:1px solid var(--bd);display:grid;gap:var(--s2);grid-template-columns:auto 1fr}
+.banner.warn{border-color:var(--st-warn)}
+.banner > svg{color:var(--st-warn-t);margin-top:1px}
+.banner .tx{display:grid;gap:2px}
+.banner .tx b{font-weight:600}
+.banner .tx span{font-size:var(--fs-caption);color:var(--mut)}
+.banner .act{grid-column:2;display:grid;gap:var(--s2)}
+/* поле с подписью сверху (§11) */
+.fld{display:grid;gap:var(--s1)}
+.fld label{font-size:var(--fs-caption);color:var(--mut)}
+.input{height:var(--field-phone);border-radius:var(--rf);border:1px solid var(--bd);background:var(--in);padding:0 var(--s3);width:100%;font-variant-numeric:tabular-nums}
+.input.big{font-size:var(--fs-title);font-weight:600}
+.fields{display:grid;grid-template-columns:3fr 2fr;gap:var(--s3)}
+/* строки прайса: карточка, флажок справа (DS А4) */
+.list{display:grid;gap:var(--s2)}
+.line{display:grid;grid-template-columns:1fr var(--hit);gap:0 var(--s1);align-items:start;background:var(--surf);border:1px solid var(--bd);border-radius:var(--ri);padding:var(--s3) 0 var(--s3) var(--s4);cursor:pointer}
+.line[aria-checked="true"]{background:var(--surf2);box-shadow:var(--sh-sm)}
+.line[aria-disabled="true"]{cursor:default}
+.ck{width:var(--hit);height:var(--hit);display:grid;place-items:center;margin-top:-10px}
+.box{width:var(--cb);height:var(--cb);border-radius:var(--cb-r);border:var(--cb-b) solid var(--mut);display:grid;place-items:center;background:var(--in);color:var(--ink)}
+.box svg{opacity:0;width:14px;height:14px;stroke-width:3}
+.line[aria-checked="true"] .box{border-color:var(--ink);background:var(--surf2)}
+.line[aria-checked="true"] .box svg{opacity:1}
+.main{min-width:0;display:grid;gap:2px}
+.t{font-weight:600;display:flex;justify-content:space-between;gap:var(--s2)}
+.v{font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.v s{color:var(--mut);font-weight:500;text-decoration:none}
+.from{font-size:var(--fs-caption);color:var(--mut)}
+.meta{display:flex;flex-wrap:wrap;gap:var(--s1) var(--s2);align-items:center;font-size:var(--fs-caption);margin-top:2px}
+.meta .cl{color:var(--mut)}
+.chip{display:inline-flex;align-items:center;gap:4px;border-radius:var(--pill);padding:2px 8px 2px 6px;font-size:var(--fs-caption);font-weight:600;border:1px solid var(--bd);background:var(--surf2)}
+.chip svg{width:12px;height:12px;stroke-width:2.5}
+.chip.ok{color:var(--st-ok-t)}.chip.warn{color:var(--st-warn-t)}.chip.bad{color:var(--st-bad-t)}.chip.info{color:var(--st-info-t)}
+.note{display:flex;gap:var(--s1);align-items:flex-start;font-size:var(--fs-caption)}
+.note.warn{color:var(--st-warn-t)}.note.ok{color:var(--st-ok-t)}
+.note svg{width:14px;height:14px;margin-top:1px}
+.group{display:flex;justify-content:space-between;align-items:center;min-height:var(--hit);padding:0 var(--s4);background:var(--surf);border:1px solid var(--bd);border-radius:var(--ri);cursor:pointer;font-weight:600}
+.group span{color:var(--mut);font-weight:500}
+.mini{display:grid;gap:2px;padding:var(--s2) var(--s4);font-size:var(--fs-caption);color:var(--mut)}
+.panel{border-top:1px solid var(--bd);background:var(--ov);backdrop-filter:blur(24px);border-radius:var(--r) var(--r) 0 0;padding:var(--s3) var(--s4) calc(var(--s3) + 20px);display:grid;gap:var(--s2)}
+.panel .sum{font-weight:600}
+/* шторка */
+.scrim{position:absolute;inset:0;background:var(--scrim)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--ov);backdrop-filter:blur(24px);border-radius:var(--r) var(--r) 0 0;padding:var(--s2) var(--s4) calc(var(--s4) + 20px);display:grid;gap:var(--s3)}
+.grab{width:36px;height:5px;border-radius:9px;background:var(--bd);justify-self:center}
+.sh-head{display:flex;justify-content:space-between;align-items:center;gap:var(--s2)}
+.kv{display:flex;justify-content:space-between;color:var(--mut)}
+.kv b{color:var(--ink);font-variant-numeric:tabular-nums}
+.pcard{display:grid;grid-template-columns:1fr auto auto;gap:var(--s2);align-items:center;background:var(--surf);border:1px solid var(--bd);border-radius:var(--ri);padding:var(--s3) var(--s2) var(--s3) var(--s4);cursor:pointer;min-height:var(--hit)}
+.pcard .v{font-weight:700;white-space:nowrap}
+.pcard > svg{color:var(--mut)}
+.prow{display:flex;justify-content:space-between;align-items:center;min-height:48px;padding:0 var(--s3);border-radius:var(--rf);cursor:pointer}
+.prow:hover{background:var(--surf)}
+.sec{font-size:var(--fs-heading);font-weight:700;margin-top:var(--s2)}
+/* тост DS Б8: пилюля Glass strong, «Вернуть» с кольцом */
+.toast{position:absolute;left:50%;transform:translateX(-50%);width:calc(100% - 2 * var(--s4));max-width:444px;bottom:110px;background:var(--ov);backdrop-filter:blur(24px);border:1px solid var(--bd);box-shadow:var(--sh);color:var(--ink);border-radius:var(--pill);min-height:var(--hit);padding:var(--s1) var(--s1) var(--s1) var(--s4);display:flex;justify-content:space-between;align-items:center;font-weight:500}
+.toast button{background:none;border:0;font-weight:700;min-height:var(--hit);padding:0 var(--s3);cursor:pointer;display:inline-flex;align-items:center;gap:var(--s2)}
+.ring{width:18px;height:18px}
+.done-h{display:flex;gap:var(--s2);align-items:center}
+.done-h svg{width:20px;height:20px;color:var(--st-ok-t)}
+[hidden]{display:none!important}
+
+/* экран «Что сделать» */
+.doc{display:grid;gap:var(--s1)}
+.doc .row{display:flex;justify-content:space-between;gap:var(--s2);align-items:baseline}
+.act{display:grid;grid-template-columns:auto 1fr var(--hit);gap:0 var(--s3);align-items:center;background:var(--surf);border:1px solid var(--bd);border-radius:var(--ri);padding:var(--s2) 0 var(--s2) var(--s4);cursor:pointer;min-height:64px}
+.act[aria-checked="true"]{background:var(--surf2);box-shadow:var(--sh-sm)}
+.act > svg{width:20px;height:20px;color:var(--mut)}
+.act .tx{display:grid;gap:2px}
+.act .tx b{font-weight:600}
+.act .tx span{font-size:var(--fs-caption);color:var(--mut)}
+.act[aria-disabled="true"]{opacity:1;cursor:default}
+.act[aria-disabled="true"] .box{border-style:dashed}
+.act[aria-checked="true"] .box{border-color:var(--ink);background:var(--surf2)}
+.act[aria-checked="true"] .box svg{opacity:1}
+.lines{display:grid;gap:2px;font-size:var(--fs-caption);color:var(--mut);padding:0 var(--s4) var(--s2)}
+.cap{display:grid;place-items:center;gap:var(--s3);text-align:center;padding:var(--s6) var(--s4);border:2px dashed var(--bd);border-radius:var(--r);color:var(--mut)}
+.cap svg{width:36px;height:36px}
+.pickers{display:grid;gap:var(--s2)}
+.progress{height:6px;border-radius:9px;background:var(--surf2);overflow:hidden}
+.progress i{display:block;height:100%;width:62%;background:var(--ink)}
+.chev{color:var(--mut)}
+
+/* ред. 2 (design-reviewer): строки действий в одной карточке, миниатюра, ширина 820 */
+.acts{background:var(--surf);border:1px solid var(--bd);border-radius:var(--ri);overflow:hidden}
+.arow{display:grid;grid-template-columns:auto 1fr auto;gap:0 var(--s3);align-items:center;padding:var(--s2) 0 var(--s2) var(--s4);min-height:64px;cursor:pointer;border-top:1px solid var(--bd)}
+.arow:first-child{border-top:0}
+.arow[aria-checked="true"]{background:var(--surf2)}
+.arow > svg{width:20px;height:20px;color:var(--mut)}
+.arow .tx{display:grid;gap:2px}.arow .tx b{font-weight:600}.arow .tx span{font-size:var(--fs-caption);color:var(--mut)}
+.arow .end{display:flex;align-items:center}
+.arow .more{width:var(--hit);height:var(--hit);display:grid;place-items:center;color:var(--mut);background:none;border:0;cursor:pointer}
+.arow[aria-checked="true"] .box{border-color:var(--ink);background:var(--surf2)}
+.arow[aria-checked="true"] .box svg{opacity:1}
+.thumb{width:56px;height:72px;border-radius:var(--rf);border:1px solid var(--bd);background:repeating-linear-gradient(180deg,var(--surf2) 0 6px,var(--in) 6px 9px);flex:none}
+.docrow{display:flex;gap:var(--s3);align-items:center}
+.link{background:none;border:0;padding:0;min-height:var(--hit);font-weight:600;text-decoration:underline;cursor:pointer;color:var(--ink)}
+.panel .two{display:grid;grid-template-columns:1fr 1fr;gap:var(--s2)}
+.dev.w820{width:820px;max-width:none;height:700px}
+.stage{overflow-x:auto;max-width:100%}
+.w820 .body{justify-items:center}
+.w820 .colmax{width:100%;max-width:560px;display:grid;gap:var(--s3)}
+.lst{display:grid;gap:2px;font-size:var(--fs-caption);color:var(--mut)}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 001.7 3h16.6a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-chevd" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5M5 21h14"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5"/></symbol>
+  <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.5"/></symbol>
+  <symbol id="i-truck" viewBox="0 0 24 24"><path d="M3 6h11v10H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></symbol>
+</svg>
+<div class="wrap">
+  <header>
+    <h1>Документ поставщика → «Что сделать»</h1>
+    <p class="lede">Прототип спеки 53 §8а.13 (редакция 2 — после независимого дизайн-ревью). Один распознаватель чеков, прайсов и счетов поставщика: снимок системным сканером документов или PDF/документ → распознавание → «Что сделать» (несколько действий за раз) → возврат туда, откуда пришли, с тостом «Вернуть». Данные вымышлены, числа тестовые.</p>
+  </header>
+  <div class="bar">
+    <span class="lbl">Тема</span>
+    <div class="seg" role="radiogroup" aria-label="Тема">
+      <button type="button" role="radio" data-theme-btn="light" aria-pressed="true">Светлая</button>
+      <button type="button" role="radio" data-theme-btn="dark" aria-pressed="false">Тёмная</button>
+    </div>
+  </div>
+  <div class="cols">
+    <section class="col" aria-labelledby="s1">
+      <h2 id="s1">1. Вход: «＋ Документ»</h2>
+      <p>Кнопки — в закреплённой панели (DS §8.9): «Снять документ» — главная, системный сканер документов (края, выравнивание, несколько страниц).</p>
+      <div class="dev" id="scr-pick">
+        <div class="top"><button class="iconbtn" type="button" aria-label="Назад"><svg class="i"><use href="#i-back"/></svg></button><div><div class="sub">Каталог</div><div class="ttl">Документ поставщика</div></div></div>
+        <div class="body">
+          <div class="card docrow"><svg class="i" style="width:28px;height:28px;color:var(--mut)"><use href="#i-receipt"/></svg><div><b>Чек, прайс или счёт поставщика</b><div class="sub">Распознаем строки и цены, а что с ними делать — выберете дальше.</div></div></div>
+          <div class="note" style="color:var(--mut)"><svg class="i"><use href="#i-lock"/></svg><span>Мы снимок не храним, сервис распознавания — до 30 дней. <button class="link" type="button">Что уходит на распознавание</button></span></div>
+        </div>
+        <div class="panel">
+          <button class="btn primary full bar" type="button"><svg class="i"><use href="#i-camera"/></svg>Снять документ</button>
+          <div class="two"><button class="btn bar" type="button"><svg class="i"><use href="#i-image"/></svg>Фото</button><button class="btn bar" type="button"><svg class="i"><use href="#i-file"/></svg>Файл</button></div>
+        </div>
+      </div>
+    </section>
+    <section class="col" aria-labelledby="s2">
+      <h2 id="s2">2. Распознавание</h2>
+      <p>Миниатюра снятого и «Переснять». Без сети — «Документ ждёт сети · 1», распознается сам.</p>
+      <div class="dev" id="scr-wait">
+        <div class="top"><button class="iconbtn" type="button" aria-label="Назад"><svg class="i"><use href="#i-back"/></svg></button><div><div class="sub">Каталог</div><div class="ttl">Документ поставщика</div></div></div>
+        <div class="body">
+          <div class="card docrow"><div class="thumb" role="img" aria-label="Снимок, 2 страницы"></div><div style="display:grid;gap:var(--s2);flex:1"><b>Распознаём · страница 1 из 2</b><div class="progress" role="progressbar" aria-valuenow="62" aria-valuemin="0" aria-valuemax="100"><i></i></div><div class="sub">Можно уйти — пришлём «Документ распознан — проверьте».</div></div></div>
+          <button class="link" type="button" style="justify-self:start">Переснять</button>
+        </div>
+      </div>
+    </section>
+    <section class="col" aria-labelledby="s3">
+      <h2 id="s3">3. «Что сделать»</h2>
+      <p>Действия — строками одной карточки (меню выбора, правило 12). Строки с деталями — «›». Кнопка называет, что запишет; ничего не отмечено — подсказка.</p>
+      <div class="dev" id="scr-act">
+        <div class="top"><button class="iconbtn" type="button" aria-label="Назад"><svg class="i"><use href="#i-back"/></svg></button><div><div class="sub">Документ поставщика</div><div class="ttl">Что сделать</div></div></div>
+        <div class="body">
+          <div class="card docrow"><div class="thumb" role="img" aria-label="Снимок чека — открыть крупно"></div><div class="doc" style="flex:1"><div class="row"><b>ABC Supply</b><span class="sub">Чек · 11/14/2026</span></div><div class="sub">есть в справочнике · 14 строк · налог $31.20</div><div class="row"><span></span><b>Итого $412.80</b></div></div></div>
+          <div class="acts" id="acts"></div>
+        </div>
+        <div class="panel">
+          <div class="note warn" id="act-hint" hidden><svg class="i"><use href="#i-alert"/></svg><span>Отметьте, что сделать с документом</span></div>
+          <button class="btn primary full bar" type="button" id="act-go">Записать расход и 9 цен</button>
+        </div>
+        <div class="scrim" id="it-scrim" hidden></div>
+        <div class="sheet" id="it-sheet" role="dialog" aria-label="Позиции в каталог" hidden>
+          <div class="grab"></div>
+          <div class="sh-head"><div class="ttl" style="font-size:var(--fs-heading)">Добавить в каталог</div><button class="iconbtn" type="button" aria-label="Закрыть" onclick="closeItems()"><svg class="i"><use href="#i-close"/></svg></button></div>
+          <div class="acts" id="items"></div>
+          <div class="fld"><label for="imk">Наценка для новых, %</label><input class="input" id="imk" inputmode="decimal" value="30"></div>
+          <button class="btn primary full bar" type="button" onclick="closeItems()">Выбрать</button>
+        </div>
+      </div>
+    </section>
+    <section class="col" aria-labelledby="s4">
+      <h2 id="s4">4. После «Записать»</h2>
+      <p>Возврат туда, откуда пришли (здесь — «Каталог»), и один тост на всё: «Записано: расход, 9 цен · Вернуть». Позже — «Отменить всё по документу» в истории.</p>
+      <div class="dev" id="scr-done">
+        <div class="top"><div><div class="ttl">Каталог</div></div></div>
+        <div class="body">
+          <div class="pcard"><div><b>Гаттер · 5″ · K-style · белый</b></div><div class="v">$3.12 / ft</div><svg class="i"><use href="#i-chev"/></svg></div>
+          <div class="pcard"><div><b>Водосток · 2×3 · белый</b></div><div class="v">$2.57 / ft</div><svg class="i"><use href="#i-chev"/></svg></div>
+          <div class="pcard"><div><b>Крюк · скрытый · 5″</b></div><div class="v">$1.37 / ea</div><svg class="i"><use href="#i-chev"/></svg></div>
+        </div>
+        <div class="toast" role="status"><span>Записано: расход, 9 цен</span><button type="button"><svg class="ring" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="50.3" stroke-dashoffset="18" transform="rotate(-90 10 10)"/></svg>Вернуть</button></div>
+      </div>
+    </section>
+  </div>
+  <section class="col" aria-labelledby="s5">
+    <h2 id="s5">5. «Что сделать» на 820</h2>
+    <p>Колонка формы до formMax по центру; кнопка — в конце колонки, не в панели (DS §8.9: от 820 панели нет).</p>
+    <div class="stage"><div class="dev w820" id="scr-act820">
+      <div class="top"><button class="iconbtn" type="button" aria-label="Назад"><svg class="i"><use href="#i-back"/></svg></button><div><div class="sub">Документ поставщика</div><div class="ttl">Что сделать</div></div></div>
+      <div class="body"><div class="colmax">
+        <div class="card docrow"><div class="thumb"></div><div class="doc" style="flex:1"><div class="row"><b>ABC Supply</b><span class="sub">Чек · 11/14/2026</span></div><div class="sub">есть в справочнике · 14 строк · налог $31.20</div><div class="row"><span></span><b>Итого $412.80</b></div></div></div>
+        <div class="acts" id="acts820"></div>
+        <div class="sum" style="font-weight:600">Будет записано: расход, 9 цен</div>
+        <button class="btn primary bar" type="button" style="justify-self:end;padding:0 var(--s6)">Записать расход и 9 цен</button>
+      </div></div>
+    </div></div>
+  </section>
+</div>
+<script>
+const ACTS = [
+  { id: "exp", icon: "receipt", title: "Записать расход", sub: "$412.80 · материалы · работа «Smith — гаттеры»", on: true },
+  { id: "price", icon: "tag", title: "Обновить цены поставщика", sub: "9 совпали · 2 «Проверьте»", on: true, more: true },
+  { id: "items", icon: "box", title: "Добавить позиции в каталог", sub: "Нет в каталоге: 3 · выбрано 0", on: false, more: true },
+];
+const ITEMS = [{ n: "Leaf guard mesh 4'", p: "$6.10 / ea", on: false }, { n: "Gutter sealant 10oz", p: "$7.40 / ea", on: false }, { n: "Rivet #42 painted, bag 100", p: "$5.63 / bag", on: false }];
+const ic = (n) => `<svg class="i"><use href="#i-${n}"/></svg>`;
+const rowHtml = (a) => `<div class="arow" role="checkbox" tabindex="0" aria-checked="${!!a.on}" data-id="${a.id}">
+  ${ic(a.icon)}<div class="tx"><b>${a.title}</b><span>${a.sub}</span></div>
+  <div class="end">${a.more ? `<button class="more" type="button" aria-label="Подробнее: ${a.title}" data-more="${a.id}">${ic("chev")}</button>` : ""}<div class="ck"><span class="box">${ic("check")}</span></div></div></div>`;
+function label() {
+  const n = ITEMS.filter((x) => x.on).length;
+  const parts = [];
+  if (ACTS[0].on) parts.push("расход");
+  if (ACTS[1].on) parts.push("9 цен");
+  if (ACTS[2].on && n) parts.push(n + " позиции");
+  return parts;
+}
+function render() {
+  ACTS[2].sub = `Нет в каталоге: 3 · выбрано ${ITEMS.filter((x) => x.on).length}`;
+  for (const id of ["acts", "acts820"]) {
+    const box = document.getElementById(id);
+    box.innerHTML = ACTS.map(rowHtml).join("");
+    box.querySelectorAll(".arow").forEach((el) => {
+      const a = ACTS.find((x) => x.id === el.dataset.id);
+      el.onclick = (e) => {
+        if (e.target.closest("[data-more]")) return a.id === "items" ? openItems() : null;
+        if (a.id === "items" && !a.on && !ITEMS.some((x) => x.on)) return openItems();
+        a.on = !a.on; render();
+      };
+    });
+  }
+  const parts = label();
+  const go = document.getElementById("act-go");
+  go.textContent = parts.length ? "Записать " + parts.join(" и ").replace(" и ", parts.length > 2 ? ", " : " и ") : "Записать";
+  go.onclick = () => { document.getElementById("act-hint").hidden = !!parts.length; };
+}
+function openItems() {
+  document.getElementById("it-scrim").hidden = false; document.getElementById("it-sheet").hidden = false;
+  const box = document.getElementById("items");
+  box.innerHTML = ITEMS.map((x, i) => `<div class="arow" role="checkbox" tabindex="0" aria-checked="${x.on}" data-i="${i}"><span></span><div class="tx"><b>${x.n}</b><span>${x.p}</span></div><div class="end"><div class="ck"><span class="box">${ic("check")}</span></div></div></div>`).join("");
+  box.querySelectorAll(".arow").forEach((el) => el.onclick = () => { const x = ITEMS[+el.dataset.i]; x.on = !x.on; openItems(); });
+}
+function closeItems() { document.getElementById("it-scrim").hidden = true; document.getElementById("it-sheet").hidden = true; ACTS[2].on = ITEMS.some((x) => x.on); render(); }
+document.querySelectorAll("[data-theme-btn]").forEach((b) => b.onclick = () => {
+  document.documentElement.dataset.theme = b.dataset.themeBtn;
+  document.querySelectorAll("[data-theme-btn]").forEach((x) => x.setAttribute("aria-pressed", x === b));
+});
+const qs = new URLSearchParams(location.search);
+if (qs.get("theme")) document.documentElement.dataset.theme = qs.get("theme");
+render();
+</script>
+</body>
+</html>

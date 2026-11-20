@@ -97,7 +97,6 @@ describe("design system: components", () => {
   // a Press drawn as a button / tile / chip by the screen itself: its own background, radius or border in the tag
   const RULE29_STYLED_PRESS: Record<string, number> = {
     "features/LegalAgree.tsx": 1, // the Terms / Privacy links drawn as underlined text (#2022); spec 56 §11.1 waits for the lawyer
-    "features/DatePick.tsx": 1,
     "features/PhotoStrip.tsx": 2,
     "features/PlanParts.tsx": 1,
     "features/estimate/SwipeRow.tsx": 1,

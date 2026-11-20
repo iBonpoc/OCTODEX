@@ -1,8 +1,9 @@
 /**
  * Wave 7а-1 — согласие, документы, «Помощь и поддержка» (docs/specs/19 §5; legal/01 §3.5; App Store 1.5). Demo mode;
  * the server side (no company / no team without the consent, the journal) is db T49.
- * - the sign-in screen: an EMPTY tick «Я принимаю Условия использования и Политику конфиденциальности»; without it
- *   «Получить код» and «Создать аккаунт» are off even with a good email; the tick turns them on; untick — off again;
+ * - the sign-in screen: an EMPTY tick «Я принимаю Условия использования и Политику конфиденциальности»; the buttons are
+ *   always on (DS §7.4, spec 52): «Получить код» and the password «Войти» without the tick say «Отметьте согласие…»
+ *   under the tick and send nothing (no password sign-up since #1756: the first code creates the account);
  * - the underlined links open the drafts /legal/terms and /legal/privacy (a tap on a link does not tick the box);
  * - a draft: «Черновик», «Редакция от …» (US date), sections, «the English text governs» (not in English); an unknown
  *   document — «Такого документа нет»;
@@ -17,31 +18,29 @@ exports.run = async (h) => {
   const vis = (id) => p.getByTestId(id).locator("visible=true");
   const btn = (name) => p.getByRole("button", { name, exact: true }).locator("visible=true").last();
 
-  // the sign-in screen: the tick comes first, the buttons wait for it
+  // the sign-in screen: the tick comes first; without it a button says so under the tick
   await h.go("/auth/sign-in");
   const tick = vis("legal-agree");
   await tick.waitFor({ timeout: 4000 });
   h.expect((await tick.getAttribute("aria-checked")) === "false", "the tick starts empty");
-  await h.expectText(/Я принимаю.*Условия использования.*и.*Политику конфиденциальности/s, "the words say that ticking is agreeing");
-  await p.getByPlaceholder("Email").locator("visible=true").last().fill("owner@example.com");
-  h.expect(await btn("Получить код").isDisabled(), "a good email, no tick: «Получить код» is off");
+  await h.expectText(/Я принимаю Условия использования и Политику конфиденциальности/, "the words say that ticking is agreeing");
+  await vis("auth-email").locator("input").last().fill("owner@example.com");
+  await vis("auth-send-code").click();
+  await vis("auth-agree-error").waitFor({ timeout: 4000 });
+  h.expect(/Отметьте согласие/.test(await vis("auth-agree-error").innerText()), "no tick: «Получить код» says so under the tick");
+  h.expect((await p.getByTestId("auth-code").locator("visible=true").count()) === 0, "and sends nothing");
   await tick.click();
-  await p.waitForTimeout(200);
+  await p.locator('[data-testid="legal-agree"][aria-checked="true"]').locator("visible=true").last().waitFor({ timeout: 4000 });
   h.expect((await tick.getAttribute("aria-checked")) === "true", "ticked");
-  h.expect(!(await btn("Получить код").isDisabled()), "ticked: «Получить код» is on");
+  h.expect((await p.getByTestId("auth-agree-error").locator("visible=true").count()) === 0, "ticked: the note under the tick is gone");
   await h.shot("sign-in-ticked");
+  // the password sign-in too (no password sign-up since #1756)
   await tick.click();
-  await p.waitForTimeout(200);
-  h.expect(await btn("Получить код").isDisabled(), "untick: off again");
-  // the sign-up form too
-  await btn("Войти с паролем").click();
-  await btn("Нет аккаунта — создать").click();
-  await p.getByPlaceholder("Пароль").locator("visible=true").last().fill("secret123");
-  await p.getByPlaceholder("Ваше имя").locator("visible=true").last().fill("Olga Owner");
-  h.expect(await btn("Создать аккаунт").isDisabled(), "sign-up without the tick is off");
-  await vis("legal-agree").click();
-  await p.waitForTimeout(200);
-  h.expect(!(await btn("Создать аккаунт").isDisabled()), "sign-up with the tick is on");
+  await vis("auth-use-password").click();
+  await vis("auth-password").locator("input").last().fill("secret123");
+  await vis("auth-password-sign-in").click();
+  await vis("auth-agree-error").waitFor({ timeout: 4000 });
+  h.expect(/Отметьте согласие/.test(await vis("auth-agree-error").innerText()), "the password «Войти» without the tick says so too");
 
   // the links: visible, underlined, open the documents, do not tick
   await h.go("/auth/sign-in");
