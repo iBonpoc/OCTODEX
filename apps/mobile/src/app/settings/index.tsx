@@ -63,6 +63,7 @@ export default function Settings() {
           items={[
             { key: "lime", label: t("more.accentLime") },
             { key: "yellow", label: t("more.accentYellow") },
+            { key: "tangerine", label: t("more.accentTangerine") },
             { key: "orange", label: t("more.accentOrange") },
             { key: "emerald", label: t("more.accentEmerald") },
             { key: "cobalt", label: t("more.accentCobalt") },

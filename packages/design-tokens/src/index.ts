@@ -158,6 +158,10 @@ export const gesture = {
   slotHysteresis: 6,
   /** a finger moves this far and the gesture is «taken» (swipe of a row, sheet body, back swipe), px — DS §14.6, Н-19 */
   slop: 10,
+  /** a full row swipe, once armed, is let go only this far back inside its line (no flicker on the line), px — DS Б13 п.2 */
+  swipeFullHysteresis: 10,
+  /** a row swipe starts no closer than this to the left edge of the screen: nearer is the system «back», px — DS Б13 п.2 */
+  edgeGuard: 24,
 } as const;
 
 /* ---------- components.css ---------- */
@@ -213,6 +217,11 @@ export const component = {
   qtyFieldW: 72,
   /** value column of a stepper */
   stepperValueW: 56,
+  /** two side by side (founder 21.11.2026, #2350: «две кнопки в столбик — две кнопки в ряд… селекторы… в ряд, если помещаются»; DS §7.4):
+   *  `labelMax` — the longest label (characters) a button of a pair may have and still stand in a row; `charEm` — the average width of a
+   *  button character as a share of `size.button` (Manrope, Latin and Cyrillic), to tell if a label fits its half; `fieldMin` — the
+   *  narrowest a field of a `FieldRow` may be (a date «Wed, Nov 18», a time «12:45 PM» with the chevron) */
+  pair: { labelMax: 16, charEm: 0.58, fieldMin: 150 },
   /** sheet grabber */
   grabber: { w: 36, h: 4 },
   /** progress bar of Steps */
@@ -331,11 +340,15 @@ export interface ThemeColors {
 
 /** redesign #2348 (docs/design/2026-11-20-direction/06-decision.md): calm opaque surfaces, one cobalt accent,
  *  tonal status plates (fill = the plate, text = word and icon, on = text on the plate); no background glow */
-export type AccentName = "lime" | "yellow" | "orange" | "emerald" | "cobalt";
+export type AccentName = "lime" | "yellow" | "tangerine" | "orange" | "emerald" | "cobalt";
 /** founder 21.11 (#2350): one accent, the same in both themes; lime by default (his references), the others to compare */
+/** the order the home screen's colour dot cycles through (prototype #2350) */
+export const ACCENT_ORDER: readonly AccentName[] = ["lime", "yellow", "tangerine", "orange", "emerald", "cobalt"];
 export const accents: Record<AccentName, Record<ThemeName, { acc: string; onAcc: string }>> = {
   lime: { dark: { acc: "#D4F06A", onAcc: "#15161A" }, light: { acc: "#D4F06A", onAcc: "#15161A" } },
   yellow: { dark: { acc: "#F5D04A", onAcc: "#15161A" }, light: { acc: "#F5D04A", onAcc: "#15161A" } },
+  /** founder 21.11: «танжерин, апельсиновый такой насыщенный» */
+  tangerine: { dark: { acc: "#FF9A1F", onAcc: "#15161A" }, light: { acc: "#FF9A1F", onAcc: "#15161A" } },
   orange: { dark: { acc: "#FF7A2F", onAcc: "#15161A" }, light: { acc: "#FF7A2F", onAcc: "#15161A" } },
   emerald: { dark: { acc: "#3DDC97", onAcc: "#15161A" }, light: { acc: "#3DDC97", onAcc: "#15161A" } },
   cobalt: { dark: { acc: "#6F86FF", onAcc: "#FFFFFF" }, light: { acc: "#2747E8", onAcc: "#FFFFFF" } },

@@ -451,6 +451,7 @@ export const es: Dict = {
   "more.accentCobalt": "Azul",
   "more.accentLime": "Lima",
   "more.accentYellow": "Amarillo",
+  "more.accentTangerine": "Mandarina",
   "more.accentOrange": "Naranja",
   "more.accentEmerald": "Esmeralda",
   "more.language": "Idioma",
@@ -4925,4 +4926,14 @@ export const es: Dict = {
   "cc.why.bill": "Presupuesto {n} aprobado · facturar {amount}",
   "cc.why.send": "Presupuesto {n} en borrador — el cliente no lo ha visto",
   "cc.why.estimate": "Este cliente aún no tiene presupuesto",
+  // #2350: row swipes and the quick contacts of a client card in the list
+  "swipe.call": "Llamar",
+  "swipe.archive": "Archivar",
+  "swipe.open": "Abrir",
+  "swipe.done": "Hecho",
+  "swipe.reopen": "Reabrir",
+  "contact.write": "Escribir",
+  "contact.writeTo": "Escribir a {name}",
+  "contact.sms": "SMS",
+  "contact.email": "Correo",
 };

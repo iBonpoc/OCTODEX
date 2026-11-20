@@ -450,6 +450,7 @@ export const ru = {
   "more.accentCobalt": "Синий",
   "more.accentLime": "Лайм",
   "more.accentYellow": "Жёлтый",
+  "more.accentTangerine": "Танжерин",
   "more.accentOrange": "Оранж",
   "more.accentEmerald": "Изумруд",
   "more.language": "Язык",
@@ -4925,6 +4926,16 @@ export const ru = {
   "cc.why.bill": "Смета {n} принята · выставить {amount}",
   "cc.why.send": "Смета {n} — черновик, клиент её не видел",
   "cc.why.estimate": "У клиента пока нет сметы",
+  // #2350: row swipes and the quick contacts of a client card in the list
+  "swipe.call": "Позвонить",
+  "swipe.archive": "В архив",
+  "swipe.open": "Открыть",
+  "swipe.done": "Готово",
+  "swipe.reopen": "Вернуть",
+  "contact.write": "Написать",
+  "contact.writeTo": "Написать: {name}",
+  "contact.sms": "SMS",
+  "contact.email": "Почта",
 } as const;
 
 export type DictKey = keyof typeof ru;
