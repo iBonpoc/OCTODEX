@@ -3022,6 +3022,8 @@ export const ru = {
   "fix.more.leads": "Ждут: {n}",
   "fix.more.tasks": "На сегодня: {n}",
   "fix.more.jobs": "К плану: {n}",
+  "fix.more.jobsCheck": "Проверить: {n}",
+  "fix.more.jobsAll": "Требуют внимания: {n}",
   "fix.more.estimates": "На подпись: {n}",
   "fix.more.invoices": "Просрочено: {n}",
   // ---- push (docs/specs/27-push.md) ----
@@ -3066,6 +3068,8 @@ export const ru = {
   // fix.sign.* — the full-screen signature (spec 29)
   "fix.sign.expand": "Развернуть на весь экран",
   "fix.sign.done": "Готово",
+  // sign.* — the signature pad (#2215)
+  "sign.undoStroke": "Отменить штрих",
   // fix.co.* — company settings read-only for the office (spec 26 §3)
   "fix.co.readOnly": "Только просмотр — менять может директор",
   // 7а-3 «в»: the people of a closed company (docs/specs/22 §3.6)

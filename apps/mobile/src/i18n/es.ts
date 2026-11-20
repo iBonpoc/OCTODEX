@@ -3023,6 +3023,8 @@ export const es: Dict = {
   "fix.more.leads": "Esperan: {n}",
   "fix.more.tasks": "Para hoy: {n}",
   "fix.more.jobs": "Por programar: {n}",
+  "fix.more.jobsCheck": "Por revisar: {n}",
+  "fix.more.jobsAll": "Requieren atención: {n}",
   "fix.more.estimates": "Por firmar: {n}",
   "fix.more.invoices": "Vencidas: {n}",
   // ---- push (docs/specs/27-push.md) ----
@@ -3067,6 +3069,8 @@ export const es: Dict = {
   // fix.sign.* — the full-screen signature (spec 29)
   "fix.sign.expand": "Pantalla completa",
   "fix.sign.done": "Listo",
+  // sign.* — the signature pad (#2215)
+  "sign.undoStroke": "Deshacer trazo",
   // fix.co.* — company settings read-only for the office (spec 26 §3)
   "fix.co.readOnly": "Solo lectura — los cambios los hace el director",
   // 7а-3 «в»: the people of a closed company (docs/specs/22 §3.6)

@@ -3023,6 +3023,8 @@ export const en: Dict = {
   "fix.more.leads": "Waiting: {n}",
   "fix.more.tasks": "For today: {n}",
   "fix.more.jobs": "To schedule: {n}",
+  "fix.more.jobsCheck": "To check: {n}",
+  "fix.more.jobsAll": "Need attention: {n}",
   "fix.more.estimates": "To sign: {n}",
   "fix.more.invoices": "Overdue: {n}",
   // ---- push (docs/specs/27-push.md) ----
@@ -3067,6 +3069,8 @@ export const en: Dict = {
   // fix.sign.* — the full-screen signature (spec 29)
   "fix.sign.expand": "Full screen",
   "fix.sign.done": "Done",
+  // sign.* — the signature pad (#2215)
+  "sign.undoStroke": "Undo stroke",
   // fix.co.* — company settings read-only for the office (spec 26 §3)
   "fix.co.readOnly": "View only — the director makes changes",
   // 7а-3 «в»: the people of a closed company (docs/specs/22 §3.6)
