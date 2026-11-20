@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Витрина «Графит» — прототип</title>
+<!-- Прототип структуры витрины (спека 63 §5). Не код приложения: значения цвета и размеры — из пакета «Графит» v2.1 §2 и токенов «Наряда», только для показа. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500&family=Onest:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* «Графит», тёмная (пакет §2.1) */
+  --bg:#383C41;--bgMid:#474C52;--bgLow:#575D64;
+  --panel:rgba(38,40,44,.75);--panelEdge:rgba(255,255,255,.14);--sheetBg:rgba(36,38,42,.93);
+  --tile1:rgba(255,255,255,.06);--tile2:rgba(255,255,255,.11);
+  --text:#F2F3F4;--text2:#CDD1D5;--text3:#8F9499;
+  --div:rgba(255,255,255,.09);--borderS:rgba(255,255,255,.18);
+  --fieldBg:rgba(255,255,255,.07);--fieldEdge:rgba(255,255,255,.40);--focus:#ECEDEE;
+  --acc:#FBFF00;--onAcc:#040505;--sel:#ECEDEE;--onSel:#1B1D20;
+  --chip:#303337;--chipOn:#ECEDEE;
+  --bad:#FF9C8A;--warn:#F2C66A;--info:#9CC4EF;--ok:#93D3A0;
+  --toast:#2A2D31;--onToast:#F2F3F4;--scrim:rgba(0,0,0,.5);
+  --beam:#FBFF00;--glow:0 0 12px 2px rgba(251,255,0,.45),0 0 4px 0 rgba(251,255,0,.7);
+  --gl:rgba(18,19,21,.45);--rim:rgba(255,255,255,.14);
+  /* «Наряд», тёмная (packages/design-tokens) */
+  --nPage:#181A1E;--nBg:#24272D;--nInk:#F2F3F5;--nMut:#CDD1DA;--nSurf:rgba(255,255,255,.07);--nSurf2:rgba(255,255,255,.11);
+  --nBd:rgba(255,255,255,.14);--nBdField:rgba(255,255,255,.38);--nIn:rgba(255,255,255,.05);
+  --ease:cubic-bezier(.23,1,.32,1);
+  color-scheme:dark;
+}
+:root[data-theme="light"]{
+  --bg:#ECEDEE;--bgMid:#D5D8DB;--bgLow:#B9BDC1;
+  --panel:rgba(246,247,248,.544);--panelEdge:rgba(255,255,255,.75);--sheetBg:rgba(240,241,242,.93);
+  --tile1:rgba(255,255,255,.45);--tile2:rgba(255,255,255,.72);
+  --text:#16181A;--text2:#3C4045;--text3:#6B7076;
+  --div:rgba(22,24,26,.10);--borderS:rgba(22,24,26,.24);
+  --fieldBg:rgba(255,255,255,.66);--fieldEdge:rgba(22,24,26,.50);--focus:#3A3E43;
+  --sel:#FFFFFF;--onSel:#16181A;--chip:#DCDFE2;--chipOn:#FFFFFF;
+  --bad:#A3221B;--warn:#6E4D00;--info:#1B5290;--ok:#1E5F34;
+  --toast:#FFFFFF;--onToast:#16181A;--scrim:rgba(22,24,26,.32);
+  --beam:#5F6100;--glow:0 1px 0 0 rgba(40,42,0,.35);
+  --gl:rgba(255,255,255,.34);--rim:rgba(255,255,255,.55);
+  --nPage:#DDD9D2;--nBg:#EFEBE5;--nInk:#15161A;--nMut:#575C68;--nSurf:rgba(255,255,255,.62);--nSurf2:rgba(255,255,255,.85);
+  --nBd:rgba(20,22,30,.1);--nBdField:rgba(20,22,30,.5);--nIn:rgba(255,255,255,.55);
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:Jost,system-ui,sans-serif;font-weight:400;color:var(--text);
+  background:linear-gradient(180deg,var(--bg) 0%,var(--bgMid) 55%,var(--bgLow) 100%) fixed;
+  -webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.5;
+  background:repeating-radial-gradient(circle at 20% 18%,transparent 0 22px,var(--div) 22px 23px),
+             repeating-radial-gradient(circle at 85% 70%,transparent 0 30px,var(--div) 30px 31px)}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}
+.app{position:relative;display:grid;grid-template-columns:1fr;min-height:100%;max-width:1280px;margin:0 auto}
+@media (min-width:820px){.app{grid-template-columns:340px 1fr;gap:12px;padding:12px}}
+@media (min-width:1280px){.app{grid-template-columns:380px 1fr}}
+.pane{padding:0 16px 120px;min-width:0}
+@media (min-width:820px){.pane{padding:0 0 40px}.list{position:sticky;top:12px;align-self:start;max-height:calc(100vh - 24px);overflow:auto}}
+/* шапка */
+.head{display:flex;align-items:center;gap:8px;min-height:56px;padding-top:8px}
+.circle{width:44px;height:44px;border-radius:999px;display:grid;place-items:center;flex:none;
+  background:var(--gl);box-shadow:inset 1px 1px 0 rgba(255,255,255,.55),inset -1px -1px 0 rgba(255,255,255,.18),0 0 0 1px var(--rim);
+  backdrop-filter:blur(4px) saturate(1.2);-webkit-backdrop-filter:blur(4px) saturate(1.2)}
+.title{font-size:34px;line-height:40px;letter-spacing:-.3px;margin:4px 0 4px}
+.sub{font-size:15px;line-height:20px;color:var(--text2);margin:0 0 16px}
+.h2{font-size:13px;line-height:18px;color:var(--text2);margin:20px 4px 8px;text-transform:none}
+/* матовая панель */
+.gp{background:var(--panel);border:1px solid var(--panelEdge);border-radius:14px;
+  backdrop-filter:blur(19.5px) saturate(1.3);-webkit-backdrop-filter:blur(19.5px) saturate(1.3);overflow:hidden}
+.row{display:flex;align-items:center;gap:12px;min-height:56px;padding:0 16px;width:100%;text-align:left;position:relative}
+.row+.row::before{content:"";position:absolute;left:62px;right:0;top:0;height:.5px;background:var(--div)}
+.row:active{background:var(--tile2)}
+.row[aria-current="true"]{background:var(--tile2)}
+.gi{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--tile2);flex:none}
+.row .t{flex:1;min-width:0}
+.row .n{font-size:17px;line-height:22px}
+.row .w{font-size:13px;line-height:18px;color:var(--text2)}
+.row .r{font-size:13px;line-height:18px;color:var(--text2);white-space:nowrap}
+.chev{color:var(--text2)}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:12px;line-height:16px;padding:2px 8px;border-radius:999px;background:var(--tile2);color:var(--text2)}
+.pill.on{background:var(--chipOn);color:var(--onSel)}
+svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+/* экран элемента */
+.picker{display:flex;gap:4px;padding:4px;border-radius:999px;background:var(--gl);box-shadow:0 0 0 1px var(--rim);margin:0 0 12px;overflow-x:auto}
+.picker button{flex:1;min-height:44px;padding:0 14px;border-radius:999px;font-size:15px;white-space:nowrap;color:var(--text2);transition:background .12s var(--ease),color .12s var(--ease)}
+.picker button[aria-pressed="true"]{background:var(--sel);color:var(--onSel);font-weight:500}
+.stage{position:relative;min-height:300px;padding:24px 16px;display:grid;place-items:center;gap:16px}
+.cur{position:absolute;top:12px;left:12px}
+.big{font-size:22px;line-height:28px;text-align:center;margin:4px 0 12px}
+.big b{font-weight:500}
+.states{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.states button{min-height:36px;padding:0 12px;border-radius:999px;background:var(--chip);font-size:13px}
+.states button[aria-pressed="true"]{background:var(--chipOn);color:var(--onSel)}
+details{margin-top:12px}
+summary{min-height:44px;display:flex;align-items:center;font-size:15px;color:var(--text2);cursor:pointer}
+table{width:100%;border-collapse:collapse;font-size:13px;line-height:18px}
+td,th{text-align:left;padding:6px 8px;border-top:.5px solid var(--div);vertical-align:top}
+th{color:var(--text2);font-weight:400}
+.note{font-size:13px;line-height:18px;color:var(--text2);margin:8px 4px}
+.back{display:inline-flex}
+@media (min-width:820px){.back{display:none}}
+.hide-sm{display:none}
+@media (min-width:820px){.hide-sm{display:block}.view-list .el,.view-el .list{display:block}}
+@media (max-width:819px){.view-list .el{display:none}.view-el .list{display:none}}
+/* ===== образцы ===== */
+.naryad{font-family:Onest,system-ui,sans-serif;color:var(--nInk)}
+.nbtn{min-height:36px;padding:0 16px;border-radius:12px;background:var(--acc);color:#0B0C0F;font-weight:600;font-size:15px}
+.gbtn{min-height:52px;padding:0 24px;border-radius:16px;background:var(--acc);color:var(--onAcc);font-weight:500;font-size:17px;transition:transform .08s var(--ease),filter .15s var(--ease)}
+.gbtn.pillish{border-radius:999px}
+.st-press .gbtn,.st-press .nbtn{transform:scale(.97);filter:brightness(.84)}
+.st-off .gbtn,.st-off .nbtn{opacity:.4}
+.gbtn2{min-height:52px;padding:0 24px;border-radius:16px;background:var(--tile2);border:1px solid var(--panelEdge);font-size:17px}
+.nfield{width:260px;min-height:44px;border-radius:12px;border:1px solid var(--nBdField);background:var(--nIn);padding:0 12px;display:flex;align-items:center;font-size:15px;color:var(--nInk)}
+.gfield{width:280px;min-height:44px;border-radius:12px;border:1px solid var(--fieldEdge);background:var(--fieldBg);padding:0 14px;display:flex;align-items:center;font-size:15px}
+.gfield.float{min-height:52px;flex-direction:column;align-items:flex-start;justify-content:center}
+.gfield.float small{font-size:12px;line-height:16px;color:var(--text2)}
+.st-focus .gfield{box-shadow:0 0 0 1.5px var(--focus)}
+.st-focus .nfield{box-shadow:0 0 0 2px var(--nInk)}
+.st-error .gfield,.st-error .nfield{border-color:var(--bad)}
+.err{font-size:13px;color:var(--bad);margin-top:6px;display:none;align-items:center;gap:4px}
+.st-error .err{display:flex}
+.lbl{font-size:13px;color:var(--text2);margin:0 0 6px}
+.nsel{width:280px;min-height:44px;border-radius:12px;background:var(--nSurf);border:1px solid var(--nBd);display:flex;align-items:center;justify-content:space-between;padding:0 12px;font-size:15px}
+.gsel{width:300px;min-height:44px;border-radius:12px;background:var(--tile1);display:flex;align-items:center;justify-content:space-between;padding:0 14px;font-size:15px}
+.menu{width:300px;margin-top:6px;border-radius:14px;background:var(--sheetBg);border:1px solid var(--panelEdge);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);overflow:hidden}
+.menu div{min-height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;font-size:15px;border-top:.5px solid var(--div)}
+.menu div:first-child{border-top:0}
+.tg{width:51px;height:31px;border-radius:999px;position:relative;background:var(--chip);transition:background .25s var(--ease)}
+.tg::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .25s var(--ease)}
+.tg.on::after{transform:translateX(20px)}
+.tg.on{background:var(--sel)} .tg.on::after{background:var(--onSel)}
+.tg.y.on{background:var(--acc)} .tg.y.on::after{background:#040505}
+.ntg{width:42px;height:24px;border-radius:999px;background:var(--nSurf2);position:relative;border:1px solid var(--nBd)}
+.ntg::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:999px;background:var(--nMut)}
+.ntg.on{background:var(--acc)}.ntg.on::after{left:20px;background:#0B0C0F}
+.trow{width:300px;min-height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+.alert{width:270px;border-radius:16px;background:var(--sheetBg);border:1px solid var(--panelEdge);text-align:center;overflow:hidden;backdrop-filter:blur(6px)}
+.alert p{margin:0;padding:18px 16px 4px;font-size:17px;line-height:22px}
+.alert small{display:block;padding:0 16px 16px;font-size:13px;color:var(--text2)}
+.alert .ab{display:flex;border-top:.5px solid var(--div)}
+.alert .ab button{flex:1;min-height:44px;font-size:17px}
+.alert .ab button+button{border-left:.5px solid var(--div)}
+.dan{color:var(--bad);font-weight:500}
+.asheet{width:320px;display:grid;gap:8px}
+.asheet .g{border-radius:14px;background:var(--sheetBg);border:1px solid var(--panelEdge);overflow:hidden}
+.asheet .g div{min-height:52px;display:grid;place-items:center;font-size:17px;border-top:.5px solid var(--div)}
+.asheet .g div:first-child{border-top:0;font-size:13px;color:var(--text2);min-height:44px}
+.scatter{display:grid;gap:8px;width:300px;font-size:13px;color:var(--text2)}
+.scatter div{padding:8px 12px;border-radius:12px;background:var(--nSurf);border:1px dashed var(--nBdField)}
+.toast{width:320px;min-height:52px;border-radius:14px;background:var(--toast);color:var(--onToast);display:flex;align-items:center;justify-content:space-between;padding:0 8px 0 16px;font-size:15px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.toast button{min-height:44px;padding:0 12px;font-weight:500}
+.stack{display:grid}
+.stack .toast{grid-area:1/1}
+.stack .toast:nth-child(2){transform:translateY(-10px) scale(.96);opacity:.7}
+.stack .toast:nth-child(3){transform:translateY(-20px) scale(.92);opacity:.45}
+.stack .toast:first-child{z-index:3}
+.nav{position:relative;width:340px;height:64px;border-radius:999px;background:var(--gl);box-shadow:inset 1px 1px 0 rgba(255,255,255,.55),inset -1px -1px 0 rgba(255,255,255,.18),0 0 0 1px var(--rim);display:flex;align-items:center;justify-content:space-around;backdrop-filter:blur(2px) saturate(1.2)}
+.nav span{display:grid;justify-items:center;font-size:12px;gap:2px;width:56px;color:var(--text2)}
+.nav span.on{color:var(--text);font-weight:500}
+.nav .plus{width:52px;height:52px;border-radius:999px;background:var(--acc);color:var(--onAcc);display:grid;place-items:center;font-size:28px;font-weight:300}
+.beam{position:absolute;top:0;height:2px;width:36px;background:var(--beam);box-shadow:var(--glow);border-radius:2px;transition:left .32s var(--ease)}
+.cone{position:absolute;top:2px;width:56px;height:28px;background:linear-gradient(180deg,rgba(251,255,90,.34),rgba(251,255,90,0));clip-path:polygon(25% 0,75% 0,100% 100%,0 100%);transition:left .32s var(--ease)}
+.ntab{width:340px;height:60px;border-radius:24px;background:var(--nSurf2);border:1px solid var(--nBd);display:flex;align-items:center;justify-content:space-around;font-family:Onest;font-size:11px;color:var(--nMut)}
+.ntab span{display:grid;justify-items:center;gap:2px}.ntab .on{color:var(--nInk);background:var(--nSurf2);border-radius:16px;padding:4px 10px}
+.sheet{width:320px;border-radius:16px 16px 16px 16px;background:var(--sheetBg);border:1px solid var(--panelEdge);padding:8px 16px 16px;backdrop-filter:blur(6px)}
+.grab{width:36px;height:5px;border-radius:3px;background:var(--text3);margin:0 auto 10px}
+.sheet h4{font-weight:400;font-size:22px;line-height:28px;margin:0 0 8px;display:flex;justify-content:space-between;align-items:center}
+.nsheet{width:320px;border-radius:24px 24px 0 0;background:var(--nBg);border:1px solid var(--nBd);padding:10px 16px 16px}
+.placeholder{max-width:320px;text-align:center;font-size:15px;line-height:20px;color:var(--text2)}
+.tbar{position:fixed;right:12px;bottom:12px;z-index:5;display:flex;gap:8px}
+.tbar .circle{width:auto;padding:0 14px;font-size:13px}
+</style>
+</head>
+<body>
+<div class="app view-list" id="app">
+  <section class="pane list" id="list"></section>
+  <section class="pane el" id="el"></section>
+</div>
+<div class="tbar"><button class="circle" id="theme" aria-label="Сменить тему">Тема</button></div>
+
+<script>
+/* Иконки: линия 1.5, сетка 20 (пакет §2.3) */
+const I = {
+  base:'<circle cx="10" cy="10" r="6.5"/><path d="M10 3.5v13M3.5 10h13"/>',
+  tap:'<rect x="3" y="6" width="14" height="8" rx="4"/>',
+  type:'<rect x="3" y="5" width="14" height="10" rx="3"/><path d="M6 10h5"/>',
+  pick:'<path d="M5 8l5 5 5-5"/>',
+  win:'<rect x="3" y="4" width="14" height="12" rx="3"/><path d="M3 8h14"/>',
+  msg:'<path d="M4 5h12v8H8l-4 3z"/>',
+  list:'<path d="M4 6h12M4 10h12M4 14h12"/>',
+  wait:'<path d="M10 3a7 7 0 1 1-7 7"/>',
+  nav:'<rect x="3" y="12" width="14" height="5" rx="2.5"/><path d="M10 3v6"/>',
+  tpl:'<rect x="3" y="3" width="6" height="14" rx="2"/><rect x="11" y="3" width="6" height="6" rx="2"/><rect x="11" y="11" width="6" height="6" rx="2"/>',
+  spec:'<path d="M4 16l4-10 4 6 4-8"/>',
+  chev:'<path d="M8 5l5 5-5 5"/>', back:'<path d="M12 5l-5 5 5 5"/>',
+  warn:'<path d="M10 4l7 12H3z"/><path d="M10 9v3M10 14v.1"/>',
+  check:'<path d="M5 10l3 3 7-7"/>', x:'<path d="M6 6l8 8M14 6l-8 8"/>',
+  today:'<circle cx="10" cy="10" r="6"/><path d="M10 7v3l2 2"/>', plan:'<rect x="4" y="5" width="12" height="11" rx="2"/><path d="M4 9h12"/>',
+  people:'<circle cx="10" cy="7" r="3"/><path d="M4 16c1-3 3-4 6-4s5 1 6 4"/>', chat:'<path d="M4 5h12v8H8l-4 3z"/>'
+};
+const ic = (k,cls='') => `<svg class="i ${cls}" viewBox="0 0 20 20" aria-hidden="true">${I[k]}</svg>`;
+
+/* Разделы витрины: простые названия, где в приложении, сколько мест (спека 63 §2, §3а) */
+const GROUPS = [
+ ['Основа','base',[
+  ['colors','Цвета','фон, панели, текст, жёлтый акцент, статусы'],
+  ['type','Шрифт','заголовки, текст, цифры'],
+  ['space','Отступы и скругления','поля экрана, между блоками, углы'],
+  ['icons','Значки','все значки приложения'],
+  ['motion','Движение','скорость окон, шторок, переходов'],
+  ['haptics','Вибрация','отклик на нажатие и успех'] ]],
+ ['Нажать','tap',[
+  ['button','Кнопка','139 мест: «Сохранить», «Отправить клиенту»…'],
+  ['iconbtn','Кнопка-значок','40 мест: «⋯», «?», закрыть'],
+  ['plus','Кнопка «＋ Создать»','в нижнем меню'],
+  ['actionbar','Панель действий внизу','смета, счёт, выезд'] ]],
+ ['Ввести','type',[
+  ['field','Поле','65 мест: имя, адрес, заметка'],
+  ['phone','Телефон и почта','карточка клиента'],
+  ['money','Число и деньги','цены, количество, проценты'],
+  ['date','Дата и время','выезд, срок счёта'] ]],
+ ['Выбрать','pick',[
+  ['select','Выбор из списка','15 мест: статус, источник, налог'],
+  ['toggle','Переключатель','43 места: да / нет'],
+  ['check','Отметка','чек-лист, задачи'],
+  ['segment','Сегмент','16 мест: режим экрана'],
+  ['filter','Фильтр','над списками'] ]],
+ ['Окна','win',[
+  ['sheet','Шторка','74 места: формы, выбор'],
+  ['confirm','Окно «Точно удалить?»','удаление, отправка, возврат денег'],
+  ['menu','Меню «⋯»','действия у кнопки'],
+  ['tip','Подсказка «ⓘ»','пояснение к числу или правилу'] ]],
+ ['Сообщения','msg',[
+  ['toast','Тост «Вернуть»','после удаления и других действий'],
+  ['banner','Баннер','«Нет сети», «Счёт просрочен»'],
+  ['status','Статус','«Оплачено», «Просрочено» — значок и слово'],
+  ['badge','Счётчик','число на «Чатах»'] ]],
+ ['Списки','list',[
+  ['card','Карточка','клиент, смета, счёт в списке'],
+  ['row','Строка','внутри карточки и в меню выбора'],
+  ['empty','Пустой список','«Клиентов пока нет»'] ]],
+ ['Ожидание и переходы','wait',[
+  ['loading','Загрузка','кружок и серые заготовки'],
+  ['pull','Потянуть вниз — обновить','корневые списки'],
+  ['push','Переход между экранами','открыть клиента, назад'] ]],
+ ['Навигация','nav',[
+  ['tabbar','Нижнее меню','Сегодня, План, ＋, Клиенты, Чаты'],
+  ['header','Шапка экрана','заголовок, назад, «?»'],
+  ['side','Боковое меню','планшет и компьютер'] ]],
+ ['Шаблоны экранов','tpl',[
+  ['t-list','Список','клиенты, сметы, счета'],
+  ['t-card','Карточка объекта','клиент, работа, смета'],
+  ['t-form','Форма','новый клиент, новый выезд'],
+  ['t-wizard','Мастер','первый запуск'],
+  ['t-doc','Документ','смета, счёт, чек'],
+  ['t-set','Настройки','компания, профиль'] ]],
+ ['Особые места','spec',[
+  ['x-draw','Холст рисунка Gutters','исключение: рисунок пальцем'],
+  ['x-tape','Рулетка Gutters','исключение: протяжка числа'],
+  ['x-sign','Подпись клиента','исключение: рисование'],
+  ['x-launch','Запуск приложения','знак GoRix'],
+  ['x-pdf','PDF сметы и счёта','печатный вид'] ]]
+];
+const ALL = Object.fromEntries(GROUPS.flatMap(([,,els])=>els.map(e=>[e[0],{id:e[0],name:e[1],where:e[2]}])));
+
+/* Образцы: «Сейчас» (вид «Наряд» в приложении) и варианты 1–2. Варианты 2 — заготовки для показа структуры. */
+const S = {
+ button:{states:['Покой','Нажато','Выключено'],
+  now:()=>`<div class="naryad"><button class="nbtn">Отправить клиенту</button></div>`,
+  v:[['«Графит»: жёлтая 52, угол 16',()=>`<div style="display:grid;gap:12px;justify-items:center"><button class="gbtn">Отправить клиенту</button><button class="gbtn2">Сохранить черновик</button></div>`],
+     ['«Графит»: жёлтая 52, пилюля',()=>`<div style="display:grid;gap:12px;justify-items:center"><button class="gbtn pillish">Отправить клиенту</button><button class="gbtn2" style="border-radius:999px">Сохранить черновик</button></div>`]],
+  dev:[['высота','36','52'],['угол','12','16 / 999'],['шрифт','Onest 600 · 15','Jost 500 · 17'],['нажатие','80 мс, пружина','80 / 150 мс, scale .97']]},
+ field:{states:['Покой','Фокус','Ошибка'],
+  now:()=>`<div class="naryad"><div class="lbl" style="color:var(--nMut)">Имя клиента</div><div class="nfield">Майкл Чен</div><div class="err">${ic('warn')} Укажите имя</div></div>`,
+  v:[['«Графит»: подпись над полем',()=>`<div><div class="lbl">Имя клиента</div><div class="gfield">Майкл Чен</div><div class="err">${ic('warn')} Укажите имя</div></div>`],
+     ['«Графит»: подпись внутри поля',()=>`<div><div class="gfield float"><small>Имя клиента</small>Майкл Чен</div><div class="err">${ic('warn')} Укажите имя</div></div>`]],
+  dev:[['заливка','nIn','fieldBg ≠ panel'],['кромка','bdField 1','fieldEdge 1 (≥ 3:1)'],['фокус','2','кольцо 1.5']]},
+ select:{states:['Закрыто','Открыто'],
+  now:o=>`<div class="naryad"><div class="lbl" style="color:var(--nMut)">Статус сметы</div><div class="nsel">Отправлена <span>⌄</span></div>${o?'<div class="nsel" style="margin-top:6px;flex-direction:column;align-items:stretch;padding:4px 12px"><div style="min-height:36px;display:flex;align-items:center">Черновик</div><div style="min-height:36px;display:flex;align-items:center">Отправлена ✓</div><div style="min-height:36px;display:flex;align-items:center">Подписана</div></div>':''}</div>`,
+  v:[['«Графит»: меню под строкой',o=>`<div><div class="gp" style="width:300px"><div class="gsel" style="background:none"><span>Статус сметы</span><span style="color:var(--text2)">Отправлена ${ic('pick')}</span></div></div>${o?`<div class="menu"><div>Черновик</div><div>Отправлена ${ic('check')}</div><div>Подписана</div><div>Отклонена</div></div>`:''}</div>`],
+     ['«Графит»: шторка со списком',o=>`<div><div class="gp" style="width:300px"><div class="gsel" style="background:none"><span>Статус сметы</span><span style="color:var(--text2)">Отправлена ${ic('chev')}</span></div></div>${o?`<div class="sheet" style="margin-top:10px"><div class="grab"></div><h4>Статус сметы <span class="circle" style="width:36px;height:36px">${ic('x')}</span></h4><div class="trow" style="width:auto;padding:0">Черновик</div><div class="trow" style="width:auto;padding:0;border-top:.5px solid var(--div)">Отправлена ${ic('check')}</div><div class="trow" style="width:auto;padding:0;border-top:.5px solid var(--div)">Подписана</div></div>`:''}</div>`]],
+  dev:[['вид','SelectField: меню / PickerSheet','строка + меню (blur 6) / шторка ¼'],['пунктов в меню','до 8','5–8, больше — шторка']]},
+ toggle:{states:['Выкл.','Вкл.'],
+  now:o=>`<div class="naryad" style="display:flex;align-items:center;gap:12px;font-size:15px">Вибрация <span class="ntg ${o?'on':''}"></span></div>`,
+  v:[['«Графит»: белый бегунок',o=>`<div class="gp"><div class="trow">Вибрация <span class="tg ${o?'on':''}"></span></div></div>`],
+     ['«Графит»: жёлтая дорожка',o=>`<div class="gp"><div class="trow">Вибрация <span class="tg y ${o?'on':''}"></span></div></div>`]],
+  dev:[['размер','42×24','51×31'],['всегда в строке','нет (33 места без строки)','да'],['бегунок','—','250 мс']]},
+ confirm:{states:['Покой'],
+  now:()=>`<div class="scatter"><div>Сейчас общего окна нет: подтверждение сделано пятью разными способами.</div><div>1. Шторка с красной кнопкой</div><div>2. Тост «Отменить» без вопроса</div><div>3. Системное окно браузера на вебе</div><div>4. Вопрос внутри карточки</div><div>5. Сегмент «Да / Нет»</div></div>`,
+  v:[['«Графит»: окно по центру',()=>`<div class="alert"><p>Удалить смету №1042?</p><small>Смету нельзя будет вернуть.</small><div class="ab"><button>Отмена</button><button class="dan">Удалить</button></div></div>`],
+     ['«Графит»: выбор снизу',()=>`<div class="asheet"><div class="g"><div>Смету нельзя будет вернуть</div><div class="dan">Удалить смету</div></div><div class="g"><div style="font-weight:500;color:var(--text);font-size:17px;min-height:52px">Отмена</div></div></div>`]],
+  dev:[['когда','—','необратимое; ошибка с решением; выход без сохранения'],['движение','—','160 / 120 мс'],['слой','—','alert 60']]},
+ toast:{states:['Один','Три сразу'],
+  now:o=>`<div class="naryad"><div class="toast" style="font-family:Onest;border-radius:24px;background:var(--nBg);color:var(--nInk)">Смета удалена <button>Отменить</button></div><div class="note" style="text-align:center">${o?'Второй тост заменяет первый':''}</div></div>`,
+  v:[['«Графит»: стопка до 3',o=>`<div class="stack" style="padding-top:24px">${(o?['Смета удалена','Клиент в архиве','Фото удалено']:['Смета удалена']).map(t=>`<div class="toast">${t} <button>Вернуть</button></div>`).join('')}</div>`],
+     ['«Графит»: только один',()=>`<div class="toast">Смета удалена <button>Вернуть</button></div>`]],
+  dev:[['слово','«Отменить»','«Вернуть»'],['сколько','1','до 3, у каждого свой таймер ≥ 5 с'],['слой','zIndex 100','toast 70']]},
+ tabbar:{states:['Сегодня','Клиенты'],
+  now:o=>`<div class="ntab"><span class="${o?'':'on'}">${ic('today')}Сегодня</span><span>${ic('plan')}План</span><span style="font-size:22px;color:var(--nInk)">＋</span><span class="${o?'on':''}">${ic('people')}Клиенты</span><span>${ic('chat')}Чаты</span></div>`,
+  v:[['«Графит»: «Прожектор»',o=>{const x=o?246:18;return `<div class="nav"><i class="cone" style="left:${x-10}px"></i><i class="beam" style="left:${x}px"></i><span class="${o?'':'on'}">${ic('today')}Сегодня</span><span>${ic('plan')}План</span><span class="plus">＋</span><span class="${o?'on':''}">${ic('people')}Клиенты</span><span>${ic('chat')}Чаты</span></div>`}],
+     ['«Графит»: без луча',o=>`<div class="nav"><span class="${o?'':'on'}">${ic('today')}Сегодня</span><span>${ic('plan')}План</span><span class="plus">＋</span><span class="${o?'on':''}">${ic('people')}Клиенты</span><span>${ic('chat')}Чаты</span></div>`]],
+  dev:[['стекло','своя пилюля','жидкое стекло'],['выбор','пилюля, пружина','луч 320 мс + вес 500']]},
+ sheet:{states:['Половина'],
+  now:()=>`<div class="naryad"><div class="nsheet"><div class="grab"></div><div style="font-size:17px;font-weight:600;margin-bottom:8px">Новый выезд</div><div class="nfield" style="width:auto">Завтра, 9:00</div></div></div>`,
+  v:[['«Графит»: плавает над низом',()=>`<div class="sheet"><div class="grab"></div><h4>Новый выезд <span class="circle" style="width:36px;height:36px">${ic('x')}</span></h4><div class="gfield" style="width:auto">Завтра, 9:00</div></div>`]],
+  dev:[['угол','24 сверху','16, поля 8, над низом 8'],['высоты','fit / ½ / large','¼ / ½ / полная'],['движение','350 мс, пружина','320 вверх / 240 вниз']]}
+};
+
+let theme = 'dark', cur = null, variant = 'now', state = 0;
+const qs = new URLSearchParams(location.search);
+if (qs.get('theme')) theme = qs.get('theme');
+document.documentElement.dataset.theme = theme;
+
+function renderList(){
+  const L = document.getElementById('list');
+  L.innerHTML = `<div class="head"></div><h1 class="title">Дизайн-система</h1>
+  <p class="sub">Каждый элемент приложения. Нажмите на элемент — увидите, как он выглядит сейчас, и варианты нового вида «Графит».</p>` +
+  GROUPS.map(([g,icon,els])=>`<div class="h2">${g}</div><div class="gp">${els.map(([id,n,w])=>{
+    const has = !!S[id]; const cnt = has ? (S[id].v.length+' вар.') : 'скоро';
+    return `<button class="row" data-id="${id}" ${cur===id?'aria-current="true"':''}><span class="gi">${ic(icon)}</span><span class="t"><div class="n">${n}</div><div class="w">${w}</div></span><span class="r">${cnt}</span>${ic('chev','chev')}</button>`}).join('')}</div>`).join('') +
+  `<p class="note">Всего 47 элементов в 11 разделах. «Особые места» — то, что остаётся своим (исключение), но тоже показано здесь.</p>`;
+  L.querySelectorAll('.row').forEach(b=>b.onclick=()=>open(b.dataset.id));
+}
+function renderEl(){
+  const E = document.getElementById('el');
+  if(!cur){E.innerHTML = `<div class="head"></div><div class="gp hide-sm" style="padding:24px"><div class="big">Выберите элемент слева</div><p class="note" style="text-align:center">Например, «Выбор из списка»</p></div>`;return;}
+  const e = ALL[cur], s = S[cur];
+  if(!s){E.innerHTML = `<div class="head"><button class="circle back" id="bk" aria-label="Назад">${ic('back')}</button></div><h1 class="title">${e.name}</h1><p class="sub">${e.where}</p><div class="gp stage"><div class="placeholder">Образец появится в PR этого раздела (спека 63 §5.3). В прототипе показаны: Кнопка, Поле, Выбор из списка, Переключатель, Шторка, Окно «Точно удалить?», Тост, Нижнее меню.</div></div>`;
+    const b=document.getElementById('bk'); if(b) b.onclick=back; return;}
+  const opts = [['now','Сейчас'], ...s.v.map((_,i)=>[String(i+1),'Вариант '+(i+1)])];
+  const on = state>0;
+  const body = variant==='now' ? s.now(on) : s.v[+variant-1][1](on);
+  const label = variant==='now' ? `<b>${e.name}</b> · сейчас в приложении` : `<b>${e.name}</b> · вариант ${variant}`;
+  const desc = variant==='now' ? 'Так выглядит в приложении сейчас' : s.v[+variant-1][0];
+  E.innerHTML = `<div class="head"><button class="circle back" id="bk" aria-label="Назад">${ic('back')}</button></div>
+  <h1 class="title">${e.name}</h1><p class="sub">${e.where}</p>
+  <div class="picker" role="group" aria-label="Варианты">${opts.map(([k,t])=>`<button aria-pressed="${variant===k}" data-v="${k}">${t}</button>`).join('')}</div>
+  <div class="big" aria-live="polite">${label}</div>
+  <div class="gp stage st-${['idle','press','off','focus','error'][stateKey(s,state)]}">${variant==='now'?'<span class="pill on cur">Сейчас в приложении</span>':''}${body}</div>
+  <p class="note">${desc}. Назовите голосом: «${e.name.toLowerCase()}, ${variant==='now'?'оставить как сейчас':'вариант '+variant}».</p>
+  ${s.states.length>1?`<div class="states" role="group" aria-label="Состояния">${s.states.map((t,i)=>`<button aria-pressed="${state===i}" data-s="${i}">${t}</button>`).join('')}</div>`:''}
+  <details><summary>Подробнее для разработчика</summary><div class="gp" style="padding:4px 8px"><table><tr><th></th><th>Сейчас</th><th>«Графит»</th></tr>${s.dev.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}</table></div></details>`;
+  E.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{variant=b.dataset.v;renderEl()});
+  E.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{state=+b.dataset.s;renderEl()});
+  document.getElementById('bk').onclick=back;
+}
+function stateKey(s,i){const t=s.states[i]||'';return t==='Нажато'?1:t==='Выключено'?2:t==='Фокус'?3:t==='Ошибка'?4:0}
+function open(id){cur=id;variant='now';state=0;document.getElementById('app').className='app view-el';renderList();renderEl();window.scrollTo(0,0)}
+function back(){document.getElementById('app').className='app view-list';cur=null;renderList();renderEl()}
+document.getElementById('theme').onclick=()=>{theme=theme==='dark'?'light':'dark';document.documentElement.dataset.theme=theme};
+renderList(); renderEl();
+if(qs.get('el')){open(qs.get('el')); if(qs.get('v')){variant=qs.get('v');} if(qs.get('s')){state=+qs.get('s');} renderEl();}
+</script>
+</body>
+</html>
