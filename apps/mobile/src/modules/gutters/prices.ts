@@ -72,24 +72,26 @@ export function findItem(catalog: readonly CatalogItem[], p: Pick<PartQty, "key"
 }
 
 /**
- * #2227 (spec 33-price-key §11.3.4, §11.10): parts whose colour IS the product (a tube of sealant, a can of paint) keep an
- * item per colour until the founder answers (№48) — never searched without their colour, never merged by the transition
+ * #2262 (spec 33-price-key §11.10, founder №48, 20.11): parts without a finish — the colour of a tube of sealant or a can of touch-up
+ * paint is only its specification. They follow the one rule of #2227 (one item for every colour, the colour is the line's variant),
+ * but their item without colour is never «painted»: the company's plain «Sealant» item is that one item, no second one is made
  */
-export const COLOUR_IS_PRODUCT: ReadonlySet<string> = new Set(["sealant", "touch_up_paint"]);
+export const FINISHLESS_PARTS: ReadonlySet<string> = new Set(["sealant", "touch_up_paint"]);
 /** the property of a Gutters item's variant (the core never names it: registry variantWord) */
 export const VARIANT_ATTR = "color";
 
-/** a coloured part whose item may be one for every colour (not a colour-is-the-product part, not labor) */
+/** a coloured part whose item may be one for every colour (any of the module's parts but labor; #2262: sealant and paint too) */
 export function colourVariantPart(p: Pick<PartQty, "key" | "kind" | "attrs">): boolean {
   if (p.kind === "labor" || !p.attrs.color?.trim()) return false;
   const part = matchAttrs(p).part ?? "";
-  return PART_WORDS.has(part) && !COLOUR_IS_PRODUCT.has(part);
+  return PART_WORDS.has(part);
 }
 
 /** #2227: the part as its one item for every colour sees it: no colour, «painted» when it had a colour and no finish */
 export function colourlessPart<P extends Pick<PartQty, "key" | "kind" | "attrs" | "unit">>(p: P): P {
   const { color, ...attrs } = p.attrs;
-  return { ...p, attrs: color?.trim() && !attrs.finish ? { ...attrs, finish: "painted" } : attrs };
+  const finishless = FINISHLESS_PARTS.has(matchAttrs(p).part ?? "");
+  return { ...p, attrs: color?.trim() && !attrs.finish && !finishless ? { ...attrs, finish: "painted" } : attrs };
 }
 
 /**
@@ -115,7 +117,8 @@ export function findPriced(catalog: readonly CatalogItem[], p: Pick<PartQty, "ke
     ...ROUND_ELBOW_FALLBACK(want).map((w) => ({ w, pool: base.filter(metalOk) })),
     ...(want.metal && METAL_FALLBACK_PARTS.has(want.part ?? "") ? [{ w: (({ metal: _m, ...x }) => x)(want), pool: base.filter((x) => !x.attributes?.metal) }] : []),
   ];
-  const painted = (it: CatalogItem) => !!want.finish || it.attributes?.finish?.trim().toLowerCase() === "painted";
+  // #2262: a part without a finish (sealant, paint) takes its item without colour as it is — there is no «mill» one to keep apart
+  const painted = (it: CatalogItem) => !!want.finish || FINISHLESS_PARTS.has(want.part ?? "") || it.attributes?.finish?.trim().toLowerCase() === "painted";
   for (const { w, pool } of steps) {
     const own = catalogMatch(pool, w)[0];
     const { color: _c, ...plain } = w;
