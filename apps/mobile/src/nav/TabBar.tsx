@@ -167,8 +167,9 @@ function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: Secti
           gap: wide ? space[2] : 2,
         }}
       >
-        <Icon name={it.icon} s={wide ? 16 : 20} color={c.ink} />
-        <T v="micro" w={sel ? "semibold" : "medium"} style={{ color: sel ? c.ink : c.mut }} numberOfLines={1}>
+        {/* founder 21.11 (#2350): the active tab is filled with the accent, as in his references */}
+        <Icon name={it.icon} s={wide ? 16 : 20} color={sel ? c.onAcc : c.ink} />
+        <T v="micro" w={sel ? "semibold" : "medium"} style={{ color: sel ? c.onAcc : c.mut }} numberOfLines={1}>
           {t(it.label as DictKey)}
         </T>
       </Press>
@@ -208,7 +209,7 @@ function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: Secti
           <View key={`${role}-${wide}`} testID="tab-bar" role="tablist" style={{ flexDirection: "row", alignItems: "center", flex: wide ? undefined : 1, gap: wide ? space[1] : 0 }}>
             <Animated.View
               pointerEvents="none"
-              style={[{ position: "absolute", top: 0, height: itemH, borderRadius: radius.pill }, fillStyleFlat(c), pill]}
+              style={[{ position: "absolute", top: 0, height: itemH, borderRadius: radius.pill }, fillStyleFlat(c), { backgroundColor: c.acc }, pill]}
             />
             {ordered}
           </View>

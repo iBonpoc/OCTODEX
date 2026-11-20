@@ -51,7 +51,7 @@ export default function Settings() {
           ]}
         />
       </Card>
-      {/* redesign #2348 (decision 20.11 п.5): the founder compares the accent on the sun — cobalt or amber */}
+      {/* redesign #2348 (decision 20.11 п.5): the founder compares the accent (21.11, #2350: lime by default) */}
       <Card>
         <T v="heading">{t("more.accent")}</T>
         <Segmented<AccentName>
@@ -61,8 +61,11 @@ export default function Settings() {
           value={accent}
           onChange={setAccent}
           items={[
+            { key: "lime", label: t("more.accentLime") },
+            { key: "yellow", label: t("more.accentYellow") },
+            { key: "orange", label: t("more.accentOrange") },
+            { key: "emerald", label: t("more.accentEmerald") },
             { key: "cobalt", label: t("more.accentCobalt") },
-            { key: "amber", label: t("more.accentAmber") },
           ]}
         />
       </Card>

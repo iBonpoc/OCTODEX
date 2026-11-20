@@ -10,15 +10,16 @@ export { graphite, graphiteThemes, type GraphiteColors, type Graphite } from "./
 /* ---------- foundation.css ---------- */
 export const font = {
   /** redesign #2348 (decision 06): the system font — SF on iOS, Roboto on Android, system-ui on the web */
-  family: "System",
+  /** founder 21.11 (#2350): a geometric sans like his references (Poppins has no Cyrillic → Manrope) */
+  family: "Manrope",
   /** RN needs one family per weight (custom fonts ignore fontWeight on Android). */
   families: {
-    regular: "System",
-    medium: "System",
-    semibold: "System",
-    bold: "System",
+    regular: "Manrope_400Regular",
+    medium: "Manrope_500Medium",
+    semibold: "Manrope_600SemiBold",
+    bold: "Manrope_700Bold",
   },
-  size: { display: 32, title: 22, heading: 17, body: 16, button: 16, caption: 14, micro: 12, input: 17 },
+  size: { display: 30, title: 22, heading: 17, body: 15, button: 15, caption: 13, micro: 12, input: 16 },
   lineHeight: { tight: 1.15, body: 1.45, snug: 1.35 },
   weight: { regular: "400", medium: "500", semibold: "600", bold: "700" },
   /** Minimum readable text size (DS rule 6). */
@@ -34,8 +35,8 @@ export const radius = {
   field: 12,
   chip: 999,
   /** redesign #2348: calmer, iOS 26 inset-grouped */
-  card: 20,
-  inner: 12,
+  card: 22,
+  inner: 14,
   sheet: 28,
   tip: 8,
 } as const;
@@ -44,14 +45,15 @@ export const size = {
   controlSm: 28,
   controlMd: 32,
   field: 34,
-  hitMin: 48,
+  hitMin: 44,
   /** Android touch target (Google Play / Material 48 dp) */
   hitMinAndroid: 48,
   /** visible button on a phone (--control-lg / --control-md-phone) */
   /** redesign #2348: the phone's main / secondary button 50 (gloves, thumb; rule 3 — founder's decision pending) */
-  controlLg: 50,
-  controlMdPhone: 44,
-  fieldPhone: 48,
+  /** founder 21.11 (#2350): «кнопку 50 я бы не делал» — compact 40, the touch zone stays 44 */
+  controlLg: 40,
+  controlMdPhone: 36,
+  fieldPhone: 44,
   iconXs: 12,
   iconSm: 16,
   iconMd: 20,
@@ -60,10 +62,10 @@ export const size = {
   statusbarH: 44,
   tabbarH: 56,
   safeBottom: 34,
-  fab: 56,
+  fab: 52,
   /** list rows (clients, dropdown items, price list) — not buttons */
-  rowMin: 52,
-  rowMax: 64,
+  rowMin: 48,
+  rowMax: 60,
 } as const;
 
 export const motion = {
@@ -160,8 +162,8 @@ export const gesture = {
 
 /* ---------- components.css ---------- */
 export const component = {
-  button: { sm: 32, md: 36, phone: 50, hit: 48 },
-  field: { h: 40, phone: 48 },
+  button: { sm: 32, md: 36, phone: 40, hit: 44 },
+  field: { h: 40, phone: 44 },
   chip: { h: 24, px: 10 },
   segmented: { h: 32, pad: 4 },
   /** a tab of a screen (pill); `fadeW` — the row of view tabs fades this wide at an edge that has more tabs past it (DS §9 А1п, #1343) */
@@ -170,7 +172,7 @@ export const component = {
   switch: { w: 42, h: 24, knob: 18 },
   help: { visible: 18, icon: 11 },
   tip: { fs: 13, px: 8, py: 4, radius: 8, max: 220, gap: 6 },
-  fab: 56,
+  fab: 52,
   dockBtn: 40,
   /** a module's tape measure: px between two marks, 1/16″ or 1 mm — stretched over a real tape so a finger can hit a mark (founder 13.11.2026, #1315: «чуть растянутая, ничего страшного») */
   tapeTick: 16,
@@ -201,7 +203,7 @@ export const component = {
   /** charts of «Сегодня» (spec 24 A3; «Наряд» prototype column bars r8 / min 4 / muted .55, track 8; height 130 → 120 for the phone) */
   chart: { h: 120, barRadius: 8, barMin: 4, track: 8, mutedOpacity: 0.55 },
   /** compact row (lines of an estimate, small lists) */
-  rowCompact: 44,
+  rowCompact: 40,
   /** signature pad, receipt photo */
   mediaH: 160,
   /** scroll area inside a bottom sheet: list / form */
@@ -329,74 +331,79 @@ export interface ThemeColors {
 
 /** redesign #2348 (docs/design/2026-11-20-direction/06-decision.md): calm opaque surfaces, one cobalt accent,
  *  tonal status plates (fill = the plate, text = word and icon, on = text on the plate); no background glow */
-export type AccentName = "cobalt" | "amber";
-/** the accent the founder compares in the sun (Settings → Вид): cobalt by default, amber as the alternative */
+export type AccentName = "lime" | "yellow" | "orange" | "emerald" | "cobalt";
+/** founder 21.11 (#2350): one accent, the same in both themes; lime by default (his references), the others to compare */
 export const accents: Record<AccentName, Record<ThemeName, { acc: string; onAcc: string }>> = {
-  cobalt: { dark: { acc: "#8098FF", onAcc: "#0B0C0F" }, light: { acc: "#2747E8", onAcc: "#FFFFFF" } },
-  amber: { dark: { acc: "#FFB81C", onAcc: "#0E1116" }, light: { acc: "#F2A900", onAcc: "#0E1116" } },
+  lime: { dark: { acc: "#D4F06A", onAcc: "#15161A" }, light: { acc: "#D4F06A", onAcc: "#15161A" } },
+  yellow: { dark: { acc: "#F5D04A", onAcc: "#15161A" }, light: { acc: "#F5D04A", onAcc: "#15161A" } },
+  orange: { dark: { acc: "#FF7A2F", onAcc: "#15161A" }, light: { acc: "#FF7A2F", onAcc: "#15161A" } },
+  emerald: { dark: { acc: "#3DDC97", onAcc: "#15161A" }, light: { acc: "#3DDC97", onAcc: "#15161A" } },
+  cobalt: { dark: { acc: "#6F86FF", onAcc: "#FFFFFF" }, light: { acc: "#2747E8", onAcc: "#FFFFFF" } },
 };
 
 export const themes: Record<ThemeName, ThemeColors> = {
   dark: {
-    page: "#0B0C0E",
-    bg: "#111215",
-    ink: "#F4F5F7",
-    mut: "#B4B8C0",
-    surf: "#1A1B1F",
-    surf2: "#222328",
-    surfSolid: "#1A1B1F",
-    in: "#222328",
-    bd: "rgba(255,255,255,0.08)",
-    bdField: "#6A6E78",
+    /** 60/30/10 (founder 21.11): graphite ground 60, a tone lighter surfaces + text 30, the accent 10; never pure black */
+    page: "#141518",
+    bg: "#1B1C1F",
+    ink: "#EDEEF0",
+    mut: "#A9ACB4",
+    surf: "#25262A",
+    surf2: "#2E2F34",
+    surfSolid: "#25262A",
+    in: "#2E2F34",
+    bd: "rgba(255,255,255,0.07)",
+    bdField: "#5E6169",
     track: "rgba(255,255,255,0.10)",
-    ov: "rgba(22,23,27,0.78)",
-    ovSolid: "#16171B",
-    acc: "#8098FF",
-    onAcc: "#0B0C0F",
-    scrim: "rgba(0,0,0,0.55)",
-    shadow: { color: "#000000", opacity: 0.4, radius: 24, offsetY: 8 },
+    ov: "rgba(32,33,37,0.84)",
+    ovSolid: "#202125",
+    acc: "#D4F06A",
+    onAcc: "#15161A",
+    scrim: "rgba(0,0,0,0.5)",
+    shadow: { color: "#000000", opacity: 0.35, radius: 24, offsetY: 8 },
     blur: 20,
     blurOverlay: 24,
     blurTint: "dark",
     glow: [],
     status: {
-      ok: { fill: "#15291B", text: "#7DDB92", on: "#7DDB92" },
-      info: { fill: "#10262B", text: "#6ED3E6", on: "#6ED3E6" },
-      warn: { fill: "#2E2112", text: "#FFB061", on: "#FFB061" },
-      bad: { fill: "#331716", text: "#FF8A80", on: "#FF8A80" },
-      neutral: { fill: "#24252A", text: "#B4B8C0", on: "#F4F5F7" },
+      ok: { fill: "#183022", text: "#5BD88A", on: "#5BD88A" },
+      info: { fill: "#122A2F", text: "#6ED3E6", on: "#6ED3E6" },
+      warn: { fill: "#33251A", text: "#FFB061", on: "#FFB061" },
+      bad: { fill: "#3A1C1C", text: "#FF8A80", on: "#FF8A80" },
+      neutral: { fill: "#2E2F34", text: "#A9ACB4", on: "#EDEEF0" },
     },
     drawing: { node: "#F4F5F7", story: ["#7FD4FF", "#FF8FD0", "#D59BFF", "#7CEBC6"] },
     tape: { markFill: "#FBFF00", markText: "#0B0C0F" },
   },
   light: {
-    page: "#E9E9E6",
-    bg: "#F5F5F3",
-    ink: "#111215",
-    mut: "#4A4E56",
-    surf: "#FFFFFF",
-    surf2: "#F0F0EE",
-    surfSolid: "#FFFFFF",
-    in: "#F0F0EE",
-    bd: "rgba(17,18,21,0.08)",
-    bdField: "#868A92",
-    track: "rgba(17,18,21,0.08)",
-    ov: "rgba(250,250,248,0.82)",
-    ovSolid: "#FAFAF8",
-    acc: "#2747E8",
-    onAcc: "#FFFFFF",
-    scrim: "rgba(17,18,21,0.32)",
+    /** 60/30/10, soft grey — never pure white */
+    page: "#DCDDD9",
+    bg: "#E9EAE6",
+    ink: "#18191C",
+    mut: "#4A4D54",
+    surf: "#F6F6F3",
+    surf2: "#E0E1DC",
+    surfSolid: "#F6F6F3",
+    in: "#EFEFEB",
+    bd: "rgba(20,21,24,0.08)",
+    bdField: "#8A8D93",
+    track: "rgba(20,21,24,0.09)",
+    ov: "rgba(244,244,241,0.86)",
+    ovSolid: "#F4F4F1",
+    acc: "#D4F06A",
+    onAcc: "#15161A",
+    scrim: "rgba(20,21,24,0.3)",
     shadow: { color: "#1B1C22", opacity: 0.08, radius: 20, offsetY: 6 },
     blur: 20,
     blurOverlay: 24,
     blurTint: "light",
     glow: [],
     status: {
-      ok: { fill: "#E3F3E7", text: "#1E6B34", on: "#1E6B34" },
-      info: { fill: "#DDF1F5", text: "#0B6478", on: "#0B6478" },
-      warn: { fill: "#FCEBD9", text: "#8F4A00", on: "#8F4A00" },
-      bad: { fill: "#FBE3E1", text: "#B3261E", on: "#B3261E" },
-      neutral: { fill: "#ECECE9", text: "#4A4E56", on: "#111215" },
+      ok: { fill: "#DCEFE2", text: "#1C7A3E", on: "#1C7A3E" },
+      info: { fill: "#DAEEF2", text: "#0B6478", on: "#0B6478" },
+      warn: { fill: "#F8E6D2", text: "#8F4A00", on: "#8F4A00" },
+      bad: { fill: "#F7DEDC", text: "#B3261E", on: "#B3261E" },
+      neutral: { fill: "#E0E1DC", text: "#4A4D54", on: "#18191C" },
     },
     drawing: { node: "#111215", story: ["#0B6290", "#A0327A", "#7A3DB8", "#0B6E50"] },
     tape: { markFill: "#FBFF00", markText: "#0B0C0F" },

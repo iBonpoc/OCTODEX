@@ -7,6 +7,7 @@ if (__DEV__) LogBox.ignoreAllLogs();
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useFonts, Onest_400Regular, Onest_500Medium, Onest_600SemiBold, Onest_700Bold } from "@expo-google-fonts/onest";
+import { Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold } from "@expo-google-fonts/manrope";
 import { ThemeProvider, useTheme } from "@/theme/ThemeProvider";
 import { I18nProvider } from "@/i18n";
 import { StoreProvider } from "@/data/store";
@@ -75,7 +76,7 @@ export function ErrorBoundary(props: ErrorBoundaryProps) {
 }
 
 export default function RootLayout() {
-  const [loaded] = useFonts({ Onest_400Regular, Onest_500Medium, Onest_600SemiBold, Onest_700Bold });
+  const [loaded] = useFonts({ Onest_400Regular, Onest_500Medium, Onest_600SemiBold, Onest_700Bold, Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold });
   // never a blank frame (#654, #1046): until the fonts, the theme, the language and the company's cache are read,
   // the boot layer shows the brand in the system's theme
   if (!loaded) return <BootRoot fontsReady={false} />;
