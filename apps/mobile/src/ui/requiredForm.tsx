@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
-import { AccessibilityInfo, Platform, TextInput, View } from "react-native";
+import { AccessibilityInfo, Platform, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
 import { motion, radius, size, space } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -51,6 +51,11 @@ export interface FieldBinding {
   edit: (v: string) => void;
   /** the person leaves a text field: a filled but wrong value shows its error at once (DS §11 п.1) */
   blur: (v: string) => void;
+  /**
+   * the field hands the form the scroll of the screen it stands in. The form's hook is called by the screen component ABOVE its
+   * `<Screen>` — the context is not there; the field, rendered inside `<Screen>`, sees it (`useFieldScroll`, `FieldAnchor`)
+   */
+  attach: (s: ScreenScroll | null) => void;
 }
 
 export interface RequiredForm {
@@ -73,7 +78,9 @@ function focusNoScroll(n: InputNode | null | undefined) {
 }
 
 export function useRequiredForm(): RequiredForm {
-  const scroll = useScreenScroll();
+  // a form inside a sheet or a part of a screen sees the context itself; a screen's own form gets it from its fields (`attach`)
+  const ctxScroll = useScreenScroll();
+  const fieldScroll = useRef<ScreenScroll | null>(null);
   const reduce = useReducedMotion();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const nodes = useRef<Record<string, ViewNode | null>>({});
@@ -104,6 +111,7 @@ export function useRequiredForm(): RequiredForm {
         // an error on the field stays while the value is still wrong, with the right text; else it goes
         edit: have?.edit ?? ((v: string) => setErrors((e) => afterEdit(e, id, v, checks.current[id]))),
         blur: have?.blur ?? ((v: string) => setErrors((e) => afterBlur(e, id, v, checks.current[id]))),
+        attach: have?.attach ?? ((s: ScreenScroll | null) => void (s && (fieldScroll.current = s))),
       };
       bindings.current[id] = b;
       return b;
@@ -126,12 +134,13 @@ export function useRequiredForm(): RequiredForm {
       // after the block has opened and the errors are on the screen: scroll, then the focus (the keyboard comes last)
       setTimeout(() => {
         const node = nodes.current[first.id];
+        const scroll = ctxScroll ?? fieldScroll.current;
         if (node && scroll) scroll.scrollToNode(node, space[6], !reduce);
         setTimeout(() => focusNoScroll(inputs.current[first.id]), reduce ? 0 : motion.durBase);
       }, 0);
       return false;
     },
-    [scroll, reduce],
+    [ctxScroll, reduce],
   );
   const clearAll = useCallback(() => setErrors({}), []);
   return useMemo(() => ({ field, errors, submit, clearAll }), [field, errors, submit, clearAll]);
@@ -151,9 +160,26 @@ export function FieldError({ text, testID }: { text?: string; testID?: string })
   );
 }
 
+/** a field (inside `<Screen>`) hands its form the screen's scroll — see `FieldBinding.attach` */
+export function useFieldScroll(field?: FieldBinding) {
+  const scroll = useScreenScroll();
+  field?.attach(scroll);
+}
+
+/** the place of a required field for the scroll, when the screen draws the field itself (its frame, its words) */
+export function FieldAnchor({ field, children, style, testID }: { field: FieldBinding; children: ReactNode; style?: StyleProp<ViewStyle>; testID?: string }) {
+  useFieldScroll(field);
+  return (
+    <View ref={field.anchorRef} collapsable={false} testID={testID ?? field.testID} style={style}>
+      {children}
+    </View>
+  );
+}
+
 /** a required field that brings its own control: the place for the scroll, the error under it */
 export function Anchored({ field, children }: { field: FieldBinding; children: ReactNode }) {
   const { c } = useTheme();
+  useFieldScroll(field);
   return (
     <View ref={field.anchorRef} collapsable={false} testID={field.testID} style={{ gap: space[1] }}>
       {/* the frame of a wrong field is `status.bad` (Р10 п.2), as on a text field */}

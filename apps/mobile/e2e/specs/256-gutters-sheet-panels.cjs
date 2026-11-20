@@ -2,7 +2,7 @@
  * e2e 256 — a small contour next to a big one gets its own panel (#1091, founder 12.11: «всё сбито в кучу»). Every view.
  * A measurement of a 250′ 4″ gutter and a 34′ 5″ · 25′ 4″ · 13′ 5″ contour, put straight into the store:
  * - «Просмотр замера»: the sheet has two panels («Контур 1», «Контур 2»), each with its own scale, the numbers 1–4 once;
- * - «PDF бригаде»: the same sheet in the document;
+ * - «PDF бригаде»: the same sheet in the document — in the company's document language (en, rule 7, #2158): «Contour 1», «Contour 2»;
  * - a measurement of one house stays one sheet: no panel titles.
  * Finds things by testID; waits on what it checks (no pauses).
  */
@@ -75,7 +75,8 @@ exports.run = async (h) => {
   for (const n of ["250′ 4″", "34′ 5″", "25′ 4″", "13′ 5″"]) h.expect(s.includes(n), `the length ${n}`);
   await h.shot("panels");
   const pdf = await printed("view-pdf-crew");
-  h.expect(/Контур 1/.test(pdf) && /Контур 2/.test(pdf), "the crew's PDF has the two panels");
+  h.expect(/Contour 1/.test(pdf) && /Contour 2/.test(pdf), "the crew's PDF has the two panels (en)");
+  h.expect(!/[А-Яа-яЁё]/.test(pdf.replace(/<style[\s\S]*?<\/style>/g, "")), "the crew's PDF has no Cyrillic");
 
   await view("e2e256-one");
   const one = await sheetText();

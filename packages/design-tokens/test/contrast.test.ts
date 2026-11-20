@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { component, print, themes, type ThemeName } from "../src/index";
+import { component, graphite, print, themes, type ThemeName } from "../src/index";
 
 /** WCAG 2.x contrast. Translucent colours are composited over the solid background first. */
 type RGBA = [number, number, number, number];
@@ -147,4 +147,61 @@ describe.each(names)("%s switch (DS §9 А5: knob ≥ 3:1 to its track, off / on
     it(`disabled on on ${gname}: the dimmed knob to the dimmed yellow track`, () => expect(ratio(dimmed(parse(c.onAcc), g), dimmed(parse(c.acc), g))).toBeGreaterThanOrEqual(DISABLED_MIN));
   }
   it("on: knob onAcc to the yellow track", () => expect(ratio(parse(c.onAcc), parse(c.acc))).toBeGreaterThanOrEqual(3));
+});
+
+/**
+ * «Графит» — пилот #2254 (handoff §2.1, §3 п.5): text ≥ 7, second text ≥ 4.5, UI parts ≥ 3 — measured on every stop of
+ * the scene (top / middle / bottom), with the panel, the sheet and the liquid-glass fallback laid over it. Native iOS 26
+ * glass is not computable here: its caption sits on `glDim` over the fallback fill (the floor below holds for it).
+ */
+describe.each(names)("«Графит» %s contrast (#2254)", (name) => {
+  const g = graphite.themes[name];
+  const rgb = (x: RGBA) => `rgb(${x[0]},${x[1]},${x[2]})`;
+  const scene = [g.bg, g.bgMid, g.bgLow];
+  const on = (layer: string) => scene.map((s) => over(layer, s));
+  const grounds = { panel: on(g.panel), sheet: on(g.sheetBg), solid: [parse(g.panelSolid)] };
+  for (const [gname, list] of Object.entries(grounds)) {
+    it(`text ≥ 7, text2 ≥ 4.5, statuses ≥ 4.5 on ${gname}`, () => {
+      for (const s of list) {
+        expect(ratio(parse(g.text), s)).toBeGreaterThanOrEqual(7);
+        expect(ratio(parse(g.text2), s)).toBeGreaterThanOrEqual(4.5);
+        for (const st of ["ok", "info", "warn", "bad"] as const) expect(ratio(parse(g[st]), s), st).toBeGreaterThanOrEqual(4.5);
+      }
+    });
+  }
+  it("text2 on the glass nav (fallback fill + dim under the caption) ≥ 4.5", () => {
+    for (const s of scene) expect(ratio(parse(g.text2), over(g.glDim, rgb(over(g.gl, s))))).toBeGreaterThanOrEqual(4.5);
+  });
+  it("the field edge stands out from the panel ≥ 3", () => {
+    for (const p of grounds.panel) expect(ratio(over(g.fieldEdge, rgb(p)), p)).toBeGreaterThanOrEqual(3);
+  });
+  it("text on yellow, on the toast, on the selected pill, on the badge, on danger ≥ 7 / 4.5", () => {
+    expect(ratio(parse(g.onAcc), parse(g.acc))).toBeGreaterThanOrEqual(7);
+    expect(ratio(parse(g.onToast), parse(g.toast))).toBeGreaterThanOrEqual(7);
+    expect(ratio(parse(g.onSel), parse(g.sel))).toBeGreaterThanOrEqual(7);
+    expect(ratio(parse(g.onBadge), parse(g.badge))).toBeGreaterThanOrEqual(7);
+    expect(ratio(parse(g.onDan), parse(g.danBg))).toBeGreaterThanOrEqual(4.5);
+  });
+  it("the yellow fill is one colour in both themes (only the main action and «＋»)", () => expect(g.acc).toBe("#FBFF00"));
+  it("status icons (`ic`) on the panel ≥ 3 (UI), the word (`-w`) ≥ 4.5 — the word never in `ic`", () => {
+    for (const s of on(g.panel))
+      for (const st of ["ok", "info", "warn", "bad"] as const) expect(ratio(parse(g[`${st}Ic`]), s), `${st}Ic`).toBeGreaterThanOrEqual(3);
+  });
+  it("the solid fallbacks (Reduce Transparency, v2 §3 п.5): text ≥ 7, text2 ≥ 4.5 on panelSolid and glSolid", () => {
+    for (const s of [g.panelSolid, g.glSolid]) {
+      expect(ratio(parse(g.text), parse(s))).toBeGreaterThanOrEqual(7);
+      expect(ratio(parse(g.text2), parse(s))).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+  /**
+   * handoff v2 §2.9 — the design chat's measure on the founder's choice (worst pixel under each glyph, 20 screens × 2 themes):
+   * text 8.27 / 7.80, text2 6.74 / 5.73, onAcc on yellow 18.86, the beam against the glass next to it 9.11 / 3.12 (light: thin
+   * margin, check on the device), the selected nav label 8.27 / 16.33. Here: the same pairs on the flat fills, never under the floors.
+   */
+  it("§2.9: the beam against the glass of the nav ≥ 3 (light #5F6100: #A9AC00 gave 1.88)", () => {
+    for (const s of scene) expect(ratio(parse(g.beam), over(g.gl, s))).toBeGreaterThanOrEqual(3);
+  });
+  it("§2.9: the selected nav label on the glass ≥ 7", () => {
+    for (const s of scene) expect(ratio(parse(g.text), over(g.glDim, rgb(over(g.gl, s))))).toBeGreaterThanOrEqual(7);
+  });
 });
