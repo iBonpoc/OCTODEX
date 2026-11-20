@@ -69,6 +69,10 @@
   --gr-motion-press-dim:0.16;
   --gr-motion-behind-scale:0.96;
   --gr-motion-toast-rise:12;
+  --gr-motion-load-delay:300;
+  --gr-motion-spinner-min:600;
+  --gr-motion-still-sending:10000;
+  --gr-state-disabled-dim:0.4;
   --gr-sheet-max-detents:3;
   --gr-sheet-max-width:560;
   --gr-sheet-side:8;

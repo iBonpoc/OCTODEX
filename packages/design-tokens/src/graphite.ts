@@ -232,7 +232,13 @@ export const graphite = {
     pressDim: 0.16,
     behindScale: 0.96,
     toastRise: 12,
+    /** waiting (R15 «время показа»): nothing before `loadDelay`; a spinner, once shown, stays `spinnerMin`; «Всё ещё отправляем…» after `stillSending` (ms) */
+    loadDelay: 300,
+    spinnerMin: 600,
+    stillSending: 10000,
   },
+  /** the state of a control: how much a switched-off one dims (a number, not a colour: no contrast of its own) */
+  state: { disabledDim: 0.4 },
   /** the sheet: side margin, float above the bottom, gap under the status bar; detents and close rules */
   sheet: { maxDetents: 3, maxWidth: 560, side: 8, float: 8, topGap: 60, quarter: 0.25, half: 0.5, closeVelocity: 0.5, closeBelow: 0.3, projectMs: 150, resist: 0.25 },
   /** layers, bottom → top */
