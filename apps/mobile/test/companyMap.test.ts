@@ -1,7 +1,7 @@
 /** company.save merges jsonb settings with what is stored (cloud/companyMap.ts). П4a review: the read before the save
  *  missed schedule_settings / business_hours / lead_settings, so a save from any profile section wiped them. */
 import { describe, expect, it } from "vitest";
-import { COMPANY_STORED_COLUMNS, companyFromDb, companyToDb } from "../src/cloud/companyMap";
+import { assigneeToSend, COMPANY_STORED_COLUMNS, companyFromDb, companyToDb } from "../src/cloud/companyMap";
 
 const row = {
   id: "c1", name: "Co", timezone: "America/Denver",
@@ -34,16 +34,22 @@ describe("company ↔ database rows (П4a)", () => {
     expect(out.business_hours).toEqual({ mon: [420, 960], sun: null });
     expect(out.lead_settings).toEqual({ replyWarnMin: 10 });
   });
-  it("whom new leads go to: read and written; null = the owner; an older op without the field leaves the stored one", () => {
+  it("whom new leads go to: read; never in the settings row (Р-7: by its own request, assigneeToSend)", () => {
     const c = companyFromDb({ id: "c1", name: "Co", lead_default_assignee_id: "u-office" }, undefined, [], []);
     expect(c.leadDefaultAssigneeId).toBe("u-office");
-    expect((companyToDb(c, row) as Record<string, unknown>).lead_default_assignee_id).toBe("u-office");
+    expect("lead_default_assignee_id" in companyToDb(c, row)).toBe(false);
     const none = companyFromDb({ id: "c1", name: "Co" }, undefined, [], []);
     expect(none.leadDefaultAssigneeId).toBeNull();
-    // survives the queue (JSON): null is sent, so «Владелец» clears the choice
-    const queued = JSON.parse(JSON.stringify({ ...c, leadDefaultAssigneeId: null })) as typeof c;
-    expect((companyToDb(queued, row) as Record<string, unknown>).lead_default_assignee_id).toBeNull();
-    const old = { ...c, leadDefaultAssigneeId: undefined };
-    expect("lead_default_assignee_id" in companyToDb(old, row)).toBe(false);
+  });
+  it("assigneeToSend: chosen in this save — sent (null = the owner); not chosen — not sent, even if the stored one differs", () => {
+    expect(assigneeToSend("u-x", "u-y", true)).toBe(true);
+    expect(assigneeToSend(null, "u-y", true)).toBe(true);
+    expect(assigneeToSend("u-x", "u-y", false)).toBe(false);
+    // an older op without the flag: only when it differs from the stored one
+    expect(assigneeToSend("u-x", "u-x", undefined)).toBe(false);
+    expect(assigneeToSend("u-x", "u-y", undefined)).toBe(true);
+    expect(assigneeToSend(null, null, undefined)).toBe(false);
+    // an old cache without the field: never
+    expect(assigneeToSend(undefined, "u-y", true)).toBe(false);
   });
 });

@@ -3,7 +3,8 @@
  * homeowner without the app. The edge function is put in by the browser (page.route, no network):
  * GET → the company's form; POST → always {ok: true}. The page speaks the client's language (the browser's, ?lang=, the
  * chips), sends only what the form has (the hidden field empty, the opening time, a nonce kept for a retry), shows the
- * SMS box only when the company turned it on, and says «Request sent». An unknown token: «not available».
+ * SMS box only when the company turned it on, and says «Request sent». An unknown token: «not available». A form that asks
+ * for a captcha opens and sends too (no widget yet, В3): the server holds its request for a person (#2012).
  */
 const TOKEN = "f0123456789abcdef0123456789abcdef";
 exports.run = async (h) => {
@@ -90,10 +91,17 @@ exports.run = async (h) => {
   await h.expectText(/Request sent/, "sent after a double tap");
   h.expect(posts.length === 1, `a double tap sends once: ${posts.length}`);
 
-  // a form that requires a captcha: no widget here yet (В3) — «not available», never a lost request
+  // a form that asks for a captcha: no widget here yet (В3) — the form opens and sends; the server holds the request
+  // for a person (held / no_captcha, #2012), never «not available», never a lost request
   captcha = true;
+  posts.length = 0;
   await h.go(`/f/${TOKEN}`);
-  await h.expectText(/This request form is not available/, "a captcha form is not offered without its widget");
+  await input("intake-email").waitFor({ timeout: 6000 });
+  h.expect(await p.getByText(/This request form is not available/).count() === 0, "a captcha form is not «not available»");
+  await input("intake-email").fill("cap@example.com");
+  await send().click();
+  await h.expectText(/Request sent/, "a captcha form sends");
+  h.expect(posts.length === 1 && posts[0].email === "cap@example.com" && !("captcha" in posts[0]), "sent once, with no captcha answer (the server holds it)");
   captcha = false;
 
   // a company without the SMS box; ?lang=ru

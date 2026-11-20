@@ -4,6 +4,9 @@ project_id = "octodex"
 # Keep «Confirm email» on in the hosted project too (Authentication → Providers → Email).
 [auth.email]
 enable_confirmations = true
+# the sign-in code (docs/specs/52 §4 Р3): 8 digits, 10 minutes — the same in the hosted project (Authentication → Providers → Email)
+otp_length = 6
+otp_expiry = 600
 
 # 7а-2a (S22): «Удалить аккаунт» — only with a valid user JWT (the person deletes themselves; the uid is never in the body).
 [functions.delete-account]
@@ -46,10 +49,23 @@ verify_jwt = true
 site_url = "http://127.0.0.1:3000"
 additional_redirect_urls = ["http://127.0.0.1:*/**"]
 
-# the app signs in by the 6-digit code from the email (auth/sign-in.tsx → verifyOtp): the local email must carry it
+# the app signs in by the 8-digit code from the email (auth/sign-in.tsx → verifyOtp, #1756, docs/specs/52): BOTH emails
+# carry the code and no link — a new address gets «confirmation», a known one «magic_link»; the same text for both, so
+# the email does not tell a new address from a known one. The code in the subject lets iOS offer it over the keyboard.
+# The hosted project gets the same subjects and texts BY HAND (release.yml runs `db push`, not `config push`):
+# the templates hold no comments, so a file copied whole puts nothing of ours into the email.
+# Guard: apps/mobile/test/authEmails.test.ts.
 [auth.email.template.magic_link]
-subject = "Your OCTODEX sign-in code"
+subject = "{{ .Token }} — your GoRix sign-in code"
 content_path = "./supabase/templates/magic-link.html"
+
+[auth.email.template.confirmation]
+subject = "{{ .Token }} — your GoRix sign-in code"
+content_path = "./supabase/templates/confirmation.html"
+
+# the local stack's built-in limit is 2 emails an hour: the nightly cloud specs (102, 442, delete-account) send more
+[auth.rate_limit]
+email_sent = 100
 
 [edge_runtime]
 enabled = true

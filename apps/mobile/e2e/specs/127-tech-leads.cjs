@@ -72,6 +72,13 @@ exports.run = async (h) => {
   // his lead goes up to «Лиды»
   await h.go("/lead/l1");
   await p.getByText(l1.name).first().waitFor({ timeout: 5000 });
+  // #2075: the source of his lead is shown, not changed (the office's, as the price and «Ведёт»; the server refuses it)
+  const srcName = (db.leadSources ?? db.sources ?? []).find((x) => x.id === l1.sourceId)?.name;
+  if (srcName) {
+    await h.clickText("Обзор");
+    await p.getByText(srcName, { exact: true }).locator("visible=true").first().waitFor({ timeout: 5000 });
+    h.expect((await p.getByRole("button", { name: srcName, exact: true }).locator("visible=true").count()) === 0, `the tech sees the source «${srcName}» but does not change it`);
+  } else h.expect(false, "l1 has a source in the demo");
   const up = p.getByRole("link", { name: "Лиды", exact: true }).or(p.getByRole("button", { name: /Лиды/ })).locator("visible=true");
   h.expect((await up.count()) >= 1, "the lead's crumb / «‹ назад» names «Лиды»");
   await up.first().click();
