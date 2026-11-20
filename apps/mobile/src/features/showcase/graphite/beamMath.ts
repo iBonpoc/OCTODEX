@@ -21,6 +21,16 @@ export function beamX(
   return Math.min(width - beamW, Math.max(0, x));
 }
 
+/**
+ * how the beam goes to its place (#2286): it «glides» only when it was already placed (`prevWidth` > 0 — a tap, a new width);
+ * the first place after the layout (and any place under «уменьшить движение», or while there is no width) is taken at once,
+ * so it never flies in from the left edge when the screen opens
+ */
+export function beamStart(prevWidth: number, width: number, reduceMotion: boolean): "jump" | "glide" {
+  if (reduceMotion || width <= 0 || prevWidth <= 0) return "jump";
+  return "glide";
+}
+
 /** the beam's width: most of a slot, never wider than the slot */
 export const beamWidth = (width: number, count: number, share = 0.6): number =>
   Math.max(0, slotWidth(width, count) * share);
