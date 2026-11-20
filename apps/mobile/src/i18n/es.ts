@@ -4823,7 +4823,7 @@ export const es: Dict = {
   "ds.gr.base.nums": "dentro {a} · entre {b}",
   "ds.gr.sheet.noState": "Ahora la app no tiene este estado.",
   "ds.gr.fld.text": "Campo de texto",
-  "ds.gr.fld.textNote": "Un nombre, un título, una dirección. Pulse en el campo: se ve el marco de foco; «Obligatorio»: error si sale vacío.",
+  "ds.gr.fld.textNote": "Un nombre, un título, una dirección. Pulse en el campo: se ve el marco de foco; «Obligatorio»: error si sale vacío. Opción 1 — etiqueta arriba, 44; Opción 2 — etiqueta dentro, 56.",
   "ds.gr.fld.name": "Nombre del cliente",
   "ds.gr.fld.required": "Rellene el campo",
   "ds.gr.fld.requiredSw": "Obligatorio",

@@ -5,7 +5,7 @@
  * icon + a word under the field (never colour alone). Heights are the package's three: 44 / 52 / 56.
  */
 import { useState } from "react";
-import { TextInput, View } from "react-native";
+import { StyleSheet, TextInput, View } from "react-native";
 import { graphite } from "@octo/design-tokens";
 import { GrStatus } from "./Controls";
 import { GrText, useGr } from "./theme";
@@ -72,18 +72,25 @@ export function GrTextField({
       selectionColor={g.focus}
       accessibilityLabel={label}
       aria-invalid={error ? true : undefined}
-      style={{
-        fontFamily: graphite.font.family.regular,
-        fontSize: graphite.font.size.sub,
-        color: g.text,
-        fontVariant: ["tabular-nums"],
-        minHeight: note ? S.row * 2 : S.control,
-        paddingVertical: 0,
-        textAlignVertical: note ? "top" : "center",
-        flex: 1,
-      }}
+      style={[
+        {
+          fontFamily: graphite.font.family.regular,
+          fontSize: graphite.font.size.sub,
+          color: g.text,
+          fontVariant: ["tabular-nums"],
+          // the whole box is the input: a touch anywhere in it types (the label of look 2 floats over its top part)
+          minHeight: note ? S.row * 2 : inside ? S.row - 2 * S.edge : S.control - 2 * S.edge,
+          paddingTop: inside ? graphite.font.lineHeight.micro : 0,
+          paddingVertical: note ? SP[2] : undefined,
+          textAlignVertical: note ? "top" : "center",
+          flex: 1,
+        },
+        // the frame (the ring below) shows the focus; the browser's own outline would double it
+        { outlineStyle: "none" } as object,
+      ]}
     />
   );
+  const ring = error || focus;
   return (
     <View style={{ gap: SP[1] }}>
       {inside ? null : (
@@ -95,22 +102,34 @@ export function GrTextField({
         style={{
           minHeight: note ? S.row * 2 + SP[2] : inside ? S.row : S.control,
           borderRadius: R.control,
-          borderWidth: focus ? S.focus : S.edge,
-          borderColor: error ? g.bad : focus ? g.focus : g.fieldEdge,
-          backgroundColor: g.fieldBg,
+          borderWidth: S.edge,
+          borderColor: g.fieldEdge,
+          // the fill is solid under the tint: the picture of the scene never shows through the typed text
+          backgroundColor: g.panelSolid,
+          overflow: "hidden",
           justifyContent: "center",
           paddingHorizontal: SP[3],
-          paddingVertical: note || inside ? SP[2] : 0,
           opacity: disabled ? graphite.state.disabledDim : undefined,
         }}
       >
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: g.fieldBg }]} />
+        {/* the focus / error ring over the edge: the box keeps its size, the text does not shift */}
+        {ring ? (
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: R.control, borderWidth: S.focus, borderColor: error ? g.bad : g.focus }]} />
+        ) : null}
         {inside ? (
-          <GrText v="micro" tone="text2">
-            {label}
-          </GrText>
+          <View pointerEvents="none" style={{ position: "absolute", top: SP[1], left: SP[3] }}>
+            <GrText v="micro" tone="text2">
+              {label}
+            </GrText>
+          </View>
         ) : null}
         <View style={{ flexDirection: "row", alignItems: "center", gap: SP[1] }}>
-          {prefix ? <GrText v="sub">{prefix}</GrText> : null}
+          {prefix ? (
+            <GrText v="sub" tone="text2">
+              {prefix}
+            </GrText>
+          ) : null}
           {input}
         </View>
       </View>
