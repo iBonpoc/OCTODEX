@@ -276,6 +276,7 @@ export function GrTaskRow({
         testID={`${testID}-check`}
         accessibilityRole="button"
         accessibilityState={{ selected: done }}
+        {...({ "aria-pressed": done } as object)}
         accessibilityLabel={title}
         visible={S.check}
         onPress={() => setDone((d) => !d)}

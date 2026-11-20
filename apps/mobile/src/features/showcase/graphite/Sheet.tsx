@@ -185,7 +185,9 @@ export function GrSheet({
                     justifyContent: "center",
                   }}
                 >
-                  <Icon name="close" s={graphite.size.glyph} color={g.text} />
+                  <View>
+                    <Icon name="close" s={graphite.size.glyph} color={g.text} />
+                  </View>
                 </GrMatte>
               </GrPress>
             </View>

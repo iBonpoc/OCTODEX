@@ -174,7 +174,7 @@ export const graphiteThemes: Record<ThemeName, GraphiteColors> = {
     info: "#1B5290",
     ok: "#1E5F34",
     badIc: "#C8322B",
-    warnIc: "#C46A1C",
+    warnIc: "#A85A12",
     infoIc: "#1F6FC0",
     okIc: "#2E8A50",
     danBg: "#9E1C16",

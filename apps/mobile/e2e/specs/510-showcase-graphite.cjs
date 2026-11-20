@@ -95,6 +95,12 @@ exports.run = async (h) => {
   await until("С6 row back", () => document.querySelectorAll('[data-testid^="gr-row-"]').length === 3);
   await p.getByTestId("gr-toast").waitFor({ state: "detached", timeout: 4000 });
 
+  // the task row: the check on the left marks it (seen 24, hit 44)
+  await vis("gr-task-check").click();
+  await until("task checked", () => document.querySelector('[data-testid="gr-task-check"]')?.getAttribute("aria-pressed") === "true");
+  const hit = await vis("gr-task-check").boundingBox();
+  h.expect(hit.width >= 34 && hit.height >= 34, `task check: the hit area holds the 34 square (+ hitSlop to 44) (${hit.width}×${hit.height})`);
+
   // С7 — the pilot's theme switch; yellow only on the main button and «＋»
   const sceneBg = () => vis("gr-screen").evaluate((el) => getComputedStyle(el).backgroundColor);
   const before = await sceneBg();

@@ -183,12 +183,9 @@ describe.each(names)("«Графит» %s contrast (#2254)", (name) => {
     expect(ratio(parse(g.onDan), parse(g.danBg))).toBeGreaterThanOrEqual(4.5);
   });
   it("the yellow fill is one colour in both themes (only the main action and «＋»)", () => expect(g.acc).toBe("#FBFF00"));
-  /** asked of the design chat 20.11 (#2254): light `late ic` #C46A1C gives 2.83 on the panel — the word next to it holds 4.5.
-   *  Its own floor until the answer; anything else under 3 is red. */
-  const IC_ASKED: Partial<Record<string, number>> = { "light.warnIc": 2.8 };
   it("status icons (`ic`) on the panel ≥ 3 (UI), the word (`-w`) ≥ 4.5 — the word never in `ic`", () => {
     for (const s of on(g.panel))
-      for (const st of ["ok", "info", "warn", "bad"] as const) expect(ratio(parse(g[`${st}Ic`]), s), `${st}Ic`).toBeGreaterThanOrEqual(IC_ASKED[`${name}.${st}Ic`] ?? 3);
+      for (const st of ["ok", "info", "warn", "bad"] as const) expect(ratio(parse(g[`${st}Ic`]), s), `${st}Ic`).toBeGreaterThanOrEqual(3);
   });
   it("the solid fallbacks (Reduce Transparency, v2 §3 п.5): text ≥ 7, text2 ≥ 4.5 on panelSolid and glSolid", () => {
     for (const s of [g.panelSolid, g.glSolid]) {

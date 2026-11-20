@@ -108,6 +108,8 @@ export function SpotlightNav({
                 testID={`gr-nav-${s.id}`}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: on }}
+                // the web does not turn `selected` into aria-selected by itself (as TabBar)
+                {...({ "aria-selected": on } as object)}
                 accessibilityLabel={t(s.label)}
                 onPress={() =>
                   setSel((cur) => nextBeamSlot(i, cur, PLUS, SLOTS.length))

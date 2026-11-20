@@ -114,7 +114,10 @@ function Circle({
           justifyContent: "center",
         }}
       >
-        <Icon name={icon} s={S.glyph} color={g.text} />
+        {/* in its own View: on the web an svg is painted under the glass layers */}
+        <View>
+          <Icon name={icon} s={S.glyph} color={g.text} />
+        </View>
       </GrLiquid>
     </GrPress>
   );
