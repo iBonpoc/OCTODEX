@@ -83,8 +83,8 @@ describe("the lines are the company's price-list items, priced by test items", (
 describe("#1336 — the line means the company's own stock; several candidates are never settled by the alphabet", () => {
   const gutterLine = lines.find((l) => l.s === "replace" && l.key === "gutter")!;
   const gutterItem = (c: CatalogItem[]) => c.find((it) => it.attributes?.part === "gutter" && it.unit === "ft")!;
-  /** a second gutter in the price list: another profile, named so that it sorts FIRST */
-  const another = (c: CatalogItem[]): CatalogItem => ({ ...gutterItem(c), id: "other-gutter", name: "A — медь K6", attributes: { ...gutterItem(c).attributes, profile: "k", size: "6", material: "copper", color: "natural" } });
+  /** a second gutter in the price list: another profile, named so that it sorts FIRST; as many properties as the made one (#2227: no colour) */
+  const another = (c: CatalogItem[]): CatalogItem => ({ ...gutterItem(c), id: "other-gutter", name: "A — медь K6", attributes: { ...gutterItem(c).attributes, profile: "k", size: "6", material: "copper" } });
   const withOther = (): CatalogItem[] => {
     const c = made();
     return [...c, another(c)];

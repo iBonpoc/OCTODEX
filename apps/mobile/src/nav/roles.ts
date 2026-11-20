@@ -17,7 +17,8 @@ const PLANNERS: readonly Role[] = ["dispatcher", "director"];
 
 /**
  * Who may open a screen (route-guard; docs/specs/03 §8.1, docs/specs/05 §2, §4.2).
- * Key = the first part of the address (`/company/hours` → "company"); a screen not listed is open to every role.
+ * Key = the first part of the address (`/company/hours` → "company"), or the first two for one screen inside a folder
+ * (`/job/schedule` → "job/schedule"); a screen not listed is open to every role.
  * The technician sees only his own work: no company money (Today, Money, figures), no Sales and lead prices,
  * no Triage; Company settings and Team — director (owner/admin) only. The server limits the data the same way (RLS);
  * this table only keeps the screens closed. Invoices and receipts stay open: the tech takes a payment on site
@@ -44,6 +45,9 @@ export const routeRoles: Record<string, readonly Role[]> = {
   "purchase-orders": PLANNERS,
   // one order: the office and the tech of its job (RLS); not sales (spec 36 В3) — review SUP2-б
   "purchase-order": [...PLANNERS, "tech"],
+  // #2016: «Назначить выезд» — planning is the office's (canPlan; the server: visits_insert, t15_job_schedule_guard);
+  // a two-part key: /job/<id> stays open to the tech of the job
+  "job/schedule": PLANNERS,
 };
 
 /** the first part of an address: "/company/hours?x=1" → "company", "/" → "" */
@@ -53,8 +57,12 @@ export const routeKey = (path: string) => path.split(/[?#]/)[0]!.split("/").filt
  *  sales see no expenses of the company (13 §3.4, §4; #868, founder's #1042: «no» by default) */
 export const canSeeProfit = (role: Role) => role === "director" || role === "dispatcher";
 
-/** may this role open the screen at `path` */
-export const canOpen = (role: Role, path: string) => (routeRoles[routeKey(path)] ?? ALL).includes(role);
+/** the first two parts of an address: "/job/schedule?jobId=1" → "job/schedule" (a key of routeRoles may name one screen
+ *  inside a folder whose other screens stay open) */
+const routeKey2 = (path: string) => path.split(/[?#]/)[0]!.split("/").filter(Boolean).slice(0, 2).join("/");
+
+/** may this role open the screen at `path`: a two-part key first, then the first part */
+export const canOpen = (role: Role, path: string) => (routeRoles[routeKey2(path)] ?? routeRoles[routeKey(path)] ?? ALL).includes(role);
 
 /** the role the app works in: the chosen one if this person has it, else their first role */
 export const effectiveRole = (role: Role, available: readonly Role[]): Role =>

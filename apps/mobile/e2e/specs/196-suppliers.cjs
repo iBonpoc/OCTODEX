@@ -4,7 +4,8 @@
  * - a material of the catalog: «Поставщик ›» → the sheet → the new supplier → its tax is in the item (both sides of the
  *   stake: the item's price with the tax, and a new estimate line from it counts the same price);
  * - a new cost → «История цен» on the item and on the supplier;
- * - the supplier's tax changes → «Применить к N позициям?» → the item counts with the new tax; «Отменить» puts it back;
+ * - the supplier's tax changes → its item counts with the new tax at once (#1834: the server moves it in the same transaction, no
+ *   question); «Отменить» puts the supplier's tax and the item back;
  * - archive → «Отменить»;
  * - sales and the tech: no «Поставщики» (the account number), the address is closed to them.
  * Everything by testID (CHECKS §9 №2); waits for what it checks.
@@ -64,22 +65,20 @@ exports.run = async (h) => {
   h.expect(/\$12\.13/.test(await p.getByTestId("sup-hist-0").locator("visible=true").first().innerText()), "«История цен» on the item: $11 + 10.25%");
   await h.shot("item");
 
-  // the supplier's card: its item, the history; a new tax → «Применить к 1 поз.?» → applied, then «Отменить»
+  // the supplier's card: its item, the history; a new tax → the item follows at once (#1834), then «Отменить»
   await h.go(`/suppliers/${zed.id}`);
   await p.getByTestId("sup-history").locator("visible=true").first().waitFor({ timeout: 5000 });
   h.expect(/Railing bracket/.test(await p.getByTestId("sup-hist-0").locator("visible=true").first().innerText()), "the supplier's history names the item");
   await field("sup-tax").fill("9.5");
   await tap("sup-save");
-  await h.sheet().getByTestId("sup-apply").waitFor({ timeout: 5000 });
-  h.expect(/9\.5% — применить к 1 поз\./.test(await h.sheet().innerText()), "asks before changing the item's price");
-  await h.shot("apply");
-  await h.sheet().getByTestId("sup-apply").locator('[role="button"]').first().click();
   db = await dbWhen((d) => d.catalog.find((x) => x.id === ITEM)?.vendorTaxBps === 950);
-  h.expect(db.catalog.find((x) => x.id === ITEM).vendorTaxBps === 950, "the item counts with the new tax");
+  h.expect(db.catalog.find((x) => x.id === ITEM).vendorTaxBps === 950, "the item counts with the new tax at once, no question");
   await p.waitForTimeout(400); // the toast arms «Отменить» after ~0.3 s (lesson of №5)
   await p.getByRole("button", { name: "Отменить" }).last().click();
   db = await dbWhen((d) => d.catalog.find((x) => x.id === ITEM)?.vendorTaxBps === 1025);
   h.expect(db.catalog.find((x) => x.id === ITEM).vendorTaxBps === 1025, "«Отменить»: the item's tax is back");
+  db = await dbWhen((d) => d.suppliers.find((x) => x.id === zed.id)?.taxBps === 1025);
+  h.expect(db.suppliers.find((x) => x.id === zed.id).taxBps === 1025, "«Отменить»: the supplier's tax is back too");
 
   // archive → «Отменить»
   await h.go(`/suppliers/${zed.id}`);

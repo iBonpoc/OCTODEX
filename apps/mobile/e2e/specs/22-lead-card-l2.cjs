@@ -6,6 +6,7 @@
 const { pressEscUntilClosed, waited } = require("../sheet.cjs");
 const { minuteOf, workdayOffset } = require("../companyTime.cjs");
 
+const { pickVisitDay, pickVisitStart } = require("../visitForm.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const lead = async (name) => (await h.db()).leads.find((x) => x.name === name);
@@ -36,10 +37,9 @@ exports.run = async (h) => {
   await h.click("Что дальше?");
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).click(); await p.waitForTimeout(400);
   // the visit form (docs/specs/03 §7.1): day → person (with the day's load) → a free slot → note
-  const chips = h.sheet().getByRole("radio");
-  await chips.nth(workdayOffset(2)).click();
+  await pickVisitDay(h.page, workdayOffset(2), h.sheet()); // the day — DateField (spec 56 wave 5б)
   await h.sheet().getByRole("option", { name: "Ivan Sokolov" }).click();
-  await h.sheet().getByRole("radio", { name: /^10:30/ }).click();
+  await pickVisitStart(h.page, 10 * 60 + 30, h.sheet()); // «Начало ⌄» — 10:30 AM
   await h.sheet().getByPlaceholder(/Собака во дворе, где парковаться/).fill("Dog in the yard");
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).last().click(); await p.waitForTimeout(500);
   await h.sheet().getByRole("button", { name: "Не сейчас" }).click(); await p.waitForTimeout(300);

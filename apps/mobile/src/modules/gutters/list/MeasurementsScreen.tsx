@@ -12,7 +12,8 @@ import { usePersistentState } from "@/data/persist";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { estimateStatusView } from "@/features/estimateStatus";
-import { moduleDef, moduleHref, moduleTabs } from "@/modules/registry";
+import { moduleDef, moduleHref, moduleState, moduleTabs } from "@/modules/registry";
+import { Banner } from "@/ui/banner";
 import { useListPanel } from "@/nav/listPanel";
 import { useDevice } from "@/theme/ThemeProvider";
 import { Button, IconButton } from "@/ui/controls";
@@ -46,6 +47,9 @@ export default function MeasurementsScreen() {
   // «Замеры» is a tab of the app for this person (the bottom bar, the side menu): a tab is a root — no «‹ Назад» over it, as the
   // core's tab lists (#1426, design review); opened where it is not a tab (the role has no such tab) it keeps its «back»
   const asTab = moduleTabs(store.db.company, store.role).some((m) => m.href === moduleHref("gutters", "list"));
+  // the trial is over (founder 18.11: the tab stays, never «План» in its place silently): the screen says so and why —
+  // drafts open, nothing is saved; the director gets the way to «Компания → Модули»
+  const expired = moduleState(store.db.company?.modules?.gutters).access === "expired";
   const [kept, setKept] = usePersistentState<MeasurementFilter>(`${filterStoreKey("gutters.measurements")}.status`, "all");
   const f = asMeasurementFilter(kept);
   const [q, setQ] = useState("");
@@ -154,6 +158,15 @@ export default function MeasurementsScreen() {
         ) : undefined
       }
     >
+      {expired ? (
+        <Banner
+          tone="warn"
+          testID="measurements-expired"
+          title={t("mod.st.expired")}
+          hint={t("mod.lockedHint")}
+          action={store.role === "director" ? { label: t("mod.gutters.draw.connect"), onPress: () => router.push("/company/modules") } : undefined}
+        />
+      ) : null}
       {items.length === 0 ? (
         // DS §13 «Пусто — данных нет вообще»: the object's icon, the words, why, and the one button to start
         <Empty

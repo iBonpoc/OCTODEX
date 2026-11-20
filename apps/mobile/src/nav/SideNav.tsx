@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { component, radius, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useAuth } from "@/cloud/auth";
+import { openCompanies, useCanSwitch } from "@/features/CompanySwitcher";
 import { useI18n } from "@/i18n";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Avatar } from "@/ui/controls";
@@ -35,6 +36,7 @@ export function SideNav() {
   const menu = useNavMenu();
   const current = useMenuCurrent();
   const path = usePathname();
+  const canSwitch = useCanSwitch();
   // a screen that needs the whole screen (useHideTabBar: the signature pad, a module's full-screen screens — a drawing canvas, #1426)
   const hidden = useTabBarHidden();
   if (!wide || hidden || !isAppPath(path)) return null;
@@ -90,6 +92,12 @@ export function SideNav() {
           </View>
         ))}
       </ScrollView>
+      {/* spec 42 S34: two or more companies — «Компании» over the profile */}
+      {canSwitch ? (
+        <View style={{ paddingHorizontal: space[2], alignItems: open ? "stretch" : "center" }}>
+          <Item icon="home2" label={companyName ?? t("people.switch.title")} open={open} onPress={openCompanies} hideLabel={!open} testID="side-company-switch" />
+        </View>
+      ) : null}
       {/* profile → «Профиль и аккаунт» (spec 26) */}
       <Press
         testID="side-profile"

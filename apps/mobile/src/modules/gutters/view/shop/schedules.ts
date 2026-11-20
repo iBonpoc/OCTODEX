@@ -2,7 +2,7 @@
  * Sheets «SCHEDULES & MATERIALS» (#1349): the gutter schedule, the downspout schedule and the material list with the
  * basis of every quantity — and the «MATERIAL ORDER» for the supplier. The quantities are the estimate's own (the
  * engine's parts): the sheet, the estimate and the order show one number. A table that does not fit goes on to the
- * next sheet. What the measurement does not say is «TBD», never a guess.
+ * next sheet. What the measurement does not say is «TBD», never a guess; a downspout's elbows the engine defaults are its own (#1973).
  */
 import type { PartQty } from "@octo/estimating-engine";
 import { partName } from "../../prices";
@@ -19,7 +19,9 @@ const endWord = (t: Tr, e: ShopEnd) => (e.kind === "cap" ? sw(t, "endCap", { s: 
 /** «End cap L to 90° outside miter» */
 export const segWord = (t: Tr, s: ShopSeg) => cap1(sw(t, "fromTo", { a: endWord(t, s.ends[0]), b: endWord(t, s.ends[1]) }));
 const tbd = (t: Tr) => SW(t, "tbd");
-const elbowWord = (t: Tr, d: ShopDs) => (d.elbows === undefined ? tbd(t) : d.elbows.length ? d.elbows.map((e) => `${e.style} ×${e.qty}`).join(", ") : "—");
+/** the elbows as the engine counts them (#1973): bent on site — «Гиб по месту × N» (no elbow parts), else by style; none — «—» */
+const elbowWord = (t: Tr, d: ShopDs) =>
+  d.bends !== undefined ? (d.bends > 0 ? t("mod.gutters.view.dsBends", { n: d.bends }) : "—") : d.elbows === undefined ? tbd(t) : d.elbows.length ? d.elbows.map((e) => `${e.style} ×${e.qty}`).join(", ") : "—";
 const offsetWord = (t: Tr, d: ShopDs) => (d.offsets === undefined ? tbd(t) : d.offsets.length ? d.offsets.map((o) => `${o.lengthIn}"${o.qty > 1 ? ` ×${o.qty}` : ""}`).join(", ") : "—");
 
 /** the sheets a table flows over: a new one is made when the next row has no room */

@@ -4,6 +4,7 @@
  * starters → «Добавить» one: a company template with the module's mark and the module's item ids, the offer is gone.
  * Added, it applies to «работа» visits (#607). «Отменить» brings the offer back. Archived — still not offered again. Found by testID and the db.
  */
+const { pickVisitDay, pickVisitStart } = require("../visitForm.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const tid = (id) => p.getByTestId(id).last();
@@ -82,9 +83,9 @@ exports.run = async (h) => {
   await p.waitForFunction((k) => (JSON.parse(localStorage.getItem(k)).db.jobs || []).some((j) => j.estimateId === "e6"), "octo.db.v5", { timeout: 8000 });
   const job = (await h.db()).jobs.find((j) => j.estimateId === "e6");
   await h.go(`/job/schedule?jobId=${job.id}`);
-  await p.getByRole("radiogroup").first().getByRole("radio").nth(require("../companyTime.cjs").workdayOffset(3)).click();
+  await pickVisitDay(p, require("../companyTime.cjs").workdayOffset(3)); // the day — DateField (spec 56 wave 5б)
   await p.getByRole("option", { name: "Ivan Sokolov" }).last().click();
-  await p.getByRole("radio", { name: /^1:00/ }).last().click();
+  await pickVisitStart(p, 13 * 60); // «Начало ⌄» — 1:00 PM
   await p.getByRole("button", { name: "Запланировать", exact: true }).last().click();
   await p.getByRole("button", { name: "Не сейчас" }).last().waitFor({ timeout: 8000 });
   await p.getByRole("button", { name: "Не сейчас" }).last().click();
