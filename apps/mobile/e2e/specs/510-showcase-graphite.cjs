@@ -36,9 +36,9 @@ exports.run = async (h) => {
   await h.go("/settings/design-system");
   await vis("showcase-row-graphite").waitFor({ timeout: 8000 });
   await vis("showcase-row-graphite").click();
-  await vis("showcase-graphite").waitFor({ timeout: 8000 });
+  await vis("showcase-graphite").waitFor({ timeout: 20000 }); // the sheet draws its sections after the fonts (#2286 flake)
   await p.getByTestId("gr-open").locator("visible=true").first().click();
-  await vis("gr-screen").waitFor({ timeout: 8000 });
+  await vis("gr-screen").waitFor({ timeout: 15000 });
 
   // С3 — the beam over the pressed tab; «＋» keeps it
   const centreX = async (id) => {
