@@ -178,6 +178,7 @@ describe("design system: components", () => {
     "ui/pctUsdField.tsx": 1, // PctUsdField — the «% | $» switch
     "ui/selectField.tsx": 1, // SelectField — the row
     "ui/surfaces.tsx": 2, // Card (pressable, its `base` style — seen since #2022), ListRow
+    "ui/swipeRow.tsx": 1, // SwipeRow — the action button under a swiped row (#2350, DS §8.11а)
   };
   it("rule 29 inside src/ui (#1997): an own look only in the component that defines it; the list only goes down", () => {
     const now: Record<string, number> = {};
@@ -506,7 +507,6 @@ describe("design system: a form's fields have no plate (#1411)", () => {
     "features/client/ClientSheets.tsx": { n: 1, why: "каждый дополнительный человек клиента — объект списка, карточка (правило 12)" },
     "app/purchase-order/[id].tsx": { n: 1, why: "карточка объекта (шаблон «К»), не форма" },
     "features/JobLinesBlock.tsx": { n: 1, why: "блок карточки работы (налог), не форма" },
-    "features/NotesBlock.tsx": { n: 1, why: "блок заметок карточки объекта, не форма" },
     "features/VisitChecklist.tsx": { n: 2, why: "чек-лист выезда — блок карточки, не форма" },
   };
   it("no <TextField> inside a <Card> (outside the written exceptions)", () => {

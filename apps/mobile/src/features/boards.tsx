@@ -11,6 +11,7 @@ import { EST_COLUMNS, EST_COLUMNS_PANEL, EstimateListCard } from "@/features/lis
 import { EstimateCardBody, estimateSubtitle } from "@/features/EstimateCard";
 import { useListPanel } from "@/nav/listPanel";
 import { ListPanel } from "@/ui/listPanel";
+import { SwipeRow } from "@/ui/swipeRow";
 import { useDevice } from "@/theme/ThemeProvider";
 import { T } from "@/ui/primitives";
 import { useI18n, type DictKey } from "@/i18n";
@@ -65,8 +66,12 @@ export function EstimatesBoard({ wrap }: { wrap: (body: ReactNode, aside?: React
   const mayOpen = (id: string) => canSeeEstimate(db, { role, mode, me: db.me }, id);
   const panel = useListPanel(groups.flatMap(([, xs]) => xs.map((x) => x.e.id)), (id) => `/estimate/${id}`, (id) => db.estimates.some((x) => x.id === id) && mayOpen(id));
   const openE = panel.openId && mayOpen(panel.openId) ? db.estimates.find((x) => x.id === panel.openId) : undefined;
+  // #2350: a swipe right opens the estimate (phone / tablet). No swipe to the left: the store has no deleting or copying of an
+  // estimate with «Отменить» (rule 5), so nothing irreversible is put under a finger
   const card = ({ e }: { e: Estimate; g: EstimateGroup }) => (
-    <EstimateListCard key={e.id} e={e} density={device === "desktop" ? "row" : "rich"} panel={{ selected: e.id === panel.openId, open: () => panel.open(e.id), narrow: !!panel.openId }} />
+    <SwipeRow key={e.id} testID={`est-swipe-${e.id}`} left={device === "desktop" ? [] : [{ key: "open", label: t("swipe.open"), icon: "eye", full: true, onPress: () => panel.open(e.id) }]}>
+      <EstimateListCard e={e} density={device === "desktop" ? "row" : "rich"} panel={{ selected: e.id === panel.openId, open: () => panel.open(e.id), narrow: !!panel.openId }} />
+    </SwipeRow>
   );
   // #1412: as the estimate's screen — «⋯» in the panel's header row, the main button at the top of the card
   const aside = openE ? (

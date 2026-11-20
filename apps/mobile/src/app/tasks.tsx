@@ -9,6 +9,7 @@ import { usePersistentState } from "@/data/persist";
 import { CardList, Empty, Screen } from "@/ui/surfaces";
 import { ListCard } from "@/ui/listCard";
 import { useToast } from "@/ui/overlays";
+import { SwipeRow } from "@/ui/swipeRow";
 import { TaskSheet, type TaskDraft } from "@/features/tasks/TaskSheet";
 import { memberName } from "@/features/team";
 import {
@@ -48,9 +49,10 @@ export default function Tasks() {
     const s = taskSubject(db, x);
     const who = memberName(db, x.assigneeId, t);
     const when = taskWhen(x);
+    // #2350: a swipe right marks it done (or brings a done one back) — the same toggle as the card's button, with «Отменить»
     return (
+      <SwipeRow key={x.id} testID={`task-swipe-${x.id}`} left={[{ key: "done", label: t(x.doneAt ? "swipe.reopen" : "swipe.done"), icon: x.doneAt ? "undo" : "check", tone: x.doneAt ? undefined : "ok", full: true, onPress: () => toggle(x) }]}>
       <ListCard
-        key={x.id}
         testID={`task-${x.id}`}
         title={x.title}
         when={when ? (x.allDay && x.startsAt ? day(x.startsAt) : `${day(when)} · ${time(when)}`) : t("task.noDate")}
@@ -60,6 +62,7 @@ export default function Tasks() {
         action={{ label: t(x.doneAt ? "task.undo" : "w6.task.doneBtn"), icon: x.doneAt ? "undo" : "check", onPress: () => toggle(x) }}
         onPress={() => setEdit(x)}
       />
+      </SwipeRow>
     );
   };
 

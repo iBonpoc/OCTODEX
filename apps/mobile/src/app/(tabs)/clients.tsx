@@ -22,7 +22,10 @@ import { useDevice } from "@/theme/ThemeProvider";
 import { ListPanel } from "@/ui/listPanel";
 import { useListPanel } from "@/nav/listPanel";
 import { ClientCardBody } from "@/features/client/ClientCard";
-import { space } from "@octo/design-tokens";
+import { radius, space } from "@octo/design-tokens";
+import { SwipeRow, type SwipeAction } from "@/ui/swipeRow";
+import { openContact } from "@/ui/listCard";
+import { telHref } from "@/features/contactLinks";
 import type { Customer, CustomerStatus } from "@/data/types";
 import { groupByLetter } from "@/features/clientGroups";
 import { dayOffsetOf, isoDayKey } from "@/features/calendar";
@@ -110,9 +113,14 @@ export default function Clients() {
     const off = next ? dayOffsetOf(isoDayKey(next.start)) : -1;
     const nextDay = !next ? "" : off === 0 ? t("common.today") : off === 1 ? t("common.tomorrow") : day(next.start);
     const nextLine = next ? [`${nextDay}, ${time(next.start)}`, db.jobs.find((j) => j.id === next.jobId)?.title ?? t("plan.kind.inspection")].join(" · ") : undefined;
+    // #2350: a swipe right calls, left archives (the same move as the status picker, with «Отменить»); the web keeps the card's taps
+    const tel = !desktop ? telHref(c.phone) : null;
+    const toArchive = office && !desktop ? pickerOptions("customer", st).find((o) => o.status === "archived" && o.enabled && o.how !== "form") : undefined;
+    const swipeLeft: SwipeAction[] = tel ? [{ key: "call", label: t("swipe.call"), icon: "phone", onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c.phone ?? "" }) }] : [];
+    const swipeRight: SwipeAction[] = toArchive ? [{ key: "archive", label: t("swipe.archive"), icon: "box", onPress: () => pickStatus(c, "archived") }] : [];
     return (
+      <SwipeRow key={c.id} testID={`client-swipe-${c.id}`} left={swipeLeft} right={swipeRight} round={radius.field}>
       <ListCard
-        key={c.id}
         title={c.name}
         lead={{ kind: "initials", text: initials(c.name), dashed: st === "prospect" }}
         // founder 07.11: one money figure in one place — the debt if any, otherwise the paid total
@@ -138,13 +146,17 @@ export default function Clients() {
         }}
         // phone / tablet: a compact card (avatar, name, one line, money, a sign only when it needs attention); call,
         // SMS and the map live on the client's card. The 1280 row keeps its columns and its call button.
-        when={desktop ? nextLine : nextLine ?? addr}
-        contact={desktop ? { phone: c.phone, email: c.email, addr } : undefined}
+        // #2350 (founder 21.11): the compact card shows the phone (a tap calls) and the address (a tap opens the map) in small
+        // type under the name, and one «Написать» (SMS / Почта); the line under the name is the next visit only
+        when={nextLine}
+        contact={{ phone: c.phone, email: c.email, addr }}
+        quickContact={!desktop}
         density={desktop ? "row" : "compact"}
         columns={openId ? COLUMNS_PANEL : COLUMNS}
         selected={c.id === openId}
         onPress={() => panel.open(c.id)}
       />
+      </SwipeRow>
     );
   };
   return (
