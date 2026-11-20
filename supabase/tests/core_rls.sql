@@ -19105,6 +19105,293 @@ select tst.ok(has_column_privilege('authenticated', 'public.catalog_item_costs',
 rollback;
 \echo 'T450–T459 ok'
 
+-- ================================================================ T460–T469: the exact cost on the estimate's and the templates' lines
+-- (#1926 PR 2/4, spec 53 §8а.12, migration 20261117640000). The catalog's rule (T450–T459) on estimate_line_costs, the
+-- kept costs and the template's costs; a save (delete, then insert) keeps the exact value. Its own rows, rolled back.
+:as_super
+begin;
+-- a line cost as the server holds it: [millicents, cents]
+create or replace function pg_temp.c460(p_id uuid) returns jsonb language sql security definer as $f$
+  select jsonb_build_array(c.unit_cost_millicents, c.unit_cost_cents) from public.estimate_line_costs c where c.line_item_id = p_id $f$;
+grant execute on function pg_temp.c460(uuid) to public;
+create or replace function pg_temp.t460(p_tpl uuid, p_line text) returns jsonb language sql security definer as $f$
+  select jsonb_build_array(c.unit_cost_millicents, c.unit_cost_cents) from public.estimate_template_line_costs c
+   where c.template_id = p_tpl and c.line_id = p_line $f$;
+grant execute on function pg_temp.t460(uuid, text) to public;
+
+-- T460: the columns, their bounds, the new table closed, the functions nobody's (rule 18), the old rows filled
+\echo 'T460 the exact cost on the lines: columns, bounds, rights'
+select tst.ok((select count(*) = 3 from information_schema.columns where table_schema = 'public' and column_name = 'unit_cost_millicents'
+                 and data_type = 'bigint' and table_name in ('estimate_line_costs', 'estimate_line_costs_kept', 'estimate_template_line_costs')),
+  'T460 unit_cost_millicents is a bigint on the line costs, the kept costs and the template costs');
+select tst.ok((select count(*) = 3 from pg_constraint where conname in ('estimate_line_costs_millicents_range', 'estimate_line_costs_kept_millicents_range',
+                 'estimate_template_line_costs_millicents_range') and convalidated),
+  'T460 the bounds 0..$1 000 000 a unit are on and validated');
+select tst.ok(not exists (select 1 from public.estimate_line_costs where unit_cost_cents is distinct from round(unit_cost_millicents::numeric / 1000)::bigint)
+          and not exists (select 1 from public.estimate_template_line_costs where unit_cost_cents is distinct from round(unit_cost_millicents::numeric / 1000)::bigint)
+          and not exists (select 1 from public.estimate_line_costs_kept where unit_cost_cents is distinct from round(unit_cost_millicents::numeric / 1000)::bigint),
+  'T460 every stored line cost has its exact value and its mirror half up (the migration filled the old rows)');
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_line_cost_millicents()', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_line_cost_exact_keep()', 'execute')
+          and not has_function_privilege('anon', 'app.tg_line_cost_millicents()', 'execute'),
+  'T460 rule 18: the new trigger functions are nobody''s');
+select tst.ok(not has_table_privilege('authenticated', 'public.estimate_line_cost_exact', 'select')
+          and not has_table_privilege('anon', 'public.estimate_line_cost_exact', 'select')
+          and (select relforcerowsecurity from pg_class where oid = 'public.estimate_line_cost_exact'::regclass),
+  'T460 the kept exact values: no one reads them but the triggers');
+select tst.ok(has_column_privilege('authenticated', 'public.estimate_line_costs', 'unit_cost_millicents', 'INSERT')
+          and has_column_privilege('authenticated', 'public.estimate_line_costs', 'unit_cost_millicents', 'UPDATE')
+          and not has_column_privilege('authenticated', 'public.estimate_template_line_costs', 'unit_cost_millicents', 'UPDATE'),
+  'T460 a member writes a line''s exact cost (RLS decides who); the template''s costs only the server');
+\echo 'T460 ok'
+
+-- the estimate: a draft of the tech (he edits his own draft), one option
+:as_tech_a
+insert into public.estimates (id, company_id, customer_id, property_id, title)
+  values ('54600000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T460 draft');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no)
+  values ('54600000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000e1', 1);
+:as_super
+create function tst.t460_save(p_lines jsonb, p_costs jsonb) returns void language sql as $f$
+  select public.save_estimate_version('54600000-0000-4000-8000-0000000000e1', '54600000-0000-4000-8000-0000000000d1', 'T460',
+    jsonb_build_object('calc_inputs', '{}'::jsonb, 'engine_version', 't', 'tax_enabled', false, 'tax_mode', 'added_on_top'),
+    '[{"id": "54600000-0000-4000-8000-0000000000a1", "name": "A", "position": 0}]'::jsonb, p_lines, p_costs) $f$;
+grant execute on function tst.t460_save(jsonb, jsonb) to authenticated;
+\set l460 '[{"id": "54600000-0000-4000-8000-0000000000b1", "option_id": "54600000-0000-4000-8000-0000000000a1", "position": 0, "line_group": "material", "name": "Rivet", "quantity": "37", "unit": "ea", "unit_price_cents": 25}, {"id": "54600000-0000-4000-8000-0000000000b2", "option_id": "54600000-0000-4000-8000-0000000000a1", "position": 1, "line_group": "material", "name": "Anchor", "quantity": "10", "unit": "ea", "unit_price_cents": 10}]'
+
+-- T461: a new build saves the exact cost → the mirror half up; both sent → the exact value wins (audit Р2)
+\echo 'T461 save_estimate_version keeps the exact cost'
+:as_office_a
+select tst.t460_save(:'l460', '[{"line_item_id": "54600000-0000-4000-8000-0000000000b1", "unit_cost_millicents": 22500},
+                               {"line_item_id": "54600000-0000-4000-8000-0000000000b2", "unit_cost_cents": 99, "unit_cost_millicents": 4120}]');
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]',
+  format('T461 22 500 m¢ («$22.50 for 100») → the mirror 23 ¢: %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b1')));
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b2') = '[4120, 4]',
+  format('T461 the exact value and the cents sent together: the exact wins, the mirror is the server''s (4, not 99): %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b2')));
+\echo 'T461 ok'
+
+-- T462: an old office build saves again with the cents only. The save deletes the lines (the cost row goes with them)
+-- and inserts them again: the same mirror gives the exact value back (red before: 23 000); a different one replaces it.
+-- The older ops.ts path (delete, insert, upsert of the cost) — the same.
+\echo 'T462 an old build''s save: the echo keeps the exact cost through delete + insert'
+:as_office_a
+select tst.t460_save(:'l460', '[{"line_item_id": "54600000-0000-4000-8000-0000000000b1", "unit_cost_cents": 23},
+                               {"line_item_id": "54600000-0000-4000-8000-0000000000b2", "unit_cost_cents": 5}]');
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]',
+  format('T462 the same mirror 23 ¢ after delete + insert: 22 500 stays, not 23 000: %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b1')));
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b2') = '[5000, 5]',
+  format('T462 a different mirror (5 ¢, was 4): exact = 5 000: %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b2')));
+select tst.ok(not exists (select 1 from public.estimate_line_cost_exact where line_item_id in ('54600000-0000-4000-8000-0000000000b1', '54600000-0000-4000-8000-0000000000b2')),
+  'T462 the kept exact value is used up by the next cost of the line');
+:as_office_a
+delete from public.estimate_line_items where id = '54600000-0000-4000-8000-0000000000b1';
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
+  ('54600000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000a1', 'Rivet', 37, 25);
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values
+  ('54600000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 23)
+on conflict (line_item_id) do update set unit_cost_cents = excluded.unit_cost_cents;
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]',
+  format('T462 the ops.ts path (delete, insert, upsert of the cents): 22 500 stays: %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b1')));
+-- review 2: another company holds a kept row under our line id (the id is free once a line is deleted): ours is kept
+-- beside it and comes back to us; theirs stays theirs
+:as_super
+insert into public.estimate_line_cost_exact (line_item_id, company_id, unit_cost_millicents)
+  values ('54600000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 99999);
+:as_office_a
+update public.estimate_line_costs set unit_cost_millicents = 22500 where line_item_id = '54600000-0000-4000-8000-0000000000b1';
+delete from public.estimate_line_items where id = '54600000-0000-4000-8000-0000000000b1';
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
+  ('54600000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000a1', 'Rivet', 37, 25);
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values
+  ('54600000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 23);
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]'
+          and (select unit_cost_millicents = 99999 from public.estimate_line_cost_exact
+                where line_item_id = '54600000-0000-4000-8000-0000000000b1' and company_id = 'cb000000-0000-0000-0000-000000000000'),
+  format('T462 another company''s row under our line id: our 22 500 is kept and comes back, theirs untouched: %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b1')));
+delete from public.estimate_line_cost_exact where company_id = 'cb000000-0000-0000-0000-000000000000';
+\echo 'T462 ok'
+
+-- T463: the row edited in place: the echo of the mirror keeps the exact value, a new exact value with the same mirror is
+-- written (22 500 → 22 600, both 23 ¢), a different mirror replaces it
+\echo 'T463 the line cost edited in place'
+:as_office_a
+update public.estimate_line_costs set unit_cost_cents = 23 where line_item_id = '54600000-0000-4000-8000-0000000000b1';
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]', 'T463 an echo of the mirror: 22 500 stays');
+:as_office_a
+update public.estimate_line_costs set unit_cost_millicents = 22600 where line_item_id = '54600000-0000-4000-8000-0000000000b1';
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22600, 23]', 'T463 22 500 → 22 600, the mirror stays 23');
+:as_office_a
+update public.estimate_line_costs set unit_cost_cents = 30 where line_item_id = '54600000-0000-4000-8000-0000000000b1';
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[30000, 30]', 'T463 a different mirror: exact = 30 000');
+:as_office_a
+update public.estimate_line_costs set unit_cost_millicents = 22500 where line_item_id = '54600000-0000-4000-8000-0000000000b1';
+:as_super
+select tst.fails_like($q$update public.estimate_line_costs set unit_cost_millicents = 100000000000001 where line_item_id = '54600000-0000-4000-8000-0000000000b1'$q$,
+  '%millicents_range%', 'T463 above $1 000 000 a unit: refused');
+\echo 'T463 ok'
+
+-- T464: the tech's save (he sees no costs): the kept cost comes back with its exact value (keep / restore)
+\echo 'T464 the tech''s save keeps the exact cost'
+:as_tech_a
+select tst.t460_save(:'l460', '[{"line_item_id": "54600000-0000-4000-8000-0000000000b1", "unit_cost_cents": 99}]');
+select tst.ok(tst.cnt('select 1 from public.estimate_line_costs') = 0, 'T464 the tech reads no line cost (no exact value either)');
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]' and pg_temp.c460('54600000-0000-4000-8000-0000000000b2') = '[5000, 5]',
+  format('T464 after the tech''s delete + insert the office''s exact cost is back (his cents left out): %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b1')));
+:as_tech_a
+delete from public.estimate_line_items where id = '54600000-0000-4000-8000-0000000000b1';
+:as_super
+select tst.ok((select unit_cost_millicents = 22500 and unit_cost_cents = 23 from public.estimate_line_costs_kept where line_item_id = '54600000-0000-4000-8000-0000000000b1'),
+  'T464 the kept cost holds the exact value');
+:as_tech_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
+  ('54600000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000a1', 'Rivet', 37, 25);
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]', 'T464 the line comes back: 22 500, not 23 000');
+-- sales without the right to costs saves with an exact cost: nothing of his is written
+:as_sales_a
+select tst.t460_save(:'l460', '[{"line_item_id": "54600000-0000-4000-8000-0000000000b1", "unit_cost_millicents": 1}]');
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]',
+  format('T464 sales'' save with an exact cost: the office''s 22 500 stays (his value not written): %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b1')));
+\echo 'T464 ok'
+
+-- T465: a new version of a sent estimate (copied_from_line_id): who sees no costs gets the exact value copied (t96); the
+-- office's old build writes the cents itself — the same mirror takes the source's exact value, another one is its own
+\echo 'T465 a new version keeps the exact cost'
+:as_super
+insert into public.estimate_versions (id, company_id, estimate_id, version_no)
+  values ('54600000-0000-4000-8000-0000000000d2', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000e1', 2);
+insert into public.estimate_options (id, company_id, version_id, name) values
+  ('54600000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000d2', 'A');
+select tst.server($q$update public.estimate_versions set locked_at = now() where id = '54600000-0000-4000-8000-0000000000d1'$q$);
+update public.estimates set current_version_id = '54600000-0000-4000-8000-0000000000d2' where id = '54600000-0000-4000-8000-0000000000e1';
+:as_sales_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id) values
+  ('54600000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000a2', 'Rivet', 40, 25, '54600000-0000-4000-8000-0000000000b1');
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000c1') = '[22500, 23]',
+  format('T465 sales'' copy of the line: the exact value copied (t96): %s', pg_temp.c460('54600000-0000-4000-8000-0000000000c1')));
+:as_office_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id) values
+  ('54600000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000a2', 'Rivet', 40, 25, '54600000-0000-4000-8000-0000000000b1'),
+  ('54600000-0000-4000-8000-0000000000c3', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000a2', 'Rivet', 40, 25, '54600000-0000-4000-8000-0000000000b1');
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values
+  ('54600000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', 23),
+  ('54600000-0000-4000-8000-0000000000c3', 'ca000000-0000-0000-0000-000000000000', 24);
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000c2') = '[22500, 23]',
+  format('T465 the office''s old build writes 23 ¢ for the copy: the source''s 22 500: %s', pg_temp.c460('54600000-0000-4000-8000-0000000000c2')));
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000c3') = '[24000, 24]', 'T465 another mirror (24 ¢): its own 24 000');
+-- review 1: a new build set the copy to a whole 23 000; an old office build saves it again (delete, insert, cents 23):
+-- the kept 23 000 comes back, not the copied-from line's 22 500
+:as_office_a
+update public.estimate_line_costs set unit_cost_millicents = 23000 where line_item_id = '54600000-0000-4000-8000-0000000000c2';
+delete from public.estimate_line_items where id = '54600000-0000-4000-8000-0000000000c2';
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id) values
+  ('54600000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000a2', 'Rivet', 40, 25, '54600000-0000-4000-8000-0000000000b1');
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values
+  ('54600000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', 23);
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000c2') = '[23000, 23]',
+  format('T465 a whole 23 000 set by a new build survives an old save: %s', pg_temp.c460('54600000-0000-4000-8000-0000000000c2')));
+-- review 2: copied_from_line_id pointing at a line that is no source under t96's rules (another name) gives nothing
+:as_office_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id) values
+  ('54600000-0000-4000-8000-0000000000c4', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000a2', 'Other', 1, 25, '54600000-0000-4000-8000-0000000000b1');
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values
+  ('54600000-0000-4000-8000-0000000000c4', 'ca000000-0000-0000-0000-000000000000', 23);
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000c4') = '[23000, 23]',
+  'T465 a «copy» of another name is no source: cents × 1000, not 22 500');
+\echo 'T465 ok'
+
+-- T466: a template line carries the exact cost: it goes to the template's costs, never into the stored document; an old
+-- build's echo of the cents keeps it; both keys — the exact value wins (audit Р3); a null clears it; a bad value is refused
+\echo 'T466 the template''s exact cost'
+:as_office_a
+insert into public.estimate_templates (id, company_id, name, doc) values
+  ('54600000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', 'T466', '{"options":[{"id":"o1","name":"A","lines":[
+  {"id":"l1","name":"Rivet","group":"material","quantity":"37","unit":"ea","unitPriceCents":25,"unitCostMillicents":22500},
+  {"id":"l2","name":"Anchor","group":"material","quantity":"1","unit":"ea","unitPriceCents":10,"unitCostCents":99,"unitCostMillicents":4120},
+  {"id":"l3","name":"Old","group":"material","quantity":"1","unit":"ea","unitPriceCents":10,"unitCostCents":7}]}],
+ "settings":{"discount":null,"tax":{"enabled":false,"rateBps":0,"groups":{"service":false,"labor":false,"material":false}},"deposit":{"kind":"none"}}}');
+:as_super
+select tst.ok(pg_temp.t460('54600000-0000-4000-8000-0000000000f1', 'l1') = '[22500, 23]'
+          and pg_temp.t460('54600000-0000-4000-8000-0000000000f1', 'l2') = '[4120, 4]'
+          and pg_temp.t460('54600000-0000-4000-8000-0000000000f1', 'l3') = '[7000, 7]',
+  'T466 the exact value goes to the template''s costs (both sent: the exact wins; the cents alone: × 1000)');
+select tst.ok(not jsonb_path_exists((select doc from public.estimate_templates where id = '54600000-0000-4000-8000-0000000000f1'), '$.options[*].lines[*].unitCostMillicents')
+          and not jsonb_path_exists((select doc from public.estimate_templates where id = '54600000-0000-4000-8000-0000000000f1'), '$.options[*].lines[*].unitCostCents'),
+  'T466 the stored document has no cost key');
+:as_office_a
+update public.estimate_templates set doc = jsonb_set(jsonb_set(doc, '{options,0,lines,0,unitCostCents}', '23'), '{options,0,lines,2,unitCostCents}', 'null')
+ where id = '54600000-0000-4000-8000-0000000000f1';
+:as_super
+select tst.ok(pg_temp.t460('54600000-0000-4000-8000-0000000000f1', 'l1') = '[22500, 23]', 'T466 an old build''s echo of the mirror: 22 500 stays');
+select tst.ok(pg_temp.t460('54600000-0000-4000-8000-0000000000f1', 'l2') = '[4120, 4]', 'T466 a line without a cost key keeps its exact cost');
+select tst.ok(pg_temp.t460('54600000-0000-4000-8000-0000000000f1', 'l3') is null, 'T466 a cost sent as null is cleared');
+:as_office_a
+update public.estimate_templates set doc = jsonb_set(doc, '{options,0,lines,0,unitCostMillicents}', '22600') where id = '54600000-0000-4000-8000-0000000000f1';
+:as_super
+select tst.ok(pg_temp.t460('54600000-0000-4000-8000-0000000000f1', 'l1') = '[22600, 23]', 'T466 22 500 → 22 600 with the same mirror');
+:as_office_a
+do $$ begin
+  perform tst.fails_like($q$update public.estimate_templates set doc = jsonb_set(doc, '{options,0,lines,0,unitCostMillicents}', '225.5') where id = '54600000-0000-4000-8000-0000000000f1'$q$,
+    '%not valid%', 'T466 a fraction of a thousandth: refused');
+  perform tst.fails_like($q$update public.estimate_templates set doc = jsonb_set(doc, '{options,0,lines,0,unitCostMillicents}', '"22500"') where id = '54600000-0000-4000-8000-0000000000f1'$q$,
+    '%not valid%', 'T466 a string: refused');
+  perform tst.fails_like($q$update public.estimate_templates set doc = jsonb_set(doc, '{options,0,lines,0,unitCostMillicents}', '100000000000001') where id = '54600000-0000-4000-8000-0000000000f1'$q$,
+    '%not valid%', 'T466 above $1 000 000 a unit: refused');
+end $$;
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.estimate_template_line_costs where template_id = '54600000-0000-4000-8000-0000000000f1'$q$) = 0,
+  'T466 sales without view_costs reads no template cost');
+\echo 'T466 ok'
+
+-- T467: the exact cost never reaches a tech or a client: the server takes the key out of a version's document (t45) and
+-- out of every cost-free document (app.doc_without_costs)
+\echo 'T467 the exact cost is hidden like the cents'
+:as_super
+select tst.ok(not (app.doc_without_costs('{"options":[{"id":"o","lines":[{"id":"l","unitCostMillicents":22500,"unitCostCents":23,"unitPriceCents":25}]}]}')
+                   -> 'options' -> 0 -> 'lines' -> 0) ?| array['unitCostMillicents', 'unitCostCents']
+          and app.doc_without_costs('{"options":[{"id":"o","lines":[{"id":"l","unitPriceCents":25}]}]}') -> 'options' -> 0 -> 'lines' -> 0 ->> 'unitPriceCents' = '25',
+  'T467 app.doc_without_costs takes the exact cost out, the price stays');
+:as_tech_a
+update public.estimate_versions set calc_inputs = '{"options":[{"id":"o","lines":[{"id":"l","unitPriceCents":25,"unitCostMillicents":22500}]}]}'
+ where id = '54600000-0000-4000-8000-0000000000d2';
+:as_super
+select tst.ok(not jsonb_path_exists((select calc_inputs from public.estimate_versions where id = '54600000-0000-4000-8000-0000000000d2'), '$.options[*].lines[*].unitCostMillicents'),
+  'T467 a version''s document is stored without the exact cost');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where unit_cost_millicents is not null$q$) = 0, 'T467 the tech reads no exact cost');
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where unit_cost_millicents is not null$q$) = 0, 'T467 sales without view_costs reads no exact cost');
+-- the client's document (the PDF and /p/) passes only the keys it lists: no exact cost
+:as_super
+select tst.ok(not (app.client_doc('{"options":[{"id":"o","name":"A","lines":[{"id":"l","name":"Rivet","group":"material","quantity":"37","unit":"ea","unitPriceCents":25,"unitCostMillicents":22500,"unitCostCents":23}]}]}')
+                   -> 'options' -> 0 -> 'lines' -> 0) ?| array['unitCostMillicents', 'unitCostCents'],
+  'T467 the client''s document (PDF, /p/) has no exact cost');
+-- who sees no costs: a save carrying an exact cost writes none (the lines are saved), the kept exact values closed
+:as_sales_a
+select tst.blocked('select * from public.estimate_line_cost_exact', 'T467 sales reads the kept exact values');
+:as_office_a
+select tst.blocked('select * from public.estimate_line_cost_exact', 'T467 the office reads the kept exact values');
+do $$ begin
+  perform tst.fails($q$insert into public.estimate_line_cost_exact (line_item_id, company_id, unit_cost_millicents)
+    values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 1)$q$, 'T467 nobody writes the kept exact values directly');
+end $$;
+\echo 'T467 ok'
+rollback;
+\echo 'T460–T467 ok'
+
 -- ================================================================ T468–T469: the last row of a history is the last written (#2250,
 -- migration 20261117650000). Rows of one transaction share «at», a uuid v7's order inside a millisecond is random:
 -- «at desc, id desc» picked any of them. seq (an identity) is the order they were written in. Its own rows, rolled back.
