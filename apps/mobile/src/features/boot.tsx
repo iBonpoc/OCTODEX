@@ -22,9 +22,11 @@ import Animated, {
 import type * as SplashModule from "expo-splash-screen";
 import * as Updates from "expo-updates";
 import { getLocales } from "expo-localization";
-import { component, motion, space, themes } from "@octo/design-tokens";
+import { component, motion, space } from "@octo/design-tokens";
 import { tFor, type DocLang } from "@/i18n/translate";
 import { StaticThemeProvider } from "@/theme/ThemeProvider";
+import { colorsFor, DEFAULT_SKIN, SKIN_KEY, type Skin } from "@/theme/skin";
+import { readSkin } from "@/theme/skinRead";
 import { BrandLaunch, BrandWait } from "@/ui/brand";
 import { BRAND_SEEN_KEY, bootStage, launchKind, type Launch } from "@/ui/brandRules";
 import { Button } from "@/ui/controls";
@@ -168,6 +170,15 @@ export function BootRoot({ fontsReady, children }: { fontsReady: boolean; childr
   const [leaving, setLeaving] = useState(false);
   const [gone, setGone] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  // the chosen colour set (#2292): the boot layer shows it from the first frame the device answers, no flash of the other one
+  const [skin, setSkin] = useState<Skin>(DEFAULT_SKIN);
+  useEffect(() => {
+    let live = true;
+    AsyncStorage.getItem(SKIN_KEY).then((v) => live && setSkin(readSkin(v))).catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
   const started = useRef(Date.now());
   const waitShown = useRef<number | null>(null);
   // the first launch after install: the dot's drive along the G (the mark counts as shown once it starts)
@@ -219,15 +230,15 @@ export function BootRoot({ fontsReady, children }: { fontsReady: boolean; childr
   const leave = useBootLeave(leaving, onGone);
   const mark: Mark = waiting ? { kind: "wait", home } : { kind: "launch", play: kind === "first" && !reduce ? "first" : bounce ? "bounce" : null };
   return (
-    <View style={{ flex: 1, backgroundColor: themes[name].bg }} onLayout={() => void splash()?.hideAsync().catch(() => {})}>
+    <View style={{ flex: 1, backgroundColor: colorsFor(skin, name).bg }} onLayout={() => void splash()?.hideAsync().catch(() => {})}>
       {gone ? null : (
         <Animated.View
           testID={leaving ? "boot-leaving" : "boot-layer"}
-          style={[StyleSheet.absoluteFill, { zIndex: ready ? 1 : 0, backgroundColor: ready ? themes[name].bg : undefined }, leave.layer]}
+          style={[StyleSheet.absoluteFill, { zIndex: ready ? 1 : 0, backgroundColor: ready ? colorsFor(skin, name).bg : undefined }, leave.layer]}
           // over the app before it leaves: no blind taps on a screen not seen yet; leaving — the first screen takes them
           pointerEvents={leaving ? "none" : ready ? "auto" : "box-none"}
         >
-          <StaticThemeProvider name={name}>
+          <StaticThemeProvider name={name} skin={skin}>
             <BootBrand words={fontsReady} mark={mark} stage={stage} onPlayed={onPlayed} markStyle={leave.mark} />
           </StaticThemeProvider>
         </Animated.View>

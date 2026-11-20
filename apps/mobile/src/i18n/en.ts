@@ -4744,6 +4744,7 @@ export const en: Dict = {
   "ds.gr.title": "Graphite (pilot)",
   "ds.gr.hint": "A new look to try, behind a switch",
   "ds.gr.where": "Only the showcase: the rest of the app stays as it is",
+  // «Developer» (#2292, Ш2): the hidden Settings card — the colour set «Naryad / Graphite»
   "dev.title": "Developer",
   "dev.skin": "«Graphite» colours",
   "dev.skinHint": "The whole app in the «Graphite» colours; on this device only",

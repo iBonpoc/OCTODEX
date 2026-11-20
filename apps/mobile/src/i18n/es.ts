@@ -4744,6 +4744,7 @@ export const es: Dict = {
   "ds.gr.title": "Grafito (piloto)",
   "ds.gr.hint": "Un nuevo aspecto a prueba, tras un interruptor",
   "ds.gr.where": "Solo el muestrario: el resto de la app no cambia",
+  // «Desarrollador» (#2292, Ш2): la tarjeta oculta de Ajustes — el juego de colores «Naryad / Grafito»
   "dev.title": "Desarrollador",
   "dev.skin": "Colores «Grafito»",
   "dev.skinHint": "Toda la app en los colores «Grafito»; solo en este dispositivo",

@@ -310,6 +310,8 @@ export interface ThemeColors {
   blurOverlay: number;
   blurTint: "dark" | "light";
   glow: GlowSpot[];
+  /** the scene's background is a vertical gradient `bg` → `mid` (55 %) → `low` instead of the soft glows (the «Графит» colour set only; «Наряд» has none) */
+  scene?: { mid: string; low: string };
   status: Record<StatusName, { fill: string; text: string; on: string }>;
   /** the drawing canvas only (founder О3, 07.11.2026 — the one exception to «colour only for status»): a node, and the
    *  storeys 1..4 of a drawn line, always with the label «эт N»; ≥ 3:1 to the canvas (bg) in both themes */
