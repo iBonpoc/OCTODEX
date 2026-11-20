@@ -7,12 +7,11 @@ import { useState } from "react";
 import { Modal, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import {
-  useFonts,
-  Jost_300Light,
-  Jost_400Regular,
-  Jost_500Medium,
-} from "@expo-google-fonts/jost";
+// one file per weight: the package root would bring all 18 weights into the bundle (≈1.1 MB); we need three
+import { useFonts } from "expo-font";
+import { Jost_300Light } from "@expo-google-fonts/jost/300Light";
+import { Jost_400Regular } from "@expo-google-fonts/jost/400Regular";
+import { Jost_500Medium } from "@expo-google-fonts/jost/500Medium";
 import { useI18n } from "@/i18n";
 import { Button } from "@/ui/controls";
 import { T } from "@/ui/primitives";
