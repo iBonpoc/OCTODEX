@@ -27,8 +27,8 @@ export interface Where {
 export function firstSteps(db: DB, role: Role, where: Where): FirstStep[] {
   const c = db.company;
   if (role !== "director" || !c) return [];
-  // the document header (S0): name, phone, license, logo
-  const profile = stepDone(c, "profile", db.serviceCategories) && stepDone(c, "contacts") && stepDone(c, "licenses") && stepDone(c, "brand");
+  // the document header (S0): name, phone, logo — a license is optional (#2065)
+  const profile = stepDone(c, "profile", db.serviceCategories) && stepDone(c, "contacts") && stepDone(c, "brand");
   const steps: FirstStep[] = [
     { id: "profile", label: "first.profile", done: profile, href: "/company/profile?wizard=1" },
     { id: "job", label: "first.job", done: db.jobs.length > 0, href: "/job/new" },

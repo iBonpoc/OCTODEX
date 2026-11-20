@@ -204,7 +204,8 @@ export function LeadOverview({ l }: { l: Lead }) {
       </Card>
       <Card>
         <T v="heading">{t("lead.sec.source")}</T>
-        <ListRow title={src?.name ?? "—"} subtitle={src ? t(sourceKindLabel(src.kind)) : undefined} left={<Icon name="star" />} onPress={() => setEdit("source")} />
+        {/* the source is the office's (as the price and «Ведёт»): the server refuses it to a tech (#2075, t12_lead_member_guard) */}
+        <ListRow title={src?.name ?? "—"} subtitle={src ? t(sourceKindLabel(src.kind)) : undefined} left={<Icon name="star" />} onPress={staff ? () => setEdit("source") : undefined} />
         {staff ? (
           <>
             <Divider />

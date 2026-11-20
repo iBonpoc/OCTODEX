@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { computeCustomOption, computeGutterParts, dec, DEFAULT_TAX, type PartQty } from "@octo/estimating-engine";
 import type { CatalogItem } from "../src/data/types";
 import { billQty, goneLines, handChanges, linesFromParts, noPriceLines, resyncLines, sectionAt, SECTION_ORDER, testPriceLines, type LineSource, type ModuleLine } from "../src/modules/gutters/estimate";
-import { findItem, laborRows, materialRows, missingItems, sampleJob } from "../src/modules/gutters/prices";
-const findIn = (c: CatalogItem[], p: PartQty) => !!findItem(c, p);
+import { findPriced, laborRows, materialRows, missingItems, sampleJob } from "../src/modules/gutters/prices";
+const findIn = (c: CatalogItem[], p: PartQty) => !!findPriced(c, p).it;
 
 const C = "11111111-1111-4111-8111-111111111111";
 const name = (p: PartQty) => `${p.attrs.part ?? p.attrs.work ?? p.key}`;

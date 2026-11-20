@@ -44,12 +44,12 @@ export function propertyNow(db: DB, propertyId: string, now = Date.now()): Prope
 /** Calendar day number of a moment in a time zone — lives with the schedule settings (one rule for the whole app) */
 export { dayIn };
 /**
- * May this person see the gate code? The office always; a tech only on the day of a visit of theirs at the property
- * or the day before, by the company's time zone, and not for a visit that is over (paid, completed, no-show).
- * The same rule as app.can_see_gate_code on the server, which decides in the cloud.
+ * May this person see the gate code? The office always; a tech and sales only on the day of a visit of theirs at the
+ * property (for sales: their inspection) or the day before, by the company's time zone, and not for a visit that is over
+ * (paid, completed, no-show). The same rule as app.can_see_gate_code on the server, which decides in the cloud (Р-3).
  */
 export function canSeeGateCode(db: DB, role: Role, propertyId: string, now = Date.now()): boolean {
-  if (role !== "tech") return true;
+  if (role !== "tech" && role !== "sales") return true;
   const tz = db.company?.timezone || "America/Los_Angeles";
   // a visit of a live job, or an inspection (no job) at this property
   const doneJobs = new Set(db.jobs.filter((j) => j.status === "done").map((j) => j.id));
@@ -109,4 +109,14 @@ export function propertyPhotos(db: DB, propertyId: string): { visit: Visit; phot
     .filter((v) => visitPropertyId(db, v) === propertyId)
     .sort((a, b) => b.start.localeCompare(a.start))
     .flatMap((v) => v.photos.map((photo) => ({ visit: v, photo })));
+}
+
+/**
+ * #2016: who may open a property card — the office every live property of a visible client; the technician a property of a
+ * client he sees (visibleClients) or one his own visit is at — an inspection without a job too (the server:
+ * app.is_customer_assignee counts the visit's job, lead and property).
+ */
+export function canSeeProperty(db: DB, role: Role, p: Property, visible: (db: DB, role: Role) => { id: string }[]): boolean {
+  if (visible(db, role).some((c) => c.id === p.customerId)) return true;
+  return role === "tech" && db.visits.some((v) => isAssigned(v, db.me) && visitPropertyId(db, v) === p.id);
 }
