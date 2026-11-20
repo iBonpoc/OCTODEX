@@ -182,6 +182,11 @@ describe.each(names)("«Графит» %s contrast (#2254)", (name) => {
     expect(ratio(parse(g.onBadge), parse(g.badge))).toBeGreaterThanOrEqual(7);
     expect(ratio(parse(g.onDan), parse(g.danBg))).toBeGreaterThanOrEqual(4.5);
   });
+  it("the round button, variant 2 (#2292): the glyph on the chip ≥ 7, on the selected plate ≥ 7; the inverse main button ≥ 7", () => {
+    expect(ratio(parse(g.text), parse(g.chip))).toBeGreaterThanOrEqual(7);
+    expect(ratio(parse(g.onSel), parse(g.sel))).toBeGreaterThanOrEqual(7);
+    expect(ratio(parse(g.onBadge), parse(g.badge))).toBeGreaterThanOrEqual(7);
+  });
   it("the yellow fill is one colour in both themes (only the main action and «＋»)", () => expect(g.acc).toBe("#FBFF00"));
   it("status icons (`ic`) on the panel ≥ 3 (UI), the word (`-w`) ≥ 4.5 — the word never in `ic`", () => {
     for (const s of on(g.panel))

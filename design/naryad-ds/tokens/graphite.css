@@ -17,6 +17,7 @@
   --gr-font-line-height-micro:16;
   --gr-font-display-tracking:-0.3;
   --gr-font-light-from:22;
+  --gr-font-max-scale-button:1.6;
   --gr-space-1:4;
   --gr-space-2:8;
   --gr-space-3:12;
@@ -69,6 +70,11 @@
   --gr-motion-press-dim:0.16;
   --gr-motion-behind-scale:0.96;
   --gr-motion-toast-rise:12;
+  --gr-motion-load-delay:300;
+  --gr-motion-spinner-min:600;
+  --gr-motion-still-sending:10000;
+  --gr-motion-demo-wait:1500;
+  --gr-state-disabled-dim:0.4;
   --gr-sheet-max-detents:3;
   --gr-sheet-max-width:560;
   --gr-sheet-side:8;
