@@ -6,6 +6,8 @@ import { Icon, T } from "@/ui/primitives";
 import { Card, Divider, ListRow, Screen } from "@/ui/surfaces";
 import { canSeeShowcase } from "@/features/showcase/access";
 import { SCREENS } from "@/features/showcase/registry";
+import { useGraphiteFlag } from "@/features/showcase/graphite/flag";
+import { ToggleRow } from "@/ui/toggleRow";
 
 /**
  * «Дизайн-система» — the showcase (#1093, founder 11.11–12.11.2026): the first screen is the list of its sections,
@@ -15,6 +17,7 @@ import { SCREENS } from "@/features/showcase/registry";
 export default function DesignSystemShowcase() {
   const { t } = useI18n();
   const { mode, role } = useStore();
+  const [graphite, setGraphite] = useGraphiteFlag();
   // the showcase is the company owner's (and the demo's): the Settings row is hidden for others, the address checks too
   if (!canSeeShowcase(mode, role)) return <Redirect href="/settings" />;
   return (
@@ -24,7 +27,7 @@ export default function DesignSystemShowcase() {
       </View>
       <Card>
         <View testID="showcase-sections">
-          {SCREENS.map((s, i) => (
+          {SCREENS.filter((s) => !s.pilot || graphite).map((s, i) => (
             <View key={s.id} testID={`showcase-row-${s.id}`}>
               {i ? <Divider /> : null}
               <ListRow
@@ -37,6 +40,10 @@ export default function DesignSystemShowcase() {
             </View>
           ))}
         </View>
+      </Card>
+      {/* «Графит» — пилот #2254, не правило: off by default, this device only */}
+      <Card>
+        <ToggleRow testID="showcase-graphite-flag" label={t("ds.gr.flag")} caption={t("ds.gr.flagHint")} value={graphite} onChange={setGraphite} />
       </Card>
     </Screen>
   );

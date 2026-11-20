@@ -15,7 +15,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { WEB_APP_URL } from "@/config/backend";
 import { fetchIntakeStatus } from "@/cloud/intake";
 import { createEndpoint, decideEvent, listEndpoints, listEvents, rotateEndpoint, setEndpoint } from "@/cloud/intakeSettings";
-import { formLink, heldFirst, readiness, READINESS_TONE, siteSnippet, type IntakeEndpoint, type IntakeEvent } from "@/features/intakeSettings";
+import { formLink, heldFirst, heldReasonKey, readiness, READINESS_TONE, siteSnippet, type IntakeEndpoint, type IntakeEvent } from "@/features/intakeSettings";
 import { copyText, shareText } from "@/features/sendEstimate";
 import { Button, ChoiceChips, ReadOnly, StatusChip, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -212,7 +212,7 @@ export default function CompanyIntake() {
 
       <Sheet visible={!!held} onClose={() => setHeld(null)} title={t("intake.set.heldTitle")}>
         <View testID="intake-held-sheet" style={{ gap: space[3] }}>
-          <T v="caption" tone="mut">{t(`intake.set.reason.${held?.reason ?? "other"}` as DictKey)}</T>
+          <T v="caption" tone="mut">{t(heldReasonKey(held?.reason))}</T>
           {[held?.name, held?.phone, held?.email, held?.message].filter(Boolean).map((x, i) => <T key={i} v="body">{x}</T>)}
           <Button label={t("intake.set.accept")} full disabled={busy} onPress={() => { const e = held; setHeld(null); if (e) run(async () => void (await decideEvent(e.id, true)), t("intake.set.accepted")); }} />
           <Button label={t("intake.set.reject")} variant="secondary" full disabled={busy} onPress={() => { const e = held; setHeld(null); if (e) run(async () => void (await decideEvent(e.id, false))); }} />

@@ -16,15 +16,20 @@ import { HapticsSection } from "@/features/showcase/Haptics";
 import { RowsSection } from "@/features/showcase/Rows";
 import { BrandSection } from "@/features/showcase/Brand";
 import { ChoiceSection } from "@/features/showcase/Choice";
+import { GraphiteSection } from "@/features/showcase/graphite/GraphiteSection";
+import { useGraphiteFlag } from "@/features/showcase/graphite/flag";
 
 /** One section of the showcase on its own screen (#1150). The id is the registry's `SCREENS[].id`. */
 export default function DesignSystemSection() {
   const { t } = useI18n();
   const { mode, role } = useStore();
   const { section } = useLocalSearchParams<{ section: string }>();
+  const [graphite, , flagRead] = useGraphiteFlag();
   if (!canSeeShowcase(mode, role)) return <Redirect href="/settings" />;
   const s = SCREENS.find((x) => x.id === section);
   if (!s) return <Redirect href="/settings/design-system" />;
+  // «Графит» (пилот #2254): without the switch its address goes back to the list
+  if (s.pilot && flagRead && !graphite) return <Redirect href="/settings/design-system" />;
   return (
     <Screen title={t(s.title)} back={() => router.replace("/settings/design-system")}>
       <View testID={`showcase-screen-${s.id}`} style={{ gap: 0 }}>
@@ -42,6 +47,7 @@ export default function DesignSystemSection() {
       {s.id === "fields" ? <FieldsSection /> : null}
       {s.id === "choice" ? <ChoiceSection /> : null}
       {s.id === "brand" ? <BrandSection /> : null}
+      {s.id === "graphite" && graphite ? <GraphiteSection /> : null}
     </Screen>
   );
 }

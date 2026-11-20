@@ -317,12 +317,17 @@ describe("П18: half round, copper", () => {
     expect(q(parts, "shank.copper.half_round.10.6")).toBe("11");
     expect(q(parts, "circle.copper.half_round.6")).toBe("11");
     expect(q(parts, "bolt.10-24x075")).toBe("11");
-    expect(q(parts, "screw.10x15")).toBe("22");
+    // М8 (founder 16.11 «винты к меди — медные»): a copper gutter's screws carry their metal
+    expect(q(parts, "screw.copper.10x15")).toBe("22");
+    expect(q(parts, "screw.10x15")).toBeUndefined();
     expect(q(parts, "endcap.-.half_round.6.copper.-")).toBe("2");
     expect(keys(parts).some((k) => k.startsWith("endcap.L") || k.startsWith("endcap.R"))).toBe(false);
-    expect(q(parts, "solder")).toBe("1");
-    expect(parts.find((p) => p.key === "solder")!.unit).toBe("lb");
-    expect(q(parts, "flux")).toBe("1");
+    // М3–М7 (founder 16.11 №19): ONE soldering kit with its make-up inside, the soldering work by the points; no solder / flux lines
+    expect(q(parts, "soldering_kit")).toBe("1");
+    expect(parts.find((p) => p.key === "soldering_kit")!.why).toMatchObject({ rule: "soldering_kit", params: { points: 2, solderLb: 1, fluxCans: 1, gasCylinders: 1, abrasivePacks: 1, soda: 1 } });
+    expect(q(parts, "labor.solder")).toBe("2");
+    expect(q(parts, "solder")).toBeUndefined();
+    expect(q(parts, "flux")).toBeUndefined();
     expect(q(parts, "sealant")).toBeUndefined();
     expect(q(parts, "rivet.42.copper.mill.-")).toBe("4");
   });
