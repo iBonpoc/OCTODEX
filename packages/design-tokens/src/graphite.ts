@@ -51,11 +51,15 @@ export interface GraphiteColors {
   beamGlow: string;
   coneTop: string;
   coneBottom: string;
-  /** status word / icon colour (always icon + word) */
+  /** status word colour (`-w`) and its icon colour (`ic`): always icon + word (handoff v2 §3 п.4) */
   bad: string;
   warn: string;
   info: string;
   ok: string;
+  badIc: string;
+  warnIc: string;
+  infoIc: string;
+  okIc: string;
   danBg: string;
   onDan: string;
   toast: string;
@@ -112,6 +116,10 @@ export const graphiteThemes: Record<ThemeName, GraphiteColors> = {
     warn: "#F2C66A",
     info: "#9CC4EF",
     ok: "#93D3A0",
+    badIc: "#E85E62",
+    warnIc: "#F49D4F",
+    infoIc: "#4FA6E8",
+    okIc: "#7AD8A2",
     danBg: "#FF9C8A",
     onDan: "#040505",
     toast: "#2A2D31",
@@ -156,15 +164,19 @@ export const graphiteThemes: Record<ThemeName, GraphiteColors> = {
     fieldBg: "rgba(255,255,255,.66)",
     fieldEdge: "rgba(22,24,26,.50)",
     focus: "#3A3E43",
-    beam: "#A9AC00",
-    beamTop: "rgba(169,172,0,.9)",
-    beamGlow: "rgba(214,218,0,.55)",
+    beam: "#5F6100",
+    beamTop: "rgba(95,97,0,.95)",
+    beamGlow: "rgba(40,42,0,.35)",
     coneTop: "rgba(214,218,0,.42)",
     coneBottom: "rgba(214,218,0,.14)",
     bad: "#A3221B",
     warn: "#6E4D00",
     info: "#1B5290",
     ok: "#1E5F34",
+    badIc: "#C8322B",
+    warnIc: "#C46A1C",
+    infoIc: "#1F6FC0",
+    okIc: "#2E8A50",
     danBg: "#9E1C16",
     onDan: "#FFFFFF",
     toast: "#FFFFFF",
@@ -191,13 +203,15 @@ export const graphite = {
     size: { display: 34, title: 22, body: 17, sub: 15, caption: 13, micro: 12 },
     lineHeight: { display: 40, title: 28, body: 22, sub: 20, caption: 18, micro: 16 },
     displayTracking: -0.3,
+    /** weight 300 only from this size up; under it text is ≥ 400 (v2 §3 п.10) */
+    lightFrom: 22,
   },
   space: { 1: 4, 2: 8, 3: 12, 4: 16, 6: 24, 8: 32, 12: 48 },
   radius: { xs: 6, sm: 9, control: 12, tile: 12, card: 14, main: 16, sheet: 16, icon: 10, pill: 999 },
   /** only three control heights: 44, 52, 56 */
   size: { control: 44, button: 52, row: 56, plus: 52, nav: 64, icon: 34, glyph: 20, check: 24, badge: 18, hairline: 0.5, edge: 1, focus: 1.5 },
-  /** «Прожектор»: beam line per theme, the cone under it */
-  beam: { dark: 2, light: 3, cone: 24, glow: 12 },
+  /** «Прожектор»: beam line per theme, the cone under it; the glow radius per theme (light: none, v2 §2.9) */
+  beam: { dark: 2, light: 3, cone: 24, glowDark: 12, glowLight: 0 },
   /** matte glass «Матовое» (--glassT 55): CSS blur 19.5 pt ≈ expo-blur intensity; liquid fallback blur */
   glass: { blurPt: 19.5, intensity: 50, liquidIntensity: 12 },
   /** one curve, no springs (handoff §2.8) */
@@ -212,6 +226,7 @@ export const graphite = {
     toastIn: 250,
     toastOut: 200,
     toastLife: 5000,
+    toastStack: 3,
     reduced: 120,
     pressScale: 0.97,
     pressDim: 0.16,
@@ -219,7 +234,7 @@ export const graphite = {
     toastRise: 12,
   },
   /** the sheet: side margin, float above the bottom, gap under the status bar; detents and close rules */
-  sheet: { side: 8, float: 8, topGap: 60, quarter: 0.25, half: 0.5, closeVelocity: 0.5, closeBelow: 0.3, projectMs: 150, resist: 0.25 },
+  sheet: { maxDetents: 3, side: 8, float: 8, topGap: 60, quarter: 0.25, half: 0.5, closeVelocity: 0.5, closeBelow: 0.3, projectMs: 150, resist: 0.25 },
   /** layers, bottom → top */
   z: { scene: 0, panel: 1, header: 10, nav: 20, scrim: 30, sheet: 40, toast: 70 },
 } as const;

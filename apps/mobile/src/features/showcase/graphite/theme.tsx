@@ -133,7 +133,8 @@ export function GrText({
       numberOfLines={lines}
       style={[
         {
-          fontFamily: f.family[w],
+          fontFamily:
+            f.family[w === "light" && f.size[v] < f.lightFrom ? "regular" : w],
           fontSize: f.size[v],
           lineHeight: f.lineHeight[v],
           letterSpacing: v === "display" ? f.displayTracking : undefined,

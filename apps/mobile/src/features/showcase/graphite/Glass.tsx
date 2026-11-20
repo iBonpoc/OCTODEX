@@ -27,6 +27,7 @@ const edge = graphite.size.edge;
 export function GrMatte({
   radius = graphite.radius.card,
   still,
+  flat,
   style,
   children,
   testID,
@@ -34,6 +35,8 @@ export function GrMatte({
   radius?: number;
   /** moving now: no blur, denser fill */
   still?: boolean;
+  /** a button / chip / field: the panel's fill tone in tone, no blur (v2 §3 п.2) */
+  flat?: boolean;
   style?: StyleProp<ViewStyle>;
   children?: ReactNode;
   testID?: string;
@@ -54,7 +57,9 @@ export function GrMatte({
         style,
       ]}
     >
-      {solid ? null : still ? (
+      {solid ? null : flat ? (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: g.panel }]} />
+      ) : still ? (
         <View
           style={[StyleSheet.absoluteFill, { backgroundColor: g.sheetBg }]}
         />

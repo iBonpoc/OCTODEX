@@ -61,6 +61,7 @@ export function GrButton({
         </View>
       ) : (
         <GrMatte
+          flat
           radius={R.main}
           style={{
             height: S.button,
@@ -170,7 +171,7 @@ export function GrStatus({
       <Icon
         name={STATUS_ICON[tone]}
         s={graphite.font.size.caption}
-        color={g[tone]}
+        color={g[`${tone}Ic`]}
       />
       <GrText v="caption" tone={tone}>
         {label}

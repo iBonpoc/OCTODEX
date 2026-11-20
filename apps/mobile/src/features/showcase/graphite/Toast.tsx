@@ -1,10 +1,12 @@
 /**
- * «Графит» — пилот витрины (#2254): the «Вернуть» toast (handoff §2.8, §3 п.11, 15; §5 п.5). One on the screen, a new one
- * replaces the old; ≤ 40 characters and one action; above the bottom nav. Comes up 12 pt with opacity in 250 ms, goes in
- * 200 ms; lives 5 s (2.5 s without an action); the clock stands while a finger is on it.
+ * «Графит» — пилот витрины (#2254): «Вернуть» toasts (handoff v2 §2.8, §3 п.11, 15; §5 п.5). A stack of up to 3, the new
+ * one on top, each with its own «Вернуть» and its own clock; each lives ≥ 5 s (with an action or without); the clock stands
+ * while a finger is on it; with VoiceOver on there is no clock — each toast is read out and stays until acted on or a fourth
+ * pushes it out. Above the bottom nav. Comes up 12 pt with opacity in 250 ms (only opacity under «уменьшить движение»).
+ * The stack's arithmetic — toastPush (unit-tested).
  */
-import { useEffect, useRef } from "react";
-import { View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { AccessibilityInfo, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -12,6 +14,9 @@ import Animated, {
 } from "react-native-reanimated";
 import { graphite } from "@octo/design-tokens";
 import { GrPress, GrText, grTiming, useGr } from "./theme";
+import { toastPush } from "./toastMath";
+
+export { toastPush };
 
 export interface GrToastMsg {
   id: number;
@@ -19,18 +24,36 @@ export interface GrToastMsg {
   action?: { label: string; run: () => void };
 }
 
-/** how long a toast lives: 5 s with an action, half of it without */
-export const toastLife = (withAction: boolean): number =>
-  withAction ? graphite.motion.toastLife : graphite.motion.toastLife / 2;
+/** each toast lives at least 5 s, with an action or without (v2 §2.8) */
+export const toastLife = (): number => graphite.motion.toastLife;
 
-export function GrToast({
+function useScreenReader(): boolean {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    let live = true;
+    AccessibilityInfo.isScreenReaderEnabled?.()
+      .then((v) => live && setOn(!!v))
+      .catch(() => undefined);
+    const sub = AccessibilityInfo.addEventListener(
+      "screenReaderChanged",
+      (v: boolean) => setOn(!!v),
+    );
+    return () => {
+      live = false;
+      sub?.remove();
+    };
+  }, []);
+  return on;
+}
+
+function OneToast({
   msg,
   onGone,
-  bottom,
+  reader,
 }: {
-  msg: GrToastMsg | null;
-  onGone: () => void;
-  bottom: number;
+  msg: GrToastMsg;
+  onGone: (id: number) => void;
+  reader: boolean;
 }) {
   const { g, reduceMotion } = useGr();
   const p = useSharedValue(0);
@@ -41,17 +64,17 @@ export function GrToast({
   };
   const arm = () => {
     stop();
-    if (msg) timer.current = setTimeout(onGone, toastLife(!!msg.action));
+    if (!reader) timer.current = setTimeout(() => onGone(msg.id), toastLife());
   };
   useEffect(() => {
-    p.value = 0;
-    if (msg) {
-      p.value = withTiming(1, grTiming(graphite.motion.toastIn, reduceMotion));
-      arm();
-    }
+    p.value = withTiming(1, grTiming(graphite.motion.toastIn, reduceMotion));
+    AccessibilityInfo.announceForAccessibility?.(
+      msg.action ? `${msg.text}. ${msg.action.label}` : msg.text,
+    );
+    arm();
     return stop;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [msg?.id]);
+  }, [reader]);
   const a = useAnimatedStyle(() => ({
     opacity: p.value,
     transform: [
@@ -62,22 +85,12 @@ export function GrToast({
       },
     ],
   }));
-  if (!msg) return null;
   return (
     <Animated.View
       testID="gr-toast"
       onTouchStart={stop}
       onTouchEnd={arm}
-      style={[
-        {
-          position: "absolute",
-          left: graphite.space[4],
-          right: graphite.space[4],
-          bottom,
-          zIndex: graphite.z.toast,
-        },
-        a,
-      ]}
+      style={a}
     >
       <View
         style={{
@@ -101,7 +114,7 @@ export function GrToast({
             onPress={() => {
               stop();
               msg.action?.run();
-              onGone();
+              onGone(msg.id);
             }}
             style={{
               height: graphite.size.control,
@@ -116,5 +129,35 @@ export function GrToast({
         ) : null}
       </View>
     </Animated.View>
+  );
+}
+
+export function GrToasts({
+  stack,
+  onGone,
+  bottom,
+}: {
+  stack: GrToastMsg[];
+  onGone: (id: number) => void;
+  bottom: number;
+}) {
+  const reader = useScreenReader();
+  if (!stack.length) return null;
+  return (
+    <View
+      pointerEvents="box-none"
+      style={{
+        position: "absolute",
+        left: graphite.space[4],
+        right: graphite.space[4],
+        bottom,
+        zIndex: graphite.z.toast,
+        gap: graphite.space[2],
+      }}
+    >
+      {stack.map((m) => (
+        <OneToast key={m.id} msg={m} onGone={onGone} reader={reader} />
+      ))}
+    </View>
   );
 }

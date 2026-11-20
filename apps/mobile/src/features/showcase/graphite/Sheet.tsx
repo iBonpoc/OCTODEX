@@ -16,7 +16,7 @@ import Animated, {
 import { graphite } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { Icon } from "@/ui/primitives";
-import { GrLiquid, GrMatte } from "./Glass";
+import { GrMatte } from "./Glass";
 import { detents, dragHeight, release } from "./sheetMath";
 import { GrPress, GrText, grTiming, useGr } from "./theme";
 
@@ -175,7 +175,8 @@ export function GrSheet({
                 accessibilityLabel={t("ds.gr.close")}
                 onPress={onClose}
               >
-                <GrLiquid
+                <GrMatte
+                  flat
                   radius={graphite.radius.pill}
                   style={{
                     width: graphite.size.control,
@@ -185,7 +186,7 @@ export function GrSheet({
                   }}
                 >
                   <Icon name="close" s={graphite.size.glyph} color={g.text} />
-                </GrLiquid>
+                </GrMatte>
               </GrPress>
             </View>
             {children}

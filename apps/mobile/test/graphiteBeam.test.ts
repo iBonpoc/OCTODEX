@@ -44,3 +44,23 @@ describe("graphite pilot flag (off by default)", () => {
     expect(parseGraphiteFlag("1")).toBe(true);
   });
 });
+
+import { toastPush } from "../src/features/showcase/graphite/toastMath";
+import { alphaOf, rgbOf } from "../src/features/showcase/graphite/beamMath";
+
+describe("graphite toasts (v2 §3 п.15: a stack of up to 3, new on top)", () => {
+  it("new on top, the fourth pushes the oldest out", () => {
+    let st: number[] = [];
+    for (const i of [1, 2, 3, 4]) st = toastPush(st, i);
+    expect(st).toEqual([4, 3, 2]);
+  });
+});
+
+describe("graphite cone stops (rgba split for SVG)", () => {
+  it("rgba → rgb + alpha; a hex stays whole", () => {
+    expect(rgbOf("rgba(251,255,90,.34)")).toBe("rgb(251,255,90)");
+    expect(alphaOf("rgba(251,255,90,.34)")).toBeCloseTo(0.34, 5);
+    expect(rgbOf("#5F6100")).toBe("#5F6100");
+    expect(alphaOf("#5F6100")).toBe(1);
+  });
+});

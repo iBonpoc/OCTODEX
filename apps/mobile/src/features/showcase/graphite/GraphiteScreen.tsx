@@ -5,7 +5,7 @@
  * task row, the glass panel with statuses; its own theme switch; «уменьшить движение / прозрачность» respected.
  * The scene is the «Рельеф» picture of the theme (assets/, made by the design package's generator, Appendix A).
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ImageBackground, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { graphite } from "@octo/design-tokens";
@@ -23,7 +23,7 @@ import {
 import { GrLiquid, useGlassMode } from "./Glass";
 import { GrSheet } from "./Sheet";
 import { SpotlightNav } from "./Spotlight";
-import { GrToast, type GrToastMsg } from "./Toast";
+import { GrToasts, toastPush, type GrToastMsg } from "./Toast";
 import { GrPress, GrText, useGr, type GrThemePref } from "./theme";
 
 const RELIEF = {
@@ -127,10 +127,11 @@ export function GraphiteScreen({ onClose }: { onClose: () => void }) {
   const ins = useSafeAreaInsets();
   const [rows, setRows] = useState(ROWS);
   const [sheet, setSheet] = useState(false);
-  const [toast, setToast] = useState<GrToastMsg | null>(null);
+  const [toasts, setToasts] = useState<GrToastMsg[]>([]);
+  const seq = useRef(0);
   const navBottom = Math.max(ins.bottom, SP[2]);
   const show = (m: Omit<GrToastMsg, "id">) =>
-    setToast({ ...m, id: Date.now() });
+    setToasts((st) => toastPush(st, { ...m, id: ++seq.current }));
 
   const removeRow = () => {
     const gone = rows[rows.length - 1];
@@ -269,9 +270,9 @@ export function GraphiteScreen({ onClose }: { onClose: () => void }) {
       >
         <SpotlightNav badge={3} onPlus={() => setSheet(true)} />
       </View>
-      <GrToast
-        msg={toast}
-        onGone={() => setToast(null)}
+      <GrToasts
+        stack={toasts}
+        onGone={(id) => setToasts((st) => st.filter((x) => x.id !== id))}
         bottom={navBottom + S.nav + SP[2]}
       />
       <GrSheet

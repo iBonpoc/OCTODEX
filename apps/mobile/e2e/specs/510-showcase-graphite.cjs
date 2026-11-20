@@ -13,7 +13,14 @@ const YELLOW = "rgb(251, 255, 0)";
 exports.run = async (h) => {
   const p = h.page;
   const vis = (id) => p.getByTestId(id).locator("visible=true").first();
-  const settle = () => p.waitForFunction(() => document.readyState === "complete");
+  /** a wait that says which step it was on when it fails */
+  const until = async (label, fn, arg) => {
+    try {
+      await p.waitForFunction(fn, arg, { timeout: 8000 });
+    } catch (e) {
+      throw new Error(`${label}: ${e.message.split("\n")[0]}`);
+    }
+  };
 
   // С1 — hidden by default
   await h.go("/settings/design-system");
@@ -32,7 +39,6 @@ exports.run = async (h) => {
   await vis("showcase-graphite").waitFor({ timeout: 8000 });
   await p.getByTestId("gr-open").locator("visible=true").first().click();
   await vis("gr-screen").waitFor({ timeout: 8000 });
-  await settle();
 
   // С3 — the beam over the pressed tab; «＋» keeps it
   const centreX = async (id) => {
@@ -42,8 +48,8 @@ exports.run = async (h) => {
   const beamOver = async (id) => Math.abs((await centreX("gr-nav-beam")) - (await centreX(id))) < 4;
   h.expect(await beamOver("gr-nav-today"), "С3: the beam starts over «Сегодня»");
   await vis("gr-nav-clients").click();
-  await p.waitForFunction(() => document.querySelector('[data-testid="gr-nav-clients"]')?.getAttribute("aria-selected") === "true");
-  await p.waitForFunction(() => {
+  await until("С3 clients selected", () => document.querySelector('[data-testid="gr-nav-clients"]')?.getAttribute("aria-selected") === "true");
+  await until("С3 beam over clients", () => {
     const c = (s) => {
       const r = document.querySelector(`[data-testid="${s}"]`)?.getBoundingClientRect();
       return r ? r.x + r.width / 2 : -1;
@@ -57,7 +63,7 @@ exports.run = async (h) => {
   await vis("gr-nav-plus").click();
   await vis("gr-sheet").waitFor({ timeout: 4000 });
   h.expect(await beamOver("gr-nav-clients"), "С3: «＋» does not move the beam");
-  await p.waitForFunction(() => {
+  await until("С4 sheet at ½", () => {
     const r = document.querySelector('[data-testid="gr-sheet"]')?.getBoundingClientRect();
     return r && Math.abs(r.height - Math.round(window.innerHeight / 2)) <= 2;
   });
@@ -86,7 +92,7 @@ exports.run = async (h) => {
   h.expect((await rows()) === 2, "С6: a row is gone");
   await h.shot("toast");
   await vis("gr-toast-undo").click();
-  await p.waitForFunction(() => document.querySelectorAll('[data-testid^="gr-row-"]').length === 3);
+  await until("С6 row back", () => document.querySelectorAll('[data-testid^="gr-row-"]').length === 3);
   await p.getByTestId("gr-toast").waitFor({ state: "detached", timeout: 4000 });
 
   // С7 — the pilot's theme switch; yellow only on the main button and «＋»

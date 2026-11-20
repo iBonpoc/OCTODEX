@@ -1,4 +1,4 @@
-/* «Графит» — ПИЛОТ, НЕ ПРАВИЛО (#2254, 19.11.2026). Пакет чата дизайна, handoff §2. Зеркало: packages/design-tokens/src/graphite.ts (mirror.test.ts). */
+/* «Графит» — ПИЛОТ, НЕ ПРАВИЛО (#2254, 19.11.2026). Пакет чата дизайна, handoff §2 (v2 после критика, §2.9). Зеркало: packages/design-tokens/src/graphite.ts (mirror.test.ts). */
 [data-skin="graphite"]{
   --gr-font-family-light:Jost_300Light;
   --gr-font-family-regular:Jost_400Regular;
@@ -16,6 +16,7 @@
   --gr-font-line-height-caption:18;
   --gr-font-line-height-micro:16;
   --gr-font-display-tracking:-0.3;
+  --gr-font-light-from:22;
   --gr-space-1:4;
   --gr-space-2:8;
   --gr-space-3:12;
@@ -47,7 +48,8 @@
   --gr-beam-dark:2;
   --gr-beam-light:3;
   --gr-beam-cone:24;
-  --gr-beam-glow:12;
+  --gr-beam-glow-dark:12;
+  --gr-beam-glow-light:0;
   --gr-glass-blur-pt:19.5;
   --gr-glass-intensity:50;
   --gr-glass-liquid-intensity:12;
@@ -61,11 +63,13 @@
   --gr-motion-toast-in:250;
   --gr-motion-toast-out:200;
   --gr-motion-toast-life:5000;
+  --gr-motion-toast-stack:3;
   --gr-motion-reduced:120;
   --gr-motion-press-scale:0.97;
   --gr-motion-press-dim:0.16;
   --gr-motion-behind-scale:0.96;
   --gr-motion-toast-rise:12;
+  --gr-sheet-max-detents:3;
   --gr-sheet-side:8;
   --gr-sheet-float:8;
   --gr-sheet-top-gap:60;
@@ -121,6 +125,10 @@
   --gr-warn:#F2C66A;
   --gr-info:#9CC4EF;
   --gr-ok:#93D3A0;
+  --gr-bad-ic:#E85E62;
+  --gr-warn-ic:#F49D4F;
+  --gr-info-ic:#4FA6E8;
+  --gr-ok-ic:#7AD8A2;
   --gr-dan-bg:#FF9C8A;
   --gr-on-dan:#040505;
   --gr-toast:#2A2D31;
@@ -165,15 +173,19 @@
   --gr-field-bg:rgba(255,255,255,.66);
   --gr-field-edge:rgba(22,24,26,.50);
   --gr-focus:#3A3E43;
-  --gr-beam:#A9AC00;
-  --gr-beam-top:rgba(169,172,0,.9);
-  --gr-beam-glow:rgba(214,218,0,.55);
+  --gr-beam:#5F6100;
+  --gr-beam-top:rgba(95,97,0,.95);
+  --gr-beam-glow:rgba(40,42,0,.35);
   --gr-cone-top:rgba(214,218,0,.42);
   --gr-cone-bottom:rgba(214,218,0,.14);
   --gr-bad:#A3221B;
   --gr-warn:#6E4D00;
   --gr-info:#1B5290;
   --gr-ok:#1E5F34;
+  --gr-bad-ic:#C8322B;
+  --gr-warn-ic:#C46A1C;
+  --gr-info-ic:#1F6FC0;
+  --gr-ok-ic:#2E8A50;
   --gr-dan-bg:#9E1C16;
   --gr-on-dan:#FFFFFF;
   --gr-toast:#FFFFFF;

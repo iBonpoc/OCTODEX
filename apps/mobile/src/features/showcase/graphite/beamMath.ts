@@ -35,3 +35,11 @@ export function nextBeamSlot(
   if (tapped === plusIndex || tapped < 0 || tapped >= count) return current;
   return tapped;
 }
+
+/** «rgba(r,g,b,a)» → «rgb(r,g,b)» and a: an SVG stop takes its opacity apart */
+export const rgbOf = (c: string): string =>
+  c.replace(/^rgba\(([^,]+),([^,]+),([^,]+),[^)]+\)$/, "rgb($1,$2,$3)");
+export const alphaOf = (c: string): number => {
+  const m = /^rgba\([^,]+,[^,]+,[^,]+,([^)]+)\)$/.exec(c);
+  return m ? Number(m[1]) : 1;
+};

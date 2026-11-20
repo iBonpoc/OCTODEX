@@ -18,7 +18,7 @@ import { graphite } from "@octo/design-tokens";
 import { useI18n, type DictKey } from "@/i18n";
 import { Icon, type IconKey } from "@/ui/primitives";
 import { GrLiquid } from "./Glass";
-import { beamWidth, beamX, nextBeamSlot } from "./beamMath";
+import { alphaOf, beamWidth, beamX, nextBeamSlot, rgbOf } from "./beamMath";
 import { GrPress, GrText, grTiming, useGr } from "./theme";
 
 const SLOTS: { id: string; label: DictKey; icon: IconKey }[] = [
@@ -178,15 +178,26 @@ export function SpotlightNav({
               borderTopColor: g.beamTop,
               shadowColor: g.beamGlow,
               shadowOpacity: 1,
-              shadowRadius: graphite.beam.glow,
+              shadowRadius:
+                name === "dark"
+                  ? graphite.beam.glowDark
+                  : graphite.beam.glowLight,
               shadowOffset: { width: 0, height: 0 },
             }}
           />
           <Svg width={bw} height={graphite.beam.cone}>
             <Defs>
               <LinearGradient id="grCone" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor={g.coneTop} />
-                <Stop offset="1" stopColor={g.coneBottom} />
+                <Stop
+                  offset="0"
+                  stopColor={rgbOf(g.coneTop)}
+                  stopOpacity={alphaOf(g.coneTop)}
+                />
+                <Stop
+                  offset="1"
+                  stopColor={rgbOf(g.coneBottom)}
+                  stopOpacity={alphaOf(g.coneBottom)}
+                />
               </LinearGradient>
             </Defs>
             <Path

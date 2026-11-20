@@ -169,8 +169,8 @@ describe.each(names)("«Графит» %s contrast (#2254)", (name) => {
       }
     });
   }
-  it("text on the glass nav (fallback fill + dim under the caption) ≥ 4.5", () => {
-    for (const s of scene) expect(ratio(parse(g.text), over(g.glDim, rgb(over(g.gl, s))))).toBeGreaterThanOrEqual(4.5);
+  it("text2 on the glass nav (fallback fill + dim under the caption) ≥ 4.5", () => {
+    for (const s of scene) expect(ratio(parse(g.text2), over(g.glDim, rgb(over(g.gl, s))))).toBeGreaterThanOrEqual(4.5);
   });
   it("the field edge stands out from the panel ≥ 3", () => {
     for (const p of grounds.panel) expect(ratio(over(g.fieldEdge, rgb(p)), p)).toBeGreaterThanOrEqual(3);
@@ -183,4 +183,28 @@ describe.each(names)("«Графит» %s contrast (#2254)", (name) => {
     expect(ratio(parse(g.onDan), parse(g.danBg))).toBeGreaterThanOrEqual(4.5);
   });
   it("the yellow fill is one colour in both themes (only the main action and «＋»)", () => expect(g.acc).toBe("#FBFF00"));
+  /** asked of the design chat 20.11 (#2254): light `late ic` #C46A1C gives 2.83 on the panel — the word next to it holds 4.5.
+   *  Its own floor until the answer; anything else under 3 is red. */
+  const IC_ASKED: Partial<Record<string, number>> = { "light.warnIc": 2.8 };
+  it("status icons (`ic`) on the panel ≥ 3 (UI), the word (`-w`) ≥ 4.5 — the word never in `ic`", () => {
+    for (const s of on(g.panel))
+      for (const st of ["ok", "info", "warn", "bad"] as const) expect(ratio(parse(g[`${st}Ic`]), s), `${st}Ic`).toBeGreaterThanOrEqual(IC_ASKED[`${name}.${st}Ic`] ?? 3);
+  });
+  it("the solid fallbacks (Reduce Transparency, v2 §3 п.5): text ≥ 7, text2 ≥ 4.5 on panelSolid and glSolid", () => {
+    for (const s of [g.panelSolid, g.glSolid]) {
+      expect(ratio(parse(g.text), parse(s))).toBeGreaterThanOrEqual(7);
+      expect(ratio(parse(g.text2), parse(s))).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+  /**
+   * handoff v2 §2.9 — the design chat's measure on the founder's choice (worst pixel under each glyph, 20 screens × 2 themes):
+   * text 8.27 / 7.80, text2 6.74 / 5.73, onAcc on yellow 18.86, the beam against the glass next to it 9.11 / 3.12 (light: thin
+   * margin, check on the device), the selected nav label 8.27 / 16.33. Here: the same pairs on the flat fills, never under the floors.
+   */
+  it("§2.9: the beam against the glass of the nav ≥ 3 (light #5F6100: #A9AC00 gave 1.88)", () => {
+    for (const s of scene) expect(ratio(parse(g.beam), over(g.gl, s))).toBeGreaterThanOrEqual(3);
+  });
+  it("§2.9: the selected nav label on the glass ≥ 7", () => {
+    for (const s of scene) expect(ratio(parse(g.text), over(g.glDim, rgb(over(g.gl, s))))).toBeGreaterThanOrEqual(7);
+  });
 });
