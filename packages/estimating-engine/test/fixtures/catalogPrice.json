@@ -137,5 +137,109 @@
    "markupBps": 0,
    "price": 1213
   }
- ]
+ ],
+ "millicents": [
+  {
+   "costMillicents": 22500,
+   "taxBps": 0,
+   "markupBps": 1000,
+   "price": 25,
+   "note": "22.5 ¢ (for 100: $22.50) + 10 % = 24.75 → 25 ¢ (#1926)"
+  },
+  {
+   "costMillicents": 22500,
+   "taxBps": 0,
+   "markupBps": 0,
+   "price": 23,
+   "note": "22.5 ¢ with nothing on it → 23 ¢ (half up)"
+  },
+  {
+   "costMillicents": 4120,
+   "taxBps": 0,
+   "markupBps": 0,
+   "price": 4,
+   "note": "$10.30 for 250 = 4.12 ¢ → 4 ¢"
+  },
+  {
+   "costMillicents": 6528,
+   "taxBps": 0,
+   "markupBps": 3000,
+   "price": 8,
+   "note": "anchors $65.28 for 1000: 6.528 ¢ + 30 % = 8.4864 → 8 ¢"
+  },
+  {
+   "costMillicents": 33333,
+   "taxBps": 0,
+   "markupBps": 0,
+   "price": 33,
+   "note": "$1.00 for 3 = 33.333 ¢ → 33 ¢"
+  },
+  {
+   "costMillicents": 22500,
+   "taxBps": 825,
+   "markupBps": 1000,
+   "price": 27,
+   "note": "22.5 ¢, 8.25 % tax, 10 % markup = 26.791875 → 27 ¢"
+  },
+  {
+   "costMillicents": 22600,
+   "taxBps": 0,
+   "markupBps": 1000,
+   "price": 25,
+   "note": "22.6 ¢ + 10 % = 24.86 → 25 ¢ (the same mirror 23 ¢ as 22.5)"
+  },
+  {
+   "costMillicents": 1,
+   "taxBps": 0,
+   "markupBps": 0,
+   "price": 0,
+   "note": "a thousandth of a cent → 0 ¢"
+  },
+  {
+   "costMillicents": 500,
+   "taxBps": 0,
+   "markupBps": 0,
+   "price": 1,
+   "note": "half a cent → 1 ¢ (half up)"
+  },
+  {
+   "costMillicents": 499,
+   "taxBps": 0,
+   "markupBps": 0,
+   "price": 0,
+   "note": "just under half a cent → 0 ¢"
+  },
+  {
+   "costMillicents": 1499,
+   "taxBps": 0,
+   "markupBps": 10000,
+   "price": 3,
+   "note": "1.499 ¢ + 100 % = 2.998 → 3 ¢ (from the mirror 1 ¢ it would be 2 ¢)"
+  },
+  {
+   "costMillicents": 100000000000,
+   "taxBps": 0,
+   "markupBps": 0,
+   "price": 100000000,
+   "note": "the bound: $1 000 000 a unit in thousandths"
+  },
+  {
+   "costMillicents": 100000000000,
+   "taxBps": 1025,
+   "markupBps": 10000,
+   "price": 220500000,
+   "note": "the bound with tax and 100 % markup"
+  }
+ ],
+ "line": {
+  "qty": 37,
+  "costMillicents": 22500,
+  "taxBps": 0,
+  "markupBps": 1000,
+  "unitPrice": 25,
+  "lineTotal": 925,
+  "lineCost": 833,
+  "note": "37 pcs at $22.50 for 100 + 10 %: unit price 25 ¢, the client's line 925 ¢, our cost 833 ¢ (from the rounded 23 ¢ it would be 851 ¢) — #1926, spec 53 §8а.12"
+ },
+ "_millicents": "#1926 (spec 53 §8а.12, (а″)): «millicents» — the exact cost in thousandths of a cent (22 500 = 22.5 ¢), read by the engine test and by T450 (app.item_price_millicents). «cases» stay as they were: cents are the old input (a guard test holds them unchanged)."
 }

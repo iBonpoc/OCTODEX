@@ -6,6 +6,8 @@ import { Labeled } from "@/features/fields";
 import { Button, TextField } from "@/ui/controls";
 import { formatPhoneUS } from "@/ui/inputFormat";
 import { NumberField } from "@/ui/numberField";
+import { DateField } from "@/ui/dateField";
+import { addDays, todayKey, type DayKey } from "@/features/calendar";
 import { formatBps, formatCents } from "@/ui/numberInput";
 import { T } from "@/ui/primitives";
 import { FieldGroup, FormMain, RowView, SectionTitle } from "@/ui/surfaces";
@@ -23,6 +25,8 @@ export function FieldsSection() {
   const [cents, setCents] = useState(123450);
   const [bps, setBps] = useState(825);
   const [qty, setQty] = useState("2.5");
+  const [date, setDate] = useState<DayKey | null>(() => addDays(todayKey(), 1));
+  const [due, setDue] = useState<DayKey | null>(null);
   const [ft, setFt] = useState("12");
   const [inch, setInch] = useState("7 1/2");
   const [days, setDays] = useState(12);
@@ -74,6 +78,9 @@ export function FieldsSection() {
         </View>
         <NumberField kind="qty" label={t("ds.fields.qty")} unit="ft" unitWord={t("ds.fields.qtyWord")} qty={qty} onChange={setQty} testID="showcase-num-qty" />
         <NumberField kind="integer" label={t("ds.fields.integer")} value={days} onChange={setDays} testID="showcase-num-integer" />
+        {/* DS А7: a day in a form — the row, «Сегодня · Завтра» and the calendar open under it; the second one may be empty */}
+        <DateField label={t("ds.fields.date")} value={date} onChange={setDate} testID="showcase-date" />
+        <DateField label={t("ds.fields.due")} value={due} onChange={setDue} optional testID="showcase-due" />
         {/* two narrow fields in one row (#1990): the unit stays inside its own frame on a phone */}
         <T v="caption" tone="mut">{t("ds.fields.narrow")}</T>
         <View testID="showcase-num-narrow">

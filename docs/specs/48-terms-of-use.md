@@ -187,6 +187,16 @@ Invoice Simple (End User Terms), Joist (адрес основных услови
 
 **11. Cambios.** Mostramos la nueva edición en la aplicación antes de que entre en vigor. Los cambios importantes se aceptan de nuevo en el siguiente inicio de sesión.
 
+### 4.3а. Добавка #2169: цены и состав тарифов (18.11.2026) — **текст на юриста**
+
+Новый пункт после «10. Limit of liability», перед «11. Changes» (номер ставит исполнитель экранов при переносе; ключи `legal.terms.N.t/.b` — общий блок i18n через руководителя). Основание: решение основателя 18.11 (подписка Apple, три тарифа; «старым клиентам… цена ещё остаётся для них месяц старая… для новых пользователей сразу же новая цена»), спека 44 ред. 5 §5.4, спека 62.
+
+- **EN.** **Plans and prices.** GoRix is offered as monthly plans billed through the App Store. We may change prices and what each plan includes. A new price applies to new subscribers right away. If you already subscribe, we will tell you in the app at least 30 days before a higher price or a smaller plan applies to you; Apple may also ask for your consent. You can cancel at any time in your Apple ID settings, and your data stays readable and exportable.
+- **RU.** **Тарифы и цены.** GoRix предлагается месячными тарифами с оплатой через App Store. Мы можем менять цены и состав тарифов. Новая цена сразу действует для новых подписчиков. Если вы уже подписаны, мы сообщим в приложении не меньше чем за 30 дней до того, как для вас начнёт действовать более высокая цена или меньший состав тарифа; Apple может также попросить ваше согласие. Отменить подписку можно в любой момент в настройках Apple ID; ваши данные остаются доступны для чтения и выгрузки.
+- **ES.** **Planes y precios.** GoRix se ofrece en planes mensuales cobrados a través de la App Store. Podemos cambiar los precios y lo que incluye cada plan. Un precio nuevo se aplica de inmediato a los nuevos suscriptores. Si ya está suscrito, le avisaremos en la app al menos 30 días antes de que se le aplique un precio más alto o un plan con menos contenido; Apple también puede pedir su consentimiento. Puede cancelar en cualquier momento en los ajustes de su Apple ID, y sus datos siguen disponibles para leer y exportar.
+
+Пометка: **текст — на юриста** (условия автопродления, требования штатов США к уведомлению о повышении цены и к отмене подписки — [не проверено]; Apple сама показывает свои условия покупки). Тест при переносе: ключи пункта есть в RU/EN/ES, строки «30 days» / «30 дней» / «30 días» на месте.
+
 ### 4.4. Проверяемые свойства текста (EN)
 
 - Слов: ≈ 600 (Zoho ≈ 4 000, Invoice2go ≈ 11 000) — цель ≤ 700, сторож в тестах (§6).

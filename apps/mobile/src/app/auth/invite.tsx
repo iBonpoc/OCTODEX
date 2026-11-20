@@ -32,6 +32,8 @@ export default function AcceptInvite() {
   const [busy, setBusy] = useState(false);
   const [round, setRound] = useState(0);
   const [err, setErr] = useState("");
+  // DS §11 п.3: «Принять» is always on; pressed without the tick — what to do, in words (warn), nothing sent
+  const [needTick, setNeedTick] = useState(false);
   const tried = useRef(false);
   const signedIn = !!auth.userId;
   const step = inviteStep({ signedIn, legalChecked: auth.legalChecked, legal: auth.legal });
@@ -41,7 +43,7 @@ export default function AcceptInvite() {
     tried.current = true;
     setState("joining");
     (async () => {
-      const r = await joinInvite(param, { store: AsyncStorage, accept: acceptInvitation, reload: async () => void (await auth.reloadMemberships()) });
+      const r = await joinInvite(param, { store: AsyncStorage, accept: acceptInvitation, reload: async (id) => void (await auth.reloadMemberships(id ?? undefined, "joined")) });
       if (r.kind === "joined") return router.replace("/");
       if (r.kind === "legal") {
         // the consent is missing (another device, an old app): ask here, the link is kept, then try again
@@ -53,6 +55,8 @@ export default function AcceptInvite() {
     })();
   }, [step, param, auth, t, round]);
   const agreeAndJoin = async () => {
+    if (!agreed) return setNeedTick(true);
+    setNeedTick(false);
     setBusy(true);
     const e = await auth.agree();
     setBusy(false);
@@ -89,11 +93,23 @@ export default function AcceptInvite() {
           ) : state === "legal" ? (
             <View testID="invite-legal" style={{ gap: space[3] }}>
               <T v="body">{t("invite.legal")}</T>
-              <LegalAgree on={agreed} onChange={setAgreed} testID="invite-agree" />
+              <LegalAgree
+                on={agreed}
+                onChange={(v) => {
+                  setAgreed(v);
+                  if (v) setNeedTick(false);
+                }}
+                testID="invite-agree"
+              />
+              {needTick && !agreed ? (
+                <StatusNote tone="warn" testID="invite-need-tick">
+                  {t("legal.err.needed")}
+                </StatusNote>
+              ) : null}
               {err ? (
                 <StatusNote tone="bad">{err}</StatusNote>
               ) : null}
-              <Button label={t("legal.gate.accept")} icon="check" full disabled={!agreed || busy} onPress={agreeAndJoin} />
+              <Button label={t("legal.gate.accept")} icon="check" full disabled={busy} onPress={agreeAndJoin} testID="invite-accept-legal" />
             </View>
           ) : state === "error" ? (
             <>
