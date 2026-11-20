@@ -4,7 +4,7 @@
  *
  * Not mapped — stay as in «Наряд» (taken from `base`): `shadow` (Графит has no shadows: depth is glass + edge), `blur`,
  * `blurOverlay`, `blurTint` (glass is its own number set), `glow` (the «Рельеф» picture replaces it), `drawing`
- * (the Gutters canvas keeps its storey colours, rule 2 exception). `status.neutral` has no «Графит» colour:
+ * (the drawing canvas keeps its storey colours, rule 2 exception). `status.neutral` has no «Графит» colour:
  * derived from `tile2` / `text2` / `text`. Fonts, radii, sizes, motion are not colours: not touched here.
  */
 import type { GraphiteColors } from "./graphite";
