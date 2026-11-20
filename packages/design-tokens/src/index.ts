@@ -5,6 +5,7 @@
  */
 export * from "./icons";
 export { extraIcons } from "./extraIcons";
+export { graphite, graphiteThemes, type GraphiteColors, type Graphite } from "./graphite";
 
 /* ---------- foundation.css ---------- */
 export const font = {
@@ -162,7 +163,8 @@ export const component = {
   segmented: { h: 32, pad: 4 },
   /** a tab of a screen (pill); `fadeW` — the row of view tabs fades this wide at an edge that has more tabs past it (DS §9 А1п, #1343) */
   tab: { h: 30, fadeW: 32 },
-  switch: { w: 42, h: 24, knob: 16 },
+  /** DS §9 А5 (spec 56 §3.3, wave 1а): the knob 18 (was 16), pad 2 inside the 1-px edge */
+  switch: { w: 42, h: 24, knob: 18 },
   help: { visible: 18, icon: 11 },
   tip: { fs: 13, px: 8, py: 4, radius: 8, max: 220, gap: 6 },
   fab: 36,
@@ -261,6 +263,11 @@ export const component = {
   /** list cards (docs/specs/06-list-cards.md): option row in a picker sheet; narrowest figure tile */
   rowOption: 48,
   tileMin: 78,
+  /** choice controls (DS §9, spec 56 wave 1а): a tile of `OptionTile` (≈ 100 × 76, not wider than 120 — the row stays left on 1280, А2б); the «⊖» of a repeated value — visible 22,
+   *  the zone 44 (А14а); its label button — not wider than 110 (the row on 390: ⊖ 36 + label 110 + 8 + field 204) */
+  optionTile: { h: 76, maxW: 120 },
+  valueIcon: 22,
+  valueLabelMax: 110,
 } as const;
 
 /* ---------- breakpoints (HANDOFF: 390 / 820 / 1280) ---------- */

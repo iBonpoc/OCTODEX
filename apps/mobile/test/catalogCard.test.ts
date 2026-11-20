@@ -133,8 +133,8 @@ describe("unit:catalogCard — what the item did on this device (itemUsage)", ()
         est("e5", "sent", { options: [{ id: "o1", name: "A", lines: [line("x", { catalogItemId: "other" })] }], settings: DEFAULT_SETTINGS } as unknown as EstimateDoc),
       ],
       purchaseOrders: [po("received", "3"), po("partially_received", "1.5"), po("cancelled", "7")],
-    } as unknown as Pick<DB, "estimates" | "purchaseOrders" | "costsVisible">;
-    const u = itemUsage(db, "i1");
+    } as unknown as Pick<DB, "estimates" | "purchaseOrders">;
+    const u = itemUsage(db, "i1", true);
     expect(u.inEstimates).toBe(4);
     // e1: l1 2 + the add-on l2 2 (taken); e2: 1.5; e4: the add-on not taken; the other option and a draft — not sold
     expect(u.soldQty).toBe("5.5");
@@ -144,10 +144,10 @@ describe("unit:catalogCard — what the item did on this device (itemUsage)", ()
   });
   it("profit only for who sees costs and only with every cost known", () => {
     const d = doc([line("l1"), line("l2", { unitCostCents: undefined })]);
-    const db = { estimates: [est("e1", "approved", d, { optionId: "o1", addonIds: [] })], purchaseOrders: [] } as unknown as Pick<DB, "estimates" | "purchaseOrders" | "costsVisible">;
-    expect(itemUsage(db, "i1").profitCents).toBeNull();
-    expect(itemUsage({ ...db, estimates: [est("e1", "approved", doc([line("l1")]), { optionId: "o1", addonIds: [] })], costsVisible: false }, "i1").profitCents).toBeNull();
-    expect(itemUsage({ estimates: [], purchaseOrders: undefined } as unknown as DB, "i1")).toEqual({ inEstimates: 0, soldQty: "0", revenueCents: 0, profitCents: 0, boughtQty: "0" });
+    const db = { estimates: [est("e1", "approved", d, { optionId: "o1", addonIds: [] })], purchaseOrders: [] } as unknown as Pick<DB, "estimates" | "purchaseOrders">;
+    expect(itemUsage(db, "i1", true).profitCents).toBeNull();
+    expect(itemUsage({ ...db, estimates: [est("e1", "approved", doc([line("l1")]), { optionId: "o1", addonIds: [] })] }, "i1", false).profitCents).toBeNull();
+    expect(itemUsage({ estimates: [], purchaseOrders: undefined } as unknown as DB, "i1", true)).toEqual({ inEstimates: 0, soldQty: "0", revenueCents: 0, profitCents: 0, boughtQty: "0" });
   });
 });
 
@@ -210,12 +210,12 @@ describe("unit:catalogCard — itemUsage, more cases (code-reviewer of РС-10)"
   const est = (status: Estimate["status"], optionId?: string) =>
     ({ id: status + (optionId ?? ""), customerId: "c", propertyId: "p", title: "x", totalCents: 0, status, doc: d, ...(optionId ? { approval: { optionId, addonIds: [], signerName: "x", signature: "x", at: "x", channel: "on_site", totalCents: 0, depositCents: 0 } } : {}) }) as Estimate;
   it("the option the client chose, not the recommended one; the quantity as the engine counts it (4 decimals)", () => {
-    const u = itemUsage({ estimates: [est("approved", "o2")], purchaseOrders: [], costsVisible: true } as unknown as DB, "i1");
+    const u = itemUsage({ estimates: [est("approved", "o2")], purchaseOrders: [] } as unknown as DB, "i1", true);
     expect(u.soldQty).toBe("1.2346");
     expect(u.revenueCents).toBe(1235);
   });
   it("approved without a choice, declined with one, a choice of an option not there — nothing sold", () => {
-    const u = itemUsage({ estimates: [est("approved"), est("declined", "o1"), est("approved", "gone")], purchaseOrders: [], costsVisible: true } as unknown as DB, "i1");
+    const u = itemUsage({ estimates: [est("approved"), est("declined", "o1"), est("approved", "gone")], purchaseOrders: [] } as unknown as DB, "i1", true);
     expect(u).toMatchObject({ inEstimates: 3, soldQty: "0", revenueCents: 0 });
   });
 });

@@ -78,8 +78,9 @@ exports.run = async (h) => {
   // no photos after work: a warning, not a lock (docs/specs/08 §4) — «Пропустить» goes on to the payment
   await p.getByTestId("chk-missing").last().waitFor();
   await p.getByTestId("chk-skip").last().click();
-  await h.clickText("Наличные");
-  await h.click("Записать оплату");
+  await p.getByTestId("visit-method-button").locator("visible=true").first().click(); // the method is a row with a menu (spec 56 wave 5а)
+  await p.getByTestId("visit-method-cash").locator("visible=true").first().click();
+  await h.click("Принять оплату");
   db = await h.db();
   v = db.visits.find((x) => x.id === id);
   h.expect(v.step === "paid" && v.payment && v.payment.method === "cash", "paid in cash");

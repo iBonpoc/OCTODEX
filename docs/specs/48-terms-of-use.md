@@ -133,7 +133,7 @@ Invoice Simple (End User Terms), Joist (адрес основных услови
 
 **8. Your data (with export — see §8.3).** Your data belongs to you. GoRix does not sell it, does not share it for advertising and does not use it to train models. You can export it at any time while your account is open. When you close the account we do not keep a copy for export, so export first.
 
-**9. As is.** GoRix is provided as is, without implied warranties and without a promise of uninterrupted work. Keep exports and backups of what matters to you.
+**9. As is.** GoRix is provided as is, without implied warranties and without a promise of uninterrupted work. Keep exports and backups of what matters to you. Measurements in the app are approximate; the contractor verifies dimensions on site before ordering materials and cutting. The app is not responsible for measurement errors. (решение аудита 16.11, слова основателя: «замер примерный — убрать вообще» с экранов; оговорка — только здесь)
 
 **10. Limit of liability.** Our liability is limited to what you paid GoRix in the 12 months before a claim, or $100 if that is more, and we are not liable for indirect losses, except where the law does not allow such a limit.
 
@@ -157,7 +157,7 @@ Invoice Simple (End User Terms), Joist (адрес основных услови
 
 **8. Ваши данные.** Ваши данные принадлежат вам. GoRix их не продаёт, не передаёт для рекламы и не использует для обучения моделей. Выгрузить их можно в любой момент, пока учётная запись открыта. Когда вы закрываете её, копию для выгрузки мы не храним — выгрузите заранее.
 
-**9. «Как есть».** GoRix предоставляется как есть, без подразумеваемых гарантий и без обещания бесперебойной работы. Сохраняйте выгрузки и копии важного.
+**9. «Как есть».** GoRix предоставляется как есть, без подразумеваемых гарантий и без обещания бесперебойной работы. Сохраняйте выгрузки и копии важного. Замеры в приложении приблизительные; подрядчик проверяет размеры на месте перед заказом материалов и резкой. Приложение не несёт ответственности за ошибки замера. (решение аудита 16.11, слова основателя: «замер примерный — убрать вообще» с экранов; оговорка — только здесь)
 
 **10. Предел ответственности.** Наша ответственность ограничена суммой, которую вы заплатили GoRix за 12 месяцев до претензии, или $100, если это больше; косвенные убытки мы не возмещаем, кроме случаев, когда закон такое ограничение не допускает.
 
@@ -181,11 +181,21 @@ Invoice Simple (End User Terms), Joist (адрес основных услови
 
 **8. Sus datos.** Sus datos le pertenecen. GoRix no los vende, no los comparte para publicidad ni los usa para entrenar modelos. Puede exportarlos en cualquier momento mientras su cuenta esté abierta. Al cerrar la cuenta no guardamos una copia para exportar, así que exporte antes.
 
-**9. Tal cual.** GoRix se ofrece tal cual, sin garantías implícitas y sin promesa de funcionamiento ininterrumpido. Guarde exportaciones y copias de lo importante.
+**9. Tal cual.** GoRix se ofrece tal cual, sin garantías implícitas y sin promesa de funcionamiento ininterrumpido. Guarde exportaciones y copias de lo importante. Las medidas en la aplicación son aproximadas; el contratista verifica las dimensiones en el sitio antes de pedir materiales y cortar. La aplicación no se responsabiliza por errores de medición. (решение аудита 16.11, слова основателя: «замер примерный — убрать вообще» с экранов; оговорка — только здесь)
 
 **10. Límite de responsabilidad.** Nuestra responsabilidad se limita a lo que pagó a GoRix en los 12 meses anteriores a un reclamo, o $100 si es más, y no respondemos por pérdidas indirectas, salvo donde la ley no permita ese límite.
 
 **11. Cambios.** Mostramos la nueva edición en la aplicación antes de que entre en vigor. Los cambios importantes se aceptan de nuevo en el siguiente inicio de sesión.
+
+### 4.3а. Добавка #2169: цены и состав тарифов (18.11.2026) — **текст на юриста**
+
+Новый пункт после «10. Limit of liability», перед «11. Changes» (номер ставит исполнитель экранов при переносе; ключи `legal.terms.N.t/.b` — общий блок i18n через руководителя). Основание: решение основателя 18.11 (подписка Apple, три тарифа; «старым клиентам… цена ещё остаётся для них месяц старая… для новых пользователей сразу же новая цена»), спека 44 ред. 5 §5.4, спека 62.
+
+- **EN.** **Plans and prices.** GoRix is offered as monthly plans billed through the App Store. We may change prices and what each plan includes. A new price applies to new subscribers right away. If you already subscribe, we will tell you in the app at least 30 days before a higher price or a smaller plan applies to you; Apple may also ask for your consent. You can cancel at any time in your Apple ID settings, and your data stays readable and exportable.
+- **RU.** **Тарифы и цены.** GoRix предлагается месячными тарифами с оплатой через App Store. Мы можем менять цены и состав тарифов. Новая цена сразу действует для новых подписчиков. Если вы уже подписаны, мы сообщим в приложении не меньше чем за 30 дней до того, как для вас начнёт действовать более высокая цена или меньший состав тарифа; Apple может также попросить ваше согласие. Отменить подписку можно в любой момент в настройках Apple ID; ваши данные остаются доступны для чтения и выгрузки.
+- **ES.** **Planes y precios.** GoRix se ofrece en planes mensuales cobrados a través de la App Store. Podemos cambiar los precios y lo que incluye cada plan. Un precio nuevo se aplica de inmediato a los nuevos suscriptores. Si ya está suscrito, le avisaremos en la app al menos 30 días antes de que se le aplique un precio más alto o un plan con menos contenido; Apple también puede pedir su consentimiento. Puede cancelar en cualquier momento en los ajustes de su Apple ID, y sus datos siguen disponibles para leer y exportar.
+
+Пометка: **текст — на юриста** (условия автопродления, требования штатов США к уведомлению о повышении цены и к отмене подписки — [не проверено]; Apple сама показывает свои условия покупки). Тест при переносе: ключи пункта есть в RU/EN/ES, строки «30 days» / «30 дней» / «30 días» на месте.
 
 ### 4.4. Проверяемые свойства текста (EN)
 

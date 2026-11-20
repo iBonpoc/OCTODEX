@@ -1,7 +1,7 @@
 /** Панель атрибутов холста Gutters (docs/specs/33-gutters-screens.md П21.8 M5c): наборы, поправка зависимых полей, рулетка. */
 import { describe, expect, it } from "vitest";
 import { computeGutterParts, DEFAULT_HANGER_KITS, DEFAULT_WALL_KITS } from "@octo/estimating-engine";
-import { changeDs, changeRun, DS_SHAPES, DS_SIZES, elbowsOf, hangerKitsFor, PROFILES, SIZES_BY_PROFILE, tapeIn, wallKitsFor, wallOf, WALLS } from "../src/modules/gutters/canvas/attrs";
+import { changeDs, changeRun, DS_SHAPES, DS_SIZES, elbowCounts, hangerKitsFor, PROFILES, SIZES_BY_PROFILE, tapeIn, wallKitsFor, wallOf, WALLS } from "../src/modules/gutters/canvas/attrs";
 import { pushHistory, setDsAttrs, setLength, setRunAttrs, undo } from "../src/modules/gutters/canvas/edit";
 import { DEFAULT_DS_ATTRS, DEFAULT_RUN_ATTRS, fromElements, toElements } from "../src/modules/gutters/canvas/model";
 import { runLengthIn, toMeasurement, type Drawing } from "../src/modules/gutters/geometry";
@@ -81,10 +81,10 @@ describe("changeRun: зависимые поля", () => {
 });
 
 describe("changeDs: зависимые поля", () => {
-  it("круглый: размер 2×3 → 3″, колена A → 45° с тем же числом", () => {
+  it("круглый: размер 2×3 → 3″, колена A → 75° (умолчание круглого, «Расход v2») с тем же числом", () => {
     const a = changeDs({ ...DEFAULT_DS_ATTRS, elbows: [{ style: "A", qty: 4 }] }, { shape: "round" });
     expect(a.size).toBe("3");
-    expect(a.elbows).toEqual([{ style: "45", qty: 4 }]);
+    expect(a.elbows).toEqual([{ style: "75", qty: 4 }]);
     expect(DS_SIZES.round).toContain(a.size);
   });
   it("набор стены другой формы → та же стена, набор формы по умолчанию", () => {
@@ -93,9 +93,12 @@ describe("changeDs: зависимые поля", () => {
     const b = changeDs({ ...DEFAULT_DS_ATTRS, wall: "brick_hook_hd" }, { shape: "round" });
     expect(b.wall).toBe("brick_hook_hd"); // fits both shapes
   });
-  it("колена без записи — 3 × A по умолчанию движка", () => {
-    expect(elbowsOf(DEFAULT_DS_ATTRS)).toEqual({ style: "A", qty: 3 });
-    expect(elbowsOf({ shape: "round" })).toEqual({ style: "45", qty: 3 });
+  it("колена без записи — умолчание движка по виду (#1776, «Расход v2»): без вида 0, гладкий — 3 гиба по месту, ребристый 3 × A, круглый 1 × 75°", () => {
+    expect(elbowCounts(DEFAULT_DS_ATTRS)).toEqual({ A: 0, B: 0 });
+    expect(elbowCounts({ ...DEFAULT_DS_ATTRS, dsStyle: "corrugated" })).toEqual({ A: 3, B: 0 });
+    expect(elbowCounts({ ...DEFAULT_DS_ATTRS, dsStyle: "plain" })).toEqual({ A: 3, B: 0 });
+    expect(elbowCounts({ ...DEFAULT_DS_ATTRS, dsStyle: "plain", elbowBend: "ready" })).toEqual({ A: 0, B: 0 });
+    expect(elbowCounts({ shape: "round" })).toEqual({ "30": 0, "45": 0, "60": 0, "75": 1, "90": 0 });
   });
 });
 

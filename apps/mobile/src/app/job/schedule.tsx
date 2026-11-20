@@ -1,3 +1,4 @@
+import { View } from "react-native";
 import { scheduleSettingsOf } from "@/features/scheduleSettings";
 import { useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
@@ -79,7 +80,9 @@ export default function ScheduleJob() {
         ) : null}
       </Card>
       <VisitFormFields f={f} />
-      <Button label={t("sch.save")} icon="calendar" variant="primary" full disabled={f.past} onPress={save} />
+      <View testID="sch-save">
+        <Button label={t("sch.save")} icon="calendar" variant="primary" full disabled={f.past} onPress={save} />
+      </View>
       <NotifySheet visitId={notifyId} onClose={() => { setNotifyId(null); back(); }} />
     </Screen>
   );

@@ -28,7 +28,7 @@ exports.run = async (h) => {
   const leadBefore = db.leads.find((l) => l.id === "l5")?.serviceCategoryId;
   await dirButton(h).first().click();
   await p.waitForTimeout(300);
-  await h.sheet().getByRole("button", { name: "Электрика" }).click();
+  await h.sheet().getByRole("radio", { name: "Электрика" }).click(); // option rows (spec 56 wave 5а)
   await p.waitForTimeout(400);
   await h.expectText(/Направление изменено/, "toast after the change");
   await h.expectText(/Электрика/, "the chosen direction is shown");
@@ -39,7 +39,7 @@ exports.run = async (h) => {
   // back to «no direction»
   await dirButton(h).first().click();
   await p.waitForTimeout(300);
-  await h.sheet().getByRole("button", { name: "Без направления" }).click();
+  await h.sheet().getByRole("radio", { name: "Без направления" }).click(); // the directions are option rows (spec 56 wave 5а)
   await p.waitForTimeout(400);
   db = await h.db();
   h.expect(!db.estimates.find((e) => e.id === "e6")?.serviceCategoryId, "direction cleared");
@@ -65,7 +65,7 @@ exports.run = async (h) => {
   await h.go("/estimate/e6");
   await dirButton(h).first().click();
   await p.waitForTimeout(300);
-  await h.sheet().getByRole("button", { name: "Покраска" }).click();
+  await h.sheet().getByRole("radio", { name: "Покраска" }).click();
   await p.waitForTimeout(400);
   db = await h.db();
   h.expect(db.estimates.find((e) => e.id === "e6")?.serviceCategoryId === "cat-painting", "tech changes the direction of a draft");

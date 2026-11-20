@@ -9,6 +9,7 @@ import { InvoiceCardBody } from "@/features/invoice/InvoiceCard";
 import { useListPanel } from "@/nav/listPanel";
 import { ListPanel } from "@/ui/listPanel";
 import { asInvoiceFilter, canSeeInvoiceList, INVOICE_FILTERS, invoiceList, type InvoiceFilter, type OwedGroup } from "@/features/moneyLists";
+import { INVOICE_PAID } from "@/features/invoiceStatus";
 import { useDevice } from "@/theme/ThemeProvider";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
@@ -18,8 +19,9 @@ import { T } from "@/ui/primitives";
 import { CardList, Empty, Screen } from "@/ui/surfaces";
 import { CardGrid, ListCardHeader } from "@/ui/listCard";
 
-const CHIP: Record<InvoiceFilter, DictKey> = { owed: "mny.f.owed", paid: "mny.f.paid", all: "mny.f.all" };
-const GROUP: Record<OwedGroup, DictKey> = { overdue: "mny.g.overdue", waiting: "mny.g.waiting", paid: "mny.g.paid" };
+// a paid invoice: the filter, the group and the chip say one word (DS §4.4 п.1, #1427)
+const CHIP: Record<InvoiceFilter, DictKey> = { owed: "mny.f.owed", paid: INVOICE_PAID, all: "mny.f.all" };
+const GROUP: Record<OwedGroup, DictKey> = { overdue: "mny.g.overdue", waiting: "mny.g.waiting", paid: INVOICE_PAID };
 /** the search of «Счета»: the client's name, the number, the title of the work, the address of the job's property */
 function matchInvoice(db: DB, i: Invoice, q: string): boolean {
   const needle = q.trim().toLowerCase();
@@ -122,7 +124,9 @@ export default function Invoices() {
           {device === "desktop" ? <ListCardHeader title={t("card.fact.client")} columns={panel.openId ? INV_COLUMNS_PANEL : INV_COLUMNS} value={t("card.val.toPay")} /> : null}
           {shown.groups.map(({ g, items, cents }) => (
             <View key={g} style={{ gap: space[2] }}>
-              <T v="caption" w="semibold" tone="mut">{`${t(GROUP[g])} · ${items.length} · ${money(cents)}`}</T>
+              <View testID={`invoice-group-${g}`}>
+                <T v="caption" w="semibold" tone="mut">{`${t(GROUP[g])} · ${items.length} · ${money(cents)}`}</T>
+              </View>
               {device === "tablet" ? (
                 <CardGrid>{items.map((i) => <InvoiceListCard key={i.id} i={i} density="rich" panel={row(i)} />)}</CardGrid>
               ) : (

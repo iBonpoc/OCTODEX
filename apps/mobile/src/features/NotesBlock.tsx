@@ -4,7 +4,8 @@ import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { NoteSubject } from "@/data/types";
 import { useI18n } from "@/i18n";
-import { Button, IconButton, Segmented, StatusChip, TextField } from "@/ui/controls";
+import { Button, IconButton, StatusChip, TextField } from "@/ui/controls";
+import { SelectField } from "@/ui/selectField";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, RowView, SectionTitle } from "@/ui/surfaces";
@@ -58,8 +59,10 @@ export function NotesBlock({ subjectType, subjectId, extraSubjects = [] }: { sub
           <T v="caption" tone="mut">{t("notes.accessHint")}</T>
         ) : null}
         <TextField type="note" value={body} onChangeText={setBody} placeholder={t("notes.placeholder")} />
-        <Segmented
-          full
+        {/* who sees the note — two named values of the form, a row with a menu (spec 56 А2); the default stays «team» */}
+        <SelectField<"team" | "private">
+          testID="note-visibility"
+          label={t("notes.visibleTo")}
           value={vis}
           onChange={setVis}
           items={[

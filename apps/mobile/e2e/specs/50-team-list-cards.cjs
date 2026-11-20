@@ -2,11 +2,13 @@ const { dayKey, todayKey } = require("../companyTime.cjs");
 /**
  * «Команда» on the new list cards (step 10а, PR9b; docs/specs/06-list-cards.md §5), every view (3 widths × 2 themes).
  * - one card per person: name, roles and «Субподрядчик» / «Вы» as grey tags, phone, call / SMS (not on my own card);
- * - a tech: «Выездов сегодня: N» and the current visit's own status in words, read only (as in «Бригады сейчас»);
+ * - a tech: «N выездов сегодня» and the current visit's own status in words, read only (as in «Бригады сейчас»);
  * - «Приглашён» is a neutral status (was a yellow chip), no coloured edge on any card;
  * - the director opens «Сотрудник» on an employee; a subcontractor's card does not open; no «…»; edges aligned;
  * - the technician cannot open «Команда» (route guard): he lands on his visits, no team cards, no «Пригласить».
  */
+// «3 выезда сегодня» (#1427: a counted phrase through Intl.PluralRules, not «Выездов сегодня: 3»)
+const visitsToday = (n) => `${n} ${({ one: "выезд", few: "выезда", many: "выездов" })[new Intl.PluralRules("ru-RU").select(n)] ?? "выезда"} сегодня`;
 const { checkCardAlignment } = require("../cardsAlignment.cjs");
 
 exports.run = async (h) => {
@@ -46,7 +48,7 @@ exports.run = async (h) => {
   await tc.scrollIntoViewIfNeeded();
   const tt = await tc.innerText();
   const n = db.visits.filter((v) => dayKey(v.start) === today && assigned(v, tech.id)).length;
-  for (const s of [tech.name, "Мастер", `Выездов сегодня: ${n}`, "Идёт работа", "(818) 555-0199"]) h.expect(tt.includes(s), `tech card shows «${s}»: ${tt.slice(0, 240)}`);
+  for (const s of [tech.name, "Мастер", visitsToday(n), "Идёт работа", "(818) 555-0199"]) h.expect(tt.includes(s), `tech card shows «${s}»: ${tt.slice(0, 240)}`);
   h.expect((await tc.getByRole("button", { name: /Позвонить/ }).count()) > 0 && (await tc.getByRole("button", { name: /SMS/ }).count()) > 0, "call and SMS on the tech card");
 
   // me: roles and «Вы» as tags, no call to myself
@@ -59,7 +61,7 @@ exports.run = async (h) => {
   // invited: neutral status, email, no «today»
   const ic = cardOf("Nina Invited");
   const it = await ic.innerText();
-  h.expect(it.includes("Приглашён") && it.includes("nina@example.com") && it.includes("Диспетчер") && !it.includes("Выездов сегодня"), `invited card: ${it.slice(0, 200)}`);
+  h.expect(it.includes("Приглашён") && it.includes("nina@example.com") && it.includes("Диспетчер") && !/выезд\S* сегодня/.test(it), `invited card: ${it.slice(0, 200)}`);
 
   // a subcontractor: dashed initials, the tag
   const sub = db.members.find((m) => m.kind === "sub");

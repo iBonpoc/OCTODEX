@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { component, drawing, drawingPrint, font, icons, motion, print, radius, shopSheet, size, space, spaceHalf, themes } from "../src/index";
+import { component, drawing, drawingPrint, font, graphite, icons, motion, print, radius, shopSheet, size, space, spaceHalf, themes, tokens } from "../src/index";
 
 /**
  * The founder's design system (design/naryad-ds/tokens/*.css, icons.json) is the source of truth.
@@ -199,4 +199,35 @@ describe("print tokens mirror print.css (docs/specs/07 §2.2 В, §3.4)", () => 
   it("no colours in the styles: the brand band colour is a company setting", () => {
     expect(JSON.stringify(print.styles)).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(/i);
   });
+});
+
+/** «Графит» — пилот #2254, не правило: its own css (graphite.css), its own TS (src/graphite.ts), one to one both ways */
+describe("«Графит» pilot tokens mirror graphite.css (#2254)", () => {
+  const gcss = readFileSync(join(DS, "graphite.css"), "utf8");
+  const vars = (sel: string): Record<string, string> => {
+    const body = gcss.match(new RegExp(`${sel.replace(/[[\]"=]/g, "\\$&")}\\{([^}]*)\\}`))?.[1] ?? "";
+    return Object.fromEntries([...body.matchAll(/--gr-([\w-]+):([^;]+);/g)].map((m) => [m[1]!, m[2]!.trim()]));
+  };
+  const kebab = (s: string) => s.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase());
+  const flat = (o: object, p: string[] = [], out: Record<string, string> = {}): Record<string, string> => {
+    for (const [k, val] of Object.entries(o)) {
+      if (k === "themes") continue;
+      const key = [...p, k].map(kebab).join("-");
+      if (Array.isArray(val)) out[key] = `cubic-bezier(${val.join(", ")})`;
+      else if (typeof val === "object") flat(val as object, [...p, k], out);
+      else out[key] = String(val);
+    }
+    return out;
+  };
+  it("numbers, font, motion", () => expect(flat(graphite)).toEqual(vars('[data-skin="graphite"]')));
+  it.each(["dark", "light"] as const)("%s colours", (t) => {
+    const ts = Object.fromEntries(Object.entries(graphite.themes[t]).map(([k, c]) => [kebab(k), norm(c)]));
+    const ds = Object.fromEntries(Object.entries(vars(`[data-skin="graphite"][data-theme="${t}"]`)).map(([k, c]) => [k, norm(c)]));
+    expect(ts).toEqual(ds);
+  });
+  it("only three control heights (44 / 52 / 56) and the type scale 34/22/17/15/13/12", () => {
+    expect(new Set([graphite.size.control, graphite.size.button, graphite.size.row])).toEqual(new Set([44, 52, 56]));
+    expect(Object.values(graphite.font.size)).toEqual([34, 22, 17, 15, 13, 12]);
+  });
+  it("is not part of «Наряд» tokens (the pilot does not leak into the app)", () => expect(Object.keys(tokens)).not.toContain("graphite"));
 });

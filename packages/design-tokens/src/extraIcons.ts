@@ -55,4 +55,7 @@ export const extraIcons = {
   xsFascia: "M6 4v13.5a2.5 2.5 0 0 0 2.5 2.5H18V8.5h-3",
   xsBox: "M5 5v13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V5",
   xsEuro: "M4 8c0 6 3 10 8 10s8-4 8-10",
+  // repeated values (DS §9 А14а, spec 56 §3а.3): «⊖» removes a row (status.bad.text), «⊕ Добавить …» adds one (ink) — as in iOS Contacts
+  minusCircle: "M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0M8 12h8",
+  plusCircle: "M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0M8 12h8M12 8v8",
 } as const;

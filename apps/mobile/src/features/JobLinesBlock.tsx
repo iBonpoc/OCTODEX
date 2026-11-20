@@ -13,13 +13,15 @@ import { uid } from "@/features/estimateDoc";
 import type { Job, JobLineItem, Role } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { caContractWarning, jobClientExempt, lineChangeRefusal, linesEditable, linesOf, nextLinePosition, jobRateText, percentToRate, shownLineQty, totalOf, withJobLine, withJobTax, withoutJobLine, type LineRefusal } from "@/features/jobLines";
-import { Button, StatusChip, TextField, Toggle } from "@/ui/controls";
+import { Button, StatusChip, TextField } from "@/ui/controls";
+import { ToggleRow } from "@/ui/toggleRow";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { whenLate, type GuardedUndo } from "@/data/undo";
+import { canEditJobMoney } from "@/features/billRights";
 
-/** who changes a job's own lines: the server's app.is_staff (owner, admin, office, sales) */
+/** who changes the type and tags of a job: the server's app.is_staff (owner, admin, office, sales); its lines and tax — canEditJobMoney (#2075) */
 export const canEditJobLines = (role: Role) => role !== "tech";
 
 /** "12.50" / "$1,200" → cents through the engine (rule 8); null when it is not a number */
@@ -52,7 +54,7 @@ export function JobLinesBlock({ job }: { job: Job }) {
   useEffect(() => setRate(jobRateText(job)), [job.taxRateBps, job.taxRatePpm]);
   if (job.estimateId) return null;
   const lines = linesOf(db, job.id);
-  const editable = linesEditable(job) && canEditJobLines(store.role);
+  const editable = linesEditable(job) && canEditJobMoney(store.role);
   const exempt = jobClientExempt(db, job);
   const totals = totalOf(lines, job);
   const warn = caContractWarning(db, job.id);
@@ -147,7 +149,8 @@ export function JobLinesBlock({ job }: { job: Job }) {
       {editable && lines.length && (!exempt || job.taxEnabled) ? (
         <Card>
           <View testID="job-tax-toggle">
-            <Toggle on={!!job.taxEnabled} onChange={(on) => setTax(on)} label={t("job5.lines.taxToggle")} />
+            {/* on / off of one property — a row with its switch (spec 56 §3 row 2) */}
+            <ToggleRow label={t("job5.lines.taxToggle")} value={!!job.taxEnabled} onChange={(on) => setTax(on)} />
           </View>
           {job.taxEnabled ? (
             <RowView>
@@ -174,7 +177,7 @@ export function JobLinesBlock({ job }: { job: Job }) {
                 <TextField type="money" value={draft.price} onChangeText={(price) => setDraft({ ...draft, price })} placeholder={t("job5.lines.price")} icon="dollar" />
               </View>
             </RowView>
-            <Toggle on={draft.taxable} onChange={(taxable) => setDraft({ ...draft, taxable })} label={t("job5.lines.taxable")} />
+            <ToggleRow testID="job-line-taxable" label={t("job5.lines.taxable")} value={draft.taxable} onChange={(taxable) => setDraft({ ...draft, taxable })} />
             <Button label={t("ue.save")} icon="check" full disabled={!ready} onPress={save} />
             {!draft.isNew ? <Button label={t("job5.lines.remove")} icon="trash" variant="ghost" full onPress={remove} /> : null}
           </View>

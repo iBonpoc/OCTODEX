@@ -39,7 +39,7 @@ exports.run = async (h) => {
   await h.go("/visit/e2e66");
   await p.getByRole("button", { name: "Отменить выезд", exact: true }).first().click();
   await p.waitForTimeout(400);
-  await h.sheet().getByRole("button", { name: "Клиент отменил" }).click();
+  await h.sheet().getByRole("radio", { name: "Клиент отменил" }).click(); // the reason — a row with a check (spec 56 wave 5б)
   await h.sheet().getByRole("button", { name: "Отменить выезд", exact: true }).last().click();
   await p.waitForTimeout(600);
   await h.go(`/job/${job.id}`);

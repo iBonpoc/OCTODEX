@@ -88,5 +88,5 @@ exports.run = async (h) => {
   await h.expectText(/Gutter 5in K/, "the client page shows the estimate");
   const body = await h.text();
   h.expect(!/Leaf guard/.test(body), "the quantity-0 line is not on the client page");
-  h.expect(!/Тестовая цена|Нет в замере|Test price|Not in measurement|Из замера|From measurement/.test(body), "no module marks for the client");
+  h.expect(!/Тестовая цена|Нет в замере|Test price|Not in measurement|Из замера|From measurement/.test(body), "no module marks for the client"); // i18n-old: ok — the old words must be absent
 };

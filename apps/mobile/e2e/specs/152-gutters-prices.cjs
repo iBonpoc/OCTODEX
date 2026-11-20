@@ -3,7 +3,7 @@
  * - director, the trial on: «Компания → Модули → Gutters → Цены и прайс» → the page; every labor line and part «not in the
  *   price list»; the settings page has its way here too;
  * - «Привязать»: an own labor item without properties gets the properties of «install, story 4» — found, its price;
- * - «Создать с тестовой ценой» on one row: one item, marked test;
+ * - «Создать позицию» on one row: one item, its data marked placeholder (no mark shown, #1873);
  * - «Создать позиции сразу»: all the missing ones, each a TEST price (placeholder), «Отменить» takes them back; again → made;
  *   a second press is not offered, the catalog has no duplicates (one item per id and per properties);
  * - the $ on «Просмотр замера» (#700): with every item at a real price — no «тестовые цены», and the $ follows the install price;
@@ -13,6 +13,8 @@
 const { skipLength, viewTotal } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
+
+const { sheetGone } = require("../sheet.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -69,6 +71,10 @@ exports.run = async (h) => {
   // one row: a test item
   await card("miss", "labor.tile").click();
   await tid("gpr-bind-make").getByRole("button").click();
+  // #2155: its «Цена» opens at once — «Сохранить» untouched keeps the sample price (rule 9)
+  await tid("qp-sheet").waitFor({ timeout: 8000 });
+  await tid("qp-save").getByRole("button").click();
+  await sheetGone(p);
   await waitFor(async () => (await gutterItems()).filter((x) => x.attributes.work === "tile" && x.placeholder === true).length === 1, "tile: one test item");
   await card("test", "labor.tile").waitFor({ timeout: 5000 });
 
@@ -78,7 +84,7 @@ exports.run = async (h) => {
   await tid("gpr-missing-n-action").getByRole("button").dblclick();
   await waitFor(async () => (await gutterItems()).length > before + 10, "all the missing items made");
   const made = (await gutterItems()).filter((x) => x.id !== "own-install-4");
-  h.expect(made.every((x) => x.placeholder === true && Number.isInteger(x.priceCents) && x.priceCents >= 0), "every made item is a test price in whole cents (rule 9)");
+  h.expect(made.every((x) => x.placeholder === true && Number.isInteger(x.priceCents) && x.priceCents >= 0), "every made item is a sample price in whole cents (rule 9)");
   await p.getByRole("button", { name: "Отменить", exact: true }).last().click();
   await waitFor(async () => (await gutterItems()).length === before, "«Отменить»: the made items are gone");
   await tid("gpr-missing-n-action").getByRole("button").click();
@@ -111,7 +117,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await p.getByTestId("draw-svg").first().locator("line:not([id^=halo])").count()) === 1, "one run");
   const v0 = await viewTotal(p);
   h.expect(v0.total > 0, "a $ on the review");
-  h.expect(!v0.test, "every part from the price list at a real price: no «тестовые цены»");
+  h.expect(!v0.test, "every part from the price list at a real price: no sample-price mark");
   const m0 = v0.total;
   // the same measurement again (?m=…): «Править чертёж» goes back in history, and the address changes after the screen
   // does — wait for the canvas's own address, not the review's (1280 dark on GitHub took the review's: no canvas, #727)

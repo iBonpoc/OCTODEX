@@ -40,9 +40,12 @@ describe("measureSpec", () => {
     const s = measureSpec(house(), []);
     expect(s.ds[0]).toMatchObject({ n: 1, story: 1, elbows: [{ style: "A", qty: 2 }, { style: "B", qty: 1 }], offsets: [{ lengthIn: 2, qty: 1 }] });
   });
-  it("#1747: a downspout with no elbows set — the engine's default 3×A (the canvas «AAA», the estimate counts three), not 0", () => {
+  it("#1747, #1776: a downspout with no elbows set — the engine's default by kind: a plain one none, a corrugated one 3×A («AAA» on the canvas)", () => {
     const s = measureSpec(house(), []);
-    expect(s.ds[1]).toMatchObject({ n: 2, elbows: [{ style: "A", qty: 3 }], offsets: [] });
+    expect(s.ds[1]).toMatchObject({ n: 2, elbows: [], offsets: [] });
+    const d = house();
+    const ribbed = { ...d, downspouts: d.downspouts.map((x) => ({ ...x, dsStyle: "corrugated" as const })) };
+    expect(measureSpec(ribbed, []).ds[1]).toMatchObject({ n: 2, elbows: [{ style: "A", qty: 3 }], offsets: [] });
     expect(s.ds[1]).toMatchObject({ n: 2, story: 2 });
   });
   it("parts: only materials with a quantity — labour is the estimate's", () => {
@@ -54,6 +57,6 @@ describe("measureSpec", () => {
     expect(parts.some((p) => p.kind === "labor")).toBe(true);
   });
   it("an empty drawing: nothing", () => {
-    expect(measureSpec({ runs: [], downspouts: [] }, [])).toEqual({ runs: [], corners: [], ds: [], parts: [] });
+    expect(measureSpec({ runs: [], downspouts: [] }, [])).toEqual({ runs: [], corners: [], ds: [], parts: [], manyStories: false });
   });
 });
