@@ -9,7 +9,8 @@ import { graphite } from "@octo/design-tokens";
 import { space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { T } from "@/ui/primitives";
-import { Card } from "@/ui/surfaces";
+import { StatusChip } from "@/ui/controls";
+import { Card, RowView } from "@/ui/surfaces";
 import { ToggleRow } from "@/ui/toggleRow";
 import { useGr } from "../theme";
 
@@ -19,7 +20,7 @@ const RELIEF = {
 } as const;
 
 /** a demo run: a press counts and keeps `busy` for `ms` (a fake wait, nothing is sent) */
-export function useDemoRun(ms = 1500) {
+export function useDemoRun(ms: number = graphite.motion.demoWait) {
   const [n, setN] = useState(0);
   const [busy, setBusy] = useState(false);
   const t = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -50,12 +51,17 @@ export function GrStage({ children, testID }: { children: ReactNode; testID?: st
 }
 
 /** one line of a block: its label («Как сейчас» / «Вариант N») and the live sample */
-export function VariantRow({ id, label, children, stage }: { id: string; label: string; children: ReactNode; stage?: boolean }) {
+export function VariantRow({ id, label, children, stage, inApp }: { id: string; label: string; children: ReactNode; stage?: boolean; inApp?: boolean }) {
+  const { t } = useI18n();
   return (
     <View testID={id} style={{ gap: space[1] }}>
-      <T v="caption" tone="mut" w="semibold">
-        {label}
-      </T>
+      <RowView>
+        <T v="caption" tone="mut" w="semibold">
+          {label}
+        </T>
+        {/* «Как сейчас» is what the app has now: a plate with an icon and a word, not only a caption */}
+        {inApp ? <StatusChip status="info" soft label={t("ds.gr.sheet.inApp")} /> : null}
+      </RowView>
       {stage ? <GrStage>{children}</GrStage> : children}
     </View>
   );
@@ -97,7 +103,7 @@ export function Block({
           ) : null}
         </View>
         {controls ? <View testID={`gr-block-${id}-states`}>{controls}</View> : null}
-        <VariantRow id={`gr-${id}-now`} label={t("ds.gr.sheet.now")}>
+        <VariantRow id={`gr-${id}-now`} label={t("ds.gr.sheet.now")} inApp>
           {now ?? (
             <T v="body" tone="mut">
               {t("ds.gr.sheet.noneNow")}

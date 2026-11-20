@@ -1,6 +1,6 @@
 /**
  * «Кнопки» on the sheet (#2292, spec 63 §2.2): «Как сейчас» is `Button` / `IconButton` / `ActionBar` / `Fab` of «Наряд» as they
- * are; «Вариант 1» is the package «Графит» (`look` 1), «Вариант 2» the quieter one (`look` 2). Every sample is pressable and says
+ * are; «Вариант 1» is the package «Графит» (`variant` 1), «Вариант 2» the quieter one (`variant` 2). Every sample is pressable and says
  * so; «Загрузка» and «Выключено» are small switches of the block (states a finger cannot hold).
  */
 import { useState } from "react";
@@ -63,10 +63,10 @@ function KindBlock({
   const [loading, setLoading] = useState(false);
   const [off, setOff] = useState(false);
   // each sample counts its own presses; a press of a variant also makes it wait a moment (a fake wait)
-  const gr = (look: 1 | 2, run: ReturnType<typeof useDemoRun>) => (
+  const gr = (variant: 1 | 2, run: ReturnType<typeof useDemoRun>) => (
     <>
-      <GrButton testID={`gr-${id}-v${look}-btn`} kind={kind} look={look} icon={icon} label={label} loading={loading || run.busy} disabled={off} onPress={run.press} />
-      <Count gr id={`gr-${id}-v${look}-count`} n={run.n} />
+      <GrButton testID={`gr-${id}-v${variant}-btn`} kind={kind} variant={variant} icon={icon} label={label} loading={loading || run.busy} disabled={off} onPress={run.press} />
+      <Count gr id={`gr-${id}-v${variant}-count`} n={run.n} />
     </>
   );
   return (
@@ -127,12 +127,12 @@ function RoundBlock() {
           ) : null}
         </View>
       }
-      variants={[1, 2].map((look) => (
-        <View key={look} style={{ gap: SP[1] }}>
+      variants={[1, 2].map((variant) => (
+        <View key={variant} style={{ gap: SP[1] }}>
           <View style={{ flexDirection: "row" }}>
-            <GrIconButton testID={`gr-round-v${look}-btn`} icon="phone" label={t("ds.gr.btn.call")} look={look as 1 | 2} active={on[look]} disabled={off} onPress={flip(look)} />
+            <GrIconButton testID={`gr-round-v${variant}-btn`} icon="phone" label={t("ds.gr.btn.call")} variant={variant as 1 | 2} active={on[variant]} disabled={off} onPress={flip(variant)} />
           </View>
-          <Count gr id={`gr-round-v${look}-count`} n={runs[look]!.n} />
+          <Count gr id={`gr-round-v${variant}-count`} n={runs[variant]!.n} />
         </View>
       ))}
     />
@@ -193,17 +193,18 @@ function BarBlock() {
           <Count id="gr-bar-now-count" n={runs[0]!.n} />
         </View>
       }
-      variants={[1, 2].map((look) => (
-        <View key={look} style={{ gap: SP[1] }}>
-          <View style={{ flexDirection: "row", gap: SP[2] }}>
-            <View style={{ flex: 1 }}>
-              <GrButton testID={`gr-bar-v${look}-second`} kind="secondary" look={look as 1 | 2} label={t("ds.gr.secondary")} disabled={off} onPress={runs[look]!.tap} />
+      variants={[1, 2].map((variant) => (
+        <View key={variant} style={{ gap: SP[1] }}>
+          {/* side by side; a big system text wraps them one under the other instead of cutting the label */}
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: SP[2] }}>
+            <View style={{ flexGrow: 1, minWidth: graphite.size.row * 2 }}>
+              <GrButton testID={`gr-bar-v${variant}-second`} kind="secondary" variant={variant as 1 | 2} label={t("ds.gr.secondary")} disabled={off} onPress={runs[variant]!.tap} />
             </View>
-            <View style={{ flex: 1 }}>
-              <GrButton testID={`gr-bar-v${look}-main`} kind="primary" look={look as 1 | 2} label={t("ds.gr.primary")} disabled={off} onPress={runs[look]!.tap} />
+            <View style={{ flexGrow: 1, minWidth: graphite.size.row * 2 }}>
+              <GrButton testID={`gr-bar-v${variant}-main`} kind="primary" variant={variant as 1 | 2} label={t("ds.gr.primary")} disabled={off} onPress={runs[variant]!.tap} />
             </View>
           </View>
-          <Count gr id={`gr-bar-v${look}-count`} n={runs[look]!.n} />
+          <Count gr id={`gr-bar-v${variant}-count`} n={runs[variant]!.n} />
         </View>
       ))}
     />

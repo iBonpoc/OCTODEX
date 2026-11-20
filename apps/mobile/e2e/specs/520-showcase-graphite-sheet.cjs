@@ -4,7 +4,7 @@
  * С1 the sheet opens behind the pilot switch, with no tabs; the strip is sticky and scrolls the same page to a heading;
  * С2 every block shows «Как сейчас» + «Вариант 1» (+ «Вариант 2») at once, nothing is cut at the side;
  * С3 SWEEP: every shown button of every block, in every variant, is pressed — the block's counter goes up by one each time;
- * С4 «Загрузка»: the spinner shows (after the delay) on the variants, «Как сейчас» says it cannot wait; «Выключено» stops presses;
+ * С4 «Загрузка» / «Выключено» on EVERY block that has them: the spinner shows (after the delay) on the variants, «Как сейчас» says it has no such state; switched-off samples ignore presses;
  * С5 the round button switches on and off (aria-pressed), «Как сейчас» too;
  * С2b «Основа» on examples: the theme switch, status / accent / surface, spacing and corners as three cards, the vibration block;
  * С5b the one fold «Для разработчиков» is shut, opens and shuts;
@@ -83,17 +83,18 @@ exports.run = async (h) => {
 
   // С2b — «Основа»: colour and measures are seen on examples; the theme switch flips the whole app; the spacing and the corners are three cards
   await center("gr-block-theme");
-  const surface = () => vis("gr-surface-now").evaluate((e) => getComputedStyle(e.querySelector("[style*='background-color']") ?? e).backgroundColor);
+  // the card of the sample is the last painted box in the «Как сейчас» row (the plate «Сейчас в приложении» is before it)
+  const surface = () => vis("gr-surface-now").evaluate((e) => getComputedStyle([...e.querySelectorAll("[style*='background-color']")].pop() ?? e).backgroundColor);
   const light0 = await surface();
   await vis("gr-theme-switch").click();
   await until("С2b the theme changed", (was) => {
     const e = document.querySelector('[data-testid="gr-surface-now"]');
-    return getComputedStyle(e.querySelector("[style*='background-color']") ?? e).backgroundColor !== was;
+    return getComputedStyle([...e.querySelectorAll("[style*='background-color']")].pop() ?? e).backgroundColor !== was;
   }, light0);
   await vis("gr-theme-switch").click();
   await until("С2b the theme is back", (was) => {
     const e = document.querySelector('[data-testid="gr-surface-now"]');
-    return getComputedStyle(e.querySelector("[style*='background-color']") ?? e).backgroundColor === was;
+    return getComputedStyle([...e.querySelectorAll("[style*='background-color']")].pop() ?? e).backgroundColor === was;
   }, light0);
   for (const id of ["gr-status-now", "gr-status-v1", "gr-space-now-dense", "gr-space-now-mid", "gr-space-now-loose", "gr-space-v1-dense", "gr-space-v1-loose", "gr-radius-now-c1", "gr-radius-now-c3", "gr-radius-v1-c1", "gr-radius-v1-c3"]) {
     await center(id);
@@ -139,29 +140,47 @@ exports.run = async (h) => {
   }
   h.expect(broken.length === 0, `С3: elements that do not work: ${broken.join("; ")}`);
 
-  // С4 — states: «Загрузка» shows the spinner on the variants; «Как сейчас» cannot wait; «Выключено» stops the presses
-  await center("gr-main-loading");
-  await vis("gr-main-loading").click();
-  await vis("gr-main-v1-btn-spinner").waitFor({ timeout: 4000 });
-  await vis("gr-main-v2-btn-spinner").waitFor({ timeout: 4000 });
-  h.expect((await vis("gr-main-v1-btn").getAttribute("aria-busy")) === "true", "С4: the loading button is busy");
-  const n0 = await count("gr-main-v1-count");
-  await center("gr-main-v1-btn");
-  await vis("gr-main-v1-btn").click({ force: true, timeout: 2000 }).catch(() => undefined);
-  await frames();
-  h.expect((await count("gr-main-v1-count")) === n0, "С4: a loading button ignores presses");
-  await h.shot("sheet-loading");
-  await vis("gr-main-loading").click();
-  await p.getByTestId("gr-main-v1-btn-spinner").waitFor({ state: "detached", timeout: 4000 });
-  await vis("gr-main-disabled").click();
-  const n1 = await count("gr-main-v1-count");
-  for (const id of ["gr-main-now-btn", "gr-main-v1-btn", "gr-main-v2-btn"]) {
-    await center(id);
-    await vis(id).click({ force: true, timeout: 2000 }).catch(() => undefined);
+  // С4 — states on EVERY block that has the switches: «Загрузка» shows the spinner on the variants and «Как сейчас» says it has no
+  // such state; «Выключено» stops the presses (all samples; the app's round button has no switched-off look and says so)
+  const counterOf = (b, kind) => `gr-${b.id}-${kind}-count`;
+  for (const b of BLOCKS.filter((x) => ["main", "second", "ghost", "danger", "icon"].includes(x.id))) {
+    await center(`gr-${b.id}-loading`);
+    await vis(`gr-${b.id}-loading`).click();
+    for (const id of [...b.v1, ...b.v2]) {
+      await vis(`${id}-spinner`).waitFor({ timeout: 4000 });
+      h.expect((await vis(id).getAttribute("aria-busy")) === "true", `С4: ${id} is busy while loading`);
+      const kind = b.v1.includes(id) ? "v1" : "v2";
+      const n0 = await count(counterOf(b, kind));
+      await center(id);
+      await vis(id).click({ force: true, timeout: 2000 }).catch(() => undefined);
+      await frames();
+      h.expect((await count(counterOf(b, kind))) === n0, `С4: ${id} ignores presses while loading`);
+    }
+    h.expect(/такого состояния нет/.test(await vis(`gr-${b.id}-now`).innerText()), `С4: «Как сейчас» of ${b.id} says it has no waiting state`);
+    if (b.id === "main") await h.shot("sheet-loading");
+    await center(`gr-${b.id}-loading`);
+    await vis(`gr-${b.id}-loading`).click();
+    for (const id of [...b.v1, ...b.v2]) await p.getByTestId(`${id}-spinner`).waitFor({ state: "detached", timeout: 4000 });
   }
-  await frames();
-  h.expect((await count("gr-main-v1-count")) === n1, "С4: a switched-off button ignores presses (all three)");
-  await vis("gr-main-disabled").click();
+  for (const b of BLOCKS.filter((x) => x.id !== "plus")) {
+    await center(`gr-${b.id}-disabled`);
+    await vis(`gr-${b.id}-disabled`).click();
+    await frames();
+    for (const [kind, list] of [["now", b.now], ["v1", b.v1], ["v2", b.v2]]) {
+      // the app's round button has no switched-off look: it still counts, and its block says so
+      if (b.id === "round" && kind === "now") continue;
+      for (const id of list) {
+        const n0 = await count(counterOf(b, kind));
+        await center(id);
+        await vis(id).click({ force: true, timeout: 2000 }).catch(() => undefined);
+        await frames();
+        h.expect((await count(counterOf(b, kind))) === n0, `С4: switched-off ${id} ignores presses`);
+      }
+    }
+    if (b.id === "round") h.expect(/нет выключенного вида/.test(await vis("gr-round-now").innerText()), "С4: the app's round button says it has no switched-off look");
+    await center(`gr-${b.id}-disabled`);
+    await vis(`gr-${b.id}-disabled`).click();
+  }
 
   // С5 — the round button flips on and off, in all three
   for (const id of ["gr-round-now-btn", "gr-round-v1-btn", "gr-round-v2-btn"]) {

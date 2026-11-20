@@ -115,6 +115,7 @@ export function GrText({
   tone = "text",
   center,
   lines,
+  maxScale,
   style,
   children,
 }: {
@@ -123,6 +124,8 @@ export function GrText({
   tone?: Tone;
   center?: boolean;
   lines?: number;
+  /** the most the system text scale may enlarge it (Dynamic Type) */
+  maxScale?: number;
   style?: StyleProp<TextStyle>;
   children: ReactNode;
 }) {
@@ -131,6 +134,7 @@ export function GrText({
   return (
     <Text
       numberOfLines={lines}
+      maxFontSizeMultiplier={maxScale}
       style={[
         {
           fontFamily:

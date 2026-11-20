@@ -49,7 +49,7 @@ export function GrSpinner({ tone = "text", testID }: { tone?: "text" | "onAcc" |
 }
 
 /**
- * The button of «Графит» (#2292). `look` is the variant number of the showcase sheet: 1 — the package (yellow main, matte
+ * The button of «Графит» (#2292). `variant` is the variant number of the showcase sheet: 1 — the package (yellow main, matte
  * second, filled danger), 2 — the quieter one (inverse-plate main, outline second, outline danger). Heights are the package's:
  * 52 (a text button 44). `loading`: the spinner after 300 ms, the press is ignored; `disabled`: dimmed, not pressable.
  */
@@ -58,7 +58,7 @@ export function GrButton({
   label,
   onPress,
   testID,
-  look = 1,
+  variant = 1,
   icon,
   loading,
   disabled,
@@ -67,7 +67,7 @@ export function GrButton({
   label: string;
   onPress: () => void;
   testID?: string;
-  look?: 1 | 2;
+  variant?: 1 | 2;
   icon?: IconKey;
   loading?: boolean;
   disabled?: boolean;
@@ -75,8 +75,8 @@ export function GrButton({
   const { g } = useGr();
   const wait = useWaitShown(!!loading);
   const off = !!disabled || !!loading;
-  const quiet = look === 2;
-  // look 2 of the main button is the inverse plate (`badge`/`onBadge`: light on dark, dark on light), not a second yellow
+  const quiet = variant === 2;
+  // variant 2 of the main button is the inverse plate (`badge`/`onBadge`: light on dark, dark on light), not a second yellow
   const tone: "onAcc" | "onBadge" | "onDan" | "text" | "bad" =
     kind === "primary"
       ? quiet ? "onBadge" : "onAcc"
@@ -87,13 +87,15 @@ export function GrButton({
     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: SP[2] }}>
       {/* a danger colour always has its icon (rule 2): the alert mark unless the button has its own */}
       {wait ? <GrSpinner testID={testID ? `${testID}-spinner` : undefined} tone={tone} /> : (icon ?? (kind === "danger" ? "alert" : null)) ? <Icon name={(icon ?? "alert") as IconKey} s={S.glyph} color={g[tone]} /> : null}
-      <GrText v="body" w={kind === "primary" ? "medium" : "regular"} tone={tone} center lines={1} style={{ flexShrink: 1 }}>
+      <GrText v="body" w={kind === "primary" ? "medium" : "regular"} tone={tone} center maxScale={graphite.font.maxScaleButton} style={{ flexShrink: 1 }}>
         {label}
       </GrText>
     </View>
   );
   const box = {
-    height: kind === "ghost" ? S.control : S.button,
+    // a big system text grows the button (and wraps the label) instead of cutting it
+    minHeight: kind === "ghost" ? S.control : S.button,
+    paddingVertical: SP[2],
     alignItems: "center" as const,
     justifyContent: "center" as const,
     paddingHorizontal: SP[4],
@@ -149,7 +151,7 @@ export function GrIconButton({
   label,
   onPress,
   testID,
-  look = 1,
+  variant = 1,
   active,
   disabled,
 }: {
@@ -157,13 +159,13 @@ export function GrIconButton({
   label: string;
   onPress: () => void;
   testID?: string;
-  look?: 1 | 2;
+  variant?: 1 | 2;
   active?: boolean;
   disabled?: boolean;
 }) {
   const { g } = useGr();
   const size = { width: S.control, height: S.control, alignItems: "center" as const, justifyContent: "center" as const };
-  const glyph = <Icon name={icon} s={S.glyph} color={active && look === 2 ? g.onSel : g.text} />;
+  const glyph = <Icon name={icon} s={S.glyph} color={active && variant === 2 ? g.onSel : g.text} />;
   return (
     <GrPress
       testID={testID}
@@ -175,7 +177,7 @@ export function GrIconButton({
       onPress={onPress}
       style={disabled ? { opacity: graphite.state.disabledDim } : undefined}
     >
-      {look === 1 ? (
+      {variant === 1 ? (
         <GrLiquid radius={R.pill} style={[size, { borderColor: g.borderS }]}>
           {/* in its own View: on the web an svg is painted under the glass layers */}
           <View>{glyph}</View>
