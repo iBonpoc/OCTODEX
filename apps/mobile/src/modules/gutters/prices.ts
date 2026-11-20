@@ -13,7 +13,7 @@
  */
 import { bendOf, computeGutterParts, DEFAULT_GUTTER_RULES, gutterPreview, type MeasurementInput, type PartQty, type PreviewRates } from "@octo/estimating-engine";
 import type { CatalogItem } from "@/data/types";
-import { catalogMatch } from "@/features/catalogMatch";
+import { catalogMatch, mergedInto } from "@/features/catalogMatch";
 import type { DictKey } from "@/i18n";
 import { catalogUnitPrice } from "@/features/estimateDoc";
 import { fmtLen, type LenFormat } from "./canvas/format";
@@ -87,6 +87,28 @@ export function colourVariantPart(p: Pick<PartQty, "key" | "kind" | "attrs">): b
   return PART_WORDS.has(part);
 }
 
+/**
+ * #2262 (review №1 of the second reviewer): a company that already prices a part without a finish per colour (an older build made
+ * «Sealant White» in its price group) and has a plain «Sealant» item outside that group (made while `sealantByColor` was off — spec
+ * §4 №9: outside groups) keeps the old way for that part until its transition: a new colour gets its own item in the group (one
+ * price for the product), never the plain item's other price. Only when no coloured item of the group is left (merged or none), or
+ * an item without colour is in the group already, is that part one item for every colour.
+ */
+function perColourStays(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): boolean {
+  const want = matchAttrs(p);
+  if (!FINISHLESS_PARTS.has(want.part ?? "")) return false;
+  const unit = p.unit.trim().toLowerCase();
+  const g = priceGroupKey({ unit: p.unit, attributes: want });
+  const ofGroup = catalog.filter((it) => live(it) && !mergedInto(it) && it.unit.trim().toLowerCase() === unit && it.attributes?.part === want.part);
+  if (!ofGroup.some((it) => !!it.attributes?.color?.trim() && priceGroupKey(it) === g)) return false;
+  return !ofGroup.some((it) => !it.attributes?.color?.trim() && it.attributes?.priceGroup === g);
+}
+
+/** a coloured part priced by one item for every colour in this catalog (`colourVariantPart`, less the case of `perColourStays`) */
+function oneForAll(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): boolean {
+  return colourVariantPart(p) && !perColourStays(catalog, p);
+}
+
 /** #2227: the part as its one item for every colour sees it: no colour, «painted» when it had a colour and no finish */
 export function colourlessPart<P extends Pick<PartQty, "key" | "kind" | "attrs" | "unit">>(p: P): P {
   const { color, ...attrs } = p.attrs;
@@ -103,7 +125,7 @@ export function colourlessPart<P extends Pick<PartQty, "key" | "kind" | "attrs" 
  *   colourless one has the company's price). Never another colour's item. `matchAttrs` / `matchKey` are not changed.
  */
 export function findPriced(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): { it?: CatalogItem; variant?: { attr: string; value: string } } {
-  if (!colourVariantPart(p)) {
+  if (!oneForAll(catalog, p)) {
     const it = findItem(catalog, p);
     return it ? { it } : {};
   }
@@ -117,12 +139,15 @@ export function findPriced(catalog: readonly CatalogItem[], p: Pick<PartQty, "ke
     ...ROUND_ELBOW_FALLBACK(want).map((w) => ({ w, pool: base.filter(metalOk) })),
     ...(want.metal && METAL_FALLBACK_PARTS.has(want.part ?? "") ? [{ w: (({ metal: _m, ...x }) => x)(want), pool: base.filter((x) => !x.attributes?.metal) }] : []),
   ];
+  // #2262 (second review №1): of a part without a finish, the item without colour in the part's price group before a plain one
+  const g = FINISHLESS_PARTS.has(want.part ?? "") ? priceGroupKey({ unit: p.unit, attributes: want }) : undefined;
+  const inGroupFirst = (a: CatalogItem, b: CatalogItem) => (g ? Number(b.attributes?.priceGroup === g) - Number(a.attributes?.priceGroup === g) : 0);
   // #2262: a part without a finish (sealant, paint) takes its item without colour as it is — there is no «mill» one to keep apart
   const painted = (it: CatalogItem) => !!want.finish || FINISHLESS_PARTS.has(want.part ?? "") || it.attributes?.finish?.trim().toLowerCase() === "painted";
   for (const { w, pool } of steps) {
     const own = catalogMatch(pool, w)[0];
     const { color: _c, ...plain } = w;
-    const one = catalogMatch(pool.filter((it) => !it.attributes?.color?.trim()), plain).filter(painted)[0];
+    const one = catalogMatch(pool.filter((it) => !it.attributes?.color?.trim()), plain).filter(painted).sort(inGroupFirst)[0];
     if (own && !(own.placeholder && one && !one.placeholder)) return { it: own };
     if (one) return { it: one, variant: { attr: VARIANT_ATTR, value } };
   }
@@ -270,7 +295,7 @@ export function missingItems(companyId: string, rows: readonly PriceRow[], catal
     if (findPriced(catalog, part).it && !priceFromOtherDegree(catalog, part)) continue;
     // #2227 (§11.3.4.1, §11.8): a coloured part gets ONE item for every colour — its properties less the colour, «painted» when
     // it has a colour and no finish; its id from that key, so every colour and every build make the same id (no duplicates)
-    const plain = colourVariantPart(part) ? colourlessPart(part) : undefined;
+    const plain = oneForAll(catalog, part) ? colourlessPart(part) : undefined;
     const id = stableItemId(companyId, plain ? matchKey(plain) : key);
     if (ids.has(id) || out.has(id)) continue;
     const made: CatalogItem = {

@@ -22,6 +22,7 @@ import { draftsForJob } from "../src/features/purchaseOrders";
 import { tFor } from "../src/i18n/translate";
 import { linesFromParts, resyncLines, type LineSource, type ModuleLine } from "../src/modules/gutters/estimate";
 import gutters from "../src/modules/gutters/module";
+import { priceGroupKey } from "../src/modules/gutters/prices/groups";
 import { colourlessPart, findPriced, matchKey, missingItems, priceFromOtherDegree, stableItemId } from "../src/modules/gutters/prices";
 
 const C = "11111111-1111-4111-8111-111111111111";
@@ -207,7 +208,22 @@ describe("unit:gutterVariants — test 16 (#2262, founder №48): sealant and to
   it("before the transition nothing moves: an item of that colour wins over the one without colour", () => {
     const white = sealPer("sw", "White", 800);
     expect(findPriced([plainSeal, white], sealantPart("White"))).toEqual({ it: white });
-    expect(findPriced([plainSeal, white], sealantPart("Brown"))).toEqual({ it: plainSeal, variant: { attr: "color", value: "brown" } });
+  });
+  it("second review №1: per-colour items of a group and a plain «Sealant» outside it — a new colour never takes the plain item's other price", () => {
+    const w0 = sealPer("sw", "White", 800);
+    const white = { ...w0, attributes: { ...w0.attributes!, priceGroup: priceGroupKey(w0) } }; // in its group (PR3 of #1913)
+    // Brown: no price, as before #2262 (it never silently takes $7 next to White's $8)
+    expect(findPriced([plainSeal, white], sealantPart("Brown"))).toEqual({});
+    // «Создать позиции сразу» makes Brown's own item in White's price group — one price for the product
+    const made = missingItems(C, [{ key: "sealant.brown", part: sealantPart("Brown") }], [plainSeal, white], sname);
+    expect(made).toHaveLength(1);
+    expect(made[0]!.attributes?.color).toBe("Brown");
+    expect(made[0]!.priceCents).toBe(800);
+    // an item without colour in the group (the transition's): one item for every colour again
+    const one: CatalogItem = { ...plainSeal, id: "s1", priceCents: 800, attributes: { part: "sealant", priceGroup: made[0]!.attributes!.priceGroup! } };
+    expect(findPriced([plainSeal, white, one], sealantPart("Brown"))).toEqual({ it: one, variant: { attr: "color", value: "brown" } });
+    // every coloured item merged: the plain item is the one item
+    expect(findPriced([plainSeal, { ...white, attributes: { ...white.attributes!, mergedInto: "s0" } }], sealantPart("Brown"))).toEqual({ it: plainSeal, variant: { attr: "color", value: "brown" } });
   });
   it("an old estimate is the same — lines, names, sums, the client's PDF — before the transition, after it and after «Обновить смету»", () => {
     const db = makeSeed();
