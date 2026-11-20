@@ -45,7 +45,6 @@ function KindBlock({
   label,
   icon,
   nowVariant,
-  oneVariant,
 }: {
   id: string;
   kind: "primary" | "secondary" | "ghost" | "danger";
@@ -54,7 +53,6 @@ function KindBlock({
   label: string;
   icon?: "phone";
   nowVariant: "primary" | "secondary" | "ghost" | "danger";
-  oneVariant?: boolean;
 }) {
   const { t } = useI18n();
   const runNow = useDemoRun();
@@ -90,7 +88,7 @@ function KindBlock({
           </T>
         </View>
       }
-      variants={oneVariant ? [gr(1, run1)] : [gr(1, run1), gr(2, run2)]}
+      variants={[gr(1, run1), gr(2, run2)]}
     />
   );
 }
@@ -140,7 +138,7 @@ function RoundBlock() {
 
 function PlusBlock() {
   const { t } = useI18n();
-  const run = useDemoRun();
+  const runs = [useDemoRun(), useDemoRun(), useDemoRun()];
   return (
     <Block
       id="plus"
@@ -157,14 +155,14 @@ function PlusBlock() {
           </T>
         </View>
       }
-      variants={[
-        <View key="1" style={{ gap: SP[1] }}>
+      variants={[1, 2].map((variant) => (
+        <View key={variant} style={{ gap: SP[1] }}>
           <View style={{ flexDirection: "row" }}>
-            <GrPlus testID="gr-plus-v1-btn" label={t("ds.gr.btn.create")} onPress={run.tap} />
+            <GrPlus testID={`gr-plus-v${variant}-btn`} variant={variant as 1 | 2} label={t("ds.gr.btn.create")} onPress={runs[variant]!.tap} />
           </View>
-          <Count gr id="gr-plus-v1-count" n={run.n} />
-        </View>,
-      ]}
+          <Count gr id={`gr-plus-v${variant}-count`} n={runs[variant]!.n} />
+        </View>
+      ))}
     />
   );
 }
@@ -216,7 +214,7 @@ export function ButtonsBlocks() {
     <>
       <KindBlock id="main" kind="primary" nowVariant="primary" title={t("ds.gr.btn.main")} note={t("ds.gr.btn.mainNote")} label={t("ds.gr.primary")} />
       <KindBlock id="second" kind="secondary" nowVariant="secondary" title={t("ds.gr.btn.second")} note={t("ds.gr.btn.secondNote")} label={t("ds.gr.secondary")} />
-      <KindBlock id="ghost" kind="ghost" nowVariant="ghost" title={t("ds.gr.btn.ghost")} note={t("ds.gr.btn.ghostNote")} label={t("ds.gr.btn.later")} oneVariant />
+      <KindBlock id="ghost" kind="ghost" nowVariant="ghost" title={t("ds.gr.btn.ghost")} note={t("ds.gr.btn.ghostNote")} label={t("ds.gr.btn.later")} />
       <KindBlock id="danger" kind="danger" nowVariant="danger" title={t("ds.gr.btn.danger")} note={t("ds.gr.btn.dangerNote")} label={t("ds.gr.btn.delClient")} />
       <KindBlock id="icon" kind="secondary" nowVariant="secondary" icon="phone" title={t("ds.gr.btn.withIcon")} note={t("ds.gr.btn.withIconNote")} label={t("ds.gr.btn.call")} />
       <RoundBlock />

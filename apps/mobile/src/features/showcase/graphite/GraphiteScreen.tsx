@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { graphite } from "@octo/design-tokens";
 import { fmtUsd } from "@octo/estimating-engine";
 import { useI18n, type DictKey } from "@/i18n";
+import { useKeyboardHeight } from "@/ui/keyboard";
 import { Icon, type IconKey } from "@/ui/primitives";
 import {
   GrButton,
@@ -127,6 +128,8 @@ export function GraphiteScreen({ onClose }: { onClose: () => void }) {
   const { t } = useI18n();
   const { g, name, pref, setPref, reduceMotion, reduceTransparency } = useGr();
   const glass = useGlassMode();
+  // with the keyboard up the fixed bottom panels step aside (the keys cover them; the field is what the person is in)
+  const keys = useKeyboardHeight() > 0;
   const ins = useSafeAreaInsets();
   const [rows, setRows] = useState(ROWS);
   const [sheet, setSheet] = useState(false);
@@ -184,6 +187,8 @@ export function GraphiteScreen({ onClose }: { onClose: () => void }) {
         />
       </View>
       <ScrollView
+        automaticallyAdjustKeyboardInsets
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           paddingHorizontal: SP[4],
           // the nav, the fixed action row above it and their gaps: the last panel scrolls clear of both
@@ -251,17 +256,20 @@ export function GraphiteScreen({ onClose }: { onClose: () => void }) {
           <GrPhoneField testID="gr-phone" />
         </GrPanel>
       </ScrollView>
-      <View
-        style={{
-          position: "absolute",
-          left: SP[4],
-          right: SP[4],
-          bottom: navBottom,
-          zIndex: graphite.z.nav,
-        }}
-      >
-        <SpotlightNav badge={3} onPlus={() => setSheet(true)} />
-      </View>
+      {keys ? null : (
+        <View
+          style={{
+            position: "absolute",
+            left: SP[4],
+            right: SP[4],
+            bottom: navBottom,
+            zIndex: graphite.z.nav,
+          }}
+        >
+          <SpotlightNav badge={3} onPlus={() => setSheet(true)} />
+        </View>
+      )}
+      {keys ? null : (
       <View
         testID="gr-actions"
         style={{
@@ -291,6 +299,7 @@ export function GraphiteScreen({ onClose }: { onClose: () => void }) {
           />
         </View>
       </View>
+      )}
       <GrToasts
         stack={toasts}
         onGone={(id) => setToasts((st) => st.filter((x) => x.id !== id))}

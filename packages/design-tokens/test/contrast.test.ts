@@ -187,6 +187,11 @@ describe.each(names)("«Графит» %s contrast (#2254)", (name) => {
     expect(ratio(parse(g.onSel), parse(g.sel))).toBeGreaterThanOrEqual(7);
     expect(ratio(parse(g.onBadge), parse(g.badge))).toBeGreaterThanOrEqual(7);
   });
+  it("the hint in a field (`placeholder`) ≥ 4.5 on the field's solid base and paler than the typed text (#2292)", () => {
+    expect(ratio(parse(g.placeholder), parse(g.panelSolid))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(parse(g.placeholder), parse(g.panelSolid))).toBeLessThan(ratio(parse(g.text), parse(g.panelSolid)));
+    expect(ratio(parse(g.placeholder), parse(g.panelSolid))).toBeLessThan(ratio(parse(g.text2), parse(g.panelSolid)));
+  });
   it("the yellow fill is one colour in both themes (only the main action and «＋»)", () => expect(g.acc).toBe("#FBFF00"));
   it("status icons (`ic`) on the panel ≥ 3 (UI), the word (`-w`) ≥ 4.5 — the word never in `ic`", () => {
     for (const s of on(g.panel))

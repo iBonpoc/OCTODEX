@@ -19,7 +19,7 @@ const KINDS: { kind: Kind; name: DictKey; where: DictKey }[] = [
 ];
 
 /** Haptics (DS §15.6): every response of the map on its own button — «feel it» — with where the app gives it. */
-export function HapticsSection() {
+export function HapticsSection({ bare }: { bare?: boolean } = {}) {
   const { t } = useI18n();
   const s = SECTIONS.find((x) => x.id === "haptics")!;
   const [on, setOn] = useHapticsEnabled();
@@ -27,12 +27,12 @@ export function HapticsSection() {
   const web = Platform.OS === "web";
   return (
     <View testID="showcase-haptics">
-      <SectionTitle title={`${t(s.title)} · ${s.ds}`} />
+      {bare ? null : <SectionTitle title={`${t(s.title)} · ${s.ds}`} />}
       <Card>
         <RowView style={{ justifyContent: "space-between" }}>
           <View style={{ flex: 1 }}>
             <T v="heading">{t("haptics.title")}</T>
-            <T v="caption" tone="mut">{web ? t("ds.hap.web") : t("haptics.hint")}</T>
+            <T v="caption" tone="mut">{web ? t(bare ? "ds.gr.hapWeb" : "ds.hap.web") : t("haptics.hint")}</T>
           </View>
           {web ? null : (
             <View testID="showcase-hap-switch">

@@ -7,6 +7,7 @@
  * С4 «Загрузка» / «Выключено» on EVERY block that has them: the spinner shows (after the delay) on the variants, «Как сейчас» says it has no such state; switched-off samples ignore presses;
  * С5 the round button switches on and off (aria-pressed), «Как сейчас» too;
  * С2b «Основа» on examples: the theme switch, status / accent / surface, spacing and corners as three cards, the vibration block;
+ * С7 «Поля»: every field of every variant types (phone mask, money format, errors with words, switched off), the date row opens;
  * С5b the one fold «Для разработчиков» is shut, opens and shuts;
  * С6 «Готовятся» is a plain list at the end; the pilot screen is still opened by its own button.
  */
@@ -14,12 +15,12 @@ const BLOCKS = [
   // id, the pressable ids of «Как сейчас», of «Вариант 1», of «Вариант 2» (the counter is the block's, one for all)
   { id: "main", now: ["gr-main-now-btn"], v1: ["gr-main-v1-btn"], v2: ["gr-main-v2-btn"] },
   { id: "second", now: ["gr-second-now-btn"], v1: ["gr-second-v1-btn"], v2: ["gr-second-v2-btn"] },
-  { id: "ghost", now: ["gr-ghost-now-btn"], v1: ["gr-ghost-v1-btn"], v2: [] },
+  { id: "ghost", now: ["gr-ghost-now-btn"], v1: ["gr-ghost-v1-btn"], v2: ["gr-ghost-v2-btn"] },
   { id: "danger", now: ["gr-danger-now-btn"], v1: ["gr-danger-v1-btn"], v2: ["gr-danger-v2-btn"] },
   { id: "icon", now: ["gr-icon-now-btn"], v1: ["gr-icon-v1-btn"], v2: ["gr-icon-v2-btn"] },
   { id: "round", now: ["gr-round-now-btn"], v1: ["gr-round-v1-btn"], v2: ["gr-round-v2-btn"] },
   { id: "bar", now: ["gr-bar-now-second", "gr-bar-now-main"], v1: ["gr-bar-v1-second", "gr-bar-v1-main"], v2: ["gr-bar-v2-second", "gr-bar-v2-main"] },
-  { id: "plus", now: [], v1: ["gr-plus-v1-btn"], v2: [] },
+  { id: "plus", now: [], v1: ["gr-plus-v1-btn"], v2: ["gr-plus-v2-btn"] },
 ];
 
 exports.run = async (h) => {
@@ -73,7 +74,7 @@ exports.run = async (h) => {
   // С2 — every block: «Как сейчас» and the variants all seen; nothing is cut at the side
   const width = await p.evaluate(() => window.innerWidth);
   for (const b of BLOCKS) {
-    const ids = [`gr-${b.id}-now`, `gr-${b.id}-v1`, ...(b.v2.length || ["main", "second", "danger", "icon", "round", "bar"].includes(b.id) ? [`gr-${b.id}-v2`] : [])];
+    const ids = [`gr-${b.id}-now`, `gr-${b.id}-v1`, `gr-${b.id}-v2`];
     for (const id of ids) {
       await center(id);
       const box = await vis(id).boundingBox();
@@ -96,17 +97,38 @@ exports.run = async (h) => {
     const e = document.querySelector('[data-testid="gr-surface-now"]');
     return getComputedStyle([...e.querySelectorAll("[style*='background-color']")].pop() ?? e).backgroundColor === was;
   }, light0);
-  for (const id of ["gr-status-now", "gr-status-v1", "gr-space-now-dense", "gr-space-now-mid", "gr-space-now-loose", "gr-space-v1-dense", "gr-space-v1-loose", "gr-radius-now-c1", "gr-radius-now-c3", "gr-radius-v1-c1", "gr-radius-v1-c3"]) {
+  for (const id of ["gr-status-now", "gr-status-v1", "gr-space-now-card", "gr-space-v1-card", "gr-radius-now-card", "gr-radius-v1-card"]) {
     await center(id);
     h.expect(await vis(id).isVisible(), `С2b: ${id} is on the sheet`);
   }
-  // the loose card is taller than the tight one: the spacing is seen, not read
+  // the spacing and the corners are CHOSEN: press a name — it is marked, the example is rebuilt (taller / rounder)
   const hs = async (id) => (await vis(id).boundingBox()).height;
-  h.expect((await hs("gr-space-now-loose")) > (await hs("gr-space-now-dense")), "С2b: «свободно» is taller than «плотно» (Как сейчас)");
-  h.expect((await hs("gr-space-v1-loose")) > (await hs("gr-space-v1-dense")), "С2b: «свободно» is taller than «плотно» (Вариант 1)");
+  await center("gr-space-pick-dense");
+  await vis("gr-space-pick-dense").click();
+  const [nowDense, v1Dense] = [await hs("gr-space-now-card"), await hs("gr-space-v1-card")];
+  await vis("gr-space-pick-loose").click();
+  await until("С2b the loose card is taller", ([a, b]) => document.querySelector('[data-testid="gr-space-now-card"]').getBoundingClientRect().height > a && document.querySelector('[data-testid="gr-space-v1-card"]').getBoundingClientRect().height > b, [nowDense, v1Dense]);
+  h.expect((await vis("gr-space-pick-loose").getAttribute("aria-checked")) === "true", "С2b: the chosen density is marked");
+  const corner = (id) => vis(id).evaluate((e) => { for (let n = e; n; n = n.parentElement) { const r = parseFloat(getComputedStyle(n).borderTopLeftRadius); if (r > 0) return r; } return 0; });
+  await center("gr-radius-pick-c1");
+  await vis("gr-radius-pick-c1").click();
+  const [c1Now, c1V1] = [await corner("gr-radius-now-card"), await corner("gr-radius-v1-card")];
+  await vis("gr-radius-pick-c3").click();
+  await until("С2b the corner became rounder", ([a, b]) => {
+    const r = (id) => { for (let n = document.querySelector(`[data-testid="${id}"]`); n; n = n.parentElement) { const v = parseFloat(getComputedStyle(n).borderTopLeftRadius); if (v > 0) return v; } return 0; };
+    return r("gr-radius-now-card") > a && r("gr-radius-v1-card") > b;
+  }, [c1Now, c1V1]);
+  // the sheet speaks plainly: no rule numbers, no pilot words, no digits in the spacing / corner names (service words are in the fold)
+  const page = await vis("gr-sheet-page").innerText();
+  h.expect(!/DESIGN-SYSTEM|§|#2254|Откат/.test(page), "С2b: no service words on the sheet outside the fold");
   // the vibration check is on the sheet as it is
   await center("showcase-haptics");
   h.expect(await vis("showcase-haptics").isVisible(), "С2b: the vibration block is on the sheet");
+  // every response answers a press (in a browser nothing vibrates, the line under the buttons says which was pressed)
+  for (const k of ["selection", "light", "medium", "success", "warning", "error"]) {
+    await vis(`showcase-hap-${k}`).getByRole("button").click();
+    await until(`С2b ${k} answered`, (kind) => /./.test(document.querySelector('[data-testid="showcase-hap-last"]')?.innerText || ""), k);
+  }
 
   // С3 — SWEEP: every button, every variant; a Gr button waits (busy) after its press, then the next one is pressed
   for (const b of BLOCKS) {
@@ -193,6 +215,75 @@ exports.run = async (h) => {
       return `${e.getAttribute("aria-pressed")}/${getComputedStyle(e.firstElementChild).backgroundColor}` !== w;
     }, [id, was]);
   }
+
+  // С7 — «Поля»: every field of every variant types; the phone mask, the money format, the error with its words, the date row opens
+  const input = async (id) => {
+    await center(id);
+    const el = vis(id);
+    const tag = await el.evaluate((e) => e.tagName);
+    return /^(INPUT|TEXTAREA)$/.test(tag) ? el : el.locator("input,textarea").first();
+  };
+  const leave = async (id) => {
+    // leaving a field: press the block's own heading
+    await (await input(id)).blur();
+  };
+  const blockText = (b) => vis(`gr-block-${b}`).innerText();
+  const SAMPLES = (b) => [`gr-${b}-now-input`, `gr-${b}-v1-input`, `gr-${b}-v2-input`];
+  // text
+  for (const id of SAMPLES("ftext")) {
+    const el = await input(id);
+    await el.fill("Maria");
+    h.expect((await el.inputValue()) === "Maria", `С7: ${id} takes text`);
+  }
+  await center("gr-ftext-required");
+  await vis("gr-ftext-required").click();
+  for (const id of SAMPLES("ftext")) {
+    const el = await input(id);
+    await el.fill("");
+    await el.blur();
+  }
+  await until("С7 the required error shows on all three", () => (document.querySelector('[data-testid="gr-block-ftext"]').innerText.match(/Заполните поле/g) || []).length >= 3);
+  await vis("gr-ftext-required").click();
+  // phone: the mask and the error after leaving with a few digits
+  for (const id of SAMPLES("fphone")) {
+    const el = await input(id);
+    await el.fill("6265550142");
+    h.expect((await el.inputValue()) === "(626) 555-0142", `С7: ${id} masks the phone (${await el.inputValue()})`);
+    await el.fill("626");
+    await el.blur();
+  }
+  await until("С7 the phone error shows on all three", () => (document.querySelector('[data-testid="gr-block-fphone"]').innerText.match(/Нужно 10 цифр/g) || []).length >= 3);
+  // money: «1234.5» → «1,234.50» on leaving
+  for (const id of SAMPLES("fmoney")) {
+    const el = await input(id);
+    await el.fill("1234.5");
+    await el.blur();
+    await until(`С7 ${id} formats the sum`, (i) => {
+      const e = document.querySelector(`[data-testid="${i}"]`);
+      const v = (e.matches("input") ? e : e.querySelector("input")).value;
+      return /1,234\.50/.test(v);
+    }, id);
+  }
+  // note: several lines
+  for (const id of SAMPLES("fnote")) {
+    const el = await input(id);
+    await el.fill("one\ntwo");
+    h.expect(/one\s*two/.test(await el.inputValue()), `С7: ${id} takes two lines`);
+  }
+  // «Выключено»: the variants' inputs stop typing (the app's fields have no such state and say so)
+  for (const b of ["ftext", "fphone", "fmoney", "fnote"]) {
+    await center(`gr-${b}-disabled`);
+    await vis(`gr-${b}-disabled`).click();
+    for (const v of ["v1", "v2"]) h.expect(await (await input(`gr-${b}-${v}-input`)).evaluate((e) => e.disabled || e.readOnly), `С7: ${b} ${v} is switched off`);
+    h.expect(/такого состояния нет/.test(await blockText(b)), `С7: ${b} «Как сейчас» says it has no switched-off state`);
+    await vis(`gr-${b}-disabled`).click();
+  }
+  // the date: its row opens, a quick day is picked
+  await center("gr-fdate-now");
+  await vis("gr-fdate-now-row-button").click();
+  await vis("gr-fdate-now-panel").waitFor({ timeout: 4000 });
+  await vis("gr-fdate-now-today").click();
+  await h.shot("sheet-fields");
 
   // С5b — the one fold: the service values, shut by default, opened by its button, shut again
   await vis("gr-jump-dev").click();
