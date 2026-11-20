@@ -3071,6 +3071,7 @@ export const es: Dict = {
   "fix.sign.done": "Listo",
   // sign.* — the signature pad (#2215)
   "sign.undoStroke": "Deshacer trazo",
+  "sign.sent": "Firma entregada",
   // fix.co.* — company settings read-only for the office (spec 26 §3)
   "fix.co.readOnly": "Solo lectura — los cambios los hace el director",
   // 7а-3 «в»: the people of a closed company (docs/specs/22 §3.6)

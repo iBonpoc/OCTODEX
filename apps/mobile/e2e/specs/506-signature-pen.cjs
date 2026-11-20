@@ -46,4 +46,19 @@ exports.run = async (h) => {
   await btn("signature-clear").click();
   await p.waitForTimeout(200);
   h.expect((await strokes()) === 0, "clear: everything is gone");
+  // #2260: the confirm button is whole on the screen at every width (the tools wrap, the button has its row), and the result of
+  // the confirmation is visible: the note «Подпись передана» under the pad, or the step has moved on (the pad is gone)
+  await stroke(0);
+  const vw = p.viewportSize().width;
+  const confirm = p.getByTestId("signature-pad").locator("visible=true").first().locator("xpath=ancestor::*[.//button][1]").getByRole("button", { name: /Подтвердить/ }).first();
+  await confirm.scrollIntoViewIfNeeded();
+  const cb = await confirm.boundingBox();
+  h.expect(cb && cb.x >= 0 && cb.x + cb.width <= vw + 1, `the confirm button is inside the screen (${cb && Math.round(cb.x)}…${cb && Math.round(cb.x + cb.width)} of ${vw})`);
+  h.expect(cb && cb.width >= 120, `the confirm button has its label room (${cb && Math.round(cb.width)} px)`);
+  await h.shot("confirm-button");
+  await confirm.click();
+  await p.waitForTimeout(400);
+  const sent = await p.getByTestId("signature-sent").count();
+  const padGone = (await p.getByTestId("signature-pad").count()) === 0;
+  h.expect(sent > 0 || padGone, "after «Подтвердить подпись»: the note «Подпись передана» or the next step is shown");
 };
