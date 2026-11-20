@@ -96,8 +96,7 @@ export function companyToDb(c: Company, stored: Row, tzChanged?: boolean) {
     estimate_settings: { ...((stored.estimate_settings as Row) ?? {}), valid_days: c.estimate.validDays, deposit_bps: c.estimate.depositBps, ...termsToDb(c) },
     payment_settings: { ...((stored.payment_settings as Row) ?? {}), zelle: n(c.payment.zelle), check_payable_to: n(c.payment.checkPayableTo) },
     onboarding_state: { ...((stored.onboarding_state as Row) ?? {}), skipped: c.skipped },
-    // whom new leads go to: null = the owner; absent (an older build's queued op, an old cache) leaves the stored one
-    ...(c.leadDefaultAssigneeId !== undefined ? { lead_default_assignee_id: c.leadDefaultAssigneeId } : {}),
+    // whom new leads go to: not here — company.save sends it by its own request (assigneeToSend, Р-7)
     lead_settings: { ...((stored.lead_settings as Row) ?? {}), ...(c.leadSettings ?? {}) },
     schedule_settings: { ...((stored.schedule_settings as Row) ?? {}), ...(c.scheduleSettings ?? {}) },
     // hours: the days the phone has win, the stored ones stay; no hours on the phone — the stored ones stay (null = defaults)
@@ -112,6 +111,11 @@ export const contactToDb = (c: CompanyContact, companyId: string, position: numb
   id: c.id, company_id: companyId, name: c.name.trim(), title: c.title || null, phone: c.phone || null, email: c.email || null,
   is_primary: c.isPrimary, on_documents: c.onDocuments, position,
 });
+
+/** Р-7: company.save sends the default lead assignee only when this save chose it (`assigneeChanged`); an older op
+ *  without the flag — only when it differs from the stored one; absent on the phone (an old cache) — never. null = the owner. */
+export const assigneeToSend = (want: string | null | undefined, stored: unknown, assigneeChanged?: boolean): boolean =>
+  want !== undefined && (assigneeChanged === undefined ? (want ?? null) !== (stored ?? null) : assigneeChanged);
 
 /** company.save sends the zone only when it was chosen (`tzChanged`) and this phone knows it (docs/specs/22 §1.3).
  *  An op queued by an older build has no flag: then — as before — when it differs from the stored one. */

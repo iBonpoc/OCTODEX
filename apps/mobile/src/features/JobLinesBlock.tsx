@@ -19,8 +19,9 @@ import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { whenLate, type GuardedUndo } from "@/data/undo";
+import { canEditJobMoney } from "@/features/billRights";
 
-/** who changes a job's own lines: the server's app.is_staff (owner, admin, office, sales) */
+/** who changes the type and tags of a job: the server's app.is_staff (owner, admin, office, sales); its lines and tax — canEditJobMoney (#2075) */
 export const canEditJobLines = (role: Role) => role !== "tech";
 
 /** "12.50" / "$1,200" → cents through the engine (rule 8); null when it is not a number */
@@ -53,7 +54,7 @@ export function JobLinesBlock({ job }: { job: Job }) {
   useEffect(() => setRate(jobRateText(job)), [job.taxRateBps, job.taxRatePpm]);
   if (job.estimateId) return null;
   const lines = linesOf(db, job.id);
-  const editable = linesEditable(job) && canEditJobLines(store.role);
+  const editable = linesEditable(job) && canEditJobMoney(store.role);
   const exempt = jobClientExempt(db, job);
   const totals = totalOf(lines, job);
   const warn = caContractWarning(db, job.id);

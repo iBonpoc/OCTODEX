@@ -48,8 +48,10 @@ const live = (it: CatalogItem) => it.kind !== "kit";
 /** the company's item for a part: its properties and its unit; the closest first (catalogMatch), else undefined */
 export function findItem(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): CatalogItem | undefined {
   const unit = p.unit.trim().toLowerCase();
-  const pool = catalog.filter((it) => live(it) && it.unit.trim().toLowerCase() === unit);
   const want = matchAttrs(p);
+  // a fastener of another metal is never this one's (review PR-2 №1): an aluminum job's screw never takes the copper screw's item
+  const metalOk = (it: CatalogItem) => !METAL_FALLBACK_PARTS.has(want.part ?? "") || !it.attributes?.metal || it.attributes.metal === want.metal;
+  const pool = catalog.filter((it) => live(it) && it.unit.trim().toLowerCase() === unit && metalOk(it));
   const own = catalogMatch(pool, want)[0];
   if (own) return own;
   // #871: before the fix the engine counted «A» for a round downspout's elbows by default, and a company priced that row
@@ -58,8 +60,73 @@ export function findItem(catalog: readonly CatalogItem[], p: Pick<PartQty, "key"
     const it = catalogMatch(pool, alt)[0];
     if (it) return it;
   }
+  // М8 («Расход v2» PR-2): a copper or zinc job's screw, anchor or strap strip carries its metal; a company that priced the same fastener
+  // without a metal keeps that price until it prices the metal's own (no mark — the director's decision on §5а №2, as #2000). Only an
+  // item WITHOUT a metal: a stainless screw never prices a copper one
+  if (want.metal && METAL_FALLBACK_PARTS.has(want.part ?? "")) {
+    const { metal: _m, ...plain } = want;
+    const it = catalogMatch(pool.filter((x) => !x.attributes?.metal), plain)[0];
+    if (it) return it;
+  }
   return undefined;
 }
+
+/**
+ * #2227 (spec 33-price-key §11.3.4, §11.10): parts whose colour IS the product (a tube of sealant, a can of paint) keep an
+ * item per colour until the founder answers (№48) — never searched without their colour, never merged by the transition
+ */
+export const COLOUR_IS_PRODUCT: ReadonlySet<string> = new Set(["sealant", "touch_up_paint"]);
+/** the property of a Gutters item's variant (the core never names it: registry variantWord) */
+export const VARIANT_ATTR = "color";
+
+/** a coloured part whose item may be one for every colour (not a colour-is-the-product part, not labor) */
+export function colourVariantPart(p: Pick<PartQty, "key" | "kind" | "attrs">): boolean {
+  if (p.kind === "labor" || !p.attrs.color?.trim()) return false;
+  const part = matchAttrs(p).part ?? "";
+  return PART_WORDS.has(part) && !COLOUR_IS_PRODUCT.has(part);
+}
+
+/** #2227: the part as its one item for every colour sees it: no colour, «painted» when it had a colour and no finish */
+export function colourlessPart<P extends Pick<PartQty, "key" | "kind" | "attrs" | "unit">>(p: P): P {
+  const { color, ...attrs } = p.attrs;
+  return { ...p, attrs: color?.trim() && !attrs.finish ? { ...attrs, finish: "painted" } : attrs };
+}
+
+/**
+ * #2227: the item of a part and the variant of its line (spec §11.3.4, редакция 5 — review #2249 №1, №3). Step by step, the
+ * part's own properties first, then the old fallbacks of `findItem` (a round elbow's other degree, a fastener without metal):
+ *   in each step the item of the SAME colour (the old way, before the company's transition), then the item WITHOUT a colour
+ *   (a coloured part without a finish takes only a «painted» one — never «mill» or a company's plain item), its colour the
+ *   line's variant. A placeholder of the same colour gives way to a priced item without colour (an old build made it while the
+ *   colourless one has the company's price). Never another colour's item. `matchAttrs` / `matchKey` are not changed.
+ */
+export function findPriced(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): { it?: CatalogItem; variant?: { attr: string; value: string } } {
+  if (!colourVariantPart(p)) {
+    const it = findItem(catalog, p);
+    return it ? { it } : {};
+  }
+  const unit = p.unit.trim().toLowerCase();
+  const want = matchAttrs(p);
+  const value = want.color!.trim().toLowerCase();
+  const metalOk = (it: CatalogItem) => !METAL_FALLBACK_PARTS.has(want.part ?? "") || !it.attributes?.metal || it.attributes.metal === want.metal;
+  const base = catalog.filter((it) => live(it) && it.unit.trim().toLowerCase() === unit);
+  const steps: { w: Record<string, string>; pool: CatalogItem[] }[] = [
+    { w: want, pool: base.filter(metalOk) },
+    ...ROUND_ELBOW_FALLBACK(want).map((w) => ({ w, pool: base.filter(metalOk) })),
+    ...(want.metal && METAL_FALLBACK_PARTS.has(want.part ?? "") ? [{ w: (({ metal: _m, ...x }) => x)(want), pool: base.filter((x) => !x.attributes?.metal) }] : []),
+  ];
+  const painted = (it: CatalogItem) => !!want.finish || it.attributes?.finish?.trim().toLowerCase() === "painted";
+  for (const { w, pool } of steps) {
+    const own = catalogMatch(pool, w)[0];
+    const { color: _c, ...plain } = w;
+    const one = catalogMatch(pool.filter((it) => !it.attributes?.color?.trim()), plain).filter(painted)[0];
+    if (own && !(own.placeholder && one && !one.placeholder)) return { it: own };
+    if (one) return { it: one, variant: { attr: VARIANT_ATTR, value } };
+  }
+  return {};
+}
+/** the fasteners whose metal follows the gutter's (the engine's METAL_FASTENERS) */
+const METAL_FALLBACK_PARTS = new Set(["screw", "anchor", "flat_coil"]);
 
 /**
  * The round elbow of the engine's DEFAULT degree (75°, «Расход v2») the company has not priced takes its round elbow of the same
@@ -72,21 +139,26 @@ const ROUND_ELBOW_FALLBACK = (w: Record<string, string>): Record<string, string>
   w.part !== "elbow" || w.shape !== "round" ? [] : w.style === "45" ? [{ ...w, style: "A" }] : ROUND_DEFAULT_STYLES.has(w.style ?? "") ? [{ ...w, style: "45" }, { ...w, style: "A" }] : [];
 /** the line's item is another degree's (see findItem): the estimate says «проверьте цену» for it */
 export function priceFromOtherDegree(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): boolean {
-  const it = findItem(catalog, p);
+  // #2227 (review #2249 №3): the item the line really takes — of its colour or the one for every colour, by the same steps
+  const it = findPriced(catalog, p).it;
+  if (!it) return false;
+  // М8 (review PR-2): a copper fastener priced by the same fastener without a metal borrows its price too — its own name in the line, and
+  // the price list still shows its own item missing («Создать позиции сразу» makes it; its price is then its own)
+  if (p.attrs.metal && METAL_FALLBACK_PARTS.has(p.attrs.part ?? "") && it.attributes?.metal !== p.attrs.metal) return true;
   // the #871 «A» name of the 45° elbow is the same elbow under its old name — not another degree
-  return !!it && p.attrs.part === "elbow" && p.attrs.shape === "round" && ROUND_DEFAULT_STYLES.has(p.attrs.style ?? "") && it.attributes?.style !== p.attrs.style;
+  return p.attrs.part === "elbow" && p.attrs.shape === "round" && ROUND_DEFAULT_STYLES.has(p.attrs.style ?? "") && it.attributes?.style !== p.attrs.style;
 }
 
 /** parts with a word of their own; any other part (a kit's) shows its code — data, like an item's name */
 export const PART_WORDS = new Set([
   "gutter", "downspout", "end_cap", "hanger", "ds_strap", "elbow", "outlet", "end_outlet", "extension", "splash_block", "flex", "drain", "drain_adapter", "splash_pan", "sealant",
   "shank", "spike", "circle", "bolt", "screw", "anchor", "ferrule", "flat_coil",
-  "rivet", "touch_up_paint", "flux", "solder", "strip_miter", "wedge", "guard",
+  "rivet", "touch_up_paint", "flux", "solder", "soldering_kit", "strip_miter", "wedge", "guard",
   "slip_joint", "miter", "splash_guard", "expansion_joint", "guard_run", "offset", "reducer", "funnel", "conductor_head", "diverter", "eave_box", "outlet_screen", "wye", "rain_chain", "rain_chain_adapter",
   // a downspout's wall fasteners: the kit is named by its part (#1805: they were shown as codes)
   "sickle_hook", "u_bracket", "conductor_bracket", "brick_hook", "brick_hook_hd", "conductor_band", "hinged_hook", "pipe_cleat",
 ]);
-export const WORK_WORDS = new Set(["install", "downspout", "corner_cut", "bend", "tearoff", "tile", "cleaning", "flush", "guard_install"]);
+export const WORK_WORDS = new Set(["install", "downspout", "corner_cut", "bend", "solder", "tearoff", "tile", "cleaning", "flush", "guard_install"]);
 
 /* ---------- the parts the company prices ---------- */
 
@@ -101,6 +173,8 @@ export const LABOR_PARTS: readonly PartQty[] = [
   labor("labor.corner_cut", "ea", { work: "corner_cut" }),
   // «Гиб по месту» (Р4, «Расход v2»): a plain rectangular downspout's elbows bent on site, each
   labor("labor.bend", "ea", { work: "bend" }),
+  // «Пайка швов» (М7, «Расход v2» PR-2): a copper or zinc job's solder points, each
+  labor("labor.solder", "ea", { work: "solder" }),
   labor("labor.tearoff", "ft", { work: "tearoff" }),
   labor("labor.tile", "ft", { work: "tile" }),
   // the starter estimates (#1323): a cleaning, a downspout flush and a guard installation are priced like the rest of the labor
@@ -190,22 +264,27 @@ export function missingItems(companyId: string, rows: readonly PriceRow[], catal
   const out = new Map<string, CatalogItem>();
   for (const { key, part } of rows) {
     // a part priced only by another degree's item (§2.7) still gets its own: the price list shows it missing until there is one
-    if (findItem(catalog, part) && !priceFromOtherDegree(catalog, part)) continue;
-    const id = stableItemId(companyId, key);
+    if (findPriced(catalog, part).it && !priceFromOtherDegree(catalog, part)) continue;
+    // #2227 (§11.3.4.1, §11.8): a coloured part gets ONE item for every colour — its properties less the colour, «painted» when
+    // it has a colour and no finish; its id from that key, so every colour and every build make the same id (no duplicates)
+    const plain = colourVariantPart(part) ? colourlessPart(part) : undefined;
+    const id = stableItemId(companyId, plain ? matchKey(plain) : key);
     if (ids.has(id) || out.has(id)) continue;
     const made: CatalogItem = {
       id,
       kind: part.kind === "labor" ? "labor" : "material",
-      name: name(part).slice(0, 200),
+      name: name(plain ?? part).slice(0, 200),
       unit: part.unit,
       priceCents: testPriceCents(part),
       // a material's price is cost × tax × markup in the core's editor (catalog/[id]): cost = the price, no tax, no markup
       ...(part.kind === "labor" ? {} : { costCents: testPriceCents(part), vendorTaxBps: 0, markupBps: 0 }),
       placeholder: true,
-      attributes: withGroup(part.unit, matchAttrs(part)),
+      // review #2249 №1 (§11.6): the item for every colour is in the price group of the old per-colour items — one price for all
+      attributes: plain ? { ...matchAttrs(plain), priceGroup: priceGroupKey({ unit: part.unit, attributes: withGroup(part.unit, matchAttrs(part)) }) } : withGroup(part.unit, matchAttrs(part)),
     };
     // a colour of a part whose group is there: the group's price, as the store and the server give a joining item (in every mode —
     // the store does it only in the cloud; review of PR3 №6)
+    // #2227: the one item for every colour takes the price of a colour already in that group, the same way
     const g = made.attributes?.priceGroup;
     const peer = g ? catalog.find((c) => c.attributes?.priceGroup === g) : undefined;
     out.set(id, peer ? { ...made, priceCents: peer.priceCents, placeholder: peer.placeholder, costCents: peer.costCents, vendorTaxBps: peer.vendorTaxBps, markupBps: peer.markupBps } : made);
@@ -237,7 +316,7 @@ export function listPreview(parts: readonly PartQty[], catalog: readonly Catalog
   let test = false;
   const priced = catalog.filter(live);
   const r = gutterPreview(parts, rates, (p) => {
-    const it = findItem(priced, p);
+    const it = findPriced(priced, p).it;
     if (!it) return undefined;
     if (it.placeholder) test = true;
     // the core's price of an item (a material: cost × supplier tax × markup, as the estimate's line from the list)

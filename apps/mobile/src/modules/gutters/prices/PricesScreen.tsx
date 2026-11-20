@@ -26,7 +26,7 @@ import { CardGrid, ListCard, ListCardHeader } from "@/ui/listCard";
 import { useToast, Sheet } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { CardList, ListRow, Screen } from "@/ui/surfaces";
-import { bindable, bindItem, findItem, laborRows, materialRows, missingItems, partName, type PriceRow, priceFromOtherDegree } from "../prices";
+import { bindable, bindItem, findPriced, laborRows, materialRows, missingItems, partName, type PriceRow, priceFromOtherDegree } from "../prices";
 import { withAfter } from "@/data/undo";
 import { QuickPriceSheet } from "@/features/QuickPriceSheet";
 import { quickSheetKey } from "@/features/quickPrice";
@@ -57,6 +57,9 @@ export default function GutterPricesScreen() {
   const [bindFor, setBindFor] = useState<PriceRow | null>(null);
   /** spec 53 §6.3 (53-1): the price of a found item in a sheet — two taps (a kit keeps the full editor) */
   const [quickId, setQuickId] = useState<string | null>(null);
+  /** the item just made from a row's sheet: its «Цена» opens when that sheet has left (never two sheets at once — #743;
+   *  founder 18.11, #2155: «она создалась и не спросила меня цену») */
+  const priceNext = useRef<string | null>(null);
   // held while the sheet goes out (DS Б1, #1163); an item deleted meanwhile (another phone) — the sheet goes out
   const quick = useHeldSheet(quickId ? catalog.find((x) => x.id === quickId) ?? null : null);
 
@@ -110,7 +113,8 @@ export default function GutterPricesScreen() {
   const desktop = device === "desktop";
   const card = (row: PriceRow) => {
     // a part priced only by another degree's elbow (§2.7) is shown missing here: the company prices its own
-    const it = priceFromOtherDegree(catalog, row.part) ? undefined : findItem(catalog, row.part);
+    // #2227: a coloured part is priced by the one item of every colour (findPriced), as its estimate line is
+    const it = priceFromOtherDegree(catalog, row.part) ? undefined : findPriced(catalog, row.part).it;
     const title = keep(it ? it.name : nameOf(row.part));
     const unit = row.part.unit;
     if (it) {
@@ -203,12 +207,21 @@ export default function GutterPricesScreen() {
 
       <TransitionSheet visible={pgOpen && canGroup && groups.length > 0} groups={groups} onClose={() => setPgOpen(false)} onDone={doGroups} />
       <QuickPriceSheet key={quickSheetKey(quick.opening, quick.value)} item={quick.value} visible={quick.visible} onExited={quick.onExited} onClose={() => setQuickId(null)} />
-      <Sheet visible={!!bindFor} onClose={() => setBindFor(null)} title={bindFor ? nameOf(bindFor.part) : ""}>
+      <Sheet
+        visible={!!bindFor}
+        onClose={() => setBindFor(null)}
+        onExited={() => {
+          const id = priceNext.current;
+          priceNext.current = null;
+          if (id) setQuickId(id);
+        }}
+        title={bindFor ? nameOf(bindFor.part) : ""}
+      >
         <View style={{ gap: space[3] }} testID="gpr-bind">
           <T v="caption" tone="mut">{t(k("bindHint"))}</T>
           {bindFor
             ? (() => {
-                const own = missing.find((m) => findItem([m], bindFor.part));
+                const own = missing.find((m) => findPriced([m], bindFor.part).it);
                 return own ? (
                   <View testID="gpr-bind-make">
                     <Button
@@ -218,6 +231,7 @@ export default function GutterPricesScreen() {
                       onPress={() => {
                         setBindFor(null);
                         make([own]);
+                        priceNext.current = own.id;
                       }}
                     />
                   </View>
