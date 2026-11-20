@@ -376,6 +376,10 @@ export const en: Dict = {
   "triage.later.tomorrow": "Tomorrow · {date}",
   "triage.later.days3": "In 3 days · {date}",
   "triage.later.week": "In a week · {date}",
+  "triage.later.pick": "Pick a date…",
+  "triage.pickTitle": "Put off until a day",
+  "triage.pickDate": "Day",
+  "triage.pickDo": "Put off",
   "triage.laterSaved": "Put off until {date} — it comes back by itself",
 
   "inbox.title": "Inbox",

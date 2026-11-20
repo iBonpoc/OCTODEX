@@ -375,6 +375,10 @@ export const ru = {
   "triage.later.tomorrow": "Завтра · {date}",
   "triage.later.days3": "Через 3 дня · {date}",
   "triage.later.week": "Через неделю · {date}",
+  "triage.later.pick": "Выбрать дату…",
+  "triage.pickTitle": "Отложить до дня",
+  "triage.pickDate": "День",
+  "triage.pickDo": "Отложить",
   "triage.laterSaved": "Отложено до {date} — вернётся само",
 
   "inbox.title": "Входящие",

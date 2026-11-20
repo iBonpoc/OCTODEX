@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { buildAttention } from "../src/features/attention";
-import { isSnoozed, snoozeDay, snoozeUntil, withSnooze } from "../src/features/attentionSnooze";
+import { canSnoozeTo, isSnoozed, pickMin, snoozeDay, snoozeUntil, withSnooze } from "../src/features/attentionSnooze";
 import { moreCounts } from "../src/features/moreCounts";
 import { makeSeed } from "../src/data/seed";
 
@@ -51,5 +51,31 @@ describe("«Позже» до даты (#2097)", () => {
   it("old saved data with no list: nothing is put off", () => {
     const db = { ...makeSeed(), attentionSnoozes: undefined };
     expect(isSnoozed(db, "sch-x", NOW)).toBe(false);
+  });
+});
+
+describe("«Позже» → «Выбрать дату…» (#2123)", () => {
+  it("С2 the first day to pick is the company's tomorrow (the LA day, not the UTC one)", () => {
+    // NOW is 16:00 on the 18th in LA, already the 19th in UTC: tomorrow is the 19th
+    expect(pickMin(NOW, LA)).toBe("2026-11-19");
+  });
+  it("С2 today and the past cannot be picked; tomorrow and later can", () => {
+    expect(canSnoozeTo("2026-11-18", NOW, LA)).toBe(false);
+    expect(canSnoozeTo("2026-11-01", NOW, LA)).toBe(false);
+    expect(canSnoozeTo("2026-11-19", NOW, LA)).toBe(true);
+    expect(canSnoozeTo("2026-11-28", NOW, LA)).toBe(true);
+  });
+  it("С2 at the company's midnight the edge moves with it", () => {
+    const justBefore = Date.parse("2026-11-19T07:59:00Z"); // 23:59 on the 18th in LA
+    const justAfter = Date.parse("2026-11-19T08:01:00Z"); // 00:01 on the 19th in LA
+    expect(canSnoozeTo("2026-11-19", justBefore, LA)).toBe(true);
+    expect(canSnoozeTo("2026-11-19", justAfter, LA)).toBe(false);
+    expect(pickMin(justAfter, LA)).toBe("2026-11-20");
+  });
+  it("С1 ten days on: back at 00:00 of that day in the company's zone", () => {
+    const day = snoozeDay(10, NOW, LA);
+    expect(day).toBe("2026-11-28");
+    expect(canSnoozeTo(day, NOW, LA)).toBe(true);
+    expect(snoozeUntil(day, LA)).toBe("2026-11-28T08:00:00.000Z");
   });
 });
