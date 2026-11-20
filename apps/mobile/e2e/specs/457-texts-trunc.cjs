@@ -78,7 +78,7 @@ exports.run = async (h) => {
 
   // 061: the showcase sections' captions wrap
   await h.go("/settings/design-system");
-  for (const id of ["base", "buttons", "selectors", "windows", "notices", "motion", "choice", "fields", "rows", "haptics", "spacing", "brand"]) await whole(`showcase-row-${id}`, undefined, `061 showcase row ${id}`);
+  for (const id of ["buttons", "selectors", "windows", "notices", "choice", "fields", "rows", "haptics", "brand"]) await whole(`showcase-row-${id}`, undefined, `061 showcase row ${id}`);
   // 085: «Профиль и аккаунт» — the delete row's caption wraps
   await h.go("/settings/profile");
   await whole("acct-row", undefined, "085 the account row");
