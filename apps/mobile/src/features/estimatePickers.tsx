@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { usableItems } from "@/features/catalogMatch";
 import { View } from "react-native";
 import { space, component } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -26,7 +27,8 @@ export function CatalogPicker({ visible, onClose, onPick, exclude }: { visible: 
   const [kind, setKind] = useState<CatalogKind | "all">("all");
   const items = useMemo(
     () =>
-      db.catalog
+      // #2227: a merged item (mergedInto) is never picked again
+      usableItems(db.catalog)
         .filter((x) => !exclude?.includes(x.kind))
         .filter((x) => kind === "all" || x.kind === kind)
         .filter((x) => !q.trim() || x.name.toLowerCase().includes(q.trim().toLowerCase()))

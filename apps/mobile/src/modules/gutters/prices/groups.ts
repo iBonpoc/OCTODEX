@@ -16,7 +16,8 @@ import { catalogUnitPrice } from "@/features/estimateDoc";
 /** the version of the key: a new set of the group's properties is `v2`, and the transition offers the items again (§4.3) */
 export const GROUP_KEY_VERSION = "v1";
 
-/** a gutter part's item of a colour: a material of the module's parts with a colour (an item without a colour is never in a group, §9 Б2) */
+/** a gutter part's item of a colour: a material of the module's parts with a colour. A hand-made item without a colour is never
+ *  grouped by its key (§9 Б2); the module's one item for every colour (#2227) carries its group from «Создать позиции сразу» (§11.6) */
 export const colouredPart = (it: CatalogItem): boolean =>
   it.kind === "material" && !!it.attributes?.color?.trim() && PART_WORDS.has(it.attributes?.part ?? "");
 
@@ -26,14 +27,18 @@ const NOT_KEY = new Set(["color", "priceGroup", "custom", "side"]);
 export function groupAttrs(attrs: Readonly<Record<string, string>>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(attrs)) if (!NOT_KEY.has(k)) out[k] = v;
-  if (attrs.color?.trim() && !out.finish) out.finish = "painted";
+  if (attrs.color?.trim() && !out.finish?.trim()) out.finish = "painted";
   return out;
 }
 
-/** the readable key of a group (before the hash): unit and the sorted properties */
+/**
+ * The readable key of a group (before the hash): unit and the sorted properties — values with case and spaces ignored, as an item is
+ * matched (`catalogMatch`): «Aluminum» from an import and the module's «aluminum» are one group. The values the module writes are
+ * lower case already, so their key (and every key the database keeps) is the same as before; the server only reads the written key.
+ */
 export function groupText(it: Pick<CatalogItem, "unit" | "attributes">): string {
   const a = groupAttrs(it.attributes ?? {});
-  return [it.unit.trim().toLowerCase(), ...Object.keys(a).sort().map((k) => `${k}=${a[k]}`)].join("|");
+  return [it.unit.trim().toLowerCase(), ...Object.keys(a).sort().map((k) => `${k}=${a[k]!.trim().toLowerCase()}`)].join("|");
 }
 
 /** `attributes.priceGroup` of a coloured part: «gutters:v1:<16 hex of sha1>» — within the 120 characters of the database's check */

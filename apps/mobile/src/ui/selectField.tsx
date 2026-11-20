@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { FieldBinding } from "./requiredForm";
+import { useFieldScroll, type FieldBinding } from "./requiredForm";
 import { View } from "react-native";
 import { component, radius, size, space } from "@octo/design-tokens";
 import { Platform } from "react-native";
@@ -30,6 +30,9 @@ export function SelectField<K extends string>({
   field,
   labelAbove,
   onOpen,
+  expanded,
+  controls,
+  rowRef,
 }: {
   label: string;
   value: K | null | undefined;
@@ -49,6 +52,12 @@ export function SelectField<K extends string>({
   /** the owner's own sheet opens instead of the menu — a list with groups and «＋ Новый …» (the sources, spec 56 §3а.5); `items` then
    *  only name the chosen value */
   onOpen?: () => void;
+  /** with `onOpen`: what the owner opened under the row is open now (DateField's calendar) — read to the screen reader */
+  expanded?: boolean;
+  /** with `expanded`: the id of what opens under the row (`aria-controls`; no `aria-haspopup` — it is not a popup) */
+  controls?: string;
+  /** the row itself — the owner gives the focus back to it (DateField after a pick) */
+  rowRef?: (n: React.ComponentRef<typeof View> | null) => void;
 }) {
   const { c } = useTheme();
   const { t } = useI18n();
@@ -74,6 +83,7 @@ export function SelectField<K extends string>({
     opener.current = null;
     if (Platform.OS === "web" && el && typeof el.focus === "function") requestAnimationFrame(() => el.isConnected && el.focus());
   };
+  useFieldScroll(field);
   const open = () => (onOpen ? onOpen() : long ? openPicker() : ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h })));
   return (
     <View ref={field?.anchorRef} collapsable={false} style={{ gap: space[1] }} testID={testID ?? field?.testID}>
@@ -82,7 +92,7 @@ export function SelectField<K extends string>({
           {label}
         </T>
       ) : null}
-      <View ref={ref} collapsable={false}>
+      <View ref={(n) => { ref.current = n; rowRef?.(n); }} collapsable={false}>
         <Press
           testID={testID ? `${testID}-button` : undefined}
           onPress={open}
@@ -92,8 +102,10 @@ export function SelectField<K extends string>({
           // the web reads the label instead of the button's text and ignores the value: the chosen one goes into the label
           accessibilityLabel={Platform.OS === "web" ? `${label}, ${shown}` : label}
           accessibilityValue={{ text: shown }}
-          accessibilityState={{ expanded: !!anchor || picker, disabled: !!(disabled || ro) }}
-          aria-haspopup={long || onOpen ? "dialog" : "menu"}
+          accessibilityState={{ expanded: !!anchor || picker || !!expanded, disabled: !!(disabled || ro) }}
+          // the web reads `aria-expanded` only when it is set on the element (as est-bar-total does)
+          {...({ "aria-expanded": !!anchor || picker || !!expanded } as object)}
+          {...(expanded !== undefined && onOpen ? ({ "aria-controls": controls } as object) : ({ "aria-haspopup": long || onOpen ? "dialog" : "menu" } as object))}
           style={{
             minHeight: size.fieldPhone,
             flexDirection: "row",

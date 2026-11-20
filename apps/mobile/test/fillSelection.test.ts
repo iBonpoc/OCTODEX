@@ -36,11 +36,18 @@ describe("«Заливка» of the chosen (#1306)", () => {
     expect(src("nav/TabBar.tsx")).not.toMatch(/borderColor: c\.ink/);
   });
   it("cards and days: no ink frame, a check instead (DS «Выделение выбранного»)", () => {
-    for (const f of ["ui/listCard.tsx", "features/PlanParts.tsx", "features/DatePick.tsx"]) {
+    for (const f of ["ui/listCard.tsx", "features/PlanParts.tsx"]) {
       const t = src(f);
       expect(t, f).not.toMatch(/selected \? c\.ink : c\.bd/);
       expect(t, f).toMatch(/SelectedCheck/);
     }
+  });
+  it("DateField's calendar: the states by shape (DS А7 table, review of wave 5б) — chosen an ink circle, today a ring; no corner check", () => {
+    const t = src("features/DatePick.tsx");
+    expect(t).toMatch(/backgroundColor: s\.selected \? c\.ink : "transparent"/);
+    expect(t).toMatch(/borderWidth: s\.today && !s\.selected \? component\.selectedBorder : 0/);
+    expect(t).not.toMatch(/SelectedCheck/);
+    expect(t).not.toMatch(/selected \? c\.ink : c\.bd/);
   });
   it("a chosen chip of several carries a check icon, not «✓ » as text", () => {
     const c = src("ui/controls.tsx");

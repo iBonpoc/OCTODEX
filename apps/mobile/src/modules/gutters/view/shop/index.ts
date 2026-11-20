@@ -20,7 +20,7 @@ export type ShopPaper = "ansiB" | "letter";
 export interface ShopSet { drawings: Sheet[]; order: Sheet[]; problems: string[]; orderProblems: string[] }
 
 export function shopSheets(d: Drawing, x: ShopCtx): ShopSet {
-  const m = shopModel(d, x.rules.storyFt, x.rules.corner);
+  const m = shopModel(d, x.rules.storyFt, x.rules.corner, x.rules.engine);
   const plans = m.stories.length;
   // the schedules may take more than one sheet: counted first, then drawn with «SHEET n OF N»
   const build = (of: number) => {
