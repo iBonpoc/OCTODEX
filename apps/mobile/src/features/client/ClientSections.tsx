@@ -127,10 +127,13 @@ export function ClientSection({ c, s, noAdd }: { c: Customer; s: ClientRow; /** 
           <CardList>
             {r.people.map((p) => (
               <Card key={p.id}>
-                <T v="heading">{p.name || c.name}</T>
-                <T v="caption" tone="mut">
-                  {t(`person.role.${p.role}` as DictKey)}
-                </T>
+                {/* the client's own name is the screen's title already (#2350: one thing on a screen once) — his card is named by its role */}
+                <T v="heading">{p.name && p.name !== c.name ? p.name : t(`person.role.${p.role}` as DictKey)}</T>
+                {p.name && p.name !== c.name ? (
+                  <T v="caption" tone="mut">
+                    {t(`person.role.${p.role}` as DictKey)}
+                  </T>
+                ) : null}
                 <PersonRows p={p} onCall={(x) => setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), customerId: c.id, contactId: x.id })} />
               </Card>
             ))}
@@ -157,7 +160,8 @@ export function ClientSection({ c, s, noAdd }: { c: Customer; s: ClientRow; /** 
                 testID={`client-job-${j.id}`}
                 lead={{ kind: "icon", icon: "wrench" }}
                 title={j.title || j.number || ""}
-                when={[j.title ? j.number : null, p ? propertyTitle(p) : null].filter(Boolean).join(" · ") || undefined}
+                // one address — it is in the head of the card already (#2350)
+                when={[j.title ? j.number : null, p && r.properties.length > 1 ? propertyTitle(p) : null].filter(Boolean).join(" · ") || undefined}
                 value={office ? money(j.amountCents) : undefined}
                 status={{ tone: v.status, label: t(v.label) }}
                 onPress={() => router.push(`/job/${j.id}`)}

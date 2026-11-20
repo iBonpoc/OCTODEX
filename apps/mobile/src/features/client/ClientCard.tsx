@@ -1,6 +1,7 @@
 import { ModulePlaces } from "@/modules/ModulePlaces";
 import { useState, type ReactElement, type ReactNode } from "react";
-import { isOpenVisit } from "@/features/schedule";
+import { isAssigned, isOpenVisit, visitWhen } from "@/features/schedule";
+import { memberName } from "@/features/team";
 import { Linking, View } from "react-native";
 import { router, type Href } from "expo-router";
 import { component, space } from "@octo/design-tokens";
@@ -8,7 +9,7 @@ import { useStore } from "@/data/store";
 import { findJob } from "@/data/jobs";
 import { peopleOf } from "@/data/people";
 import { canServe, canSeeClientMoney, statusChoices, clientMoneyOf, clientStatusChip, noLateCallsNow, statusOf, tagLabel, tagsOf } from "@/features/clients";
-import { clientRecords, type ClientRow, type ClientTab } from "@/features/clientRows";
+import { clientCounts, clientRecords, clientRowsFor, type ClientRow, type ClientTab } from "@/features/clientRows";
 import { ClientSection } from "@/features/client/ClientSections";
 import { clientCurrent, clientNextStep, type NextStep } from "@/features/client/nextStep";
 import { AdvancesBlock } from "@/features/payments/AdvancesBlock";
@@ -28,7 +29,7 @@ import { invoiceChip } from "@/features/ContractStatement";
 import { invoiceTitle } from "@/features/invoiceTitle";
 import { NotesBlock } from "@/features/NotesBlock";
 import type { Customer, CustomerStatus, Estimate, Invoice, Job } from "@/data/types";
-import { useI18n } from "@/i18n";
+import { useI18n, type DictKey } from "@/i18n";
 import { fabItems } from "@/nav/sections";
 import { Button, StatusChip } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
@@ -36,11 +37,37 @@ import { Sheet, useToast } from "@/ui/overlays";
 import { CardGrid, ListCard, StatusPicker, type ListCardProps } from "@/ui/listCard";
 import { ActionBar } from "@/ui/actionBar";
 import { MetaLine } from "@/ui/metaLine";
-import { Card, CardList, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
+import { Card, CardList, Empty, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
+import { ViewTabs } from "@/ui/viewTabs";
 import { cleanPhone, mailtoHref } from "@/features/contactLinks";
 
 /** the history shows this many cards, the rest open in place («Показать все · N») */
 const HISTORY_FIRST = 5;
+
+/**
+ * The card's sections in the line under the head (founder 21.11.2026, #2350: «хочу вверху… скролл горизонтальный… не полотна кнопок»):
+ * «Обзор» first, then each section of the client; a section with nothing in it goes to the end, and one that has nothing to do
+ * when empty (leads, invoices, visits, files) is not shown until there is something (or the address asks for it).
+ */
+export type ClientCardSection = "overview" | Exclude<ClientRow, "billing"> | "visits";
+const SECTION_ORDER: Exclude<ClientCardSection, "overview" | "history">[] = ["jobs", "estimates", "invoices", "visits", "properties", "people", "leads", "tasks", "notes", "files"];
+/** empty — not in the line: nothing to make there from the card */
+const HIDE_EMPTY = new Set<ClientCardSection>(["leads", "invoices", "visits", "files"]);
+const SECTION_LABEL: Record<ClientCardSection, DictKey> = {
+  overview: "client.tab.overview",
+  jobs: "client.row.jobs",
+  estimates: "client.row.estimates",
+  invoices: "client.invoices",
+  visits: "jobs.visits",
+  properties: "client.row.properties",
+  people: "client.people",
+  leads: "client.row.leads",
+  tasks: "client.row.tasks",
+  notes: "client.row.notes",
+  files: "client.row.files",
+  history: "cc.events",
+};
+export const isClientCardSection = (v: unknown): v is ClientCardSection => typeof v === "string" && v in SECTION_LABEL;
 
 /** the next step's button: its word and its icon (06-decision.md п.3) */
 const STEP_ICON: Record<NextStep["kind"], IconKey> = { estimate: "invoice", send: "send", bill: "invoice", pay: "dollar" };
@@ -53,16 +80,33 @@ export type ClientFrame = (parts: { summary: ReactNode; content: ReactNode; rest
 
 /**
  * The client card (redesign 20.11.2026, docs/design/2026-11-20-direction/06-decision.md; designers' «Карточка клиента» 5.2):
- * ONE page, top to bottom — the address and «Позвонить · SMS · Маршрут»; «Сейчас» (the document of the next step or the one
- * waiting for the client, the jobs not done, the next visit); «История» (estimates, jobs, invoices — compact cards); notes;
- * photos; «О клиенте» (contacts, properties, tasks, leads, the log — each opens its own list `?s=<row>`). At the bottom — one
- * main button, the next step along the chain (features/client/nextStep.ts). The same body in the panel beside the list on 1280.
- * `tab` / `onTab` — the old view tabs' address (`?tab=`), kept so an old link still opens; the page has no tabs now.
+ * ONE page — the head (the address, one line «number · status · tags», «Позвонить · SMS · Маршрут», the money), then the
+ * sections in one line that scrolls sideways (#2350, founder 21.11.2026): «Обзор» — «Сейчас» (the document of the next step or
+ * the one waiting for the client, the jobs not done, the next visit) and «История» (estimates, jobs, invoices — compact cards);
+ * then «Работы · Сметы · Счета · Выезды · Объекты · Контакты · Лиды · Задачи · Заметки · Файлы · Журнал», each the same list as
+ * before, right under the line. One main button — the next step along the chain (features/client/nextStep.ts). The same body in
+ * the panel beside the list on 1280. `section` / `onSection` — the screen's `?s=`; `tab` / `onTab` — the panel's old `?tab=`.
  */
-export function ClientCardBody({ c, frame }: { c: Customer; tab?: ClientTab; onTab?: (t: ClientTab) => void; frame?: ClientFrame }) {
+export function ClientCardBody({
+  c,
+  frame,
+  tab,
+  onTab,
+  section,
+  onSection,
+}: {
+  c: Customer;
+  tab?: ClientTab;
+  onTab?: (t: ClientTab) => void;
+  frame?: ClientFrame;
+  /** the section open under the head (the screen keeps it in `?s=`); none — the card keeps its own, from `tab` */
+  section?: ClientCardSection;
+  onSection?: (s: ClientCardSection) => void;
+}) {
   const store = useStore();
   const { db, role } = store;
-  const { t, money, moneyWhole, day } = useI18n();
+  const { t, money, moneyWhole, day, time } = useI18n();
+  const [ownSection, setOwnSection] = useState<ClientCardSection>(isClientCardSection(tab) ? tab : "overview");
   const toast = useToast();
   const [sheet, setSheet] = useState<null | "tags" | "status" | "people">(null);
   const [picking, setPicking] = useState(false);
@@ -90,7 +134,25 @@ export function ClientCardBody({ c, frame }: { c: Customer; tab?: ClientTab; onT
   const nextVisit = db.visits
     .filter((v) => r.jobs.some((j) => j.id === v.jobId) && isOpenVisit(v) && new Date(v.start).getTime() >= Date.now() - 86_400_000)
     .sort((a, b) => a.start.localeCompare(b.start))[0];
-  const open = (row: ClientRow) => router.push(`/client/${c.id}?s=${row}`);
+  /* ---------- the sections' line ---------- */
+  const visits = db.visits
+    .filter((v) => r.jobs.some((j) => j.id === v.jobId) && (office || isAssigned(v, db.me)))
+    .sort((a, b) => b.start.localeCompare(a.start));
+  const counts: Partial<Record<ClientCardSection, number>> = { ...clientCounts(r), visits: visits.length };
+  const seen = clientRowsFor(role);
+  const want = section ?? ownSection;
+  const allowed = (k: ClientCardSection) =>
+    k === "overview" || k === "visits" || (k === "people" ? r.people.length > 1 || office : (seen as string[]).includes(k));
+  const current: ClientCardSection = allowed(want) ? want : "overview";
+  const sectionKeys = SECTION_ORDER.filter((k) => allowed(k) && (counts[k] || !HIDE_EMPTY.has(k) || k === current));
+  const lineKeys: ClientCardSection[] = ["overview", ...sectionKeys.filter((k) => counts[k]), ...sectionKeys.filter((k) => !counts[k]), "history"];
+  // the number is how many there are; one contact — that is the client himself, no number
+  const shownCount = (k: ClientCardSection) => (k === "people" && (counts.people ?? 0) < 2 ? undefined : counts[k] || undefined);
+  const open = (k: ClientCardSection) => {
+    setOwnSection(k);
+    if (onSection) onSection(k);
+    else if (onTab && (k === "overview" || k === "estimates" || k === "invoices" || k === "jobs" || k === "tasks" || k === "notes" || k === "files" || k === "history")) onTab(k);
+  };
   const place = props[0];
   const routeTo = () => place && Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(`${place.address}, ${place.city}`)}`).catch(() => {});
   const call = () => tel && dial(tel, () => setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), customerId: c.id, contactId: main?.id }));
@@ -272,8 +334,8 @@ export function ClientCardBody({ c, frame }: { c: Customer; tab?: ClientTab; onT
   );
 
   const hasNow = !!now.doc || now.jobs.length > 0 || !!nextVisit || openTasks.length > 0;
-  const content = (
-    <View testID="client-page" style={{ gap: space[3] }}>
+  const overview = (
+    <>
       {/* «Сейчас»: the document the next step is about (or the one waiting for the client), the jobs not done, the next visit */}
       {hasNow ? (
         <>
@@ -328,64 +390,73 @@ export function ClientCardBody({ c, frame }: { c: Customer; tab?: ClientTab; onT
         </>
       ) : null}
 
-      {/* the notes block has its own title with the number */}
-      <ClientSection c={c} s="notes" />
+    </>
+  );
 
-      {/* photos from the visits and files: only when there are any (an empty block would only push «О клиенте» down) */}
-      {r.photos.length + r.files.length ? (
-        <>
-          <SectionTitle title={t("cc.photos")} />
-          <ClientSection c={c} s="files" />
-        </>
-      ) : null}
-
-      {/* «О клиенте»: everything else of the client, each row opens its own list (`?s=<row>`, the same lists as before) */}
-      <SectionTitle title={t("cc.about")} />
-      <View testID="client-about">
-        <Card style={{ paddingVertical: space[1] }}>
-          {r.people.length > 1 || office ? (
-            <View testID="client-people">
-              <ListRow
-                title={t("client.row.people")}
-                subtitle={r.people.map((p) => p.name || c.name).join(" · ")}
-                left={<Icon name="users" />}
-                right={<Count n={r.people.length} />}
-                onPress={() => (office ? setSheet("people") : open("people"))}
-              />
-            </View>
-          ) : null}
-          <ListRow
-            title={t("client.row.properties")}
-            subtitle={props.map((p) => propertyTitle(p)).join(" · ") || undefined}
-            left={<Icon name="pin" />}
-            right={<Count n={props.length} />}
-            onPress={() => open("properties")}
-          />
-          {office ? (
-            // where the invoices go (office): the property's address until one is set; opens the client's form
-            <View testID="client-billing">
+  /* ---------- a section under the line: the same lists as before (`ClientSection`), right on the card ---------- */
+  const sectionBody =
+    current === "overview" ? null : current === "visits" ? (
+      visits.length === 0 ? (
+        <Empty icon="calendar" title={t("prop.noVisits")} />
+      ) : (
+        <CardGrid>
+          {visits.map((v) => (
+            <ListCard
+              key={v.id}
+              density="compact"
+              testID={`client-visit-${v.id}`}
+              lead={{ kind: "icon", icon: "calendar" }}
+              title={r.jobs.find((j) => j.id === v.jobId)?.title ?? t("prop.h.visit")}
+              when={[day(v.start), visitWhen(v, time, t("plan5.allDay"), false), memberName(db, v.techId, t)].filter(Boolean).join(" · ")}
+              onPress={() => router.push(`/visit/${v.id}`)}
+            />
+          ))}
+        </CardGrid>
+      )
+    ) : current === "properties" ? (
+      <>
+        {office ? (
+          // where the invoices go (office): the property's address until one is set; opens the client's form
+          <View testID="client-billing">
+            <Card style={{ paddingVertical: space[1] }}>
               <ListRow
                 title={t("client.row.billing")}
-                subtitle={c.billing ? billingLine(c.billing) : place ? `${t("client.row.billingSame")} · ${propertyTitle(place)}` : t("client.row.billingSame")}
+                subtitle={c.billing ? billingLine(c.billing) : t("client.row.billingSame")}
                 left={<Icon name="invoice" />}
                 onPress={() => router.push(`/client/edit?id=${c.id}`)}
               />
-            </View>
-          ) : null}
-          <ListRow title={t("client.tab.tasks")} left={<Icon name="check" />} right={<Count n={openTasks.length} />} onPress={() => open("tasks")} />
-          {r.leads.length ? (
-            <View testID="client-leads">
-              <ListRow title={t("client.row.leads")} left={<Icon name="inbox" />} right={<Count n={r.leads.length} />} onPress={() => open("leads")} />
-            </View>
-          ) : null}
-          <ListRow
-            title={t("cc.events")}
-            subtitle={office && c.sourceId ? t("client.cameFrom", { source: sourceName(db, c.sourceId) }) : undefined}
-            left={<Icon name="clock" />}
-            onPress={() => open("history")}
-          />
-        </Card>
+            </Card>
+          </View>
+        ) : null}
+        <ClientSection c={c} s="properties" />
+      </>
+    ) : current === "history" ? (
+      <>
+        {office && c.sourceId ? (
+          <T v="caption" tone="mut">
+            {t("client.cameFrom", { source: sourceName(db, c.sourceId) })}
+          </T>
+        ) : null}
+        <ClientSection c={c} s="history" />
+      </>
+    ) : (
+      // the old rows' testIDs stay on their lists (e2e): «Контакты», «Лиды»
+      <View testID={current === "people" ? "client-people" : current === "leads" ? "client-leads" : `client-section-${current}`} style={{ gap: space[3] }}>
+        <ClientSection c={c} s={current} />
       </View>
+    );
+
+  const content = (
+    <View testID="client-page" style={{ gap: space[3] }}>
+      {/* the sections in one line that scrolls sideways (DS §9 А1п), not a sheet of rows at the bottom (#2350) */}
+      <ViewTabs<ClientCardSection>
+        testID="client-tab"
+        label={t("cl6.tabs")}
+        value={current}
+        onChange={open}
+        items={lineKeys.map((k) => ({ key: k, label: t(SECTION_LABEL[k]), count: shownCount(k) }))}
+      />
+      {current === "overview" ? overview : sectionBody}
     </View>
   );
 
@@ -447,15 +518,6 @@ export function ClientCardBody({ c, frame }: { c: Customer; tab?: ClientTab; onT
       {rest}
     </>
   );
-}
-
-/** the number at the right of a row of «О клиенте»; nothing — no number */
-function Count({ n }: { n: number }) {
-  return n ? (
-    <T v="body" tone="mut" tabular>
-      {String(n)}
-    </T>
-  ) : null;
 }
 
 function MoneyCell({ label, value, tone = "ink", testID }: { label: string; value: string; tone?: "ink" | "warn"; testID?: string }) {
