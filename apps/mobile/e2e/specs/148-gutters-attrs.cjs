@@ -115,14 +115,14 @@ exports.run = async (h) => {
   // the tape
   await tid("attr-length-in").locator("input").fill("6");
   await tid("attr-length-apply").getByRole("button").click();
-  await waitFor(async () => (await tid("attr-length-reset").count()) === 1, "taped: «По рисунку» puts the drawn one back");
+  await waitFor(async () => (await tid("attr-length-reset").count()) === 1, "taped: «По рисунку» puts the drawn one back"); // i18n-old: ok — «taped» is the data value, not a label
   h.expect((await tid("attr-length-bad").count()) === 0, "the warning is gone");
-  await waitFor(async () => (await labels()).some((t) => /^25′ 6″/.test(t)), "the label shows the taped length");
+  await waitFor(async () => (await labels()).some((t) => /^25′ 6″/.test(t)), "the label shows the taped length"); // i18n-old: ok — «taped» is the data value, not a label
   await waitFor(async () => {
     const r = (await stored()).find((e) => e.kind === "run");
-    return r && r.confidence === "taped" && r.geom.lengthIn === 306 && r.attrs.profile === "half_round" && r.attrs.color === "brown" && r.attrs.hanger === "hr_shank_fascia";
+    return r && r.confidence === "taped" && r.geom.lengthIn === 306 && r.attrs.profile === "half_round" && r.attrs.color === "brown" && r.attrs.hanger === "hr_shank_fascia"; // i18n-old: ok — «taped» is the data value, not a label
   }, "the store: the run's attributes and the tape");
-  await h.shot("taped");
+  await h.shot("taped"); // i18n-old: ok — «taped» is the data value, not a label
 
   // «Назад» on the canvas takes the tape back
   await closeAttrs();
@@ -161,7 +161,7 @@ exports.run = async (h) => {
   await p.waitForTimeout(1300); // the 1 s save after the last edit
   await p.reload();
   await tid("draw-surface").waitFor({ timeout: 8000 });
-  await waitFor(async () => (await labels()).some((t) => /^25′ 6″/.test(t)), "after a reload: the taped length");
+  await waitFor(async () => (await labels()).some((t) => /^25′ 6″/.test(t)), "after a reload: the taped length"); // i18n-old: ok — «taped» is the data value, not a label
   // the reload fits the drawing anew: tap the run where it is drawn now («Желоб» tool: a tap picks)
   const at = await svg().locator("line:not([id^=halo])").first().evaluate((l) => {
     const r = l.ownerSVGElement.getBoundingClientRect();
@@ -170,9 +170,9 @@ exports.run = async (h) => {
     return [r.x + (n("x1") + n("x2") * 3) / 4, r.y + (n("y1") + n("y2") * 3) / 4];
   });
   await p.mouse.click(at[0], at[1]);
-  await waitFor(async () => /Желоб/.test((await tid("draw-selected").count()) ? await tid("draw-selected").innerText() : ""), "the run picked");
+  await waitFor(async () => /Gutter/.test((await tid("draw-selected").count()) ? await tid("draw-selected").innerText() : ""), "the run picked");
   await openAttrs();
   await more();
-  h.expect((await tid("attr-length-reset").count()) === 1, "after a reload: still taped");
+  h.expect((await tid("attr-length-reset").count()) === 1, "after a reload: still taped"); // i18n-old: ok — «taped» is the data value, not a label
   h.expect((await chosen("attr-profile")) === "Полукруглый" && (await chosen("attr-color")) === "Коричневый", "after a reload: profile and colour");
 };

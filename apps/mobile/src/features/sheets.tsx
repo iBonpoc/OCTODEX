@@ -9,7 +9,8 @@ import { sourceName } from "@/features/leads";
 import { smsWithBody } from "@/features/sms";
 import type { ID } from "@/data/types";
 import { useI18n } from "@/i18n";
-import { Avatar, Button, TextField } from "@/ui/controls";
+import { Button, TextField } from "@/ui/controls";
+import { OptionRows } from "@/ui/optionRow";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Divider, ListRow } from "@/ui/surfaces";
@@ -27,7 +28,6 @@ export function AssignSheet({ visitId, onClose }: { visitId: ID | null; onClose:
   const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
   // the day of the visit on the company's calendar (П4b)
   const day = v ? isoDayKey(v.start) : todayKey();
-  const toggle = (id: ID) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   const save = (ids: ID[]) => {
     if (!visitId) return;
     const undo = assignVisit(visitId, ids);
@@ -40,23 +40,18 @@ export function AssignSheet({ visitId, onClose }: { visitId: ID | null; onClose:
   };
   return (
     <Sheet visible={!!v} onClose={onClose} title={t("plan.assignTo")}>
-      <View>
-        {techs.map((m, i) => {
+      {/* several people — rows with a check, not «✓ » in the text (spec 56 §3 row 7, §9.3 №4); the load of the day under each */}
+      <OptionRows<ID>
+        multiple
+        testID="assign-options"
+        label={t("plan.assignTo")}
+        items={techs.map((m) => {
           const load = dayVisits(db, m.id, day, visitId ?? undefined).length;
-          const on = picked.includes(m.id);
-          return (
-            <View key={m.id}>
-              {i > 0 ? <Divider /> : null}
-              <ListRow
-                title={`${on ? "✓ " : ""}${m.name}`}
-                subtitle={`${m.kind === "sub" ? `${t("plan.sub")} · ` : ""}${load ? t("plan.dayLoad", { n: load }) : t("plan.free")}`}
-                left={<Avatar initials={m.initials} sub={m.kind === "sub"} />}
-                onPress={() => toggle(m.id)}
-              />
-            </View>
-          );
+          return { key: m.id, title: m.name, subtitle: `${m.kind === "sub" ? `${t("plan.sub")} · ` : ""}${load ? t("plan.dayLoad", { n: load }) : t("plan.free")}` };
         })}
-      </View>
+        value={picked}
+        onChange={setPicked}
+      />
       <View style={{ gap: space[2] }}>
         <Button label={t("plan.assignSave")} icon="user" variant="primary" full disabled={!v} onPress={() => save(picked)} />
         {v && assigneesOf(v).length ? <Button label={t("plan.unassignAll")} variant="ghost" full onPress={() => save([])} /> : null}

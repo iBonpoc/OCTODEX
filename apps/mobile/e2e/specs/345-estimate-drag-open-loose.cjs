@@ -26,7 +26,8 @@ exports.run = async (h) => {
 
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await tid("est-add-new").waitFor({ timeout: 8000 });
-  for (const [n, v] of [["Alpha (тестовые)", 10], ["Bravo (тестовые)", 20], ["Charlie (тестовые)", 30]]) await line.addCustom(h, n, v);
+  // short names: one line each, as before #1427 (long names wrap now — the drop places would move; wrapping is e2e 457)
+  for (const [n, v] of [["Alpha", 10], ["Bravo", 20], ["Charlie", 30]]) await line.addCustom(h, n, v);
   const [a, , c] = await ids();
 
   // the open line C, taken by the «≡» in its header

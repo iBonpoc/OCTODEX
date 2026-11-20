@@ -14,19 +14,22 @@ import { CallSheet, type CallPreset } from "@/features/comms/CallSheet";
 import { useDialThenAsk } from "@/features/comms/dial";
 import { MessageSheet, type MessagePreset } from "@/features/comms/MessageSheet";
 import { callPlaceForClient } from "@/features/comms/comms";
-import { StatusSheet, TagsSheet } from "@/features/client/ClientSheets";
+import { PeopleSheet, StatusSheet, TagsSheet } from "@/features/client/ClientSheets";
 import { billingLine } from "@/features/clientForm";
 import { propertyTitle } from "@/features/properties";
 import { ClientDupCards } from "@/features/client/ClientDuplicates";
 import { ActionTile } from "@/features/ActionTile";
 import { sourceName } from "@/features/leads";
-import type { Customer, CustomerStatus } from "@/data/types";
+import type { Customer, CustomerStatus, Property } from "@/data/types";
+import { newProperty, PropertySheet } from "@/features/client/PropertySheets";
 import { useI18n, type DictKey } from "@/i18n";
 import { fabItems } from "@/nav/sections";
-import { Button, IconButton, StatusChip, TagChip } from "@/ui/controls";
+import { Button, IconButton, StatusChip } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
-import { Menu, Sheet, useToast } from "@/ui/overlays";
+import { Sheet, useToast } from "@/ui/overlays";
+import { StatusPicker } from "@/ui/listCard";
 import { ViewTabs } from "@/ui/viewTabs";
+import { MetaLine } from "@/ui/metaLine";
 import { Card, CardList, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { cleanPhone, mailtoHref } from "@/features/contactLinks";
 
@@ -59,8 +62,9 @@ export function ClientCardBody({ c, tab: tabNow, onTab, frame }: { c: Customer; 
   const { db, role } = store;
   const { t, money, moneyWhole, day } = useI18n();
   const toast = useToast();
-  const [sheet, setSheet] = useState<null | "tags" | "status">(null);
-  const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [sheet, setSheet] = useState<null | "tags" | "status" | "people">(null);
+  const [picking, setPicking] = useState(false);
+  const [adding, setAdding] = useState<Property | null>(null);
   /** wave 6-2: after «Позвонить» — «Чем кончился?» (the call goes to the client; a technician — to his job) */
   const [calling, setCalling] = useState<CallPreset | null>(null);
   const dial = useDialThenAsk();
@@ -74,7 +78,6 @@ export function ClientCardBody({ c, tab: tabNow, onTab, frame }: { c: Customer; 
     setTabOwn(k);
     onTab?.(k);
   };
-  const statusRef = useRef<React.ComponentRef<typeof View>>(null);
   const office = role !== "tech";
   const status = statusOf(c);
   const chip = clientStatusChip[status];
@@ -98,11 +101,11 @@ export function ClientCardBody({ c, tab: tabNow, onTab, frame }: { c: Customer; 
     .sort((a, b) => a.start.localeCompare(b.start))[0];
   const open = (row: ClientRow) => router.push(`/client/${c.id}?s=${row}`);
 
-  const openStatusMenu = () =>
-    statusRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }));
+  // the status is chosen in the one StatusPicker (DS §9 А10, spec 56 wave 4), not in a menu at the chip
   const chooseStatus = (st: CustomerStatus) => {
+    setPicking(false);
     if (st === status) return;
-    if (st === "do_not_service") return setSheet("status"); // needs a reason
+    if (st === "do_not_service") return setSheet("status"); // needs a reason: the page of that choice
     toast.show(t("client.statusSaved"), store.setCustomerStatus(c.id, st));
   };
   // the mark is the director's and the office's (04 §12.8): sales see no «Не обслуживаем» and cannot lift it
@@ -113,33 +116,51 @@ export function ClientCardBody({ c, tab: tabNow, onTab, frame }: { c: Customer; 
       {/* the summary (status, actions, «Создать смету», money): above the tabs on a phone and a tablet (as wide as they are), in the
           side column 360 on a desktop (DS §12.3, #1416) */}
       <View testID="client-summary" style={{ width: "100%", gap: space[3] }}>
-        {/* one line: number · status · tags */}
-        <RowView style={{ flexWrap: "wrap", marginTop: -space[2] }}>
-          {c.number ? (
-            <T v="caption" tone="mut" tabular>
-              {c.number}
-            </T>
-          ) : null}
-          {office && statusOptions.length ? (
-            <View ref={statusRef} collapsable={false}>
-              <Press onPress={openStatusMenu} visibleHeight={component.button.sm} accessibilityRole="button" accessibilityLabel={`${t("client.statusTitle")}: ${t(chip.l)}`}>
-                <StatusChip status={chip.s} label={t(chip.l)} />
-              </Press>
-            </View>
-          ) : (
-            <StatusChip status={chip.s} label={t(chip.l)} />
-          )}
-          {c.taxExempt ? <StatusChip status="neutral" label={t("client.f.taxExempt")} soft /> : null}
-          {tags.map((x) => (
-            <TagChip key={x.id} label={tagLabel(x, t)} onPress={office ? () => setSheet("tags") : undefined} />
-          ))}
-          {office ? (
-            // «＋ Метка» always with its word (a lone «+» on a line of its own read as nothing, #1417 review); the zone is a real 44
-            <Press testID="client-add-tag" onPress={() => setSheet("tags")} accessibilityRole="button" accessibilityLabel={t("client.addTag")} style={{ minHeight: size.hitMin, justifyContent: "center" }}>
-              <TagChip label={`＋ ${t("client.addTag")}`} />
-            </Press>
-          ) : null}
-        </RowView>
+        {/* one line, never wrapped (spec 56 §3а.6): number · status · tags, the tags that do not fit — «+N»; the tags open their sheet */}
+        <View style={{ marginTop: -space[2] }}>
+          <MetaLine
+            testID="client-headline"
+            fixed={[
+              c.number ? (
+                <T key="n" v="caption" tone="mut" tabular numberOfLines={1}>
+                  {c.number}
+                </T>
+              ) : null,
+              office && statusOptions.length ? (
+                <Press key="s" testID="client-status" onPress={() => setPicking(true)} visibleHeight={component.button.sm} accessibilityRole="button" accessibilityLabel={`${t("client.statusTitle")}: ${t(chip.l)}`}>
+                  <StatusChip status={chip.s} label={t(chip.l)} />
+                </Press>
+              ) : (
+                <StatusChip key="s" status={chip.s} label={t(chip.l)} />
+              ),
+              c.taxExempt ? <StatusChip key="x" status="neutral" label={t("client.f.taxExempt")} soft /> : null,
+            ]}
+            tags={tags.map((x) => ({ id: x.id, label: tagLabel(x, t) }))}
+            onTags={office ? () => setSheet("tags") : undefined}
+            tagsLabel={t("cw4.tags", { list: tags.map((x) => tagLabel(x, t)).join(", ") })}
+            addLabel={office ? `＋ ${t("client.addTag")}` : undefined}
+            moreLabel={(n) => t("cw4.moreTags", { n })}
+          />
+        </View>
+        {/* «Контакты · N ›» (spec 56 §3а.6): the office edits them in the sheet at once; the technician reads the list */}
+        {r.people.length > 1 || office ? (
+          <View testID="client-people">
+            <Card style={{ paddingVertical: space[1] }}>
+              <ListRow
+                title={t("client.row.people")}
+                // the number counts people (the client and the others), the names say so (review of wave 4)
+                subtitle={r.people.map((p) => p.name || c.name).join(" · ")}
+                left={<Icon name="users" />}
+                right={
+                  <T v="body" tone="mut" tabular>
+                    {String(r.people.length)}
+                  </T>
+                }
+                onPress={() => (office ? setSheet("people") : open("people"))}
+              />
+            </Card>
+          </View>
+        ) : null}
         {office && c.sourceId ? (
           <T v="caption" tone="mut">
             {t("client.cameFrom", { source: sourceName(db, c.sourceId) })}
@@ -260,8 +281,16 @@ export function ClientCardBody({ c, tab: tabNow, onTab, frame }: { c: Customer; 
                 </CardList>
               </>
             ) : null}
-            <SectionTitle title={t("client.row.properties")} />
-            <ClientSection c={c} s="properties" />
+            {/* «Объекты» with «＋ Объект» on the right of the title (spec 56 §3а.6, DS §12.2), not a big button under it */}
+            <SectionTitle
+              title={t("client.row.properties")}
+              right={
+                office && props.length ? (
+                  <Button testID="client-add-property" label={t("cw4.addProperty")} accessibilityLabel={t("prop.new")} icon="plus" variant="secondary" size="sm" onPress={() => setAdding(newProperty(c.id))} />
+                ) : undefined
+              }
+            />
+            <ClientSection c={c} s="properties" noAdd />
             {office ? (
               // where the invoices go (office): the property's address until one is set; opens the client's form
               <View testID="client-billing">
@@ -282,13 +311,6 @@ export function ClientCardBody({ c, tab: tabNow, onTab, frame }: { c: Customer; 
                   <PersonRows p={main} onCall={(x) => setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), customerId: c.id, contactId: x.id })} />
                 </Card>
               </>
-            ) : null}
-            {r.people.length > 1 || office ? (
-              <View testID="client-people">
-              <Card style={{ paddingVertical: space[1] }}>
-                <ListRow title={t("client.row.people")} subtitle={r.people.map((p) => p.name || c.name).join(" · ")} left={<Icon name="users" />} onPress={() => open("people")} />
-              </Card>
-              </View>
             ) : null}
             {r.leads.length ? (
               <View testID="client-leads">
@@ -320,14 +342,15 @@ export function ClientCardBody({ c, tab: tabNow, onTab, frame }: { c: Customer; 
   );
   const rest = (
     <>
-      <Menu
-        visible={!!menu}
-        anchor={menu}
+      <StatusPicker
+        visible={picking}
+        onClose={() => setPicking(false)}
         title={t("client.statusTitle")}
-        onClose={() => setMenu(null)}
-        onSelect={chooseStatus}
-        items={statusOptions.map((x) => ({ key: x, label: t(clientStatusChip[x].l), selected: x === status, destructive: x === "do_not_service" }))}
+        options={statusOptions.map((x) => ({ key: x, tone: clientStatusChip[x].s, label: t(clientStatusChip[x].l), current: x === status, enabled: true, form: x === "do_not_service" }))}
+        onPick={(k) => chooseStatus(k as CustomerStatus)}
       />
+      <PropertySheet value={adding} onClose={() => setAdding(null)} />
+      <PeopleSheet visible={sheet === "people"} customer={c} onClose={() => setSheet(null)} />
       <TagsSheet visible={sheet === "tags"} customer={c} onClose={() => setSheet(null)} />
       <StatusSheet visible={sheet === "status"} customer={c} preset="do_not_service" onClose={() => setSheet(null)} />
       <CallSheet preset={calling} onClose={() => setCalling(null)} />
@@ -398,4 +421,5 @@ function MoneyCell({ label, value, tone = "ink", testID }: { label: string; valu
     </View>
   );
 }
+
 

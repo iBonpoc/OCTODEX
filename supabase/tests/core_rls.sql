@@ -792,7 +792,7 @@ begin
   perform tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000088'$q$);
   perform tst.server($q$update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000088' where id = '0e1a0000-0000-0000-0000-000000000088'$q$);
 end $$;
-set role anon;
+reset role; reset request.jwt.claim.sub; set role anon;
 select public.portal_accept('tok_inv_0123456789abcdef', '0e3a0000-0000-0000-0000-000000000088', null, 'Client', 'M0 0 L5 5', true) is not null as signed;
 reset role;
 :as_owner_a
@@ -1283,9 +1283,9 @@ select tst.ok((select status from public.visits where id = 'f2000000-0000-4000-8
 :as_super
 update public.visits set starts_at = starts_at + interval '1 hour' where id = 'f2000000-0000-4000-8000-000000000003';
 select tst.ok((select count(*) from public.visits where id = 'f2000000-0000-4000-8000-000000000003' and starts_at > now() + interval '3 days') = 1, 'no user (server, cron): the visit moves');
--- sales is office staff (app.is_staff): sees the code like the dispatcher
+-- sales read a code as a tech does, on the visit day of their own (Р-3, 20261117568000; T434): not a tech's visit in 3 days
 reset role; set request.jwt.claim.sub = 'a0000000-0000-0000-0000-000000000005'; set role authenticated;
-select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000003'$q$) = 1, 'sales (office staff) sees the gate code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000003'$q$) = 0, 'sales: no code of a visit that is not theirs');
 -- a tech of another company sees nothing; another company cannot change a code
 reset role; set request.jwt.claim.sub = 'b0000000-0000-0000-0000-000000000002'; set role authenticated;
 select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd2000000%'$q$) = 0, 'tech of another company: no codes');
@@ -2720,7 +2720,7 @@ insert into public.properties (id, company_id, customer_id, address_line1, addre
 -- an estimate sent and signed by the client (the caller signs on the page by its token); p_both: the company signs too
 create function tst.t37_estimate(p_customer uuid, p_property uuid, p_title text, p_both boolean default true)
 returns uuid language plpgsql as $$
-declare e uuid; v uuid; o uuid; tok text;
+declare e uuid; v uuid; o uuid; tok text; me text;
 begin
   insert into public.estimates (id, company_id, customer_id, property_id, title) values
     (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', p_customer, p_property, p_title) returning id into e;
@@ -2729,7 +2729,11 @@ begin
   insert into public.estimate_options (id, company_id, version_id, name) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', v, 'Only') returning id into o;
   insert into public.estimate_line_items (id, company_id, option_id, line_group, name, quantity, unit_price_cents) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', o, 'labor', 'Work', 1, 40000);
   tok := public.send_estimate(e);
+  -- the client signs by the link: no company person behind it (#2020: a member signs by the link — refused)
+  me := current_setting('request.jwt.claim.sub', true);
+  perform set_config('request.jwt.claim.sub', '', true);
   perform public.portal_accept(tok, o, null, 'T37 Signer', 'M0 0 L7 7', true);
+  perform set_config('request.jwt.claim.sub', me, true);
   if p_both then
     perform tst.ok(public.countersign_estimate(e, 'M1 1 L7 7') = 'approved', 'T37 fixture: both signed');
   end if;
@@ -3415,9 +3419,9 @@ update public.jobs set status = 'cancelled' where id = 'e4100000-0000-4000-8000-
 select tst.fails($q$insert into public.job_line_items (company_id, job_id, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000002', 'T41 late', 1, 100)$q$, 'a cancelled job takes no new lines');
 select tst.fails($q$update public.job_line_items set unit_price_cents = 1 where job_id = 'e4100000-0000-4000-8000-000000000002'$q$, 'the lines of a cancelled job do not change');
 :as_sales_a
-insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', 3, 'T41 sales line', 1, 100);
-select tst.ok((select contract_total_cents from public.jobs where id = 'e4100000-0000-4000-8000-000000000001') = 18931, 'sales adds a line, the total follows');
-update public.job_line_items set deleted_at = now() where name = 'T41 sales line';
+-- #2075 (20261117360000): the lines of a job make its contract total — the office's, not sales'
+select tst.fails($q$insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', 3, 'T41 sales line', 1, 100)$q$, 'sales do not add a line to a job');
+select tst.fails($q$update public.job_line_items set unit_price_cents = 1 where job_id = 'e4100000-0000-4000-8000-000000000001'$q$, 'sales do not change the price of a job line');
 :as_office_a
 :as_super
 select tst.fails($q$insert into public.job_tags (company_id, job_id, tag_id) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', (select id from public.tags where company_id = 'cb000000-0000-0000-0000-000000000000' limit 1))$q$, 'a tag of another company does not go on our job');
@@ -3951,13 +3955,22 @@ select tst.fails($q$update public.jobs set completed_at = now() where id = 'e470
 update public.jobs set description = 'T47 note', job_type_id = (select id from public.job_types where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'repair') where id = 'e4700000-0000-4000-8000-000000000001';
 select tst.ok((select description = 'T47 note' and job_type_id is not null from public.jobs where id = 'e4700000-0000-4000-8000-000000000001'), 'update: what the app changes still changes (job.update)');
 -- the other live paths of the app (ops.ts): job.update money, job.category, advanceJob, lead.visit
+-- #2075 (20261117360000): the tax of a job is the office's — sales are refused, the office still changes it
+select tst.fails($q$update public.jobs set tax_enabled = true, tax_rate_bps = 825 where id = 'e4700000-0000-4000-8000-000000000001'$q$, 'job.update: sales do not change the tax of a job');
+:as_office_a
 update public.jobs set tax_enabled = true, tax_rate_bps = 825 where id = 'e4700000-0000-4000-8000-000000000001';
-select tst.ok((select tax_enabled and tax_rate_bps = 825 from public.jobs where id = 'e4700000-0000-4000-8000-000000000001'), 'job.update: the tax of a job still changes');
+select tst.ok((select tax_enabled and tax_rate_bps = 825 from public.jobs where id = 'e4700000-0000-4000-8000-000000000001'), 'job.update: the tax of a job still changes (office)');
+:as_sales_a
 update public.jobs set service_category_id = null where id = 'e4700000-0000-4000-8000-000000000001';
 select tst.ok((select service_category_id is null from public.jobs where id = 'e4700000-0000-4000-8000-000000000001'), 'job.category still changes');
+-- advanceJob: planning a job is the office's (#2016) — sales are refused «scheduled», the office moves it on
+select tst.fails_like($q$update public.jobs set status = 'scheduled' where id = 'e4700000-0000-4000-8000-000000000001'$q$, '%only the office schedules a job%',
+  'advanceJob: sales do not schedule a job (#2016)');
+:as_office_a
 update public.jobs set status = 'scheduled' where id = 'e4700000-0000-4000-8000-000000000001';
 update public.jobs set status = 'in_progress' where id = 'e4700000-0000-4000-8000-000000000001';
-select tst.ok((select status from public.jobs where id = 'e4700000-0000-4000-8000-000000000001') = 'in_progress', 'advanceJob: a job still moves draft → scheduled → in progress');
+select tst.ok((select status from public.jobs where id = 'e4700000-0000-4000-8000-000000000001') = 'in_progress', 'advanceJob: a job still moves draft → scheduled → in progress (the office)');
+:as_sales_a
 insert into public.jobs (id, company_id, customer_id, property_id, title, type, number) values
   ('e4700000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c4700000-0000-4000-8000-000000000002', 'd4700000-0000-4000-8000-000000000002', 'Estimate visit', 'inspection', '')
   on conflict (id) do nothing;
@@ -4043,7 +4056,7 @@ begin
                         'accept_invitation(text)', 'accept_legal(jsonb,text,text)',
                         'accept_on_site(uuid,uuid,uuid[],text,text,boolean,uuid,uuid)',
                         'accept_on_site(uuid,uuid,uuid[],text,text,boolean,uuid,uuid,bigint)', 'advance_apply(uuid,uuid)',
-                        'assign_visit(uuid,uuid[])', 'cancel_visit(uuid,text,text)', 'company_location_sharing(uuid)', 'complete_job(uuid)',
+                        'assign_visit(uuid,uuid[])', 'cancel_job(uuid,text)', 'cancel_visit(uuid,text,text)', 'company_location_sharing(uuid)', 'complete_job(uuid)',
                         'countersign_estimate(uuid,text,uuid,uuid,uuid)', 'create_job(uuid,uuid,uuid,text,text,uuid,uuid)',
                         'decline_countersign(uuid,text)', 'delete_account(text,uuid[])', 'estimate_link(uuid)', 'estimate_links(uuid)',
                         'forget_push_device(text)', 'import_customers(uuid,jsonb)', 'import_customers_finish(uuid)',
@@ -4051,19 +4064,19 @@ begin
                         'intake_endpoint_rotate(uuid)', 'intake_endpoint_set(uuid,boolean,uuid,uuid,boolean,boolean,boolean,integer,boolean)',
                         'intake_event_decide(uuid,boolean)', 'invite_member(uuid,text,text,text,boolean)', 'legal_status()',
                         'mark_not_duplicate(uuid,uuid)', 'merge_customers(uuid,uuid)', 'module_disable(uuid,text)', 'module_enable(uuid,text)',
-                        'module_save_settings(uuid,text,jsonb,integer)', 'my_closed_companies()', 'po_receive(uuid,jsonb,bigint)',
+                        'module_save_settings(uuid,text,jsonb,integer)', 'mark_notifications_read(uuid[])', 'my_closed_companies()', 'notifications_split_at()', 'po_receive(uuid,jsonb,bigint)', 'catalog_set_group_price(uuid,bigint,boolean,bigint,integer,integer,bigint,bigint,integer,integer)', 'catalog_set_item_costs(uuid,jsonb,jsonb)', 'catalog_set_variant(uuid,text,text,jsonb)',
                         'portal_accept(text,uuid,uuid[],text,text,boolean,text,uuid,uuid,uuid)', 'portal_estimate(text)',
                         'portal_pay_simulated(text,uuid)', 'record_estimate_deposit(uuid,uuid,text)',
                         'record_visit_payment(uuid,uuid,uuid,text,date,bigint)', 'refund_record(uuid,bigint,text,text,text)',
                         'register_push_device(text,text,text,text)', 'reissue_estimate_link(uuid)', 'reopen_estimate(uuid,text)',
                         'resend_invitation(uuid)', 'resend_signed_copy(uuid)', 'revoke_estimate_link(uuid)', 'revoke_invitation(uuid)',
                         'save_customer_people(uuid,jsonb)', 'save_estimate_version(uuid,uuid,text,jsonb,jsonb,jsonb,jsonb)',
-                        'save_lead_people(uuid,jsonb)', 'send_estimate(uuid,text)', 'set_customer_tags(uuid,uuid[])',
+                        'save_lead_people(uuid,jsonb)', 'send_estimate(uuid,text)', 'set_customer_tags(uuid,uuid[])', 'set_gate_code(uuid,text)',
                         'set_job_tags(uuid,uuid[])', 'set_location_consent(uuid,boolean)', 'set_member_status(uuid,uuid,text)',
-                        'set_my_prefs(uuid,boolean)', 'set_push_kind(uuid,text,boolean)', 'set_share_location(uuid,boolean)',
+                        'set_my_prefs(uuid,boolean)', 'snooze_attention(uuid,text,timestamp with time zone)', 'set_push_kind(uuid,text,boolean)', 'set_share_location(uuid,boolean)',
                         'sign_estimate_on_site(uuid,text,text)', 'sign_estimate_on_site(uuid,text,text,bigint)',
-                        'stop_member_location(uuid,uuid)', 'transfer_ownership(uuid,uuid)', 'trash_items(text,uuid[])', 'trash_list(uuid)',
-                        'trash_restore(text,uuid[])', 'undo_customer_import(uuid)', 'uuid_generate_v7()']::text[]);
+                        'stop_member_location(uuid,uuid)', 'supplier_set_tax(uuid,integer,integer)', 'transfer_ownership(uuid,uuid)', 'trash_items(text,uuid[])', 'trash_list(uuid)',
+                        'trash_restore(text,uuid[])', 'undo_customer_import(uuid)', 'uuid_generate_v7()', 'visit_no_show(uuid,text)']::text[]);
   perform tst.ok(bad is null, 'authenticated runs only the listed functions in public: ' || coalesce(bad, ''));
 
   -- schema extensions: the API creates nothing there (nor in public / app), and no definer function there runs for it
@@ -4127,9 +4140,10 @@ rollback;
 
 
 -- ---------------------------------------------------------------- T53: the money of a sent invoice does not change directly (security audit 06.11, item 1)
+-- #2075 (20261117360000): invoices are the office's — these checks write as the office (sales wrote here before)
 :as_owner_a
 insert into public.customers (id, company_id, display_name) values ('c5300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T53 Client');
-:as_sales_a
+:as_office_a
 -- as the app makes it (invoice.issue / visit.pay): inserted already sent, subtotal = total
 insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
   ('15300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T53 sent', 10000, 10000, now());
@@ -4139,10 +4153,10 @@ select tst.fails($q$insert into public.invoices (company_id, number, customer_id
 :as_office_a
 insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
   ('15310000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000001', 'c5300000-0000-4000-8000-000000000001', 'cash', 4000, 'succeeded', 't53-pay-1');
-:as_sales_a
+:as_office_a
 select tst.ok((select paid_cents = 4000 and payment_status = 'partially_paid' from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'T53: a payment still lowers the balance');
-select tst.fails($q$update public.invoices set total_cents = -100 where id = '15300000-0000-4000-8000-000000000001'$q$, 'sales do not set a negative total on a sent invoice');
-select tst.fails($q$update public.invoices set total_cents = 3000, subtotal_cents = 3000 where id = '15300000-0000-4000-8000-000000000001'$q$, 'sales do not set the total below what is paid');
+select tst.fails($q$update public.invoices set total_cents = -100 where id = '15300000-0000-4000-8000-000000000001'$q$, 'the office does not set a negative total on a sent invoice');
+select tst.fails($q$update public.invoices set total_cents = 3000, subtotal_cents = 3000 where id = '15300000-0000-4000-8000-000000000001'$q$, 'the office does not set the total below what is paid');
 select tst.fails($q$update public.invoices set total_cents = 20000, subtotal_cents = 20000 where id = '15300000-0000-4000-8000-000000000001'$q$, 'the total of a sent invoice does not change at all');
 do $$ begin
   update public.invoices set total_cents = 20000, subtotal_cents = 20000 where id = '15300000-0000-4000-8000-000000000001';
@@ -4172,7 +4186,7 @@ select tst.ok((select paid_cents = 4000 and payment_status = 'partially_paid' fr
 :as_office_a
 insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
   ('15310000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000001', 'c5300000-0000-4000-8000-000000000001', 'check', 6000, 'succeeded', 't53-pay-2');
-:as_sales_a
+:as_office_a
 select tst.ok((select paid_cents = 10000 and payment_status = 'paid' and total_cents = 10000 from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'the last payment closes the invoice (recalc passes the guard)');
 -- a draft still changes, but not below what is paid; once sent it is frozen
 insert into public.invoices (id, company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values
@@ -4184,7 +4198,7 @@ select tst.fails($q$update public.invoices set total_cents = -1 where id = '1530
 :as_office_a
 insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
   ('15310000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000002', 'c5300000-0000-4000-8000-000000000001', 'cash', 3000, 'succeeded', 't53-pay-3');
-:as_sales_a
+:as_office_a
 do $$ begin
   update public.invoices set subtotal_cents = 1000, total_cents = 1000 where id = '15300000-0000-4000-8000-000000000002';
   raise exception 'FAILED: a draft went below what is paid';
@@ -4199,7 +4213,7 @@ do $$ begin
   update public.invoices set subtotal_cents = 1000, total_cents = 1000 where id = '15300000-0000-4000-8000-000000000002';
   perform set_config('app.invoice_recalc', '', true);
 end $$;
-:as_sales_a
+:as_office_a
 update public.invoices set due_date = tst.today() + 7 where id = '15300000-0000-4000-8000-000000000002';
 select tst.ok((select due_date = tst.today() + 7 and total_cents = 1000 and paid_cents = 3000 from public.invoices where id = '15300000-0000-4000-8000-000000000002'),
               'an old invoice with total below paid still takes a new due date');
@@ -5138,7 +5152,7 @@ select tst.ok((select closed_at is not null from public.companies where id = 'c5
 select tst.ok((select every(status = 'deleted') from public.memberships where company_id = 'c5000000-0000-4000-8000-000000000002'), 'nobody works in it any more');
 select tst.ok(app.retention_years() = 7, 'records are kept 7 years by default');
 :as_adam50
-select tst.fails_like($q$update public.companies set closed_at = now() where id = 'c5000000-0000-4000-8000-000000000001'$q$, '%closed only with its last owner%', 'an owner does not close a company by hand');
+select tst.fails_like($q$update public.companies set closed_at = now() where id = 'c5000000-0000-4000-8000-000000000001'$q$, '%permission denied for table companies%', 'an owner does not close a company by hand (Р-7: the grant refuses it before t06; t06 itself — the super case below)');
 :as_super
 select tst.fails_like($q$update public.companies set closed_at = null where id = 'c5000000-0000-4000-8000-000000000002'$q$, '%closed only with its last owner%', 'nor reopen it (only delete_account sets it)');
 :as_eve50
@@ -5188,7 +5202,7 @@ select tst.ok((select count(*) from public.memberships where company_id = :'t50_
 select tst.ok((select count(*) from public.companies where id = :'t50_twin') = 0, 'the creator who left does not see the company');
 -- a company is never created already closed
 reset role; set request.jwt.claim.sub = 'a5000000-0000-4000-8000-000000000007'; set role authenticated;
-select tst.fails_like($q$insert into public.companies (name, closed_at) values ('Closed From Birth Co', now())$q$, '%closed only with its last owner%', 'no company is created closed');
+select tst.fails_like($q$insert into public.companies (name, closed_at) values ('Closed From Birth Co', now())$q$, '%permission denied for table companies%', 'no company is created closed');
 
 -- the consent journal: even with the erasing flag, a client edits nothing
 set app.erasing_user = 'on';
@@ -5201,6 +5215,12 @@ select tst.ok(not has_function_privilege('anon', 'public.transfer_ownership(uuid
 select tst.ok(has_function_privilege('authenticated', 'public.delete_account(text,uuid[])', 'EXECUTE'), 'authenticated: delete_account');
 select tst.ok(not has_function_privilege('authenticated', 'app.signed_in_recently(int)', 'EXECUTE'), 'internal: signed_in_recently');
 select tst.ok(not has_function_privilege('authenticated', 'app.erase_personal_rows(uuid)', 'EXECUTE'), 'internal: erase_personal_rows');
+-- 50-1 (spec 50 §3.2, rule 18): the erasure itself is behind delete_account — nobody calls it directly
+select tst.ok(not has_function_privilege('anon', 'app.erase_account(uuid,uuid[])', 'EXECUTE'), 'anon: no erase_account');
+select tst.ok(not has_function_privilege('authenticated', 'app.erase_account(uuid,uuid[])', 'EXECUTE'), 'internal: erase_account (only delete_account calls it)');
+select tst.ok(not has_function_privilege('public', 'app.erase_account(uuid,uuid[])', 'EXECUTE'), 'public: no erase_account');
+select tst.ok(not has_function_privilege('service_role', 'app.erase_account(uuid,uuid[])', 'EXECUTE'), 'service_role: no erase_account yet (spec 45 §5.6 grants it with its own caller)');
+select tst.ok((select prosecdef from pg_proc where oid = 'app.erase_account(uuid,uuid[])'::regprocedure), 'erase_account is security definer (the wrapper delete_account calls it as the owner)');
 select tst.ok(not has_function_privilege('authenticated', 'app.tg_user_erased_guard()', 'EXECUTE'), 'internal: the users guard');
 -- the watchman: every column that points to a person is classified — a new table must say what happens on deletion
 select coalesce(string_agg(format('%s.%s', t, c), ', ' order by t, c), '') as t50_unclassified from (
@@ -5225,6 +5245,7 @@ where c not in ('created_by', 'updated_by')   -- history of who wrote a row: kep
     'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id', 'intake_events.decided_by', 'import_jobs.undone_by', 'trash_entries.deleted_by', 'trash_entries.restored_by',
     -- erased (app.erase_personal_rows)
     'member_prefs.user_id', 'user_locations.user_id', 'push_devices.user_id', 'push_outbox.user_id', 'push_prefs.user_id',
+    'notification_reads.user_id',
     -- unlinked (set to null)
     'company_contacts.user_id', 'companies.lead_default_assignee_id') \gset
 select tst.ok(:'t50_unclassified' = '', format('every person column is classified in T50 (kept / erased / unlinked): %s', :'t50_unclassified'));
@@ -5236,7 +5257,7 @@ select coalesce(string_agg(e, ', '), '') as t50_stale from unnest(array[
     'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
     'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by',
     'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id', 'intake_events.decided_by', 'import_jobs.undone_by', 'trash_entries.deleted_by', 'trash_entries.restored_by',
-    'member_prefs.user_id', 'user_locations.user_id', 'company_contacts.user_id', 'companies.lead_default_assignee_id']) e
+    'member_prefs.user_id', 'user_locations.user_id', 'notification_reads.user_id', 'company_contacts.user_id', 'companies.lead_default_assignee_id']) e
  where not exists (select 1 from information_schema.columns c where c.table_schema = 'public'
                      and format('%s.%s', c.table_name, c.column_name) = e) \gset
 select tst.ok(:'t50_stale' = '', format('no stale entries in the T50 lists: %s', :'t50_stale'));
@@ -5257,6 +5278,207 @@ select tst.ok((public.delete_account('DELETE') ->> 'deleted')::boolean, 'a switc
 select tst.ok((select every(location_notice_ack_at is null and status = 'deleted') from public.memberships where user_id = 'a5700000-0000-4000-8000-000000000009'), 'the notice marks are gone in both companies');
 \echo 'T57 + S22: deletion with a switched-off owner row and a notice mark ok'
 :as_super
+-- ---------------------------------------------------------------- T230 + T240 (spec 50, PR 50-2): the erasure queue and its job
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a2300000-0000-4000-8000-000000000001', 't230a@x.test', '{"full_name":"T230 Person"}'),
+  ('a2300000-0000-4000-8000-000000000002', 't230b@x.test', '{"full_name":"T230 Other"}');
+insert into public.memberships (id, company_id, user_id, role, status) values
+  ('a2300000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'a2300000-0000-4000-8000-000000000001', 'tech', 'active'),
+  ('a2300000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'a2300000-0000-4000-8000-000000000002', 'tech', 'active');
+update public.memberships set title = 'Gutter pro', his_registration_number = 'HIS-230', color = '#112233' where id = 'a2300000-0000-4000-8000-0000000000a1';
+update public.memberships set title = 'Other title', his_registration_number = 'HIS-231' where id = 'a2300000-0000-4000-8000-0000000000a2';
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price)
+  values ('a2300000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T230 item', 'ea', 100, false);
+insert into public.catalog_cost_history (company_id, item_id, unit_cost_cents, source, by) values
+  ('ca000000-0000-0000-0000-000000000000', 'a2300000-0000-4000-8000-0000000000c1', 50, 'manual', 'a2300000-0000-4000-8000-000000000001'),
+  ('ca000000-0000-0000-0000-000000000000', 'a2300000-0000-4000-8000-0000000000c1', 60, 'manual', 'a2300000-0000-4000-8000-000000000002');
+insert into public.catalog_price_history (company_id, item_id, unit_price_cents, prev_unit_price_cents, source, by) values
+  ('ca000000-0000-0000-0000-000000000000', 'a2300000-0000-4000-8000-0000000000c1', 120, 100, 'manual', 'a2300000-0000-4000-8000-000000000001'),
+  ('ca000000-0000-0000-0000-000000000000', 'a2300000-0000-4000-8000-0000000000c1', 130, 120, 'manual', 'a2300000-0000-4000-8000-000000000002');
+reset role; set request.jwt.claim.sub = 'a2300000-0000-4000-8000-000000000001'; reset request.jwt.claims; set role authenticated;
+select tst.fresh(2);
+select tst.ok((public.delete_account('DELETE') ->> 'deleted')::boolean, 'T230 the person deletes the account');
+select tst.ok((public.delete_account('DELETE') ->> 'repeat')::boolean, 'T230 again: the same success');
+:as_super
+select tst.ok((select count(*) = 1 from app.erase_queue where user_id = 'a2300000-0000-4000-8000-000000000001'), 'T230 one queue row for the erased person (a repeat adds none)');
+select tst.ok((select membership_ids = array['a2300000-0000-4000-8000-0000000000a1'::uuid] and done_at is null from app.erase_queue where user_id = 'a2300000-0000-4000-8000-000000000001'), 'T230 the row holds the membership ids and waits');
+select tst.ok(not exists (select 1 from app.erase_queue where user_id = 'a2300000-0000-4000-8000-000000000002'), 'T230 nobody else is queued');
+select tst.ok((select relrowsecurity and relforcerowsecurity from pg_class where oid = 'app.erase_queue'::regclass), 'T238 the queue has row security on and forced');
+select tst.ok(not has_table_privilege('authenticated', 'app.erase_queue', 'SELECT') and not has_table_privilege('anon', 'app.erase_queue', 'SELECT')
+              and not has_function_privilege('authenticated', 'app.erase_queue_run()', 'EXECUTE') and not has_function_privilege('anon', 'app.erase_queue_run()', 'EXECUTE')
+              and has_function_privilege('service_role', 'app.erase_queue_run()', 'EXECUTE'),
+              'T238 the queue and the job: nobody from the API; the job for service_role only');
+-- the journal has the personal fields of the erased membership (the erasure's own update logged them) — before the job
+select count(*) as t240_rows_before from public.audit_log where entity_type = 'memberships' and entity_id = 'a2300000-0000-4000-8000-0000000000a1' \gset
+select tst.ok(exists (select 1 from public.audit_log where entity_type = 'memberships' and entity_id = 'a2300000-0000-4000-8000-0000000000a1'
+                       and (before ->> 'title' = 'Gutter pro' or before ->> 'his_registration_number' = 'HIS-230')), 'T240 before the job: the journal still holds the personal fields');
+-- the journal stays append-only: under the job's flag a change of anything but before/after is still refused
+do $$ begin
+  perform set_config('app.erasing_journal', 'on', true);
+  begin
+    update public.audit_log set action = 'tampered' where entity_type = 'memberships' and entity_id = 'a2300000-0000-4000-8000-0000000000a1';
+    raise exception 'T240 NOT BLOCKED: an audit row changed';
+  exception when sqlstate '42501' then null;
+  end;
+end $$;
+select tst.fails($q$update public.audit_log set before = null where entity_type = 'memberships'$q$, 'T240 without the job the journal is append-only');
+-- the flag is not a secret: with it set, anon and authenticated (and anyone but the job's owner) still cannot rewrite the journal
+set role authenticated;
+select set_config('app.erasing_journal', 'on', false);
+select tst.fails($q$update public.audit_log set before = null where entity_type = 'memberships'$q$, 'T240 authenticated with the flag cannot rewrite the journal');
+reset role; set role anon;
+select set_config('app.erasing_journal', 'on', false);
+select tst.fails($q$update public.audit_log set before = null where entity_type = 'memberships'$q$, 'T240 anon with the flag cannot rewrite the journal');
+reset role; set role service_role;
+select set_config('app.erasing_journal', 'on', false);
+select tst.fails($q$update public.audit_log set before = null where entity_type = 'memberships'$q$, 'T240 service_role with the flag, outside the job, cannot rewrite the journal');
+reset role;
+select set_config('app.erasing_journal', '', false);
+reset role; set role service_role;
+select tst.ok(app.erase_queue_run() >= 1, 'T240 the job does the waiting people (the earlier deletions of this file too)');
+reset role;
+select tst.ok(not exists (select 1 from app.erase_queue where done_at is null), 'T240 nobody is left waiting (no failures)');
+select tst.ok((select done_at is not null from app.erase_queue where user_id = 'a2300000-0000-4000-8000-000000000001'), 'T240 marked done');
+select tst.ok(not exists (select 1 from public.audit_log where entity_type = 'memberships' and entity_id = 'a2300000-0000-4000-8000-0000000000a1'
+                           and (before ->> 'title' is not null or after ->> 'title' is not null or before ->> 'his_registration_number' is not null
+                                or after ->> 'his_registration_number' is not null or before ->> 'color' is not null or after ->> 'color' is not null)),
+              'T240 the journal rows about the person lost title, HIS number and colour');
+select tst.ok((select count(*) from public.audit_log where entity_type = 'memberships' and entity_id = 'a2300000-0000-4000-8000-0000000000a1') = :t240_rows_before,
+              'T240 the rows themselves are all there (only before/after were redacted)');
+select tst.ok(exists (select 1 from public.audit_log where entity_type = 'memberships' and entity_id = 'a2300000-0000-4000-8000-0000000000a1' and (before ? 'role' or after ? 'role')),
+              'T240 ids and codes stay in the redacted rows');
+select tst.ok(exists (select 1 from public.audit_log where entity_type = 'memberships' and entity_id = 'a2300000-0000-4000-8000-0000000000a2' and after ->> 'title' = 'Other title'),
+              'T240 another person''s journal rows are untouched');
+select tst.ok((select count(*) = 0 from public.catalog_cost_history where by = 'a2300000-0000-4000-8000-000000000001')
+              and (select count(*) = 0 from public.catalog_price_history where by = 'a2300000-0000-4000-8000-000000000001'), 'T240 the catalog histories forget who (by = null)');
+select tst.ok((select count(*) = 1 from public.catalog_cost_history where by = 'a2300000-0000-4000-8000-000000000002')
+              and (select count(*) = 1 from public.catalog_price_history where by = 'a2300000-0000-4000-8000-000000000002')
+              and (select count(*) = 2 from public.catalog_cost_history where item_id = 'a2300000-0000-4000-8000-0000000000c1')
+              and (select count(*) = 2 from public.catalog_price_history where item_id = 'a2300000-0000-4000-8000-0000000000c1'), 'T240 the other person''s history and every history row stay');
+set role service_role;
+select tst.ok(app.erase_queue_run() = 0, 'T240 a second run does nothing');
+reset role;
+-- a failure of one person does not stop the others, leaves him waiting with a failed try, and a later run finishes him
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a2300000-0000-4000-8000-000000000003', 't230c@x.test', '{"full_name":"T230 Failing"}'),
+  ('a2300000-0000-4000-8000-000000000004', 't230d@x.test', '{"full_name":"T230 Fine"}');
+insert into public.catalog_cost_history (company_id, item_id, unit_cost_cents, source, by) values
+  ('ca000000-0000-0000-0000-000000000000', 'a2300000-0000-4000-8000-0000000000c1', 70, 'manual', 'a2300000-0000-4000-8000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', 'a2300000-0000-4000-8000-0000000000c1', 80, 'manual', 'a2300000-0000-4000-8000-000000000004');
+insert into app.erase_queue (user_id, at) values
+  ('a2300000-0000-4000-8000-000000000003', now() - interval '1 hour'),
+  ('a2300000-0000-4000-8000-000000000004', now());
+create function tst.boom() returns trigger language plpgsql as $$ begin
+  if old."by" = 'a2300000-0000-4000-8000-000000000003' then raise exception 'T240 planted failure'; end if;
+  return new;
+end $$;
+create trigger t_boom before update on public.catalog_cost_history for each row execute function tst.boom();
+set role service_role;
+select app.erase_queue_run() as t240_done \gset
+reset role;
+select tst.ok(:t240_done = 1, format('T240 one person failed, the other was done in the same run (done=%s, waiting=%s)', :t240_done, (select string_agg(user_id::text || ':' || tries, ',') from app.erase_queue where done_at is null)));
+select tst.ok((select done_at is null and tries = 1 from app.erase_queue where user_id = 'a2300000-0000-4000-8000-000000000003'), 'T240 the failing one waits, with one failed try');
+select tst.ok((select done_at is not null and tries = 0 from app.erase_queue where user_id = 'a2300000-0000-4000-8000-000000000004')
+              and not exists (select 1 from public.catalog_cost_history where by = 'a2300000-0000-4000-8000-000000000004'), 'T240 the other one is done and clean');
+drop trigger t_boom on public.catalog_cost_history;
+set role service_role;
+select app.erase_queue_run() as t240_done2 \gset
+reset role;
+select tst.ok(:t240_done2 = 1 and (select done_at is not null from app.erase_queue where user_id = 'a2300000-0000-4000-8000-000000000003'), 'T240 the next run finishes the one that failed');
+update app.erase_queue set tries = 5, done_at = null where user_id = 'a2300000-0000-4000-8000-000000000003';
+set role service_role;
+select tst.ok(app.erase_queue_run() = 0, 'T240 after 5 failed tries a row is left alone (50-6 raises an alarm on it)');
+reset role;
+drop function tst.boom();
+\echo 'T230 + T240 (50-2): the erasure queue and the job ok'
+-- ---------------------------------------------------------------- T239 (spec 50, PR 50-3): the profile picture's object goes to the Storage queue
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a2390000-0000-4000-8000-000000000005', 't239a@x.test', '{"full_name":"T239 Own"}'),
+  ('a2390000-0000-4000-8000-000000000006', 't239b@x.test', '{"full_name":"T239 Other"}');
+insert into public.files (id, company_id, kind, storage_key, created_by) values
+  ('a2390000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', 'photo', 'ca000000-0000-0000-0000-000000000000/avatar-own.jpg', 'a2390000-0000-4000-8000-000000000005'),
+  ('a2390000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', 'document', 'ca000000-0000-0000-0000-000000000000/work-doc.pdf', 'a2390000-0000-4000-8000-000000000006'),
+  ('a2390000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', 'photo', 'ca000000-0000-0000-0000-000000000000/someone-elses.jpg', 'a2390000-0000-4000-8000-000000000006');
+-- the profile of the other person points at a WORK file and at someone else's photo (the server's role may write it; the guard is for the app)
+update public.users set avatar_file_id = 'a2390000-0000-4000-8000-0000000000f1' where id = 'a2390000-0000-4000-8000-000000000005';
+update public.users set avatar_file_id = 'a2390000-0000-4000-8000-0000000000f2' where id = 'a2390000-0000-4000-8000-000000000006';
+reset role; set request.jwt.claim.sub = 'a2390000-0000-4000-8000-000000000005'; reset request.jwt.claims; set role authenticated;
+select tst.fresh(2);
+select tst.ok((public.delete_account('DELETE') ->> 'deleted')::boolean, 'T239 the person with a picture deletes the account');
+:as_super
+select tst.ok((select avatar_file_id = 'a2390000-0000-4000-8000-0000000000f1' from app.erase_queue where user_id = 'a2390000-0000-4000-8000-000000000005'), 'T239 the queue remembers the picture''s file');
+reset role; set request.jwt.claim.sub = 'a2390000-0000-4000-8000-000000000006'; reset request.jwt.claims; set role authenticated;
+select tst.fresh(2);
+select tst.ok((public.delete_account('DELETE') ->> 'deleted')::boolean, 'T239 the other person deletes the account');
+:as_super
+set role service_role;
+select app.erase_queue_run() >= 2 as t239_ran \gset
+reset role;
+select tst.ok(:'t239_ran'::boolean, 'T239 the job ran');
+select tst.ok((select count(*) = 1 from app.storage_erase_queue where path = 'ca000000-0000-0000-0000-000000000000/avatar-own.jpg' and bucket = 'files' and done_at is null), 'T239 the own picture''s object is queued');
+select tst.ok(not exists (select 1 from public.files where id = 'a2390000-0000-4000-8000-0000000000f1'), 'T239 the own picture''s file row is gone');
+select tst.ok(not exists (select 1 from app.storage_erase_queue where path like '%work-doc.pdf' or path like '%someone-elses.jpg'), 'T239 a work file and someone else''s photo are never queued');
+select tst.ok((select count(*) = 2 from public.files where id in ('a2390000-0000-4000-8000-0000000000f2', 'a2390000-0000-4000-8000-0000000000f3')), 'T239 the work files stay (#1603)');
+select tst.ok((select count(*) = 2 from app.erase_queue where user_id in ('a2390000-0000-4000-8000-000000000005', 'a2390000-0000-4000-8000-000000000006') and done_at is not null), 'T239 both people are done');
+-- the path check: only <company uuid>/<name> in the bucket «files»
+select tst.fails($q$insert into app.storage_erase_queue (bucket, path) values ('files', '../x')$q$, 'T239 no «..» path');
+select tst.fails($q$insert into app.storage_erase_queue (bucket, path) values ('files', '/x')$q$, 'T239 no rooted path');
+select tst.fails($q$insert into app.storage_erase_queue (bucket, path) values ('files', 'ca000000-0000-0000-0000-000000000000/')$q$, 'T239 no bare prefix');
+select tst.fails($q$insert into app.storage_erase_queue (bucket, path) values ('files', 'ca000000-0000-0000-0000-000000000000/../cb000000-0000-0000-0000-000000000000/x')$q$, 'T239 no path that climbs out');
+select tst.fails($q$insert into app.storage_erase_queue (bucket, path) values ('files', 'not-a-uuid/x.jpg')$q$, 'T239 the first part is a company uuid');
+select tst.fails($q$insert into app.storage_erase_queue (bucket, path) values ('other', 'ca000000-0000-0000-0000-000000000000/x.jpg')$q$, 'T239 only the bucket files');
+-- the edge function's calls: people cannot, service_role can
+select tst.ok(not has_function_privilege('anon', 'public.storage_erase_claim(int)', 'EXECUTE') and not has_function_privilege('authenticated', 'public.storage_erase_claim(int)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'public.storage_erase_done(uuid[])', 'EXECUTE') and not has_function_privilege('authenticated', 'public.storage_erase_fail(uuid[])', 'EXECUTE')
+              and has_function_privilege('service_role', 'public.storage_erase_claim(int)', 'EXECUTE') and has_function_privilege('service_role', 'public.storage_erase_done(uuid[])', 'EXECUTE')
+              and has_function_privilege('service_role', 'public.storage_erase_fail(uuid[])', 'EXECUTE'), 'T238 the Storage queue calls are for service_role only');
+select tst.ok(not has_table_privilege('authenticated', 'app.storage_erase_queue', 'SELECT') and not has_table_privilege('anon', 'app.storage_erase_queue', 'SELECT')
+              and (select relrowsecurity and relforcerowsecurity from pg_class where oid = 'app.storage_erase_queue'::regclass), 'T238 the Storage queue is closed to the API (row security on and forced)');
+set role authenticated;
+select tst.fails($q$select * from public.storage_erase_claim(10)$q$, 'T239 authenticated cannot claim');
+reset role; set role service_role;
+select id as t239_id from public.storage_erase_claim(10) limit 1 \gset
+select tst.ok(:'t239_id' <> '', 'T239 service_role claims the waiting object');
+select tst.ok(public.storage_erase_fail(array[:'t239_id'::uuid]) = 1, 'T239 a failed removal counts a try');
+select tst.ok(public.storage_erase_done(array[:'t239_id'::uuid]) = 1, 'T239 a removed object is marked done');
+select tst.ok(public.storage_erase_done(array[:'t239_id'::uuid]) = 0, 'T239 and only once');
+select tst.ok((select count(*) = 0 from public.storage_erase_claim(10)), 'T239 nothing is left to claim');
+reset role;
+-- an own photo that is linked to something (a client) is not a profile picture: never queued, never deleted; an odd key is left for a person
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a2390000-0000-4000-8000-000000000007', 't239c@x.test', '{"full_name":"T239 Linked"}'),
+  ('a2390000-0000-4000-8000-000000000008', 't239d@x.test', '{"full_name":"T239 Odd key"}');
+insert into public.files (id, company_id, kind, storage_key, created_by, customer_id) values
+  ('a2390000-0000-4000-8000-0000000000f4', 'ca000000-0000-0000-0000-000000000000', 'photo', 'ca000000-0000-0000-0000-000000000000/linked-own.jpg', 'a2390000-0000-4000-8000-000000000007', 'c3900000-0000-4000-8000-000000000001');
+insert into public.files (id, company_id, kind, storage_key, created_by) values
+  ('a2390000-0000-4000-8000-0000000000f5', 'ca000000-0000-0000-0000-000000000000', 'photo', 'ca000000-0000-0000-0000-000000000000/Odd Name.jpg', 'a2390000-0000-4000-8000-000000000008');
+update public.users set avatar_file_id = 'a2390000-0000-4000-8000-0000000000f4' where id = 'a2390000-0000-4000-8000-000000000007';
+update public.users set avatar_file_id = 'a2390000-0000-4000-8000-0000000000f5' where id = 'a2390000-0000-4000-8000-000000000008';
+reset role; set request.jwt.claim.sub = 'a2390000-0000-4000-8000-000000000007'; reset request.jwt.claims; set role authenticated;
+select tst.fresh(2);
+select tst.ok((public.delete_account('DELETE') ->> 'deleted')::boolean, 'T239 the person whose picture is linked to a client deletes the account');
+reset role; set request.jwt.claim.sub = 'a2390000-0000-4000-8000-000000000008'; reset request.jwt.claims; set role authenticated;
+select tst.fresh(2);
+select tst.ok((public.delete_account('DELETE') ->> 'deleted')::boolean, 'T239 the person with an odd key deletes the account');
+:as_super
+set role service_role;
+select app.erase_queue_run() >= 2 as t239_ran2 \gset
+reset role;
+select tst.ok(:'t239_ran2'::boolean, 'T239 the job ran again');
+select tst.ok(exists (select 1 from public.files where id = 'a2390000-0000-4000-8000-0000000000f4'), 'T239 an own photo linked to a client stays (it is the client''s record)');
+select tst.ok(not exists (select 1 from app.storage_erase_queue where path like '%linked-own.jpg'), 'T239 and is not queued');
+select tst.ok(exists (select 1 from public.files where id = 'a2390000-0000-4000-8000-0000000000f5') and not exists (select 1 from app.storage_erase_queue where path like '%Odd Name%'),
+              'T239 an odd key: not queued, the row stays with its reference');
+select tst.ok((select count(*) = 2 from app.erase_queue where user_id in ('a2390000-0000-4000-8000-000000000007', 'a2390000-0000-4000-8000-000000000008') and done_at is not null and tries = 0),
+              'T239 the rest of the erasure of both people is done (one odd file never fails it)');
+set role service_role;
+select tst.ok(app.erase_queue_run() = 0, 'T239 a repeat of the job changes nothing');
+reset role;
+\echo 'T239 (50-3): the Storage erase queue ok'
 -- ---------------------------------------------------------------- T59: a row never moves to another company (security #2, 19 §7.1)
 :as_super
 -- (1) guard: every table with company_id, in every non-system schema, has the immutable trigger
@@ -5960,10 +6182,11 @@ select tst.ok((select count(*) = 1 from public.jobs where estimate_id = '0e47000
 insert into public.customers (id, company_id, display_name) values ('c7300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T73 Client');
 insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
   ('d7300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', '73 Deposit St', 'Pasadena');
-insert into public.estimates (id, company_id, customer_id, property_id, title) values
-  ('0e730000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 signed'),
-  ('0e730000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 not signed'),
-  ('0e730000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 no deposit');
+-- #2075 (20261117560000): sales take the deposit of their own deal — the signed estimate is the sales person's (T424: not another's)
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+  ('0e730000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 signed', 'a0000000-0000-0000-0000-000000000005'),
+  ('0e730000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 not signed', null),
+  ('0e730000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 no deposit', null);
 insert into public.jobs (id, company_id, number, title, customer_id, property_id, estimate_id) values
   ('e7300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'T73 job', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e730000-0000-4000-8000-000000000001'),
   ('e7300000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'T73 job 3', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e730000-0000-4000-8000-000000000003');
@@ -7283,7 +7506,8 @@ select tst.agree('a7700000-0000-4000-8000-000000000004');
 \set as_with77  'reset role; set request.jwt.claim.sub = ''a7700000-0000-4000-8000-000000000002''; reset request.jwt.claims; set role authenticated;'
 \set as_off77   'reset role; set request.jwt.claim.sub = ''a7700000-0000-4000-8000-000000000003''; reset request.jwt.claims; set role authenticated;'
 :as_owner77
-insert into public.companies (id, name, dba) values ('c7700000-0000-4000-8000-000000000001', 'T77 Legal LLC', '');
+insert into public.companies (id, name) values ('c7700000-0000-4000-8000-000000000001', 'T77 Legal LLC');
+update public.companies set dba = '' where id = 'c7700000-0000-4000-8000-000000000001';
 :as_super
 insert into public.memberships (company_id, user_id, role, status, deleted_at) values
   ('c7700000-0000-4000-8000-000000000001', 'a7700000-0000-4000-8000-000000000001', 'tech', 'deleted', now() - interval '1 day');
@@ -8602,10 +8826,10 @@ select tst.ok((select v.checklist = app.chk_items_json(v.id) and jsonb_array_len
 update public.visits set checklist = '[{"id":"c1030000-0000-4000-8000-0000000000a1","label":"x","done":false}]' where id = 'c1030000-0000-4000-8000-0000000000f1';
 select tst.ok((select not done from public.visit_checklist_items where id = 'c1030000-0000-4000-8000-0000000000a1'), 'T103 an old phone takes off its own tick');
 update public.visits set checklist = '[{"id":"c1030000-0000-4000-8000-0000000000a1","label":"x","done":true}]' where id = 'c1030000-0000-4000-8000-0000000000f1';
--- sales writing an old array changes no item
+-- sales writing an old array changes no item (since #2016 sales do not write a work visit at all: a refusal)
 :as_sales_a
-update public.visits set checklist = '[{"id":"c1030000-0000-4000-8000-0000000000a1","label":"x","done":false},{"id":"c1030000-0000-4000-8000-0000000000a8","label":"sales item","done":false}]'
- where id = 'c1030000-0000-4000-8000-0000000000f1';
+select tst.fails($q$update public.visits set checklist = '[{"id":"c1030000-0000-4000-8000-0000000000a1","label":"x","done":false},{"id":"c1030000-0000-4000-8000-0000000000a8","label":"sales item","done":false}]'
+ where id = 'c1030000-0000-4000-8000-0000000000f1'$q$, 'T103 sales: no write to a work visit (#2016)');
 :as_super
 select tst.ok((select done from public.visit_checklist_items where id = 'c1030000-0000-4000-8000-0000000000a1')
           and tst.cnt($q$select 1 from public.visit_checklist_items where id = 'c1030000-0000-4000-8000-0000000000a8'$q$) = 0
@@ -8724,10 +8948,9 @@ do $$ begin
   perform tst.fails($q$insert into public.visits (id, company_id, job_id, starts_at, checklist_min_photos_before) values
     ('c1040000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', 'c1040000-0000-4000-8000-0000000000e1', now(), 5)$q$, 'T104 sales does not make a visit with minimums');
 end $$;
--- a visit without minimums: sales books it as before
-insert into public.visits (id, company_id, job_id, starts_at) values
-  ('c1040000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', 'c1040000-0000-4000-8000-0000000000e1', now());
-select tst.ok(tst.cnt($q$select 1 from public.visits where id = 'c1040000-0000-4000-8000-0000000000f3'$q$) = 1, 'T104 sales makes a visit without minimums as before');
+-- a work visit without minimums: since #2016 planning a job is the office's — sales are refused (they book inspections, T394)
+select tst.fails($q$insert into public.visits (id, company_id, job_id, starts_at) values
+  ('c1040000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', 'c1040000-0000-4000-8000-0000000000e1', now())$q$, 'T104 sales do not make a work visit (#2016)');
 :as_super
 select tst.ok((select checklist_min_photos_before = 2 and checklist_min_photos_after = 4 and notes = 'tech note' from public.visits where id = 'c1040000-0000-4000-8000-0000000000f1'),
   'T104 the tech''s other edit of the visit passes, the minimums stay');
@@ -9355,7 +9578,7 @@ select tst.ok((select parse_status = 'needs_review' and email = 'big@example.com
                  from public.leads l where l.provider = 'angi'), 'T115 a price over $500 is dropped, the lead marked for review');
 select tst.ok((select payload is null from public.intake_events where event_key = 'z115d'), 'T115 a refused request keeps no fields');
 
--- T116: limits — a request is held, never lost; bots and a missing captcha are refused
+-- T116: limits — a request is held, never lost; bots are refused, a missing captcha is held (#2012)
 :as_service
 do $$ declare i int; begin
   for i in 1..5 loop
@@ -9368,7 +9591,7 @@ end $$;
 :as_owner_a
 select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => true);
 :as_service
-select tst.ok(tst.intake('form', 'form', 'cap116', '{"phone":"(818) 555-0196"}', '9.9.9.6') ->> 'status' = 'rejected', 'T116 the captcha is required and missing');
+select tst.ok(tst.intake('form', 'form', 'cap116', '{"phone":"(818) 555-0196"}', '9.9.9.6') ->> 'status' = 'held', 'T116 the captcha is required and missing — held for a person (#2012)');
 select tst.ok(tst.intake('form', 'form', 'cap116ok', '{"phone":"(818) 555-0195"}', '9.9.9.6', '{"captcha":"ok"}') ->> 'status' = 'accepted', 'T116 a solved captcha passes');
 :as_owner_a
 select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => false, p_daily_limit => 2);
@@ -9402,6 +9625,41 @@ select tst.ok(not has_column_privilege('authenticated', 'public.intake_events', 
 -- parallel requests: the advisory lock serialises the count (two sessions are not possible here; the lock is checked to exist)
 select tst.ok(position('pg_advisory_xact_lock' in pg_get_functiondef('app.intake_lead(text, text, text, text, text, jsonb, jsonb)'::regprocedure)) > 0,
   'T116 the limits are counted under the company''s lock');
+
+-- T411–T413: a form that asks for a captcha never loses a request (#2012, spec 34 §3д): the page has no widget yet (В3)
+-- T411: no captcha answer → held / no_captcha with its fields, no lead until a person accepts
+:as_super
+select tst.ok((select status = 'held' and reason = 'no_captcha' and payload ->> 'phone' = '(818) 555-0196' and lead_id is null
+                 from public.intake_events where event_key = 'cap116'), 'T411 no captcha answer: held with its fields, no lead yet');
+:as_office_a
+select tst.ok(public.intake_event_decide((select id from public.intake_events where event_key = 'cap116'), true) ->> 'status' = 'accepted',
+  'T411 the office accepts it from the journal');
+:as_super
+select tst.ok((select count(*) from public.leads where phone = '(818) 555-0196') = 1, 'T411 the accepted request made one lead');
+-- T412: a captcha that answered «fail» (a widget said «bot») → refused, no fields kept
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => true, p_daily_limit => 100);
+:as_service
+select tst.ok(tst.intake('form', 'form', 'cap412', '{"phone":"(818) 555-0412"}', '9.9.4.12', '{"captcha":"fail"}') ->> 'status' = 'rejected',
+  'T412 a failed captcha is refused');
+:as_super
+select tst.ok((select reason = 'captcha' and payload is null from public.intake_events where event_key = 'cap412'), 'T412 a failed captcha keeps no fields');
+-- T413: the trap still comes first; an unknown captcha answer is not taken for «ok»
+:as_service
+select tst.ok(tst.intake('form', 'form', 'cap413bot', '{"phone":"(818) 555-0413"}', '9.9.4.13', '{"bot":"trap"}') ->> 'status' = 'rejected',
+  'T413 the trap field is refused even without a captcha');
+select tst.ok(tst.intake('form', 'form', 'cap413junk', '{"phone":"(818) 555-0414"}', '9.9.4.14', '{"captcha":"maybe"}') ->> 'status' = 'held',
+  'T413 an unknown captcha answer is held, not passed');
+select tst.ok(tst.intake('form', 'form', 'cap413fast', '{"phone":"(818) 555-0415"}', '9.9.4.15', '{"bot":"time"}') ->> 'status' = 'held',
+  'T413 too fast and no captcha: held');
+select tst.ok(tst.intake('webhook', 'hook', 'cap413hook', '{"phone":"(818) 555-0416"}') ->> 'status' = 'accepted',
+  'T413 the form''s captcha does not hold the webhook''s leads');
+:as_super
+select tst.ok((select reason = 'no_captcha' from public.intake_events where event_key = 'cap413junk'), 'T413 no other sign — the reason is «no captcha»');
+select tst.ok((select reason = 'too_fast' from public.intake_events where event_key = 'cap413fast'),
+  'T413 a sharper reason wins over «no captcha» (the person sees «too fast»)');
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => false, p_daily_limit => 1);
 
 -- T117: who gets the lead — the chosen person while active, else the owner
 :as_owner_a
@@ -11533,7 +11791,8 @@ select tst.ok((select public_token is null from public.estimates where id = 'e14
 select tst.ok((select token from public.estimate_links('ca000000-0000-0000-0000-000000000000') where estimate_id = 'e1470000-0000-4000-8000-000000000001') = :'t147_first',
   'T147 the director gets the link through estimate_links');
 :as_sales_a
-select tst.ok(exists (select 1 from public.estimate_links('ca000000-0000-0000-0000-000000000000') where estimate_id = 'e1470000-0000-4000-8000-000000000001'), 'T147 …sales too');
+-- since #2075 (20261117560000) sales get the links of their own deals only: this estimate is the tech's
+select tst.ok(not exists (select 1 from public.estimate_links('ca000000-0000-0000-0000-000000000000') where estimate_id = 'e1470000-0000-4000-8000-000000000001'), 'T147 …sales: not of another''s estimate (#2075)');
 :as_tech_a
 select tst.ok((select public_token is null from public.estimates where id = 'e1470000-0000-4000-8000-000000000001'), 'T147 the tech reads his estimate — without its link');
 select tst.ok((select count(*) from public.estimate_links('ca000000-0000-0000-0000-000000000000')) = 0, 'T147 estimate_links gives a tech nothing');
@@ -12676,10 +12935,11 @@ select tst.ok(tst.cnt($q$select 1 from public.payments where idempotency_key = '
 -- the deposit at the signing stays sales' (17): the server's deposit function on the deposit the signature made (approved,
 -- the signed version, the client's deposit); a deposit invoice sales put in themselves, or of another sum, is refused
 -- (security-check of #1061 В-1: an own «deposit» of $99 999 was paid)
-insert into public.estimates (id, company_id, customer_id, property_id, title) values
-  ('0e191000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed'),
-  ('0e191000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed, no deposit'),
-  ('0e191000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed, another sum');
+-- #2075 (20261117560000): the estimates are the sales person's own deals, so each refusal below is the rule it names
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+  ('0e191000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed', 'a0000000-0000-0000-0000-000000000005'),
+  ('0e191000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed, no deposit', 'a0000000-0000-0000-0000-000000000005'),
+  ('0e191000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed, another sum', 'a0000000-0000-0000-0000-000000000005');
 insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
   ('51910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000001', 1, '{"kind":"none"}'),
   ('51910000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000002', 1, '{"kind":"none"}'),
@@ -12732,15 +12992,18 @@ do $$ begin
 exception when insufficient_privilege then null;
 end $$;
 select tst.ok(true, 'T191 sales take no payment on a visit (record_visit_payment, 42501)');
--- С-1: a draft progress invoice of their own turned «deposit» of the signed version by an update: refused
+-- С-1: a draft progress invoice turned «deposit» of the signed version by an update: refused (tg_invoice_guard answers
+-- first, «only the office changes what an invoice is»). Since #2075 (20261117360000) sales insert no invoice at all (RLS),
+-- so the draft is the office's here; it stays as it was
+select tst.fails($q$insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
+  ('11910000-0000-4000-8000-000000000016', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f2', 'progress', 'draft', 'T191 draft', 9999900, 9999900)$q$,
+  'T191 sales do not insert an invoice (#2075)');
+:as_office_a
 insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
   ('11910000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f2', 'progress', 'draft', 'T191 draft', 9999900, 9999900);
-do $$ begin
-  update public.invoices set kind = 'deposit', source_estimate_version_id = '51910000-0000-4000-8000-000000000002' where id = '11910000-0000-4000-8000-000000000006';
-  raise exception 'FAILED: T191 sales turned a draft into a deposit';
-exception when insufficient_privilege then null;
-end $$;
-select tst.ok(true, 'T191 sales do not change what an invoice is (kind, version: tg_invoice_guard, 42501)');
+:as_sales_a
+select tst.fails($q$update public.invoices set kind = 'deposit', source_estimate_version_id = '51910000-0000-4000-8000-000000000002' where id = '11910000-0000-4000-8000-000000000006'$q$,
+  'T191 sales do not change what an invoice is (kind, version)');
 :as_super
 select tst.ok((select kind = 'progress' and source_estimate_version_id is null from public.invoices where id = '11910000-0000-4000-8000-000000000006'), 'T191 the draft stays a progress invoice');
 select tst.ok(tst.cnt($q$select 1 from public.payments where id = 'a1910000-0000-4000-8000-000000000005'$q$) = 0, 'T191 no payment from sales on the visit');
@@ -12763,6 +13026,7 @@ select tst.ok(true, 'T191 a deposit invoice the office made by hand (no signed v
 :as_super
 insert into public.estimates (id, company_id, customer_id, property_id, title) values
   ('0e191000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 another version');
+update public.estimates set created_by = 'a0000000-0000-0000-0000-000000000005' where id = '0e191000-0000-4000-8000-000000000007';  -- his deal: refused by the version rule, not by #2075
 insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
   ('51910000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000007', 1, '{"kind":"none"}'),
   ('51910000-0000-4000-8000-000000000017', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000007', 2, '{"kind":"none"}');
@@ -12787,6 +13051,7 @@ select tst.ok(true, 'T191 another version than the client signed, the same sum: 
 insert into public.estimates (id, company_id, customer_id, property_id, title) values
   ('0e191000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 not approved'),
   ('0e191000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 ACH on its way');
+update public.estimates set created_by = 'a0000000-0000-0000-0000-000000000005' where id = '0e191000-0000-4000-8000-000000000004';  -- his deal: refused as not approved, not by #2075
 insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
   ('51910000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000004', 1, '{"kind":"none"}'),
   ('51910000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000005', 1, '{"kind":"none"}');
@@ -13329,7 +13594,7 @@ end $$;
 :as_super
 update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
 :as_sales_a
-select tst.fails($q$update public.invoices set status = 'void', void_reason = 'T197 sales' where id = '01970000-0000-4000-8000-000000000002'$q$, 'T197 sales do not void');
+select tst.blocked($q$update public.invoices set status = 'void', void_reason = 'T197 sales' where id = '01970000-0000-4000-8000-000000000002'$q$, 'T197 sales do not void (since #2075 they do not even see an invoice of another''s deal)');
 :as_owner_a
 select tst.fails($q$update public.invoices set status = 'void' where id = '01970000-0000-4000-8000-000000000002'$q$, 'T197 no void without a reason');
 update public.invoices set status = 'void', void_reason = 'T197 wrong amount: $900 instead of $90' where id = '01970000-0000-4000-8000-000000000002';
@@ -13415,8 +13680,9 @@ select tst.ok((select status = 'sent' and total_cents = 20000 and paid_cents = 2
               'T197 the draft final is billed as the rest of the contract ($200) and paid');
 select tst.ok((select discount_cents = 0 and subtotal_cents + tax_cents = total_cents from public.invoices where id = '01970000-0000-4000-8000-000000000008'),
               'T197 billed as the rest: no discount of the draft''s own left, subtotal + tax = total (security-check of #1203 №2)');
--- never born removed: such a row would pass the contract check and come back later (security-check of #1203 №1)
-:as_sales_a
+-- never born removed: such a row would pass the contract check and come back later (security-check of #1203 №1); as the
+-- office since #2075 (20261117560000: sales write only inside their deals, refused before this check)
+:as_office_a
 select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, total_cents, sent_at, deleted_at) values
          ('ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'progress', 'sent', 'T197 hidden', 999900, now(), now())$q$,
        '%created removed%', 'T197 an invoice is never inserted removed (the way past the cap)');
@@ -13931,7 +14197,12 @@ select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_i
 select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 2,
               'T202 the purchase history keeps only the purchase rows (the first cost and the cost change)');
 -- who reads: the office yes; a tech, sales without view_costs, another company no; nobody writes it by hand
-select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 4, 'T202 the office reads the price history');
+-- 4 rows of T202 itself + 3 prices the server counted from the cost since #1807 (53-0б): $12.13 → $12.35 (markup 12 %),
+-- → $12.47 (cost $10.10), → $12.81 (markup 15 % the old way); the first cost gave $12.1275 → $12.13 = the price as it was
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 7
+          and (select array_agg(unit_price_cents order by at, id) from public.catalog_price_history
+                where item_id = 'a2020000-0000-4000-8000-000000000001' and unit_price_cents is not null) = array[1213, 1235, 1247, 1281]::bigint[],
+              'T202 the office reads the price history (the server''s prices from the cost included, #1807)');
 select tst.fails($q$insert into public.catalog_price_history (company_id, item_id, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'a2020000-0000-4000-8000-000000000001', 1)$q$, 'T202 the office does not write the history by hand');
 select tst.fails($q$update public.catalog_price_history set unit_price_cents = 1 where item_id = 'a2020000-0000-4000-8000-000000000001'$q$, 'T202 …nor change it (no update right)');
 :as_tech_a
@@ -15481,7 +15752,7 @@ select tst.ok((select assigned_to = 'a5600000-0000-4000-8000-000000000002' from 
 -- the team as the caller — every member sees the team, so the check holds for them)
 :as_tech281
 select tst.fails_like($q$update public.leads set assigned_to = 'a5600000-0000-4000-8000-000000000002' where id = 'a2810000-0000-4000-8000-000000000c03'$q$,
-                      '%not given to a subcontractor%', 'T282 a tech does not give his lead to a subcontractor');
+                      '%given to someone else by the office%', 'T282 a tech does not give his lead to a subcontractor (since #2075 to nobody else: t12_lead_member_guard)');
 -- a tech's task is his own whoever he names (t04_task_who): never the subcontractor's
 insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id) values ('a2820000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c03', 'T282 t', 'a5600000-0000-4000-8000-000000000002');
 select tst.ok((select assignee_id = 'a2810000-0000-4000-8000-000000000001' from public.tasks where id = 'a2820000-0000-4000-8000-000000000001'),
@@ -15712,5 +15983,3413 @@ select tst.ok((select status = 'draft' and current_version_id = 'f2920000-0000-4
               and (select count(*) = 1 and sum(line_total_cents) = 49874 from public.estimate_line_items li join public.estimate_options o on o.id = li.option_id where o.version_id = 'f2920000-0000-4000-8000-000000000002'),
               'T292 sent → draft: a new version without the elbow line; the sent version (what the client got) keeps its lines');
 \echo 'T292 a sent estimate keeps the lines it went with ok'
+
+-- ---------------------------------------------------------------- T321: receiving a supplier order writes the cost history (#1836)
+-- the first time a line came: one 'receipt' row with the price paid per the item's own unit (a pack ÷ pack_size, half up to
+-- the cent: #1948, the audit on #1849), the order's supplier; a repeat or a tick taken back and put again — nothing new; the item's own cost stays
+-- (В8 #1832); the tech who receives never reads the history
+:as_owner_a
+insert into public.suppliers (id, company_id, name, purchase_tax_bps) values ('53210000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'T321 Supply (test)', 950);
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, unit_cost_cents, vendor_tax_bps, markup_bps, pack_size, supplier_id) values
+  ('53210000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T321 elbow', 'ea', 500, 300, 950, 2000, 3, '53210000-0000-4000-8000-0000000000a1');
+insert into public.purchase_orders (id, company_id, supplier_id, job_id) values
+  ('53210000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '53210000-0000-4000-8000-0000000000a1', 'e1a00000-0000-0000-0000-000000000001');
+insert into public.purchase_order_lines (id, company_id, po_id, position, catalog_item_id, name, qty, unit) values
+  ('53210000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', '53210000-0000-4000-8000-000000000001', 0, '53210000-0000-4000-8000-0000000000c1', 'T321 elbow box', 2, 'box'),
+  ('53210000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', '53210000-0000-4000-8000-000000000001', 1, null, 'T321 no item', 1, 'ea');
+insert into public.purchase_order_line_costs (line_id, company_id, unit_cost_cents) values
+  ('53210000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 1000),
+  ('53210000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 700);
+update public.purchase_orders set status = 'sent' where id = '53210000-0000-4000-8000-000000000001';
+create or replace function pg_temp.t321_rows() returns bigint language sql as $f$
+  select count(*) from public.catalog_cost_history where company_id = 'ca000000-0000-0000-0000-000000000000' and source = 'receipt'
+     and item_id = '53210000-0000-4000-8000-0000000000c1' $f$;
+:as_super
+select tst.ok(pg_temp.t321_rows() = 0, 'T321 nothing received — no receipt row');
+-- the tech of the job receives one line: the history gets the price paid
+:as_tech_a
+select tst.ok(public.po_receive('53210000-0000-4000-8000-000000000001', '[{"id":"53210000-0000-4000-8000-0000000000b1","received":1}]') = 'partially_received',
+  'T321 the tech of the job receives a line');
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = '53210000-0000-4000-8000-0000000000c1'$q$) = 0,
+  'T321 the tech never reads the cost history');
+:as_super
+select tst.ok(pg_temp.t321_rows() = 1
+          and (select unit_cost_cents = 333 and supplier_id = '53210000-0000-4000-8000-0000000000a1' and vendor_tax_bps = 950
+                      and po_line_id = '53210000-0000-4000-8000-0000000000b1' and by = 'a0000000-0000-0000-0000-000000000003'
+                 from public.catalog_cost_history where source = 'receipt' and item_id = '53210000-0000-4000-8000-0000000000c1'),
+  'T321 one receipt row: $10.00 a box of 3 → $3.33 an elbow (half up, #1948), the order''s supplier, the item''s tax, who received');
+select tst.ok((select unit_cost_cents = 300 from public.catalog_item_costs where item_id = '53210000-0000-4000-8000-0000000000c1'),
+  'T321 the item''s own cost stays (В8 #1832: only the history)');
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where source = 'receipt' and po_line_id = '53210000-0000-4000-8000-0000000000b2'$q$) = 0,
+  'T321 a line without a catalog item writes no history');
+-- the same marking again, more of the same line, a tick taken back and put again: nothing new
+:as_office_a
+select public.po_receive('53210000-0000-4000-8000-000000000001', '[{"id":"53210000-0000-4000-8000-0000000000b1","received":1}]');
+select public.po_receive('53210000-0000-4000-8000-000000000001', '[{"id":"53210000-0000-4000-8000-0000000000b1","received":2}]');
+select public.po_receive('53210000-0000-4000-8000-000000000001', '[{"id":"53210000-0000-4000-8000-0000000000b1","received":0}]');
+select public.po_receive('53210000-0000-4000-8000-000000000001', '[{"id":"53210000-0000-4000-8000-0000000000b1","received":2},{"id":"53210000-0000-4000-8000-0000000000b2","received":1}]');
+:as_super
+select tst.ok(pg_temp.t321_rows() = 1, 'T321 a repeat, more, a tick back and again — still one receipt row for the line');
+-- an item without a pack size (the pack is the unit), a line without a cost row, an item without its costs row
+:as_owner_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('53210000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', 'material', 'T321 no pack, no costs', 'ea', 900),
+  ('53210000-0000-4000-8000-0000000000c3', 'ca000000-0000-0000-0000-000000000000', 'material', 'T321 no line cost', 'ea', 900);
+insert into public.purchase_orders (id, company_id, supplier_id) values
+  ('53210000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '53210000-0000-4000-8000-0000000000a1');
+insert into public.purchase_order_lines (id, company_id, po_id, position, catalog_item_id, name, qty, unit) values
+  ('53210000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', '53210000-0000-4000-8000-000000000002', 0, '53210000-0000-4000-8000-0000000000c2', 'T321 c2', 1, 'ea'),
+  ('53210000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', '53210000-0000-4000-8000-000000000002', 1, '53210000-0000-4000-8000-0000000000c3', 'T321 c3', 1, 'ea');
+insert into public.purchase_order_line_costs (line_id, company_id, unit_cost_cents) values
+  ('53210000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 777);
+update public.purchase_orders set status = 'sent' where id = '53210000-0000-4000-8000-000000000002';
+select public.po_receive('53210000-0000-4000-8000-000000000002', '[{"id":"53210000-0000-4000-8000-0000000000b3","received":1},{"id":"53210000-0000-4000-8000-0000000000b4","received":1}]');
+:as_super
+select tst.ok((select count(*) = 1 and min(unit_cost_cents) = 777 and bool_and(vendor_tax_bps is null) from public.catalog_cost_history
+                where source = 'receipt' and item_id = '53210000-0000-4000-8000-0000000000c2'),
+  'T321 no pack size — the pack''s price as is; no costs row of the item — the tax is empty');
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where source = 'receipt' and item_id = '53210000-0000-4000-8000-0000000000c3'$q$) = 0,
+  'T321 a line without a cost row writes no history');
+-- the item's supplier changed in the same transaction keeps the receipt's own (the order's) supplier
+:as_owner_a
+insert into public.suppliers (id, company_id, name) values ('53210000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'T321 Other (test)');
+select public.po_receive('53210000-0000-4000-8000-000000000002', '[{"id":"53210000-0000-4000-8000-0000000000b3","received":0}]');
+:as_super
+delete from public.catalog_cost_history where source = 'receipt' and po_line_id = '53210000-0000-4000-8000-0000000000b3';
+:as_owner_a
+do $t$ begin
+  perform public.po_receive('53210000-0000-4000-8000-000000000002', '[{"id":"53210000-0000-4000-8000-0000000000b3","received":1}]');
+  update public.catalog_items set supplier_id = '53210000-0000-4000-8000-0000000000a2' where id = '53210000-0000-4000-8000-0000000000c2';
+end $t$;
+:as_super
+select tst.ok((select supplier_id = '53210000-0000-4000-8000-0000000000a1' from public.catalog_cost_history where source = 'receipt' and po_line_id = '53210000-0000-4000-8000-0000000000b3'),
+  'T321 a receipt keeps the order''s supplier when the item''s supplier changes in the same transaction');
+-- the app never writes the source or the line itself
+:as_office_a
+select tst.fails($q$insert into public.catalog_cost_history (company_id, item_id, unit_cost_cents, source, po_line_id) values
+  ('ca000000-0000-0000-0000-000000000000', '53210000-0000-4000-8000-0000000000c1', 1, 'receipt', '53210000-0000-4000-8000-0000000000b2')$q$,
+  'T321 the app does not write a receipt row by hand');
+:as_super
+select tst.ok(has_function_privilege('authenticated', 'public.po_receive(uuid, jsonb, bigint)', 'execute')
+          and not has_function_privilege('anon', 'public.po_receive(uuid, jsonb, bigint)', 'execute'),
+  'T321 po_receive — the app only (rule 18)');
+\echo 'T321 a receipt writes the cost history ok'
+
+
+-- ================================================================ T322–T331: the server counts a material's price (#1807, 53-0б, spec 53 §5.3б)
+-- T322: one formula in the engine and in the database (packages/estimating-engine/test/fixtures/catalogPrice.json, read by
+-- catalogPrice.fixture.test.ts too); nobody executes the formula directly (rule 18, check 2 N1)
+\set price_json `cat :catalog_price`
+:as_super
+select tst.ok(coalesce(string_agg(x::text, '; '), '') = '', format('T322 app.item_price_cents = the engine''s catalogPrice: %s', coalesce(string_agg(x::text || ' → ' || app.item_price_cents((x ->> 'cost')::bigint, (x ->> 'taxBps')::int, (x ->> 'markupBps')::int), '; '), '')))
+  from jsonb_array_elements((:'price_json')::jsonb -> 'cases') x
+ where app.item_price_cents((x ->> 'cost')::bigint, (x ->> 'taxBps')::int, (x ->> 'markupBps')::int) is distinct from (x ->> 'price')::bigint;
+select tst.ok(jsonb_array_length((:'price_json')::jsonb -> 'cases') >= 20, 'T322 the shared set has its examples');
+select tst.ok(not has_function_privilege('authenticated', 'app.item_price_cents(bigint, int, int)', 'execute')
+          and not has_function_privilege('anon', 'app.item_price_cents(bigint, int, int)', 'execute'),
+  'T322 nobody executes the formula directly — only the server''s triggers');
+-- an off-formula price, as the database may hold one today (written without the triggers)
+create or replace function pg_temp.drift322(p_id uuid, p_price bigint) returns void language plpgsql as $f$
+begin
+  set local session_replication_role = replica;
+  update public.catalog_items set unit_price_cents = p_price where id = p_id;
+  set local session_replication_role = origin;
+end $f$;
+\echo 'T322 one formula ok'
+
+-- T323: two phones — B changed the cost, A (who had the old cost) changed the markup and sent its price: the stored price
+-- follows the new cost and the new markup
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('53220000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T323 coil', 'ft', 0);
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
+  ('53220000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 1000, 0, 1000);
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 1100 and (select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1'),
+  'T323 a cost written directly counts the price: $10.00 + 10 % = $11.00, counted from the cost');
+-- phone B: the cost $20.00
+update public.catalog_item_costs set unit_cost_cents = 2000 where item_id = '53220000-0000-4000-8000-0000000000c1';
+-- phone A: the markup 20 % with its price from the old cost ($12.00)
+update public.catalog_items set markup_bps = 2000, unit_price_cents = 1200 where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 2400,
+  'T323 two phones: the new cost ($20.00) with the new markup (20 %) = $24.00, not the $12.00 phone A counted');
+\echo 'T323 two phones ok'
+
+-- T324: an old phone sends the cost on the item row (t30): no 27000, the price counted; the cost cleared — not counted any
+-- more, the price stays
+update public.catalog_items set unit_cost_cents = 3000, vendor_tax_bps = 0, markup_bps = 1000, unit_price_cents = 999
+ where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 3300,
+  'T324 an old phone''s cost on the item: moved and counted in the same command ($30.00 + 10 % = $33.00), not its $9.99');
+update public.catalog_item_costs set unit_cost_cents = null where item_id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 3300 and not (select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1'),
+  'T324 the cost cleared: the price stays $33.00, no longer counted from the cost');
+\echo 'T324 the old phone''s path ok'
+
+-- T325: the new phone writes both (the item and catalog_item_costs): counted, one history row; a price import's source
+update public.catalog_item_costs set unit_cost_cents = 4000 where item_id = '53220000-0000-4000-8000-0000000000c1';
+update public.catalog_items set unit_cost_cents = 4000, unit_price_cents = 4400 where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 4400 and (select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1')
+          and (select count(*) = 1 from public.catalog_price_history where item_id = '53220000-0000-4000-8000-0000000000c1' and unit_price_cents = 4400),
+  'T325 the new phone''s two writes: $44.00 once in the price history');
+do $t$ begin
+  perform set_config('app.cost_source', 'import_file', true);
+  update public.catalog_item_costs set unit_cost_cents = 5000 where item_id = '53220000-0000-4000-8000-0000000000c1';
+end $t$;
+select tst.ok((select source = 'import_file' and unit_price_cents = 5500 and prev_unit_price_cents = 4400 from public.catalog_price_history
+                where item_id = '53220000-0000-4000-8000-0000000000c1' and unit_price_cents = 5500),
+  'T325 a direct cost write (a price import): the price counted and logged with its source');
+\echo 'T325 the new phone''s paths ok'
+
+-- T326: price_from_cost is the server's — a client's value does not hold; a material that stops being one — false
+update public.catalog_items set price_from_cost = false where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1'), 'T326 a client cannot clear price_from_cost');
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, price_from_cost) values
+  ('53220000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', 'material', 'T326 no cost', 'ea', 700, true);
+select tst.ok(not (select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c2') and (select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c2') = 700,
+  'T326 …nor set it: a material without a cost keeps its hand price, not counted');
+update public.catalog_items set kind = 'labor' where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok(not (select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') and (select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 5500,
+  'T326 a material that became labor: not counted any more, its price as it was');
+update public.catalog_items set kind = 'material' where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') and (select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 5500,
+  'T326 …and back a material: counted again');
+\echo 'T326 price_from_cost ok'
+
+-- T327: a rename keeps an off-formula price — from the new phone and from an old one (the same three cost numbers)
+:as_super
+select pg_temp.drift322('53220000-0000-4000-8000-0000000000c1', 6000);
+:as_office_a
+update public.catalog_items set name = 'T327 coil renamed' where id = '53220000-0000-4000-8000-0000000000c1';
+update public.catalog_items set name = 'T327 coil again', unit_cost_cents = 5000, vendor_tax_bps = 0, markup_bps = 1000, unit_price_cents = 6000
+ where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 6000,
+  'T327 a rename (new phone, old phone with the same cost) keeps the off-formula $60.00');
+:as_super
+select tst.ok((select count(*) = 1 and min(formula_cents) = 5500 from app.catalog_price_drift('ca000000-0000-0000-0000-000000000000')
+                where item_id = '53220000-0000-4000-8000-0000000000c1'),
+  'T327 the list of off-formula prices (for 55-1) has it');
+select tst.ok(not has_function_privilege('authenticated', 'app.catalog_price_drift(uuid)', 'execute'),
+  'T327 the list is not callable by the app yet (55-1 adds a wrapper)');
+:as_office_a
+\echo 'T327 a rename ok'
+
+-- T328: sales without view_costs (the audit's conditions 17.11): never gets the formula back, nor our costs; a replaced price
+-- is noted for the office; a stale echo is not; an old office build's hand price is
+:as_sales_a
+update public.catalog_items set unit_price_cents = 6500 where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 6000,
+  'T328 sales sent $65.00 for a counted material: the price stays $60.00 — not the formula $55.00');
+update public.catalog_items set kind = 'labor' where id = '53220000-0000-4000-8000-0000000000c1';
+update public.catalog_items set kind = 'material' where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 6000,
+  'T328 sales turning it into labor and back gets no formula either');
+select tst.ok((select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1'),
+  'T328 sales sees that the price is counted (no number in it)');
+-- the same price saved again is one note; a null price is refused by the item itself (not by the note)
+update public.catalog_items set unit_price_cents = 6500 where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.fails($q$update public.catalog_items set unit_price_cents = null where id = '53220000-0000-4000-8000-0000000000c1'$q$,
+  'T328 a null price is refused');
+select tst.ok(tst.cnt($q$select 1 from public.catalog_item_costs where item_id = '53220000-0000-4000-8000-0000000000c1'$q$) = 0
+          and tst.cnt($q$select 1 from public.catalog_price_history where item_id = '53220000-0000-4000-8000-0000000000c1'$q$) = 0
+          and tst.cnt($q$select 1 from public.catalog_price_recalc where item_id = '53220000-0000-4000-8000-0000000000c1'$q$) = 0
+          and (select unit_cost_cents is null and vendor_tax_bps is null and markup_bps is null from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1'),
+  'T328 sales reads no cost, tax, markup, price history or recalc note');
+select tst.fails($q$select * from app.catalog_price_drift('ca000000-0000-0000-0000-000000000000')$q$, 'T328 sales gets no list of off-formula prices');
+select tst.fails($q$insert into public.catalog_price_recalc (company_id, item_id, sent_price_cents, server_price_cents) values ('ca000000-0000-0000-0000-000000000000', '53220000-0000-4000-8000-0000000000c1', 1, 1)$q$,
+  'T328 nobody writes a recalc note by hand');
+:as_office_a
+select tst.ok((select count(*) = 1 and bool_and(sent_price_cents = 6500 and server_price_cents = 6000)
+                 from public.catalog_price_recalc where item_id = '53220000-0000-4000-8000-0000000000c1' and by = 'a0000000-0000-0000-0000-000000000005'),
+  'T328 the office reads the note: sales sent $65.00, $60.00 stayed');
+-- the office's own replaced prices are noted too (check 2, S1): T323's $12.00 from the old cost, T324's old phone's $9.99
+select tst.ok((select array_agg(sent_price_cents || '>' || server_price_cents order by at, id) = array['1200>2400', '999>3300']
+                 from public.catalog_price_recalc where item_id = '53220000-0000-4000-8000-0000000000c1' and by = 'a0000000-0000-0000-0000-000000000002'),
+  'T328 a price the server replaced for the office is noted too (T323, T324)');
+-- the office changes the cost ($60.00 → $66.00); an old phone of sales then sends its cached row (the stale $60.00): no note
+update public.catalog_item_costs set unit_cost_cents = 6000 where item_id = '53220000-0000-4000-8000-0000000000c1';
+:as_sales_a
+update public.catalog_items set name = 'T328 coil', unit_price_cents = 6000 where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 6600
+          and tst.cnt($q$select 1 from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1' and name = 'T328 coil'$q$) = 1,
+  'T328 the cost changed: $66.00 for everyone; the rename of an old phone of sales goes through');
+:as_office_a
+select tst.ok((select count(*) = 1 from public.catalog_price_recalc where item_id = '53220000-0000-4000-8000-0000000000c1' and by = 'a0000000-0000-0000-0000-000000000005'),
+  'T328 a stale echo ($60.00, the price before the last change) is no note');
+-- an old office build (no costs on it) types a price by hand: the formula stays, and the office is told
+update public.catalog_items set unit_price_cents = 7000 where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 6600
+          and (select count(*) = 1 from public.catalog_price_recalc
+                where item_id = '53220000-0000-4000-8000-0000000000c1' and sent_price_cents = 7000 and server_price_cents = 6600),
+  'T328 an old office build''s hand price: $66.00 from the cost stays, noted');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_recalc$q$) = 0, 'T328 another company reads no recalc note');
+-- the night job keeps 90 days of notes (old builds die out); nobody but the server runs it
+:as_super
+insert into public.catalog_price_recalc (company_id, item_id, sent_price_cents, server_price_cents, at) values
+  ('ca000000-0000-0000-0000-000000000000', '53220000-0000-4000-8000-0000000000c1', 1, 2, now() - interval '91 days');
+select tst.ok(app.purge_price_recalc() = 1
+          and (select count(*) >= 3 from public.catalog_price_recalc where item_id = '53220000-0000-4000-8000-0000000000c1'),
+  'T328 the night job removes a note older than 90 days and keeps the newer ones');
+select tst.ok(not has_function_privilege('authenticated', 'app.purge_price_recalc()', 'execute'), 'T328 the app does not run the night job');
+\echo 'T328 sales without our costs ok'
+
+-- T329: labor, service and a kit are not counted (spec 55 brings their modes)
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('53220000-0000-4000-8000-0000000000c3', 'ca000000-0000-0000-0000-000000000000', 'labor', 'T329 install', 'hr', 9000),
+  ('53220000-0000-4000-8000-0000000000c4', 'ca000000-0000-0000-0000-000000000000', 'service', 'T329 haul', 'ea', 5000);
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, markup_bps) values
+  ('53220000-0000-4000-8000-0000000000c3', 'ca000000-0000-0000-0000-000000000000', 4500, 500),
+  ('53220000-0000-4000-8000-0000000000c4', 'ca000000-0000-0000-0000-000000000000', 2000, 500);
+update public.catalog_item_costs set unit_cost_cents = 4600 where item_id in ('53220000-0000-4000-8000-0000000000c3', '53220000-0000-4000-8000-0000000000c4');
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, components) values
+  ('53220000-0000-4000-8000-0000000000c5', 'ca000000-0000-0000-0000-000000000000', 'kit', 'T329 kit', 'ea', 0,
+   '[{"item_id":"53220000-0000-4000-8000-0000000000c1","qty":"2"}]');
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c3') = 9000 and (select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c4') = 5000
+          and (select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c5') = 0
+          and not (select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c3') and not (select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c4')
+          and not (select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c5'),
+  'T329 labor, service and a kit keep their own price, not counted');
+\echo 'T329 only materials ok'
+
+-- T330: in the Trash — not counted; back from the Trash — counted
+:as_super
+update public.catalog_items set deleted_at = now() where id = '53220000-0000-4000-8000-0000000000c1';
+:as_office_a
+update public.catalog_item_costs set unit_cost_cents = 7000 where item_id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents = 6600 from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1'),
+  'T330 an item in the Trash is not counted');
+:as_super
+update public.catalog_items set deleted_at = null where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 7700, 'T330 back from the Trash: counted ($70.00 + 10 % = $77.00)');
+\echo 'T330 the Trash ok'
+
+-- T331: the flags do not leak and cannot be forged; the cost's bound
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('53220000-0000-4000-8000-0000000000c6', 'ca000000-0000-0000-0000-000000000000', 'material', 'T331 a', 'ea', 0),
+  ('53220000-0000-4000-8000-0000000000c7', 'ca000000-0000-0000-0000-000000000000', 'material', 'T331 b', 'ea', 0);
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, markup_bps) values
+  ('53220000-0000-4000-8000-0000000000c6', 'ca000000-0000-0000-0000-000000000000', 100, 0),
+  ('53220000-0000-4000-8000-0000000000c7', 'ca000000-0000-0000-0000-000000000000', 200, 0);
+-- two rows in one command (the old way, through t30)
+update public.catalog_items set markup_bps = 5000 where id in ('53220000-0000-4000-8000-0000000000c6', '53220000-0000-4000-8000-0000000000c7');
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c6') = 150 and (select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c7') = 300,
+  'T331 two rows in one command: both counted');
+-- two commands in one transaction
+do $t$ begin
+  update public.catalog_items set markup_bps = 10000 where id = '53220000-0000-4000-8000-0000000000c6';
+  update public.catalog_items set markup_bps = 10000 where id = '53220000-0000-4000-8000-0000000000c7';
+end $t$;
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c6') = 200 and (select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c7') = 400,
+  'T331 two commands in one transaction: both counted');
+-- the «moving» flag set by hand at the top level skips nothing
+do $t$ begin
+  perform set_config('app.item_costs_moving', '53220000-0000-4000-8000-0000000000c6', true);
+  update public.catalog_item_costs set unit_cost_cents = 300 where item_id = '53220000-0000-4000-8000-0000000000c6';
+end $t$;
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c6') = 600, 'T331 a forged «moving» flag does not skip the count');
+-- the «price due» flag set by hand counts nothing: an off-formula price stays on a rename — for sales (no formula back,
+-- check 2 Б1) and for the office
+:as_super
+select pg_temp.drift322('53220000-0000-4000-8000-0000000000c6', 999);
+select pg_temp.drift322('53220000-0000-4000-8000-0000000000c7', 888);
+:as_sales_a
+do $t$ begin
+  perform set_config('app.item_price_due', '53220000-0000-4000-8000-0000000000c6', true);
+  update public.catalog_items set name = 'T331 a renamed' where id = '53220000-0000-4000-8000-0000000000c6';
+end $t$;
+:as_office_a
+do $t$ begin
+  perform set_config('app.item_price_due', '53220000-0000-4000-8000-0000000000c7', true);
+  update public.catalog_items set name = 'T331 b renamed' where id = '53220000-0000-4000-8000-0000000000c7';
+end $t$;
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c6') = 999
+          and (select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c7') = 888,
+  'T331 a forged «price due» flag counts nothing: sales gets no formula, the office''s rename keeps the price');
+:as_office_a
+select tst.fails($q$update public.catalog_item_costs set unit_cost_cents = 100000001 where item_id = '53220000-0000-4000-8000-0000000000c6'$q$,
+  'T331 a cost above $1 000 000 a unit is refused');
+:as_super
+select tst.ok((select condeferrable = false and convalidated from pg_constraint where conname = 'catalog_item_costs_cost_max'),
+  'T331 the bound is validated');
+\echo 'T331 the flags ok'
+
+
+-- ---------------------------------------------------------------- T350: sales does not turn a counted material into another kind (#1965)
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('53500000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T350 coil', 'ft', 0);
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
+  ('53500000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 1000, 0, 1000);
+-- an old build of sales: «service» with its own price in one save
+:as_sales_a
+update public.catalog_items set kind = 'service', unit_price_cents = 500 where id = '53500000-0000-4000-8000-0000000000c1';
+select tst.ok((select kind = 'material' and unit_price_cents = 1100 and price_from_cost from public.catalog_items where id = '53500000-0000-4000-8000-0000000000c1'),
+  'T350 sales cannot make a counted material a service: still a material, $11.00 from the cost, not its $5.00');
+:as_office_a
+select tst.ok((select count(*) = 1 and bool_and(sent_price_cents = 500 and server_price_cents = 1100)
+                 from public.catalog_price_recalc where item_id = '53500000-0000-4000-8000-0000000000c1'),
+  'T350 the office is told: sales sent $5.00, $11.00 stayed');
+:as_sales_a
+-- an old phone's whole row (upsert) and a kind-only change with a rename: the kind stays, the name is saved
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('53500000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'labor', 'T350 coil', 'ft', 500)
+  on conflict (id) do update set kind = excluded.kind, unit_price_cents = excluded.unit_price_cents;
+update public.catalog_items set kind = 'kit', name = 'T350 coil renamed' where id = '53500000-0000-4000-8000-0000000000c1';
+select tst.ok((select kind = 'material' and unit_price_cents = 1100 and name = 'T350 coil renamed' from public.catalog_items where id = '53500000-0000-4000-8000-0000000000c1'),
+  'T350 an upsert of the whole row and a kind-only change keep the kind; the rename is saved');
+-- in the Trash with the flag not re-counted (a cost written meanwhile): still a material for sales
+:as_super
+update public.catalog_items set deleted_at = now() where id = '53500000-0000-4000-8000-0000000000c1';
+do $t$ begin
+  set local session_replication_role = replica;
+  update public.catalog_items set price_from_cost = false where id = '53500000-0000-4000-8000-0000000000c1';
+  set local session_replication_role = origin;
+end $t$;
+:as_sales_a
+update public.catalog_items set kind = 'service' where id = '53500000-0000-4000-8000-0000000000c1';
+:as_super
+select tst.ok((select kind = 'material' from public.catalog_items where id = '53500000-0000-4000-8000-0000000000c1'),
+  'T350 the lock is by the cost itself, not the flag (in the Trash too)');
+update public.catalog_items set deleted_at = null where id = '53500000-0000-4000-8000-0000000000c1';
+-- sales WITH view_costs (matrix 04 §1) changes the kind like the office
+update public.memberships set permissions_override = coalesce(permissions_override, '{}'::jsonb) || '{"view_costs": true}'
+ where user_id = 'a0000000-0000-0000-0000-000000000005';
+:as_sales_a
+update public.catalog_items set kind = 'service' where id = '53500000-0000-4000-8000-0000000000c1';
+select tst.ok((select kind = 'service' from public.catalog_items where id = '53500000-0000-4000-8000-0000000000c1'),
+  'T350 sales with view_costs changes the kind');
+:as_super
+update public.memberships set permissions_override = permissions_override - 'view_costs'
+ where user_id = 'a0000000-0000-0000-0000-000000000005';
+update public.catalog_items set kind = 'material' where id = '53500000-0000-4000-8000-0000000000c1';
+:as_office_a
+-- who sees our costs changes the kind as before; a material without a cost — sales too
+update public.catalog_items set kind = 'labor' where id = '53500000-0000-4000-8000-0000000000c1';
+select tst.ok((select kind = 'labor' and not price_from_cost from public.catalog_items where id = '53500000-0000-4000-8000-0000000000c1'),
+  'T350 the office changes the kind as before');
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('53500000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', 'material', 'T350 hand', 'ea', 700);
+:as_sales_a
+update public.catalog_items set kind = 'service', unit_price_cents = 800 where id = '53500000-0000-4000-8000-0000000000c2';
+select tst.ok((select kind = 'service' and unit_price_cents = 800 from public.catalog_items where id = '53500000-0000-4000-8000-0000000000c2'),
+  'T350 a material without a cost: sales changes its kind and price as before');
+\echo 'T350 the kind of a counted material ok'
+
+-- ---------------------------------------------------------------- T363 (spec 50, PR 50-6): the schedule of the erasure jobs
+\echo 'T363 the erasure schedule'
+:as_super
+-- rights: for service_role only (rule 18), nobody from the API
+select tst.ok(has_function_privilege('service_role', 'app.erase_retry()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.erase_retry()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.erase_kick_ok(text, text)', 'EXECUTE')
+              and (select bool_and(prosecdef and proconfig @> array['search_path=""']) from pg_proc where oid in ('app.erase_cron()'::regprocedure, 'app.erase_stuck()'::regprocedure,
+                   'app.erase_purge_done()'::regprocedure, 'app.erase_kick()'::regprocedure, 'app.erase_retry()'::regprocedure)),
+  'T363 retry is for service_role; the five job functions are security definer with an empty search_path');
+-- the address and the key: a project host and a JWT pass; anything else does not
+select tst.ok(app.erase_kick_ok('https://abcdefghij0123456789.supabase.co/functions/v1/erase-storage', 'aaa.bbb.ccc')
+              and not app.erase_kick_ok('https://abcdefghij0123456789.supabase.co.evil.test/functions/v1/erase-storage', 'aaa.bbb.ccc')
+              and not app.erase_kick_ok('https://evil.test/functions/v1/erase-storage', 'aaa.bbb.ccc')
+              and not app.erase_kick_ok('http://abcdefghij0123456789.supabase.co/functions/v1/erase-storage', 'aaa.bbb.ccc')
+              and not app.erase_kick_ok('https://abcdefghij0123456789.supabase.co/functions/v1/send-push', 'aaa.bbb.ccc')
+              and not app.erase_kick_ok('https://abcdefghij0123456789.supabase.co/functions/v1/erase-storage', 'sb_secret_abcdefghijklmnop')
+              and not app.erase_kick_ok(null, 'aaa.bbb.ccc') and not app.erase_kick_ok('https://abcdefghij0123456789.supabase.co/functions/v1/erase-storage', null),
+  'T363 erase_kick_ok: a project host and a JWT pass, a foreign host, http, another function, a non-JWT key and nulls do not');
+select tst.ok(not has_function_privilege('anon', 'app.erase_cron()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.erase_cron()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.erase_kick()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.erase_stuck()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.erase_purge_done()', 'EXECUTE')
+              and has_function_privilege('service_role', 'app.erase_cron()', 'EXECUTE') and has_function_privilege('service_role', 'app.erase_stuck()', 'EXECUTE')
+              and has_function_privilege('service_role', 'app.erase_purge_done()', 'EXECUTE') and has_function_privilege('service_role', 'app.erase_kick()', 'EXECUTE'),
+  'T363 the erasure job functions are for service_role only');
+-- no Vault and no pg_net here: the kick says false and breaks nothing
+select tst.ok(app.erase_kick() = false, 'T363 no Vault or pg_net: the kick is false, silently');
+-- the alarm counts only the rows that gave up (5 tries, not done), in both queues
+delete from app.erase_queue where user_id in ('36000000-0000-4000-8000-0000000000a1', '36000000-0000-4000-8000-0000000000a2', '36000000-0000-4000-8000-0000000000a3');
+delete from app.storage_erase_queue where path like '36000000-0000-4000-8000-000000000001/%';
+select app.erase_stuck() as t360_before \gset
+insert into app.erase_queue (user_id, tries) values ('36000000-0000-4000-8000-0000000000a1', 5);                        -- gave up
+insert into app.erase_queue (user_id, tries) values ('36000000-0000-4000-8000-0000000000a2', 4);                        -- still tries
+insert into app.erase_queue (user_id, tries, done_at) values ('36000000-0000-4000-8000-0000000000a3', 5, now());        -- done
+insert into app.storage_erase_queue (bucket, path, tries) values ('files', '36000000-0000-4000-8000-000000000001/gave-up.jpg', 5);
+insert into app.storage_erase_queue (bucket, path, tries) values ('files', '36000000-0000-4000-8000-000000000001/waits.jpg', 2);
+select tst.ok(app.erase_stuck() = :t360_before + 2, 'T363 the alarm counts the person row and the object that gave up, not the others');
+-- a row that waits for more than 2 days counts too (no Vault, a refused key, a function not deployed)
+insert into app.erase_queue (user_id, tries, at) values ('36000000-0000-4000-8000-0000000000a4', 0, now() - interval '3 days');
+select tst.ok(app.erase_stuck() = :t360_before + 3, 'T363 a row that waits for more than 2 days is counted');
+delete from app.erase_queue where user_id = '36000000-0000-4000-8000-0000000000a4';
+-- retry: the rows that gave up get five more tries, the others are not touched
+select app.erase_retry() >= 2 as t360_retried \gset
+select tst.ok(:'t360_retried'::boolean and not exists (select 1 from app.erase_queue where user_id = '36000000-0000-4000-8000-0000000000a1' and tries >= 5)
+              and (select tries from app.erase_queue where user_id = '36000000-0000-4000-8000-0000000000a2') = 4
+              and (select tries from app.storage_erase_queue where path = '36000000-0000-4000-8000-000000000001/gave-up.jpg') = 0,
+  'T363 retry gives the rows that gave up five more tries and leaves the others');
+update app.erase_queue set tries = 5 where user_id = '36000000-0000-4000-8000-0000000000a1';
+update app.storage_erase_queue set tries = 5 where path = '36000000-0000-4000-8000-000000000001/gave-up.jpg';
+-- cleanup: done for more than 7 days leaves, done yesterday and rows not done stay
+insert into app.erase_queue (user_id, tries, done_at) values ('36000000-0000-4000-8000-0000000000b1', 0, now() - interval '8 days');
+insert into app.erase_queue (user_id, tries, done_at) values ('36000000-0000-4000-8000-0000000000b2', 0, now() - interval '1 day');
+insert into app.storage_erase_queue (bucket, path, tries, done_at) values ('files', '36000000-0000-4000-8000-000000000001/old.jpg', 0, now() - interval '8 days');
+insert into app.storage_erase_queue (bucket, path, tries, done_at) values ('files', '36000000-0000-4000-8000-000000000001/new.jpg', 0, now() - interval '1 day');
+select count(*) as t360_done_old from app.erase_queue where done_at < now() - interval '7 days' \gset
+select count(*) as t360_done_old2 from app.storage_erase_queue where done_at < now() - interval '7 days' \gset
+select tst.ok(app.erase_purge_done() = :t360_done_old + :t360_done_old2, 'T363 the cleanup removes exactly the rows done for more than 7 days');
+select tst.ok(not exists (select 1 from app.erase_queue where user_id = '36000000-0000-4000-8000-0000000000b1')
+              and exists (select 1 from app.erase_queue where user_id = '36000000-0000-4000-8000-0000000000b2')
+              and exists (select 1 from app.erase_queue where user_id = '36000000-0000-4000-8000-0000000000a1')
+              and not exists (select 1 from app.storage_erase_queue where path = '36000000-0000-4000-8000-000000000001/old.jpg')
+              and exists (select 1 from app.storage_erase_queue where path = '36000000-0000-4000-8000-000000000001/new.jpg')
+              and exists (select 1 from app.storage_erase_queue where path = '36000000-0000-4000-8000-000000000001/gave-up.jpg'),
+  'T363 done for more than 7 days is gone; yesterday, waiting and given-up rows stay');
+-- the one call: runs the job, returns the counts, never throws
+select app.erase_cron() as t360_cron \gset
+select tst.ok((:'t360_cron'::jsonb ->> 'kick') = 'false' and (:'t360_cron'::jsonb ->> 'stuck')::int >= 2 and (:'t360_cron'::jsonb) ? 'purged',
+  'T363 erase_cron returns its counts and does not break without Vault');
+-- the schedule: where pg_cron exists, two jobs with these names, one each (the migration repeated makes no second one)
+do $$
+declare v_a int; v_b int;
+begin
+  if to_regnamespace('cron') is not null then
+    execute $q$select count(*) from cron.job where jobname = 'erase-people'$q$ into v_a;
+    execute $q$select count(*) from cron.job where jobname = 'erase-storage'$q$ into v_b;
+    if v_a <> 1 or v_b <> 1 then raise exception 'FAILED: T363 the two erasure jobs exist once each where pg_cron exists'; end if;
+  end if;
+end $$;
+-- from the API: nobody
+set role authenticated;
+select tst.fails($q$select app.erase_cron()$q$, 'T363 authenticated cannot run the erasure job');
+select tst.fails($q$select app.erase_stuck()$q$, 'T363 authenticated cannot read the alarm');
+select tst.fails($q$select app.erase_retry()$q$, 'T363 authenticated cannot give rows more tries');
+reset role;
+delete from app.erase_queue where user_id::text like '36000000-%';
+delete from app.storage_erase_queue where path like '36000000-0000-4000-8000-000000000001/%';
+\echo 'T363 the erasure schedule ok'
+
+-- ================================================================ T351–T362: one price for a «price group» (#1913 PR1, spec 33-gutters-price-key §4.6)
+-- A group: items of one company with the same attributes.priceGroup (the module writes it; the core does not know why).
+-- Here: three hand-priced items of one group (white, brown, black), one counted material group, items outside it.
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('53510000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'service', 'T351 haul white', 'ea', 800, '{"priceGroup":"t351:hand"}'),
+  ('53510000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'service', 'T351 haul brown', 'ea', 800, '{"priceGroup":"t351:hand"}'),
+  ('53510000-0000-4000-8000-0000000000a9', 'ca000000-0000-0000-0000-000000000000', 'service', 'T351 no group', 'ea', 800, '{}'),
+  ('53510000-0000-4000-8000-0000000000a8', 'ca000000-0000-0000-0000-000000000000', 'service', 'T351 other group', 'ea', 800, '{"priceGroup":"t351:other"}');
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('53510000-0000-4000-8000-0000000000a7', 'ca000000-0000-0000-0000-000000000000', 'service', 'T351 deleted', 'ea', 800, '{"priceGroup":"t351:hand"}');
+:as_super
+update public.catalog_items set deleted_at = now() where id = '53510000-0000-4000-8000-0000000000a7';
+:as_owner_b
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('53510000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'service', 'T351 rival', 'ea', 800, '{"priceGroup":"t351:hand"}');
+create or replace function pg_temp.p351(p_id uuid) returns bigint language sql as $f$ select unit_price_cents::bigint from public.catalog_items where id = p_id $f$;
+grant execute on function pg_temp.p351(uuid) to public;
+:as_super
+grant execute on function pg_temp.p351(uuid) to public;
+
+-- T351: the function writes the price into every item of the group of this company; others are not touched
+:as_office_a
+select tst.ok(public.catalog_set_group_price('53510000-0000-4000-8000-0000000000a1', 1000, false, null, null, null, 800) = 2,
+  'T351 the group''s price written: two live items of the group');
+:as_super
+select tst.ok((select array_agg(unit_price_cents order by name) from public.catalog_items where id in
+                 ('53510000-0000-4000-8000-0000000000a1','53510000-0000-4000-8000-0000000000a2','53510000-0000-4000-8000-0000000000a9',
+                  '53510000-0000-4000-8000-0000000000a8','53510000-0000-4000-8000-0000000000a7','53510000-0000-4000-8000-0000000000b1'))
+              = array[800, 1000, 1000, 800, 800, 800]::bigint[],
+  'T351 the group $10.00; no group, another group, deleted, another company with the same group — untouched');
+select tst.ok((select count(*) = 2 and bool_and(source = 'module') from public.catalog_price_history
+                where item_id in ('53510000-0000-4000-8000-0000000000a1','53510000-0000-4000-8000-0000000000a2') and unit_price_cents = 1000),
+  'T351 one history row per item, source «module»');
+-- what the phone saw is gone: 40001, nothing written
+:as_office_a
+select tst.fails($q$select public.catalog_set_group_price('53510000-0000-4000-8000-0000000000a2', 1200, false, null, null, null, 800)$q$,
+  'T351 an old expected price (someone changed it first) is refused');
+select tst.ok(pg_temp.p351('53510000-0000-4000-8000-0000000000a2') = 1000, 'T351 …and nothing is written');
+do $t$ begin
+  perform public.catalog_set_group_price('53510000-0000-4000-8000-0000000000a2', 1200, false, null, null, null, 800);
+  raise exception 'no conflict';
+exception when sqlstate '40001' then
+  if sqlerrm not like '%changed meanwhile%' then raise; end if;
+end $t$;
+-- sales: the hand price yes; a tech: no
+:as_sales_a
+select tst.ok(public.catalog_set_group_price('53510000-0000-4000-8000-0000000000a1', 1100, false, 1, 1, 1, 1000) = 2,
+  'T351 sales writes the hand price of a group (no cost is written for it)');
+select tst.ok(tst.cnt($q$select 1 from public.catalog_item_costs where item_id in ('53510000-0000-4000-8000-0000000000a1','53510000-0000-4000-8000-0000000000a2')$q$) = 0,
+  'T351 …and no cost row: sales does not write our costs');
+:as_tech_a
+select tst.fails($q$select public.catalog_set_group_price('53510000-0000-4000-8000-0000000000a1', 1, false, null, null, null, 1100)$q$,
+  'T351 a tech cannot set a group''s price');
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.catalog_set_group_price(uuid,bigint,boolean,bigint,integer,integer,bigint,bigint,integer,integer)', 'execute')
+          and not has_function_privilege('authenticated', 'app.spread_group_price(uuid,text,uuid,boolean,boolean)', 'execute')
+          and not has_function_privilege('authenticated', 'app.group_peer(uuid,text,uuid)', 'execute'),
+  'T351 rule 18: the app runs only catalog_set_group_price; anon nothing');
+-- every role that writes catalog_items runs the index's function (the cloud e2e writes as service_role — #1978 CI)
+:as_super
+set role service_role;
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('53510000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', 'service', 'T351 by the server', 'ea', 1, '{"priceGroup":"t351:server"}');
+update public.catalog_items set unit_price_cents = 2 where id = '53510000-0000-4000-8000-0000000000f1';
+reset role;
+select tst.ok(pg_temp.p351('53510000-0000-4000-8000-0000000000f1') = 2
+          and (select bool_and(has_function_privilege(r, 'app.price_group(jsonb)', 'execute')) from unnest(array['authenticated', 'service_role']) r),
+  'T351 the server''s role writes catalog_items too (the index''s function is granted to every writer)');
+\echo 'T351 the group''s price function ok'
+
+-- T352: a group counted from its cost (53-0б): who sees costs writes the cost, each material counts the same price;
+-- sales gets a refusal, never a formula back
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('53520000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T352 gutter white', 'ft', 0, '{"priceGroup":"t352:mat"}');
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
+  ('53520000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 400, 0, 10000);
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('53520000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', 'material', 'T352 gutter brown', 'ft', 1, '{"priceGroup":"t352:mat"}');
+select tst.ok(pg_temp.p351('53520000-0000-4000-8000-0000000000c2') = 800
+          and (select unit_cost_cents = 400 and markup_bps = 10000 from public.catalog_item_costs where item_id = '53520000-0000-4000-8000-0000000000c2'),
+  'T352 a new item of a counted group: the group''s price ($8.00) and the group''s cost');
+select tst.ok(public.catalog_set_group_price('53520000-0000-4000-8000-0000000000c2', 1000, false, 500, 0, 10000, 800, 400, 0, 10000) >= 2,
+  'T352 the office writes the group''s cost $5.00');
+select tst.ok(pg_temp.p351('53520000-0000-4000-8000-0000000000c1') = 1000 and pg_temp.p351('53520000-0000-4000-8000-0000000000c2') = 1000
+          and (select bool_and(unit_cost_cents = 500) from public.catalog_item_costs where item_id in ('53520000-0000-4000-8000-0000000000c1','53520000-0000-4000-8000-0000000000c2')),
+  'T352 both items: the cost $5.00, the price from it $10.00');
+:as_sales_a
+select tst.fails($q$select public.catalog_set_group_price('53520000-0000-4000-8000-0000000000c1', 2000, false, null, null, null, 1000)$q$,
+  'T352 sales cannot set the price of a group counted from its cost (42501)');
+:as_super
+select tst.ok(pg_temp.p351('53520000-0000-4000-8000-0000000000c1') = 1000, 'T352 …the price stays');
+\echo 'T352 a counted group ok'
+
+-- T353: the triggers — an old build changes one item's price (whole row): the group follows; the same price (a rename)
+-- changes nothing
+:as_office_a
+update public.catalog_items set name = 'T351 haul white', unit_price_cents = 1100 where id = '53510000-0000-4000-8000-0000000000a1';
+select tst.ok((select count(*) from public.catalog_price_history where item_id = '53510000-0000-4000-8000-0000000000a2') = 2,
+  'T353 a rename with the same price spreads nothing (no new history row)');
+update public.catalog_items set unit_price_cents = 1300 where id = '53510000-0000-4000-8000-0000000000a1';
+select tst.ok(pg_temp.p351('53510000-0000-4000-8000-0000000000a2') = 1300 and pg_temp.p351('53510000-0000-4000-8000-0000000000a9') = 800,
+  'T353 an old build''s price of one item ($13.00) goes into the group, not outside it');
+select tst.ok((select count(*) = 1 and bool_and(source = 'module') from public.catalog_price_history where item_id = '53510000-0000-4000-8000-0000000000a2' and unit_price_cents = 1300)
+          and (select bool_and(source = 'manual') from public.catalog_price_history where item_id = '53510000-0000-4000-8000-0000000000a1' and unit_price_cents = 1300),
+  'T353 one spread, one history row (no loop), seen as a spread («module»); the writer''s own row stays «manual»');
+\echo 'T353 the old build''s price ok'
+
+-- T354: three cost chains reach the group — (1) an old build sends the cost on the item (t30), (2) an insert with a cost
+-- (t95 → t30) joins and takes the group's cost, (3) a direct write of catalog_item_costs
+update public.catalog_items set unit_cost_cents = 600 where id = '53520000-0000-4000-8000-0000000000c1';
+select tst.ok((select bool_and(unit_cost_cents = 600) from public.catalog_item_costs where item_id in ('53520000-0000-4000-8000-0000000000c1','53520000-0000-4000-8000-0000000000c2'))
+          and pg_temp.p351('53520000-0000-4000-8000-0000000000c2') = 1200 and pg_temp.p351('53520000-0000-4000-8000-0000000000c1') = 1200,
+  'T354 (1) the cost an old build sends on the item: the group $6.00 / $12.00');
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, unit_cost_cents, vendor_tax_bps, markup_bps, attributes) values
+  ('53520000-0000-4000-8000-0000000000c3', 'ca000000-0000-0000-0000-000000000000', 'material', 'T352 gutter black', 'ft', 1, 99, 0, 0, '{"priceGroup":"t352:mat"}');
+select tst.ok((select bool_and(unit_cost_cents = 600) from public.catalog_item_costs where item_id in ('53520000-0000-4000-8000-0000000000c1','53520000-0000-4000-8000-0000000000c2','53520000-0000-4000-8000-0000000000c3'))
+          and pg_temp.p351('53520000-0000-4000-8000-0000000000c3') = 1200,
+  'T354 (2) an insert with its own cost joins: the group''s cost and price, the group is not overwritten');
+update public.catalog_item_costs set unit_cost_cents = 700 where item_id = '53520000-0000-4000-8000-0000000000c3';
+select tst.ok((select bool_and(unit_cost_cents = 700) from public.catalog_item_costs where item_id in ('53520000-0000-4000-8000-0000000000c1','53520000-0000-4000-8000-0000000000c2','53520000-0000-4000-8000-0000000000c3'))
+          and pg_temp.p351('53520000-0000-4000-8000-0000000000c1') = 1400,
+  'T354 (3) a direct cost write: the group $7.00 / $14.00');
+\echo 'T354 the cost chains ok'
+
+-- T355: an insert by sales (an old phone, «Создать позиции сразу») and entering a group: the group's price and cost
+:as_sales_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price, attributes) values
+  ('53520000-0000-4000-8000-0000000000c4', 'ca000000-0000-0000-0000-000000000000', 'material', 'T352 gutter red', 'ft', 1, true, '{"priceGroup":"t352:mat"}');
+:as_super
+select tst.ok(pg_temp.p351('53520000-0000-4000-8000-0000000000c4') = 1400
+          and not (select is_placeholder_price from public.catalog_items where id = '53520000-0000-4000-8000-0000000000c4')
+          and (select unit_cost_cents = 700 from public.catalog_item_costs where item_id = '53520000-0000-4000-8000-0000000000c4'),
+  'T355 sales makes a new item of the group: the group''s price, placeholder and cost row');
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('53550000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', 'service', 'T355 haul black', 'ea', 1, '{}');
+update public.catalog_items set attributes = '{"priceGroup":"t351:hand"}' where id = '53550000-0000-4000-8000-0000000000a3';
+select tst.ok(pg_temp.p351('53550000-0000-4000-8000-0000000000a3') = 1300
+          and pg_temp.p351('53510000-0000-4000-8000-0000000000a1') = 1300,
+  'T355 entering a group: the item takes the group''s price; the group keeps its own');
+\echo 'T355 joining a group ok'
+
+-- T356: back from the Trash — the group's price
+:as_super
+update public.catalog_items set deleted_at = null where id = '53510000-0000-4000-8000-0000000000a7';
+select tst.ok(pg_temp.p351('53510000-0000-4000-8000-0000000000a7') = 1300, 'T356 back from the Trash: the group''s price ($13.00, not its $8.00)');
+\echo 'T356 the Trash ok'
+
+-- T357: no JWT (a migration, a server job): the spread goes
+update public.catalog_items set unit_price_cents = 1500 where id = '53510000-0000-4000-8000-0000000000a2';
+select tst.ok((select bool_and(unit_price_cents = 1500) from public.catalog_items
+                where attributes ->> 'priceGroup' = 't351:hand' and company_id = 'ca000000-0000-0000-0000-000000000000' and deleted_at is null),
+  'T357 without a JWT the group follows ($15.00)');
+\echo 'T357 no JWT ok'
+
+-- T358: flags set by hand at the top level skip nothing (a spread is not switched off from outside)
+:as_office_a
+do $t$ begin
+  perform set_config('app.item_costs_moving', '53510000-0000-4000-8000-0000000000a2', true);
+  perform set_config('app.price_group_spreading', 'ca000000-0000-0000-0000-000000000000/t351:hand', true);
+  update public.catalog_items set unit_price_cents = 1600 where id = '53510000-0000-4000-8000-0000000000a1';
+end $t$;
+select tst.ok(pg_temp.p351('53510000-0000-4000-8000-0000000000a2') = 1600, 'T358 forged «moving» and «spreading» flags do not stop the spread');
+\echo 'T358 the flag ok'
+
+-- T359: two writers at once — the same order of locks: the second waits and gets the conflict, no deadlock (40P01)
+:as_super
+create extension if not exists dblink;
+select set_config('tst.t359_conn', format('host=%s port=%s dbname=%s user=%s', split_part(current_setting('unix_socket_directories'), ',', 1),
+                  current_setting('port'), current_database(), current_user), false);
+do $$
+declare c text := current_setting('tst.t359_conn'); msg text := ''; set_who text :=
+  'set request.jwt.claim.sub = ''a0000000-0000-0000-0000-000000000002''; set role authenticated;';
+begin
+  perform dblink_connect('t359a', c);
+  perform dblink_connect('t359b', c);
+  perform dblink_exec('t359a', 'begin');
+  perform dblink_exec('t359a', set_who);
+  perform * from dblink('t359a', $q$select public.catalog_set_group_price('53510000-0000-4000-8000-0000000000a1', 1700, false, null, null, null, 1600)$q$) as x(n int);
+  -- the second writer (another item of the same group) waits on the group's locks while the first is not committed
+  perform dblink_send_query('t359b', 'begin; ' || set_who || $q$ select public.catalog_set_group_price('53510000-0000-4000-8000-0000000000a2', 1800, false, null, null, null, 1600); commit;$q$);
+  perform pg_sleep(0.3);
+  perform tst.ok(dblink_is_busy('t359b') = 1, 'T359 the second writer waits for the first');
+  perform dblink_exec('t359a', 'commit');
+  for i in 1..100 loop exit when dblink_is_busy('t359b') = 0; perform pg_sleep(0.05); end loop;
+  for i in 1..8 loop
+    begin
+      perform * from dblink_get_result('t359b', false) as x(t text);
+    exception when others then null;
+    end;
+    msg := msg || ' ' || coalesce(dblink_error_message('t359b'), '');
+  end loop;
+  perform tst.ok(msg like '%changed meanwhile%' and msg not like '%deadlock%', 'T359 the second gets the conflict (40001), not a deadlock: ' || btrim(msg));
+  perform dblink_disconnect('t359a');
+  perform dblink_disconnect('t359b');
+end $$;
+drop extension dblink;   -- only for this test (its functions are open to everyone by default)
+select tst.ok((select bool_and(unit_price_cents = 1700) from public.catalog_items
+                where attributes ->> 'priceGroup' = 't351:hand' and company_id = 'ca000000-0000-0000-0000-000000000000' and deleted_at is null),
+  'T359 the first writer''s $17.00 in the whole group');
+\echo 'T359 two writers ok'
+
+
+-- T360: an old build's upsert (INSERT … ON CONFLICT DO UPDATE) of an item already in a group: its price is spread, not lost
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('53510000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'service', 'T351 haul white', 'ea', 2500, '{"priceGroup":"t351:hand"}')
+  on conflict (id) do update set name = excluded.name, unit_price_cents = excluded.unit_price_cents, attributes = excluded.attributes;
+select tst.ok(pg_temp.p351('53510000-0000-4000-8000-0000000000a1') = 2500 and pg_temp.p351('53510000-0000-4000-8000-0000000000a2') = 2500,
+  'T360 an upsert of a group item with a new price ($25.00): kept and spread');
+\echo 'T360 the upsert ok'
+
+-- T361: who does not see our costs does not move an item that has a cost into a group (it would take the group's cost over
+-- its own); who sees costs does, and the item gets the group's cost and price
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('53610000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T361 own cost', 'ft', 0, '{}');
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
+  ('53610000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', 50, 0, 10000);
+:as_sales_a
+update public.catalog_items set attributes = '{"priceGroup":"t352:mat"}' where id = '53610000-0000-4000-8000-0000000000d1';
+:as_super
+select tst.ok((select app.price_group(attributes) is null from public.catalog_items where id = '53610000-0000-4000-8000-0000000000d1')
+          and (select unit_cost_cents = 50 from public.catalog_item_costs where item_id = '53610000-0000-4000-8000-0000000000d1')
+          and (select bool_and(unit_cost_cents = 700) from public.catalog_item_costs where item_id in ('53520000-0000-4000-8000-0000000000c1','53520000-0000-4000-8000-0000000000c2')),
+  'T361 sales cannot put an item with a cost into a group: its cost $0.50 and the group''s $7.00 stay');
+:as_office_a
+update public.catalog_items set attributes = '{"priceGroup":"t352:mat"}' where id = '53610000-0000-4000-8000-0000000000d1';
+select tst.ok((select unit_cost_cents = 700 from public.catalog_item_costs where item_id = '53610000-0000-4000-8000-0000000000d1')
+          and pg_temp.p351('53610000-0000-4000-8000-0000000000d1') = 1400
+          and (select bool_and(unit_cost_cents = 700) from public.catalog_item_costs where item_id in ('53520000-0000-4000-8000-0000000000c1','53520000-0000-4000-8000-0000000000c2')),
+  'T361 the office moves it: the group''s cost $7.00 and price $14.00; the group is not overwritten by the item''s own');
+-- a material of the group back from the Trash with its own cost: the group's
+:as_super
+update public.catalog_items set deleted_at = now() where id = '53610000-0000-4000-8000-0000000000d1';
+update public.catalog_item_costs set unit_cost_cents = 50 where item_id = '53610000-0000-4000-8000-0000000000d1';
+update public.catalog_items set deleted_at = null where id = '53610000-0000-4000-8000-0000000000d1';
+select tst.ok((select bool_and(unit_cost_cents = 700) from public.catalog_item_costs where item_id in ('53610000-0000-4000-8000-0000000000d1','53520000-0000-4000-8000-0000000000c1'))
+          and pg_temp.p351('53610000-0000-4000-8000-0000000000d1') = 1400,
+  'T361 back from the Trash with its own cost: the group''s cost and price');
+\echo 'T361 joining with a cost ok'
+
+-- T362: sales names a hand-priced item of a group that also has a counted material — refused (no price pushed at it)
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('53620000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'service', 'T362 service in a counted group', 'ea', 1400, '{"priceGroup":"t352:mat"}');
+:as_sales_a
+select tst.fails($q$select public.catalog_set_group_price('53620000-0000-4000-8000-0000000000e1', 9999, false, null, null, null, 1400)$q$,
+  'T362 sales cannot set the price of a group that has a counted material, through any of its items');
+\echo 'T362 a mixed group ok'
+
+
+-- T362 (more): the answer counts each item against its own price (a group that differs today); a markup-only call keeps
+-- the cost; a forged «spreading» marker does not stop a cost spread of an old build; a group has at most 200 items
+:as_super
+do $t$ begin
+  set local session_replication_role = replica;
+  update public.catalog_items set unit_price_cents = 150 where attributes ->> 'priceGroup' = 't351:hand' and company_id = 'ca000000-0000-0000-0000-000000000000';
+  update public.catalog_items set unit_price_cents = 100 where id = '53510000-0000-4000-8000-0000000000a1';
+  set local session_replication_role = origin;
+end $t$;
+:as_office_a
+select tst.ok(public.catalog_set_group_price('53510000-0000-4000-8000-0000000000a1', 150, false, null, null, null, 100) = 1
+          and pg_temp.p351('53510000-0000-4000-8000-0000000000a1') = 150,
+  'T362 a group that differs today: the count is of the items that changed, each against its own price');
+:as_super
+do $t$ begin
+  set local session_replication_role = replica;
+  update public.catalog_items set unit_price_cents = 100 where attributes ->> 'priceGroup' = 't351:hand' and company_id = 'ca000000-0000-0000-0000-000000000000';
+  update public.catalog_items set unit_price_cents = 150 where id = '53510000-0000-4000-8000-0000000000a1';
+  set local session_replication_role = origin;
+end $t$;
+:as_office_a
+select tst.ok(public.catalog_set_group_price('53510000-0000-4000-8000-0000000000a1', 100, false, null, null, null, 150) = 1,
+  'T362 …also when the named item is the one that changes nothing else (b was 100 already, a changed)');
+select tst.ok(public.catalog_set_group_price('53520000-0000-4000-8000-0000000000c1', 1400, false, null, null, 10000, 1400, 700, 0, 10000) >= 0
+          and (select bool_and(unit_cost_cents = 700) from public.catalog_item_costs where item_id in ('53520000-0000-4000-8000-0000000000c1','53520000-0000-4000-8000-0000000000c2')),
+  'T362 a markup-only call keeps the group''s cost ($7.00), it does not wipe it');
+do $t$ begin
+  perform set_config('app.price_group_spreading', 'ca000000-0000-0000-0000-000000000000/t352:mat', true);
+  update public.catalog_items set unit_cost_cents = 800 where id = '53520000-0000-4000-8000-0000000000c1';
+end $t$;
+select tst.ok((select bool_and(unit_cost_cents = 800) from public.catalog_item_costs where item_id in ('53520000-0000-4000-8000-0000000000c1','53520000-0000-4000-8000-0000000000c2')),
+  'T362 a forged «spreading» marker does not stop an old build''s cost spread');
+do $t$ begin
+  perform set_config('app.item_costs_moving', '53520000-0000-4000-8000-0000000000c2', true);
+  update public.catalog_item_costs set unit_cost_cents = 900 where item_id = '53520000-0000-4000-8000-0000000000c1';
+end $t$;
+select tst.ok((select bool_and(unit_cost_cents = 900) from public.catalog_item_costs where item_id in ('53520000-0000-4000-8000-0000000000c1','53520000-0000-4000-8000-0000000000c2'))
+          and pg_temp.p351('53520000-0000-4000-8000-0000000000c2') = 1800,
+  'T362 a forged «moving» flag on a direct cost write skips no item');
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes)
+select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'service', 'T362 full ' || g, 'ea', 1, '{"priceGroup":"t362:full"}'
+  from generate_series(1, 200) g;
+select tst.fails($q$insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes)
+  values ('53620000-0000-4000-8000-0000000000e9', 'ca000000-0000-0000-0000-000000000000', 'service', 'T362 one too many', 'ea', 1, '{"priceGroup":"t362:full"}')$q$,
+  'T362 a group has at most 200 items (54000)');
+\echo 'T362 more ok'
+
+-- ---------------------------------------------------------------- T364 (#1837): who sees our costs — the phone's table
+-- is the server's. The rows are the same as TABLE in apps/mobile/test/seeCosts.test.ts (features/access.ts roleSeesCosts):
+-- change both together.
+\echo 'T364 app.can_view_costs by role and view_costs = the phone''s table'
+:as_super
+-- its own companies and people, rolled back: nothing stays for the tests after it
+begin;
+do $t$
+declare
+  r record; v_got boolean; i int := 0;
+  v_u uuid; v_c uuid;
+begin
+  for r in select * from (values
+    ('owner',         false, 'active', true),
+    ('admin',         false, 'active', true),
+    ('office',        false, 'active', true),
+    ('sales',         false, 'active', false),
+    ('sales',         true,  'active', true),
+    ('tech',          false, 'active', false),
+    ('tech',          true,  'active', false),
+    ('subcontractor', false, 'active', false),
+    ('subcontractor', true,  'active', false),
+    ('office',        false, 'invited', false),
+    ('sales',         true,  'invited', false),
+    ('office',        false, 'disabled', false),
+    ('owner',         false, 'deleted', false),
+    ('owner',         false, 'active+deleted_at', false)
+  ) as x(role, view_costs, status, sees) loop
+    i := i + 1;
+    -- a company of its own per row: no limit on owners or seats is in the way
+    insert into auth.users (id, email, raw_user_meta_data)
+      values (('36400000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid, 't364-' || i || '@a.test', '{"full_name":"T364"}');
+    insert into public.companies (id, name)
+      values (('36410000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid, 'T364 co ' || i);
+    delete from public.memberships where company_id = ('36410000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid;
+    insert into public.memberships (company_id, user_id, role, status, permissions_override)
+      values (('36410000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid, ('36400000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid,
+              r.role, case when r.status = 'active+deleted_at' then 'active' else r.status end, case when r.view_costs then '{"view_costs": true}'::jsonb else '{}'::jsonb end);
+    v_u := ('36400000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid;
+    v_c := ('36410000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid;
+    -- an active membership with deleted_at (the phone never loads it — repo.ts reads deleted_at is null)
+    if r.status = 'active+deleted_at' then
+      update public.memberships set deleted_at = now() where company_id = v_c and user_id = v_u;
+    end if;
+    perform set_config('request.jwt.claim.sub', v_u::text, true);
+    v_got := app.can_view_costs(v_c);
+    perform set_config('request.jwt.claim.sub', '', true);
+    perform tst.ok(v_got = r.sees, format('T364 %s view_costs=%s %s: %s', r.role, r.view_costs, r.status, r.sees));
+  end loop;
+end $t$;
+rollback;
+\echo 'T364 ok'
+
+-- ---------------------------------------------------------------- T436, T372–T378 (#1834, spec 54 §13): the supplier's tax lives at the supplier
+\echo 'T436 the supplier tax (server)'
+:as_super
+insert into public.suppliers (id, company_id, name, purchase_tax_bps) values
+  ('37100000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'T436 Supplier', 825),
+  ('37100000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'T436 No rate', null),
+  ('37100000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', 'T436 Other', 600);
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, supplier_id) values
+  ('37100000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T436 one', 'ea', 0, '37100000-0000-4000-8000-0000000000a1'),
+  ('37100000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'material', 'T436 two', 'ea', 0, '37100000-0000-4000-8000-0000000000a1'),
+  ('37100000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'material', 'T436 three', 'ea', 0, '37100000-0000-4000-8000-0000000000a1'),
+  ('37100000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', 'material', 'T436 own rate', 'ea', 0, null);
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps)
+select id, company_id, 1000, 825, 3000 from public.catalog_items where name in ('T436 one', 'T436 two', 'T436 three');
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
+  ('37100000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', 1000, 500, 3000);
+delete from public.catalog_cost_history where item_id::text like '37100000-%';
+-- С1: the owner changes the rate: the supplier, every item's rate, the price of each and one history row per item
+:as_owner_a
+select public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 900, 825) as t371_n \gset
+:as_super
+select tst.ok(:t371_n = 3, 'T436 С1 three items followed the supplier');
+select tst.ok((select purchase_tax_bps = 900 from public.suppliers where id = '37100000-0000-4000-8000-0000000000a1')
+              and (select count(*) = 3 from public.catalog_item_costs where item_id::text in ('37100000-0000-4000-8000-0000000000b1', '37100000-0000-4000-8000-0000000000b2', '37100000-0000-4000-8000-0000000000b3') and vendor_tax_bps = 900),
+  'T436 С1 the supplier and its three items are on 9 %');
+select tst.ok((select count(*) = 3 from public.catalog_items where name in ('T436 one', 'T436 two', 'T436 three') and unit_price_cents = app.item_price_cents(1000, 900, 3000)),
+  'T436 С1 the price of each material is recounted from the cost and the new rate');
+select tst.ok((select count(*) = 3 from public.catalog_cost_history where item_id::text like '37100000-%' and source = 'supplier_tax' and vendor_tax_bps = 900),
+  'T436 С1 one history row per item, source supplier_tax');
+\echo 'T372 stale rate'
+-- С2: the phone saw 8,25 %, the server has 9 %: nothing changes
+:as_owner_a
+select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 1000, 825)$q$, 'T372 С2 a stale rate is refused (40001)');
+:as_super
+select tst.ok((select purchase_tax_bps = 900 from public.suppliers where id = '37100000-0000-4000-8000-0000000000a1')
+              and (select count(*) = 3 from public.catalog_item_costs where item_id::text like '37100000-%' and vendor_tax_bps = 900), 'T372 С2 nothing changed');
+do $$ declare v text; begin
+  perform set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-000000000001', true);
+  begin
+    perform public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 1000, 825);
+  exception when others then v := sqlstate;
+  end;
+  perform tst.ok(v = '40001', 'T372 С2 the refusal is SQLSTATE 40001, got ' || coalesce(v, 'none'));
+  perform set_config('request.jwt.claim.sub', '', true);
+end $$;
+\echo 'T373 the old phone cannot bring its own rate'
+-- С3: both paths — straight into catalog_item_costs and through catalog_items (t30 moves it)
+:as_owner_a
+update public.catalog_item_costs set vendor_tax_bps = 500 where item_id = '37100000-0000-4000-8000-0000000000b1';
+:as_super
+select tst.ok((select vendor_tax_bps = 900 from public.catalog_item_costs where item_id = '37100000-0000-4000-8000-0000000000b1'), 'T373 С3 a rate sent straight to the costs is brought back to the supplier''s');
+:as_owner_a
+update public.catalog_items set vendor_tax_bps = 500, unit_price_cents = unit_price_cents where id = '37100000-0000-4000-8000-0000000000b2';
+:as_super
+select tst.ok((select vendor_tax_bps = 900 from public.catalog_item_costs where item_id = '37100000-0000-4000-8000-0000000000b2')
+              and (select unit_price_cents = app.item_price_cents(1000, 900, 3000) from public.catalog_items where id = '37100000-0000-4000-8000-0000000000b2'),
+  'T373 С3 a rate sent through catalog_items (t30) is brought back too, the price stays from 9 %');
+\echo 'T374 an item takes the rate of the supplier it gets'
+-- С4 (server side): an item without a supplier keeps its own rate; getting a supplier with a rate takes it; one without keeps it
+:as_super
+update public.catalog_items set supplier_id = '37100000-0000-4000-8000-0000000000a2' where id = '37100000-0000-4000-8000-0000000000b4';
+select tst.ok((select vendor_tax_bps = 500 from public.catalog_item_costs where item_id = '37100000-0000-4000-8000-0000000000b4'),
+  'T374 С4 a supplier without a rate leaves the item''s own rate');
+update public.catalog_items set supplier_id = '37100000-0000-4000-8000-0000000000a3' where id = '37100000-0000-4000-8000-0000000000b4';
+select tst.ok((select vendor_tax_bps = 600 from public.catalog_item_costs where item_id = '37100000-0000-4000-8000-0000000000b4')
+              and (select unit_price_cents = app.item_price_cents(1000, 600, 3000) from public.catalog_items where id = '37100000-0000-4000-8000-0000000000b4'),
+  'T374 С4 an item that gets a supplier with a rate takes it and is repriced');
+\echo 'T375 who may change the rate'
+-- С5: the rule of «who sees our costs» (#1837): staff + can_view_costs. The office and the owner do; the tech and a sales person without view_costs do not; a sales person with it does
+:as_office_a
+select tst.ok(public.supplier_set_tax('37100000-0000-4000-8000-0000000000a3', 650, 600) = 1, 'T375 С5 the office changes the rate');
+:as_tech_a
+select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000000000a3', 700, 650)$q$, 'T375 С5 the tech may not');
+:as_sales_a
+select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000000000a3', 700, 650)$q$, 'T375 С5 sales without view_costs may not');
+:as_super
+update public.memberships set permissions_override = coalesce(permissions_override, '{}'::jsonb) || '{"view_costs": true}'
+ where user_id = 'a0000000-0000-0000-0000-000000000005';
+:as_sales_a
+select tst.ok(public.supplier_set_tax('37100000-0000-4000-8000-0000000000a3', 700, 650) = 1, 'T375 С5 sales WITH view_costs may (one rule with #1837)');
+:as_super
+update public.memberships set permissions_override = permissions_override - 'view_costs' where user_id = 'a0000000-0000-0000-0000-000000000005';
+:as_owner_b
+select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000000000a3', 800, 700)$q$, 'T375 С5 another company''s owner may not (the supplier is not found)');
+-- a second wall: the table itself — a sales person or the tech cannot update a supplier at all (0 rows), the items stay
+:as_sales_a
+update public.suppliers set purchase_tax_bps = 1 where id = '37100000-0000-4000-8000-0000000000a3';
+:as_tech_a
+update public.suppliers set purchase_tax_bps = 1 where id = '37100000-0000-4000-8000-0000000000a3';
+:as_super
+select tst.ok((select purchase_tax_bps = 700 from public.suppliers where id = '37100000-0000-4000-8000-0000000000a3')
+              and (select vendor_tax_bps = 700 from public.catalog_item_costs where item_id = '37100000-0000-4000-8000-0000000000b4'),
+  'T375 С5 sales and the tech cannot update a supplier: the rate and the items are as they were');
+\echo 'T376 the rate has one writer'
+-- С6: a phone's own upsert (a stale whole row, an old build, the offline queue) neither changes nor rolls back the rate; the rest is saved
+:as_owner_a
+update public.suppliers set purchase_tax_bps = 825, phone = '555-T376' where id = '37100000-0000-4000-8000-0000000000a1';
+:as_super
+select tst.ok((select purchase_tax_bps = 900 and phone = '555-T376' from public.suppliers where id = '37100000-0000-4000-8000-0000000000a1')
+              and (select count(*) = 3 from public.catalog_item_costs where item_id::text in ('37100000-0000-4000-8000-0000000000b1', '37100000-0000-4000-8000-0000000000b2', '37100000-0000-4000-8000-0000000000b3') and vendor_tax_bps = 900),
+  'T376 С6 a phone''s upsert with an old rate does not roll the rate back nor move it to the items; its other fields are saved');
+:as_owner_a
+select tst.ok(public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 900, 900) = 0, 'T376 С6 the same rate changes nothing');
+select tst.ok(public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 1200, 900) = 3, 'T376 С6 a new rate moves to the three items');
+insert into public.suppliers (id, company_id, name, purchase_tax_bps) values ('37100000-0000-4000-8000-0000000000a9', 'ca000000-0000-0000-0000-000000000000', 'T376 new with a rate', 725);
+select tst.ok((select purchase_tax_bps = 725 from public.suppliers where id = '37100000-0000-4000-8000-0000000000a9'), 'T376 С6 a new supplier made with a rate (insert) keeps it');
+:as_super
+select tst.ok((select purchase_tax_bps = 1200 from public.suppliers where id = '37100000-0000-4000-8000-0000000000a1')
+              and (select count(*) = 3 from public.catalog_item_costs where item_id::text in ('37100000-0000-4000-8000-0000000000b1', '37100000-0000-4000-8000-0000000000b2', '37100000-0000-4000-8000-0000000000b3') and vendor_tax_bps = 1200),
+  'T376 С6 the three items follow the door');
+\echo 'T377 the order of locks'
+-- С7: the supplier, then its items, then their costs — the same as catalog_set_item_costs; the right is checked before any lock
+do $$ declare d text; a int; b int; c int; begin
+  d := pg_get_functiondef('app.tg_supplier_tax_moves()'::regprocedure);
+  a := position('from public.catalog_items i' in d);
+  b := position('from public.catalog_item_costs k' in d);
+  perform tst.ok(a > 0 and b > a, 'T377 С7 locks in t95: items, then costs (the supplier is locked by the update that fires it)');
+  perform tst.ok(d ~ 'order by i\.id for update' and d ~ 'order by k\.item_id for update', 'T377 С7 each set locked in key order');
+  d := pg_get_functiondef('public.supplier_set_tax(uuid,integer,integer)'::regprocedure);
+  perform tst.ok(position('app.is_staff' in d) > 0 and position('app.is_staff' in d) < position('for no key update' in d),
+                 'T377 С7 the right is checked before the lock, the lock is NO KEY UPDATE (a phone''s foreign key waits crosswise with FOR UPDATE)');
+end $$;
+\echo 'T378 rights'
+select tst.ok(has_function_privilege('authenticated', 'public.supplier_set_tax(uuid,integer,integer)', 'EXECUTE')
+              and not has_function_privilege('anon', 'public.supplier_set_tax(uuid,integer,integer)', 'EXECUTE')
+              and (select prosecdef and proconfig @> array['search_path=""'] from pg_proc where oid = 'public.supplier_set_tax(uuid,integer,integer)'::regprocedure),
+  'T378 С8 supplier_set_tax: authenticated only, security definer, empty search_path');
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_tax_follows_supplier()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.tg_item_supplier_tax()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_supplier_tax_moves()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.tg_supplier_tax_door()', 'EXECUTE'),
+  'T378 С8 the trigger functions are for nobody');
+-- С9: one supplier with more than 1000 items is refused (no half-done change, the rate stays)
+:as_super
+insert into public.suppliers (id, company_id, name, purchase_tax_bps) values ('37100000-0000-4000-8000-0000000000aa', 'ca000000-0000-0000-0000-000000000000', 'T378 big', 500);
+insert into public.catalog_items (company_id, kind, name, unit, unit_price_cents, supplier_id)
+select 'ca000000-0000-0000-0000-000000000000', 'material', 'T378 item ' || g, 'ea', 0, '37100000-0000-4000-8000-0000000000aa' from generate_series(1, 1001) g;
+:as_owner_a
+select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000000000aa', 600, 500)$q$, 'T378 С9 more than 1000 items: refused');
+:as_super
+select tst.ok((select purchase_tax_bps = 500 from public.suppliers where id = '37100000-0000-4000-8000-0000000000aa'), 'T378 С9 the refused change left the rate as it was');
+delete from public.catalog_items where name like 'T378 item %';
+\echo 'T436, T372–T378 ok'
+-- ---------------------------------------------------------------- T383–T390 (#2015, spec 38 §12): cancel a job — public.cancel_job
+\echo 'T383 cancel a job ok'
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('38300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T383 plain', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('38300000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T383 invoiced', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('38300000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T383 paid', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('38300000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'T383 effects', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('38300000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'T383 on site', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('38300000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', 'T383 old phone', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+-- С1: a plain job
+:as_owner_a
+select tst.ok((public.cancel_job('38300000-0000-4000-8000-000000000001', '  Client changed his mind  ')) ->> 'repeat' = 'false', 'T383 С1 the owner cancels a plain job');
+:as_super
+select tst.ok((select status = 'cancelled' and cancel_reason = 'Client changed his mind' and cancelled_at is not null from public.jobs where id = '38300000-0000-4000-8000-000000000001'),
+  'T383 С1 cancelled, the reason (trimmed) and the time saved');
+select tst.ok(exists (select 1 from public.status_events where entity_type = 'job' and entity_id = '38300000-0000-4000-8000-000000000001' and to_status = 'cancelled'),
+  'T383 С1 the status journal has the move');
+
+\echo 'T384 a payment: refund first ok'
+-- С2: a job with a payment (a payment in transit and a cash payment on a visit without an invoice count too)
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('38400000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '38300000-0000-4000-8000-000000000002', 'final', 10000),
+  ('38400000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '38300000-0000-4000-8000-000000000003', 'final', 10000);
+update public.invoices set status = 'sent', sent_at = now() where id in ('38400000-0000-4000-8000-000000000002', '38400000-0000-4000-8000-000000000003');
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('38400000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', '38300000-0000-4000-8000-000000000003', now() + interval '3 days');
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+values ('ca000000-0000-0000-0000-000000000000', '38400000-0000-4000-8000-000000000003', 'c1a00000-0000-0000-0000-000000000002', 'cash', 5000, 'succeeded', 't384-pay');
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000003', 'no')$q$, 'job:paid%', 'T384 С2 a paid job is not cancelled (refund first)');
+:as_super
+select tst.ok((select status = 'draft' and cancel_reason is null from public.jobs where id = '38300000-0000-4000-8000-000000000003')
+              and (select status = 'scheduled' from public.visits where id = '38400000-0000-4000-8000-0000000000a3')
+              and (select status = 'sent' from public.invoices where id = '38400000-0000-4000-8000-000000000003'),
+  'T384 С2 nothing changed: the job, its visit and its invoice are as they were');
+
+\echo 'T385 who cancels ok'
+-- С3: the office cancels a job without an invoice; with one — «invoiceOpen»; sales, the tech and another company — «no right»
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('38500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T385 office plain', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+:as_office_a
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000002', 'no')$q$, 'job:invoiceOpen%', 'T385 С3 the office: not a job with an invoice');
+select tst.ok((public.cancel_job('38500000-0000-4000-8000-000000000001', 'Duplicate')) ->> 'status' = 'cancelled', 'T385 С3 the office cancels a job without an invoice');
+:as_sales_a
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000004', 'no')$q$, '%only the office%', 'T385 С3 sales does not cancel');
+:as_tech_a
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000004', 'no')$q$, '%only the office%', 'T385 С3 the tech does not cancel');
+:as_owner_b
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000004', 'no')$q$, '%only the office%', 'T385 С3 another company: the same answer as «not found»');
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-0000000000ff', 'no')$q$, '%only the office%', 'T385 С3 a job that does not exist: the same answer (no oracle)');
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+
+\echo 'T386 what goes with the job ok'
+-- С4: two open visits, an unpaid advance and an unpaid final invoice, an approved estimate and a won lead stay as they are
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('38600000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', '38300000-0000-4000-8000-000000000004', now() + interval '2 days'),
+  ('38600000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', '38300000-0000-4000-8000-000000000004', now() + interval '4 days');
+update public.visits set status = 'en_route' where id = '38600000-0000-4000-8000-0000000000a2';
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('38600000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '38300000-0000-4000-8000-000000000004', 'deposit', 3000),
+  ('38600000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '38300000-0000-4000-8000-000000000004', 'final', 7000);
+update public.invoices set status = 'sent', sent_at = now() where id = '38600000-0000-4000-8000-0000000000b1';
+:as_owner_a
+select tst.ok((public.cancel_job('38300000-0000-4000-8000-000000000004', 'Client cancelled the work')) = jsonb_build_object('status', 'cancelled', 'repeat', false, 'visits', 2, 'invoices', 2),
+  'T386 С4 two visits cancelled, two invoices voided');
+:as_super
+select tst.fails($q$insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+  values ('ca000000-0000-0000-0000-000000000000', '38600000-0000-4000-8000-0000000000b2', 'c1a00000-0000-0000-0000-000000000002', 'cash', 100, 'succeeded', 't386-late')$q$,
+  'T386 С4 a payment into the voided invoice of a cancelled job is refused (the payment link is dead)');
+select tst.ok((select count(*) = 2 from public.visits where job_id = '38300000-0000-4000-8000-000000000004' and status = 'cancelled')
+              and (select count(*) = 2 from public.invoices where job_id = '38300000-0000-4000-8000-000000000004' and status = 'void' and void_reason = 'job cancelled')
+              and (select status = 'cancelled' from public.jobs where id = '38300000-0000-4000-8000-000000000004'),
+  'T386 С4 the visits cancelled, the invoices void with the reason, the job cancelled');
+
+\echo 'T387 not every job ok'
+-- С5: a visit on site; a done job; a repeat
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('38700000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', '38300000-0000-4000-8000-000000000005', now());
+update public.visits set status = 'en_route' where id = '38700000-0000-4000-8000-0000000000a1';
+update public.visits set status = 'on_site' where id = '38700000-0000-4000-8000-0000000000a1';
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000005', 'no')$q$, 'job:visitOnSite%', 'T387 С5 a visit on site: finish or cancel it first');
+select tst.ok((public.cancel_job('38300000-0000-4000-8000-000000000001', 'again')) = jsonb_build_object('status', 'cancelled', 'repeat', true, 'visits', 0, 'invoices', 0),
+  'T387 С5 a repeat on a cancelled job changes nothing');
+:as_super
+select tst.ok((select cancel_reason = 'Client changed his mind' from public.jobs where id = '38300000-0000-4000-8000-000000000001'), 'T387 С5 the repeat kept the first reason');
+update public.visits set status = 'completed' where id = '38700000-0000-4000-8000-0000000000a1';
+update public.jobs set status = 'scheduled' where id = '38300000-0000-4000-8000-000000000005';
+update public.jobs set status = 'in_progress' where id = '38300000-0000-4000-8000-000000000005';
+update public.jobs set status = 'completed', completed_at = now() where id = '38300000-0000-4000-8000-000000000005';
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('38300000-0000-4000-8000-000000000005', 'no')$q$, 'job:done%', 'T387 С5 a done job is not cancelled');
+
+\echo 'T388 an old phone ok'
+-- С6: the direct update of an old build is still caught by the guard t13 (the new function is no way round it)
+:as_sales_a
+select tst.fails_like($q$update public.jobs set status = 'cancelled' where id = '38300000-0000-4000-8000-000000000006'$q$, 'job:noRight%', 'T388 С6 sales: the direct update is refused');
+:as_super
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('38800000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '38300000-0000-4000-8000-000000000006', 'final', 1000);
+update public.invoices set status = 'sent', sent_at = now() where id = '38800000-0000-4000-8000-0000000000b1';
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+select tst.fails_like($q$update public.jobs set status = 'cancelled' where id = '38300000-0000-4000-8000-000000000006'$q$, 'job:invoiceOpen%', 'T388 С6 the office with an invoice: the direct update is refused');
+select tst.fails($q$update public.jobs set cancel_reason = 'x' where id = '38300000-0000-4000-8000-000000000006'$q$, 'T388 С6 the phone does not write the reason itself (no grant)');
+:as_super
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+values ('ca000000-0000-0000-0000-000000000000', '38800000-0000-4000-8000-0000000000b1', 'c1a00000-0000-0000-0000-000000000002', 'cash', 500, 'succeeded', 't388-pay');
+:as_office_a
+select tst.fails_like($q$update public.jobs set status = 'cancelled' where id = '38300000-0000-4000-8000-000000000006'$q$, 'job:%', 'T388 С6 the office with a payment: the direct update is refused');
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+
+\echo 'T389 rights of the function and the reason ok'
+-- С7
+select tst.ok(not has_function_privilege('anon', 'public.cancel_job(uuid,text)', 'EXECUTE')
+          and not has_function_privilege('public', 'public.cancel_job(uuid,text)', 'EXECUTE')
+          and has_function_privilege('authenticated', 'public.cancel_job(uuid,text)', 'EXECUTE'), 'T389 С7 authenticated only');
+select tst.ok((select prosecdef and proconfig @> array['search_path=""'] from pg_proc where oid = 'public.cancel_job(uuid,text)'::regprocedure), 'T389 С7 security definer, empty search_path');
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('38900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T389 reason', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('38900000-0000-4000-8000-000000000001', '')$q$, '%1 to 500%', 'T389 С7 an empty reason');
+select tst.fails_like($q$select public.cancel_job('38900000-0000-4000-8000-000000000001', '    ')$q$, '%1 to 500%', 'T389 С7 a reason of spaces');
+select tst.fails_like($q$select public.cancel_job('38900000-0000-4000-8000-000000000001', null)$q$, '%1 to 500%', 'T389 С7 no reason');
+select tst.fails_like($q$select public.cancel_job('38900000-0000-4000-8000-000000000001', repeat('x', 501))$q$, '%1 to 500%', 'T389 С7 a reason over 500 characters');
+select tst.ok((public.cancel_job('38900000-0000-4000-8000-000000000001', repeat('x', 500))) ->> 'status' = 'cancelled', 'T389 С7 500 characters are fine');
+:as_super
+
+\echo 'T390 the order of locks ok'
+-- С8: the visits first (by id), then the job — as cancel_visit (visit → job)
+do $$ declare d text; a int; b int; begin
+  d := pg_get_functiondef('public.cancel_job(uuid,text)'::regprocedure);
+  a := position('from public.visits v' in d);
+  b := position('from public.jobs where id = p_job and company_id = v_company and deleted_at is null for update' in d);
+  perform tst.ok(a > 0 and b > a, 'T390 С8 the visits of the job are locked before the job');
+  perform tst.ok(d ~ 'order by v\.id for update', 'T390 С8 the visits locked in key order');
+  perform tst.ok(position('job_cancel_reason' in d) > b, 'T390 С8 the guard''s rule is asked after the lock (a guard does not run in a definer)');
+end $$;
+
+\echo 'T391 no new money on a cancelled job ok'
+-- a visit finished before the cancel is paid later (record_visit_payment would make an invoice and a payment): both doors are shut
+:as_super
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('39100000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T391 finished visit', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('39100000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T391 pending payment', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('39100000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T391 deleted', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('39100000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', '39100000-0000-4000-8000-000000000001', now());
+update public.visits set status = 'en_route' where id = '39100000-0000-4000-8000-0000000000a1';
+update public.visits set status = 'on_site' where id = '39100000-0000-4000-8000-0000000000a1';
+update public.visits set status = 'completed' where id = '39100000-0000-4000-8000-0000000000a1';
+update public.jobs set status = 'scheduled' where id = '39100000-0000-4000-8000-000000000001';
+update public.jobs set status = 'in_progress' where id = '39100000-0000-4000-8000-000000000001';
+:as_owner_a
+select tst.ok((public.cancel_job('39100000-0000-4000-8000-000000000001', 'Client left')) ->> 'status' = 'cancelled', 'T391 a job with a finished visit and no money is cancelled');
+:as_super
+select tst.fails_like($q$insert into public.invoices (company_id, customer_id, job_id, kind, total_cents)
+  values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '39100000-0000-4000-8000-000000000001', 'final', 100)$q$,
+  'job:cancelled%', 'T391 no invoice for a cancelled job');
+select tst.fails_like($q$insert into public.payments (company_id, visit_id, customer_id, method, amount_cents, status, idempotency_key)
+  values ('ca000000-0000-0000-0000-000000000000', '39100000-0000-4000-8000-0000000000a1', 'c1a00000-0000-0000-0000-000000000002', 'cash', 100, 'succeeded', 't391-visit')$q$,
+  'job:cancelled%', 'T391 no payment on the finished visit of a cancelled job');
+-- a payment in transit counts as money (T384 the paid one, here the pending one)
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('39100000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '39100000-0000-4000-8000-000000000002', 'final', 5000);
+update public.invoices set status = 'sent', sent_at = now() where id = '39100000-0000-4000-8000-0000000000b2';
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+values ('ca000000-0000-0000-0000-000000000000', '39100000-0000-4000-8000-0000000000b2', 'c1a00000-0000-0000-0000-000000000002', 'ach', 5000, 'pending', 't391-pending');
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('39100000-0000-4000-8000-000000000002', 'no')$q$, 'job:paid%', 'T391 a payment in transit: refund first');
+-- a deleted job answers as «not found»
+:as_super
+update public.jobs set deleted_at = now() where id = '39100000-0000-4000-8000-000000000003';
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('39100000-0000-4000-8000-000000000003', 'no')$q$, '%only the office%', 'T391 a deleted job: the same answer as «not found»');
+:as_super
+
+\echo 'T392 pay, refund in full, then cancel ok'
+-- a payment refunded in full does not hold the cancel (job_cancel_reason counts amount − refunded) and the void of the invoice
+-- goes through tg_invoice_guard (paid_cents is back to 0 after the refund)
+:as_super
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('39200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T392 refunded in full', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('39200000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '39200000-0000-4000-8000-000000000001', 'final', 5000);
+update public.invoices set status = 'sent', sent_at = now() where id = '39200000-0000-4000-8000-0000000000b1';
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+values ('39200000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', '39200000-0000-4000-8000-0000000000b1', 'c1a00000-0000-0000-0000-000000000002', 'cash', 5000, 'succeeded', 't392-pay');
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('39200000-0000-4000-8000-000000000001', 'no')$q$, 'job:paid%', 'T392 a paid job: refund first');
+:as_super
+select set_config('app.invoice_recalc', 'on', false);
+update public.payments set refunded_cents = 5000, status = 'refunded' where id = '39200000-0000-4000-8000-0000000000c1';
+select set_config('app.invoice_recalc', '', false);
+select tst.ok((select paid_cents = 0 from public.invoices where id = '39200000-0000-4000-8000-0000000000b1'), 'T392 the refund took the payment off the invoice (paid_cents 0)');
+:as_owner_a
+select tst.ok((public.cancel_job('39200000-0000-4000-8000-000000000001', 'Refunded, client left')) ->> 'invoices' = '1', 'T392 refunded in full: the job is cancelled and its invoice voided');
+:as_super
+select tst.ok((select status = 'void' from public.invoices where id = '39200000-0000-4000-8000-0000000000b1') and (select status = 'cancelled' from public.jobs where id = '39200000-0000-4000-8000-000000000001'), 'T392 the invoice void, the job cancelled');
+
+-- ================================================================ T365–T370: a cost is written only over what the phone saw
+-- (#1958 (а), migration 20261117340000). catalog_set_item_costs(item, the changed fields, what the phone had in them).
+-- Its own items, rolled back at the end: nothing stays for the tests after it.
+:as_super
+begin;
+create or replace function pg_temp.st(p_sql text) returns text language plpgsql as $f$
+begin
+  execute p_sql;
+  return 'ok';
+exception when others then
+  return sqlstate;
+end $f$;
+grant execute on function pg_temp.st(text) to public;
+create or replace function pg_temp.k365(p_id uuid) returns jsonb language sql security definer as $f$
+  select jsonb_build_array(c.unit_cost_cents, c.vendor_tax_bps, c.markup_bps) from public.catalog_item_costs c where c.item_id = p_id $f$;
+grant execute on function pg_temp.k365(uuid) to public;
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('53650000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T365 coil', 'ft', 100, '{}'),
+  ('53650000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'material', 'T365 group white', 'ft', 100, '{"priceGroup":"t365:g"}'),
+  ('53650000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', 'material', 'T365 group brown', 'ft', 100, '{"priceGroup":"t365:g"}');
+:as_owner_b
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('53650000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'material', 'T365 rival', 'ft', 100, '{}');
+
+-- T365: who may — the office (sees our costs); sales without view_costs no (42501), a tech / another company / a
+-- deleted or unknown item: not found (P0002); bad input 22023; anon cannot run it
+\echo 'T365 catalog_set_item_costs: who may'
+:as_sales_a
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": 400}', '{"unit_cost_cents": null}')$q$) = '42501',
+  'T365 С5: sales without view_costs: 42501');
+:as_tech_a
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": 400}', '{"unit_cost_cents": null}')$q$) = 'P0002',
+  'T365 С5: a tech: not found');
+:as_office_a
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000b1', '{"unit_cost_cents": 400}', '{"unit_cost_cents": null}')$q$) = 'P0002',
+  'T365 С5: another company''s item: not found');
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000ff', '{"unit_cost_cents": 400}', null)$q$) = 'P0002',
+  'T365 С5: an unknown item: not found');
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{}', null)$q$) = '22023'
+          and pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_price_cents": 1}', null)$q$) = '22023'
+          and pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '[1]', null)$q$) = '22023',
+  'T365 С5: nothing, a field that is not a cost, not an object: 22023');
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.catalog_set_item_costs(uuid,jsonb,jsonb)', 'EXECUTE')
+          and has_function_privilege('authenticated', 'public.catalog_set_item_costs(uuid,jsonb,jsonb)', 'EXECUTE'),
+  'T365 С5: rule 18: authenticated only');
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes, deleted_at) values
+  ('53650000-0000-4000-8000-0000000000a7', 'ca000000-0000-0000-0000-000000000000', 'material', 'T365 deleted', 'ft', 100, '{}', now());
+set local role anon;
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": 400}', null)$q$) = '42501',
+  'T365 С5: anon cannot run it');
+reset role;
+:as_office_a
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a7', '{"unit_cost_cents": 400}', null)$q$) = 'P0002',
+  'T365 С5: an item in the Trash: not found');
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": -1}', '{"unit_cost_cents": null}')$q$) not in ('ok')
+          and pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": "x"}', '{"unit_cost_cents": null}')$q$) = '22P02',
+  'T365 С5: a negative or not-a-number cost is refused');
+:as_super
+select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') is null, 'T365 С5: nothing written by the refusals');
+-- the owner and sales WITH view_costs may (on an item of their own; the office's cases follow in T366)
+update public.memberships set permissions_override = coalesce(permissions_override, '{}'::jsonb) || '{"view_costs": true}'
+ where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000005';
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('53650000-0000-4000-8000-0000000000a5', 'ca000000-0000-0000-0000-000000000000', 'service', 'T365 sales may', 'ea', 100, '{}'),
+  ('53650000-0000-4000-8000-0000000000a6', 'ca000000-0000-0000-0000-000000000000', 'service', 'T365 owner may', 'ea', 100, '{}');
+:as_sales_a
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a5', '{"unit_cost_cents": 70}', '{"unit_cost_cents": null}')$q$) = 'ok',
+  'T365 С5: sales with view_costs may');
+:as_owner_a
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a6', '{"unit_cost_cents": 80}', '{"unit_cost_cents": null}')$q$) = 'ok',
+  'T365 С5: the owner may');
+:as_super
+select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a5') = '[70, null, null]'::jsonb and pg_temp.k365('53650000-0000-4000-8000-0000000000a6') = '[80, null, null]'::jsonb,
+  'T365 С5: written for them');
+
+-- T366: the first cost (the phone saw none), then a change over what it saw; the material's price follows (53-0б)
+\echo 'T366 written over what the phone saw; the price counts from it'
+:as_office_a
+select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1',
+  '{"unit_cost_cents": 400, "vendor_tax_bps": 0, "markup_bps": 10000}', '{"unit_cost_cents": null, "vendor_tax_bps": null, "markup_bps": null}');
+select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') = '[400, 0, 10000]'::jsonb
+          and (select unit_price_cents = 800 from public.catalog_items where id = '53650000-0000-4000-8000-0000000000a1'),
+  'T366 С1: the first cost: $4.00 + 100% — the price $8.00');
+select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": 500}', '{"unit_cost_cents": 400}');
+select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') = '[500, 0, 10000]'::jsonb
+          and (select unit_price_cents = 1000 from public.catalog_items where id = '53650000-0000-4000-8000-0000000000a1'),
+  'T366 С1: $4.00 → $5.00 over what the phone saw; tax and markup untouched; the price $10.00');
+select tst.ok((select source = 'manual' from public.catalog_cost_history where item_id = '53650000-0000-4000-8000-0000000000a1' order by at desc limit 1),
+  'T366 С1: the cost history writes «manual»');
+
+-- T367: someone changed it first (another phone, a price-list upload): 40001, nothing written — also an old phone's view
+\echo 'T367 a cost changed meanwhile: 40001, nothing written'
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": 450}', '{"unit_cost_cents": 400}')$q$) = '40001',
+  'T367 С2: the phone saw $4.00, the server has $5.00: 40001');
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": 450}', null)$q$) = '40001',
+  'T367 С2: «saw nothing» while there is a cost: 40001');
+select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') = '[500, 0, 10000]'::jsonb
+          and (select unit_price_cents = 1000 from public.catalog_items where id = '53650000-0000-4000-8000-0000000000a1'),
+  'T367 С2: the cost and the price stay as the other one wrote them');
+-- the same call again (its answer lost, the queue retries): the server already holds the value sent — no conflict
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": 500}', '{"unit_cost_cents": 400}')$q$) = 'ok'
+          and pg_temp.k365('53650000-0000-4000-8000-0000000000a1') = '[500, 0, 10000]'::jsonb,
+  'T367 С2: a retry of a call that was written is no conflict (idempotent)');
+
+-- T368: field by field — only the fields sent are compared and written (a markup over a cost changed by another is fine)
+\echo 'T368 only the fields sent'
+select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"markup_bps": 5000}', '{"markup_bps": 10000}');
+select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') = '[500, 0, 5000]'::jsonb
+          and (select unit_price_cents = 750 from public.catalog_items where id = '53650000-0000-4000-8000-0000000000a1'),
+  'T368 С3: the markup 100% → 50% over what the phone saw; the cost $5.00 kept; the price $7.50');
+
+-- T369: a null clears (the old path could not: t30 reads null as «not sent»)
+\echo 'T369 a cleared field'
+select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"vendor_tax_bps": null}', '{"vendor_tax_bps": 0}');
+select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') = '[500, null, 5000]'::jsonb, 'T369 С4: the tax cleared, the rest kept');
+
+-- T370: an item of a price group — its cost goes to the group (#1913 t98), checked against the named item only
+\echo 'T370 a price group gets the cost'
+select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a2', '{"unit_cost_cents": 300, "markup_bps": 10000}', '{"unit_cost_cents": null, "markup_bps": null}');
+select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a3') = '[300, null, 10000]'::jsonb
+          and (select bool_and(unit_price_cents = 600) from public.catalog_items where id in ('53650000-0000-4000-8000-0000000000a2', '53650000-0000-4000-8000-0000000000a3')),
+  'T370 С7: both colours: $3.00 + 100% — $6.00');
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a3', '{"unit_cost_cents": 350}', '{"unit_cost_cents": null}')$q$) = '40001',
+  'T370 С7: the other colour''s phone that saw none: 40001 (the group has a cost now)');
+-- a batch over one group (a supplier's tax for every item of it): the second item's call meets the value the first one
+-- already spread — no conflict
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a2', '{"vendor_tax_bps": 500}', '{"vendor_tax_bps": null}')$q$) = 'ok'
+          and pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a3', '{"vendor_tax_bps": 500}', '{"vendor_tax_bps": null}')$q$) = 'ok'
+          and pg_temp.k365('53650000-0000-4000-8000-0000000000a3') = '[300, 500, 10000]'::jsonb,
+  'T370 С7: a batch over one group — the peer already holds the value sent: no conflict');
+
+-- T371 (С11): the «checked write» mark — the named item's id while its own row is written, so a trigger of the side
+-- table (the supplier's tax, #1834) refuses that row instead of changing it silently; a group peer written by the spread
+-- inside the same statement does not carry it; cleared after
+\echo 'T371 the checked-write mark'
+:as_super
+create table pg_temp.t371 (item_id uuid, mark text);
+grant all on pg_temp.t371 to public;
+create function pg_temp.t371_seen() returns trigger language plpgsql as $f$
+begin
+  insert into pg_temp.t371 values (new.item_id, coalesce(current_setting('app.costs_checked_write', true), ''));
+  return new;
+end $f$;
+create trigger t371_probe before insert or update on public.catalog_item_costs for each row execute function pg_temp.t371_seen();
+:as_office_a
+select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a2', '{"unit_cost_cents": 320}', '{"unit_cost_cents": 300}');
+:as_super
+select tst.ok((select mark from pg_temp.t371 where item_id = '53650000-0000-4000-8000-0000000000a2' limit 1) = '53650000-0000-4000-8000-0000000000a2'
+          and (select bool_and(mark is distinct from item_id::text) from pg_temp.t371 where item_id = '53650000-0000-4000-8000-0000000000a3')
+          and (select count(*) from pg_temp.t371 where item_id = '53650000-0000-4000-8000-0000000000a3') >= 1
+          and coalesce(current_setting('app.costs_checked_write', true), '') = '',
+  'T371 С11: the mark is the named item''s while its row is written; the group peer''s row does not carry it; cleared after');
+drop trigger t371_probe on public.catalog_item_costs;
+rollback;
+\echo 'T365–T371 ok'
+
+-- ---------------------------------------------------------------- T379 (#2020): the client's link is signed by the client
+-- S3 (spec: the client's page): a person of the company signs only on site; by the link (portal) the server refuses (42501,
+-- hint member_portal_sign); the client (anon, by the token) signs as before; on site — as before; a signature already made
+-- answers «repeat» as before. Three estimates of company A, each sent with its own token.
+\echo 'T379 the link is the client''s'
+begin;
+:as_owner_a
+do $t$
+declare i int;
+begin
+  for i in 1..4 loop
+    insert into public.estimates (id, company_id, number, customer_id, property_id, title) values
+      (('37900000-0000-4000-8000-00000000000' || i)::uuid, 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001',
+       'd1a00000-0000-0000-0000-000000000001', 'T379 ' || i);
+    perform tst.set_token(('37900000-0000-4000-8000-00000000000' || i)::uuid, 'tok_t379_' || i || '_0123456789abcdef');
+    insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+      (('37910000-0000-4000-8000-00000000000' || i)::uuid, 'ca000000-0000-0000-0000-000000000000', ('37900000-0000-4000-8000-00000000000' || i)::uuid, 1);
+    update public.estimates set current_version_id = ('37910000-0000-4000-8000-00000000000' || i)::uuid where id = ('37900000-0000-4000-8000-00000000000' || i)::uuid;
+    insert into public.estimate_options (id, company_id, version_id, name) values
+      (('37920000-0000-4000-8000-00000000000' || i)::uuid, 'ca000000-0000-0000-0000-000000000000', ('37910000-0000-4000-8000-00000000000' || i)::uuid, 'Standard');
+    insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
+      ('ca000000-0000-0000-0000-000000000000', ('37920000-0000-4000-8000-00000000000' || i)::uuid, 'labor', 'Porch', 1, 100000, false);
+    perform tst.server(format($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = %L$q$, '37910000-0000-4000-8000-00000000000' || i));
+    perform tst.server(format($q$update public.estimates set status = 'sent', sent_version_id = %L where id = %L$q$,
+                              '37910000-0000-4000-8000-00000000000' || i, '37900000-0000-4000-8000-00000000000' || i));
+  end loop;
+end $t$;
+
+-- the office and the owner, by the link (channel portal, and the default channel): refused, the estimate stays open
+:as_office_a
+select tst.fails_like($q$select public.portal_accept('tok_t379_1_0123456789abcdef', '37920000-0000-4000-8000-000000000001', null, 'Office', 'M0 0 L5 5', true, 'portal')$q$,
+  '%not by the client''s link%', 'T379 the office signs by the link: refused');
+:as_owner_a
+select tst.fails_like($q$select public.portal_accept('tok_t379_1_0123456789abcdef', '37920000-0000-4000-8000-000000000001', null, 'Owner', 'M0 0 L5 5', true)$q$,
+  '%not by the client''s link%', 'T379 the owner signs by the link (default channel): refused');
+do $t$
+declare v_hint text;
+begin
+  begin
+    perform public.portal_accept('tok_t379_1_0123456789abcdef', '37920000-0000-4000-8000-000000000001', null, 'Owner', 'M0 0 L5 5', true, 'portal');
+  exception when others then
+    get stacked diagnostics v_hint = pg_exception_hint;
+    perform tst.ok(sqlstate = '42501' and v_hint = 'member_portal_sign', 'T379 the refusal: 42501, hint member_portal_sign');
+    return;
+  end;
+  perform tst.ok(false, 'T379 the owner''s portal signature must be refused');
+end $t$;
+:as_super
+select tst.ok((select status from public.estimates where id = '37900000-0000-4000-8000-000000000001') = 'sent'
+          and not exists (select 1 from public.estimate_approvals where estimate_id = '37900000-0000-4000-8000-000000000001'),
+  'T379 after the refusals: still sent, no signature');
+
+-- a tech of the company, by the link: refused too (any person of the company)
+:as_tech_a
+select tst.fails_like($q$select public.portal_accept('tok_t379_1_0123456789abcdef', '37920000-0000-4000-8000-000000000001', null, 'Tech', 'M0 0 L5 5', true, 'portal')$q$,
+  '%not by the client''s link%', 'T379 a tech signs by the link: refused');
+
+-- a person of ANOTHER company is only a client here: signs by the link
+:as_owner_b
+select tst.ok(public.portal_accept('tok_t379_4_0123456789abcdef', '37920000-0000-4000-8000-000000000004', null, 'T379 Other co', 'M0 0 L5 5', true) ->> 'status'
+              = 'awaiting_countersign', 'T379 a member of another company signs as a client');
+
+-- the client: anonymous, by the token — signs as before
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok(public.portal_accept('tok_t379_1_0123456789abcdef', '37920000-0000-4000-8000-000000000001', null, 'T379 Client', 'M0 0 L5 5', true) ->> 'status'
+              = 'awaiting_countersign', 'T379 the client signs by the link');
+
+-- on site, on the owner's device: as before
+:as_owner_a
+select public.portal_accept('tok_t379_2_0123456789abcdef', '37920000-0000-4000-8000-000000000002', null, 'T379 On site', 'M0 0 L5 5', true, 'on_site') is not null as t379_on_site;
+:as_super
+select tst.ok((select status from public.estimates where id = '37900000-0000-4000-8000-000000000002') = 'awaiting_countersign'
+          and (select channel from public.estimate_approvals where estimate_id = '37900000-0000-4000-8000-000000000002') = 'on_site',
+  'T379 on site: signed, channel on_site');
+
+-- a signature already made (before this check existed) sent again from an old phone's queue: «repeat», nothing changes
+reset role; reset request.jwt.claim.sub; set role anon;
+select public.portal_accept('tok_t379_3_0123456789abcdef', '37920000-0000-4000-8000-000000000003', null, 'T379 Earlier', 'M0 0 L5 5', true) is not null as t379_first;
+:as_office_a
+select tst.ok(public.portal_accept('tok_t379_3_0123456789abcdef', '37920000-0000-4000-8000-000000000003', null, 'T379 Earlier', 'M0 0 L5 5', true, 'portal') ->> 'status'
+              = 'awaiting_countersign', 'T379 a repeat of a signature already made: answered as before, no refusal');
+:as_super
+select tst.ok((select count(*) from public.estimate_approvals where estimate_id = '37900000-0000-4000-8000-000000000003') = 1, 'T379 the repeat doubles nothing');
+rollback;
+\echo 'T379 ok'
+
+-- ---------------------------------------------------------------- T393–T398 (#2016): planning a job is the office's
+-- Sales book inspections only; an install visit, its change and a job «scheduled» are owner / admin / office.
+-- Before: sales wrote the install visit and the job «scheduled», only assign_visit refused — half a write.
+\echo 'T393-T398 planning rights'
+begin;
+:as_super
+update public.memberships set role = 'sales', status = 'active' where user_id = 'a0000000-0000-0000-0000-000000000005' and company_id = 'ca000000-0000-0000-0000-000000000000';
+insert into public.customers (id, company_id, display_name) values ('39300000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'T393 Client');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('39300000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000c1', '393 Plan St', 'Pasadena');
+insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+  ('39300000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'T393 job', '39300000-0000-4000-8000-0000000000c1', '39300000-0000-4000-8000-0000000000d1', 'draft'),
+  ('39300000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'T397 job', '39300000-0000-4000-8000-0000000000c1', '39300000-0000-4000-8000-0000000000d1', 'draft');
+insert into public.leads (id, company_id, source_id, contact_name, phone)
+  select '39300000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', id, 'T394 Lead', '(818) 555-0394'
+    from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' order by created_at limit 1;
+-- an install visit the office made (sales must not change it)
+insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values
+  ('39300000-0000-4000-8000-0000000000f9', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000e1', 'install', now() + interval '2 days', now() + interval '2 days 3 hours');
+
+:as_sales_a
+-- T393: sales — an install visit: refused
+select tst.fails_like($q$insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values ('39300000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000e1', 'install', now() + interval '1 day', now() + interval '1 day 3 hours')$q$, '%row-level security%',
+  'T393 sales: an install visit is refused');
+select tst.fails_like($q$insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values ('39300000-0000-4000-8000-0000000000f4', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000e1', 'inspection', now() + interval '1 day', now() + interval '1 day 1 hour')$q$, '%row-level security%',
+  'T393 sales: an «inspection» on a job is refused (an inspection is a lead''s visit without a job)');
+-- T394: sales — an inspection: as before
+insert into public.visits (id, company_id, property_id, kind, starts_at, ends_at) values
+  ('39300000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000d1', 'inspection', now() + interval '1 day', now() + interval '1 day 1 hour');
+update public.visits set starts_at = now() + interval '3 days', ends_at = now() + interval '3 days 1 hour' where id = '39300000-0000-4000-8000-0000000000f2';
+-- T394: the app's own path for sales (ops.ts lead.visit): a visit of the lead at its property, no job; the lead moves on
+insert into public.visits (id, company_id, lead_id, property_id, kind, starts_at, ends_at, scope) values
+  ('39300000-0000-4000-8000-0000000000f5', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000a1', '39300000-0000-4000-8000-0000000000d1', 'inspection',
+   now() + interval '2 days', now() + interval '2 days 45 minutes', '{}');
+update public.leads set status = 'inspection_scheduled', property_id = '39300000-0000-4000-8000-0000000000d1' where id = '39300000-0000-4000-8000-0000000000a1';
+-- T395: sales — an inspection turned into an install, or the office's install moved: refused / not reached
+select tst.fails_like($q$update public.visits set kind = 'install', job_id = '39300000-0000-4000-8000-0000000000e1', property_id = null where id = '39300000-0000-4000-8000-0000000000f2'$q$, '%sales change only an inspection%',
+  'T395 sales: an inspection does not become an install');
+select tst.fails_like($q$update public.visits set starts_at = now() + interval '9 days' where id = '39300000-0000-4000-8000-0000000000f9'$q$, '%sales change only an inspection%',
+  'T395 sales: the office''s install visit is not moved (a refusal, not a silent «0 rows»)');
+select tst.fails_like($q$update public.visits set kind = 'inspection', starts_at = now() + interval '9 days' where id = '39300000-0000-4000-8000-0000000000f9'$q$,
+  '%sales change only an inspection%', 'T395 sales: the office''s install does not become an «inspection»');
+select tst.fails($q$update public.visits set deleted_at = now() where id = '39300000-0000-4000-8000-0000000000f9'$q$,
+  'T395 sales: the office''s install is not dropped');
+-- T396: sales — a job «scheduled»: refused
+select tst.fails_like($q$update public.jobs set status = 'scheduled' where id = '39300000-0000-4000-8000-0000000000e1'$q$, '%only the office schedules a job%',
+  'T396 sales: a job does not become «scheduled»');
+:as_super
+select tst.ok(not exists (select 1 from public.visits where id = '39300000-0000-4000-8000-0000000000f1'), 'T393 …no install visit written');
+select tst.ok((select kind = 'inspection' and starts_at > now() + interval '2 days' from public.visits where id = '39300000-0000-4000-8000-0000000000f2'), 'T394 sales: the inspection is booked and moved');
+select tst.ok((select kind = 'inspection' from public.visits where id = '39300000-0000-4000-8000-0000000000f2'), 'T395 …still an inspection');
+select tst.ok((select kind = 'inspection' and job_id is null and lead_id = '39300000-0000-4000-8000-0000000000a1' from public.visits where id = '39300000-0000-4000-8000-0000000000f5')
+          and (select status from public.leads where id = '39300000-0000-4000-8000-0000000000a1') = 'inspection_scheduled',
+  'T394 sales book an inspection of a lead the way the app does (lead.visit)');
+select tst.ok((select kind = 'install' and deleted_at is null and starts_at < now() + interval '3 days' from public.visits where id = '39300000-0000-4000-8000-0000000000f9'),
+  'T395 sales: the office''s install visit is not moved, turned or dropped');
+select tst.ok(not exists (select 1 from public.visits where id = '39300000-0000-4000-8000-0000000000f4'), 'T393 …no inspection on a job written');
+select tst.ok((select status from public.jobs where id = '39300000-0000-4000-8000-0000000000e1') = 'draft', 'T396 …the job stays a draft');
+
+-- T397: the office plans as before — an install visit, the job «scheduled», the visit moved
+:as_office_a
+insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values
+  ('39300000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000e2', 'install', now() + interval '1 day', now() + interval '1 day 3 hours');
+update public.jobs set status = 'scheduled' where id = '39300000-0000-4000-8000-0000000000e2';
+update public.visits set starts_at = now() + interval '4 days', ends_at = now() + interval '4 days 3 hours' where id = '39300000-0000-4000-8000-0000000000f3';
+:as_super
+select tst.ok((select status from public.jobs where id = '39300000-0000-4000-8000-0000000000e2') = 'scheduled'
+          and (select starts_at > now() + interval '3 days' from public.visits where id = '39300000-0000-4000-8000-0000000000f3'),
+  'T397 the office: install visit, job scheduled, visit moved');
+
+-- T398: the tech — no visit of any kind
+:as_tech_a
+select tst.fails($q$insert into public.visits (company_id, property_id, kind, starts_at) values ('ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000d1', 'inspection', now())$q$,
+  'T398 tech: no inspection');
+select tst.fails($q$insert into public.visits (company_id, job_id, kind, starts_at) values ('ca000000-0000-0000-0000-000000000000', '39300000-0000-4000-8000-0000000000e1', 'install', now())$q$,
+  'T398 tech: no install visit');
+rollback;
+\echo 'T393-T398 ok'
+
+-- ---------------------------------------------------------------- T407–T410 (#2066): «Клиента нет дома»
+-- The visit's own tech marks a no-show at the door (scheduled / en_route / on_site, before work); the office can too.
+-- Before: only the office (cancel_visit), and not on_site — the tech at a locked door could not close the visit.
+\echo 'T407-T410 visit no-show'
+begin;
+:as_super
+update public.memberships set status = 'active' where company_id = 'ca000000-0000-0000-0000-000000000000'
+   and user_id in ('a0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000005');
+update public.memberships set role = 'tech' where company_id = 'ca000000-0000-0000-0000-000000000000'
+   and user_id in ('a0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000004');
+update public.memberships set role = 'sales' where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000005';
+insert into public.customers (id, company_id, display_name) values ('40700000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'T407 Client');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('40700000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000c1', '407 Door St', 'Pasadena');
+insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+  ('40700000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'T407 job', '40700000-0000-4000-8000-0000000000c1', '40700000-0000-4000-8000-0000000000d1', 'draft'),
+  ('40700000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'T409 job', '40700000-0000-4000-8000-0000000000c1', '40700000-0000-4000-8000-0000000000d1', 'draft');
+update public.jobs set status = 'scheduled' where id in ('40700000-0000-4000-8000-0000000000e1', '40700000-0000-4000-8000-0000000000e2');
+insert into public.leads (id, company_id, source_id, contact_name, phone, property_id)
+  select '40700000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', id, 'T408 Lead', '(818) 555-0407', '40700000-0000-4000-8000-0000000000d1'
+    from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' order by created_at limit 1;
+update public.leads set status = 'inspection_scheduled' where id = '40700000-0000-4000-8000-0000000000a1';
+-- f1: the job's install visit, tech on site; f2: the lead's inspection, sales on it; f3: at work; f4: another tech's;
+-- f5: a second open visit of job e2 (the job keeps «scheduled»); f6: its sibling
+insert into public.visits (id, company_id, job_id, lead_id, property_id, kind, starts_at, ends_at) values
+  ('40700000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e1', null, null, 'install', now(), now() + interval '3 hours'),
+  ('40700000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', null, '40700000-0000-4000-8000-0000000000a1', '40700000-0000-4000-8000-0000000000d1', 'inspection', now(), now() + interval '1 hour'),
+  ('40700000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now(), now() + interval '3 hours'),
+  ('40700000-0000-4000-8000-0000000000f4', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now() + interval '1 day', now() + interval '1 day 3 hours'),
+  ('40700000-0000-4000-8000-0000000000f5', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now() + interval '2 days', now() + interval '2 days 3 hours'),
+  ('40700000-0000-4000-8000-0000000000f6', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now() + interval '3 days', now() + interval '3 days 3 hours'),
+  ('40700000-0000-4000-8000-0000000000f9', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e2', null, null, 'install', now() + interval '4 days', now() + interval '4 days 3 hours');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f1', 'a0000000-0000-0000-0000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f2', 'a0000000-0000-0000-0000-000000000005'),
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f3', 'a0000000-0000-0000-0000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f4', 'a0000000-0000-0000-0000-000000000004'),
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f5', 'a0000000-0000-0000-0000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f6', 'a0000000-0000-0000-0000-000000000005'),
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f9', 'a0000000-0000-0000-0000-000000000003');
+-- f9: the office took a payment before the visit (record_visit_payment allows it) — the client paid, not a no-show
+insert into public.payments (company_id, customer_id, visit_id, method, amount_cents, status, idempotency_key, received_by)
+  values ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000c1', '40700000-0000-4000-8000-0000000000f9', 'cash', 5000, 'succeeded', 't409-paid', 'a0000000-0000-0000-0000-000000000002');
+update public.visits set status = 'on_site' where id in ('40700000-0000-4000-8000-0000000000f1', '40700000-0000-4000-8000-0000000000f3');
+update public.visits set work_started_at = now() where id = '40700000-0000-4000-8000-0000000000f3';
+
+-- T407: the tech on site — no-show: the visit closes with the reason, who and when; the job waits for a date again
+select tst.ok((select status from public.jobs where id = '40700000-0000-4000-8000-0000000000e1') = 'in_progress', 'T407 «on site» started the job');
+:as_tech_a
+select tst.ok(public.visit_no_show('40700000-0000-4000-8000-0000000000f1', '  Nobody home, left a card  ') ->> 'job_back'
+              = '40700000-0000-4000-8000-0000000000e1', 'T407 the tech on site: no-show, the job rolls back');
+:as_super
+select tst.ok((select status = 'no_show' and cancel_reason = 'no_show' and cancel_reason_text = 'Nobody home, left a card'
+                      and cancelled_by = 'a0000000-0000-0000-0000-000000000003' and cancelled_at is not null
+                 from public.visits where id = '40700000-0000-4000-8000-0000000000f1'), 'T407 the visit: no_show, the note, who and when');
+select tst.ok((select status from public.jobs where id = '40700000-0000-4000-8000-0000000000e1') = 'draft', 'T407 the job: waits for a date (S9a)');
+select tst.ok(exists (select 1 from public.status_events where entity_type = 'visit' and entity_id = '40700000-0000-4000-8000-0000000000f1'
+                       and from_status = 'on_site' and to_status = 'no_show' and reason = 'no_show'), 'T407 the status journal: on_site → no_show, reason no_show');
+-- a repeat from the offline queue: answered, nothing doubles
+:as_tech_a
+select tst.ok((public.visit_no_show('40700000-0000-4000-8000-0000000000f1') ->> 'repeat')::boolean, 'T407 a repeat: answered as a repeat');
+:as_super
+select tst.ok((select count(*) from public.status_events where entity_type = 'visit' and entity_id = '40700000-0000-4000-8000-0000000000f1' and to_status = 'no_show') = 1
+          and (select cancel_reason_text from public.visits where id = '40700000-0000-4000-8000-0000000000f1') = 'Nobody home, left a card',
+  'T407 the repeat changes nothing');
+
+-- T408: sales on their own inspection — no-show: the lead goes back to «in contact» (S4a); on an install — «not found»
+:as_sales_a
+select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f6')$q$, '%visit not found%', 'T408 sales on an install visit: «not found» (the office plans)');
+select tst.ok(public.visit_no_show('40700000-0000-4000-8000-0000000000f2') ->> 'lead_back' = '40700000-0000-4000-8000-0000000000a1',
+  'T408 sales on their inspection: no-show, the lead rolls back');
+:as_super
+select tst.ok((select status from public.leads where id = '40700000-0000-4000-8000-0000000000a1') = 'contacted'
+          and (select status from public.visits where id = '40700000-0000-4000-8000-0000000000f2') = 'no_show', 'T408 the lead: contacted; the visit: no_show');
+
+-- T409: refusals — at work; another tech's visit («not found», as a visit that does not exist); a direct update still refused;
+-- a person of another company; the job with another open visit keeps «scheduled»
+:as_tech_a
+select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f3')$q$, '%client was there%', 'T409 at work: not a no-show');
+select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f4')$q$, '%visit not found%', 'T409 another tech''s visit: «not found»');
+select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000ff')$q$, '%visit not found%', 'T409 a visit that does not exist: the same answer');
+select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f9')$q$, '%has a payment%', 'T409 a visit with a payment: not a no-show');
+select tst.fails($q$update public.visits set status = 'no_show' where id = '40700000-0000-4000-8000-0000000000f5'$q$, 'T409 a direct no_show by the tech: refused');
+select tst.fails($q$update public.visits set cancel_reason = 'no_show' where id = '40700000-0000-4000-8000-0000000000f5'$q$, 'T409 a direct reason by the tech: refused');
+:as_owner_b
+select tst.fails_like($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f5')$q$, '%visit not found%', 'T409 another company: «not found»');
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails($q$select public.visit_no_show('40700000-0000-4000-8000-0000000000f5')$q$, 'T409 anon: no execute');
+:as_tech_a
+select tst.ok(public.visit_no_show('40700000-0000-4000-8000-0000000000f5') ->> 'job_back' is null, 'T409 the job has another open visit: no roll-back');
+:as_super
+select tst.ok((select status from public.jobs where id = '40700000-0000-4000-8000-0000000000e2') = 'in_progress'
+          and (select status from public.visits where id = '40700000-0000-4000-8000-0000000000f3') = 'on_site', 'T409 the job keeps going; the visit at work is untouched');
+
+-- T410: a multi-day job — day 1 finished, day 2 a no-show: the job stays «in progress» (not «waits for a date»)
+:as_super
+insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+  ('40700000-0000-4000-8000-0000000000e3', 'ca000000-0000-0000-0000-000000000000', 'T410 job', '40700000-0000-4000-8000-0000000000c1', '40700000-0000-4000-8000-0000000000d1', 'draft');
+update public.jobs set status = 'scheduled' where id = '40700000-0000-4000-8000-0000000000e3';
+insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values
+  ('40700000-0000-4000-8000-0000000000f7', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e3', 'install', now() - interval '1 day', now() - interval '21 hours'),
+  ('40700000-0000-4000-8000-0000000000f8', 'ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000e3', 'install', now(), now() + interval '3 hours');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', '40700000-0000-4000-8000-0000000000f8', 'a0000000-0000-0000-0000-000000000003');
+update public.visits set status = 'on_site', work_started_at = now() - interval '1 day' where id = '40700000-0000-4000-8000-0000000000f7';
+update public.visits set status = 'completed' where id = '40700000-0000-4000-8000-0000000000f7';
+update public.visits set status = 'on_site' where id = '40700000-0000-4000-8000-0000000000f8';
+:as_tech_a
+select tst.ok(public.visit_no_show('40700000-0000-4000-8000-0000000000f8') ->> 'job_back' is null, 'T410 day 2 of a started job: no roll-back');
+:as_super
+select tst.ok((select status from public.jobs where id = '40700000-0000-4000-8000-0000000000e3') = 'in_progress', 'T410 the started job stays «in progress»');
+-- a started job back to planning by a direct write: refused for everyone (only visit_no_show does it, after its checks)
+:as_office_a
+select tst.fails_like($q$update public.jobs set status = 'draft' where id = '40700000-0000-4000-8000-0000000000e3'$q$, '%only through a no-show%', 'T410 the office: a direct «in progress» → draft refused');
+:as_sales_a
+select tst.fails($q$update public.jobs set status = 'draft' where id = '40700000-0000-4000-8000-0000000000e3'$q$, 'T410 sales: a direct «in progress» → draft refused');
+:as_super
+select tst.ok((select status from public.jobs where id = '40700000-0000-4000-8000-0000000000e3') = 'in_progress', 'T410 after the refusals: still «in progress»');
+
+-- T410: the office marks a no-show too (another tech's visit, scheduled); a tech of the company still cannot touch the time
+:as_office_a
+select tst.ok(public.visit_no_show('40700000-0000-4000-8000-0000000000f4') ->> 'status' = 'no_show', 'T410 the office: no-show of a scheduled visit');
+:as_super
+select tst.ok((select cancelled_by from public.visits where id = '40700000-0000-4000-8000-0000000000f4') = 'a0000000-0000-0000-0000-000000000002', 'T410 who: the office');
+:as_tech_a
+select tst.fails($q$update public.visits set starts_at = now() + interval '5 days' where id = '40700000-0000-4000-8000-0000000000f3'$q$, 'T410 the guard still: a tech does not move a visit');
+rollback;
+\echo 'T407-T410 ok'
+
+-- ---------------------------------------------------------------- T380 (#2020): by the client's link the client pays
+-- A sent estimate of company A with a 10% deposit, signed by the client (anon) and by the owner: its deposit invoice.
+-- The company simulates payments (a demo company). The owner and the office pay by the token: 42501, hint member_portal_pay,
+-- no payment; the client (anonymous, by the token) pays as before.
+\echo 'T380 the client pays by the link'
+begin;
+:as_super
+insert into app.company_flags (company_id, simulated_payments) values ('ca000000-0000-0000-0000-000000000000', true)
+  on conflict (company_id) do update set simulated_payments = true;
+:as_owner_a
+do $t$
+begin
+  insert into public.customers (id, company_id, display_name) values ('38000000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'T380 Client');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('38000000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', '38000000-0000-4000-8000-0000000000c1', '380 Pay St', 'Pasadena');
+  insert into public.estimates (id, company_id, number, customer_id, property_id, title) values
+    ('38000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', '38000000-0000-4000-8000-0000000000c1', '38000000-0000-4000-8000-0000000000d1', 'T380');
+  perform tst.set_token('38000000-0000-4000-8000-000000000001', 'tok_t380_0123456789abcdef');
+  insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+    ('38010000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '38000000-0000-4000-8000-000000000001', 1, '{"kind":"pct","bps":1000}');
+  update public.estimates set current_version_id = '38010000-0000-4000-8000-000000000001' where id = '38000000-0000-4000-8000-000000000001';
+  insert into public.estimate_options (id, company_id, version_id, name) values
+    ('38020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '38010000-0000-4000-8000-000000000001', 'Standard');
+  insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
+    ('ca000000-0000-0000-0000-000000000000', '38020000-0000-4000-8000-000000000001', 'labor', 'Porch', 1, 100000, false);
+  perform tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = '38010000-0000-4000-8000-000000000001'$q$);
+  perform tst.server($q$update public.estimates set status = 'sent', sent_version_id = '38010000-0000-4000-8000-000000000001' where id = '38000000-0000-4000-8000-000000000001'$q$);
+end $t$;
+reset role; reset request.jwt.claim.sub; set role anon;
+select public.portal_accept('tok_t380_0123456789abcdef', '38020000-0000-4000-8000-000000000001', null, 'T380 Client', 'M0 0 L5 5', true) is not null as t380_signed;
+:as_owner_a
+select public.countersign_estimate('38000000-0000-4000-8000-000000000001', 'M0 0 L3 3') = 'approved' as t380_countersigned;
+:as_super
+select set_config('tst.t380_inv', coalesce((select i.id::text from public.invoices i join public.jobs j on j.id = i.job_id
+                                    where j.estimate_id = '38000000-0000-4000-8000-000000000001' and i.status = 'sent' limit 1), ''), false) is not null as t380_inv_set;
+select tst.ok(current_setting('tst.t380_inv') <> '', 'T380 fixture: the deposit invoice is issued');
+:as_owner_a
+select tst.fails_like(format($q$select public.portal_pay_simulated('tok_t380_0123456789abcdef', %L)$q$, current_setting('tst.t380_inv')),
+  '%does not pay by the client''s link%', 'T380 the owner pays by the link: refused');
+:as_office_a
+do $t$
+declare v_hint text;
+begin
+  begin
+    perform public.portal_pay_simulated('tok_t380_0123456789abcdef', current_setting('tst.t380_inv')::uuid);
+  exception when others then
+    get stacked diagnostics v_hint = pg_exception_hint;
+    perform tst.ok(sqlstate = '42501' and v_hint = 'member_portal_pay', 'T380 the office: 42501, hint member_portal_pay');
+    return;
+  end;
+  perform tst.ok(false, 'T380 the office''s simulated payment must be refused');
+end $t$;
+:as_super
+select tst.ok(not exists (select 1 from public.payments where invoice_id = current_setting('tst.t380_inv')::uuid)
+          and not exists (select 1 from public.notifications where invoice_id = current_setting('tst.t380_inv')::uuid and kind in ('deposit.paid', 'invoice.paid')),
+  'T380 after the refusals: no payment, no «paid» notice');
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok((select (x ->> 'paid')::bigint > 0 from jsonb_array_elements(public.portal_pay_simulated('tok_t380_0123456789abcdef', current_setting('tst.t380_inv')::uuid) -> 'invoices') x
+                where x ->> 'id' = current_setting('tst.t380_inv')), 'T380 the client pays by the link as before');
+-- a person of ANOTHER company is only a client here: not refused (the invoice is paid already — nothing doubles)
+:as_owner_b
+select public.portal_pay_simulated('tok_t380_0123456789abcdef', current_setting('tst.t380_inv')::uuid) is not null as t380_other_company_not_refused;
+:as_super
+select tst.ok((select count(*) from public.payments where invoice_id = current_setting('tst.t380_inv')::uuid) = 1, 'T380 one payment in all');
+rollback;
+\echo 'T380 ok'
+
+-- ---------------------------------------------------------------- T381 (#2020): on site by the token — only who reads the estimate
+-- An old app signs on site through portal_accept by the token (rule 16, T142). A tech who may sign contracts but does not
+-- read this estimate (not his, not on his property) is refused as accept_on_site refuses him; a tech who made the estimate
+-- signs on site as before (channel on_site, on his device).
+\echo 'T381 on site by the token'
+begin;
+:as_super
+-- both techs active and allowed to sign contracts (the second was switched off by an earlier test; rolled back below)
+update public.memberships set can_sign_contracts = true, status = 'active' where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id in
+  ('a0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000004');
+:as_super
+insert into public.customers (id, company_id, display_name) values ('38100000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'T381 Client');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('38100000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', '38100000-0000-4000-8000-0000000000c1', '381 Site St', 'Pasadena');
+-- the second estimate is the tech's own (he made it on site): inserted as the server, so created_by is his (core.sql:269)
+insert into public.estimates (id, company_id, number, customer_id, property_id, title, created_by) values
+  ('38100000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', '38100000-0000-4000-8000-0000000000c1', '38100000-0000-4000-8000-0000000000d1', 'T381 2',
+   'a0000000-0000-0000-0000-000000000003');
+:as_owner_a
+do $t$
+declare i int;
+begin
+  for i in 1..2 loop
+    if i = 1 then insert into public.estimates (id, company_id, number, customer_id, property_id, title) values
+      (('38100000-0000-4000-8000-00000000000' || i)::uuid, 'ca000000-0000-0000-0000-000000000000', '', '38100000-0000-4000-8000-0000000000c1', '38100000-0000-4000-8000-0000000000d1', 'T381 ' || i); end if;
+    perform tst.set_token(('38100000-0000-4000-8000-00000000000' || i)::uuid, 'tok_t381_' || i || '_0123456789abcdef');
+    insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+      (('38110000-0000-4000-8000-00000000000' || i)::uuid, 'ca000000-0000-0000-0000-000000000000', ('38100000-0000-4000-8000-00000000000' || i)::uuid, 1);
+    update public.estimates set current_version_id = ('38110000-0000-4000-8000-00000000000' || i)::uuid where id = ('38100000-0000-4000-8000-00000000000' || i)::uuid;
+    insert into public.estimate_options (id, company_id, version_id, name) values
+      (('38120000-0000-4000-8000-00000000000' || i)::uuid, 'ca000000-0000-0000-0000-000000000000', ('38110000-0000-4000-8000-00000000000' || i)::uuid, 'Standard');
+    insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
+      ('ca000000-0000-0000-0000-000000000000', ('38120000-0000-4000-8000-00000000000' || i)::uuid, 'labor', 'Porch', 1, 100000, false);
+    perform tst.server(format($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = %L$q$, '38110000-0000-4000-8000-00000000000' || i));
+    perform tst.server(format($q$update public.estimates set status = 'sent', sent_version_id = %L where id = %L$q$,
+                              '38110000-0000-4000-8000-00000000000' || i, '38100000-0000-4000-8000-00000000000' || i));
+  end loop;
+end $t$;
+:as_tech2_a
+select tst.fails_like($q$select public.portal_accept('tok_t381_1_0123456789abcdef', '38120000-0000-4000-8000-000000000001', null, 'T381 X', 'M0 0 L5 5', true, 'on_site')$q$,
+  '%not found%', 'T381 a tech who does not read the estimate: on site by the token refused');
+-- a person of ANOTHER company reads nothing here: on site by the token — not found
+:as_owner_b
+select tst.fails_like($q$select public.portal_accept('tok_t381_1_0123456789abcdef', '38120000-0000-4000-8000-000000000001', null, 'T381 B', 'M0 0 L5 5', true, 'on_site')$q$,
+  '%not found%', 'T381 another company on site by the token: not found');
+:as_super
+select tst.ok((select status from public.estimates where id = '38100000-0000-4000-8000-000000000001') = 'sent', 'T381 …and it stays unsigned');
+-- the owner (staff) on site by the token: as before
+:as_owner_a
+select tst.ok((public.portal_accept('tok_t381_1_0123456789abcdef', '38120000-0000-4000-8000-000000000001', null, 'T381 Client', 'M0 0 L5 5', true, 'on_site') ->> 'status')
+              = 'awaiting_countersign', 'T381 the owner signs the client on site by the token, as before');
+:as_tech_a
+select tst.ok((public.portal_accept('tok_t381_2_0123456789abcdef', '38120000-0000-4000-8000-000000000002', null, 'T381 Client', 'M0 0 L5 5', true, 'on_site') ->> 'status')
+              = 'awaiting_countersign', 'T381 the tech who made the estimate signs the client on site by the token, as before');
+:as_super
+select tst.ok((select channel = 'on_site' and signer_user_id = 'a0000000-0000-0000-0000-000000000003' from public.estimate_approvals
+                where estimate_id = '38100000-0000-4000-8000-000000000002'), 'T381 …on site, on the tech''s device');
+-- the old phone's queue sends the same signature again after the tech lost the estimate (another tech): «repeat», not an error
+:as_tech2_a
+select tst.ok((public.portal_accept('tok_t381_2_0123456789abcdef', '38120000-0000-4000-8000-000000000002', null, 'T381 Client', 'M0 0 L5 5', true, 'on_site') ->> 'status')
+              = 'awaiting_countersign', 'T381 a repeat of a signature already made answers as before');
+:as_super
+select tst.ok((select count(*) from public.estimate_approvals where estimate_id = '38100000-0000-4000-8000-000000000002') = 1, 'T381 the repeat doubles nothing');
+rollback;
+\echo 'T381 ok'
+
+-- ---------------------------------------------------------------- T420–T423 (#2075): sales see the money of their deals only
+-- The founder's answer to В4 (audit of roles #2064): sales do not see the company's money, only the sums of their own
+-- estimates and leads. «His deal»: an estimate he made, or one of a lead he leads; its job; that job's / version's invoices
+-- (20261117560000). Three estimates of company A: E1 by sales, E2 by the office on a lead sales leads, E3 by the office.
+\echo 'T420 sales and the money of the company'
+begin;
+:as_super
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
+  ('a4200000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000',
+   (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T420 lead', '(818) 555-4200',
+   'a0000000-0000-0000-0000-000000000005');
+insert into public.estimates (id, company_id, number, customer_id, property_id, title, created_by, lead_id) values
+  ('a4200000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T420 E1 sales', 'a0000000-0000-0000-0000-000000000005', null),
+  ('a4200000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T420 E2 his lead', 'a0000000-0000-0000-0000-000000000002', 'a4200000-0000-4000-8000-0000000000a1'),
+  ('a4200000-0000-4000-8000-0000000000e3', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T420 E3 office', 'a0000000-0000-0000-0000-000000000002', null);
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+  ('a4201000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'a4200000-0000-4000-8000-0000000000e2', 1);
+insert into public.jobs (id, company_id, number, title, customer_id, property_id, estimate_id, contract_total_cents) values
+  ('a4202000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', '', 'T420 J1', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'a4200000-0000-4000-8000-0000000000e1', 100000),
+  ('a4202000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', '', 'T420 J2', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'a4200000-0000-4000-8000-0000000000e2', 100000),
+  ('a4202000-0000-4000-8000-0000000000e3', 'ca000000-0000-0000-0000-000000000000', '', 'T420 J3', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'a4200000-0000-4000-8000-0000000000e3', 100000);
+insert into public.invoices (id, company_id, number, customer_id, job_id, source_estimate_version_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('a4203000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'a4202000-0000-4000-8000-0000000000e1', null, 'progress', 'sent', 'T420 his job', 30000, 30000, now()),
+  ('a4203000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'a4202000-0000-4000-8000-0000000000e2', 'a4201000-0000-4000-8000-0000000000e2', 'deposit', 'sent', 'T420 his lead deposit', 5000, 5000, now()),
+  ('a4203000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'a4202000-0000-4000-8000-0000000000e3', null, 'progress', 'sent', 'T420 office job', 40000, 40000, now()),
+  ('a4203000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', null, null, 'standalone', 'sent', 'T420 standalone', 7000, 7000, now());
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, received_by) values
+  ('a4204000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'a4203000-0000-4000-8000-000000000001', 'c1a00000-0000-0000-0000-000000000001', 'cash', 1000, 'succeeded', 't420-p1', 'a0000000-0000-0000-0000-000000000002'),
+  ('a4204000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'a4203000-0000-4000-8000-000000000003', 'c1a00000-0000-0000-0000-000000000001', 'cash', 2000, 'succeeded', 't420-p3', 'a0000000-0000-0000-0000-000000000002'),
+  ('a4204000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'a4203000-0000-4000-8000-000000000004', 'c1a00000-0000-0000-0000-000000000001', 'check', 3000, 'succeeded', 't420-p4', 'a0000000-0000-0000-0000-000000000005');
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('a4205000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', 'a4200000-0000-4000-8000-0000000000e1'),
+  ('a4205000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'estimate.approved', 'a4200000-0000-4000-8000-0000000000e2'),
+  ('a4205000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', 'a4200000-0000-4000-8000-0000000000e3'),
+  ('a4205000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'deposit.paid', null);
+insert into public.stripe_accounts (company_id, account_id) values ('ca000000-0000-0000-0000-000000000000', 'acct_T420test')
+  on conflict do nothing;
+insert into public.payment_attempts (company_id, invoice_id, customer_id, amount_cents, attempt_no, idempotency_key, stripe_account_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4203000-0000-4000-8000-000000000001', 'c1a00000-0000-0000-0000-000000000001', 1000, 1, 't420-attempt', 'acct_T420test');
+insert into public.refunds (company_id, payment_id, amount_cents, idempotency_key) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4204000-0000-4000-8000-000000000001', 100, 't420-refund');
+
+-- T420: invoices — his estimate's job, his lead's estimate; not the office's, not a standalone one
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.invoices where id::text like 'a4203000-%'$q$) = 2, 'T420 sales see the invoices of their two deals only');
+select tst.ok(exists (select 1 from public.invoices where id = 'a4203000-0000-4000-8000-000000000001'), 'T420 the invoice of the job of his estimate');
+select tst.ok(exists (select 1 from public.invoices where id = 'a4203000-0000-4000-8000-000000000002'), 'T420 the deposit of the estimate of the lead he leads');
+select tst.ok(not exists (select 1 from public.invoices where id in ('a4203000-0000-4000-8000-000000000003', 'a4203000-0000-4000-8000-000000000004')),
+  'T420 not the office''s job, not a standalone invoice');
+select tst.ok((select sum(b.balance_cents) from public.customer_balances b where b.customer_id = 'c1a00000-0000-0000-0000-000000000001') = 34000,
+  'T420 the client''s balance shows him only what his deals bill (29000 + 5000)');
+
+-- T421: payments — of his deals and those he took himself
+select tst.ok(tst.cnt($q$select 1 from public.payments where id::text like 'a4204000-%'$q$) = 2, 'T421 sales see two payments');
+select tst.ok(exists (select 1 from public.payments where id = 'a4204000-0000-4000-8000-000000000001'), 'T421 a payment of his deal (the office took it)');
+select tst.ok(exists (select 1 from public.payments where id = 'a4204000-0000-4000-8000-000000000004'), 'T421 a payment he took himself');
+select tst.ok(not exists (select 1 from public.payments where id = 'a4204000-0000-4000-8000-000000000003'), 'T421 not a payment of the office''s deal');
+
+-- T422: refunds, payment attempts, the Stripe account — none; notifications of his estimates only
+select tst.ok(tst.cnt($q$select 1 from public.refunds$q$) = 0, 'T422 sales see no refunds');
+select tst.ok(tst.cnt($q$select 1 from public.payment_attempts$q$) = 0, 'T422 sales see no payment attempts');
+select tst.ok(tst.cnt($q$select 1 from public.stripe_accounts$q$) = 0, 'T422 sales do not see the Stripe account');
+select tst.ok(tst.cnt($q$select 1 from public.notifications where id::text like 'a4205000-%'$q$) = 2, 'T422 sales see the notifications of their two estimates only');
+select tst.blocked($q$update public.notifications set read_at = now() where id = 'a4205000-0000-4000-8000-000000000003'$q$, 'T422 sales do not mark another''s notification read');
+-- Р-8b (20261117569000, T435): sales mark a notification read for themselves (notification_reads), not the shared column
+select tst.blocked($q$update public.notifications set read_at = now() where id = 'a4205000-0000-4000-8000-000000000001'$q$, 'T422 sales do not put out the shared mark of their own notification');
+insert into public.notification_reads (notification_id, company_id) values ('a4205000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000');
+select tst.ok(exists (select 1 from public.notification_reads where notification_id = 'a4205000-0000-4000-8000-000000000001'), 'T422 sales mark their own notification read (for themselves)');
+
+-- T423: the office sees everything as before; the lead handed to the office takes its deal from sales
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.invoices where id::text like 'a4203000-%'$q$) = 4
+          and tst.cnt($q$select 1 from public.payments where id::text like 'a4204000-%'$q$) = 3
+          and tst.cnt($q$select 1 from public.refunds$q$) >= 1 and tst.cnt($q$select 1 from public.stripe_accounts$q$) >= 1
+          and tst.cnt($q$select 1 from public.notifications where id::text like 'a4205000-%'$q$) = 4, 'T423 the office sees all the money as before');
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4200000-0000-4000-8000-0000000000a1';
+:as_sales_a
+select tst.ok(not exists (select 1 from public.invoices where id = 'a4203000-0000-4000-8000-000000000002'), 'T423 the lead handed over: its deposit is no longer his');
+-- T424: the deposit at the signature — sales take it on their own deal only (record_estimate_deposit)
+:as_sales_a
+select tst.fails_like($q$select public.record_estimate_deposit('a4200000-0000-4000-8000-0000000000e3', 'a4204000-0000-4000-8000-0000000000d3', 'cash')$q$,
+  '%only the office takes a deposit%', 'T424 sales do not take the deposit of another''s estimate');
+-- the client links the app loads: sales — of their deals only
+:as_super
+select tst.set_token('a4200000-0000-4000-8000-0000000000e1', 'tok_t424_mine_0123456789abcdef');
+select tst.set_token('a4200000-0000-4000-8000-0000000000e3', 'tok_t424_office_0123456789abcd');
+:as_sales_a
+select tst.ok(exists (select 1 from public.estimate_links('ca000000-0000-0000-0000-000000000000') x where x.estimate_id = 'a4200000-0000-4000-8000-0000000000e1')
+          and not exists (select 1 from public.estimate_links('ca000000-0000-0000-0000-000000000000') x where x.estimate_id = 'a4200000-0000-4000-8000-0000000000e3'),
+  'T424 sales get the client link of their estimate, not of the office''s');
+:as_office_a
+select tst.ok(exists (select 1 from public.estimate_links('ca000000-0000-0000-0000-000000000000') x where x.estimate_id = 'a4200000-0000-4000-8000-0000000000e3'), 'T424 the office gets every link');
+:as_sales_a
+-- what sales write stays inside their deals, refused before any check of a sum (no answer about another deal's sums)
+select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'a4202000-0000-4000-8000-0000000000e3', 'progress', 'sent', 'T424 probe', 9999900, 9999900, now())$q$,
+  '%not a deal of yours%', 'T424 sales issue no invoice on another''s job (refused before the contract cap)');
+select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'standalone', 'draft', 'T424 standalone', 100, 100)$q$,
+  '%not a deal of yours%', 'T424 sales issue no invoice without a job');
+select tst.fails_like($q$insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4203000-0000-4000-8000-000000000003', 'c1a00000-0000-0000-0000-000000000001', 'cash', 9999900, 'succeeded', 't424-probe')$q$,
+  '%not a deal of yours%', 'T424 sales take no payment on another''s invoice (refused before the balance check)');
+select tst.fails_like($q$update public.invoices set due_date = '2030-01-01'$q$,
+  '%not a deal of yours%', 'T424 sales change no invoice of another''s deal, even without a where');
+select tst.fails_like($q$update public.invoices set title = 'T424 sales' where id = 'a4203000-0000-4000-8000-000000000001'$q$,
+  '%row-level security%', 'T424 sales change no invoice of their own deal either: a refusal (42501), not «0 rows» an old phone''s queue would take for done');
+:as_super
+select tst.ok(not exists (select 1 from public.invoices where due_date = '2030-01-01'), 'T424 no invoice moved');
+rollback;
+\echo 'T420 T421 T422 T423 T424 ok'
+
+-- ---------------------------------------------------------------- T399–T402 (#1834 × #1958): t13 and the checked write of «Прайс»
+-- catalog_set_item_costs marks the item it writes (app.costs_checked_write = its id): a tax that really changes there is refused
+-- (22023, hint supplier_tax); a neighbour, the cost alone and an old build stay quiet — the supplier's rate wins.
+\echo 'T399 the checked write: a changed tax is refused ok'
+:as_super
+insert into public.suppliers (id, company_id, name, purchase_tax_bps) values
+  ('39900000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'T399 Supplier', 800);
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, supplier_id) values
+  ('39900000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T399 one', 'ea', 0, '39900000-0000-4000-8000-0000000000a1'),
+  ('39900000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'material', 'T399 two', 'ea', 0, '39900000-0000-4000-8000-0000000000a1'),
+  ('39900000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'material', 'T399 no supplier', 'ea', 0, null);
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
+  ('39900000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 1000, 800, 3000),
+  ('39900000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 2000, 800, 3000),
+  ('39900000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 3000, 500, 3000);
+do $$ declare h text; begin
+  perform set_config('app.costs_checked_write', '39900000-0000-4000-8000-0000000000b1', true);
+  begin
+    update public.catalog_item_costs set vendor_tax_bps = 500 where item_id = '39900000-0000-4000-8000-0000000000b1';
+    perform tst.ok(false, 'T399 the changed tax of the marked item is refused');
+  exception when sqlstate '22023' then
+    get stacked diagnostics h = pg_exception_hint;
+    perform tst.ok(h = 'supplier_tax', 'T399 refused with the hint supplier_tax');
+  end;
+  perform tst.ok((select vendor_tax_bps = 800 from public.catalog_item_costs where item_id = '39900000-0000-4000-8000-0000000000b1'), 'T399 nothing written');
+end $$;
+\echo 'T400 the cost alone passes ok'
+-- an item left with an old tax before the supplier's rate came (a desync of old data): a change of the COST alone is no change of the tax
+alter table public.catalog_item_costs disable trigger t13_tax_follows_supplier;
+update public.catalog_item_costs set vendor_tax_bps = 500 where item_id = '39900000-0000-4000-8000-0000000000b1';
+alter table public.catalog_item_costs enable trigger t13_tax_follows_supplier;
+do $$ begin
+  perform set_config('app.costs_checked_write', '39900000-0000-4000-8000-0000000000b1', true);
+  update public.catalog_item_costs set unit_cost_cents = 1100 where item_id = '39900000-0000-4000-8000-0000000000b1';
+  perform tst.ok((select unit_cost_cents = 1100 and vendor_tax_bps = 800 from public.catalog_item_costs where item_id = '39900000-0000-4000-8000-0000000000b1'),
+    'T400 the cost alone is written, no false refusal; the tax comes to the supplier''s');
+end $$;
+\echo 'T401 a neighbour of the group stays quiet ok'
+-- the write of the item b1 moves the neighbour b2 (another item, same supplier): b2 is not marked — the supplier's rate wins quietly
+do $$ begin
+  perform set_config('app.costs_checked_write', '39900000-0000-4000-8000-0000000000b1', true);
+  update public.catalog_item_costs set vendor_tax_bps = 100 where item_id = '39900000-0000-4000-8000-0000000000b2';
+  perform tst.ok((select vendor_tax_bps = 800 from public.catalog_item_costs where item_id = '39900000-0000-4000-8000-0000000000b2'), 'T401 the neighbour keeps the supplier''s rate, no refusal');
+end $$;
+\echo 'T402 an old build stays quiet ok'
+-- no mark (a whole-row upsert of an old build): the supplier's rate wins without a word; an item with no supplier keeps its own, even marked
+update public.catalog_item_costs set vendor_tax_bps = 100 where item_id = '39900000-0000-4000-8000-0000000000b1';
+select tst.ok((select vendor_tax_bps = 800 from public.catalog_item_costs where item_id = '39900000-0000-4000-8000-0000000000b1'), 'T402 an old build: no error, the supplier''s rate');
+do $$ begin
+  perform set_config('app.costs_checked_write', '39900000-0000-4000-8000-0000000000b3', true);
+  update public.catalog_item_costs set vendor_tax_bps = 600 where item_id = '39900000-0000-4000-8000-0000000000b3';
+  perform tst.ok((select vendor_tax_bps = 600 from public.catalog_item_costs where item_id = '39900000-0000-4000-8000-0000000000b3'), 'T402 an item without a supplier keeps its own tax even when marked');
+end $$;
+
+\echo 'T436 the door opens only inside the function ok'
+-- the flag alone is no key (CHECKS №47): a session of the phone (authenticated) that sets it and updates the rate directly is still given the old rate
+:as_owner_a
+do $$ begin
+  perform set_config('app.supplier_tax_door', 'on', true);
+  update public.suppliers set purchase_tax_bps = 777 where id = '39900000-0000-4000-8000-0000000000a1';
+end $$;
+:as_super
+select tst.ok((select purchase_tax_bps = 800 from public.suppliers where id = '39900000-0000-4000-8000-0000000000a1'), 'T436 a phone with the flag set does not change the rate by a direct update');
+:as_owner_a
+select tst.ok(public.supplier_set_tax('39900000-0000-4000-8000-0000000000a1', 810, 800) = 2, 'T436 the door itself still changes it (the owner of the function)');
+:as_super
+
+-- ---------------------------------------------------------------- T414–T416 (#2075): invoices and the money of a job are the office's
+-- The roles decision (В9): sales do not issue or change invoices — the deposit at the signature stays theirs through the
+-- server functions (T73, T191). The lines and the tax of a job make its contract total: the office's too (20261117360000).
+\echo 'T414 invoices and the money of a job: the office'
+begin;
+:as_office_a
+insert into public.jobs (id, company_id, number, title, customer_id, property_id) values
+  ('e4140000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'T414 job', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001');
+insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('e4141000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e4140000-0000-4000-8000-000000000001', 1, 'T414 line', 1, 10000, false);
+select tst.ok((select contract_total_cents from public.jobs where id = 'e4140000-0000-4000-8000-000000000001') = 10000, 'T414 the office adds a line, the total follows');
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('e4142000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'e4140000-0000-4000-8000-000000000001', 'progress', 'sent', 'T414 office', 5000, 5000, now());
+select tst.ok(exists (select 1 from public.invoices where id = 'e4142000-0000-4000-8000-000000000001'), 'T414 the office issues an invoice');
+
+-- T414: sales issue no invoice — of any kind, sent or draft, with or without a job
+:as_sales_a
+select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'standalone', 'sent', 'T414 sales', 999900, 999900, now())$q$,
+  '%not a deal of yours%', 'T414 sales do not issue a standalone invoice');
+select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'standalone', 'draft', 'T414 sales draft', 100, 100)$q$,
+  '%not a deal of yours%', 'T414 sales do not make a draft invoice');
+select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'e4140000-0000-4000-8000-000000000001', 'final', 'sent', 'T414 sales final', 5000, 5000, now())$q$,
+  '%not a deal of yours%', 'T414 sales do not bill the balance of a job');
+
+-- T415: sales change no invoice. The office's invoice is not of his deal (#2075): he no longer sees it and changes
+-- nothing; the refusal of a change on the invoice of his own deal (42501, not «0 rows») — T424.
+select tst.blocked($q$update public.invoices set title = 'T415 sales' where id = 'e4142000-0000-4000-8000-000000000001'$q$,
+  'T415 sales do not rename an invoice');
+select tst.blocked($q$update public.invoices set due_date = tst.today() + 60 where id = 'e4142000-0000-4000-8000-000000000001'$q$,
+  'T415 sales do not move the due date');
+select tst.ok((select count(*) from public.invoices where id = 'e4142000-0000-4000-8000-000000000001') = 0, 'T415 sales do not see the office''s invoice');
+:as_super
+select tst.ok((select title = 'T414 office' and due_date is distinct from tst.today() + 60 from public.invoices where id = 'e4142000-0000-4000-8000-000000000001'),
+  'T415 the invoice is as the office left it');
+:as_office_a
+update public.invoices set title = 'T415 office' where id = 'e4142000-0000-4000-8000-000000000001';
+select tst.ok((select title from public.invoices where id = 'e4142000-0000-4000-8000-000000000001') = 'T415 office', 'T415 the office still changes what may change');
+
+-- T416: the contract total of a job — sales neither add, change nor remove a line, nor switch the tax
+:as_sales_a
+select tst.fails_like($q$insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents) values
+  ('ca000000-0000-0000-0000-000000000000', 'e4140000-0000-4000-8000-000000000001', 2, 'T416 sales', 1, 990000)$q$,
+  '%row-level security%', 'T416 sales do not add a line to a job');
+select tst.fails_like($q$update public.job_line_items set unit_price_cents = 990000 where id = 'e4141000-0000-4000-8000-000000000001'$q$,
+  '%row-level security%', 'T416 sales do not change a line price');
+select tst.fails_like($q$update public.job_line_items set deleted_at = now() where id = 'e4141000-0000-4000-8000-000000000001'$q$,
+  '%row-level security%', 'T416 sales do not remove a line');
+select tst.fails_like($q$update public.jobs set tax_enabled = true, tax_rate_bps = 1000 where id = 'e4140000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes the tax of a job%', 'T416 sales do not switch on the tax of a job');
+select tst.fails_like($q$update public.jobs set tax_rate_ppm = 100000 where id = 'e4140000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes the tax of a job%', 'T416 sales do not change the tax rate of a job');
+select tst.fails($q$update public.jobs set contract_total_cents = 990000 where id = 'e4140000-0000-4000-8000-000000000001'$q$, 'T416 sales do not set the total');
+-- what sales still change on a job: its description (job.update)
+update public.jobs set description = 'T416 sales note' where id = 'e4140000-0000-4000-8000-000000000001';
+select tst.ok((select description = 'T416 sales note' and contract_total_cents = 10000 and not tax_enabled from public.jobs where id = 'e4140000-0000-4000-8000-000000000001'),
+  'T416 sales still note a job; its total and tax stay the office''s');
+-- a new job of sales comes without a tax: one with it is refused, a plain one is made
+select tst.fails_like($q$insert into public.jobs (id, company_id, number, title, customer_id, property_id, tax_enabled, tax_rate_bps) values
+  ('e4140000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'T416 taxed', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', true, 10000)$q$,
+  '%only the office changes the tax of a job%', 'T416 sales do not make a job with a tax');
+select tst.fails_like($q$insert into public.jobs (id, company_id, number, title, customer_id, property_id, tax_rate_ppm) values
+  ('e4140000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'T416 rate', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 50000)$q$,
+  '%only the office changes the tax of a job%', 'T416 sales do not make a job with a tax rate');
+insert into public.jobs (id, company_id, number, title, customer_id, property_id) values
+  ('e4140000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'T416 plain', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001');
+select tst.ok(exists (select 1 from public.jobs where id = 'e4140000-0000-4000-8000-000000000003' and not tax_enabled), 'T416 sales still make a plain job (lead.book)');
+-- the tech: no invoice, no line, no tax either
+:as_tech_a
+select tst.fails($q$insert into public.invoices (company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'standalone', 'draft', 'T416 tech', 100, 100)$q$, 'T416 the tech issues no invoice');
+select tst.fails($q$insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents) values
+  ('ca000000-0000-0000-0000-000000000000', 'e4140000-0000-4000-8000-000000000001', 3, 'T416 tech', 1, 100)$q$, 'T416 the tech adds no line');
+select tst.blocked($q$update public.jobs set tax_enabled = true where id = 'e4140000-0000-4000-8000-000000000001'$q$, 'T416 the tech switches no tax');
+:as_office_a
+update public.jobs set tax_enabled = true, tax_rate_bps = 1000 where id = 'e4140000-0000-4000-8000-000000000001';
+update public.job_line_items set taxable = true where id = 'e4141000-0000-4000-8000-000000000001';
+select tst.ok((select tax_enabled and contract_total_cents = 11000 from public.jobs where id = 'e4140000-0000-4000-8000-000000000001'), 'T416 the office switches the tax, the total follows');
+rollback;
+\echo 'T414 T415 T416 ok'
+
+-- ---------------------------------------------------------------- T417–T419 (#2075): a tech's own lead — his to work, the rest the office's
+-- The roles decision (audit of roles #2064): a member who is not staff works his lead (contact fields, the next step,
+-- close / reopen / snooze, the first reply); he gives it to nobody else, and its source, price, client, number, links
+-- and «won» stay the office's (leads_update WITH CHECK = USING, t12_lead_member_guard, 20261117370000).
+\echo 'T417 a tech''s own lead'
+begin;
+:as_tech_a
+insert into public.leads (id, company_id, source_id, contact_name, phone) values
+  ('a4170000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000',
+   (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T417 Neighbor', '(818) 555-4170');
+:as_office_a
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000003' where id = 'a4170000-0000-4000-8000-000000000001';
+
+-- T417: he gives it to nobody else, and the lead stays his after his change
+:as_tech_a
+select tst.fails_like($q$update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%given to someone else by the office%', 'T417 a tech does not give his lead to the office');
+select tst.fails_like($q$update public.leads set assigned_to = null where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%given to someone else by the office%', 'T417 a tech does not leave his lead without anyone');
+select tst.fails($q$update public.leads set created_by = 'a0000000-0000-0000-0000-000000000002', assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  'T417 a tech does not hand the lead out of his reach');
+:as_office_a
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001';
+:as_tech_a
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000003' where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select assigned_to from public.leads where id = 'a4170000-0000-4000-8000-000000000001') = 'a0000000-0000-0000-0000-000000000003', 'T417 a tech takes a lead he brought back to himself');
+
+-- T418: the office's fields of a lead do not change by his hand
+select tst.fails_like($q$update public.leads set source_id = (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name <> 'Referral' limit 1) where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T418 a tech does not change the source');
+select tst.fails_like($q$update public.leads set cost_cents = 99900 where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T418 a tech does not set the lead price');
+select tst.fails_like($q$update public.leads set customer_id = 'c1a00000-0000-0000-0000-000000000001' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office%', 'T418 a tech does not tie the lead to a client (t06_lead_place_guard answers first)');
+select tst.fails_like($q$update public.leads set number = 'LEA-9999' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T418 a tech does not renumber the lead');
+select tst.fails_like($q$update public.leads set received_at = now() - interval '30 days' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T418 a tech does not move the receipt time');
+-- what is his: the contact fields, the next step, close and reopen
+update public.leads set contact_name = 'T417 Neighbor Jr', service_requested = 'Gutter cleaning', snoozed_until = now() + interval '3 days', snooze_reason = 'client_away' where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select contact_name = 'T417 Neighbor Jr' and service_requested = 'Gutter cleaning' from public.leads where id = 'a4170000-0000-4000-8000-000000000001'), 'T418 a tech still works his lead (fields, snooze)');
+update public.leads set snoozed_until = null, snooze_reason = null where id = 'a4170000-0000-4000-8000-000000000001';
+update public.leads set status = 'lost', lost_reason = 'no_response' where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select status from public.leads where id = 'a4170000-0000-4000-8000-000000000001') = 'lost', 'T418 a tech closes his lead');
+update public.leads set status = 'contacted', lost_reason = null, lost_reason_text = null where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select status from public.leads where id = 'a4170000-0000-4000-8000-000000000001') = 'contacted', 'T418 a tech reopens his lead');
+
+-- T419: «won» (making a client) is the office's; the office still changes what the tech may not
+select tst.fails_like($q$update public.leads set status = 'won', won_via = 'manual' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office%', 'T419 a tech does not make his lead won');
+-- archived, «referred by», a first reply moved: the office's too
+update public.leads set status = 'lost', lost_reason = 'no_response' where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.fails_like($q$update public.leads set status = 'archived' where id = 'a4170000-0000-4000-8000-000000000001'$q$, '%only the office%', 'T419 a tech does not archive his lead');
+update public.leads set status = 'contacted', lost_reason = null where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.fails_like($q$update public.leads set referred_by_customer_id = 'c1a00000-0000-0000-0000-000000000001' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T419 a tech does not mark the lead «referred by» a client');
+update public.leads set first_response_at = now(), first_response_kind = 'manual' where id = 'a4170000-0000-4000-8000-000000000001' and first_response_at is null;
+select tst.ok((select first_response_at is not null from public.leads where id = 'a4170000-0000-4000-8000-000000000001'), 'T419 a tech marks the first reply once');
+select tst.fails_like($q$update public.leads set first_response_at = now() - interval '100 days' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%only the office changes this of a lead%', 'T419 a tech does not move the first reply');
+-- a new lead of his is a plain new one
+select tst.fails_like($q$insert into public.leads (company_id, source_id, contact_name, phone, status, won_via) values
+  ('ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T419 won', '(818) 555-4191', 'won', 'manual')$q$,
+  '%only the office makes a lead like this%', 'T419 a tech does not bring a lead already won');
+select tst.fails_like($q$insert into public.leads (company_id, source_id, contact_name, phone, provider, provider_ref) values
+  ('ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T419 market', '(818) 555-4192', 'thumbtack', 'T419-ref')$q$,
+  '%only the office makes a lead like this%', 'T419 a tech does not bring a lead with a marketplace reference');
+insert into public.leads (id, company_id, source_id, contact_name, phone, received_at) values
+  ('a4170000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'),
+   'T419 back-dated', '(818) 555-4193', now() - interval '90 days');
+select tst.ok((select received_at > now() - interval '1 minute' and status = 'new' from public.leads where id = 'a4170000-0000-4000-8000-000000000002'),
+  'T419 a lead he brings is received now, whatever the phone says');
+:as_sales_a
+update public.leads set source_id = (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name <> 'Referral' limit 1)
+ where id = 'a4170000-0000-4000-8000-000000000001';
+select tst.ok((select source_id <> (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral')
+                 from public.leads where id = 'a4170000-0000-4000-8000-000000000001'), 'T419 sales (staff) still change the source of a lead');
+-- the tech's lead is not his: given to another by the office only (#2075, T425)
+select tst.fails_like($q$update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4170000-0000-4000-8000-000000000001'$q$,
+  '%not a lead of yours%', 'T419 sales do not give the tech''s lead to another');
+rollback;
+\echo 'T417 T418 T419 ok'
+
+-- ---------------------------------------------------------------- T425 (#2075): sales do not make another's deal theirs
+-- a deal of sales is his estimate or an estimate of his lead; the lead is given or taken by sales only when it is his,
+-- the lead of an estimate is changed only on his own estimate and only to his own lead
+\echo 'T425 sales and another''s deal'
+begin;
+:as_super
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to, created_by) values
+  ('a4250000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T425 free', '(818) 555-4251', null, 'a0000000-0000-0000-0000-000000000002'),
+  ('a4250000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T425 office''s', '(818) 555-4252', 'a0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002'),
+  ('a4250000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T425 brought by him', '(818) 555-4253', null, 'a0000000-0000-0000-0000-000000000005'),
+  ('a4250000-0000-4000-8000-0000000000a4', 'ca000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'), 'T425 his', '(818) 555-4254', 'a0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000002');
+insert into public.estimates (id, company_id, number, customer_id, property_id, title, created_by, lead_id) values
+  ('a4250000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T425 office E', 'a0000000-0000-0000-0000-000000000002', 'a4250000-0000-4000-8000-0000000000a2'),
+  ('a4250000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T425 his E', 'a0000000-0000-0000-0000-000000000005', null);
+:as_sales_a
+select tst.ok(not app.sales_deal_estimate('a4250000-0000-4000-8000-0000000000e1'), 'T425 fixture: the office''s estimate is not his deal');
+select tst.fails_like($q$update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000005' where id = 'a4250000-0000-4000-8000-0000000000a2'$q$,
+  '%not a lead of yours%', 'T425 sales do not take the office''s lead');
+select tst.fails_like($q$update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000005' where id = 'a4250000-0000-4000-8000-0000000000a1'$q$,
+  '%not a lead of yours%', 'T425 sales do not take a free lead (the office gives it)');
+select tst.fails_like($q$update public.leads set assigned_to = null where id = 'a4250000-0000-4000-8000-0000000000a2'$q$,
+  '%not a lead of yours%', 'T425 sales do not take another''s lead from him');
+select tst.fails_like($q$update public.estimates set lead_id = 'a4250000-0000-4000-8000-0000000000a4' where id = 'a4250000-0000-4000-8000-0000000000e1'$q$,
+  '%not a deal of yours%', 'T425 sales do not put the office''s estimate on their lead');
+select tst.fails_like($q$update public.estimates set lead_id = 'a4250000-0000-4000-8000-0000000000a2' where id = 'a4250000-0000-4000-8000-0000000000e2'$q$,
+  '%not a deal of yours%', 'T425 sales do not put their estimate on the office''s lead');
+select tst.ok(not app.sales_deal_estimate('a4250000-0000-4000-8000-0000000000e1'), 'T425 after the refusals the office''s deal is still not his');
+-- brought by him, given by the office to another: no longer his
+:as_super
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4250000-0000-4000-8000-0000000000a3';
+:as_sales_a
+select tst.fails_like($q$update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000005' where id = 'a4250000-0000-4000-8000-0000000000a3'$q$,
+  '%not a lead of yours%', 'T425 sales do not take back the lead they brought once the office gave it to another');
+select tst.fails_like($q$update public.estimates set lead_id = 'a4250000-0000-4000-8000-0000000000a3' where id = 'a4250000-0000-4000-8000-0000000000e2'$q$,
+  '%not a deal of yours%', 'T425 …nor put their estimate on it');
+:as_super
+update public.leads set assigned_to = null where id = 'a4250000-0000-4000-8000-0000000000a3';
+:as_sales_a
+-- his own: as before
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000005' where id = 'a4250000-0000-4000-8000-0000000000a3';
+select tst.ok((select assigned_to = 'a0000000-0000-0000-0000-000000000005' from public.leads where id = 'a4250000-0000-4000-8000-0000000000a3'), 'T425 sales take the lead they brought');
+update public.leads set contact_name = 'T425 his renamed', assigned_to = 'a0000000-0000-0000-0000-000000000005' where id = 'a4250000-0000-4000-8000-0000000000a4';
+select tst.ok((select contact_name = 'T425 his renamed' from public.leads where id = 'a4250000-0000-4000-8000-0000000000a4'), 'T425 a change of his lead that keeps the person passes');
+update public.estimates set lead_id = 'a4250000-0000-4000-8000-0000000000a4' where id = 'a4250000-0000-4000-8000-0000000000e2';
+select tst.ok((select lead_id = 'a4250000-0000-4000-8000-0000000000a4' from public.estimates where id = 'a4250000-0000-4000-8000-0000000000e2'), 'T425 sales put their estimate on their lead');
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = 'a4250000-0000-4000-8000-0000000000a4';
+select tst.ok((select assigned_to = 'a0000000-0000-0000-0000-000000000002' from public.leads where id = 'a4250000-0000-4000-8000-0000000000a4'), 'T425 sales give their lead to the office');
+-- the office gives any lead, as before
+:as_office_a
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000005' where id = 'a4250000-0000-4000-8000-0000000000a1';
+select tst.ok((select assigned_to = 'a0000000-0000-0000-0000-000000000005' from public.leads where id = 'a4250000-0000-4000-8000-0000000000a1'), 'T425 the office gives a free lead to sales');
+update public.estimates set lead_id = 'a4250000-0000-4000-8000-0000000000a1' where id = 'a4250000-0000-4000-8000-0000000000e1';
+select tst.ok((select lead_id = 'a4250000-0000-4000-8000-0000000000a1' from public.estimates where id = 'a4250000-0000-4000-8000-0000000000e1'), 'T425 the office changes the lead of an estimate');
+-- T426: the other ways to make another's deal his are shut by the older guards — proved here
+:as_super
+insert into public.estimates (id, company_id, number, customer_id, property_id, title, created_by, lead_id) values
+  ('a4260000-0000-4000-8000-0000000000e3', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T426 office E', 'a0000000-0000-0000-0000-000000000002', null);
+insert into public.jobs (id, company_id, number, title, customer_id, property_id, estimate_id) values
+  ('a4260000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', '', 'T426 office job', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'a4260000-0000-4000-8000-0000000000e3'),
+  ('a4260000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', '', 'T426 plain job', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', null);
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+  ('a4260000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a4260000-0000-4000-8000-0000000000e3', 1);
+:as_sales_a
+select tst.ok(not app.sales_deal_estimate('a4260000-0000-4000-8000-0000000000e3'), 'T426 fixture: the office''s estimate is not his deal');
+-- (1) the estimate of a job: not changed by the app (no column right), nor a new job made with one (t-guard 20261106046000)
+select tst.fails_like($q$update public.jobs set estimate_id = 'a4250000-0000-4000-8000-0000000000e2' where id = 'a4260000-0000-4000-8000-0000000000f2'$q$,
+  '%permission denied for table jobs%', 'T426 sales do not put their estimate on a job (the column is the server''s)');
+select tst.fails_like($q$insert into public.jobs (company_id, number, title, customer_id, property_id, estimate_id) values
+  ('ca000000-0000-0000-0000-000000000000', '', 'T426 probe', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'a4260000-0000-4000-8000-0000000000e3')$q$,
+  '%made by its signature%', 'T426 sales make no job with an estimate (another''s or their own)');
+-- (2) the author of an estimate is the server's (t10_service_fields keeps it)
+update public.estimates set created_by = 'a0000000-0000-0000-0000-000000000005' where id = 'a4260000-0000-4000-8000-0000000000e3';
+select tst.ok(not app.sales_deal_estimate('a4260000-0000-4000-8000-0000000000e3'), 'T426 sales do not make themselves the author of another''s estimate');
+-- (3) a version stays with its estimate (t06_version_lock_by_send); the source version of an invoice is the office's (T424)
+select tst.fails_like($q$update public.estimate_versions set estimate_id = 'a4250000-0000-4000-8000-0000000000e2' where id = 'a4260000-0000-4000-8000-0000000000b1'$q$,
+  '%stays with its estimate%', 'T426 sales do not move a version of another''s estimate to theirs');
+:as_super
+select tst.ok((select estimate_id = 'a4260000-0000-4000-8000-0000000000e3' from public.estimate_versions where id = 'a4260000-0000-4000-8000-0000000000b1')
+              and (select estimate_id = 'a4260000-0000-4000-8000-0000000000e3' from public.jobs where id = 'a4260000-0000-4000-8000-0000000000f1')
+              and (select estimate_id is null from public.jobs where id = 'a4260000-0000-4000-8000-0000000000f2'), 'T426 nothing moved');
+rollback;
+\echo 'T425 T426 ok'
+
+-- ---------------------------------------------------------------- T427–T430 (Р-6): who sees whom in the team, the company row
+\echo 'T427 the team by roles'
+begin;
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a4270000-0000-4000-8000-000000000001', 'sub427@a.test', '{"full_name":"Sam Sub427"}'),
+  ('a4270000-0000-4000-8000-000000000002', 'inv427@a.test', '{"full_name":"Ivy Invited427"}'),
+  ('a4270000-0000-4000-8000-000000000003', 'del427@a.test', '{"full_name":"Del Deleted427"}'),
+  ('a4270000-0000-4000-8000-000000000004', 'gone427@a.test', '{"full_name":"Gil Gone427"}'),
+  ('a4270000-0000-4000-8000-000000000005', 'tech427@a.test', '{"full_name":"Tom Tech427"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4270000-0000-4000-8000-000000000001', 'subcontractor', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a4270000-0000-4000-8000-000000000002', 'tech', 'invited'),
+  ('ca000000-0000-0000-0000-000000000000', 'a4270000-0000-4000-8000-000000000003', 'tech', 'deleted'),
+  ('ca000000-0000-0000-0000-000000000000', 'a4270000-0000-4000-8000-000000000004', 'tech', 'disabled'),
+  ('ca000000-0000-0000-0000-000000000000', 'a4270000-0000-4000-8000-000000000005', 'tech', 'active'),
+  -- the same subcontractor is a tech in another company (B)
+  ('cb000000-0000-0000-0000-000000000000', 'a4270000-0000-4000-8000-000000000001', 'tech', 'active');
+-- visit 1: the subcontractor with Mike Tech; visit 2 (then cancelled): with Luis Tech; visit 3 (then deleted): with Tom Tech427
+insert into public.visits (id, company_id, job_id, starts_at, ends_at) values
+  ('f4270000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', now(), now() + interval '2 hours'),
+  ('f4270000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', now() + interval '1 day', now() + interval '1 day 2 hours'),
+  ('f4270000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', now() + interval '2 days', now() + interval '2 days 2 hours');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f4270000-0000-4000-8000-000000000001', 'a4270000-0000-4000-8000-000000000001'),
+  ('ca000000-0000-0000-0000-000000000000', 'f4270000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', 'f4270000-0000-4000-8000-000000000002', 'a4270000-0000-4000-8000-000000000001'),
+  ('ca000000-0000-0000-0000-000000000000', 'f4270000-0000-4000-8000-000000000002', 'a0000000-0000-0000-0000-000000000004'),
+  ('ca000000-0000-0000-0000-000000000000', 'f4270000-0000-4000-8000-000000000003', 'a4270000-0000-4000-8000-000000000001'),
+  ('ca000000-0000-0000-0000-000000000000', 'f4270000-0000-4000-8000-000000000003', 'a4270000-0000-4000-8000-000000000005');
+update public.visits set status = 'cancelled' where id = 'f4270000-0000-4000-8000-000000000002';
+update public.visits set deleted_at = now() where id = 'f4270000-0000-4000-8000-000000000003';
+-- the office: everyone, as before
+:as_office_a
+select tst.ok((select count(*) from public.memberships where user_id::text like 'a4270000-%' and company_id = 'ca000000-0000-0000-0000-000000000000') = 5, 'T427 the office sees the whole team, invited and deleted too');
+-- a tech: himself and the colleagues who joined (active, disabled, deleted); not the invited
+:as_tech_a
+select tst.ok(exists (select 1 from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000003'), 'T427 a tech sees his own row');
+select tst.ok(exists (select 1 from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000004'), 'T427 a tech sees an active colleague');
+select tst.ok(exists (select 1 from public.memberships where user_id = 'a4270000-0000-4000-8000-000000000004'), 'T427 a tech sees a former colleague (his name on the history)');
+select tst.ok(exists (select 1 from public.memberships where user_id = 'a4270000-0000-4000-8000-000000000003'), 'T427 a tech sees a deleted colleague (named «Удалённый пользователь» on the history)');
+select tst.ok(not exists (select 1 from public.memberships where user_id = 'a4270000-0000-4000-8000-000000000002'), 'T427 a tech does not see the invited');
+select tst.ok((select count(*) from public.memberships) > 0, 'T427 an old phone''s select of every column still loads (no column refused)');
+:as_sales_a
+select tst.ok(exists (select 1 from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000001')
+              and not exists (select 1 from public.memberships where user_id = 'a4270000-0000-4000-8000-000000000002'), 'T427 sales: the colleagues, not the invited');
+-- a subcontractor: himself and who he is on a visit with
+reset role; set request.jwt.claim.sub = 'a4270000-0000-4000-8000-000000000001'; set role authenticated;
+select tst.ok(exists (select 1 from public.memberships where user_id = 'a4270000-0000-4000-8000-000000000001'), 'T427 a subcontractor sees his own row');
+select tst.ok(exists (select 1 from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000003'), 'T427 a subcontractor sees the tech on his visit');
+select tst.ok(not exists (select 1 from public.memberships where user_id in ('a0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000004', 'a4270000-0000-4000-8000-000000000004')),
+  'T427 a subcontractor does not see the owner or the people not on his visits');
+select tst.ok(not exists (select 1 from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000004')
+              and not exists (select 1 from public.users where id = 'a0000000-0000-0000-0000-000000000004'), 'T427 a cancelled visit: the subcontractor does not see the colleague');
+select tst.ok(not exists (select 1 from public.memberships where user_id = 'a4270000-0000-4000-8000-000000000005')
+              and not exists (select 1 from public.users where id = 'a4270000-0000-4000-8000-000000000005'), 'T427 a deleted visit: the subcontractor does not see the colleague');
+-- two companies: a subcontractor in A, a tech in B — the team of B by the tech's rule, the team of A by the subcontractor's
+select tst.ok(exists (select 1 from public.memberships where company_id = 'cb000000-0000-0000-0000-000000000000' and user_id = 'b0000000-0000-0000-0000-000000000001')
+              and exists (select 1 from public.users where id = 'b0000000-0000-0000-0000-000000000001'), 'T427 two companies: a tech in B sees the team of B');
+select tst.ok(not exists (select 1 from public.memberships where user_id in ('a0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002'))
+              and not exists (select 1 from public.users where id in ('a0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002')),
+  'T427 two companies: being a tech in B does not open the team of A, where he is a subcontractor');
+:as_super
+update public.visit_assignees set deleted_at = now() where visit_id = 'f4270000-0000-4000-8000-000000000001' and user_id = 'a4270000-0000-4000-8000-000000000001';
+reset role; set request.jwt.claim.sub = 'a4270000-0000-4000-8000-000000000001'; set role authenticated;
+select tst.ok(not exists (select 1 from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000003'), 'T427 …and no longer once he is off the visit');
+-- T430: the people of the team (users) — the same rule
+:as_super
+update public.visit_assignees set deleted_at = null where visit_id = 'f4270000-0000-4000-8000-000000000001' and user_id = 'a4270000-0000-4000-8000-000000000001';
+:as_office_a
+select tst.ok(exists (select 1 from public.users where id = 'a4270000-0000-4000-8000-000000000002'), 'T430 the office sees the person invited');
+:as_tech_a
+select tst.ok(exists (select 1 from public.users where id = 'a0000000-0000-0000-0000-000000000004')
+              and exists (select 1 from public.users where id = 'a4270000-0000-4000-8000-000000000003'), 'T430 a tech sees his colleagues, a deleted one too');
+select tst.ok(not exists (select 1 from public.users where id = 'a4270000-0000-4000-8000-000000000002'), 'T430 a tech does not see the person invited');
+reset role; set request.jwt.claim.sub = 'a4270000-0000-4000-8000-000000000001'; set role authenticated;
+select tst.ok(exists (select 1 from public.users where id = 'a4270000-0000-4000-8000-000000000001'), 'T430 a subcontractor sees himself');
+select tst.ok(exists (select 1 from public.users where id = 'a0000000-0000-0000-0000-000000000003'), 'T430 a subcontractor sees the tech on his visit');
+select tst.ok(not exists (select 1 from public.users where id in ('a0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000004', 'a4270000-0000-4000-8000-000000000002')),
+  'T430 a subcontractor does not see the owner, the people not on his visits, the invited (name, e-mail, phone)');
+-- another company: nothing, as before
+:as_owner_b
+select tst.ok(not exists (select 1 from public.users where id in ('a4270000-0000-4000-8000-000000000003', 'a4270000-0000-4000-8000-000000000005')), 'T430 another company does not see the people');
+select tst.ok(exists (select 1 from public.users where id = 'a4270000-0000-4000-8000-000000000001'), 'T430 …but its own tech, who is also a subcontractor in A');
+select tst.ok(not exists (select 1 from public.memberships where company_id = 'ca000000-0000-0000-0000-000000000000'), 'T427 another company sees none of the team');
+rollback;
+\echo 'T427 ok'
+
+\echo 'T428 the invite token of a membership'
+begin;
+:as_super
+select tst.ok(not exists (select 1 from public.memberships where invite_token_hash is not null), 'T428 no membership keeps an invite token');
+:as_owner_a
+select tst.fails_like($q$update public.memberships set invite_token_hash = 'T428 hash' where company_id = 'ca000000-0000-0000-0000-000000000000'$q$,
+  '%permission denied for table memberships%', 'T428 the app does not write an invite token (no right to that column)');
+select tst.ok(not has_function_privilege('authenticated', 'app.shares_company(uuid)', 'execute'), 'T428 app.shares_company: nobody asks through it who is in his companies');
+:as_tech_a
+select tst.fails_like($q$select app.shares_company('a0000000-0000-0000-0000-000000000001')$q$, '%permission denied for function shares_company%', 'T428 a member cannot call app.shares_company');
+rollback;
+\echo 'T428 ok'
+
+\echo 'T429 the Stripe account is not on the company row'
+begin;
+:as_super
+select tst.ok(not exists (select 1 from public.companies where stripe_account_id is not null), 'T429 no company row keeps the Stripe account');
+select tst.ok(not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'company_secrets' and column_name = 'stripe_account_id'),
+  'T429 no copy in the company secrets (the source of truth is stripe_accounts, written by the server)');
+:as_owner_a
+select tst.fails_like($q$update public.companies set stripe_account_id = 'acct_T429_phone', name = name where id = 'ca000000-0000-0000-0000-000000000000'$q$,
+  '%permission denied for table companies%', 'T429 the app does not write it on the company row (no right to the column, Р-7)');
+:as_super
+select tst.ok((select stripe_account_id is null from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'T429 …and it stays empty');
+update public.companies set stripe_account_id = 'acct_T429_server' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select stripe_account_id = 'acct_T429_server' from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'T429 the server is not stopped by the trigger');
+update public.companies set stripe_account_id = null where id = 'ca000000-0000-0000-0000-000000000000';
+:as_tech_a
+select tst.ok((select count(*) from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 1, 'T429 a tech still reads the company row (every column: an old phone''s select)');
+select tst.ok(not exists (select 1 from public.company_secrets where company_id = 'ca000000-0000-0000-0000-000000000000'), 'T429 a tech does not read the company secrets');
+:as_sales_a
+select tst.ok(not exists (select 1 from public.company_secrets where company_id = 'ca000000-0000-0000-0000-000000000000'), 'T429 nor sales (owner and admin only, as before)');
+rollback;
+\echo 'T429 ok'
+
+-- ---------------------------------------------------------------- T431–T432 (Р-7): what the app writes on the company row
+\echo 'T431 the company row: only the columns the app writes'
+begin;
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a4310000-0000-4000-8000-000000000001', 'admin431@a.test', '{"full_name":"Ada Admin431"}'),
+  ('a4310000-0000-4000-8000-000000000002', 'office431@a.test', '{"full_name":"Otis Office431"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4310000-0000-4000-8000-000000000001', 'admin', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a4310000-0000-4000-8000-000000000002', 'office', 'active');
+\set as_admin431 'reset role; set request.jwt.claim.sub = ''a4310000-0000-4000-8000-000000000001''; set role authenticated;'
+\set as_office431 'reset role; set request.jwt.claim.sub = ''a4310000-0000-4000-8000-000000000002''; set role authenticated;'
+-- every column any build of the app writes (companyToDb, company.save with the time zone, the visit settings, old trades)
+:as_owner_a
+update public.companies set name = name, dba = dba, legal_name = legal_name, entity_type = entity_type, phone = phone, email = email,
+  website = website, address_line1 = address_line1, address_city = address_city, address_state = address_state, address_zip = address_zip,
+  mailing_address_line1 = mailing_address_line1, mailing_address_city = mailing_address_city, mailing_address_state = mailing_address_state,
+  mailing_address_zip = mailing_address_zip, timezone = timezone, doc_language = doc_language, brand = brand,
+  contract_settings = contract_settings, estimate_settings = estimate_settings, payment_settings = payment_settings,
+  onboarding_state = onboarding_state, lead_default_assignee_id = 'a0000000-0000-0000-0000-000000000003', lead_settings = lead_settings,
+  schedule_settings = schedule_settings, business_hours = business_hours, visit_settings = visit_settings, trades = trades
+ where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select lead_default_assignee_id = 'a0000000-0000-0000-0000-000000000003' from public.companies where id = 'ca000000-0000-0000-0000-000000000000'),
+  'T431 the owner saves every setting the app sends (an old phone''s queued save too)');
+:as_admin431
+update public.companies set name = 'T431 Admin Co', trades = trades, visit_settings = visit_settings where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select name = 'T431 Admin Co' from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'T431 the admin saves the settings, as the owner');
+-- what the app never writes: the server's
+:as_owner_a
+select tst.fails_like($q$update public.companies set deleted_at = now() where id = 'ca000000-0000-0000-0000-000000000000'$q$, '%permission denied for table companies%', 'T431 the owner does not hide the company by hand');
+select tst.fails_like($q$update public.companies set numbering = '{}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, '%permission denied for table companies%', 'T431 nor rewrite the numbering');
+select tst.fails_like($q$update public.companies set public_slug = 'T431-slug' where id = 'ca000000-0000-0000-0000-000000000000'$q$, '%permission denied for table companies%', 'T431 nor the public link name');
+select tst.fails_like($q$update public.companies set id = 'ca000000-0000-0000-0000-0000000004a1' where id = 'ca000000-0000-0000-0000-000000000000'$q$, '%permission denied for table companies%', 'T431 nor the id');
+:as_admin431
+select tst.fails_like($q$update public.companies set tax_settings = '{}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, '%permission denied for table companies%', 'T431 the admin: not the tax settings');
+select tst.fails_like($q$update public.companies set gutter_settings = '{}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, '%permission denied for table companies%', 'T431 …nor the module''s settings');
+select tst.fails_like($q$update public.companies set checklist_since = now() where id = 'ca000000-0000-0000-0000-000000000000'$q$, '%permission denied for table companies%', 'T431 …nor checklist_since');
+-- a new company: the name (and its id), nothing else
+:as_owner_a
+select tst.fails_like($q$insert into public.companies (id, name, public_slug) values ('ca000000-0000-0000-0000-0000000004a2', 'T431 Co', 'T431-new')$q$, '%permission denied for table companies%', 'T431 a new company: only the name');
+-- the other roles: the policy, as before
+:as_office431
+update public.companies set name = 'T431 by office' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_tech_a
+update public.companies set name = 'T431 by tech' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_sales_a
+update public.companies set name = 'T431 by sales' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_super
+select tst.ok((select name = 'T431 Admin Co' from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'T431 office, tech and sales do not change the company');
+rollback;
+\echo 'T431 ok'
+
+\echo 'T432 the default lead assignee: a member of this company'
+begin;
+:as_owner_a
+select tst.fails_like($q$update public.companies set lead_default_assignee_id = 'b0000000-0000-0000-0000-000000000001' where id = 'ca000000-0000-0000-0000-000000000000'$q$,
+  '%active member of the company%', 'T432 not a person of another company');
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a4320000-0000-4000-8000-000000000001', 'sub432@a.test', '{"full_name":"Sid Sub432"}'),
+  ('a4320000-0000-4000-8000-000000000002', 'off432@a.test', '{"full_name":"Olga Off432"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4320000-0000-4000-8000-000000000001', 'subcontractor', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a4320000-0000-4000-8000-000000000002', 'tech', 'disabled');
+:as_owner_a
+select tst.fails_like($q$update public.companies set lead_default_assignee_id = 'a4320000-0000-4000-8000-000000000001' where id = 'ca000000-0000-0000-0000-000000000000'$q$,
+  '%active member of the company%', 'T432 not a subcontractor (new leads never go to one)');
+select tst.fails_like($q$update public.companies set lead_default_assignee_id = 'a4320000-0000-4000-8000-000000000002' where id = 'ca000000-0000-0000-0000-000000000000'$q$,
+  '%active member of the company%', 'T432 not someone switched off');
+update public.companies set lead_default_assignee_id = 'a0000000-0000-0000-0000-000000000003' where id = 'ca000000-0000-0000-0000-000000000000';
+-- the chosen one leaves: saving the other settings still works (the stored value is not checked again)
+:as_super
+update public.memberships set status = 'disabled' where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003';
+:as_owner_a
+update public.companies set name = 'T432 Co', lead_default_assignee_id = 'a0000000-0000-0000-0000-000000000003' where id = 'ca000000-0000-0000-0000-000000000000';
+update public.companies set lead_default_assignee_id = null where id = 'ca000000-0000-0000-0000-000000000000';
+:as_super
+select tst.ok((select name = 'T432 Co' and lead_default_assignee_id is null from public.companies where id = 'ca000000-0000-0000-0000-000000000000'),
+  'T432 a stored assignee who left does not block saving; «nobody» (the owner) is always allowed');
+rollback;
+\echo 'T431 T432 ok'
+
+-- ---------------------------------------------------------------- T433 (Р-8a): who writes which expense
+\echo 'T433 an expense: the client of its job, a sum not below zero, a subcontractor only on a job of his'
+begin;
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a4330000-0000-4000-8000-000000000001', 'sub433@a.test', '{"full_name":"Sam Sub433"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4330000-0000-4000-8000-000000000001', 'subcontractor', 'active');
+-- the subcontractor works a visit of job 2 (the HOA's)
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f1a00000-0000-0000-0000-000000000002', 'a4330000-0000-4000-8000-000000000001');
+\set as_sub433 'reset role; set request.jwt.claim.sub = ''a4330000-0000-4000-8000-000000000001''; set role authenticated;'
+-- the fixtures this test stands on: the tech works job 1 (client Petrov), not job 2 (client HOA)
+:as_tech_a
+select tst.ok(app.is_job_assignee('e1a00000-0000-0000-0000-000000000001') and not app.is_job_assignee('e1a00000-0000-0000-0000-000000000002'),
+  'T433 fixtures: the tech works job 1 only');
+-- what the app sends (cloud/ops.ts expense.add): no client, a job of his own or none, a sum ≥ 0 — taken
+insert into public.expenses (id, company_id, job_id, vendor, amount_cents, category) values
+  ('e4330000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', null, 'T433 fuel', 4500, 'fuel'),
+  ('e4330000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', 'T433 nails', 1200, 'materials');
+-- the client of his own job: taken
+insert into public.expenses (id, company_id, job_id, customer_id, vendor, amount_cents, category) values
+  ('e4330000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001',
+   'c1a00000-0000-0000-0000-000000000001', 'T433 job client', 100, 'other');
+-- another client: not without a job, not on his job
+select tst.fails_like($q$insert into public.expenses (company_id, customer_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'T433', 100, 'other')$q$,
+  '%row-level security%', 'T433 the tech: no client of the company without a job');
+select tst.fails_like($q$insert into public.expenses (company_id, job_id, customer_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', 'c1a00000-0000-0000-0000-000000000002', 'T433', 100, 'other')$q$,
+  '%row-level security%', 'T433 the tech: not another client on his own job');
+-- a sum below zero
+select tst.fails_like($q$insert into public.expenses (company_id, job_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', 'T433', -500000, 'materials')$q$,
+  '%row-level security%', 'T433 the tech: no expense below zero');
+select tst.fails_like($q$insert into public.expenses (company_id, vendor, amount_cents, tax_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'T433', 100, -50, 'materials')$q$,
+  '%row-level security%', 'T433 the tech: no tax below zero');
+-- the same through a change of his own expense
+select tst.fails_like($q$update public.expenses set amount_cents = -500000 where id = 'e4330000-0000-4000-8000-000000000002'$q$,
+  '%row-level security%', 'T433 the tech: his expense is not changed to below zero');
+select tst.fails_like($q$update public.expenses set tax_cents = -1 where id = 'e4330000-0000-4000-8000-000000000002'$q$,
+  '%row-level security%', 'T433 the tech: nor its tax');
+select tst.fails_like($q$update public.expenses set customer_id = 'c1a00000-0000-0000-0000-000000000002' where id = 'e4330000-0000-4000-8000-000000000002'$q$,
+  '%row-level security%', 'T433 the tech: his expense does not go to another client');
+select tst.fails_like($q$update public.expenses set customer_id = 'c1a00000-0000-0000-0000-000000000002' where id = 'e4330000-0000-4000-8000-000000000001'$q$,
+  '%row-level security%', 'T433 the tech: …nor an expense without a job');
+-- his ordinary edits stay
+update public.expenses set amount_cents = 5000, vendor = 'T433 fuel+' where id = 'e4330000-0000-4000-8000-000000000001';
+select tst.ok((select amount_cents = 5000 from public.expenses where id = 'e4330000-0000-4000-8000-000000000001'), 'T433 the tech changes the sum of his expense');
+-- sales: the same limits (sales may put an expense on any job, as before)
+:as_sales_a
+insert into public.expenses (company_id, job_id, vendor, amount_cents, category) values
+  ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000002', 'T433 sales', 300, 'marketing');
+select tst.fails_like($q$insert into public.expenses (company_id, job_id, customer_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000002', 'c1a00000-0000-0000-0000-000000000001', 'T433', 100, 'other')$q$,
+  '%row-level security%', 'T433 sales: not a client other than the job''s');
+select tst.fails_like($q$insert into public.expenses (company_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'T433', -1, 'other')$q$,
+  '%row-level security%', 'T433 sales: no expense below zero');
+select tst.fails_like($q$insert into public.expenses (company_id, vendor, amount_cents, tax_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'T433', 100, -1, 'other')$q$,
+  '%row-level security%', 'T433 sales: nor a tax below zero');
+-- sales move their expense with the job's client: the client goes with the job, not to another job or to none
+insert into public.expenses (id, company_id, job_id, customer_id, vendor, amount_cents, category) values
+  ('e4330000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001',
+   'c1a00000-0000-0000-0000-000000000001', 'T433 sales job client', 100, 'other');
+select tst.fails_like($q$update public.expenses set job_id = 'e1a00000-0000-0000-0000-000000000002' where id = 'e4330000-0000-4000-8000-000000000007'$q$,
+  '%row-level security%', 'T433 sales: an expense with a client does not move to a job of another client');
+select tst.fails_like($q$update public.expenses set job_id = null where id = 'e4330000-0000-4000-8000-000000000007'$q$,
+  '%row-level security%', 'T433 sales: …nor off its job with the client');
+select tst.fails_like($q$update public.expenses set amount_cents = -1 where id = 'e4330000-0000-4000-8000-000000000007'$q$,
+  '%row-level security%', 'T433 sales: their expense is not changed to below zero');
+update public.expenses set job_id = 'e1a00000-0000-0000-0000-000000000002', customer_id = 'c1a00000-0000-0000-0000-000000000002'
+ where id = 'e4330000-0000-4000-8000-000000000007';
+-- the subcontractor: only on a job he works
+:as_sub433
+insert into public.expenses (id, company_id, job_id, vendor, amount_cents, category) values
+  ('e4330000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000002', 'T433 sub', 700, 'materials');
+select tst.fails_like($q$insert into public.expenses (company_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'T433 sub', 700, 'other')$q$,
+  '%row-level security%', 'T433 the subcontractor: no expense without a job');
+select tst.fails_like($q$insert into public.expenses (company_id, job_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', 'T433 sub', 700, 'other')$q$,
+  '%row-level security%', 'T433 the subcontractor: not on a job he does not work');
+-- the client of his job — yes (he does not read jobs: the policy reads the job's client itself); another client — no
+insert into public.expenses (id, company_id, job_id, customer_id, vendor, amount_cents, category) values
+  ('e4330000-0000-4000-8000-000000000008', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000002',
+   'c1a00000-0000-0000-0000-000000000002', 'T433 sub job client', 700, 'materials');
+select tst.fails_like($q$insert into public.expenses (company_id, job_id, customer_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000002', 'c1a00000-0000-0000-0000-000000000001', 'T433 sub', 700, 'other')$q$,
+  '%row-level security%', 'T433 the subcontractor: not another client on his job');
+select tst.fails_like($q$insert into public.expenses (company_id, job_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000002', 'T433 sub', -700, 'other')$q$,
+  '%row-level security%', 'T433 the subcontractor: no expense below zero');
+-- (he does not read his expenses at all — expenses_select: nothing to change)
+select tst.blocked($q$update public.expenses set job_id = null where id = 'e4330000-0000-4000-8000-000000000004'$q$,
+  'T433 the subcontractor: his expense is not taken off the job');
+-- the office: as before — any client, any sign (a supplier's credit note)
+:as_office_a
+insert into public.expenses (id, company_id, job_id, customer_id, vendor, amount_cents, tax_cents, category) values
+  ('e4330000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001',
+   'c1a00000-0000-0000-0000-000000000002', 'T433 credit note', -2500, -200, 'materials'),
+  ('e4330000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', null,
+   'c1a00000-0000-0000-0000-000000000002', 'T433 office', 900, 0, 'other');
+update public.expenses set amount_cents = -3000 where id = 'e4330000-0000-4000-8000-000000000005';
+:as_owner_a
+update public.expenses set customer_id = 'c1a00000-0000-0000-0000-000000000001' where id = 'e4330000-0000-4000-8000-000000000006';
+:as_owner_b
+select tst.ok(app.job_customer('e1a00000-0000-0000-0000-000000000001') is null, 'T433 app.job_customer: nothing of another company''s job');
+:as_super
+select tst.ok((select count(*) = 8 from public.expenses where id::text like 'e4330000-%')
+              and (select customer_id = 'c1a00000-0000-0000-0000-000000000002' from public.expenses where id = 'e4330000-0000-4000-8000-000000000007')
+              and (select amount_cents = -3000 from public.expenses where id = 'e4330000-0000-4000-8000-000000000005'),
+  'T433 the office writes any client and a negative sum, as before');
+rollback;
+\echo 'T433 ok'
+
+-- ---------------------------------------------------------------- T434 (Р-3): who reads a gate code
+\echo 'T434 a gate code: the office always; sales, as a tech, on the day of their own visit and the day before'
+begin;
+:as_owner_a
+do $$
+declare v_src uuid; v_c uuid := 'c4340000-0000-4000-8000-000000000001'; k int; v_p uuid; v_l uuid; v_v uuid;
+  -- property → inspection of sales in days (null: none), cancelled?
+  plan text[][] := array[['0','n'], ['1','n'], ['3','n'], [null,'n'], ['0','c'], ['-1','n'], ['0','n']];
+begin
+  select id into v_src from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral';
+  insert into public.customers (id, company_id, display_name) values (v_c, 'ca000000-0000-0000-0000-000000000000', 'T434 Client');
+  for k in 1..7 loop
+    v_p := ('d4340000-0000-4000-8000-00000000000' || k)::uuid;
+    insert into public.properties (id, company_id, customer_id, address_line1, address_city) values (v_p, 'ca000000-0000-0000-0000-000000000000', v_c, k || ' T434 St', 'Pasadena');
+    insert into public.property_secrets (company_id, property_id, gate_code) values ('ca000000-0000-0000-0000-000000000000', v_p, '#434' || k);
+    if plan[k][1] is not null then
+      v_l := ('b4340000-0000-4000-8000-00000000000' || k)::uuid;
+      v_v := ('f4340000-0000-4000-8000-00000000000' || k)::uuid;
+      insert into public.leads (id, company_id, source_id, contact_name, phone, customer_id, property_id)
+      values (v_l, 'ca000000-0000-0000-0000-000000000000', v_src, 'T434 Lead ' || k, '(818) 555-434' || k, v_c, v_p);
+      insert into public.visits (id, company_id, lead_id, property_id, kind, starts_at)
+      values (v_v, 'ca000000-0000-0000-0000-000000000000', v_l, v_p, 'inspection', now() + (plan[k][1] || ' days')::interval);
+      insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000005');
+      if plan[k][2] = 'c' then perform public.cancel_visit(v_v, 'we_cancelled'); end if;
+    end if;
+  end loop;
+  -- a removed code (soft delete)
+  update public.property_secrets set deleted_at = now() where property_id = 'd4340000-0000-4000-8000-000000000001';
+end $$;
+-- the office: every code, the removed one too
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd4340000%'$q$) = 7, 'T434 the office sees every code, the removed one too');
+:as_owner_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd4340000%'$q$) = 7, 'T434 the owner sees every code');
+-- sales: only on the day of their inspection and the day before, a live visit, a live code
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000007'$q$) = 1, 'T434 sales: inspection today → the code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000002'$q$) = 1, 'T434 sales: inspection tomorrow → the code the day before');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000001'$q$) = 0, 'T434 sales: a visit today that is the tech''s, not theirs → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000003'$q$) = 0, 'T434 sales: inspection in 3 days → no code yet');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000004'$q$) = 0, 'T434 sales: no visit of theirs → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000005'$q$) = 0, 'T434 sales: a cancelled inspection today → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000006'$q$) = 0, 'T434 sales: inspection was yesterday → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000001'$q$) = 0, 'T434 sales: a removed code — no, even on the visit day');
+select tst.ok(not app.can_see_gate_code('d4340000-0000-4000-8000-000000000004') and app.can_see_gate_code('d4340000-0000-4000-8000-000000000002'),
+  'T434 app.can_see_gate_code: sales by the visit window');
+-- the code of another property: the tech's rule is unchanged (T20: his visit today)
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000001'$q$) = 1, 'T434 the tech: his visit today → the code, as before');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd4340000%'$q$) = 0, 'T434 the tech: not the codes of sales'' inspections');
+-- who writes a code: the table — the office; sales — through public.set_gate_code, and they do not read it back
+:as_sales_a
+select tst.fails_like($q$insert into public.property_secrets (property_id, company_id, gate_code, deleted_at) values
+  ('d4340000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '#x', null)
+  on conflict (property_id) do update set gate_code = excluded.gate_code$q$,
+  '%row-level security%', 'T434 sales: not the table (an old build''s upsert is refused)');
+select tst.blocked($q$update public.property_secrets set gate_code = '#x' where property_id = 'd4340000-0000-4000-8000-000000000002'$q$,
+  'T434 sales: no update of the table, even in the visit window');
+select public.set_gate_code('d4340000-0000-4000-8000-000000000004', ' #new4 ');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000004'$q$) = 0,
+  'T434 sales set a code through the function and still do not read it outside the window');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('d4340000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'c4340000-0000-4000-8000-000000000001', '9 T434 St', 'Pasadena');
+select public.set_gate_code('d4340000-0000-4000-8000-000000000009', '#4349');
+-- sales do not clear a code, and do not bring back one the office removed
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000003', '')$q$, '%only the office clears%', 'T434 sales: not an empty code');
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000003', '   ')$q$, '%only the office clears%', 'T434 sales: …nor blanks');
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000007', null)$q$, '%only the office clears%', 'T434 sales: …nor null');
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000001', '#back1')$q$, '%removed by the office%', 'T434 sales: not over a code the office removed');
+-- the office: a removed code comes back with the new one; an empty or null code clears it
+:as_office_a
+select public.set_gate_code('d4340000-0000-4000-8000-000000000001', '#back1');
+select public.set_gate_code('d4340000-0000-4000-8000-000000000003', '');
+select public.set_gate_code('d4340000-0000-4000-8000-000000000007', null);
+:as_sales_a
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000004', repeat('9', 65))$q$, '%at most 64%', 'T434 the function: at most 64 characters');
+:as_tech_a
+select tst.fails_like($q$select public.set_gate_code('d2000000-0000-4000-8000-000000000001', '#tech')$q$, '%not allowed%', 'T434 the tech: not through the function');
+:as_owner_b
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000004', '#b')$q$, '%not allowed%', 'T434 another company: not through the function');
+:as_super
+update public.properties set deleted_at = now() where id = 'd4340000-0000-4000-8000-000000000006';
+:as_owner_a
+select tst.fails_like($q$select public.set_gate_code('d4340000-0000-4000-8000-000000000006', '#gone')$q$, '%not allowed%', 'T434 the function: not on a removed property');
+-- the office still writes the table (an upsert as before) and through the function
+:as_office_a
+insert into public.property_secrets (property_id, company_id, gate_code, deleted_at) values
+  ('d4340000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '#off5', null)
+  on conflict (property_id) do update set gate_code = excluded.gate_code, deleted_at = excluded.deleted_at;
+select public.set_gate_code('d4340000-0000-4000-8000-000000000002', '#off2');
+select tst.ok((select gate_code = '#new4' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000004')
+              and (select gate_code = '#4349' and created_by = 'a0000000-0000-0000-0000-000000000005' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000009')
+              and (select gate_code = '#back1' and deleted_at is null from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000001')
+              and (select count(*) = 2 from public.property_secrets where property_id in ('d4340000-0000-4000-8000-000000000003', 'd4340000-0000-4000-8000-000000000007') and gate_code is null)
+              and (select gate_code = '#off5' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000005')
+              and (select gate_code = '#off2' from public.property_secrets where property_id = 'd4340000-0000-4000-8000-000000000002'),
+  'T434 the codes are written: sales through the function (trimmed), the office brings a removed one back and clears with an empty or null one');
+rollback;
+\echo 'T434 ok'
+
+-- ---------------------------------------------------------------- T435 (Р-8b): each person's own «read»
+\echo 'T435 a notification read by one person stays unread for the others'
+begin;
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a4350000-0000-4000-8000-000000000001', 'office435@a.test', '{"full_name":"Olive Office435"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4350000-0000-4000-8000-000000000001', 'office', 'active');
+\set as_office435 'reset role; set request.jwt.claim.sub = ''a4350000-0000-4000-8000-000000000001''; set role authenticated;'
+-- an estimate of sales (his deal) and its notice; a notice of the office's estimate (not his)
+:as_sales_a
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('a4350000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T435 sales deal');
+:as_super
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('a4350000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', 'a4350000-0000-4000-8000-0000000000e1'),
+  ('a4350000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', '0e1a0000-0000-0000-0000-000000000002');
+-- the cut of the split is a constant of the migration (not the clock of the call)
+select tst.ok(public.notifications_split_at() is not null and public.notifications_split_at() <= now()
+              and (select provolatile = 'i' and prosrc !~* 'now|clock|current_' from pg_proc where oid = 'public.notifications_split_at()'::regprocedure),
+  'T435 the split moment is the migration''s: a constant, not a clock');
+-- what the app sends (cloud/ops.ts notice.read): the ids of the notices it shows, a phone's own one and one not his among
+-- them; who, the company and the time are the server's
+:as_sales_a
+select public.mark_notifications_read(array['a4350000-0000-4000-8000-0000000000a1', 'a4350000-0000-4000-8000-0000000000a2',
+                                            'a4350000-0000-4000-8000-0000000000ff']::uuid[]);
+select public.mark_notifications_read(array['a4350000-0000-4000-8000-0000000000a1']::uuid[]);
+select public.mark_notifications_read(null);
+select tst.ok(tst.cnt($q$select 1 from public.notification_reads where notification_id = 'a4350000-0000-4000-8000-0000000000a1'$q$) = 1
+              and tst.cnt($q$select 1 from public.notification_reads$q$) = 1,
+  'T435 sales: his mark, once (a repeat is nothing); an unknown id and a notice he does not see are left out, the rest marked');
+-- not a notice he does not see; not in another person's name
+select tst.fails_like($q$insert into public.notification_reads (notification_id, company_id) values ('a4350000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000')$q$,
+  '%row-level security%', 'T435 sales: not a notice he does not see');
+select tst.fails_like($q$insert into public.notification_reads (notification_id, user_id, company_id) values ('a4350000-0000-4000-8000-0000000000a1', 'a0000000-0000-0000-0000-000000000002', 'ca000000-0000-0000-0000-000000000000')$q$,
+  '%permission denied%', 'T435 sales: not in another person''s name');
+-- an old sales build marks the shared column: 0 rows, no refusal
+do $$ declare n int; begin
+  update public.notifications set read_at = now() where id = 'a4350000-0000-4000-8000-0000000000a1';
+  get diagnostics n = row_count;
+  perform tst.ok(n = 0, 'T435 an old sales build: the shared mark goes to 0 rows, without a refusal');
+end $$;
+:as_super
+select tst.ok((select read_at is null from public.notifications where id = 'a4350000-0000-4000-8000-0000000000a1'), 'T435 …and the shared column is untouched');
+-- the office: nothing is read for them; one dispatcher reads — the other does not see it read
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.notification_reads$q$) = 0, 'T435 the office: sales'' mark is not theirs (unread)');
+insert into public.notification_reads (notification_id, company_id) values ('a4350000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000');
+:as_office435
+select tst.ok(tst.cnt($q$select 1 from public.notification_reads$q$) = 0, 'T435 the second dispatcher: the first one''s mark is not his');
+-- his own mark: the company is the notice's, whatever the phone sends
+insert into public.notification_reads (notification_id, company_id) values ('a4350000-0000-4000-8000-0000000000a2', 'cb000000-0000-0000-0000-000000000000');
+select tst.ok((select company_id = 'ca000000-0000-0000-0000-000000000000' from public.notification_reads where notification_id = 'a4350000-0000-4000-8000-0000000000a2'),
+  'T435 a mark takes the notice''s company, not the one sent');
+:as_owner_b
+select tst.fails_like($q$insert into public.notification_reads (notification_id, company_id) values ('a4350000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000')$q$,
+  '%row-level security%', 'T435 another company: not a notice of this one');
+-- an old office build: the shared column takes the server's time and never goes back to null
+:as_office_a
+update public.notifications set read_at = '2001-01-01' where id = 'a4350000-0000-4000-8000-0000000000a2';
+update public.notifications set read_at = null where id = 'a4350000-0000-4000-8000-0000000000a2';
+:as_super
+select tst.ok((select read_at > '2020-01-01' from public.notifications where id = 'a4350000-0000-4000-8000-0000000000a2'),
+  'T435 an old build''s mark: the server''s time, not the phone''s, and not unread again');
+select tst.ok((select count(*) = 3 from public.notification_reads where notification_id in ('a4350000-0000-4000-8000-0000000000a1', 'a4350000-0000-4000-8000-0000000000a2')),
+  'T435 three marks: sales, and each dispatcher his own');
+-- a deleted account's marks go with its other own rows
+select app.erase_personal_rows('a0000000-0000-0000-0000-000000000005');
+select tst.ok(not exists (select 1 from public.notification_reads where user_id = 'a0000000-0000-0000-0000-000000000005')
+              and exists (select 1 from public.notification_reads where user_id = 'a0000000-0000-0000-0000-000000000002'),
+  'T435 erasing a person erases his marks only');
+rollback;
+\echo 'T435 ok'
+
+-- ---------------------------------------------------------------- T437 (#2097): «Позже» — a reason put off for the company
+-- Only the office (is_staff: owner, admin, office, sales) puts a reason off, only in its own company; «by» is the server's.
+\echo 'T437 attention_snoozes: who writes'
+begin;
+:as_office_a
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t437', '2026-11-20T08:00:00Z');
+:as_super
+select tst.ok((select until = '2026-11-20T08:00:00Z' and by = 'a0000000-0000-0000-0000-000000000002' from public.attention_snoozes
+                where company_id = 'ca000000-0000-0000-0000-000000000000' and item_id = 'sch-t437'), 'T437 the office puts a reason off; «by» is the caller');
+:as_tech_a
+select tst.fails($q$select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t437', null)$q$, 'T437 a tech does not (no «Разбор дел»)');
+:as_owner_b
+select tst.fails($q$select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t437', null)$q$, 'T437 another company does not write');
+:as_super
+-- the second tech was switched off by an earlier test: active again, as sales (rolled back below)
+update public.memberships set role = 'sales', status = 'active' where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000004';
+:as_tech2_a
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'done-t437', '2026-11-21T08:00:00Z');
+:as_super
+select tst.ok((select count(*) from public.attention_snoozes where item_id = 'done-t437') = 1, 'T437 sales see «Разбор дел» and put off too');
+select tst.fails($q$select public.snooze_attention('ca000000-0000-0000-0000-000000000000', '', null)$q$, 'T437 an empty item_id is refused');
+rollback;
+\echo 'T437 ok'
+
+-- ---------------------------------------------------------------- T438 (#2097): a repeat and two phones — one row, the last wins
+\echo 'T438 attention_snoozes: one row'
+begin;
+:as_office_a
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t438', '2026-11-20T08:00:00Z');
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t438', '2026-11-20T08:00:00Z');
+:as_owner_a
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t438', '2026-11-25T08:00:00Z');
+:as_super
+select tst.ok((select count(*) from public.attention_snoozes where item_id = 'sch-t438') = 1, 'T438 a repeat from the queue and a second phone: one row');
+select tst.ok((select until = '2026-11-25T08:00:00Z' and by = 'a0000000-0000-0000-0000-000000000001' from public.attention_snoozes where item_id = 'sch-t438'),
+  'T438 the last write wins, «by» follows it');
+-- lifting («Отменить», put back): until = null, the row stays (no delete)
+:as_office_a
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t438', null);
+:as_super
+select tst.ok((select until is null from public.attention_snoozes where item_id = 'sch-t438'), 'T438 lifted: until = null');
+rollback;
+\echo 'T438 ok'
+
+-- ---------------------------------------------------------------- T439 (#2097): no direct writes, another company reads nothing
+\echo 'T439 attention_snoozes: rights'
+begin;
+:as_office_a
+select public.snooze_attention('ca000000-0000-0000-0000-000000000000', 'sch-t439', '2026-11-20T08:00:00Z');
+select tst.ok(tst.cnt($q$select 1 from public.attention_snoozes where item_id = 'sch-t439'$q$) = 1, 'T439 the office reads its company''s');
+select tst.fails($q$insert into public.attention_snoozes (company_id, item_id, until) values ('ca000000-0000-0000-0000-000000000000', 'x439', null)$q$, 'T439 no direct insert');
+select tst.fails($q$update public.attention_snoozes set until = null$q$, 'T439 no direct update');
+select tst.fails($q$delete from public.attention_snoozes$q$, 'T439 no delete');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.attention_snoozes$q$) = 0, 'T439 another company reads nothing');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.attention_snoozes$q$) = 0, 'T439 a tech reads nothing');
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.snooze_attention(uuid,text,timestamptz)', 'EXECUTE'), 'T439 anon: no snooze_attention');
+select tst.ok(not has_table_privilege('anon', 'public.attention_snoozes', 'SELECT'), 'T439 anon: no select');
+rollback;
+\echo 'T439 ok'
+
+-- ---------------------------------------------------------------- T442–T447 (#2227, spec 33-price-key §11.5, §11.7): variants of an item
+-- One item for every colour; the colour's sku (and supplier, pack) lives at the item as a variant. The core knows no «colour».
+\echo 'T442 catalog_set_variant: one value, the others kept'
+begin;
+:as_super
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price) values
+  ('44200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T442 Gutter 5in K', 'ft', 800, false),
+  ('44200000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'material', 'T442 Rival gutter', 'ft', 800, false);
+insert into public.suppliers (id, company_id, name) values
+  ('44200000-0000-4000-8000-0000000000a5', 'ca000000-0000-0000-0000-000000000000', 'T442 Supplier A'),
+  ('44200000-0000-4000-8000-0000000000b5', 'cb000000-0000-0000-0000-000000000000', 'T442 Supplier B');
+:as_office_a
+select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', ' White ', '{"sku":"W-1"}');
+-- «another phone» writes brown after it: white is not erased (a whole-row write would erase it)
+select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', 'brown', '{"sku":"B-1","supplierId":"44200000-0000-4000-8000-0000000000A5","packSize":"10"}');
+:as_super
+select tst.ok((select variant_skus = '{"color":{"white":{"sku":"W-1"},"brown":{"sku":"B-1","supplierId":"44200000-0000-4000-8000-0000000000A5","packSize":"10"}}}'::jsonb
+                 from public.catalog_items where id = '44200000-0000-4000-8000-000000000001'), 'T442 both colours kept, the value lower-cased and trimmed; a supplier id in capitals is found (as uuid)');
+:as_office_a
+-- a colour without data yet is still a variant (its sku is set later); null data removes it
+select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', 'black', '{"sku":""}');
+select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', 'white', null);
+:as_super
+select tst.ok((select variant_skus = '{"color":{"black":{},"brown":{"sku":"B-1","supplierId":"44200000-0000-4000-8000-0000000000A5","packSize":"10"}}}'::jsonb
+                 from public.catalog_items where id = '44200000-0000-4000-8000-000000000001'), 'T442 an empty sku is «not set», null data removes the value');
+:as_office_a
+select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', 'black', null);
+select public.catalog_set_variant('44200000-0000-4000-8000-000000000001', 'color', 'brown', null);
+:as_super
+select tst.ok((select variant_skus = '{"color":{}}'::jsonb from public.catalog_items where id = '44200000-0000-4000-8000-000000000001'),
+              'T442 the last value removed keeps the property (which one is the variant stays known)');
+rollback;
+\echo 'T442 ok'
+
+\echo 'T443 catalog_set_variant: who, which supplier, one property'
+begin;
+:as_super
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price) values
+  ('44300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T443 Gutter', 'ft', 800, false),
+  ('44300000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'material', 'T443 Rival', 'ft', 800, false);
+insert into public.suppliers (id, company_id, name) values ('44300000-0000-4000-8000-0000000000b5', 'cb000000-0000-0000-0000-000000000000', 'T443 Supplier B');
+:as_tech_a
+select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-000000000001', 'color', 'white', '{"sku":"W"}')$q$, '%not found%', 'T443 a tech does not write variants');
+:as_sales_a
+select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-000000000001', 'color', 'white', '{"sku":"W"}')$q$, '%catalog item not found%', 'T443 sales does not write variants (supplier data: owner, admin, office — SUP1 №2), told nothing about ids');
+:as_owner_a
+select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-0000000000b1', 'color', 'white', '{"sku":"W"}')$q$, '%not found%', 'T443 not another company''s item');
+select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-000000000001', 'color', 'white', '{"supplierId":"44300000-0000-4000-8000-0000000000b5"}')$q$, '%supplier not found%', 'T443 not another company''s supplier');
+select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-000000000001', 'color', 'white', '{"sku":"W","price":"1"}')$q$, '%variant_skus_check%', 'T443 only sku, supplierId, purchaseUnit, packSize');
+select public.catalog_set_variant('44300000-0000-4000-8000-000000000001', 'color', 'white', '{"sku":"W"}');
+select tst.fails_like($q$select public.catalog_set_variant('44300000-0000-4000-8000-000000000001', 'size', '5', '{"sku":"S"}')$q$, '%another property%', 'T443 one property per item');
+select tst.fails_like($q$select public.catalog_set_variant('00000000-0000-4000-8000-000000000000', 'color', 'white', '{"sku":"W"}')$q$, '%not found%', 'T443 no item yet (the queue waits) — P0002');
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.catalog_set_variant(uuid,text,text,jsonb)', 'execute'), 'T443 anon does not run it');
+rollback;
+\echo 'T443 ok'
+
+\echo 'T444 the shape of variant_skus; an old build''s whole row keeps it'
+begin;
+:as_super
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price, variant_skus) values
+  ('44400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T444 Gutter', 'ft', 800, false, '{"color":{"white":{"sku":"W-1"}}}');
+select tst.fails_like($q$update public.catalog_items set variant_skus = '{"color":{"White":{}}}' where id = '44400000-0000-4000-8000-000000000001'$q$, '%variant_skus_check%', 'T444 a value is lower case');
+select tst.fails_like($q$update public.catalog_items set variant_skus = '{"color":{"white":{}},"size":{"5":{}}}' where id = '44400000-0000-4000-8000-000000000001'$q$, '%variant_skus_check%', 'T444 one property');
+select tst.fails_like($q$update public.catalog_items set variant_skus = '{"color":{"white":{"packSize":"0"}}}' where id = '44400000-0000-4000-8000-000000000001'$q$, '%variant_skus_check%', 'T444 a pack size > 0');
+select tst.fails_like($q$update public.catalog_items set variant_skus = '["white"]' where id = '44400000-0000-4000-8000-000000000001'$q$, '%variant_skus_check%', 'T444 an object');
+:as_office_a
+-- an old build saves the whole row it knows (catalog.save upsert): variant_skus is not among its columns
+insert into public.catalog_items as c (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price, supplier_sku)
+values ('44400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T444 Gutter renamed', 'ft', 800, false, 'G-1')
+on conflict (id) do update set name = excluded.name, unit = excluded.unit, unit_price_cents = excluded.unit_price_cents,
+  is_placeholder_price = excluded.is_placeholder_price, supplier_sku = excluded.supplier_sku;
+:as_super
+select tst.ok((select variant_skus = '{"color":{"white":{"sku":"W-1"}}}'::jsonb and name = 'T444 Gutter renamed'
+                 from public.catalog_items where id = '44400000-0000-4000-8000-000000000001'), 'T444 the old build''s whole row does not erase variant_skus');
+-- a direct write of the column (the table's update grant): sales keeps the stored value, as t20 does for the supplier
+:as_sales_a
+update public.catalog_items set variant_skus = '{"color":{"white":{"sku":"HACK"}}}' where id = '44400000-0000-4000-8000-000000000001';
+:as_super
+select tst.ok((select variant_skus = '{"color":{"white":{"sku":"W-1"}}}'::jsonb from public.catalog_items where id = '44400000-0000-4000-8000-000000000001'),
+              'T444 a direct write by sales keeps the stored variants');
+insert into public.suppliers (id, company_id, name) values ('44400000-0000-4000-8000-0000000000b5', 'cb000000-0000-0000-0000-000000000000', 'T444 Supplier B');
+:as_office_a
+select tst.fails_like($q$update public.catalog_items set variant_skus = '{"color":{"white":{"supplierId":"44400000-0000-4000-8000-0000000000b5"}}}' where id = '44400000-0000-4000-8000-000000000001'$q$,
+  '%supplier not found%', 'T444 a direct write by office with another company''s supplier is refused');
+rollback;
+\echo 'T444 ok'
+
+\echo 'T445 an old build edits the sku of an old per-colour item: into the new item''s variant'
+begin;
+:as_super
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price, variant_skus, attributes) values
+  ('44500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T445 Gutter', 'ft', 800, false, '{"color":{"white":{"sku":"W-1"}}}', '{"part":"gutter"}'),
+  ('44500000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'material', 'T445 Gutter · Brown', 'ft', 800, false, null,
+   '{"part":"gutter","color":"Brown","mergedInto":"44500000-0000-4000-8000-000000000001"}'),
+  ('44500000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'material', 'T445 Other', 'ft', 800, false, null, '{"part":"gutter"}'),
+  ('44500000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'material', 'T445 Other · Red', 'ft', 800, false, null,
+   '{"part":"gutter","color":"red","mergedInto":"44500000-0000-4000-8000-000000000003"}'),
+  ('44500000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'material', 'T445 Rival gutter', 'ft', 800, false, '{"color":{"white":{"sku":"RB-1"}}}', '{"part":"gutter"}'),
+  ('44500000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'material', 'T445 Points abroad · White', 'ft', 800, false, null,
+   '{"part":"gutter","color":"white","mergedInto":"44500000-0000-4000-8000-0000000000b1"}');
+:as_office_a
+update public.catalog_items set supplier_sku = 'B-9' where id = '44500000-0000-4000-8000-000000000002';
+update public.catalog_items set supplier_sku = 'R-9' where id = '44500000-0000-4000-8000-000000000004';
+update public.catalog_items set supplier_sku = 'X-9' where id = '44500000-0000-4000-8000-000000000005';
+:as_super
+select tst.ok((select variant_skus = '{"color":{"white":{"sku":"W-1"},"brown":{"sku":"B-9"}}}'::jsonb
+                 from public.catalog_items where id = '44500000-0000-4000-8000-000000000001'), 'T445 the brown sku is in the new item''s variant, white kept');
+select tst.ok((select variant_skus is null from public.catalog_items where id = '44500000-0000-4000-8000-000000000003'),
+              'T445 the new item without variants: nothing is written (which property is the variant is not known)');
+select tst.ok((select variant_skus = '{"color":{"white":{"sku":"RB-1"}}}'::jsonb from public.catalog_items where id = '44500000-0000-4000-8000-0000000000b1'),
+              'T445 mergedInto pointing at another company''s item: nothing is written there');
+rollback;
+\echo 'T445 ok'
+
+\echo 'T446 a merged per-colour item is never put in the Trash'
+begin;
+:as_super
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price, attributes) values
+  ('44600000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T446 Gutter', 'ft', 800, false, '{"part":"gutter"}'),
+  ('44600000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'material', 'T446 Gutter · White', 'ft', 800, false,
+   '{"part":"gutter","color":"white","mergedInto":"44600000-0000-4000-8000-000000000001"}');
+:as_owner_a
+select tst.fails_like($q$update public.catalog_items set deleted_at = now() where id = '44600000-0000-4000-8000-000000000002'$q$, '%merged item is kept%', 'T446 the merged item stays');
+-- the new item itself (the undo of the transition takes mergedInto off first) goes to the Trash as any item
+update public.catalog_items set attributes = attributes - 'mergedInto' where id = '44600000-0000-4000-8000-000000000002';
+update public.catalog_items set deleted_at = now() where id = '44600000-0000-4000-8000-000000000001';
+update public.catalog_items set deleted_at = now() where id = '44600000-0000-4000-8000-000000000002';
+:as_super
+select tst.ok((select count(*) from public.catalog_items where id::text like '44600000-%' and deleted_at is not null) = 2, 'T446 without mergedInto both go to the Trash');
+rollback;
+\echo 'T446 ok'
+
+-- ================================================================ T450–T459: the exact cost of a unit in thousandths of a cent
+-- (#1926, spec 53 §8а.12, variant (а″), migration 20261117630000). unit_cost_millicents is the truth (22 500 = 22.5 ¢, a
+-- supplier's «$22.50 for 100»); unit_cost_cents stays the mirror old builds read and write, half up, kept by the server.
+-- Its own items, rolled back at the end.
+:as_super
+begin;
+create or replace function pg_temp.st(p_sql text) returns text language plpgsql as $f$
+begin
+  execute p_sql;
+  return 'ok';
+exception when others then
+  return sqlstate;
+end $f$;
+grant execute on function pg_temp.st(text) to public;
+-- the cost row as the server holds it: [millicents, cents, tax, markup]
+create or replace function pg_temp.k450(p_id uuid) returns jsonb language sql security definer as $f$
+  select jsonb_build_array(c.unit_cost_millicents, c.unit_cost_cents, c.vendor_tax_bps, c.markup_bps)
+    from public.catalog_item_costs c where c.item_id = p_id $f$;
+grant execute on function pg_temp.k450(uuid) to public;
+create or replace function pg_temp.p450(p_id uuid) returns bigint language sql security definer as $f$
+  select i.unit_price_cents from public.catalog_items i where i.id = p_id $f$;
+grant execute on function pg_temp.p450(uuid) to public;
+create or replace function pg_temp.h450(p_id uuid) returns jsonb language sql security definer as $f$
+  select coalesce(jsonb_agg(jsonb_build_array(h.unit_cost_millicents, h.unit_cost_cents) order by h.at, h.id), '[]'::jsonb)
+    from public.catalog_cost_history h where h.item_id = p_id $f$;
+grant execute on function pg_temp.h450(uuid) to public;
+
+-- T450: one formula in the engine and in the database for the exact cost (packages/estimating-engine/test/fixtures/
+-- catalogPrice.json «millicents», read by millicents.test.ts too); the old examples in cents ×1000 give their old price
+\echo 'T450 app.item_price_millicents = the engine''s catalogPrice({ millicents })'
+select tst.ok(coalesce(string_agg(x::text, '; '), '') = '', format('T450 app.item_price_millicents = the engine: %s', coalesce(string_agg(x::text, '; '), '')))
+  from jsonb_array_elements((:'price_json')::jsonb -> 'millicents') x
+ where app.item_price_millicents((x ->> 'costMillicents')::bigint, (x ->> 'taxBps')::int, (x ->> 'markupBps')::int) is distinct from (x ->> 'price')::bigint;
+select tst.ok(jsonb_array_length((:'price_json')::jsonb -> 'millicents') >= 10, 'T450 the shared set has the examples of #1926');
+select tst.ok(not exists (select 1 from jsonb_array_elements((:'price_json')::jsonb -> 'cases') x
+                           where app.item_price_millicents((x ->> 'cost')::bigint * 1000, (x ->> 'taxBps')::int, (x ->> 'markupBps')::int)
+                                 is distinct from (x ->> 'price')::bigint),
+  'T450 every old example in cents, as thousandths: the same price as before');
+select tst.ok(not has_function_privilege('authenticated', 'app.item_price_millicents(bigint, int, int)', 'execute')
+          and not has_function_privilege('anon', 'app.item_price_millicents(bigint, int, int)', 'execute'),
+  'T450 nobody executes the formula directly — only the server''s triggers');
+select tst.ok((select data_type from information_schema.columns where table_schema = 'public' and table_name = 'catalog_item_costs' and column_name = 'unit_cost_millicents') = 'bigint'
+          and (select data_type from information_schema.columns where table_schema = 'public' and table_name = 'catalog_cost_history' and column_name = 'unit_cost_millicents') = 'bigint',
+  'T450 the exact cost is a bigint on the cost row and in its history');
+\echo 'T450 one formula ok'
+
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('54500000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T450 rivet', 'ea', 0, '{}'),
+  ('54500000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'material', 'T450 anchor', 'ea', 0, '{}'),
+  ('54500000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', 'material', 'T450 old phone', 'ea', 0, '{}'),
+  ('54500000-0000-4000-8000-0000000000a4', 'ca000000-0000-0000-0000-000000000000', 'material', 'T450 group white', 'ea', 0, '{"priceGroup":"t450:g"}'),
+  ('54500000-0000-4000-8000-0000000000a5', 'ca000000-0000-0000-0000-000000000000', 'material', 'T450 group brown', 'ea', 0, '{"priceGroup":"t450:g"}'),
+  ('54500000-0000-4000-8000-0000000000a6', 'ca000000-0000-0000-0000-000000000000', 'material', 'T450 via rpc', 'ea', 0, '{}');
+
+-- T451: the exact cost written → the mirror half up, the price counted from the exact cost (not from the mirror)
+\echo 'T451 the exact cost is the truth, the mirror follows it'
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_millicents, vendor_tax_bps, markup_bps) values
+  ('54500000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 22500, 0, 1000),
+  ('54500000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 1499, 0, 10000);
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a1') = '[22500, 23, 0, 1000]',
+  format('T451 22 500 m¢ → the mirror 23 ¢ (half up): %s', pg_temp.k450('54500000-0000-4000-8000-0000000000a1')));
+select tst.ok(pg_temp.p450('54500000-0000-4000-8000-0000000000a1') = 25, 'T451 22.5 ¢ + 10 % = 24.75 → 25 ¢');
+select tst.ok(pg_temp.p450('54500000-0000-4000-8000-0000000000a2') = 3,
+  format('T451 1.499 ¢ + 100 %% = 3 ¢ — counted from the exact cost, not from the mirror 1 ¢ (2 ¢): %s', pg_temp.p450('54500000-0000-4000-8000-0000000000a2')));
+update public.catalog_item_costs set unit_cost_millicents = 4120 where item_id = '54500000-0000-4000-8000-0000000000a1';
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a1') = '[4120, 4, 0, 1000]', 'T451 4 120 m¢ → 4 ¢');
+update public.catalog_item_costs set unit_cost_millicents = 22500 where item_id = '54500000-0000-4000-8000-0000000000a1';
+\echo 'T451 ok'
+
+-- T452: an old phone writes the mirror only. The same mirror (an echo of what it read, or an old op without «costs») does
+-- not wipe the exact cost; a different mirror is a real change: exact = mirror × 1000. The same through the item row (t30).
+\echo 'T452 an old phone: the echo keeps the exact cost, a change replaces it'
+update public.catalog_item_costs set unit_cost_cents = 23 where item_id = '54500000-0000-4000-8000-0000000000a1';
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a1') = '[22500, 23, 0, 1000]',
+  format('T452 the mirror sent back unchanged: 22 500 stays, not 23 000: %s', pg_temp.k450('54500000-0000-4000-8000-0000000000a1')));
+update public.catalog_items set unit_cost_cents = 23, markup_bps = 1000 where id = '54500000-0000-4000-8000-0000000000a1';
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a1') = '[22500, 23, 0, 1000]',
+  format('T452 an old phone''s cost on the item row (t30), the same mirror: 22 500 stays: %s', pg_temp.k450('54500000-0000-4000-8000-0000000000a1')));
+update public.catalog_item_costs set unit_cost_cents = 30 where item_id = '54500000-0000-4000-8000-0000000000a1';
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a1') = '[30000, 30, 0, 1000]', 'T452 a different mirror (30 ¢): exact = 30 000');
+update public.catalog_items set unit_cost_cents = 24 where id = '54500000-0000-4000-8000-0000000000a1';
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a1') = '[24000, 24, 0, 1000]' and pg_temp.p450('54500000-0000-4000-8000-0000000000a1') = 26,
+  'T452 a different mirror through the item row (t30): exact = 24 000, the price 24 + 10 % = 26 ¢');
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
+  ('54500000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', 1850, 0, 0);
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a3') = '[1850000, 1850, 0, 0]', 'T452 an old phone''s new cost in cents: exact = cents × 1000');
+update public.catalog_item_costs set unit_cost_cents = null where item_id = '54500000-0000-4000-8000-0000000000a3';
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a3') = '[null, null, 0, 0]', 'T452 the cost cleared by an old phone: both empty');
+update public.catalog_item_costs set unit_cost_millicents = 22500, unit_cost_cents = 99 where item_id = '54500000-0000-4000-8000-0000000000a3';
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a3') = '[22500, 23, 0, 0]', 'T452 both sent: the exact cost wins, the mirror is the server''s (23, not 99)');
+\echo 'T452 ok'
+
+-- T453: the history sees a change of the exact cost that keeps the mirror (22 500 → 22 600, both 23 ¢); a row the server
+-- writes in cents (as po_receive does until PR 3/4) gets its thousandths
+\echo 'T453 the history of the exact cost'
+-- the rows of one transaction share «at»: their order is the id's (uuid v7, milliseconds of the clock) — a pause between the
+-- writes so two of them never fall in one millisecond (else the order is the random part's: CI of #2247, 19.11)
+select pg_sleep(0.005);
+update public.catalog_item_costs set unit_cost_millicents = 22500 where item_id = '54500000-0000-4000-8000-0000000000a1';
+select pg_sleep(0.005);
+update public.catalog_item_costs set unit_cost_millicents = 22600 where item_id = '54500000-0000-4000-8000-0000000000a1';
+select tst.ok(pg_temp.h450('54500000-0000-4000-8000-0000000000a1') -> -1 = '[22600, 23]' and pg_temp.h450('54500000-0000-4000-8000-0000000000a1') -> -2 = '[22500, 23]',
+  format('T453 22 500 → 22 600 with the same mirror: a history row each: %s', pg_temp.h450('54500000-0000-4000-8000-0000000000a1')));
+select jsonb_array_length(pg_temp.h450('54500000-0000-4000-8000-0000000000a1')) as n453 \gset
+update public.catalog_item_costs set unit_cost_cents = 23 where item_id = '54500000-0000-4000-8000-0000000000a1';
+select tst.ok(jsonb_array_length(pg_temp.h450('54500000-0000-4000-8000-0000000000a1')) = :n453
+          and pg_temp.h450('54500000-0000-4000-8000-0000000000a1') -> -1 = '[22600, 23]',
+  'T453 an echo of the mirror writes no history row');
+:as_super
+select pg_sleep(0.005);
+insert into public.catalog_cost_history (company_id, item_id, unit_cost_cents, vendor_tax_bps, source)
+values ('ca000000-0000-0000-0000-000000000000', '54500000-0000-4000-8000-0000000000a3', 740, 0, 'manual');
+select tst.ok(pg_temp.h450('54500000-0000-4000-8000-0000000000a3') -> -1 = '[740000, 740]', 'T453 a history row written in cents gets its thousandths (× 1000)');
+select tst.ok(not exists (select 1 from public.catalog_item_costs where unit_cost_cents is not null and unit_cost_millicents is null)
+          and not exists (select 1 from public.catalog_cost_history where unit_cost_cents is not null and unit_cost_millicents is null)
+          and not exists (select 1 from public.catalog_item_costs where unit_cost_cents is distinct from round(unit_cost_millicents::numeric / 1000)::bigint),
+  'T453 every stored cost has its exact value and its mirror half up (the migration filled the old rows)');
+\echo 'T453 ok'
+
+-- T454: the price follows a change of the exact cost that keeps the mirror (t32): 11 ¢ ×4 = 4 ¢ → 14 ¢ ×4 = 6 ¢, mirror 1 ¢
+\echo 'T454 the price follows the exact cost'
+:as_office_a
+update public.catalog_item_costs set unit_cost_millicents = 1100, markup_bps = 30000 where item_id = '54500000-0000-4000-8000-0000000000a2';
+select tst.ok(pg_temp.p450('54500000-0000-4000-8000-0000000000a2') = 4, 'T454 1.1 ¢ + 300 % = 4.4 → 4 ¢');
+update public.catalog_item_costs set unit_cost_millicents = 1400 where item_id = '54500000-0000-4000-8000-0000000000a2';
+select tst.ok(pg_temp.p450('54500000-0000-4000-8000-0000000000a2') = 6 and pg_temp.k450('54500000-0000-4000-8000-0000000000a2') ->> 1 = '1',
+  format('T454 1.4 ¢ + 300 %% = 5.6 → 6 ¢ with the same mirror 1 ¢: %s', pg_temp.p450('54500000-0000-4000-8000-0000000000a2')));
+:as_super
+select tst.ok(tst.cnt($q$select 1 from app.catalog_price_drift('ca000000-0000-0000-0000-000000000000') d where d.item_id::text like '54500000-%'$q$) = 0,
+  'T454 the drift check (a server job) counts from the exact cost: no false drift');
+:as_office_a
+\echo 'T454 ok'
+
+-- T455: catalog_set_item_costs takes the exact cost and checks it against what the phone saw (#1958 (а))
+\echo 'T455 catalog_set_item_costs and the exact cost'
+select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": 22500, "markup_bps": 1000}', '{"unit_cost_millicents": null, "markup_bps": null}');
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a6') = '[22500, 23, null, 1000]' and pg_temp.p450('54500000-0000-4000-8000-0000000000a6') = 25,
+  format('T455 the exact cost through the function: 22 500 → mirror 23, price 25: %s', pg_temp.k450('54500000-0000-4000-8000-0000000000a6')));
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": 22600}', '{"unit_cost_millicents": 22400}')$q$) = '40001',
+  'T455 the phone saw another exact cost: 40001, nothing written');
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": 22600, "unit_cost_cents": 23}', '{"unit_cost_millicents": 22500, "unit_cost_cents": 23}')$q$) = '22023',
+  'T455 the exact cost and the mirror together: 22023 (one of them)');
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": 22600.5}', '{"unit_cost_millicents": 22500}')$q$) = '22023'
+          and pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": -1}', '{"unit_cost_millicents": 22500}')$q$) = '22023'
+          and pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": 1e30}', '{"unit_cost_millicents": 22500}')$q$) = '22023'
+          and pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": "22600"}', '{"unit_cost_millicents": 22500}')$q$) = '22023',
+  'T455 a fraction, a negative, a huge number, a string: 22023, nothing written');
+select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_millicents": 22600}', '{"unit_cost_millicents": 22500}');
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a6') = '[22600, 23, null, 1000]', 'T455 22 500 → 22 600 over what was seen');
+select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"markup_bps": 2000}', '{"markup_bps": 1000}');
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a6') = '[22600, 23, null, 2000]', 'T455 the markup changed: the exact cost stays 22 600');
+select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_cents": 23}', '{"unit_cost_cents": 23}');
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a6') = '[22600, 23, null, 2000]', 'T455 an old build sends the same mirror: 22 600 stays');
+select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a6', '{"unit_cost_cents": 25}', '{"unit_cost_cents": 23}');
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a6') = '[25000, 25, null, 2000]', 'T455 an old build changes the cost: exact = 25 000');
+\echo 'T455 ok'
+
+-- T456: a price group shares one exact cost: the spread and a joining item carry the thousandths, not the mirror × 1000
+\echo 'T456 a price group carries the exact cost'
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_millicents, vendor_tax_bps, markup_bps) values
+  ('54500000-0000-4000-8000-0000000000a4', 'ca000000-0000-0000-0000-000000000000', 22500, 0, 1000);
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a5') = '[22500, 23, 0, 1000]',
+  format('T456 the group peer gets 22 500, not 23 000: %s', pg_temp.k450('54500000-0000-4000-8000-0000000000a5')));
+update public.catalog_item_costs set unit_cost_millicents = 22600 where item_id = '54500000-0000-4000-8000-0000000000a4';
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a5') = '[22600, 23, 0, 1000]', 'T456 22 500 → 22 600 with the same mirror spreads too');
+update public.catalog_items set attributes = '{"priceGroup":"t450:g"}' where id = '54500000-0000-4000-8000-0000000000a3';
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a3') = '[22600, 23, 0, 1000]',
+  format('T456 an item joining the group gets the group''s exact cost: %s', pg_temp.k450('54500000-0000-4000-8000-0000000000a3')));
+select public.catalog_set_group_price('54500000-0000-4000-8000-0000000000a4', 25, false, null, null, 2000, 25, 23, 0, 1000);
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a5') = '[22600, 23, 0, 2000]' and pg_temp.k450('54500000-0000-4000-8000-0000000000a4') = '[22600, 23, 0, 2000]',
+  format('T456 the group''s markup set without a cost: the exact cost 22 600 stays on every item: %s', pg_temp.k450('54500000-0000-4000-8000-0000000000a5')));
+-- as every build calls it: the cost it has (the mirror 23) is sent with the new markup — an echo, the exact cost stays
+select public.catalog_set_group_price('54500000-0000-4000-8000-0000000000a4', pg_temp.p450('54500000-0000-4000-8000-0000000000a4'), false, 23, 0, 3000,
+                                      pg_temp.p450('54500000-0000-4000-8000-0000000000a4'), 23, 0, 2000);
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a5') = '[22600, 23, 0, 3000]' and pg_temp.k450('54500000-0000-4000-8000-0000000000a3') = '[22600, 23, 0, 3000]',
+  format('T456 the group''s markup with the mirror sent back (23): 22 600 stays on every item, not 23 000: %s', pg_temp.k450('54500000-0000-4000-8000-0000000000a5')));
+select public.catalog_set_group_price('54500000-0000-4000-8000-0000000000a4', pg_temp.p450('54500000-0000-4000-8000-0000000000a4'), false, 24, 0, 3000,
+                                      pg_temp.p450('54500000-0000-4000-8000-0000000000a4'), 23, 0, 3000);
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a5') = '[24000, 24, 0, 3000]' and pg_temp.k450('54500000-0000-4000-8000-0000000000a4') = '[24000, 24, 0, 3000]',
+  'T456 a different cost for the group (24 ¢): exact = 24 000 on every item');
+\echo 'T456 ok'
+
+-- T457: who does not see our costs sees no exact cost either, and cannot write it
+\echo 'T457 the exact cost: only who sees our costs'
+:as_sales_a
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a1', '{"unit_cost_millicents": 1}', '{"unit_cost_millicents": 22600}')$q$) = '42501',
+  'T457 sales without view_costs: catalog_set_item_costs with the exact cost — 42501');
+:as_tech_a
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a1', '{"unit_cost_millicents": 1}', '{"unit_cost_millicents": 22600}')$q$) = 'P0002',
+  'T457 a tech: catalog_set_item_costs — not found');
+:as_owner_b
+select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('54500000-0000-4000-8000-0000000000a1', '{"unit_cost_millicents": 1}', '{"unit_cost_millicents": 22600}')$q$) = 'P0002'
+          and tst.cnt($q$select 1 from public.catalog_item_costs where item_id::text like '54500000-%'$q$) = 0,
+  'T457 another company: not found, no row seen');
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.catalog_item_costs where item_id::text like '54500000-%'$q$) = 0
+          and tst.cnt($q$select 1 from public.catalog_cost_history where item_id::text like '54500000-%'$q$) = 0,
+  'T457 sales without view_costs: no cost row, no history');
+update public.catalog_item_costs set unit_cost_millicents = 1 where item_id = '54500000-0000-4000-8000-0000000000a1';
+select tst.ok(pg_temp.st($q$insert into public.catalog_item_costs (item_id, company_id, unit_cost_millicents) values ('54500000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 1) on conflict (item_id) do update set unit_cost_millicents = 1$q$) = '42501',
+  'T457 sales without view_costs cannot write an exact cost (42501, the insert policy)');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.catalog_item_costs where item_id::text like '54500000-%'$q$) = 0
+          and tst.cnt($q$select 1 from public.catalog_cost_history where item_id::text like '54500000-%'$q$) = 0,
+  'T457 a tech: no cost row, no history');
+update public.catalog_item_costs set unit_cost_millicents = 1 where item_id = '54500000-0000-4000-8000-0000000000a1';
+select tst.ok(pg_temp.k450('54500000-0000-4000-8000-0000000000a1') ->> 0 = '22600', 'T457 neither sales nor a tech changed the exact cost');
+\echo 'T457 ok'
+
+-- T458: the bounds — a negative or above $1 000 000 a unit is refused (the mirror bound × 1000)
+\echo 'T458 the bounds of the exact cost'
+:as_office_a
+select tst.ok(pg_temp.st($q$update public.catalog_item_costs set unit_cost_millicents = -1 where item_id = '54500000-0000-4000-8000-0000000000a1'$q$) = '23514',
+  'T458 a negative exact cost: 23514');
+select tst.ok(pg_temp.st($q$update public.catalog_item_costs set unit_cost_millicents = 100000000001 where item_id = '54500000-0000-4000-8000-0000000000a1'$q$) = '23514',
+  'T458 above $1 000 000 a unit: 23514');
+select tst.ok(pg_temp.st($q$update public.catalog_item_costs set unit_cost_millicents = 100000000000 where item_id = '54500000-0000-4000-8000-0000000000a1'$q$) = 'ok',
+  'T458 the bound itself is allowed');
+\echo 'T458 ok'
+
+-- T459: the exact cost moves with the item as the old cost does — the side table only (t30 never puts it on the item row,
+-- the item row has no such column: no cost leaks to who reads catalog_items)
+\echo 'T459 the exact cost is never on the item row'
+:as_super
+select tst.ok(not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'catalog_items' and column_name like '%millicents%'),
+  'T459 catalog_items has no exact-cost column (only the side table that RLS hides)');
+select tst.ok(has_column_privilege('authenticated', 'public.catalog_item_costs', 'unit_cost_millicents', 'UPDATE')
+          and has_column_privilege('authenticated', 'public.catalog_item_costs', 'unit_cost_millicents', 'INSERT')
+          and not has_column_privilege('anon', 'public.catalog_item_costs', 'unit_cost_millicents', 'SELECT')
+          and not has_column_privilege('authenticated', 'public.catalog_cost_history', 'unit_cost_millicents', 'UPDATE'),
+  'T459 the grants: a member writes the exact cost (RLS decides who), anon nothing, the history only the server');
+rollback;
+\echo 'T450–T459 ok'
+
+-- ================================================================ T460–T469: the exact cost on the estimate's and the templates' lines
+-- (#1926 PR 2/4, spec 53 §8а.12, migration 20261117640000). The catalog's rule (T450–T459) on estimate_line_costs, the
+-- kept costs and the template's costs; a save (delete, then insert) keeps the exact value. Its own rows, rolled back.
+:as_super
+begin;
+-- a line cost as the server holds it: [millicents, cents]
+create or replace function pg_temp.c460(p_id uuid) returns jsonb language sql security definer as $f$
+  select jsonb_build_array(c.unit_cost_millicents, c.unit_cost_cents) from public.estimate_line_costs c where c.line_item_id = p_id $f$;
+grant execute on function pg_temp.c460(uuid) to public;
+create or replace function pg_temp.t460(p_tpl uuid, p_line text) returns jsonb language sql security definer as $f$
+  select jsonb_build_array(c.unit_cost_millicents, c.unit_cost_cents) from public.estimate_template_line_costs c
+   where c.template_id = p_tpl and c.line_id = p_line $f$;
+grant execute on function pg_temp.t460(uuid, text) to public;
+
+-- T460: the columns, their bounds, the new table closed, the functions nobody's (rule 18), the old rows filled
+\echo 'T460 the exact cost on the lines: columns, bounds, rights'
+select tst.ok((select count(*) = 3 from information_schema.columns where table_schema = 'public' and column_name = 'unit_cost_millicents'
+                 and data_type = 'bigint' and table_name in ('estimate_line_costs', 'estimate_line_costs_kept', 'estimate_template_line_costs')),
+  'T460 unit_cost_millicents is a bigint on the line costs, the kept costs and the template costs');
+select tst.ok((select count(*) = 3 from pg_constraint where conname in ('estimate_line_costs_millicents_range', 'estimate_line_costs_kept_millicents_range',
+                 'estimate_template_line_costs_millicents_range') and convalidated),
+  'T460 the bounds 0..$1 000 000 a unit are on and validated');
+select tst.ok(not exists (select 1 from public.estimate_line_costs where unit_cost_cents is distinct from round(unit_cost_millicents::numeric / 1000)::bigint)
+          and not exists (select 1 from public.estimate_template_line_costs where unit_cost_cents is distinct from round(unit_cost_millicents::numeric / 1000)::bigint)
+          and not exists (select 1 from public.estimate_line_costs_kept where unit_cost_cents is distinct from round(unit_cost_millicents::numeric / 1000)::bigint),
+  'T460 every stored line cost has its exact value and its mirror half up (the migration filled the old rows)');
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_line_cost_millicents()', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_line_cost_exact_keep()', 'execute')
+          and not has_function_privilege('anon', 'app.tg_line_cost_millicents()', 'execute'),
+  'T460 rule 18: the new trigger functions are nobody''s');
+select tst.ok(not has_table_privilege('authenticated', 'public.estimate_line_cost_exact', 'select')
+          and not has_table_privilege('anon', 'public.estimate_line_cost_exact', 'select')
+          and (select relforcerowsecurity from pg_class where oid = 'public.estimate_line_cost_exact'::regclass),
+  'T460 the kept exact values: no one reads them but the triggers');
+select tst.ok(has_column_privilege('authenticated', 'public.estimate_line_costs', 'unit_cost_millicents', 'INSERT')
+          and has_column_privilege('authenticated', 'public.estimate_line_costs', 'unit_cost_millicents', 'UPDATE')
+          and not has_column_privilege('authenticated', 'public.estimate_template_line_costs', 'unit_cost_millicents', 'UPDATE'),
+  'T460 a member writes a line''s exact cost (RLS decides who); the template''s costs only the server');
+\echo 'T460 ok'
+
+-- the estimate: a draft of the tech (he edits his own draft), one option
+:as_tech_a
+insert into public.estimates (id, company_id, customer_id, property_id, title)
+  values ('54600000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T460 draft');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no)
+  values ('54600000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000e1', 1);
+:as_super
+create function tst.t460_save(p_lines jsonb, p_costs jsonb) returns void language sql as $f$
+  select public.save_estimate_version('54600000-0000-4000-8000-0000000000e1', '54600000-0000-4000-8000-0000000000d1', 'T460',
+    jsonb_build_object('calc_inputs', '{}'::jsonb, 'engine_version', 't', 'tax_enabled', false, 'tax_mode', 'added_on_top'),
+    '[{"id": "54600000-0000-4000-8000-0000000000a1", "name": "A", "position": 0}]'::jsonb, p_lines, p_costs) $f$;
+grant execute on function tst.t460_save(jsonb, jsonb) to authenticated;
+\set l460 '[{"id": "54600000-0000-4000-8000-0000000000b1", "option_id": "54600000-0000-4000-8000-0000000000a1", "position": 0, "line_group": "material", "name": "Rivet", "quantity": "37", "unit": "ea", "unit_price_cents": 25}, {"id": "54600000-0000-4000-8000-0000000000b2", "option_id": "54600000-0000-4000-8000-0000000000a1", "position": 1, "line_group": "material", "name": "Anchor", "quantity": "10", "unit": "ea", "unit_price_cents": 10}]'
+
+-- T461: a new build saves the exact cost → the mirror half up; both sent → the exact value wins (audit Р2)
+\echo 'T461 save_estimate_version keeps the exact cost'
+:as_office_a
+select tst.t460_save(:'l460', '[{"line_item_id": "54600000-0000-4000-8000-0000000000b1", "unit_cost_millicents": 22500},
+                               {"line_item_id": "54600000-0000-4000-8000-0000000000b2", "unit_cost_cents": 99, "unit_cost_millicents": 4120}]');
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]',
+  format('T461 22 500 m¢ («$22.50 for 100») → the mirror 23 ¢: %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b1')));
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b2') = '[4120, 4]',
+  format('T461 the exact value and the cents sent together: the exact wins, the mirror is the server''s (4, not 99): %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b2')));
+\echo 'T461 ok'
+
+-- T462: an old office build saves again with the cents only. The save deletes the lines (the cost row goes with them)
+-- and inserts them again: the same mirror gives the exact value back (red before: 23 000); a different one replaces it.
+-- The older ops.ts path (delete, insert, upsert of the cost) — the same.
+\echo 'T462 an old build''s save: the echo keeps the exact cost through delete + insert'
+:as_office_a
+select tst.t460_save(:'l460', '[{"line_item_id": "54600000-0000-4000-8000-0000000000b1", "unit_cost_cents": 23},
+                               {"line_item_id": "54600000-0000-4000-8000-0000000000b2", "unit_cost_cents": 5}]');
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]',
+  format('T462 the same mirror 23 ¢ after delete + insert: 22 500 stays, not 23 000: %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b1')));
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b2') = '[5000, 5]',
+  format('T462 a different mirror (5 ¢, was 4): exact = 5 000: %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b2')));
+select tst.ok(not exists (select 1 from public.estimate_line_cost_exact where line_item_id in ('54600000-0000-4000-8000-0000000000b1', '54600000-0000-4000-8000-0000000000b2')),
+  'T462 the kept exact value is used up by the next cost of the line');
+:as_office_a
+delete from public.estimate_line_items where id = '54600000-0000-4000-8000-0000000000b1';
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
+  ('54600000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000a1', 'Rivet', 37, 25);
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values
+  ('54600000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 23)
+on conflict (line_item_id) do update set unit_cost_cents = excluded.unit_cost_cents;
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]',
+  format('T462 the ops.ts path (delete, insert, upsert of the cents): 22 500 stays: %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b1')));
+-- review 2: another company holds a kept row under our line id (the id is free once a line is deleted): ours is kept
+-- beside it and comes back to us; theirs stays theirs
+:as_super
+insert into public.estimate_line_cost_exact (line_item_id, company_id, unit_cost_millicents)
+  values ('54600000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 99999);
+:as_office_a
+update public.estimate_line_costs set unit_cost_millicents = 22500 where line_item_id = '54600000-0000-4000-8000-0000000000b1';
+delete from public.estimate_line_items where id = '54600000-0000-4000-8000-0000000000b1';
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
+  ('54600000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000a1', 'Rivet', 37, 25);
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values
+  ('54600000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 23);
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]'
+          and (select unit_cost_millicents = 99999 from public.estimate_line_cost_exact
+                where line_item_id = '54600000-0000-4000-8000-0000000000b1' and company_id = 'cb000000-0000-0000-0000-000000000000'),
+  format('T462 another company''s row under our line id: our 22 500 is kept and comes back, theirs untouched: %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b1')));
+delete from public.estimate_line_cost_exact where company_id = 'cb000000-0000-0000-0000-000000000000';
+\echo 'T462 ok'
+
+-- T463: the row edited in place: the echo of the mirror keeps the exact value, a new exact value with the same mirror is
+-- written (22 500 → 22 600, both 23 ¢), a different mirror replaces it
+\echo 'T463 the line cost edited in place'
+:as_office_a
+update public.estimate_line_costs set unit_cost_cents = 23 where line_item_id = '54600000-0000-4000-8000-0000000000b1';
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]', 'T463 an echo of the mirror: 22 500 stays');
+:as_office_a
+update public.estimate_line_costs set unit_cost_millicents = 22600 where line_item_id = '54600000-0000-4000-8000-0000000000b1';
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22600, 23]', 'T463 22 500 → 22 600, the mirror stays 23');
+:as_office_a
+update public.estimate_line_costs set unit_cost_cents = 30 where line_item_id = '54600000-0000-4000-8000-0000000000b1';
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[30000, 30]', 'T463 a different mirror: exact = 30 000');
+:as_office_a
+update public.estimate_line_costs set unit_cost_millicents = 22500 where line_item_id = '54600000-0000-4000-8000-0000000000b1';
+:as_super
+select tst.fails_like($q$update public.estimate_line_costs set unit_cost_millicents = 100000000000001 where line_item_id = '54600000-0000-4000-8000-0000000000b1'$q$,
+  '%millicents_range%', 'T463 above $1 000 000 a unit: refused');
+\echo 'T463 ok'
+
+-- T464: the tech's save (he sees no costs): the kept cost comes back with its exact value (keep / restore)
+\echo 'T464 the tech''s save keeps the exact cost'
+:as_tech_a
+select tst.t460_save(:'l460', '[{"line_item_id": "54600000-0000-4000-8000-0000000000b1", "unit_cost_cents": 99}]');
+select tst.ok(tst.cnt('select 1 from public.estimate_line_costs') = 0, 'T464 the tech reads no line cost (no exact value either)');
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]' and pg_temp.c460('54600000-0000-4000-8000-0000000000b2') = '[5000, 5]',
+  format('T464 after the tech''s delete + insert the office''s exact cost is back (his cents left out): %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b1')));
+:as_tech_a
+delete from public.estimate_line_items where id = '54600000-0000-4000-8000-0000000000b1';
+:as_super
+select tst.ok((select unit_cost_millicents = 22500 and unit_cost_cents = 23 from public.estimate_line_costs_kept where line_item_id = '54600000-0000-4000-8000-0000000000b1'),
+  'T464 the kept cost holds the exact value');
+:as_tech_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
+  ('54600000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000a1', 'Rivet', 37, 25);
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]', 'T464 the line comes back: 22 500, not 23 000');
+-- sales without the right to costs saves with an exact cost: nothing of his is written
+:as_sales_a
+select tst.t460_save(:'l460', '[{"line_item_id": "54600000-0000-4000-8000-0000000000b1", "unit_cost_millicents": 1}]');
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000b1') = '[22500, 23]',
+  format('T464 sales'' save with an exact cost: the office''s 22 500 stays (his value not written): %s', pg_temp.c460('54600000-0000-4000-8000-0000000000b1')));
+\echo 'T464 ok'
+
+-- T465: a new version of a sent estimate (copied_from_line_id): who sees no costs gets the exact value copied (t96); the
+-- office's old build writes the cents itself — the same mirror takes the source's exact value, another one is its own
+\echo 'T465 a new version keeps the exact cost'
+:as_super
+insert into public.estimate_versions (id, company_id, estimate_id, version_no)
+  values ('54600000-0000-4000-8000-0000000000d2', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000e1', 2);
+insert into public.estimate_options (id, company_id, version_id, name) values
+  ('54600000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000d2', 'A');
+select tst.server($q$update public.estimate_versions set locked_at = now() where id = '54600000-0000-4000-8000-0000000000d1'$q$);
+update public.estimates set current_version_id = '54600000-0000-4000-8000-0000000000d2' where id = '54600000-0000-4000-8000-0000000000e1';
+:as_sales_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id) values
+  ('54600000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000a2', 'Rivet', 40, 25, '54600000-0000-4000-8000-0000000000b1');
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000c1') = '[22500, 23]',
+  format('T465 sales'' copy of the line: the exact value copied (t96): %s', pg_temp.c460('54600000-0000-4000-8000-0000000000c1')));
+:as_office_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id) values
+  ('54600000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000a2', 'Rivet', 40, 25, '54600000-0000-4000-8000-0000000000b1'),
+  ('54600000-0000-4000-8000-0000000000c3', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000a2', 'Rivet', 40, 25, '54600000-0000-4000-8000-0000000000b1');
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values
+  ('54600000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', 23),
+  ('54600000-0000-4000-8000-0000000000c3', 'ca000000-0000-0000-0000-000000000000', 24);
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000c2') = '[22500, 23]',
+  format('T465 the office''s old build writes 23 ¢ for the copy: the source''s 22 500: %s', pg_temp.c460('54600000-0000-4000-8000-0000000000c2')));
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000c3') = '[24000, 24]', 'T465 another mirror (24 ¢): its own 24 000');
+-- review 1: a new build set the copy to a whole 23 000; an old office build saves it again (delete, insert, cents 23):
+-- the kept 23 000 comes back, not the copied-from line's 22 500
+:as_office_a
+update public.estimate_line_costs set unit_cost_millicents = 23000 where line_item_id = '54600000-0000-4000-8000-0000000000c2';
+delete from public.estimate_line_items where id = '54600000-0000-4000-8000-0000000000c2';
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id) values
+  ('54600000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000a2', 'Rivet', 40, 25, '54600000-0000-4000-8000-0000000000b1');
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values
+  ('54600000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', 23);
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000c2') = '[23000, 23]',
+  format('T465 a whole 23 000 set by a new build survives an old save: %s', pg_temp.c460('54600000-0000-4000-8000-0000000000c2')));
+-- review 2: copied_from_line_id pointing at a line that is no source under t96's rules (another name) gives nothing
+:as_office_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id) values
+  ('54600000-0000-4000-8000-0000000000c4', 'ca000000-0000-0000-0000-000000000000', '54600000-0000-4000-8000-0000000000a2', 'Other', 1, 25, '54600000-0000-4000-8000-0000000000b1');
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values
+  ('54600000-0000-4000-8000-0000000000c4', 'ca000000-0000-0000-0000-000000000000', 23);
+:as_super
+select tst.ok(pg_temp.c460('54600000-0000-4000-8000-0000000000c4') = '[23000, 23]',
+  'T465 a «copy» of another name is no source: cents × 1000, not 22 500');
+\echo 'T465 ok'
+
+-- T466: a template line carries the exact cost: it goes to the template's costs, never into the stored document; an old
+-- build's echo of the cents keeps it; both keys — the exact value wins (audit Р3); a null clears it; a bad value is refused
+\echo 'T466 the template''s exact cost'
+:as_office_a
+insert into public.estimate_templates (id, company_id, name, doc) values
+  ('54600000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', 'T466', '{"options":[{"id":"o1","name":"A","lines":[
+  {"id":"l1","name":"Rivet","group":"material","quantity":"37","unit":"ea","unitPriceCents":25,"unitCostMillicents":22500},
+  {"id":"l2","name":"Anchor","group":"material","quantity":"1","unit":"ea","unitPriceCents":10,"unitCostCents":99,"unitCostMillicents":4120},
+  {"id":"l3","name":"Old","group":"material","quantity":"1","unit":"ea","unitPriceCents":10,"unitCostCents":7}]}],
+ "settings":{"discount":null,"tax":{"enabled":false,"rateBps":0,"groups":{"service":false,"labor":false,"material":false}},"deposit":{"kind":"none"}}}');
+:as_super
+select tst.ok(pg_temp.t460('54600000-0000-4000-8000-0000000000f1', 'l1') = '[22500, 23]'
+          and pg_temp.t460('54600000-0000-4000-8000-0000000000f1', 'l2') = '[4120, 4]'
+          and pg_temp.t460('54600000-0000-4000-8000-0000000000f1', 'l3') = '[7000, 7]',
+  'T466 the exact value goes to the template''s costs (both sent: the exact wins; the cents alone: × 1000)');
+select tst.ok(not jsonb_path_exists((select doc from public.estimate_templates where id = '54600000-0000-4000-8000-0000000000f1'), '$.options[*].lines[*].unitCostMillicents')
+          and not jsonb_path_exists((select doc from public.estimate_templates where id = '54600000-0000-4000-8000-0000000000f1'), '$.options[*].lines[*].unitCostCents'),
+  'T466 the stored document has no cost key');
+:as_office_a
+update public.estimate_templates set doc = jsonb_set(jsonb_set(doc, '{options,0,lines,0,unitCostCents}', '23'), '{options,0,lines,2,unitCostCents}', 'null')
+ where id = '54600000-0000-4000-8000-0000000000f1';
+:as_super
+select tst.ok(pg_temp.t460('54600000-0000-4000-8000-0000000000f1', 'l1') = '[22500, 23]', 'T466 an old build''s echo of the mirror: 22 500 stays');
+select tst.ok(pg_temp.t460('54600000-0000-4000-8000-0000000000f1', 'l2') = '[4120, 4]', 'T466 a line without a cost key keeps its exact cost');
+select tst.ok(pg_temp.t460('54600000-0000-4000-8000-0000000000f1', 'l3') is null, 'T466 a cost sent as null is cleared');
+:as_office_a
+update public.estimate_templates set doc = jsonb_set(doc, '{options,0,lines,0,unitCostMillicents}', '22600') where id = '54600000-0000-4000-8000-0000000000f1';
+:as_super
+select tst.ok(pg_temp.t460('54600000-0000-4000-8000-0000000000f1', 'l1') = '[22600, 23]', 'T466 22 500 → 22 600 with the same mirror');
+:as_office_a
+do $$ begin
+  perform tst.fails_like($q$update public.estimate_templates set doc = jsonb_set(doc, '{options,0,lines,0,unitCostMillicents}', '225.5') where id = '54600000-0000-4000-8000-0000000000f1'$q$,
+    '%not valid%', 'T466 a fraction of a thousandth: refused');
+  perform tst.fails_like($q$update public.estimate_templates set doc = jsonb_set(doc, '{options,0,lines,0,unitCostMillicents}', '"22500"') where id = '54600000-0000-4000-8000-0000000000f1'$q$,
+    '%not valid%', 'T466 a string: refused');
+  perform tst.fails_like($q$update public.estimate_templates set doc = jsonb_set(doc, '{options,0,lines,0,unitCostMillicents}', '100000000000001') where id = '54600000-0000-4000-8000-0000000000f1'$q$,
+    '%not valid%', 'T466 above $1 000 000 a unit: refused');
+end $$;
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.estimate_template_line_costs where template_id = '54600000-0000-4000-8000-0000000000f1'$q$) = 0,
+  'T466 sales without view_costs reads no template cost');
+\echo 'T466 ok'
+
+-- T467: the exact cost never reaches a tech or a client: the server takes the key out of a version's document (t45) and
+-- out of every cost-free document (app.doc_without_costs)
+\echo 'T467 the exact cost is hidden like the cents'
+:as_super
+select tst.ok(not (app.doc_without_costs('{"options":[{"id":"o","lines":[{"id":"l","unitCostMillicents":22500,"unitCostCents":23,"unitPriceCents":25}]}]}')
+                   -> 'options' -> 0 -> 'lines' -> 0) ?| array['unitCostMillicents', 'unitCostCents']
+          and app.doc_without_costs('{"options":[{"id":"o","lines":[{"id":"l","unitPriceCents":25}]}]}') -> 'options' -> 0 -> 'lines' -> 0 ->> 'unitPriceCents' = '25',
+  'T467 app.doc_without_costs takes the exact cost out, the price stays');
+:as_tech_a
+update public.estimate_versions set calc_inputs = '{"options":[{"id":"o","lines":[{"id":"l","unitPriceCents":25,"unitCostMillicents":22500}]}]}'
+ where id = '54600000-0000-4000-8000-0000000000d2';
+:as_super
+select tst.ok(not jsonb_path_exists((select calc_inputs from public.estimate_versions where id = '54600000-0000-4000-8000-0000000000d2'), '$.options[*].lines[*].unitCostMillicents'),
+  'T467 a version''s document is stored without the exact cost');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where unit_cost_millicents is not null$q$) = 0, 'T467 the tech reads no exact cost');
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where unit_cost_millicents is not null$q$) = 0, 'T467 sales without view_costs reads no exact cost');
+-- the client's document (the PDF and /p/) passes only the keys it lists: no exact cost
+:as_super
+select tst.ok(not (app.client_doc('{"options":[{"id":"o","name":"A","lines":[{"id":"l","name":"Rivet","group":"material","quantity":"37","unit":"ea","unitPriceCents":25,"unitCostMillicents":22500,"unitCostCents":23}]}]}')
+                   -> 'options' -> 0 -> 'lines' -> 0) ?| array['unitCostMillicents', 'unitCostCents'],
+  'T467 the client''s document (PDF, /p/) has no exact cost');
+-- who sees no costs: a save carrying an exact cost writes none (the lines are saved), the kept exact values closed
+:as_sales_a
+select tst.blocked('select * from public.estimate_line_cost_exact', 'T467 sales reads the kept exact values');
+:as_office_a
+select tst.blocked('select * from public.estimate_line_cost_exact', 'T467 the office reads the kept exact values');
+do $$ begin
+  perform tst.fails($q$insert into public.estimate_line_cost_exact (line_item_id, company_id, unit_cost_millicents)
+    values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 1)$q$, 'T467 nobody writes the kept exact values directly');
+end $$;
+\echo 'T467 ok'
+rollback;
+\echo 'T460–T467 ok'
 
 \echo 'ALL TESTS PASSED'

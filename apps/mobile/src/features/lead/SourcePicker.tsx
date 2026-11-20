@@ -7,7 +7,9 @@ import { SOURCE_KINDS, type Source, type SourceKind } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { Labeled } from "@/features/fields";
 import { sourceGroups, sourceInUse, sourceOf } from "@/features/leads";
-import { Button, ChoiceChips, IconButton, StatusChip, TextField } from "@/ui/controls";
+import { Button, IconButton, StatusChip, TextField } from "@/ui/controls";
+import { CheckMark } from "@/ui/checkMark";
+import { SelectField } from "@/ui/selectField";
 import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Divider, ListRow, RowView } from "@/ui/surfaces";
@@ -51,8 +53,15 @@ export function SourceSheet({ visible, value, onClose, onPick }: { visible: bool
       key={s.id}
       title={s.name}
       subtitle={[s.kind === "person" ? s.phone : undefined, !s.active ? t("src.hidden") : undefined].filter(Boolean).join(" · ") || undefined}
-      left={s.id === value ? <Icon name="check" /> : <Icon name={s.kind === "person" ? "user" : s.kind === "ads" ? "chart" : s.kind === "own" ? "home" : "star"} />}
-      right={<IconButton icon="pencil" label={t("src.edit", { name: s.name })} onPress={() => setEdit(s)} />}
+      left={<Icon name={s.kind === "person" ? "user" : s.kind === "ads" ? "chart" : s.kind === "own" ? "home" : "star"} />}
+      // the chosen one: CheckMark on the right (DS §9 «Выделение выбранного»), the pencil after it
+      right={
+        <RowView gap={space[2]}>
+          {s.id === value ? <CheckMark testID={`src-check-${s.id}`} /> : null}
+          <IconButton icon="pencil" label={t("src.edit", { name: s.name })} onPress={() => setEdit(s)} />
+        </RowView>
+      }
+      selected={s.id === value}
       onPress={() => onPick(s.id)}
     />
   );
@@ -112,9 +121,8 @@ function SourceForm({ value, onDone }: { value: Omit<Source, "id"> & { id?: stri
       {taken ? (
         <StatusNote tone="warn">{t("src.taken")}</StatusNote>
       ) : null}
-      <Labeled label={t("src.kind")}>
-        <ChoiceChips<SourceKind> value={d.kind} onChange={(k) => set({ kind: k })} items={SOURCE_KINDS.map((k) => ({ key: k, label: t(sourceKindLabel(k)) }))} />
-      </Labeled>
+      {/* «Тип · По рекомендации ⌄» — a value of the form (DS §9 А2, spec 56 §3б) */}
+      <SelectField<SourceKind> testID="src-kind" label={t("src.kind")} value={d.kind} onChange={(k) => set({ kind: k })} items={SOURCE_KINDS.map((k) => ({ key: k, label: t(sourceKindLabel(k)) }))} />
       {d.kind === "person" ? (
         <>
           <Labeled label={t("co.phone")}>

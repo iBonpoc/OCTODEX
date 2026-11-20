@@ -56,11 +56,11 @@ describe("parts for a person (#1090)", () => {
   it("the named parts: rivet and touch-up paint have words, the coil says its blank in feet-inches", () => {
     const en = tFor("en");
     const names = parts.map((q) => partName(en, q));
-    expect(names.join("|")).toMatch(/Pop rivet/);
-    expect(names.join("|")).toMatch(/Touch-up paint/);
-    expect(names.join("|")).toMatch(/Seamless coil/);
-    expect(names.join("|")).toMatch(/11′ 10[⅞½]″|11′ 7⅞″|0′|11′/);
-    expect(partName(tFor("ru"), parts.find((q) => q.attrs.part === "touch_up_paint")!)).toContain("Краска");
+    expect(names.join("|")).toMatch(/Pop Rivet/);
+    expect(names.join("|")).toMatch(/Touch Up Paint/);
+    expect(names.join("|")).toMatch(/(^|\|)Coil /);
+    expect(names.join("|")).toMatch(/11⅞″|11′ 10[⅞½]″|11′ 7⅞″|0′|11′/);
+    expect(partName(tFor("ru"), parts.find((q) => q.attrs.part === "touch_up_paint")!)).toContain("Touch Up Paint") // #1800: the supplier's name, the same in Russian;
     expect(partName(tFor("es"), parts.find((q) => q.attrs.part === "touch_up_paint")!)).toContain("Pintura");
   });
 });

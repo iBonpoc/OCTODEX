@@ -4,14 +4,17 @@ import { Image } from "react-native";
 import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { radius, space, component } from "@octo/design-tokens";
-import { isToday, useStore, visitContext } from "@/data/store";
+import { expenseAmountCents } from "@/features/expenseAmount";
+import { useStore } from "@/data/store";
+import { canStartExpense, expenseJobOptions, myVisitsToday } from "@/features/expenseJobs";
+import { realJob } from "@/cloud/inspectionBridge";
+import { meIsSub } from "@/nav/sections";
 import type { ExpenseCategory } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { Button, ChoiceChips, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { FieldGroup, Screen } from "@/ui/surfaces";
-import { isAssigned } from "@/features/schedule";
+import { Empty, FieldGroup, Screen } from "@/ui/surfaces";
 import { expenseVendors } from "@/features/suppliers";
 import { shrinkPicked } from "@/data/photoShrink";
 
@@ -28,11 +31,16 @@ export default function NewExpense() {
   const VENDORS = expenseVendors(db, USUAL);
   const [vendor, setVendor] = useState(VENDORS[0] ?? "Home Depot");
   const [category, setCategory] = useState<ExpenseCategory>("materials");
-  const todays = db.visits.filter((v) => isToday(v.start) && isAssigned(v, db.me));
-  const [jobId, setJobId] = useState<string>(todays[0]?.jobId ?? "none");
+  const todays = myVisitsToday(db);
+  // a subcontractor: only a job of his today, never «Общий расход» (Р-8a: the server refuses it)
+  const opts = expenseJobOptions(db, todays, meIsSub(db));
+  // an inspection's in-memory job is never the default (it never reaches the server)
+  const [jobId, setJobId] = useState<string>((opts.allowNone ? realJob(todays[0]?.jobId) : opts.jobs[0]?.key) ?? "none");
+  const can = canStartExpense(opts);
   const [photo, setPhoto] = useState<string | undefined>();
-  const cents = Math.round(Number(amount.replace(/[^0-9.]/g, "")) * 100);
-  const ok = Number.isFinite(cents) && cents > 0;
+  // money through the engine, the app's one money parser (rule 8, #1537; features/expenseAmount)
+  const cents = expenseAmountCents(amount);
+  const ok = cents > 0;
   const form = useRequiredForm();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
   const pick = async () => {
@@ -42,9 +50,17 @@ export default function NewExpense() {
     if (uri) setPhoto(uri);
   };
   const jobs = [
-    { key: "none", label: t("exp.noJob") },
-    ...todays.filter((v): v is typeof v & { jobId: string } => !!v.jobId).map((v) => ({ key: v.jobId, label: visitContext(db, v).customer?.name ?? v.jobId })),
+    ...(opts.allowNone ? [{ key: "none", label: t("exp.noJob") }] : []),
+    // the job by its number and title, not the client's name (#1427 053)
+    ...opts.jobs,
   ];
+  // a subcontractor without a job today: nothing to fill in — why, and the way back
+  if (!can)
+    return (
+      <Screen title={t("exp.title")} back={back}>
+        <Empty icon="wallet" title={t("exp.subNoJob")} hint={t("exp.subNoJobHint")} action={<Button label={t("common.back")} variant="secondary" onPress={back} />} testID="expense-sub-no-job" />
+      </Screen>
+    );
   return (
     <Screen form title={t("exp.title")} back={back}>
       {/* the fields straight on the background, no card around them (DS §11 п.17, #1411) */}

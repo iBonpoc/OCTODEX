@@ -17,7 +17,7 @@ import { moduleActive, type ModuleEstimateStore } from "../registry";
 import { leadEstimatePropertyId } from "@/features/access";
 import { docLanguageFor } from "@/data/people";
 import type { DocLang } from "@/i18n/translate";
-import { gutterData, K, KEY, ownFields, putMeasurement, undoAll, withGutterData } from "./data";
+import { gutterData, K, KEY, ownFields, putMeasurement, removeMeasurement, undoAll, withGutterData } from "./data";
 import { linesFromParts, resyncLines, type LineSource, type ModuleLine } from "./estimate";
 import { fromElements, type ElementRow, type MeasurementRow } from "./canvas/model";
 import { toMeasurement } from "./geometry";
@@ -167,7 +167,7 @@ export function estimateAction(db: Pick<DB, "estimates"> & Partial<Pick<DB, "mod
  * (review M8b №5). A line someone deleted comes back on «Обновить» — to keep a part out, set its quantity to 0
  * (a hand change: it stays 0); spec П23.8.
  */
-export function docWithLines(prev: EstimateDoc | undefined, next: readonly ModuleLine[], measurementId: string, fresh: () => EstimateDoc): EstimateDoc {
+export function docWithLines(prev: EstimateDoc | undefined, next: readonly ModuleLine[], measurementId: string, fresh: () => EstimateDoc, catalog: readonly CatalogItem[] = []): EstimateDoc {
   if (!prev) {
     const d = fresh();
     return { ...d, options: d.options.map((o, i) => (i === 0 ? { ...o, lines: [...(next as EstimateDoc["options"][number]["lines"])] } : o)) };
@@ -179,7 +179,7 @@ export function docWithLines(prev: EstimateDoc | undefined, next: readonly Modul
       const mine = o.lines.some((l) => ofMeasurement(l, measurementId));
       // no option has lines of it (they were all removed by hand): the first option gets them again
       if (!mine && (touched || i > 0)) return o;
-      const out = resyncLines(o.lines as ModuleLine[], next, (l) => sourceOf(l)?.module === KEY && !ofMeasurement(l, measurementId));
+      const out = resyncLines(o.lines as ModuleLine[], next, (l) => sourceOf(l)?.module === KEY && !ofMeasurement(l, measurementId), catalog);
       return { ...o, lines: out as typeof o.lines };
     }),
   };
@@ -272,7 +272,7 @@ export function makeEstimate(store: ModuleEstimateStore, x: MakeInput): MakeResu
   const undoReady = store.moduleOp(KEY, { kind: K.mSave, payload: { m: row }, apply: (d) => withGutterData(d, putMeasurement({ ...was, status: "ready" })), coalesceKey: was.id, made: [was.id] });
 
   const lines = linesFromParts(x.parts, x.catalog, x.name, uid, revisionId, x.m.id, (x.now ?? (() => new Date().toISOString()))(), GUTTER_PARTS_VERSION);
-  const withLines = docWithLines(e?.doc, lines, x.m.id, () => newDoc(db.company?.estimate?.depositBps));
+  const withLines = docWithLines(e?.doc, lines, x.m.id, () => newDoc(db.company?.estimate?.depositBps), x.catalog);
   // the drawing of this revision goes with the estimate (S6g): the client sees on /p/ and in the PDF what it was counted from
   const doc = x.page ? withMeasurementPage(withLines, x.m.id, x.page) : withLines;
   const estimateId = e?.id ?? uid();
@@ -293,4 +293,62 @@ export function makeEstimate(store: ModuleEstimateStore, x: MakeInput): MakeResu
     // the lead's new client: all of them go back or none (DS §15.2)
     undo: undoAll(store, [t.undo, undoReady, undoSave]),
   };
+}
+
+/* ---------- «Удалить замер» with an estimate on it (#2013) ---------- */
+
+/** the open estimates with this measurement's lines: drafts (their lines are let go of the measurement) and sent ones (left as they are) */
+export function estimatesOn(db: Pick<DB, "estimates">, measurementId: string): { drafts: Estimate[]; sent: Estimate[] } {
+  const mine = db.estimates.filter((e) => !SIGNED.has(e.status) && e.status !== "declined" && hasLinesOf(e, measurementId));
+  return { drafts: mine.filter((e) => e.status === "draft"), sent: mine.filter((e) => e.status === "sent") };
+}
+
+/**
+ * The estimate's lines of this measurement become ordinary lines (#2013, director's option Б): the same name, quantity, price, cost —
+ * only the module's mark goes (no «Из замера», no «Обновить из замера» to a measurement that is gone). The drawing's page in the
+ * document is a picture of what was counted (withMeasurementPage): it stays. The same document back when nothing is of it.
+ */
+export function detachDoc(doc: EstimateDoc, measurementId: string): EstimateDoc {
+  let changed = false;
+  const options = doc.options.map((o) => ({
+    ...o,
+    lines: o.lines.map((l) => {
+      if (!ofMeasurement(l, measurementId)) return l;
+      changed = true;
+      const { source: _s, ...rest } = l as typeof l & { source?: unknown };
+      return rest as typeof l;
+    }),
+  }));
+  return changed ? { ...doc, options } : doc;
+}
+
+/** who deletes: a tech edits only the estimates he made (the server's can_edit_estimate: created_by = auth.uid()) */
+export interface Deleter { role: string; me?: string | null }
+const mayEdit = (e: Estimate, w: Deleter) => w.role !== "tech" || (!!w.me && e.createdBy === w.me);
+
+/**
+ * What stops «Удалить замер» (#2013): a signed estimate on it (never deleted — the server refuses too), or a draft estimate on it this
+ * person may not change (a tech and the office's draft: its lines could not be let go — the server would refuse the estimate's save
+ * and keep the removal). Null — it may go.
+ */
+export function deleteBlock(db: Pick<DB, "estimates">, measurementId: string, w: Deleter): "signed" | "notYours" | null {
+  if (signedOn(db, measurementId)) return "signed";
+  return estimatesOn(db, measurementId).drafts.some((e) => !mayEdit(e, w)) ? "notYours" : null;
+}
+
+/**
+ * «Удалить замер» (#2013): the measurement goes (soft, removeMeasurement) FIRST — not removed (the module is off meanwhile), nothing else
+ * is written; then its draft estimates keep their lines as ordinary ones (one save each, through the core's save — money through the
+ * engine, the queue); a sent estimate is not touched (its status and the client's copy stay — the director, 17.11). One «Отменить» takes
+ * all of it back, offline too. Null — nothing done (blocked: deleteBlock, or nothing to delete).
+ */
+export function removeMeasurementDetached(store: ModuleEstimateStore & { role?: string }, measurementId: string, w: Deleter = { role: store.role ?? "owner", me: store.db.me }): GuardedUndo | null {
+  if (deleteBlock(store.db, measurementId, w)) return null;
+  const { drafts } = estimatesOn(store.db, measurementId);
+  const del = removeMeasurement(store, measurementId);
+  if (!del) return null;
+  const saves = drafts.map((e) =>
+    store.saveEstimate({ id: e.id, customerId: e.customerId, propertyId: e.propertyId, title: e.title, doc: detachDoc(e.doc!, measurementId), ...(e.leadId ? { leadId: e.leadId } : {}) }),
+  );
+  return undoAll(store, [del, ...saves]);
 }

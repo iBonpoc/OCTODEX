@@ -12,7 +12,7 @@ import { starterWant } from "./prices";
 import { benchOfferedHere } from "./bench/visible";
 
 const draw = moduleHref("gutters", "draw");
-/** «Просмотр замера» (#698): the drawing whole, its list, the estimate by the state; estimate=1 does the estimate at once */
+/** «Просмотр замера» (#698): the drawing whole, its list, the estimate by the state; estimate=1 asks to make / update it (a press writes) */
 const view = moduleHref("gutters", "view");
 /** «Замер желобов» on a lead, an address or a visit: its newest measurement's card opens, else a new one linked to it on the canvas (S4g, П24, П25.3 В) */
 function measure(data: unknown, by: { leadId?: string; propertyId?: string; leadIds?: readonly string[] }) {
@@ -107,6 +107,9 @@ const gutters: ModuleDef = {
   // (a test one is marked «тестовая цена» in the list, rule 9); a line without an item is $0 with «проверьте цену». The quantities
   // are only a start. They never touch a measurement's lines — the main way is «Смета из замера»
   starterWant,
+  // #2227 (spec 33-price-key §11.3.3): the core names an item's variant property by the module's word — the supplier order says
+  // «Color code not set» in the order's language; the core itself never knows the word «color»
+  variantWord: (attr, t) => (attr === "color" ? t("mod.gutters.attr.color") : undefined),
   estimateTemplates: [
     {
       key: "clean",
@@ -153,13 +156,15 @@ const gutters: ModuleDef = {
   rebuild: rebuildOp,
   // the canvas and its speed check take the whole screen: no bottom tabs, no side menu (#1426, DS Б11); the list, the review,
   // the settings and the prices keep them
-  fullScreen: ["draw", "bench"],
+  fullScreen: ["draw", ...(benchOfferedHere() ? ["bench"] : [])],
   screens: {
     draw: () => require("./draw/DrawScreen").default,
     view: () => require("./view/ViewScreen").default,
     list: () => require("./list/MeasurementsScreen").default,
     start: () => require("./list/StartScreen").default,
-    bench: () => require("./bench/BenchScreen").default,
+    // the speed check is a developer's screen: registered only where it is offered (Expo Go, a development build) — the store build
+    // and the web have no such route at all, a link to it is «not found»
+    ...(benchOfferedHere() ? { bench: () => require("./bench/BenchScreen").default } : {}),
     settings: () => require("./settings/SettingsScreen").default,
     prices: () => require("./prices/PricesScreen").default,
   },

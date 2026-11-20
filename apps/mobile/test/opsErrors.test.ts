@@ -36,22 +36,22 @@ beforeEach(() => {
 describe("unit:opsErrors — the server's answer rides on the error", () => {
   it("503 / 429 / an expired sign-in: a ServerError with its status → «not now»", async () => {
     answers.push({ error: { message: "Service Unavailable", code: "" }, status: 503 });
-    const e = await fail(applyOp({ k: "notice.read", ids: ["n1"] } as Parameters<typeof applyOp>[0], "co", "u"));
+    const e = await fail(applyOp({ k: "notice.read", ids: ["0e000000-0000-4000-8000-000000000001"] } as Parameters<typeof applyOp>[0], "co", "u"));
     expect(e).toBeInstanceOf(ServerError);
     expect((e as ServerError).status).toBe(503);
     expect(classify(e)).toBe("transient");
     answers.push({ error: { message: "JWT expired", code: "PGRST301" }, status: 401 });
-    expect(classify(await fail(applyOp({ k: "notice.read", ids: ["n1"] } as Parameters<typeof applyOp>[0], "co", "u")))).toBe("transient");
+    expect(classify(await fail(applyOp({ k: "notice.read", ids: ["0e000000-0000-4000-8000-000000000001"] } as Parameters<typeof applyOp>[0], "co", "u")))).toBe("transient");
   });
   it("a permission / constraint code: a PermanentError → a refusal", async () => {
     answers.push({ error: { message: "new row violates row-level security policy", code: "42501" }, status: 403 });
-    const e = await fail(applyOp({ k: "notice.read", ids: ["n1"] } as Parameters<typeof applyOp>[0], "co", "u"));
+    const e = await fail(applyOp({ k: "notice.read", ids: ["0e000000-0000-4000-8000-000000000001"] } as Parameters<typeof applyOp>[0], "co", "u"));
     expect(e).toBeInstanceOf(PermanentError);
     expect(classify(e)).toBe("refusal");
   });
   it("no answer at all (status 0, «Failed to fetch») → network", async () => {
     answers.push({ error: { message: "TypeError: Failed to fetch", code: "" }, status: 0 });
-    expect(classify(await fail(applyOp({ k: "notice.read", ids: ["n1"] } as Parameters<typeof applyOp>[0], "co", "u")))).toBe("network");
+    expect(classify(await fail(applyOp({ k: "notice.read", ids: ["0e000000-0000-4000-8000-000000000001"] } as Parameters<typeof applyOp>[0], "co", "u")))).toBe("network");
   });
 });
 
@@ -77,5 +77,22 @@ describe("unit:opsErrors — the connection drops in the middle of an op (review
     const e = await fail(applyOp({ k: "estimate.send", id: "e1" } as Parameters<typeof applyOp>[0], "co", "u"));
     expect(asked.slice(0, 2)).toEqual(["rpc:send_estimate", "from:estimates"]);
     expect(classify(e)).toBe("transient");
+  });
+});
+
+describe("unit:opsErrors — notice.read: my own mark (Р-8b)", () => {
+  it("marks through mark_notifications_read, not the shared column", async () => {
+    await applyOp({ k: "notice.read", ids: ["0e000000-0000-4000-8000-000000000001", "n-local"] } as Parameters<typeof applyOp>[0], "co", "u");
+    expect(asked).toEqual(["rpc:mark_notifications_read"]);
+  });
+  it("a server before the migration (no such function): the shared column, as before", async () => {
+    answers.push({ error: { message: "Could not find the function", code: "PGRST202" }, status: 404 });
+    await applyOp({ k: "notice.read", ids: ["0e000000-0000-4000-8000-000000000001"] } as Parameters<typeof applyOp>[0], "co", "u");
+    expect(asked).toEqual(["rpc:mark_notifications_read", "from:notifications"]);
+  });
+  it("nothing to mark (none, or only the phone's own notices): no request", async () => {
+    await applyOp({ k: "notice.read", ids: [] } as unknown as Parameters<typeof applyOp>[0], "co", "u");
+    await applyOp({ k: "notice.read", ids: ["n-local"] } as Parameters<typeof applyOp>[0], "co", "u");
+    expect(asked).toEqual([]);
   });
 });

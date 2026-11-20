@@ -32,6 +32,14 @@ const rules: { name: string; re: RegExp }[] = [
 ];
 
 const outsideUi = code.filter((f) => !f.includes(`${join("src", "ui")}`));
+/**
+ * «Графит» — пилот витрины #2254, НЕ ПРАВИЛО (условие аудита 1; DS §8.0 и §25): ONE named exception — its own folder may
+ * have its own Text, Pressable, TextInput and Modal (the pilot does not touch src/ui). Every tokens-only rule below still
+ * holds there, through the `graphite` tokens. Roll-back = delete the folder (and this line).
+ */
+const PILOT_GRAPHITE = join("src", "features", "showcase", "graphite");
+const inPilot = (f: string) => f.includes(PILOT_GRAPHITE);
+const outsideUiAndPilot = outsideUi.filter((f) => !inPilot(f));
 
 /** #816 (C-08): the general rule lets a bare 0 and 1 through; the module's screens carry no such border — `component.hairline` */
 describe("design system: the module's hairline is a token", () => {
@@ -50,19 +58,152 @@ describe("design system: the module's hairline is a token", () => {
 
 describe("design system: components", () => {
   it("text only through <T> (no raw react-native Text outside src/ui)", () => {
-    const hits = outsideUi.filter((f) => {
+    const hits = outsideUiAndPilot.filter((f) => {
       const imp = readFileSync(f, "utf8").split("\n").find((l) => /from "react-native"/.test(l) && /\bText\b/.test(l) && !l.includes("ds-allow"));
       return !!imp;
     });
     expect(hits.map((f) => relative(ROOT, f))).toEqual([]);
   });
   it("taps only through Press / Button / IconButton / Card (44 pt hit area), no raw Pressable / Touchable* outside src/ui", () => {
-    const hits = outsideUi.filter((f) =>
+    const hits = outsideUiAndPilot.filter((f) =>
       readFileSync(f, "utf8")
         .split("\n")
         .some((l) => /from "react-native"/.test(l) && /\b(Pressable|TouchableOpacity|TouchableHighlight|TouchableWithoutFeedback)\b/.test(l) && !l.includes("ds-allow")),
     );
     expect(hits.map((f) => relative(ROOT, f))).toEqual([]);
+  });
+  // Rule 29 (founder 16.11.2026: «никаких кастомных кнопок, никаких кастомных шторок… всё по токенам и сущностям»; DS §8.0):
+  // screens and modules are built from src/ui only. Counts below are the debt found on 16.11 — they may only go down;
+  // fixing goes with the waves of spec 56 (Gutters draw/** — wave G). A new place is an exception in DS §8.0 first.
+  const RULE29_MODAL: Record<string, number> = {
+    "features/SignatureFullscreen.tsx": 1,
+    "modules/gutters/draw/InputWindow.tsx": 1,
+    "nav/NavMenu.tsx": 1,
+  };
+  const countIn = (src: string, re: RegExp) => (src.match(re) || []).length;
+  it("rule 29: no own Modal outside src/ui (sheets and windows — Sheet / InputDialog of src/ui); the old ones only go down", () => {
+    const now: Record<string, number> = {};
+    for (const f of outsideUiAndPilot) {
+      const src = readFileSync(f, "utf8");
+      if (!/import\s*\{[^}]*\bModal\b[^}]*\}\s*from\s*"react-native"/.test(src)) continue;
+      const n = countIn(src, /<Modal\b/g);
+      if (n) now[relative(ROOT, f).split("\\").join("/")] = n;
+    }
+    const over = Object.entries(now).filter(([k, n]) => n > (RULE29_MODAL[k] ?? 0)).map(([k, n]) => `${k}: ${n} > ${RULE29_MODAL[k] ?? 0}`);
+    const less = Object.entries(RULE29_MODAL).filter(([k, n]) => (now[k] ?? 0) < n).map(([k, n]) => `${k}: ${now[k] ?? 0} < ${n} — lower the list`);
+    expect(over, `own Modal outside src/ui (rule 29, DS §8.0):\n${over.join("\n")}`).toEqual([]);
+    expect(less, less.join("\n")).toEqual([]);
+  });
+  // a Press drawn as a button / tile / chip by the screen itself: its own background, radius or border in the tag
+  const RULE29_STYLED_PRESS: Record<string, number> = {
+    "features/LegalAgree.tsx": 1, // the Terms / Privacy links drawn as underlined text (#2022); spec 56 §11.1 waits for the lawyer
+    "features/PhotoStrip.tsx": 2,
+    "features/PlanParts.tsx": 1,
+    "features/estimate/SwipeRow.tsx": 1,
+    "features/showcase/Rows.tsx": 1,
+    "modules/gutters/draw/AttrPanel.tsx": 1,
+    "modules/gutters/draw/CornerSheet.tsx": 1,
+    "modules/gutters/draw/DrawScreen.tsx": 2,
+    "modules/gutters/draw/FracPicker.tsx": 1,
+    "modules/gutters/settings/SettingsScreen.tsx": 1,
+    "nav/Fab.tsx": 3,
+    "nav/HomeHeader.tsx": 1,
+    "nav/NavMenu.tsx": 2,
+    "nav/SearchEntry.tsx": 1,
+    "nav/SideNav.tsx": 2,
+    "nav/TabBar.tsx": 1,
+  };
+  // #2022: an own look is also a style kept in a variable (`style={hitBox}`), a link drawn in the child text (`textDecorationLine`),
+  // or a button-sized Press (`accessibilityRole="button"` + `minHeight: component.button…`) — not only a background in the tag
+  const OWN_LOOK = /backgroundColor|borderRadius|borderWidth|fillStyle\(/;
+  const styledPress = (src: string) => {
+    // what the file's own `const name = { … }` objects hold (a style kept in a variable)
+    const objOf = (name: string): string => {
+      const m = new RegExp(`\\b(?:const|let)\\s+${name}\\s*(?::[^=]+)?=\\s*\\{`).exec(src);
+      if (!m) return "";
+      let depth = 0;
+      let i = m.index + m[0].length - 1;
+      const start = i;
+      for (; i < src.length; i++) {
+        if (src[i] === "{") depth++;
+        else if (src[i] === "}" && --depth === 0) break;
+      }
+      return src.slice(start, i + 1);
+    };
+    let n = 0;
+    for (const m of src.matchAll(/<Press\b/g)) {
+      let depth = 0;
+      let i = m.index! + 6;
+      for (; i < src.length; i++) {
+        const ch = src[i];
+        if (ch === "{") depth++;
+        else if (ch === "}") depth--;
+        else if (ch === ">" && depth === 0) break;
+      }
+      const tag = src.slice(m.index!, i);
+      // the style's own names: style={x} / style={[x, …]} → the objects they name in this file
+      const styleExpr = /\bstyle=\{([\s\S]*)\}/.exec(tag)?.[1] ?? "";
+      const named = [...styleExpr.matchAll(/(?:^|[\s[,(])([a-z][A-Za-z0-9]*)\b(?!\s*[.:(])/g)].map((x) => objOf(x[1]!)).join(" ");
+      const look = tag + " " + named;
+      // the element's own children (up to its closing tag; a self-closing Press has none)
+      const selfClosing = src[i - 1] === "/";
+      const end = selfClosing ? i : src.indexOf("</Press>", i);
+      const children = selfClosing || end < 0 ? "" : src.slice(i, end);
+      const buttonSized = /accessibilityRole=["{]+button/.test(tag) && /minHeight:\s*component\.button\./.test(look);
+      if (OWN_LOOK.test(look) || /textDecorationLine:\s*["'`]underline/.test(children) || buttonSized) n++;
+    }
+    return n;
+  };
+  it("rule 29: no Press drawn as an own button outside src/ui (Button / IconButton / ListRow / OptionRow / OptionTile); the old ones only go down", () => {
+    const now: Record<string, number> = {};
+    for (const f of outsideUi) {
+      const n = styledPress(readFileSync(f, "utf8"));
+      if (n) now[relative(ROOT, f).split("\\").join("/")] = n;
+    }
+    const over = Object.entries(now).filter(([k, n]) => n > (RULE29_STYLED_PRESS[k] ?? 0)).map(([k, n]) => `${k}: ${n} > ${RULE29_STYLED_PRESS[k] ?? 0}`);
+    const less = Object.entries(RULE29_STYLED_PRESS).filter(([k, n]) => (now[k] ?? 0) < n).map(([k, n]) => `${k}: ${now[k] ?? 0} < ${n} — lower the list`);
+    expect(over, `own button-looking Press outside src/ui (rule 29, DS §8.0):\n${over.join("\n")}`).toEqual([]);
+    expect(less, less.join("\n")).toEqual([]);
+  });
+  // #1997: inside src/ui too. A ui component is built from ui components; its own look (a Press with a background, radius
+  // or border) belongs only to the component that defines that look — listed here by file, with what it defines. A new file,
+  // or one more in a listed file, is an own button hidden in ui (as the old «Сохранить изменения?» of Sheet was, #1996).
+  const UI_OWN_STYLED_PRESS: Record<string, number> = {
+    "ui/controls.tsx": 7, // Button, IconButton, Toggle, Segmented, TagChip, TextField's action; + a style kept in a variable (#2022)
+    "ui/filterBar.tsx": 4, // FilterBar (chip, «Фильтр», «Сброс»), FilterRow
+    "ui/fracKeys.tsx": 1, // FracKeys — the key
+    "ui/listCard.tsx": 2, // ListCard, its open panel
+    "ui/optionTile.tsx": 1, // OptionTile
+    "ui/overlays.tsx": 3, // Menu row; LEGACY ×2 — the old unsaved question of Sheet, goes with #1996 (UnsavedAsk from Button)
+    "ui/pctUsdField.tsx": 1, // PctUsdField — the «% | $» switch
+    "ui/selectField.tsx": 1, // SelectField — the row
+    "ui/surfaces.tsx": 3, // Card (pressable, its `base` style — seen since #2022), ListRow
+  };
+  it("rule 29 inside src/ui (#1997): an own look only in the component that defines it; the list only goes down", () => {
+    const now: Record<string, number> = {};
+    for (const f of code.filter((x) => x.includes(join("src", "ui")))) {
+      const n = styledPress(readFileSync(f, "utf8"));
+      if (n) now[relative(ROOT, f).split("\\").join("/")] = n;
+    }
+    const over = Object.entries(now).filter(([k, n]) => n > (UI_OWN_STYLED_PRESS[k] ?? 0)).map(([k, n]) => `${k}: ${n} > ${UI_OWN_STYLED_PRESS[k] ?? 0}`);
+    const less = Object.entries(UI_OWN_STYLED_PRESS).filter(([k, n]) => (now[k] ?? 0) < n).map(([k, n]) => `${k}: ${now[k] ?? 0} < ${n} — lower the list`);
+    expect(over, `an own button-looking Press inside src/ui — build it from Button / ListRow / OptionRow …, or add the component that defines the look with a reason (rule 29, DS §8.0):\n${over.join("\n")}`).toEqual([]);
+    expect(less, less.join("\n")).toEqual([]);
+  });
+  it("the styled-Press counter sees what it must (guards the guard)", () => {
+    expect(styledPress(`<Press onPress={go} style={{ backgroundColor: c.surf2, borderRadius: radius.pill }}><T>x</T></Press>`)).toBe(1);
+    expect(styledPress(`<Press onPress={go} accessibilityRole="button"><T>x</T></Press>`)).toBe(0);
+    expect(styledPress(`<Press style={[a, { borderWidth: 1 }]} onPress={() => { if (x) y(); }}>z</Press>`)).toBe(1);
+    // #2022 С1: a button-sized Press with its style in a variable and a link look in the child text
+    expect(styledPress(`const hitBox = { minHeight: component.button.hit, justifyContent: "center" };\n<Press accessibilityRole="button" style={hitBox}><T style={{ textDecorationLine: "underline" }}>x</T></Press>`)).toBe(1);
+    // С2: the look kept in a variable
+    expect(styledPress(`const s = { borderRadius: radius.pill };\n<Press style={s} onPress={go}><T>x</T></Press>`)).toBe(1);
+    expect(styledPress(`const s = { borderRadius: radius.pill };\n<Press style={[s, { flex: 1 }]} onPress={go}><T>x</T></Press>`)).toBe(1);
+    // the link look in the child alone
+    expect(styledPress(`<Press onPress={go}><T style={{ textDecorationLine: "underline" }}>x</T></Press>`)).toBe(1);
+    // С3: a plain Press (a row, a card from src/ui inside) stays green
+    expect(styledPress(`<Press onPress={go} accessibilityRole="button"><T>x</T></Press>`)).toBe(0);
+    expect(styledPress(`const pad = { padding: space[2] };\n<Press onPress={go} style={pad}><T>x</T></Press>`)).toBe(0);
   });
   it("vibration only through ui/haptics.ts (no expo-haptics anywhere else; the «Вибрация» switch must work, DS §15.6)", () => {
     const hits = code.filter((f) => !f.endsWith(join("ui", "haptics.ts")) && /from "expo-haptics"/.test(readFileSync(f, "utf8"))).map((f) => relative(ROOT, f));
@@ -151,7 +292,7 @@ describe("design system: components", () => {
     for (const f of ["SortableList.tsx", "dnd.tsx"]) expect(readFileSync(join(ROOT, "features", f), "utf8")).toMatch(/holdConfig\(/);
   });
   it("text fields only through <TextField> (no raw TextInput outside src/ui)", () => {
-    const hits = outsideUi.filter((f) =>
+    const hits = outsideUiAndPilot.filter((f) =>
       readFileSync(f, "utf8")
         .split("\n")
         .some((l) => /from "react-native"/.test(l) && /\bTextInput\b/.test(l) && !l.includes("ds-allow")),
@@ -181,6 +322,22 @@ describe("design system: components", () => {
         });
     }
     expect(hits, hits.join("\n")).toEqual([]);
+  });
+});
+
+describe("design system: «Графит» stays a pilot (#2254)", () => {
+  const REL = (f: string) => relative(ROOT, f).split("\\").join("/");
+  it("the `graphite` tokens are read only inside the pilot folder", () => {
+    const hits = code.filter((f) => !inPilot(f) && /\bgraphite(Themes)?\b[^\n]*from "@octo\/design-tokens"|from "@octo\/design-tokens"[^\n]*\bgraphite\b/.test(readFileSync(f, "utf8"))).map(REL);
+    expect(hits).toEqual([]);
+  });
+  it("the pilot folder is opened only by the showcase (its first screen and its section screen)", () => {
+    const hits = code.filter((f) => !inPilot(f) && /features\/showcase\/graphite\//.test(readFileSync(f, "utf8"))).map(REL);
+    expect(hits.sort()).toEqual(["app/settings/design-system/[section].tsx", "app/settings/design-system/index.tsx"]);
+  });
+  it("Jost is loaded only by the pilot (the app's start is not touched)", () => {
+    const hits = code.filter((f) => !inPilot(f) && /@expo-google-fonts\/jost/.test(readFileSync(f, "utf8"))).map(REL);
+    expect(hits).toEqual([]);
   });
 });
 
@@ -369,9 +526,8 @@ describe("design system: a form's fields have no plate (#1411)", () => {
   const SUBMIT_ROWS: Record<string, { n: number; why: string }> = {
     "app/job/[id].tsx": { n: 1, why: "«Добавить» заметку — отправляет набранное" },
     "features/JobLinesBlock.tsx": { n: 1, why: "«Сохранить» ставку налога" },
-    "features/ServiceCategoryPicker.tsx": { n: 1, why: "«Добавить» свою категорию" },
     "features/VisitChecklist.tsx": { n: 2, why: "«Добавить» пункт чек-листа" },
-    "features/client/ClientSheets.tsx": { n: 2, why: "«Удалить» человека; «Добавить» метку" },
+    "features/client/ClientSheets.tsx": { n: 1, why: "«Добавить» метку" },
   };
   it("a field's helper action is an icon inside it: no worded button in one row with a field", () => {
     const bad: string[] = [];
