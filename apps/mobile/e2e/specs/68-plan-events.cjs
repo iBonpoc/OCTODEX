@@ -2,7 +2,7 @@ const { addDays, atMinute, dayKey, todayKey } = require("../companyTime.cjs");
 /**
  * Wave 5 «План» — events and days off (docs/specs/13-app-structure.md §3.2, §2.4; docs/specs/03 §11 PR-B).
  * The office: «Записать в план» → «Событие»: a named event of the whole company at a time → in the Feed and in the data;
- * «Выходной»: «Сохранить» is off until a person is chosen; two days «Весь день» → on both days of the Feed. A card opens
+ * «Выходной»: «Сохранить» with no person says «Выберите, чей это выходной» (#2220: nothing before a try); two days «Весь день» → on both days of the Feed. A card opens
  * the form again: a new name saves on the same event; «Удалить» → «Отменить» brings it back (rule 5). A tech has no «＋» and
  * cannot open an event. One yellow per form (rule 2). Days and times are the company's (companyTime.cjs).
  */
@@ -24,8 +24,10 @@ exports.run = async (h) => {
   await openAdd(h);
   await h.sheet().getByText("Событие", { exact: true }).click(); await p.waitForTimeout(400);
   await h.expectText(/Новое событие/, "the event form");
-  await h.expectText(/Нужно название/, "a name is needed first");
-  h.expect(await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().isDisabled(), "«Сохранить» is off without a name");
+  // #2220: nothing is said before a try, «Сохранить» is live; tried without a name — «Нужно название» (e2e 516 in detail)
+  h.expect(!(await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().isDisabled()), "«Сохранить» is live on a new form");
+  await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().click();
+  await h.expectText(/Нужно название/, "a name is needed — said after a try");
   await h.sheet().getByPlaceholder("Например: собрание бригады").fill("T68 crew meeting");
   await expectOneAccent(h, "the event form", '[aria-modal="true"]');
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(500);
@@ -40,8 +42,8 @@ exports.run = async (h) => {
   // a day off: «Сохранить» off until a person; 2 days, all day → both days in the Feed
   await openAdd(h);
   await h.sheet().getByText("Выходной", { exact: true }).click(); await p.waitForTimeout(400);
-  await h.expectText(/Выберите, чей это выходной/, "a day off needs a person");
-  h.expect(await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().isDisabled(), "«Сохранить» is off without a person");
+  await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().click();
+  await h.expectText(/Выберите, чей это выходной/, "a day off needs a person — said after a try");
   await h.sheet().getByRole("radio", { name: "Ivan Sokolov", exact: true }).click(); await p.waitForTimeout(200);
   await h.sheet().getByRole("button", { name: "Дней +1", exact: true }).click(); await p.waitForTimeout(200);
   await h.shot("timeoff-form");

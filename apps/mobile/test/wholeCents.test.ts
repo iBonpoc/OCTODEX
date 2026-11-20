@@ -5,7 +5,8 @@
  *  1. итоги сметы — целые центы при дробном количестве, скидке процентом, налоге с долями процента, задатке процентом;
  *  2. документ клиента — каждая сумма «$…» с ровно двумя знаками после точки или без них, третьего знака нет;
  *  3. цена позиции из закупки, налога поставщика и наценки — целые центы;
- *  4. база — каждая колонка `*_cents` в миграциях целая (bigint / integer), не numeric / real / double.
+ *  4. база — каждая колонка `*_cents` в миграциях целая (bigint / integer), не numeric / real / double;
+ *     4а. колонка `*_millicents` (точная закупка в тысячных долях цента, #1926) — только bigint.
  * Примеры — из повторяемого генератора (своё зерно), а не из настоящего часа.
  */
 import { describe, expect, it, vi } from "vitest";
@@ -129,6 +130,22 @@ describe("unit:wholeCents — дробных центов клиент не ви
       }
     }
     expect(seen, "колонки *_cents найдены").toBeGreaterThan(20);
+    expect(bad).toEqual([]);
+  });
+
+  it("4а. база: каждая колонка *_millicents (точная закупка, #1926) — только bigint", () => {
+    const dir = new URL("../../../supabase/migrations/", import.meta.url);
+    const bad: string[] = [];
+    let seen = 0;
+    for (const f of readdirSync(dir).filter((x) => x.endsWith(".sql"))) {
+      const sql = readFileSync(new URL(f, dir), "utf8").replace(/--[^\n]*/g, "");
+      const re = /(?:^|[\n,(]|add column(?: if not exists)?)\s*"?([a-z_]*_millicents)"?\s+(numeric|decimal|real|double precision|float[48]?|money|bigint|integer|int[248]?|smallint)\b/gi;
+      for (const m of sql.matchAll(re)) {
+        seen++;
+        if (!/^bigint$/i.test(m[2]!)) bad.push(`${f}: ${m[1]} ${m[2]}`);
+      }
+    }
+    expect(seen, "колонки *_millicents найдены").toBeGreaterThanOrEqual(2);
     expect(bad).toEqual([]);
   });
 });

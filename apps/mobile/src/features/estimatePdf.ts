@@ -169,3 +169,14 @@ export async function saveEstimatePdf(html: string, fileName: string): Promise<v
   const { uri } = await Print.printToFileAsync({ html });
   if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: fileName });
 }
+
+/**
+ * «Открыть» a document — to LOOK at it first (founder 18.11, #2157: «Нажимаю „Открыть“ — он сразу предлагает их
+ * отправить»). A phone: the system's document view (expo-print `printAsync` — the pages to scroll and zoom; send, save or
+ * print from there by its own share button); `page` — the sheet's own size in points, margins 0. The web: the browser's
+ * print preview, as before. Sending the file at once stays `saveEstimatePdf` («Отправить»).
+ */
+export async function openPdfPreview(html: string, fileName: string, page?: { width: number; height: number }): Promise<void> {
+  if (Platform.OS === "web") return saveEstimatePdf(html, fileName);
+  await Print.printAsync(page ? { html, width: page.width, height: page.height, margins: { top: 0, bottom: 0, left: 0, right: 0 } } : { html });
+}

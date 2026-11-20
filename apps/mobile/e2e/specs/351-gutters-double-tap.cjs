@@ -90,6 +90,23 @@ exports.run = async (h) => {
   await h.shot("end");
   await closeSheet();
 
+  // #1855 (founder 16.11: «выбираю End Cap и нажимаю удалить — удаляется весь желоб»): one tap on a cap picks the cap — the chip
+  // says «End cap» — and 🗑 takes the cap off; the gutter stays; «Отменить» puts the cap back
+  const runsN = (await els()).filter((e) => e.kind === "run").length;
+  await pastDoubleTap(p);
+  await canvasAt(p, capAt[0], capAt[1]);
+  await p.mouse.click(...capAt);
+  await p.waitForFunction(() => /End cap/.test([...document.querySelectorAll('[data-testid="draw-selected"]')].find((e) => e.getClientRects().length)?.textContent || ""), null, { timeout: 5000 }).catch(() => h.expect(false, "one tap on a cap: the chip says «End cap»"));
+  await tid("draw-delete").getByRole("button").click();
+  await p.waitForFunction(() => document.querySelectorAll('[data-testid="draw-svg"] [id^="cap:"]').length === 1, null, { timeout: 5000 }).catch(() => h.expect(false, "🗑 on the picked cap: one cap left"));
+  h.expect((await els()).filter((e) => e.kind === "run").length === runsN, `🗑 on the picked cap: the gutter stays (${runsN} → ${(await els()).filter((e) => e.kind === "run").length})`);
+  await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="toast-text"]')].some((e) => e.getClientRects().length && /End cap/.test(e.textContent || "")), null, { timeout: 5000 });
+  // the toast's «Отменить» arms after `motion.doubleTapMs` (a second tap of a double tap never undoes): pressed once it is armed
+  const armedAt = await p.evaluate(() => performance.now());
+  await p.waitForFunction((t0) => performance.now() - t0 > 400, armedAt, { polling: 50 });
+  await p.locator('[data-testid="toast-text"]', { hasText: "End cap" }).locator("xpath=ancestor::*[.//*[@data-testid='toast-undo']][1]").locator('[data-testid="toast-undo"]').click();
+  await p.waitForFunction(() => document.querySelectorAll('[data-testid="draw-svg"] [id^="cap:"]').length === 2, null, { timeout: 5000 }).catch(() => h.expect(false, "«Отменить»: the cap is back"));
+
   // the same as rows of «⋯» (a screen reader has no double tap): «Конец желоба · L/R» of the picked gutter's free ends, and «Свойства» on the phone
   const menuRow = async (re) => {
     await p.getByTestId("draw-who").locator("visible=true").getByRole("button").click();
