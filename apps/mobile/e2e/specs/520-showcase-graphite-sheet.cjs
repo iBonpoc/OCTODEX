@@ -271,7 +271,14 @@ exports.run = async (h) => {
   await center("gr-dev-toggle");
   await vis("gr-dev-toggle").click();
   await vis("gr-dev-body").waitFor({ timeout: 4000 });
-  h.expect((await p.getByTestId("token-group-themes").count()) === 1, "С5b: the colours by name are in the fold");
+  // the coverage that left 264 / 457 (the token screens are not rows any more): the three token screens are drawn in the fold
+  for (const id of ["tokens-color", "tokens-text", "tokens-print", "tokens-layout", "tokens-motion"]) h.expect((await p.getByTestId(`showcase-${id}`).count()) === 1, `С5b: the fold draws ${id}`);
+  for (const g of ["themes", "font", "space", "radius", "motion"]) h.expect((await p.getByTestId(`token-group-${g}`).count()) === 1, `С5b: token group ${g} is in the fold`);
+  const ok = await p.getByTestId("token-themes.status.ok.text").locator("xpath=../..").innerText();
+  h.expect(/#[0-9A-Fa-f]{6}/.test(ok), `С5b: themes.status.ok.text shows a colour (${ok.replace(/\n/g, " ")})`);
+  const motionTok = await p.getByTestId("token-motion.durFast").locator("xpath=../..").innerText();
+  h.expect(/160/.test(motionTok), `С5b: motion.durFast shows 160 (${motionTok.replace(/\n/g, " ")})`);
+  h.expect(/Только для модуля ниши/.test(await vis("gr-dev-body").innerText()), "С5b: the niche module's own tokens carry their note");
   await vis("gr-dev-toggle").click();
   await p.getByTestId("gr-dev-body").waitFor({ state: "detached", timeout: 4000 });
 

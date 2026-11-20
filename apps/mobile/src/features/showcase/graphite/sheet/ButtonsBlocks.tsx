@@ -84,11 +84,10 @@ function KindBlock({
         <View style={{ gap: SP[1] }}>
           <Button testID={`gr-${id}-now-btn`} label={label} icon={icon} variant={nowVariant} disabled={off} onPress={runNow.tap} />
           <Count id={`gr-${id}-now-count`} n={runNow.n} />
-          {loading ? (
-            <T v="caption" tone="mut">
-              {t("ds.gr.sheet.noWait")}
-            </T>
-          ) : null}
+          {/* always, not only after «Загрузка» is switched on: the app's button has no waiting state */}
+          <T v="caption" tone="mut">
+            {t("ds.gr.sheet.noWait")}
+          </T>
         </View>
       }
       variants={oneVariant ? [gr(1, run1)] : [gr(1, run1), gr(2, run2)]}
