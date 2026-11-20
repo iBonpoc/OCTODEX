@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { usableItems } from "@/features/catalogMatch";
 import { seeCosts } from "@/features/access";
 import { View } from "react-native";
 import { router } from "expo-router";
@@ -33,7 +34,8 @@ export default function Catalog() {
   const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));
   const items = useMemo(
     () =>
-      db.catalog
+      // #2227: an item another took over (mergedInto) is kept for its estimates, never listed
+      usableItems(db.catalog)
         .filter((x) => kind === "all" || x.kind === kind)
         .filter((x) => !q.trim() || x.name.toLowerCase().includes(q.trim().toLowerCase()))
         .sort((a, b) => a.name.localeCompare(b.name)),
@@ -88,7 +90,7 @@ export default function Catalog() {
         search={{ value: q, onChange: setQ, placeholder: t("ue.catalogSearch") }}
         value={kind}
         onChange={setKind}
-        items={KINDS.map((k) => ({ key: k, label: t(kindLabel(k)), count: k === "all" ? db.catalog.length : db.catalog.filter((x) => x.kind === k).length }))}
+        items={KINDS.map((k) => ({ key: k, label: t(kindLabel(k)), count: k === "all" ? usableItems(db.catalog).length : usableItems(db.catalog).filter((x) => x.kind === k).length }))}
       />
       {items.length === 0 ? (
         <Empty icon="note" title={t("cat.empty")} />

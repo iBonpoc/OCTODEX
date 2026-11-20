@@ -38,6 +38,8 @@ export default function SupplierScreen() {
   const [s, setS] = useState<Supplier>(() => found ?? { id: uid(), name: "", active: true });
   const [ask, setAsk] = useState<{ n: number; pct: string } | null>(null);
   const undoRef = useRef<GuardedUndo | null>(null);
+  // the rate the form was opened with: only a rate the person changed goes through the door (a sync may bring another one meanwhile)
+  const openedTax = useRef(found?.taxBps);
   const [taxText, setTaxText] = useState(() => (found?.taxBps === undefined ? "" : String(found.taxBps / 100)));
   const set = (p: Partial<Supplier>) => setS((x) => ({ ...x, ...p }));
   const back = () => (router.canGoBack() ? router.back() : router.replace("/suppliers"));
@@ -61,11 +63,15 @@ export default function SupplierScreen() {
   }, [found?.id, costs]);
 
   const save = () => {
-    const undoSave = store.saveSupplier(s);
-    undoRef.current = undoSave;
-    toast.show(t("sup.saved", { name: s.name.trim() }), undoSave);
+    // #1834: the rate has one door (the server's supplier_set_tax); the rest of the supplier is saved as before. The upsert of the
+    // form still carries the old rate (the server keeps the stored one), so only a real change goes through the door
+    const rateChanged = !!found && costs && s.taxBps !== openedTax.current;
+    const undoSave = store.saveSupplier(found ? { ...s, taxBps: found.taxBps } : s);
+    const undoRate = rateChanged ? store.setSupplierTax(s.id, s.taxBps) : undefined;
+    undoRef.current = undoRate ? store.undoTogether([undoSave, undoRate]) : undoSave;
+    toast.show(t("sup.saved", { name: s.name.trim() }), undoRef.current);
     // the tax changed and some of its items count with another one: ask before changing their prices
-    const other = costs ? itemsWithOtherTax(store.db, { ...s, taxBps: s.taxBps }) : [];
+    const other = costs && !rateChanged ? itemsWithOtherTax(store.db, { ...s, taxBps: s.taxBps }) : [];
     if (found && s.taxBps !== undefined && s.taxBps !== found.taxBps && other.length) {
       setAsk({ n: other.length, pct: (s.taxBps / 100).toString() });
       return;

@@ -41,12 +41,16 @@ concurrency:
 jobs:
   build:
     name: Build ${{ inputs.platform }}
+    # the key lives in the environment `release` (only branch main may use it)
+    environment: release
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Android paused until Firebase has com.gorix.app (#1444)
         if: inputs.platform == 'android'
         run: |
@@ -78,7 +82,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
       - run: npm ci
       # #733: our BUILD (the header's number) = the PR of the commit being built; the store's own build number stays EAS's
       - name: Build number (the PR of this commit)
