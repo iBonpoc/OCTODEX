@@ -6,6 +6,7 @@
 export * from "./icons";
 export { extraIcons } from "./extraIcons";
 export { graphite, graphiteThemes, type GraphiteColors, type Graphite } from "./graphite";
+export { graphiteToTheme } from "./graphiteMap";
 
 /* ---------- foundation.css ---------- */
 export const font = {
