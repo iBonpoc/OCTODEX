@@ -1,14 +1,14 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { visitDueCents } from "@/features/visitDue";
-import { View } from "react-native";
+import { ScrollView, View, type ScrollViewInstance } from "react-native";
 import { router } from "expo-router";
-import { component, space } from "@octo/design-tokens";
+import { component, radius, space, spaceHalf } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import type { CalendarEvent, CalendarEventKind, ID, Task } from "@/data/types";
+import type { CalendarEvent, CalendarEventKind, ID, Task, Visit } from "@/data/types";
 import { findJob } from "@/data/jobs";
 import { visitPropertyId } from "@/data/selectors";
-import { todayKey, type DayKey } from "@/features/calendar";
+import { addDays, todayKey, weekStart, type DayKey } from "@/features/calendar";
 import { lateAfterOf, scheduleSettingsOf } from "@/features/scheduleSettings";
 import { visitStatus } from "@/features/visits";
 import { AssignSheet } from "@/features/sheets";
@@ -18,7 +18,7 @@ import { formatDayKey } from "@/features/zone";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
-import { canPlan, daysSince, unassignedSoon, visitWho, waitingJobs, type PlanWho } from "@/features/schedule";
+import { assigneesOf, canPlan, canReschedule, daysSince, liveAssignees, unassignedSoon, visitWho, waitingJobs } from "@/features/schedule";
 import { jobStatusView } from "@/features/jobs";
 import { memberName } from "@/features/team";
 import { VisitFormSheet } from "@/features/VisitForm";
@@ -30,6 +30,8 @@ import { CardList, Divider, ListRow, RowView, SectionTitle } from "@/ui/surfaces
 import { ListCard, type CardLead } from "@/ui/listCard";
 import type { Density, FactKey } from "@/ui/listCardLayout";
 import { SelectedCheck } from "@/ui/selectedCheck";
+import { SwipeRow } from "@/ui/swipeRow";
+import { NO_UNDO } from "@/data/undo";
 import { StatusNote } from "@/ui/statusNote";
 
 /** desktop row columns of the Plan's cards (06 §5 «Визиты»: адрес · работа · кто) */
@@ -258,7 +260,16 @@ function FreeRow({ label, a11y, onAdd }: { label: string; a11y: string; onAdd?: 
  * reader), yellow only when an open visit has nobody on it; a day off of the picked person is the word «выходной»,
  * no colour. The picked day is «Заливка» with a check (DS «Выделение выбранного», not the accent); today is bold. Tap → the Day.
  */
-export function DayCell({ day, load, selected, dim, head, onPress }: { day: DayKey; load?: DayLoad; selected: boolean; dim?: boolean; head?: string; onPress: () => void }) {
+export function DayCell({ day, load, selected, dim, head, pill, onPress }: {
+  day: DayKey;
+  load?: DayLoad;
+  selected: boolean;
+  dim?: boolean;
+  head?: string;
+  /** the Day's strip (LAYOUT-RULES §3 «Календарь»): a pill «Пн / 23 / •», the picked one filled with the accent, today edged */
+  pill?: boolean;
+  onPress: () => void;
+}) {
   const { t, dayOf } = useI18n();
   const { c } = useTheme();
   const today = day === todayKey();
@@ -269,40 +280,69 @@ export function DayCell({ day, load, selected, dim, head, onPress }: { day: DayK
   return (
     <Press
       onPress={onPress}
-      visibleHeight={component.rowCompact}
+      visibleHeight={pill ? undefined : component.rowCompact}
       accessibilityRole="button"
       accessibilityLabel={said}
-      testID={`plan-day-${day}`}
-      containerStyle={{ flex: 1, minWidth: 0 }}
-      style={{
-        minHeight: component.rowCompact + space[4],
-        borderRadius: component.checkbox.radius,
-        // chosen day: «Заливка» + a check (DS «Выделение выбранного»), not an ink frame
-        ...(selected ? fillStyle(c) : { backgroundColor: c.in }),
-        borderWidth: component.hairline,
-        borderColor: selected ? "transparent" : c.bd,
-        opacity: dim ? component.dimOpacity : 1,
-        alignItems: "center",
-        justifyContent: "center",
-        gap: space[1],
-      }}
+      accessibilityState={pill ? { selected } : undefined}
+      testID={pill ? `plan-strip-${day}` : `plan-day-${day}`}
+      containerStyle={pill ? undefined : { flex: 1, minWidth: 0 }}
+      // one cell, two looks: the Week / Month cell, or the Day's pill
+      style={pill
+        ? {
+            width: PILL_W,
+            minHeight: component.rowCompact + space[5],
+            borderRadius: radius.pill,
+            backgroundColor: selected ? c.acc : c.surf,
+            borderWidth: component.hairline,
+            borderColor: selected ? "transparent" : today ? c.ink : c.bd,
+            alignItems: "center" as const,
+            justifyContent: "center" as const,
+            gap: spaceHalf.hair,
+          }
+        : {
+            minHeight: component.rowCompact + space[4],
+            borderRadius: component.checkbox.radius,
+            // chosen day: «Заливка» + a check (DS «Выделение выбранного»), not an ink frame
+            ...(selected ? fillStyle(c) : { backgroundColor: c.in }),
+            borderWidth: component.hairline,
+            borderColor: selected ? "transparent" : c.bd,
+            opacity: dim ? component.dimOpacity : 1,
+            alignItems: "center" as const,
+            justifyContent: "center" as const,
+            gap: space[1],
+          }}
     >
-      {selected ? <SelectedCheck small /> : null}
-      {head ? (
-        <T v="micro" tone="mut" numberOfLines={1}>
-          {head}
-        </T>
-      ) : null}
-      <T v="caption" w={today ? "bold" : "regular"} tabular>
-        {Number(day.slice(8))}
-      </T>
-      {n ? <StatusChip status={un ? "warn" : "info"} label={String(n)} soft /> : null}
-      {load?.dayOff ? (
-        // a cell of the strip is ~46 px on a phone: the short word; the screen reader hears the whole one
-        <T v="micro" tone="mut" numberOfLines={1}>
-          {t("plan5.dayOffShort")}
-        </T>
-      ) : null}
+      {pill ? (
+        <>
+          <T v="micro" tone={selected ? "onAcc" : "mut"} numberOfLines={1}>
+            {head}
+          </T>
+          <T v="heading" w={selected || today ? "bold" : "semibold"} tone={selected ? "onAcc" : "ink"} tabular>
+            {Number(day.slice(8))}
+          </T>
+          {/* the day has something: a dot (warn when a visit there has nobody on it); a day off is said to a screen reader */}
+          <View style={{ width: spaceHalf.tight, height: spaceHalf.tight, borderRadius: radius.pill, backgroundColor: !n ? "transparent" : selected ? c.onAcc : un ? c.status.warn.text : c.mut }} />
+        </>
+      ) : (
+        <>
+          {selected ? <SelectedCheck small /> : null}
+          {head ? (
+            <T v="micro" tone="mut" numberOfLines={1}>
+              {head}
+            </T>
+          ) : null}
+          <T v="caption" w={today ? "bold" : "regular"} tabular>
+            {Number(day.slice(8))}
+          </T>
+          {n ? <StatusChip status={un ? "warn" : "info"} label={String(n)} soft /> : null}
+          {load?.dayOff ? (
+            // a cell of the strip is ~46 px on a phone: the short word; the screen reader hears the whole one
+            <T v="micro" tone="mut" numberOfLines={1}>
+              {t("plan5.dayOffShort")}
+            </T>
+          ) : null}
+        </>
+      )}
     </Press>
   );
 }
@@ -320,7 +360,14 @@ export function WeekStrip({ days, loads, date, onPick }: { days: DayKey[]; loads
   );
 }
 
-function FeedCard({ x, onEvent }: { x: PlanItem; onEvent?: (e: CalendarEvent) => void }) {
+function FeedCard({ x, onEvent, onAssign, endOnly }: {
+  x: PlanItem;
+  onEvent?: (e: CalendarEvent) => void;
+  /** the Day: a visit nobody is on gets «Назначить» */
+  onAssign?: (id: ID) => void;
+  /** the Day: the start is the big hour on the left — under the name only «– end» (one thing once, LAYOUT-RULES П7) */
+  endOnly?: boolean;
+}) {
   const { db, role } = useStore();
   const { t, time, money } = useI18n();
   const density = usePlanDensity();
@@ -331,7 +378,7 @@ function FeedCard({ x, onEvent }: { x: PlanItem; onEvent?: (e: CalendarEvent) =>
   // «Весь день» and the carried-over part of a span (it began on an earlier day) have no hour of this day: a calendar
   // icon on the left, the words («Весь день» / «– 2:00 AM») under the name
   const lead: CardLead = x.allDay || x.at === "" ? { kind: "icon", icon: "calendar" } : timeLead(time(x.start));
-  const span = until ? `${when} ${until}` : when;
+  const span = endOnly && lead.kind === "time" ? until : until ? `${when} ${until}` : when;
   if (x.kind === "visit") {
     const v = x.visit;
     const job = findJob(db, v.jobId);
@@ -358,6 +405,7 @@ function FeedCard({ x, onEvent }: { x: PlanItem; onEvent?: (e: CalendarEvent) =>
         // a screen; the job, its number and the call / route buttons — on the 1280 row-card and on the visit's screen
         facts={wide ? { num: job?.number, addr, work: job?.title, by: names || t("plan.unassigned") } : { addr, by: names || t("plan.unassigned") }}
         contact={wide ? { phone: customer?.phone, addr } : undefined}
+        action={onAssign && !liveAssignees(v, db.members).length && canReschedule(v) ? { label: t("plan.assign"), icon: "user", onPress: () => onAssign(v.id) } : undefined}
         density={density}
         columns={PLAN_COLUMNS}
         onPress={() => router.push(`/visit/${v.id}`)}
@@ -395,6 +443,148 @@ function FeedCard({ x, onEvent }: { x: PlanItem; onEvent?: (e: CalendarEvent) =>
   );
 }
 
+
+/* ---------- «Календарь» (docs/design/LAYOUT-RULES.md §3, #2350): a strip of day pills → the day's list by time ---------- */
+
+/** how many weeks the strip holds: the one before the picked day's, its own and two after (a swipe sideways, no arrows) */
+const STRIP_WEEKS_BEFORE = 1;
+const STRIP_WEEKS = 4;
+/** a day pill: as wide as a finger's zone, as tall as a compact row and its weekday */
+const PILL_W = component.button.hit + space[1];
+
+/** the days of the strip around a day: from the Monday a week before, four weeks */
+export function stripDays(k: DayKey): DayKey[] {
+  const from = addDays(weekStart(k), -7 * STRIP_WEEKS_BEFORE);
+  return Array.from({ length: 7 * STRIP_WEEKS }, (_, i) => addDays(from, i));
+}
+
+/**
+ * The days as pills «Пн / 23 / •» in one row that scrolls sideways (the founder's planners, #2350): the picked day is filled
+ * with the accent (LAYOUT-RULES П10 «активное, выбранное»), today is edged, a dot says the day has something (yellow-free:
+ * `warn` when a visit there has nobody on it). Above: the month, «Сегодня» when away, a week back / forward as icons.
+ */
+export function DayStrip({ date, loads, onPick }: { date: DayKey; loads: Map<DayKey, DayLoad>; onPick: (k: DayKey) => void }) {
+  const { t, dayOf, lang } = useI18n();
+  const { c } = useTheme();
+  const loc = lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU";
+  const today = todayKey();
+  const days = stripDays(date);
+  const ref = useRef<ScrollViewInstance>(null);
+  const [w, setW] = useState(0);
+  // the picked pill to the middle of the row
+  useEffect(() => {
+    const i = days.indexOf(date);
+    if (!w || i < 0) return;
+    ref.current?.scrollTo({ x: Math.max(0, space[4] + i * (PILL_W + space[2]) - (w - PILL_W) / 2), animated: true });
+  }, [date, w]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the month in words; the year only when it is not this one («Ноябрь», «Январь 2027»)
+  const month = date.slice(0, 4) === today.slice(0, 4) ? formatDayKey(date, { month: "long" }, loc) : formatDayKey(date, { month: "long", year: "numeric" }, loc);
+  return (
+    <View style={{ gap: space[2] }} testID="plan-day-strip">
+      <RowView style={{ justifyContent: "space-between" }}>
+        <T v="heading" style={{ flex: 1 }} numberOfLines={1}>
+          {month.charAt(0).toUpperCase() + month.slice(1)}
+        </T>
+        {date !== today ? <Button label={t("common.today")} size="sm" variant="secondary" onPress={() => onPick(today)} /> : null}
+        <IconButton icon="chevronLeft" label={t("plan.prev")} onPress={() => onPick(addDays(date, -7))} />
+        <IconButton icon="chevronRight" label={t("plan.next")} onPress={() => onPick(addDays(date, 7))} />
+      </RowView>
+      <ScrollView
+        ref={ref}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        onLayout={(e) => setW(e.nativeEvent.layout.width)}
+        // the row runs to the screen's edges, the pills start at the padding
+        style={{ marginHorizontal: -space[4] }}
+        contentContainerStyle={{ gap: space[2], paddingHorizontal: space[4] }}
+      >
+        {days.map((k) => {
+          return <DayCell key={k} day={k} load={loads.get(k)} selected={k === date} head={formatDayKey(k, { weekday: "short" }, loc)} pill onPress={() => onPick(k)} />;
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
+/**
+ * The day's list by time (LAYOUT-RULES §3 «Календарь»): every item one card — the hour big on the left, the client, the
+ * address small, who, the status as icon + word. No hour grid and no rows for the empty windows. A visit: a swipe right
+ * opens it, a swipe left shows «Перенести» · «Назначить» (the same sheets as the visit's «Когда и кто»); the web and a
+ * screen reader keep the card's tap (→ the visit, where both are) and «Назначить» on a visit nobody is on.
+ */
+export function DayList({ day, items, onEvent, onAdd }: { day: DayKey; items: PlanItem[]; onEvent?: (e: CalendarEvent) => void; onAdd?: () => void }) {
+  const { db, role } = useStore();
+  const { t, dayOf } = useI18n();
+  const planner = canPlan([role]);
+  const [assign, setAssign] = useState<ID | null>(null);
+  const [move, setMove] = useState<ID | null>(null);
+  const list = items.filter((x) => x.day === day);
+  return (
+    <View style={{ gap: space[3] }} testID="plan-day-list">
+      {list.length === 0 ? (
+        <FreeRow label={day === todayKey() ? t("plan5.freeToday") : t("plan.empty")} a11y={t("plan5.freeA11y", { from: dayOf(day), to: dayOf(day) })} onAdd={onAdd} />
+      ) : (
+        list.map((x) => {
+          const card = <FeedCard x={x} onEvent={onEvent} onAssign={planner ? setAssign : undefined} endOnly />;
+          const key = `${x.kind}:${x.id}`;
+          if (x.kind !== "visit") return <View key={key}>{card}</View>;
+          const v = x.visit;
+          const open = planner && canReschedule(v);
+          return (
+            <SwipeRow
+              key={key}
+              testID={`plan-swipe-${v.id}`}
+              round={radius.card}
+              left={[{ key: "open", label: t("swipe.open"), icon: "eye", full: true, onPress: () => router.push(`/visit/${v.id}`) }]}
+              right={
+                open
+                  ? [
+                      { key: "move", label: t("vw.reschedule"), icon: "calendar", onPress: () => setMove(v.id) },
+                      { key: "assign", label: t("plan.assign"), icon: "user", onPress: () => setAssign(v.id) },
+                    ]
+                  : []
+              }
+            >
+              {card}
+            </SwipeRow>
+          );
+        })
+      )}
+      <AssignSheet visitId={assign} onClose={() => setAssign(null)} />
+      <MoveVisitSheet visit={db.visits.find((v) => v.id === move)} onClose={() => setMove(null)} />
+    </View>
+  );
+}
+
+/** «Перенести» from the Plan: the same form and the same store calls as the visit's «Когда и кто» (VisitForm WhenWho) */
+function MoveVisitSheet({ visit, onClose }: { visit?: Visit; onClose: () => void }) {
+  const store = useStore();
+  const { db } = store;
+  const { t, day, time } = useI18n();
+  const toast = useToast();
+  const held = useHeldSheet(visit ?? null);
+  const v = held.value;
+  if (!v) return null;
+  const people = assigneesOf(v);
+  return (
+    <VisitFormSheet
+      key={held.opening}
+      visible={held.visible}
+      onExited={held.onExited}
+      onClose={onClose}
+      title={t("vw.reschedule")}
+      saveLabel={t("vw.reschedule")}
+      withNote={false}
+      init={{ durationMin: v.durationMin, techIds: people, start: v.start, exceptId: v.id, propertyId: visitPropertyId(db, v), jobId: v.jobId, allDay: v.allDay, allowAllDay: !!v.jobId && v.kind !== "inspection" }}
+      onSave={(f) => {
+        const undoMove = store.rescheduleVisit(v.id, f.start, f.durationMin, f.allDay);
+        const undoTech = f.assigneeIds.join() !== people.join() ? store.assignVisit(v.id, f.assigneeIds) : NO_UNDO;
+        toast.show(f.allDay ? t("job5.allDaySaved", { date: day(f.start) }) : t("vf.rescheduled", { date: day(f.start), time: time(f.start) }), store.undoTogether([undoMove, undoTech]));
+        return v.customerNotifiedAt ? v.id : null;
+      }}
+    />
+  );
+}
 
 /** desktop: a row-card with columns (06 §4); phone and tablet: the regular card in one column — the Feed is a timeline */
 function usePlanDensity(): Density {
