@@ -7,6 +7,7 @@
  * С4 «Загрузка» / «Выключено» on EVERY block that has them: the spinner shows (after the delay) on the variants, «Как сейчас» says it has no such state; switched-off samples ignore presses;
  * С5 the round button switches on and off (aria-pressed), «Как сейчас» too;
  * С2b «Основа» on examples: the theme switch, status / accent / surface, spacing and corners as three cards, the vibration block;
+ * С7 «Поля»: every field of every variant types (phone mask, money format, errors with words, switched off), the date row opens;
  * С5b the one fold «Для разработчиков» is shut, opens and shuts;
  * С6 «Готовятся» is a plain list at the end; the pilot screen is still opened by its own button.
  */
@@ -193,6 +194,75 @@ exports.run = async (h) => {
       return `${e.getAttribute("aria-pressed")}/${getComputedStyle(e.firstElementChild).backgroundColor}` !== w;
     }, [id, was]);
   }
+
+  // С7 — «Поля»: every field of every variant types; the phone mask, the money format, the error with its words, the date row opens
+  const input = async (id) => {
+    await center(id);
+    const el = vis(id);
+    const tag = await el.evaluate((e) => e.tagName);
+    return /^(INPUT|TEXTAREA)$/.test(tag) ? el : el.locator("input,textarea").first();
+  };
+  const leave = async (id) => {
+    // leaving a field: press the block's own heading
+    await (await input(id)).blur();
+  };
+  const blockText = (b) => vis(`gr-block-${b}`).innerText();
+  const SAMPLES = (b) => [`gr-${b}-now-input`, `gr-${b}-v1-input`, `gr-${b}-v2-input`];
+  // text
+  for (const id of SAMPLES("ftext")) {
+    const el = await input(id);
+    await el.fill("Maria");
+    h.expect((await el.inputValue()) === "Maria", `С7: ${id} takes text`);
+  }
+  await center("gr-ftext-required");
+  await vis("gr-ftext-required").click();
+  for (const id of SAMPLES("ftext")) {
+    const el = await input(id);
+    await el.fill("");
+    await el.blur();
+  }
+  await until("С7 the required error shows on all three", () => (document.querySelector('[data-testid="gr-block-ftext"]').innerText.match(/Заполните поле/g) || []).length >= 3);
+  await vis("gr-ftext-required").click();
+  // phone: the mask and the error after leaving with a few digits
+  for (const id of SAMPLES("fphone")) {
+    const el = await input(id);
+    await el.fill("6265550142");
+    h.expect((await el.inputValue()) === "(626) 555-0142", `С7: ${id} masks the phone (${await el.inputValue()})`);
+    await el.fill("626");
+    await el.blur();
+  }
+  await until("С7 the phone error shows on all three", () => (document.querySelector('[data-testid="gr-block-fphone"]').innerText.match(/Нужно 10 цифр/g) || []).length >= 3);
+  // money: «1234.5» → «1,234.50» on leaving
+  for (const id of SAMPLES("fmoney")) {
+    const el = await input(id);
+    await el.fill("1234.5");
+    await el.blur();
+    await until(`С7 ${id} formats the sum`, (i) => {
+      const e = document.querySelector(`[data-testid="${i}"]`);
+      const v = (e.matches("input") ? e : e.querySelector("input")).value;
+      return /1,234\.50/.test(v);
+    }, id);
+  }
+  // note: several lines
+  for (const id of SAMPLES("fnote")) {
+    const el = await input(id);
+    await el.fill("one\ntwo");
+    h.expect(/one\s*two/.test(await el.inputValue()), `С7: ${id} takes two lines`);
+  }
+  // «Выключено»: the variants' inputs stop typing (the app's fields have no such state and say so)
+  for (const b of ["ftext", "fphone", "fmoney", "fnote"]) {
+    await center(`gr-${b}-disabled`);
+    await vis(`gr-${b}-disabled`).click();
+    for (const v of ["v1", "v2"]) h.expect(await (await input(`gr-${b}-${v}-input`)).evaluate((e) => e.disabled || e.readOnly), `С7: ${b} ${v} is switched off`);
+    h.expect(/такого состояния нет/.test(await blockText(b)), `С7: ${b} «Как сейчас» says it has no switched-off state`);
+    await vis(`gr-${b}-disabled`).click();
+  }
+  // the date: its row opens, a quick day is picked
+  await center("gr-fdate-now");
+  await vis("gr-fdate-now-row-button").click();
+  await vis("gr-fdate-now-panel").waitFor({ timeout: 4000 });
+  await vis("gr-fdate-now-today").click();
+  await h.shot("sheet-fields");
 
   // С5b — the one fold: the service values, shut by default, opened by its button, shut again
   await vis("gr-jump-dev").click();

@@ -20,6 +20,7 @@ import { GraphiteSection } from "../GraphiteSection";
 import { useGrFonts } from "../fonts";
 import { GraphiteProvider } from "../theme";
 import { BasicsBlocks } from "./BasicsBlocks";
+import { FieldsBlocks } from "./FieldsBlocks";
 import { ButtonsBlocks } from "./ButtonsBlocks";
 
 interface SheetSection {
@@ -32,6 +33,7 @@ interface SheetSection {
 const SECTIONS: SheetSection[] = [
   { id: "base", title: "ds.gr.sheet.s.base", body: <BasicsBlocks /> },
   { id: "buttons", title: "ds.gr.sheet.s.buttons", body: <ButtonsBlocks /> },
+  { id: "fields", title: "ds.gr.sheet.s.fields", body: <FieldsBlocks /> },
   // the vibration check is the showcase's own, as it is (DS §15.6): a button per response
   { id: "haptics", title: "ds.gr.sheet.s.haptics", body: <HapticsSection /> },
   { id: "pilot", title: "ds.gr.sheet.s.pilot", body: <GraphiteSection /> },
@@ -62,7 +64,6 @@ function DevFold() {
 
 /** «Готовятся»: not on the sheet yet — a list, not a link */
 const SOON: DictKey[] = [
-  "ds.gr.sheet.s.fields",
   "ds.gr.sheet.s.select",
   "ds.gr.sheet.s.switch",
   "ds.gr.sheet.s.sheets",
