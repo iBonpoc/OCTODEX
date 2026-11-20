@@ -107,6 +107,9 @@ const gutters: ModuleDef = {
   // (a test one is marked «тестовая цена» in the list, rule 9); a line without an item is $0 with «проверьте цену». The quantities
   // are only a start. They never touch a measurement's lines — the main way is «Смета из замера»
   starterWant,
+  // #2227 (spec 33-price-key §11.3.3): the core names an item's variant property by the module's word — the supplier order says
+  // «Color code not set» in the order's language; the core itself never knows the word «color»
+  variantWord: (attr, t) => (attr === "color" ? t("mod.gutters.attr.color") : undefined),
   estimateTemplates: [
     {
       key: "clean",

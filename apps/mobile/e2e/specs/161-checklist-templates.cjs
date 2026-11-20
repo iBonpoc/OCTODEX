@@ -7,6 +7,7 @@
  */
 const { workdayOffset } = require("../companyTime.cjs");
 
+const { pickVisitDay, pickVisitStart } = require("../visitForm.cjs");
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/company");
@@ -46,9 +47,9 @@ exports.run = async (h) => {
 
   // S9: a visit scheduled now gets the snapshot of both templates and the minimum of photos after
   await h.go("/job/schedule?jobId=j2");
-  await p.getByRole("radiogroup").first().getByRole("radio").nth(workdayOffset(3)).click();
+  await pickVisitDay(p, workdayOffset(3)); // the day — DateField (spec 56 wave 5б)
   await p.getByRole("option", { name: "Ivan Sokolov" }).last().click();
-  await p.getByRole("radio", { name: /^1:00/ }).last().click();
+  await pickVisitStart(p, 13 * 60); // «Начало ⌄» — 1:00 PM
   await p.getByRole("button", { name: "Запланировать", exact: true }).last().click();
   await h.sheet().getByRole("button", { name: "Не сейчас" }).waitFor();
   await h.sheet().getByRole("button", { name: "Не сейчас" }).click();

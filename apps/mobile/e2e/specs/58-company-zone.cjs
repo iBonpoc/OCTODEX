@@ -20,6 +20,7 @@ function laAt(k, h, m) {
   throw new Error(`no ${h}:${m} on ${k} in LA`);
 }
 
+const { pickVisitDay, pickVisitStart } = require("../visitForm.cjs");
 exports.run = async (h0, { browser, BASE, layout, installClock }) => {
   // «today» of the company: the real LA day; the fake clock is at 9:30 PM of it
   const today = dayKey(Date.now());
@@ -73,9 +74,9 @@ exports.run = async (h0, { browser, BASE, layout, installClock }) => {
     while (weekday(addDays(today, offset)) === 0) offset++;
     const target = addDays(today, offset);
     await go("/job/schedule?jobId=j1");
-    await p.getByRole("radiogroup").first().getByRole("radio").nth(offset).click();
+    await pickVisitDay(p, offset); // the company's day — DateField (spec 56 wave 5б)
     await p.waitForTimeout(300);
-    await p.getByRole("radio", { name: /^9:00/ }).last().click();
+    await pickVisitStart(p, 9 * 60); // «Начало ⌄» — 9:00 AM
     await p.getByRole("button", { name: "Запланировать", exact: true }).last().click(); await p.waitForTimeout(600);
     await p.locator('[aria-modal="true"]').last().getByRole("button", { name: "Не сейчас" }).click(); await p.waitForTimeout(400);
     const after = await db();
