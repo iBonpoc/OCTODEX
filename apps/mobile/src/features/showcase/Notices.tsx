@@ -7,7 +7,7 @@ import { Button } from "@/ui/controls";
 import { useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { Card, Empty, SectionTitle, SyncBadge } from "@/ui/surfaces";
-import { EmptyFilter, EmptySearch, NotFound, PageNotFound } from "@/ui/emptyStates";
+import { ListEmpty, NotFound, PageNotFound } from "@/ui/emptyStates";
 import { DemoBadge } from "@/features/DemoBadge";
 import { StatusNote } from "@/ui/statusNote";
 import { Banner } from "@/ui/banner";
@@ -44,8 +44,15 @@ export function NoticesSection() {
           testID="showcase-state-none"
           action={<Button label={t("ds.state.noneBtn")} onPress={() => setPressed(t("ds.state.noneBtn"))} />}
         />
-        <EmptyFilter testID="showcase-state-filter" onReset={() => setPressed(t("empty.filterReset"))} />
-        <EmptySearch testID="showcase-state-search" q="Roof" inAll={{ n: 3, onShow: () => setPressed(t("empty.searchAll", { n: 3 })) }} />
+        {/* «nothing found»: the list has something, the search / lane / sheet hide it (founder 20.11, #2264) */}
+        <ListEmpty
+          testID="showcase-state-nothing"
+          base={5}
+          narrowed
+          none={{ icon: "invoice", title: t("ds.state.noneTitle") }}
+          onReset={() => setPressed(t("empty.reset"))}
+          inAll={{ n: 3, onShow: () => setPressed(t("empty.searchAll", { n: 3 })) }}
+        />
         <NotFound testID="showcase-state-notfound" title={t("ds.state.notFoundTitle")} listLabel={t("ds.state.notFoundBtn")} onList={() => setPressed(t("ds.state.notFoundBtn"))} />
         <PageNotFound testID="showcase-state-page" />
         <View testID="showcase-state-pressed">

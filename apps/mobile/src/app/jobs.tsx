@@ -9,7 +9,8 @@ import { categoryLabel } from "@/features/serviceCategories";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
-import { CardList, Empty, Screen } from "@/ui/surfaces";
+import { CardList, Screen } from "@/ui/surfaces";
+import { ListEmpty } from "@/ui/emptyStates";
 import { CardGrid, ListCard, ListCardHeader } from "@/ui/listCard";
 import type { FactKey } from "@/ui/listCardLayout";
 import { useDevice } from "@/theme/ThemeProvider";
@@ -125,7 +126,13 @@ export default function Jobs() {
         onReset={() => { setWho([]); setTrades([]); }}
       />
       {list.length === 0 ? (
-        <Empty icon="wrench" title={t("jobs.empty")} />
+        <ListEmpty
+          base={work.length + cancelled.length}
+          narrowed={q.trim() !== "" || f !== (count("unscheduled") ? "unscheduled" : "scheduled") || who.length > 0 || tradeOn.length > 0}
+          none={{ icon: "wrench", title: t("jobs.empty") }}
+          onReset={() => { setQ(""); setF(null); setWho([]); setTrades([]); }}
+          testID="jobs-empty"
+        />
       ) : device === "tablet" ? (
         <CardGrid>{list.map(card)}</CardGrid>
       ) : (

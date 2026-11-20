@@ -12,7 +12,8 @@ import { Button, IconButton } from "@/ui/controls";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
-import { CardList, Empty, ListRow, Screen } from "@/ui/surfaces";
+import { CardList, ListRow, Screen } from "@/ui/surfaces";
+import { ListEmpty } from "@/ui/emptyStates";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { CardGrid, ListCard, ListCardHeader, StatusPicker } from "@/ui/listCard";
@@ -193,11 +194,18 @@ export default function Clients() {
         onReset={() => setTagIds([])}
       />
       {list.length === 0 ? (
-        <Empty
-          icon="search"
-          title={t("clients.empty")}
-          hint={q.trim() ? t("clients.emptyHint") : t("card.emptyFilter")}
-          action={office ? <Button testID="clients-empty-new" label={t("clients.new")} icon="plus" variant="secondary" onPress={() => router.push("/client/edit")} /> : undefined}
+        // two different empties (founder 20.11, #2264): no clients at all / the search, the lane or the tags hide them
+        <ListEmpty
+          base={clients.length}
+          narrowed={q.trim() !== "" || tab !== "all" || tagIds.length > 0}
+          none={{
+            icon: "user",
+            title: t("empty.clients"),
+            hint: t("empty.clientsHint"),
+            action: office ? <Button testID="clients-empty-new" label={t("clients.new")} icon="plus" variant="secondary" onPress={() => router.push("/client/edit")} /> : undefined,
+          }}
+          onReset={() => { setQ(""); setTab("all"); setTagIds([]); }}
+          testID="clients-empty"
         />
       ) : device === "tablet" ? (
         <CardGrid>{list.map(card)}</CardGrid>

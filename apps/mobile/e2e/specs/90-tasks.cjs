@@ -69,7 +69,7 @@ exports.run = async (h) => {
   await listSearch(p, "Mitchell");
   await h.expectText(new RegExp(TITLE), "the search finds it by the client");
   await listSearch(p, "zzzz");
-  await h.expectText(/Задач не найдено/, "nothing found");
+  await h.expectText(/Ничего не найдено/, "nothing found");
   await listSearchClear(p);
 
   // the task with a time is in the Plan

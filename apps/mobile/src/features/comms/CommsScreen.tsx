@@ -9,6 +9,7 @@ import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
 import { ListCard } from "@/ui/listCard";
 import { CardList, Empty, Screen } from "@/ui/surfaces";
+import { ListEmpty } from "@/ui/emptyStates";
 import type { IconKey } from "@/ui/primitives";
 import { CALL_OUTCOME, CALL_OUTCOMES, commsLog, matchComms, type CommsKind } from "./comms";
 import { CallSheet, type CallPreset } from "./CallSheet";
@@ -50,7 +51,13 @@ export function CommsScreen({ kind }: { kind: CommsKind }) {
         />
       ) : null}
       {items.length === 0 && all.length > 0 ? (
-        <Empty icon="search" title={t("card.emptyFilter")} />
+        <ListEmpty
+          base={all.length}
+          narrowed={q.trim() !== "" || filter !== "all"}
+          none={{ icon: "phone", title: t("nav.calls.empty") }}
+          onReset={() => { setQ(""); setFilter("all"); }}
+          testID="calls-empty"
+        />
       ) : items.length === 0 ? (
         <Empty
           icon={calls ? "phone" : "sms"}

@@ -14,6 +14,7 @@ import { FilterBar } from "@/ui/filterBar";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, Empty, ListRow, Screen, SectionTitle } from "@/ui/surfaces";
+import { ListEmpty } from "@/ui/emptyStates";
 import { dayKeyIn, formatDayKey } from "@/features/zone";
 import { memberName } from "@/features/team";
 import { matchExpense } from "@/features/moneyLists";
@@ -76,7 +77,9 @@ export default function Money() {
         <View style={{ gap: space[3] }}>
           <FilterBar<string> items={[]} value="" onChange={() => undefined} search={{ value: q, onChange: setQ, placeholder: t("card.filter.searchExpenses") }} />
           <SectionTitle title={`${t("money.expenses")} · ${money(shown.reduce((s, x) => s + x.amountCents, 0))}`} />
-          {shown.length === 0 ? <Empty icon="search" title={t("card.emptyFilter")} /> : null}
+          {shown.length === 0 ? (
+            <ListEmpty base={db.expenses.length} narrowed={q.trim() !== ""} none={{ icon: "wallet", title: t("money.expenses") }} onReset={() => setQ("")} testID="expenses-empty" />
+          ) : null}
           {months.map(([m, xs]) => (
             <View key={m} style={{ gap: space[2] }}>
               <T v="caption" w="semibold" tone="mut">{`${monthOf(m, lang)} · ${money(xs.reduce((s, x) => s + x.amountCents, 0))}`}</T>

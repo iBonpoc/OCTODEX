@@ -13,7 +13,8 @@ import { Button } from "@/ui/controls";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
-import { CardList, Empty, Screen } from "@/ui/surfaces";
+import { CardList, Screen } from "@/ui/surfaces";
+import { ListEmpty } from "@/ui/emptyStates";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { useDevice } from "@/theme/ThemeProvider";
 
@@ -77,7 +78,15 @@ export default function PurchaseOrders() {
           { key: "done", label: t("po.f.done"), count: all.filter((o) => !OPEN.has(o.status)).length },
         ]}
       />
-      {list.length === 0 ? <Empty icon="truck" title={t("po.empty")} /> : device === "phone" ? <CardList>{list.map(card)}</CardList> : <CardGrid>{list.map(card)}</CardGrid>}
+      {list.length === 0 ? (
+        <ListEmpty
+          base={all.length}
+          narrowed={q.trim() !== "" || lane !== "open"}
+          none={{ icon: "truck", title: t("po.empty") }}
+          onReset={() => { setQ(""); setLane("open"); }}
+          testID="po-empty"
+        />
+      ) : device === "phone" ? <CardList>{list.map(card)}</CardList> : <CardGrid>{list.map(card)}</CardGrid>}
     </Screen>
   );
 }

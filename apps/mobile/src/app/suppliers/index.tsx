@@ -12,7 +12,8 @@ import { Button } from "@/ui/controls";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
-import { CardList, Empty, Screen } from "@/ui/surfaces";
+import { CardList, Screen } from "@/ui/surfaces";
+import { ListEmpty } from "@/ui/emptyStates";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { useDevice } from "@/theme/ThemeProvider";
 
@@ -73,7 +74,13 @@ export default function Suppliers() {
         ]}
       />
       {list.length === 0 ? (
-        <Empty icon="truck" title={lane === "active" ? t("sup.empty") : t("sup.emptyArchived")} />
+        <ListEmpty
+          base={all.length}
+          narrowed={q.trim() !== "" || lane !== "active"}
+          none={{ icon: "truck", title: lane === "active" ? t("sup.empty") : t("sup.emptyArchived") }}
+          onReset={() => { setQ(""); setLane("active"); }}
+          testID="suppliers-empty"
+        />
       ) : device === "phone" ? (
         <CardList>{list.map(card)}</CardList>
       ) : (

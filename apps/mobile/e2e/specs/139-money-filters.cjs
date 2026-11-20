@@ -1,7 +1,7 @@
 const { listSearch, listSearchClear } = require("../listSearch.cjs");
 /**
  * «Расходы», «Счета» и отчёты по одному правилу фильтров (docs/specs/31-list-filters.md, director 07.11), every view:
- * - «Расходы»: a magnifier (vendor, category, work, client, who paid); nothing found — «В этом отборе никого нет»; ✕ — all;
+ * - «Расходы»: a magnifier (vendor, category, work, client, who paid); nothing found — «Ничего не найдено»; ✕ — all;
  * - «Счета»: «Клиент» in the «Фильтры» sheet, one at a time; picked — a chip «Клиент: X ✕» under the row; ✕ — every client;
  *   no «Все клиенты» button;
  * - a report: the periods are a lane (no magnifier), in one row with «CSV» (a phone: «CSV» under it); a tap changes the period.
@@ -24,7 +24,7 @@ exports.run = async (h) => {
   h.expect(n >= 1 && n === db.expenses.filter((x) => x.vendor.toLowerCase().includes(vendor.toLowerCase())).length, `the vendor «${vendor}» (${n})`);
   await listSearch(p, "zzzqqq");
   h.expect((await vis(p.locator(card)).count()) === 0, "nothing found — no cards");
-  await h.expectText(/В этом отборе никого нет/, "… and it says so");
+  await h.expectText(/Ничего не найдено/, "… and it says so");
   await h.shot("expenses-search");
   await listSearchClear(p);
   h.expect((await vis(p.locator(card)).count()) === all, "✕ — every expense again");

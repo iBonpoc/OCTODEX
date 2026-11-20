@@ -17,6 +17,7 @@ import { usePersistentState } from "@/data/persist";
 import type { DB, Invoice } from "@/data/types";
 import { T } from "@/ui/primitives";
 import { CardList, Empty, Screen } from "@/ui/surfaces";
+import { ListEmpty } from "@/ui/emptyStates";
 import { CardGrid, ListCardHeader } from "@/ui/listCard";
 
 // a paid invoice: the filter, the group and the chip say one word (DS §4.4 п.1, #1427)
@@ -118,7 +119,13 @@ export default function Invoices() {
         onReset={() => go(f, "")}
       />
       {shown.groups.length === 0 ? (
-        <Empty icon="invoice" title={t(EMPTY[f])} />
+        <ListEmpty
+          base={db.invoices.length}
+          narrowed={q.trim() !== "" || f !== "owed" || !!client}
+          none={{ icon: "invoice", title: t(EMPTY[f]) }}
+          onReset={() => { setQ(""); setKept("owed"); go("owed", ""); }}
+          testID="invoices-empty"
+        />
       ) : (
         <>
           {device === "desktop" ? <ListCardHeader title={t("card.fact.client")} columns={panel.openId ? INV_COLUMNS_PANEL : INV_COLUMNS} value={t("card.val.toPay")} /> : null}

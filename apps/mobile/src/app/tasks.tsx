@@ -6,7 +6,8 @@ import { ProgressBar, Button } from "@/ui/controls";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
-import { CardList, Empty, Screen } from "@/ui/surfaces";
+import { CardList, Screen } from "@/ui/surfaces";
+import { ListEmpty } from "@/ui/emptyStates";
 import { ListCard } from "@/ui/listCard";
 import { useToast } from "@/ui/overlays";
 import { TaskSheet, type TaskDraft } from "@/features/tasks/TaskSheet";
@@ -89,11 +90,17 @@ export default function Tasks() {
         onReset={() => setScope("all")}
       />
       {list.length === 0 ? (
-        <Empty
-          icon="check"
-          title={t(q.trim() ? "w6.task.emptySearch" : filter === "done" ? "w6.task.emptyDone" : "task.none")}
-          hint={q.trim() || filter === "done" ? undefined : t("w6.task.emptyHint")}
-          action={!q.trim() && filter !== "done" ? <Button label={t("task.new")} icon="plus" variant="secondary" onPress={newTask} /> : undefined}
+        <ListEmpty
+          base={tasksOf(db, "all").length}
+          narrowed={q.trim() !== "" || filter !== "open" || scope !== defaultTaskScope(role)}
+          none={{
+            icon: "check",
+            title: t("task.none"),
+            hint: t("w6.task.emptyHint"),
+            action: <Button label={t("task.new")} icon="plus" variant="secondary" onPress={newTask} />,
+          }}
+          onReset={() => { setQ(""); setFilter("open"); setScope(null); }}
+          testID="tasks-empty"
         />
       ) : (
         <CardList>{list.map(card)}</CardList>

@@ -16,7 +16,8 @@ import { T } from "@/ui/primitives";
 import { useI18n, type DictKey } from "@/i18n";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
-import { CardList, Empty } from "@/ui/surfaces";
+import { CardList } from "@/ui/surfaces";
+import { ListEmpty } from "@/ui/emptyStates";
 import { canSeeEstimate } from "@/features/access";
 
 /** status chip of an estimate — the one place for it (lists, client and property documents) */
@@ -99,7 +100,13 @@ export function EstimatesBoard({ wrap }: { wrap: (body: ReactNode, aside?: React
         items={ESTIMATE_LANE.map((k) => ({ key: k, label: t(LANE_LABEL[k]), count: count(k) }))}
       />
       {list.length === 0 ? (
-        <Empty icon="invoice" title={t("board.noEstimates")} />
+        <ListEmpty
+          base={all.length}
+          narrowed={q.trim() !== "" || f !== "open"}
+          none={{ icon: "invoice", title: t("board.noEstimates") }}
+          onReset={() => { setQ(""); setF("open"); }}
+          testID="estimates-empty"
+        />
       ) : (
         <>
           {device === "desktop" ? <ListCardHeader title={t("card.fact.client")} columns={panel.openId ? EST_COLUMNS_PANEL : EST_COLUMNS} value={t("card.val.total")} /> : null}

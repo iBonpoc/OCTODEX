@@ -89,3 +89,19 @@ describe("one at a time and a long group (spec 31, «План» — director 07.
     expect(sheetOptions({ options: people(12), searchable: true }, "")).toHaveLength(12);
   });
 });
+
+import { listEmptyKind } from "../src/ui/filterBarRules";
+
+describe("listEmptyKind — «Клиентов пока нет» or «Ничего не найдено» (founder 20.11, #2264)", () => {
+  it("no objects at all: «nothing yet», whatever is on", () => {
+    expect(listEmptyKind(0, false)).toBe("none");
+    expect(listEmptyKind(0, true)).toBe("none");
+  });
+  it("objects there and the search, a lane or the sheet hides them: «nothing found» with a reset", () => {
+    expect(listEmptyKind(12, true)).toBe("notFound");
+    expect(listEmptyKind(1, true)).toBe("notFound");
+  });
+  it("objects there and nothing narrows (the default lane is empty by itself): «nothing yet», not a reset that changes nothing", () => {
+    expect(listEmptyKind(12, false)).toBe("none");
+  });
+});

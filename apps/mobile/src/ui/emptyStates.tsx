@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { useI18n } from "@/i18n";
@@ -6,44 +7,55 @@ import { component, space } from "@octo/design-tokens";
 import { BrandMark } from "@/ui/brand";
 import { T } from "@/ui/primitives";
 import { Card, Empty } from "@/ui/surfaces";
+import { listEmptyKind } from "@/ui/filterBarRules";
 
 /**
- * The empty states of a screen (DS §13, Н-65, S-42…S-47). Three kinds of «empty» and two of «not found», one wording each:
- * - `Empty` (surfaces) — no data at all: the object's icon, «{Objects} yet», why, the button that makes the first one;
- * - `EmptyFilter` — a filter gave nothing: «Nothing in this filter» + «Reset filter» (12.2);
- * - `EmptySearch` — a search gave nothing: «Nothing found for «…»» (12.3), and, when «All» has it, «Found in «All» · N → Show»;
+ * The empty states of a screen (DS §13, Н-65, S-42…S-47). Two kinds of «empty» in a list and two of «not found», one wording each:
+ * - `ListEmpty` — an empty list (founder 20.11, #2264): nothing at all → `Empty` («Clients yet» + the button that makes the first one);
+ *   something hidden by the search, the lane or the sheet → «Nothing found» + «Reset», and, when «All» has it, «Found in «All» · N → Show»;
+ *   the choice is `listEmptyKind` (filterBarRules);
  * - `NotFound` — the thing is gone or the link is old: «{Thing} not found» + why + the way back (no silent redirect);
  * - `PageNotFound` — an address that does not exist: «No such page» + «Home».
  */
-export function EmptyFilter({ onReset, testID = "empty-filter" }: { onReset: () => void; testID?: string }) {
+export function ListEmpty({
+  base,
+  narrowed,
+  none,
+  onReset,
+  inAll,
+  testID = "list-empty",
+}: {
+  /** everything the list could hold, whatever the lane, the search and the sheet say */
+  base: number;
+  /** the search, a lane other than the default or a group of the sheet is on */
+  narrowed: boolean;
+  /** «nothing at all»: the object's icon, «{Objects} yet», why, the button — the list's own words */
+  none: ComponentProps<typeof Empty>;
+  /** «Reset»: the search, the lane and the sheet back to the broad default */
+  onReset: () => void;
+  /** the search finds N in «All» (the lane hides them) */
+  inAll?: { n: number; onShow: () => void };
+  testID?: string;
+}) {
   const { t } = useI18n();
-  return (
-    <Empty
-      icon="sliders"
-      title={t("empty.filter")}
-      testID={testID}
-      action={
-        <View testID={`${testID}-reset`}>
-          <Button label={t("empty.filterReset")} variant="secondary" onPress={onReset} />
-        </View>
-      }
-    />
-  );
-}
-
-export function EmptySearch({ q, inAll, testID = "empty-search" }: { q: string; /** the search finds N in «All» (the filter hides them) */ inAll?: { n: number; onShow: () => void }; testID?: string }) {
-  const { t } = useI18n();
+  if (listEmptyKind(base, narrowed) === "none") return <Empty {...none} testID={none.testID ?? `${testID}-none`} />;
   return (
     <Empty
       icon="search"
-      title={t("empty.search", { q })}
-      testID={testID}
+      title={t("empty.nothing")}
+      hint={t("empty.nothingHint")}
+      testID={`${testID}-notfound`}
       action={
-        inAll && inAll.n > 0 ? (
-          <View testID={`${testID}-all`}>
-            <Button label={t("empty.searchAll", { n: inAll.n })} variant="secondary" onPress={inAll.onShow} />
+        <View style={{ gap: space[2], alignItems: "center" }}>
+          <View testID={`${testID}-reset`}>
+            <Button label={t("empty.reset")} variant="secondary" onPress={onReset} />
           </View>
-        ) : undefined
+          {inAll && inAll.n > 0 ? (
+            <View testID={`${testID}-all`}>
+              <Button label={t("empty.searchAll", { n: inAll.n })} variant="ghost" onPress={inAll.onShow} />
+            </View>
+          ) : null}
+        </View>
       }
     />
   );

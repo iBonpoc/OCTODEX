@@ -88,6 +88,15 @@ describe("the one filter rule over every list (spec 31, PR 7 guard)", () => {
     });
   }
 
+  it("an empty list says «nothing yet» or «nothing found» through ListEmpty, not one Empty for both (#2264)", () => {
+    // «План» is a day, not a narrowed list; «Отчёты» are tables of one report
+    const OWN = new Set(["plan", "reports/[id]"]);
+    for (const [route, files] of Object.entries(LISTS)) {
+      if (OWN.has(route)) continue;
+      expect(files.some((f) => read(f).includes("<ListEmpty")), `${route}: draw its empty list with ListEmpty (src/ui/emptyStates.tsx, rule listEmptyKind)`).toBe(true);
+    }
+  });
+
   it("every list screen is in LISTS or in NO_FILTER", () => {
     const lists = routes()
       .filter(({ route }) => !NOT_A_LIST(route))

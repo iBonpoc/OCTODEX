@@ -11,6 +11,7 @@ import { useDevice } from "@/theme/ThemeProvider";
 import { FilterBar } from "@/ui/filterBar";
 import { T } from "@/ui/primitives";
 import { Card, CardList, Empty, Screen } from "@/ui/surfaces";
+import { ListEmpty } from "@/ui/emptyStates";
 import { CardGrid, ListCard, ListCardHeader } from "@/ui/listCard";
 import type { FactKey } from "@/ui/listCardLayout";
 import { memberName } from "@/features/team";
@@ -147,7 +148,13 @@ export default function Payments() {
         </Card>
       </View>
       {v.items.length === 0 ? (
-        <Empty icon="wallet" title={t("mny.payments.empty")} />
+        <ListEmpty
+          base={db.payments.length}
+          narrowed={q.trim() !== "" || p !== "month" || !!method}
+          none={{ icon: "wallet", title: t("mny.payments.empty") }}
+          onReset={() => { setQ(""); router.setParams({ p: "month", m: "" }); }}
+          testID="payments-empty"
+        />
       ) : device === "tablet" ? (
         <CardGrid>{v.items.map(card)}</CardGrid>
       ) : (

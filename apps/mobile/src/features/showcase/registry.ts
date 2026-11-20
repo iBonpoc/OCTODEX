@@ -57,7 +57,7 @@ export const SECTIONS: ShowcaseSection[] = [
   { id: "choice", screen: "choice", ds: "§9", title: "ds.scr.choice", tokenGroups: [], components: ["OptionRow", "OptionRows", "OptionTiles", "CheckMark", "ToggleRow", "Toggle", "PctUsdField", "MultiValueField", "ActionRow", "MetaLine", "DoneCircle", "FracKeys"] },
   { id: "fields", screen: "fields", ds: "§9", title: "ds.scr.fields", tokenGroups: [], components: ["NumberField", "TextField", "FieldGroup", "FormMain", "DateField"] },
   { id: "buttons", screen: "buttons", ds: "§7", title: "ds.scr.buttons", tokenGroups: [], components: ["Button", "IconButton", "Press", "ActionBar"] },
-  { id: "notices", screen: "notices", ds: "§15", title: "ds.scr.notices", tokenGroups: [], components: ["ToastProvider", "SyncBadge", "Banner", "StatusNote", "Empty", "EmptyFilter", "EmptySearch", "NotFound", "PageNotFound"] },
+  { id: "notices", screen: "notices", ds: "§15", title: "ds.scr.notices", tokenGroups: [], components: ["ToastProvider", "SyncBadge", "Banner", "StatusNote", "Empty", "ListEmpty", "NotFound", "PageNotFound"] },
   { id: "rows", screen: "rows", ds: "§8.3", title: "ds.scr.rows", tokenGroups: [], components: ["SelectedCheck"] },
   { id: "haptics", screen: "haptics", ds: "§15.6", title: "ds.scr.haptics", tokenGroups: [], components: [] },
   { id: "brand", screen: "brand", ds: "§18.2", title: "ds.brand.title", tokenGroups: [], components: ["BrandMark", "BrandLogo", "BrandLaunch", "BrandWait", "BrandIntro"] },

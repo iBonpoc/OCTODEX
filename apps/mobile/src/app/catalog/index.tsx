@@ -11,7 +11,8 @@ import { Button } from "@/ui/controls";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
-import { CardList, Empty, Screen } from "@/ui/surfaces";
+import { CardList, Screen } from "@/ui/surfaces";
+import { ListEmpty } from "@/ui/emptyStates";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import type { IconKey } from "@/ui/primitives";
 import { T } from "@/ui/primitives";
@@ -93,7 +94,13 @@ export default function Catalog() {
         items={KINDS.map((k) => ({ key: k, label: t(kindLabel(k)), count: k === "all" ? usableItems(db.catalog).length : usableItems(db.catalog).filter((x) => x.kind === k).length }))}
       />
       {items.length === 0 ? (
-        <Empty icon="note" title={t("cat.empty")} />
+        <ListEmpty
+          base={usableItems(db.catalog).length}
+          narrowed={q.trim() !== "" || kind !== "all"}
+          none={{ icon: "note", title: t("cat.empty") }}
+          onReset={() => { setQ(""); setKind("all"); }}
+          testID="catalog-empty"
+        />
       ) : (
         <>
           {groups.map(([k, xs]) => (

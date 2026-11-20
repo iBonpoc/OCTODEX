@@ -21,7 +21,8 @@ import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { CardList, Empty, Screen } from "@/ui/surfaces";
+import { CardList, Screen } from "@/ui/surfaces";
+import { ListEmpty } from "@/ui/emptyStates";
 import { ListPanel } from "@/ui/listPanel";
 import { useListPanel } from "@/nav/listPanel";
 import { LeadCardBody } from "@/features/lead/LeadCard";
@@ -175,7 +176,13 @@ function LeadsBoard() {
       {leads.length === 0 ? (
         <View testID="leads-empty">
           {/* the tech sees only his own (13 §2.3): say which, not «from Thumbtack and the website» */}
-          <Empty icon="inbox" title={t("inbox.empty")} hint={t(office ? "inbox.emptyHint" : "leads.empty.tech")} />
+          <ListEmpty
+            base={Math.max(0, ...LANE.map(count))}
+            narrowed={q.trim() !== "" || f !== "open" || sources.length > 0 || who.length > 0}
+            none={{ icon: "inbox", title: t("inbox.empty"), hint: t(office ? "inbox.emptyHint" : "leads.empty.tech") }}
+            onReset={() => { setQ(""); setF("open"); setSrcIds([]); setWhoIds([]); }}
+            testID="leads-empty-list"
+          />
         </View>
       ) : (
         <>

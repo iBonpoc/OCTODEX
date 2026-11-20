@@ -80,3 +80,18 @@ export function searchAfter(ev: "tap" | "blur" | "clear", q: string): { open: bo
   if (ev === "clear") return { open: false, q: "" };
   return { open: false, q };
 }
+
+/* ---------- an empty list: «nothing yet» or «nothing found» (founder 20.11, #2264; DS §13) ---------- */
+
+/** none — the list has nothing at all (the object's «yet» + the button that makes the first one);
+ *  notFound — it has something, but the search, the lane or the sheet hides all of it («Ничего не найдено» + «Сбросить»). */
+export type ListEmptyKind = "none" | "notFound";
+
+/**
+ * `base` — everything the list could hold, whatever the lane, the search and the sheet say (the biggest lane, e.g. «All»).
+ * `narrowed` — the search, a lane other than the default, or a group in the sheet is on.
+ * Nothing at all, or nothing narrowing (the default lane is empty by itself) → «none». Something there and narrowed → «notFound»; a reset gives it back.
+ */
+export function listEmptyKind(base: number, narrowed: boolean): ListEmptyKind {
+  return base > 0 && narrowed ? "notFound" : "none";
+}
