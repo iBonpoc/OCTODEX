@@ -2,7 +2,7 @@
 // Deployed by .github/workflows/release.yml after the migrations; verify_jwt = false (supabase/config.toml): a homeowner's
 // browser and Zapier have no JWT. Secrets of the function (Supabase → Edge Functions → Secrets), never logged:
 // INTAKE_IP_SECRET (HMAC of the IP; without it no IP is kept and the page's requests are refused) and TURNSTILE_SECRET
-// (Cloudflare Turnstile; without it the captcha is «none» and a form that requires it refuses everything).
+// (Cloudflare Turnstile; without it the captcha is «none» and a form that requires it holds every request for a person, #2012).
 import { createClient } from "npm:@supabase/supabase-js@2.118.0";
 import { SITE_ORIGIN, handleIntake, type IntakeCall } from "./handler.ts";
 

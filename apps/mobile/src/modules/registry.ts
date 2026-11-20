@@ -12,7 +12,7 @@ import type { DictKey } from "@/i18n";
 
 /** where a module may add its own actions in the core screens (estimate and job — with their first content, П15.3) */
 /** `tab` (founder 09.11): a section of the module in the bottom tabs (phone, before «Ещё») and in the side menu (820/1280) —
- *  only while the module is usable; the core's own 5 tabs stay as they are. `client` and `visit` (09.11, spec 33 П24 А3,
+ *  while the module is switched on, usable or its trial over (founder 18.11: never gone silently; `moduleTabs`); the core's own 5 tabs stay as they are. `client` and `visit` (09.11, spec 33 П24 А3,
  *  А7): the client's card and a visit's screen — the module decides what its buttons do there */
 export type ModulePlace = "lead" | "property" | "client" | "visit" | "home" | "estimate" | "job" | "settings" | "tab";
 
@@ -39,6 +39,16 @@ export interface PlaceCtx {
   /** the leads of this address or client (a lead that got the address: what was made on the lead shows here too —
    *  spec 33 П24 Б4, S4h) */
   leadIds?: string[];
+  /** #2271: the addresses of the screen's object (a client's card): what an action needs to know its target at the press —
+   *  each with the leads on it */
+  places?: PlaceAddress[];
+}
+/** an address as a module's place sees it (#2271) */
+export interface PlaceAddress {
+  id: string;
+  address: string;
+  city?: string;
+  leadIds: string[];
 }
 /** one action of a module in a core screen: a button (lead, property) or an item of «＋» (home) */
 export interface ModuleAction {
@@ -47,6 +57,11 @@ export interface ModuleAction {
   labelKey: DictKey;
   icon: import("@/ui/primitives").IconKey;
   href: string;
+  /** #2271: a choice before going (several addresses): the press opens a sheet of rows, a row goes to its `href` — one
+   *  transition, no screen in between. `href` is then unused */
+  pick?: { titleKey: DictKey; items: { id: string; title: string; subtitle?: string; href: string }[] };
+  /** #2271: nowhere to go yet (no address): the press shows this line under the buttons instead of a transition */
+  noteKey?: DictKey;
 }
 
 /** a module's change as the queue carries it (Op "module.op"): what to do and with what */
@@ -194,6 +209,11 @@ export interface ModuleDef {
    * Pure; `data` — DB.moduleData[key]. The core makes the order; the module never knows the supplier.
    */
   purchaseLines?: (job: import("@/data/types").Job, db: import("@/data/types").DB, data: unknown) => import("@/features/purchaseOrders").ModulePurchaseLine[];
+  /**
+   * #2227: the module's word for an item's variant property it uses (a module: «color» → «Color»), in the language asked —
+   * the supplier order names it («Color code not set»). Undefined — not the module's property
+   */
+  variantWord?: (attr: string, t: (k: import("@/i18n").DictKey) => string) => string | undefined;
   /** starter checklist templates the office may add (optional; a module without them adds none) */
   checklistTemplates?: StarterChecklist[];
   /** starter estimate templates the office may add (optional; docs/specs/07 §12) */
@@ -300,15 +320,30 @@ export function placeActions(place: ModulePlace, company: Pick<Company, "modules
   return activeModules(company, now).flatMap((d) => (d.places?.[place]?.(ctx, moduleData?.[d.key]) ?? []).map((a) => ({ ...a, module: d.key })));
 }
 
-/** the usable modules' sections in the tabs and the side menu (place «tab»): id `module-<key>-<id>` */
+/**
+ * The modules' tabs: every SWITCHED-ON module's, usable or not (founder 18.11.2026: «вместо [модуля] появилась вкладка
+ * „План“» — the trial ran out and the tab went silently). A module whose trial is over keeps its tab; its screen says
+ * «Пробный период закончился» and why (nothing is saved, drafts open). Switched off — no tab, «План» is back. id `module-<key>-<id>`.
+ */
 export function moduleTabs(company: Pick<Company, "modules"> | null | undefined, role: import("@/data/types").Role, now = Date.now()) {
-  return placeActions("tab", company, { role }, now).map((a) => ({ ...a, tabId: `module-${a.module}-${a.id}` }));
+  return allModules()
+    .filter((d) => moduleState(company?.modules?.[d.key], now).access !== "off")
+    .flatMap((d) => (d.places?.tab?.({ role }, undefined) ?? []).map((a) => ({ ...a, module: d.key, tabId: `module-${d.key}-${a.id}` })));
 }
 
 /** the usable modules' words on an estimate; only an open one (draft / sent) — a signed one is a copy, more is a change order */
 export function estimateNotes(db: import("@/data/types").DB, e: import("@/data/types").Estimate, now = Date.now()): (ModuleNote & { module: string })[] {
   if (e.status !== "draft" && e.status !== "sent") return [];
   return activeModules(db.company, now).flatMap((d) => (d.estimateNotes?.(e, db, db.moduleData?.[d.key]) ?? []).map((n) => ({ ...n, module: d.key })));
+}
+
+/** #2227: the word of a variant property from the modules that know it, else the property's own name */
+export function variantWordOf(db: import("@/data/types").DB, attr: string, t: (k: import("@/i18n").DictKey) => string, now = Date.now()): string {
+  for (const d of activeModules(db.company, now)) {
+    const w = d.variantWord?.(attr, t);
+    if (w) return w;
+  }
+  return attr;
 }
 
 /** S11g: the lines every active module adds to a job's supplier order (a module that fails adds none) */

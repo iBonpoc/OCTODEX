@@ -16,15 +16,23 @@ import { HapticsSection } from "@/features/showcase/Haptics";
 import { RowsSection } from "@/features/showcase/Rows";
 import { BrandSection } from "@/features/showcase/Brand";
 import { ChoiceSection } from "@/features/showcase/Choice";
+import { GraphiteSheet } from "@/features/showcase/graphite/sheet/GraphiteSheet";
+import { useGraphiteFlag } from "@/features/showcase/graphite/flag";
 
 /** One section of the showcase on its own screen (#1150). The id is the registry's `SCREENS[].id`. */
 export default function DesignSystemSection() {
   const { t } = useI18n();
   const { mode, role } = useStore();
   const { section } = useLocalSearchParams<{ section: string }>();
+  const [graphite, , flagRead] = useGraphiteFlag();
   if (!canSeeShowcase(mode, role)) return <Redirect href="/settings" />;
   const s = SCREENS.find((x) => x.id === section);
   if (!s) return <Redirect href="/settings/design-system" />;
+  // «Графит» (пилот #2254): without the switch its address goes back to the list
+  if (s.pilot && flagRead && !graphite) return <Redirect href="/settings/design-system" />;
+  // «Графит» is ONE sheet that only scrolls (#2292): its own screen, with the sticky strip
+  if (s.id === "graphite")
+    return <GraphiteSheet title={t(s.title)} caption={`${t("ds.rule", { ds: s.ds })} · ${t(s.where)}`} onBack={() => router.replace("/settings/design-system")} />;
   return (
     <Screen title={t(s.title)} back={() => router.replace("/settings/design-system")}>
       <View testID={`showcase-screen-${s.id}`} style={{ gap: 0 }}>

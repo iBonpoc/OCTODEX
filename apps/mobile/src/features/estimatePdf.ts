@@ -20,6 +20,9 @@ import { docDay, docMoney, docPage, docTime, esc, type DocOpts } from "./docPdf"
 import { pagesHtml } from "./docPages";
 import { clientRows } from "./clientLayout";
 
+/** not an animation: the print frame goes this long after the print dialog was opened, ms */
+const CLEANUP_MS = 1000;
+
 export interface EstimatePdfOpts extends DocOpts {
   /** company setting «Show unit prices» (docs/specs/07 §3.4); on by default */
   showUnitPrices?: boolean;
@@ -162,10 +165,21 @@ export async function saveEstimatePdf(html: string, fileName: string): Promise<v
     setTimeout(() => {
       w.focus();
       w.print();
-      setTimeout(() => frame.remove(), 1000);
+      setTimeout(() => frame.remove(), CLEANUP_MS);
     }, 250);
     return;
   }
   const { uri } = await Print.printToFileAsync({ html });
   if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: fileName });
+}
+
+/**
+ * «Открыть» a document — to LOOK at it first (founder 18.11, #2157: «Нажимаю „Открыть“ — он сразу предлагает их
+ * отправить»). A phone: the system's document view (expo-print `printAsync` — the pages to scroll and zoom; send, save or
+ * print from there by its own share button); `page` — the sheet's own size in points, margins 0. The web: the browser's
+ * print preview, as before. Sending the file at once stays `saveEstimatePdf` («Отправить»).
+ */
+export async function openPdfPreview(html: string, fileName: string, page?: { width: number; height: number }): Promise<void> {
+  if (Platform.OS === "web") return saveEstimatePdf(html, fileName);
+  await Print.printAsync(page ? { html, width: page.width, height: page.height, margins: { top: 0, bottom: 0, left: 0, right: 0 } } : { html });
 }

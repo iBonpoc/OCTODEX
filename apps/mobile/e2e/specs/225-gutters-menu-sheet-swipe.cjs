@@ -2,14 +2,15 @@
  * e2e 225 — два зависания шторок (основатель 11.11; #743, #745). Every view.
  * #743 — a menu item that opens a sheet: on iPhone the sheet opened while the menu was still closing never showed, and
  *   its invisible layer took every touch. Now the menu closes first, the pick runs after (src/ui/menuPick.ts; the order
- *   itself is test/menuPick.test.ts — the web cannot hang this way). Here: «⋯» on the drawing → «Где панель
- *   инструментов» → the sheet is up, the menu is gone, and the sheet answers a press (the toolbar moves).
+ *   itself is test/menuPick.test.ts — the web cannot hang this way). Here: «⋯» on the drawing → «Слои» (was «Где
+ *   панель», gone — #2156) → the sheet is up, the menu is gone, and the sheet answers a press (the grid goes off).
  * #745 — the downspout's and the gutter's sheet (390): no list of its own inside the sheet's list (it took the finger,
  *   a swipe from the middle never closed it); a swipe down from the middle of the sheet closes it.
  *   820/1280: the side panel keeps its own scroll.
  * Finds things by testID / role; waits on what it checks.
  */
 const { openProps, skipLength, sheetGone, pressWhenStill, canvasAt, stands } = require("../gutters.cjs");
+const { pressEscUntilClosed } = require("../sheet.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -77,16 +78,20 @@ exports.run = async (h) => {
 
   // #743: a menu item opens a sheet — the menu is gone, the sheet answers
   await pressWhenStill(tid("draw-who").getByRole("button"));
-  const item = p.getByRole("menuitem", { name: "Где панель инструментов" });
+  const item = p.getByRole("menuitem", { name: "Слои…" });
   await item.waitFor({ timeout: 4000 });
   await item.click();
   await tid("draw-more-sheet").waitFor({ timeout: 4000 });
   await waitFor(async () => (await p.getByRole("menu").count()) === 0, "the menu is gone under the sheet");
   await p.waitForTimeout(400); // the sheet ends sliding in
-  await tid("draw-place-top").locator('[role="button"]').first().click();
-  await waitFor(async () => (await tid("draw-more-sheet").count()) === 0, "the sheet answers a press: the place picked closes it");
+  const grid = tid("draw-layer-grid").getByRole("switch");
+  await grid.click();
+  await p.waitForFunction(() => !document.querySelector('[data-testid="draw-grid"] #grid-minor'), null, { timeout: 5000 })
+    .catch(() => h.expect(false, "the sheet answers a press: the grid goes off"));
+  await grid.click(); // back as it was
+  await p.waitForFunction(() => !!document.querySelector('[data-testid="draw-grid"] #grid-minor'), null, { timeout: 5000 });
+  await pressEscUntilClosed(p);
   await sheetGone(p);
-  await waitFor(async () => (await p.evaluate(() => localStorage.getItem("octo.mod.gutters.toolbar.v1"))) === "top", "the toolbar moved to the top");
 
   // the menu closed, kept mounted hidden, holds no layer: nothing modal is left, the canvas takes the next stroke
   h.expect((await p.getByRole("menu").count()) === 0 && (await p.getByRole("menuitem").count()) === 0, "no menu left after the pick");

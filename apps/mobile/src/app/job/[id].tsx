@@ -42,6 +42,8 @@ import { memberLabel, memberName } from "@/features/team";
 import { canSeeJob } from "@/features/access";
 import { invoiceTitle } from "@/features/invoiceTitle";
 import { signedText } from "@/i18n/translate";
+import { jobCancelRefusal } from "@/features/jobCancel";
+import { CancelJobSheet, CancelledJobBody } from "@/features/job/CancelJob";
 
 type Tab = "details" | "money" | "history";
 
@@ -58,6 +60,7 @@ export default function JobScreen() {
   const [focusNote, setFocusNote] = useState(false);
   const [restSent, setRestSent] = useState(false);
   const [calling, setCalling] = useState<CallPreset | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
   const [writing, setWriting] = useState<MessagePreset | null>(null);
   const moreRef = useRef<ComponentRef<typeof View>>(null);
   const [moreAt, setMoreAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -75,6 +78,13 @@ export default function JobScreen() {
     return (
       <Screen title={t("jobs.title")} back={back}>
         <Empty icon="wrench" title={t("mny.noAccess")} testID="no-access" />
+      </Screen>
+    );
+  // #2015: a cancelled job opens as a card with its reason (no steps, visits or money buttons)
+  if (!db.jobs.some((x) => x.id === j.id))
+    return (
+      <Screen testID="job-screen" title={j.title} back={back}>
+        <CancelledJobBody job={j} />
       </Screen>
     );
   const p = db.properties.find((x) => x.id === j.propertyId);
@@ -163,6 +173,7 @@ export default function JobScreen() {
           : null;
   // the technician on his way: «В пути» stays in sight beside the main step (Jobber/HCP «On my way»); the office has it in «⋯»
   const enRouteShown = !!next && !!mainStep && mainStep.key === "start" && !office;
+  const cancelBlocked = jobCancelRefusal(db, j.id, "x", store.role);
   const moreItems = [
     ...(next && !enRouteShown ? [{ key: "enRoute", label: t("job3.more.enRoute"), icon: "navigate" as const, testID: "job-act-enRoute" }] : []),
     ...(payTo && mainStep?.key !== "pay" ? [{ key: "pay", label: t("job3.more.pay"), icon: "dollar" as const, testID: "job-act-pay" }] : []),
@@ -170,6 +181,10 @@ export default function JobScreen() {
     ...(servable && c && fabItems("job", store.role, { customerId: c.id }).some((i) => i.id === "estimate") ? [{ key: "estimate", label: t("path.estimateNew"), icon: "invoice" as const, testID: "job-act-estimate" }] : []),
     { key: "note", label: t("job3.more.note"), icon: "note" as const, testID: "job-act-note" },
     ...(next ? [{ key: "file", label: t("job3.more.file"), icon: "camera" as const, testID: "job-act-file" }] : []),
+    // #2015: for the director and the dispatcher, last and red; a refusal is told, not hidden (П7: no dead ends)
+    ...(j.status !== "done" && (store.role === "director" || store.role === "dispatcher")
+      ? [{ key: "cancel", label: t("job.cancel.menu"), icon: "close" as const, destructive: true, dim: !!cancelBlocked, testID: "job-act-cancel" }]
+      : []),
   ];
   const more = (
     <View ref={moreRef} collapsable={false} testID="job-more">
@@ -193,7 +208,7 @@ export default function JobScreen() {
           </T>
           <RowView style={{ flexWrap: "wrap" }}>
             <Button label={t("job3.done.yes")} icon="check" variant="primary" size="sm" onPress={complete} />
-            {servable ? <Button label={t("job3.done.more")} icon="calendar" variant="secondary" size="sm" onPress={() => router.push(`/job/schedule?jobId=${j.id}`)} /> : null}
+            {servable && office ? <Button label={t("job3.done.more")} icon="calendar" variant="secondary" size="sm" onPress={() => router.push(`/job/schedule?jobId=${j.id}`)} /> : null}
           </RowView>
         </Card>
       ) : null}
@@ -252,7 +267,7 @@ export default function JobScreen() {
       ) : null}
       <SectionTitle
         title={t("job3.schedule")}
-        right={j.status === "done" || !servable ? undefined : <Button label={visits.length ? t("sch.another") : t("sch.title")} icon="calendar" size="sm" variant={visits.length ? "ghost" : "primary"} onPress={() => router.push(`/job/schedule?jobId=${j.id}`)} />}
+        right={j.status === "done" || !servable || !office ? undefined : <Button label={visits.length ? t("sch.another") : t("sch.title")} icon="calendar" size="sm" variant={visits.length ? "ghost" : "primary"} onPress={() => router.push(`/job/schedule?jobId=${j.id}`)} />}
       />
       {next ? (
         <T v="body" tone="mut">
@@ -485,6 +500,7 @@ export default function JobScreen() {
       {tab === "details" ? details : tab === "money" ? moneyTab : historyTab}
       <CallSheet preset={calling} onClose={() => setCalling(null)} />
       <MessageSheet preset={writing} onClose={() => setWriting(null)} />
+      <CancelJobSheet jobId={j.id} visible={cancelOpen} onClose={() => setCancelOpen(false)} />
       <Menu
         visible={!!moreAt}
         anchor={moreAt}
@@ -500,6 +516,10 @@ export default function JobScreen() {
             setTab("history");
           }
           else if (k === "file" && next) router.push(`/visit/${next.id}`);
+          else if (k === "cancel") {
+            if (cancelBlocked) toast.show(t(`job.cancel.why.${cancelBlocked}` as DictKey));
+            else setCancelOpen(true);
+          }
         }}
         onClose={() => setMoreAt(null)}
       />

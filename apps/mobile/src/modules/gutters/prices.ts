@@ -13,7 +13,7 @@
  */
 import { bendOf, computeGutterParts, DEFAULT_GUTTER_RULES, gutterPreview, type MeasurementInput, type PartQty, type PreviewRates } from "@octo/estimating-engine";
 import type { CatalogItem } from "@/data/types";
-import { catalogMatch } from "@/features/catalogMatch";
+import { catalogMatch, mergedInto } from "@/features/catalogMatch";
 import type { DictKey } from "@/i18n";
 import { catalogUnitPrice } from "@/features/estimateDoc";
 import { fmtLen, type LenFormat } from "./canvas/format";
@@ -70,6 +70,89 @@ export function findItem(catalog: readonly CatalogItem[], p: Pick<PartQty, "key"
   }
   return undefined;
 }
+
+/**
+ * #2262 (spec 33-price-key §11.10, founder №48, 20.11): parts without a finish — the colour of a tube of sealant or a can of touch-up
+ * paint is only its specification. They follow the one rule of #2227 (one item for every colour, the colour is the line's variant),
+ * but their item without colour is never «painted»: the company's plain «Sealant» item is that one item, no second one is made
+ */
+export const FINISHLESS_PARTS: ReadonlySet<string> = new Set(["sealant", "touch_up_paint"]);
+/** the property of a Gutters item's variant (the core never names it: registry variantWord) */
+export const VARIANT_ATTR = "color";
+
+/** a coloured part whose item may be one for every colour (any of the module's parts but labor; #2262: sealant and paint too) */
+export function colourVariantPart(p: Pick<PartQty, "key" | "kind" | "attrs">): boolean {
+  if (p.kind === "labor" || !p.attrs.color?.trim()) return false;
+  const part = matchAttrs(p).part ?? "";
+  return PART_WORDS.has(part);
+}
+
+/**
+ * #2262 (review №1 of the second reviewer): a company that already prices a part without a finish per colour (an older build made
+ * «Sealant White» in its price group) and has a plain «Sealant» item outside that group (made while `sealantByColor` was off — spec
+ * §4 №9: outside groups) keeps the old way for that part until its transition: a new colour gets its own item in the group (one
+ * price for the product), never the plain item's other price. Only when no coloured item of the group is left (merged or none), or
+ * an item without colour is in the group already, is that part one item for every colour.
+ */
+function perColourStays(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): boolean {
+  const want = matchAttrs(p);
+  if (!FINISHLESS_PARTS.has(want.part ?? "")) return false;
+  const unit = p.unit.trim().toLowerCase();
+  const g = priceGroupKey({ unit: p.unit, attributes: want });
+  const ofGroup = catalog.filter((it) => live(it) && !mergedInto(it) && it.unit.trim().toLowerCase() === unit && it.attributes?.part === want.part);
+  if (!ofGroup.some((it) => !!it.attributes?.color?.trim() && priceGroupKey(it) === g)) return false;
+  return !ofGroup.some((it) => !it.attributes?.color?.trim() && it.attributes?.priceGroup === g);
+}
+
+/** a coloured part priced by one item for every colour in this catalog (`colourVariantPart`, less the case of `perColourStays`) */
+function oneForAll(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): boolean {
+  return colourVariantPart(p) && !perColourStays(catalog, p);
+}
+
+/** #2227: the part as its one item for every colour sees it: no colour, «painted» when it had a colour and no finish */
+export function colourlessPart<P extends Pick<PartQty, "key" | "kind" | "attrs" | "unit">>(p: P): P {
+  const { color, ...attrs } = p.attrs;
+  const finishless = FINISHLESS_PARTS.has(matchAttrs(p).part ?? "");
+  return { ...p, attrs: color?.trim() && !attrs.finish && !finishless ? { ...attrs, finish: "painted" } : attrs };
+}
+
+/**
+ * #2227: the item of a part and the variant of its line (spec §11.3.4, редакция 5 — review #2249 №1, №3). Step by step, the
+ * part's own properties first, then the old fallbacks of `findItem` (a round elbow's other degree, a fastener without metal):
+ *   in each step the item of the SAME colour (the old way, before the company's transition), then the item WITHOUT a colour
+ *   (a coloured part without a finish takes only a «painted» one — never «mill» or a company's plain item), its colour the
+ *   line's variant. A placeholder of the same colour gives way to a priced item without colour (an old build made it while the
+ *   colourless one has the company's price). Never another colour's item. `matchAttrs` / `matchKey` are not changed.
+ */
+export function findPriced(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): { it?: CatalogItem; variant?: { attr: string; value: string } } {
+  if (!oneForAll(catalog, p)) {
+    const it = findItem(catalog, p);
+    return it ? { it } : {};
+  }
+  const unit = p.unit.trim().toLowerCase();
+  const want = matchAttrs(p);
+  const value = want.color!.trim().toLowerCase();
+  const metalOk = (it: CatalogItem) => !METAL_FALLBACK_PARTS.has(want.part ?? "") || !it.attributes?.metal || it.attributes.metal === want.metal;
+  const base = catalog.filter((it) => live(it) && it.unit.trim().toLowerCase() === unit);
+  const steps: { w: Record<string, string>; pool: CatalogItem[] }[] = [
+    { w: want, pool: base.filter(metalOk) },
+    ...ROUND_ELBOW_FALLBACK(want).map((w) => ({ w, pool: base.filter(metalOk) })),
+    ...(want.metal && METAL_FALLBACK_PARTS.has(want.part ?? "") ? [{ w: (({ metal: _m, ...x }) => x)(want), pool: base.filter((x) => !x.attributes?.metal) }] : []),
+  ];
+  // #2262 (second review №1): of a part without a finish, the item without colour in the part's price group before a plain one
+  const g = FINISHLESS_PARTS.has(want.part ?? "") ? priceGroupKey({ unit: p.unit, attributes: want }) : undefined;
+  const inGroupFirst = (a: CatalogItem, b: CatalogItem) => (g ? Number(b.attributes?.priceGroup === g) - Number(a.attributes?.priceGroup === g) : 0);
+  // #2262: a part without a finish (sealant, paint) takes its item without colour as it is — there is no «mill» one to keep apart
+  const painted = (it: CatalogItem) => !!want.finish || FINISHLESS_PARTS.has(want.part ?? "") || it.attributes?.finish?.trim().toLowerCase() === "painted";
+  for (const { w, pool } of steps) {
+    const own = catalogMatch(pool, w)[0];
+    const { color: _c, ...plain } = w;
+    const one = catalogMatch(pool.filter((it) => !it.attributes?.color?.trim()), plain).filter(painted).sort(inGroupFirst)[0];
+    if (own && !(own.placeholder && one && !one.placeholder)) return { it: own };
+    if (one) return { it: one, variant: { attr: VARIANT_ATTR, value } };
+  }
+  return {};
+}
 /** the fasteners whose metal follows the gutter's (the engine's METAL_FASTENERS) */
 const METAL_FALLBACK_PARTS = new Set(["screw", "anchor", "flat_coil"]);
 
@@ -84,7 +167,8 @@ const ROUND_ELBOW_FALLBACK = (w: Record<string, string>): Record<string, string>
   w.part !== "elbow" || w.shape !== "round" ? [] : w.style === "45" ? [{ ...w, style: "A" }] : ROUND_DEFAULT_STYLES.has(w.style ?? "") ? [{ ...w, style: "45" }, { ...w, style: "A" }] : [];
 /** the line's item is another degree's (see findItem): the estimate says «проверьте цену» for it */
 export function priceFromOtherDegree(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): boolean {
-  const it = findItem(catalog, p);
+  // #2227 (review #2249 №3): the item the line really takes — of its colour or the one for every colour, by the same steps
+  const it = findPriced(catalog, p).it;
   if (!it) return false;
   // М8 (review PR-2): a copper fastener priced by the same fastener without a metal borrows its price too — its own name in the line, and
   // the price list still shows its own item missing («Создать позиции сразу» makes it; its price is then its own)
@@ -208,22 +292,27 @@ export function missingItems(companyId: string, rows: readonly PriceRow[], catal
   const out = new Map<string, CatalogItem>();
   for (const { key, part } of rows) {
     // a part priced only by another degree's item (§2.7) still gets its own: the price list shows it missing until there is one
-    if (findItem(catalog, part) && !priceFromOtherDegree(catalog, part)) continue;
-    const id = stableItemId(companyId, key);
+    if (findPriced(catalog, part).it && !priceFromOtherDegree(catalog, part)) continue;
+    // #2227 (§11.3.4.1, §11.8): a coloured part gets ONE item for every colour — its properties less the colour, «painted» when
+    // it has a colour and no finish; its id from that key, so every colour and every build make the same id (no duplicates)
+    const plain = oneForAll(catalog, part) ? colourlessPart(part) : undefined;
+    const id = stableItemId(companyId, plain ? matchKey(plain) : key);
     if (ids.has(id) || out.has(id)) continue;
     const made: CatalogItem = {
       id,
       kind: part.kind === "labor" ? "labor" : "material",
-      name: name(part).slice(0, 200),
+      name: name(plain ?? part).slice(0, 200),
       unit: part.unit,
       priceCents: testPriceCents(part),
       // a material's price is cost × tax × markup in the core's editor (catalog/[id]): cost = the price, no tax, no markup
       ...(part.kind === "labor" ? {} : { costCents: testPriceCents(part), vendorTaxBps: 0, markupBps: 0 }),
       placeholder: true,
-      attributes: withGroup(part.unit, matchAttrs(part)),
+      // review #2249 №1 (§11.6): the item for every colour is in the price group of the old per-colour items — one price for all
+      attributes: plain ? { ...matchAttrs(plain), priceGroup: priceGroupKey({ unit: part.unit, attributes: withGroup(part.unit, matchAttrs(part)) }) } : withGroup(part.unit, matchAttrs(part)),
     };
     // a colour of a part whose group is there: the group's price, as the store and the server give a joining item (in every mode —
     // the store does it only in the cloud; review of PR3 №6)
+    // #2227: the one item for every colour takes the price of a colour already in that group, the same way
     const g = made.attributes?.priceGroup;
     const peer = g ? catalog.find((c) => c.attributes?.priceGroup === g) : undefined;
     out.set(id, peer ? { ...made, priceCents: peer.priceCents, placeholder: peer.placeholder, costCents: peer.costCents, vendorTaxBps: peer.vendorTaxBps, markupBps: peer.markupBps } : made);
@@ -255,7 +344,7 @@ export function listPreview(parts: readonly PartQty[], catalog: readonly Catalog
   let test = false;
   const priced = catalog.filter(live);
   const r = gutterPreview(parts, rates, (p) => {
-    const it = findItem(priced, p);
+    const it = findPriced(priced, p).it;
     if (!it) return undefined;
     if (it.placeholder) test = true;
     // the core's price of an item (a material: cost × supplier tax × markup, as the estimate's line from the list)

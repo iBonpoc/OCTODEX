@@ -114,7 +114,7 @@ export function BrandWait({ size, home = false, testID }: { size: number; home?:
   const o = useSharedValue(1);
   useEffect(() => {
     if (reduce) return;
-    const easing = Easing.bezier(0.45, 0, 0.55, 1);
+    const easing = Easing.bezier(...motion.easeInOut);
     const edge = motion.durBrandEdge;
     t.value = withDelay(edge, withRepeat(withSequence(withTiming(0, { duration: 0 }), withTiming(1, { duration: motion.durBrand, easing })), -1));
     o.value = withSequence(
@@ -188,7 +188,7 @@ export function BrandLaunch({ size, play, onDone, testID }: { size: number; play
     let total = D;
     if (play === "first") {
       // a jump to the start is invisible: the moving dot is clear (rest 1) on that frame, the dot at its place shows
-      way.value = withSequence(withTiming(0, { duration: 0 }), withTiming(1, { duration: motion.durBrandQuick, easing: Easing.bezier(0.45, 0, 0.55, 1) }));
+      way.value = withSequence(withTiming(0, { duration: 0 }), withTiming(1, { duration: motion.durBrandQuick, easing: Easing.bezier(...motion.easeInOut) }));
       rest.value = withSequence(withTiming(1, { duration: 0 }), withTiming(0, { duration: motion.durBrandEdge }));
       bounce(motion.durBrandQuick);
       total = motion.durBrandQuick + D;
@@ -241,8 +241,8 @@ export function BrandIntro({ width, onDone, testID }: { width: number; onDone?: 
       onDone?.();
       return;
     }
-    way.value = withTiming(1, { duration: motion.durBrandQuick, easing: Easing.bezier(0.4, 0, 0.6, 1) });
-    fly.value = withDelay(motion.durBrandQuick + motion.durBrandPause, withTiming(1, { duration: motion.durBrandFold, easing: Easing.bezier(0.45, 0, 0.35, 1) }));
+    way.value = withTiming(1, { duration: motion.durBrandQuick, easing: Easing.bezier(...motion.easeBrandWay) });
+    fly.value = withDelay(motion.durBrandQuick + motion.durBrandPause, withTiming(1, { duration: motion.durBrandFold, easing: Easing.bezier(...motion.easeBrandFold) }));
     const done = setTimeout(() => onDone?.(), motion.durBrandQuick + motion.durBrandPause + motion.durBrandFold);
     return () => {
       clearTimeout(done);

@@ -5,6 +5,7 @@
  */
 export * from "./icons";
 export { extraIcons } from "./extraIcons";
+export { graphite, graphiteThemes, type GraphiteColors, type Graphite } from "./graphite";
 
 /* ---------- foundation.css ---------- */
 export const font = {
@@ -72,12 +73,18 @@ export const motion = {
   /** a second tap on the same object within this is a double tap (app-only like longPressMs; = the toast's arm time): the canvas opens properties by it (spec 33, #1273) */
   doubleTapMs: 300,
   durChart: 900,
+  /** DS §14 (Ш III-1): a press shrinks the control this fast, ms (the release is the spring) */
+  durPress: 80,
   easeOut: [0.2, 0.8, 0.2, 1] as const,
   /** DS §18.2 (#1394): a fade-out that starts gently and ends at full speed — the launch layer leaving */
   easeIn: [0.4, 0, 1, 1] as const,
   /** components.css --ease-spring (overrides foundation's .3,1.4,.5,1) */
   easeSpring: [0.3, 1.25, 0.5, 1] as const,
   easeLiquid: [0.3, 1.35, 0.5, 1] as const,
+  /** DS §14.2 (#brand): the mark's own curves — a symmetric ease for the loop and the dot's way; the way of a quick launch; the fold */
+  easeInOut: [0.45, 0, 0.55, 1] as const,
+  easeBrandWay: [0.4, 0, 0.6, 1] as const,
+  easeBrandFold: [0.45, 0, 0.35, 1] as const,
   liquidStretch: 160,
   liquidSettle: 420,
   pressScale: 0.95,
@@ -131,7 +138,7 @@ export const motion = {
   durBrandWaitMin: 500,
 } as const;
 
-export const z = { nav: 2, fab: 4, scrim: 5, sheet: 6, modal: 7, toast: 8, /** DS §14.6 (Н-27): a lifted card — above the neighbours, below the chrome */ lift: 3 } as const;
+export const z = { /** DS §14.6: the plain level — under its neighbours */ under: 0, /** just above its neighbours (a layer that covers, a dragged row's siblings) */ over: 1, /** DS §14.6: the row in a hand, above `over` */ dragged: 2, nav: 2, fab: 4, scrim: 5, sheet: 6, modal: 7, toast: 8, /** DS §14.6 (Н-27): a lifted card — above the neighbours, below the chrome */ lift: 3 } as const;
 
 /** DS §14.6 (Н-28, Н-87): the numbers of a drag — app-only tokens (not in the DS css) */
 export const gesture = {

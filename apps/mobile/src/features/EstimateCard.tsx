@@ -1,6 +1,6 @@
 import { APP_NAME } from "@/config/product";
 import { keepCosts, seeCosts } from "./access";
-import { visitWhen } from "@/features/schedule";
+import { canPlan, visitWhen } from "@/features/schedule";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { useEffect, useMemo, useRef, useState, type ComponentRef, type ReactElement, type ReactNode } from "react";
 import { View } from "react-native";
@@ -14,6 +14,7 @@ import { portalFromEstimate } from "@/cloud/portal";
 import { EstimateView } from "@/features/EstimateView";
 import { SignBlock } from "@/features/SignBlock";
 import { SignaturePad, SignaturePreview } from "@/features/SignaturePad";
+import { StackBackGestureOff } from "@/nav/StackBackGestureOff";
 import { clientDoc, issueCount, isUniversal, mainOption, marginView, newToken, SEND_ISSUE_KINDS, sendIssues, uid, type SendIssues } from "@/features/estimateDoc";
 import { canEditEstimateTemplates, cleanEstimateTemplate, ESTIMATE_TEMPLATE_NAME_MAX, toTemplateDoc } from "@/features/estimateTemplate";
 import { ContractStatement } from "@/features/ContractStatement";
@@ -293,7 +294,9 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
 
 function ApprovedCard({ e, jobId }: { e: Estimate; jobId?: string }) {
   const { t, day, time } = useI18n();
-  const { db } = useStore();
+  const { db, role } = useStore();
+  // #2016: «Запланировать» opens a screen of the planners only — the others see where the job stands, not the button
+  const planner = canPlan([role]);
   const visits = jobId ? db.visits.filter((v) => v.jobId === jobId).sort((x, y) => x.start.localeCompare(y.start)) : [];
   const a = e.approval!;
   const doc = e.doc!;
@@ -309,7 +312,7 @@ function ApprovedCard({ e, jobId }: { e: Estimate; jobId?: string }) {
             <T v="caption" tone="mut">
               {t("ue.toSchedule")}
             </T>
-            <Button label={t("sch.title")} icon="calendar" onPress={() => router.push(`/job/schedule?jobId=${jobId}`)} />
+            {planner ? <Button label={t("sch.title")} icon="calendar" onPress={() => router.push(`/job/schedule?jobId=${jobId}`)} /> : null}
           </>
         ) : null}
         {visits.map((v) => (
@@ -317,7 +320,7 @@ function ApprovedCard({ e, jobId }: { e: Estimate; jobId?: string }) {
             {t("ue.scheduledOn", { date: day(v.start), time: visitWhen(v, time, t("plan5.allDay"), false) })}
           </T>
         ))}
-        {jobId && visits.length ? (
+        {jobId && visits.length && planner ? (
           <Button label={t("sch.another")} icon="plus" variant="ghost" size="sm" onPress={() => router.push(`/job/schedule?jobId=${jobId}`)} />
         ) : null}
       </Card>
@@ -624,6 +627,7 @@ function LegacyBody({ e }: { e: Estimate }) {
             </T>
             <StatusNote tone="warn">{t("est.rescission")}</StatusNote>
             <View testID="est-sign-on-site">
+              <StackBackGestureOff />
               <SignaturePad
                 consent="est.signConsent"
                 onConfirm={(path) => {
@@ -692,6 +696,7 @@ function CountersignCard({ e }: { e: Estimate }) {
             <T v="caption" tone="mut">
               {mine ? t("est.countersign.orDraw") : t("est.countersign.becomesSaved")}
             </T>
+            <StackBackGestureOff />
             <SignaturePad
               label={t("est.countersign.padLabel")}
               consent={null}
