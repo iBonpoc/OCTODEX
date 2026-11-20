@@ -16,9 +16,9 @@ import { useDevice } from "@/theme/ThemeProvider";
 import { memberLabel } from "@/features/team";
 import { canSeeJob } from "@/features/access";
 
-type Filter = JobStatus | "all";
+type Filter = JobStatus | "all" | "cancelled";
 /** the lane of «Работы» (spec 31 §13): in the order of the work, «Все» last */
-const LANE: readonly Filter[] = ["unscheduled", "scheduled", "in_progress", "done", "all"];
+const LANE: readonly Filter[] = ["unscheduled", "scheduled", "in_progress", "done", "all", "cancelled"];
 /** the «Не назначен» row of «Мастер» */
 const NOBODY = "__nobody";
 /** desktop row columns (docs/specs/06-list-cards.md, «Работы») */
@@ -34,8 +34,11 @@ export default function Jobs() {
   const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));
   // the tech: only jobs with a visit of his (#868; jobs_select in the database)
   const work = db.jobs.filter((j) => canSeeJob(db, { role, mode, me: db.me }, j.id));
+  // #2015: the cancelled ones are their own lane (db.cancelledJobs), outside «Все»
+  const cancelled = (db.cancelledJobs ?? []).filter((j) => canSeeJob(db, { role, mode, me: db.me }, j.id));
   const inLane = (j: Job, x: Filter) => x === "all" || j.status === x;
-  const count = (x: Filter) => work.filter((j) => inLane(j, x)).length;
+  const laneJobs = (x: Filter) => (x === "cancelled" ? cancelled : work.filter((j) => inLane(j, x)));
+  const count = (x: Filter) => laneJobs(x).length;
   // spec 31 §6 п.7, §13: a chip the person picked is kept on this device and wins; until then «Ждут даты» when there are
   // such jobs (they need an action, S8b), else «Запланированы». The search is not kept.
   const key = filterStoreKey("jobs");
@@ -45,7 +48,7 @@ export default function Jobs() {
   const [q, setQ] = useState("");
   const f: Filter = kept && LANE.includes(kept) ? kept : count("unscheduled") ? "unscheduled" : "scheduled";
   const peopleOf = (j: Job) => jobPeople(db, j).map((m) => m.id);
-  const base = work.filter((j) => inLane(j, f));
+  const base = laneJobs(f);
   // «Мастер»: everyone who is the master of some job, by name, then «Не назначен»; the office's only (a tech sees his own)
   const masters = [...new Map(work.flatMap((j) => jobPeople(db, j)).map((m) => [m.id, m])).values()].sort((a, b) => a.name.localeCompare(b.name));
   const who = whoIds.filter((id) => id === NOBODY || masters.some((m) => m.id === id));
@@ -60,7 +63,7 @@ export default function Jobs() {
     const p = db.properties.find((x) => x.id === j.propertyId);
     const c = db.customers.find((x) => x.id === p?.customerId);
     const v = nextVisitOf(db, j.id);
-    const st = jobStatusView[j.status];
+    const st = f === "cancelled" ? { status: "neutral" as const, label: "job.cancel.status" as const } : jobStatusView[j.status];
     const addr = p ? `${p.address}, ${p.city}` : undefined;
     const trade = categoryLabel(db.serviceCategories.find((x) => x.id === j.serviceCategoryId), t as never);
     return (
@@ -97,7 +100,7 @@ export default function Jobs() {
         search={{ value: q, onChange: setQ, placeholder: t("card.filter.searchJobs") }}
         value={f}
         onChange={setF}
-        items={LANE.map((k) => ({ key: k, label: k === "all" ? t("cat.all") : t(jobStatusView[k].label), count: count(k) }))}
+        items={LANE.map((k) => ({ key: k, label: k === "all" ? t("cat.all") : k === "cancelled" ? t("job.cancel.lane") : t(jobStatusView[k].label), count: count(k) }))}
         groups={[
           ...(office && masters.length > 1
             ? [{

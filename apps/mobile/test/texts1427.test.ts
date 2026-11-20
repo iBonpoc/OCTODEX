@@ -101,7 +101,8 @@ describe("dictionary nouns", () => {
   it("«Удалить учётную запись» (DS §12.8), the agreement «…и Политику конфиденциальности»", () => {
     expect(translate("ru", "acct.title")).toBe("Удалить учётную запись");
     expect(translate("ru", "acct.sure.title")).toBe("Удалить учётную запись навсегда?");
-    expect(translate("ru", "legal.agree.privacy")).toBe("Политику конфиденциальности");
+    // the agreement sentence is one key since #1756 (spec 52 §6): the case is checked in it
+    expect(translate("ru", "legal.agree.a11y")).toContain("и Политику конфиденциальности");
   });
   it("a sample button of the showcase is «Создать смету» («Новый X» is only a form title)", () => {
     expect(translate("ru", "ds.state.noneBtn")).toBe("Создать смету");
