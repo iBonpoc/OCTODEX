@@ -935,7 +935,9 @@ export function Screen({
                 <View
                   // glass (--ov + blur), not a solid plate: in the light theme the bar blends with the page (unslop 05.11)
                   // the glass only once the row has stuck (DS А1п «Прилипание»): in its place on the page it is a plain row, no band (#1416)
-                  style={{ backgroundColor: stuck ? c.ov : undefined, overflow: "hidden", paddingVertical: space[2], marginHorizontal: -space[4], paddingHorizontal: space[4], transform: [{ translateY: stickyShift(stuck, navInsets.safeTop) }] }}
+                  // stuck on a phone the row stands under the status bar: it grows by the safe-area top (padding) and gives that height back (margin), so the
+                  // page below does not jump. A transform would not do — the sticky wrapper sets its own `transform` over the child's
+                  style={{ backgroundColor: stuck ? c.ov : undefined, overflow: "hidden", paddingTop: space[2] + stickyShift(stuck, navInsets.safeTop), paddingBottom: space[2], marginBottom: -stickyShift(stuck, navInsets.safeTop), marginHorizontal: -space[4], paddingHorizontal: space[4] }}
                 >
                   {stuck ? <BlurView intensity={c.blur * 3} tint={c.blurTint} style={StyleSheet.absoluteFill} /> : null}
                   {/* the mini header appears at once when the tabs stick (no motion: it is the same name that scrolled away, §14.3) */}
