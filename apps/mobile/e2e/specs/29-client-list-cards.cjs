@@ -1,7 +1,7 @@
 /**
  * Clients list on the new list cards (step 10а, docs/specs/06-list-cards.md): every view (3 widths × 2 themes).
- * Card shows number, phone, address (no "…"), money for the office; contact buttons call / SMS / map / email
- * with visible size ≤ 36; status changes from the card only by allowed moves (prospect → archive) with «Undo».
+ * Phone / tablet: a compact card — avatar, name, one line (next visit or address), money for the office, a sign only
+ * when it needs attention, no contact buttons (К6 п.3, 20.11.2026). 1280 row: phone, address, call + map ≤ 36; status changes from the card only by allowed moves (prospect → archive) with «Undo».
  */
 const { checkCardAlignment } = require("../cardsAlignment.cjs");
 const { addDays, todayKey } = require("../companyTime.cjs");
@@ -18,9 +18,15 @@ exports.run = async (h) => {
   const card = p.getByRole("button", { name: owes.name, exact: true }).first();
   await card.scrollIntoViewIfNeeded();
   const txt = await card.innerText();
-  h.expect(txt.includes(owes.phone), `phone on the card: ${owes.phone}`);
   const prop = db.properties.find((x) => x.customerId === owes.id);
-  h.expect(txt.includes(prop.address), `address on the card: ${prop.address}`);
+  if (wide) {
+    h.expect(txt.includes(owes.phone), `phone on the row: ${owes.phone}`);
+    h.expect(txt.includes(prop.address), `address on the row: ${prop.address}`);
+  } else {
+    // К6 п.3 (20.11.2026): a compact card — one line under the name: the next visit, otherwise the address; no phone
+    h.expect(/\d{1,2}:\d\d [AP]M/.test(txt) || txt.includes(prop.address), `one line under the name (next visit or ${prop.address}): ${txt.slice(0, 160)}`);
+    h.expect(!txt.includes(owes.phone), "no phone line on the compact card");
+  }
   // the label «Должен» is next to the amount on cards; on 1280 rows it is the column title
   h.expect(/\$[\d,]+/.test(txt) && (wide || /Должен/i.test(txt)), `owed amount with its label: ${txt.slice(0, 200)}`);
   if (wide) {
@@ -71,13 +77,17 @@ exports.run = async (h) => {
   if (h.layout.width !== 820) await h.expectText(new RegExp(` ${owes.name[0]} `), "letter header");
   if (wide) await h.expectText(/КЛИЕНТ|Клиент .*Телефон .*Адрес/i, "column titles above the rows");
 
-  // contact buttons: call always, then map; visible 28–36 (hit area 44 / 48 is added on devices)
-  const call = p.getByRole("button", { name: new RegExp(`^Позвонить: ${owes.phone.replace(/[()]/g, "\\$&")}`) }).first();
-  h.expect((await call.count()) === 1, "call button");
-  const bb = await call.boundingBox();
-  h.expect(bb && bb.height <= 36 && bb.height >= 28, `call button visible size ${bb && bb.height}`);
-  h.expect((await p.getByRole("button", { name: /^Карта и маршрут: / }).count()) > 0, "map button");
-  if (!wide) h.expect((await p.getByRole("button", { name: /^SMS: / }).count()) > 0, "SMS button on phone / tablet cards");
+  if (wide) {
+    // the 1280 row: call, then map; visible 28–36 (hit area 44 / 48 is added on devices)
+    const call = p.getByRole("button", { name: new RegExp(`^Позвонить: ${owes.phone.replace(/[()]/g, "\\$&")}`) }).first();
+    h.expect((await call.count()) === 1, "call button");
+    const bb = await call.boundingBox();
+    h.expect(bb && bb.height <= 36 && bb.height >= 28, `call button visible size ${bb && bb.height}`);
+    h.expect((await p.getByRole("button", { name: /^Карта и маршрут: / }).count()) > 0, "map button");
+  } else {
+    // К6 п.3: no row of round buttons on phone / tablet cards — call, SMS and the map are on the client's card
+    h.expect((await p.getByRole("button", { name: /^(Позвонить|SMS|Карта и маршрут): / }).locator("visible=true").count()) === 0, "no contact buttons on the compact cards");
+  }
   await h.shot("list");
 
   // edges and gaps: cards on the search field's lines; tablet rows of equal height (founder 05.11: «линии сдвинуты»)

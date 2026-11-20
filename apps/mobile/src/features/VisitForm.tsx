@@ -7,7 +7,6 @@ import { useHeldSheet } from "@/ui/heldSheet";
 import { useEffect, useState, type ReactNode } from "react";
 import { Linking, Platform, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { docLanguageFor } from "@/data/people";
@@ -398,14 +397,15 @@ export function CancelVisitSheet({ visitId, onClose, onDone }: { visitId: ID | n
   );
 }
 
-/** «Когда и кто» on the visit card, for the office (§7.3): date, time – end, the person; «Перенести» · «Отменить выезд»
- *  (only before the tech is on site); «Клиенту сообщили …» or «Сообщить клиенту». */
-export function WhenWho({ visitId, onCancelled }: { visitId: ID; onCancelled?: (visitId: ID) => void }) {
+/** «Когда и кто» on the visit card, for the office (§7.3): date, time – end, the person; «Перенести» · «Назначить»
+ *  (only before the tech is on site); «Клиенту сообщили …» or «Сообщить клиенту». «Отменить выезд» is not here: a dangerous
+ *  action never sits beside an ordinary one (K6) — the visit screen keeps it in its «⋯» menu (CancelVisitSheet). */
+export function WhenWho({ visitId }: { visitId: ID }) {
   const store = useStore();
   const { db } = store;
   const { t, day, time } = useI18n();
   const toast = useToast();
-  const [sheet, setSheet] = useState<"move" | "cancel" | "notify" | "assign" | null>(null);
+  const [sheet, setSheet] = useState<"move" | "notify" | "assign" | null>(null);
   const moveHeld = useHeldSheet(sheet === "move" ? true : null); // the sheet goes out before it is unmounted (#1163)
   const v = db.visits.find((x) => x.id === visitId);
   if (!v) return null;
@@ -425,7 +425,6 @@ export function WhenWho({ visitId, onCancelled }: { visitId: ID; onCancelled?: (
         <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
           <Button label={t("vw.reschedule")} icon="calendar" variant="secondary" size="sm" onPress={() => setSheet("move")} />
           <Button label={t("plan.assign")} icon="user" variant="secondary" size="sm" onPress={() => setSheet("assign")} />
-          <Button label={t("vc.title")} icon="close" variant="secondary" size="sm" onPress={() => setSheet("cancel")} />
         </RowView>
       ) : null}
       {moveHeld.value ? (
@@ -447,8 +446,6 @@ export function WhenWho({ visitId, onCancelled }: { visitId: ID; onCancelled?: (
           }}
         />
       ) : null}
-      {/* a cancelled visit leaves the screens: the screen asks «Сообщить клиенту?» (it outlives this card), then goes back */}
-      <CancelVisitSheet visitId={sheet === "cancel" ? v.id : null} onClose={() => setSheet(null)} onDone={(id) => (onCancelled ? onCancelled(id) : router.canGoBack() ? router.back() : router.replace("/plan"))} />
       <NotifySheet visitId={sheet === "notify" ? v.id : null} onClose={() => setSheet(null)} />
       <AssignSheet visitId={sheet === "assign" ? v.id : null} onClose={() => setSheet(null)} />
     </Card>

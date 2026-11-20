@@ -22,7 +22,8 @@ import { Card, ListRow, RowView } from "@/ui/surfaces";
 import { type GuardedUndo } from "@/data/undo";
 
 /** the checklist card of a visit at work (or an inspection on site) */
-export function ChecklistCard({ v, missing }: { v: Visit; missing: Missing }) {
+/** `adding` — the «Свой пункт» field (the visit screen opens it from «⋯»: at work the card is just the ticks, K6) */
+export function ChecklistCard({ v, missing, adding = true, onAdded }: { v: Visit; missing: Missing; adding?: boolean; onAdded?: () => void }) {
   const store = useStore();
   const { t } = useI18n();
   const toast = useToast();
@@ -34,6 +35,7 @@ export function ChecklistCard({ v, missing }: { v: Visit; missing: Missing }) {
     if (!label) return;
     toast.show(queuedHint() ?? t("check.added"), store.addCheckItem(v.id, label));
     setExtra("");
+    onAdded?.();
   };
   return (
     <Card>
@@ -48,10 +50,10 @@ export function ChecklistCard({ v, missing }: { v: Visit; missing: Missing }) {
       {v.checklist.map((item) => (
         <ItemRow key={item.id} v={v} item={item} />
       ))}
-      {canAddItem(store.role, v, false) ? (
+      {adding && canAddItem(store.role, v, false) ? (
         <RowView>
           <View style={{ flex: 1 }}>
-            <TextField type="text" value={extra} onChangeText={setExtra} placeholder={t("check.addPlaceholder")} icon="plus" />
+            <TextField type="text" value={extra} autoFocus={!!onAdded} onChangeText={setExtra} placeholder={t("check.addPlaceholder")} icon="plus" />
           </View>
           <Button label={t("check.add")} size="sm" variant="secondary" disabled={!extra.trim()} onPress={addItem} />
         </RowView>

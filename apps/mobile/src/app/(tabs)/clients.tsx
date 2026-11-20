@@ -5,7 +5,7 @@ import { isClientTab } from "@/features/clientRows";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
-import { canMarkNoService, clientHistory, clientMoneyOf, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
+import { canMarkNoService, clientHistory, clientMoneyOf, clientNextVisit, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
 import { canChangeStatus, pickerOptions } from "@/features/statusMoves";
 import { useI18n } from "@/i18n";
 import { Button, IconButton } from "@/ui/controls";
@@ -25,6 +25,7 @@ import { ClientCardBody } from "@/features/client/ClientCard";
 import { space } from "@octo/design-tokens";
 import type { Customer, CustomerStatus } from "@/data/types";
 import { groupByLetter } from "@/features/clientGroups";
+import { dayOffsetOf, isoDayKey } from "@/features/calendar";
 
 type Filter = "all" | "owes" | "estimate" | "prospect" | "archived";
 
@@ -36,7 +37,7 @@ const COLUMNS_PANEL: FactKey[] = ["phone"];
 
 /** Client list (each client a card): search by name, phone or address; filters; new client by hand. */
 export default function Clients() {
-  const { t, money: moneyFmt, day } = useI18n();
+  const { t, money: moneyFmt, day, time } = useI18n();
   const { db, role } = useStore();
   const clients = visibleClients(db, role);
   const office = role !== "tech";
@@ -104,6 +105,11 @@ export default function Clients() {
     // computed sign: how much is overdue and how long — the oldest invoice (founder 07.11)
     const overdue = office ? clientOverdueOf(db, c.id) : null;
     const addr = props[0] ? `${props[0].address}, ${props[0].city}` : undefined;
+    // К6 п.3 (20.11.2026): one line under the name — the next visit if there is one, otherwise the address
+    const next = clientNextVisit(db, c.id);
+    const off = next ? dayOffsetOf(isoDayKey(next.start)) : -1;
+    const nextDay = !next ? "" : off === 0 ? t("common.today") : off === 1 ? t("common.tomorrow") : day(next.start);
+    const nextLine = next ? [`${nextDay}, ${time(next.start)}`, db.jobs.find((j) => j.id === next.jobId)?.title ?? t("plan.kind.inspection")].join(" · ") : undefined;
     return (
       <ListCard
         key={c.id}
@@ -130,8 +136,11 @@ export default function Clients() {
           addr: addr && props.length > 1 ? `${addr} · ${t("clients.properties", { n: props.length })}` : addr,
           last: last ? [t(last.title), last.detail, day(last.at)].filter(Boolean).join(" · ") : undefined,
         }}
-        contact={{ phone: c.phone, email: c.email, addr }}
-        density={desktop ? "row" : "rich"}
+        // phone / tablet: a compact card (avatar, name, one line, money, a sign only when it needs attention); call,
+        // SMS and the map live on the client's card. The 1280 row keeps its columns and its call button.
+        when={desktop ? nextLine : nextLine ?? addr}
+        contact={desktop ? { phone: c.phone, email: c.email, addr } : undefined}
+        density={desktop ? "row" : "compact"}
         columns={openId ? COLUMNS_PANEL : COLUMNS}
         selected={c.id === openId}
         onPress={() => panel.open(c.id)}

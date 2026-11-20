@@ -57,6 +57,7 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
     dRef.current = "";
     setD("");
   };
+  const confirm = <Button label={confirmLabel ?? t("visit.confirmSign")} icon="check" full={device === "phone"} onPress={() => onConfirm(normalizeSignature(d, w, h))} disabled={ro || disabled || d.length < 20} />;
   return (
     <View style={{ gap: space[2] }}>
       <View
@@ -101,8 +102,10 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
         <View testID="signature-clear">
           <Button label={t("visit.clear")} variant="secondary" onPress={clear} disabled={!d} />
         </View>
-        <Button label={confirmLabel ?? t("visit.confirmSign")} icon="check" onPress={() => onConfirm(normalizeSignature(d, w, h))} disabled={ro || disabled || d.length < 20} />
+        {/* a wide window: the confirm in the same row; a phone: its own full row — «Подтвердить подпись» never runs past the card */}
+        {device === "phone" ? null : confirm}
       </RowView>
+      {device === "phone" ? confirm : null}
       <SignatureFullscreen
         visible={full}
         d={d}

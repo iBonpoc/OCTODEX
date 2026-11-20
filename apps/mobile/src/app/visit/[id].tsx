@@ -2,7 +2,9 @@ import { ModulePlaces } from "@/modules/ModulePlaces";
 import { visitDueCents } from "@/features/visitDue";
 import { signedAction } from "@/features/visitSignedAction";
 import { lateAfterOf } from "@/features/scheduleSettings";
-import { useRef, useState } from "react";
+import { useRef, useState, type ComponentRef, type RefObject } from "react";
+import { useReducedMotion } from "react-native-reanimated";
+import { useScreenScroll } from "@/ui/requiredForm";
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space, size } from "@octo/design-tokens";
@@ -11,10 +13,10 @@ import { canSeeProfit } from "@/nav/roles";
 import { haptics } from "@/ui/haptics";
 import type { PaymentMethod } from "@/data/types";
 import { useI18n } from "@/i18n";
-import { CancelNotifySheet, WhenWho } from "@/features/VisitForm";
+import { CancelNotifySheet, CancelVisitSheet, WhenWho } from "@/features/VisitForm";
 import { NotesBlock } from "@/features/NotesBlock";
 import { RelatedBlock } from "@/features/RelatedBlock";
-import { canNoShow, canPlan, mayMarkNoShow } from "@/features/schedule";
+import { canCancel, canNoShow, canPlan, mayMarkNoShow, visitWhen } from "@/features/schedule";
 import { visitServable } from "@/features/jobs";
 import { peopleOf } from "@/data/people";
 import { cleanPhone, telHref } from "@/features/contactLinks";
@@ -26,13 +28,14 @@ import { STEP_LABELS, stepIndex, visitStatus } from "@/features/visits";
 import { SignaturePad } from "@/features/SignaturePad";
 import { StackBackGestureOff } from "@/nav/StackBackGestureOff";
 import { PhotoStrip } from "@/features/PhotoStrip";
-import { canEditVisitItems, checklistGate, visitSettings } from "@/features/checklist";
+import { canAddItem, canEditVisitItems, canTick, checklistGate, itemKind, visitSettings } from "@/features/checklist";
 import { ChecklistCard, ChecklistEditor, MissingSheet } from "@/features/VisitChecklist";
 import { OfficeLocation, TechLocation, useConsentQuestion } from "@/features/LocationParts";
 import { Button, IconButton, StatusChip, Steps, TextField } from "@/ui/controls";
 import { SelectField } from "@/ui/selectField";
-import { Icon, T } from "@/ui/primitives";
-import { Sheet, useToast } from "@/ui/overlays";
+import { Icon, T, type IconKey } from "@/ui/primitives";
+import { DoneCircle } from "@/ui/doneCircle";
+import { Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { canSeeVisit } from "@/features/access";
 import { StatusNote } from "@/ui/statusNote";
@@ -45,7 +48,7 @@ export default function VisitScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const store = useStore();
   const { db } = store;
-  const { t, time, money } = useI18n();
+  const { t, time, day, money } = useI18n();
   const { c } = useTheme();
   const toast = useToast();
   const [method, setMethod] = useState<PaymentMethod>("card");
@@ -60,6 +63,14 @@ export default function VisitScreen() {
   const [noShowNote, setNoShowNote] = useState("");
   // a second tap in the same frame: one mark, one toast, one «back»
   const noShowSent = useRef(false);
+  // «⋯» (K6): the menu at its button, «Изменить чек-лист» (the editor in place of the plain list), «Отменить выезд»
+  const moreRef = useRef<ComponentRef<typeof View>>(null);
+  const [moreAt, setMoreAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [editingChecklist, setEditingChecklist] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [addingItem, setAddingItem] = useState(false);
+  // «Завершить» at work: the signature is the end of the work — the button brings the page to it
+  const signRef = useRef<ComponentRef<typeof View>>(null);
   const v = db.visits.find((x) => x.id === id);
   // wave 7б-2: the location question comes before the first «On the way» on my own visit (docs/specs/03 §12)
   const consent = useConsentQuestion(v);
@@ -164,9 +175,49 @@ export default function VisitScreen() {
   };
   const addr = property ? encodeURIComponent(`${property.address}, ${property.city}`) : "";
 
+  // K6 (founder): one main button for the next step, right under the header — in the thumb's reach, never under the checklist
+  const nextStep: null | { label: string; icon?: IconKey; testID: string; onPress: () => void } =
+    v.step === "scheduled"
+      ? { label: t("step.en_route"), icon: "navigate", testID: "visit-main-en-route", onPress: () => consent.ask(() => advance(t("visit.etaSent"))) }
+      : v.step === "en_route"
+        ? { label: t("step.on_site"), icon: "pin", testID: "visit-main-on-site", onPress: () => advance(t("toast.step", { step: t("step.on_site") })) }
+        : v.step === "on_site" && v.kind === "inspection"
+          // an inspection ends on site with "Done": no work, signature or payment (S10, docs/specs/03 §4.1)
+          ? { label: t("st.done"), icon: "check", testID: "visit-main-done", onPress: goDone }
+          : v.step === "on_site"
+            ? { label: t("visit.next", { step: t("step.working") }), icon: "chevronRight", testID: "visit-main-work", onPress: goWork }
+            : v.step === "done" && isInspection && servable
+              // after an inspection the main action is the estimate, lead and property filled in (13 §3.9, 17-job §7.2)
+              ? { label: t("job3.makeEstimate"), icon: "invoice", testID: "visit-main-estimate", onPress: makeEstimate }
+              : null;
+  // what is not the next step goes into «⋯»: the checklist's order and text (the office), «Клиента нет дома», and — apart,
+  // red, with its own sheet as the confirmation — «Отменить выезд» (K6: the dangerous never beside the ordinary)
+  const mayEditChecklist = canEditVisitItems(store.role, v);
+  const mayCancel = office && canCancel(v);
+  // the ticks card of the work (or an inspection on site): its «Свой пункт» field opens from «⋯»
+  const ticking = v.checklist.length > 0 && (v.step === "working" || (v.step === "on_site" && isInspection));
+  const mayAddItem = (v.step === "working" || (v.step === "on_site" && isInspection)) && canAddItem(store.role, v, false);
+  const moreItems: MenuItem<"message" | "checklist" | "addItem" | "noShow" | "cancel">[] = [
+    ...(tel || main ? [{ key: "message" as const, label: t("visit.message"), icon: "message" as const, testID: "visit-act-message" }] : []),
+    ...(mayEditChecklist ? [{ key: "checklist" as const, label: t("visit.editChecklist"), icon: "pencil" as const, testID: "visit-act-checklist" }] : []),
+    ...(mayAddItem ? [{ key: "addItem" as const, label: t("visit.addCheckItem"), icon: "plus" as const, testID: "visit-act-add-item" }] : []),
+    ...(noShowOk ? [{ key: "noShow" as const, label: t("noShow.btn"), icon: "alert" as const, testID: "visit-no-show" }] : []),
+    ...(mayCancel ? [{ key: "cancel" as const, label: t("vc.title"), icon: "close" as const, destructive: true, group: !!(tel || main) || mayEditChecklist || noShowOk, testID: "visit-act-cancel" }] : []),
+  ];
+  const more = moreItems.length ? (
+    <View ref={moreRef} collapsable={false} testID="visit-more">
+      <IconButton
+        icon="more"
+        label={`${t("lead.more")}: ${customer?.name ?? t("visit.title")}`}
+        onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMoreAt({ x, y, w, h }))}
+      />
+    </View>
+  ) : undefined;
+  const before0 = v.step === "scheduled" || v.step === "en_route" || v.step === "on_site";
+
   return (
-    <Screen testID="visit-screen" title={customer?.name ?? t("visit.title")} back={back} subtitle={`${v.allDay ? t("job5.allDayChip") : time(v.start)} · ${job?.title ?? ""}`} fab="visit" fabCtx={{ visitId: v.id, customerId: servable ? customer?.id : undefined, propertyId: property?.id, leadId: v.leadId, inspection: v.kind === "inspection" }}>
-      <RelatedBlock of={{ type: "visit", id: v.id }} />
+    <Screen testID="visit-screen" title={customer?.name ?? t("visit.title")} back={back} right={more} subtitle={job?.title ?? undefined} fab="visit" fabCtx={{ visitId: v.id, customerId: servable ? customer?.id : undefined, propertyId: property?.id, leadId: v.leadId, inspection: v.kind === "inspection" }}>
+      {/* the head of the visit: where, when, how to get there and call — then the one next step */}
       <Card>
         <RowView style={{ justifyContent: "space-between" }}>
           <StatusChip status={st.status} label={t(st.label)} />
@@ -176,133 +227,46 @@ export default function VisitScreen() {
             </T>
           ) : null}
         </RowView>
-        <Steps labels={STEP_LABELS.map((k) => t(k))} current={idx} />
-        <RowView gap={space[1]}>
-          <Icon name="pin" s={size.iconSm} color={c.mut} />
-          <T v="body" tone="mut" style={{ flex: 1 }}>
-            {[property?.address, property?.city].filter(Boolean).join(", ")}
-          </T>
-        </RowView>
-        <RowView>
-          <IconButton icon="phone" label={t("visit.call")} onPress={call} />
-          <IconButton icon="message" label={t("visit.message")} onPress={sms} />
-          <IconButton icon="navigate" label={t("visit.navigate")} onPress={() => Linking.openURL(`https://maps.apple.com/?daddr=${addr}`)} />
-        </RowView>
-      </Card>
-
-      {office ? <WhenWho visitId={v.id} onCancelled={setCancelled} /> : null}
-      {office ? <OfficeLocation v={v} geo={property?.geo} /> : null}
-
-      {/* the note for the tech from the visit form (docs/specs/03 §7.3, wave П3b): everyone on the visit sees it */}
-      {v.note ? (
-        <Card>
-          <T v="heading">{t("lead.book.note")}</T>
-          <T v="body">{v.note}</T>
-        </Card>
-      ) : null}
-
-      <Card>
-        <T v="heading">{t("visit.scope")}</T>
-        {v.scope.map((s) => (
-          <RowView key={s} gap={space[2]} style={{ alignItems: "flex-start" }}>
-            <T v="body" tone="mut">
-              •
-            </T>
-            <T v="body" style={{ flex: 1 }}>
-              {s}
+        <View style={{ gap: space[1] }}>
+          <RowView gap={space[2]}>
+            <Icon name="clock" s={size.iconSm} color={c.mut} />
+            <T v="heading" tabular style={{ flex: 1 }}>
+              {`${day(v.start)} · ${visitWhen(v, time, t("plan5.allDay"))}`}
             </T>
           </RowView>
-        ))}
-      </Card>
-
-      {/* the office edits the items before the visit (§7.4, CH3); an empty list too — «Добавить из шаблона» */}
-      {canEditVisitItems(store.role, v) ? <ChecklistEditor v={v} /> : null}
-      {!canEditVisitItems(store.role, v) && v.checklist.length > 0 && (v.step === "scheduled" || v.step === "en_route" || v.step === "on_site") ? (
-        <Card>
-          <RowView style={{ justifyContent: "space-between" }}>
-            <T v="heading">{t("visit.checklist")}</T>
-            <T v="caption" tone="mut">
-              {t("check.preview", { n: v.checklist.length })}
-            </T>
-          </RowView>
-          {v.checklist.map((item) => (
-            <T key={item.id} v="body" tone="mut">
-              ○ {item.label}
-            </T>
-          ))}
-        </Card>
-      ) : null}
-
-      <TechLocation v={v} geo={property?.geo} />
-      {/* add-on modules' place (spec 33 П24 А7): nothing unless a module is switched on */}
-      <ModulePlaces place="visit" ctx={{ visitId: v.id, leadId: v.leadId, customerId: servable ? customer?.id : undefined, propertyId: property?.id }} />
-      {consent.sheet}
-
-      {/* Step actions */}
-      {v.step === "scheduled" ? (
-        <Button label={t("step.en_route")} icon="navigate" full onPress={() => consent.ask(() => advance(t("visit.etaSent")))} />
-      ) : null}
-      {v.step === "en_route" ? (
-        <Button label={t("step.on_site")} icon="pin" full onPress={() => advance(t("toast.step", { step: t("step.on_site") }))} />
-      ) : null}
-
-      {noShowOk ? (
-        <View testID="visit-no-show">
-          <Button label={t("noShow.btn")} icon="alert" variant="secondary" full onPress={() => setNoShow(true)} />
+          {property ? (
+            <RowView gap={space[2]} style={{ alignItems: "flex-start" }}>
+              <Icon name="pin" s={size.iconSm} color={c.mut} />
+              <T v="body" style={{ flex: 1 }}>
+                {[property.address, property.city].filter(Boolean).join(", ")}
+              </T>
+            </RowView>
+          ) : null}
         </View>
-      ) : null}
-
-      {/* an inspection with a checklist (В6): ticked on site, checked before «Готово» */}
-      {v.step === "on_site" && isInspection && v.checklist.length ? <ChecklistCard v={v} missing={gate.missing} /> : null}
-
-      {v.step === "on_site" || v.step === "working" ? (
-        <Card>
-          <T v="heading">{t("visit.photosBefore")}</T>
-          <PhotoStrip
-            photos={before}
-            onAdd={(uri) => toast.show(queuedHint() ?? t("toast.photo"), store.addPhoto(v.id, "before", uri))}
-            onRemove={removePhoto}
-            onRetry={retryPhoto}
-          />
-          {v.step === "on_site" && v.kind === "inspection" ? (
-            // an inspection ends on site with "Done": no work, signature or payment (S10, docs/specs/03 §4.1)
-            <Button label={t("st.done")} icon="check" full onPress={goDone} />
+        <RowView gap={space[2]}>
+          {property ? (
+            <View style={{ flex: 1 }}>
+              <Button label={t("visit.navigate")} icon="navigate" variant="secondary" full onPress={() => Linking.openURL(`https://maps.apple.com/?daddr=${addr}`)} />
+            </View>
           ) : null}
-          {v.step === "on_site" && v.kind !== "inspection" ? (
-            <>
-              {gate.missing.photosBefore > 0 ? (
-                <StatusNote tone="warn">{t("chk.needBefore", { n: gate.missing.photosBefore })}</StatusNote>
-              ) : null}
-              <Button label={t("visit.next", { step: t("step.working") })} full onPress={goWork} />
-            </>
+          {tel ? (
+            <View style={{ flex: 1 }}>
+              <Button label={t("visit.call")} icon="phone" variant="secondary" full onPress={call} />
+            </View>
           ) : null}
-        </Card>
-      ) : null}
-
-      {v.step !== "on_site" && v.step !== "working" && failedHere.length ? (
-        <Card>
-          <T v="heading">{t("photoUp.title")}</T>
-          <PhotoStrip photos={failedHere} onRetry={retryPhoto} />
-        </Card>
-      ) : null}
-
-      {v.step === "working" ? (
-        <>
-          {v.checklist.length ? <ChecklistCard v={v} missing={gate.missing} /> : null}
-          <Card>
-            <T v="heading">{t("visit.photosAfter")}</T>
-            <PhotoStrip photos={after} onAdd={(uri) => toast.show(queuedHint() ?? t("toast.photo"), store.addPhoto(v.id, "after", uri))} onRemove={removePhoto} onRetry={retryPhoto} />
-            {gate.missing.photosAfter > 0 ? (
-              <StatusNote tone="warn">{t("chk.needAfter", { n: gate.missing.photosAfter })}</StatusNote>
-            ) : null}
-          </Card>
-          <SectionTitle title={t("step.sign")} />
-          <Card>
-            <StackBackGestureOff />
-            <SignaturePad onConfirm={goSign} />
-          </Card>
-        </>
-      ) : null}
+        </RowView>
+        <Steps labels={STEP_LABELS.map((k) => t(k))} current={idx} />
+        {v.step === "on_site" && v.kind !== "inspection" && gate.missing.photosBefore > 0 ? (
+          <StatusNote tone="warn">{t("chk.needBefore", { n: gate.missing.photosBefore })}</StatusNote>
+        ) : null}
+        {v.step === "working" ? <FinishButton target={signRef} label={t("visit.finish")} /> : null}
+        {nextStep ? (
+          <View testID={nextStep.testID}>
+            <Button label={nextStep.label} icon={nextStep.icon} full onPress={nextStep.onPress} />
+          </View>
+        ) : null}
+      </Card>
+      {consent.sheet}
 
       {/* #2018 С1: nothing to pay (the job is paid by invoice) — «Закрыть выезд», no «$0.00» and no payment step; the same
           payVisit, which on $0 writes no payment and ends the visit on the server */}
@@ -360,11 +324,6 @@ export default function VisitScreen() {
         </Card>
       ) : null}
 
-      {v.step === "done" && isInspection && servable ? (
-        // after an inspection the main action is the estimate, lead and property filled in (13 §3.9, 17-job §7.2)
-        <Button label={t("job3.makeEstimate")} icon="invoice" variant="primary" full onPress={makeEstimate} />
-      ) : null}
-
       {v.step === "paid" || v.step === "done" ? (
         <Card status="ok">
           <RowView>
@@ -400,6 +359,107 @@ export default function VisitScreen() {
           ) : null}
         </Card>
       ) : null}
+
+      {/* the note for the tech from the visit form (docs/specs/03 §7.3, wave П3b): everyone on the visit sees it */}
+      {v.note ? (
+        <Card>
+          <T v="heading">{t("lead.book.note")}</T>
+          <T v="body">{v.note}</T>
+        </Card>
+      ) : null}
+
+      <Card>
+        <T v="heading">{t("visit.scope")}</T>
+        {v.scope.map((s) => (
+          <RowView key={s} gap={space[2]} style={{ alignItems: "flex-start" }}>
+            <T v="body" tone="mut">
+              •
+            </T>
+            <T v="body" style={{ flex: 1 }}>
+              {s}
+            </T>
+          </RowView>
+        ))}
+      </Card>
+
+      {/* the checklist before the work: the items to do, plain; the office changes their order and text from «⋯» (§7.4, CH3) */}
+      {editingChecklist && mayEditChecklist ? (
+        <>
+          <ChecklistEditor v={v} />
+          <View testID="visit-checklist-done">
+            <Button label={t("visit.editChecklistDone")} icon="check" variant="secondary" full onPress={() => setEditingChecklist(false)} />
+          </View>
+        </>
+      ) : v.checklist.length > 0 && before0 && !(v.step === "on_site" && isInspection) ? (
+        <Card>
+          <RowView style={{ justifyContent: "space-between" }}>
+            <T v="heading">{t("visit.checklist")}</T>
+            <T v="caption" tone="mut">
+              {t("check.preview", { n: v.checklist.length })}
+            </T>
+          </RowView>
+          {v.checklist.map((item) =>
+            itemKind(item) === "photo" ? (
+              <RowView key={item.id} gap={space[3]} style={{ minHeight: size.hitMin }}>
+                <Icon name="camera" s={size.iconSm} color={c.mut} />
+                <T v="body" style={{ flex: 1 }}>
+                  {item.label}
+                </T>
+              </RowView>
+            ) : (
+              <DoneCircle key={item.id} testID={`chk-pre-${item.id}`} done={item.done} disabled={!canTick(store.role, v, !item.done)} label={item.label} title={item.label} onChange={() => store.toggleCheck(v.id, item.id)} />
+            ),
+          )}
+        </Card>
+      ) : null}
+
+      {/* an inspection with a checklist (В6): ticked on site, checked before «Готово» */}
+      {v.step === "on_site" && isInspection && (ticking || addingItem) ? <ChecklistCard v={v} missing={gate.missing} adding={addingItem} onAdded={() => setAddingItem(false)} /> : null}
+
+      {v.step === "on_site" || v.step === "working" ? (
+        <Card>
+          <T v="heading">{t("visit.photosBefore")}</T>
+          <PhotoStrip
+            photos={before}
+            onAdd={(uri) => toast.show(queuedHint() ?? t("toast.photo"), store.addPhoto(v.id, "before", uri))}
+            onRemove={removePhoto}
+            onRetry={retryPhoto}
+          />
+        </Card>
+      ) : null}
+
+      {v.step !== "on_site" && v.step !== "working" && failedHere.length ? (
+        <Card>
+          <T v="heading">{t("photoUp.title")}</T>
+          <PhotoStrip photos={failedHere} onRetry={retryPhoto} />
+        </Card>
+      ) : null}
+
+      {v.step === "working" ? (
+        <>
+          {ticking || addingItem ? <ChecklistCard v={v} missing={gate.missing} adding={addingItem} onAdded={() => setAddingItem(false)} /> : null}
+          <Card>
+            <T v="heading">{t("visit.photosAfter")}</T>
+            <PhotoStrip photos={after} onAdd={(uri) => toast.show(queuedHint() ?? t("toast.photo"), store.addPhoto(v.id, "after", uri))} onRemove={removePhoto} onRetry={retryPhoto} />
+            {gate.missing.photosAfter > 0 ? (
+              <StatusNote tone="warn">{t("chk.needAfter", { n: gate.missing.photosAfter })}</StatusNote>
+            ) : null}
+          </Card>
+          <View ref={signRef} collapsable={false}>
+            <SectionTitle title={t("step.sign")} />
+          </View>
+          <Card>
+            <StackBackGestureOff />
+            <SignaturePad onConfirm={goSign} />
+          </Card>
+        </>
+      ) : null}
+
+      {office ? <WhenWho visitId={v.id} /> : null}
+      {office ? <OfficeLocation v={v} geo={property?.geo} /> : null}
+      <TechLocation v={v} geo={property?.geo} />
+      {/* add-on modules' place (spec 33 П24 А7): nothing unless a module is switched on */}
+      <ModulePlaces place="visit" ctx={{ visitId: v.id, leadId: v.leadId, customerId: servable ? customer?.id : undefined, propertyId: property?.id }} />
       {job ? <NotesBlock subjectType="job" subjectId={job.id} /> : v.leadId ? <NotesBlock subjectType="lead" subjectId={v.leadId} /> : null}
       <MissingSheet v={v} missing={gate.missing} open={!!ask} step={ask?.step ?? "sign"} onFill={() => setAsk(null)} onSkip={skipAndGo} />
       <Sheet visible={noShow} onClose={() => setNoShow(false)} title={t("noShow.title")}>
@@ -421,8 +481,39 @@ export default function VisitScreen() {
           </View>
         </View>
       </Sheet>
+      <RelatedBlock of={{ type: "visit", id: v.id }} />
+      <Menu
+        visible={!!moreAt}
+        anchor={moreAt}
+        title={customer?.name ?? t("visit.title")}
+        items={moreItems}
+        onSelect={(k) => {
+          setMoreAt(null);
+          if (k === "message") sms();
+          else if (k === "checklist") setEditingChecklist(true);
+          else if (k === "addItem") setAddingItem(true);
+          else if (k === "noShow") setNoShow(true);
+          else if (k === "cancel") setCancelling(true);
+        }}
+        onClose={() => setMoreAt(null)}
+      />
+      {/* «Отменить выезд» asks the reason first — the sheet is the confirmation; a cancelled visit leaves the screens: the
+          screen asks «Сообщить клиенту?» (cancelAsk outlives the visit), then goes back */}
+      <CancelVisitSheet visitId={cancelling ? v.id : null} onClose={() => setCancelling(false)} onDone={setCancelled} />
       <CallSheet preset={calling} onClose={() => setCalling(null)} />
       <MessageSheet preset={writing} onClose={() => setWriting(null)} />
     </Screen>
+  );
+}
+
+/** «Завершить» at work (K6): the one main button stays at the top; the work ends with the client's signature, so it takes
+ *  the page down to the signature (the screen's scroll is offered to its children only — hence a component of its own) */
+function FinishButton({ target, label }: { target: RefObject<ComponentRef<typeof View> | null>; label: string }) {
+  const scroll = useScreenScroll();
+  const reduce = useReducedMotion();
+  return (
+    <View testID="visit-main-finish">
+      <Button label={label} icon="check" full onPress={() => target.current && scroll?.scrollToNode(target.current, space[4], !reduce)} />
+    </View>
   );
 }
