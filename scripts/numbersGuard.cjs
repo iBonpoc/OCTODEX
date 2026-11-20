@@ -14,7 +14,7 @@
  * «| e2e | 482–497 | #2075 |», «| T | 363 | #2080 |». A number reserved for a task is that task's: a PR may use it only when its body names
  * the task (Closes / Refs #N). A row without a task («—») only says «given out», nobody's yet.
  *
- * `decide` is pure; the CLI reads git (BASE_SHA … HEAD_SHA) and the PR's body (PR_BODY).
+ * `decide` is pure; the CLI reads git (BASE_SHA … HEAD_SHA) and the PR's body live through the REST API (PR_NUMBER, GH_TOKEN; like rule22.cjs, never from the event).
  */
 const MIGRATION = /^supabase\/migrations\/(\d{14})_[^/]+\.sql$/;
 const SPEC = /^apps\/mobile\/e2e\/(?:cloud\/)?specs\/(\d+)-[^/]+$/;
@@ -131,6 +131,12 @@ if (require.main === module) {
   const show = (rev, path) => { try { return git("show", `${rev}:${path}`); } catch { return ""; } };
   const added = git("diff", "--name-only", "--diff-filter=A", "--no-renames", from, head).split("\n").filter(Boolean);
   const rlsDiff = git("diff", "-U0", from, head, "--", RLS);
+  // the body is read live (not pasted from the event into the step); not a PR (no PR_NUMBER) — no body, only told
+  const prBody = () => {
+    if (!process.env.PR_NUMBER) return undefined;
+    const out = execFileSync("gh", ["api", `repos/${process.env.GITHUB_REPOSITORY}/pulls/${process.env.PR_NUMBER}`, "--jq", ".body // \"\""], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    return out.replace(/\n$/, "");
+  };
   const res = decide({
     added,
     baseMigrations: versions(ls(from, "supabase/migrations")),
@@ -139,7 +145,7 @@ if (require.main === module) {
     rlsAddedLines: rlsDiff.split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++")).map((l) => l.slice(1)),
     baseTests: testsOf(show(from, RLS)),
     reservedMd: show(head, "supabase/migrations/RESERVED.md"),
-    body: process.env.PR_BODY,
+    body: prBody(),
   });
   for (const n of res.notes) console.log(`::notice::${n}`);
   if (res.ok) { console.log("ok: номера миграций, e2e и T уникальны"); process.exit(0); }
