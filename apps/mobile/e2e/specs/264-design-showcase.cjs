@@ -42,6 +42,10 @@ exports.run = async (h) => {
   await vis("showcase-screen-motion").waitFor({ timeout: 5000 });
   const motion = await p.getByTestId("token-motion.durFast").locator("xpath=../..").innerText();
   h.expect(/160/.test(motion), `motion.durFast shows 160 (${motion.replace(/\n/g, " ")})`);
+  // Ш III-1 (#2292): the new tokens are drawn by the group, nothing is added by hand
+  const durPress = await p.getByTestId("token-motion.durPress").locator("xpath=../..").innerText();
+  h.expect(/80/.test(durPress), `motion.durPress shows 80 (${durPress.replace(/\n/g, " ")})`);
+  h.expect((await p.getByTestId("token-motion.easeInOut").count()) === 1, "motion.easeInOut is in the showcase");
 
   // an unknown section returns to the list
   await h.go("/settings/design-system/nothing");

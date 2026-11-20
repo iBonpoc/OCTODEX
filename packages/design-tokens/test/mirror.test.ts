@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { component, drawing, drawingPrint, font, graphite, icons, motion, print, radius, shopSheet, size, space, spaceHalf, themes, tokens } from "../src/index";
+import { component, drawing, drawingPrint, font, graphite, icons, motion, print, radius, shopSheet, size, space, spaceHalf, themes, tokens, z } from "../src/index";
 
 /**
  * The founder's design system (design/naryad-ds/tokens/*.css, icons.json) is the source of truth.
@@ -121,6 +121,9 @@ describe("app tokens mirror the founder's DS css", () => {
     expect([...motion.easeIn]).toEqual(bez("ease-in"));
     expect([...motion.easeSpring]).toEqual(bez("ease-spring"));
     expect([...motion.easeLiquid]).toEqual(bez("ease-liquid"));
+    expect(motion.durPress).toBe(px("dur-press"));
+    expect([[...motion.easeInOut], [...motion.easeBrandWay], [...motion.easeBrandFold]]).toEqual([bez("ease-in-out"), bez("ease-brand-way"), bez("ease-brand-fold")]);
+    expect([z.under, z.over, z.dragged]).toEqual([px("z-under"), px("z-over"), px("z-dragged")]);
     expect([motion.toastInfoMs, motion.toastUndoA11yMs, motion.spinnerDelayMs, motion.actionTimeoutMs]).toEqual([px("toast-info-ms"), px("toast-undo-a11y-ms"), px("spinner-delay-ms"), px("action-timeout-ms")]);
     expect([motion.menuScale, motion.alertScale, motion.skeletonCycle]).toEqual([parseFloat(v("menu-scale")), parseFloat(v("alert-scale")), px("skeleton-cycle")]);
     expect([motion.liquidStretch, motion.liquidSettle]).toEqual([px("liquid-stretch"), px("liquid-settle")]);
