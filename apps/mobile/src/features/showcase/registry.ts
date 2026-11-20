@@ -19,6 +19,8 @@ export interface ShowcaseScreen {
   ds: string;
   /** «где в приложении»: the screens where this is seen */
   where: DictKey;
+  /** a pilot behind a switch of the showcase (#2254): the row and the screen show only when it is on */
+  pilot?: "graphite";
 }
 
 export interface ShowcaseSection {
@@ -49,6 +51,8 @@ export const SCREENS: ShowcaseScreen[] = [
   { id: "haptics", title: "ds.scr.haptics", hint: "ds.scr.hapticsHint", icon: "phone", ds: "§15.6", where: "ds.where.haptics" },
   { id: "spacing", title: "ds.sec.layout", hint: "ds.scr.spacingHint", icon: "route", ds: "§5", where: "ds.where.spacing" },
   { id: "brand", title: "ds.brand.title", hint: "ds.scr.brandHint", icon: "star", ds: "§18.2", where: "ds.where.brand" },
+  // «Графит» — пилот, не правило (#2254): behind the switch on the showcase's first screen, off by default
+  { id: "graphite", title: "ds.gr.title", hint: "ds.gr.hint", icon: "sun", ds: "§25", where: "ds.gr.where", pilot: "graphite" },
 ];
 
 export const SECTIONS: ShowcaseSection[] = [
@@ -65,6 +69,7 @@ export const SECTIONS: ShowcaseSection[] = [
   { id: "tokens-text", screen: "base", ds: "§4", title: "ds.sec.text", tokenGroups: ["font"], components: [] },
   { id: "tokens-layout", screen: "spacing", ds: "§5", title: "ds.sec.layout", tokenGroups: ["space", "spaceHalf", "radius", "size", "breakpoint", "layout", "z", "component"], components: [] },
   { id: "tokens-motion", screen: "motion", ds: "§14", title: "ds.sec.motion", tokenGroups: ["motion", "timing"], components: [] },
+  { id: "graphite", screen: "graphite", ds: "§25", title: "ds.gr.title", tokenGroups: [], components: [] },
   { id: "tokens-print", screen: "base", ds: "§19", title: "ds.sec.print", tokenGroups: ["print", "drawingPrint", "shopSheet"], components: [] },
 ];
 

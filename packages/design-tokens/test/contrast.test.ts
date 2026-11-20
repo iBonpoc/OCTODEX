@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { component, print, themes, type ThemeName } from "../src/index";
+import { component, graphite, print, themes, type ThemeName } from "../src/index";
 
 /** WCAG 2.x contrast. Translucent colours are composited over the solid background first. */
 type RGBA = [number, number, number, number];
@@ -147,4 +147,40 @@ describe.each(names)("%s switch (DS §9 А5: knob ≥ 3:1 to its track, off / on
     it(`disabled on on ${gname}: the dimmed knob to the dimmed yellow track`, () => expect(ratio(dimmed(parse(c.onAcc), g), dimmed(parse(c.acc), g))).toBeGreaterThanOrEqual(DISABLED_MIN));
   }
   it("on: knob onAcc to the yellow track", () => expect(ratio(parse(c.onAcc), parse(c.acc))).toBeGreaterThanOrEqual(3));
+});
+
+/**
+ * «Графит» — пилот #2254 (handoff §2.1, §3 п.5): text ≥ 7, second text ≥ 4.5, UI parts ≥ 3 — measured on every stop of
+ * the scene (top / middle / bottom), with the panel, the sheet and the liquid-glass fallback laid over it. Native iOS 26
+ * glass is not computable here: its caption sits on `glDim` over the fallback fill (the floor below holds for it).
+ */
+describe.each(names)("«Графит» %s contrast (#2254)", (name) => {
+  const g = graphite.themes[name];
+  const rgb = (x: RGBA) => `rgb(${x[0]},${x[1]},${x[2]})`;
+  const scene = [g.bg, g.bgMid, g.bgLow];
+  const on = (layer: string) => scene.map((s) => over(layer, s));
+  const grounds = { panel: on(g.panel), sheet: on(g.sheetBg), solid: [parse(g.panelSolid)] };
+  for (const [gname, list] of Object.entries(grounds)) {
+    it(`text ≥ 7, text2 ≥ 4.5, statuses ≥ 4.5 on ${gname}`, () => {
+      for (const s of list) {
+        expect(ratio(parse(g.text), s)).toBeGreaterThanOrEqual(7);
+        expect(ratio(parse(g.text2), s)).toBeGreaterThanOrEqual(4.5);
+        for (const st of ["ok", "info", "warn", "bad"] as const) expect(ratio(parse(g[st]), s), st).toBeGreaterThanOrEqual(4.5);
+      }
+    });
+  }
+  it("text on the glass nav (fallback fill + dim under the caption) ≥ 4.5", () => {
+    for (const s of scene) expect(ratio(parse(g.text), over(g.glDim, rgb(over(g.gl, s))))).toBeGreaterThanOrEqual(4.5);
+  });
+  it("the field edge stands out from the panel ≥ 3", () => {
+    for (const p of grounds.panel) expect(ratio(over(g.fieldEdge, rgb(p)), p)).toBeGreaterThanOrEqual(3);
+  });
+  it("text on yellow, on the toast, on the selected pill, on the badge, on danger ≥ 7 / 4.5", () => {
+    expect(ratio(parse(g.onAcc), parse(g.acc))).toBeGreaterThanOrEqual(7);
+    expect(ratio(parse(g.onToast), parse(g.toast))).toBeGreaterThanOrEqual(7);
+    expect(ratio(parse(g.onSel), parse(g.sel))).toBeGreaterThanOrEqual(7);
+    expect(ratio(parse(g.onBadge), parse(g.badge))).toBeGreaterThanOrEqual(7);
+    expect(ratio(parse(g.onDan), parse(g.danBg))).toBeGreaterThanOrEqual(4.5);
+  });
+  it("the yellow fill is one colour in both themes (only the main action and «＋»)", () => expect(g.acc).toBe("#FBFF00"));
 });

@@ -32,6 +32,14 @@ const rules: { name: string; re: RegExp }[] = [
 ];
 
 const outsideUi = code.filter((f) => !f.includes(`${join("src", "ui")}`));
+/**
+ * «Графит» — пилот витрины #2254, НЕ ПРАВИЛО (условие аудита 1; DS §8.0 и §25): ONE named exception — its own folder may
+ * have its own Text, Pressable, TextInput and Modal (the pilot does not touch src/ui). Every tokens-only rule below still
+ * holds there, through the `graphite` tokens. Roll-back = delete the folder (and this line).
+ */
+const PILOT_GRAPHITE = join("src", "features", "showcase", "graphite");
+const inPilot = (f: string) => f.includes(PILOT_GRAPHITE);
+const outsideUiAndPilot = outsideUi.filter((f) => !inPilot(f));
 
 /** #816 (C-08): the general rule lets a bare 0 and 1 through; the module's screens carry no such border — `component.hairline` */
 describe("design system: the module's hairline is a token", () => {
@@ -50,14 +58,14 @@ describe("design system: the module's hairline is a token", () => {
 
 describe("design system: components", () => {
   it("text only through <T> (no raw react-native Text outside src/ui)", () => {
-    const hits = outsideUi.filter((f) => {
+    const hits = outsideUiAndPilot.filter((f) => {
       const imp = readFileSync(f, "utf8").split("\n").find((l) => /from "react-native"/.test(l) && /\bText\b/.test(l) && !l.includes("ds-allow"));
       return !!imp;
     });
     expect(hits.map((f) => relative(ROOT, f))).toEqual([]);
   });
   it("taps only through Press / Button / IconButton / Card (44 pt hit area), no raw Pressable / Touchable* outside src/ui", () => {
-    const hits = outsideUi.filter((f) =>
+    const hits = outsideUiAndPilot.filter((f) =>
       readFileSync(f, "utf8")
         .split("\n")
         .some((l) => /from "react-native"/.test(l) && /\b(Pressable|TouchableOpacity|TouchableHighlight|TouchableWithoutFeedback)\b/.test(l) && !l.includes("ds-allow")),
@@ -75,7 +83,7 @@ describe("design system: components", () => {
   const countIn = (src: string, re: RegExp) => (src.match(re) || []).length;
   it("rule 29: no own Modal outside src/ui (sheets and windows — Sheet / InputDialog of src/ui); the old ones only go down", () => {
     const now: Record<string, number> = {};
-    for (const f of outsideUi) {
+    for (const f of outsideUiAndPilot) {
       const src = readFileSync(f, "utf8");
       if (!/import\s*\{[^}]*\bModal\b[^}]*\}\s*from\s*"react-native"/.test(src)) continue;
       const n = countIn(src, /<Modal\b/g);
@@ -285,7 +293,7 @@ describe("design system: components", () => {
     for (const f of ["SortableList.tsx", "dnd.tsx"]) expect(readFileSync(join(ROOT, "features", f), "utf8")).toMatch(/holdConfig\(/);
   });
   it("text fields only through <TextField> (no raw TextInput outside src/ui)", () => {
-    const hits = outsideUi.filter((f) =>
+    const hits = outsideUiAndPilot.filter((f) =>
       readFileSync(f, "utf8")
         .split("\n")
         .some((l) => /from "react-native"/.test(l) && /\bTextInput\b/.test(l) && !l.includes("ds-allow")),
@@ -315,6 +323,22 @@ describe("design system: components", () => {
         });
     }
     expect(hits, hits.join("\n")).toEqual([]);
+  });
+});
+
+describe("design system: «Графит» stays a pilot (#2254)", () => {
+  const REL = (f: string) => relative(ROOT, f).split("\\").join("/");
+  it("the `graphite` tokens are read only inside the pilot folder", () => {
+    const hits = code.filter((f) => !inPilot(f) && /\bgraphite(Themes)?\b[^\n]*from "@octo\/design-tokens"|from "@octo\/design-tokens"[^\n]*\bgraphite\b/.test(readFileSync(f, "utf8"))).map(REL);
+    expect(hits).toEqual([]);
+  });
+  it("the pilot folder is opened only by the showcase (its first screen and its section screen)", () => {
+    const hits = code.filter((f) => !inPilot(f) && /features\/showcase\/graphite\//.test(readFileSync(f, "utf8"))).map(REL);
+    expect(hits.sort()).toEqual(["app/settings/design-system/[section].tsx", "app/settings/design-system/index.tsx"]);
+  });
+  it("Jost is loaded only by the pilot (the app's start is not touched)", () => {
+    const hits = code.filter((f) => !inPilot(f) && /@expo-google-fonts\/jost/.test(readFileSync(f, "utf8"))).map(REL);
+    expect(hits).toEqual([]);
   });
 });
 

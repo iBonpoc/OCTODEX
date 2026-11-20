@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "dependencies": {
+    "@expo-google-fonts/jost": "^0.4.2",
     "@expo-google-fonts/onest": "^0.4.2",
     "@octo/design-tokens": "*",
     "@octo/estimating-engine": "*",
