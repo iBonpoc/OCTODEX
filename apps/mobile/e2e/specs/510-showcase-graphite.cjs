@@ -91,6 +91,11 @@ exports.run = async (h) => {
   await vis("gr-toast").waitFor({ timeout: 4000 });
   h.expect((await rows()) === 2, "С6: a row is gone");
   await h.shot("toast");
+  // v2 §3 п.15: the toast never covers the main button; the main button keeps 8 above the nav (design-reviewer, #2254)
+  const box = async (id) => vis(id).boundingBox();
+  const [toastB, mainB, navB] = [await box("gr-toast"), await box("gr-primary"), await box("gr-nav")];
+  h.expect(toastB.y + toastB.height <= mainB.y - 7.5, `С6: the toast stands above the main button (${toastB.y + toastB.height} / ${mainB.y})`);
+  h.expect(mainB.y + mainB.height <= navB.y - 7.5, `С6: the main button keeps 8 above the nav (${mainB.y + mainB.height} / ${navB.y})`);
   await vis("gr-toast-undo").click();
   await until("С6 row back", () => document.querySelectorAll('[data-testid^="gr-row-"]').length === 3);
   await p.getByTestId("gr-toast").waitFor({ state: "detached", timeout: 4000 });

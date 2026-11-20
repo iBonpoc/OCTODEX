@@ -70,6 +70,7 @@
   --gr-motion-behind-scale:0.96;
   --gr-motion-toast-rise:12;
   --gr-sheet-max-detents:3;
+  --gr-sheet-max-width:560;
   --gr-sheet-side:8;
   --gr-sheet-float:8;
   --gr-sheet-top-gap:60;

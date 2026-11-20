@@ -37,7 +37,8 @@ export function GrSheet({
 }) {
   const { t } = useI18n();
   const { g, reduceMotion } = useGr();
-  const { height: screenH } = useWindowDimensions();
+  const { height: screenH, width: screenW } = useWindowDimensions();
+  const side = Math.max(SH.side, (screenW - SH.maxWidth) / 2);
   const d = detents(screenH);
   const target = d.half;
   const h = useSharedValue(0);
@@ -134,8 +135,9 @@ export function GrSheet({
           style={[
             {
               position: "absolute",
-              left: SH.side,
-              right: SH.side,
+              // a phone sheet: on a wide screen it keeps its width, centred
+              left: side,
+              right: side,
               bottom: SH.float,
               zIndex: graphite.z.sheet,
             },
@@ -143,6 +145,7 @@ export function GrSheet({
           ]}
         >
           <GrMatte
+            sheet
             radius={graphite.radius.sheet}
             still={moving}
             style={{

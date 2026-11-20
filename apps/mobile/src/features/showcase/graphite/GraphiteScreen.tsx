@@ -133,6 +133,8 @@ export function GraphiteScreen({ onClose }: { onClose: () => void }) {
   const [toasts, setToasts] = useState<GrToastMsg[]>([]);
   const seq = useRef(0);
   const navBottom = Math.max(ins.bottom, SP[2]);
+  /** the main action stands fixed over the nav with an 8 gap; toasts stand over it (v2 §3 п.15: never over the main button) */
+  const actionsBottom = navBottom + S.nav + SP[2];
   const show = (m: Omit<GrToastMsg, "id">) =>
     setToasts((st) => toastPush(st, { ...m, id: ++seq.current }));
 
@@ -184,10 +186,31 @@ export function GraphiteScreen({ onClose }: { onClose: () => void }) {
       <ScrollView
         contentContainerStyle={{
           paddingHorizontal: SP[4],
-          paddingBottom: S.nav + navBottom + SP[12],
+          // the nav, the fixed action row above it and their gaps: the last panel scrolls clear of both
+          paddingBottom: actionsBottom + S.button + SP[4],
           gap: SP[3],
         }}
       >
+        <View
+          testID="gr-access"
+          style={{
+            alignSelf: "flex-start",
+            backgroundColor: g.bgVeil,
+            borderRadius: graphite.radius.sm,
+            paddingHorizontal: SP[2],
+            paddingVertical: SP[1],
+          }}
+        >
+          <GrText v="micro" tone="text2">
+            {t("ds.gr.access", {
+              m: t(reduceMotion ? "ds.gr.on" : "ds.gr.off"),
+              t: t(reduceTransparency ? "ds.gr.on" : "ds.gr.off"),
+            })}
+          </GrText>
+          <GrText v="micro" tone="text2">
+            {t(GLASS_LABEL[glass])}
+          </GrText>
+        </View>
         <GrPanel testID="gr-panel" title={t("ds.gr.burning", { n: "3" })}>
           <GrStatus tone="bad" label={t("ds.gr.st.bad")} />
           <GrStatus tone="warn" label={t("ds.gr.st.warn")} />
@@ -227,40 +250,6 @@ export function GraphiteScreen({ onClose }: { onClose: () => void }) {
         <GrPanel title={t("ds.gr.phone")}>
           <GrPhoneField testID="gr-phone" />
         </GrPanel>
-        <View style={{ gap: SP[2] }}>
-          <GrButton
-            testID="gr-primary"
-            kind="primary"
-            label={t("ds.gr.primary")}
-            onPress={() => show({ text: t("ds.gr.primary") })}
-          />
-          <GrButton
-            testID="gr-secondary"
-            kind="secondary"
-            label={t("ds.gr.secondary")}
-            onPress={() => setSheet(true)}
-          />
-        </View>
-        <View
-          testID="gr-access"
-          style={{
-            alignSelf: "flex-start",
-            backgroundColor: g.bgVeil,
-            borderRadius: graphite.radius.sm,
-            paddingHorizontal: SP[2],
-            paddingVertical: SP[1],
-          }}
-        >
-          <GrText v="micro" tone="text2">
-            {t("ds.gr.access", {
-              m: t(reduceMotion ? "ds.gr.on" : "ds.gr.off"),
-              t: t(reduceTransparency ? "ds.gr.on" : "ds.gr.off"),
-            })}
-          </GrText>
-          <GrText v="micro" tone="text2">
-            {t(GLASS_LABEL[glass])}
-          </GrText>
-        </View>
       </ScrollView>
       <View
         style={{
@@ -273,10 +262,39 @@ export function GraphiteScreen({ onClose }: { onClose: () => void }) {
       >
         <SpotlightNav badge={3} onPlus={() => setSheet(true)} />
       </View>
+      <View
+        testID="gr-actions"
+        style={{
+          position: "absolute",
+          left: SP[4],
+          right: SP[4],
+          bottom: actionsBottom,
+          zIndex: graphite.z.nav,
+          flexDirection: "row",
+          gap: SP[2],
+        }}
+      >
+        <View style={{ flex: 1 }}>
+          <GrButton
+            testID="gr-secondary"
+            kind="secondary"
+            label={t("ds.gr.secondary")}
+            onPress={() => setSheet(true)}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <GrButton
+            testID="gr-primary"
+            kind="primary"
+            label={t("ds.gr.primary")}
+            onPress={() => show({ text: t("ds.gr.primary") })}
+          />
+        </View>
+      </View>
       <GrToasts
         stack={toasts}
         onGone={(id) => setToasts((st) => st.filter((x) => x.id !== id))}
-        bottom={navBottom + S.nav + SP[2]}
+        bottom={actionsBottom + S.button + SP[2]}
       />
       <GrSheet
         open={sheet}

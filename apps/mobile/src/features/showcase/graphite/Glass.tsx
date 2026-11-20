@@ -28,6 +28,7 @@ export function GrMatte({
   radius = graphite.radius.card,
   still,
   flat,
+  sheet,
   style,
   children,
   testID,
@@ -37,6 +38,8 @@ export function GrMatte({
   still?: boolean;
   /** a button / chip / field: the panel's fill tone in tone, no blur (v2 §3 п.2) */
   flat?: boolean;
+  /** the sheet / alert / menu body: the denser `sheetBg` over the blur (v2 §2.1) */
+  sheet?: boolean;
   style?: StyleProp<ViewStyle>;
   children?: ReactNode;
   testID?: string;
@@ -71,7 +74,10 @@ export function GrMatte({
             style={StyleSheet.absoluteFill}
           />
           <View
-            style={[StyleSheet.absoluteFill, { backgroundColor: g.panel }]}
+            style={[
+              StyleSheet.absoluteFill,
+              { backgroundColor: sheet ? g.sheetBg : g.panel },
+            ]}
           />
         </>
       )}

@@ -234,7 +234,7 @@ export const graphite = {
     toastRise: 12,
   },
   /** the sheet: side margin, float above the bottom, gap under the status bar; detents and close rules */
-  sheet: { maxDetents: 3, side: 8, float: 8, topGap: 60, quarter: 0.25, half: 0.5, closeVelocity: 0.5, closeBelow: 0.3, projectMs: 150, resist: 0.25 },
+  sheet: { maxDetents: 3, maxWidth: 560, side: 8, float: 8, topGap: 60, quarter: 0.25, half: 0.5, closeVelocity: 0.5, closeBelow: 0.3, projectMs: 150, resist: 0.25 },
   /** layers, bottom → top */
   z: { scene: 0, panel: 1, header: 10, nav: 20, scrim: 30, sheet: 40, toast: 70 },
 } as const;
