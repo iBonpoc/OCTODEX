@@ -17,6 +17,7 @@ import { usePersistentState } from "@/data/persist";
 import type { DB, Invoice } from "@/data/types";
 import { T } from "@/ui/primitives";
 import { CardList, Empty, Screen } from "@/ui/surfaces";
+import { MoneyTabs } from "@/features/moneyTabs";
 import { CardGrid, ListCardHeader } from "@/ui/listCard";
 
 // a paid invoice: the filter, the group and the chip say one word (DS §4.4 п.1, #1427)
@@ -52,10 +53,10 @@ export default function Invoices() {
   const clientP = customer ? db.customers.find((c) => c.id === customer) : undefined;
   const qShown = q.trim() ? invoiceList({ invoices: db.invoices.filter((i) => matchInvoice(db, i, q)) }, f, { customerId: clientP?.id }) : invoiceList(db, f, { customerId: clientP?.id });
   const panel = useListPanel(canSeeInvoiceList(role) ? qShown.groups.flatMap((g) => g.items.map((i) => i.id)) : [], (id) => `/invoice/${id}`, (id) => canSeeInvoiceList(role) && db.invoices.some((i) => i.id === id));
-  const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));
   if (!canSeeInvoiceList(role))
     return (
-      <Screen title={t("nav.invoices")} back={back}>
+      <Screen title={t("nav.money")}>
+        <MoneyTabs value="invoices" />
         <Empty icon="invoice" title={t("mny.noAccess")} />
       </Screen>
     );
@@ -88,8 +89,7 @@ export default function Invoices() {
   };
   return (
     <Screen
-      title={t("nav.invoices")}
-      back={back}
+      title={t("nav.money")}
       aside={
         openInv ? (
           // #1474: as the invoice's screen — «⋯» in the panel's header row, «Принять оплату» at the top of the card
@@ -108,6 +108,7 @@ export default function Invoices() {
       help={t("mny.invoices.help")}
       hintKey="invoices"
     >
+      <MoneyTabs value="invoices" />
       {/* spec 31 (variant Б): the search (client, address, INV, work) and one lane; the debts first */}
       <FilterBar<InvoiceFilter>
         search={{ value: q, onChange: setQ, placeholder: t("card.filter.searchInvoices") }}

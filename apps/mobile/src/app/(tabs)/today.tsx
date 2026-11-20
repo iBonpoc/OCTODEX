@@ -5,7 +5,7 @@ import { lateAfterOf } from "@/features/scheduleSettings";
 import { View } from "react-native";
 import { isOpenVisit, visitWhen } from "@/features/schedule";
 import { router } from "expo-router";
-import { component, font, motion, size, space } from "@octo/design-tokens";
+import { component, font, layout, motion, size, space, spaceHalf, statusIcon } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { usePersistentState } from "@/data/persist";
 import { awaitingCounts, funnelShare, periodNumbers, prevReceivedCents, receivedBuckets, receivedIndex, receivedSoFar, type Bucket, type Figure, type Period, type ReceivedIndex } from "@/features/metrics";
@@ -15,7 +15,8 @@ import { Columns, Meter } from "@/ui/charts";
 import { useI18n } from "@/i18n";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { buildAttention } from "@/features/attention";
-import { AttentionPeople } from "@/features/AttentionCards";
+import { AttentionNow } from "@/features/AttentionCards";
+import { attentionPeople } from "@/features/attentionPeople";
 import { todayVisits, visitStatus } from "@/features/visits";
 import { crewNow } from "@/features/crewList";
 import { visitContext } from "@/data/selectors";
@@ -153,10 +154,112 @@ function FunnelRow({ icon, label, count, max, share, index, onPress }: { icon: I
   );
 }
 
-/** Owner home: money for today / week / month, the sales funnel and what needs a decision. */
+/** «Дальше» (redesign #2344): the nearest visit — time, client, address, one main button; the rest of the day is one line. */
+function NextVisit() {
+  const { t, time } = useI18n();
+  const { db, role } = useStore();
+  const { c } = useTheme();
+  // a tech sees his own day; the office — the company's (П4b: todayVisits sorts by start)
+  const vs = todayVisits(db, role === "tech" ? db.me : undefined).filter(isOpenVisit);
+  const { current, next } = crewNow(vs);
+  // the tech: the visit he is on comes first; the office: the next one to start (the running ones are in «Бригады»)
+  const v = role === "tech" ? (current ?? next) : (next ?? current);
+  const later = v ? vs.filter((x) => x !== v && x.step === "scheduled" && x.start >= v.start).length : 0;
+  const right = <Button label={t("plan.title")} icon="calendar" size="sm" variant="ghost" onPress={() => router.push("/plan")} />;
+  if (!v)
+    return (
+      <View style={{ gap: space[2] }}>
+        <SectionTitle title={t("todayR.next")} right={right} />
+        <StatusNote tone="ok" v="body">
+          {t("todayR.noVisits")}
+        </StatusNote>
+      </View>
+    );
+  const { customer, property } = visitContext(db, v);
+  const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, v));
+  const techs = (v.assigneeIds ?? (v.techId ? [v.techId] : []))
+    .map((id) => db.members.find((m) => m.id === id)?.name)
+    .filter(Boolean)
+    .join(", ");
+  return (
+    <View style={{ gap: space[2] }}>
+      <SectionTitle title={t("todayR.next")} right={right} />
+      <Card style={{ gap: space[3] }}>
+        <View testID="next-visit" style={{ gap: space[1] }}>
+          <RowView gap={space[2]} style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+            <T v="title" tabular numberOfLines={1} style={{ flexShrink: 1 }}>
+              {visitWhen(v, time, t("plan5.allDay"), false)}
+            </T>
+            <StatusChip status={st.status} label={t(st.label)} soft />
+          </RowView>
+          {customer ? (
+            <T v="heading" w="semibold" numberOfLines={2}>
+              {customer.name}
+            </T>
+          ) : null}
+          {property ? (
+            <RowView gap={space[1]} style={{ alignItems: "flex-start" }}>
+              <Icon name="pin" s={size.iconSm} color={c.mut} />
+              <T v="body" tone="mut" numberOfLines={2} style={{ flex: 1 }}>
+                {`${property.address}, ${property.city}`}
+              </T>
+            </RowView>
+          ) : null}
+          {role !== "tech" && techs ? (
+            <RowView gap={space[1]}>
+              <Icon name="user" s={size.iconSm} color={c.mut} />
+              <T v="body" tone="mut" numberOfLines={1} style={{ flex: 1 }}>
+                {t("todayR.tech", { name: techs })}
+              </T>
+            </RowView>
+          ) : null}
+        </View>
+        {/* the screen's one main button (decision 06 §3) */}
+        <Button label={t("todayR.openVisit")} full onPress={() => router.push(`/visit/${v.id}`)} />
+        {later > 0 ? (
+          <T v="caption" tone="mut">
+            {t("todayR.laterToday", { n: later })}
+          </T>
+        ) : null}
+      </Card>
+    </View>
+  );
+}
+
+/** one figure of the money line: the label, the amount, one line under it; the whole cell opens its records */
+function MoneyCell({ label, value, sub, tone, onPress }: { label: string; value: string; sub?: string; tone?: "bad"; onPress: () => void }) {
+  const { c } = useTheme();
+  return (
+    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={[`${label}: ${value}`, sub].filter(Boolean).join(", ")} containerStyle={{ flex: 1 }}>
+      <View style={{ minHeight: size.hitMin, gap: spaceHalf.hair }}>
+        <T v="caption" tone="mut" numberOfLines={1}>
+          {label}
+        </T>
+        <RowView gap={space[1]}>
+          {/* overdue is a status: icon + word (rule 2) */}
+          {tone ? <Icon name={statusIcon[tone]} s={size.iconSm} color={c.status[tone].text} /> : null}
+          <T v="heading" w="semibold" tone={tone ?? "ink"} tabular numberOfLines={1} style={{ flexShrink: 1 }}>
+            {value}
+          </T>
+        </RowView>
+        {sub ? (
+          <T v="caption" tone="mut" numberOfLines={1}>
+            {sub}
+          </T>
+        ) : null}
+      </View>
+    </Press>
+  );
+}
+
 /** the home cards have come in once in this session (spec 24 A4) */
 let homeAppeared = false;
 
+/**
+ * «Сегодня» (redesign #2344, decision 06; К6 п.3–4): first what needs doing now — the next visit with one main button and
+ * «Требует действия» (3 people + «Все»); then money as one line (Получено · Ждёт оплаты · Просрочено), the chart and the
+ * funnel folded under «Подробнее»; then the crews and the setup cards. Same data and numbers as before, only the order and the look.
+ */
 export default function Today() {
   useTick();
   const reduce = useReducedMotion();
@@ -169,9 +272,11 @@ export default function Today() {
     if (animate) shown.value = withTiming(1, { duration: motion.durSlow, easing: Easing.bezier(...motion.easeOut) });
   }, [animate, shown]);
   const appearStyle = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ translateY: (1 - shown.value) * space[2] }] }));
-  const { t, tn, day, time } = useI18n();
+  const { t, tn, day, time, moneyWhole } = useI18n();
   const { db, role, rejectedOps, mode } = useStore();
   const [period, setPeriod] = usePersistentState<Period>("octo.todayPeriod.v1", "today");
+  // the chart and the funnel are folded by default (К6 п.3): one tap opens them, the choice is kept
+  const [details, setDetails] = usePersistentState<boolean>("octo.todayDetails.v1", false);
   // the company's day and zone are part of the key: left open overnight (useTick re-renders), the numbers move to
   // the new day at midnight, not when db changes next (review #270); a new company zone re-sorts the payments
   const today = todayKey();
@@ -184,123 +289,164 @@ export default function Today() {
   const open = (f: Figure) => router.push(`/figures/${f}?period=${period}`);
   // a money change the server refused is first here too (docs/specs/23 §3)
   const attention = buildAttention(db, role, undefined, { rejected: rejectedOps, mode });
+  const people = attentionPeople(db, attention).length;
   // invited or switched off people are not a crew (7-2)
   const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
   const aw = awaitingCounts(db);
+  const got = receivedSoFar(idx, period, today);
+  const periodWord = t(period === "today" ? "today.title" : period === "week" ? "plan.week" : "plan.month");
   const fmax = Math.max(n.leads, n.sent, n.signed);
   const shareText = (key: "today2.ofLeads" | "today2.ofSent", v: number | undefined) => (v === undefined ? undefined : t(key, { n: v }));
-  const received = <Received period={period} idx={idx} onPress={() => open("received")} />;
-  const tiles = (
-    <View style={{ flexDirection: "row", gap: space[2] }}>
-      <Kpi label={t("today.signed")} cents={n.signedCents} icon="signature" hint={t("today.nEstimates", { n: n.signed })} onPress={() => open("signed")} />
-      <Kpi
-        label={t("today.awaiting")}
-        cents={n.awaitingCents}
-        icon="invoice"
-        hint={t("today2.nInvoices", { n: aw.open })}
-        chip={aw.overdue > 0 ? t("today2.overdue", { n: aw.overdue }) : undefined}
-        onPress={() => router.push("/invoice?f=owed")}
+
+  const action = (
+    <View style={{ gap: space[2] }}>
+      <SectionTitle
+        // the count sits next to the title, not at the far edge (unslop 05.11)
+        title={attention.length ? `${t("todayR.action")} · ${attention.length}` : t("todayR.action")}
+        right={people > ACTION_MAX ? <Button label={t("todayR.all")} size="sm" variant="ghost" onPress={() => router.push("/triage")} /> : undefined}
       />
+      {attention.length === 0 ? (
+        <StatusNote tone="ok" v="body">
+          {t("today.allClear")}
+        </StatusNote>
+      ) : (
+        <AttentionNow items={attention} max={ACTION_MAX} />
+      )}
     </View>
   );
-  const funnel = (
-    <Card>
-      <SectionTitle title={`${t("today.funnel")} · ${t(period === "today" ? "today.title" : period === "week" ? "plan.week" : "plan.month")}`} />
-      <FunnelRow icon="inbox" index={0} label={t("today.f.leads")} count={n.leads} max={fmax} onPress={() => open("leads")} />
-      <FunnelRow icon="send" index={1} label={t("today.f.sent")} count={n.sent} max={fmax} share={shareText("today2.ofLeads", funnelShare(n.sent, n.leads))} onPress={() => open("sent")} />
-      <FunnelRow icon="signature" index={2} label={t("today.f.signed")} count={n.signed} max={fmax} share={shareText("today2.ofSent", funnelShare(n.signed, n.sent))} onPress={() => open("signed")} />
-    </Card>
-  );
-  return (
-    <Screen title={t("today.title")} help={t("help.today")} hintKey="today" fab="home" home subtitle={day(new Date().toISOString())}>
-      <Segmented<Period>
-        value={period}
-        onChange={setPeriod}
-        items={[
-          { key: "today", label: t("today.title") },
-          { key: "week", label: t("plan.week") },
-          { key: "month", label: t("plan.month") },
-        ]}
+
+  const money = (
+    <View style={{ gap: space[2] }}>
+      <SectionTitle
+        title={t("nav.money")}
+        right={<Button label={t(details ? "todayR.collapse" : "todayR.details")} icon={details ? "chevronUp" : "chevronDown"} size="sm" variant="ghost" onPress={() => setDetails(!details)} />}
       />
-      {/* spec 24 A: the main number with columns, two tiles, the funnel in counts as bars (founder 07.11) */}
+      <Card>
+        <RowView gap={space[3]} style={{ alignItems: "flex-start" }}>
+          <MoneyCell label={t("today.received")} value={moneyWhole(got.cents)} sub={periodWord} onPress={() => open("received")} />
+          <MoneyCell label={t("today.awaiting")} value={moneyWhole(n.awaitingCents)} sub={t("today2.nInvoices", { n: aw.open })} onPress={() => router.push("/invoice?f=owed")} />
+          <MoneyCell
+            label={t("todayR.overdue")}
+            value={aw.overdue > 0 ? tn("todayR.invN", aw.overdue) : t("todayR.none")}
+            tone={aw.overdue > 0 ? "bad" : undefined}
+            onPress={() => router.push("/invoice?f=owed")}
+          />
+        </RowView>
+      </Card>
+      {details ? (
+        <View style={{ gap: space[3] }}>
+          <Segmented<Period>
+            value={period}
+            onChange={setPeriod}
+            items={[
+              { key: "today", label: t("today.title") },
+              { key: "week", label: t("plan.week") },
+              { key: "month", label: t("plan.month") },
+            ]}
+          />
+          <Received period={period} idx={idx} onPress={() => open("received")} />
+          <Kpi label={t("today.signed")} cents={n.signedCents} icon="signature" hint={t("today.nEstimates", { n: n.signed })} onPress={() => open("signed")} />
+          <Card>
+            <SectionTitle title={`${t("today.funnel")} · ${periodWord}`} />
+            <FunnelRow icon="inbox" index={0} label={t("today.f.leads")} count={n.leads} max={fmax} onPress={() => open("leads")} />
+            <FunnelRow icon="send" index={1} label={t("today.f.sent")} count={n.sent} max={fmax} share={shareText("today2.ofLeads", funnelShare(n.sent, n.leads))} onPress={() => open("sent")} />
+            <FunnelRow icon="signature" index={2} label={t("today.f.signed")} count={n.signed} max={fmax} share={shareText("today2.ofSent", funnelShare(n.signed, n.sent))} onPress={() => open("signed")} />
+          </Card>
+        </View>
+      ) : null}
+    </View>
+  );
+
+  const crew = techs.length ? (
+    <View style={{ gap: space[2] }}>
+      <SectionTitle title={t("today.crew")} />
+      {/* one list card per tech (spec 06, PR10a): where now, what next, call / SMS */}
+      <View style={{ gap: space[2] }}>
+        {techs.map((m) => {
+          const vs = todayVisits(db, m.id);
+          const { current, next } = crewNow(vs);
+          const st = current ? visitStatus(current, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, current)) : next ? visitStatus(next, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, next)) : null;
+          const where = (v: typeof current) => {
+            if (!v) return undefined;
+            const { customer, property } = visitContext(db, v);
+            return [customer?.name, property ? `${property.address}, ${property.city}` : undefined].filter(Boolean).join(" · ");
+          };
+          return (
+            <ListCard
+              key={m.id}
+              testID="crew-card"
+              title={m.name}
+              when={tn("visits.today", vs.length)}
+              lead={{ kind: "initials", text: m.initials, dashed: m.kind === "sub" }}
+              // read only: the visit's own status (its steps move on the visit screen)
+              status={st ? { tone: st.status, label: t(st.label) } : { tone: "neutral", label: t("plan.free") }}
+              facts={{
+                now: where(current),
+                next: next ? [visitWhen(next, time, t("plan5.allDay"), false), visitContext(db, next).customer?.name].filter(Boolean).join(" · ") : undefined,
+              }}
+              // a tech: call / SMS only (his address is not a place to go)
+              contact={{ phone: m.phone }}
+              edge={null}
+              density="regular"
+              onPress={() => router.push(current ? `/visit/${current.id}` : "/plan")}
+            />
+          );
+        })}
+      </View>
+    </View>
+  ) : null;
+
+  const setup = (
+    <>
+      <CompanySetupCard />
+      <FirstStepsCard />
+    </>
+  );
+  const now = (
+    <View style={{ gap: space[3] }}>
+      <NextVisit />
+      {action}
+      <NoticesCard />
+    </View>
+  );
+  const cols = layout.gridCols[device];
+  return (
+    // the hint line is gone (К6 п.4): the same words are behind «?» in the header
+    <Screen title={t("today.title")} help={t("help.today")} fab="home" home subtitle={day(new Date().toISOString())}>
       {/* the cards come in once per session (A4: FadeInDown 8, durSlow); not again on coming back to the tab */}
       <Animated.View style={[{ gap: space[3] }, appearStyle]}>
-        {device === "desktop" ? (
-          // 1280: «Получено» | funnel | tiles + company setup (A3) — three full columns
+        {cols === 1 ? (
+          <>
+            {now}
+            {money}
+            {crew}
+            {setup}
+          </>
+        ) : cols === 2 ? (
+          // 820: what to do | money and crews
           <Grid>
-            {received}
-            {funnel}
+            {now}
             <View style={{ gap: space[3] }}>
-              {tiles}
-              <CompanySetupCard />
+              {money}
+              {crew}
+              {setup}
             </View>
           </Grid>
         ) : (
-          <>
-            <Grid>
-              {received}
-              <View style={{ gap: space[3] }}>
-                {tiles}
-                {funnel}
-              </View>
-            </Grid>
-            <CompanySetupCard />
-          </>
+          // 1280: what to do | money | crews and setup
+          <Grid>
+            {now}
+            {money}
+            <View style={{ gap: space[3] }}>
+              {crew}
+              {setup}
+            </View>
+          </Grid>
         )}
       </Animated.View>
-      <FirstStepsCard />
-      <NoticesCard />
-      <Grid>
-        <View style={{ gap: space[2] }}>
-          {/* the count sits next to the title, not at the far edge (unslop 05.11) */}
-          <SectionTitle title={attention.length ? `${t("today.attention")} · ${attention.length}` : t("today.attention")} />
-          {attention.length === 0 ? (
-            <StatusNote tone="ok" v="body">
-              {t("today.allClear")}
-            </StatusNote>
-          ) : (
-            // people view (spec 06 decision 5): one card per client with all reasons, 3 people + «More» → Triage
-            <AttentionPeople items={attention} max={3} />
-          )}
-        </View>
-        <View style={{ gap: space[2] }}>
-          <SectionTitle title={t("today.crew")} right={<Button label={t("plan.title")} icon="calendar" size="sm" variant="ghost" onPress={() => router.push("/plan")} />} />
-          {/* one list card per tech (spec 06, PR10a): where now, what next, call / SMS; a column like «Требует внимания» */}
-          <View style={{ gap: space[2] }}>
-            {techs.map((m) => {
-              const vs = todayVisits(db, m.id);
-              const { current, next } = crewNow(vs);
-              const st = current ? visitStatus(current, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, current)) : next ? visitStatus(next, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, next)) : null;
-              const where = (v: typeof current) => {
-                if (!v) return undefined;
-                const { customer, property } = visitContext(db, v);
-                return [customer?.name, property ? `${property.address}, ${property.city}` : undefined].filter(Boolean).join(" · ");
-              };
-              return (
-                <ListCard
-                  key={m.id}
-                  testID="crew-card"
-                  title={m.name}
-                  when={tn("visits.today", vs.length)}
-                  lead={{ kind: "initials", text: m.initials, dashed: m.kind === "sub" }}
-                  // read only: the visit's own status (its steps move on the visit screen)
-                  status={st ? { tone: st.status, label: t(st.label) } : { tone: "neutral", label: t("plan.free") }}
-                  facts={{
-                    phone: m.phone,
-                    now: where(current),
-                    next: next ? [visitWhen(next, time, t("plan5.allDay"), false), visitContext(db, next).customer?.name].filter(Boolean).join(" · ") : undefined,
-                  }}
-                  // a tech: call / SMS only (his address is not a place to go)
-                  contact={{ phone: m.phone }}
-                  edge={null}
-                  density="rich"
-                  onPress={() => router.push(current ? `/visit/${current.id}` : "/plan")}
-                />
-              );
-            })}
-          </View>
-        </View>
-      </Grid>
     </Screen>
   );
 }
+
+/** «Требует действия» shows this many people; the rest — «Все» → Triage */
+const ACTION_MAX = 3;

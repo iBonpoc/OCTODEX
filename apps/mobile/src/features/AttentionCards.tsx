@@ -66,59 +66,41 @@ export function useAttentionVerbs() {
   return { verb, sheets };
 }
 
-/** «Today»: one card per client (a lead without a client — its own card) with all reasons; the first `max` people. */
-export function AttentionPeople({ items, max }: { items: AttentionItem[]; max: number }) {
+/**
+ * «Today», redesign #2344 (К6 п.3): one light card per person — the name, the worst reason with its one verb, the debt.
+ * No phone line and no row of contact buttons here (they are on the person's own card); the rest of the queue is «Все» → Triage.
+ */
+export function AttentionNow({ items, max }: { items: AttentionItem[]; max: number }) {
   const { db, role } = useStore();
   const { t, money } = useI18n();
   const { verb, sheets } = useAttentionVerbs();
   const office = role !== "tech";
-  const people = attentionPeople(db, items);
-  const shown = people.slice(0, max);
-  const card = (p: (typeof people)[number]) => {
-    const c = p.customerId ? db.customers.find((x) => x.id === p.customerId) : undefined;
-    const l = p.leadId ? db.leads.find((x) => x.id === p.leadId) : undefined;
-    const props = c ? db.properties.filter((x) => x.customerId === c.id) : [];
-    // a reason with no client or lead (a money change the server refused, docs/specs/23 §3): its own words as the title
-    const name = c?.name ?? l?.name ?? (p.items[0]!.name || t(p.items[0]!.label, p.items[0]!.params));
-    const addr = props[0] ? `${props[0].address}, ${props[0].city}` : l?.address ? [l.address, l.city].filter(Boolean).join(", ") : undefined;
-    const worst = p.items[0]!;
-    // several properties: each reason says which address it is about
-    const addrOf = (it: AttentionItem) => {
-      if (props.length < 2) return undefined;
-      const job = db.jobs.find((j) => j.id === it.refId) ?? db.jobs.find((j) => j.id === db.invoices.find((i) => i.id === it.refId)?.jobId);
-      const pid = job?.propertyId ?? db.estimates.find((e) => e.id === it.refId)?.propertyId;
-      return props.find((x) => x.id === pid)?.address;
-    };
-    return (
-      <ListCard
-        key={p.key}
-        title={name}
-        when={t("card.reasons", { n: p.items.length })}
-        lead={{ kind: "initials", text: initials(name), dashed: !!l }}
-        value={office && p.debtCents > 0 ? money(p.debtCents) : undefined}
-        valueLabel={office && p.debtCents > 0 ? t("client.owes") : undefined}
-        // one chip — the worst reason; the edge only for warn / bad (an «info» reason has none)
-        status={{ tone: worst.status, label: t(worst.chip, worst.params) }}
-        edge={worst.status === "bad" || worst.status === "warn" ? worst.status : null}
-        facts={{ phone: c?.phone ?? l?.phone, addr }}
-        reasons={p.items.map((it) => ({
-          key: it.id,
-          tone: it.status,
-          text: t(it.label, it.params),
-          detail: [addrOf(it), (office || it.kind === "rejected") && it.kind !== "overdue" && it.amountCents ? money(it.amountCents) : undefined].filter(Boolean).join(" · ") || undefined,
-          onPress: () => router.push(attentionHref(it)),
-          action: verb(it),
-        }))}
-        contact={{ phone: c?.phone ?? l?.phone, email: c?.email ?? l?.email, addr }}
-        onPress={() => router.push(c ? `/client/${c.id}` : l ? `/lead/${l.id}` : attentionHref(worst))}
-      />
-    );
-  };
+  const people = attentionPeople(db, items).slice(0, max);
   return (
     <View style={{ gap: space[2] }}>
-      {/* the section already sits in a column of «Today» (next to the crew): one card per row at every width */}
-      <View style={{ gap: space[2] }}>{shown.map(card)}</View>
-      {people.length > max ? <Button label={t("card.morePeople", { n: people.length - max })} variant="secondary" size="sm" onPress={() => router.push("/triage")} /> : null}
+      {people.map((p) => {
+        const c = p.customerId ? db.customers.find((x) => x.id === p.customerId) : undefined;
+        const l = p.leadId ? db.leads.find((x) => x.id === p.leadId) : undefined;
+        const worst = p.items[0]!;
+        const name = c?.name ?? l?.name ?? (worst.name || t(worst.label, worst.params));
+        const debt = office && p.debtCents > 0 ? money(p.debtCents) : undefined;
+        return (
+          <ListCard
+            key={p.key}
+            testID="attention-now"
+            title={name}
+            when={p.items.length > 1 ? t("card.reasons", { n: p.items.length }) : undefined}
+            lead={{ kind: "initials", text: initials(name), dashed: !!l }}
+            value={debt}
+            valueLabel={debt ? t("client.owes") : undefined}
+            edge={worst.status === "bad" || worst.status === "warn" ? worst.status : null}
+            density="regular"
+            // the worst reason only: icon + words + its verb (rule 2); the others are counted in «when»
+            reasons={[{ key: worst.id, tone: worst.status, text: t(worst.label, worst.params), onPress: () => router.push(attentionHref(worst)), action: verb(worst) }]}
+            onPress={() => router.push(c ? `/client/${c.id}` : l ? `/lead/${l.id}` : attentionHref(worst))}
+          />
+        );
+      })}
       {sheets}
     </View>
   );

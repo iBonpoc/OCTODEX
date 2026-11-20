@@ -589,7 +589,9 @@ export function Screen({
   // a tab opened from «More» (Plan, Triage…) has a parent too, but it lives in the tab navigator that already draws the pill
   const pinned = wide && !!up && !isTabScreen(routeName);
   /** phone, a section opened from «Ещё» (Jobs, Money, Catalog…; Leads with from=more): «‹ Ещё» — no ☰ any more (variant Б) */
-  const backMore = !wide && menuRoot && (!isTabScreen(routeName) || params.from === "more");
+  // redesign #2348: the three money lists are the «Деньги» tab — no «‹ Ещё» on them
+  const moneyTab = ["estimates", "invoice", "invoice/index", "payments", "payments/index"].includes(routeName) && params.from !== "more";
+  const backMore = !wide && menuRoot && !moneyTab && (!isTabScreen(routeName) || params.from === "more");
   const toMore = () => go("/more");
   /** a tab screen with a header «back» swipes back from the left edge too, by the same handler (nav/backSwipe.ts) */
   const swipeBack = tabBackSwipe({ tabScreen: isTabScreen(routeName), wide, os: Platform.OS, back: hasUp || backMore, keyboard: kb > 0 });
@@ -762,11 +764,11 @@ export function Screen({
       {home ? <CompanyWaiting /> : null}
       {home ? null : <SyncBadge />}
       {/* «Искать везде» on «Главная» (13 v2 §2.2) */}
-      {home ? <SearchEntry /> : null}
+      {/* redesign #2348: on a phone search is its own tab — the line stays on 820/1280 only */}
+      {home && wide ? <SearchEntry /> : null}
       {help && hintKey && !hints.seen(hintKey) ? (
         // redesign #2348 (К6 п.4): a quiet one-line hint, not a half-screen card with an accent frame — the word, then ×
         <RowView
-          testID="screen-hint"
           style={{ alignItems: "center", gap: space[2], paddingLeft: space[3], paddingVertical: space[1], borderRadius: radius.inner, backgroundColor: c.surf2 }}
         >
           <Icon name="help" s={size.iconSm} color={c.mut} />

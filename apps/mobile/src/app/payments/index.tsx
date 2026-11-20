@@ -11,6 +11,7 @@ import { useDevice } from "@/theme/ThemeProvider";
 import { FilterBar } from "@/ui/filterBar";
 import { T } from "@/ui/primitives";
 import { Card, CardList, Empty, Screen } from "@/ui/surfaces";
+import { MoneyTabs } from "@/features/moneyTabs";
 import { CardGrid, ListCard, ListCardHeader } from "@/ui/listCard";
 import type { FactKey } from "@/ui/listCardLayout";
 import { memberName } from "@/features/team";
@@ -40,10 +41,10 @@ export default function Payments() {
   const [q, setQ] = useState("");
   const { t, money, moneyWhole, day } = useI18n();
   const { device } = useDevice();
-  const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));
   if (!canSeePayments(role))
     return (
-      <Screen title={t("mny.payments.title")} back={back}>
+      <Screen title={t("nav.money")}>
+        <MoneyTabs value="payments" />
         <Empty icon="wallet" title={t("mny.noAccess")} />
       </Screen>
     );
@@ -112,7 +113,8 @@ export default function Payments() {
     );
   };
   return (
-    <Screen title={t("mny.payments.title")} back={back} help={t("mny.payments.help")} hintKey="payments">
+    <Screen title={t("nav.money")} help={t("mny.payments.help")} hintKey="payments">
+      <MoneyTabs value="payments" />
       {/* spec 31, one rule (founder 07.11): the magnifier, the periods as the lane (one at a time, with the number of
           payments), the method in the «Фильтр» sheet; the period and the method live in the address (?p=, ?m=) */}
       <FilterBar<PaymentPeriod>

@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import { useStore } from "@/data/store";
 import { languages, useI18n, type Lang } from "@/i18n";
 import { useTheme, type ThemePref } from "@/theme/ThemeProvider";
+import type { AccentName } from "@octo/design-tokens";
 import { Button, ChoiceChips, Segmented, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
@@ -28,7 +29,7 @@ import { BrandLogo } from "@/ui/brand";
 export default function Settings() {
   const { t, lang, setLang } = useI18n();
   const { online, setOnline, resetDemo, mode, role } = useStore();
-  const { pref, setPref } = useTheme();
+  const { pref, setPref, accent, setAccent } = useTheme();
   const toast = useToast();
   const hints = useHints();
   const [showDone, setShowDone] = usePlanShowDone();
@@ -47,6 +48,21 @@ export default function Settings() {
             { key: "system", label: t("more.themeSystem") },
             { key: "dark", label: t("more.dark") },
             { key: "light", label: t("more.light") },
+          ]}
+        />
+      </Card>
+      {/* redesign #2348 (decision 20.11 п.5): the founder compares the accent on the sun — cobalt or amber */}
+      <Card>
+        <T v="heading">{t("more.accent")}</T>
+        <Segmented<AccentName>
+          full
+          testID="settings-accent"
+          label={t("more.accent")}
+          value={accent}
+          onChange={setAccent}
+          items={[
+            { key: "cobalt", label: t("more.accentCobalt") },
+            { key: "amber", label: t("more.accentAmber") },
           ]}
         />
       </Card>

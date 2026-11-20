@@ -6,11 +6,11 @@ import { EstimatesBoard } from "@/features/boards";
 import { IconButton } from "@/ui/controls";
 import { Menu } from "@/ui/overlays";
 import { Screen } from "@/ui/surfaces";
+import { MoneyTabs } from "@/features/moneyTabs";
 
-/** «Сметы»: all estimates, a section of its own for every role (founder 07.11, spec 31 §7а). */
+/** «Деньги» → «Сметы» (redesign #2348: a part of the «Деньги» tab, no «back»): all estimates, a section of its own for every role (founder 07.11, spec 31 §7а). */
 export default function Estimates() {
   const { t } = useI18n();
-  const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));
   // «＋»: a menu at the button — «Новая смета», «Из шаблона…» (DS §8.13, #1117)
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const ref = useRef<ComponentRef<typeof View>>(null);
@@ -24,7 +24,8 @@ export default function Estimates() {
     <>
       <EstimatesBoard
         wrap={(body, aside) => (
-          <Screen title={t("sales.estimates")} back={back} aside={aside} right={add}>
+          <Screen title={t("nav.money")} aside={aside} right={add}>
+            <MoneyTabs value="estimates" />
             {body}
           </Screen>
         )}
