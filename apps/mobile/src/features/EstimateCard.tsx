@@ -33,6 +33,8 @@ import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
 import { canCountersign, canManageLink, canSeeClientLink, canSignDraftOnSite, hisWarning, mySignature } from "@/features/estimateSign";
 import { EstimateReasonSheet } from "@/features/EstimateReasonSheet";
 import { StatusNote } from "@/ui/statusNote";
+import type { IconRowItem } from "@/ui/iconRow";
+import { ObjectScreen, type MainAction, type MoreAction } from "@/ui/templates";
 
 
 /** under the estimate's title (its screen and the panel on 1280): «client · address, city» */
@@ -56,7 +58,11 @@ export type EstimateFrame = (parts: { more: ReactNode; main: ReactNode | null; m
 
 type EstAction = "edit" | "client" | "template" | "pdf" | "revoke";
 
-export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend?: boolean; frame?: EstimateFrame }) {
+/**
+ * What the estimate's screen (`EstimateObject`) and the panel beside the list on 1280 (`EstimateCardBody`) share: who may do what,
+ * the PDF with its C5 check, «⋯»'s actions and the sheets they open (send, PDF check, «Сохранить как шаблон»).
+ */
+function useEstimateCore(e: Estimate, openSend?: boolean) {
   const store = useStore();
   const { db } = store;
   const { t, money, day } = useI18n();
@@ -120,6 +126,35 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
     else if (k === "pdf") pdf();
     else if (k === "revoke") toast.show(t("est.revoke.done"), store.revokeEstimateLink(e.id));
   };
+  const sheets = (
+    <>
+      {universal && maySend ? <SendSheet e={e} visible={sendOpen} onClose={() => setSendOpen(false)} /> : null}
+      {tplHeld.value ? <SaveTemplateSheet key={tplHeld.opening} e={tplHeld.value} visible={tplHeld.visible} onExited={tplHeld.onExited} onClose={() => setTplOpen(false)} /> : null}
+      {pdfIssues ? (
+        <Sheet visible={pdfOpen} onClose={() => setPdfOpen(false)} title={t("ue.pdf")}>
+          <SendCheck
+            id="pdf-check"
+            issues={pdfIssues}
+            canForce={pdfIssues.noPrice.length === 0}
+            optionName={optionNameOf(e.doc)}
+            onEdit={() => {
+              setPdfOpen(false);
+              router.push(`/estimate/new?id=${e.id}`);
+            }}
+            onForce={() => pdf(true)}
+            notes={notes}
+            forceLabel="ue.check.forcePdf"
+            titles={["ue.check.pdfReview", "ue.check.pdfBlocked"]}
+          />
+        </Sheet>
+      ) : null}
+    </>
+  );
+  return { store, db, t, money, day, toast, method, setMethod, maySend, sendOpen, setSendOpen, customer, property, st, q, universal, facts, margin, job, notes, pdf, canEdit, canSend, canRevoke, actions, act, sheets };
+}
+
+export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend?: boolean; frame?: EstimateFrame }) {
+  const { store, db, t, money, day, toast, method, setMethod, setSendOpen, st, q, universal, facts, margin, job, notes, canSend, actions, act, sheets } = useEstimateCore(e, openSend);
   const moreRef = useRef<ComponentRef<typeof View>>(null);
   const [moreAt, setMoreAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const label = [e.number, e.title].filter(Boolean).join(" · ");
@@ -243,26 +278,7 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
         </Card>
       ) : null}
 
-      {universal && maySend ? <SendSheet e={e} visible={sendOpen} onClose={() => setSendOpen(false)} /> : null}
-      {tplHeld.value ? <SaveTemplateSheet key={tplHeld.opening} e={tplHeld.value} visible={tplHeld.visible} onExited={tplHeld.onExited} onClose={() => setTplOpen(false)} /> : null}
-      {pdfIssues ? (
-        <Sheet visible={pdfOpen} onClose={() => setPdfOpen(false)} title={t("ue.pdf")}>
-          <SendCheck
-            id="pdf-check"
-            issues={pdfIssues}
-            canForce={pdfIssues.noPrice.length === 0}
-            optionName={optionNameOf(e.doc)}
-            onEdit={() => {
-              setPdfOpen(false);
-              router.push(`/estimate/new?id=${e.id}`);
-            }}
-            onForce={() => pdf(true)}
-            notes={notes}
-            forceLabel="ue.check.forcePdf"
-            titles={["ue.check.pdfReview", "ue.check.pdfBlocked"]}
-          />
-        </Sheet>
-      ) : null}
+      {sheets}
       <Menu
         visible={!!moreAt}
         anchor={moreAt}
@@ -292,7 +308,225 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
   );
 }
 
-function ApprovedCard({ e, jobId }: { e: Estimate; jobId?: string }) {
+type EstSection = "doc" | "sign";
+type EstMore = EstAction | "signHere" | "reopen" | "decline";
+
+/**
+ * «Смета — просмотр» — the Object template (prototype v2 #2350, LAYOUT-RULES §3, BUILD-SPEC §2.8, object-cards «Смета»).
+ * The screen's one job: bring the estimate to a signature and a deposit — «Отправить → Подписать → Задаток».
+ * ObjectHeader («EST-0006 · название», «статус · сумма · задаток» once, the client ›; ⌄ — the address, the facts, the margin, the
+ * direction) → IconRow: SMS · Почта · Ссылка · PDF · Изменить → ONE main step by the state (a 40 button by its words, the reason
+ * under it): draft → «Отправить клиенту»; sent → «Напомнить»; signed by the client → «Подписать договор»; approved → «Взять задаток
+ * · $X» or «Запланировать работу»; none after that → the sections «Смета · Подпись на месте» (the client signs on this phone —
+ * there the signature's own button is the step, the screen draws no other). «⋯»: «Подписать здесь», «Как видит клиент»,
+ * «Сохранить как шаблон», «Не подписывать — изменить», «Отказать», «Отозвать ссылку» (red, last).
+ */
+export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: boolean; back: () => void }) {
+  const { store, db, t, money, day, toast, method, setMethod, setSendOpen, customer, property, st, q, universal, margin, job, notes, pdf, canEdit, canSend, actions, act, sheets } = useEstimateCore(e, openSend);
+  const quick = useSendGo(e, false);
+  const [section, setSection] = useState<EstSection>("doc");
+  const [ask, setAsk] = useState<"reopen" | "decline" | null>(null);
+  const [depositOpen, setDepositOpen] = useState(false);
+  const planner = canPlan([store.role]);
+  const visits = job ? db.visits.filter((v) => v.jobId === job.id) : [];
+  const mine = mySignature(db, db.me);
+  const signer = canCountersign(db, db.me);
+  const manage = canManageLink(db, db.me);
+  const a = e.approval;
+  // the client signs on this phone: an unsigned universal estimate; the company signs: one the client signed (S8b)
+  const signHere = universal && (e.status === "draft" || e.status === "sent");
+  const countersign = universal && e.status === "awaiting_countersign";
+  const sections: { key: EstSection; label: string }[] = signHere || countersign ? [{ key: "doc", label: t("proto.est.sec.doc") }, { key: "sign", label: t(countersign ? "proto.est.sec.countersign" : "proto.est.sec.sign") }] : [];
+  const onSign = sections.length > 0 && section === "sign";
+  const depositDue = e.status === "approved" && !job && !!e.depositCents && !e.depositPaidAt;
+  const toSchedule = e.status === "approved" && !!job && visits.length === 0 && planner;
+  const sentOn = e.sentAt ? t("proto.est.reason.sentOn", { date: day(e.sentAt) }) : undefined;
+
+  // ONE main step by the state (object-cards «Смета»); in «Подпись на месте» the signature's own button is the step
+  const main: MainAction | undefined = onSign
+    ? undefined
+    : canSend
+      ? e.status === "sent"
+        ? { label: t("proto.est.main.remind"), onPress: () => setSendOpen(true), reason: e.viewedAt ? t("proto.est.reason.viewed", { date: day(e.viewedAt) }) : sentOn, testID: "est-send" }
+        : { label: t("ue.send"), onPress: () => setSendOpen(true), reason: t("proto.est.reason.notSeen"), testID: "est-send" }
+      : countersign && signer
+        ? {
+            label: t("est.countersign.sign"),
+            // the saved signature signs at once («Отменить» on the toast); none yet — the pad in «Подпись»
+            onPress: mine
+              ? () => {
+                  haptics.success();
+                  toast.show(store.online ? t("est.countersign.done") : t("offline.queued"), store.countersignEstimate(e.id, { savedId: mine.id }));
+                }
+              : () => setSection("sign"),
+            reason: a?.at ? t("est.countersign.clientSigned", { name: a.signerName, date: day(a.at) }) : t("est.countersign.clientSignedNoDate"),
+            testID: "est-countersign-main",
+          }
+        : depositDue
+          ? { label: t("proto.est.main.deposit", { amount: money(e.depositCents ?? 0) }), onPress: () => setDepositOpen(true), reason: t("proto.est.reason.deposit"), testID: "est-deposit-main" }
+          : toSchedule
+            ? { label: t("sch.title"), onPress: () => router.push(`/job/schedule?jobId=${job!.id}`), reason: t("ue.toSchedule"), testID: "est-schedule-main" }
+            : undefined;
+  // a second step goes into «⋯» on an object: «Подписать здесь» — the client is beside you
+  const second: MainAction | undefined = signHere && !onSign && canCountersign(db, db.me) ? { label: t("proto.est.second.signHere"), onPress: () => setSection("sign"), testID: "est-sign-here" } : undefined;
+
+  const who = customer?.name ?? "";
+  const of = (what: string) => (who ? t("proto.money.actOf", { what, who }) : what);
+  const send = (how: "sms" | "email" | "copy") => () => {
+    // C5 or a module's word stops it: the sheet shows why and the way out
+    if (quick.issues) return setSendOpen(true);
+    void quick.go(how);
+  };
+  // QuickActions — the icon and its word (П6): sending (the office, an unsigned estimate) · PDF · Изменить (≤ 5)
+  const iconActions: IconRowItem[] = [
+    ...(canSend
+      ? [
+          { icon: "sms" as const, label: t("proto.money.act.sms"), a11y: of(t("ue.sendSms")), onPress: send("sms"), disabled: !customer?.phone, testID: "est-act-sms" },
+          { icon: "mail" as const, label: t("proto.money.act.mail"), a11y: of(t("ue.sendEmail")), onPress: send("email"), disabled: !customer?.email, testID: "est-act-email" },
+          { icon: "link" as const, label: t("proto.money.act.link"), a11y: of(t("ue.copyLink")), onPress: send("copy"), testID: "est-act-copy" },
+        ]
+      : []),
+    ...(universal ? [{ icon: "invoice" as const, label: t("proto.money.act.pdf"), a11y: of(t("ue.pdf")), onPress: () => pdf(), testID: "est-act-pdf" }] : []),
+    ...(canEdit ? [{ icon: "pencil" as const, label: t("ue.edit"), a11y: of(t("ue.edit")), onPress: () => act("edit"), testID: "est-act-edit" }] : []),
+  ].slice(0, 5);
+  const moreList: MoreAction = [
+    ...actions.filter((x) => x.key !== "edit" && x.key !== "pdf").map(({ key, label, icon, destructive, testID }) => ({ key, label, icon, destructive, testID })),
+    ...(countersign && manage ? [{ key: "reopen", label: t("est.reopen.button"), icon: "pencil" as const, testID: "est-act-reopen" }, { key: "decline", label: t("est.decline.button"), icon: "close" as const, testID: "est-act-decline" }] : []),
+  ];
+  const onMore = (k: string) => {
+    const key = k as EstMore;
+    if (key === "reopen" || key === "decline") return setAsk(key);
+    if (key === "signHere") return setSection("sign");
+    act(key);
+  };
+
+  const address = [property?.address, property?.city].filter(Boolean).join(", ");
+  const details = (
+    <View style={{ gap: space[2] }}>
+      {address ? (
+        <T v="caption" tone="mut">
+          {address}
+        </T>
+      ) : null}
+      {/* the deposit and «отправлена» are said once already (the client line, the reason under the step): only the options here */}
+      {universal && (e.doc?.options.length ?? 0) > 1 ? (
+        <T v="caption" tone="mut">
+          {t("ue.nOptions", { n: e.doc!.options.length })}
+        </T>
+      ) : null}
+      {margin?.kind === "pct" ? (
+        <View testID="est-margin">
+          <T v="caption" tone="mut">
+            {t("est.margin", { p: margin.pct })}
+          </T>
+        </View>
+      ) : null}
+      {margin?.kind === "missing" ? (
+        <View testID="est-margin-missing" style={{ alignSelf: "flex-start", maxWidth: "100%" }}>
+          <StatusChip status="warn" soft label={t("est.marginMissing", { n: margin.lines })} />
+        </View>
+      ) : null}
+      {/* T2 (S16): the direction of the business; read-only once the client signed — the job keeps its own */}
+      <ServiceCategoryRow value={e.serviceCategoryId} readOnly={!canChangeEstimateCategory(e.status, store.role)} onChange={(cid) => toast.show(q(t("dir.changed")), store.setEstimateCategory(e.id, cid))} />
+    </View>
+  );
+
+  const doc = e.doc;
+  const docView = (() => {
+    if (!universal || !doc) return <LegacyBody e={e} />;
+    if (e.status === "approved" && a) return <ApprovedCard e={e} jobId={job?.id} noPlan={toSchedule} />;
+    if (e.status === "declined") return (
+      <>
+        <DeclinedCard e={e} />
+        <EstimateView doc={clientDoc(doc)} optionId={mainOption(doc).id} addonIds={[]} readOnly terms={clientTerms(db, e)} />
+      </>
+    );
+    // signed by the client: what they chose; unsigned: the document as the client will read it (no hidden $0 lines, no costs)
+    return <EstimateView doc={clientDoc(doc)} optionId={a?.optionId ?? mainOption(doc).id} addonIds={a?.addonIds ?? []} readOnly terms={clientTerms(db, e)} />;
+  })();
+  const body = (
+    <>
+      {notes.map((n) => (
+        <ModuleNoteCard key={`${n.module}-${n.id}`} n={n} />
+      ))}
+      {e.status === "draft" && store.role === "tech" && canServe(db, e.customerId) ? (
+        <View testID="est-send-office">
+          <T v="caption" tone="mut" numberOfLines={1}>
+            {t("est.tech.officeSends")}
+          </T>
+        </View>
+      ) : null}
+      {onSign ? (countersign ? <CountersignCard e={e} onAsk={setAsk} /> : <OnSiteSign e={e} />) : docView}
+      {!onSign && job && e.status === "approved" ? <ContractStatement jobId={job.id} /> : null}
+      {!onSign && e.status === "approved" && !job && e.depositCents && e.depositPaidAt ? <StatusNote tone="ok">{t("est.depositPaid")}</StatusNote> : null}
+    </>
+  );
+
+  return (
+    <>
+      <ObjectScreen<EstSection>
+        testID="estimate-screen"
+        back={back}
+        header={{
+          testID: "estimate-head",
+          title: [e.number, e.title].filter(Boolean).join(" · ") || t("est.detail"),
+          status: { name: st.s, label: t(st.l) },
+          amount: money(e.totalCents),
+          // «Linda Alvarez › · задаток $77.24» (object-cards): who, and what is taken before the work — once
+          link: customer ? { label: [customer.name, e.depositCents ? t("proto.est.depositShort", { amount: money(e.depositCents) }) : ""].filter(Boolean).join(" · "), onPress: () => router.push(`/client/${customer.id}`) } : undefined,
+          details,
+          labels: { expand: t("ds.proto.expand"), collapse: t("ds.proto.collapse"), more: (n) => t("ds.proto.moreN", { n }) },
+        }}
+        actions={iconActions}
+        main={main}
+        second={second}
+        sections={sections}
+        section={section}
+        onSection={setSection}
+        sectionsLabel={t("proto.est.sections")}
+        more={moreList}
+        onMore={onMore}
+      >
+        {body}
+      </ObjectScreen>
+      {sheets}
+      {countersign ? <ReasonSheets e={e} sheet={ask} onClose={() => setAsk(null)} /> : null}
+      {/* «Взять задаток»: the way, then the record (prototype — the payment sheet of the invoice comes with the deposit invoice) */}
+      <Sheet visible={depositOpen} onClose={() => setDepositOpen(false)} title={t("est.depositDue")}>
+        <View testID="est-deposit-sheet" style={{ gap: space[3] }}>
+          <T v="display" tabular>
+            {money(e.depositCents ?? 0)}
+          </T>
+          <Segmented
+            full
+            value={method}
+            onChange={setMethod}
+            items={[
+              { key: "card", label: t("visit.payCard") },
+              { key: "cash", label: t("visit.payCash") },
+              { key: "check", label: t("visit.payCheck") },
+              { key: "zelle", label: t("visit.payZelle") },
+            ]}
+          />
+          <View testID="est-deposit-record">
+            <Button
+              label={t("est.recordDeposit")}
+              icon="dollar"
+              full
+              onPress={() => {
+                setDepositOpen(false);
+                toast.show(q(t("est.depositToast", { amount: money(e.depositCents ?? 0) })), store.payDeposit(e.id, method));
+              }}
+            />
+          </View>
+        </View>
+      </Sheet>
+    </>
+  );
+}
+
+/** `noPlan` — the screen's main step is «Запланировать работу» already (the estimate's screen): the card does not repeat it */
+function ApprovedCard({ e, jobId, noPlan }: { e: Estimate; jobId?: string; noPlan?: boolean }) {
   const { t, day, time } = useI18n();
   const { db, role } = useStore();
   // #2016: «Запланировать» opens a screen of the planners only — the others see where the job stands, not the button
@@ -312,7 +546,7 @@ function ApprovedCard({ e, jobId }: { e: Estimate; jobId?: string }) {
             <T v="caption" tone="mut">
               {t("ue.toSchedule")}
             </T>
-            {planner ? <Button label={t("sch.title")} icon="calendar" onPress={() => router.push(`/job/schedule?jobId=${jobId}`)} /> : null}
+            {planner && !noPlan ? <Button label={t("sch.title")} icon="calendar" onPress={() => router.push(`/job/schedule?jobId=${jobId}`)} /> : null}
           </>
         ) : null}
         {visits.map((v) => (
@@ -404,28 +638,28 @@ function OnSiteSign({ e }: { e: Estimate }) {
   );
 }
 
-function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onClose: () => void }) {
+/**
+ * Sending an estimate by SMS, email or its link (C5 first; «do not service» sends nothing; a taxed draft of a now tax-exempt client
+ * is re-saved before it goes). The send sheet and the estimate screen's SMS · Почта · Ссылка icons share it. `force` — «Всё равно».
+ */
+function useSendGo(e: Estimate, force: boolean) {
   const store = useStore();
-  const { t, money } = useI18n();
+  const { t } = useI18n();
   const toast = useToast();
   const customer = store.db.customers.find((c) => c.id === e.customerId);
   const company = store.companyName ?? APP_NAME;
   /** to the client in the client's language (rule 7), whatever the app language is */
   const msg = (url: string) => estimateMessage(docLanguageFor(store.db, { customerId: e.customerId, leadId: e.leadId }), { company, name: customer?.name ?? "", totalCents: e.totalCents, number: e.number, link: url });
   // C5 (spec 33 П23.9): «Всё равно отправить» for a test price / a line not in the measurement; never for «нет цены»
-  const [force, setForce] = useState(false);
   const check = beforeSend(store.db, e, { force });
   const notes = estimateNotes(store.db, e);
   const issues = linesOrNotes(check, notes, force);
-  const close = () => {
-    setForce(false);
-    onClose();
-  };
-  const go = async (how: "sms" | "email" | "copy") => {
+  /** true when it went (the caller clears its «Всё равно») */
+  const go = async (how: "sms" | "email" | "copy"): Promise<boolean> => {
     // «do not service» sends nothing; a taxed draft of a client who became «Без налога» is re-saved first (04 §12)
     const pre = beforeSend(store.db, e, { force });
-    if (!pre.ok) return pre.reason === "no_service" ? toast.show(t("client.noServiceHint")) : undefined;
-    if (notes.length && !force) return;
+    if (!pre.ok) return pre.reason === "no_service" ? (toast.show(t("client.noServiceHint")), false) : false;
+    if (notes.length && !force) return false;
     if (pre.resave) store.saveEstimate({ id: e.id, customerId: e.customerId, propertyId: e.propertyId, title: e.title, doc: pre.resave, leadId: e.leadId });
     const token = e.token ?? newToken();
     const undo = store.sendEstimate(e.id, token);
@@ -434,11 +668,27 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
       if (how === "sms") await openSms(customer?.phone ?? "", msg(url).text);
       if (how === "email") await openEmail(customer?.email ?? "", msg(url).subject, msg(url).text);
       if (how === "copy") await copyText(url);
-      setForce(false);
       toast.show(how === "copy" ? t("ue.linkCopied") : t("est.sentToast", { name: customer?.name ?? "" }), e.status === "draft" ? undo : undefined);
+      return true;
     } catch {
       toast.show(t("err.linkSend"));
+      return false;
     }
+  };
+  return { customer, notes, issues, go };
+}
+
+function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onClose: () => void }) {
+  const store = useStore();
+  const { t } = useI18n();
+  const [force, setForce] = useState(false);
+  const { customer, notes, issues, go: send } = useSendGo(e, force);
+  const close = () => {
+    setForce(false);
+    onClose();
+  };
+  const go = async (how: "sms" | "email" | "copy") => {
+    if (await send(how)) setForce(false);
   };
   return (
     <Sheet visible={visible} onClose={close} title={t("ue.send")}>
@@ -649,7 +899,8 @@ function LegacyBody({ e }: { e: Estimate }) {
  * S8b (docs/specs/07 §2.2 А, §7.1): the client signed — an employee signs the contract for the company in their own name.
  * Wave E2a: drawn with a finger; the saved signature, the sheet and «My signature» come in E2b.
  */
-function CountersignCard({ e }: { e: Estimate }) {
+/** `onAsk` — the screen holds «Не подписывать — изменить» and «Отказать» (in its «⋯», `ReasonSheets`): the card does not draw them */
+function CountersignCard({ e, onAsk }: { e: Estimate; onAsk?: (k: "reopen" | "decline") => void }) {
   const store = useStore();
   const { t, day, money } = useI18n();
   const toast = useToast();
@@ -714,16 +965,28 @@ function CountersignCard({ e }: { e: Estimate }) {
           </T>
         )}
         {/* director and office: change it (back to draft) or decline — both with a reason; a tech does not see these */}
-        {manage ? (
+        {manage && !onAsk ? (
           <RowView style={{ flexWrap: "wrap" }}>
             <Button label={t("est.reopen.button")} icon="pencil" variant="secondary" size="sm" onPress={() => setSheet("reopen")} />
             <Button label={t("est.decline.button")} icon="close" variant="ghost" size="sm" onPress={() => setSheet("decline")} />
           </RowView>
         ) : null}
       </Card>
+      {onAsk ? null : <ReasonSheets e={e} sheet={sheet} onClose={() => setSheet(null)} />}
+    </>
+  );
+}
+
+/** «Не подписывать — изменить» (back to a draft, then the editor) and «Отказать» — both with a reason (the director and the office) */
+function ReasonSheets({ e, sheet, onClose }: { e: Estimate; sheet: "reopen" | "decline" | null; onClose: () => void }) {
+  const store = useStore();
+  const { t } = useI18n();
+  const toast = useToast();
+  return (
+    <>
       <EstimateReasonSheet
         visible={sheet === "reopen"}
-        onClose={() => setSheet(null)}
+        onClose={onClose}
         title={t("est.reopen.button")}
         hint={t("est.reopen.hint")}
         confirmLabel={t("est.reopen.button")}
@@ -734,7 +997,7 @@ function CountersignCard({ e }: { e: Estimate }) {
       />
       <EstimateReasonSheet
         visible={sheet === "decline"}
-        onClose={() => setSheet(null)}
+        onClose={onClose}
         title={t("est.decline.button")}
         hint={t("est.decline.hint")}
         confirmLabel={t("est.decline.button")}
