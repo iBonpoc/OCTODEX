@@ -32,6 +32,8 @@ const LISTS: Record<string, string[]> = {
   calls: ["app/calls.tsx", "features/comms/CommsScreen.tsx"],
   money: ["app/money.tsx"],
   "reports/[id]": ["app/reports/[id].tsx"],
+  // «Поиск» (#2350): ListScreen with `search.open` — the field always open, the scopes «Всё · Клиенты · …» one strip of chips
+  search: ["app/search.tsx"],
 };
 
 /** what a list screen may still draw over its list, and why (director 07.11) */
@@ -57,7 +59,6 @@ const NO_FILTER: Record<string, string> = {
   visits: "the tech's day: today's visits and the week, nothing to narrow",
   "figures/[metric]": "a figure of «Главная»: its list is the figure itself (the period came from the tap)",
   reports: "«Отчёты»: four reports to open, not a list to narrow",
-  search: "«Поиск»: the search is the screen",
 };
 
 const BANNED = ["<ChoiceChips", "<Segmented"];

@@ -105,6 +105,7 @@ export default function Visits() {
     <OverviewScreen
       testID="visits"
       title={greeting}
+      greeting={header.greeting}
       headerIcons={header.icons}
       create={header.create}
       onCreate={header.onCreate}

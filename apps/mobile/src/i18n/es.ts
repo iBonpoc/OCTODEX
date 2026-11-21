@@ -3013,6 +3013,7 @@ export const es: Dict = {
   "ds.tpl.today": "Hoy",
   "ds.tpl.unassigned": "Sin asignar · {n}",
   "ds.tpl.freeDay": "El día está libre",
+  "ds.tpl.viewBody": "Semana, Mes o el tablero por persona — el cuerpo de la vista en lugar de las filas del día",
   "ds.tpl.undated": "Sin fecha · {n}",
   "ds.rows.drag": "Arrastrar una lista",
   "ds.rows.dragHint": "Pulsa — el teléfono responde como al mover una fila del presupuesto.",

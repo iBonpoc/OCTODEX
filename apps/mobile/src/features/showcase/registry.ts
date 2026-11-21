@@ -74,7 +74,7 @@ export const SECTIONS: ShowcaseSection[] = [
   { id: "tokens-layout", screen: "spacing", ds: "§5", title: "ds.sec.layout", tokenGroups: ["space", "spaceHalf", "radius", "size", "breakpoint", "layout", "z", "component"], components: [] },
   { id: "tokens-motion", screen: "motion", ds: "§14", title: "ds.sec.motion", tokenGroups: ["motion", "timing"], components: [] },
   { id: "proto-object", screen: "proto", ds: "§12.11", title: "ds.sec.protoObject", tokenGroups: [], components: ["ObjectHeader", "ObjectHeaderBar", "IconRow", "MainStep", "SummaryLine", "Collapsible", "AccessNote", "ViewSteps"] },
-  { id: "proto-lists", screen: "proto", ds: "§12.11", title: "ds.sec.protoLists", tokenGroups: [], components: ["DayCell", "WeekStrip", "DayStrip", "GroupedList", "ListGroup", "GroupRow", "StatTile", "StatGrid", "StatusPill", "NowCard"] },
+  { id: "proto-lists", screen: "proto", ds: "§12.11", title: "ds.sec.protoLists", tokenGroups: [], components: ["DayCell", "WeekStrip", "MonthHead", "DayStrip", "GroupedList", "ListGroup", "GroupRow", "StatTile", "StatGrid", "StatusPill", "NowCard"] },
   // поток Г: the five screen templates (src/ui/templates/*) and their shared parts, in their showcase frame
   { id: "proto-templates", screen: "proto", ds: "§12.11", title: "ds.sec.protoTemplates", tokenGroups: [], components: ["OverviewScreen", "ListScreen", "ObjectScreen", "EditorScreen", "CalendarScreen", "CreateButton", "MoreButton", "ConfirmSheet", "HeaderIcons", "HeaderIcon", "Greeting", "TemplateFrame"] },
   { id: "graphite", screen: "graphite", ds: "§25", title: "ds.gr.title", tokenGroups: [], components: [] },

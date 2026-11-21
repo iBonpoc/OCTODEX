@@ -9,8 +9,41 @@ import { Sheet } from "./overlays";
 import { Button, TextField } from "./controls";
 import { activeFilterCount, chosenFilters, chosenLabel, filterLabel, SEARCH_FROM, searchAfter, sheetOptions, searchState, visibleFilters, type FilterGroup, type FilterItem, type SearchState } from "./filterBarRules";
 import { fillStyle } from "./fill";
+import type { IconAction } from "./templates/types";
 
 export type { FilterGroup, FilterOption } from "./filterBarRules";
+
+/**
+ * FilterBar «значки в шапке» (#2350, founder 21.11: no row of circles of its own over a calendar / a list on a phone): the search
+ * and «Фильтры» are icons of the screen's header (`icons` — give them to the template's `headerIcons`; «Фильтры» carries the number
+ * of what is on as its badge), and `<FilterBar header={state} …>` draws only what they open — the search field (open while it is
+ * tapped open or holds text, focused), the lane if any, the chosen chips «Мастер: Ivan ✕ · Сбросить» and the same sheet.
+ * testIDs: `<testID>-search`, `<testID>-filters` (the icons).
+ */
+export type FilterHeaderState = { search: boolean; setSearch: (o: boolean) => void; sheet: boolean; setSheet: (o: boolean) => void };
+
+export function useFilterHeader({ search, groups = [], searchA11y, testID }: {
+  search?: { value: string };
+  groups?: FilterGroup[];
+  /** the search icon's words («Искать в плане») */
+  searchA11y?: string;
+  testID: string;
+}): { icons: IconAction[]; state: FilterHeaderState } {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const [sheet, setSheet] = useState(false);
+  const shown = groups.filter((g) => g.options.length > 0);
+  const active = activeFilterCount(shown);
+  const icons: IconAction[] = [
+    ...(search
+      ? [{ icon: "search" as const, a11y: searchA11y ?? t("card.filter.search"), onPress: () => setOpen((o) => !o || search.value !== ""), testID: `${testID}-search` }]
+      : []),
+    ...(shown.length
+      ? [{ icon: "sliders" as const, a11y: t("fix.filters.a11y", { n: active }), onPress: () => setSheet(true), testID: `${testID}-filters`, badge: active ? { n: active, tone: "info" as const } : undefined }]
+      : []),
+  ];
+  return { icons, state: { search: open, setSearch: setOpen, sheet, setSheet } };
+}
 
 /**
  * Filters over a list (docs/specs/31-list-filters.md, variant Б — founder 07.11: «очень много кнопок сверху»).
@@ -27,6 +60,7 @@ export function FilterBar<K extends string>({
   onChange,
   groups = [],
   onReset,
+  header,
 }: {
   /** row 1: the search field of the list */
   search?: { value: string; onChange: (s: string) => void; placeholder: string };
@@ -39,13 +73,17 @@ export function FilterBar<K extends string>({
   groups?: FilterGroup[];
   /** «Сбросить»: everything in the sheet off */
   onReset?: () => void;
+  /** «значки в шапке»: the search and «Фильтры» are the header's icons (useFilterHeader); the bar draws only what they open */
+  header?: FilterHeaderState;
 }) {
   const { c } = useTheme();
   const { t } = useI18n();
   const { device } = useDevice();
   const desktop = device === "desktop";
   // which sheet is open: all groups (phone, tablet) or one group (a desktop button)
-  const [open, setOpen] = useState<string | null>(null);
+  const [own, setOwn] = useState<string | null>(null);
+  const open = header ? (header.sheet ? "*" : null) : own;
+  const setOpen = (k: string | null) => (header ? header.setSheet(k !== null) : setOwn(k));
   // the search inside the sheet (a long «Мастер»), forgotten when the sheet closes
   const [sheetQ, setSheetQ] = useState("");
   const closeSheet = () => { setOpen(null); setSheetQ(""); };
@@ -177,9 +215,47 @@ export function FilterBar<K extends string>({
   ) : null;
   const rowOne = !inline && st === "open";
 
+  // «значки в шапке»: the field the header's magnifier opened (focused), the lane alone in its row
+  const headerRow = header ? (
+    <>
+      {search && (header.search || search.value !== "") ? (
+        <TextField testID="filter-search-field" type="search" icon="search" value={search.value} onChangeText={search.onChange} placeholder={search.placeholder} label={search.placeholder} autoFocus={header.search} />
+      ) : null}
+      {items.length ? lane : null}
+    </>
+  ) : null;
+
+  const sheetEl = (
+    <Sheet visible={open !== null} onClose={closeSheet} title={open === "*" ? t("fix.filters.title") : (sheetGroups[0]?.title ?? t("fix.filters.title"))}>
+      {sheetGroups.map((g) => (
+        <View key={g.key} style={{ gap: space[1] }}>
+          {open === "*" ? (
+            <T v="caption" w="semibold" tone="mut">
+              {g.title}
+            </T>
+          ) : null}
+          {g.searchable && g.options.length > SEARCH_FROM ? (
+            <View testID={`filter-find-${g.key}`}>
+              <TextField type="search" value={sheetQ} onChangeText={setSheetQ} placeholder={t("card.filter.findPerson")} icon="search" />
+            </View>
+          ) : null}
+          {sheetOptions(g, sheetQ).map((o) => (
+            <FilterRow key={o.key} label={o.label} count={o.count} on={o.on} single={g.single} onToggle={() => g.onToggle(o.key)} />
+          ))}
+        </View>
+      ))}
+      <View style={{ flexDirection: "row", gap: space[2], marginTop: space[3] }}>
+        {active > 0 && onReset ? <Button label={t("fix.filters.reset")} variant="secondary" onPress={onReset} /> : null}
+        <Button label={t("fix.filters.done")} variant="secondary" onPress={closeSheet} />
+      </View>
+    </Sheet>
+  );
+  // «значки в шапке» with nothing open and nothing on: no row at all (the sheet is a layer, it takes no place)
+  if (header && !(search && (header.search || search.value !== "")) && !items.length && !chosen.length) return sheetEl;
+
   return (
     <View style={{ gap: space[2] }} testID="filter-bar">
-      {desktop ? (
+      {header ? headerRow : desktop ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: space[3] }}>
           {searchEl}
           <View style={{ flex: 1, minWidth: 0 }}>{items.length ? lane : null}</View>
@@ -221,29 +297,7 @@ export function FilterBar<K extends string>({
           {onReset ? <Button label={t("fix.filters.reset")} variant="ghost" size="sm" onPress={onReset} /> : null}
         </View>
       ) : null}
-      <Sheet visible={open !== null} onClose={closeSheet} title={open === "*" ? t("fix.filters.title") : (sheetGroups[0]?.title ?? t("fix.filters.title"))}>
-        {sheetGroups.map((g) => (
-          <View key={g.key} style={{ gap: space[1] }}>
-            {open === "*" ? (
-              <T v="caption" w="semibold" tone="mut">
-                {g.title}
-              </T>
-            ) : null}
-            {g.searchable && g.options.length > SEARCH_FROM ? (
-              <View testID={`filter-find-${g.key}`}>
-                <TextField type="search" value={sheetQ} onChangeText={setSheetQ} placeholder={t("card.filter.findPerson")} icon="search" />
-              </View>
-            ) : null}
-            {sheetOptions(g, sheetQ).map((o) => (
-              <FilterRow key={o.key} label={o.label} count={o.count} on={o.on} single={g.single} onToggle={() => g.onToggle(o.key)} />
-            ))}
-          </View>
-        ))}
-        <View style={{ flexDirection: "row", gap: space[2], marginTop: space[3] }}>
-          {active > 0 && onReset ? <Button label={t("fix.filters.reset")} variant="secondary" onPress={onReset} /> : null}
-          <Button label={t("fix.filters.done")} variant="secondary" onPress={closeSheet} />
-        </View>
-      </Sheet>
+      {sheetEl}
     </View>
   );
 }

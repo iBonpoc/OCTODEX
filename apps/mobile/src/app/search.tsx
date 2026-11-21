@@ -1,15 +1,16 @@
 import { useCallback, useMemo, useState } from "react";
-import { Platform, View } from "react-native";
+import { Platform } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams, type Href } from "expo-router";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { SEARCH_GROUPS, hitCount, searchAll, type Hit, type SearchGroup, type Why } from "@/features/search";
 import { cleanPhone } from "@/features/contactLinks";
 import { useDialThenAsk } from "@/features/comms/dial";
-import { Button, ChoiceChips, TextField } from "@/ui/controls";
-import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
+import { Button } from "@/ui/controls";
+import type { GroupRowProps } from "@/ui/groupedList";
 import type { IconKey } from "@/ui/primitives";
-import { Empty, Screen } from "@/ui/surfaces";
+import { Empty } from "@/ui/surfaces";
+import { ListScreen } from "@/ui/templates";
 
 /** per group on «Всё»; «Все ›» of the group shows the rest (15-flows §3.2) */
 const SEARCH_PER_GROUP = 3;
@@ -32,8 +33,7 @@ type Scope = "all" | SearchGroup;
  * Сметы · Счета…» (only the ones with hits, with their counts), then the hits as grouped rows: the type icon, the name, «Тип · главное ·
  * почему нашлось»; a client has a call icon right in the row. «Всё» shows 3 per group with «Все ›» (the group's scope); nothing found —
  * «Создать клиента». The local database — works offline; the technician sees only his own (searchAll). On 820/1280 «/» opens it.
- * The ListScreen template keeps its field behind the header icon, so this screen lays out the same parts itself (BUILD-PLAN §3 Э7:
- * a request to поток А2 for `ListScreen search.open`).
+ * The template «Список» with `search.open`: the field always stands open under the title, focused on entry (no search icon then).
  */
 export default function Search() {
   const { t } = useI18n();
@@ -52,7 +52,7 @@ export default function Search() {
       if (Platform.OS !== "web" || typeof document === "undefined") return;
       let inner = 0;
       const outer = requestAnimationFrame(() => {
-        inner = requestAnimationFrame(() => (document.querySelector('[data-testid="search-field"] input') as HTMLInputElement | null)?.focus());
+        inner = requestAnimationFrame(() => (document.querySelector('[data-testid="search-search-field"] input') as HTMLInputElement | null)?.focus());
       });
       return () => {
         cancelAnimationFrame(outer);
@@ -66,63 +66,58 @@ export default function Search() {
     if (w.kind === "person") return t("nav.search.why.person", { who: w.who ?? "" });
     return t(`nav.search.why.${w.kind}` as DictKey);
   };
-  const row = (h: Hit) => {
+  const row = (h: Hit): GroupRowProps & { key: string } => {
     const phone = h.group === "clients" ? cleanPhone(db.customers.find((c) => c.id === h.id)?.phone) : "";
-    return (
-      <GroupRow
-        key={`${h.group}-${h.id}`}
-        testID="search-hit"
-        lead={{ icon: GROUP[h.group].icon }}
-        title={h.title || h.number || "—"}
-        subtitle={[t(GROUP[h.group].kind), h.title ? h.number : undefined, h.subtitle, why(h.why)].filter(Boolean).join(" · ")}
-        status={h.closed ? { status: "neutral", label: t("nav.search.closed") } : undefined}
-        actions={phone && !h.closed ? [{ icon: "phone", a11y: `${t("client.call")} ${h.title}`, onPress: () => dial(phone, () => router.push(h.href as Href)), testID: `search-call-${h.id}` }] : undefined}
-        onPress={() => router.push(h.href as Href)}
-      />
-    );
+    return {
+      key: `${h.group}-${h.id}`,
+      testID: "search-hit",
+      lead: { icon: GROUP[h.group].icon },
+      title: h.title || h.number || "—",
+      subtitle: [t(GROUP[h.group].kind), h.title ? h.number : undefined, h.subtitle, why(h.why)].filter(Boolean).join(" · "),
+      status: h.closed ? { status: "neutral", label: t("nav.search.closed") } : undefined,
+      actions: phone && !h.closed ? [{ icon: "phone", a11y: `${t("client.call")} ${h.title}`, onPress: () => dial(phone, () => router.push(h.href as Href)), testID: `search-call-${h.id}` }] : undefined,
+      onPress: () => router.push(h.href as Href),
+    };
   };
-  const shown = current === "all" ? found : [current];
+  const shown = !q.trim() ? [] : current === "all" ? found : [current];
+  const groups = shown.map((g) => {
+    const hits = res[g];
+    const cut = current === "all" ? hits.slice(0, SEARCH_PER_GROUP) : hits;
+    return {
+      key: g,
+      title: `${t(GROUP[g].label)} · ${hits.length}`,
+      rows: cut,
+      all: hits.length > cut.length ? { label: t("proto.client.all"), onPress: () => setScope(g) } : undefined,
+    };
+  });
   return (
-    <Screen testID="search" title={t("nav.searchTab")}>
-      <View testID="search-field">
-        <TextField type="search" value={q} onChangeText={setQ} placeholder={t("nav.search.placeholder")} label={t("nav.search")} icon="search" autoFocus />
-      </View>
-      {found.length > 1 ? (
-        <ChoiceChips<Scope>
-          layout="strip"
-          testID="search-scopes"
-          value={current}
-          onChange={setScope}
-          items={[{ key: "all", label: `${t("proto.search.all")} ${total}` }, ...found.map((g) => ({ key: g, label: `${t(GROUP[g].label)} ${res[g].length}` }))]}
-        />
-      ) : null}
-      {!q.trim() ? (
-        <Empty icon="search" title={t("proto.search.start")} hint={t("nav.search.hint")} />
-      ) : !total ? (
-        <Empty
-          icon="search"
-          title={t("nav.search.empty", { q: q.trim() })}
-          hint={t("nav.search.emptyHint")}
-          action={role !== "tech" ? <Button testID="search-new-client" label={t("proto.search.newClient", { q: q.trim() })} icon="plus" variant="secondary" onPress={() => router.push("/client/edit")} /> : undefined}
-        />
-      ) : (
-        <GroupedList testID="search-groups">
-            {shown.map((g) => {
-              const hits = res[g];
-              const cut = current === "all" ? hits.slice(0, SEARCH_PER_GROUP) : hits;
-              return (
-                <ListGroup
-                  key={g}
-                  testID={`search-group-${g}`}
-                  title={`${t(GROUP[g].label)} · ${hits.length}`}
-                  all={hits.length > cut.length ? { label: t("proto.client.all"), onPress: () => setScope(g), testID: `search-all-${g}` } : undefined}
-                >
-                  {cut.map(row)}
-                </ListGroup>
-              );
-            })}
-        </GroupedList>
-      )}
-    </Screen>
+    <ListScreen<Hit>
+      testID="search"
+      title={t("nav.searchTab")}
+      search={{ placeholder: t("nav.search.placeholder"), value: q, onChange: setQ, open: true }}
+      chips={
+        found.length > 1
+          ? {
+              items: [{ key: "all", label: `${t("proto.search.all")} ${total}` }, ...found.map((g) => ({ key: g, label: `${t(GROUP[g].label)} ${res[g].length}` }))],
+              value: current,
+              onChange: (k) => setScope(k as Scope),
+            }
+          : undefined
+      }
+      groups={groups}
+      row={row}
+      empty={
+        !q.trim() ? (
+          <Empty icon="search" title={t("proto.search.start")} hint={t("nav.search.hint")} />
+        ) : (
+          <Empty
+            icon="search"
+            title={t("nav.search.empty", { q: q.trim() })}
+            hint={t("nav.search.emptyHint")}
+            action={role !== "tech" ? <Button testID="search-new-client" label={t("proto.search.newClient", { q: q.trim() })} icon="plus" variant="secondary" onPress={() => router.push("/client/edit")} /> : undefined}
+          />
+        )
+      }
+    />
   );
 }

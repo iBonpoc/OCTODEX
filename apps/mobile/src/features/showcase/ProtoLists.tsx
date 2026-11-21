@@ -1,6 +1,6 @@
 /**
  * Showcase section «Список и календарь» of the prototype v2 (BUILD-PLAN §1 поток В): GroupedList / ListGroup / GroupRow,
- * DayStrip, StatGrid / StatTile, StatusPill, NowCard, ChoiceChips layout="strip". Registered by поток А (registry.ts).
+ * MonthHead + DayStrip (the month «Ноябрь ⌄» opens the calendar in place), FilterBar «значки в шапке» (useFilterHeader), StatGrid / StatTile, StatusPill, NowCard, ChoiceChips layout="strip". Registered by поток А (registry.ts).
  * The names and sums are demo data, the words come from i18n.
  */
 import { useMemo, useState } from "react";
@@ -11,6 +11,9 @@ import { todayKey, addDays, type DayKey } from "@/features/calendar";
 import type { DayLoad } from "@/features/planFeed";
 import { ChoiceChips } from "@/ui/controls";
 import { DayStrip } from "@/ui/dayStrip";
+import { FilterBar, useFilterHeader } from "@/ui/filterBar";
+import { HeaderIcons } from "@/ui/templates/parts";
+import { RowView } from "@/ui/surfaces";
 import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
 import { NowCard } from "@/ui/nowCard";
 import { StatGrid, StatTile } from "@/ui/statTile";
@@ -35,9 +38,20 @@ export function ProtoLists() {
   const [taskDone, setTaskDone] = useState(false);
   const loads = useMemo(() => new Map<DayKey, DayLoad>([[todayKey(), { n: 3, unassigned: 1 } as DayLoad], [addDays(todayKey(), 2), { n: 1, unassigned: 0 } as DayLoad]]), []);
   const said = (label: string) => () => toast.show(label, NO_UNDO);
+  // FilterBar «значки в шапке»: the magnifier and «Фильтры» (with the number on) are icons of the header row
+  const [q, setQ] = useState("");
+  const [who, setWho] = useState<string | null>(null);
+  const groups = [{ key: "people", title: t("card.filter.masters"), single: true, options: DEMO.map((d) => ({ key: d.id, label: d.name, on: who === d.id })), onToggle: (k: string) => setWho(who === k ? null : k) }];
+  const fh = useFilterHeader({ search: { value: q }, groups, testID: "showcase-filter-head" });
   return (
     <View style={{ gap: space[6] }} testID="showcase-proto-lists">
       <DayStrip date={date} loads={loads} onPick={setDate} testID="showcase-day-strip" />
+      <View style={{ gap: space[2] }} testID="showcase-filter-header">
+        <RowView style={{ justifyContent: "flex-end" }} gap={space[2]}>
+          <HeaderIcons icons={fh.icons} />
+        </RowView>
+        <FilterBar<string> header={fh.state} items={[]} value="" onChange={() => undefined} search={{ value: q, onChange: setQ, placeholder: t("card.filter.searchPlan") }} groups={groups} onReset={() => setWho(null)} />
+      </View>
       <ChoiceChips
         layout="strip"
         testID="showcase-chips-strip"

@@ -9,7 +9,8 @@
  *   stays seen); a second step of an object always goes into «⋯»; only an editor keeps a pinned bottom (one compact row);
  * - one FILLED accent on a screen (`filledAccents`): an outlined main one (`MainAction.outline`) is not filled;
  * - a list: search is an icon of the header (first of the icons), the chips one strip under the title;
- * - a calendar: the day strip under the views.
+ * - a calendar: the views, the month («Ноябрь ⌄» — it opens the month calendar) and the day strip under them; no strip in the view
+ *   «Месяц» (the grid is the days); the Week, the Month and the board stand as the `view` body instead of the day's rows.
  * A second step whose label does not fit the bar's pair goes into «⋯» (mainStepLayout); a dangerous item of «⋯» is the last one.
  */
 import type { MenuItem } from "../overlays";
@@ -21,7 +22,7 @@ export type TemplateKind = "overview" | "list" | "object" | "editor" | "calendar
 /** a part of a screen; «main» is THE main button, wherever it stands */
 export type Slot =
   | "back" | "title" | "icons" | "search" | "create" | "more"
-  | "header" | "actions" | "sections" | "chips" | "searchField" | "filters" | "views" | "days" | "unassigned"
+  | "header" | "actions" | "sections" | "chips" | "searchField" | "filters" | "views" | "month" | "days" | "unassigned" | "view"
   | "next" | "main" | "second" | "total" | "attention" | "summary" | "details" | "body" | "groups" | "undated" | "empty";
 
 /** top — the header row (left to right); under — what stands under the title / header (stuck tabs, strips);
@@ -51,6 +52,10 @@ export interface LayoutInput {
   summary?: boolean;
   details?: boolean;
   undated?: boolean;
+  /** a calendar: the view is «Месяц» — the grid is the days, no strip */
+  monthView?: boolean;
+  /** a calendar: the view draws its own body (the Week, the Month, the board by person) instead of the day's rows */
+  viewBody?: boolean;
   /** the list / the day has nothing: `empty` instead of the groups */
   empty?: boolean;
   /** the screen's pinned bottom is not there (820/1280, or a route that still has the tab bar): the main step goes to the top of the content */
@@ -81,7 +86,8 @@ export function templateLayout(kind: TemplateKind, p: LayoutInput): TemplateLayo
     return { top, under: [...on(p.searchOpen, "searchField" as const), ...on(p.chips, "chips" as const), ...on(p.filters, "filters" as const)], body: [p.empty ? "empty" : "groups"], bottom: [] };
   }
   if (kind === "calendar") {
-    return { top, under: [...on(p.views, "views" as const), "days"], body: [...on(p.unassigned, "unassigned" as const), p.empty ? "empty" : "groups", ...on(p.undated, "undated" as const)], bottom: [] };
+    const rows: Slot = p.viewBody ? "view" : p.empty ? "empty" : "groups";
+    return { top, under: [...on(p.views, "views" as const), "month", ...on(!p.monthView, "days" as const)], body: [...on(p.unassigned, "unassigned" as const), rows, ...on(p.undated, "undated" as const)], bottom: [] };
   }
   if (kind === "object") {
     // the header and its IconRow, the one main step right under them (no pinned plate), then the sections strip

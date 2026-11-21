@@ -1,19 +1,21 @@
 /**
  * The day strip of the Plan (BUILD-SPEC §1 «DayStrip», BUILD-PLAN §1 поток В): moved here from features/PlanParts.tsx
  * (which re-exports it until wave 3). `DayCell` is one day — a cell of the Week / Month, or a pill of the strip;
- * `WeekStrip` — 7 cells in a row; `DayStrip` — pills in one row that scrolls sideways; `stripDays` — the strip's days.
+ * `WeekStrip` — 7 cells in a row; `MonthHead` — «Ноябрь ⌄ · Сегодня · ‹ ›»; `DayStrip` — pills in one row that scrolls sideways;
+ * `stripDays` — the strip's days.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, View, type ScrollViewInstance } from "react-native";
-import { component, radius, space } from "@octo/design-tokens";
-import { addDays, todayKey, type DayKey } from "@/features/calendar";
+import { component, radius, size, space } from "@octo/design-tokens";
+import { addDays, addMonths, todayKey, type DayKey } from "@/features/calendar";
+import { DatePick } from "@/features/DatePick";
 import type { DayLoad } from "@/features/planFeed";
 import { formatDayKey } from "@/features/zone";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { Button, IconButton, StatusChip } from "./controls";
 import { fillStyle } from "./fill";
-import { Press, T } from "./primitives";
+import { Icon, Press, T } from "./primitives";
 import { RowView } from "./surfaces";
 import { SelectedCheck } from "./selectedCheck";
 import { pillDot, pillLook, stripDays, stripOffset } from "./dayStripLogic";
@@ -133,36 +135,85 @@ export function WeekStrip({ days, loads, date, onPick }: { days: DayKey[]; loads
 }
 
 /**
- * The days as pills «Пн / 23 / •» in one row that scrolls sideways (BUILD-SPEC §1 «DayStrip», #2350): 52 tall, the picked
- * day is the accent with `onAcc` (light theme: + `accEdge`), today's number `accText`, a dot 4 — «есть выезды» (`warn` when
- * a visit there has nobody on it). Above: the month, «Сегодня» when away, a week back / forward as icons.
- * `days` — the pills (default: `stripDays(date)`, four weeks around the picked day).
+ * The month over the Plan (BUILD-SPEC §1 «DayStrip», #2350): «Ноябрь ⌄» — the title is a button that opens the month calendar
+ * (DatePick) right under the row, in place (a pick closes it); «Сегодня» when away; back / forward as icons — a week (`step` 7) or a
+ * month (`step` "month", the view «Месяц»). The year only when it is not this one («Январь 2027»). testIDs: `<testID>-title`,
+ * `-today`, `-prev`, `-next`, `-pick` (the calendar; its days `-pick-YYYY-MM-DD`).
  */
-export function DayStrip({ days: given, date, loads, onPick, testID = "plan-day-strip" }: { days?: DayKey[]; date: DayKey; loads: Map<DayKey, DayLoad>; onPick: (k: DayKey) => void; testID?: string }) {
+export function MonthHead({ date, onPick, step = 7, testID = "plan-month" }: { date: DayKey; onPick: (k: DayKey) => void; step?: 7 | "month"; testID?: string }) {
   const { t, lang } = useI18n();
+  const { c } = useTheme();
   const loc = localeOf(lang);
   const today = todayKey();
+  const [open, setOpen] = useState(false);
+  const month = date.slice(0, 4) === today.slice(0, 4) ? formatDayKey(date, { month: "long" }, loc) : formatDayKey(date, { month: "long", year: "numeric" }, loc);
+  const title = month.charAt(0).toUpperCase() + month.slice(1);
+  const go = (n: number) => onPick(step === "month" ? addMonths(date, n) : addDays(date, n * 7));
+  return (
+    <View style={{ gap: space[2] }}>
+      <RowView style={{ justifyContent: "space-between" }}>
+        <Press
+          testID={`${testID}-title`}
+          onPress={() => setOpen((o) => !o)}
+          accessibilityRole="button"
+          accessibilityLabel={t("tpl.pickDay", { x: title })}
+          accessibilityState={{ expanded: open }}
+          containerStyle={{ flex: 1, minWidth: 0 }}
+          style={{ minHeight: size.hitMin, flexDirection: "row", alignItems: "center", gap: space[1] }}
+        >
+          <T v="heading" numberOfLines={1} style={{ flexShrink: 1 }}>
+            {title}
+          </T>
+          <Icon name={open ? "chevronUp" : "chevronDown"} s={size.iconSm} color={c.mut} />
+        </Press>
+        {date !== today ? <Button testID={`${testID}-today`} label={t("common.today")} size="sm" variant="secondary" onPress={() => onPick(today)} /> : null}
+        <IconButton testID={`${testID}-prev`} icon="chevronLeft" label={t("plan.prev")} onPress={() => go(-1)} />
+        <IconButton testID={`${testID}-next`} icon="chevronRight" label={t("plan.next")} onPress={() => go(1)} />
+      </RowView>
+      {open ? (
+        <DatePick
+          testID={`${testID}-pick`}
+          value={date}
+          min={PAST}
+          onPick={(k) => {
+            setOpen(false);
+            onPick(k);
+          }}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+/** the Plan looks back too: any past day can be picked from the month */
+const PAST: DayKey = "2000-01-01";
+
+/**
+ * The days as pills «Пн / 23 / •» in one row that scrolls sideways (BUILD-SPEC §1 «DayStrip», #2350): 52 tall, the picked
+ * day is the accent with `onAcc` (light theme: + `accEdge`), today's number `accText`, a dot 4 — «есть выезды» (`warn` when
+ * a visit there has nobody on it). The picked pill stands in the middle of the row — on the first draw, on a pick and when
+ * the days change (another view: the Week's seven, the Day's four weeks). `head` (default) — the MonthHead above it; the
+ * Calendar template draws its own MonthHead and passes `head={false}` (in «Месяц» it draws no strip at all).
+ * `days` — the pills (default: `stripDays(date)`, four weeks around the picked day).
+ */
+export function DayStrip({ days: given, date, loads, onPick, head = true, testID = "plan-day-strip" }: { days?: DayKey[]; date: DayKey; loads: Map<DayKey, DayLoad>; onPick: (k: DayKey) => void; head?: boolean; testID?: string }) {
+  const { lang } = useI18n();
+  const loc = localeOf(lang);
   const days = useMemo(() => given ?? stripDays(date), [given, date]);
   const ref = useRef<ScrollViewInstance>(null);
   const [w, setW] = useState(0);
-  // the picked pill to the middle of the row
+  const span = `${days[0]}:${days.length}`;
+  const placed = useRef(false);
+  // the picked pill to the middle of the row: at once on the first draw, smoothly after
   useEffect(() => {
     const i = days.indexOf(date);
     if (!w || i < 0) return;
-    ref.current?.scrollTo({ x: stripOffset(i, w), animated: true });
-  }, [date, w]); // eslint-disable-line react-hooks/exhaustive-deps
-  // the month in words; the year only when it is not this one («Ноябрь», «Январь 2027»)
-  const month = date.slice(0, 4) === today.slice(0, 4) ? formatDayKey(date, { month: "long" }, loc) : formatDayKey(date, { month: "long", year: "numeric" }, loc);
+    ref.current?.scrollTo({ x: stripOffset(i, w), animated: placed.current });
+    placed.current = true;
+  }, [date, w, span]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <View style={{ gap: space[2] }} testID={testID}>
-      <RowView style={{ justifyContent: "space-between" }}>
-        <T v="heading" style={{ flex: 1 }} numberOfLines={1}>
-          {month.charAt(0).toUpperCase() + month.slice(1)}
-        </T>
-        {date !== today ? <Button label={t("common.today")} size="sm" variant="secondary" onPress={() => onPick(today)} /> : null}
-        <IconButton icon="chevronLeft" label={t("plan.prev")} onPress={() => onPick(addDays(date, -7))} />
-        <IconButton icon="chevronRight" label={t("plan.next")} onPress={() => onPick(addDays(date, 7))} />
-      </RowView>
+      {head ? <MonthHead date={date} onPick={onPick} /> : null}
       <ScrollView
         ref={ref}
         horizontal

@@ -190,14 +190,16 @@ export function ProtoTemplates() {
         create={create}
         onCreate={pick}
         views={<Segmented testID="tpl-calendar-views" items={[{ key: "day", label: t("ds.tpl.vDay") }, { key: "week", label: t("ds.tpl.vWeek") }, { key: "month", label: t("ds.tpl.vMonth") }]} value={view} onChange={setView} full />}
+        view={view === "week" || view === "month" ? view : "day"}
         day={day}
         onDay={setDay}
         loads={loads}
         dayTitle={t("ds.tpl.today")}
+        body={view === "day" ? undefined : <Empty icon="calendar" title={t("ds.tpl.viewBody")} />}
         unassigned={{ label: t("ds.tpl.unassigned", { n: 1 }), onPress: said(t("ds.tpl.unassigned", { n: 1 })) }}
         items={
           day === todayKey()
-            ? DEMO.slice(0, 2).map((d) => <GroupRow key={d.id} title={d.name} subtitle={`8:30 · ${d.line}`} lead={{ icon: "calendar" }} onPress={said(d.name)} />)
+            ? DEMO.slice(0, 2).map((d) => <GroupRow key={d.id} title={d.name} subtitle={d.line} lead={{ time: "8:30", sub: "AM" }} onPress={said(d.name)} />)
             : []
         }
         empty={<Empty icon="calendar" title={t("ds.tpl.freeDay")} />}

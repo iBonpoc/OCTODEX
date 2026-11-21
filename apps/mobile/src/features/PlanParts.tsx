@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { View } from "react-native";
 import { router } from "expo-router";
-import { size, space } from "@octo/design-tokens";
+import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { CalendarEvent, CalendarEventKind, ID, Task, Visit } from "@/data/types";
 import { findJob } from "@/data/jobs";
@@ -17,14 +17,11 @@ import { uid } from "@/features/estimateDoc";
 import { assigneesOf, canReschedule, daysSince, liveAssignees, unassignedSoon, visitWho, waitingJobs } from "@/features/schedule";
 import { memberName } from "@/features/team";
 import { VisitFormSheet } from "@/features/VisitForm";
-import { Button, TextField } from "@/ui/controls";
-import { Icon, T } from "@/ui/primitives";
+import { TextField } from "@/ui/controls";
+import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Divider, ListRow, RowView } from "@/ui/surfaces";
-import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
-import { FilterRow } from "@/ui/filterBar";
-import type { FilterGroup } from "@/ui/filterBarRules";
-import { useTheme } from "@/theme/ThemeProvider";
+import { Divider, ListRow } from "@/ui/surfaces";
+import { GroupedList, GroupRow, ListGroup, type RowLead } from "@/ui/groupedList";
 /** the day strip moved to src/ui (BUILD-PLAN §1, поток В); re-exported so plan.tsx keeps its imports until wave 3 */
 export { DayCell, DayStrip, WeekStrip, stripDays } from "@/ui/dayStrip";
 import { NO_UNDO } from "@/data/undo";
@@ -33,35 +30,10 @@ import { NO_UNDO } from "@/data/undo";
  * Parts of «План» on the template «Календарь» (LAYOUT-RULES §3, BUILD-SPEC §2.2, wave 3 Э2): the day's rows — the hour on
  * the left, the client, «– конец · работа · мастер», a StatusPill only when it says something (not «Запланирован»); the
  * swipe «Открыть» / «Перенести · Назначить» (the same on a long press and to VoiceOver — GroupRow); «Не назначено · N» and
- * «Без даты · N» as sheets behind one row each; the search and the filters behind the header's icons; «＋» — the header's menu.
+ * «Без даты · N» as sheets behind one row each; the search and the filters — FilterBar «значки в шапке»; «＋» — the header's menu.
  */
 
 const TASK_ROUTE: Record<Task["subjectType"], string> = { lead: "/lead", customer: "/client", job: "/job", estimate: "/estimate", property: "/property" };
-
-/** the hour column on the left of a row: «9:00» big, «AM» small; «весь день» / a carried-over span — a calendar icon */
-function HourLead({ x }: { x: PlanItem }) {
-  const { time } = useI18n();
-  const { c } = useTheme();
-  const hm = x.allDay || x.at === "" ? null : timeLead(time(x.start));
-  return (
-    <View style={{ width: size.hitMin, marginLeft: space[4], alignItems: "flex-end" }} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-      {hm ? (
-        <>
-          <T v="heading" w="semibold" tabular numberOfLines={1}>
-            {hm.top}
-          </T>
-          {hm.bottom ? (
-            <T v="micro" tone="mut" numberOfLines={1}>
-              {hm.bottom}
-            </T>
-          ) : null}
-        </>
-      ) : (
-        <Icon name="calendar" s={size.iconMd} color={c.mut} />
-      )}
-    </View>
-  );
-}
 
 export type RowHandlers = {
   onEvent?: (e: CalendarEvent) => void;
@@ -84,6 +56,9 @@ export function PlanRow({ x, onEvent, onAssign, onMove }: { x: PlanItem } & RowH
   // (a phone row has ~200 pt for the line: «работа · мастер» first, as in the wireframe v2 №2)
   void until;
   const span = x.allDay || x.at === "" ? when : null;
+  // the hour on the left (GroupRow `lead.time`: «9:00» big, «AM» small); «весь день» / a carried-over span — a calendar icon
+  const hm = span ? null : timeLead(time(x.start));
+  const lead: RowLead = hm ? { time: hm.top, sub: hm.bottom || undefined } : { icon: "calendar" };
   let row;
   if (x.kind === "visit") {
     const v = x.visit;
@@ -96,6 +71,7 @@ export function PlanRow({ x, onEvent, onAssign, onMove }: { x: PlanItem } & RowH
     row = (
       <GroupRow
         testID={`plan-row-${v.id}`}
+        lead={lead}
         title={client || "—"}
         subtitle={[span, work, nobody ? null : names, late ? (st.label === "late.enRoute" ? t("plan5.lateEnRoute") : t("plan5.lateNotLeft")) : null].filter(Boolean).join(" · ")}
         // «Запланирован» is every row — no pill; the rest is a pill «значок + слово» (rule 2)
@@ -117,6 +93,7 @@ export function PlanRow({ x, onEvent, onAssign, onMove }: { x: PlanItem } & RowH
     const tk = x.task;
     row = (
       <GroupRow
+        lead={lead}
         title={tk.title}
         subtitle={[span, t("plan5.task"), names].filter(Boolean).join(" · ")}
         status={x.done ? { status: "ok", label: t("plan5.done") } : undefined}
@@ -126,14 +103,9 @@ export function PlanRow({ x, onEvent, onAssign, onMove }: { x: PlanItem } & RowH
   } else {
     const e = x.event;
     const kind = x.kind === "timeOff" ? t("plan5.timeOff") : t("plan5.event");
-    row = <GroupRow title={e.title || kind} subtitle={[span, e.title ? kind : null, names || t("plan5.company")].filter(Boolean).join(" · ")} onPress={onEvent ? () => onEvent(e) : undefined} />;
+    row = <GroupRow lead={lead} title={e.title || kind} subtitle={[span, e.title ? kind : null, names || t("plan5.company")].filter(Boolean).join(" · ")} onPress={onEvent ? () => onEvent(e) : undefined} />;
   }
-  return (
-    <RowView gap={0} style={{ alignItems: "center" }}>
-      <HourLead x={x} />
-      <View style={{ flex: 1, minWidth: 0 }}>{row}</View>
-    </RowView>
-  );
+  return row;
 }
 
 /** the day's rows, for the template's `items` */
@@ -244,59 +216,6 @@ export function WaitingSheet({ visible, onClose }: { visible: boolean; onClose: 
         </ListGroup>
       </GroupedList>
     </Sheet>
-  );
-}
-
-/** the search of the Plan, opened by the header's magnifier (founder 21.11: not a row of circles of its own) */
-export function PlanSearch({ value, onChange, placeholder }: { value: string; onChange: (s: string) => void; placeholder: string }) {
-  return <TextField testID="plan-search-field" type="search" icon="search" value={value} onChangeText={onChange} placeholder={placeholder} label={placeholder} autoFocus />;
-}
-
-/**
- * «Фильтры» of the Plan behind the header's icon (founder 21.11): the same groups as FilterBar's sheet, rows FilterRow;
- * what is on is a chip «Мастер: Ivan ✕» under the strip (PlanChosen).
- */
-export function PlanFilterSheet({ visible, onClose, groups }: { visible: boolean; onClose: () => void; groups: FilterGroup[] }) {
-  const { t } = useI18n();
-  return (
-    <Sheet visible={visible} onClose={onClose} title={t("fix.filters.title")}>
-      <View style={{ gap: space[4] }} testID="plan-filter-sheet">
-        {groups.filter((g) => g.options.length).map((g) => (
-          <View key={g.key} style={{ gap: space[1] }}>
-            <T v="micro" w="semibold" tone="mut" style={{ textTransform: "uppercase" }}>
-              {g.title}
-            </T>
-            {g.options.map((o) => (
-              <FilterRow key={o.key} label={o.label} on={o.on} single={g.single} onToggle={() => g.onToggle(o.key)} />
-            ))}
-          </View>
-        ))}
-        <Button label={t("fix.filters.done")} variant="secondary" onPress={onClose} />
-      </View>
-    </Sheet>
-  );
-}
-
-/** what is on in «Фильтры»: a chip per choice («Мастер: Ivan ✕»), «Сбросить» */
-export function PlanChosen({ groups, onReset }: { groups: FilterGroup[]; onReset: () => void }) {
-  const { t } = useI18n();
-  const on = groups.flatMap((g) => g.options.filter((o) => o.on).map((o) => ({ g, o })));
-  if (!on.length) return null;
-  return (
-    <View testID="plan-chosen" style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space[2] }}>
-      {on.map(({ g, o }) => (
-        <Button
-          key={`${g.key}:${o.key}`}
-          label={g.single ? `${g.title}: ${o.label}` : o.label}
-          icon="close"
-          size="sm"
-          variant="secondary"
-          accessibilityLabel={t("card.filter.remove", { v: g.single ? `${g.title}: ${o.label}` : o.label })}
-          onPress={() => g.onToggle(o.key)}
-        />
-      ))}
-      <Button label={t("fix.filters.reset")} variant="ghost" size="sm" onPress={onReset} />
-    </View>
   );
 }
 

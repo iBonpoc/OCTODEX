@@ -33,13 +33,14 @@ import { PhotoStrip } from "@/features/PhotoStrip";
 import { canAddItem, canEditVisitItems, canTick, checklistGate, itemKind, visitSettings } from "@/features/checklist";
 import { ChecklistCard, ChecklistEditor, MissingSheet } from "@/features/VisitChecklist";
 import { OfficeLocation, TechLocation, useConsentQuestion } from "@/features/LocationParts";
-import { Button, Steps, TextField } from "@/ui/controls";
+import { Button, TextField } from "@/ui/controls";
 import { SelectField } from "@/ui/selectField";
 import { Icon, T } from "@/ui/primitives";
 import { DoneCircle } from "@/ui/doneCircle";
 import { Sheet, useToast, type MenuItem } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
-import { Banner } from "@/ui/banner";
+import { AccessNote } from "@/ui/accessNote";
+import { ViewSteps } from "@/ui/viewTabs";
 import { GroupRow, ListGroup } from "@/ui/groupedList";
 import { mapsUrl, type OS } from "@/ui/listCardLayout";
 import { ObjectScreen, type MainAction } from "@/ui/templates";
@@ -311,11 +312,17 @@ export default function VisitScreen() {
   // AccessNote first (BUILD-SPEC §2.6): the note, and the gate code — to the tech on the visit day and the day before
   const gateOk = property ? canSeeGateCode(db, store.role, property.id) : false;
   const accessText = property?.accessNotes?.trim();
-  const codeLine = property?.gateCode ? (gateOk ? `${t("prop.gate")}: ${property.gateCode}` : t("proto.job.gateLater")) : undefined;
-  const access =
-    accessText || codeLine ? (
-      <Banner tone="warn" testID="visit-access" title={`${t("job3.access")}: ${codeLine && gateOk ? codeLine : accessText ?? codeLine}`} hint={codeLine && gateOk ? accessText : accessText ? codeLine : undefined} />
-    ) : null;
+  // a code not open yet is not drawn: the line says when it opens (AccessNote `locked`)
+  const access = (
+    <AccessNote
+      testID="visit-access"
+      label={t("job3.access")}
+      text={accessText || undefined}
+      code={property?.gateCode && gateOk ? property.gateCode : undefined}
+      codeWord={t("prop.gate")}
+      locked={property?.gateCode && !gateOk ? t("proto.job.gateLater") : undefined}
+    />
+  );
 
   const before0 = v.step === "scheduled" || v.step === "en_route" || v.step === "on_site";
   const est = job?.estimateId ? db.estimates.find((e) => e.id === job.estimateId) : undefined;
@@ -350,9 +357,12 @@ export default function VisitScreen() {
       >
         {access}
         {/* the steps strip (SectionStrip `steps`): passed / now / next — not pressed */}
-        <View testID="visit-steps">
-          <Steps labels={STEP_LABELS.map((k) => t(k))} current={idx} />
-        </View>
+        <ViewSteps
+          testID="visit-steps"
+          label={t("proto.visit.steps")}
+          items={STEP_LABELS.map((k) => ({ key: k, label: t(k) }))}
+          value={idx < STEP_LABELS.length ? STEP_LABELS[idx]! : "done"}
+        />
         {consent.sheet}
 
         {/* the signature: the end of the work (the bar says «Подпись клиента»; «⋯ → Вернуться к работе») */}

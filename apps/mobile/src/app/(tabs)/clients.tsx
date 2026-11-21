@@ -11,7 +11,9 @@ import { dayOffsetOf, isoDayKey } from "@/features/calendar";
 import { telHref } from "@/features/contactLinks";
 import { pickerOptions } from "@/features/statusMoves";
 import { useI18n } from "@/i18n";
-import { useAgo } from "@/features/client/ClientSections";
+import { ClientOverview, useAgo, useClientFacts } from "@/features/client/ClientSections";
+import { useListPanel } from "@/nav/listPanel";
+import { ListPanel } from "@/ui/listPanel";
 import { Button } from "@/ui/controls";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { openContact } from "@/ui/listCard";
@@ -77,6 +79,9 @@ export default function Clients() {
     .sort((a, b) => a.name.localeCompare(b.name));
   // #2014: an empty name goes to «#», never brings the list down
   const groups = groupByLetter(list).map(([letter, rows]) => ({ key: letter, title: letter, rows }));
+  // 1280: the client opens beside the list (ListScreen `aside`, ListPanel — «Сейчас» and the client's Обзор); 390/820 — his screen
+  const panel = useListPanel(list.map((c) => c.id), (id) => `/client/${id}`, (id) => clients.some((c) => c.id === id));
+  const openC = panel.openId ? clients.find((c) => c.id === panel.openId) : undefined;
 
   /** archive in one tap with «Отменить» — the same move as the status picker (do-not-service needs a reason: the client's page) */
   const archive = (c: Customer) => toast.show(`${c.name}: ${t(clientStatusChip.archived.l)}`, store.setCustomerStatus(c.id, "archived"));
@@ -119,7 +124,7 @@ export default function Clients() {
       status,
       actions: !m?.owesCents && !status && tel ? [{ icon: "phone" as const, a11y: `${t("client.call")} ${c.name}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c.phone ?? "" }), testID: `client-row-call-${c.id}` }] : undefined,
       swipe: { left: swipeLeft, right: swipeRight },
-      onPress: () => router.push(`/client/${c.id}`),
+      onPress: () => panel.open(c.id),
     };
   };
   return (
@@ -136,6 +141,7 @@ export default function Clients() {
       // «⋯» — import from CSV: the office's (owner, admin, office), not sales (04 §14.4)
       more={canImportClients(role) ? [{ key: "import", label: t("client.import.menu"), icon: "invoice" }, { key: "imports", label: t("client.imports.menu"), icon: "history" }] : undefined}
       onMore={(k) => router.push(k === "import" ? "/client/import" : "/client/imports")}
+      aside={openC ? <ClientAside key={openC.id} c={openC} outside={panel.outside} onOpen={panel.full} onClose={panel.close} /> : undefined}
       empty={
         <Empty
           icon="search"
@@ -145,5 +151,15 @@ export default function Clients() {
         />
       }
     />
+  );
+}
+
+/** the client beside the list on 1280: the panel's head (name, «⤢ Открыть», «✕») and his Обзор; a section opens his screen */
+function ClientAside({ c, outside, onOpen, onClose }: { c: Customer; outside: boolean; onOpen: () => void; onClose: () => void }) {
+  const f = useClientFacts(c);
+  return (
+    <ListPanel title={c.name || "—"} outside={outside} onOpen={onOpen} onClose={onClose}>
+      <ClientOverview c={c} f={f} onSection={onOpen} />
+    </ListPanel>
   );
 }

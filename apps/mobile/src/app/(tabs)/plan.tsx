@@ -18,8 +18,8 @@ import { T } from "@/ui/primitives";
 import { Card, Empty, Grid, RowView } from "@/ui/surfaces";
 import { canPlan, canReschedule, hiddenAssignees, isAssigned, liveAssignees, moveAssignee, planFilter, unassignedSoon, waitingJobs, type PlanWho } from "@/features/schedule";
 import { memberName } from "@/features/team";
-import { DayCell, MoveVisitSheet, PlanAddSheet, PlanChosen, PlanFilterSheet, PlanSearch, UnassignedSheet, WaitingSheet, WeekList, planRows, stripDays, type RowHandlers } from "@/features/PlanParts";
-import { FilterBar } from "@/ui/filterBar";
+import { DayCell, MoveVisitSheet, PlanAddSheet, UnassignedSheet, WaitingSheet, WeekList, planRows, stripDays, type RowHandlers } from "@/features/PlanParts";
+import { FilterBar, useFilterHeader } from "@/ui/filterBar";
 import type { FilterGroup } from "@/ui/filterBarRules";
 import { dayLoads, matchPlanItem, matchVisit, planItems, type DayLoad } from "@/features/planFeed";
 import { EventSheet, type EventSheetState } from "@/features/EventForm";
@@ -50,8 +50,7 @@ export default function Plan() {
   const whoNow: PlanWho = planner && (who === "all" || who === "me" || db.members.some((m) => m.id === who && !m.pending)) ? who : "all";
   const [adding, setAdding] = useState(false);
   const [ev, setEv] = useState<EventSheetState>(null);
-  const [sheet, setSheet] = useState<"unassigned" | "undated" | "filters" | null>(null);
-  const [findOpen, setFindOpen] = useState(false);
+  const [sheet, setSheet] = useState<"unassigned" | "undated" | null>(null);
   const [assign, setAssign] = useState<string | null>(null);
   const [move, setMove] = useState<string | null>(null);
   // the search (client, address, work; a task or an event by its title) — not kept, like every list's (spec 31 §6 п.7)
@@ -96,16 +95,10 @@ export default function Plan() {
   const addOn = (k: DayKey) => { setAddDay(k); setAdding(true); };
   const h: RowHandlers = planner ? { onEvent: (e) => setEv({ kind: e.kind, event: e }), onAssign: setAssign, onMove: setMove } : {};
   const desktop = device === "desktop";
-  // phone and tablet: the search and «Фильтры» are icons of the header (founder 21.11: no row of circles of its own);
-  // 1280: FilterBar's one row (the search panel and a button per group)
-  const icons: IconAction[] = desktop
-    ? []
-    : [
-        { icon: "search", a11y: t("proto.plan.searchA11y"), onPress: () => setFindOpen((o) => !o || q !== ""), testID: "plan-search" },
-        ...(filterGroups.some((g) => g.options.length)
-          ? [{ icon: "sliders" as const, a11y: t("proto.plan.filters", { n: filterGroups.reduce((n, g) => n + g.options.filter((o) => o.on).length, 0) }), onPress: () => setSheet("filters"), testID: "plan-filters" }]
-          : []),
-      ];
+  // phone and tablet: the search and «Фильтры» are icons of the header (FilterBar «значки в шапке», founder 21.11: no row of
+  // circles of its own); 1280: FilterBar's one row (the search panel and a button per group)
+  const fh = useFilterHeader({ search: { value: q }, groups: filterGroups, searchA11y: t("proto.plan.searchA11y"), testID: "plan" });
+  const icons: IconAction[] = desktop ? [] : fh.icons;
   // the 820 / 1280 board by person has its own «Не назначено» on top (one thing once, П7)
   const soon = planner && !(mode === "day" && wide) ? unassignedSoon(db).length : 0;
   const waiting = planner ? waitingJobs(db).length : 0;
@@ -120,7 +113,7 @@ export default function Plan() {
     ) : wide ? (
       <DayView date={date} visits={visitsOn(date)} who={whoNow} onAdd={planner ? () => addOn(date) : undefined} />
     ) : null;
-  const empty = other ?? (
+  const empty = (
     <Empty
       icon="calendar"
       title={date === today ? t("plan5.freeToday") : t("plan.empty")}
@@ -144,27 +137,29 @@ export default function Plan() {
         } : undefined}
         onCreate={(k) => (k === "visit" ? addOn(date) : setEv({ kind: k === "event" ? "event" : "time_off", day: date }))}
         views={
-          <View style={{ gap: space[3] }}>
-            <Segmented
-              value={mode}
-              onChange={setMode}
-              testID="plan-mode"
-              full
-              items={[
-                { key: "day", label: t("plan.day") },
-                { key: "week", label: t("plan.week") },
-                { key: "month", label: t("plan.month") },
-              ]}
-            />
-            {desktop ? (
-              <FilterBar<string> items={[]} value="" onChange={() => undefined} search={{ value: q, onChange: setQ, placeholder: t("card.filter.searchPlan") }} groups={filterGroups} onReset={reset} />
-            ) : (
-              <>
-                {findOpen || q ? <PlanSearch value={q} onChange={setQ} placeholder={t("card.filter.searchPlan")} /> : null}
-                <PlanChosen groups={filterGroups} onReset={reset} />
-              </>
-            )}
-          </View>
+          <Segmented
+            value={mode}
+            onChange={setMode}
+            testID="plan-mode"
+            full
+            items={[
+              { key: "day", label: t("plan.day") },
+              { key: "week", label: t("plan.week") },
+              { key: "month", label: t("plan.month") },
+            ]}
+          />
+        }
+        view={mode}
+        filters={
+          <FilterBar<string>
+            items={[]}
+            value=""
+            onChange={() => undefined}
+            search={{ value: q, onChange: setQ, placeholder: t("card.filter.searchPlan") }}
+            groups={filterGroups}
+            onReset={reset}
+            header={desktop ? undefined : fh.state}
+          />
         }
         days={strip}
         day={date}
@@ -172,8 +167,9 @@ export default function Plan() {
         loads={loads}
         dayTitle={date === today ? `${t("common.today")} · ${dayOf(date)}` : dayOf(date)}
         unassigned={soon ? { label: t("proto.plan.unassigned", { n: soon }), onPress: () => setSheet("unassigned") } : undefined}
-        items={other ? [] : dayItems}
+        items={dayItems}
         empty={empty}
+        body={other}
         undated={waiting ? { label: t("proto.plan.undated", { n: waiting }), onPress: () => setSheet("undated") } : undefined}
       />
       {planner ? (
@@ -186,7 +182,6 @@ export default function Plan() {
           <MoveVisitSheet visit={db.visits.find((v) => v.id === move)} onClose={() => setMove(null)} />
         </>
       ) : null}
-      {!desktop ? <PlanFilterSheet visible={sheet === "filters"} onClose={() => setSheet(null)} groups={filterGroups} /> : null}
     </>
   );
 }

@@ -30,6 +30,8 @@ export interface EditorScreenProps {
   /** unsaved changes: «назад» asks first */
   dirty: boolean;
   back: () => void;
+  /** a finger starts to scroll the page (passed to Screen: an open row of the estimate folds and keeps what is typed, DS §8.3) */
+  onScrollBegin?: () => void;
   preview?: boolean;
   testID: string;
 }
@@ -61,7 +63,7 @@ export function EditorScreen(p: EditorScreenProps) {
           {body}
         </TemplateFrame>
       ) : (
-        <Screen testID={p.testID} title={p.title} back={back} right={right} form footer={layout.bottom.includes("main") ? step : undefined}>
+        <Screen testID={p.testID} title={p.title} back={back} right={right} onScrollBegin={p.onScrollBegin} form footer={layout.bottom.includes("main") ? step : undefined}>
           {body}
         </Screen>
       )}

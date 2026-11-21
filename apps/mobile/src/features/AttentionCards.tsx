@@ -19,7 +19,8 @@ import { cleanPhone } from "./contactLinks";
 import { enRouteSms } from "./jobHistory";
 import { useConsentQuestion } from "./LocationParts";
 import { smsWithBody } from "./sms";
-import { minuteIn } from "./zone";
+import { formatDayKey, minuteIn } from "./zone";
+import { todayKey } from "./calendar";
 import { fabItems } from "@/nav/sections";
 import { useSearchIcon } from "@/nav/HeaderIcons";
 import { unreadCount } from "@/nav/notices";
@@ -174,23 +175,40 @@ export function useEnRoute(v: Visit | undefined) {
   return { go, sheet: consent.sheet };
 }
 
-/** the header of an Overview (BUILD-SPEC §1 HeaderActions, Greeting): sync (only with something unsent or no network) ·
- *  search · the bell (the office) · the profile → «Ещё»; «＋» — the role's «Главная» set as a Menu at the button */
+/** the header of an Overview (BUILD-SPEC §1 HeaderActions, Greeting): sync (only with something unsent or no network; the queue
+ *  as its badge) · search · the bell (the office; unread as its badge); the profile is the Greeting's avatar on 390 (→ «Ещё»), on
+ *  820/1280 it is at the bottom of the side menu; «＋» — the role's «Главная» set as a Menu at the button */
 export function useHomeHeader() {
   const { db, role, queue, online } = useStore();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const search = useSearchIcon();
   const { wide } = useDevice();
   const n = unreadCount(db, role);
   const icons: IconAction[] = [
     ...(queue.length || !online
-      ? [{ icon: (online ? "cloudUp" : "wifiOff") as IconKey, a11y: online ? t("proto.home.sync", { n: queue.length }) : t("proto.home.offline", { n: queue.length }), onPress: () => router.push("/settings/profile"), testID: "home-sync" }]
+      ? [
+          {
+            icon: (online ? "cloudUp" : "wifiOff") as IconKey,
+            a11y: online ? t("proto.home.sync", { n: queue.length }) : t("proto.home.offline", { n: queue.length }),
+            onPress: () => router.push("/settings/profile"),
+            testID: "home-sync",
+            badge: queue.length ? { n: queue.length, tone: "warn" as const } : undefined,
+          },
+        ]
       : []),
     search,
-    ...(role !== "tech" ? [{ icon: "bell" as IconKey, a11y: n ? t("nav.bellNew", { n }) : t("nav.bell"), onPress: () => router.push("/notifications"), testID: "home-bell" }] : []),
-    // 820/1280: the profile is at the bottom of the side menu — not twice
-    ...(wide ? [] : [{ icon: "user" as IconKey, a11y: t("nav.profile"), onPress: () => router.push("/more"), testID: "home-profile" }]),
+    ...(role !== "tech" ? [{ icon: "bell" as IconKey, a11y: n ? t("nav.bellNew", { n }) : t("nav.bell"), onPress: () => router.push("/notifications"), testID: "home-bell", badge: n ? { n } : undefined }] : []),
   ];
+  const me = db.members.find((m) => m.id === db.me);
+  const loc = lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU";
+  const greeting = {
+    initials: initials(me?.name ?? "") || "·",
+    text: useGreeting(),
+    date: formatDayKey(todayKey(), { weekday: "long", day: "numeric", month: "long" }, loc),
+    // 820/1280: the profile is at the bottom of the side menu — the avatar there is not a second door
+    onAvatar: wide ? undefined : () => router.push("/more"),
+    avatarLabel: t("nav.profile"),
+  };
   const items = fabItems("home", role).filter((x) => x.href);
   const create: CreateAction | undefined = items.length
     ? { a11y: t("nav.create"), items: items.map((x) => ({ key: x.id, label: t(x.label), icon: x.icon, testID: `fab-${x.id}` })) }
@@ -199,7 +217,7 @@ export function useHomeHeader() {
     const href = items.find((x) => x.id === key)?.href;
     if (href) router.push(href as Href);
   };
-  return { icons, create, onCreate };
+  return { icons, create, onCreate, greeting };
 }
 
 /** «через 10 мин» on the NowCard: only while the start is less than two hours away */

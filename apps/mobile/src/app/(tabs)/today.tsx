@@ -184,6 +184,7 @@ export default function Today() {
     <OverviewScreen
       testID="today"
       title={greeting}
+      greeting={header.greeting}
       headerIcons={header.icons}
       create={header.create}
       onCreate={header.onCreate}

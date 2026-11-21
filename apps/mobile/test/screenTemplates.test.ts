@@ -74,8 +74,13 @@ describe("the other templates", () => {
     expect(templateLayout("list", { empty: true }).body).toEqual(["empty"]);
   });
   it("a calendar: the views, then the day strip under the title", () => {
-    expect(templateLayout("calendar", { views: true }).under).toEqual(["views", "days"]);
-    expect(templateLayout("calendar", {}).under).toEqual(["days"]);
+    expect(templateLayout("calendar", { views: true }).under).toEqual(["views", "month", "days"]);
+    expect(templateLayout("calendar", {}).under).toEqual(["month", "days"]);
+  });
+  it("a calendar: no strip in «Месяц»; the Week / Month / board is the `view` body in place of the day's rows", () => {
+    expect(templateLayout("calendar", { views: true, monthView: true }).under).toEqual(["views", "month"]);
+    expect(templateLayout("calendar", { viewBody: true, unassigned: true, undated: true }).body).toEqual(["unassigned", "view", "undated"]);
+    expect(templateLayout("calendar", { viewBody: true, empty: true }).body).toEqual(["view"]);
   });
   it("an overview: no «назад», the next step first", () => {
     const o = templateLayout("overview", { main, attention: true, summary: true });
