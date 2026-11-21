@@ -7,7 +7,7 @@ import type { Visit } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { usePersistentState } from "@/data/persist";
 import { usePlanShowDone } from "@/features/prefs";
-import { isoDayKey, monthGrid, todayKey, weekDays, type DayKey } from "@/features/calendar";
+import { headDay, isoDayKey, monthGrid, todayKey, weekDays, type DayKey } from "@/features/calendar";
 import { formatDayKey } from "@/features/zone";
 import { VisitCard, sortByStart } from "@/features/visits";
 import { AssignSheet } from "@/features/sheets";
@@ -147,8 +147,8 @@ export default function Plan() {
             onChange={setMode}
             testID="plan-mode"
             full
-            // visual v2: the Plan's one yellow fill is the chosen view («День»)
-            accent
+            // #2363 F19: a yellow fill is the screen's main action only — the chosen view is the neutral cell (the Plan has no main
+            // action, so no yellow fill; the picked day keeps its tone)
             items={[
               { key: "day", label: t("plan.day") },
               { key: "week", label: t("plan.week") },
@@ -308,8 +308,4 @@ function RaisedGrid({ ids, children }: { ids: string[]; children: ReactNode[] })
   return <Grid raise={i >= 0 ? i : undefined}>{children}</Grid>;
 }
 
-/** «Пт, 20 ноября» — the kicker's day (v2 макет 2), the weekday short and the month in full */
-function kickDay(k: DayKey, lang: string): string {
-  const s = formatDayKey(k, { weekday: "short", day: "numeric", month: "long" }, lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU");
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
+const kickDay = headDay;

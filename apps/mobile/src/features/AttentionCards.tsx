@@ -20,7 +20,7 @@ import { enRouteSms } from "./jobHistory";
 import { useConsentQuestion } from "./LocationParts";
 import { smsWithBody } from "./sms";
 import { formatDayKey, minuteIn } from "./zone";
-import { todayKey } from "./calendar";
+import { headDay, todayKey } from "./calendar";
 import { useFabItems } from "@/nav/Fab";
 import { useSearchIcon } from "@/nav/HeaderIcons";
 import { unreadCount } from "@/nav/notices";
@@ -205,7 +205,7 @@ export function useHomeHeader() {
   const greeting = {
     initials: initials(me?.name ?? "") || "·",
     text: useGreeting(),
-    date: formatDayKey(todayKey(), { weekday: "long", day: "numeric", month: "long" }, loc),
+    date: headDay(todayKey(), lang), // #2363 F27: «Пт, 20 ноября» — one date line with the Plan
     // the folded header's small title (visual-v2 «Корень вкладки — Главная», кадр 3): «Сегодня, 20 нояб.»
     mini: t("hdr.today", { d: formatDayKey(todayKey(), { day: "numeric", month: "short" }, loc) }),
     // 820/1280: the profile is at the bottom of the side menu — the avatar there is not a second door

@@ -71,7 +71,7 @@ export function DoneCircle({
         {done ? <Icon name="check" s={list ? k.glyph : size.iconSm} color={list ? c.surf : st.on} /> : null}
       </View>
       {title ? (
-        <T v="body" tone={done ? "mut" : "ink"} numberOfLines={list ? 1 : undefined} style={{ flex: 1, textDecorationLine: done && !list ? "line-through" : "none" }}>
+        <T v="body" tone={done ? "mut" : "ink"} numberOfLines={list ? 2 : undefined} style={{ flex: 1, textDecorationLine: done && !list ? "line-through" : "none" }}>
           {title}
         </T>
       ) : null}

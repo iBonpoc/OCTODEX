@@ -163,7 +163,7 @@ function LeadsList() {
         testID="leads"
         title={t("sales.leads")}
         count={open.length}
-        create={{ a11y: t("quick.lead"), items: [{ key: "new", label: t("quick.lead"), icon: "inbox", testID: "leads-create-new" }] }}
+        create={{ a11y: t("quick.lead"), items: [{ key: "new", label: t("quick.lead"), icon: "leads", testID: "leads-create-new" }] }}
         onCreate={newLead}
         search={{ placeholder: t("lead.search"), value: q, onChange: setQ }}
         chips={{ items: chips.map((c) => ({ key: c, label: label(c) })), value: chip, onChange: setKept }}
@@ -174,7 +174,7 @@ function LeadsList() {
         onMore={() => router.push("/company/leads")}
         empty={
           <Empty
-            icon="inbox"
+            icon="leads"
             title={q.trim() ? t("proto.leads.emptySearch") : visible.length ? t("proto.leads.emptyChip") : t("inbox.empty")}
             // the tech sees only his own (13 §2.3): say which, not «from Thumbtack and the website»
             hint={q.trim() ? undefined : t(office ? "inbox.emptyHint" : "leads.empty.tech")}

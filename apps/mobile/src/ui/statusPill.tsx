@@ -30,7 +30,9 @@ export function StatusPill({ status, label, onPress, a11y, testID }: {
         paddingRight: component.statusPill.padR,
         paddingVertical: spaceHalf.hair,
         borderRadius: radius.pill,
-        backgroundColor: st.fill,
+        // #2363 N1 (вариант А): quiet — the icon and the word in the status tone, no muddy fill; only «плохо» (bad: act now —
+        // «Просрочен», «Пропущен») keeps its fill. Rule 2 holds: always the icon AND the word
+        backgroundColor: status === "bad" ? st.fill : "transparent",
         flexDirection: "row",
         alignItems: "center",
         gap: space[1],

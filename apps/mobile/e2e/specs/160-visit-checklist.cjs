@@ -61,7 +61,8 @@ exports.run = async (h) => {
   // a tick, a photo for the photo item
   const left = p.getByTestId("chk-left").locator("visible=true").first();
   await left.waitFor();
-  h.expect(/0 из 4/.test(await left.innerText()), `nothing done yet: ${await left.innerText()}`);
+  // #2363 F38: not begun — «4 пункта», not «0 из 4 · 0 %»
+  h.expect(/4 пункта/.test(await left.innerText()) && !/0 %/.test(await left.innerText()), `nothing done yet: ${await left.innerText()}`);
   await p.getByTestId(`chk-item-${A}`).locator("visible=true").first().click();
   for (let i = 0; i < 10 && !(await visit()).checklist.find((x) => x.id === A).done; i++) await p.waitForTimeout(150);
   h.expect((await visit()).checklist.find((x) => x.id === A).done, "the tick is saved");

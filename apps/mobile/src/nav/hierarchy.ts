@@ -138,8 +138,9 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
     case "visit": {
       if (role === "tech") return { section: "home", kind: "visit.title", up: { href: "/visits", label: K("nav.home") } };
       const v = db.visits.find((x) => x.id === id);
-      // an inspection has no job: up to the Plan
-      return { section: v?.jobId ? "clients" : "plan", kind: "visit.title", up: v?.jobId ? toJob(v.jobId) : { href: "/plan", label: K("nav.plan") } };
+      // an inspection has no job: up to the Plan. #2363 F14: a visit lives in the Plan — opened with no history (a link, a push)
+      // it lights «План», not «Клиенты» (opened from a list, the tab it came from stays lit: tabBarRule litSection)
+      return { section: "plan", kind: "visit.title", up: v?.jobId ? toJob(v.jobId) : { href: "/plan", label: K("nav.plan") } };
     }
     case "catalog":
       return id ? { section: "catalog", kind: "cat.item", up: { href: "/catalog", label: K("cat.title") } } : { section: "catalog" };

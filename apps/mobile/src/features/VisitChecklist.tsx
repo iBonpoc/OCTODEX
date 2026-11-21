@@ -39,7 +39,7 @@ export function ChecklistCard({ v, missing, adding = true, onAdded, cell, foot, 
   folded?: boolean;
 }) {
   const store = useStore();
-  const { t } = useI18n();
+  const { t, tn } = useI18n();
   const toast = useToast();
   const [extra, setExtra] = useState("");
   const queuedHint = () => (store.online ? undefined : t("offline.queued"));
@@ -59,7 +59,7 @@ export function ChecklistCard({ v, missing, adding = true, onAdded, cell, foot, 
     return (
       <Card inner>
         <View testID="chk-left">
-          <ProgressWords caption={t("px2.cv.checklist")} value={all ? t("px2.cv.ofPct", { n: doneN, m: all, p: Math.round((doneN / all) * 100) }) : undefined} />
+          <ProgressWords caption={t("px2.cv.checklist")} value={all ? (doneN ? t("px2.cv.ofPct", { n: doneN, m: all, p: Math.round((doneN / all) * 100) }) : tn("r1.itemsN", all)) : undefined /* #2363 F38: not begun — «4 пункта» */} />
         </View>
         {folded ? null : (
           <View>

@@ -59,9 +59,8 @@ export function StatTile({ label, value, unit, unitTone, sub, icon, accent, warn
         borderRadius: radius.card,
         backgroundColor: accent ? c.acc : selected ? c.surf3 : c.surf,
         borderTopWidth: component.hairline,
-        borderTopColor: accent ? c.accEdge : c.hl,
-        borderWidth: accent ? component.hairline : 0,
-        borderColor: accent ? c.accEdge : "transparent",
+        // #2363 F36: the yellow tile has no dark edge in the light theme — one look in both themes
+        borderTopColor: accent ? c.acc : c.hl,
         justifyContent: "space-between",
         gap: spaceHalf.tight,
       }}

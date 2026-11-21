@@ -50,6 +50,9 @@ describe("navigation hierarchy: back = one level up", () => {
     const v = db.visits.find((x) => x.jobId === job.id)!;
     expect(navContext(`/visit/${v.id}`, {}, db, "dispatcher").up?.href).toBe(`/job/${job.id}`);
     expect(navContext(`/visit/${v.id}`, {}, db, "tech")).toMatchObject({ section: "home", up: { href: "/visits" } });
+    // #2363 F14: a visit opened with no history (a link, a push) lights «План» — it lives in the Plan, not under «Клиенты»
+    expect(navContext(`/visit/${v.id}`, {}, db, "dispatcher").section).toBe("plan");
+    expect(navContext(`/visit/${v.id}`, {}, db, "director").section).toBe("plan");
   });
   it("«Ещё» → Счета → Счёт: the list is a root; an invoice without a job goes up to the list", () => {
     expect(navContext("/invoice", { f: "owed" }, db, "director")).toEqual({ section: "invoices" });

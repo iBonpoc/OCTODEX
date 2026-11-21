@@ -5567,7 +5567,7 @@ export const en: Dict = {
   "px2.cv.deposit": "deposit",
   "px2.cv.work": "work",
   "px2.cv.workCap": "Work",
-  "px2.cv.ofPct": "{n} of {m} · {p}%",
+  "px2.cv.ofPct": "{n} of {m} · {p}%",
   "px2.cv.pinnedTeam": "pinned · the crew sees it",
   "px2.cv.pinnedMine": "pinned · only you see it",
   "px2.cv.dur": "Length",
@@ -5589,4 +5589,10 @@ export const en: Dict = {
   "px2.cv.call": "Call",
   "px2.cv.sms": "Text",
   "px2.cv.route": "Directions",
+  // #2363 круг 1 проверки вида v2
+  "r1.itemsN.one": "{n} item",
+  "r1.itemsN.few": "{n} items",
+  "r1.itemsN.many": "{n} items",
+  "r1.itemsN.other": "{n} items",
+  "r1.est.changedAfterSend": "changed after sending",
 };

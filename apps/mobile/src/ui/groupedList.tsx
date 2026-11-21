@@ -19,7 +19,7 @@ import { Menu } from "./overlays";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { Card, RowView } from "./surfaces";
 import { StatusPill } from "./statusPill";
-import type { FigureCol } from "./figures";
+import { CountPill, type FigureCol } from "./figures";
 import { SwipeRow, type SwipeAction } from "./swipeRow";
 import type { IconAction } from "./templates/types";
 import { rowActions, rowSaid } from "./groupedListLogic";
@@ -39,10 +39,10 @@ export function groupRows(children: ReactNode): ReactNode[] {
 }
 
 /** One group: its title (and «Все ›»), the rows in one card with inset hairlines between them. */
-export function ListGroup({ title, all, note, children, inset = component.listRow.inset, bare, testID }: {
+export function ListGroup({ title, count, all, children, inset = component.listRow.inset, bare, testID }: {
   title?: string;
-  /** visual v2 Деньги (макет 6): a plain word on the right of the title instead of «Все ›» («Оплачены сегодня   2») */
-  note?: string;
+  /** #2363 F08: the number of the group beside its title — the same CountPill as «Позиции 7» and «Выезды сегодня 6» */
+  count?: number;
   /** visual v2 Главная (макет 1): the block's children stand as their own cards `rhythm.cardGap` 8 apart (tiles, FigureRows) — no
    *  card around them, no hairlines */
   bare?: boolean;
@@ -58,12 +58,15 @@ export function ListGroup({ title, all, note, children, inset = component.listRo
   if (!rows.length) return null;
   return (
     <View style={{ gap: rhythm.headGap }} testID={testID}>
-      {title || all || note ? (
+      {title || all || count != null ? (
         // visual v2: the block's title 17/700 `ink`, «Все ›» 13/600 `mut` on its baseline; the title → the content 10
         <RowView style={{ justifyContent: "space-between", alignItems: "baseline" }}>
-          <T v="heading" style={{ flex: 1 }} numberOfLines={1}>
-            {title ?? ""}
-          </T>
+          <RowView gap={space[2]} style={{ flex: 1, minWidth: 0 }}>
+            <T v="heading" style={{ flexShrink: 1 }} numberOfLines={1}>
+              {title ?? ""}
+            </T>
+            {count != null ? <CountPill n={count} testID={testID ? `${testID}-count` : undefined} /> : null}
+          </RowView>
           {all ? (
             <Press onPress={all.onPress} visibleHeight={size.iconMd} accessibilityRole="link" accessibilityLabel={all.label} testID={all.testID}>
               <RowView gap={space[1]}>
@@ -73,10 +76,6 @@ export function ListGroup({ title, all, note, children, inset = component.listRo
                 <Icon name="chevronRight" s={size.iconXs} color={c.mut} />
               </RowView>
             </Press>
-          ) : note ? (
-            <T v="caption" w="semibold" tone="mut" numberOfLines={1}>
-              {note}
-            </T>
           ) : null}
         </RowView>
       ) : null}
@@ -126,12 +125,14 @@ export interface GroupRowProps {
   onPress?: () => void;
   /** a 40 row (`rowCompact`): small lists inside an object */
   compact?: boolean;
+  /** #2363 F21/F24: the title and the line may take 2 lines each (a note, «работа · мастер» beside a pill) — never cut mid-word on one line */
+  wrap?: boolean;
   /** 1280: the row whose record is open in the panel beside the list (`aria-current`, a tinted row; the focus returns to it, spec 06) */
   selected?: boolean;
   testID?: string;
 }
 
-export function GroupRow({ title, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, selected, testID }: GroupRowProps) {
+export function GroupRow({ title, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, wrap, selected, testID }: GroupRowProps) {
   const { c } = useTheme();
   const [down, setDown] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -163,11 +164,11 @@ export function GroupRow({ title, subtitle, lead, value, cols, status, actions =
         </View>
       ) : null}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <T v="body" w="semibold" tone={check?.done ? "mut" : "ink"} numberOfLines={1} style={check?.done ? { textDecorationLine: "line-through" } : undefined}>
+        <T v="body" w="semibold" tone={check?.done ? "mut" : "ink"} numberOfLines={wrap ? 2 : 1} style={check?.done ? { textDecorationLine: "line-through" } : undefined}>
           {title}
         </T>
         {subtitle ? (
-          <T v="caption" tone="mut" numberOfLines={1}>
+          <T v="caption" tone="mut" numberOfLines={wrap ? 2 : 1}>
             {subtitle}
           </T>
         ) : null}

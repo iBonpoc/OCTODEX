@@ -5543,7 +5543,7 @@ export const ru = {
   "px2.cv.deposit": "задаток",
   "px2.cv.work": "работа",
   "px2.cv.workCap": "Работа",
-  "px2.cv.ofPct": "{n} из {m} · {p} %",
+  "px2.cv.ofPct": "{n} из {m} · {p} %",
   "px2.cv.pinnedTeam": "закреплено · видят мастера",
   "px2.cv.pinnedMine": "закреплено · видите только вы",
   "px2.cv.dur": "Длит.",
@@ -5589,6 +5589,12 @@ export const ru = {
   "px1.visitsN.many": "{n} выездов",
   "px1.visitsN.other": "{n} выезда",
   "px1.plan.nowA11y": "Сейчас {time}",
+  // #2363 круг 1 проверки вида v2
+  "r1.itemsN.one": "{n} пункт",
+  "r1.itemsN.few": "{n} пункта",
+  "r1.itemsN.many": "{n} пунктов",
+  "r1.itemsN.other": "{n} пункта",
+  "r1.est.changedAfterSend": "изменена после отправки",
 } as const;
 
 export type DictKey = keyof typeof ru;

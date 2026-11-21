@@ -31,7 +31,6 @@ import { mapsUrl } from "@/ui/listCardLayout";
 import type { NowCardProps } from "@/ui/nowCard";
 import { Icon, T } from "@/ui/primitives";
 import { StatGrid, StatTile } from "@/ui/statTile";
-import { FigureRow } from "@/ui/figures";
 import { Card, RowView } from "@/ui/surfaces";
 import { OverviewScreen } from "@/ui/templates";
 import type { Visit } from "@/data/types";
@@ -176,9 +175,10 @@ export default function Today() {
       title: customer?.name ?? db.leads.find((l) => l.id === v.leadId)?.name ?? "—",
       // visual v2 «Дальше»: «работа · адрес» in one quiet line; the route is the dark button of the pair, not a link
       // v2 макет 1 «Bathroom remodel · 1420 Oak Grove Ave, Pasadena»: the job's name before its «: details», so the address fits the line
-      sub: [job?.title.split(":")[0]?.trim(), place].filter(Boolean).join(" · "),
+      // #2363 F22: the job and the address are two lines — the address is never cut in the middle of a word
+      sub: [job?.title.split(":")[0]?.trim(), place].filter(Boolean).join("\n"),
       // «Работа · 0 из 4 · 0 %» — the visit's work list in words (no bar)
-      progress: v.checklist.length ? { caption: t("px1.work"), value: v.checklist.filter((x) => x.done).length, max: v.checklist.length, label: t("w2a.ofN", { a: v.checklist.filter((x) => x.done).length, b: v.checklist.length }) } : undefined,
+      progress: v.checklist.length ? { caption: t("px1.work"), value: v.checklist.filter((x) => x.done).length, max: v.checklist.length, label: v.checklist.some((x) => x.done) ? t("w2a.ofN", { a: v.checklist.filter((x) => x.done).length, b: v.checklist.length }) : tn("r1.itemsN", v.checklist.length) } : undefined,
       // «тройка цифр»: how long on site · on the way (or what is due) · who
       trio: [
         { value: v.allDay ? t("plan5.allDay") : duration(v.durationMin), label: t("w2a.onSite") },
@@ -215,29 +215,25 @@ export default function Today() {
     const name = customer?.name ?? db.leads.find((l) => l.id === x.leadId)?.name ?? "—";
     const techs = (x.assigneeIds ?? (x.techId ? [x.techId] : [])).map((id) => db.members.find((m) => m.id === id)?.name?.split(/\s+/)[0]).filter(Boolean).join(", ");
     const s = crewSt[i];
+    // #2363 F20/F24: a row of ONE group (rule 12); the line is «работа · мастер» only, the state is a one-word pill on every
+    // row whose state says more than its hour — never glued into the line
+    // the office's overview: every state beyond «Запланирован» is a pill («Идёт работа» says which crew works)
+    const odd = !!s;
     return (
-      <FigureRow
+      <GroupRow
         key={x.id}
         testID="crew-row"
-        lead={x.allDay ? undefined : timeLead(time(x.start)).top}
-        icon={x.allDay ? "calendar" : undefined}
+        wrap
+        lead={x.allDay ? { icon: "calendar" } : { time: timeLead(time(x.start)).top, sub: timeLead(time(x.start)).bottom || undefined }}
         title={name}
-        // the quiet word first: the end of a long line is cut
-        line={[s && crewShown[i] === "word" ? s.label : null, job?.title ?? t("st.inspection"), techs].filter(Boolean).join(" · ")}
-        status={s && crewShown[i] === "pill" ? { status: s.status, label: s.label } : undefined}
+        subtitle={[job?.title?.split(":")[0]?.trim() ?? t("st.inspection"), techs].filter(Boolean).join(" · ")}
+        status={odd ? { status: s.status, label: s.label } : undefined}
         onPress={() => router.push(`/visit/${x.id}`)}
       />
     );
   });
-  const crewSummary = sum ? (
-    <FigureRow
-      key="summary"
-      testID="crew-summary"
-      icon="alert"
-      title={[sum.late ? tn("w2a.lateN", sum.late) : null, sum.missed ? tn("w2a.missedN", sum.missed) : null].filter(Boolean).join(" · ")}
-      onPress={() => router.push("/plan")}
-    />
-  ) : null;
+  void crewShown;
+  void sum;
   // «Сметы ждут · до 6 дн»: the longest wait of a sent estimate
   const estDays = Math.max(0, ...db.estimates.filter((e) => e.status === "sent").map((e) => daysSince(e.sentAt) ?? 0));
 
@@ -269,14 +265,13 @@ export default function Today() {
       ) : null}
       <ListGroup title={t("todayR.action")} all={{ label: t("todayR.all"), onPress: () => router.push("/triage"), testID: "home-attention-all" }} bare testID="today-attention">
         <StatGrid testID="today-tiles">
-          <StatTile testID="tile-leads" icon="inbox" dense label={t("proto.home.tile.leads")} value={leadsWaiting.length} unit={longest ? t("px1.tile.leadsWait", { m: waitShort(longest, t) }) : undefined} onPress={() => router.push("/leads")} />
+          <StatTile testID="tile-leads" icon="leads" dense label={t("proto.home.tile.leads")} value={leadsWaiting.length} unit={longest ? t("px1.tile.leadsWait", { m: waitShort(longest, t) }) : undefined} onPress={() => router.push("/leads")} />
           <StatTile testID="tile-estimates" icon="doc" dense label={t("px1.tile.estimates")} value={estWaiting} unit={estDays ? t("px1.tile.estDays", { n: estDays }) : undefined} onPress={() => router.push("/estimates")} />
           <StatTile testID="tile-owed" icon="dollar" dense label={t("proto.home.tile.owed")} value={moneyWhole(n.awaitingCents)} unit={aw.overdue ? t("px1.tile.overdue", { n: aw.overdue }) : undefined} unitTone="bad" onPress={() => router.push("/invoice?f=owed")} />
-          <StatTile testID="tile-received" icon="chart" dense label={t("proto.home.tile.received")} value={moneyWhole(got.cents)} unit={got.count ? tn("px1.payN", got.count) : undefined} onPress={() => router.push("/figures/received?period=today")} />
+          <StatTile testID="tile-received" icon="trend" dense label={t("proto.home.tile.received")} value={moneyWhole(got.cents)} unit={got.count ? tn("px1.payN", got.count) : undefined} onPress={() => router.push("/figures/received?period=today")} />
         </StatGrid>
       </ListGroup>
-      <ListGroup title={t("proto.home.crews")} all={{ label: t("plan.title"), onPress: () => router.push("/plan"), testID: "crew-plan" }} bare testID="today-crews">
-        {crewSummary}
+      <ListGroup title={t("proto.home.crews")} all={{ label: t("plan.title"), onPress: () => router.push("/plan"), testID: "crew-plan" }} testID="today-crews">
         {crewRows}
       </ListGroup>
       {/* the chart and the funnel are details (П9): folded by default, the choice is kept */}

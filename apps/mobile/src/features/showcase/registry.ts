@@ -139,7 +139,7 @@ export const V2_VARIANTS: readonly { part: string; prop: string; src: string; us
   { part: "StatTile", prop: "unitTone", src: "ui/statTile.tsx", use: 'unitTone="bad"', shown: "ProtoV2.tsx" },
   { part: "StatGrid", prop: "cols", src: "ui/statTile.tsx", use: "cols={4}", shown: "ProtoV2.tsx" },
   { part: "ListGroup", prop: "bare", src: "ui/groupedList.tsx", use: "<ListGroup bare", shown: "ProtoV2.tsx" },
-  { part: "ListGroup", prop: "note", src: "ui/groupedList.tsx", use: '<ListGroup note="', shown: "ProtoV2.tsx" },
+  { part: "ListGroup", prop: "count", src: "ui/groupedList.tsx", use: "<ListGroup count={", shown: "ProtoV2.tsx" },
   { part: "TimeSlot", prop: "top", src: "ui/figures.tsx", use: "top={<HatchPlate", shown: "ProtoV2.tsx" },
   { part: "TimeSlot", prop: "oneLine", src: "ui/figures.tsx", use: " oneLine ", shown: "ProtoV2.tsx" },
   { part: "FitTitle", prop: "text", src: "ui/templates/screenHeader.tsx", use: "<FitTitle", shown: "ProtoV2.tsx" },

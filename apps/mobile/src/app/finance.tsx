@@ -52,7 +52,10 @@ export default function Finance() {
     ...(pay ? [{ key: "expenses", label: t("nav.expenses"), href: "/money", icon: "wallet" as const }] : []),
   ];
   const owedSub = [o.owed.overdue ? tn("px3.money.overdue", o.owed.overdue) : null, tn("todayR.invN", o.owed.n)].filter(Boolean).join(" · ");
-  const estSub = [tn("px3.money.estN", o.estimates.n), o.estimates.waiting ? tn("px3.money.waitN", o.estimates.waiting) : null].filter(Boolean).join(" · ");
+  // #2363 F45: «3 сметы · 3 ждут ответа» said the same twice — when every open estimate waits, only «3 ждут ответа»
+  const estSub = o.estimates.waiting && o.estimates.waiting === o.estimates.n
+    ? tn("px3.money.waitN", o.estimates.waiting)
+    : [tn("px3.money.estN", o.estimates.n), o.estimates.waiting ? tn("px3.money.waitN", o.estimates.waiting) : null].filter(Boolean).join(" · ");
   return (
     <Screen
       testID="money-overview"
@@ -72,7 +75,7 @@ export default function Finance() {
             <StatTile testID="money-tile-estimates" icon="doc" label={t("px3.money.est")} value={moneyWhole(o.estimates.cents)} sub={estSub} onPress={() => go("/estimates")} />
           </StatGrid>
           <StatGrid cols={3} testID="money-tiles-small">
-            <StatTile testID="money-tile-today" icon="chart" label={t("px3.money.today")} value={moneyWhole(o.today.cents)} onPress={pay ? () => go("/payments") : undefined} />
+            <StatTile testID="money-tile-today" icon="trend" label={t("px3.money.today")} value={moneyWhole(o.today.cents)} onPress={pay ? () => go("/payments") : undefined} />
             {pay ? <StatTile testID="money-tile-spent" icon="invoice" label={t("px3.money.spentWeek")} value={moneyWhole(o.expensesWeek.cents)} onPress={() => go("/money")} /> : null}
             <StatTile testID="money-tile-deposits" icon="wallet" label={t("px3.money.deposits")} value={moneyWhole(o.deposits.cents)} onPress={pay ? () => go("/payments") : undefined} />
           </StatGrid>
@@ -97,7 +100,7 @@ export default function Finance() {
           })}
         </ListGroup>
         {pay ? (
-          <ListGroup bare testID="money-paid" title={t("px3.money.paidToday")} note={String(o.paidToday.length)}>
+          <ListGroup bare testID="money-paid" title={t("px3.money.paidToday")} count={o.paidToday.length}>
             {o.paidToday.slice(0, SHOWN).map((x) => {
               const inv = db.invoices.find((i) => i.id === x.invoiceId);
               const how = t(`pay.${x.method}` as DictKey);

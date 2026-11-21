@@ -82,10 +82,10 @@ export function Button({
           borderRadius: radius.pill,
           ...(bar ? { paddingVertical: space[1] } : null),
           backgroundColor: bg,
-          // v2: no frame — a secondary button is told by its cell and its yellow words (WCAG 1.4.11 — the words identify it);
-          // the light theme's primary keeps the dark edge `accEdge` (yellow on the light ground is < 3:1)
-          borderWidth: variant === "primary" ? component.hairline : 0,
-          borderColor: variant === "primary" ? c.accEdge : "transparent",
+          // v2: no frame on any button — the words identify it (WCAG 1.4.11 asks no edge of a control told by its label);
+          // #2363 F36: the yellow fill looks the same in both themes, the dark `accEdge` line in the light one is gone
+          borderWidth: 0,
+          borderColor: "transparent",
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "center",
@@ -490,7 +490,10 @@ export function MetaTag({ label, icon }: { label: string; icon?: IconKey }) {
 /* ---------- ProgressBar: progress in words and a number, never a bar (founder 21.11: «полосу прогресса убрать вообще») ---------- */
 export function progressText(value: number, max: number, label?: string): string {
   const pct = max ? Math.round(Math.min(100, (value / max) * 100)) : 0;
-  return `${label ?? `${value} / ${max}`} · ${pct} %`;
+  // #2363 F38: nothing done yet — no «· 0 %» (the caller says «4 пункта»); the number and «%» never part (U+202F narrow no-break
+  // space), «·» stays with its neighbours (U+00A0)
+  if (value === 0 && label) return label;
+  return `${label ?? `${value} / ${max}`}\u00A0· ${pct}\u202F%`;
 }
 /** visual v2 «Прогресс»: only words and a number — «3 из 5 · 62 %» 15/700 on the right, what it is of («Работа», `caption`) 12/600 `mut` on the left */
 export function ProgressBar({ value, max, label, caption }: { value: number; max: number; label?: string; caption?: string }) {

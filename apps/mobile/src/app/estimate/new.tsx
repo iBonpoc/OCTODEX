@@ -44,7 +44,7 @@ import { Button, IconButton, Segmented, StatusChip, TextField, Toggle } from "@/
 import { CountPill, FigureRow } from "@/ui/figures";
 import type { IconKey } from "@/ui/primitives";
 import { dayKeyIn } from "@/features/zone";
-import { todayKey } from "@/features/calendar";
+import { dayOffsetOf, todayKey } from "@/features/calendar";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
 import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle, useFooterShown } from "@/ui/surfaces";
@@ -774,7 +774,12 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // «сохранено 8:19» (visual v2 №5): the version's own save mark; another day — the day
   // (an estimate saved before the mark existed: the time it was sent — the type's own fallback)
   const savedIso = existing?.doc?.savedAt ?? existing?.savedAt ?? existing?.sentAt;
-  const savedWord = savedIso ? t("px3.est.saved", { time: dayKeyIn(savedIso) === todayKey() ? time(savedIso) : day(savedIso) }) : undefined;
+  // #2363 F46: «сохранено 8:19» today, «сохранено вчера» the day before, else «сохранено 19 нояб.» — no weekday, no «чт,»
+  // #2363 F33: saved after it went to the client — the client has not seen these edits
+  const changedAfterSend = !!existing && existing.status !== "draft" && !!existing.sentAt && !!savedIso && savedIso > existing.sentAt;
+  const savedWord = savedIso
+    ? t("px3.est.saved", { time: dayKeyIn(savedIso) === todayKey() ? time(savedIso) : dayOffsetOf(dayKeyIn(savedIso)) === -1 ? t("proto.client.yesterday").toLocaleLowerCase() : day(savedIso).replace(/^[^,]+,\s*/, "") })
+    : undefined;
   // the pinned bar's ONE main step (direction 20.11 §3, the founder 21.11 #2350: «большая кнопка всегда светится, перекрывает» —
   // so one compact row «Итого ˅ $… · кнопка по словам»): no line yet — «Добавить позицию» (the price list when there is one, else
   // a line of its own); lines — «Готово» (saves and opens the estimate: send, sign, deposit are there). Always active: a press with
@@ -833,7 +838,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       head={{ kind: "editor" }}
       title={tplEdit ? t("est.tpl.editTitle") : existing ? [t("ue.title"), existing.number].filter(Boolean).join(" ") : t("ue.newTitle")}
       // visual v2 №5: «Черновик · сохранено 8:19» (the version's own save time), «Демо» joins it in the header; no «?» by the title
-      subtitle={tplEdit ? undefined : existing ? [t(estimateStatusView(existing.status).l), savedWord].filter(Boolean).join(" · ") : t("proto.est.autosave")}
+      subtitle={tplEdit ? undefined : existing ? [t(estimateStatusView(existing.status).l), changedAfterSend ? t("r1.est.changedAfterSend") : null, savedWord].filter(Boolean).join(" · ") : t("proto.est.autosave")}
       back={back}
       hintKey="estimate-builder"
       right={tplEdit ? undefined : <MoreButton items={moreList} onMore={onMore} a11y={t("est.actions")} testID="est-menu" />}
@@ -845,10 +850,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           <Button label={t("est.client.off")} icon="eye" variant="secondary" size="sm" onPress={() => toggleClientScreen(false)} />
         </View>
       ) : null}
-      {existing && existing.status !== "draft" ? (
-        // one line (the subtitle says the status): what follows from editing a sent estimate
-        <StatusNote tone="warn">{t("proto.est.sentNote")}</StatusNote>
-      ) : null}
+      {/* #2363 F33: no line over the estimate that pushes everything down — the header line says «изменена после отправки» */}
       {draft ? (
         <View testID="est-draft">
           {/* a hint in one line, the way out beside it (not a card) */}
@@ -920,12 +922,12 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
             {signed ? null : (
               <>
                 <View testID="est-add-catalog">
-                  <IconButton size="card" icon="ruler" label={t("px3.est.fromCatalog")} onPress={openCatalog} />
+                  <IconButton size="card" icon="catalog" label={t("px3.est.fromCatalog")} onPress={openCatalog} />
                 </View>
-                <MenuIcon icon="copy" label={t("px3.est.layout")} items={layerItems} onSelect={onAdd} testID="est-add-layers" />
+                <MenuIcon icon="layers" label={t("px3.est.layout")} items={layerItems} onSelect={onAdd} testID="est-add-layers" />
                 {!tplEdit ? (
                   <View testID={hasContent(doc) ? "est-menu-template" : "est-from-template"}>
-                    <IconButton size="card" icon="note" label={t("px3.est.template")} onPress={openTemplates} />
+                    <IconButton size="card" icon="doc" label={t("px3.est.template")} onPress={openTemplates} />
                   </View>
                 ) : null}
                 <View testID="est-add-new">

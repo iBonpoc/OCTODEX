@@ -57,7 +57,7 @@ import {
   type ClientTile,
 } from "@/features/client/nextStep";
 import { Button, StatusChip } from "@/ui/controls";
-import { FigureRow, NumberTrio } from "@/ui/figures";
+import { NumberTrio } from "@/ui/figures";
 import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
 import { NowCard } from "@/ui/nowCard";
 import { StatGrid, StatTile } from "@/ui/statTile";
@@ -111,11 +111,13 @@ export function clientStepOf(f: ClientFacts, newEstimateHref: string | undefined
 /** «2 дн. назад», «сегодня», «вчера»; older than a week — the date (LAYOUT-RULES §8 п.13) */
 export function useAgo() {
   const { t, day } = useI18n();
-  return (iso: string) => {
+  // #2363 F40: in the middle of a line («Home Depot · сегодня») the day word starts small, like the date beside it
+  const small = (w: string, mid?: boolean) => (mid ? w.charAt(0).toLocaleLowerCase() + w.slice(1) : w);
+  return (iso: string, mid?: boolean) => {
     const d = -dayOffsetOf(isoDayKey(iso));
-    if (d <= 0) return t("common.today");
-    if (d === 1) return t("proto.client.yesterday");
-    if (d < 7) return t("proto.client.daysAgo", { n: d });
+    if (d <= 0) return small(t("common.today"), mid);
+    if (d === 1) return small(t("proto.client.yesterday"), mid);
+    if (d < 7) return small(t("proto.client.daysAgo", { n: d }), mid);
     return day(iso);
   };
 }
@@ -165,6 +167,7 @@ export function ClientOverview({ c, f, onSection, withNow }: {
   const ahead = f.visits.filter((v) => isOpenVisit(v) && dayOffsetOf(isoDayKey(v.start)) >= 0).slice(0, 2);
   // the pinned notes of the client (v2 «Gate code 4512 · small dog / закреплено · видят мастера»): the warm plate first
   const pinned = db.notes.filter((n) => n.subjectType === "customer" && n.subjectId === c.id && n.pinned && !(n as { deletedAt?: string }).deletedAt);
+  const aheadRow = useAheadRow(f);
   const openTasks = r.tasks.filter((x) => !x.doneAt);
   const done = r.jobs.filter((j) => j.status === "done").sort((a, b) => b.id.localeCompare(a.id))[0];
   const place = r.properties.find((p) => p.accessNotes || p.gateCode) ;
@@ -230,39 +233,34 @@ export function ClientOverview({ c, f, onSection, withNow }: {
   return (
     <View style={{ gap: space[4] }} testID="client-overview">
       {plate}
-      <View style={{ gap: space[2] }}>
-      {/* v2 макет 3: the pinned note first in the content — a warm plate, «видят мастера» when the team sees it */}
-      {pinned.map((n) => (
-        <FigureRow
-          key={n.id}
-          testID={`client-pinned-${n.id}`}
-          tone="warn"
-          icon="key"
-          title={n.body.split("\n")[0]!}
-          line={t(n.visibility === "team" ? "px2.cv.pinnedTeam" : "px2.cv.pinnedMine")}
-          onPress={() => onSection("log")}
-        />
-      ))}
-      {/* the property's gate code / access words (rights: canSeeGateCode) — the same warm plate */}
-      {place && (place.accessNotes || place.gateCode) ? (
-        <FigureRow
-          testID="client-access"
-          tone="warn"
-          icon="key"
-          title={place.gateCode ? (gateSeen ? t("proto.client.gateIs", { code: place.gateCode }) : t("proto.client.gateLater")) : t("proto.client.access")}
-          line={[place.accessNotes, r.properties.length > 1 ? propertyTitle(place) : null].filter(Boolean).join(" · ") || undefined}
-          onPress={r.properties.length > 1 ? () => onSection("places") : () => router.push(`/property/${place.id}`)}
-        />
-      ) : null}
-      {ahead.length ? (
-        // v2 макет 3: «Сегодня 8:30–12:30 / Bathroom remodel · Alex ◷ Скоро», «Завтра 9:00 / Final walkthrough… Длит. 1 ч» — rows «цифры справа»
-        <View testID="client-ahead" style={{ gap: space[2] }}>
-          {ahead.map((v) => (
-            <AheadRow key={v.id} v={v} f={f} />
+      {/* #2363 F12/F20/F21: the pinned note, the access words and the visits ahead — rows of ONE group (rule 12), quiet:
+          a gate code is not a status, so no warm fill; the note takes 2 lines, never cut in the middle of a word */}
+      <GroupedList testID="client-top">
+        <ListGroup testID="client-top-group">
+          {pinned.map((n) => (
+            <GroupRow
+              key={n.id}
+              testID={`client-pinned-${n.id}`}
+              lead={{ icon: "key" }}
+              wrap
+              title={n.body.split("\n")[0]!}
+              subtitle={t(n.visibility === "team" ? "px2.cv.pinnedTeam" : "px2.cv.pinnedMine")}
+              onPress={() => onSection("log")}
+            />
           ))}
-        </View>
-      ) : null}
-      </View>
+          {place && (place.accessNotes || place.gateCode) ? (
+            <GroupRow
+              testID="client-access"
+              lead={{ icon: "key" }}
+              wrap
+              title={place.gateCode ? (gateSeen ? t("proto.client.gateIs", { code: place.gateCode }) : t("proto.client.gateLater")) : t("proto.client.access")}
+              subtitle={[place.accessNotes, r.properties.length > 1 ? propertyTitle(place) : null].filter(Boolean).join(" · ") || undefined}
+              onPress={r.properties.length > 1 ? () => onSection("places") : () => router.push(`/property/${place.id}`)}
+            />
+          ) : null}
+          {ahead.map((v) => aheadRow(v))}
+        </ListGroup>
+      </GroupedList>
       {(() => {
         // only the tiles that have something to say; a lone one is dropped (its line is in the sections)
         // (a tile whose value says nothing — «$0» — draws nothing: StatTile's own rule, statShown)
@@ -316,34 +314,38 @@ const bareTime = (s: string) => plateHalves(s, s)[0];
  * A day row of the overview (v2 макет 3): «Сегодня 8:30–12:30 / Bathroom remodel · Alex» with «◷ Скоро» (today: «◷ Идёт» once on
  * site), another day «Завтра 9:00 / Final walkthrough…» with «Длит. 1 ч 30 мин» on the right. A visit of one task says the task.
  */
-function AheadRow({ v, f }: { v: Visit; f: ClientFacts }) {
+/** «Сегодня 8:30–12:30 / Bathroom remodel · Alex  ◷ Скоро» — a row of the overview's top group (#2363 F02: the time is never cut,
+ *  the pill is one word: «Опаздывает», not «Опаздывает · не выехал» — the detail is on the visit itself) */
+function useAheadRow(f: ClientFacts) {
   const { t, time, day, duration } = useI18n();
   const { db } = f;
-  const off = dayOffsetOf(isoDayKey(v.start));
-  const dayWord = off === 0 ? t("common.today") : off === 1 ? t("common.tomorrow") : day(v.start);
-  const end = new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString();
-  const going = v.step === "on_site" || v.step === "working";
-  const today = off === 0;
-  const tech = memberName(db, v.techId, t)?.split(" ")[0];
-  // today: «◷ Идёт» on site, «◷ Скоро» before its start; past its start and not begun — the visit's own word (late / missed)
-  const past = new Date(v.start).getTime() <= Date.now();
-  const own = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
-  const todayPill = going ? { status: "info" as const, label: t("px2.cv.going") } : past ? { status: own.status, label: t(own.label) } : { status: "info" as const, label: t("px2.cv.soon") };
-  const job = findJob(db, v.jobId);
-  // the job by the estimate's short name (as the «Сейчас» card says it), else its own
-  const jobWord = (job?.estimateId ? f.r.estimates.find((e) => e.id === job.estimateId)?.title : undefined) || job?.title;
-  const line = v.scope.length === 1 ? v.scope[0]! : [jobWord, tech].filter(Boolean).join(" · ");
-  return (
-    <FigureRow
-      testID={`client-ahead-${v.id}`}
-      icon="calendar"
-      title={today ? `${dayWord} ${bareTime(time(v.start))}–${bareTime(time(end))}` : `${dayWord} ${bareTime(time(v.start))}`}
-      line={line || undefined}
-      status={today ? todayPill : undefined}
-      cols={today ? undefined : [{ label: t("px2.cv.dur"), value: duration(v.durationMin) }]}
-      onPress={() => router.push(`/visit/${v.id}`)}
-    />
-  );
+  return (v: Visit) => {
+    const off = dayOffsetOf(isoDayKey(v.start));
+    const dayWord = off === 0 ? t("common.today") : off === 1 ? t("common.tomorrow") : day(v.start);
+    const end = new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString();
+    const going = v.step === "on_site" || v.step === "working";
+    const today = off === 0;
+    const tech = memberName(db, v.techId, t)?.split(" ")[0];
+    const past = new Date(v.start).getTime() <= Date.now();
+    const own = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
+    const ownWord = own.label === "late.enRoute" || own.label === "late.notLeft" ? "st.late" : own.label;
+    const todayPill = going ? { status: "info" as const, label: t("px2.cv.going") } : past ? { status: own.status, label: t(ownWord) } : { status: "info" as const, label: t("px2.cv.soon") };
+    const job = findJob(db, v.jobId);
+    const jobWord = (job?.estimateId ? f.r.estimates.find((e) => e.id === job.estimateId)?.title : undefined) || job?.title;
+    const line = v.scope.length === 1 ? v.scope[0]! : [jobWord, tech].filter(Boolean).join(" · ");
+    return (
+      <GroupRow
+        key={v.id}
+        testID={`client-ahead-${v.id}`}
+        lead={{ icon: "calendar" }}
+        title={today ? `${dayWord} ${bareTime(time(v.start))}–${bareTime(time(end))}` : `${dayWord} ${bareTime(time(v.start))}`}
+        subtitle={line || undefined}
+        status={today ? todayPill : undefined}
+        cols={today ? undefined : [{ label: t("px2.cv.dur"), value: duration(v.durationMin) }]}
+        onPress={() => router.push(`/visit/${v.id}`)}
+      />
+    );
+  };
 }
 
 const placeName = (db: DB, j: Job) => {
