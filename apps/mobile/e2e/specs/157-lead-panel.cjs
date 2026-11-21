@@ -53,7 +53,8 @@ exports.run = async (h) => {
     h.expect((await p.evaluate(() => history.length)) === startLen, "open, ↓, ↑ replace the address, history does not grow");
     // Esc with a sheet of the panel open (its «Сейчас» card's step) closes the sheet only
     const step = panel(h).getByTestId("lead-now").getByRole("button").first();
-    if (await step.count()) {
+    await step.waitFor({ timeout: 4000 });
+    {
       await step.click();
       await p.locator('[aria-modal="true"]').first().waitFor();
       await h.sheet().getByRole("button").first().waitFor();
