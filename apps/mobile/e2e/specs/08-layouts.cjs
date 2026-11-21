@@ -1,12 +1,5 @@
 /** Every screen (all routes in src/app) at 390 / 820 / 1280 in dark and light: no horizontal overflow; screenshots in e2e/out. */
-const SCREENS = [
-  "/today", "/figures/leads?period=month", "/triage", "/leads", "/visits", "/plan", "/messages", "/messages/c-c1", "/calls", "/tasks", "/clients", "/more", "/notifications", "/search?q=mitchell",
-  "/lead/l1", "/lead/new", "/client/c1", "/property/p1", "/client/edit?id=c1", "/client/edit", "/client/import", "/client/imports",
-  "/module/gutters/draw", "/module/gutters/list", "/module/gutters/start?customer=c1", "/module/gutters/view", "/module/gutters/settings", "/module/gutters/prices", "/estimate/new?id=e6", "/estimate/e5", "/estimate/signature", "/estimates", "/p/demo0handyman0estimate0000000001", "/f/f00000000000000000000000000000000",
-  "/jobs", "/job/j1", "/job/new", "/job/schedule?jobId=j1", "/visit/v1",
-  "/money", "/invoice", "/invoice?f=paid", "/payments", "/reports", "/reports/owed", "/reports/collected?p=all", "/reports/sales", "/reports/sources?p=all", "/reports/categories?p=all", "/invoice/i5", "/receipt/pay5", "/expense/new",
-  "/catalog", "/catalog/cat-haul", "/suppliers", "/suppliers/sup-hd", "/purchase-orders", "/purchase-order/po-demo-1", "/company", "/settings/design-system", "/settings/design-system/base", "/settings/design-system/buttons", "/settings/design-system/selectors", "/settings/design-system/windows", "/settings/design-system/notices", "/settings/design-system/motion", "/settings/design-system/haptics", "/settings/design-system/rows", "/settings/design-system/fields", "/settings/design-system/choice", "/settings/design-system/spacing", "/settings/design-system/graphite", "/company/profile", "/company/schedule", "/company/leads", "/company/intake", "/company/payments", "/company/modules", "/company/checklists", "/company/checklist/tpl-job", "/estimate/templates", "/company/licenses", "/company/trades", "/team", "/settings", "/settings/profile", "/settings/delete-account", "/auth/trade", "/auth/terms", "/legal/terms", "/legal/privacy", "/help", "/auth/invite?token=a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
-];
+const { SCREENS } = require("../screens.cjs");
 /** screens that redirect by design: screen → the path it ends on (empty: nothing yet — filled from the first run, #800) */
 // by design: the «Графит» sheet is behind the pilot switch (off by default) — its address goes back to the list; the sheet itself is e2e 520 on all 6 views
 const REDIRECTS = { "/settings/design-system/graphite": true };

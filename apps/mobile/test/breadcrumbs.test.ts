@@ -103,9 +103,9 @@ describe("the lit section of a screen (tab or ☰ item; spec 10 Н1, 13 §2)", (
 const roleHasSection = (role: "director" | "dispatcher" | "tech", id: string) =>
   tabs(role).some((s) => s.id === id) || menuGroups(role).some((g) => g.items.some((s) => s.id === id));
 
-/** every screen the layout run opens (e2e/specs/08-layouts.cjs SCREENS), with real ids from the seed */
-const layoutSpec = fs.readFileSync(path.resolve(__dirname, "../e2e/specs/08-layouts.cjs"), "utf8");
-const screenUrls = [...layoutSpec.slice(layoutSpec.indexOf("SCREENS = ["), layoutSpec.indexOf("];")).matchAll(/"(\/[^"]*)"/g)].map((m) => m[1]!);
+/** every screen the layout run opens (e2e/screens.cjs SCREENS), with real ids from the seed */
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const screenUrls: string[] = (require("../e2e/screens.cjs") as { SCREENS: string[] }).SCREENS.filter((u) => u.startsWith("/"));
 
 describe("activeSection on every inner screen, three roles", () => {
   it("found the screens", () => expect(screenUrls.length).toBeGreaterThan(20));

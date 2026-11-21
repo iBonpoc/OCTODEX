@@ -1,6 +1,6 @@
 /**
  * Every screen in src/app is opened by the layout run (e2e/specs/08-layouts.cjs) at 3 widths × 2 themes (CLAUDE.md rule 4).
- * A new screen without a line in 08's SCREENS fails here.
+ * A new screen without a line in e2e/screens.cjs (the list 08 and the picture run share) fails here.
  */
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
@@ -18,14 +18,14 @@ function routes(dir = APP, base = ""): string[] {
     return [`${base}${e.name.replace(/\.tsx$/, "")}`.replace(/\/index$/, "")];
   });
 }
-const layoutSpec = fs.readFileSync(path.resolve(__dirname, "../e2e/specs/08-layouts.cjs"), "utf8");
-const screens = [...layoutSpec.slice(layoutSpec.indexOf("SCREENS = ["), layoutSpec.indexOf("];")).matchAll(/"\/([^"?]*)/g)].map((m) => m[1]!);
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const screens = (require("../e2e/screens.cjs") as { SCREENS: string[] }).SCREENS.map((u) => u.slice(1).split("?")[0]!);
 /** "lead/[id]" matches "lead/l1"; "lead/new" matches only itself */
 const matches = (route: string, url: string) =>
   new RegExp(`^${route.replace(/\[[^\]]+\]/g, "[^/]+")}$`).test(url) && !(route.includes("[") && routes().includes(url));
 
 describe("every screen is in the layout run", () => {
   for (const r of routes().filter((x) => !NOT_A_SCREEN.has(x))) {
-    it(r, () => expect(screens.some((u) => matches(r, u)), `add "/${r}" to SCREENS in e2e/specs/08-layouts.cjs`).toBe(true));
+    it(r, () => expect(screens.some((u) => matches(r, u)), `add "/${r}" to SCREENS in e2e/screens.cjs`).toBe(true));
   }
 });
