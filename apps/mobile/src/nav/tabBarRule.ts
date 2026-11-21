@@ -14,9 +14,7 @@ export const NO_TAB_BAR = [
   "auth/company", "auth/invite", "auth/sign-in", "auth/terms", "auth/trade",
   // a catalog item is a form («Новая позиция» / edit, «Сохранить»): a tab would drop what is not saved (review #274)
   "catalog/[id]",
-  // prototype v2 (BUILD-PLAN §2 п.5, HIG check п.6): an object's screen — its main button pinned at the bottom, «‹» top left,
-  // the edge swipe back (root Stack); no tab bar under it
-  "client/[id]", "job/[id]", "visit/[id]", "lead/[id]", "property/[id]",
+  // founder 21.11 (#2350): an object's card keeps the tab bar — its next step lives in the «Сейчас» card at the top, no pinned slab
   "client/edit", "client/import",
   "company/[section]", "company/schedule",
   // a checklist template is a form («Сохранить»): a tab would drop what is not saved
@@ -47,6 +45,8 @@ export const NO_TAB_BAR = [
 export const WITH_TAB_BAR = [
   "index", "inbox",
   "calls", "catalog", "client/imports", "clients", "company",
+  // founder 21.11 (#2350): an object's card keeps the bar (no pinned slab); its next step is in the «Сейчас» card
+  "client/[id]", "job/[id]", "visit/[id]", "lead/[id]", "property/[id]",
   // a settings page saved from its sheet at once (no form to lose)
   "company/leads",
   "company/intake",
@@ -68,8 +68,7 @@ const hidden = new Set<string>(NO_TAB_BAR);
  * founder 08.11, build 373 — they now keep the bar, #1426, so they are never «a form above» at all.)
  */
 // the estimate's card (#1412): no tab bar for its pinned main button, but nothing typed to lose
-// the objects (prototype v2): a card with a pinned button, nothing typed to lose
-export const NOT_A_FORM: readonly string[] = ["estimate/[id]", "invoice/[id]", "receipt/[id]", "client/[id]", "job/[id]", "visit/[id]", "lead/[id]", "property/[id]"];
+export const NOT_A_FORM: readonly string[] = ["estimate/[id]", "invoice/[id]", "receipt/[id]"];
 const notAForm = new Set<string>(NOT_A_FORM);
 
 /** "(tabs)/clients" → "clients", "company/index" → "company", "" → "index" */

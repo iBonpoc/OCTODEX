@@ -32,11 +32,8 @@ describe("unit:tabBarRule — the bottom bar on the phone", () => {
     for (const r of ["jobs", "tasks", "invoice", "catalog", "team", "company", "settings", "calls", "leads", "plan", "clients"])
       expect(showsTabBar(r), r).toBe(true);
     for (const r of ["lead/new", "estimate/signature", "client/edit", "p/[token]", "auth/sign-in", "catalog/[id]"]) expect(showsTabBar(r), r).toBe(false);
-    // prototype v2 (BUILD-PLAN §2 п.5): an object — its main button pinned at the bottom, no tab bar; not a form (no «Выйти без сохранения?»)
-    for (const r of ["client/[id]", "job/[id]", "visit/[id]", "lead/[id]", "property/[id]"]) {
-      expect(showsTabBar(r), r).toBe(false);
-      expect(NOT_A_FORM, r).toContain(r);
-    }
+    // founder 21.11 (#2350): an object's card keeps the tab bar — no pinned slab; its next step sits in the «Сейчас» card
+    for (const r of ["client/[id]", "job/[id]", "visit/[id]", "lead/[id]", "property/[id]"]) expect(showsTabBar(r), r).toBe(true);
   });
   it("route names and segments are read the same", () => {
     expect(tabRouteKey("(tabs)/clients")).toBe("clients");
