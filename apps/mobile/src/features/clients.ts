@@ -162,6 +162,13 @@ export function clientHistory(db: DB, customerId: ID, role: Role): HistoryItem[]
     out.push({ id: `note-${n.id}`, at: n.at, kind: "talk", icon: "note", title: "client.h.note", detail: n.body });
   }
   for (const a of db.activities.filter((x) => (x.subjectType === "customer" && x.subjectId === customerId) || (x.subjectType === "lead" && leadIds.has(x.subjectId)))) {
+    // #2098: the server's trace of «не обслуживаем» (t45 trace): set with its reason, lifted with who did it
+    if (a.kind === "status" && a.subjectType === "customer" && (a.meta?.action === "do_not_service_set" || a.meta?.action === "do_not_service_lifted")) {
+      const set = a.meta.action === "do_not_service_set";
+      const who = db.members.find((m) => m.id === a.actorId)?.name;
+      out.push({ id: `act-${a.id}`, at: a.at, kind: "docs", icon: set ? "close" : "check", title: set ? "client.h.noServiceSet" : "client.h.noServiceLifted", detail: set ? a.meta.reason : who });
+      continue;
+    }
     if (!["call", "sms", "email"].includes(a.kind)) continue;
     const icon: IconKey = a.kind === "call" ? "phone" : a.kind === "sms" ? "sms" : "mail";
     out.push({ id: `act-${a.id}`, at: a.at, kind: "talk", icon, title: `client.h.${a.kind}` as DictKey, detail: a.body });

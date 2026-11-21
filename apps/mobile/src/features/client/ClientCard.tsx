@@ -6,7 +6,7 @@ import { router, type Href } from "expo-router";
 import { component, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { peopleOf } from "@/data/people";
-import { canServe, canSeeClientMoney, statusChoices, clientMoneyOf, clientStatusChip, noLateCallsNow, statusOf, tagLabel, tagsOf } from "@/features/clients";
+import { canMarkNoService, canServe, canSeeClientMoney, statusChoices, clientMoneyOf, clientStatusChip, noLateCallsNow, statusOf, tagLabel, tagsOf } from "@/features/clients";
 import { clientRecords, clientTabsFor, clientWaiting, type ClientRow, type ClientTab } from "@/features/clientRows";
 import { ClientSection, PersonRows } from "@/features/client/ClientSections";
 import { AdvancesBlock } from "@/features/payments/AdvancesBlock";
@@ -14,7 +14,7 @@ import { CallSheet, type CallPreset } from "@/features/comms/CallSheet";
 import { useDialThenAsk } from "@/features/comms/dial";
 import { MessageSheet, type MessagePreset } from "@/features/comms/MessageSheet";
 import { callPlaceForClient } from "@/features/comms/comms";
-import { PeopleSheet, StatusSheet, TagsSheet } from "@/features/client/ClientSheets";
+import { PeopleSheet, ServeAgainSheet, StatusSheet, TagsSheet } from "@/features/client/ClientSheets";
 import { billingLine } from "@/features/clientForm";
 import { propertyTitle } from "@/features/properties";
 import { ClientDupCards } from "@/features/client/ClientDuplicates";
@@ -65,6 +65,8 @@ export function ClientCardBody({ c, tab: tabNow, onTab, frame }: { c: Customer; 
   const [sheet, setSheet] = useState<null | "tags" | "status" | "people">(null);
   const [picking, setPicking] = useState(false);
   const [adding, setAdding] = useState<Property | null>(null);
+  /** #2098: lifting «не обслуживаем» asks first (the card's button and the status chooser): to which status */
+  const [lifting, setLifting] = useState<CustomerStatus | null>(null);
   /** wave 6-2: after «Позвонить» — «Чем кончился?» (the call goes to the client; a technician — to his job) */
   const [calling, setCalling] = useState<CallPreset | null>(null);
   const dial = useDialThenAsk();
@@ -106,6 +108,7 @@ export function ClientCardBody({ c, tab: tabNow, onTab, frame }: { c: Customer; 
     setPicking(false);
     if (st === status) return;
     if (st === "do_not_service") return setSheet("status"); // needs a reason: the page of that choice
+    if (status === "do_not_service") return setLifting(st); // #2098: lifting the mark asks once, whatever path
     toast.show(t("client.statusSaved"), store.setCustomerStatus(c.id, st));
   };
   // the mark is the director's and the office's (04 §12.8): sales see no «Не обслуживаем» and cannot lift it
@@ -170,6 +173,10 @@ export function ClientCardBody({ c, tab: tabNow, onTab, frame }: { c: Customer; 
           <T v="caption" tone="mut">
             {[c.statusReason ? t("client.reason", { r: c.statusReason }) : null, t("client.noServiceHint")].filter(Boolean).join(" · ")}
           </T>
+        ) : null}
+        {/* #2098 (founder 18.11): the mark is reversible — the director and the office (the server: t45) */}
+        {status === "do_not_service" && canMarkNoService(role) ? (
+          <Button testID="client-serve-again" label={t("client.serveAgain")} icon="check" variant="secondary" onPress={() => setLifting("active")} />
         ) : null}
         {/* step 17 C3: other clients with the same phone / email / address — «Слить» or «Не дубль» (docs/specs/04 §13) */}
         <ClientDupCards c={c} />
@@ -353,6 +360,7 @@ export function ClientCardBody({ c, tab: tabNow, onTab, frame }: { c: Customer; 
       <PeopleSheet visible={sheet === "people"} customer={c} onClose={() => setSheet(null)} />
       <TagsSheet visible={sheet === "tags"} customer={c} onClose={() => setSheet(null)} />
       <StatusSheet visible={sheet === "status"} customer={c} preset="do_not_service" onClose={() => setSheet(null)} />
+      <ServeAgainSheet customer={lifting ? c : null} to={lifting ?? "active"} onClose={() => setLifting(null)} />
       <CallSheet preset={calling} onClose={() => setCalling(null)} />
       <MessageSheet preset={writing} onClose={() => setWriting(null)} />
       <Sheet visible={writeAsk} onClose={() => setWriteAsk(false)} title={t("cl6.writeTitle", { name: c.name })}>
