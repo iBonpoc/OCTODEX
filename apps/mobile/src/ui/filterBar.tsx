@@ -143,7 +143,7 @@ export function FilterBar<K extends string>({
       horizontal
       showsHorizontalScrollIndicator={false}
       style={desktop ? { flexShrink: 1 } : undefined}
-      contentContainerStyle={{ gap: space[2], paddingVertical: space[1] }}
+      contentContainerStyle={{ gap: space[1], paddingVertical: space[1] }}
       accessibilityRole="radiogroup"
       testID="filter-lane"
     >
