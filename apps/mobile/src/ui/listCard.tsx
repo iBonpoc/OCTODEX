@@ -15,6 +15,7 @@ import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { Icon, Press, type IconKey } from "./primitives";
 import { outerPressRole } from "./groupedListLogic";
+import { progressText } from "./controls";
 import { Menu, Sheet } from "./overlays";
 import { SelectedCheck } from "./selectedCheck";
 import {
@@ -396,11 +397,8 @@ export function ListCard(p: ListCardProps) {
         </View>
       ) : null}
       {density === "rich" && p.progress ? (
-        <View style={{ gap: space[1] }} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: p.progress.max, now: p.progress.value }}>
-          <View style={{ height: component.stepBar, borderRadius: radius.pill, backgroundColor: c.track, overflow: "hidden" }}>
-            <View style={{ width: `${p.progress.max ? Math.min(100, (p.progress.value / p.progress.max) * 100) : 0}%`, height: "100%", backgroundColor: c.status.ok.fill }} />
-          </View>
-          {p.progress.label ? <Txt v="caption" color={c.mut}>{p.progress.label}</Txt> : null}
+        <View accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: p.progress.max, now: p.progress.value }}>
+          <Txt v="caption" color={c.mut} tabular>{progressText(p.progress.value, p.progress.max, p.progress.label)}</Txt>
         </View>
       ) : null}
       {/* contact buttons (call, SMS, map, email) + main action */}

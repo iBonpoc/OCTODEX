@@ -471,43 +471,34 @@ export function MetaTag({ label, icon }: { label: string; icon?: IconKey }) {
   );
 }
 
-/* ---------- ProgressBar: "5 of 8" as a thin bar, not a colored chip ---------- */
+/* ---------- ProgressBar: progress in words and a number, never a bar (founder 21.11: «полосу прогресса убрать вообще») ---------- */
+export function progressText(value: number, max: number, label?: string): string {
+  const pct = max ? Math.round(Math.min(100, (value / max) * 100)) : 0;
+  return `${label ?? `${value} / ${max}`} · ${pct} %`;
+}
 export function ProgressBar({ value, max, label }: { value: number; max: number; label?: string }) {
-  const { c } = useTheme();
-  const pct = max ? Math.min(100, (value / max) * 100) : 0;
   return (
-    <View style={{ gap: space[1] }} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max, now: value }}>
-      <View style={{ height: component.stepBar, borderRadius: radius.pill, backgroundColor: c.track, overflow: "hidden" }}>
-        <View style={{ width: `${pct}%`, height: "100%", backgroundColor: c.status.ok.fill }} />
-      </View>
-      {label ? (
-        <T v="caption" tone="mut">
-          {label}
-        </T>
-      ) : null}
+    <View accessibilityRole="progressbar" accessibilityValue={{ min: 0, max, now: value }}>
+      <T v="caption" tone="mut" tabular>
+        {progressText(value, max, label)}
+      </T>
     </View>
   );
 }
 
-/* ---------- Stepper (visit steps) ---------- */
+/* ---------- Stepper (visit steps): a line of words, done ones with a check — no bars ---------- */
 export function Steps({ labels, current }: { labels: string[]; current: number }) {
   const { c } = useTheme();
   return (
-    <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space[1] }} accessibilityRole="progressbar">
+    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space[1] }} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: labels.length, now: current }}>
       {labels.map((l, i) => {
         const done = i < current;
         const now = i === current;
         return (
-          <View key={l} style={{ flex: 1, gap: space[1] }}>
-            <View
-              style={{
-                height: component.stepBar,
-                borderRadius: radius.pill,
-                // the current step is a status (info), not the accent: yellow is kept for the main action (rule 2)
-                backgroundColor: done ? c.status.ok.fill : now ? c.status.info.fill : c.track,
-              }}
-            />
-            <T v="micro" tone={done || now ? "ink" : "mut"} w={now ? "semibold" : "medium"} numberOfLines={1}>
+          <View key={l} style={{ flexDirection: "row", alignItems: "center", gap: spaceHalf.hair }}>
+            {i > 0 ? <Icon name="chevronRight" s={sizes.iconXs} color={c.mut} /> : null}
+            {done ? <Icon name="check" s={sizes.iconXs} color={c.status.ok.text} /> : null}
+            <T v="caption" tone={now ? "ink" : "mut"} w={now ? "semibold" : "medium"} numberOfLines={1}>
               {l}
             </T>
           </View>

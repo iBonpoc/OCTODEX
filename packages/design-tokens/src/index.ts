@@ -367,7 +367,7 @@ export interface ThemeColors {
 }
 
 /** redesign #2348 (docs/design/2026-11-20-direction/06-decision.md): calm opaque surfaces, one cobalt accent,
- *  tonal status plates (fill = the plate, text = word and icon, on = text on the plate); no background glow */
+ *  tonal status plates (fill = the plate, text = word and icon, on = text on the plate); the screen ground carries one soft accent glow from above (founder 21.11) */
 export type AccentName = "yellow";
 /** founder 21.11.2026 (#2350, palette A, docs/design/palette.html): one muted yellow, the same in both themes */
 export const ACCENT_ORDER: readonly AccentName[] = ["yellow"];
@@ -417,7 +417,8 @@ export const themes: Record<ThemeName, ThemeColors> = {
     blur: 20,
     blurOverlay: 24,
     blurTint: "dark",
-    glow: [],
+    // founder 21.11: «задний фон — градиент»; chosen in the accent picker: «свечение акцента» 60 % — one soft accent glow from above the top edge
+    glow: [{ cx: 0.5, cy: -0.1, rx: 507, ry: 640, color: "#E2C15E", opacity: 0.2 }],
     status: {
       ok: { fill: "#1C2E23", text: "#86D3A0", on: "#86D3A0" },
       info: { fill: "#182A2E", text: "#86C9D4", on: "#86C9D4" },
@@ -452,7 +453,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
     blur: 20,
     blurOverlay: 24,
     blurTint: "light",
-    glow: [],
+    glow: [{ cx: 0.5, cy: -0.1, rx: 507, ry: 640, color: "#E2C15E", opacity: 0.25 }],
     status: {
       ok: { fill: "#DCEBDF", text: "#1B6034", on: "#1B6034" },
       info: { fill: "#D8EAED", text: "#0E5866", on: "#0E5866" },

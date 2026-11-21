@@ -55,7 +55,7 @@ sizes:
 A field tool for US contractors, used one-handed on a phone, often in the sun. **Calm, dense, graphite.** It should feel like a well-made instrument (Linear, Things, Apple Contacts), not a dashboard template. Compact first: the founder's word is «максимально компактно».
 
 ## Colors (60 / 30 / 10)
-- **60 % ground** — graphite in dark (`#26282C`), soft grey in light (`#D6D7D1`). Never pure black, never pure white.
+- **60 % ground** — graphite in dark (`#26282C`), soft grey in light (`#D6D7D1`). Never pure black, never pure white. Over it — one soft accent glow from above the top edge (`glow`, 20 % dark / 25 % light; founder 21.11 «задний фон — градиент»); cards and bars stay solid.
 - **30 % surfaces and text** — cards one tone lighter; ink 12–14:1, muted text ≥ 6:1.
 - **10 % accent** — muted yellow `#E2C15E`, the same in both themes: the one main button, the active tab, the chosen day. In light theme an accent fill without text gets a `#7A6418` hairline; accent as text uses `#6E5A12`.
 - **Pastels** (lavender, mint, butter, peach) — only stat tiles and categories, always with a word. Never for status.
@@ -71,4 +71,4 @@ Six templates — Overview, List, Object, Editor, Calendar, Sheet. One main acti
 Animate by frequency: what people do 100 times a day does not animate. Only `transform` and `opacity`. Ease-out, never ease-in. Springs only after a finger threw or dragged. One haptic per event, together with a visible response. Reduce Motion = softer, not nothing.
 
 ## Never
-Progress bars of any kind (founder 21.11: «полосу прогресса убрать вообще») — show progress as words and a number («3 of 5 · 62 %») · Identical card grids with no hierarchy · decorative gradients or glass · emoji as icons · everything centred · the same radius and shadow on everything · accent on everything · made-up numbers · a second accent button next to the main one.
+Progress bars of any kind (founder 21.11: «полосу прогресса убрать вообще») — show progress as words and a number («3 of 5 · 62 %») · Identical card grids with no hierarchy · gradients or glass on cards, buttons and bars (the one gradient is the screen ground: a soft accent glow from above, founder 21.11) · emoji as icons · everything centred · the same radius and shadow on everything · accent on everything · made-up numbers · a second accent button next to the main one.

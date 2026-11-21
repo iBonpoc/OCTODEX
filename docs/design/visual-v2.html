@@ -79,8 +79,6 @@ figcaption p{margin:3px 0}
   --lav:#DDD7F4;--lavT:#3A2F78;--mint:#CFE8D9;--mintT:#1E5236;--but:#F1E7B8;--butT:#5A4708;--pea:#F5D9C6;--peaT:#6E3416;
   --tab:#E3E4DE;--white:#17181B;--dash:#6F7279;
   background:linear-gradient(180deg,#E1E2DC 0%,#D9DAD4 30%,#D6D7D1 55%,#D0D1CB 100%);color:var(--ink)}
-.lt .tk{--tOn:#8F7514}
-.lt .tk.mint{--tOn:#3E8A60}
 
 /* статус-бар */
 .sb{position:absolute;left:0;right:0;top:0;height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 30px 0 34px;font-weight:700;font-size:15px;z-index:3}
@@ -144,18 +142,10 @@ figcaption p{margin:3px 0}
 .bd2 svg{width:18px;height:18px}
 .sq{width:40px;height:40px;border-radius:20px;background:var(--cell);display:grid;place-items:center;flex:none}
 
-/* полоса штрихами (AGFlow) */
-.tk{--tOn:var(--but);display:flex;gap:3px;align-items:center;height:18px}
-.tk.mint{--tOn:var(--mint)}
-.tk i{width:3px;height:16px;border-radius:1.5px;background:var(--off);display:block;flex:none}
-.tk i.on{background:var(--tOn)}
-.pct{font-size:13px;font-weight:700;color:var(--mut)}
-/* сегментный прогресс (Dell) */
-.dbar{display:flex;gap:4px;height:28px}
-.dbar>div{border-radius:14px}
-.dbar .f{background:var(--white)}
-.dbar .h{background:repeating-linear-gradient(90deg,var(--white) 0 2px,transparent 2px 5px);opacity:.85}
-.dbar .r{background:var(--off)}
+/* прогресс — только словами и числом (основатель 21.11: полос нет) */
+.prg{display:flex;align-items:baseline;justify-content:space-between;gap:10px;min-width:0}
+.prg span{font-size:12px;font-weight:600;color:var(--mut)}
+.prg b{font-size:15px;font-weight:700}
 .tri{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .tri>div{padding:9px 10px;text-align:center}
 .tri b{display:block;font-size:17px;font-weight:700}
@@ -163,9 +153,6 @@ figcaption p{margin:3px 0}
 .num3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
 .num3 span{font-size:12px;font-weight:600;color:var(--mut);display:block}
 .num3 b{font-size:20px;font-weight:600;display:flex;align-items:center;gap:6px;letter-spacing:-.01em}
-.num3 b i{display:inline-block;width:10px;height:3px;border-radius:2px;background:var(--white)}
-.num3 b i.h{background:repeating-linear-gradient(90deg,var(--white) 0 2px,transparent 2px 3px)}
-.num3 b i.r{background:var(--off)}
 
 /* сегмент, пилюли дней */
 .seg{height:36px;border-radius:18px;background:var(--card);padding:3px;display:flex;box-shadow:inset 0 1px 0 var(--hl)}
@@ -324,7 +311,7 @@ figcaption p{margin:3px 0}
 <div class="wrap">
 <h1>Визуальный язык GoRix v2</h1>
 <p class="lead">Вторая попытка: ближе к пяти главным образцам основателя. Палитра A (жёлтый #E2C15E, графит, светло-серый, пастели), шрифт Manrope, компакт, кнопка 40. Структура экранов — по BUILD-SPEC, LAYOUT-RULES и каркасам v2; данные — из демо. Код приложения не менялся.</p>
-<p class="note"><b>Образцы:</b> №1 AGFlow (графит, полосы штрихами, плашки, чек-лист, таймер) · №2 трекер привычек (шапка, тройка цифр, «Done + Add Note») · №3 жёлтые календарь, обзор и карта (сегмент, одна жёлтая плитка, строки с цифрами) · №4 бронирования (пилюли дней, время слева, интервал плашкой) · №5 Dell Planning (← круглой кнопкой, «Заголовок | подзаголовок», сегментный прогресс, низ «итог + кнопка»).</p>
+<p class="note"><b>Образцы:</b> №1 AGFlow (графит, плашки, чек-лист, таймер) · №2 трекер привычек (шапка, тройка цифр, «Done + Add Note») · №3 жёлтые календарь, обзор и карта (сегмент, одна жёлтая плитка, строки с цифрами) · №4 бронирования (пилюли дней, время слева, интервал плашкой) · №5 Dell Planning (← круглой кнопкой, «Заголовок | подзаголовок», низ «итог + кнопка»).</p>
 
 <h2>Визуальный язык числами</h2>
 <table class="tb">
@@ -338,8 +325,7 @@ figcaption p{margin:3px 0}
 <tr><td>Круглые кнопки</td><td>40 на карточке #303237 в шапке, 32 внутри карточек, 44 в ряду быстрых действий с подписью 12; значок 20, линия 1,75.</td><td>№2, №5</td></tr>
 <tr><td>Сегмент</td><td>высота 36, радиус 18, дорожка #303237, отступ 3, выбранный — жёлтый 15-радиусный, текст 13/600.</td><td>№3</td></tr>
 <tr><td>Пилюли дней</td><td>46 × 64, радиус 23, день 12/600 сверху, число 17/700, точка 4 внизу «в дне есть выезды».</td><td>№3, №4</td></tr>
-<tr><td>Полоса штрихами</td><td>штрих 3 × 16, радиус 1,5, шаг 6; 22 штриха; цвет — пастель (сливочный «идёт», мята «готово»), пусто #4A4D54; % справа 13/700, «2 из 5» слева 12.</td><td>№1</td></tr>
-<tr><td>Сегментный прогресс</td><td>высота 28, капсулы через 4: сделано — светлая заливка, идёт — штриховка 2/3, впереди — #4A4D54. Под ним три цифры 20/600 с меткой того же вида.</td><td>№5</td></tr>
+<tr><td>Прогресс</td><td>только словами и числом: «3 из 5 · 62 %» 15/700 справа, подпись («Работа», «Чек-лист») 12/600 серым слева. Полос, штрихов и сегментов нет (основатель 21.11).</td><td>—</td></tr>
 <tr><td>Плашка статуса</td><td>24, радиус 12, значок 13 + слово 12/600; тихие тона: ok #86D3A0/#1C2E23, info #86C9D4/#182A2E, warn #E8B67F/#33281C, bad #F09A90/#3A2122.</td><td>№1</td></tr>
 <tr><td>Чек-лист</td><td>кружок 20: пустой — пунктир 1,5 #8C9098; готово — светлый круг с галочкой; строка 34; слева общая линия 1 pt.</td><td>№1</td></tr>
 <tr><td>Таймер</td><td>песочные часы 20 + «1:12:40» 17/700 моноширинно + «с 8:34» 13; справа круглая 32 «⌃».</td><td>№1</td></tr>
@@ -442,14 +428,14 @@ figcaption p{margin:3px 0}
 <div class="scr">
 <div class="hrow" style="position:relative;z-index:2"><span class="av ring" style="background:var(--lav);color:var(--lavT)">AP</span><span class="t17" style="opacity:.35;transform:translateY(5px)">Сегодня, 20 нояб.</span><span class="sp"></span><span class="rb"><svg><use href="#i-bell"/></svg><i class="bd"></i></span><span class="rb"><svg><use href="#i-plus"/></svg></span></div>
 <div class="big" style="transform:translateY(-30px) scale(.8);transform-origin:0 0;opacity:.55;margin-bottom:-40px"><div><div class="kick" style="opacity:0">Пт, 20 ноября</div><div class="tt">Доброе утро, Алекс</div></div></div>
-<div class="card" style="margin-top:8px"><div class="row"><span class="pl inf"><svg><use href="#i-clock"/></svg>через 10 мин</span><span class="sp"></span><span class="c13">8:30–12:30</span></div><div class="t17" style="font-size:22px;margin-top:10px">Sarah Mitchell</div><div class="c13">Bathroom remodel · Alex</div><div class="row" style="margin-top:12px"><span class="c12">Работа</span><div class="tk" data-n="22" data-on="14"></div><span class="pct">62%</span></div></div>
+<div class="card" style="margin-top:8px"><div class="row"><span class="pl inf"><svg><use href="#i-clock"/></svg>через 10 мин</span><span class="sp"></span><span class="c13">8:30–12:30</span></div><div class="t17" style="font-size:22px;margin-top:10px">Sarah Mitchell</div><div class="c13">Bathroom remodel · Alex</div><div class="prg" style="margin-top:12px"><span>Работа</span><b>3 из 5 · 62 %</b></div></div>
 </div></div></div>
 <figcaption><b>2 · Сжимается, y = 44</b>Дата погасла; заголовок ×0,8, opacity 55 %, уезжает под строку; малый «Сегодня, 20 нояб.» проявляется.</figcaption></figure>
 
 <figure><div class="pw mini" style="--h:330"><div class="ph strip dk"><div class="sb"><span>8:20</span><span class="isl"></span><span class="sy"><i style="width:22px;height:11px;border-radius:3px"></i></span></div>
 <div class="scr">
 <div class="hcol"><span class="av s36 ring" style="background:var(--lav);color:var(--lavT);position:relative">AP<i style="position:absolute;right:-1px;top:-1px;width:9px;height:9px;border-radius:5px;background:#E8B67F;box-shadow:0 0 0 2px #26282C"></i></span><span class="ttl el">Сегодня, <span class="mut" style="font-weight:600">20 нояб.</span></span><span class="sp"></span><span class="rb"><svg><use href="#i-bell"/></svg><i class="bd"></i></span><span class="rb"><svg><use href="#i-plus"/></svg></span></div>
-<div class="card" style="margin-top:-10px;border-radius:0 0 22px 22px;padding-top:4px"><div class="row" style="margin-top:12px"><span class="c12">Работа</span><div class="tk" data-n="22" data-on="14"></div><span class="pct">62%</span></div><div class="row" style="gap:8px;margin-top:14px"><div class="by" style="flex:1">В пути</div><div class="bd2" style="flex:1"><svg><use href="#i-pin"/></svg>Маршрут</div></div></div>
+<div class="card" style="margin-top:-10px;border-radius:0 0 22px 22px;padding-top:4px"><div class="prg" style="margin-top:12px"><span>Работа</span><b>3 из 5 · 62 %</b></div><div class="row" style="gap:8px;margin-top:14px"><div class="by" style="flex:1">В пути</div><div class="bd2" style="flex:1"><svg><use href="#i-pin"/></svg>Маршрут</div></div></div>
 </div></div></div>
 <figcaption><b>3 · Свёрнута, y ≥ 64</b>Одна строка 52: аватар 36 (точка «Демо») · «Сегодня, 20 нояб.» 17 · значки. У Плана под строкой прилипает сегмент 36 и пилюли.</figcaption></figure>
 </div>
@@ -471,7 +457,7 @@ figcaption p{margin:3px 0}
 <div class="big" style="transform:translateY(-14px) scale(.82);transform-origin:0 0;margin-bottom:-14px"><div class="tt" style="font-size:28px">Sarah Mitchell<span class="chev"><svg><use href="#i-cd"/></svg></span></div><span class="vb" style="opacity:.3"></span><div class="sub" style="opacity:.3"><b>Клиент · VIP</b><span>◷ Активный</span></div></div>
 <div class="qa" style="opacity:0;height:0;overflow:hidden"></div>
 <div class="chips" style="margin-top:6px"><span class="chp on">Обзор</span><span class="chp">Работы <em>2</em></span><span class="chp">Сметы <em>1</em></span><span class="chp">Счета <em>2</em></span></div>
-<div class="card" style="margin-top:10px"><div class="row"><span class="t15">Сейчас · Bathroom remodel</span></div><div class="dbar" style="margin-top:12px"><div class="f" style="flex:2"></div><div class="h" style="flex:1.2"></div><div class="r" style="flex:.8"></div></div></div>
+<div class="card" style="margin-top:10px"><div class="row"><span class="t15">Сейчас · Bathroom remodel</span></div><div class="prg" style="margin-top:10px"><span>Работа</span><b>3 из 5 · 62 %</b></div></div>
 </div></div></div>
 <figcaption><b>2 · Сжимается, y = 72</b>Быстрые действия уже погасли (0–48), подзаголовок на 30 %, имя ×0,82 едет к «←», «Клиенты» гаснет.</figcaption></figure>
 
@@ -512,7 +498,7 @@ figcaption p{margin:3px 0}
  <div class="row"><span class="c12" style="letter-spacing:.04em">ДАЛЬШЕ</span><span class="pl inf"><svg><use href="#i-clock"/></svg>через 10 мин</span><span class="sp"></span><span class="c13">8:30–12:30</span></div>
  <div class="t17" style="font-size:22px;margin-top:10px">Sarah Mitchell</div>
  <div class="c13 el">Bathroom remodel · 1420 Oak Grove Ave, Pasadena</div>
- <div class="row" style="margin-top:12px;gap:10px"><span class="c12">2 из 4</span><div class="tk" data-n="26" data-on="16"></div><span class="pct">62%</span></div>
+ <div class="prg" style="margin-top:12px"><span>Работа</span><b>3 из 5 · 62 %</b></div>
  <div class="tri" style="margin-top:12px"><div class="cell"><b>4 ч</b><span>на месте</span></div><div class="cell"><b>12 мин</b><span>в дороге</span></div><div class="cell"><b>Alex</b><span>мастер</span></div></div>
  <div class="row" style="gap:8px;margin-top:14px"><div class="by" style="flex:1.1"><svg><use href="#i-check"/></svg>В пути</div><div class="bd2" style="flex:1"><svg><use href="#i-pin"/></svg>Маршрут</div><span class="sq"><svg><use href="#i-phone"/></svg></span></div>
 </div>
@@ -531,7 +517,7 @@ figcaption p{margin:3px 0}
 </div></div>
 <figcaption><div class="no">1 · Главная, тёмная · образцы №2, №1, №3</div>
 <p>№2: шапка «аватар · значки 40», тройка цифр в ячейках, пара «жёлтая кнопка + тёмная с жёлтым текстом + квадрат».</p>
-<p>№1/№3: «Дальше» слоями с полосой штрихами 62 %; графитовые плитки со значком в круге 28, строки с плашкой справа.</p></figcaption>
+<p>№1/№3: «Дальше» слоями, прогресс словами «3 из 5 · 62 %»; графитовые плитки со значком в круге 28, строки с плашкой справа.</p></figcaption>
 </figure>
 
 <!-- ============ 2 План ============ -->
@@ -569,9 +555,8 @@ figcaption p{margin:3px 0}
 <div class="qa"><div><span class="rb"><svg><use href="#i-phone"/></svg></span>Позвонить</div><div><span class="rb"><svg><use href="#i-msg"/></svg></span>SMS</div><div><span class="rb"><svg><use href="#i-pin"/></svg></span>Маршрут</div><div><span class="rb"><svg><use href="#i-mail"/></svg></span>Почта</div><div><span class="rb"><svg><use href="#i-ruler"/></svg></span>Замер</div></div>
 <div class="card" style="margin-top:16px">
  <div class="row"><span class="t15 el">Bathroom remodel</span><span class="sp"></span><span class="pl ok"><svg><use href="#i-check"/></svg>Смета принята</span></div>
- <div class="dbar" style="margin-top:14px"><div class="f" style="flex:2"></div><div class="h" style="flex:1.2"></div><div class="r" style="flex:.8"></div></div>
- <div class="row" style="justify-content:space-between;margin-top:6px"><span class="c12">Смета · Задаток</span><span class="c12">Работа 62%</span><span class="c12">Счёт</span></div>
- <div class="num3"><div><span>Смета</span><b><i></i>$3,420</b></div><div><span>Оплачено</span><b><i class="h"></i>$342</b></div><div><span>Остаток</span><b><i class="r"></i>$3,078</b></div></div>
+ <div class="prg" style="margin-top:12px"><span>Смета ✓ · задаток ✓ · работа</span><b>3 из 5 · 62 %</b></div>
+ <div class="num3"><div><span>Смета</span><b>$3,420</b></div><div><span>Оплачено</span><b>$342</b></div><div><span>Остаток</span><b>$3,078</b></div></div>
  <div class="row" style="margin-top:14px;gap:10px"><div class="by" style="flex:none">Выставить счёт</div><span class="c12" style="line-height:1.3">задаток оплачен,<br>работа идёт</span></div>
 </div>
 <div class="chips" style="margin-top:16px"><span class="chp on">Обзор</span><span class="chp">Работы <em>2</em></span><span class="chp">Сметы <em>1</em></span><span class="chp">Счета <em>2</em></span><span class="chp">Выезды <em>2</em></span></div>
@@ -583,7 +568,7 @@ figcaption p{margin:3px 0}
 <div class="hi"></div>
 </div></div>
 <figcaption><div class="no">3 · Клиент, обзор · образцы №5, №1</div>
-<p>№5: «← Клиенты» круглой кнопкой, «Sarah Mitchell | Клиент · VIP» через черту, сегментный прогресс (сделано · идёт штриховкой · впереди) и три цифры с метками.</p>
+<p>№5: «← Клиенты» круглой кнопкой, «Sarah Mitchell | Клиент · VIP» через черту, прогресс словами «3 из 5 · 62 %» и три цифры с метками.</p>
 <p>№1: «Сейчас» карточкой-слоем с плашкой «✓ Смета принята»; код ворот — тёплой плашкой первым в содержимом.</p></figcaption>
 </figure>
 
@@ -597,9 +582,9 @@ figcaption p{margin:3px 0}
 <div class="row" style="gap:8px;margin-top:2px"><span class="pl inf"><svg><use href="#i-clock"/></svg>Идёт</span><span class="pl w"><svg><use href="#i-key"/></svg>Код 4512 · собака</span><span class="sp"></span><span class="rb s32"><svg><use href="#i-phone"/></svg></span><span class="rb s32"><svg><use href="#i-msg"/></svg></span><span class="rb s32"><svg><use href="#i-pin"/></svg></span></div>
 <div class="card" style="margin-top:12px;padding:12px">
  <div class="row"><span class="sq" style="background:var(--cell)"><svg><use href="#i-tool"/></svg></span><div style="min-width:0"><div class="t17">Bathroom remodel</div><div class="c13">работа · выезд 2 из 3</div></div></div>
- <div class="row" style="margin-top:10px;gap:10px"><span class="c12">работа</span><div class="tk mint" data-n="26" data-on="16"></div><span class="pct">62%</span></div>
+ <div class="prg" style="margin-top:10px"><span>Работа</span><b>3 из 5 · 62 %</b></div>
  <div class="cell" style="margin-top:12px;padding:12px;background:#3A3C42">
-  <div class="row" style="gap:10px"><span class="c12">2 из 5</span><div class="tk" data-n="22" data-on="9"></div><span class="pct">40%</span></div>
+  <div class="prg"><span>Чек-лист выезда</span><b>2 из 5 · 40 %</b></div>
   <div class="ck">
    <div class="dn"><span class="d"><svg><use href="#i-check"/></svg></span><span>Фото «до»</span></div>
    <div class="dn"><span class="d"><svg><use href="#i-check"/></svg></span><span>Remove old vanity and toilet</span></div>
@@ -618,7 +603,7 @@ figcaption p{margin:3px 0}
 <div class="hi"></div>
 </div></div>
 <figcaption><div class="no">4 · Выезд, в работе · образцы №1, №2, №5</div>
-<p>№1: карточка в карточке, две полосы штрихами (работа 62 % мятой, выезд 40 % сливочным), чек-лист пунктирными кружками с общей линией, таймер с «⌃».</p>
+<p>№1: карточка в карточке, прогресс словами (работа «3 из 5 · 62 %», чек-лист «2 из 5 · 40 %»), чек-лист пунктирными кружками с общей линией, таймер с «⌃».</p>
 <p>№2/№5: «Завершить» жёлтая + «Фото» тёмная с жёлтым текстом + квадрат-заметка в ряд; шапка «Выезд | Sarah Mitchell».</p></figcaption>
 </figure>
 
@@ -692,7 +677,7 @@ figcaption p{margin:3px 0}
  <div class="row"><span class="c12" style="letter-spacing:.04em">ДАЛЬШЕ</span><span class="pl inf"><svg><use href="#i-clock"/></svg>через 10 мин</span><span class="sp"></span><span class="c13">8:30–12:30</span></div>
  <div class="t17" style="font-size:22px;margin-top:10px">Sarah Mitchell</div>
  <div class="c13 el">Bathroom remodel · 1420 Oak Grove Ave, Pasadena</div>
- <div class="row" style="margin-top:12px;gap:10px"><span class="c12">2 из 4</span><div class="tk" data-n="26" data-on="16"></div><span class="pct">62%</span></div>
+ <div class="prg" style="margin-top:12px"><span>Работа</span><b>3 из 5 · 62 %</b></div>
  <div class="tri" style="margin-top:12px"><div class="cell"><b>4 ч</b><span>на месте</span></div><div class="cell"><b>12 мин</b><span>в дороге</span></div><div class="cell"><b>Alex</b><span>мастер</span></div></div>
  <div class="row" style="gap:8px;margin-top:14px"><div class="by" style="flex:1.1"><svg><use href="#i-check"/></svg>В пути</div><div class="bd2" style="flex:1"><svg><use href="#i-pin"/></svg>Маршрут</div><span class="sq"><svg><use href="#i-phone"/></svg></span></div>
 </div>
@@ -711,13 +696,12 @@ figcaption p{margin:3px 0}
 </div></div>
 <figcaption><div class="no">7 · Главная, светлая · образцы №2, №3 в светлой теме</div>
 <p>Та же сетка: фон-градиент #E1E2DC → #D0D1CB, карточки #E3E4DE, ячейки #CDCEC8 — ничего белого.</p>
-<p>Жёлтая «В пути» с обводкой #7A6418; жёлтый текст — тёмный #6E5A12; штрихи — тёмный тон пастели #8F7514.</p></figcaption>
+<p>Жёлтая «В пути» с обводкой #7A6418; жёлтый текст — тёмный #6E5A12; прогресс — словами, без полос.</p></figcaption>
 </figure>
 
 </div>
 </div>
 <script>
-document.querySelectorAll('.tk').forEach(function(el){var n=+el.dataset.n||22,on=+el.dataset.on||0,h='';for(var i=0;i<n;i++)h+=i<on?'<i class="on"></i>':'<i></i>';el.innerHTML=h;});
 function fit(){document.querySelectorAll('.pw').forEach(function(w){w.style.setProperty('--k',(w.clientWidth/390).toFixed(4));});}
 fit();addEventListener('resize',fit);
 </script>

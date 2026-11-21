@@ -1,0 +1,175 @@
+<title>GoRix Accent Picker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+:root{--bg:#D6D7D1;--page:#CBCCC6;--surf:#E3E4DE;--ink:#17181B;--mut:#42454B;--bd:rgba(0,0,0,.10);--acc:#E2C15E;--on:#1C1A12;}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#26282C;--page:#1F2024;--surf:#303237;--ink:#EEEFF1;--mut:#B3B6BE;--bd:rgba(255,255,255,.08);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#26282C;--page:#1F2024;--surf:#303237;--ink:#EEEFF1;--mut:#B3B6BE;--bd:rgba(255,255,255,.08);color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--page);color:var(--ink);font-family:Manrope,-apple-system,system-ui,sans-serif;font-size:15px;margin:0}
+.wrap{max-width:1040px;margin:0 auto;padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+h1{font-size:24px;letter-spacing:-.4px;margin:0;text-wrap:balance}
+.lead{color:var(--mut);margin:4px 0 0;max-width:62ch}
+.panel{background:var(--bg);border:1px solid var(--bd);border-radius:22px;padding:16px;display:grid;gap:14px}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+input[type=color]{width:64px;height:64px;border:none;border-radius:16px;padding:0;background:none;cursor:pointer}
+input[type=color]::-webkit-color-swatch-wrapper{padding:0}input[type=color]::-webkit-color-swatch{border:none;border-radius:16px}
+.hex{font:600 22px/1 Manrope;letter-spacing:.5px;background:var(--surf);color:var(--ink);border:1px solid var(--bd);border-radius:12px;padding:10px 12px;width:150px;text-transform:uppercase}
+.btn{font:600 14px Manrope;height:40px;padding:0 16px;border-radius:999px;border:1px solid var(--bd);background:var(--surf);color:var(--ink);cursor:pointer}
+.sl{display:grid;grid-template-columns:90px 1fr 44px;gap:10px;align-items:center;font-size:13px;color:var(--mut)}
+.sl input{width:100%}
+.sw{display:flex;flex-wrap:wrap;gap:8px}
+.sw button{width:36px;height:36px;border-radius:12px;border:1px solid var(--bd);cursor:pointer}
+.lab{font-size:12px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--mut)}
+.phones{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
+.ph{border-radius:30px;padding:16px 14px 10px;display:grid;gap:12px;min-width:0}
+.ph.dark{--b:#26282C;--s:#303237;--i:#EEEFF1;--m:#B3B6BE;--d:rgba(255,255,255,.08);background:var(--gb,var(--b));color:var(--i)}
+.ph.light{--b:#D6D7D1;--s:#E3E4DE;--i:#17181B;--m:#42454B;--d:rgba(0,0,0,.10);background:var(--gb,var(--b));color:var(--i)}
+.gbtn{font:600 13px Manrope;height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--bd);background:var(--surf);color:var(--ink);cursor:pointer}
+.gbtn.on{background:var(--ink);color:var(--bg)}
+.ph .t{font-size:12px;font-weight:600;color:var(--m);text-transform:uppercase;letter-spacing:.6px}
+.hd{display:flex;justify-content:space-between;align-items:center}
+.hd b{font-size:26px;letter-spacing:-.6px}
+.ic{width:36px;height:36px;border-radius:50%;background:var(--s);display:grid;place-items:center;color:var(--i);font-size:16px}
+.days{display:flex;gap:6px}
+.day{flex:1;border-radius:14px;padding:8px 0;text-align:center;background:var(--s);font-size:12px;color:var(--m)}
+.day b{display:block;font-size:16px;color:var(--i)}
+.day.on{background:var(--a);color:var(--o);box-shadow:inset 0 0 0 1px var(--e)}.day.on b{color:var(--o)}
+.card{background:var(--s);border-radius:22px;padding:14px;display:grid;gap:10px}
+.card small{color:var(--m);font-size:13px}
+.card h3{margin:0;font-size:17px}
+.mb{height:40px;border-radius:999px;background:var(--a);color:var(--o);font-weight:700;display:grid;place-items:center;box-shadow:inset 0 0 0 1px var(--e)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sb{height:40px;border-radius:999px;border:1px solid var(--d);display:grid;place-items:center;font-weight:600;font-size:14px}
+.list{background:var(--s);border-radius:22px;overflow:hidden}
+.li{display:flex;gap:12px;align-items:center;height:56px;padding:0 14px;border-top:1px solid var(--d)}
+.li:first-child{border-top:none}
+.li .tm{width:44px;font-size:13px;color:var(--m);font-variant-numeric:tabular-nums}
+.li .nm{flex:1;min-width:0;font-weight:600;font-size:15px}
+.li .nm span{display:block;font-weight:400;font-size:13px;color:var(--m)}
+.lk{color:var(--x);font-weight:600;font-size:14px}
+.tabs{display:flex;justify-content:space-around;background:var(--s);border-radius:999px;padding:6px}
+.tab{font-size:11px;color:var(--m);padding:6px 10px;border-radius:999px;text-align:center}
+.tab.on{background:var(--a);color:var(--o);font-weight:700;box-shadow:inset 0 0 0 1px var(--e)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+td,th{padding:8px 6px;border-top:1px solid var(--bd);text-align:left}
+th{font-size:12px;color:var(--mut);font-weight:600}
+.ok{color:#2f8a4f;font-weight:700}.no{color:#c0453a;font-weight:700}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .ok{color:#7fcf98}:root:not([data-theme="light"]) .no{color:#f09a90}}
+:root[data-theme="dark"] .ok{color:#7fcf98}:root[data-theme="dark"] .no{color:#f09a90}
+.tw{overflow-x:auto}
+.note{font-size:13px;color:var(--mut)}
+</style>
+
+<div class="wrap">
+  <div>
+    <h1>Пикер акцента GoRix</h1>
+    <p class="lead">Выберите цвет — главная кнопка, выбранный день, активный таб и ссылка сразу перекрасятся в тёмной и светлой теме. Цвет текста на кнопке подбирается сам. Понравился — нажмите «Скопировать» и пришлите HEX в чат.</p>
+  </div>
+
+  <div class="panel">
+    <div class="row">
+      <input type="color" id="pick" value="#E2C15E" aria-label="Цвет акцента">
+      <input class="hex" id="hex" value="#E2C15E" maxlength="7" aria-label="HEX">
+      <button class="btn" id="copy">Скопировать</button>
+      <span class="note" id="copied"></span>
+    </div>
+    <div class="sl"><span>Оттенок</span><input type="range" id="h" min="0" max="360"><span id="hv"></span></div>
+    <div class="sl"><span>Насыщенность</span><input type="range" id="s" min="0" max="100"><span id="sv"></span></div>
+    <div class="sl"><span>Светлота</span><input type="range" id="l" min="0" max="100"><span id="lv"></span></div>
+    <div>
+      <div class="lab" style="margin-bottom:8px">Фон экрана</div>
+      <div class="row" id="gr" style="gap:8px"></div>
+    </div>
+    <div class="sl"><span>Сила градиента</span><input type="range" id="gs" min="0" max="100" value="60"><span id="gsv"></span></div>
+    <div>
+      <div class="lab" style="margin-bottom:8px">Быстрые образцы</div>
+      <div class="sw" id="sw"></div>
+    </div>
+  </div>
+
+  <div class="phones" id="phones"></div>
+
+  <div class="panel">
+    <div class="lab">Контраст (WCAG)</div>
+    <div class="tw"><table id="ct"></table></div>
+    <p class="note">Текст на кнопке — нужно ≥ 4.5. Кнопка на фоне — ≥ 3, иначе в этой теме у неё появится тонкий тёмный край (он уже нарисован на макете). Ссылка-текст цветом акцента — ≥ 4.5; если не хватает, текст автоматически темнее/светлее.</p>
+  </div>
+</div>
+
+<script>
+const PRE=[["Текущий","#E2C15E"],["Солнечный жёлтый (совет колориста)","#F5D04C"],["Шалфей","#A3D4B6"],["Терракота","#E0A088"],["Лаванда колориста","#BDB2F2"],["Чистый жёлтый","#F2CF4A"],["Лимонный","#EAD96B"],["Мята","#8FD3B0"],["Шалфей","#A9C9A4"],["Бирюза","#6FC7C0"],["Коралл","#EE9A7E"],["Терракота","#D9906A"],["Лаванда","#B7A8F0"],["Сирень","#C9A0DC"],["Монохром","#ECEDEF"],["Песок","#E5C99A"]];
+const BG={dark:{b:"#26282C",s:"#303237"},light:{b:"#D6D7D1",s:"#E3E4DE"}};
+const $=id=>document.getElementById(id);
+function hexRgb(h){h=h.replace("#","");return[0,2,4].map(i=>parseInt(h.substr(i,2),16))}
+function rgbHex(r){return"#"+r.map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,"0")).join("").toUpperCase()}
+function lum(h){return hexRgb(h).map(v=>{v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)}).reduce((a,v,i)=>a+v*[.2126,.7152,.0722][i],0)}
+function cr(a,b){const x=lum(a),y=lum(b);return(Math.max(x,y)+.05)/(Math.min(x,y)+.05)}
+function rgbHsl([r,g,b]){r/=255;g/=255;b/=255;const M=Math.max(r,g,b),m=Math.min(r,g,b);let h=0,s=0,l=(M+m)/2;if(M!==m){const d=M-m;s=l>.5?d/(2-M-m):d/(M+m);h=M===r?(g-b)/d+(g<b?6:0):M===g?(b-r)/d+2:(r-g)/d+4;h*=60}return[h,s*100,l*100]}
+function hslHex(h,s,l){s/=100;l/=100;const k=n=>(n+h/30)%12,a=s*Math.min(l,1-l),f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));return rgbHex([f(0)*255,f(8)*255,f(4)*255])}
+function shade(hex,toward,target,bg){// move lightness until contrast with bg >= target
+  let[h,s,l]=rgbHsl(hexRgb(hex));for(let i=0;i<100;i++){const c=hslHex(h,s,l);if(cr(c,bg)>=target)return c;l+=toward;if(l<0||l>100)break}return hslHex(h,s,Math.max(0,Math.min(100,l)))}
+function onColor(a){const d="#17181B",w="#FFFFFF";return cr(a,d)>=cr(a,w)?shade(a,-100,0,a)&&tint(a,d):w}
+function tint(a,base){// dark text tinted toward the accent hue
+  const[h]=rgbHsl(hexRgb(a));const c=hslHex(h,30,10);return cr(a,c)>=4.5?c:base}
+const GR=[["none","Ровный"],["glow","Свечение акцента"],["vert","Сверху вниз"],["diag","Диагональ"],["two","Два пятна"],["warm","Тёплый"],["cool","Холодный"]];
+let gmode="glow";try{gmode=localStorage.getItem("gorix.gr")||gmode}catch(e){}
+function rgba(hex,al){const[r,g,b]=hexRgb(hex);return`rgba(${r},${g},${b},${al})`}
+function mix(hex,to,t){const a=hexRgb(hex),b=hexRgb(to);return rgbHex(a.map((v,i)=>v+(b[i]-v)*t))}
+function grad(theme,a){const k=+$("gs").value/100,b=BG[theme].b,dark=theme==="dark";
+  const deep=dark?mix(b,"#000000",.35*k):mix(b,"#9A9C94",.45*k),lift=dark?mix(b,"#4A4D55",.5*k):mix(b,"#F2F3EE",.6*k);
+  switch(gmode){
+    case"glow":return`radial-gradient(120% 70% at 50% -10%, ${rgba(a,(dark?.34:.42)*k)}, transparent 65%), ${b}`;
+    case"vert":return`linear-gradient(180deg, ${lift} 0%, ${b} 45%, ${deep} 100%)`;
+    case"diag":return`linear-gradient(150deg, ${lift} 0%, ${b} 50%, ${deep} 100%)`;
+    case"two":return`radial-gradient(70% 45% at 0% 0%, ${rgba(a,(dark?.30:.38)*k)}, transparent 70%), radial-gradient(70% 45% at 100% 100%, ${rgba(dark?"#7B8CFF":"#8C9CFF",(dark?.22:.25)*k)}, transparent 70%), ${b}`;
+    case"warm":return`linear-gradient(170deg, ${mix(b,dark?"#5A4632":"#EADBC4",.55*k)} 0%, ${b} 55%, ${deep} 100%)`;
+    case"cool":return`linear-gradient(170deg, ${mix(b,dark?"#33415A":"#C9D4E4",.55*k)} 0%, ${b} 55%, ${deep} 100%)`;
+    default:return b}}
+function phone(theme,a){const bg=BG[theme];const o=onColor(a);
+  const edge=cr(a,bg.b)<3?shade(a,theme==="light"?-4:4,3,bg.b):"transparent";
+  const txt=cr(a,bg.s)>=4.5?a:shade(a,theme==="light"?-2:2,4.5,bg.s);
+  return {o,edge,txt,html:`<div class="ph ${theme}" style="--a:${a};--o:${o};--e:${edge};--x:${txt};--gb:${grad(theme,a)}">
+  <div class="t">${theme==="dark"?"Тёмная":"Светлая"}</div>
+  <div class="hd"><b>Сегодня</b><div class="row" style="gap:8px"><div class="ic">⌕</div><div class="ic">＋</div></div></div>
+  <div class="days">${["Пн 17","Вт 18","Ср 19","Чт 20","Пт 21"].map((d,i)=>`<div class="day ${i===2?"on":""}">${d.split(" ")[0]}<b>${d.split(" ")[1]}</b></div>`).join("")}</div>
+  <div class="card"><small>Сейчас · 10:30</small><h3>Замер — Сара Митчелл</h3><small>1824 Oak St · работа 3 из 5 · 62 %</small>
+    <div class="mb">Начать визит</div>
+    <div class="pair"><div class="sb">Позвонить</div><div class="sb">Маршрут</div></div></div>
+  <div class="list">
+    <div class="li"><span class="tm">13:00</span><span class="nm">Дэвид Ким<span>Смета · $4 280</span></span><span class="lk">Открыть</span></div>
+    <div class="li"><span class="tm">15:30</span><span class="nm">Лора Чен<span>Монтаж · 2 ч</span></span></div>
+  </div>
+  <div class="tabs">${["Главная","План","Клиенты","Деньги","Лиды"].map((x,i)=>`<div class="tab ${i===0?"on":""}">${x}</div>`).join("")}</div>
+</div>`}}
+function fmt(v,t){return`<span class="${v>=t?"ok":"no"}">${v.toFixed(1)}</span>`}
+function render(hex,from){
+  hex=hex.toUpperCase();$("pick").value=hex;if(from!=="hex")$("hex").value=hex;
+  if(from!=="sl"){const[h,s,l]=rgbHsl(hexRgb(hex));$("h").value=Math.round(h);$("s").value=Math.round(s);$("l").value=Math.round(l)}
+  $("hv").textContent=$("h").value;$("sv").textContent=$("s").value+"%";$("lv").textContent=$("l").value+"%";
+  const d=phone("dark",hex),l=phone("light",hex);$("phones").innerHTML=d.html+l.html;
+  const row=(n,t,dv,lv,th)=>`<tr><td>${n}</td><td>${fmt(dv,th)}</td><td>${fmt(lv,th)}</td><td class="note">${t}</td></tr>`;
+  $("ct").innerHTML=`<tr><th>Что</th><th>Тёмная</th><th>Светлая</th><th>Норма</th></tr>`+
+   row("Текст на кнопке","≥ 4.5",cr(hex,d.o),cr(hex,l.o),4.5)+
+   row("Кнопка на фоне","≥ 3 (иначе край)",cr(hex,BG.dark.b),cr(hex,BG.light.b),3)+
+   row("Кнопка на карточке","≥ 3 (иначе край)",cr(hex,BG.dark.s),cr(hex,BG.light.s),3)+
+   row("Акцент как текст","≥ 4.5 (иначе темнее)",cr(hex,BG.dark.s),cr(hex,BG.light.s),4.5)+
+   `<tr><td>Цвет текста на кнопке</td><td>${d.o}</td><td>${l.o}</td><td class="note">подобран сам</td></tr>`+
+   `<tr><td>Ссылка-текст</td><td>${d.txt.toUpperCase()}</td><td>${l.txt.toUpperCase()}</td><td class="note">если пришлось сдвинуть</td></tr>`;
+  try{localStorage.setItem("gorix.acc",hex)}catch(e){}
+}
+$("pick").addEventListener("input",e=>render(e.target.value));
+$("hex").addEventListener("input",e=>{const v=e.target.value.trim();if(/^#?[0-9a-f]{6}$/i.test(v))render(v[0]==="#"?v:"#"+v,"hex")});
+["h","s","l"].forEach(k=>$(k).addEventListener("input",()=>render(hslHex(+$("h").value,+$("s").value,+$("l").value),"sl")));
+$("sw").innerHTML=PRE.map(([n,c])=>`<button title="${n}" aria-label="${n} ${c}" style="background:${c}" data-c="${c}"></button>`).join("");
+$("sw").addEventListener("click",e=>{const c=e.target.dataset&&e.target.dataset.c;if(c)render(c)});
+$("copy").addEventListener("click",()=>{const v=$("hex").value.toUpperCase();const done=()=>{$("copied").textContent="Скопировано: "+v};
+  if(navigator.clipboard)navigator.clipboard.writeText(v).then(done,()=>{$("hex").select();$("copied").textContent="Выделено — скопируйте вручную"});else{$("hex").select()}});
+function drawGr(){$("gr").innerHTML=GR.map(([k,n])=>`<button class="gbtn ${k===gmode?"on":""}" data-g="${k}">${n}</button>`).join("");$("gsv").textContent=$("gs").value+"%"}
+$("gr").addEventListener("click",e=>{const g=e.target.dataset&&e.target.dataset.g;if(!g)return;gmode=g;try{localStorage.setItem("gorix.gr",g)}catch(_){}drawGr();render($("hex").value,"hex")});
+$("gs").addEventListener("input",()=>{drawGr();render($("hex").value,"hex")});
+drawGr();
+let start="#E2C15E";try{start=localStorage.getItem("gorix.acc")||start}catch(e){}
+render(start);
+</script>
