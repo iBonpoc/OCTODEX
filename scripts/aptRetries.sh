@@ -5,6 +5,7 @@
 #     and any source that names the azure mirror directly: azure.archive.ubuntu.com → archive.ubuntu.com, and archive.ubuntu.com
 #     is added to the list as a fallback when it is not there;
 #  2) apt itself retries a failed download and gives up on a silent host sooner than minutes (also for Playwright's apt-get).
+# `sed -i.bak` + rm, not `sed -i`: the same on GNU (runner) and BSD sed (a Mac running the test, #2356).
 # Paths and sudo can be replaced by variables, so the test runs it on temporary files (test/aptRetry.test.ts).
 SUDO="${APT_SUDO-sudo}"
 MIRRORS="${APT_MIRRORS_FILE:-/etc/apt/apt-mirrors.txt}"
@@ -16,7 +17,7 @@ AZURE='http://azure\.archive\.ubuntu\.com/'
 ARCHIVE='http://archive.ubuntu.com/'
 
 if [ -f "$MIRRORS" ]; then
-  $SUDO sed -i "s#${AZURE}#${ARCHIVE}#g" "$MIRRORS"
+  $SUDO sed -i.bak "s#${AZURE}#${ARCHIVE}#g" "$MIRRORS" && $SUDO rm -f "$MIRRORS.bak"
   # the fallback: archive.ubuntu.com/ubuntu/ stands in the list (once)
   if ! grep -q 'archive\.ubuntu\.com/ubuntu' "$MIRRORS"; then
     echo "${ARCHIVE}ubuntu/ priority:2" | $SUDO tee -a "$MIRRORS" >/dev/null
@@ -25,7 +26,7 @@ if [ -f "$MIRRORS" ]; then
   $SUDO awk '!seen[$0]++' "$MIRRORS" | $SUDO tee "$MIRRORS.tmp" >/dev/null && $SUDO mv "$MIRRORS.tmp" "$MIRRORS"
 fi
 for f in "$SOURCES_DIR"/*.sources "$SOURCES_DIR"/*.list "$LEGACY_LIST"; do
-  [ -f "$f" ] && grep -q 'azure\.archive\.ubuntu\.com' "$f" && $SUDO sed -i "s#${AZURE}#${ARCHIVE}#g" "$f"
+  [ -f "$f" ] && grep -q 'azure\.archive\.ubuntu\.com' "$f" && $SUDO sed -i.bak "s#${AZURE}#${ARCHIVE}#g" "$f" && $SUDO rm -f "$f.bak"
 done
 printf 'Acquire::Retries "3";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | $SUDO tee "$CONF_DIR/80-retries" >/dev/null
 exit 0
