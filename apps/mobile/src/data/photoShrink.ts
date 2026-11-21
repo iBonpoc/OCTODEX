@@ -7,6 +7,7 @@
  * Pure part (`fitLongSide`): test/photoShrink.test.ts.
  */
 import * as ImageManipulator from "expo-image-manipulator";
+import { dropPickedCopy, keptHere } from "./localFiles";
 
 /** the long side of a kept photo, px (decision of the director 14.11, #642) */
 export const PHOTO_LONG_SIDE = 2048;
@@ -54,10 +55,14 @@ export async function shrinkPhoto(img: PickedImage): Promise<string> {
       refs.push(out);
     }
     const saved = await out.saveAsync({ compress: PHOTO_QUALITY, format: ImageManipulator.SaveFormat.JPEG });
+    // #1659: the picker's full-size copy in the app's own folder is not needed any more (never the person's library)
+    dropPickedCopy(img.uri, saved.uri);
+    keptHere(saved.uri);
     return saved.uri;
   } catch (e) {
     // never lose the photo: the original is kept, and the log says why it is big
     console.warn("[photoShrink] the photo is kept as picked:", (e as Error)?.message ?? e);
+    keptHere(img.uri);
     return img.uri;
   } finally {
     for (const r of refs) r.release();

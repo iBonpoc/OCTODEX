@@ -12,6 +12,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as Crypto from "expo-crypto";
 import { motion } from "@octo/design-tokens";
 import { useAuth, type DbRole } from "@/cloud/auth";
+import { setMemoryRecords, sweepSoon } from "./localFiles";
 import { MEMBERSHIP_REREAD_MS, memberMatches } from "@/cloud/membershipSync";
 import { appRoles, loadCompanyDB, loadCompanyModule, loadCostHistory, loadPriceHistory } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
@@ -732,6 +733,17 @@ export function StoreProvider({
   onlineRef.current = online;
   const outboxRef = useRef(outbox);
   outboxRef.current = outbox;
+  // #1659: what the store holds only in memory names photo files too (a write not landed yet); a write the device refused
+  // — no sweep of photo files at all (the file may be the only copy of a queued photo). The first sweep after the start
+  // waits: the store's records are read and written by then
+  const memRecords = useRef<() => string[] | null>(() => null);
+  memRecords.current = () =>
+    notSavedOnDevice ? null : [JSON.stringify(dbRef.current), JSON.stringify(outboxRef.current), JSON.stringify(queue), JSON.stringify(rejected)];
+  useEffect(() => {
+    const off = setMemoryRecords(() => memRecords.current());
+    sweepSoon(30_000);
+    return off;
+  }, []);
   // the outbox key is one for the phone: each op knows whose it is, the signed-in person sends only theirs
   // (review #231: after a plain sign-out the next person must never send someone else's ops in their company)
   const who = mode === "cloud" ? { userId: auth.userId!, companyId: company!.companyId } : null;

@@ -10,6 +10,7 @@ import {
   type AccountState, type DeleteOutcome, type Gone, type MembershipRow, type OwnedCompany, type WipeStore,
 } from "@/features/deleteAccount";
 import { forgetDeviceState } from "@/data/persist";
+import { sweepSoon } from "@/data/localFiles";
 import { forgetSharedOps, OUTBOX_KEY, othersOf, REJECTED_KEY, wipedOnDelete, type OwnedItem } from "@/data/outboxOwner";
 import { rejectedOthers, type RejectedOp } from "@/data/outboxRejected";
 import { supabase } from "./client";
@@ -323,6 +324,8 @@ async function wipeKeepingOthers(userId: string | null | undefined, orSession = 
     leave: unknown,
     wiped: wipeMark(ids),
   });
+  // #1659: the photo and receipt files the wiped records named leave the phone too (other people's queued ones stay)
+  sweepSoon();
 }
 
 /**

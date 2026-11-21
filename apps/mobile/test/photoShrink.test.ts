@@ -40,6 +40,9 @@ vi.mock("expo-image-manipulator", () => ({
   },
 }));
 
+const dropped: { picked: string; kept: string }[] = [];
+vi.mock("../src/data/localFiles", () => ({ dropPickedCopy: (picked: string, kept: string) => void dropped.push({ picked, kept }), keptHere: () => {} }));
+
 const { fitLongSide, shrinkPhoto, shrinkPicked, PHOTO_LONG_SIDE, PHOTO_QUALITY } = await import("../src/data/photoShrink");
 
 beforeEach(() => {
@@ -125,6 +128,19 @@ describe("shrinkPhoto", () => {
     expect(await shrinkPhoto({ uri: "data:image/heic;base64,AAAA" })).toBe("data:image/heic;base64,AAAA");
     expect(await shrinkPicked({ canceled: false, assets: [{ uri: "blob:http://x/heic" }] })).toBe("blob:http://x/heic");
     warn.mockRestore();
+  });
+});
+
+describe("shrinkPhoto — the picker's copy (#1659)", () => {
+  it("saved smaller: the picker's copy is offered to go; the shrink failed: nothing is", async () => {
+    dropped.length = 0;
+    log.src = { width: 4032, height: 3024 };
+    await shrinkPhoto({ uri: "file:///Caches/ImagePicker/a.jpg", width: 4032, height: 3024 });
+    expect(dropped).toEqual([{ picked: "file:///Caches/ImagePicker/a.jpg", kept: "file:///out-2048x1536.jpg" }]);
+    dropped.length = 0;
+    log.failSave = true;
+    expect(await shrinkPhoto({ uri: "file:///Caches/ImagePicker/b.jpg", width: 4032, height: 3024 })).toBe("file:///Caches/ImagePicker/b.jpg");
+    expect(dropped).toEqual([]);
   });
 });
 
