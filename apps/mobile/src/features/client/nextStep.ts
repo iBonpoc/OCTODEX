@@ -76,3 +76,168 @@ export function clientCurrent(step: NextStep | null, estimates: Estimate[], jobs
           : undefined;
   return { doc, jobs: jobs.filter((j) => j.status !== "done" && !j.cancelledAt) };
 }
+
+/* ---------- prototype v2 (client-card.html, BUILD-SPEC §2.4): the five sections, «Сейчас», the tiles, the main step ---------- */
+
+/** The client's five sections (client-card.html §4): Обзор · Работы · Деньги · Объекты · Журнал. Contacts live in the header. */
+export type ClientSectionKey = "overview" | "work" | "money" | "places" | "log";
+
+/**
+ * The sections a role sees: the tech — Обзор · Выезды · Объекты · Журнал (no money, canSeeClientMoney); the office and sales —
+ * all five, «Деньги» only once there is money (an invoice, a payment, an advance or something left to bill).
+ */
+export function clientSectionKeys(role: Role, hasMoney: boolean): ClientSectionKey[] {
+  if (role === "tech") return ["overview", "work", "places", "log"];
+  return hasMoney ? ["overview", "work", "money", "places", "log"] : ["overview", "work", "places", "log"];
+}
+
+/** An address of before (`?tab=` / `?s=` of the 11 sections) opens the section that holds it now. */
+export function clientSectionOf(v: unknown): ClientSectionKey {
+  switch (v) {
+    case "work":
+    case "jobs":
+    case "estimates":
+    case "leads":
+    case "visits":
+      return "work";
+    case "money":
+    case "invoices":
+    case "billing":
+      return "money";
+    case "places":
+    case "properties":
+      return "places";
+    case "log":
+    case "history":
+    case "notes":
+    case "tasks":
+    case "files":
+      return "log";
+    default:
+      return "overview";
+  }
+}
+
+/**
+ * «Ещё выставить» (client-card.html «Что надо решить» п.3): of every live job made from an approved estimate — what its contract
+ * statement still has to bill. Computed by the engine (`contractStatement`), nothing new in the model.
+ */
+export function clientToBill(estimates: Estimate[], jobs: Job[], invoices: Invoice[]): number {
+  let cents = 0;
+  for (const e of estimates.filter((x) => x.status === "approved")) {
+    const job = jobs.find((j) => j.estimateId === e.id && !j.cancelledAt);
+    if (!job || job.amountCents <= 0) continue;
+    cents += Math.max(0, contractStatement(job.amountCents, invoices.filter((i) => live(i) && i.jobId === job.id)).toInvoice);
+  }
+  return cents;
+}
+
+/** a visit of the client as «Сейчас» reads it */
+export interface NowVisit {
+  id: string;
+  jobId?: string;
+  start: string;
+  durationMin: number;
+  step: string;
+  closed?: boolean;
+  techId: string | null;
+  customerNotifiedAt?: string;
+}
+
+/**
+ * «Сейчас» — the one line in a frame (client-card.html (а), §6): what is with the client this minute. The order: a job going on
+ * (a visit on site / working) → an overdue invoice → a job scheduled (its next visit) → an estimate waiting for the client →
+ * a draft → a new lead → nothing. Archive and «do not service» have their own plate instead.
+ */
+export type ClientNow =
+  | { kind: "working"; job: Job; visit: NowVisit }
+  | { kind: "overdue"; invoice: Invoice; owesCents: number }
+  | { kind: "scheduled"; job: Job; visit: NowVisit }
+  | { kind: "waiting"; estimate: Estimate }
+  | { kind: "draft"; estimate: Estimate }
+  | { kind: "lead"; lead: { id: string; service?: string; receivedAt: string; source?: string } }
+  | null;
+
+export interface ClientNowInput {
+  jobs: Job[];
+  /** the client's visits the role sees, any order */
+  visits: NowVisit[];
+  invoices: Invoice[];
+  estimates: Estimate[];
+  leads: { id: string; status: string; service?: string; receivedAt: string; sourceId?: string }[];
+  /** today's company day for «overdue» (YYYY-MM-DD) */
+  today: string;
+}
+
+const openStep = (v: NowVisit) => !v.closed && v.step !== "paid" && v.step !== "done";
+
+export function clientNowOf({ jobs, visits, invoices, estimates, leads, today }: ClientNowInput): ClientNow {
+  const live = jobs.filter((j) => !j.cancelledAt && j.status !== "done");
+  const jobOf = (v: NowVisit) => live.find((j) => j.id === v.jobId);
+  const going = visits.filter((v) => openStep(v) && ["en_route", "on_site", "working"].includes(v.step) && jobOf(v)).sort((a, b) => a.start.localeCompare(b.start))[0];
+  if (going) return { kind: "working", job: jobOf(going)!, visit: going };
+  const overdue = invoices
+    .filter((i) => i.status !== "void" && !!i.dueDate && i.dueDate < today)
+    .map((invoice) => ({ invoice, owesCents: invoiceBalance(invoice).owesCents }))
+    .filter((x) => x.owesCents > 0)
+    .sort((a, b) => (a.invoice.dueDate ?? "").localeCompare(b.invoice.dueDate ?? ""))[0];
+  if (overdue) return { kind: "overdue", ...overdue };
+  const next = visits.filter((v) => openStep(v) && v.step === "scheduled" && jobOf(v) && v.start.slice(0, 10) >= today).sort((a, b) => a.start.localeCompare(b.start))[0];
+  if (next) return { kind: "scheduled", job: jobOf(next)!, visit: next };
+  const waiting = estimates.filter((e) => e.status === "sent" || e.status === "awaiting_countersign").sort(newest)[0];
+  if (waiting) return { kind: "waiting", estimate: waiting };
+  const draft = estimates.filter((e) => e.status === "draft").sort(newest)[0];
+  if (draft) return { kind: "draft", estimate: draft };
+  const lead = leads.filter((l) => l.status === "new" || l.status === "replied" || l.status === "booked").sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))[0];
+  if (lead) return { kind: "lead", lead: { id: lead.id, service: lead.service, receivedAt: lead.receivedAt, source: lead.sourceId } };
+  return null;
+}
+
+/** what the client is as a whole: the tiles and the plate follow it (client-card.html §6) */
+export type ClientState = "new" | "active" | "owes" | "archived" | "noService";
+
+export function clientStateOf(status: "prospect" | "active" | "archived" | "do_not_service", o: { owesCents: number; jobs: number; paidCents: number; toBillCents: number }): ClientState {
+  if (status === "archived") return "archived";
+  if (status === "do_not_service") return "noService";
+  if (o.owesCents > 0) return "owes";
+  if (o.jobs === 0 && o.paidCents === 0 && o.toBillCents === 0) return "new";
+  return "active";
+}
+
+/** one tile of the 2×2 grid */
+export type ClientTile = "debt" | "paid" | "toBill" | "nextVisit" | "contact" | "reminded" | "lastJob" | "approved" | "source" | "gate" | "onSite" | "tomorrow";
+
+/**
+ * The four tiles by role and state (client-card.html §6–§7, BUILD-SPEC §2.4): the office — Долг · Ещё выставить (or Оплачено всего
+ * when nothing is left to bill) · Следующий выезд · Последний контакт («Напоминали» when the client owes); sales — Оплачено ·
+ * Одобрено · Откуда · Контакт; the tech — Код · На месте · Завтра (the access note is the row under the tiles: a sentence does not
+ * fit a 30 figure); archive — Оплачено · Последняя работа; a new client —
+ * none (zeros say nothing).
+ */
+export function clientTileKeys(role: Role, state: ClientState, toBillCents: number): ClientTile[] {
+  if (role === "tech") return ["gate", "onSite", "tomorrow"];
+  if (state === "new") return [];
+  if (state === "archived" || state === "noService") return ["paid", "lastJob"];
+  if (role === "sales") return ["paid", "approved", "source", "contact"];
+  return ["debt", toBillCents > 0 ? "toBill" : "paid", "nextVisit", state === "owes" ? "reminded" : "contact"];
+}
+
+/**
+ * The one main step of the client (client-card.html §6–§7, BUILD-SPEC §2.4 table): the chain of `clientNextStep` plus the steps
+ * the card adds — archive: «Вернуть в активные» (outlined, not a selling step); «do not service»: none (the plate says why);
+ * the tech: «В путь» to his visit (prototype); a job scheduled whose time the client was not told: «Сообщить время» (prototype,
+ * the SMS sheet), an estimate waiting for the client's answer: «Напомнить про смету» (its screen) — only when the chain itself
+ * has nothing but «Новая смета».
+ */
+export type ClientMainStep = NextStep | { kind: "restore" } | { kind: "trip"; visitId: string } | { kind: "tellTime"; visit: NowVisit; job: Job } | { kind: "remind"; estimate: Estimate };
+
+export function clientMainStep(o: { role: Role; state: ClientState; step: NextStep | null; now: ClientNow; techVisitId?: string }): ClientMainStep | null {
+  if (o.state === "archived") return o.role === "tech" ? null : { kind: "restore" };
+  if (o.state === "noService") return null;
+  if (o.role === "tech") return o.techVisitId ? { kind: "trip", visitId: o.techVisitId } : null;
+  if (o.step && o.step.kind !== "estimate") return o.step;
+  if (o.now?.kind === "scheduled" && !o.now.visit.customerNotifiedAt && o.role !== "sales") return { kind: "tellTime", visit: o.now.visit, job: o.now.job };
+  // an estimate is with the client and nothing else moves: remind him (BUILD-SPEC §2.4 «смета ждёт → Напомнить про смету»)
+  if (o.now?.kind === "waiting") return { kind: "remind", estimate: o.now.estimate };
+  return o.step;
+}

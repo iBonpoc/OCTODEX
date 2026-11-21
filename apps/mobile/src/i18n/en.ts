@@ -5242,6 +5242,7 @@ export const en: Dict = {
   "proto.client.visitOf": "visit {n} of {m}",
   "proto.client.yesterday": "Yesterday",
   "proto.client.yourVisit": "Your visit",
+  "proto.client.lateDays": "{d}d",
   "proto.client.remindEstimate": "Remind about the estimate",
   "proto.client.remindWhy": "Estimate {n} is with the client — no answer yet",
 };

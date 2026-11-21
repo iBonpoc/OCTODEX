@@ -5242,6 +5242,7 @@ export const ru = {
   "proto.client.visitOf": "выезд {n} из {m}",
   "proto.client.yesterday": "Вчера",
   "proto.client.yourVisit": "Ваш выезд",
+  "proto.client.lateDays": "{d} дн",
   "proto.client.remindEstimate": "Напомнить про смету",
   "proto.client.remindWhy": "Смета {n} у клиента — он ещё не ответил",
 } as const;
