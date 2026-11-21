@@ -1,21 +1,23 @@
-import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
-import { InvoiceCardBody } from "@/features/invoice/InvoiceCard";
+import { InvoiceObject } from "@/features/invoice/InvoiceCard";
 import { Empty, Screen } from "@/ui/surfaces";
 import { canSeeInvoice } from "@/features/access";
 import { VoidInvoiceBody } from "@/features/invoice/VoidInvoice";
-import { useDevice } from "@/theme/ThemeProvider";
+import { initialsOf } from "@/features/invoice/moneySummary";
+import { ObjectScreen } from "@/ui/templates";
 
-/** Invoice: amount, paid, balance; take a payment (any part); receipts; send / PDF (body — features/invoice/InvoiceCard). */
+/**
+ * «Счёт» — the Object template (prototype v2 #2350; body — features/invoice/InvoiceCard `InvoiceObject`): how much is owed and
+ * the one next step pinned at the bottom. A voided invoice opens too (В1-5) — marked, with its reason, no step at all.
+ * `?pay=1` (the list's swipe «Принять оплату») opens the payment sheet on arrival.
+ */
 export default function InvoiceScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, pay } = useLocalSearchParams<{ id: string; pay?: string }>();
   const { db, role, mode } = useStore();
   const { t } = useI18n();
-  const { wide, device } = useDevice();
-  const back = () => (router.canGoBack() ? router.back() : router.replace("/money"));
+  const back = () => (router.canGoBack() ? router.back() : router.replace("/invoice"));
   // В1-5: a voided invoice opens too — marked, with its reason, outside every sum
   const live = db.invoices.find((i) => i.id === id);
   const inv = live ?? (db.voidInvoices ?? []).find((i) => i.id === id);
@@ -32,39 +34,28 @@ export default function InvoiceScreen() {
         <Empty icon="invoice" title={t("mny.noAccess")} testID="no-access" />
       </Screen>
     );
-  const cust = db.customers.find((c) => c.id === inv.customerId);
-  const title = `${t("inv.title")} ${inv.number ?? ""}`.trim();
-  if (!live)
-    return (
-      <Screen testID="invoice-screen" title={title} back={back} subtitle={cust?.name}>
-        <VoidInvoiceBody inv={inv} />
-      </Screen>
-    );
-  // LAYOUT-RULES §3 «Объект» (#2350): the client is a link in the card's first line (not a second time under the title); «⋯» — only
-  // «Аннулировать…»; «Принять оплату · $X» (or «Отправить») pinned at the bottom on a phone, after the money from 820
+  if (live) return <InvoiceObject key={live.id} inv={live} back={back} pay={pay === "1"} />;
+  const who = db.customers.find((c) => c.id === inv.customerId)?.name;
   return (
-    <InvoiceCardBody
-      inv={live}
-      inline={wide}
-      frame={({ more, bar, body, head, summary, rest }) =>
-        device === "desktop" ? (
-          // desktop (DS §12.3 «Десктоп», #1495 Б): the receipts on the left, the summary — status, money, the main action — in the
-          // side column 360 on the right, as on the client's card (#1416)
-          <Screen testID="invoice-screen" title={title} back={back} right={more}>
-            {head}
-            <View style={{ flexDirection: "row-reverse", alignItems: "flex-start", gap: space[6] }}>
-              <View testID="invoice-side" style={{ width: component.panelW, gap: space[3] }}>
-                {summary}
-              </View>
-              <View style={{ flex: 1, minWidth: 0, gap: space[3] }}>{rest}</View>
-            </View>
-          </Screen>
-        ) : (
-          <Screen testID="invoice-screen" title={title} back={back} right={more} footer={bar ?? undefined}>
-            {body}
-          </Screen>
-        )
-      }
-    />
+    <ObjectScreen
+      testID="invoice-screen"
+      back={back}
+      header={{
+        testID: "invoice-head",
+        title: who ?? `${t("inv.title")} ${inv.number ?? ""}`.trim(),
+        avatar: who ? initialsOf(who) : undefined,
+        status: { name: "neutral", label: t("inv.void.status") },
+        meta: [{ id: "num", label: t("proto.money.invoiceOf", { num: inv.number ?? "" }).trim() }],
+        labels: { expand: t("ds.proto.expand"), collapse: t("ds.proto.collapse"), more: (n) => t("ds.proto.moreN", { n }) },
+      }}
+      sections={[]}
+      section=""
+      onSection={() => {}}
+      sectionsLabel={t("proto.money.details")}
+      more={[]}
+      onMore={() => {}}
+    >
+      <VoidInvoiceBody inv={inv} />
+    </ObjectScreen>
   );
 }

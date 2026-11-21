@@ -19,6 +19,11 @@ import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { CardList, Empty } from "@/ui/surfaces";
 import { canSeeEstimate } from "@/features/access";
+import { estimateSigns } from "@/features/listSigns";
+import { estimateListAmount } from "@/features/estimateDoc";
+import { initialsOf } from "@/features/invoice/moneySummary";
+import { router } from "expo-router";
+import type { GroupRowProps } from "@/ui/groupedList";
 
 /** status chip of an estimate — the one place for it (lists, client and property documents) */
 export const estView: Record<EstimateStatus, { s: StatusName; l: DictKey }> = {
@@ -119,4 +124,60 @@ export function EstimatesBoard({ wrap }: { wrap: (body: ReactNode, aside?: React
     </View>,
     aside,
   );
+}
+
+/** how many closed estimates «Готово» shows before «Все ›» (the list stays short: the open ones are the work) */
+export const DONE_SHOWN = 5;
+
+/**
+ * «Деньги → Сметы» of prototype v2 (#2350, BUILD-SPEC §2.9, wireframes-v2 №8): the estimates the role may see, as the groups and
+ * rows of the List template — «Нужно действие · Черновики · Ждём клиента · Готово» (an empty group is not drawn), each row the
+ * client's initials, the name, «работа · что с ней» and the sum once. The search narrows every group; «Готово» shows the last
+ * `DONE_SHOWN` until «Все ›». A swipe right opens the estimate (no swipe left: the store has no deleting with «Отменить», rule 5).
+ */
+export function useEstimateList(q: string, allDone: boolean, onAllDone: () => void) {
+  const { db, role, mode } = useStore();
+  const { t, money, day } = useI18n();
+  const now = Date.now();
+  const list = db.estimates
+    .filter((e) => canSeeEstimate(db, { role, mode, me: db.me }, e.id))
+    .filter((e) => matchEstimate(db, e, q))
+    .map((e) => ({ e, g: estimateGroup(e, now) }))
+    .sort((a, b) => (b.e.sentAt ?? b.e.approvedAt ?? "").localeCompare(a.e.sentAt ?? a.e.approvedAt ?? ""));
+  const groups = ESTIMATE_GROUPS.map((g) => {
+    const rows = list.filter((x) => x.g === g).map((x) => x.e);
+    const cut = g === "done" && !allDone && !q.trim() && rows.length > DONE_SHOWN;
+    return {
+      key: g,
+      title: `${t(`card.group.${g}` as DictKey)} · ${rows.length}`,
+      rows: cut ? rows.slice(0, DONE_SHOWN) : rows,
+      all: cut ? { label: t("proto.money.all"), onPress: onAllDone } : undefined,
+    };
+  });
+  const row = (e: Estimate): GroupRowProps & { key: string } => {
+    const c = db.customers.find((x) => x.id === e.customerId);
+    const sign = estimateSigns(e, now)[0];
+    const amount = estimateListAmount(e);
+    // what is with it now, once: the sign («Без ответа 6 дн»), else the last event, else its status word
+    const what = sign
+      ? t(sign.key, sign.params)
+      : e.approval
+        ? `${t(estView[e.status].l)} ${day(e.approval.at)}`
+        : e.viewedAt
+          ? t("ue.viewed", { date: day(e.viewedAt) })
+          : e.sentAt
+            ? `${t("st.sent")} ${day(e.sentAt)}`
+            : t(estView[e.status].l);
+    return {
+      key: e.id,
+      testID: `est-row-${e.id}`,
+      title: c?.name ?? "—",
+      subtitle: [what, e.title].filter(Boolean).join(" · "),
+      lead: { initials: initialsOf(c?.name) },
+      value: amount.from ? t("card.fromAmount", { amount: money(amount.cents) }) : money(amount.cents),
+      onPress: () => router.push(`/estimate/${e.id}`),
+      swipe: { left: [{ key: "open", label: t("swipe.open"), icon: "eye", full: true, onPress: () => router.push(`/estimate/${e.id}`), testID: `est-swipe-${e.id}` }] },
+    };
+  };
+  return { groups, row, count: list.length };
 }
