@@ -55,25 +55,25 @@ const PLANNERS: readonly Role[] = ["director", "dispatcher"];
 /** Order = menu order inside a group (13 §2.3). */
 export const SECTIONS: readonly Section[] = [
   { id: "home", label: "nav.home", icon: "home", group: "top", tab: true },
-  { id: "plan", label: "nav.plan", icon: "calendar", group: "work", tab: true },
+  { id: "plan", label: "nav.plan", icon: "plan", group: "work", tab: true },
   { id: "messages", label: "nav.messages", icon: "sms", group: "top" },
   // the tech sees his own leads — assigned to him or brought by him (13 §2.3, §4; canSeeLead and RLS leads_select);
   // a subcontractor does not (he never gets leads: features/leadAssignee.ts)
   // prototype v2 (BUILD-PLAN §2 п.1): «Лиды» is the fifth tab
-  { id: "leads", label: "nav.leads", icon: "inbox", group: "work", tab: true, roles: [...OFFICE, "tech"], noSub: true },
+  { id: "leads", label: "nav.leads", icon: "leads", group: "work", tab: true, roles: [...OFFICE, "tech"], noSub: true },
   { id: "jobs", label: "nav.jobs", icon: "wrench", group: "work" },
   { id: "clients", label: "nav.clients", icon: "users", group: "work", tab: true },
   // redesign #2348: «Деньги» — estimates, invoices, payments behind one tab (a segment switches them)
   // the tech has no «Деньги» tab (audit 12 §2.6): the company's money is the office's; his own estimates are a tile of «Ещё»
-  { id: "finance", label: "nav.money", icon: "wallet", group: "docs", tab: true, phoneOnly: true, roles: OFFICE },
+  { id: "finance", label: "nav.money", icon: "money", group: "docs", tab: true, phoneOnly: true, roles: OFFICE },
   // prototype v2: search is an icon in the header (HeaderIcons, /search stays), not a tab
   // «Звонки» is not a tab until the company has its own number (founder 06.11, variant Б; 13 v2 §2.1)
   { id: "calls", label: "nav.calls", icon: "phone", group: "work" },
   // wave 6 (20 §7): every role; the technician sees his own (RLS)
   { id: "tasks", label: "task.title", icon: "check", group: "work" },
-  { id: "estimates", label: "nav.estimates", icon: "invoice", group: "docs" },
-  { id: "invoices", label: "nav.invoices", icon: "wallet", group: "docs", roles: OFFICE },
-  { id: "catalog", label: "nav.catalog", icon: "note", group: "docs" },
+  { id: "estimates", label: "nav.estimates", icon: "estimate", group: "docs" },
+  { id: "invoices", label: "nav.invoices", icon: "invoice", group: "docs", roles: OFFICE },
+  { id: "catalog", label: "nav.catalog", icon: "catalog", group: "docs" },
   // spec 36: owner, admin, office — the account number is not for the tech or sales
   { id: "suppliers", label: "nav.suppliers", icon: "truck", group: "docs", roles: PLANNERS },
   // spec 37: owner, admin, office; the tech sees the orders of his jobs on the job
@@ -83,7 +83,7 @@ export const SECTIONS: readonly Section[] = [
   { id: "reports", label: "rpt.title", icon: "chart", group: "money", roles: PLANNERS },
   // «Расходы» (13 §2.3): the /money screen
   { id: "money", label: "nav.expenses", icon: "wallet", group: "money", roles: PLANNERS },
-  { id: "team", label: "nav.team", icon: "users", group: "bottom", roles: ["director"] },
+  { id: "team", label: "nav.team", icon: "crew", group: "bottom", roles: ["director"] },
   // spec 26 §3 (07.11): the office (dispatcher) sees the company settings read-only; only the director changes them
   { id: "company", label: "nav.companySettings", icon: "home2", group: "bottom", roles: ["director", "dispatcher"] },
   { id: "settings", label: "nav.mySettings", icon: "sliders", group: "bottom" },
@@ -233,7 +233,7 @@ const FAB_LOOK: Record<FabId, { label: DictKey; icon: IconKey; hint?: DictKey }>
   lead: { label: "path.leadNew", icon: "user" },
   client: { label: "path.clientNew", icon: "users" },
   job: { label: "path.jobNew", icon: "wrench", hint: "path.jobHint" },
-  estimate: { label: "path.estimateNew", icon: "invoice", hint: "path.estimateHint" },
+  estimate: { label: "path.estimateNew", icon: "estimate", hint: "path.estimateHint" },
   expense: { label: "path.expenseNew", icon: "wallet" },
   visit: { label: "path.visitAdd", icon: "calendar" },
   planAdd: { label: "plan.add", icon: "calendar" },

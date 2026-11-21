@@ -66,10 +66,11 @@ export const size = {
   controlLg: 40,
   controlMdPhone: 36,
   fieldPhone: 44,
-  iconXs: 12,
-  iconSm: 16,
-  iconMd: 20,
-  iconLg: 24,
+  // #2350: основной размер значков 24 (основатель 21.11.2026: «измени на 24, не 22»); всё ×1,2 от прежних 12/16/20/24
+  iconXs: 14,
+  iconSm: 18,
+  iconMd: 24,
+  iconLg: 28,
   iconStroke: 1.75,
   statusbarH: 44,
   tabbarH: 56,
@@ -181,7 +182,7 @@ export const gesture = {
 /* ---------- components.css ---------- */
 export const component = {
   /** visual v2: the phone's capsule 40, the icon in it `glyph` 18 */
-  button: { sm: 32, md: 36, phone: 40, hit: 44, glyph: 18 },
+  button: { sm: 32, md: 36, phone: 40, hit: 44, glyph: 22 },
   field: { h: 40, phone: 44 },
   chip: { h: 24, px: 10 },
   /** visual v2: the segment 36 high, radius 18 (a pill), the track 3 inside; the chosen one is a 15-radius pill (`h / 2 − pad`), text 13/600 */
@@ -308,11 +309,11 @@ export const component = {
   listRow: { h: 56, inset: 64, timeW: 52 },
   /** StatTile (visual v2): two in a row `h` 112 (figure 26), three in a row `hSm` 92 (figure 18); the icon `glyph` 15 in a circle `icon` 28
    *  top left, the word 12 over the figure, the unit 12 paler; one tile of a screen may be the yellow one */
-  statTile: { h: 112, hSm: 92, icon: 28, glyph: 15 },
+  statTile: { h: 112, hSm: 92, icon: 28, glyph: 18 },
   /** DayStrip (visual v2): pills 46 × 64 (radius 23), 7 fill the 358 row with `gap` 6; the day 12/600 over the number 17/700, the «есть выезды» dot `dot` 4 */
   dayPill: { w: 46, h: 64, dot: 4, gap: 6 },
   /** StatusPill (visual v2): 24 high (`chip.h`), radius 12, the icon `icon` 13 and the word 12/600, padding `padL` 7 · `padR` 9 */
-  statusPill: { icon: 13, padL: 7, padR: 9 },
+  statusPill: { icon: 16, padL: 7, padR: 9 },
   /** CheckList (visual v2): the circle `dot` 20 (empty — a dashed `dash` 1.5 ring), a row `row` 34, one line `line` 1 on the left through the circles */
   checkList: { dot: 20, row: 34, line: 1, dash: 1.5, glyph: 13 },
   /** FigureRow «цифры справа» (visual v2): a card from `h` 64, the icon square `icon` 40 with radius `iconRadius` 13, a value column `colW` 64 */
@@ -322,7 +323,7 @@ export const component = {
   /** round buttons (visual v2): 40 in the header (on a `surf` card), `card` 32 inside a card, `quick` 44 in the quick-actions row with a 12 caption */
   roundButton: { header: 40, card: 32, quick: 44 },
   /** the phone's tab bar (visual v2): 56 (`size.tabbarH`) + the bottom zone; the icon `icon` 22 over the word 12; the top `fade` 18 fades into `tab` */
-  tabBar: { icon: 22, fade: 18 },
+  tabBar: { icon: 26, fade: 18 },
   /** app-only (#2214, DS §15.3б): the offline queue's thin line over the tab bar — its height (the hit area grows to 44 by Press) */
   queueLine: { h: 28 },
   /** QuickActions / IconRow: `row` — a circle 44 with a 12 label under it, the cell `labelW` 64, between cells `gap` 8; `inline` — a circle 36 (zone 44) in the address line */
@@ -641,7 +642,7 @@ export const print = {
   contract: { minPt: 10, headingPt: 10, noticePt: 12 },
 } as const;
 
-/** Status glyph (DS: always icon + word). Maps to icons.ts names. */
+/** Status glyph (DS: always icon + word): its own glyph in a circle (ok ✓, info i, warn △, bad ×, neutral — an empty circle; #2350). */
 /** sizes on the drawing canvas (design/naryad-ds/tokens/foundation.css --draw-*): line widths, a downspout, a node,
  *  the gap between a length label and its line; colours are themes[t].drawing */
 export const drawing = { runW: 4, runWSel: 6, dsR: 7, nodeR: 5, labelGap: 4, liftScale: 1.5 } as const;
@@ -665,12 +666,12 @@ export const shopSheet = {
   band: "#AFAFAF",
 } as const;
 
-export const statusIcon: Record<StatusName, "check" | "clock" | "alert" | "close" | "note"> = {
-  ok: "check",
-  info: "clock",
-  warn: "alert",
-  bad: "close",
-  neutral: "note",
+export const statusIcon: Record<StatusName, "ok" | "info" | "warn" | "bad" | "neutral"> = {
+  ok: "ok",
+  info: "info",
+  warn: "warn",
+  bad: "bad",
+  neutral: "neutral",
 };
 
 /** Business timing rules from HANDOFF: estimate without reply 2–4 days → warn, 5+ → bad. */

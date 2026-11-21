@@ -9,7 +9,7 @@
  /* визуальная высота контролов; зона нажатия всегда не меньше --hit-min (HIG 44pt) */
  --control-sm:28px;--control-md:32px;--control-lg:40px;--field:34px;--hit-min:44px;--hit-min-android:48px;
  --control-md-phone:36px;--field-phone:44px;
- --icon-xs:12px;--icon-sm:16px;--icon-md:20px;--icon-lg:24px;--icon-stroke:1.75;
+ --icon-xs:14px;--icon-sm:18px;--icon-md:24px;--icon-lg:28px;--icon-stroke:1.75;
  --statusbar-h:44px;--tabbar-h:56px;--safe-bottom:34px;--fab:52px;--sheet-radius:28px;
  --dur-fast:160ms;--dur-base:220ms;--dur-slow:350ms;--dur-chart:900ms;--long-press-ms:500ms;--dur-press:80ms;
  --menu-scale:.96;--alert-scale:1.06;--skeleton-cycle:1800ms;

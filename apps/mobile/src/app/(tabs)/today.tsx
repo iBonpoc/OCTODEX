@@ -19,6 +19,7 @@ import { buildAttention } from "@/features/attention";
 import { startsIn, useAttentionNow, useEnRoute, useGreeting, useHomeHeader } from "@/features/AttentionCards";
 import { todayVisits, visitStatus } from "@/features/visits";
 import { crewNow } from "@/features/crewList";
+import { roadShort, visitWho, waitShort } from "@/features/shortTime";
 import { visitContext } from "@/data/selectors";
 import { useTick } from "@/features/sheets";
 import { CompanySetupCard, FirstStepsCard } from "@/features/SetupCards";
@@ -98,7 +99,7 @@ const CREW_MAX = 6;
  */
 export default function Today() {
   useTick();
-  const { t, time, moneyWhole, tn, duration } = useI18n();
+  const { t, time, day: dayOf, moneyWhole, tn, duration } = useI18n();
   const { db, role, rejectedOps, mode } = useStore();
   const greeting = useGreeting();
   const header = useHomeHeader();
@@ -143,7 +144,8 @@ export default function Today() {
     const running = v.step !== "scheduled";
     const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, v));
     const mine = isAssigned(v, db.me);
-    const first = (v.assigneeIds ?? (v.techId ? [v.techId] : [])).map((id) => db.members.find((m) => m.id === id)?.name?.split(/\s+/)[0]).find(Boolean);
+    // «мастер»: the assignee's first name; a sub — its company and «субподрядчик» (bug 20.11: «Valley · мастер»); nobody — «Не назначен»
+    const who = visitWho(v, db.members, t);
     const tel = customer?.phone?.replace(/[^\d+]/g, "");
     const addr = property ? `${property.address}, ${property.city}` : undefined;
     // visual v2 макет 1: «1420 Oak Grove Ave, Pasadena» — the street and the city, no state and zip in the card's one line
@@ -154,7 +156,8 @@ export default function Today() {
     const due = visitDueCents(db, v);
     // «в дороге»: only what the visit knows — the minutes since the tech left (`enRouteAt`); the demo has no route time to the address
     // (no geo of the properties), so a visit not on its way says what is due on it instead (px1, report 21.11)
-    const road = v.step === "en_route" && v.enRouteAt ? Math.max(1, Math.round((Date.now() - Date.parse(v.enRouteAt)) / 60_000)) : null;
+    // short words (bug 20.11: «20 ч 26 мин в дороге»): «25 мин», «2 ч», past 3 h — since when («с 8:34», «с вчера»)
+    const road = v.step === "en_route" && v.enRouteAt ? roadShort(v.enRouteAt, Date.now(), t, { time, day: dayOf }) : null;
     return {
       kicker: t(running ? "px1.now" : "todayR.next"),
       soon,
@@ -170,8 +173,8 @@ export default function Today() {
       // «тройка цифр»: how long on site · on the way (or what is due) · who
       trio: [
         { value: v.allDay ? t("plan5.allDay") : duration(v.durationMin), label: t("w2a.onSite") },
-        road !== null ? { value: duration(road), label: t("px1.onRoad") } : due > 0 ? { value: moneyWhole(due), label: t("px1.due") } : { value: t("w2a.ofN", { a: v.checklist.filter((x) => x.done).length, b: v.checklist.length }), label: t("w2a.checklist") },
-        { value: first ?? "—", label: t("w2a.tech") },
+        road !== null ? { value: road, label: t("px1.onRoad") } : due > 0 ? { value: moneyWhole(due), label: t("px1.due") } : { value: t("w2a.ofN", { a: v.checklist.filter((x) => x.done).length, b: v.checklist.length }), label: t("w2a.checklist") },
+        { value: who.value, label: who.label },
       ],
       // my own visit not started — «✓ В пути» (the same step as on the visit); a crew's or a running one — open it
       main:
@@ -180,7 +183,7 @@ export default function Today() {
           : { label: t("todayR.openVisit"), onPress: () => router.push(`/visit/${v.id}`), testID: "home-main-open" },
       mainIcon: !running && mine ? "check" : undefined,
       // the pair is the driver's: «В пути» · «Маршрут» · «☎» on my own visit; a crew's one only opens
-      second: addr && !running && mine ? { label: t("proto.visit.route"), icon: "pin", onPress: () => void Linking.openURL(mapsUrl(addr, Platform.OS)).catch(() => {}), testID: "home-route" } : undefined,
+      second: addr && !running && mine ? { label: t("proto.visit.route"), icon: "route", onPress: () => void Linking.openURL(mapsUrl(addr, Platform.OS)).catch(() => {}), testID: "home-route" } : undefined,
       icon: tel && !running && mine ? { icon: "phone", a11y: `${t("proto.visit.call")} ${customer?.name ?? ""}`, onPress: () => void Linking.openURL(`tel:${tel}`).catch(() => {}), testID: "home-call" } : undefined,
     };
   })();
@@ -243,7 +246,7 @@ export default function Today() {
           it counts (founder 05.11); a zero tile is not drawn; none is yellow — the Home's one yellow is «В пути» */}
       <ListGroup title={t("todayR.action")} all={{ label: t("todayR.all"), onPress: () => router.push("/triage"), testID: "home-attention-all" }} bare testID="today-attention">
         <StatGrid testID="today-tiles">
-          <StatTile testID="tile-leads" icon="inbox" dense label={t("proto.home.tile.leads")} value={leadsWaiting.length} unit={longest ? t("px1.tile.leadsWait", { m: longest }) : undefined} onPress={() => router.push("/leads")} />
+          <StatTile testID="tile-leads" icon="inbox" dense label={t("proto.home.tile.leads")} value={leadsWaiting.length} unit={longest ? t("px1.tile.leadsWait", { m: waitShort(longest, t) }) : undefined} onPress={() => router.push("/leads")} />
           <StatTile testID="tile-estimates" icon="doc" dense label={t("px1.tile.estimates")} value={estWaiting} unit={estDays ? t("px1.tile.estDays", { n: estDays }) : undefined} onPress={() => router.push("/estimates")} />
           <StatTile testID="tile-owed" icon="dollar" dense label={t("proto.home.tile.owed")} value={moneyWhole(n.awaitingCents)} unit={aw.overdue ? t("px1.tile.overdue", { n: aw.overdue }) : undefined} unitTone="bad" onPress={() => router.push("/invoice?f=owed")} />
           <StatTile testID="tile-received" icon="chart" dense label={t("proto.home.tile.received")} value={moneyWhole(got.cents)} unit={got.count ? tn("px1.payN", got.count) : undefined} onPress={() => router.push("/figures/received?period=today")} />

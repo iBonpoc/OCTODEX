@@ -1,21 +1,18 @@
 /**
  * The words of a lead in the prototype v2 list and object (wireframes-v2 №16, object-cards «Лид»): pure, no React.
- * - `fmtWait` — «12 мин», «3 ч 5 мин», «2 дн»;
+ * - `fmtWait` — «12 мин», «3 ч», «2 дн» (`waitShort`);
  * - `leadWaitLabel` — how long the client waits for our reply, the StatusPill on the right of the row («12 мин»), null when it is not our reply;
  * - `leadRowLine` — the one line under the name: «где он сейчас · что нужно · город» (a new lead — only «что · город»: the pill says the wait).
  */
 import type { Lead } from "@/data/types";
 import type { DictKey } from "@/i18n";
 import { isClosedLead, leadStatusView, type LeadTurn } from "@/features/leads";
+import { waitShort } from "@/features/shortTime";
 
 type Tr = (k: DictKey, p?: Record<string, string | number>) => string;
 
-/** "12 min", "3 h 5 min", "2 d" */
-export function fmtWait(m: number, t: Tr): string {
-  if (m < 60) return t("time.min", { n: m });
-  if (m < 60 * 24) return t("time.hmin", { h: Math.floor(m / 60), m: m % 60 });
-  return t("time.days", { n: Math.floor(m / 1440) });
-}
+/** "12 min", "3 h", "2 d" — the one short wait of the app (features/shortTime.ts) */
+export const fmtWait = (m: number, t: Tr): string => waitShort(m, t);
 
 /** the client waits for us: «12 мин» (the turn's colour goes with it); otherwise null */
 export function leadWaitLabel(turn: LeadTurn, t: Tr): string | null {

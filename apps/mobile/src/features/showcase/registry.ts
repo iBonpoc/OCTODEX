@@ -53,6 +53,8 @@ export const SCREENS: ShowcaseScreen[] = [
   { id: "haptics", title: "ds.scr.haptics", hint: "ds.scr.hapticsHint", icon: "phone", ds: "§15.6", where: "ds.where.haptics" },
   { id: "spacing", title: "ds.sec.layout", hint: "ds.scr.spacingHint", icon: "route", ds: "§5", where: "ds.where.spacing", hidden: true },
   { id: "brand", title: "ds.brand.title", hint: "ds.scr.brandHint", icon: "star", ds: "§18.2", where: "ds.where.brand" },
+  // #2350: the «Тонкие острые» set — every icon, normal and selected
+  { id: "icons", title: "ds.scr.icons", hint: "ds.scr.iconsHint", icon: "layers", ds: "§18.1", where: "ds.where.icons" },
   // prototype v2 (docs/design/BUILD-PLAN.md §1, wave 1): the shared parts of the five templates
   { id: "proto", title: "ds.scr.proto", hint: "ds.scr.protoHint", icon: "copy", ds: "§12.11", where: "ds.where.proto" },
   // «Графит» — пилот, не правило (#2254): behind the switch on the showcase's first screen, off by default
@@ -69,6 +71,7 @@ export const SECTIONS: ShowcaseSection[] = [
   { id: "rows", screen: "rows", ds: "§8.3", title: "ds.scr.rows", tokenGroups: [], components: ["SelectedCheck"] },
   { id: "haptics", screen: "haptics", ds: "§15.6", title: "ds.scr.haptics", tokenGroups: [], components: [] },
   { id: "brand", screen: "brand", ds: "§18.2", title: "ds.brand.title", tokenGroups: [], components: ["BrandMark", "BrandLogo", "BrandLaunch", "BrandWait", "BrandIntro"] },
+  { id: "icons", screen: "icons", ds: "§18.1", title: "ds.scr.icons", tokenGroups: ["statusIcon"], components: ["Icon"] },
   { id: "tokens-color", screen: "base", ds: "§3", title: "ds.sec.color", tokenGroups: ["themes", "statusIcon", "drawing"], components: [] },
   { id: "tokens-text", screen: "base", ds: "§4", title: "ds.sec.text", tokenGroups: ["font"], components: [] },
   { id: "tokens-layout", screen: "spacing", ds: "§5", title: "ds.sec.layout", tokenGroups: ["space", "spaceHalf", "radius", "size", "breakpoint", "layout", "z", "component"], components: [] },
@@ -90,7 +93,7 @@ export const SECTIONS: ShowcaseSection[] = [
 export const UI_PENDING: readonly string[] = [
   "Columns", "Meter", "ReadOnly", "StatusChip", "TagChip", "Avatar", "MetaTag", "Steps",
   "Stepper", "ChoiceChips", "MultiChips", "FilterBar", "FilterRow", "HintsProvider", "ListCard", "CardGrid", "ListCardHeader", "StatusPicker",
-  "ListPanel", "Glass", "Menu", "T", "Icon", "Card", "RowView", "Grid", "SectionTitle", "ListRow", "CardList",
+  "ListPanel", "Glass", "Menu", "T", "Card", "RowView", "Grid", "SectionTitle", "ListRow", "CardList",
   "Divider", "Empty", "Screen",
   // #2350: the row swipe has no gesture on the web (the showcase runs there too); seen on the phone in Клиенты / Задачи / Сметы
   "SwipeRow",

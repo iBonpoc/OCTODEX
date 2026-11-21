@@ -9,9 +9,13 @@ describe("downspout kind icons", () => {
     for (const p of paths) expect(p).toMatch(/^M[\d .\-a-zA-Z]+$/);
     expect(new Set([...paths, icons.downspout]).size).toBe(5);
   });
-  it("a ribbed kind is its smooth one plus ribs (the same outline first)", () => {
-    expect(icons.dsRectRibbed.startsWith(icons.dsRect)).toBe(true);
-    expect(icons.dsRoundRibbed.startsWith(icons.dsRound)).toBe(true);
+  // #2350 «Тонкие острые» (founder 20.11.2026: «даунспауты оставляем»): a ribbed kind is drawn by its own corrugated outline
+  // (the notches of a rectangular one, the waves of a round one) — more drawing than its smooth one, never the same
+  it("a ribbed kind is its own corrugated outline, more drawn than its smooth one", () => {
+    expect(icons.dsRectRibbed).not.toBe(icons.dsRect);
+    expect(icons.dsRoundRibbed).not.toBe(icons.dsRound);
+    expect(icons.dsRectRibbed.length).toBeGreaterThan(icons.dsRect.length / 2);
+    expect(icons.dsRoundRibbed.length).toBeGreaterThan(icons.dsRound.length);
   });
   it("neutral names (no niche word in the core's icon set)", () => {
     for (const k of KINDS) expect(k).not.toMatch(/gutter|желоб/i);

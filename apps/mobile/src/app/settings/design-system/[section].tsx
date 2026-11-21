@@ -15,6 +15,7 @@ import { NoticesSection } from "@/features/showcase/Notices";
 import { HapticsSection } from "@/features/showcase/Haptics";
 import { RowsSection } from "@/features/showcase/Rows";
 import { BrandSection } from "@/features/showcase/Brand";
+import { IconsSection } from "@/features/showcase/Icons";
 import { ChoiceSection } from "@/features/showcase/Choice";
 import { ProtoObject } from "@/features/showcase/ProtoObject";
 import { ProtoLists } from "@/features/showcase/ProtoLists";
@@ -53,6 +54,7 @@ export default function DesignSystemSection() {
       {s.id === "fields" ? <FieldsSection /> : null}
       {s.id === "choice" ? <ChoiceSection /> : null}
       {s.id === "brand" ? <BrandSection /> : null}
+      {s.id === "icons" ? <IconsSection /> : null}
       {s.id === "proto" ? (
         <View style={{ gap: 0 }}>
           <SectionTitle title={t("ds.sec.protoObject")} />

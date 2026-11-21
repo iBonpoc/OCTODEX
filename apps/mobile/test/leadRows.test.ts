@@ -11,7 +11,8 @@ const lead = (x: Partial<Lead> = {}): Lead => ({ id: "l1", name: "Kevin Brooks",
 describe("fmtWait", () => {
   it("minutes, hours and days", () => {
     expect(fmtWait(4, t)).toBe("time.min(4)");
-    expect(fmtWait(65, t)).toBe("time.hmin(1,5)");
+    expect(fmtWait(65, t)).toBe("time.h(1)");
+    expect(fmtWait(1217, t)).toBe("time.h(20)");
     expect(fmtWait(3000, t)).toBe("time.days(2)");
   });
 });

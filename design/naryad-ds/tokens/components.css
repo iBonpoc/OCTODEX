@@ -1,8 +1,8 @@
 /* Токены компонентов. Только псевдонимы на tokens/foundation.css: размеры определены один раз там.
    Зона нажатия на телефоне всегда --hit-min (44), видимая высота кнопки --control-lg (36). Кнопок выше 36 в системе нет. */
 :root{
- --btn-sm:32px;--btn-md:36px;--btn-phone-visible:var(--control-lg);--btn-glyph:18px;
- --btn-icon:var(--control-md);--btn-icon-phone:var(--control-lg);--btn-icon-glyph:18px;
+ --btn-sm:32px;--btn-md:36px;--btn-phone-visible:var(--control-lg);--btn-glyph:22px;
+ --btn-icon:var(--control-md);--btn-icon-phone:var(--control-lg);--btn-icon-glyph:22px;
  --field-h:40px;
  --chip-h:24px;--chip-px:10px;
  --seg-h:36px;--seg-pad:3px;--tab-h:30px;--tab-fade-w:var(--space-8);

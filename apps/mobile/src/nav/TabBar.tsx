@@ -99,7 +99,7 @@ function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: Secti
   const kb = useKeyboardHeight();
   // the core's tabs; a usable module's section (place «tab», founder 09.11 «Замеры») takes the place of «План», which goes
   // to «Ещё» — five tabs, not six (founder 16.11, #1487; DS §5.3)
-  // prototype v2 (BUILD-PLAN §2 п.2): Gutters «Замеры» stands where «План» was — only with the module on
+  // prototype v2 (BUILD-PLAN §2 п.2): a module's own tab stands where «План» was — only with the module on
   const mods = moduleTabs(db.company, role);
   const core = tabs(role, mods.length > 0, meIsSub(db));
   type Item = { id: string; label: string; icon: (typeof core)[number]["icon"]; onPress: () => void };
@@ -150,7 +150,7 @@ function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: Secti
               containerStyle={{ flex: 1 }}
               style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: spaceHalf.hair }}
             >
-              <Icon name={it.icon} s={component.tabBar.icon} color={tone} />
+              <Icon name={it.icon} s={component.tabBar.icon} color={tone} active={sel} />
               <T v="micro" style={{ color: tone }} numberOfLines={1} capped>
                 {t(it.label as DictKey)}
               </T>

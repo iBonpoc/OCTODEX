@@ -82,7 +82,7 @@ export function ProtoTemplates() {
           title: t("ds.tpl.attention"),
           all: { label: t("ds.tpl.all"), onPress: said(t("ds.tpl.all")) },
           rows: DEMO.map(({ ...d }) => { const { key, ...r } = row(d); return <GroupRow key={key} {...r} status={{ status: "bad", label: t("ds.proto.owes") }} value={undefined} />; }).concat(
-            <GroupRow key="x" title="Ann Park" subtitle="Gutter clean · 5 Bay Rd" lead={{ initials: "AP" }} />,
+            <GroupRow key="x" title="Ann Park" subtitle="Water heater · 5 Bay Rd" lead={{ initials: "AP" }} />,
           ),
         }}
         summary={[

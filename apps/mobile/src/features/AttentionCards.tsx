@@ -32,6 +32,7 @@ import { ListCard } from "@/ui/listCard";
 import { useToast } from "@/ui/overlays";
 import type { IconKey } from "@/ui/primitives";
 import type { CreateAction, IconAction } from "@/ui/templates/types";
+import { waitParams } from "./shortTime";
 
 const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 
@@ -120,15 +121,15 @@ export function useAttentionNow(items: AttentionItem[]) {
     const c = p.customerId ? db.customers.find((x) => x.id === p.customerId) : undefined;
     const l = p.leadId ? db.leads.find((x) => x.id === p.leadId) : undefined;
     const worst = p.items[0]!;
-    const name = c?.name ?? l?.name ?? (worst.name || t(worst.label, worst.params));
+    const name = c?.name ?? l?.name ?? (worst.name || t(worst.label, waitParams(worst.params, t)));
     const more = p.items.length > 1 ? ` · ${t("card.reasons", { n: p.items.length })}` : "";
     return {
       key: p.key,
       name,
       // the chip's short words («Ждёт ответа 22 мин»), not the sentence that names the person again (П7)
-      reason: `${t(worst.chip, worst.params)}${more}`,
+      reason: `${t(worst.chip, waitParams(worst.params, t))}${more}`,
       status: worst.status,
-      chip: t(worst.chip, worst.params),
+      chip: t(worst.chip, waitParams(worst.params, t)),
       debt: office && p.debtCents > 0 ? money(p.debtCents) : undefined,
       lead: !!l,
       verb: verb(worst),
@@ -253,16 +254,16 @@ export function AttentionRows({ items }: { items: AttentionItem[] }) {
         const who = s.customerId ? db.customers.find((c) => c.id === s.customerId) : undefined;
         const lead = s.leadId ? db.leads.find((x) => x.id === s.leadId) : undefined;
         // a reason with no client or lead (a refused money change): its status word, not empty initials
-        const name = who?.name ?? lead?.name ?? (it.name || t(it.chip, it.params));
+        const name = who?.name ?? lead?.name ?? (it.name || t(it.chip, waitParams(it.params, t)));
         return (
           <ListCard
             key={it.id}
-            title={t(it.label, it.params)}
+            title={t(it.label, waitParams(it.params, t))}
             when={name}
             lead={{ kind: "initials", text: initials(name), dashed: !!lead }}
             // a refused change is the person's own money: its amount for every role, as on top of «Разобрать» (review #263 №8)
             value={(office || it.kind === "rejected") && it.amountCents ? money(it.amountCents) : undefined}
-            status={{ tone: it.status, label: t(it.chip, it.params) }}
+            status={{ tone: it.status, label: t(it.chip, waitParams(it.params, t)) }}
             edge={it.status === "bad" || it.status === "warn" ? it.status : null}
             facts={{ phone: who?.phone ?? lead?.phone }}
             contact={{ phone: who?.phone ?? lead?.phone }}
