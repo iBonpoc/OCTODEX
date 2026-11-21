@@ -1,7 +1,7 @@
 /**
  * Design-system guard (CLAUDE.md rule 1, "Naryad"): components use tokens only.
  * Fails on raw colors, raw numbers for size/spacing/radius/font, raw font families, and lists of objects
- * rendered as rows inside one card (rule 12 — ListCard in CardGrid / CardList), and the removed ItemCard.
+ * as Divider-separated ListRows inside one Card, a new list on ListCard (rule 12 as of 21.11 — ListGroup / GroupRow), and the removed ItemCard.
  * A deliberate exception needs `// ds-allow: <reason>` on the same line.
  */
 import { describe, it, expect } from "vitest";
@@ -445,6 +445,32 @@ describe("design system: tokens only", () => {
       });
     }
     expect(hits, hits.join("\n")).toEqual([]);
+  });
+
+  // Rule 12 as of 21.11 (founder, #2350): a list is grouped rows in one card — ListGroup / GroupRow (ui/groupedList.tsx),
+  // not a card per object. The lists still on ListCard move over in waves; this list may only shrink — a new file with
+  // <ListCard is red, a moved one must be struck off here.
+  it("lists are ListGroup/GroupRow: ListCard only in the files not moved yet (the list only shrinks)", () => {
+    const LISTCARD_LEFT = new Set([
+      "app/catalog/index.tsx", "app/client/import.tsx", "app/client/imports.tsx", "app/company/checklists.tsx",
+      "app/company/intake.tsx", "app/estimate/templates.tsx", "app/job/[id].tsx", "app/jobs.tsx", "app/messages/[key].tsx",
+      "app/money.tsx", "app/property/[id].tsx", "app/purchase-orders/index.tsx", "app/reports/[id].tsx",
+      "app/reports/index.tsx", "app/suppliers/[id].tsx", "app/suppliers/index.tsx", "app/team.tsx",
+      "features/AttentionCards.tsx", "features/ContractStatement.tsx", "features/JobOrdersBlock.tsx",
+      "features/ServiceCategoryPicker.tsx", "features/client/ClientDuplicates.tsx", "features/client/PropertySections.tsx",
+      "features/comms/CommsScreen.tsx", "features/comms/MessagesScreen.tsx", "features/invoice/VoidInvoice.tsx",
+      "features/lead/LeadParts.tsx", "features/listCards.tsx", "features/notices.tsx", "features/payments/AdvancesBlock.tsx",
+      "modules/gutters/list/MeasurementsScreen.tsx", "modules/gutters/list/StartScreen.tsx",
+      "modules/gutters/prices/PricesScreen.tsx",
+    ]);
+    const using = outsideUi
+      .filter((f) => /<ListCard\b/.test(readFileSync(f, "utf8")))
+      .map((f) => relative(ROOT, f).split("\\").join("/"))
+      .filter((f) => !f.startsWith("features/showcase/"));
+    const added = using.filter((f) => !LISTCARD_LEFT.has(f));
+    expect(added, `a new list on ListCard — use ListGroup/GroupRow (rule 12):\n${added.join("\n")}`).toEqual([]);
+    const moved = [...LISTCARD_LEFT].filter((f) => !using.includes(f));
+    expect(moved, `moved to ListGroup — strike it off LISTCARD_LEFT:\n${moved.join("\n")}`).toEqual([]);
   });
 });
 
