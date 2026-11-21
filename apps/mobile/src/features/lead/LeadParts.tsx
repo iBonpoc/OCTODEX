@@ -24,6 +24,7 @@ import { Avatar, Button, ChoiceChips, IconButton, Segmented, StatusChip, TextFie
 import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Empty, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
+import { GroupRow, ListGroup } from "@/ui/groupedList";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { mailtoHref, smsHref } from "@/features/contactLinks";
 import { dayAtHour } from "./bookRules";
@@ -76,10 +77,15 @@ export function ContactActions({ l, onCall }: { l: Lead; onCall: () => void }) {
 /* ======================= overview ======================= */
 type EditKind = "contact" | "address" | "request" | "cost" | "source" | "assignee" | null;
 
+/**
+ * The lead's overview (prototype v2, object-cards «Лид» → Обзор): what is missing for an estimate, «Что нужно» with the client's
+ * own words, «Контакт» (people, phones, the address), «Кто ведёт» (who works it, the source and the lead's price — not to a tech),
+ * the owner's gut feeling. Grouped rows (GroupedList); «Изменить ›» of a group opens its sheet; every edit has «Отменить».
+ */
 export function LeadOverview({ l }: { l: Lead }) {
   const store = useStore();
   const { db, role } = store;
-  const { t, money, day } = useI18n();
+  const { t, money, day, time } = useI18n();
   const [edit, setEdit] = useState<EditKind>(null);
   // a form starts fresh at each opening — a counter that grows at the opening, not a key that flips at the close (#1163)
   const openContact = useOpening(edit === "contact");
@@ -98,128 +104,86 @@ export function LeadOverview({ l }: { l: Lead }) {
   const src = sourceOf(db, l.sourceId);
   const assignee = db.members.find((m) => m.id === l.assigneeId);
   const item = db.catalog.find((x) => x.id === l.serviceItemId);
+  // the source, the price and «Ведёт» are the office's: the server refuses them to a tech (#2075, t12_lead_member_guard)
   const staff = canSeeLeadCost(role);
-  const row = (icon: Parameters<typeof Icon>[0]["name"], text?: string, sub?: string) =>
-    text ? (
-      <RowView gap={space[2]} style={{ alignItems: "flex-start" }}>
-        <Icon name={icon} />
-        <View style={{ flex: 1 }}>
-          <T v="body">{text}</T>
-          {sub ? (
-            <T v="caption" tone="mut">
-              {sub}
-            </T>
-          ) : null}
-        </View>
-      </RowView>
-    ) : null;
-  const head = (title: string, k: EditKind) => (
-    <RowView style={{ justifyContent: "space-between" }}>
-      <T v="heading">{title}</T>
-      <IconButton icon="pencil" label={`${t("common.edit")}: ${title}`} onPress={() => setEdit(k)} />
-    </RowView>
-  );
-
-  /** every phone (type, "primary" when several) and email of a person */
-  const phoneRows = (p?: Person) =>
-    p ? (
-      <>
-        {p.phones.map((x, i) => (
-          <View key={`p${i}`}>{row("phone", x.number, [t(`phone.${x.label}` as DictKey), p.phones.length > 1 && x.primary ? t("person.primary") : ""].filter(Boolean).join(" · "))}</View>
-        ))}
-        {p.emails.map((x, i) => (
-          <View key={`e${i}`}>{row("mail", x.address, p.emails.length > 1 && x.primary ? t("person.primary") : undefined)}</View>
-        ))}
-      </>
-    ) : null;
+  const edit_ = (k: EditKind, label = t("common.edit")) => ({ label, onPress: () => setEdit(k), testID: `lead-edit-${k}` });
+  const what = item?.name ?? l.service;
+  const when = l.timeframe ? (l.timeframe === "date" && l.timeframeDate ? day(l.timeframeDate) : t(`lead.tf.${l.timeframe}` as DictKey)) : undefined;
+  const phonesOf = (p?: Person) => (p ? [...p.phones.map((x) => x.number), ...p.emails.map((x) => x.address)].join(" · ") : "");
+  const ways = [l.preferredContact ? t("lead.prefers", { way: t(`lead.way.${l.preferredContact}` as DictKey) }) : "", lang ? t("lead.lang", { lang: lang.toUpperCase() }) : ""].filter(Boolean).join(" · ");
+  const ini = (n: string) => n.split(/\s+/).filter(Boolean).map((x) => x[0]).slice(0, 2).join("").toUpperCase() || "#";
 
   return (
-    <View style={{ gap: space[3] }}>
+    <View style={{ gap: space[6] }}>
       <MissingBlock l={l} onAdd={(k) => (k === "contact" && canEditPeople ? setPeopleOpen(true) : setEdit(k))} />
-      <Card>
-        {head(t("lead.sec.contact"), "contact")}
-        {row("user", l.name, l.customerId ? t("lead.peopleOfClient") : undefined)}
-        {phoneRows(main)}
-        {l.preferredContact || lang ? (
-          <RowView style={{ flexWrap: "wrap" }}>
-            {l.preferredContact ? <StatusChip status="neutral" label={t("lead.prefers", { way: t(`lead.way.${l.preferredContact}` as DictKey) })} soft /> : null}
-            {lang ? <StatusChip status="neutral" label={t("lead.lang", { lang: lang.toUpperCase() })} soft /> : null}
-          </RowView>
-        ) : null}
-        {canEditPeople ? <Button label={t("lead.editPhones")} icon="pencil" size="sm" variant="secondary" onPress={() => setPeopleOpen(true)} /> : null}
-      </Card>
-
       <View style={{ gap: space[2] }}>
-        <SectionTitle
-          title={t("lead.sec.people")}
-          right={canEditPeople ? <Button label={t("lead.addPerson")} icon="plus" size="sm" variant="ghost" onPress={() => setPeopleOpen(true)} /> : undefined}
-        />
-        {others.length ? (
-          <CardGrid>
-            {others.map((p) => (
-              // a person of the lead (as the property's people, B2): role beside the name, phones and emails as facts;
-              // no call buttons here — a call to the lead goes through ContactActions above («did you get through?», Р13)
-              <ListCard
-                key={p.id}
-                density="regular"
-                testID={`lead-person-${p.id}`}
-                lead={{ kind: "icon", icon: "user" }}
-                title={p.name || "—"}
-                when={t(`person.role.${p.role}` as DictKey)}
-                facts={{ phone: p.phones.map((x) => x.number).join(", ") || undefined, email: p.emails.map((x) => x.address).join(", ") || undefined }}
-                onPress={canEditPeople ? () => setPeopleOpen(true) : undefined}
-              />
-            ))}
-          </CardGrid>
-        ) : (
-          <T v="caption" tone="mut">
-            {t("lead.noPeople")}
-          </T>
-        )}
+        <ListGroup title={t("lead.sec.request")} all={edit_("request")} testID="lead-request">
+          <GroupRow
+            lead={{ icon: "wrench" }}
+            title={what || t("lead.noRequest")}
+            subtitle={[item && l.service ? l.service : undefined, when, l.budgetCents ? t("proto.leads.upTo", { amount: money(l.budgetCents) }) : undefined].filter(Boolean).join(" · ") || undefined}
+            onPress={() => setEdit("request")}
+            testID="lead-request-row"
+          />
+        </ListGroup>
+        {l.message ? (
+          // the client's own words — whole, not cut to a row (object-cards: «Что нужно» с цитатой)
+          <View testID="lead-quote">
+            <Card inner>
+              <T v="body">“{l.message}”</T>
+              <T v="caption" tone="mut">
+                {[t("proto.leads.wroteIn", { source: src?.name ?? "—" }), `${day(l.receivedAt)} ${time(l.receivedAt)}`].join(" · ")}
+              </T>
+            </Card>
+          </View>
+        ) : null}
       </View>
 
-      <Card>
-        {head(t("lead.sec.address"), "address")}
-        {l.address || l.city ? row("pin", l.address || l.city, [l.address ? l.city : undefined, [l.state, l.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ") || undefined) : (
-          <T v="caption" tone="mut">{t("lead.noAddress")}</T>
-        )}
-      </Card>
-
-      <Card>
-        {head(t("lead.sec.request"), "request")}
-        {row("wrench", item?.name ?? l.service, item && l.service ? l.service : undefined)}
-        {l.timeframe ? row("clock", l.timeframe === "date" && l.timeframeDate ? day(l.timeframeDate) : t(`lead.tf.${l.timeframe}` as DictKey), t("lead.when")) : null}
-        {l.budgetCents ? row("wallet", money(l.budgetCents), t("lead.budget")) : null}
-        {l.message ? (
-          <Card inner>
-            <T v="caption" tone="mut">{t("lead.clientWrote")}</T>
-            <T v="body">“{l.message}”</T>
-          </Card>
-        ) : null}
-        {!item && !l.service && !l.message ? <T v="caption" tone="mut">{t("lead.noRequest")}</T> : null}
-      </Card>
-
-      <Card>
-        <InterestPicker l={l} />
-      </Card>
-      <Card>
-        <T v="heading">{t("lead.sec.source")}</T>
-        {/* the source is the office's (as the price and «Ведёт»): the server refuses it to a tech (#2075, t12_lead_member_guard) */}
-        <ListRow title={src?.name ?? "—"} subtitle={src ? t(sourceKindLabel(src.kind)) : undefined} left={<Icon name="star" />} onPress={staff ? () => setEdit("source") : undefined} />
-        {staff ? (
-          <>
-            <Divider />
-            <ListRow title={t("lead.cost")} subtitle={t("lead.costHint")} right={<T v="body" w="semibold" tabular>{money(l.costCents ?? 0)}</T>} onPress={() => setEdit("cost")} />
-          </>
-        ) : null}
-        <Divider />
-        <ListRow
-          title={memberLabel(assignee, t) ?? t("lead.unassigned")}
-          subtitle={t("lead.assignee")}
-          left={assignee ? <Avatar initials={assignee.initials} /> : <Icon name="user" />}
-          onPress={staff ? () => setEdit("assignee") : undefined}
+      <ListGroup title={t("lead.sec.contact")} all={canEditPeople ? { label: t("lead.addPerson"), onPress: () => setPeopleOpen(true), testID: "lead-add-person" } : undefined} testID="lead-contact">
+        <GroupRow
+          lead={{ initials: ini(l.name) }}
+          title={l.name}
+          subtitle={[phonesOf(main), ways, l.customerId ? t("lead.peopleOfClient") : ""].filter(Boolean).join(" · ") || undefined}
+          onPress={() => (canEditPeople ? setPeopleOpen(true) : setEdit("contact"))}
+          testID="lead-person-main"
         />
-      </Card>
+        {others.map((p) => (
+          <GroupRow
+            key={p.id}
+            lead={{ initials: ini(p.name || "—") }}
+            title={p.name || "—"}
+            subtitle={[t(`person.role.${p.role}` as DictKey), phonesOf(p)].filter(Boolean).join(" · ")}
+            onPress={canEditPeople ? () => setPeopleOpen(true) : undefined}
+            testID={`lead-person-${p.id}`}
+          />
+        ))}
+        <GroupRow
+          lead={{ icon: "pin" }}
+          title={l.address || l.city || t("lead.noAddress")}
+          subtitle={[l.address ? l.city : undefined, [l.state, l.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ") || undefined}
+          onPress={() => setEdit("address")}
+          testID="lead-address-row"
+        />
+      </ListGroup>
+
+      <ListGroup title={t("lead.assignee")} testID="lead-work">
+        <GroupRow
+          lead={assignee ? { initials: assignee.initials } : { icon: "user" }}
+          title={assignee ? t("lead.worksOn", { name: memberLabel(assignee, t) ?? "" }) : t("lead.unassigned")}
+          onPress={staff ? () => setEdit("assignee") : undefined}
+          testID="lead-assignee-row"
+        />
+        <GroupRow
+          lead={{ icon: "star" }}
+          title={src?.name ?? "—"}
+          subtitle={src ? t(sourceKindLabel(src.kind)) : undefined}
+          onPress={staff ? () => setEdit("source") : undefined}
+          testID="lead-source-row"
+        />
+        {staff ? <GroupRow lead={{ icon: "wallet" }} title={t("lead.cost")} subtitle={t("lead.costHint")} value={money(l.costCents ?? 0)} onPress={() => setEdit("cost")} testID="lead-cost-row" /> : null}
+      </ListGroup>
+
+      <InterestPicker l={l} />
 
       <ContactSheet key={`ContactSheet-${openContact}`} l={l} visible={edit === "contact"} onClose={() => setEdit(null)} />
       <AddressSheet key={`AddressSheet-${openAddress}`} l={l} visible={edit === "address"} onClose={() => setEdit(null)} />

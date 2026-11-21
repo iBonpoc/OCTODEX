@@ -233,7 +233,7 @@ export function MissingBlock({ l, onAdd }: { l: Lead; onAdd: (what: "contact" | 
   const sheetOf = (m: MissingItem) => (m === "phone" || m === "email" ? "contact" : m === "request" ? "request" : "address");
   return (
     <Card status="warn">
-      <T v="heading">⚠ {t("lead.missing.title")}</T>
+      <T v="heading">{t("lead.missing.title")}</T>
       <RowView style={{ flexWrap: "wrap" }}>
         {missing.map((m) => (
           <Button key={m} label={`+ ${t(MISSING_KEYS[m])}`} size="sm" variant="secondary" onPress={() => onAdd(sheetOf(m))} />

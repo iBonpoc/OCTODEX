@@ -5334,7 +5334,7 @@ export const ru = {
   "proto.search.kind.invoice": "Счёт",
   "proto.search.kind.payment": "Оплата",
   "proto.search.newClient": "Создать клиента «{q}»",
-  "proto.search.start": "Имя, телефон, адрес или номер",
+  "proto.search.start": "Найдите что угодно",
   "proto.tasks.hideDone": "Скрыть выполненные",
   "proto.tasks.later": "Позже",
   "proto.tasks.showAll": "Показать все задачи",

@@ -5334,7 +5334,7 @@ export const es: Dict = {
   "proto.search.kind.invoice": "Factura",
   "proto.search.kind.payment": "Pago",
   "proto.search.newClient": "Crear cliente «{q}»",
-  "proto.search.start": "Nombre, teléfono, dirección o número",
+  "proto.search.start": "Busque lo que sea",
   "proto.tasks.hideDone": "Ocultar hechas",
   "proto.tasks.later": "Más tarde",
   "proto.tasks.showAll": "Mostrar todas las tareas",
