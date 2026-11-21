@@ -40,7 +40,7 @@ spacing:
   inside-card: 16
 sizes:
   button: 40          # touch zone 44
-  main-button-bottom: 44
+  editor-bottom-row: 56
   field: 44
   list-row: 56
   stat-tile: 88
@@ -65,7 +65,7 @@ A field tool for US contractors, used one-handed on a phone, often in the sun. *
 Manrope, five sizes per screen at most (30 / 22 / 17 / 15 / 13, micro 12). Big titles tracked tight. Money in tabular figures. Follow Dynamic Type: rows grow, tiles drop to one column.
 
 ## Layout
-Six templates — Overview, List, Object, Editor, Calendar, Sheet. One main action per screen: on an object it is pinned at the bottom, full width, 44 high; «back» top-left. Sections of an object are a horizontal strip, never a column of rows. Lists are grouped rows 56 high, not one card per row. Two short buttons or two fields — side by side. Secondary actions are icons with a VoiceOver label. Nothing on a screen is said twice.
+Six templates — Overview, List, Object, Editor, Calendar, Sheet. One main action per screen, one filled accent per screen. On an object card the next step sits in the «Сейчас» card near the top (the tab bar stays); a pinned bottom row exists only in editors, compact: total on the left, button on the right. «Back» is a round button top-left. Sections of an object are a horizontal strip, never a column of rows. Lists are grouped rows 56 high, not one card per row. Two short buttons or two fields — side by side. Secondary actions are icons with a VoiceOver label. Nothing on a screen is said twice.
 
 ## Motion
 Animate by frequency: what people do 100 times a day does not animate. Only `transform` and `opacity`. Ease-out, never ease-in. Springs only after a finger threw or dragged. One haptic per event, together with a visible response. Reduce Motion = softer, not nothing.
