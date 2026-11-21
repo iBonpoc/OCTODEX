@@ -73,7 +73,7 @@ if (require.main === module) {
   const { execFileSync } = require("node:child_process");
   const repo = process.env.GITHUB_REPOSITORY;
   const pr = process.env.PR_NUMBER;
-  const api = (p, extra = []) => JSON.parse(execFileSync("gh", ["api", ...extra, p], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }) || "null");
+  const api = (p, extra = []) => JSON.parse(execFileSync("gh", ["api", ...extra, p], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] }) || "null");
   const tryApi = (p) => { try { return api(p); } catch (e) { if (/HTTP 404/.test(String(e.stderr || e.message))) return null; throw e; } };
   (async () => {
     const prData = api(`repos/${repo}/pulls/${pr}`);

@@ -12,7 +12,7 @@ exports.run = async (h) => {
   const ids = async () => (await p.locator('[data-testid^="est-line-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")))).map((x) => x.replace("est-line-", ""));
   const order = () => p.locator('[data-testid^="est-line-"], [data-testid="est-sec-loose"]').evaluateAll((els) => els.map((e) => (e.getAttribute("data-testid") === "est-sec-loose" ? "u" : e.getAttribute("data-testid").replace("est-line-", ""))));
   const take = async (key) => {
-    const hd = tid(`sort-handle-${key}`);
+    const hd = await line.grip(h, key);
     await line.toMiddle(h, hd);
     const b = await hd.boundingBox();
     const x = b.x + b.width / 2;
@@ -43,7 +43,7 @@ exports.run = async (h) => {
   await h.shot("open-moved");
 
   // every line in a section: save, put them into «Roof», open again
-  await tid("ue-save").getByRole("button").click();
+  await tid("ue-save").click();
   await p.waitForFunction(() => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.estimates ?? []).some((e) => e.customerId === "c2" && e.doc?.options?.[0]?.lines?.length === 3), null, { timeout: 8000 });
   const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));
   const est = raw.db.estimates.find((e) => e.customerId === "c2" && e.doc?.options?.[0]?.lines?.length === 3);

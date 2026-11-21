@@ -38,8 +38,8 @@ describe("navigation hierarchy: back = one level up", () => {
     const prop = db.properties.find((x) => x.customerId === cust)!;
     expect(navContext(`/property/${prop.id}`, { id: prop.id, s: "visits" }, db, "director").up?.href).toBe(`/property/${prop.id}`);
     expect(navContext(`/property/${prop.id}`, { id: prop.id }, db, "director").up?.href).toBe(`/client/${cust}`);
-    // wave 4: a row's list of the client goes up to the client, not to Clients
-    expect(navContext(`/client/${cust}`, { id: cust, s: "jobs" }, db, "director").up?.href).toBe(`/client/${cust}`);
+    // redesign #2350: the client's sections are a tab strip on the card itself — ?s= is the same card, under Clients
+    expect(navContext(`/client/${cust}`, { id: cust, s: "jobs" }, db, "director").up?.href).toBe("/clients");
     expect(navContext(`/job/${job.id}`, {}, db, "director").up?.href).toBe(`/client/${cust}`);
     expect(navContext("/job/schedule", { jobId: job.id }, db, "director").up?.href).toBe(`/job/${job.id}`);
     expect(navContext("/client/edit", { id: cust }, db, "director").up?.href).toBe(`/client/${cust}`);
@@ -53,6 +53,10 @@ describe("navigation hierarchy: back = one level up", () => {
   });
   it("«Ещё» → Счета → Счёт: the list is a root; an invoice without a job goes up to the list", () => {
     expect(navContext("/invoice", { f: "owed" }, db, "director")).toEqual({ section: "invoices" });
+    // one client's debts (the client's «Должен», v2 #2350 — no chip ✕ under the row): «‹» goes back to that client
+    const c0 = db.customers[0]!;
+    expect(navContext("/invoice", { f: "owed", customer: c0.id }, db, "director")).toEqual({ section: "invoices", up: { href: `/client/${c0.id}`, label: { text: c0.name } } });
+    expect(navContext("/invoice", { customer: "no-such-client" }, db, "director")).toEqual({ section: "invoices" });
     expect(navContext("/payments", {}, db, "dispatcher")).toEqual({ section: "payments" });
     expect(navContext("/reports", {}, db, "dispatcher")).toEqual({ section: "reports" });
     expect(navContext("/reports/revenue", {}, db, "director")).toMatchObject({ section: "reports", kind: "rpt.title", up: { href: "/reports" } });

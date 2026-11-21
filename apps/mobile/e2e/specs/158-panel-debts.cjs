@@ -48,7 +48,9 @@ exports.run = async (h) => {
   // ↓ to the last client of a short window: the open row is scrolled into view
   await p.setViewportSize({ width: h.layout.width, height: 420 });
   await h.go("/clients");
-  const cards = p.locator('[data-testid="list-card"]:visible');
+  // v2 (rule 12): a client is a GroupRow `client-row-<id>` (its swipe and call buttons have longer testIDs)
+  const rowSel = db.customers.map((c) => `[data-testid="client-row-${c.id}"]:visible`).join(", ");
+  const cards = p.locator(rowSel);
   await cards.first().waitFor();
   const n = await cards.count();
   h.expect(n >= 4, `enough clients to pass the edge (${n})`);
@@ -65,7 +67,7 @@ exports.run = async (h) => {
     h.expect(await openIs(h, idOf(ids[i])), `↓ ${i} → ${ids[i].slice(0, 30)}`);
   }
   h.expect(await waited(p.waitForFunction(() => {
-    const r = [...document.querySelectorAll('[data-testid="list-card"][aria-current="true"]')].find((x) => x.offsetParent !== null);
+    const r = [...document.querySelectorAll('[aria-current="true"]')].find((x) => x.offsetParent !== null);
     if (!r) return false;
     const b = r.getBoundingClientRect();
     return b.top >= 0 && b.bottom <= window.innerHeight;
@@ -87,20 +89,15 @@ exports.run = async (h) => {
   const card = await panel(h).locator('[data-testid^="client-property-"]').locator("visible=true").first().boundingBox().catch(() => null);
   const box = await panel(h).boundingBox();
   if (card && box) h.expect(card.width > box.width * 0.7, `one column in the panel (card ${Math.round(card.width)} of ${Math.round(box.width)})`);
-  // the open tab lives in the address beside ?open= (#1417 review): it survives «Назад» like on the client's screen
-  const jobsPill = panel(h).getByTestId("client-tabs-jobs").locator("visible=true").first();
-  await jobsPill.scrollIntoViewIfNeeded();
-  await jobsPill.click();
-  await p.waitForFunction(() => /[?&]tab=jobs\b/.test(location.search) && /[?&]open=/.test(location.search), null, { timeout: 4000 });
-  await panel(h).getByTestId("client-tab-jobs").locator("visible=true").first().waitFor({ timeout: 4000 });
-  await panel(h).getByTestId("client-tabs-overview").locator("visible=true").first().click();
+  // v2: the panel is the client's Обзор (`client-overview`); a section of his is his own screen (its tiles and «Все ›» open it), not a tab inside 360
+  await panel(h).getByTestId("client-overview").locator("visible=true").first().waitFor({ timeout: 4000 });
   h.expect((await panel(h).getByTestId("list-panel-outside").count()) === 0, "in the list: no «not in the list» mark");
 
   // out of the filter: the panel says so; back to «Все» — the mark is gone
-  await p.getByTestId("filter-lane").locator("visible=true").getByRole("radio", { name: /^Должны/ }).first().click();
+  await p.getByTestId("clients-chips").locator("visible=true").first().getByText(/^Должны/).first().click();
   await panel(h).getByTestId("list-panel-outside").waitFor();
   await h.shot("panel-outside");
-  await p.getByTestId("filter-lane").locator("visible=true").getByRole("radio", { name: /^Все/ }).first().click();
+  await p.getByTestId("clients-chips").locator("visible=true").first().getByText(/^Все/).first().click();
   await panel(h).getByTestId("list-panel-outside").waitFor({ state: "detached" });
   h.expect(await openIs(h, quiet.id), "the same client stays open");
 
@@ -110,7 +107,7 @@ exports.run = async (h) => {
   // the technician: no «Изменить» in the panel (as on the screen)
   await role(h, "tech");
   await h.go("/clients");
-  const techCards = p.locator('[data-testid="list-card"]:visible');
+  const techCards = p.locator(rowSel);
   await techCards.first().click();
   await panel(h).waitFor();
   h.expect((await panel(h).getByTestId("list-panel-edit").count()) === 0, "technician: no «Изменить» in the panel");

@@ -6,7 +6,7 @@
  * - the open row: «˄ Свернуть» on the left, the trash; ONE row «Кол-во · Ед. · Цена»; «Вид» is a list; the sum and the
  *   panel's total change while typing, before the field is left;
  * - «abc» in the quantity: an error, the row stays open, another row does not open;
- * - the trash on a folded row and on the open one: the line goes at once, «Вернуть» brings it back;
+ * - «Удалить» of a folded row (its menu; v2 has no trash on it) and the trash of the open one: the line goes at once, «Вернуть» brings it back;
  * - a folded row never shows profit or cost.
  */
 exports.run = async (h) => {
@@ -44,21 +44,23 @@ exports.run = async (h) => {
   await line.fold(h);
   await line.addCustom(h, "Downspout (тестовые)", 50);
 
-  // «Кратко» by default: the name and the sum, no «× qty», no profit or cost
+  // «Кратко» by default (visual v2 №5): the name, «3 ea × $10.00» under it, the sum — not «Подробно»'s «$10.00 × 3 ea»; no profit or cost
   const folded = await tid(`est-line-${a}`).innerText();
-  h.expect(/Gutter clean/.test(folded) && /\$30\b/.test(folded) && !/×/.test(folded), `«Кратко»: the name and the sum (${folded.replace(/\n/g, " ")})`);
+  const briefTimes = await tid(`est-times-${a}`).innerText();
+  h.expect(/Gutter clean/.test(folded) && /\$30\b/.test(folded) && /^3 ea × \$10\.00$/.test(briefTimes.trim()), `«Кратко»: the name, «3 ea × $10.00» and the sum (${folded.replace(/\n/g, " ")})`);
   h.expect(!/прибыль|себестоим|\$4\b/i.test(folded), "a folded row never shows profit or cost");
   await h.shot("brief");
 
   // «Подробно»: «$10.00 × 3 ea»; kept after a reload
-  await tid("est-row-view").getByText("Подробно").click();
-  await tid(`est-times-${a}`).waitFor({ timeout: 3000 });
-  h.expect(/\$10(\.00)? × 3 ea/.test(await tid(`est-times-${a}`).innerText()), "«Подробно»: the price × the quantity");
+  // («⋯ → Строки подробно», v2: an item of the header menu — a press flips «Кратко ↔ Подробно»)
+  await line.editorMenu(h, "est-row-view");
+  await p.waitForFunction((id) => /^\$10(\.00)? × 3 ea$/.test((document.querySelector(`[data-testid="est-times-${id}"]`)?.textContent || "").trim()), a, { timeout: 3000 });
+  h.expect(/^\$10(\.00)? × 3 ea$/.test((await tid(`est-times-${a}`).innerText()).trim()), "«Подробно»: the price × the quantity");
   await h.shot("full");
   await p.waitForFunction(() => /full/.test(localStorage.getItem("octo.est.rowView.v1") || ""), null, { timeout: 3000 });
-  await tid("est-row-view").getByText("Кратко").click();
+  await line.editorMenu(h, "est-row-view");
   await p.waitForFunction(() => /brief/.test(localStorage.getItem("octo.est.rowView.v1") || ""), null, { timeout: 3000 });
-  h.expect((await count('[data-testid^="est-times-"]')) === 0, "«Кратко» again: no «× qty»");
+  h.expect(/^3 ea × \$10\.00$/.test((await tid(`est-times-${a}`).innerText()).trim()), "«Кратко» again: «3 ea × $10.00», not «$10.00 × 3 ea»");
 
   // «abc» in the quantity: an error under the field, the row stays open, another does not open
   await tid(`est-line-${a}`).click();
@@ -71,8 +73,9 @@ exports.run = async (h) => {
   await vis(`[data-testid="est-qty-${a}"] input`).first().fill("3");
   await line.fold(h);
 
-  // the trash of a folded row: gone at once, «Вернуть» brings it back
-  await tid(`est-trash-${b}`).getByRole("button").click();
+  // a folded row (visual v2 №5: no trash on it — a swipe on a phone, its menu on the web): «Удалить» — gone at once, «Вернуть» brings it back
+  await line.menu(h, b);
+  await tid(`est-act-delete-${b}`).click();
   await p.waitForFunction((id) => !document.querySelector(`[data-testid="est-line-${id}"]`), b, { timeout: 3000 });
   h.expect(await line.undo(h), "«Вернуть» pressed");
   await tid(`est-line-${b}`).waitFor({ timeout: 3000 });

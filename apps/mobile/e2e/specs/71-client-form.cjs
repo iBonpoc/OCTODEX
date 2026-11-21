@@ -55,11 +55,12 @@ exports.run = async (h) => {
   h.expect(c.sourceId === "src-google", `source saved (${c.sourceId})`);
   h.expect(c.billing && c.billing.line1 === "PO Box 4512" && c.billing.city === "Sherman Oaks" && c.billing.zip === "91413", `billing saved: ${JSON.stringify(c.billing)}`);
 
-  // the card shows the billing address in its row
+  // the card (v2: the header's panel) shows the billing address among its facts and the new phone among the contacts
   await h.go("/client/c2");
-  const rows = (await p.getByTestId("client-billing").locator("visible=true").first().innerText()).replace(/\s+/g, " ");
+  await p.getByTestId("client-facts").first().waitFor({ state: "attached", timeout: 8000 });
+  const rows = (await p.getByTestId("client-facts").first().innerText()).replace(/\s+/g, " ");
   h.expect(/Адрес для счетов\s*PO Box 4512, Sherman Oaks, CA 91413/.test(rows), `billing row (${rows})`);
-  await h.expectText(/\(818\) 555-0177/, "the new phone in the contacts");
+  h.expect(/\(818\) 555-0177/.test(await p.getByTestId("client-people").first().innerText()), "the new phone in the contacts");
 
   // «Без налога» (П-2a): a switch with the certificate; the card shows the label
   await h.go("/client/edit?id=c2");
@@ -70,7 +71,8 @@ exports.run = async (h) => {
   const ce = (await h.db()).customers.find((x) => x.id === "c2");
   h.expect(ce.taxExempt === true && ce.taxExemptNote === "RC-4512", `tax exempt saved: ${JSON.stringify([ce.taxExempt, ce.taxExemptNote])}`);
   await h.go("/client/c2");
-  await h.expectText(/Без налога/, "label «Без налога» on the card");
+  await p.getByTestId("client-facts").first().waitFor({ state: "attached", timeout: 8000 });
+  h.expect(/Налог\s*Без налога · RC-4512/.test(await p.getByTestId("client-facts").first().innerText()), "«Без налога» with the certificate on the card");
 
   // back to «same as the property»: billing cleared
   await h.go("/client/edit?id=c2");

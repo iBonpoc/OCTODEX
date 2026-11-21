@@ -23,7 +23,7 @@ const walk = (d: string) => {
 walk(ROOT);
 
 /** the «?» among a row's actions — only shrinks */
-const LEGACY_CORNER: Record<string, number> = { "ui/surfaces.tsx": 2 };
+const LEGACY_CORNER: Record<string, number> = { "ui/surfaces.tsx": 1 };
 
 /** a «?» whose next sibling (within 3 lines) is a slot of header actions */
 function cornerHelps(src: string): number {

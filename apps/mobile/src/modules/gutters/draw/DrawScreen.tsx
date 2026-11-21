@@ -90,12 +90,12 @@ const SAVE_AFTER_MS = 1000;
 const EMPTY: Drawing = { runs: [], downspouts: [] };
 
 /** the name in the header (#1274): a button that SHRINKS — a long name is cut (not linked yet — «Привязать», DS §19а, #1665: whole at 390) with «…» in its own width, never under the icons beside it */
-function NameButton({ icon, label, onPress, filled }: { icon: IconKey; label: string; onPress: () => void; filled?: boolean }) {
+function NameButton({ icon, label, onPress, filled }: { icon?: IconKey; label: string; onPress: () => void; filled?: boolean }) {
   const { c } = useTheme();
   return (
     <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={label} visibleHeight={component.button.phone} containerStyle={{ flexShrink: 1, minWidth: 0 }}
       style={{ height: component.button.phone, flexShrink: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space[1], paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: filled ? c.surf2 : "transparent", borderWidth: filled ? 1 : 0, borderColor: c.bd }}>
-      <Icon name={icon} s={sizes.iconSm} color={c.ink} />
+      {icon ? <Icon name={icon} s={sizes.iconSm} color={c.ink} /> : null}
       <T v="button" w="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>{label}</T>
     </Press>
   );
@@ -1322,7 +1322,8 @@ export default function DrawScreen() {
               </View>
             ) : inStore && !leadId && !inStore.propertyId ? (
               <View testID="draw-to-lead" style={{ flexShrink: 1 }}>
-                <NameButton icon="plus" label={t("mod.gutters.draw.toLead")} filled onPress={() => setLinkSheet(true)} />
+                {/* the filled pill is the button; no «＋» before the word: with the header's buttons at 40 (rule 3, #2350) «Привязать» is whole at 390 (e2e 412) */}
+                <NameButton label={t("mod.gutters.draw.toLead")} filled onPress={() => setLinkSheet(true)} />
               </View>
             ) : (
               <T v="heading" w="semibold">{t("mod.gutters.draw.title")}</T>
@@ -1547,10 +1548,10 @@ export default function DrawScreen() {
       {m ? <LinkSheet visible={linkSheet} onClose={() => setLinkSheet(false)} measurementId={m.id} /> : null}
       <DeleteMeasurementSheet visible={!!askDelete} on={askDelete ?? NO_ESTIMATES} onDelete={deleteNow} onClose={() => setAskDelete(null)} />
       <Menu visible={!!whoAt} anchor={whoAt} items={whoItems} onSelect={onWho} onClose={() => setWhoAt(null)} />
-      <InputWindow visible={canSave && !!editRun} onClose={() => setLenEdit(null)}>
+      <InputWindow visible={canSave && !!editRun} onClose={() => setLenEdit(null)} scroll={false}>
         {editRun ? <QuickLength key={editRun.id} fmt={ch.lenFormat} run={editRun} start={runLengthIn(editRun)} onLength={(n) => commit(setLength(cur.current.drawing, editRun.id, n))} onDone={() => setLenEdit(null)} onCancel={() => setLenEdit(null)} /> : null}
       </InputWindow>
-      <InputWindow visible={canSave && !!quick} onClose={cancelQuick}>
+      <InputWindow visible={canSave && !!quick} onClose={cancelQuick} scroll={false}>
         {quick ? <QuickLength fmt={ch.lenFormat} run={quick} onLength={(n) => commit(setLength(cur.current.drawing, quick.id, n))} onDone={() => setQuickRun(null)} onCancel={cancelQuick} /> : null}
       </InputWindow>
       {/* «Конец желоба» (a double tap on a free end, #1273): the cap is there / none, the line's face L ↔ R */}

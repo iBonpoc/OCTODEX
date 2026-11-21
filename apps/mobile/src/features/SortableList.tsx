@@ -11,6 +11,7 @@ import { Icon } from "@/ui/primitives";
 import { useScreenScroll } from "@/ui/requiredForm";
 import { useScrollLock } from "@/ui/surfaces";
 import { finePointer, holdConfig } from "@/ui/pointer";
+import { dragEnd, holdStill, showsHandle } from "./estimate/rowGesture";
 import { canBegin, crossesSection, dragKind, dragWrite, edgeStep, feelOf, heldGone, ownsDrag, placeWithMargin, resolveDrop, rowKey, shiftOf, withoutBlock, type Drop, type DropResult } from "./sortable";
 import type { ViewRow } from "./sectionLayout";
 
@@ -82,9 +83,13 @@ export interface SortableListProps {
   /** before a section is taken (it folds, and an open row inside it would be unmounted): false — the drag does not start */
   beforeBegin?: (row: ViewRow) => boolean;
   renderRow: (row: ViewRow, index: number) => ReactNode;
+  /** visual v2 №5 (#2344): a folded LINE has no «≡» — it is taken by its body (a hold for a finger, a move for a mouse) */
+  quietLines?: boolean;
+  /** a finger held a folded line and let it go where it was (estimate/rowGesture holdStill): the screen opens the row's menu */
+  onHoldStill?: (key: string) => void;
 }
 
-export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, beforeBegin, renderRow }: SortableListProps) {
+export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, beforeBegin, renderRow, quietLines, onHoldStill }: SortableListProps) {
   const { c } = useTheme();
   const reduce = useReducedMotion();
   const lock = useScrollLock();
@@ -130,8 +135,8 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
   const foldGap = useRef(0);
   /** how far the edge zone has scrolled the page since the row was taken (the finger's scroll; any other is the fold's) */
   const edgeScrolled = useRef(0);
-  const latest = useRef({ rows, onDrop, onHold, onLift, beforeBegin, state, scroll, openKey, locked });
-  latest.current = { rows, onDrop, onHold, onLift, beforeBegin, state, scroll, openKey, locked };
+  const latest = useRef({ rows, onDrop, onHold, onLift, beforeBegin, state, scroll, openKey, locked, onHoldStill, quietLines });
+  latest.current = { rows, onDrop, onHold, onLift, beforeBegin, state, scroll, openKey, locked, onHoldStill, quietLines };
 
   const place = useCallback((key: string, ty: number) => {
     const { rows: rs } = latest.current;
@@ -414,6 +419,8 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
       end: (key, canceled, endTy) => {
         // only the held row's own finger ends the drag (the other finger's end took its place, its lastT and its lock)
         if (!ownsDrag(activeKey.current, key)) return;
+        // the release that follows is no tap on the row (the web's click after a mouse drag)
+        dragEnd.ended();
         activeKey.current = null;
         activeSV.value = "";
         lastT.current = endTy;
@@ -443,6 +450,8 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
         // what the drop CAME TO decides the feel, and it is known before the buzz: moved — «medium»; ended where it was — nothing;
         // refused — «warning» (never «medium» for a move that did not happen)
         const res: DropResult = d ? drop(d) : "same";
+        // a finger's hold let go where it was taken: the row's menu (visual v2 №5 — no «⋯» on a folded line)
+        if (res === "same" && latest.current.onHoldStill && holdStill({ canceled, ty: endTy, fine: finePointer(), key, open: latest.current.openKey === key })) latest.current.onHoldStill(key);
         if (res === "moved" && landAt !== null) pendingLand.current = { key, y: landAt - foldGap.current, at: liftAt.current };
         foldGap.current = 0;
         const feel = feelOf(res);
@@ -477,7 +486,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
     <SortCtx.Provider value={ctl}>
       <View ref={boxRef} collapsable={false} onLayout={(e) => (box.current.h = e.nativeEvent.layout.height)} style={{ position: "relative" }}>
         {rows.map((r, i) => (
-          <Item key={rowKey(r)} k={rowKey(r)} index={i} dragKind={dragKind(r) ? "x" : null} open={openKey === rowKey(r)}>
+          <Item key={rowKey(r)} k={rowKey(r)} index={i} dragKind={dragKind(r) ? "x" : null} open={openKey === rowKey(r)} quiet={!!quietLines}>
             {renderRow(r, i)}
           </Item>
         ))}
@@ -488,7 +497,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
   );
 }
 
-function Item({ k, index, dragKind, open, children }: { k: string; index: number; dragKind: "x" | null; open: boolean; children: ReactNode }) {
+function Item({ k, index, dragKind, open, quiet, children }: { k: string; index: number; dragKind: "x" | null; open: boolean; quiet: boolean; children: ReactNode }) {
   const ctl = useContext(SortCtx)!;
   const { c } = useTheme();
   const { t } = useI18n();
@@ -592,7 +601,9 @@ function Item({ k, index, dragKind, open, children }: { k: string; index: number
   const canDrag = dragKind !== null && ctl.canDrag(k);
   // an open LINE draws its handle in its own header; any other row has it in a column on the right
   const inHeader = open && k.startsWith("l:");
-  const handleEl = canDrag ? (
+  // the held row keeps its «≡» while it is carried (#2350): an open line taken by the «≡» of its header folds as the drag begins —
+  // a folded line has no «≡», and the handle leaving the page would end its own gesture (the drag never started)
+  const handleEl = canDrag && (!quiet || showsHandle(k, open) || mine) ? (
     <GestureDetector gesture={handle}>
       <View
         testID={`sort-handle-${k}`}

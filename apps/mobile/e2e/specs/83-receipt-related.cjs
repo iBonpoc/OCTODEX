@@ -3,6 +3,8 @@
  * - office: receipt → «Счёт INV-…» → invoice → «Работа JOB-…» → job; the invoice also links «Клиент …» → client and its estimate;
  * - the technician on an invoice of a job: no estimate link (company money).
  */
+const { objOpenHead } = require("../objectScreen.cjs");
+
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/payments?p=all");
@@ -24,12 +26,14 @@ exports.run = async (h) => {
   await p.waitForTimeout(700);
   h.expect(p.url().endsWith(`/invoice/${inv.id}`), `receipt → its invoice (${p.url()})`);
 
-  // invoice → job, client, estimate
+  // invoice → job, client, estimate: v2 — «Связано» is in the header's panel, opened by «⌄»
+  await objOpenHead(p, "invoice-head");
   if (job.estimateId) h.expect((await rel(/^Связано: Смета/).count()) === 1, "office: the invoice links its estimate");
   await rel(new RegExp(`^Связано: Работа ${esc(job.number ?? job.title)}$`)).click();
   await p.waitForTimeout(700);
   h.expect(p.url().endsWith(`/job/${job.id}`), `invoice → its job (${p.url()})`);
   await h.go(`/invoice/${inv.id}`);
+  await objOpenHead(p, "invoice-head");
   await rel(new RegExp(`^Связано: Клиент ${esc(cust.name)}$`)).click();
   await p.waitForTimeout(700);
   h.expect(p.url().endsWith(`/client/${cust.id}`), `invoice → its client (${p.url()})`);
@@ -37,5 +41,8 @@ exports.run = async (h) => {
   // technician: no estimate (money)
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go(`/invoice/${inv.id}`);
+  // the invoice of a job of his — its screen (open «⌄» to read «Связано»); not his — «нет доступа», no links at all
+  await p.locator('[data-testid="invoice-screen"], [data-testid="no-access"]').locator("visible=true").first().waitFor({ timeout: 8000 });
+  if (await p.getByTestId("invoice-screen").locator("visible=true").count()) await objOpenHead(p, "invoice-head");
   h.expect((await rel(/^Связано: Смета/).count()) === 0, "tech: no estimate link on the invoice");
 };

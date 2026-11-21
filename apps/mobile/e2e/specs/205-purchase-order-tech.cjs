@@ -3,6 +3,8 @@
  * it up, the lines without prices; «Отметить получение» → one line → «Получен частично»; «Всё получено» → «Получен»;
  * «Отменить» → back as it was. He cannot edit or send it.
  */
+const { objSection } = require("../objectScreen.cjs");
+
 exports.run = async (h) => {
   const p = h.page;
   const dbWhen = async (ok) => {
@@ -22,6 +24,7 @@ exports.run = async (h) => {
     localStorage.setItem(k, JSON.stringify(s));
   });
   await h.go("/job/j1");
+  await objSection(p, "job-screen", "orders"); // v2: the orders are a section of the job
   await p.getByTestId("job-po-po-demo-1").locator("visible=true").first().click();
   await p.waitForURL(/\/purchase-order\/po-demo-1/, { timeout: 5000 });
   h.expect(/Забрать: Home Depot/.test(await p.getByTestId("po-where").locator("visible=true").first().innerText()), "where to pick it up");
@@ -47,7 +50,8 @@ exports.run = async (h) => {
   let db = await dbWhen((d) => d.purchaseOrders.find((o) => o.id === "po-demo-1")?.status === "received");
   h.expect(db.purchaseOrders.find((o) => o.id === "po-demo-1").status === "received", "«Всё получено» → received");
   await p.waitForTimeout(400); // the toast arms «Отменить» after ~0.3 s (lesson of №5)
-  await p.getByRole("button", { name: "Отменить" }).last().click();
+  // the toasts stack newest first (toastStack.stackShow): the undo of the last «Всё получено» is the first one
+  await p.getByTestId("toast-undo").locator("visible=true").first().click();
   db = await dbWhen((d) => d.purchaseOrders.find((o) => o.id === "po-demo-1")?.status === "partially_received");
   h.expect(db.purchaseOrders.find((o) => o.id === "po-demo-1").status === "partially_received", "«Отменить» puts the previous quantities back");
 };

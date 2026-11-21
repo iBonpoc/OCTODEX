@@ -287,7 +287,9 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
     onDone();
   };
   return (
-    <View testID="quick-length" style={{ gap: space[3] }}>
+    // the body scrolls, the buttons stay under it in view (the input window gives it its room — InputWindow `scroll={false}`)
+    <View testID="quick-length" style={{ gap: space[3], flexShrink: 1 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" style={{ flexShrink: 1 }} contentContainerStyle={{ gap: space[3] }} showsVerticalScrollIndicator={false}>
       <T v="heading" w="semibold">{t(k("quickTitle"))}</T>
       {unit === "ftin" ? (
         <>
@@ -316,6 +318,7 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
       {unit !== "ftin" ? <PullOne one={one} unit={unit} onOne={(v) => { edited.current = true; setOne(v); setBad(false); }} testID="quick-length-tape" /> : null}
       <T v="caption" tone="mut">{t(k("quickDrawn"), { len: fmtLen(drawn, fmt) })}</T>
       {bad ? <View testID="quick-length-bad"><StatusChip status="warn" label={t(k("badLength"))} soft /></View> : null}
+      </ScrollView>
       <RowView style={{ gap: space[2], justifyContent: "flex-end" }}>
         {unit === "ftin" && stage !== "frac" ? <View testID="quick-length-next"><Button label={t(k("next"))} size="sm" variant="secondary" onPress={goNext} /></View> : null}
         <View testID="quick-length-cancel"><Button label={t(k("quickCancel"))} size="sm" variant="ghost" onPress={onCancel} /></View>

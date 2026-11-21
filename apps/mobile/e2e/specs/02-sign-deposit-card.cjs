@@ -2,7 +2,7 @@
 /** S8b (docs/specs/07 §2.2 А, founder 05.11): an employee signs the contract for the company on the estimate screen. */
 async function countersign(h, estimateId) {
   await h.go(`/estimate/${estimateId}`);
-  const pad = h.page.getByLabel(/расписывается|signs here/i).last();
+  const pad = await require("../estimateMenu.cjs").countersignPad(h.page);
   await pad.scrollIntoViewIfNeeded(); await h.page.waitForTimeout(250);
   const bb = await pad.boundingBox();
   await h.page.mouse.move(bb.x + 30, bb.y + 90); await h.page.mouse.down();

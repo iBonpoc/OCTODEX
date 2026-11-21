@@ -56,7 +56,9 @@ exports.run = async (h) => {
 
   // several addresses → a sheet on the card, one transition. The demo has one address a client: the same client gets a second
   // one the way a person adds it (spec 27's «＋ Объект»)
-  await tid("client-add-property").first().click();
+  // v2 (#2350): «＋ Объект» is an item of the header's «＋» (`client-screen-create` → `client-create-property`)
+  await tid("client-screen-create").first().getByRole("button").first().click();
+  await tid("client-create-property").first().click();
   await h.sheet().getByPlaceholder("Улица и дом", { exact: true }).fill("515 Second St");
   await h.sheet().getByPlaceholder("Город", { exact: true }).fill("Pasadena");
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();

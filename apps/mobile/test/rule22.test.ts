@@ -1,4 +1,5 @@
 /** Rule 22 guard (#902; stages 1–6 since 15.11.2026): a PR must refer to a «до-1.0» task inside a stage container or an old epic (directly or through a sub-task). */
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 
@@ -85,4 +86,7 @@ describe("rule 22 guard", () => {
     for (const n of [1878, 1542, 1905]) expect((await run(`Closes #${n}`)).ok, `#${n}`).toBe(false);
   });
   it("the label «починка-main» skips the check", async () => expect((await run("", { prLabels: ["починка-main"] })).skip).toContain("починка-main"));
+  // a PR of 500+ files makes `gh api --paginate` print > 1 MB: without maxBuffer execFileSync dies with ENOBUFS (PR #2349)
+  it("the gh call has a big maxBuffer (a 500-file PR is more than the 1 MB default)", () =>
+    expect(readFileSync(new URL("../../../scripts/rule22.cjs", import.meta.url), "utf8")).toMatch(/execFileSync\("gh", \["api", \.\.\.extra, p\], \{[^}]*maxBuffer: 64 \* 1024 \* 1024/));
 });

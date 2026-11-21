@@ -32,7 +32,8 @@ exports.run = async (h) => {
   await vis("showcase-btn-iconbutton").getByRole("button").first().click();
   h.expect((await counter()) === n + 1, "the round button presses");
   const sizes = await Promise.all(["size-phone", "size-md", "size-sm"].map((id) => vis(`showcase-btn-${id}`).innerText()));
-  h.expect(/36/.test(sizes[0]) && /32/.test(sizes[1]) && /28/.test(sizes[2]), `sizes name the live tokens (${sizes.map((x) => x.replace(/\n/g, " ")).join(" | ")})`);
+  // rule 3 (founder 21.11, #2350): visible 40 on a phone, 36 tablet/desktop, 32 small; the touch zone 44 for all
+  h.expect(/\b40\b/.test(sizes[0]) && /\b36\b/.test(sizes[1]) && /\b32\b/.test(sizes[2]) && sizes.every((x) => /\b44\b/.test(x)), `sizes name the live tokens (${sizes.map((x) => x.replace(/\n/g, " ")).join(" | ")})`);
   h.expect(/44/.test(sizes[0]), "…and the 44 tap area");
   // the «＋» of the header: its sheet opens
   await vis("showcase-btn-fab").getByRole("button").first().click();

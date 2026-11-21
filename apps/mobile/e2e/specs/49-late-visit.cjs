@@ -1,3 +1,4 @@
+const { visitStep } = require("../visitScreen.cjs");
 /**
  * П3c (docs/specs/03 «П3c — этап 0»; story map S15, §5 «вычисляемые»): one rule «Опаздывает», start + 15 min.
  * Office side: «Требует внимания» and the notice «{tech} опаздывает на {client}, не выехал · начало …»;
@@ -37,8 +38,8 @@ exports.run = async (h) => {
     { id: "e2e-tm", propertyId: other.id, kind: "inspection", techId: null, assigneeIds: [], start: tomorrow.toISOString(), durationMin: 60, step: "scheduled", scope: [], checklist: [], photos: [], amountDueCents: 0 },
   ]);
 
-  // the office: not left yet
-  await h.go("/today");
+  // the office: not left yet — v2: the notice is a card of the bell's «Уведомления» (Главная holds no notices block)
+  await h.go("/notifications");
   const notLeft = new RegExp(`${me.name} опаздывает на ${client.name}, не выехал · начало \\d{1,2}:\\d{2}[\\s\\u202f]?[AP]M`);
   await h.expectText(notLeft, "the office notice: not left, with the start in en-US");
   await h.expectText(/Опаздывает · не выехал/, "the sign: not left");
@@ -54,6 +55,9 @@ exports.run = async (h) => {
   await h.go("/today");
   let body = await h.text();
   h.expect(!/опаздывает на/.test(body), "the tech sees no office notice");
+  await h.go("/notifications");
+  body = await h.text();
+  h.expect(!/опаздывает на/.test(body), "the tech's bell has no office notice");
   await h.go("/triage");
   body = await h.text();
   h.expect(!/Завтра выезд без мастера/.test(body), "the tech sees no «Не назначено» of the office");
@@ -61,11 +65,11 @@ exports.run = async (h) => {
 
   // the tech leaves: still late, now «on the way»
   await h.go("/visit/e2e-late");
-  await h.click("Я в пути");
+  await visitStep(p, "en-route");
   let v = (await h.db()).visits.find((x) => x.id === "e2e-late");
   h.expect(v.step === "en_route" && !!v.enRouteAt, `on the way with the time (${v.step}, ${v.enRouteAt})`);
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
-  await h.go("/today");
+  await h.go("/notifications");
   await h.expectText(new RegExp(`${me.name} опаздывает на ${client.name}, в пути с \\d{1,2}:\\d{2}[\\s\\u202f]?[AP]M`), "on the way does not clear it: «в пути с …»");
   await h.expectText(/Опаздывает · в пути/, "the sign: on the way");
   await h.shot("office-on-the-way");
@@ -73,11 +77,11 @@ exports.run = async (h) => {
   // on site: gone
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go("/visit/e2e-late");
-  await h.click("На месте");
+  await visitStep(p, "on-site");
   v = (await h.db()).visits.find((x) => x.id === "e2e-late");
   h.expect(v.step === "on_site", `on site (${v.step})`);
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
-  await h.go("/today");
+  await h.go("/notifications");
   body = await h.text();
   h.expect(!new RegExp(`${me.name} опаздывает на ${client.name}`).test(body), "on site: the notice is gone");
   await h.go("/triage");

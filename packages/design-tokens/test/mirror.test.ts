@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { component, drawing, drawingPrint, font, graphite, icons, motion, print, radius, shopSheet, size, space, spaceHalf, themes, tokens, z } from "../src/index";
+import { component, drawing, drawingPrint, extraIcons, font, graphite, iconLayers, iconMeta, icons, motion, print, radius, rhythm, shopSheet, size, space, spaceHalf, themes, tokens, z } from "../src/index";
 
 /**
  * The founder's design system (design/naryad-ds/tokens/*.css, icons.json) is the source of truth.
@@ -33,6 +33,11 @@ describe("app tokens mirror the founder's DS css", () => {
     expect(font.lineHeight).toEqual({ tight: px("lh-tight"), body: px("lh-body"), snug: px("lh-snug") });
     expect(font.size.button).toBe(px("fs-btn"));
   });
+  it("visual v2: the figure sizes, the tracking and the rhythm of a screen", () => {
+    expect([font.size.figure, font.size.figureSm]).toEqual([px("fs-figure"), px("fs-figure-sm")]);
+    expect([font.tracking.display, font.tracking.figure]).toEqual([parseFloat(v("tracking-display")), parseFloat(v("tracking-figure"))]);
+    expect(rhythm).toEqual({ screen: px("rhythm-screen"), cardGap: px("rhythm-card-gap"), cardPad: px("rhythm-card-pad"), rowGap: px("rhythm-row-gap"), blockGap: px("rhythm-block-gap"), headGap: px("rhythm-head-gap") });
+  });
   it("spacing scale", () => {
     for (const k of [1, 2, 3, 4, 5, 6, 8] as const) expect(space[k], `space-${k}`).toBe(px(`space-${k}`));
     expect(spaceHalf).toEqual({ hair: px("space-hair"), tight: px("space-tight") });
@@ -44,7 +49,7 @@ describe("app tokens mirror the founder's DS css", () => {
     expect(radius.inner).toBe(px("ri"));
     expect(radius.sheet).toBe(px("sheet-radius"));
   });
-  it("controls and hit area (no button above 36, hit 44)", () => {
+  it("controls and hit area (no button above 40, hit 44)", () => {
     expect(size.controlSm).toBe(px("control-sm"));
     expect(size.controlMd).toBe(px("control-md"));
     expect(size.controlLg).toBe(px("control-lg"));
@@ -54,7 +59,7 @@ describe("app tokens mirror the founder's DS css", () => {
     expect(size.hitMin).toBe(px("hit-min"));
     expect(size.hitMinAndroid).toBe(px("hit-min-android"));
     expect([component.rowOption, component.tileMin]).toEqual([px("row-option"), px("tile-min")]);
-    expect(component.button).toEqual({ sm: px("btn-sm"), md: px("btn-md"), phone: px("btn-phone-visible"), hit: px("hit-min") });
+    expect(component.button).toEqual({ sm: px("btn-sm"), md: px("btn-md"), phone: px("btn-phone-visible"), hit: px("hit-min"), glyph: px("btn-glyph") });
     expect(component.field).toEqual({ h: px("field-h"), phone: px("field-phone") });
     expect(component.chip).toEqual({ h: px("chip-h"), px: px("chip-px") });
     expect(component.segmented).toEqual({ h: px("seg-h"), pad: px("seg-pad") });
@@ -68,7 +73,8 @@ describe("app tokens mirror the founder's DS css", () => {
     expect(component.brand).toEqual({ mark: px("brand-mark"), wait: px("brand-wait"), about: px("brand-about"), splash: px("brand-splash"), intro: px("brand-intro") });
     expect(component.estRow).toEqual({ qty: px("est-qty-w"), unit: px("est-unit-w") });
     expect([component.modalW, component.panelW, component.paletteW]).toEqual([px("modal-w"), px("panel-w"), px("palette-w")]);
-    for (const k of Object.values(component.button)) expect(k === px("hit-min") || k <= 36).toBe(true);
+    // founder 21.11.2026 (#2350): the phone button is 40 (was ≤ 36, rule 3 — to be updated through the audit, #2337); the zone stays 44
+    for (const k of Object.values(component.button)) expect(k === px("hit-min") || k <= 40).toBe(true);
   });
   it("icon sizes, bars and safe areas", () => {
     expect([size.iconXs, size.iconSm, size.iconMd, size.iconLg, size.iconStroke]).toEqual([px("icon-xs"), px("icon-sm"), px("icon-md"), px("icon-lg"), px("icon-stroke")]);
@@ -133,6 +139,8 @@ describe("app tokens mirror the founder's DS css", () => {
     it("surfSolid mirrors the css and is `surf` laid over `bg`", () => {
       expect(norm(c.surfSolid)).toBe(norm(v("surf-solid", t)));
       const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+      // palette A (#2350): the surface is opaque — what the eye sees is the surface itself
+      if (c.surf.startsWith("#")) return expect(norm(c.surfSolid)).toBe(norm(c.surf));
       const m = c.surf.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/)!;
       const a = Number(m[4]);
       const over = rgb(c.bg).map((b, i) => Math.round(b + (Number(m[i + 1]) - b) * a));
@@ -144,14 +152,23 @@ describe("app tokens mirror the founder's DS css", () => {
       expect(norm(c.ovSolid)).toBe(norm(v("ov-solid", t)));
       expect(norm(c.acc)).toBe(norm(v("acc", t)));
       expect(norm(c.onAcc)).toBe(norm(v("on-acc", t)));
+      expect(norm(c.accText)).toBe(norm(v("acc-text", t)));
+      expect(norm(c.accEdge)).toBe(norm(v("acc-edge", t)));
+      // visual v2 (21.11): the layers, the card's highlight, the accent's tone, the checklist's lines, the tab bar's ground
+      for (const k of ["surf3", "hl", "tint", "tint2", "off", "dash", "tab"] as const) expect(norm(c[k]), k).toBe(norm(v(k, t)));
+      expect(norm(c.onAccTint)).toBe(norm(v("on-acc-tint", t)));
+      expect(norm(c.onAccMut)).toBe(norm(v("on-acc-mut", t)));
+      // DS Б8 (v2, #2214): the toast plate, its words and its «Вернуть»
+      expect([norm(c.toast), norm(c.onToast), norm(c.toastAction)]).toEqual([norm(v("toast", t)), norm(v("on-toast", t)), norm(v("toast-action", t))]);
       expect(radius.card).toBe(px("r"));
       expect([c.blur, c.blurOverlay]).toEqual([px("blur"), px("blurov")]);
     });
     it("status fill and text colours", () => {
-      for (const k of ["ok", "info", "warn", "bad"] as const) {
+      // palette A (#2350): tonal plates — the text on a plate is its own per status and theme (`st-x-on`)
+      for (const k of ["ok", "info", "warn", "bad", "neutral"] as const) {
         expect(norm(c.status[k].fill), `${k} fill`).toBe(norm(v(`st-${k}`, t)));
         expect(norm(c.status[k].text), `${k} text`).toBe(norm(v(`st-${k}-text`, t)));
-        expect(norm(c.status[k].on)).toBe(norm(v("st-on", t)));
+        expect(norm(c.status[k].on), `${k} on`).toBe(norm(v(`st-${k}-on`, t)));
       }
     });
     it("drawing canvas: node and storeys (founder О3)", () => {
@@ -170,6 +187,14 @@ describe("app tokens mirror the founder's DS css", () => {
   it("icons are exactly the DS icon set", () => {
     const ds = JSON.parse(readFileSync(join(DS, "icons.json"), "utf8")).icons as Record<string, string>;
     expect(icons).toEqual(ds);
+  });
+  // набор «Тонкие острые» (#2350): слои выбранного состояния, толщина и концы — тоже из icons.json
+  it("icon layers and the line are exactly the DS ones", () => {
+    const ds = JSON.parse(readFileSync(join(DS, "icons.json"), "utf8"));
+    expect(iconLayers).toEqual(ds.layers);
+    expect(iconMeta).toEqual({ viewBox: ds.viewBox, stroke: ds.stroke, air: ds.air, cap: ds.cap, join: ds.join, mask: ds.mask });
+    for (const k of Object.keys(ds.layers)) expect(Object.keys(icons)).toContain(k);
+    expect(extraIcons).toEqual({});
   });
 });
 

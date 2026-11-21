@@ -72,7 +72,7 @@ exports.run = async (h) => {
   await h.go("/p/demo0handyman0estimate0000000001");
   await h.sign("Linda Alvarez");
   await h.go("/estimate/e6");
-  const pad = p.getByLabel(/расписывается|signs here/i).last();
+  const pad = await require("../estimateMenu.cjs").countersignPad(p);
   await pad.scrollIntoViewIfNeeded();
   const bb = await pad.boundingBox();
   await p.mouse.move(bb.x + 30, bb.y + 90);
@@ -101,9 +101,9 @@ exports.run = async (h) => {
   await h.go("/inbox");
   const angela = (await h.db()).leads.find((x) => x.name === "Angela Rossi");
   await h.go(`/lead/${angela.id}`);
-  await h.clickText("Задачи");
-  await h.click("Что дальше?");
-  await h.sheet().getByRole("button", { name: "Записать на оценку" }).click();
+  // v2 (#2350): «Записать на оценку» is an item of the lead's «＋» (ObjectScreen `create`), it opens the booking sheet
+  await tid("lead-screen-create").getByRole("button").first().click();
+  await tid("lead-create-book").click();
   await h.sheet().getByRole("option", { name: "Ivan Sokolov" }).click();
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).last().click();
   await p.waitForFunction(([k, id]) => (JSON.parse(localStorage.getItem(k)).db.visits || []).some((v) => v.leadId === id), ["octo.db.v5", angela.id], { timeout: 8000 });

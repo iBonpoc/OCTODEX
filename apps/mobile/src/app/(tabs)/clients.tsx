@@ -1,235 +1,182 @@
 import { useMemo, useState } from "react";
-import { useHeldSheet } from "@/ui/heldSheet";
-import { canImportClients } from "@/features/client/importRun";
-import { isClientTab } from "@/features/clientRows";
 import { View } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router } from "expo-router";
 import { useStore } from "@/data/store";
-import { canMarkNoService, clientHistory, clientMoneyOf, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
-import { canChangeStatus, pickerOptions } from "@/features/statusMoves";
-import { useI18n } from "@/i18n";
-import { Button, IconButton } from "@/ui/controls";
-import { FilterBar } from "@/ui/filterBar";
-import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
-import { CardList, Empty, ListRow, Screen } from "@/ui/surfaces";
-import { T } from "@/ui/primitives";
-import { Sheet, useToast } from "@/ui/overlays";
-import { CardGrid, ListCard, ListCardHeader, StatusPicker } from "@/ui/listCard";
+import type { Customer } from "@/data/types";
+import { canImportClients } from "@/features/client/importRun";
+import { clientHistory, clientMoneyOf, clientNextVisit, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, visibleClients } from "@/features/clients";
 import { canSeeClientDups, clientDuplicates } from "@/features/clientDuplicates";
-import type { FactKey } from "@/ui/listCardLayout";
-import { useDevice } from "@/theme/ThemeProvider";
-import { ListPanel } from "@/ui/listPanel";
+import { clientListGroups } from "@/features/clientGroups";
+import { dayOffsetOf, isoDayKey } from "@/features/calendar";
+import { smsHref, telHref } from "@/features/contactLinks";
+import { pickerOptions } from "@/features/statusMoves";
+import { useI18n } from "@/i18n";
+import { ClientOverview, useAgo, useClientFacts } from "@/features/client/ClientSections";
 import { useListPanel } from "@/nav/listPanel";
-import { ClientCardBody } from "@/features/client/ClientCard";
-import { space } from "@octo/design-tokens";
-import type { Customer, CustomerStatus } from "@/data/types";
-import { groupByLetter } from "@/features/clientGroups";
+import { ListPanel } from "@/ui/listPanel";
+import { Button } from "@/ui/controls";
+import { filterStoreKey } from "@/ui/filterBarRules";
+import { openContact } from "@/ui/listCard";
+import { useToast } from "@/ui/overlays";
+import { Empty } from "@/ui/surfaces";
+import type { SwipeAction } from "@/ui/swipeRow";
+import { ListScreen } from "@/ui/templates";
 
-type Filter = "all" | "owes" | "estimate" | "prospect" | "archived";
+/** «Все · Должны · Смета у клиента · Новые · Архив» and the company's tags (`tag:<id>`) — one strip that scrolls sideways */
+type Filter = "all" | "owes" | "estimate" | "prospect" | "archived" | `tag:${string}`;
 
-const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
-/** desktop row columns (docs/specs/06-list-cards.md §5 «Клиенты») */
-const COLUMNS: FactKey[] = ["phone", "addr", "last"];
-/** with the panel open the row keeps one column of details (06 §4) */
-const COLUMNS_PANEL: FactKey[] = ["phone"];
+const initials = (n: string) => n.split(/\s+/).filter(Boolean).map((p) => p[0]).slice(0, 2).join("").toUpperCase() || "#";
 
-/** Client list (each client a card): search by name, phone or address; filters; new client by hand. */
+/**
+ * Клиенты — шаблон «Список» (prototype v2, wireframes-v2 «Клиенты», BUILD-SPEC §2.3, LAYOUT-RULES §3): the title with the count,
+ * search as an icon of the header, filters one strip (statuses and tags), rows 56 grouped by letter: initials, the name, one line
+ * «когда · что», on the right the debt with «! N дн» or the status; one card of rows under 50 clients, the letters from 50. A swipe
+ * right calls, left shows «SMS» and «В архив» (with «Отменить»); the same
+ * two on a long press and to VoiceOver (the web has no swipe). «＋» — a new client; «⋯» — import from CSV (the office's).
+ */
 export default function Clients() {
-  const { t, money: moneyFmt, day } = useI18n();
-  const { db, role } = useStore();
+  const { t, money, day, time } = useI18n();
+  const store = useStore();
+  const { db, role } = store;
+  const toast = useToast();
+  const ago = useAgo();
   const clients = visibleClients(db, role);
   const office = role !== "tech";
   const [q, setQ] = useState("");
-  // spec 31 §6 п.7: the status and the tags are kept on this device for this list, until «Сбросить»; the search is not
-  const [kept, setTab] = usePersistentState<Filter>(`${filterStoreKey("clients")}.status`, "all");
-  const [keptTags, setTagIds] = usePersistentState<string[]>(`${filterStoreKey("clients")}.tags`, []);
-  // what was kept may not fit any more: a role without that filter, a tag switched off or deleted
-  const tagIds = keptTags.filter((id) => db.tags.some((x) => x.id === id && x.active));
+  // spec 31 §6 п.7: the chosen filter is kept on this device for this list; the search is not
+  const [kept, setKept] = usePersistentState<Filter>(`${filterStoreKey("clients")}.status`, "all");
   const owes = (id: string) => clientMoneyOf(db, id).owesCents > 0;
-  // step 17 C3 (docs/specs/04 §13): possible duplicates — the office's mark; found on the phone, without the network
   const dups = useMemo(
     () => (canSeeClientDups(role) ? clientDuplicates(db) : new Map<string, unknown[]>()),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only the clients and their properties decide
     [role, db.customers, db.properties],
   );
   const openEst = (id: string) => db.estimates.some((e) => e.customerId === id && e.status === "sent");
-  const pass: Record<Filter, (c: (typeof db.customers)[number]) => boolean> = {
-    all: (c) => statusOf(c) === "active" || statusOf(c) === "do_not_service",
-    owes: (c) => statusOf(c) !== "prospect" && owes(c.id),
-    estimate: (c) => openEst(c.id),
-    prospect: (c) => statusOf(c) === "prospect",
-    archived: (c) => statusOf(c) === "archived",
-  };
-  const filters: Filter[] = office ? ["all", "owes", "estimate", "prospect", "archived"] : ["all"];
-  const tab: Filter = filters.includes(kept) ? kept : "all";
-  const count = (f: Filter) => clients.filter(pass[f]).length;
-  // search: name, number, any phone / email of any person, any property address, any document number
-  const list = clients
-    .filter(pass[tab])
-    .filter((c) => matchClient(db, c, q))
-    .filter((c) => tagIds.length === 0 || (c.tagIds ?? []).some((x) => tagIds.includes(x)))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const { device } = useDevice();
-  // 1280: the open card beside the list, `/clients?open=<id>` (spec 06 «Панель 1280», nav/listPanel.ts)
-  const { tab: cardTab } = useLocalSearchParams<{ tab?: string }>();
-  // «Открыть» takes the open tab to the card's own screen
-  const panel = useListPanel(list.map((c) => c.id), (id) => `/client/${id}${isClientTab(cardTab) ? `?tab=${cardTab}` : ""}`, (id) => clients.some((c) => c.id === id));
-  const { desktop, openId } = panel;
-  const openC = openId ? clients.find((c) => c.id === openId) : undefined;
-  const toast = useToast();
-  const store = useStore();
-  const [picking, setPicking] = useState<Customer | null>(null);
-  const pickHeld = useHeldSheet(picking); // the sheet goes out before it is unmounted (#1163)
-  const pk = pickHeld.value;
-  /** «…» of the list (13 §3.3): «Импорт из CSV» — the office's */
-  const [more, setMore] = useState(false);
-  /** archive: one tap with «Undo»; «do not service» needs a reason → the client's page (existing form) */
-  const pickStatus = (c: Customer, s: CustomerStatus) => {
-    setPicking(null);
-    const move = pickerOptions("customer", statusOf(c)).find((o) => o.status === s);
-    if (!move?.enabled) return;
-    if (move.how === "form") return router.push(`/client/${c.id}`);
-    toast.show(`${c.name}: ${t(clientStatusChip[s].l)}`, store.setCustomerStatus(c.id, s));
-  };
-  // #2014: an empty name (CSV, the server, an old version) brought the whole list down — it goes to «#» now
-  const groups = groupByLetter(list);
-  const card = (c: Customer) => {
-    const props = db.properties.filter((p) => p.customerId === c.id);
-    const money = office ? clientMoneyOf(db, c.id) : null;
-    const figure = !money ? null : money.owesCents > 0 ? { cents: money.owesCents, label: "client.owes" as const } : money.paidTotalCents > 0 ? { cents: money.paidTotalCents, label: "client.paidTotal" as const } : null;
+  const tags = db.tags.filter((x) => x.active).sort((a, b) => a.position - b.position);
+  const pass = (f: Filter) => (c: Customer) => {
     const st = statusOf(c);
-    const open = db.estimates.filter((e) => e.customerId === c.id && e.status === "sent").length;
-    const last = clientHistory(db, c.id, role)[0];
-    // computed sign: how much is overdue and how long — the oldest invoice (founder 07.11)
+    if (f === "all") return st === "active" || st === "do_not_service";
+    if (f === "owes") return st !== "prospect" && owes(c.id);
+    if (f === "estimate") return openEst(c.id);
+    if (f === "prospect") return st === "prospect";
+    if (f === "archived") return st === "archived";
+    return st !== "archived" && (c.tagIds ?? []).includes(f.slice(4));
+  };
+  const count = (f: Filter) => clients.filter(pass(f)).length;
+  const filters: Filter[] = office ? ["all", "owes", "estimate", "prospect", ...tags.map((x) => `tag:${x.id}` as Filter), "archived"] : ["all"];
+  const tab: Filter = filters.includes(kept) ? kept : "all";
+  const label = (f: Filter) => {
+    if (f.startsWith("tag:")) {
+      const tag = tags.find((x) => `tag:${x.id}` === f);
+      return tag ? tagLabel(tag, t) : f;
+    }
+    const n = count(f);
+    const word = t(`clients.f.${f as "all" | "owes" | "estimate" | "prospect" | "archived"}`);
+    return f === "archived" || !n ? word : `${word} ${n}`;
+  };
+  const list = clients
+    .filter(pass(tab))
+    .filter((c) => matchClient(db, c, q))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  // one card of rows 56 under 50 clients, the letters from 50 (wireframes-v2; #2014: an empty name goes to «#», never brings the list down)
+  const groups = clientListGroups(list);
+  // 1280: the client opens beside the list (ListScreen `aside`, ListPanel — «Сейчас» and the client's Обзор); 390/820 — his screen
+  const panel = useListPanel(list.map((c) => c.id), (id) => `/client/${id}`, (id) => clients.some((c) => c.id === id));
+  const openC = panel.openId ? clients.find((c) => c.id === panel.openId) : undefined;
+
+  /** archive in one tap with «Отменить» — the same move as the status picker (do-not-service needs a reason: the client's page) */
+  const archive = (c: Customer) => toast.show(`${c.name}: ${t(clientStatusChip.archived.l)}`, store.setCustomerStatus(c.id, "archived"));
+  const row = (c: Customer) => {
+    const st = statusOf(c);
+    const m = office ? clientMoneyOf(db, c.id) : null;
     const overdue = office ? clientOverdueOf(db, c.id) : null;
-    const addr = props[0] ? `${props[0].address}, ${props[0].city}` : undefined;
-    return (
-      <ListCard
-        key={c.id}
-        title={c.name}
-        lead={{ kind: "initials", text: initials(c.name), dashed: st === "prospect" }}
-        // founder 07.11: one money figure in one place — the debt if any, otherwise the paid total
-        value={figure ? moneyFmt(figure.cents) : undefined}
-        valueLabel={figure ? t(figure.label) : undefined}
-        // an active client has no chip (spec 06 §5); prospects, archive, «do not service» do — tappable when it can change
-        status={st !== "active" ? { tone: clientStatusChip[st].s, label: t(clientStatusChip[st].l), onPress: office && canChangeStatus("customer", st) ? () => setPicking(c) : undefined } : undefined}
-        signs={
-          overdue || dups.get(c.id)?.length
-            ? [
-                ...(overdue ? [{ tone: "bad" as const, label: t("fix.client.overdue", { amount: moneyFmt(overdue.cents), d: overdue.days }) }] : []),
-                ...(dups.get(c.id)?.length ? [{ tone: "warn" as const, label: t("clientDup.sign") }] : []),
-              ]
-            : undefined
-        }
-        tags={[...tagsOf(db, c).slice(0, 3).map((x) => tagLabel(x, t)), ...(open > 0 ? [t("card.tag.estimateSent", { n: open })] : [])]}
-        facts={{
-          num: c.number,
-          phone: c.phone,
-          email: c.email,
-          addr: addr && props.length > 1 ? `${addr} · ${t("clients.properties", { n: props.length })}` : addr,
-          last: last ? [t(last.title), last.detail, day(last.at)].filter(Boolean).join(" · ") : undefined,
-        }}
-        contact={{ phone: c.phone, email: c.email, addr }}
-        density={desktop ? "row" : "rich"}
-        columns={openId ? COLUMNS_PANEL : COLUMNS}
-        selected={c.id === openId}
-        onPress={() => panel.open(c.id)}
-      />
-    );
+    const next = clientNextVisit(db, c.id);
+    const off = next ? dayOffsetOf(isoDayKey(next.start)) : -1;
+    const nextDay = !next ? "" : off === 0 ? t("common.today") : off === 1 ? t("common.tomorrow") : day(next.start);
+    const last = clientHistory(db, c.id, role)[0];
+    const prop = db.properties.find((p) => p.customerId === c.id);
+    // one line «когда · что»: the next visit, else what happened last, else the address
+    const line = next
+      ? [`${nextDay} ${time(next.start)}`, db.jobs.find((j) => j.id === next.jobId)?.title ?? t("plan.kind.inspection")].join(" · ")
+      : last
+        ? [ago(last.at), t(last.title), last.detail].filter(Boolean).join(" · ")
+        : prop
+          ? [prop.address, prop.city].filter(Boolean).join(", ")
+          : undefined;
+    const tel = telHref(c.phone);
+    const toArchive = office && pickerOptions("customer", st).find((o) => o.status === "archived" && o.enabled && o.how !== "form");
+    const sms = smsHref(c.phone);
+    // a swipe right — «Позвонить»; left — «SMS» and «В архив» (#2350 «смахивание: позвонить / SMS»); the same on a long press and to VoiceOver
+    const swipeLeft: SwipeAction[] = tel ? [{ key: "call", label: t("swipe.call"), icon: "phone", testID: `client-row-swipe-call-${c.id}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c.phone ?? "" }) }] : [];
+    const swipeRight: SwipeAction[] = [
+      ...(sms ? [{ key: "sms", label: t("cc.sms"), icon: "sms" as const, testID: `client-row-swipe-sms-${c.id}`, onPress: () => openContact({ kind: "sms", icon: "sms", url: sms, value: c.phone ?? "" }) }] : []),
+      ...(toArchive ? [{ key: "archive", label: t("swipe.archive"), icon: "box" as const, tone: "bad" as const, testID: `client-row-swipe-archive-${c.id}`, onPress: () => archive(c) }] : []),
+    ];
+    const status = overdue
+      ? { status: "bad" as const, label: t("proto.client.lateDays", { d: overdue.days }) }
+      : st !== "active"
+        ? { status: clientStatusChip[st].s, label: t(clientStatusChip[st].l) }
+        : dups.get(c.id)?.length
+          ? { status: "warn" as const, label: t("clientDup.sign") }
+          : undefined;
+    return {
+      key: c.id,
+      testID: `client-row-${c.id}`,
+      title: c.name,
+      subtitle: line,
+      lead: { initials: initials(c.name) },
+      // one money figure: the debt; none — a call icon (BUILD-SPEC §2.3 table)
+      value: m && m.owesCents > 0 ? money(m.owesCents) : undefined,
+      status,
+      actions: !m?.owesCents && !status && tel ? [{ icon: "phone" as const, a11y: `${t("client.call")} ${c.name}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c.phone ?? "" }), testID: `client-row-call-${c.id}` }] : undefined,
+      swipe: { left: swipeLeft, right: swipeRight },
+      onPress: () => panel.open(c.id),
+      selected: panel.openId === c.id,
+    };
   };
   return (
-    <Screen
+    <ListScreen<Customer>
+      testID="clients"
       title={t("clients.title")}
-      help={t("help.clients")}
-      hintKey="clients"
-      subtitle={t("clients.count", { n: count("all") })}
-      fab="clients"
-      // «…» holds only «Импорт из CSV»: the office's (owner, admin, office), not sales (04 §14.4)
-      right={canImportClients(role) ? <IconButton icon="more" label={t("lead.more")} onPress={() => setMore(true)} /> : undefined}
-      aside={
-        openC ? (
-          <ListPanel
-            title={openC.name}
-            outside={panel.outside}
-            // as the client's screen: «Изменить» (office); no «＋» on the client card (prototype v6, #1343)
-            actions={
-              office ? (
-                <>
-                  {office ? (
-                    <View testID="list-panel-edit">
-                      <Button label={t("ue.edit")} icon="pencil" variant="ghost" size="sm" onPress={() => router.push(`/client/edit?id=${openC.id}`)} />
-                    </View>
-                  ) : null}
-                </>
-              ) : undefined
-            }
-            onOpen={panel.full}
-            onClose={panel.close}
-          >
-            {/* the open tab lives in the address beside ?open= (as on the client's screen): «Назад» from a document returns to it */}
-            <ClientCardBody key={openC.id} c={openC} tab={isClientTab(cardTab) ? cardTab : undefined} onTab={(k) => router.setParams({ tab: k })} />
-          </ListPanel>
-        ) : undefined
-      }
-    >
-      {/* spec 31 (variant Б): the search and «Фильтр» in one row, one lane of statuses, the tags in the sheet */}
-      <FilterBar<Filter>
-        search={{ value: q, onChange: setQ, placeholder: t("clients.search") }}
-        value={tab}
-        onChange={setTab}
-        items={filters.map((f) => ({ key: f, label: t(`clients.f.${f}`), count: count(f) }))}
-        groups={[
-          {
-            key: "tags",
-            title: t("fix.filters.tags"),
-            options: db.tags
-              .filter((x) => x.active)
-              .sort((a, b) => a.position - b.position)
-              .map((x) => ({ key: x.id, label: tagLabel(x, t), count: clients.filter(pass[tab]).filter((c) => (c.tagIds ?? []).includes(x.id)).length, on: tagIds.includes(x.id) })),
-            onToggle: (id) => setTagIds(tagIds.includes(id) ? tagIds.filter((y) => y !== id) : [...tagIds, id]),
-          },
-        ]}
-        onReset={() => setTagIds([])}
-      />
-      {list.length === 0 ? (
+      count={count("all")}
+      create={office ? { a11y: t("clients.new"), items: [{ key: "new", label: t("path.clientNew"), icon: "user", testID: "clients-create-new" }] } : undefined}
+      onCreate={() => router.push("/client/edit")}
+      search={{ placeholder: t("clients.search"), value: q, onChange: setQ }}
+      chips={office ? { items: filters.map((f) => ({ key: f, label: label(f) })), value: tab, onChange: (k) => setKept(k as Filter) } : undefined}
+      groups={groups}
+      row={row}
+      // «⋯» — import from CSV: the office's (owner, admin, office), not sales (04 §14.4)
+      more={canImportClients(role) ? [{ key: "import", label: t("client.import.menu"), icon: "invoice", testID: "clients-more-import" }, { key: "imports", label: t("client.imports.menu"), icon: "history", testID: "clients-more-imports" }] : undefined}
+      onMore={(k) => router.push(k === "import" ? "/client/import" : "/client/imports")}
+      aside={openC ? <ClientAside key={openC.id} c={openC} outside={panel.outside} onOpen={panel.full} onClose={panel.close} /> : undefined}
+      empty={
         <Empty
           icon="search"
           title={t("clients.empty")}
           hint={q.trim() ? t("clients.emptyHint") : t("card.emptyFilter")}
           action={office ? <Button testID="clients-empty-new" label={t("clients.new")} icon="plus" variant="secondary" onPress={() => router.push("/client/edit")} /> : undefined}
         />
-      ) : device === "tablet" ? (
-        <CardGrid>{list.map(card)}</CardGrid>
-      ) : (
-        <>
-          {desktop ? <ListCardHeader title={t("card.fact.client")} columns={openId ? COLUMNS_PANEL : COLUMNS} value={office ? t("fix.client.balance") : undefined} /> : null}
-          {groups.map(([letter, cs]) => (
-          <View key={letter} style={{ gap: space[2] }}>
-            <T v="caption" w="semibold" tone="mut">{letter}</T>
-            <CardList>{cs.map(card)}</CardList>
-          </View>
-          ))}
-        </>
-      )}
-      {pk ? (
-        <StatusPicker
-          visible={pickHeld.visible}
-          onExited={pickHeld.onExited}
-          onClose={() => setPicking(null)}
-          title={`${t("card.statusTitle")} · ${pk.name}`}
-          options={pickerOptions("customer", statusOf(pk)).map((o) => {
-            const chip = clientStatusChip[o.status as CustomerStatus];
-            // «Не обслуживаем» — the director's and the office's only (04 §12.8)
-            return { key: o.status, tone: chip.s, label: t(chip.l), current: o.current, enabled: o.enabled && (o.status !== "do_not_service" || canMarkNoService(role)), form: o.how === "form" };
-          })}
-          onPick={(k) => pickStatus(pk, k as CustomerStatus)}
-        />
-      ) : null}
-      <Sheet visible={more} onClose={() => setMore(false)} title={t("clients.title")}>
-        <ListRow title={t("client.import.menu")} onPress={() => { setMore(false); router.push("/client/import"); }} />
-        <ListRow title={t("client.imports.menu")} onPress={() => { setMore(false); router.push("/client/imports"); }} />
-      </Sheet>
-    </Screen>
+      }
+    />
+  );
+}
+
+/** the client beside the list on 1280: the panel's head (name, «⤢ Открыть», «✕») and his Обзор; a section opens his screen */
+function ClientAside({ c, outside, onOpen, onClose }: { c: Customer; outside: boolean; onOpen: () => void; onClose: () => void }) {
+  const f = useClientFacts(c);
+  const { t } = useI18n();
+  const { role } = useStore();
+  // as the client's screen: «Изменить» for the office, no «＋» (prototype v6, #1343)
+  const actions =
+    role !== "tech" ? (
+      <View testID="list-panel-edit">
+        <Button label={t("ue.edit")} icon="pencil" variant="ghost" size="sm" onPress={() => router.push(`/client/edit?id=${c.id}`)} />
+      </View>
+    ) : undefined;
+  return (
+    <ListPanel title={c.name || "—"} outside={outside} actions={actions} onOpen={onOpen} onClose={onClose}>
+      <ClientOverview c={c} f={f} onSection={onOpen} />
+    </ListPanel>
   );
 }

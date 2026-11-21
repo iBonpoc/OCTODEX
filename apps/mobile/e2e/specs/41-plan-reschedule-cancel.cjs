@@ -4,6 +4,9 @@
  * cancelling the only visit of a job makes the job wait for a date again. One yellow per screen (rule 2).
  */
 const { expectOneAccent } = require("../accent.cjs");
+const { visitAct, visitHas } = require("../visitScreen.cjs");
+const { objCreate } = require("../objectScreen.cjs");
+const { pressUndo } = require("../gutters.cjs");
 
 const { pickVisitDay, pickVisitStart } = require("../visitForm.cjs");
 exports.run = async (h) => {
@@ -14,9 +17,8 @@ exports.run = async (h) => {
 
   // book an inspection through the form
   await h.go(`/lead/${angela.id}`);
-  await h.clickText("Задачи");
-  await h.click("Что дальше?");
-  await h.sheet().getByRole("button", { name: "Записать на оценку" }).click(); await p.waitForTimeout(400);
+  // v2: «Записать на оценку» is an item of the lead's «＋»
+  await objCreate(p, "lead-screen", "lead-create-book"); await p.waitForTimeout(400);
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).last().click(); await p.waitForTimeout(500);
   await h.sheet().getByRole("button", { name: "Не сейчас" }).click(); await p.waitForTimeout(300);
   db = await h.db();
@@ -37,7 +39,8 @@ exports.run = async (h) => {
   h.expect(db.leads.find((x) => x.id === angela.id).status === "booked", "S4a: a move keeps the lead booked");
 
   // cancel the only inspection: the sheet says what happens; the lead goes back to "In touch"
-  await p.getByRole("button", { name: "Отменить выезд", exact: true }).first().click(); await p.waitForTimeout(400);
+  // v2: «Отменить выезд» is the red item of the header's «⋯»
+  await visitAct(p, "visit-act-cancel"); await p.waitForTimeout(400);
   await h.expectText(/Лид вернётся в «На связи»/, "the cancel sheet tells the consequence");
   await h.sheet().getByRole("radio", { name: "Другое" }).click(); // the reason — a row with a check (spec 56 wave 5б)
   h.expect(await h.sheet().getByRole("button", { name: "Отменить выезд", exact: true }).last().isDisabled(), "«other» needs a text");
@@ -57,7 +60,8 @@ exports.run = async (h) => {
   // S9a: the only visit of a scheduled job (demo j2) — the job waits for a date again
   h.expect(db.jobs.find((j) => j.id === "j2").status === "scheduled" && db.visits.filter((x) => x.jobId === "j2").length === 1, "j2 has one visit");
   await h.go("/visit/v2");
-  await p.getByRole("button", { name: "Отменить выезд", exact: true }).first().click(); await p.waitForTimeout(400);
+  // v2: «Отменить выезд» is the red item of the header's «⋯»
+  await visitAct(p, "visit-act-cancel"); await p.waitForTimeout(400);
   await h.expectText(/Работа снова будет ждать даты/, "the cancel sheet tells the job consequence");
   await h.sheet().getByRole("radio", { name: "Мы отменили" }).click(); // the reason — a row with a check (spec 56 wave 5б)
   await h.sheet().getByRole("button", { name: "Отменить выезд", exact: true }).last().click(); await p.waitForTimeout(600);
@@ -66,12 +70,13 @@ exports.run = async (h) => {
   // «Сообщить клиенту об отмене?» comes after a cancel (e2e 132); answer «Не сейчас» to reach the toast
   await h.sheet().getByRole("button", { name: "Не сейчас" }).click(); await p.waitForTimeout(400);
   // «Отменить» in the toast (5 s) brings the visit and the job back
-  await p.getByRole("button", { name: "Отменить", exact: true }).last().click(); await p.waitForTimeout(500);
+  await pressUndo(p); await p.waitForTimeout(500);
   db = await h.db();
   h.expect(db.visits.some((x) => x.id === "v2") && db.jobs.find((j) => j.id === "j2").status === "scheduled", "undo: the visit and the job are back");
 
   // a visit already on site: no move, no cancel (demo v4 is working)
   await h.go("/visit/v4");
-  h.expect((await p.getByRole("button", { name: "Отменить выезд", exact: true }).count()) === 0, "on site: no cancel");
+  await p.getByTestId("visit-screen").first().waitFor();
+  h.expect(!(await visitHas(p, "visit-act-cancel")), "on site: no cancel");
   h.expect((await p.getByRole("button", { name: "Перенести", exact: true }).count()) === 0, "on site: no move");
 };

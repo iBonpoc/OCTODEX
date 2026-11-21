@@ -19,8 +19,8 @@ describe("design system: the estimate line (DS §8.3)", () => {
     for (const bad of ["est.row.profit", "marginPct", "unitCostCents", "figures.", "est.row.cost"]) expect(folded, bad).not.toContain(bad);
     expect(folded).toContain("hiddenSpend(l, { costsVisible: p.costsVisible, clientScreen: !!p.clientScreen })");
   });
-  it("the trash: an IconButton (visible dockBtn 36, Press makes the zone 44) and space[6] before «≡»", () => {
-    expect(component.dockBtn).toBe(36);
+  it("the trash: an IconButton (visible dockBtn 40 — the button of П4, Press makes the zone 44) and space[6] before «≡»", () => {
+    expect(component.dockBtn).toBe(40);
     expect(size.hitMin).toBe(44);
     const trash = src.slice(src.indexOf("function Trash("), src.indexOf("function Trash(") + 600);
     expect(trash).toMatch(/<IconButton icon="trash"/);

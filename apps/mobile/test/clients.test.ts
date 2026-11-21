@@ -1,7 +1,7 @@
 /** Client card logic (docs/specs/04 §4, §7, §8): status label, tags, money, search, history, who sees what. */
 import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
-import { canSeeClientMoney, clientHistory, clientMoneyOf, clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "../src/features/clients";
+import { canSeeClientMoney, clientHistory, clientMoneyOf, clientNextVisit, clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "../src/features/clients";
 import { CUSTOMER_STATUSES } from "../src/data/types";
 
 const db = makeSeed();
@@ -81,5 +81,19 @@ describe("history", () => {
     const d = { ...db, notes: [{ id: "n-x", subjectType: "customer" as const, subjectId: "c1", body: "secret", visibility: "private" as const, pinned: false, authorId: "m-ivan", at: new Date().toISOString() }] };
     expect(clientHistory(d, "c1", "director").some((x) => x.detail === "secret")).toBe(false);
     expect(clientHistory({ ...d, me: "m-ivan" }, "c1", "director").some((x) => x.detail === "secret")).toBe(true);
+  });
+});
+
+describe("clientNextVisit — the list card's one line (К6 п.3)", () => {
+  const now = Date.parse("2026-11-20T12:00:00Z");
+  const v = (id: string, start: string, o: Record<string, unknown> = {}) => ({ id, jobId: "j1", techId: null, start, durationMin: 60, step: "scheduled", scope: [], checklist: [], photos: [], ...o });
+  const db = (visits: unknown[]) => ({ properties: [{ id: "p1", customerId: "c1" }, { id: "p2", customerId: "c2" }], jobs: [{ id: "j1", propertyId: "p1" }, { id: "j2", propertyId: "p2" }], visits }) as never;
+  it("the earliest open visit not over yet, at the client's property", () => {
+    const got = clientNextVisit(db([v("late", "2026-11-22T10:00:00Z"), v("soon", "2026-11-21T10:00:00Z"), v("past", "2026-11-19T10:00:00Z")]), "c1", now);
+    expect(got?.id).toBe("soon");
+  });
+  it("a visit going on now still counts; a done one and another client's do not", () => {
+    expect(clientNextVisit(db([v("now", "2026-11-20T11:30:00Z")]), "c1", now)?.id).toBe("now");
+    expect(clientNextVisit(db([v("done", "2026-11-21T10:00:00Z", { step: "done" }), v("other", "2026-11-21T10:00:00Z", { jobId: "j2" })]), "c1", now)).toBeUndefined();
   });
 });

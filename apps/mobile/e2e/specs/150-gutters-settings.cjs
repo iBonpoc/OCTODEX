@@ -8,9 +8,9 @@
  * - offline (the demo's «no network»): a change is saved on the phone and waits in the queue (the badge);
  * - the trial over: read only, «Подключить» for the director;
  * - the office (dispatcher): read only, «ask the owner».
- * Finds things by testID and the store; waits on what it checks (the toast's «Отменить» has no testID — by its name).
+ * Finds things by testID and the store; waits on what it checks (the toast's «Отменить» — `pressUndo`, once it is armed).
  */
-const { openProps, skipLength } = require("../gutters.cjs");
+const { openProps, skipLength, pressUndo } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 /** an in-app move: a full load would put the demo back online */
@@ -56,7 +56,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await off("profiles")).join() === "box", "Box off is saved as «not installed» only");
   h.expect(!(await checked("gset-profiles-box")) && (await tid("gset-sizes-box").count()) === 0, "Box off, no sizes of it");
   // «Отменить» (rule 5): back in the store and on the page
-  await p.getByRole("button", { name: "Отменить", exact: true }).last().click();
+  await pressUndo(p);
   await waitFor(async () => (await off("profiles")).length === 0 && (await checked("gset-profiles-box")), "«Отменить»: Box is back");
   await tid("gset-profiles-box").click();
   await waitFor(async () => (await off("profiles")).join() === "box", "Box off again");

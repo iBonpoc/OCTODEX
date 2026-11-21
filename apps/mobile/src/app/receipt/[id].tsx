@@ -26,7 +26,6 @@ import { ActionBar } from "@/ui/actionBar";
 import { useDevice } from "@/theme/ThemeProvider";
 import { Card, Divider, Empty, RowView, Screen } from "@/ui/surfaces";
 import { RelatedBlock } from "@/features/RelatedBlock";
-import { invoiceTitle } from "@/features/invoiceTitle";
 
 /** Receipt = one payment: number, amount, method, invoice, balance; PDF and send to the client. A client's advance (no
  *  invoice, spec 35 §4г) opens here too: refund it, or apply it to an invoice of the same client. */
@@ -109,22 +108,27 @@ export default function ReceiptScreen() {
   const barMain = !wide ? mainBtn(true) : null;
   return (
     <Screen
-      title={`${t("rcpt.title")} ${p.receiptNumber ?? ""}`.trim()}
+      // the number alone is the name («Квитанция RCT-0105» was cut to «Квитанция RCT…» at 390); the parent line says «INV-…»
+      title={p.receiptNumber ?? t("rcpt.title")}
       back={back}
-      subtitle={cust?.name}
       right={more}
       footer={barMain ? <ActionBar testID="rcpt-actionbar" main={barMain} second={secondBtn(true) ?? undefined} /> : undefined}
     >
-      {/* «Связано»: invoice, job, client (15-flows §2 «квитанция → счёт → работа → клиент») */}
+      {/* LAYOUT-RULES §3 «Объект», compact (#2350): the invoice, the job and the client — chips in one row (DS §12.3 п.6; the client
+          is not repeated under the title, the invoice not repeated in the card); the sum large with its status, how and when in one line */}
       <RelatedBlock of={{ type: "receipt", id: p.id }} />
       <Card status="ok">
-        <StatusChip status="ok" label={t("rcpt.received")} />
-        <T v="display" tabular>
-          {money(p.amountCents)}
-        </T>
-        {line(t("rcpt.date"), day(p.at))}
-        {line(t("rcpt.method"), `${t(`pay.${p.method}` as DictKey)}${p.reference ? ` · ${p.reference === "stripe-simulated" ? t("pay.testMode") : p.reference}` : ""}`)}
-        {inv ? line(t("rcpt.forInvoice"), [inv.number, inv.title ? invoiceTitle(inv, t) : undefined].filter(Boolean).join(" · ")) : null}
+        <RowView style={{ justifyContent: "space-between", alignItems: "center" }}>
+          <T v="display" tabular>
+            {money(p.amountCents)}
+          </T>
+          <StatusChip status="ok" label={t("rcpt.received")} />
+        </RowView>
+        <View testID="rcpt-how">
+          <T v="body" tone="mut">
+            {[t(`pay.${p.method}` as DictKey), p.reference ? (p.reference === "stripe-simulated" ? t("pay.testMode") : p.reference) : undefined, day(p.at)].filter(Boolean).join(" · ")}
+          </T>
+        </View>
         {advance ? <View testID="rcpt-advance">{line(t("rcpt.forInvoice"), t("mny.adv.noInvoice"))}</View> : null}
         {fee ? <View testID="rcpt-fee">{line(t("mny.refund.fee"), money(fee))}</View> : null}
         <Divider />

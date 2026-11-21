@@ -1,7 +1,7 @@
 /**
  * e2e 343 — the estimate's action bar and a series of deletions (DS §8.9, §15.2, §8.3; #1307 part «в»), every view, by testID:
- * - 390: the pinned bar has the buttons IN ONE ROW — «Сохранить» on the left, «Сохранить и отправить» on the right, widths
- *   2 : 3, each 44 high; the tech has one «Сохранить» across the bar and «Отправит офис»; 820 / 1280: no bar, the buttons stand in the column;
+ * - 390 (v2 #2350): the pinned bar is ONE row — «Итого» on the left, the one step on the right, ≥ 40 high; «Сохранить и
+ *   отправить» is in «⋯» (the tech has none, «Отправит офис» stands); 820 / 1280: no bar, the step stands in the column;
  * - three lines deleted one after another: ONE toast «Удалено позиций: 3» (the count grows, the toast is not replaced);
  *   a price changed between the deletions stays after «Вернуть», and all three lines are back on their places; another
  *   toast between two deletions ends the series;
@@ -19,18 +19,23 @@ exports.run = async (h) => {
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await tid("est-add-new").waitFor({ timeout: 8000 });
 
-  // the bar: one row 2 : 3, 44 high (a phone); no bar on a wide screen
+  // the bar (v2 #2350, the founder 21.11 «одна компактная строка»): ONE row — «Итого $…» on the left, the one step on the right
+  // («Добавить позицию» while there is no line), the button at least 40 high; «Сохранить и отправить» is an item of «⋯», not in
+  // the bar. From 820 there is no pinned bar: no «Итого» in it, the step stands in the column after the totals.
   if (phone) {
-    const bar = '[data-testid="est-actionbar"]';
-    const [save, send] = [await box(`${bar} [data-testid="ue-save"] [role="button"]`), await box(`${bar} [data-testid="ue-save-send"] [role="button"]`)];
-    h.expect(Math.abs(save.y - send.y) < 2 && save.x < send.x, `one row: «Сохранить» left, «Сохранить и отправить» right (${Math.round(save.x)},${Math.round(save.y)} / ${Math.round(send.x)},${Math.round(send.y)})`);
-    const ratio = save.width / send.width;
-    h.expect(ratio > 0.6 && ratio < 0.74, `widths 2 : 3 (${Math.round(save.width)} : ${Math.round(send.width)})`);
-    h.expect(save.height >= 43.5 && send.height >= 43.5, `44 high (${save.height}, ${send.height})`);
+    const bar = '[data-testid="est-bar-add-bar"]';
+    const [bb, tot, add] = [await box(bar), await box(`${bar} [data-testid="est-bar-total"]`), await box(`${bar} [data-testid="est-bar-add"]`)];
+    const vh = p.viewportSize().height;
+    h.expect(bb.height > 0 && vh - (bb.y + bb.height) >= 0 && vh - (bb.y + bb.height) < 40, `the bar is pinned at the bottom (${Math.round(bb.y + bb.height)} of ${vh})`);
+    h.expect(Math.abs(tot.y + tot.height / 2 - (add.y + add.height / 2)) < 8 && tot.x < add.x, `one row: «Итого» left, the step right (${Math.round(tot.x)},${Math.round(tot.y)} / ${Math.round(add.x)},${Math.round(add.y)})`);
+    h.expect(add.height >= 39.5, `the step is at least 40 high (${add.height})`);
+    h.expect((await vis(`${bar} [data-testid="ue-save-send"]`).count()) === 0, "«Сохранить и отправить» is not in the bar");
   } else {
-    h.expect((await vis('[data-testid="est-actionbar"]').count()) === 0, "no pinned bar from 820");
-    await tid("ue-save").waitFor({ timeout: 3000 });
+    h.expect((await vis('[data-testid="est-bar-total"]').count()) === 0, "no pinned bar from 820: no «Итого» of the bar");
+    const [dep, add] = [await box('[data-testid="est-deposit-row"]'), await box('[data-testid="est-bar-add"]')];
+    h.expect(add.height > 0 && add.y > dep.y, "from 820 the step stands in the column, after the totals");
   }
+  h.expect(await line.editorMenuHas(h, "ue-save-send"), "«Сохранить и отправить» is in «⋯»");
 
   // the empty description: one line; it grows with the text
   await tid("est-add-new").getByRole("button").click();
@@ -65,14 +70,19 @@ exports.run = async (h) => {
 
   // three deletions in a row, a price changed between them: one toast that counts
   const [x, y, keep, z] = before;
-  await tid(`est-trash-${x}`).getByRole("button").click();
+  // (visual v2 №5: a folded row has no trash — a swipe on a phone, «⋯ → Удалить» of its menu on the web)
+  const del = async (id) => {
+    await line.menu(h, id);
+    await tid(`est-act-delete-${id}`).click();
+  };
+  await del(x);
   await p.waitForFunction((id) => !document.querySelector(`[data-testid="est-line-${id}"]`), x, { timeout: 3000 });
-  await tid(`est-trash-${y}`).getByRole("button").click();
+  await del(y);
   await p.waitForFunction(() => /Удалено позиций: 2/.test(document.querySelector('[data-testid="toast-text"]')?.textContent || ""), null, { timeout: 3000 });
   await tid(`est-line-${keep}`).click();
   await vis(`[data-testid="est-price-${keep}"] input`).first().fill("35");
   await line.fold(h);
-  await tid(`est-trash-${z}`).getByRole("button").click();
+  await del(z);
   await p.waitForFunction(() => /Удалено позиций: 3/.test(document.querySelector('[data-testid="toast-text"]')?.textContent || ""), null, { timeout: 3000 });
   h.expect((await p.getByTestId("toast-text").count()) === 1, "one toast");
   await h.shot("series");
@@ -82,23 +92,20 @@ exports.run = async (h) => {
   h.expect(/\$35\b/.test(await tid(`est-sum-${keep}`).innerText()), "the price changed between the deletions stays ($35)");
 
   // another toast between two deletions ends the series: the next deletion is «Позиция удалена», not «Удалено позиций: 2»
-  await tid(`est-trash-${x}`).getByRole("button").click();
+  await del(x);
   await p.waitForFunction(() => /Позиция удалена/.test(document.querySelector('[data-testid="toast-text"]')?.textContent || ""), null, { timeout: 3000 });
-  await tid(`est-menu-${keep}`).getByRole("button").click();
+  await line.menu(h, keep);
   await tid(`est-act-duplicate-${keep}`).click();
   await p.waitForFunction(() => !/Позиция удалена/.test(document.querySelector('[data-testid="toast-text"]')?.textContent || ""), null, { timeout: 3000 });
-  await tid(`est-trash-${y}`).getByRole("button").click();
+  await del(y);
   await p.waitForFunction(() => /Позиция удалена/.test(document.querySelector('[data-testid="toast-text"]')?.textContent || ""), null, { timeout: 3000 });
 
-  // the tech: one «Сохранить» across the bar
-  if (phone) {
-    await h.seed("octo.role.v1", "tech");
-    await h.go("/estimate/new?customerId=c2&propertyId=p2");
-    await tid("est-actionbar").waitFor({ timeout: 8000 });
-    h.expect((await vis('[data-testid="est-actionbar"] [data-testid="ue-save-send"]').count()) === 0, "the tech: no «Сохранить и отправить»");
-    const [bar, save] = [await box('[data-testid="est-actionbar"]'), await box('[data-testid="est-actionbar"] [data-testid="ue-save"] [role="button"]')];
-    h.expect(/Отправит офис/.test(await tid("est-bar-office").innerText()), "the tech: «Отправит офис» under the total");
-    await h.shot("tech");
-    h.expect(save.width > bar.width * 0.85, `the tech's «Сохранить» across the bar (${Math.round(save.width)} of ${Math.round(bar.width)})`);
-  }
+  // the tech saves, the office sends (#1113): no «Сохранить и отправить» in «⋯», «Отправит офис» stands (every width)
+  await h.seed("octo.role.v1", "tech");
+  await h.go("/estimate/new?customerId=c2&propertyId=p2");
+  await tid("est-add-new").waitFor({ timeout: 8000 });
+  h.expect(!(await line.editorMenuHas(h, "ue-save-send")), "the tech: no «Сохранить и отправить»");
+  h.expect(/Отправит офис/.test(await tid("est-bar-office").innerText()), "the tech: «Отправит офис»");
+  await h.shot("tech");
+  await h.seed("octo.role.v1", "director");
 };
