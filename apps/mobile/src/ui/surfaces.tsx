@@ -1,3 +1,4 @@
+import { useQueueLineHeight } from "./queueLineHeight";
 import { BlurView } from "expo-blur";
 import { UpdateBar } from "@/features/UpdateBar";
 import { ScreenScrollCtx, type ScreenScroll } from "./requiredForm";
@@ -399,7 +400,10 @@ function SyncChip({ compact }: { compact?: boolean }) {
 export function useNavInsets(path?: string) {
   const insets = useSafeAreaInsets();
   const { wide } = useDevice();
-  return navInsets(insets, wide, wide && (path === undefined || isAppPath(path)));
+  // #2214: the offline queue's line over the tab bar makes the bar taller — the content's bottom reserve grows with it
+  const line = useQueueLineHeight();
+  const nav = navInsets(insets, wide, wide && (path === undefined || isAppPath(path)));
+  return line && !wide ? { ...nav, bottom: nav.bottom + line } : nav;
 }
 
 /* ---------- Breadcrumbs: "⌂ Today › Clients › Client card" — like an address bar, every level is a link ----------

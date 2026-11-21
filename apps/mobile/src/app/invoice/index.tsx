@@ -8,11 +8,13 @@ import { invoiceBalance } from "@/features/invoiceStatus";
 import { invoiceSigns } from "@/features/listSigns";
 import { remindersOf } from "@/features/invoiceRemind";
 import { sumCents } from "@octo/estimating-engine";
-import { daysBetween, dayKeyIn, dueDayKey, getZone } from "@/features/zone";
+import { daysBetween, dayKeyIn, dueDayKey, formatDayKey, getZone } from "@/features/zone";
 import { initialsOf, remindAll, type MoneyTile } from "@/features/invoice/moneySummary";
 import { useInvoiceRemind } from "@/features/invoice/useRemind";
 import { MoneyTiles, useMoneyChips, useMoneyCreate } from "@/features/moneyTabs";
 import type { GroupRowProps } from "@/ui/groupedList";
+import type { FigureCol } from "@/ui/figures";
+import { invoiceTitle } from "@/features/invoiceTitle";
 import { Empty, Screen } from "@/ui/surfaces";
 import { ListScreen } from "@/ui/templates";
 
@@ -88,18 +90,13 @@ export default function Invoices() {
     const owes = invoiceBalance(i).owesCents;
     const sign = invoiceSigns(i, now, tz)[0];
     const left = i.dueDate ? daysBetween(dayKeyIn(now, tz), dueDayKey(i.dueDate, tz)) : 0;
-    const when =
-      owes <= 0
-        ? i.paidAt
-          ? t("money.paidOn", { date: day(i.paidAt) })
-          : undefined
-        : sign
-          ? t(sign.key, sign.params)
-          : left > 0
-            ? t("proto.money.dueIn", { d: left })
-            : t("proto.money.dueToday");
     const late = owes > 0 && sign?.tone === "bad";
-    const sub = [when, late ? t("proto.money.reminders", { n: remindersOf(db, i.id).length }) : undefined, i.number].filter(Boolean).join(" · ");
+    // visual v2 «цифры справа»: «Срок −9 дн» (red word, not a fill) · «Сумма $1,840»; the line — the number, the work, the reminders
+    const due: FigureCol =
+      owes <= 0
+        ? { label: t("w2m.col.paid"), value: i.paidAt ? formatDayKey(dayKeyIn(i.paidAt, tz), { month: "numeric", day: "numeric" }) : "—" }
+        : { label: t("w2m.col.due"), value: left < 0 ? t("w2m.due.late", { d: -left }) : left > 0 ? t("w2m.due.in", { d: left }) : t("w2m.due.today"), tone: late || left < 0 ? "bad" : undefined };
+    const sub = [i.number, invoiceTitle(i, t), late ? t("proto.money.reminders", { n: remindersOf(db, i.id).length }) : undefined].filter(Boolean).join(" · ");
     return {
       key: i.id,
       testID: `invoice-row-${i.id}`,
@@ -107,6 +104,7 @@ export default function Invoices() {
       subtitle: sub,
       lead: { initials: initialsOf(c?.name) },
       value: money(owes > 0 ? owes : i.paidCents),
+      cols: [due, { label: t("w2m.col.sum"), value: money(owes > 0 ? owes : i.paidCents) }],
       onPress: () => router.push(`/invoice/${i.id}`),
       swipe:
         owes > 0
@@ -124,6 +122,7 @@ export default function Invoices() {
       back={client ? () => (router.canGoBack() ? router.back() : router.setParams({ customer: "" })) : undefined}
       search={{ placeholder: t("card.filter.searchInvoices"), value: q, onChange: setQ }}
       chips={client ? undefined : chips}
+      chipsAs="segment"
       filters={client ? undefined : <MoneyTiles selected={tile} onSelect={(k) => router.setParams({ g: k ?? "", f: "owed" })} />}
       create={create}
       onCreate={onCreate}

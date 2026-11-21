@@ -1,11 +1,12 @@
 /**
- * The client — template «Объект» (prototype v2, docs/design/client-card.html, BUILD-SPEC §2.4, LAYOUT-RULES §3):
- * the header (initials, the name once, «StatusPill · tags · долг», the address → the route, «тел» / «смс» inline; «⌄» or a swipe
- * down opens the panel: contacts by person with types and ★, addresses, facts, «✎ Изменить»), the strip of five sections
- * «Обзор · Работы · Деньги · Объекты · Журнал» (the tech: «Обзор · Выезды · Объекты · Журнал»), ONE main step pinned at the bottom
- * with its reason (the chain «Новая смета → Отправить → Выставить счёт → Взять оплату», plus «Сообщить время», «В путь» and
- * «Вернуть в активные» — features/client/nextStep.ts). «＋» makes from the client (estimate, job, task, property, note);
- * «⋯» holds the rare: «Изменить», status, tags, people.
+ * The client — template «Объект», by visual v2 «Объект — Клиент» (docs/design/visual-v2.html, #2350):
+ * the one header «Sarah Mitchell ⌄ | VIP · Постоянный / ◷ Активный» («⌄» or a swipe down opens the panel: contacts by person with
+ * types and ★, addresses, facts, «✎ Изменить»); the quick actions — five icons 44 with their words «Позвонить · SMS · Маршрут · Почта ·
+ * Замер»; the «Сейчас» card with its three figures and the ONE main step inside it (the chain «Новая смета → Отправить → Выставить
+ * счёт → Взять оплату», plus «Сообщить время», «В путь» and «Вернуть в активные» — features/client/nextStep.ts); then one strip of
+ * sections «Обзор · Работы · Сметы · Счета · Объекты · Журнал» that scrolls sideways (the tech: «Обзор · Выезды · Объекты · Журнал»).
+ * Nothing twice: the address and the phone live in the panel (and in «Маршрут» / «Позвонить»), the sum once — in the card's figures.
+ * «＋» makes from the client (estimate, job, task, property, note); «⋯» holds the rare: «Изменить», status, tags, people.
  * Built on `ObjectScreen` (src/ui/templates) — nothing of its own. Business rules are only called.
  */
 import { useMemo, useState } from "react";
@@ -23,7 +24,7 @@ import { callPlaceForClient } from "@/features/comms/comms";
 import { PeopleSheet, StatusSheet, TagsSheet } from "@/features/client/ClientSheets";
 import { newProperty, PropertySheet } from "@/features/client/PropertySheets";
 import { clientSectionKeys, type ClientMainStep, type ClientSectionKey } from "@/features/client/nextStep";
-import { ClientDetails, ClientLog, ClientMoney, ClientOverview, ClientPlaces, ClientWork, clientStepOf, useClientFacts } from "@/features/client/ClientSections";
+import { ClientDetails, ClientEstimates, ClientLog, ClientMoney, ClientNowCard, ClientOverview, ClientPlaces, ClientWork, clientStepOf, useClientFacts } from "@/features/client/ClientSections";
 import { TaskSheet, type TaskDraft } from "@/features/tasks/TaskSheet";
 import { cleanPhone, mailtoHref } from "@/features/contactLinks";
 import { propertyMapQuery } from "@/features/properties";
@@ -36,12 +37,16 @@ import type { IconRowItem } from "@/ui/iconRow";
 const SECTION_LABEL: Record<ClientSectionKey, DictKey> = {
   overview: "client.tab.overview",
   work: "proto.client.sec.work",
-  money: "proto.client.sec.money",
+  estimates: "cl6.tab.estimates",
+  money: "cl6.tab.invoices",
   places: "proto.client.sec.places",
   log: "proto.client.sec.log",
 };
 
 const initials = (n: string) => n.split(/\s+/).filter(Boolean).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+
+/** the header's tags: the first one, the rest as «+N» */
+export const headTags = (all: { id: string; label: string }[]) => (all.length > 1 ? [all[0]!, { id: "more", label: `+${all.length - 1}` }] : all);
 
 /** the testID of the main step: the old «Создать смету» keeps its id (e2e), the rest `client-next-<kind>` */
 export const stepTestID = (s: ClientMainStep | null) => (s?.kind === "estimate" ? "client-make-estimate" : `client-next-${s?.kind ?? "none"}`);
@@ -49,7 +54,7 @@ export const stepTestID = (s: ClientMainStep | null) => (s?.kind === "estimate" 
 export function ClientObject({ c, section, onSection, back }: { c: Customer; section: ClientSectionKey; onSection: (k: ClientSectionKey) => void; back: () => void }) {
   const store = useStore();
   const { db, role } = store;
-  const { t, money } = useI18n();
+  const { t } = useI18n();
   const toast = useToast();
   const f = useClientFacts(c);
   const { r, office, status } = f;
@@ -72,9 +77,15 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
   const call = () => tel && dial(tel, () => callDone());
   const sms = (p?: Person) => (tel || p ? setWriting({ owner: { type: "customer", id: c.id }, person: p ?? main }) : mail ? Linking.openURL(mail).catch(() => {}) : undefined);
   const route = (p: Property) => Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(propertyMapQuery(p))}`).catch(() => {});
-  const inline: IconRowItem[] = [
-    ...(tel ? [{ icon: "phone" as const, label: t("client.call"), a11y: `${t("client.call")} ${c.name}`, onPress: call, testID: "client-call" }] : []),
-    ...(main && (tel || mail) ? [{ icon: tel ? ("sms" as const) : ("mail" as const), label: t("cc.sms"), a11y: `${tel ? t("cc.sms") : t("visit.message")} ${c.name}`, onPress: () => sms(), testID: "client-write" }] : []),
+  // the measure starts a new estimate for the client (where the module's drawing lives): the office's, when the client is served
+  const estimateHref = fabItems("client", role, { customerId: c.id }).find((i) => i.id === "estimate")?.href;
+  /** v2 «быстрые действия»: five icons 44 with their words; what cannot be done is dimmed with the reason (VoiceOver) */
+  const quick: IconRowItem[] = [
+    { icon: "phone", label: t("client.call"), a11y: `${t("client.call")} ${c.name}`, onPress: call, testID: "client-call", disabled: !tel, reason: t("w2b.client.noPhone") },
+    { icon: "sms", label: t("cc.sms"), a11y: `${t("cc.sms")} ${c.name}`, onPress: () => sms(), testID: "client-write", disabled: !tel || !main, reason: t("w2b.client.noPhone") },
+    { icon: "navigate", label: t("client.route"), a11y: place ? `${t("client.route")}: ${place.address}` : t("client.route"), onPress: () => place && route(place), testID: "client-route", disabled: !place, reason: t("w2b.client.noPlace") },
+    { icon: "mail", label: t("cl6.writeMail"), a11y: `${t("cl6.writeMail")} ${c.name}`, onPress: () => mail && Linking.openURL(mail).catch(() => {}), testID: "client-mail", disabled: !mail, reason: t("w2b.client.noMail") },
+    ...(estimateHref && canServe(db, c.id) ? [{ icon: "ruler" as const, label: t("w2b.client.measure"), a11y: `${t("w2b.client.measure")}: ${c.name}`, onPress: () => router.push(estimateHref as Href), testID: "client-measure" }] : []),
   ];
 
   /* ---------- status ---------- */
@@ -96,15 +107,15 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
         const testID = stepTestID(step);
         switch (step.kind) {
           case "pay":
-            return { testID, label: t("cc.next.pay", { amount: money(step.owesCents) }), reason: t("cc.why.pay", { n: docNo(step.invoice), amount: money(step.owesCents) }), onPress: () => router.push(step.href as Href) };
+            return { testID, label: t("w2b.client.pay"), reason: t("w2b.client.payWhy", { n: docNo(step.invoice) }), onPress: () => router.push(step.href as Href) };
           case "bill":
-            return { testID, label: t("proto.client.billAmount", { amount: money(step.toInvoiceCents) }), reason: t("cc.why.bill", { n: docNo(step.estimate), amount: money(step.toInvoiceCents) }), onPress: () => router.push(step.href as Href) };
+            return { testID, label: t("inv.issue"), reason: t("w2b.client.billWhy"), onPress: () => router.push(step.href as Href) };
           case "send":
             return { testID, label: t("cc.next.send"), reason: t("cc.why.send", { n: docNo(step.estimate) }), onPress: () => router.push(step.href as Href) };
           case "estimate":
             return { testID, label: t("est.new"), reason: r.estimates.length ? undefined : t("cc.why.estimate"), onPress: () => router.push(step.href as Href) };
           case "restore":
-            return { testID, label: t("proto.client.restore"), reason: t("proto.client.restoreWhy"), onPress: () => toast.show(t("client.statusSaved"), store.setCustomerStatus(c.id, "active")) };
+            return { testID, outline: true, label: t("proto.client.restore"), reason: t("proto.client.restoreWhy"), onPress: () => toast.show(t("client.statusSaved"), store.setCustomerStatus(c.id, "active")) };
           case "trip":
             return { testID, label: t("proto.client.trip"), reason: t("proto.client.tripWhy"), onPress: () => router.push(`/visit/${step.visitId}`) };
           case "remind":
@@ -149,7 +160,7 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
   };
 
   /* ---------- the strip ---------- */
-  const keys = clientSectionKeys(role, f.hasMoney);
+  const keys = clientSectionKeys(role, f.hasMoney, r.properties.length > 1);
   const current: ClientSectionKey = keys.includes(section) ? section : "overview";
   const workN = office ? r.jobs.length : f.visits.length;
   const sections = useMemo(
@@ -157,17 +168,18 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
       keys.map((k) => ({
         key: k,
         label: k === "work" && !office ? t("jobs.visits") : t(SECTION_LABEL[k]),
-        // a number only where it means something (client-card.html §4): «Работы 2», «Объекты 2»
-        count: k === "work" && workN ? workN : k === "places" && r.properties.length > 1 ? r.properties.length : undefined,
+        // a number only where it means something (v2: «Работы 2 · Сметы 1 · Счета 2»)
+        count: k === "work" ? workN || undefined : k === "estimates" ? r.estimates.length || undefined : k === "money" ? r.invoices.length || undefined : k === "places" ? r.properties.length : undefined,
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the words of the strip
-    [keys.join(), office, workN, r.properties.length, t],
+    [keys.join(), office, workN, r.estimates.length, r.invoices.length, r.properties.length, t],
   );
 
-  const owes = office && f.m.owesCents > 0 ? t("proto.client.owes", { amount: money(f.m.owesCents) }) : undefined;
   const body =
     current === "work" ? (
       <ClientWork c={c} f={f} />
+    ) : current === "estimates" ? (
+      <ClientEstimates f={f} />
     ) : current === "money" ? (
       <ClientMoney c={c} f={f} />
     ) : current === "places" ? (
@@ -177,6 +189,8 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
     ) : (
       <ClientOverview c={c} f={f} onSection={onSection} />
     );
+  // the header's status: «◷ Активный» (v2) — not «Клиент» on a client's own card; the others say their own word
+  const statusWord = status === "active" ? t("w2b.client.active") : t(chip.l);
 
   return (
     <>
@@ -187,23 +201,19 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
           testID: "client-header",
           title: c.name,
           avatar: initials(c.name),
-          status: { name: chip.s, label: t(chip.l), onPress: office && statusOptions.length ? () => setPicking(true) : undefined },
-          meta: [
-            ...tags.map((x) => ({ id: x.id, label: tagLabel(x, t) })),
-            ...(noLateCallsNow(db, c) ? [{ id: "late", label: t("client.lateCalls") }] : []),
-          ],
-          amount: owes,
-          address: place ? { text: [place.address, place.city.split(",")[0]].filter(Boolean).join(", "), onPress: () => route(place) } : undefined,
-          actions: inline,
+          status: { name: chip.s, label: statusWord, onPress: office && statusOptions.length ? () => setPicking(true) : undefined },
+          // the line right of the rule holds one tag and «+N» (v2 «Клиент · VIP»): never «VIP · Постоя…»; all of them are in «⋯ Метки»
+          meta: headTags([...tags.map((x) => ({ id: x.id, label: tagLabel(x, t) })), ...(noLateCallsNow(db, c) ? [{ id: "late", label: t("client.lateCalls") }] : [])]),
           details: <ClientDetails c={c} f={f} onCall={(p) => callDone(p)} onSms={(p) => sms(p)} onRoute={route} />,
           onEdit: office ? () => router.push(`/client/edit?id=${c.id}`) : undefined,
           labels: { expand: t("proto.client.expand"), collapse: t("proto.client.collapse"), more: (n) => t("cw4.moreTags", { n }), edit: t("ue.edit") },
         }}
+        actions={quick}
+        now={<ClientNowCard f={f} main={mainStep} />}
         sections={sections}
         section={current}
         onSection={onSection}
         sectionsLabel={t("cl6.tabs")}
-        main={mainStep}
         create={create}
         onCreate={onCreate}
         more={more}

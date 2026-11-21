@@ -11,7 +11,7 @@ import { cleanPhone, smsHref } from "@/features/contactLinks";
 import { useDialThenAsk } from "@/features/comms/dial";
 import { CloseSheet } from "@/features/lead/LeadParts";
 import { CallResultSheet } from "@/features/lead/LeadSheets";
-import { leadRowLine, leadWaitLabel } from "@/features/lead/leadRows";
+import { leadRowLine, leadWaitLabel, leadWaitPlace } from "@/features/lead/leadRows";
 import { ReplySheet, useTick } from "@/features/sheets";
 import { Button } from "@/ui/controls";
 import { filterStoreKey } from "@/ui/filterBarRules";
@@ -121,6 +121,7 @@ function LeadsList() {
   const row = (l: Lead) => {
     const turn = leadTurn(db, l, settings);
     const wait = leadWaitLabel(turn, t);
+    const place = leadWaitPlace(turn);
     const tel = cleanPhone(l.phone);
     const bySms = l.preferredContact === "sms";
     const swipeLeft: SwipeAction[] = tel ? [{ key: "call", label: t("swipe.call"), icon: "phone", onPress: () => call(l), testID: `lead-row-call-${l.id}` }] : [];
@@ -134,10 +135,11 @@ function LeadsList() {
       key: l.id,
       testID: `lead-row-${l.id}`,
       title: l.name || "—",
-      subtitle: leadRowLine(l, turn, { t, day, source: sourceName(db, l.sourceId) }),
+      // how long the client waits — the first word of the line (wireframes №16); late — the pill on the right (leadWaitPlace)
+      subtitle: [place === "line" ? wait : null, leadRowLine(l, turn, { t, day, source: sourceName(db, l.sourceId) })].filter(Boolean).join(" · "),
       lead: { initials: initials(l.name) },
-      // how long the client waits — first (wireframes №16); a closed or won lead says its status
-      status: wait ? { status: turn.status, label: wait } : !isOpenLead(l) ? { status: sv.status, label: t(sv.label) } : undefined,
+      // a closed or won lead says its status
+      status: wait && place === "pill" ? { status: turn.status, label: wait } : !isOpenLead(l) ? { status: sv.status, label: t(sv.label) } : undefined,
       actions:
         isOpenLead(l) && tel
           ? [

@@ -144,26 +144,30 @@ export function TimerLine({ value, since, action, testID }: { value: string; sin
   );
 }
 
-/** «8:30 ▸ 12:30» — the interval as a plate of two halves (the start's half points to the end) */
+/** «8:30 ▸ 12:30» — the interval as a plate of two halves (the start's half points to the end); no `to` — one half («Весь день») */
 export function IntervalPlate({ from, to, near }: { from: string; to: string; near?: boolean }) {
   const { c } = useTheme();
   const k = component.timeSlot;
   const fg = near ? c.accText : c.ink;
   return (
     <View style={{ flexDirection: "row", height: k.interval, borderRadius: radius.pill, overflow: "hidden", backgroundColor: near ? c.tint : c.surf2, alignSelf: "flex-start" }}>
-      <View style={{ flexDirection: "row", alignItems: "center", paddingLeft: space[2] + spaceHalf.hair, backgroundColor: near ? c.tint2 : c.surf3 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", paddingLeft: space[2] + spaceHalf.hair, paddingRight: to ? 0 : space[2] + spaceHalf.hair, backgroundColor: near ? c.tint2 : c.surf3 }}>
         <T v="caption" w="bold" style={{ color: fg }} numberOfLines={1}>
           {from}
         </T>
-        <View style={{ width: k.notch, alignItems: "center" }}>
-          <Icon name="chevronRight" s={size.iconXs} color={fg} />
+        {to ? (
+          <View style={{ width: k.notch, alignItems: "center" }}>
+            <Icon name="chevronRight" s={size.iconXs} color={fg} />
+          </View>
+        ) : null}
+      </View>
+      {to ? (
+        <View style={{ justifyContent: "center", paddingHorizontal: space[2] + spaceHalf.hair }}>
+          <T v="caption" w="bold" style={{ color: fg }} numberOfLines={1}>
+            {to}
+          </T>
         </View>
-      </View>
-      <View style={{ justifyContent: "center", paddingHorizontal: space[2] + spaceHalf.hair }}>
-        <T v="caption" w="bold" style={{ color: fg }} numberOfLines={1}>
-          {to}
-        </T>
-      </View>
+      ) : null}
     </View>
   );
 }
@@ -188,7 +192,7 @@ export function TimeSlot({ hour, length, from, to, near, title, line, status, ri
 }) {
   const { c } = useTheme();
   const k = component.timeSlot;
-  const said = [`${from}–${to}`, title, line, status?.label].filter(Boolean).join(", ");
+  const said = [to ? `${from}–${to}` : from, title, line, status?.label].filter(Boolean).join(", ");
   const card = (
     <View style={{ backgroundColor: c.surf, borderRadius: radius.card, borderTopWidth: component.hairline, borderTopColor: c.hl, paddingVertical: space[2] + spaceHalf.hair, paddingHorizontal: space[3], gap: spaceHalf.tight }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
@@ -201,7 +205,8 @@ export function TimeSlot({ hour, length, from, to, near, title, line, status, ri
           {title}
         </T>
         {line ? (
-          <T v="caption" tone="mut" numberOfLines={1}>
+          // two lines: «Bathroom remodel: vanity, toilet, tile · Alex» is not cut to «Bathroom remodel: va…» (audit 12 §2.1)
+          <T v="caption" tone="mut" numberOfLines={2}>
             {line}
           </T>
         ) : null}

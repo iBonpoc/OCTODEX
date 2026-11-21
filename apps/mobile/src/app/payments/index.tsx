@@ -63,7 +63,8 @@ export default function Payments() {
     // how it was paid once: a reference that already names the way («Check #1042») stands alone
     const how = t(`pay.${x.method}` as DictKey);
     const way = ref && (ref.toLowerCase().includes(x.method) || ref.toLowerCase().includes(how.toLowerCase())) ? ref : [how, ref].filter(Boolean).join(" ");
-    const sub = [review, way, day(x.at), inv?.number, x.refundedCents ? t("mny.refunded", { amount: money(x.refundedCents) }) : undefined];
+    // visual v2 «цифры справа»: «Способ Карта · Сумма $678»; the line — the reference (when it is more than the way), the day, the invoice
+    const sub = [review, way !== how ? way : undefined, day(x.at), inv?.number, x.refundedCents ? t("mny.refunded", { amount: money(x.refundedCents) }) : undefined];
     return {
       key: x.id,
       testID: `payment-row-${x.id}`,
@@ -71,6 +72,7 @@ export default function Payments() {
       subtitle: sub.filter(Boolean).join(" · "),
       lead: { initials: initialsOf(c?.name) },
       value: money(x.amountCents),
+      cols: [{ label: t("w2m.col.way"), value: how }, { label: t("w2m.col.sum"), value: money(x.amountCents) }],
       onPress: () => router.push(`/receipt/${x.id}`),
     };
   };
@@ -80,6 +82,7 @@ export default function Payments() {
       title={t("nav.money")}
       search={{ placeholder: t("card.filter.searchPayments"), value: q, onChange: setQ }}
       chips={chips}
+      chipsAs="segment"
       filters={<MoneyTiles />}
       create={create}
       onCreate={onCreate}

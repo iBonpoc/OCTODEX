@@ -14,16 +14,20 @@ const files = new Set(
 );
 const menu = (r: Role) => menuGroups(r).flatMap((g) => g.items.map((i) => i.id));
 
-describe("bottom tabs: the same 5 for every role (13 v2 §2.1, variant Б)", () => {
+describe("bottom tabs: the same 5 for the office (13 v2 §2.1, variant Б); the tech — his own 4 (audit 12 §2.6)", () => {
   it("Главная · План · Клиенты · Деньги · Лиды (prototype v2); search is not a tab, «Ещё» is the avatar", () => {
-    for (const r of ROLES) expect(tabs(r).map((s) => s.id), r).toEqual(["home", "plan", "clients", "finance", "leads"]);
+    for (const r of ROLES.filter((x) => x !== "tech")) expect(tabs(r).map((s) => s.id), r).toEqual(["home", "plan", "clients", "finance", "leads"]);
     expect(TAB_ORDER).toEqual(["home", "plan", "clients", "finance", "leads"]);
     expect(SECTIONS.some((s) => (s.id as string) === "search")).toBe(false);
     for (const r of ROLES) expect(tabs(r).map((s) => s.id)).not.toContain("more");
   });
-  it("a subcontractor never gets leads (noSub): 4 tabs", () => {
-    expect(tabs("tech", false, true).map((s) => s.id)).toEqual(["home", "plan", "clients", "finance"]);
-    expect(tabs("tech", true, true).map((s) => s.id)).toEqual(["home", "clients", "finance"]);
+  it("the tech: no «Деньги» (the company's money is not his — his estimates are a tile of «Ещё»): Мой день · План · Клиенты · Лиды", () => {
+    expect(tabs("tech").map((s) => s.id)).toEqual(["home", "plan", "clients", "leads"]);
+    expect(tabOf("estimates", "tech")).toBeUndefined();
+  });
+  it("a subcontractor never gets leads (noSub): 3 tabs", () => {
+    expect(tabs("tech", false, true).map((s) => s.id)).toEqual(["home", "plan", "clients"]);
+    expect(tabs("tech", true, true).map((s) => s.id)).toEqual(["home", "clients"]);
   });
   it("the lit tab: the money lists light «Деньги», a lead «Лиды», a section of «Ещё» none", () => {
     for (const id of ["estimates", "invoices", "payments", "money", "finance"] as const) expect(tabOf(id, "director"), id).toBe("finance");
@@ -44,7 +48,7 @@ describe("bottom tabs: the same 5 for every role (13 v2 §2.1, variant Б)", () 
 
 describe("a module's tab takes the place of «План» (founder 16.11, #1487; DS §5.3)", () => {
   it("with a module's tab: four core tabs — «План» is not one; the bar stays at five with the module's", () => {
-    for (const r of ROLES) expect(tabs(r, true).map((s) => s.id), r).toEqual(["home", "clients", "finance", "leads"]);
+    for (const r of ROLES) expect(tabs(r, true).map((s) => s.id), r).toEqual(r === "tech" ? ["home", "clients", "leads"] : ["home", "clients", "finance", "leads"]);
   });
   it("«План» is a tile in «Ещё» then, and only then; the side menu (820/1280) has it either way", () => {
     for (const r of ROLES) {

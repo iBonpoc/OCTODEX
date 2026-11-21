@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { View } from "react-native";
 import { router } from "expo-router";
-import { space } from "@octo/design-tokens";
+import { component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { CalendarEvent, CalendarEventKind, ID, Task, Visit } from "@/data/types";
 import { findJob } from "@/data/jobs";
@@ -17,7 +17,10 @@ import { uid } from "@/features/estimateDoc";
 import { assigneesOf, canReschedule, daysSince, liveAssignees, unassignedSoon, visitWho, waitingJobs } from "@/features/schedule";
 import { memberName } from "@/features/team";
 import { VisitFormSheet } from "@/features/VisitForm";
-import { TextField } from "@/ui/controls";
+import { Avatar, TextField } from "@/ui/controls";
+import { TimeSlot } from "@/ui/figures";
+import { StatusPill } from "@/ui/statusPill";
+import { nearIndex, plateHalves, problemSummary, quietStatuses } from "@/features/planSlots";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Divider, ListRow } from "@/ui/surfaces";
@@ -106,6 +109,109 @@ export function PlanRow({ x, onEvent, onAssign, onMove }: { x: PlanItem } & RowH
     row = <GroupRow lead={lead} title={e.title || kind} subtitle={[span, e.title ? kind : null, names || t("plan5.company")].filter(Boolean).join(" · ")} onPress={onEvent ? () => onEvent(e) : undefined} />;
   }
   return row;
+}
+
+/**
+ * The Day on a phone as visual v2 «время и интервал» (docs/design/visual-v2.html, кадр 2): the day's title with its count «06»,
+ * one summary «3 опаздывают · 1 пропущен» instead of a pill on every row (audit 12 §2.3), then a TimeSlot per item — the hour column
+ * 44 (the hour, the length), the interval plate «8:30 ▸ 12:30 PM» (the nearest visit of today in the accent's tone), the client and
+ * «работа · мастер» in two lines. A problem is a pill on its first row only; the tech's initials stand where no pill is. «Назначить»
+ * is «Не назначено · N» over the day, «Перенести» — the visit itself («Когда и кто»).
+ */
+export function PlanDay({ items, day, title, testID }: { items: PlanItem[]; day: DayKey; title: string; testID?: string }) {
+  const { db } = useStore();
+  const { t, tn, time, duration } = useI18n();
+  const rows = items.filter((x) => x.day === day);
+  const now = Date.now();
+  const near = day === todayKey() ? nearIndex(rows, now) : -1;
+  const st = rows.map((x) => (x.kind === "visit" ? visitStatus(x.visit, db.members, now, lateAfterOf(db)) : x.kind === "task" && x.done ? { status: "ok" as const, label: "plan5.done" as const } : undefined));
+  const shown = quietStatuses(st.map((s) => s?.status));
+  const kinds = st.map((s) => (!s ? null : s.label === "st.missed" ? "missed" : s.label === "late.enRoute" || s.label === "late.notLeft" ? "late" : null));
+  const sum = problemSummary(kinds);
+  const sumText = sum ? [sum.late ? tn("w2a.lateN", sum.late) : null, sum.missed ? tn("w2a.missedN", sum.missed) : null].filter(Boolean).join(" · ") : null;
+  return (
+    <View testID={testID} style={{ gap: space[2] }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+        <T v="heading" numberOfLines={1} style={{ flexShrink: 1 }}>
+          {title}
+        </T>
+        <T v="heading" tone="mut" tabular>
+          {String(rows.length).padStart(2, "0")}
+        </T>
+      </View>
+      {sumText ? (
+        <View testID="plan-summary" style={{ alignSelf: "flex-start" }}>
+          <StatusPill status={sum!.missed ? "bad" : "warn"} label={sumText} />
+        </View>
+      ) : null}
+      {rows.map((x, i) => {
+        const span = x.allDay || x.at === "";
+        const from = span ? itemTimes(x, time, t("plan5.allDay")).when : time(x.start);
+        const to = span || !x.end ? "" : time(x.end);
+        const [a, b] = to ? plateHalves(from, to) : [from, ""];
+        const hour = span ? "" : timeLead(time(x.start)).top;
+        const len = !span && x.end ? duration((Date.parse(x.end) - Date.parse(x.start)) / 60_000) : undefined;
+        const names = x.people.map((id) => memberName(db, id, t)).filter(Boolean).join(", ");
+        const s = st[i];
+        const pill = s && shown[i] === "pill" ? { status: s.status, label: kinds[i] === "late" ? t("st.late") : t(s.label) } : undefined;
+        const word = s && shown[i] === "word" ? t(s.label) : null;
+        if (x.kind === "visit") {
+          const v = x.visit;
+          const { client } = visitWho(db, v);
+          const nobody = !liveAssignees(v, db.members).length;
+          const work = findJob(db, v.jobId)?.title ?? (v.kind === "inspection" ? t("plan.kind.inspection") : t("plan.kind.job"));
+          const first = x.people[0] ? db.members.find((m) => m.id === x.people[0]) : undefined;
+          // the tech's initials where no pill stands; a visit nobody is on is assigned from «Не назначено · N» over the day (a button
+          // inside the card would be a button in a button)
+          const right = pill || !first ? undefined : <Avatar initials={first.initials} s={component.avatar.sm} sub={first.kind === "sub"} />;
+          return (
+            <TimeSlot
+              key={`visit:${x.id}`}
+              testID={`plan-row-${v.id}`}
+              hour={hour}
+              length={len}
+              from={a}
+              to={b}
+              near={i === near}
+              title={client || "—"}
+              line={[word, work, nobody ? null : names].filter(Boolean).join(" · ")}
+              status={pill}
+              right={right}
+              onPress={() => router.push(`/visit/${v.id}`)}
+            />
+          );
+        }
+        if (x.kind === "task") {
+          const tk = x.task;
+          return (
+            <TimeSlot
+              key={`task:${x.id}`}
+              hour={hour}
+              from={a}
+              to={b}
+              title={tk.title}
+              line={[t("plan5.task"), names].filter(Boolean).join(" · ")}
+              status={pill}
+              onPress={() => router.push(`${TASK_ROUTE[tk.subjectType]}/${tk.subjectId}`)}
+            />
+          );
+        }
+        const e = x.event;
+        const kind = x.kind === "timeOff" ? t("plan5.timeOff") : t("plan5.event");
+        return (
+          <TimeSlot
+            key={`${x.kind}:${x.id}`}
+            hour={hour}
+            length={len}
+            from={a}
+            to={b}
+            title={e.title || kind}
+            line={[e.title ? kind : null, names || t("plan5.company")].filter(Boolean).join(" · ")}
+          />
+        );
+      })}
+    </View>
+  );
 }
 
 /** the day's rows, for the template's `items` */

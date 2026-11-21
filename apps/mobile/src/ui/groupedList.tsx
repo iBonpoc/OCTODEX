@@ -18,6 +18,7 @@ import { Menu } from "./overlays";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { Card, RowView } from "./surfaces";
 import { StatusPill } from "./statusPill";
+import type { FigureCol } from "./figures";
 import { SwipeRow, type SwipeAction } from "./swipeRow";
 import type { IconAction } from "./templates/types";
 import { rowActions, rowSaid } from "./groupedListLogic";
@@ -99,6 +100,9 @@ export interface GroupRowProps {
   lead?: RowLead;
   /** a sum on the right (15, tabular) */
   value?: string;
+  /** visual v2 «цифры справа» (FigureRow): columns «word 12 / value 15» on the right instead of a bare `value` — «Срок −9 дн ·
+   *  Сумма $1,840»; each but the last `figureRow.colW` wide, so the columns of a group stand under each other */
+  cols?: FigureCol[];
   /** a StatusPill on the right */
   status?: { status: StatusName; label: string };
   /** small quick actions on the right (call, SMS): ≤ 2, the label names the object (П6) */
@@ -111,12 +115,12 @@ export interface GroupRowProps {
   testID?: string;
 }
 
-export function GroupRow({ title, subtitle, lead, value, status, actions = [], swipe, onPress, compact, testID }: GroupRowProps) {
+export function GroupRow({ title, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, testID }: GroupRowProps) {
   const { c } = useTheme();
   const [down, setDown] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const more = rowActions(swipe);
-  const said = rowSaid({ title, subtitle, value, status, when: lead && "time" in lead ? [lead.time, lead.sub].filter(Boolean).join(" ") : undefined });
+  const said = rowSaid({ title, subtitle, value: cols?.length ? cols.map((x) => `${x.label} ${x.value}`).join(", ") : value, status, when: lead && "time" in lead ? [lead.time, lead.sub].filter(Boolean).join(" ") : undefined });
   const onLong = more.length ? (e: GestureResponderEvent) => setMenu({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, w: 0, h: 0 }) : undefined;
   const onAction = (e: AccessibilityActionEvent) => more.find((a) => a.key === e.nativeEvent.actionName)?.onPress();
   const check = lead && "done" in lead ? lead : null;
@@ -151,11 +155,22 @@ export function GroupRow({ title, subtitle, lead, value, status, actions = [], s
           </T>
         ) : null}
       </View>
-      {value ? (
-        <T v="body" w="semibold" tabular numberOfLines={1}>
-          {value}
-        </T>
-      ) : null}
+      {cols?.length
+        ? cols.map((x, i, all) => (
+            <View key={x.label} style={{ alignItems: "flex-end", width: i < all.length - 1 ? component.figureRow.colW : undefined }}>
+              <T v="micro" tone="mut" numberOfLines={1}>
+                {x.label}
+              </T>
+              <T v="body" w="bold" tabular tone={x.tone ?? "ink"} numberOfLines={1}>
+                {x.value}
+              </T>
+            </View>
+          ))
+        : value ? (
+            <T v="body" w="semibold" tabular numberOfLines={1}>
+              {value}
+            </T>
+          ) : null}
       {status ? <StatusPill status={status.status} label={status.label} /> : null}
     </RowView>
   );

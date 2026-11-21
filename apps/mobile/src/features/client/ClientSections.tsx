@@ -1,13 +1,14 @@
 /**
- * The client's five sections (prototype v2, docs/design/client-card.html §4–§7, BUILD-SPEC §2.4): «Обзор» («Сейчас», tiles 2×2,
- * access, «В работе», «Последнее общение», «Закрыто»), «Работы» (projects as chains «Смета · Депозит · Работа · Счёт»; the tech —
- * his visits), «Деньги» (tiles, invoices, payments with who took them, advances), «Объекты» (route, gate code with rights, access,
- * people, jobs; the billing address last), «Журнал» (one feed with filters: calls, SMS, notes, tasks, files).
- * Built from src/ui only (GroupedList / ListGroup / GroupRow 56, StatGrid, NowCard, ChoiceChips strip, Steps, Empty, Button).
+ * The client's sections (visual v2 «Клиент», #2350): «Обзор» (the gate code plate, the upcoming visits, «В работе» without the job
+ * the «Сейчас» card already holds, «Последнее общение», «Закрыто»), «Работы» (the jobs with their visits, the closed ones and the
+ * leads as groups — no second row of chips; the tech — his visits), «Сметы», «Счета» (the three figures, invoices, payments with who
+ * took them, advances), «Объекты» (route, gate code with rights, access, people, jobs; the billing address last), «Журнал» (notes
+ * «видно команде», open tasks, the feed by day). The «Сейчас» card (`ClientNowCard`) stands over the strip with the main step inside.
+ * Built from src/ui only (GroupedList / ListGroup / GroupRow 56, StatGrid, NowCard, NumberTrio, Empty, Button).
  * Business rules are only called: money through the engine (clientMoneyOf, contractStatement in nextStep), rights (canSeeGateCode,
  * canSeeClientMoney), statuses (invoiceChip, estView, jobStatusView, leadStatusView), the stores' mutations with «Отменить».
  */
-import { useState, type ReactNode } from "react";
+import { useState, type ReactElement, type ReactNode } from "react";
 import { Linking, View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
@@ -45,16 +46,20 @@ import {
   clientStateOf,
   clientTileKeys,
   clientToBill,
+  jobFigures,
   type ClientNow,
   type ClientState,
   type ClientTile,
 } from "@/features/client/nextStep";
-import { Button, ChoiceChips, StatusChip, Steps } from "@/ui/controls";
+import { Button, StatusChip } from "@/ui/controls";
+import { NumberTrio } from "@/ui/figures";
 import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
 import { NowCard } from "@/ui/nowCard";
 import { StatGrid, StatTile } from "@/ui/statTile";
+import { statShown } from "@/ui/statTileLogic";
 import { useToast } from "@/ui/overlays";
 import { Empty } from "@/ui/surfaces";
+import type { MainAction } from "@/ui/templates";
 
 /** what the five sections and the header share: read once per render of the client's screen */
 export function useClientFacts(c: Customer) {
@@ -124,14 +129,33 @@ const initials = (n: string) => n.split(/\s+/).filter(Boolean).map((p) => p[0]).
 
 /* ============================== Обзор ============================== */
 
-export function ClientOverview({ c, f, onSection }: { c: Customer; f: ClientFacts; onSection: (k: "work" | "money" | "places" | "log") => void }) {
+export function ClientOverview({ c, f, onSection, withNow }: {
+  c: Customer;
+  f: ClientFacts;
+  onSection: (k: "work" | "estimates" | "money" | "places" | "log") => void;
+  /** the «Сейчас» card inside the section (the 1280 list's panel); on the client's screen it stands over the strip */
+  withNow?: boolean;
+}) {
   const { t, money, moneyWhole, time } = useI18n();
   const ago = useAgo();
   const when = useWhen();
   const { db, r, office } = f;
   const money$ = canSeeClientMoney(f.role);
-  const tiles = clientTileKeys(f.role, f.state, f.toBillCents);
-  const nowJobs = r.jobs.filter((j) => j.status !== "done" && !j.cancelledAt);
+  // what the «Сейчас» card already says is not said again (#2350): its job's figures (debt / to bill / paid), its visit
+  const nowJob = f.now && (f.now.kind === "working" || f.now.kind === "scheduled") ? f.now.job : undefined;
+  const covered = new Set<ClientTile>([
+    ...(nowJob && jobFigures(nowJob, r.invoices) ? (["toBill", "paid", "debt"] as const) : []),
+    ...(f.now?.kind === "overdue" ? (["debt"] as const) : []),
+    // the next visit is a row of «впереди» (or the card's own) — never a tile beside it saying the same
+    "nextVisit",
+  ]);
+  const shownTiles = clientTileKeys(f.role, f.state, f.toBillCents).filter((k) => !covered.has(k));
+  // a lone tile is a wall of one: the line it would say is in the sections (v2 «тройка цифр», not a 2×2 of leftovers)
+  const tiles = shownTiles;
+  const nowJobs = r.jobs.filter((j) => j.status !== "done" && !j.cancelledAt && j.id !== nowJob?.id);
+  // the visits ahead (v2 «Сегодня 8:30–12:30 · Bathroom remodel · Alex»): the next two, not the one the card holds
+  const nowVisitId = f.now && (f.now.kind === "working" || f.now.kind === "scheduled") ? f.now.visit.id : undefined;
+  const ahead = f.visits.filter((v) => isOpenVisit(v) && dayOffsetOf(isoDayKey(v.start)) >= 0 && v.id !== nowVisitId).slice(0, 2);
   const openTasks = r.tasks.filter((x) => !x.doneAt);
   const done = r.jobs.filter((j) => j.status === "done").sort((a, b) => b.id.localeCompare(a.id))[0];
   const place = r.properties.find((p) => p.accessNotes || p.gateCode) ;
@@ -181,33 +205,56 @@ export function ClientOverview({ c, f, onSection }: { c: Customer; f: ClientFact
     return off === 0 ? t("common.today") : off === 1 ? t("common.tomorrow") : when(iso).split(" ").slice(0, -1).join(" ");
   }
 
-  const nowCard = <ClientNowCard f={f} />;
+  // archive: on the client's screen the «Сейчас» card says it with its «Вернуть в активные»; «не обслуживаем» has no step — the plate
+  const plate =
+    f.state === "noService" || (f.state === "archived" && withNow) ? (
+      <ListGroup testID="client-plate">
+        <GroupRow
+          lead={{ icon: f.state === "archived" ? "box" : "alert" }}
+          title={f.state === "archived" ? t("proto.client.archivedTitle") : t("proto.client.noServiceTitle")}
+          subtitle={f.state === "archived" ? t("proto.client.archivedHint") : [c.statusReason, t("client.noServiceHint")].filter(Boolean).join(" · ")}
+        />
+      </ListGroup>
+    ) : withNow ? (
+      <ClientNowCard f={f} />
+    ) : null;
   return (
     <View style={{ gap: space[4] }} testID="client-overview">
-      {f.state === "archived" || f.state === "noService" ? (
-        <ListGroup testID="client-plate">
-          <GroupRow
-            lead={{ icon: f.state === "archived" ? "box" : "alert" }}
-            title={f.state === "archived" ? t("proto.client.archivedTitle") : t("proto.client.noServiceTitle")}
-            subtitle={f.state === "archived" ? t("proto.client.archivedHint") : [c.statusReason, t("client.noServiceHint")].filter(Boolean).join(" · ")}
-          />
-        </ListGroup>
-      ) : (
-        nowCard
-      )}
-      {tiles.length ? <StatGrid testID="client-tiles">{tiles.map(tile)}</StatGrid> : null}
+      {plate}
+      {/* v2: the gate code first in the content — a warm plate, seen by the techs */}
       {place && (place.accessNotes || place.gateCode) ? (
         <ListGroup testID="client-access">
           <GroupRow
             lead={{ icon: "key" }}
-            title={`${t("proto.client.access")} · ${propertyTitle(place)}`}
-            subtitle={[place.gateCode ? (gateSeen ? t("proto.client.gateIs", { code: place.gateCode }) : t("proto.client.gateLater")) : null, place.accessNotes].filter(Boolean).join(" · ")}
-            onPress={() => onSection("places")}
+            title={place.gateCode ? (gateSeen ? t("proto.client.gateIs", { code: place.gateCode }) : t("proto.client.gateLater")) : t("proto.client.access")}
+            subtitle={[place.accessNotes, r.properties.length > 1 ? propertyTitle(place) : null].filter(Boolean).join(" · ") || undefined}
+            onPress={r.properties.length > 1 ? () => onSection("places") : () => router.push(`/property/${place.id}`)}
           />
         </ListGroup>
       ) : null}
+      {(() => {
+        // only the tiles that have something to say; a lone one is dropped (its line is in the sections)
+        // (a tile whose value says nothing — «$0» — draws nothing: StatTile's own rule, statShown)
+        const drawn = tiles.map(tile).filter((n): n is ReactElement<{ value: string }> => !!n && statShown(String((n as ReactElement<{ value: string }>).props.value)));
+        return drawn.length >= 2 ? <StatGrid testID="client-tiles">{drawn}</StatGrid> : null;
+      })()}
+      {ahead.length ? (
+        <ListGroup testID="client-ahead">
+          {ahead.map((v) => (
+            <GroupRow
+              key={v.id}
+              testID={`client-ahead-${v.id}`}
+              lead={{ icon: "calendar" }}
+              title={when(v.start)}
+              subtitle={[findJob(db, v.jobId)?.title, memberName(db, v.techId, t)].filter(Boolean).join(" · ")}
+              onPress={() => router.push(`/visit/${v.id}`)}
+            />
+          ))}
+        </ListGroup>
+      ) : null}
       <ClientDupCards c={c} />
-      {f.state === "new" && !r.estimates.length ? <Empty icon="wrench" title={t("proto.client.noJobs")} hint={t("proto.client.noJobsHint")} testID="client-new-empty" /> : null}
+      {/* a new client: the «Сейчас» card says «Работ пока нет» with its «Новая смета»; the panel of the 1280 list says it here */}
+      {withNow && f.state === "new" && !r.estimates.length ? <Empty icon="wrench" title={t("proto.client.noJobs")} hint={t("proto.client.noJobsHint")} testID="client-new-empty" /> : null}
       <GroupedList testID="client-overview-groups">
         <ListGroup title={t("proto.client.inWork")} testID="client-in-work">
           {nowJobs.map((j) => (
@@ -270,14 +317,28 @@ function jobVisitLine(visits: Visit[], j: Job, t: (k: DictKey, p?: Record<string
   return t("proto.client.visitOf", { n: Math.min(doneN + 1, mine.length), m: mine.length });
 }
 
-/** «Сейчас» in its frame: what is with the client this minute; the whole card opens it */
-function ClientNowCard({ f }: { f: ClientFacts }) {
-  const { t, money, time, day } = useI18n();
+/**
+ * «Сейчас» (visual v2 «Клиент»): what is with the client this minute, with the job's three figures «Смета · Оплачено · Остаток» and
+ * the ONE main step inside (its reason beside it). The title opens the record. Nothing going on — the step alone (a new client:
+ * «Работ пока нет» + «Новая смета»).
+ */
+export function ClientNowCard({ f, main }: { f: ClientFacts; main?: MainAction }) {
+  const { t, money, moneyWhole, time, day } = useI18n();
   const ago = useAgo();
   const when = useWhen();
   const { db } = f;
   const n = f.now;
   const tech = (v: { techId: string | null }) => memberName(db, v.techId, t) ?? t("proto.client.noTech");
+  const figures = (j: Job) => {
+    const x = f.office ? jobFigures(j, f.r.invoices) : null;
+    if (!x) return undefined;
+    const e = f.r.estimates.find((e) => e.id === j.estimateId);
+    return [
+      { value: moneyWhole(x.contract), label: t(e ? "proto.client.stEstimate" : "w2b.job.contract") },
+      { value: moneyWhole(x.paid), label: t("cl6.money.paid") },
+      { value: moneyWhole(x.remaining), label: t("w2b.client.left") },
+    ] as const;
+  };
   if (f.role === "tech" && f.techVisit) {
     const v = f.techVisit;
     const j = findJob(db, v.jobId);
@@ -287,12 +348,17 @@ function ClientNowCard({ f }: { f: ClientFacts }) {
         kicker={`${t("proto.client.yourVisit")} · ${when(v.start)}`}
         title={j?.title ?? t("prop.h.visit")}
         sub={[visitWhen(v, time, t("plan5.allDay")), t("proto.client.points", { n: v.checklist.length })].join(" · ")}
+        main={main}
         onPress={() => router.push(`/visit/${v.id}`)}
       />
     );
   }
-  if (!n)
-    return f.state === "new" ? null : <NowCard testID="client-now" kicker={t("proto.client.now")} empty={t("proto.client.nowNothing")} />;
+  if (!n) {
+    if (main && f.state === "archived")
+      return <NowCard testID="client-now" kicker={t("proto.client.now")} title={t("proto.client.archivedTitle")} sub={t("proto.client.archivedHint")} main={main} />;
+    if (main) return <NowCard testID="client-now" kicker={t("proto.client.now")} title={f.state === "new" ? t("proto.client.noJobs") : t("proto.client.nowNothing")} main={main} />;
+    return f.state === "new" || f.state === "archived" || f.state === "noService" ? null : <NowCard testID="client-now" kicker={t("proto.client.now")} empty={t("proto.client.nowNothing")} />;
+  }
   switch (n.kind) {
     case "working":
       return (
@@ -302,6 +368,8 @@ function ClientNowCard({ f }: { f: ClientFacts }) {
           status={{ status: "info", label: t("proto.client.going") }}
           title={n.job.title}
           sub={t("proto.client.techSince", { who: tech(n.visit), at: time(n.visit.start) })}
+          trio={figures(n.job)}
+          main={main}
           onPress={() => router.push(`/visit/${n.visit.id}`)}
         />
       );
@@ -312,7 +380,9 @@ function ClientNowCard({ f }: { f: ClientFacts }) {
           kicker={t("proto.client.now")}
           status={{ status: "bad", label: t(invoiceChip(n.invoice).l, invoiceChip(n.invoice).p) }}
           title={t("proto.client.overdueTitle")}
-          sub={[n.invoice.number, findJob(db, n.invoice.jobId)?.title, money(n.owesCents)].filter(Boolean).join(" · ")}
+          // the invoice, its job and the debt once; the step goes without a reason that would name the invoice again
+          sub={[n.invoice.number, money(n.owesCents), findJob(db, n.invoice.jobId)?.title].filter(Boolean).join(" · ")}
+          main={main ? { ...main, reason: undefined } : undefined}
           onPress={() => router.push(`/invoice/${n.invoice.id}`)}
         />
       );
@@ -324,6 +394,8 @@ function ClientNowCard({ f }: { f: ClientFacts }) {
           status={{ status: "info", label: t(jobStatusView[n.job.status].label) }}
           title={n.job.title}
           sub={t("proto.client.visitBy", { when: when(n.visit.start), who: tech(n.visit) })}
+          trio={figures(n.job)}
+          main={main}
           onPress={() => router.push(`/visit/${n.visit.id}`)}
         />
       );
@@ -336,6 +408,7 @@ function ClientNowCard({ f }: { f: ClientFacts }) {
           status={{ status: estView[n.estimate.status].s, label: t(estView[n.estimate.status].l) }}
           title={n.estimate.title || n.estimate.number || t("cc.kind.estimate")}
           sub={[n.estimate.number, f.office ? money(n.estimate.totalCents) : null, n.estimate.sentAt ? day(n.estimate.sentAt) : null].filter(Boolean).join(" · ")}
+          main={main}
           onPress={() => router.push(`/estimate/${n.estimate.id}`)}
         />
       );
@@ -346,6 +419,7 @@ function ClientNowCard({ f }: { f: ClientFacts }) {
           kicker={`${t("proto.client.now")} · ${ago(n.lead.receivedAt)}`}
           title={t("proto.client.leadFrom", { source: sourceName(db, n.lead.source) })}
           sub={n.lead.service}
+          main={main}
           onPress={() => router.push(`/lead/${n.lead.id}`)}
         />
       );
@@ -353,8 +427,6 @@ function ClientNowCard({ f }: { f: ClientFacts }) {
 }
 
 /* ============================== Работы ============================== */
-
-type WorkFilter = "active" | "all" | "leads";
 
 /** where the job is along «Смета · Депозит · Работа · Счёт»: the first step not done */
 export function projectStep(e: Estimate | undefined, j: Job, invoices: Invoice[]): number {
@@ -369,11 +441,10 @@ export function projectStep(e: Estimate | undefined, j: Job, invoices: Invoice[]
   return at === -1 ? steps.length : at;
 }
 
-export function ClientWork({ c, f }: { c: Customer; f: ClientFacts }) {
+export function ClientWork({ f }: { c: Customer; f: ClientFacts }) {
   const { t, money, day } = useI18n();
   const when = useWhen();
   const { db, r, office } = f;
-  const [filter, setFilter] = useState<WorkFilter>("active");
   if (f.role === "tech") {
     // the tech: his own visits only (client-card.html §7 «Работы» → «Выезды»)
     return f.visits.length === 0 ? (
@@ -397,15 +468,8 @@ export function ClientWork({ c, f }: { c: Customer; f: ClientFacts }) {
   }
   const live = r.jobs.filter((j) => !j.cancelledAt && j.status !== "done");
   const closed = r.jobs.filter((j) => j.status === "done" || j.cancelledAt);
-  const loose = r.estimates.filter((e) => !r.jobs.some((j) => j.estimateId === e.id));
-  const items = [
-    { key: "active" as const, label: `${t("proto.client.active")} ${live.length + loose.length}` },
-    { key: "all" as const, label: `${t("proto.client.all")} ${r.jobs.length + loose.length}` },
-    { key: "leads" as const, label: `${t("client.row.leads")} ${r.leads.length}` },
-  ];
+  // one job, one group: its row and its visits under it (the estimate and the invoices are their own sections — nothing twice)
   const project = (j: Job) => {
-    const e = r.estimates.find((x) => x.id === j.estimateId);
-    const inv = r.invoices.filter((i) => i.jobId === j.id);
     const vis = f.visits.filter((v) => v.jobId === j.id);
     return (
       <ListGroup key={j.id} testID={`client-project-${j.id}`}>
@@ -413,66 +477,78 @@ export function ClientWork({ c, f }: { c: Customer; f: ClientFacts }) {
           testID={`client-job-${j.id}`}
           lead={{ icon: "wrench" }}
           title={j.title || j.number || t("cc.kind.job")}
-          subtitle={[j.number, placeName(db, j)].filter(Boolean).join(" · ")}
+          subtitle={[t(jobStatusView[j.status].label), j.number, r.properties.length > 1 ? placeName(db, j) : null].filter(Boolean).join(" · ")}
           value={office ? money(j.amountCents) : undefined}
           onPress={() => router.push(`/job/${j.id}`)}
         />
-        <View style={{ padding: space[4] }} testID={`client-project-steps-${j.id}`}>
-          <Steps labels={[t("proto.client.stEstimate"), t("proto.client.stDeposit"), t("proto.client.stJob"), t("proto.client.stInvoice")]} current={projectStep(e, j, r.invoices)} />
-        </View>
-        {e ? (
-          <GroupRow compact testID={`client-estimate-${e.id}`} lead={{ icon: "doc" }} title={`${t("cc.kind.estimate")} · ${t(estView[e.status].l)}`} subtitle={[e.number, e.approvedAt ? day(e.approvedAt) : null].filter(Boolean).join(" · ")} onPress={() => router.push(`/estimate/${e.id}`)} />
-        ) : null}
         {vis.map((v) => (
           <GroupRow compact key={v.id} testID={`client-visit-${v.id}`} lead={{ icon: "calendar" }} title={when(v.start)} subtitle={memberName(db, v.techId, t)} onPress={() => router.push(`/visit/${v.id}`)} />
         ))}
-        {inv.map((i) => {
-          const ic = invoiceChip(i);
-          return <GroupRow compact key={i.id} testID={`client-invoice-${i.id}`} lead={{ icon: "invoice" }} title={[i.number, i.title ? invoiceTitle(i, t) : null].filter(Boolean).join(" · ")} value={money(i.totalCents)} status={{ status: ic.s, label: t(ic.l, ic.p) }} onPress={() => router.push(`/invoice/${i.id}`)} />;
-        })}
       </ListGroup>
     );
   };
-  const estimateRow = (e: Estimate) => (
-    <GroupRow key={e.id} testID={`client-estimate-${e.id}`} lead={{ icon: "doc" }} title={e.title || e.number || t("cc.kind.estimate")} subtitle={e.title ? e.number : undefined} value={money(e.totalCents)} status={{ status: estView[e.status].s, label: t(estView[e.status].l) }} onPress={() => router.push(`/estimate/${e.id}`)} />
-  );
-  const body =
-    filter === "leads" ? (
-      r.leads.length === 0 ? (
-        <Empty icon="inbox" title={t("client.empty.leads")} />
-      ) : (
-        <ListGroup>
-          {r.leads.map((l) => (
-            <GroupRow key={l.id} testID={`client-lead-${l.id}`} lead={{ icon: "inbox" }} title={l.service ?? l.name ?? l.number ?? ""} subtitle={[l.number, day(l.receivedAt)].filter(Boolean).join(" · ")} status={{ status: leadStatusView[l.status].status, label: t(leadStatusView[l.status].label) }} onPress={() => router.push(`/lead/${l.id}`)} />
-          ))}
-        </ListGroup>
-      )
-    ) : r.jobs.length + loose.length === 0 ? (
-      <Empty icon="wrench" title={t("client.empty.jobs")} hint={t("proto.client.noJobsHint")} />
-    ) : (
-      <>
-        {loose.length ? <ListGroup title={t("client.row.estimates")} testID="client-estimates">{loose.map(estimateRow)}</ListGroup> : null}
-        {live.map(project)}
-        {filter === "all" && closed.length ? (
-          <>
-            <ListGroup title={t("proto.client.closedMany")} testID="client-closed-jobs">
-              {closed.map((j) => (
-                <GroupRow key={j.id} testID={`client-job-${j.id}`} lead={{ icon: "wrench" }} title={j.title || j.number || ""} subtitle={[j.number, placeName(db, j)].filter(Boolean).join(" · ")} value={money(j.amountCents)} status={{ status: jobStatusView[j.status].status, label: t(jobStatusView[j.status].label) }} onPress={() => router.push(`/job/${j.id}`)} />
-              ))}
-            </ListGroup>
-          </>
-        ) : null}
-        {filter === "active" && closed.length ? (
-          <ListGroup title={t("proto.client.closedMany")}>
-            <GroupRow lead={{ icon: "history" }} title={t("proto.client.closedN", { n: closed.length })} onPress={() => setFilter("all")} />
-          </ListGroup>
-        ) : null}
-      </>
-    );
   return (
     <View style={{ gap: space[4] }} testID="client-work">
-      <ChoiceChips layout="strip" testID="client-work-filter" items={items} value={filter} onChange={setFilter} />
-      <GroupedList>{body}</GroupedList>
+      {r.jobs.length === 0 && r.leads.length === 0 ? <Empty icon="wrench" title={t("client.empty.jobs")} hint={t("proto.client.noJobsHint")} /> : null}
+      <GroupedList>
+        {live.map(project)}
+        <ListGroup title={t("w2b.client.closedJobs", { n: closed.length })} testID="client-closed-jobs">
+          {closed.map((j) => (
+            <GroupRow
+              key={j.id}
+              testID={`client-job-${j.id}`}
+              lead={{ icon: "wrench" }}
+              title={j.title || j.number || ""}
+              subtitle={[t(jobStatusView[j.status].label), j.number, r.properties.length > 1 ? placeName(db, j) : null].filter(Boolean).join(" · ")}
+              value={money(j.amountCents)}
+              onPress={() => router.push(`/job/${j.id}`)}
+            />
+          ))}
+        </ListGroup>
+        <ListGroup title={t("w2b.client.leads", { n: r.leads.length })} testID="client-leads">
+          {r.leads.map((l) => (
+            <GroupRow
+              key={l.id}
+              testID={`client-lead-${l.id}`}
+              lead={{ icon: "inbox" }}
+              title={l.service ?? l.name ?? l.number ?? ""}
+              subtitle={[l.number, day(l.receivedAt)].filter(Boolean).join(" · ")}
+              status={{ status: leadStatusView[l.status].status, label: t(leadStatusView[l.status].label) }}
+              onPress={() => router.push(`/lead/${l.id}`)}
+            />
+          ))}
+        </ListGroup>
+      </GroupedList>
+    </View>
+  );
+}
+
+/* ============================== Сметы ============================== */
+
+/** the client's estimates, newest first: the title, the number and when, the sum and the status (visual v2 «Сметы 1») */
+export function ClientEstimates({ f }: { f: ClientFacts }) {
+  const { t, money, day } = useI18n();
+  const list = [...f.r.estimates].sort((a, b) => (b.savedAt ?? b.sentAt ?? "").localeCompare(a.savedAt ?? a.sentAt ?? ""));
+  return (
+    <View style={{ gap: space[4] }} testID="client-estimates">
+      {list.length === 0 ? (
+        <Empty icon="doc" title={t("client.empty.estimates")} />
+      ) : (
+        <ListGroup>
+          {list.map((e) => (
+            <GroupRow
+              key={e.id}
+              testID={`client-estimate-${e.id}`}
+              lead={{ icon: "doc" }}
+              title={e.title || e.number || t("cc.kind.estimate")}
+              subtitle={[e.title ? e.number : null, e.sentAt ? day(e.sentAt) : null].filter(Boolean).join(" · ") || undefined}
+              value={money(e.totalCents)}
+              status={{ status: estView[e.status].s, label: t(estView[e.status].l) }}
+              onPress={() => router.push(`/estimate/${e.id}`)}
+            />
+          ))}
+        </ListGroup>
+      )}
     </View>
   );
 }
@@ -485,12 +561,15 @@ export function ClientMoney({ c, f }: { c: Customer; f: ClientFacts }) {
   const voided = (db.voidInvoices ?? []).filter((i) => i.customerId === c.id);
   return (
     <View style={{ gap: space[4] }} testID="client-money">
-      <StatGrid testID="client-money-tiles">
-        <StatTile testID="client-money-debt" label={t("proto.client.tile.debt")} value={moneyWhole(f.m.owesCents)} icon="invoice" warn={f.overdue ? t("card.sign.overdueDays", { d: f.overdue.days }) : undefined} />
-        <StatTile testID="client-money-tobill" label={t("proto.client.tile.toBill")} value={moneyWhole(f.toBillCents)} icon="doc" />
-        <StatTile testID="client-money-paid" label={t("proto.client.tile.paid")} value={moneyWhole(f.m.paidTotalCents)} icon="wallet" />
-        <StatTile testID="client-money-advance" label={t("proto.client.tile.advance")} value={moneyWhole(f.advanceCents)} icon="dollar" />
-      </StatGrid>
+      {/* v2 «тройка цифр»: Долг · Ещё выставить · Оплачено (the advance is its own block below) */}
+      <NumberTrio
+        testID="client-money-figures"
+        items={[
+          { value: moneyWhole(f.m.owesCents), label: f.overdue ? `${t("w2b.client.debt")} · ${t("card.sign.overdueDays", { d: f.overdue.days })}` : t("w2b.client.debt") },
+          { value: moneyWhole(f.toBillCents), label: t("proto.client.tile.toBill") },
+          { value: moneyWhole(f.m.paidTotalCents), label: t("cl6.money.paid") },
+        ]}
+      />
       <GroupedList>
         <ListGroup title={t("client.invoices")} testID="client-invoices">
           {r.invoices.map((inv) => {
@@ -587,27 +666,19 @@ export function ClientPlaces({ c, f, onRoute }: { c: Customer; f: ClientFacts; o
 
 /* ============================== Журнал ============================== */
 
-type LogFilter = "all" | "calls" | "sms" | "notes" | "tasks" | "files";
-
+/**
+ * The log (#2350 «не больше одного ряда чипов»): no filter strip under the sections — the notes first («видно команде» / «только мне»
+ * inside NotesBlock), the open tasks, the feed by day (calls, SMS, mail, documents), the photos and files as one row.
+ */
 export function ClientLog({ c, f }: { c: Customer; f: ClientFacts }) {
   const store = useStore();
   const { t, money, day } = useI18n();
   const toast = useToast();
   const ago = useAgo();
   const { db, r, office } = f;
-  const [filter, setFilter] = useState<LogFilter>("all");
   const [taskEdit, setTaskEdit] = useState<TaskDraft | null>(null);
-  const history = clientHistory(db, c.id, f.role);
-  const items: { key: LogFilter; label: string }[] = [
-    { key: "all", label: t("proto.client.logAll") },
-    { key: "calls", label: t("proto.client.logCalls") },
-    { key: "sms", label: t("proto.client.logSms") },
-    { key: "notes", label: t("client.row.notes") },
-    { key: "tasks", label: t("client.row.tasks") },
-    { key: "files", label: t("client.row.files") },
-  ];
-  const feed = history.filter((h) => (filter === "all" ? h.icon !== "note" : filter === "calls" ? h.icon === "phone" : filter === "sms" ? h.icon === "sms" || h.icon === "mail" : false));
-  // the feed by day: «СЕГОДНЯ», «18 НОЯБ.»
+  const feed = clientHistory(db, c.id, f.role).filter((h) => h.icon !== "note");
+  // the feed by day: «Сегодня», «18 нояб.»
   const days: [string, HistoryItem[]][] = [];
   for (const h of feed) {
     const k = ago(h.at) === t("common.today") ? t("common.today") : day(h.at);
@@ -616,83 +687,54 @@ export function ClientLog({ c, f }: { c: Customer; f: ClientFacts }) {
     else days.push([k, [h]]);
   }
   const openT = r.tasks.filter((x) => !x.doneAt);
-  const doneT = r.tasks.filter((x) => x.doneAt).sort((a, b) => (b.doneAt ?? "").localeCompare(a.doneAt ?? ""));
+  const doneN = r.tasks.length - openT.length;
   const newTask = () => setTaskEdit({ subjectType: "customer", subjectId: c.id, title: "", assigneeId: db.me });
+  const files = r.photos.length + r.files.length;
   return (
     <View style={{ gap: space[4] }} testID="client-log">
-      <ChoiceChips layout="strip" testID="client-log-filter" items={items} value={filter} onChange={setFilter} />
-      {filter === "all" || filter === "notes" ? (
-        // «Заметка…» on top, pinned first, a private note is the author's only (NotesBlock: the team / «только мне» with a lock)
-        <View testID="client-notes">
-          <NotesBlock subjectType="customer" subjectId={c.id} extraSubjects={r.leadIds.map((id) => ({ type: "lead" as const, id }))} />
-        </View>
-      ) : null}
-      {filter === "tasks" ? (
-        <>
-          {office ? <Button testID="client-task-new" label={t("task.new")} icon="plus" variant="secondary" size="sm" onPress={newTask} /> : null}
-          {openT.length + doneT.length === 0 ? <Empty icon="check" title={t("client.empty.tasks")} hint={office ? t("client.empty.tasksHint") : undefined} /> : null}
-          <GroupedList>
-            <ListGroup testID="client-tasks-open">
-              {openT.map((x) => (
-                <GroupRow
-                  key={x.id}
-                  testID={`client-task-${x.id}`}
-                  lead={{ icon: "check" }}
-                  title={x.title}
-                  subtitle={[x.dueAt ? day(x.dueAt) : null, memberName(db, x.assigneeId, t)].filter(Boolean).join(" · ")}
-                  actions={[{ icon: "check", a11y: `${t("client.taskDone")}: ${x.title}`, testID: `client-task-done-btn-${x.id}`, onPress: () => toast.show(t("client.taskDoneToast"), store.saveTask({ ...x, doneAt: new Date().toISOString() }).undo) }]}
-                  onPress={() => setTaskEdit(x)}
-                />
-              ))}
-            </ListGroup>
-            <ListGroup title={t("client.doneTasks", { n: doneT.length })} testID="client-tasks-done">
-              {doneT.map((x) => (
-                <GroupRow
-                  key={x.id}
-                  compact
-                  testID={`client-task-done-${x.id}`}
-                  lead={{ icon: "check" }}
-                  title={x.title}
-                  subtitle={t("client.doneOn", { date: day(x.doneAt!) })}
-                  actions={[{ icon: "undo", a11y: `${t("client.taskReopen")}: ${x.title}`, testID: `client-task-reopen-${x.id}`, onPress: () => toast.show(t("client.taskReopened"), store.saveTask({ ...x, doneAt: undefined }).undo) }]}
-                />
-              ))}
-            </ListGroup>
-          </GroupedList>
-        </>
-      ) : null}
-      {filter === "files" ? (
-        r.photos.length + r.files.length === 0 ? (
-          <Empty icon="camera" title={t("client.empty.files")} hint={t("client.empty.filesHint")} />
-        ) : (
-          <ListGroup>
-            <GroupRow lead={{ icon: "image" }} title={t("client.photos", { n: r.photos.length + r.files.length })} subtitle={t("client.photosHint")} />
-          </ListGroup>
-        )
-      ) : null}
-      {filter === "all" || filter === "calls" || filter === "sms" ? (
-        days.length === 0 ? (
-          filter === "all" ? null : <Empty icon="clock" title={t("client.empty.history")} hint={t("client.empty.historyHint")} />
-        ) : (
-          <GroupedList testID="client-feed">
-            {days.map(([k, hs]) => (
-              <ListGroup key={k} title={k}>
-                {hs.map((h) => (
-                  <GroupRow
-                    key={h.id}
-                    compact={!h.detail}
-                    lead={{ icon: h.icon }}
-                    title={t(h.title)}
-                    subtitle={h.detail}
-                    value={h.cents !== undefined ? money(h.cents) : undefined}
-                    onPress={h.href ? () => router.push(h.href as never) : undefined}
-                  />
-                ))}
-              </ListGroup>
+      <View testID="client-notes">
+        <NotesBlock subjectType="customer" subjectId={c.id} extraSubjects={r.leadIds.map((id) => ({ type: "lead" as const, id }))} />
+      </View>
+      <GroupedList testID="client-feed">
+        <ListGroup
+          title={t("client.row.tasks")}
+          all={office ? { label: t("task.new"), onPress: newTask, testID: "client-task-new" } : undefined}
+          testID="client-tasks-open"
+        >
+          {openT.map((x) => (
+            <GroupRow
+              key={x.id}
+              testID={`client-task-${x.id}`}
+              lead={{ icon: "check" }}
+              title={x.title}
+              subtitle={[x.dueAt ? day(x.dueAt) : null, memberName(db, x.assigneeId, t)].filter(Boolean).join(" · ")}
+              actions={[{ icon: "check", a11y: `${t("client.taskDone")}: ${x.title}`, testID: `client-task-done-btn-${x.id}`, onPress: () => toast.show(t("client.taskDoneToast"), store.saveTask({ ...x, doneAt: new Date().toISOString() }).undo) }]}
+              onPress={() => setTaskEdit(x)}
+            />
+          ))}
+          {doneN ? <GroupRow compact key="done" testID="client-tasks-done" lead={{ icon: "history" }} title={t("client.doneTasks", { n: doneN })} onPress={() => router.push("/tasks")} /> : null}
+        </ListGroup>
+        {days.map(([k, hs]) => (
+          <ListGroup key={k} title={k}>
+            {hs.map((h) => (
+              <GroupRow
+                key={h.id}
+                compact={!h.detail}
+                lead={{ icon: h.icon }}
+                title={t(h.title)}
+                subtitle={h.detail}
+                value={h.cents !== undefined ? money(h.cents) : undefined}
+                onPress={h.href ? () => router.push(h.href as never) : undefined}
+              />
             ))}
-          </GroupedList>
-        )
-      ) : null}
+          </ListGroup>
+        ))}
+        {files ? (
+          <ListGroup>
+            <GroupRow lead={{ icon: "image" }} title={t("w2b.client.files", { n: files })} subtitle={t("client.photosHint")} />
+          </ListGroup>
+        ) : null}
+      </GroupedList>
       <TaskSheet value={taskEdit} onClose={() => setTaskEdit(null)} />
     </View>
   );
@@ -716,8 +758,9 @@ export function ClientDetails({ c, f, onCall, onSms, onRoute }: { c: Customer; f
   return (
     <View style={{ gap: space[4] }} testID="client-details">
       <ListGroup title={`${t("proto.client.contacts")} · ${people.length}`} testID="client-people">
-        {people.flatMap((p) => [
-          <GroupRow
+        {people.flatMap((p, pi) => [
+          // the client himself is the header's name: his phones come first, without his name again (#2350, audit 2.4)
+          pi === 0 && (!p.name || p.name === c.name) ? null : <GroupRow
             key={`h${p.id}`}
             compact
             lead={{ initials: initials(p.name || c.name) }}
@@ -761,10 +804,7 @@ export function ClientDetails({ c, f, onCall, onSms, onRoute }: { c: Customer; f
       </ListGroup>
       <ListGroup title={t("proto.client.facts")} testID="client-facts">
         {c.number ? <GroupRow compact title={t("proto.client.number")} subtitle={c.number} /> : null}
-        {/* not in the model (client-card.html «НЕТ В МОДЕЛИ»): shown marked «(прототип)», the model is not changed */}
-        {office ? <GroupRow compact title={t("proto.client.created")} subtitle={t("proto.client.proto")} /> : null}
         {office && c.sourceId ? <GroupRow compact title={t("proto.client.tile.source")} subtitle={sourceName(db, c.sourceId)} /> : null}
-        {office ? <GroupRow compact title={t("proto.client.owner")} subtitle={`${memberName(db, db.me, t) ?? "—"} ${t("proto.client.proto")}`} /> : null}
         {office ? <GroupRow compact title={t("proto.client.tax")} subtitle={c.taxExempt ? [t("client.f.taxExempt"), c.taxExemptNote].filter(Boolean).join(" · ") : t("proto.client.taxed")} /> : null}
         {office ? <GroupRow compact title={t("client.row.billing")} subtitle={c.billing ? billingLine(c.billing) : t("client.row.billingSame")} /> : null}
       </ListGroup>

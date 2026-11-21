@@ -127,6 +127,8 @@ export const motion = {
   /** app-only: «Отменить» on a toast ignores taps this long after it shows — the second tap of a double tap
    *  must not undo what the first one made (reduced motion shows the toast at once, under the finger) */
   toastArmMs: 300,
+  /** app-only (DS Б8, #2214): toasts stand in a stack of at most this many, the newest on top; a fourth pushes the oldest out */
+  toastStack: 3,
   /** app-only (spec 24 A4): delay between columns / bars growing one after another */
   chartStagger: 40,
   /** DS §14.2 (#brand): the GoRix mark's splash, ms — longer than a chart's growth (durChart), only here */
@@ -216,6 +218,10 @@ export const component = {
   logoPx: 256,
   /** a signature stroke, px (the pad, the full-screen pad, the preview) */
   signStroke: 2.4,
+  /** app-only (#2215): the smooth pen — the stroke's width from the finger's speed (segment length per sample, in field px):
+   *  ≤ `slow` px → `thick` × signStroke, ≥ `fast` px → `thin` × signStroke; the width follows by `follow` per sample (no jumps)
+   *  and is drawn in `levels` steps (one path per step) */
+  signInk: { thin: 0.6, thick: 1.3, slow: 2, fast: 24, follow: 0.35, levels: 5 },
   /** «Ещё» on 820/1280: one column of menu rows, not wider than the palette (spec 25) */
   menuListMax: 560,
   /** charts of «Сегодня» (spec 24 A3; «Наряд» prototype column bars r8 / min 4 / muted .55, track 8; height 130 → 120 for the phone) */
@@ -317,6 +323,8 @@ export const component = {
   roundButton: { header: 40, card: 32, quick: 44 },
   /** the phone's tab bar (visual v2): 56 (`size.tabbarH`) + the bottom zone; the icon `icon` 22 over the word 12; the top `fade` 18 fades into `tab` */
   tabBar: { icon: 22, fade: 18 },
+  /** app-only (#2214, DS §15.3б): the offline queue's thin line over the tab bar — its height (the hit area grows to 44 by Press) */
+  queueLine: { h: 28 },
   /** QuickActions / IconRow: `row` — a circle 44 with a 12 label under it, the cell `labelW` 64, between cells `gap` 8; `inline` — a circle 36 (zone 44) in the address line */
   quickAction: { row: 44, inline: 36, labelW: 64, gap: 8 },
   /** IconRow (BUILD-PLAN поток Б): between the icon buttons */
@@ -430,6 +438,10 @@ export interface ThemeColors {
   dash: string;
   /** the phone's tab bar ground (the bar fades into it from the top) */
   tab: string;
+  /** DS Б8 (v2, #2214): the toast plate — the inverse of the screen (light theme: dark plate; dark theme: a lifted plate), its words and its «Вернуть» */
+  toast: string;
+  onToast: string;
+  toastAction: string;
   /** on the yellow fill (the one yellow tile): the icon's circle and the paler words (≥ 4.5:1 on `acc`) */
   onAccTint: string;
   onAccMut: string;
@@ -504,6 +516,9 @@ export const themes: Record<ThemeName, ThemeColors> = {
     off: "#4A4D54",
     dash: "#8C9098",
     tab: "#1F2024",
+    toast: "#44464D",
+    onToast: "#EEEFF1",
+    toastAction: "#E2C15E",
     onAccTint: "rgba(28,26,18,0.12)",
     onAccMut: "rgba(28,26,18,0.78)",
     scrim: "rgba(0,0,0,0.5)",
@@ -551,6 +566,9 @@ export const themes: Record<ThemeName, ThemeColors> = {
     off: "#B7B8B2",
     dash: "#6F7279",
     tab: "#E3E4DE",
+    toast: "#26282C",
+    onToast: "#EEEFF1",
+    toastAction: "#E2C15E",
     onAccTint: "rgba(28,26,18,0.12)",
     onAccMut: "rgba(28,26,18,0.78)",
     scrim: "rgba(20,21,24,0.3)",

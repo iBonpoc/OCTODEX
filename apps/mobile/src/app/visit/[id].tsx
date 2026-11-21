@@ -15,7 +15,7 @@ import { useI18n } from "@/i18n";
 import { CancelNotifySheet, CancelVisitSheet, WhenWho } from "@/features/VisitForm";
 import { NotesBlock } from "@/features/NotesBlock";
 import { RelatedBlock } from "@/features/RelatedBlock";
-import { canCancel, canNoShow, canPlan, mayMarkNoShow, visitWhen } from "@/features/schedule";
+import { canCancel, canNoShow, canPlan, mayMarkNoShow, visitEnd, visitWhen } from "@/features/schedule";
 import { visitServable } from "@/features/jobs";
 import { peopleOf } from "@/data/people";
 import { cleanPhone, telHref } from "@/features/contactLinks";
@@ -46,6 +46,8 @@ import { mapsUrl, type OS } from "@/ui/listCardLayout";
 import { ObjectScreen, type MainAction } from "@/ui/templates";
 import type { IconRowItem } from "@/ui/iconRow";
 import { canSeeVisit } from "@/features/access";
+import { isoDayKey, todayKey } from "@/features/calendar";
+import { plateHalves } from "@/features/planSlots";
 import { StatusNote } from "@/ui/statusNote";
 import { signedText } from "@/i18n/translate";
 
@@ -327,12 +329,19 @@ export default function VisitScreen() {
   const before0 = v.step === "scheduled" || v.step === "en_route" || v.step === "on_site";
   const est = job?.estimateId ? db.estimates.find((e) => e.id === job.estimateId) : undefined;
   const nLines = job ? (est ? est.lines?.length ?? 0 : linesOf(db, job.id).length) : 0;
+  // visual v2 «Объект — Выезд» (audit 12 §1 K): the screen's object is the visit — «Выезд · 8:30–12:30»; the client is the line under
+  // it (with the sum on the payment step), the status its pill; the job — once, as the «‹» parent and the link under the header
+  // «8:30–12:30» as v2 draws it: the hours without AM / PM (the field's day; the full time is in «Когда и кто»), so the 30 title
+  // keeps its one line (native shrinks it to fit, the web cuts it)
+  const bare = (iso: string) => plateHalves(time(iso), time(iso))[0];
+  const span = v.allDay ? t("plan5.allDay") : `${bare(v.start)}–${bare(visitEnd(v))}`;
   const header = {
     testID: "visit-head",
-    title: customer?.name ?? t("visit.title"),
+    title: t("w2a.visitTitle", { when: span }),
+    meta: [{ id: "client", label: customer?.name ?? db.leads.find((l) => l.id === v.leadId)?.name ?? day(v.start) }],
     status: { name: st.status, label: t(st.label) },
-    // «StatusPill · when»; the sum shows only on the payment step (wireframe №7)
-    amount: v.step === "signed" && due > 0 ? money(due) : `${day(v.start)} ${visitWhen(v, time, t("plan5.allDay"), false)}`,
+    // the sum shows only on the payment step (wireframe №7); another day than today says its date
+    amount: v.step === "signed" && due > 0 ? money(due) : isoDayKey(v.start) === todayKey() ? undefined : day(v.start),
     link: job ? { label: job.title, onPress: () => router.push(`/job/${job.id}`) } : undefined,
     address: addr ? { text: addr, onPress: route } : undefined,
     labels: { expand: t("proto.job.expand"), collapse: t("proto.job.collapse"), more: (n: number) => t("proto.job.moreN", { n }) },

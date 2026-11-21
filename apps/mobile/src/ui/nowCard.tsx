@@ -2,14 +2,15 @@
  * NowCard (visual v2, Главная): «Сейчас» or «Дальше» — the one visit / step that matters now.
  * A card (`surf`, `radius.card`, the top highlight — no accent frame, v2: the yellow is the button). On top 12 «ДАЛЬШЕ · 8:30–12:30» and
  * on the right «через 10 мин» or a StatusPill; below the name 17, «работа · мастер» 13, the address as a link (→ the maps);
- * `progress` — «Работа · 3 из 5 · 62 %» in words (no bar). On the Overviews the pair (`ButtonPair`): the filled `main` («В пути»), the
+ * `trio` — «тройка цифр» (NumberTrio); `progress` — «Работа · 3 из 5 · 62 %» in words (no bar). On the Overviews the pair (`ButtonPair`): the filled `main` («В пути»), the
  * dark `second` («Маршрут») and a round `icon` («☎»); inside an object no button — the whole card opens (`onPress`, «›»).
  * Nothing — `empty` («На сегодня всё · завтра 9:00»).
  */
 import { View } from "react-native";
 import { size, space, type StatusName } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
-import { ProgressBar } from "./controls";
+import { Button, ProgressBar } from "./controls";
+import { NumberTrio } from "./figures";
 import { ButtonPair } from "./pairs";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { Card, RowView } from "./surfaces";
@@ -34,6 +35,8 @@ export interface NowCardProps {
   second?: MainAction & { icon?: IconKey };
   /** a round icon at the end of the pair («Позвонить») */
   icon?: IconAction;
+  /** «тройка цифр» under the lines (v2 Главная: «4 ч на месте · 0 из 4 чек-лист · Alex мастер») */
+  trio?: readonly [{ value: string; label: string }, { value: string; label: string }, { value: string; label: string }];
   /** «Работа · 3 из 5 · 62 %» */
   progress?: { caption: string; value: number; max: number; label?: string };
   /** inside an object: the whole card opens, with «›» */
@@ -43,7 +46,7 @@ export interface NowCardProps {
   testID?: string;
 }
 
-export function NowCard({ kicker, when, status, title, sub, address, main, second, icon, progress, onPress, empty, testID }: NowCardProps) {
+export function NowCard({ kicker, when, status, title, sub, address, main, second, icon, trio, progress, onPress, empty, testID }: NowCardProps) {
   const { c } = useTheme();
   return (
     <View testID={testID}>
@@ -60,19 +63,31 @@ export function NowCard({ kicker, when, status, title, sub, address, main, secon
         </RowView>
         {title ? (
           <>
-            <RowView>
-              <View style={{ flex: 1 }}>
-                <T v="heading" numberOfLines={2}>
-                  {title}
-                </T>
-                {sub ? (
-                  <T v="caption" tone="mut" numberOfLines={1}>
-                    {sub}
-                  </T>
-                ) : null}
-              </View>
-              {onPress && !main ? <Icon name="chevronRight" s={size.iconSm} color={c.mut} /> : null}
-            </RowView>
+            {(() => {
+              const head = (
+                <RowView>
+                  <View style={{ flex: 1 }}>
+                    <T v="heading" numberOfLines={2}>
+                      {title}
+                    </T>
+                    {sub ? (
+                      <T v="caption" tone="mut" numberOfLines={1}>
+                        {sub}
+                      </T>
+                    ) : null}
+                  </View>
+                  {onPress ? <Icon name="chevronRight" s={size.iconSm} color={c.mut} /> : null}
+                </RowView>
+              );
+              // with a step inside, the card is not one button: the title opens the record by itself (no button inside a button)
+              return onPress && main ? (
+                <Press testID={testID ? `${testID}-open` : undefined} onPress={onPress} accessibilityRole="button" accessibilityLabel={[title, sub].filter(Boolean).join(", ")}>
+                  {head}
+                </Press>
+              ) : (
+                head
+              );
+            })()}
             {address ? (
               <Press onPress={address.onPress} visibleHeight={size.iconSm} accessibilityRole="link" accessibilityLabel={address.a11y} containerStyle={{ alignSelf: "flex-start" }}>
                 <T v="caption" style={{ color: c.accText }} numberOfLines={1}>
@@ -80,8 +95,19 @@ export function NowCard({ kicker, when, status, title, sub, address, main, secon
                 </T>
               </Press>
             ) : null}
+            {trio ? <NumberTrio testID={testID ? `${testID}-trio` : undefined} items={trio} /> : null}
             {progress ? <ProgressBar caption={progress.caption} value={progress.value} max={progress.max} label={progress.label} /> : null}
-            {main ? (
+            {main && !second && !icon ? (
+              // inside an object (visual v2 «Клиент»): the step's button by its words, its reason beside it (≤ 2 lines) — never across a 1280 card
+              <RowView style={{ marginTop: space[1] }}>
+                <Button label={main.label} onPress={main.onPress} disabled={main.disabled} testID={main.testID} variant={main.outline ? "secondary" : "primary"} />
+                {main.reason ? (
+                  <T v="caption" tone="mut" numberOfLines={2} style={{ flex: 1, minWidth: 0 }}>
+                    {main.reason}
+                  </T>
+                ) : null}
+              </RowView>
+            ) : main ? (
               <View style={{ gap: space[1], marginTop: space[1] }}>
                 <ButtonPair
                   main={{ label: main.label, onPress: main.onPress, disabled: main.disabled, testID: main.testID, variant: main.outline ? "secondary" : "primary" }}

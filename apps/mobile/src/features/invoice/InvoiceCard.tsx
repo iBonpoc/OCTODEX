@@ -6,7 +6,7 @@ import { router } from "expo-router";
 import { canOpen } from "@/nav/roles";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import type { Invoice, PaymentMethod } from "@/data/types";
+import type { Invoice } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { companyForPortal } from "@/cloud/portal";
 import { invoiceChip } from "@/features/ContractStatement";
@@ -14,7 +14,6 @@ import { invoiceNext } from "@/features/invoice/invoiceNext";
 import { invoiceHtml, invoiceMessage, invoicePageToken, paymentHow } from "@/features/docPdf";
 import { docLanguageFor } from "@/data/people";
 import { saveEstimatePdf } from "@/features/estimatePdf";
-import { Labeled, MoneyField } from "@/features/fields";
 import { clientLink, copyText, openEmail, openSms } from "@/features/sendEstimate";
 import { invoiceBalance } from "@/features/invoiceStatus";
 import { remindersOf } from "@/features/invoiceRemind";
@@ -23,12 +22,13 @@ import { RelatedBlock } from "@/features/RelatedBlock";
 import { useVoidInvoice } from "@/features/invoice/VoidInvoice";
 import { initialsOf, invoiceStep } from "@/features/invoice/moneySummary";
 import { useInvoiceRemind } from "@/features/invoice/useRemind";
-import { Button, Segmented, TextField } from "@/ui/controls";
+import { PaySheet } from "@/features/payments/PaySheet";
+import { Button } from "@/ui/controls";
 import { GroupRow, GroupedList, ListGroup } from "@/ui/groupedList";
 import { ButtonPair } from "@/ui/pairs";
-import { Icon, T } from "@/ui/primitives";
+import { T } from "@/ui/primitives";
 import { Sheet } from "@/ui/overlays";
-import { Card, RowView } from "@/ui/surfaces";
+import { Card } from "@/ui/surfaces";
 import { ToggleRow } from "@/ui/toggleRow";
 import type { IconRowItem } from "@/ui/iconRow";
 import { ObjectScreen, type MainAction } from "@/ui/templates";
@@ -36,11 +36,6 @@ import { paymentRight } from "@/features/moneyLists";
 import { StatusNote } from "@/ui/statusNote";
 import { invoiceTitle } from "@/features/invoiceTitle";
 import { useToast } from "@/ui/overlays";
-
-/** the ways of the payment sheet: Tap to Pay first (as Collect Payment of Jobber; prototype — recorded as a card payment) */
-type Way = "tap" | Exclude<PaymentMethod, "card" | "ach">;
-const WAYS: Way[] = ["tap", "cash", "check", "zelle"];
-const WAY_LABEL: Record<Exclude<Way, "tap">, DictKey> = { cash: "pay.cash", check: "pay.check", zelle: "pay.zelle" };
 
 /**
  * «Счёт» — the Object template (prototype v2 #2350, LAYOUT-RULES §3, BUILD-SPEC §2.10, object-cards «Счёт»).
@@ -59,9 +54,6 @@ export function InvoiceObject({ inv, back, pay: payNow }: { inv: Invoice; back: 
   const remind = useInvoiceRemind();
   const voiding = useVoidInvoice(inv);
   const [pay, setPay] = useState(false);
-  const [amount, setAmount] = useState(0);
-  const [way, setWay] = useState<Way>("tap");
-  const [ref, setRef] = useState("");
   const [remindOpen, setRemindOpen] = useState(false);
   const [auto, setAuto] = useState(false);
   const cust = db.customers.find((c) => c.id === inv.customerId);
@@ -77,6 +69,9 @@ export function InvoiceObject({ inv, back, pay: payNow }: { inv: Invoice; back: 
   const payCents = right === "wholeDeposit" ? balance : Math.max(0, balance - pendingCents);
   const canPay = balance > 0 && right !== "none";
   const chip = invoiceChip(inv);
+  // «Задаток» of the sheet's quick amounts: the job's estimate deposit while it is not paid
+  const est = job?.estimateId ? db.estimates.find((x) => x.id === job.estimateId) : undefined;
+  const depositCents = est?.depositCents && !est.depositPaidAt ? est.depositCents : undefined;
   const company = companyForPortal(db, store.companyName ?? APP_NAME);
   // #2017: the client sees and pays the invoice on the page of the job's signed estimate (none without an estimate: #2082)
   const pageToken = invoicePageToken(db, inv);
@@ -105,8 +100,7 @@ export function InvoiceObject({ inv, back, pay: payNow }: { inv: Invoice; back: 
   const send = sendSms ?? sendEmail;
   const step = invoiceStep(inv, { send: store.role !== "tech" && !!send, remind: canRemind, pay: canPay });
   const takePay = () => {
-    // ACH on its way: the rest, not the whole balance (review 20в №7); sales — the whole deposit
-    setAmount(payCents);
+    // ACH on its way: the rest, not the whole balance (review 20в №7); sales — the whole deposit (PaySheet starts at `payCents`)
     setPay(true);
   };
   useEffect(() => {
@@ -136,7 +130,8 @@ export function InvoiceObject({ inv, back, pay: payNow }: { inv: Invoice; back: 
 
   // QuickActions — the icon and its word (П6), what the main step is not: Оплата · Напомнить · Ссылка · PDF · Почта (≤ 5)
   const actions: IconRowItem[] = [
-    ...(canPay && step !== "pay" && !second ? [{ icon: "dollar" as const, label: t("proto.money.act.pay"), a11y: of(t("inv.takePayment")), onPress: takePay, testID: "invoice-act-pay" }] : []),
+    // «Оплата» stays an icon while «Принять» is the second step (an object puts its second step into «⋯» — the money must not hide there)
+    ...(canPay && step !== "pay" ? [{ icon: "dollar" as const, label: t("proto.money.act.pay"), a11y: of(t("inv.takePayment")), onPress: takePay, testID: "invoice-act-pay" }] : []),
     ...(canRemind && step !== "remind" ? [{ icon: "bell" as const, label: t("proto.money.act.remind"), a11y: of(t("mny.remind")), onPress: () => setRemindOpen(true), testID: "invoice-remind" }] : []),
     ...(link ? [{ icon: "link" as const, label: t("proto.money.act.link"), a11y: of(t("ue.copyLink")), onPress: () => void copyText(link).then(() => toast.show(t("team.copied"))).catch(() => {}), testID: "invoice-act-copy" }] : []),
     { icon: "invoice" as const, label: t("proto.money.act.pdf"), a11y: of(t("ue.pdf")), onPress: () => void pdf(), testID: "invoice-act-pdf" },
@@ -266,88 +261,20 @@ export function InvoiceObject({ inv, back, pay: payNow }: { inv: Invoice; back: 
         </View>
       </Sheet>
 
-      {/* taking a payment (BUILD-SPEC §2.10, wireframes-v2 №11): the sum once — it is the field (a part is fine); Tap to Pay first;
-          the number only for a check or Zelle; one button with the sum */}
-      <Sheet
+      {/* taking a payment and its receipt at once (#2217, #2212): features/payments/PaySheet */}
+      <PaySheet
+        inv={inv}
         visible={pay}
         onClose={() => setPay(false)}
-        title={t("inv.takePayment")}
-        footer={
-          <View testID="pay-record">
-            <Button
-              label={t(way === "tap" ? "proto.money.pay.byCard" : "proto.money.pay.record", { amount: money(Math.min(amount, balance)) })}
-              icon={way === "tap" ? "wallet" : "check"}
-              size="bar"
-              full
-              disabled={amount <= 0}
-              onPress={() => {
-                const method: PaymentMethod = way === "tap" ? "card" : way;
-                const undo = store.recordPayment(inv.id, amount, method, way === "check" || way === "zelle" ? ref : undefined);
-                toast.show(store.online ? t("toast.paid", { amount: money(Math.min(amount, balance)) }) : t("offline.queued"), undo);
-                setPay(false);
-                setRef("");
-              }}
-            />
-          </View>
-        }
-      >
-        <View testID="pay-sheet" style={{ gap: space[4] }}>
-          <T v="caption" tone="mut" numberOfLines={1}>
-            {t("proto.money.pay.of", { num: number, who })}
-          </T>
-          {right === "wholeDeposit" ? (
-            <View testID="pay-owed">
-              <T v="display" tabular>
-                {money(balance)}
-              </T>
-            </View>
-          ) : (
-            <View testID="pay-owed">
-              <Labeled label={t("proto.money.pay.amount")}>
-                <MoneyField cents={amount} onChange={setAmount} />
-              </Labeled>
-            </View>
-          )}
-          <Segmented<Way>
-            radio
-            full
-            label={t("rcpt.method")}
-            testID="pay-method"
-            value={way}
-            onChange={setWay}
-            items={WAYS.map((w) => ({ key: w, label: w === "tap" ? t("proto.money.pay.tap") : t(WAY_LABEL[w]) }))}
-          />
-          {way === "tap" ? (
-            <View testID="pay-tap">
-            <Card>
-              <RowView gap={space[3]}>
-                <Icon name="wallet" />
-                <View style={{ flex: 1, minWidth: 0, gap: space[1] }}>
-                  <T v="heading">{t("proto.money.pay.tapTitle")}</T>
-                  <T v="caption" tone="mut">
-                    {t("proto.money.pay.tapHint")}
-                  </T>
-                </View>
-              </RowView>
-              <T v="caption" tone="mut">
-                {t("proto.money.pay.tips")}
-              </T>
-            </Card>
-            </View>
-          ) : null}
-          {(way === "check" || way === "zelle") && right !== "wholeDeposit" ? (
-            <Labeled label={t("proto.money.pay.ref")}>
-              <TextField type="identifier" value={ref} onChangeText={setRef} label={t("inv.reference")} />
-            </Labeled>
-          ) : null}
-          {link && cust?.phone ? (
-            <ListGroup inset={space[4]}>
-              <GroupRow compact testID="pay-link-sms" title={`${t("proto.money.pay.link")} ›`} onPress={() => void openSms(cust.phone, msg().text).catch(() => {})} />
-            </ListGroup>
-          ) : null}
-          {amount > balance ? <StatusNote tone="warn">{t("inv.capped", { max: money(balance) })}</StatusNote> : null}
-        </View>
-      </Sheet>
+        startCents={payCents}
+        balanceCents={balance}
+        fixed={right === "wholeDeposit"}
+        depositCents={depositCents}
+        who={who}
+        cust={cust}
+        company={company}
+        payLink={link && cust?.phone ? () => void openSms(cust.phone, msg().text).catch(() => {}) : undefined}
+      />
     </>
   );
 }

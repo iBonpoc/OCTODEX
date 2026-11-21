@@ -18,7 +18,7 @@ import { T } from "@/ui/primitives";
 import { Card, Empty, Grid, RowView } from "@/ui/surfaces";
 import { canPlan, canReschedule, hiddenAssignees, isAssigned, liveAssignees, moveAssignee, planFilter, unassignedSoon, waitingJobs, type PlanWho } from "@/features/schedule";
 import { memberName } from "@/features/team";
-import { DayCell, MoveVisitSheet, PlanAddSheet, UnassignedSheet, WaitingSheet, WeekList, planRows, stripDays, type RowHandlers } from "@/features/PlanParts";
+import { DayCell, MoveVisitSheet, PlanAddSheet, PlanDay, UnassignedSheet, WaitingSheet, WeekList, planRows, stripDays, type RowHandlers } from "@/features/PlanParts";
 import { FilterBar, useFilterHeader } from "@/ui/filterBar";
 import type { FilterGroup } from "@/ui/filterBarRules";
 import { dayLoads, matchPlanItem, matchVisit, planItems, type DayLoad } from "@/features/planFeed";
@@ -32,7 +32,8 @@ type Mode = "day" | "week" | "month";
  * «План» on the template «Календарь» (LAYOUT-RULES §3, BUILD-SPEC §2.2, wave 3 Э2; founder 21.11): the header «План» with the
  * search and «Фильтры» as icons and «＋» as the header's menu (one filled accent on the screen — the picked day); the views
  * «День · Неделя · Месяц»; the strip of days (the month, «Сегодня», a dot = something in the day); then «Не назначено · N»,
- * the day's rows by time (the hour on the left; the swipe «Открыть» / «Перенести · Назначить»), «Без даты · N».
+ * the day's TimeSlots (visual v2 «время и интервал»: the hour column 44, the interval plate, the nearest one in the accent's tone,
+ * one summary of the late and missed — PlanParts PlanDay), «Без даты · N».
  * Week — the seven days, a group per day; Month — 6 × 7 cells, a cell → the Day. 820 / 1280: the Day is the board by person.
  */
 export default function Plan() {
@@ -104,6 +105,7 @@ export default function Plan() {
   const waiting = planner ? waitingJobs(db).length : 0;
   const dayItems = planRows(items, date, h);
   const today = todayKey();
+  const dayTitle = date === today ? `${t("common.today")} · ${dayOf(date)}` : dayOf(date);
   // Week, Month and the 820 / 1280 board by person are not the day's rows: they stand where the template draws its body
   const other: ReactNode =
     mode === "week" ? (
@@ -112,6 +114,9 @@ export default function Plan() {
       <MonthView date={date} loads={loads} openDay={(k) => { setDate(k); setMode("day"); }} />
     ) : wide ? (
       <DayView date={date} visits={visitsOn(date)} who={whoNow} onAdd={planner ? () => addOn(date) : undefined} />
+    ) : dayItems.length ? (
+      // the phone's Day — visual v2 «время и интервал»: the hour column, the interval plate, one summary (PlanParts PlanDay)
+      <PlanDay testID="plan-items" items={items} day={date} title={dayTitle} />
     ) : null;
   const empty = (
     <Empty
@@ -167,7 +172,7 @@ export default function Plan() {
         day={date}
         onDay={setDate}
         loads={loads}
-        dayTitle={date === today ? `${t("common.today")} · ${dayOf(date)}` : dayOf(date)}
+        dayTitle={dayTitle}
         unassigned={soon ? { label: t("proto.plan.unassigned", { n: soon }), onPress: () => setSheet("unassigned") } : undefined}
         items={dayItems}
         empty={empty}

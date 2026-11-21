@@ -22,6 +22,15 @@ export function leadWaitLabel(turn: LeadTurn, t: Tr): string | null {
   return turn.kind === "reply" ? fmtWait(turn.minutes, t) : null;
 }
 
+/**
+ * Where the wait stands in the row (wireframes-v2 №16 «сколько минут без ответа — первым словом строки»; audit 2.3 «плашка — только
+ * где горит»): late (`bad`) — a StatusPill on the right; in time — the first word of the line, no pill (the name keeps its room at 390).
+ */
+export function leadWaitPlace(turn: LeadTurn): "pill" | "line" | null {
+  if (turn.kind !== "reply") return null;
+  return turn.status === "bad" ? "pill" : "line";
+}
+
 /** what the client asked for, short: the service, else the first words of the message */
 export function leadWhat(l: Pick<Lead, "service" | "message">, max = 32): string {
   const s = (l.service ?? "").trim();

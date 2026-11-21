@@ -108,7 +108,8 @@ export default function ReceiptScreen() {
   const barMain = !wide ? mainBtn(true) : null;
   return (
     <Screen
-      title={`${t("rcpt.title")} ${p.receiptNumber ?? ""}`.trim()}
+      // the number alone is the name («Квитанция RCT-0105» was cut to «Квитанция RCT…» at 390); the parent line says «INV-…»
+      title={p.receiptNumber ?? t("rcpt.title")}
       back={back}
       right={more}
       footer={barMain ? <ActionBar testID="rcpt-actionbar" main={barMain} second={secondBtn(true) ?? undefined} /> : undefined}

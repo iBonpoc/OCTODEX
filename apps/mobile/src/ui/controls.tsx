@@ -571,6 +571,7 @@ export function TextField({
   onBlurText,
   a11yLabel,
   action,
+  big,
 }: {
   value: string;
   onChangeText: (s: string) => void;
@@ -614,13 +615,16 @@ export function TextField({
    * a real 44 × 44 touch box (the web has no hitSlop), `label` for the screen reader and the web's hover hint (DS §11 п.18, #1411)
    */
   action?: FieldAction | FieldAction[];
+  /** visual v2 «Шторка» (the sum of «Принять оплату», #2217): the one value of a sheet typed large — 22/700 tabular, the frame as tall
+   *  as a pinned button (`button.hit` 44 on every width) */
+  big?: boolean;
 }) {
   const ro = useReadOnly();
   const { c } = useTheme();
   const { wide } = useDevice();
   const f = FIELD[type];
   const multi = multiline ?? f.multiline ?? false;
-  const h = wide ? component.field.h : component.field.phone;
+  const h = big ? component.button.hit : wide ? component.field.h : component.field.phone;
   // a multi-line field grows with its text (the browser's textarea does not by itself)
   const [textH, setTextH] = useState(0);
   // one line empty: the text's own line height, the frame padded to the field's height (44 phone / 36 wide)
@@ -666,7 +670,7 @@ export function TextField({
       }}
     >
       {icon ? <Icon name={icon} s={sizes.iconSm} color={c.mut} /> : null}
-      {prefix ? <T tone="mut">{prefix}</T> : null}
+      {prefix ? <T v={big ? "title" : undefined} tone="mut">{prefix}</T> : null}
       <TextInput
         ref={(n) => {
           input.current = n;
@@ -714,8 +718,8 @@ export function TextField({
           // the browser's textarea does not grow by itself; a phone's multi-line field does (minHeight is enough there)
           height: multi && Platform.OS === "web" ? Math.max(minH, textH) : undefined,
           color: c.ink,
-          fontFamily: font.families.regular,
-          fontSize: font.size.input,
+          fontFamily: big ? font.families.bold : font.families.regular,
+          fontSize: big ? font.size.title : font.size.input,
           lineHeight: one ? line : undefined,
           textAlignVertical: multi ? "top" : "center",
           fontVariant: type === "money" || type === "number" || type === "integer" || type === "percent" ? ["tabular-nums"] : undefined,

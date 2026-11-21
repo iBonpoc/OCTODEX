@@ -79,16 +79,21 @@ export function clientCurrent(step: NextStep | null, estimates: Estimate[], jobs
 
 /* ---------- prototype v2 (client-card.html, BUILD-SPEC §2.4): the five sections, «Сейчас», the tiles, the main step ---------- */
 
-/** The client's five sections (client-card.html §4): Обзор · Работы · Деньги · Объекты · Журнал. Contacts live in the header. */
-export type ClientSectionKey = "overview" | "work" | "money" | "places" | "log";
+/**
+ * The client's sections (visual v2 «Клиент», #2350): Обзор · Работы · Сметы · Счета · Объекты · Журнал — one strip that scrolls
+ * sideways. Contacts live in the header's «⌄» panel. «Сметы» and «Счета» are their own sections (v2), not chips inside «Работы».
+ */
+export type ClientSectionKey = "overview" | "work" | "estimates" | "money" | "places" | "log";
 
 /**
- * The sections a role sees: the tech — Обзор · Выезды · Объекты · Журнал (no money, canSeeClientMoney); the office and sales —
- * all five, «Деньги» only once there is money (an invoice, a payment, an advance or something left to bill).
+ * The sections a role sees: the tech — Обзор · Выезды · (Объекты) · Журнал (no money, no estimates, canSeeClientMoney); the office and
+ * sales — Обзор · Работы · Сметы · (Счета, once there is money: an invoice, a payment, an advance or something left to bill) ·
+ * (Объекты) · Журнал. «Объекты» only with two places or more: one address is the header's panel and «Маршрут» (nothing twice, #2350).
  */
-export function clientSectionKeys(role: Role, hasMoney: boolean): ClientSectionKey[] {
-  if (role === "tech") return ["overview", "work", "places", "log"];
-  return hasMoney ? ["overview", "work", "money", "places", "log"] : ["overview", "work", "places", "log"];
+export function clientSectionKeys(role: Role, hasMoney: boolean, manyPlaces = true): ClientSectionKey[] {
+  const places: ClientSectionKey[] = manyPlaces ? ["places"] : [];
+  if (role === "tech") return ["overview", "work", ...places, "log"];
+  return ["overview", "work", "estimates", ...(hasMoney ? (["money"] as const) : []), ...places, "log"];
 }
 
 /** An address of before (`?tab=` / `?s=` of the 11 sections) opens the section that holds it now. */
@@ -96,10 +101,11 @@ export function clientSectionOf(v: unknown): ClientSectionKey {
   switch (v) {
     case "work":
     case "jobs":
-    case "estimates":
     case "leads":
     case "visits":
       return "work";
+    case "estimates":
+      return "estimates";
     case "money":
     case "invoices":
     case "billing":
@@ -116,6 +122,16 @@ export function clientSectionOf(v: unknown): ClientSectionKey {
     default:
       return "overview";
   }
+}
+
+/**
+ * «Тройка цифр» of the «Сейчас» card (visual v2 «Клиент»: «Смета $3,420 · Оплачено $342 · Остаток $3,078»): the job's contract, what
+ * is paid on it and what is left — by the engine's contract statement (rule 8), the void invoices left out. A job without a sum — none.
+ */
+export function jobFigures(job: Job, invoices: Invoice[]): { contract: number; paid: number; remaining: number } | null {
+  if (job.amountCents <= 0) return null;
+  const st = contractStatement(job.amountCents, invoices.filter((i) => live(i) && i.jobId === job.id));
+  return { contract: st.contract, paid: st.paid, remaining: st.remaining };
 }
 
 /**

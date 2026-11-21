@@ -1,9 +1,10 @@
 /**
  * The lead — template «Объект» (prototype v2, object-cards «Лид», BUILD-SPEC §2.11, LAYOUT-RULES §3): the work of the screen is to
  * answer faster than the others and bring the lead to an estimate — or close it.
- * Header: the name once, «StatusPill · чей ход · источник», the address → the route of the platform's maps; QuickActions «Позвонить ·
- * SMS · Почта · Ответил в источнике» (a call always asks «Чем кончился?» after it, Р13); the strip «Обзор · Переписка · Задачи ·
- * Сметы · Файлы»; ONE main step pinned at the bottom with its reason, chosen by whose turn it is (`leadStepOf`): «Ответить» →
+ * The same object system as the client (visual v2 «Объект», #2350): the header «Kevin Brooks | ◷ Новый»; QuickActions «Позвонить ·
+ * SMS · Почта · Маршрут · Ответил в источнике» (a call always asks «Чем кончился?» after it, Р13); the «Сейчас» card — whose turn it is
+ * in words and the ONE main step inside it (`leadStepOf`); the strip «Обзор · Переписка · Задачи · Сметы · Файлы». Nothing twice: the
+ * address and the source are in «Контакт» / «Кто ведёт» only, the turn in the card only. The step order: «Ответить» →
  * «Открыть клиента» → «Что дальше?» → «Потерян или подождать?» → «Напомнить про смету» (+ «Потерян?») → «Составить смету» →
  * «Задачи» → «Вернуть сейчас» → «Вернуть в работу». «＋» makes from the lead (estimate, task, the estimate visit); «⋯» holds the rare:
  * status, «Сделать клиентом», «Отложить», «Закрыть лид». Built on `ObjectScreen` — nothing of its own; the rules are only called.
@@ -43,6 +44,7 @@ import { mapsUrl, type OS } from "@/ui/listCardLayout";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Icon, T } from "@/ui/primitives";
 import { Empty, Grid } from "@/ui/surfaces";
+import { NowCard } from "@/ui/nowCard";
 import { ObjectScreen, type MainAction, type MoreAction } from "@/ui/templates";
 import { dayAtHour } from "./bookRules";
 import { CloseSheet, LeadHistory, LeadOverview } from "./LeadParts";
@@ -110,8 +112,9 @@ export function LeadObject({ l, section, onSection, back }: { l: Lead; section: 
     { icon: "phone", label: t("client.call"), a11y: `${t("client.call")} ${l.name}`, onPress: call, disabled: !tel, reason: t("proto.leads.noPhone"), testID: "lead-call" },
     { icon: "sms", label: t("cc.sms"), a11y: `${t("cc.sms")} ${l.name}`, onPress: () => touch("sms", smsHref(l.phone)), disabled: !tel, reason: t("proto.leads.noPhone"), testID: "lead-sms" },
     { icon: "mail", label: t("proto.leads.mail"), a11y: `${t("lead.emailTo")} ${l.name}`, onPress: () => touch("email", mail), disabled: !mail, reason: t("proto.leads.noEmail"), testID: "lead-mail" },
+    ...(addr ? [{ icon: "navigate" as const, label: t("client.route"), a11y: `${t("client.route")}: ${addr}`, onPress: () => Linking.openURL(mapsUrl(addr, Platform.OS as OS)).catch(() => {}), testID: "lead-route" }] : []),
     ...(src?.kind === "marketplace"
-      ? [{ icon: "send" as const, label: t("proto.leads.answered"), a11y: t("lead.answeredIn", { source: src.name }), onPress: () => { touch("marketplace"); toast.show(q(t("proto.leads.answeredToast", { source: src.name }))); }, testID: "lead-answered" }]
+      ? [{ icon: "check" as const, label: t("proto.leads.answered"), a11y: t("lead.answeredIn", { source: src.name }), onPress: () => { touch("marketplace"); toast.show(q(t("proto.leads.answeredToast", { source: src.name }))); }, testID: "lead-answered" }]
       : []),
   ];
 
@@ -266,14 +269,15 @@ export function LeadObject({ l, section, onSection, back }: { l: Lead; section: 
           title: l.name || "—",
           avatar: initials(l.name),
           status: { name: sv.status, label: statusLabel, onPress: () => setSheet("status") },
-          // «чей ход» is said once: by the main step's reason when there is a step, else here (П7)
-          meta: [...(turnWord && !main?.reason ? [{ id: "turn", label: turnWord }] : []), ...(l.sourceId ? [{ id: "source", label: sourceName(db, l.sourceId) }] : [])],
-          address: addr ? { text: addr, onPress: () => Linking.openURL(mapsUrl(addr, Platform.OS as OS)).catch(() => {}) } : undefined,
           labels: { expand: t("proto.client.expand"), collapse: t("proto.client.collapse"), more: (n) => t("cw4.moreTags", { n }) },
         }}
         actions={actions}
-        main={main}
-        second={second}
+        now={
+          // «чей ход» once — the card's title (the step's reason, else the turn's word); the step inside without it
+          main || turnWord ? (
+            <NowCard testID="lead-now" kicker={t("proto.client.now")} title={main?.reason ?? turnWord ?? statusLabel} main={main ? { ...main, reason: undefined } : undefined} second={second} />
+          ) : undefined
+        }
         sections={sections}
         section={section}
         onSection={onSection}

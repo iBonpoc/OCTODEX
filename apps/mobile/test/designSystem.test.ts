@@ -173,7 +173,7 @@ describe("design system: components", () => {
     "ui/headerIcon.tsx": 1, // HeaderButton — the one header's circle 40 («←», «×», search, the bell, «＋», «⋯»; visual-v2 «Единая шапка»)
     "ui/listCard.tsx": 2, // ListCard, its open panel
     "ui/optionTile.tsx": 1, // OptionTile
-    "ui/overlays.tsx": 3, // Menu row; LEGACY ×2 — the old unsaved question of Sheet, goes with #1996 (UnsavedAsk from Button)
+    "ui/overlays.tsx": 2, // Menu row; LEGACY — the old unsaved question of Sheet, goes with #1996 (UnsavedAsk from Button); the toast's filled «Отменить» left with the v2 stack (#2214)
     "ui/pctUsdField.tsx": 1, // PctUsdField — the «% | $» switch
     "ui/selectField.tsx": 1, // SelectField — the row
     "ui/surfaces.tsx": 2, // Card (pressable, its `base` style — seen since #2022), ListRow
@@ -578,9 +578,8 @@ describe("design system: a record's card has no row of pill buttons (#1412)", ()
     return rows;
   };
   /** cards still to move (#1474) and rows that are not a card's actions — exact counts, the list only shrinks */
-  const ALLOWED: Record<string, { n: number; why: string }> = {
-    "features/EstimateCard.tsx": { n: 1, why: "шторка «Отправить»: три способа отправки — выбор внутри начатого действия, не действия карточки" },
-  };
+  // EstimateCard's «Отправить» sheet: one main button with «Отменить · 5» and two in a row under it (#2218) — the list is empty
+  const ALLOWED: Record<string, { n: number; why: string }> = {};
   it("no row of 3+ buttons on a record's card (src/app/**/[id].tsx, features/**/*Card.tsx)", () => {
     const bad: string[] = [];
     for (const f of code.filter((x) => /\[id\]\.tsx$|Card\.tsx$/.test(x) && !x.includes(join("src", "ui")) && !x.includes(join("src", "modules")) && !x.includes(join("features", "estimate", "")))) {

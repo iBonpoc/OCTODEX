@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import type { Lead } from "../src/data/types";
 import type { LeadTurn } from "../src/features/leads";
-import { fmtWait, leadRowLine, leadStepOf, leadWaitLabel, leadWhat } from "../src/features/lead/leadRows";
+import { fmtWait, leadRowLine, leadStepOf, leadWaitLabel, leadWaitPlace, leadWhat } from "../src/features/lead/leadRows";
 
 const t = (k: string, p?: Record<string, string | number>) => (p ? `${k}(${Object.values(p).join(",")})` : k);
 const day = (iso: string) => iso.slice(0, 10);
@@ -62,5 +62,13 @@ describe("the one main step (object-cards «Порядок главной»)", (
     expect(leadStepOf(lead({ status: "lost" }), { kind: "done", status: "neutral" }, o)).toBe("reopen");
     expect(leadStepOf(lead({ status: "won", customerId: "c1" }), { kind: "done", status: "ok" }, o)).toBe("client");
     expect(leadStepOf(lead({ status: "won" }), { kind: "done", status: "ok" }, o)).toBeNull();
+  });
+});
+
+describe("the wait in the row (wireframes-v2 №16, audit 2.3)", () => {
+  it("in time — the first word of the line; late — the pill; not our reply — nowhere", () => {
+    expect(leadWaitPlace({ kind: "reply", minutes: 4, attempts: 0, status: "info" })).toBe("line");
+    expect(leadWaitPlace({ kind: "reply", minutes: 22, attempts: 0, status: "bad" })).toBe("pill");
+    expect(leadWaitPlace({ kind: "wait", days: 3, action: "none", status: "neutral" })).toBeNull();
   });
 });

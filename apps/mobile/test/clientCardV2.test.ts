@@ -10,6 +10,7 @@ import {
   clientStateOf,
   clientTileKeys,
   clientToBill,
+  jobFigures,
   type NowVisit,
 } from "../src/features/client/nextStep";
 
@@ -20,20 +21,38 @@ const inv = (id: string, o: Partial<Invoice> = {}): Invoice => ({ id, customerId
 const visit = (id: string, o: Partial<NowVisit> = {}): NowVisit => ({ id, jobId: "j1", start: "2026-11-20T16:30:00Z", durationMin: 240, step: "scheduled", techId: "u1", ...o });
 const none = { jobs: [] as Job[], visits: [] as NowVisit[], invoices: [] as Invoice[], estimates: [] as Estimate[], leads: [], today: "2026-11-20" };
 
-describe("sections: five instead of eleven", () => {
-  it("the office: Обзор · Работы · Деньги · Объекты · Журнал; no money yet — no «Деньги»", () => {
-    expect(clientSectionKeys("director", true)).toEqual(["overview", "work", "money", "places", "log"]);
-    expect(clientSectionKeys("dispatcher", false)).toEqual(["overview", "work", "places", "log"]);
+describe("sections: one strip «Обзор · Работы · Сметы · Счета · Объекты · Журнал» (visual v2, #2350)", () => {
+  it("the office: Обзор · Работы · Сметы · Счета · Объекты · Журнал; no money yet — no «Счета»", () => {
+    expect(clientSectionKeys("director", true)).toEqual(["overview", "work", "estimates", "money", "places", "log"]);
+    expect(clientSectionKeys("dispatcher", false)).toEqual(["overview", "work", "estimates", "places", "log"]);
   });
-  it("the tech never sees «Деньги»", () => expect(clientSectionKeys("tech", true)).not.toContain("money"));
+  it("one place: no «Объекты» — the address is the header's panel and «Маршрут» (nothing twice)", () => {
+    expect(clientSectionKeys("director", true, false)).toEqual(["overview", "work", "estimates", "money", "log"]);
+    expect(clientSectionKeys("tech", false, false)).toEqual(["overview", "work", "log"]);
+  });
+  it("the tech never sees «Счета» nor «Сметы»", () => {
+    expect(clientSectionKeys("tech", true)).not.toContain("money");
+    expect(clientSectionKeys("tech", true)).not.toContain("estimates");
+  });
   it("an old address opens the section that holds it now", () => {
-    expect(clientSectionOf("estimates")).toBe("work");
+    expect(clientSectionOf("estimates")).toBe("estimates");
+    expect(clientSectionOf("jobs")).toBe("work");
     expect(clientSectionOf("invoices")).toBe("money");
     expect(clientSectionOf("properties")).toBe("places");
     expect(clientSectionOf("notes")).toBe("log");
     expect(clientSectionOf("people")).toBe("overview");
     expect(clientSectionOf(undefined)).toBe("overview");
   });
+});
+
+describe("the «Сейчас» card's three figures (visual v2: Смета · Оплачено · Остаток)", () => {
+  it("the contract, what is paid on it, what is left — the void invoices left out", () => {
+    const j = job("j1", { amountCents: 342_000 });
+    const paid = inv("dep", { totalCents: 34_200, paidCents: 34_200 });
+    const voided = inv("v", { totalCents: 99_000, paidCents: 99_000, status: "void" } as Partial<Invoice>);
+    expect(jobFigures(j, [paid, voided, inv("other", { jobId: "j2", paidCents: 50_000 })])).toEqual({ contract: 342_000, paid: 34_200, remaining: 307_800 });
+  });
+  it("a job without a sum has no figures", () => expect(jobFigures(job("j1", { amountCents: 0 }), [])).toBeNull());
 });
 
 describe("«Ещё выставить»", () => {

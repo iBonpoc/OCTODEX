@@ -15,7 +15,8 @@ import type { CancelReason, ID, Visit } from "@/data/types";
 import { CANCEL_REASONS } from "@/data/types";
 import { tFor } from "@/i18n/translate";
 import { useI18n, type DictKey } from "@/i18n";
-import { assigneesOf, atMinute, canPlan, visitWhen, wholeDay, canReschedule, dayVisits, formHours, formWarnings, freeSlots, jobRollsBack, leadRollsBack, quickStarts, SCHEDULE_DEFAULTS } from "@/features/schedule";
+import { assigneesOf, atMinute, canPlan, visitWhen, wholeDay, canReschedule, dayVisits, formHours, formWarnings, freeSlots, jobRollsBack, leadRollsBack, SCHEDULE_DEFAULTS } from "@/features/schedule";
+import { nearestWindows } from "@/features/visitWindows";
 import { arrivalWindow, businessHoursOf, clientDate, companyTime, companyTz, scheduleSettingsOf } from "@/features/scheduleSettings";
 import { AssignSheet } from "@/features/sheets";
 import { dayOffsetOf } from "@/features/DatePick";
@@ -24,7 +25,7 @@ import { SelectField } from "@/ui/selectField";
 import { addDays, isoDayKey, todayKey, type DayKey } from "@/features/calendar";
 import { formDayOffset } from "@/features/planFeed";
 import { minuteIn } from "@/features/zone";
-import { Button, IconButton, Stepper, TextField } from "@/ui/controls";
+import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
 import { OptionRows } from "@/ui/optionRow";
 import { ToggleRow } from "@/ui/toggleRow";
 import { T } from "@/ui/primitives";
@@ -122,25 +123,14 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
         testID="vf-date"
         label={t("sch.date")}
         value={f.day}
-        // «Перенести» has its own quick dates with a time (quickStarts below) — one row of quick choices, not two
-        quick={!f.exceptId}
+        // the quick choices are the free windows below (#2208) — one row of quick choices, not two
+        quick={false}
         // the same day again keeps the chosen time; another day takes its own first free one
         onChange={(k) => { if (k && k !== f.day) { f.setDayOffset(dayOffsetOf(k)); f.setMinute(null); } }}
       />
-      {f.exceptId ? (
-        // moving a visit: quick dates on the company's calendar and clock (13 §3.6)
-        <RowView style={{ flexWrap: "wrap" }}>
-          {quickStarts(todayKey(), minuteIn(new Date().toISOString())).map((q) => (
-            <Button
-              key={q.key}
-              label={t(`job3.q.${q.key}` as DictKey, { time: time(atMinute(q.day, q.minute)) })}
-              size="sm"
-              variant="secondary"
-              onPress={() => { f.setDayOffset(dayOffsetOf(q.day)); f.setMinute(q.minute); }}
-            />
-          ))}
-        </RowView>
-      ) : null}
+      {/* #2208 «ближайшие свободные окна»: the chosen people's nearest free windows (freeSlots — the one busy rule), one row of chips
+          that scrolls sideways; a tap takes the window's day and its first start. «Перенести» had quick dates here — one row, not two */}
+      {f.allDay ? null : <FreeWindows f={f} />}
       <Field label={t("sch.tech")}>
         {/* sales books, the office assigns (the server refuses sales: public.assign_visit) */}
         {!planner ? <T v="body" tone="mut">{t("vf.dispatcherAssigns")}</T> : <T v="caption" tone="mut">{t("vf.techsHint")}</T>}
@@ -212,6 +202,36 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
       {/* what the client is told (§7.1 п. 8): the window from the start, company time zone (П4a) */}
       <T v="caption" tone="mut">{f.allDay ? t("job5.clientDay") : clientSees(f.value.start, db, t)}</T>
     </View>
+  );
+}
+
+/** #2208: the nearest free windows from the form's day on (test/visitWindows.test.ts) — chips «Сегодня · 10:00 AM–1:00 PM» */
+function FreeWindows({ f }: { f: ReturnType<typeof useVisitForm> }) {
+  const { db } = useStore();
+  const { t, time, dayOf } = useI18n();
+  const sch = scheduleSettingsOf(db.company);
+  const bh = businessHoursOf(db.company);
+  const from = f.dayOffset > 0 ? f.day : todayKey();
+  const list = nearestWindows(db, f.techIds, from, f.duration, { hoursOf: (d) => formHours(bh, sch.stepMin, d), exceptId: f.exceptId, max: 6 });
+  if (!list.length) return null;
+  const today = todayKey();
+  const label = (d: DayKey) => (d === today ? t("plan5.today") : d === addDays(today, 1) ? t("plan5.tomorrow") : dayOf(d));
+  const key = (d: DayKey, m: number) => `${d}|${m}`;
+  return (
+    <Field label={t("w2a.windows")}>
+      <ChoiceChips<string>
+        layout="strip"
+        testID="vf-windows"
+        items={list.map((w) => ({ key: key(w.day, w.from), label: `${label(w.day)} · ${time(atMinute(w.day, w.from))}–${time(atMinute(w.day, w.to))}` }))}
+        value={key(f.day, f.startMin)}
+        onChange={(k) => {
+          const w = list.find((x) => key(x.day, x.from) === k);
+          if (!w) return;
+          f.setDayOffset(dayOffsetOf(w.day));
+          f.setMinute(w.from);
+        }}
+      />
+    </Field>
   );
 }
 

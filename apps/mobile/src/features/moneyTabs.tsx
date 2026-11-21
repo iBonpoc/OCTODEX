@@ -1,6 +1,7 @@
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
+import { useDevice } from "@/theme/ThemeProvider";
 import { StatGrid, StatTile } from "@/ui/statTile";
 import type { IconKey } from "@/ui/primitives";
 import type { CreateAction } from "@/ui/templates";
@@ -63,6 +64,7 @@ const LABEL = { waiting: "proto.money.tile.waiting", overdue: "proto.money.tile.
 export function MoneyTiles({ selected, onSelect }: { selected?: MoneyTile; onSelect?: (k: MoneyTile | undefined) => void }) {
   const { db, role } = useStore();
   const { t, moneyWhole } = useI18n();
+  const { device } = useDevice();
   if (!canSeeInvoiceList(role)) return null;
   const s = moneySummary(db);
   const open = (k: MoneyTile) => {
@@ -72,7 +74,8 @@ export function MoneyTiles({ selected, onSelect }: { selected?: MoneyTile; onSel
     router.push("/estimates");
   };
   return (
-    <StatGrid testID="money-tiles">
+    // 1280: the four in one row (2 × 2 there stretched each tile over half the screen)
+    <StatGrid testID="money-tiles" cols={device === "desktop" ? 4 : 2}>
       {MONEY_TILES.map((k) => (
         <StatTile
           key={k}

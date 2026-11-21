@@ -118,6 +118,16 @@ describe.each(names)("%s solid glass (DS §6.4, #1467: the tab bar's fallback pa
   });
 });
 
+describe.each(names)("%s toast plate (DS Б8, v2 #2214)", (name) => {
+  const c = themes[name];
+  it("the plate is opaque; its words ≥ 7:1, «Вернуть» ≥ 4.5:1, the plate stands out from the screen ≥ 1.5:1", () => {
+    expect(parse(c.toast)[3]).toBe(1);
+    expect(ratio(parse(c.onToast), parse(c.toast))).toBeGreaterThanOrEqual(7);
+    expect(ratio(parse(c.toastAction), parse(c.toast))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(parse(c.toast), parse(c.bg))).toBeGreaterThanOrEqual(1.5);
+  });
+});
+
 describe.each(names)("%s drawing canvas (founder О3: storeys by colour + «эт N», ≥ 3:1 to the canvas)", (name) => {
   const c = themes[name];
   const canvas = { bg: parse(c.bg), card: over(c.surf, c.bg) };

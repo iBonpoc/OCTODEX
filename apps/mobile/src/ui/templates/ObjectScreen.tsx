@@ -11,7 +11,7 @@
  */
 import { useMemo, useState, type ReactNode } from "react";
 import { View } from "react-native";
-import { space } from "@octo/design-tokens";
+import { layout as screenLayout, space } from "@octo/design-tokens";
 import { IconRow, type IconRowItem } from "../iconRow";
 import { MainStep, type MainStepTotal } from "../mainStep";
 import { ObjectHeader, objectHeadSub, type ObjectHeaderProps } from "../objectHeader";
@@ -28,6 +28,11 @@ export interface ObjectScreenProps<S extends string> {
   actions?: IconRowItem[];
   /** THE main step — under the header and its quick actions, a 40 button by its words (no pinned plate on an object) */
   main?: MainAction;
+  /**
+   * visual v2 «Клиент» (#2350, the lead №21: «кнопка следующего шага — в карточке „Сейчас“ вверху»): the object's «Сейчас» card under
+   * the quick actions, before the sections — the screen puts its main step INSIDE it (then `main` is not given: never two steps)
+   */
+  now?: ReactNode;
   /** a second step — always in «⋯» on an object (the main one stands alone) */
   second?: MainAction;
   /** not drawn on an object since the pinned bar is gone (put the sum into the label: «Выставить · $3,078») — kept so «⋯» knows it */
@@ -82,9 +87,13 @@ function useObjectParts<S extends string>(p: ObjectScreenProps<S>) {
       <ObjectHeader {...p.header} inHead open={open} onToggle={setOpen} />
       {p.actions?.length ? (
         <HeaderFade>
-          <IconRow testID={`${p.testID}-actions`} actions={p.actions} />
+          {/* 820/1280: the five 44s stay a phone's row on the left — never spread across 1180 with holes between them (audit 2.1) */}
+          <View style={{ maxWidth: screenLayout.formMax }}>
+            <IconRow testID={`${p.testID}-actions`} actions={p.actions} />
+          </View>
         </HeaderFade>
       ) : null}
+      {p.now ?? null}
       {step}
     </View>
   );

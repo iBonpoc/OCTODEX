@@ -10,10 +10,10 @@
  */
 import { useState, type ReactNode } from "react";
 import { View } from "react-native";
-import { space } from "@octo/design-tokens";
+import { component, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { useDevice } from "@/theme/ThemeProvider";
-import { ChoiceChips, TextField } from "../controls";
+import { ChoiceChips, Segmented, TextField } from "../controls";
 import { GroupedList, GroupRow, ListGroup, type GroupRowProps } from "../groupedList";
 import { Screen } from "../surfaces";
 import { CreateButton, HeaderIcons, MoreButton, TemplateFrame } from "./parts";
@@ -30,6 +30,9 @@ export interface ListScreenProps<T> {
   /** `open` — the field always stands open under the title, focused on entry (the Search screen); then no search icon in the header */
   search: { placeholder: string; value: string; onChange: (s: string) => void; open?: boolean };
   chips?: { items: { key: string; label: string }[]; value: string; onChange: (k: string) => void };
+  /** visual v2: the parts of a tab («Сметы · Счета · Оплаты» of «Деньги») — a Segmented 36 across the width, not a chips strip;
+   *  for a few parts that always fit (≤ 3) — a long list of filters stays chips */
+  chipsAs?: "segment";
   /** the filter bar (FilterBar) under the chips */
   filters?: ReactNode;
   groups: { key: string; title?: string; rows: T[]; all?: { label: string; onPress: () => void } }[];
@@ -58,7 +61,17 @@ export function ListScreen<T>(p: ListScreenProps<T>) {
   const title = p.count === undefined ? p.title : `${p.title} · ${p.count}`;
   const searchIcon: IconAction = { icon: "search", a11y: t("tpl.searchIn", { x: p.title }), onPress: () => setOpened((o) => !o || p.search.value !== ""), testID: `${p.testID}-search` };
   const icons = always ? (p.headerIcons ?? []) : [searchIcon, ...(p.headerIcons ?? [])];
-  const chips = layout.under.includes("chips") && p.chips ? <ChoiceChips layout="strip" testID={`${p.testID}-chips`} items={p.chips.items} value={p.chips.value} onChange={p.chips.onChange} /> : null;
+  const chips =
+    layout.under.includes("chips") && p.chips ? (
+      p.chipsAs === "segment" ? (
+        // not wider than a form column on 820/1280 (three words stretched over 1176 read as one)
+        <View style={{ maxWidth: component.sheetFormMax, width: "100%" }}>
+          <Segmented full equal testID={`${p.testID}-chips`} items={p.chips.items} value={p.chips.value} onChange={p.chips.onChange} />
+        </View>
+      ) : (
+        <ChoiceChips layout="strip" testID={`${p.testID}-chips`} items={p.chips.items} value={p.chips.value} onChange={p.chips.onChange} />
+      )
+    ) : null;
   const field = layout.under.includes("searchField") ? (
     <TextField testID={`${p.testID}-search-field`} type="search" icon="search" value={p.search.value} onChangeText={p.search.onChange} placeholder={p.search.placeholder} label={p.search.placeholder} autoFocus={opened || always} />
   ) : null;

@@ -141,9 +141,10 @@ export function LeadOverview({ l }: { l: Lead }) {
 
       <ListGroup title={t("lead.sec.contact")} all={canEditPeople ? { label: t("lead.addPerson"), onPress: () => setPeopleOpen(true), testID: "lead-add-person" } : undefined} testID="lead-contact">
         <GroupRow
-          lead={{ initials: ini(l.name) }}
-          title={l.name}
-          subtitle={[phonesOf(main), ways, l.customerId ? t("lead.peopleOfClient") : ""].filter(Boolean).join(" · ") || undefined}
+          // the name is the header's: the row starts with how to reach him (#2350 «ничего не повторять», audit 2.4)
+          lead={{ icon: "phone" }}
+          title={phonesOf(main) || l.name}
+          subtitle={[ways, l.customerId ? t("lead.peopleOfClient") : ""].filter(Boolean).join(" · ") || undefined}
           onPress={() => (canEditPeople ? setPeopleOpen(true) : setEdit("contact"))}
           testID="lead-person-main"
         />

@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
 import { PanResponder, Platform, View, type LayoutChangeEvent } from "react-native";
 import Svg, { Path } from "react-native-svg";
+import { SignatureInk } from "./SignatureInkView";
+import { undoStroke } from "./signatureInk";
 import { radius, space, component } from "@octo/design-tokens";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -57,6 +59,11 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
     dRef.current = "";
     setD("");
   };
+  // #2215: «Отменить штрих» — the last stroke goes, the rest stays as drawn
+  const undo = () => {
+    dRef.current = undoStroke(dRef.current);
+    setD(dRef.current);
+  };
   const confirm = <Button label={confirmLabel ?? t("visit.confirmSign")} icon="check" full={device === "phone"} onPress={() => onConfirm(normalizeSignature(d, w, h))} disabled={ro || disabled || d.length < 20} />;
   return (
     <View style={{ gap: space[2] }}>
@@ -89,7 +96,7 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
           </View>
         ) : null}
         <Svg width="100%" height="100%" pointerEvents="none">
-          <Path d={d} stroke={c.ink} strokeWidth={component.signStroke} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          <SignatureInk d={d} color={c.ink} />
         </Svg>
       </View>
       {consent ? (
@@ -99,6 +106,8 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
       ) : null}
       <RowView>
         {device === "phone" && !ro ? <IconButton icon="expand" label={t("fix.sign.expand")} onPress={() => setFull(true)} /> : null}
+        {/* shown once there is a stroke to take back */}
+        {ro || !d ? null : <IconButton icon="undo" label={t("sig.undoStroke")} onPress={undo} testID="signature-undo" />}
         <View testID="signature-clear">
           <Button label={t("visit.clear")} variant="secondary" onPress={clear} disabled={!d} />
         </View>
@@ -133,6 +142,7 @@ export function SignaturePreview({ svg, label }: { svg: string; label: string })
     >
       {/* the saved path lives in the 400 × 160 box (signaturePath.ts): drawn in that box, left-aligned, never cut */}
       <Svg width="100%" height="100%" viewBox={`0 0 ${SIG_BOX.w} ${SIG_BOX.h}`} preserveAspectRatio="xMinYMid meet" pointerEvents="none">
+        {/* drawn exactly as saved, like the PDF (a client's signature is legally meaningful): the smooth pen is only the pad's picture (#2215) */}
         <Path d={fitSignature(svg)} stroke={c.ink} strokeWidth={component.signStroke} fill="none" strokeLinecap="round" strokeLinejoin="round" />
       </Svg>
     </View>

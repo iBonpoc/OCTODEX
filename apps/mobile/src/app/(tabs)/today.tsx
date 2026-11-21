@@ -4,12 +4,14 @@ import { router } from "expo-router";
 import { size, space } from "@octo/design-tokens";
 import { visitDueCents } from "@/features/visitDue";
 import { lateAfterOf } from "@/features/scheduleSettings";
-import { isAssigned, isOpenVisit, visitWhen } from "@/features/schedule";
+import { isAssigned, isOpenVisit, visitEnd, visitWhen } from "@/features/schedule";
 import { useStore } from "@/data/store";
 import { usePersistentState } from "@/data/persist";
 import { awaitingCounts, funnelShare, periodNumbers, prevReceivedCents, receivedBuckets, receivedIndex, receivedSoFar, type Bucket, type Period, type ReceivedIndex } from "@/features/metrics";
 import { todayKey } from "@/features/calendar";
 import { formatDayKey, getZone, minuteIn } from "@/features/zone";
+import { problemSummary, quietStatuses } from "@/features/planSlots";
+import { timeLead } from "@/features/planFeed";
 import { Columns } from "@/ui/charts";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -95,7 +97,7 @@ const CREW_MAX = 6;
  */
 export default function Today() {
   useTick();
-  const { t, time, moneyWhole, tn } = useI18n();
+  const { t, time, moneyWhole, tn, duration } = useI18n();
   const { db, role, rejectedOps, mode } = useStore();
   const greeting = useGreeting();
   const header = useHomeHeader();
@@ -119,7 +121,9 @@ export default function Today() {
 
   // «Дальше»: the next visit of the day; the running ones are in «Сегодня у бригад»
   const day = todayVisits(db);
-  const { current, next } = crewNow(day.filter(isOpenVisit));
+  // a visit nobody started whose window is over is «Пропущен» (a row of «Сегодня у бригад»), never «Дальше» with «В пути»
+  const nowMs = Date.now();
+  const { current, next } = crewNow(day.filter((x) => isOpenVisit(x) && !(x.step === "scheduled" && Date.parse(visitEnd(x)) <= nowMs)));
   const v: Visit | undefined = next ?? current;
   const enRoute = useEnRoute(v);
   const nextCard = ((): Omit<NowCardProps, "testID"> => {
@@ -143,42 +147,77 @@ export default function Today() {
     const running = v.step !== "scheduled";
     const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, v));
     const mine = isAssigned(v, db.me);
+    const first = (v.assigneeIds ?? (v.techId ? [v.techId] : [])).map((id) => db.members.find((m) => m.id === id)?.name?.split(/\s+/)[0]).find(Boolean);
+    const tel = customer?.phone?.replace(/[^\d+]/g, "");
     return {
       kicker: t(running ? "proto.home.now" : "proto.home.next", { time: when }),
       when: running ? undefined : startsIn(v.start, Date.now(), t),
       status: running || !startsIn(v.start, Date.now(), t) ? { status: st.status, label: t(st.label) } : undefined,
       title: customer?.name ?? db.leads.find((l) => l.id === v.leadId)?.name ?? "—",
-      sub: [job?.title, techs || t("proto.home.noTech")].filter(Boolean).join(" · "),
-      address: addr ? { text: addr, a11y: t("proto.home.route", { addr }), onPress: () => void Linking.openURL(mapsUrl(addr, Platform.OS)).catch(() => {}) } : undefined,
-      // my own visit not started — «В пути» (the same step as on the visit); a crew's or a running one — open it
+      // visual v2 «Дальше»: «работа · адрес» in one quiet line; the route is the dark button of the pair, not a link
+      sub: [job?.title, addr].filter(Boolean).join(" · "),
+      // «тройка цифр»: how long on site, the checklist, who
+      trio: [
+        { value: v.allDay ? t("plan5.allDay") : duration(v.durationMin), label: t("w2a.onSite") },
+        { value: t("w2a.ofN", { a: v.checklist.filter((x) => x.done).length, b: v.checklist.length }), label: t("w2a.checklist") },
+        { value: first ?? "—", label: t("w2a.tech") },
+      ],
+      // my own visit not started — «В пути» (the same step as on the visit); a crew's or a running one — open it. No hint under the
+      // pair (audit 12 §2.8: it repeated what the card says)
       main:
         !running && mine
-          ? { label: t("proto.visit.enRoute"), reason: t("proto.visit.enRouteWhy"), onPress: enRoute.go, testID: "home-main-en-route" }
-          : { label: t("todayR.openVisit"), reason: techs && !mine ? t("todayR.tech", { name: techs }) : undefined, onPress: () => router.push(`/visit/${v.id}`), testID: "home-main-open" },
+          ? { label: t("proto.visit.enRoute"), onPress: enRoute.go, testID: "home-main-en-route" }
+          : { label: t("todayR.openVisit"), onPress: () => router.push(`/visit/${v.id}`), testID: "home-main-open" },
+      // the pair is the driver's: «В пути» · «Маршрут» · «☎» on my own visit; a crew's one only opens (a long word wraps the pair)
+      second: addr && !running && mine ? { label: t("proto.visit.route"), icon: "route", onPress: () => void Linking.openURL(mapsUrl(addr, Platform.OS)).catch(() => {}), testID: "home-route" } : undefined,
+      icon: tel && !running && mine ? { icon: "phone", a11y: `${t("proto.visit.call")} ${customer?.name ?? ""}`, onPress: () => void Linking.openURL(`tel:${tel}`).catch(() => {}), testID: "home-call" } : undefined,
     };
   })();
 
-  // «Сегодня у бригад»: the day by time — the hour and the client, «работа · мастер», the visit's status; no tech → «Назначить»
-  const crewRows = day.slice(0, CREW_MAX).map((x) => {
+  // «Сегодня у бригад»: the day by time — the hour column (v2 «время и интервал»), the client, «работа · мастер»; a problem (late,
+  // missed, no tech) is a pill on its FIRST row only, the others say it as a quiet word, one summary row over them (audit 12 §2.3)
+  const crew = day.slice(0, CREW_MAX);
+  const crewSt = crew.map((x) => {
+    const free = !(x.assigneeIds ?? (x.techId ? [x.techId] : [])).some((id) => db.members.some((m) => m.id === id));
+    if (free) return { status: "warn" as const, label: t("proto.home.noTech"), kind: null };
+    const st = visitStatus(x, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, x));
+    const kind = st.label === "st.missed" ? ("missed" as const) : st.label === "late.enRoute" || st.label === "late.notLeft" ? ("late" as const) : null;
+    // «Запланирован» says nothing more than its hour
+    return x.step === "scheduled" && st.status === "neutral" ? undefined : { status: st.status, label: t(st.label), kind };
+  });
+  const crewShown = quietStatuses(crewSt.map((s) => s?.status));
+  const sum = problemSummary(crewSt.map((s) => s?.kind));
+  const crewRows = crew.map((x, i) => {
     const { customer, job } = visitContext(db, x);
     const name = customer?.name ?? db.leads.find((l) => l.id === x.leadId)?.name ?? "—";
     const techs = (x.assigneeIds ?? (x.techId ? [x.techId] : [])).map((id) => db.members.find((m) => m.id === id)?.name?.split(/\s+/)[0]).filter(Boolean).join(", ");
-    const st = visitStatus(x, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, x));
+    const s = crewSt[i];
     const free = !techs;
+    const hm = timeLead(time(x.start));
     return (
       <GroupRow
         key={x.id}
         testID="crew-row"
-        // the name first and whole; the hour leads the line under it (a 56 row has no time column — request to поток А)
+        lead={x.allDay ? { icon: "calendar" } : { time: hm.top, sub: hm.bottom || undefined }}
         title={name}
-        subtitle={[x.allDay ? t("plan5.allDay") : time(x.start), job?.title ?? t("st.inspection"), techs].filter(Boolean).join(" · ")}
-        // a scheduled visit says nothing more than its hour: a pill only for what changed (in work, late, done); «Без мастера» once
-        status={free ? { status: "warn", label: t("proto.home.noTech") } : x.step === "scheduled" && st.status === "neutral" ? undefined : { status: st.status, label: t(st.label) }}
+        // the quiet word first: the end of a long line is cut
+        subtitle={[s && crewShown[i] === "word" ? s.label : null, job?.title ?? t("st.inspection"), techs].filter(Boolean).join(" · ")}
+        status={s && crewShown[i] === "pill" ? { status: s.status, label: s.label } : undefined}
         actions={free ? [{ icon: "user", a11y: t("proto.home.assign", { name }), onPress: () => setAssign(x.id), testID: "crew-assign" }] : []}
         onPress={() => router.push(`/visit/${x.id}`)}
       />
     );
   });
+  const crewSummary = sum ? (
+    <GroupRow
+      key="summary"
+      testID="crew-summary"
+      compact
+      lead={{ icon: "alert" }}
+      title={[sum.late ? tn("w2a.lateN", sum.late) : null, sum.missed ? tn("w2a.missedN", sum.missed) : null].filter(Boolean).join(" · ")}
+      onPress={() => router.push("/plan")}
+    />
+  ) : null;
 
   return (
     <OverviewScreen
@@ -191,14 +230,16 @@ export default function Today() {
       next={nextCard}
       attention={{ title: t("todayR.action"), rows: att.rows, all: { label: t("todayR.all"), onPress: () => router.push("/triage") } }}
     >
+      {/* the tiles: what burns; one «⚠» on the grid — the debt overdue (audit 12 §2.3: three were noise), the rest say it in their line */}
       {/* the tiles: what burns and the money of today; each opens exactly the records it counts (founder 05.11); a zero tile is not drawn */}
       <StatGrid testID="today-tiles">
-        <StatTile testID="tile-leads" icon="inbox" label={t("proto.home.tile.leads")} value={leadsWaiting.length} sub={longest ? t("proto.home.tile.leadsWarn", { m: longest }) : undefined} warn={longest ? t("proto.home.tile.leadsWarn", { m: longest }) : undefined} onPress={() => router.push("/leads")} />
-        <StatTile testID="tile-estimates" icon="doc" label={t("proto.home.tile.estimates")} value={estWaiting} sub={estLate ? t("proto.home.tile.estLate", { n: estLate }) : undefined} warn={estLate ? t("proto.home.tile.estLate", { n: estLate }) : undefined} onPress={() => router.push("/estimates")} />
+        <StatTile testID="tile-leads" icon="inbox" label={t("proto.home.tile.leads")} value={leadsWaiting.length} sub={longest ? t("proto.home.tile.leadsWarn", { m: longest }) : undefined} onPress={() => router.push("/leads")} />
+        <StatTile testID="tile-estimates" icon="doc" label={t("proto.home.tile.estimates")} value={estWaiting} sub={estLate ? t("proto.home.tile.estLate", { n: estLate }) : undefined} onPress={() => router.push("/estimates")} />
         <StatTile testID="tile-owed" icon="invoice" label={t("proto.home.tile.owed")} value={moneyWhole(n.awaitingCents)} sub={aw.overdue ? t("proto.home.tile.overdue", { n: tn("todayR.invN", aw.overdue) }) : undefined} warn={aw.overdue ? t("proto.home.tile.overdue", { n: tn("todayR.invN", aw.overdue) }) : undefined} onPress={() => router.push("/invoice?f=owed")} />
         <StatTile testID="tile-received" icon="wallet" label={t("proto.home.tile.received")} value={moneyWhole(got.cents)} onPress={() => router.push("/figures/received?period=today")} />
       </StatGrid>
       <ListGroup title={t("proto.home.crews")} all={{ label: t("plan.title"), onPress: () => router.push("/plan"), testID: "crew-plan" }} testID="today-crews">
+        {crewSummary}
         {crewRows}
       </ListGroup>
       {/* the chart and the funnel are details (П9): folded by default, the choice is kept */}

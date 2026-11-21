@@ -6,9 +6,9 @@ import type { Customer } from "@/data/types";
 import { canImportClients } from "@/features/client/importRun";
 import { clientHistory, clientMoneyOf, clientNextVisit, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, visibleClients } from "@/features/clients";
 import { canSeeClientDups, clientDuplicates } from "@/features/clientDuplicates";
-import { groupByLetter } from "@/features/clientGroups";
+import { clientListGroups } from "@/features/clientGroups";
 import { dayOffsetOf, isoDayKey } from "@/features/calendar";
-import { telHref } from "@/features/contactLinks";
+import { smsHref, telHref } from "@/features/contactLinks";
 import { pickerOptions } from "@/features/statusMoves";
 import { useI18n } from "@/i18n";
 import { ClientOverview, useAgo, useClientFacts } from "@/features/client/ClientSections";
@@ -30,7 +30,8 @@ const initials = (n: string) => n.split(/\s+/).filter(Boolean).map((p) => p[0]).
 /**
  * Клиенты — шаблон «Список» (prototype v2, wireframes-v2 «Клиенты», BUILD-SPEC §2.3, LAYOUT-RULES §3): the title with the count,
  * search as an icon of the header, filters one strip (statuses and tags), rows 56 grouped by letter: initials, the name, one line
- * «когда · что», on the right the debt with «! N дн» or the status. A swipe right calls, left archives with «Отменить»; the same
+ * «когда · что», on the right the debt with «! N дн» or the status; one card of rows under 50 clients, the letters from 50. A swipe
+ * right calls, left shows «SMS» and «В архив» (with «Отменить»); the same
  * two on a long press and to VoiceOver (the web has no swipe). «＋» — a new client; «⋯» — import from CSV (the office's).
  */
 export default function Clients() {
@@ -77,8 +78,8 @@ export default function Clients() {
     .filter(pass(tab))
     .filter((c) => matchClient(db, c, q))
     .sort((a, b) => a.name.localeCompare(b.name));
-  // #2014: an empty name goes to «#», never brings the list down
-  const groups = groupByLetter(list).map(([letter, rows]) => ({ key: letter, title: letter, rows }));
+  // one card of rows 56 under 50 clients, the letters from 50 (wireframes-v2; #2014: an empty name goes to «#», never brings the list down)
+  const groups = clientListGroups(list);
   // 1280: the client opens beside the list (ListScreen `aside`, ListPanel — «Сейчас» and the client's Обзор); 390/820 — his screen
   const panel = useListPanel(list.map((c) => c.id), (id) => `/client/${id}`, (id) => clients.some((c) => c.id === id));
   const openC = panel.openId ? clients.find((c) => c.id === panel.openId) : undefined;
@@ -104,8 +105,13 @@ export default function Clients() {
           : undefined;
     const tel = telHref(c.phone);
     const toArchive = office && pickerOptions("customer", st).find((o) => o.status === "archived" && o.enabled && o.how !== "form");
-    const swipeLeft: SwipeAction[] = tel ? [{ key: "call", label: t("swipe.call"), icon: "phone", onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c.phone ?? "" }) }] : [];
-    const swipeRight: SwipeAction[] = toArchive ? [{ key: "archive", label: t("swipe.archive"), icon: "box", tone: "bad", onPress: () => archive(c) }] : [];
+    const sms = smsHref(c.phone);
+    // a swipe right — «Позвонить»; left — «SMS» and «В архив» (#2350 «смахивание: позвонить / SMS»); the same on a long press and to VoiceOver
+    const swipeLeft: SwipeAction[] = tel ? [{ key: "call", label: t("swipe.call"), icon: "phone", testID: `client-row-swipe-call-${c.id}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c.phone ?? "" }) }] : [];
+    const swipeRight: SwipeAction[] = [
+      ...(sms ? [{ key: "sms", label: t("cc.sms"), icon: "sms" as const, testID: `client-row-swipe-sms-${c.id}`, onPress: () => openContact({ kind: "sms", icon: "sms", url: sms, value: c.phone ?? "" }) }] : []),
+      ...(toArchive ? [{ key: "archive", label: t("swipe.archive"), icon: "box" as const, tone: "bad" as const, testID: `client-row-swipe-archive-${c.id}`, onPress: () => archive(c) }] : []),
+    ];
     const status = overdue
       ? { status: "bad" as const, label: t("proto.client.lateDays", { d: overdue.days }) }
       : st !== "active"

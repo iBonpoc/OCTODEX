@@ -158,6 +158,8 @@ describe("app tokens mirror the founder's DS css", () => {
       for (const k of ["surf3", "hl", "tint", "tint2", "off", "dash", "tab"] as const) expect(norm(c[k]), k).toBe(norm(v(k, t)));
       expect(norm(c.onAccTint)).toBe(norm(v("on-acc-tint", t)));
       expect(norm(c.onAccMut)).toBe(norm(v("on-acc-mut", t)));
+      // DS Б8 (v2, #2214): the toast plate, its words and its «Вернуть»
+      expect([norm(c.toast), norm(c.onToast), norm(c.toastAction)]).toEqual([norm(v("toast", t)), norm(v("on-toast", t)), norm(v("toast-action", t))]);
       expect(radius.card).toBe(px("r"));
       expect([c.blur, c.blurOverlay]).toEqual([px("blur"), px("blurov")]);
     });

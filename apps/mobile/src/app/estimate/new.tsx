@@ -865,11 +865,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
             <RowView>
               {customer ? <Avatar initials={initials(customer.name)} /> : <Icon name="user" />}
               <View style={{ flex: 1 }}>
-                <T v="body" w="semibold">
+                <T v="body" w="semibold" numberOfLines={1}>
                   {customer?.name ?? t("ue.pickClient")}
                 </T>
                 {property ? (
-                  <T v="caption" tone="mut">
+                  <T v="caption" tone="mut" numberOfLines={1}>
                     {property.address}, {property.city}
                   </T>
                 ) : null}
@@ -1207,7 +1207,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               {totals.depositOverCaLimit ? <CaWarn limitCents={totals.caDepositLimit} testID="est-ca-warn-sheet" /> : null}
             </>
           ) : null}
-          <Button label={t("common.gotIt")} icon="check" full onPress={() => setSetting(null)} />
+          {/* the sheet only closes: quiet — the screen's one yellow is «Готово» of the bar (oneAccent) */}
+          <Button label={t("common.gotIt")} icon="check" variant="secondary" full onPress={() => setSetting(null)} />
         </View>
       </Sheet>
       <Sheet visible={askRestart} onClose={() => setAskRestart(false)} title={t("est.draft.ask")}>

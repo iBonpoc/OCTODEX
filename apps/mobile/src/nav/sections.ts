@@ -64,7 +64,8 @@ export const SECTIONS: readonly Section[] = [
   { id: "jobs", label: "nav.jobs", icon: "wrench", group: "work" },
   { id: "clients", label: "nav.clients", icon: "users", group: "work", tab: true },
   // redesign #2348: «Деньги» — estimates, invoices, payments behind one tab (a segment switches them)
-  { id: "finance", label: "nav.money", icon: "invoice", group: "docs", tab: true, phoneOnly: true },
+  // the tech has no «Деньги» tab (audit 12 §2.6): the company's money is the office's; his own estimates are a tile of «Ещё»
+  { id: "finance", label: "nav.money", icon: "invoice", group: "docs", tab: true, phoneOnly: true, roles: OFFICE },
   // prototype v2: search is an icon in the header (HeaderIcons, /search stays), not a tab
   // «Звонки» is not a tab until the company has its own number (founder 06.11, variant Б; 13 v2 §2.1)
   { id: "calls", label: "nav.calls", icon: "phone", group: "work" },
@@ -127,11 +128,11 @@ const isTab = (s: Section, modTab: boolean) => !!s.tab && !(modTab && s.id === M
 export const TAB_ORDER: readonly SectionId[] = ["home", "plan", "clients", "finance", "leads"];
 const tabRank = (id: SectionId) => TAB_ORDER.indexOf(id);
 
-/** The 5 bottom tabs: the same set for every role (13 §2.1) — what is inside is filtered by rights. With a module's tab
+/** The 5 bottom tabs: the same set for the office (13 §2.1); the tech has no «Деньги» (audit 12 §2.6) — what is inside is filtered by rights. With a module's tab
  *  (`modTab`) «План» is not a tab: the module's tab takes its place (TabBar puts it there), «План» is in «Ещё».
  *  A subcontractor (`sub`) never gets leads (noSub): 4 tabs. */
-export const tabs = (_role: Role, modTab = false, sub = false): Section[] =>
-  SECTIONS.filter((s) => isTab(s, modTab) && !(sub && s.noSub)).sort((a, b) => tabRank(a.id) - tabRank(b.id));
+export const tabs = (role: Role, modTab = false, sub = false): Section[] =>
+  SECTIONS.filter((s) => isTab(s, modTab) && !(sub && s.noSub) && (!s.roles || s.roles.includes(role))).sort((a, b) => tabRank(a.id) - tabRank(b.id));
 
 /** the money sections behind the one «Деньги» tab (its segment switches them) */
 const FINANCE: ReadonlySet<SectionId> = new Set<SectionId>(["finance", "estimates", "invoices", "payments", "money"]);

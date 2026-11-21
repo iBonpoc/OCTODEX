@@ -24,11 +24,16 @@ export default function Estimates() {
       title={t("nav.money")}
       search={{ placeholder: t("card.filter.searchEstimates"), value: q, onChange: setQ }}
       chips={chips}
+      chipsAs="segment"
       filters={<MoneyTiles />}
       create={create}
       onCreate={onCreate}
       groups={groups}
-      row={row}
+      // visual v2 «цифры справа»: «Сумма $3,420» in the column of the group (FigureRow)
+      row={(e) => {
+        const r = row(e);
+        return r.value ? { ...r, cols: [{ label: t("w2m.col.sum"), value: r.value }] } : r;
+      }}
       empty={<Empty icon="invoice" title={t("board.noEstimates")} />}
     />
   );

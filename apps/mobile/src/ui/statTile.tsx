@@ -16,7 +16,7 @@ import { Icon, Press, T, type IconKey } from "./primitives";
 import { statColumns, statRows, statSaid, statShown } from "./statTileLogic";
 
 /** how many tiles the grid puts in a row (2 — the big tile, 3 — the small one) */
-const ColsCtx = createContext<2 | 3>(2);
+const ColsCtx = createContext<2 | 3 | 4>(2);
 
 export function StatTile({ label, value, unit, sub, icon, accent, warn, selected, onPress, a11y, testID }: {
   /** the word (always there — a figure never stands alone) */
@@ -120,7 +120,8 @@ export function StatTile({ label, value, unit, sub, icon, accent, warn, selected
  * The grid of tiles (`rhythm.cardGap` 8 apart): two in a row (the big tile) or `cols={3}` (the small one); zero tiles are already
  * gone, the rest fill the rows; one column with a big font.
  */
-export function StatGrid({ children, cols: want = 2, testID }: { children: ReactNode; cols?: 2 | 3; testID?: string }) {
+/** `cols={4}` — the tiles of 2 × 2 in one row of a desktop width (1280: no tile wider than a third of the screen) */
+export function StatGrid({ children, cols: want = 2, testID }: { children: ReactNode; cols?: 2 | 3 | 4; testID?: string }) {
   const { fontScale } = useWindowDimensions();
   const cols = statColumns(fontScale) === 1 ? 1 : want;
   // a zero tile draws nothing: it takes no place in the grid either

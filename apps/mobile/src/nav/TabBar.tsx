@@ -11,7 +11,8 @@ import { Sheet } from "@/ui/overlays";
 import { Button } from "@/ui/controls";
 import { useNavInsets } from "@/ui/surfaces";
 import { useKeyboardHeight } from "@/ui/keyboard";
-import { appStackRoutes, formsAbove, showsTabBar, tabLeave } from "./tabBarRule";
+import { QueueLine } from "@/ui/queueLine";
+import { appStackRoutes, formsAbove, litSection, showsTabBar, tabLeave, tabRouteKey, tabUnder } from "./tabBarRule";
 import { setNavState } from "./go";
 import { useTabBarHidden } from "./tabBarHide";
 import { useAuth } from "@/cloud/auth";
@@ -39,7 +40,8 @@ export function TabBar() {
   // goTo (a plain function, no hooks) reads the stack from here: the shell always renders the bar, at every width
   setNavState(root);
   const [ask, setAsk] = useState<Href | null>(null);
-  const own = activeSection(pathname, params, store.db, store.role);
+  // the lit tab is the one the card was opened from (audit 12 §1); a search lights none (tabBarRule litSection)
+  const own = litSection(tabRouteKey(segments.join("/")), activeSection(pathname, params, store.db, store.role), tabUnder(root));
   // prototype v2: the money lists light «Деньги», a lead lights «Лиды»; a section of «Ещё» (the avatar) lights no tab;
   // with a module's tab «План» is not a tab (#1487): the Plan opened from «Ещё» lights none
   const sec = tabOf(own, store.role, moduleTabs(store.db.company, store.role).length > 0, meIsSub(store.db));
@@ -130,6 +132,8 @@ function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: Secti
         </Svg>
         <View style={{ flex: 1, backgroundColor: c.tab }} />
       </View>
+      {/* #2214: «Ждёт отправки · N» — a thin line of the bar itself, over the tabs, only while something waits or there is no network */}
+      <QueueLine docked />
       <View key={`${role}-${wide}`} testID="tab-bar" role="tablist" style={{ flexDirection: "row", alignItems: "stretch", height: size.tabbarH, marginBottom: nav.tabBottom }}>
         {items.map((it) => {
           const sel = it.id === current;

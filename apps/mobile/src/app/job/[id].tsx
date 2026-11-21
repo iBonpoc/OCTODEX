@@ -35,7 +35,7 @@ import { useToast } from "@/ui/overlays";
 import { visitStatus } from "@/features/visits";
 import { Button, IconButton, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { Empty, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, Empty, Screen, SectionTitle } from "@/ui/surfaces";
 import { fabItems } from "@/nav/sections";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { FilterBar } from "@/ui/filterBar";
@@ -50,6 +50,9 @@ import { invoiceTitle } from "@/features/invoiceTitle";
 import { signedText } from "@/i18n/translate";
 import { jobCancelRefusal } from "@/features/jobCancel";
 import { CancelJobSheet, CancelledJobBody } from "@/features/job/CancelJob";
+import { jobFigures } from "@/features/client/nextStep";
+import { jobHeadParts } from "@/features/job/headName";
+import { NowCard } from "@/ui/nowCard";
 
 /** the job's sections, in the strip under the header (BUILD-SPEC §2.5) */
 type Section = "overview" | "visits" | "estimates" | "invoices" | "expenses" | "orders" | "photos" | "notes";
@@ -66,10 +69,12 @@ const SECTION_LABEL: Record<Section, DictKey> = {
 
 /**
  * Работа — the «Объект» template (BUILD-SPEC §2.5, object-cards.html «Работа», wireframes-v2 №6).
- * Screen's job: what is with the job and its next step. ObjectHeader (the job's name; «status · contract» — the sum to the office
- * only; «Клиент ›» and the address › that opens the platform's maps) → QuickActions row «Позвонить · SMS · Маршрут · Фото» →
- * the sections strip → the open section. ONE main step pinned at the bottom by the state table (§2.5); the technician on his own
- * visit gets «В пути» as the second of the pair; rare and dangerous — «⋯», what is made from the job — «＋».
+ * Screen's job: what is with the job and its next step — the same object system as the client (visual v2 «Объект», #2350):
+ * the one header «Bathroom remodel | ◷ Запланирована» («Клиент ›» only when «‹» does not already name him) → QuickActions row
+ * «Позвонить · SMS · Маршрут · Фото» → the «Сейчас» card: the next visit and who, the address small (→ «Маршрут»), the three
+ * figures «Смета · Оплачено · Остаток» (the office) and the ONE main step inside by the state table (§2.5; the technician on his
+ * own visit gets «В пути» beside it) → the sections strip → the open section. Nothing twice: the sum lives in the figures only, the
+ * address in the card only. Rare and dangerous — «⋯», what is made from the job — «＋».
  */
 export default function JobScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -211,7 +216,7 @@ export default function JobScreen() {
           second: servable ? { label: t("job3.done.more"), onPress: schedule, testID: "job-next-more" } : undefined,
         }
       : restShown
-        ? { main: { label: t("proto.job.rest", { amount: money(rest) }), onPress: invoiceRest, reason: t("job6.why.rest"), testID: "job-next-rest" } }
+        ? { main: { label: t("w2b.job.rest"), onPress: invoiceRest, reason: t("job6.why.rest"), testID: "job-next-rest" } }
         : next && mine
           ? {
               main: { label: t("job3.main.start"), onPress: () => openVisit(next.id), reason: t("proto.job.nextVisit", { when: nextWhen, who: nextWho }), testID: "job-next-start" },
@@ -220,7 +225,7 @@ export default function JobScreen() {
           : next
             ? { main: { label: t("proto.job.openVisit"), onPress: () => openVisit(next.id), reason: t("proto.job.nextVisit", { when: nextWhen, who: nextWho }), testID: "job-next-open" } }
             : payTo
-              ? { main: { label: payCents > 0 ? t("proto.job.pay", { amount: money(payCents) }) : t("job3.main.pay"), onPress: () => router.push(payTo as never), testID: "job-next-pay" } }
+              ? { main: { label: t("job3.main.pay"), onPress: () => router.push(payTo as never), reason: payCents > 0 ? `${t("job3.dueNow")} ${money(payCents)}` : undefined, testID: "job-next-pay" } }
               : canSchedule && !visits.length
                 ? { main: { label: t("proto.job.schedule"), onPress: schedule, reason: t("job3.noVisit"), testID: "job-next-schedule" } }
                 : office && j.status !== "done" && j.status !== "unscheduled"
@@ -268,6 +273,40 @@ export default function JobScreen() {
     { icon: "camera" as const, label: t("proto.job.photo"), a11y: `${t("proto.job.photo")}: ${j.title}`, onPress: () => open("photos"), testID: "job-photo" },
   ];
 
+  const { name: headName, rest: headRest } = jobHeadParts(j.title);
+
+  /* ---------- «Сейчас»: the next visit, the address small, the figures, the one step inside (v2 «Объект») ---------- */
+  const figs = showMoney ? jobFigures(j, invoices) : null;
+  const e0 = estimates[0];
+  const nowCard = (
+    <NowCard
+      testID="job-now"
+      kicker={next ? t("w2b.job.next") : t("proto.client.now")}
+      status={{ status: st.status, label: t(st.label) }}
+      title={
+        next
+          ? `${nextWhen} · ${nextWho}`
+          : step?.main.testID === "job-next-pay" && openInvoice
+            ? t("w2b.client.payWhy", { n: openInvoice.number || invoiceTitle(openInvoice, t) })
+            : (step?.main.reason ?? (addr || t("proto.client.nowNothing")))
+      }
+      sub={next || step?.main.reason ? addr || undefined : undefined}
+      onPress={next ? () => openVisit(next.id) : undefined}
+      trio={
+        figs
+          ? [
+              { value: money(figs.contract), label: t(e0 ? "proto.client.stEstimate" : "w2b.job.contract") },
+              { value: money(figs.paid), label: t("cl6.money.paid") },
+              { value: money(figs.remaining), label: t("w2b.client.left") },
+            ]
+          : undefined
+      }
+      // the card's title already says when and who (or why): the step goes without its reason
+      main={step ? { ...step.main, reason: undefined } : undefined}
+      second={step?.second}
+    />
+  );
+
   /* ---------- sections ---------- */
   // AccessNote (BUILD-SPEC §1): the first line of the overview; the tech sees the code on the visit day and the day before
   const accessText = p?.accessNotes?.trim();
@@ -283,7 +322,7 @@ export default function JobScreen() {
       {/* «Позиции · N» — the job's own lines (the technician reads them, changes nothing — server: app.is_staff) */}
       <JobLinesBlock job={j} />
       {/* связанное: what the header does not name already (смета, задаток, расход, заказ) */}
-      <RelatedBlock of={{ type: "job", id: j.id }} hide={["customer", "property"]} />
+      <RelatedBlock of={{ type: "job", id: j.id }} hide={["customer", "property", "estimate", "invoice"]} />
       <ListGroup testID="job-facts" inset={space[4]}>
         <GroupRow compact testID="job-team" title={t("job3.team")} subtitle={team || t("job3.noTeam")} />
         {showMoney && j.amountCents > 0 ? (
@@ -302,8 +341,13 @@ export default function JobScreen() {
           <T v="body">{j.description}</T>
         </View>
       ) : null}
-      <JobTypeTags job={j} canEdit={canEditJobLines(store.role)} />
-      <ServiceCategoryRow value={j.serviceCategoryId} onChange={(cid) => toast.show(t("dir.changed"), store.setJobCategory(j.id, cid))} />
+      {/* «Тип работы · Метки · Направление» — one card, not two loose rows and a third in a card (audit 2.4) */}
+      <View testID="job-kind">
+        <Card>
+          <JobTypeTags job={j} canEdit={canEditJobLines(store.role)} />
+          <ServiceCategoryRow bare value={j.serviceCategoryId} onChange={(cid) => toast.show(t("dir.changed"), store.setJobCategory(j.id, cid))} />
+        </Card>
+      </View>
     </>
   );
 
@@ -531,17 +575,16 @@ export default function JobScreen() {
         back={back}
         header={{
           testID: "job-head",
-          title: j.title,
-          status: { name: st.status, label: t(st.label) },
-          // the contract sum — the office only (object-cards «Работа»)
-          amount: showMoney && j.amountCents > 0 ? money(j.amountCents) : undefined,
+          // v2 «Bathroom remodel | vanity, toilet, tile»: the name before «:» is the big title, the rest the line right of the rule;
+          // the status stands in the «Сейчас» card (a long word is never cut at the screen's edge, #2350)
+          title: headName,
+          meta: headRest ? [{ id: "rest", label: headRest }] : undefined,
+          // the sum is the «Сейчас» card's figures, the address its small line (nothing twice, #2350)
           link: c ? { label: c.name, onPress: () => router.push(`/client/${c.id}`) } : undefined,
-          address: addr ? { text: addr, onPress: route } : undefined,
           labels: { expand: t("proto.job.expand"), collapse: t("proto.job.collapse"), more: (n) => t("proto.job.moreN", { n }) },
         }}
         actions={actions}
-        main={step?.main}
-        second={step?.second}
+        now={nowCard}
         sections={ordered.map((k) => ({ key: k, label: t(SECTION_LABEL[k]), count: counts[k] || undefined }))}
         section={current}
         onSection={open}
