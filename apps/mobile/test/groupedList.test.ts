@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { rowActions, rowSaid } from "../src/ui/groupedListLogic";
+import { outerPressRole, rowActions, rowSaid } from "../src/ui/groupedListLogic";
 
 const a = (key: string) => ({ key, label: key, icon: "check" as const, onPress: () => undefined });
 const src = (f: string) => readFileSync(join(__dirname, "..", "src", "ui", f), "utf8");
@@ -24,6 +24,19 @@ describe("GroupedList / GroupRow 56 (BUILD-SPEC §1)", () => {
     expect(s).toMatch(/<SwipeRow\b/);
     expect(s).toMatch(/accessibilityActions=/);
     expect(s).toMatch(/onLongPress=/);
+  });
+  it("no button inside a button (web «<button> cannot contain a nested <button>», wave 3): the row's actions stand beside its Press", () => {
+    const s = src("groupedList.tsx");
+    const press = s.slice(s.indexOf("const tap ="), s.indexOf("const row ="));
+    expect(press).toMatch(/<Press\b/);
+    expect(press).not.toMatch(/IconButton/);
+    expect(s.slice(s.indexOf("const row ="))).toMatch(/\{tap\}[\s\S]*IconButton/);
+    // a card that must hold its buttons (ListCard) is a group on the web, a button on a phone
+    expect(outerPressRole("web", true)).toBe("group");
+    expect(outerPressRole("ios", true)).toBe("button");
+    expect(outerPressRole("android", true)).toBe("button");
+    expect(outerPressRole("web", false)).toBe("button");
+    expect(src("listCard.tsx")).not.toMatch(/accessibilityRole=\{p\.onPress \? "button"/);
   });
 });
 

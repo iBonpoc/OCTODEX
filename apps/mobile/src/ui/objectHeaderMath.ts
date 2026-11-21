@@ -68,3 +68,17 @@ export function expandEndsOpen(open: boolean, travel: number, velocity: number, 
   const where = Math.abs(velocity) >= r.slow ? shown + velocity * r.project : shown;
   return where > panelH * r.settle;
 }
+
+/**
+ * The panel's look at a given `shown` (LAYOUT-RULES §8 п.5 — only `transform` and `opacity`, never the height): the panel stands in
+ * the flow at its full measured height (the content below takes its place at once — no height animation) inside a clip, and comes
+ * out from under the header: `translateY` −panelH … 0 and `opacity` 0 … 1 as `shown` goes 0 … panelH. Reduce Motion — no shift,
+ * only the fade (§8 п.8). Not measured yet (`panelH` 0) — nothing seen, no shift.
+ */
+export function panelMotion(shown: number, panelH: number, reduce: boolean): { translateY: number; opacity: number } {
+  "worklet";
+  if (panelH <= 0) return { translateY: 0, opacity: 0 };
+  const p = Math.min(1, Math.max(0, shown / panelH));
+  return { translateY: reduce ? 0 : -(1 - p) * panelH, opacity: p };
+}
+

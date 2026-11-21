@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { component } from "@octo/design-tokens";
-import { ATTENTION_MAX, SECOND_KEY, asksFirst, attentionRows, mainCount, moreItems, shownGroups, templateLayout, type TemplateKind } from "../src/ui/templates/templateRules";
+import { ATTENTION_MAX, SECOND_KEY, asksFirst, attentionRows, filledAccents, mainCount, moreItems, shownGroups, templateLayout, type TemplateKind } from "../src/ui/templates/templateRules";
 import type { MainAction } from "../src/ui/templates/types";
 
 const main: MainAction = { label: "Send invoice", onPress: () => {}, testID: "m" };
@@ -25,13 +25,22 @@ describe("screen templates: one main button (BUILD-PLAN §1 Г)", () => {
     expect(mainCount(templateLayout("calendar", { main }))).toBe(0);
     expect(mainCount(templateLayout("object", {}))).toBe(0);
   });
-  it("a second step is never a second main one: it stands beside it or goes into «⋯»", () => {
-    const pair = templateLayout("object", { main, second });
-    expect(pair.bottom).toEqual(["second", "main"]);
-    const long = templateLayout("object", { main, second: longSecond });
-    expect(long.bottom).toEqual(["main"]);
+  it("a second step is never a second main one: in an editor it stands beside it or goes into «⋯»; on an object always «⋯»", () => {
+    expect(templateLayout("editor", { main, second }).bottom).toEqual(["second", "main"]);
+    expect(templateLayout("editor", { main, second: longSecond }).bottom).toEqual(["main"]);
+    expect(templateLayout("editor", { main: { ...main, reason: "No signature" }, second }).bottom).toEqual(["main"]);
     expect(moreItems([], longSecond).map((i) => i.key)).toEqual([SECOND_KEY]);
     expect(moreItems([], second)).toEqual([]);
+    expect(moreItems([], second, undefined, false, "No signature").map((i) => i.key)).toEqual([SECOND_KEY]);
+    expect(moreItems([], second, undefined, true).map((i) => i.key)).toEqual([SECOND_KEY]);
+    expect(templateLayout("object", { main, second }).under).not.toContain("second");
+  });
+  it("one FILLED accent on a screen (founder 21.11, #2350): an outlined main one is none", () => {
+    for (const kind of KINDS) {
+      const l = templateLayout(kind, { back: true, create: true, more: true, main, second, sections: true, attention: true });
+      expect(filledAccents(l, main), kind).toBeLessThanOrEqual(1);
+      expect(filledAccents(l, { ...main, outline: true }), kind).toBe(0);
+    }
   });
 });
 
@@ -42,21 +51,17 @@ describe("ObjectScreen layout", () => {
     expect(l.top.at(-1)).toBe("more");
     expect(l.top.indexOf("create")).toBeLessThan(l.top.indexOf("more"));
   });
-  it("the sections strip right under the header and its actions", () => {
-    expect(l.under).toEqual(["header", "actions", "sections"]);
-  });
-  it("the main step pinned at the bottom (MainStep bar), not in the content", () => {
-    expect(l.bottom).toEqual(["main"]);
+  it("the main step right under the header and its actions, then the sections strip; NO pinned plate (LAYOUT-RULES П3, #2350)", () => {
+    expect(l.under).toEqual(["header", "actions", "main", "sections"]);
+    expect(l.bottom).toEqual([]);
     expect(l.body).not.toContain("main");
+    for (const noBar of [false, true]) expect(templateLayout("object", { main, total: { label: "Total" }, noBar }).bottom).toEqual([]);
   });
-  it("without the pinned bar (820/1280) the same one step stands at the top of the content", () => {
-    const wide = templateLayout("object", { back: true, more: true, main, sections: true, noBar: true });
-    expect(wide.bottom).toEqual([]);
-    expect(wide.body[0]).toBe("main");
-    expect(mainCount(wide)).toBe(1);
+  it("no main step — nothing under the actions", () => {
+    expect(templateLayout("object", { sections: true }).under).toEqual(["header", "actions", "sections"]);
   });
-  it("«Итого ˅» stands on the left of the main one", () => {
-    expect(templateLayout("object", { main, total: { label: "Total" } }).bottom).toEqual(["total", "main"]);
+  it("an editor: «Итого ˅» on the left of the main one in the compact bar", () => {
+    expect(templateLayout("editor", { main, total: { label: "Total" } }).bottom).toEqual(["total", "main"]);
   });
 });
 

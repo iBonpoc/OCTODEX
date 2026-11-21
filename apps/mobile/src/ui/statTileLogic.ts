@@ -21,3 +21,8 @@ export function statRows<T>(items: T[], cols: number): T[][] {
   for (let i = 0; i < items.length; i += cols) rows.push(items.slice(i, i + cols));
   return rows;
 }
+
+/** what a screen reader hears for a tile: «label: value[, sub][, warn]» — the sub line and the «!» reason are said, not only drawn */
+export function statSaid(label: string, value: number | string, sub?: string, warn?: string): string {
+  return [`${label}: ${value}`, sub, warn].filter(Boolean).join(", ");
+}

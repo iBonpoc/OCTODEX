@@ -1,7 +1,9 @@
 /** ObjectHeader's motion (rule 27а): compact on scroll, swipe to open/shut — limits, no jump, release rule. */
 import { describe, expect, it } from "vitest";
 import { component, size } from "@octo/design-tokens";
-import { compactProgress, expandEndsOpen, expandShown, expandSwipeStart, followFrom, isCompact } from "../src/ui/objectHeaderMath";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { compactProgress, expandEndsOpen, expandShown, expandSwipeStart, followFrom, isCompact, panelMotion } from "../src/ui/objectHeaderMath";
 
 const at = component.objectHeader.collapseAt;
 const span = size.hitMin;
@@ -93,5 +95,45 @@ describe("swipe on the header: let go", () => {
     expect(expandEndsOpen(false, 0, 0, 0, rule)).toBe(false);
     expect(expandEndsOpen(true, -20, 0, 0, rule)).toBe(false);
     expect(expandEndsOpen(true, 0, 0, 0, rule)).toBe(true);
+  });
+});
+
+describe("the panel moves by transform and opacity only (LAYOUT-RULES §8 п.5, wave 3)", () => {
+  it("shut — out of sight above, a hair of shown — almost there, open — in place and opaque", () => {
+    expect(panelMotion(0, H, false)).toEqual({ translateY: -H, opacity: 0 });
+    expect(panelMotion(H, H, false)).toEqual({ translateY: -0, opacity: 1 });
+    const half = panelMotion(H / 2, H, false);
+    expect(half.translateY).toBeCloseTo(-H / 2);
+    expect(half.opacity).toBeCloseTo(0.5);
+  });
+  it("follows the finger with no jump: monotonic, the bottom edge is where `shown` says", () => {
+    let prevY = -Infinity;
+    let prevO = -Infinity;
+    for (let shown = 0; shown <= H; shown += 7) {
+      const m = panelMotion(shown, H, false);
+      expect(m.translateY).toBeGreaterThanOrEqual(prevY);
+      expect(m.opacity).toBeGreaterThanOrEqual(prevO);
+      // the panel's bottom edge (its height + the shift) is exactly how much of it is seen
+      expect(H + m.translateY).toBeCloseTo(shown);
+      prevY = m.translateY;
+      prevO = m.opacity;
+    }
+  });
+  it("stays within its limits past either end (a fast flick, a bounce)", () => {
+    expect(panelMotion(-50, H, false)).toEqual({ translateY: -H, opacity: 0 });
+    expect(panelMotion(H + 80, H, false)).toEqual({ translateY: -0, opacity: 1 });
+  });
+  it("Reduce Motion — no shift, only the fade", () => {
+    for (const shown of [0, H / 3, H]) expect(panelMotion(shown, H, true).translateY).toBe(0);
+    expect(panelMotion(H / 4, H, true).opacity).toBeCloseTo(0.25);
+  });
+  it("not measured yet — nothing seen, no shift (no flash of a 0-high panel)", () => {
+    expect(panelMotion(0, 0, false)).toEqual({ translateY: 0, opacity: 0 });
+    expect(panelMotion(40, 0, true)).toEqual({ translateY: 0, opacity: 0 });
+  });
+  it("the header animates no height: the panel's style is transform + opacity", () => {
+    const s = readFileSync(join(__dirname, "..", "src", "ui", "objectHeader.tsx"), "utf8");
+    expect(s).not.toMatch(/height:\s*shown\.value/);
+    expect(s).toMatch(/transform: \[\{ translateY: m\.translateY \}\]/);
   });
 });

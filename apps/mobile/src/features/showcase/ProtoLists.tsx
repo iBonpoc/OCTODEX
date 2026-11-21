@@ -5,7 +5,7 @@
  */
 import { useMemo, useState } from "react";
 import { View } from "react-native";
-import { space, type StatusName } from "@octo/design-tokens";
+import { component, space, type StatusName } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { todayKey, addDays, type DayKey } from "@/features/calendar";
 import type { DayLoad } from "@/features/planFeed";
@@ -32,6 +32,7 @@ export function ProtoLists() {
   const [date, setDate] = useState<DayKey>(todayKey());
   const [chip, setChip] = useState("all");
   const [tile, setTile] = useState("overdue");
+  const [taskDone, setTaskDone] = useState(false);
   const loads = useMemo(() => new Map<DayKey, DayLoad>([[todayKey(), { n: 3, unassigned: 1 } as DayLoad], [addDays(todayKey(), 2), { n: 1, unassigned: 0 } as DayLoad]]), []);
   const said = (label: string) => () => toast.show(label, NO_UNDO);
   return (
@@ -64,6 +65,11 @@ export function ProtoLists() {
         <StatTile label={t("visit.amountDue")} value="$9,800" pastel="butter" selected={tile === "due"} onPress={() => setTile("due")} testID="showcase-tile-due" />
         <StatTile label={t("st.paid")} value="$22,300" pastel="mint" selected={tile === "paid"} onPress={() => setTile("paid")} testID="showcase-tile-paid" />
         <StatTile label={t("st.draft")} value={0} pastel="lav" testID="showcase-tile-zero" />
+      </StatGrid>
+      {/* wave 3 (г): the line under the figure («Выезды 1 · 0 закрыто») */}
+      <StatGrid testID="showcase-stat-grid-sub">
+        <StatTile label={t("ds.proto.visits")} value={1} sub={t("ds.proto.closedN", { n: 0 })} pastel="lav" testID="showcase-tile-sub" />
+        <StatTile label={t("st.paid")} value="$1,240" sub="Nov 12" pastel="mint" testID="showcase-tile-sub-paid" />
       </StatGrid>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
         <StatusPill status="ok" label={t("st.paid")} />
@@ -103,6 +109,11 @@ export function ProtoLists() {
             ]}
           />
           <GroupRow compact title={DEMO[2]!.name} subtitle={DEMO[2]!.line} lead={{ icon: "calendar" }} onPress={said(DEMO[2]!.name)} testID="showcase-row-compact" />
+        </ListGroup>
+        {/* the hour column (as in the Plan) and a task's DoneCircle — the circle is the row's neighbour, not inside its press */}
+        <ListGroup title={t("ds.proto.rowLeads")} inset={component.listRow.timeW + space[4] + space[3]}>
+          <GroupRow title={DEMO[0]!.name} subtitle={DEMO[0]!.line} lead={{ time: "8:30", sub: "AM" }} onPress={said(DEMO[0]!.name)} testID="showcase-row-time" />
+          <GroupRow title={t("ds.proto.taskCall")} subtitle={DEMO[1]!.name} lead={{ done: taskDone, onToggle: setTaskDone, label: t("ds.proto.taskCall"), testID: "showcase-row-done-circle" }} onPress={said(t("ds.proto.taskCall"))} testID="showcase-row-done" />
         </ListGroup>
       </GroupedList>
     </View>

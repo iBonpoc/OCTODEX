@@ -9,7 +9,8 @@ import { View } from "react-native";
 import { component, radius, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { Button, IconButton } from "../controls";
+import { Avatar, Button, IconButton } from "../controls";
+import { HeaderIcon } from "../headerIcon";
 import { Menu, Sheet, type MenuItem } from "../overlays";
 import { Icon, Press, T } from "../primitives";
 import { RowView } from "../surfaces";
@@ -94,7 +95,7 @@ export function HeaderIcons({ icons }: { icons: IconAction[] }) {
   return (
     <>
       {icons.map((a) => (
-        <IconButton key={a.testID} testID={a.testID} icon={a.icon} label={a.a11y} onPress={a.onPress} bare />
+        <HeaderIcon key={a.testID} action={a} />
       ))}
     </>
   );
@@ -108,6 +109,7 @@ export function HeaderIcons({ icons }: { icons: IconAction[] }) {
 export function TemplateFrame({
   title,
   titleHidden,
+  lead,
   back,
   right,
   under,
@@ -117,6 +119,8 @@ export function TemplateFrame({
 }: {
   title: string;
   titleHidden?: boolean;
+  /** the Overview's Greeting: stands where the title would (left of the icons) */
+  lead?: ReactNode;
   back?: () => void;
   right?: ReactNode;
   under?: ReactNode;
@@ -139,6 +143,8 @@ export function TemplateFrame({
                 </T>
               </RowView>
             </Press>
+          ) : lead ? (
+            <View style={{ flex: 1, minWidth: 0 }}>{lead}</View>
           ) : (
             <T v="title" numberOfLines={1} style={{ flexShrink: 1 }}>
               {title}
@@ -157,6 +163,34 @@ export function TemplateFrame({
         {children}
       </View>
       {bottom}
+    </View>
+  );
+}
+
+/**
+ * Greeting — the head of an Overview (BUILD-SPEC §1 «Greeting»): the avatar 36 on the left (opens the «Ещё» sheet), «Доброе утро, Алекс»
+ * 17 semibold in one line and the date 13 `mut` under it — instead of a 30 title, so the header icons on the right never wrap on 390.
+ * testIDs: `<testID>`, `<testID>-avatar`.
+ */
+export function Greeting({ initials, text, date, onAvatar, avatarLabel, testID }: { initials: string; text: string; date: string; onAvatar?: () => void; avatarLabel: string; testID: string }) {
+  const avatar = <Avatar initials={initials} s={component.avatar.md} />;
+  return (
+    <View testID={testID} style={{ flexDirection: "row", alignItems: "center", gap: space[3], minWidth: 0 }}>
+      {onAvatar ? (
+        <Press testID={`${testID}-avatar`} onPress={onAvatar} visibleHeight={component.avatar.md} accessibilityRole="button" accessibilityLabel={avatarLabel}>
+          {avatar}
+        </Press>
+      ) : (
+        avatar
+      )}
+      <View style={{ flex: 1, minWidth: 0 }} role="heading" aria-level={1}>
+        <T v="heading" fit>
+          {text}
+        </T>
+        <T v="caption" tone="mut" numberOfLines={1}>
+          {date}
+        </T>
+      </View>
     </View>
   );
 }

@@ -30,6 +30,7 @@ export function T({
   tabular,
   center,
   capped,
+  fit,
 }: {
   v?: TextVariant;
   w?: Weight;
@@ -41,6 +42,8 @@ export function T({
   center?: boolean;
   /** a label in a fixed shape (StatusPill, QuickActions, a day pill, tab labels): Dynamic Type grows it at most `font.labelMaxScale` (BUILD-SPEC §0) */
   capped?: boolean;
+  /** one line that shrinks to fit (down to `font.fitMinScale`) before it is cut: a screen's title (iOS / Android; the web cuts with «…») */
+  fit?: boolean;
 }) {
   const { c } = useTheme();
   const color =
@@ -49,7 +52,9 @@ export function T({
   const lh = v === "display" || v === "title" ? font.lineHeight.tight : font.lineHeight.body;
   return (
     <Text
-      numberOfLines={numberOfLines}
+      numberOfLines={fit ? 1 : numberOfLines}
+      adjustsFontSizeToFit={fit || undefined}
+      minimumFontScale={fit ? font.fitMinScale : undefined}
       maxFontSizeMultiplier={capped ? font.labelMaxScale : undefined}
       style={[
         {

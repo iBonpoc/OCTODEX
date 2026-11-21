@@ -9,7 +9,7 @@ import { MetaLine } from "./metaLine";
 import { ButtonPair } from "./pairs";
 import { Press, T } from "./primitives";
 import { IconRow, type IconRowItem } from "./iconRow";
-import { compactProgress, expandEndsOpen, expandShown, expandSwipeStart, followFrom, isCompact, type ExpandRule } from "./objectHeaderMath";
+import { compactProgress, expandEndsOpen, expandShown, expandSwipeStart, followFrom, isCompact, panelMotion, type ExpandRule } from "./objectHeaderMath";
 
 /** a tag of the meta line («VIP», «Regular»): drawn as `MetaTag`, the ones that do not fit go into «+N» (MetaLine) */
 export type MetaPart = { id: string; label: string };
@@ -64,7 +64,8 @@ const releaseRule: ExpandRule = {
  * The object's header (BUILD-SPEC §1 ObjectHeader, client-card.html): who it is and what is with it now.
  * Shut (by default, ≤ `objectHeader.maxH` 104 without the status bar): initials 36 · the name 22 semibold, under it MetaLine
  * «StatusPill · tags · sum», on the right «⌄» (zone 44); the address line 13 `accText` «›» with QuickActions `inline` on the right.
- * Open (by «⌄» or a swipe down on the header): the panel `surf` comes out under it (`durBase`, `easeOut`; Reduce Motion — at once)
+ * Open (by «⌄» or a swipe down on the header): the panel `surf` slides out from under it with a fade (`durBase`, `easeOut`; only
+ * transform and opacity — the content below takes the panel's place at once, no height is animated; Reduce Motion — the fade only)
  * with `details` and, at its bottom, «✎ Изменить» · «⌃ Свернуть»; the address line is hidden then. A swipe up on the header shuts it.
  * The swipe follows the finger and lets go by the sheet's rule (`objectHeaderMath.ts`, rule 27а). The compact bar «‹ Имя ⌄ ⋯» that
  * comes in on scroll is `ObjectHeaderBar` (the screen puts it in its header row). The nav row «‹ ＋ ⋯» is the Screen's.
@@ -84,17 +85,29 @@ export function ObjectHeader(p: ObjectHeaderProps) {
   };
   const id = (part: string) => `${p.testID}-${part}`;
 
-  // the panel: its natural height is measured where it lies (absolutely, under a clip); `shown` is how much of it is seen
+  // the panel: its natural height is measured where it lies (absolutely, under a clip of 0, while shut); `shown` is how far it is
+  // out. Only transform and opacity move (LAYOUT-RULES §8 п.5): open, it stands in the flow at its full height and slides out from
+  // under the header with a fade (`panelMotion`); the content below takes its place at once — no height is animated.
   const [panelH, setPanelH] = useState(0);
+  const [inFlow, setInFlow] = useState(open);
   const shown = useSharedValue(0);
   const dragging = useRef(false);
   const ease = Easing.bezier(...motion.easeOut);
+  const settle = (to: boolean) => {
+    if (to) setInFlow(true);
+    shown.value = withTiming(to ? panelH : 0, { duration: motion.durBase, easing: ease }, (done) => {
+      if (done && !to) runOnJS(setInFlow)(false);
+    });
+  };
   useEffect(() => {
     if (dragging.current) return;
-    shown.value = withTiming(open ? panelH : 0, { duration: reduce ? 0 : motion.durBase, easing: ease });
+    settle(open);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, panelH, reduce]);
-  const clip = useAnimatedStyle(() => ({ height: shown.value }));
+  }, [open, panelH]);
+  const look = useAnimatedStyle(() => {
+    const m = panelMotion(shown.value, panelH, reduce);
+    return { opacity: m.opacity, transform: [{ translateY: m.translateY }] };
+  }, [panelH, reduce]);
 
   // the swipe on the header: down opens, up shuts; the page's scroll keeps the other direction
   const touchAt = useRef<[number, number] | null>(null);
@@ -116,6 +129,7 @@ export function ObjectHeader(p: ObjectHeaderProps) {
     onActivate: (e) => {
       dragging.current = true;
       base.current = e.translationY;
+      setInFlow(true);
     },
     onUpdate: (e) => {
       shown.value = expandShown(openRef.current, followFrom(base.current, e.translationY), panelH);
@@ -125,7 +139,7 @@ export function ObjectHeader(p: ObjectHeaderProps) {
       // Gesture Handler counts pt per second, the rule pt per ms
       const next = expandEndsOpen(openRef.current, travel, e.velocityY / 1000, panelH, releaseRule);
       dragging.current = false;
-      shown.value = withTiming(next ? panelH : 0, { duration: reduce ? 0 : motion.durBase, easing: ease });
+      settle(next);
       setOpen(next);
     },
   });
@@ -187,12 +201,16 @@ export function ObjectHeader(p: ObjectHeaderProps) {
             {p.actions?.length ? <IconRow variant="inline" actions={p.actions} testID={id("actions")} /> : null}
           </View>
         ) : null}
-        <Animated.View style={[clip, { overflow: "hidden" }]} accessibilityElementsHidden={!open} importantForAccessibility={open ? "auto" : "no-hide-descendants"}>
-          <View
+        <View
+          style={inFlow ? { overflow: "hidden" } : { height: 0, overflow: "hidden" }}
+          accessibilityElementsHidden={!open}
+          importantForAccessibility={open ? "auto" : "no-hide-descendants"}
+        >
+          <Animated.View
             testID={id("panel")}
             onLayout={(e) => setPanelH(Math.ceil(e.nativeEvent.layout.height))}
             pointerEvents={open ? "auto" : "none"}
-            style={{ position: "absolute", top: 0, left: 0, right: 0 }}
+            style={[inFlow ? null : { position: "absolute", top: 0, left: 0, right: 0 }, look]}
           >
             <View style={{ backgroundColor: c.surf, borderRadius: radius.card, padding: space[4], gap: space[3] }}>
               {p.details}
@@ -201,43 +219,60 @@ export function ObjectHeader(p: ObjectHeaderProps) {
                 second={p.onEdit && p.labels.edit ? { testID: id("edit"), label: p.labels.edit, icon: "pencil", variant: "secondary", onPress: p.onEdit } : null}
               />
             </View>
-          </View>
-        </Animated.View>
+          </Animated.View>
+        </View>
       </View>
     </GestureDetector>
   );
 }
 
 /**
- * The compact header on scroll (BUILD-SPEC §1 «сжатый», client-card.html (в)): the middle of the nav row «‹ Имя ⌄ ⋯» — the name 17
- * semibold and «⌄» (the screen scrolls up and opens the header). It comes in once the page is past `objectHeader.collapseAt`
- * (`compactProgress`, over one bar's height — no jump); takes touches only when in. The line `bd` under it only then.
- * The screen puts it in its header row (Screen `back` and «⋯» stay the Screen's). testIDs: `<testID>`, `-expand`.
+ * The compact header on scroll (BUILD-SPEC §1 «сжатый», client-card.html (в)): one row 44 «‹ Имя ⌄ ⋯» — `back` «‹» on the left, the
+ * name 17 semibold and «⌄» in the middle (the screen scrolls up and opens the header), `right` (the screen's «⋯») on the right.
+ * With `scrollY` it comes in once the page is past `objectHeader.collapseAt` (`compactProgress`, over one bar's height — no jump) and
+ * takes touches only when in; without it the bar is simply in (the screen shows it where the full header has gone — ObjectScreen
+ * puts it over the stuck sections strip). The line `bd` under it only when in. testIDs: `<testID>`, `-expand`, `-back`.
  */
-export function ObjectHeaderBar({ title, scrollY, onExpand, expandLabel, testID }: { title: string; scrollY: SharedValue<number>; onExpand: () => void; expandLabel: string; testID: string }) {
+export function ObjectHeaderBar({ title, scrollY, onExpand, expandLabel, back, right, testID }: {
+  title: string;
+  /** the page's scroll: the bar fades in past `collapseAt`; none — always in */
+  scrollY?: SharedValue<number>;
+  onExpand: () => void;
+  expandLabel: string;
+  /** «‹» on the left (its label names where it goes: «Назад») */
+  back?: { label: string; onPress: () => void };
+  /** the screen's «⋯» (MoreButton) — the last on the right */
+  right?: ReactNode;
+  testID: string;
+}) {
   const { c } = useTheme();
   const at = component.objectHeader.collapseAt;
-  const [compact, setCompact] = useState(false);
+  const [compact, setCompact] = useState(!scrollY);
   useAnimatedReaction(
-    () => isCompact(scrollY.value, at),
+    () => (scrollY ? isCompact(scrollY.value, at) : true),
     (now, before) => {
       if (now !== before) runOnJS(setCompact)(now);
     },
-    [at],
+    [at, scrollY],
   );
-  const fade = useAnimatedStyle(() => ({ opacity: compactProgress(scrollY.value, at, size.hitMin) }));
+  const fade = useAnimatedStyle(() => ({ opacity: scrollY ? compactProgress(scrollY.value, at, size.hitMin) : 1 }), [scrollY]);
+  const side = back || right ? { width: size.hitMin, alignItems: "center" as const } : null;
   return (
     <Animated.View
       testID={testID}
       pointerEvents={compact ? "auto" : "none"}
       accessibilityElementsHidden={!compact}
       importantForAccessibility={compact ? "auto" : "no-hide-descendants"}
-      style={[fade, { flexDirection: "row", alignItems: "center", justifyContent: "center", minHeight: size.hitMin, gap: space[1], borderBottomWidth: compact ? component.hairline : 0, borderColor: c.bd }]}
+      style={[fade, { flexDirection: "row", alignItems: "center", minHeight: size.hitMin, gap: space[1], borderBottomWidth: compact ? component.hairline : 0, borderColor: c.bd }]}
     >
-      <T v="heading" numberOfLines={1} style={{ flexShrink: 1 }}>
-        {title}
-      </T>
-      <IconButton bare testID={`${testID}-expand`} icon="chevronDown" label={expandLabel} onPress={onExpand} />
+      {side ? <View style={side}>{back ? <IconButton bare testID={`${testID}-back`} icon="chevronLeft" label={back.label} onPress={back.onPress} /> : null}</View> : null}
+      <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space[1] }}>
+        <T v="heading" numberOfLines={1} style={{ flexShrink: 1 }}>
+          {title}
+        </T>
+        <IconButton bare testID={`${testID}-expand`} icon="chevronDown" label={expandLabel} onPress={onExpand} />
+      </View>
+      {side ? <View style={side}>{right}</View> : null}
     </Animated.View>
   );
 }

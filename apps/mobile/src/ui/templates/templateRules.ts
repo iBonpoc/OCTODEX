@@ -4,7 +4,10 @@
  * the screens' rules:
  * - one main button at most (the `MainAction` is one slot; `mainCount` of a layout is 0 or 1, never 2);
  * - «‹ назад» first in the top row on the left, «⋯» last on the right (after «＋»);
- * - the sections strip (ViewTabs) right under the object's header; the object's main step pinned at the bottom (MainStep "bar");
+ * - the sections strip (ViewTabs) right under the object's header; the object's main step right under its header and quick actions
+ *   (MainStep "top", a 40 button by its words — LAYOUT-RULES П3, the founder 21.11 #2350: no pinned plate on an object, the tab bar
+ *   stays seen); a second step of an object always goes into «⋯»; only an editor keeps a pinned bottom (one compact row);
+ * - one FILLED accent on a screen (`filledAccents`): an outlined main one (`MainAction.outline`) is not filled;
  * - a list: search is an icon of the header (first of the icons), the chips one strip under the title;
  * - a calendar: the day strip under the views.
  * A second step whose label does not fit the bar's pair goes into «⋯» (mainStepLayout); a dangerous item of «⋯» is the last one.
@@ -64,7 +67,7 @@ function topRow(kind: TemplateKind, p: LayoutInput): Slot[] {
 /** the bar: «Итого ˅» or the second one (if it fits the pair), then the main one */
 function bar(p: LayoutInput): Slot[] {
   if (!p.main) return [];
-  const { layout } = mainStepLayout({ second: p.second, total: p.total });
+  const { layout } = mainStepLayout({ second: p.second, total: p.total, reason: p.main.reason });
   return [...on(layout === "total", "total" as const), ...on(layout === "pair", "second" as const), "main"];
 }
 
@@ -80,11 +83,11 @@ export function templateLayout(kind: TemplateKind, p: LayoutInput): TemplateLayo
   if (kind === "calendar") {
     return { top, under: [...on(p.views, "views" as const), "days"], body: [...on(p.unassigned, "unassigned" as const), p.empty ? "empty" : "groups", ...on(p.undated, "undated" as const)], bottom: [] };
   }
-  const pinned = bar(p);
   if (kind === "object") {
-    // the header and its IconRow, then the sections strip right under it; the main step pinned at the bottom
-    return { top, under: ["header", "actions", ...on(p.sections, "sections" as const)], body: p.noBar ? [...pinned, "body"] : ["body"], bottom: p.noBar ? [] : pinned };
+    // the header and its IconRow, the one main step right under them (no pinned plate), then the sections strip
+    return { top, under: ["header", "actions", ...on(p.main, "main" as const), ...on(p.sections, "sections" as const)], body: ["body"], bottom: [] };
   }
+  const pinned = bar(p);
   // editor: the fields, the summary, the save step pinned at the bottom
   return { top, under: [], body: p.noBar ? ["body", ...on(p.summary, "summary" as const), ...pinned] : ["body", ...on(p.summary, "summary" as const)], bottom: p.noBar ? [] : pinned };
 }
@@ -94,6 +97,14 @@ export function mainCount(l: TemplateLayout): number {
   return [...l.top, ...l.under, ...l.body, ...l.bottom].filter((s) => s === "main").length;
 }
 
+/**
+ * How many FILLED accents (`acc` buttons) the layout draws — the rule «один залитый акцент на экран» (founder 21.11, #2350): 0 or 1.
+ * The main step is filled unless it is outlined; the selected tab / day are a choice, not a button, and are not counted.
+ */
+export function filledAccents(l: TemplateLayout, main?: { outline?: boolean } | null): number {
+  return main?.outline ? 0 : mainCount(l);
+}
+
 /** the key «⋯» gives a second step that went into it (it did not fit the bar's pair) */
 export const SECOND_KEY = "__second";
 
@@ -101,10 +112,11 @@ export const SECOND_KEY = "__second";
  * The items of «⋯»: the screen's own, plus the second step when it does not stand in the bar; a dangerous one — the last,
  * after the rest (the Menu draws a line before it). Order of the rest kept.
  */
-export function moreItems(items: MenuItem<string>[] | undefined, second?: (MainAction & { icon?: MenuItem<string>["icon"] }) | null, total?: unknown): MenuItem<string>[] {
+export function moreItems(items: MenuItem<string>[] | undefined, second?: (MainAction & { icon?: MenuItem<string>["icon"] }) | null, total?: unknown, always?: boolean, reason?: string): MenuItem<string>[] {
   const own = items ?? [];
+  // `always` — the object: its main step stands alone under the header, a second one is always in «⋯»
   const extra: MenuItem<string>[] =
-    second && mainStepLayout({ second, total }).secondInMore ? [{ key: SECOND_KEY, label: second.label, icon: second.icon, testID: second.testID }] : [];
+    second && (always || mainStepLayout({ second, total, reason }).secondInMore) ? [{ key: SECOND_KEY, label: second.label, icon: second.icon, testID: second.testID }] : [];
   const all = [...own, ...extra];
   return [...all.filter((i) => !i.destructive), ...all.filter((i) => i.destructive)];
 }

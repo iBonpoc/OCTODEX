@@ -1,7 +1,9 @@
 /**
  * Showcase section «Объект: шапка и действия» of the prototype v2 (BUILD-PLAN §1 поток Б, registered by поток А):
  * ObjectHeader (shut / open by «⌄» or a swipe), ObjectHeaderBar (the compact bar on scroll), IconRow `row` / `inline`,
- * MainStep (in the content; «вторая + главная»; «итог + кнопка»), SummaryLine, Collapsible. Names and sums — demo data.
+ * MainStep (in the content; «вторая + главная»; «итог + кнопка»; «контурная» — `main.outline`), SummaryLine, Collapsible; wave 3:
+ * the compact bar «‹ Имя ⌄ ⋯», AccessNote (code; held back + pinned), ViewSteps (the visit's steps), IconRow with two-line captions.
+ * Names and sums — demo data.
  */
 import { useState } from "react";
 import { View } from "react-native";
@@ -10,6 +12,7 @@ import { component, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { NO_UNDO } from "@/data/undo";
 import { Button } from "@/ui/controls";
+import { AccessNote } from "@/ui/accessNote";
 import { Collapsible } from "@/ui/collapsible";
 import { IconRow, type IconRowItem } from "@/ui/iconRow";
 import { MainStep } from "@/ui/mainStep";
@@ -18,6 +21,8 @@ import { useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { SummaryLine } from "@/ui/summaryLine";
 import { Card, SectionTitle } from "@/ui/surfaces";
+import { MoreButton } from "@/ui/templates/parts";
+import { ViewSteps } from "@/ui/viewTabs";
 import { ProtoTemplates } from "./ProtoTemplates";
 
 /** a demo person of the samples (not a UI word) */
@@ -51,6 +56,21 @@ export function ProtoObject() {
     act("more", "more", t("ds.proto.more")),
   ];
   const inline: IconRowItem[] = [act("in-call", "phone", t("ds.proto.call")), act("in-sms", "message", t("ds.proto.sms"))];
+  // wave 3 (и): long captions take two lines under the circle, never «…»
+  const longRow: IconRowItem[] = [
+    act("w-call", "phone", t("ds.proto.call")),
+    act("w-remind", "bell", t("ds.proto.remind")),
+    act("w-plan", "calendar", t("ds.proto.toPlan")),
+    act("w-more", "more", t("ds.proto.more")),
+  ];
+  const [step, setStep] = useState(1);
+  const steps = [
+    { key: "way", label: t("ds.proto.stWay") },
+    { key: "here", label: t("ds.proto.stHere") },
+    { key: "work", label: t("ds.proto.stWork") },
+    { key: "sign", label: t("ds.proto.stSign") },
+    { key: "pay", label: t("ds.proto.stPay") },
+  ];
   return (
     <>
     <View style={{ gap: space[6] }} testID="showcase-proto-object">
@@ -76,10 +96,27 @@ export function ProtoObject() {
         <View style={{ gap: space[2] }}>
           <T v="heading">{t("ds.proto.compact")}</T>
           <ObjectHeaderBar testID="showcase-object-bar" title={NAME} scrollY={scrollY} onExpand={flip} expandLabel={t("ds.proto.expand")} />
+          <T v="caption" tone="mut">{t("ds.proto.compactBar")}</T>
+          <ObjectHeaderBar
+            testID="showcase-object-bar-full"
+            title={NAME}
+            back={{ label: t("common.back"), onPress: said(t("common.back")) }}
+            right={<MoreButton items={[{ key: "archive", label: t("ds.tpl.archive"), icon: "inbox" }]} onMore={(k) => said(k)()} testID="showcase-object-bar-more" />}
+            onExpand={said(t("ds.proto.expand"))}
+            expandLabel={t("ds.proto.expand")}
+          />
           <Button testID="showcase-object-bar-flip" variant="secondary" size="sm" label={compact ? t("ds.proto.compactHide") : t("ds.proto.compactShow")} onPress={flip} />
         </View>
       </Card>
       <IconRow testID="showcase-icon-row" actions={row} />
+      <SectionTitle title={t("ds.proto.w3")} />
+      <AccessNote testID="showcase-access" label={t("ds.proto.access")} text={t("ds.proto.accessText")} code="#4471" codeWord={t("ds.proto.code")} />
+      <AccessNote testID="showcase-access-locked" label={t("ds.proto.access")} text={t("ds.proto.accessText")} code="#4471" codeWord={t("ds.proto.code")} locked={t("ds.proto.codeLocked")} pinned={t("ds.proto.pinnedNote")} />
+      <View style={{ gap: space[2] }}>
+        <ViewSteps testID="showcase-steps" items={steps} value={step < steps.length ? steps[step]!.key : "done"} label={t("ds.proto.steps")} />
+        <Button testID="showcase-steps-next" variant="secondary" size="sm" label={t("ds.proto.stNext")} onPress={() => setStep((n) => (n + 1) % (steps.length + 1))} />
+      </View>
+      <IconRow testID="showcase-icon-row-long" actions={longRow} />
       <SummaryLine
         testID="showcase-summary-line"
         items={[
@@ -107,6 +144,10 @@ export function ProtoObject() {
           main={{ label: t("ds.proto.sendEst"), onPress: said(t("ds.proto.sendEst")), reason: t("ds.proto.issueReason"), testID: "showcase-main-pair" }}
           second={{ label: t("ds.proto.newEst"), onPress: said(t("ds.proto.newEst")), testID: "showcase-main-second" }}
         />
+      </View>
+      <View style={{ gap: space[2] }}>
+        <T v="heading">{t("ds.proto.outline")}</T>
+        <MainStep placement="bar" main={{ label: t("ds.proto.restore"), onPress: said(t("ds.proto.restore")), outline: true, testID: "showcase-main-outline" }} />
       </View>
       <View style={{ gap: space[2] }}>
         <T v="heading">{t("ds.proto.totalBar")}</T>

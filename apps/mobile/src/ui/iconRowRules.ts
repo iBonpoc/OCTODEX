@@ -16,3 +16,6 @@ export function iconRowItems<A>(actions: readonly A[], variant: IconRowVariant):
     problem: over ? `IconRow ${variant}: ${actions.length} actions, at most ${max} — put the rest into «Ещё» / «⋯»` : undefined,
   };
 }
+
+/** a `row` caption wraps to at most this many lines under its circle (a 64 cell at 12: «Напомнить», «Записать в план») — not «…» */
+export const ICON_ROW_LABEL_LINES = 2;

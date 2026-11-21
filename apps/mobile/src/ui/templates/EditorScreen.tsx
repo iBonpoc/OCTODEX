@@ -2,7 +2,8 @@
  * Шаблон «Редактор» (BUILD-PLAN §1 поток Г, DS §12.3): Новый клиент, Смета, Выезд-форма.
  * Guarantees: «‹ назад» at the top left — with unsaved changes (`dirty`) it asks «Выйти без сохранения?» first (rule 5);
  * «⋯» the last on the right; the fields (`children`: FieldGroup / FieldRow) in the form column; ONE main step — `save` is a single
- * slot, pinned at the bottom (MainStep "bar"); where the screen has no pinned bar (820/1280) it stands after the fields.
+ * slot, pinned at the bottom in ONE compact row (MainStep "bar": the total or the reason on the left, the button 40 by its words on the
+ * right, ≤ 56 — LAYOUT-RULES П3, 21.11 #2350); where the screen has no pinned bar (820/1280) the same row stands after the fields.
  * `preview` — the showcase frame instead of the Screen.
  */
 import { useMemo, useState, type ReactNode } from "react";
@@ -39,7 +40,7 @@ export function EditorScreen(p: EditorScreenProps) {
   const noBar = p.preview ? false : !bar;
   const [leave, setLeave] = useState(false);
   const layout = templateLayout("editor", { back: true, more: !!p.more?.length, main: p.save, second: p.second, total: p.total, summary: !!p.summary, noBar });
-  const items = useMemo(() => moreItems(p.more, p.second, p.total), [p.more, p.second, p.total]);
+  const items = useMemo(() => moreItems(p.more, p.second, p.total, false, p.save.reason), [p.more, p.second, p.total, p.save.reason]);
   const onMore = (k: string) => (k === SECOND_KEY ? p.second?.onPress() : p.onMore?.(k));
   const secondShown = layout.bottom.includes("second") || layout.body.includes("second");
   const step = <MainStep placement="bar" main={p.save} second={secondShown ? p.second : null} total={p.total} />;

@@ -26,6 +26,8 @@ export const font = {
   minSize: 12,
   /** Dynamic Type: small labels that sit in a fixed shape (tab labels, StatusPill, QuickActions, a day pill) grow at most this much (BUILD-SPEC §0) */
   labelMaxScale: 1.5,
+  /** a one-line screen title (`T fit`): shrinks to at most this part of its size before it is cut (30 → 22,5; the founder 21.11, #2350) */
+  fitMinScale: 0.75,
 } as const;
 
 export const space = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24, 8: 32 } as const;
@@ -286,7 +288,8 @@ export const component = {
   valueLabelMax: 110,
   /* ---- prototype v2 (docs/design/BUILD-SPEC.md §1, BUILD-PLAN §1 поток А; approved by the lead №21, 21.11.2026) ---- */
   /** GroupedList / ListRow: a row from `h` 56 (initials 36 · title 15 · line 13); separators start `inset` 64 from the left (past the initials) */
-  listRow: { h: 56, inset: 64 },
+  /** `timeW` — the hour column of a row («8:30», as in the Plan; GroupRow `lead={{ time }}`) */
+  listRow: { h: 56, inset: 64, timeW: 52 },
   /** StatTile: a 2×2 grid tile from `h` 88 (label 12 caps, figure 30) */
   statTile: { h: 88 },
   /** DayStrip (BUILD-SPEC §1): 7 pills `h` 52, not narrower than `w` 44 (they share the row, `gap` 8), the «something on this day» dot `dot` 4 */

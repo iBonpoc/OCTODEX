@@ -2,6 +2,9 @@
  * The guard of the one filter rule (docs/specs/31-list-filters.md, director 07.11, step 10в PR 7).
  * - Every list screen draws its filters with FilterBar (the magnifier, one lane, «Фильтры» with the sheet) and nothing of
  *   its own over the list: no ChoiceChips, no Segmented, no search field. An exception is named here with its reason.
+ * - Prototype v2 (wave 3, 21.11): a list built on the ListScreen template (src/ui/templates/ListScreen.tsx) keeps the rule by the
+ *   template itself — search is the header's icon with its field, the chips ONE strip (ChoiceChips layout="strip"), other filters
+ *   behind `filters` (FilterBar) — so `<ListScreen` stands for FilterBar; the screen file still draws no chips / search of its own.
  * - A list screen (a route that draws a list of cards) is either in LISTS or in NO_FILTER — a new one fails until it is
  *   put in one of them. Detail screens ([id]), forms (new, edit, import) and the client's page (/p/) are not lists.
  */
@@ -69,19 +72,19 @@ function routes(dir = APP, base = ""): { route: string; file: string }[] {
   });
 }
 /** a route that draws a list of cards itself or through a list screen component */
-const LIST_SIGN = /<CardList|<CardGrid|<EstimatesBoard|<CommsScreen|<MessagesScreen/;
+const LIST_SIGN = /<CardList|<CardGrid|<EstimatesBoard|<CommsScreen|<MessagesScreen|<ListScreen/;
 const NOT_A_LIST = (r: string) => /\[[^\]]+\]$/.test(r) && r !== "reports/[id]" && r !== "figures/[metric]" ? true : /(^|\/)(new|edit|import)$/.test(r) || r.startsWith("p/");
 
 describe("the one filter rule over every list (spec 31, PR 7 guard)", () => {
   for (const [route, files] of Object.entries(LISTS)) {
     it(`${route}: FilterBar, nothing of its own over the list`, () => {
       const all = files.map((f) => ({ f, s: read(f) }));
-      expect(all.some(({ s }) => s.includes("<FilterBar")), `${route}: draw the filters with FilterBar (src/ui/filterBar.tsx)`).toBe(true);
+      expect(all.some(({ s }) => s.includes("<FilterBar") || s.includes("<ListScreen")), `${route}: draw the filters with FilterBar (src/ui/filterBar.tsx) or the ListScreen template`).toBe(true);
       for (const { f, s } of all) {
         const allowed = EXCEPTIONS[f] ?? [];
         for (const b of BANNED) {
           const ok = allowed.find((x) => x.pattern === b)?.count ?? 0;
-          expect(count(s, b), `${f}: ${b} over a list — use FilterBar, or name the exception in EXCEPTIONS with its reason`).toBe(ok);
+          expect(count(s, b), `${f}: ${b} over a list — use FilterBar, or name the exception in EXCEPTIONS with its reason`).toBeLessThanOrEqual(ok);
         }
         expect(count(s, SEARCH_FIELD), `${f}: a search field of its own — FilterBar has the magnifier (search={…})`).toBe(0);
       }
@@ -107,6 +110,8 @@ describe("the one filter rule over every list (spec 31, PR 7 guard)", () => {
     for (const r of Object.keys(NO_FILTER)) {
       const f = routes().find((x) => x.route === r)!.file;
       expect(read(f).includes("<FilterBar"), `${r} draws FilterBar — move it to LISTS`).toBe(false);
+      // a ListScreen with chips is a filtered list too
+      expect(/<ListScreen[\s\S]*?\bchips=/.test(read(f)), `${r} gives ListScreen chips — move it to LISTS`).toBe(false);
     }
   });
 });

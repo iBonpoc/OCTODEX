@@ -2,7 +2,7 @@ import { View } from "react-native";
 import { component, radius, size } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T } from "./primitives";
-import { iconRowItems, type IconRowVariant } from "./iconRowRules";
+import { ICON_ROW_LABEL_LINES, iconRowItems, type IconRowVariant } from "./iconRowRules";
 import type { IconAction } from "./templates/types";
 
 /** an IconRow action: the shared `IconAction` + its visible caption («Позвонить») and, when it cannot be done, why */
@@ -11,7 +11,7 @@ export type IconRowItem = IconAction & { label?: string; disabled?: boolean; rea
 /**
  * QuickActions — the icon AND its word (BUILD-SPEC §1: a bare icon is not recognised in the sun), a replacement of `features/ActionTile`.
  * `row`: 3…5 circles `quickAction.row` 44 on `surf2`, icon 20 `ink`, the caption 12 medium `mut` under it, across the width; the fifth
- * is «Ещё» (the screen gives it). `inline`: 2 circles `quickAction.inline` 36 with the 44 touch zone (the header's address line), the
+ * is «Ещё» (the screen gives it); a caption takes up to two lines (`ICON_ROW_LABEL_LINES`), never cut to «…». `inline`: 2 circles `quickAction.inline` 36 with the 44 touch zone (the header's address line), the
  * word is the VoiceOver label. Pressed — `pressScale` (Press); unavailable — `dimOpacity`, the reason is the VoiceOver hint. No accent
  * in either theme. More than the limit is cut and told in development (`iconRowItems`).
  * testIDs: each action's own `testID`; the row `testID`.
@@ -43,7 +43,8 @@ export function IconRow({ actions, variant = "row", testID }: { actions: IconRow
             <Icon name={a.icon} s={size.iconMd} color={c.ink} />
           </View>
           {!inline && a.label ? (
-            <T v="micro" w="medium" tone="mut" numberOfLines={1} center capped style={{ maxWidth: component.quickAction.labelW }}>
+            // up to two lines, never «…»: «Напомнить» / «Записать в план» do not fit the 64 cell at 12 (wave 3); the circles stay on one line
+            <T v="micro" w="medium" tone="mut" numberOfLines={ICON_ROW_LABEL_LINES} center capped style={{ maxWidth: component.quickAction.labelW }}>
               {a.label}
             </T>
           ) : null}

@@ -2,7 +2,9 @@
  * Шаблон «Обзор» (BUILD-PLAN §1 поток Г, DS §12.3): Главная, «Мой день» мастера.
  * Guarantees: a tab root — no «назад»; the header icons (search, the bell) · «＋» · «⋯» on the right, «⋯» the last; the next step
  * first (`next` — the NowCard with ONE main button in it, 40 the whole width); «Нужно внимание» — at most three rows, the rest behind
- * «Все ›»; the summary line; the rest folded (`details` in a Collapsible). `preview` — the showcase frame instead of the Screen.
+ * «Все ›»; the summary line; the rest folded (`details` in a Collapsible). The head: the icons row on top, the 30 title in one line
+ * under it — or `greeting` (avatar · «Доброе утро» 17 · the date) on the left of the icons instead; `home` (default) — the company line.
+ * `preview` — the showcase frame instead of the Screen.
  */
 import type { ReactNode } from "react";
 import { View } from "react-native";
@@ -12,12 +14,17 @@ import { GroupedList, ListGroup } from "../groupedList";
 import { NowCard, type NowCardProps } from "../nowCard";
 import { Screen } from "../surfaces";
 import { SummaryLine, type SummaryItem } from "../summaryLine";
-import { CreateButton, HeaderIcons, MoreButton, TemplateFrame } from "./parts";
+import { CreateButton, Greeting, HeaderIcons, MoreButton, TemplateFrame } from "./parts";
 import { attentionRows, templateLayout } from "./templateRules";
 import type { CreateAction, IconAction, MoreAction } from "./types";
 
 export interface OverviewScreenProps {
+  /** the screen's name (the tests, VoiceOver, the tab); drawn as the 30 title only without `greeting` */
   title: string;
+  /** the head instead of the 30 title: avatar · «Доброе утро, Алекс» 17 · the date 13 (Greeting) — the icons stay on one row at 390 */
+  greeting?: { initials: string; text: string; date: string; onAvatar?: () => void; avatarLabel: string };
+  /** a role's «Главная» (default): the company line «Компания ▾» and its «not loaded yet» under the head, the sync badge; `false` — not */
+  home?: boolean;
   headerIcons?: IconAction[];
   create?: CreateAction;
   onCreate?: (key: string) => void;
@@ -45,6 +52,7 @@ export function OverviewScreen(p: OverviewScreenProps) {
     details: !!p.details,
   });
   const att = attentionRows(p.attention?.rows ?? []);
+  const greet = p.greeting ? <Greeting testID={`${p.testID}-greeting`} {...p.greeting} /> : undefined;
   const body = (
     <View style={{ gap: space[6] }}>
       {p.next ? (
@@ -77,6 +85,7 @@ export function OverviewScreen(p: OverviewScreenProps) {
       <TemplateFrame
         testID={p.testID}
         title={p.title}
+        lead={greet}
         right={
           <>
             <HeaderIcons icons={p.headerIcons ?? []} />
@@ -88,7 +97,15 @@ export function OverviewScreen(p: OverviewScreenProps) {
       </TemplateFrame>
     );
   return (
-    <Screen testID={p.testID} title={p.title} headerIcons={p.headerIcons} right={tail}>
+    <Screen
+      testID={p.testID}
+      title={p.title}
+      titleHidden={!!greet}
+      headerLead={greet}
+      home={p.home ?? true}
+      headerIcons={p.headerIcons}
+      right={tail}
+    >
       {body}
     </Screen>
   );

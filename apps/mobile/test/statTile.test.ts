@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { statColumns, statRows, statShown, STAT_ONE_COLUMN_SCALE } from "../src/ui/statTileLogic";
+import { statColumns, statRows, statSaid, statShown, STAT_ONE_COLUMN_SCALE } from "../src/ui/statTileLogic";
 
 describe("StatTile / StatGrid (BUILD-SPEC §1)", () => {
   it("two in a row; one column from fontScale 1.35", () => {
@@ -25,5 +25,12 @@ describe("StatTile / StatGrid (BUILD-SPEC §1)", () => {
     expect(src).toMatch(/label: string;/);
     expect(src).toMatch(/c\.status\.warn\.text/);
     expect(src).toMatch(/minHeight: component\.statTile\.h/);
+  });
+  it("the sub line under the figure is said with it (wave 3: «Выезды 1 · 0 закрыто»)", () => {
+    expect(statSaid("Выезды", 1, "0 закрыто")).toBe("Выезды: 1, 0 закрыто");
+    expect(statSaid("Должны", "$1,840", undefined, "2 просрочены")).toBe("Должны: $1,840, 2 просрочены");
+    expect(statSaid("Должны", "$1,840", "за 7 дн", "2 просрочены")).toBe("Должны: $1,840, за 7 дн, 2 просрочены");
+    const src = readFileSync(join(__dirname, "..", "src", "ui", "statTile.tsx"), "utf8");
+    expect(src).toMatch(/sub\?: string;/);
   });
 });

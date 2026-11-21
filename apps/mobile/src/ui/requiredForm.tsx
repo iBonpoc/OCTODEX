@@ -33,6 +33,8 @@ export interface ScreenScroll {
   offsetNow?: () => number;
   /** the part of the window where the page can be seen, below the header and above the bottom bar (window coordinates) */
   measureVisible: (cb: (v: { top: number; bottom: number } | null) => void) => void;
+  /** back to the top of the page (the object's compact bar «⌄» opens the full header there) */
+  toTop?: (animated: boolean) => void;
 }
 export const ScreenScrollCtx = createContext<ScreenScroll | null>(null);
 export const useScreenScroll = () => useContext(ScreenScrollCtx);

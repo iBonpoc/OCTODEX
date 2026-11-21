@@ -14,6 +14,7 @@ import { component, font, layout, radius, size, space, spaceHalf, statusIcon, mo
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { Icon, Press, type IconKey } from "./primitives";
+import { outerPressRole } from "./groupedListLogic";
 import { Menu, Sheet } from "./overlays";
 import { SelectedCheck } from "./selectedCheck";
 import {
@@ -286,8 +287,8 @@ export function ListCard(p: ListCardProps) {
   return (
     <Press
       onPress={p.onPress}
-      // a card without a tap (e.g. an expense) is not a button and is not dimmed like a disabled control
-      accessibilityRole={p.onPress ? "button" : undefined}
+      // a card without a tap (e.g. an expense) is not a button and is not dimmed like a disabled control; the web: a group, it holds buttons
+      accessibilityRole={p.onPress ? outerPressRole(Platform.OS, true) : undefined}
       // the open row (panel on 1280): «current item of the set», not «selected» — this is a button (ARIA)
       {...({ "aria-current": p.selected ? "true" : undefined } as object)}
       accessibilityLabel={p.title}
@@ -505,8 +506,8 @@ function ListCardRow(p: ListCardProps) {
   return (
     <Press
       onPress={p.onPress}
-      // a card without a tap (e.g. an expense) is not a button and is not dimmed like a disabled control
-      accessibilityRole={p.onPress ? "button" : undefined}
+      // a card without a tap (e.g. an expense) is not a button and is not dimmed like a disabled control; the web: a group, it holds buttons
+      accessibilityRole={p.onPress ? outerPressRole(Platform.OS, true) : undefined}
       // the open row (panel on 1280): «current item of the set», not «selected» — this is a button (ARIA)
       {...({ "aria-current": p.selected ? "true" : undefined } as object)}
       accessibilityLabel={p.title}

@@ -13,6 +13,7 @@ import { StyleSheet, View, type AccessibilityActionEvent, type GestureResponderE
 import { component, radius, size, space, type StatusName } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Avatar, IconButton } from "./controls";
+import { DoneCircle } from "./doneCircle";
 import { Menu } from "./overlays";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { Card, RowView } from "./surfaces";
@@ -79,7 +80,16 @@ export function ListGroup({ title, all, children, inset = component.listRow.inse
   );
 }
 
-export type RowLead = { initials: string } | { icon: IconKey };
+/**
+ * What leads a row: initials 36, a type icon 36, or the hour column (as in the Plan): `time` 17 semibold tabular («8:30») and under
+ * it `sub` 12 `mut` («AM», «2 ч»), `listRow.timeW` wide so the hours of a group stand in one column.
+ */
+export type RowLead = { initials: string } | { icon: IconKey } | { time: string; sub?: string } | RowDone;
+/**
+ * A task's row: the DoneCircle 22 on the left (`done`, `onToggle`; `label` — what is read: «Сделано: Позвонить Смитам»). The circle is
+ * the row's NEIGHBOUR, not inside its press (no button in a button); done — the title `mut` and struck through.
+ */
+export type RowDone = { done: boolean; onToggle: (done: boolean) => void; label: string; testID?: string };
 
 export interface GroupRowProps {
   title: string;
@@ -105,46 +115,50 @@ export function GroupRow({ title, subtitle, lead, value, status, actions = [], s
   const [down, setDown] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const more = rowActions(swipe);
-  const said = rowSaid({ title, subtitle, value, status });
+  const said = rowSaid({ title, subtitle, value, status, when: lead && "time" in lead ? [lead.time, lead.sub].filter(Boolean).join(" ") : undefined });
   const onLong = more.length ? (e: GestureResponderEvent) => setMenu({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, w: 0, h: 0 }) : undefined;
   const onAction = (e: AccessibilityActionEvent) => more.find((a) => a.key === e.nativeEvent.actionName)?.onPress();
-  const body = (
-    <View style={{ backgroundColor: down ? c.surf2 : c.surf }}>
-      <RowView style={{ minHeight: compact ? component.rowCompact : component.listRow.h, paddingHorizontal: space[4], paddingVertical: space[2], gap: space[3] }}>
-        {lead ? "initials" in lead ? (
-          <Avatar initials={lead.initials} s={component.avatar.md} />
-        ) : (
-          <View style={{ width: component.avatar.md, height: component.avatar.md, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
-            <Icon name={lead.icon} s={size.iconMd} color={c.ink} />
-          </View>
-        ) : null}
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <T v="body" w="semibold" numberOfLines={1}>
-            {title}
+  const check = lead && "done" in lead ? lead : null;
+  const pad = { minHeight: compact ? component.rowCompact : component.listRow.h, paddingVertical: space[2], gap: space[3] };
+  const main = (
+    <RowView style={[pad, { paddingLeft: check ? 0 : space[4], paddingRight: actions.length ? 0 : space[4] }]}>
+      {!lead || check ? null : "initials" in lead ? (
+        <Avatar initials={lead.initials} s={component.avatar.md} />
+      ) : "time" in lead ? (
+        <View style={{ width: component.listRow.timeW }}>
+          <T v="heading" tabular numberOfLines={1}>
+            {lead.time}
           </T>
-          {subtitle ? (
-            <T v="caption" tone="mut" numberOfLines={1}>
-              {subtitle}
+          {lead.sub ? (
+            <T v="micro" tone="mut" numberOfLines={1}>
+              {lead.sub}
             </T>
           ) : null}
         </View>
-        {value ? (
-          <T v="body" w="semibold" tabular numberOfLines={1}>
-            {value}
+      ) : "icon" in lead ? (
+        <View style={{ width: component.avatar.md, height: component.avatar.md, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
+          <Icon name={lead.icon} s={size.iconMd} color={c.ink} />
+        </View>
+      ) : null}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <T v="body" w="semibold" tone={check?.done ? "mut" : "ink"} numberOfLines={1} style={check?.done ? { textDecorationLine: "line-through" } : undefined}>
+          {title}
+        </T>
+        {subtitle ? (
+          <T v="caption" tone="mut" numberOfLines={1}>
+            {subtitle}
           </T>
         ) : null}
-        {status ? <StatusPill status={status.status} label={status.label} /> : null}
-        {actions.length ? (
-          <RowView gap={space[1]}>
-            {actions.map((a) => (
-              <IconButton key={a.testID} icon={a.icon} label={a.a11y} onPress={a.onPress} testID={a.testID} />
-            ))}
-          </RowView>
-        ) : null}
-      </RowView>
-    </View>
+      </View>
+      {value ? (
+        <T v="body" w="semibold" tabular numberOfLines={1}>
+          {value}
+        </T>
+      ) : null}
+      {status ? <StatusPill status={status.status} label={status.label} /> : null}
+    </RowView>
   );
-  const row = onPress || onLong ? (
+  const tap = onPress || onLong ? (
     <Press
       onPress={onPress}
       onLongPress={onLong}
@@ -155,13 +169,33 @@ export function GroupRow({ title, subtitle, lead, value, status, actions = [], s
       accessibilityActions={more.map((a) => ({ name: a.key, label: a.label }))}
       onAccessibilityAction={onAction}
       testID={testID}
+      containerStyle={{ flex: 1, minWidth: 0 }}
     >
-      {body}
+      {main}
     </Press>
   ) : (
-    <View testID={testID} accessible accessibilityLabel={said}>
-      {body}
+    <View testID={testID} accessible accessibilityLabel={said} style={{ flex: 1, minWidth: 0 }}>
+      {main}
     </View>
+  );
+  // the quick actions are the row's NEIGHBOURS, not its children: a button inside the row's button is not a thing on the web
+  // («<button> cannot contain a nested <button>») nor to a screen reader — the row reads as one, each action as its own
+  const row = (
+    <RowView gap={0} style={{ backgroundColor: down ? c.surf2 : c.surf }}>
+      {check ? (
+        <View style={{ paddingLeft: space[4], paddingRight: space[3] }}>
+          <DoneCircle done={check.done} onChange={check.onToggle} label={check.label} testID={check.testID} />
+        </View>
+      ) : null}
+      {tap}
+      {actions.length ? (
+        <RowView gap={space[1]} style={{ paddingLeft: space[3], paddingRight: space[4] }}>
+          {actions.map((a) => (
+            <IconButton key={a.testID} icon={a.icon} label={a.a11y} onPress={a.onPress} testID={a.testID} />
+          ))}
+        </RowView>
+      ) : null}
+    </RowView>
   );
   return (
     <>

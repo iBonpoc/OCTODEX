@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, View } from "react-native";
-import { component, motion, size, space } from "@octo/design-tokens";
+import { component, motion, radius, size, space } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button } from "./controls";
-import { ActionBar } from "./actionBar";
+import { Glass } from "./overlays";
 import { Icon, Press, T } from "./primitives";
 import { loadPhase, mainStepLayout } from "./mainStepRules";
 import type { MainAction } from "./templates/types";
@@ -18,15 +18,17 @@ export interface MainStepTotal {
 }
 
 /**
- * The main step of an object or an editor (BUILD-SPEC §1 MainStepBar; BUILD-PLAN §1 поток Б).
- * `placement="bar"` — the pinned bottom (`ActionBar`, the screen's `footer`): the reason 13 `mut` in one line ABOVE the button, the
- * button 44 across the width (`acc`/`onAcc`, `Button size="bar"`). Variants: `second` — «вторая + главная» in one row (the second
- * outlined); a second label longer than `pair.labelMax` does not stand there — it is not drawn and the screen puts it into «⋯»
- * (`mainStepLayout().secondInMore`); `total` — «Итого ˅» 13 and the sum 22 on the left, the main one on the right (3 : 2 of the
- * bar — not narrower than half); `outline` — the main one outlined when the step is not about selling.
- * `placement="top"` — in the content: the button 40 across the width, the reason under it.
+ * The main step of an object or an editor (BUILD-SPEC §1 MainStepBar; BUILD-PLAN §1 поток Б; LAYOUT-RULES П3 as of 21.11, #2350).
+ * `placement="bar"` — the pinned bottom of an EDITOR only (the screen's `footer`): ONE compact row, at most 56 with its padding —
+ * on the left «Итого ˅» 13 and the sum 22 (`total`), else the reason 13 `mut` (why the step is held), else the second step
+ * (outlined, by its words); on the right the main button 40 by its words (`acc`/`onAcc`), never across the width. A second step that
+ * does not stand there (with a total or a reason, or a label longer than `pair.labelMax`) is not drawn — the screen puts it into «⋯»
+ * (`mainStepLayout().secondInMore`). `outline` (or `main.outline`) — the main one outlined when the step is not about selling.
+ * `placement="top"` — in the content (an object: right under its header and quick actions): the button 40, the reason under it;
+ * `fit` — the button by its words on the left line (an object), else across the column.
  * Loading (`loading`): nothing for `spinnerDelayMs`, then a spinner by the reason, after `actionTimeoutMs` the reason reads `failedLabel`.
- * Disabled (`main.disabled`) — the reason says why. testIDs: `main.testID`, `second.testID`, `total.testID`, `<main.testID>-reason`.
+ * Disabled (`main.disabled`) — the reason says why. testIDs: `main.testID`, `second.testID`, `total.testID`, `<main.testID>-reason`,
+ * `<main.testID>-bar`.
  */
 export function MainStep({
   main,
@@ -34,6 +36,7 @@ export function MainStep({
   second,
   total,
   outline,
+  fit,
   loading,
   failedLabel,
 }: {
@@ -42,54 +45,63 @@ export function MainStep({
   second?: MainAction | null;
   total?: MainStepTotal | null;
   outline?: boolean;
+  /** `top`: the button by its words on the left line, not across the column (an object) */
+  fit?: boolean;
   loading?: boolean;
   /** what the reason reads once a loading step took longer than `actionTimeoutMs` («Не получилось») */
   failedLabel?: string;
 }) {
   const { c } = useTheme();
   const phase = useLoadPhase(!!loading);
-  const { layout } = mainStepLayout({ second, total });
+  const { layout } = mainStepLayout({ second, total, reason: placement === "bar" ? main.reason : undefined });
   const reasonText = phase === "failed" ? failedLabel : main.reason;
   const reason =
     reasonText || phase === "spinner" ? (
       <View testID={`${main.testID}-reason`} style={{ flexDirection: "row", alignItems: "center", gap: space[2], marginTop: placement === "top" ? component.mainStep.reasonGap : 0 }}>
         {phase === "spinner" ? <ActivityIndicator color={c.mut} /> : null}
         {reasonText ? (
-          <T v="caption" tone="mut" numberOfLines={1} style={{ flexShrink: 1 }}>
+          <T v="caption" tone="mut" numberOfLines={placement === "bar" ? 2 : 1} style={{ flexShrink: 1 }}>
             {reasonText}
           </T>
         ) : null}
       </View>
     ) : null;
+  const byWords = placement === "bar" || fit;
   const button = (
     <Button
       testID={main.testID}
       label={main.label}
       onPress={main.onPress}
       disabled={main.disabled || phase === "spinner" || phase === "wait"}
-      variant={outline ? "secondary" : "primary"}
-      size={placement === "bar" ? "bar" : undefined}
-      full
+      variant={outline || main.outline ? "secondary" : "primary"}
+      full={!byWords}
     />
   );
   if (placement === "top")
     return (
-      <View>
+      <View style={fit ? { alignSelf: "flex-start", maxWidth: "100%" } : undefined}>
         {button}
         {reason}
       </View>
     );
-  let left: ReactNode = undefined;
-  if (layout === "pair" && second)
-    left = <Button testID={second.testID} label={second.label} onPress={second.onPress} disabled={second.disabled} variant="secondary" size="bar" full />;
+  let left: ReactNode = reason;
+  if (layout === "pair" && second) left = <Button testID={second.testID} label={second.label} onPress={second.onPress} disabled={second.disabled} variant="secondary" />;
   if (layout === "total" && total) left = <TotalPart total={total} />;
-  return <ActionBar testID={`${main.testID}-bar`} summary={reason} second={left} main={button} />;
+  // one row: what the step is about on the left, the button by its words on the right (≤ 56 with the padding, LAYOUT-RULES П3)
+  return (
+    <Glass strong testID={`${main.testID}-bar`} style={{ borderTopLeftRadius: radius.card, borderTopRightRadius: radius.card, borderBottomWidth: 0, paddingHorizontal: space[4], paddingVertical: space[2] }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: component.button.phone }}>
+        <View style={{ flex: 1, minWidth: 0, alignItems: "flex-start" }}>{left}</View>
+        {button}
+      </View>
+    </Glass>
+  );
 }
 
 function TotalPart({ total }: { total: MainStepTotal }) {
   const { c } = useTheme();
   const body = (
-    <View style={{ justifyContent: "center", minHeight: component.mainBar }}>
+    <View style={{ justifyContent: "center" }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: space[1] }}>
         <T v="caption" tone="mut" numberOfLines={1}>
           {total.label}

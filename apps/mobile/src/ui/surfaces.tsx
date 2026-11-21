@@ -3,6 +3,7 @@ import { VersionBadge } from "@/features/version";
 import { DemoBadge } from "@/features/DemoBadge";
 import { UpdateBar } from "@/features/UpdateBar";
 import { ScreenScrollCtx, type ScreenScroll } from "./requiredForm";
+import { HeaderIcon } from "./headerIcon";
 import { coveredBottomOf, scrollTargetY } from "./requiredLogic";
 import { scrollBottom, setFooterInset } from "./footerInset";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
@@ -34,7 +35,6 @@ import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { HelpButton, Menu } from "./overlays";
-import { IconButton } from "./controls";
 import type { IconAction } from "./templates/types";
 import { useHints } from "./hints";
 
@@ -517,6 +517,7 @@ export function Screen({
   home,
   footer,
   aside,
+  headerLead,
   testID,
   form,
 }: {
@@ -565,6 +566,9 @@ export function Screen({
    *  `"center"` — a public page of the client with no side menu (the request form /f/): the column with its title stands in the middle
    *  of a wide screen, not at its left edge with the right side empty (DS §12.3, 1.15.8, #1728) */
   form?: boolean | "center";
+  /** a tab root: what stands on the LEFT of the icons row instead of nothing — the Overview's Greeting (avatar · «Доброе утро, Алекс» ·
+   *  the date); with it the big title is usually `titleHidden` */
+  headerLead?: ReactNode;
   /** 1280: the open card beside the list (ui/listPanel.tsx, spec 06 «Панель 1280»): the list scrolls on its own, the panel on the right */
   aside?: ReactNode;
   /** the screen's content, for the tests (a record that opened: its own testID, not its words — CHECKS §9 п.2) */
@@ -652,7 +656,7 @@ export function Screen({
   const headerFab = fab ? <Fab placement="header" set={fab} ctx={fabCtx} on={fabOn} /> : null;
   /** the header's round icons (search, bell): left of «＋», «⋯» stays the last */
   const headerIconRow = headerIcons?.length
-    ? headerIcons.map((a) => <IconButton key={a.testID} testID={a.testID} icon={a.icon} label={a.a11y} onPress={a.onPress} bare />)
+    ? headerIcons.map((a) => <HeaderIcon key={a.testID} action={a} />)
     : null;
   const addressRow = hasUp ? (
           <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin, gap: space[2] }}>
@@ -723,7 +727,7 @@ export function Screen({
           {titleHidden ? null : (
           <RowView style={{ gap: space[1] }}>
             <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={[{ flexShrink: 1 }, noFocusRing]} testID="screen-title">
-              <T v="title" numberOfLines={2}>
+              <T v="title" fit>
                 {title}
               </T>
             </View>
@@ -731,11 +735,14 @@ export function Screen({
           )}
         </>
       ) : (
-        /* tab root: the big title is where you are (docs/specs/13 §2.2; no ☰ since variant Б).
-           The screen's actions wrap under the title when the row is too narrow (Plan at 390), never squeeze it. */
+        /* tab root: the big title is where you are (docs/specs/13 §2.2; no ☰ since variant Б). Phone, a section opened from «Ещё»
+           outside the tabs (Jobs, Money, Catalog…): «‹ Ещё» on the left of the icons row (DS §12.2, #1648) */
         <>
-          {/* phone, a section opened from «Ещё» outside the tabs (Jobs, Money, Catalog…): «‹ Ещё» — a row above the title, the title
-              stays where it is on the tabs (DS §12.2, #1648; was a round button that pushed the title to the right) */}
+        {/* the founder 21.11 (#2350, LAYOUT-RULES П3): a thin row of icons ON TOP (right: «?» · icons · «＋» · «⋯» / the home's
+            search · bell · profile; circles `headerIcon` 36, zone 44), the big title UNDER it in one line (shrinks, never wraps) —
+            the icons never wrap under the title any more */}
+        {headerLead || backMore || right || headerFab || headerIconRow || home || help ? (
+          <RowView gap={space[2]} style={{ justifyContent: "flex-end", minHeight: size.hitMin }}>
           {backMore ? (
             <Press
               testID="back-more"
@@ -743,7 +750,7 @@ export function Screen({
               visibleHeight={component.dockBtn}
               accessibilityRole="button"
               accessibilityLabel={t("nav.more")}
-              containerStyle={{ alignSelf: "flex-start" }}
+              containerStyle={{ marginRight: "auto", flexShrink: 1 }}
             >
               <RowView gap={space[1]} style={{ height: component.dockBtn, paddingRight: space[2] }}>
                 <Icon name="chevronLeft" color={c.ink} />
@@ -753,25 +760,22 @@ export function Screen({
               </RowView>
             </Press>
           ) : null}
-        <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin, flexWrap: "wrap", rowGap: space[2] }}>
-          <RowView style={{ flexGrow: 1, flexShrink: 0, maxWidth: "100%", gap: space[1] }}>
-            <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={[{ flexShrink: 1 }, noFocusRing]} testID="screen-title">
-              <T v="display" numberOfLines={1}>
-                {title}
-              </T>
-            </View>
+            {headerLead ? <View style={{ flex: 1, minWidth: 0 }}>{headerLead}</View> : null}
+            {help ? <HelpButton title={title} text={help} /> : null}
+            {headerIconRow}
+            {headerFab}
+            {right}
+            {/* «Главная»: its own icons (`headerIcons`, with their counts) replace the stock search · bell · profile; the sync stays */}
+            {home ? headerIcons?.length ? <SyncBadge compact /> : <HomeHeader /> : null}
           </RowView>
-          {right || headerFab || headerIconRow || home || help ? (
-            <RowView gap={space[2]} style={{ marginLeft: "auto" }}>
-              {/* DS §12.2: «?» · icons · «＋» · «⋯» — «?» first on the right (#1648) */}
-              {help ? <HelpButton title={title} text={help} /> : null}
-              {headerIconRow}
-              {headerFab}
-              {right}
-              {home ? <HomeHeader /> : null}
-            </RowView>
-          ) : null}
-        </RowView>
+        ) : null}
+        {titleHidden ? null : (
+          <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={noFocusRing} testID="screen-title">
+            <T v="display" fit>
+              {title}
+            </T>
+          </View>
+        )}
         </>
       )}
       {subtitle ? (
@@ -876,6 +880,10 @@ export function Screen({
       sv.measureInWindow((_x, y, _w, h) => cb({ top: y + coveredTop.current, bottom: y + h - coveredBottom.current }));
     },
     offset: () => offset.current,
+    toTop: (animated) => {
+      offset.current = 0;
+      scrollRef.current?.scrollTo({ y: 0, animated });
+    },
     scrollToNode: (node, margin, animated, done) => {
       const sv = scrollRef.current;
       if (!sv) return void done?.();
@@ -971,7 +979,7 @@ export function Screen({
                       }}
                       style={[column, { paddingBottom: space[2] }]}
                     >
-                      {tabsMini}
+                      <ScreenScrollCtx.Provider value={screenScroll}>{tabsMini}</ScreenScrollCtx.Provider>
                     </View>
                   ) : null}
                   <View style={column}>{tabs}</View>

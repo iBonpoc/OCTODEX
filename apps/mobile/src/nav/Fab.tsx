@@ -122,23 +122,20 @@ export function Fab({ placement, bottom = 0, right = space[4], ...p }: FabProps 
   const press = () => (one ? run(one) : setOpen(true));
   const sheet = one ? null : <FabSheet {...p} visible={open} onClose={() => setOpen(false)} />;
   if (placement === "header") {
-    // «Главная»'s quick actions are its main action: yellow, one on the screen (DS §5.3, audit №2 14.11, #1395); a list's «＋» is secondary
-    const acc = p.set === "home";
+    // the founder 21.11 (#2350): «＋» in the header is an ICON — a tonal circle `headerIcon` 36 (zone 44), never the filled accent:
+    // one filled accent on a screen, and it is the screen's main step, not «make a new one». Its words are the VoiceOver label.
     return (
       <>
         <Press
           testID="fab-header"
           onPress={press}
-          visibleHeight={component.button.sm}
+          visibleHeight={component.headerIcon}
           accessibilityRole="button"
           accessibilityLabel={label}
           aria-haspopup={one ? undefined : "dialog"}
-          style={{ flexDirection: "row", alignItems: "center", gap: space[2], height: component.button.sm, paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: acc ? c.acc : c.surf2, borderWidth: acc ? 0 : component.hairline, borderColor: c.bd }}
+          style={{ width: component.headerIcon, height: component.headerIcon, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd, alignItems: "center", justifyContent: "center" }}
         >
-          <Icon name="plus" s={size.iconSm} color={acc ? c.onAcc : c.ink} />
-          <T v="button" numberOfLines={1} style={acc ? { color: c.onAcc } : undefined}>
-            {label}
-          </T>
+          <Icon name="plus" s={size.iconMd} color={c.ink} />
         </Press>
         {sheet}
       </>

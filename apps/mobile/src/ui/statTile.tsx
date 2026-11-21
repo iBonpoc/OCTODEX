@@ -2,7 +2,7 @@
  * StatTile and StatGrid (BUILD-SPEC §1 «StatTile»): a big figure and its word on a pastel tile, two in a row (2×2).
  * The tile: from `statTile.h` 88 tall, `radius.card`, padding 16; the word 12 semibold in capitals, the figure 30 bold;
  * the fill `pastels[theme][lav|mint|butter|peach]` — the pastel is never alone, the word is always on it (rule 2, palette A).
- * «!» — a `status.warn` icon, the tile's own colour does not change. A press opens the filtered list; in «Деньги» the tiles
+ * `sub` — a line 13 under the figure in the pastel's text («1 · 0 закрыто»). «!» — a `status.warn` icon, the tile's own colour does not change. A press opens the filtered list; in «Деньги» the tiles
  * switch the view (`selected` → a 2 frame in the pastel's text, role `tab`). A zero tile is not drawn.
  * With a big system font (fontScale ≥ 1.35) the grid is one column.
  */
@@ -12,13 +12,15 @@ import { component, pastels, size, space, type PastelName } from "@octo/design-t
 import { useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T } from "./primitives";
 import { Card } from "./surfaces";
-import { statColumns, statRows, statShown } from "./statTileLogic";
+import { statColumns, statRows, statSaid, statShown } from "./statTileLogic";
 
-export function StatTile({ label, value, pastel, warn, selected, onPress, a11y, testID }: {
+export function StatTile({ label, value, sub, pastel, warn, selected, onPress, a11y, testID }: {
   /** the word (always there — the pastel never speaks alone) */
   label: string;
   /** the figure: a count or a sum already formatted («$12,400») */
   value: number | string;
+  /** the line under the figure, 13 in the pastel's text: «1 · 0 закрыто», «за 7 дн», «в среду» — what the figure is of */
+  sub?: string;
   pastel: PastelName;
   /** «!» with the reason a screen reader hears («2 просрочены») */
   warn?: string;
@@ -32,7 +34,7 @@ export function StatTile({ label, value, pastel, warn, selected, onPress, a11y, 
   const { c, name } = useTheme();
   if (!statShown(value)) return null;
   const p = pastels[name][pastel];
-  const said = a11y ?? [`${label}: ${value}`, warn].filter(Boolean).join(", ");
+  const said = a11y ?? statSaid(label, value, sub, warn);
   const tile = (
     <Card
       style={{
@@ -50,9 +52,18 @@ export function StatTile({ label, value, pastel, warn, selected, onPress, a11y, 
         </T>
         {warn ? <Icon name="alert" s={size.iconSm} color={c.status.warn.text} /> : null}
       </View>
-      <T v="display" w="bold" style={{ color: p.text }} tabular numberOfLines={1}>
-        {value}
-      </T>
+      <View>
+        <T v="display" w="bold" style={{ color: p.text }} tabular numberOfLines={1}>
+          {value}
+        </T>
+        {sub ? (
+          <View testID={testID ? `${testID}-sub` : undefined}>
+            <T v="caption" style={{ color: p.text }} numberOfLines={1}>
+              {sub}
+            </T>
+          </View>
+        ) : null}
+      </View>
     </Card>
   );
   if (!onPress)
