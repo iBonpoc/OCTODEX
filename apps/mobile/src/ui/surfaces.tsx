@@ -27,7 +27,7 @@ import { breadcrumbs, collapseCrumbs, navContext, type Crumb, type Label } from 
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance, type StyleProp, type ViewStyle } from "react-native";
 import { avoidBehavior, useKeyboardHeight } from "./keyboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from "react-native-svg";
+import Svg, { Defs, Ellipse, LinearGradient, RadialGradient, Rect, Stop } from "react-native-svg";
 import { component, layout, motion, radius, size, space, z, type StatusName } from "@octo/design-tokens";
 import Animated, { FadeIn, FadeOut, useReducedMotion } from "react-native-reanimated";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
@@ -38,7 +38,7 @@ import { HelpButton, Menu } from "./overlays";
 import type { IconAction } from "./templates/types";
 import { useHints } from "./hints";
 
-/* ---------- Background: --bg + three soft glows (theme.css --glow) ---------- */
+/* ---------- Background: --bg, or the ground gradient (--ground), + soft glows (--glow) ---------- */
 export function Background() {
   const { c, name } = useTheme();
   const { width, height } = useWindowDimensions();
@@ -47,6 +47,13 @@ export function Background() {
     <View style={[StyleSheet.absoluteFill, { backgroundColor: c.bg, overflow: "hidden" }]} pointerEvents="none">
       <Svg width={width} height={height}>
         <Defs>
+          {c.ground ? (
+            <LinearGradient id={`ground${name}`} x1={c.ground.x1} y1={c.ground.y1} x2={c.ground.x2} y2={c.ground.y2}>
+              {c.ground.stops.map((st) => (
+                <Stop key={st.offset} offset={st.offset} stopColor={st.color} />
+              ))}
+            </LinearGradient>
+          ) : null}
           {c.glow.map((g, i) => (
             <RadialGradient key={i} id={`g${name}${i}`} cx="50%" cy="50%" rx="50%" ry="50%">
               <Stop offset="0" stopColor={g.color} stopOpacity={g.opacity} />
@@ -54,7 +61,7 @@ export function Background() {
             </RadialGradient>
           ))}
         </Defs>
-        <Rect width={width} height={height} fill={c.bg} />
+        <Rect width={width} height={height} fill={c.ground ? `url(#ground${name})` : c.bg} />
         {c.glow.map((g, i) => (
           <Ellipse key={i} cx={g.cx * width} cy={g.cy * height} rx={g.rx} ry={g.ry} fill={`url(#g${name}${i})`} />
         ))}

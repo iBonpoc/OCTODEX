@@ -84,6 +84,11 @@ th{font-size:12px;color:var(--mut);font-weight:600}
     </div>
     <div class="sl"><span>Сила градиента</span><input type="range" id="gs" min="0" max="100" value="60"><span id="gsv"></span></div>
     <div>
+      <div class="lab" style="margin-bottom:8px">Узор поверх (неподвижный)</div>
+      <div class="row" id="pt" style="gap:8px"></div>
+    </div>
+    <div class="sl"><span>Яркость узора</span><input type="range" id="ps" min="0" max="100" value="50"><span id="psv"></span></div>
+    <div>
       <div class="lab" style="margin-bottom:8px">Быстрые образцы</div>
       <div class="sw" id="sw"></div>
     </div>
@@ -113,7 +118,7 @@ function shade(hex,toward,target,bg){// move lightness until contrast with bg >=
 function onColor(a){const d="#17181B",w="#FFFFFF";return cr(a,d)>=cr(a,w)?shade(a,-100,0,a)&&tint(a,d):w}
 function tint(a,base){// dark text tinted toward the accent hue
   const[h]=rgbHsl(hexRgb(a));const c=hslHex(h,30,10);return cr(a,c)>=4.5?c:base}
-const GR=[["none","Ровный"],["glow","Свечение акцента"],["vert","Сверху вниз"],["diag","Диагональ"],["two","Два пятна"],["warm","Тёплый"],["cool","Холодный"]];
+const GR=[["none","Ровный"],["glow","Свечение акцента"],["vert","Сверху вниз"],["down","Снизу вверх"],["diag","Диагональ"],["side","Слева направо"],["center","Светлый центр"],["vign","Тёмные края"],["tint","Акцентный верх"],["bottom","Свечение снизу"],["corner","Свечение из угла"],["two","Два пятна"],["warm","Тёплый"],["cool","Холодный"]];
 let gmode="glow";try{gmode=localStorage.getItem("gorix.gr")||gmode}catch(e){}
 function rgba(hex,al){const[r,g,b]=hexRgb(hex);return`rgba(${r},${g},${b},${al})`}
 function mix(hex,to,t){const a=hexRgb(hex),b=hexRgb(to);return rgbHex(a.map((v,i)=>v+(b[i]-v)*t))}
@@ -123,14 +128,42 @@ function grad(theme,a){const k=+$("gs").value/100,b=BG[theme].b,dark=theme==="da
     case"glow":return`radial-gradient(120% 70% at 50% -10%, ${rgba(a,(dark?.34:.42)*k)}, transparent 65%), ${b}`;
     case"vert":return`linear-gradient(180deg, ${lift} 0%, ${b} 45%, ${deep} 100%)`;
     case"diag":return`linear-gradient(150deg, ${lift} 0%, ${b} 50%, ${deep} 100%)`;
+    case"down":return`linear-gradient(0deg, ${lift} 0%, ${b} 45%, ${deep} 100%)`;
+    case"side":return`linear-gradient(90deg, ${lift} 0%, ${b} 55%, ${deep} 100%)`;
+    case"center":return`radial-gradient(90% 60% at 50% 45%, ${lift}, ${b} 60%, ${deep})`;
+    case"vign":return`radial-gradient(110% 80% at 50% 40%, ${b} 50%, ${deep} 100%)`;
+    case"tint":return`linear-gradient(180deg, ${mix(b,a,(dark?.18:.28)*k)} 0%, ${b} 50%)`;
+    case"bottom":return`radial-gradient(120% 60% at 50% 110%, ${rgba(a,(dark?.30:.40)*k)}, transparent 65%), ${b}`;
+    case"corner":return`radial-gradient(110% 70% at 0% 0%, ${rgba(a,(dark?.32:.42)*k)}, transparent 65%), ${b}`;
     case"two":return`radial-gradient(70% 45% at 0% 0%, ${rgba(a,(dark?.30:.38)*k)}, transparent 70%), radial-gradient(70% 45% at 100% 100%, ${rgba(dark?"#7B8CFF":"#8C9CFF",(dark?.22:.25)*k)}, transparent 70%), ${b}`;
     case"warm":return`linear-gradient(170deg, ${mix(b,dark?"#5A4632":"#EADBC4",.55*k)} 0%, ${b} 55%, ${deep} 100%)`;
     case"cool":return`linear-gradient(170deg, ${mix(b,dark?"#33415A":"#C9D4E4",.55*k)} 0%, ${b} 55%, ${deep} 100%)`;
     default:return b}}
+const PT=[["none","Без узора"],["topo","Топо-карта"],["dots","Точки"],["grid","Сетка"],["grain","Зерно"],["hatch","Штриховка"]];
+let pmode="none";try{pmode=localStorage.getItem("gorix.pt")||pmode}catch(e){}
+const PCACHE={};
+function field(x,y){return Math.sin(x*.011+Math.sin(y*.009)*1.6)+.7*Math.sin(y*.015+Math.sin(x*.007)*2.1)+.35*Math.sin((x-y)*.019+1.3)+.25*Math.sin(Math.hypot(x-260,y-520)*.02)}
+function pattern(theme){const k=+$("ps").value/100;if(pmode==="none"||k===0)return"";
+  const key=pmode+theme+k;if(PCACHE[key])return PCACHE[key];
+  const W=360,H=780,cv=document.createElement("canvas");cv.width=W*2;cv.height=H*2;const g=cv.getContext("2d");g.scale(2,2);
+  const col=theme==="dark"?"255,255,255":"0,0,0";const al=(theme==="dark"?.14:.16)*k;
+  g.strokeStyle=g.fillStyle=`rgba(${col},${al})`;g.lineWidth=1;
+  if(pmode==="dots"){for(let y=8;y<H;y+=16)for(let x=8;x<W;x+=16){g.beginPath();g.arc(x,y,1.1,0,7);g.fill()}}
+  if(pmode==="grid"){g.beginPath();for(let x=.5;x<W;x+=24){g.moveTo(x,0);g.lineTo(x,H)}for(let y=.5;y<H;y+=24){g.moveTo(0,y);g.lineTo(W,y)}g.stroke()}
+  if(pmode==="hatch"){g.beginPath();for(let x=-H;x<W;x+=10){g.moveTo(x,H);g.lineTo(x+H,0)}g.stroke()}
+  if(pmode==="grain"){const im=g.getImageData(0,0,W*2,H*2),d=im.data,base=theme==="dark"?255:0;let s=7;for(let i=0;i<d.length;i+=4){s=(s*16807)%2147483647;const r=s/2147483647;d[i]=d[i+1]=d[i+2]=base;d[i+3]=r<.5?Math.round(r*2*al*255*1.4):0}g.putImageData(im,0,0)}
+  if(pmode==="topo"){const st=6,cols=Math.ceil(W/st)+1,rows=Math.ceil(H/st)+1,v=[];for(let j=0;j<rows;j++){v[j]=[];for(let i=0;i<cols;i++)v[j][i]=field(i*st,j*st)}
+    for(let lv=-2.2,n=0;lv<=2.2;lv+=.2,n++){g.lineWidth=n%5===0?1.3:.8;g.beginPath();
+      for(let j=0;j<rows-1;j++)for(let i=0;i<cols-1;i++){const a=v[j][i],b=v[j][i+1],c=v[j+1][i+1],d=v[j+1][i],x=i*st,y=j*st,p=[];
+        const e=(p1,p2,q1,q2,u,w)=>{if((u<lv)!==(w<lv)){const t=(lv-u)/(w-u);p.push([p1+(q1-p1)*t,p2+(q2-p2)*t])}};
+        e(x,y,x+st,y,a,b);e(x+st,y,x+st,y+st,b,c);e(x+st,y+st,x,y+st,c,d);e(x,y+st,x,y,d,a);
+        if(p.length>=2){g.moveTo(p[0][0],p[0][1]);g.lineTo(p[1][0],p[1][1])}if(p.length===4){g.moveTo(p[2][0],p[2][1]);g.lineTo(p[3][0],p[3][1])}}
+      g.stroke()}}
+  return PCACHE[key]=`url(${cv.toDataURL()}) center top / 100% auto no-repeat`}
 function phone(theme,a){const bg=BG[theme];const o=onColor(a);
   const edge=cr(a,bg.b)<3?shade(a,theme==="light"?-4:4,3,bg.b):"transparent";
   const txt=cr(a,bg.s)>=4.5?a:shade(a,theme==="light"?-2:2,4.5,bg.s);
-  return {o,edge,txt,html:`<div class="ph ${theme}" style="--a:${a};--o:${o};--e:${edge};--x:${txt};--gb:${grad(theme,a)}">
+  return {o,edge,txt,html:`<div class="ph ${theme}" style="--a:${a};--o:${o};--e:${edge};--x:${txt};--gb:${(p=>p?p+", ":"")(pattern(theme))}${grad(theme,a)}">
   <div class="t">${theme==="dark"?"Тёмная":"Светлая"}</div>
   <div class="hd"><b>Сегодня</b><div class="row" style="gap:8px"><div class="ic">⌕</div><div class="ic">＋</div></div></div>
   <div class="days">${["Пн 17","Вт 18","Ср 19","Чт 20","Пт 21"].map((d,i)=>`<div class="day ${i===2?"on":""}">${d.split(" ")[0]}<b>${d.split(" ")[1]}</b></div>`).join("")}</div>
@@ -169,7 +202,11 @@ $("copy").addEventListener("click",()=>{const v=$("hex").value.toUpperCase();con
 function drawGr(){$("gr").innerHTML=GR.map(([k,n])=>`<button class="gbtn ${k===gmode?"on":""}" data-g="${k}">${n}</button>`).join("");$("gsv").textContent=$("gs").value+"%"}
 $("gr").addEventListener("click",e=>{const g=e.target.dataset&&e.target.dataset.g;if(!g)return;gmode=g;try{localStorage.setItem("gorix.gr",g)}catch(_){}drawGr();render($("hex").value,"hex")});
 $("gs").addEventListener("input",()=>{drawGr();render($("hex").value,"hex")});
-drawGr();
+function drawPt(){$("pt").innerHTML=PT.map(([k,n])=>`<button class="gbtn ${k===pmode?"on":""}" data-p="${k}">${n}</button>`).join("");$("psv").textContent=$("ps").value+"%"}
+$("pt").addEventListener("click",e=>{const p=e.target.dataset&&e.target.dataset.p;if(!p)return;pmode=p;try{localStorage.setItem("gorix.pt",p)}catch(_){}drawPt();render($("hex").value,"hex")});
+$("ps").addEventListener("change",()=>{drawPt();render($("hex").value,"hex")});
+$("ps").addEventListener("input",()=>{$("psv").textContent=$("ps").value+"%"});
+drawGr();drawPt();
 let start="#E2C15E";try{start=localStorage.getItem("gorix.acc")||start}catch(e){}
 render(start);
 </script>

@@ -327,6 +327,15 @@ export interface GlowSpot {
   opacity: number;
 }
 
+/** the screen ground as a linear gradient (founder 21.11: «тёплый 100 %» in the accent picker); points are fractions of the screen */
+export interface GroundGradient {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  stops: { offset: number; color: string }[];
+}
+
 export interface ThemeColors {
   page: string;
   bg: string;
@@ -356,6 +365,8 @@ export interface ThemeColors {
   blurOverlay: number;
   blurTint: "dark" | "light";
   glow: GlowSpot[];
+  /** null — a flat `bg` */
+  ground: GroundGradient | null;
   status: Record<StatusName, { fill: string; text: string; on: string }>;
   /** the drawing canvas only (founder О3, 07.11.2026 — the one exception to «colour only for status»): a node, and the
    *  storeys 1..4 of a drawn line, always with the label «эт N»; ≥ 3:1 to the canvas (bg) in both themes */
@@ -367,7 +378,7 @@ export interface ThemeColors {
 }
 
 /** redesign #2348 (docs/design/2026-11-20-direction/06-decision.md): calm opaque surfaces, one cobalt accent,
- *  tonal status plates (fill = the plate, text = word and icon, on = text on the plate); the screen ground carries one soft accent glow from above (founder 21.11) */
+ *  tonal status plates (fill = the plate, text = word and icon, on = text on the plate); the screen ground is a warm gradient (`ground`, founder 21.11) */
 export type AccentName = "yellow";
 /** founder 21.11.2026 (#2350, palette A, docs/design/palette.html): one muted yellow, the same in both themes */
 export const ACCENT_ORDER: readonly AccentName[] = ["yellow"];
@@ -417,8 +428,9 @@ export const themes: Record<ThemeName, ThemeColors> = {
     blur: 20,
     blurOverlay: 24,
     blurTint: "dark",
-    // founder 21.11: «задний фон — градиент»; chosen in the accent picker: «свечение акцента» 60 % — one soft accent glow from above the top edge
-    glow: [{ cx: 0.5, cy: -0.1, rx: 507, ry: 640, color: "#E2C15E", opacity: 0.2 }],
+    glow: [],
+    // founder 21.11: «задний фон — градиент» → in the picker «Тёплый» 100 %: warm graphite at the top, deeper at the bottom (CSS 170°)
+    ground: { x1: 0.41, y1: 0, x2: 0.59, y2: 1, stops: [{ offset: 0, color: "#43392F" }, { offset: 0.55, color: "#26282C" }, { offset: 1, color: "#191A1D" }] },
     status: {
       ok: { fill: "#1C2E23", text: "#86D3A0", on: "#86D3A0" },
       info: { fill: "#182A2E", text: "#86C9D4", on: "#86C9D4" },
@@ -453,7 +465,8 @@ export const themes: Record<ThemeName, ThemeColors> = {
     blur: 20,
     blurOverlay: 24,
     blurTint: "light",
-    glow: [{ cx: 0.5, cy: -0.1, rx: 507, ry: 640, color: "#E2C15E", opacity: 0.25 }],
+    glow: [],
+    ground: { x1: 0.41, y1: 0, x2: 0.59, y2: 1, stops: [{ offset: 0, color: "#E1D9CA" }, { offset: 0.55, color: "#D6D7D1" }, { offset: 1, color: "#BBBCB6" }] },
     status: {
       ok: { fill: "#DCEBDF", text: "#1B6034", on: "#1B6034" },
       info: { fill: "#D8EAED", text: "#0E5866", on: "#0E5866" },
