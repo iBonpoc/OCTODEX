@@ -18,6 +18,7 @@ import { GuardedScreen, RouteGuard } from "@/nav/RouteGuard";
 import { NavMenuProvider } from "@/nav/NavMenu";
 import { SideNav } from "@/nav/SideNav";
 import { TabBar } from "@/nav/TabBar";
+import { statusBarStyleFor } from "@/ui/statusBarStyle";
 import { UpdateDriver } from "@/features/UpdateBar";
 import { ClosedCompanyNotice } from "@/nav/ClosedCompanyNotice";
 import { SlashToSearch } from "@/nav/SearchEntry";
@@ -33,7 +34,7 @@ function Shell() {
   useBootDone();
   return (
     <View style={{ flex: 1, backgroundColor: c.page }}>
-      <StatusBar style={name === "dark" ? "light" : "dark"} />
+      <StatusBar style={statusBarStyleFor(name)} />
       <ToastProvider>
         <NavMenuProvider>
           <NoticeWatcher />
@@ -42,7 +43,7 @@ function Shell() {
           <View style={{ flex: 1, flexDirection: "row" }}>
             <SideNav />
             <View style={{ flex: 1 }}>
-              <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }} screenLayout={(props) => <GuardedScreen {...props} />} />
+              <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg }, statusBarStyle: statusBarStyleFor(name) }} screenLayout={(props) => <GuardedScreen {...props} />} />
               {/* the phone's bottom bar over every screen but forms (docs/specs/28); 820/1280: SideNav instead */}
               <TabBar />
               <RouteGuard />

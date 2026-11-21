@@ -162,6 +162,7 @@ export function SpotlightNav({
                   w={on ? "medium" : "regular"}
                   tone={on ? "text" : "text2"}
                   lines={1}
+                  maxScale={graphite.font.maxScaleNav}
                 >
                   {t(s.label)}
                 </GrText>

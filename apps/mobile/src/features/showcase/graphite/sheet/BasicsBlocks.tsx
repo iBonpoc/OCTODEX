@@ -4,12 +4,13 @@
  * themes by one switch, spacing and corners on one card «плотно / средне / свободно», «угол 1 / 2 / 3». Numbers are small
  * captions under the sample. «Как сейчас» is «Наряд» as it is; «Вариант 1» is «Графит».
  */
+import { useState } from "react";
 import { View } from "react-native";
 import { graphite } from "@octo/design-tokens";
 import { radius, space } from "@octo/design-tokens";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { Button, StatusChip } from "@/ui/controls";
+import { Button, Segmented, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card } from "@/ui/surfaces";
 import { GrButton, GrStatus } from "../Controls";
@@ -66,9 +67,7 @@ function StatusBlock() {
           {tones.map((s) => (
             <GrStatus key={s} tone={s} label={t(labels[s])} />
           ))}
-          <GrText v="caption" tone="text2">
-            {t("ds.gr.base.noNeutral")}
-          </GrText>
+          <GrStatus tone="neutral" label={t("ds.gr.base.draft")} testID="gr-status-neutral" />
         </View>,
       ]}
     />
@@ -104,7 +103,14 @@ function SurfaceBlock() {
         </Card>
       }
       variants={[
-        <GrMatte key="1" style={{ padding: SP[4], gap: SP[1] }}>
+        // variant 1: the matte glass — a blur under a see-through fill; variant 2: the same card plain and opaque
+        <GrMatte key="1" testID="gr-surface-v1" style={{ padding: SP[4], gap: SP[1] }}>
+          <GrText v="title">{t("ds.gr.row1")}</GrText>
+          <GrText v="caption" tone="text2">
+            {t("ds.gr.row1Sub")}
+          </GrText>
+        </GrMatte>,
+        <GrMatte key="2" solid testID="gr-surface-v2" style={{ padding: SP[4], gap: SP[1] }}>
           <GrText v="title">{t("ds.gr.row1")}</GrText>
           <GrText v="caption" tone="text2">
             {t("ds.gr.row1Sub")}
@@ -121,41 +127,39 @@ const DENSITY: { id: "dense" | "mid" | "loose"; name: DictKey; between: 1 | 2 | 
   { id: "loose", name: "ds.gr.base.loose", between: 3, inside: 4 },
 ];
 
-/** the same card three times: only the space inside changes */
+/** a choice of the sheet's own (a mode of the sample): press a name — it is marked, the example below is rebuilt */
+function Pick<K extends string>({ id, items, value, onChange }: { id: string; items: { key: K; label: string }[]; value: K; onChange: (k: K) => void }) {
+  return <Segmented testID={id} radio full items={items} value={value} onChange={onChange} />;
+}
+
+/** the same card in the chosen density: only the space inside changes */
 function SpaceBlock() {
   const { t } = useI18n();
+  const [pick, setPick] = useState<"dense" | "mid" | "loose">("mid");
+  const d = DENSITY.find((x) => x.id === pick)!;
   return (
     <Block
       id="space"
       title={t("ds.gr.base.space")}
       note={t("ds.gr.base.spaceNote")}
+      controls={<Pick id="gr-space-pick" items={DENSITY.map((x) => ({ key: x.id, label: t(x.name) }))} value={pick} onChange={setPick} />}
       now={
-        <View style={{ gap: space[2] }}>
-          {DENSITY.map((d) => (
-            <View key={d.id} testID={`gr-space-now-${d.id}`} style={{ gap: space[1] }}>
-              <T v="caption" tone="mut">{`${t(d.name)} · ${t("ds.gr.base.nums", { a: space[d.inside], b: space[d.between] })}`}</T>
-              <Card style={{ padding: space[d.inside], gap: space[d.between] }}>
-                <T v="heading">{t("ds.gr.row1")}</T>
-                <T v="caption" tone="mut">{t("ds.gr.row1Sub")}</T>
-                <Button label={t("ds.gr.save")} size="sm" variant="secondary" onPress={() => undefined} />
-              </Card>
-            </View>
-          ))}
-        </View>
+        <Card style={{ padding: space[d.inside], gap: space[d.between] }}>
+          <View testID="gr-space-now-card" style={{ gap: space[d.between] }}>
+            <T v="heading">{t("ds.gr.row1")}</T>
+            <T v="caption" tone="mut">{t("ds.gr.row1Sub")}</T>
+            <Button label={t("ds.gr.save")} size="sm" variant="secondary" onPress={() => undefined} />
+          </View>
+        </Card>
       }
       variants={[
-        <View key="1" style={{ gap: SP[2] }}>
-          {DENSITY.map((d) => (
-            <View key={d.id} testID={`gr-space-v1-${d.id}`} style={{ gap: SP[1] }}>
-              <GrText v="caption" tone="text2">{`${t(d.name)} · ${t("ds.gr.base.nums", { a: SP[d.inside], b: SP[d.between] })}`}</GrText>
-              <GrMatte style={{ padding: SP[d.inside], gap: SP[d.between] }}>
-                <GrText v="title">{t("ds.gr.row1")}</GrText>
-                <GrText v="caption" tone="text2">{t("ds.gr.row1Sub")}</GrText>
-                <GrButton kind="secondary" label={t("ds.gr.save")} onPress={() => undefined} />
-              </GrMatte>
-            </View>
-          ))}
-        </View>,
+        <GrMatte key="1" style={{ padding: SP[d.inside] }}>
+          <View testID="gr-space-v1-card" style={{ gap: SP[d.between] }}>
+            <GrText v="title">{t("ds.gr.row1")}</GrText>
+            <GrText v="caption" tone="text2">{t("ds.gr.row1Sub")}</GrText>
+            <GrButton kind="secondary" label={t("ds.gr.save")} onPress={() => undefined} />
+          </View>
+        </GrMatte>,
       ]}
     />
   );
@@ -167,37 +171,30 @@ const CORNERS: { id: "c1" | "c2" | "c3"; name: DictKey; now: number; gr: number 
   { id: "c3", name: "ds.gr.base.corner3", now: radius.card, gr: R.main },
 ];
 
-/** the same card with the corners 1 / 2 / 3 */
+/** the same card in the chosen corner */
 function RadiusBlock() {
   const { t } = useI18n();
+  const [pick, setPick] = useState<"c1" | "c2" | "c3">("c2");
+  const c = CORNERS.find((x) => x.id === pick)!;
   return (
     <Block
       id="radius"
       title={t("ds.gr.base.radius")}
       note={t("ds.gr.base.radiusNote")}
+      controls={<Pick id="gr-radius-pick" items={CORNERS.map((x) => ({ key: x.id, label: t(x.name) }))} value={pick} onChange={setPick} />}
       now={
-        <View style={{ gap: space[2] }}>
-          {CORNERS.map((c) => (
-            <View key={c.id} testID={`gr-radius-now-${c.id}`} style={{ gap: space[1] }}>
-              <T v="caption" tone="mut">{`${t(c.name)} · ${c.now}`}</T>
-              <Card style={{ borderRadius: c.now }}>
-                <T v="heading">{t("ds.gr.row1")}</T>
-              </Card>
-            </View>
-          ))}
-        </View>
+        <Card style={{ borderRadius: c.now }}>
+          <View testID="gr-radius-now-card">
+            <T v="heading">{t("ds.gr.row1")}</T>
+          </View>
+        </Card>
       }
       variants={[
-        <View key="1" style={{ gap: SP[2] }}>
-          {CORNERS.map((c) => (
-            <View key={c.id} testID={`gr-radius-v1-${c.id}`} style={{ gap: SP[1] }}>
-              <GrText v="caption" tone="text2">{`${t(c.name)} · ${c.gr}`}</GrText>
-              <GrMatte radius={c.gr} style={{ padding: SP[4] }}>
-                <GrText v="title">{t("ds.gr.row1")}</GrText>
-              </GrMatte>
-            </View>
-          ))}
-        </View>,
+        <GrMatte key="1" radius={c.gr} style={{ padding: SP[4] }}>
+          <View testID="gr-radius-v1-card">
+            <GrText v="title">{t("ds.gr.row1")}</GrText>
+          </View>
+        </GrMatte>,
       ]}
     />
   );

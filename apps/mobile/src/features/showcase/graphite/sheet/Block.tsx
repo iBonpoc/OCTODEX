@@ -10,7 +10,7 @@ import { space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { T } from "@/ui/primitives";
 import { StatusChip } from "@/ui/controls";
-import { Card, RowView } from "@/ui/surfaces";
+import { Card } from "@/ui/surfaces";
 import { ToggleRow } from "@/ui/toggleRow";
 import { useGr } from "../theme";
 
@@ -55,13 +55,13 @@ export function VariantRow({ id, label, children, stage, inApp }: { id: string; 
   const { t } = useI18n();
   return (
     <View testID={id} style={{ gap: space[1] }}>
-      <RowView>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space[2] }}>
         <T v="caption" tone="mut" w="semibold">
           {label}
         </T>
         {/* «Как сейчас» is what the app has now: a plate with an icon and a word, not only a caption */}
         {inApp ? <StatusChip status="info" soft label={t("ds.gr.sheet.inApp")} /> : null}
-      </RowView>
+      </View>
       {stage ? <GrStage>{children}</GrStage> : children}
     </View>
   );

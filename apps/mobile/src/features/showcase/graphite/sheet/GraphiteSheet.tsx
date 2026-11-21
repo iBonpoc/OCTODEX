@@ -5,7 +5,7 @@
  * «Как сейчас» and the numbered variants at once, all of them live. Behind the pilot switch (flag.ts); nothing here applies to
  * the app. «Готовятся» — a plain list at the end. Phone 390 first; from 820 the column stays ≤ `sheet.maxWidth`, centred.
  */
-import { useRef, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import { ScrollView, View } from "react-native";
 import { graphite } from "@octo/design-tokens";
 import { size, space } from "@octo/design-tokens";
@@ -20,6 +20,7 @@ import { GraphiteSection } from "../GraphiteSection";
 import { useGrFonts } from "../fonts";
 import { GraphiteProvider } from "../theme";
 import { BasicsBlocks } from "./BasicsBlocks";
+import { FieldsBlocks } from "./FieldsBlocks";
 import { ButtonsBlocks } from "./ButtonsBlocks";
 
 interface SheetSection {
@@ -32,13 +33,14 @@ interface SheetSection {
 const SECTIONS: SheetSection[] = [
   { id: "base", title: "ds.gr.sheet.s.base", body: <BasicsBlocks /> },
   { id: "buttons", title: "ds.gr.sheet.s.buttons", body: <ButtonsBlocks /> },
+  { id: "fields", title: "ds.gr.sheet.s.fields", body: <FieldsBlocks /> },
   // the vibration check is the showcase's own, as it is (DS §15.6): a button per response
-  { id: "haptics", title: "ds.gr.sheet.s.haptics", body: <HapticsSection /> },
+  { id: "haptics", title: "ds.gr.sheet.s.haptics", body: <HapticsSection bare /> },
   { id: "pilot", title: "ds.gr.sheet.s.pilot", body: <GraphiteSection /> },
 ];
 
 /** the one fold of the sheet: the service values (colours, numbers, the module's own tokens) for the developer, at the very end */
-function DevFold() {
+function DevFold({ caption }: { caption: string }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   return (
@@ -47,9 +49,14 @@ function DevFold() {
         <T v="caption" tone="mut">
           {t("ds.gr.sheet.devNote")}
         </T>
+
         <Button testID="gr-dev-toggle" size="sm" variant="secondary" icon={open ? "chevronUp" : "chevronDown"} label={t(open ? "ds.gr.sheet.devHide" : "ds.gr.sheet.devShow")} onPress={() => setOpen((v) => !v)} />
         {open ? (
           <View testID="gr-dev-body">
+            {/* the rule line of the showcase and the pilot's footing: service words, for the developer — only in the fold */}
+            <T v="caption" tone="mut">
+              {`${caption} · ${t("ds.gr.sheet.devPilot")}`}
+            </T>
             <TokenSections screen="base" />
             <TokenSections screen="spacing" />
             <TokenSections screen="motion" />
@@ -62,7 +69,6 @@ function DevFold() {
 
 /** «Готовятся»: not on the sheet yet — a list, not a link */
 const SOON: DictKey[] = [
-  "ds.gr.sheet.s.fields",
   "ds.gr.sheet.s.select",
   "ds.gr.sheet.s.switch",
   "ds.gr.sheet.s.sheets",
@@ -83,13 +89,15 @@ export function GraphiteSheet({ title, caption, onBack }: { title: string; capti
   const loaded = useGrFonts();
   const scroll = useRef<ScreenScroll | null>(null);
   const anchors = useRef<Record<string, ViewNode | null>>({});
-  const jump = (id: string) => {
+  const jump = useCallback((id: string) => {
     const node = anchors.current[id];
     // the heading stops under the sticky strip
     if (node) scroll.current?.scrollToNode(node, size.hitMin + space[4], true);
-  };
+  }, []);
   const column = { width: "100%" as const, maxWidth: graphite.sheet.maxWidth, alignSelf: "center" as const, gap: space[3] };
-  const strip = (
+  // one element for the whole life of the screen: a new one on every render would be read as a new `tabs`
+  const strip = useMemo(
+    () => (
     <View testID="gr-sheet-strip" style={{ width: "100%", maxWidth: graphite.sheet.maxWidth, alignSelf: "center" }}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space[2] }} accessibilityLabel={t("ds.gr.sheet.jump")}>
         {SECTIONS.map((s) => (
@@ -99,6 +107,8 @@ export function GraphiteSheet({ title, caption, onBack }: { title: string; capti
         <Button testID="gr-jump-dev" size="sm" variant="secondary" label={t("ds.gr.sheet.s.dev")} onPress={() => jump("dev")} />
       </ScrollView>
     </View>
+    ),
+    [t, jump],
   );
   const heading = (id: string, text: string) => (
     <View key={id} testID={`gr-section-${id}`} collapsable={false} ref={(n) => void (anchors.current[id] = n)}>
@@ -109,6 +119,9 @@ export function GraphiteSheet({ title, caption, onBack }: { title: string; capti
     <GraphiteProvider>
       <Screen title={title} back={onBack} tabs={strip} tabKey="gr-sheet" below={
         <View testID="gr-sheet-page" style={column}>
+          <View testID="showcase-screen-graphite">
+            <T v="body">{t("ds.gr.sheet.intro")}</T>
+          </View>
           {loaded
             ? SECTIONS.map((s) => (
                 <View key={s.id} style={{ gap: space[3] }}>
@@ -124,19 +137,15 @@ export function GraphiteSheet({ title, caption, onBack }: { title: string; capti
                 {t("ds.gr.sheet.soonHint")}
               </T>
               {SOON.map((k) => (
-                <ListRow key={k} title={t(k)} chevron={false} />
+                <ListRow key={k} title={t(k)} chevron={false} lines={0} />
               ))}
             </View>
           </Card>
           {heading("dev", t("ds.gr.sheet.s.dev"))}
-          <DevFold />
+          <DevFold caption={caption} />
         </View>
       }>
         <GrabScroll into={scroll} />
-        <View testID="showcase-screen-graphite" style={{ gap: space[1] }}>
-          <T v="caption" tone="mut">{caption}</T>
-          <T v="body">{t("ds.gr.sheet.intro")}</T>
-        </View>
       </Screen>
     </GraphiteProvider>
   );

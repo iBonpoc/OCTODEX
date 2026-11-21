@@ -101,8 +101,11 @@ export function GrButton({
     paddingHorizontal: SP[4],
   };
   let body;
-  if (kind === "ghost") {
+  if (kind === "ghost" && !quiet) {
     body = <View style={box}>{inner}</View>;
+  } else if (kind === "ghost") {
+    // variant 2 of the text button: a quiet plate (the chip's), so it is seen on the scene
+    body = <View style={[box, { borderRadius: R.main, backgroundColor: g.chip, borderWidth: S.edge, borderColor: g.border }]}>{inner}</View>;
   } else if (kind === "secondary" && !quiet) {
     body = (
       // the edge `borderS`: on the light scene the matte plate alone does not stand out
@@ -189,13 +192,13 @@ export function GrIconButton({
   );
 }
 
-/** «＋» — create: the 52 yellow circle (the one yellow of its layer, like the button) */
-export function GrPlus({ label, onPress, testID }: { label: string; onPress: () => void; testID?: string }) {
+/** «＋» — create: variant 1 is the 52 yellow circle (the one yellow of its layer, like the button), 2 the inverse plate */
+export function GrPlus({ label, onPress, testID, variant = 1 }: { label: string; onPress: () => void; testID?: string; variant?: 1 | 2 }) {
   const { g } = useGr();
   return (
     <GrPress testID={testID} accessibilityRole="button" accessibilityLabel={label} onPress={onPress}>
-      <View style={{ width: S.plus, height: S.plus, borderRadius: R.pill, backgroundColor: g.acc, alignItems: "center", justifyContent: "center" }}>
-        <Icon name="plus" s={S.glyph} color={g.onAcc} />
+      <View style={{ width: S.plus, height: S.plus, borderRadius: R.pill, backgroundColor: variant === 2 ? g.badge : g.acc, alignItems: "center", justifyContent: "center" }}>
+        <Icon name="plus" s={S.glyph} color={variant === 2 ? g.onBadge : g.onAcc} />
       </View>
     </GrPress>
   );
@@ -269,7 +272,8 @@ export function GrPhoneField({ testID }: { testID?: string }) {
   );
 }
 
-const STATUS_ICON: Record<"ok" | "info" | "warn" | "bad", IconKey> = {
+const STATUS_ICON: Record<"ok" | "info" | "warn" | "bad" | "neutral", IconKey> = {
+  neutral: "note",
   ok: "check",
   info: "star",
   warn: "clock",
@@ -282,7 +286,7 @@ export function GrStatus({
   label,
   testID,
 }: {
-  tone: "ok" | "info" | "warn" | "bad";
+  tone: "ok" | "info" | "warn" | "bad" | "neutral";
   label: string;
   testID?: string;
 }) {
