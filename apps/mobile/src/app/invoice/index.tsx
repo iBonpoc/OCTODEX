@@ -1,27 +1,23 @@
 import { useState } from "react";
-import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import { useI18n, type DictKey } from "@/i18n";
-import { INV_COLUMNS, INV_COLUMNS_PANEL, InvoiceListCard } from "@/features/listCards";
-import { InvoiceCardBody } from "@/features/invoice/InvoiceCard";
-import { useListPanel } from "@/nav/listPanel";
-import { ListPanel } from "@/ui/listPanel";
-import { asInvoiceFilter, canSeeInvoiceList, INVOICE_FILTERS, invoiceList, type InvoiceFilter, type OwedGroup } from "@/features/moneyLists";
-import { INVOICE_PAID } from "@/features/invoiceStatus";
-import { useDevice } from "@/theme/ThemeProvider";
-import { FilterBar } from "@/ui/filterBar";
-import { filterStoreKey } from "@/ui/filterBarRules";
-import { usePersistentState } from "@/data/persist";
+import { useI18n } from "@/i18n";
 import type { DB, Invoice } from "@/data/types";
-import { T } from "@/ui/primitives";
-import { CardList, Empty, Screen } from "@/ui/surfaces";
-import { CardGrid, ListCardHeader } from "@/ui/listCard";
+import { asInvoiceFilter, canSeeInvoiceList, invoiceList, type InvoiceFilter, type OwedGroup } from "@/features/moneyLists";
+import { invoiceBalance } from "@/features/invoiceStatus";
+import { invoiceSigns } from "@/features/listSigns";
+import { remindersOf } from "@/features/invoiceRemind";
+import { sumCents } from "@octo/estimating-engine";
+import { daysBetween, dayKeyIn, dueDayKey, formatDayKey, getZone } from "@/features/zone";
+import { initialsOf, remindAll, type MoneyTile } from "@/features/invoice/moneySummary";
+import { useInvoiceRemind } from "@/features/invoice/useRemind";
+import { MoneyTiles, useMoneyChips, useMoneyCreate } from "@/features/moneyTabs";
+import type { GroupRowProps } from "@/ui/groupedList";
+import type { FigureCol } from "@/ui/figures";
+import { invoiceTitle } from "@/features/invoiceTitle";
+import { Empty, Screen } from "@/ui/surfaces";
+import { ListScreen } from "@/ui/templates";
 
-// a paid invoice: the filter, the group and the chip say one word (DS §4.4 п.1, #1427)
-const CHIP: Record<InvoiceFilter, DictKey> = { owed: "mny.f.owed", paid: INVOICE_PAID, all: "mny.f.all" };
-const GROUP: Record<OwedGroup, DictKey> = { overdue: "mny.g.overdue", waiting: "mny.g.waiting", paid: INVOICE_PAID };
 /** the search of «Счета»: the client's name, the number, the title of the work, the address of the job's property */
 function matchInvoice(db: DB, i: Invoice, q: string): boolean {
   const needle = q.trim().toLowerCase();
@@ -32,110 +28,107 @@ function matchInvoice(db: DB, i: Invoice, q: string): boolean {
   return [client?.name, i.number, i.title, job?.title, prop?.address, prop?.city].some((x) => (x ?? "").toLowerCase().includes(needle));
 }
 
-const EMPTY: Record<InvoiceFilter, DictKey> = { owed: "mny.empty.owed", paid: "mny.empty.paid", all: "mny.empty.all" };
+const WEEK_DAYS = 7;
+const GROUP_TITLE = { overdue: "proto.money.g.overdue", waiting: "proto.money.g.waiting", paid: "proto.money.g.paid" } as const;
 
 /**
- * «Ещё» → Счета (wave 8, docs/specs/18-money-reports.md §7): the one path to debts. «Не оплачен · Просрочен» by default;
- * «Ждёт оплаты» on Today and «Должен» on a client open the same list (`?f=owed`, `&customer=<id>`).
+ * «Деньги → Счета» and «Кто должен» — the List template (prototype v2 #2350, BUILD-SPEC §2.9, §2.13, wireframes-v2 №17).
+ * The screen's one job: who owes how much and for how many days — and remind them all at once.
+ * «Деньги» · search · «＋» → «Сметы · Счета · Оплаты» → the tiles (on this list «Ждёт оплаты» / «Просрочено» switch it) → «Должны»
+ * by days overdue with «Напомнить всем · N» on the group's line → «Ждут оплаты» → «Оплачено за неделю» («Все ›» — every paid one).
+ * Rows 56: initials, the client, «Просрочен 9 дн · INV-0101 · напоминаний 0», the sum once. Swipe → «Напомнить», ← «Принять оплату»
+ * (the same on a long press and to VoiceOver). Links: `?f=owed|paid|all` (Today «Ждёт оплаты», a client's «Должен» with
+ * `&customer=`), `?g=waiting|overdue` (a tile).
  */
 export default function Invoices() {
-  const { f: fParam, customer } = useLocalSearchParams<{ f?: string; customer?: string }>();
+  const { f: fParam, customer, g: gParam } = useLocalSearchParams<{ f?: string; customer?: string; g?: string }>();
   const { db, role } = useStore();
-  const { t, money } = useI18n();
-  const { device } = useDevice();
-  // spec 31 §6 п.7: a link with ?f= («Ждёт оплаты» on Today, «Должен» on a client) sets the filter for this visit only;
-  // a chip the person taps is kept on this device for this list; the search is not kept
-  const [kept, setKept] = usePersistentState<InvoiceFilter>(`${filterStoreKey("invoices")}.status`, "owed");
-  const f = fParam ? asInvoiceFilter(fParam) : asInvoiceFilter(kept);
+  const { t, money, day } = useI18n();
+  const remind = useInvoiceRemind();
+  const chips = useMoneyChips("invoices");
+  const { create, onCreate } = useMoneyCreate();
+  // the filter lives in the address (a link, «Все ›», «back» keep it); none — the debts
+  const f: InvoiceFilter = asInvoiceFilter(fParam);
+  const tile: MoneyTile | undefined = gParam === "waiting" || gParam === "overdue" ? gParam : undefined;
   const [q, setQ] = useState("");
-  // computed before the role check (hooks): the visible rows in their order on screen
-  const clientP = customer ? db.customers.find((c) => c.id === customer) : undefined;
-  const qShown = q.trim() ? invoiceList({ invoices: db.invoices.filter((i) => matchInvoice(db, i, q)) }, f, { customerId: clientP?.id }) : invoiceList(db, f, { customerId: clientP?.id });
-  const panel = useListPanel(canSeeInvoiceList(role) ? qShown.groups.flatMap((g) => g.items.map((i) => i.id)) : [], (id) => `/invoice/${id}`, (id) => canSeeInvoiceList(role) && db.invoices.some((i) => i.id === id));
-  const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));
   if (!canSeeInvoiceList(role))
     return (
-      <Screen title={t("nav.invoices")} back={back}>
+      <Screen title={t("nav.money")}>
         <Empty icon="invoice" title={t("mny.noAccess")} />
       </Screen>
     );
   const client = customer ? db.customers.find((c) => c.id === customer) : undefined;
-  const v = invoiceList(db, f, { customerId: client?.id });
-  // the search narrows the groups; the chips and «Должны всего» count the whole list
-  const shown = qShown;
-  // the filter lives in the address: «back» and a shared link keep it
-  const go = (x: InvoiceFilter, c: string | undefined = client?.id) => router.setParams({ f: x, customer: c ?? "" });
-  // «Клиент» (spec 31, one rule): one at a time, in the sheet with a search at 10+; picked — a chip «Клиент: X ✕» under the row.
-  // «Должен» on a client opens the list with it (`?customer=`)
-  const payers = db.customers
-    .map((c) => ({ c, n: invoiceList(db, f, { customerId: c.id }).groups.reduce((s, g) => s + g.items.length, 0), any: db.invoices.some((i) => i.customerId === c.id) }))
-    .filter((x) => x.any)
-    .sort((a, b) => a.c.name.localeCompare(b.c.name));
-  const clientGroup = {
-    key: "client",
-    title: t("card.fact.client"),
-    single: true,
-    searchable: true,
-    options: payers.map(({ c, n }) => ({ key: c.id, label: c.name, count: n, on: client?.id === c.id })),
-    onToggle: (id: string) => go(f, client?.id === id ? "" : id),
-  };
-  // 1280: the open invoice beside the list, `/invoice?open=<id>` (spec 06 «Панель 1280»); the rows in the groups' order
-  const openInv = panel.openId ? db.invoices.find((i) => i.id === panel.openId) : undefined;
-  const row = (i: (typeof db.invoices)[number]) => ({ selected: i.id === panel.openId, open: () => panel.open(i.id), narrow: !!panel.openId });
-  const pick = (x: InvoiceFilter) => {
-    setKept(x);
-    go(x);
+  const now = Date.now();
+  const tz = getZone();
+  // the search looks through every invoice; else the filter (and the tile) narrow it
+  const searching = q.trim() !== "";
+  const view = invoiceList({ invoices: db.invoices.filter((i) => matchInvoice(db, i, q)) }, searching ? "all" : f === "owed" ? "all" : f, { customerId: client?.id, now, tz });
+  const weekAgo = now - WEEK_DAYS * 86_400_000;
+  const owedOnly = f === "owed" && !searching;
+  const shown = view.groups
+    .filter(({ g }) => !tile || g === tile)
+    .map(({ g, items }) => ({ g: g as OwedGroup, items: owedOnly && g === "paid" ? items.filter((i) => i.paidAt && Date.parse(i.paidAt) >= weekAgo) : items, all: owedOnly && g === "paid" }));
+  const late = remindAll(shown.find((x) => x.g === "overdue")?.items ?? [], remind.reachable, now, tz);
+  // the list is the office's (canSeeInvoiceList: not the tech) — reminders are theirs (S20)
+  const canRemind = true;
+  const groups = shown.map(({ g, items, all }) => ({
+    key: g,
+    title: `${t(g === "paid" && owedOnly ? "proto.money.g.paidWeek" : GROUP_TITLE[g])} · ${money(sumCents(items.map((i) => (g === "paid" ? i.paidCents : invoiceBalance(i).owesCents))))}`,
+    rows: items,
+    // «Напомнить всем · N» — on the debtors' line (the List template has no main button; BUILD-SPEC §2.13)
+    all:
+      g === "overdue" && canRemind && late.length
+        ? { label: t("proto.money.remindAll", { n: late.length }), onPress: () => remind.all(late) }
+        : all
+          ? { label: t("proto.money.all"), onPress: () => router.setParams({ f: "paid", g: "" }) }
+          : g === "paid" && f === "paid" && !searching
+            ? { label: t("proto.money.fewer"), onPress: () => router.setParams({ f: "owed" }) }
+            : undefined,
+  }));
+  const row = (i: Invoice): GroupRowProps & { key: string } => {
+    const c = db.customers.find((x) => x.id === i.customerId);
+    const owes = invoiceBalance(i).owesCents;
+    const sign = invoiceSigns(i, now, tz)[0];
+    const left = i.dueDate ? daysBetween(dayKeyIn(now, tz), dueDayKey(i.dueDate, tz)) : 0;
+    const late = owes > 0 && sign?.tone === "bad";
+    // visual v2 «цифры справа»: «Срок −9 дн» (red word, not a fill) · «Сумма $1,840»; the line — the number, the work, the reminders
+    const due: FigureCol =
+      owes <= 0
+        ? { label: t("w2m.col.paid"), value: i.paidAt ? formatDayKey(dayKeyIn(i.paidAt, tz), { month: "numeric", day: "numeric" }) : "—" }
+        : { label: t("w2m.col.due"), value: left < 0 ? t("w2m.due.late", { d: -left }) : left > 0 ? t("w2m.due.in", { d: left }) : t("w2m.due.today"), tone: late || left < 0 ? "bad" : undefined };
+    const sub = [i.number, invoiceTitle(i, t), late ? t("proto.money.reminders", { n: remindersOf(db, i.id).length }) : undefined].filter(Boolean).join(" · ");
+    return {
+      key: i.id,
+      testID: `invoice-row-${i.id}`,
+      title: c?.name ?? "—",
+      subtitle: sub,
+      lead: { initials: initialsOf(c?.name) },
+      value: money(owes > 0 ? owes : i.paidCents),
+      cols: [due, { label: t("w2m.col.sum"), value: money(owes > 0 ? owes : i.paidCents) }],
+      onPress: () => router.push(`/invoice/${i.id}`),
+      swipe:
+        owes > 0
+          ? {
+              left: canRemind && remind.reachable(i.customerId) ? [{ key: "remind", label: t("mny.remind"), icon: "bell", onPress: () => remind.one(i), testID: `invoice-swipe-remind-${i.id}` }] : [],
+              right: [{ key: "pay", label: t("inv.takePayment"), icon: "dollar", onPress: () => router.push(`/invoice/${i.id}?pay=1`), testID: `invoice-swipe-pay-${i.id}` }],
+            }
+          : undefined,
+    };
   };
   return (
-    <Screen
-      title={t("nav.invoices")}
-      back={back}
-      aside={
-        openInv ? (
-          // #1474: as the invoice's screen — «⋯» in the panel's header row, «Принять оплату» at the top of the card
-          <InvoiceCardBody
-            key={openInv.id}
-            inv={openInv}
-            frame={({ more, body }) => (
-              <ListPanel title={`${t("inv.title")} ${openInv.number ?? ""}`.trim()} subtitle={db.customers.find((c) => c.id === openInv.customerId)?.name} outside={panel.outside} more={more} onOpen={panel.full} onClose={panel.close}>
-                {body}
-              </ListPanel>
-            )}
-          />
-        ) : undefined
-      }
-      subtitle={`${t("mny.owedTotal")} ${money(v.owedCents)}`}
-      help={t("mny.invoices.help")}
-      hintKey="invoices"
-    >
-      {/* spec 31 (variant Б): the search (client, address, INV, work) and one lane; the debts first */}
-      <FilterBar<InvoiceFilter>
-        search={{ value: q, onChange: setQ, placeholder: t("card.filter.searchInvoices") }}
-        value={f}
-        onChange={pick}
-        items={INVOICE_FILTERS.map((k) => ({ key: k, label: t(CHIP[k]), count: v.counts[k] }))}
-        groups={payers.length > 1 || client ? [clientGroup] : []}
-        onReset={() => go(f, "")}
-      />
-      {shown.groups.length === 0 ? (
-        <Empty icon="invoice" title={t(EMPTY[f])} />
-      ) : (
-        <>
-          {device === "desktop" ? <ListCardHeader title={t("card.fact.client")} columns={panel.openId ? INV_COLUMNS_PANEL : INV_COLUMNS} value={t("card.val.toPay")} /> : null}
-          {shown.groups.map(({ g, items, cents }) => (
-            <View key={g} style={{ gap: space[2] }}>
-              <View testID={`invoice-group-${g}`}>
-                <T v="caption" w="semibold" tone="mut">{`${t(GROUP[g])} · ${items.length} · ${money(cents)}`}</T>
-              </View>
-              {device === "tablet" ? (
-                <CardGrid>{items.map((i) => <InvoiceListCard key={i.id} i={i} density="rich" panel={row(i)} />)}</CardGrid>
-              ) : (
-                <CardList>{items.map((i) => <InvoiceListCard key={i.id} i={i} density={device === "desktop" ? "row" : "rich"} panel={row(i)} />)}</CardList>
-              )}
-            </View>
-          ))}
-        </>
-      )}
-    </Screen>
+    <ListScreen
+      testID="invoice-list"
+      title={client ? client.name : t("nav.money")}
+      back={client ? () => (router.canGoBack() ? router.back() : router.setParams({ customer: "" })) : undefined}
+      search={{ placeholder: t("card.filter.searchInvoices"), value: q, onChange: setQ }}
+      chips={client ? undefined : chips}
+      chipsAs="segment"
+      filters={client ? undefined : <MoneyTiles selected={tile} onSelect={(k) => router.setParams({ g: k ?? "", f: "owed" })} />}
+      create={create}
+      onCreate={onCreate}
+      groups={groups}
+      row={row}
+      empty={<Empty icon="invoice" title={t(f === "owed" && !searching ? "proto.money.empty.owed" : f === "paid" ? "mny.empty.paid" : "mny.empty.all")} />}
+    />
   );
 }

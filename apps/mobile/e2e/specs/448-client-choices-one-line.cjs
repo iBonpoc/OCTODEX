@@ -57,7 +57,7 @@ exports.run = async (h) => {
   await sheet.getByTestId("people-0-phones-row-0-label").click();
   await p.getByTestId("people-0-phones-row-0-label-home").click();
   await p.getByRole("menu").waitFor({ state: "detached" });
-  h.expect(/Домашний/.test(await sheet.getByTestId("people-0-phones-row-0-label").innerText()), "the label menu set «Домашний»");
+  h.expect(/Домашний/.test((await sheet.getByTestId("people-0-phones-row-0-label").getAttribute("aria-label")) || ""), "the label menu set «Домашний»");
   // «⊕ Добавить телефон» adds a row
   await sheet.getByTestId("people-0-phones-add").click();
   await shown("people-0-phones-row-2");

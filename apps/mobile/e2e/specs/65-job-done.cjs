@@ -1,8 +1,8 @@
 /**
  * Wave 3c «Работа выполнена» (S10; docs/specs/17-job.md §4, 13 §3.4.1, 15-flows §1.1 шаг 22, §1.15):
  * - a job going with every visit over → «Работа выполнена?» in the office's queue and on the job;
- * - «Нужен ещё выезд» → a second visit; the job stays «in progress» (failed before: it went back to «scheduled»);
- * - with an open visit «Завершить работу» says why and closes nothing;
+ * - «Нужен ещё выезд» (in «⋯») → a second visit; the job stays «in progress» (failed before: it went back to «scheduled»);
+ * - with an open visit «Завершить работу» (in «⋯») says why and closes nothing;
  * - «Да, выполнена» → done → «Создать счёт на остаток» (only when something is left to invoice);
  * - the technician is never asked.
  */
@@ -27,16 +27,22 @@ exports.run = async (h) => {
   // the technician: nothing to answer
   await setRole(h, "tech");
   await h.go(`/job/${job.id}`);
-  h.expect(!/Работа выполнена\?/.test(await h.text()), "the technician is not asked");
+  h.expect((await p.getByTestId("job-next-close").count()) === 0, "the technician is not asked");
 
   // the office: on the job
   await setRole(h, "director");
   await h.go(`/job/${job.id}`);
-  await h.expectText(/Работа выполнена\?/, "the office is asked on the job");
+  // the next step of the card (LAYOUT-RULES §3): «Да, выполнена», its reason under it
+  await p.getByTestId("job-next-close").locator("visible=true").first().waitFor({ timeout: 8000 });
+  await h.expectText(/Все выезды закончены/, "the office is asked on the job");
   await h.shot("ask");
 
-  // «Нужен ещё выезд» → the visit form → the job stays in progress
-  await h.click("Нужен ещё выезд");
+  // «Нужен ещё выезд» (in «⋯») → the visit form → the job stays in progress
+  const more = async (id) => {
+    await p.getByTestId("job-more").locator("visible=true").first().getByRole("button").click();
+    await p.getByTestId(id).locator("visible=true").first().click();
+  };
+  await more("job-act-more");
   await p.waitForTimeout(500);
   h.expect(new URL(p.url()).pathname === "/job/schedule", `«Нужен ещё выезд» → the visit form (${p.url()})`);
   await pickVisitDay(p, workdayOffset(2)); // the day — DateField (spec 56 wave 5б)
@@ -51,8 +57,8 @@ exports.run = async (h) => {
 
   // an open visit: «Завершить работу» explains, closes nothing; no question while a visit is open
   await h.go(`/job/${job.id}`);
-  h.expect(!/Работа выполнена\?/.test(await h.text()), "no question while a visit is open");
-  await h.click("Завершить работу");
+  h.expect((await p.getByTestId("job-next-close").count()) === 0, "no question while a visit is open");
+  await more("job-act-complete");
   await h.expectText(/Сначала завершите или отмените открытые выезды/, "why it is not closed");
   db = await h.db();
   h.expect(db.jobs.find((j) => j.id === job.id).status === "in_progress", "not closed with an open visit");

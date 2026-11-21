@@ -16,7 +16,7 @@ exports.run = async (h) => {
 
   // — the job's history: the filter lane
   await h.go("/job/j1");
-  await p.getByRole("tab", { name: "История", exact: true }).locator("visible=true").click();
+  await p.getByTestId("job-tab-notes").locator("visible=true").click();
   await tid("job-history-filter").waitFor({ timeout: 8000 });
   h.expect((await old(tid("job-history-filter"))) === 0, "the history filter is no segments");
   await tid("job-history-filter").getByRole("radio", { name: "Заметки", exact: true }).click();
@@ -26,7 +26,7 @@ exports.run = async (h) => {
   await h.go("/lead/l1");
   await h.clickText("Переписка");
   await p.getByPlaceholder("Собака во дворе, где парковаться…").locator("visible=true").fill(NOTE);
-  h.expect(/Для команды/.test(await tid("note-visibility-button").innerText()), "«Видно · Для команды» by default");
+  h.expect(/Для команды/.test((await tid("note-visibility-button").getAttribute("aria-label")) || ""), "«Видно: Для команды» by default (the eye inside the composer)");
   await tid("note-visibility-button").click();
   await tid("note-visibility-private").click();
   await h.click("Добавить заметку");

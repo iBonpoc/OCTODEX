@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { NO_TAB_BAR, NOT_A_FORM, WITH_TAB_BAR, appStackRoutes, formsAbove, goAction, tabLeave, tabRouteKey, showsTabBar } from "../src/nav/tabBarRule";
+import { NO_TAB_BAR, NOT_A_FORM, WITH_TAB_BAR, appStackRoutes, litSection, tabUnder, formsAbove, goAction, tabLeave, tabRouteKey, showsTabBar } from "../src/nav/tabBarRule";
 
 const APP = path.resolve(__dirname, "../src/app");
 function routes(dir = APP, base = ""): string[] {
@@ -29,9 +29,11 @@ describe("unit:tabBarRule — the bottom bar on the phone", () => {
     for (const r of [...NO_TAB_BAR, ...WITH_TAB_BAR]) expect(all, `no screen "${r}"`).toContain(r);
   });
   it("the founder's screens (07.11) have it; forms and the signature do not", () => {
-    for (const r of ["jobs", "tasks", "invoice", "catalog", "team", "company", "settings", "calls", "client/[id]", "job/[id]", "lead/[id]"])
+    for (const r of ["jobs", "tasks", "invoice", "catalog", "team", "company", "settings", "calls", "leads", "plan", "clients"])
       expect(showsTabBar(r), r).toBe(true);
     for (const r of ["lead/new", "estimate/signature", "client/edit", "p/[token]", "auth/sign-in", "catalog/[id]"]) expect(showsTabBar(r), r).toBe(false);
+    // founder 21.11 (#2350): an object's card keeps the tab bar — no pinned slab; its next step sits in the «Сейчас» card
+    for (const r of ["client/[id]", "job/[id]", "visit/[id]", "lead/[id]", "property/[id]"]) expect(showsTabBar(r), r).toBe(true);
   });
   it("route names and segments are read the same", () => {
     expect(tabRouteKey("(tabs)/clients")).toBe("clients");
@@ -82,5 +84,39 @@ describe("unit:tabBarRule — the bottom bar on the phone", () => {
     const st = { routeNames: ["__root"], index: 0, routes: [{ name: "__root", state: { routeNames: ["(tabs)", "client/[id]"], index: 1, routes: [{ name: "client/[id]" }, { name: "(tabs)" }] } }] };
     expect(appStackRoutes(st)).toEqual(["client/[id]", "(tabs)"]);
     expect(appStackRoutes(undefined)).toEqual([]);
+  });
+});
+
+/**
+ * Prototype audit 12 §1 «Подсветка вкладки»: a Job, a Visit, an Estimate opened from the Plan or «Главная» lit «Клиенты» (their place
+ * in the hierarchy), «Поиск» lit «Главная». Now a card lights the tab it was opened from (the tab under the cards); a search lights none;
+ * a deep link with no tabs under it keeps the hierarchy's section.
+ */
+describe("unit:tabBarRule — which tab is lit (by the source)", () => {
+  const stack = (tab: string, ...cards: string[]) => ({
+    routeNames: ["__root"],
+    index: 0,
+    routes: [{ name: "__root", state: { routeNames: ["(tabs)", ...cards], index: cards.length, routes: [{ name: "(tabs)", state: { index: 1, routes: [{ name: "today" }, { name: tab }] } }, ...cards.map((name) => ({ name }))] } }],
+  });
+  it("the tab under the cards", () => {
+    expect(tabUnder(stack("plan", "visit/[id]"))).toBe("plan");
+    expect(tabUnder(stack("today", "job/[id]", "visit/[id]"))).toBe("today");
+    // the tabs on top: nothing lies over them
+    expect(tabUnder(stack("plan"))).toBeUndefined();
+    expect(tabUnder(undefined)).toBeUndefined();
+  });
+  it("a visit or a job from the Plan lights «План», from «Главная» — «Главная» (was: «Клиенты»)", () => {
+    expect(litSection("visit/[id]", "clients", "plan")).toBe("plan");
+    expect(litSection("job/[id]", "clients", "today")).toBe("home");
+    expect(litSection("job/[id]", "clients", "index")).toBe("home");
+    expect(litSection("estimate/[id]", "estimates", "leads")).toBe("leads");
+  });
+  it("a search lights no tab (was: «Главная»)", () => {
+    expect(litSection("search", "home", "today")).toBeUndefined();
+    expect(litSection("search", "home", undefined)).toBeUndefined();
+  });
+  it("a tab screen lights itself; a card opened by a link (no tabs under it) — its own section", () => {
+    expect(litSection("plan", "plan", undefined)).toBe("plan");
+    expect(litSection("visit/[id]", "clients", undefined)).toBe("clients");
   });
 });

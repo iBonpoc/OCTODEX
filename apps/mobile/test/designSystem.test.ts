@@ -7,6 +7,7 @@
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { V2_VARIANTS } from "../src/features/showcase/registry";
 
 const ROOT = join(__dirname, "..", "src");
 const files: string[] = [];
@@ -98,7 +99,6 @@ describe("design system: components", () => {
   const RULE29_STYLED_PRESS: Record<string, number> = {
     "features/LegalAgree.tsx": 1, // the Terms / Privacy links drawn as underlined text (#2022); spec 56 §11.1 waits for the lawyer
     "features/PhotoStrip.tsx": 2,
-    "features/PlanParts.tsx": 1,
     "features/estimate/SwipeRow.tsx": 1,
     "features/showcase/Rows.tsx": 1,
     "modules/gutters/draw/AttrPanel.tsx": 1,
@@ -106,12 +106,10 @@ describe("design system: components", () => {
     "modules/gutters/draw/DrawScreen.tsx": 2,
     "modules/gutters/draw/FracPicker.tsx": 1,
     "modules/gutters/settings/SettingsScreen.tsx": 1,
-    "nav/Fab.tsx": 3,
-    "nav/HomeHeader.tsx": 1,
+    "nav/Fab.tsx": 2, // the header «＋» is the one header's HeaderButton now (visual-v2)
     "nav/NavMenu.tsx": 2,
     "nav/SearchEntry.tsx": 1,
     "nav/SideNav.tsx": 2,
-    "nav/TabBar.tsx": 1,
   };
   // #2022: an own look is also a style kept in a variable (`style={hitBox}`), a link drawn in the child text (`textDecorationLine`),
   // or a button-sized Press (`accessibilityRole="button"` + `minHeight: component.button…`) — not only a background in the tag
@@ -169,15 +167,18 @@ describe("design system: components", () => {
   // or border) belongs only to the component that defines that look — listed here by file, with what it defines. A new file,
   // or one more in a listed file, is an own button hidden in ui (as the old «Сохранить изменения?» of Sheet was, #1996).
   const UI_OWN_STYLED_PRESS: Record<string, number> = {
+    "ui/dayStrip.tsx": 1, // DayCell — the weekday and the day pill (moved from features/PlanParts.tsx, BUILD-PLAN §1 поток В)
     "ui/controls.tsx": 7, // Button, IconButton, Toggle, Segmented, TagChip, TextField's action; + a style kept in a variable (#2022)
     "ui/filterBar.tsx": 4, // FilterBar (chip, «Фильтр», «Сброс»), FilterRow
     "ui/fracKeys.tsx": 1, // FracKeys — the key
+    "ui/headerIcon.tsx": 1, // HeaderButton — the one header's circle 40 («←», «×», search, the bell, «＋», «⋯»; visual-v2 «Единая шапка»)
     "ui/listCard.tsx": 2, // ListCard, its open panel
     "ui/optionTile.tsx": 1, // OptionTile
-    "ui/overlays.tsx": 3, // Menu row; LEGACY ×2 — the old unsaved question of Sheet, goes with #1996 (UnsavedAsk from Button)
+    "ui/overlays.tsx": 2, // Menu row; LEGACY — the old unsaved question of Sheet, goes with #1996 (UnsavedAsk from Button); the toast's filled «Отменить» left with the v2 stack (#2214)
     "ui/pctUsdField.tsx": 1, // PctUsdField — the «% | $» switch
     "ui/selectField.tsx": 1, // SelectField — the row
-    "ui/surfaces.tsx": 3, // Card (pressable, its `base` style — seen since #2022), ListRow
+    "ui/surfaces.tsx": 2, // Card (pressable, its `base` style — seen since #2022), ListRow
+    "ui/swipeRow.tsx": 1, // SwipeRow — the action button under a swiped row (#2350, DS §8.11а)
   };
   it("rule 29 inside src/ui (#1997): an own look only in the component that defines it; the list only goes down", () => {
     const now: Record<string, number> = {};
@@ -367,6 +368,21 @@ describe("design system: the showcase covers everything (#1093, Настройк
   });
 });
 
+// #2350 (SCREEN-SPECS.md): every variant of the last v2 pass is written in DS §12.14 and drawn by the showcase
+describe("design system: the v2 variants are written and shown (DS §12.14)", () => {
+  const ds = readFileSync(join(__dirname, "..", "..", "..", "design", "naryad-ds", "DESIGN-SYSTEM.md"), "utf8");
+  const sec = ds.slice(ds.indexOf("### 12.14."), ds.indexOf("### 12.15."));
+  it("DS §12.14 exists and comes before §12.15", () => expect(sec.length).toBeGreaterThan(1000));
+  it.each(V2_VARIANTS.map((v) => [`${v.part} ${v.prop}`, v] as const))("%s", (_, v) => {
+    const src = readFileSync(join(ROOT, v.src), "utf8");
+    expect(new RegExp(`\\b${v.part}\\b`).test(src), `${v.part} is not in ${v.src} any more — update V2_VARIANTS`).toBe(true);
+    expect(new RegExp(`\\b${v.prop}\\b`).test(src), `${v.part}: prop «${v.prop}» is not in ${v.src} any more`).toBe(true);
+    expect(sec.includes(v.part) && new RegExp(`\\b${v.prop}\\b`).test(sec.slice(sec.indexOf(v.part))), `write ${v.part} «${v.prop}» in DESIGN-SYSTEM.md §12.14`).toBe(true);
+    if (v.shown) expect(readFileSync(join(ROOT, "features", "showcase", v.shown), "utf8").includes(v.use), `show ${v.part} ${v.use.trim()} in features/showcase/${v.shown}`).toBe(true);
+    else expect(v.why ?? "", "a variant not in the showcase says where it is seen").not.toBe("");
+  });
+});
+
 describe("design system: tokens only", () => {
   for (const rule of rules) {
     it(`no ${rule.name}`, () => {
@@ -506,7 +522,6 @@ describe("design system: a form's fields have no plate (#1411)", () => {
     "features/client/ClientSheets.tsx": { n: 1, why: "каждый дополнительный человек клиента — объект списка, карточка (правило 12)" },
     "app/purchase-order/[id].tsx": { n: 1, why: "карточка объекта (шаблон «К»), не форма" },
     "features/JobLinesBlock.tsx": { n: 1, why: "блок карточки работы (налог), не форма" },
-    "features/NotesBlock.tsx": { n: 1, why: "блок заметок карточки объекта, не форма" },
     "features/VisitChecklist.tsx": { n: 2, why: "чек-лист выезда — блок карточки, не форма" },
   };
   it("no <TextField> inside a <Card> (outside the written exceptions)", () => {
@@ -524,7 +539,6 @@ describe("design system: a form's fields have no plate (#1411)", () => {
    * exact counts by file (a new row with a button beside a field fails: a helper goes into the field as an icon).
    */
   const SUBMIT_ROWS: Record<string, { n: number; why: string }> = {
-    "app/job/[id].tsx": { n: 1, why: "«Добавить» заметку — отправляет набранное" },
     "features/JobLinesBlock.tsx": { n: 1, why: "«Сохранить» ставку налога" },
     "features/VisitChecklist.tsx": { n: 2, why: "«Добавить» пункт чек-листа" },
     "features/client/ClientSheets.tsx": { n: 1, why: "«Добавить» метку" },
@@ -580,9 +594,8 @@ describe("design system: a record's card has no row of pill buttons (#1412)", ()
     return rows;
   };
   /** cards still to move (#1474) and rows that are not a card's actions — exact counts, the list only shrinks */
-  const ALLOWED: Record<string, { n: number; why: string }> = {
-    "features/EstimateCard.tsx": { n: 1, why: "шторка «Отправить»: три способа отправки — выбор внутри начатого действия, не действия карточки" },
-  };
+  // EstimateCard's «Отправить» sheet: one main button with «Отменить · 5» and two in a row under it (#2218) — the list is empty
+  const ALLOWED: Record<string, { n: number; why: string }> = {};
   it("no row of 3+ buttons on a record's card (src/app/**/[id].tsx, features/**/*Card.tsx)", () => {
     const bad: string[] = [];
     for (const f of code.filter((x) => /\[id\]\.tsx$|Card\.tsx$/.test(x) && !x.includes(join("src", "ui")) && !x.includes(join("src", "modules")) && !x.includes(join("features", "estimate", "")))) {

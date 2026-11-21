@@ -111,8 +111,7 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
       if (id === "import") return { section: "clients", kind: "client.import.title", up: { href: "/clients", label: K("tab.clients") } };
       // step 17 C3 (04 §14.4): the imports of clients are under Clients too
       if (id === "imports") return { section: "clients", kind: "client.imports.title", up: { href: "/clients", label: K("tab.clients") } };
-      // wave 4 (13 §3.3): a row's list of the client (/client/<id>?s=jobs) sits under its client
-      if (one(params.s)) return { section: "clients", kind: "client.card", up: toClient(id) };
+      // redesign #2350: the client's sections are a tab strip on the card itself — ?s= is the same card, under Clients
       return { section: "clients", kind: "client.card", up: { href: "/clients", label: K("tab.clients") } };
     case "property": {
       // C2: a property lives only inside its client

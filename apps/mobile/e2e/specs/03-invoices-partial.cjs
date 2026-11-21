@@ -9,7 +9,10 @@ exports.run = async (h) => {
     await h.page.getByRole("button", { name: "Принять оплату" }).click(); await h.page.waitForTimeout(300);
     await h.sheet().locator('input[inputmode="decimal"]').fill(amount);
     await h.sheet().getByRole("radio", { name: method }).click();
-    await h.sheet().getByRole("button", { name: /Записать/ }).click(); await h.page.waitForTimeout(600);
+    await h.sheet().getByRole("button", { name: /Записать/ }).click();
+    // #2212: the receipt at once, in the same sheet — «Готово» closes it
+    await h.page.getByTestId("pay-receipt").last().waitFor({ timeout: 5000 });
+    await h.page.getByTestId("pay-receipt-done").last().click(); await h.page.waitForTimeout(600);
   };
   await pay("1000", "Zelle");
   await h.expectText(/Оплачено \| \$1,000 \| К оплате \| \$2,078/, "after $1,000");
@@ -21,6 +24,7 @@ exports.run = async (h) => {
   const receipts = db.payments.filter((p) => p.invoiceId === inv.id);
   h.expect(receipts.length === 2 && receipts.every((p) => /^RCT-\d+$/.test(p.receiptNumber)), "two receipts with numbers");
   await h.page.getByText(/RCT-\d+/).first().click(); await h.page.waitForTimeout(500);
-  await h.expectText(/Квитанция RCT-\d+/, "receipt screen");
+  await h.page.getByTestId("rcpt-more").last().waitFor({ timeout: 5000 });
+  await h.expectText(/RCT-\d+/, "receipt screen");
   await h.shot("receipt");
 };

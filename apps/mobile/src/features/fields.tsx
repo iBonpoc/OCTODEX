@@ -43,9 +43,9 @@ function useSynced<T>(value: T, toText: (v: T) => string, parse: (s: string) => 
   };
 }
 
-export function MoneyField({ cents, onChange, placeholder }: { cents: number; onChange: (c: number) => void; placeholder?: string }) {
+export function MoneyField({ cents, onChange, placeholder, big, label, testID }: { cents: number; onChange: (c: number) => void; placeholder?: string; /** the one sum of a sheet, large with «$» (#2217) */ big?: boolean; label?: string; testID?: string }) {
   const f = useSynced(cents, centsToText, (s) => (s.trim() === "" ? 0 : parseMoneyToCents(s)), onChange);
-  return <TextField type="money" value={f.text} onChangeText={f.set} placeholder={placeholder ?? "0"} />;
+  return <TextField type="money" value={f.text} onChangeText={f.set} placeholder={placeholder ?? "0"} big={big} prefix={big ? "$" : undefined} label={label} selectOnFocus={big} testID={testID} />;
 }
 
 export function PctField({ bps, onChange, placeholder }: { bps: number; onChange: (b: number) => void; placeholder?: string }) {

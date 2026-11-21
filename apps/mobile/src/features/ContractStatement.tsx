@@ -10,6 +10,7 @@ import { canBill } from "@/features/billRights";
 import { useI18n, type DictKey } from "@/i18n";
 import { MoneyField, PctField } from "./fields";
 import { Button, Segmented, TextField } from "@/ui/controls";
+import { ButtonPair } from "@/ui/pairs";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
@@ -32,7 +33,17 @@ export function invoiceChip(i: Invoice): { s: "ok" | "info" | "warn" | "bad"; l:
  * Contract statement for a job (docs/13 §5): contract / invoiced / paid / left to bill,
  * the job's invoices, "Bill the balance" and "Progress invoice".
  */
-export function ContractStatement({ jobId }: { jobId: string }) {
+export function ContractStatement({
+  jobId,
+  hideContract,
+  quiet,
+}: {
+  jobId: string;
+  /** the screen shows the contract sum already (its head, LAYOUT-RULES П7) */
+  hideContract?: boolean;
+  /** the screen has its own one main button (LAYOUT-RULES П2): «Выставить остаток» here is secondary */
+  quiet?: boolean;
+}) {
   const store = useStore();
   const { db } = store;
   const { t, money, day } = useI18n();
@@ -59,6 +70,8 @@ export function ContractStatement({ jobId }: { jobId: string }) {
     return !!undo;
   };
 
+  const progressButton = { label: t("inv.progress"), testID: "statement-progress", icon: "plus" as const, variant: "secondary" as const, onPress: () => setSheet(true) };
+
   const row = (label: string, v: number, strong?: boolean, testID?: string) => (
     <View testID={testID}>
     <RowView style={{ justifyContent: "space-between" }}>
@@ -76,7 +89,7 @@ export function ContractStatement({ jobId }: { jobId: string }) {
     <View style={{ gap: space[2] }}>
       <SectionTitle title={t("inv.statement")} />
       <Card>
-        {row(t("inv.contract"), st.contract)}
+        {hideContract ? null : row(t("inv.contract"), st.contract)}
         {row(t("inv.invoiced"), st.invoiced, false, "statement-invoiced")}
         {row(t("inv.paid"), st.paid)}
         <Divider />
@@ -110,22 +123,26 @@ export function ContractStatement({ jobId }: { jobId: string }) {
       ) : null}
       <VoidInvoiceCards list={(db.voidInvoices ?? []).filter((i) => i.jobId === jobId)} testPrefix="statement" />
       {st.toInvoice > 0 && canBill(store.role) ? (
-        <RowView style={{ flexWrap: "wrap" }}>
-          {!hasFinal ? (
-            <Button
-              label={t("inv.billBalance", { amount: money(st.toInvoice) })}
-              testID="statement-bill-balance"
-              icon="invoice"
-              disabled={balanceSent}
-              onPress={() => {
-                if (balanceSent) return;
-                setBalanceSent(true);
-                if (!issue("final", st.toInvoice, "Final balance")) setBalanceSent(false);
-              }}
-            />
-          ) : null}
-          <Button label={t("inv.progress")} testID="statement-progress" icon="plus" variant="secondary" onPress={() => setSheet(true)} />
-        </RowView>
+        // two buttons in a row when they fit (DS §7.4, #2350): «Промежуточный» on the left, «Выставить остаток» on the right
+        <ButtonPair
+          main={
+            !hasFinal
+              ? {
+                  label: t("inv.billBalance", { amount: money(st.toInvoice) }),
+                  testID: "statement-bill-balance",
+                  icon: "invoice",
+                  variant: quiet ? "secondary" : undefined,
+                  disabled: balanceSent,
+                  onPress: () => {
+                    if (balanceSent) return;
+                    setBalanceSent(true);
+                    if (!issue("final", st.toInvoice, "Final balance")) setBalanceSent(false);
+                  },
+                }
+              : progressButton
+          }
+          second={!hasFinal ? progressButton : null}
+        />
       ) : null}
       <Sheet visible={sheet} onClose={() => setSheet(false)} title={t("inv.progress")}>
         <View style={{ gap: space[3] }}>

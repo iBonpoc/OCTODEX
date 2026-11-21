@@ -1,86 +1,343 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useHeldSheet } from "@/ui/heldSheet";
-import { visitDueCents } from "@/features/visitDue";
 import { View } from "react-native";
 import { router } from "expo-router";
-import { component, space } from "@octo/design-tokens";
+import { component, radius, rhythm, space, spaceHalf } from "@octo/design-tokens";
+import { useTheme } from "@/theme/ThemeProvider";
 import { useStore } from "@/data/store";
-import type { CalendarEvent, CalendarEventKind, ID, Task } from "@/data/types";
+import type { CalendarEvent, CalendarEventKind, ID, Task, Visit } from "@/data/types";
 import { findJob } from "@/data/jobs";
 import { visitPropertyId } from "@/data/selectors";
 import { todayKey, type DayKey } from "@/features/calendar";
 import { lateAfterOf, scheduleSettingsOf } from "@/features/scheduleSettings";
 import { visitStatus } from "@/features/visits";
 import { AssignSheet } from "@/features/sheets";
-import { collapseEmpty, groupByDay, itemTimes, timeLead, type DayLoad, type PlanItem } from "@/features/planFeed";
-import { overlapSigns } from "@/features/listSigns";
-import { formatDayKey } from "@/features/zone";
-import { useDevice, useTheme } from "@/theme/ThemeProvider";
+import { collapseEmpty, groupByDay, itemTimes, timeLead, type PlanItem } from "@/features/planFeed";
 import { useI18n } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
-import { canPlan, daysSince, unassignedSoon, visitWho, waitingJobs, type PlanWho } from "@/features/schedule";
-import { jobStatusView } from "@/features/jobs";
+import { assigneesOf, canReschedule, daysSince, liveAssignees, unassignedSoon, visitWho, waitingJobs } from "@/features/schedule";
 import { memberName } from "@/features/team";
 import { VisitFormSheet } from "@/features/VisitForm";
-import { Button, ChoiceChips, IconButton, StatusChip, TextField } from "@/ui/controls";
-import { fillStyle } from "@/ui/fill";
-import { Press, T } from "@/ui/primitives";
+import { Avatar, TextField } from "@/ui/controls";
+import { HatchPlate, TimeSlot } from "@/ui/figures";
+import { StatusPill } from "@/ui/statusPill";
+import { nearIndex, plateHalves, problemSummary, quietStatuses } from "@/features/planSlots";
+import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { CardList, Divider, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
-import { ListCard, type CardLead } from "@/ui/listCard";
-import type { Density, FactKey } from "@/ui/listCardLayout";
-import { SelectedCheck } from "@/ui/selectedCheck";
-import { StatusNote } from "@/ui/statusNote";
-
-/** desktop row columns of the Plan's cards (06 §5 «Визиты»: адрес · работа · кто) */
-const PLAN_COLUMNS: readonly FactKey[] = ["addr", "work", "by"];
+import { Divider, ListRow } from "@/ui/surfaces";
+import { GroupedList, GroupRow, ListGroup, type RowLead } from "@/ui/groupedList";
+/** the day strip moved to src/ui (BUILD-PLAN §1, поток В); re-exported so plan.tsx keeps its imports until wave 3 */
+export { DayCell, DayStrip, WeekStrip, stripDays } from "@/ui/dayStrip";
+import { NO_UNDO } from "@/data/undo";
 
 /**
- * Parts of the Plan tab for the office (docs/specs/03 §7.2, wave П3b): «Ждут даты», «Чей план», «+».
- * Only for those who plan (canPlan): a tech and sales never see them.
+ * Parts of «План» on the template «Календарь» (LAYOUT-RULES §3, BUILD-SPEC §2.2, wave 3 Э2): the day's rows — the hour on
+ * the left, the client, «– конец · работа · мастер», a StatusPill only when it says something (not «Запланирован»); the
+ * swipe «Открыть» / «Перенести · Назначить» (the same on a long press and to VoiceOver — GroupRow); «Не назначено · N» and
+ * «Без даты · N» as sheets behind one row each; the search and the filters — FilterBar «значки в шапке»; «＋» — the header's menu.
  */
 
-/** «Ждут даты · N» (S8b / S9a on the screen): jobs without a date, the oldest first → «Запланировать» */
-export function WaitingJobs() {
+const TASK_ROUTE: Record<Task["subjectType"], string> = { lead: "/lead", customer: "/client", job: "/job", estimate: "/estimate", property: "/property" };
+
+export type RowHandlers = {
+  onEvent?: (e: CalendarEvent) => void;
+  /** the planner: «Назначить» (a visit nobody is on gets it as the row's icon, every visit in the swipe) */
+  onAssign?: (id: ID) => void;
+  /** the planner: «Перенести» in the swipe */
+  onMove?: (id: ID) => void;
+};
+
+/**
+ * One item of the day as a row (GroupRow) with the hour on the left. Everything the old card said once is said once (П7):
+ * the start is the hour, under the name only «– end», the work and who; «Без мастера» is the pill, not a word under the name.
+ */
+export function PlanRow({ x, onEvent, onAssign, onMove }: { x: PlanItem } & RowHandlers) {
   const { db } = useStore();
-  const { t, money } = useI18n();
-  const density = usePlanDensity();
-  const [all, setAll] = useState(false);
-  const list = waitingJobs(db);
-  if (!list.length) return null;
-  const shown = all ? list : list.slice(0, 2);
+  const { t, time } = useI18n();
+  const names = x.people.map((id) => memberName(db, id, t)).filter(Boolean).join(", ");
+  const { when, until } = itemTimes(x, time, t("plan5.allDay"));
+  // the hour is the lead; only a span that began earlier / «весь день» say it under the name — the end is on the visit
+  // (a phone row has ~200 pt for the line: «работа · мастер» first, as in the wireframe v2 №2)
+  void until;
+  const span = x.allDay || x.at === "" ? when : null;
+  // the hour on the left (GroupRow `lead.time`: «9:00» big, «AM» small); «весь день» / a carried-over span — a calendar icon
+  const hm = span ? null : timeLead(time(x.start));
+  const lead: RowLead = hm ? { time: hm.top, sub: hm.bottom || undefined } : { icon: "calendar" };
+  let row;
+  if (x.kind === "visit") {
+    const v = x.visit;
+    const { client } = visitWho(db, v);
+    const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
+    const late = st.label === "late.enRoute" || st.label === "late.notLeft";
+    const nobody = !liveAssignees(v, db.members).length;
+    const work = findJob(db, v.jobId)?.title ?? (v.kind === "inspection" ? t("plan.kind.inspection") : t("plan.kind.job"));
+    const movable = canReschedule(v);
+    row = (
+      <GroupRow
+        testID={`plan-row-${v.id}`}
+        lead={lead}
+        title={client || "—"}
+        subtitle={[span, work, nobody ? null : names, late ? (st.label === "late.enRoute" ? t("plan5.lateEnRoute") : t("plan5.lateNotLeft")) : null].filter(Boolean).join(" · ")}
+        // «Запланирован» is every row — no pill; the rest is a pill «значок + слово» (rule 2)
+        status={st.status === "neutral" ? undefined : { status: st.status, label: late ? t("st.late") : t(st.label) }}
+        actions={onAssign && nobody && movable ? [{ icon: "user", a11y: t("proto.plan.assignA11y", { name: client || "—" }), onPress: () => onAssign(v.id), testID: `plan-assign-${v.id}` }] : []}
+        swipe={{
+          left: [{ key: "open", label: t("swipe.open"), icon: "eye", full: true, onPress: () => router.push(`/visit/${v.id}`) }],
+          right: onAssign && onMove && movable
+            ? [
+                { key: "move", label: t("vw.reschedule"), icon: "calendar", onPress: () => onMove(v.id) },
+                { key: "assign", label: t("plan.assign"), icon: "user", onPress: () => onAssign(v.id) },
+              ]
+            : [],
+        }}
+        onPress={() => router.push(`/visit/${v.id}`)}
+      />
+    );
+  } else if (x.kind === "task") {
+    const tk = x.task;
+    row = (
+      <GroupRow
+        lead={lead}
+        title={tk.title}
+        subtitle={[span, t("plan5.task"), names].filter(Boolean).join(" · ")}
+        status={x.done ? { status: "ok", label: t("plan5.done") } : undefined}
+        onPress={() => router.push(`${TASK_ROUTE[tk.subjectType]}/${tk.subjectId}`)}
+      />
+    );
+  } else {
+    const e = x.event;
+    const kind = x.kind === "timeOff" ? t("plan5.timeOff") : t("plan5.event");
+    row = <GroupRow lead={lead} title={e.title || kind} subtitle={[span, e.title ? kind : null, names || t("plan5.company")].filter(Boolean).join(" · ")} onPress={onEvent ? () => onEvent(e) : undefined} />;
+  }
+  return row;
+}
+
+/**
+ * The Day on a phone as visual v2 «время и интервал» (docs/design/visual-v2.html, кадр 2): the day's title with its count «06»,
+ * one summary «3 опаздывают · 1 пропущен» instead of a pill on every row (audit 12 §2.3), then a TimeSlot per item — the hour column
+ * 44 (the hour, the length), the interval plate «8:30 ▸ 12:30 PM» (the nearest visit of today in the accent's tone), the client and
+ * «работа · мастер» in two lines. A problem is a pill on its first row only; the tech's initials stand where no pill is. «Назначить»
+ * is «Не назначено · N» over the day, «Перенести» — the visit itself («Когда и кто»).
+ */
+export function PlanDay({ items, day, title, testID }: { items: PlanItem[]; day: DayKey; title: string; testID?: string }) {
+  const { db } = useStore();
+  const { t, tn, time, duration, dayOf } = useI18n();
+  const { c } = useTheme();
+  const rows = items.filter((x) => x.day === day);
+  const now = Date.now();
+  const near = day === todayKey() ? nearIndex(rows, now) : -1;
+  const st = rows.map((x) => (x.kind === "visit" ? visitStatus(x.visit, db.members, now, lateAfterOf(db)) : x.kind === "task" && x.done ? { status: "ok" as const, label: "plan5.done" as const } : undefined));
+  const shown = quietStatuses(st.map((s) => s?.status));
+  const kinds = st.map((s) => (!s ? null : s.label === "st.missed" ? "missed" : s.label === "late.enRoute" || s.label === "late.notLeft" ? "late" : null));
+  const sum = problemSummary(kinds);
+  const sumText = sum ? [sum.late ? tn("w2a.lateN", sum.late) : null, sum.missed ? tn("w2a.missedN", sum.missed) : null].filter(Boolean).join(" · ") : null;
+  // v2 макет 2: the line «сейчас» stands after the last item begun by now (today only)
+  const nowAt = day === todayKey() ? rows.filter((x) => !(x.allDay || x.at === "") && Date.parse(x.start) <= now).length : -1;
+  const nowLine = nowAt >= 0 && rows.length ? <NowLine key="now" label={time(new Date(now).toISOString())} /> : null;
   return (
-    <View style={{ gap: space[2] }}>
-      <StatusNote tone="warn" v="heading">
-        {t("plan.waiting", { n: list.length })}
-      </StatusNote>
-      <CardList>
-        {shown.map(({ job, since }) => {
-          const property = db.properties.find((p) => p.id === job.propertyId);
-          const customer = db.customers.find((c) => c.id === property?.customerId);
-          const d = daysSince(since);
-          const ago = d === null ? undefined : d === 0 ? t("plan.signedToday") : t("plan.signedAgo", { n: d });
+    <View testID={testID} style={{ gap: space[2] }}>
+      {/* «Выезды сегодня (06)» — the count in its cell 28 (v2 `.cnt`); the miles and the road time of the day are not in the data */}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], marginTop: space[4] - space[2], marginBottom: rhythm.headGap - space[2] }}>
+        <T v="heading" numberOfLines={1} style={{ flexShrink: 1 }}>
+          {day === todayKey() ? t("px1.plan.today") : `${t("px1.plan.day")} · ${dayOf(day)}`}
+        </T>
+        <View style={{ minWidth: component.dayPill.w - space[3], height: component.avatar.sm, borderRadius: radius.pill, backgroundColor: c.surf, alignItems: "center", justifyContent: "center", paddingHorizontal: space[2] }}>
+          <T v="body" w="bold" tabular>
+            {String(rows.length).padStart(2, "0")}
+          </T>
+        </View>
+      </View>
+      {sumText ? (
+        <View testID="plan-summary" style={{ alignSelf: "flex-start" }}>
+          <StatusPill status={sum!.missed ? "bad" : "warn"} label={sumText} />
+        </View>
+      ) : null}
+      {nowAt === 0 ? nowLine : null}
+      {rows.flatMap((x, i) => {
+        const el = ((): ReactNode => {
+        const span = x.allDay || x.at === "";
+        const from = span ? itemTimes(x, time, t("plan5.allDay")).when : time(x.start);
+        const to = span || !x.end ? "" : time(x.end);
+        const [a, b] = to ? plateHalves(from, to) : [from, ""];
+        const hour = span ? "" : timeLead(time(x.start)).top;
+        const len = !span && x.end ? duration((Date.parse(x.end) - Date.parse(x.start)) / 60_000) : undefined;
+        const names = x.people.map((id) => memberName(db, id, t)).filter(Boolean).join(", ");
+        const s = st[i];
+        const pill = s && shown[i] === "pill" ? { status: s.status, label: kinds[i] === "late" ? t("st.late") : t(s.label) } : undefined;
+        const word = s && shown[i] === "word" ? t(s.label) : null;
+        if (x.kind === "visit") {
+          const v = x.visit;
+          const { client } = visitWho(db, v);
+          const nobody = !liveAssignees(v, db.members).length;
+          const work = findJob(db, v.jobId)?.title ?? (v.kind === "inspection" ? t("plan.kind.inspection") : t("plan.kind.job"));
+          const first = x.people[0] ? db.members.find((m) => m.id === x.people[0]) : undefined;
+          // the tech's initials where no pill stands; a visit nobody is on is assigned from «Не назначено · N» over the day (a button
+          // inside the card would be a button in a button)
+          const right = pill || !first ? undefined : <Avatar initials={first.initials} s={component.avatar.sm} sub={first.kind === "sub"} />;
           return (
-            <ListCard
-              key={job.id}
-              title={customer?.name ?? job.title}
-              when={ago}
-              lead={{ kind: "icon", icon: "calendar" }}
-              // only the planner sees this block (plan.tsx): the sum of the job is the office's (06 §7.6)
-              value={job.amountCents > 0 ? money(job.amountCents) : undefined}
-              valueLabel={job.amountCents > 0 ? t("card.val.total") : undefined}
-              status={{ tone: jobStatusView[job.status].status, label: t(jobStatusView[job.status].label) }}
-              facts={{ num: job.number, addr: property?.address, work: job.title }}
-              action={{ label: t("plan.schedule"), icon: "calendar", onPress: () => router.push(`/job/schedule?jobId=${job.id}`) }}
-              density={density}
-              columns={PLAN_COLUMNS}
-              onPress={() => router.push(`/job/${job.id}`)}
+            <TimeSlot
+              key={`visit:${x.id}`}
+              testID={`plan-row-${v.id}`}
+              hour={hour}
+              length={len}
+              from={a}
+              to={b}
+              near={i === near}
+              title={client || "—"}
+              // v2 макет 2 «Bathroom remodel · Alex»: the job's name before its «: details», the tech by the first name
+              line={[word, work.split(":")[0]?.trim(), nobody ? null : x.people.map((id) => memberName(db, id, t)?.split(/\s+/)[0]).filter(Boolean).join(", ")].filter(Boolean).join(" · ")}
+              status={pill}
+              right={right}
+              oneLine
+              // v2 макет 2: «в дороге · 30 мин» — the minutes since the tech left (`enRouteAt`), a hatched plate, not a progress
+              top={v.step === "en_route" && v.enRouteAt ? <HatchPlate testID={`plan-road-${v.id}`} label={t("px1.plan.road", { d: duration(Math.max(1, Math.round((now - Date.parse(v.enRouteAt)) / 60_000))) })} /> : undefined}
+              onPress={() => router.push(`/visit/${v.id}`)}
             />
           );
-        })}
-      </CardList>
-      {list.length > 2 && !all ? <Button label={t("plan.showAll")} variant="ghost" size="sm" onPress={() => setAll(true)} /> : null}
+        }
+        if (x.kind === "task") {
+          const tk = x.task;
+          return (
+            <TimeSlot
+              key={`task:${x.id}`}
+              hour={hour}
+              from={a}
+              to={b}
+              title={tk.title}
+              line={[t("plan5.task"), names].filter(Boolean).join(" · ")}
+              status={pill}
+              onPress={() => router.push(`${TASK_ROUTE[tk.subjectType]}/${tk.subjectId}`)}
+            />
+          );
+        }
+        const e = x.event;
+        const kind = x.kind === "timeOff" ? t("plan5.timeOff") : t("plan5.event");
+        return (
+          <TimeSlot
+            key={`${x.kind}:${x.id}`}
+            hour={hour}
+            length={len}
+            from={a}
+            to={b}
+            title={e.title || kind}
+            line={[e.title ? kind : null, names || t("plan5.company")].filter(Boolean).join(" · ")}
+          />
+        );
+        })();
+        return i + 1 === nowAt ? [el, nowLine] : [el];
+      })}
     </View>
+  );
+}
+
+/** the day's rows, for the template's `items` */
+export function planRows(items: PlanItem[], day: DayKey, h: RowHandlers) {
+  return items.filter((x) => x.day === day).map((x) => <PlanRow key={`${x.kind}:${x.id}`} x={x} {...h} />);
+}
+
+/**
+ * The Week: the seven days one under another, a group per day; a run of empty days is one quiet line
+ * («Вс, 8 – Чт, 12 нояб. · свободно», 24 §B) — the empty windows are not drawn as rows (LAYOUT-RULES §3).
+ */
+export function WeekList({ days, items, h, onDay }: { days: DayKey[]; items: PlanItem[]; h: RowHandlers; onDay: (k: DayKey) => void }) {
+  const { t, dayOf } = useI18n();
+  const today = todayKey();
+  return (
+    <View testID="plan-week-list">
+      <GroupedList>
+        {collapseEmpty(groupByDay(items, days), today).map((r) => {
+          if (r.kind === "day" && r.items.length) {
+            return (
+              <ListGroup
+                key={r.day}
+                title={`${r.day === today ? `${t("common.today")} · ` : ""}${dayOf(r.day)}`}
+                all={{ label: t("plan.day"), onPress: () => onDay(r.day), testID: `plan-week-day-${r.day}` }}
+              >
+                {r.items.map((x) => (
+                  <PlanRow key={`${x.kind}:${x.id}:${r.day}`} x={x} {...h} />
+                ))}
+              </ListGroup>
+            );
+          }
+          const from = r.kind === "day" ? r.day : r.from;
+          const to = r.kind === "day" ? r.day : r.to;
+          const label = from === today && to === today ? t("plan5.freeToday") : from === to ? t("plan5.freeDay", { day: dayOf(from) }) : t("plan5.freeRun", { from: dayOf(from), to: dayOf(to) });
+          return (
+            <View key={`free:${from}`} testID="plan-free" style={{ paddingHorizontal: space[1] }}>
+              <T v="caption" tone="mut">
+                {label}
+              </T>
+            </View>
+          );
+        })}
+      </GroupedList>
+    </View>
+  );
+}
+
+/** «Не назначено · N» (today and tomorrow, the office): a sheet of rows, each with «Назначить» */
+export function UnassignedSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { db } = useStore();
+  const { t, time } = useI18n();
+  const [assign, setAssign] = useState<ID | null>(null);
+  const list = unassignedSoon(db);
+  return (
+    <>
+      <Sheet visible={visible && !assign} onClose={onClose} title={t("plan5.unassigned", { n: list.length })}>
+        <GroupedList testID="plan-unassigned-sheet">
+          <ListGroup>
+            {list.map(({ v, dd }) => {
+              const { client } = visitWho(db, v);
+              return (
+                <GroupRow
+                  key={v.id}
+                  title={client || "—"}
+                  subtitle={[dd === 0 ? t("plan5.today") : t("plan5.tomorrow"), v.allDay ? t("plan5.allDay") : time(v.start), v.kind === "inspection" ? t("plan.kind.inspection") : t("plan.kind.job")].join(" · ")}
+                  lead={{ icon: "user" }}
+                  actions={[{ icon: "user", a11y: t("proto.plan.assignA11y", { name: client || "—" }), onPress: () => setAssign(v.id), testID: `plan-unassigned-assign-${v.id}` }]}
+                  onPress={() => { onClose(); router.push(`/visit/${v.id}`); }}
+                />
+              );
+            })}
+          </ListGroup>
+        </GroupedList>
+      </Sheet>
+      <AssignSheet visitId={assign} onClose={() => setAssign(null)} />
+    </>
+  );
+}
+
+/** «Без даты · N» (S8b / S9a): jobs without a date, the oldest first; the row's icon → «Запланировать» */
+export function WaitingSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { db } = useStore();
+  const { t, money } = useI18n();
+  const list = waitingJobs(db);
+  return (
+    <Sheet visible={visible} onClose={onClose} title={t("plan.waiting", { n: list.length })}>
+      <GroupedList testID="plan-waiting-sheet">
+        <ListGroup>
+          {list.map(({ job, since }) => {
+            const property = db.properties.find((p) => p.id === job.propertyId);
+            const customer = db.customers.find((c) => c.id === property?.customerId);
+            const d = daysSince(since);
+            const ago = d === null ? null : d === 0 ? t("plan.signedToday") : t("plan.signedAgo", { n: d });
+            const name = customer?.name ?? job.title;
+            return (
+              <GroupRow
+                key={job.id}
+                title={name}
+                subtitle={[customer ? job.title : null, ago].filter(Boolean).join(" · ")}
+                lead={{ icon: "calendar" }}
+                // only the planner opens this sheet: the job's sum is the office's (06 §7.6)
+                value={job.amountCents > 0 ? money(job.amountCents) : undefined}
+                actions={[{ icon: "calendar", a11y: t("proto.plan.scheduleA11y", { name }), onPress: () => { onClose(); router.push(`/job/schedule?jobId=${job.id}`); }, testID: `plan-waiting-schedule-${job.id}` }]}
+                onPress={() => { onClose(); router.push(`/job/${job.id}`); }}
+              />
+            );
+          })}
+        </ListGroup>
+      </GroupedList>
+    </Sheet>
   );
 }
 
@@ -157,247 +414,55 @@ export function PlanAddSheet({ visible, onClose, onEvent, day: onDay }: { visibl
   );
 }
 
-/* ---------- wave 5 «План» (13 §3.2): Лента and «Не назначено» on top ---------- */
-
-const TASK_ROUTE: Record<Task["subjectType"], string> = { lead: "/lead", customer: "/client", job: "/job", estimate: "/estimate", property: "/property" };
-
-/** «Не назначено» today and tomorrow, on top of the Plan (office only; the same rule as «Требует внимания») */
-export function UnassignedSoon() {
-  const { db } = useStore();
-  const { t, time } = useI18n();
-  const density = usePlanDensity();
-  const [assign, setAssign] = useState<ID | null>(null);
-  const list = unassignedSoon(db);
-  if (!list.length) return null;
+/** «Перенести» from the Plan: the same form and the same store calls as the visit's «Когда и кто» (VisitForm WhenWho) */
+export function MoveVisitSheet({ visit, onClose }: { visit?: Visit; onClose: () => void }) {
+  const store = useStore();
+  const { db } = store;
+  const { t, day, time } = useI18n();
+  const toast = useToast();
+  const held = useHeldSheet(visit ?? null);
+  const v = held.value;
+  if (!v) return null;
+  const people = assigneesOf(v);
   return (
-    <View style={{ gap: space[2] }} testID="plan-unassigned-soon">
-      <StatusNote tone="warn" v="heading">
-        {t("plan5.unassigned", { n: list.length })}
-      </StatusNote>
-      <CardList>
-        {list.map(({ v, dd }) => {
-          const { client } = visitWho(db, v);
-          const property = db.properties.find((p) => p.id === visitPropertyId(db, v));
-          return (
-            <ListCard
-              key={v.id}
-              title={client || "—"}
-              // 24 §B: the day in words goes under the name, the hour to the left block
-              when={[dd === 0 ? t("plan5.today") : t("plan5.tomorrow"), v.allDay ? t("plan5.allDay") : null].filter(Boolean).join(" · ")}
-              lead={v.allDay ? { kind: "icon", icon: "calendar" } : timeLead(time(v.start))}
-              // «Весь день» goes under the name with the day: «Завтра · Весь день»
-              // the visit's own status: «Не назначен» (warn) — the same chip as in the Feed
-              status={{ tone: visitStatus(v, db.members, Date.now(), lateAfterOf(db)).status, label: t(visitStatus(v, db.members, Date.now(), lateAfterOf(db)).label) }}
-              tags={[v.kind === "inspection" ? t("plan.kind.inspection") : t("plan.kind.job")]}
-              facts={{ addr: property?.address, num: findJob(db, v.jobId)?.number }}
-              action={{ label: t("plan.assign"), icon: "user", onPress: () => setAssign(v.id) }}
-              density={density}
-              columns={PLAN_COLUMNS}
-              onPress={() => router.push(`/visit/${v.id}`)}
-            />
-          );
-        })}
-      </CardList>
-      <AssignSheet visitId={assign} onClose={() => setAssign(null)} />
-    </View>
-  );
-}
-
-/**
- * «Лента» and the days of the Week: the days one under another, every item a card. A run of empty days is one row
- * («Вс, 8 – Чт, 12 нояб. · свободно», 24 §B); today stays its own row. The planner gets a quiet «＋» on a free row: the
- * add sheet opens on its first day (not the accent: one yellow per screen — the FAB).
- */
-export function FeedView({ days, items, onEvent, onAdd }: { days: DayKey[]; items: PlanItem[]; onEvent?: (e: CalendarEvent) => void; onAdd?: (day: DayKey) => void }) {
-  const { t, dayOf } = useI18n();
-  const today = todayKey();
-  return (
-    <View style={{ gap: space[4] }} testID="plan-feed">
-      {collapseEmpty(groupByDay(items, days), today).map((r) => {
-        if (r.kind === "day") {
-          // today stays its own day, with a header, even when empty («На сегодня ничего нет», 24 §B)
-          return (
-            <View key={r.day} style={{ gap: space[2] }}>
-              <SectionTitle title={`${r.day === today ? `${t("common.today")} · ` : ""}${dayOf(r.day)}`} />
-              {r.items.length ? (
-                <CardList>
-                  {r.items.map((x) => (
-                    <FeedCard key={`${x.kind}:${x.id}:${r.day}`} x={x} onEvent={onEvent} />
-                  ))}
-                </CardList>
-              ) : (
-                <FreeRow label={t("plan5.freeToday")} a11y={t("plan5.freeA11y", { from: dayOf(r.day), to: dayOf(r.day) })} onAdd={onAdd ? () => onAdd(r.day) : undefined} />
-              )}
-            </View>
-          );
-        }
-        // a run of empty days, or one empty day
-        const label = r.from === r.to ? t("plan5.freeDay", { day: dayOf(r.from) }) : t("plan5.freeRun", { from: dayOf(r.from), to: dayOf(r.to) });
-        return <FreeRow key={`free:${r.from}`} label={label} a11y={t("plan5.freeA11y", { from: dayOf(r.from), to: dayOf(r.to) })} onAdd={onAdd ? () => onAdd(r.from) : undefined} />;
-      })}
-    </View>
-  );
-}
-
-/** A free row: the words in mut, a quiet «＋» for the planner (not the accent: one yellow per screen — the FAB) */
-function FreeRow({ label, a11y, onAdd }: { label: string; a11y: string; onAdd?: () => void }) {
-  return (
-    <View testID="plan-free">
-      <RowView style={{ justifyContent: "space-between", minHeight: component.rowCompact }}>
-        <T v="caption" tone="mut" style={{ flex: 1 }}>
-          {label}
-        </T>
-        {onAdd ? <IconButton icon="plus" label={a11y} onPress={onAdd} /> : null}
-      </RowView>
-    </View>
-  );
-}
-
-/**
- * One day of the Week strip and of the Month (24 §B): the date, the number of the Feed's items («В плане: N» to a screen
- * reader), yellow only when an open visit has nobody on it; a day off of the picked person is the word «выходной»,
- * no colour. The picked day is «Заливка» with a check (DS «Выделение выбранного», not the accent); today is bold. Tap → the Day.
- */
-export function DayCell({ day, load, selected, dim, head, onPress }: { day: DayKey; load?: DayLoad; selected: boolean; dim?: boolean; head?: string; onPress: () => void }) {
-  const { t, dayOf } = useI18n();
-  const { c } = useTheme();
-  const today = day === todayKey();
-  const n = load?.n ?? 0;
-  const un = load?.unassigned ?? 0;
-  // a screen reader hears the day in words, «В плане: N», «Не назначено · N», «выходной» (review of #267)
-  const said = [dayOf(day), t("plan5.planned", { n }), un ? t("plan5.unassigned", { n: un }) : null, load?.dayOff ? t("plan5.dayOff") : null].filter(Boolean).join(", ");
-  return (
-    <Press
-      onPress={onPress}
-      visibleHeight={component.rowCompact}
-      accessibilityRole="button"
-      accessibilityLabel={said}
-      testID={`plan-day-${day}`}
-      containerStyle={{ flex: 1, minWidth: 0 }}
-      style={{
-        minHeight: component.rowCompact + space[4],
-        borderRadius: component.checkbox.radius,
-        // chosen day: «Заливка» + a check (DS «Выделение выбранного»), not an ink frame
-        ...(selected ? fillStyle(c) : { backgroundColor: c.in }),
-        borderWidth: component.hairline,
-        borderColor: selected ? "transparent" : c.bd,
-        opacity: dim ? component.dimOpacity : 1,
-        alignItems: "center",
-        justifyContent: "center",
-        gap: space[1],
+    <VisitFormSheet
+      key={held.opening}
+      visible={held.visible}
+      onExited={held.onExited}
+      onClose={onClose}
+      title={t("vw.reschedule")}
+      saveLabel={t("vw.reschedule")}
+      withNote={false}
+      init={{ durationMin: v.durationMin, techIds: people, start: v.start, exceptId: v.id, propertyId: visitPropertyId(db, v), jobId: v.jobId, allDay: v.allDay, allowAllDay: !!v.jobId && v.kind !== "inspection" }}
+      onSave={(f) => {
+        const undoMove = store.rescheduleVisit(v.id, f.start, f.durationMin, f.allDay);
+        const undoTech = f.assigneeIds.join() !== people.join() ? store.assignVisit(v.id, f.assigneeIds) : NO_UNDO;
+        toast.show(f.allDay ? t("job5.allDaySaved", { date: day(f.start) }) : t("vf.rescheduled", { date: day(f.start), time: time(f.start) }), store.undoTogether([undoMove, undoTech]));
+        return v.customerNotifiedAt ? v.id : null;
       }}
-    >
-      {selected ? <SelectedCheck small /> : null}
-      {head ? (
-        <T v="micro" tone="mut" numberOfLines={1}>
-          {head}
-        </T>
-      ) : null}
-      <T v="caption" w={today ? "bold" : "regular"} tabular>
-        {Number(day.slice(8))}
-      </T>
-      {n ? <StatusChip status={un ? "warn" : "info"} label={String(n)} soft /> : null}
-      {load?.dayOff ? (
-        // a cell of the strip is ~46 px on a phone: the short word; the screen reader hears the whole one
-        <T v="micro" tone="mut" numberOfLines={1}>
-          {t("plan5.dayOffShort")}
-        </T>
-      ) : null}
-    </Press>
-  );
-}
-
-/** The Week strip: 7 days in a row, the same cell as the Month (24 §B) */
-export function WeekStrip({ days, loads, date, onPick }: { days: DayKey[]; loads: Map<DayKey, DayLoad>; date: DayKey; onPick: (k: DayKey) => void }) {
-  const { lang } = useI18n();
-  const loc = lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU";
-  return (
-    <View style={{ flexDirection: "row", gap: space[1] }} testID="plan-week-strip">
-      {days.map((k) => (
-        <DayCell key={k} day={k} load={loads.get(k)} selected={k === date} head={formatDayKey(k, { weekday: "short" }, loc)} onPress={() => onPick(k)} />
-      ))}
-    </View>
-  );
-}
-
-function FeedCard({ x, onEvent }: { x: PlanItem; onEvent?: (e: CalendarEvent) => void }) {
-  const { db, role } = useStore();
-  const { t, time, money } = useI18n();
-  const density = usePlanDensity();
-  const wide = density === "row";
-  const names = x.people.map((id) => memberName(db, id, t)).filter(Boolean).join(", ");
-  // the hour goes to the left block, the whole span «9:00 AM – 11:00 AM» under the name (recipe C, 06 §3)
-  const { when, until } = itemTimes(x, time, t("plan5.allDay"));
-  // «Весь день» and the carried-over part of a span (it began on an earlier day) have no hour of this day: a calendar
-  // icon on the left, the words («Весь день» / «– 2:00 AM») under the name
-  const lead: CardLead = x.allDay || x.at === "" ? { kind: "icon", icon: "calendar" } : timeLead(time(x.start));
-  const span = until ? `${when} ${until}` : when;
-  if (x.kind === "visit") {
-    const v = x.visit;
-    const job = findJob(db, v.jobId);
-    const { client } = visitWho(db, v);
-    const property = db.properties.find((p) => p.id === visitPropertyId(db, v));
-    const customer = db.customers.find((c) => c.id === property?.customerId);
-    const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
-    // the chip says «Опаздывает»; «в пути» / «не выехал» is a grey tag next to it (24 §B: the name is never cut)
-    const late = st.label === "late.enRoute" ? t("plan5.lateEnRoute") : st.label === "late.notLeft" ? t("plan5.lateNotLeft") : null;
-    const addr = property ? [property.address, property.city].filter(Boolean).join(", ") : undefined;
-    // «к оплате» only to the office and only when there is a sum (06 §7.6; руководитель 07.11, В2)
-    const due = canPlan([role]) && visitDueCents(db, v) > 0;
-    return (
-      <ListCard
-        title={client || "—"}
-        when={span}
-        lead={lead}
-        value={due ? money(visitDueCents(db, v)) : undefined}
-        valueLabel={due ? t("card.val.toPay") : undefined}
-        status={{ tone: st.status, label: late ? t("st.late") : t(st.label) }}
-        signs={overlapSigns(db, v).map((o) => ({ tone: o.tone, label: t(o.key, o.params) }))}
-        tags={[...(late ? [late] : []), v.kind === "inspection" ? t("plan.kind.inspection") : t("plan.kind.job")]}
-        // the Feed is an overview of the day: on a phone and a tablet only what 06 §5 asks of a visit (where, who), ~4 visits
-        // a screen; the job, its number and the call / route buttons — on the 1280 row-card and on the visit's screen
-        facts={wide ? { num: job?.number, addr, work: job?.title, by: names || t("plan.unassigned") } : { addr, by: names || t("plan.unassigned") }}
-        contact={wide ? { phone: customer?.phone, addr } : undefined}
-        density={density}
-        columns={PLAN_COLUMNS}
-        onPress={() => router.push(`/visit/${v.id}`)}
-      />
-    );
-  }
-  if (x.kind === "task") {
-    const tk = x.task;
-    return (
-      <ListCard
-        title={tk.title}
-        when={span}
-        lead={lead}
-        status={{ tone: x.done ? "ok" : "neutral", label: x.done ? t("plan5.done") : t("plan5.task") }}
-        facts={{ by: names }}
-        density={density}
-        columns={PLAN_COLUMNS}
-        onPress={() => router.push(`${TASK_ROUTE[tk.subjectType]}/${tk.subjectId}`)}
-      />
-    );
-  }
-  const e = x.event;
-  const kind = x.kind === "timeOff" ? t("plan5.timeOff") : t("plan5.event");
-  return (
-    <ListCard
-      title={e.title || kind}
-      when={span}
-      lead={lead}
-      status={{ tone: "neutral", label: kind }}
-      facts={{ by: names || t("plan5.company") }}
-      density={density}
-      columns={PLAN_COLUMNS}
-      onPress={onEvent ? () => onEvent(e) : undefined}
     />
   );
 }
 
-
-/** desktop: a row-card with columns (06 §4); phone and tablet: the regular card in one column — the Feed is a timeline */
-function usePlanDensity(): Density {
-  const { device } = useDevice();
-  return device === "desktop" ? "row" : "regular";
+/**
+ * «8:20 ●——» — the line «сейчас» of today's Day (v2 макет 2 `.now`): the time 12/700 `accText` in the hour column, a dot 8 and a
+ * hairline of the accent from the cards' edge to the screen's (85 %).
+ */
+function NowLine({ label }: { label: string }) {
+  const { c } = useTheme();
+  const { t } = useI18n();
+  const k = component.timeSlot;
+  const dot = space[2];
+  return (
+    <View testID="plan-now" accessibilityRole="text" accessibilityLabel={t("px1.plan.nowA11y", { time: label })} style={{ flexDirection: "row", alignItems: "center", height: dot + spaceHalf.hair, marginVertical: -spaceHalf.hair }}>
+      <View style={{ width: k.timeW + space[2] + spaceHalf.hair - dot / 2 }}>
+        <T v="micro" w="bold" style={{ color: c.accText }} numberOfLines={1}>
+          {timeLead(label).top}
+        </T>
+      </View>
+      <View style={{ width: dot, height: dot, borderRadius: radius.pill, backgroundColor: c.acc }} />
+      <View style={{ flex: 1, height: component.hairline, backgroundColor: c.acc, opacity: NOW_OPACITY }} />
+    </View>
+  );
 }
+const NOW_OPACITY = 0.85;

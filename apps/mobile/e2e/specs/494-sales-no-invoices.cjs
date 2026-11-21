@@ -8,7 +8,7 @@ exports.run = async (h) => {
   const p = h.page;
   const statement = () => p.getByTestId("statement-invoiced").locator("visible=true").first().waitFor();
   const money = async () => {
-    await p.getByTestId("job-tab-money").locator("visible=true").click();
+    await p.getByTestId("job-tab-invoices").locator("visible=true").click();
     await p.getByText(/Позиций нет|Позиции/).locator("visible=true").first().waitFor();
   };
 

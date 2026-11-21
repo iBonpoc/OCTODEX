@@ -4,7 +4,7 @@ const SCREENS = [
   "/lead/l1", "/lead/new", "/client/c1", "/property/p1", "/client/edit?id=c1", "/client/edit", "/client/import", "/client/imports",
   "/module/gutters/draw", "/module/gutters/list", "/module/gutters/start?customer=c1", "/module/gutters/view", "/module/gutters/settings", "/module/gutters/prices", "/estimate/new?id=e6", "/estimate/e5", "/estimate/signature", "/estimates", "/p/demo0handyman0estimate0000000001", "/f/f00000000000000000000000000000000",
   "/jobs", "/job/j1", "/job/new", "/job/schedule?jobId=j1", "/visit/v1",
-  "/money", "/invoice", "/invoice?f=paid", "/payments", "/reports", "/reports/owed", "/reports/collected?p=all", "/reports/sales", "/reports/sources?p=all", "/reports/categories?p=all", "/invoice/i5", "/receipt/pay5", "/expense/new",
+  "/money", "/finance", "/invoice", "/invoice?f=paid", "/payments", "/reports", "/reports/owed", "/reports/collected?p=all", "/reports/sales", "/reports/sources?p=all", "/reports/categories?p=all", "/invoice/i5", "/receipt/pay5", "/expense/new",
   "/catalog", "/catalog/cat-haul", "/suppliers", "/suppliers/sup-hd", "/purchase-orders", "/purchase-order/po-demo-1", "/company", "/settings/design-system", "/settings/design-system/base", "/settings/design-system/buttons", "/settings/design-system/selectors", "/settings/design-system/windows", "/settings/design-system/notices", "/settings/design-system/motion", "/settings/design-system/haptics", "/settings/design-system/rows", "/settings/design-system/fields", "/settings/design-system/choice", "/settings/design-system/spacing", "/settings/design-system/graphite", "/company/profile", "/company/schedule", "/company/leads", "/company/intake", "/company/payments", "/company/modules", "/company/checklists", "/company/checklist/tpl-job", "/estimate/templates", "/company/licenses", "/company/trades", "/team", "/settings", "/settings/profile", "/settings/delete-account", "/auth/trade", "/auth/terms", "/legal/terms", "/legal/privacy", "/help", "/auth/invite?token=a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
 ];
 /** screens that redirect by design: screen → the path it ends on (empty: nothing yet — filled from the first run, #800) */
@@ -70,7 +70,8 @@ exports.run = async (h, { browser, BASE, layouts, installClock }) => {
         });
         const missing = shown.match(NOT_THERE);
         if (missing && !NOT_THERE_OK.includes(s)) errs.push(`${s} ${width} ${theme}: the screen says «${missing[0]}»`);
-        if (!/GoRix v\d/.test(body) && !NO_HEADER.includes(s)) errs.push(`${s} ${width} ${theme}: no header with the version label`);
+        // the one header (visual-v2 «Единая шапка»): the row of every screen; the version line is no longer over it
+        if (!(await p.locator('[data-testid="screen-head"]').count()) && !NO_HEADER.includes(s)) errs.push(`${s} ${width} ${theme}: no header (screen-head)`);
         const over = await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
         if (over) errs.push(`horizontal overflow ${s} ${width} ${theme}`);
         const cards = CARD_SCREENS.find((x) => x.path === s);

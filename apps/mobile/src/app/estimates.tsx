@@ -1,47 +1,40 @@
-import { useRef, useState, type ComponentRef } from "react";
-import { View } from "react-native";
-import { router } from "expo-router";
+import { useState } from "react";
 import { useI18n } from "@/i18n";
-import { EstimatesBoard } from "@/features/boards";
-import { IconButton } from "@/ui/controls";
-import { Menu } from "@/ui/overlays";
-import { Screen } from "@/ui/surfaces";
+import { useEstimateList } from "@/features/boards";
+import { MoneyTiles, useMoneyChips, useMoneyCreate } from "@/features/moneyTabs";
+import { Empty } from "@/ui/surfaces";
+import { ListScreen } from "@/ui/templates";
 
-/** «Сметы»: all estimates, a section of its own for every role (founder 07.11, spec 31 §7а). */
+/**
+ * «Деньги → Сметы» — the List template (prototype v2 #2350, LAYOUT-RULES §2–§3, BUILD-SPEC §2.9, wireframes-v2 №8).
+ * The screen's one job: see which estimates wait for me or for the client, and open the one needed.
+ * «Деньги» · search icon · «＋» (new estimate / from a template) → «Сметы · Счета · Оплаты» one strip → the money tiles 2×2 →
+ * grouped rows 56 (initials, name, «работа · что с ней», the sum once). No main button: making a new one is «＋».
+ */
 export default function Estimates() {
   const { t } = useI18n();
-  const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));
-  // «＋»: a menu at the button — «Новая смета», «Из шаблона…» (DS §8.13, #1117)
-  const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  const ref = useRef<ComponentRef<typeof View>>(null);
-  const add = (
-    <View ref={ref} collapsable={false} testID="est-list-add">
-      {/* «＋» opens a choice (DS §8.13): the label names the choice, not one of its items (design review) */}
-      <IconButton icon="plus" label={t("est.tplIn.create")} onPress={() => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }))} />
-    </View>
-  );
+  const [q, setQ] = useState("");
+  const [allDone, setAllDone] = useState(false);
+  const chips = useMoneyChips("estimates");
+  const { create, onCreate } = useMoneyCreate();
+  const { groups, row } = useEstimateList(q, allDone, () => setAllDone(true));
   return (
-    <>
-      <EstimatesBoard
-        wrap={(body, aside) => (
-          <Screen title={t("sales.estimates")} back={back} aside={aside} right={add}>
-            {body}
-          </Screen>
-        )}
-      />
-      <Menu
-        visible={!!menu}
-        anchor={menu}
-        items={[
-          { key: "blank" as const, label: t("est.new"), icon: "plus" as const, testID: "est-list-add-blank" },
-          { key: "template" as const, label: t("est.tplIn.from"), icon: "doc" as const, testID: "est-list-add-template" },
-        ]}
-        onSelect={(k) => {
-          setMenu(null);
-          router.push(k === "template" ? "/estimate/new?pick=templates" : "/estimate/new");
-        }}
-        onClose={() => setMenu(null)}
-      />
-    </>
+    <ListScreen
+      testID="est-list"
+      title={t("nav.money")}
+      search={{ placeholder: t("card.filter.searchEstimates"), value: q, onChange: setQ }}
+      chips={chips}
+      chipsAs="segment"
+      filters={<MoneyTiles />}
+      create={create}
+      onCreate={onCreate}
+      groups={groups}
+      // visual v2 «цифры справа»: «Сумма $3,420» in the column of the group (FigureRow)
+      row={(e) => {
+        const r = row(e);
+        return r.value ? { ...r, cols: [{ label: t("w2m.col.sum"), value: r.value }] } : r;
+      }}
+      empty={<Empty icon="invoice" title={t("board.noEstimates")} />}
+    />
   );
 }

@@ -31,7 +31,7 @@ exports.run = async (h) => {
   await h.shot("open-handle");
 
   // take D by its handle and hold it
-  const hd = tid(`sort-handle-l:${d}`);
+  const hd = await line.grip(h, `l:${d}`);
   await line.toMiddle(h, hd);
   const hb = await hd.boundingBox();
   const x = hb.x + hb.width / 2;

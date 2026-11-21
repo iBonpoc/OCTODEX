@@ -56,6 +56,7 @@ exports.run = async (h) => {
   // technician: no «Напомнить»
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go(`/invoice/${inv.id}`);
-  await p.getByTestId("invoice-more").locator("visible=true").first().waitFor({ timeout: 8000 });
+  // the row of icons is there (PDF at least; «⋯» is the director's only — #2350)
+  await p.getByTestId("invoice-actions").locator("visible=true").first().waitFor({ timeout: 8000 });
   h.expect((await p.getByTestId("invoice-remind").count()) === 0, "tech: no «Напомнить»");
 };

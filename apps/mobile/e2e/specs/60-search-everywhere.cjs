@@ -14,7 +14,7 @@ exports.run = async (h) => {
   const p = h.page;
   const w = h.layout.width;
   const wide = w >= 820;
-  const field = () => p.locator('[data-testid="search-field"] input').locator("visible=true");
+  const field = () => p.locator('[data-testid="search-search-field"] input').locator("visible=true");
   const hits = () => p.locator('[data-testid="search-hit"]:visible');
   const type = async (q) => {
     await field().fill(q);

@@ -53,6 +53,10 @@ export const SCREENS: ShowcaseScreen[] = [
   { id: "haptics", title: "ds.scr.haptics", hint: "ds.scr.hapticsHint", icon: "phone", ds: "§15.6", where: "ds.where.haptics" },
   { id: "spacing", title: "ds.sec.layout", hint: "ds.scr.spacingHint", icon: "route", ds: "§5", where: "ds.where.spacing", hidden: true },
   { id: "brand", title: "ds.brand.title", hint: "ds.scr.brandHint", icon: "star", ds: "§18.2", where: "ds.where.brand" },
+  // #2350: the «Тонкие острые» set — every icon, normal and selected
+  { id: "icons", title: "ds.scr.icons", hint: "ds.scr.iconsHint", icon: "layers", ds: "§18.1", where: "ds.where.icons" },
+  // prototype v2 (docs/design/BUILD-PLAN.md §1, wave 1): the shared parts of the five templates
+  { id: "proto", title: "ds.scr.proto", hint: "ds.scr.protoHint", icon: "copy", ds: "§12.11", where: "ds.where.proto" },
   // «Графит» — пилот, не правило (#2254): behind the switch on the showcase's first screen, off by default
   { id: "graphite", title: "ds.gr.title", hint: "ds.gr.hint", icon: "sun", ds: "§25", where: "ds.gr.where", pilot: "graphite" },
 ];
@@ -61,16 +65,23 @@ export const SECTIONS: ShowcaseSection[] = [
   { id: "windows", screen: "windows", ds: "§10", title: "ds.sec.windows", tokenGroups: [], components: ["Sheet", "SheetScroll", "HelpButton"] },
   { id: "selectors", screen: "selectors", ds: "§9", title: "ds.sec.selectors", tokenGroups: [], components: ["ViewTabs", "SelectField", "PickerSheet", "FieldError", "Anchored"] },
   { id: "choice", screen: "choice", ds: "§9", title: "ds.scr.choice", tokenGroups: [], components: ["OptionRow", "OptionRows", "OptionTiles", "CheckMark", "ToggleRow", "Toggle", "PctUsdField", "MultiValueField", "ActionRow", "MetaLine", "DoneCircle", "FracKeys"] },
-  { id: "fields", screen: "fields", ds: "§9", title: "ds.scr.fields", tokenGroups: [], components: ["NumberField", "TextField", "FieldGroup", "FormMain", "DateField"] },
-  { id: "buttons", screen: "buttons", ds: "§7", title: "ds.scr.buttons", tokenGroups: [], components: ["Button", "IconButton", "Press", "ActionBar"] },
-  { id: "notices", screen: "notices", ds: "§15", title: "ds.scr.notices", tokenGroups: [], components: ["ToastProvider", "SyncBadge", "Banner", "StatusNote", "Empty", "EmptyFilter", "EmptySearch", "NotFound", "PageNotFound"] },
+  { id: "fields", screen: "fields", ds: "§9", title: "ds.scr.fields", tokenGroups: [], components: ["NumberField", "TextField", "FieldGroup", "FormMain", "DateField", "FieldRow"] },
+  { id: "buttons", screen: "buttons", ds: "§7", title: "ds.scr.buttons", tokenGroups: [], components: ["Button", "IconButton", "Press", "ActionBar", "ButtonPair"] },
+  { id: "notices", screen: "notices", ds: "§15", title: "ds.scr.notices", tokenGroups: [], components: ["ToastProvider", "QueueLine", "SyncBadge", "Banner", "StatusNote", "Empty", "EmptyFilter", "EmptySearch", "NotFound", "PageNotFound"] },
   { id: "rows", screen: "rows", ds: "§8.3", title: "ds.scr.rows", tokenGroups: [], components: ["SelectedCheck"] },
   { id: "haptics", screen: "haptics", ds: "§15.6", title: "ds.scr.haptics", tokenGroups: [], components: [] },
   { id: "brand", screen: "brand", ds: "§18.2", title: "ds.brand.title", tokenGroups: [], components: ["BrandMark", "BrandLogo", "BrandLaunch", "BrandWait", "BrandIntro"] },
+  { id: "icons", screen: "icons", ds: "§18.1", title: "ds.scr.icons", tokenGroups: ["statusIcon"], components: ["Icon"] },
   { id: "tokens-color", screen: "base", ds: "§3", title: "ds.sec.color", tokenGroups: ["themes", "statusIcon", "drawing"], components: [] },
   { id: "tokens-text", screen: "base", ds: "§4", title: "ds.sec.text", tokenGroups: ["font"], components: [] },
   { id: "tokens-layout", screen: "spacing", ds: "§5", title: "ds.sec.layout", tokenGroups: ["space", "spaceHalf", "radius", "size", "breakpoint", "layout", "z", "component"], components: [] },
   { id: "tokens-motion", screen: "motion", ds: "§14", title: "ds.sec.motion", tokenGroups: ["motion", "timing"], components: [] },
+  { id: "proto-object", screen: "proto", ds: "§12.11", title: "ds.sec.protoObject", tokenGroups: [], components: ["ObjectHeader", "ObjectHeaderBar", "IconRow", "MainStep", "SummaryLine", "Collapsible", "AccessNote", "ViewSteps"] },
+  // visual language v2 (docs/design/visual-v2.html, founder 21.11): the new parts and the v2 look of the old ones
+  { id: "proto-v2", screen: "proto", ds: "§12.12", title: "ds.sec.protoV2", tokenGroups: ["rhythm"], components: ["CheckList", "NumberTrio", "ProgressWords", "TonePill", "FigureRow", "CountPill", "TimerLine", "IntervalPlate", "TimeSlot", "HatchPlate", "ProgressBar", "Segmented"] },
+  { id: "proto-lists", screen: "proto", ds: "§12.11", title: "ds.sec.protoLists", tokenGroups: [], components: ["DayCell", "WeekStrip", "MonthHead", "MonthArrows", "MonthPick", "DayStrip", "GroupedList", "ListGroup", "GroupRow", "StatTile", "StatGrid", "StatusPill", "NowCard"] },
+  // поток Г: the five screen templates (src/ui/templates/*) and their shared parts, in their showcase frame
+  { id: "proto-templates", screen: "proto", ds: "§12.11", title: "ds.sec.protoTemplates", tokenGroups: [], components: ["OverviewScreen", "ListScreen", "ObjectScreen", "EditorScreen", "CalendarScreen", "CreateButton", "MoreButton", "ConfirmSheet", "HeaderIcons", "HeaderIcon", "HeaderButton", "HeaderBar", "HeaderBig", "HeaderAvatar", "HeaderBack", "HeaderClose", "HeaderPlate", "HeaderFade", "HeaderScroll", "HeaderStill", "FitTitle", "HeadStatus", "SheetHead", "DemoPlate", "DemoDot", "TemplateFrame"] },
   { id: "graphite", screen: "graphite", ds: "§25", title: "ds.gr.title", tokenGroups: [], components: [] },
   { id: "tokens-print", screen: "base", ds: "§19", title: "ds.sec.print", tokenGroups: ["print", "drawingPrint", "shopSheet"], components: [] },
 ];
@@ -80,10 +91,12 @@ export const SECTIONS: ShowcaseSection[] = [
  * the guard fails on a component that is neither in a section, nor here, nor in UI_NOT_SHOWN.
  */
 export const UI_PENDING: readonly string[] = [
-  "Columns", "Meter", "ReadOnly", "StatusChip", "Segmented", "TagChip", "Avatar", "MetaTag", "ProgressBar", "Steps",
+  "Columns", "Meter", "ReadOnly", "StatusChip", "TagChip", "Avatar", "MetaTag", "Steps",
   "Stepper", "ChoiceChips", "MultiChips", "FilterBar", "FilterRow", "HintsProvider", "ListCard", "CardGrid", "ListCardHeader", "StatusPicker",
-  "ListPanel", "Glass", "Menu", "T", "Icon", "Card", "RowView", "Grid", "SectionTitle", "ListRow", "CardList",
+  "ListPanel", "Glass", "Menu", "T", "Card", "RowView", "Grid", "SectionTitle", "ListRow", "CardList",
   "Divider", "Empty", "Screen",
+  // #2350: the row swipe has no gesture on the web (the showcase runs there too); seen on the phone in Клиенты / Задачи / Сметы
+  "SwipeRow",
 ];
 
 /** components that are plumbing, not something a person sees — each with the reason */
@@ -94,3 +107,46 @@ export const UI_NOT_SHOWN: Record<string, string> = {
   "FieldAnchor": "the place of a required field the screen draws itself (the scroll goes to it); nothing to see — its frame and words are FieldError / Anchored",
   "Scrim": "the dim layer of a sheet; seen in the sheet sample",
 };
+
+/**
+ * The variants of the last v2 pass (#2350; docs/design/SCREEN-SPECS.md, DS §12.14): a prop of a detail that changes how it looks.
+ * The guard (designSystem.test.ts) checks each one three ways: the prop still exists in `src` of the detail, DESIGN-SYSTEM.md §12.14
+ * names it, and the showcase file `shown` draws it (the snippet `use` is in that file). `shown: null` — not a sample of the showcase
+ * (a function or a screen part), `why` says where it is seen. A new variant of a detail is added here in the same PR.
+ */
+export const V2_VARIANTS: readonly { part: string; prop: string; src: string; use: string; shown: string | null; why?: string }[] = [
+  { part: "ViewTabs", prop: "look", src: "ui/viewTabs.tsx", use: 'look="chips"', shown: "ProtoV2.tsx" },
+  { part: "ProgressWords", prop: "caption", src: "ui/figures.tsx", use: "<ProgressWords", shown: "ProtoV2.tsx" },
+  { part: "TonePill", prop: "tone", src: "ui/figures.tsx", use: "<TonePill", shown: "ProtoV2.tsx" },
+  { part: "CountPill", prop: "n", src: "ui/figures.tsx", use: "<CountPill", shown: "ProtoV2.tsx" },
+  { part: "HatchPlate", prop: "label", src: "ui/figures.tsx", use: "<HatchPlate", shown: "ProtoV2.tsx" },
+  { part: "IntervalPlate", prop: "near", src: "ui/figures.tsx", use: "<IntervalPlate", shown: "ProtoV2.tsx" },
+  { part: "TextField", prop: "plate", src: "ui/controls.tsx", use: "<TextField plate", shown: "ProtoV2.tsx" },
+  { part: "TextField", prop: "big", src: "ui/controls.tsx", use: "<TextField big", shown: "ProtoV2.tsx" },
+  { part: "FigureRow", prop: "avatar", src: "ui/figures.tsx", use: "avatar={{", shown: "ProtoV2.tsx" },
+  { part: "FigureRow", prop: "iconTone", src: "ui/figures.tsx", use: 'iconTone="ok"', shown: "ProtoV2.tsx" },
+  { part: "FigureRow", prop: "tone", src: "ui/figures.tsx", use: 'tone="warn" icon="key"', shown: "ProtoV2.tsx" },
+  { part: "NumberTrio", prop: "look", src: "ui/figures.tsx", use: 'look="plain"', shown: "ProtoV2.tsx" },
+  { part: "NowCard", prop: "bare", src: "ui/nowCard.tsx", use: "\n        bare\n", shown: "ProtoV2.tsx" },
+  { part: "NowCard", prop: "words", src: "ui/nowCard.tsx", use: "words={{", shown: "ProtoV2.tsx" },
+  { part: "NowCard", prop: "trioLook", src: "ui/nowCard.tsx", use: 'trioLook="plain"', shown: "ProtoV2.tsx" },
+  { part: "NowCard", prop: "soon", src: "ui/nowCard.tsx", use: "soon={", shown: "ProtoV2.tsx" },
+  { part: "NowCard", prop: "window", src: "ui/nowCard.tsx", use: 'window="', shown: "ProtoV2.tsx" },
+  { part: "NowCard", prop: "big", src: "ui/nowCard.tsx", use: "\n        big\n", shown: "ProtoV2.tsx" },
+  { part: "NowCard", prop: "mainIcon", src: "ui/nowCard.tsx", use: 'mainIcon="check"', shown: "ProtoV2.tsx" },
+  { part: "NowCard", prop: "trio", src: "ui/nowCard.tsx", use: "trio={[", shown: "ProtoV2.tsx" },
+  { part: "StatTile", prop: "dense", src: "ui/statTile.tsx", use: "<StatTile dense", shown: "ProtoV2.tsx" },
+  { part: "StatTile", prop: "unitTone", src: "ui/statTile.tsx", use: 'unitTone="bad"', shown: "ProtoV2.tsx" },
+  { part: "StatGrid", prop: "cols", src: "ui/statTile.tsx", use: "cols={4}", shown: "ProtoV2.tsx" },
+  { part: "ListGroup", prop: "bare", src: "ui/groupedList.tsx", use: "<ListGroup bare", shown: "ProtoV2.tsx" },
+  { part: "ListGroup", prop: "note", src: "ui/groupedList.tsx", use: '<ListGroup note="', shown: "ProtoV2.tsx" },
+  { part: "TimeSlot", prop: "top", src: "ui/figures.tsx", use: "top={<HatchPlate", shown: "ProtoV2.tsx" },
+  { part: "TimeSlot", prop: "oneLine", src: "ui/figures.tsx", use: " oneLine ", shown: "ProtoV2.tsx" },
+  { part: "FitTitle", prop: "text", src: "ui/templates/screenHeader.tsx", use: "<FitTitle", shown: "ProtoV2.tsx" },
+  { part: "HeadStatus", prop: "status", src: "ui/templates/screenHeader.tsx", use: "<HeadStatus", shown: "ProtoV2.tsx" },
+  { part: "MonthArrows", prop: "head", src: "ui/dayStrip.tsx", use: "<MonthArrows", shown: "ProtoV2.tsx" },
+  { part: "MonthPick", prop: "head", src: "ui/dayStrip.tsx", use: "<MonthPick", shown: "ProtoV2.tsx" },
+  { part: "ListScreen", prop: "chipsAs", src: "ui/templates/ListScreen.tsx", use: 'chipsAs="segment"', shown: "ProtoTemplates.tsx" },
+  { part: "pastelOf", prop: "name", src: "ui/pastelOf.ts", use: "", shown: null, why: "a function: the pastel of FigureRow avatar (the showcase's «LA») and of the header's avatar; unit test pastelOf.test.ts" },
+  { part: "ClientContacts", prop: "onCall", src: "features/client/ClientContacts.tsx", use: "", shown: null, why: "a screen part, not src/ui: the client's «⌄» panel of GroupRow rows; seen on Клиент, e2e of the client header, visual guard client-*" },
+];

@@ -22,6 +22,7 @@ exports.run = async (h) => {
   await h.go("/job/j3");
   await h.expectText(/Drywall patch/, "the job opens");
   h.expect((await anyFab().count()) === 0 && (await estimateInMore()) === 1, "an ordinary job: no «＋», «Создать смету» in «⋯»");
+  await p.getByTestId("job-tab-visits").locator("visible=true").click();
   h.expect((await p.getByRole("button", { name: /^(Ещё один выезд|Запланировать работу)$/ }).count()) >= 1, "an ordinary job can be planned");
 
   // Linda (c3) becomes «Не обслуживаем»
@@ -34,6 +35,7 @@ exports.run = async (h) => {
   await h.go("/job/j3");
   await h.expectText(/новых выездов и смет нет/, "the job says the client is not served");
   await h.expectText(/Назначенный выезд можно доделать или перенести/, "and that the set visit is finished as usual");
+  await p.getByTestId("job-tab-visits").locator("visible=true").click();
   h.expect((await p.getByRole("button", { name: /^(Ещё один выезд|Запланировать работу)$/ }).count()) === 0, "no new visit from the job");
   h.expect((await anyFab().count()) === 0 && (await estimateInMore()) === 0, "no new estimate on the job");
   await h.shot("job");
@@ -67,7 +69,7 @@ exports.run = async (h) => {
     localStorage.setItem(k, JSON.stringify(s));
   });
   await h.go("/job/j1");
-  await p.getByRole("tab", { name: "История", exact: true }).locator("visible=true").click(); await p.waitForTimeout(400);
+  await p.getByTestId("job-tab-notes").locator("visible=true").click(); await p.waitForTimeout(400);
   await h.expectText(/В пути/, "«В пути» is in the job's history");
   await h.shot("history");
 };

@@ -1,10 +1,10 @@
 /**
- * e2e 386 — the invoice's card: one main button and «⋯» instead of a row of five pills (#1474, as the estimate #1412; DS §7.3, §8.9,
- * Б4), an owed invoice of a client with a phone and an email, as the director, every view, by testID:
- * - no other action stands on the page: PDF, SMS, email are in «⋯» only;
- * - «Принять оплату» and the second «Напомнить» (§12.3, §8.9 2 : 3): on a phone in the pinned bar (no tab bar under it), from 820
- *   right after the money, as wide as their words — the same place on every width;
- * - «⋯» in Б4's order: PDF · SMS · Email · a line · «Аннулировать…» last;
+ * e2e 386 — the invoice's card as LAYOUT-RULES §3 «Объект» (#2350; before — #1474, DS Б4), an owed invoice of a client with a phone
+ * and an email, as the director, every view, by testID:
+ * - the secondary actions are icons in ONE row on the page (SMS · email · PDF · «Напомнить»), each with its VoiceOver label;
+ * - one main button «Принять оплату · $X»: on a phone pinned alone at the bottom (no tab bar under it), from 820 right after the
+ *   money, as wide as its words;
+ * - «⋯» holds only the rare and dangerous «Аннулировать…»;
  * - «Напомнить» opens its sheet.
  */
 const { pressEscUntilClosed } = require("../sheet.cjs");
@@ -25,12 +25,19 @@ exports.run = async (h) => {
 
   await h.go(`/invoice/${inv.id}`);
   await tid("invoice-more").waitFor({ timeout: 8000 });
-  for (const id of ["invoice-act-pdf", "invoice-act-sms", "invoice-act-email", "invoice-void-item"]) {
-    h.expect((await p.getByTestId(id).locator("visible=true").count()) === 0, `«${id}» is not on the page (it lives in «⋯»)`);
+  // the icons: one row, each a labelled button
+  const icons = [];
+  for (const id of ["invoice-act-sms", "invoice-act-email", "invoice-act-pdf", "invoice-remind"]) {
+    await tid(id).waitFor({ timeout: 3000 });
+    const label = await tid(id).getByRole("button").getAttribute("aria-label");
+    h.expect(label && label.length > 2, `«${id}» is an icon with a VoiceOver label (${label})`);
+    icons.push(await tid(id).boundingBox());
   }
+  h.expect(icons.every((b) => Math.abs(b.y - icons[0].y) <= 2) && icons.every((b, i) => i === 0 || b.x > icons[i - 1].x), "the icons stand in one row");
 
-  // the main button: pinned on a phone, at the top of the content from 820
+  // the main button: pinned alone on a phone, after the money from 820
   await tid("invoice-take-payment").waitFor({ timeout: 3000 });
+  h.expect(/Принять оплату · \$/.test(await tid("invoice-take-payment").innerText()), "the main button names the sum");
   h.expect((await p.getByTestId("invoice-actionbar").locator("visible=true").count() > 0) === phone, phone ? "«Принять оплату» is in the pinned bar" : "no pinned bar from 820");
   if (phone) {
     const bar = await tid("invoice-actionbar").boundingBox();
@@ -38,26 +45,20 @@ exports.run = async (h) => {
     h.expect(bar && Math.abs(bar.y + bar.height - vp.height) <= 2, `the bar stands on the bottom edge (${bar && bar.y + bar.height} / ${vp.height})`);
     h.expect((await p.getByTestId("tab-bar").locator("visible=true").count()) === 0, "no tab bar under the pinned bar");
     const pay = await tid("invoice-take-payment").boundingBox();
-    const remind = await tid("invoice-remind").boundingBox();
-    h.expect(remind && pay && remind.x < pay.x && remind.y >= bar.y && pay.width > remind.width, "«Напомнить» on the left of «Принять оплату» in the bar, narrower (2 : 3)");
+    h.expect(pay && pay.y >= bar.y && pay.width > bar.width / 2, "one main button across the bar");
   } else {
     const btn = await tid("invoice-take-payment").boundingBox();
     h.expect(btn && btn.width < 400, `from 820 the button is as wide as its words (${btn && btn.width})`);
   }
   await h.shot("card");
 
-  // «⋯»: Б4's order, the dangerous one last
+  // «⋯»: only «Аннулировать…»
   await tid("invoice-more").getByRole("button").click();
   await tid("menu-items").waitFor({ timeout: 3000 });
-  const order = await p.evaluate(() =>
-    [...document.querySelectorAll('[data-testid^="invoice-act-"], [data-testid="invoice-void-item"]')]
-      .filter((e) => e.offsetParent !== null)
-      .map((e) => ({ id: e.getAttribute("data-testid"), y: e.getBoundingClientRect().y }))
-      .sort((a, b) => a.y - b.y)
-      .map((x) => x.id),
+  const inMenu = await p.evaluate(() =>
+    [...document.querySelectorAll('[data-testid="menu-items"] [data-testid]')].filter((e) => e.offsetParent !== null).map((e) => e.getAttribute("data-testid")).filter((x) => /^invoice-/.test(x)),
   );
-  h.expect((await p.getByTestId("menu-divider").locator("visible=true").count()) === 1, "a line before «Аннулировать…» (Б4: the dangerous ones are the last group)");
-  h.expect(JSON.stringify(order) === JSON.stringify(["invoice-act-pdf", "invoice-act-sms", "invoice-act-email", "invoice-void-item"]), `the menu in Б4's order: ${order.join(", ")}`);
+  h.expect(JSON.stringify(inMenu) === JSON.stringify(["invoice-void-item"]), `«⋯» holds only «Аннулировать…»: ${inMenu.join(", ")}`);
   await h.shot("menu");
   await pressEscUntilClosed(p, p.getByTestId("menu-items").locator("visible=true").first());
   // «Напомнить» opens its sheet

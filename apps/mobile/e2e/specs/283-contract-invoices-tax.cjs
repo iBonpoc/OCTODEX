@@ -16,8 +16,8 @@ exports.run = async (h) => {
   raw.db.invoices = raw.db.invoices.filter((i) => i.jobId !== "j3");
   await h.seed("octo.db.v5", raw);
   await h.go("/job/j3");
-  await p.getByTestId("job-tab-money").locator("visible=true").click();
-  await h.expectText(/Договор \| \$510/, "the contract with its tax");
+  await p.getByTestId("job-tab-invoices").locator("visible=true").click();
+  h.expect((await p.getByTestId("job-contract").locator("visible=true").first().innerText()).includes("$510"), "the contract with its tax (in the head, said once — LAYOUT-RULES П7)");
 
   await p.getByTestId("statement-progress").click();
   await h.sheet().getByTestId("statement-progress-issue").click();
