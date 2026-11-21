@@ -212,7 +212,7 @@ export function useHomeHeader() {
     onAvatar: wide ? undefined : () => router.push("/more"),
     avatarLabel: t("nav.profile"),
   };
-  // the home set AND what the company's usable modules add («Замер желобов» of Gutters, docs/specs/33 П15.2) — as the old «＋» (Fab.tsx)
+  // the home set AND what the company's usable modules add (a module's quick action, docs/specs/33 П15.2) — as the old «＋» (Fab.tsx)
   const items = useFabItems({ set: "home" }).filter((x) => x.href);
   const create: CreateAction | undefined = items.length
     ? { a11y: t("nav.create"), items: items.map((x) => ({ key: x.id, label: t(x.label), icon: x.icon, testID: `fab-${x.id}` })) }

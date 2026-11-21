@@ -79,12 +79,12 @@ exports.run = async (h) => {
   h.expect(path(h) === "/more", `Messages: back → /more (${p.url()})`);
   // v2: «Лиды» is a tab — no «‹ Ещё» on it for the office either
   await h.go("/leads");
-  await p.waitForTimeout(500);
+  await p.waitForLoadState("networkidle");
   h.expect((await p.getByTestId("back-more").locator("visible=true").count()) === 0, "director: Leads is a tab, no «‹ Ещё»");
   // sales: Leads is the home — no «‹ Ещё» there
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("sales")));
   await h.go("/leads");
-  await p.waitForTimeout(500);
+  await p.waitForLoadState("networkidle");
   h.expect((await p.getByTestId("back-more").locator("visible=true").count()) === 0, "sales: Leads is the home, no «‹ Ещё»");
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
 };

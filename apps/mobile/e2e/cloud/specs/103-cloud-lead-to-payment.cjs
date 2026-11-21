@@ -42,7 +42,7 @@ exports.run = async (h, { seed, admin, browser, BASE }) => {
   await require("../../estimateLine.cjs").addCustom(h, LINE, PRICE);
   await require("../../estimateLine.cjs").saveSend(h);
   await p.waitForTimeout(700);
-  await p.getByRole("button", { name: "Копировать ссылку" }).click();
+  await p.getByTestId("send-copy").getByRole("button", { name: "Копировать ссылку" }).click();
   await p.waitForTimeout(400);
   const [est] = await waitRows(
     admin,
