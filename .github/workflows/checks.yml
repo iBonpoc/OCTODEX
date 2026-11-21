@@ -292,6 +292,99 @@ jobs:
           name: e2e-screenshots-${{ matrix.view }}-${{ matrix.part }}
           path: apps/mobile/e2e/out/
 
+  # «Без отличий» (#2312 п.1, приёмка этапа III Графита): every screen as a picture at all 6 views, compared with the base of the
+  # last green run of main. REPORT ONLY for now (director 20.11, rule 26): the job is not in `needs` of «checks» and blocks no
+  # merge until the base has stood green for 2–3 runs of main. It runs where the full matrix runs (main, nightly, by hand, a PR
+  # with «к-влитию»), not on every push. The base is NOT in the repository: a run on main writes it (`--update-snapshots`) and
+  # uploads it as the artifact `visual-base-<view>` (30 days; the nightly refreshes it); a PR downloads the one of the last
+  # green run of main and only compares. No base yet (the first run) — nothing to compare, the job says so and stays green.
+  visual:
+    name: Pictures ${{ matrix.view }} (report only)
+    needs: [changes, build-web]
+    if: needs.changes.outputs.app == 'true' && needs.changes.outputs.e2e == 'full'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        view: ${{ fromJSON(needs.changes.outputs.views) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: apps/mobile/dist
+      - id: pw
+        name: Playwright version
+        working-directory: apps/mobile
+        run: echo "v=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.v }}
+      - name: Playwright browser
+        run: |
+          bash scripts/aptRetries.sh
+          bash scripts/playwrightInstall.sh
+      # a PR: the base pictures of the last green run of main (none yet — the first run — is not an error)
+      - id: last
+        name: Last green run of main
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow checks.yml --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          [ -n "$run" ] || echo "::notice::no green run of main yet: no base pictures to compare with"
+      - uses: actions/download-artifact@v4
+        if: github.event_name == 'pull_request' && steps.last.outputs.run != ''
+        continue-on-error: true
+        with:
+          name: visual-base-${{ matrix.view }}
+          path: apps/mobile/e2e/visual/__base__/${{ matrix.view }}
+          run-id: ${{ steps.last.outputs.run }}
+          github-token: ${{ github.token }}
+      # main (push, nightly, by hand on main): write the base
+      - name: Write the base pictures
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        working-directory: apps/mobile
+        run: npx playwright test -c playwright.visual.config.cjs --project=${{ matrix.view }} --update-snapshots
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        with:
+          name: visual-base-${{ matrix.view }}
+          path: apps/mobile/e2e/visual/__base__/${{ matrix.view }}
+          if-no-files-found: error
+          retention-days: 30
+      # a PR: compare (a red here is a report, the job stays green)
+      - name: Compare with the base
+        if: github.event_name == 'pull_request'
+        working-directory: apps/mobile
+        continue-on-error: true
+        run: |
+          if [ ! -d "e2e/visual/__base__/${{ matrix.view }}" ]; then echo "::notice::no base pictures for ${{ matrix.view }}: nothing to compare"; exit 0; fi
+          npx playwright test -c playwright.visual.config.cjs --project=${{ matrix.view }}
+      - uses: actions/upload-artifact@v4
+        if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
+        with:
+          name: visual-diff-${{ matrix.view }}
+          path: |
+            apps/mobile/e2e/out/visual/
+            apps/mobile/e2e/out/visual-report/
+          if-no-files-found: ignore
+          retention-days: 7
+
   # Rule 22 (CLAUDE.md, #902): the PR refers to a «до-1.0» task inside a release epic. Skipped: documents-only PRs and the
   # label «починка-main» (scripts/rule22.cjs). Reads the PR live (not from the event), so a re-run after editing the body is enough.
   rule22:
