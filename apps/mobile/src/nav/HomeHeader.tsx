@@ -1,6 +1,6 @@
 import { View } from "react-native";
 import { router } from "expo-router";
-import { ACCENT_ORDER, component, radius, size, space } from "@octo/design-tokens";
+import { component, radius, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
@@ -16,9 +16,7 @@ import { unreadCount } from "./notices";
  */
 export function HomeHeader() {
   const { t } = useI18n();
-  const { c, accent, setAccent } = useTheme();
-  // prototype #2350 (founder 21.11): the accent is switched right here, not in Settings — each tap takes the next colour
-  const nextAccent = () => setAccent(ACCENT_ORDER[(ACCENT_ORDER.indexOf(accent) + 1) % ACCENT_ORDER.length]!);
+  const { c } = useTheme();
   const { wide } = useDevice();
   const { db, role } = useStore();
   const me = db.members.find((m) => m.id === db.me);
@@ -26,12 +24,7 @@ export function HomeHeader() {
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
       <SyncBadge compact />
-      {/* prototype #2350: the colour dot — goes away when the founder picks the accent; the look lives in the dot itself */}
-      <Press testID="home-accent" onPress={nextAccent} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("more.accent")}>
-        <View style={{ width: component.dockBtn, height: component.dockBtn, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd, alignItems: "center", justifyContent: "center" }}>
-          <View style={{ width: size.iconMd, height: size.iconMd, borderRadius: radius.pill, backgroundColor: c.acc }} />
-        </View>
-      </Press>
+
       {role !== "tech" ? (
         <Press
           testID="home-bell"

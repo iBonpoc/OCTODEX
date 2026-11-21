@@ -209,7 +209,7 @@ function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: Secti
           <View key={`${role}-${wide}`} testID="tab-bar" role="tablist" style={{ flexDirection: "row", alignItems: "center", flex: wide ? undefined : 1, gap: wide ? space[1] : 0 }}>
             <Animated.View
               pointerEvents="none"
-              style={[{ position: "absolute", top: 0, height: itemH, borderRadius: radius.pill }, fillStyleFlat(c), { backgroundColor: c.acc }, pill]}
+              style={[{ position: "absolute", top: 0, height: itemH, borderRadius: radius.pill }, fillStyleFlat(c), { backgroundColor: c.acc, borderWidth: component.hairline, borderColor: c.accEdge }, pill]}
             />
             {ordered}
           </View>

@@ -1,0 +1,112 @@
+<title>Палитра GoRix</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+:root{--pg:#E9EAE6;--fg:#18191C;--mut:#4A4D54;--card:#F6F6F3;--line:rgba(20,21,24,.1);color-scheme:light}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--pg:#141518;--fg:#EDEEF0;--mut:#A9ACB4;--card:#1B1C1F;--line:rgba(255,255,255,.08);color-scheme:dark}}
+:root[data-theme="dark"]{--pg:#141518;--fg:#EDEEF0;--mut:#A9ACB4;--card:#1B1C1F;--line:rgba(255,255,255,.08);color-scheme:dark}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--pg);color:var(--fg);font:15px/1.45 Manrope,system-ui,sans-serif;
+  padding:24px max(16px,env(safe-area-inset-right,0px)) 48px max(16px,env(safe-area-inset-left,0px));overflow-x:hidden}
+h1{font-size:26px;line-height:1.15;margin:0 0 6px;font-weight:700}
+h2{font-size:20px;margin:36px 0 4px;font-weight:700}
+.lead{color:var(--mut);max-width:760px;margin:0 0 8px}
+.var{max-width:1100px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:16px;margin-top:12px}
+.ph{border-radius:22px;padding:16px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.ph.dark{background:#1B1C1F;color:#EDEEF0;--surf:#25262A;--mut:#A9ACB4;--track:#34353A;--nav:#2E2F34}
+.ph.light{background:#E9EAE6;color:#18191C;--surf:#F6F6F3;--mut:#4A4D54;--track:#DCDDD8;--nav:#25262A}
+.phh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.cap{font-size:12px;line-height:1.35;color:var(--mut);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.card{background:var(--surf);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:6px}
+.t1{font-weight:700;font-size:17px}.t1s{font-weight:600}.t2{color:var(--mut);font-size:13px}
+.btn{font:600 15px Manrope,system-ui,sans-serif;height:40px;border:0;border-radius:999px;background:var(--acc);color:var(--on);padding:0 18px;align-self:flex-start}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.day{background:var(--surf);border-radius:14px;padding:6px 0 8px;display:flex;flex-direction:column;align-items:center;position:relative}
+.day small{font-size:12px;color:var(--mut)}.day b{font-size:16px}
+.day i{position:absolute;bottom:3px;width:4px;height:4px;border-radius:50%;background:var(--mut)}
+.day.sel{background:var(--acc);color:var(--on);box-shadow:inset 0 0 0 1.5px var(--edge)}
+.day.sel small{color:var(--on)}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tile{border-radius:18px;padding:12px;display:flex;flex-direction:column;gap:2px;min-height:96px}
+.tile span{font-size:13px;font-weight:600}.tile b{font-size:26px;line-height:1.15;font-weight:700}
+.tile em{font-style:normal;font-size:12px;opacity:.85;margin-top:auto;overflow-wrap:anywhere}
+.row{display:flex;justify-content:space-between}
+.bar{height:8px;border-radius:999px;background:var(--track);overflow:hidden;display:flex}
+.bar.seg{gap:2px;background:transparent}.bar.seg div{border-radius:999px}
+.leg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--mut)}
+.leg i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:13px;font-weight:600;border-radius:999px;padding:3px 10px;white-space:nowrap}
+.chip.sm{font-size:12px;padding:2px 8px}
+.lr{flex-direction:row;align-items:center;gap:10px}
+.av{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.lt{display:flex;flex-direction:column;min-width:0;flex:1}
+.lnk{color:var(--acct);font-weight:600}
+.nav{background:var(--nav);border-radius:999px;padding:6px;display:flex;justify-content:space-between;align-self:center;width:min(100%,260px)}
+.ni{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:#A9ACB4;font-size:19px}
+.ni.on{background:var(--acc);color:var(--on)}
+.rec{max-width:820px;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:16px 18px;margin-top:36px}
+.rec p,.rec li{margin:6px 0}.rec ul{padding-left:20px;margin:6px 0}
+</style>
+<h1>Палитра GoRix</h1><p class="lead">Утверждённая палитра GoRix (выбор основателя 21.11.2026, вариант A): приглушённый жёлтый и пастели на графите и светло-сером. Правило 60/30/10: фон 60, карточки и текст 30, акцент 10; пастели — только плитки статистики, категории и полосы прогресса, всегда с подписью. Подписи — hex и контраст по WCAG 2.x (таблица: palette-contrast.md).</p>
+<section class="var"><h2>Приглушённый жёлтый <span class="cap">(утверждена)</span></h2><div class="grid"><div class="ph dark" style="--acc:#E2C15E;--on:#1C1A12;--edge:transparent;--acct:#E2C15E">
+<div class="phh"><b>Тёмная</b><span class="cap">фон #1B1C1F · карточка #25262A</span></div>
+<div class="card"><div class="t1">Сара Митчелл</div><div class="t2">Oak Grove Ave, 14 · сегодня 10:00</div><span class="cap">текст #EDEEF0 13.0:1 · втор. #A9ACB4 6.7:1 / на фоне 7.5:1</span></div>
+<button class="btn">Новая работа</button><span class="cap">акцент #E2C15E · текст #1C1A12 10.0:1</span>
+<div class="days"><div class="day"><small>Пн</small><b>17</b></div><div class="day"><small>Вт</small><b>18</b><i></i></div><div class="day"><small>Ср</small><b>19</b></div><div class="day sel"><small>Чт</small><b>20</b></div><div class="day"><small>Пт</small><b>21</b><i></i></div><div class="day"><small>Сб</small><b>22</b></div><div class="day"><small>Вс</small><b>23</b></div></div>
+<span class="cap">выбранный день: к фону 9.8:1</span>
+<div class="tiles">
+<div class="tile" style="background:#C9C1EC;color:#2A2452"><span>Работы сегодня</span><b>6</b><em>Лаванда #C9C1EC / #2A2452 · 8.4:1</em></div>
+<div class="tile" style="background:#B6DCC6;color:#173A28"><span>Сметы ждут</span><b>3</b><em>Мята #B6DCC6 / #173A28 · 8.4:1</em></div>
+<div class="tile" style="background:#E8DCA0;color:#3A300E"><span>Оплачено, нед.</span><b>$4 820</b><em>Сливочный #E8DCA0 / #3A300E · 9.4:1</em></div>
+<div class="tile" style="background:#EDC6AC;color:#4A2512"><span>Новые лиды</span><b>12</b><em>Персик #EDC6AC / #4A2512 · 8.5:1</em></div>
+</div>
+<div class="card"><div class="row"><span class="t1s">Покраска фасада</span><span class="t2">62%</span></div><div class="bar"><div style="width:62%;background:#C9C1EC"></div></div>
+<div class="bar seg"><div style="width:40%;background:#C9C1EC"></div><div style="width:22%;background:#B6DCC6"></div><div style="width:18%;background:#E8DCA0"></div><div style="width:20%;background:#EDC6AC"></div></div>
+<div class="leg"><span><i style="background:#C9C1EC"></i>Готово</span><span><i style="background:#B6DCC6"></i>В работе</span><span><i style="background:#E8DCA0"></i>Материалы</span><span><i style="background:#EDC6AC"></i>Осталось</span></div>
+<span class="cap">Лаванда #C9C1EC 8.9:1 · Мята #B6DCC6 10.1:1 · Сливочный #E8DCA0 10.9:1 · Персик #EDC6AC 9.6:1</span></div>
+<div class="chips"><span class="chip" style="background:#1C2E23;color:#86D3A0">✓ Оплачено</span><span class="chip" style="background:#182A2E;color:#86C9D4">◷ Запланировано</span><span class="chip" style="background:#33281C;color:#E8B67F">! Ждёт ответа</span><span class="chip" style="background:#3A2122;color:#F09A90">× Просрочено</span><span class="chip" style="background:#2E2F34;color:#B4B7BE">✎ Черновик</span></div>
+<span class="cap">ok #86D3A0/#1C2E23 8.1:1 · info #86C9D4/#182A2E 8.0:1 · warn #E8B67F/#33281C 7.8:1 · bad #F09A90/#3A2122 6.8:1 · neutral #B4B7BE/#2E2F34 6.7:1</span>
+<div class="card lr"><span class="av" style="background:#B6DCC6;color:#173A28">ДК</span><span class="lt"><span class="t1s">Дэвид Ким</span><span class="t2">Смета на кровлю · $12 400</span></span><span class="chip sm" style="background:#33281C;color:#E8B67F">! Ждёт</span></div>
+<div class="card lr"><span class="av" style="background:#EDC6AC;color:#4A2512">ОГ</span><span class="lt"><span class="t1s">Oak Grove, 14</span><span class="t2">Работа №218 · <span class="lnk">Открыть</span></span></span><span class="chip sm" style="background:#1C2E23;color:#86D3A0">✓ Готово</span></div>
+<span class="cap">ссылка/акцент-текст #E2C15E 8.7:1</span>
+<div class="nav"><span class="ni">⌂</span><span class="ni on">▦</span><span class="ni">◷</span><span class="ni">☰</span></div>
+<span class="cap">таблетка #2E2F34 · активный круг к ней 7.6:1 · неактивные 5.9:1</span>
+</div><div class="ph light" style="--acc:#E2C15E;--on:#1C1A12;--edge:#7A6418;--acct:#6E5A12">
+<div class="phh"><b>Светлая</b><span class="cap">фон #E9EAE6 · карточка #F6F6F3</span></div>
+<div class="card"><div class="t1">Сара Митчелл</div><div class="t2">Oak Grove Ave, 14 · сегодня 10:00</div><span class="cap">текст #18191C 16.2:1 · втор. #4A4D54 7.8:1 / на фоне 7.0:1</span></div>
+<button class="btn">Новая работа</button><span class="cap">акцент #E2C15E · текст #1C1A12 10.0:1</span>
+<div class="days"><div class="day"><small>Пн</small><b>17</b></div><div class="day"><small>Вт</small><b>18</b><i></i></div><div class="day"><small>Ср</small><b>19</b></div><div class="day sel"><small>Чт</small><b>20</b></div><div class="day"><small>Пт</small><b>21</b><i></i></div><div class="day"><small>Сб</small><b>22</b></div><div class="day"><small>Вс</small><b>23</b></div></div>
+<span class="cap">выбранный день: к фону 1.4:1 · обводка #7A6418 5.3:1</span>
+<div class="tiles">
+<div class="tile" style="background:#DDD7F4;color:#3A2F78"><span>Работы сегодня</span><b>6</b><em>Лаванда #DDD7F4 / #3A2F78 · 8.1:1</em></div>
+<div class="tile" style="background:#CFE8D9;color:#1E5236"><span>Сметы ждут</span><b>3</b><em>Мята #CFE8D9 / #1E5236 · 7.0:1</em></div>
+<div class="tile" style="background:#F1E7B8;color:#5A4708"><span>Оплачено, нед.</span><b>$4 820</b><em>Сливочный #F1E7B8 / #5A4708 · 7.2:1</em></div>
+<div class="tile" style="background:#F5D9C6;color:#6E3416"><span>Новые лиды</span><b>12</b><em>Персик #F5D9C6 / #6E3416 · 7.2:1</em></div>
+</div>
+<div class="card"><div class="row"><span class="t1s">Покраска фасада</span><span class="t2">62%</span></div><div class="bar"><div style="width:62%;background:#6E61B8"></div></div>
+<div class="bar seg"><div style="width:40%;background:#6E61B8"></div><div style="width:22%;background:#3E8A60"></div><div style="width:18%;background:#8F7514"></div><div style="width:20%;background:#B0623A"></div></div>
+<div class="leg"><span><i style="background:#6E61B8"></i>Готово</span><span><i style="background:#3E8A60"></i>В работе</span><span><i style="background:#8F7514"></i>Материалы</span><span><i style="background:#B0623A"></i>Осталось</span></div>
+<span class="cap">Лаванда #6E61B8 4.8:1 · Мята #3E8A60 3.9:1 · Сливочный #8F7514 4.1:1 · Персик #B0623A 4.2:1</span></div>
+<div class="chips"><span class="chip" style="background:#DCEBDF;color:#1D6638">✓ Оплачено</span><span class="chip" style="background:#D8EAED;color:#0E5866">◷ Запланировано</span><span class="chip" style="background:#F2E2CC;color:#824306">! Ждёт ответа</span><span class="chip" style="background:#F4DAD6;color:#9A2C22">× Просрочено</span><span class="chip" style="background:#E0E1DC;color:#45484F">✎ Черновик</span></div>
+<span class="cap">ok #1D6638/#DCEBDF 5.6:1 · info #0E5866/#D8EAED 6.5:1 · warn #824306/#F2E2CC 6.0:1 · bad #9A2C22/#F4DAD6 5.7:1 · neutral #45484F/#E0E1DC 7.0:1</span>
+<div class="card lr"><span class="av" style="background:#CFE8D9;color:#1E5236">ДК</span><span class="lt"><span class="t1s">Дэвид Ким</span><span class="t2">Смета на кровлю · $12 400</span></span><span class="chip sm" style="background:#F2E2CC;color:#824306">! Ждёт</span></div>
+<div class="card lr"><span class="av" style="background:#F5D9C6;color:#6E3416">ОГ</span><span class="lt"><span class="t1s">Oak Grove, 14</span><span class="t2">Работа №218 · <span class="lnk">Открыть</span></span></span><span class="chip sm" style="background:#DCEBDF;color:#1D6638">✓ Готово</span></div>
+<span class="cap">ссылка/акцент-текст #6E5A12 6.2:1</span>
+<div class="nav"><span class="ni">⌂</span><span class="ni on">▦</span><span class="ni">◷</span><span class="ni">☰</span></div>
+<span class="cap">таблетка #25262A · активный круг к ней 8.7:1 · неактивные 6.7:1</span>
+</div></div></section>
+<section class="rec"><h2 style="margin-top:0">Почему эта палитра</h2>
+<p><b>Вариант A, приглушённый жёлтый #E2C15E.</b> Он ближе всего к образцам основателя (жёлтый день, жёлтая плитка, жёлтый маршрут на тёмной карте) и не неон: насыщенность ниже прежнего лайма #D4F06A и жёлтого #F5D04A.</p>
+<ul>
+<li><b>Поле и солнце.</b> На графите жёлтый даёт 9.8:1 — его видно на солнце и в перчатках.</li>
+<li><b>Бренд.</b> Жёлтый — цвет стройки и сигнальной разметки, подрядчик узнаёт его сразу; спокойнее прежнего неона.</li>
+<li><b>60/30/10.</b> Один акцент одинаковый в обеих темах. На тёмной хватает заливки, на светлой выбранный день и чип получают тёмную обводку, а меню-таблетка остаётся графитовой — так 10% акцента везде видны и не кричат.</li>
+<li><b>Пастели.</b> Лаванда, мята, сливочный, персик — как на образцах; на тёмной теме их тон приглушён, на светлой полоса прогресса берёт тёмный тон того же цвета (3:1+).</li>
+</ul>
+<p><b>Расхождение с правилом 2 CLAUDE.md</b> («цвет только для статуса»). Предлагаемая формулировка исключения: <i>«Четвёртое исключение (основатель, #2350): пастельные токены <code>pastel.lav/mint/butter/peach</code> — только для плиток статистики, меток категорий и полос прогресса, всегда с подписью словом (цвет — не единственный носитель смысла); для статуса не применять, статусы остаются ok/info/warn/bad/neutral со значком и словом.»</i></p>
+</section>

@@ -294,7 +294,7 @@ export function DayCell({ day, load, selected, dim, head, pill, onPress }: {
             borderRadius: radius.pill,
             backgroundColor: selected ? c.acc : c.surf,
             borderWidth: component.hairline,
-            borderColor: selected ? "transparent" : today ? c.ink : c.bd,
+            borderColor: selected ? c.accEdge : today ? c.ink : c.bd,
             alignItems: "center" as const,
             justifyContent: "center" as const,
             gap: spaceHalf.hair,

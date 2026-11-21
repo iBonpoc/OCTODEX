@@ -3,7 +3,6 @@ import { router } from "expo-router";
 import { useStore } from "@/data/store";
 import { languages, useI18n, type Lang } from "@/i18n";
 import { useTheme, type ThemePref } from "@/theme/ThemeProvider";
-import type { AccentName } from "@octo/design-tokens";
 import { Button, ChoiceChips, Segmented, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
@@ -29,7 +28,7 @@ import { BrandLogo } from "@/ui/brand";
 export default function Settings() {
   const { t, lang, setLang } = useI18n();
   const { online, setOnline, resetDemo, mode, role } = useStore();
-  const { pref, setPref, accent, setAccent } = useTheme();
+  const { pref, setPref } = useTheme();
   const toast = useToast();
   const hints = useHints();
   const [showDone, setShowDone] = usePlanShowDone();
@@ -48,25 +47,6 @@ export default function Settings() {
             { key: "system", label: t("more.themeSystem") },
             { key: "dark", label: t("more.dark") },
             { key: "light", label: t("more.light") },
-          ]}
-        />
-      </Card>
-      {/* redesign #2348 (decision 20.11 п.5): the founder compares the accent (21.11, #2350: lime by default) */}
-      <Card>
-        <T v="heading">{t("more.accent")}</T>
-        <Segmented<AccentName>
-          full
-          testID="settings-accent"
-          label={t("more.accent")}
-          value={accent}
-          onChange={setAccent}
-          items={[
-            { key: "lime", label: t("more.accentLime") },
-            { key: "yellow", label: t("more.accentYellow") },
-            { key: "tangerine", label: t("more.accentTangerine") },
-            { key: "orange", label: t("more.accentOrange") },
-            { key: "emerald", label: t("more.accentEmerald") },
-            { key: "cobalt", label: t("more.accentCobalt") },
           ]}
         />
       </Card>

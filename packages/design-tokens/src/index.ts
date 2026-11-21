@@ -322,6 +322,10 @@ export interface ThemeColors {
   ovSolid: string;
   acc: string;
   onAcc: string;
+  /** palette A: the frame of an accent fill without text (a chosen day, a chip) where the fill alone is < 3:1 to the ground — light theme */
+  accEdge: string;
+  /** palette A: the accent as text or a link on a card (the fill colour is too light for text on the light theme) */
+  accText: string;
   scrim: string;
   shadow: { color: string; opacity: number; radius: number; offsetY: number };
   blur: number;
@@ -340,18 +344,28 @@ export interface ThemeColors {
 
 /** redesign #2348 (docs/design/2026-11-20-direction/06-decision.md): calm opaque surfaces, one cobalt accent,
  *  tonal status plates (fill = the plate, text = word and icon, on = text on the plate); no background glow */
-export type AccentName = "lime" | "yellow" | "tangerine" | "orange" | "emerald" | "cobalt";
-/** founder 21.11 (#2350): one accent, the same in both themes; lime by default (his references), the others to compare */
-/** the order the home screen's colour dot cycles through (prototype #2350) */
-export const ACCENT_ORDER: readonly AccentName[] = ["lime", "yellow", "tangerine", "orange", "emerald", "cobalt"];
+export type AccentName = "yellow";
+/** founder 21.11.2026 (#2350, palette A, docs/design/palette.html): one muted yellow, the same in both themes */
+export const ACCENT_ORDER: readonly AccentName[] = ["yellow"];
 export const accents: Record<AccentName, Record<ThemeName, { acc: string; onAcc: string }>> = {
-  lime: { dark: { acc: "#D4F06A", onAcc: "#15161A" }, light: { acc: "#D4F06A", onAcc: "#15161A" } },
-  yellow: { dark: { acc: "#F5D04A", onAcc: "#15161A" }, light: { acc: "#F5D04A", onAcc: "#15161A" } },
-  /** founder 21.11: «танжерин, апельсиновый такой насыщенный» */
-  tangerine: { dark: { acc: "#FF9A1F", onAcc: "#15161A" }, light: { acc: "#FF9A1F", onAcc: "#15161A" } },
-  orange: { dark: { acc: "#FF7A2F", onAcc: "#15161A" }, light: { acc: "#FF7A2F", onAcc: "#15161A" } },
-  emerald: { dark: { acc: "#3DDC97", onAcc: "#15161A" }, light: { acc: "#3DDC97", onAcc: "#15161A" } },
-  cobalt: { dark: { acc: "#6F86FF", onAcc: "#FFFFFF" }, light: { acc: "#2747E8", onAcc: "#FFFFFF" } },
+  yellow: { dark: { acc: "#E2C15E", onAcc: "#1C1A12" }, light: { acc: "#E2C15E", onAcc: "#1C1A12" } },
+};
+/** palette A pastels (#2350): stat tiles, categories and progress bars only — always with a word (rule 2, 4th exception);
+ *  fill = the tile, text = words on it (≥ 7:1), bar = a progress bar on a card (≥ 3:1) */
+export type PastelName = "lav" | "mint" | "butter" | "peach";
+export const pastels: Record<ThemeName, Record<PastelName, { fill: string; text: string; bar: string }>> = {
+  dark: {
+    lav: { fill: "#C9C1EC", text: "#2A2452", bar: "#C9C1EC" },
+    mint: { fill: "#B6DCC6", text: "#173A28", bar: "#B6DCC6" },
+    butter: { fill: "#E8DCA0", text: "#3A300E", bar: "#E8DCA0" },
+    peach: { fill: "#EDC6AC", text: "#4A2512", bar: "#EDC6AC" },
+  },
+  light: {
+    lav: { fill: "#DDD7F4", text: "#3A2F78", bar: "#6E61B8" },
+    mint: { fill: "#CFE8D9", text: "#1E5236", bar: "#3E8A60" },
+    butter: { fill: "#F1E7B8", text: "#5A4708", bar: "#8F7514" },
+    peach: { fill: "#F5D9C6", text: "#6E3416", bar: "#B0623A" },
+  },
 };
 
 export const themes: Record<ThemeName, ThemeColors> = {
@@ -370,8 +384,10 @@ export const themes: Record<ThemeName, ThemeColors> = {
     track: "rgba(255,255,255,0.10)",
     ov: "rgba(32,33,37,0.84)",
     ovSolid: "#202125",
-    acc: "#D4F06A",
-    onAcc: "#15161A",
+    acc: "#E2C15E",
+    onAcc: "#1C1A12",
+    accEdge: "transparent",
+    accText: "#E2C15E",
     scrim: "rgba(0,0,0,0.5)",
     shadow: { color: "#000000", opacity: 0.35, radius: 24, offsetY: 8 },
     blur: 20,
@@ -379,11 +395,11 @@ export const themes: Record<ThemeName, ThemeColors> = {
     blurTint: "dark",
     glow: [],
     status: {
-      ok: { fill: "#183022", text: "#5BD88A", on: "#5BD88A" },
-      info: { fill: "#122A2F", text: "#6ED3E6", on: "#6ED3E6" },
-      warn: { fill: "#33251A", text: "#FFB061", on: "#FFB061" },
-      bad: { fill: "#3A1C1C", text: "#FF8A80", on: "#FF8A80" },
-      neutral: { fill: "#2E2F34", text: "#A9ACB4", on: "#EDEEF0" },
+      ok: { fill: "#1C2E23", text: "#86D3A0", on: "#86D3A0" },
+      info: { fill: "#182A2E", text: "#86C9D4", on: "#86C9D4" },
+      warn: { fill: "#33281C", text: "#E8B67F", on: "#E8B67F" },
+      bad: { fill: "#3A2122", text: "#F09A90", on: "#F09A90" },
+      neutral: { fill: "#2E2F34", text: "#B4B7BE", on: "#EDEEF0" },
     },
     drawing: { node: "#F4F5F7", story: ["#7FD4FF", "#FF8FD0", "#D59BFF", "#7CEBC6"] },
     tape: { markFill: "#FBFF00", markText: "#0B0C0F" },
@@ -403,8 +419,10 @@ export const themes: Record<ThemeName, ThemeColors> = {
     track: "rgba(20,21,24,0.09)",
     ov: "rgba(244,244,241,0.86)",
     ovSolid: "#F4F4F1",
-    acc: "#D4F06A",
-    onAcc: "#15161A",
+    acc: "#E2C15E",
+    onAcc: "#1C1A12",
+    accEdge: "#7A6418",
+    accText: "#6E5A12",
     scrim: "rgba(20,21,24,0.3)",
     shadow: { color: "#1B1C22", opacity: 0.08, radius: 20, offsetY: 6 },
     blur: 20,
@@ -412,11 +430,11 @@ export const themes: Record<ThemeName, ThemeColors> = {
     blurTint: "light",
     glow: [],
     status: {
-      ok: { fill: "#DCEFE2", text: "#1C7A3E", on: "#1C7A3E" },
-      info: { fill: "#DAEEF2", text: "#0B6478", on: "#0B6478" },
-      warn: { fill: "#F8E6D2", text: "#8F4A00", on: "#8F4A00" },
-      bad: { fill: "#F7DEDC", text: "#B3261E", on: "#B3261E" },
-      neutral: { fill: "#E0E1DC", text: "#4A4D54", on: "#18191C" },
+      ok: { fill: "#DCEBDF", text: "#1D6638", on: "#1D6638" },
+      info: { fill: "#D8EAED", text: "#0E5866", on: "#0E5866" },
+      warn: { fill: "#F2E2CC", text: "#824306", on: "#824306" },
+      bad: { fill: "#F4DAD6", text: "#9A2C22", on: "#9A2C22" },
+      neutral: { fill: "#E0E1DC", text: "#45484F", on: "#18191C" },
     },
     drawing: { node: "#111215", story: ["#0B6290", "#A0327A", "#7A3DB8", "#0B6E50"] },
     tape: { markFill: "#FBFF00", markText: "#0B0C0F" },
