@@ -23,7 +23,7 @@ const walk = (d: string) => {
 walk(ROOT);
 
 /** the «?» among a row's actions — only shrinks */
-const LEGACY_CORNER: Record<string, number> = { "ui/surfaces.tsx": 2 };
+const LEGACY_CORNER: Record<string, number> = {};
 
 /** a «?» whose next sibling (within 3 lines) is a slot of header actions */
 function cornerHelps(src: string): number {
@@ -31,7 +31,8 @@ function cornerHelps(src: string): number {
   let n = 0;
   lines.forEach((l, i) => {
     if (!/<HelpButton\b/.test(l)) return;
-    const next = lines.slice(i + 1, i + 4).join("\n");
+    // only within its own row: a row of actions after the title's row closes (</RowView>) is not the «?»'s neighbour
+    const next = lines.slice(i + 1, i + 4).join("\n").split("</RowView>")[0]!;
     if (/\{(headerFab|right|home \?)/.test(next)) n++;
   });
   return n;
@@ -46,6 +47,13 @@ describe("«?» — next to its words, with the way to where it is set (DS Б7)"
     }
     for (const [f, n] of Object.entries(found)) expect(n, `${f}: a «?» among the header's actions — put it right after its words (DS Б7)`).toBeLessThanOrEqual(LEGACY_CORNER[f] ?? 0);
     for (const [f, n] of Object.entries(LEGACY_CORNER)) expect(found[f] ?? 0, `${f}: fewer «?» in the corner now — lower LEGACY_CORNER to ${found[f] ?? 0}`).toBe(n);
+  });
+  it("#2132: the screen's «?» (Screen) stands right after the title — on a tab root and on a detail screen", () => {
+    const src = readFileSync(join(ROOT, "ui", "surfaces.tsx"), "utf8");
+    // each title block (testID="screen-title") is followed by the «?» before its row closes
+    const blocks = src.split('testID="screen-title"').slice(1).map((b) => b.slice(0, b.indexOf("</RowView>")));
+    expect(blocks).toHaveLength(2);
+    for (const b of blocks) expect(b).toMatch(/<HelpButton[^>]*testID="screen-help"/);
   });
   it("the way to a setting is a link (`to`), never the old words «Где настроить» (`where`)", () => {
     const src = readFileSync(join(ROOT, "ui", "overlays.tsx"), "utf8");
