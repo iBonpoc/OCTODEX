@@ -20,8 +20,9 @@ exports.run = async (h) => {
   const row = p.getByTestId("lead-row-l1").locator("visible=true").first();
   await row.waitFor({ timeout: 8000 });
   h.expect(/Kevin Brooks/.test(await row.innerText()), "leads list renders with old data");
-  // v2: the row opens the lead's screen on every width (no panel on «Лиды», #2350)
+  // 1280: the row opens the panel beside the list, «Открыть» — the lead's screen; narrower — the screen at once
   await row.click();
+  if (h.layout.width >= 1280) await p.getByTestId("list-panel-open").locator("visible=true").first().click();
   h.expect(await waited(p.getByTestId("lead-screen").locator("visible=true").first().waitFor({ timeout: 5000 })), "lead card opens");
   h.expect(await waited(p.getByRole("button", { name: "Назад: Лиды" }).first().waitFor({ timeout: 5000 })), "its back says «Лиды»");
   h.expect(/Thumbtack/.test(await p.getByTestId("lead-source-row").locator("visible=true").first().innerText()), "source name resolved from the old text value");

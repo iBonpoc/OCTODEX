@@ -82,6 +82,8 @@ exports.run = async (h) => {
 
   // a row opens the invoice
   await vis(`invoice-row-${mine[0].id}`).first().click();
+  // 1280: the panel beside the list first, «Открыть» — the invoice's own screen
+  if (h.layout.width >= 1280) await vis("list-panel-open").first().click();
   await p.waitForURL(new RegExp(`/invoice/${mine[0].id}$`), { timeout: 5000 });
   h.expect(true, `a row opens the invoice (${p.url()})`);
 

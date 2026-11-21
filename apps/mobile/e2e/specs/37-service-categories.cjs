@@ -70,6 +70,8 @@ exports.run = async (h) => {
   await h.go("/inbox");
   // v2 (#2350): the leads' rows `lead-row-<id>` open the lead's screen
   await p.getByTestId("lead-row-l1").locator("visible=true").first().click();
+  // 1280: the panel beside the list first, «Открыть» — the lead's screen
+  if (h.layout.width >= 1280) await p.getByTestId("list-panel-open").locator("visible=true").first().click();
   await p.waitForURL(/\/lead\/l1/, { timeout: 8000 });
   await p.getByRole("button", { name: "Направление" }).first().click();
   await p.waitForTimeout(300);
