@@ -8,9 +8,11 @@ import { Avatar } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
 import { SyncBadge } from "@/ui/surfaces";
 import { unreadCount } from "./notices";
+import { SearchIcon } from "./HeaderIcons";
 
 /**
  * The right side of «Главная» (docs/specs/13 v2 §2.2, §3.14): the sync badge (only with a queue or no network),
+ * search (phone; prototype v2 — an icon, not a tab; 820/1280 have the «Искать везде» line),
  * the bell with the unread count (the office: notices are about clients and money; the technician has none yet),
  * the profile → My settings (phone; on 820/1280 the profile is at the bottom of the side menu).
  */
@@ -24,6 +26,7 @@ export function HomeHeader() {
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
       <SyncBadge compact />
+      {wide ? null : <SearchIcon />}
 
       {role !== "tech" ? (
         <Press

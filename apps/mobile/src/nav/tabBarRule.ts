@@ -14,6 +14,9 @@ export const NO_TAB_BAR = [
   "auth/company", "auth/invite", "auth/sign-in", "auth/terms", "auth/trade",
   // a catalog item is a form («Новая позиция» / edit, «Сохранить»): a tab would drop what is not saved (review #274)
   "catalog/[id]",
+  // prototype v2 (BUILD-PLAN §2 п.5, HIG check п.6): an object's screen — its main button pinned at the bottom, «‹» top left,
+  // the edge swipe back (root Stack); no tab bar under it
+  "client/[id]", "job/[id]", "visit/[id]", "lead/[id]", "property/[id]",
   "client/edit", "client/import",
   "company/[section]", "company/schedule",
   // a checklist template is a form («Сохранить»): a tab would drop what is not saved
@@ -43,7 +46,7 @@ export const NO_TAB_BAR = [
 /** lists, cards, sections of «Ещё», settings pages: the bar stays */
 export const WITH_TAB_BAR = [
   "index", "inbox",
-  "calls", "catalog", "client/[id]", "client/imports", "clients", "company",
+  "calls", "catalog", "client/imports", "clients", "company",
   // a settings page saved from its sheet at once (no form to lose)
   "company/leads",
   "company/intake",
@@ -51,12 +54,12 @@ export const WITH_TAB_BAR = [
   "company/modules",
   "company/checklists",
   "estimate/templates", "estimates", "figures/[metric]", "help",
-  "invoice", "job/[id]", "jobs", "lead/[id]", "leads",
+  "invoice", "jobs", "leads",
   // a module's own screens (spec 33 П20.3): its lists and cards keep the bar (#1426, design audit: «Замеры» had none, the
   // core's lists have it); the full-screen ones (ModuleDef.fullScreen: the canvas) hide it themselves (useHideTabBar in the route)
   "module/[key]/[screen]",
-  "messages", "messages/[key]", "money", "more", "notifications", "payments", "plan", "property/[id]",
-  "reports", "reports/[id]", "search", "settings", "settings/profile", "settings/design-system", "settings/design-system/[section]", "suppliers", "purchase-orders", "tasks", "team", "today", "triage", "visit/[id]", "visits",
+  "messages", "messages/[key]", "money", "more", "notifications", "payments", "plan",
+  "reports", "reports/[id]", "search", "settings", "settings/profile", "settings/design-system", "settings/design-system/[section]", "suppliers", "purchase-orders", "tasks", "team", "today", "triage", "visits",
 ] as const;
 
 const hidden = new Set<string>(NO_TAB_BAR);
@@ -65,7 +68,8 @@ const hidden = new Set<string>(NO_TAB_BAR);
  * founder 08.11, build 373 — they now keep the bar, #1426, so they are never «a form above» at all.)
  */
 // the estimate's card (#1412): no tab bar for its pinned main button, but nothing typed to lose
-export const NOT_A_FORM: readonly string[] = ["estimate/[id]", "invoice/[id]", "receipt/[id]"];
+// the objects (prototype v2): a card with a pinned button, nothing typed to lose
+export const NOT_A_FORM: readonly string[] = ["estimate/[id]", "invoice/[id]", "receipt/[id]", "client/[id]", "job/[id]", "visit/[id]", "lead/[id]", "property/[id]"];
 const notAForm = new Set<string>(NOT_A_FORM);
 
 /** "(tabs)/clients" → "clients", "company/index" → "company", "" → "index" */

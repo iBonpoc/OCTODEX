@@ -31,8 +31,7 @@ export type SectionId =
   | "settings"
   | "help"
   | "more"
-  | "finance"
-  | "search";
+  | "finance";
 export type MenuGroup = "top" | "work" | "docs" | "money" | "bottom";
 
 export interface Section {
@@ -40,7 +39,7 @@ export interface Section {
   label: DictKey;
   icon: IconKey;
   group: MenuGroup;
-  /** a bottom tab (phone) — the same 5 for every role; a tab is not repeated in «Ещё» */
+  /** a bottom tab (phone) — the same 5 for every role (a subcontractor: 4, no Leads); a tab is not repeated in «Ещё» */
   tab?: boolean;
   /** the phone's «Ещё» tab itself: never a section in «Ещё» or in the side menu */
   phoneOnly?: boolean;
@@ -60,13 +59,13 @@ export const SECTIONS: readonly Section[] = [
   { id: "messages", label: "nav.messages", icon: "sms", group: "top" },
   // the tech sees his own leads — assigned to him or brought by him (13 §2.3, §4; canSeeLead and RLS leads_select);
   // a subcontractor does not (he never gets leads: features/leadAssignee.ts)
-  { id: "leads", label: "nav.leads", icon: "inbox", group: "work", roles: [...OFFICE, "tech"], noSub: true },
+  // prototype v2 (BUILD-PLAN §2 п.1): «Лиды» is the fifth tab
+  { id: "leads", label: "nav.leads", icon: "inbox", group: "work", tab: true, roles: [...OFFICE, "tech"], noSub: true },
   { id: "jobs", label: "nav.jobs", icon: "wrench", group: "work" },
   { id: "clients", label: "nav.clients", icon: "users", group: "work", tab: true },
   // redesign #2348: «Деньги» — estimates, invoices, payments behind one tab (a segment switches them)
   { id: "finance", label: "nav.money", icon: "invoice", group: "docs", tab: true, phoneOnly: true },
-  // redesign #2348: search is its own tab, on the right (HIG iOS 26)
-  { id: "search", label: "nav.searchTab", icon: "search", group: "top", tab: true, phoneOnly: true },
+  // prototype v2: search is an icon in the header (HeaderIcons, /search stays), not a tab
   // «Звонки» is not a tab until the company has its own number (founder 06.11, variant Б; 13 v2 §2.1)
   { id: "calls", label: "nav.calls", icon: "phone", group: "work" },
   // wave 6 (20 §7): every role; the technician sees his own (RLS)
@@ -124,9 +123,26 @@ export const MODULE_TAB_REPLACES: SectionId = "plan";
 /** a bottom tab now: `modTab` — the company has a module's tab (moduleTabs), it stands where «План» was */
 const isTab = (s: Section, modTab: boolean) => !!s.tab && !(modTab && s.id === MODULE_TAB_REPLACES);
 
+/** the order of the bottom bar (prototype v2, BUILD-SPEC: Главная · План · Клиенты · Деньги · Лиды) */
+export const TAB_ORDER: readonly SectionId[] = ["home", "plan", "clients", "finance", "leads"];
+const tabRank = (id: SectionId) => TAB_ORDER.indexOf(id);
+
 /** The 5 bottom tabs: the same set for every role (13 §2.1) — what is inside is filtered by rights. With a module's tab
- *  (`modTab`) «План» is not a tab: the module's tab takes its place (TabBar puts it there), «План» is a tile in «Ещё». */
-export const tabs = (_role: Role, modTab = false): Section[] => SECTIONS.filter((s) => isTab(s, modTab));
+ *  (`modTab`) «План» is not a tab: the module's tab takes its place (TabBar puts it there), «План» is in «Ещё».
+ *  A subcontractor (`sub`) never gets leads (noSub): 4 tabs. */
+export const tabs = (_role: Role, modTab = false, sub = false): Section[] =>
+  SECTIONS.filter((s) => isTab(s, modTab) && !(sub && s.noSub)).sort((a, b) => tabRank(a.id) - tabRank(b.id));
+
+/** the money sections behind the one «Деньги» tab (its segment switches them) */
+const FINANCE: ReadonlySet<SectionId> = new Set<SectionId>(["finance", "estimates", "invoices", "payments", "money"]);
+
+/** Which bottom tab is lit for a section: the tab itself, «Деньги» for the money lists, none for a section of «Ещё»
+ *  (it opens from the avatar; no tab is it — HIG: the bar never shows a place you are not in). */
+export function tabOf(id: SectionId | undefined, role: Role, modTab = false, sub = false): SectionId | undefined {
+  if (!id) return undefined;
+  const t = FINANCE.has(id) ? "finance" : id;
+  return tabs(role, modTab, sub).some((s) => s.id === t) ? t : undefined;
+}
 
 /**
  * The sections by group for this role, in order (13 v2 §2.3); a group with nothing the role may open is left out.
@@ -149,8 +165,8 @@ export const hasSection = (role: Role, id: SectionId) => tabs(role).some((s) => 
 export function sectionOfRoute(route: string): SectionId | undefined {
   if (HOME_ROUTES.has(route) || route === "figures") return "home";
   if (route === "inbox") return "leads";
-  // redesign #2348: the three money lists light «Деньги»
-  if (route === "estimates" || route === "invoice" || route === "payments") return "finance";
+  // the lists keep their own item (the side menu lights it); the bar maps them to «Деньги» (tabOf)
+  if (route === "invoice") return "invoices";
   return SECTIONS.some((s) => s.id === route) ? (route as SectionId) : undefined;
 }
 

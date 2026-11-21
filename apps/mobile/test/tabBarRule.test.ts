@@ -29,9 +29,14 @@ describe("unit:tabBarRule — the bottom bar on the phone", () => {
     for (const r of [...NO_TAB_BAR, ...WITH_TAB_BAR]) expect(all, `no screen "${r}"`).toContain(r);
   });
   it("the founder's screens (07.11) have it; forms and the signature do not", () => {
-    for (const r of ["jobs", "tasks", "invoice", "catalog", "team", "company", "settings", "calls", "client/[id]", "job/[id]", "lead/[id]"])
+    for (const r of ["jobs", "tasks", "invoice", "catalog", "team", "company", "settings", "calls", "leads", "plan", "clients"])
       expect(showsTabBar(r), r).toBe(true);
     for (const r of ["lead/new", "estimate/signature", "client/edit", "p/[token]", "auth/sign-in", "catalog/[id]"]) expect(showsTabBar(r), r).toBe(false);
+    // prototype v2 (BUILD-PLAN §2 п.5): an object — its main button pinned at the bottom, no tab bar; not a form (no «Выйти без сохранения?»)
+    for (const r of ["client/[id]", "job/[id]", "visit/[id]", "lead/[id]", "property/[id]"]) {
+      expect(showsTabBar(r), r).toBe(false);
+      expect(NOT_A_FORM, r).toContain(r);
+    }
   });
   it("route names and segments are read the same", () => {
     expect(tabRouteKey("(tabs)/clients")).toBe("clients");

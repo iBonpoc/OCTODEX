@@ -18,7 +18,7 @@ import { deviceTabSurface, liquidGlassView } from "./tabGlass";
 import { useAuth } from "@/cloud/auth";
 import { gateFreePath } from "@/features/legal";
 import { activeSection } from "./hierarchy";
-import { sectionHref, tabs, type SectionId } from "./sections";
+import { meIsSub, sectionHref, tabOf, tabs, type SectionId } from "./sections";
 import { moduleTabs } from "@/modules/registry";
 import { fillStyleFlat } from "@/ui/fill";
 
@@ -26,7 +26,7 @@ import { fillStyleFlat } from "@/ui/fill";
  * Phone: floating glass pill at the bottom (56 + safe area), the 5 tabs of docs/specs/13 §2.1 — the same for every role.
  * Tablet/desktop: none — the side menu (SideNav, 13 §2.5) takes its place.
  * Active item gets the liquid fill (160ms stretch + 420ms settle): raised surface + ink frame.
- * A screen without a tab (Leads, Jobs… from «Ещё») lights «Ещё».
+ * Prototype v2: Главная · План · Клиенты · Деньги · Лиды; a section of «Ещё» (the avatar) lights none.
  */
 export function TabBar() {
   const store = useStore();
@@ -42,9 +42,9 @@ export function TabBar() {
   setNavState(root);
   const [ask, setAsk] = useState<Href | null>(null);
   const own = activeSection(pathname, params, store.db, store.role);
-  // a section that is not a tab (Leads, Jobs… opened from «Ещё») lights «Ещё» (13 v2 §2.1, variant Б)
-  // with a module's tab «План» is not a tab (#1487): the Plan opened from «Ещё» lights «Ещё»
-  const sec = own && !tabs(store.role, moduleTabs(store.db.company, store.role).length > 0).some((s) => s.id === own) ? "more" : own;
+  // prototype v2: the money lists light «Деньги», a lead lights «Лиды»; a section of «Ещё» (the avatar) lights no tab;
+  // with a module's tab «План» is not a tab (#1487): the Plan opened from «Ещё» lights none
+  const sec = tabOf(own, store.role, moduleTabs(store.db.company, store.role).length > 0, meIsSub(store.db));
   // every phone screen but forms, the signature, sign-in, /p and the legal texts (docs/specs/28)
   // a module's own screens hide the bar (the canvas needs the whole screen) — but not the one that is a tab of its own
   // («Замеры», place «tab»)
@@ -101,9 +101,9 @@ function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: Secti
   const kb = useKeyboardHeight();
   // the core's tabs; a usable module's section (place «tab», founder 09.11 «Замеры») takes the place of «План», which goes
   // to «Ещё» — five tabs, not six (founder 16.11, #1487; DS §5.3)
-  // redesign #2348: a module lives in the job and in «＋», not in the bar
-  const mods: ReturnType<typeof moduleTabs> = [];
-  const core = tabs(role, mods.length > 0);
+  // prototype v2 (BUILD-PLAN §2 п.2): Gutters «Замеры» stands where «План» was — only with the module on
+  const mods = moduleTabs(db.company, role);
+  const core = tabs(role, mods.length > 0, meIsSub(db));
   type Item = { id: string; label: string; icon: (typeof core)[number]["icon"]; onPress: () => void };
   const coreItem = (s: (typeof core)[number]): Item => ({ id: s.id as string, label: s.label as string, icon: s.icon, onPress: () => onGo(s.id) });
   const modItems: Item[] = mods.map((m) => ({ id: m.tabId, label: m.labelKey as string, icon: m.icon, onPress: () => onGoHref(m.href as Href) }));
