@@ -806,12 +806,16 @@ export function ChoiceChips<K extends string>({
   nowrap,
   label,
   testID,
+  layout = "wrap",
 }: {
   items: { key: K; label: string }[];
   value: K;
   onChange: (k: K) => void;
   /** one line (put inside a horizontal ScrollView) */
   nowrap?: boolean;
+  /** «strip» (BUILD-SPEC §1, the chips of a list): one row of chips that scrolls sideways — its own horizontal ScrollView,
+   *  never a segment or a field; «wrap» (default) — as before */
+  layout?: "wrap" | "strip";
   /** a segment gives each option `<testID>-<key>`; a field — `<testID>` (the row), `<testID>-button`, `<testID>-<key>` (menu items) */
   testID?: string;
   /** the field's name: the row of a `SelectField` when the options do not fit one line */
@@ -820,6 +824,7 @@ export function ChoiceChips<K extends string>({
   // never a second line of chips (#1095): a few short options — a segment in one line, otherwise a field with a menu.
   // Screens move over one by one, each naming its field with `label` (test/chipsLabel.test.ts keeps the list of the
   // others from growing); without `label` — and in a horizontal scroll (`nowrap`) — the chips are as they were.
+  if (layout === "strip") return <ChipStrip testID={testID}><ChipsRow items={items} value={value} onChange={onChange} nowrap /></ChipStrip>;
   if (nowrap || !label) return <ChipsRow items={items} value={value} onChange={onChange} nowrap={nowrap} />;
   if (fitsSegment(items.map((i) => i.label))) {
     const seg = <Segmented radio full label={label} testID={testID} items={items} value={value} onChange={onChange} />;
@@ -836,6 +841,15 @@ export function ChoiceChips<K extends string>({
     );
   }
   return <SelectField label={label} testID={testID} value={value} items={items} onChange={onChange} />;
+}
+
+/** one row of chips that scrolls sideways (`layout="strip"`): no scroll bar, the row keeps its height */
+function ChipStrip({ children, testID }: { children: ReactNode; testID?: string }) {
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" testID={testID} style={{ flexGrow: 0 }} contentContainerStyle={{ alignItems: "center" }}>
+      {children}
+    </ScrollView>
+  );
 }
 
 /** the chips of one line, inside a horizontal scroll (filters) */
@@ -884,16 +898,22 @@ export function MultiChips<K extends string>({
   items,
   value,
   onChange,
+  layout = "wrap",
+  testID,
 }: {
   items: { key: K; label: string }[];
   value: K[];
   onChange: (v: K[]) => void;
+  /** «strip»: one row that scrolls sideways (as `ChoiceChips`); «wrap» (default) — as before */
+  layout?: "wrap" | "strip";
+  testID?: string;
 }) {
   const ro = useReadOnly();
   const { c } = useTheme();
   const h = component.button.sm;
-  return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
+  const strip = layout === "strip";
+  const row = (
+    <View style={{ flexDirection: "row", flexWrap: strip ? "nowrap" : "wrap", gap: space[2] }} testID={strip ? undefined : testID}>
       {items.map((it) => {
         const sel = value.includes(it.key);
         return (
@@ -927,4 +947,5 @@ export function MultiChips<K extends string>({
       })}
     </View>
   );
+  return strip ? <ChipStrip testID={testID}>{row}</ChipStrip> : row;
 }

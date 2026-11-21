@@ -1,20 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { visitDueCents } from "@/features/visitDue";
-import { ScrollView, View, type ScrollViewInstance } from "react-native";
+import { View } from "react-native";
 import { router } from "expo-router";
-import { component, radius, space, spaceHalf } from "@octo/design-tokens";
+import { component, radius, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { CalendarEvent, CalendarEventKind, ID, Task, Visit } from "@/data/types";
 import { findJob } from "@/data/jobs";
 import { visitPropertyId } from "@/data/selectors";
-import { addDays, todayKey, weekStart, type DayKey } from "@/features/calendar";
+import { todayKey, type DayKey } from "@/features/calendar";
 import { lateAfterOf, scheduleSettingsOf } from "@/features/scheduleSettings";
 import { visitStatus } from "@/features/visits";
 import { AssignSheet } from "@/features/sheets";
 import { collapseEmpty, groupByDay, itemTimes, timeLead, type DayLoad, type PlanItem } from "@/features/planFeed";
 import { overlapSigns } from "@/features/listSigns";
-import { formatDayKey } from "@/features/zone";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
@@ -22,15 +21,15 @@ import { assigneesOf, canPlan, canReschedule, daysSince, liveAssignees, unassign
 import { jobStatusView } from "@/features/jobs";
 import { memberName } from "@/features/team";
 import { VisitFormSheet } from "@/features/VisitForm";
-import { Button, ChoiceChips, IconButton, StatusChip, TextField } from "@/ui/controls";
-import { fillStyle } from "@/ui/fill";
+import { Button, ChoiceChips, IconButton, TextField } from "@/ui/controls";
 import { Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { CardList, Divider, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { ListCard, type CardLead } from "@/ui/listCard";
 import type { Density, FactKey } from "@/ui/listCardLayout";
-import { SelectedCheck } from "@/ui/selectedCheck";
 import { SwipeRow } from "@/ui/swipeRow";
+/** the day strip moved to src/ui (BUILD-PLAN §1, поток В); re-exported so plan.tsx keeps its imports until wave 3 */
+export { DayCell, DayStrip, WeekStrip, stripDays } from "@/ui/dayStrip";
 import { NO_UNDO } from "@/data/undo";
 import { StatusNote } from "@/ui/statusNote";
 
@@ -255,111 +254,6 @@ function FreeRow({ label, a11y, onAdd }: { label: string; a11y: string; onAdd?: 
   );
 }
 
-/**
- * One day of the Week strip and of the Month (24 §B): the date, the number of the Feed's items («В плане: N» to a screen
- * reader), yellow only when an open visit has nobody on it; a day off of the picked person is the word «выходной»,
- * no colour. The picked day is «Заливка» with a check (DS «Выделение выбранного», not the accent); today is bold. Tap → the Day.
- */
-export function DayCell({ day, load, selected, dim, head, pill, onPress }: {
-  day: DayKey;
-  load?: DayLoad;
-  selected: boolean;
-  dim?: boolean;
-  head?: string;
-  /** the Day's strip (LAYOUT-RULES §3 «Календарь»): a pill «Пн / 23 / •», the picked one filled with the accent, today edged */
-  pill?: boolean;
-  onPress: () => void;
-}) {
-  const { t, dayOf } = useI18n();
-  const { c } = useTheme();
-  const today = day === todayKey();
-  const n = load?.n ?? 0;
-  const un = load?.unassigned ?? 0;
-  // a screen reader hears the day in words, «В плане: N», «Не назначено · N», «выходной» (review of #267)
-  const said = [dayOf(day), t("plan5.planned", { n }), un ? t("plan5.unassigned", { n: un }) : null, load?.dayOff ? t("plan5.dayOff") : null].filter(Boolean).join(", ");
-  return (
-    <Press
-      onPress={onPress}
-      visibleHeight={pill ? undefined : component.rowCompact}
-      accessibilityRole="button"
-      accessibilityLabel={said}
-      accessibilityState={pill ? { selected } : undefined}
-      testID={pill ? `plan-strip-${day}` : `plan-day-${day}`}
-      containerStyle={pill ? undefined : { flex: 1, minWidth: 0 }}
-      // one cell, two looks: the Week / Month cell, or the Day's pill
-      style={pill
-        ? {
-            width: PILL_W,
-            minHeight: component.rowCompact + space[5],
-            borderRadius: radius.pill,
-            backgroundColor: selected ? c.acc : c.surf,
-            borderWidth: component.hairline,
-            borderColor: selected ? c.accEdge : today ? c.ink : c.bd,
-            alignItems: "center" as const,
-            justifyContent: "center" as const,
-            gap: spaceHalf.hair,
-          }
-        : {
-            minHeight: component.rowCompact + space[4],
-            borderRadius: component.checkbox.radius,
-            // chosen day: «Заливка» + a check (DS «Выделение выбранного»), not an ink frame
-            ...(selected ? fillStyle(c) : { backgroundColor: c.in }),
-            borderWidth: component.hairline,
-            borderColor: selected ? "transparent" : c.bd,
-            opacity: dim ? component.dimOpacity : 1,
-            alignItems: "center" as const,
-            justifyContent: "center" as const,
-            gap: space[1],
-          }}
-    >
-      {pill ? (
-        <>
-          <T v="micro" tone={selected ? "onAcc" : "mut"} numberOfLines={1}>
-            {head}
-          </T>
-          <T v="heading" w={selected || today ? "bold" : "semibold"} tone={selected ? "onAcc" : "ink"} tabular>
-            {Number(day.slice(8))}
-          </T>
-          {/* the day has something: a dot (warn when a visit there has nobody on it); a day off is said to a screen reader */}
-          <View style={{ width: spaceHalf.tight, height: spaceHalf.tight, borderRadius: radius.pill, backgroundColor: !n ? "transparent" : selected ? c.onAcc : un ? c.status.warn.text : c.mut }} />
-        </>
-      ) : (
-        <>
-          {selected ? <SelectedCheck small /> : null}
-          {head ? (
-            <T v="micro" tone="mut" numberOfLines={1}>
-              {head}
-            </T>
-          ) : null}
-          <T v="caption" w={today ? "bold" : "regular"} tabular>
-            {Number(day.slice(8))}
-          </T>
-          {n ? <StatusChip status={un ? "warn" : "info"} label={String(n)} soft /> : null}
-          {load?.dayOff ? (
-            // a cell of the strip is ~46 px on a phone: the short word; the screen reader hears the whole one
-            <T v="micro" tone="mut" numberOfLines={1}>
-              {t("plan5.dayOffShort")}
-            </T>
-          ) : null}
-        </>
-      )}
-    </Press>
-  );
-}
-
-/** The Week strip: 7 days in a row, the same cell as the Month (24 §B) */
-export function WeekStrip({ days, loads, date, onPick }: { days: DayKey[]; loads: Map<DayKey, DayLoad>; date: DayKey; onPick: (k: DayKey) => void }) {
-  const { lang } = useI18n();
-  const loc = lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU";
-  return (
-    <View style={{ flexDirection: "row", gap: space[1] }} testID="plan-week-strip">
-      {days.map((k) => (
-        <DayCell key={k} day={k} load={loads.get(k)} selected={k === date} head={formatDayKey(k, { weekday: "short" }, loc)} onPress={() => onPick(k)} />
-      ))}
-    </View>
-  );
-}
-
 function FeedCard({ x, onEvent, onAssign, endOnly }: {
   x: PlanItem;
   onEvent?: (e: CalendarEvent) => void;
@@ -443,68 +337,6 @@ function FeedCard({ x, onEvent, onAssign, endOnly }: {
   );
 }
 
-
-/* ---------- «Календарь» (docs/design/LAYOUT-RULES.md §3, #2350): a strip of day pills → the day's list by time ---------- */
-
-/** how many weeks the strip holds: the one before the picked day's, its own and two after (a swipe sideways, no arrows) */
-const STRIP_WEEKS_BEFORE = 1;
-const STRIP_WEEKS = 4;
-/** a day pill: as wide as a finger's zone, as tall as a compact row and its weekday */
-const PILL_W = component.button.hit + space[1];
-
-/** the days of the strip around a day: from the Monday a week before, four weeks */
-export function stripDays(k: DayKey): DayKey[] {
-  const from = addDays(weekStart(k), -7 * STRIP_WEEKS_BEFORE);
-  return Array.from({ length: 7 * STRIP_WEEKS }, (_, i) => addDays(from, i));
-}
-
-/**
- * The days as pills «Пн / 23 / •» in one row that scrolls sideways (the founder's planners, #2350): the picked day is filled
- * with the accent (LAYOUT-RULES П10 «активное, выбранное»), today is edged, a dot says the day has something (yellow-free:
- * `warn` when a visit there has nobody on it). Above: the month, «Сегодня» when away, a week back / forward as icons.
- */
-export function DayStrip({ date, loads, onPick }: { date: DayKey; loads: Map<DayKey, DayLoad>; onPick: (k: DayKey) => void }) {
-  const { t, dayOf, lang } = useI18n();
-  const { c } = useTheme();
-  const loc = lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU";
-  const today = todayKey();
-  const days = stripDays(date);
-  const ref = useRef<ScrollViewInstance>(null);
-  const [w, setW] = useState(0);
-  // the picked pill to the middle of the row
-  useEffect(() => {
-    const i = days.indexOf(date);
-    if (!w || i < 0) return;
-    ref.current?.scrollTo({ x: Math.max(0, space[4] + i * (PILL_W + space[2]) - (w - PILL_W) / 2), animated: true });
-  }, [date, w]); // eslint-disable-line react-hooks/exhaustive-deps
-  // the month in words; the year only when it is not this one («Ноябрь», «Январь 2027»)
-  const month = date.slice(0, 4) === today.slice(0, 4) ? formatDayKey(date, { month: "long" }, loc) : formatDayKey(date, { month: "long", year: "numeric" }, loc);
-  return (
-    <View style={{ gap: space[2] }} testID="plan-day-strip">
-      <RowView style={{ justifyContent: "space-between" }}>
-        <T v="heading" style={{ flex: 1 }} numberOfLines={1}>
-          {month.charAt(0).toUpperCase() + month.slice(1)}
-        </T>
-        {date !== today ? <Button label={t("common.today")} size="sm" variant="secondary" onPress={() => onPick(today)} /> : null}
-        <IconButton icon="chevronLeft" label={t("plan.prev")} onPress={() => onPick(addDays(date, -7))} />
-        <IconButton icon="chevronRight" label={t("plan.next")} onPress={() => onPick(addDays(date, 7))} />
-      </RowView>
-      <ScrollView
-        ref={ref}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        onLayout={(e) => setW(e.nativeEvent.layout.width)}
-        // the row runs to the screen's edges, the pills start at the padding
-        style={{ marginHorizontal: -space[4] }}
-        contentContainerStyle={{ gap: space[2], paddingHorizontal: space[4] }}
-      >
-        {days.map((k) => {
-          return <DayCell key={k} day={k} load={loads.get(k)} selected={k === date} head={formatDayKey(k, { weekday: "short" }, loc)} pill onPress={() => onPick(k)} />;
-        })}
-      </ScrollView>
-    </View>
-  );
-}
 
 /**
  * The day's list by time (LAYOUT-RULES §3 «Календарь»): every item one card — the hour big on the left, the client, the

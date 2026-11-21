@@ -36,7 +36,7 @@ describe("«Заливка» of the chosen (#1306)", () => {
     expect(src("nav/TabBar.tsx")).not.toMatch(/borderColor: c\.ink/);
   });
   it("cards and days: no ink frame, a check instead (DS «Выделение выбранного»)", () => {
-    for (const f of ["ui/listCard.tsx", "features/PlanParts.tsx"]) {
+    for (const f of ["ui/listCard.tsx", "ui/dayStrip.tsx"]) {
       const t = src(f);
       expect(t, f).not.toMatch(/selected \? c\.ink : c\.bd/);
       expect(t, f).toMatch(/SelectedCheck/);
