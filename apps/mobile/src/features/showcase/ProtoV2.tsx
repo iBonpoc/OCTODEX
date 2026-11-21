@@ -6,13 +6,20 @@
  * interval (the nearest in the accent's tone). The names and sums are demo data, the words come from i18n.
  */
 import { useState } from "react";
+import { todayKey, type DayKey } from "@/features/calendar";
 import { View } from "react-native";
 import { radius, rhythm, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { CheckList, type CheckItem } from "@/ui/checkList";
 import { IconButton, ProgressBar, Segmented } from "@/ui/controls";
-import { CountPill, FigureRow, HatchPlate, NumberTrio, ProgressWords, TimeSlot, TimerLine, TonePill } from "@/ui/figures";
+import { TextField } from "@/ui/controls";
+import { MonthArrows, MonthPick, useMonthHead } from "@/ui/dayStrip";
+import { CountPill, FigureRow, HatchPlate, IntervalPlate, NumberTrio, ProgressWords, TimeSlot, TimerLine, TonePill } from "@/ui/figures";
+import { ListGroup } from "@/ui/groupedList";
+import { NowCard } from "@/ui/nowCard";
+import { FitTitle, HeadStatus } from "@/ui/templates/screenHeader";
+import { ViewTabs } from "@/ui/viewTabs";
 import { IconRow } from "@/ui/iconRow";
 import { ButtonPair } from "@/ui/pairs";
 import { T } from "@/ui/primitives";
@@ -27,6 +34,11 @@ export function ProtoV2() {
   const toast = useToast();
   const said = (label: string) => () => toast.show(label, NO_UNDO);
   const [mode, setMode] = useState("day");
+  const [section, setSection] = useState("all");
+  const [title, setTitle] = useState("Bathroom remodel");
+  const [sum, setSum] = useState("1,840");
+  const [day, setDay] = useState<DayKey>(todayKey());
+  const head = useMonthHead(day, setDay);
   const [kind, setKind] = useState("a");
   const [items, setItems] = useState<CheckItem[]>([
     { key: "1", label: t("ds.v2.check1"), done: true },
@@ -110,6 +122,67 @@ export function ProtoV2() {
         <TimeSlot testID="showcase-v2-slot-late" hour="7:30" length={t("ds.v2.hours", { n: 2 })} from="7:30" to="9:30" title="James O'Connor" line="Panel upgrade 200A" status={{ status: "bad", label: t("st.late") }} onPress={said("James O'Connor")} />
         <TimeSlot testID="showcase-v2-slot-near" top={<HatchPlate label={t("px1.plan.road", { d: duration(12) })} />} oneLine hour="8:30" length={t("ds.v2.hours", { n: 4 })} near from="8:30" to="12:30" title="Sarah Mitchell" line="Bathroom remodel · Alex" onPress={said("Sarah Mitchell")} />
       </View>
+      {/* the last pass of v2 (#2350, SCREEN-SPECS.md): every new variant once, as the six screens use it */}
+      <ViewTabs look="chips" testID="showcase-v2-chips-tabs" label={t("ds.v2.work")} value={section} onChange={setSection} items={[{ key: "all", label: t("cat.all") }, { key: "est", label: t("nav.estimates"), count: 1 }, { key: "inv", label: t("nav.invoices"), count: 2 }]} />
+      <NowCard
+        testID="showcase-v2-now-big"
+        big
+        kicker={t("ds.tpl.next")}
+        soon={t("ds.tpl.in10")}
+        window="8:30–12:30 PM"
+        title="David Kim"
+        sub="Kitchen faucet · 4512 Ventura Blvd"
+        progress={{ caption: t("ds.v2.work"), value: 0, max: 4, label: t("ds.v2.ofN", { a: 0, b: 4 }) }}
+        trio={[{ value: t("ds.v2.hours", { n: 2 }), label: t("ds.v2.onSite") }, { value: "$1,840", label: t("ds.v2.sum") }, { value: "Alex", label: t("ds.v2.tech") }]}
+        main={{ label: t("ds.v2.enRoute"), onPress: said(t("ds.v2.enRoute")), testID: "showcase-v2-now-big-main" }}
+        mainIcon="check"
+        second={{ label: t("ds.proto.route"), icon: "route", onPress: said(t("ds.proto.route")), testID: "showcase-v2-now-big-second" }}
+        icon={{ icon: "phone", a11y: t("ds.proto.call"), onPress: said(t("ds.proto.call")), testID: "showcase-v2-now-big-call" }}
+      />
+      <NowCard
+        testID="showcase-v2-now-bare"
+        bare
+        kicker={t("tday.now")}
+        title="Bathroom remodel"
+        status={{ status: "ok", label: t("st.sent") }}
+        words={{ caption: t("px2.cv.workCap"), value: t("px2.cv.ofPct", { n: 3, m: 5, p: 60 }) }}
+        trio={[{ value: "$3,420", label: t("px2.cv.estimate") }, { value: "$342", label: t("px2.cv.deposit") }, { value: "$3,078", label: t("px2.cv.work") }]}
+        trioLook="plain"
+        onPress={said("Bathroom remodel")}
+      />
+      <ListGroup bare title={t("ds.tpl.attention")} all={{ label: t("ds.tpl.all"), onPress: said(t("ds.tpl.all")) }} testID="showcase-v2-group-bare">
+        <StatGrid>
+          <StatTile dense icon="invoice" label={t("ds.v2.owed")} value="$2,800" unit={t("ds.v2.days", { n: -9 })} unitTone="bad" testID="showcase-v2-tile-dense" />
+          <StatTile dense icon="wallet" label={t("st.paid")} value="$1,020" unit={t("ds.v2.days", { n: 0 })} testID="showcase-v2-tile-dense2" />
+        </StatGrid>
+      </ListGroup>
+      <ListGroup note="2" title={t("st.paid")} testID="showcase-v2-group-note">
+        <FigureRow testID="showcase-v2-row-ok" icon="check" iconTone="ok" title="Linda Alvarez" line="INV-0102" cols={[{ label: t("ds.v2.sum"), value: "$412.60" }]} />
+      </ListGroup>
+      <FigureRow testID="showcase-v2-row-warm" tone="warn" icon="key" title={t("px2.cv.code", { code: "4512" })} line={t("ds.v2.work")} />
+      <StatGrid cols={4} testID="showcase-v2-tiles4">
+        <StatTile icon="calendar" label={t("ds.v2.jobs")} value={7} testID="showcase-v2-t4-a" />
+        <StatTile icon="clock" label={t("ds.v2.work")} value={12} unit={t("ds.v2.h")} testID="showcase-v2-t4-b" />
+        <StatTile icon="check" label={t("st.paid")} value={3} testID="showcase-v2-t4-c" />
+        <StatTile icon="invoice" label={t("ds.v2.owed")} value="$4,120" testID="showcase-v2-t4-d" />
+      </StatGrid>
+      <RowView gap={rhythm.cardGap}>
+        <IntervalPlate from="8:30" to="12:30" />
+        <IntervalPlate from="8:30" to="12:30" near />
+        <IntervalPlate from={t("ds.v2.work")} to="" />
+      </RowView>
+      <Card>
+        <FitTitle text="Sarah Mitchell-Rodriguez Residence" />
+        <HeadStatus status="info" label={t("st.sent")} onPress={said(t("st.sent"))} testID="showcase-v2-head-status" />
+        <RowView style={{ justifyContent: "space-between" }}>
+          <T v="heading">{head.title}</T>
+          <MonthArrows head={head} testID="showcase-v2-month" />
+        </RowView>
+        <IconButton icon="calendar" label={head.label} onPress={head.toggle} testID="showcase-v2-month-toggle" />
+        <MonthPick head={head} date={day} onPick={setDay} testID="showcase-v2-month" />
+      </Card>
+      <TextField plate type="title" value={title} onChangeText={setTitle} label={t("ue.items")} testID="showcase-v2-field-plate" />
+      <TextField big type="money" prefix="$" value={sum} onChangeText={setSum} label={t("ds.v2.sum")} testID="showcase-v2-field-big" />
     </View>
   );
 }

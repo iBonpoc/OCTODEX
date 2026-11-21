@@ -104,3 +104,46 @@ export const UI_NOT_SHOWN: Record<string, string> = {
   "FieldAnchor": "the place of a required field the screen draws itself (the scroll goes to it); nothing to see — its frame and words are FieldError / Anchored",
   "Scrim": "the dim layer of a sheet; seen in the sheet sample",
 };
+
+/**
+ * The variants of the last v2 pass (#2350; docs/design/SCREEN-SPECS.md, DS §12.14): a prop of a detail that changes how it looks.
+ * The guard (designSystem.test.ts) checks each one three ways: the prop still exists in `src` of the detail, DESIGN-SYSTEM.md §12.14
+ * names it, and the showcase file `shown` draws it (the snippet `use` is in that file). `shown: null` — not a sample of the showcase
+ * (a function or a screen part), `why` says where it is seen. A new variant of a detail is added here in the same PR.
+ */
+export const V2_VARIANTS: readonly { part: string; prop: string; src: string; use: string; shown: string | null; why?: string }[] = [
+  { part: "ViewTabs", prop: "look", src: "ui/viewTabs.tsx", use: 'look="chips"', shown: "ProtoV2.tsx" },
+  { part: "ProgressWords", prop: "caption", src: "ui/figures.tsx", use: "<ProgressWords", shown: "ProtoV2.tsx" },
+  { part: "TonePill", prop: "tone", src: "ui/figures.tsx", use: "<TonePill", shown: "ProtoV2.tsx" },
+  { part: "CountPill", prop: "n", src: "ui/figures.tsx", use: "<CountPill", shown: "ProtoV2.tsx" },
+  { part: "HatchPlate", prop: "label", src: "ui/figures.tsx", use: "<HatchPlate", shown: "ProtoV2.tsx" },
+  { part: "IntervalPlate", prop: "near", src: "ui/figures.tsx", use: "<IntervalPlate", shown: "ProtoV2.tsx" },
+  { part: "TextField", prop: "plate", src: "ui/controls.tsx", use: "<TextField plate", shown: "ProtoV2.tsx" },
+  { part: "TextField", prop: "big", src: "ui/controls.tsx", use: "<TextField big", shown: "ProtoV2.tsx" },
+  { part: "FigureRow", prop: "avatar", src: "ui/figures.tsx", use: "avatar={{", shown: "ProtoV2.tsx" },
+  { part: "FigureRow", prop: "iconTone", src: "ui/figures.tsx", use: 'iconTone="ok"', shown: "ProtoV2.tsx" },
+  { part: "FigureRow", prop: "tone", src: "ui/figures.tsx", use: 'tone="warn" icon="key"', shown: "ProtoV2.tsx" },
+  { part: "NumberTrio", prop: "look", src: "ui/figures.tsx", use: 'look="plain"', shown: "ProtoV2.tsx" },
+  { part: "NowCard", prop: "bare", src: "ui/nowCard.tsx", use: "\n        bare\n", shown: "ProtoV2.tsx" },
+  { part: "NowCard", prop: "words", src: "ui/nowCard.tsx", use: "words={{", shown: "ProtoV2.tsx" },
+  { part: "NowCard", prop: "trioLook", src: "ui/nowCard.tsx", use: 'trioLook="plain"', shown: "ProtoV2.tsx" },
+  { part: "NowCard", prop: "soon", src: "ui/nowCard.tsx", use: "soon={", shown: "ProtoV2.tsx" },
+  { part: "NowCard", prop: "window", src: "ui/nowCard.tsx", use: 'window="', shown: "ProtoV2.tsx" },
+  { part: "NowCard", prop: "big", src: "ui/nowCard.tsx", use: "\n        big\n", shown: "ProtoV2.tsx" },
+  { part: "NowCard", prop: "mainIcon", src: "ui/nowCard.tsx", use: 'mainIcon="check"', shown: "ProtoV2.tsx" },
+  { part: "NowCard", prop: "trio", src: "ui/nowCard.tsx", use: "trio={[", shown: "ProtoV2.tsx" },
+  { part: "StatTile", prop: "dense", src: "ui/statTile.tsx", use: "<StatTile dense", shown: "ProtoV2.tsx" },
+  { part: "StatTile", prop: "unitTone", src: "ui/statTile.tsx", use: 'unitTone="bad"', shown: "ProtoV2.tsx" },
+  { part: "StatGrid", prop: "cols", src: "ui/statTile.tsx", use: "cols={4}", shown: "ProtoV2.tsx" },
+  { part: "ListGroup", prop: "bare", src: "ui/groupedList.tsx", use: "<ListGroup bare", shown: "ProtoV2.tsx" },
+  { part: "ListGroup", prop: "note", src: "ui/groupedList.tsx", use: '<ListGroup note="', shown: "ProtoV2.tsx" },
+  { part: "TimeSlot", prop: "top", src: "ui/figures.tsx", use: "top={<HatchPlate", shown: "ProtoV2.tsx" },
+  { part: "TimeSlot", prop: "oneLine", src: "ui/figures.tsx", use: " oneLine ", shown: "ProtoV2.tsx" },
+  { part: "FitTitle", prop: "text", src: "ui/templates/screenHeader.tsx", use: "<FitTitle", shown: "ProtoV2.tsx" },
+  { part: "HeadStatus", prop: "status", src: "ui/templates/screenHeader.tsx", use: "<HeadStatus", shown: "ProtoV2.tsx" },
+  { part: "MonthArrows", prop: "head", src: "ui/dayStrip.tsx", use: "<MonthArrows", shown: "ProtoV2.tsx" },
+  { part: "MonthPick", prop: "head", src: "ui/dayStrip.tsx", use: "<MonthPick", shown: "ProtoV2.tsx" },
+  { part: "ListScreen", prop: "chipsAs", src: "ui/templates/ListScreen.tsx", use: 'chipsAs="segment"', shown: "ProtoTemplates.tsx" },
+  { part: "pastelOf", prop: "name", src: "ui/pastelOf.ts", use: "", shown: null, why: "a function: the pastel of FigureRow avatar (the showcase's «LA») and of the header's avatar; unit test pastelOf.test.ts" },
+  { part: "ClientContacts", prop: "onCall", src: "features/client/ClientContacts.tsx", use: "", shown: null, why: "a screen part, not src/ui: the client's «⌄» panel of GroupRow rows; seen on Клиент, e2e of the client header, visual guard client-*" },
+];

@@ -121,6 +121,18 @@ export function ProtoTemplates() {
       <T v="caption" tone="mut">
         {t("ds.tpl.aside")}
       </T>
+      {/* visual v2 Деньги (макет 6): the parts of a tab — a Segmented 36 across the width, not a chips strip (`chipsAs="segment"`) */}
+      <ListScreen
+        preview
+        testID="tpl-list-seg"
+        title={t("ds.v2.owed")}
+        search={{ placeholder: t("ds.tpl.searchClients"), value: query, onChange: setQuery }}
+        chips={{ items: [{ key: "all", label: t("ds.tpl.chipAll") }, { key: "debt", label: t("ds.proto.owes") }, { key: "new", label: t("ds.tpl.chipNew") }], value: chip === "vip" ? "all" : chip, onChange: setChip }}
+        chipsAs="segment"
+        groups={[{ key: "a", title: t("ds.tpl.groupActive"), rows: found.filter((d) => d.group === "a") }]}
+        row={row}
+        empty={<Empty icon="search" title={t("ds.tpl.nothing")} />}
+      />
 
       <Heading title={t("ds.tpl.object")} hint={t("ds.tpl.objectHint")} />
       <ObjectScreen

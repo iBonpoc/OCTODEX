@@ -7,6 +7,7 @@
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { V2_VARIANTS } from "../src/features/showcase/registry";
 
 const ROOT = join(__dirname, "..", "src");
 const files: string[] = [];
@@ -364,6 +365,21 @@ describe("design system: the showcase covers everything (#1093, Настройк
       if (!new RegExp(`^#{2,3} ${n.replace(".", "\\.")}\\.`, "m").test(ds)) bad.push(`§${n}`);
     }
     expect(bad).toEqual([]);
+  });
+});
+
+// #2350 (SCREEN-SPECS.md): every variant of the last v2 pass is written in DS §12.14 and drawn by the showcase
+describe("design system: the v2 variants are written and shown (DS §12.14)", () => {
+  const ds = readFileSync(join(__dirname, "..", "..", "..", "design", "naryad-ds", "DESIGN-SYSTEM.md"), "utf8");
+  const sec = ds.slice(ds.indexOf("### 12.14."), ds.indexOf("### 12.15."));
+  it("DS §12.14 exists and comes before §12.15", () => expect(sec.length).toBeGreaterThan(1000));
+  it.each(V2_VARIANTS.map((v) => [`${v.part} ${v.prop}`, v] as const))("%s", (_, v) => {
+    const src = readFileSync(join(ROOT, v.src), "utf8");
+    expect(new RegExp(`\\b${v.part}\\b`).test(src), `${v.part} is not in ${v.src} any more — update V2_VARIANTS`).toBe(true);
+    expect(new RegExp(`\\b${v.prop}\\b`).test(src), `${v.part}: prop «${v.prop}» is not in ${v.src} any more`).toBe(true);
+    expect(sec.includes(v.part) && new RegExp(`\\b${v.prop}\\b`).test(sec.slice(sec.indexOf(v.part))), `write ${v.part} «${v.prop}» in DESIGN-SYSTEM.md §12.14`).toBe(true);
+    if (v.shown) expect(readFileSync(join(ROOT, "features", "showcase", v.shown), "utf8").includes(v.use), `show ${v.part} ${v.use.trim()} in features/showcase/${v.shown}`).toBe(true);
+    else expect(v.why ?? "", "a variant not in the showcase says where it is seen").not.toBe("");
   });
 });
 
