@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { useStore } from "@/data/store";
 import type { Lead, LeadStatus } from "@/data/types";
@@ -13,7 +13,7 @@ import { useDevice } from "@/theme/ThemeProvider";
 import { View } from "react-native";
 import { space } from "@octo/design-tokens";
 import { usePersistentState } from "@/data/persist";
-import { router, useLocalSearchParams } from "expo-router";
+import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useI18n, type DictKey } from "@/i18n";
 import { ReplySheet, useTick } from "@/features/sheets";
 import { Button } from "@/ui/controls";
@@ -40,10 +40,9 @@ const LANE: readonly LeadFilter[] = ["open", "waiting", "snoozed", "won", "close
  */
 export default function Leads() {
   const want = useLocalSearchParams<{ tab?: string }>().tab;
-  useEffect(() => {
-    if (want === "estimates") router.replace("/estimates");
-    else if (want === "invoices") router.replace("/invoice");
-  }, [want]);
+  // #2273: the section at once — the leads board never mounts (it used to show a frame, then replace itself)
+  if (want === "estimates") return <Redirect href="/estimates" />;
+  if (want === "invoices") return <Redirect href="/invoice" />;
   return <LeadsBoard />;
 }
 
@@ -125,6 +124,7 @@ function LeadsBoard() {
     ) : null;
   return (
     <Screen
+      testID="leads-screen"
       title={t("sales.leads")}
       help={t("help.inbox")}
       hintKey="inbox"

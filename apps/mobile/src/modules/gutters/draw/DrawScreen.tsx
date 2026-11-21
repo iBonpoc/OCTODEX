@@ -14,7 +14,7 @@ import { registerDirtySheet } from "@/ui/dirtySheets";
 import { sizeText } from "../sizeText";
 import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
 import { useWindowDimensions, View, type LayoutChangeEvent } from "react-native";
-import { router, Stack, useLocalSearchParams, type Href } from "expo-router";
+import { Redirect, router, Stack, useLocalSearchParams, type Href } from "expo-router";
 import * as Crypto from "expo-crypto";
 import Svg, { Line } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -190,7 +190,18 @@ function NextDsLine({ gutterFt, icon, text }: { gutterFt: number; icon: IconKey;
   );
 }
 
+/**
+ * #2273: an old link «Смета из замера» to the canvas (estimate=1 with a measurement) goes to the review at once — the canvas never
+ * mounts (it used to draw a frame, then replace itself). The review finds the measurement or says it is not there.
+ */
 export default function DrawScreen() {
+  const params = useLocalSearchParams<{ m?: string; estimate?: string }>();
+  if (params.estimate === "1" && typeof params.m === "string" && params.m)
+    return <Redirect href={`${moduleHref("gutters", "view")}?m=${encodeURIComponent(params.m)}&estimate=1` as Href} />;
+  return <DrawCanvas />;
+}
+
+function DrawCanvas() {
   const { t, money } = useI18n();
   const { c } = useTheme();
   const { wide: wideScreen } = useDevice();
@@ -1159,13 +1170,6 @@ export default function DrawScreen() {
     if (cur.current.canSave) await saver.flush(mm, toElements(cur.current.drawing, mm.id));
     router.push(`${moduleHref("gutters", "view")}?m=${encodeURIComponent(mm.id)}&from=draw` as Href);
   };
-  // an old link «Смета из замера» (estimate=1) to the canvas: the review does the estimate now
-  const toView = useRef(params.estimate === "1");
-  useEffect(() => {
-    if (!toView.current || !inStore) return;
-    toView.current = false;
-    router.replace(`${moduleHref("gutters", "view")}?m=${encodeURIComponent(inStore.id)}&estimate=1` as Href);
-  });
 
   // on its side (founder 08.11): one strip at the bottom — the card and the toolbar as a row beside it (a column would
   // not fit the height); the grip puts the toolbar left or right of the card
