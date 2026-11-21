@@ -16,16 +16,17 @@
  * every part here reads it on the UI thread — only transform and opacity, no height. The row stands pinned over the page (its
  * plate `ov` + the line fade in as it folds); the big block is the page's first part and goes up with it.
  */
-import { createContext, useContext, useState, type ComponentRef, type ReactNode, type Ref } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode, type Ref } from "react";
 import { Platform, View, type ViewStyle } from "react-native";
 import Animated, { runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
-import { component, motion, radius, size, space, spaceHalf } from "@octo/design-tokens";
+import { BlurView } from "expo-blur";
+import { component, motion, pastels, radius, size, space, spaceHalf, statusIcon, type StatusName } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Avatar } from "../controls";
 import { HeaderButton } from "../headerIcon";
-import { Icon, Press, T } from "../primitives";
+import { Icon, Press, T, type IconKey } from "../primitives";
 import { DemoDot, DemoPlate, useDemo } from "./demoMark";
-import { foldHalf, foldStage, headerFrame, reducedFrame, type HeaderFrame, type HeaderKind } from "./headerMath";
+import { bigClip, fitScale, foldStage, headerFrame, reducedFrame, type HeaderFrame, type HeaderKind } from "./headerMath";
 
 const H = component.header;
 
@@ -39,18 +40,36 @@ export type HeadSpec =
       mini?: string;
       /** the avatar on the left (→ «Ещё»); `null` — none (820/1280: the profile is in the side menu) */
       avatar?: { initials: string; onPress?: () => void; label: string; testID?: string } | null;
+      /** the 30 title is a button with «⌄» 24 after it (План: «Ноябрь ⌄» opens the month in place) */
+      titlePress?: TitlePress;
+      /** on the right of the big block (План: ‹ › 32) */
+      trailing?: ReactNode;
     }
   | {
       kind: "object";
       /** right of the rule: 15/600 and 13/500 (or a StatusPill) */
       sub?: { line1?: string; line2?: ReactNode };
-      /** a client's «⌄»: the contacts panel (ObjectHeader `details`) */
-      expand?: { open: boolean; onToggle: (open: boolean) => void; expandLabel: string; collapseLabel: string; testID?: string };
+      /** a client's «⌄»: the contacts panel (ObjectHeader `details` in place; `panel` over the page from the folded row) */
+      expand?: { open: boolean; onToggle: (open: boolean) => void; expandLabel: string; collapseLabel: string; testID?: string; panel?: ReactNode };
     }
   | { kind: "editor"; /** «Черновик · сохранено 8:19» */ state?: string };
 
+export type TitlePress = { open: boolean; label: string; onPress: () => void; testID?: string };
+
 /* ---------- the page's scroll, handed down ---------- */
-type Scroll = { y: SharedValue<number>; fade: SharedValue<number>; kind: HeaderKind; reduce: boolean };
+type Scroll = {
+  y: SharedValue<number>;
+  fade: SharedValue<number>;
+  kind: HeaderKind;
+  reduce: boolean;
+  /** ≥ 0 — the header is held at this scroll (the contacts panel is open over it: «пока открыта — шапка не меняется») */
+  held: SharedValue<number>;
+  /** the room under an object's name (what fades out under it, + the gap): the name's hold is never longer */
+  room: SharedValue<number>;
+  /** the big block is cut at the pinned row's bottom (the row stands over the page) */
+  clip: boolean;
+  addRoom: (key: string, h: number) => void;
+};
 const ScrollCtx = createContext<Scroll | null>(null);
 const StageCtx = createContext<0 | 1 | 2>(0);
 
@@ -59,11 +78,39 @@ const StageCtx = createContext<0 | 1 | 2>(0);
  * `fade` runs 0 ↔ 1 in `durFast` once the page crosses the half. `stage` (0 open · 1 past the half · 2 folded) is the only thing
  * that comes back to JS: the row's touches and «＋» into «⋯» follow it.
  */
-export function HeaderScroll({ y, kind, reduce, children }: { y: SharedValue<number>; kind: HeaderKind; reduce: boolean; children: ReactNode }) {
+export function HeaderScroll({
+  y,
+  kind,
+  reduce,
+  held: heldIn,
+  clip = false,
+  children,
+}: {
+  y: SharedValue<number>;
+  kind: HeaderKind;
+  reduce: boolean;
+  held?: SharedValue<number>;
+  clip?: boolean;
+  children: ReactNode;
+}) {
   const fade = useSharedValue(0);
+  const own = useSharedValue(-1);
+  const held = heldIn ?? own;
+  const room = useSharedValue<number>(space[3]);
+  const rooms = useRef(new Map<string, number>());
+  const addRoom = useCallback(
+    (key: string, h: number) => {
+      if (h > 0) rooms.current.set(key, h);
+      else rooms.current.delete(key);
+      let sum = space[3];
+      rooms.current.forEach((v) => (sum += v));
+      room.value = sum;
+    },
+    [room],
+  );
   const [stage, setStage] = useState<0 | 1 | 2>(0);
   useAnimatedReaction(
-    () => foldStage(kind, y.value),
+    () => foldStage(kind, held.value >= 0 ? held.value : y.value),
     (now, before) => {
       if (now === before) return;
       runOnJS(setStage)(now);
@@ -72,7 +119,7 @@ export function HeaderScroll({ y, kind, reduce, children }: { y: SharedValue<num
     [kind, reduce],
   );
   return (
-    <ScrollCtx.Provider value={{ y, fade, kind, reduce }}>
+    <ScrollCtx.Provider value={useMemo(() => ({ y, fade, kind, reduce, held, room, clip, addRoom }), [y, fade, kind, reduce, held, room, clip, addRoom])}>
       <StageCtx.Provider value={stage}>{children}</StageCtx.Provider>
     </ScrollCtx.Provider>
   );
@@ -86,25 +133,38 @@ export const useHeaderParent = () => useContext(ParentCtx);
 /** 0 open · 1 past the half · 2 folded — an object's «＋» leaves for «⋯» at 2 */
 export const useHeaderStage = () => useContext(StageCtx);
 
-/** the look of the header at the page's scroll now (UI thread); outside a Screen — the open header */
-function useLook<S extends object>(pick: (f: HeaderFrame) => S, deps: unknown[] = []) {
+/** the look of the header at the page's scroll now (UI thread); outside a Screen — the open header. `clip` — the scroll the big
+ *  block's cut follows (0 when the row does not stand over the page) */
+function useLook<S extends object>(pick: (f: HeaderFrame, clip: number) => S, deps: unknown[] = []) {
   const ctx = useContext(ScrollCtx);
   const zero = useSharedValue(0);
+  const none = useSharedValue(-1);
   const y = ctx?.y ?? zero;
   const fade = ctx?.fade ?? zero;
+  const held = ctx?.held ?? none;
+  const room = ctx?.room ?? none;
   const kind = ctx?.kind ?? "root";
   const reduce = !!ctx?.reduce;
-  return useAnimatedStyle(() => pick(reduce ? reducedFrame(kind, fade.value) : headerFrame(kind, y.value)), [kind, reduce, ...deps]);
+  const cut = !!ctx?.clip;
+  return useAnimatedStyle(() => {
+    const at = held.value >= 0 ? held.value : y.value;
+    const f = reduce ? reducedFrame(kind, fade.value) : headerFrame(kind, at, false, kind === "object" ? room.value : undefined);
+    return pick(f, cut ? bigClip(at) : 0);
+  }, [kind, reduce, cut, ...deps]);
 }
 
 /** quick actions, the address line of an object: fade 0–48 and go up 12 (none of it with Reduce Motion but the fade) */
 export function HeaderFade({ children, testID }: { children: ReactNode; testID?: string }) {
+  const ctx = useContext(ScrollCtx);
+  const key = useRef(`f${Math.random()}`).current;
+  useEffect(() => () => ctx?.addRoom(key, 0), [ctx, key]);
   const look = useLook((f) => {
     "worklet";
     return { opacity: f.actions, transform: [{ translateY: f.actionsY }] };
   });
   return (
-    <Animated.View testID={testID} style={look}>
+    // what fades here leaves room for the object's name to wait over (its hold, `holdOf`)
+    <Animated.View testID={testID} style={look} onLayout={(e) => ctx?.addRoom(key, e.nativeEvent.layout.height)}>
       {children}
     </Animated.View>
   );
@@ -112,9 +172,11 @@ export function HeaderFade({ children, testID }: { children: ReactNode; testID?:
 
 /* ---------- the row's left: the avatar, «←», «×» ---------- */
 export function HeaderAvatar({ initials, onPress, label, testID = "hdr-avatar" }: { initials: string; onPress?: () => void; label: string; testID?: string }) {
-  const { c } = useTheme();
+  const { c, name } = useTheme();
   const s = H.circle;
   const out = H.avatarRing + H.ringGap;
+  // v2 «Корень вкладки»: the avatar 40 on the pastel lavender (palette A), its initials in the pastel's text (≥ 7:1)
+  const lav = pastels[name].lav;
   const look = useLook((f) => {
     "worklet";
     return { transform: [{ scale: f.avatarScale }] };
@@ -126,7 +188,11 @@ export function HeaderAvatar({ initials, onPress, label, testID = "hdr-avatar" }
   const body = (
     <Animated.View style={[{ width: s, height: s }, look]}>
       <View pointerEvents="none" style={{ position: "absolute", top: -out, left: -out, right: -out, bottom: -out, borderRadius: radius.pill, borderWidth: H.avatarRing, borderColor: c.acc }} />
-      <Avatar initials={initials} s={s} />
+      <View style={{ width: s, height: s, borderRadius: radius.pill, backgroundColor: lav.fill, alignItems: "center", justifyContent: "center" }}>
+        <T v="caption" w="bold" style={{ color: lav.text }}>
+          {initials}
+        </T>
+      </View>
       <DemoDotAt look={dot} />
     </Animated.View>
   );
@@ -156,7 +222,7 @@ export function HeaderBack({ label, onPress, testID = "hdr-back" }: { label: str
     "worklet";
     return { opacity: f.demoDot };
   });
-  return <HeaderButton testID={testID} icon="chevronLeft" label={label} onPress={onPress} dot={<DemoDotAt look={dot} />} />;
+  return <HeaderButton testID={testID} icon="arrowLeft" label={label} onPress={onPress} dot={<DemoDotAt look={dot} />} />;
 }
 
 /** the editor's «×» 40 (it asks first when something is not saved — the screen's `back` does) */
@@ -169,10 +235,21 @@ function Chevron({ open, label, onPress, testID }: { open: boolean; label: strin
   const { c } = useTheme();
   return (
     <Press testID={testID} onPress={onPress} visibleHeight={H.chevron} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open }}>
-      <View style={{ width: H.chevron, height: H.chevron, borderRadius: radius.pill, backgroundColor: c.surf, alignItems: "center", justifyContent: "center" }}>
+      {/* the circle 24 on the cell tone (v2 `.chev`); open — «⌃» */}
+      <View style={{ width: H.chevron, height: H.chevron, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
         <Icon name={open ? "chevronUp" : "chevronDown"} s={size.iconSm} color={c.ink} />
       </View>
     </Press>
+  );
+}
+
+/** the «⌄» 24 drawn inside a pressable title (План «Ноябрь ⌄»): the same circle as `Chevron`, not a button of its own */
+function ChevronMark({ open }: { open: boolean }) {
+  const { c } = useTheme();
+  return (
+    <View style={{ width: H.chevron, height: H.chevron, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
+      <Icon name={open ? "chevronUp" : "chevronDown"} s={size.iconSm} color={c.ink} />
+    </View>
   );
 }
 
@@ -269,7 +346,7 @@ export function HeaderBar({
               style={[{ flexDirection: "row", alignItems: "center", gap: space[2] }, miniLook]}
             >
               <T v="heading" w="bold" numberOfLines={1} style={{ flexShrink: 1 }}>
-                {mini}
+                {miniParts(kind, mini)}
               </T>
               {chevron ? <Chevron testID="hdr-bar-expand" open={chevron.open} label={chevron.label} onPress={chevron.onPress} /> : null}
             </Animated.View>
@@ -278,6 +355,20 @@ export function HeaderBar({
       </View>
       {right ? <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], flexShrink: 0 }}>{right}</View> : null}
     </View>
+  );
+}
+
+/** a root's small title «Сегодня, 20 нояб.»: what it is in `ink`, the date after the comma `mut` 600 (v2 frame 3) */
+function miniParts(kind: HeaderKind, mini: string): ReactNode {
+  const at = kind === "root" ? mini.indexOf(", ") : -1;
+  if (at <= 0) return mini;
+  return (
+    <>
+      {mini.slice(0, at + 2)}
+      <T v="heading" w="semibold" tone="mut">
+        {mini.slice(at + 2)}
+      </T>
+    </>
   );
 }
 
@@ -291,15 +382,68 @@ export function HeaderPlate({ top, testID = "screen-head-plate" }: { top: number
     "worklet";
     return { opacity: f.plate };
   });
-  // v2 «свёрнутая строка»: the ground ≈ 92 % — the page that went under the row is not read through it (`ovSolid`, the glass
-  // without its transparency; the same as the tab bar's fallback panel)
-  return <Animated.View testID={testID} pointerEvents="none" style={[{ position: "absolute", top, bottom: 0, left: 0, right: 0, backgroundColor: c.ovSolid, borderBottomWidth: component.hairline, borderBottomColor: c.bd }, look]} />;
+  // v2 «свёрнутая строка»: the screen's ground at 92 % (`header.plateAlpha`) + the hairline; under it a blur, so the 8 % that shows
+  // through is a haze, never words of the page that went under the row
+  return (
+    <Animated.View testID={testID} pointerEvents="none" style={[{ position: "absolute", top, bottom: 0, left: 0, right: 0, overflow: "hidden", borderBottomWidth: component.hairline, borderBottomColor: c.bd }, look]}>
+      <BlurView intensity={c.blur * 3} tint={c.blurTint} style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }} />
+      <View style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0, backgroundColor: c.bg, opacity: H.plateAlpha }} />
+    </Animated.View>
+  );
 }
 
 /* ---------- the big block ---------- */
 /**
- * The big block 64 under the row (root, object): it goes up with the page; the title shrinks from its left top and fades, the
- * 13 line / the two lines fade first. The title is the screen's heading (`titleRef`, `screen-title`) — one line, `fit`.
+ * The title on one line, the same on every platform (v2: «сжимается до 22,5 по fitMinScale, потом «…»»; no `adjustsFontSizeToFit`):
+ * its natural width is measured once in a wide box, then it is drawn scaled by `fitScale` from its left (transform, as the fold's
+ * scale) in the room it has; past `font.fitMinScale` it is cut with «…» at that scale. The room the title takes in the line is its
+ * scaled width, so the «⌄» and the «?» stand right after it.
+ */
+export function FitTitle({ text, track }: { text: string; track?: number }) {
+  const [nat, setNat] = useState(0);
+  const [room, setRoom] = useState(0);
+  useEffect(() => setNat(0), [text]);
+  const s = fitScale(nat, room);
+  const measuring = nat <= 0;
+  return (
+    <View
+      onLayout={(e) => setRoom(e.nativeEvent.layout.width)}
+      style={{ flexShrink: 1, minWidth: 0, width: measuring ? undefined : nat, maxWidth: "100%" }}
+    >
+      {/* the line's height (a space: no second copy of the name for the tests and the screen reader) */}
+      <View aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ opacity: 0 }}>
+        <T v="display" w="semibold">
+          {" "}
+        </T>
+      </View>
+      <View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          alignItems: "flex-start",
+          width: measuring ? 10000 : s < 1 ? room / s : 10000,
+          transform: [{ scale: s }],
+          transformOrigin: "left center",
+        }}
+      >
+        <View onLayout={measuring ? (e) => setNat(Math.ceil(e.nativeEvent.layout.width) + 1) : undefined} style={{ maxWidth: "100%" }}>
+          <T v="display" w="semibold" numberOfLines={1} style={{ letterSpacing: track }}>
+            {text}
+          </T>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * The big block 64 under the row (root, object): it goes up with the page — a root's after its first 16, an object's name after 56
+ * (`titleY`, the hold); the title shrinks from its left and fades, the 13 line / the two lines fade first. It is cut at the pinned
+ * row's bottom (`bigClip`): the clip window stays at the row's bottom while the block inside goes up, so nothing of it is drawn
+ * over «←», the avatar or the small title — it goes UNDER the row (v2 «уезжает под строку»). The title is the screen's heading
+ * (`titleRef`, `screen-title`) — one line, `FitTitle`.
  */
 export function HeaderBig({
   kind,
@@ -309,11 +453,15 @@ export function HeaderBig({
   sub,
   expand,
   help,
+  titlePress,
+  trailing,
 }: {
   kind: "root" | "object";
   title: string;
   titleRef?: Ref<ComponentRef<typeof View>>;
   kicker?: string;
+  titlePress?: TitlePress;
+  trailing?: ReactNode;
   sub?: { line1?: string; line2?: ReactNode };
   expand?: { open: boolean; onToggle: (open: boolean) => void; expandLabel: string; collapseLabel: string; testID?: string };
   /** the screen's «?» — right after the title it explains (DS Б7) */
@@ -327,17 +475,29 @@ export function HeaderBig({
   });
   const titleLook = useLook((f) => {
     "worklet";
-    return { opacity: f.title, transform: [{ scale: f.titleScale }] };
+    return { opacity: f.title, transform: [{ translateX: f.titleX }, { scale: f.titleScale }] };
   });
   const subLook = useLook((f) => {
     "worklet";
     return { opacity: f.sub };
   });
+  const trailLook = useLook((f) => {
+    "worklet";
+    return { opacity: f.title };
+  });
+  // the clip window goes down as the page goes up (it stays at the row's bottom); the block inside goes up by the same, less its hold
+  const windowLook = useLook((_f, clip) => {
+    "worklet";
+    return { transform: [{ translateY: clip }] };
+  });
+  const blockLook = useLook((f, clip) => {
+    "worklet";
+    return { transform: [{ translateY: clip > 0 ? -clip + f.titleY : 0 }] };
+  });
+  const hold = kind === "root" ? H.root.hold : H.object.hold;
   const titleText = (
-    <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={[{ flexShrink: 1, minWidth: 0 }, noRing]} testID="screen-title">
-      <T v="display" w="semibold" fit style={{ letterSpacing: H.titleTrack }}>
-        {title}
-      </T>
+    <View ref={titleRef} role="heading" aria-level={1} aria-label={title} tabIndex={-1} style={[{ flexShrink: 1, minWidth: 0 }, noRing]} testID="screen-title">
+      <FitTitle text={title} track={H.titleTrack} />
     </View>
   );
   const chevron = expand ? (
@@ -348,9 +508,9 @@ export function HeaderBig({
       onPress={() => expand.onToggle(!expand.open)}
     />
   ) : null;
-  if (kind === "root")
-    return (
-      <View testID="screen-head-big" style={{ minHeight: H.big, justifyContent: "flex-end", paddingTop: spaceHalf.hair, paddingBottom: space[1] }}>
+  const body =
+    kind === "root" ? (
+      <View style={{ minHeight: H.big, justifyContent: "flex-end", paddingTop: spaceHalf.hair, paddingBottom: space[1] }}>
         {kicker || demo.shown ? (
           <Animated.View style={[{ flexDirection: "row", alignItems: "center", gap: space[2] }, kickLook]}>
             {kicker ? (
@@ -361,40 +521,90 @@ export function HeaderBig({
             <DemoPlate />
           </Animated.View>
         ) : null}
-        <Animated.View style={[{ flexDirection: "row", alignItems: "center", gap: space[2], transformOrigin: "left top" }, titleLook]}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+          <Animated.View style={[{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space[2], transformOrigin: "left top" }, titleLook]}>
+            {titlePress ? (
+              <Press
+                testID={titlePress.testID}
+                onPress={titlePress.onPress}
+                accessibilityRole="button"
+                accessibilityLabel={titlePress.label}
+                accessibilityState={{ expanded: titlePress.open }}
+                containerStyle={{ flexShrink: 1, minWidth: 0 }}
+                style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}
+              >
+                {titleText}
+                <ChevronMark open={titlePress.open} />
+              </Press>
+            ) : (
+              titleText
+            )}
+            {help}
+          </Animated.View>
+          {trailing ? <Animated.View style={[{ flexDirection: "row", alignItems: "center", gap: space[2] }, trailLook]}>{trailing}</Animated.View> : null}
+        </View>
+      </View>
+    ) : (
+      <View style={{ minHeight: H.big, flexDirection: "row", alignItems: "center", gap: space[3], paddingTop: spaceHalf.hair, paddingBottom: space[1] }}>
+        {/* the name keeps its room first (up to two thirds of the line); the two lines take what is left and cut with «…» */}
+        <Animated.View style={[{ flexDirection: "row", alignItems: "center", gap: space[2], flexShrink: 0, maxWidth: "66%", transformOrigin: "left center" }, titleLook]}>
           {titleText}
+          {chevron}
           {help}
         </Animated.View>
+        {sub && (sub.line1 || sub.line2) ? (
+          <Animated.View style={[{ flex: 1, flexDirection: "row", alignItems: "center", gap: space[3], minWidth: 0 }, subLook]}>
+            {/* v2 `.vb`: the rule 1 × 40 in `off` — it is seen (the hairline `bd` was not: «нет разделения») */}
+            <View testID="screen-head-rule" style={{ width: component.hairline, height: H.rule, backgroundColor: c.off }} />
+            <View style={{ minWidth: 0, flexShrink: 1, overflow: "hidden", gap: spaceHalf.hair }}>
+              {sub.line1 ? (
+                <T v="body" w="semibold" numberOfLines={1}>
+                  {sub.line1}
+                </T>
+              ) : null}
+              {typeof sub.line2 === "string" ? (
+                <T v="caption" w="medium" tone="mut" numberOfLines={1}>
+                  {sub.line2}
+                </T>
+              ) : sub.line2 ? (
+                <View style={{ flexDirection: "row", overflow: "hidden" }}>{sub.line2}</View>
+              ) : null}
+            </View>
+          </Animated.View>
+        ) : null}
       </View>
     );
+  // the window is taller than the block by the hold (and as much less below it): the held block is never cut at its own bottom
   return (
-    <View testID="screen-head-big" style={{ minHeight: H.big, flexDirection: "row", alignItems: "center", gap: space[3], paddingTop: spaceHalf.hair, paddingBottom: space[1] }}>
-      {/* the name keeps its room first (up to two thirds of the line); the two lines take what is left and cut with «…» */}
-      <Animated.View style={[{ flexDirection: "row", alignItems: "center", gap: space[2], flexShrink: 0, maxWidth: "66%", transformOrigin: "left center" }, titleLook]}>
-        {titleText}
-        {chevron}
-        {help}
+    <Animated.View testID="screen-head-big" pointerEvents="box-none" style={[{ overflow: "hidden", paddingBottom: hold, marginBottom: -hold }, windowLook]}>
+      <Animated.View pointerEvents="box-none" style={blockLook}>
+        {body}
       </Animated.View>
-      {sub && (sub.line1 || sub.line2) ? (
-        <Animated.View style={[{ flex: 1, flexDirection: "row", alignItems: "center", gap: space[3], minWidth: 0 }, subLook]}>
-          <View style={{ width: component.hairline, height: H.rule, backgroundColor: c.bd }} />
-          <View style={{ minWidth: 0, flexShrink: 1, overflow: "hidden", gap: spaceHalf.hair }}>
-            {sub.line1 ? (
-              <T v="body" w="semibold" numberOfLines={1}>
-                {sub.line1}
-              </T>
-            ) : null}
-            {typeof sub.line2 === "string" ? (
-              <T v="caption" w="medium" tone="mut" numberOfLines={1}>
-                {sub.line2}
-              </T>
-            ) : sub.line2 ? (
-              // a StatusPill keeps its one line: it is cut at the edge, never wrapped onto a second (v2: two lines right of the rule)
-              <View style={{ flexDirection: "row", overflow: "hidden" }}>{sub.line2}</View>
-            ) : null}
-          </View>
-        </Animated.View>
-      ) : null}
+    </Animated.View>
+  );
+}
+
+/**
+ * The status as the second line right of the rule (v2 «Клиент · VIP / ◷ Активный»): the status's icon and its word, 13/500 `mut` —
+ * no plate (rule 2: an icon and a word, never a colour alone). A tap — the office's StatusPicker.
+ */
+export function HeadStatus({ status, icon, label, onPress, testID }: { status: StatusName; icon?: IconKey; label: string; onPress?: () => void; testID?: string }) {
+  const { c } = useTheme();
+  const line = (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space[1], minWidth: 0 }}>
+      <Icon name={icon ?? statusIcon[status]} s={size.iconXs} color={c.mut} />
+      <T v="caption" w="medium" tone="mut" numberOfLines={1} style={{ flexShrink: 1 }}>
+        {label}
+      </T>
+    </View>
+  );
+  return onPress ? (
+    <Press testID={testID} onPress={onPress} visibleHeight={component.chip.h} accessibilityRole="button" accessibilityLabel={label} containerStyle={{ alignSelf: "flex-start", maxWidth: "100%" }}>
+      {line}
+    </Press>
+  ) : (
+    <View testID={testID} accessibilityRole="text" accessibilityLabel={label} style={{ alignSelf: "flex-start", maxWidth: "100%" }}>
+      {line}
     </View>
   );
 }

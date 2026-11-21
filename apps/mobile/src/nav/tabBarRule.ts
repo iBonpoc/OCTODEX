@@ -55,7 +55,7 @@ export const WITH_TAB_BAR = [
   "company/payments",
   "company/modules",
   "company/checklists",
-  "estimate/templates", "estimates", "figures/[metric]", "help",
+  "estimate/templates", "estimates", "figures/[metric]", "finance", "help",
   "invoice", "jobs", "leads",
   // a module's own screens (spec 33 П20.3): its lists and cards keep the bar (#1426, design audit: «Замеры» had none, the
   // core's lists have it); the full-screen ones (ModuleDef.fullScreen: the canvas) hide it themselves (useHideTabBar in the route)

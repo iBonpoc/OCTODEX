@@ -25,7 +25,7 @@ describe("StatTile / StatGrid (BUILD-SPEC §1)", () => {
     expect(src).not.toMatch(/pastels/);
     expect(src).toMatch(/label: string;/);
     expect(src).toMatch(/c\.status\.warn\.text/);
-    expect(src).toMatch(/minHeight: small \? component\.statTile\.hSm : component\.statTile\.h/);
+    expect(src).toMatch(/minHeight: dense \? component\.statTile\.hSm \+ space\[2\] : small \? component\.statTile\.hSm : component\.statTile\.h/);
     expect(src).toMatch(/backgroundColor: accent \? c\.acc/);
     expect(src).toMatch(/component\.statTile\.icon/);
   });

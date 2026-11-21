@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { View } from "react-native";
 import { router } from "expo-router";
-import { component, space } from "@octo/design-tokens";
+import { component, radius, rhythm, space, spaceHalf } from "@octo/design-tokens";
+import { useTheme } from "@/theme/ThemeProvider";
 import { useStore } from "@/data/store";
 import type { CalendarEvent, CalendarEventKind, ID, Task, Visit } from "@/data/types";
 import { findJob } from "@/data/jobs";
@@ -18,7 +19,7 @@ import { assigneesOf, canReschedule, daysSince, liveAssignees, unassignedSoon, v
 import { memberName } from "@/features/team";
 import { VisitFormSheet } from "@/features/VisitForm";
 import { Avatar, TextField } from "@/ui/controls";
-import { TimeSlot } from "@/ui/figures";
+import { HatchPlate, TimeSlot } from "@/ui/figures";
 import { StatusPill } from "@/ui/statusPill";
 import { nearIndex, plateHalves, problemSummary, quietStatuses } from "@/features/planSlots";
 import { T } from "@/ui/primitives";
@@ -120,7 +121,8 @@ export function PlanRow({ x, onEvent, onAssign, onMove }: { x: PlanItem } & RowH
  */
 export function PlanDay({ items, day, title, testID }: { items: PlanItem[]; day: DayKey; title: string; testID?: string }) {
   const { db } = useStore();
-  const { t, tn, time, duration } = useI18n();
+  const { t, tn, time, duration, dayOf } = useI18n();
+  const { c } = useTheme();
   const rows = items.filter((x) => x.day === day);
   const now = Date.now();
   const near = day === todayKey() ? nearIndex(rows, now) : -1;
@@ -129,22 +131,30 @@ export function PlanDay({ items, day, title, testID }: { items: PlanItem[]; day:
   const kinds = st.map((s) => (!s ? null : s.label === "st.missed" ? "missed" : s.label === "late.enRoute" || s.label === "late.notLeft" ? "late" : null));
   const sum = problemSummary(kinds);
   const sumText = sum ? [sum.late ? tn("w2a.lateN", sum.late) : null, sum.missed ? tn("w2a.missedN", sum.missed) : null].filter(Boolean).join(" · ") : null;
+  // v2 макет 2: the line «сейчас» stands after the last item begun by now (today only)
+  const nowAt = day === todayKey() ? rows.filter((x) => !(x.allDay || x.at === "") && Date.parse(x.start) <= now).length : -1;
+  const nowLine = nowAt >= 0 && rows.length ? <NowLine key="now" label={time(new Date(now).toISOString())} /> : null;
   return (
     <View testID={testID} style={{ gap: space[2] }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+      {/* «Выезды сегодня (06)» — the count in its cell 28 (v2 `.cnt`); the miles and the road time of the day are not in the data */}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], marginTop: space[4] - space[2], marginBottom: rhythm.headGap - space[2] }}>
         <T v="heading" numberOfLines={1} style={{ flexShrink: 1 }}>
-          {title}
+          {day === todayKey() ? t("px1.plan.today") : `${t("px1.plan.day")} · ${dayOf(day)}`}
         </T>
-        <T v="heading" tone="mut" tabular>
-          {String(rows.length).padStart(2, "0")}
-        </T>
+        <View style={{ minWidth: component.dayPill.w - space[3], height: component.avatar.sm, borderRadius: radius.pill, backgroundColor: c.surf, alignItems: "center", justifyContent: "center", paddingHorizontal: space[2] }}>
+          <T v="body" w="bold" tabular>
+            {String(rows.length).padStart(2, "0")}
+          </T>
+        </View>
       </View>
       {sumText ? (
         <View testID="plan-summary" style={{ alignSelf: "flex-start" }}>
           <StatusPill status={sum!.missed ? "bad" : "warn"} label={sumText} />
         </View>
       ) : null}
-      {rows.map((x, i) => {
+      {nowAt === 0 ? nowLine : null}
+      {rows.flatMap((x, i) => {
+        const el = ((): ReactNode => {
         const span = x.allDay || x.at === "";
         const from = span ? itemTimes(x, time, t("plan5.allDay")).when : time(x.start);
         const to = span || !x.end ? "" : time(x.end);
@@ -174,9 +184,13 @@ export function PlanDay({ items, day, title, testID }: { items: PlanItem[]; day:
               to={b}
               near={i === near}
               title={client || "—"}
-              line={[word, work, nobody ? null : names].filter(Boolean).join(" · ")}
+              // v2 макет 2 «Bathroom remodel · Alex»: the job's name before its «: details», the tech by the first name
+              line={[word, work.split(":")[0]?.trim(), nobody ? null : x.people.map((id) => memberName(db, id, t)?.split(/\s+/)[0]).filter(Boolean).join(", ")].filter(Boolean).join(" · ")}
               status={pill}
               right={right}
+              oneLine
+              // v2 макет 2: «в дороге · 30 мин» — the minutes since the tech left (`enRouteAt`), a hatched plate, not a progress
+              top={v.step === "en_route" && v.enRouteAt ? <HatchPlate testID={`plan-road-${v.id}`} label={t("px1.plan.road", { d: duration(Math.max(1, Math.round((now - Date.parse(v.enRouteAt)) / 60_000))) })} /> : undefined}
               onPress={() => router.push(`/visit/${v.id}`)}
             />
           );
@@ -209,6 +223,8 @@ export function PlanDay({ items, day, title, testID }: { items: PlanItem[]; day:
             line={[e.title ? kind : null, names || t("plan5.company")].filter(Boolean).join(" · ")}
           />
         );
+        })();
+        return i + 1 === nowAt ? [el, nowLine] : [el];
       })}
     </View>
   );
@@ -427,3 +443,26 @@ export function MoveVisitSheet({ visit, onClose }: { visit?: Visit; onClose: () 
     />
   );
 }
+
+/**
+ * «8:20 ●——» — the line «сейчас» of today's Day (v2 макет 2 `.now`): the time 12/700 `accText` in the hour column, a dot 8 and a
+ * hairline of the accent from the cards' edge to the screen's (85 %).
+ */
+function NowLine({ label }: { label: string }) {
+  const { c } = useTheme();
+  const { t } = useI18n();
+  const k = component.timeSlot;
+  const dot = space[2];
+  return (
+    <View testID="plan-now" accessibilityRole="text" accessibilityLabel={t("px1.plan.nowA11y", { time: label })} style={{ flexDirection: "row", alignItems: "center", height: dot + spaceHalf.hair, marginVertical: -spaceHalf.hair }}>
+      <View style={{ width: k.timeW + space[2] + spaceHalf.hair - dot / 2 }}>
+        <T v="micro" w="bold" style={{ color: c.accText }} numberOfLines={1}>
+          {timeLead(label).top}
+        </T>
+      </View>
+      <View style={{ width: dot, height: dot, borderRadius: radius.pill, backgroundColor: c.acc }} />
+      <View style={{ flex: 1, height: component.hairline, backgroundColor: c.acc, opacity: NOW_OPACITY }} />
+    </View>
+  );
+}
+const NOW_OPACITY = 0.85;

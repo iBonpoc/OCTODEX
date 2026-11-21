@@ -79,7 +79,7 @@ describe("the other templates", () => {
   });
   it("a calendar: no strip in «Месяц»; the Week / Month / board is the `view` body in place of the day's rows", () => {
     expect(templateLayout("calendar", { views: true, monthView: true }).under).toEqual(["views", "month"]);
-    expect(templateLayout("calendar", { viewBody: true, unassigned: true, undated: true }).body).toEqual(["unassigned", "view", "undated"]);
+    expect(templateLayout("calendar", { viewBody: true, unassigned: true, undated: true }).body).toEqual(["view", "unassigned", "undated"]);
     expect(templateLayout("calendar", { viewBody: true, empty: true }).body).toEqual(["view"]);
   });
   it("an overview: no «назад», the next step first", () => {

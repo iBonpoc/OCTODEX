@@ -572,6 +572,7 @@ export function TextField({
   a11yLabel,
   action,
   big,
+  plate,
 }: {
   value: string;
   onChangeText: (s: string) => void;
@@ -618,6 +619,9 @@ export function TextField({
   /** visual v2 «Шторка» (the sum of «Принять оплату», #2217): the one value of a sheet typed large — 22/700 tabular, the frame as tall
    *  as a pinned button (`button.hit` 44 on every width) */
   big?: boolean;
+  /** visual v2 №5 «Смета, редактор» (образец №2 «поле-плашка вместо рамки»): the field is a plate on `surf` with the top highlight,
+   *  no frame (an error still draws the `status.bad` frame), its text 15/600 */
+  plate?: boolean;
 }) {
   const ro = useReadOnly();
   const { c } = useTheme();
@@ -659,8 +663,9 @@ export function TextField({
         minHeight: h,
         borderRadius: radius.field,
         borderWidth: 1,
-        borderColor: shownError ? c.status.bad.fill : c.bdField,
-        backgroundColor: c.in,
+        borderColor: shownError ? c.status.bad.fill : plate ? "transparent" : c.bdField,
+        borderTopColor: shownError ? c.status.bad.fill : plate ? c.hl : c.bdField,
+        backgroundColor: plate ? c.surf : c.in,
         flexDirection: "row",
         alignItems: multi ? "flex-start" : "center",
         paddingHorizontal: space[3],
@@ -718,7 +723,7 @@ export function TextField({
           // the browser's textarea does not grow by itself; a phone's multi-line field does (minHeight is enough there)
           height: multi && Platform.OS === "web" ? Math.max(minH, textH) : undefined,
           color: c.ink,
-          fontFamily: big ? font.families.bold : font.families.regular,
+          fontFamily: big ? font.families.bold : plate ? font.families.semibold : font.families.regular,
           fontSize: big ? font.size.title : font.size.input,
           lineHeight: one ? line : undefined,
           textAlignVertical: multi ? "top" : "center",

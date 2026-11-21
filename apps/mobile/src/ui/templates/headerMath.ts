@@ -3,14 +3,18 @@
  * not a browser). The scroll leads, not a timer: every look below is a function of the page's scroll `y` alone, so a finger that
  * stops halfway holds the header halfway, and a bounce above 0 is the open header. Only transform and opacity (LAYOUT-RULES §8 п.5).
  *
- * Root of a tab (0–64): the 13 line fades 0–24; the 30 title shrinks to `foldScale` on 16–64 and fades on 40–64; the small title in
- * the row comes in on 40–64 (and slides 8 → 0); the row's plate + line fade in on 48–64; the avatar 40 → 36. Folded from 64.
- * Object (0–112): the quick actions fade 0–48 and go up 12; the two lines right of the rule fade 32–72; the name shrinks 56–112 and
- * fades 80–112 while the small one comes in; the parent's word fades 56–80; the plate 96–112; «＋» leaves the row 96–112 (into «⋯»).
+ * Root of a tab (0–64): the 13 line fades 0–24; the big block stands still for the first 16 (`hold`) and then goes up with the page —
+ * «уезжает вверх на 48» on 16–64; the 30 title shrinks to `foldScale` on 16–64 and fades on 40–64; the small title in the row comes
+ * in on 40–64 (and slides 8 → 0); the row's plate + line fade in on 48–64; the avatar 40 → 36. Folded from 64.
+ * Object (0–112): the quick actions fade 0–48 and go up 12; the two lines right of the rule fade 32–72; the name waits on 0–56
+ * (`hold`), then shrinks 56–112 (30 → 17), goes up into the row and right to the place right of «←» (`shiftX` 48), fades 80–112
+ * while the small one comes in; the parent's word fades 56–80; the plate 96–112; «＋» leaves the row 96–112 (into «⋯»).
+ * Nothing is drawn over the row: the big block is cut at the row's bottom (`bigClip`) — it goes UNDER the row, never over «←», the
+ * avatar or the small title, at every `y`.
  * Let go between the ends: the nearer end (the half 32 / 56), `durBase` easeOut; a fling down folds at once. Reduce Motion: no shift
  * and no scale — at the half the big block and the small title swap by a fade (`durFast`).
  */
-import { component } from "@octo/design-tokens";
+import { component, font } from "@octo/design-tokens";
 
 export type HeaderKind = "root" | "object" | "editor";
 
@@ -30,6 +34,16 @@ const lerp = (from: number, to: number, p: number) => {
   return from + (to - from) * p;
 };
 
+/**
+ * The one-line title's scale (v2: «сжимается до 22,5 по fitMinScale, потом «…»»): its natural width `nat` in the `room` it has —
+ * 1 when it fits, down to `font.fitMinScale` (30 → 22,5); past that the caller cuts it with «…» at that scale. Not measured — 1.
+ */
+export function fitScale(nat: number, room: number): number {
+  "worklet";
+  if (!(nat > 0) || !(room > 0) || room >= nat - 0.5) return 1;
+  return Math.max(font.fitMinScale, room / nat);
+}
+
 /** where the header is folded (pt of scroll); an editor never folds */
 export function foldEnd(kind: HeaderKind): number {
   "worklet";
@@ -42,13 +56,36 @@ export function foldHalf(kind: HeaderKind): number {
   return foldEnd(kind) / 2;
 }
 
+/**
+ * How long the big block stands still (pt of scroll, v2 table): root 16, object 56 — never more than `holdMax`, the room the page
+ * gives it below (what fades out under the name: an object without quick actions has less), so the held block never meets the
+ * content coming up under it.
+ */
+export function holdOf(kind: HeaderKind, holdMax?: number): number {
+  "worklet";
+  const h = kind === "root" ? H.root.hold : kind === "object" ? H.object.hold : 0;
+  return holdMax !== undefined && holdMax >= 0 ? Math.min(h, holdMax) : h;
+}
+
+/**
+ * The cut of the big block at the row's bottom (the block's own top when open): the clip window goes DOWN by this (pt) as the page
+ * goes up, so it stays at the row's bottom, and the block inside goes up by the same plus its own `titleY` — whatever went above the
+ * row's bottom is not drawn. 0 at rest and on a bounce (y < 0).
+ */
+export function bigClip(y: number): number {
+  "worklet";
+  return y > 0 ? y : 0;
+}
+
 /** what every part of the header looks like at a scroll `y` */
 export interface HeaderFrame {
   /** the 13 line over the title (the date, «Демо») / the parent's word next to «←» */
   kick: number;
-  /** the big title: opacity, scale (from its left top), lift (pt up, on top of the scroll's own) */
+  /** the big title: opacity, scale (from its left), and its own shift over the scroll's: `titleY` down (the hold), `titleX` right */
   title: number;
   titleScale: number;
+  titleY: number;
+  titleX: number;
   /** the two lines right of the rule (an object) */
   sub: number;
   /** quick actions, the address line (an object): opacity and the shift up */
@@ -67,14 +104,15 @@ export interface HeaderFrame {
   avatarScale: number;
 }
 
-const OPEN: HeaderFrame = { kick: 1, title: 1, titleScale: 1, sub: 1, actions: 1, actionsY: 0, mini: 0, miniY: H.root.miniShift, plate: 0, plus: 1, demoDot: 0, avatarScale: 1 };
+const OPEN: HeaderFrame = { kick: 1, title: 1, titleScale: 1, titleY: 0, titleX: 0, sub: 1, actions: 1, actionsY: 0, mini: 0, miniY: H.root.miniShift, plate: 0, plus: 1, demoDot: 0, avatarScale: 1 };
 
 /**
  * The look at scroll `y`. `reduce` (Reduce Motion): the parts are only 0 or 1 by the half — the caller fades between them in
  * `durFast` — and nothing moves or scales.
  */
-export function headerFrame(kind: HeaderKind, y: number, reduce = false): HeaderFrame {
+export function headerFrame(kind: HeaderKind, y: number, reduce = false, holdMax?: number): HeaderFrame {
   "worklet";
+  const yy = y > 0 ? y : 0;
   if (kind === "editor") {
     // one line, never folds: the plate only says the page went under it
     const plate = reduce ? (y > 0 ? 1 : 0) : ramp(y, 0, H.bar / 4);
@@ -83,7 +121,7 @@ export function headerFrame(kind: HeaderKind, y: number, reduce = false): Header
   if (reduce) {
     const past = y >= foldHalf(kind) ? 1 : 0;
     const off = 1 - past;
-    return { kick: off, title: off, titleScale: 1, sub: off, actions: off, actionsY: 0, mini: past, miniY: 0, plate: past, plus: kind === "object" ? off : 1, demoDot: past, avatarScale: 1 };
+    return { kick: off, title: off, titleScale: 1, titleY: 0, titleX: 0, sub: off, actions: off, actionsY: 0, mini: past, miniY: 0, plate: past, plus: kind === "object" ? off : 1, demoDot: past, avatarScale: 1 };
   }
   if (kind === "root") {
     const r = H.root;
@@ -93,6 +131,8 @@ export function headerFrame(kind: HeaderKind, y: number, reduce = false): Header
       kick,
       title: 1 - ramp(y, r.titleFadeFrom, r.end),
       titleScale: lerp(1, H.foldScale, ramp(y, r.titleFrom, r.end)),
+      titleY: Math.min(yy, holdOf(kind, holdMax)),
+      titleX: 0,
       sub: kick,
       actions: 1,
       actionsY: 0,
@@ -111,6 +151,8 @@ export function headerFrame(kind: HeaderKind, y: number, reduce = false): Header
     kick: parent,
     title: 1 - ramp(y, o.titleFadeFrom, o.end),
     titleScale: lerp(1, H.foldScale, ramp(y, o.titleFrom, o.end)),
+    titleY: Math.min(yy, holdOf(kind, holdMax)),
+    titleX: lerp(0, o.shiftX, ramp(y, o.titleFrom, o.end)),
     sub: 1 - ramp(y, o.subFrom, o.subEnd),
     actions: 1 - actionsP,
     actionsY: -o.actionsShift * actionsP,
@@ -121,6 +163,19 @@ export function headerFrame(kind: HeaderKind, y: number, reduce = false): Header
     demoDot: 1 - parent,
     avatarScale: 1,
   };
+}
+
+/**
+ * Where the big title's top is on the screen at `y`, from the block's open top (= the row's bottom): its own place in the block `at`
+ * (pt), moved by the scroll and the hold; and what of it shows — the part below the row's bottom (0 … 1 of its height `h`, scaled).
+ */
+export function titleOnScreen(kind: HeaderKind, y: number, at: number, h: number, holdMax?: number): { top: number; bottom: number; shown: number } {
+  "worklet";
+  const f = headerFrame(kind, y, false, holdMax);
+  const top = at - (y > 0 ? y : 0) + f.titleY;
+  const bottom = top + h * f.titleScale;
+  const vis = Math.max(0, bottom - Math.max(0, top));
+  return { top, bottom, shown: h > 0 ? Math.min(1, vis / (h * f.titleScale)) : 0 };
 }
 
 /**
@@ -135,6 +190,21 @@ export function settleTarget(kind: HeaderKind, y: number, velocity = 0): number 
   if (velocity >= H.flick) return end;
   if (velocity <= -H.flick) return 0;
   return y >= end / 2 ? end : 0;
+}
+
+/**
+ * The web has no finger to lift: the page that stood still `header.pauseMs` is let go. Only strictly between the open and the folded
+ * header (0 < y < end) — a jump to the very end (an e2e `scrollTo`, the end of the list) or to the top never moves; `null` — stay.
+ */
+export function pauseTarget(kind: HeaderKind, y: number): number | null {
+  "worklet";
+  return settleTarget(kind, y, 0);
+}
+
+/** the open contacts panel over the folded header: the page went further than `header.panelCloseScroll` from where it opened */
+export function panelCloses(openedAt: number, y: number): boolean {
+  "worklet";
+  return Math.abs(y - openedAt) > H.panelCloseScroll;
 }
 
 /** the folded stage the row's controls follow (touches, «＋» into «⋯»): 0 open, 1 past the half, 2 folded */
@@ -163,6 +233,8 @@ export function reducedFrame(kind: HeaderKind, p: number): HeaderFrame {
     kick: m(a.kick, b.kick),
     title: m(a.title, b.title),
     titleScale: 1,
+    titleY: 0,
+    titleX: 0,
     sub: m(a.sub, b.sub),
     actions: m(a.actions, b.actions),
     actionsY: 0,

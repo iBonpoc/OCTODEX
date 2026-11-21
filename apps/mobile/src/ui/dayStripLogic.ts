@@ -1,5 +1,5 @@
 /** The math of the day strip (src/ui/dayStrip.tsx, BUILD-SPEC §1 «DayStrip»): which days, where it scrolls, how a pill looks. */
-import { component, space } from "@octo/design-tokens";
+import { component } from "@octo/design-tokens";
 import { addDays, weekStart, type DayKey } from "@/features/calendar";
 import type { DayLoad } from "@/features/planFeed";
 
@@ -14,9 +14,11 @@ export function stripDays(k: DayKey): DayKey[] {
   return Array.from({ length: 7 * STRIP_WEEKS }, (_, i) => addDays(from, i));
 }
 
-/** where the strip scrolls so the pill `i` stands in the middle of a row `w` wide (never before the start) */
+/** where the strip scrolls (v2 макет 2): the picked day's week stands at the row's start — «Пн 16 … Вс 22» fill a 390 row (7 × 46 + 6 × 6
+ *  = 358); `w` is kept for the callers (a row narrower than a week still starts at its Monday) */
 export function stripOffset(i: number, w: number): number {
-  return Math.max(0, space[4] + i * (pill.w + pill.gap) - (w - pill.w) / 2);
+  void w;
+  return Math.max(0, Math.floor(i / 7) * 7 * (pill.w + pill.gap));
 }
 
 /** what a pill looks like (visual v2 «Пилюли дней»): the picked one is the accent's TONE with a 1.5 accent frame and its words in

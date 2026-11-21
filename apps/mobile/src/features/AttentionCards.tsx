@@ -197,7 +197,7 @@ export function useHomeHeader() {
         ]
       : []),
     search,
-    ...(role !== "tech" ? [{ icon: "bell" as IconKey, a11y: n ? t("nav.bellNew", { n }) : t("nav.bell"), onPress: () => router.push("/notifications"), testID: "home-bell", badge: n ? { n } : undefined }] : []),
+    ...(role !== "tech" ? [{ icon: "bell" as IconKey, a11y: n ? t("nav.bellNew", { n }) : t("nav.bell"), onPress: () => router.push("/notifications"), testID: "home-bell", badge: n ? { n, dot: true } : undefined }] : []),
   ];
   const me = db.members.find((m) => m.id === db.me);
   const loc = lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU";

@@ -87,7 +87,7 @@ export function DayCell({ day, load, selected, dim, head, pill: asPill, onPress 
       {asPill ? (
         <>
           <T v="micro" style={{ color: c[look.head] }} numberOfLines={1} capped>
-            {head}
+            {head ? head.charAt(0).toUpperCase() + head.slice(1) : head}
           </T>
           <T v="heading" w={look.bold ? "bold" : "semibold"} style={{ color: c[look.num] }} tabular capped>
             {Number(day.slice(8))}
@@ -189,6 +189,56 @@ export function MonthHead({ date, onPick, step = 7, testID = "plan-month" }: { d
 const PAST: DayKey = "2000-01-01";
 
 /**
+ * The month head as the one header's big block (v2 макет 2 «План»: «Ноябрь ⌄» 30 — a button that opens the month in place — and
+ * the circles ‹ › 32 on the right; «Сегодня» before them when another day is picked). `useMonthHead` keeps its state; the screen
+ * gives `title` / `toggle` to the header (`HeadSpec.titlePress`), `MonthArrows` to its `trailing`, `MonthPick` under it.
+ * The same testIDs as MonthHead: `-title`, `-today`, `-prev`, `-next`, `-pick`.
+ */
+export function useMonthHead(date: DayKey, onPick: (k: DayKey) => void, step: 7 | "month" = 7) {
+  const { t, lang } = useI18n();
+  const loc = localeOf(lang);
+  const today = todayKey();
+  const [open, setOpen] = useState(false);
+  const month = date.slice(0, 4) === today.slice(0, 4) ? formatDayKey(date, { month: "long" }, loc) : formatDayKey(date, { month: "long", year: "numeric" }, loc);
+  const title = month.charAt(0).toUpperCase() + month.slice(1);
+  return {
+    title,
+    open,
+    label: t("tpl.pickDay", { x: title }),
+    toggle: () => setOpen((o) => !o),
+    close: () => setOpen(false),
+    go: (n: number) => onPick(step === "month" ? addMonths(date, n) : addDays(date, n * 7)),
+    toToday: date !== today ? () => onPick(today) : undefined,
+  };
+}
+
+export function MonthArrows({ head, testID = "plan-month" }: { head: ReturnType<typeof useMonthHead>; testID?: string }) {
+  const { t } = useI18n();
+  return (
+    <RowView style={{ gap: space[2] }}>
+      {head.toToday ? <Button testID={`${testID}-today`} label={t("common.today")} size="sm" variant="secondary" onPress={head.toToday} /> : null}
+      <IconButton testID={`${testID}-prev`} icon="chevronLeft" size="card" label={t("plan.prev")} onPress={() => head.go(-1)} />
+      <IconButton testID={`${testID}-next`} icon="chevronRight" size="card" label={t("plan.next")} onPress={() => head.go(1)} />
+    </RowView>
+  );
+}
+
+export function MonthPick({ head, date, onPick, testID = "plan-month" }: { head: ReturnType<typeof useMonthHead>; date: DayKey; onPick: (k: DayKey) => void; testID?: string }) {
+  if (!head.open) return null;
+  return (
+    <DatePick
+      testID={`${testID}-pick`}
+      value={date}
+      min={PAST}
+      onPick={(k) => {
+        head.close();
+        onPick(k);
+      }}
+    />
+  );
+}
+
+/**
  * The days as pills «Пн / 23 / •» in one row that scrolls sideways (visual v2 «Пилюли дней»): 46 × 64, radius 23, the day
  * 12/600 over the number 17/700; the picked day is the accent's tone `tint` with a 1.5 `acc` frame and `accText` words (not a fill),
  * today's number `accText`, a dot 4 — «есть выезды» (`warn` when a visit there has nobody on it). The picked pill stands in the middle of the row — on the first draw, on a pick and when
@@ -219,9 +269,9 @@ export function DayStrip({ days: given, date, loads, onPick, head = true, testID
         horizontal
         showsHorizontalScrollIndicator={false}
         onLayout={(e) => setW(e.nativeEvent.layout.width)}
-        // the row runs to the screen's edges, the pills start at the padding
-        style={{ marginHorizontal: -space[4] }}
-        contentContainerStyle={{ gap: pill.gap, paddingHorizontal: space[4] }}
+        // v2 макет 2: the row is the screen's width inside its padding — the picked day's week «Пн … Вс» fills it, no sliver of the
+        // weeks beside it (stripOffset)
+        contentContainerStyle={{ gap: pill.gap }}
       >
         {days.map((k) => (
           <DayCell key={k} day={k} load={loads.get(k)} selected={k === date} head={formatDayKey(k, { weekday: "short" }, loc)} pill onPress={() => onPick(k)} />

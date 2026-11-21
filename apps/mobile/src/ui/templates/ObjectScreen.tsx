@@ -42,6 +42,15 @@ export interface ObjectScreenProps<S extends string> {
   onSection: (k: S) => void;
   /** what the strip is of — read with the group («Разделы клиента») */
   sectionsLabel: string;
+  /** the strip's look: visual v2 макет 3 «Клиент» — `chips` (a plate on every pill, the selected one light) */
+  sectionsLook?: "plain" | "chips";
+  /**
+   * the two lines right of the rule, when the screen says them itself (visual v2 макет 3 «Клиент · VIP / ◷ Активный», макет 4
+   * «Sarah Mitchell / 8:30–12:30 · Alex»): a string `line2` is the quiet 13 line — no plate; default — `objectHeadSub(header)`
+   */
+  sub?: { line1?: string; line2?: ReactNode };
+  /** what stands under the header instead of the quick actions row (макет 4 «Выезд»: «◷ Идёт · Код … · ☎ ✉ ◎») */
+  lead?: ReactNode;
   /** the open section's content */
   children: ReactNode;
   more: MoreAction;
@@ -79,20 +88,24 @@ function useObjectParts<S extends string>(p: ObjectScreenProps<S>) {
   const right = <ObjectRight create={p.create} onCreate={p.onCreate} items={items} onMore={onMore} testID={p.testID} />;
   // the selected pill stays one object while the section is the same (03 §2.5: the strip's items memoised)
   const tabs = useMemo(
-    () => (p.sections.length ? <ViewTabs testID={`${p.testID}-sections`} items={p.sections} value={p.section} onChange={p.onSection} label={p.sectionsLabel} /> : null),
-    [p.sections, p.section, p.onSection, p.sectionsLabel, p.testID],
+    () => (p.sections.length ? <ViewTabs testID={`${p.testID}-sections`} items={p.sections} value={p.section} onChange={p.onSection} label={p.sectionsLabel} look={p.sectionsLook} /> : null),
+    [p.sections, p.section, p.onSection, p.sectionsLabel, p.sectionsLook, p.testID],
   );
   const top = (
     <View style={{ gap: space[4] }}>
-      <ObjectHeader {...p.header} inHead open={open} onToggle={setOpen} />
-      {p.actions?.length ? (
-        <HeaderFade>
-          {/* 820/1280: the five 44s stay a phone's row on the left — never spread across 1180 with holes between them (audit 2.1) */}
-          <View style={{ maxWidth: screenLayout.formMax }}>
-            <IconRow testID={`${p.testID}-actions`} actions={p.actions} />
-          </View>
-        </HeaderFade>
-      ) : null}
+      {/* v2 «Объект»: the quick actions stand right under the big block (its 4 + the column's 12 — v2 6 + 6), not a gap further */}
+      <View style={{ gap: space[1] }}>
+        <ObjectHeader {...p.header} inHead open={open} onToggle={setOpen} />
+        {p.actions?.length ? (
+          <HeaderFade>
+            {/* 820/1280: the five 44s stay a phone's row on the left — never spread across 1180 with holes between them (audit 2.1) */}
+            <View style={{ maxWidth: screenLayout.formMax }}>
+              <IconRow testID={`${p.testID}-actions`} actions={p.actions} />
+            </View>
+          </HeaderFade>
+        ) : null}
+        {p.lead ? <HeaderFade>{p.lead}</HeaderFade> : null}
+      </View>
       {p.now ?? null}
       {step}
     </View>
@@ -100,9 +113,9 @@ function useObjectParts<S extends string>(p: ObjectScreenProps<S>) {
   // v2 «Объект»: the name 30 | the rule | two lines; a client's «⌄» (the header has a panel) after the name
   const head = {
     kind: "object" as const,
-    sub: objectHeadSub(p.header),
+    sub: p.sub ?? objectHeadSub(p.header),
     expand: p.header.details
-      ? { open, onToggle: setOpen, expandLabel: p.header.labels.expand, collapseLabel: p.header.labels.collapse, testID: `${p.header.testID}-toggle` }
+      ? { open, onToggle: setOpen, expandLabel: p.header.labels.expand, collapseLabel: p.header.labels.collapse, testID: `${p.header.testID}-toggle`, panel: p.header.contacts ?? p.header.details }
       : undefined,
   };
   return { right, tabs, top, head };

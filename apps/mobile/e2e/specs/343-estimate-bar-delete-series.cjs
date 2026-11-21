@@ -84,7 +84,7 @@ exports.run = async (h) => {
   // another toast between two deletions ends the series: the next deletion is «Позиция удалена», not «Удалено позиций: 2»
   await tid(`est-trash-${x}`).getByRole("button").click();
   await p.waitForFunction(() => /Позиция удалена/.test(document.querySelector('[data-testid="toast-text"]')?.textContent || ""), null, { timeout: 3000 });
-  await tid(`est-menu-${keep}`).getByRole("button").click();
+  await line.menu(h, keep);
   await tid(`est-act-duplicate-${keep}`).click();
   await p.waitForFunction(() => !/Позиция удалена/.test(document.querySelector('[data-testid="toast-text"]')?.textContent || ""), null, { timeout: 3000 });
   await tid(`est-trash-${y}`).getByRole("button").click();

@@ -65,7 +65,7 @@ export const SECTIONS: readonly Section[] = [
   { id: "clients", label: "nav.clients", icon: "users", group: "work", tab: true },
   // redesign #2348: «Деньги» — estimates, invoices, payments behind one tab (a segment switches them)
   // the tech has no «Деньги» tab (audit 12 §2.6): the company's money is the office's; his own estimates are a tile of «Ещё»
-  { id: "finance", label: "nav.money", icon: "invoice", group: "docs", tab: true, phoneOnly: true, roles: OFFICE },
+  { id: "finance", label: "nav.money", icon: "wallet", group: "docs", tab: true, phoneOnly: true, roles: OFFICE },
   // prototype v2: search is an icon in the header (HeaderIcons, /search stays), not a tab
   // «Звонки» is not a tab until the company has its own number (founder 06.11, variant Б; 13 v2 §2.1)
   { id: "calls", label: "nav.calls", icon: "phone", group: "work" },
@@ -103,7 +103,8 @@ export function sectionHref(id: SectionId, role: Role): string {
       // a section of its own for every role (founder 07.11, spec 31 §7а); /leads holds the leads only
       return "/estimates";
     case "finance":
-      return "/estimates";
+      // visual v2 №6 (#2344): the tab opens its overview; the tech has no «Деньги» tab (his estimates are in «Ещё»)
+      return role === "tech" ? "/estimates" : "/finance";
     case "invoices":
       // the one path to debts (18 §1): the list opens on «Не оплачен · Просрочен»
       return "/invoice";

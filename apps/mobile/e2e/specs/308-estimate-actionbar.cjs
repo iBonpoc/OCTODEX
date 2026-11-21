@@ -22,14 +22,15 @@ exports.run = async (h) => {
     await bar.first().waitFor({ timeout: 3000 });
     const bb = await bar.first().boundingBox();
     const vh = p.viewportSize().height;
-    h.expect(Math.abs(bb.y + bb.height - vh) < 4, `the bar is pinned at the bottom (${Math.round(bb.y + bb.height)} of ${vh})`);
+    // visual v2 №5: the bar is a card `cardGap` 8 over the bottom zone
+    h.expect(vh - (bb.y + bb.height) >= 0 && vh - (bb.y + bb.height) < 12, `the bar is pinned at the bottom (${Math.round(bb.y + bb.height)} of ${vh})`);
     const sv = await tid("ue-save").boundingBox();
     h.expect(sv.y >= bb.y && sv.y + sv.height <= bb.y + bb.height + 1, "the buttons are in the bar");
     // the content can be scrolled clear of the bar
-    await tid("est-add-section").scrollIntoViewIfNeeded();
-    await p.evaluate(() => { let e = document.querySelector('[data-testid="est-add-section"]'); while (e && !(e.scrollHeight > e.clientHeight + 50)) e = e.parentElement; if (e) e.scrollTop = e.scrollHeight; });
+    await tid("est-deposit-row").scrollIntoViewIfNeeded();
+    await p.evaluate(() => { let e = document.querySelector('[data-testid="est-deposit-row"]'); while (e && !(e.scrollHeight > e.clientHeight + 50)) e = e.parentElement; if (e) e.scrollTop = e.scrollHeight; });
     await p.waitForFunction(() => new Promise((r) => { let n = 0; const f = () => (++n > 12 ? r(true) : requestAnimationFrame(f)); f(); }), null, { timeout: 5000 });
-    const last = await tid("est-add-section").boundingBox();
+    const last = await tid("est-deposit-row").boundingBox();
     const bb2 = await bar.first().boundingBox();
     h.expect(last.y + last.height <= bb2.y + 1, "the last button of the page stands clear of the bar");
   } else {

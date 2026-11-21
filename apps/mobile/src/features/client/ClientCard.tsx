@@ -23,7 +23,8 @@ import { MessageSheet, type MessagePreset } from "@/features/comms/MessageSheet"
 import { callPlaceForClient } from "@/features/comms/comms";
 import { PeopleSheet, StatusSheet, TagsSheet } from "@/features/client/ClientSheets";
 import { newProperty, PropertySheet } from "@/features/client/PropertySheets";
-import { clientSectionKeys, type ClientMainStep, type ClientSectionKey } from "@/features/client/nextStep";
+import { clientSectionKeys, jobChain, type ClientMainStep, type ClientSectionKey } from "@/features/client/nextStep";
+import { ClientContacts } from "@/features/client/ClientContacts";
 import { ClientDetails, ClientEstimates, ClientLog, ClientMoney, ClientNowCard, ClientOverview, ClientPlaces, ClientWork, clientStepOf, useClientFacts } from "@/features/client/ClientSections";
 import { TaskSheet, type TaskDraft } from "@/features/tasks/TaskSheet";
 import { cleanPhone, mailtoHref } from "@/features/contactLinks";
@@ -82,8 +83,8 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
   /** v2 «быстрые действия»: five icons 44 with their words; what cannot be done is dimmed with the reason (VoiceOver) */
   const quick: IconRowItem[] = [
     { icon: "phone", label: t("client.call"), a11y: `${t("client.call")} ${c.name}`, onPress: call, testID: "client-call", disabled: !tel, reason: t("w2b.client.noPhone") },
-    { icon: "sms", label: t("cc.sms"), a11y: `${t("cc.sms")} ${c.name}`, onPress: () => sms(), testID: "client-write", disabled: !tel || !main, reason: t("w2b.client.noPhone") },
-    { icon: "navigate", label: t("client.route"), a11y: place ? `${t("client.route")}: ${place.address}` : t("client.route"), onPress: () => place && route(place), testID: "client-route", disabled: !place, reason: t("w2b.client.noPlace") },
+    { icon: "message", label: t("cc.sms"), a11y: `${t("cc.sms")} ${c.name}`, onPress: () => sms(), testID: "client-write", disabled: !tel || !main, reason: t("w2b.client.noPhone") },
+    { icon: "pin", label: t("client.route"), a11y: place ? `${t("client.route")}: ${place.address}` : t("client.route"), onPress: () => place && route(place), testID: "client-route", disabled: !place, reason: t("w2b.client.noPlace") },
     { icon: "mail", label: t("cl6.writeMail"), a11y: `${t("cl6.writeMail")} ${c.name}`, onPress: () => mail && Linking.openURL(mail).catch(() => {}), testID: "client-mail", disabled: !mail, reason: t("w2b.client.noMail") },
     ...(estimateHref && canServe(db, c.id) ? [{ icon: "ruler" as const, label: t("w2b.client.measure"), a11y: `${t("w2b.client.measure")}: ${c.name}`, onPress: () => router.push(estimateHref as Href), testID: "client-measure" }] : []),
   ];
@@ -101,6 +102,9 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
   const estimateItem = fabItems("client", role, { customerId: c.id }).find((i) => i.id === "estimate");
   const step = clientStepOf(f, estimateItem && canServe(db, c.id) ? estimateItem.href : undefined);
   const docNo = (x: { number?: string; title?: string }) => x.number || x.title || "";
+  const nowJob = f.now && (f.now.kind === "working" || f.now.kind === "scheduled") ? f.now.job : undefined;
+  const nowEst = nowJob ? r.estimates.find((e) => e.id === nowJob.estimateId) : undefined;
+  const depositPaid = !!nowJob && jobChain(nowJob, nowEst, r.invoices).some((x) => x.key === "deposit" && x.done);
   const mainStep: MainAction | undefined = !step
     ? undefined
     : (() => {
@@ -109,7 +113,8 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
           case "pay":
             return { testID, label: t("w2b.client.pay"), reason: t("w2b.client.payWhy", { n: docNo(step.invoice) }), onPress: () => router.push(step.href as Href) };
           case "bill":
-            return { testID, label: t("inv.issue"), reason: t("w2b.client.billWhy"), onPress: () => router.push(step.href as Href) };
+            // v2 макет 3 «задаток оплачен, …»: the deposit of the «Сейчас» job paid — say so; else the plain reason
+            return { testID, label: t("inv.issue"), reason: depositPaid ? t("px2.cv.billWhyDeposit") : t("w2b.client.billWhy"), onPress: () => router.push(step.href as Href) };
           case "send":
             return { testID, label: t("cc.next.send"), reason: t("cc.why.send", { n: docNo(step.estimate) }), onPress: () => router.push(step.href as Href) };
           case "estimate":
@@ -201,12 +206,18 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
           testID: "client-header",
           title: c.name,
           avatar: initials(c.name),
-          status: { name: chip.s, label: statusWord, onPress: office && statusOptions.length ? () => setPicking(true) : undefined },
-          // the line right of the rule holds one tag and «+N» (v2 «Клиент · VIP»): never «VIP · Постоя…»; all of them are in «⋯ Метки»
-          meta: headTags([...tags.map((x) => ({ id: x.id, label: tagLabel(x, t) })), ...(noLateCallsNow(db, c) ? [{ id: "late", label: t("client.lateCalls") }] : [])]),
+          // v2 макет 3: «◷ Активный» — the clock for an active client
+          status: { name: chip.s, label: statusWord, icon: status === "active" ? "clock" : undefined, onPress: office && statusOptions.length ? () => setPicking(true) : undefined },
+          // the line right of the rule (v2 «Клиент · VIP», the founder 21.11 «нет разделения Клиент · VIP»): what it is and its first
+          // tag — never «VIP · Постоя…»; all of them are in «⋯ Метки»
+          kindWord: t("client.card"),
+          meta: headTags([...tags.map((x) => ({ id: x.id, label: tagLabel(x, t) })), ...(noLateCallsNow(db, c) ? [{ id: "late", label: t("client.lateCalls") }] : [])]).slice(0, 1),
           details: <ClientDetails c={c} f={f} onCall={(p) => callDone(p)} onSms={(p) => sms(p)} onRoute={route} />,
+          // v2 «⌄ в свёрнутой»: the contacts, one row 48 each, over the page
+          contacts: <ClientContacts c={c} f={f} onCall={(p) => callDone(p)} onSms={(p) => sms(p)} onRoute={route} />,
           onEdit: office ? () => router.push(`/client/edit?id=${c.id}`) : undefined,
-          labels: { expand: t("proto.client.expand"), collapse: t("proto.client.collapse"), more: (n) => t("cw4.moreTags", { n }), edit: t("ue.edit") },
+          // «⌄» says what it opens (the founder 21.11: «стрелочка вниз возле имени — не понимаю, что делает»)
+          labels: { expand: t("hdr.contacts"), collapse: t("hdr.contactsHide"), more: (n) => t("cw4.moreTags", { n }), edit: t("ue.edit") },
         }}
         actions={quick}
         now={<ClientNowCard f={f} main={mainStep} />}
@@ -214,6 +225,7 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
         section={current}
         onSection={onSection}
         sectionsLabel={t("cl6.tabs")}
+        sectionsLook="chips"
         create={create}
         onCreate={onCreate}
         more={more}

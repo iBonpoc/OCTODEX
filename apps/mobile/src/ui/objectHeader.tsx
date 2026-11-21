@@ -7,9 +7,9 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { Avatar, IconButton, StatusChip } from "./controls";
 import { MetaLine } from "./metaLine";
 import { ButtonPair } from "./pairs";
-import { Press, T } from "./primitives";
+import { Press, T, type IconKey } from "./primitives";
 import { IconRow, type IconRowItem } from "./iconRow";
-import { HeaderFade, useHeaderParent } from "./templates/screenHeader";
+import { HeadStatus, HeaderFade, useHeaderParent } from "./templates/screenHeader";
 import { compactProgress, expandEndsOpen, expandShown, expandSwipeStart, followFrom, isCompact, panelMotion, type ExpandRule } from "./objectHeaderMath";
 
 /** a tag of the meta line («VIP», «Regular»): drawn as `MetaTag`, the ones that do not fit go into «+N» (MetaLine) */
@@ -31,10 +31,14 @@ export interface ObjectHeaderProps {
   title: string;
   /** the tags after the status: «VIP · Regular» */
   meta?: MetaPart[];
+  /** what the object is, first on the line right of the rule (v2 «Клиент · VIP») */
+  kindWord?: string;
+  /** the contacts panel over the page when «⌄» is pressed in the folded row (v2 «⌄ в свёрнутой»: 4 rows 48); `details` by default */
+  contacts?: ReactNode;
   /** the sum at the end of the meta line («$1,840») */
   amount?: string;
   /** StatusPill; `onPress` — the office's StatusPicker */
-  status?: { name: StatusName; label: string; onPress?: () => void };
+  status?: { name: StatusName; label: string; onPress?: () => void; /** the icon of the status line instead of the status's own (v2 «◷ Активный») */ icon?: IconKey };
   /** the address line 13 `accText` «›» — opens the route in the platform's maps (#2353); hidden while the panel is open */
   address?: { text: string; onPress: () => void };
   /** «Клиент ›» — the parent object */
@@ -60,23 +64,14 @@ export interface ObjectHeaderProps {
 }
 
 /**
- * The object's lines for the one header's big block (v2 «Объект»): right of the rule — the tags and the sum 15/600, under them the
- * StatusPill (the office's StatusPicker on a tap). testIDs `<testID>-status`, `<testID>-meta`.
+ * The object's lines for the one header's big block (v2 «Объект»): right of the rule — what it is, the tags and the sum 15/600
+ * («Клиент · VIP»), under them the status 13/500 «◷ Активный» — its icon and word, no plate (the office's StatusPicker on a tap). testIDs `<testID>-status`, `<testID>-meta`.
  */
 export function objectHeadSub(p: ObjectHeaderProps): { line1?: string; line2?: ReactNode } {
   const id = (part: string) => `${p.testID}-${part}`;
-  const line1 = [...(p.meta ?? []).map((m) => m.label), p.amount].filter(Boolean).join(" · ") || undefined;
-  const line2 = p.status ? (
-    p.status.onPress ? (
-      <Press testID={id("status")} onPress={p.status.onPress} visibleHeight={component.chip.h} accessibilityRole="button" accessibilityLabel={p.status.label} containerStyle={{ alignSelf: "flex-start" }}>
-        <StatusChip status={p.status.name} label={p.status.label} />
-      </Press>
-    ) : (
-      <View testID={id("status")} style={{ alignSelf: "flex-start" }}>
-        <StatusChip status={p.status.name} label={p.status.label} />
-      </View>
-    )
-  ) : undefined;
+  const line1 = [p.kindWord, ...(p.meta ?? []).map((m) => m.label), p.amount].filter(Boolean).join(" · ") || undefined;
+  // v2: «◷ Активный» 13/500 — the status's icon and word, no plate
+  const line2 = p.status ? <HeadStatus testID={id("status")} status={p.status.name} icon={p.status.icon} label={p.status.label} onPress={p.status.onPress} /> : undefined;
   return { line1, line2 };
 }
 
@@ -197,7 +192,8 @@ export function ObjectHeader(p: ObjectHeaderProps) {
 
   return (
     <GestureDetector gesture={pan}>
-      <View testID={p.testID} style={{ gap: space[2] }}>
+      {/* in the one header nothing of it shows while shut and without a link / address: no gap of its own then */}
+      <View testID={p.testID} style={{ gap: p.inHead && !open && !link && !p.address && !p.actions?.length ? 0 : space[2] }}>
         {p.inHead ? null : (
         <View style={{ flexDirection: "row", alignItems: "center", gap: space[3] }}>
           {p.avatar ? <Avatar initials={p.avatar} s={component.avatar.md} /> : null}

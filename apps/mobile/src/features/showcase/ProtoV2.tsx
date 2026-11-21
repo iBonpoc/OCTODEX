@@ -12,7 +12,7 @@ import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { CheckList, type CheckItem } from "@/ui/checkList";
 import { IconButton, ProgressBar, Segmented } from "@/ui/controls";
-import { FigureRow, NumberTrio, TimeSlot, TimerLine } from "@/ui/figures";
+import { CountPill, FigureRow, HatchPlate, NumberTrio, ProgressWords, TimeSlot, TimerLine, TonePill } from "@/ui/figures";
 import { IconRow } from "@/ui/iconRow";
 import { ButtonPair } from "@/ui/pairs";
 import { T } from "@/ui/primitives";
@@ -22,7 +22,7 @@ import { useToast } from "@/ui/overlays";
 import { NO_UNDO } from "@/data/undo";
 
 export function ProtoV2() {
-  const { t } = useI18n();
+  const { t, duration } = useI18n();
   const { c } = useTheme();
   const toast = useToast();
   const said = (label: string) => () => toast.show(label, NO_UNDO);
@@ -74,6 +74,10 @@ export function ProtoV2() {
         <CheckList testID="showcase-v2-check" items={items} onToggle={(k, d) => setItems((xs) => xs.map((x) => (x.key === k ? { ...x, done: d } : x)))} />
         <TimerLine testID="showcase-v2-timer" value="1:12:40" since={t("ds.v2.since", { t: "8:34" })} action={{ icon: "chevronUp", a11y: t("ds.v2.timerFold"), onPress: said(t("ds.v2.timerFold")), testID: "showcase-v2-timer-fold" }} />
         <NumberTrio testID="showcase-v2-trio" items={[{ value: t("ds.v2.hours", { n: 4 }), label: t("ds.v2.onSite") }, { value: t("ds.v2.min", { n: 12 }), label: t("ds.v2.onRoad") }, { value: "Alex", label: t("ds.v2.tech") }]} />
+        {/* v2 макеты 3–4: progress in words, the trio without cells, the warm access pill */}
+        <ProgressWords testID="showcase-v2-words" caption={t("px2.cv.workCap")} value={t("px2.cv.ofPct", { n: 3, m: 5, p: 60 })} />
+        <NumberTrio testID="showcase-v2-trio-plain" look="plain" items={[{ value: "$3,420", label: t("px2.cv.estimate") }, { value: "$342", label: t("px2.cv.deposit") }, { value: "$3,078", label: t("px2.cv.work") }]} />
+        <TonePill testID="showcase-v2-tone-pill" tone="warn" icon="key" label={t("px2.cv.code", { code: "4512" })} />
         <ButtonPair
           main={{ label: t("ds.v2.finish"), icon: "check", onPress: said(t("ds.v2.finish")) }}
           second={{ label: t("ds.proto.photo"), icon: "camera", onPress: said(t("ds.proto.photo")) }}
@@ -94,11 +98,17 @@ export function ProtoV2() {
       <View style={{ gap: rhythm.cardGap }}>
         <FigureRow testID="showcase-v2-row-late" icon="doc" title="David Kim" line="INV-0101 · Kitchen faucet" cols={[{ label: t("ds.v2.due"), value: t("ds.v2.days", { n: -9 }), tone: "bad" }, { label: t("ds.v2.sum"), value: "$1,840" }]} onPress={said("David Kim")} />
         <FigureRow testID="showcase-v2-row-soon" icon="calendar" title="8:30–12:30" line="Bathroom remodel · Alex" status={{ status: "info", label: t("st.sent") }} />
+        {/* №5 «Смета, редактор»: the client card with the pastel initials, «Позиции  7» with its count */}
+        <FigureRow testID="showcase-v2-row-client" avatar={{ initials: "LA", name: "Linda Alvarez" }} title="Linda Alvarez" line="2207 Ocean Park Blvd, Santa Monica" onPress={said("Linda Alvarez")} />
+        <RowView>
+          <T v="heading">{t("ue.items")}</T>
+          <CountPill n={7} testID="showcase-v2-count" />
+        </RowView>
       </View>
       {/* the time and the interval: the nearest in the accent's tone, not a fill */}
       <View style={{ gap: rhythm.cardGap }}>
         <TimeSlot testID="showcase-v2-slot-late" hour="7:30" length={t("ds.v2.hours", { n: 2 })} from="7:30" to="9:30" title="James O'Connor" line="Panel upgrade 200A" status={{ status: "bad", label: t("st.late") }} onPress={said("James O'Connor")} />
-        <TimeSlot testID="showcase-v2-slot-near" hour="8:30" length={t("ds.v2.hours", { n: 4 })} near from="8:30" to="12:30" title="Sarah Mitchell" line="Bathroom remodel · Alex" onPress={said("Sarah Mitchell")} />
+        <TimeSlot testID="showcase-v2-slot-near" top={<HatchPlate label={t("px1.plan.road", { d: duration(12) })} />} oneLine hour="8:30" length={t("ds.v2.hours", { n: 4 })} near from="8:30" to="12:30" title="Sarah Mitchell" line="Bathroom remodel · Alex" onPress={said("Sarah Mitchell")} />
       </View>
     </View>
   );

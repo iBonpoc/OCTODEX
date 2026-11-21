@@ -18,7 +18,7 @@ export type MainAction = { label: string; onPress: () => void; reason?: string; 
  * `badge` — a count on the icon (the bell: unread; the sync: the offline queue): a status colour WITH the number (rule 2), «99+» past
  * 99, none at 0; the `a11y` says the number too («Уведомления, 3 новых»).
  */
-export type IconAction = { icon: IconKey; a11y: string; onPress: () => void; testID: string; badge?: { n: number; tone?: StatusName } };
+export type IconAction = { icon: IconKey; a11y: string; onPress: () => void; testID: string; badge?: { n: number; tone?: StatusName; /** a dot 8 instead of the number (the bell, v2 «колокольчик (точка 8)»): the count is in `a11y` */ dot?: boolean } };
 
 /** «＋» in the header: opens a Menu at the button (no floating «＋», no sheet). */
 export type CreateAction = { a11y: string; items: MenuItem<string>[] };

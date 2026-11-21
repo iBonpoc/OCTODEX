@@ -69,3 +69,25 @@ exports.toMiddle = async (h, loc) => {
   // the scroll event reaches the screen a frame later: wait two frames so the page stands
   await h.page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 };
+
+/**
+ * visual v2 №5 (#2344): a folded line has no «≡» and no «⋯». `grip` — what a line is taken by: its «≡» when it has one (a section,
+ * the open line), else its body (a mouse drags it after a move of `gesture.dragStart`). `menu` — the line's actions: the open
+ * line's «⋯», else a long press of the folded row (a mouse; a finger's hold is the drag — e2e cannot show that, rule 27).
+ */
+exports.grip = async (h, key) => {
+  const hd = vis(h, `[data-testid="sort-handle-${key}"]`).first();
+  if (await hd.count()) return hd;
+  return vis(h, `[data-testid="sort-row-${key}"]`).first();
+};
+exports.menu = async (h, id) => {
+  const more = vis(h, `[data-testid="est-menu-${id}"]`).first();
+  if (await more.count()) await more.getByRole("button").click();
+  else await vis(h, `[data-testid="est-line-${id}"]`).first().click({ delay: 700 });
+  await vis(h, '[data-testid="menu-items"]').first().waitFor({ timeout: 3000 });
+};
+/** «＋ Раздел» is in the menu of «слои» (the round 32 beside «Позиции», visual v2 №5) */
+exports.addSection = async (h) => {
+  await vis(h, '[data-testid="est-add-layers"]').first().getByRole("button").click();
+  await vis(h, '[data-testid="est-add-section"]').first().click();
+};

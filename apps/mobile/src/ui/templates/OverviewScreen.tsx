@@ -8,7 +8,7 @@
  */
 import type { ReactNode } from "react";
 import { View } from "react-native";
-import { space } from "@octo/design-tokens";
+import { rhythm } from "@octo/design-tokens";
 import { Collapsible } from "../collapsible";
 import { GroupedList, ListGroup } from "../groupedList";
 import { NowCard, type NowCardProps } from "../nowCard";
@@ -56,7 +56,8 @@ export function OverviewScreen(p: OverviewScreenProps) {
   const g = p.greeting;
   const avatar = g ? (g.onAvatar ? { initials: g.initials, onPress: g.onAvatar, label: g.avatarLabel, testID: "home-profile" } : null) : undefined;
   const body = (
-    <View style={{ gap: space[6] }}>
+    // visual v2 «Поля и ритм»: between blocks 20
+    <View style={{ gap: rhythm.blockGap }}>
       {p.next ? (
         <NowCard {...p.next} main={layout.body.includes("main") ? p.next.main : undefined} testID={`${p.testID}-next`} />
       ) : null}

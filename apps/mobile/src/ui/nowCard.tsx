@@ -7,10 +7,10 @@
  * Nothing — `empty` («На сегодня всё · завтра 9:00»).
  */
 import { View } from "react-native";
-import { size, space, type StatusName } from "@octo/design-tokens";
+import { font, rhythm, size, space, spaceHalf, type StatusName } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button, ProgressBar } from "./controls";
-import { NumberTrio } from "./figures";
+import { NumberTrio, ProgressWords } from "./figures";
 import { ButtonPair } from "./pairs";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { Card, RowView } from "./surfaces";
@@ -22,6 +22,13 @@ export interface NowCardProps {
   kicker: string;
   /** «через 10 мин» on the right (or `status`) */
   when?: string;
+  /** visual v2 Главная (макет 1): «через 10 мин» as an info pill (◷) right after the kicker; `window` — «8:30–12:30» 13 `mut` on the right */
+  soon?: string;
+  window?: string;
+  /** visual v2 Главная: the name 22/700 and the card's v2 rhythm (name +10, progress +12, trio +12, the pair +14) */
+  big?: boolean;
+  /** the icon of the filled `main` («✓ В пути») */
+  mainIcon?: IconKey;
   status?: { status: StatusName; label: string };
   /** the client / the visit's name; none — the card is the `empty` line */
   title?: string;
@@ -44,30 +51,58 @@ export interface NowCardProps {
   /** nothing now: «На сегодня всё · завтра 9:00» */
   empty?: string;
   testID?: string;
+  /**
+   * visual v2 макет 3 «Клиент»: no kicker line — the title 15/600 with the StatusPill on its own line («Bathroom remodel ✓ Смета
+   * принята»); `kicker` is then only read by VoiceOver
+   */
+  bare?: boolean;
+  /** «Смета ✓ · задаток ✓ · работа» on the left, «3 из 5 · 62 %» on the right — progress in words, no bar */
+  words?: { caption: string; value?: string };
+  /** the trio's look: `plain` — the word 12 over the figure 22, no cells (макет 3 `.num3`) */
+  trioLook?: "cells" | "plain";
 }
 
-export function NowCard({ kicker, when, status, title, sub, address, main, second, icon, trio, progress, onPress, empty, testID }: NowCardProps) {
+export function NowCard({ kicker, when, soon, window: span, big, mainIcon, status, title, sub, address, main, second, icon, trio, progress, onPress, empty, testID, bare, words, trioLook }: NowCardProps) {
   const { c } = useTheme();
+  // v2 макет 1: the card's own rhythm over the Card's gap 8
+  const gapAt = (n: number) => (big ? { marginTop: n - space[2] } : null);
   return (
     <View testID={testID}>
       <Card onPress={!main && title ? onPress : undefined} accessibilityLabel={[kicker, when, title, sub].filter(Boolean).join(", ")}>
+        {bare && title ? null : (
         <RowView style={{ justifyContent: "space-between" }}>
-          <T v="micro" w="semibold" tone="mut" style={{ flex: 1, textTransform: "uppercase" }} numberOfLines={1}>
+          <T v="micro" w="semibold" tone="mut" style={{ flex: soon || span ? undefined : 1, flexShrink: 1, textTransform: "uppercase", letterSpacing: big ? font.size.micro * KICK_TRACKING : undefined }} numberOfLines={1}>
             {kicker}
           </T>
-          {status ? <StatusPill status={status.status} label={status.label} /> : when ? (
+          {soon ? <StatusPill status="info" label={soon} /> : null}
+          {soon || span ? <View style={{ flex: 1 }} /> : null}
+          {span && !status ? (
+            <T v="caption" tone="mut" tabular numberOfLines={1}>
+              {span}
+            </T>
+          ) : null}
+          {status ? <StatusPill status={status.status} label={status.label} /> : when && !soon ? (
             <T v="micro" w="semibold" tone="mut" numberOfLines={1}>
               {when}
             </T>
           ) : null}
         </RowView>
+        )}
         {title ? (
           <>
             {(() => {
-              const head = (
+              const head = bare ? (
+                // v2 макет 3: «Bathroom remodel ✓ Смета принята» — the title 15/600 and the status on one line
                 <RowView>
+                  <T v="body" w="semibold" numberOfLines={1} style={{ flex: 1, minWidth: 0 }}>
+                    {title}
+                  </T>
+                  {status ? <StatusPill status={status.status} label={status.label} /> : null}
+                </RowView>
+              ) : (
+                <RowView style={gapAt(rhythm.headGap)}>
                   <View style={{ flex: 1 }}>
-                    <T v="heading" numberOfLines={2}>
+                    <T v={big ? "title" : "heading"} numberOfLines={2}>
                       {title}
                     </T>
                     {sub ? (
@@ -95,8 +130,26 @@ export function NowCard({ kicker, when, status, title, sub, address, main, secon
                 </T>
               </Press>
             ) : null}
-            {trio ? <NumberTrio testID={testID ? `${testID}-trio` : undefined} items={trio} /> : null}
-            {progress ? <ProgressBar caption={progress.caption} value={progress.value} max={progress.max} label={progress.label} /> : null}
+            {big ? (
+              <>
+                {progress ? (
+                  <View style={gapAt(rhythm.rowGap)}>
+                    <ProgressBar caption={progress.caption} value={progress.value} max={progress.max} label={progress.label} />
+                  </View>
+                ) : null}
+                {trio ? (
+                  <View style={gapAt(rhythm.rowGap)}>
+                    <NumberTrio testID={testID ? `${testID}-trio` : undefined} items={trio} />
+                  </View>
+                ) : null}
+              </>
+            ) : (
+              <>
+                {words ? <ProgressWords testID={testID ? `${testID}-words` : undefined} caption={words.caption} value={words.value} /> : null}
+            {trio ? <NumberTrio testID={testID ? `${testID}-trio` : undefined} items={trio} look={trioLook} /> : null}
+                {progress ? <ProgressBar caption={progress.caption} value={progress.value} max={progress.max} label={progress.label} /> : null}
+              </>
+            )}
             {main && !second && !icon ? (
               // inside an object (visual v2 «Клиент»): the step's button by its words, its reason beside it (≤ 2 lines) — never across a 1280 card
               <RowView style={{ marginTop: space[1] }}>
@@ -108,9 +161,9 @@ export function NowCard({ kicker, when, status, title, sub, address, main, secon
                 ) : null}
               </RowView>
             ) : main ? (
-              <View style={{ gap: space[1], marginTop: space[1] }}>
+              <View style={{ gap: space[1], marginTop: big ? BIG_PAIR_GAP - space[2] : space[1] }}>
                 <ButtonPair
-                  main={{ label: main.label, onPress: main.onPress, disabled: main.disabled, testID: main.testID, variant: main.outline ? "secondary" : "primary" }}
+                  main={{ label: main.label, onPress: main.onPress, disabled: main.disabled, testID: main.testID, variant: main.outline ? "secondary" : "primary", icon: mainIcon }}
                   second={second ? { label: second.label, onPress: second.onPress, disabled: second.disabled, testID: second.testID, icon: second.icon, variant: "secondary" } : null}
                   icon={icon}
                 />
@@ -131,3 +184,9 @@ export function NowCard({ kicker, when, status, title, sub, address, main, secon
     </View>
   );
 }
+
+/** v2 макет 1: the kicker «ДАЛЬШЕ» 12/600 in capitals, tracked .04 em */
+const KICK_TRACKING = 0.04;
+/** v2 макет 1: the pair stands 14 under the trio */
+const BIG_PAIR_GAP = space[3] + spaceHalf.hair;
+

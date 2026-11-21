@@ -87,7 +87,7 @@ export function templateLayout(kind: TemplateKind, p: LayoutInput): TemplateLayo
   }
   if (kind === "calendar") {
     const rows: Slot = p.viewBody ? "view" : p.empty ? "empty" : "groups";
-    return { top, under: [...on(p.views, "views" as const), "month", ...on(!p.monthView, "days" as const)], body: [...on(p.unassigned, "unassigned" as const), rows, ...on(p.undated, "undated" as const)], bottom: [] };
+    return { top, under: [...on(p.views, "views" as const), "month", ...on(!p.monthView, "days" as const)], body: [rows, ...on(p.unassigned, "unassigned" as const), ...on(p.undated, "undated" as const)], bottom: [] };
   }
   if (kind === "object") {
     // the header and its IconRow, the one main step right under them (no pinned plate), then the sections strip

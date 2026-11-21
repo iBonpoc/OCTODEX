@@ -10,7 +10,7 @@
  */
 import { Children, createContext, isValidElement, useContext, type ReactNode } from "react";
 import { View, useWindowDimensions } from "react-native";
-import { component, radius, rhythm, size, space, spaceHalf } from "@octo/design-tokens";
+import { component, radius, rhythm, size, space, spaceHalf, type StatusName } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { statColumns, statRows, statSaid, statShown } from "./statTileLogic";
@@ -18,13 +18,17 @@ import { statColumns, statRows, statSaid, statShown } from "./statTileLogic";
 /** how many tiles the grid puts in a row (2 — the big tile, 3 — the small one) */
 const ColsCtx = createContext<2 | 3 | 4>(2);
 
-export function StatTile({ label, value, unit, sub, icon, accent, warn, selected, onPress, a11y, testID }: {
+export function StatTile({ label, value, unit, unitTone, sub, icon, accent, warn, selected, dense, onPress, a11y, testID }: {
   /** the word (always there — a figure never stands alone) */
   label: string;
   /** the figure: a count or a sum already formatted («$12,400») */
   value: number | string;
   /** the unit after the figure, 12 paler («ч», «дн») */
   unit?: string;
+  /** the unit as a status word («1 просроч.» `bad`, v2 Главная) */
+  unitTone?: StatusName;
+  /** visual v2 Главная «Требует действия»: the tile `statTile.hSm` + 8 = 100 high, the figure 22/700 (`title`) with its unit on its line */
+  dense?: boolean;
   /** the line under the figure, 12 `mut`: «1 · 0 закрыто», «за 7 дн» — what the figure is of */
   sub?: string;
   /** the icon in the circle on top left */
@@ -50,7 +54,7 @@ export function StatTile({ label, value, unit, sub, icon, accent, warn, selected
   const tile = (
     <View
       style={{
-        minHeight: small ? component.statTile.hSm : component.statTile.h,
+        minHeight: dense ? component.statTile.hSm + space[2] : small ? component.statTile.hSm : component.statTile.h,
         padding: small ? space[3] - spaceHalf.hair : space[3],
         borderRadius: radius.card,
         backgroundColor: accent ? c.acc : selected ? c.surf3 : c.surf,
@@ -77,11 +81,11 @@ export function StatTile({ label, value, unit, sub, icon, accent, warn, selected
           {label}
         </T>
         <View style={{ flexDirection: "row", alignItems: "baseline", gap: space[1] }}>
-          <T v={small ? "figureSm" : "figure"} style={{ color: ink, flexShrink: 1 }} numberOfLines={1}>
+          <T v={dense ? "title" : small ? "figureSm" : "figure"} style={{ color: ink, flexShrink: 1 }} numberOfLines={1}>
             {value}
           </T>
           {unit ? (
-            <T v="micro" style={{ color: mut }} numberOfLines={1}>
+            <T v="micro" style={{ color: unitTone && !accent ? c.status[unitTone].text : mut, flexShrink: 1 }} numberOfLines={1}>
               {unit}
             </T>
           ) : null}

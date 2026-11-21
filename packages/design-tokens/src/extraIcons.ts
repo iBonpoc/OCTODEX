@@ -5,6 +5,16 @@
 export const extraIcons = {
   // ⌛ — the visit's timer (visual v2 «Таймер», 21.11)
   hourglass: "M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9",
+  // «←» of the one header (v2 «Единая шапка»: «←» круглой 40 — an arrow, not the chevron «‹»)
+  arrowLeft: "M19 12H5M11 6l-6 6 6 6",
+  // the v2 set (docs/design/visual-v2.html <symbol>s, the same grid and stroke): the money trend, the list filter, the layers
+  // (estimate parts), the book (the catalog / price book), the receipt; the flag («Требует действия»: leads waiting)
+  trend: "M4 17l5-5 4 3 7-7M15 8h5v5",
+  filter: "M4 7h16M7 12h10M10 17h4",
+  layers: "M12 4l8 4-8 4-8-4zM4 12l8 4 8-4M4 16l8 4 8-4",
+  book: "M5 17V6a2 2 0 0 1 2-2h12v13H7a2 2 0 0 0-2 2 2 2 0 0 0 2 2h12",
+  receipt: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6",
+  flag: "M5 21V4M5 4h11l-2 4 2 4H5",
   // ☰ — the app menu (docs/specs/13 §2.2)
   menu: "M4 7h16M4 12h16M4 17h16",
   // a grip to drag a panel by (a canvas toolbar, founder 08.11)

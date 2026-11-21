@@ -4,7 +4,7 @@
  * the list) or «Пропустить» (the items are marked skipped — still «not done» — and the step goes on).
  */
 import { useHeldSheet } from "@/ui/heldSheet";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { View } from "react-native";
 import { component, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -15,6 +15,7 @@ import { canAddItem, canAttachPhoto, canRemoveItem, canSetRequired, canTick, cle
 import { PhotoStrip } from "@/features/PhotoStrip";
 import { Button, StatusChip, TextField } from "@/ui/controls";
 import { DoneCircle } from "@/ui/doneCircle";
+import { ProgressWords } from "@/ui/figures";
 import { ToggleRow } from "@/ui/toggleRow";
 import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -23,13 +24,27 @@ import { type GuardedUndo } from "@/data/undo";
 
 /** the checklist card of a visit at work (or an inspection on site) */
 /** `adding` — the «Свой пункт» field (the visit screen opens it from «⋯»: at work the card is just the ticks, K6) */
-export function ChecklistCard({ v, missing, adding = true, onAdded }: { v: Visit; missing: Missing; adding?: boolean; onAdded?: () => void }) {
+export function ChecklistCard({ v, missing, adding = true, onAdded, cell, foot, folded }: {
+  v: Visit;
+  missing: Missing;
+  adding?: boolean;
+  onAdded?: () => void;
+  /**
+   * visual v2 макет 4 «Выезд»: the list as a cell inside the work card — «Чек-лист выезда · 2 из 5 · 40 %» in words, the circles
+   * joined by one line, `foot` (the timer) under a hairline; `folded` — the items hidden (the timer's «⌃»). No «Свой пункт» field
+   * in the cell: while adding, the screen shows the plain card (a field never lies on a cell, DS §11 п.17)
+   */
+  cell?: boolean;
+  foot?: ReactNode;
+  folded?: boolean;
+}) {
   const store = useStore();
   const { t } = useI18n();
   const toast = useToast();
   const [extra, setExtra] = useState("");
   const queuedHint = () => (store.online ? undefined : t("offline.queued"));
   const left = missing.items.length;
+  const { c } = useTheme();
   const addItem = () => {
     const label = extra.trim();
     if (!label) return;
@@ -37,6 +52,29 @@ export function ChecklistCard({ v, missing, adding = true, onAdded }: { v: Visit
     setExtra("");
     onAdded?.();
   };
+  if (cell) {
+    const doneN = v.checklist.filter((i) => itemDone(i, v.photos)).length;
+    const all = v.checklist.length;
+    const ticks = v.checklist.every((i) => itemKind(i) !== "photo");
+    return (
+      <Card inner>
+        <View testID="chk-left">
+          <ProgressWords caption={t("px2.cv.checklist")} value={all ? t("px2.cv.ofPct", { n: doneN, m: all, p: Math.round((doneN / all) * 100) }) : undefined} />
+        </View>
+        {folded ? null : (
+          <View>
+            {ticks && all > 1 ? (
+              <View pointerEvents="none" style={{ position: "absolute", left: (component.checkList.dot - component.checkList.line) / 2, top: component.checkList.row / 2, bottom: component.checkList.row / 2, width: component.checkList.line, backgroundColor: c.off }} />
+            ) : null}
+            {v.checklist.map((item) => (
+              <ItemRow key={item.id} v={v} item={item} quiet />
+            ))}
+          </View>
+        )}
+        {foot ? <View style={{ borderTopWidth: component.hairline, borderTopColor: c.bd, paddingTop: space[2] }}>{foot}</View> : null}
+      </Card>
+    );
+  }
   return (
     <Card>
       <RowView style={{ justifyContent: "space-between" }}>
@@ -62,7 +100,8 @@ export function ChecklistCard({ v, missing, adding = true, onAdded }: { v: Visit
   );
 }
 
-function ItemRow({ v, item }: { v: Visit; item: ChecklistItem }) {
+/** `quiet` — the cell of the work card (v2 макет 4): no «необязательный» line under an item, the rows stay 34 along the line */
+function ItemRow({ v, item, quiet }: { v: Visit; item: ChecklistItem; quiet?: boolean }) {
   const store = useStore();
   const { t } = useI18n();
   const { c } = useTheme();
@@ -71,7 +110,7 @@ function ItemRow({ v, item }: { v: Visit; item: ChecklistItem }) {
   const skipped = itemSkipped(item, v.photos);
   const sub = (
     <>
-      {!itemRequired(item) ? (
+      {!itemRequired(item) && !quiet ? (
         <T v="caption" tone="mut">
           {t("chk.optional")}
         </T>

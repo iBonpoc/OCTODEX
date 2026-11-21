@@ -12,7 +12,7 @@ exports.run = async (h) => {
   const ids = async () => (await p.locator('[data-testid^="est-line-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")))).map((x) => x.replace("est-line-", ""));
   const order = () => p.locator('[data-testid^="est-line-"], [data-testid="est-sec-loose"]').evaluateAll((els) => els.map((e) => (e.getAttribute("data-testid") === "est-sec-loose" ? "u" : e.getAttribute("data-testid").replace("est-line-", ""))));
   const take = async (key) => {
-    const hd = tid(`sort-handle-${key}`);
+    const hd = await line.grip(h, key);
     await line.toMiddle(h, hd);
     const b = await hd.boundingBox();
     const x = b.x + b.width / 2;

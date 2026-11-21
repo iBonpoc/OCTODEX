@@ -366,10 +366,23 @@ export const component = {
     foldScale: 0.57,
     /** the root avatar folded: 40 → 36 */
     avatarFold: 0.9,
-    root: { end: 64, kickEnd: 24, titleFrom: 16, titleFadeFrom: 40, miniFrom: 40, miniShift: 8, plateFrom: 48 },
-    object: { end: 112, actionsEnd: 48, actionsShift: 12, subFrom: 32, subEnd: 72, titleFrom: 56, titleFadeFrom: 80, parentFrom: 56, parentEnd: 80, miniFrom: 80, miniShift: 8, plateFrom: 96, plusFrom: 96 },
+    /** the folded row's ground: the screen's `bg` at 92 % over a blur, and the hairline (v2 «свёрнутая строка» rgba … .92) */
+    plateAlpha: 0.92,
+    /** the bell's dot 8 (v2 «колокольчик (точка 8)»; the count is in its VoiceOver label) */
+    bellDot: 8,
+    /**
+     * `hold` — the big block stands still for the first pt of the scroll (root: 16 — «уезжает вверх на 48» over 16–64; object: 56 —
+     * the name waits while the quick actions and the two lines go, then goes into the row on 56–112); `shiftX` — the name slides right
+     * to the row's title place, right of «←» (40 + 8). The block never shows above the row's bottom (`bigClip`).
+     */
+    root: { end: 64, kickEnd: 24, titleFrom: 16, titleFadeFrom: 40, miniFrom: 40, miniShift: 8, plateFrom: 48, hold: 16 },
+    object: { end: 112, actionsEnd: 48, actionsShift: 12, subFrom: 32, subEnd: 72, titleFrom: 56, titleFadeFrom: 80, parentFrom: 56, parentEnd: 80, miniFrom: 80, miniShift: 8, plateFrom: 96, plusFrom: 96, hold: 56, shiftX: 48 },
     flick: 1,
     slow: 0.25,
+    /** the web has no finger lifting: the scroll that stops this long (ms) between the ends is let go (v2 «Отпустил посередине») */
+    pauseMs: 120,
+    /** the open contacts panel over a folded header closes when the page goes this far (pt) */
+    panelCloseScroll: 8,
   },
 } as const;
 

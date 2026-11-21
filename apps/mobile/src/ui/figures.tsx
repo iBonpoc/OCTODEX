@@ -10,24 +10,57 @@
  */
 import { type ReactNode } from "react";
 import { View } from "react-native";
-import { component, radius, rhythm, size, space, spaceHalf, type StatusName } from "@octo/design-tokens";
+import Svg, { Line } from "react-native-svg";
+import { component, pastels, radius, rhythm, size, space, spaceHalf, type StatusName } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { IconButton } from "./controls";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { StatusPill } from "./statusPill";
+import { pastelOf } from "./pastelOf";
 import type { IconAction } from "./templates/types";
 
 /** «4 ч на месте · 12 мин в дороге · Alex мастер» */
-export function NumberTrio({ items, testID }: { items: readonly [Fig, Fig, Fig]; testID?: string }) {
+export function NumberTrio({ items, testID, look = "cells" }: {
+  items: readonly [Fig, Fig, Fig];
+  testID?: string;
+  /** visual v2 макет 3 «Клиент» (`.num3`): `plain` — no cells, the word 12/600 `mut` over the figure 22, left-aligned */
+  look?: "cells" | "plain";
+}) {
   return (
     <View testID={testID} style={{ flexDirection: "row", gap: rhythm.cardGap }}>
-      {items.map((f, i) => (
-        <TrioCell key={i} f={f} />
-      ))}
+      {items.map((f, i) => (look === "plain" ? <PlainFig key={i} f={f} /> : <TrioCell key={i} f={f} />))}
     </View>
   );
 }
 type Fig = { value: string; label: string };
+function PlainFig({ f }: { f: Fig }) {
+  return (
+    <View accessible accessibilityLabel={`${f.label} ${f.value}`} style={{ flex: 1, minWidth: 0 }}>
+      <T v="micro" w="semibold" tone="mut" numberOfLines={1}>
+        {f.label}
+      </T>
+      <T v="title" w="semibold" numberOfLines={1}>
+        {f.value}
+      </T>
+    </View>
+  );
+}
+
+/** «Работа · 3 из 5 · 62 %» — progress in words (v2: no bar): the caption 12/600 `mut` on the left, the figure 15/700 on the right */
+export function ProgressWords({ caption, value, testID }: { caption: string; value?: string; testID?: string }) {
+  return (
+    <View testID={testID} accessible accessibilityLabel={[caption, value].filter(Boolean).join(", ")} style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space[2] + spaceHalf.hair }}>
+      <T v="micro" w="semibold" tone="mut" numberOfLines={1} style={{ flexShrink: 1 }}>
+        {caption}
+      </T>
+      {value ? (
+        <T v="body" w="bold" numberOfLines={1}>
+          {value}
+        </T>
+      ) : null}
+    </View>
+  );
+}
 function TrioCell({ f }: { f: Fig }) {
   const { c } = useTheme();
   return (
@@ -45,7 +78,7 @@ function TrioCell({ f }: { f: Fig }) {
 /** a value column on the right of a FigureRow; `tone` — a status word («−9 дн» bad) */
 export type FigureCol = { label: string; value: string; tone?: StatusName };
 
-export function FigureRow({ title, line, icon, lead, cols, status, onPress, testID }: {
+export function FigureRow({ title, line, icon, lead, cols, status, onPress, testID, tone, iconTone, avatar }: {
   title: string;
   line?: string;
   /** the icon in the square 40 */
@@ -58,15 +91,22 @@ export function FigureRow({ title, line, icon, lead, cols, status, onPress, test
   /** the row opens something: «›» on the right when there are no columns */
   onPress?: () => void;
   testID?: string;
+  /** visual v2 макет 3 «Gate code 4512 · small dog»: the warm plate — the row on `status.warn.fill`, its words `status.warn.text` */
+  tone?: "warn";
+  /** visual v2 макет 6 «Оплачены сегодня»: the icon in a status colour («✓» ok) — the row's words keep theirs */
+  iconTone?: StatusName;
+  /** visual v2 макет 5 «Смета, редактор» (the client card): the person's initials on their pastel, a circle `avatar.md` 36, not the square */
+  avatar?: { initials: string; name: string };
 }) {
-  const { c } = useTheme();
+  const { c, name: themeName } = useTheme();
   const k = component.figureRow;
+  const warm = tone === "warn" ? c.status.warn : null;
   const said = [title, line, ...(cols ?? []).map((x) => `${x.label} ${x.value}`), status?.label].filter(Boolean).join(", ");
   const body = (
     <View
       style={{
         minHeight: k.h,
-        backgroundColor: c.surf,
+        backgroundColor: warm ? warm.fill : c.surf,
         borderRadius: radius.card,
         borderTopWidth: component.hairline,
         borderTopColor: c.hl,
@@ -77,9 +117,16 @@ export function FigureRow({ title, line, icon, lead, cols, status, onPress, test
         gap: space[3],
       }}
     >
-      {icon || lead ? (
-        <View style={{ width: k.icon, height: k.icon, borderRadius: k.iconRadius, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
-          {icon ? <Icon name={icon} s={size.iconMd} color={c.ink} /> : (
+      {avatar ? (
+        <View style={{ width: component.avatar.md, height: component.avatar.md, borderRadius: radius.pill, backgroundColor: pastels[themeName][pastelOf(avatar.name)].fill, alignItems: "center", justifyContent: "center" }}>
+          <T v="caption" w="bold" style={{ color: pastels[themeName][pastelOf(avatar.name)].text }} numberOfLines={1}>
+            {avatar.initials}
+          </T>
+        </View>
+      ) : null}
+      {!avatar && (icon || lead) ? (
+        <View style={{ width: k.icon, height: k.icon, borderRadius: k.iconRadius, backgroundColor: warm ? c.track : c.surf2, alignItems: "center", justifyContent: "center" }}>
+          {icon ? <Icon name={icon} s={size.iconMd} color={warm ? warm.text : iconTone ? c.status[iconTone].text : c.ink} /> : (
             <T v="caption" w="bold" numberOfLines={1}>
               {lead}
             </T>
@@ -87,11 +134,11 @@ export function FigureRow({ title, line, icon, lead, cols, status, onPress, test
         </View>
       ) : null}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <T v="body" w="bold" numberOfLines={1}>
+        <T v="body" w="bold" numberOfLines={1} style={warm ? { color: warm.text } : undefined}>
           {title}
         </T>
         {line ? (
-          <T v="micro" tone="mut" numberOfLines={1}>
+          <T v="micro" w="semibold" tone={warm ? "warn" : "mut"} numberOfLines={1}>
             {line}
           </T>
         ) : null}
@@ -107,7 +154,7 @@ export function FigureRow({ title, line, icon, lead, cols, status, onPress, test
         </View>
       ))}
       {status ? <StatusPill status={status.status} label={status.label} /> : null}
-      {onPress && !cols?.length && !status ? <Icon name="chevronRight" s={size.iconMd} color={c.mut} /> : null}
+      {onPress && !cols?.length && !status && !warm ? <Icon name="chevronRight" s={size.iconMd} color={c.mut} /> : null}
     </View>
   );
   if (!onPress)
@@ -176,7 +223,7 @@ export function IntervalPlate({ from, to, near }: { from: string; to: string; ne
  * One visit on the Plan's day: the hour column on the left and the visit's card — the interval plate with a StatusPill (or `right`)
  * on its line, the name 15/600 and the line 13 `mut`. `near` — the nearest visit: its plate in the accent's tone.
  */
-export function TimeSlot({ hour, length, from, to, near, title, line, status, right, onPress, testID }: {
+export function TimeSlot({ hour, length, from, to, near, title, line, status, right, top, oneLine, onPress, testID }: {
   hour: string;
   length?: string;
   from: string;
@@ -187,6 +234,10 @@ export function TimeSlot({ hour, length, from, to, near, title, line, status, ri
   status?: { status: StatusName; label: string };
   /** instead of the status: what stands on the right of the plate (the tech's initials) */
   right?: ReactNode;
+  /** v2 макет 2: what stands over the plate inside the card — the hatched «в дороге · 12 мин» (`HatchPlate`) */
+  top?: ReactNode;
+  /** v2 макет 2: «работа · мастер» in one line, cut at the end */
+  oneLine?: boolean;
   onPress?: () => void;
   testID?: string;
 }) {
@@ -195,6 +246,7 @@ export function TimeSlot({ hour, length, from, to, near, title, line, status, ri
   const said = [to ? `${from}–${to}` : from, title, line, status?.label].filter(Boolean).join(", ");
   const card = (
     <View style={{ backgroundColor: c.surf, borderRadius: radius.card, borderTopWidth: component.hairline, borderTopColor: c.hl, paddingVertical: space[2] + spaceHalf.hair, paddingHorizontal: space[3], gap: spaceHalf.tight }}>
+      {top ? <View style={{ marginBottom: spaceHalf.hair }}>{top}</View> : null}
       <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
         <IntervalPlate from={from} to={to} near={near} />
         <View style={{ flex: 1 }} />
@@ -206,7 +258,7 @@ export function TimeSlot({ hour, length, from, to, near, title, line, status, ri
         </T>
         {line ? (
           // two lines: «Bathroom remodel: vanity, toilet, tile · Alex» is not cut to «Bathroom remodel: va…» (audit 12 §2.1)
-          <T v="caption" tone="mut" numberOfLines={2}>
+          <T v="caption" tone="mut" numberOfLines={oneLine ? 1 : 2}>
             {line}
           </T>
         ) : null}
@@ -237,5 +289,80 @@ export function TimeSlot({ hour, length, from, to, near, title, line, status, ri
         )}
       </View>
     </View>
+  );
+}
+
+/**
+ * «в дороге · 12 мин» (v2 макет 2 `.hatch`): a plate 30 high, radius 12, diagonal stripes 7 every 13 (135°) and a hairline edge, the
+ * word 12/600 `mut` in the middle — the time on the road, not a progress.
+ */
+export function HatchPlate({ label, testID }: { label: string; testID?: string }) {
+  const { c } = useTheme();
+  const step = HATCH.period * Math.SQRT2;
+  return (
+    <View testID={testID} accessibilityRole="text" accessibilityLabel={label} style={{ height: HATCH.h, borderRadius: radius.field, overflow: "hidden", borderWidth: component.hairline, borderColor: c.bd, alignItems: "center", justifyContent: "center" }}>
+      <Svg style={{ position: "absolute", left: 0, top: 0 }} width="100%" height={HATCH.h}>
+        {Array.from({ length: HATCH.count }, (_, i) => (
+          <Line key={i} x1={i * step} y1={HATCH.h + HATCH.band} x2={i * step + HATCH.h + 2 * HATCH.band} y2={-HATCH.band} stroke={c.surf2} strokeWidth={HATCH.band} />
+        ))}
+      </Svg>
+      <T v="micro" tone="mut" numberOfLines={1}>
+        {label}
+      </T>
+    </View>
+  );
+}
+/** the hatch: 30 high, stripes 7 wide every 13 (along the 135° normal), enough of them for a 1280 card */
+const HATCH = { h: space[6] + spaceHalf.tight, band: 7, period: 13, count: 80 } as const;
+
+/** «Позиции  7» — the count in a cell beside a block's title (visual v2 №5, «Your Habit (18)» of образец №2): `chip.h` 24, 13/700 */
+export function CountPill({ n, testID }: { n: number; testID?: string }) {
+  const { c } = useTheme();
+  return (
+    <View testID={testID} style={{ minWidth: component.chip.h + space[1], height: component.chip.h, paddingHorizontal: space[2], borderRadius: radius.pill, backgroundColor: c.surf, borderTopWidth: component.hairline, borderTopColor: c.hl, alignItems: "center", justifyContent: "center" }}>
+      <T v="caption" w="bold" tabular numberOfLines={1}>
+        {n}
+      </T>
+    </View>
+  );
+}
+
+/**
+ * «⚿ Код 4512 · собака» (visual v2 макет 4): a StatusPill with its own icon — the visit's access words in the warm tone, beside the
+ * status pill. One line, cut with «…»; it presses when there is more to read (the sheet with the whole note).
+ */
+export function TonePill({ tone, icon, label, onPress, testID }: { tone: StatusName; icon: IconKey; label: string; onPress?: () => void; testID?: string }) {
+  const { c } = useTheme();
+  const st = c.status[tone];
+  const pill = (
+    <View
+      style={{
+        minHeight: component.chip.h,
+        paddingLeft: component.statusPill.padL,
+        paddingRight: component.statusPill.padR,
+        borderRadius: radius.pill,
+        backgroundColor: st.fill,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: space[1],
+        flexShrink: 1,
+      }}
+    >
+      <Icon name={icon} s={component.statusPill.icon} color={st.text} />
+      <T v="micro" w="semibold" capped numberOfLines={1} style={{ color: st.text, flexShrink: 1 }}>
+        {label}
+      </T>
+    </View>
+  );
+  if (!onPress)
+    return (
+      <View testID={testID} accessible accessibilityLabel={label} style={{ flexShrink: 1, minWidth: 0 }}>
+        {pill}
+      </View>
+    );
+  return (
+    <Press testID={testID} onPress={onPress} visibleHeight={component.chip.h} accessibilityRole="button" accessibilityLabel={label} containerStyle={{ flexShrink: 1, minWidth: 0 }}>
+      {pill}
+    </Press>
   );
 }

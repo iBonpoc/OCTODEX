@@ -19,12 +19,13 @@ describe("DayStrip (BUILD-SPEC §1, поток В)", () => {
     expect(d).toContain("2027-01-01");
     for (let i = 1; i < d.length; i++) expect(Date.parse(d[i]!) - Date.parse(d[i - 1]!)).toBe(86_400_000);
   });
-  it("scrolls the picked pill to the middle, never before the start", () => {
+  it("scrolls so the picked day's week stands from the padding (v2 макет 2: Пн … Вс in one 390 row)", () => {
     expect(stripOffset(0, 390)).toBe(0);
-    const i = 10;
-    const x = stripOffset(i, 390);
-    const pillLeft = space[4] + i * (component.dayPill.w + component.dayPill.gap) - x;
-    expect(pillLeft + component.dayPill.w / 2).toBeCloseTo(390 / 2);
+    expect(stripOffset(6, 390)).toBe(0);
+    const row = 7 * (component.dayPill.w + component.dayPill.gap);
+    expect(stripOffset(7, 390)).toBe(row);
+    expect(stripOffset(11, 390)).toBe(row);
+    expect(7 * component.dayPill.w + 6 * component.dayPill.gap).toBe(390 - 2 * space[4]);
   });
   // visual v2 «Пилюли дней» (21.11): the picked day is the accent's tone with an accent frame, not a fill — the Plan's one fill is «День»
   it("the picked pill is the accent's tone with an accent frame and accText words; today's number accText; the others surf, no frame", () => {

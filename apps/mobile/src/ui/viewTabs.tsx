@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Platform, ScrollView, View, type LayoutChangeEvent, type ScrollViewInstance } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useReducedMotion } from "react-native-reanimated";
-import { component, motion, radius, size, space } from "@octo/design-tokens";
+import { component, motion, radius, size, space, spaceHalf } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { fillStyle } from "./fill";
 import { Icon, Press, T } from "./primitives";
@@ -34,6 +34,8 @@ type ViewTabsProps<K extends string> = {
   testID?: string;
   bleed?: number;
   fade?: string;
+  /** visual v2 «Клиент» (#2350, макет 3): `chips` — every pill a plate 32 on `surf`, the selected one light (`ink`) with `bg` words */
+  look?: "plain" | "chips";
 };
 
 function Tabs<K extends string>({
@@ -44,6 +46,7 @@ function Tabs<K extends string>({
   testID,
   bleed = space[4],
   fade,
+  look = "plain",
 }: {
   items: { key: K; label: string; count?: number }[];
   value: K;
@@ -55,7 +58,9 @@ function Tabs<K extends string>({
   bleed?: number;
   /** the colour the edges fade into — what is behind the row (the page, or the bar once it sticks) */
   fade?: string;
+  look?: "plain" | "chips";
 }) {
+  const chips = look === "chips";
   const { c } = useTheme();
   const reduce = useReducedMotion();
   const strip = useRef<ScrollViewInstance>(null);
@@ -132,7 +137,7 @@ function Tabs<K extends string>({
         onScroll={(e) => setOffset(e.nativeEvent.contentOffset.x)}
         onLayout={(e) => setView(e.nativeEvent.layout.width)}
         onContentSizeChange={(w) => setContent(w)}
-        contentContainerStyle={{ paddingHorizontal: bleed, gap: space[2], alignItems: "center" }}
+        contentContainerStyle={{ paddingHorizontal: bleed, gap: chips ? spaceHalf.tight : space[2], alignItems: "center" }}
       >
         {items.map((it) => {
           const sel = it.key === value;
@@ -156,6 +161,31 @@ function Tabs<K extends string>({
               // nor do two neighbours' zones overlap) — the visible pill of 30 sits in its middle (#1343 review)
               style={{ minHeight: size.hitMin, justifyContent: "center" }}
             >
+              {chips ? (
+                // v2 макет 3 «.chp»: a plate 32 on `surf` each; the selected one light with dark words; the number paler
+                <View
+                  style={{
+                    minHeight: component.button.sm,
+                    paddingHorizontal: space[3],
+                    borderRadius: radius.pill,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: space[1],
+                    backgroundColor: sel ? c.ink : hover === it.key ? c.surf2 : c.surf,
+                  }}
+                >
+                  <T v="caption" w="semibold" style={{ color: sel ? c.bg : c.mut }} numberOfLines={1}>
+                    {it.label}
+                  </T>
+                  {it.count ? (
+                    <View testID={testID ? `${testID}-${it.key}-count` : undefined}>
+                      <T v="caption" w="semibold" tabular style={{ color: sel ? c.surf3 : c.dash }}>
+                        {String(it.count)}
+                      </T>
+                    </View>
+                  ) : null}
+                </View>
+              ) : (
               <View
                 style={{
                   minHeight: component.tab.h,
@@ -179,6 +209,7 @@ function Tabs<K extends string>({
                   </View>
                 ) : null}
               </View>
+              )}
             </Press>
           );
         })}

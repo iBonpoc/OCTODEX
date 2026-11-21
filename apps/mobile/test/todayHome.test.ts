@@ -25,9 +25,9 @@ describe("the two Overviews are the template «Обзор»", () => {
       expect(s).toMatch(/useHomeHeader\(\)/);
       expect(s).toMatch(/useGreeting\(\)/);
     });
-    it(`${name}: nothing own — no Button, Press, Card or ListCard on the screen; rows are GroupRow, tiles StatTile`, () => {
+    it(`${name}: nothing own — no Button, Press, Card or ListCard on the screen; rows are GroupRow / FigureRow, tiles StatTile`, () => {
       expect(s).not.toMatch(/<(Button|Press|ListCard|CardGrid)\b/);
-      expect(s).toMatch(/<GroupRow\b/);
+      expect(s).toMatch(/<(GroupRow|FigureRow)\b/);
       // visual v2 (21.11): a tile carries an icon, no pastel
       expect(s).toMatch(/<StatTile\b[^>]*icon=/);
       expect(s).not.toMatch(/pastel=/);
@@ -36,12 +36,14 @@ describe("the two Overviews are the template «Обзор»", () => {
       expect(s).not.toMatch(/react-native-reanimated/);
     });
   }
-  it("the office: «Требует действия» goes through the template (it shows three) and «Все ›» opens Triage", () => {
-    expect(today).toMatch(/attention=\{\{ title: t\("todayR\.action"\), rows: att\.rows, all: \{[^}]*\/triage/);
+  it("the office (v2 макет 1): «Требует действия» is the 2 × 2 tiles under the block's title, «Все ›» opens Triage; the crews are cards", () => {
+    expect(today).toMatch(/<ListGroup title=\{t\("todayR\.action"\)\} all=\{\{.*\/triage.*\bbare\b/);
+    expect(today).toMatch(/<ListGroup title=\{t\("proto\.home\.crews"\)\}.*\bbare\b/);
+    expect(today).toMatch(/<FigureRow\s+key=\{x\.id\}\s+testID="crew-row"/);
   });
   it("the office: four tiles — leads, estimates, owed, received, each with its icon; none yellow (the Home's one yellow is «В пути»)", () => {
     const tiles = [...today.matchAll(/<StatTile testID="(tile-[a-z]+)" icon="([a-zA-Z]+)"/g)].map((m) => `${m[1]}:${m[2]}`);
-    expect(tiles).toEqual(["tile-leads:inbox", "tile-estimates:doc", "tile-owed:invoice", "tile-received:wallet"]);
+    expect(tiles).toEqual(["tile-leads:inbox", "tile-estimates:doc", "tile-owed:dollar", "tile-received:chart"]);
     expect(today).not.toMatch(/<StatTile\b[^>]*\baccent\b/);
   });
   it("the tech: two tiles, his money and his visits; no bell and no company money (BUILD-SPEC §2.14)", () => {

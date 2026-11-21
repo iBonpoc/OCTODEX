@@ -37,7 +37,7 @@ type Mode = "day" | "week" | "month";
  * Week — the seven days, a group per day; Month — 6 × 7 cells, a cell → the Day. 820 / 1280: the Day is the board by person.
  */
 export default function Plan() {
-  const { t, dayOf } = useI18n();
+  const { t, tn, dayOf, lang } = useI18n();
   const { db, role } = useStore();
   const { wide, device } = useDevice();
   const [kept, setMode] = usePersistentState<Mode | "feed">("octo.planMode.v1", "day");
@@ -173,6 +173,8 @@ export default function Plan() {
         onDay={setDate}
         loads={loads}
         dayTitle={dayTitle}
+        // v2 макет 2: «Пт, 20 ноября · 6 выездов» over the title
+        kicker={`${kickDay(date, lang)} · ${tn("px1.visitsN", items.filter((x) => x.kind === "visit" && x.day === date).length)}`}
         unassigned={soon ? { label: t("proto.plan.unassigned", { n: soon }), onPress: () => setSheet("unassigned") } : undefined}
         items={dayItems}
         empty={empty}
@@ -304,4 +306,10 @@ function RaisedGrid({ ids, children }: { ids: string[]; children: ReactNode[] })
   const from = useDragFrom();
   const i = from ? ids.indexOf(from) : -1;
   return <Grid raise={i >= 0 ? i : undefined}>{children}</Grid>;
+}
+
+/** «Пт, 20 ноября» — the kicker's day (v2 макет 2), the weekday short and the month in full */
+function kickDay(k: DayKey, lang: string): string {
+  const s = formatDayKey(k, { weekday: "short", day: "numeric", month: "long" }, lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU");
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }

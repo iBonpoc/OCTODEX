@@ -257,3 +257,30 @@ export function clientMainStep(o: { role: Role; state: ClientState; step: NextSt
   if (o.now?.kind === "waiting") return { kind: "remind", estimate: o.now.estimate };
   return o.step;
 }
+
+/**
+ * «Работа · 3 из 5 · 62 %» (visual v2 макеты 3–4, #2350 — progress in words, no bar): the items of the job's visits' checklists
+ * ticked of all of them; a job with no checklist counts its visits closed of all. Nothing to count — null.
+ */
+export function workProgress(visits: { checklist: { done?: boolean }[]; step: string; closed?: boolean }[]): { done: number; total: number; pct: number } | null {
+  const items = visits.flatMap((v) => v.checklist);
+  const [done, total] = items.length
+    ? [items.filter((i) => i.done).length, items.length]
+    : [visits.filter((v) => v.closed || v.step === "paid" || v.step === "done").length, visits.length];
+  if (!total) return null;
+  return { done, total, pct: Math.round((done / total) * 100) };
+}
+
+/**
+ * «Смета ✓ · задаток ✓ · работа» (макет 3): the job's way so far — the estimate approved, the deposit paid (only when the job has a
+ * deposit invoice or the estimate asks one), the work done. The words are the screen's (i18n); this says which links are passed.
+ */
+export function jobChain(job: Job, estimate: Estimate | undefined, invoices: Invoice[]): { key: "estimate" | "deposit" | "work"; done: boolean }[] {
+  const mine = invoices.filter((i) => live(i) && i.jobId === job.id);
+  const deposits = mine.filter((i) => i.kind === "deposit");
+  const out: { key: "estimate" | "deposit" | "work"; done: boolean }[] = [];
+  if (estimate) out.push({ key: "estimate", done: estimate.status === "approved" });
+  if (deposits.length || (estimate?.depositCents ?? 0) > 0) out.push({ key: "deposit", done: deposits.length > 0 && deposits.every((i) => i.paidCents >= i.totalCents) });
+  out.push({ key: "work", done: job.status === "done" });
+  return out;
+}

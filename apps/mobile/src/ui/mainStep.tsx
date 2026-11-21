@@ -1,9 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, View } from "react-native";
-import { component, motion, radius, size, space } from "@octo/design-tokens";
+import { component, motion, radius, rhythm, size, space, spaceHalf } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button } from "./controls";
-import { Glass } from "./overlays";
 import { Icon, Press, T } from "./primitives";
 import { loadPhase, mainStepLayout } from "./mainStepRules";
 import type { MainAction } from "./templates/types";
@@ -15,6 +14,8 @@ export interface MainStepTotal {
   onPress?: () => void;
   open?: boolean;
   testID?: string;
+  /** visual v2 №5: a quiet word after the sum, 12 `mut` («налог $14.52») */
+  sub?: string;
 }
 
 /**
@@ -87,14 +88,36 @@ export function MainStep({
   let left: ReactNode = reason;
   if (layout === "pair" && second) left = <Button testID={second.testID} label={second.label} onPress={second.onPress} disabled={second.disabled} variant="secondary" />;
   if (layout === "total" && total) left = <TotalPart total={total} />;
-  // one row: what the step is about on the left, the button by its words on the right (≤ 56 with the padding, LAYOUT-RULES П3)
+  // visual v2 «Редактор» (макет 5, образец №5 «Approximate amount 640 · Schedule»): the bottom is a card `figureRow.h` 64, radius 22,
+  // 16 from the sides (the Screen's footer) and `cardGap` 8 over the bottom zone, on the cell `surf2` with the card's shadow — what the step
+  // is about on the left, the button 40 by its words on the right
   return (
-    <Glass strong testID={`${main.testID}-bar`} style={{ borderTopLeftRadius: radius.card, borderTopRightRadius: radius.card, borderBottomWidth: 0, paddingHorizontal: space[4], paddingVertical: space[2] }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: component.button.phone }}>
-        <View style={{ flex: 1, minWidth: 0, alignItems: "flex-start" }}>{left}</View>
-        {button}
+    // (the Screen's footer already stands `rhythm.screen` from the sides)
+    <View style={{ paddingBottom: rhythm.cardGap }}>
+      <View
+        testID={`${main.testID}-bar`}
+        style={{
+          minHeight: component.figureRow.h,
+          borderRadius: radius.card,
+          backgroundColor: c.surf2,
+          borderTopWidth: component.hairline,
+          borderTopColor: c.hl,
+          paddingLeft: space[4],
+          paddingRight: space[3],
+          justifyContent: "center",
+          shadowColor: c.shadow.color,
+          shadowOpacity: c.shadow.opacity,
+          shadowRadius: c.shadow.radius,
+          shadowOffset: { width: 0, height: c.shadow.offsetY },
+          elevation: component.shadowSm.elevation,
+        }}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: component.button.phone }}>
+          <View style={{ flex: 1, minWidth: 0, alignItems: "flex-start" }}>{left}</View>
+          {button}
+        </View>
       </View>
-    </Glass>
+    </View>
   );
 }
 
@@ -108,9 +131,16 @@ function TotalPart({ total }: { total: MainStepTotal }) {
         </T>
         {total.onPress ? <Icon name={total.open ? "chevronUp" : "chevronDown"} s={size.iconSm} color={c.mut} /> : null}
       </View>
-      <T v="title" numberOfLines={1} tabular>
-        {total.value}
-      </T>
+      <View style={{ flexDirection: "row", alignItems: "baseline", gap: space[2] - spaceHalf.hair }}>
+        <T v="title" numberOfLines={1} tabular>
+          {total.value}
+        </T>
+        {total.sub ? (
+          <T v="micro" w="semibold" tone="mut" tabular numberOfLines={1} style={{ flexShrink: 1 }}>
+            {total.sub}
+          </T>
+        ) : null}
+      </View>
     </View>
   );
   if (!total.onPress) return <View testID={total.testID}>{body}</View>;

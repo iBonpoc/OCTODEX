@@ -2,7 +2,7 @@ import { ModulePlaces } from "@/modules/ModulePlaces";
 import { visitDueCents } from "@/features/visitDue";
 import { signedAction } from "@/features/visitSignedAction";
 import { lateAfterOf } from "@/features/scheduleSettings";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Linking, Platform, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space, size } from "@octo/design-tokens";
@@ -15,7 +15,7 @@ import { useI18n } from "@/i18n";
 import { CancelNotifySheet, CancelVisitSheet, WhenWho } from "@/features/VisitForm";
 import { NotesBlock } from "@/features/NotesBlock";
 import { RelatedBlock } from "@/features/RelatedBlock";
-import { canCancel, canNoShow, canPlan, mayMarkNoShow, visitEnd, visitWhen } from "@/features/schedule";
+import { canCancel, canNoShow, canPlan, mayMarkNoShow, visitEnd } from "@/features/schedule";
 import { visitServable } from "@/features/jobs";
 import { peopleOf } from "@/data/people";
 import { cleanPhone, telHref } from "@/features/contactLinks";
@@ -26,25 +26,28 @@ import { linesOf } from "@/features/jobLines";
 import { CallSheet, type CallPreset } from "@/features/comms/CallSheet";
 import { MessageSheet, type MessagePreset } from "@/features/comms/MessageSheet";
 import { useTheme } from "@/theme/ThemeProvider";
-import { STEP_LABELS, stepIndex, visitStatus } from "@/features/visits";
+import { visitStatus } from "@/features/visits";
 import { SignaturePad } from "@/features/SignaturePad";
 import { StackBackGestureOff } from "@/nav/StackBackGestureOff";
 import { PhotoStrip } from "@/features/PhotoStrip";
-import { canAddItem, canEditVisitItems, canTick, checklistGate, itemKind, visitSettings } from "@/features/checklist";
+import { canAddItem, canEditVisitItems, checklistGate, visitSettings } from "@/features/checklist";
 import { ChecklistCard, ChecklistEditor, MissingSheet } from "@/features/VisitChecklist";
 import { OfficeLocation, TechLocation, useConsentQuestion } from "@/features/LocationParts";
-import { Button, TextField } from "@/ui/controls";
+import { Button, IconButton, TextField } from "@/ui/controls";
+import { FigureRow, ProgressWords, TimerLine, TonePill } from "@/ui/figures";
+import { ButtonPair } from "@/ui/pairs";
+import { StatusPill } from "@/ui/statusPill";
+import { memberName } from "@/features/team";
+import { workProgress } from "@/features/client/nextStep";
+import { useAgo } from "@/features/client/ClientSections";
 import { SelectField } from "@/ui/selectField";
-import { Icon, T } from "@/ui/primitives";
-import { DoneCircle } from "@/ui/doneCircle";
+import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast, type MenuItem } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { AccessNote } from "@/ui/accessNote";
-import { ViewSteps } from "@/ui/viewTabs";
 import { GroupRow, ListGroup } from "@/ui/groupedList";
 import { mapsUrl, type OS } from "@/ui/listCardLayout";
 import { ObjectScreen, type MainAction } from "@/ui/templates";
-import type { IconRowItem } from "@/ui/iconRow";
 import { canSeeVisit } from "@/features/access";
 import { isoDayKey, todayKey } from "@/features/calendar";
 import { plateHalves } from "@/features/planSlots";
@@ -88,6 +91,11 @@ export default function VisitScreen() {
   const [signing, setSigning] = useState(false);
   // «Камера»: the photos of this step in a sheet (before — on site, after — at work)
   const [camera, setCamera] = useState(false);
+  // v2 макет 4: the note square of the button row and the access pill open their sheets; the timer's «⌃» folds the checklist
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [accessOpen, setAccessOpen] = useState(false);
+  const [folded, setFolded] = useState(false);
+  const ago = useAgo();
   // «Передать офису» (sales on a signed visit with money): one note per tap
   const handedOff = useRef(false);
   const v = db.visits.find((x) => x.id === id);
@@ -124,7 +132,6 @@ export default function VisitScreen() {
   const { job, property, customer } = visitContext(db, v);
   const due = visitDueCents(db, v);
   const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db), due);
-  const idx = stepIndex(v.step);
   const before = v.photos.filter((p) => p.kind === "before");
   const after = v.photos.filter((p) => p.kind === "after");
   // #1431 «Повторить»: a photo the cloud did not take is sent again from this phone
@@ -268,7 +275,6 @@ export default function VisitScreen() {
   // apart, red, with its own sheet as the confirmation — «Отменить выезд»
   const mayEditChecklist = canEditVisitItems(store.role, v);
   const mayCancel = office && canCancel(v);
-  const ticking = v.checklist.length > 0 && (v.step === "working" || (v.step === "on_site" && isInspection));
   const mayAddItem = (v.step === "working" || (v.step === "on_site" && isInspection)) && canAddItem(store.role, v, false);
   const more: MenuItem<MoreKey>[] = [
     ...(signing && v.step === "working" ? [{ key: "backToWork" as const, label: t("proto.visit.backToWork"), icon: "undo" as const, testID: "visit-act-back-to-work" }] : []),
@@ -294,26 +300,18 @@ export default function VisitScreen() {
     if (m?.href) router.push(m.href as never);
   };
 
-  /* ---------- QuickActions row: Позвонить · SMS · Маршрут · Камера ---------- */
+  /* ---------- v2 макет 4: «◷ Идёт · ⚿ Код 4512 · собака · ☎ ✉ ◎» under the header ---------- */
   const who = customer?.name ?? tel;
-  const actions: IconRowItem[] = [
-    ...(tel ? [{ icon: "phone" as const, label: t("proto.visit.call"), a11y: `${t("proto.visit.call")} ${who}`, onPress: call, testID: "visit-call" }] : []),
-    ...(tel || main ? [{ icon: "sms" as const, label: t("proto.visit.sms"), a11y: `${t("proto.visit.sms")} ${who}`, onPress: sms, testID: "visit-act-message" }] : []),
-    ...(addr ? [{ icon: "route" as const, label: t("proto.visit.route"), a11y: `${t("proto.visit.route")}: ${addr}`, onPress: route, testID: "visit-route" }] : []),
-    {
-      icon: "camera" as const,
-      label: t("proto.visit.camera"),
-      a11y: `${t("proto.visit.camera")}: ${who ?? t("visit.title")}`,
-      onPress: () => setCamera(true),
-      disabled: !photoStep,
-      reason: photoStep ? undefined : t("proto.visit.cameraLater"),
-      testID: "visit-camera",
-    },
-  ];
-
   // AccessNote first (BUILD-SPEC §2.6): the note, and the gate code — to the tech on the visit day and the day before
   const gateOk = property ? canSeeGateCode(db, store.role, property.id) : false;
   const accessText = property?.accessNotes?.trim();
+  // the client's pinned notes the team sees («Gate code 4512. Small dog…», v2 «Код 4512 · собака»)
+  const pinned = customer ? db.notes.filter((n) => n.subjectType === "customer" && n.subjectId === customer.id && n.pinned && n.visibility === "team") : [];
+  const accessWord = property?.gateCode
+    ? gateOk
+      ? [t("px2.cv.code", { code: property.gateCode }), accessText].filter(Boolean).join(" · ")
+      : t("proto.job.gateLater")
+    : accessText || pinned[0]?.body.split("\n")[0];
   // a code not open yet is not drawn: the line says when it opens (AccessNote `locked`)
   const access = (
     <AccessNote
@@ -325,27 +323,110 @@ export default function VisitScreen() {
       locked={property?.gateCode && !gateOk ? t("proto.job.gateLater") : undefined}
     />
   );
+  const going = v.step === "on_site" || v.step === "working";
+  const lead = (
+    <RowView gap={space[2]} style={{ minHeight: size.hitMin }}>
+      <View>
+        <StatusPill testID="visit-status" status={going ? "info" : st.status} label={going ? t("px2.cv.going") : t(st.label)} />
+      </View>
+      {accessWord ? <TonePill testID="visit-access-pill" tone="warn" icon="key" label={accessWord} onPress={() => setAccessOpen(true)} /> : null}
+      <View style={{ flex: 1 }} />
+      {tel ? <IconButton size="card" icon="phone" label={`${t("proto.visit.call")} ${who}`} onPress={call} testID="visit-call" /> : null}
+      {tel || main ? <IconButton size="card" icon="message" label={`${t("proto.visit.sms")} ${who}`} onPress={sms} testID="visit-act-message" /> : null}
+      {addr ? <IconButton size="card" icon="pin" label={`${t("proto.visit.route")}: ${addr}`} onPress={route} testID="visit-route" /> : null}
+    </RowView>
+  );
 
-  const before0 = v.step === "scheduled" || v.step === "en_route" || v.step === "on_site";
   const est = job?.estimateId ? db.estimates.find((e) => e.id === job.estimateId) : undefined;
   const nLines = job ? (est ? est.lines?.length ?? 0 : linesOf(db, job.id).length) : 0;
-  // visual v2 «Объект — Выезд» (audit 12 §1 K): the screen's object is the visit — «Выезд · 8:30–12:30»; the client is the line under
-  // it (with the sum on the payment step), the status its pill; the job — once, as the «‹» parent and the link under the header
-  // «8:30–12:30» as v2 draws it: the hours without AM / PM (the field's day; the full time is in «Когда и кто»), so the 30 title
-  // keeps its one line (native shrinks it to fit, the web cuts it)
+  // «8:30–12:30» as v2 draws it: the hours without AM / PM (the field's day; the full time is in «Когда и кто»)
   const bare = (iso: string) => plateHalves(time(iso), time(iso))[0];
   const span = v.allDay ? t("plan5.allDay") : `${bare(v.start)}–${bare(visitEnd(v))}`;
+  const techFirst = memberName(db, v.techId, t)?.split(" ")[0];
+  // v2 макет 4 «Выезд | Sarah Mitchell / 8:30–12:30 · Alex»: the object is the visit; the client and the hours with the tech right of
+  // the rule; the sum only on the payment step, another day than today says its date
+  const whoLine = customer?.name ?? db.leads.find((l) => l.id === v.leadId)?.name ?? day(v.start);
   const header = {
     testID: "visit-head",
-    title: t("w2a.visitTitle", { when: span }),
-    meta: [{ id: "client", label: customer?.name ?? db.leads.find((l) => l.id === v.leadId)?.name ?? day(v.start) }],
+    title: t("visit.title"),
+    meta: [{ id: "client", label: whoLine }],
     status: { name: st.status, label: t(st.label) },
-    // the sum shows only on the payment step (wireframe №7); another day than today says its date
     amount: v.step === "signed" && due > 0 ? money(due) : isoDayKey(v.start) === todayKey() ? undefined : day(v.start),
-    link: job ? { label: job.title, onPress: () => router.push(`/job/${job.id}`) } : undefined,
-    address: addr ? { text: addr, onPress: route } : undefined,
     labels: { expand: t("proto.job.expand"), collapse: t("proto.job.collapse"), more: (n: number) => t("proto.job.moreN", { n }) },
   };
+  const headSub = {
+    line1: whoLine,
+    line2: [isoDayKey(v.start) === todayKey() ? undefined : day(v.start), span, techFirst, v.step === "signed" && due > 0 ? money(due) : undefined].filter(Boolean).join(" · "),
+  };
+
+  /* ---------- v2 макет 4: the work card — the job, its progress, the checklist cell with the timer, the step's buttons ---------- */
+  const jobVisits = job ? db.visits.filter((x) => x.jobId === job.id).sort((a, b) => a.start.localeCompare(b.start)) : [];
+  const wp = job ? workProgress(jobVisits) : null;
+  const nth = jobVisits.findIndex((x) => x.id === v.id) + 1;
+  const showCell = !signing && !(editingChecklist && mayEditChecklist) && !addingItem && v.checklist.length > 0;
+  const timer = v.enRouteAt && (v.step === "en_route" || going) ? (
+    <VisitTimer
+      since={v.enRouteAt}
+      sinceText={t("px2.cv.since", { time: bare(v.enRouteAt) })}
+      action={v.checklist.length ? { icon: folded ? "chevronDown" : "chevronUp", a11y: t(folded ? "px2.cv.unfold" : "px2.cv.fold"), onPress: () => setFolded((x) => !x), testID: "visit-fold" } : undefined}
+    />
+  ) : null;
+  const noteSquare = job || v.leadId ? { icon: "note" as const, a11y: t("px2.cv.notes"), onPress: () => setNotesOpen(true), testID: "visit-notes" } : null;
+  const card = (
+    <Card>
+      <Press testID="visit-job" onPress={job ? () => router.push(`/job/${job.id}`) : undefined} accessibilityRole={job ? "link" : undefined} accessibilityLabel={job?.title}>
+        <RowView gap={space[3]}>
+          <IconButton icon={isInspection ? "clipboard" : "wrench"} label={job?.title ?? t("visit.title")} onPress={job ? () => router.push(`/job/${job.id}`) : undefined} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <T v="heading" numberOfLines={1}>
+              {est?.title || job?.title || v.scope[0] || t("visit.title")}
+            </T>
+            {job && nth > 0 ? (
+              <T v="caption" tone="mut" numberOfLines={1}>
+                {t("px2.cv.visitOf", { n: nth, m: jobVisits.length })}
+              </T>
+            ) : null}
+          </View>
+        </RowView>
+      </Press>
+      {wp ? <ProgressWords testID="visit-work-progress" caption={t("px2.cv.workCap")} value={t("px2.cv.ofPct", { n: wp.done, m: wp.total, p: wp.pct })} /> : null}
+      {showCell ? (
+        <ChecklistCard cell v={v} missing={gate.missing} adding={false} foot={timer} folded={folded} />
+      ) : timer ? (
+        <Card inner>{timer}</Card>
+      ) : null}
+      {step ? (
+        <View style={{ gap: space[1] }}>
+          {v.step === "working" && !signing ? (
+            // v2 макет 4: «✓ Завершить» (the one yellow) 1.15 · «Фото» dark 1 · the note square 40 — one row (the short words of this step)
+            <RowView gap={space[2]}>
+              <View style={{ flex: 1.15, minWidth: 0 }}>
+                <Button label={step.label} icon="check" variant={step.outline ? "secondary" : "primary"} onPress={step.onPress} disabled={step.disabled} testID={step.testID} full />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Button label={t("px2.cv.photo")} icon="camera" variant="secondary" onPress={() => setCamera(true)} testID="visit-camera" full />
+              </View>
+              {noteSquare ? <IconButton icon={noteSquare.icon} label={noteSquare.a11y} onPress={noteSquare.onPress} testID={noteSquare.testID} /> : null}
+            </RowView>
+          ) : (
+            <ButtonPair
+              main={{ label: step.label, onPress: step.onPress, disabled: step.disabled, testID: step.testID }}
+              second={photoStep && !signing ? { label: t("px2.cv.photo"), icon: "camera", onPress: () => setCamera(true), testID: "visit-camera", variant: "secondary" } : null}
+              icon={noteSquare}
+            />
+          )}
+          {v.step === "on_site" && gate.missing.photosBefore > 0 ? (
+            <T v="caption" tone="mut" numberOfLines={2}>
+              {step.reason}
+            </T>
+          ) : null}
+        </View>
+      ) : null}
+    </Card>
+  );
+
+  // the job's last expense (v2 «Материалы / ABC Supply · вчера / Сумма $884»): the sum to who may see the money or who paid it
+  const spent = job ? db.expenses.filter((x) => x.jobId === job.id).sort((a, b) => b.at.localeCompare(a.at))[0] : undefined;
 
   return (
     <>
@@ -353,8 +434,9 @@ export default function VisitScreen() {
         testID="visit-screen"
         back={back}
         header={header}
-        actions={actions}
-        main={step ?? undefined}
+        sub={headSub}
+        lead={lead}
+        now={card}
         sections={[]}
         section="steps"
         onSection={() => {}}
@@ -364,17 +446,32 @@ export default function VisitScreen() {
         create={create}
         onCreate={onCreate}
       >
-        {access}
-        {/* the steps strip (SectionStrip `steps`): passed / now / next — not pressed */}
-        <ViewSteps
-          testID="visit-steps"
-          label={t("proto.visit.steps")}
-          items={STEP_LABELS.map((k) => ({ key: k, label: t(k) }))}
-          value={idx < STEP_LABELS.length ? STEP_LABELS[idx]! : "done"}
-        />
         {consent.sheet}
 
-        {/* the signature: the end of the work (the bar says «Подпись клиента»; «⋯ → Вернуться к работе») */}
+        {/* «Позиции · 7 / по смете EST-0004 ›» and «Материалы / ABC Supply · вчера / Сумма $884» (v2 rows «цифры справа») */}
+        {job ? (
+          <View testID="visit-facts" style={{ gap: space[2] }}>
+            <FigureRow
+              testID="visit-lines"
+              icon="doc"
+              title={t("px2.cv.lines", { n: nLines })}
+              line={est?.number ? t("px2.cv.byEstimate", { n: est.number }) : t("proto.visit.linesHint")}
+              onPress={() => router.push(`/job/${job.id}`)}
+            />
+            {spent ? (
+              <FigureRow
+                testID="visit-expense"
+                icon="invoice"
+                title={t(`exp.cat.${spent.category}` as "exp.cat.materials")}
+                line={[spent.vendor, ago(spent.at)].filter(Boolean).join(" · ")}
+                cols={canSeeProfit(store.role) || spent.memberId === db.me ? [{ label: t("px2.cv.sum"), value: money(spent.amountCents) }] : undefined}
+                onPress={() => router.push(`/job/${job.id}`)}
+              />
+            ) : null}
+          </View>
+        ) : null}
+
+        {/* the signature: the end of the work (the button says «Подпись клиента»; «⋯ → Вернуться к работе») */}
         {v.step === "working" && signing ? (
           <View testID="visit-signature" style={{ gap: space[2] }}>
             <SectionTitle title={t("step.sign")} />
@@ -385,7 +482,7 @@ export default function VisitScreen() {
           </View>
         ) : null}
 
-        {/* #2018 the payment: the method is a value of the form; «Принять · $X» is the bar */}
+        {/* #2018 the payment: the method is a value of the form; «Принять · $X» is the card's button */}
         {v.step === "signed" && signed === "pay" ? (
           <ListGroup testID="visit-pay" inset={space[4]}>
             <View testID="visit-amount-due">
@@ -407,7 +504,6 @@ export default function VisitScreen() {
             </View>
           </ListGroup>
         ) : null}
-
         {v.step === "paid" || v.step === "done" ? (
           <Card status="ok">
             <RowView>
@@ -465,6 +561,7 @@ export default function VisitScreen() {
             ))}
           </ListGroup>
         ) : null}
+        {addingItem && !signing ? <ChecklistCard v={v} missing={gate.missing} adding onAdded={() => setAddingItem(false)} /> : null}
         {editingChecklist && mayEditChecklist ? (
           <>
             <ChecklistEditor v={v} />
@@ -472,33 +569,7 @@ export default function VisitScreen() {
               <Button label={t("visit.editChecklistDone")} icon="check" variant="secondary" full onPress={() => setEditingChecklist(false)} />
             </View>
           </>
-        ) : v.checklist.length > 0 && before0 && !(v.step === "on_site" && isInspection) ? (
-          <Card>
-            <RowView style={{ justifyContent: "space-between" }}>
-              <T v="heading">{t("visit.checklist")}</T>
-              <T v="caption" tone="mut">
-                {t("check.preview", { n: v.checklist.length })}
-              </T>
-            </RowView>
-            {v.checklist.map((item) =>
-              itemKind(item) === "photo" ? (
-                <RowView key={item.id} gap={space[3]} style={{ minHeight: size.hitMin }}>
-                  <Icon name="camera" s={size.iconSm} color={c.mut} />
-                  <T v="body" style={{ flex: 1 }}>
-                    {item.label}
-                  </T>
-                </RowView>
-              ) : (
-                <DoneCircle key={item.id} testID={`chk-pre-${item.id}`} done={item.done} disabled={!canTick(store.role, v, !item.done)} label={item.label} title={item.label} onChange={() => store.toggleCheck(v.id, item.id)} />
-              ),
-            )}
-          </Card>
         ) : null}
-        {/* an inspection with a checklist (В6): ticked on site, checked before «Готово»; at work — the ticks card */}
-        {(v.step === "on_site" && isInspection) || (v.step === "working" && !signing) ? (
-          ticking || addingItem ? <ChecklistCard v={v} missing={gate.missing} adding={addingItem} onAdded={() => setAddingItem(false)} /> : null
-        ) : null}
-
         {photoStep && !signing ? (
           <View testID="visit-photos-before" style={{ gap: space[2] }}>
             <SectionTitle title={v.step === "on_site" && v.kind !== "inspection" && gate.missing.photosBefore > 0 ? t("proto.visit.photoBeforeReq") : t("visit.photosBefore")} />
@@ -519,12 +590,6 @@ export default function VisitScreen() {
           </View>
         ) : null}
 
-        {/* «Позиции · N ›» and «Время» (Jobber's visit order: instructions → checklist → line items → time) */}
-        <ListGroup testID="visit-facts" inset={space[4]}>
-          {job ? <GroupRow testID="visit-lines" title={t("proto.visit.lines", { n: nLines })} subtitle={t("proto.visit.linesHint")} onPress={() => router.push(`/job/${job.id}`)} /> : null}
-          <GroupRow testID="visit-time" title={t("proto.visit.time")} subtitle={v.enRouteAt ? t("proto.visit.timeOnWay", { time: time(v.enRouteAt) }) : before0 ? t("proto.visit.timeNot") : visitWhen(v, time, t("plan5.allDay"))} />
-        </ListGroup>
-
         {office ? <WhenWho visitId={v.id} /> : null}
         {office ? <OfficeLocation v={v} geo={property?.geo} /> : null}
         <TechLocation v={v} geo={property?.geo} />
@@ -535,6 +600,19 @@ export default function VisitScreen() {
         <RelatedBlock line hide={["customer", "property", "job"]} of={{ type: "visit", id: v.id }} />
       </ObjectScreen>
 
+      <Sheet visible={notesOpen} onClose={() => setNotesOpen(false)} title={t("px2.cv.notes")}>
+        <View testID="visit-notes-sheet">{job ? <NotesBlock subjectType="job" subjectId={job.id} /> : v.leadId ? <NotesBlock subjectType="lead" subjectId={v.leadId} /> : null}</View>
+      </Sheet>
+      <Sheet visible={accessOpen} onClose={() => setAccessOpen(false)} title={t("px2.cv.access")}>
+        <View testID="visit-access-sheet" style={{ gap: space[3] }}>
+          {access}
+          {pinned.map((n) => (
+            <T key={n.id} v="body">
+              {n.body}
+            </T>
+          ))}
+        </View>
+      </Sheet>
       <MissingSheet v={v} missing={gate.missing} open={!!ask} step={ask?.step ?? "sign"} onFill={() => setAsk(null)} onSkip={skipAndGo} />
       <Sheet visible={camera && photoStep} onClose={() => setCamera(false)} title={t("proto.visit.photos")}>
         <View testID="visit-camera-sheet" style={{ gap: space[3] }}>
@@ -567,4 +645,23 @@ export default function VisitScreen() {
       <MessageSheet preset={writing} onClose={() => setWriting(null)} />
     </>
   );
+}
+
+/** «1:58:12» of a span in ms (the visit's timer: hours, then minutes and seconds two digits) */
+export function clockText(ms: number): string {
+  const sec = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const x = sec % 60;
+  return `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}`;
+}
+
+/** v2 «Таймер»: «⌛ 1:58:12 с 8:34 ⌃» — the time since the tech left (the one step time the visit keeps, `enRouteAt`), ticking */
+function VisitTimer({ since, sinceText, action }: { since: string; sinceText: string; action?: { icon: "chevronUp" | "chevronDown"; a11y: string; onPress: () => void; testID: string } }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return <TimerLine testID="visit-timer" value={clockText(now - new Date(since).getTime())} since={sinceText} action={action} />;
 }

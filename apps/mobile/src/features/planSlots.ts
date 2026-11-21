@@ -2,7 +2,7 @@
  * The Plan's day and «Сегодня у бригад» as visual v2 «время и интервал» draws them (docs/design/visual-v2.html; prototype audit 12
  * §2.3). Pure; tested in test/planSlots.test.ts.
  * - plateHalves: «8:30 AM ▸ 12:30 PM», one «PM» when both halves share it («1:30 ▸ 2:30 PM») — the plate fits beside a pill.
- * - nearIndex: the nearest visit of today — the running one or the next not over; its plate takes the accent's tone.
+ * - nearIndex: the nearest visit of today — the next not begun (else the running one); its plate takes the accent's tone.
  * - quietStatuses: the wall of «Опаздывает» (4 of 6 rows) is gone — a problem (warn / bad) is a pill on the FIRST such row only, the
  *   others say it as a quiet word in their line; the rest (in work, done) keep their pill; «Запланирован» has none.
  * - problemSummary: the one summary line over the rows — «3 опаздывают · 1 пропущен».
@@ -20,9 +20,12 @@ export function plateHalves(from: string, to: string): [string, string] {
 
 export type SlotLike = { kind: string; start: string; end?: string; done: boolean };
 
-/** the index of today's nearest open visit: the first not done whose end is still ahead; -1 — none */
+/** the index of today's nearest open visit (v2 макет 2: «8:30 ▸ 12:30» of the NEXT one, not of the late one already begun): the first
+ *  not done that has not begun; none — the first not done whose end is still ahead; -1 — none */
 export function nearIndex(items: readonly SlotLike[], now: number): number {
-  return items.findIndex((x) => x.kind === "visit" && !x.done && Date.parse(x.end ?? x.start) > now);
+  const open = (x: SlotLike) => x.kind === "visit" && !x.done;
+  const next = items.findIndex((x) => open(x) && Date.parse(x.start) > now);
+  return next >= 0 ? next : items.findIndex((x) => open(x) && Date.parse(x.end ?? x.start) > now);
 }
 
 export type Shown = "pill" | "word" | "none";

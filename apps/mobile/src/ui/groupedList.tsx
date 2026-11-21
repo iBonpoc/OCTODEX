@@ -38,8 +38,13 @@ export function groupRows(children: ReactNode): ReactNode[] {
 }
 
 /** One group: its title (and «Все ›»), the rows in one card with inset hairlines between them. */
-export function ListGroup({ title, all, children, inset = component.listRow.inset, testID }: {
+export function ListGroup({ title, all, note, children, inset = component.listRow.inset, bare, testID }: {
   title?: string;
+  /** visual v2 Деньги (макет 6): a plain word on the right of the title instead of «Все ›» («Оплачены сегодня   2») */
+  note?: string;
+  /** visual v2 Главная (макет 1): the block's children stand as their own cards `rhythm.cardGap` 8 apart (tiles, FigureRows) — no
+   *  card around them, no hairlines */
+  bare?: boolean;
   /** «Все ›» on the right of the title: the whole list */
   all?: { label: string; onPress: () => void; testID?: string };
   children: ReactNode;
@@ -52,7 +57,7 @@ export function ListGroup({ title, all, children, inset = component.listRow.inse
   if (!rows.length) return null;
   return (
     <View style={{ gap: rhythm.headGap }} testID={testID}>
-      {title || all ? (
+      {title || all || note ? (
         // visual v2: the block's title 17/700 `ink`, «Все ›» 13/600 `mut` on its baseline; the title → the content 10
         <RowView style={{ justifyContent: "space-between", alignItems: "baseline" }}>
           <T v="heading" style={{ flex: 1 }} numberOfLines={1}>
@@ -67,9 +72,16 @@ export function ListGroup({ title, all, children, inset = component.listRow.inse
                 <Icon name="chevronRight" s={size.iconXs} color={c.mut} />
               </RowView>
             </Press>
+          ) : note ? (
+            <T v="caption" w="semibold" tone="mut" numberOfLines={1}>
+              {note}
+            </T>
           ) : null}
         </RowView>
       ) : null}
+      {bare ? (
+        <View style={{ gap: rhythm.cardGap }}>{rows}</View>
+      ) : (
       <Card style={{ padding: 0, gap: 0 }}>
         {rows.map((r, i) => (
           <View key={i}>
@@ -78,6 +90,7 @@ export function ListGroup({ title, all, children, inset = component.listRow.inse
           </View>
         ))}
       </Card>
+      )}
     </View>
   );
 }

@@ -39,7 +39,7 @@ exports.run = async (h) => {
   await line.fold(h);
   const [id] = await rowIds();
   await tid(`est-line-${id}`).click();
-  await tid(`est-menu-${id}`).getByRole("button").click();
+  await line.menu(h, id);
   await tid(`est-act-replace-${id}`).click();
   await h.sheet().getByText(/Очистить позицию/).first().click();
   await p.waitForFunction((i) => document.querySelector(`[data-testid="est-name-${i}"] input`)?.value === "", id, { timeout: 4000 });
@@ -48,7 +48,7 @@ exports.run = async (h) => {
 
   // «Заменить» with a catalog thing: the new price stands
   // (after «Отменить» of the clear the row is still open)
-  await tid(`est-menu-${id}`).getByRole("button").click();
+  await line.menu(h, id);
   await tid(`est-act-replace-${id}`).click();
   await h.sheet().locator("input").first().fill("railing bracket");
   await h.sheet().getByText("Railing bracket", { exact: true }).first().click();

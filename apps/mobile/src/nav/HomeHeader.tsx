@@ -25,7 +25,7 @@ export function HomeHeader() {
       <SyncBadge compact />
       {wide ? null : <SearchIcon />}
       {role !== "tech" ? (
-        <HeaderIcon action={{ icon: "bell", a11y: n ? t("nav.bellNew", { n }) : t("nav.bell"), onPress: () => router.push("/notifications"), testID: "home-bell", badge: n ? { n } : undefined }} />
+        <HeaderIcon action={{ icon: "bell", a11y: n ? t("nav.bellNew", { n }) : t("nav.bell"), onPress: () => router.push("/notifications"), testID: "home-bell", badge: n ? { n, dot: true } : undefined }} />
       ) : null}
     </View>
   );

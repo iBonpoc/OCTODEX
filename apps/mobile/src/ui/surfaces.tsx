@@ -27,15 +27,15 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindow
 import { avoidBehavior, useKeyboardHeight } from "./keyboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, Ellipse, LinearGradient, RadialGradient, Rect, Stop } from "react-native-svg";
-import { component, layout, motion, radius, rhythm, size, space, z, type StatusName } from "@octo/design-tokens";
+import { component, layout, motion, radius, rhythm, size, space, spaceHalf, z, type StatusName } from "@octo/design-tokens";
 import Animated, { Easing, FadeIn, FadeOut, cancelAnimation, runOnJS, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
 import { HeaderAvatar, HeaderBack, HeaderBar, HeaderBig, HeaderClose, HeaderParent, HeaderPlate, HeaderScroll, type HeadSpec } from "./templates/screenHeader";
-import { settleTarget, stickShift, type HeaderKind } from "./templates/headerMath";
+import { panelCloses, pauseTarget, settleTarget, stickShift, type HeaderKind } from "./templates/headerMath";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { Icon, Press, T, type IconKey } from "./primitives";
-import { HelpButton, Menu } from "./overlays";
+import { HelpButton, Menu, Scrim } from "./overlays";
 import type { IconAction } from "./templates/types";
 import { useHints } from "./hints";
 
@@ -628,7 +628,7 @@ export function Screen({
   const pinned = wide && !!up && !isTabScreen(routeName);
   /** phone, a section opened from «Ещё» (Jobs, Money, Catalog…; Leads with from=more): «‹ Ещё» — no ☰ any more (variant Б) */
   // redesign #2348: the three money lists are the «Деньги» tab — no «‹ Ещё» on them
-  const moneyTab = ["estimates", "invoice", "invoice/index", "payments", "payments/index"].includes(routeName) && params.from !== "more";
+  const moneyTab = ["finance", "estimates", "invoice", "invoice/index", "payments", "payments/index"].includes(routeName) && params.from !== "more";
   const backMore = !wide && menuRoot && !moneyTab && (!isTabScreen(routeName) || params.from === "more");
   const toMore = () => go("/more");
   /** a tab screen with a header «back» swipes back from the left edge too, by the same handler (nav/backSwipe.ts) */
@@ -733,6 +733,18 @@ export function Screen({
             ) : null}
           </RowView>
   ) : null;
+  /** the contacts panel open over the folded header: the scroll the header is held at (−1 — not open) */
+  const held = useSharedValue(-1);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const openPanel = () => {
+    held.value = scrollY.value;
+    setPanelOpen(true);
+  };
+  const closePanel = useCallback(() => {
+    held.value = -1;
+    setPanelOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   /* ---- the one header (templates/screenHeader.tsx, visual-v2 «Единая шапка»): one row of the same parts on every screen ---- */
   const kind: HeaderKind = head?.kind ?? (hasUp || backMore ? "object" : "root");
   /** the row stands pinned over the page and folds as the page goes up; 820/1280 with a parent keep the pinned address bar */
@@ -784,13 +796,11 @@ export function Screen({
       chevron={
         objHead?.expand
           ? {
-              open: objHead.expand.open,
-              label: objHead.expand.expandLabel,
-              // folded: «⌄» goes back to the top and opens the panel there (the header does not fold while it is open)
-              onPress: () => {
-                screenScroll.toTop?.(true);
-                objHead.expand?.onToggle(true);
-              },
+              open: panelOpen,
+              label: panelOpen ? objHead.expand.collapseLabel : objHead.expand.expandLabel,
+              // folded (v2 «⌄ в свёрнутой»): the same panel over the page with a veil 50 %; while it is open the header holds
+              // still; a scroll of more than 8 or a tap on the veil closes it
+              onPress: () => (panelOpen ? closePanel() : openPanel()),
             }
           : undefined
       }
@@ -807,18 +817,22 @@ export function Screen({
         title={title}
         titleRef={titleRef}
         kicker={head?.kind === "root" ? head.kicker : undefined}
+        titlePress={head?.kind === "root" ? head.titlePress : undefined}
+        trailing={head?.kind === "root" ? head.trailing : undefined}
         sub={objHead?.sub}
         expand={objHead?.expand}
         help={helpMark}
       />
     );
   const header = (
-    <View style={{ gap: space[2], marginBottom: kind === "object" ? 0 : space[3] }}>
+    // v2 макет 1: the big title → the first card ~12 (the block's own 4 + the column's gap 12); no margin of its own
+    <View style={{ gap: space[2], marginBottom: kind === "editor" ? space[3] : 0 }}>
       {/* no version line and no «Демо» strip over the header any more (v2 «Где строка версии и «Демо»»): the version is at the
           bottom of «Ещё» and in «Настройки → О приложении»; «Демо» is a plate in the header's smallest line */}
       {overlay || pinned ? null : bar}
-      <UpdateBar />
+      {/* the big block is the page's first part: its cut at the pinned row's bottom starts right where it stands (headerMath `bigClip`) */}
       {big}
+      <UpdateBar />
       {subtitle && kind !== "editor" ? (
         <T v="body" tone="mut">
           {subtitle}
@@ -890,6 +904,37 @@ export function Screen({
   /** the page's scroll and where the sticky strip lies on the page — shared values the header and the strip read on the UI thread */
   const scrollY = useSharedValue(0);
   const tabsTop = useSharedValue(0);
+  /** the web: when a person last scrolled the page themselves (the wheel, a finger, the keys) */
+  const userScrollAt = useRef(0);
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const page = (scrollRef.current as unknown as { getScrollableNode?: () => HTMLElement | null } | null)?.getScrollableNode?.();
+    if (!page?.addEventListener) return;
+    const mark = () => (userScrollAt.current = Date.now());
+    const kinds = ["wheel", "touchmove", "keydown"] as const;
+    for (const k of kinds) page.addEventListener(k, mark, { passive: true });
+    return () => {
+      for (const k of kinds) page.removeEventListener(k, mark);
+    };
+  }, [scroll]);
+  /** the veil under the open panel: where a finger went down on it; the web — its wheel scrolls the page on */
+  const veilTouch = useRef<number | null>(null);
+  const veilRef = useRef<ComponentRef<typeof View>>(null);
+  useEffect(() => {
+    if (Platform.OS !== "web" || !panelOpen) return;
+    const node = veilRef.current as unknown as HTMLElement | null;
+    const page = (scrollRef.current as unknown as { getScrollableNode?: () => HTMLElement | null } | null)?.getScrollableNode?.();
+    if (!node?.addEventListener || !page) return;
+    const wheel = (e: WheelEvent) => {
+      e.preventDefault();
+      page.scrollTop += e.deltaY;
+    };
+    node.addEventListener("wheel", wheel, { passive: false });
+    return () => node.removeEventListener("wheel", wheel);
+  }, [panelOpen]);
+  /** the web: the scroll stood still `header.pauseMs` between the ends — let go (there is no finger to lift) */
+  const pause = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => (pause.current ? clearTimeout(pause.current) : undefined), []);
   const [stuck, setStuck] = useState(false);
   /** the scroll already moved for this time the mini header appeared */
   const miniShifted = useRef(false);
@@ -980,6 +1025,21 @@ export function Screen({
     if (!jump || Date.now() - jump.at > 250 || Math.abs(y - jump.y) < 1) offset.current = y;
     const now = y > 0;
     if (now !== under) setUnder(now);
+    if (Platform.OS === "web" && settles && !panelOpen) {
+      if (pause.current) clearTimeout(pause.current);
+      pause.current = setTimeout(() => {
+        pause.current = null;
+        // a jump of ours (a field, a held row) is not a page let go; nor a place at an end (e2e `scrollTo` to the end stays put)
+        const jumpAt = lastJump.current?.at ?? 0;
+        if (Date.now() - jumpAt < 250) return;
+        // only a scroll a person made (the wheel, a finger, the keys): a script's `scrollTo` / `scrollIntoView` (e2e) never moves on
+        if (Date.now() - userScrollAt.current > component.header.pauseMs * 4) return;
+        const at = realTop() ?? offset.current;
+        const to = pauseTarget(kind, at);
+        if (to === null || Math.abs(to - at) < 1) return;
+        scrollRef.current?.scrollTo({ y: to, animated: !reduce });
+      }, component.header.pauseMs);
+    }
     const isStuck = !!tabs && tabsY.current > 0 && y >= tabsY.current - stickOff - 1;
     if (isStuck !== stuck) {
       if (!isStuck) miniShifted.current = false;
@@ -1004,6 +1064,10 @@ export function Screen({
     {
       onScroll: (e) => {
         scrollY.value = e.contentOffset.y;
+        if (held.value >= 0 && panelCloses(held.value, e.contentOffset.y)) {
+          held.value = -1;
+          runOnJS(closePanel)();
+        }
         runOnJS(callJsScroll)(e.contentOffset.y);
       },
       onEndDrag: (e) => {
@@ -1032,7 +1096,7 @@ export function Screen({
     [kind, settles],
   );
   return (
-    <HeaderScroll y={scrollY} kind={kind} reduce={reduce}>
+    <HeaderScroll y={scrollY} kind={kind} reduce={reduce} held={held} clip={overlay}>
     <HeaderParent value={parent?.label}>
     <BackSwipe enabled={swipeBack} edge={navInsets.left} onBack={hasUp ? goUp : toMore}>
       <View style={{ flex: 1 }}>
@@ -1110,6 +1174,30 @@ export function Screen({
         ) : (
           <View style={{ flex: 1, paddingTop: top, paddingBottom: navInsets.bottom, paddingLeft: navInsets.left, paddingRight: navInsets.right }}>{content}</View>
         )}
+        {/* v2 «⌄ в свёрнутой»: the contacts panel over the page under the folded row, a veil 50 % under it (a tap closes) */}
+        {overlay && panelOpen && objHead?.expand?.panel ? (
+          <View testID="hdr-panel-layer" style={{ position: "absolute", top: navInsets.safeTop + component.header.bar, bottom: 0, left: 0, right: 0, zIndex: z.nav }}>
+            {/* the veil: a tap closes; a finger (or the wheel) that goes on over it scrolls — more than 8 closes the panel */}
+            <View
+              ref={veilRef}
+              style={StyleSheet.absoluteFill}
+              onTouchStart={(e) => (veilTouch.current = e.nativeEvent.pageY)}
+              onTouchMove={(e) => {
+                if (veilTouch.current !== null && panelCloses(veilTouch.current, e.nativeEvent.pageY)) {
+                  veilTouch.current = null;
+                  closePanel();
+                }
+              }}
+            >
+              <Scrim onPress={closePanel} />
+            </View>
+            <View pointerEvents="box-none" style={{ paddingLeft: navInsets.left, paddingRight: navInsets.right, paddingTop: spaceHalf.tight }}>
+              <View testID="hdr-panel" style={column}>
+                {objHead.expand.panel}
+              </View>
+            </View>
+          </View>
+        ) : null}
         {/* the one header's row, pinned over the page: its plate fades in as it folds (templates/screenHeader.tsx) */}
         {overlay ? (
           <View pointerEvents="box-none" style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: z.nav, paddingTop: navInsets.safeTop, paddingLeft: navInsets.left, paddingRight: navInsets.right }}>
@@ -1142,7 +1230,9 @@ export function Screen({
           >
             {footer}
             {/* under the home indicator the bar goes on in one fill (the glass has its own, the corners above stay round) */}
-            {safe.bottom > 0 ? <View style={{ height: safe.bottom, backgroundColor: c.ov }} /> : null}
+            {/* an editor's low part is the floating card «Итого» (v2: 64, 16 from the edges, 8 over the home zone) — under it the
+                screen's own ground, no band; other bars go on in one fill under the home indicator */}
+            {safe.bottom > 0 ? <View style={{ height: safe.bottom, backgroundColor: kind === "editor" ? undefined : c.ov }} /> : null}
           </View>
         ) : null}
       </View>

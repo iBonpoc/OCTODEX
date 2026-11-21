@@ -35,7 +35,7 @@ exports.run = async (h) => {
   h.expect((await count('[data-testid^="est-line-"]')) === 11, "eleven rows");
 
   // «＋ Раздел»: the title is typed in the heading
-  await tid("est-add-section").getByRole("button").click();
+  await line.addSection(h);
   await typeSectionName("Крыша");
   h.expect((await sections()) === 1, "one section");
   const sid = (await vis('[data-testid^="est-section-"]').first().getAttribute("data-testid")).replace("est-section-", "");
@@ -44,7 +44,7 @@ exports.run = async (h) => {
   // «⋯ → Переместить» the first row into it
   const first = (await vis('[data-testid^="est-line-"]').first().getAttribute("data-testid")).replace("est-line-", "");
   await tid(`est-line-${first}`).click();
-  await tid(`est-menu-${first}`).getByRole("button").click();
+  await line.menu(h, first);
   await tid(`est-act-move-${first}`).click();
   await h.sheet().getByText("Крыша").first().click();
   await p.waitForFunction((s) => !!document.querySelector(`[data-testid="est-section-${s}"]`), sid, { timeout: 3000 });
@@ -102,7 +102,7 @@ exports.run = async (h) => {
   await secMenu(sid, "delete");
   await p.waitForFunction((i) => !document.querySelector(`[data-testid="est-section-${i}"]`), sid, { timeout: 3000 });
   h.expect((await count('[data-testid^="est-line-"]')) === 12, "deleted the section: every row stays");
-  await tid("est-add-section").getByRole("button").click();
+  await line.addSection(h);
   await typeSectionName("Двор");
   const yard = (await p.locator('[data-testid^="est-section-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")))).map((x) => x.replace("est-section-", "")).find((x) => x !== sid && x !== sub);
   await secMenu(yard, "addHere");

@@ -54,16 +54,27 @@ export function HeaderButton({
 /**
  * A round icon of a screen's header (search, the bell, the offline queue) — a `HeaderButton`. `badge` — a count on its corner: the
  * status fill with the number in its text (rule 2: never a colour alone), `bad` by default, «99+» past 99, nothing at 0
- * (`badgeText`). testIDs: the action's, `<testID>-badge`.
+ * (`badgeText`); `badge.dot` — a dot 8 instead (the bell: the count is in the label). testIDs: the action's, `<testID>-badge`.
  */
 export function HeaderIcon({ action }: { action: IconAction }) {
   const { c } = useTheme();
   const text = action.badge ? badgeText(action.badge.n) : null;
   const tone = c.status[action.badge?.tone ?? "bad"];
+  const d = component.header.bellDot;
   return (
     <View>
       <HeaderButton testID={action.testID} icon={action.icon} label={action.a11y} onPress={action.onPress} />
-      {text ? (
+      {text && action.badge?.dot ? (
+        // v2 `.bd`: the dot 8 in the status's text tone, ringed by the circle's own tone, inside the circle's corner — the number is
+        // read by VoiceOver from the button's label (founder approved v2 after rule 2: DS §12.13)
+        <View
+          testID={`${action.testID}-badge`}
+          pointerEvents="none"
+          style={{ position: "absolute", top: space[2] - component.header.ringGap, right: space[2] - component.header.ringGap, width: d + 2 * component.header.ringGap, height: d + 2 * component.header.ringGap, borderRadius: radius.pill, backgroundColor: c.surf, alignItems: "center", justifyContent: "center" }}
+        >
+          <View style={{ width: d, height: d, borderRadius: radius.pill, backgroundColor: tone.text }} />
+        </View>
+      ) : text ? (
         <View
           testID={`${action.testID}-badge`}
           pointerEvents="none"

@@ -13,7 +13,7 @@ import { View } from "react-native";
 import { space } from "@octo/design-tokens";
 import type { DayKey } from "@/features/calendar";
 import type { DayLoad } from "@/features/planFeed";
-import { DayStrip, MonthHead } from "../dayStrip";
+import { DayStrip, MonthArrows, MonthHead, MonthPick, useMonthHead } from "../dayStrip";
 import { GroupedList, GroupRow, ListGroup } from "../groupedList";
 import { Screen } from "../surfaces";
 import { CreateButton, HeaderIcons, MoreButton, TemplateFrame } from "./parts";
@@ -39,6 +39,8 @@ export interface CalendarScreenProps {
   loads: Map<DayKey, DayLoad>;
   /** the day's title over its rows («Сегодня, 20 нояб.») */
   dayTitle?: string;
+  /** the 13 line over the 30 title (v2 макет 2: «Пт, 20 ноября · 6 выездов»); default `dayTitle` */
+  kicker?: string;
   /** «Не назначено · 2» — a row that opens the assigning */
   unassigned?: { label: string; onPress: () => void };
   /** the day's rows (GroupRow) */
@@ -73,9 +75,11 @@ export function CalendarScreen(p: CalendarScreenProps) {
         {layout.under.includes("days") ? <DayStrip testID={`${p.testID}-days`} head={false} days={p.days} date={p.day} loads={p.loads} onPick={p.onDay} /> : null}
       </View>
     ) : null;
+  // v2 макет 2: the month is the one header's big block — «Ноябрь ⌄» 30 (opens the month here, under it) and ‹ › 32 on the right
+  const month = useMonthHead(p.day, p.onDay, p.view === "month" ? "month" : 7);
   const above = (
     <View style={{ gap: space[3] }}>
-      <MonthHead testID={`${p.testID}-month`} date={p.day} onPick={p.onDay} step={p.view === "month" ? "month" : 7} />
+      <MonthPick testID={`${p.testID}-month`} head={month} date={p.day} onPick={p.onDay} />
       {p.filters}
     </View>
   );
@@ -91,13 +95,6 @@ export function CalendarScreen(p: CalendarScreenProps) {
   );
   const body = (
     <View style={{ gap: space[4] }}>
-      {layout.body.includes("unassigned") && p.unassigned ? (
-        <GroupedList testID={`${p.testID}-unassigned`}>
-          <ListGroup inset={space[4]}>
-            <GroupRow compact title={p.unassigned.label} lead={{ icon: "user" }} onPress={p.unassigned.onPress} />
-          </ListGroup>
-        </GroupedList>
-      ) : null}
       {layout.body.includes("view") ? (
         <View testID={`${p.testID}-view`}>{p.body}</View>
       ) : layout.body.includes("empty") ? (
@@ -107,6 +104,14 @@ export function CalendarScreen(p: CalendarScreenProps) {
           <ListGroup title={p.dayTitle}>{p.items}</ListGroup>
         </GroupedList>
       )}
+      {/* v2 макет 2: the day comes first; «Не назначено · N» stands under it, over «Без даты» */}
+      {layout.body.includes("unassigned") && p.unassigned ? (
+        <GroupedList testID={`${p.testID}-unassigned`}>
+          <ListGroup inset={space[4]}>
+            <GroupRow compact title={p.unassigned.label} lead={{ icon: "user" }} onPress={p.unassigned.onPress} />
+          </ListGroup>
+        </GroupedList>
+      ) : null}
       {layout.body.includes("undated") && p.undated ? (
         <GroupedList testID={`${p.testID}-undated`}>
           <ListGroup inset={space[4]}>
@@ -128,7 +133,7 @@ export function CalendarScreen(p: CalendarScreenProps) {
         testID={p.testID}
         kind="root"
         title={p.title}
-        kicker={p.dayTitle}
+        kicker={p.kicker ?? p.dayTitle}
         right={
           <>
             <HeaderIcons icons={p.headerIcons ?? []} />
@@ -143,8 +148,15 @@ export function CalendarScreen(p: CalendarScreenProps) {
   return (
     <Screen
       testID={p.testID}
-      title={p.title}
-      head={{ kind: "root", kicker: p.dayTitle }}
+      title={month.title}
+      head={{
+        kind: "root",
+        kicker: p.kicker ?? p.dayTitle,
+        // folded: the tab's name («План») in the row
+        mini: p.title,
+        titlePress: { open: month.open, label: month.label, onPress: month.toggle, testID: `${p.testID}-month-title` },
+        trailing: <MonthArrows testID={`${p.testID}-month`} head={month} />,
+      }}
       headerIcons={p.headerIcons}
       right={tail}
       tabs={strip ?? undefined}

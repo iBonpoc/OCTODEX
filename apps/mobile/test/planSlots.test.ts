@@ -18,6 +18,10 @@ describe("unit:planSlots", () => {
     ];
     expect(nearIndex(items, now)).toBe(3);
     expect(nearIndex(items.slice(0, 2), now)).toBe(-1);
+    // v2 макет 2: a late visit already begun keeps its plate quiet — the next one is the nearest; alone, the running one is
+    const running = { kind: "visit", start: "2026-11-20T17:40:00Z", end: "2026-11-20T21:40:00Z", done: false };
+    expect(nearIndex([running, items[3]!], now)).toBe(1);
+    expect(nearIndex([running], now)).toBe(0);
   });
   it("a problem is a pill on the first such row only; the rest a quiet word; in work keeps its pill; scheduled has none", () => {
     // the audit's day: late, in work, late, unassigned, late, late
