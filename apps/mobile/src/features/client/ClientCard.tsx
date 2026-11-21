@@ -131,7 +131,8 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
       })();
 
   /* ---------- «＋» and «⋯» ---------- */
-  const made = fabItems("client", role, { customerId: c.id });
+  // «Не обслуживаем» (04 §12): no new estimate or job for the client — «＋» keeps the task, the note and the property
+  const made = canServe(db, c.id) ? fabItems("client", role, { customerId: c.id }) : [];
   const create = office
     ? {
         a11y: t("proto.client.createFor", { name: c.name }),

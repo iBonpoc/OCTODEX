@@ -30,16 +30,14 @@ exports.run = async (h) => {
   if (!wide) {
     // rule А (docs/specs/28): the bottom bar stays on a card, its section («Клиенты») lit
     h.expect((await tab("Главная").count()) === 1 && (await p.locator('[role="tab"][aria-label="Клиенты"][aria-selected="true"]:visible').count()) === 1, "phone: the bottom bar on an inner screen, «Клиенты» lit");
-    h.expect((await roundBack().count()) === 0, "phone: no round back");
+    // v2 «Единая шапка»: the phone's back is the round «←» 40 (hdr-back) named for the parent; the row stays pinned and folds
+    const parent = p.getByTestId("hdr-back").locator("visible=true");
+    h.expect((await parent.count()) === 1 && (await parent.first().getAttribute("aria-label")) === "Назад: Клиенты", "phone: one round «←» back to «Клиенты»");
     h.expect(!/Esc/.test(await h.text()), "phone: no Esc hint");
-    // the trail scrolls away with the page, as before (not pinned)
-    const parent = p.getByRole("button", { name: "Назад: Клиенты" }).locator("visible=true");
-    const y0 = (await parent.boundingBox()).y;
     await p.mouse.move(195, 500);
     await p.mouse.wheel(0, 600);
-    await p.waitForTimeout(400);
-    const box = await parent.boundingBox();
-    h.expect(!box || box.y < y0 - 100, "phone: trail scrolls with the page");
+    await p.waitForFunction(() => [...document.querySelectorAll("div")].some((d) => d.scrollTop > 100), null, { timeout: 3000 });
+    h.expect(await parent.first().isVisible(), "phone: the back stays in the pinned header while the page scrolls");
     return;
   }
   h.expect((await p.getByTestId("side-nav").count()) === 1 && (await tab("Клиенты").count()) === 0, "the side menu on the client card, no top pill");

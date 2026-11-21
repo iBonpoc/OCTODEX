@@ -929,7 +929,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                   </View>
                 ) : null}
                 <View testID="est-add-new">
-                  <IconButton size="card" icon="plus" label={t("px3.est.newLine")} onPress={addNew} />
+                  <IconButton size="card" icon="plus" label={t("px3.est.newLine")} onPress={() => addNew()} />
                 </View>
               </>
             )}

@@ -40,7 +40,7 @@ exports.run = async (h, { seed, admin, browser, BASE }) => {
   await h.clickText("Сметы");
   await h.click("Смета");
   await require("../../estimateLine.cjs").addCustom(h, LINE, PRICE);
-  await p.getByRole("button", { name: "Сохранить и отправить" }).click();
+  await require("../../estimateLine.cjs").saveSend(h);
   await p.waitForTimeout(700);
   await p.getByRole("button", { name: "Копировать ссылку" }).click();
   await p.waitForTimeout(400);
@@ -84,7 +84,7 @@ exports.run = async (h, { seed, admin, browser, BASE }) => {
 
   // S8b: the company signs on the estimate screen
   await h.go(`/estimate/${est.id}`);
-  const pad = p.getByLabel(/расписывается|signs here/i).last();
+  const pad = await require("../../estimateMenu.cjs").countersignPad(p);
   await pad.scrollIntoViewIfNeeded();
   await p.waitForTimeout(250);
   const bb = await pad.boundingBox();

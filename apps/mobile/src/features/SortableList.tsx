@@ -11,7 +11,7 @@ import { Icon } from "@/ui/primitives";
 import { useScreenScroll } from "@/ui/requiredForm";
 import { useScrollLock } from "@/ui/surfaces";
 import { finePointer, holdConfig } from "@/ui/pointer";
-import { holdStill, showsHandle } from "./estimate/rowGesture";
+import { dragEnd, holdStill, showsHandle } from "./estimate/rowGesture";
 import { canBegin, crossesSection, dragKind, dragWrite, edgeStep, feelOf, heldGone, ownsDrag, placeWithMargin, resolveDrop, rowKey, shiftOf, withoutBlock, type Drop, type DropResult } from "./sortable";
 import type { ViewRow } from "./sectionLayout";
 
@@ -419,6 +419,8 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
       end: (key, canceled, endTy) => {
         // only the held row's own finger ends the drag (the other finger's end took its place, its lastT and its lock)
         if (!ownsDrag(activeKey.current, key)) return;
+        // the release that follows is no tap on the row (the web's click after a mouse drag)
+        dragEnd.ended();
         activeKey.current = null;
         activeSV.value = "";
         lastT.current = endTy;
@@ -599,7 +601,9 @@ function Item({ k, index, dragKind, open, quiet, children }: { k: string; index:
   const canDrag = dragKind !== null && ctl.canDrag(k);
   // an open LINE draws its handle in its own header; any other row has it in a column on the right
   const inHeader = open && k.startsWith("l:");
-  const handleEl = canDrag && (!quiet || showsHandle(k, open)) ? (
+  // the held row keeps its «≡» while it is carried (#2350): an open line taken by the «≡» of its header folds as the drag begins —
+  // a folded line has no «≡», and the handle leaving the page would end its own gesture (the drag never started)
+  const handleEl = canDrag && (!quiet || showsHandle(k, open) || mine) ? (
     <GestureDetector gesture={handle}>
       <View
         testID={`sort-handle-${k}`}

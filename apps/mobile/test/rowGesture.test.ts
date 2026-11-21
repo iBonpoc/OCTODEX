@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { gesture } from "@octo/design-tokens";
-import { holdStill, longPressMenu, showsHandle } from "../src/features/estimate/rowGesture";
+import { gesture, motion } from "@octo/design-tokens";
+import { createDragEnd, holdStill, longPressMenu, showsHandle } from "../src/features/estimate/rowGesture";
 
 describe("rowGesture — a folded line of the estimate (visual v2 №5)", () => {
   const base = { canceled: false, ty: 0, fine: false, key: "l:a", open: false };
@@ -26,5 +26,15 @@ describe("rowGesture — a folded line of the estimate (visual v2 №5)", () => 
     expect(showsHandle("l:a", true)).toBe(true);
     expect(showsHandle("s:x", false)).toBe(true);
     expect(showsHandle("u", false)).toBe(true);
+  });
+  it("a drop is not a tap: the row's tap right after a drag ended does not open it (#2350, the web's click after a mouse drag)", () => {
+    let t = 1000;
+    const d = createDragEnd(() => t);
+    expect(d.justDragged(motion.durSlow)).toBe(false);
+    d.ended();
+    t += motion.durSlow - 1;
+    expect(d.justDragged(motion.durSlow)).toBe(true);
+    t += 1;
+    expect(d.justDragged(motion.durSlow)).toBe(false);
   });
 });

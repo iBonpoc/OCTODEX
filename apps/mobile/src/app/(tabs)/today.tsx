@@ -15,7 +15,8 @@ import { timeLead } from "@/features/planFeed";
 import { Columns } from "@/ui/charts";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { buildAttention } from "@/features/attention";
+import { attentionHref, buildAttention } from "@/features/attention";
+import { waitParams } from "@/features/shortTime";
 import { startsIn, useAttentionNow, useEnRoute, useGreeting, useHomeHeader } from "@/features/AttentionCards";
 import { todayVisits, visitStatus } from "@/features/visits";
 import { crewNow } from "@/features/crewList";
@@ -82,6 +83,12 @@ function Received({ period, idx }: { period: Period; idx: ReceivedIndex }) {
         testID="received-chart"
         items={buckets.map((b) => ({ key: b.from, value: b.cents, label: label(b), valueLabel: moneyWhole(b.cents), current: b.current, future: b.future }))}
       />
+      {/* nothing came in yet: only the tracks and this line (spec 24 A, e2e 116) */}
+      {empty ? (
+        <T v="caption" tone="mut">
+          {t("today2.empty")}
+        </T>
+      ) : null}
     </Card>
   );
 }
@@ -116,6 +123,8 @@ export default function Today() {
   const aw = awaitingCounts(db);
   const got = receivedSoFar(idx, "today", today);
   const leadsWaiting = attention.filter((x) => x.kind === "lead");
+  // a refused money change is never only a tile away (docs/specs/23 §3, rule 6): its own row above the tiles until it is sorted out
+  const refused = attention.filter((x) => x.kind === "rejected");
   const longest = Math.max(0, ...leadsWaiting.map((x) => Number(x.params.m) || 0));
   const estWaiting = db.estimates.filter((e) => e.status === "sent").length;
 
@@ -244,6 +253,20 @@ export default function Today() {
     >
       {/* v2 макет 1: «Требует действия» is the 2 × 2 tiles (the rows of the queue are «Все ›» — Triage); each opens exactly the records
           it counts (founder 05.11); a zero tile is not drawn; none is yellow — the Home's one yellow is «В пути» */}
+      {refused.length ? (
+        <ListGroup testID="today-refused">
+          {refused.map((it) => (
+            <GroupRow
+              key={it.id}
+              testID={`home-${it.id}`}
+              title={t(it.label, waitParams(it.params, t))}
+              status={{ status: it.status, label: t(it.chip, waitParams(it.params, t)) }}
+              lead={{ icon: "alert" }}
+              onPress={() => router.push(attentionHref(it))}
+            />
+          ))}
+        </ListGroup>
+      ) : null}
       <ListGroup title={t("todayR.action")} all={{ label: t("todayR.all"), onPress: () => router.push("/triage"), testID: "home-attention-all" }} bare testID="today-attention">
         <StatGrid testID="today-tiles">
           <StatTile testID="tile-leads" icon="inbox" dense label={t("proto.home.tile.leads")} value={leadsWaiting.length} unit={longest ? t("px1.tile.leadsWait", { m: waitShort(longest, t) }) : undefined} onPress={() => router.push("/leads")} />
@@ -260,6 +283,7 @@ export default function Today() {
       <Collapsible testID="today-details" title={t("todayR.details")} open={details} onToggle={setDetails}>
         <View style={{ gap: space[3] }}>
           <Segmented<Period>
+            testID="today-period"
             value={period}
             onChange={setPeriod}
             items={[
@@ -270,14 +294,16 @@ export default function Today() {
           />
           <Received period={period} idx={idx} />
           <ListGroup title={t("today.funnel")} inset={space[4]}>
-            <GroupRow title={t("today.f.leads")} value={String(n.leads)} onPress={() => router.push(`/figures/leads?period=${period}`)} />
+            <GroupRow testID="today-f-leads" title={t("today.f.leads")} value={String(n.leads)} onPress={() => router.push(`/figures/leads?period=${period}`)} />
             <GroupRow
+              testID="today-f-sent"
               title={t("today.f.sent")}
               subtitle={funnelShare(n.sent, n.leads) === undefined ? undefined : t("today2.ofLeads", { n: funnelShare(n.sent, n.leads)! })}
               value={String(n.sent)}
               onPress={() => router.push(`/figures/sent?period=${period}`)}
             />
             <GroupRow
+              testID="today-f-signed"
               title={t("today.f.signed")}
               subtitle={[moneyWhole(n.signedCents), funnelShare(n.signed, n.sent) === undefined ? undefined : t("today2.ofSent", { n: funnelShare(n.signed, n.sent)! })].filter(Boolean).join(" · ")}
               value={String(n.signed)}

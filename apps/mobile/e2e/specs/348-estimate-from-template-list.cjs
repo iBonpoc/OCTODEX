@@ -22,7 +22,7 @@ exports.run = async (h) => {
   };
   const { sheetGone } = require("../sheet.cjs");
   const openMenu = async () => {
-    await tid("est-list-add").getByRole("button").click();
+    await tid("est-list-create").getByRole("button").click(); // v2: the header's «＋» (ListScreen `create`)
     await tid("est-list-add-template").click();
   };
 
@@ -57,13 +57,13 @@ exports.run = async (h) => {
   await tid(`est-collapse-${a}`).waitFor({ timeout: 5000 });
   await p.waitForFunction((id) => document.activeElement?.closest(`[data-testid="est-qty-${id}"]`), a, { timeout: 5000 });
   h.expect((await focusedQty()) === `est-qty-${a}`, "the cursor is in «Кол-во» of the first line");
-  await p.keyboard.press("Control+A");
+  await p.keyboard.press("ControlOrMeta+A");
   await p.keyboard.type("4");
   // «›» (Enter on the web): the next line opens, the cursor in its «Кол-во»; the first folds
   await p.keyboard.press("Enter");
   await p.waitForFunction((id) => document.activeElement?.closest(`[data-testid="est-qty-${id}"]`), b, { timeout: 5000 });
   h.expect((await count(`est-collapse-${a}`)) === 0, "the first line folded");
-  await p.keyboard.press("Control+A");
+  await p.keyboard.press("ControlOrMeta+A");
   await p.keyboard.type("3");
   await h.shot("second");
   await tid(`est-collapse-${b}`).getByRole("button").click();
@@ -72,7 +72,7 @@ exports.run = async (h) => {
   // no tax from the template: the total is the sum of the lines, 4 × $50 + 3 × $30 = $290
   // (the bar at the bottom on a phone, the totals beside the list from 820; with the tax it would be $319.73)
   await p.waitForFunction(() => /\$290\b/.test(document.body.innerText) && !/\$319/.test(document.body.innerText), null, { timeout: 3000 });
-  await tid("ue-save").getByRole("button").click();
+  await tid("ue-save").click();
   await p.waitForFunction(({ k, tpl }) => (JSON.parse(localStorage.getItem(k))?.db?.estimates ?? []).some((e) => e.templateId === tpl), { k: DB_KEY, tpl: TPL }, { timeout: 8000 });
   const saved = await p.evaluate(({ k, tpl }) => JSON.parse(localStorage.getItem(k)).db.estimates.find((e) => e.templateId === tpl), { k: DB_KEY, tpl: TPL });
   h.expect(saved.doc.settings.tax.enabled === false, "saved without the template's tax");

@@ -145,7 +145,7 @@ function TotalPart({ total }: { total: MainStepTotal }) {
   );
   if (!total.onPress) return <View testID={total.testID}>{body}</View>;
   return (
-    <Press testID={total.testID} onPress={total.onPress} accessibilityRole="button" accessibilityLabel={`${total.label} ${total.value}`} accessibilityState={{ expanded: !!total.open }}>
+    <Press testID={total.testID} onPress={total.onPress} accessibilityRole="button" accessibilityLabel={`${total.label} ${total.value}`} accessibilityState={{ expanded: !!total.open }} aria-expanded={!!total.open}>
       {body}
     </Press>
   );

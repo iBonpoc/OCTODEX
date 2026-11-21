@@ -58,12 +58,9 @@ exports.run = async (h) => {
   await tid(`est-line-${firstId}`).getByRole("button", { name: /Действия со строкой/ }).click();
   await tid(`est-act-delete-${firstId}`).click();
   await waitCount('[data-testid^="est-line-"]', 2, "deleted: 2 rows");
-  // «Отменить» of a toast works a moment after the toast shows (a double tap is not an undo): press until it takes
-  let back = false;
-  for (let i = 0; i < 10 && !back; i++) {
-    await p.getByRole("button", { name: /Отменить|Вернуть/ }).locator("visible=true").last().click();
-    back = await p.waitForFunction(() => document.querySelectorAll('[data-testid^="est-line-"]').length === 3, null, { timeout: 500 }).then(() => true, () => false);
-  }
+  // «Отменить» of the newest toast, by testID (the helper presses until it takes)
+  await require("../estimateLine.cjs").undo(h);
+  const back = await p.waitForFunction(() => document.querySelectorAll('[data-testid^="est-line-"]').length === 3, null, { timeout: 3000 }).then(() => true, () => false);
   h.expect(back, "«Вернуть» brought it back (3 rows)");
 
   // «Из каталога»: one thing — its row opens

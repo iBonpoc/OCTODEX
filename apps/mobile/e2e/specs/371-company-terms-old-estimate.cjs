@@ -69,7 +69,7 @@ exports.run = async (h) => {
   await tid("est-terms-field").waitFor({ timeout: 3000 });
   await tid("est-nt-done").getByRole("button").click();
   await sheetGone(p);
-  await tid("ue-save").getByRole("button").click();
+  await tid("ue-save").click();
   await p.waitForFunction(([k, id]) => {
     const e = (JSON.parse(localStorage.getItem(k))?.db?.estimates ?? []).find((x) => x.id === id);
     return !!e && !!e.doc?.savedAt;

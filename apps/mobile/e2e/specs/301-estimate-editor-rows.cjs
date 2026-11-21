@@ -13,13 +13,9 @@ exports.run = async (h) => {
   const vis = (sel) => p.locator(sel).locator("visible=true");
   const count = (sel) => p.locator(sel).count();
   const rowIds = async () => (await p.locator('[data-testid^="est-line-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid").replace("est-line-", ""))));
-  // «Отменить» of a toast works a moment after the toast shows (a double tap is not an undo): press until the toast is gone
+  // «Отменить» of the newest toast, by testID (the helper presses until it takes)
   const undo = async (ok) => {
-    const btn = p.getByRole("button", { name: /Отменить/ }).locator("visible=true");
-    for (let i = 0; i < 10 && (await btn.count()) > 0; i++) {
-      await btn.last().click();
-      if (await p.waitForFunction(() => !Array.from(document.querySelectorAll("button, [role=button]")).some((e) => /Отменить/.test(e.getAttribute("aria-label") || e.textContent || "")), null, { timeout: 400 }).then(() => true, () => false)) break;
-    }
+    await line.undo(h);
     return ok();
   };
 
@@ -53,7 +49,9 @@ exports.run = async (h) => {
   await h.sheet().locator("input").first().fill("railing bracket");
   await h.sheet().getByText("Railing bracket", { exact: true }).first().click();
   await p.waitForFunction((i) => document.querySelector(`[data-testid="est-name-${i}"] input`)?.value === "Railing bracket", id, { timeout: 4000 });
-  h.expect((await vis(`[data-testid="est-price-${id}"] input`).first().inputValue()) === "12.13", "replaced: the catalog price ($12.13) stands, not the old $10");
+  // (the price field takes the new value a frame after the name: wait for it, then say what stands)
+  const priceNow = await p.waitForFunction((i) => document.querySelector(`[data-testid="est-price-${i}"] input`)?.value === "12.13", id, { timeout: 3000 }).then(() => "12.13", () => vis(`[data-testid="est-price-${id}"] input`).first().inputValue());
+  h.expect(priceNow === "12.13", `replaced: the catalog price ($12.13) stands, not the old $10 (${priceNow})`);
 
   // the cost field: «abc» keeps the row open; empty is «unknown»
   await vis(`[data-testid="est-cost-${id}"] input`).first().fill("abc");

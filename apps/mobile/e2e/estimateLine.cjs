@@ -30,16 +30,18 @@ exports.fold = async (h) => {
 };
 
 /**
- * «Отменить» of the toast (by testID): it works a moment after the toast shows (a double tap is not an undo), so press until
- * the toast is gone, then answer whether the thing is back — no fixed pause, it waits for what it checks.
+ * «Отменить» of the NEWEST toast (by testID): v2 keeps a stack of toasts, the newest on top (first in the page, `toastStack.ts`) —
+ * an older toast's «Отменить» would take back an older action. It works a moment after the toast shows (a double tap is not an
+ * undo), so press until that toast is gone, then answer whether it went — no fixed pause, it waits for what it checks.
  */
 exports.undo = async (h) => {
   const btn = h.page.getByTestId("toast-undo").locator("visible=true");
-  for (let i = 0; i < 10 && (await btn.count()) > 0; i++) {
-    await btn.last().click();
-    if (await h.page.waitForFunction(() => document.querySelectorAll('[data-testid="toast-undo"]').length === 0, null, { timeout: 400 }).then(() => true, () => false)) return true;
+  const n = await btn.count();
+  for (let i = 0; i < 10 && (await btn.count()) >= n && n > 0; i++) {
+    await btn.first().click();
+    if (await h.page.waitForFunction((k) => document.querySelectorAll('[data-testid="toast-undo"]').length < k, n, { timeout: 400 }).then(() => true, () => false)) return true;
   }
-  return (await btn.count()) === 0;
+  return n > 0 && (await btn.count()) < n;
 };
 
 /**
@@ -49,14 +51,30 @@ exports.undo = async (h) => {
  */
 exports.carry = async (h, key, x, pointerY, y) => {
   const id = key.replace(/^l:/, "");
-  const r = await h.page.evaluate((k) => {
+  const mid = () => h.page.evaluate((k) => {
     // (a row that is going away may still be in the page for a moment, with no size: the one that is seen)
     const b = [...document.querySelectorAll(`[data-testid="sort-row-l:${k}"]`)].map((e) => e.getBoundingClientRect()).find((x) => x.height > 0);
     return b ? b.top + b.height / 2 : null;
   }, id);
-  const to = r === null ? y : pointerY + (y - r);
-  await h.page.mouse.move(x, to, { steps: 12 });
-  return to;
+  let at = pointerY;
+  // the row follows the pointer a frame later and may stand off it by what the page could not scroll: read where the row came
+  // to and correct (up to three times) until its middle is at `y`
+  for (let i = 0; i < 3; i++) {
+    const r = await mid();
+    if (r === null) {
+      if (i === 0) {
+        await h.page.mouse.move(x, y, { steps: 12 });
+        return y;
+      }
+      break;
+    }
+    if (i > 0 && Math.abs(r - y) < 4) break;
+    at += y - r;
+    await h.page.mouse.move(x, at, { steps: i === 0 ? 12 : 4 });
+    // two frames: the row is drawn where the pointer took it
+    await h.page.evaluate(() => new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res))));
+  }
+  return at;
 };
 
 /**
@@ -90,4 +108,36 @@ exports.menu = async (h, id) => {
 exports.addSection = async (h) => {
   await vis(h, '[data-testid="est-add-layers"]').first().getByRole("button").click();
   await vis(h, '[data-testid="est-add-section"]').first().click();
+};
+/** «Добавить вариант» is in the same menu of «слои» (v2: one option shows no options card — the card comes with the second) */
+exports.addOption = async (h) => {
+  await vis(h, '[data-testid="est-add-layers"]').first().getByRole("button").click();
+  await vis(h, '[data-testid="est-add-option"]').first().click();
+};
+
+/**
+ * «Сохранить и отправить» of the builder (v2 #2350): the bar's one step is «Готово»; sending is an item of the header's «⋯»
+ * (`est-menu` → `ue-save-send`), by testID (rule 19). Waits for the menu to be gone (the item runs after it, menuPick).
+ */
+exports.saveSend = async (h) => exports.editorMenu(h, "ue-save-send");
+
+/**
+ * An item of the builder header's «⋯» (`est-menu`, v2 #2350) by its testID: «Сохранить и отправить» (`ue-save-send`), «Расставить»
+ * (`est-group-by-kind`), «Подробно» (`est-row-view`, a check item: a press flips «Кратко ↔ Подробно»), «Экран клиента»
+ * (`est-menu-client`). Waits for the menu to be gone (the item runs after it, menuPick).
+ */
+exports.editorMenu = async (h, item) => {
+  const p = h.page;
+  await p.getByTestId("est-menu").locator("visible=true").first().getByRole("button").first().click();
+  await p.getByTestId(item).locator("visible=true").first().click();
+  await p.getByTestId("menu-items").locator("visible=true").first().waitFor({ state: "hidden", timeout: 3000 });
+};
+/** whether the header's «⋯» has the item (opens the menu, looks, closes it — pressEscUntilClosed) */
+exports.editorMenuHas = async (h, item) => {
+  const p = h.page;
+  await p.getByTestId("est-menu").locator("visible=true").first().getByRole("button").first().click();
+  await p.getByTestId("menu-items").locator("visible=true").first().waitFor({ timeout: 3000 });
+  const has = (await p.getByTestId(item).locator("visible=true").count()) > 0;
+  await require("./sheet.cjs").pressEscUntilClosed(p, p.getByTestId("menu-items").locator("visible=true").first());
+  return has;
 };

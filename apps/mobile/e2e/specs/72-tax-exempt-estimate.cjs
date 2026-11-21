@@ -13,7 +13,7 @@ exports.run = async (h) => {
   await h.sheet().locator('input[inputmode="decimal"]').first().fill("9.5");
   await h.sheet().getByRole("button", { name: "Понятно" }).click(); await p.waitForTimeout(300);
   await h.expectText(/9\.5%/, "tax on the draft");
-  await p.getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(800);
+  await p.getByTestId("ue-save").locator("visible=true").first().click(); await p.waitForTimeout(800); // v2: the bar's «Готово»
   let db = await h.db();
   const est = db.estimates.filter((e) => e.customerId === "c2" && e.doc).at(-1);
   h.expect(est && est.doc.settings.tax.enabled === true, "draft saved with tax");
@@ -32,7 +32,7 @@ exports.run = async (h) => {
   h.expect((await tg.getAttribute("aria-disabled")) === "true" && (await tg.getAttribute("aria-checked")) === "false", "the tax switch of an exempt client is really disabled (read as such, off)");
   await h.sheet().getByRole("button", { name: "Понятно" }).click(); await p.waitForTimeout(300);
   await h.shot("exempt");
-  await p.getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(800);
+  await p.getByTestId("ue-save").locator("visible=true").first().click(); await p.waitForTimeout(800); // v2: the bar's «Готово»
   db = await h.db();
   const saved = db.estimates.find((e) => e.id === est.id);
   h.expect(saved.doc.settings.tax.enabled === false, "saved without tax");

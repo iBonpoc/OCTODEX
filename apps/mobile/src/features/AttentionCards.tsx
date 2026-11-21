@@ -21,7 +21,7 @@ import { useConsentQuestion } from "./LocationParts";
 import { smsWithBody } from "./sms";
 import { formatDayKey, minuteIn } from "./zone";
 import { todayKey } from "./calendar";
-import { fabItems } from "@/nav/sections";
+import { useFabItems } from "@/nav/Fab";
 import { useSearchIcon } from "@/nav/HeaderIcons";
 import { unreadCount } from "@/nav/notices";
 import type { Visit } from "@/data/types";
@@ -212,7 +212,8 @@ export function useHomeHeader() {
     onAvatar: wide ? undefined : () => router.push("/more"),
     avatarLabel: t("nav.profile"),
   };
-  const items = fabItems("home", role).filter((x) => x.href);
+  // the home set AND what the company's usable modules add («Замер желобов» of Gutters, docs/specs/33 П15.2) — as the old «＋» (Fab.tsx)
+  const items = useFabItems({ set: "home" }).filter((x) => x.href);
   const create: CreateAction | undefined = items.length
     ? { a11y: t("nav.create"), items: items.map((x) => ({ key: x.id, label: t(x.label), icon: x.icon, testID: `fab-${x.id}` })) }
     : undefined;

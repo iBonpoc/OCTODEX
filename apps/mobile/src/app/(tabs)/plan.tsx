@@ -135,9 +135,9 @@ export default function Plan() {
         create={planner ? {
           a11y: t("proto.plan.create"),
           items: [
-            { key: "visit", label: t("proto.plan.add.visit"), icon: "calendar" },
-            { key: "event", label: t("proto.plan.add.event"), icon: "clock" },
-            { key: "time_off", label: t("proto.plan.add.timeOff"), icon: "user" },
+            { key: "visit", label: t("proto.plan.add.visit"), icon: "calendar", testID: "plan-create-visit" },
+            { key: "event", label: t("proto.plan.add.event"), icon: "clock", testID: "plan-create-event" },
+            { key: "time_off", label: t("proto.plan.add.timeOff"), icon: "user", testID: "plan-create-time-off" },
           ],
         } : undefined}
         onCreate={(k) => (k === "visit" ? addOn(date) : setEv({ kind: k === "event" ? "event" : "time_off", day: date }))}

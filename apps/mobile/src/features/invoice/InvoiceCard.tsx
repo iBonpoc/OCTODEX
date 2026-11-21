@@ -217,9 +217,11 @@ export function InvoiceObject({ inv, back, pay: payNow }: { inv: Invoice; back: 
           details: (
             <View style={{ gap: space[2] }}>
               <RelatedBlock of={{ type: "invoice", id: inv.id }} />
-              <T v="caption" tone="mut">
-                {[sent, t("money.due", { date: day(inv.dueDate) }), lastReminder ? t("mny.remind.last", { date: day(lastReminder.at) }) : undefined, t(next.key, next.params)].filter(Boolean).join(" · ")}
-              </T>
+              <View testID="invoice-next">
+                <T v="caption" tone="mut">
+                  {[sent, t("money.due", { date: day(inv.dueDate) }), lastReminder ? t("mny.remind.last", { date: day(lastReminder.at) }) : undefined, t(next.key, next.params)].filter(Boolean).join(" · ")}
+                </T>
+              </View>
             </View>
           ),
           labels: { expand: t("ds.proto.expand"), collapse: t("ds.proto.collapse"), more: (n) => t("ds.proto.moreN", { n }) },

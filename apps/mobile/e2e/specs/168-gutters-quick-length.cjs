@@ -86,7 +86,8 @@ exports.run = async (h) => {
     const r = el.getBoundingClientRect(), q = pill && pill.getBoundingClientRect();
     return { text: getComputedStyle(el).fill, pill: pill && pill.tagName.toLowerCase() === "rect" ? getComputedStyle(pill).fill : "", under: !!q && q.left <= r.left && q.right >= r.right };
   });
-  h.expect(look.text === "rgb(11, 12, 15)" && look.pill === "rgb(251, 255, 0)", `the number under the mark: dark on the button's yellow (${JSON.stringify(look)})`);
+  // v2 (#2350): tokens `tape.markFill`/`markText` = the main button's `acc` #E2C15E / `onAcc` #1C1A12 (both themes)
+  h.expect(look.text === "rgb(28, 26, 18)" && look.pill === "rgb(226, 193, 94)", `the number under the mark: dark on the button's yellow (${JSON.stringify(look)})`);
   h.expect(look.under, "the pill is under the whole number");
 
   // a bad length: inches 12

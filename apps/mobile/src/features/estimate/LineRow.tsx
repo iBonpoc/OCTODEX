@@ -22,7 +22,7 @@ import { SwipeRow, type SwipeBtn } from "./SwipeRow";
 import { useRowHandle } from "@/features/SortableList";
 import { swipes } from "./swipeState";
 import { rowQtyLine, rowSum } from "./rowLine";
-import { longPressMenu } from "./rowGesture";
+import { dragEnd, longPressMenu } from "./rowGesture";
 import { finePointer } from "@/ui/pointer";
 
 /**
@@ -238,7 +238,7 @@ function LineRowView(p: LineRowProps) {
       </View>
     );
     const body = (
-      <Press onPress={p.locked ? undefined : () => (swipes.justSwiped(motion.durSlow) || swipes.closeOpen() ? undefined : p.api.open(l.id))} onLongPress={items.length && longPressMenu(finePointer()) ? () => openMenuAt(rowRef) : undefined} accessibilityHint={items.length ? t("px3.est.lineActions") : undefined} disabled={p.locked} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={l.name || t("est.row.unnamed")} accessibilityState={{ expanded: false }} accessibilityActions={[...shifts.map((k) => ({ name: k, label: t(k === "up" ? "est.sec.moveUp" : "est.sec.moveDown") })), ...acts.menu.map((k) => ({ name: k, label: META[k].label }))]} onAccessibilityAction={(e) => {
+      <Press onPress={p.locked ? undefined : () => (swipes.justSwiped(motion.durSlow) || dragEnd.justDragged(motion.durSlow) || swipes.closeOpen() ? undefined : p.api.open(l.id))} onLongPress={items.length && longPressMenu(finePointer()) ? () => openMenuAt(rowRef) : undefined} accessibilityHint={items.length ? t("px3.est.lineActions") : undefined} disabled={p.locked} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={l.name || t("est.row.unnamed")} accessibilityState={{ expanded: false }} accessibilityActions={[...shifts.map((k) => ({ name: k, label: t(k === "up" ? "est.sec.moveUp" : "est.sec.moveDown") })), ...acts.menu.map((k) => ({ name: k, label: META[k].label }))]} onAccessibilityAction={(e) => {
           const n = e.nativeEvent.actionName;
           if ((n === "up" || n === "down") && shifts.length) return pick(n);
           const a = actOfName(n, acts);

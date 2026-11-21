@@ -16,10 +16,17 @@ exports.run = async (h) => {
   // the estimate line is live (#1307 «а»): «Кратко» by default, the trash, «Подробно» adds «$12 × 86 LF», the hidden line's «расход»
   await vis("showcase-rows-line").waitFor({ timeout: 3000 });
   h.expect((await p.getByTestId("showcase-rows-row-soon").count()) === 0 && (await p.getByTestId("showcase-rows-compact-soon").count()) === 0, "line and «Кратко / Подробно»: no stub any more");
-  await vis("est-trash-ds-l1").waitFor({ timeout: 3000 });
+  // visual v2 №5 (#2344): a folded row has no trash (its actions are the swipe / long press / «⋯» of the open row); «120 × $1.50»
+  // is on the folded row itself
+  await vis("est-line-ds-l1").waitFor({ timeout: 3000 });
+  h.expect((await p.getByTestId("est-trash-ds-l1").locator("visible=true").count()) === 0, "a folded row has no trash (v2 №5)");
+  await vis("est-times-ds-l1").waitFor({ timeout: 3000 });
   h.expect(/расход \$280/.test(await vis("est-spend-ds-l2").innerText()), "the hidden sample line: «расход $280»");
   await vis("showcase-rows-line").getByText("Подробно", { exact: true }).click();
   await vis("est-times-ds-l1").waitFor({ timeout: 3000 });
+  // the open row carries the trash in its header
+  await vis("est-title-ds-l1").click();
+  await vis("est-trash-ds-l1").waitFor({ timeout: 3000 });
   // the swipe is live now (РС-7c2): on the web a hint about «⋯», not a «coming» stub; the rest still wait for their components
   h.expect((await p.getByTestId("showcase-rows-swipe-soon").count()) === 0, "swipe: no stub any more");
   h.expect(/«⋯»/.test(await vis("showcase-rows-swipe").innerText()), "swipe: the web names «⋯»");

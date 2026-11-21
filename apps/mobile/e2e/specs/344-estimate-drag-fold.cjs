@@ -16,9 +16,10 @@ exports.run = async (h) => {
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await tid("est-add-new").waitFor({ timeout: 8000 });
   for (const [n, v] of [["Alpha (тестовые)", 10], ["Bravo (тестовые)", 20], ["Charlie (тестовые)", 30], ["Delta (тестовые)", 40]]) await line.addCustom(h, n, v, 2);
-  await tid("est-row-view").getByText("Подробно", { exact: true }).click();
+  await line.editorMenu(h, "est-row-view"); // «⋯ → Строки подробно» (v2: an item of the header menu)
   const [a, b, , d] = await ids();
-  await tid(`est-times-${a}`).waitFor({ timeout: 3000 });
+  // «Подробно» (v2): the row's line reads «$10.00 × 2 ea» («Кратко» reads «2 ea × $10.00»)
+  await p.waitForFunction((id) => /^\$[\d,.]+ × /.test((document.querySelector(`[data-testid="est-times-${id}"]`)?.textContent || "").trim()), a, { timeout: 3000 });
   // an open row in the middle
   await tid(`est-line-${b}`).click();
   await tid(`est-collapse-${b}`).waitFor({ timeout: 3000 });
@@ -41,8 +42,8 @@ exports.run = async (h) => {
   await p.mouse.move(x, y0 - 12, { steps: 4 });
   // the list has folded and settled (the page scrolled the row's place under the pointer, as far as it could)
   await p.getByTestId("sort-folded").first().waitFor({ state: "attached", timeout: 3000 });
-  // the whole list is short: the open row folded, no «× qty» anywhere
-  await p.waitForFunction(() => document.querySelectorAll('[data-testid^="est-times-"]').length === 0 && document.querySelectorAll('[data-testid^="est-collapse-"]').length === 0, null, { timeout: 3000 });
+  // the whole list is short («Кратко»): the open row folded, no «$price × qty» of «Подробно» anywhere
+  await p.waitForFunction(() => ![...document.querySelectorAll('[data-testid^="est-times-"]')].some((e) => /^\$[\d,.]+ × /.test((e.textContent || "").trim())) && document.querySelectorAll('[data-testid^="est-collapse-"]').length === 0, null, { timeout: 3000 });
   h.expect(true, "the list folded: every row short, the open row folded");
   // the held row is seen: inside the list (not cut off past its end, not over a neighbour), and under the pointer unless the page
   // could not scroll that far (it stands on its own place then)
@@ -70,7 +71,7 @@ exports.run = async (h) => {
   // the landed row flashes (a frame `acc` that fades)
   await p.getByTestId(`sort-flash-l:${d}`).first().waitFor({ state: "attached", timeout: 2000 });
   // «Подробно» again
-  await tid(`est-times-${a}`).waitFor({ timeout: 3000 });
+  await p.waitForFunction((id) => /^\$[\d,.]+ × /.test((document.querySelector(`[data-testid="est-times-${id}"]`)?.textContent || "").trim()), a, { timeout: 3000 });
   // the list unfolded and the landed row is still under the pointer (the page scrolled to keep it)
   const py = top + 4;
   const landed = await waited(p.waitForFunction(([id, y]) => {

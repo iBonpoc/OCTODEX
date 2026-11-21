@@ -64,17 +64,14 @@ exports.run = async (h) => {
   await h.go("/jobs");
   await listHolds(h, /Bathroom remodel/);
   h.expect((await p.getByTestId("list-card").filter({ hasText: /Deep clean after move-out/ }).count()) === 0, "the tech: /jobs has no job of another tech (j5)");
+  // v2 (#2350): the estimates are GroupRow rows `est-row-<id>` (rule 12), not cards
   await h.go("/estimates");
-  await listHolds(h, /Fence repair/);
-  h.expect((await p.getByTestId("list-card").filter({ hasText: /Panel upgrade 200A/ }).count()) === 0, "the tech: /estimates has no estimate of nothing of his (e1)");
-  if (h.layout.width === 1280) {
-    // Б3: the panel beside the list by its address — his own opens, another's does not
-    await h.go("/estimates?open=e2");
-    await p.getByTestId("list-panel").first().waitFor({ state: "visible", timeout: 15000 });
-    await h.go("/estimates?open=e1");
-    await listHolds(h, /Fence repair/);
-    h.expect((await p.getByTestId("list-panel").count()) === 0, "the tech, 1280: ?open= of an estimate of nothing of his opens no panel");
-  }
+  await p.getByTestId("est-row-e2").first().waitFor({ state: "visible", timeout: 15000 });
+  h.expect((await p.getByTestId("est-row-e1").count()) === 0, "the tech: /estimates has no estimate of nothing of his (e1)");
+  // Б3: an old link to the 1280 panel (`/estimates?open=<id>`) — v2 has no panel, the link opens the estimate's own screen,
+  // which checks the access itself: his own opens, another's says «нет доступа» (every view)
+  await shows(h, "/estimates?open=e2", "estimate-screen", "the tech: ?open= of an estimate at his inspection's property");
+  await shows(h, "/estimates?open=e1", null, "the tech: ?open= of an estimate of nothing of his");
 
   // the office sees everything as before
   await h.seed("octo.role.v1", "director");

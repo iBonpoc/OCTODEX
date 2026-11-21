@@ -53,6 +53,10 @@ describe("navigation hierarchy: back = one level up", () => {
   });
   it("«Ещё» → Счета → Счёт: the list is a root; an invoice without a job goes up to the list", () => {
     expect(navContext("/invoice", { f: "owed" }, db, "director")).toEqual({ section: "invoices" });
+    // one client's debts (the client's «Должен», v2 #2350 — no chip ✕ under the row): «‹» goes back to that client
+    const c0 = db.customers[0]!;
+    expect(navContext("/invoice", { f: "owed", customer: c0.id }, db, "director")).toEqual({ section: "invoices", up: { href: `/client/${c0.id}`, label: { text: c0.name } } });
+    expect(navContext("/invoice", { customer: "no-such-client" }, db, "director")).toEqual({ section: "invoices" });
     expect(navContext("/payments", {}, db, "dispatcher")).toEqual({ section: "payments" });
     expect(navContext("/reports", {}, db, "dispatcher")).toEqual({ section: "reports" });
     expect(navContext("/reports/revenue", {}, db, "director")).toMatchObject({ section: "reports", kind: "rpt.title", up: { href: "/reports" } });

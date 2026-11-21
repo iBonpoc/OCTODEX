@@ -61,7 +61,7 @@ exports.run = async (h) => {
   await tid(`est-line-${id}`).click();
   await tid(`est-save-catalog-${id}`).getByRole("switch").click();
   const estBefore = ((await h.db()).estimates ?? []).length;
-  await tid("ue-save").getByRole("button").click();
+  await tid("ue-save").click();
   await p.waitForURL((u) => !/\/estimate\/new/.test(u.pathname), { timeout: 8000 });
   await p.waitForFunction((n) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.estimates ?? []).length === n + 1, estBefore, { timeout: 5000 });
   const db1 = await h.db();

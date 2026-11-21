@@ -203,4 +203,17 @@ async function pickDsKind(p, key) {
   await p.waitForFunction((k) => document.querySelector(`[data-testid="attr-ds-kind-${k}"]`)?.getAttribute("aria-checked") === "true", key, { timeout: 5000 });
 }
 
-module.exports = { pickDsKind, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
+// «Отменить» of a toast (v2, #2086): the word ignores a tap until it is armed (`aria-busy` false, motion.toastArmMs after the toast
+// showed) — waits for that, then presses. A stack of up to three toasts, the NEWEST ON TOP (first in the page; the old
+// `getByRole("button", { name: "Отменить" }).last()` took the oldest — «Уже не отменить» of another action). `text` — the newest toast
+// with that text; none — the newest one.
+async function pressUndo(p, text) {
+  const all = p.getByTestId("toast").locator("visible=true");
+  const toast = (text ? all.filter({ hasText: text }) : all).first();
+  const undo = toast.getByTestId("toast-undo");
+  await undo.waitFor({ timeout: 5000 });
+  await p.waitForFunction((el) => el.getAttribute("aria-busy") !== "true", await undo.elementHandle(), { timeout: 5000 });
+  await undo.click();
+}
+
+module.exports = { pressUndo, pickDsKind, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };

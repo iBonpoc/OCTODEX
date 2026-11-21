@@ -43,7 +43,7 @@ exports.run = async (h) => {
   await h.shot("open-moved");
 
   // every line in a section: save, put them into «Roof», open again
-  await tid("ue-save").getByRole("button").click();
+  await tid("ue-save").click();
   await p.waitForFunction(() => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.estimates ?? []).some((e) => e.customerId === "c2" && e.doc?.options?.[0]?.lines?.length === 3), null, { timeout: 8000 });
   const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));
   const est = raw.db.estimates.find((e) => e.customerId === "c2" && e.doc?.options?.[0]?.lines?.length === 3);

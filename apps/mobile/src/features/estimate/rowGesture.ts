@@ -18,3 +18,18 @@ export const longPressMenu = (fine: boolean): boolean => fine;
 
 /** the handle «≡» stands on a section and on the OPEN line only; a folded line is taken by its body */
 export const showsHandle = (key: string, open: boolean): boolean => !key.startsWith("l:") || open;
+
+/**
+ * A drag that ended just now (#2350): the mouse's release over the row it carried is a «click» on the web — the folded row must
+ * not open from it (a drop is not a tap). SortableList marks the end of a carried row; the row's tap within `slow` ms is ignored.
+ */
+export function createDragEnd(now: () => number = Date.now) {
+  let last = -Infinity;
+  return {
+    ended: () => {
+      last = now();
+    },
+    justDragged: (slow: number) => now() - last < slow,
+  };
+}
+export const dragEnd = createDragEnd();

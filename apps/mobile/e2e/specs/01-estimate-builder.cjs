@@ -19,6 +19,6 @@ exports.run = async (h) => {
   await h.expectText(/Итого \| \$794\.49/, "total");
   await h.expectText(/10% · \$79\.45/, "deposit");
   await h.shot("builder");
-  await h.page.getByRole("button", { name: "Сохранить и отправить" }).click(); await h.page.waitForTimeout(800);
+  await require("../estimateLine.cjs").saveSend(h); await h.page.waitForTimeout(800);
   await h.expectText(/Отправить клиенту/, "send sheet opens");
 };

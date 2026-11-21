@@ -198,6 +198,9 @@ exports.run = async (h) => {
     // the status bar backdrop (spec 32 §7): scrolled, the list passes under the clock on glass, not bare;
     // at the top of the scroll nothing is drawn there
     if (c.t > 0 && !wide) {
+      // v2: the clients are grouped rows, the list may not fill a tall phone — «Главная» always scrolls
+      await h.go("/");
+      await insets(p, c);
       const backdrop = () => p.evaluate(() => { const e = [...document.querySelectorAll('[data-testid="status-backdrop"]')].find((x) => x.getBoundingClientRect().height > 0); return e ? e.getBoundingClientRect().height : 0; });
       h.expect((await backdrop()) === 0, `${c.name}: no backdrop at the top of the scroll`);
       await p.mouse.move(c.w / 2, c.h / 2);
@@ -209,10 +212,11 @@ exports.run = async (h) => {
       if (Math.abs(bh - c.t) > 0.5) h.failures.push(`${c.name}: scrolled — the backdrop under the clock is ${bh}, not ${c.t}`);
     }
 
-    // «＋» on «Главная» (on «Клиенты» it opens the new client at once): the floating button (phone) or the header one → its sheet
+    // «＋» on «Главная»: the header's «＋» → its menu
     await h.go("/");
     await insets(p, c);
-    const fab = p.locator(wide ? '[data-testid="fab-header"]' : '[data-testid="fab"]').locator("visible=true").first();
+    // v2: the «＋» is in the header on every width (today-create), its items open as a menu
+    const fab = p.getByTestId("today-create").locator("visible=true").first().getByRole("button").first();
     await fab.click();
     await h.sheet().locator('[data-testid^="fab-"]').first().waitFor({ timeout: 3000 });
     await applied(p, c);
@@ -221,7 +225,7 @@ exports.run = async (h) => {
     await pressEscUntilClosed(p);
     await p.waitForFunction(() => !document.querySelector('[aria-modal="true"] [data-testid^="fab-"]'), null, { timeout: 3000 });
 
-    // the menu: the phone has the «Ещё» tab (a screen); 820 — ☰ opens the drawer; 1280 — the side menu opens in place
+    // the menu: the phone has «Ещё» (a screen behind the avatar); 820 — ☰ opens the drawer; 1280 — the side menu opens in place
     if (!wide) {
       await h.go("/more");
       await insets(p, c);

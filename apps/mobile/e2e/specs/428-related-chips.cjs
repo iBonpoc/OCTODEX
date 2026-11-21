@@ -1,7 +1,8 @@
 /**
  * e2e 428 — «Связано» is chips (#1495 п.3, DS §12.3 п.6), the director, every view, by testID:
- * each parent of an invoice and of a job is a chip with a plate (a painted background or a frame) and «›» in its words —
- * not bare text with an icon; the chip still opens its parent.
+ * each parent of an invoice and of a receipt is a chip with a plate (a painted background or a frame) and «›» in its words —
+ * not bare text with an icon; the chip still opens its parent. (v2 #2350: the job's header names its client and address, so its
+ * «Связано» hides them — «одна и та же информация на экране — один раз», features/RelatedBlock `hide`.)
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -26,7 +27,7 @@ exports.run = async (h) => {
   };
   await check("/invoice/i1", ["job", "customer"]);
   await h.shot("invoice");
-  await check("/job/j2", ["customer", "property"]);
+  await check("/receipt/pay3", ["invoice", "job", "customer"]);
   // a chip still opens its parent
   await tid("related-customer").click();
   await p.waitForURL(/\/client\//, { timeout: 8000 });

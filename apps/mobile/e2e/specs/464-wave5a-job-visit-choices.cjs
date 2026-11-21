@@ -16,7 +16,8 @@ exports.run = async (h) => {
 
   // — the job's history: the filter lane
   await h.go("/job/j1");
-  await p.getByTestId("job-tab-notes").locator("visible=true").click();
+  // v2: the job is the Object template — «Заметки» is a section of its strip
+  await p.getByTestId("job-screen-sections-notes").locator("visible=true").first().click();
   await tid("job-history-filter").waitFor({ timeout: 8000 });
   h.expect((await old(tid("job-history-filter"))) === 0, "the history filter is no segments");
   await tid("job-history-filter").getByRole("radio", { name: "Заметки", exact: true }).click();
@@ -94,7 +95,7 @@ exports.run = async (h) => {
   await tid("visit-method-button").click();
   await tid("visit-method-zelle").click();
   h.expect(/Zelle/.test(await tid("visit-method-button").innerText()), "«Способ оплаты · Zelle»");
-  await tid("visit-record-payment").getByRole("button").click();
+  await tid("visit-record-payment").click();
   await p.waitForFunction((id) => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.visits?.find((x) => x.id === id)?.step === "paid", visit.id, { timeout: 8000 });
   const after = await h.db();
   const inv = after.invoices.filter((i) => i.jobId === job.id);

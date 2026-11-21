@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Redirect, useLocalSearchParams } from "expo-router";
 import { useI18n } from "@/i18n";
 import { useEstimateList } from "@/features/boards";
 import { MoneyTiles, useMoneyChips, useMoneyCreate } from "@/features/moneyTabs";
@@ -18,6 +19,9 @@ export default function Estimates() {
   const chips = useMoneyChips("estimates");
   const { create, onCreate } = useMoneyCreate();
   const { groups, row } = useEstimateList(q, allDone, () => setAllDone(true));
+  // an old link to the 1280 panel (`/estimates?open=<id>`, spec 06): the estimate's own screen (it checks the access itself)
+  const { open } = useLocalSearchParams<{ open?: string }>();
+  if (open) return <Redirect href={`/estimate/${open}`} />;
   return (
     <ListScreen
       testID="est-list"

@@ -10,7 +10,7 @@
  * - the office and sales change prices; a tech reads only; the trial over: read only.
  * Finds things by testID and the store; waits on what it checks.
  */
-const { skipLength, viewTotal } = require("../gutters.cjs");
+const { skipLength, viewTotal, pressUndo } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 
@@ -85,7 +85,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await gutterItems()).length > before + 10, "all the missing items made");
   const made = (await gutterItems()).filter((x) => x.id !== "own-install-4");
   h.expect(made.every((x) => x.placeholder === true && Number.isInteger(x.priceCents) && x.priceCents >= 0), "every made item is a sample price in whole cents (rule 9)");
-  await p.getByRole("button", { name: "Отменить", exact: true }).last().click();
+  await pressUndo(p);
   await waitFor(async () => (await gutterItems()).length === before, "«Отменить»: the made items are gone");
   await tid("gpr-missing-n-action").getByRole("button").click();
   await waitFor(async () => (await gutterItems()).length > before + 10, "made again");

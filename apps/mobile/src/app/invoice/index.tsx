@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { router, useLocalSearchParams } from "expo-router";
+import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import type { DB, Invoice } from "@/data/types";
@@ -41,7 +41,7 @@ const GROUP_TITLE = { overdue: "proto.money.g.overdue", waiting: "proto.money.g.
  * `&customer=`), `?g=waiting|overdue` (a tile).
  */
 export default function Invoices() {
-  const { f: fParam, customer, g: gParam } = useLocalSearchParams<{ f?: string; customer?: string; g?: string }>();
+  const { f: fParam, customer, g: gParam, open } = useLocalSearchParams<{ f?: string; customer?: string; g?: string; open?: string }>();
   const { db, role } = useStore();
   const { t, money, day } = useI18n();
   const remind = useInvoiceRemind();
@@ -51,6 +51,8 @@ export default function Invoices() {
   const f: InvoiceFilter = asInvoiceFilter(fParam);
   const tile: MoneyTile | undefined = gParam === "waiting" || gParam === "overdue" ? gParam : undefined;
   const [q, setQ] = useState("");
+  // an old link to the 1280 panel (`/invoice?open=<id>`, spec 06): the invoice's own screen (it checks the access itself)
+  if (open) return <Redirect href={`/invoice/${open}`} />;
   if (!canSeeInvoiceList(role))
     return (
       <Screen title={t("nav.money")}>

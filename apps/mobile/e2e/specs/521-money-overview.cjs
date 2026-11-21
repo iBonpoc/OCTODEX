@@ -21,7 +21,8 @@ exports.run = async (h) => {
   h.expect((await rows.count()) >= 1, "«К оплате» has rows");
   h.expect(/−\d+/.test(await rows.first().innerText()), "the first row is overdue: «−N дн»");
   h.expect((await p.locator('[data-testid^="money-paid-"]').locator("visible=true").count()) >= 1, "«Оплачены сегодня» has today's payments");
-  h.expect((await p.getByTestId("est-list-chips").locator("visible=true").count()) === 0, "no segment on the overview");
+  // the segment «Сметы · Счета · Оплаты» (Segmented `est-list-chips`: its tabs are `est-list-chips-<key>`)
+  h.expect((await p.locator('[data-testid^="est-list-chips"]').locator("visible=true").count()) === 0, "no segment on the overview");
   await h.shot("overview");
   // «Все ›» → the invoices
   await tid("money-topay-all").click();
@@ -29,5 +30,5 @@ exports.run = async (h) => {
   await h.go("/finance");
   await tid("money-tile-estimates").click();
   await p.waitForURL(/\/estimates/, { timeout: 5000 });
-  await tid("est-list-chips").waitFor({ timeout: 5000 });
+  await tid("est-list-chips-estimates").waitFor({ timeout: 5000 });
 };

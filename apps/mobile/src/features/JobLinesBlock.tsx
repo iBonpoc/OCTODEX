@@ -104,7 +104,7 @@ export function JobLinesBlock({ job }: { job: Job }) {
 
   return (
     <View style={{ gap: space[2] }}>
-      <SectionTitle title={t("job5.lines.title")} right={editable ? <Button label={t("job5.lines.add")} icon="plus" size="sm" variant="ghost" onPress={() => open()} /> : undefined} />
+      <SectionTitle title={t("job5.lines.title")} right={editable ? <Button testID="job-lines-add" label={t("job5.lines.add")} icon="plus" size="sm" variant="ghost" onPress={() => open()} /> : undefined} />
       {warn ? (
         <Card status="warn">
           <RowView>
@@ -116,13 +116,14 @@ export function JobLinesBlock({ job }: { job: Job }) {
       {lines.length ? (
         <Card>
           {lines.map((l) => (
-            <ListRow
-              key={l.id}
-              title={l.name}
-              subtitle={`${shownLineQty(l.quantity)} × ${money(l.unitPriceCents)}${l.taxable ? "" : ` · ${t("job5.lines.noTax")}`}`}
-              right={<T v="body" tabular>{money(l.totalCents)}</T>}
-              onPress={editable ? () => open(l) : undefined}
-            />
+            <View key={l.id} testID={`job-line-${l.id}`}>
+              <ListRow
+                title={l.name}
+                subtitle={`${shownLineQty(l.quantity)} × ${money(l.unitPriceCents)}${l.taxable ? "" : ` · ${t("job5.lines.noTax")}`}`}
+                right={<T v="body" tabular>{money(l.totalCents)}</T>}
+                onPress={editable ? () => open(l) : undefined}
+              />
+            </View>
           ))}
           <RowView style={{ justifyContent: "space-between" }}>
             <T v="body" tone="mut">{t("job5.lines.subtotal")}</T>
@@ -136,10 +137,12 @@ export function JobLinesBlock({ job }: { job: Job }) {
               </RowView>
             </View>
           ) : null}
-          <RowView style={{ justifyContent: "space-between" }}>
-            <T v="heading">{t("job5.lines.total")}</T>
-            <T v="title" tabular>{money(totals.total)}</T>
-          </RowView>
+          <View testID="job-lines-total">
+            <RowView style={{ justifyContent: "space-between" }}>
+              <T v="heading">{t("job5.lines.total")}</T>
+              <T v="title" tabular>{money(totals.total)}</T>
+            </RowView>
+          </View>
         </Card>
       ) : (
         <T v="caption" tone="mut">{t("job5.lines.empty")}</T>

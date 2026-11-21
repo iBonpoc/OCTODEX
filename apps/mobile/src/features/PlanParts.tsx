@@ -5,12 +5,13 @@ import { router } from "expo-router";
 import { component, radius, rhythm, space, spaceHalf } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useStore } from "@/data/store";
-import type { CalendarEvent, CalendarEventKind, ID, Task, Visit } from "@/data/types";
+import type { CalendarEvent, CalendarEventKind, DB, ID, Task, Visit } from "@/data/types";
 import { findJob } from "@/data/jobs";
 import { visitPropertyId } from "@/data/selectors";
 import { todayKey, type DayKey } from "@/features/calendar";
 import { lateAfterOf, scheduleSettingsOf } from "@/features/scheduleSettings";
 import { visitStatus } from "@/features/visits";
+import { overlapSigns } from "@/features/listSigns";
 import { AssignSheet } from "@/features/sheets";
 import { collapseEmpty, groupByDay, itemTimes, timeLead, type PlanItem } from "@/features/planFeed";
 import { useI18n } from "@/i18n";
@@ -38,6 +39,14 @@ import { NO_UNDO } from "@/data/undo";
  */
 
 const TASK_ROUTE: Record<Task["subjectType"], string> = { lead: "/lead", customer: "/client", job: "/job", estimate: "/estimate", property: "/property" };
+
+/**
+ * «Накладка» (docs/specs/03 П3c п. 8): an open visit crossing another of its people's says so where its status says nothing
+ * («Запланирован») — a warn pill on its first row, a word on the others (quietStatuses), as the late and the missed.
+ */
+export function withOverlap(db: Pick<DB, "visits">, v: Visit, st: ReturnType<typeof visitStatus>): ReturnType<typeof visitStatus> {
+  return st.status === "neutral" && overlapSigns(db, v).length ? { status: "warn", label: "card.sign.overlap" } : st;
+}
 
 export type RowHandlers = {
   onEvent?: (e: CalendarEvent) => void;
@@ -67,7 +76,7 @@ export function PlanRow({ x, onEvent, onAssign, onMove }: { x: PlanItem } & RowH
   if (x.kind === "visit") {
     const v = x.visit;
     const { client } = visitWho(db, v);
-    const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
+    const st = withOverlap(db, v, visitStatus(v, db.members, Date.now(), lateAfterOf(db)));
     const late = st.label === "late.enRoute" || st.label === "late.notLeft";
     const nobody = !liveAssignees(v, db.members).length;
     const work = findJob(db, v.jobId)?.title ?? (v.kind === "inspection" ? t("plan.kind.inspection") : t("plan.kind.job"));
@@ -126,7 +135,7 @@ export function PlanDay({ items, day, title, testID }: { items: PlanItem[]; day:
   const rows = items.filter((x) => x.day === day);
   const now = Date.now();
   const near = day === todayKey() ? nearIndex(rows, now) : -1;
-  const st = rows.map((x) => (x.kind === "visit" ? visitStatus(x.visit, db.members, now, lateAfterOf(db)) : x.kind === "task" && x.done ? { status: "ok" as const, label: "plan5.done" as const } : undefined));
+  const st = rows.map((x) => (x.kind === "visit" ? withOverlap(db, x.visit, visitStatus(x.visit, db.members, now, lateAfterOf(db))) : x.kind === "task" && x.done ? { status: "ok" as const, label: "plan5.done" as const } : undefined));
   const shown = quietStatuses(st.map((s) => s?.status));
   const kinds = st.map((s) => (!s ? null : s.label === "st.missed" ? "missed" : s.label === "late.enRoute" || s.label === "late.notLeft" ? "late" : null));
   const sum = problemSummary(kinds);

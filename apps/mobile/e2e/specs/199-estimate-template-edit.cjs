@@ -92,7 +92,9 @@ exports.run = async (h) => {
   await tid("est-tpl-edit").getByRole("button").click();
   await p.waitForURL(new RegExp(`estimate/new\\?editTemplate=${T_OWN}`), { timeout: 8000 });
   await tid("est-tpl-editing").waitFor({ timeout: 8000 });
-  h.expect(/Шаблоны смет/.test(await h.text()), "the crumb leads back to «Шаблоны смет», not «Новая смета»");
+  // v2 (#2350): the editor's header is «×» and the title — no crumb; the title says it is the template, not «Новая смета»
+  const head = await tid("screen-title").innerText();
+  h.expect(/Шаблон сметы/.test(head) && !/Новая смета/.test(head), `the header says «Шаблон сметы», not «Новая смета»: ${head}`);
   h.expect((await tid("ue-save").count()) === 0 && (await tid("est-start").count()) === 0, "no client, no «Сохранить», no «С чего начать?»");
   await h.shot("edit");
   await tid("est-line-lo2").click();

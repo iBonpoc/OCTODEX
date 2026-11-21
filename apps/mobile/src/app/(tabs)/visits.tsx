@@ -19,6 +19,7 @@ import { mapsUrl } from "@/ui/listCardLayout";
 import type { NowCardProps } from "@/ui/nowCard";
 import { StatGrid, StatTile } from "@/ui/statTile";
 import { OverviewScreen } from "@/ui/templates";
+import { withOverlap } from "@/features/PlanParts";
 
 /** «Задачи и фото» shows this many rows before «Все ›» (the template shows three) */
 const TASKS_ALL = "/tasks";
@@ -117,7 +118,7 @@ export default function Visits() {
   const rest = d.visits.filter((v) => v.id !== focus?.id);
   // one pill for a problem — on its first row; the others say it as a word (audit 12 §2.3: a wall of «Пропущен» / «Опаздывает»)
   const restSt = rest.map((v) => {
-    const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, v));
+    const st = withOverlap(db, v, visitStatus(v, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, v)));
     return v.step === "scheduled" && st.status === "neutral" ? undefined : st;
   });
   const restShown = quietStatuses(restSt.map((s) => s?.status));

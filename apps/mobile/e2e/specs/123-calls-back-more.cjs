@@ -39,7 +39,8 @@ exports.run = async (h) => {
     // the toast «Отменить» on a section outside the tabs: above the bar, not on it (it was hidden before — no bar here)
     await h.go("/tasks");
     await p.waitForTimeout(400);
-    await p.getByRole("button", { name: "Выполнено" }).locator("visible=true").first().click();
+    // v2: the row's round «done» (its name is «Выполнено: <task>»)
+    await p.locator('[data-testid^="task-done-"]:not([data-testid$="-circle"]):visible').first().click();
     const undo = p.getByRole("button", { name: "Отменить" }).locator("visible=true");
     await undo.waitFor({ timeout: 3000 });
     await p.waitForTimeout(600); // the slide-in
@@ -58,23 +59,28 @@ exports.run = async (h) => {
   await up.click();
   await p.waitForTimeout(600);
   h.expect(path(h) === "/messages", `«‹ Сообщения» → /messages (${p.url()})`);
-  // Leads from «Ещё» (office): «‹ Ещё», and the system back returns to «Ещё» (the director's decision 07.11, spec 28 §3)
+  // a tab screen opened from «Ещё» (office): «‹ Ещё», and the system back returns to «Ещё» (the director's decision 07.11,
+  // spec 28 §3). v2: «Лиды» is a bottom tab — «Сообщения» is the tab screen that opens from «Ещё» (from=more)
   await h.go("/today");
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
   await h.go("/more");
-  await p.locator('[data-testid="more-leads"]:visible').click();
+  await p.locator('[data-testid="more-messages"]:visible').click();
   await p.waitForTimeout(700);
-  h.expect(path(h) === "/leads", `tile → /leads (${p.url()})`);
+  h.expect(path(h) === "/messages", `tile → /messages (${p.url()})`);
   if (!wide) {
     await p.getByTestId("back-more").locator("visible=true").click();
     await p.waitForTimeout(600);
-    h.expect(path(h) === "/more", `Leads: «‹ Ещё» → /more (${p.url()})`);
-    await p.locator('[data-testid="more-leads"]:visible').click();
+    h.expect(path(h) === "/more", `Messages: «‹ Ещё» → /more (${p.url()})`);
+    await p.locator('[data-testid="more-messages"]:visible').click();
     await p.waitForTimeout(700);
   }
   await p.goBack();
   await p.waitForTimeout(700);
-  h.expect(path(h) === "/more", `Leads: back → /more (${p.url()})`);
+  h.expect(path(h) === "/more", `Messages: back → /more (${p.url()})`);
+  // v2: «Лиды» is a tab — no «‹ Ещё» on it for the office either
+  await h.go("/leads");
+  await p.waitForTimeout(500);
+  h.expect((await p.getByTestId("back-more").locator("visible=true").count()) === 0, "director: Leads is a tab, no «‹ Ещё»");
   // sales: Leads is the home — no «‹ Ещё» there
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("sales")));
   await h.go("/leads");

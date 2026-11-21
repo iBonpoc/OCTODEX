@@ -7,6 +7,8 @@
  * - «Отменить» on the toast takes the second reminder back (rule 5);
  * - the technician has no «Напомнить».
  */
+const { invRemind, invRemindCount } = require("../invoiceMenu.cjs");
+
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/invoice");
@@ -27,7 +29,7 @@ exports.run = async (h) => {
   await p.evaluate(() => { window.__opened = []; window.open = (u) => { window.__opened.push(String(u)); return null; }; });
   const reminders = async () => (await h.db()).activities.filter((a) => a.meta?.reminder === "1" && a.meta?.invoiceId === inv.id);
 
-  await p.getByTestId("invoice-remind").locator("visible=true").first().getByRole("button").click();
+  await invRemind(p);
   const sheet = p.locator('[aria-modal="true"]').filter({ hasText: "Напомнить клиенту" }).last();
   const st = await sheet.innerText();
   h.expect(st.includes("Язык клиента: Español"), "the sheet names the client's language");
@@ -46,7 +48,7 @@ exports.run = async (h) => {
 
   // a second reminder, taken back with «Отменить»
   await p.evaluate(() => { window.open = () => null; });
-  await p.getByTestId("invoice-remind").locator("visible=true").first().getByRole("button").click();
+  await invRemind(p);
   await p.locator('[aria-modal="true"]').filter({ hasText: "Напомнить клиенту" }).last().getByRole("button", { name: "Напомнить по SMS" }).click();
   await p.waitForTimeout(300);
   await h.click("Отменить");
@@ -57,6 +59,6 @@ exports.run = async (h) => {
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go(`/invoice/${inv.id}`);
   // the row of icons is there (PDF at least; «⋯» is the director's only — #2350)
-  await p.getByTestId("invoice-actions").locator("visible=true").first().waitFor({ timeout: 8000 });
-  h.expect((await p.getByTestId("invoice-remind").count()) === 0, "tech: no «Напомнить»");
+  await p.getByTestId("invoice-screen-actions").locator("visible=true").first().waitFor({ timeout: 8000 });
+  h.expect((await invRemindCount(p)) === 0, "tech: no «Напомнить» (neither the main step nor the icon)");
 };

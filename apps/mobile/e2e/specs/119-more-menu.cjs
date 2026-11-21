@@ -31,7 +31,8 @@ exports.run = async (h) => {
   for (const id of ["settings", "help"]) h.expect((await p.locator(`[data-testid="more-group-bottom"] [data-testid="more-${id}"]`).count()) === 1, `«${id}» at the bottom`);
 
   // rows: one column, 44 high, the name is exactly the word
-  const ids = ["leads", "jobs", "calls", "tasks", "estimates", "invoices", "catalog", "payments", "reports", "money", "team", "company", "settings", "help"];
+  // v2: «Лиды» is a bottom tab now, so it is not a row of «Ещё» (sections.ts TAB_ORDER)
+  const ids = ["jobs", "calls", "tasks", "estimates", "invoices", "catalog", "payments", "reports", "money", "team", "company", "settings", "help"];
   const boxes = [];
   for (const id of ids) {
     const b = await row(id).boundingBox();
@@ -75,7 +76,9 @@ exports.run = async (h) => {
   await h.go("/more");
   h.expect((await p.locator('[data-testid="more-group-company"]').count()) === 0, "tech: no «Компания»");
   for (const id of ["invoices", "payments", "reports", "money", "team", "company"]) h.expect((await row(id).count()) === 0, `tech: no row «${id}»`);
-  h.expect((await row("leads").count()) === 1, "tech: row «leads» — his own leads (#327, e2e 127)");
+  // v2: «Лиды» — his own leads (#327) — is his tab, not a row of «Ещё»
+  h.expect((await row("leads").count()) === 0, "tech: «Лиды» is a tab, not a row of «Ещё»");
+  if (!wide) h.expect((await p.locator('[data-testid="tab-leads"]:visible').count()) === 1, "tech: the «Лиды» tab (#327, e2e 127)");
   h.expect(!/Просрочено/.test(await h.text()), "tech: no overdue counter");
   await h.shot("tech");
 };

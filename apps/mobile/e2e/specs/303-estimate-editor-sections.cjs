@@ -54,7 +54,7 @@ exports.run = async (h) => {
 
   // «Разложить по видам» and «Отменить»: only the layout goes back
   await line.fold(h);
-  await tid("est-group-by-kind").getByRole("button").click();
+  await line.editorMenu(h, "est-group-by-kind");
   await p.waitForFunction(() => document.querySelectorAll('[data-testid^="est-section-"]').length >= 3, null, { timeout: 3000 });
   const back = await undo(async () => (await sections()) === 1);
   h.expect(back, "«Отменить» of the layout: one section again");
@@ -118,7 +118,7 @@ exports.run = async (h) => {
 
   // an estimate with sections saves: the sections are kept (the sums on the server are the lines' sums — see unit:estimateSections)
   const before = ((await h.db()).estimates ?? []).length;
-  await tid("ue-save").getByRole("button").click();
+  await tid("ue-save").click();
   await p.waitForURL((u) => !/\/estimate\/new/.test(u.pathname), { timeout: 8000 });
   await p.waitForFunction((n) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.estimates ?? []).length === n + 1, before, { timeout: 5000 });
   const est = ((await h.db()).estimates ?? []).find((e) => e.doc?.options?.[0]?.sections?.some((x) => x.title === "Двор"));

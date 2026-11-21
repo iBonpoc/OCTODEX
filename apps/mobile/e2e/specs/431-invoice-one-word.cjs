@@ -20,8 +20,8 @@ exports.run = async (h) => {
     return (await tid(id).innerText()).replace(/\s+/g, " ");
   };
   for (const [path, id, where, tab] of [
-    ["/job/j2", "statement-invoice-i1", "job", "job-tab-invoices"],
-    ["/client/c2", "client-invoice-i1", "client", "client-tabs-invoices"],
+    ["/job/j2", "statement-invoice-i1", "job", "job-screen-sections-invoices"],
+    ["/client/c2", "client-invoice-i1", "client", "client-screen-sections-money"],
     ["/property/p2?s=invoices", "property-invoice-i1", "property"],
   ]) {
     const txt = await chipOf(path, id, tab);

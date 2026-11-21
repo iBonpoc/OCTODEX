@@ -331,7 +331,7 @@ export function HeaderBar({
           <>
             {parent ? (
               <Animated.View pointerEvents={stage > 0 ? "none" : "box-none"} style={[{ position: "absolute", left: 0, right: 0, flexDirection: "row", alignItems: "center", gap: space[2] }, kick]}>
-                <Press onPress={parent.onPress} accessibilityRole="link" accessibilityLabel={parent.label} containerStyle={{ flexShrink: 1 }} style={{ minHeight: size.hitMin, justifyContent: "center" }}>
+                <Press testID="hdr-parent" onPress={parent.onPress} accessibilityRole="link" accessibilityLabel={parent.label} containerStyle={{ flexShrink: 1 }} style={{ minHeight: size.hitMin, justifyContent: "center" }}>
                   <T v="body" w="semibold" tone="mut" numberOfLines={1}>
                     {parent.label}
                   </T>
@@ -546,8 +546,9 @@ export function HeaderBig({
       </View>
     ) : (
       <View style={{ minHeight: H.big, flexDirection: "row", alignItems: "center", gap: space[3], paddingTop: spaceHalf.hair, paddingBottom: space[1] }}>
-        {/* the name keeps its room first (up to two thirds of the line); the two lines take what is left and cut with «…» */}
-        <Animated.View style={[{ flexDirection: "row", alignItems: "center", gap: space[2], flexShrink: 0, maxWidth: "66%", transformOrigin: "left center" }, titleLook]}>
+        {/* the name keeps its room first (up to two thirds of the line); the two lines take what is left and cut with «…»;
+            with no two lines the name has the whole line (e2e 457: «Настройки приложения» was cut at 66 % on 390) */}
+        <Animated.View style={[{ flexDirection: "row", alignItems: "center", gap: space[2], flexShrink: 0, maxWidth: sub && (sub.line1 || sub.line2) ? "66%" : "100%", transformOrigin: "left center" }, titleLook]}>
           {titleText}
           {chevron}
           {help}

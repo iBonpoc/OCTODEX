@@ -145,7 +145,7 @@ export default function Clients() {
       groups={groups}
       row={row}
       // «⋯» — import from CSV: the office's (owner, admin, office), not sales (04 §14.4)
-      more={canImportClients(role) ? [{ key: "import", label: t("client.import.menu"), icon: "invoice" }, { key: "imports", label: t("client.imports.menu"), icon: "history" }] : undefined}
+      more={canImportClients(role) ? [{ key: "import", label: t("client.import.menu"), icon: "invoice", testID: "clients-more-import" }, { key: "imports", label: t("client.imports.menu"), icon: "history", testID: "clients-more-imports" }] : undefined}
       onMore={(k) => router.push(k === "import" ? "/client/import" : "/client/imports")}
       aside={openC ? <ClientAside key={openC.id} c={openC} outside={panel.outside} onOpen={panel.full} onClose={panel.close} /> : undefined}
       empty={

@@ -8,6 +8,7 @@
 const { atMinute, todayKey } = require("../companyTime.cjs");
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 const path = (h) => new URL(h.page.url()).pathname;
+const { objMoreText } = require("../objectScreen.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -22,18 +23,23 @@ exports.run = async (h) => {
 
   await setRole(h, "director");
   await h.go(`/job/${job.id}`);
-  await h.expectText(new RegExp(`Работа ${job.number}`), "header «Работа JOB-…»");
-  for (const key of ["overview", "visits", "estimates", "invoices", "expenses", "photos", "notes"]) h.expect((await p.getByTestId(`job-tab-${key}`).locator("visible=true").count()) === 1, `section «${key}» in the line`);
-  await h.expectText(/Ближайший выезд/, "the next visit: the reason under the main step");
+  // v2 (#2350): the job's number is in «⋯» (wireframe №6 «номер JOB — в ⋯»), the title is the job's name
+  const num = await objMoreText(p, "job-screen", "job-act-number");
+  h.expect(new RegExp(`Работа ${job.number}`).test(num), `«⋯» names «Работа ${job.number}» (${num})`);
+  for (const key of ["overview", "visits", "estimates", "invoices", "expenses", "photos", "notes"]) h.expect((await p.getByTestId(`job-screen-sections-${key}`).locator("visible=true").count()) === 1, `section «${key}» in the line`);
+  // the «Сейчас» card: «Ближайший выезд» over the visit, the one main step «Начать выезд» inside
+  const now = await p.getByTestId("job-now").locator("visible=true").first().innerText();
+  h.expect(/Ближайший выезд/i.test(now), `the next visit names the «Сейчас» card (${now.replace(/\n/g, " | ")})`);
+  h.expect((await p.getByTestId("job-next-start").locator("visible=true").count()) === 1, "one main step «Начать выезд»");
   await h.shot("details");
 
   // Расходы: the office sees the profit
-  await p.getByTestId("job-tab-expenses").locator("visible=true").click();
+  await p.getByTestId("job-screen-sections-expenses").locator("visible=true").click();
   await h.expectText(/Прибыль/, "office: profit on «Расходы»");
   await h.shot("money");
 
   // Заметки: add a note → it is under «Заметки», not under «Звонки»
-  await p.getByTestId("job-tab-notes").locator("visible=true").click();
+  await p.getByTestId("job-screen-sections-notes").locator("visible=true").click();
   await p.getByPlaceholder("Собака во дворе, где парковаться…").locator("visible=true").fill("Ключ у соседа");
   await p.getByRole("button", { name: "Добавить заметку", exact: true }).locator("visible=true").first().click();
   await p.getByTestId("job-history-filter").locator("visible=true").first().getByRole("radio", { name: "Заметки", exact: true }).click(); // the list's lane (spec 56 wave 5а)
@@ -47,8 +53,8 @@ exports.run = async (h) => {
   // the technician: «К оплате», no profit; «Начать выезд» opens his visit
   await setRole(h, "tech");
   await h.go(`/job/${job.id}`);
-  h.expect((await p.getByTestId("job-tab-expenses").count()) === 0, "tech: no «Расходы»");
-  await p.getByTestId("job-tab-invoices").locator("visible=true").click();
+  h.expect((await p.getByTestId("job-screen-sections-expenses").count()) === 0, "tech: no «Расходы»");
+  await p.getByTestId("job-screen-sections-invoices").locator("visible=true").click();
   await h.expectText(/К оплате/, "tech: «К оплате»");
   h.expect(!/Прибыль/.test(await h.text()), "tech: no profit");
   // B4: each invoice of his job is a compact card with what is left to collect — not the invoice total
@@ -62,8 +68,8 @@ exports.run = async (h) => {
     h.expect(txt.includes(usd(due)), `tech: the invoice card shows what is left (${usd(due)}): ${txt.replace(/\n/g, " | ")}`);
     if (due !== inv.totalCents) h.expect(!txt.includes(usd(inv.totalCents)), `tech: no invoice total (${usd(inv.totalCents)})`);
   }
-  await p.getByTestId("job-tab-overview").locator("visible=true").click();
-  await h.click("Начать выезд");
-  await p.waitForTimeout(600);
+  await p.getByTestId("job-screen-sections-overview").locator("visible=true").click();
+  await p.getByTestId("job-next-start").locator("visible=true").first().click();
+  await p.waitForURL(/\/visit\/e2e63/, { timeout: 5000 });
   h.expect(path(h) === "/visit/e2e63", `«Начать» → the next visit (${p.url()})`);
 };

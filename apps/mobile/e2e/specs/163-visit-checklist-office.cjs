@@ -6,6 +6,8 @@
  * The dispatcher may not turn «Обязательный» off; sales and the tech do not edit. Found by testID and the db.
  */
 const { pressEscUntilClosed } = require("../sheet.cjs");
+const { visitAct, visitHas } = require("../visitScreen.cjs");
+const { pressUndo } = require("../gutters.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const ID = "v6";
@@ -17,6 +19,8 @@ exports.run = async (h) => {
   const editor = () => p.getByTestId("chk-editor").last();
 
   await h.go(`/visit/${ID}`);
+  // v2: the editor of the checklist is an item of the header's «⋯» («Изменить чек-лист», the office)
+  await visitAct(p, "visit-act-checklist");
   await editor().waitFor();
   h.expect((await visit()).checklist.length === 0, "the inspection came without items");
   await h.expectText(/Пунктов пока нет/, "an empty checklist");
@@ -59,7 +63,8 @@ exports.run = async (h) => {
   await p.getByTestId("chk-edit-0").last().getByRole("button", { name: /^Ниже/ }).click();
   v = await until((x) => x.checklist[1].id === first);
   h.expect(v.checklist[1].id === first, "moved down");
-  await p.getByRole("button", { name: "Отменить", exact: true }).last().click();
+  // v2: the newest toast is on top of the stack; its «Отменить» works once armed
+  await pressUndo(p);
   v = await until((x) => x.checklist[0].id === first);
   h.expect(v.checklist[0].id === first, "«Отменить» brings the order back");
 
@@ -77,13 +82,15 @@ exports.run = async (h) => {
   await h.expectText(/Пункт убран/, "the toast");
   v = await until((x) => !x.checklist.some((c) => c.id === gone));
   h.expect(!v.checklist.some((c) => c.id === gone), "removed");
-  await p.getByRole("button", { name: "Отменить", exact: true }).last().click();
+  // v2: the newest toast is on top of the stack; its «Отменить» works once armed
+  await pressUndo(p);
   v = await until((x) => x.checklist.some((c) => c.id === gone));
   h.expect(v.checklist.length === 5 && v.checklist[1].id === gone, "«Отменить» brings it back");
 
   // the dispatcher: a required item stays required (only the director turns it off; the server's guard)
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("dispatcher")));
   await h.go(`/visit/${ID}`);
+  await visitAct(p, "visit-act-checklist");
   await p.getByTestId("chk-edit-0").last().getByRole("button", { name: /^Изменить/ }).click();
   await h.sheet().getByText("Пункт чек-листа").waitFor();
   h.expect((await h.sheet().getByText("Снять «Обязательный» может только директор").count()) === 0, "an optional item: the dispatcher may make it required");
@@ -108,7 +115,11 @@ exports.run = async (h) => {
     }
     await p.evaluate((r) => localStorage.setItem("octo.role.v1", JSON.stringify(r)), role);
     await h.go(`/visit/${ID}`);
-    await h.expectText(/Пунктов: 5/, `${role}: the checklist is read`);
+    // v2: the checklist cell of the work card («Чек-лист выезда · 0 из 5»)
+    const cell = p.getByTestId("chk-left").locator("visible=true").first();
+    await cell.waitFor();
+    h.expect(/0 из 5/.test(await cell.innerText()), `${role}: the checklist is read: ${await cell.innerText()}`);
+    h.expect(!(await visitHas(p, "visit-act-checklist")), `${role}: no «Изменить чек-лист» in «⋯»`);
     h.expect((await p.getByTestId("chk-editor").count()) === 0, `${role}: no editor`);
   }
 };

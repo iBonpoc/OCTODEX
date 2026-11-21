@@ -2,7 +2,7 @@
  * e2e 127 — «Лиды» of the technician (docs/specs/13 §2.3, §4; spec 14 §6.4): his own leads only — assigned to him or
  * brought by him (canSeeLead, RLS leads_select). Every view. Demo «me» is Alex (as in e2e 15).
  * - the director hands l2 to Ivan (the lead's «Кто ведёт»);
- * - tech: «Лиды» is in «Ещё» (phone) / the side menu (820/1280) and opens /leads; l1 (his) is there, l2 (Ivan's) is not;
+ * - tech: «Лиды» is a bottom tab (phone, v2) / in the side menu (820/1280) and opens /leads; l1 (his) is there, l2 (Ivan's) is not;
  *   no «Ответственный» / «Источник» in the filter, no lead price; a lead's «‹ назад» goes to «Лиды», not «Главная»;
  * - /inbox (the office's old address) stays closed to him.
  * The subcontractor (no «Лиды») is the unit test sections.test.ts: in the demo «me» is never a subcontractor.
@@ -38,10 +38,15 @@ exports.run = async (h) => {
   // the technician: «Лиды» in the menu → /leads
   await setRole(h, "tech");
   await h.go("/visits");
-  await m.open();
-  const item = m.menu().getByRole("button", { name: "Лиды", exact: true });
-  h.expect((await item.count()) === 1, "the tech has «Лиды» in the menu");
-  if (m.phone) await h.shot("more-tech");
+  // v2: on the phone «Лиды» is the tech's bottom tab (sections.ts TAB_ORDER); 820/1280 — the side menu
+  let item;
+  if (m.phone) item = p.getByTestId("tab-leads").locator("visible=true");
+  else {
+    await m.open();
+    item = m.menu().getByRole("button", { name: "Лиды", exact: true });
+  }
+  h.expect((await item.count()) === 1, `the tech has «Лиды» ${m.phone ? "as a tab" : "in the menu"}`);
+  if (m.phone) await h.shot("tabs-tech");
   await item.click();
   await p.waitForURL(/\/leads/, { timeout: 5000 });
   h.expect(path(h) === "/leads", `«Лиды» opens /leads for the tech (${p.url()})`);
@@ -94,21 +99,21 @@ exports.run = async (h) => {
     localStorage.setItem("octo.db.v5", JSON.stringify(raw));
   });
   await h.go("/lead/l1");
-  // the tab reads «Сметы · N» (the side menu at 820/1280 has a bare «Сметы»)
-  await p.getByText(/^Сметы · \d+$/).locator("visible=true").last().click();
+  // the card's section strip (v2 ObjectScreen): «Сметы»
+  await p.getByTestId("lead-screen-sections-estimates").locator("visible=true").first().click();
   const est = p.getByTestId("lead-estimate-e127").locator("visible=true");
   await est.first().waitFor({ timeout: 5000 });
   const card = await est.first().innerText();
   h.expect(/E127 water heater/.test(card) && !/\$/.test(card), `the tech: the lead's estimate card has no sum (${card.replace(/\n/g, " | ")})`);
-  await p.getByText("Обзор", { exact: true }).locator("visible=true").first().click();
+  await p.getByTestId("lead-screen-sections-overview").locator("visible=true").first().click();
   await p.waitForTimeout(300);
   // the other side: the office sees the sum on the same card
   await setRole(h, "director");
   await h.go("/lead/l1");
-  await p.getByText(/^Сметы · \d+$/).locator("visible=true").last().click();
+  await p.getByTestId("lead-screen-sections-estimates").locator("visible=true").first().click();
   await est.first().waitFor({ timeout: 5000 });
   h.expect(/\$/.test(await est.first().innerText()), "the director: the lead's estimate card has the sum");
-  await p.getByText("Обзор", { exact: true }).locator("visible=true").first().click();
+  await p.getByTestId("lead-screen-sections-overview").locator("visible=true").first().click();
   await p.waitForTimeout(300);
   await setRole(h, "tech");
 

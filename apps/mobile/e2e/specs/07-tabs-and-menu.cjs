@@ -1,4 +1,6 @@
 /** Every tab and menu screen opens for every role that may open it, the rest send it home (no errors), Sales boards and Jobs filters work. */
+const { dueKey, todayKey } = require("../companyTime.cjs");
+
 exports.run = async (h) => {
   await h.go("/today");
   for (const role of ["director", "dispatcher", "tech"]) {
@@ -21,11 +23,20 @@ exports.run = async (h) => {
   await h.expectText(/GoRix v1\.0\.0 · (\d+|dev)\b/, "«О приложении» has the version line");
   // Estimates and Invoices are sections of their own (spec 31 §7а): no switch on /leads
   await h.go("/estimates");
-  await h.expectText(/Открытые · \d+/, "estimate filters");
-  // the invoice cards with groups: «Счета» is the one invoices list (spec 31 §7а)
+  // v2: the estimates list is grouped (ListGroup) — a group's title carries its count
+  const estGroup = h.page.locator('[data-testid^="est-list-group-"]:visible').first();
+  await estGroup.waitFor({ timeout: 5000 });
+  h.expect(/· \d+/.test(await estGroup.innerText()), "estimate groups with their count");
+  // the invoice rows with groups: «Счета» is the one invoices list (spec 31 §7а)
   await h.go("/invoice");
-  await h.expectText(/Просрочено · \d+ · \$[\d,]+/, "overdue invoices group");
-  await h.expectText(/Просрочен \d+ дн/, "overdue sign on the invoice card");
+  const db = await h.db();
+  const overdue = db.invoices.filter((i) => i.paidCents < i.totalCents && dueKey(i.dueDate) < todayKey());
+  h.expect(overdue.length > 0, "the demo has an overdue invoice");
+  const og = h.page.locator('[data-testid="invoice-list-group-overdue"]:visible');
+  await og.waitFor({ timeout: 5000 });
+  h.expect(/\$[\d,]+/.test(await og.innerText()), "overdue invoices group with its sum");
+  const orow = og.locator(`[data-testid="invoice-row-${overdue[0].id}"]`);
+  h.expect(/−\d+ дн/.test(await orow.innerText()), "overdue sign (−N дн) on the invoice row");
   await h.go("/jobs");
   // the job filters, by key (the words follow the status: a job is «Запланирована», #1417)
   await h.page.getByTestId("filter-lane-scheduled").locator("visible=true").first().waitFor({ timeout: 5000 });

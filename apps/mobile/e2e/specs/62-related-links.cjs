@@ -3,6 +3,8 @@
  * - tech: visit → «Работа JOB-0002» → job → «Клиент …» → client (the chain worked only from the Plan before);
  * - office: an inspection → «Лид LEA-0001» → lead; a finished inspection → «Сделать смету» with the lead filled in;
  * - «Этажей: N» is gone from the visit (niche field, 13 §3.3).
+ * v2 (#2350): the visit names its job in its header (`visit-job`), the job names its client in the header's parent link
+ * (`hdr-parent`) — «Связано» hides what the header shows (features/RelatedBlock `hide`); the inspection's lead is `related-lead`.
  */
 const { atMinute, todayKey } = require("../companyTime.cjs");
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
@@ -10,7 +12,6 @@ const path = (h) => new URL(h.page.url()).pathname;
 
 exports.run = async (h) => {
   const p = h.page;
-  const rel = (re) => p.getByRole("button", { name: re }).locator("visible=true").first();
   await h.go("/visits");
   const db = await h.db();
   const job = db.jobs.find((j) => j.id === "j2");
@@ -29,25 +30,27 @@ exports.run = async (h) => {
   // the technician: visit → job → client
   await setRole(h, "tech");
   await h.go("/visit/e2e62");
+  const tid = (id) => p.getByTestId(id).locator("visible=true").first();
+  await tid("visit-job").waitFor({ timeout: 8000 });
   let body = await h.text();
   h.expect(!/Этажей|этажей/.test(body), "no «Этажей: N» on the visit");
-  h.expect((await rel(new RegExp(`^Связано: Работа ${job.number}$`)).count()) === 1, "tech: «Работа JOB-…» on the visit");
+  h.expect((await tid("visit-job").innerText()).includes(job.title), `tech: the job «${job.title}» on the visit`);
   await h.shot("tech-visit");
-  await rel(new RegExp(`^Связано: Работа ${job.number}$`)).click();
-  await p.waitForTimeout(700);
-  h.expect(path(h) === `/job/${job.id}`, `visit → job (${p.url()})`);
-  await h.expectText(new RegExp(`Работа ${job.number}`), "the job's header has its number");
-  h.expect((await rel(/^Связано: Смета/).count()) === 0, "tech: no estimate link (money)");
-  await rel(new RegExp(`^Связано: Клиент ${cust.name}$`)).click();
-  await p.waitForTimeout(700);
-  h.expect(path(h) === `/client/${cust.id}`, `job → client (${p.url()})`);
+  await tid("visit-job").click();
+  await p.waitForURL((u) => u.pathname === `/job/${job.id}`, { timeout: 8000 });
+  await tid("job-screen").waitFor();
+  h.expect((await p.getByTestId("related-estimate").locator("visible=true").count()) === 0, "tech: no estimate link (money)");
+  h.expect((await tid("hdr-parent").innerText()).includes(cust.name), `the job's header names its client (${cust.name})`);
+  await tid("hdr-parent").click();
+  await p.waitForURL((u) => u.pathname === `/client/${cust.id}`, { timeout: 8000 });
 
   // the office: inspection → lead
   await setRole(h, "director");
   await h.go(`/visit/${insp.id}`);
-  await rel(new RegExp(`^Связано: Лид ${lead.number}$`)).click();
-  await p.waitForTimeout(700);
-  h.expect(path(h) === `/lead/${lead.id}`, `inspection → lead (${p.url()})`);
+  await tid("related-lead").waitFor({ timeout: 8000 });
+  h.expect((await tid("related-lead").getAttribute("aria-label")) === `Связано: Лид ${lead.number}`, "the inspection names its lead");
+  await tid("related-lead").click();
+  await p.waitForURL((u) => u.pathname === `/lead/${lead.id}`, { timeout: 8000 });
 
   // a finished inspection: «Сделать смету» is the main action, the lead goes along
   await p.evaluate(() => {

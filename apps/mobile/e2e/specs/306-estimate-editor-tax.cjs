@@ -52,7 +52,7 @@ exports.run = async (h) => {
   await h.expectText(/Итого \| \$97\.99/, "the total agrees");
 
   // saved: the next estimate offers «как в прошлой»
-  await p.getByRole("button", { name: "Сохранить", exact: true }).last().click();
+  await tid("ue-save").click();
   await p.waitForFunction((k) => (JSON.parse(localStorage.getItem(k) || "null")?.db?.estimates ?? []).some((e) => e.customerId === "c2" && e.doc?.settings?.tax?.ratePpm === 88750), DB_KEY, { timeout: 8000 });
   const saved = (await h.db()).estimates.filter((e) => e.customerId === "c2" && e.doc).at(-1);
   h.expect(saved?.doc.settings.tax.enabled === true && saved.doc.settings.tax.ratePpm === 88750, `saved with the rate in ppm (88750): ${JSON.stringify(saved?.doc.settings.tax)}`);

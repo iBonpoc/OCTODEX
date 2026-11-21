@@ -1,11 +1,12 @@
 const { sheetGone, waited } = require("../sheet.cjs");
+const { objMore } = require("../objectScreen.cjs");
 /**
  * Spec 56 wave 4 — the client (§3а.3, §3а.5, §3а.6), every view, by testID:
  * - «Контакты клиента»: no chips and no segments left (no radio, tablist or checkbox in the sheet); the phone's label menu changes its
  *   kind; «⊕ Добавить телефон» adds a row; «⊖» removes it (its undo toast over the sheet — the separate PR); «Сделать основным» moves a number up and
  *   the saved primary is the first one;
  * - the client form: «Источник» is a SelectField row; «Счета на другой адрес» shows and hides the address fields under it;
- * - the client card: number, status and tags on one line (one top, no wrap); «Контакты · N» opens the sheet.
+ * - the client card (v2): «Клиент · VIP» and the status — two lines right of the name, each one line; «⋯ → Контакты» opens the sheet.
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -13,41 +14,34 @@ exports.run = async (h) => {
   const shown = (id, timeout = 4000) => p.waitForFunction((id) => [...document.querySelectorAll(`[data-testid="${id}"]`)].some((e) => e.offsetParent !== null), id, { timeout });
   const gone = (id) => p.waitForFunction((id) => ![...document.querySelectorAll(`[data-testid="${id}"]`)].some((e) => e.offsetParent !== null), id, { timeout: 4000 });
 
-  // the card: one line «CLT-0001 · ✓ Клиент · VIP · Постоянный», never wrapped
+  // the card (v2 #2350, ObjectScreen): right of the name's rule two lines — «Клиент · VIP» (what it is and the first tag, never
+  // «VIP · Постоя…»; all the tags are in «⋯ → Метки») and under it the status «◷ Активный»; each line one line, never wrapped
+  const lines = async () =>
+    p.evaluate(() => {
+      const rule = [...document.querySelectorAll('[data-testid="screen-head-rule"]')].find((e) => e.offsetParent !== null);
+      const box = rule?.nextElementSibling;
+      const kids = [...(box?.children ?? [])];
+      return { n: kids.length, texts: kids.map((e) => e.innerText.trim()), hs: kids.map((e) => Math.round(e.getBoundingClientRect().height)) };
+    });
   await h.go("/client/c1");
-  await vis("client-headline").waitFor({ timeout: 8000 });
-  const tops = await p.evaluate(() => {
-    const line = [...document.querySelectorAll('[data-testid="client-headline"]')].find((e) => e.offsetParent !== null);
-    const r = (e) => e.getBoundingClientRect();
-    const box = r(line);
-    const parts = [line.querySelector('[data-testid="client-status"]'), line.querySelector('[data-testid="client-headline-tags"]')].filter(Boolean);
-    return { lineH: box.height, parts: parts.map((e) => Math.round(r(e).top + r(e).height / 2)), lineMid: Math.round(box.top + box.height / 2) };
-  });
-  h.expect(tops.parts.length === 2, `status and tags are in the line (${tops.parts.length})`);
-  h.expect(tops.parts.every((y) => Math.abs(y - tops.lineMid) <= 2), `status and tags on one line, same middle (${JSON.stringify(tops)})`);
-  h.expect(tops.lineH <= 48, `the line does not wrap (${tops.lineH})`);
-  // more tags than fit: the line stays one, «+N» takes the rest
+  await vis("client-header-status").waitFor({ timeout: 8000 });
+  const one = await lines();
+  h.expect(one.n === 2 && /^Клиент · VIP$/.test(one.texts[0]) && /Активный/.test(one.texts[1]), `«Клиент · VIP» over «Активный» (${JSON.stringify(one)})`);
+  h.expect(one.hs.every((x) => x <= 26), `each line is one line (${one.hs})`);
+  // more tags than fit: the line still says the first one only, on one line
   const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));
   const extra = ["Pool", "Solar panels", "Two dogs", "Gate code", "Spanish speaking", "Weekends only"].map((name, i) => ({ id: `t-w4-${i}`, name, active: true, position: 100 + i }));
   raw.db.tags = [...raw.db.tags, ...extra];
   raw.db.customers = raw.db.customers.map((c) => (c.id === "c1" ? { ...c, tagIds: [...(c.tagIds || []), ...extra.map((x) => x.id)] } : c));
   await h.seed("octo.db.v5", raw);
   await h.go("/client/c1");
-  await vis("client-headline").waitFor({ timeout: 8000 });
-  await shown("client-headline-more");
-  const many = await p.evaluate(() => {
-    const line = [...document.querySelectorAll('[data-testid="client-headline"]')].find((e) => e.offsetParent !== null);
-    const more = line.querySelector('[data-testid="client-headline-more"]');
-    const lb = line.getBoundingClientRect();
-    const mb = more.getBoundingClientRect();
-    return { lineH: lb.height, moreRight: mb.right, lineRight: lb.right, text: more.innerText };
-  });
-  h.expect(many.lineH <= 48, `eight tags: still one line (${many.lineH})`);
-  h.expect(/^\+\d+$/.test(many.text.trim()) && many.moreRight <= many.lineRight + 1, `«+N» inside the line (${JSON.stringify(many)})`);
+  await vis("client-header-status").waitFor({ timeout: 8000 });
+  const many = await lines();
+  h.expect(/^Клиент · VIP$/.test(many.texts[0]) && many.hs.every((x) => x <= 26), `eight tags: still one line with the first tag (${JSON.stringify(many)})`);
 
-  // «Контакты · 2 ›» opens the sheet
-  h.expect(/Контакты[\s\S]*Tom Mitchell[\s\S]*\b2\b/.test(await vis("client-people").innerText()), "the row «Контакты · 2»");
-  await vis("client-people").getByRole("button").first().click();
+  // «⋯ → Контакты» opens the sheet; the panel says «Контакты · 2» with Tom
+  h.expect(/Контакты · 2[\s\S]*Tom Mitchell/.test(await p.getByTestId("client-people").first().innerText()), "the panel's «Контакты · 2»");
+  await objMore(p, "client-screen", "client-act-people");
   await h.sheet().getByTestId("people-sheet").waitFor({ timeout: 5000 });
   const sheet = h.sheet();
   // no chips, no segments, no checkboxes in the sheet (DS §9 «ЗАПРЕЩЕНО»)

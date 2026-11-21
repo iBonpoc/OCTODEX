@@ -10,6 +10,8 @@ const { workdayOffset } = require("../companyTime.cjs");
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 
 const { pickVisitDay, pickVisitStart } = require("../visitForm.cjs");
+const { objMore } = require("../objectScreen.cjs");
+const { settle } = require("../settle.cjs");
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/today");
@@ -34,16 +36,15 @@ exports.run = async (h) => {
   await h.go(`/job/${job.id}`);
   // the next step of the card (LAYOUT-RULES §3): «Да, выполнена», its reason under it
   await p.getByTestId("job-next-close").locator("visible=true").first().waitFor({ timeout: 8000 });
-  await h.expectText(/Все выезды закончены/, "the office is asked on the job");
+  // v2: the «Сейчас» card asks «Работа выполнена?» with «Да, выполнена» and «Нужен ещё выезд» beside it
+  const now = async () => (await p.getByTestId("job-now").locator("visible=true").first().innerText()).replace(/\n/g, " | ");
+  h.expect(/Работа выполнена\?/.test(await now()), `the office is asked on the job (${await now()})`);
   await h.shot("ask");
 
-  // «Нужен ещё выезд» (in «⋯») → the visit form → the job stays in progress
-  const more = async (id) => {
-    await p.getByTestId("job-more").locator("visible=true").first().getByRole("button").click();
-    await p.getByTestId(id).locator("visible=true").first().click();
-  };
-  await more("job-act-more");
-  await p.waitForTimeout(500);
+  // «Нужен ещё выезд» (v2: the second step beside «Да, выполнена») → the visit form → the job stays in progress
+  const more = (id) => objMore(p, "job-screen", id);
+  await p.getByTestId("job-next-more").locator("visible=true").first().click();
+  await p.waitForURL(/\/job\/schedule/, { timeout: 5000 });
   h.expect(new URL(p.url()).pathname === "/job/schedule", `«Нужен ещё выезд» → the visit form (${p.url()})`);
   await pickVisitDay(p, workdayOffset(2)); // the day — DateField (spec 56 wave 5б)
   await p.getByRole("option", { name: "Ivan Sokolov" }).last().click();
@@ -72,22 +73,28 @@ exports.run = async (h) => {
   await h.go("/triage");
   await h.expectText(/работа выполнена\?/, "«Работа выполнена?» in the office's queue (Разбор)");
   await h.go(`/job/${job.id}`);
-  await h.click("Да, выполнена");
-  await p.waitForTimeout(400);
+  await p.getByTestId("job-next-close").locator("visible=true").first().click();
+  await p.getByTestId("job-next-rest").locator("visible=true").first().waitFor({ timeout: 5000 });
+  // the store writes its copy a moment after the screen shows it
+  await p.waitForFunction((jid) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.jobs ?? []).find((j) => j.id === jid)?.status === "done", job.id, { timeout: 5000 });
   db = await h.db();
   h.expect(db.jobs.find((j) => j.id === job.id).status === "done", "«Да, выполнена» → done");
-  await h.expectText(/Создать счёт на остаток \$480/, "offer to invoice the balance");
+  // v2: the main step «Счёт на остаток», its reason the card's title; the contract $480 nothing of it paid
+  h.expect(/по договору ещё не выставлено/.test(await now()), `offer to invoice the balance (${await now()})`);
+  h.expect((await p.getByTestId("job-now-trio").locator("visible=true").first().innerText()).split("\n")[0] === "$480", "the contract to bill is $480");
   await h.shot("done");
-  await p.getByRole("button", { name: /^Создать счёт на остаток/ }).last().dblclick();
-  await p.waitForTimeout(400);
+  await p.getByTestId("job-next-rest").locator("visible=true").first().dblclick();
+  await p.waitForFunction((jid) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.invoices ?? []).some((i) => i.jobId === jid), job.id);
+  await settle(p, { quietMs: 120, maxMs: 2000 }); // a second invoice from the second tap would be written by now
   db = await h.db();
   h.expect(db.invoices.filter((i) => i.jobId === job.id).length === 1, "a double tap makes one balance invoice");
   const inv = db.invoices.find((i) => i.jobId === job.id);
   h.expect(inv && inv.kind === "final" && inv.totalCents === 48000, `balance invoice: ${JSON.stringify(inv)}`);
   await h.go(`/job/${job.id}`);
-  h.expect(!/Создать счёт на остаток/.test(await h.text()), "nothing left to invoice → no offer");
+  await p.getByTestId("job-now").locator("visible=true").first().waitFor({ timeout: 8000 });
+  h.expect((await p.getByTestId("job-next-rest").count()) === 0, "nothing left to invoice → no offer");
   // a closed job takes no new visit
-  h.expect(!/Ещё один выезд/.test(await h.text()), "no «Ещё один выезд» on a closed job");
+  h.expect((await p.getByTestId("job-next-more").count()) + (await p.getByTestId("job-schedule").count()) === 0, "no «Ещё один выезд» on a closed job");
   await h.go(`/job/schedule?jobId=${job.id}`);
   await h.expectText(/Работа закрыта — новый выезд не ставится/, "the visit form refuses a closed job");
 };

@@ -18,7 +18,7 @@ exports.run = async (h) => {
   raw.db.invoices = raw.db.invoices.filter((i) => i.jobId !== "j3");
   await h.seed("octo.db.v5", raw);
   await h.go("/job/j3");
-  await visible("job-tab-overview").click();
+  await visible("job-screen-sections-overview").click();
 
   // the tax on (the job's 8.88 %), then the rate 8.875
   await visible("job-tax-toggle").getByRole("switch").click();
