@@ -131,6 +131,7 @@ export default function Clients() {
       actions: !m?.owesCents && !status && tel ? [{ icon: "phone" as const, a11y: `${t("client.call")} ${c.name}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c.phone ?? "" }), testID: `client-row-call-${c.id}` }] : undefined,
       swipe: { left: swipeLeft, right: swipeRight },
       onPress: () => panel.open(c.id),
+      selected: panel.openId === c.id,
     };
   };
   return (

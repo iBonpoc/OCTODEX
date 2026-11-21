@@ -39,14 +39,14 @@ export function usePanelKeys(on: boolean, act: (k: "up" | "down" | "close") => v
 export function focusSelectedRow() {
   if (Platform.OS !== "web" || typeof document === "undefined") return;
   // the visible open row: hidden screens of the stack stay in the page (another list with its own open row)
-  const rows = [...document.querySelectorAll<HTMLElement>('[data-testid="list-card"][aria-current="true"]')];
+  const rows = [...document.querySelectorAll<HTMLElement>('[aria-current="true"]')];
   rows.find((r) => r.offsetParent !== null)?.focus?.({ preventScroll: true });
 }
 
 /** after ↓/↑ (or any change of the open row): the row is scrolled into view if it went past the edge (долги №7) */
 export function scrollSelectedRow() {
   if (Platform.OS !== "web" || typeof document === "undefined") return;
-  const rows = [...document.querySelectorAll<HTMLElement>('[data-testid="list-card"][aria-current="true"]')];
+  const rows = [...document.querySelectorAll<HTMLElement>('[aria-current="true"]')];
   rows.find((r) => r.offsetParent !== null)?.scrollIntoView?.({ block: "nearest" });
 }
 

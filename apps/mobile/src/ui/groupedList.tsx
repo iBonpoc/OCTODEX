@@ -125,10 +125,12 @@ export interface GroupRowProps {
   onPress?: () => void;
   /** a 40 row (`rowCompact`): small lists inside an object */
   compact?: boolean;
+  /** 1280: the row whose record is open in the panel beside the list (`aria-current`, a tinted row; the focus returns to it, spec 06) */
+  selected?: boolean;
   testID?: string;
 }
 
-export function GroupRow({ title, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, testID }: GroupRowProps) {
+export function GroupRow({ title, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, selected, testID }: GroupRowProps) {
   const { c } = useTheme();
   const [down, setDown] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -198,6 +200,7 @@ export function GroupRow({ title, subtitle, lead, value, cols, status, actions =
       accessibilityActions={more.map((a) => ({ name: a.key, label: a.label }))}
       onAccessibilityAction={onAction}
       testID={testID}
+      {...({ "aria-current": selected ? "true" : undefined } as object)}
       containerStyle={{ flex: 1, minWidth: 0 }}
     >
       {main}
@@ -210,7 +213,7 @@ export function GroupRow({ title, subtitle, lead, value, cols, status, actions =
   // the quick actions are the row's NEIGHBOURS, not its children: a button inside the row's button is not a thing on the web
   // («<button> cannot contain a nested <button>») nor to a screen reader — the row reads as one, each action as its own
   const row = (
-    <RowView gap={0} style={{ backgroundColor: down ? c.surf2 : c.surf }}>
+    <RowView gap={0} style={{ backgroundColor: down || selected ? c.surf2 : c.surf }}>
       {check ? (
         <View style={{ paddingLeft: space[4], paddingRight: space[3] }}>
           <DoneCircle done={check.done} onChange={check.onToggle} label={check.label} testID={check.testID} />

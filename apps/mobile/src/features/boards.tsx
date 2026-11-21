@@ -159,7 +159,10 @@ export function useEstimateList(q: string, allDone: boolean, onAllDone: () => vo
     const sign = estimateSigns(e, now)[0];
     const amount = estimateListAmount(e);
     // what is with it now, once: the sign («Без ответа 6 дн»), else the last event, else its status word
-    const what = sign
+    // an estimate waiting for OUR signature says so first: it is in «Нужно действие» for that, not for how long it was silent
+    const what = e.status === "awaiting_countersign"
+      ? t(estView[e.status].l)
+      : sign
       ? t(sign.key, sign.params)
       : e.approval
         ? `${t(estView[e.status].l)} ${day(e.approval.at)}`

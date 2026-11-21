@@ -132,7 +132,6 @@
  "e2e/specs/252-gutters-corner-angle.cjs": 2,
  "e2e/specs/27-properties.cjs": 9,
  "e2e/specs/30-lead-list-cards.cjs": 1,
- "e2e/specs/31-estimate-list-cards.cjs": 1,
  "e2e/specs/35-estimate-countersign.cjs": 12,
  "e2e/specs/36-nav-wide.cjs": 12,
  "e2e/specs/37-service-categories.cjs": 9,

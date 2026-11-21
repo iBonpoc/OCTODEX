@@ -16,7 +16,7 @@ exports.run = async (h) => {
   /** the job's «Сметы» section (it is there for who sees the money) */
   const money = async () => {
     await tid("job-screen").waitFor({ timeout: 8000 });
-    if (await vis("job-tab-estimates").count()) await tid("job-tab-estimates").click();
+    await require("../objectScreen.cjs").objSection(p, "job-screen", "estimates");
   };
 
   // 1) j2 has no estimate
@@ -24,9 +24,11 @@ exports.run = async (h) => {
   await tid("job-screen").waitFor({ timeout: 8000 });
   // the head (LAYOUT-RULES §3, #2350): the client is one link with its name, the word only for the screen reader; the address is not
   // repeated in «Связано» (П7)
-  const client = (await tid("job-client").innerText()).trim();
+  // phone: the header's parent link (the hierarchy's parent of a job is its client); 820 / 1280: the last crumb of the trail
+  const clientLink = h.layout.width >= 820 ? p.locator('[data-testid^="crumb-/client/"]').locator("visible=true").first() : tid("hdr-parent");
+  const client = (await clientLink.innerText()).trim();
   h.expect(!/^Клиент\b/.test(client), `the head: the client without the word (${client})`);
-  h.expect(/^(Клиент|Client)/.test((await tid("job-client").getAttribute("aria-label")) || ""), "the head: the client keeps its word for the screen reader");
+  h.expect(((await clientLink.getAttribute("aria-label")) || "").includes(client), "the head: the client link is named for the screen reader");
   h.expect((await vis("related-customer").count()) + (await vis("related-property").count()) === 0, "«Связано» does not repeat the client and the address");
   // «Сметы»: «Сметы нет» and the one «Создать смету» on the screen
   await money();
@@ -41,10 +43,24 @@ exports.run = async (h) => {
   h.expect((await vis("job-rel-new-estimate").count()) === 0, "a job with an estimate: no «Создать смету»");
   h.expect((await vis("job-money-no-estimate").count()) === 0, "a job with an estimate: no «Сметы нет»");
 
-  // 2) the lists
+  // 2) the lists. A client (v2): one «＋» in the header with a menu of «Работа» / «Смета» / «Задача» / … (`client-screen-create`);
+  // an address keeps the «＋» of its list
+  const clientMenu = async (path) => {
+    await h.go(path);
+    await tid("client-screen").waitFor({ timeout: 8000 });
+    const has = (await vis("client-screen-create").count()) > 0;
+    if (!has) return { has, items: [] };
+    await tid("client-screen-create").getByRole("button").first().click();
+    await tid("menu-items").waitFor({ timeout: 3000 });
+    const items = await p.locator('[data-testid^="client-create-"]').locator("visible=true").evaluateAll((els) => els.map((e) => e.dataset.testid));
+    await require("../sheet.cjs").pressEscUntilClosed(p);
+    return { has, items };
+  };
+  for (const path of ["/client/c1?s=jobs", "/client/c1?s=estimates"]) {
+    const m = await clientMenu(path);
+    h.expect(m.has && m.items.includes("client-create-job") && m.items.includes("client-create-estimate"), `${path}: the header's «＋» offers a job and an estimate (${m.items.join(", ")})`);
+  }
   for (const [path, id] of [
-    ["/client/c1?s=jobs", "client-section-new-job"],
-    ["/client/c1?s=estimates", "client-section-new-estimate"],
     ["/property/p1?s=jobs", "property-section-new-job"],
     ["/property/p1?s=estimates", "property-section-new-estimate"],
   ]) {
@@ -63,10 +79,12 @@ exports.run = async (h) => {
   await tid("job-screen").waitFor({ timeout: 8000 });
   h.expect((await vis("job-tab-estimates").count()) === 0 && (await vis("job-rel-new-estimate").count()) === 0, "the technician: no «Сметы», no «Создать смету»");
   // …nor in a client's or an address's list (the header slot stays empty on every width)
-  for (const [path, id] of [["/client/c2?s=jobs", "client-section-new-job"], ["/property/p2?s=estimates", "property-section-new-estimate"]]) {
-    await h.go(path);
-    await h.expectText(/Работы|Сметы/, `${path}: the list is open`);
-    h.expect((await vis(id).count()) === 0, `${path}: the technician has no «＋» in a list`);
+  {
+    const m = await clientMenu("/client/c2?s=jobs");
+    h.expect(!m.has, "/client/c2?s=jobs: the technician has no «＋» on a client");
+    await h.go("/property/p2?s=estimates");
+    await h.expectText(/Сметы/, "/property/p2?s=estimates: the list is open");
+    h.expect((await vis("property-section-new-estimate").count()) === 0, "/property/p2?s=estimates: the technician has no «＋» in a list");
   }
 
   // 4) «не обслуживаем» (Linda, c3: job j3 with no estimate, address p3): neither the chip nor the list buttons (any role of the office)
@@ -80,9 +98,11 @@ exports.run = async (h) => {
   await h.go("/job/j3");
   await money();
   h.expect((await vis("job-rel-new-estimate").count()) === 0, "«не обслуживаем»: no «Создать смету»");
-  for (const [path, id] of [["/client/c3?s=jobs", "client-section-new-job"], ["/property/p3?s=jobs", "property-section-new-job"]]) {
-    await h.go(path);
-    await h.expectText(/Работы/, `${path}: the list is open`);
-    h.expect((await vis(id).count()) === 0, `${path}: «не обслуживаем» has no «＋» in a list`);
+  {
+    const m = await clientMenu("/client/c3?s=jobs");
+    h.expect(!m.items.includes("client-create-job") && !m.items.includes("client-create-estimate"), `/client/c3?s=jobs: «не обслуживаем» offers neither a job nor an estimate (${m.items.join(", ")})`);
+    await h.go("/property/p3?s=jobs");
+    await h.expectText(/Работы/, "/property/p3?s=jobs: the list is open");
+    h.expect((await vis("property-section-new-job").count()) === 0, "/property/p3?s=jobs: «не обслуживаем» has no «＋» in a list");
   }
 };

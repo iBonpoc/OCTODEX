@@ -58,16 +58,25 @@ exports.run = async (h) => {
 
   // the Plan (day): «Чей план» back to «Все»; v6 is in the group «Не назначено · N»
   await h.go("/plan");
-  // v2 (#2350, CalendarScreen): one list of the day — Ivan's visit («… · Ivan») is there, so the plan is everyone's
-  await p.getByTestId("plan-items").locator("visible=true").first().waitFor({ timeout: 8000 });
-  h.expect(/· Ivan\b/.test(await p.getByTestId("plan-items").locator("visible=true").first().innerText()), "a «Чей план» on a deleted person falls back to «Все»: the other people's visits are shown");
-  const group = p.getByTestId("plan-unassigned").locator("visible=true").first();
-  await group.waitFor({ timeout: 4000 });
-  // v2: «Не назначено · N» is one row; it opens the sheet of those visits
-  await group.getByRole("button").first().click();
-  await h.sheet().getByText(client).first().waitFor({ timeout: 4000 });
-  h.expect(true, `v6 (${client}) is in «Не назначено · N»`);
-  await require("../sheet.cjs").pressEscUntilClosed(p);
+  const wide = h.layout.width >= 820;
+  if (wide) {
+    // 820 / 1280: the board by person (DayView) with its own «Не назначено» on top — as before v2
+    await h.expectText(/Ivan Sokolov/, "a «Чей план» on a deleted person falls back to «Все»: the people's columns are shown");
+    const group = p.getByTestId("plan-unassigned").locator("visible=true").first();
+    await group.waitFor({ timeout: 4000 });
+    h.expect((await group.innerText()).includes(client), `v6 (${client}) is in «Не назначено · N» of the day`);
+  } else {
+    // v2 (#2350, CalendarScreen): one list of the day — Ivan's visit («… · Ivan») is there, so the plan is everyone's
+    await p.getByTestId("plan-items").locator("visible=true").first().waitFor({ timeout: 8000 });
+    h.expect(/· Ivan\b/.test(await p.getByTestId("plan-items").locator("visible=true").first().innerText()), "a «Чей план» on a deleted person falls back to «Все»: the other people's visits are shown");
+    const group = p.getByTestId("plan-unassigned").locator("visible=true").first();
+    await group.waitFor({ timeout: 4000 });
+    // v2: «Не назначено · N» is one row; it opens the sheet of those visits
+    await group.getByRole("button").first().click();
+    await h.sheet().getByText(client).first().waitFor({ timeout: 4000 });
+    h.expect(true, `v6 (${client}) is in «Не назначено · N»`);
+    await require("../sheet.cjs").pressEscUntilClosed(p);
+  }
 
   // the visit names them; «Назначить» does not keep them
   await h.go("/visit/v6");

@@ -83,7 +83,13 @@ exports.run = async (h) => {
   // the task with a time is in the Plan: its day (v2: «Лента» is gone — the Day of the strip)
   await h.seed("octo.planMode.v1", "day");
   await h.go("/plan");
-  await p.getByTestId(`plan-strip-${dayKey(task.startsAt)}`).locator("visible=true").first().click(); await p.waitForTimeout(500);
+  if (h.layout.width >= 820) {
+    // 820 / 1280: the day is the board by person, its tasks of a week are the Week's rows
+    await h.seed("octo.planMode.v1", "week");
+    await h.go("/plan");
+  } else {
+    await p.getByTestId(`plan-strip-${dayKey(task.startsAt)}`).locator("visible=true").first().click(); await p.waitForTimeout(500);
+  }
   await h.expectText(new RegExp(TITLE), "the task with a time shows in the Plan");
 
   // the task's subject opens the client

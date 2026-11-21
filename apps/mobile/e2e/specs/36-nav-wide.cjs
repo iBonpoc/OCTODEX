@@ -87,7 +87,7 @@ exports.run = async (h) => {
   await p.waitForTimeout(600);
   h.expect(p.url().includes(`/client/${owner}`), `Esc job → client (${p.url()})`);
   // the status at the chip opens the one StatusPicker (DS §9 А10, spec 56 wave 4): Esc closes it and stays on the client
-  const status = p.getByTestId("client-status").locator("visible=true").first();
+  const status = p.getByTestId("client-header-status").locator("visible=true").first();
   if (await status.count()) {
     await status.click();
     const picker = p.locator('[aria-modal="true"]').last();

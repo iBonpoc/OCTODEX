@@ -186,7 +186,8 @@ exports.run = async (h) => {
       await clear(h, c, name);
       // no double padding: after the side menu the content starts 16 from it, the notch is the menu's (useNavInsets)
       const cl = await contentLeft(p);
-      const want = wide ? cl.nav + 16 : Math.max(c.l, 16);
+      // v2 «Главная» has no avatar from 820 (the profile is in the side menu): at 820 the leftmost button is the one inside the first card, 16 further
+      const want = wide ? cl.nav + 16 + (name === "Главная" && c.w < 1280 ? 16 : 0) : Math.max(c.l, 16);
       if (wide && cl.nav === null) h.failures.push(`${c.name} ${name}: no side menu`);
       else if (Math.abs(cl.left - want) > 1) h.failures.push(`${c.name} ${c.w}×${c.h}: ${name} — the content starts at ${Math.round(cl.left)}, not ${want}`);
       // the fixed parts are there to check

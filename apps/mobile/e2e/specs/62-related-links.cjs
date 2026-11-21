@@ -40,8 +40,10 @@ exports.run = async (h) => {
   await p.waitForURL((u) => u.pathname === `/job/${job.id}`, { timeout: 8000 });
   await tid("job-screen").waitFor();
   h.expect((await p.getByTestId("related-estimate").locator("visible=true").count()) === 0, "tech: no estimate link (money)");
-  h.expect((await tid("hdr-parent").innerText()).includes(cust.name), `the job's header names its client (${cust.name})`);
-  await tid("hdr-parent").click();
+  // phone: the header's parent link; 820 / 1280: the client is the trail's last crumb (the address bar)
+  const clientLink = h.layout.width >= 820 ? p.locator('[data-testid^="crumb-/client/"]').locator("visible=true").first() : tid("hdr-parent");
+  h.expect((await clientLink.getAttribute("aria-label")).includes(cust.name) || (await clientLink.innerText()).includes(cust.name), `the job's header names its client (${cust.name})`);
+  await clientLink.click();
   await p.waitForURL((u) => u.pathname === `/client/${cust.id}`, { timeout: 8000 });
 
   // the office: inspection → lead

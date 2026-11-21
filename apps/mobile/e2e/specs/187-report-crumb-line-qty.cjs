@@ -17,7 +17,9 @@ exports.run = async (h) => {
   const words = await head.innerText();
   h.expect(/Кто должен/.test(words) || title === "Кто должен", `the last crumb is the report (${words.replace(/\n/g, " ")})`);
   h.expect((words.match(/Отчёты/g) || []).length === 1, `«Отчёты» once (${words.replace(/\n/g, " ")})`);
-  h.expect((await p.getByRole("button", { name: "Назад: Отчёты", exact: true }).locator("visible=true").count()) === 1, "the parent is the list of reports");
+  // 820 / 1280: the parent crumb is in the trail; a phone: the round «‹» of the header
+  const back = (await trail.count()) ? trail.first() : p;
+  h.expect((await back.getByRole("button", { name: "Назад: Отчёты", exact: true }).locator("visible=true").count()) === 1, "the parent is the list of reports");
   await h.shot("crumb");
 
   await h.go("/job/j3");

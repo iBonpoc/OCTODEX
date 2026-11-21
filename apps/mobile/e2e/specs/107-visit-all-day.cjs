@@ -63,7 +63,11 @@ exports.run = async (h) => {
   // the Plan: «Весь день», no hour, not «опаздывает», no «Накладка»
   await h.go("/plan");
   // v2: «Лента» is gone (День · Неделя · Месяц) — the all-day visit is a row of its day (TimeSlot `plan-row-<id>`)
-  await p.getByTestId(`plan-strip-${dayKey(v.start)}`).locator("visible=true").first().click();
+  if (h.layout.width >= 820) {
+    // 820 / 1280: the day is the board by person; the visit is a row of the Week
+    await h.seed("octo.planMode.v1", "week");
+    await h.go("/plan");
+  } else await p.getByTestId(`plan-strip-${dayKey(v.start)}`).locator("visible=true").first().click();
   const card = p.getByTestId(`plan-row-${v.id}`).locator("visible=true").first();
   await card.waitFor({ timeout: 5000 });
   const text = await card.innerText();
