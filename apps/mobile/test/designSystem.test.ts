@@ -98,7 +98,6 @@ describe("design system: components", () => {
   const RULE29_STYLED_PRESS: Record<string, number> = {
     "features/LegalAgree.tsx": 1, // the Terms / Privacy links drawn as underlined text (#2022); spec 56 §11.1 waits for the lawyer
     "features/PhotoStrip.tsx": 2,
-    "features/PlanParts.tsx": 1,
     "features/estimate/SwipeRow.tsx": 1,
     "features/showcase/Rows.tsx": 1,
     "modules/gutters/draw/AttrPanel.tsx": 1,
@@ -169,6 +168,7 @@ describe("design system: components", () => {
   // or border) belongs only to the component that defines that look — listed here by file, with what it defines. A new file,
   // or one more in a listed file, is an own button hidden in ui (as the old «Сохранить изменения?» of Sheet was, #1996).
   const UI_OWN_STYLED_PRESS: Record<string, number> = {
+    "ui/dayStrip.tsx": 1, // DayCell — the weekday and the day pill (moved from features/PlanParts.tsx, BUILD-PLAN §1 поток В)
     "ui/controls.tsx": 7, // Button, IconButton, Toggle, Segmented, TagChip, TextField's action; + a style kept in a variable (#2022)
     "ui/filterBar.tsx": 4, // FilterBar (chip, «Фильтр», «Сброс»), FilterRow
     "ui/fracKeys.tsx": 1, // FracKeys — the key

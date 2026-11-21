@@ -39,7 +39,7 @@ export function StatusPill({ status, label, onPress, a11y, testID }: {
       }}
     >
       <Icon name={statusIcon[status]} s={size.iconXs} color={st.text} />
-      <T v="micro" w="semibold" style={{ color: st.text, flexShrink: 1 }}>
+      <T v="micro" w="semibold" capped style={{ color: st.text, flexShrink: 1 }}>
         {label}
       </T>
     </View>

@@ -20,7 +20,7 @@ import { Fab } from "@/nav/Fab";
 import { HomeHeader } from "@/nav/HomeHeader";
 import { CompanyLine, CompanyWaiting } from "@/features/CompanySwitcher";
 import { SearchEntry } from "@/nav/SearchEntry";
-import { LIST_FABS, type FabCtx, type FabItem, type FabSet } from "@/nav/sections";
+import { type FabCtx, type FabItem, type FabSet } from "@/nav/sections";
 import { badgeState } from "@/data/syncLink";
 import { screenPath } from "./screenPath";
 import { breadcrumbs, collapseCrumbs, navContext, type Crumb, type Label } from "@/nav/hierarchy";
@@ -35,6 +35,8 @@ import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { HelpButton, Menu } from "./overlays";
+import { IconButton } from "./controls";
+import type { IconAction } from "./templates/types";
 import { useHints } from "./hints";
 
 /* ---------- Background: --bg + three soft glows (theme.css --glow) ---------- */
@@ -503,6 +505,7 @@ export function Screen({
   fab,
   fabCtx,
   fabOn,
+  headerIcons,
   home,
   footer,
   aside,
@@ -539,6 +542,8 @@ export function Screen({
   fabCtx?: FabCtx;
   /** «＋» items only this screen can do (Plan: its own «Записать в план» sheet) */
   fabOn?: Partial<Record<NonNullable<FabItem["act"]>, () => void>>;
+  /** prototype v2 (BUILD-PLAN §1 поток А): round icons of the header (search, the bell) — they stand left of «＋»; each names its object (`a11y`, П6) */
+  headerIcons?: IconAction[];
   /** «Главная» of a role: the bell, the sync badge and the profile on the right (13 v2 §2.2, §3.14) */
   home?: boolean;
   /** the pinned panel of the screen's main action (ui/actionBar.tsx, DS §8.9): phone — at the bottom over the content, which leaves room
@@ -634,11 +639,15 @@ export function Screen({
       };
     }, [pathname]),
   );
-  /** 820/1280: the screen's «＋» sits in its header, no floating button (13 v2 §2.5) */
-  // a list's «＋ <object>» is in the header on every width (#1395, DS §5.3); only «Главная»'s yellow «＋» floats on the phone
-  const fabInHeader = !!fab && (wide || LIST_FABS.includes(fab));
+  /** prototype v2 (BUILD-SPEC «Решения по умолчанию», BUILD-PLAN §0): «＋» is in the header on every width and every screen — no floating «＋».
+   *  The floating branch below (`floatFab`) is dead until wave 2 deletes it (поток Д). */
+  const fabInHeader = !!fab;
   const headerFab = fabInHeader ? <Fab placement="header" set={fab!} ctx={fabCtx} on={fabOn} /> : null;
   const floatFab = !!fab && !fabInHeader;
+  /** the header's round icons (search, bell): left of «＋», «⋯» stays the last */
+  const headerIconRow = headerIcons?.length
+    ? headerIcons.map((a) => <IconButton key={a.testID} testID={a.testID} icon={a.icon} label={a.a11y} onPress={a.onPress} bare />)
+    : null;
   const addressRow = hasUp ? (
           <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin, gap: space[2] }}>
             {pinned && up ? (
@@ -682,10 +691,11 @@ export function Screen({
                 </T>
               </RowView>
             ) : null}
-            {right || headerFab || help ? (
+            {right || headerFab || headerIconRow || help ? (
               <RowView gap={space[2]} style={{ flexShrink: 0 }}>
-                {/* DS §12.2, Б4: «?» · «＋» · «⋯» — «?» first on the right (#1648), «⋯» always the last (#1474) */}
+                {/* DS §12.2, Б4: «?» · icons · «＋» · «⋯» — «?» first on the right (#1648), «⋯» always the last (#1474) */}
                 {help ? <HelpButton title={title} text={help} /> : null}
+                {headerIconRow}
                 {headerFab}
                 {right}
               </RowView>
@@ -742,10 +752,11 @@ export function Screen({
               </T>
             </View>
           </RowView>
-          {right || headerFab || home || help ? (
+          {right || headerFab || headerIconRow || home || help ? (
             <RowView gap={space[2]} style={{ marginLeft: "auto" }}>
-              {/* DS §12.2: «?» · «＋» · «⋯» — «?» first on the right (#1648) */}
+              {/* DS §12.2: «?» · icons · «＋» · «⋯» — «?» first on the right (#1648) */}
               {help ? <HelpButton title={title} text={help} /> : null}
+              {headerIconRow}
               {headerFab}
               {right}
               {home ? <HomeHeader /> : null}

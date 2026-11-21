@@ -84,10 +84,10 @@ export function DayCell({ day, load, selected, dim, head, pill: asPill, onPress 
     >
       {asPill ? (
         <>
-          <T v="micro" tone={selected ? "onAcc" : "mut"} numberOfLines={1}>
+          <T v="micro" tone={selected ? "onAcc" : "mut"} numberOfLines={1} capped>
             {head}
           </T>
-          <T v="heading" w={look.bold ? "bold" : "semibold"} style={{ color: c[look.num] }} tabular>
+          <T v="heading" w={look.bold ? "bold" : "semibold"} style={{ color: c[look.num] }} tabular capped>
             {Number(day.slice(8))}
           </T>
           {/* the day has something: a dot (warn when a visit there has nobody on it); a day off is said to a screen reader */}

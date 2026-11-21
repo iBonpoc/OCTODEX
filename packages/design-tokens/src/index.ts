@@ -24,6 +24,8 @@ export const font = {
   weight: { regular: "400", medium: "500", semibold: "600", bold: "700" },
   /** Minimum readable text size (DS rule 6). */
   minSize: 12,
+  /** Dynamic Type: small labels that sit in a fixed shape (tab labels, StatusPill, QuickActions, a day pill) grow at most this much (BUILD-SPEC §0) */
+  labelMaxScale: 1.5,
 } as const;
 
 export const space = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24, 8: 32 } as const;
@@ -282,6 +284,25 @@ export const component = {
   optionTile: { h: 76, maxW: 120 },
   valueIcon: 22,
   valueLabelMax: 110,
+  /* ---- prototype v2 (docs/design/BUILD-SPEC.md §1, BUILD-PLAN §1 поток А; approved by the lead №21, 21.11.2026) ---- */
+  /** GroupedList / ListRow: a row from `h` 56 (initials 36 · title 15 · line 13); separators start `inset` 64 from the left (past the initials) */
+  listRow: { h: 56, inset: 64 },
+  /** StatTile: a 2×2 grid tile from `h` 88 (label 12 caps, figure 30) */
+  statTile: { h: 88 },
+  /** DayStrip (BUILD-SPEC §1): 7 pills `h` 52, not narrower than `w` 44 (they share the row, `gap` 8), the «something on this day» dot `dot` 4 */
+  dayPill: { w: 44, h: 52, dot: 4, gap: 8 },
+  /** QuickActions / IconRow: `row` — a circle 44 with a 12 label under it, the cell `labelW` 64, between cells `gap` 8; `inline` — a circle 36 (zone 44) in the address line */
+  quickAction: { row: 44, inline: 36, labelW: 64, gap: 8 },
+  /** IconRow (BUILD-PLAN поток Б): between the icon buttons */
+  iconRow: { gap: 8 },
+  /** MainStep: the reason line stands this far above (or under) its button */
+  mainStep: { reasonGap: 4 },
+  /** ObjectHeader: the folded header is not taller than `maxH` 104 (no status bar); after `collapseAt` 24 pt of scroll it shrinks to one line 44 */
+  objectHeader: { maxH: 104, collapseAt: 24 },
+  /** HeaderActions (search, «＋», bell, «⋯»): a circle 36 without a fill, the zone 44 (BUILD-SPEC §1 HeaderActions) */
+  headerIcon: 36,
+  /** the main button pinned at the bottom of an object / editor (MainStepBar, ActionBar): 44 full width (founder 21.11, #2350) */
+  mainBar: 44,
 } as const;
 
 /* ---------- breakpoints (HANDOFF: 390 / 820 / 1280) ---------- */
@@ -402,7 +423,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
       neutral: { fill: "#3A3C42", text: "#B9BCC4", on: "#EEEFF1" },
     },
     drawing: { node: "#F4F5F7", story: ["#7FD4FF", "#FF8FD0", "#D59BFF", "#7CEBC6"] },
-    tape: { markFill: "#FBFF00", markText: "#0B0C0F" },
+    tape: { markFill: "#E2C15E", markText: "#1C1A12" },
   },
   light: {
     /** 60/30/10, soft grey — never pure white; founder 21.11: «очень белая, режет глаза» → toned down (bg lum 0.81 → 0.68), contrast checked */
@@ -430,14 +451,14 @@ export const themes: Record<ThemeName, ThemeColors> = {
     blurTint: "light",
     glow: [],
     status: {
-      ok: { fill: "#DCEBDF", text: "#1D6638", on: "#1D6638" },
+      ok: { fill: "#DCEBDF", text: "#1B6034", on: "#1B6034" },
       info: { fill: "#D8EAED", text: "#0E5866", on: "#0E5866" },
       warn: { fill: "#F2E2CC", text: "#824306", on: "#824306" },
       bad: { fill: "#F4DAD6", text: "#9A2C22", on: "#9A2C22" },
       neutral: { fill: "#CDCEC8", text: "#3E4147", on: "#17181B" },
     },
     drawing: { node: "#111215", story: ["#0B6290", "#A0327A", "#7A3DB8", "#0B6E50"] },
-    tape: { markFill: "#FBFF00", markText: "#0B0C0F" },
+    tape: { markFill: "#E2C15E", markText: "#1C1A12" },
   },
 };
 

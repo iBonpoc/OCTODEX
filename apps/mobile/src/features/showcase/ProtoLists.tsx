@@ -20,7 +20,7 @@ import { NO_UNDO } from "@/data/undo";
 
 /** demo people of the samples (not UI words) */
 const DEMO = [
-  { id: "dk", name: "David Kim", initials: "DK", line: "Gutters · 1420 Oak St", cents: "$1,240.00", st: "sent" as const },
+  { id: "dk", name: "David Kim", initials: "DK", line: "Siding · 1420 Oak St", cents: "$1,240.00", st: "sent" as const },
   { id: "mr", name: "Maria Rodriguez", initials: "MR", line: "Roof repair · 88 Pine Ave", cents: "$3,860.00", st: "paid" as const },
   { id: "jl", name: "James Lee", initials: "JL", line: "Inspection · 7 Elm Ct", cents: "$0.00", st: "overdue" as const },
 ];

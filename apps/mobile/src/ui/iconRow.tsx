@@ -43,7 +43,7 @@ export function IconRow({ actions, variant = "row", testID }: { actions: IconRow
             <Icon name={a.icon} s={size.iconMd} color={c.ink} />
           </View>
           {!inline && a.label ? (
-            <T v="micro" w="medium" tone="mut" numberOfLines={1} center style={{ maxWidth: component.quickAction.labelW }}>
+            <T v="micro" w="medium" tone="mut" numberOfLines={1} center capped style={{ maxWidth: component.quickAction.labelW }}>
               {a.label}
             </T>
           ) : null}

@@ -29,6 +29,7 @@ export function T({
   numberOfLines,
   tabular,
   center,
+  capped,
 }: {
   v?: TextVariant;
   w?: Weight;
@@ -38,6 +39,8 @@ export function T({
   numberOfLines?: number;
   tabular?: boolean;
   center?: boolean;
+  /** a label in a fixed shape (StatusPill, QuickActions, a day pill, tab labels): Dynamic Type grows it at most `font.labelMaxScale` (BUILD-SPEC §0) */
+  capped?: boolean;
 }) {
   const { c } = useTheme();
   const color =
@@ -47,6 +50,7 @@ export function T({
   return (
     <Text
       numberOfLines={numberOfLines}
+      maxFontSizeMultiplier={capped ? font.labelMaxScale : undefined}
       style={[
         {
           fontFamily: font.families[w ?? defaultWeight[v]],

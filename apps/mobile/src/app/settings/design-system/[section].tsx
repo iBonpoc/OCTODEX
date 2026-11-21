@@ -4,7 +4,7 @@ import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { T } from "@/ui/primitives";
-import { Screen } from "@/ui/surfaces";
+import { Screen, SectionTitle } from "@/ui/surfaces";
 import { canSeeShowcase } from "@/features/showcase/access";
 import { SCREENS } from "@/features/showcase/registry";
 import { TokenSections } from "@/features/showcase/Tokens";
@@ -16,6 +16,8 @@ import { HapticsSection } from "@/features/showcase/Haptics";
 import { RowsSection } from "@/features/showcase/Rows";
 import { BrandSection } from "@/features/showcase/Brand";
 import { ChoiceSection } from "@/features/showcase/Choice";
+import { ProtoObject } from "@/features/showcase/ProtoObject";
+import { ProtoLists } from "@/features/showcase/ProtoLists";
 import { GraphiteSheet } from "@/features/showcase/graphite/sheet/GraphiteSheet";
 import { useGraphiteFlag } from "@/features/showcase/graphite/flag";
 
@@ -50,6 +52,14 @@ export default function DesignSystemSection() {
       {s.id === "fields" ? <FieldsSection /> : null}
       {s.id === "choice" ? <ChoiceSection /> : null}
       {s.id === "brand" ? <BrandSection /> : null}
+      {s.id === "proto" ? (
+        <View style={{ gap: 0 }}>
+          <SectionTitle title={t("ds.sec.protoObject")} />
+          <ProtoObject />
+          <SectionTitle title={t("ds.sec.protoLists")} />
+          <ProtoLists />
+        </View>
+      ) : null}
     </Screen>
   );
 }

@@ -44,7 +44,7 @@ describe("app tokens mirror the founder's DS css", () => {
     expect(radius.inner).toBe(px("ri"));
     expect(radius.sheet).toBe(px("sheet-radius"));
   });
-  it("controls and hit area (no button above 36, hit 44)", () => {
+  it("controls and hit area (no button above 40, hit 44)", () => {
     expect(size.controlSm).toBe(px("control-sm"));
     expect(size.controlMd).toBe(px("control-md"));
     expect(size.controlLg).toBe(px("control-lg"));
@@ -68,7 +68,8 @@ describe("app tokens mirror the founder's DS css", () => {
     expect(component.brand).toEqual({ mark: px("brand-mark"), wait: px("brand-wait"), about: px("brand-about"), splash: px("brand-splash"), intro: px("brand-intro") });
     expect(component.estRow).toEqual({ qty: px("est-qty-w"), unit: px("est-unit-w") });
     expect([component.modalW, component.panelW, component.paletteW]).toEqual([px("modal-w"), px("panel-w"), px("palette-w")]);
-    for (const k of Object.values(component.button)) expect(k === px("hit-min") || k <= 36).toBe(true);
+    // founder 21.11.2026 (#2350): the phone button is 40 (was ≤ 36, rule 3 — to be updated through the audit, #2337); the zone stays 44
+    for (const k of Object.values(component.button)) expect(k === px("hit-min") || k <= 40).toBe(true);
   });
   it("icon sizes, bars and safe areas", () => {
     expect([size.iconXs, size.iconSm, size.iconMd, size.iconLg, size.iconStroke]).toEqual([px("icon-xs"), px("icon-sm"), px("icon-md"), px("icon-lg"), px("icon-stroke")]);
@@ -133,6 +134,8 @@ describe("app tokens mirror the founder's DS css", () => {
     it("surfSolid mirrors the css and is `surf` laid over `bg`", () => {
       expect(norm(c.surfSolid)).toBe(norm(v("surf-solid", t)));
       const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+      // palette A (#2350): the surface is opaque — what the eye sees is the surface itself
+      if (c.surf.startsWith("#")) return expect(norm(c.surfSolid)).toBe(norm(c.surf));
       const m = c.surf.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/)!;
       const a = Number(m[4]);
       const over = rgb(c.bg).map((b, i) => Math.round(b + (Number(m[i + 1]) - b) * a));
@@ -148,10 +151,11 @@ describe("app tokens mirror the founder's DS css", () => {
       expect([c.blur, c.blurOverlay]).toEqual([px("blur"), px("blurov")]);
     });
     it("status fill and text colours", () => {
-      for (const k of ["ok", "info", "warn", "bad"] as const) {
+      // palette A (#2350): tonal plates — the text on a plate is its own per status and theme (`st-x-on`)
+      for (const k of ["ok", "info", "warn", "bad", "neutral"] as const) {
         expect(norm(c.status[k].fill), `${k} fill`).toBe(norm(v(`st-${k}`, t)));
         expect(norm(c.status[k].text), `${k} text`).toBe(norm(v(`st-${k}-text`, t)));
-        expect(norm(c.status[k].on)).toBe(norm(v("st-on", t)));
+        expect(norm(c.status[k].on), `${k} on`).toBe(norm(v(`st-${k}-on`, t)));
       }
     });
     it("drawing canvas: node and storeys (founder О3)", () => {

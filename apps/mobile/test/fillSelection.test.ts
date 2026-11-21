@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { component, themes } from "@octo/design-tokens";
+import { fillStyleFlat } from "../src/ui/fill";
 
 const src = (f: string) => readFileSync(join(__dirname, "..", "src", f), "utf8");
 
@@ -21,10 +22,10 @@ describe("«Заливка» of the chosen (#1306)", () => {
   });
   it("a moving slider (tab bar pill, Segmented) takes the fill without the shadow (#1354)", () => {
     const flat = src("ui/fill.ts").match(/export function fillStyleFlat[\s\S]*?\n}/)?.[0] ?? "";
-    expect(flat).toMatch(/backgroundColor: c\.surf2/);
+    expect(flat).toMatch(/backgroundColor: c\.surf\b/); // palette A (#2350): `surf` — see «the fill is seen in both themes»
     expect(flat).not.toMatch(/shadow|elevation/);
     // the pill of the tab bar lives in the iOS 26 GlassView and animates left/width: no shadow on it
-    expect(src("nav/TabBar.tsx")).toMatch(/borderRadius: radius\.pill \}, fillStyleFlat\(c\), pill\]/);
+    expect(src("nav/TabBar.tsx")).toMatch(/borderRadius: radius\.pill \}, fillStyleFlat\(c\),[^\n]*pill\]/);
     expect(src("nav/TabBar.tsx")).not.toMatch(/fillStyle\(c\)/);
     expect(src("ui/controls.tsx")).toMatch(/borderRadius: radius\.pill \}, fillStyleFlat\(c\), pill\]/);
   });
@@ -78,7 +79,8 @@ describe("the fill is seen in both themes", () => {
       const c = themes[t];
       const ground = hex(c.bg);
       const track = over(c.track, ground);
-      const fill = over(c.surf2, track);
+      // palette A (#2350): the slider's fill is `fillStyleFlat` (`surf`), the opaque `surf2` is the track's own tone
+      const fill = over(fillStyleFlat(c).backgroundColor as string, track);
       const hi = Math.max(lum(track), lum(fill));
       const lo = Math.min(lum(track), lum(fill));
       const ratio = (hi + 0.05) / (lo + 0.05);
