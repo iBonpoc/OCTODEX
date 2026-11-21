@@ -11,6 +11,7 @@ import { T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
 import { fullCanvas, turnedToCanvas, uprightToCanvas } from "./signatureCanvas";
 import { scale } from "./signaturePath";
+import { strokeController, undoStroke } from "./signaturePen";
 
 /**
  * «Развернуть» (spec 29, founder 07.11): the signature on the whole screen. A portrait window turns the canvas 90°, so
@@ -70,10 +71,18 @@ export function SignatureFullscreen({
   }, [k, visible]);
 
   const measure = () => canvasRef.current?.measureInWindow((x: number, y: number) => (box.current = { x, y }));
-  const point = (pageX: number, pageY: number) => {
-    const p = geo.current.rotate ? turnedToCanvas(pageX, pageY, box.current, geo.current.h) : uprightToCanvas(pageX, pageY, box.current);
-    return `${p.x.toFixed(1)} ${p.y.toFixed(1)}`;
-  };
+  const point = (pageX: number, pageY: number) =>
+    geo.current.rotate ? turnedToCanvas(pageX, pageY, box.current, geo.current.h) : uprightToCanvas(pageX, pageY, box.current);
+  // the pen (#2215): the finger sets a target, the pen follows on a spring — same stroke as on the field
+  const stroke = useRef(
+    strokeController(
+      () => pathRef.current,
+      (v) => {
+        pathRef.current = v;
+        setPath(v);
+      },
+    ),
+  ).current;
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -81,16 +90,18 @@ export function SignatureFullscreen({
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: (e) => {
         measure();
-        pathRef.current += `M${point(e.nativeEvent.pageX, e.nativeEvent.pageY)} `;
-        setPath(pathRef.current);
+        stroke.down(point(e.nativeEvent.pageX, e.nativeEvent.pageY), e.nativeEvent.timestamp);
       },
-      onPanResponderMove: (e) => {
-        pathRef.current += `L${point(e.nativeEvent.pageX, e.nativeEvent.pageY)} `;
-        setPath(pathRef.current);
-      },
+      onPanResponderMove: (e) => stroke.move(point(e.nativeEvent.pageX, e.nativeEvent.pageY), e.nativeEvent.timestamp),
+      onPanResponderRelease: () => stroke.up(),
+      onPanResponderTerminate: () => stroke.up(),
     }),
   ).current;
 
+  const undo = () => {
+    pathRef.current = undoStroke(pathRef.current);
+    setPath(pathRef.current);
+  };
   const clear = () => {
     pathRef.current = "";
     setPath("");
@@ -139,6 +150,7 @@ export function SignatureFullscreen({
           <RowView style={{ minHeight: bar, justifyContent: "space-between" }}>
             <Button label={t("common.cancel")} variant="ghost" onPress={onCancel} />
             <RowView>
+              <Button label={t("sign.undoStroke")} variant="secondary" onPress={undo} disabled={!path} />
               <Button label={t("visit.clear")} variant="secondary" onPress={clear} disabled={!path} />
               <Button label={t("fix.sign.done")} icon="check" onPress={() => onDone(pathRef.current && k > 0 ? scale(pathRef.current, 1 / k) : "")} />
             </RowView>

@@ -8,9 +8,11 @@ import { Button, IconButton, useReadOnly } from "@/ui/controls";
 import { useDevice } from "@/theme/ThemeProvider";
 import { SignatureFullscreen } from "./SignatureFullscreen";
 import { T } from "@/ui/primitives";
-import { RowView, useScrollLock } from "@/ui/surfaces";
+import { StatusNote } from "@/ui/statusNote";
+import { useScrollLock } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { SIG_BOX, fitSignature, normalizeSignature } from "./signaturePath";
+import { strokeController, undoStroke } from "./signaturePen";
 
 /** Finger signature. Output is SVG path data (stored with the visit; PDF in wave 3). */
 export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent = "visit.signConsent" }: { onConfirm: (path: string) => void; disabled?: boolean; confirmLabel?: string; /** who signs: «Клиент расписывается здесь» by default */ label?: string; /** the line under the pad — what the signature confirms: the visit's completed work by default; the estimate — its own; null — none (#1104 п.5) */ consent?: DictKey | null }) {
@@ -20,6 +22,8 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
   // takes no stroke, no full screen and no confirm — the gestures themselves are not changed
   const ro = useReadOnly();
   const [d, setD] = useState("");
+  // #2260: what was handed over — the line «Подпись передана» shows until the next stroke, undo or clear changes the drawing
+  const [sent, setSent] = useState("");
   // rule А (docs/specs/28; the director's decision on #274): no bottom bar while a signature is being drawn here —
   // from the first stroke until it is confirmed, cleared or the screen is left; before that the bar stays
   useHideTabBar(!!d);
@@ -33,6 +37,16 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
   const lockScroll = useScrollLock();
   const lockRef = useRef(lockScroll);
   lockRef.current = lockScroll;
+  // the pen (#2215): the finger sets a target, the pen follows on a spring; what is drawn is what is stored
+  const stroke = useRef(
+    strokeController(
+      () => dRef.current,
+      (v) => {
+        dRef.current = v;
+        setD(v);
+      },
+    ),
+  ).current;
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -40,19 +54,23 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: (e) => {
         lockRef.current(true);
-        const { locationX: x, locationY: y } = e.nativeEvent;
-        dRef.current += `M${x.toFixed(1)} ${y.toFixed(1)} `;
-        setD(dRef.current);
+        stroke.down({ x: e.nativeEvent.locationX, y: e.nativeEvent.locationY }, e.nativeEvent.timestamp);
       },
-      onPanResponderMove: (e) => {
-        const { locationX: x, locationY: y } = e.nativeEvent;
-        dRef.current += `L${x.toFixed(1)} ${y.toFixed(1)} `;
-        setD(dRef.current);
+      onPanResponderMove: (e) => stroke.move({ x: e.nativeEvent.locationX, y: e.nativeEvent.locationY }, e.nativeEvent.timestamp),
+      onPanResponderRelease: () => {
+        stroke.up();
+        lockRef.current(false);
       },
-      onPanResponderRelease: () => lockRef.current(false),
-      onPanResponderTerminate: () => lockRef.current(false),
+      onPanResponderTerminate: () => {
+        stroke.up();
+        lockRef.current(false);
+      },
     }),
   ).current;
+  const undo = () => {
+    dRef.current = undoStroke(dRef.current);
+    setD(dRef.current);
+  };
   const clear = () => {
     dRef.current = "";
     setD("");
@@ -96,13 +114,31 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
           {t(consent)}
         </T>
       ) : null}
-      <RowView>
+      {/* #2260: the tools wrap (390 px, a large font) — the confirm button never leaves the screen; it has a row of its own */}
+      <View testID="signature-tools" style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space[2] }}>
         {device === "phone" && !ro ? <IconButton icon="expand" label={t("fix.sign.expand")} onPress={() => setFull(true)} /> : null}
+        <View testID="signature-undo">
+          <Button label={t("sign.undoStroke")} variant="secondary" onPress={undo} disabled={!d} />
+        </View>
         <View testID="signature-clear">
           <Button label={t("visit.clear")} variant="secondary" onPress={clear} disabled={!d} />
         </View>
-        <Button label={confirmLabel ?? t("visit.confirmSign")} icon="check" onPress={() => onConfirm(normalizeSignature(d, w, h))} disabled={ro || disabled || d.length < 20} />
-      </RowView>
+      </View>
+      <Button
+        label={confirmLabel ?? t("visit.confirmSign")}
+        icon="check"
+        full
+        onPress={() => {
+          setSent(d);
+          onConfirm(normalizeSignature(d, w, h));
+        }}
+        disabled={ro || disabled || d.length < 20}
+      />
+      {sent !== "" && sent === d ? (
+        <View testID="signature-sent">
+          <StatusNote tone="ok">{t("sign.sent")}</StatusNote>
+        </View>
+      ) : null}
       <SignatureFullscreen
         visible={full}
         d={d}
