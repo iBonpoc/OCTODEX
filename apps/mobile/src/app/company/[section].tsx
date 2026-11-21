@@ -18,6 +18,7 @@ import { Button, ChoiceChips, IconButton, ReadOnly, Segmented, StatusChip, Stepp
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, FieldGroup, RowView, Screen } from "@/ui/surfaces";
+import { ListCard } from "@/ui/listCard";
 import { StatusNote } from "@/ui/statusNote";
 
 const ENTITY: EntityType[] = ["llc", "corporation", "sole_proprietor", "partnership", "other"];
@@ -290,21 +291,18 @@ function ContactsEditor() {
     <>
       {list.map((p) =>
         edit?.id === p.id ? null : (
-          <Card key={p.id} onPress={() => setEdit({ ...p })} accessibilityLabel={p.name}>
-            <RowView style={{ alignItems: "flex-start" }}>
-              <View style={{ flex: 1, gap: space[1] }}>
-                <T v="body" w="semibold">
-                  {p.name}
-                  {p.title ? ` · ${p.title}` : ""}
-                </T>
-                <T v="caption" tone="mut">
-                  {[p.phone, p.email].filter(Boolean).join(" · ")}
-                </T>
-              </View>
-              {p.isPrimary ? <StatusChip status="ok" label={t("co.primary")} /> : null}
-              {p.onDocuments ? <StatusChip status="neutral" label={t("co.onDocs")} /> : null}
-            </RowView>
-          </Card>
+          // #2129 (founder 18.11): a list of records is a ListCard (rule 12) — the title takes the whole width, phone and
+          // email are facts of their own, the marks a row of their own (before: chips beside the text squeezed it)
+          <ListCard
+            key={p.id}
+            testID={`co-contact-${p.id}`}
+            title={`${p.name}${p.title ? ` · ${p.title}` : ""}`}
+            lead={{ kind: "icon", icon: "user" }}
+            tags={[p.isPrimary ? t("co.primary") : "", p.onDocuments ? t("co.onDocs") : ""].filter(Boolean)}
+            facts={{ phone: p.phone, email: p.email }}
+            edge={null}
+            onPress={() => setEdit({ ...p })}
+          />
         ),
       )}
       {edit ? (
@@ -377,21 +375,20 @@ function LicensesEditor() {
     <>
       {list.map((l) =>
         edit?.id === l.id ? null : (
-          <Card key={l.id} onPress={() => open(l)} accessibilityLabel={l.number} status={expired(l) ? "bad" : undefined}>
-            <RowView style={{ alignItems: "flex-start" }}>
-              <View style={{ flex: 1, gap: space[1] }}>
-                <T v="body" w="semibold">
-                  {t(`co.lic.${l.kind}` as DictKey)} #{l.number}
-                </T>
-                <T v="caption" tone="mut">
-                  {[l.classes.length ? `${t("co.classes")}: ${l.classes.join(", ")}` : "", l.expiresOn ? `${t("co.expires")} ${day(l.expiresOn + "T12:00:00")}` : ""]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </T>
-              </View>
-              {expired(l) ? <StatusChip status="bad" label={t("co.expired")} /> : l.onDocuments ? <StatusChip status="neutral" label={t("co.onDocs")} /> : null}
-            </RowView>
-          </Card>
+          // #2129: the same as a person — a ListCard; an expired license is its status (bad, with the word)
+          <ListCard
+            key={l.id}
+            testID={`co-license-${l.id}`}
+            title={`${t(`co.lic.${l.kind}` as DictKey)} #${l.number}`}
+            lead={{ kind: "icon", icon: "doc" }}
+            status={expired(l) ? { tone: "bad", label: t("co.expired") } : undefined}
+            tags={l.onDocuments ? [t("co.onDocs")] : []}
+            facts={{
+              lic: l.classes.length ? `${t("co.classes")}: ${l.classes.join(", ")}` : undefined,
+              valid: l.expiresOn ? `${t("co.expires")} ${day(l.expiresOn + "T12:00:00")}` : undefined,
+            }}
+            onPress={() => open(l)}
+          />
         ),
       )}
       {edit ? (
