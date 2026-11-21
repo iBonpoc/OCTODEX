@@ -111,6 +111,12 @@ describe("unit:tabBarRule — which tab is lit (by the source)", () => {
     expect(litSection("job/[id]", "clients", "index")).toBe("home");
     expect(litSection("estimate/[id]", "estimates", "leads")).toBe("leads");
   });
+  it("«Деньги» is a card over the tabs, not a tab: it and its lists light «Деньги», not the tab it was pressed from (was: «Клиенты»)", () => {
+    expect(litSection("finance", "finance", "clients")).toBe("finance");
+    expect(litSection("estimates", "estimates", "clients")).toBe("estimates");
+    // the card of one estimate still lights the tab it was opened from (above)
+    expect(litSection("estimate/[id]", "estimates", "clients")).toBe("clients");
+  });
   it("a search lights no tab (was: «Главная»)", () => {
     expect(litSection("search", "home", "today")).toBeUndefined();
     expect(litSection("search", "home", undefined)).toBeUndefined();

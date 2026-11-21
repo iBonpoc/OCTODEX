@@ -120,6 +120,8 @@ export function appStackRoutes(state: NavState): string[] {
 
 /** routes that are no place of any tab: they light none (prototype audit 12 §1 — «Поиск» lit «Главная») */
 export const LIGHTS_NO_TAB: readonly string[] = ["search"];
+/** the bar's own targets that are cards over the tabs, not tabs («Деньги» → /finance, its lists): they light their section, not the tab lying under them */
+export const LIGHTS_OWN: readonly string[] = ["finance", "estimates"];
 
 /** the tab a card was opened from: the focused route of the tab navigator lying under the cards; none when the tabs are on top
  *  or not in the stack (a deep link) */
@@ -140,7 +142,7 @@ export function tabUnder(state: NavState): string | undefined {
  */
 export function litSection(route: string, own: SectionId | undefined, under: string | undefined): SectionId | undefined {
   if (LIGHTS_NO_TAB.includes(route)) return undefined;
-  if (isTabScreen(route.split("/")[0] ?? "") || !under) return own;
+  if (isTabScreen(route.split("/")[0] ?? "") || !under || LIGHTS_OWN.includes(route)) return own;
   return under === "index" ? "home" : sectionOfRoute(under) ?? own;
 }
 

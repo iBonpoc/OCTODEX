@@ -15,7 +15,7 @@ import { layout as screenLayout, space } from "@octo/design-tokens";
 import { IconRow, type IconRowItem } from "../iconRow";
 import { MainStep, type MainStepTotal } from "../mainStep";
 import { ObjectHeader, objectHeadSub, type ObjectHeaderProps } from "../objectHeader";
-import { Screen } from "../surfaces";
+import { Card, Screen } from "../surfaces";
 import { ViewTabs } from "../viewTabs";
 import { CreateButton, MoreButton, TemplateFrame } from "./parts";
 import { SECOND_KEY, moreItems, templateLayout } from "./templateRules";
@@ -115,7 +115,7 @@ function useObjectParts<S extends string>(p: ObjectScreenProps<S>) {
     kind: "object" as const,
     sub: p.sub ?? objectHeadSub(p.header),
     expand: p.header.details
-      ? { open, onToggle: setOpen, expandLabel: p.header.labels.expand, collapseLabel: p.header.labels.collapse, testID: `${p.header.testID}-toggle`, panel: p.header.contacts ?? p.header.details }
+      ? { open, onToggle: setOpen, expandLabel: p.header.labels.expand, collapseLabel: p.header.labels.collapse, testID: `${p.header.testID}-toggle`, panel: p.header.contacts ?? <View testID={`${p.header.testID}-details`}><Card>{p.header.details}</Card></View> }
       : undefined,
   };
   return { right, tabs, top, head };
