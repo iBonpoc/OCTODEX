@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { View } from "react-native";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
 import { usePersistentState } from "@/data/persist";
@@ -164,8 +165,17 @@ export default function Clients() {
 /** the client beside the list on 1280: the panel's head (name, «⤢ Открыть», «✕») and his Обзор; a section opens his screen */
 function ClientAside({ c, outside, onOpen, onClose }: { c: Customer; outside: boolean; onOpen: () => void; onClose: () => void }) {
   const f = useClientFacts(c);
+  const { t } = useI18n();
+  const { role } = useStore();
+  // as the client's screen: «Изменить» for the office, no «＋» (prototype v6, #1343)
+  const actions =
+    role !== "tech" ? (
+      <View testID="list-panel-edit">
+        <Button label={t("ue.edit")} icon="pencil" variant="ghost" size="sm" onPress={() => router.push(`/client/edit?id=${c.id}`)} />
+      </View>
+    ) : undefined;
   return (
-    <ListPanel title={c.name || "—"} outside={outside} onOpen={onOpen} onClose={onClose}>
+    <ListPanel title={c.name || "—"} outside={outside} actions={actions} onOpen={onOpen} onClose={onClose}>
       <ClientOverview c={c} f={f} onSection={onOpen} />
     </ListPanel>
   );

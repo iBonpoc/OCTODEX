@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { Linking } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
+import { useListPanel } from "@/nav/listPanel";
+import { ListPanel } from "@/ui/listPanel";
+import { LeadObject, leadSectionOf, type LeadSectionKey } from "@/features/lead/LeadCard";
 import { useStore } from "@/data/store";
 import { usePersistentState } from "@/data/persist";
 import type { Lead } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
-import { canSeeLead, filterLeads, isClosedLead, isOpenLead, leadStatusView, leadTurn, sourceName } from "@/features/leads";
+import { canSeeLead, canSeeLeadCost, filterLeads, isClosedLead, isOpenLead, leadStatusView, leadTurn, sourceName } from "@/features/leads";
 import { leadSettingsOf } from "@/features/leadSettings";
 import { cleanPhone, smsHref } from "@/features/contactLinks";
 import { useDialThenAsk } from "@/features/comms/dial";
@@ -45,17 +48,13 @@ const initials = (n: string) => n.split(/\s+/).filter(Boolean).map((p) => p[0]).
  * client waits (StatusPill «! 12 мин») and a call or SMS icon (SMS for whoever asked for SMS). A swipe right calls (then «Чем кончился?»),
  * left «В архив» — the close sheet with its reason (or «Вернуть» a closed one, with «Отменить»); the same on a long press and to
  * VoiceOver. «＋» — a new lead; «⋯» — the lead settings (the director). The phone has no board (founder #2350).
- * Old addresses: `?tab=estimates|invoices` go to their sections (07.11), `?open=<id>` (the 1280 panel) opens the lead's screen.
+ * Old addresses: `?tab=estimates|invoices` go to their sections (07.11), `?open=<id>` is the 1280 panel beside the list (the lead's own content; 390/820 — its screen).
  */
 export default function Leads() {
-  const { tab: want, open } = useLocalSearchParams<{ tab?: string; open?: string }>();
+  const { tab: want } = useLocalSearchParams<{ tab?: string }>();
   useEffect(() => {
     if (want === "estimates") router.replace("/estimates");
     else if (want === "invoices") router.replace("/invoice");
-    else if (open) {
-      router.setParams({ open: undefined });
-      router.push(`/lead/${open}`);
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, as the address came
   }, []);
   return <LeadsList />;
@@ -149,9 +148,13 @@ function LeadsList() {
             ]
           : undefined,
       swipe: { left: swipeLeft, right: swipeRight },
-      onPress: () => router.push(`/lead/${l.id}`),
+      onPress: () => panel.open(l.id),
+      selected: l.id === panel.openId,
     };
   };
+  // 1280: the open lead beside the list, `/leads?open=<id>` (spec 06 «Панель 1280»); the rows in the groups' order; 390/820 — its screen
+  const panel = useListPanel(groups.flatMap((g) => g.rows.map((l) => l.id)), (id) => `/lead/${id}`, (id) => db.leads.some((x) => x.id === id && canSeeLead(role, db.me, x)));
+  const openL = panel.openId ? db.leads.find((x) => x.id === panel.openId && canSeeLead(role, db.me, x)) : undefined;
   const newLead = () => router.push("/lead/new");
   const visible = db.leads.filter((l) => canSeeLead(role, db.me, l));
   return (
@@ -165,6 +168,7 @@ function LeadsList() {
         search={{ placeholder: t("lead.search"), value: q, onChange: setQ }}
         chips={{ items: chips.map((c) => ({ key: c, label: label(c) })), value: chip, onChange: setKept }}
         groups={groups}
+        aside={openL ? <LeadAside key={openL.id} id={openL.id} outside={panel.outside} onOpen={panel.full} onClose={panel.close} /> : undefined}
         row={row}
         more={role === "director" ? [{ key: "settings", label: t("co.leads.title"), icon: "sliders", testID: "leads-more-settings" }] : undefined}
         onMore={() => router.push("/company/leads")}
@@ -191,5 +195,36 @@ function LeadsList() {
       ) : null}
       {closeHeld.value ? <CloseSheet key={`close-${closeHeld.value.id}-${closeHeld.opening}`} l={closeHeld.value} visible={closeHeld.visible} onClose={() => setClosing(null)} /> : null}
     </>
+  );
+}
+
+/** the lead beside the list on 1280: the panel's head (name, «⤢ Открыть», «✕», «⋯») and the lead's own content with its sections */
+function LeadAside({ id, outside, onOpen, onClose }: { id: string; outside: boolean; onOpen: () => void; onClose: () => void }) {
+  const { db, role } = useStore();
+  const { day, money } = useI18n();
+  const [section, setSection] = useState<LeadSectionKey>(leadSectionOf());
+  const l = db.leads.find((x) => x.id === id);
+  if (!l) return null;
+  return (
+    <LeadObject
+      l={l}
+      section={section}
+      onSection={setSection}
+      back={onClose}
+      frame={({ more, now, tabs, body }) => (
+        <ListPanel
+          title={l.name || "—"}
+          subtitle={[l.number, sourceName(db, l.sourceId), canSeeLeadCost(role) && l.costCents ? money(l.costCents) : null, day(l.receivedAt)].filter(Boolean).join(" · ")}
+          outside={outside}
+          more={more}
+          onOpen={onOpen}
+          onClose={onClose}
+        >
+          {now}
+          {tabs}
+          {body}
+        </ListPanel>
+      )}
+    />
   );
 }

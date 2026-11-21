@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Redirect, router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import type { DB, Invoice } from "@/data/types";
@@ -12,6 +12,9 @@ import { daysBetween, dayKeyIn, dueDayKey, formatDayKey, getZone } from "@/featu
 import { initialsOf, remindAll, type MoneyTile } from "@/features/invoice/moneySummary";
 import { useInvoiceRemind } from "@/features/invoice/useRemind";
 import { MoneyTiles, useMoneyChips, useMoneyCreate } from "@/features/moneyTabs";
+import { InvoiceObject } from "@/features/invoice/InvoiceCard";
+import { useListPanel } from "@/nav/listPanel";
+import { ListPanel } from "@/ui/listPanel";
 import type { GroupRowProps } from "@/ui/groupedList";
 import type { FigureCol } from "@/ui/figures";
 import { invoiceTitle } from "@/features/invoiceTitle";
@@ -41,7 +44,7 @@ const GROUP_TITLE = { overdue: "proto.money.g.overdue", waiting: "proto.money.g.
  * `&customer=`), `?g=waiting|overdue` (a tile).
  */
 export default function Invoices() {
-  const { f: fParam, customer, g: gParam, open } = useLocalSearchParams<{ f?: string; customer?: string; g?: string; open?: string }>();
+  const { f: fParam, customer, g: gParam } = useLocalSearchParams<{ f?: string; customer?: string; g?: string }>();
   const { db, role } = useStore();
   const { t, money, day } = useI18n();
   const remind = useInvoiceRemind();
@@ -51,14 +54,6 @@ export default function Invoices() {
   const f: InvoiceFilter = asInvoiceFilter(fParam);
   const tile: MoneyTile | undefined = gParam === "waiting" || gParam === "overdue" ? gParam : undefined;
   const [q, setQ] = useState("");
-  // an old link to the 1280 panel (`/invoice?open=<id>`, spec 06): the invoice's own screen (it checks the access itself)
-  if (open) return <Redirect href={`/invoice/${open}`} />;
-  if (!canSeeInvoiceList(role))
-    return (
-      <Screen title={t("nav.money")}>
-        <Empty icon="invoice" title={t("mny.noAccess")} />
-      </Screen>
-    );
   const client = customer ? db.customers.find((c) => c.id === customer) : undefined;
   const now = Date.now();
   const tz = getZone();
@@ -87,6 +82,9 @@ export default function Invoices() {
             ? { label: t("proto.money.fewer"), onPress: () => router.setParams({ f: "owed" }) }
             : undefined,
   }));
+  // 1280: the open invoice beside the list, `/invoice?open=<id>` (spec 06 «Панель 1280»); the rows in the groups' order; 390/820 — its own screen
+  const panel = useListPanel(canSeeInvoiceList(role) ? groups.flatMap((g) => g.rows.map((i) => i.id)) : [], (id) => `/invoice/${id}`, (id) => canSeeInvoiceList(role) && db.invoices.some((i) => i.id === id));
+  const openInv = panel.openId ? db.invoices.find((i) => i.id === panel.openId) : undefined;
   const row = (i: Invoice): GroupRowProps & { key: string } => {
     const c = db.customers.find((x) => x.id === i.customerId);
     const owes = invoiceBalance(i).owesCents;
@@ -107,7 +105,8 @@ export default function Invoices() {
       lead: { initials: initialsOf(c?.name) },
       value: money(owes > 0 ? owes : i.paidCents),
       cols: [due, { label: t("w2m.col.sum"), value: money(owes > 0 ? owes : i.paidCents) }],
-      onPress: () => router.push(`/invoice/${i.id}`),
+      onPress: () => panel.open(i.id),
+      selected: i.id === panel.openId,
       swipe:
         owes > 0
           ? {
@@ -117,6 +116,12 @@ export default function Invoices() {
           : undefined,
     };
   };
+  if (!canSeeInvoiceList(role))
+    return (
+      <Screen title={t("nav.money")}>
+        <Empty icon="invoice" title={t("mny.noAccess")} />
+      </Screen>
+    );
   return (
     <ListScreen
       testID="invoice-list"
@@ -129,6 +134,22 @@ export default function Invoices() {
       create={create}
       onCreate={onCreate}
       groups={groups}
+      // the invoice's own content in the panel: «⋯» in the panel's header row, the main step at the top of the card
+      aside={
+        openInv ? (
+          <InvoiceObject
+            key={openInv.id}
+            inv={openInv}
+            back={panel.close}
+            frame={({ more, main, body }) => (
+              <ListPanel title={`${t("inv.title")} ${openInv.number ?? ""}`.trim()} subtitle={db.customers.find((c) => c.id === openInv.customerId)?.name} outside={panel.outside} more={more} onOpen={panel.full} onClose={panel.close}>
+                {main}
+                {body}
+              </ListPanel>
+            )}
+          />
+        ) : undefined
+      }
       row={row}
       empty={<Empty icon="invoice" title={t(f === "owed" && !searching ? "proto.money.empty.owed" : f === "paid" ? "mny.empty.paid" : "mny.empty.all")} />}
     />

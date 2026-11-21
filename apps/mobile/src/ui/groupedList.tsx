@@ -8,6 +8,7 @@
  *   A swipe is the shared `SwipeRow`; the same actions are on a long press (a Menu) and in `accessibilityActions`
  *   (the web has no swipe — the long press and the screen reader keep them). Archive / delete give their own «Отменить» toast (rule 5).
  */
+import { SelectedCheck } from "./selectedCheck";
 import { Children, useState, type ReactNode } from "react";
 import { StyleSheet, View, type AccessibilityActionEvent, type GestureResponderEvent } from "react-native";
 import { component, radius, rhythm, size, space, type StatusName } from "@octo/design-tokens";
@@ -142,6 +143,7 @@ export function GroupRow({ title, subtitle, lead, value, cols, status, actions =
   const pad = { minHeight: compact ? component.rowCompact : component.listRow.h, paddingVertical: space[2], gap: space[3] };
   const main = (
     <RowView style={[pad, { paddingLeft: check ? 0 : space[4], paddingRight: actions.length ? 0 : space[4] }]}>
+      {selected ? <SelectedCheck left /> : null}
       {!lead || check ? null : "initials" in lead ? (
         <Avatar initials={lead.initials} s={component.avatar.md} />
       ) : "time" in lead ? (

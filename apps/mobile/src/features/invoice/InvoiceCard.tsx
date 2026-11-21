@@ -1,6 +1,6 @@
 import { APP_NAME } from "@/config/product";
 import { findJob } from "@/data/jobs";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactElement, type ReactNode } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { canOpen } from "@/nav/roles";
@@ -32,6 +32,9 @@ import { Card } from "@/ui/surfaces";
 import { ToggleRow } from "@/ui/toggleRow";
 import type { IconRowItem } from "@/ui/iconRow";
 import { ObjectScreen, type MainAction } from "@/ui/templates";
+import { MoreButton } from "@/ui/templates/parts";
+import { MainStep } from "@/ui/mainStep";
+import { IconRow } from "@/ui/iconRow";
 import { paymentRight } from "@/features/moneyLists";
 import { StatusNote } from "@/ui/statusNote";
 import { invoiceTitle } from "@/features/invoiceTitle";
@@ -46,7 +49,10 @@ import { useToast } from "@/ui/overlays";
  * оплату · $X»; overdue → «Напомнить» («Принять»); paid → none. «⋯» — only «Аннулировать…», red, last.
  * `pay` — open the payment sheet at once (a swipe «Принять оплату» in the list: `/invoice/<id>?pay=1`).
  */
-export function InvoiceObject({ inv, back, pay: payNow }: { inv: Invoice; back: () => void; pay?: boolean }) {
+/** the panel beside the list on 1280 (spec 06): the invoice's own content — «⋯» goes to the panel's header, the main step and the body inside it */
+export type InvoiceFrame = (parts: { more: ReactNode; main: ReactNode; body: ReactNode }) => ReactElement;
+
+export function InvoiceObject({ inv, back, pay: payNow, frame }: { inv: Invoice; back: () => void; pay?: boolean; frame?: InvoiceFrame }) {
   const store = useStore();
   const { db } = store;
   const { t, money, day } = useI18n();
@@ -202,42 +208,8 @@ export function InvoiceObject({ inv, back, pay: payNow }: { inv: Invoice; back: 
     </GroupedList>
   );
 
-  return (
+  const sheets = (
     <>
-      <ObjectScreen
-        testID="invoice-screen"
-        back={back}
-        header={{
-          testID: "invoice-head",
-          title: who || `${t("inv.title")} ${number}`.trim(),
-          avatar: who ? initialsOf(who) : undefined,
-          status: { name: chip.s, label: statusLabel },
-          link: { label: [t("proto.money.invoiceOf", { num: number }).trim(), job?.title].filter(Boolean).join(" · "), onPress: () => (job ? router.push(`/job/${job.id}`) : undefined) },
-          // «⌄»: who and what it is tied to, and its dates — once, here (П7, П9)
-          details: (
-            <View style={{ gap: space[2] }}>
-              <RelatedBlock of={{ type: "invoice", id: inv.id }} />
-              <View testID="invoice-next">
-                <T v="caption" tone="mut">
-                  {[sent, t("money.due", { date: day(inv.dueDate) }), lastReminder ? t("mny.remind.last", { date: day(lastReminder.at) }) : undefined, t(next.key, next.params)].filter(Boolean).join(" · ")}
-                </T>
-              </View>
-            </View>
-          ),
-          labels: { expand: t("ds.proto.expand"), collapse: t("ds.proto.collapse"), more: (n) => t("ds.proto.moreN", { n }) },
-        }}
-        actions={actions}
-        main={main}
-        second={second}
-        sections={[]}
-        section=""
-        onSection={() => {}}
-        sectionsLabel={t("proto.money.details")}
-        more={voiding.item ? [voiding.item] : []}
-        onMore={(k) => (k === "void" ? voiding.pick() : undefined)}
-      >
-        {body}
-      </ObjectScreen>
       {voiding.sheet}
 
       <Sheet visible={remindOpen} onClose={() => setRemindOpen(false)} title={t("mny.remind.title")}>
@@ -277,6 +249,61 @@ export function InvoiceObject({ inv, back, pay: payNow }: { inv: Invoice; back: 
         company={company}
         payLink={link && cust?.phone ? () => void openSms(cust.phone, msg().text).catch(() => {}) : undefined}
       />
+    </>
+  );
+  if (frame)
+    return (
+      <>
+        {frame({
+          more: <MoreButton items={voiding.item ? [voiding.item] : []} onMore={(k) => (k === "void" ? voiding.pick() : undefined)} testID="invoice-more" />,
+          main: main ? <MainStep placement="top" fit main={main} /> : null,
+          body: (
+            <View style={{ gap: space[3] }}>
+              <IconRow testID="invoice-actions" actions={actions} />
+              {body}
+            </View>
+          ),
+        })}
+        {sheets}
+      </>
+    );
+  return (
+    <>
+      <ObjectScreen
+        testID="invoice-screen"
+        back={back}
+        header={{
+          testID: "invoice-head",
+          title: who || `${t("inv.title")} ${number}`.trim(),
+          avatar: who ? initialsOf(who) : undefined,
+          status: { name: chip.s, label: statusLabel },
+          link: { label: [t("proto.money.invoiceOf", { num: number }).trim(), job?.title].filter(Boolean).join(" · "), onPress: () => (job ? router.push(`/job/${job.id}`) : undefined) },
+          // «⌄»: who and what it is tied to, and its dates — once, here (П7, П9)
+          details: (
+            <View style={{ gap: space[2] }}>
+              <RelatedBlock of={{ type: "invoice", id: inv.id }} />
+              <View testID="invoice-next">
+                <T v="caption" tone="mut">
+                  {[sent, t("money.due", { date: day(inv.dueDate) }), lastReminder ? t("mny.remind.last", { date: day(lastReminder.at) }) : undefined, t(next.key, next.params)].filter(Boolean).join(" · ")}
+                </T>
+              </View>
+            </View>
+          ),
+          labels: { expand: t("ds.proto.expand"), collapse: t("ds.proto.collapse"), more: (n) => t("ds.proto.moreN", { n }) },
+        }}
+        actions={actions}
+        main={main}
+        second={second}
+        sections={[]}
+        section=""
+        onSection={() => {}}
+        sectionsLabel={t("proto.money.details")}
+        more={voiding.item ? [voiding.item] : []}
+        onMore={(k) => (k === "void" ? voiding.pick() : undefined)}
+      >
+        {body}
+      </ObjectScreen>
+      {sheets}
     </>
   );
 }

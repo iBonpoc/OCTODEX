@@ -1,7 +1,11 @@
 import { useState } from "react";
-import { Redirect, useLocalSearchParams } from "expo-router";
 import { useI18n } from "@/i18n";
+import { useStore } from "@/data/store";
+import { canSeeEstimate } from "@/features/access";
+import { EstimateCardBody, estimateSubtitle } from "@/features/EstimateCard";
 import { useEstimateList } from "@/features/boards";
+import { useListPanel } from "@/nav/listPanel";
+import { ListPanel } from "@/ui/listPanel";
 import { MoneyTiles, useMoneyChips, useMoneyCreate } from "@/features/moneyTabs";
 import { Empty } from "@/ui/surfaces";
 import { ListScreen } from "@/ui/templates";
@@ -19,9 +23,24 @@ export default function Estimates() {
   const chips = useMoneyChips("estimates");
   const { create, onCreate } = useMoneyCreate();
   const { groups, row } = useEstimateList(q, allDone, () => setAllDone(true));
-  // an old link to the 1280 panel (`/estimates?open=<id>`, spec 06): the estimate's own screen (it checks the access itself)
-  const { open } = useLocalSearchParams<{ open?: string }>();
-  if (open) return <Redirect href={`/estimate/${open}`} />;
+  // 1280: the open estimate beside the list, `/estimates?open=<id>` (spec 06 «Панель 1280»); 390/820 — its own screen. The tech: only his own
+  const { db, role, mode } = useStore();
+  const mayOpen = (id: string) => canSeeEstimate(db, { role, mode, me: db.me }, id);
+  const panel = useListPanel(groups.flatMap((g) => g.rows.map((e) => e.id)), (id) => `/estimate/${id}`, (id) => db.estimates.some((x) => x.id === id) && mayOpen(id));
+  const openE = panel.openId && mayOpen(panel.openId) ? db.estimates.find((x) => x.id === panel.openId) : undefined;
+  // #1412: as the estimate's screen — «⋯» in the panel's header row, the main button at the top of the card
+  const aside = openE ? (
+    <EstimateCardBody
+      key={openE.id}
+      e={openE}
+      frame={({ more, main, body }) => (
+        <ListPanel title={[openE.number, openE.title].filter(Boolean).join(" · ") || t("est.detail")} subtitle={estimateSubtitle(db, openE)} outside={panel.outside} more={more} onOpen={panel.full} onClose={panel.close}>
+          {main}
+          {body}
+        </ListPanel>
+      )}
+    />
+  ) : undefined;
   return (
     <ListScreen
       testID="est-list"
@@ -33,9 +52,10 @@ export default function Estimates() {
       create={create}
       onCreate={onCreate}
       groups={groups}
+      aside={aside}
       // visual v2 «цифры справа»: «Сумма $3,420» in the column of the group (FigureRow)
       row={(e) => {
-        const r = row(e);
+        const r = { ...row(e), onPress: () => panel.open(e.id), selected: e.id === panel.openId };
         return r.value ? { ...r, cols: [{ label: t("w2m.col.sum"), value: r.value }] } : r;
       }}
       empty={<Empty icon="invoice" title={t("board.noEstimates")} />}

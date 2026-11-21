@@ -9,7 +9,9 @@
  * «Задачи» → «Вернуть сейчас» → «Вернуть в работу». «＋» makes from the lead (estimate, task, the estimate visit); «⋯» holds the rare:
  * status, «Сделать клиентом», «Отложить», «Закрыть лид». Built on `ObjectScreen` — nothing of its own; the rules are only called.
  */
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactElement, type ReactNode } from "react";
+import { MoreButton } from "@/ui/templates/parts";
+import { ViewTabs } from "@/ui/viewTabs";
 import { Image, Linking, Platform, View } from "react-native";
 import { router } from "expo-router";
 import { component, radius, size, space } from "@octo/design-tokens";
@@ -66,7 +68,10 @@ export const leadSectionOf = (s?: string): LeadSectionKey => (LEAD_SECTIONS.incl
 type SheetName = "won" | "close" | "reply" | "call" | "next" | "book" | "snooze" | "status" | "low" | null;
 const initials = (n: string) => n.split(/\s+/).filter(Boolean).map((p) => p[0]).slice(0, 2).join("").toUpperCase() || "#";
 
-export function LeadObject({ l, section, onSection, back }: { l: Lead; section: LeadSectionKey; onSection: (k: LeadSectionKey) => void; back: () => void }) {
+/** the panel beside the list on 1280 (spec 06): the lead's own content — «⋯» in the panel's header row, then «Сейчас», the sections strip and the open section */
+export type LeadFrame = (parts: { more: ReactNode; now: ReactNode; tabs: ReactNode; body: ReactNode }) => ReactElement;
+
+export function LeadObject({ l, section, onSection, back, frame }: { l: Lead; section: LeadSectionKey; onSection: (k: LeadSectionKey) => void; back: () => void; frame?: LeadFrame }) {
   useTick();
   const store = useStore();
   const { db, role } = store;
@@ -259,37 +264,16 @@ export function LeadObject({ l, section, onSection, back }: { l: Lead; section: 
       </View>
     );
 
-  return (
-    <>
-      <ObjectScreen<LeadSectionKey>
-        testID="lead-screen"
-        back={back}
-        header={{
-          testID: "lead-header",
-          title: l.name || "—",
-          avatar: initials(l.name),
-          status: { name: sv.status, label: statusLabel, onPress: () => setSheet("status") },
-          labels: { expand: t("proto.client.expand"), collapse: t("proto.client.collapse"), more: (n) => t("cw4.moreTags", { n }) },
-        }}
-        actions={actions}
-        now={
+  const nowCard = (
+
           // «чей ход» once — the card's title (the step's reason, else the turn's word); the step inside without it
           main || turnWord ? (
             <NowCard testID="lead-now" kicker={t("proto.client.now")} title={main?.reason ?? turnWord ?? statusLabel} main={main ? { ...main, reason: undefined } : undefined} second={second} />
           ) : undefined
-        }
-        sections={sections}
-        section={section}
-        onSection={onSection}
-        sectionsLabel={t("proto.leads.sections")}
-        more={more}
-        onMore={onMore}
-        create={create}
-        onCreate={onCreate}
-      >
-        {body}
-      </ObjectScreen>
-
+        
+  );
+  const sheets = (
+    <>
       <ReplySheet leadId={sheet === "reply" ? l.id : null} onClose={() => setSheet(null)} />
       <CallResultSheet key={`call-${openCall}`} l={l} visible={sheet === "call"} onClose={() => setSheet(null)} onAnswered={() => (isOpenLead(l) ? setSheet("next") : undefined)} />
       <NextStepSheet office={office} l={l} visible={sheet === "next"} onClose={() => setSheet(null)} onBook={() => setSheet("book")} onEstimate={makeEstimate} onCloseLead={() => setSheet("close")} />
@@ -322,6 +306,47 @@ export function LeadObject({ l, section, onSection, back }: { l: Lead; section: 
         />
       </Sheet>
       <TaskSheet value={taskEdit} onClose={() => setTaskEdit(null)} />
+    </>
+  );
+  if (frame)
+    return (
+      <>
+        {frame({
+          more: <MoreButton items={more} onMore={onMore} testID="lead-more" />,
+          now: nowCard,
+          tabs: <ViewTabs testID="lead-screen-sections" items={sections} value={section} onChange={onSection} label={t("proto.leads.sections")} />,
+          body,
+        })}
+        {sheets}
+      </>
+    );
+  return (
+    <>
+      <ObjectScreen<LeadSectionKey>
+        testID="lead-screen"
+        back={back}
+        header={{
+          testID: "lead-header",
+          title: l.name || "—",
+          avatar: initials(l.name),
+          status: { name: sv.status, label: statusLabel, onPress: () => setSheet("status") },
+          labels: { expand: t("proto.client.expand"), collapse: t("proto.client.collapse"), more: (n) => t("cw4.moreTags", { n }) },
+        }}
+        actions={actions}
+        now={nowCard}
+        sections={sections}
+        section={section}
+        onSection={onSection}
+        sectionsLabel={t("proto.leads.sections")}
+        more={more}
+        onMore={onMore}
+        create={create}
+        onCreate={onCreate}
+      >
+        {body}
+      </ObjectScreen>
+
+      {sheets}
     </>
   );
 }
