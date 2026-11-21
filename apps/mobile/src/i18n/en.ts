@@ -257,6 +257,8 @@ export const en: Dict = {
   "visit.signConsent": "By signing, the client confirms the completed work and amount.",
   "visit.amountDue": "Amount due",
   "visit.close": "Close the visit",
+  "visit.officeTakes": "The office will take the payment: {amount}",
+  "visit.officeTakesByInvoice": "The office will take the payment by the job's invoice: {amount}",
   "visit.dueChanged": "The amount due changed — check it",
   "visit.method": "Payment method",
   "visit.payCard": "Card",

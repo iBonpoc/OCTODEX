@@ -319,6 +319,9 @@ interface StoreCtx {
   setVisitSettings: (patch: Partial<VisitSettings>) => Undo;
   signVisit: (visitId: ID, path: string) => Undo;
   payVisit: (visitId: ID, method: PaymentMethod) => Undo;
+  /** #2018 С2: who may not take the payment (sales) closes a signed visit with money still due — no payment, no invoice;
+   *  the office takes it by the job's invoice («Ждёт оплаты» / «Просрочено») or bills it («не выставлено», #2048) */
+  closeVisitForOffice: (visitId: ID) => Undo;
   /** "I replied" (no call/SMS from the app): stops the reply timer */
   replyLead: (id: ID) => Undo;
   /** call / SMS / email / marketplace from the card: history line + first response + new → in touch */
@@ -1895,6 +1898,14 @@ export function StoreProvider({
       addCheckItem: (visitId, label) => addVisitItemFn(visitId, label, false),
       signVisit: (visitId, path) =>
         mutate("visit.sign", (d) => patchVisit(d, visitId, (v) => ({ ...v, signature: path, step: "signed" })), { k: "visit.sign", visitId, svg: path }),
+      closeVisitForOffice: (visitId) => {
+        const v = dbRef.current.visits.find((x) => x.id === visitId);
+        if (!v || v.step !== "signed") return NO_UNDO;
+        // the same op as a visit with nothing to pay: the visit ends on the server (visits_update_staff: sales are staff).
+        // The step is «paid» with no payment — what the server's «completed» with no payment row loads as (repo.ts visitStep),
+        // so the visit reads the same before and after a reload; the badge says «Готово», not «Оплачено» (visitStatus)
+        return mutate("visit.step", (d) => patchVisit(d, visitId, (x) => ({ ...x, step: "paid", payment: undefined })), { k: "visit.step", visitId, to: "done" });
+      },
       payVisit: (visitId, method) => {
         const d0 = dbRef.current;
         const v = d0.visits.find((x) => x.id === visitId);

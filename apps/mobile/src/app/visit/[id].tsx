@@ -1,5 +1,6 @@
 import { ModulePlaces } from "@/modules/ModulePlaces";
 import { visitDueCents } from "@/features/visitDue";
+import { contractInvoices } from "@/features/contractKind";
 import { signedAction } from "@/features/visitSignedAction";
 import { lateAfterOf } from "@/features/scheduleSettings";
 import { useRef, useState } from "react";
@@ -102,6 +103,8 @@ export default function VisitScreen() {
 
   // #2018: what «Подпись» offers — never a dead end, never «Принять оплату» on $0
   const signed = signedAction(store.role, visitDueCents(db, v));
+  // #2018 С2: the job already has a final invoice with money left on it — the office takes the payment by that invoice
+  const officeByInvoice = !!v.jobId && contractInvoices(db, v.jobId).some((i) => i.kind === "final" && i.totalCents > i.paidCents);
   const advance = (msg: string) => {
     haptic();
     const undo = store.advanceVisit(v.id);
@@ -170,7 +173,8 @@ export default function VisitScreen() {
       <Card>
         <RowView style={{ justifyContent: "space-between" }}>
           <StatusChip status={st.status} label={t(st.label)} />
-          {visitDueCents(db, v) > 0 ? (
+          {/* a closed visit shows no bare amount beside «Готово» (#2018 С2 review): what is still owed is said in its card below */}
+          {visitDueCents(db, v) > 0 && v.step !== "paid" && v.step !== "done" ? (
             <T v="title" tabular>
               {money(visitDueCents(db, v))}
             </T>
@@ -322,6 +326,29 @@ export default function VisitScreen() {
           />
         </View>
       ) : null}
+      {/* #2018 С2: who may not take the payment (sales), money still due — never a dead end: the office takes it (by the
+          job's invoice when there is one), the visit closes with no payment written */}
+      {v.step === "signed" && signed === "closeOffice" ? (
+        <View testID="visit-close-office">
+          <Card>
+            <T v="body">
+              {t(officeByInvoice ? "visit.officeTakesByInvoice" : "visit.officeTakes", { amount: money(visitDueCents(db, v)) })}
+            </T>
+            <Button
+              testID="visit-close-office-button"
+              label={t("visit.close")}
+              icon="check"
+              full
+              onPress={() => {
+                // asked again at the press: the right or the amount may have changed since the screen drew it (a sync)
+                if (signedAction(store.role, visitDueCents(store.db, v)) !== "closeOffice") return toast.show(t("visit.dueChanged"));
+                haptic();
+                toast.show(queuedHint() ?? t("toast.step", { step: t("st.done") }), store.closeVisitForOffice(v.id));
+              }}
+            />
+          </Card>
+        </View>
+      ) : null}
       {v.step === "signed" && signed === "pay" ? (
         <Card>
           <T v="caption" tone="mut">
@@ -376,6 +403,14 @@ export default function VisitScreen() {
           <T v="body" tone="mut">
             {t(v.payment && v.payment.amountCents > 0 ? "visit.completedHint" : "visit.completedHintSigned")}
           </T>
+          {/* #2018 С2: closed with money still owed (sales closed it) — who takes it */}
+          {!(v.payment && v.payment.amountCents > 0) && visitDueCents(db, v) > 0 ? (
+            <View testID="visit-closed-office">
+              <T v="body">
+                {t(officeByInvoice ? "visit.officeTakesByInvoice" : "visit.officeTakes", { amount: money(visitDueCents(db, v)) })}
+              </T>
+            </View>
+          ) : null}
           {job && canSeeProfit(store.role) ? (() => {
             const p = jobProfit(db, job.id);
             return (

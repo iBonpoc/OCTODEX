@@ -256,6 +256,8 @@ export const ru = {
   "visit.signConsent": "Подписывая, клиент подтверждает выполненную работу и сумму.",
   "visit.amountDue": "К оплате",
   "visit.close": "Закрыть выезд",
+  "visit.officeTakes": "Оплату примет офис: {amount}",
+  "visit.officeTakesByInvoice": "Оплату примет офис по счёту работы: {amount}",
   "visit.dueChanged": "Сумма к оплате изменилась — проверьте её",
   "visit.method": "Способ оплаты",
   "visit.payCard": "Карта",
