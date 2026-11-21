@@ -41,6 +41,9 @@ describe("unit:actionBar — only a screen without the tab bar pins one", () => 
     expect(bad.map((f) => routeOf(f))).toEqual([]);
   });
   it("the screen itself ignores a footer where the tab bar shows", () => {
-    expect(readFileSync(join(__dirname, "..", "src", "ui", "surfaces.tsx"), "utf8")).toMatch(/const footerOn = !!footer && !wide && !showsTabBar\(routeName\)/);
+    // prototype v2: one rule for the Screen and the templates (useFooterShown) — a phone, and a route without the tab bar
+    const src = readFileSync(join(__dirname, "..", "src", "ui", "surfaces.tsx"), "utf8");
+    expect(src).toMatch(/const footerShown = \(wide: boolean, routeName: string\) => !wide && !showsTabBar\(routeName\)/);
+    expect(src).toMatch(/const footerOn = !!footer && footerShown\(wide, routeName\)/);
   });
 });

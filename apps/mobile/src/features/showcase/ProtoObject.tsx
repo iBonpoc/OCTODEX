@@ -17,7 +17,8 @@ import { ObjectHeader, ObjectHeaderBar } from "@/ui/objectHeader";
 import { useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { SummaryLine } from "@/ui/summaryLine";
-import { Card } from "@/ui/surfaces";
+import { Card, SectionTitle } from "@/ui/surfaces";
+import { ProtoTemplates } from "./ProtoTemplates";
 
 /** a demo person of the samples (not a UI word) */
 const NAME = "David Kim";
@@ -51,6 +52,7 @@ export function ProtoObject() {
   ];
   const inline: IconRowItem[] = [act("in-call", "phone", t("ds.proto.call")), act("in-sms", "message", t("ds.proto.sms"))];
   return (
+    <>
     <View style={{ gap: space[6] }} testID="showcase-proto-object">
       <ObjectHeader
         testID="showcase-object-header"
@@ -115,5 +117,9 @@ export function ProtoObject() {
         />
       </View>
     </View>
+    {/* the five screen templates (поток Г) — shown here so the «Прототип v2» screen needs no change of its route */}
+    <SectionTitle title={t("ds.sec.protoTemplates")} />
+    <ProtoTemplates />
+    </>
   );
 }

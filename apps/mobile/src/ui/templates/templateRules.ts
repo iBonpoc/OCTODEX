@@ -1,0 +1,124 @@
+/**
+ * The rules of the five screen templates, pure (BUILD-PLAN §1 поток Г, BUILD-SPEC §0–§1, DS §12.2 «где это всегда находится»).
+ * A template asks `templateLayout()` where each part stands and draws exactly that — so the test of this file is the test of
+ * the screens' rules:
+ * - one main button at most (the `MainAction` is one slot; `mainCount` of a layout is 0 or 1, never 2);
+ * - «‹ назад» first in the top row on the left, «⋯» last on the right (after «＋»);
+ * - the sections strip (ViewTabs) right under the object's header; the object's main step pinned at the bottom (MainStep "bar");
+ * - a list: search is an icon of the header (first of the icons), the chips one strip under the title;
+ * - a calendar: the day strip under the views.
+ * A second step whose label does not fit the bar's pair goes into «⋯» (mainStepLayout); a dangerous item of «⋯» is the last one.
+ */
+import type { MenuItem } from "../overlays";
+import { mainStepLayout } from "../mainStepRules";
+import type { MainAction } from "./types";
+
+export type TemplateKind = "overview" | "list" | "object" | "editor" | "calendar";
+
+/** a part of a screen; «main» is THE main button, wherever it stands */
+export type Slot =
+  | "back" | "title" | "icons" | "search" | "create" | "more"
+  | "header" | "actions" | "sections" | "chips" | "searchField" | "filters" | "views" | "days" | "unassigned"
+  | "next" | "main" | "second" | "total" | "attention" | "summary" | "details" | "body" | "groups" | "undated" | "empty";
+
+/** top — the header row (left to right); under — what stands under the title / header (stuck tabs, strips);
+ *  body — the scrolling content, in order; bottom — the pinned bar (MainStep "bar") */
+export interface TemplateLayout {
+  top: Slot[];
+  under: Slot[];
+  body: Slot[];
+  bottom: Slot[];
+}
+
+export interface LayoutInput {
+  back?: boolean;
+  icons?: boolean;
+  create?: boolean;
+  more?: boolean;
+  main?: MainAction | null;
+  second?: { label: string } | null;
+  total?: unknown;
+  sections?: boolean;
+  chips?: boolean;
+  searchOpen?: boolean;
+  filters?: boolean;
+  views?: boolean;
+  unassigned?: boolean;
+  attention?: boolean;
+  summary?: boolean;
+  details?: boolean;
+  undated?: boolean;
+  /** the list / the day has nothing: `empty` instead of the groups */
+  empty?: boolean;
+  /** the screen's pinned bottom is not there (820/1280, or a route that still has the tab bar): the main step goes to the top of the content */
+  noBar?: boolean;
+}
+
+const on = <T,>(cond: unknown, x: T): T[] => (cond ? [x] : []);
+
+/** the header row: «‹» · title · icons (search first) · «＋» · «⋯» (DS §12.2, Б4) */
+function topRow(kind: TemplateKind, p: LayoutInput): Slot[] {
+  return [...on(p.back, "back" as const), "title", ...on(kind === "list", "search" as const), ...on(p.icons, "icons" as const), ...on(p.create, "create" as const), ...on(p.more, "more" as const)];
+}
+
+/** the bar: «Итого ˅» or the second one (if it fits the pair), then the main one */
+function bar(p: LayoutInput): Slot[] {
+  if (!p.main) return [];
+  const { layout } = mainStepLayout({ second: p.second, total: p.total });
+  return [...on(layout === "total", "total" as const), ...on(layout === "pair", "second" as const), "main"];
+}
+
+export function templateLayout(kind: TemplateKind, p: LayoutInput): TemplateLayout {
+  const top = topRow(kind, p);
+  if (kind === "overview") {
+    // the next step is the card and its button (MainStep "top") — over the attention rows, the summary and the details
+    return { top, under: [], body: [...on(p.main, "next" as const), ...on(p.main, "main" as const), ...on(p.attention, "attention" as const), ...on(p.summary, "summary" as const), ...on(p.details, "details" as const), "body"], bottom: [] };
+  }
+  if (kind === "list") {
+    return { top, under: [...on(p.searchOpen, "searchField" as const), ...on(p.chips, "chips" as const), ...on(p.filters, "filters" as const)], body: [p.empty ? "empty" : "groups"], bottom: [] };
+  }
+  if (kind === "calendar") {
+    return { top, under: [...on(p.views, "views" as const), "days"], body: [...on(p.unassigned, "unassigned" as const), p.empty ? "empty" : "groups", ...on(p.undated, "undated" as const)], bottom: [] };
+  }
+  const pinned = bar(p);
+  if (kind === "object") {
+    // the header and its IconRow, then the sections strip right under it; the main step pinned at the bottom
+    return { top, under: ["header", "actions", ...on(p.sections, "sections" as const)], body: p.noBar ? [...pinned, "body"] : ["body"], bottom: p.noBar ? [] : pinned };
+  }
+  // editor: the fields, the summary, the save step pinned at the bottom
+  return { top, under: [], body: p.noBar ? ["body", ...on(p.summary, "summary" as const), ...pinned] : ["body", ...on(p.summary, "summary" as const)], bottom: p.noBar ? [] : pinned };
+}
+
+/** how many main buttons the layout draws — the rule «одна главная кнопка»: 0 or 1 */
+export function mainCount(l: TemplateLayout): number {
+  return [...l.top, ...l.under, ...l.body, ...l.bottom].filter((s) => s === "main").length;
+}
+
+/** the key «⋯» gives a second step that went into it (it did not fit the bar's pair) */
+export const SECOND_KEY = "__second";
+
+/**
+ * The items of «⋯»: the screen's own, plus the second step when it does not stand in the bar; a dangerous one — the last,
+ * after the rest (the Menu draws a line before it). Order of the rest kept.
+ */
+export function moreItems(items: MenuItem<string>[] | undefined, second?: (MainAction & { icon?: MenuItem<string>["icon"] }) | null, total?: unknown): MenuItem<string>[] {
+  const own = items ?? [];
+  const extra: MenuItem<string>[] =
+    second && mainStepLayout({ second, total }).secondInMore ? [{ key: SECOND_KEY, label: second.label, icon: second.icon, testID: second.testID }] : [];
+  const all = [...own, ...extra];
+  return [...all.filter((i) => !i.destructive), ...all.filter((i) => i.destructive)];
+}
+
+/** a dangerous item asks first (the template's confirm sheet); the rest run at once */
+export const asksFirst = (item: MenuItem<string> | undefined) => !!item?.destructive;
+
+/** «Нужно внимание» on an Overview: at most three rows, the rest behind «Все ›» (BUILD-PLAN §1 Г) */
+export const ATTENTION_MAX = 3;
+export function attentionRows<T>(rows: T[]): { shown: T[]; more: number } {
+  return { shown: rows.slice(0, ATTENTION_MAX), more: Math.max(0, rows.length - ATTENTION_MAX) };
+}
+
+/** the groups of a list that have rows (an empty group is not drawn, BUILD-SPEC §1 GroupedList); none — the list is empty */
+export function shownGroups<G extends { rows: unknown[] }>(groups: G[]): G[] {
+  return groups.filter((g) => g.rows.length > 0);
+}

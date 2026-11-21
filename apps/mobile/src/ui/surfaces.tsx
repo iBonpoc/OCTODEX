@@ -15,7 +15,6 @@ import { BackSwipe } from "@/nav/BackSwipe";
 import { tabBackSwipe } from "@/nav/backSwipe";
 import { showsTabBar } from "@/nav/tabBarRule";
 import { useAuth } from "@/cloud/auth";
-import { useTabBarHidden } from "@/nav/tabBarHide";
 import { Fab } from "@/nav/Fab";
 import { HomeHeader } from "@/nav/HomeHeader";
 import { CompanyLine, CompanyWaiting } from "@/features/CompanySwitcher";
@@ -485,6 +484,14 @@ const noFocusRing = (Platform.OS === "web" ? { outlineStyle: "none" } : {}) as V
  * подписать нельзя»). On iOS the native scroll takes the gesture from a JS responder inside it; the pad asks the
  * screen to stop scrolling for the stroke. Outside a Screen it is a no-op.
  */
+/** the pinned bar (`footer`) stands only on a phone, and only where the route has no tab bar (NO_TAB_BAR — a form, an object of
+ *  prototype v2), else the two would meet; the templates ask the same to put the main step into the content where the bar is not */
+const footerShown = (wide: boolean, routeName: string) => !wide && !showsTabBar(routeName);
+export function useFooterShown(): boolean {
+  const { wide } = useDevice();
+  return footerShown(wide, useRoute().name);
+}
+
 const ScrollLockCtx = createContext<(locked: boolean) => void>(() => {});
 export const useScrollLock = () => useContext(ScrollLockCtx);
 
@@ -506,6 +513,7 @@ export function Screen({
   fabCtx,
   fabOn,
   headerIcons,
+  titleHidden,
   home,
   footer,
   aside,
@@ -544,6 +552,9 @@ export function Screen({
   fabOn?: Partial<Record<NonNullable<FabItem["act"]>, () => void>>;
   /** prototype v2 (BUILD-PLAN §1 поток А): round icons of the header (search, the bell) — they stand left of «＋»; each names its object (`a11y`, П6) */
   headerIcons?: IconAction[];
+  /** prototype v2 (templates/ObjectScreen): the screen's own header shows the name (ObjectHeader) — the title is not drawn a second time (П7);
+   *  `title` still names the screen (the mini header, the tests) */
+  titleHidden?: boolean;
   /** «Главная» of a role: the bell, the sync badge and the profile on the right (13 v2 §2.2, §3.14) */
   home?: boolean;
   /** the pinned panel of the screen's main action (ui/actionBar.tsx, DS §8.9): phone — at the bottom over the content, which leaves room
@@ -575,8 +586,6 @@ export function Screen({
   const navInsets = useNavInsets(pathname);
   const routeName = useRoute().name;
   const auth = useAuth();
-  /** the bar is away while a signature is drawn (docs/specs/28): «＋» goes down to its place */
-  const barAway = useTabBarHidden();
   // the legal texts: «‹ Помощь» only inside the open app; from sign-in / the consent gate their own «back» (review #274)
   const nav = navContext(pathname, params, store.db, store.role, { appOpen: !!auth.session && auth.legal !== "first" && auth.legal !== "changed" });
   const up = nav.up;
@@ -589,7 +598,7 @@ export function Screen({
   const goUp = () => (up ? go(up.href) : back?.());
   const { wide, device } = useDevice();
   /** the pinned bar stands only where the phone has no tab bar (docs: NO_TAB_BAR — a form, a full-screen flow), else the two would meet */
-  const footerOn = !!footer && !wide && !showsTabBar(routeName);
+  const footerOn = !!footer && footerShown(wide, routeName);
   /** tablet/desktop: the address bar is pinned above the scroll, with a round «‹» (spec 10, Н2) */
   // a tab opened from «More» (Plan, Triage…) has a parent too, but it lives in the tab navigator that already draws the pill
   const pinned = wide && !!up && !isTabScreen(routeName);
@@ -639,11 +648,8 @@ export function Screen({
       };
     }, [pathname]),
   );
-  /** prototype v2 (BUILD-SPEC «Решения по умолчанию», BUILD-PLAN §0): «＋» is in the header on every width and every screen — no floating «＋».
-   *  The floating branch below (`floatFab`) is dead until wave 2 deletes it (поток Д). */
-  const fabInHeader = !!fab;
-  const headerFab = fabInHeader ? <Fab placement="header" set={fab!} ctx={fabCtx} on={fabOn} /> : null;
-  const floatFab = !!fab && !fabInHeader;
+  /** prototype v2 (BUILD-SPEC «Решения по умолчанию», BUILD-PLAN §0): «＋» is in the header on every width and every screen — no floating «＋» */
+  const headerFab = fab ? <Fab placement="header" set={fab} ctx={fabCtx} on={fabOn} /> : null;
   /** the header's round icons (search, bell): left of «＋», «⋯» stays the last */
   const headerIconRow = headerIcons?.length
     ? headerIcons.map((a) => <IconButton key={a.testID} testID={a.testID} icon={a.icon} label={a.a11y} onPress={a.onPress} bare />)
@@ -661,7 +667,8 @@ export function Screen({
                 <Icon name="chevronLeft" s={size.iconSm} color={c.ink} />
               </Press>
             ) : null}
-            {trail.length ? (
+            {/* prototype v2 (HIG, BUILD-SPEC «Назад»): on a phone one «‹ <parent>» top left; the trail «⌂ › … › Parent» only from 820 */}
+            {trail.length && wide ? (
               <Breadcrumbs trail={trail} current={nav.kind ? t(nav.kind) : undefined} go={go} />
             ) : (
               <Press
@@ -713,6 +720,7 @@ export function Screen({
               Back is a swipe (iOS) / system back (Android); on the trail the parent is the "back" button.
               Tablet/desktop: the same row is pinned above the scroll (addressBar). */}
           {pinned ? null : addressRow}
+          {titleHidden ? null : (
           <RowView style={{ gap: space[1] }}>
             <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={[{ flexShrink: 1 }, noFocusRing]} testID="screen-title">
               <T v="title" numberOfLines={2}>
@@ -720,6 +728,7 @@ export function Screen({
               </T>
             </View>
           </RowView>
+          )}
         </>
       ) : (
         /* tab root: the big title is where you are (docs/specs/13 §2.2; no ☰ since variant Б).
@@ -886,7 +895,7 @@ export function Screen({
   const column = { width: "100%" as const, maxWidth: layout.contentMax, alignSelf: "center" as const };
   const top = pinned ? space[3] : navInsets.top;
   coveredTop.current = pinned ? 0 : navInsets.top;
-  coveredBottom.current = coveredBottomOf({ keyboard: !!kb, keyboardMargin: space[6], navBottom: navInsets.bottom, fab: floatFab ? component.fab + space[3] : 0, footer: footerOn ? footH : 0 });
+  coveredBottom.current = coveredBottomOf({ keyboard: !!kb, keyboardMargin: space[6], navBottom: navInsets.bottom, fab: 0, footer: footerOn ? footH : 0 });
   useEffect(() => {
     setFooterInset(footerOn && !kb ? footH : 0);
     return () => setFooterInset(0);
@@ -913,7 +922,7 @@ export function Screen({
             <ScrollView
               ref={scrollRef}
               scrollEnabled={!scrollLocked}
-              contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : scrollBottom(navInsets.bottom + (floatFab ? component.fab + space[3] : 0) + (footerOn ? footH : 0), navInsets.wide, safe.bottom), paddingLeft: navInsets.left, paddingRight: navInsets.right }}
+              contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : scrollBottom(navInsets.bottom + (footerOn ? footH : 0), navInsets.wide, safe.bottom), paddingLeft: navInsets.left, paddingRight: navInsets.right }}
               keyboardShouldPersistTaps="handled"
               // react-native-web closes the field on ANY scroll event with "on-drag" (even the browser's own scroll to a field that takes the
               // focus, or ours to a heading): a field closed after 0–1 letters (#1241). The web has no finger dragging a keyboard away.
@@ -999,9 +1008,6 @@ export function Screen({
             {/* under the home indicator the bar goes on in one fill (the glass has its own, the corners above stay round) */}
             {safe.bottom > 0 ? <View style={{ height: safe.bottom, backgroundColor: c.ov }} /> : null}
           </View>
-        ) : null}
-        {floatFab && !kb ? (
-          <Fab placement="float" set={fab!} ctx={fabCtx} on={fabOn} right={navInsets.right} bottom={showsTabBar(routeName) && !barAway ? navInsets.tabBottom + size.tabbarH + space[3] : navInsets.tabBottom + space[2]} />
         ) : null}
       </View>
     </BackSwipe>
