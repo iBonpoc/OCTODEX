@@ -546,7 +546,8 @@ function ApprovedCard({ e, jobId, noPlan }: { e: Estimate; jobId?: string; noPla
             <T v="caption" tone="mut">
               {t("ue.toSchedule")}
             </T>
-            {planner && !noPlan ? <Button label={t("sch.title")} icon="calendar" onPress={() => router.push(`/job/schedule?jobId=${jobId}`)} /> : null}
+            {/* v2 «одна жёлтая на экран»: beside the deposit card (its «Взять задаток» is the step first) the plan is the dark one */}
+            {planner && !noPlan ? <Button label={t("sch.title")} icon="calendar" variant="secondary" onPress={() => router.push(`/job/schedule?jobId=${jobId}`)} /> : null}
           </>
         ) : null}
         {visits.map((v) => (

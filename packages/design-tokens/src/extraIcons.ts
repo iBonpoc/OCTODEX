@@ -3,6 +3,8 @@
  * Same grid and stroke (24x24, 1.75, round). To be adopted into the DS (BACKLOG).
  */
 export const extraIcons = {
+  // ⌛ — the visit's timer (visual v2 «Таймер», 21.11)
+  hourglass: "M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9",
   // ☰ — the app menu (docs/specs/13 §2.2)
   menu: "M4 7h16M4 12h16M4 17h16",
   // a grip to drag a panel by (a canvas toolbar, founder 08.11)

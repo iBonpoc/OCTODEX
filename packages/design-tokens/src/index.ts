@@ -19,7 +19,12 @@ export const font = {
     semibold: "Manrope_600SemiBold",
     bold: "Manrope_700Bold",
   },
-  size: { display: 30, title: 22, heading: 17, body: 15, button: 15, caption: 13, micro: 12, input: 16 },
+  /** visual language v2 (docs/design/visual-v2.html «Визуальный язык числами», founder 21.11): the screen title 30/600, a tile's figure
+   *  26/700 (two in a row) and `figureSm` 18/700 (three in a row), a card 17/700, text 15/500–600, the second line 13/500, a caption 12/600;
+   *  not more than five sizes on one screen */
+  size: { display: 30, title: 22, heading: 17, body: 15, button: 15, caption: 13, micro: 12, input: 16, figure: 26, figureSm: 18 },
+  /** letter spacing as a share of the size (em): the screen title −0.02 em, a figure −0.01 em (v2) */
+  tracking: { display: -0.02, figure: -0.01 },
   lineHeight: { tight: 1.15, body: 1.45, snug: 1.35 },
   weight: { regular: "400", medium: "500", semibold: "600", bold: "700" },
   /** Minimum readable text size (DS rule 6). */
@@ -33,6 +38,9 @@ export const font = {
 export const space = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24, 8: 32 } as const;
 /** half steps (foundation.css --space-hair / --space-tight): label↔value inside a tile, gap in a chip */
 export const spaceHalf = { hair: 2, tight: 6 } as const;
+/** the rhythm of a screen (visual v2, founder 21.11): the screen's side padding 16, between cards 8, inside a card 16 (its rows 12),
+ *  between blocks 20, a block's title → its content 10 */
+export const rhythm = { screen: 16, cardGap: 8, cardPad: 16, rowGap: 12, blockGap: 20, headGap: 10 } as const;
 
 export const radius = {
   pill: 999,
@@ -170,10 +178,12 @@ export const gesture = {
 
 /* ---------- components.css ---------- */
 export const component = {
-  button: { sm: 32, md: 36, phone: 40, hit: 44 },
+  /** visual v2: the phone's capsule 40, the icon in it `glyph` 18 */
+  button: { sm: 32, md: 36, phone: 40, hit: 44, glyph: 18 },
   field: { h: 40, phone: 44 },
   chip: { h: 24, px: 10 },
-  segmented: { h: 32, pad: 4 },
+  /** visual v2: the segment 36 high, radius 18 (a pill), the track 3 inside; the chosen one is a 15-radius pill (`h / 2 − pad`), text 13/600 */
+  segmented: { h: 36, pad: 3 },
   /** a tab of a screen (pill); `fadeW` — the row of view tabs fades this wide at an edge that has more tabs past it (DS §9 А1п, #1343) */
   tab: { h: 30, fadeW: 32 },
   /** DS §9 А5 (spec 56 §3.3, wave 1а): the knob 18 (was 16), pad 2 inside the 1-px edge */
@@ -225,7 +235,7 @@ export const component = {
    *  `labelMax` — the longest label (characters) a button of a pair may have and still stand in a row; `charEm` — the average width of a
    *  button character as a share of `size.button` (Manrope, Latin and Cyrillic), to tell if a label fits its half; `fieldMin` — the
    *  narrowest a field of a `FieldRow` may be (a date «Wed, Nov 18», a time «12:45 PM» with the chevron) */
-  pair: { labelMax: 16, charEm: 0.58, fieldMin: 150 },
+  pair: { labelMax: 16, charEm: 0.62, fieldMin: 150 },
   /** sheet grabber */
   grabber: { w: 36, h: 4 },
   /** progress bar of Steps */
@@ -290,10 +300,23 @@ export const component = {
   /** GroupedList / ListRow: a row from `h` 56 (initials 36 · title 15 · line 13); separators start `inset` 64 from the left (past the initials) */
   /** `timeW` — the hour column of a row («8:30», as in the Plan; GroupRow `lead={{ time }}`) */
   listRow: { h: 56, inset: 64, timeW: 52 },
-  /** StatTile: a 2×2 grid tile from `h` 88 (label 12 caps, figure 30) */
-  statTile: { h: 88 },
-  /** DayStrip (BUILD-SPEC §1): 7 pills `h` 52, not narrower than `w` 44 (they share the row, `gap` 8), the «something on this day» dot `dot` 4 */
-  dayPill: { w: 44, h: 52, dot: 4, gap: 8 },
+  /** StatTile (visual v2): two in a row `h` 112 (figure 26), three in a row `hSm` 92 (figure 18); the icon `glyph` 15 in a circle `icon` 28
+   *  top left, the word 12 over the figure, the unit 12 paler; one tile of a screen may be the yellow one */
+  statTile: { h: 112, hSm: 92, icon: 28, glyph: 15 },
+  /** DayStrip (visual v2): pills 46 × 64 (radius 23), 7 fill the 358 row with `gap` 6; the day 12/600 over the number 17/700, the «есть выезды» dot `dot` 4 */
+  dayPill: { w: 46, h: 64, dot: 4, gap: 6 },
+  /** StatusPill (visual v2): 24 high (`chip.h`), radius 12, the icon `icon` 13 and the word 12/600, padding `padL` 7 · `padR` 9 */
+  statusPill: { icon: 13, padL: 7, padR: 9 },
+  /** CheckList (visual v2): the circle `dot` 20 (empty — a dashed `dash` 1.5 ring), a row `row` 34, one line `line` 1 on the left through the circles */
+  checkList: { dot: 20, row: 34, line: 1, dash: 1.5, glyph: 13 },
+  /** FigureRow «цифры справа» (visual v2): a card from `h` 64, the icon square `icon` 40 with radius `iconRadius` 13, a value column `colW` 64 */
+  figureRow: { h: 64, icon: 40, iconRadius: 13, colW: 64 },
+  /** TimeSlot (visual v2): the hour column `timeW` 44 (hour 15/700, duration 12), the interval plate `interval` 26 of two halves, the notch `notch` 8 */
+  timeSlot: { timeW: 44, interval: 26, notch: 8 },
+  /** round buttons (visual v2): 40 in the header (on a `surf` card), `card` 32 inside a card, `quick` 44 in the quick-actions row with a 12 caption */
+  roundButton: { header: 40, card: 32, quick: 44 },
+  /** the phone's tab bar (visual v2): 56 (`size.tabbarH`) + the bottom zone; the icon `icon` 22 over the word 12; the top `fade` 18 fades into `tab` */
+  tabBar: { icon: 22, fade: 18 },
   /** QuickActions / IconRow: `row` — a circle 44 with a 12 label under it, the cell `labelW` 64, between cells `gap` 8; `inline` — a circle 36 (zone 44) in the address line */
   quickAction: { row: 44, inline: 36, labelW: 64, gap: 8 },
   /** IconRow (BUILD-PLAN поток Б): between the icon buttons */
@@ -306,6 +329,40 @@ export const component = {
   headerIcon: 36,
   /** the main button pinned at the bottom of an object / editor (MainStepBar, ActionBar): 44 full width (founder 21.11, #2350) */
   mainBar: 44,
+  /**
+   * The one header (docs/design/visual-v2.html «Единая шапка», «Сворачивающаяся шапка»; app-only, not in the DS css yet).
+   * `row` — the icons row 48 under the status bar; `big` — the big block 64 (a 13 line + the 30 title, or «Имя | две строки»);
+   * `bar` — the folded header, one line 52 (the editor's one line too); `circle` — the round header button 40 (`icon` 20, zone 44);
+   * `sheetClose` — a sheet's «×» 32; `chevron` — the «⌄» 24 after a client's name; `avatarRing` — the root avatar's ring 1,5 (gap 2);
+   * `rule` — the line 1 × 40 between the name and its two lines; `demo` — the «Демо» plate 20 (dot 6) and the folded dot 6;
+   * `titleTrack` — the 30 title's tracking (−0,02 em); `plate` — the folded row's ground is `ov` with the hairline.
+   * `root` / `object` — the scroll points (pt) of the storyboard: what fades and moves between which, `end` — folded from here;
+   * `settle` — let go between the ends, the header goes to the nearer one (the half: 32 / 56) in `motion.durBase` with `easeOut`;
+   * `flick` — a fling down this fast (pt/ms) folds it at once; Reduce Motion — the big block and the small title swap by a fade
+   * `motion.durFast` at the half, no shift, no scale.
+   */
+  header: {
+    row: 48,
+    big: 64,
+    bar: 52,
+    circle: 40,
+    sheetClose: 32,
+    sheetRow: 52,
+    chevron: 24,
+    avatarRing: 1.5,
+    ringGap: 2,
+    rule: 40,
+    demo: { h: 20, dot: 6, px: 8 },
+    titleTrack: -0.6,
+    /** the folded title is this part of the big one (30 → 17) */
+    foldScale: 0.57,
+    /** the root avatar folded: 40 → 36 */
+    avatarFold: 0.9,
+    root: { end: 64, kickEnd: 24, titleFrom: 16, titleFadeFrom: 40, miniFrom: 40, miniShift: 8, plateFrom: 48 },
+    object: { end: 112, actionsEnd: 48, actionsShift: 12, subFrom: 32, subEnd: 72, titleFrom: 56, titleFadeFrom: 80, parentFrom: 56, parentEnd: 80, miniFrom: 80, miniShift: 8, plateFrom: 96, plusFrom: 96 },
+    flick: 1,
+    slow: 0.25,
+  },
 } as const;
 
 /* ---------- breakpoints (HANDOFF: 390 / 820 / 1280) ---------- */
@@ -359,6 +416,23 @@ export interface ThemeColors {
   accEdge: string;
   /** palette A: the accent as text or a link on a card (the fill colour is too light for text on the light theme) */
   accText: string;
+  /** visual v2: the accent as a quiet tone (16 % / 30 %) — a chosen day, the nearest interval, a not-main yellow: never a second fill */
+  tint: string;
+  /** a stronger tone (the first half of the nearest interval) */
+  tint2: string;
+  /** visual v2 layers: the chosen cell, one step over `surf2` (the cell) */
+  surf3: string;
+  /** visual v2: the 1-pt highlight along the top of a card (no frames) */
+  hl: string;
+  /** a quiet line drawn inside a card (the checklist's line, the vertical bar of a header) */
+  off: string;
+  /** the dashed ring of an open checklist item (≥ 3:1 to the cell) */
+  dash: string;
+  /** the phone's tab bar ground (the bar fades into it from the top) */
+  tab: string;
+  /** on the yellow fill (the one yellow tile): the icon's circle and the paler words (≥ 4.5:1 on `acc`) */
+  onAccTint: string;
+  onAccMut: string;
   scrim: string;
   shadow: { color: string; opacity: number; radius: number; offsetY: number };
   blur: number;
@@ -423,6 +497,15 @@ export const themes: Record<ThemeName, ThemeColors> = {
     onAcc: "#1C1A12",
     accEdge: "transparent",
     accText: "#E2C15E",
+    tint: "rgba(226,193,94,0.16)",
+    tint2: "rgba(226,193,94,0.20)",
+    surf3: "#44464D",
+    hl: "rgba(255,255,255,0.05)",
+    off: "#4A4D54",
+    dash: "#8C9098",
+    tab: "#1F2024",
+    onAccTint: "rgba(28,26,18,0.12)",
+    onAccMut: "rgba(28,26,18,0.78)",
     scrim: "rgba(0,0,0,0.5)",
     shadow: { color: "#000000", opacity: 0.35, radius: 24, offsetY: 8 },
     blur: 20,
@@ -459,7 +542,17 @@ export const themes: Record<ThemeName, ThemeColors> = {
     acc: "#E2C15E",
     onAcc: "#1C1A12",
     accEdge: "#7A6418",
-    accText: "#6E5A12",
+    // v2 #6E5A12 → darker: the secondary button's yellow words on the cell `surf2` and the tab's word need ≥ 4.5:1 (was 4.2)
+    accText: "#5E4C0C",
+    tint: "rgba(226,193,94,0.30)",
+    tint2: "rgba(226,193,94,0.50)",
+    surf3: "#C4C5BF",
+    hl: "rgba(255,255,255,0.50)",
+    off: "#B7B8B2",
+    dash: "#6F7279",
+    tab: "#E3E4DE",
+    onAccTint: "rgba(28,26,18,0.12)",
+    onAccMut: "rgba(28,26,18,0.78)",
     scrim: "rgba(20,21,24,0.3)",
     shadow: { color: "#1B1C22", opacity: 0.08, radius: 20, offsetY: 6 },
     blur: 20,
@@ -553,5 +646,5 @@ export const statusIcon: Record<StatusName, "check" | "clock" | "alert" | "close
 /** Estimate follow-up thresholds. Lead thresholds are company settings (apps/mobile/src/features/leadSettings.ts), not tokens. */
 export const timing = { estimateWarnDays: 2, estimateBadDays: 5 } as const;
 
-export const tokens = { font, space, spaceHalf, radius, size, motion, z, component, breakpoint, layout, themes, statusIcon, timing, print, drawing, drawingPrint, shopSheet } as const;
+export const tokens = { font, space, spaceHalf, rhythm, radius, size, motion, z, component, breakpoint, layout, themes, statusIcon, timing, print, drawing, drawingPrint, shopSheet } as const;
 export type Tokens = typeof tokens;

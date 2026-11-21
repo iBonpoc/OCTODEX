@@ -142,6 +142,8 @@ export default function Plan() {
             onChange={setMode}
             testID="plan-mode"
             full
+            // visual v2: the Plan's one yellow fill is the chosen view («День»)
+            accent
             items={[
               { key: "day", label: t("plan.day") },
               { key: "week", label: t("plan.week") },

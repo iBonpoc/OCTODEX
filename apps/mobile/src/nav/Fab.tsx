@@ -9,6 +9,7 @@ import { useStore } from "@/data/store";
 import { canStartExpense, expenseJobOptions, myVisitsToday } from "@/features/expenseJobs";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
+import { HeaderButton } from "@/ui/headerIcon";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { fabItems, LIST_FABS, meIsSub, type FabCtx, type FabItem, type FabSet } from "./sections";
@@ -126,17 +127,8 @@ export function Fab({ placement, bottom = 0, right = space[4], ...p }: FabProps 
     // one filled accent on a screen, and it is the screen's main step, not «make a new one». Its words are the VoiceOver label.
     return (
       <>
-        <Press
-          testID="fab-header"
-          onPress={press}
-          visibleHeight={component.headerIcon}
-          accessibilityRole="button"
-          accessibilityLabel={label}
-          aria-haspopup={one ? undefined : "dialog"}
-          style={{ width: component.headerIcon, height: component.headerIcon, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd, alignItems: "center", justifyContent: "center" }}
-        >
-          <Icon name="plus" s={size.iconMd} color={c.ink} />
-        </Press>
+        {/* the one header's circle 40 (visual-v2 «Единая шапка»): «＋» looks as every other control of the row */}
+        <HeaderButton testID="fab-header" icon="plus" label={label} onPress={press} popup={!one} />
         {sheet}
       </>
     );

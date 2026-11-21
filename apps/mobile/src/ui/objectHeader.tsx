@@ -9,6 +9,7 @@ import { MetaLine } from "./metaLine";
 import { ButtonPair } from "./pairs";
 import { Press, T } from "./primitives";
 import { IconRow, type IconRowItem } from "./iconRow";
+import { HeaderFade, useHeaderParent } from "./templates/screenHeader";
 import { compactProgress, expandEndsOpen, expandShown, expandSwipeStart, followFrom, isCompact, panelMotion, type ExpandRule } from "./objectHeaderMath";
 
 /** a tag of the meta line («VIP», «Regular»): drawn as `MetaTag`, the ones that do not fit go into «+N» (MetaLine) */
@@ -50,7 +51,33 @@ export interface ObjectHeaderProps {
   defaultOpen?: boolean;
   onToggle?: (open: boolean) => void;
   labels: ObjectHeaderLabels;
+  /**
+   * The one header draws the name (templates/screenHeader.tsx, v2 «Объект»: «Имя | две строки», the «⌄» after it): here only what
+   * stands under it — the parent link and the address line (they fade 0–48 as the page goes up) and the panel. ObjectScreen sets it.
+   */
+  inHead?: boolean;
   testID: string;
+}
+
+/**
+ * The object's lines for the one header's big block (v2 «Объект»): right of the rule — the tags and the sum 15/600, under them the
+ * StatusPill (the office's StatusPicker on a tap). testIDs `<testID>-status`, `<testID>-meta`.
+ */
+export function objectHeadSub(p: ObjectHeaderProps): { line1?: string; line2?: ReactNode } {
+  const id = (part: string) => `${p.testID}-${part}`;
+  const line1 = [...(p.meta ?? []).map((m) => m.label), p.amount].filter(Boolean).join(" · ") || undefined;
+  const line2 = p.status ? (
+    p.status.onPress ? (
+      <Press testID={id("status")} onPress={p.status.onPress} visibleHeight={component.chip.h} accessibilityRole="button" accessibilityLabel={p.status.label} containerStyle={{ alignSelf: "flex-start" }}>
+        <StatusChip status={p.status.name} label={p.status.label} />
+      </Press>
+    ) : (
+      <View testID={id("status")} style={{ alignSelf: "flex-start" }}>
+        <StatusChip status={p.status.name} label={p.status.label} />
+      </View>
+    )
+  ) : undefined;
+  return { line1, line2 };
 }
 
 const releaseRule: ExpandRule = {
@@ -84,6 +111,9 @@ export function ObjectHeader(p: ObjectHeaderProps) {
     p.onToggle?.(next);
   };
   const id = (part: string) => `${p.testID}-${part}`;
+  // the row's «← Sarah Mitchell» already says the parent: its link here would say it a second time (П7, audit 12 «Работа»)
+  const parent = useHeaderParent();
+  const link = p.link && !(p.inHead && parent && p.link.label.trim() === parent.trim()) ? p.link : undefined;
 
   // the panel: its natural height is measured where it lies (absolutely, under a clip of 0, while shut); `shown` is how far it is
   // out. Only transform and opacity move (LAYOUT-RULES §8 п.5): open, it stands in the flow at its full height and slides out from
@@ -168,6 +198,7 @@ export function ObjectHeader(p: ObjectHeaderProps) {
   return (
     <GestureDetector gesture={pan}>
       <View testID={p.testID} style={{ gap: space[2] }}>
+        {p.inHead ? null : (
         <View style={{ flexDirection: "row", alignItems: "center", gap: space[3] }}>
           {p.avatar ? <Avatar initials={p.avatar} s={component.avatar.md} /> : null}
           <View style={{ flex: 1, minWidth: 0, gap: space[1] }}>
@@ -180,10 +211,12 @@ export function ObjectHeader(p: ObjectHeaderProps) {
           </View>
           <IconButton bare testID={id("toggle")} icon={open ? "chevronUp" : "chevronDown"} label={open ? p.labels.collapse : p.labels.expand} onPress={() => setOpen(!open)} />
         </View>
-        {p.link ? (
-          <Press testID={id("link")} onPress={p.link.onPress} accessibilityRole="link" accessibilityLabel={p.link.label} style={{ alignSelf: "flex-start", minHeight: size.hitMin, justifyContent: "center" }}>
+        )}
+        <HeaderFade>
+        {link ? (
+          <Press testID={id("link")} onPress={link.onPress} accessibilityRole="link" accessibilityLabel={link.label} style={{ alignSelf: "flex-start", minHeight: size.hitMin, justifyContent: "center" }}>
             <T v="caption" w="semibold" numberOfLines={1} style={{ color: c.accText }}>
-              {`${p.link.label} ›`}
+              {`${link.label} ›`}
             </T>
           </Press>
         ) : null}
@@ -201,6 +234,7 @@ export function ObjectHeader(p: ObjectHeaderProps) {
             {p.actions?.length ? <IconRow variant="inline" actions={p.actions} testID={id("actions")} /> : null}
           </View>
         ) : null}
+        </HeaderFade>
         <View
           style={inFlow ? { overflow: "hidden" } : { height: 0, overflow: "hidden" }}
           accessibilityElementsHidden={!open}

@@ -819,6 +819,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       // the Editor template's places (EditorScreen keeps no `onScrollBegin` — the open row must fold on a scroll, DS §8.3: the screen
       // stands them itself): «‹» left, «⋯» the last on the right, the step pinned at the bottom in one compact row
       testID="estimate-editor"
+      // the one header's editor kind (visual-v2 «Редактор»): «×» · «Смета EST-0006» + the state line («Черновик сохраняется сам · Демо») · «⋯»
+      head={{ kind: "editor" }}
       title={tplEdit ? t("est.tpl.editTitle") : existing ? [t("ue.title"), existing.number].filter(Boolean).join(" ") : t("ue.newTitle")}
       subtitle={tplEdit ? undefined : existing ? t(estimateStatusView(existing.status).l) : t("proto.est.autosave")}
       back={back}

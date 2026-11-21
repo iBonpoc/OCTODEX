@@ -1,31 +1,29 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState } from "react";
 import { router, useGlobalSearchParams, usePathname, useRootNavigationState, useSegments, type Href } from "expo-router";
-import { View, type LayoutChangeEvent } from "react-native";
-import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withTiming } from "react-native-reanimated";
-import { component, motion, radius, size, space } from "@octo/design-tokens";
+import { View, useWindowDimensions } from "react-native";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
+import { component, size, spaceHalf } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T } from "@/ui/primitives";
-import { Glass, Sheet } from "@/ui/overlays";
+import { Sheet } from "@/ui/overlays";
 import { Button } from "@/ui/controls";
 import { useNavInsets } from "@/ui/surfaces";
 import { useKeyboardHeight } from "@/ui/keyboard";
 import { appStackRoutes, formsAbove, showsTabBar, tabLeave } from "./tabBarRule";
 import { setNavState } from "./go";
 import { useTabBarHidden } from "./tabBarHide";
-import { deviceTabSurface, liquidGlassView } from "./tabGlass";
 import { useAuth } from "@/cloud/auth";
 import { gateFreePath } from "@/features/legal";
 import { activeSection } from "./hierarchy";
 import { meIsSub, sectionHref, tabOf, tabs, type SectionId } from "./sections";
 import { moduleTabs } from "@/modules/registry";
-import { fillStyleFlat } from "@/ui/fill";
 
 /**
- * Phone: floating glass pill at the bottom (56 + safe area), the 5 tabs of docs/specs/13 §2.1 — the same for every role.
- * Tablet/desktop: none — the side menu (SideNav, 13 §2.5) takes its place.
- * Active item gets the liquid fill (160ms stretch + 420ms settle): raised surface + ink frame.
+ * Phone: a bar across the bottom (56 + the safe area, visual v2 «Панель вкладок»), the 5 tabs of docs/specs/13 §2.1 — the same
+ * for every role. Tablet/desktop: none — the side menu (SideNav, 13 §2.5) takes its place.
+ * The active tab: the icon 22 and the word 12 in `accText`, no fill (v2; the floating glass pill with a yellow fill is gone).
  * Prototype v2: Главная · План · Клиенты · Деньги · Лиды; a section of «Ещё» (the avatar) lights none.
  */
 export function TabBar() {
@@ -91,13 +89,11 @@ export function TabBar() {
 function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: SectionId | undefined; onGo: (id: SectionId) => void; onGoHref: (href: Href) => void; path: string }) {
   const { role, db } = useStore();
   const { t } = useI18n();
-  const { c, name } = useTheme();
+  const { c } = useTheme();
   const { wide } = useDevice();
   const nav = useNavInsets();
-  // iOS 26: the system liquid glass; Android, web, older iOS, an old build: the --ov + blur panel as before (tabGlass.ts)
-  const liquid = deviceTabSurface() === "liquid";
-  const reduce = useReducedMotion();
-  /** on a phone the floating bar would sit on top of the keyboard and cover the field: hide it while typing */
+  const { width } = useWindowDimensions();
+  /** on a phone the bar would sit on top of the keyboard and cover the field: hide it while typing */
   const kb = useKeyboardHeight();
   // the core's tabs; a usable module's section (place «tab», founder 09.11 «Замеры») takes the place of «План», which goes
   // to «Ещё» — five tabs, not six (founder 16.11, #1487; DS §5.3)
@@ -111,127 +107,53 @@ function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: Secti
   const modNow = mods.find((m) => path === m.href || path.startsWith(`${m.href}/`));
   const current: string | undefined = modNow ? modNow.tabId : sectionNow;
 
-  const [layouts, setLayouts] = useState<Record<string, { x: number; w: number }>>({});
-  const left = useSharedValue(0);
-  const width = useSharedValue(0);
-  // Items move when the role changes: forget old measurements so the fill jumps to the right place.
-  useEffect(() => {
-    setLayouts({});
-    width.value = 0;
-  }, [role, wide, width]);
-  useEffect(() => {
-    const l = current ? layouts[current] : undefined;
-    if (!l) {
-      width.value = 0;
-      return;
-    }
-    if (reduce || width.value === 0) {
-      left.value = l.x;
-      width.value = l.w;
-      return;
-    }
-    const spanL = Math.min(left.value, l.x);
-    const spanR = Math.max(left.value + width.value, l.x + l.w);
-    const stretch = { duration: motion.liquidStretch, easing: Easing.bezier(...motion.easeOut) };
-    const settle = { duration: motion.liquidSettle, easing: Easing.bezier(...motion.easeLiquid) };
-    left.value = withSequence(withTiming(spanL, stretch), withTiming(l.x, settle));
-    width.value = withSequence(withTiming(spanR - spanL, stretch), withTiming(l.w, settle));
-  }, [current, layouts, reduce, left, width]);
-  const pill = useAnimatedStyle(() => ({ left: left.value, width: width.value, opacity: width.value > 0 ? 1 : 0 }));
-
-  const itemH = wide ? component.button.md : size.tabbarH - space[2] * 2;
-  const renderItem = (it: (typeof items)[number]) => {
-    const sel = it.id === current;
-    return (
-      <Press
-        key={it.id}
-        testID={`tab-${it.id}`}
-        onPress={it.onPress}
-        accessibilityRole="tab"
-        accessibilityState={{ selected: sel }}
-        aria-selected={sel}
-        accessibilityLabel={t(it.label as DictKey)}
-        containerStyle={wide ? undefined : { flex: 1 }}
-        onLayout={(e: LayoutChangeEvent) => {
-          const { x, width: w } = e.nativeEvent.layout;
-          setLayouts((p) => (p[it.id]?.x === x && p[it.id]?.w === w ? p : { ...p, [it.id]: { x, w } }));
-        }}
-        style={{
-          flex: wide ? undefined : 1,
-          height: itemH,
-          paddingHorizontal: wide ? space[3] : 0,
-          borderRadius: radius.pill,
-          alignItems: "center",
-          justifyContent: "center",
-          flexDirection: wide ? "row" : "column",
-          gap: wide ? space[2] : 2,
-        }}
-      >
-        {/* founder 21.11 (#2350): the active tab is filled with the accent, as in his references */}
-        <Icon name={it.icon} s={wide ? 16 : 20} color={sel ? c.onAcc : c.ink} />
-        <T v="micro" w={sel ? "semibold" : "medium"} style={{ color: sel ? c.onAcc : c.mut }} numberOfLines={1}>
-          {t(it.label as DictKey)}
-        </T>
-      </Press>
-    );
-  };
-
-  const ordered = items.map(renderItem);
-  const shape = {
-    borderRadius: radius.pill,
-    height: wide ? component.button.md + space[2] * 2 : size.tabbarH,
-    padding: space[2],
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: wide ? space[1] : 0,
-    width: wide ? undefined : ("100%" as const),
-    maxWidth: wide ? undefined : 480,
-  };
-
   // 820/1280: the side menu instead; phone: hidden while typing
   if (wide || kb > 0) return null;
 
+  const fade = component.tabBar.fade;
   return (
-    <>
-      <View
-        pointerEvents="box-none"
-        style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: nav.tabBottom,
-          alignItems: "center",
-          paddingLeft: nav.left,
-          paddingRight: nav.right,
-        }}
-      >
-        <Surface liquid={liquid} scheme={name} style={shape}>
-          <View key={`${role}-${wide}`} testID="tab-bar" role="tablist" style={{ flexDirection: "row", alignItems: "center", flex: wide ? undefined : 1, gap: wide ? space[1] : 0 }}>
-            <Animated.View
-              pointerEvents="none"
-              style={[{ position: "absolute", top: 0, height: itemH, borderRadius: radius.pill }, fillStyleFlat(c), { backgroundColor: c.acc, borderWidth: component.hairline, borderColor: c.accEdge }, pill]}
-            />
-            {ordered}
-          </View>
-        </Surface>
+    // visual v2 «Панель вкладок»: a bar across the width, 56 + the bottom zone, on the `tab` ground that the content fades into
+    // from the top; the icon 22 over the word 12; the active tab — the icon and the word in `accText`, NO fill under it
+    <View
+      pointerEvents="box-none"
+      style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingTop: fade, paddingLeft: nav.left, paddingRight: nav.right }}
+    >
+      <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }}>
+        <Svg width={width} height={fade}>
+          <Defs>
+            <LinearGradient id="tab-fade" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={c.tab} stopOpacity={0} />
+              <Stop offset="1" stopColor={c.tab} stopOpacity={1} />
+            </LinearGradient>
+          </Defs>
+          <Rect x="0" y="0" width={width} height={fade} fill="url(#tab-fade)" />
+        </Svg>
+        <View style={{ flex: 1, backgroundColor: c.tab }} />
       </View>
-    </>
-  );
-}
-
-/** the bar's pill: GlassView (no tint — the system glass follows the app's theme) or the old Glass panel */
-function Surface({ liquid, scheme, style, children }: { liquid: boolean; scheme: "light" | "dark"; style: object; children: ReactNode }) {
-  if (!liquid) {
-    return (
-      <Glass strong solid style={style}>
-        {children}
-      </Glass>
-    );
-  }
-  const GlassView = liquidGlassView();
-  return (
-    <GlassView testID="tab-glass" glassEffectStyle="regular" colorScheme={scheme} style={[{ overflow: "hidden" }, style]}>
-      {children}
-    </GlassView>
+      <View key={`${role}-${wide}`} testID="tab-bar" role="tablist" style={{ flexDirection: "row", alignItems: "stretch", height: size.tabbarH, marginBottom: nav.tabBottom }}>
+        {items.map((it) => {
+          const sel = it.id === current;
+          const tone = sel ? c.accText : c.mut;
+          return (
+            <Press
+              key={it.id}
+              testID={`tab-${it.id}`}
+              onPress={it.onPress}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: sel }}
+              aria-selected={sel}
+              accessibilityLabel={t(it.label as DictKey)}
+              containerStyle={{ flex: 1 }}
+              style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: spaceHalf.hair }}
+            >
+              <Icon name={it.icon} s={component.tabBar.icon} color={tone} />
+              <T v="micro" style={{ color: tone }} numberOfLines={1} capped>
+                {t(it.label as DictKey)}
+              </T>
+            </Press>
+          );
+        })}
+      </View>
+    </View>
   );
 }

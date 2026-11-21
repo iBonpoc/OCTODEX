@@ -18,6 +18,7 @@ import { BrandSection } from "@/features/showcase/Brand";
 import { ChoiceSection } from "@/features/showcase/Choice";
 import { ProtoObject } from "@/features/showcase/ProtoObject";
 import { ProtoLists } from "@/features/showcase/ProtoLists";
+import { ProtoV2 } from "@/features/showcase/ProtoV2";
 import { GraphiteSheet } from "@/features/showcase/graphite/sheet/GraphiteSheet";
 import { useGraphiteFlag } from "@/features/showcase/graphite/flag";
 
@@ -58,6 +59,8 @@ export default function DesignSystemSection() {
           <ProtoObject />
           <SectionTitle title={t("ds.sec.protoLists")} />
           <ProtoLists />
+          <SectionTitle title={t("ds.sec.protoV2")} />
+          <ProtoV2 />
         </View>
       ) : null}
     </Screen>

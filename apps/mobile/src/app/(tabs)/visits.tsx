@@ -117,10 +117,10 @@ export default function Visits() {
       }}
     >
       <StatGrid testID="visits-tiles">
-        <StatTile testID="tile-collected" pastel="mint" label={t("proto.home.tile.collected")} value={moneyWhole(d.collectedCents)} />
+        <StatTile testID="tile-collected" icon="dollar" label={t("proto.home.tile.collected")} value={moneyWhole(d.collectedCents)} />
         <StatTile
           testID="tile-visits"
-          pastel="lav"
+          icon="calendar"
           label={t("proto.home.tile.visits")}
           sub={t("proto.home.tile.closed", { n: d.done })}
           value={d.visits.length}

@@ -64,6 +64,21 @@ export function CalendarScreen(p: CalendarScreenProps) {
     monthView: p.view === "month",
     viewBody: p.body !== undefined && p.body !== null,
   });
+  // the screen: the views and the day pills are the strip that sticks under the folded header (v2: «У Плана под строкой прилипает
+  // сегмент 36 и пилюли»); the month head and the filters stay on the page above it
+  const strip =
+    layout.under.includes("views") || layout.under.includes("days") ? (
+      <View style={{ gap: space[2] }}>
+        {layout.under.includes("views") ? p.views : null}
+        {layout.under.includes("days") ? <DayStrip testID={`${p.testID}-days`} head={false} days={p.days} date={p.day} loads={p.loads} onPick={p.onDay} /> : null}
+      </View>
+    ) : null;
+  const above = (
+    <View style={{ gap: space[3] }}>
+      <MonthHead testID={`${p.testID}-month`} date={p.day} onPick={p.onDay} step={p.view === "month" ? "month" : 7} />
+      {p.filters}
+    </View>
+  );
   const under = (
     <View style={{ gap: space[3] }}>
       {layout.under.includes("views") ? p.views : null}
@@ -111,7 +126,9 @@ export function CalendarScreen(p: CalendarScreenProps) {
     return (
       <TemplateFrame
         testID={p.testID}
+        kind="root"
         title={p.title}
+        kicker={p.dayTitle}
         right={
           <>
             <HeaderIcons icons={p.headerIcons ?? []} />
@@ -124,9 +141,18 @@ export function CalendarScreen(p: CalendarScreenProps) {
       </TemplateFrame>
     );
   return (
-    <Screen testID={p.testID} title={p.title} headerIcons={p.headerIcons} right={tail}>
-      {under}
-      {body}
+    <Screen
+      testID={p.testID}
+      title={p.title}
+      head={{ kind: "root", kicker: p.dayTitle }}
+      headerIcons={p.headerIcons}
+      right={tail}
+      tabs={strip ?? undefined}
+      tabKey={p.view}
+      below={strip ? body : undefined}
+    >
+      {above}
+      {strip ? null : body}
     </Screen>
   );
 }

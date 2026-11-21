@@ -18,6 +18,8 @@ import type { MainAction, MoreAction } from "./types";
 
 export interface EditorScreenProps {
   title: string;
+  /** the state line under the title in the header's one row («Черновик · сохранено 8:19»; «Демо» joins it as a word) */
+  state?: string;
   /** THE main step: «Сохранить», «Отправить» */
   save: MainAction;
   second?: MainAction;
@@ -59,11 +61,11 @@ export function EditorScreen(p: EditorScreenProps) {
   return (
     <>
       {p.preview ? (
-        <TemplateFrame testID={p.testID} title={p.title} back={back} right={right} bottom={layout.bottom.includes("main") ? step : null}>
+        <TemplateFrame testID={p.testID} kind="editor" title={p.title} state={p.state} back={back} right={right} bottom={layout.bottom.includes("main") ? step : null}>
           {body}
         </TemplateFrame>
       ) : (
-        <Screen testID={p.testID} title={p.title} back={back} right={right} onScrollBegin={p.onScrollBegin} form footer={layout.bottom.includes("main") ? step : undefined}>
+        <Screen testID={p.testID} title={p.title} head={{ kind: "editor", state: p.state }} back={back} right={right} onScrollBegin={p.onScrollBegin} form footer={layout.bottom.includes("main") ? step : undefined}>
           {body}
         </Screen>
       )}

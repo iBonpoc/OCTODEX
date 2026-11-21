@@ -142,37 +142,37 @@ export function ClientOverview({ c, f, onSection }: { c: Customer; f: ClientFact
   const tile = (k: ClientTile): ReactNode => {
     switch (k) {
       case "debt":
-        return <StatTile key={k} testID="client-tile-debt" label={t("proto.client.tile.debt")} value={moneyWhole(f.m.owesCents)} pastel="butter" warn={f.overdue ? t("card.sign.overdueDays", { d: f.overdue.days }) : undefined} onPress={() => onSection("money")} />;
+        return <StatTile key={k} testID="client-tile-debt" label={t("proto.client.tile.debt")} value={moneyWhole(f.m.owesCents)} icon="invoice" warn={f.overdue ? t("card.sign.overdueDays", { d: f.overdue.days }) : undefined} onPress={() => onSection("money")} />;
       case "paid":
-        return <StatTile key={k} testID="client-tile-paid" label={t("proto.client.tile.paid")} value={moneyWhole(f.m.paidTotalCents)} pastel="mint" onPress={money$ && f.hasMoney ? () => onSection("money") : undefined} />;
+        return <StatTile key={k} testID="client-tile-paid" label={t("proto.client.tile.paid")} value={moneyWhole(f.m.paidTotalCents)} icon="wallet" onPress={money$ && f.hasMoney ? () => onSection("money") : undefined} />;
       case "toBill":
-        return <StatTile key={k} testID="client-tile-tobill" label={t("proto.client.tile.toBill")} value={moneyWhole(f.toBillCents)} pastel="lav" onPress={() => onSection("money")} />;
+        return <StatTile key={k} testID="client-tile-tobill" label={t("proto.client.tile.toBill")} value={moneyWhole(f.toBillCents)} icon="doc" onPress={() => onSection("money")} />;
       case "nextVisit":
         return f.nextVisit ? (
-          <StatTile key={k} testID="client-tile-next" label={`${t("proto.client.tile.next")} · ${dayWord(f.nextVisit.start)}`} value={time(f.nextVisit.start)} pastel="peach" onPress={() => router.push(`/visit/${f.nextVisit!.id}`)} />
+          <StatTile key={k} testID="client-tile-next" label={`${t("proto.client.tile.next")} · ${dayWord(f.nextVisit.start)}`} value={time(f.nextVisit.start)} icon="calendar" onPress={() => router.push(`/visit/${f.nextVisit!.id}`)} />
         ) : null;
       case "contact":
-        return lastTalk ? <StatTile key={k} testID="client-tile-contact" label={`${t("proto.client.tile.contact")} · ${t(lastTalk.title)}`} value={ago(lastTalk.at)} pastel="lav" onPress={() => onSection("log")} /> : null;
+        return lastTalk ? <StatTile key={k} testID="client-tile-contact" label={`${t("proto.client.tile.contact")} · ${t(lastTalk.title)}`} value={ago(lastTalk.at)} icon="phone" onPress={() => onSection("log")} /> : null;
       case "reminded": {
         const since = r.invoices.filter((i) => i.sentAt && i.paidCents < i.totalCents).map((i) => i.sentAt!).sort()[0];
         const n = since ? f.talks.filter((h) => h.at >= since).length : 0;
-        return <StatTile key={k} testID="client-tile-reminded" label={`${t("proto.client.tile.reminded")}${n ? ` · ${ago(f.talks[0]!.at)}` : ""}`} value={n ? String(n) : t("proto.client.never")} pastel="lav" onPress={() => onSection("log")} />;
+        return <StatTile key={k} testID="client-tile-reminded" label={`${t("proto.client.tile.reminded")}${n ? ` · ${ago(f.talks[0]!.at)}` : ""}`} value={n ? String(n) : t("proto.client.never")} icon="bell" onPress={() => onSection("log")} />;
       }
       case "lastJob":
-        return done ? <StatTile key={k} testID="client-tile-lastjob" label={`${t("proto.client.tile.lastJob")} · ${done.title}`} value={done.number ?? "—"} pastel="lav" onPress={() => router.push(`/job/${done.id}`)} /> : null;
+        return done ? <StatTile key={k} testID="client-tile-lastjob" label={`${t("proto.client.tile.lastJob")} · ${done.title}`} value={done.number ?? "—"} icon="wrench" onPress={() => router.push(`/job/${done.id}`)} /> : null;
       case "approved": {
         const ok = r.estimates.filter((e) => e.status === "approved").length;
-        return r.estimates.length ? <StatTile key={k} testID="client-tile-approved" label={t("proto.client.tile.approved")} value={`${ok}/${r.estimates.length}`} pastel="lav" onPress={() => onSection("work")} /> : null;
+        return r.estimates.length ? <StatTile key={k} testID="client-tile-approved" label={t("proto.client.tile.approved")} value={`${ok}/${r.estimates.length}`} icon="check" onPress={() => onSection("work")} /> : null;
       }
       case "source":
-        return c.sourceId ? <StatTile key={k} testID="client-tile-source" label={t("proto.client.tile.source")} value={sourceName(db, c.sourceId)} pastel="peach" /> : null;
+        return c.sourceId ? <StatTile key={k} testID="client-tile-source" label={t("proto.client.tile.source")} value={sourceName(db, c.sourceId)} icon="star" /> : null;
       case "gate":
-        return place?.gateCode ? <StatTile key={k} testID="client-tile-gate" label={t("proto.client.tile.gate")} value={gateSeen ? place.gateCode : "•••"} warn={gateSeen ? undefined : t("proto.client.gateLater")} pastel="butter" /> : null;
+        return place?.gateCode ? <StatTile key={k} testID="client-tile-gate" label={t("proto.client.tile.gate")} value={gateSeen ? place.gateCode : "•••"} warn={gateSeen ? undefined : t("proto.client.gateLater")} icon="key" /> : null;
       case "onSite":
-        return main ? <StatTile key={k} testID="client-tile-onsite" label={t("proto.client.tile.onSite")} value={main.name.split(" ")[0] ?? main.name} pastel="mint" /> : null;
+        return main ? <StatTile key={k} testID="client-tile-onsite" label={t("proto.client.tile.onSite")} value={main.name.split(" ")[0] ?? main.name} icon="user" /> : null;
       case "tomorrow": {
         const tm = f.visits.find((v) => isOpenVisit(v) && dayOffsetOf(isoDayKey(v.start)) === 1);
-        return tm ? <StatTile key={k} testID="client-tile-tomorrow" label={t("common.tomorrow")} value={time(tm.start)} pastel="peach" onPress={() => router.push(`/visit/${tm.id}`)} /> : null;
+        return tm ? <StatTile key={k} testID="client-tile-tomorrow" label={t("common.tomorrow")} value={time(tm.start)} icon="calendar" onPress={() => router.push(`/visit/${tm.id}`)} /> : null;
       }
     }
   };
@@ -486,10 +486,10 @@ export function ClientMoney({ c, f }: { c: Customer; f: ClientFacts }) {
   return (
     <View style={{ gap: space[4] }} testID="client-money">
       <StatGrid testID="client-money-tiles">
-        <StatTile testID="client-money-debt" label={t("proto.client.tile.debt")} value={moneyWhole(f.m.owesCents)} pastel="butter" warn={f.overdue ? t("card.sign.overdueDays", { d: f.overdue.days }) : undefined} />
-        <StatTile testID="client-money-tobill" label={t("proto.client.tile.toBill")} value={moneyWhole(f.toBillCents)} pastel="lav" />
-        <StatTile testID="client-money-paid" label={t("proto.client.tile.paid")} value={moneyWhole(f.m.paidTotalCents)} pastel="mint" />
-        <StatTile testID="client-money-advance" label={t("proto.client.tile.advance")} value={moneyWhole(f.advanceCents)} pastel="peach" />
+        <StatTile testID="client-money-debt" label={t("proto.client.tile.debt")} value={moneyWhole(f.m.owesCents)} icon="invoice" warn={f.overdue ? t("card.sign.overdueDays", { d: f.overdue.days }) : undefined} />
+        <StatTile testID="client-money-tobill" label={t("proto.client.tile.toBill")} value={moneyWhole(f.toBillCents)} icon="doc" />
+        <StatTile testID="client-money-paid" label={t("proto.client.tile.paid")} value={moneyWhole(f.m.paidTotalCents)} icon="wallet" />
+        <StatTile testID="client-money-advance" label={t("proto.client.tile.advance")} value={moneyWhole(f.advanceCents)} icon="dollar" />
       </StatGrid>
       <GroupedList>
         <ListGroup title={t("client.invoices")} testID="client-invoices">

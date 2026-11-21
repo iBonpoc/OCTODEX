@@ -1,7 +1,7 @@
 /**
  * GroupedList / ListGroup / GroupRow (BUILD-SPEC §1 «GroupedList / ListRow 56»): grouped rows, as in iOS Contacts —
  * the prototype's lists (decision of the lead №21, 21.11: rule 12 «списки карточками» is waived for the prototype).
- * - ListGroup: the title 12 in capitals `mut`, on the right «Все ›» `accText`; the group is a `surf` card, `radius.card`,
+ * - ListGroup (visual v2): the title 17/700, on the right «Все ›» 13/600 `mut`; the group is a `surf` card, `radius.card`,
  *   hairlines `bd` inset by `listRow.inset` 64 (past the initials). An empty group is not drawn.
  * - GroupRow: from `listRow.h` 56 (compact — `rowCompact` 40): initials 36 or a type icon · the title 15 semibold and a line
  *   13 `mut` · on the right a sum 15, a StatusPill or small quick actions (36, the zone 44). Pressed — `surf2`.
@@ -10,7 +10,7 @@
  */
 import { Children, useState, type ReactNode } from "react";
 import { StyleSheet, View, type AccessibilityActionEvent, type GestureResponderEvent } from "react-native";
-import { component, radius, size, space, type StatusName } from "@octo/design-tokens";
+import { component, radius, rhythm, size, space, type StatusName } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Avatar, IconButton } from "./controls";
 import { DoneCircle } from "./doneCircle";
@@ -22,10 +22,10 @@ import { SwipeRow, type SwipeAction } from "./swipeRow";
 import type { IconAction } from "./templates/types";
 import { rowActions, rowSaid } from "./groupedListLogic";
 
-/** A column of groups, `space[6]` apart. */
+/** A column of groups, `rhythm.blockGap` 20 apart (visual v2 «Поля и ритм»). */
 export function GroupedList({ children, testID }: { children: ReactNode; testID?: string }) {
   return (
-    <View style={{ gap: space[6] }} testID={testID}>
+    <View style={{ gap: rhythm.blockGap }} testID={testID}>
       {children}
     </View>
   );
@@ -50,19 +50,20 @@ export function ListGroup({ title, all, children, inset = component.listRow.inse
   const rows = groupRows(children);
   if (!rows.length) return null;
   return (
-    <View style={{ gap: space[2] }} testID={testID}>
+    <View style={{ gap: rhythm.headGap }} testID={testID}>
       {title || all ? (
-        <RowView style={{ justifyContent: "space-between", paddingHorizontal: space[1] }}>
-          <T v="micro" w="semibold" tone="mut" style={{ flex: 1, textTransform: "uppercase" }} numberOfLines={1}>
+        // visual v2: the block's title 17/700 `ink`, «Все ›» 13/600 `mut` on its baseline; the title → the content 10
+        <RowView style={{ justifyContent: "space-between", alignItems: "baseline" }}>
+          <T v="heading" style={{ flex: 1 }} numberOfLines={1}>
             {title ?? ""}
           </T>
           {all ? (
             <Press onPress={all.onPress} visibleHeight={size.iconMd} accessibilityRole="link" accessibilityLabel={all.label} testID={all.testID}>
               <RowView gap={space[1]}>
-                <T v="caption" w="semibold" style={{ color: c.accText }}>
+                <T v="caption" w="semibold" tone="mut">
                   {all.label}
                 </T>
-                <Icon name="chevronRight" s={size.iconXs} color={c.accText} />
+                <Icon name="chevronRight" s={size.iconXs} color={c.mut} />
               </RowView>
             </Press>
           ) : null}

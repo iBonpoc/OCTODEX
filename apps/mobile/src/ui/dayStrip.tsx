@@ -6,7 +6,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, View, type ScrollViewInstance } from "react-native";
-import { component, radius, size, space } from "@octo/design-tokens";
+import { component, radius, size, space, spaceHalf } from "@octo/design-tokens";
 import { addDays, addMonths, todayKey, type DayKey } from "@/features/calendar";
 import { DatePick } from "@/features/DatePick";
 import type { DayLoad } from "@/features/planFeed";
@@ -61,15 +61,15 @@ export function DayCell({ day, load, selected, dim, head, pill: asPill, onPress 
       // one cell, two looks: the Week / Month cell, or the Day's pill
       style={asPill
         ? {
-            minWidth: pill.w,
+            width: pill.w,
             minHeight: pill.h,
-            paddingHorizontal: space[1],
             borderRadius: radius.pill,
             backgroundColor: c[look.fill],
-            borderWidth: component.hairline,
-            borderColor: c[look.edge],
+            borderWidth: component.checkbox.border,
+            borderColor: look.edge === "acc" ? c.acc : "transparent",
             alignItems: "center" as const,
             justifyContent: "center" as const,
+            gap: spaceHalf.hair,
           }
         : {
             minHeight: component.rowCompact + space[4],
@@ -86,7 +86,7 @@ export function DayCell({ day, load, selected, dim, head, pill: asPill, onPress 
     >
       {asPill ? (
         <>
-          <T v="micro" tone={selected ? "onAcc" : "mut"} numberOfLines={1} capped>
+          <T v="micro" style={{ color: c[look.head] }} numberOfLines={1} capped>
             {head}
           </T>
           <T v="heading" w={look.bold ? "bold" : "semibold"} style={{ color: c[look.num] }} tabular capped>
@@ -189,9 +189,9 @@ export function MonthHead({ date, onPick, step = 7, testID = "plan-month" }: { d
 const PAST: DayKey = "2000-01-01";
 
 /**
- * The days as pills «Пн / 23 / •» in one row that scrolls sideways (BUILD-SPEC §1 «DayStrip», #2350): 52 tall, the picked
- * day is the accent with `onAcc` (light theme: + `accEdge`), today's number `accText`, a dot 4 — «есть выезды» (`warn` when
- * a visit there has nobody on it). The picked pill stands in the middle of the row — on the first draw, on a pick and when
+ * The days as pills «Пн / 23 / •» in one row that scrolls sideways (visual v2 «Пилюли дней»): 46 × 64, radius 23, the day
+ * 12/600 over the number 17/700; the picked day is the accent's tone `tint` with a 1.5 `acc` frame and `accText` words (not a fill),
+ * today's number `accText`, a dot 4 — «есть выезды» (`warn` when a visit there has nobody on it). The picked pill stands in the middle of the row — on the first draw, on a pick and when
  * the days change (another view: the Week's seven, the Day's four weeks). `head` (default) — the MonthHead above it; the
  * Calendar template draws its own MonthHead and passes `head={false}` (in «Месяц» it draws no strip at all).
  * `days` — the pills (default: `stripDays(date)`, four weeks around the picked day).

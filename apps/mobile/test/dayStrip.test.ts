@@ -26,20 +26,21 @@ describe("DayStrip (BUILD-SPEC §1, поток В)", () => {
     const pillLeft = space[4] + i * (component.dayPill.w + component.dayPill.gap) - x;
     expect(pillLeft + component.dayPill.w / 2).toBeCloseTo(390 / 2);
   });
-  it("the picked pill is the accent with its edge; today's number accText; the others surf with a hairline", () => {
-    expect(pillLook(true, false)).toEqual({ fill: "acc", edge: "accEdge", num: "onAcc", bold: true });
-    expect(pillLook(true, true).num).toBe("onAcc");
-    expect(pillLook(false, true)).toEqual({ fill: "surf", edge: "bd", num: "accText", bold: true });
-    expect(pillLook(false, false)).toEqual({ fill: "surf", edge: "bd", num: "ink", bold: false });
+  // visual v2 «Пилюли дней» (21.11): the picked day is the accent's tone with an accent frame, not a fill — the Plan's one fill is «День»
+  it("the picked pill is the accent's tone with an accent frame and accText words; today's number accText; the others surf, no frame", () => {
+    expect(pillLook(true, false)).toEqual({ fill: "tint", edge: "acc", num: "accText", head: "accText", bold: true });
+    expect(pillLook(true, true).num).toBe("accText");
+    expect(pillLook(false, true)).toEqual({ fill: "surf", edge: "transparent", num: "accText", head: "mut", bold: true });
+    expect(pillLook(false, false)).toEqual({ fill: "surf", edge: "transparent", num: "ink", head: "mut", bold: false });
   });
-  it("the dot: none on an empty day, warn when a visit has nobody, onAcc on the picked one", () => {
+  it("the dot: none on an empty day, warn when a visit has nobody, accText on the picked one", () => {
     expect(pillDot(undefined, false)).toBe("none");
     expect(pillDot({ n: 0, unassigned: 0 } as never, true)).toBe("none");
     expect(pillDot({ n: 2, unassigned: 1 } as never, false)).toBe("warn");
     expect(pillDot({ n: 2, unassigned: 0 } as never, false)).toBe("mut");
-    expect(pillDot({ n: 2, unassigned: 1 } as never, true)).toBe("onAcc");
+    expect(pillDot({ n: 2, unassigned: 1 } as never, true)).toBe("accText");
   });
-  it("the pill takes its sizes from the tokens (52 tall, dot 4) and PlanParts only re-exports the strip", () => {
+  it("the pill takes its sizes from the tokens (46 × 64, dot 4) and PlanParts only re-exports the strip", () => {
     const ui = readFileSync(join(__dirname, "..", "src", "ui", "dayStrip.tsx"), "utf8");
     expect(ui).toMatch(/minHeight: pill\.h/);
     expect(ui).toMatch(/width: pill\.dot/);

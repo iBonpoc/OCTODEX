@@ -1,70 +1,100 @@
 /**
- * StatTile and StatGrid (BUILD-SPEC §1 «StatTile»): a big figure and its word on a pastel tile, two in a row (2×2).
- * The tile: from `statTile.h` 88 tall, `radius.card`, padding 16; the word 12 semibold in capitals, the figure 30 bold;
- * the fill `pastels[theme][lav|mint|butter|peach]` — the pastel is never alone, the word is always on it (rule 2, palette A).
- * `sub` — a line 13 under the figure in the pastel's text («1 · 0 закрыто»). «!» — a `status.warn` icon, the tile's own colour does not change. A press opens the filtered list; in «Деньги» the tiles
- * switch the view (`selected` → a 2 frame in the pastel's text, role `tab`). A zero tile is not drawn.
- * With a big system font (fontScale ≥ 1.35) the grid is one column.
+ * StatTile and StatGrid (visual v2 «Плитки», docs/design/visual-v2.html): a figure and its word on a card tile.
+ * Two in a row — `statTile.h` 112, the figure 26/700 (`figure`); three in a row (`StatGrid cols={3}`) — `statTile.hSm` 92, the figure
+ * 18/700 (`figureSm`). On top left an icon `statTile.glyph` 15 in a circle `statTile.icon` 28 (the cell `surf2`); the word 12/600 `mut`
+ * over the figure; `unit` 12 paler after the figure; `sub` — a line 12 under it («2 просрочены»). The tile is a card (`surf`, the top
+ * highlight, no frame). ONE tile of a screen may be `accent` — the yellow fill (Деньги: «Должны»); that is the screen's one yellow
+ * (oneAccent.test.ts counts it). «!» — a `status.warn` icon, the tile keeps its colour. A press opens the filtered list; in «Деньги» the
+ * tiles switch the view (`selected` → the chosen cell `surf3`, role `tab`). A zero tile is not drawn. With a big system font
+ * (fontScale ≥ 1.35) the grid is one column.
  */
-import { Children, isValidElement, type ReactNode } from "react";
+import { Children, createContext, isValidElement, useContext, type ReactNode } from "react";
 import { View, useWindowDimensions } from "react-native";
-import { component, pastels, size, space, type PastelName } from "@octo/design-tokens";
+import { component, radius, rhythm, size, space, spaceHalf } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
-import { Icon, Press, T } from "./primitives";
-import { Card } from "./surfaces";
+import { Icon, Press, T, type IconKey } from "./primitives";
 import { statColumns, statRows, statSaid, statShown } from "./statTileLogic";
 
-export function StatTile({ label, value, sub, pastel, warn, selected, onPress, a11y, testID }: {
-  /** the word (always there — the pastel never speaks alone) */
+/** how many tiles the grid puts in a row (2 — the big tile, 3 — the small one) */
+const ColsCtx = createContext<2 | 3>(2);
+
+export function StatTile({ label, value, unit, sub, icon, accent, warn, selected, onPress, a11y, testID }: {
+  /** the word (always there — a figure never stands alone) */
   label: string;
   /** the figure: a count or a sum already formatted («$12,400») */
   value: number | string;
-  /** the line under the figure, 13 in the pastel's text: «1 · 0 закрыто», «за 7 дн», «в среду» — what the figure is of */
+  /** the unit after the figure, 12 paler («ч», «дн») */
+  unit?: string;
+  /** the line under the figure, 12 `mut`: «1 · 0 закрыто», «за 7 дн» — what the figure is of */
   sub?: string;
-  pastel: PastelName;
+  /** the icon in the circle on top left */
+  icon?: IconKey;
+  /** the screen's one yellow tile (v2: Деньги — «Должны») */
+  accent?: boolean;
   /** «!» with the reason a screen reader hears («2 просрочены») */
   warn?: string;
-  /** «Деньги»: the tile is a tab of the view; the chosen one has a frame */
+  /** «Деньги»: the tile is a tab of the view; the chosen one is the chosen cell */
   selected?: boolean;
   onPress?: () => void;
-  /** what a screen reader hears; default «label: value[, warn]» */
+  /** what a screen reader hears; default «label: value[, sub][, warn]» */
   a11y?: string;
   testID?: string;
 }) {
-  const { c, name } = useTheme();
+  const { c } = useTheme();
+  const cols = useContext(ColsCtx);
   if (!statShown(value)) return null;
-  const p = pastels[name][pastel];
-  const said = a11y ?? statSaid(label, value, sub, warn);
+  const said = a11y ?? statSaid(label, unit ? `${value} ${unit}` : value, sub, warn);
+  const small = cols === 3;
+  const ink = accent ? c.onAcc : c.ink;
+  const mut = accent ? c.onAccMut : c.mut;
   const tile = (
-    <Card
+    <View
       style={{
-        minHeight: component.statTile.h,
-        backgroundColor: p.fill,
-        borderColor: selected ? p.text : p.fill,
-        borderWidth: selected ? component.selectedBorder : component.hairline,
-        shadowOpacity: 0,
+        minHeight: small ? component.statTile.hSm : component.statTile.h,
+        padding: small ? space[3] - spaceHalf.hair : space[3],
+        borderRadius: radius.card,
+        backgroundColor: accent ? c.acc : selected ? c.surf3 : c.surf,
+        borderTopWidth: component.hairline,
+        borderTopColor: accent ? c.accEdge : c.hl,
+        borderWidth: accent ? component.hairline : 0,
+        borderColor: accent ? c.accEdge : "transparent",
         justifyContent: "space-between",
+        gap: spaceHalf.tight,
       }}
     >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space[1] }}>
-        <T v="micro" w="semibold" style={{ color: p.text, flex: 1, textTransform: "uppercase" }} numberOfLines={2}>
-          {label}
-        </T>
-        {warn ? <Icon name="alert" s={size.iconSm} color={c.status.warn.text} /> : null}
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        {icon ? (
+          <View style={{ width: component.statTile.icon, height: component.statTile.icon, borderRadius: radius.pill, backgroundColor: accent ? c.onAccTint : c.surf2, alignItems: "center", justifyContent: "center" }}>
+            <Icon name={icon} s={component.statTile.glyph} color={ink} />
+          </View>
+        ) : (
+          <View />
+        )}
+        {warn ? <Icon name="alert" s={size.iconSm} color={accent ? c.onAcc : c.status.warn.text} /> : null}
       </View>
       <View>
-        <T v="display" w="bold" style={{ color: p.text }} tabular numberOfLines={1}>
-          {value}
+        <T v="micro" style={{ color: mut }} numberOfLines={2}>
+          {label}
         </T>
+        <View style={{ flexDirection: "row", alignItems: "baseline", gap: space[1] }}>
+          <T v={small ? "figureSm" : "figure"} style={{ color: ink, flexShrink: 1 }} numberOfLines={1}>
+            {value}
+          </T>
+          {unit ? (
+            <T v="micro" style={{ color: mut }} numberOfLines={1}>
+              {unit}
+            </T>
+          ) : null}
+        </View>
         {sub ? (
           <View testID={testID ? `${testID}-sub` : undefined}>
-            <T v="caption" style={{ color: p.text }} numberOfLines={1}>
+            <T v="micro" style={{ color: mut }} numberOfLines={1}>
               {sub}
             </T>
           </View>
         ) : null}
       </View>
-    </Card>
+    </View>
   );
   if (!onPress)
     return (
@@ -86,22 +116,29 @@ export function StatTile({ label, value, sub, pastel, warn, selected, onPress, a
   );
 }
 
-/** The 2×2 grid of tiles (`space[3]` apart); zero tiles are already gone, the rest fill the rows; one column with a big font. */
-export function StatGrid({ children, testID }: { children: ReactNode; testID?: string }) {
+/**
+ * The grid of tiles (`rhythm.cardGap` 8 apart): two in a row (the big tile) or `cols={3}` (the small one); zero tiles are already
+ * gone, the rest fill the rows; one column with a big font.
+ */
+export function StatGrid({ children, cols: want = 2, testID }: { children: ReactNode; cols?: 2 | 3; testID?: string }) {
   const { fontScale } = useWindowDimensions();
-  const cols = statColumns(fontScale);
+  const cols = statColumns(fontScale) === 1 ? 1 : want;
   // a zero tile draws nothing: it takes no place in the grid either
   const items = Children.toArray(children).filter((x) => !(isValidElement<{ value?: number | string }>(x) && x.props.value !== undefined && !statShown(x.props.value)));
   const rows = statRows(items, cols);
   return (
-    <View style={{ gap: space[3] }} testID={testID}>
-      {rows.map((r, i) => (
-        <View key={i} style={{ flexDirection: "row", gap: space[3] }}>
-          {r}
-          {/* the last row keeps its half when it has one tile */}
-          {r.length < cols ? <View style={{ flex: 1 }} /> : null}
-        </View>
-      ))}
-    </View>
+    <ColsCtx.Provider value={want}>
+      <View style={{ gap: rhythm.cardGap }} testID={testID}>
+        {rows.map((r, i) => (
+          <View key={i} style={{ flexDirection: "row", gap: rhythm.cardGap }}>
+            {r}
+            {/* the last row keeps its places when it is short */}
+            {Array.from({ length: cols - r.length }, (_, k) => (
+              <View key={`gap${k}`} style={{ flex: 1 }} />
+            ))}
+          </View>
+        ))}
+      </View>
+    </ColsCtx.Provider>
   );
 }

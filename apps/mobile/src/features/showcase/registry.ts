@@ -74,9 +74,11 @@ export const SECTIONS: ShowcaseSection[] = [
   { id: "tokens-layout", screen: "spacing", ds: "§5", title: "ds.sec.layout", tokenGroups: ["space", "spaceHalf", "radius", "size", "breakpoint", "layout", "z", "component"], components: [] },
   { id: "tokens-motion", screen: "motion", ds: "§14", title: "ds.sec.motion", tokenGroups: ["motion", "timing"], components: [] },
   { id: "proto-object", screen: "proto", ds: "§12.11", title: "ds.sec.protoObject", tokenGroups: [], components: ["ObjectHeader", "ObjectHeaderBar", "IconRow", "MainStep", "SummaryLine", "Collapsible", "AccessNote", "ViewSteps"] },
+  // visual language v2 (docs/design/visual-v2.html, founder 21.11): the new parts and the v2 look of the old ones
+  { id: "proto-v2", screen: "proto", ds: "§12.12", title: "ds.sec.protoV2", tokenGroups: ["rhythm"], components: ["CheckList", "NumberTrio", "FigureRow", "TimerLine", "IntervalPlate", "TimeSlot", "ProgressBar", "Segmented"] },
   { id: "proto-lists", screen: "proto", ds: "§12.11", title: "ds.sec.protoLists", tokenGroups: [], components: ["DayCell", "WeekStrip", "MonthHead", "DayStrip", "GroupedList", "ListGroup", "GroupRow", "StatTile", "StatGrid", "StatusPill", "NowCard"] },
   // поток Г: the five screen templates (src/ui/templates/*) and their shared parts, in their showcase frame
-  { id: "proto-templates", screen: "proto", ds: "§12.11", title: "ds.sec.protoTemplates", tokenGroups: [], components: ["OverviewScreen", "ListScreen", "ObjectScreen", "EditorScreen", "CalendarScreen", "CreateButton", "MoreButton", "ConfirmSheet", "HeaderIcons", "HeaderIcon", "Greeting", "TemplateFrame"] },
+  { id: "proto-templates", screen: "proto", ds: "§12.11", title: "ds.sec.protoTemplates", tokenGroups: [], components: ["OverviewScreen", "ListScreen", "ObjectScreen", "EditorScreen", "CalendarScreen", "CreateButton", "MoreButton", "ConfirmSheet", "HeaderIcons", "HeaderIcon", "HeaderButton", "HeaderBar", "HeaderBig", "HeaderAvatar", "HeaderBack", "HeaderClose", "HeaderPlate", "HeaderFade", "HeaderScroll", "HeaderStill", "SheetHead", "DemoPlate", "DemoDot", "TemplateFrame"] },
   { id: "graphite", screen: "graphite", ds: "§25", title: "ds.gr.title", tokenGroups: [], components: [] },
   { id: "tokens-print", screen: "base", ds: "§19", title: "ds.sec.print", tokenGroups: ["print", "drawingPrint", "shopSheet"], components: [] },
 ];
@@ -86,7 +88,7 @@ export const SECTIONS: ShowcaseSection[] = [
  * the guard fails on a component that is neither in a section, nor here, nor in UI_NOT_SHOWN.
  */
 export const UI_PENDING: readonly string[] = [
-  "Columns", "Meter", "ReadOnly", "StatusChip", "Segmented", "TagChip", "Avatar", "MetaTag", "ProgressBar", "Steps",
+  "Columns", "Meter", "ReadOnly", "StatusChip", "TagChip", "Avatar", "MetaTag", "Steps",
   "Stepper", "ChoiceChips", "MultiChips", "FilterBar", "FilterRow", "HintsProvider", "ListCard", "CardGrid", "ListCardHeader", "StatusPicker",
   "ListPanel", "Glass", "Menu", "T", "Icon", "Card", "RowView", "Grid", "SectionTitle", "ListRow", "CardList",
   "Divider", "Empty", "Screen",

@@ -9,13 +9,15 @@ import { View } from "react-native";
 import { component, radius, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { Avatar, Button, IconButton } from "../controls";
-import { HeaderIcon } from "../headerIcon";
+import { Button } from "../controls";
+import { HeaderButton, HeaderIcon } from "../headerIcon";
 import { Menu, Sheet, type MenuItem } from "../overlays";
-import { Icon, Press, T } from "../primitives";
+import { T } from "../primitives";
 import { RowView } from "../surfaces";
 import type { CreateAction, IconAction, MoreAction } from "./types";
 import { asksFirst } from "./templateRules";
+import type { HeaderKind } from "./headerMath";
+import { HeaderAvatar, HeaderBack, HeaderBar, HeaderBig, HeaderClose, HeaderStill } from "./screenHeader";
 
 type Anchor = { x: number; y: number; w: number; h: number };
 
@@ -25,7 +27,8 @@ function MenuButton({ icon, a11y, items, onSelect, testID }: { icon: "plus" | "m
   const [at, setAt] = useState<Anchor | null>(null);
   return (
     <View ref={ref} collapsable={false} testID={testID}>
-      <IconButton icon={icon} label={a11y} onPress={() => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAt({ x, y, w, h }))} />
+      {/* the one header's circle 40 (headerIcon.tsx HeaderButton) — «＋» and «⋯» look as every other control of the row */}
+      <HeaderButton icon={icon} label={a11y} popup onPress={() => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAt({ x, y, w, h }))} />
       <Menu visible={!!at} anchor={at} items={items} onSelect={onSelect} onClose={() => setAt(null)} />
     </View>
   );
@@ -102,14 +105,18 @@ export function HeaderIcons({ icons }: { icons: IconAction[] }) {
 }
 
 /**
- * The showcase frame of a template (`preview`): the same parts in the same places as on its Screen — the header row «‹ назад» on
- * the left, the icons · «＋» · «⋯» on the right, the title (unless the template's own header names the object), what stands under
- * it, the content, and the pinned bar at the bottom. Only for the showcase: a real screen is the template's Screen.
+ * The showcase frame of a template (`preview`): the same one header (screenHeader.tsx) in the same places as on its Screen — the
+ * row «←» / «×» / the avatar on the left, the icons · «＋» · «⋯» on the right, the big block (the 13 line + the 30 title, or «Имя |
+ * две строки») — held open (the showcase's own scroll does not fold it), what stands under it, the content, the pinned bar at the
+ * bottom. Only for the showcase: a real screen is the template's Screen.
  */
 export function TemplateFrame({
+  kind,
   title,
-  titleHidden,
-  lead,
+  kicker,
+  avatar,
+  sub,
+  state,
   back,
   right,
   under,
@@ -117,10 +124,12 @@ export function TemplateFrame({
   bottom,
   testID,
 }: {
+  kind: HeaderKind;
   title: string;
-  titleHidden?: boolean;
-  /** the Overview's Greeting: stands where the title would (left of the icons) */
-  lead?: ReactNode;
+  kicker?: string;
+  avatar?: { initials: string; onPress?: () => void; label: string };
+  sub?: { line1?: string; line2?: ReactNode };
+  state?: string;
   back?: () => void;
   right?: ReactNode;
   under?: ReactNode;
@@ -130,67 +139,25 @@ export function TemplateFrame({
 }) {
   const { c } = useTheme();
   const { t } = useI18n();
+  const lead =
+    kind === "editor" && back ? (
+      <HeaderClose testID={`${testID}-back`} label={t("common.back")} onPress={back} />
+    ) : back ? (
+      <HeaderBack testID={`${testID}-back`} label={t("common.back")} onPress={back} />
+    ) : avatar ? (
+      <HeaderAvatar testID={`${testID}-avatar`} {...avatar} />
+    ) : null;
   return (
-    <View testID={testID} style={{ borderRadius: radius.card, borderWidth: component.hairline, borderColor: c.bd, backgroundColor: c.bg, overflow: "hidden" }}>
-      <View style={{ padding: space[4], gap: space[3] }}>
-        <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
-          {back ? (
-            <Press onPress={back} accessibilityRole="button" accessibilityLabel={t("common.back")} testID={`${testID}-back`} containerStyle={{ flexShrink: 1 }}>
-              <RowView gap={space[1]}>
-                <Icon name="chevronLeft" color={c.ink} />
-                <T v="body" w="medium" numberOfLines={1}>
-                  {t("common.back")}
-                </T>
-              </RowView>
-            </Press>
-          ) : lead ? (
-            <View style={{ flex: 1, minWidth: 0 }}>{lead}</View>
-          ) : (
-            <T v="title" numberOfLines={1} style={{ flexShrink: 1 }}>
-              {title}
-            </T>
-          )}
-          <RowView gap={space[2]} style={{ flexShrink: 0 }}>
-            {right}
-          </RowView>
-        </RowView>
-        {back && !titleHidden ? (
-          <T v="title" numberOfLines={2}>
-            {title}
-          </T>
-        ) : null}
-        {under}
-        {children}
+    <HeaderStill kind={kind}>
+      <View testID={testID} style={{ borderRadius: radius.card, borderWidth: component.hairline, borderColor: c.bd, backgroundColor: c.bg, overflow: "hidden" }}>
+        <View style={{ padding: space[4], paddingTop: 0, gap: space[3] }}>
+          <HeaderBar testID={`${testID}-head`} kind={kind} lead={lead} parent={kind === "object" && back ? { label: t("common.back"), onPress: back } : undefined} mini={title} state={state} right={right} />
+          {kind === "editor" ? null : <HeaderBig kind={kind === "root" ? "root" : "object"} title={title} kicker={kicker} sub={sub} />}
+          {under}
+          {children}
+        </View>
+        {bottom}
       </View>
-      {bottom}
-    </View>
-  );
-}
-
-/**
- * Greeting — the head of an Overview (BUILD-SPEC §1 «Greeting»): the avatar 36 on the left (opens the «Ещё» sheet), «Доброе утро, Алекс»
- * 17 semibold in one line and the date 13 `mut` under it — instead of a 30 title, so the header icons on the right never wrap on 390.
- * testIDs: `<testID>`, `<testID>-avatar`.
- */
-export function Greeting({ initials, text, date, onAvatar, avatarLabel, testID }: { initials: string; text: string; date: string; onAvatar?: () => void; avatarLabel: string; testID: string }) {
-  const avatar = <Avatar initials={initials} s={component.avatar.md} />;
-  return (
-    <View testID={testID} style={{ flexDirection: "row", alignItems: "center", gap: space[3], minWidth: 0 }}>
-      {onAvatar ? (
-        <Press testID={`${testID}-avatar`} onPress={onAvatar} visibleHeight={component.avatar.md} accessibilityRole="button" accessibilityLabel={avatarLabel}>
-          {avatar}
-        </Press>
-      ) : (
-        avatar
-      )}
-      <View style={{ flex: 1, minWidth: 0 }} role="heading" aria-level={1}>
-        <T v="heading" fit>
-          {text}
-        </T>
-        <T v="caption" tone="mut" numberOfLines={1}>
-          {date}
-        </T>
-      </View>
-    </View>
+    </HeaderStill>
   );
 }

@@ -69,6 +69,38 @@ describe.each(names)("%s theme contrast (DS rule: text ≥ 4.5:1)", (name) => {
   });
 });
 
+/** visual v2 (docs/design/visual-v2.html, 21.11): the accent as text and as a tone, the layers, the tab bar */
+describe.each(names)("%s visual v2: accent text and tone, layers, tab bar (text ≥ 4.5:1, lines ≥ 3:1)", (name) => {
+  const c = themes[name];
+  const str = (x: RGBA) => `rgb(${x[0]},${x[1]},${x[2]})`;
+  const card = over(c.surf, c.bg);
+  const cell = over(c.surf2, str(card));
+  const chosen = over(c.surf3, str(card));
+  const tab = parse(c.tab);
+  it("accText reads on the screen, a card, a cell (the secondary button), the chosen cell and the tab bar", () => {
+    for (const [k, s] of Object.entries({ bg: parse(c.bg), card, cell, chosen, tab })) expect(ratio(parse(c.accText), s), k).toBeGreaterThanOrEqual(4.5);
+  });
+  it("accText reads on the accent's tone (a chosen day, the nearest interval) and on its stronger half", () => {
+    expect(ratio(parse(c.accText), over(c.tint, str(card)))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(parse(c.accText), over(c.tint2, str(card)))).toBeGreaterThanOrEqual(4.5);
+  });
+  it("ink and mut on the chosen cell and on the tab bar", () => {
+    for (const s of [chosen, tab]) {
+      expect(ratio(parse(c.ink), s)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(parse(c.mut), s)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+  it("the paler words on the yellow tile ≥ 4.5:1", () => expect(ratio(over(c.onAccMut, c.acc), parse(c.acc))).toBeGreaterThanOrEqual(4.5));
+  it("the open checklist ring is seen on its cell (≥ 3:1)", () => expect(ratio(parse(c.dash), cell)).toBeGreaterThanOrEqual(3));
+  it("the layers go one way: bg → card → cell → chosen", () => {
+    const l = [parse(c.bg), card, cell, chosen].map(lum);
+    const up = name === "dark";
+    // dark: each layer lighter; light: the card lighter than the screen, the cells darker than the card
+    if (up) expect(l[1]! > l[0]! && l[2]! > l[1]! && l[3]! > l[2]!).toBe(true);
+    else expect(l[1]! > l[0]! && l[2]! < l[1]! && l[3]! < l[2]!).toBe(true);
+  });
+});
+
 describe.each(names)("%s input frame (DS §8.1, #1594: ≥ 3:1 to the screen, WCAG 1.4.11)", (name) => {
   const c = themes[name];
   it("the field frame stands out from the screen and from the field's own fill", () => {

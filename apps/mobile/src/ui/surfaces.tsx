@@ -1,6 +1,4 @@
 import { BlurView } from "expo-blur";
-import { VersionBadge } from "@/features/version";
-import { DemoBadge } from "@/features/DemoBadge";
 import { UpdateBar } from "@/features/UpdateBar";
 import { ScreenScrollCtx, type ScreenScroll } from "./requiredForm";
 import { HeaderIcon } from "./headerIcon";
@@ -28,8 +26,10 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindow
 import { avoidBehavior, useKeyboardHeight } from "./keyboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, Ellipse, LinearGradient, RadialGradient, Rect, Stop } from "react-native-svg";
-import { component, layout, motion, radius, size, space, z, type StatusName } from "@octo/design-tokens";
-import Animated, { FadeIn, FadeOut, useReducedMotion } from "react-native-reanimated";
+import { component, layout, motion, radius, rhythm, size, space, z, type StatusName } from "@octo/design-tokens";
+import Animated, { Easing, FadeIn, FadeOut, cancelAnimation, runOnJS, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
+import { HeaderAvatar, HeaderBack, HeaderBar, HeaderBig, HeaderClose, HeaderParent, HeaderPlate, HeaderScroll, type HeadSpec } from "./templates/screenHeader";
+import { settleTarget, stickShift, type HeaderKind } from "./templates/headerMath";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
@@ -91,12 +91,15 @@ export function Card({
   inner?: boolean;
 }) {
   const { c } = useTheme();
+  // visual v2 («Слои»): the screen → a card `surf` (22) → a cell `surf2` (14); no frames, a card has a 1-pt highlight along its top
   const base: ViewStyle = {
-    backgroundColor: inner ? c.in : c.surf,
-    borderWidth: 1,
-    borderColor: c.bd,
+    backgroundColor: inner ? c.surf2 : c.surf,
+    borderWidth: 0,
+    borderTopWidth: inner ? 0 : component.hairline,
+    borderColor: "transparent",
+    borderTopColor: inner ? "transparent" : c.hl,
     borderRadius: inner ? radius.inner : radius.card,
-    padding: inner ? space[3] : space[4],
+    padding: inner ? space[3] : rhythm.cardPad,
     gap: space[2],
     overflow: "hidden",
     shadowColor: c.shadow.color,
@@ -527,6 +530,7 @@ export function Screen({
   headerLead,
   testID,
   form,
+  head,
 }: {
   title: string;
   help?: string;
@@ -580,6 +584,11 @@ export function Screen({
   aside?: ReactNode;
   /** the screen's content, for the tests (a record that opened: its own testID, not its words — CHECKS §9 п.2) */
   testID?: string;
+  /**
+   * The one header (templates/screenHeader.tsx, visual-v2 «Единая шапка»): root / object / editor and what each shows. Without it
+   * the Screen works the kind out: a parent (or «‹ Ещё») — an object; else a root. An editor says so (EditorScreen, the estimate).
+   */
+  head?: HeadSpec;
 }) {
   const kb = useKeyboardHeight();
   /** the pinned panel stands on a phone only, and not under the keyboard */
@@ -720,72 +729,93 @@ export function Screen({
             ) : null}
           </RowView>
   ) : null;
+  /* ---- the one header (templates/screenHeader.tsx, visual-v2 «Единая шапка»): one row of the same parts on every screen ---- */
+  const kind: HeaderKind = head?.kind ?? (hasUp || backMore ? "object" : "root");
+  /** the row stands pinned over the page and folds as the page goes up; 820/1280 with a parent keep the pinned address bar */
+  const overlay = scroll && !pinned;
+  const backLabel = upLabel ? t("nav.backTo", { to: upLabel }) : t("common.back");
+  const me = store.db.members.find((m) => m.id === store.db.me);
+  // the root's avatar (→ «Ещё», v2 «Корень вкладки»): a phone only (820/1280 have the profile in the side menu), not on «Ещё» itself
+  const avatar =
+    kind !== "root" || wide
+      ? null
+      : head?.kind === "root" && head.avatar !== undefined
+        ? head.avatar
+        : pathname === "/more"
+          ? null
+          : { initials: me?.initials ?? "··", onPress: toMore, label: t("nav.profile"), testID: home ? "home-profile" : "hdr-avatar" };
+  const lead =
+    kind === "editor" ? (
+      hasUp ? <HeaderClose label={backLabel} onPress={goUp} /> : null
+    ) : kind === "object" ? (
+      hasUp ? (
+        <HeaderBack label={backLabel} onPress={goUp} />
+      ) : backMore ? (
+        <HeaderBack testID="back-more" onPress={toMore} label={t("nav.more")} />
+      ) : null
+    ) : avatar ? (
+      <HeaderAvatar {...avatar} />
+    ) : null;
+  const parent = kind === "object" ? (hasUp && upLabel ? { label: upLabel, onPress: goUp } : backMore ? { label: t("nav.more"), onPress: toMore } : undefined) : undefined;
+  const objHead = head?.kind === "object" ? head : undefined;
+  /* DS §12.2, Б4: icons · «＋» · «⋯», «⋯» always the last (#1474); the «?» stands right after the title it explains (DS Б7), not in
+     the row's corner; «Главная»: its own icons (`headerIcons`, with their counts) replace the stock search · bell; the sync stays */
+  const helpMark = help ? <HelpButton title={title} text={help} /> : null;
+  const rightRow =
+    right || headerFab || headerIconRow || home ? (
+      <>
+        {headerIconRow}
+        {headerFab}
+        {right}
+        {home ? headerIcons?.length ? <SyncBadge compact /> : <HomeHeader /> : null}
+      </>
+    ) : null;
+  const bar = (
+    <HeaderBar
+      kind={kind}
+      lead={lead}
+      parent={parent}
+      mini={head?.kind === "root" && head.mini ? head.mini : title}
+      state={kind === "editor" ? (head?.kind === "editor" && head.state ? head.state : subtitle) : undefined}
+      chevron={
+        objHead?.expand
+          ? {
+              open: objHead.expand.open,
+              label: objHead.expand.expandLabel,
+              // folded: «⌄» goes back to the top and opens the panel there (the header does not fold while it is open)
+              onPress: () => {
+                screenScroll.toTop?.(true);
+                objHead.expand?.onToggle(true);
+              },
+            }
+          : undefined
+      }
+      right={rightRow}
+      help={kind === "editor" ? helpMark : undefined}
+      titleRef={kind === "editor" && !pinned ? titleRef : undefined}
+    />
+  );
+  // the big block 64 (root, object; an editor on 820/1280 with the pinned bar has its title here too)
+  const big =
+    titleHidden || (kind === "editor" && !pinned) ? null : (
+      <HeaderBig
+        kind={kind === "root" ? "root" : "object"}
+        title={title}
+        titleRef={titleRef}
+        kicker={head?.kind === "root" ? head.kicker : undefined}
+        sub={objHead?.sub}
+        expand={objHead?.expand}
+        help={helpMark}
+      />
+    );
   const header = (
-    <View style={{ gap: space[2], marginBottom: space[3] }}>
-      <VersionBadge />
-      <DemoBadge />
+    <View style={{ gap: space[2], marginBottom: kind === "object" ? 0 : space[3] }}>
+      {/* no version line and no «Демо» strip over the header any more (v2 «Где строка версии и «Демо»»): the version is at the
+          bottom of «Ещё» and in «Настройки → О приложении»; «Демо» is a plate in the header's smallest line */}
+      {overlay || pinned ? null : bar}
       <UpdateBar />
-      {hasUp ? (
-        <>
-          {/* detail screen: the trail "Home › … › Parent › This", actions on the right, then the title.
-              Back is a swipe (iOS) / system back (Android); on the trail the parent is the "back" button.
-              Tablet/desktop: the same row is pinned above the scroll (addressBar). */}
-          {pinned ? null : addressRow}
-          {titleHidden ? null : (
-          <RowView style={{ gap: space[1] }}>
-            <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={[{ flexShrink: 1 }, noFocusRing]} testID="screen-title">
-              <T v="title" fit>
-                {title}
-              </T>
-            </View>
-          </RowView>
-          )}
-        </>
-      ) : (
-        /* tab root: the big title is where you are (docs/specs/13 §2.2; no ☰ since variant Б). Phone, a section opened from «Ещё»
-           outside the tabs (Jobs, Money, Catalog…): «‹ Ещё» on the left of the icons row (DS §12.2, #1648) */
-        <>
-        {/* the founder 21.11 (#2350, LAYOUT-RULES П3): a thin row of icons ON TOP (right: «?» · icons · «＋» · «⋯» / the home's
-            search · bell · profile; circles `headerIcon` 36, zone 44), the big title UNDER it in one line (shrinks, never wraps) —
-            the icons never wrap under the title any more */}
-        {headerLead || backMore || right || headerFab || headerIconRow || home || help ? (
-          <RowView gap={space[2]} style={{ justifyContent: "flex-end", minHeight: size.hitMin }}>
-          {backMore ? (
-            <Press
-              testID="back-more"
-              onPress={toMore}
-              visibleHeight={component.dockBtn}
-              accessibilityRole="button"
-              accessibilityLabel={t("nav.more")}
-              containerStyle={{ marginRight: "auto", flexShrink: 1 }}
-            >
-              <RowView gap={space[1]} style={{ height: component.dockBtn, paddingRight: space[2] }}>
-                <Icon name="chevronLeft" color={c.ink} />
-                <T v="body" w="medium" numberOfLines={1}>
-                  {t("nav.more")}
-                </T>
-              </RowView>
-            </Press>
-          ) : null}
-            {headerLead ? <View style={{ flex: 1, minWidth: 0 }}>{headerLead}</View> : null}
-            {help ? <HelpButton title={title} text={help} /> : null}
-            {headerIconRow}
-            {headerFab}
-            {right}
-            {/* «Главная»: its own icons (`headerIcons`, with their counts) replace the stock search · bell · profile; the sync stays */}
-            {home ? headerIcons?.length ? <SyncBadge compact /> : <HomeHeader /> : null}
-          </RowView>
-        ) : null}
-        {titleHidden ? null : (
-          <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={noFocusRing} testID="screen-title">
-            <T v="display" fit>
-              {title}
-            </T>
-          </View>
-        )}
-        </>
-      )}
-      {subtitle ? (
+      {big}
+      {subtitle && kind !== "editor" ? (
         <T v="body" tone="mut">
           {subtitle}
         </T>
@@ -826,7 +856,14 @@ export function Screen({
       testID={testID ?? (form ? "form-column" : undefined)}
       // where the sticky tabs start: right under the content. The sticky wrapper's own layout says 0 on the web (react-native-web
       // measures it inside its sticky box), so the tabs' place is the content's bottom (#1416)
-      onLayout={tabs ? (e) => (tabsY.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height) : undefined}
+      onLayout={
+        tabs
+          ? (e) => {
+              tabsY.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height;
+              tabsTop.value = tabsY.current;
+            }
+          : undefined
+      }
       style={{ width: "100%", maxWidth: form ? layout.formMax : layout.contentMax, alignSelf: form && form !== "center" ? "flex-start" : "center", gap: space[3] }}
     >
       {header}
@@ -846,6 +883,9 @@ export function Screen({
   const [under, setUnder] = useState(false);
   const reduce = useReducedMotion();
   const tabsY = useRef(0);
+  /** the page's scroll and where the sticky strip lies on the page — shared values the header and the strip read on the UI thread */
+  const scrollY = useSharedValue(0);
+  const tabsTop = useSharedValue(0);
   const [stuck, setStuck] = useState(false);
   /** the scroll already moved for this time the mini header appeared */
   const miniShifted = useRef(false);
@@ -904,12 +944,15 @@ export function Screen({
       });
     },
   }).current;
+  /** the pinned row covers the top of the page: the sticky strip stops under it, a field scrolled to stops below it */
+  const stickOff = overlay ? navInsets.safeTop + component.header.bar : 0;
   useEffect(() => {
-    if (tabs && offset.current > tabsY.current) scrollRef.current?.scrollTo({ y: tabsY.current, animated: true });
+    if (tabs && offset.current > tabsY.current - stickOff) scrollRef.current?.scrollTo({ y: Math.max(0, tabsY.current - stickOff), animated: true });
   }, [tabKey, tabs]);
   const column = { width: "100%" as const, maxWidth: layout.contentMax, alignSelf: "center" as const };
-  const top = pinned ? space[3] : navInsets.top;
-  coveredTop.current = pinned ? 0 : navInsets.top;
+  // the page starts under the pinned row 48 (the big block's first 4 pt lie under the folded row's 52)
+  const top = pinned ? space[3] : overlay ? navInsets.safeTop + (kind === "editor" ? component.header.bar + space[2] : component.header.row) : navInsets.top;
+  coveredTop.current = pinned ? 0 : overlay ? stickOff : navInsets.top;
   coveredBottom.current = coveredBottomOf({ keyboard: !!kb, keyboardMargin: space[6], navBottom: navInsets.bottom, fab: 0, footer: footerOn ? footH : 0 });
   useEffect(() => {
     setFooterInset(footerOn && !kb ? footH : 0);
@@ -917,7 +960,76 @@ export function Screen({
   }, [footerOn, kb, footH]);
   /** the pinned bar is outside the scroll: the sticky-tabs area below is one screen minus the bar */
   const [barH, setBarH] = useState(0);
+  /* ---- the page's scroll: a shared value the header reads on the UI thread (templates/headerMath.ts) ---- */
+  const tabsShift = useAnimatedStyle(() => ({ transform: [{ translateY: stickShift(scrollY.value, tabsTop.value, stickOff) }] }), [stickOff]);
+  const animRef = useAnimatedRef<Animated.ScrollView>();
+  const setScrollRef = useCallback((r: ScrollViewInstance | null) => {
+    (scrollRef as { current: ScrollViewInstance | null }).current = r;
+    (animRef as unknown as (x: unknown) => void)(r);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  /** what the page's scroll tells JS: the place (fields, held rows), the clock's glass, the stuck strip */
+  const onJsScroll = (y: number) => {
+    // a late event of an earlier jump (a held row's autoscroll makes one every 16 ms) is older than what we asked of the
+    // scroll: the place is the last one asked, until the events catch up with it (else the held row lagged by a few steps)
+    const jump = lastJump.current;
+    if (!jump || Date.now() - jump.at > 250 || Math.abs(y - jump.y) < 1) offset.current = y;
+    const now = y > 0;
+    if (now !== under) setUnder(now);
+    const isStuck = !!tabs && tabsY.current > 0 && y >= tabsY.current - stickOff - 1;
+    if (isStuck !== stuck) {
+      if (!isStuck) miniShifted.current = false;
+      setStuck(isStuck);
+    }
+  };
+  const jsScroll = useRef(onJsScroll);
+  jsScroll.current = onJsScroll;
+  const callJsScroll = useCallback((y: number) => jsScroll.current(y), []);
+  // let go between the open and the folded header: the page goes to the nearer end in `durBase` easeOut (v2 «Отпустил посередине»)
+  const snapY = useSharedValue(0);
+  const snapping = useSharedValue(false);
+  const settles = overlay && kind !== "editor";
+  const ease = Easing.bezier(...motion.easeOut);
+  useAnimatedReaction(
+    () => snapY.value,
+    (v) => {
+      if (snapping.value) scrollTo(animRef, 0, v, false);
+    },
+  );
+  const scrollHandler = useAnimatedScrollHandler(
+    {
+      onScroll: (e) => {
+        scrollY.value = e.contentOffset.y;
+        runOnJS(callJsScroll)(e.contentOffset.y);
+      },
+      onEndDrag: (e) => {
+        // a slow finger lets go: settle now; a fling runs on (its momentum's end settles)
+        const v = e.velocity?.y ?? 0;
+        if (!settles || Math.abs(v) >= component.header.slow) return;
+        const to = settleTarget(kind, e.contentOffset.y, 0);
+        if (to === null) return;
+        snapping.value = true;
+        snapY.value = e.contentOffset.y;
+        snapY.value = withTiming(to, { duration: motion.durBase, easing: ease }, () => {
+          snapping.value = false;
+        });
+      },
+      onMomentumEnd: (e) => {
+        if (!settles) return;
+        const to = settleTarget(kind, e.contentOffset.y, 0);
+        if (to === null) return;
+        snapping.value = true;
+        snapY.value = e.contentOffset.y;
+        snapY.value = withTiming(to, { duration: motion.durBase, easing: ease }, () => {
+          snapping.value = false;
+        });
+      },
+    },
+    [kind, settles],
+  );
   return (
+    <HeaderScroll y={scrollY} kind={kind} reduce={reduce}>
+    <HeaderParent value={parent?.label}>
     <BackSwipe enabled={swipeBack} edge={navInsets.left} onBack={hasUp ? goUp : toMore}>
       <View style={{ flex: 1 }}>
         <Background />
@@ -934,8 +1046,8 @@ export function Screen({
         {scroll ? (
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "android" ? avoidBehavior : undefined} enabled={Platform.OS === "android"}>
             {/* from 820 the end of the page scrolls out from under the toast (the toast lane, DS §15.2, #1701) */}
-            <ScrollView
-              ref={scrollRef}
+            <Animated.ScrollView
+              ref={setScrollRef}
               scrollEnabled={!scrollLocked}
               contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : scrollBottom(navInsets.bottom + (footerOn ? footH : 0), navInsets.wide, safe.bottom), paddingLeft: navInsets.left, paddingRight: navInsets.right }}
               keyboardShouldPersistTaps="handled"
@@ -947,26 +1059,21 @@ export function Screen({
               scrollEventThrottle={16}
               onContentSizeChange={(_w, h) => (contentH.current = h)}
               onLayout={(e) => (viewH.current = e.nativeEvent.layout.height)}
-              onScrollBeginDrag={onScrollBegin}
-              onScroll={(e) => {
-                const y = e.nativeEvent.contentOffset.y;
-                // a late event of an earlier jump (a held row's autoscroll makes one every 16 ms) is older than what we asked of the
-                // scroll: the place is the last one asked, until the events catch up with it (else the held row lagged by a few steps)
-                const jump = lastJump.current;
-                if (!jump || Date.now() - jump.at > 250 || Math.abs(y - jump.y) < 1) offset.current = y;
-                const now = y > 0;
-                if (now !== under) setUnder(now);
-                const isStuck = !!tabs && tabsY.current > 0 && y >= tabsY.current - 1;
-                if (isStuck !== stuck) {
-                  if (!isStuck) miniShifted.current = false;
-                  setStuck(isStuck);
-                }
+              onScrollBeginDrag={() => {
+                // a finger takes the page: a settle on its way stops where it is
+                cancelAnimation(snapY);
+                snapping.value = false;
+                onScrollBegin?.();
               }}
+              onScroll={scrollHandler}
             >
               <ScrollLockCtx.Provider value={setScrollLocked}>
                 <ScreenScrollCtx.Provider value={screenScroll}>{content}</ScreenScrollCtx.Provider>
               </ScrollLockCtx.Provider>
               {tabs ? (
+                // the strip sticks right under the pinned row (v2: the sections strip / the segment stick to the row's bottom): from where
+                // it meets the row it goes down as the page goes up (transform only), until the scroll's own sticking holds it there
+                <Animated.View style={tabsShift}>
                 <View
                   // glass (--ov + blur), not a solid plate: in the light theme the bar blends with the page (unslop 05.11)
                   // the glass only once the row has stuck (DS А1п «Прилипание»): in its place on the page it is a plain row, no band (#1416)
@@ -991,13 +1098,23 @@ export function Screen({
                   ) : null}
                   <View style={column}>{tabs}</View>
                 </View>
+                </Animated.View>
               ) : null}
-              {tabs ? <View style={[column, { gap: space[3], paddingTop: space[2], minHeight: winH - top - navInsets.bottom - (pinned ? barH : 0) }]}>{below}</View> : null}
-            </ScrollView>
+              {tabs ? <View style={[column, { gap: space[3], paddingTop: space[2], minHeight: winH - top - navInsets.bottom - (pinned ? barH : 0) - stickOff }]}>{below}</View> : null}
+            </Animated.ScrollView>
           </KeyboardAvoidingView>
         ) : (
           <View style={{ flex: 1, paddingTop: top, paddingBottom: navInsets.bottom, paddingLeft: navInsets.left, paddingRight: navInsets.right }}>{content}</View>
         )}
+        {/* the one header's row, pinned over the page: its plate fades in as it folds (templates/screenHeader.tsx) */}
+        {overlay ? (
+          <View pointerEvents="box-none" style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: z.nav, paddingTop: navInsets.safeTop, paddingLeft: navInsets.left, paddingRight: navInsets.right }}>
+            <HeaderPlate top={navInsets.safeTop} />
+            <View pointerEvents="box-none" style={column}>
+              {bar}
+            </View>
+          </View>
+        ) : null}
         </View>
         {aside}
         </View>
@@ -1026,5 +1143,7 @@ export function Screen({
         ) : null}
       </View>
     </BackSwipe>
+    </HeaderParent>
+    </HeaderScroll>
   );
 }

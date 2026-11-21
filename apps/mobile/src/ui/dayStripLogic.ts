@@ -19,13 +19,14 @@ export function stripOffset(i: number, w: number): number {
   return Math.max(0, space[4] + i * (pill.w + pill.gap) - (w - pill.w) / 2);
 }
 
-/** what a pill looks like: the picked one is the accent with its edge (light theme), today has its number in `accText` */
-export function pillLook(selected: boolean, today: boolean): { fill: "acc" | "surf"; edge: "accEdge" | "bd"; num: "onAcc" | "accText" | "ink"; bold: boolean } {
-  return { fill: selected ? "acc" : "surf", edge: selected ? "accEdge" : "bd", num: selected ? "onAcc" : today ? "accText" : "ink", bold: selected || today };
+/** what a pill looks like (visual v2 «Пилюли дней»): the picked one is the accent's TONE with a 1.5 accent frame and its words in
+ *  `accText` — not a fill (the Plan's one yellow fill is the segment «День»); today has its number in `accText` */
+export function pillLook(selected: boolean, today: boolean): { fill: "tint" | "surf"; edge: "acc" | "transparent"; num: "accText" | "ink"; head: "accText" | "mut"; bold: boolean } {
+  return { fill: selected ? "tint" : "surf", edge: selected ? "acc" : "transparent", num: selected || today ? "accText" : "ink", head: selected ? "accText" : "mut", bold: selected || today };
 }
 
-/** the dot under a pill's number: nothing in the day — none; a visit with nobody on it — warn; else muted (on the accent — onAcc) */
-export function pillDot(load: DayLoad | undefined, selected: boolean): "none" | "onAcc" | "warn" | "mut" {
+/** the dot under a pill's number: nothing in the day — none; a visit with nobody on it — warn; else muted (on the picked one — accText) */
+export function pillDot(load: DayLoad | undefined, selected: boolean): "none" | "accText" | "warn" | "mut" {
   if (!load?.n) return "none";
-  return selected ? "onAcc" : load.unassigned ? "warn" : "mut";
+  return selected ? "accText" : load.unassigned ? "warn" : "mut";
 }

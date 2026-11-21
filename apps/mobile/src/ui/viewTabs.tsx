@@ -201,8 +201,8 @@ export interface ViewStepsProps<K extends string> {
 
 /**
  * SectionStrip `steps` (BUILD-SPEC §1; the visit «В пути · На месте · Работа · Подпись · Оплата»): one row of pills `tab.h` 30 — a passed
- * step is «✓» and its word `ink`; the current one is the accent `acc`/`onAcc` (light theme: + the `accEdge` line), its number and word
- * semibold; the steps ahead — the number and the word `mut`. Not pressable: the step moves by the screen's main button. A row longer
+ * step is «✓» and its word `ink`; the current one is the accent's TONE `tint` with `accText` words (visual v2: «остальное жёлтое —
+ * тон 16 %»; the visit's one yellow fill is its main button «Завершить»), its number and word semibold; the steps ahead — the number and the word `mut`. Not pressable: the step moves by the screen's main button. A row longer
  * than the screen scrolls sideways (the current step is in view at the start). VoiceOver reads the row as one: «Шаги выезда: На месте,
  * 2 / 5». `ViewTabs variant="steps"` is the same.
  */
@@ -223,7 +223,7 @@ export function ViewSteps<K extends string>({ items, value, label, testID }: Vie
       {items.map((it, i) => {
         const st = states[i]!;
         const now = st === "now";
-        const color = now ? c.onAcc : st === "done" ? c.ink : c.mut;
+        const color = now ? c.accText : st === "done" ? c.ink : c.mut;
         return (
           <View
             key={it.key}
@@ -236,9 +236,7 @@ export function ViewSteps<K extends string>({ items, value, label, testID }: Vie
               flexDirection: "row",
               alignItems: "center",
               gap: space[1],
-              backgroundColor: now ? c.acc : undefined,
-              borderWidth: component.hairline,
-              borderColor: now ? c.accEdge : "transparent",
+              backgroundColor: now ? c.tint : undefined,
             }}
           >
             {st === "done" ? (

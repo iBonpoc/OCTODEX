@@ -49,14 +49,14 @@ describe("ChoiceChips / MultiChips layout=\"strip\" (BUILD-SPEC §1)", () => {
   });
 });
 
-describe("StatusPill (BUILD-SPEC §1)", () => {
-  it("icon 12 and word 12 semibold on the status fill, chip 24 × px 10", () => {
+describe("StatusPill (visual v2 «Плашка статуса», 21.11)", () => {
+  it("icon 13 and word 12 semibold on the quiet status fill, 24 high, padding 7 · 9", () => {
     const s = src("statusPill.tsx");
     expect(s).toMatch(/statusIcon\[status\]/);
-    expect(s).toMatch(/size\.iconXs/);
+    expect(s).toMatch(/component\.statusPill\.icon/);
     expect(s).toMatch(/v="micro" w="semibold"/);
     expect(s).toMatch(/component\.chip\.h/);
-    expect(s).toMatch(/component\.chip\.px/);
+    expect(s).toMatch(/component\.statusPill\.padL/);
     expect(s).toMatch(/st\.fill/);
   });
 });

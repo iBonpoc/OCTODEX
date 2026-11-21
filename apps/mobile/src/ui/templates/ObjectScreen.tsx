@@ -4,24 +4,23 @@
  * the name once (ObjectHeader — the Screen's title is not drawn, П7); IconRow under the header; ONE main step — `main` is a single
  * slot — right under the header and its quick actions: MainStep "top", a 40 button by its words, not across the screen (LAYOUT-RULES
  * П3, the founder 21.11 #2350: no pinned plate on an object — the tab bar stays seen, a plate always lit was too loud); a second
- * step always goes into «⋯»; then the sections strip (ViewTabs), sticking to the top on scroll. Once it sticks, the compact bar
- * «‹ Имя ⌄ ⋯» (ObjectHeaderBar) stands over it: «⌄» scrolls up and opens the header, «⋯» is the same menu.
+ * step always goes into «⋯»; then the sections strip (ViewTabs), sticking under the one header's row on scroll. The name is the one
+ * header's big block (templates/screenHeader.tsx «Объект»: «Имя | две строки», a client's «⌄»); folded (from 112) the row reads
+ * «← Имя ⌄ · ⋯» — «⌄» scrolls up and opens the panel, «＋» goes into «⋯» (ObjectRight).
  * `preview` — the showcase frame (templates/parts.tsx TemplateFrame) instead of the Screen.
  */
 import { useMemo, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import { space } from "@octo/design-tokens";
-import { useI18n } from "@/i18n";
-import { useDevice } from "@/theme/ThemeProvider";
 import { IconRow, type IconRowItem } from "../iconRow";
 import { MainStep, type MainStepTotal } from "../mainStep";
-import { ObjectHeader, ObjectHeaderBar, type ObjectHeaderProps } from "../objectHeader";
-import { useScreenScroll } from "../requiredForm";
+import { ObjectHeader, objectHeadSub, type ObjectHeaderProps } from "../objectHeader";
 import { Screen } from "../surfaces";
 import { ViewTabs } from "../viewTabs";
 import { CreateButton, MoreButton, TemplateFrame } from "./parts";
 import { SECOND_KEY, moreItems, templateLayout } from "./templateRules";
 import type { CreateAction, MainAction, MoreAction } from "./types";
+import { HeaderFade, useHeaderStage } from "./screenHeader";
 
 export interface ObjectScreenProps<S extends string> {
   header: ObjectHeaderProps;
@@ -72,13 +71,7 @@ function useObjectParts<S extends string>(p: ObjectScreenProps<S>) {
   const onMore = (k: string) => (k === SECOND_KEY ? p.second?.onPress() : p.onMore(k));
   // the one step under the header: a 40 button by its words (never a plate across the screen, never two)
   const step = p.main && layout.under.includes("main") ? <MainStep placement="top" fit main={p.main} /> : null;
-  const more = <MoreButton items={items} onMore={onMore} testID={`${p.testID}-more`} />;
-  const right = (
-    <>
-      {p.create && p.onCreate ? <CreateButton create={p.create} onCreate={p.onCreate} testID={`${p.testID}-create`} /> : null}
-      {more}
-    </>
-  );
+  const right = <ObjectRight create={p.create} onCreate={p.onCreate} items={items} onMore={onMore} testID={p.testID} />;
   // the selected pill stays one object while the section is the same (03 §2.5: the strip's items memoised)
   const tabs = useMemo(
     () => (p.sections.length ? <ViewTabs testID={`${p.testID}-sections`} items={p.sections} value={p.section} onChange={p.onSection} label={p.sectionsLabel} /> : null),
@@ -86,48 +79,54 @@ function useObjectParts<S extends string>(p: ObjectScreenProps<S>) {
   );
   const top = (
     <View style={{ gap: space[4] }}>
-      <ObjectHeader {...p.header} open={open} onToggle={setOpen} />
-      {p.actions?.length ? <IconRow testID={`${p.testID}-actions`} actions={p.actions} /> : null}
+      <ObjectHeader {...p.header} inHead open={open} onToggle={setOpen} />
+      {p.actions?.length ? (
+        <HeaderFade>
+          <IconRow testID={`${p.testID}-actions`} actions={p.actions} />
+        </HeaderFade>
+      ) : null}
       {step}
     </View>
   );
-  const bar = <CompactBar title={p.header.title} back={p.back} more={<MoreButton items={items} onMore={onMore} testID={`${p.testID}-bar-more`} />} onOpen={() => setOpen(true)} expandLabel={p.header.labels.expand} testID={`${p.testID}-bar`} />;
-  return { right, tabs, top, bar };
+  // v2 «Объект»: the name 30 | the rule | two lines; a client's «⌄» (the header has a panel) after the name
+  const head = {
+    kind: "object" as const,
+    sub: objectHeadSub(p.header),
+    expand: p.header.details
+      ? { open, onToggle: setOpen, expandLabel: p.header.labels.expand, collapseLabel: p.header.labels.collapse, testID: `${p.header.testID}-toggle` }
+      : undefined,
+  };
+  return { right, tabs, top, head };
 }
 
-/** «‹ Имя ⌄ ⋯» over the stuck strip: «⌄» goes back to the top and opens the header (the page's scroll is the Screen's) */
-function CompactBar({ title, back, more, onOpen, expandLabel, testID }: { title: string; back: () => void; more: ReactNode; onOpen: () => void; expandLabel: string; testID: string }) {
-  const { t } = useI18n();
-  const { wide } = useDevice();
-  const scroll = useScreenScroll();
-  // 820/1280: «‹» and «⋯» stay in the pinned address row over the scroll — the bar is only «Имя ⌄», not a second «⋯»
+/**
+ * «＋» · «⋯» of the object's row: once the header has folded (v2 «С 112 — строка «← Sarah Mitchell ⌄ · ⋯», «＋» уходит в «⋯»»)
+ * the «＋» items move to the top of «⋯» and the «＋» circle leaves the row.
+ */
+function ObjectRight({ create, onCreate, items, onMore, testID }: { create?: CreateAction; onCreate?: (k: string) => void; items: MoreAction; onMore: (k: string) => void; testID: string }) {
+  const folded = useHeaderStage() === 2;
+  const plusKeys = useMemo(() => new Set((create?.items ?? []).map((i) => i.key)), [create]);
+  const merged = useMemo(() => (folded && create && onCreate ? [...create.items, ...items] : items), [folded, create, onCreate, items]);
+  const pick = (k: string) => (folded && plusKeys.has(k) ? onCreate?.(k) : onMore(k));
   return (
-    <ObjectHeaderBar
-      testID={testID}
-      title={title}
-      back={wide ? undefined : { label: t("common.back"), onPress: back }}
-      right={wide ? undefined : more}
-      expandLabel={expandLabel}
-      onExpand={() => {
-        scroll?.toTop?.(true);
-        onOpen();
-      }}
-    />
+    <>
+      {create && onCreate && !folded ? <CreateButton create={create} onCreate={onCreate} testID={`${testID}-create`} /> : null}
+      <MoreButton items={merged} onMore={pick} testID={`${testID}-more`} />
+    </>
   );
 }
 
 function ObjectLive<S extends string>(p: ObjectScreenProps<S>) {
-  const { right, tabs, top, bar: compact } = useObjectParts(p);
+  const { right, tabs, top, head } = useObjectParts(p);
   return (
     <Screen
       testID={p.testID}
       title={p.header.title}
-      titleHidden
+      head={head}
       back={p.back}
       right={right}
       tabs={tabs ?? undefined}
       tabKey={p.section}
-      tabsMini={compact}
       below={tabs ? <View style={{ gap: space[3] }}>{p.children}</View> : undefined}
     >
       {top}
@@ -137,9 +136,9 @@ function ObjectLive<S extends string>(p: ObjectScreenProps<S>) {
 }
 
 function ObjectPreview<S extends string>(p: ObjectScreenProps<S>) {
-  const { right, tabs, top } = useObjectParts(p);
+  const { right, tabs, top, head } = useObjectParts(p);
   return (
-    <TemplateFrame testID={p.testID} title={p.header.title} titleHidden back={p.back} right={right}>
+    <TemplateFrame testID={p.testID} kind="object" title={p.header.title} sub={head.sub} back={p.back} right={right}>
       {top}
       {tabs}
       {p.children}

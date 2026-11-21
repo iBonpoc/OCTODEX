@@ -1,10 +1,10 @@
 /* Основы: типографика, отступы, размеры, движение, слои. Темы и цвета: theme.css, status.css */
 :root{
  --font:'Onest',system-ui,sans-serif;
- --fs-display:30px;--fs-title:22px;--fs-heading:17px;--fs-body:15px;--fs-btn:15px;--fs-caption:13px;--fs-micro:12px;--fs-input:16px;
+ --fs-display:30px;--fs-title:22px;--fs-heading:17px;--fs-body:15px;--fs-btn:15px;--fs-caption:13px;--fs-micro:12px;--fs-input:16px;--fs-figure:26px;--fs-figure-sm:18px;--tracking-display:-0.02em;--tracking-figure:-0.01em;
  --lh-tight:1.15;--lh-body:1.45;--lh-snug:1.35;
  --fw-regular:400;--fw-medium:500;--fw-semibold:600;--fw-bold:700;
- --space-hair:2px;--space-tight:6px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;
+ --space-hair:2px;--space-tight:6px;--rhythm-screen:16px;--rhythm-card-gap:8px;--rhythm-card-pad:16px;--rhythm-row-gap:12px;--rhythm-block-gap:20px;--rhythm-head-gap:10px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;
  --radius-pill:999px;--radius-field:12px;--radius-chip:999px;
  /* визуальная высота контролов; зона нажатия всегда не меньше --hit-min (HIG 44pt) */
  --control-sm:28px;--control-md:32px;--control-lg:40px;--field:34px;--hit-min:44px;--hit-min-android:48px;

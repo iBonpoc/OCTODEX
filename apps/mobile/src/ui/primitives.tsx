@@ -10,15 +10,22 @@ export type TextVariant = Exclude<keyof typeof font.size, "input">;
 type Weight = keyof typeof font.families;
 type Tone = "ink" | "mut" | "onAcc" | StatusName;
 
+/** visual v2 (docs/design/visual-v2.html «Шрифт»): the title 30/600, a figure 26 · 18/700, a card 17/700, text 15/500, the second
+ *  line 13/500, a caption 12/600 */
 const defaultWeight: Record<TextVariant, Weight> = {
-  display: "bold",
-  title: "semibold",
-  heading: "semibold",
-  body: "regular",
-  button: "semibold",
+  display: "semibold",
+  title: "bold",
+  heading: "bold",
+  body: "medium",
+  button: "bold",
   caption: "medium",
-  micro: "medium",
+  micro: "semibold",
+  figure: "bold",
+  figureSm: "bold",
 };
+/** the letter spacing of a size (v2: the title −0.02 em, a figure −0.01 em) */
+const trackingOf = (v: TextVariant, fs: number) =>
+  v === "display" ? fs * font.tracking.display : v === "figure" || v === "figureSm" || v === "title" ? fs * font.tracking.figure : undefined;
 
 export function T({
   v = "body",
@@ -49,7 +56,7 @@ export function T({
   const color =
     tone === "ink" ? c.ink : tone === "mut" ? c.mut : tone === "onAcc" ? c.onAcc : c.status[tone].text;
   const fs = font.size[v];
-  const lh = v === "display" || v === "title" ? font.lineHeight.tight : font.lineHeight.body;
+  const lh = v === "display" || v === "title" || v === "figure" || v === "figureSm" ? font.lineHeight.tight : font.lineHeight.body;
   return (
     <Text
       numberOfLines={fit ? 1 : numberOfLines}
@@ -62,7 +69,9 @@ export function T({
           fontSize: fs,
           lineHeight: Math.round(fs * lh),
           color,
-          fontVariant: tabular ? ["tabular-nums"] : undefined,
+          // v2: figures are tabular everywhere (a column of sums, a timer lines up); `tabular={false}` keeps the proportional ones
+          fontVariant: tabular === false ? undefined : ["tabular-nums"],
+          letterSpacing: trackingOf(v, fs),
           textAlign: center ? "center" : undefined,
         },
         style,

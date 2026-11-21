@@ -1,15 +1,60 @@
+import type { ReactNode } from "react";
 import { View } from "react-native";
-import { component, radius, space } from "@octo/design-tokens";
+import { component, radius, size, space } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
-import { IconButton } from "./controls";
-import { T } from "./primitives";
+import { Icon, Press, T, type IconKey } from "./primitives";
 import { badgeText } from "./headerIconRules";
 import type { IconAction } from "./templates/types";
 
 /**
- * A round icon of a screen's header (BUILD-SPEC §1 HeaderActions: search, the bell, the offline queue): `headerIcon` 36 without a
- * plate, `ink`, zone 44 (`IconButton bare`). `badge` — a count on its corner: the status fill with the number in its text (rule 2:
- * never a colour alone), `bad` by default, «99+» past 99, nothing at 0 (`badgeText`). testIDs: the action's, `<testID>-badge`.
+ * The round button of the one header (docs/design/visual-v2.html «Единая шапка»): a circle `header.circle` 40 on the card tone
+ * (`surf`, one tone lighter than the ground, no frame), the icon 20, the zone 44. Every control of the row is one of these —
+ * «←», «×», search, the bell, «＋», «⋯» — no bare icons, no second size (audit 12 §1). `dot` — the «Демо» dot 6 `warn` on its corner
+ * (the folded header, v2 «Где строка версии и «Демо»»). `children` — instead of the icon (the avatar's initials).
+ */
+export function HeaderButton({
+  icon,
+  label,
+  onPress,
+  testID,
+  dot,
+  children,
+  hint,
+  popup,
+}: {
+  icon?: IconKey;
+  label: string;
+  onPress?: () => void;
+  testID?: string;
+  dot?: ReactNode;
+  children?: ReactNode;
+  hint?: string;
+  /** the button opens a menu or a sheet (VoiceOver «всплывающее») */
+  popup?: boolean;
+}) {
+  const { c } = useTheme();
+  const s = component.header.circle;
+  return (
+    <Press
+      testID={testID}
+      onPress={onPress}
+      visibleHeight={s}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={hint}
+      aria-haspopup={popup ? "menu" : undefined}
+      style={{ width: s, height: s, borderRadius: radius.pill, backgroundColor: c.surf, alignItems: "center", justifyContent: "center" }}
+    >
+      {children ?? (icon ? <Icon name={icon} s={size.iconMd} color={c.ink} /> : null)}
+      {dot}
+    </Press>
+  );
+}
+
+/**
+ * A round icon of a screen's header (search, the bell, the offline queue) — a `HeaderButton`. `badge` — a count on its corner: the
+ * status fill with the number in its text (rule 2: never a colour alone), `bad` by default, «99+» past 99, nothing at 0
+ * (`badgeText`). testIDs: the action's, `<testID>-badge`.
  */
 export function HeaderIcon({ action }: { action: IconAction }) {
   const { c } = useTheme();
@@ -17,12 +62,12 @@ export function HeaderIcon({ action }: { action: IconAction }) {
   const tone = c.status[action.badge?.tone ?? "bad"];
   return (
     <View>
-      <IconButton testID={action.testID} icon={action.icon} label={action.a11y} onPress={action.onPress} bare />
+      <HeaderButton testID={action.testID} icon={action.icon} label={action.a11y} onPress={action.onPress} />
       {text ? (
         <View
           testID={`${action.testID}-badge`}
           pointerEvents="none"
-          style={{ position: "absolute", top: space[1], right: -space[1], minWidth: component.chip.h, height: component.chip.h, paddingHorizontal: space[1], borderRadius: radius.pill, backgroundColor: tone.fill, alignItems: "center", justifyContent: "center" }}
+          style={{ position: "absolute", top: -space[1], right: -space[1], minWidth: component.chip.h, height: component.chip.h, paddingHorizontal: space[1], borderRadius: radius.pill, backgroundColor: tone.fill, alignItems: "center", justifyContent: "center" }}
         >
           <T v="micro" w="semibold" tabular capped style={{ color: tone.on }}>
             {text}

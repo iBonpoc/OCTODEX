@@ -16,6 +16,7 @@ export function DoneCircle({
   label,
   title,
   disabled,
+  look,
   testID,
 }: {
   done: boolean;
@@ -25,12 +26,17 @@ export function DoneCircle({
   /** the words beside the circle: struck through when done */
   title?: string;
   disabled?: boolean;
+  /** visual v2 «Чек-лист» (`CheckList`): the circle `checkList.dot` 20 — open a dashed ring `dash` on the cell, done a light circle
+   *  with a dark check; a row `checkList.row` 34; the done words `mut`, not struck through */
+  look?: "list";
   testID?: string;
 }) {
   const { c } = useTheme();
   const ro = useReadOnly();
   const off = !!(disabled || ro);
-  const s = component.checkbox.size;
+  const list = look === "list";
+  const k = component.checkList;
+  const s = list ? k.dot : component.checkbox.size;
   const st = c.status.ok;
   return (
     <Press
@@ -46,7 +52,7 @@ export function DoneCircle({
       accessibilityState={{ checked: done, disabled: off }}
       // web: React Native Web does not write aria-checked from the state — without it the mark is silent there (as Toggle, P4c)
       {...({ "aria-checked": done, "aria-disabled": off || undefined } as object)}
-      style={{ minHeight: size.hitMin, minWidth: size.hitMin, flexDirection: "row", alignItems: "center", gap: space[3] }}
+      style={{ minHeight: list ? k.row : size.hitMin, minWidth: size.hitMin, flexDirection: "row", alignItems: "center", gap: space[3] }}
     >
       <View
         testID={testID ? `${testID}-circle` : undefined}
@@ -54,17 +60,18 @@ export function DoneCircle({
           width: s,
           height: s,
           borderRadius: radius.pill,
-          borderWidth: done ? 0 : component.checkbox.border,
-          borderColor: c.mut,
-          backgroundColor: done ? st.fill : "transparent",
+          borderWidth: done ? 0 : list ? k.dash : component.checkbox.border,
+          borderStyle: list && !done ? "dashed" : "solid",
+          borderColor: list ? c.dash : c.mut,
+          backgroundColor: list ? (done ? c.ink : c.surf2) : done ? st.fill : "transparent",
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        {done ? <Icon name="check" s={size.iconSm} color={st.on} /> : null}
+        {done ? <Icon name="check" s={list ? k.glyph : size.iconSm} color={list ? c.surf : st.on} /> : null}
       </View>
       {title ? (
-        <T v="body" tone={done ? "mut" : "ink"} style={{ flex: 1, textDecorationLine: done ? "line-through" : "none" }}>
+        <T v="body" tone={done ? "mut" : "ink"} numberOfLines={list ? 1 : undefined} style={{ flex: 1, textDecorationLine: done && !list ? "line-through" : "none" }}>
           {title}
         </T>
       ) : null}

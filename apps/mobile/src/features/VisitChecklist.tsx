@@ -109,8 +109,8 @@ function ItemRow({ v, item }: { v: Visit; item: ChecklistItem }) {
   // «сделано» of an item — the one done circle (spec 56 §6, DS §9 А4), not a square checkbox; what is under the label stays under it
   return (
     <View style={{ gap: space[1] }}>
-      <DoneCircle testID={`chk-item-${item.id}`} done={item.done} disabled={!may} label={item.label} title={item.label} onChange={() => store.toggleCheck(v.id, item.id)} />
-      {sub ? <View style={{ paddingLeft: component.checkbox.size + space[3] }}>{sub}</View> : null}
+      <DoneCircle look="list" testID={`chk-item-${item.id}`} done={item.done} disabled={!may} label={item.label} title={item.label} onChange={() => store.toggleCheck(v.id, item.id)} />
+      {sub ? <View style={{ paddingLeft: component.checkList.dot + space[3] }}>{sub}</View> : null}
     </View>
   );
 }

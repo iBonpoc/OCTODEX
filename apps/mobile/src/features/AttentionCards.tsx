@@ -205,6 +205,8 @@ export function useHomeHeader() {
     initials: initials(me?.name ?? "") || "·",
     text: useGreeting(),
     date: formatDayKey(todayKey(), { weekday: "long", day: "numeric", month: "long" }, loc),
+    // the folded header's small title (visual-v2 «Корень вкладки — Главная», кадр 3): «Сегодня, 20 нояб.»
+    mini: t("hdr.today", { d: formatDayKey(todayKey(), { day: "numeric", month: "short" }, loc) }),
     // 820/1280: the profile is at the bottom of the side menu — the avatar there is not a second door
     onAvatar: wide ? undefined : () => router.push("/more"),
     avatarLabel: t("nav.profile"),

@@ -14,15 +14,16 @@ import { GroupedList, ListGroup } from "../groupedList";
 import { NowCard, type NowCardProps } from "../nowCard";
 import { Screen } from "../surfaces";
 import { SummaryLine, type SummaryItem } from "../summaryLine";
-import { CreateButton, Greeting, HeaderIcons, MoreButton, TemplateFrame } from "./parts";
+import { CreateButton, HeaderIcons, MoreButton, TemplateFrame } from "./parts";
 import { attentionRows, templateLayout } from "./templateRules";
 import type { CreateAction, IconAction, MoreAction } from "./types";
 
 export interface OverviewScreenProps {
   /** the screen's name (the tests, VoiceOver, the tab); drawn as the 30 title only without `greeting` */
   title: string;
-  /** the head instead of the 30 title: avatar · «Доброе утро, Алекс» 17 · the date 13 (Greeting) — the icons stay on one row at 390 */
-  greeting?: { initials: string; text: string; date: string; onAvatar?: () => void; avatarLabel: string };
+  /** the root header of a role's «Главная» (v2 «Корень вкладки»): the avatar on the left (→ «Ещё»), the date in the 13 line, «Доброе
+   *  утро, Алекс» as the 30 title; folded — «Сегодня, 20 нояб.» (`mini`) */
+  greeting?: { initials: string; text: string; date: string; mini?: string; onAvatar?: () => void; avatarLabel: string };
   /** a role's «Главная» (default): the company line «Компания ▾» and its «not loaded yet» under the head, the sync badge; `false` — not */
   home?: boolean;
   headerIcons?: IconAction[];
@@ -52,7 +53,8 @@ export function OverviewScreen(p: OverviewScreenProps) {
     details: !!p.details,
   });
   const att = attentionRows(p.attention?.rows ?? []);
-  const greet = p.greeting ? <Greeting testID={`${p.testID}-greeting`} {...p.greeting} /> : undefined;
+  const g = p.greeting;
+  const avatar = g ? (g.onAvatar ? { initials: g.initials, onPress: g.onAvatar, label: g.avatarLabel, testID: "home-profile" } : null) : undefined;
   const body = (
     <View style={{ gap: space[6] }}>
       {p.next ? (
@@ -84,8 +86,10 @@ export function OverviewScreen(p: OverviewScreenProps) {
     return (
       <TemplateFrame
         testID={p.testID}
-        title={p.title}
-        lead={greet}
+        kind="root"
+        title={g?.text ?? p.title}
+        kicker={g?.date}
+        avatar={avatar ?? undefined}
         right={
           <>
             <HeaderIcons icons={p.headerIcons ?? []} />
@@ -99,9 +103,8 @@ export function OverviewScreen(p: OverviewScreenProps) {
   return (
     <Screen
       testID={p.testID}
-      title={p.title}
-      titleHidden={!!greet}
-      headerLead={greet}
+      title={g?.text ?? p.title}
+      head={{ kind: "root", kicker: g?.date, mini: g?.mini, avatar }}
       home={p.home ?? true}
       headerIcons={p.headerIcons}
       right={tail}

@@ -1,4 +1,4 @@
-import { component, font, size, space } from "@octo/design-tokens";
+import { component, font, space } from "@octo/design-tokens";
 
 /**
  * Two side by side when they fit (founder 21.11.2026, #2350: «в стиле компакт… если две кнопки в столбик — я бы сделал две кнопки
@@ -10,7 +10,7 @@ export type PairLayout = "row" | "column";
 
 /** the width a button label takes in one line: the padding, the icon with its gap, the characters (`component.pair.charEm` of the font) */
 export function buttonNeed(label: string, icon: boolean): number {
-  return space[4] * 2 + (icon ? size.iconSm + space[2] : 0) + Math.ceil(label.length * font.size.button * component.pair.charEm);
+  return space[4] * 2 + (icon ? component.button.glyph + space[2] : 0) + Math.ceil(label.length * font.size.button * component.pair.charEm);
 }
 
 /**

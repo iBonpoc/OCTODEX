@@ -19,12 +19,15 @@ describe("StatTile / StatGrid (BUILD-SPEC §1)", () => {
     expect(statRows([1, 2, 3], 2)).toEqual([[1, 2], [3]]);
     expect(statRows([1, 2], 1)).toEqual([[1], [2]]);
   });
-  it("the fill is a pastel of the theme, always with its word; «!» is the warn icon, the tile keeps its colour", () => {
+  // visual v2 «Плитки» (21.11): a card tile with an icon in a circle, not a pastel; the one yellow tile is `accent`
+  it("the tile is a card with its word and an icon in a circle; one may be the yellow; «!» is the warn icon, the tile keeps its colour", () => {
     const src = readFileSync(join(__dirname, "..", "src", "ui", "statTile.tsx"), "utf8");
-    expect(src).toMatch(/pastels\[name\]\[pastel\]/);
+    expect(src).not.toMatch(/pastels/);
     expect(src).toMatch(/label: string;/);
     expect(src).toMatch(/c\.status\.warn\.text/);
-    expect(src).toMatch(/minHeight: component\.statTile\.h/);
+    expect(src).toMatch(/minHeight: small \? component\.statTile\.hSm : component\.statTile\.h/);
+    expect(src).toMatch(/backgroundColor: accent \? c\.acc/);
+    expect(src).toMatch(/component\.statTile\.icon/);
   });
   it("the sub line under the figure is said with it (wave 3: «Выезды 1 · 0 закрыто»)", () => {
     expect(statSaid("Выезды", 1, "0 закрыто")).toBe("Выезды: 1, 0 закрыто");

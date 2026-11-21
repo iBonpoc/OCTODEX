@@ -28,7 +28,9 @@ describe("the two Overviews are the template «Обзор»", () => {
     it(`${name}: nothing own — no Button, Press, Card or ListCard on the screen; rows are GroupRow, tiles StatTile`, () => {
       expect(s).not.toMatch(/<(Button|Press|ListCard|CardGrid)\b/);
       expect(s).toMatch(/<GroupRow\b/);
-      expect(s).toMatch(/<StatTile\b[^>]*pastel=/);
+      // visual v2 (21.11): a tile carries an icon, no pastel
+      expect(s).toMatch(/<StatTile\b[^>]*icon=/);
+      expect(s).not.toMatch(/pastel=/);
     });
     it(`${name}: no «appear once per session» animation (LAYOUT-RULES §8 п.1: the home is opened 100 times a day)`, () => {
       expect(s).not.toMatch(/react-native-reanimated/);
@@ -37,13 +39,14 @@ describe("the two Overviews are the template «Обзор»", () => {
   it("the office: «Требует действия» goes through the template (it shows three) and «Все ›» opens Triage", () => {
     expect(today).toMatch(/attention=\{\{ title: t\("todayR\.action"\), rows: att\.rows, all: \{[^}]*\/triage/);
   });
-  it("the office: four tiles — leads peach, estimates lav, owed butter, received mint (BUILD-SPEC §2.1)", () => {
-    const tiles = [...today.matchAll(/<StatTile testID="(tile-[a-z]+)" pastel="([a-z]+)"/g)].map((m) => `${m[1]}:${m[2]}`);
-    expect(tiles).toEqual(["tile-leads:peach", "tile-estimates:lav", "tile-owed:butter", "tile-received:mint"]);
+  it("the office: four tiles — leads, estimates, owed, received, each with its icon; none yellow (the Home's one yellow is «В пути»)", () => {
+    const tiles = [...today.matchAll(/<StatTile testID="(tile-[a-z]+)" icon="([a-zA-Z]+)"/g)].map((m) => `${m[1]}:${m[2]}`);
+    expect(tiles).toEqual(["tile-leads:inbox", "tile-estimates:doc", "tile-owed:invoice", "tile-received:wallet"]);
+    expect(today).not.toMatch(/<StatTile\b[^>]*\baccent\b/);
   });
-  it("the tech: two tiles, his money mint and his visits lav; no bell and no company money (BUILD-SPEC §2.14)", () => {
-    expect(visits).toMatch(/testID="tile-collected" pastel="mint"/);
-    expect(visits).toMatch(/testID="tile-visits"\s+pastel="lav"/);
+  it("the tech: two tiles, his money and his visits; no bell and no company money (BUILD-SPEC §2.14)", () => {
+    expect(visits).toMatch(/testID="tile-collected" icon="dollar"/);
+    expect(visits).toMatch(/testID="tile-visits"\s+icon="calendar"/);
     expect(visits).not.toMatch(/awaitingCents|receivedIndex|tile-owed/);
     expect(cards).toMatch(/role !== "tech" \? \[\{ icon: "bell"/);
   });

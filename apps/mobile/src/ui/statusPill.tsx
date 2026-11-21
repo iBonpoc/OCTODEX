@@ -1,10 +1,10 @@
 /**
- * StatusPill (BUILD-SPEC §1): a status as an icon and a word — `chip.h` 24, `chip.px` 10, the icon `statusIcon` 12 and the
- * word 12 semibold in `status[x].fill` / `.text` of the theme. Five: ok ✓, info ◷, warn !, bad ×, neutral ✎. It presses only
+ * StatusPill (visual v2 «Плашка статуса»): a status as an icon and a word — `chip.h` 24, radius 12, the icon `statusPill.icon` 13
+ * and the word 12/600 in the quiet tones `status[x].fill` / `.text` of the theme (ok #86D3A0/#1C2E23 …), padding 7 · 9. Five: ok ✓, info ◷, warn !, bad ×, neutral ✎. It presses only
  * where the office changes the status (the object's header → `StatusPicker`); elsewhere it is text.
  */
 import { View } from "react-native";
-import { component, radius, size, space, spaceHalf, statusIcon, type StatusName } from "@octo/design-tokens";
+import { component, radius, space, spaceHalf, statusIcon, type StatusName } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T } from "./primitives";
 
@@ -26,7 +26,8 @@ export function StatusPill({ status, label, onPress, a11y, testID }: {
       testID={onPress ? undefined : testID}
       style={{
         minHeight: component.chip.h,
-        paddingHorizontal: component.chip.px,
+        paddingLeft: component.statusPill.padL,
+        paddingRight: component.statusPill.padR,
         paddingVertical: spaceHalf.hair,
         borderRadius: radius.pill,
         backgroundColor: st.fill,
@@ -38,7 +39,7 @@ export function StatusPill({ status, label, onPress, a11y, testID }: {
         maxWidth: "100%",
       }}
     >
-      <Icon name={statusIcon[status]} s={size.iconXs} color={st.text} />
+      <Icon name={statusIcon[status]} s={component.statusPill.icon} color={st.text} />
       <T v="micro" w="semibold" capped style={{ color: st.text, flexShrink: 1 }}>
         {label}
       </T>

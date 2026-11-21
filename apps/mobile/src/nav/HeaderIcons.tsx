@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useI18n } from "@/i18n";
-import { IconButton } from "@/ui/controls";
+import { HeaderButton } from "@/ui/headerIcon";
 import type { IconAction } from "@/ui/templates/types";
 
 /** the one way into search (prototype v2, BUILD-PLAN §2 п.4): /search opens with the keyboard up */
@@ -15,8 +15,8 @@ export function useSearchIcon(): IconAction {
   return { icon: "search", a11y: t("nav.searchTab"), onPress: openSearch, testID: "hdr-search" };
 }
 
-/** the same icon as a button (HomeHeader: search · bell · avatar) */
+/** the same icon as a button (HomeHeader: search · bell) — the one header's circle 40 */
 export function SearchIcon() {
   const a = useSearchIcon();
-  return <IconButton testID={a.testID} icon={a.icon} label={a.a11y} onPress={a.onPress} bare />;
+  return <HeaderButton testID={a.testID} icon={a.icon} label={a.a11y} onPress={a.onPress} />;
 }

@@ -1,8 +1,8 @@
 import { router } from "expo-router";
-import type { PastelName } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { StatGrid, StatTile } from "@/ui/statTile";
+import type { IconKey } from "@/ui/primitives";
 import type { CreateAction } from "@/ui/templates";
 import { canSeeInvoiceList, canSeePayments } from "@/features/moneyLists";
 import { moneySummary, MONEY_TILES, type MoneyTile } from "@/features/invoice/moneySummary";
@@ -51,7 +51,8 @@ export function useMoneyCreate(): { create: CreateAction; onCreate: (k: string) 
   };
 }
 
-const PASTEL: Record<MoneyTile, PastelName> = { waiting: "lav", overdue: "peach", received: "mint", toBill: "butter" };
+/** visual v2 «Плитки»: an icon in a circle; the screen's one yellow is the tile «Должны» (waiting) */
+const ICON: Record<MoneyTile, IconKey> = { waiting: "invoice", overdue: "clock", received: "wallet", toBill: "doc" };
 const LABEL = { waiting: "proto.money.tile.waiting", overdue: "proto.money.tile.overdue", received: "proto.money.tile.received", toBill: "proto.money.tile.toBill" } as const;
 
 /**
@@ -78,7 +79,8 @@ export function MoneyTiles({ selected, onSelect }: { selected?: MoneyTile; onSel
           testID={`money-tile-${k}`}
           label={t("proto.money.tile.count", { label: t(LABEL[k]), n: s[k].n })}
           value={s[k].cents ? moneyWhole(s[k].cents) : 0}
-          pastel={PASTEL[k]}
+          icon={ICON[k]}
+          accent={k === "waiting"}
           warn={k === "overdue" && s.overdue.n ? t("proto.money.tile.overdueWarn", { n: s.overdue.n }) : undefined}
           selected={onSelect && (k === "waiting" || k === "overdue") ? selected === k : undefined}
           onPress={() => open(k)}

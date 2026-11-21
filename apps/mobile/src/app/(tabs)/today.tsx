@@ -193,10 +193,10 @@ export default function Today() {
     >
       {/* the tiles: what burns and the money of today; each opens exactly the records it counts (founder 05.11); a zero tile is not drawn */}
       <StatGrid testID="today-tiles">
-        <StatTile testID="tile-leads" pastel="peach" label={t("proto.home.tile.leads")} value={leadsWaiting.length} sub={longest ? t("proto.home.tile.leadsWarn", { m: longest }) : undefined} warn={longest ? t("proto.home.tile.leadsWarn", { m: longest }) : undefined} onPress={() => router.push("/leads")} />
-        <StatTile testID="tile-estimates" pastel="lav" label={t("proto.home.tile.estimates")} value={estWaiting} sub={estLate ? t("proto.home.tile.estLate", { n: estLate }) : undefined} warn={estLate ? t("proto.home.tile.estLate", { n: estLate }) : undefined} onPress={() => router.push("/estimates")} />
-        <StatTile testID="tile-owed" pastel="butter" label={t("proto.home.tile.owed")} value={moneyWhole(n.awaitingCents)} sub={aw.overdue ? t("proto.home.tile.overdue", { n: tn("todayR.invN", aw.overdue) }) : undefined} warn={aw.overdue ? t("proto.home.tile.overdue", { n: tn("todayR.invN", aw.overdue) }) : undefined} onPress={() => router.push("/invoice?f=owed")} />
-        <StatTile testID="tile-received" pastel="mint" label={t("proto.home.tile.received")} value={moneyWhole(got.cents)} onPress={() => router.push("/figures/received?period=today")} />
+        <StatTile testID="tile-leads" icon="inbox" label={t("proto.home.tile.leads")} value={leadsWaiting.length} sub={longest ? t("proto.home.tile.leadsWarn", { m: longest }) : undefined} warn={longest ? t("proto.home.tile.leadsWarn", { m: longest }) : undefined} onPress={() => router.push("/leads")} />
+        <StatTile testID="tile-estimates" icon="doc" label={t("proto.home.tile.estimates")} value={estWaiting} sub={estLate ? t("proto.home.tile.estLate", { n: estLate }) : undefined} warn={estLate ? t("proto.home.tile.estLate", { n: estLate }) : undefined} onPress={() => router.push("/estimates")} />
+        <StatTile testID="tile-owed" icon="invoice" label={t("proto.home.tile.owed")} value={moneyWhole(n.awaitingCents)} sub={aw.overdue ? t("proto.home.tile.overdue", { n: tn("todayR.invN", aw.overdue) }) : undefined} warn={aw.overdue ? t("proto.home.tile.overdue", { n: tn("todayR.invN", aw.overdue) }) : undefined} onPress={() => router.push("/invoice?f=owed")} />
+        <StatTile testID="tile-received" icon="wallet" label={t("proto.home.tile.received")} value={moneyWhole(got.cents)} onPress={() => router.push("/figures/received?period=today")} />
       </StatGrid>
       <ListGroup title={t("proto.home.crews")} all={{ label: t("plan.title"), onPress: () => router.push("/plan"), testID: "crew-plan" }} testID="today-crews">
         {crewRows}

@@ -12,7 +12,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { component, spaceHalf, font, motion, radius, space, statusIcon, type StatusName, size as sizes } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
-import { fillStyle, fillStyleFlat } from "./fill";
+import { fillStyle } from "./fill";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { SelectField } from "./selectField";
 import { FIELD, type FieldType } from "./fieldTypes";
@@ -61,9 +61,11 @@ export function Button({
   const { wide } = useDevice();
   const bar = size === "bar";
   const h = bar ? component.button.hit : component.button[size ?? (wide ? "md" : "phone")];
+  // visual v2 («Кнопки»): a capsule 40, 15/700, the icon 18; the pair — the filled yellow + the dark cell `surf2` with yellow words
+  // (`accText`, ≥ 4.5:1 in both themes, contrast.test.ts) + a round icon 40; no frames
   const bg =
     variant === "primary" ? c.acc : variant === "secondary" ? c.surf2 : variant === "danger" ? c.status.bad.fill : "transparent";
-  const fg = variant === "primary" ? c.onAcc : variant === "danger" ? c.status.bad.on : c.ink;
+  const fg = variant === "primary" ? c.onAcc : variant === "secondary" ? c.accText : variant === "danger" ? c.status.bad.on : c.ink;
   return (
     <Press
       testID={testID}
@@ -80,10 +82,10 @@ export function Button({
           borderRadius: radius.pill,
           ...(bar ? { paddingVertical: space[1] } : null),
           backgroundColor: bg,
-          borderWidth: variant === "secondary" ? 1 : 0,
-          // the edge of a secondary button is seen (≥ 3:1 to the page, WCAG 1.4.11, DS §7.3 1.15.6, #1728): the fields' frame,
-          // not `bd` (≈1.2:1 in the light theme — a «Связано» chip on 390 had no edge)
-          borderColor: c.bdField,
+          // v2: no frame — a secondary button is told by its cell and its yellow words (WCAG 1.4.11 — the words identify it);
+          // the light theme's primary keeps the dark edge `accEdge` (yellow on the light ground is < 3:1)
+          borderWidth: variant === "primary" ? component.hairline : 0,
+          borderColor: variant === "primary" ? c.accEdge : "transparent",
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "center",
@@ -96,7 +98,7 @@ export function Button({
       {/* the icon keeps its size: in a narrow button (the left one of a pinned bar) the words wrap, the icon never shrinks to a dot (#1474) */}
       {icon ? (
         <View style={{ flexShrink: 0 }}>
-          <Icon name={icon} s={sizes.iconSm} color={fg} />
+          <Icon name={icon} s={component.button.glyph} color={fg} />
         </View>
       ) : null}
       <T v="button" style={bar ? { color: fg, flexShrink: 1, textAlign: "center" } : { color: fg }} numberOfLines={bar ? 2 : 1}>
@@ -113,6 +115,7 @@ export function IconButton({
   active,
   tone,
   bare,
+  size,
   testID,
 }: {
   icon: IconKey;
@@ -123,10 +126,12 @@ export function IconButton({
   tone?: "acc" | "plain" | "bad";
   /** no plate: the icon alone, visible `valueIcon` 22, the box 36 × 44 (iOS Contacts' «⊖», DS §9 А14а) */
   bare?: boolean;
+  /** visual v2 «Круглые кнопки»: `card` — 32 inside a card (the timer's «⌃», a row's call); default 40 (the zone is 44 either way) */
+  size?: "card";
   testID?: string;
 }) {
   const { c } = useTheme();
-  const s = component.dockBtn;
+  const s = size === "card" ? component.roundButton.card : component.roundButton.header;
   if (bare)
     return (
       <Press
@@ -157,15 +162,15 @@ export function IconButton({
         borderRadius: radius.pill,
         alignItems: "center",
         justifyContent: "center",
+        // v2: a round button is a cell on its card, no frame
         backgroundColor: filled ? c.acc : c.surf2,
-        borderWidth: filled ? 0 : 1,
-        borderColor: c.bd,
+        borderWidth: 0,
         // a toggle: off — no plate, `mut` icon; on — «Заливка» (the same as a chosen chip or tab)
         ...(active === false ? { backgroundColor: "transparent", borderWidth: 0 } : null),
         ...(active && !filled ? fillStyle(c) : null),
       }}
     >
-      <Icon name={icon} s={sizes.iconMd} color={filled ? c.onAcc : tone === "bad" ? c.status.bad.text : active === false ? c.mut : c.ink} />
+      <Icon name={icon} s={size === "card" ? component.button.glyph : sizes.iconMd} color={filled ? c.onAcc : tone === "bad" ? c.status.bad.text : active === false ? c.mut : c.ink} />
     </Press>
   );
 }
@@ -270,6 +275,7 @@ export function Segmented<K extends string>({
   radio,
   label,
   equal,
+  accent,
 }: {
   items: { key: K; label: string }[];
   value: K;
@@ -285,6 +291,9 @@ export function Segmented<K extends string>({
   label?: string;
   /** with `full`: every segment the same width — a column under each lines up with it (the totals of the options, DS §8.10) */
   equal?: boolean;
+  /** visual v2: the chosen segment is the screen's ONE yellow fill (the Plan's «День»); without it the chosen is the neutral cell
+   *  `surf3` — a screen has one yellow fill (oneAccent.test.ts counts it) */
+  accent?: boolean;
 }) {
   const ro = useReadOnly();
   const { c } = useTheme();
@@ -326,6 +335,10 @@ export function Segmented<K extends string>({
 
   const pill = useAnimatedStyle(() => ({ left: left.value, width: width.value }));
   const { h, pad } = component.segmented;
+  const chosenBg = accent ? c.acc : c.surf3;
+  // visual v2: a segment across the width shares it equally (a form's radio keeps its labels' widths, they give way instead)
+  const same = equal || (full && !scroll && !radio);
+  const chosenFg = accent ? c.onAcc : c.ink;
   const bar = (
     <View
       accessibilityRole={radio ? "radiogroup" : "tablist"}
@@ -334,15 +347,18 @@ export function Segmented<K extends string>({
         minHeight: h,
         padding: pad,
         borderRadius: radius.pill,
-        backgroundColor: c.track,
+        // visual v2 «Сегмент»: the track is a card (`surf` + the top highlight), 3 inside
+        backgroundColor: c.surf,
+        borderTopWidth: component.hairline,
+        borderTopColor: c.hl,
         flexDirection: "row",
         alignSelf: full ? "stretch" : "flex-start",
       }}
     >
       {ready ? (
         <Animated.View
-          // selected: ink frame on a raised surface — yellow is kept for the one main action (rule 2, unslop 05.11 №1)
-          style={[{ position: "absolute", top: pad, bottom: pad, borderRadius: radius.pill }, fillStyleFlat(c), pill]}
+          // the chosen: the yellow with `accent` (the screen's one fill), else the chosen cell `surf3`
+          style={[{ position: "absolute", top: pad, bottom: pad, borderRadius: radius.pill, backgroundColor: chosenBg }, pill]}
         />
       ) : null}
       {items.map((it) => {
@@ -354,7 +370,7 @@ export function Segmented<K extends string>({
             onPress={() => onChange(it.key)}
             disabled={ro}
             visibleHeight={h}
-            containerStyle={equal ? { flex: 1 } : undefined}
+            containerStyle={same ? { flex: 1 } : undefined}
             accessibilityRole={radio ? "radio" : "tab"}
             accessibilityState={radio ? { selected: sel, checked: sel } : { selected: sel }}
             {...(radio ? ({ "aria-checked": sel } as object) : null)}
@@ -366,14 +382,14 @@ export function Segmented<K extends string>({
               minHeight: h - pad * 2,
               paddingHorizontal: space[3],
               justifyContent: "center",
-              ...(equal ? { alignItems: "center" } : null),
+              ...(same ? { alignItems: "center" } : null),
               // a choice in a form never grows past its card: the labels give way, they do not push the segment out
               ...(radio ? { flexShrink: 1 } : null),
               borderRadius: radius.pill,
-              ...(!ready && sel ? fillStyle(c) : { backgroundColor: "transparent" }),
+              backgroundColor: !ready && sel ? chosenBg : "transparent",
             }}
           >
-            <T v="button" w={sel ? "semibold" : undefined} style={{ color: sel ? c.ink : c.mut }} numberOfLines={1}>
+            <T v="caption" w="semibold" style={{ color: sel ? chosenFg : c.mut }} numberOfLines={1}>
               {it.label}
             </T>
           </Press>
@@ -383,7 +399,7 @@ export function Segmented<K extends string>({
   );
   // scroll: a fixed capsule the width of the screen; the tabs slide inside it, its rounded ends never get cut
   return scroll ? (
-    <View style={{ alignSelf: "stretch", borderRadius: radius.pill, overflow: "hidden", backgroundColor: c.track }}>
+    <View style={{ alignSelf: "stretch", borderRadius: radius.pill, overflow: "hidden", backgroundColor: c.surf }}>
       <ScrollView
         ref={strip}
         horizontal
@@ -476,10 +492,16 @@ export function progressText(value: number, max: number, label?: string): string
   const pct = max ? Math.round(Math.min(100, (value / max) * 100)) : 0;
   return `${label ?? `${value} / ${max}`} · ${pct} %`;
 }
-export function ProgressBar({ value, max, label }: { value: number; max: number; label?: string }) {
+/** visual v2 «Прогресс»: only words and a number — «3 из 5 · 62 %» 15/700 on the right, what it is of («Работа», `caption`) 12/600 `mut` on the left */
+export function ProgressBar({ value, max, label, caption }: { value: number; max: number; label?: string; caption?: string }) {
   return (
-    <View accessibilityRole="progressbar" accessibilityValue={{ min: 0, max, now: value }}>
-      <T v="caption" tone="mut" tabular>
+    <View accessibilityRole="progressbar" accessibilityLabel={caption} accessibilityValue={{ min: 0, max, now: value }} style={{ flexDirection: "row", alignItems: "baseline", justifyContent: caption ? "space-between" : "flex-start", gap: space[3] }}>
+      {caption ? (
+        <T v="micro" tone="mut" numberOfLines={1} style={{ flexShrink: 1 }}>
+          {caption}
+        </T>
+      ) : null}
+      <T v="body" w="bold" numberOfLines={1}>
         {progressText(value, max, label)}
       </T>
     </View>

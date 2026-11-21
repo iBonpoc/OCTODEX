@@ -51,7 +51,9 @@ export function tagsOf(src: string, name: string): string[] {
 export function filledCount(src: string): number {
   const buttons = tagsOf(src, "Button").filter((t) => !/\bvariant=/.test(t) || /\bvariant=["']primary["']/.test(t)).length;
   const steps = tagsOf(src, "MainStep").filter((t) => !/\boutline\b/.test(t)).length;
-  return buttons + steps;
+  // visual v2 (21.11): the one yellow may also be a tile (Деньги — «Должны») or the chosen segment (План — «День»)
+  const yellow = [...tagsOf(src, "StatTile"), ...tagsOf(src, "Segmented")].filter((t) => /\baccent\b/.test(t)).length;
+  return buttons + steps + yellow;
 }
 
 /** found on 21.11 (static count, branches included) — may only go down */
@@ -64,7 +66,7 @@ const DEBT: Record<string, number> = {
   "app/company/checklist/[id].tsx": 2,
   "app/company/intake.tsx": 3,
   "app/company/modules.tsx": 2,
-  "app/estimate/new.tsx": 5,
+  "app/estimate/new.tsx": 4,
   "app/p/[token].tsx": 3,
   "app/purchase-order/[id].tsx": 2,
   "app/settings/profile.tsx": 3,
@@ -85,6 +87,7 @@ describe("one filled accent on a screen", () => {
     expect(filledCount(`<Button variant="primary" label="a" />`)).toBe(1);
     expect(filledCount(`<Button variant="secondary" label="a" /><Button variant={"danger"} label="b" />`)).toBe(0);
     expect(filledCount(`<MainStep placement="top" main={m} /><MainStep placement="top" outline main={m} />`)).toBe(1);
+    expect(filledCount(`<StatTile label="a" value={1} accent /><StatTile label="b" value={2} /><Segmented accent items={x} />`)).toBe(2);
   });
   it("no screen file has more than one, except the debt of 21.11 — which may only go down", () => {
     const over: string[] = [];

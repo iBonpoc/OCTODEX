@@ -20,14 +20,20 @@ describe("«Заливка» of the chosen (#1306)", () => {
   it("ChoiceChips, MultiChips and the filter bar take it", () => {
     for (const f of ["ui/controls.tsx", "ui/filterBar.tsx"]) expect(src(f), f).toMatch(/fillStyle\(c\)/);
   });
-  it("a moving slider (tab bar pill, Segmented) takes the fill without the shadow (#1354)", () => {
+  it("a moving slider takes the fill without the shadow (#1354)", () => {
     const flat = src("ui/fill.ts").match(/export function fillStyleFlat[\s\S]*?\n}/)?.[0] ?? "";
     expect(flat).toMatch(/backgroundColor: c\.surf\b/); // palette A (#2350): `surf` — see «the fill is seen in both themes»
     expect(flat).not.toMatch(/shadow|elevation/);
-    // the pill of the tab bar lives in the iOS 26 GlassView and animates left/width: no shadow on it
-    expect(src("nav/TabBar.tsx")).toMatch(/borderRadius: radius\.pill \}, fillStyleFlat\(c\),[^\n]*pill\]/);
-    expect(src("nav/TabBar.tsx")).not.toMatch(/fillStyle\(c\)/);
-    expect(src("ui/controls.tsx")).toMatch(/borderRadius: radius\.pill \}, fillStyleFlat\(c\), pill\]/);
+  });
+  // visual v2 (docs/design/visual-v2.html, founder 21.11) changed two of these: the tab bar's active tab is the yellow icon and
+  // word with NO fill under it; the segment's chosen one is the chosen cell `surf3` — or, with `accent`, the screen's one yellow
+  it("v2: the tab bar has no fill under the active tab; the segment's slider is surf3 or (accent) the yellow, no shadow", () => {
+    const bar = src("nav/TabBar.tsx");
+    expect(bar).not.toMatch(/fillStyle|backgroundColor: c\.acc/);
+    expect(bar).toMatch(/sel \? c\.accText : c\.mut/);
+    const ctl = src("ui/controls.tsx");
+    expect(ctl).toMatch(/const chosenBg = accent \? c\.acc : c\.surf3;/);
+    expect(ctl).toMatch(/borderRadius: radius\.pill, backgroundColor: chosenBg \}, pill\]/);
   });
   it("the chosen is never the accent and never an ink frame", () => {
     const c = src("ui/controls.tsx");

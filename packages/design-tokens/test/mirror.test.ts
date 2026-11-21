@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { component, drawing, drawingPrint, font, graphite, icons, motion, print, radius, shopSheet, size, space, spaceHalf, themes, tokens, z } from "../src/index";
+import { component, drawing, drawingPrint, font, graphite, icons, motion, print, radius, rhythm, shopSheet, size, space, spaceHalf, themes, tokens, z } from "../src/index";
 
 /**
  * The founder's design system (design/naryad-ds/tokens/*.css, icons.json) is the source of truth.
@@ -33,6 +33,11 @@ describe("app tokens mirror the founder's DS css", () => {
     expect(font.lineHeight).toEqual({ tight: px("lh-tight"), body: px("lh-body"), snug: px("lh-snug") });
     expect(font.size.button).toBe(px("fs-btn"));
   });
+  it("visual v2: the figure sizes, the tracking and the rhythm of a screen", () => {
+    expect([font.size.figure, font.size.figureSm]).toEqual([px("fs-figure"), px("fs-figure-sm")]);
+    expect([font.tracking.display, font.tracking.figure]).toEqual([parseFloat(v("tracking-display")), parseFloat(v("tracking-figure"))]);
+    expect(rhythm).toEqual({ screen: px("rhythm-screen"), cardGap: px("rhythm-card-gap"), cardPad: px("rhythm-card-pad"), rowGap: px("rhythm-row-gap"), blockGap: px("rhythm-block-gap"), headGap: px("rhythm-head-gap") });
+  });
   it("spacing scale", () => {
     for (const k of [1, 2, 3, 4, 5, 6, 8] as const) expect(space[k], `space-${k}`).toBe(px(`space-${k}`));
     expect(spaceHalf).toEqual({ hair: px("space-hair"), tight: px("space-tight") });
@@ -54,7 +59,7 @@ describe("app tokens mirror the founder's DS css", () => {
     expect(size.hitMin).toBe(px("hit-min"));
     expect(size.hitMinAndroid).toBe(px("hit-min-android"));
     expect([component.rowOption, component.tileMin]).toEqual([px("row-option"), px("tile-min")]);
-    expect(component.button).toEqual({ sm: px("btn-sm"), md: px("btn-md"), phone: px("btn-phone-visible"), hit: px("hit-min") });
+    expect(component.button).toEqual({ sm: px("btn-sm"), md: px("btn-md"), phone: px("btn-phone-visible"), hit: px("hit-min"), glyph: px("btn-glyph") });
     expect(component.field).toEqual({ h: px("field-h"), phone: px("field-phone") });
     expect(component.chip).toEqual({ h: px("chip-h"), px: px("chip-px") });
     expect(component.segmented).toEqual({ h: px("seg-h"), pad: px("seg-pad") });
@@ -147,6 +152,12 @@ describe("app tokens mirror the founder's DS css", () => {
       expect(norm(c.ovSolid)).toBe(norm(v("ov-solid", t)));
       expect(norm(c.acc)).toBe(norm(v("acc", t)));
       expect(norm(c.onAcc)).toBe(norm(v("on-acc", t)));
+      expect(norm(c.accText)).toBe(norm(v("acc-text", t)));
+      expect(norm(c.accEdge)).toBe(norm(v("acc-edge", t)));
+      // visual v2 (21.11): the layers, the card's highlight, the accent's tone, the checklist's lines, the tab bar's ground
+      for (const k of ["surf3", "hl", "tint", "tint2", "off", "dash", "tab"] as const) expect(norm(c[k]), k).toBe(norm(v(k, t)));
+      expect(norm(c.onAccTint)).toBe(norm(v("on-acc-tint", t)));
+      expect(norm(c.onAccMut)).toBe(norm(v("on-acc-mut", t)));
       expect(radius.card).toBe(px("r"));
       expect([c.blur, c.blurOverlay]).toEqual([px("blur"), px("blurov")]);
     });

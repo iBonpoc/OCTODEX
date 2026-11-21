@@ -105,12 +105,10 @@ describe("design system: components", () => {
     "modules/gutters/draw/DrawScreen.tsx": 2,
     "modules/gutters/draw/FracPicker.tsx": 1,
     "modules/gutters/settings/SettingsScreen.tsx": 1,
-    "nav/Fab.tsx": 3,
-    "nav/HomeHeader.tsx": 1,
+    "nav/Fab.tsx": 2, // the header «＋» is the one header's HeaderButton now (visual-v2)
     "nav/NavMenu.tsx": 2,
     "nav/SearchEntry.tsx": 1,
     "nav/SideNav.tsx": 2,
-    "nav/TabBar.tsx": 1,
   };
   // #2022: an own look is also a style kept in a variable (`style={hitBox}`), a link drawn in the child text (`textDecorationLine`),
   // or a button-sized Press (`accessibilityRole="button"` + `minHeight: component.button…`) — not only a background in the tag
@@ -172,6 +170,7 @@ describe("design system: components", () => {
     "ui/controls.tsx": 7, // Button, IconButton, Toggle, Segmented, TagChip, TextField's action; + a style kept in a variable (#2022)
     "ui/filterBar.tsx": 4, // FilterBar (chip, «Фильтр», «Сброс»), FilterRow
     "ui/fracKeys.tsx": 1, // FracKeys — the key
+    "ui/headerIcon.tsx": 1, // HeaderButton — the one header's circle 40 («←», «×», search, the bell, «＋», «⋯»; visual-v2 «Единая шапка»)
     "ui/listCard.tsx": 2, // ListCard, its open panel
     "ui/optionTile.tsx": 1, // OptionTile
     "ui/overlays.tsx": 3, // Menu row; LEGACY ×2 — the old unsaved question of Sheet, goes with #1996 (UnsavedAsk from Button)

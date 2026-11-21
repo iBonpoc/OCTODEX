@@ -58,15 +58,19 @@ export function ListScreen<T>(p: ListScreenProps<T>) {
   const title = p.count === undefined ? p.title : `${p.title} · ${p.count}`;
   const searchIcon: IconAction = { icon: "search", a11y: t("tpl.searchIn", { x: p.title }), onPress: () => setOpened((o) => !o || p.search.value !== ""), testID: `${p.testID}-search` };
   const icons = always ? (p.headerIcons ?? []) : [searchIcon, ...(p.headerIcons ?? [])];
+  const chips = layout.under.includes("chips") && p.chips ? <ChoiceChips layout="strip" testID={`${p.testID}-chips`} items={p.chips.items} value={p.chips.value} onChange={p.chips.onChange} /> : null;
+  const field = layout.under.includes("searchField") ? (
+    <TextField testID={`${p.testID}-search-field`} type="search" icon="search" value={p.search.value} onChangeText={p.search.onChange} placeholder={p.search.placeholder} label={p.search.placeholder} autoFocus={opened || always} />
+  ) : null;
+  const filters = layout.under.includes("filters") ? p.filters : null;
   const under = (
     <View style={{ gap: space[3] }}>
-      {layout.under.includes("searchField") ? (
-        <TextField testID={`${p.testID}-search-field`} type="search" icon="search" value={p.search.value} onChangeText={p.search.onChange} placeholder={p.search.placeholder} label={p.search.placeholder} autoFocus={opened || always} />
-      ) : null}
-      {layout.under.includes("chips") && p.chips ? <ChoiceChips layout="strip" testID={`${p.testID}-chips`} items={p.chips.items} value={p.chips.value} onChange={p.chips.onChange} /> : null}
-      {layout.under.includes("filters") ? p.filters : null}
+      {field}
+      {chips}
+      {filters}
     </View>
   );
+  // the screen: the chips are the strip that sticks under the folded header (v2 «полоса разделов / сегмент прилипает»)
   const body = layout.body.includes("empty") ? (
     <View testID={`${p.testID}-empty`}>{p.empty}</View>
   ) : (
@@ -81,6 +85,12 @@ export function ListScreen<T>(p: ListScreenProps<T>) {
       ))}
     </GroupedList>
   );
+  const rest = (
+    <View style={{ gap: space[3] }}>
+      {filters}
+      {body}
+    </View>
+  );
   const tail = (
     <>
       {p.create && p.onCreate ? <CreateButton create={p.create} onCreate={p.onCreate} testID={`${p.testID}-create`} /> : null}
@@ -91,6 +101,7 @@ export function ListScreen<T>(p: ListScreenProps<T>) {
     return (
       <TemplateFrame
         testID={p.testID}
+        kind={p.back ? "object" : "root"}
         title={title}
         back={p.back}
         right={
@@ -112,9 +123,19 @@ export function ListScreen<T>(p: ListScreenProps<T>) {
       </TemplateFrame>
     );
   return (
-    <Screen testID={p.testID} title={title} back={p.back} headerIcons={icons} right={tail} aside={aside}>
-      {under}
-      {body}
+    <Screen
+      testID={p.testID}
+      title={title}
+      back={p.back}
+      headerIcons={icons}
+      right={tail}
+      aside={aside}
+      tabs={chips ?? undefined}
+      tabKey={chips ? p.chips?.value : undefined}
+      below={chips ? rest : undefined}
+    >
+      {field}
+      {chips ? null : rest}
     </Screen>
   );
 }

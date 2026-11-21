@@ -10,7 +10,7 @@ export type IconRowItem = IconAction & { label?: string; disabled?: boolean; rea
 
 /**
  * QuickActions — the icon AND its word (BUILD-SPEC §1: a bare icon is not recognised in the sun), a replacement of `features/ActionTile`.
- * `row`: 3…5 circles `quickAction.row` 44 on `surf2`, icon 20 `ink`, the caption 12 medium `mut` under it, across the width; the fifth
+ * `row`: 3…5 circles `roundButton.quick` 44 on `surf` with the top highlight (visual v2), icon 20 `ink`, the caption 12 medium `mut` under it, across the width; the fifth
  * is «Ещё» (the screen gives it); a caption takes up to two lines (`ICON_ROW_LABEL_LINES`), never cut to «…». `inline`: 2 circles `quickAction.inline` 36 with the 44 touch zone (the header's address line), the
  * word is the VoiceOver label. Pressed — `pressScale` (Press); unavailable — `dimOpacity`, the reason is the VoiceOver hint. No accent
  * in either theme. More than the limit is cut and told in development (`iconRowItems`).
@@ -21,7 +21,7 @@ export function IconRow({ actions, variant = "row", testID }: { actions: IconRow
   const { shown, problem } = iconRowItems(actions, variant);
   if (problem && __DEV__) console.warn(problem);
   const inline = variant === "inline";
-  const d = inline ? component.quickAction.inline : component.quickAction.row;
+  const d = inline ? component.quickAction.inline : component.roundButton.quick;
   return (
     <View testID={testID} style={{ flexDirection: "row", alignItems: "flex-start", gap: component.iconRow.gap, ...(inline ? null : { alignSelf: "stretch", justifyContent: "space-around" }) }}>
       {shown.map((a) => (
@@ -39,7 +39,8 @@ export function IconRow({ actions, variant = "row", testID }: { actions: IconRow
           style={{ alignItems: "center", gap: component.iconRow.gap }}
         >
           {/* the circle is the look this component defines (BUILD-SPEC §1 QuickActions); the touch is the whole column */}
-          <View style={{ width: d, height: d, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
+          {/* visual v2 «Круглые кнопки»: the quick row's 44 is a card on the screen (`surf` + the top highlight); inline — the cell */}
+          <View style={{ width: d, height: d, borderRadius: radius.pill, backgroundColor: inline ? c.surf2 : c.surf, borderTopWidth: inline ? 0 : component.hairline, borderTopColor: c.hl, alignItems: "center", justifyContent: "center" }}>
             <Icon name={a.icon} s={size.iconMd} color={c.ink} />
           </View>
           {!inline && a.label ? (

@@ -21,6 +21,7 @@ import { useI18n } from "@/i18n";
 import { router, type Href } from "expo-router";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import type { GuardedUndo } from "@/data/undo";
+import { SheetHead } from "./templates/screenHeader";
 
 /**
  * Every modal turns with the device (docs/specs/32): without it an iPhone shows a modal in portrait only
@@ -632,33 +633,8 @@ export function Sheet({
                 />
               ) : null}
               {title || onBack ? (
-                <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], minHeight: size.hitMin }}>
-                  {onBack ? (
-                    <Press testID="sheet-back" onPress={onBack} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("common.back")}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: space[1] }}>
-                        <Icon name="chevronLeft" s={size.iconSm} />
-                        <T v="button">{t("common.back")}</T>
-                      </View>
-                    </Press>
-                  ) : null}
-                  <View testID="sheet-title" style={{ flex: 1 }}>
-                    <T v="title" numberOfLines={2}>{title ?? ""}</T>
-                  </View>
-                  <Press testID="sheet-close" onPress={() => requestClose()} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("common.close")}>
-                    <View
-                      style={{
-                        width: component.dockBtn,
-                        height: component.dockBtn,
-                        borderRadius: radius.pill,
-                        backgroundColor: c.surf2,
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <Icon name="close" s={size.iconSm} />
-                    </View>
-                  </Press>
-                </View>
+                // the one header's sheet kind (visual-v2 «Шторка»): the title 22/700 on the left, «×» 32 on the right
+                <SheetHead title={title} onClose={() => requestClose()} closeLabel={t("common.close")} back={onBack ? { label: t("common.back"), onPress: onBack } : undefined} />
               ) : (
                 <View style={{ height: space[2] }} />
               )}

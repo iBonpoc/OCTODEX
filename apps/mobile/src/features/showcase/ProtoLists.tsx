@@ -75,15 +75,15 @@ export function ProtoLists() {
         main={{ label: t("visit.call"), onPress: said(t("visit.call")), testID: "showcase-now-main" }}
       />
       <StatGrid testID="showcase-stat-grid">
-        <StatTile label={t("money.overdue")} value="$4,120" pastel="peach" warn={t("st.overdue")} selected={tile === "overdue"} onPress={() => setTile("overdue")} testID="showcase-tile-overdue" />
-        <StatTile label={t("visit.amountDue")} value="$9,800" pastel="butter" selected={tile === "due"} onPress={() => setTile("due")} testID="showcase-tile-due" />
-        <StatTile label={t("st.paid")} value="$22,300" pastel="mint" selected={tile === "paid"} onPress={() => setTile("paid")} testID="showcase-tile-paid" />
-        <StatTile label={t("st.draft")} value={0} pastel="lav" testID="showcase-tile-zero" />
+        <StatTile label={t("money.overdue")} value="$4,120" icon="clock" warn={t("st.overdue")} selected={tile === "overdue"} onPress={() => setTile("overdue")} testID="showcase-tile-overdue" />
+        <StatTile label={t("visit.amountDue")} value="$9,800" icon="invoice" accent selected={tile === "due"} onPress={() => setTile("due")} testID="showcase-tile-due" />
+        <StatTile label={t("st.paid")} value="$22,300" icon="wallet" selected={tile === "paid"} onPress={() => setTile("paid")} testID="showcase-tile-paid" />
+        <StatTile label={t("st.draft")} value={0} icon="doc" testID="showcase-tile-zero" />
       </StatGrid>
       {/* wave 3 (г): the line under the figure («Выезды 1 · 0 закрыто») */}
       <StatGrid testID="showcase-stat-grid-sub">
-        <StatTile label={t("ds.proto.visits")} value={1} sub={t("ds.proto.closedN", { n: 0 })} pastel="lav" testID="showcase-tile-sub" />
-        <StatTile label={t("st.paid")} value="$1,240" sub="Nov 12" pastel="mint" testID="showcase-tile-sub-paid" />
+        <StatTile label={t("ds.proto.visits")} value={1} sub={t("ds.proto.closedN", { n: 0 })} icon="calendar" testID="showcase-tile-sub" />
+        <StatTile label={t("st.paid")} value="$1,240" sub="Nov 12" icon="wallet" testID="showcase-tile-sub-paid" />
       </StatGrid>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
         <StatusPill status="ok" label={t("st.paid")} />
