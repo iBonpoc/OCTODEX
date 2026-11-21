@@ -292,6 +292,29 @@ jobs:
           name: e2e-screenshots-${{ matrix.view }}-${{ matrix.part }}
           path: apps/mobile/e2e/out/
 
+  # #2099 (the founder: «почему чат не проверяет, занят номер миграции?»): a new migration's version is unique, later than main's last and
+  # not reserved for another task (supabase/migrations/RESERVED.md); a new e2e spec's number and a new T in core_rls.sql — the same.
+  numbers:
+    name: Unique numbers (migrations, e2e, T)
+    needs: pause
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Numbers the PR adds are its own
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node scripts/numbersGuard.cjs
+
   # Rule 22 (CLAUDE.md, #902): the PR refers to a «до-1.0» task inside a release epic. Skipped: documents-only PRs and the
   # label «починка-main» (scripts/rule22.cjs). Reads the PR live (not from the event), so a re-run after editing the body is enough.
   rule22:
@@ -315,7 +338,7 @@ jobs:
 
   checks:
     name: checks
-    needs: [pause, changes, fast, bundle, build-web, e2e, rule22]
+    needs: [pause, changes, fast, bundle, build-web, e2e, rule22, numbers]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -336,6 +359,8 @@ jobs:
           if [ "$docs" = true ] && [ "$bundle" = "skipped" ]; then bundle=success; fi
           # rule22 runs on pull requests only: "skipped" on push/schedule is fine, failure is not
           [ "${{ needs.rule22.result }}" != "failure" ] && [ "${{ needs.rule22.result }}" != "cancelled" ] || { echo "::error::rule22=${{ needs.rule22.result }}"; exit 1; }
+          # numbers (#2099) runs on pull requests only, like rule22
+          [ "${{ needs.numbers.result }}" != "failure" ] && [ "${{ needs.numbers.result }}" != "cancelled" ] || { echo "::error::numbers=${{ needs.numbers.result }}"; exit 1; }
           [ "${{ needs.fast.result }}" = "success" ] && [ "$e2e" = "success" ] && [ "$bundle" = "success" ] || { echo "::error::changes=${{ needs.changes.result }} fast=${{ needs.fast.result }} bundle=${{ needs.bundle.result }} build-web=${{ needs.build-web.result }} e2e=${{ needs.e2e.result }}"; exit 1; }
 
   # A red nightly run opens (or adds to) one issue, so the director sees it in the morning (docs/ai/CHECKS.md §1).
