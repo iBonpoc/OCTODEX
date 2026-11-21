@@ -81,7 +81,15 @@ exports.run = async (h) => {
   await tid("showcase-due-none").click();
   h.expect(/Без даты/.test(await tid("showcase-due-row-button").innerText()), "С5 «Без даты» empties it");
 
-  // — the visit form: «Завтра» and a free slot are saved as the company's day and minute
+  // — the visit form: «Завтра» and a free slot are saved as the company's day and minute.
+  // The company works every day here: by default Sunday is a day off (no slots, no «Начало ⌄»), and on a Saturday «Завтра»
+  // was a Sunday — the spec went red every Saturday (21.11.2026, #2356). This spec checks the date field, not the hours.
+  {
+    const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));
+    const open = [480, 1080];
+    raw.db.company.businessHours = { sun: open, mon: open, tue: open, wed: open, thu: open, fri: open, sat: open };
+    await h.seed("octo.db.v5", raw);
+  }
   await h.go("/job/schedule?jobId=j1");
   await tid("vf-date-row-button").waitFor({ timeout: 8000 });
   const old = await p.evaluate(() => [...document.querySelectorAll('[role="radiogroup"]')].filter((e) => e.offsetParent !== null && !e.closest('[data-testid="vf-windows"]')).length);
