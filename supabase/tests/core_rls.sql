@@ -19392,4 +19392,76 @@ end $$;
 rollback;
 \echo 'T460–T467 ok'
 
+-- ================================================================ T468–T469: the last row of a history is the last written (#2250,
+-- migration 20261117650000). Rows of one transaction share «at», a uuid v7's order inside a millisecond is random:
+-- «at desc, id desc» picked any of them. seq (an identity) is the order they were written in. Its own rows, rolled back.
+:as_super
+begin;
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('54680000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T468 bracket', 'ea', 0, '{}');
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_millicents, vendor_tax_bps, markup_bps) values
+  ('54680000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 50000, 0, 1000);
+
+-- T468: two rows in one transaction, the id of the later one smaller (as a uuid v7 of the same millisecond may be)
+\echo 'T468 the last history row is the one written last'
+:as_super
+insert into public.catalog_price_history (id, company_id, item_id, unit_price_cents, prev_unit_price_cents, at) values
+  ('54680000-0000-4000-8000-ffffffffff01', 'ca000000-0000-0000-0000-000000000000', '54680000-0000-4000-8000-0000000000a1', 55, 111, '2026-11-19 12:00:00+00'),
+  ('54680000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '54680000-0000-4000-8000-0000000000a1', 55, 222, '2026-11-19 12:00:00+00');
+insert into public.catalog_price_recalc (id, company_id, item_id, sent_price_cents, server_price_cents, by, at) values
+  ('54680000-0000-4000-8000-ffffffffff03', 'ca000000-0000-0000-0000-000000000000', '54680000-0000-4000-8000-0000000000a1', 333, 55, 'a0000000-0000-0000-0000-000000000002', '2026-11-19 12:00:00+00'),
+  ('54680000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '54680000-0000-4000-8000-0000000000a1', 444, 55, 'a0000000-0000-0000-0000-000000000002', '2026-11-19 12:00:00+00');
+select tst.ok((select array_agg(prev_unit_price_cents order by seq) from public.catalog_price_history where item_id = '54680000-0000-4000-8000-0000000000a1' and prev_unit_price_cents in (111, 222)) = array[111, 222]::bigint[],
+  'T468 seq follows the order of writing, not the id');
+-- an old phone sends the price the item had before its last change (222): an echo — no note (red before: the row with
+-- the larger id, 111, was taken as the last one)
+:as_office_a
+update public.catalog_items set unit_price_cents = 222 where id = '54680000-0000-4000-8000-0000000000a1';
+:as_super
+select tst.ok((select unit_price_cents from public.catalog_items where id = '54680000-0000-4000-8000-0000000000a1') = 55
+          and tst.cnt($q$select 1 from public.catalog_price_recalc where item_id = '54680000-0000-4000-8000-0000000000a1' and sent_price_cents = 222$q$) = 0,
+  'T468 the echo of the price before the last change (the last row by seq) is recognised: no note');
+-- the same price sent again by the same person is one note: the last note (by seq) is 444
+:as_office_a
+update public.catalog_items set unit_price_cents = 444 where id = '54680000-0000-4000-8000-0000000000a1';
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_recalc where item_id = '54680000-0000-4000-8000-0000000000a1' and sent_price_cents = 444$q$) = 1,
+  format('T468 the same price again after the last note (by seq): one note, not two: %s',
+         tst.cnt($q$select 1 from public.catalog_price_recalc where item_id = '54680000-0000-4000-8000-0000000000a1' and sent_price_cents = 444$q$)));
+\echo 'T468 ok'
+
+-- T469: seq on the three tables — always there, once, the server's; it never goes against «at»; who sees costs reads it
+\echo 'T469 seq is the order of a history'
+select tst.ok((select count(*) = 3 from information_schema.columns where table_schema = 'public' and column_name = 'seq' and data_type = 'bigint'
+                 and is_nullable = 'NO' and is_identity = 'YES'
+                 and table_name in ('catalog_cost_history', 'catalog_price_history', 'catalog_price_recalc')),
+  'T469 seq is a not null bigint identity on the cost history, the price history and the recalc notes');
+-- the old rows numbered by (at, id): supabase/tests/upgrade/20261117650000_history_seq.after.sql (UPG468)
+select tst.ok((select count(*) = 3 from pg_index i join pg_class c on c.oid = i.indexrelid
+                where i.indisunique and c.relname in ('catalog_cost_history_seq_key', 'catalog_price_history_seq_key', 'catalog_price_recalc_seq_key')),
+  'T469 one seq once');
+select tst.ok(not has_table_privilege('authenticated', 'public.catalog_cost_history', 'insert')
+          and not has_table_privilege('authenticated', 'public.catalog_price_history', 'insert')
+          and not has_table_privilege('authenticated', 'public.catalog_price_recalc', 'update')
+          and not has_table_privilege('authenticated', 'public.catalog_cost_history', 'update')
+          and not has_table_privilege('authenticated', 'public.catalog_price_history', 'update')
+          and not has_table_privilege('authenticated', 'public.catalog_price_recalc', 'insert')
+          and not has_column_privilege('authenticated', 'public.catalog_cost_history', 'seq', 'update')
+          and not has_column_privilege('authenticated', 'public.catalog_price_history', 'seq', 'update')
+          and not has_column_privilege('authenticated', 'public.catalog_price_recalc', 'seq', 'update')
+          and not has_column_privilege('anon', 'public.catalog_cost_history', 'seq', 'select'),
+  'T469 nobody but the server writes the histories (no grant); anon reads nothing');
+:as_office_a
+select tst.ok(tst.cnt($q$select seq from public.catalog_price_history where item_id = '54680000-0000-4000-8000-0000000000a1'$q$) >= 2,
+  'T469 the office reads seq with the rows');
+:as_sales_a
+select tst.ok(tst.cnt($q$select seq from public.catalog_price_history where item_id = '54680000-0000-4000-8000-0000000000a1'$q$) = 0
+          and tst.cnt($q$select seq from public.catalog_cost_history$q$) = 0,
+  'T469 sales without view_costs reads no history rows (no seq either)');
+\echo 'T469 ok'
+:as_super
+rollback;
+\echo 'T468–T469 ok'
+
 \echo 'ALL TESTS PASSED'
