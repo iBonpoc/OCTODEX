@@ -32,6 +32,14 @@ export function contractTaxOf(d: D, job: Pick<Job, "id" | "estimateId" | "amount
 export { contractInvoices, isContractKind } from "@/features/contractKind";
 import { contractInvoices } from "@/features/contractKind";
 
+/**
+ * #2061 (the lead 18.11): a job has at most one live final invoice — the server's unique index
+ * invoices_one_deposit_final_idx (job_id, kind) where kind = 'final' and not void. A second final is refused on the phone
+ * too, so it never sits in the queue to be refused there.
+ */
+export const secondFinal = (d: Pick<DB, "invoices">, jobId: ID, kind: "progress" | "final"): boolean =>
+  kind === "final" && d.invoices.some((i) => i.jobId === jobId && i.kind === "final");
+
 /** a new invoice of `amountCents` on the job: refused (null) above the contract; else its subtotal and tax */
 export function contractInvoice(d: D, job: Pick<Job, "id" | "estimateId" | "amountCents" | "taxEnabled" | "taxRateBps" | "contractTaxCents">, amountCents: number): { subtotalCents: number; taxCents: number } | null {
   const live = contractInvoices(d, job.id).map((i) => ({ totalCents: i.totalCents, paidCents: i.paidCents, taxCents: i.taxCents }));

@@ -20,7 +20,8 @@ import { enRouteSms, filterJobHistory, jobHistory, nextOpenVisit, type JobHistor
 import { canSeeGateCode } from "@/features/properties";
 import { canPlan, visitWhen } from "@/features/schedule";
 import { completeBlock, jobAwaitingClose } from "@/features/jobDone";
-import { contractStatement, invoiceOwes, invoicesOwe } from "@octo/estimating-engine";
+import { invoiceOwes, invoicesOwe } from "@octo/estimating-engine";
+import { contractToInvoiceCents, restInvoiceKind } from "@/features/contractKind";
 import { RelatedBlock } from "@/features/RelatedBlock";
 import { JobLinesBlock, canEditJobLines } from "@/features/JobLinesBlock";
 import { JobTypeTags } from "@/features/JobTypeTags";
@@ -137,7 +138,8 @@ export default function JobScreen() {
   // S10: «Да, выполнена» / «Завершить работу» — the office, no open visit (the server checks the same in complete_job)
   const office = canPlan([store.role]);
   const awaiting = jobAwaitingClose(db, j);
-  const rest = contractStatement(j.amountCents, invoices).toInvoice;
+  // #2061: the contract's own invoices only (a standalone one is extra work) — as the server's limit
+  const rest = contractToInvoiceCents(db, j);
   const complete = () => {
     const block = completeBlock(db, j);
     if (block === "openVisits") return toast.show(t("job3.done.openVisits"));
@@ -149,7 +151,8 @@ export default function JobScreen() {
     // one tap = one balance invoice (a double tap before the re-render made two)
     if (restSent) return;
     setRestSent(true);
-    const undo = store.issueInvoice(j.id, "final", rest, t("job3.done.restTitle"));
+    // review of #2061: one final per job (the server refuses a second) — with a final already, the rest is a progress invoice
+    const undo = store.issueInvoice(j.id, restInvoiceKind(db, j.id), rest, t("job3.done.restTitle"));
     // #865: refused (above the contract) — said so, nothing to undo; the button works again
     if (!undo) {
       setRestSent(false);
