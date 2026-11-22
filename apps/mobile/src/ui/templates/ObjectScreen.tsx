@@ -15,7 +15,7 @@ import { layout as screenLayout, space } from "@octo/design-tokens";
 import { IconRow, type IconRowItem } from "../iconRow";
 import { MainStep, type MainStepTotal } from "../mainStep";
 import { ObjectHeader, objectHeadSub, type ObjectHeaderProps } from "../objectHeader";
-import { Card, Screen } from "../surfaces";
+import { Card, Screen, useFooterShown } from "../surfaces";
 import { ViewTabs } from "../viewTabs";
 import { CreateButton, MoreButton, TemplateFrame } from "./parts";
 import { SECOND_KEY, moreItems, templateLayout } from "./templateRules";
@@ -89,7 +89,12 @@ function useObjectParts<S extends string>(p: ObjectScreenProps<S>) {
   const onMore = (k: string) => (k === SECOND_KEY ? p.second?.onPress() : p.onMore(k));
   // the one step under the header: a 40 button by its words (never a plate across the screen, never two)
   const step = p.main && layout.under.includes("main") ? <MainStep placement="top" fit main={p.main} /> : null;
-  const below = !!p.mainBelowSections && p.sections.length > 0;
+  // the pinned bar exists only where the Screen has a footer (a phone, no tab bar): 820/1280 keep the step under the header
+  const footerOn = useFooterShown();
+  const sectioned = !!p.mainBelowSections && p.sections.length > 0;
+  const below = sectioned && footerOn;
+  // 820/1280 (no footer): the step stands first UNDER the strip — the strip still never moves between the sections
+  const underStrip = sectioned && !footerOn;
   const right = <ObjectRight create={p.create} onCreate={p.onCreate} items={items} onMore={onMore} testID={p.testID} />;
   // the selected pill stays one object while the section is the same (03 §2.5: the strip's items memoised)
   const tabs = useMemo(
@@ -112,7 +117,7 @@ function useObjectParts<S extends string>(p: ObjectScreenProps<S>) {
         {p.lead ? <HeaderFade>{p.lead}</HeaderFade> : null}
       </View>
       {p.now ?? null}
-      {below ? null : step}
+      {below || underStrip ? null : step}
     </View>
   );
   // v2 «Объект»: the name 30 | the rule | two lines; a client's «⌄» (the header has a panel) after the name
@@ -124,7 +129,7 @@ function useObjectParts<S extends string>(p: ObjectScreenProps<S>) {
       : undefined,
   };
   const bar = below && p.main ? <MainStep placement="bar" main={p.main} /> : null;
-  return { right, tabs, top, head, under: null as ReactNode, bar };
+  return { right, tabs, top, head, under: (underStrip ? step : null) as ReactNode, bar };
 }
 
 /**

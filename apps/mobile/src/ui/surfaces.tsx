@@ -5,7 +5,7 @@ import { ScreenScrollCtx, type ScreenScroll } from "./requiredForm";
 import { HeaderIcon } from "./headerIcon";
 import { coveredBottomOf, scrollTargetY } from "./requiredLogic";
 import { scrollBottom, setFooterInset } from "./footerInset";
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { router, useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
 import { isAppPath, navInsets } from "@/nav/shell";
 import { goTo } from "@/nav/go";
@@ -42,6 +42,9 @@ import { useHints } from "./hints";
 /* ---------- Background: --bg, or the ground gradient (--ground), + soft glows (--glow) ---------- */
 export function Background() {
   const { c, name } = useTheme();
+  // #2363 (founder: «в открытой карточке клиента градиента нет»): every screen's own gradient id — on the web the screen under it
+  // in the stack stays in the page hidden, and a shared id made the new screen point at the hidden one's gradient (not drawn)
+  const gid = `ground${name}${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const { width, height } = useWindowDimensions();
   return (
     // clipped to the screen: next to the side menu (820/1280) the screen is narrower than the window
@@ -49,22 +52,22 @@ export function Background() {
       <Svg width={width} height={height}>
         <Defs>
           {c.ground ? (
-            <LinearGradient id={`ground${name}`} x1={c.ground.x1} y1={c.ground.y1} x2={c.ground.x2} y2={c.ground.y2}>
+            <LinearGradient id={gid} x1={c.ground.x1} y1={c.ground.y1} x2={c.ground.x2} y2={c.ground.y2}>
               {c.ground.stops.map((st) => (
                 <Stop key={st.offset} offset={st.offset} stopColor={st.color} />
               ))}
             </LinearGradient>
           ) : null}
           {c.glow.map((g, i) => (
-            <RadialGradient key={i} id={`g${name}${i}`} cx="50%" cy="50%" rx="50%" ry="50%">
+            <RadialGradient key={i} id={`${gid}g${i}`} cx="50%" cy="50%" rx="50%" ry="50%">
               <Stop offset="0" stopColor={g.color} stopOpacity={g.opacity} />
               <Stop offset="0.6" stopColor={g.color} stopOpacity={0} />
             </RadialGradient>
           ))}
         </Defs>
-        <Rect width={width} height={height} fill={c.ground ? `url(#ground${name})` : c.bg} />
+        <Rect width={width} height={height} fill={c.ground ? `url(#${gid})` : c.bg} />
         {c.glow.map((g, i) => (
-          <Ellipse key={i} cx={g.cx * width} cy={g.cy * height} rx={g.rx} ry={g.ry} fill={`url(#g${name}${i})`} />
+          <Ellipse key={i} cx={g.cx * width} cy={g.cy * height} rx={g.rx} ry={g.ry} fill={`url(#${gid}g${i})`} />
         ))}
       </Svg>
     </View>

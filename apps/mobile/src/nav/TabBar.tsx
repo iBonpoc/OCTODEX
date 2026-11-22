@@ -151,7 +151,9 @@ function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: Secti
               accessibilityRole="tab"
               accessibilityState={{ selected: sel }}
               aria-selected={sel}
-              accessibilityLabel={it.id === "leads" && leadsN ? `${t(it.label as DictKey)}, ${t("r1.tab.leadsWaiting", { n: leadsN })}` : t(it.label as DictKey)}
+              accessibilityLabel={t(it.label as DictKey)}
+              // the tab's name stays «Лиды»; the count is its value — VoiceOver reads «Лиды, 2 без ответа»
+              accessibilityValue={it.id === "leads" && leadsN ? { text: t("r1.tab.leadsWaiting", { n: leadsN }) } : undefined}
               containerStyle={{ flex: 1 }}
               style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: spaceHalf.hair }}
             >

@@ -74,7 +74,8 @@ exports.run = async (h0, { browser, BASE, layout, installClock }) => {
     await expectText(new RegExp(`\\b${Number(today.slice(8))} \\S+ · ${all} выезд`), "the kicker of the company's day");
     // the day's list «Выезды сегодня» is the phone's; 820 / 1280 draw the board by person under the same kicker
     if (layout.width < 820) await expectText(/Выезды сегодня/, "«Сегодня» is the company's day");
-    await expectText(/8:30\s*AM/, "the visit in the Plan on the company's clock");
+    // #2363 q73: in the Plan's plate «AM» stands as two small letters in a column («8:30 A M» in the page's text)
+    await expectText(/8:30\s*A\s*M/, "the visit in the Plan on the company's clock");
 
     // the form: the company's tomorrow (a working day), the 9:00 slot = 9:00 AM in Los Angeles
     let offset = 1;
@@ -96,7 +97,7 @@ exports.run = async (h0, { browser, BASE, layout, installClock }) => {
     if (layout.width >= 820) {
       // 820 / 1280: the same strip of days over the board by person
       await p.getByTestId(`plan-strip-${target}`).locator("visible=true").first().click();
-      await expectText(/9:00\s*AM/, "the new visit at 9:00 AM in the Plan");
+      await expectText(/9:00\s*A\s*M/, "the new visit at 9:00 AM in the Plan");
     } else {
       // v2: the day is a pill of the strip (the arrows step by a week)
       await p.getByTestId(`plan-strip-${target}`).locator("visible=true").first().click();
@@ -105,7 +106,8 @@ exports.run = async (h0, { browser, BASE, layout, installClock }) => {
       const row = p.getByTestId(`plan-row-${added[0].id}`).locator("visible=true").first();
       await row.waitFor({ timeout: 5000 });
       const rowSaid = (await row.innerText()).replace(/\s+/g, " ");
-      h0.expect(/^9:00\b/.test(rowSaid) && /\b(AM|PM)\b/.test(rowSaid), `the new visit at 9:00 AM in the Plan: ${rowSaid}`);
+      // #2363 q73: the plate's AM/PM is two small letters in a column — «9:00 A M» in the page's text
+      h0.expect(/^9:00\b/.test(rowSaid) && /\b(A\s?M|P\s?M)\b/.test(rowSaid), `the new visit at 9:00 AM in the Plan: ${rowSaid}`);
     }
     h0.expect(!errors.length, errors.join("\n"));
   } finally {
