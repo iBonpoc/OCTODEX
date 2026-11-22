@@ -52,7 +52,7 @@ import { useDayWord } from "@/features/useDayWord";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
 import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle, useFooterShown } from "@/ui/surfaces";
-import { draftCtx, draftSnapshot, draftsKey, findDraft, isEditCtx, nextDrafts, removeDraft, restoreDraftOnDevice, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
+import { draftCtx, draftSnapshot, draftsKey, findDraft, isEditCtx, nextDrafts, removeDraft, restoreDraftOnDevice, useDraftEditorOpen, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
 import { useConfirm } from "@/ui/confirmDialog";
 import { doneAction, gateAtOpen, gateBeforeSave, markOf, takeMine } from "@/features/estimate/editSession";
 import { useAuth } from "@/cloud/auth";
@@ -90,6 +90,8 @@ export default function EstimateBuilderScreen() {
 type Params = { id?: string; customerId?: string; propertyId?: string; leadId?: string; template?: string; editTemplate?: string; pick?: string };
 
 function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDrafts> }) {
+  // #2381 review 4: while an editor is open it owns the drafts list — a draft put back by an undo waits until it closes
+  useDraftEditorOpen();
   const params = useLocalSearchParams<Params>();
   const store = useStore();
   const { db } = store;

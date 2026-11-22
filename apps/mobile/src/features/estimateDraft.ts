@@ -6,7 +6,7 @@
  * (deleteAccount.ts DEVICE_PREFIXES). Pure parts unit-tested: test/estimateDraft.test.ts.
  */
 import type { EstimateDoc } from "@/data/types";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { usePersistentState } from "@/data/persist";
 import { hasContent, newDoc, normalizeDoc } from "./estimateDoc";
@@ -132,14 +132,44 @@ export function useEstimateDrafts(key: string) {
 /**
  * #2381 (review 4): a draft put back on the device straight — for an undo that runs after its editor has closed (the copy's toast
  * «Отменить»): the editor's own list state is gone, a write through it would be lost. One read, one write; a broken list stays.
+ * The order with the drafts' deferred write (250 ms, `usePersistentState`): only an estimate editor owns the list; a closing editor
+ * writes what waits at once (persist.ts, unmount → flush), and the toast's «Отменить» arms after `toastArmMs` 300 — so the restore
+ * comes after. An editor OPEN meanwhile (another estimate's «Изменить» within the toast's 5 s) holds the old list and would write it
+ * over the restore: then the restore waits until the last editor closes (after its own final write).
  */
-export async function restoreDraftOnDevice(key: string, d: EstimateDraft, now = Date.now(), s: { getItem: (k: string) => Promise<string | null>; setItem: (k: string, v: string) => Promise<void> } = AsyncStorage as never): Promise<boolean> {
-  try {
-    const raw = await s.getItem(key);
-    const list = raw ? cleanDrafts(JSON.parse(raw)) : [];
-    await s.setItem(key, JSON.stringify(upsertDraft(list, d, now)));
-    return true;
-  } catch {
-    return false;
+type Kv = { getItem: (k: string) => Promise<string | null>; setItem: (k: string, v: string) => Promise<void> };
+let openEditors = 0;
+let waiting: (() => Promise<unknown>)[] = [];
+/** an estimate editor is open (it owns the drafts list until it closes) */
+export function markEditorOpen(): () => void {
+  openEditors += 1;
+  return () => {
+    openEditors -= 1;
+    if (openEditors > 0) return;
+    const run = waiting;
+    waiting = [];
+    // after the closing editor's own last write (issued in the same unmount, before this runs)
+    setTimeout(() => run.forEach((f) => void f()), 0);
+  };
+}
+export function useDraftEditorOpen() {
+  useEffect(() => markEditorOpen(), []);
+}
+
+export function restoreDraftOnDevice(key: string, d: EstimateDraft, now = Date.now(), s: Kv = AsyncStorage as never): Promise<boolean> {
+  const run = async () => {
+    try {
+      const raw = await s.getItem(key);
+      const list = raw ? cleanDrafts(JSON.parse(raw)) : [];
+      await s.setItem(key, JSON.stringify(upsertDraft(list, d, now)));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (openEditors > 0) {
+    waiting.push(run);
+    return Promise.resolve(true);
   }
+  return run();
 }

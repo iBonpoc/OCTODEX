@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: async () => null, setItem: async () => {} } }));
-import { DRAFT_DAYS, MAX_DRAFTS, cleanDraft, cleanDrafts, draftCtx, restoreDraftOnDevice, draftSnapshot, draftWorthKeeping, draftsKey, findDraft, isEditCtx, nextDrafts, removeDraft, upsertDraft, type EstimateDraft } from "../src/features/estimateDraft";
+import { DRAFT_DAYS, MAX_DRAFTS, cleanDraft, cleanDrafts, draftCtx, markEditorOpen, restoreDraftOnDevice, draftSnapshot, draftWorthKeeping, draftsKey, findDraft, isEditCtx, nextDrafts, removeDraft, upsertDraft, type EstimateDraft } from "../src/features/estimateDraft";
 import { newDoc } from "../src/features/estimateDoc";
 import { isDeviceKey } from "../src/features/deleteAccount";
 import type { EstimateDoc } from "../src/data/types";
@@ -142,6 +142,19 @@ describe("unit:estimateDraft — #2381 the edit of a saved estimate («Гото�
 });
 
 describe("unit:estimateDraft — #2381 review 4: the copy's «Отменить» after its editor closed", () => {
+  it("an editor open meanwhile: the restore waits until it closes — its own last write never covers the restore", async () => {
+    vi.useFakeTimers();
+    const m = new Map<string, string>([["k", "[]"]]);
+    const s = { getItem: async (k: string) => m.get(k) ?? null, setItem: async (k: string, v: string) => void m.set(k, v) };
+    const close = markEditorOpen();
+    await restoreDraftOnDevice("k", draft("edit|e1", { estimateId: "e1", baseSavedAt: "" }), NOW, s);
+    expect(JSON.parse(m.get("k")!)).toHaveLength(0); // waits: the open editor owns the list
+    m.set("k", JSON.stringify([draft("new|b|||")])); // the editor's last write as it closes
+    close();
+    await vi.runAllTimersAsync();
+    vi.useRealTimers();
+    expect(JSON.parse(m.get("k")!).map((d: EstimateDraft) => d.ctx).sort()).toEqual(["edit|e1", "new|b|||"]);
+  });
   it("puts the edit back on the device (one read, one write), next to what is there", async () => {
     const m = new Map<string, string>([["k", JSON.stringify([draft("new|a|||")])]]);
     const s = { getItem: async (k: string) => m.get(k) ?? null, setItem: async (k: string, v: string) => void m.set(k, v) };
