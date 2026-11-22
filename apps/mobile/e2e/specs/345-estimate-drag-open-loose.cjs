@@ -43,6 +43,8 @@ exports.run = async (h) => {
   await h.shot("open-moved");
 
   // every line in a section: save, put them into «Roof», open again
+  // optional: #2363 q72 — scrolled down, «Итого» is the capsule; a tap opens the bar with «Готово»
+  if (!(await p.getByTestId("ue-save").locator("visible=true").count())) await p.getByTestId("ue-save-capsule").click({ timeout: 3000 }).catch(() => {}); // (#2387: at the page's end the bar opens by itself)
   await tid("ue-save").click();
   await p.waitForFunction(() => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.estimates ?? []).some((e) => e.customerId === "c2" && e.doc?.options?.[0]?.lines?.length === 3), null, { timeout: 8000 });
   const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));

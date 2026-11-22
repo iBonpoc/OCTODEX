@@ -58,27 +58,7 @@ export function ListGroup({ title, count, all, children, inset = component.listR
   if (!rows.length) return null;
   return (
     <View style={{ gap: rhythm.headGap }} testID={testID}>
-      {title || all || count != null ? (
-        // visual v2: the block's title 17/700 `ink`, «Все ›» 13/600 `mut` on its baseline; the title → the content 10
-        <RowView style={{ justifyContent: "space-between", alignItems: "baseline" }}>
-          <RowView gap={space[2]} style={{ flex: 1, minWidth: 0 }}>
-            <T v="heading" style={{ flexShrink: 1 }} numberOfLines={1}>
-              {title ?? ""}
-            </T>
-            {count != null ? <CountPill n={count} testID={testID ? `${testID}-count` : undefined} /> : null}
-          </RowView>
-          {all ? (
-            <Press onPress={all.onPress} visibleHeight={size.iconMd} accessibilityRole="link" accessibilityLabel={all.label} testID={all.testID}>
-              <RowView gap={space[1]}>
-                <T v="caption" w="semibold" tone="mut">
-                  {all.label}
-                </T>
-                <Icon name="chevronRight" s={size.iconXs} color={c.mut} />
-              </RowView>
-            </Press>
-          ) : null}
-        </RowView>
-      ) : null}
+      {title || all || count != null ? <GroupHead title={title ?? ""} count={count} countTestID={testID ? `${testID}-count` : undefined} all={all} /> : null}
       {bare ? (
         <View style={{ gap: rhythm.cardGap }}>{rows}</View>
       ) : (
@@ -93,6 +73,91 @@ export function ListGroup({ title, count, all, children, inset = component.listR
       )}
     </View>
   );
+}
+
+/**
+ * The title of a group (visual v2 «Заголовок блока»): 17/700 `ink` and its CountPill 8 apart; on the right «Все ›», a figure
+ * (`value` 17/700 tabular — an estimate group's sum) and quiet actions (`actions` — bare icons 36, the zone 44, in a column of their
+ * own so a group's «⋯» stands over its rows' trash). `fold` makes the title a button that folds the group («˅»/«›» before the
+ * word, `aria-expanded`). One title for every group of the app: Главная, Деньги, a client, an estimate's groups (#2387).
+ */
+export function GroupHead({ title, count, countTestID, all, icon, value, valueTestID, fold, actions, testID }: {
+  title: string;
+  count?: number;
+  countTestID?: string;
+  all?: { label: string; onPress: () => void; testID?: string };
+  /** a kind's icon before the word (an estimate group: materials, labor, services) */
+  icon?: IconKey;
+  value?: string;
+  valueTestID?: string;
+  fold?: { open: boolean; onToggle: () => void; label: string; testID?: string };
+  actions?: ReactNode;
+  testID?: string;
+}) {
+  const { c } = useTheme();
+  const words = (
+    <RowView gap={space[2]} style={{ flex: 1, minWidth: 0 }}>
+      {/* (the marks keep their size: only the title gives way) */}
+      {fold ? <View style={{ flexShrink: 0 }}><Icon name={fold.open ? "chevronDown" : "chevronRight"} s={size.iconSm} color={c.mut} /></View> : null}
+      {icon ? <View style={{ flexShrink: 0 }}><Icon name={icon} s={size.iconSm} color={c.mut} /></View> : null}
+      {/* the title wraps (never «Материа…»: a narrow column of 820 holds the sum, «⋯» and «⠿» too) */}
+      <T v="heading" style={{ flexShrink: 1 }} numberOfLines={2}>
+        {title}
+      </T>
+      {count != null ? <CountPill n={count} testID={countTestID} /> : null}
+    </RowView>
+  );
+  return (
+    // (no gap after the figure: it ends where a row's figure ends — right before the actions' column, as the rows' sums before their trash)
+    <View testID={testID}>
+    <RowView gap={0} style={{ justifyContent: "space-between", alignItems: fold || actions ? "center" : "baseline", minHeight: fold || actions ? size.hitMin : undefined }}>
+      {fold ? (
+        <Press onPress={fold.onToggle} visibleHeight={size.hitMin} accessibilityRole="button" accessibilityLabel={fold.label} accessibilityState={{ expanded: fold.open }} testID={fold.testID} containerStyle={{ flex: 1, minWidth: 0 }}>
+          {words}
+        </Press>
+      ) : (
+        words
+      )}
+      {all ? (
+        <Press onPress={all.onPress} visibleHeight={size.iconMd} accessibilityRole="link" accessibilityLabel={all.label} testID={all.testID} containerStyle={{ marginLeft: space[3] }}>
+          <RowView gap={space[1]}>
+            <T v="caption" w="semibold" tone="mut">
+              {all.label}
+            </T>
+            <Icon name="chevronRight" s={size.iconXs} color={c.mut} />
+          </RowView>
+        </Press>
+      ) : null}
+      {value != null ? (
+        <View testID={valueTestID} style={{ marginLeft: space[3], flexShrink: 0 }}>
+          <T v="heading" tabular numberOfLines={1}>
+            {value}
+          </T>
+        </View>
+      ) : null}
+      {actions}
+    </RowView>
+    </View>
+  );
+}
+
+/**
+ * The card edge of one row of a group whose rows are drawn one by one (an estimate's sortable lines: the drag needs each row on its
+ * own): the `surf` ground and the card's corners on the first and the last row only — the rows join into ONE card, as ListGroup.
+ */
+export function useGroupEdge() {
+  const { c } = useTheme();
+  return (first: boolean, last: boolean) => ({
+    backgroundColor: c.surf,
+    ...(first ? { borderTopLeftRadius: radius.card, borderTopRightRadius: radius.card } : null),
+    ...(last ? { borderBottomLeftRadius: radius.card, borderBottomRightRadius: radius.card } : null),
+  });
+}
+
+/** the inset hairline between two rows of a group (ListGroup draws its own; a group drawn row by row takes this one) */
+export function GroupHairline({ inset = space[4] }: { inset?: number }) {
+  const { c } = useTheme();
+  return <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.bd, marginLeft: inset }} />;
 }
 
 /**
@@ -129,21 +194,33 @@ export interface GroupRowProps {
   wrap?: boolean;
   /** 1280: the row whose record is open in the panel beside the list (`aria-current`, a tinted row; the focus returns to it, spec 06) */
   selected?: boolean;
+  /** «›» at the right end: the row opens something (an estimate's discount, tax, deposit) */
+  chevron?: boolean;
+  /** the testID of the figure on the right (the tests read it) */
+  valueTestID?: string;
+  /** the right side is a quiet mark (a document's language «EN»), not a figure: 13 `mut` */
+  valueMark?: boolean;
   testID?: string;
 }
 
-export function GroupRow({ title, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, wrap, selected, testID }: GroupRowProps) {
+/**
+ * The inside of a GroupRow — the lead, the title 15/600 over its line 13 `mut`, the figure or columns, a StatusPill and «›» — for a
+ * row whose press is its owner's (an estimate's line: it opens in place, it is held to be carried). One look for every row (#2387).
+ */
+export function GroupRowBody({ title, subtitle, lead, value, cols, status, compact, wrap, selected, chevron, quiet, valueMark, padRight = space[4], below, ids }: Pick<GroupRowProps, "title" | "subtitle" | "lead" | "value" | "cols" | "status" | "compact" | "wrap" | "selected" | "chevron" | "valueMark"> & {
+  /** a row that counts for nothing now (a hidden line, a line on the client's choice): the title and the figure `mut` */
+  quiet?: boolean;
+  padRight?: number;
+  /** under the line: the row's marks (chips) */
+  below?: ReactNode;
+  /** testIDs of the parts (the tests read them); `subtitleInner` — a second name of the line (an estimate's «по желанию клиента») */
+  ids?: { title?: string; subtitle?: string; subtitleInner?: string; value?: string };
+}) {
   const { c } = useTheme();
-  const [down, setDown] = useState(false);
-  const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  const more = rowActions(swipe);
-  const said = rowSaid({ title, subtitle, value: cols?.length ? cols.map((x) => `${x.label} ${x.value}`).join(", ") : value, status, when: lead && "time" in lead ? [lead.time, lead.sub].filter(Boolean).join(" ") : undefined });
-  const onLong = more.length ? (e: GestureResponderEvent) => setMenu({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, w: 0, h: 0 }) : undefined;
-  const onAction = (e: AccessibilityActionEvent) => more.find((a) => a.key === e.nativeEvent.actionName)?.onPress();
   const check = lead && "done" in lead ? lead : null;
   const pad = { minHeight: compact ? component.rowCompact : component.listRow.h, paddingVertical: space[2], gap: space[3] };
-  const main = (
-    <RowView style={[pad, { paddingLeft: check ? 0 : space[4], paddingRight: actions.length ? 0 : space[4] }]}>
+  return (
+    <RowView style={[pad, { paddingLeft: check ? 0 : space[4], paddingRight: padRight }]}>
       {selected ? <SelectedCheck left /> : null}
       {!lead || check ? null : "initials" in lead ? (
         <Avatar initials={lead.initials} s={component.avatar.md} />
@@ -164,14 +241,21 @@ export function GroupRow({ title, subtitle, lead, value, cols, status, actions =
         </View>
       ) : null}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <T v="body" w="semibold" tone={check?.done ? "mut" : "ink"} numberOfLines={wrap ? 2 : 1} style={check?.done ? { textDecorationLine: "line-through" } : undefined}>
-          {title}
-        </T>
-        {subtitle ? (
-          <T v="caption" tone="mut" numberOfLines={wrap ? 2 : 1}>
-            {subtitle}
+        <View testID={ids?.title}>
+          <T v="body" w="semibold" tone={check?.done || quiet ? "mut" : "ink"} numberOfLines={wrap ? 2 : 1} style={check?.done ? { textDecorationLine: "line-through" } : undefined}>
+            {title}
           </T>
+        </View>
+        {subtitle ? (
+          <View testID={ids?.subtitle}>
+            <View testID={ids?.subtitleInner}>
+              <T v="caption" tone="mut" tabular numberOfLines={wrap ? 2 : 1}>
+                {subtitle}
+              </T>
+            </View>
+          </View>
         ) : null}
+        {below}
       </View>
       {cols?.length
         ? cols.map((x, i, all) => (
@@ -189,13 +273,34 @@ export function GroupRow({ title, subtitle, lead, value, cols, status, actions =
             </View>
           ))
         : value ? (
-            <T v="body" w="semibold" tabular numberOfLines={1}>
-              {value}
-            </T>
+            <View testID={ids?.value}>
+              {valueMark ? (
+                <T v="caption" tone="mut" numberOfLines={1}>
+                  {value}
+                </T>
+              ) : (
+                <T v="body" w="semibold" tabular tone={quiet ? "mut" : "ink"} numberOfLines={1}>
+                  {value}
+                </T>
+              )}
+            </View>
           ) : null}
       {status ? <StatusPill status={status.status} label={status.label} /> : null}
+      {chevron ? <Icon name="chevronRight" s={size.iconSm} color={c.mut} /> : null}
     </RowView>
   );
+}
+
+export function GroupRow({ title, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, wrap, selected, chevron, valueTestID, valueMark, testID }: GroupRowProps) {
+  const { c } = useTheme();
+  const [down, setDown] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const more = rowActions(swipe);
+  const said = rowSaid({ title, subtitle, value: cols?.length ? cols.map((x) => `${x.label} ${x.value}`).join(", ") : value, status, when: lead && "time" in lead ? [lead.time, lead.sub].filter(Boolean).join(" ") : undefined });
+  const onLong = more.length ? (e: GestureResponderEvent) => setMenu({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, w: 0, h: 0 }) : undefined;
+  const onAction = (e: AccessibilityActionEvent) => more.find((a) => a.key === e.nativeEvent.actionName)?.onPress();
+  const check = lead && "done" in lead ? lead : null;
+  const main = <GroupRowBody title={title} subtitle={subtitle} lead={lead} value={value} cols={cols} status={status} compact={compact} wrap={wrap} selected={selected} chevron={chevron} padRight={actions.length ? 0 : space[4]} ids={valueTestID ? { value: valueTestID } : undefined} valueMark={valueMark} />;
   const tap = onPress || onLong ? (
     <Press
       onPress={onPress}

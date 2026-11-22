@@ -9,6 +9,7 @@ import { Menu, type MenuItem } from "@/ui/overlays";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { useScreenScroll } from "@/ui/requiredForm";
 import { RowView } from "@/ui/surfaces";
+import { GroupHead } from "@/ui/groupedList";
 import { useRef, type ComponentRef } from "react";
 
 /**
@@ -89,28 +90,23 @@ function SectionHeaderView(p: SectionHeaderProps) {
             </T>
           </View>
         ) : (
-          <Press onPress={() => p.api.toggle(s.id)} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={t("est.sec.toggle")} accessibilityState={{ expanded: !p.collapsed }} containerStyle={{ flex: 1 }} testID={`est-sec-toggle-${s.id}`}>
-            <RowView gap={space[2]} style={{ minHeight: size.rowMin }}>
-              <Icon name={p.collapsed ? "chevronRight" : "chevronDown"} s={size.iconSm} color={c.mut} />
-              {p.depth === 0 && s.kind && KIND_ICON[s.kind] ? <Icon name={KIND_ICON[s.kind]!} s={size.iconSm} color={c.mut} /> : null}
-              <T v={p.depth === 0 ? "heading" : "body"} w="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>
-                {p.title}
-              </T>
-              <T v="body" tone="mut" tabular numberOfLines={1}>
-                {p.collapsed ? `· ${t("est.sec.count", { n: p.lineCount })}` : `· ${p.lineCount}`}
-              </T>
-            </RowView>
-          </Press>
-        )}
-        {p.locked || (p.renaming && ready) ? null : (
-          <View ref={moreRef} collapsable={false} testID={`est-sec-menu-${s.id}`}>
-            <IconButton icon="more" label={t("est.sec.menu")} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h }))} />
+          // #2387: the same title as every group of the app (GroupHead): «˅», the kind's icon, the word 17/700 and its CountPill;
+          // the group's sum 17/700 on the right in the column of the lines' sums; «⋯» a quiet icon over the lines' trash
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <GroupHead
+              title={p.title}
+              icon={p.depth === 0 && s.kind ? KIND_ICON[s.kind] : undefined}
+              count={p.lineCount}
+              value={p.total}
+              fold={{ open: !p.collapsed, onToggle: () => p.api.toggle(s.id), label: t("est.sec.toggle"), testID: `est-sec-toggle-${s.id}` }}
+              actions={p.locked ? null : (
+                // in the column of the lines' trash: the same `space[6]` before the «⠿»
+                <View ref={moreRef} collapsable={false} testID={`est-sec-menu-${s.id}`} style={{ marginRight: space[6] }}>
+                  <IconButton bare icon="more" label={t("est.sec.menu")} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h }))} />
+                </View>
+              )}
+            />
           </View>
-        )}
-        {p.renaming && ready ? null : (
-          <T v={p.depth === 0 ? "heading" : "body"} tabular w="semibold">
-            {p.total}
-          </T>
         )}
       </RowView>
       <Menu visible={!!anchor} anchor={anchor} items={items} onSelect={(a) => p.api.action(s.id, a)} onClose={() => setAnchor(null)} />

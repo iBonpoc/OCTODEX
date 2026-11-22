@@ -4929,8 +4929,8 @@ export const ru = {
   "est.tot.open": "Показать, из чего итог",
   "est.tot.close": "Свернуть итог",
   // «Экраны» #1304 (д): Notes / Terms в смете и в компании (DS §8.12)
-  "est.nt.notes": "Notes — заметка",
-  "est.nt.terms": "Terms — условия",
+  "est.nt.notes": "Заметка для клиента",
+  "est.nt.terms": "Условия",
   "est.nt.empty": "Не заполнено",
   "est.nt.notesHint": "Что входит в работу, сроки, что сделать клиенту",
   "est.nt.termsHint": "Гарантия, уборка, доступ к участку",
@@ -5597,6 +5597,7 @@ export const ru = {
   "r1.tab.leadsWaiting": "{n} без ответа",
   "r1.est.emptyHint": "Добавьте первую — новой строкой или из каталога",
   "r1.est.changedAfterSend": "изменена после отправки",
+  "r1.est.sendChanges": "Отправить изменения",
 } as const;
 
 export type DictKey = keyof typeof ru;

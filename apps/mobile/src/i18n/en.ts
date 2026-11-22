@@ -5597,4 +5597,5 @@ export const en: Dict = {
   "r1.tab.leadsWaiting": "{n} awaiting reply",
   "r1.est.emptyHint": "Add the first one — a new line or from the catalog",
   "r1.est.changedAfterSend": "changed after sending",
+  "r1.est.sendChanges": "Send the changes",
 };

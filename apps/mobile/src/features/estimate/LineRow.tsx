@@ -1,3 +1,4 @@
+import { GroupRowBody } from "@/ui/groupedList";
 import { memo, useEffect, useRef, useState, type ComponentRef } from "react";
 import { Platform, View } from "react-native";
 import Animated, { Easing, useReducedMotion, useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
@@ -110,15 +111,6 @@ function Hatch({ color, id }: { color: string; /** one pattern id per row: two e
   );
 }
 
-/** the trash on the row (DS §8.3): visible 36, the zone 44; `space[6]` from the handle «≡» that the list draws after it */
-function Trash({ label, onPress, testID, gap = true }: { label: string; onPress: () => void; testID: string; /** the gap to «≡» — false where «⋯» stands between */ gap?: boolean }) {
-  return (
-    <View testID={testID} style={gap ? { marginRight: space[6] } : undefined}>
-      <IconButton icon="trash" label={label} onPress={onPress} />
-    </View>
-  );
-}
-
 export const rowFieldId = (lineId: string, f: "name" | "qty" | "price" | "cost") => `est-${f}-${lineId}`;
 
 function LineRowView(p: LineRowProps) {
@@ -143,7 +135,9 @@ function LineRowView(p: LineRowProps) {
   useEffect(() => {
     if (known) setPickedOwn(false);
   }, [known, l.unit]);
-  const ownUnit = pickedOwn || !known;
+  // #2387 (design audit: «Ед. — „Св…“ и отдельное поле „flat“»): a unit written by hand stands IN the choice (the list holds it); the
+  // field to write one shows only after «Своя…» is chosen (or while there is no unit at all)
+  const ownUnit = pickedOwn || (!known && !l.unit);
   // the height of the row opens in `durBase` (reduced motion: at once)
   const grow = useSharedValue(open ? 1 : 0);
   useEffect(() => {
@@ -244,9 +238,8 @@ function LineRowView(p: LineRowProps) {
           const a = actOfName(n, acts);
           if (a) p.api.action(l.id, a);
         }} testID={`est-line-${l.id}`} containerStyle={{ flex: 1 }}>
-        <View style={{ minHeight: size.rowMin, paddingVertical: full ? space[2] : spaceHalf.tight, gap: space[1], justifyContent: "center" }}>
-          {full ? (
-            <>
+        {full ? (
+            <View style={{ minHeight: size.rowMin, paddingVertical: space[2], paddingLeft: space[4], gap: space[1], justifyContent: "center" }}>
               <View testID={`est-title-${l.id}`}>
                 <T v="body" w="semibold" tone={hidden ? "mut" : "ink"}>
                   {l.name || t("est.row.unnamed")}
@@ -268,35 +261,27 @@ function LineRowView(p: LineRowProps) {
                 {sum}
               </RowView>
               <RowView style={{ flexWrap: "wrap" }}>{chips}</RowView>
-            </>
+              <LineMarks marks={marks} lineId={l.id} />
+            </View>
           ) : (
-            <>
-              {/* a quiet row (direction 20.11): the name, «кол-во × цена» under it, the sum on the right — nothing to press but the row */}
-              <RowView gap={space[3]}>
-                {/* the name wraps, never «…» (DS §4.3, #1427): the sum beside it keeps its width */}
-                {/* the name 15 right over its line 12 (visual v2 №5: a row of 52) */}
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <View testID={`est-title-${l.id}`}>
-                    <T v="body" w="semibold" tone={hidden ? "mut" : "ink"}>
-                      {l.name || t("est.row.unnamed")}
-                    </T>
-                  </View>
-                  {/* visual v2 №5: «120 sq ft × $1.50» 12/600; a line on the client's choice says so in the same line */}
-                  <View testID={`est-times-${l.id}`}>
-                    <View testID={l.optional ? `est-optional-${l.id}` : undefined}>
-                      <T v="micro" w="semibold" tone="mut" tabular numberOfLines={1}>
-                        {[l.optional ? t("px3.est.optional") : null, rowQtyLine(l, shownQty)].filter(Boolean).join(" · ")}
-                      </T>
-                    </View>
-                  </View>
-                </View>
-                {sum}
-              </RowView>
-              {hidden || noPrice(l) || p.unhiddenMark || p.checkPrice ? <RowView style={{ flexWrap: "wrap" }}>{briefChips}</RowView> : null}
-            </>
+            // #2387: the folded line is a GroupRow's inside (one look with every list of the app): the name 15/600 over
+            // «кол-во × цена» 13, the sum 15 on the right; a hidden or optional line reads `mut`; its marks under the line
+            <GroupRowBody
+              title={l.name || t("est.row.unnamed")}
+              subtitle={[l.optional ? t("px3.est.optional") : null, rowQtyLine(l, shownQty)].filter(Boolean).join(" · ") || undefined}
+              value={right}
+              quiet={hidden || !!l.optional}
+              wrap
+              padRight={0}
+              ids={{ title: `est-title-${l.id}`, subtitle: `est-times-${l.id}`, subtitleInner: l.optional ? `est-optional-${l.id}` : undefined, value: `est-sum-${l.id}` }}
+              below={
+                <>
+                  {hidden || noPrice(l) || p.unhiddenMark || p.checkPrice ? <RowView style={{ flexWrap: "wrap", marginTop: space[1] }}>{briefChips}</RowView> : null}
+                  <LineMarks marks={marks} lineId={l.id} />
+                </>
+              }
+            />
           )}
-          <LineMarks marks={marks} lineId={l.id} />
-        </View>
       </Press>
     );
     // the row's other actions are in «⋯» (and, on a phone, the swipe): no trash or buttons standing on every row (direction 20.11,
@@ -306,7 +291,17 @@ function LineRowView(p: LineRowProps) {
     const row = (
       <View ref={rowRef} collapsable={false}>
         {hidden ? <Hatch color={c.track} id={l.id} /> : null}
-        <RowView gap={space[2]}>{body}</RowView>
+        {/* founder 21.11 («5 открытых»: корзина в свёрнутой строке — оставить, всегда; DS §8.3 О8, #2374): the trash stands on the folded
+            line too, a quiet icon in the column of the group's «⋯»; the delete gives the «Вернуть» toast (rule 5) */}
+        <RowView gap={0}>
+          {body}
+          {p.locked ? null : (
+            // DS §8.3: `space[6]` to the «⠿» — the trash and the handle never touch (a gloved finger going for the handle)
+            <View testID={`est-row-trash-${l.id}`} style={{ marginRight: space[6] }}>
+              <IconButton bare icon="trash" label={t("est2.row.trash")} onPress={() => p.api.action(l.id, "delete")} />
+            </View>
+          )}
+        </RowView>
         <Menu visible={!!menu} anchor={menu} items={items} onSelect={pick} onClose={() => setMenu(null)} />
       </View>
     );
@@ -325,13 +320,18 @@ function LineRowView(p: LineRowProps) {
       {/* the header (DS §8.3): «˄ Свернуть» on the left (the founder's words); on the right the trash, «⋯» and «≡» (the list's handle) */}
       <RowView style={{ justifyContent: "space-between" }}>
         <View testID={`est-collapse-${l.id}`}>
-          <Button label={t("est.row.collapse")} icon="chevronUp" variant="ghost" size="sm" onPress={p.api.close} />
+          <Button label={t("est.row.collapse")} icon="chevronUp" variant="ghost" onPress={p.api.close} />
         </View>
         <RowView>
-          {p.locked ? null : <Trash gap={false} label={t("est2.row.trash")} onPress={() => p.api.action(l.id, "delete")} testID={`est-trash-${l.id}`} />}
-          <View ref={moreRef} collapsable={false} style={{ marginRight: space[6] }}>
+          {/* #2387: the trash and «⋯» quiet (bare), as on the folded line and the group's title — the same column over the «≡» */}
+          {p.locked ? null : (
+            <View testID={`est-trash-${l.id}`}>
+              <IconButton bare icon="trash" label={t("est2.row.trash")} onPress={() => p.api.action(l.id, "delete")} />
+            </View>
+          )}
+          <View ref={moreRef} collapsable={false}>
             <View testID={`est-menu-${l.id}`}>
-              <IconButton icon="more" label={t("est.row.actions")} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }))} />
+              <IconButton bare icon="more" label={t("est.row.actions")} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }))} />
             </View>
           </View>
           {handleInHeader ? <View style={{ width: size.hitMin }} /> : null}

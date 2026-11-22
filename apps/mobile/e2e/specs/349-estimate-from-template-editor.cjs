@@ -34,8 +34,8 @@ exports.run = async (h) => {
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await tid("est-start-blank").click();
   await sheetGone(p);
-  // the empty editor: «Из шаблона…» is one of the round buttons of «Позиции» beside «＋» (visual v2 №5, #2350)
-  h.expect((await tid("est-items-head").getByTestId("est-from-template").count()) === 1 && (await tid("est-items-head").getByTestId("est-add-new").count()) === 1, "«Из шаблона…» beside «＋ Новая позиция» in the head of «Позиции»");
+  // the empty editor (#2387): «Из шаблона…» is under «＋ Позиция · Каталог» of the empty card; the head of «Позиции» stands bare
+  h.expect((await count("est-from-template")) === 1 && (await count("est-add-new")) === 1 && (await tid("est-items-head").getByTestId("est-from-template").count()) === 0, "«Из шаблона…» under «＋ Позиция» of the empty card, not in the head");
   await h.shot("empty");
   // a note typed in the empty estimate: the template must not take it away
   await tid("est-notes-row").click();

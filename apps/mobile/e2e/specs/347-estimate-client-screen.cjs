@@ -17,6 +17,8 @@ exports.run = async (h) => {
   const ownCount = async () => {
     const phone = h.layout.width < 820;
     if (phone) {
+      // optional: #2363 q72 — scrolled down, «Итого» is the capsule; a tap opens the bar with its «Итого ˅»
+      if (!(await p.getByTestId("est-bar-total").locator("visible=true").count())) await p.getByTestId("ue-save-capsule").click({ timeout: 3000 }).catch(() => {}); // (#2387: at the page's end the bar opens by itself)
       await tid("est-bar-total").click();
       await tid("est-bar-breakdown").waitFor({ timeout: 3000 });
     }

@@ -15,7 +15,7 @@ type ButtonProps = ComponentProps<typeof Button>;
  * A long label or a narrow screen — the column, `main` first (the icon then stands under them on the left). One button (no `second`)
  * — the whole width. The screen does not choose: the rule is here.
  */
-export function ButtonPair({ main, second, icon, testID }: { main: ButtonProps; second?: ButtonProps | null | false; icon?: IconAction | null; testID?: string }) {
+export function ButtonPair({ main, second, icon, testID, ids }: { main: ButtonProps; second?: ButtonProps | null | false; icon?: IconAction | null; testID?: string; /** the testIDs of each button's place (the tests find a button inside its place) */ ids?: { main?: string; second?: string } }) {
   const [w, setW] = useState(0);
   const both = second ? [main, second] : [main];
   // the round icon takes its 40 and a gap out of the row first
@@ -26,10 +26,10 @@ export function ButtonPair({ main, second, icon, testID }: { main: ButtonProps; 
     <View testID={testID} onLayout={(e) => setW(e.nativeEvent.layout.width)} style={{ flexDirection: how === "row" ? "row" : "column", alignItems: how === "row" ? "center" : "stretch", gap: space[2] }}>
       {how === "row" && second ? (
         <>
-          <View style={{ flex: 1, minWidth: 0 }}>
+          <View testID={ids?.main} style={{ flex: 1, minWidth: 0 }}>
             <Button {...main} full />
           </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
+          <View testID={ids?.second} style={{ flex: 1, minWidth: 0 }}>
             <Button {...second} variant={second.variant ?? "secondary"} full />
           </View>
           {square}
@@ -44,9 +44,15 @@ export function ButtonPair({ main, second, icon, testID }: { main: ButtonProps; 
               {square}
             </View>
           ) : (
-            <Button {...main} full />
+            <View testID={ids?.main}>
+              <Button {...main} full />
+            </View>
           )}
-          {second ? <Button {...second} variant={second.variant ?? "secondary"} full /> : null}
+          {second ? (
+            <View testID={ids?.second}>
+              <Button {...second} variant={second.variant ?? "secondary"} full />
+            </View>
+          ) : null}
           {second && square ? <View style={{ alignSelf: "flex-start" }}>{square}</View> : null}
         </>
       )}
