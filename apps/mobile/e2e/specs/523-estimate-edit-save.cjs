@@ -50,6 +50,16 @@ exports.run = async (h) => {
 
   await h.go("/today");
   const original = (await saved()).title;
+  const e6orig = await saved();
+  /** e6 back as it was (status / changes set over it), and this edit put on the phone as a draft — through h.seed */
+  const restore = async (patch = {}) => {
+    const st = await rawDb();
+    st.db.estimates = [...st.db.estimates.filter((e) => e.id !== ID), { ...e6orig, ...patch }];
+    await h.seed(DB, st);
+  };
+  const seedEdit = async (title, extra = {}) => {
+    await h.seed(DRAFTS, [{ ctx: `edit|${ID}`, at: new Date().toISOString(), estimateId: ID, customerId: e6orig.customerId, propertyId: e6orig.propertyId, title, doc: e6orig.doc, checkPrice: [], baseSavedAt: "", ...extra }]);
+  };
 
   // opened: nothing to take back
   await open();
@@ -199,6 +209,82 @@ exports.run = async (h) => {
   await tid("k1-missing-reset").getByRole("button").click();
   await waitDraft(false);
   h.expect(!(await p.evaluate(([k, id]) => JSON.parse(localStorage.getItem(k)).db.estimates.some((e) => e.id === id), [DB, ID])), "the deleted estimate is not made again");
+
+  // ── review 3 ──
+  // Б-1: signed, the edit carries «проверить цену» and «в каталог»: «Оставить черновик» keeps the EDIT on the phone (red before:
+  // the screen's leftovers differed from the snapshot and the draft was overwritten with the signed estimate)
+  const firstLine = e6orig.doc.options[0].lines[0].id;
+  await restore({ status: "approved" });
+  await seedEdit("Правка 523 · Б-1", { checkPrice: [firstLine], wantCatalog: [firstLine] });
+  await open();
+  await dialog("k1-open-signed");
+  await tid("k1-open-keep").getByRole("button").click();
+  await tid("k1-kept").waitFor({ timeout: 3000 });
+  await titleInput().fill(await titleInput().inputValue()); // a render after the keep
+  await h.go("/today");
+  h.expect((await drafts()).some((d) => d.ctx === `edit|${ID}` && d.title === "Правка 523 · Б-1"), "«Оставить черновик»: the edit itself stays on the phone (not the signed estimate)");
+
+  // Б-2: «Сбросить правки» of a kept estimate asks first (rule 5): «Назад» keeps, «Сбросить» drops
+  await open();
+  await dialog("k1-open-signed");
+  await tid("k1-open-keep").getByRole("button").click();
+  await tid("k1-kept-reset").getByRole("button").click();
+  await dialog("k1-kept-reset-ask");
+  await tid("k1-kept-reset-no").getByRole("button").click();
+  h.expect(await hasEditDraft(), "«Назад»: the edit stays");
+  await tid("k1-kept-reset").getByRole("button").click();
+  await dialog("k1-kept-reset-ask");
+  await tid("k1-kept-reset-yes").getByRole("button").click();
+  await waitDraft(false);
+
+  // «Сделать копию с правками»: a NEW estimate (same client and property, no lead), the draft goes (§11 п.2)
+  await restore({ status: "approved", leadId: e6orig.leadId ?? "l1" });
+  await seedEdit("Правка 523 · копия");
+  await open();
+  await dialog("k1-open-signed");
+  await tid("k1-open-copy").getByRole("button").click();
+  await waitDraft(false);
+  await flushedSaved();
+  {
+    const copy = (await rawDb()).db.estimates.find((e) => e.id !== ID && e.title === "Правка 523 · копия");
+    h.expect(!!copy && copy.customerId === e6orig.customerId && copy.propertyId === e6orig.propertyId && !copy.leadId && copy.status === "draft", `the copy: same client and property, no lead, a draft (${JSON.stringify(copy && { c: copy.customerId, l: copy.leadId, s: copy.status })})`);
+    h.expect((await saved()).status === "approved" && (await saved()).title === e6orig.title, "the signed estimate is not changed");
+  }
+
+  // §10: the client signed (awaiting_countersign) — «Сохранить и снять подпись» saves, asked ONCE (red before: asked again at the save)
+  await restore({ status: "awaiting_countersign" });
+  await seedEdit("Правка 523 · снять подпись");
+  await open();
+  await dialog("k1-open-signed");
+  await tid("k1-open-unsign").getByRole("button").click();
+  await waitDraft(false);
+  h.expect((await count("k1-await-ask")) === 0, "«Сохранить и снять подпись» is not asked a second time");
+  {
+    const a = await flushedSaved();
+    h.expect(a.title === "Правка 523 · снять подпись" && a.status === "draft", `saved, the signature off (${a.status})`);
+  }
+
+  // §10: a double press — «Готово» saves once, «Отменить» asks once
+  await restore();
+  await open();
+  await edit("Правка 523 · двойное");
+  await tid("k1-cancel").dblclick();
+  h.expect((await p.getByTestId("k1-cancel-ask").count()) <= 1, "«Отменить» pressed twice: one question");
+  await tid("k1-cancel-no").getByRole("button").click();
+  await tid("ue-save").dblclick();
+  await p.getByTestId("ue-title").waitFor({ state: "detached", timeout: 5000 });
+  const savedToasts = (await p.getByTestId("toast-text").allInnerTexts()).filter((x) => /Сохран/.test(x)).length;
+  h.expect(savedToasts <= 1, `«Готово» pressed twice: saved once (${savedToasts} toasts)`);
+
+  // §10: «Готово» without the network — saved on the phone, goes later (the queue), the draft is gone
+  await open();
+  await edit("Правка 523 · без сети");
+  await p.context().setOffline(true);
+  await tid("ue-save").click();
+  await p.getByTestId("ue-title").waitFor({ state: "detached", timeout: 5000 });
+  await waitDraft(false);
+  await p.context().setOffline(false);
+  h.expect((await flushedSaved()).title === "Правка 523 · без сети", "offline «Готово»: the estimate saved on the phone (the queue sends it)");
 
   // Ж2: the phone refuses to keep the edits (full storage) — said, with the way out
   await h.go("/estimate/new?customerId=c2&propertyId=p2");

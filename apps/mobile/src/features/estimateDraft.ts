@@ -55,12 +55,7 @@ export const draftWorthKeeping = (d: Pick<EstimateDraft, "doc" | "title">) => ha
 export const isEditCtx = (ctx: string | null | undefined) => !!ctx && ctx.startsWith("edit|");
 const fresh = (d: EstimateDraft, now: number) => isEditCtx(d.ctx) || now - Date.parse(d.at) < DRAFT_DAYS * 86_400_000;
 
-/** #2381 (founder 21.11: «дать выбрать»): the estimate was saved since the edit began — on another phone; «≠», never «>»
- *  (phones' clocks differ); an edit without its base (an older build dropped it) is a conflict too — asked, never overwritten */
-export const draftConflict = (d: Pick<EstimateDraft, "ctx" | "baseSavedAt">, savedAt: string | undefined): boolean =>
-  isEditCtx(d.ctx) && (d.baseSavedAt === undefined || d.baseSavedAt !== baseOf(savedAt));
-/** the base an edit keeps: the estimate's `savedAt`, or "" for an older estimate that has none (so it is not a conflict by itself) */
-export const baseOf = (savedAt: string | undefined) => savedAt ?? "";
+/* #2381: the conflict has ONE rule — features/estimate/editSession.ts (`markOf` of the document, `gate*`), review 3 */
 
 /** the draft of this place: not too old, and not an estimate saved meanwhile (its id already in the data) */
 export function findDraft(list: readonly EstimateDraft[], ctx: string | null, now: number, saved: (id: string) => boolean): EstimateDraft | undefined {

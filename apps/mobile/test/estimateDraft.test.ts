@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: async () => null, setItem: async () => {} } }));
-import { DRAFT_DAYS, MAX_DRAFTS, cleanDraft, cleanDrafts, draftConflict, draftCtx, draftSnapshot, draftWorthKeeping, draftsKey, findDraft, isEditCtx, nextDrafts, removeDraft, upsertDraft, type EstimateDraft } from "../src/features/estimateDraft";
+import { DRAFT_DAYS, MAX_DRAFTS, cleanDraft, cleanDrafts, draftCtx, draftSnapshot, draftWorthKeeping, draftsKey, findDraft, isEditCtx, nextDrafts, removeDraft, upsertDraft, type EstimateDraft } from "../src/features/estimateDraft";
 import { newDoc } from "../src/features/estimateDoc";
 import { isDeviceKey } from "../src/features/deleteAccount";
 import type { EstimateDoc } from "../src/data/types";
@@ -126,19 +126,6 @@ describe("unit:estimateDraft — #2381 the edit of a saved estimate («Гото�
     for (const n of news) list = upsertDraft(list, n, NOW);
     expect(list.filter((d) => isEditCtx(d.ctx))).toHaveLength(3);
     expect(list.filter((d) => !isEditCtx(d.ctx))).toHaveLength(MAX_DRAFTS);
-  });
-  it("the conflict: the estimate saved since the draft began (another phone) — by «≠», never «>» (phones' clocks differ)", () => {
-    const d = edit("e1");
-    expect(draftConflict(d, "2026-11-10T10:00:00.000Z")).toBe(false);
-    expect(draftConflict(d, "2026-11-10T10:05:00.000Z")).toBe(true);
-    expect(draftConflict(d, "2026-11-10T09:55:00.000Z")).toBe(true);
-  });
-  it("an older estimate with no savedAt: its base is \"\" — not a conflict by itself", () => {
-    expect(draftConflict(edit("e1", { baseSavedAt: "" }), undefined)).toBe(false);
-    expect(draftConflict(edit("e1", { baseSavedAt: "" }), "2026-11-10T10:00:00.000Z")).toBe(true);
-  });
-  it("an edit's draft without its base (an older build dropped it, rule 16): a conflict — asked, never overwritten", () => {
-    expect(draftConflict(edit("e1", { baseSavedAt: undefined }), "2026-11-10T10:00:00.000Z")).toBe(true);
   });
   it("the base survives the store: cleanDraft keeps baseSavedAt; an old draft without it reads as before", () => {
     expect(cleanDraft(JSON.parse(JSON.stringify(edit("e1"))))?.baseSavedAt).toBe("2026-11-10T10:00:00.000Z");

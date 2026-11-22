@@ -5632,6 +5632,7 @@ export const en: Dict = {
   "k1.unsaved": "There are unsaved changes",
   "k1.writeFailed": "The changes are not kept on the phone — press «Done»",
   "k1.keptLine": "Changes not saved — the estimate is signed and shown as it is",
+  "k1.dropKeptText": "The changes to the signed estimate are removed from the phone.",
   "k1.missingQ": "The estimate was deleted",
   "k1.missingText": "It was deleted on another device. The changes stay on the phone.",
   "k1.copyNew": "Make a new estimate with the changes",

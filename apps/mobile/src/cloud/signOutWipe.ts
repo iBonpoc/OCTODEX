@@ -53,6 +53,8 @@ export async function countUnsentDrafts(
   now = Date.now(),
   /** an estimate already saved (its draft is not «unsent»: findDraft leaves it out the same way) */
   saved: (estimateId: string) => boolean = () => false,
+  /** #2381 Ж1: an edit of an estimate deleted on another phone (only what the caller KNOWS: this company, its store loaded) — not asked */
+  orphan: (draftsKey: string, estimateId: string) => boolean = () => false,
 ): Promise<number> {
   let n = 0;
   try {
@@ -62,7 +64,7 @@ export async function countUnsentDrafts(
         const list = JSON.parse((await s.getItem(k)) ?? "[]") as EstimateDraft[];
         // #2381 Б2: the edits of a saved estimate (edit|<id>) are unsent whatever their age and though the estimate is saved —
         // asked about, never wiped silently; a new estimate's draft — fresh, worth keeping and not saved yet, as before
-        n += Array.isArray(list) ? list.filter((d) => (isEditCtx(d.ctx) ? draftWorthKeeping(d) : now - Date.parse(d.at) < DRAFT_DAYS * 86_400_000 && draftWorthKeeping(d) && !saved(d.estimateId))).length : 1;
+        n += Array.isArray(list) ? list.filter((d) => (isEditCtx(d.ctx) ? draftWorthKeeping(d) && !orphan(k, d.estimateId) : now - Date.parse(d.at) < DRAFT_DAYS * 86_400_000 && draftWorthKeeping(d) && !saved(d.estimateId))).length : 1;
       } catch {
         n += 1;
       }

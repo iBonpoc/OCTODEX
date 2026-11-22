@@ -296,6 +296,13 @@ describe("unit:signOutWipe — drafts not saved, asked about before the sign-out
     const { s } = mem({ "octo.drafts.v1.c1.u1": JSON.stringify([edit("e-saved", "2026-09-01T10:00:00Z"), edit("e-gone", "2026-11-15T10:00:00Z")]) });
     expect(await countUnsentDrafts(me, s, now, (id) => id === "e-saved")).toBe(2);
   });
+  it("#2381 Ж1 (review 3): the edits of an estimate deleted on another phone (this company, the store loaded) are not asked about", async () => {
+    const edit = (id: string) => ({ ...draft("2026-11-15T10:00:00Z"), ctx: `edit|${id}`, estimateId: id, baseSavedAt: "" });
+    const { s } = mem({ "octo.drafts.v1.c1.u1": JSON.stringify([edit("gone"), edit("e-live")]), "octo.drafts.v1.c2.u1": JSON.stringify([edit("other")]) });
+    // c1 is this company and its estimates are loaded: «gone» is an orphan; c2's edit is not known here — counted
+    const orphan = (key: string, id: string) => key === "octo.drafts.v1.c1.u1" && id === "gone";
+    expect(await countUnsentDrafts(me, s, now, (id) => id === "e-live", orphan)).toBe(2);
+  });
   const authOk = { getSession: async () => ({ data: { session: null } }), signOut: async () => ({ error: null }) };
   const three = () => mem({ "octo.drafts.v1.c1.u1": JSON.stringify([draft("2026-11-15T10:00:00Z")]), "octo.drafts.v1.c2.u1": "[]", "octo.drafts.v1.demo": "[]" });
   it("«Выйти и стереть»: the wipe takes my drafts of every company (the demo's stay); both marks go", async () => {

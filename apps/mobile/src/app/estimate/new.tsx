@@ -52,8 +52,9 @@ import { useDayWord } from "@/features/useDayWord";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
 import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle, useFooterShown } from "@/ui/surfaces";
-import { baseOf, draftConflict, draftCtx, draftSnapshot, draftsKey, findDraft, isEditCtx, nextDrafts, removeDraft, upsertDraft, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
+import { draftCtx, draftSnapshot, draftsKey, findDraft, isEditCtx, nextDrafts, removeDraft, upsertDraft, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
 import { useConfirm } from "@/ui/confirmDialog";
+import { useEditorOpenMark } from "@/features/estimateDraftCleanup";
 import { doneAction, gateAtOpen, gateBeforeSave, markOf, takeMine } from "@/features/estimate/editSession";
 import { useAuth } from "@/cloud/auth";
 import { NO_UNDO, localUndo, withAfter } from "@/data/undo";
@@ -90,6 +91,8 @@ export default function EstimateBuilderScreen() {
 type Params = { id?: string; customerId?: string; propertyId?: string; leadId?: string; template?: string; editTemplate?: string; pick?: string };
 
 function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDrafts> }) {
+  // #2381 Ж1: while an editor is open it owns the drafts list — the cleanup of deleted estimates' edits waits
+  useEditorOpenMark();
   const params = useLocalSearchParams<Params>();
   const store = useStore();
   const { db } = store;
@@ -748,7 +751,18 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     setCustomerId(fresh.customerId);
     setPropertyId(fresh.propertyId);
     setTemplateId(fresh.templateId);
+    // (Б-1 of review 3: every part of the held state as in the snapshot — a «проверить цену» or «в каталог» of the edit left on the
+    // screen made the screen differ from the snapshot, and the draft was overwritten with the signed estimate)
+    setCheckPrice([]);
+    setWantCatalog([]);
     toast.show(t("k1.kept"));
+  };
+  /** Б-2 of review 3 (rule 5): «Сбросить правки» of an estimate kept aside — asked in the window first */
+  const dropKept = async () => {
+    const k = await ask({ title: t("k1.cancelQ"), text: t("k1.dropKeptText"), actions: [{ key: "back", label: t("k1.back"), tone: "cancel", testID: "k1-kept-reset-no" }, { key: "yes", label: t("k1.reset"), tone: "danger", testID: "k1-kept-reset-yes" }], testID: "k1-kept-reset-ask" });
+    if (k !== "yes") return;
+    dropDraft();
+    setKeptAside(false);
   };
   /** «Отменить» (founder 21.11: «отменяет все мои действия» · «Отменить спрашивает подтверждение — да»): the window in the middle
    *  (DS Б3); yes — the edits on the phone go, the estimate stays as saved (a new one is not made), the screen closes */
@@ -807,10 +821,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     }
   };
   /** what stands between «Готово» and the save — editSession.gateBeforeSave; "go" — save */
-  const checkBeforeSave = async (clean: EstimateDoc, cust: { id: string; name: string }, prop: { id: string }): Promise<"go" | "stop"> => {
+  const checkBeforeSave = async (clean: EstimateDoc, cust: { id: string; name: string }, prop: { id: string }, answered?: "await"): Promise<"go" | "stop"> => {
     const live = db.estimates.find((e) => e.id === estimateId);
     const g = gateBeforeSave({ isEdit: isEditCtx(ctx), live, base: baseSavedAt, dirty, storeLoaded: store.companyLoaded });
-    if (g === "go") return "go";
+    // the question answered already («Сохранить и снять подпись» at the opening): not asked a second time (review 3)
+    if (g === "go" || (g === "await" && answered === "await")) return "go";
     if (g === "wait") {
       toast.show(t("k1.wait"));
       return "stop";
@@ -833,7 +848,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     // Р4: only «Мои правки» goes on; «Назад» and Esc stay with the edits, nothing saved
     return takeMine(k) ? "go" : "stop";
   };
-  const save = async (send: boolean) => {
+  const save = async (send: boolean, answered?: "await") => {
     // Р1 (spec §4 п.2): a saved estimate with no edits — «Готово» only closes (nothing written: «sent» and its time stay); «Отправить»
     // goes to the send of the estimate as it is. An estimate kept aside (signed, «Оставить черновик») is shown as saved — closes too
     // stale: what a save would write differs from the saved document (the client became tax exempt since — e2e 72)
@@ -859,7 +874,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     savingRef.current = true;
     const clean: EstimateDoc = exemptDoc({ ...docWith(settled.option), options: docWith(settled.option).options.map((o) => ({ ...o, lines: activeLines(o.lines).filter((l) => !isBlank(l)) })) }, customer.taxExempt);
     // #2381: signed meanwhile, or saved on another phone — asked first; nothing is lost («стоп» keeps the edits on the phone)
-    if ((await checkBeforeSave(clean, customer, property)) === "stop") {
+    if ((await checkBeforeSave(clean, customer, property, answered)) === "stop") {
       savingRef.current = false;
       return;
     }
@@ -913,7 +928,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         });
         if (k === "reset") resetToSaved();
         else if (k === "copy" && cust && prop) copyWithEdits(clean(), cust, prop);
-        else if (k === "save") void save(false);
+        else if (k === "save") void save(false, "await");
         else keepAside();
         return;
       }
@@ -1112,7 +1127,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               {t("k1.keptLine")}
             </T>
             <View testID="k1-kept-reset">
-              <Button label={t("k1.reset")} variant="ghost" onPress={() => { dropDraft(); setKeptAside(false); }} />
+              <Button label={t("k1.reset")} variant="ghost" onPress={() => void dropKept()} />
             </View>
           </RowView>
         </View>

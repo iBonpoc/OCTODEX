@@ -5632,6 +5632,7 @@ export const es: Dict = {
   "k1.unsaved": "Hay cambios sin guardar",
   "k1.writeFailed": "Los cambios no se guardan en el teléfono: pulse «Listo»",
   "k1.keptLine": "Cambios no guardados: el presupuesto está firmado y se muestra tal cual",
+  "k1.dropKeptText": "Los cambios del presupuesto firmado se borrarán del teléfono.",
   "k1.missingQ": "El presupuesto fue eliminado",
   "k1.missingText": "Se eliminó en otro dispositivo. Los cambios siguen en el teléfono.",
   "k1.copyNew": "Crear un presupuesto nuevo con los cambios",
