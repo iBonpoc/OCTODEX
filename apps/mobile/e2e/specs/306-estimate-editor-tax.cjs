@@ -20,7 +20,7 @@ exports.run = async (h) => {
     await tid("est-tax-toggle").waitFor({ timeout: 4000 });
   };
   const closeSheet = async () => {
-    await require("../sheet.cjs").closeSheet(h.page);
+    await require("../sheet.cjs").pressEscUntilClosed(h.page);
     await p.waitForFunction(() => document.querySelectorAll('[data-testid="est-tax-toggle"]').length === 0, null, { timeout: 4000 });
   };
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
@@ -47,7 +47,7 @@ exports.run = async (h) => {
   await p.getByRole("button", { name: "Скидка" }).click();
   await h.sheet().getByRole("tab", { name: "%", exact: true }).click();
   await h.sheet().locator('input[inputmode="decimal"]').first().fill("10");
-  await require("../sheet.cjs").closeSheet(h.page);
+  await require("../sheet.cjs").pressEscUntilClosed(h.page);
   await h.expectText(/\$7\.99 · 8\.875%/, "the tax after the discount: $90.00 × 8.875 % = $7.99");
   await h.expectText(/Итого \| \$97\.99/, "the total agrees");
 

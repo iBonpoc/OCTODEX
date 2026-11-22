@@ -18,8 +18,16 @@ exports.run = async (h) => {
     const phone = h.layout.width < 820;
     if (phone) {
       // optional: #2363 q72 — scrolled down, «Итого» is the capsule; a tap opens the bar with its «Итого ˅»
-      if (!(await p.getByTestId("est-bar-total").locator("visible=true").count())) await p.getByTestId("ue-save-capsule").click({ timeout: 3000 }).catch(() => {}); // (#2387: at the page's end the bar opens by itself)
-      await tid("est-bar-total").click();
+      // (#2387: the page may still be settling from the last tap — a late scroll folds «Итого» into the capsule; open it and try again)
+      for (let i = 0; ; i++) {
+        if (await p.getByTestId("ue-save-capsule").locator("visible=true").count()) await p.getByTestId("ue-save-capsule").click({ timeout: 2000 }).catch(() => {});
+        try {
+          await tid("est-bar-total").click({ timeout: 2000 });
+          break;
+        } catch (e) {
+          if (i >= 3) throw e;
+        }
+      }
       await tid("est-bar-breakdown").waitFor({ timeout: 3000 });
     }
     const n = await count('[data-testid="est-tot-own"]');
