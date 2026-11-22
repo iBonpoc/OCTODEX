@@ -127,7 +127,11 @@ exports.run = async (h) => {
     // «×» with edits (a phone: the header's «×»; from 820 the same question on Esc — the way up): «Отменить изменения» drops them
     await edit("Правка 523 · ×");
     if (phone) await tid("hdr-close").click();
-    else await require("../sheet.cjs").escOnPage(p);
+    else {
+      // Esc in a field is not «leave the screen» (Screen's rule): out of the field first, then Esc — the way up
+      await p.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
+      await require("../sheet.cjs").escOnPage(p);
+    }
     await dialog("k1-close-ask");
     await tid("k1-close-drop").getByRole("button").click();
     await waitDraft(false);
