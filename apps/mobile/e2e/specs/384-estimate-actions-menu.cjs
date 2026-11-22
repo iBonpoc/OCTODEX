@@ -19,13 +19,21 @@ exports.run = async (h) => {
   for (const id of row) h.expect((await tid("estimate-screen-actions").getByTestId(id).count()) === 1, `«${id}» is an icon of the row under the header`);
   for (const id of ["est-act-client", "est-act-template", "est-act-revoke"]) h.expect(!(await visible(id)), `«${id}» is not on the page (it lives in «⋯»)`);
 
-  // the main step: under the header, above the sections; no pinned bar
+  // the main step: the first thing of «Смета», UNDER the sections strip — the strip stands still when «Подпись на месте» has no
+  // step (#2363, founder 21.11: «кнопка сдвигает контент»); no pinned bar
   await tid("est-send").waitFor({ timeout: 3000 });
   h.expect(/Напомнить/.test((await tid("est-send").textContent()) || ""), "a sent estimate: «Напомнить», not «Отправить клиенту»");
   const btn = await tid("est-send").boundingBox();
   const head = await tid("estimate-screen-actions").boundingBox();
   const secs = await tid("estimate-screen-sections").boundingBox();
-  h.expect(btn && head && secs && btn.y > head.y && btn.y < secs.y, `the main step stands under the icons, above the sections (${btn && btn.y} / ${head && head.y} / ${secs && secs.y})`);
+  h.expect(btn && head && secs && btn.y > head.y && btn.y > secs.y, `the main step stands under the sections strip (${btn && btn.y} / ${head && head.y} / ${secs && secs.y})`);
+  // the strip does not move between «Смета» and «Подпись на месте»
+  await tid("estimate-screen-sections-sign").click();
+  await tid("sign-client-doc").waitFor({ timeout: 3000 });
+  const secs2 = await tid("estimate-screen-sections").boundingBox();
+  h.expect(secs2 && Math.abs(secs2.y - secs.y) < 1, `the sections strip stands still (${secs.y} → ${secs2 && secs2.y})`);
+  await tid("estimate-screen-sections-doc").click();
+  await tid("est-send").waitFor({ timeout: 3000 });
   h.expect(btn && btn.width < 400, `the button is as wide as its words (${btn && btn.width})`);
   h.expect(!(await visible("est-view-actionbar")), "no pinned bar");
   await h.shot("card");

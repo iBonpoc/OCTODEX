@@ -2108,10 +2108,10 @@ export const es: Dict = {
   "w2m.due.today": "hoy",
   // визуал v2, Смета-редактор и Деньги (#2344, px3)
   "px3.money.owed": "Por cobrar · facturas",
-  "px3.money.overdue.one": "! {n} vencida",
-  "px3.money.overdue.few": "! {n} vencidas",
-  "px3.money.overdue.many": "! {n} vencidas",
-  "px3.money.overdue.other": "! {n} vencidas",
+  "px3.money.overdue.one": "{n} vencida",
+  "px3.money.overdue.few": "{n} vencidas",
+  "px3.money.overdue.many": "{n} vencidas",
+  "px3.money.overdue.other": "{n} vencidas",
   "px3.money.est": "Presupuestos abiertos",
   "px3.money.estN.one": "{n} presupuesto",
   "px3.money.estN.few": "{n} presupuestos",
@@ -5594,5 +5594,7 @@ export const es: Dict = {
   "r1.itemsN.few": "{n} puntos",
   "r1.itemsN.many": "{n} puntos",
   "r1.itemsN.other": "{n} puntos",
+  "r1.tab.leadsWaiting": "{n} sin respuesta",
+  "r1.est.emptyHint": "Añada la primera: una línea nueva o del catálogo",
   "r1.est.changedAfterSend": "modificada después del envío",
 };

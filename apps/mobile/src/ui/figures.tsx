@@ -191,7 +191,22 @@ export function TimerLine({ value, since, action, testID }: { value: string; sin
   );
 }
 
-/** «8:30 ▸ 12:30» — the interval as a plate of two halves (the start's half points to the end); no `to` — one half («Весь день») */
+/** «8:30 AM» → the hour and a small raised «AM» (founder 21.11, #2363 q73: the full US time, the AM/PM small like a superscript) */
+function PlateTime({ text, color }: { text: string; color: string }) {
+  const m = /^(.*?)[\s\u00a0\u202f]*([AaPp]\.?[Mm]\.?)$/.exec(text.trim());
+  return (
+    <T v="caption" w="bold" style={{ color }} numberOfLines={1}>
+      {m ? m[1] : text}
+      {m ? (
+        <T v="micro" w="bold" style={{ color, fontSize: component.timeSlot.meridiem, lineHeight: component.timeSlot.meridiem + space[1] }}>
+          {` ${m[2]!.toUpperCase()}`}
+        </T>
+      ) : null}
+    </T>
+  );
+}
+
+/** «8:30 ᴬᴹ ▸ 12:30 ᴾᴹ» — the interval as a plate of two halves (the start's half points to the end); no `to` — one half («Весь день») */
 export function IntervalPlate({ from, to, near }: { from: string; to: string; near?: boolean }) {
   const { c } = useTheme();
   const k = component.timeSlot;
@@ -199,9 +214,7 @@ export function IntervalPlate({ from, to, near }: { from: string; to: string; ne
   return (
     <View style={{ flexDirection: "row", height: k.interval, borderRadius: radius.pill, overflow: "hidden", backgroundColor: near ? c.tint : c.surf2, alignSelf: "flex-start" }}>
       <View style={{ flexDirection: "row", alignItems: "center", paddingLeft: space[2] + spaceHalf.hair, paddingRight: to ? 0 : space[2] + spaceHalf.hair, backgroundColor: near ? c.tint2 : c.surf3 }}>
-        <T v="caption" w="bold" style={{ color: fg }} numberOfLines={1}>
-          {from}
-        </T>
+        <PlateTime text={from} color={fg} />
         {to ? (
           <View style={{ width: k.notch, alignItems: "center" }}>
             <Icon name="chevronRight" s={size.iconXs} color={fg} />
@@ -210,9 +223,7 @@ export function IntervalPlate({ from, to, near }: { from: string; to: string; ne
       </View>
       {to ? (
         <View style={{ justifyContent: "center", paddingHorizontal: space[2] + spaceHalf.hair }}>
-          <T v="caption" w="bold" style={{ color: fg }} numberOfLines={1}>
-            {to}
-          </T>
+          <PlateTime text={to} color={fg} />
         </View>
       ) : null}
     </View>

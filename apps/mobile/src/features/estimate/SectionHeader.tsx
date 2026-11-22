@@ -1,12 +1,12 @@
 import { memo, useEffect, useState } from "react";
 import { View } from "react-native";
-import { size, space } from "@octo/design-tokens";
+import { radius, size, space } from "@octo/design-tokens";
 import type { EstimateSection } from "@octo/estimating-engine";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { IconButton, TextField } from "@/ui/controls";
 import { Menu, type MenuItem } from "@/ui/overlays";
-import { Icon, Press, T } from "@/ui/primitives";
+import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { useScreenScroll } from "@/ui/requiredForm";
 import { RowView } from "@/ui/surfaces";
 import { useRef, type ComponentRef } from "react";
@@ -75,7 +75,15 @@ function SectionHeaderView(p: SectionHeaderProps) {
   ];
   const commit = () => p.api.rename(s.id, draft);
   return (
-    <View ref={rootRef} collapsable={false} testID={`est-section-${s.id}`} style={{ paddingLeft: p.depth === 1 ? space[4] : 0, paddingVertical: space[1] }} accessibilityRole="header">
+    // #2363 q75 (founder 21.11: «группы должны быть хорошо видны — сейчас тёмно-серое на сером»): a top section is a band of its own —
+    // `surf2` across the card, the kind's icon, the title and the total 15/700; a subsection stays a quiet line
+    <View
+      ref={rootRef}
+      collapsable={false}
+      testID={`est-section-${s.id}`}
+      style={{ paddingLeft: p.depth === 1 ? space[4] : space[2], paddingRight: p.depth === 1 ? 0 : space[1], paddingVertical: space[1], ...(p.depth === 0 ? { backgroundColor: c.surf2, borderRadius: radius.inner, marginVertical: space[1] } : null) }}
+      accessibilityRole="header"
+    >
       <RowView style={{ minHeight: size.rowMin }}>
         {p.renaming && ready ? (
           <View style={{ flex: 1, gap: space[1] }}>
@@ -88,8 +96,9 @@ function SectionHeaderView(p: SectionHeaderProps) {
           <Press onPress={() => p.api.toggle(s.id)} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={t("est.sec.toggle")} accessibilityState={{ expanded: !p.collapsed }} containerStyle={{ flex: 1 }} testID={`est-sec-toggle-${s.id}`}>
             <RowView style={{ minHeight: size.rowMin }}>
               <Icon name={p.collapsed ? "chevronRight" : "chevronDown"} s={size.iconSm} color={c.mut} />
+              {p.depth === 0 && s.kind && KIND_ICON[s.kind] ? <Icon name={KIND_ICON[s.kind]!} s={size.iconSm} color={c.ink} /> : null}
               <View style={{ flex: 1 }}>
-                <T v="body" w="semibold" numberOfLines={1}>
+                <T v="body" w={p.depth === 0 ? "bold" : "semibold"} numberOfLines={1}>
                   {p.title}
                 </T>
                 {p.collapsed ? (
@@ -98,7 +107,7 @@ function SectionHeaderView(p: SectionHeaderProps) {
                   </T>
                 ) : null}
               </View>
-              <T v="body" tabular w="semibold">
+              <T v="body" tabular w={p.depth === 0 ? "bold" : "semibold"}>
                 {p.total}
               </T>
             </RowView>
@@ -114,5 +123,8 @@ function SectionHeaderView(p: SectionHeaderProps) {
     </View>
   );
 }
+
+/** the kind's own icon on a kind section's band (DS §8.5) */
+const KIND_ICON: Partial<Record<string, IconKey>> = { material: "box", labor: "wrench", service: "toolbox" };
 
 export const SectionHeader = memo(SectionHeaderView);

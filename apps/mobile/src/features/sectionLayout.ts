@@ -329,3 +329,16 @@ export function sameLayout(a: Opt, b: Opt): boolean {
   const y = view(b);
   return x.length === y.length && x.every((k, i) => k === y[i]);
 }
+
+/**
+ * #2363 q75 (founder 21.11.2026: «по видам, автоматически»): the option as it is SHOWN — with no sections of its own and lines of two
+ * kinds or more, its lines stand in kind sections («Материалы · Работа · Услуги», `layoutByKind`) with fixed ids `auto-1…` (in the kinds' order),
+ * so the view is the same on every render. Null — show the option as it is (own sections, one kind, a module's lines only).
+ */
+export function autoGroups<T extends Opt>(o: T): T | null {
+  if ((o.sections ?? []).length) return null;
+  const kinds = new Set(o.lines.filter((l) => !l.source).map((l) => l.group));
+  if (kinds.size < 2) return null;
+  let n = 0;
+  return layoutByKind(o, () => `auto-${++n}`);
+}

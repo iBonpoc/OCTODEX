@@ -51,7 +51,9 @@ export default function Finance() {
     ...(pay ? [{ key: "payments", label: t("mny.payments.title"), href: "/payments", icon: "dollar" as const }] : []),
     ...(pay ? [{ key: "expenses", label: t("nav.expenses"), href: "/money", icon: "wallet" as const }] : []),
   ];
-  const owedSub = [o.owed.overdue ? tn("px3.money.overdue", o.owed.overdue) : null, tn("todayR.invN", o.owed.n)].filter(Boolean).join(" · ");
+  // #2363 q77 (founder: Б): «Должны» is a neutral tile — the overdue count is a status word with its icon, not a yellow fill
+  const owedSub = tn("todayR.invN", o.owed.n);
+  const owedNote = o.owed.overdue ? { tone: "bad" as const, text: tn("px3.money.overdue", o.owed.overdue) } : undefined;
   // #2363 F45: «3 сметы · 3 ждут ответа» said the same twice — when every open estimate waits, only «3 ждут ответа»
   const estSub = o.estimates.waiting && o.estimates.waiting === o.estimates.n
     ? tn("px3.money.waitN", o.estimates.waiting)
@@ -71,7 +73,7 @@ export default function Finance() {
         <View style={{ gap: rhythm.cardGap }}>
           {/* a $0 tile is not drawn (StatTile): the rest keep their places */}
           <StatGrid testID="money-tiles">
-            <StatTile testID="money-tile-owed" icon="dollar" accent label={t("px3.money.owed")} value={moneyWhole(o.owed.cents)} sub={owedSub} onPress={() => go("/invoice")} />
+            <StatTile testID="money-tile-owed" icon="dollar" label={t("px3.money.owed")} value={moneyWhole(o.owed.cents)} sub={owedSub} subNote={owedNote} onPress={() => go("/invoice")} />
             <StatTile testID="money-tile-estimates" icon="doc" label={t("px3.money.est")} value={moneyWhole(o.estimates.cents)} sub={estSub} onPress={() => go("/estimates")} />
           </StatGrid>
           <StatGrid cols={3} testID="money-tiles-small">

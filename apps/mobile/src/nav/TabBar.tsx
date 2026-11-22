@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { router, useGlobalSearchParams, usePathname, useRootNavigationState, useSegments, type Href } from "expo-router";
 import { View, useWindowDimensions } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
-import { component, size, spaceHalf } from "@octo/design-tokens";
+import { component, radius, size, space, spaceHalf } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
@@ -20,6 +20,8 @@ import { gateFreePath } from "@/features/legal";
 import { activeSection } from "./hierarchy";
 import { meIsSub, sectionHref, tabOf, tabs, type SectionId } from "./sections";
 import { moduleTabs } from "@/modules/registry";
+import { buildAttention } from "@/features/attention";
+import { badgeText } from "@/ui/headerIconRules";
 
 /**
  * Phone: a bar across the bottom (56 + the safe area, visual v2 «Панель вкладок»), the 5 tabs of docs/specs/13 §2.1 — the same
@@ -106,6 +108,9 @@ function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: Secti
   const coreItem = (s: (typeof core)[number]): Item => ({ id: s.id as string, label: s.label as string, icon: s.icon, onPress: () => onGo(s.id) });
   const modItems: Item[] = mods.map((m) => ({ id: m.tabId, label: m.labelKey as string, icon: m.icon, onPress: () => onGoHref(m.href as Href) }));
   const items: Item[] = core.flatMap((s, i) => (i === 1 && modItems.length ? [...modItems, coreItem(s)] : [coreItem(s)]));
+  // #2363 q78 (founder 21.11: «А, красное»): the count of leads with no answer on the «Лиды» tab — the same count as the Home tile
+  // «Лиды без ответа»; the tab says it with its icon AND word, VoiceOver hears «Лиды, 2 без ответа»
+  const leadsN = useMemo(() => buildAttention(db, role).filter((x) => x.kind === "lead").length, [db, role]);
   const modNow = mods.find((m) => path === m.href || path.startsWith(`${m.href}/`));
   const current: string | undefined = modNow ? modNow.tabId : sectionNow;
 
@@ -146,11 +151,24 @@ function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: Secti
               accessibilityRole="tab"
               accessibilityState={{ selected: sel }}
               aria-selected={sel}
-              accessibilityLabel={t(it.label as DictKey)}
+              accessibilityLabel={it.id === "leads" && leadsN ? `${t(it.label as DictKey)}, ${t("r1.tab.leadsWaiting", { n: leadsN })}` : t(it.label as DictKey)}
               containerStyle={{ flex: 1 }}
               style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: spaceHalf.hair }}
             >
-              <Icon name={it.icon} s={component.tabBar.icon} color={tone} active={sel} />
+              <View>
+                <Icon name={it.icon} s={component.tabBar.icon} color={tone} active={sel} />
+                {it.id === "leads" && badgeText(leadsN) ? (
+                  <View
+                    testID="leads-badge"
+                    pointerEvents="none"
+                    style={{ position: "absolute", top: -space[1], left: component.tabBar.icon - space[2], minWidth: component.tabBar.badge, height: component.tabBar.badge, paddingHorizontal: spaceHalf.tight, borderRadius: radius.pill, backgroundColor: c.status.bad.text, alignItems: "center", justifyContent: "center" }}
+                  >
+                    <T v="micro" w="bold" tabular style={{ color: c.bg, fontSize: component.tabBar.badgeText, lineHeight: component.tabBar.badge }}>
+                      {badgeText(leadsN)}
+                    </T>
+                  </View>
+                ) : null}
+              </View>
               <T v="micro" style={{ color: tone }} numberOfLines={1} capped>
                 {t(it.label as DictKey)}
               </T>

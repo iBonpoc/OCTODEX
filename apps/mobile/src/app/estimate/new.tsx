@@ -28,7 +28,7 @@ import { CaWarn } from "@/features/estimate/CaWarn";
 import { NotesTerms } from "@/features/estimate/NotesTerms";
 import { isSignedEstimate } from "@/features/estimate/notesTerms";
 import { docLanguageFor } from "@/data/people";
-import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
+import { autoGroups, canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
 import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, nextSeries, replaceLine, restoreDeleted, type DeleteSeries, restoreLine, rowProblems, setHidden } from "@/features/estimateRows";
 import { FieldError, useRequiredForm, useScreenScroll } from "@/ui/requiredForm";
 import { MainStep } from "@/ui/mainStep";
@@ -253,6 +253,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const customer = db.customers.find((c) => c.id === customerId);
   const property = db.properties.find((p) => p.id === propertyId) ?? db.properties.find((p) => p.customerId === customerId);
   const option = doc.options[Math.min(cur, doc.options.length - 1)]!;
+  // #2363 q75 (founder 21.11: «по видам, автоматически»): an option with no sections of its own and lines of two kinds or more is
+  // SHOWN in groups by kind («Материалы · Работа · Услуги», DS §8.5) — a view, not data: the document, the PDF and /p/ do not change
+  // until the person moves a row or a section (then the grouping becomes the option's own sections, with «Вернуть»)
+  const grouped = useMemo(() => autoGroups(option), [option]);
+  const layoutOpt = grouped ?? option;
   // a tax-exempt client: no sales tax on the estimate (the server refuses it, П-2a)
   const exempt = !!customer?.taxExempt;
   const counted = useMemo(() => exemptDoc(doc, exempt), [doc, exempt]);
@@ -449,6 +454,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     showUndo("est.sec.laidOut", option, next);
   };
   const sectionAction = (id: string, a: SectionAction) => {
+    const option = layoutOpt; // the shown layout: a move makes the auto groups the option's own
     if (signed) return;
     if (a === "rename") return setRenamingId(id);
     if (a === "addSub") return addSectionBtn(id);
@@ -459,6 +465,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     showUndo("est.sec.deleted", option, next);
   };
   const doMove = (lineId: string, key: string) => {
+    const option = layoutOpt; // the shown layout: a move makes the auto groups the option's own
     if (signed) return setMoveFor(null);
     const index = option.lines.findIndex((l) => l.id === lineId);
     const line = option.lines[index];
@@ -481,6 +488,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   };
   /** a row was let go in the list (DS §14.6): the line or the section lands where the bar stood; «Вернуть» takes back this move only */
   const dropRow = (d: Drop): DropResult => {
+    const option = layoutOpt; // the shown layout: a move makes the auto groups the option's own
     if (signed) return "same";
     const refuse = (why: string): DropResult => {
       toast.show(t("est.sec.moduleBlocked"));
@@ -760,10 +768,10 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const act = activeLines(option.lines);
   // the sum of each line by its id, once (not `indexOf` for every row: that is n² for a long estimate)
   // a section that is carried folds while it is held (its lines go with it)
-  const view = useMemo(() => withLooseTarget(viewRows(option, new Set(holdSection ? [...collapsedIds, holdSection] : collapsedIds)), !!lifted?.startsWith("l:")), [option, collapsedIds, holdSection, lifted]);
+  const view = useMemo(() => withLooseTarget(viewRows(layoutOpt, new Set(holdSection ? [...collapsedIds, holdSection] : collapsedIds)), !!lifted?.startsWith("l:")), [layoutOpt, collapsedIds, holdSection, lifted]);
   // the first line on the list: the swipe hint plays on it
   const firstLineId = view.find((r): r is Extract<typeof r, { type: "line" }> => r.type === "line")?.line.id;
-  const secTotals = useMemo(() => sectionSubtotals(option, s), [option, s]);
+  const secTotals = useMemo(() => sectionSubtotals(layoutOpt, s), [layoutOpt, s]);
   const totalById = new Map(act.map((l, i) => [l.id, totals.lineTotals[i] ?? 0] as const));
   const taxValue = !s.tax.enabled ? t("ue.off") : partialTax ? `${ppmToPctText(taxRatePpm(s.tax))}% · ${t("ue.taxPartialShort")}` : `${ppmToPctText(taxRatePpm(s.tax))}%`;
   const discValue = !s.discount ? t("ue.add") : s.discount.kind === "pct" ? `${discountBps(s.discount.value) / 100}%` : money(s.discount.cents);
@@ -774,11 +782,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // «сохранено 8:19» (visual v2 №5): the version's own save mark; another day — the day
   // (an estimate saved before the mark existed: the time it was sent — the type's own fallback)
   const savedIso = existing?.doc?.savedAt ?? existing?.savedAt ?? existing?.sentAt;
-  // #2363 F46: «сохранено 8:19» today, «сохранено вчера» the day before, else «сохранено 19 нояб.» — no weekday, no «чт,»
+  // #2363 F46 (founder 21.11): «сохранено 8:19» today, «сохранено вчера» the day before, else «сохранено пт, 19 нояб.» — no «позавчера»
   // #2363 F33: saved after it went to the client — the client has not seen these edits
   const changedAfterSend = !!existing && existing.status !== "draft" && !!existing.sentAt && !!savedIso && savedIso > existing.sentAt;
   const savedWord = savedIso
-    ? t("px3.est.saved", { time: dayKeyIn(savedIso) === todayKey() ? time(savedIso) : dayOffsetOf(dayKeyIn(savedIso)) === -1 ? t("proto.client.yesterday").toLocaleLowerCase() : day(savedIso).replace(/^[^,]+,\s*/, "") })
+    ? t("px3.est.saved", { time: dayKeyIn(savedIso) === todayKey() ? time(savedIso) : dayOffsetOf(dayKeyIn(savedIso)) === -1 ? t("proto.client.yesterday").toLocaleLowerCase() : day(savedIso) })
     : undefined;
   // the pinned bar's ONE main step (direction 20.11 §3, the founder 21.11 #2350: «большая кнопка всегда светится, перекрывает» —
   // so one compact row «Итого ˅ $… · кнопка по словам»): no line yet — «Добавить позицию» (the price list when there is one, else
@@ -921,6 +929,10 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
             <View style={{ flex: 1 }} />
             {signed ? null : (
               <>
+                {/* #2363 (founder 21.11): «＋» first — a new line is the commonest; then the catalog, the sections, a template */}
+                <View testID="est-add-new">
+                  <IconButton size="card" icon="plus" label={t("px3.est.newLine")} onPress={() => addNew()} />
+                </View>
                 <View testID="est-add-catalog">
                   <IconButton size="card" icon="catalog" label={t("px3.est.fromCatalog")} onPress={openCatalog} />
                 </View>
@@ -930,22 +942,33 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                     <IconButton size="card" icon="doc" label={t("px3.est.template")} onPress={openTemplates} />
                   </View>
                 ) : null}
-                <View testID="est-add-new">
-                  <IconButton size="card" icon="plus" label={t("px3.est.newLine")} onPress={() => addNew()} />
-                </View>
               </>
             )}
           </RowView>
           </View>
           <View ref={linesRef} collapsable={false} style={{ gap: space[1] }}>
-          <Card style={{ paddingVertical: 0, paddingHorizontal: space[3] + spaceHalf.hair, gap: 0, ...(missing === "lines" ? { borderColor: c.status.bad.fill } : null) }}>
-            {option.lines.length === 0 ? (
-              <View testID="est-empty">
-                <T v="body" tone="mut">
-                  {t("est.row.empty")}
-                </T>
-              </View>
+          {option.lines.length === 0 ? (
+              // #2363 (founder 21.11: «Позиций пока нет — блок некрасивый»): DS §13 «Пусто — данных нет вообще» — the object's icon,
+              // the words, one line why, and the two ways to add (secondary: the screen's main action is the bar below)
+              <Empty
+                testID="est-empty"
+                icon="estimate"
+                title={t("est.row.empty")}
+                hint={signed ? undefined : t("r1.est.emptyHint")}
+                action={signed ? undefined : (
+                  <RowView gap={space[2]} style={{ flexWrap: "wrap", justifyContent: "center" }}>
+                    <View testID="est-empty-new">
+                      <Button label={t("px3.est.newLine")} icon="plus" variant="secondary" onPress={() => addNew()} />
+                    </View>
+                    <View testID="est-empty-catalog">
+                      <Button label={t("px3.est.fromCatalog")} icon="catalog" variant="secondary" onPress={openCatalog} />
+                    </View>
+                  </RowView>
+                )}
+              />
             ) : null}
+          {/* the lines' card only when there are lines: the empty state is its own card, never a card in a card */}
+          <Card style={{ paddingVertical: 0, paddingHorizontal: space[3] + spaceHalf.hair, gap: 0, ...(option.lines.length === 0 ? { display: "none" } : null), ...(missing === "lines" ? { borderColor: c.status.bad.fill } : null) }}>
             <SortableList
               rows={view}
               openKey={openId ? `l:${openId}` : renamingId ? `s:${renamingId}` : null}

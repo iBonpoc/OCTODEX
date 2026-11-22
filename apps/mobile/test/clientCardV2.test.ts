@@ -23,11 +23,11 @@ const none = { jobs: [] as Job[], visits: [] as NowVisit[], invoices: [] as Invo
 
 describe("sections: one strip «Обзор · Работы · Сметы · Счета · Объекты · Журнал» (visual v2, #2350)", () => {
   it("the office: Обзор · Работы · Сметы · Счета · Объекты · Журнал; no money yet — no «Счета»", () => {
-    expect(clientSectionKeys("director", true)).toEqual(["overview", "work", "estimates", "money", "places", "log"]);
-    expect(clientSectionKeys("dispatcher", false)).toEqual(["overview", "work", "estimates", "places", "log"]);
+    expect(clientSectionKeys("director", true)).toEqual(["overview", "work", "estimates", "money", "visits", "places", "log"]);
+    expect(clientSectionKeys("dispatcher", false)).toEqual(["overview", "work", "estimates", "visits", "places", "log"]);
   });
   it("one place: no «Объекты» — the address is the header's panel and «Маршрут» (nothing twice)", () => {
-    expect(clientSectionKeys("director", true, false)).toEqual(["overview", "work", "estimates", "money", "log"]);
+    expect(clientSectionKeys("director", true, false)).toEqual(["overview", "work", "estimates", "money", "visits", "log"]);
     expect(clientSectionKeys("tech", false, false)).toEqual(["overview", "work", "log"]);
   });
   it("the tech never sees «Счета» nor «Сметы»", () => {

@@ -137,6 +137,7 @@ export const V2_VARIANTS: readonly { part: string; prop: string; src: string; us
   { part: "NowCard", prop: "trio", src: "ui/nowCard.tsx", use: "trio={[", shown: "ProtoV2.tsx" },
   { part: "StatTile", prop: "dense", src: "ui/statTile.tsx", use: "<StatTile dense", shown: "ProtoV2.tsx" },
   { part: "StatTile", prop: "unitTone", src: "ui/statTile.tsx", use: 'unitTone="bad"', shown: "ProtoV2.tsx" },
+  { part: "StatTile", prop: "subNote", src: "ui/statTile.tsx", use: "subNote={{", shown: "ProtoV2.tsx" },
   { part: "StatGrid", prop: "cols", src: "ui/statTile.tsx", use: "cols={4}", shown: "ProtoV2.tsx" },
   { part: "ListGroup", prop: "bare", src: "ui/groupedList.tsx", use: "<ListGroup bare", shown: "ProtoV2.tsx" },
   { part: "ListGroup", prop: "count", src: "ui/groupedList.tsx", use: "<ListGroup count={", shown: "ProtoV2.tsx" },

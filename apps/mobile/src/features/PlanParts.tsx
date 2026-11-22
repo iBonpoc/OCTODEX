@@ -23,7 +23,7 @@ import { Avatar, TextField } from "@/ui/controls";
 import { CountPill, HatchPlate, TimeSlot } from "@/ui/figures";
 import { StatusPill } from "@/ui/statusPill";
 import { StatusNote } from "@/ui/statusNote";
-import { nearIndex, plateHalves, problemSummary, quietStatuses } from "@/features/planSlots";
+import { nearIndex, problemSummary, quietStatuses } from "@/features/planSlots";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Divider, ListRow } from "@/ui/surfaces";
@@ -168,7 +168,8 @@ export function PlanDay({ items, day, title, testID }: { items: PlanItem[]; day:
         const span = x.allDay || x.at === "";
         const from = span ? itemTimes(x, time, t("plan5.allDay")).when : time(x.start);
         const to = span || !x.end ? "" : time(x.end);
-        const [a, b] = to ? plateHalves(from, to) : [from, ""];
+        // #2363 q73: both halves keep their AM/PM (the plate draws them small)
+        const [a, b] = to ? [from, to] : [from, ""];
         const hour = span ? "" : timeLead(time(x.start)).top;
         const len = !span && x.end ? duration((Date.parse(x.end) - Date.parse(x.start)) / 60_000) : undefined;
         const names = x.people.map((id) => memberName(db, id, t)).filter(Boolean).join(", ");

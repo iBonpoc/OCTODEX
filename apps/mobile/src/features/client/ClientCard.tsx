@@ -25,7 +25,7 @@ import { PeopleSheet, StatusSheet, TagsSheet } from "@/features/client/ClientShe
 import { newProperty, PropertySheet } from "@/features/client/PropertySheets";
 import { clientSectionKeys, jobChain, type ClientMainStep, type ClientSectionKey } from "@/features/client/nextStep";
 import { ClientContacts } from "@/features/client/ClientContacts";
-import { ClientDetails, ClientEstimates, ClientLog, ClientMoney, ClientNowCard, ClientOverview, ClientPlaces, ClientWork, clientStepOf, useClientFacts } from "@/features/client/ClientSections";
+import { ClientDetails, ClientEstimates, ClientLog, ClientMoney, ClientNowCard, ClientOverview, ClientPlaces, ClientVisits, ClientWork, clientStepOf, useClientFacts } from "@/features/client/ClientSections";
 import { TaskSheet, type TaskDraft } from "@/features/tasks/TaskSheet";
 import { cleanPhone, mailtoHref } from "@/features/contactLinks";
 import { propertyMapQuery } from "@/features/properties";
@@ -40,6 +40,7 @@ const SECTION_LABEL: Record<ClientSectionKey, DictKey> = {
   work: "proto.client.sec.work",
   estimates: "cl6.tab.estimates",
   money: "cl6.tab.invoices",
+  visits: "jobs.visits",
   places: "proto.client.sec.places",
   log: "proto.client.sec.log",
 };
@@ -175,10 +176,10 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
         key: k,
         label: k === "work" && !office ? t("jobs.visits") : t(SECTION_LABEL[k]),
         // a number only where it means something (v2: «Работы 2 · Сметы 1 · Счета 2»)
-        count: k === "work" ? workN || undefined : k === "estimates" ? r.estimates.length || undefined : k === "money" ? r.invoices.length || undefined : k === "places" ? r.properties.length : undefined,
+        count: k === "work" ? workN || undefined : k === "estimates" ? r.estimates.length || undefined : k === "money" ? r.invoices.length || undefined : k === "visits" ? f.visits.length || undefined : k === "places" ? r.properties.length : undefined,
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the words of the strip
-    [keys.join(), office, workN, r.estimates.length, r.invoices.length, r.properties.length, t],
+    [keys.join(), office, workN, r.estimates.length, r.invoices.length, f.visits.length, r.properties.length, t],
   );
 
   const body =
@@ -188,6 +189,8 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
       <ClientEstimates f={f} />
     ) : current === "money" ? (
       <ClientMoney c={c} f={f} />
+    ) : current === "visits" ? (
+      <ClientVisits f={f} />
     ) : current === "places" ? (
       <ClientPlaces c={c} f={f} onRoute={route} />
     ) : current === "log" ? (

@@ -10,7 +10,7 @@
  */
 import { Children, createContext, isValidElement, useContext, type ReactNode } from "react";
 import { View, useWindowDimensions } from "react-native";
-import { component, radius, rhythm, size, space, spaceHalf, type StatusName } from "@octo/design-tokens";
+import { component, radius, rhythm, size, space, spaceHalf, statusIcon, type StatusName } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { statColumns, statRows, statSaid, statShown } from "./statTileLogic";
@@ -18,7 +18,7 @@ import { statColumns, statRows, statSaid, statShown } from "./statTileLogic";
 /** how many tiles the grid puts in a row (2 — the big tile, 3 — the small one) */
 const ColsCtx = createContext<2 | 3 | 4>(2);
 
-export function StatTile({ label, value, unit, unitTone, sub, icon, accent, warn, selected, dense, onPress, a11y, testID }: {
+export function StatTile({ label, value, unit, unitTone, sub, subNote, icon, accent, warn, selected, dense, onPress, a11y, testID }: {
   /** the word (always there — a figure never stands alone) */
   label: string;
   /** the figure: a count or a sum already formatted («$12,400») */
@@ -31,6 +31,8 @@ export function StatTile({ label, value, unit, unitTone, sub, icon, accent, warn
   dense?: boolean;
   /** the line under the figure, 12 `mut`: «1 · 0 закрыто», «за 7 дн» — what the figure is of */
   sub?: string;
+  /** #2363 q77: a status word before `sub` — its icon and the word in the tone («⊗ 1 просрочен · 2 счёта»), rule 2 */
+  subNote?: { tone: Exclude<StatusName, "neutral">; text: string };
   /** the icon in the circle on top left */
   icon?: IconKey;
   /** the screen's one yellow tile (v2: Деньги — «Должны») */
@@ -79,19 +81,27 @@ export function StatTile({ label, value, unit, unitTone, sub, icon, accent, warn
         <T v="micro" style={{ color: mut }} numberOfLines={2}>
           {label}
         </T>
-        <View style={{ flexDirection: "row", alignItems: "baseline", gap: space[1] }}>
-          <T v={dense ? "title" : small ? "figureSm" : "figure"} style={{ color: ink, flexShrink: 1 }} numberOfLines={1}>
+        {/* the figure is never cut: a long unit («⊙ 1 просроч.») goes to the next line, not «$2,8…» (#2363) */}
+        <View style={{ flexDirection: "row", alignItems: "baseline", columnGap: space[1], flexWrap: "wrap" }}>
+          <T v={dense ? "title" : small ? "figureSm" : "figure"} style={{ color: ink, flexShrink: 0 }} numberOfLines={1}>
             {value}
           </T>
+          {/* #2363 X01: a unit in a status tone («1 просроч.») carries its status icon — rule 2, never the colour alone */}
           {unit ? (
-            <T v="micro" style={{ color: unitTone && !accent ? c.status[unitTone].text : mut, flexShrink: 1 }} numberOfLines={1}>
-              {unit}
-            </T>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: spaceHalf.tight, maxWidth: "100%" }}>
+              {unitTone && unitTone !== "neutral" && !accent ? <Icon name={statusIcon[unitTone]} s={size.iconXs} color={c.status[unitTone].text} /> : null}
+              <T v="micro" style={{ color: unitTone && !accent ? c.status[unitTone].text : mut, flexShrink: 1 }} numberOfLines={1}>
+                {unit}
+              </T>
+            </View>
           ) : null}
         </View>
-        {sub ? (
-          <View testID={testID ? `${testID}-sub` : undefined}>
-            <T v="micro" style={{ color: mut }} numberOfLines={1}>
+        {sub || subNote ? (
+          <View testID={testID ? `${testID}-sub` : undefined} style={{ flexDirection: "row", alignItems: "center", gap: spaceHalf.tight }}>
+            {subNote ? <Icon name={statusIcon[subNote.tone]} s={size.iconXs} color={accent ? ink : c.status[subNote.tone].text} /> : null}
+            <T v="micro" style={{ color: mut, flexShrink: 1 }} numberOfLines={1}>
+              {subNote ? <T v="micro" w="semibold" style={{ color: accent ? ink : c.status[subNote.tone].text }}>{subNote.text}</T> : null}
+              {subNote && sub ? " · " : null}
               {sub}
             </T>
           </View>

@@ -493,13 +493,12 @@ export function projectStep(e: Estimate | undefined, j: Job, invoices: Invoice[]
   return at === -1 ? steps.length : at;
 }
 
-export function ClientWork({ f }: { c: Customer; f: ClientFacts }) {
-  const { t, money, day } = useI18n();
+/** «Выезды» — the client's visits, newest first (the tech's «Работы», the office's own section — #2363 q76) */
+export function ClientVisits({ f }: { f: ClientFacts }) {
+  const { t } = useI18n();
   const when = useWhen();
-  const { db, r, office } = f;
-  if (f.role === "tech") {
-    // the tech: his own visits only (client-card.html §7 «Работы» → «Выезды»)
-    return f.visits.length === 0 ? (
+  const { db } = f;
+  return f.visits.length === 0 ? (
       <Empty icon="calendar" title={t("prop.noVisits")} />
     ) : (
       <GroupedList testID="client-visits">
@@ -517,6 +516,15 @@ export function ClientWork({ f }: { c: Customer; f: ClientFacts }) {
         </ListGroup>
       </GroupedList>
     );
+}
+
+export function ClientWork({ f }: { c: Customer; f: ClientFacts }) {
+  const { t, money, day } = useI18n();
+  const when = useWhen();
+  const { db, r, office } = f;
+  if (f.role === "tech") {
+    // the tech: his own visits only (client-card.html §7 «Работы» → «Выезды»)
+    return <ClientVisits f={f} />;
   }
   const live = r.jobs.filter((j) => !j.cancelledAt && j.status !== "done");
   const closed = r.jobs.filter((j) => j.status === "done" || j.cancelledAt);

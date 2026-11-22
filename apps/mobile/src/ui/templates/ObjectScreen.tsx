@@ -28,6 +28,9 @@ export interface ObjectScreenProps<S extends string> {
   actions?: IconRowItem[];
   /** THE main step — under the header and its quick actions, a 40 button by its words (no pinned plate on an object) */
   main?: MainAction;
+  /** #2363 (founder 21.11: «кнопка сдвигает контент»): the step stands UNDER the sections strip, first in the section's content —
+   *  for a screen whose step exists in one section only (Смета · Подпись на месте): the strip never jumps */
+  mainBelowSections?: boolean;
   /**
    * visual v2 «Клиент» (#2350, the lead №21: «кнопка следующего шага — в карточке „Сейчас“ вверху»): the object's «Сейчас» card under
    * the quick actions, before the sections — the screen puts its main step INSIDE it (then `main` is not given: never two steps)
@@ -85,6 +88,7 @@ function useObjectParts<S extends string>(p: ObjectScreenProps<S>) {
   const onMore = (k: string) => (k === SECOND_KEY ? p.second?.onPress() : p.onMore(k));
   // the one step under the header: a 40 button by its words (never a plate across the screen, never two)
   const step = p.main && layout.under.includes("main") ? <MainStep placement="top" fit main={p.main} /> : null;
+  const below = !!p.mainBelowSections && p.sections.length > 0;
   const right = <ObjectRight create={p.create} onCreate={p.onCreate} items={items} onMore={onMore} testID={p.testID} />;
   // the selected pill stays one object while the section is the same (03 §2.5: the strip's items memoised)
   const tabs = useMemo(
@@ -107,7 +111,7 @@ function useObjectParts<S extends string>(p: ObjectScreenProps<S>) {
         {p.lead ? <HeaderFade>{p.lead}</HeaderFade> : null}
       </View>
       {p.now ?? null}
-      {step}
+      {below ? null : step}
     </View>
   );
   // v2 «Объект»: the name 30 | the rule | two lines; a client's «⌄» (the header has a panel) after the name
@@ -118,7 +122,7 @@ function useObjectParts<S extends string>(p: ObjectScreenProps<S>) {
       ? { open, onToggle: setOpen, expandLabel: p.header.labels.expand, collapseLabel: p.header.labels.collapse, testID: `${p.header.testID}-toggle`, panel: p.header.contacts ?? <View testID={`${p.header.testID}-details`}><Card>{p.header.details}</Card></View> }
       : undefined,
   };
-  return { right, tabs, top, head };
+  return { right, tabs, top, head, under: below ? step : null };
 }
 
 /**
@@ -139,7 +143,7 @@ function ObjectRight({ create, onCreate, items, onMore, testID }: { create?: Cre
 }
 
 function ObjectLive<S extends string>(p: ObjectScreenProps<S>) {
-  const { right, tabs, top, head } = useObjectParts(p);
+  const { right, tabs, top, head, under } = useObjectParts(p);
   return (
     <Screen
       testID={p.testID}
@@ -149,7 +153,7 @@ function ObjectLive<S extends string>(p: ObjectScreenProps<S>) {
       right={right}
       tabs={tabs ?? undefined}
       tabKey={p.section}
-      below={tabs ? <View style={{ gap: space[3] }}>{p.children}</View> : undefined}
+      below={tabs ? <View style={{ gap: space[3] }}>{under}{p.children}</View> : undefined}
     >
       {top}
       {tabs ? null : <View style={{ gap: space[3] }}>{p.children}</View>}
@@ -158,11 +162,12 @@ function ObjectLive<S extends string>(p: ObjectScreenProps<S>) {
 }
 
 function ObjectPreview<S extends string>(p: ObjectScreenProps<S>) {
-  const { right, tabs, top, head } = useObjectParts(p);
+  const { right, tabs, top, head, under } = useObjectParts(p);
   return (
     <TemplateFrame testID={p.testID} kind="object" title={p.header.title} sub={head.sub} back={p.back} right={right}>
       {top}
       {tabs}
+      {under}
       {p.children}
     </TemplateFrame>
   );

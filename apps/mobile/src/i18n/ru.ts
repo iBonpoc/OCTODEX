@@ -2107,10 +2107,10 @@ export const ru = {
   "w2m.due.today": "сегодня",
   // визуал v2, Смета-редактор и Деньги (#2344, px3)
   "px3.money.owed": "Должны · счета",
-  "px3.money.overdue.one": "! {n} просрочен",
-  "px3.money.overdue.few": "! {n} просрочены",
-  "px3.money.overdue.many": "! {n} просрочено",
-  "px3.money.overdue.other": "! {n} просрочено",
+  "px3.money.overdue.one": "{n} просрочен",
+  "px3.money.overdue.few": "{n} просрочены",
+  "px3.money.overdue.many": "{n} просрочено",
+  "px3.money.overdue.other": "{n} просрочено",
   "px3.money.est": "Сметы открыты",
   "px3.money.estN.one": "{n} смета",
   "px3.money.estN.few": "{n} сметы",
@@ -5594,6 +5594,8 @@ export const ru = {
   "r1.itemsN.few": "{n} пункта",
   "r1.itemsN.many": "{n} пунктов",
   "r1.itemsN.other": "{n} пункта",
+  "r1.tab.leadsWaiting": "{n} без ответа",
+  "r1.est.emptyHint": "Добавьте первую — новой строкой или из каталога",
   "r1.est.changedAfterSend": "изменена после отправки",
 } as const;
 
