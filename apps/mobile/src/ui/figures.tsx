@@ -192,10 +192,11 @@ export function TimerLine({ value, since, action, testID }: { value: string; sin
 }
 
 /** «8:30 AM» → the hour and «AM» as two small letters in a COLUMN beside it — «A» over «M» (founder 21.11, #2363 q73: «цифры
- *  горизонтально, буквы вертикально»); a screen reader hears the time whole from the slot's label */
+ *  горизонтально, буквы вертикально»), the column no higher than a digit («вместе высотой как цифра»); a screen reader hears the
+ *  time whole from the slot's label */
 function PlateTime({ text, color }: { text: string; color: string }) {
   const m = /^(.*?)[\s\u00a0\u202f]*([AaPp])\.?([Mm])\.?$/.exec(text.trim());
-  const k = component.timeSlot.meridiem;
+  const k = component.timeSlot;
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: spaceHalf.hair }}>
       <T v="caption" w="bold" style={{ color }} numberOfLines={1}>
@@ -204,7 +205,7 @@ function PlateTime({ text, color }: { text: string; color: string }) {
       {m ? (
         <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={{ alignItems: "center" }}>
           {[m[2]!, m[3]!].map((ch, i) => (
-            <T key={i} v="micro" w="bold" style={{ color, fontSize: k, lineHeight: k }}>
+            <T key={i} v="micro" w="bold" capped style={{ color, fontSize: k.meridiem, lineHeight: k.meridiemLine }}>
               {ch.toUpperCase()}
             </T>
           ))}

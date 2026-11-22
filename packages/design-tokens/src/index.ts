@@ -319,8 +319,9 @@ export const component = {
   /** FigureRow «цифры справа» (visual v2): a card from `h` 64, the icon square `icon` 40 with radius `iconRadius` 13, a value column `colW` 64 */
   figureRow: { h: 64, icon: 40, iconRadius: 13, colW: 64 },
   /** TimeSlot (visual v2): the hour column `timeW` 44 (hour 15/700, duration 12), the interval plate `interval` 26 of two halves, the notch `notch` 8 */
-  /** `meridiem` — «AM»/«PM» in the interval plate, small like a superscript beside the hour (founder 21.11, #2363 q73) */
-  timeSlot: { timeW: 44, interval: 26, notch: 8, meridiem: 9 },
+  /** `meridiem` — «AM»/«PM» in the interval plate: two letters in a column beside the hour, the column as high as a digit
+   *  (founder 21.11, #2363: «вместе высотой как цифра», each letter ≈ half a digit) — the letter `meridiem` 6 on a line `meridiemLine` 5 */
+  timeSlot: { timeW: 44, interval: 26, notch: 8, meridiem: 6, meridiemLine: 5 },
   /** #2363 q72 (founder 21.11: вариант А): the estimate's «Итого» folds into a capsule on the right after scrolling down `down`
    *  24 pt; it opens again after scrolling up `up` 8 pt, at the very top, or by a tap */
   totalFold: { down: 24, up: 8 },

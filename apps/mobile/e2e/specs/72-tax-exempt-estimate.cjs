@@ -11,7 +11,7 @@ exports.run = async (h) => {
   await p.getByRole("button", { name: "Налог с продаж" }).click(); await p.waitForTimeout(250);
   await h.sheet().getByRole("switch", { name: "Налог с продаж" }).click();
   await h.sheet().locator('input[inputmode="decimal"]').first().fill("9.5");
-  await h.sheet().getByRole("button", { name: "Понятно" }).click(); await p.waitForTimeout(300);
+  await require("../sheet.cjs").pressEscUntilClosed(h.page); await p.waitForTimeout(300);
   await h.expectText(/9\.5%/, "tax on the draft");
   await p.getByTestId("ue-save").locator("visible=true").first().click(); await p.waitForTimeout(800); // v2: the bar's «Готово»
   let db = await h.db();
@@ -30,7 +30,7 @@ exports.run = async (h) => {
   await h.expectText(/Клиент без налога/, "the sheet says the client is exempt");
   const tg = h.sheet().getByTestId("est-tax-toggle").getByRole("switch");
   h.expect((await tg.getAttribute("aria-disabled")) === "true" && (await tg.getAttribute("aria-checked")) === "false", "the tax switch of an exempt client is really disabled (read as such, off)");
-  await h.sheet().getByRole("button", { name: "Понятно" }).click(); await p.waitForTimeout(300);
+  await require("../sheet.cjs").pressEscUntilClosed(h.page); await p.waitForTimeout(300);
   await h.shot("exempt");
   await p.getByTestId("ue-save").locator("visible=true").first().click(); await p.waitForTimeout(800); // v2: the bar's «Готово»
   db = await h.db();

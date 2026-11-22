@@ -109,7 +109,8 @@ exports.run = async (h) => {
   await p.getByRole("button", { name: "Налог с продаж" }).click(); await p.waitForTimeout(250);
   await h.sheet().getByRole("switch", { name: "Налог с продаж" }).click();
   await h.sheet().locator('input[inputmode="decimal"]').first().fill("9.5");
-  await h.sheet().getByRole("button", { name: "Понятно" }).click(); await p.waitForTimeout(300);
+  // #2387: the tax sheet applies at once and has no «Понятно» (DS Б1) — it closes as every sheet does
+  await require("../sheet.cjs").pressEscUntilClosed(p);
   // v2: the builder's one step «Готово» saves the draft (`ue-save`)
   await p.getByTestId("ue-save").locator("visible=true").first().click();
   await p.waitForFunction(() => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db.estimates.some((e) => e.customerId === "c2" && e.doc && e.status === "draft" && e.doc.settings?.tax?.enabled), null, { timeout: 8000 });

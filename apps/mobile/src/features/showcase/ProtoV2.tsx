@@ -10,13 +10,14 @@ import { todayKey, type DayKey } from "@/features/calendar";
 import { View } from "react-native";
 import { radius, rhythm, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
+import { ButtonMenu } from "@/ui/pairs";
 import { useTheme } from "@/theme/ThemeProvider";
 import { CheckList, type CheckItem } from "@/ui/checkList";
 import { IconButton, ProgressBar, Segmented } from "@/ui/controls";
 import { TextField } from "@/ui/controls";
 import { MonthArrows, MonthPick, useMonthHead } from "@/ui/dayStrip";
 import { CountPill, FigureRow, HatchPlate, IntervalPlate, NumberTrio, ProgressWords, TimeSlot, TimerLine, TonePill } from "@/ui/figures";
-import { ListGroup } from "@/ui/groupedList";
+import { GroupHairline, GroupHead, GroupRowBody, ListGroup, useGroupEdge } from "@/ui/groupedList";
 import { NowCard } from "@/ui/nowCard";
 import { FitTitle, HeadStatus } from "@/ui/templates/screenHeader";
 import { ViewTabs } from "@/ui/viewTabs";
@@ -160,6 +161,7 @@ export function ProtoV2() {
       <ListGroup count={2} title={t("st.paid")} testID="showcase-v2-group-note">
         <FigureRow testID="showcase-v2-row-ok" icon="check" iconTone="ok" title="Linda Alvarez" line="INV-0102" cols={[{ label: t("ds.v2.sum"), value: "$412.60" }]} />
       </ListGroup>
+      <ShowEstimateGroup />
       <FigureRow testID="showcase-v2-row-warm" tone="warn" icon="key" title={t("px2.cv.code", { code: "4512" })} line={t("ds.v2.work")} />
       <StatGrid cols={4} testID="showcase-v2-tiles4">
         <StatTile icon="calendar" label={t("ds.v2.jobs")} value={7} testID="showcase-v2-t4-a" />
@@ -184,6 +186,34 @@ export function ProtoV2() {
       </Card>
       <TextField plate type="title" value={title} onChangeText={setTitle} label={t("ue.items")} testID="showcase-v2-field-plate" />
       <TextField big type="money" prefix="$" value={sum} onChangeText={setSum} label={t("ds.v2.sum")} testID="showcase-v2-field-big" />
+    </View>
+  );
+}
+
+/** #2387: an estimate's group as the screen draws it — GroupHead with «˅», the kind, the count, the sum and a quiet «⋯»; two rows drawn
+ *  one by one (GroupRowBody inside the group edge, an inset GroupHairline between them) — one card, as every ListGroup */
+function ShowEstimateGroup() {
+  const { t } = useI18n();
+  const edge = useGroupEdge();
+  const [open, setOpen] = useState(true);
+  return (
+    <View testID="showcase-v2-estimate-group" style={{ gap: rhythm.headGap }}>
+      <ButtonMenu
+        main={{ label: t("est.row.addShort"), icon: "plus", variant: "secondary", onPress: () => undefined }}
+        menu={{ icon: "chevronDown", a11y: t("px3.est.addFrom"), items: [{ key: "catalog", label: t("px3.est.fromCatalog"), icon: "catalog" }, { key: "template", label: t("ds.rows.fromTemplate"), icon: "template" }], onSelect: () => undefined }}
+      />
+      <GroupHead title={t("est.sec.material")} icon="box" count={2} value="$152.84" fold={{ open, onToggle: () => setOpen(!open), label: t("est.sec.toggle") }} actions={<IconButton bare icon="more" label={t("est.sec.menu")} />} />
+      {open ? (
+        <View>
+          <View style={edge(true, false)}>
+            <GroupRowBody title="Railing bracket" subtitle="12 ea × $12.13" value="$145.56" />
+          </View>
+          <View style={edge(false, true)}>
+            <GroupHairline />
+            <GroupRowBody title="LED bulb A19" subtitle="1 ea" value="$7.28" />
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }

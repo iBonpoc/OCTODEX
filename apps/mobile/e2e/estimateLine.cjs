@@ -15,7 +15,12 @@ exports.addCustom = async (h, name, price, qty) => {
 
 /** «Из каталога»: search, pick the thing (one thing opens its row, the cursor in the quantity), the quantity, the row folded */
 exports.addCatalog = async (h, search, item, qty) => {
-  await h.page.getByTestId("est-add-catalog").locator("visible=true").first().getByRole("button").click();
+  // #2387 (С4): an empty estimate has «Каталог» in its card; with lines it is in the «˅» menu beside «＋ Позиция»
+  const menu = h.page.getByTestId("est-add-layers").locator("visible=true");
+  if (await menu.count()) {
+    await menu.first().getByRole("button").click();
+    await h.page.getByTestId("est-add-catalog").locator("visible=true").first().click();
+  } else await h.page.getByTestId("est-add-catalog").locator("visible=true").first().getByRole("button").click();
   await h.sheet().locator("input").first().fill(search);
   await h.sheet().getByText(item).first().click();
   if (qty !== undefined) {

@@ -69,6 +69,12 @@ exports.run = async (h) => {
     await h.go("/plan");
   } else await p.getByTestId(`plan-strip-${dayKey(v.start)}`).locator("visible=true").first().click();
   const card = p.getByTestId(`plan-row-${v.id}`).locator("visible=true").first();
+  // (a Sunday: the new visit is on Monday — the next week; the Week shows this one — step to the next, CHECKS §9 «не от настоящего часа»)
+  if (h.layout.width >= 820) {
+    // the Week has drawn its rows (the demo's visits of today) — only then is the visit's row missing for real
+    await p.locator('[data-testid^="plan-row-"]').locator("visible=true").first().waitFor({ timeout: 5000 });
+    if (!(await card.isVisible())) await p.getByTestId("plan-month-next").locator("visible=true").first().click();
+  }
   await card.waitFor({ timeout: 5000 });
   const text = await card.innerText();
   h.expect(/Весь день/i.test(text), `the Plan row says «Весь день» (${text.replace(/\s+/g, " ").slice(0, 120)})`);

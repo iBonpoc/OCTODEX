@@ -7,6 +7,7 @@ import { component, gesture, motion, radius, size, space, z } from "@octo/design
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { haptics } from "@/ui/haptics";
+import { GroupHairline } from "@/ui/groupedList";
 import { Icon } from "@/ui/primitives";
 import { useScreenScroll } from "@/ui/requiredForm";
 import { useScrollLock } from "@/ui/surfaces";
@@ -89,9 +90,11 @@ export interface SortableListProps {
   onHoldStill?: (key: string) => void;
   /** #2363: the look of a row's frame WITH its handle (a group's card drawn by its rows: the ground, the corners of the first/last) */
   rowLook?: (row: ViewRow, index: number) => ViewStyle | undefined;
+  /** #2387: an inset hairline over the row (its left inset; `null` — none): the rule of a group's rows runs to the card's right edge, past the «≡» */
+  rowRule?: (row: ViewRow, index: number) => number | null;
 }
 
-export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, beforeBegin, renderRow, quietLines, onHoldStill, rowLook }: SortableListProps) {
+export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, beforeBegin, renderRow, quietLines, onHoldStill, rowLook, rowRule }: SortableListProps) {
   const { c } = useTheme();
   const reduce = useReducedMotion();
   const lock = useScrollLock();
@@ -488,7 +491,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
     <SortCtx.Provider value={ctl}>
       <View ref={boxRef} collapsable={false} onLayout={(e) => (box.current.h = e.nativeEvent.layout.height)} style={{ position: "relative" }}>
         {rows.map((r, i) => (
-          <Item key={rowKey(r)} k={rowKey(r)} index={i} dragKind={dragKind(r) ? "x" : null} open={openKey === rowKey(r)} quiet={!!quietLines} look={rowLook?.(r, i)}>
+          <Item key={rowKey(r)} k={rowKey(r)} index={i} dragKind={dragKind(r) ? "x" : null} open={openKey === rowKey(r)} quiet={!!quietLines} look={rowLook?.(r, i)} rule={rowRule?.(r, i) ?? null}>
             {renderRow(r, i)}
           </Item>
         ))}
@@ -499,7 +502,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
   );
 }
 
-function Item({ k, index, dragKind, open, quiet, look, children }: { k: string; index: number; dragKind: "x" | null; open: boolean; quiet: boolean; look?: ViewStyle; children: ReactNode }) {
+function Item({ k, index, dragKind, open, quiet, look, rule, children }: { k: string; index: number; dragKind: "x" | null; open: boolean; quiet: boolean; look?: ViewStyle; rule: number | null; children: ReactNode }) {
   const ctl = useContext(SortCtx)!;
   const { c } = useTheme();
   const { t } = useI18n();
@@ -569,6 +572,12 @@ function Item({ k, index, dragKind, open, quiet, look, children }: { k: string; 
     },
   });
 
+  // #2363 (founder 21.11: «прозрачные полоски» between a group's lines): the row's ground and corners are drawn by the OUTER view
+  // (the one that is carried), so the rows of a group join into one card
+  const { backgroundColor: lookBg, borderTopLeftRadius, borderTopRightRadius, borderBottomLeftRadius, borderBottomRightRadius, ...lookInner } = look ?? {};
+  const lookGround = typeof lookBg === "string" ? lookBg : "transparent";
+  // a middle line of a group has square corners (else the wrapper's own `radius.inner` rounded every line into a card of its own)
+  const lookCorners = look ? { borderTopLeftRadius: borderTopLeftRadius ?? 0, borderTopRightRadius: borderTopRightRadius ?? 0, borderBottomLeftRadius: borderBottomLeftRadius ?? 0, borderBottomRightRadius: borderBottomRightRadius ?? 0 } : undefined;
   const a = useAnimatedStyle(() => {
     const on = mine;
     return {
@@ -582,12 +591,15 @@ function Item({ k, index, dragKind, open, quiet, look, children }: { k: string; 
       shadowRadius: c.shadow.radius,
       shadowOffset: { width: 0, height: component.dragHandle },
       shadowColor: c.shadow.color,
-      borderRadius: radius.inner,
-      borderWidth: component.selectedBorder,
-      borderColor: on && held.value > 0.5 ? c.acc : "transparent",
-      backgroundColor: on && held.value > 0.5 ? c.bg : "transparent",
+      // a group's line: its own corners (per corner — a web `borderRadius` set after them would round every line)
+      // (a carried line is rounded whole, like its `acc` frame — its ground never sticks out past the frame's corners)
+      ...(lookCorners && !(on && held.value > 0.5) ? lookCorners : { borderTopLeftRadius: radius.inner, borderTopRightRadius: radius.inner, borderBottomLeftRadius: radius.inner, borderBottomRightRadius: radius.inner }),
+      backgroundColor: on && held.value > 0.5 ? c.bg : lookGround,
     };
   });
+  // the held row's frame `acc` lies OVER the row (not a border around it): a row is as high as it draws (F32: a line 52, as in the
+  // mock), and the rows of a group touch — no transparent frame between them
+  const frameStyle = useAnimatedStyle(() => ({ opacity: mine && held.value > 0.5 ? 1 : 0 }));
 
   // the landed row flashes: a frame `acc` that fades out over `durSlow`
   const fl = useSharedValue(0);
@@ -625,10 +637,16 @@ function Item({ k, index, dragKind, open, quiet, look, children }: { k: string; 
   );
   return (
     <Animated.View ref={(n: unknown) => ctl.node(k, n as ComponentRef<typeof View> | null)} collapsable={false} onLayout={(e) => ctl.layout(k, e.nativeEvent.layout.y, e.nativeEvent.layout.height)} style={a}>
-      <View style={[{ flexDirection: "row", alignItems: "center" }, look]}>
+      <View style={[{ flexDirection: "row", alignItems: "center" }, lookInner]}>
         {canDrag && !open ? <GestureDetector gesture={hold}>{body}</GestureDetector> : body}
         {handleEl}
       </View>
+      {rule !== null && !mine ? (
+        <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
+          <GroupHairline inset={rule} />
+        </View>
+      ) : null}
+      {mine ? <Animated.View pointerEvents="none" style={[{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: radius.inner, borderWidth: component.selectedBorder, borderColor: c.acc }, frameStyle]} /> : null}
       {flashing ? <Animated.View pointerEvents="none" testID={`sort-flash-${k}`} style={[{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: radius.inner, borderWidth: component.selectedBorder, borderColor: c.acc }, flashStyle]} /> : null}
     </Animated.View>
   );

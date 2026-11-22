@@ -63,7 +63,8 @@ exports.run = async (h) => {
   // a folded section keeps its heading and its count
   await tid(`est-sec-toggle-${sid}`).click();
   await p.waitForFunction((i) => !document.querySelector(`[data-testid="est-line-${i}"]`), first, { timeout: 3000 });
-  h.expect(/Позиций: 1/.test(await tid(`est-section-${sid}`).innerText()), "folded: the count");
+  // #2387: the count is the group title's CountPill (GroupHead), as every group of the app
+  h.expect(/(^|\s)1(\s|$)/.test(await tid(`est-section-${sid}`).innerText()), "folded: the count");
   await tid(`est-sec-toggle-${sid}`).click();
 
   const menuGone = () => p.waitForFunction(() => document.querySelectorAll('[role="menu"]').length === 0, null, { timeout: 3000 });

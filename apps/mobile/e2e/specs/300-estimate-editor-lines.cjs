@@ -64,7 +64,9 @@ exports.run = async (h) => {
   h.expect(back, "«Вернуть» brought it back (3 rows)");
 
   // «Из каталога»: one thing — its row opens
-  await tid("est-add-catalog").getByRole("button").click();
+  // #2387 (С4): the catalog is in the «˅» menu beside «＋ Позиция»
+  await tid("est-add-layers").getByRole("button").click();
+  await tid("est-add-catalog").click();
   await h.sheet().locator("input").first().fill("carpet");
   await h.sheet().getByText("Carpet removal").first().click();
   // (the cursor in the quantity is the phone's: the browser gives the focus back to the button that opened the sheet)
