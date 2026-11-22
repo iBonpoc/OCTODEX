@@ -45,6 +45,7 @@ import { CountPill, FigureRow } from "@/ui/figures";
 import type { IconKey } from "@/ui/primitives";
 import { dayKeyIn } from "@/features/zone";
 import { dayOffsetOf, todayKey } from "@/features/calendar";
+import { foldStart, foldStep, type FoldState } from "@/ui/totalFold";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
 import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle, useFooterShown } from "@/ui/surfaces";
@@ -668,6 +669,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const [clientScreen, setClientScreen] = useState(false);
   /** «Итого ˅» of the phone's panel: open or folded (the screen's own state, not remembered) */
   const [totalOpen, setTotalOpen] = useState(false);
+  const [fold, setFold] = useState<FoldState>(foldStart);
   /** a folded line asked to show its menu (SortableList onHoldStill): its id and a counter, each ask opens it once */
   const [menuAsk, setMenuAsk] = useState<{ id: string; n: number }>({ id: "", n: 0 });
   const totalRows = totalsRows({ totals, allOptional, own: seeCosts && !clientScreen, costKnown: costComplete(option) });
@@ -801,7 +803,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // where the screen has no pinned bar (820/1280) the same row stands after the totals (as EditorScreen does)
   const barShown = useFooterShown();
   // (there the totals card says «Итого» already — the row is the button only, П7)
-  const stepRow = tplEdit ? null : <MainStep placement="bar" main={step} total={barShown ? total : null} />;
+  // #2363 q72 (founder 21.11, вариант А): scrolled down, the «Итого» card folds into the capsule on the right; up 8 pt, the top, or a
+  // tap opens it (ui/totalFold.ts). An open total panel («Итого ˅») never folds under the finger
+  const stepRow = tplEdit ? null : <MainStep placement="bar" main={step} total={barShown ? total : null} folded={fold.folded && !totalOpen} onUnfold={() => setFold({ folded: false, anchor: Number.MAX_SAFE_INTEGER })} />;
   /** «слои» (visual v2 №5): the sections and the options of the list */
   const layerItems = [
     ...(!signed ? [{ key: "section", label: t("est.sec.addSectionMenu"), icon: "plus" as const, testID: "est-add-section" }] : []),
@@ -831,7 +835,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   };
 
   return (
-    <Screen onScrollBegin={() => {
+    <Screen onScrollY={(y) => setFold((f) => { const n = foldStep(f, y); return n.folded === f.folded && n.anchor === f.anchor ? f : n; })} onScrollBegin={() => {
       swipes.closeOpen();
       // the finger that starts this scroll went down a moment ago; an older touch (a tap on a field) does not count
       const inOpen = Date.now() - touchInOpen.current < motion.durSlow * 3;

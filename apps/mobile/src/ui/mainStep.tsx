@@ -40,6 +40,8 @@ export function MainStep({
   fit,
   loading,
   failedLabel,
+  folded,
+  onUnfold,
 }: {
   main: MainAction;
   placement: "top" | "bar";
@@ -51,6 +53,10 @@ export function MainStep({
   loading?: boolean;
   /** what the reason reads once a loading step took longer than `actionTimeoutMs` («Не получилось») */
   failedLabel?: string;
+  /** #2363 q72 (founder 21.11, вариант А): `bar` with a `total`, scrolled down — only the capsule «˄ $772.36» on the right
+   *  (a secondary Button, under the thumb, the prices on the left stay seen); a tap opens the bar again (`onUnfold`) */
+  folded?: boolean;
+  onUnfold?: () => void;
 }) {
   const { c } = useTheme();
   const phase = useLoadPhase(!!loading);
@@ -83,6 +89,13 @@ export function MainStep({
       <View style={fit ? { alignSelf: "flex-start", maxWidth: "100%" } : undefined}>
         {button}
         {reason}
+      </View>
+    );
+  if (placement === "bar" && folded && total && onUnfold)
+    return (
+      <View style={{ paddingBottom: rhythm.cardGap, alignItems: "flex-end" }}>
+        {/* rule 29: the capsule is the Button itself (secondary 40, zone 44) — the sum and «˄» */}
+        <Button testID={`${main.testID}-capsule`} label={total.value} icon="chevronUp" variant="secondary" onPress={onUnfold} accessibilityLabel={`${total.label} ${total.value}`} />
       </View>
     );
   let left: ReactNode = reason;

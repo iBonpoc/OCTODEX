@@ -530,6 +530,7 @@ export function Screen({
   titleHidden,
   home,
   footer,
+  onScrollY,
   aside,
   headerLead,
   testID,
@@ -577,6 +578,8 @@ export function Screen({
    *  for it; hidden while the keyboard is up (the keys cover it, the field is what the person is in). From 820 the screen puts the same
    *  buttons in its own column. */
   footer?: ReactNode;
+  /** #2363 q72: the page's offset as it scrolls (JS side) — the estimate folds its «Итого» into a capsule by it (`totalFold`) */
+  onScrollY?: (y: number) => void;
   /** a form screen (sign-in, a company, a client link): the column is at most `layout.formMax` wide, on the same left line as the title (DS §12.3, #1594); not together with `tabs` (their sticky offset is measured on the plain column).
    *  `"center"` — a public page of the client with no side menu (the request form /f/): the column with its title stands in the middle
    *  of a wide screen, not at its left edge with the right side empty (DS §12.3, 1.15.8, #1728) */
@@ -1019,6 +1022,7 @@ export function Screen({
   }, []);
   /** what the page's scroll tells JS: the place (fields, held rows), the clock's glass, the stuck strip */
   const onJsScroll = (y: number) => {
+    onScrollY?.(y);
     // a late event of an earlier jump (a held row's autoscroll makes one every 16 ms) is older than what we asked of the
     // scroll: the place is the last one asked, until the events catch up with it (else the held row lagged by a few steps)
     const jump = lastJump.current;

@@ -321,6 +321,9 @@ export const component = {
   /** TimeSlot (visual v2): the hour column `timeW` 44 (hour 15/700, duration 12), the interval plate `interval` 26 of two halves, the notch `notch` 8 */
   /** `meridiem` — «AM»/«PM» in the interval plate, small like a superscript beside the hour (founder 21.11, #2363 q73) */
   timeSlot: { timeW: 44, interval: 26, notch: 8, meridiem: 9 },
+  /** #2363 q72 (founder 21.11: вариант А): the estimate's «Итого» folds into a capsule on the right after scrolling down `down`
+   *  24 pt; it opens again after scrolling up `up` 8 pt, at the very top, or by a tap */
+  totalFold: { down: 24, up: 8 },
   /** round buttons (visual v2): 40 in the header (on a `surf` card), `card` 32 inside a card, `quick` 44 in the quick-actions row with a 12 caption */
   roundButton: { header: 40, card: 32, quick: 44 },
   /** the phone's tab bar (visual v2): 56 (`size.tabbarH`) + the bottom zone; the icon `icon` 22 over the word 12; the top `fade` 18 fades into `tab` */
