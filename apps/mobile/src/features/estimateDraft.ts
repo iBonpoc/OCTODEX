@@ -33,31 +33,48 @@ export interface EstimateDraft {
   checkPrice: string[];
   /** rows where «Сохранить в каталог» is on (the choice survives a reload; absent in older drafts) */
   wantCatalog?: string[];
+  /** #2381: an edit of a saved estimate — the estimate's `savedAt` when the edit began (the conflict is «the store's savedAt ≠ this»;
+   *  an older build drops the field — then it is a conflict and asked, never overwritten, rule 16). No sums here: the engine counts them. */
+  baseSavedAt?: string;
 }
 export const MAX_DRAFTS = 10;
 export const DRAFT_DAYS = 30;
 
 /** the place the builder was opened from; null — not a new estimate (an edit of a saved one, a template's lines) */
 export function draftCtx(p: { id?: string; editTemplate?: string; leadId?: string; customerId?: string; propertyId?: string; template?: string }): string | null {
-  if (p.id || p.editTemplate) return null;
+  if (p.editTemplate) return null;
+  // #2381: a saved estimate's edit lives on the phone until «Готово» (an app closed by chance loses nothing)
+  if (p.id) return `edit|${p.id}`;
   return `new|${p.leadId ?? ""}|${p.customerId ?? ""}|${p.propertyId ?? ""}|${p.template ?? ""}`;
 }
 
 /** worth keeping: a line or a title (an untouched builder leaves nothing behind) */
 export const draftWorthKeeping = (d: Pick<EstimateDraft, "doc" | "title">) => hasContent(d.doc) || !!d.title.trim();
 
-const fresh = (d: EstimateDraft, now: number) => now - Date.parse(d.at) < DRAFT_DAYS * 86_400_000;
+/** #2381: the edit of a saved estimate (not a new one): never too old, never pushed out by the limit — the edits of a live estimate */
+export const isEditCtx = (ctx: string | null | undefined) => !!ctx && ctx.startsWith("edit|");
+const fresh = (d: EstimateDraft, now: number) => isEditCtx(d.ctx) || now - Date.parse(d.at) < DRAFT_DAYS * 86_400_000;
+
+/** #2381 (founder 21.11: «дать выбрать»): the estimate was saved since the edit began — on another phone; «≠», never «>»
+ *  (phones' clocks differ); an edit without its base (an older build dropped it) is a conflict too — asked, never overwritten */
+export const draftConflict = (d: Pick<EstimateDraft, "ctx" | "baseSavedAt">, savedAt: string | undefined): boolean =>
+  isEditCtx(d.ctx) && (d.baseSavedAt === undefined || d.baseSavedAt !== savedAt);
 
 /** the draft of this place: not too old, and not an estimate saved meanwhile (its id already in the data) */
 export function findDraft(list: readonly EstimateDraft[], ctx: string | null, now: number, saved: (id: string) => boolean): EstimateDraft | undefined {
   if (!ctx) return undefined;
   const d = list.find((x) => x.ctx === ctx);
-  return d && fresh(d, now) && !saved(d.estimateId) && draftWorthKeeping(d) ? d : undefined;
+  // a new estimate's draft goes once it is saved; a saved estimate's edit is meant to be found (#2381)
+  return d && fresh(d, now) && (isEditCtx(ctx) || !saved(d.estimateId)) && draftWorthKeeping(d) ? d : undefined;
 }
 
 /** this place's draft put first; the old and the over-the-limit ones go */
 export function upsertDraft(list: readonly EstimateDraft[], d: EstimateDraft, now: number): EstimateDraft[] {
-  return [d, ...list.filter((x) => x.ctx !== d.ctx && fresh(x, now))].slice(0, MAX_DRAFTS);
+  // the limit counts the new estimates only: a saved estimate's edit is never pushed out (#2381)
+  const rest = [d, ...list.filter((x) => x.ctx !== d.ctx && fresh(x, now))];
+  const edits = rest.filter((x) => isEditCtx(x.ctx));
+  const news = rest.filter((x) => !isEditCtx(x.ctx)).slice(0, MAX_DRAFTS);
+  return rest.filter((x) => edits.includes(x) || news.includes(x));
 }
 
 /** what the builder holds, to compare with how it opened (the time and the place are not part of it) */
@@ -97,6 +114,7 @@ export function cleanDraft(x: unknown): EstimateDraft | null {
     templateId: d.templateId,
     checkPrice: Array.isArray(d.checkPrice) ? d.checkPrice.filter((c) => typeof c === "string") : [],
     ...(Array.isArray(d.wantCatalog) && d.wantCatalog.some((c) => typeof c === "string") ? { wantCatalog: d.wantCatalog.filter((c) => typeof c === "string") } : {}),
+    ...(typeof d.baseSavedAt === "string" ? { baseSavedAt: d.baseSavedAt } : {}),
   };
 }
 export const cleanDrafts = (v: unknown): EstimateDraft[] => (Array.isArray(v) ? v.map(cleanDraft).filter((d): d is EstimateDraft => !!d) : []);
