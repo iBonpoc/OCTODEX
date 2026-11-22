@@ -534,6 +534,7 @@ export function Screen({
   home,
   footer,
   onScrollY,
+  onLeave,
   aside,
   headerLead,
   testID,
@@ -583,6 +584,9 @@ export function Screen({
   footer?: ReactNode;
   /** #2363 q72: the page's offset as it scrolls (JS side) — the estimate folds its «Итого» into a capsule by it (`totalFold`) */
   onScrollY?: (y: number, max: number) => void;
+  /** #2381: asked before the screen's own way up («×», «‹», Esc) goes — `proceed` leaves; not called, the screen stays (an editor with
+   *  unsaved edits asks «Сохранить изменения?»). The trail's crumbs and the tabs leave as before (the edits stay on the phone) */
+  onLeave?: (proceed: () => void) => void;
   /** a form screen (sign-in, a company, a client link): the column is at most `layout.formMax` wide, on the same left line as the title (DS §12.3, #1594); not together with `tabs` (their sticky offset is measured on the plain column).
    *  `"center"` — a public page of the client with no side menu (the request form /f/): the column with its title stands in the middle
    *  of a wide screen, not at its left edge with the right side empty (DS §12.3, 1.15.8, #1728) */
@@ -625,7 +629,11 @@ export function Screen({
   const upLabel = up ? ("key" in up.label ? t(up.label.key) : up.label.text) : undefined;
   const trail = up ? breadcrumbs(pathname, params, store.db, store.role) : [];
   const go = goTo;
-  const goUp = () => (up ? go(up.href) : back?.());
+  const goUp = () => {
+    const proceed = () => (up ? go(up.href) : back?.());
+    if (onLeave) onLeave(proceed);
+    else proceed();
+  };
   const { wide, device } = useDevice();
   /** the pinned bar stands only where the phone has no tab bar (docs: NO_TAB_BAR — a form, a full-screen flow), else the two would meet */
   const footerOn = !!footer && footerShown(wide, routeName);

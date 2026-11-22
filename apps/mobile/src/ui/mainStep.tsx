@@ -43,6 +43,7 @@ export function MainStep({
   folded,
   onUnfold,
   foldAdd,
+  aside,
 }: {
   main: MainAction;
   placement: "top" | "bar";
@@ -60,6 +61,9 @@ export function MainStep({
   onUnfold?: () => void;
   /** #2363 q72 вариант Г (founder 21.11): beside the capsule a round «＋» — a new line from anywhere in a long list */
   foldAdd?: { a11y: string; onPress: () => void; testID?: string };
+  /** #2381 (founder 21.11: «внизу „Готово“. И „Отменить“»): a quiet way back BEFORE the main button in the bar with the total —
+   *  `ghost` by its words («Отменить»); the total keeps its place on the left. Only when there is something to take back */
+  aside?: MainAction | null;
 }) {
   const { c } = useTheme();
   const phase = useLoadPhase(!!loading);
@@ -132,6 +136,7 @@ export function MainStep({
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: component.button.phone }}>
           <View style={{ flex: 1, minWidth: 0, alignItems: "flex-start" }}>{left}</View>
+          {aside ? <Button testID={aside.testID} label={aside.label} onPress={aside.onPress} variant="ghost" /> : null}
           {button}
         </View>
       </View>

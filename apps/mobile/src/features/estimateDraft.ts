@@ -58,7 +58,9 @@ const fresh = (d: EstimateDraft, now: number) => isEditCtx(d.ctx) || now - Date.
 /** #2381 (founder 21.11: «дать выбрать»): the estimate was saved since the edit began — on another phone; «≠», never «>»
  *  (phones' clocks differ); an edit without its base (an older build dropped it) is a conflict too — asked, never overwritten */
 export const draftConflict = (d: Pick<EstimateDraft, "ctx" | "baseSavedAt">, savedAt: string | undefined): boolean =>
-  isEditCtx(d.ctx) && (d.baseSavedAt === undefined || d.baseSavedAt !== savedAt);
+  isEditCtx(d.ctx) && (d.baseSavedAt === undefined || d.baseSavedAt !== baseOf(savedAt));
+/** the base an edit keeps: the estimate's `savedAt`, or "" for an older estimate that has none (so it is not a conflict by itself) */
+export const baseOf = (savedAt: string | undefined) => savedAt ?? "";
 
 /** the draft of this place: not too old, and not an estimate saved meanwhile (its id already in the data) */
 export function findDraft(list: readonly EstimateDraft[], ctx: string | null, now: number, saved: (id: string) => boolean): EstimateDraft | undefined {
@@ -121,11 +123,12 @@ export const cleanDrafts = (v: unknown): EstimateDraft[] => (Array.isArray(v) ? 
 
 /** the person's drafts on this phone; `ready` — read */
 export function useEstimateDrafts(key: string) {
-  const [raw, setList, ready] = usePersistentState<EstimateDraft[]>(key, [], { validate: Array.isArray });
+  const [raw, setList, ready, health] = usePersistentState<EstimateDraft[]>(key, [], { validate: Array.isArray });
   // every write starts from the cleaned list ([null, good] would throw in removeDraft/upsertDraft — second review)
   const update = useCallback(
     (fn: (list: EstimateDraft[]) => EstimateDraft[], forKey?: string) => setList((l) => fn(cleanDrafts(l)), forKey),
     [setList],
   );
-  return { list: cleanDrafts(raw), setList: update, ready, key };
+  // #2381: the phone refused to write (full storage) — the screen says the edits are not kept on the phone
+  return { list: cleanDrafts(raw), setList: update, ready, key, writeFailed: health.writeFailed };
 }

@@ -13,7 +13,7 @@ import Animated, { Easing, FadeIn, FadeOut, Keyframe, useReducedMotion } from "r
 import { component, motion, radius, space } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button } from "./controls";
-import { Glass } from "./overlays";
+import { ALL_ORIENTATIONS, Glass } from "./overlays";
 import { T } from "./primitives";
 
 import { confirmLayout, type ConfirmAction, type ConfirmAsk } from "./confirmLayout";
@@ -33,7 +33,7 @@ export function ConfirmDialog({ ask, onPick }: { ask: ConfirmAsk | null; onPick:
   const layout = ask ? confirmLayout(ask.actions) : null;
   const titleId = "confirm-dialog-title";
   return (
-    <Modal transparent visible={!!ask} animationType="none" onRequestClose={() => onPick(back ? back.key : null)} statusBarTranslucent>
+    <Modal transparent visible={!!ask} animationType="none" onRequestClose={() => onPick(back ? back.key : null)} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
       {/* the scrim: it does not close the question (DS Б3) */}
       <Animated.View entering={reduce ? undefined : FadeIn.duration(motion.durFast)} exiting={reduce ? undefined : FadeOut.duration(motion.durFast)} style={{ flex: 1, backgroundColor: c.scrim, alignItems: "center", justifyContent: "center" }}>
         {ask && layout ? (

@@ -131,6 +131,10 @@ describe("unit:estimateDraft — #2381 the edit of a saved estimate («Гото�
     expect(draftConflict(d, "2026-11-10T10:05:00.000Z")).toBe(true);
     expect(draftConflict(d, "2026-11-10T09:55:00.000Z")).toBe(true);
   });
+  it("an older estimate with no savedAt: its base is \"\" — not a conflict by itself", () => {
+    expect(draftConflict(edit("e1", { baseSavedAt: "" }), undefined)).toBe(false);
+    expect(draftConflict(edit("e1", { baseSavedAt: "" }), "2026-11-10T10:00:00.000Z")).toBe(true);
+  });
   it("an edit's draft without its base (an older build dropped it, rule 16): a conflict — asked, never overwritten", () => {
     expect(draftConflict(edit("e1", { baseSavedAt: undefined }), "2026-11-10T10:00:00.000Z")).toBe(true);
   });
