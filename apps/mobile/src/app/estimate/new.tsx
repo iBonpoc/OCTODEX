@@ -52,9 +52,8 @@ import { useDayWord } from "@/features/useDayWord";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
 import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle, useFooterShown } from "@/ui/surfaces";
-import { draftCtx, draftSnapshot, draftsKey, findDraft, isEditCtx, nextDrafts, removeDraft, upsertDraft, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
+import { draftCtx, draftSnapshot, draftsKey, findDraft, isEditCtx, nextDrafts, removeDraft, restoreDraftOnDevice, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
 import { useConfirm } from "@/ui/confirmDialog";
-import { useEditorOpenMark } from "@/features/estimateDraftCleanup";
 import { doneAction, gateAtOpen, gateBeforeSave, markOf, takeMine } from "@/features/estimate/editSession";
 import { useAuth } from "@/cloud/auth";
 import { NO_UNDO, localUndo, withAfter } from "@/data/undo";
@@ -91,8 +90,6 @@ export default function EstimateBuilderScreen() {
 type Params = { id?: string; customerId?: string; propertyId?: string; leadId?: string; template?: string; editTemplate?: string; pick?: string };
 
 function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDrafts> }) {
-  // #2381 Ж1: while an editor is open it owns the drafts list — the cleanup of deleted estimates' edits waits
-  useEditorOpenMark();
   const params = useLocalSearchParams<Params>();
   const store = useStore();
   const { db } = store;
@@ -803,7 +800,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     const undo = store.saveEstimate({ id, customerId: cust.id, propertyId: prop.id, doc: doc2, title: title.trim() || estimateTitle(doc2, t("ue.title")) });
     if (undo === NO_UNDO) return void toast.show(t("k1.refused"));
     dropDraft();
-    toast.show(t("k1.copied"), withAfter(undo, () => was && setDrafts((list) => upsertDraft(list, was, Date.now()), keyOfDrafts)));
+    // the editor is closed by the time «Отменить» is pressed: the edit goes back to the device straight (not through this screen's list)
+    toast.show(t("k1.copied"), withAfter(undo, () => void (was && restoreDraftOnDevice(keyOfDrafts, was))));
     router.replace(`/estimate/${id}`);
   };
   /** #2381: «Сохранено» is never said where the edits did not go in; the edits stay on the phone (spec §10–11, review 2) */

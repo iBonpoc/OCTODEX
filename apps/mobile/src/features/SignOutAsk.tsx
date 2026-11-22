@@ -28,7 +28,7 @@ export function useSignOutAsk(): { ask: () => void; sheet: React.ReactNode } {
   const ask = () => {
     const me = auth.userId;
     void (async () => {
-      // #2381 Ж1: an edit of an estimate gone from THIS company's loaded store is not asked about (it is dropped, estimateDraftCleanup)
+      // #2381 Ж1: an edit of an estimate gone from THIS company's loaded store is not asked about (it stays on the phone — never dropped without asking, rule 5; «Выйти и стереть» erases all as always)
       const here = draftsKey(mode === "cloud", auth.company?.companyId, me);
       const drafts = me ? await countUnsentDrafts(me, undefined, undefined, (id) => db.estimates.some((e) => e.id === id), (k, id) => companyLoaded && k === here && !db.estimates.some((e) => e.id === id)) : 0;
       const next = signOutPlan(unsentAll, drafts);

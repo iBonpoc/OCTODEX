@@ -203,6 +203,10 @@ exports.run = async (h) => {
     st.db.estimates = st.db.estimates.filter((e) => e.id !== ID);
     await h.seed(DB, st);
   }
+  // the store loaded with the estimate gone (another phone deleted it, or this role cannot see it): the edit stays on the phone
+  await h.go("/today");
+  await h.go("/estimates");
+  h.expect(await hasEditDraft(), "the estimate gone from the loaded store: its edit is not dropped (rule 5)");
   await open();
   await dialog("k1-missing-ask");
   await h.shot("missing");
@@ -239,7 +243,16 @@ exports.run = async (h) => {
 
   // «Сделать копию с правками»: a NEW estimate (same client and property, no lead), the draft goes (§11 п.2)
   await restore({ status: "approved", leadId: e6orig.leadId ?? "l1" });
-  await seedEdit("Правка 523 · копия");
+  await seedEdit("Правка 523 · копия", { doc: { ...e6orig.doc, terms: "SIGNED TERMS 523" } });
+  await open();
+  await dialog("k1-open-signed");
+  await tid("k1-open-copy").getByRole("button").click();
+  await waitDraft(false);
+  // the toast's «Отменить»: the copy goes out, the edit comes back to the phone
+  await p.getByTestId("toast").filter({ hasText: /Копия/ }).locator('[data-testid="toast-undo"][aria-busy="false"]').first().click();
+  await waitDraft(true);
+  h.expect(!(await flushedSaved() && (await rawDb()).db.estimates.some((e) => e.id !== ID && e.title === "Правка 523 · копия")), "«Отменить» of the copy: no copy left");
+  // again — the copy stays this time
   await open();
   await dialog("k1-open-signed");
   await tid("k1-open-copy").getByRole("button").click();
@@ -249,6 +262,8 @@ exports.run = async (h) => {
     const copy = (await rawDb()).db.estimates.find((e) => e.id !== ID && e.title === "Правка 523 · копия");
     h.expect(!!copy && copy.customerId === e6orig.customerId && copy.propertyId === e6orig.propertyId && !copy.leadId && copy.status === "draft", `the copy: same client and property, no lead, a draft (${JSON.stringify(copy && { c: copy.customerId, l: copy.leadId, s: copy.status })})`);
     h.expect((await saved()).status === "approved" && (await saved()).title === e6orig.title, "the signed estimate is not changed");
+    // Р8: the copy is a new estimate — the company's Terms, not the signed one's
+    h.expect(typeof copy.doc.terms === "string" && copy.doc.terms !== "SIGNED TERMS 523", `the copy's Terms are a new estimate's (${String(copy.doc.terms).slice(0, 40)})`);
   }
 
   // §10: the client signed (awaiting_countersign) — «Сохранить и снять подпись» saves, asked ONCE (red before: asked again at the save)
@@ -269,8 +284,24 @@ exports.run = async (h) => {
   await open();
   await edit("Правка 523 · двойное");
   await tid("k1-cancel").dblclick();
-  h.expect((await p.getByTestId("k1-cancel-ask").count()) <= 1, "«Отменить» pressed twice: one question");
+  h.expect((await p.getByTestId("k1-cancel-ask").locator("visible=true").count()) === 1, "«Отменить» pressed twice: one question on the screen");
   await tid("k1-cancel-no").getByRole("button").click();
+  // «Отменить» twice then «Отменить изменения»: ONE way back — to the estimate it was opened from, never past it (a check that fails
+  // if the way back runs twice); the editor opened in the app (its own history), from the estimate's «Изменить»
+  await h.go(`/estimate/${ID}`);
+  await tid("estimate-screen-actions").getByTestId("est-act-edit").first().click();
+  await tid("ue-title").waitFor({ timeout: 8000 });
+  await titleInput().fill("Правка 523 · дважды");
+  await waitDraft(true);
+  await tid("k1-cancel").dblclick();
+  await dialog("k1-cancel-ask");
+  await tid("k1-cancel-yes").getByRole("button").click();
+  await p.waitForFunction(() => !location.pathname.startsWith("/estimate/new"), null, { timeout: 5000 });
+  await p.getByTestId("estimate-screen-actions").locator("visible=true").first().waitFor({ timeout: 5000 });
+  h.expect(new URL(p.url()).pathname === `/estimate/${ID}`, `one step back, to the estimate (${new URL(p.url()).pathname})`);
+  await waitDraft(false);
+  await open();
+  await edit("Правка 523 · двойное");
   await tid("ue-save").dblclick();
   await p.getByTestId("ue-title").waitFor({ state: "detached", timeout: 5000 });
   const savedToasts = (await p.getByTestId("toast-text").allInnerTexts()).filter((x) => /Сохран/.test(x)).length;

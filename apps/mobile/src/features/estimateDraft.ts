@@ -7,6 +7,7 @@
  */
 import type { EstimateDoc } from "@/data/types";
 import { useCallback } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { usePersistentState } from "@/data/persist";
 import { hasContent, newDoc, normalizeDoc } from "./estimateDoc";
 
@@ -126,4 +127,19 @@ export function useEstimateDrafts(key: string) {
   );
   // #2381: the phone refused to write (full storage) — the screen says the edits are not kept on the phone
   return { list: cleanDrafts(raw), setList: update, ready, key, writeFailed: health.writeFailed };
+}
+
+/**
+ * #2381 (review 4): a draft put back on the device straight — for an undo that runs after its editor has closed (the copy's toast
+ * «Отменить»): the editor's own list state is gone, a write through it would be lost. One read, one write; a broken list stays.
+ */
+export async function restoreDraftOnDevice(key: string, d: EstimateDraft, now = Date.now(), s: { getItem: (k: string) => Promise<string | null>; setItem: (k: string, v: string) => Promise<void> } = AsyncStorage as never): Promise<boolean> {
+  try {
+    const raw = await s.getItem(key);
+    const list = raw ? cleanDrafts(JSON.parse(raw)) : [];
+    await s.setItem(key, JSON.stringify(upsertDraft(list, d, now)));
+    return true;
+  } catch {
+    return false;
+  }
 }

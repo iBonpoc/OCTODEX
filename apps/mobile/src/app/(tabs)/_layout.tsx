@@ -2,12 +2,9 @@ import { Tabs } from "expo-router/js-tabs";
 import { useReducedMotion } from "react-native-reanimated";
 import { GuardedScreen } from "@/nav/RouteGuard";
 import { tabTransition } from "@/nav/tabTransition";
-import { useOrphanEditCleanup } from "@/features/estimateDraftCleanup";
 
 export default function TabsLayout() {
   const reduce = useReducedMotion();
-  // #2381 Ж1: the edits of estimates deleted on another phone go once the company's data is loaded
-  useOrphanEditCleanup();
   return (
     <Tabs
       // the bar is drawn by the shell on every phone screen, not only on these (app/_layout.tsx, docs/specs/28)
