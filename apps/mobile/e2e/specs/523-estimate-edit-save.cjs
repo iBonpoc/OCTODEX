@@ -23,11 +23,13 @@ exports.run = async (h) => {
   const titleInput = () => tid("ue-title").locator("input, textarea").first();
   const drafts = () => p.evaluate((k) => JSON.parse(localStorage.getItem(k) || "[]"), DRAFTS);
   const saved = () => p.evaluate(([k, id]) => JSON.parse(localStorage.getItem(k)).db.estimates.find((e) => e.id === id), [DB, ID]);
-  const patchSaved = (patch) => p.evaluate(([k, id, patch]) => {
-    const st = JSON.parse(localStorage.getItem(k));
-    st.db.estimates = st.db.estimates.map((e) => (e.id === id ? { ...e, ...patch } : e));
-    localStorage.setItem(k, JSON.stringify(st));
-  }, [DB, ID, patch]);
+  // the store's copy changed as another phone would (read now, put back on a page without the app — h.seed, CHECKS §9 №12)
+  const rawDb = () => p.evaluate((k) => JSON.parse(localStorage.getItem(k)), DB);
+  const patchSaved = async (patch) => {
+    const st = await rawDb();
+    st.db.estimates = st.db.estimates.map((e) => (e.id === ID ? { ...e, ...patch } : e));
+    await h.seed(DB, st);
+  };
   const hasEditDraft = async () => (await drafts()).some((d) => d.ctx === `edit|${ID}`);
   const waitDraft = (want) => p.waitForFunction(([k, ctx, want]) => JSON.parse(localStorage.getItem(k) || "[]").some((d) => d.ctx === ctx) === want, [DRAFTS, `edit|${ID}`, want], { timeout: 5000 });
   const open = async () => {
@@ -157,11 +159,11 @@ exports.run = async (h) => {
   await patchSaved({ status: "sent" });
   await open();
   await edit("Правка 523 · удалена");
-  await p.evaluate(([k, id]) => {
-    const st = JSON.parse(localStorage.getItem(k));
-    st.db.estimates = st.db.estimates.filter((e) => e.id !== id);
-    localStorage.setItem(k, JSON.stringify(st));
-  }, [DB, ID]);
+  {
+    const st = await rawDb();
+    st.db.estimates = st.db.estimates.filter((e) => e.id !== ID);
+    await h.seed(DB, st);
+  }
   await open();
   await dialog("k1-missing-ask");
   await h.shot("missing");
