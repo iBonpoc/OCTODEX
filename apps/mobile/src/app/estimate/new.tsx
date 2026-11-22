@@ -960,14 +960,22 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                 title={t("est.row.empty")}
                 hint={signed ? undefined : t("r1.est.emptyHint")}
                 action={signed ? undefined : (
-                  <RowView gap={space[2]} style={{ flexWrap: "wrap", justifyContent: "center" }}>
-                    <View testID="est-empty-new">
-                      <Button label={t("px3.est.newLine")} icon="plus" variant="secondary" onPress={() => addNew()} />
-                    </View>
-                    <View testID="est-empty-catalog">
-                      <Button label={t("px3.est.fromCatalog")} icon="catalog" variant="secondary" onPress={openCatalog} />
-                    </View>
-                  </RowView>
+                  // founder 21.11: the two ways in ONE row (not a column), and «Из шаблона…» under them
+                  <View style={{ gap: space[2], alignSelf: "stretch" }}>
+                    <RowView gap={space[2]}>
+                      <View testID="est-empty-new" style={{ flex: 1, minWidth: 0 }}>
+                        <Button label={t("px3.est.newLine")} icon="plus" variant="secondary" full onPress={() => addNew()} />
+                      </View>
+                      <View testID="est-empty-catalog" style={{ flex: 1, minWidth: 0 }}>
+                        <Button label={t("cat.title")} icon="catalog" variant="secondary" full onPress={openCatalog} />
+                      </View>
+                    </RowView>
+                    {!tplEdit ? (
+                      <View testID="est-empty-template">
+                        <Button label={t("ds.rows.fromTemplate")} icon="doc" variant="secondary" full onPress={openTemplates} />
+                      </View>
+                    ) : null}
+                  </View>
                 )}
               />
             ) : null}

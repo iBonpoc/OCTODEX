@@ -191,18 +191,26 @@ export function TimerLine({ value, since, action, testID }: { value: string; sin
   );
 }
 
-/** «8:30 AM» → the hour and a small raised «AM» (founder 21.11, #2363 q73: the full US time, the AM/PM small like a superscript) */
+/** «8:30 AM» → the hour and «AM» as two small letters in a COLUMN beside it — «A» over «M» (founder 21.11, #2363 q73: «цифры
+ *  горизонтально, буквы вертикально»); a screen reader hears the time whole from the slot's label */
 function PlateTime({ text, color }: { text: string; color: string }) {
-  const m = /^(.*?)[\s\u00a0\u202f]*([AaPp]\.?[Mm]\.?)$/.exec(text.trim());
+  const m = /^(.*?)[\s\u00a0\u202f]*([AaPp])\.?([Mm])\.?$/.exec(text.trim());
+  const k = component.timeSlot.meridiem;
   return (
-    <T v="caption" w="bold" style={{ color }} numberOfLines={1}>
-      {m ? m[1] : text}
+    <View style={{ flexDirection: "row", alignItems: "center", gap: spaceHalf.hair }}>
+      <T v="caption" w="bold" style={{ color }} numberOfLines={1}>
+        {m ? m[1] : text}
+      </T>
       {m ? (
-        <T v="micro" w="bold" style={{ color, fontSize: component.timeSlot.meridiem, lineHeight: component.timeSlot.meridiem + space[1] }}>
-          {` ${m[2]!.toUpperCase()}`}
-        </T>
+        <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={{ alignItems: "center" }}>
+          {[m[2]!, m[3]!].map((ch, i) => (
+            <T key={i} v="micro" w="bold" style={{ color, fontSize: k, lineHeight: k }}>
+              {ch.toUpperCase()}
+            </T>
+          ))}
+        </View>
       ) : null}
-    </T>
+    </View>
   );
 }
 
