@@ -28,7 +28,8 @@ exports.run = async (h) => {
   const [col, hdl, menu, row] = [await tid(`est-collapse-${b}`).boundingBox(), await tid(`sort-handle-l:${b}`).boundingBox(), await tid(`est-menu-${b}`).boundingBox(), await tid(`est-line-${b}`).boundingBox()];
   h.expect(Math.abs(hdl.y + hdl.height / 2 - (col.y + col.height / 2)) < 12 && hdl.x > menu.x, `«≡» in the header, right of «⋯» (≡ ${Math.round(hdl.x)},${Math.round(hdl.y)} · «Свернуть» y ${Math.round(col.y)})`);
   const nameBox = await p.locator(`[data-testid="est-name-${b}"]`).locator("visible=true").first().boundingBox();
-  h.expect(nameBox.x + nameBox.width > row.x + row.width - 12, `the name field takes the row's width (${Math.round(nameBox.x + nameBox.width)} of ${Math.round(row.x + row.width)})`);
+  // #2387: the open row keeps the card's inset space[4] (16) on both sides — the field runs to it, not short of it
+  h.expect(nameBox.x + nameBox.width > row.x + row.width - 16 - 4, `the name field takes the row's width inside its inset (${Math.round(nameBox.x + nameBox.width)} of ${Math.round(row.x + row.width)})`);
   await h.shot("open-handle");
 
   // take D by its handle and hold it
