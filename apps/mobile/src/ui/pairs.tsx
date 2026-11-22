@@ -1,7 +1,9 @@
-import { Children, isValidElement, useState, type ComponentProps, type ReactNode } from "react";
+import { Children, isValidElement, useRef, useState, type ComponentProps, type ComponentRef, type ReactNode } from "react";
 import { View } from "react-native";
 import { component, space } from "@octo/design-tokens";
 import { Button, IconButton } from "./controls";
+import { Menu, type MenuItem } from "./overlays";
+import type { IconKey } from "./primitives";
 import type { IconAction } from "./templates/types";
 import { buttonPairLayout, fieldRowLayout } from "./pairLayout";
 import { RowView } from "./surfaces";
@@ -56,6 +58,34 @@ export function ButtonPair({ main, second, icon, testID, ids }: { main: ButtonPr
           {second && square ? <View style={{ alignSelf: "flex-start" }}>{square}</View> : null}
         </>
       )}
+    </View>
+  );
+}
+
+/**
+ * One button and its round 40 with a Menu (#2387, founder 21.11 С4: «одна „＋ Позиция“… с каким-то удобным доступом»): the button
+ * does the common thing in one press (a new line — many new lines go fast), the round beside it opens the other ways (the catalog,
+ * a template, a section, an option) as a Menu at itself. The button takes the row, the round its 40 at the end, `space[2]` apart.
+ */
+export function ButtonMenu({ main, menu, testID, ids }: {
+  main: ButtonProps;
+  menu: { icon: IconKey; a11y: string; items: MenuItem<string>[]; onSelect: (k: string) => void; testID?: string };
+  testID?: string;
+  ids?: { main?: string };
+}) {
+  const ref = useRef<ComponentRef<typeof View>>(null);
+  const [at, setAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  return (
+    <View testID={testID} style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+      <View testID={ids?.main} style={{ flex: 1, minWidth: 0 }}>
+        <Button {...main} full />
+      </View>
+      {menu.items.length ? (
+        <View ref={ref} collapsable={false} testID={menu.testID}>
+          <IconButton icon={menu.icon} label={menu.a11y} onPress={() => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAt({ x, y, w, h }))} />
+          <Menu visible={!!at} anchor={at} items={menu.items} onSelect={menu.onSelect} onClose={() => setAt(null)} />
+        </View>
+      ) : null}
     </View>
   );
 }

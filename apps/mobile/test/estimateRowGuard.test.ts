@@ -19,9 +19,9 @@ describe("design system: the estimate line (DS §8.3)", () => {
     for (const bad of ["est.row.profit", "marginPct", "unitCostCents", "figures.", "est.row.cost"]) expect(folded, bad).not.toContain(bad);
     expect(folded).toContain("hiddenSpend(l, { costsVisible: p.costsVisible, clientScreen: !!p.clientScreen })");
   });
-  it("the trash (#2387, founder 21.11 «корзина — всегда»): a quiet IconButton on the folded line (`space[6]` before «⠿», DS §8.3) AND in the open line's header, the zone 44", () => {
+  it("the trash (#2387, founder 21.11 «корзина — всегда»): a quiet IconButton on the folded line (by the «⠿» at the edge, zones 44 meet, `space[6]` from the sum) AND in the open line's header, the zone 44", () => {
     expect(size.hitMin).toBe(44);
-    expect(folded).toMatch(/testID=\{`est-row-trash-\$\{l\.id\}`\} style=\{\{ marginRight: space\[6\] \}\}>\s*<IconButton bare icon="trash"/);
+    expect(folded).toMatch(/testID=\{`est-row-trash-\$\{l\.id\}`\} style=\{\{ marginLeft: space\[6\], width: size\.hitMin, alignItems: "center" \}\}>\s*<IconButton bare icon="trash"/);
     expect(src).toMatch(/testID=\{`est-trash-\$\{l\.id\}`\}>\s*<IconButton bare icon="trash"/);
     void component;
   });

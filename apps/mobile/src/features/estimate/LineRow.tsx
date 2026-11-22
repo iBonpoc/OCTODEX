@@ -296,8 +296,9 @@ function LineRowView(p: LineRowProps) {
         <RowView gap={0}>
           {body}
           {p.locked ? null : (
-            // DS §8.3: `space[6]` to the «⠿» — the trash and the handle never touch (a gloved finger going for the handle)
-            <View testID={`est-row-trash-${l.id}`} style={{ marginRight: space[6] }}>
+            // founder 21.11 (#2387: «корзину — к драг-н-дропу, всё поравнял бы по краю»): the trash stands by the «⠿» at the right
+            // edge, its zone 44 wide beside the handle's 44 (they meet, never overlap), `space[6]` away from the sum
+            <View testID={`est-row-trash-${l.id}`} style={{ marginLeft: space[6], width: size.hitMin, alignItems: "center" }}>
               <IconButton bare icon="trash" label={t("est2.row.trash")} onPress={() => p.api.action(l.id, "delete")} />
             </View>
           )}

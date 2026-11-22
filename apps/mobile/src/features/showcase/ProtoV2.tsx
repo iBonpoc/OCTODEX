@@ -10,6 +10,7 @@ import { todayKey, type DayKey } from "@/features/calendar";
 import { View } from "react-native";
 import { radius, rhythm, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
+import { ButtonMenu } from "@/ui/pairs";
 import { useTheme } from "@/theme/ThemeProvider";
 import { CheckList, type CheckItem } from "@/ui/checkList";
 import { IconButton, ProgressBar, Segmented } from "@/ui/controls";
@@ -197,6 +198,10 @@ function ShowEstimateGroup() {
   const [open, setOpen] = useState(true);
   return (
     <View testID="showcase-v2-estimate-group" style={{ gap: rhythm.headGap }}>
+      <ButtonMenu
+        main={{ label: t("est.row.addShort"), icon: "plus", variant: "secondary", onPress: () => undefined }}
+        menu={{ icon: "chevronDown", a11y: t("px3.est.addFrom"), items: [{ key: "catalog", label: t("px3.est.fromCatalog"), icon: "catalog" }, { key: "template", label: t("ds.rows.fromTemplate"), icon: "template" }], onSelect: () => undefined }}
+      />
       <GroupHead title={t("est.sec.material")} icon="box" count={2} value="$152.84" fold={{ open, onToggle: () => setOpen(!open), label: t("est.sec.toggle") }} actions={<IconButton bare icon="more" label={t("est.sec.menu")} />} />
       {open ? (
         <View>

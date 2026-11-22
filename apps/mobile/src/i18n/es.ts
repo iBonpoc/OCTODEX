@@ -5598,4 +5598,5 @@ export const es: Dict = {
   "r1.est.emptyHint": "Añada la primera: una línea nueva o del catálogo",
   "r1.est.changedAfterSend": "modificada después del envío",
   "r1.est.sendChanges": "Enviar los cambios",
+  "px3.est.addFrom": "Más formas de añadir",
 };

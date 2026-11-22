@@ -5598,6 +5598,7 @@ export const ru = {
   "r1.est.emptyHint": "Добавьте первую — новой строкой или из каталога",
   "r1.est.changedAfterSend": "изменена после отправки",
   "r1.est.sendChanges": "Отправить изменения",
+  "px3.est.addFrom": "Ещё способы добавить",
 } as const;
 
 export type DictKey = keyof typeof ru;

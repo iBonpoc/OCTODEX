@@ -53,11 +53,13 @@ exports.run = async (h) => {
   h.expect((await p.locator('[data-testid^="est-section-"]').locator("visible=true").count()) >= 1, "its section came as a section");
   h.expect((await count("toast-undo")) === 0, "the empty estimate: no «Вернуть»");
   h.expect(/Gate code 1234/.test(await tid("est-notes-row").innerText()), "the note typed before stays");
-  h.expect((await count("est-from-template")) === 0 && (await count("est-menu-template")) === 1, "after the first line the button only adds («Добавить из шаблона…»)");
+  h.expect((await count("est-from-template")) === 0 && (await count("est-add-layers")) === 1, "after the first line the button only adds («Добавить из шаблона…»)");
   await line.fold(h);
 
   // a typed estimate: «Добавить из шаблона…» (the same round button of «Позиции», v2) only adds
-  await tid("est-menu-template").getByRole("button").click();
+  // #2387 (С4): «Из шаблона…» is in the «˅» menu beside «＋ Позиция»
+  await tid("est-add-layers").getByRole("button").click();
+  await tid("est-menu-template").click();
   await tid(`est-start-${TPL}`).waitFor({ timeout: 5000 });
   await tid(`est-start-${TPL}`).click();
   await sheetGone(p);

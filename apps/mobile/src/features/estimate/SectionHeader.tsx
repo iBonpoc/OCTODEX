@@ -100,8 +100,8 @@ function SectionHeaderView(p: SectionHeaderProps) {
               value={p.total}
               fold={{ open: !p.collapsed, onToggle: () => p.api.toggle(s.id), label: t("est.sec.toggle"), testID: `est-sec-toggle-${s.id}` }}
               actions={p.locked ? null : (
-                // in the column of the lines' trash: the same `space[6]` before the «⠿»
-                <View ref={moreRef} collapsable={false} testID={`est-sec-menu-${s.id}`} style={{ marginRight: space[6] }}>
+                // in the column of the lines' trash: by the «⠿» at the right edge, `space[6]` away from the sum
+                <View ref={moreRef} collapsable={false} testID={`est-sec-menu-${s.id}`} style={{ marginLeft: space[6], width: size.hitMin, alignItems: "center" }}>
                   <IconButton bare icon="more" label={t("est.sec.menu")} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h }))} />
                 </View>
               )}

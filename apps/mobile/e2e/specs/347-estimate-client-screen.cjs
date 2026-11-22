@@ -8,33 +8,14 @@
 exports.run = async (h) => {
   const p = h.page;
   const line = require("../estimateLine.cjs");
-  const { sheetGone, closeSheet } = require("../sheet.cjs");
+  const { sheetGone } = require("../sheet.cjs");
   const tid = (id) => p.getByTestId(id).locator("visible=true").first();
   const vis = (sel) => p.locator(sel).locator("visible=true");
   const count = (sel) => vis(sel).count();
   // the page's words without the toast (the toast of the mode itself names «себестоимость»)
   // «Только для вас» counted: a phone has it in the sheet of the bar's «Итого ˅» (opened for the count, then closed), from 820 in the card
-  const ownCount = async () => {
-    const phone = h.layout.width < 820;
-    if (phone) {
-      // optional: #2363 q72 — scrolled down, «Итого» is the capsule; a tap opens the bar with its «Итого ˅»
-      // (#2387: the page may still be settling from the last tap — a late scroll folds «Итого» into the capsule; open it and try again)
-      for (let i = 0; ; i++) {
-        if (await p.getByTestId("ue-save-capsule").locator("visible=true").count()) await p.getByTestId("ue-save-capsule").click({ timeout: 2000 }).catch(() => {});
-        try {
-          await tid("est-bar-total").click({ timeout: 2000 });
-          break;
-        } catch (e) {
-          if (i >= 3) throw e;
-        }
-      }
-      await tid("est-bar-breakdown").waitFor({ timeout: 3000 });
-    }
-    const n = await count('[data-testid="est-tot-own"]');
-    // v2: the breakdown is a sheet over the bar — closed as a sheet
-    if (phone) await closeSheet(p);
-    return n;
-  };
+  // #2387 (founder 21.11, С5: «шторку убрать, разбор суммы только в карточке внизу»): «Только для вас» is the totals card's, every width
+  const ownCount = async () => count('[data-testid="est-tot-own"]');
   const page = () => p.evaluate(() => {
     const toasts = [...document.querySelectorAll('[data-testid="toast-text"]')].map((e) => e.innerText);
     return toasts.reduce((all, x) => all.split(x).join(""), document.body.innerText);

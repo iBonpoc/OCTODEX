@@ -47,7 +47,7 @@ import { dayKeyIn } from "@/features/zone";
 import { dayOffsetOf, todayKey } from "@/features/calendar";
 import { foldStart, foldStep, type FoldState } from "@/ui/totalFold";
 import { GroupHead, GroupRow, ListGroup, useGroupEdge } from "@/ui/groupedList";
-import { ButtonPair } from "@/ui/pairs";
+import { ButtonMenu, ButtonPair } from "@/ui/pairs";
 import { useDayWord } from "@/features/useDayWord";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
@@ -672,7 +672,6 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   /** «Экран для клиента» (DS §8.3): cost, profit, the spend of hidden lines and «Только для вас» go from the screen */
   const [clientScreen, setClientScreen] = useState(false);
   /** «Итого ˅» of the phone's panel: open or folded (the screen's own state, not remembered) */
-  const [totalOpen, setTotalOpen] = useState(false);
   const [fold, setFold] = useState<FoldState>(foldStart);
   /** a folded line asked to show its menu (SortableList onHoldStill): its id and a counter, each ask opens it once */
   const [menuAsk, setMenuAsk] = useState<{ id: string; n: number }>({ id: "", n: 0 });
@@ -805,18 +804,26 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const step: MainAction = firstLine ? { label: t("ue.addItem"), onPress: addFirst, testID: "est-bar-add" } : { label: t("proto.est.done"), onPress: () => save(false), testID: "ue-save" };
   // «Итого ˅ $…» (DS §8.9, #1362): a press opens what the total is made of (a sheet over the bar, not a plate growing under the thumb)
   // visual v2 №5: «Итого ⌄ $772.36 налог $14.52» — the sum with cents (the engine's fmtUsd), the tax after it when there is one
-  const total = { label: t("ue.total"), value: rowSum(totals.total), sub: totals.tax ? t("px3.est.tax", { sum: rowSum(totals.tax) }) : undefined, onPress: () => setTotalOpen((o) => !o), open: totalOpen, testID: "est-bar-total" };
+  // founder 21.11 (С5: «шторку убрать, разбор суммы только в карточке внизу», #2387): the bar's «Итого» is a figure, not a button —
+  // the breakdown («если клиент включит всё», «Только для вас») is the totals card's, on every width
+  const total = { label: t("ue.total"), value: rowSum(totals.total), sub: totals.tax ? t("px3.est.tax", { sum: rowSum(totals.tax) }) : undefined, testID: "est-bar-total" };
   // where the screen has no pinned bar (820/1280) the same row stands after the totals (as EditorScreen does)
   const barShown = useFooterShown();
   // (there the totals card says «Итого» already — the row is the button only, П7)
   // #2363 q72 (founder 21.11, вариант А): scrolled down, the «Итого» card folds into the capsule on the right; up 8 pt, the top, or a
   // tap opens it (ui/totalFold.ts). An open total panel («Итого ˅») never folds under the finger
-  const stepRow = tplEdit ? null : <MainStep placement="bar" main={step} total={barShown ? total : null} folded={fold.folded && !totalOpen && option.lines.length > 0} onUnfold={() => setFold({ folded: false, anchor: Number.MAX_SAFE_INTEGER })} foldAdd={signed ? undefined : { a11y: t("px3.est.newLine"), onPress: () => addNew(), testID: "est-fold-add" }} />;
+  const stepRow = tplEdit ? null : <MainStep placement="bar" main={step} total={barShown ? total : null} folded={fold.folded && option.lines.length > 0} onUnfold={() => setFold({ folded: false, anchor: Number.MAX_SAFE_INTEGER })} foldAdd={signed ? undefined : { a11y: t("px3.est.newLine"), onPress: () => addNew(), testID: "est-fold-add" }} />;
   /** «слои» (visual v2 №5): the sections and the options of the list */
   const layerItems = [
     ...(!signed ? [{ key: "section", label: t("est.sec.addSectionMenu"), icon: "plus" as const, testID: "est-add-section" }] : []),
     ...(!signed && !tplEdit && doc.options.length < MAX_OPTIONS ? [{ key: "option", label: t("est.var.add"), icon: "copy" as const, testID: "est-add-option" }] : []),
     ...(!signed && option.lines.length ? [{ key: "layout", label: t("est.sec.layout"), icon: "menu" as const, testID: "est-layers-layout" }] : []),
+  ];
+  // the round «˅» beside «＋ Позиция»: the other ways to add (С4) — the catalog first, a template, then the sections and options
+  const addItems = [
+    { key: "catalog", label: t("px3.est.fromCatalog"), icon: "catalog" as const, testID: "est-add-catalog" },
+    ...(!tplEdit ? [{ key: "template", label: t("ds.rows.fromTemplate"), icon: "template" as const, testID: "est-menu-template" }] : []),
+    ...layerItems,
   ];
   const onAdd = (k: string) => {
     if (k === "new") addNew();
@@ -945,27 +952,14 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               (GroupHead), the sections and a template as quiet icons on its right; under it «＋ Новая позиция · Из каталога» — a ButtonPair of
               two secondary 40 (the screen's one yellow stays «Готово» of the bar) */}
           <View testID="est-items-head" style={{ marginTop: space[3], gap: rhythm.headGap }}>
-            <GroupHead
-              title={t("ue.items")}
-              count={act.length ? act.length : undefined}
-              countTestID="est-items-count"
-              actions={signed ? null : (
-                <RowView gap={0}>
-                  <MenuIcon icon="sections" label={t("px3.est.layout")} items={layerItems} onSelect={onAdd} testID="est-add-layers" />
-                  {!tplEdit && option.lines.length > 0 ? (
-                    <View testID={hasContent(doc) ? "est-menu-template" : "est-from-template"}>
-                      <IconButton bare icon="template" label={t("px3.est.template")} onPress={openTemplates} />
-                    </View>
-                  ) : null}
-                </RowView>
-              )}
-            />
+            <GroupHead title={t("ue.items")} count={act.length ? act.length : undefined} countTestID="est-items-count" />
+            {/* founder 21.11 (С4, #2387): ONE «＋ Позиция» — a new line in one press (many new lines go fast); the round beside it
+                opens the other ways: the catalog, a template, a section, an option, the layout */}
             {signed || option.lines.length === 0 ? null : (
-              <ButtonPair
-                // the short noun with «＋», as every list's «＋ Смета», «＋ Клиент» (DS §12, В-02); the screen reader hears the whole words
+              <ButtonMenu
                 main={{ label: t("est.row.addShort"), icon: "plus", variant: "secondary", accessibilityLabel: t("px3.est.newLine"), onPress: () => addNew() }}
-                second={{ label: t("cat.title"), icon: "catalog", accessibilityLabel: t("px3.est.fromCatalog"), onPress: openCatalog }}
-                ids={{ main: "est-add-new", second: "est-add-catalog" }}
+                menu={{ icon: "chevronDown", a11y: t("px3.est.addFrom"), items: addItems, onSelect: onAdd, testID: "est-add-layers" }}
+                ids={{ main: "est-add-new" }}
               />
             )}
           </View>
@@ -1093,7 +1087,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
             <GroupRow title={t("ue.deposit")} value={depValue} chevron={!signed} onPress={signed ? undefined : () => setSetting("deposit")} testID="est-deposit-row" />
             {totals.depositOverCaLimit ? <View style={{ padding: space[4] }}><CaWarn limitCents={totals.caDepositLimit} testID="est-ca-warn" /></View> : null}
             {/* from 820 (no panel): «если клиент включит всё на выбор» and «Только для вас» here; a phone has them in the panel's «Итого ˅» */}
-            {wide && (totalRows.client.some((r) => r.key === "ifAll") || totalRows.own.length) ? (
+            {totalRows.client.some((r) => r.key === "ifAll") || totalRows.own.length ? (
               <View style={{ padding: space[4] }}>
                 <TotalsBreakdown client={totalRows.client.filter((r) => r.key === "ifAll")} own={totalRows.own} testID="est-card-breakdown" />
               </View>
@@ -1370,9 +1364,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         }}
       />
       {/* «Итого ˅» of the bar: what the total is made of — «если клиент включит всё на выбор», «Только для вас» (DS §8.9, #1362) */}
-      <Sheet visible={totalOpen && !tplEdit} onClose={() => setTotalOpen(false)} title={`${t("ue.total")} ${money(totals.total)}`}>
-        <TotalsBreakdown panel client={totalRows.client.filter((r) => r.key !== "total")} own={totalRows.own} testID="est-bar-breakdown" />
-      </Sheet>
+
     </Screen>
   );
 }
@@ -1388,18 +1380,6 @@ function RevealOnTick({ tick, target }: { tick: number; target: React.RefObject<
   return null;
 }
 
-/** a round 32 of a card that opens a Menu at itself (visual v2 №5 «слои»): IconButton + Menu of src/ui */
-function MenuIcon({ icon, label, items, onSelect, testID }: { icon: IconKey; label: string; items: MenuItem<string>[]; onSelect: (k: string) => void; testID: string }) {
-  const ref = useRef<ComponentRef<typeof View>>(null);
-  const [at, setAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  if (!items.length) return null;
-  return (
-    <View ref={ref} collapsable={false} testID={testID}>
-      <IconButton bare icon={icon} label={label} onPress={() => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAt({ x, y, w, h }))} />
-      <Menu visible={!!at} anchor={at} items={items} onSelect={onSelect} onClose={() => setAt(null)} />
-    </View>
-  );
-}
 
 /** the lines' frame: no card of its own — the rows draw their group's card (`groupLook`); a missing list is framed in `bad` */
 function ListFrame({ empty, missing, children }: { empty: boolean; missing: boolean; children: ReactNode }) {
