@@ -11,7 +11,7 @@
 import { SelectedCheck } from "./selectedCheck";
 import { Children, useState, type ReactNode } from "react";
 import { StyleSheet, View, type AccessibilityActionEvent, type GestureResponderEvent } from "react-native";
-import { component, radius, rhythm, size, space, type StatusName } from "@octo/design-tokens";
+import { component, radius, rhythm, size, space, spaceHalf, statusIcon, type StatusName } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Avatar, IconButton } from "./controls";
 import { DoneCircle } from "./doneCircle";
@@ -179,9 +179,13 @@ export function GroupRow({ title, subtitle, lead, value, cols, status, actions =
               <T v="micro" tone="mut" numberOfLines={1}>
                 {x.label}
               </T>
-              <T v="body" w="bold" tabular tone={x.tone ?? "ink"} numberOfLines={1}>
-                {x.value}
-              </T>
+              {/* a value in a status tone («−9 дн» overdue) carries its status icon — rule 2, never the colour alone (#2363 X01) */}
+              <RowView gap={spaceHalf.tight}>
+                {x.tone ? <Icon name={statusIcon[x.tone]} s={size.iconXs} color={c.status[x.tone].text} /> : null}
+                <T v="body" w="bold" tabular tone={x.tone ?? "ink"} numberOfLines={1}>
+                  {x.value}
+                </T>
+              </RowView>
             </View>
           ))
         : value ? (

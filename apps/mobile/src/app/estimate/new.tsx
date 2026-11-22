@@ -46,6 +46,7 @@ import type { IconKey } from "@/ui/primitives";
 import { dayKeyIn } from "@/features/zone";
 import { dayOffsetOf, todayKey } from "@/features/calendar";
 import { foldStart, foldStep, type FoldState } from "@/ui/totalFold";
+import { useDayWord } from "@/features/useDayWord";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
 import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle, useFooterShown } from "@/ui/surfaces";
@@ -785,11 +786,12 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // «сохранено 8:19» (visual v2 №5): the version's own save mark; another day — the day
   // (an estimate saved before the mark existed: the time it was sent — the type's own fallback)
   const savedIso = existing?.doc?.savedAt ?? existing?.savedAt ?? existing?.sentAt;
+  const dw = useDayWord();
   // #2363 F46 (founder 21.11): «сохранено 8:19» today, «сохранено вчера» the day before, else «сохранено пт, 19 нояб.» — no «позавчера»
   // #2363 F33: saved after it went to the client — the client has not seen these edits
   const changedAfterSend = !!existing && existing.status !== "draft" && !!existing.sentAt && !!savedIso && savedIso > existing.sentAt;
   const savedWord = savedIso
-    ? t("px3.est.saved", { time: dayKeyIn(savedIso) === todayKey() ? time(savedIso) : dayOffsetOf(dayKeyIn(savedIso)) === -1 ? t("proto.client.yesterday").toLocaleLowerCase() : day(savedIso) })
+    ? t("px3.est.saved", { time: dayKeyIn(savedIso) === todayKey() ? time(savedIso) : dw(savedIso, true) })
     : undefined;
   // the pinned bar's ONE main step (direction 20.11 §3, the founder 21.11 #2350: «большая кнопка всегда светится, перекрывает» —
   // so one compact row «Итого ˅ $… · кнопка по словам»): no line yet — «Добавить позицию» (the price list when there is one, else

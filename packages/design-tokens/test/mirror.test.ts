@@ -192,7 +192,7 @@ describe("app tokens mirror the founder's DS css", () => {
   it("icon layers and the line are exactly the DS ones", () => {
     const ds = JSON.parse(readFileSync(join(DS, "icons.json"), "utf8"));
     expect(iconLayers).toEqual(ds.layers);
-    expect(iconMeta).toEqual({ viewBox: ds.viewBox, stroke: ds.stroke, air: ds.air, cap: ds.cap, join: ds.join, mask: ds.mask });
+    expect(iconMeta).toEqual({ viewBox: ds.viewBox, stroke: ds.stroke, air: ds.air, thin: ds.thin, cap: ds.cap, join: ds.join, mask: ds.mask });
     for (const k of Object.keys(ds.layers)) expect(Object.keys(icons)).toContain(k);
     expect(extraIcons).toEqual({});
   });

@@ -11,8 +11,7 @@ import { dueWord, moneyOverview } from "@/features/payments/overview";
 import { todayKey } from "@/features/calendar";
 import { formatDayKey } from "@/features/zone";
 import { useSearchIcon } from "@/nav/HeaderIcons";
-import { FigureRow } from "@/ui/figures";
-import { ListGroup } from "@/ui/groupedList";
+import { GroupRow, ListGroup } from "@/ui/groupedList";
 import { Sheet } from "@/ui/overlays";
 import { Icon } from "@/ui/primitives";
 import { StatGrid, StatTile } from "@/ui/statTile";
@@ -82,16 +81,17 @@ export default function Finance() {
             <StatTile testID="money-tile-deposits" icon="wallet" label={t("px3.money.deposits")} value={moneyWhole(o.deposits.cents)} onPress={pay ? () => go("/payments") : undefined} />
           </StatGrid>
         </View>
-        <ListGroup bare testID="money-topay" title={t("px3.money.toPay")} all={{ label: t("proto.money.all"), onPress: () => go("/invoice"), testID: "money-topay-all" }}>
+        {/* #2363 F20/F29: the money lists are rows of ONE card (rule 12), one row height for every list */}
+        <ListGroup testID="money-topay" title={t("px3.money.toPay")} all={{ label: t("proto.money.all"), onPress: () => go("/invoice"), testID: "money-topay-all" }}>
           {o.toPay.slice(0, SHOWN).map((x) => {
             const d = dueWord(x.dueIn);
             return (
-              <FigureRow
+              <GroupRow
                 key={x.inv.id}
                 testID={`money-topay-${x.inv.id}`}
-                icon="doc"
+                lead={{ icon: "doc" }}
                 title={name(x.inv.customerId)}
-                line={[x.inv.number, jobTitle(x.inv.jobId) ?? x.inv.title].filter(Boolean).join(" · ")}
+                subtitle={[x.inv.number, jobTitle(x.inv.jobId) ?? x.inv.title].filter(Boolean).join(" · ")}
                 cols={[
                   { label: t("w2m.col.due"), value: t(d.key, { d: d.d }), tone: d.late ? "bad" : undefined },
                   { label: t("w2m.col.sum"), value: moneyWhole(x.owesCents) },
@@ -102,18 +102,18 @@ export default function Finance() {
           })}
         </ListGroup>
         {pay ? (
-          <ListGroup bare testID="money-paid" title={t("px3.money.paidToday")} count={o.paidToday.length}>
+          <ListGroup testID="money-paid" title={t("px3.money.paidToday")} count={o.paidToday.length}>
             {o.paidToday.slice(0, SHOWN).map((x) => {
               const inv = db.invoices.find((i) => i.id === x.invoiceId);
               const how = t(`pay.${x.method}` as DictKey);
               return (
-                <FigureRow
+                <GroupRow
                   key={x.id}
                   testID={`money-paid-${x.id}`}
-                  icon="check"
-                  iconTone="ok"
+                  lead={{ icon: "check" }}
                   title={name(x.customerId)}
-                  line={[inv?.number, how.toLowerCase(), time(x.at)].filter(Boolean).join(" · ")}
+                  // #2363 F44: the way is the column «Способ» («Чек», «Zelle» — as the dictionary writes it); the line does not repeat it
+                  subtitle={[inv?.number, time(x.at)].filter(Boolean).join(" · ")}
                   cols={[
                     { label: t("w2m.col.way"), value: how },
                     { label: t("w2m.col.sum"), value: money(x.amountCents) },

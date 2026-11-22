@@ -58,6 +58,7 @@ import {
 } from "@/features/client/nextStep";
 import { Button, StatusChip } from "@/ui/controls";
 import { NumberTrio } from "@/ui/figures";
+import { useDayWord } from "@/features/useDayWord";
 import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
 import { NowCard } from "@/ui/nowCard";
 import { StatGrid, StatTile } from "@/ui/statTile";
@@ -109,27 +110,17 @@ export function clientStepOf(f: ClientFacts, newEstimateHref: string | undefined
 }
 
 /** «2 дн. назад», «сегодня», «вчера»; older than a week — the date (LAYOUT-RULES §8 п.13) */
+/** #2363 F46: the day of a past moment — the ONE rule (features/dayWords.ts): «Сегодня» / «вчера» / «пт, 19 нояб.» */
 export function useAgo() {
-  const { t, day } = useI18n();
-  // #2363 F40: in the middle of a line («Home Depot · сегодня») the day word starts small, like the date beside it
-  const small = (w: string, mid?: boolean) => (mid ? w.charAt(0).toLocaleLowerCase() + w.slice(1) : w);
-  return (iso: string, mid?: boolean) => {
-    const d = -dayOffsetOf(isoDayKey(iso));
-    if (d <= 0) return small(t("common.today"), mid);
-    if (d === 1) return small(t("proto.client.yesterday"), mid);
-    if (d < 7) return small(t("proto.client.daysAgo", { n: d }), mid);
-    return day(iso);
-  };
+  const dw = useDayWord();
+  return (iso: string, mid?: boolean) => dw(iso, !!mid);
 }
 
-/** «Сегодня 8:30», «Завтра 9:00», «пт, 21 нояб. 10:00» */
+/** «Сегодня 8:30», «Завтра 9:00», «пт, 21 нояб. 10:00» — the day by the one rule, then the time */
 function useWhen() {
-  const { t, day, time } = useI18n();
-  return (iso: string) => {
-    const off = dayOffsetOf(isoDayKey(iso));
-    const d = off === 0 ? t("common.today") : off === 1 ? t("common.tomorrow") : day(iso);
-    return `${d} ${time(iso)}`;
-  };
+  const { time } = useI18n();
+  const dw = useDayWord();
+  return (iso: string) => `${dw(iso)} ${time(iso)}`;
 }
 
 const initials = (n: string) => n.split(/\s+/).filter(Boolean).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -212,10 +203,8 @@ export function ClientOverview({ c, f, onSection, withNow }: {
       }
     }
   };
-  function dayWord(iso: string) {
-    const off = dayOffsetOf(isoDayKey(iso));
-    return off === 0 ? t("common.today") : off === 1 ? t("common.tomorrow") : when(iso).split(" ").slice(0, -1).join(" ");
-  }
+  const dw = useDayWord();
+  const dayWord = (iso: string) => dw(iso);
 
   // archive: on the client's screen the «Сейчас» card says it with its «Вернуть в активные»; «не обслуживаем» has no step — the plate
   const plate =
@@ -318,10 +307,11 @@ const bareTime = (s: string) => plateHalves(s, s)[0];
  *  the pill is one word: «Опаздывает», not «Опаздывает · не выехал» — the detail is on the visit itself) */
 function useAheadRow(f: ClientFacts) {
   const { t, time, day, duration } = useI18n();
+  const dw = useDayWord();
   const { db } = f;
   return (v: Visit) => {
     const off = dayOffsetOf(isoDayKey(v.start));
-    const dayWord = off === 0 ? t("common.today") : off === 1 ? t("common.tomorrow") : day(v.start);
+    const dayWord = dw(v.start);
     const end = new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString();
     const going = v.step === "on_site" || v.step === "working";
     const today = off === 0;

@@ -1,3 +1,4 @@
+import { useDayWord } from "@/features/useDayWord";
 import { useMemo, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
@@ -37,6 +38,7 @@ const initials = (n: string) => n.split(/\s+/).filter(Boolean).map((p) => p[0]).
  */
 export default function Clients() {
   const { t, money, day, time } = useI18n();
+  const dw = useDayWord();
   const store = useStore();
   const { db, role } = store;
   const toast = useToast();
@@ -93,7 +95,7 @@ export default function Clients() {
     const overdue = office ? clientOverdueOf(db, c.id) : null;
     const next = clientNextVisit(db, c.id);
     const off = next ? dayOffsetOf(isoDayKey(next.start)) : -1;
-    const nextDay = !next ? "" : off === 0 ? t("common.today") : off === 1 ? t("common.tomorrow") : day(next.start);
+    const nextDay = !next ? "" : dw(next.start); // #2363 F46: the one rule (features/dayWords.ts)
     const last = clientHistory(db, c.id, role)[0];
     const prop = db.properties.find((p) => p.customerId === c.id);
     // one line «когда · что»: the next visit, else what happened last, else the address

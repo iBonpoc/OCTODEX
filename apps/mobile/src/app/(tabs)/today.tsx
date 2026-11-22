@@ -226,7 +226,8 @@ export default function Today() {
         wrap
         lead={x.allDay ? { icon: "calendar" } : { time: timeLead(time(x.start)).top, sub: timeLead(time(x.start)).bottom || undefined }}
         title={name}
-        subtitle={[job?.title?.split(":")[0]?.trim() ?? t("st.inspection"), techs].filter(Boolean).join(" · ")}
+        // #2363 F24: «работа · мастер» — the tech never stands alone on the second line (no-break spaces around «·»)
+        subtitle={[job?.title?.split(":")[0]?.trim() ?? t("st.inspection"), techs].filter(Boolean).join("\u00a0·\u00a0")}
         status={odd ? { status: s.status, label: s.label } : undefined}
         onPress={() => router.push(`/visit/${x.id}`)}
       />
