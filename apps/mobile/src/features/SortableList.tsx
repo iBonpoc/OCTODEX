@@ -569,6 +569,12 @@ function Item({ k, index, dragKind, open, quiet, look, children }: { k: string; 
     },
   });
 
+  // #2363 (founder 21.11: «прозрачные полоски» between a group's lines): the row's ground and corners are drawn by the OUTER view
+  // (the one that is carried), so the rows of a group join into one card
+  const { backgroundColor: lookBg, borderTopLeftRadius, borderTopRightRadius, borderBottomLeftRadius, borderBottomRightRadius, ...lookInner } = look ?? {};
+  const lookGround = typeof lookBg === "string" ? lookBg : "transparent";
+  // a middle line of a group has square corners (else the wrapper's own `radius.inner` rounded every line into a card of its own)
+  const lookCorners = look ? { borderTopLeftRadius: borderTopLeftRadius ?? 0, borderTopRightRadius: borderTopRightRadius ?? 0, borderBottomLeftRadius: borderBottomLeftRadius ?? 0, borderBottomRightRadius: borderBottomRightRadius ?? 0 } : undefined;
   const a = useAnimatedStyle(() => {
     const on = mine;
     return {
@@ -582,12 +588,14 @@ function Item({ k, index, dragKind, open, quiet, look, children }: { k: string; 
       shadowRadius: c.shadow.radius,
       shadowOffset: { width: 0, height: component.dragHandle },
       shadowColor: c.shadow.color,
-      borderRadius: radius.inner,
-      borderWidth: component.selectedBorder,
-      borderColor: on && held.value > 0.5 ? c.acc : "transparent",
-      backgroundColor: on && held.value > 0.5 ? c.bg : "transparent",
+      // a group's line: its own corners (per corner — a web `borderRadius` set after them would round every line)
+      ...(lookCorners ?? { borderRadius: radius.inner }),
+      backgroundColor: on && held.value > 0.5 ? c.bg : lookGround,
     };
   });
+  // the held row's frame `acc` lies OVER the row (not a border around it): a row is as high as it draws (F32: a line 52, as in the
+  // mock), and the rows of a group touch — no transparent frame between them
+  const frameStyle = useAnimatedStyle(() => ({ opacity: mine && held.value > 0.5 ? 1 : 0 }));
 
   // the landed row flashes: a frame `acc` that fades out over `durSlow`
   const fl = useSharedValue(0);
@@ -625,10 +633,11 @@ function Item({ k, index, dragKind, open, quiet, look, children }: { k: string; 
   );
   return (
     <Animated.View ref={(n: unknown) => ctl.node(k, n as ComponentRef<typeof View> | null)} collapsable={false} onLayout={(e) => ctl.layout(k, e.nativeEvent.layout.y, e.nativeEvent.layout.height)} style={a}>
-      <View style={[{ flexDirection: "row", alignItems: "center" }, look]}>
+      <View style={[{ flexDirection: "row", alignItems: "center" }, lookInner]}>
         {canDrag && !open ? <GestureDetector gesture={hold}>{body}</GestureDetector> : body}
         {handleEl}
       </View>
+      {mine ? <Animated.View pointerEvents="none" style={[{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: radius.inner, borderWidth: component.selectedBorder, borderColor: c.acc }, frameStyle]} /> : null}
       {flashing ? <Animated.View pointerEvents="none" testID={`sort-flash-${k}`} style={[{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: radius.inner, borderWidth: component.selectedBorder, borderColor: c.acc }, flashStyle]} /> : null}
     </Animated.View>
   );

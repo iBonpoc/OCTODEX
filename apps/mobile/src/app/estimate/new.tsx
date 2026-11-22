@@ -838,7 +838,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   };
 
   return (
-    <Screen onScrollY={(y) => setFold((f) => { if (lifted) return f; /* a row is carried: the bar under the finger never changes */ const n = foldStep(f, y); return n.folded === f.folded && n.anchor === f.anchor ? f : n; })} onScrollBegin={() => {
+    <Screen onScrollY={(y, max) => setFold((f) => { if (lifted) return f; /* a row is carried: the bar under the finger never changes */ /* #2363: at the end of the page the whole «Итого» again — the capsule never lies over «Сумма» */ const n = foldStep(f, y, undefined, max); return n.folded === f.folded && n.anchor === f.anchor ? f : n; })} onScrollBegin={() => {
       swipes.closeOpen();
       // the finger that starts this scroll went down a moment ago; an older touch (a tap on a field) does not count
       const inOpen = Date.now() - touchInOpen.current < motion.durSlow * 3;
