@@ -40,7 +40,7 @@ export default function CompanyModules() {
       <View key={d.key} testID={`module-${d.key}`}>
         <Card>
           <RowView style={{ alignItems: "flex-start" }}>
-            <Icon name="sliders" />
+            <Icon name="settings" />
             <View style={{ flex: 1, gap: space[1] }}>
               <T v="heading">{title}</T>
               <T v="caption" tone="mut">{t(d.hintKey)}</T>

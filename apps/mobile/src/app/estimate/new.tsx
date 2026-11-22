@@ -940,10 +940,10 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                 <View testID="est-add-catalog">
                   <IconButton size="card" icon="catalog" label={t("px3.est.fromCatalog")} onPress={openCatalog} />
                 </View>
-                <MenuIcon icon="layers" label={t("px3.est.layout")} items={layerItems} onSelect={onAdd} testID="est-add-layers" />
+                <MenuIcon icon="sections" label={t("px3.est.layout")} items={layerItems} onSelect={onAdd} testID="est-add-layers" />
                 {!tplEdit ? (
                   <View testID={hasContent(doc) ? "est-menu-template" : "est-from-template"}>
-                    <IconButton size="card" icon="doc" label={t("px3.est.template")} onPress={openTemplates} />
+                    <IconButton size="card" icon="template" label={t("px3.est.template")} onPress={openTemplates} />
                   </View>
                 ) : null}
               </>
@@ -972,7 +972,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                     </RowView>
                     {!tplEdit ? (
                       <View testID="est-empty-template">
-                        <Button label={t("ds.rows.fromTemplate")} icon="doc" variant="secondary" full onPress={openTemplates} />
+                        <Button label={t("ds.rows.fromTemplate")} icon="template" variant="secondary" full onPress={openTemplates} />
                       </View>
                     ) : null}
                   </View>

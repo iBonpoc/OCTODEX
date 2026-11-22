@@ -170,7 +170,7 @@ function LeadsList() {
         groups={groups}
         aside={openL ? <LeadAside key={openL.id} id={openL.id} outside={panel.outside} onOpen={panel.full} onClose={panel.close} /> : undefined}
         row={row}
-        more={role === "director" ? [{ key: "settings", label: t("co.leads.title"), icon: "sliders", testID: "leads-more-settings" }] : undefined}
+        more={role === "director" ? [{ key: "settings", label: t("co.leads.title"), icon: "settings", testID: "leads-more-settings" }] : undefined}
         onMore={() => router.push("/company/leads")}
         empty={
           <Empty
