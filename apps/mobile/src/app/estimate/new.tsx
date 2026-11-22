@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { canSeeClientLink } from "@/features/estimateSign";
-import { View } from "react-native";
+import { View, type ViewStyle } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { haptics } from "@/ui/haptics";
-import { component, motion, space, spaceHalf, size } from "@octo/design-tokens";
+import { component, motion, radius, space, spaceHalf, size } from "@octo/design-tokens";
 import { LINE_GROUPS, activeLines, countedSections, discountBps, ppmToPctText, sectionSubtotals, taxRatePpm, type TaxSettings, type EstimateSection, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
 import { canMakeEstimateAt, canSeeEstimate, keepCosts, seeCosts as seesCosts } from "@/features/access";
@@ -774,6 +774,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // the first line on the list: the swipe hint plays on it
   const firstLineId = view.find((r): r is Extract<typeof r, { type: "line" }> => r.type === "line")?.line.id;
   const secTotals = useMemo(() => sectionSubtotals(layoutOpt, s), [layoutOpt, s]);
+  const hasGroups = (layoutOpt.sections ?? []).length > 0;
   const totalById = new Map(act.map((l, i) => [l.id, totals.lineTotals[i] ?? 0] as const));
   const taxValue = !s.tax.enabled ? t("ue.off") : partialTax ? `${ppmToPctText(taxRatePpm(s.tax))}% · ${t("ue.taxPartialShort")}` : `${ppmToPctText(taxRatePpm(s.tax))}%`;
   const discValue = !s.discount ? t("ue.add") : s.discount.kind === "pct" ? `${discountBps(s.discount.value) / 100}%` : money(s.discount.cents);
@@ -805,7 +806,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // (there the totals card says «Итого» already — the row is the button only, П7)
   // #2363 q72 (founder 21.11, вариант А): scrolled down, the «Итого» card folds into the capsule on the right; up 8 pt, the top, or a
   // tap opens it (ui/totalFold.ts). An open total panel («Итого ˅») never folds under the finger
-  const stepRow = tplEdit ? null : <MainStep placement="bar" main={step} total={barShown ? total : null} folded={fold.folded && !totalOpen} onUnfold={() => setFold({ folded: false, anchor: Number.MAX_SAFE_INTEGER })} />;
+  const stepRow = tplEdit ? null : <MainStep placement="bar" main={step} total={barShown ? total : null} folded={fold.folded && !totalOpen && option.lines.length > 0} onUnfold={() => setFold({ folded: false, anchor: Number.MAX_SAFE_INTEGER })} foldAdd={signed ? undefined : { a11y: t("px3.est.newLine"), onPress: () => addNew(), testID: "est-fold-add" }} />;
   /** «слои» (visual v2 №5): the sections and the options of the list */
   const layerItems = [
     ...(!signed ? [{ key: "section", label: t("est.sec.addSectionMenu"), icon: "plus" as const, testID: "est-add-section" }] : []),
@@ -835,7 +836,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   };
 
   return (
-    <Screen onScrollY={(y) => setFold((f) => { const n = foldStep(f, y); return n.folded === f.folded && n.anchor === f.anchor ? f : n; })} onScrollBegin={() => {
+    <Screen onScrollY={(y) => setFold((f) => { if (lifted) return f; /* a row is carried: the bar under the finger never changes */ const n = foldStep(f, y); return n.folded === f.folded && n.anchor === f.anchor ? f : n; })} onScrollBegin={() => {
       swipes.closeOpen();
       // the finger that starts this scroll went down a moment ago; an older touch (a tap on a field) does not count
       const inOpen = Date.now() - touchInOpen.current < motion.durSlow * 3;
@@ -980,8 +981,12 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               />
             ) : null}
           {/* the lines' card only when there are lines: the empty state is its own card, never a card in a card */}
-          <Card style={{ paddingVertical: 0, paddingHorizontal: space[3] + spaceHalf.hair, gap: 0, ...(option.lines.length === 0 ? { display: "none" } : null), ...(missing === "lines" ? { borderColor: c.status.bad.fill } : null) }}>
+          {/* #2363 (founder 21.11: «разделители групп некрасиво, непонятно»; both design reviews): with groups each group is a card of
+              its own — the rows draw the card (the ground, the first/last corners), the group's title stands OVER it with its sum; one
+              list still, so a line drags from group to group */}
+          <ListFrame grouped={hasGroups} empty={option.lines.length === 0} missing={missing === "lines"}>
             <SortableList
+              rowLook={hasGroups ? (r, i) => groupLook(view, r, i, c.surf) : undefined}
               rows={view}
               openKey={openId ? `l:${openId}` : renamingId ? `s:${renamingId}` : null}
               locked={signed}
@@ -991,15 +996,16 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               // the open row folds first (the whole list folds): a wrong one stays, says why (the errors, the scroll) and the drag does
               // not start — never silently (code review of «б»)
               beforeBegin={() => leaveRow(false)}
-              // visual v2 №5: folded lines without «≡» (taken by their body); a finger's hold let go in place opens the row's menu
+              // #2363 (founder 21.11: «не вижу, как перетаскивать»; DS §8.3): every folded line shows its «≡»; a hold still drags too
               quietLines
               onHoldStill={(k) => setMenuAsk((m) => ({ id: k.replace(/^l:/, ""), n: m.n + 1 }))}
               renderRow={(r, i) =>
 
               r.type === "section" ? (
                 <View key={`s-${r.section.id}`}>
-                  {i > 0 ? <Divider /> : null}
+                  {i > 0 && !hasGroups ? <Divider /> : null}
                   <SectionHeader
+                    gapAbove={hasGroups && i > 0}
                     section={r.section}
                     depth={r.depth}
                     title={secTitle(r.section)}
@@ -1012,15 +1018,15 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                   />
                 </View>
               ) : r.type === "unsectioned" ? (
-                <View key="unsectioned" testID="est-sec-loose">
-                  {i > 0 ? <Divider /> : null}
+                <View key="unsectioned" testID="est-sec-loose" style={hasGroups && i > 0 ? { paddingTop: space[3] } : undefined}>
+                  {i > 0 && !hasGroups ? <Divider /> : null}
                   <T v="caption" tone="mut" w="semibold">
                     {t("est.sec.loose")}
                   </T>
                 </View>
               ) : (
                 <View key={r.line.id} style={{ paddingLeft: r.depth === 1 ? space[4] : 0 }}>
-                  {i > 0 ? <Divider /> : null}
+                  {i > 0 && (!hasGroups || view[i - 1]?.type === "line") ? <Divider /> : null}
                   <LineRow
                     line={r.line}
                     open={openId === r.line.id}
@@ -1046,7 +1052,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               )
               }
             />
-          </Card>
+          </ListFrame>
           {missing === "lines" ? <FieldError text={t("ue.empty")} testID="ue-missing-lines" /> : null}
           </View>
         </View>
@@ -1397,4 +1403,25 @@ function MenuIcon({ icon, label, items, onSelect, testID }: { icon: IconKey; lab
       <Menu visible={!!at} anchor={at} items={items} onSelect={onSelect} onClose={() => setAt(null)} />
     </View>
   );
+}
+
+/** the lines' frame: one card for a plain list; with groups — no card (each group's rows draw their own, `groupLook`) */
+function ListFrame({ grouped, empty, missing, children }: { grouped: boolean; empty: boolean; missing: boolean; children: ReactNode }) {
+  const { c } = useTheme();
+  if (grouped) return <View style={{ gap: 0, ...(missing ? { borderWidth: component.hairline, borderColor: c.status.bad.fill, borderRadius: radius.card } : null) }}>{children}</View>;
+  return <Card style={{ paddingVertical: 0, paddingHorizontal: space[3] + spaceHalf.hair, gap: 0, ...(empty ? { display: "none" } : null), ...(missing ? { borderColor: c.status.bad.fill } : null) }}>{children}</Card>;
+}
+
+/** #2363: a line of a group draws the group's card — the ground and the corners of the first and the last line; a group's title has none */
+function groupLook(view: readonly { type: string }[], r: { type: string }, i: number, ground: string): ViewStyle | undefined {
+  // (no padding here: the drag measures a row by what it draws — the gap over a group is the title's own, `SectionHeader` `gapAbove`)
+  if (r.type !== "line") return undefined;
+  const first = view[i - 1]?.type !== "line";
+  const last = view[i + 1]?.type !== "line";
+  return {
+    backgroundColor: ground,
+    paddingLeft: space[3] + spaceHalf.hair,
+    ...(first ? { borderTopLeftRadius: radius.card, borderTopRightRadius: radius.card } : null),
+    ...(last ? { borderBottomLeftRadius: radius.card, borderBottomRightRadius: radius.card } : null),
+  };
 }

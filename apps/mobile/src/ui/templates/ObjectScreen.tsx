@@ -28,8 +28,9 @@ export interface ObjectScreenProps<S extends string> {
   actions?: IconRowItem[];
   /** THE main step — under the header and its quick actions, a 40 button by its words (no pinned plate on an object) */
   main?: MainAction;
-  /** #2363 (founder 21.11: «кнопка сдвигает контент»): the step stands UNDER the sections strip, first in the section's content —
-   *  for a screen whose step exists in one section only (Смета · Подпись на месте): the strip never jumps */
+  /** #2363 (founder 21.11: «кнопка „Напомнить“ сдвигает контент… продумай»; both design reviews: the pinned bottom bar): a screen
+   *  whose step exists in one section only (Смета · Подпись на месте) pins it at the BOTTOM (MainStep "bar", the Screen's footer) —
+   *  the top of both sections is the same, nothing under the strip moves when the section changes */
   mainBelowSections?: boolean;
   /**
    * visual v2 «Клиент» (#2350, the lead №21: «кнопка следующего шага — в карточке „Сейчас“ вверху»): the object's «Сейчас» card under
@@ -122,7 +123,8 @@ function useObjectParts<S extends string>(p: ObjectScreenProps<S>) {
       ? { open, onToggle: setOpen, expandLabel: p.header.labels.expand, collapseLabel: p.header.labels.collapse, testID: `${p.header.testID}-toggle`, panel: p.header.contacts ?? <View testID={`${p.header.testID}-details`}><Card>{p.header.details}</Card></View> }
       : undefined,
   };
-  return { right, tabs, top, head, under: below ? step : null };
+  const bar = below && p.main ? <MainStep placement="bar" main={p.main} /> : null;
+  return { right, tabs, top, head, under: null as ReactNode, bar };
 }
 
 /**
@@ -143,9 +145,10 @@ function ObjectRight({ create, onCreate, items, onMore, testID }: { create?: Cre
 }
 
 function ObjectLive<S extends string>(p: ObjectScreenProps<S>) {
-  const { right, tabs, top, head, under } = useObjectParts(p);
+  const { right, tabs, top, head, under, bar } = useObjectParts(p);
   return (
     <Screen
+      footer={bar ?? undefined}
       testID={p.testID}
       title={p.header.title}
       head={head}

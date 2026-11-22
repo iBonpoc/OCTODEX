@@ -21,6 +21,12 @@ describe("unit:totalFold", () => {
     expect(run([310], open).folded).toBe(false);
     expect(run([315], open).folded).toBe(true);
   });
+  it("at the end of the list it opens (the last lines are read with their total)", () => {
+    const f = [50, 300].reduce((a, y) => foldStep(a, y), foldStart);
+    expect(f.folded).toBe(true);
+    expect(foldStep(f, 600, undefined, 604).folded).toBe(false);
+    expect(foldStep(f, 590, undefined, 604).folded).toBe(true);
+  });
   it("at the top it is always open", () => {
     expect(run([400, 0]).folded).toBe(false);
   });

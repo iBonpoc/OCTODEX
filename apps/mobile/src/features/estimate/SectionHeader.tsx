@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from "react";
 import { View } from "react-native";
-import { radius, size, space } from "@octo/design-tokens";
+import { size, space } from "@octo/design-tokens";
 import type { EstimateSection } from "@octo/estimating-engine";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -31,6 +31,8 @@ export interface SectionHeaderProps {
   title: string;
   total: string;
   lineCount: number;
+  /** #2363: a group title over its card keeps a gap above it (not the first row) */
+  gapAbove?: boolean;
   collapsed: boolean;
   renaming: boolean;
   /** a signed estimate: the heading can be folded, nothing else (no «⋯», no rename) */
@@ -75,15 +77,9 @@ function SectionHeaderView(p: SectionHeaderProps) {
   ];
   const commit = () => p.api.rename(s.id, draft);
   return (
-    // #2363 q75 (founder 21.11: «группы должны быть хорошо видны — сейчас тёмно-серое на сером»): a top section is a band of its own —
-    // `surf2` across the card, the kind's icon, the title and the total 15/700; a subsection stays a quiet line
-    <View
-      ref={rootRef}
-      collapsable={false}
-      testID={`est-section-${s.id}`}
-      style={{ paddingLeft: p.depth === 1 ? space[4] : space[2], paddingRight: p.depth === 1 ? 0 : space[1], paddingVertical: space[1], ...(p.depth === 0 ? { backgroundColor: c.surf2, borderRadius: radius.inner, marginVertical: space[1] } : null) }}
-      accessibilityRole="header"
-    >
+    // #2363 (founder 21.11: «разделители групп некрасиво, непонятно»; both design reviews): a top section is the TITLE OVER its card —
+    // no band: the chevron, the kind's icon, the word and «· N» on the left, «⋯», the group's sum on the right in the column of the lines' sums
+    <View ref={rootRef} collapsable={false} testID={`est-section-${s.id}`} style={{ paddingLeft: p.depth === 1 ? space[4] : 0, paddingVertical: space[1], ...(p.gapAbove ? { marginTop: space[3] } : null) }} accessibilityRole="header">
       <RowView style={{ minHeight: size.rowMin }}>
         {p.renaming && ready ? (
           <View style={{ flex: 1, gap: space[1] }}>
@@ -94,29 +90,27 @@ function SectionHeaderView(p: SectionHeaderProps) {
           </View>
         ) : (
           <Press onPress={() => p.api.toggle(s.id)} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={t("est.sec.toggle")} accessibilityState={{ expanded: !p.collapsed }} containerStyle={{ flex: 1 }} testID={`est-sec-toggle-${s.id}`}>
-            <RowView style={{ minHeight: size.rowMin }}>
+            <RowView gap={space[2]} style={{ minHeight: size.rowMin }}>
               <Icon name={p.collapsed ? "chevronRight" : "chevronDown"} s={size.iconSm} color={c.mut} />
-              {p.depth === 0 && s.kind && KIND_ICON[s.kind] ? <Icon name={KIND_ICON[s.kind]!} s={size.iconSm} color={c.ink} /> : null}
-              <View style={{ flex: 1 }}>
-                <T v="body" w={p.depth === 0 ? "bold" : "semibold"} numberOfLines={1}>
-                  {p.title}
-                </T>
-                {p.collapsed ? (
-                  <T v="caption" tone="mut" numberOfLines={1}>
-                    {t("est.sec.count", { n: p.lineCount })}
-                  </T>
-                ) : null}
-              </View>
-              <T v="body" tabular w={p.depth === 0 ? "bold" : "semibold"}>
-                {p.total}
+              {p.depth === 0 && s.kind && KIND_ICON[s.kind] ? <Icon name={KIND_ICON[s.kind]!} s={size.iconSm} color={c.mut} /> : null}
+              <T v={p.depth === 0 ? "heading" : "body"} w="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>
+                {p.title}
+              </T>
+              <T v="body" tone="mut" tabular numberOfLines={1}>
+                {p.collapsed ? `· ${t("est.sec.count", { n: p.lineCount })}` : `· ${p.lineCount}`}
               </T>
             </RowView>
           </Press>
         )}
-        {p.locked ? null : (
+        {p.locked || (p.renaming && ready) ? null : (
           <View ref={moreRef} collapsable={false} testID={`est-sec-menu-${s.id}`}>
             <IconButton icon="more" label={t("est.sec.menu")} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h }))} />
           </View>
+        )}
+        {p.renaming && ready ? null : (
+          <T v={p.depth === 0 ? "heading" : "body"} tabular w="semibold">
+            {p.total}
+          </T>
         )}
       </RowView>
       <Menu visible={!!anchor} anchor={anchor} items={items} onSelect={(a) => p.api.action(s.id, a)} onClose={() => setAnchor(null)} />

@@ -579,7 +579,7 @@ export function Screen({
    *  buttons in its own column. */
   footer?: ReactNode;
   /** #2363 q72: the page's offset as it scrolls (JS side) — the estimate folds its «Итого» into a capsule by it (`totalFold`) */
-  onScrollY?: (y: number) => void;
+  onScrollY?: (y: number, max: number) => void;
   /** a form screen (sign-in, a company, a client link): the column is at most `layout.formMax` wide, on the same left line as the title (DS §12.3, #1594); not together with `tabs` (their sticky offset is measured on the plain column).
    *  `"center"` — a public page of the client with no side menu (the request form /f/): the column with its title stands in the middle
    *  of a wide screen, not at its left edge with the right side empty (DS §12.3, 1.15.8, #1728) */
@@ -1021,8 +1021,8 @@ export function Screen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   /** what the page's scroll tells JS: the place (fields, held rows), the clock's glass, the stuck strip */
-  const onJsScroll = (y: number) => {
-    onScrollY?.(y);
+  const onJsScroll = (y: number, max = Number.MAX_SAFE_INTEGER) => {
+    onScrollY?.(y, max);
     // a late event of an earlier jump (a held row's autoscroll makes one every 16 ms) is older than what we asked of the
     // scroll: the place is the last one asked, until the events catch up with it (else the held row lagged by a few steps)
     const jump = lastJump.current;
@@ -1052,7 +1052,7 @@ export function Screen({
   };
   const jsScroll = useRef(onJsScroll);
   jsScroll.current = onJsScroll;
-  const callJsScroll = useCallback((y: number) => jsScroll.current(y), []);
+  const callJsScroll = useCallback((y: number, max: number) => jsScroll.current(y, max), []);
   // let go between the open and the folded header: the page goes to the nearer end in `durBase` easeOut (v2 «Отпустил посередине»)
   const snapY = useSharedValue(0);
   const snapping = useSharedValue(false);
@@ -1072,7 +1072,8 @@ export function Screen({
           held.value = -1;
           runOnJS(closePanel)();
         }
-        runOnJS(callJsScroll)(e.contentOffset.y);
+        // (the web may not report the sizes: then no end — the fold opens only up or at the top)
+        runOnJS(callJsScroll)(e.contentOffset.y, e.contentSize?.height && e.layoutMeasurement?.height ? e.contentSize.height - e.layoutMeasurement.height : 1e9);
       },
       onEndDrag: (e) => {
         // a slow finger lets go: settle now; a fling runs on (its momentum's end settles)

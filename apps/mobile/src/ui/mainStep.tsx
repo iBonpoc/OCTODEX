@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { component, motion, radius, rhythm, size, space, spaceHalf } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
-import { Button } from "./controls";
+import { Button, IconButton } from "./controls";
 import { Icon, Press, T } from "./primitives";
 import { loadPhase, mainStepLayout } from "./mainStepRules";
 import type { MainAction } from "./templates/types";
@@ -42,6 +42,7 @@ export function MainStep({
   failedLabel,
   folded,
   onUnfold,
+  foldAdd,
 }: {
   main: MainAction;
   placement: "top" | "bar";
@@ -57,6 +58,8 @@ export function MainStep({
    *  (a secondary Button, under the thumb, the prices on the left stay seen); a tap opens the bar again (`onUnfold`) */
   folded?: boolean;
   onUnfold?: () => void;
+  /** #2363 q72 вариант Г (founder 21.11): beside the capsule a round «＋» — a new line from anywhere in a long list */
+  foldAdd?: { a11y: string; onPress: () => void; testID?: string };
 }) {
   const { c } = useTheme();
   const phase = useLoadPhase(!!loading);
@@ -93,7 +96,9 @@ export function MainStep({
     );
   if (placement === "bar" && folded && total && onUnfold)
     return (
-      <View style={{ paddingBottom: rhythm.cardGap, alignItems: "flex-end" }}>
+      // the SAME height as the open card (`figureRow.h`): the bar never changes its height — the page's end and the drag's edge stay put
+      <View style={{ paddingBottom: rhythm.cardGap, height: component.figureRow.h + rhythm.cardGap, flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: space[2] }}>
+        {foldAdd ? <IconButton icon="plus" label={foldAdd.a11y} onPress={foldAdd.onPress} testID={foldAdd.testID} /> : null}
         {/* rule 29: the capsule is the Button itself (secondary 40, zone 44) — the sum and «˄» */}
         <Button testID={`${main.testID}-capsule`} label={total.value} icon="chevronUp" variant="secondary" onPress={onUnfold} accessibilityLabel={`${total.label} ${total.value}`} />
       </View>
