@@ -2107,10 +2107,10 @@ export const ru = {
   "w2m.due.today": "сегодня",
   // визуал v2, Смета-редактор и Деньги (#2344, px3)
   "px3.money.owed": "Должны · счета",
-  "px3.money.overdue.one": "! {n} просрочен",
-  "px3.money.overdue.few": "! {n} просрочены",
-  "px3.money.overdue.many": "! {n} просрочено",
-  "px3.money.overdue.other": "! {n} просрочено",
+  "px3.money.overdue.one": "{n} просрочен",
+  "px3.money.overdue.few": "{n} просрочены",
+  "px3.money.overdue.many": "{n} просрочено",
+  "px3.money.overdue.other": "{n} просрочено",
   "px3.money.est": "Сметы открыты",
   "px3.money.estN.one": "{n} смета",
   "px3.money.estN.few": "{n} сметы",
@@ -5543,7 +5543,7 @@ export const ru = {
   "px2.cv.deposit": "задаток",
   "px2.cv.work": "работа",
   "px2.cv.workCap": "Работа",
-  "px2.cv.ofPct": "{n} из {m} · {p} %",
+  "px2.cv.ofPct": "{n} из {m} · {p} %",
   "px2.cv.pinnedTeam": "закреплено · видят мастера",
   "px2.cv.pinnedMine": "закреплено · видите только вы",
   "px2.cv.dur": "Длит.",
@@ -5589,6 +5589,14 @@ export const ru = {
   "px1.visitsN.many": "{n} выездов",
   "px1.visitsN.other": "{n} выезда",
   "px1.plan.nowA11y": "Сейчас {time}",
+  // #2363 круг 1 проверки вида v2
+  "r1.itemsN.one": "{n} пункт",
+  "r1.itemsN.few": "{n} пункта",
+  "r1.itemsN.many": "{n} пунктов",
+  "r1.itemsN.other": "{n} пункта",
+  "r1.tab.leadsWaiting": "{n} без ответа",
+  "r1.est.emptyHint": "Добавьте первую — новой строкой или из каталога",
+  "r1.est.changedAfterSend": "изменена после отправки",
 } as const;
 
 export type DictKey = keyof typeof ru;

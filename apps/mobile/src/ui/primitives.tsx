@@ -109,6 +109,7 @@ export function Icon({ name, s = size.iconMd, color, active }: { name: IconKey; 
                 <Path d={L!.fill!} fill={iconMeta.mask.show} />
                 {L!.inner ? <Path d={L!.inner} stroke={iconMeta.mask.hide} strokeWidth={sw} strokeLinecap={iconMeta.cap} strokeLinejoin={iconMeta.join} fill="none" /> : null}
                 {L!.innerDots ? <Path d={L!.innerDots} fill={iconMeta.mask.hide} /> : null}
+                {L!.thin ? <Path d={L!.thin} stroke={iconMeta.mask.hide} strokeWidth={sw * iconMeta.thin} strokeLinecap={iconMeta.cap} fill="none" /> : null}
               </Mask>
             </Defs>
             <Path d={L!.fill!} fill={col} mask={`url(#m${id})`} />
@@ -118,6 +119,7 @@ export function Icon({ name, s = size.iconMd, color, active }: { name: IconKey; 
         ) : (
           <>
             <Path d={d} {...line} />
+            {L?.thin ? <Path d={L.thin} {...line} strokeWidth={sw * iconMeta.thin} /> : null}
             {L?.dots ? <Path d={L.dots} fill={col} /> : null}
           </>
         )}

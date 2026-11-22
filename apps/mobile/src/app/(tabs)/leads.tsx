@@ -163,18 +163,18 @@ function LeadsList() {
         testID="leads"
         title={t("sales.leads")}
         count={open.length}
-        create={{ a11y: t("quick.lead"), items: [{ key: "new", label: t("quick.lead"), icon: "inbox", testID: "leads-create-new" }] }}
+        create={{ a11y: t("quick.lead"), items: [{ key: "new", label: t("quick.lead"), icon: "leads", testID: "leads-create-new" }] }}
         onCreate={newLead}
         search={{ placeholder: t("lead.search"), value: q, onChange: setQ }}
         chips={{ items: chips.map((c) => ({ key: c, label: label(c) })), value: chip, onChange: setKept }}
         groups={groups}
         aside={openL ? <LeadAside key={openL.id} id={openL.id} outside={panel.outside} onOpen={panel.full} onClose={panel.close} /> : undefined}
         row={row}
-        more={role === "director" ? [{ key: "settings", label: t("co.leads.title"), icon: "sliders", testID: "leads-more-settings" }] : undefined}
+        more={role === "director" ? [{ key: "settings", label: t("co.leads.title"), icon: "settings", testID: "leads-more-settings" }] : undefined}
         onMore={() => router.push("/company/leads")}
         empty={
           <Empty
-            icon="inbox"
+            icon="leads"
             title={q.trim() ? t("proto.leads.emptySearch") : visible.length ? t("proto.leads.emptyChip") : t("inbox.empty")}
             // the tech sees only his own (13 §2.3): say which, not «from Thumbtack and the website»
             hint={q.trim() ? undefined : t(office ? "inbox.emptyHint" : "leads.empty.tech")}

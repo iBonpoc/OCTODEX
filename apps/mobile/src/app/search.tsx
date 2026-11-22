@@ -17,7 +17,7 @@ const SEARCH_PER_GROUP = 3;
 
 const GROUP: Record<SearchGroup, { label: DictKey; kind: DictKey; icon: IconKey }> = {
   clients: { label: "nav.search.g.clients", kind: "w6.task.kind.customer", icon: "users" },
-  leads: { label: "nav.search.g.leads", kind: "w6.task.kind.lead", icon: "inbox" },
+  leads: { label: "nav.search.g.leads", kind: "w6.task.kind.lead", icon: "leads" },
   properties: { label: "nav.search.g.properties", kind: "w6.task.kind.property", icon: "pin" },
   jobs: { label: "nav.search.g.jobs", kind: "w6.task.kind.job", icon: "wrench" },
   estimates: { label: "nav.search.g.estimates", kind: "w6.task.kind.estimate", icon: "invoice" },

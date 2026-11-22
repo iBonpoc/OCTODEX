@@ -105,11 +105,12 @@ export function NowCard({ kicker, when, soon, window: span, big, mainIcon, statu
                     <T v={big ? "title" : "heading"} numberOfLines={2}>
                       {title}
                     </T>
-                    {sub ? (
-                      <T v="caption" tone="mut" numberOfLines={1}>
-                        {sub}
+                    {/* #2363 F22: «работа» and «адрес» each on its own line (the caller joins them with «\n») */}
+                    {sub ? sub.split("\n").map((l, i) => (
+                      <T key={i} v="caption" tone="mut" numberOfLines={1}>
+                        {l}
                       </T>
-                    ) : null}
+                    )) : null}
                   </View>
                   {onPress ? <Icon name="chevronRight" s={size.iconSm} color={c.mut} /> : null}
                 </RowView>

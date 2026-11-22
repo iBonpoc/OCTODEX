@@ -446,6 +446,9 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
     // signed by the client: what they chose; unsigned: the document as the client will read it (no hidden $0 lines, no costs)
     return <EstimateView doc={clientDoc(doc)} optionId={a?.optionId ?? mainOption(doc).id} addonIds={a?.addonIds ?? []} readOnly terms={clientTerms(db, e)} />;
   })();
+  // #2363 (founder 21.11: «кнопка „Отправить клиенту“ сдвигает контент»): with the «Смета · Подпись на месте» strip the step lived
+  // ABOVE the strip and left on «Подпись» — the strip and all under it jumped 79 pt. Now the step is the first thing of «Смета»
+  // itself, under the strip (ObjectScreen `mainBelowSections`): the strip stands still on both sections
   const body = (
     <>
       {notes.map((n) => (
@@ -483,6 +486,7 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
         }}
         actions={iconActions}
         main={main}
+        mainBelowSections
         second={second}
         sections={sections}
         section={section}

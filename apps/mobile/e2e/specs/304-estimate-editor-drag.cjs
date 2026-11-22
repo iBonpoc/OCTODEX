@@ -133,8 +133,9 @@ exports.run = async (h) => {
   await p.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2 + 12, { steps: 3 });
   await p.mouse.move(hb.x + hb.width / 2, vh - 6, { steps: 8 });
   await p.getByTestId("sort-bar").first().waitFor({ timeout: 3000 });
-  // the page reaches its end ...
-  await p.waitForFunction(() => { let e = document.querySelector('[data-testid^="est-line-"]'); while (e && !(e.scrollTop > 0 && e.scrollHeight > e.clientHeight + 50)) e = e.parentElement; return !!e && e.scrollTop + e.clientHeight >= e.scrollHeight - 2; }, null, { timeout: 15000 });
+  // the page runs down and STOPS — at its end, or where the held row meets the list's end (#2363: with the kind groups drawn as
+  // cards the list ends a little above the page's end — the totals card below; the row never goes past the last line) ...
+  await p.waitForFunction(() => new Promise((r) => { let e = document.querySelector('[data-testid^="est-line-"]'); while (e && !(e.scrollTop > 0 && e.scrollHeight > e.clientHeight + 50)) e = e.parentElement; if (!e) return r(false); let prev = -1; let still = 0; const f = () => { const t = e.scrollTop; still = t > 0 && Math.abs(t - prev) < 0.5 ? still + 1 : 0; prev = t; still >= 30 ? r(e.scrollTop + e.clientHeight >= e.scrollHeight - 60) : requestAnimationFrame(f); }; f(); }), null, { timeout: 15000 });
   // ... and is held there for a while (40 frames): the row must still be with the finger
   await p.waitForFunction(() => new Promise((r) => { let n = 0; const f = () => (++n > 40 ? r(true) : requestAnimationFrame(f)); f(); }), null, { timeout: 5000 });
   // the row is still under the finger (the page's offset used to grow past the end: the row ran away from the finger)

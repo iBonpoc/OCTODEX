@@ -20,9 +20,10 @@ import { assigneesOf, canReschedule, daysSince, liveAssignees, unassignedSoon, v
 import { memberName } from "@/features/team";
 import { VisitFormSheet } from "@/features/VisitForm";
 import { Avatar, TextField } from "@/ui/controls";
-import { HatchPlate, TimeSlot } from "@/ui/figures";
+import { CountPill, HatchPlate, TimeSlot } from "@/ui/figures";
 import { StatusPill } from "@/ui/statusPill";
-import { nearIndex, plateHalves, problemSummary, quietStatuses } from "@/features/planSlots";
+import { StatusNote } from "@/ui/statusNote";
+import { nearIndex, problemSummary, quietStatuses } from "@/features/planSlots";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Divider, ListRow } from "@/ui/surfaces";
@@ -86,7 +87,8 @@ export function PlanRow({ x, onEvent, onAssign, onMove }: { x: PlanItem } & RowH
         testID={`plan-row-${v.id}`}
         lead={lead}
         title={client || "—"}
-        subtitle={[span, work, nobody ? null : names, late ? (st.label === "late.enRoute" ? t("plan5.lateEnRoute") : t("plan5.lateNotLeft")) : null].filter(Boolean).join(" · ")}
+        // #2363 F10: the state is the pill only — never glued into the line
+        subtitle={[span, work, nobody ? null : names].filter(Boolean).join(" · ")}
         // «Запланирован» is every row — no pill; the rest is a pill «значок + слово» (rule 2)
         status={st.status === "neutral" ? undefined : { status: st.status, label: late ? t("st.late") : t(st.label) }}
         actions={onAssign && nobody && movable ? [{ icon: "user", a11y: t("proto.plan.assignA11y", { name: client || "—" }), onPress: () => onAssign(v.id), testID: `plan-assign-${v.id}` }] : []}
@@ -145,35 +147,39 @@ export function PlanDay({ items, day, title, testID }: { items: PlanItem[]; day:
   const nowLine = nowAt >= 0 && rows.length ? <NowLine key="now" label={time(new Date(now).toISOString())} /> : null;
   return (
     <View testID={testID} style={{ gap: space[2] }}>
-      {/* «Выезды сегодня (06)» — the count in its cell 28 (v2 `.cnt`); the miles and the road time of the day are not in the data */}
+      {/* «Выезды сегодня 6» — the count is the CountPill of every section head (#2363 F08); the miles and the road time of the day are not in the data */}
       <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], marginTop: space[4] - space[2], marginBottom: rhythm.headGap - space[2] }}>
         <T v="heading" numberOfLines={1} style={{ flexShrink: 1 }}>
           {day === todayKey() ? t("px1.plan.today") : `${t("px1.plan.day")} · ${dayOf(day)}`}
         </T>
-        <View style={{ minWidth: component.dayPill.w - space[3], height: component.avatar.sm, borderRadius: radius.pill, backgroundColor: c.surf, alignItems: "center", justifyContent: "center", paddingHorizontal: space[2] }}>
-          <T v="body" w="bold" tabular>
-            {String(rows.length).padStart(2, "0")}
-          </T>
-        </View>
+        {/* #2363 F08: one counter for every section head — CountPill, no leading zero */}
+        <CountPill n={rows.length} testID="plan-day-count" />
+        {/* #2363 F28: «⚠ 2 опаздывают» on the right of the head (where v2 has «41 mi · 1 ч 50») — nothing below moves */}
+        <View style={{ flex: 1 }} />
+        {sumText ? (
+          <View testID="plan-summary" style={{ flexShrink: 1 }}>
+            <StatusNote tone={sum!.missed ? "bad" : "warn"}>{sumText}</StatusNote>
+          </View>
+        ) : null}
       </View>
-      {sumText ? (
-        <View testID="plan-summary" style={{ alignSelf: "flex-start" }}>
-          <StatusPill status={sum!.missed ? "bad" : "warn"} label={sumText} />
-        </View>
-      ) : null}
       {nowAt === 0 ? nowLine : null}
       {rows.flatMap((x, i) => {
         const el = ((): ReactNode => {
         const span = x.allDay || x.at === "";
         const from = span ? itemTimes(x, time, t("plan5.allDay")).when : time(x.start);
         const to = span || !x.end ? "" : time(x.end);
-        const [a, b] = to ? plateHalves(from, to) : [from, ""];
+        // #2363 q73: both halves keep their AM/PM (the plate draws them small)
+        const [a, b] = to ? [from, to] : [from, ""];
         const hour = span ? "" : timeLead(time(x.start)).top;
         const len = !span && x.end ? duration((Date.parse(x.end) - Date.parse(x.start)) / 60_000) : undefined;
         const names = x.people.map((id) => memberName(db, id, t)).filter(Boolean).join(", ");
         const s = st[i];
-        const pill = s && shown[i] === "pill" ? { status: s.status, label: kinds[i] === "late" ? t("st.late") : t(s.label) } : undefined;
-        const word = s && shown[i] === "word" ? t(s.label) : null;
+        // #2363 F10/N1: a pill only on the exceptions (late, missed, a problem) — one word, on every such row; the line never
+        // carries the state («Опаздывает · в пути · …» was glued into it)
+        const odd = !!s && (kinds[i] !== null || s.status === "bad" || s.status === "warn");
+        const pill = s && odd ? { status: s.status, label: kinds[i] === "late" ? t("st.late") : t(s.label) } : undefined;
+        void shown;
+        const word = null;
         if (x.kind === "visit") {
           const v = x.visit;
           const { client } = visitWho(db, v);

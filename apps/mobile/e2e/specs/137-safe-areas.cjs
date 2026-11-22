@@ -184,8 +184,11 @@ exports.run = async (h) => {
       await h.go(path);
       await insets(p, c);
       await clear(h, c, name);
+      // #2363 F22: «Дальше» is a line taller (the address on its own line) — on a landscape phone its button is below the fold (and the
+      // header snaps a small scroll back): on «Главная» the content's left is the first card's own button, wherever it stands
       // no double padding: after the side menu the content starts 16 from it, the notch is the menu's (useNavInsets)
       const cl = await contentLeft(p);
+      if (name === "Главная") cl.left = Math.min(cl.left, await p.evaluate(() => { const e = document.querySelector('[data-testid="home-main-en-route"]') || document.querySelector('[data-testid="home-main-open"]'); return e ? e.getBoundingClientRect().left : Infinity; }));
       // v2 «Главная» has no avatar from 820 (the profile is in the side menu): at 820 the leftmost button is the one inside the first card, 16 further
       const want = wide ? cl.nav + 16 + (name === "Главная" && c.w < 1280 ? 16 : 0) : Math.max(c.l, 16);
       if (wide && cl.nav === null) h.failures.push(`${c.name} ${name}: no side menu`);

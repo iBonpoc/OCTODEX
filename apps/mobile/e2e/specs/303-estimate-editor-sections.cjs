@@ -118,6 +118,8 @@ exports.run = async (h) => {
 
   // an estimate with sections saves: the sections are kept (the sums on the server are the lines' sums — see unit:estimateSections)
   const before = ((await h.db()).estimates ?? []).length;
+  // optional: #2363 q72 — scrolled down, «Итого» is the capsule; a tap opens the bar with «Готово» (at the top it is the bar already)
+  if (await tid("ue-save-capsule").locator("visible=true").count()) await tid("ue-save-capsule").click();
   await tid("ue-save").click();
   await p.waitForURL((u) => !/\/estimate\/new/.test(u.pathname), { timeout: 8000 });
   await p.waitForFunction((n) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.estimates ?? []).length === n + 1, before, { timeout: 5000 });

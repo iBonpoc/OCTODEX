@@ -118,7 +118,7 @@ exports.run = async (h) => {
     // v2: the checklist cell of the work card («Чек-лист выезда · 0 из 5»)
     const cell = p.getByTestId("chk-left").locator("visible=true").first();
     await cell.waitFor();
-    h.expect(/0 из 5/.test(await cell.innerText()), `${role}: the checklist is read: ${await cell.innerText()}`);
+    h.expect(/5 пунктов/.test(await cell.innerText()), `${role}: the checklist is read («5 пунктов», #2363 F38): ${await cell.innerText()}`);
     h.expect(!(await visitHas(p, "visit-act-checklist")), `${role}: no «Изменить чек-лист» in «⋯»`);
     h.expect((await p.getByTestId("chk-editor").count()) === 0, `${role}: no editor`);
   }

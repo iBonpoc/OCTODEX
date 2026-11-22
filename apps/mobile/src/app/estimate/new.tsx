@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { canSeeClientLink } from "@/features/estimateSign";
-import { View } from "react-native";
+import { View, type ViewStyle } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { haptics } from "@/ui/haptics";
-import { component, motion, space, spaceHalf, size } from "@octo/design-tokens";
+import { component, motion, radius, space, spaceHalf, size } from "@octo/design-tokens";
 import { LINE_GROUPS, activeLines, countedSections, discountBps, ppmToPctText, sectionSubtotals, taxRatePpm, type TaxSettings, type EstimateSection, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
 import { canMakeEstimateAt, canSeeEstimate, keepCosts, seeCosts as seesCosts } from "@/features/access";
@@ -28,7 +28,7 @@ import { CaWarn } from "@/features/estimate/CaWarn";
 import { NotesTerms } from "@/features/estimate/NotesTerms";
 import { isSignedEstimate } from "@/features/estimate/notesTerms";
 import { docLanguageFor } from "@/data/people";
-import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
+import { autoGroups, canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
 import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, nextSeries, replaceLine, restoreDeleted, type DeleteSeries, restoreLine, rowProblems, setHidden } from "@/features/estimateRows";
 import { FieldError, useRequiredForm, useScreenScroll } from "@/ui/requiredForm";
 import { MainStep } from "@/ui/mainStep";
@@ -44,7 +44,9 @@ import { Button, IconButton, Segmented, StatusChip, TextField, Toggle } from "@/
 import { CountPill, FigureRow } from "@/ui/figures";
 import type { IconKey } from "@/ui/primitives";
 import { dayKeyIn } from "@/features/zone";
-import { todayKey } from "@/features/calendar";
+import { dayOffsetOf, todayKey } from "@/features/calendar";
+import { foldStart, foldStep, type FoldState } from "@/ui/totalFold";
+import { useDayWord } from "@/features/useDayWord";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
 import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle, useFooterShown } from "@/ui/surfaces";
@@ -253,6 +255,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const customer = db.customers.find((c) => c.id === customerId);
   const property = db.properties.find((p) => p.id === propertyId) ?? db.properties.find((p) => p.customerId === customerId);
   const option = doc.options[Math.min(cur, doc.options.length - 1)]!;
+  // #2363 q75 (founder 21.11: «по видам, автоматически»): an option with no sections of its own and lines of two kinds or more is
+  // SHOWN in groups by kind («Материалы · Работа · Услуги», DS §8.5) — a view, not data: the document, the PDF and /p/ do not change
+  // until the person moves a row or a section (then the grouping becomes the option's own sections, with «Вернуть»)
+  const grouped = useMemo(() => autoGroups(option), [option]);
+  const layoutOpt = grouped ?? option;
   // a tax-exempt client: no sales tax on the estimate (the server refuses it, П-2a)
   const exempt = !!customer?.taxExempt;
   const counted = useMemo(() => exemptDoc(doc, exempt), [doc, exempt]);
@@ -449,6 +456,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     showUndo("est.sec.laidOut", option, next);
   };
   const sectionAction = (id: string, a: SectionAction) => {
+    const option = layoutOpt; // the shown layout: a move makes the auto groups the option's own
     if (signed) return;
     if (a === "rename") return setRenamingId(id);
     if (a === "addSub") return addSectionBtn(id);
@@ -459,6 +467,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     showUndo("est.sec.deleted", option, next);
   };
   const doMove = (lineId: string, key: string) => {
+    const option = layoutOpt; // the shown layout: a move makes the auto groups the option's own
     if (signed) return setMoveFor(null);
     const index = option.lines.findIndex((l) => l.id === lineId);
     const line = option.lines[index];
@@ -481,6 +490,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   };
   /** a row was let go in the list (DS §14.6): the line or the section lands where the bar stood; «Вернуть» takes back this move only */
   const dropRow = (d: Drop): DropResult => {
+    const option = layoutOpt; // the shown layout: a move makes the auto groups the option's own
     if (signed) return "same";
     const refuse = (why: string): DropResult => {
       toast.show(t("est.sec.moduleBlocked"));
@@ -660,6 +670,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const [clientScreen, setClientScreen] = useState(false);
   /** «Итого ˅» of the phone's panel: open or folded (the screen's own state, not remembered) */
   const [totalOpen, setTotalOpen] = useState(false);
+  const [fold, setFold] = useState<FoldState>(foldStart);
   /** a folded line asked to show its menu (SortableList onHoldStill): its id and a counter, each ask opens it once */
   const [menuAsk, setMenuAsk] = useState<{ id: string; n: number }>({ id: "", n: 0 });
   const totalRows = totalsRows({ totals, allOptional, own: seeCosts && !clientScreen, costKnown: costComplete(option) });
@@ -760,10 +771,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const act = activeLines(option.lines);
   // the sum of each line by its id, once (not `indexOf` for every row: that is n² for a long estimate)
   // a section that is carried folds while it is held (its lines go with it)
-  const view = useMemo(() => withLooseTarget(viewRows(option, new Set(holdSection ? [...collapsedIds, holdSection] : collapsedIds)), !!lifted?.startsWith("l:")), [option, collapsedIds, holdSection, lifted]);
+  const view = useMemo(() => withLooseTarget(viewRows(layoutOpt, new Set(holdSection ? [...collapsedIds, holdSection] : collapsedIds)), !!lifted?.startsWith("l:")), [layoutOpt, collapsedIds, holdSection, lifted]);
   // the first line on the list: the swipe hint plays on it
   const firstLineId = view.find((r): r is Extract<typeof r, { type: "line" }> => r.type === "line")?.line.id;
-  const secTotals = useMemo(() => sectionSubtotals(option, s), [option, s]);
+  const secTotals = useMemo(() => sectionSubtotals(layoutOpt, s), [layoutOpt, s]);
+  const hasGroups = (layoutOpt.sections ?? []).length > 0;
   const totalById = new Map(act.map((l, i) => [l.id, totals.lineTotals[i] ?? 0] as const));
   const taxValue = !s.tax.enabled ? t("ue.off") : partialTax ? `${ppmToPctText(taxRatePpm(s.tax))}% · ${t("ue.taxPartialShort")}` : `${ppmToPctText(taxRatePpm(s.tax))}%`;
   const discValue = !s.discount ? t("ue.add") : s.discount.kind === "pct" ? `${discountBps(s.discount.value) / 100}%` : money(s.discount.cents);
@@ -774,7 +786,13 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // «сохранено 8:19» (visual v2 №5): the version's own save mark; another day — the day
   // (an estimate saved before the mark existed: the time it was sent — the type's own fallback)
   const savedIso = existing?.doc?.savedAt ?? existing?.savedAt ?? existing?.sentAt;
-  const savedWord = savedIso ? t("px3.est.saved", { time: dayKeyIn(savedIso) === todayKey() ? time(savedIso) : day(savedIso) }) : undefined;
+  const dw = useDayWord();
+  // #2363 F46 (founder 21.11): «сохранено 8:19» today, «сохранено вчера» the day before, else «сохранено пт, 19 нояб.» — no «позавчера»
+  // #2363 F33: saved after it went to the client — the client has not seen these edits
+  const changedAfterSend = !!existing && existing.status !== "draft" && !!existing.sentAt && !!savedIso && savedIso > existing.sentAt;
+  const savedWord = savedIso
+    ? t("px3.est.saved", { time: dayKeyIn(savedIso) === todayKey() ? time(savedIso) : dw(savedIso, true) })
+    : undefined;
   // the pinned bar's ONE main step (direction 20.11 §3, the founder 21.11 #2350: «большая кнопка всегда светится, перекрывает» —
   // so one compact row «Итого ˅ $… · кнопка по словам»): no line yet — «Добавить позицию» (the price list when there is one, else
   // a line of its own); lines — «Готово» (saves and opens the estimate: send, sign, deposit are there). Always active: a press with
@@ -788,7 +806,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // where the screen has no pinned bar (820/1280) the same row stands after the totals (as EditorScreen does)
   const barShown = useFooterShown();
   // (there the totals card says «Итого» already — the row is the button only, П7)
-  const stepRow = tplEdit ? null : <MainStep placement="bar" main={step} total={barShown ? total : null} />;
+  // #2363 q72 (founder 21.11, вариант А): scrolled down, the «Итого» card folds into the capsule on the right; up 8 pt, the top, or a
+  // tap opens it (ui/totalFold.ts). An open total panel («Итого ˅») never folds under the finger
+  const stepRow = tplEdit ? null : <MainStep placement="bar" main={step} total={barShown ? total : null} folded={fold.folded && !totalOpen && option.lines.length > 0} onUnfold={() => setFold({ folded: false, anchor: Number.MAX_SAFE_INTEGER })} foldAdd={signed ? undefined : { a11y: t("px3.est.newLine"), onPress: () => addNew(), testID: "est-fold-add" }} />;
   /** «слои» (visual v2 №5): the sections and the options of the list */
   const layerItems = [
     ...(!signed ? [{ key: "section", label: t("est.sec.addSectionMenu"), icon: "plus" as const, testID: "est-add-section" }] : []),
@@ -818,7 +838,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   };
 
   return (
-    <Screen onScrollBegin={() => {
+    <Screen onScrollY={(y) => setFold((f) => { if (lifted) return f; /* a row is carried: the bar under the finger never changes */ const n = foldStep(f, y); return n.folded === f.folded && n.anchor === f.anchor ? f : n; })} onScrollBegin={() => {
       swipes.closeOpen();
       // the finger that starts this scroll went down a moment ago; an older touch (a tap on a field) does not count
       const inOpen = Date.now() - touchInOpen.current < motion.durSlow * 3;
@@ -833,7 +853,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       head={{ kind: "editor" }}
       title={tplEdit ? t("est.tpl.editTitle") : existing ? [t("ue.title"), existing.number].filter(Boolean).join(" ") : t("ue.newTitle")}
       // visual v2 №5: «Черновик · сохранено 8:19» (the version's own save time), «Демо» joins it in the header; no «?» by the title
-      subtitle={tplEdit ? undefined : existing ? [t(estimateStatusView(existing.status).l), savedWord].filter(Boolean).join(" · ") : t("proto.est.autosave")}
+      subtitle={tplEdit ? undefined : existing ? [t(estimateStatusView(existing.status).l), changedAfterSend ? t("r1.est.changedAfterSend") : null, savedWord].filter(Boolean).join(" · ") : t("proto.est.autosave")}
       back={back}
       hintKey="estimate-builder"
       right={tplEdit ? undefined : <MoreButton items={moreList} onMore={onMore} a11y={t("est.actions")} testID="est-menu" />}
@@ -845,10 +865,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           <Button label={t("est.client.off")} icon="eye" variant="secondary" size="sm" onPress={() => toggleClientScreen(false)} />
         </View>
       ) : null}
-      {existing && existing.status !== "draft" ? (
-        // one line (the subtitle says the status): what follows from editing a sent estimate
-        <StatusNote tone="warn">{t("proto.est.sentNote")}</StatusNote>
-      ) : null}
+      {/* #2363 F33: no line over the estimate that pushes everything down — the header line says «изменена после отправки» */}
       {draft ? (
         <View testID="est-draft">
           {/* a hint in one line, the way out beside it (not a card) */}
@@ -919,32 +936,59 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
             <View style={{ flex: 1 }} />
             {signed ? null : (
               <>
-                <View testID="est-add-catalog">
-                  <IconButton size="card" icon="ruler" label={t("px3.est.fromCatalog")} onPress={openCatalog} />
-                </View>
-                <MenuIcon icon="copy" label={t("px3.est.layout")} items={layerItems} onSelect={onAdd} testID="est-add-layers" />
-                {!tplEdit ? (
-                  <View testID={hasContent(doc) ? "est-menu-template" : "est-from-template"}>
-                    <IconButton size="card" icon="note" label={t("px3.est.template")} onPress={openTemplates} />
-                  </View>
-                ) : null}
+                {/* #2363 (founder 21.11): «＋» first — a new line is the commonest; then the catalog, the sections, a template */}
                 <View testID="est-add-new">
                   <IconButton size="card" icon="plus" label={t("px3.est.newLine")} onPress={() => addNew()} />
                 </View>
+                <View testID="est-add-catalog">
+                  <IconButton size="card" icon="catalog" label={t("px3.est.fromCatalog")} onPress={openCatalog} />
+                </View>
+                <MenuIcon icon="sections" label={t("px3.est.layout")} items={layerItems} onSelect={onAdd} testID="est-add-layers" />
+                {!tplEdit ? (
+                  <View testID={hasContent(doc) ? "est-menu-template" : "est-from-template"}>
+                    <IconButton size="card" icon="template" label={t("px3.est.template")} onPress={openTemplates} />
+                  </View>
+                ) : null}
               </>
             )}
           </RowView>
           </View>
           <View ref={linesRef} collapsable={false} style={{ gap: space[1] }}>
-          <Card style={{ paddingVertical: 0, paddingHorizontal: space[3] + spaceHalf.hair, gap: 0, ...(missing === "lines" ? { borderColor: c.status.bad.fill } : null) }}>
-            {option.lines.length === 0 ? (
-              <View testID="est-empty">
-                <T v="body" tone="mut">
-                  {t("est.row.empty")}
-                </T>
-              </View>
+          {option.lines.length === 0 ? (
+              // #2363 (founder 21.11: «Позиций пока нет — блок некрасивый»): DS §13 «Пусто — данных нет вообще» — the object's icon,
+              // the words, one line why, and the two ways to add (secondary: the screen's main action is the bar below)
+              <Empty
+                testID="est-empty"
+                icon="estimate"
+                title={t("est.row.empty")}
+                hint={signed ? undefined : t("r1.est.emptyHint")}
+                action={signed ? undefined : (
+                  // founder 21.11: the two ways in ONE row (not a column), and «Из шаблона…» under them
+                  <View style={{ gap: space[2], alignSelf: "stretch" }}>
+                    <RowView gap={space[2]}>
+                      <View testID="est-empty-new" style={{ flex: 1, minWidth: 0 }}>
+                        <Button label={t("px3.est.newLine")} icon="plus" variant="secondary" full onPress={() => addNew()} />
+                      </View>
+                      <View testID="est-empty-catalog" style={{ flex: 1, minWidth: 0 }}>
+                        <Button label={t("cat.title")} icon="catalog" variant="secondary" full onPress={openCatalog} />
+                      </View>
+                    </RowView>
+                    {!tplEdit ? (
+                      <View testID="est-empty-template">
+                        <Button label={t("ds.rows.fromTemplate")} icon="template" variant="secondary" full onPress={openTemplates} />
+                      </View>
+                    ) : null}
+                  </View>
+                )}
+              />
             ) : null}
+          {/* the lines' card only when there are lines: the empty state is its own card, never a card in a card */}
+          {/* #2363 (founder 21.11: «разделители групп некрасиво, непонятно»; both design reviews): with groups each group is a card of
+              its own — the rows draw the card (the ground, the first/last corners), the group's title stands OVER it with its sum; one
+              list still, so a line drags from group to group */}
+          <ListFrame grouped={hasGroups} empty={option.lines.length === 0} missing={missing === "lines"}>
             <SortableList
+              rowLook={hasGroups ? (r, i) => groupLook(view, r, i, c.surf) : undefined}
               rows={view}
               openKey={openId ? `l:${openId}` : renamingId ? `s:${renamingId}` : null}
               locked={signed}
@@ -954,15 +998,15 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               // the open row folds first (the whole list folds): a wrong one stays, says why (the errors, the scroll) and the drag does
               // not start — never silently (code review of «б»)
               beforeBegin={() => leaveRow(false)}
-              // visual v2 №5: folded lines without «≡» (taken by their body); a finger's hold let go in place opens the row's menu
-              quietLines
+              // #2363 (founder 21.11: «не вижу, как перетаскивать»; DS §8.3): every folded line shows its «≡»; a hold still drags too
               onHoldStill={(k) => setMenuAsk((m) => ({ id: k.replace(/^l:/, ""), n: m.n + 1 }))}
               renderRow={(r, i) =>
 
               r.type === "section" ? (
                 <View key={`s-${r.section.id}`}>
-                  {i > 0 ? <Divider /> : null}
+                  {i > 0 && !hasGroups ? <Divider /> : null}
                   <SectionHeader
+                    gapAbove={hasGroups && i > 0}
                     section={r.section}
                     depth={r.depth}
                     title={secTitle(r.section)}
@@ -975,15 +1019,15 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                   />
                 </View>
               ) : r.type === "unsectioned" ? (
-                <View key="unsectioned" testID="est-sec-loose">
-                  {i > 0 ? <Divider /> : null}
+                <View key="unsectioned" testID="est-sec-loose" style={hasGroups && i > 0 ? { paddingTop: space[3] } : undefined}>
+                  {i > 0 && !hasGroups ? <Divider /> : null}
                   <T v="caption" tone="mut" w="semibold">
                     {t("est.sec.loose")}
                   </T>
                 </View>
               ) : (
                 <View key={r.line.id} style={{ paddingLeft: r.depth === 1 ? space[4] : 0 }}>
-                  {i > 0 ? <Divider /> : null}
+                  {i > 0 && (!hasGroups || view[i - 1]?.type === "line") ? <Divider /> : null}
                   <LineRow
                     line={r.line}
                     open={openId === r.line.id}
@@ -1009,7 +1053,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               )
               }
             />
-          </Card>
+          </ListFrame>
           {missing === "lines" ? <FieldError text={t("ue.empty")} testID="ue-missing-lines" /> : null}
           </View>
         </View>
@@ -1360,4 +1404,25 @@ function MenuIcon({ icon, label, items, onSelect, testID }: { icon: IconKey; lab
       <Menu visible={!!at} anchor={at} items={items} onSelect={onSelect} onClose={() => setAt(null)} />
     </View>
   );
+}
+
+/** the lines' frame: one card for a plain list; with groups — no card (each group's rows draw their own, `groupLook`) */
+function ListFrame({ grouped, empty, missing, children }: { grouped: boolean; empty: boolean; missing: boolean; children: ReactNode }) {
+  const { c } = useTheme();
+  if (grouped) return <View style={{ gap: 0, ...(missing ? { borderWidth: component.hairline, borderColor: c.status.bad.fill, borderRadius: radius.card } : null) }}>{children}</View>;
+  return <Card style={{ paddingVertical: 0, paddingHorizontal: space[3] + spaceHalf.hair, gap: 0, ...(empty ? { display: "none" } : null), ...(missing ? { borderColor: c.status.bad.fill } : null) }}>{children}</Card>;
+}
+
+/** #2363: a line of a group draws the group's card — the ground and the corners of the first and the last line; a group's title has none */
+function groupLook(view: readonly { type: string }[], r: { type: string }, i: number, ground: string): ViewStyle | undefined {
+  // (no padding here: the drag measures a row by what it draws — the gap over a group is the title's own, `SectionHeader` `gapAbove`)
+  if (r.type !== "line") return undefined;
+  const first = view[i - 1]?.type !== "line";
+  const last = view[i + 1]?.type !== "line";
+  return {
+    backgroundColor: ground,
+    paddingLeft: space[3] + spaceHalf.hair,
+    ...(first ? { borderTopLeftRadius: radius.card, borderTopRightRadius: radius.card } : null),
+    ...(last ? { borderBottomLeftRadius: radius.card, borderBottomRightRadius: radius.card } : null),
+  };
 }

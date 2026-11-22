@@ -118,11 +118,12 @@ exports.run = async (h) => {
     await h.go("/plan"); await p.waitForTimeout(300);
     await h.clickText("Неделя"); await p.waitForTimeout(300);
     h.expect((await p.getByText("Опаздывает · не выехал", { exact: true }).locator("visible=true").count()) === 0, "no long «Опаздывает · не выехал» chip");
-    // v2 GroupRow: the pill says «Опаздывает», the detail «не выехал» is a word of the row's line
+    // v2 GroupRow: the pill says «Опаздывает»; the row's line is «работа · мастер» only — the state is never glued into it (#2363 F10,
+    // founder 21.11: «подпись слота — только работа · мастер, статус отдельной плашкой»)
     const late = p.getByTestId("plan-row-v109late").locator("visible=true").first();
     await late.waitFor({ timeout: 5000 });
     h.expect((await late.getByText("Опаздывает", { exact: true }).count()) > 0, "the chip says «Опаздывает»");
-    h.expect(/· не выехал|не выехал ·|^не выехал/m.test(await late.innerText()), `the detail «не выехал» is in the row's line: ${await late.innerText()}`);
+    h.expect(!/не выехал/.test(await late.innerText()), `the state is not in the row's line: ${await late.innerText()}`);
   }
   await h.clickText("Неделя"); await p.waitForTimeout(300);
   // v2 GroupRow of the Week: the hour, the client, «работа · мастер» — no job number (the visit holds it); nothing cut with «…»

@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { component, motion, radius, rhythm, size, space, spaceHalf } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
-import { Button } from "./controls";
+import { Button, IconButton } from "./controls";
 import { Icon, Press, T } from "./primitives";
 import { loadPhase, mainStepLayout } from "./mainStepRules";
 import type { MainAction } from "./templates/types";
@@ -40,6 +40,9 @@ export function MainStep({
   fit,
   loading,
   failedLabel,
+  folded,
+  onUnfold,
+  foldAdd,
 }: {
   main: MainAction;
   placement: "top" | "bar";
@@ -51,6 +54,12 @@ export function MainStep({
   loading?: boolean;
   /** what the reason reads once a loading step took longer than `actionTimeoutMs` («Не получилось») */
   failedLabel?: string;
+  /** #2363 q72 (founder 21.11, вариант А): `bar` with a `total`, scrolled down — only the capsule «˄ $772.36» on the right
+   *  (a secondary Button, under the thumb, the prices on the left stay seen); a tap opens the bar again (`onUnfold`) */
+  folded?: boolean;
+  onUnfold?: () => void;
+  /** #2363 q72 вариант Г (founder 21.11): beside the capsule a round «＋» — a new line from anywhere in a long list */
+  foldAdd?: { a11y: string; onPress: () => void; testID?: string };
 }) {
   const { c } = useTheme();
   const phase = useLoadPhase(!!loading);
@@ -83,6 +92,15 @@ export function MainStep({
       <View style={fit ? { alignSelf: "flex-start", maxWidth: "100%" } : undefined}>
         {button}
         {reason}
+      </View>
+    );
+  if (placement === "bar" && folded && total && onUnfold)
+    return (
+      // the SAME height as the open card (`figureRow.h`): the bar never changes its height — the page's end and the drag's edge stay put
+      <View style={{ paddingBottom: rhythm.cardGap, height: component.figureRow.h + rhythm.cardGap, flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: space[2] }}>
+        {foldAdd ? <IconButton icon="plus" label={foldAdd.a11y} onPress={foldAdd.onPress} testID={foldAdd.testID} /> : null}
+        {/* rule 29: the capsule is the Button itself (secondary 40, zone 44) — the sum and «˄» */}
+        <Button testID={`${main.testID}-capsule`} label={total.value} icon="chevronUp" variant="secondary" onPress={onUnfold} accessibilityLabel={`${total.label} ${total.value}`} />
       </View>
     );
   let left: ReactNode = reason;

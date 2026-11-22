@@ -69,6 +69,8 @@ exports.run = async (h) => {
   await tid("est-terms-field").waitFor({ timeout: 3000 });
   await tid("est-nt-done").getByRole("button").click();
   await sheetGone(p);
+  // optional: #2363 q72 — scrolled down, «Итого» is the capsule; a tap opens the bar with «Готово» (at the top it is the bar already)
+  if (await tid("ue-save-capsule").locator("visible=true").count()) await tid("ue-save-capsule").click();
   await tid("ue-save").click();
   await p.waitForFunction(([k, id]) => {
     const e = (JSON.parse(localStorage.getItem(k))?.db?.estimates ?? []).find((x) => x.id === id);

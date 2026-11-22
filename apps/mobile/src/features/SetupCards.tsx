@@ -26,7 +26,7 @@ export function CompanySetupCard() {
     <ListGroup title={`${t("co.setupTitle")} · ${t("co.progress", { done: p.done, total: p.total })}`} testID="company-setup">
       <GroupRow
         testID="company-setup-next"
-        lead={{ icon: "sliders" }}
+        lead={{ icon: "settings" }}
         title={p.next ? t(stepTitle(p.next)) : t("co.setupTitle")}
         subtitle={p.next ? t("co.continue") : undefined}
         onPress={() => router.push(p.next ? `/company/${p.next}?wizard=1` : "/company")}

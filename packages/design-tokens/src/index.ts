@@ -319,11 +319,16 @@ export const component = {
   /** FigureRow «цифры справа» (visual v2): a card from `h` 64, the icon square `icon` 40 with radius `iconRadius` 13, a value column `colW` 64 */
   figureRow: { h: 64, icon: 40, iconRadius: 13, colW: 64 },
   /** TimeSlot (visual v2): the hour column `timeW` 44 (hour 15/700, duration 12), the interval plate `interval` 26 of two halves, the notch `notch` 8 */
-  timeSlot: { timeW: 44, interval: 26, notch: 8 },
+  /** `meridiem` — «AM»/«PM» in the interval plate, small like a superscript beside the hour (founder 21.11, #2363 q73) */
+  timeSlot: { timeW: 44, interval: 26, notch: 8, meridiem: 9 },
+  /** #2363 q72 (founder 21.11: вариант А): the estimate's «Итого» folds into a capsule on the right after scrolling down `down`
+   *  24 pt; it opens again after scrolling up `up` 8 pt, at the very top, or by a tap */
+  totalFold: { down: 24, up: 8 },
   /** round buttons (visual v2): 40 in the header (on a `surf` card), `card` 32 inside a card, `quick` 44 in the quick-actions row with a 12 caption */
   roundButton: { header: 40, card: 32, quick: 44 },
   /** the phone's tab bar (visual v2): 56 (`size.tabbarH`) + the bottom zone; the icon `icon` 22 over the word 12; the top `fade` 18 fades into `tab` */
-  tabBar: { icon: 26, fade: 18 },
+  /** `badge` 18 — the red count on «Лиды» (founder 21.11, #2363 q78), its number `badgeText` 11 */
+  tabBar: { icon: 26, fade: 18, badge: 18, badgeText: 11 },
   /** app-only (#2214, DS §15.3б): the offline queue's thin line over the tab bar — its height (the hit area grows to 44 by Press) */
   queueLine: { h: 28 },
   /** QuickActions / IconRow: `row` — a circle 44 with a 12 label under it, the cell `labelW` 64, between cells `gap` 8; `inline` — a circle 36 (zone 44) in the address line */

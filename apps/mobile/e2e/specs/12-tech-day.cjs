@@ -40,7 +40,8 @@ exports.run = async (h) => {
   if (v.checklist.length) {
     const cell = p.getByTestId("chk-left").locator("visible=true").first();
     await cell.waitFor();
-    h.expect(new RegExp(`из ${v.checklist.length}`).test(await cell.innerText()), `checklist visible before work: ${await cell.innerText()}`);
+    // #2363 F38: not begun — «4 пункта»; begun — «1 из 4 · 25 %»
+    h.expect(new RegExp(`из ${v.checklist.length}|^\\D*${v.checklist.length} пункт`, "m").test(await cell.innerText()), `checklist visible before work: ${await cell.innerText()}`);
   }
 
   await visitStep(p, "on-site");

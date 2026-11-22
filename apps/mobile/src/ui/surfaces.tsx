@@ -5,7 +5,7 @@ import { ScreenScrollCtx, type ScreenScroll } from "./requiredForm";
 import { HeaderIcon } from "./headerIcon";
 import { coveredBottomOf, scrollTargetY } from "./requiredLogic";
 import { scrollBottom, setFooterInset } from "./footerInset";
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { router, useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
 import { isAppPath, navInsets } from "@/nav/shell";
 import { goTo } from "@/nav/go";
@@ -42,6 +42,9 @@ import { useHints } from "./hints";
 /* ---------- Background: --bg, or the ground gradient (--ground), + soft glows (--glow) ---------- */
 export function Background() {
   const { c, name } = useTheme();
+  // #2363 (founder: «в открытой карточке клиента градиента нет»): every screen's own gradient id — on the web the screen under it
+  // in the stack stays in the page hidden, and a shared id made the new screen point at the hidden one's gradient (not drawn)
+  const gid = `ground${name}${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const { width, height } = useWindowDimensions();
   return (
     // clipped to the screen: next to the side menu (820/1280) the screen is narrower than the window
@@ -49,22 +52,22 @@ export function Background() {
       <Svg width={width} height={height}>
         <Defs>
           {c.ground ? (
-            <LinearGradient id={`ground${name}`} x1={c.ground.x1} y1={c.ground.y1} x2={c.ground.x2} y2={c.ground.y2}>
+            <LinearGradient id={gid} x1={c.ground.x1} y1={c.ground.y1} x2={c.ground.x2} y2={c.ground.y2}>
               {c.ground.stops.map((st) => (
                 <Stop key={st.offset} offset={st.offset} stopColor={st.color} />
               ))}
             </LinearGradient>
           ) : null}
           {c.glow.map((g, i) => (
-            <RadialGradient key={i} id={`g${name}${i}`} cx="50%" cy="50%" rx="50%" ry="50%">
+            <RadialGradient key={i} id={`${gid}g${i}`} cx="50%" cy="50%" rx="50%" ry="50%">
               <Stop offset="0" stopColor={g.color} stopOpacity={g.opacity} />
               <Stop offset="0.6" stopColor={g.color} stopOpacity={0} />
             </RadialGradient>
           ))}
         </Defs>
-        <Rect width={width} height={height} fill={c.ground ? `url(#ground${name})` : c.bg} />
+        <Rect width={width} height={height} fill={c.ground ? `url(#${gid})` : c.bg} />
         {c.glow.map((g, i) => (
-          <Ellipse key={i} cx={g.cx * width} cy={g.cy * height} rx={g.rx} ry={g.ry} fill={`url(#g${name}${i})`} />
+          <Ellipse key={i} cx={g.cx * width} cy={g.cy * height} rx={g.rx} ry={g.ry} fill={`url(#${gid}g${i})`} />
         ))}
       </Svg>
     </View>
@@ -530,6 +533,7 @@ export function Screen({
   titleHidden,
   home,
   footer,
+  onScrollY,
   aside,
   headerLead,
   testID,
@@ -577,6 +581,8 @@ export function Screen({
    *  for it; hidden while the keyboard is up (the keys cover it, the field is what the person is in). From 820 the screen puts the same
    *  buttons in its own column. */
   footer?: ReactNode;
+  /** #2363 q72: the page's offset as it scrolls (JS side) — the estimate folds its «Итого» into a capsule by it (`totalFold`) */
+  onScrollY?: (y: number, max: number) => void;
   /** a form screen (sign-in, a company, a client link): the column is at most `layout.formMax` wide, on the same left line as the title (DS §12.3, #1594); not together with `tabs` (their sticky offset is measured on the plain column).
    *  `"center"` — a public page of the client with no side menu (the request form /f/): the column with its title stands in the middle
    *  of a wide screen, not at its left edge with the right side empty (DS §12.3, 1.15.8, #1728) */
@@ -1018,7 +1024,8 @@ export function Screen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   /** what the page's scroll tells JS: the place (fields, held rows), the clock's glass, the stuck strip */
-  const onJsScroll = (y: number) => {
+  const onJsScroll = (y: number, max = Number.MAX_SAFE_INTEGER) => {
+    onScrollY?.(y, max);
     // a late event of an earlier jump (a held row's autoscroll makes one every 16 ms) is older than what we asked of the
     // scroll: the place is the last one asked, until the events catch up with it (else the held row lagged by a few steps)
     const jump = lastJump.current;
@@ -1048,7 +1055,7 @@ export function Screen({
   };
   const jsScroll = useRef(onJsScroll);
   jsScroll.current = onJsScroll;
-  const callJsScroll = useCallback((y: number) => jsScroll.current(y), []);
+  const callJsScroll = useCallback((y: number, max: number) => jsScroll.current(y, max), []);
   // let go between the open and the folded header: the page goes to the nearer end in `durBase` easeOut (v2 «Отпустил посередине»)
   const snapY = useSharedValue(0);
   const snapping = useSharedValue(false);
@@ -1068,7 +1075,8 @@ export function Screen({
           held.value = -1;
           runOnJS(closePanel)();
         }
-        runOnJS(callJsScroll)(e.contentOffset.y);
+        // (the web may not report the sizes: then no end — the fold opens only up or at the top)
+        runOnJS(callJsScroll)(e.contentOffset.y, e.contentSize?.height && e.layoutMeasurement?.height ? e.contentSize.height - e.layoutMeasurement.height : 1e9);
       },
       onEndDrag: (e) => {
         // a slow finger lets go: settle now; a fling runs on (its momentum's end settles)

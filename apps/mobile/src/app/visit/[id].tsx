@@ -329,11 +329,11 @@ export default function VisitScreen() {
       <View>
         <StatusPill testID="visit-status" status={going ? "info" : st.status} label={going ? t("px2.cv.going") : t(st.label)} />
       </View>
-      {accessWord ? <TonePill testID="visit-access-pill" tone="warn" icon="key" label={accessWord} onPress={() => setAccessOpen(true)} /> : null}
+      {accessWord ? <TonePill testID="visit-access-pill" tone="neutral" icon="key" label={accessWord} onPress={() => setAccessOpen(true)} /> : null}
       <View style={{ flex: 1 }} />
       {tel ? <IconButton size="card" icon="phone" label={`${t("proto.visit.call")} ${who}`} onPress={call} testID="visit-call" /> : null}
       {tel || main ? <IconButton size="card" icon="message" label={`${t("proto.visit.sms")} ${who}`} onPress={sms} testID="visit-act-message" /> : null}
-      {addr ? <IconButton size="card" icon="pin" label={`${t("proto.visit.route")}: ${addr}`} onPress={route} testID="visit-route" /> : null}
+      {addr ? <IconButton size="card" icon="route" label={`${t("proto.visit.route")}: ${addr}`} onPress={route} testID="visit-route" /> : null}
     </RowView>
   );
 
@@ -389,7 +389,8 @@ export default function VisitScreen() {
           </View>
         </RowView>
       </Press>
-      {wp ? <ProgressWords testID="visit-work-progress" caption={t("px2.cv.workCap")} value={t("px2.cv.ofPct", { n: wp.done, m: wp.total, p: wp.pct })} /> : null}
+      {/* #2363 F37: one visit = the checklist says the same «0 из 4 · 0 %» — the work progress only when the work has more visits */}
+      {wp && jobVisits.length > 1 ? <ProgressWords testID="visit-work-progress" caption={t("px2.cv.workCap")} value={t("px2.cv.ofPct", { n: wp.done, m: wp.total, p: wp.pct })} /> : null}
       {showCell ? (
         <ChecklistCard cell v={v} missing={gate.missing} adding={false} foot={timer} folded={folded} />
       ) : timer ? (
@@ -400,11 +401,12 @@ export default function VisitScreen() {
           {v.step === "working" && !signing ? (
             // v2 макет 4: «✓ Завершить» (the one yellow) 1.15 · «Фото» dark 1 · the note square 40 — one row (the short words of this step)
             <RowView gap={space[2]}>
-              <View style={{ flex: 1.15, minWidth: 0 }}>
+              {/* #2363 F01: the main step takes the room, «Фото» only its own width — «Завершить» is never cut */}
+              <View style={{ flex: 1, minWidth: 0 }}>
                 <Button label={step.label} icon="check" variant={step.outline ? "secondary" : "primary"} onPress={step.onPress} disabled={step.disabled} testID={step.testID} full />
               </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Button label={t("px2.cv.photo")} icon="camera" variant="secondary" onPress={() => setCamera(true)} testID="visit-camera" full />
+              <View style={{ flexShrink: 0 }}>
+                <Button label={t("px2.cv.photo")} icon="camera" variant="secondary" onPress={() => setCamera(true)} testID="visit-camera" />
               </View>
               {noteSquare ? <IconButton icon={noteSquare.icon} label={noteSquare.a11y} onPress={noteSquare.onPress} testID={noteSquare.testID} /> : null}
             </RowView>
@@ -463,7 +465,7 @@ export default function VisitScreen() {
                 testID="visit-expense"
                 icon="invoice"
                 title={t(`exp.cat.${spent.category}` as "exp.cat.materials")}
-                line={[spent.vendor, ago(spent.at)].filter(Boolean).join(" · ")}
+                line={[spent.vendor, ago(spent.at, !!spent.vendor)].filter(Boolean).join(" · ")}
                 cols={canSeeProfit(store.role) || spent.memberId === db.me ? [{ label: t("px2.cv.sum"), value: money(spent.amountCents) }] : undefined}
                 onPress={() => router.push(`/job/${job.id}`)}
               />

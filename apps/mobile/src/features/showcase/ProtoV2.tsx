@@ -154,9 +154,10 @@ export function ProtoV2() {
         <StatGrid>
           <StatTile dense icon="invoice" label={t("ds.v2.owed")} value="$2,800" unit={t("ds.v2.days", { n: -9 })} unitTone="bad" testID="showcase-v2-tile-dense" />
           <StatTile dense icon="wallet" label={t("st.paid")} value="$1,020" unit={t("ds.v2.days", { n: 0 })} testID="showcase-v2-tile-dense2" />
+          <StatTile icon="dollar" label={t("st.paid")} value="$2,800" sub="2" subNote={{ tone: "bad", text: t("st.overdue") }} testID="showcase-v2-tile-subnote" />
         </StatGrid>
       </ListGroup>
-      <ListGroup note="2" title={t("st.paid")} testID="showcase-v2-group-note">
+      <ListGroup count={2} title={t("st.paid")} testID="showcase-v2-group-note">
         <FigureRow testID="showcase-v2-row-ok" icon="check" iconTone="ok" title="Linda Alvarez" line="INV-0102" cols={[{ label: t("ds.v2.sum"), value: "$412.60" }]} />
       </ListGroup>
       <FigureRow testID="showcase-v2-row-warm" tone="warn" icon="key" title={t("px2.cv.code", { code: "4512" })} line={t("ds.v2.work")} />

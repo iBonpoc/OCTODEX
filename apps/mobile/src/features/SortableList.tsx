@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
-import { View, useWindowDimensions } from "react-native";
+import { View, useWindowDimensions, type ViewStyle } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -87,9 +87,11 @@ export interface SortableListProps {
   quietLines?: boolean;
   /** a finger held a folded line and let it go where it was (estimate/rowGesture holdStill): the screen opens the row's menu */
   onHoldStill?: (key: string) => void;
+  /** #2363: the look of a row's frame WITH its handle (a group's card drawn by its rows: the ground, the corners of the first/last) */
+  rowLook?: (row: ViewRow, index: number) => ViewStyle | undefined;
 }
 
-export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, beforeBegin, renderRow, quietLines, onHoldStill }: SortableListProps) {
+export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, beforeBegin, renderRow, quietLines, onHoldStill, rowLook }: SortableListProps) {
   const { c } = useTheme();
   const reduce = useReducedMotion();
   const lock = useScrollLock();
@@ -486,7 +488,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
     <SortCtx.Provider value={ctl}>
       <View ref={boxRef} collapsable={false} onLayout={(e) => (box.current.h = e.nativeEvent.layout.height)} style={{ position: "relative" }}>
         {rows.map((r, i) => (
-          <Item key={rowKey(r)} k={rowKey(r)} index={i} dragKind={dragKind(r) ? "x" : null} open={openKey === rowKey(r)} quiet={!!quietLines}>
+          <Item key={rowKey(r)} k={rowKey(r)} index={i} dragKind={dragKind(r) ? "x" : null} open={openKey === rowKey(r)} quiet={!!quietLines} look={rowLook?.(r, i)}>
             {renderRow(r, i)}
           </Item>
         ))}
@@ -497,7 +499,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
   );
 }
 
-function Item({ k, index, dragKind, open, quiet, children }: { k: string; index: number; dragKind: "x" | null; open: boolean; quiet: boolean; children: ReactNode }) {
+function Item({ k, index, dragKind, open, quiet, look, children }: { k: string; index: number; dragKind: "x" | null; open: boolean; quiet: boolean; look?: ViewStyle; children: ReactNode }) {
   const ctl = useContext(SortCtx)!;
   const { c } = useTheme();
   const { t } = useI18n();
@@ -612,7 +614,7 @@ function Item({ k, index, dragKind, open, quiet, children }: { k: string; index:
         // in the open line's header: over its right end, centred on its buttons (the row's top padding `space[3]`, `dockBtn` high)
         style={inHeader ? { position: "absolute", right: 0, top: space[3] + (component.dockBtn - size.hitMin) / 2, width: size.hitMin, height: size.hitMin, alignItems: "center", justifyContent: "center" } : { width: size.hitMin, minHeight: size.hitMin, alignItems: "center", justifyContent: "center", alignSelf: "stretch" }}
       >
-        <Icon name="menu" s={size.iconMd} color={c.mut} />
+        <Icon name="grip" s={size.iconMd} color={c.mut} />
       </View>
     </GestureDetector>
   ) : null;
@@ -623,7 +625,7 @@ function Item({ k, index, dragKind, open, quiet, children }: { k: string; index:
   );
   return (
     <Animated.View ref={(n: unknown) => ctl.node(k, n as ComponentRef<typeof View> | null)} collapsable={false} onLayout={(e) => ctl.layout(k, e.nativeEvent.layout.y, e.nativeEvent.layout.height)} style={a}>
-      <View style={{ flexDirection: "row", alignItems: "center" }}>
+      <View style={[{ flexDirection: "row", alignItems: "center" }, look]}>
         {canDrag && !open ? <GestureDetector gesture={hold}>{body}</GestureDetector> : body}
         {handleEl}
       </View>
