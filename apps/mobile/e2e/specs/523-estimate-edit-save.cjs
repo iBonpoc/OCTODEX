@@ -30,6 +30,12 @@ exports.run = async (h) => {
     st.db.estimates = st.db.estimates.map((e) => (e.id === ID ? { ...e, ...patch } : e));
     await h.seed(DB, st);
   };
+  // what the store holds once the app has written it out: leaving the page writes at once (the store writes ~250 ms after a change)
+  const flushedSaved = async () => {
+    await h.go("/today");
+    await p.getByTestId("ue-title").waitFor({ state: "detached", timeout: 5000 });
+    return saved();
+  };
   const hasEditDraft = async () => (await drafts()).some((d) => d.ctx === `edit|${ID}`);
   const waitDraft = (want) => p.waitForFunction(([k, ctx, want]) => JSON.parse(localStorage.getItem(k) || "[]").some((d) => d.ctx === ctx) === want, [DRAFTS, `edit|${ID}`, want], { timeout: 5000 });
   const open = async () => {
@@ -54,8 +60,27 @@ exports.run = async (h) => {
   const before = await saved();
   await tid("ue-save").click();
   await p.getByTestId("ue-title").waitFor({ state: "detached", timeout: 5000 });
-  const after = await saved();
+  const after = await flushedSaved();
   h.expect(after.status === before.status && after.sentAt === before.sentAt && JSON.stringify(after.doc) === JSON.stringify(before.doc), `«Готово» without edits wrote nothing (${before.status}→${after.status})`);
+  // №23: the client became tax exempt since the estimate was SENT; it is opened only to look — «Готово» closes, nothing written:
+  // the client's sum never changes from a look, «sent» stays (red before: it re-saved without tax and made it a draft)
+  {
+    const st = await rawDb();
+    const cid = st.db.estimates.find((e) => e.id === ID).customerId;
+    // (the estimate with its tax on the whole amount, as sent; then the client is made exempt)
+    st.db.estimates = st.db.estimates.map((e) => (e.id === ID ? { ...e, status: "sent", doc: { ...e.doc, settings: { ...e.doc.settings, tax: { ...e.doc.settings.tax, enabled: true } } } } : e));
+    st.db.customers = st.db.customers.map((c) => (c.id === cid ? { ...c, taxExempt: true } : c));
+    await h.seed(DB, st);
+    await open();
+    const b2 = await saved();
+    await tid("ue-save").click();
+    await p.getByTestId("ue-title").waitFor({ state: "detached", timeout: 5000 });
+    const a2 = await flushedSaved();
+    h.expect(a2.status === b2.status && JSON.stringify(a2.doc) === JSON.stringify(b2.doc), `a sent estimate of a now-exempt client, only looked at: nothing written (${b2.status}→${a2.status}, tax ${b2.doc.settings.tax.enabled}→${a2.doc.settings.tax.enabled})`);
+    const st2 = await rawDb();
+    st2.db.customers = st2.db.customers.map((c) => (c.id === cid ? { ...c, taxExempt: false } : c));
+    await h.seed(DB, st2);
+  }
   // Р6: an old estimate without its own mark (doc.savedAt), the server's updated_at moved (Estimate.savedAt) — no false conflict
   await patchSaved({ savedAt: "2026-11-21T09:00:00.000Z", doc: { ...before.doc, savedAt: undefined } });
   await open();

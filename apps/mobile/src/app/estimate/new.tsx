@@ -836,7 +836,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const save = async (send: boolean) => {
     // Р1 (spec §4 п.2): a saved estimate with no edits — «Готово» only closes (nothing written: «sent» and its time stay); «Отправить»
     // goes to the send of the estimate as it is. An estimate kept aside (signed, «Оставить черновик») is shown as saved — closes too
-    if (existing && (keptAside || doneAction({ existing: true, dirty }) === "close")) {
+    // stale: what a save would write differs from the saved document (the client became tax exempt since — e2e 72)
+    const stale = !!existing?.doc && !!customer && JSON.stringify(exemptDoc(existing.doc, customer.taxExempt)) !== JSON.stringify(existing.doc);
+    if (existing && (keptAside || doneAction({ existing: true, dirty, stale, status: existing.status }) === "close")) {
       if (send && canSeeClientLink(store.role)) return void router.replace(`/estimate/${estimateId}?send=1`);
       return void back();
     }

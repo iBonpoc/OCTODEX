@@ -13,6 +13,12 @@ describe("unit:editSession — «Готово»", () => {
     expect(doneAction({ existing: true, dirty: true })).toBe("save");
     expect(doneAction({ existing: false, dirty: false })).toBe("save");
   });
+  it("Р1 / e2e 72: a DRAFT with no edits but a stale document (the client became tax exempt) — it saves, the tax goes off", () => {
+    expect(doneAction({ existing: true, dirty: false, stale: true, status: "draft" })).toBe("save");
+  });
+  it("№23: a sent or signed estimate only looked at — «Готово» closes though stale: money never changes from a look (sent never → draft)", () => {
+    for (const status of ["sent", "viewed", "awaiting_countersign", "approved"]) expect(doneAction({ existing: true, dirty: false, stale: true, status }), status).toBe("close");
+  });
   it("Р1: no edits, saved on another phone meanwhile — no conflict asked (it only closes)", () => {
     expect(doneAction({ existing: true, dirty: false })).toBe("close");
   });

@@ -14,8 +14,15 @@ export const markOf = (e: Pick<Estimate, "doc"> | null | undefined): string => {
   return typeof m === "string" ? m : "";
 };
 
-/** Р1 (spec §4 п.2): «Готово» on a saved estimate with no edits only closes — nothing written, «sent» and its time untouched */
-export const doneAction = (p: { existing: boolean; dirty: boolean }): "close" | "save" => (p.existing && !p.dirty ? "close" : "save");
+/**
+ * Р1 (spec §4 п.2): «Готово» on a saved estimate with no edits only closes — nothing written, «sent» and its time untouched. `stale` —
+ * the saved document is not what a save would write now (the client became tax exempt since: the tax goes off only by a save,
+ * e2e 72): a DRAFT then saves, as before; a sent or signed one only closes (money never changes from a look — the lead №23).
+ */
+export const doneAction = (p: { existing: boolean; dirty: boolean; stale?: boolean; status?: string }): "close" | "save" =>
+  // №23: a stale document is re-saved only while it is a DRAFT — a sent or signed estimate only looked at never changes the client's
+  // money nor turns sent → draft; its tax goes off with the next real edit
+  p.existing && !p.dirty && !(p.stale && p.status === "draft") ? "close" : "save";
 
 /**
  * What stands between the step and the edit:
