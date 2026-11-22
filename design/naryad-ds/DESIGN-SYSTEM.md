@@ -584,7 +584,7 @@ HIG [«Accessibility»](https://developer.apple.com/design/human-interface-guide
 | `HintsProvider` | подсказка первого визита | да | ✅ `ui/hints.tsx` | в теле, не `acc` (Н-67) |
 | `TabBar`, `SideNav`, `NavMenu`, `Fab`/`FabSheet`, `HomeHeader`, `SearchEntry`, `BackSwipe` | навигация | частично | ✅ `src/nav/*` | повторное нажатие вкладки (З35) |
 | `ClosedCompanyNotice` | шторка «компании нет» один раз | нет | ✅ `nav/ClosedCompanyNotice.tsx` | — |
-| `ConfirmDialog` + `useConfirm` | диалог подтверждения | да | ⬜ | Н-41 |
+| `ConfirmDialog` + `useConfirm` | диалог подтверждения | да | ✅ `ui/confirmDialog.tsx` (раскладка — `ui/confirmLayout.ts`, тест `confirmDialog.test.ts`; витрина «Окна → Диалог подтверждения»; #2381) | Н-41 |
 | `Banner` | баннер на странице | да | ✅ `ui/banner.tsx` (вид); ⬜ порядок срочности | Н-62 |
 | `Tooltip` | подпись при наведении | да | ⬜ (C-02) | Н-51 |
 | `Popover` | выбор у элемента от 820 | нет | ⬜ | Н-52 |
@@ -1156,6 +1156,7 @@ HIG [«Accessibility»](https://developer.apple.com/design/human-interface-guide
 - **Движение:** масштаб новый токен `motion.alertScale` = 1.06 → 1 и прозрачность за `durBase` `easeOut`; фон `FadeIn durFast`; уменьшенное — только прозрачность.
 - **Вибрация:** нет (алерт iOS сам не вибрирует).
 - **Доступность:** `alert` (веб `alertdialog` с `aria-labelledby` / `describedby`), `accessibilityViewIsModal`; заголовок и текст читаются сразу.
+- **Сделано (#2381, 22.11):** `ConfirmDialog` + `useConfirm` (`await ask({ title, text, actions })` → ключ или `null`), окно `Glass strong`, `alertMaxW`, `alertScale`, фон не закрывает, Esc / «Назад» = отмена; две короткие кнопки — в ряд (назад слева), иначе столбиком (шаги сверху). Перевод мест с `ConfirmSheet` — по одному, тем PR, что трогает экран.
 - **Чем:** свой. **Тест:** e2e — `testID="confirm-dialog"` у каждого действия из списка; фон не закрывает; Esc = отмена; сторож — `variant="danger"` только внутри диалога или шага подтверждения.
 
 ### Б4. Меню действий «⋯» (`ActionMenu`)

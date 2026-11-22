@@ -62,7 +62,7 @@ export const SCREENS: ShowcaseScreen[] = [
 ];
 
 export const SECTIONS: ShowcaseSection[] = [
-  { id: "windows", screen: "windows", ds: "§10", title: "ds.sec.windows", tokenGroups: [], components: ["Sheet", "SheetScroll", "HelpButton"] },
+  { id: "windows", screen: "windows", ds: "§10", title: "ds.sec.windows", tokenGroups: [], components: ["Sheet", "SheetScroll", "HelpButton", "ConfirmDialog"] },
   { id: "selectors", screen: "selectors", ds: "§9", title: "ds.sec.selectors", tokenGroups: [], components: ["ViewTabs", "SelectField", "PickerSheet", "FieldError", "Anchored"] },
   { id: "choice", screen: "choice", ds: "§9", title: "ds.scr.choice", tokenGroups: [], components: ["OptionRow", "OptionRows", "OptionTiles", "CheckMark", "ToggleRow", "Toggle", "PctUsdField", "MultiValueField", "ActionRow", "MetaLine", "DoneCircle", "FracKeys"] },
   { id: "fields", screen: "fields", ds: "§9", title: "ds.scr.fields", tokenGroups: [], components: ["NumberField", "TextField", "FieldGroup", "FormMain", "DateField", "FieldRow"] },
