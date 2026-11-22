@@ -3,6 +3,8 @@
  * e2e 246-estimate-draft.
  */
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: async () => null, setItem: async () => {} } }));
 import { DRAFT_DAYS, MAX_DRAFTS, cleanDraft, cleanDrafts, draftConflict, draftCtx, draftSnapshot, draftWorthKeeping, draftsKey, findDraft, isEditCtx, nextDrafts, removeDraft, upsertDraft, type EstimateDraft } from "../src/features/estimateDraft";
@@ -144,8 +146,10 @@ describe("unit:estimateDraft — #2381 the edit of a saved estimate («Гото�
     expect(old?.ctx).toBe("new||c1|p1|");
     expect(old?.baseSavedAt).toBeUndefined();
   });
-  it("no sums in a draft: the engine counts them from the doc (rule 8)", () => {
-    const keys = Object.keys(edit("e1"));
-    for (const k of keys) expect(/total|sum|cents$/i.test(k), k).toBe(false);
+  it("no sums in a draft: the engine counts them from the doc (rule 8) — the stored shape itself (interface EstimateDraft) has none", () => {
+    const src = readFileSync(join(__dirname, "..", "src", "features", "estimateDraft.ts"), "utf8");
+    const shape = src.slice(src.indexOf("export interface EstimateDraft"), src.indexOf("}", src.indexOf("export interface EstimateDraft")));
+    expect(shape.length).toBeGreaterThan(100);
+    for (const field of shape.matchAll(/^\s+(\w+)\??:/gm)) expect(/total|sum|cents|deposit|tax/i.test(field[1]!), field[1]).toBe(false);
   });
 });

@@ -48,6 +48,26 @@ exports.run = async (h) => {
   h.expect((await count("k1-cancel")) === 0 && (await count("k1-unsaved")) === 0, "a saved estimate, untouched: no «Отменить», no «несохранённые правки»");
   h.expect(!(await hasEditDraft()), "untouched: no draft");
 
+  // Р1: «Готово» with no edits only closes — nothing written, «sent» and its time untouched (red before: it saved and made it a draft)
+  const before = await saved();
+  await tid("ue-save").click();
+  await p.getByTestId("ue-title").waitFor({ state: "detached", timeout: 5000 });
+  const after = await saved();
+  h.expect(after.status === before.status && after.sentAt === before.sentAt && JSON.stringify(after.doc) === JSON.stringify(before.doc), `«Готово» without edits wrote nothing (${before.status}→${after.status})`);
+  // Р6: an old estimate without its own mark (doc.savedAt), the server's updated_at moved (Estimate.savedAt) — no false conflict
+  await patchSaved({ savedAt: "2026-11-21T09:00:00.000Z", doc: { ...before.doc, savedAt: undefined } });
+  await open();
+  await edit("Правка 523 · старая");
+  await patchSaved({ savedAt: "2026-11-21T11:11:00.000Z" });
+  await open();
+  h.expect((await count("k1-open-conflict")) === 0, "an old estimate: the server's time moved — no conflict asked");
+  await tid("k1-cancel").click();
+  await dialog("k1-cancel-ask");
+  await tid("k1-cancel-yes").getByRole("button").click();
+  await waitDraft(false);
+  await patchSaved({ doc: before.doc, savedAt: before.savedAt });
+  await open();
+
   // an edit: kept on the phone with its base; «Отменить» beside «Готово»
   await edit("Правка 523");
   const d = (await drafts()).find((x) => x.ctx === `edit|${ID}`);
@@ -62,13 +82,13 @@ exports.run = async (h) => {
   h.expect((await saved()).title === original, "the store's estimate is not changed yet");
 
   // «Отменить»: asked in the window in the middle; «Продолжить правку» keeps; «Отменить изменения» takes back
-  await tid("k1-cancel").getByRole("button").click();
+  await tid("k1-cancel").click();
   await dialog("k1-cancel-ask");
   await h.shot("cancel-ask");
   await tid("k1-cancel-no").getByRole("button").click();
   await p.getByTestId("k1-cancel-ask").waitFor({ state: "detached", timeout: 3000 });
   h.expect((await titleInput().inputValue()) === "Правка 523" && (await hasEditDraft()), "«Продолжить правку»: the edit stays");
-  await tid("k1-cancel").getByRole("button").click();
+  await tid("k1-cancel").click();
   await dialog("k1-cancel-ask");
   await tid("k1-cancel-yes").getByRole("button").click();
   await waitDraft(false);
@@ -93,10 +113,11 @@ exports.run = async (h) => {
     await tid("hdr-close").click();
     await dialog("k1-close-ask");
     await tid("k1-close-save").getByRole("button").click();
-  } else await tid("ue-save").getByRole("button").click();
+  } else await tid("ue-save").click();
   await p.waitForFunction(([k, id]) => JSON.parse(localStorage.getItem(k)).db.estimates.find((e) => e.id === id)?.title === "Правка 523 · сохранено", [DB, ID], { timeout: 8000 });
   await waitDraft(false);
 
+  // (Р4 «Назад» ≠ «мои» at «Готово» — the unit test editSession «takeMine»: the store reads another phone's change only at a load)
   // another phone saved it meanwhile: asked at the opening; «Их версию» drops the edits
   await open();
   await edit("Правка 523 · конфликт");
@@ -116,9 +137,12 @@ exports.run = async (h) => {
   await h.shot("signed");
   await tid("k1-open-keep").getByRole("button").click();
   h.expect(await hasEditDraft(), "«Оставить черновик»: the edits stay on the phone");
+  // Р2: the screen shows the estimate AS SAVED (signed), the line says the edits are aside (red before: the draft's lines were drawn)
+  await tid("k1-kept").waitFor({ timeout: 3000 });
+  h.expect((await titleInput().inputValue()) === "С другого телефона", "«Оставить»: the signed estimate as saved on the screen");
   const toastNow = async () => (await p.getByTestId("toast-text").locator("visible=true").allInnerTexts()).join(" | ");
   if (await count("ue-save")) {
-    await tid("ue-save").getByRole("button").click();
+    await tid("ue-save").click();
     if (await count("k1-signed-ask")) await tid("k1-signed-keep").getByRole("button").click();
   }
   h.expect(await hasEditDraft(), "«Готово» on a signed estimate: the draft is not erased");
@@ -128,4 +152,33 @@ exports.run = async (h) => {
   await dialog("k1-open-signed");
   await tid("k1-open-reset").getByRole("button").click();
   await waitDraft(false);
+
+  // Ж1 / Р3: the estimate deleted on another phone — the edits stay; asked (never made again with the same id)
+  await patchSaved({ status: "sent" });
+  await open();
+  await edit("Правка 523 · удалена");
+  await p.evaluate(([k, id]) => {
+    const st = JSON.parse(localStorage.getItem(k));
+    st.db.estimates = st.db.estimates.filter((e) => e.id !== id);
+    localStorage.setItem(k, JSON.stringify(st));
+  }, [DB, ID]);
+  await open();
+  await dialog("k1-missing-ask");
+  await h.shot("missing");
+  await tid("k1-missing-reset").getByRole("button").click();
+  await waitDraft(false);
+  h.expect(!(await p.evaluate(([k, id]) => JSON.parse(localStorage.getItem(k)).db.estimates.some((e) => e.id === id), [DB, ID])), "the deleted estimate is not made again");
+
+  // Ж2: the phone refuses to keep the edits (full storage) — said, with the way out
+  await h.go("/estimate/new?customerId=c2&propertyId=p2");
+  await tid("ue-title").waitFor({ timeout: 8000 });
+  await p.evaluate((k) => {
+    const set = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, v) {
+      if (key === k) throw new DOMException("full", "QuotaExceededError");
+      return set.call(this, key, v);
+    };
+  }, DRAFTS);
+  await titleInput().fill("Не пишется");
+  await tid("k1-write-failed").waitFor({ timeout: 5000 });
 };

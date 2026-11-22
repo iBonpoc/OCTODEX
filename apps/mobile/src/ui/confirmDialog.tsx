@@ -7,7 +7,8 @@
  * `durBase` (reduced motion: the fade only). No vibration. Read out as an alert (web: `alertdialog`, labelled by its title).
  * `useConfirm` asks with a promise: `await ask({...})` → the key pressed, or null for the way back.
  */
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { confirmQueue } from "./confirmQueue";
 import { Modal, Platform, View, useWindowDimensions } from "react-native";
 import Animated, { Easing, FadeIn, FadeOut, Keyframe, useReducedMotion } from "react-native-reanimated";
 import { component, motion, radius, space } from "@octo/design-tokens";
@@ -32,6 +33,7 @@ export function ConfirmDialog({ ask, onPick }: { ask: ConfirmAsk | null; onPick:
   const back = ask?.actions.find((a) => a.tone === "cancel");
   const layout = ask ? confirmLayout(ask.actions) : null;
   const titleId = "confirm-dialog-title";
+  const textId = "confirm-dialog-text";
   return (
     <Modal transparent visible={!!ask} animationType="none" onRequestClose={() => onPick(back ? back.key : null)} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
       {/* the scrim: it does not close the question (DS Б3) */}
@@ -42,7 +44,7 @@ export function ConfirmDialog({ ask, onPick }: { ask: ConfirmAsk | null; onPick:
             testID={ask.testID ?? "confirm-dialog"}
             accessibilityRole="alert"
             accessibilityViewIsModal
-            {...(Platform.OS === "web" ? ({ role: "alertdialog", "aria-modal": true, "aria-labelledby": titleId } as object) : {})}
+            {...(Platform.OS === "web" ? ({ role: "alertdialog", "aria-modal": true, "aria-labelledby": titleId, ...(ask.text ? { "aria-describedby": textId } : {}) } as object) : {})}
             style={{ width: w }}
           >
             <Glass strong style={{ borderRadius: radius.card, padding: space[5], gap: space[4] }}>
@@ -51,7 +53,7 @@ export function ConfirmDialog({ ask, onPick }: { ask: ConfirmAsk | null; onPick:
                   {ask.title}
                 </T>
                 {ask.text ? (
-                  <T v="body" tone="mut">
+                  <T v="body" tone="mut" {...({ nativeID: textId } as object)}>
                     {ask.text}
                   </T>
                 ) : null}
@@ -71,24 +73,12 @@ export function ConfirmDialog({ ask, onPick }: { ask: ConfirmAsk | null; onPick:
   );
 }
 
-/** ask a question and wait for the answer: `const [dialog, ask] = useConfirm(); … if ((await ask({...})) === "yes") …` */
+/** ask a question and wait for the answer: `const [dialog, ask] = useConfirm(); … if ((await ask({...})) === "yes") …`
+ *  (the queue — ui/confirmQueue.ts: one at a time, an unmount answers an open one null) */
 export function useConfirm(): [ReactNode, (a: ConfirmAsk) => Promise<string | null>] {
   const [ask, setAsk] = useState<ConfirmAsk | null>(null);
-  const done = useRef<((k: string | null) => void) | null>(null);
-  const request = useCallback(
-    (a: ConfirmAsk) =>
-      new Promise<string | null>((resolve) => {
-        done.current?.(null); // a question asked over another: the first one is answered «back»
-        done.current = resolve;
-        setAsk(a);
-      }),
-    [],
-  );
-  const onPick = (k: string | null) => {
-    const r = done.current;
-    done.current = null;
-    setAsk(null);
-    r?.(k);
-  };
-  return [<ConfirmDialog key="confirm" ask={ask} onPick={onPick} />, request];
+  const q = useRef(confirmQueue<ConfirmAsk>(setAsk)).current;
+  useEffect(() => () => q.dispose(), [q]);
+  const request = useCallback((a: ConfirmAsk) => q.ask(a), [q]);
+  return [<ConfirmDialog key="confirm" ask={ask} onPick={(k) => q.answer(k)} />, request];
 }

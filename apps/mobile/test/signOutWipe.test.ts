@@ -291,6 +291,11 @@ describe("unit:signOutWipe — drafts not saved, asked about before the sign-out
     expect(await countUnsentDrafts(me, s, now)).toBe(2);
     expect(await countUnsentDrafts(me, s, now, (id) => id === "e-saved")).toBe(1);
   });
+  it("#2381 Б2/Р9: the edits of a SAVED estimate (edit|<id>) are unsent — counted always: the estimate saved, the draft old, the estimate gone", async () => {
+    const edit = (id: string, at: string) => ({ ...draft(at), ctx: `edit|${id}`, estimateId: id, baseSavedAt: "2026-11-01T10:00:00Z" });
+    const { s } = mem({ "octo.drafts.v1.c1.u1": JSON.stringify([edit("e-saved", "2026-09-01T10:00:00Z"), edit("e-gone", "2026-11-15T10:00:00Z")]) });
+    expect(await countUnsentDrafts(me, s, now, (id) => id === "e-saved")).toBe(2);
+  });
   const authOk = { getSession: async () => ({ data: { session: null } }), signOut: async () => ({ error: null }) };
   const three = () => mem({ "octo.drafts.v1.c1.u1": JSON.stringify([draft("2026-11-15T10:00:00Z")]), "octo.drafts.v1.c2.u1": "[]", "octo.drafts.v1.demo": "[]" });
   it("«Выйти и стереть»: the wipe takes my drafts of every company (the demo's stay); both marks go", async () => {
