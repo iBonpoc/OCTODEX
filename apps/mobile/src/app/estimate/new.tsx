@@ -45,7 +45,6 @@ import { CountPill, FigureRow } from "@/ui/figures";
 import type { IconKey } from "@/ui/primitives";
 import { dayKeyIn } from "@/features/zone";
 import { dayOffsetOf, todayKey } from "@/features/calendar";
-import { foldStart, foldStep, type FoldState } from "@/ui/totalFold";
 import { GroupHead, GroupRow, ListGroup, useGroupEdge } from "@/ui/groupedList";
 import { ButtonMenu, ButtonPair } from "@/ui/pairs";
 import { useDayWord } from "@/features/useDayWord";
@@ -672,7 +671,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   /** «Экран для клиента» (DS §8.3): cost, profit, the spend of hidden lines and «Только для вас» go from the screen */
   const [clientScreen, setClientScreen] = useState(false);
   /** «Итого ˅» of the phone's panel: open or folded (the screen's own state, not remembered) */
-  const [fold, setFold] = useState<FoldState>(foldStart);
+  // #2387 С2 (the founder: «пусть делает дизайнер как хочет… внизу должно быть „Готово“»): ONE bar always — «Итого · Готово»,
+  // never a capsule: a floating capsule lay over the totals and the open line's rows (design review), «Готово» stays in view
   /** a folded line asked to show its menu (SortableList onHoldStill): its id and a counter, each ask opens it once */
   const [menuAsk, setMenuAsk] = useState<{ id: string; n: number }>({ id: "", n: 0 });
   const totalRows = totalsRows({ totals, allOptional, own: seeCosts && !clientScreen, costKnown: costComplete(option) });
@@ -801,7 +801,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // something missing says what (DS §11 п.3).
   const firstLine = !signed && !hasContent(doc);
   const addFirst = () => (db.catalog.length ? openCatalog() : addNew());
-  const step: MainAction = firstLine ? { label: t("ue.addItem"), onPress: addFirst, testID: "est-bar-add" } : { label: t("proto.est.done"), onPress: () => save(false), testID: "ue-save" };
+  // #2387 (CRM review: «одни слова — два разных действия»): the empty estimate's step says what it does — «Из каталога» when there is one
+  const step: MainAction = firstLine ? { label: db.catalog.length ? t("px3.est.fromCatalog") : t("px3.est.newLine"), onPress: addFirst, testID: "est-bar-add" } : { label: t("proto.est.done"), onPress: () => save(false), testID: "ue-save" };
   // «Итого ˅ $…» (DS §8.9, #1362): a press opens what the total is made of (a sheet over the bar, not a plate growing under the thumb)
   // visual v2 №5: «Итого ⌄ $772.36 налог $14.52» — the sum with cents (the engine's fmtUsd), the tax after it when there is one
   // founder 21.11 (С5: «шторку убрать, разбор суммы только в карточке внизу», #2387): the bar's «Итого» is a figure, not a button —
@@ -812,7 +813,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // (there the totals card says «Итого» already — the row is the button only, П7)
   // #2363 q72 (founder 21.11, вариант А): scrolled down, the «Итого» card folds into the capsule on the right; up 8 pt, the top, or a
   // tap opens it (ui/totalFold.ts). An open total panel («Итого ˅») never folds under the finger
-  const stepRow = tplEdit ? null : <MainStep placement="bar" main={step} total={barShown ? total : null} folded={fold.folded && option.lines.length > 0} onUnfold={() => setFold({ folded: false, anchor: Number.MAX_SAFE_INTEGER })} foldAdd={signed ? undefined : { a11y: t("px3.est.newLine"), onPress: () => addNew(), testID: "est-fold-add" }} />;
+  const stepRow = tplEdit ? null : <MainStep placement="bar" main={step} total={barShown ? total : null} />;
   /** «слои» (visual v2 №5): the sections and the options of the list */
   const layerItems = [
     ...(!signed ? [{ key: "section", label: t("est.sec.addSectionMenu"), icon: "plus" as const, testID: "est-add-section" }] : []),
@@ -823,7 +824,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const addItems = [
     { key: "catalog", label: t("px3.est.fromCatalog"), icon: "catalog" as const, testID: "est-add-catalog" },
     ...(!tplEdit ? [{ key: "template", label: t("ds.rows.fromTemplate"), icon: "template" as const, testID: "est-menu-template" }] : []),
-    ...layerItems,
+    // (the layout «Разложить по видам» is the editor's «⋯» only — not a way to add, never twice)
+    ...layerItems.filter((x) => x.key !== "layout"),
   ];
   const onAdd = (k: string) => {
     if (k === "new") addNew();
@@ -835,7 +837,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   };
   /** «⋯» of the editor: rare things — send now, the layout of the list, how the rows read, the client's screen */
   const moreList = [
-    ...(canSend ? [{ key: "send", label: t("proto.est.saveSend"), icon: "send" as const, testID: "ue-save-send" }] : []),
+    // the same words as the header's round «Отправить» (CRM review: one action, one name); in «⋯» it stays for the empty
+    // estimate too — pressed with no line it says what is missing (spec 308)
+    ...(canSend ? [{ key: "send", label: existing && existing.status !== "draft" ? t("r1.est.sendChanges") : t("proto.est.saveSend"), icon: "send" as const, testID: "ue-save-send" }] : []),
     ...(!signed && option.lines.length ? [{ key: "layout", label: t("est.sec.layout"), icon: "menu" as const, testID: "est-group-by-kind" }] : []),
     ...(option.lines.length ? [{ key: "rows", label: t("proto.est.rowsFull"), icon: "menu" as const, selected: rowLook === "full", testID: "est-row-view" }] : []),
     { key: "client", label: t("est.client.on"), icon: "eye" as const, selected: clientScreen, testID: "est-menu-client" },
@@ -848,7 +852,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   };
 
   return (
-    <Screen onScrollY={(y, max) => setFold((f) => { if (lifted) return f; /* a row is carried: the bar under the finger never changes */ /* #2363: at the end of the page the whole «Итого» again — the capsule never lies over «Сумма» */ const n = foldStep(f, y, undefined, max); return n.folded === f.folded && n.anchor === f.anchor ? f : n; })} onScrollBegin={() => {
+    <Screen onScrollBegin={() => {
       swipes.closeOpen();
       // the finger that starts this scroll went down a moment ago; an older touch (a tap on a field) does not count
       const inOpen = Date.now() - touchInOpen.current < motion.durSlow * 3;
@@ -1389,7 +1393,8 @@ function ListFrame({ empty, missing, children }: { empty: boolean; missing: bool
 
 /** #2387: a line of a group takes the group card's edge (ui/groupedList) — its ground and the corners of the first and the last line */
 function groupLook(view: readonly { type: string }[], r: { type: string }, i: number, edge: (first: boolean, last: boolean) => ViewStyle): ViewStyle | undefined {
-  // (no padding here: the drag measures a row by what it draws — the gap over a group is the title's own, `SectionHeader` `gapAbove`)
-  if (r.type !== "line") return undefined;
+  // the gap over a group's title (not the first row) is the title row's own top margin — the whole row (with its «⠿») moves down,
+  // so the handle stands on the title's line (design review: «ручка выше „⋯“»); the drag measures a row by what it draws
+  if (r.type !== "line") return i > 0 && r.type === "section" ? { marginTop: space[3] } : undefined;
   return edge(view[i - 1]?.type !== "line", view[i + 1]?.type !== "line");
 }

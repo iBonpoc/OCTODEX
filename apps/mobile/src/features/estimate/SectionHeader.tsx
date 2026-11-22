@@ -80,7 +80,7 @@ function SectionHeaderView(p: SectionHeaderProps) {
   return (
     // #2363 (founder 21.11: «разделители групп некрасиво, непонятно»; both design reviews): a top section is the TITLE OVER its card —
     // no band: the chevron, the kind's icon, the word and «· N» on the left, «⋯», the group's sum on the right in the column of the lines' sums
-    <View ref={rootRef} collapsable={false} testID={`est-section-${s.id}`} style={{ paddingLeft: p.depth === 1 ? space[4] : 0, paddingVertical: space[1], ...(p.gapAbove ? { marginTop: space[3] } : null) }} accessibilityRole="header">
+    <View ref={rootRef} collapsable={false} testID={`est-section-${s.id}`} style={{ paddingLeft: p.depth === 1 ? space[4] : 0, paddingVertical: space[1] }} accessibilityRole="header">
       <RowView style={{ minHeight: size.rowMin }}>
         {p.renaming && ready ? (
           <View style={{ flex: 1, gap: space[1] }}>
@@ -96,7 +96,8 @@ function SectionHeaderView(p: SectionHeaderProps) {
             <GroupHead
               title={p.title}
               icon={p.depth === 0 && s.kind ? KIND_ICON[s.kind] : undefined}
-              count={p.lineCount}
+              // founder 21.11 («двоечка наезжает на цифру»): the count only on a folded group (DS §8.5) — an open one shows its lines
+              count={p.collapsed ? p.lineCount : undefined}
               value={p.total}
               fold={{ open: !p.collapsed, onToggle: () => p.api.toggle(s.id), label: t("est.sec.toggle"), testID: `est-sec-toggle-${s.id}` }}
               actions={p.locked ? null : (

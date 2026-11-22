@@ -317,24 +317,27 @@ function LineRowView(p: LineRowProps) {
   const unitItems = [...UNITS, ...(l.unit && !(UNITS as readonly string[]).includes(l.unit) ? [l.unit] : [])].map((u) => ({ key: u as string, label: u }));
   unitItems.push({ key: OWN, label: t("est.row.unitOwn") });
   return (
-    <Animated.View style={[{ paddingVertical: space[3], gap: space[3] }, fade]} testID={`est-line-${l.id}`} accessibilityState={{ expanded: true }} onTouchStart={p.onTouchOpen}>
+    // #2387 (design review): the open line keeps the card's inset `space[4]`, as the folded lines and «Свернуть» — fields never touch the card's edge
+    <Animated.View style={[{ paddingVertical: space[3], paddingHorizontal: space[4], gap: space[3] }, fade]} testID={`est-line-${l.id}`} accessibilityState={{ expanded: true }} onTouchStart={p.onTouchOpen}>
       {/* the header (DS §8.3): «˄ Свернуть» on the left (the founder's words); on the right the trash, «⋯» and «≡» (the list's handle) */}
-      <RowView style={{ justifyContent: "space-between" }}>
+      {/* (the header runs to the card's right edge, past the row's inset: its trash and «⋯» stand in the column of the folded lines' trash, by the «⠿») */}
+      <RowView style={{ justifyContent: "space-between", marginRight: -space[4] }}>
         <View testID={`est-collapse-${l.id}`}>
           <Button label={t("est.row.collapse")} icon="chevronUp" variant="ghost" onPress={p.api.close} />
         </View>
-        <RowView>
-          {/* #2387: the trash and «⋯» quiet (bare), as on the folded line and the group's title — the same column over the «≡» */}
-          {p.locked ? null : (
-            <View testID={`est-trash-${l.id}`}>
-              <IconButton bare icon="trash" label={t("est2.row.trash")} onPress={() => p.api.action(l.id, "delete")} />
-            </View>
-          )}
-          <View ref={moreRef} collapsable={false}>
+        <RowView gap={0}>
+          {/* #2387 (founder 21.11: «корзину — к драг-н-дропу»): «⋯», then the trash right by the «⠿» — the trash in the same column as
+              on every folded line; both quiet (bare), each a 44 column */}
+          <View ref={moreRef} collapsable={false} style={{ width: size.hitMin, alignItems: "center" }}>
             <View testID={`est-menu-${l.id}`}>
               <IconButton bare icon="more" label={t("est.row.actions")} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }))} />
             </View>
           </View>
+          {p.locked ? null : (
+            <View testID={`est-trash-${l.id}`} style={{ width: size.hitMin, alignItems: "center" }}>
+              <IconButton bare icon="trash" label={t("est2.row.trash")} onPress={() => p.api.action(l.id, "delete")} />
+            </View>
+          )}
           {handleInHeader ? <View style={{ width: size.hitMin }} /> : null}
         </RowView>
       </RowView>
