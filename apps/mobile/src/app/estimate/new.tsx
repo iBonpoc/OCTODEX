@@ -999,7 +999,6 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               // not start — never silently (code review of «б»)
               beforeBegin={() => leaveRow(false)}
               // #2363 (founder 21.11: «не вижу, как перетаскивать»; DS §8.3): every folded line shows its «≡»; a hold still drags too
-              quietLines
               onHoldStill={(k) => setMenuAsk((m) => ({ id: k.replace(/^l:/, ""), n: m.n + 1 }))}
               renderRow={(r, i) =>
 
