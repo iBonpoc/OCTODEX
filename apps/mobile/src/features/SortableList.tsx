@@ -614,7 +614,7 @@ function Item({ k, index, dragKind, open, quiet, look, children }: { k: string; 
         // in the open line's header: over its right end, centred on its buttons (the row's top padding `space[3]`, `dockBtn` high)
         style={inHeader ? { position: "absolute", right: 0, top: space[3] + (component.dockBtn - size.hitMin) / 2, width: size.hitMin, height: size.hitMin, alignItems: "center", justifyContent: "center" } : { width: size.hitMin, minHeight: size.hitMin, alignItems: "center", justifyContent: "center", alignSelf: "stretch" }}
       >
-        <Icon name="menu" s={size.iconMd} color={c.mut} />
+        <Icon name="grip" s={size.iconMd} color={c.mut} />
       </View>
     </GestureDetector>
   ) : null;
