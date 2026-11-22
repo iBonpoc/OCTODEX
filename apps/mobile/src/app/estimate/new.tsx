@@ -52,9 +52,11 @@ import { useDayWord } from "@/features/useDayWord";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
 import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle, useFooterShown } from "@/ui/surfaces";
-import { draftCtx, draftSnapshot, draftsKey, findDraft, nextDrafts, removeDraft, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
+import { draftCtx, draftSnapshot, draftsKey, findDraft, isEditCtx, nextDrafts, removeDraft, restoreDraftOnDevice, useDraftEditorOpen, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
+import { useConfirm } from "@/ui/confirmDialog";
+import { doneAction, gateAtOpen, gateBeforeSave, markOf, takeMine } from "@/features/estimate/editSession";
 import { useAuth } from "@/cloud/auth";
-import { localUndo, withAfter } from "@/data/undo";
+import { NO_UNDO, localUndo, withAfter } from "@/data/undo";
 import { StatusNote } from "@/ui/statusNote";
 
 type SettingKind = "discount" | "tax" | "deposit" | null;
@@ -88,6 +90,8 @@ export default function EstimateBuilderScreen() {
 type Params = { id?: string; customerId?: string; propertyId?: string; leadId?: string; template?: string; editTemplate?: string; pick?: string };
 
 function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDrafts> }) {
+  // #2381 review 4: while an editor is open it owns the drafts list — a draft put back by an undo waits until it closes
+  useDraftEditorOpen();
   const params = useLocalSearchParams<Params>();
   const store = useStore();
   const { db } = store;
@@ -98,8 +102,12 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const ctx = draftCtx(params);
   const [draft, setDraft] = useState(() => findDraft(drafts.list, ctx, Date.now(), (id) => db.estimates.some((e) => e.id === id)));
   const [estimateId] = useState(() => existing?.id ?? draft?.estimateId ?? uid());
-  const [customerId, setCustomerId] = useState(existing?.customerId ?? draft?.customerId ?? params.customerId);
-  const [propertyId, setPropertyId] = useState(existing?.propertyId ?? draft?.propertyId ?? params.propertyId);
+  // #2381: a saved estimate's edit found on the phone (the app closed by chance, «×» left them): the screen opens ON the edits
+  const fromEdit = existing && draft && isEditCtx(ctx) ? draft : undefined;
+  const [customerId, setCustomerId] = useState(fromEdit?.customerId ?? existing?.customerId ?? draft?.customerId ?? params.customerId);
+  const [propertyId, setPropertyId] = useState(fromEdit?.propertyId ?? existing?.propertyId ?? draft?.propertyId ?? params.propertyId);
+  /** #2381: the estimate's `savedAt` when its edit began (kept in the draft): the conflict is «the store's savedAt ≠ this» */
+  const [baseSavedAt, setBaseSavedAt] = useState<string | undefined>(() => (existing ? (fromEdit ? fromEdit.baseSavedAt : markOf(existing)) : undefined));
   // E3 (S5t): a template to start from — given by the templates screen, or picked in «С чего начать?»
   const seeCosts = seesCosts(db, store.role, store.mode);
   // #1837: what a write carries — a template's costs the phone holds go into the estimate (and back) unless the server
@@ -139,12 +147,14 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const [doc, setDoc] = useState<EstimateDoc>(() =>
     existing
       ? // an estimate saved already never gets the key here (one without a doc — an older phone's — starts empty, no Terms)
-        existing.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : newDoc(db.company?.estimate.depositBps)
+        fromEdit
+        ? (JSON.parse(JSON.stringify(fromEdit.doc)) as EstimateDoc)
+        : existing.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : newDoc(db.company?.estimate.depositBps)
       : tplEdit
         ? templateForEdit(tplEdit, keep)
         : withNewTerms(draft?.doc ?? fromTpl?.doc ?? newDoc(db.company?.estimate.depositBps), draft?.customerId ?? params.customerId),
   );
-  const [title, setTitle] = useState(existing?.doc ? existing.title : draft?.title ?? tplEdit?.name ?? given?.name ?? "");
+  const [title, setTitle] = useState(fromEdit ? fromEdit.title : existing?.doc ? existing.title : draft?.title ?? tplEdit?.name ?? given?.name ?? "");
   const [cur, setCur] = useState(() => Math.max(0, doc.options.findIndex((o) => o.recommended)));
   // the open row of the list (DS §8.3: one open; it closes and keeps what is typed when another opens, «Новая позиция»,
   // «Из каталога», a finger starts to scroll or the estimate is saved); the focus it takes when it opens
@@ -188,9 +198,12 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const [opened, setOpened] = useState(() => ({ snapshot: draftSnapshot(held), restored: !!draft }));
   useEffect(() => {
     if (!ctx) return;
-    const d: EstimateDraft = { ctx, at: new Date().toISOString(), estimateId, customerId, propertyId, title, doc, templateId, checkPrice, wantCatalog };
+    const d: EstimateDraft = { ctx, at: new Date().toISOString(), estimateId, customerId, propertyId, title, doc, templateId, checkPrice, wantCatalog, ...(isEditCtx(ctx) ? { baseSavedAt } : {}) };
     setDrafts((list) => nextDrafts(list, d, opened, Date.now()), keyOfDrafts);
-  }, [ctx, estimateId, customerId, propertyId, title, doc, templateId, checkPrice, wantCatalog, opened, setDrafts, keyOfDrafts]);
+  }, [ctx, estimateId, customerId, propertyId, title, doc, templateId, checkPrice, wantCatalog, opened, setDrafts, keyOfDrafts, baseSavedAt]);
+  /** #2381: there are edits not saved («Отменить» shows only then — founder 21.11): this place's draft is on the phone */
+  const dirty = !!ctx && !tplEdit && drafts.list.some((x) => x.ctx === ctx);
+  const [dialog, ask] = useConfirm();
   const dropDraft = () => {
     if (ctx) setDrafts((list) => removeDraft(list, ctx), keyOfDrafts);
   };
@@ -703,7 +716,147 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const savingRef = useRef(false);
   const { wide } = useDevice();
   const { c } = useTheme();
-  const save = (send: boolean) => {
+  /** #2381: the edit of a saved estimate as it was saved (theirs taken, or «Сбросить правки»): the screen shows the store's estimate */
+  const resetToSaved = () => {
+    const live = db.estimates.find((e) => e.id === estimateId);
+    if (!live) return;
+    const fresh = { estimateId, customerId: live.customerId, propertyId: live.propertyId, title: live.doc ? live.title : "", doc: live.doc ? (JSON.parse(JSON.stringify(live.doc)) as EstimateDoc) : newDoc(db.company?.estimate.depositBps), templateId: live.templateId, checkPrice: [] as string[] };
+    dropDraft();
+    setDraft(undefined);
+    setOpened({ snapshot: draftSnapshot(fresh), restored: false });
+    setBaseSavedAt(markOf(live));
+    setDoc(fresh.doc);
+    setCur(Math.max(0, fresh.doc.options.findIndex((o) => o.recommended)));
+    setTitle(fresh.title);
+    setCustomerId(fresh.customerId);
+    setPropertyId(fresh.propertyId);
+    setTemplateId(fresh.templateId);
+    setCheckPrice([]);
+    setWantCatalog([]);
+  };
+  /** Р2: «Оставить черновик» of a signed estimate — the screen shows the estimate AS SAVED (signed: its lines and total), the edits
+   *  stay on the phone and the line says so; nothing of the draft is drawn as if it were the estimate */
+  const [keptAside, setKeptAside] = useState(false);
+  const keepAside = () => {
+    const live = db.estimates.find((e) => e.id === estimateId);
+    if (!live) return;
+    const fresh = { estimateId, customerId: live.customerId, propertyId: live.propertyId, title: live.doc ? live.title : "", doc: live.doc ? (JSON.parse(JSON.stringify(live.doc)) as EstimateDoc) : newDoc(db.company?.estimate.depositBps), templateId: live.templateId, checkPrice: [] as string[] };
+    // the draft list is not touched: «restored» keeps this place's draft as it is (nextDrafts)
+    setOpened({ snapshot: draftSnapshot(fresh), restored: true });
+    setKeptAside(true);
+    setDoc(fresh.doc);
+    setCur(Math.max(0, fresh.doc.options.findIndex((o) => o.recommended)));
+    setTitle(fresh.title);
+    setCustomerId(fresh.customerId);
+    setPropertyId(fresh.propertyId);
+    setTemplateId(fresh.templateId);
+    // (Б-1 of review 3: every part of the held state as in the snapshot — a «проверить цену» or «в каталог» of the edit left on the
+    // screen made the screen differ from the snapshot, and the draft was overwritten with the signed estimate)
+    setCheckPrice([]);
+    setWantCatalog([]);
+    toast.show(t("k1.kept"));
+  };
+  /** Б-2 of review 3 (rule 5): «Сбросить правки» of an estimate kept aside — asked in the window first */
+  const dropKept = async () => {
+    const k = await ask({ title: t("k1.cancelQ"), text: t("k1.dropKeptText"), actions: [{ key: "back", label: t("k1.back"), tone: "cancel", testID: "k1-kept-reset-no" }, { key: "yes", label: t("k1.reset"), tone: "danger", testID: "k1-kept-reset-yes" }], testID: "k1-kept-reset-ask" });
+    if (k !== "yes") return;
+    dropDraft();
+    setKeptAside(false);
+  };
+  /** «Отменить» (founder 21.11: «отменяет все мои действия» · «Отменить спрашивает подтверждение — да»): the window in the middle
+   *  (DS Б3); yes — the edits on the phone go, the estimate stays as saved (a new one is not made), the screen closes */
+  const cancelEdits = async () => {
+    const k = await ask({
+      title: t("k1.cancelQ"),
+      text: existing ? t("k1.cancelText") : t("k1.cancelTextNew"),
+      actions: [{ key: "back", label: t("k1.keepEditing"), tone: "cancel", testID: "k1-cancel-no" }, { key: "yes", label: t("k1.cancelYes"), tone: "danger", testID: "k1-cancel-yes" }],
+      testID: "k1-cancel-ask",
+    });
+    if (k !== "yes") return;
+    dropDraft();
+    back();
+  };
+  /** «×» of a saved estimate with edits (founder 21.11: «когда выхожу, я могу их отменить»): save, take them back, or stay.
+   *  A new estimate leaves as before — its draft waits on the phone (#760). */
+  const close = async (proceed: () => void = back) => {
+    if (!(existing && dirty)) return proceed();
+    const k = await ask({
+      title: t("k1.closeQ"),
+      text: t("k1.closeText"),
+      actions: [{ key: "save", label: t("proto.est.done"), tone: "primary", testID: "k1-close-save" }, { key: "drop", label: t("k1.cancelYes"), tone: "danger", testID: "k1-close-drop" }, { key: "back", label: t("k1.keepEditing"), tone: "cancel", testID: "k1-close-back" }],
+      testID: "k1-close-ask",
+    });
+    if (k === "save") void save(false);
+    else if (k === "drop") {
+      dropDraft();
+      proceed();
+    }
+  };
+  /** «Сделать копию с правками» (#2381 §11 п.2): a NEW estimate from the edits — the same client and property, no lead (it is won),
+   *  no template; the edit's draft goes only once the copy is in; «Отменить» on the toast takes the copy out and the draft back */
+  const copyWithEdits = (clean: EstimateDoc, cust: { id: string; name: string }, prop: { id: string }) => {
+    const id = uid();
+    const was = drafts.list.find((x) => x.ctx === ctx);
+    // Р8: the copy is a NEW estimate — the company's Terms in its client's language (termsForNew), not the signed one's
+    const doc2: EstimateDoc = { ...clean, terms: store.estimateTerms({ customerId: cust.id }).text };
+    const undo = store.saveEstimate({ id, customerId: cust.id, propertyId: prop.id, doc: doc2, title: title.trim() || estimateTitle(doc2, t("ue.title")) });
+    if (undo === NO_UNDO) return void toast.show(t("k1.refused"));
+    dropDraft();
+    // the editor is closed by the time «Отменить» is pressed: the edit goes back to the device straight (not through this screen's list)
+    toast.show(t("k1.copied"), withAfter(undo, () => void (was && restoreDraftOnDevice(keyOfDrafts, was))));
+    router.replace(`/estimate/${id}`);
+  };
+  /** #2381: «Сохранено» is never said where the edits did not go in; the edits stay on the phone (spec §10–11, review 2) */
+  const askSigned = async (clean: EstimateDoc, cust: { id: string; name: string }, prop: { id: string }) => {
+    const k = await ask({ title: t("k1.signedQ"), text: t("k1.signedText"), actions: [{ key: "copy", label: t("k1.copy"), tone: "primary", testID: "k1-signed-copy" }, { key: "keep", label: t("k1.keepDraft"), tone: "cancel", testID: "k1-signed-keep" }], testID: "k1-signed-ask" });
+    if (k === "copy") copyWithEdits(clean, cust, prop);
+    else keepAside();
+  };
+  const askMissing = async (clean: EstimateDoc, cust: { id: string; name: string } | undefined, prop: { id: string } | undefined) => {
+    const k = await ask({ title: t("k1.missingQ"), text: t("k1.missingText"), actions: [...(cust && prop ? [{ key: "copy", label: t("k1.copyNew"), tone: "primary" as const, testID: "k1-missing-copy" }] : []), { key: "reset", label: t("k1.reset"), tone: "danger", testID: "k1-missing-reset" }, { key: "back", label: t("k1.back"), tone: "cancel", testID: "k1-missing-back" }], testID: "k1-missing-ask" });
+    if (k === "copy" && cust && prop) copyWithEdits(clean, cust, prop);
+    else if (k === "reset") {
+      dropDraft();
+      back();
+    }
+  };
+  /** what stands between «Готово» and the save — editSession.gateBeforeSave; "go" — save */
+  const checkBeforeSave = async (clean: EstimateDoc, cust: { id: string; name: string }, prop: { id: string }, answered?: "await"): Promise<"go" | "stop"> => {
+    const live = db.estimates.find((e) => e.id === estimateId);
+    const g = gateBeforeSave({ isEdit: isEditCtx(ctx), live, base: baseSavedAt, dirty, storeLoaded: store.companyLoaded });
+    // the question answered already («Сохранить и снять подпись» at the opening): not asked a second time (review 3)
+    if (g === "go" || (g === "await" && answered === "await")) return "go";
+    if (g === "wait") {
+      toast.show(t("k1.wait"));
+      return "stop";
+    }
+    if (g === "missing") {
+      await askMissing(clean, cust, prop);
+      return "stop";
+    }
+    if (g === "signed") {
+      await askSigned(clean, cust, prop);
+      return "stop";
+    }
+    if (g === "await") {
+      const k = await ask({ title: t("k1.awaitQ"), text: t("k1.awaitText"), actions: [{ key: "save", label: t("k1.saveUnsign"), tone: "danger", testID: "k1-await-save" }, { key: "copy", label: t("k1.copy"), testID: "k1-await-copy" }, { key: "back", label: t("k1.back"), tone: "cancel", testID: "k1-await-back" }], testID: "k1-await-ask" });
+      if (k === "copy") copyWithEdits(clean, cust, prop);
+      return k === "save" ? "go" : "stop";
+    }
+    const k = await ask({ title: t("k1.conflictQ"), text: live?.savedAt ? t("k1.conflictText", { time: time(live.savedAt) }) : undefined, actions: [{ key: "mine", label: t("k1.mine"), tone: "primary", testID: "k1-conflict-mine" }, { key: "theirs", label: t("k1.theirs"), testID: "k1-conflict-theirs" }, { key: "back", label: t("k1.back"), tone: "cancel", testID: "k1-conflict-back" }], testID: "k1-conflict-ask" });
+    if (k === "theirs") resetToSaved();
+    // Р4: only «Мои правки» goes on; «Назад» and Esc stay with the edits, nothing saved
+    return takeMine(k) ? "go" : "stop";
+  };
+  const save = async (send: boolean, answered?: "await") => {
+    // Р1 (spec §4 п.2): a saved estimate with no edits — «Готово» only closes (nothing written: «sent» and its time stay); «Отправить»
+    // goes to the send of the estimate as it is. An estimate kept aside (signed, «Оставить черновик») is shown as saved — closes too
+    // stale: what a save would write differs from the saved document (the client became tax exempt since — e2e 72)
+    const stale = !!existing?.doc && !!customer && JSON.stringify(exemptDoc(existing.doc, customer.taxExempt)) !== JSON.stringify(existing.doc);
+    if (existing && (keptAside || doneAction({ existing: true, dirty, stale, status: existing.status }) === "close")) {
+      if (send && canSeeClientLink(store.role)) return void router.replace(`/estimate/${estimateId}?send=1`);
+      return void back();
+    }
     // #1138: the main button stays active (DS §11 п.3, the director's review of #1169): where the tech may not make one, it says why
     if (!mayHere) return void toast.show(t("est.tech.notHere"));
     // something is missing (no client, no line): the button is not off — it says what and takes the person there (DS §11 п.3, Р10)
@@ -719,13 +872,24 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     if (!settled.closed) return;
     if (savingRef.current) return;
     savingRef.current = true;
-    haptics.success();
     const clean: EstimateDoc = exemptDoc({ ...docWith(settled.option), options: docWith(settled.option).options.map((o) => ({ ...o, lines: activeLines(o.lines).filter((l) => !isBlank(l)) })) }, customer.taxExempt);
+    // #2381: signed meanwhile, or saved on another phone — asked first; nothing is lost («стоп» keeps the edits on the phone)
+    if ((await checkBeforeSave(clean, customer, property, answered)) === "stop") {
+      savingRef.current = false;
+      return;
+    }
+    haptics.success();
     const catalogUndos = writeCatalog(settled.newItems);
     const undo = store.saveEstimate({
       id: estimateId, customerId: customer.id, propertyId: property.id, doc: clean, leadId: params.leadId, templateId,
       title: title.trim() || estimateTitle(clean, t("ue.title")),
     });
+    // #2381 (review 1 №1): the store refused (signed, no right) — the edits stay on the phone, never «Сохранено»
+    if (undo === NO_UNDO) {
+      for (const u of catalogUndos) u();
+      savingRef.current = false;
+      return void toast.show(t("k1.refused"));
+    }
     // saved: the store holds it now. «Отменить» on the toast takes the saved estimate back out of the store; the builder
     // is closed by then, so its content does not come back as a draft (#860)
     dropDraft();
@@ -734,6 +898,52 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     toast.show(settled.newItems.length ? `${saved} · ${t("est.row.catalogAdded")}` : saved, store.undoTogether([...catalogUndos, undo]));
     router.replace(`/estimate/${estimateId}${send && canSeeClientLink(store.role) ? "?send=1" : ""}`);
   };
+
+  /** #2381 §11 п.1: opened with the edits of an estimate that got signed meanwhile, saved on another phone or deleted — asked ONCE
+   *  (the draft never hangs on for good); a store not loaded yet (Р5) — asked once it is */
+  const askedAtOpen = useRef(false);
+  useEffect(() => {
+    if (askedAtOpen.current || !isEditCtx(ctx) || !draft) return;
+    const live = db.estimates.find((e) => e.id === estimateId);
+    const g = gateAtOpen({ hasEditDraft: true, live, base: draft.baseSavedAt, storeLoaded: store.companyLoaded });
+    if (g === "wait") return; // the store comes: this runs again
+    askedAtOpen.current = true;
+    if (g === "go") return;
+    const cust = db.customers.find((x) => x.id === customerId);
+    const prop = db.properties.find((x) => x.id === propertyId);
+    const clean = (): EstimateDoc => exemptDoc({ ...doc, options: doc.options.map((o) => ({ ...o, lines: activeLines(o.lines).filter((l) => !isBlank(l)) })) }, !!cust?.taxExempt);
+    void (async () => {
+      if (g === "missing") return void askMissing(clean(), cust, prop);
+      if (g === "signed" || g === "await") {
+        const k = await ask({
+          title: g === "signed" ? t("k1.signedQ") : t("k1.awaitQ"),
+          text: g === "signed" ? t("k1.signedText") : t("k1.awaitText"),
+          actions: [
+            ...(g === "await" ? [{ key: "save", label: t("k1.saveUnsign"), tone: "danger" as const, testID: "k1-open-unsign" }] : []),
+            { key: "copy", label: t("k1.copy"), tone: "primary", testID: "k1-open-copy" },
+            { key: "reset", label: t("k1.reset"), tone: g === "signed" ? "danger" : undefined, testID: "k1-open-reset" },
+            { key: "keep", label: t("k1.keepDraft"), tone: "cancel", testID: "k1-open-keep" },
+          ],
+          testID: "k1-open-signed",
+        });
+        if (k === "reset") resetToSaved();
+        else if (k === "copy" && cust && prop) copyWithEdits(clean(), cust, prop);
+        else if (k === "save") void save(false, "await");
+        else keepAside();
+        return;
+      }
+      const k = await ask({
+        title: t("k1.conflictQ"),
+        text: live?.savedAt ? t("k1.conflictText", { time: time(live.savedAt) }) : undefined,
+        actions: [{ key: "mine", label: t("k1.mine"), tone: "primary", testID: "k1-open-mine" }, { key: "theirs", label: t("k1.theirs"), testID: "k1-open-theirs" }],
+        testID: "k1-open-conflict",
+      });
+      if (k === "theirs") resetToSaved();
+      // mine: the edits go on, made over the version now in the store — «Готово» does not ask again for the same change
+      else if (takeMine(k) && live) setBaseSavedAt(markOf(live));
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.companyLoaded]);
 
   const saveTemplate = () => {
     if (!tplEdit) return;
@@ -804,7 +1014,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const firstLine = !signed && !hasContent(doc);
   const addFirst = () => (db.catalog.length ? openCatalog() : addNew());
   // #2387 (CRM review: «одни слова — два разных действия»): the empty estimate's step says what it does — «Из каталога» when there is one
-  const step: MainAction = firstLine ? { label: db.catalog.length ? t("px3.est.fromCatalog") : t("px3.est.newLine"), onPress: addFirst, testID: "est-bar-add" } : { label: t("proto.est.done"), onPress: () => save(false), testID: "ue-save" };
+  const step: MainAction = firstLine ? { label: db.catalog.length ? t("px3.est.fromCatalog") : t("px3.est.newLine"), onPress: addFirst, testID: "est-bar-add" } : { label: t("proto.est.done"), onPress: () => void save(false), testID: "ue-save" };
   // «Итого ˅ $…» (DS §8.9, #1362): a press opens what the total is made of (a sheet over the bar, not a plate growing under the thumb)
   // visual v2 №5: «Итого ⌄ $772.36 налог $14.52» — the sum with cents (the engine's fmtUsd), the tax after it when there is one
   // founder 21.11 (С5: «шторку убрать, разбор суммы только в карточке внизу», #2387): the bar's «Итого» is a figure, not a button —
@@ -815,7 +1025,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // (there the totals card says «Итого» already — the row is the button only, П7)
   // #2363 q72 (founder 21.11, вариант А): scrolled down, the «Итого» card folds into the capsule on the right; up 8 pt, the top, or a
   // tap opens it (ui/totalFold.ts). An open total panel («Итого ˅») never folds under the finger
-  const stepRow = tplEdit ? null : <MainStep placement="bar" main={step} total={barShown ? total : null} folded={fold.folded && option.lines.length > 0} onUnfold={() => setFold({ folded: false, anchor: Number.MAX_SAFE_INTEGER })} foldAdd={signed ? undefined : { a11y: t("px3.est.newLine"), onPress: () => addNew(), testID: "est-fold-add" }} />;
+  // #2381 (founder 21.11: «внизу „Готово“. И „Отменить“» · «Отменить видно, только когда есть правки — да»)
+  const cancelStep: MainAction | null = dirty && !signed && !firstLine ? { label: t("k1.cancel"), onPress: () => void cancelEdits(), testID: "k1-cancel" } : null;
+  const stepRow = tplEdit ? null : <MainStep placement="bar" main={step} aside={cancelStep} total={barShown ? total : null} folded={fold.folded && option.lines.length > 0} onUnfold={() => setFold({ folded: false, anchor: Number.MAX_SAFE_INTEGER })} foldAdd={signed ? undefined : { a11y: t("px3.est.newLine"), onPress: () => addNew(), testID: "est-fold-add" }} />;
   /** «слои» (visual v2 №5): the sections and the options of the list */
   const layerItems = [
     ...(!signed ? [{ key: "section", label: t("est.sec.addSectionMenu"), icon: "plus" as const, testID: "est-add-section" }] : []),
@@ -847,7 +1059,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     { key: "client", label: t("est.client.on"), icon: "eye" as const, selected: clientScreen, testID: "est-menu-client" },
   ];
   const onMore = (k: string) => {
-    if (k === "send") save(true);
+    if (k === "send") void save(true);
     else if (k === "layout") layoutBtn();
     else if (k === "rows") setRowLook(rowLook === "full" ? "brief" : "full");
     else toggleClientScreen(!clientScreen);
@@ -871,6 +1083,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       // visual v2 №5: «Черновик · сохранено 8:19» (the version's own save time), «Демо» joins it in the header; no «?» by the title
       subtitle={tplEdit ? undefined : existing ? [t(estimateStatusView(existing.status).l), changedAfterSend ? t("r1.est.changedAfterSend") : null, savedWord].filter(Boolean).join(" · ") : t("proto.est.autosave")}
       back={back}
+      onLeave={(proceed) => void close(proceed)}
       hintKey="estimate-builder"
       // founder 21.11 («5 открытых»: «Отправить — не внизу редактора, а вверху сметы… здесь работаем с позициями», #2379): the send is a
       // round 40 of the header before «⋯» (as «＋ · ⋯» of every header); the bottom keeps the lines' buttons and «Итого / Готово»
@@ -878,7 +1091,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         <RowView gap={space[2]}>
           {canSend && !signed && option.lines.length > 0 ? (
             <View testID="est-send-top">
-              <IconButton icon="send" label={existing && existing.status !== "draft" ? t("r1.est.sendChanges") : t("proto.est.saveSend")} onPress={() => save(true)} />
+              <IconButton icon="send" label={existing && existing.status !== "draft" ? t("r1.est.sendChanges") : t("proto.est.saveSend")} onPress={() => void save(true)} />
             </View>
           ) : null}
           <MoreButton items={moreList} onMore={onMore} a11y={t("est.actions")} testID="est-menu" />
@@ -893,7 +1106,43 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         </View>
       ) : null}
       {/* #2363 F33: no line over the estimate that pushes everything down — the header line says «изменена после отправки» */}
-      {draft ? (
+      {/* #2381: the phone refused to keep the edits (full storage) — said, with the way out («Готово» saves them) */}
+      {drafts.writeFailed ? (
+        <View testID="k1-write-failed">
+          <RowView>
+            <Icon name="alert" s={size.iconSm} color={c.status.warn.text} />
+            <T v="caption" tone="warn" style={{ flex: 1, minWidth: 0 }}>
+              {t("k1.writeFailed")}
+            </T>
+          </RowView>
+        </View>
+      ) : null}
+      {/* #2381: a saved estimate with edits on the phone — said in one line; «Отменить» takes them back (asked first) */}
+      {/* Р2: a signed estimate shown as saved; the edits kept aside on the phone — said, with the way to drop them */}
+      {keptAside ? (
+        <View testID="k1-kept">
+          <RowView>
+            <Icon name="note" s={size.iconSm} />
+            <T v="caption" tone="mut" style={{ flex: 1, minWidth: 0 }}>
+              {t("k1.keptLine")}
+            </T>
+            <View testID="k1-kept-reset">
+              <Button label={t("k1.reset")} variant="ghost" onPress={() => void dropKept()} />
+            </View>
+          </RowView>
+        </View>
+      ) : null}
+      {existing && dirty && !signed && !keptAside ? (
+        <View testID="k1-unsaved">
+          <RowView>
+            <Icon name="note" s={size.iconSm} />
+            <T v="caption" tone="mut" numberOfLines={1} style={{ flex: 1, minWidth: 0 }}>
+              {t("k1.unsaved")}
+            </T>
+          </RowView>
+        </View>
+      ) : null}
+      {draft && !existing ? (
         <View testID="est-draft">
           {/* a hint in one line, the way out beside it (not a card) */}
           <RowView>
@@ -1305,6 +1554,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           {/* #2387 (DS Б1: no button in a sheet's body; a setting applies at once): the sheet closes by «✕» or a swipe — no «Понятно» */}
         </View>
       </Sheet>
+      {dialog}
       <Sheet visible={askRestart} onClose={() => setAskRestart(false)} title={t("est.draft.ask")}>
         <View testID="est-draft-ask" style={{ gap: space[3] }}>
           <T v="body" tone="mut">{t("est.draft.askHint")}</T>
