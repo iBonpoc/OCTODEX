@@ -46,6 +46,7 @@ import type { IconKey } from "@/ui/primitives";
 import { dayKeyIn } from "@/features/zone";
 import { dayOffsetOf, todayKey } from "@/features/calendar";
 import { GroupHead, GroupRow, ListGroup, useGroupEdge } from "@/ui/groupedList";
+import { foldStart, foldStep, type FoldState } from "@/ui/totalFold";
 import { ButtonMenu, ButtonPair } from "@/ui/pairs";
 import { useDayWord } from "@/features/useDayWord";
 import { Icon, Press, T } from "@/ui/primitives";
@@ -671,8 +672,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   /** «Экран для клиента» (DS §8.3): cost, profit, the spend of hidden lines and «Только для вас» go from the screen */
   const [clientScreen, setClientScreen] = useState(false);
   /** «Итого ˅» of the phone's panel: open or folded (the screen's own state, not remembered) */
-  // #2387 С2 (the founder: «пусть делает дизайнер как хочет… внизу должно быть „Готово“»): ONE bar always — «Итого · Готово»,
-  // never a capsule: a floating capsule lay over the totals and the open line's rows (design review), «Готово» stays in view
+  // #2387 С2 — the lead's call (22.11: «А, капсула», as the founder chose in q72): scrolled down, «Итого» folds into the capsule;
+  // at the page's end the whole card «Итого · Готово» again (foldStep with `max`) — the capsule never lies over the totals at rest
+  const [fold, setFold] = useState<FoldState>(foldStart);
   /** a folded line asked to show its menu (SortableList onHoldStill): its id and a counter, each ask opens it once */
   const [menuAsk, setMenuAsk] = useState<{ id: string; n: number }>({ id: "", n: 0 });
   const totalRows = totalsRows({ totals, allOptional, own: seeCosts && !clientScreen, costKnown: costComplete(option) });
@@ -813,7 +815,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // (there the totals card says «Итого» already — the row is the button only, П7)
   // #2363 q72 (founder 21.11, вариант А): scrolled down, the «Итого» card folds into the capsule on the right; up 8 pt, the top, or a
   // tap opens it (ui/totalFold.ts). An open total panel («Итого ˅») never folds under the finger
-  const stepRow = tplEdit ? null : <MainStep placement="bar" main={step} total={barShown ? total : null} />;
+  const stepRow = tplEdit ? null : <MainStep placement="bar" main={step} total={barShown ? total : null} folded={fold.folded && option.lines.length > 0} onUnfold={() => setFold({ folded: false, anchor: Number.MAX_SAFE_INTEGER })} foldAdd={signed ? undefined : { a11y: t("px3.est.newLine"), onPress: () => addNew(), testID: "est-fold-add" }} />;
   /** «слои» (visual v2 №5): the sections and the options of the list */
   const layerItems = [
     ...(!signed ? [{ key: "section", label: t("est.sec.addSectionMenu"), icon: "plus" as const, testID: "est-add-section" }] : []),
@@ -852,7 +854,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   };
 
   return (
-    <Screen onScrollBegin={() => {
+    <Screen onScrollY={(y, max) => setFold((f) => { if (lifted) return f; /* a row is carried: the bar under the finger never changes */ const n = foldStep(f, y, undefined, max); return n.folded === f.folded && n.anchor === f.anchor ? f : n; })} onScrollBegin={() => {
       swipes.closeOpen();
       // the finger that starts this scroll went down a moment ago; an older touch (a tap on a field) does not count
       const inOpen = Date.now() - touchInOpen.current < motion.durSlow * 3;
