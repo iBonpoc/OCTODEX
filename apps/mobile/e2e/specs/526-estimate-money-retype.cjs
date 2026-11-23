@@ -1,5 +1,5 @@
 /**
- * e2e 524 — #2425: a price or a cost that is already there is typed over, not added to (every view; by testID, rule 19).
+ * e2e 526 — #2425: a price or a cost that is already there is typed over, not added to (every view; by testID, rule 19).
  * The founder on the iPhone typed «150» into a price that stood at «0.00» and got $1.50; a cost of «190» showed a loss.
  * The money fields of an open estimate row select their text on focus: a tap + typing replaces the old number.
  * (The browser types key by key here, like a finger; the iPhone itself is checked by hand — rule 27.)
