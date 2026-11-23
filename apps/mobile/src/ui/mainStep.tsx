@@ -1,10 +1,11 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, View } from "react-native";
+import Animated, { Easing, FadeOut, Keyframe, useReducedMotion } from "react-native-reanimated";
 import { component, motion, radius, rhythm, size, space, spaceHalf } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button, IconButton } from "./controls";
 import { Icon, Press, T } from "./primitives";
-import { loadPhase, mainStepLayout } from "./mainStepRules";
+import { foldMotion, loadPhase, mainStepLayout, type FoldFrom } from "./mainStepRules";
 import type { MainAction } from "./templates/types";
 
 /** «Итого ˅ $1,240.00» on the left of the bar: it opens the tax and the deposit (the screen's sheet or its Collapsible) */
@@ -68,6 +69,14 @@ export function MainStep({
   const { c } = useTheme();
   const phase = useLoadPhase(!!loading);
   const { layout } = mainStepLayout({ second, total, reason: placement === "bar" ? main.reason : undefined });
+  // #2405: the bar's fold moves (the capsule in, the card back up) only where it can fold; reduced motion — a cut
+  const reduce = useReducedMotion();
+  // (not at the screen's first drawing: the bar is simply there — only a fold or an unfold moves)
+  const firstDraw = useRef(true);
+  useEffect(() => {
+    firstDraw.current = false;
+  }, []);
+  const fold = placement === "bar" && total && onUnfold && !firstDraw.current ? foldMotion(!!reduce) : null;
   const reasonText = phase === "failed" ? failedLabel : main.reason;
   const reason =
     reasonText || phase === "spinner" ? (
@@ -101,11 +110,12 @@ export function MainStep({
   if (placement === "bar" && folded && total && onUnfold)
     return (
       // the SAME height as the open card (`figureRow.h`): the bar never changes its height — the page's end and the drag's edge stay put
-      <View style={{ paddingBottom: rhythm.cardGap, height: component.figureRow.h + rhythm.cardGap, flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: space[2] }}>
+      // #2405: it slides in from the right growing a little (foldMotion), the card it replaces fades out — never a jump
+      <Animated.View entering={fold ? enter(fold.capsule.from, fold.capsule.ms) : undefined} exiting={fold ? FadeOut.duration(fold.outMs) : undefined} style={{ paddingBottom: rhythm.cardGap, height: component.figureRow.h + rhythm.cardGap, flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: space[2] }}>
         {foldAdd ? <IconButton icon="plus" label={foldAdd.a11y} onPress={foldAdd.onPress} testID={foldAdd.testID} /> : null}
         {/* rule 29: the capsule is the Button itself (secondary 40, zone 44) — the sum and «˄» */}
         <Button testID={`${main.testID}-capsule`} label={total.value} icon="chevronUp" variant="secondary" onPress={onUnfold} accessibilityLabel={`${total.label} ${total.value}`} />
-      </View>
+      </Animated.View>
     );
   let left: ReactNode = reason;
   if (layout === "pair" && second) left = <Button testID={second.testID} label={second.label} onPress={second.onPress} disabled={second.disabled} variant="secondary" />;
@@ -114,8 +124,8 @@ export function MainStep({
   // 16 from the sides (the Screen's footer) and `cardGap` 8 over the bottom zone, on the cell `surf2` with the card's shadow — what the step
   // is about on the left, the button 40 by its words on the right
   return (
-    // (the Screen's footer already stands `rhythm.screen` from the sides)
-    <View style={{ paddingBottom: rhythm.cardGap }}>
+    // (the Screen's footer already stands `rhythm.screen` from the sides); #2405: back from the capsule it comes up with its fade
+    <Animated.View entering={fold ? enter(fold.card.from, fold.card.ms) : undefined} exiting={fold ? FadeOut.duration(fold.outMs) : undefined} style={{ paddingBottom: rhythm.cardGap }}>
       <View
         testID={`${main.testID}-bar`}
         style={{
@@ -140,8 +150,17 @@ export function MainStep({
           {button}
         </View>
       </View>
-    </View>
+    </Animated.View>
   );
+}
+
+/** #2405: a fold's entering — from `from` (a little away, a little smaller, transparent) to its place, easeOut */
+function enter(from: FoldFrom, ms: number) {
+  const t0 = [{ translateX: from.x ?? 0 }, { translateY: from.y ?? 0 }, { scale: from.scale }];
+  return new Keyframe({
+    0: { opacity: from.opacity, transform: t0 },
+    100: { opacity: 1, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 1 }], easing: Easing.out(Easing.cubic) },
+  }).duration(ms);
 }
 
 function TotalPart({ total }: { total: MainStepTotal }) {
