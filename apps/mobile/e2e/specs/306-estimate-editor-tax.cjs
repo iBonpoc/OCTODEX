@@ -33,7 +33,7 @@ exports.run = async (h) => {
   h.expect((await rate.inputValue()) === "8.875", "the rate keeps three decimals (8.875)");
   // not a rate: nothing changes, the field says what to write; leaving it shows the rate that is saved
   await rate.fill("abc");
-  await tid("est-tax-rate").getByText("Впишите ставку, например 10.25").waitFor({ timeout: 3000 });
+  await tid("est-tax-bad").getByText("Впишите ставку, например 10.25").waitFor({ timeout: 3000 }); // DS §8.7а: under the row
   await rate.blur();
   await p.waitForFunction(() => document.querySelector('[data-testid="est-tax-rate"] input')?.value === "8.875", null, { timeout: 3000 });
   h.expect((await p.locator('[aria-modal="true"]').locator("visible=true").count()) === 0, "no sheet: the tax is set in its row");
@@ -41,7 +41,7 @@ exports.run = async (h) => {
   // a 10 % discount: the tax is on the amount after it
   await totals.mode(h, "est-discount-row", "pct");
   await totals.fill(h, "est-discount-pct", "10");
-  h.expect((await totals.sumIs(h, "est-discount-row", "−$10.00")) === "−$10.00", "the discount: −$10.00");
+  h.expect((await totals.sumIs(h, "est-discount-row", "−$10")) === "−$10", "the discount: −$10");
   await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="est-tax-row-sum"]')].some((e) => e.offsetParent !== null && e.innerText.trim() === "$7.99"), null, { timeout: 3000 });
   h.expect((await totals.sumOf(h, "est-tax-row")) === "$7.99", "the tax after the discount: $90.00 × 8.875 % = $7.99");
   await h.expectText(/Итого \| \$97\.99/, "the total agrees");
