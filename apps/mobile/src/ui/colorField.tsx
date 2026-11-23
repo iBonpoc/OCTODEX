@@ -5,8 +5,10 @@ import type { PickerItem } from "./pickerSheet";
 export interface ColorChoice<K extends string> {
   key: K;
   label: string;
-  /** the sample; none — «no colour» (a struck-through ring) */
+  /** the sample; none — the name alone (a company's own colour without a sample) */
   hex?: string;
+  /** «no colour» («Unpainted»): a struck-through ring instead of a sample */
+  none?: boolean;
   /** «As the other part», «Unpainted»: their own group first */
   top?: boolean;
 }
@@ -36,6 +38,6 @@ export function ColorField<K extends string>({
   labelAbove?: boolean;
   testID?: string;
 }) {
-  const items: PickerItem<K>[] = colors.map((x) => ({ key: x.key, label: x.label, top: x.top, leading: x.hex ? { swatch: x.hex } : { none: true } }));
+  const items: PickerItem<K>[] = colors.map((x) => ({ key: x.key, label: x.label, top: x.top, ...(x.hex ? { leading: { swatch: x.hex } } : x.none ? { leading: { none: true } } : {}) }));
   return <SelectField label={label} value={value} items={items} onChange={onChange} placeholder={placeholder} error={error} labelAbove={labelAbove} testID={testID} />;
 }

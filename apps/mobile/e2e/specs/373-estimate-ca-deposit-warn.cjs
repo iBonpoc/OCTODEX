@@ -2,10 +2,8 @@
  * e2e 373 — «депозит сверх лимита Калифорнии» (#1377, rule 2, DS §8.3), every view, by testID:
  * - a $20,000 line (тестовые цены) with the default deposit 10 % ($2,000) is above the CA limit ($1,000, the lesser of
  *   10 % and $1,000): under «Депозит» the warning has the `warn` icon before its words — not colour alone;
- * - the deposit sheet shows the same warning with its icon;
- * - 5 % ($1,000 = the limit) — the warning goes, in the sheet and on the card.
+ * - 5 % ($1,000 = the limit), typed in the deposit row — the warning goes.
  */
-const { sheetGone, pressEscUntilClosed } = require("../sheet.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -23,16 +21,8 @@ exports.run = async (h) => {
   h.expect(/\$1,000\b/.test(await tid("est-ca-warn").innerText()), "the warning names the $1,000 limit");
   await h.shot("card");
 
-  // the deposit sheet: the same warning, with its icon
-  await tid("est-deposit-row").click();
-  await tid("est-ca-warn-sheet").waitFor({ timeout: 3000 });
-  h.expect((await count("est-ca-warn-sheet-icon")) === 1, "the warning has its icon in the sheet");
-  await h.shot("sheet");
-
-  // 5 % = $1,000, the limit itself: no warning any more
-  await tid("est-deposit-pct").locator("input").fill("5");
-  await p.waitForFunction(() => ![...document.querySelectorAll('[data-testid="est-ca-warn-sheet"]')].some((e) => e.offsetParent !== null), null, { timeout: 3000 });
-  await pressEscUntilClosed(p);
-  await sheetGone(p);
+  // 5 % = $1,000, the limit itself: no warning any more — the deposit is set right in its row (DS §8.7а, #2454)
+  await require("../estimateTotals.cjs").fill(h, "est-deposit-pct", "5");
+  await p.waitForFunction(() => ![...document.querySelectorAll('[data-testid="est-ca-warn"]')].some((e) => e.offsetParent !== null), null, { timeout: 3000 });
   h.expect((await count("est-ca-warn")) === 0, "at the limit the card has no warning");
 };
