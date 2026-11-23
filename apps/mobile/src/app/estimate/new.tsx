@@ -1070,7 +1070,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         ids={{ main: "est-add-new", second: "est-add-catalog" }}
       />
       <ButtonPair
-        main={{ label: t("m2403.section"), icon: "plus", variant: "secondary", onPress: addSectionBtn }}
+        main={{ label: t("m2403.section"), icon: "plus", variant: "secondary", onPress: () => addSectionBtn() }}
         second={tplEdit ? null : { label: t("m2403.template"), icon: "template", onPress: openTemplates }}
         ids={{ main: "est-add-section", second: "est-menu-template" }}
       />
