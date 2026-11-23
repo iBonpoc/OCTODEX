@@ -191,7 +191,7 @@ exports.run = async (h) => {
   await tid("quick-length-tape-more").getByRole("button").click();
   await tid("quick-length-tape-more").getByRole("button").click();
   await waitFor(async () => (await field("quick-length-one").inputValue()) === "1002", "the mm tape: two marks → 1002 mm");
-  h.expect(/1002 mm/.test(await tid("quick-length-tape-value").innerText()), "the big value says 1002 mm");
+  h.expect(/1,002 mm/.test(await tid("quick-length-tape-value").innerText()), "the big value says 1,002 mm");
   await field("quick-length-one").fill("1000");
   await tid("quick-length-apply").getByRole("button").click();
   await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 39.375), "1000 mm → 39⅜″");

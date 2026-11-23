@@ -178,6 +178,7 @@ describe("app tokens mirror the founder's DS css", () => {
     it("tape measure: the number under the mark (founder 09.11, #674)", () => {
       expect(norm(c.tape.markFill)).toBe(norm(v("tape-mark-fill", t)));
       expect(norm(c.tape.markText)).toBe(norm(v("tape-mark-text", t)));
+      expect(norm(c.tape.needle)).toBe(norm(v("tape-needle", t)));
     });
     it("background glow spots (opacity per theme)", () => {
       const ops = [...v("glow", t).matchAll(/rgba\([^)]*,\s*([\d.]+)\)/g)].map((m) => Number(m[1]));

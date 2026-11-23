@@ -486,8 +486,9 @@ export interface ThemeColors {
   drawing: { node: string; story: readonly [string, string, string, string] };
   /** a module's tape measure only (founder 09.11.2026, issue #674 — an exception to rule 2): the number
    *  or fraction under the tape's fixed mark stands on a pill of the main button's colours («как у нас кнопки»):
-   *  fill = acc, text = onAcc (≥ 4.5:1); nowhere else */
-  tape: { markFill: string; markText: string };
+   *  fill = acc, text = onAcc (≥ 4.5:1); nowhere else. `needle` — the red line the length is read at, full height with a notch
+   *  at both edges (founder 23.11.2026 «просто хочу красную», the 5th exception of rule 2, #2436/#2412); ≥ 3:1 to the tape */
+  tape: { markFill: string; markText: string; needle: string };
 }
 
 /** redesign #2348 (docs/design/2026-11-20-direction/06-decision.md): calm opaque surfaces, one cobalt accent,
@@ -564,7 +565,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
       neutral: { fill: "#3A3C42", text: "#B9BCC4", on: "#EEEFF1" },
     },
     drawing: { node: "#F4F5F7", story: ["#7FD4FF", "#FF8FD0", "#D59BFF", "#7CEBC6"] },
-    tape: { markFill: "#E2C15E", markText: "#1C1A12" },
+    tape: { markFill: "#E2C15E", markText: "#1C1A12", needle: "#FF453A" },
   },
   light: {
     /** 60/30/10, soft grey — never pure white; founder 21.11: «очень белая, режет глаза» → toned down (bg lum 0.81 → 0.68), contrast checked */
@@ -613,7 +614,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
       neutral: { fill: "#CDCEC8", text: "#3E4147", on: "#17181B" },
     },
     drawing: { node: "#111215", story: ["#0B6290", "#A0327A", "#7A3DB8", "#0B6E50"] },
-    tape: { markFill: "#E2C15E", markText: "#1C1A12" },
+    tape: { markFill: "#E2C15E", markText: "#1C1A12", needle: "#D70015" },
   },
 };
 
