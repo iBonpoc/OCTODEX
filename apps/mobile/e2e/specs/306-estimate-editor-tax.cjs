@@ -113,6 +113,7 @@ exports.run = async (h) => {
     const rateIn = p.getByTestId("est-tax-rate").locator("visible=true").locator("input");
     if (await rateIn.count()) h.expect(!(await rateIn.first().isEditable()), `a signed estimate (${status}): the rate does not take text`);
     await tid("est-totals-signed").waitFor({ timeout: 3000 });
+    if (status === "approved") await h.shot("signed");
     h.expect(/не меняется/.test(await tid("est-totals-signed").innerText()), `a signed estimate (${status}): says why`);
   }
 };

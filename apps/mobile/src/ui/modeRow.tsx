@@ -40,20 +40,22 @@ export function ModeRow<K extends string>({
   return (
     <View testID={testID} style={{ paddingHorizontal: space[4], paddingVertical: space[2], gap: space[2], minHeight: component.listRow.h, justifyContent: "center" }}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", rowGap: space[2], columnGap: space[3] }}>
-        <T v="body" style={{ flexShrink: 1 }}>
+        {/* the word is a column of one width in the group: the switches stand one under another (design review); a long word wraps */}
+        <T v="body" numberOfLines={2} style={{ width: component.modeRow.titleW }}>
           {title}
         </T>
         <ReadOnly value={!!locked}>
           {/* a press on the chosen position changes nothing (it never resets a value or asks a question again — code review of #2454) */}
           <Segmented items={modes} value={mode} onChange={(k) => k !== mode && onMode(k)} accent={mode !== off} radio onCard label={title} testID={testID ? `${testID}-mode` : undefined} />
         </ReadOnly>
+        {/* with no field (off) the sum stays on the first line; with one, the field and the sum go together (under it where narrow) */}
         <View style={{ flexDirection: "row", alignItems: "center", columnGap: space[3], marginLeft: "auto" }}>
           {field && mode !== off ? (
             <ReadOnly value={!!locked}>
               <View style={{ width: component.modeRow.fieldW }}>{field}</View>
             </ReadOnly>
           ) : null}
-          <View testID={testID ? `${testID}-sum` : undefined} style={{ minWidth: component.modeRow.sumW, alignItems: "flex-end" }}>
+          <View testID={testID ? `${testID}-sum` : undefined} style={{ minWidth: field && mode !== off ? component.modeRow.sumW : undefined, alignItems: "flex-end" }}>
             <T v="body" w="semibold" tabular>
               {sum}
             </T>

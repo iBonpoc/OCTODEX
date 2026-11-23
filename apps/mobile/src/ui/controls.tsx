@@ -339,7 +339,9 @@ export function Segmented<K extends string>({
 
   const pill = useAnimatedStyle(() => ({ left: left.value, width: width.value }));
   const { h, pad } = component.segmented;
-  const chosenBg = accent ? c.acc : c.surf3;
+  // on a card's `track` the neutral chosen is the card's own `surf` framed by `bdField` (≥ 3:1, WCAG 1.4.11) — `surf3` on `track`
+  // read about 1:1 in the dark (design review of #2454)
+  const chosenBg = accent ? c.acc : onCard ? c.surf : c.surf3;
   // visual v2: a segment across the width shares it equally (a form's radio keeps its labels' widths, they give way instead)
   const same = equal || (full && !scroll && !radio);
   const chosenFg = accent ? c.onAcc : c.ink;
@@ -362,7 +364,7 @@ export function Segmented<K extends string>({
       {ready ? (
         <Animated.View
           // the chosen: the yellow with `accent` (the screen's one fill), else the chosen cell `surf3`
-          style={[{ position: "absolute", top: pad, bottom: pad, borderRadius: radius.pill, backgroundColor: chosenBg }, pill]}
+          style={[{ position: "absolute", top: pad, bottom: pad, borderRadius: radius.pill, backgroundColor: chosenBg, ...(onCard && !accent ? { borderWidth: component.hairline, borderColor: c.bdField } : null) }, pill]}
         />
       ) : null}
       {items.map((it) => {

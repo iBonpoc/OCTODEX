@@ -53,6 +53,7 @@ exports.run = async (h) => {
   // the deposit: «%» starts at 10 % of $175.00 = $17.50; «$» starts empty ($0.00), the person types it; «Выкл.» — «—»
   await totals.mode(h, "est-deposit-row", "pct");
   h.expect((await tid("est-deposit-pct").locator("input").inputValue()) === "10", "the deposit in % starts at 10");
+  await h.shot("pct");
   await sumIs("est-deposit-row", "$17.50");
   await totals.mode(h, "est-deposit-row", "fixed");
   await sumIs("est-deposit-row", "$0");
@@ -75,6 +76,10 @@ exports.run = async (h) => {
 
   await totals.mode(h, "est-deposit-row", "off");
   await sumIs("est-deposit-row", "—");
+  {
+    const [r, sg, sm] = [await box("est-deposit-row"), await box("est-deposit-row-mode-off"), await box("est-deposit-row-sum")];
+    h.expect(Math.abs(sg.y + sg.height / 2 - (sm.y + sm.height / 2)) < 4 && sm.y + sm.height <= r.y + r.height + 1, "off: «—» stays on the switch's line");
+  }
   h.expect((await p.getByTestId("est-deposit-fixed").count()) === 0, "off: no field");
   h.expect((await sheets()) === 0, "still no sheet");
 };
