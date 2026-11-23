@@ -50,7 +50,7 @@ import { foldStart, foldStep, type FoldState } from "@/ui/totalFold";
 import { ButtonPair } from "@/ui/pairs";
 import { useDayWord } from "@/features/useDayWord";
 import { Icon, Press, T } from "@/ui/primitives";
-import { Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
+import { HelpButton, Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
 import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle, useFooterShown } from "@/ui/surfaces";
 import { draftCtx, draftSnapshot, draftsKey, findDraft, isEditCtx, nextDrafts, removeDraft, restoreDraftOnDevice, useDraftEditorOpen, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
 import { useConfirm } from "@/ui/confirmDialog";
@@ -1138,13 +1138,17 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           </RowView>
         </View>
       ) : null}
-      {existing && dirty && !signed && !keptAside ? (
+      {/* not while the phone fails to keep them: «уже хранится на телефоне» would contradict the warning above (code review of #2423) */}
+      {existing && dirty && !signed && !keptAside && !drafts.writeFailed ? (
         <View testID="k1-unsaved">
           <RowView>
             <Icon name="note" s={size.iconSm} />
-            <T v="caption" tone="mut" numberOfLines={1} style={{ flex: 1, minWidth: 0 }}>
+            {/* founder 23.11 (#2423: «несохранённые правки — что это значит? Там должен быть знак вопроса»; audit MAP §6): the words say
+                what it is, «?» right after them explains Готово / Отменить (DS Б7) */}
+            <T v="caption" tone="mut" numberOfLines={1} style={{ flexShrink: 1, minWidth: 0 }}>
               {t("k1.unsaved")}
             </T>
+            <HelpButton title={t("k1.unsaved")} text={t("k1.unsavedHelp")} testID="k1-unsaved-help" />
           </RowView>
         </View>
       ) : null}

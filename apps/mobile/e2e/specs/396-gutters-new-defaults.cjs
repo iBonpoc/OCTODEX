@@ -4,7 +4,7 @@
  * colour of every NEW gutter of this drawing, the gutter drawn before keeps its own; after a reload it is still there (kept on this phone);
  * «Сбросить» gives the company's back. The same for «Водосток» (a size). Every view. Finds things by testID; waits on what it checks.
  */
-const { skipLength, pastDoubleTap, doubleTapUntil } = require("../gutters.cjs");
+const { skipLength, pastDoubleTap, doubleTapUntil, pickAttr, attrShown } = require("../gutters.cjs");
 const { pressEscUntilClosed, sheetGone } = require("../sheet.cjs");
 const KEY = "octo.db.v5";
 
@@ -14,11 +14,9 @@ exports.run = async (h) => {
   const tid = (id) => p.getByTestId(id).locator("visible=true");
   const els = () => p.evaluate((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => !e.deletedAt), KEY);
   const runs = async () => (await els()).filter((e) => e.kind === "run");
-  const chosen = async (field) => ((await tid(`${field}-value`).count()) ? tid(`${field}-value`).innerText() : tid(field).locator('[aria-checked="true"]').innerText());
-  const choose = async (field, name) => {
-    if ((await tid(`${field}-open`).count()) && !(await tid(field).getByRole("radio").count())) await tid(`${field}-open`).click();
-    await tid(field).getByRole("radio", { name, exact: true }).click();
-  };
+  // the fields (#2412 G1): what one shows; a stored key picked in its menu or list
+  const chosen = (field) => attrShown(p, field);
+  const choose = (field, key) => pickAttr(p, field, key);
   const shown = () => p.evaluate(() => [...document.querySelectorAll('[data-testid="draw-new-defaults"]')].some((e) => e.getClientRects().length > 0));
   /** two taps on a tool cell: «Новые …» open */
   const openNew = async (tool) => {
@@ -85,7 +83,7 @@ exports.run = async (h) => {
   // two taps on «Желоб»: «Для новых желобов»; brown there
   await openNew("line");
   h.expect((await tid("attr-length").count()) === 0 && (await tid("attr-story").count()) === 0, "no length and no story among the new gutters' rows");
-  await choose("attr-color", "Коричневый");
+  await choose("attr-color", "brown");
   await p.waitForFunction(() => /Коричнев/.test(document.querySelector('[data-testid="draw-new-defaults"]')?.textContent || ""), null, { timeout: 5000 });
   await h.shot("new-runs");
   await closeNew();
@@ -105,7 +103,7 @@ exports.run = async (h) => {
   // two taps — «Для новых водостоков», its own rows; 3×4 there
   await openNew("ds");
   await tid("attr-ds-size").waitFor({ timeout: 5000 });
-  await choose("attr-ds-size", "3×4");
+  await choose("attr-ds-size", "3x4");
   await p.waitForFunction(() => /3×4/.test(document.querySelector('[data-testid="draw-new-defaults"]')?.textContent || ""), null, { timeout: 5000 });
   // the title: the phone's sheet has it in its header (with «✕»), wider the column has it on top
   const title = wide ? await tid("draw-new-defaults").innerText() : await tid("sheet-title").innerText();

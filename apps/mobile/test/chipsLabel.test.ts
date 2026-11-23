@@ -63,9 +63,9 @@ describe("ChoiceChips name their field (#1095)", () => {
     expect(/\blabel=""/.test(sample('<ChoiceChips label="" items={x} />'))).toBe(true);
   });
   it("the parser sees the chips (guards the guard)", () => {
-    // 80 → 75: the accuracy choice left the canvas and the card (#768, #1764); 75 → 70: spec 56 wave 4 (client) took 8 away; 70 → 67: wave 4б took 3; 67 → 61: wave 5а took 5 (job/new 2, task sheet 3); 61 → 58: wave 5б (the visit day and start);
+    // 80 → 75: the accuracy choice left the canvas and the card (#768, #1764); 75 → 70: spec 56 wave 4 (client) took 8 away; 70 → 67: wave 4б took 3; 67 → 61: wave 5а took 5 (job/new 2, task sheet 3); 61 → 58: wave 5б (the visit day and start); 58 → 54: Gutters windows G1 (#2412) took 4 (the attribute panel picks through SelectField);
     // the parser still sees every chip
-    expect(all).toBeGreaterThan(58);
+    expect(all).toBeGreaterThan(54);
     expect(all - legacy.length).toBeGreaterThanOrEqual(5);
   });
 });

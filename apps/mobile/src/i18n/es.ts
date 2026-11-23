@@ -3713,6 +3713,7 @@ export const es: Dict = {
   "mod.gutters.attr.unitPick": "Unidad: {u} — cambiar",
   "mod.gutters.attr.colorAsRun": "Igual que la canaleta ({c})",
   "mod.gutters.attr.offsetOwn": "Propio",
+  "mod.gutters.attr.offsetLen": "Largo",
   "mod.gutters.attr.quickTitle": "Largo de la canaleta",
   "mod.gutters.attr.quickDrawn": "Según el dibujo: {len}",
   // module M7b: company settings (spec 33 П22)
@@ -3756,8 +3757,8 @@ export const es: Dict = {
   "mod.gutters.set.paletteFull": "La paleta admite hasta {n} colores",
   // module M7c: rules, use, rare downspout fields, corners (spec 33 П22)
   "mod.gutters.attr.more": "Más: altura, desvíos, reducción, parte superior",
-  "mod.gutters.attr.moreRun": "Más: perfil, material, montaje, ganchos",
-  "mod.gutters.attr.moreDs": "Más: forma, material, salida, pared",
+  "mod.gutters.attr.moreRun": "Más",
+  "mod.gutters.attr.moreDs": "Más",
   "mod.gutters.attr.dsLength": "Longitud",
   "mod.gutters.attr.heightAuto": "Por piso",
   "mod.gutters.attr.offsets": "Desvío",
@@ -5650,7 +5651,8 @@ export const es: Dict = {
   "k1.refused": "No guardado: los cambios siguen en el teléfono",
   "k1.kept": "Los cambios siguen en el teléfono",
   "k1.copied": "Se creó una copia del presupuesto",
-  "k1.unsaved": "Hay cambios sin guardar",
+  "k1.unsaved": "Cambios desde que lo abrió",
+  "k1.unsavedHelp": "Todo lo que cambió ya está guardado en el teléfono. «Listo» acepta los cambios. «Descartar» devuelve el presupuesto a como estaba al abrirlo.",
   "k1.writeFailed": "Los cambios no se guardan en el teléfono: pulse «Listo»",
   "k1.keptLine": "Cambios no guardados: el presupuesto está firmado y se muestra tal cual",
   "k1.dropKeptText": "Los cambios del presupuesto firmado se borrarán del teléfono.",
