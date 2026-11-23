@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
-import { View, useWindowDimensions, type ViewStyle } from "react-native";
+import { Platform, View, useWindowDimensions, type ViewStyle } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -583,7 +583,14 @@ function Item({ k, index, dragKind, open, quiet, look, rule, children }: { k: st
   // a middle line of a group has square corners (else the wrapper's own `radius.inner` rounded every line into a card of its own)
   const lookCorners = rowCorners(look);
   // #2427: a folded line is clipped by the same corners — on a phone its swipe's square ground covered the card's left corners
-  const clip = rowClip(look, open);
+  // (the web has no swipe: nothing to clip, its focus ring stays whole); a held row is clipped as its outer view is rounded
+  const clip = Platform.OS === "web" ? undefined : rowClip(look, open);
+  // (always all four corners: an animated style that drops a key keeps its last value on a phone)
+  const clipStyle = useAnimatedStyle(() => {
+    if (!clip) return {};
+    const r = mine && held.value > 0.5 ? radius.inner : null;
+    return { borderTopLeftRadius: r ?? clip.borderTopLeftRadius, borderTopRightRadius: r ?? clip.borderTopRightRadius, borderBottomLeftRadius: r ?? clip.borderBottomLeftRadius, borderBottomRightRadius: r ?? clip.borderBottomRightRadius };
+  });
   const a = useAnimatedStyle(() => {
     const on = mine;
     return {
@@ -643,10 +650,10 @@ function Item({ k, index, dragKind, open, quiet, look, rule, children }: { k: st
   );
   return (
     <Animated.View ref={(n: unknown) => ctl.node(k, n as ComponentRef<typeof View> | null)} collapsable={false} onLayout={(e) => ctl.layout(k, e.nativeEvent.layout.y, e.nativeEvent.layout.height)} style={a}>
-      <View style={[{ flexDirection: "row", alignItems: "center" }, lookInner, clip]}>
+      <Animated.View style={[{ flexDirection: "row", alignItems: "center" }, lookInner, clip, clipStyle]}>
         {canDrag && !open ? <GestureDetector gesture={hold}>{body}</GestureDetector> : body}
         {handleEl}
-      </View>
+      </Animated.View>
       {rule !== null && !mine ? (
         <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
           <GroupHairline inset={rule} />

@@ -28,6 +28,9 @@ describe("a group line's corners (#2427)", () => {
     const c = rowClip(first, false);
     expect(c).toMatchObject({ overflow: "hidden", borderTopLeftRadius: radius.card, borderBottomLeftRadius: 0 });
   });
+  it("a section title (its look is only a top margin) is not clipped", () => {
+    expect(rowClip({ marginTop: 12 }, false)).toBeUndefined();
+  });
   it("an open line is not clipped (it has no swipe; its own content stays free)", () => {
     expect(rowClip(first, true)).toBeUndefined();
   });
@@ -35,7 +38,9 @@ describe("a group line's corners (#2427)", () => {
 
 describe("the sortable row draws the clip (#2427)", () => {
   const src = readFileSync(join(__dirname, "../src/features/SortableList.tsx"), "utf8");
-  it("the row's inner view (around the swipe) takes rowClip", () => {
-    expect(src).toMatch(/rowClip\(look, open\)/);
+  it("the row's inner view (around the swipe) takes rowClip — on a phone, and held: the carried row's corners", () => {
+    expect(src).toMatch(/const clip = Platform\.OS === "web" \? undefined : rowClip\(look, open\)/);
+    expect(src).toMatch(/<Animated\.View style=\{\[\{ flexDirection: "row", alignItems: "center" \}, lookInner, clip, clipStyle\]\}>/);
+    expect(src).toMatch(/const r = mine && held\.value > 0\.5 \? radius\.inner : null;/);
   });
 });

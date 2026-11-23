@@ -16,10 +16,12 @@ export function rowCorners(look: ViewStyle | undefined): RowCorners | undefined 
 /**
  * #2427: the clip of a FOLDED row of a group — on a phone the row lies in its swipe (estimate/SwipeRow), whose opaque square ground
  * and buttons would cover the card's corners (the left ones: the «≡» column stands outside the swipe). The open row has no swipe and
- * is not clipped (its own content stays free).
+ * is not clipped (its own content stays free). The caller clips only where the swipe is (not the web); a held row takes the carried
+ * row's corners instead (SortableList `Item`), as its outer view does.
  */
 export function rowClip(look: ViewStyle | undefined, open: boolean): ViewStyle | undefined {
-  const c = rowCorners(look);
+  // only a line of a group (it has the card's ground): a section title's look is its top margin — not clipped
+  const c = look?.backgroundColor ? rowCorners(look) : undefined;
   if (!c || open) return undefined;
   return { ...c, overflow: "hidden" };
 }
