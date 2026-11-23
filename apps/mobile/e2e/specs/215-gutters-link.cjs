@@ -39,7 +39,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
+  await tid("module-gutters-status").filter({ hasText: /^Без срока/ }).waitFor({ timeout: 5000 });
   const d0 = await db();
   const lead = d0.leads.find((l) => !["won", "lost", "declined"].includes(l.status));
   const client = d0.customers.find((c) => d0.properties.filter((q) => q.customerId === c.id).length === 1);

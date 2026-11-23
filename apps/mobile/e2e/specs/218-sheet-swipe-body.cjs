@@ -137,7 +137,7 @@ exports.run = async (h) => {
   const tid = (id) => p.getByTestId(id).locator("visible=true");
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  for (let i = 0; i < 40 && !/^Пробный/.test((await tid("module-gutters-status").innerText()).trim()); i++) await p.waitForTimeout(150);
+  for (let i = 0; i < 40 && !/^Без срока/.test((await tid("module-gutters-status").innerText()).trim()); i++) await p.waitForTimeout(150);
   await h.go("/module/gutters/draw");
   await tid("draw-surface").waitFor({ timeout: 8000 });
   const s = await p.getByTestId("draw-surface").boundingBox();

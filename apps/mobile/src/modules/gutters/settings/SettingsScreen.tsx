@@ -14,7 +14,7 @@ import { GUTTER_MOUNTS } from "@octo/estimating-engine";
 import { component, radius, size as sizes, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
-import { moduleHref, moduleState } from "@/modules/registry";
+import { moduleHref, moduleState, moduleUsable } from "@/modules/registry";
 import { ANCHORS, SPIKE_LENGTHS, WOOD_SCREWS } from "@octo/estimating-engine";
 import { Banner } from "@/ui/banner";
 import { Button, ChoiceChips, IconButton, ReadOnly, StatusChip, Stepper, TextField, Toggle, useReadOnly } from "@/ui/controls";
@@ -152,7 +152,7 @@ export default function GutterSettingsScreen() {
   const use = useMemo(() => readUse(raw), [raw]);
   const [newColor, setNewColor] = useState("");
   const access = moduleState(cm).access;
-  const active = access === "trial" || access === "paid";
+  const active = moduleUsable(access);
   const director = store.role === "director";
   const ro = !director || !active;
   const back = () => (router.canGoBack() ? router.back() : router.replace("/company/modules"));
