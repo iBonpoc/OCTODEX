@@ -3,7 +3,7 @@
  * by testID:
  * - «Кратко» by default: a folded row is its name and its sum, one line; «Подробно» adds «$10 × 3 ea» and the
  *   description; the choice survives a reload (the device keeps it);
- * - the open row: «˄ Свернуть» on the left, the trash; ONE row «Кол-во · Ед. · Цена»; «Вид» is a list; the sum and the
+ * - the open row: its head is the folded face (#2421), the trash on the right; ONE row «Кол-во · Ед. · Цена»; «Вид» is a list; the sum and the
  *   panel's total change while typing, before the field is left;
  * - «abc» in the quantity: an error, the row stays open, another row does not open;
  * - «Удалить» of a folded row (its menu; v2 has no trash on it) and the trash of the open one: the line goes at once, «Вернуть» brings it back;
@@ -32,9 +32,9 @@ exports.run = async (h) => {
   const box = async (id) => (await vis(`[data-testid="${id}"]`).first().boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 };
   const [q, u, pr] = [await box(`est-qty-${a}`), await box(`est-unit-${a}-button`), await box(`est-price-${a}`)];
   h.expect(Math.abs(q.y - u.y) < 4 && Math.abs(u.y - pr.y) < 4 && q.x < u.x && u.x < pr.x, `«Кол-во · Ед. · Цена» in one row (${[q, u, pr].map((b) => `${Math.round(b.x)},${Math.round(b.y)}`).join(" / ")})`);
-  // «˄ Свернуть» on the left of the trash
+  // the head (the folded face, #2421) on the left of the trash
   const [col, tr] = [await box(`est-collapse-${a}`), await box(`est-trash-${a}`)];
-  h.expect(col.x < tr.x, "«Свернуть» on the left, the trash on the right");
+  h.expect(col.x < tr.x, "the head on the left, the trash on the right");
   // «Вид» is a list
   await tid(`est-kind-${a}-button`).click();
   await tid(`est-kind-${a}-material`).click();
