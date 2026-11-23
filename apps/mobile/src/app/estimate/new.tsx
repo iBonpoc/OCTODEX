@@ -1080,7 +1080,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     const parent = x.parentId ? layoutOpt.sections?.find((y) => y.id === x.parentId) : undefined;
     return { key: x.id, label: parent ? `${secTitle(parent)} > ${secTitle(x)}` : secTitle(x) };
   }), { key: "__none__", label: t("est.sec.loose") }];
-  const sectionField = sectionItems.length > 1 ? { items: sectionItems, valueOf: (id: string) => layoutOpt.lines.find((x) => x.id === id)?.sectionId ?? "__none__", onChange: (id: string, k: string) => doMove(id, k) } : null;
+  // #2403 (CRM review 7): no «Раздел» while the lines stand in the auto groups by kind — it would repeat «Вид»
+  const sectionField = sectionItems.length > 1 && !grouped ? { items: sectionItems, valueOf: (id: string) => layoutOpt.lines.find((x) => x.id === id)?.sectionId ?? "__none__", onChange: (id: string, k: string) => doMove(id, k) } : null;
 
   return (
     <Screen onScrollY={(y, max) => setFold((f) => { if (lifted) return f; /* a row is carried: the bar under the finger never changes */ const n = foldStep(f, y, undefined, max); return n.folded === f.folded && n.anchor === f.anchor ? f : n; })} onScrollBegin={() => {
@@ -1109,7 +1110,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           {/* #2403 С1–С3: the one place to send — the empty estimate too (a press says what is missing); a sent one says what it sends */}
           {canSend && !signed ? (
             <View testID="est-send-top">
-              <IconButton icon="send" label={existing && existing.status !== "draft" ? (dirty || changedAfterSend ? t("r1.est.sendChanges") : t("est.view.sendAgain")) : t("proto.est.saveSend")} onPress={() => void save(true)} />
+              <IconButton icon="send" dim={option.lines.length === 0} label={existing && existing.status !== "draft" ? (dirty || changedAfterSend ? t("r1.est.sendChanges") : t("est.view.sendAgain")) : t("proto.est.saveSend")} onPress={() => void save(true)} />
             </View>
           ) : null}
           <MoreButton items={moreList} onMore={onMore} a11y={t("est.actions")} testID="est-menu" />

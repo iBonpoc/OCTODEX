@@ -116,6 +116,7 @@ export function IconButton({
   tone,
   bare,
   size,
+  dim,
   testID,
 }: {
   icon: IconKey;
@@ -128,6 +129,8 @@ export function IconButton({
   bare?: boolean;
   /** visual v2 «Круглые кнопки»: `card` — 32 inside a card (the timer's «⌃», a row's call); default 40 (the zone is 44 either way) */
   size?: "card";
+  /** pale (`dimOpacity`) but pressable: the press says what is missing (an empty estimate's «Отправить», #2403) */
+  dim?: boolean;
   testID?: string;
 }) {
   const { c } = useTheme();
@@ -162,6 +165,7 @@ export function IconButton({
         borderRadius: radius.pill,
         alignItems: "center",
         justifyContent: "center",
+        opacity: dim ? component.dimOpacity : 1,
         // v2: a round button is a cell on its card, no frame
         backgroundColor: filled ? c.acc : c.surf2,
         borderWidth: 0,

@@ -13,6 +13,9 @@ import { Linking, View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
+import { canManageLink } from "@/features/estimateSign";
+import { useDevice } from "@/theme/ThemeProvider";
+import { Press } from "@/ui/primitives";
 import { findJob } from "@/data/jobs";
 import { peopleOf } from "@/data/people";
 import { visitPropertyId } from "@/data/selectors";
@@ -601,7 +604,14 @@ function EstimateListRow({ e }: { e: Estimate }) {
   const toast = useToast();
   const ref = useRef<ComponentRef<typeof View>>(null);
   const [at, setAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  const items = estimateMenu(e, t as never, { open: true });
+  const store = useStore();
+  const manage = canManageLink(store.db, store.db.me);
+  const { wide } = useDevice();
+  const items = estimateMenu(e, t as never, { role: store.role, manage, me: store.db.me, templatesMissing: !!store.db.estimateTemplatesMissing });
+  // the one swipe by status (spec 38 §4.1): a draft that never left — delete; one that left — withdraw; declined — archive; a tech — none
+  const everSent = !!e.token || !!e.sentAt;
+  const mockSwipe = (key: string, label: string, icon: "trash" | "close" | "box", tone?: "bad") => ({ right: [{ key, label, icon, ...(tone ? { tone } : null), onPress: () => toast.show(t("m2403.mockToast")) }] });
+  const swipe = store.role === "tech" ? undefined : e.status === "draft" && !everSent ? mockSwipe("del", t("m2403.deleteEst"), "trash", "bad") : everSent && (e.status === "sent" || e.status === "draft") && !e.linkRevokedAt && manage ? mockSwipe("rev", t("m2403.revokeEst"), "close", "bad") : e.status === "declined" ? mockSwipe("arc", t("m2403.archive"), "box") : undefined;
   return (
     <View ref={ref} collapsable={false}>
       <GroupRow
@@ -611,11 +621,13 @@ function EstimateListRow({ e }: { e: Estimate }) {
         subtitle={[e.title ? e.number : null, e.sentAt ? day(e.sentAt) : null].filter(Boolean).join(" · ") || undefined}
         value={money(e.totalCents)}
         status={{ status: estView[e.status].s, label: t(estView[e.status].l) }}
-        actions={[{ icon: "more", a11y: t("est.actions"), onPress: () => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAt({ x: x + w - space[8], y, w: 0, h })), testID: `client-estimate-more-${e.id}` }]}
-        swipe={{ right: e.status === "draft" ? [{ key: "del", label: t("m2403.deleteEst"), icon: "trash", tone: "bad", onPress: () => toast.show(t("m2403.mockToast")) }] : e.status === "sent" ? [{ key: "rev", label: t("m2403.revokeEst"), icon: "close", tone: "bad", onPress: () => toast.show(t("m2403.mockToast")) }] : e.status === "declined" ? [{ key: "arc", label: t("m2403.archive"), icon: "box", onPress: () => toast.show(t("m2403.mockToast")) }] : undefined }}
+        actions={wide ? [{ icon: "more", a11y: t("est.actions"), onPress: () => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAt({ x: x + w - space[8], y, w: 0, h })), testID: `client-estimate-more-${e.id}` }] : undefined}
+        swipe={swipe}
         onPress={() => router.push(`/estimate/${e.id}`)}
       />
-      <Menu visible={!!at} anchor={at} items={items} onSelect={(k) => { setAt(null); if (k === "open") router.push(`/estimate/${e.id}`); else toast.show(t("m2403.mockToast")); }} onClose={() => setAt(null)} />
+      {/* mock only (a hold cannot be made in a shot): a 4-px stand-in for the long press on a phone, outside the row's picture */}
+      {!wide ? <Press testID={`client-estimate-hold-${e.id}`} onPress={() => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAt({ x: x + w - space[8], y, w: 0, h }))} accessibilityLabel={t("est.actions")} style={{ position: "absolute", right: 0, top: 0, width: 4, height: 4, opacity: 0 }}>{null}</Press> : null}
+      <Menu visible={!!at} anchor={at} items={items} onSelect={(k) => { setAt(null); if (k !== "signedNote") toast.show(t("m2403.mockToast")); }} onClose={() => setAt(null)} />
     </View>
   );
 }

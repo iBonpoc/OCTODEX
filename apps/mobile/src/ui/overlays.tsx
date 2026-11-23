@@ -66,6 +66,8 @@ export interface MenuItem<K extends string> {
   group?: boolean;
   /** a second line under the label (13 `mut`): what the action leaves alone («Позиции останутся в смете») */
   hint?: string;
+  /** a quiet line, not an action (`mut` text, not a faded one): «Подписанную смету не удаляют, только хранят» */
+  muted?: boolean;
   testID?: string;
 }
 export function Menu<K extends string>({
@@ -215,7 +217,7 @@ export function Menu<K extends string>({
               {/* the check's column only in a menu that has a checked-or-not item (iOS: no empty gutter in a plain menu, #2403) */}
               {checkable ? <View style={{ width: size.iconMd }}>{it.selected ? <Icon name="check" color={c.ink} /> : null}</View> : null}
               <View style={{ flex: 1 }}>
-                <T v="body" tone={it.destructive ? "bad" : "ink"}>
+                <T v="body" tone={it.destructive ? "bad" : it.muted ? "mut" : "ink"}>
                   {it.label}
                 </T>
                 {it.hint ? (

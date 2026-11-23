@@ -8,7 +8,7 @@ import { router } from "expo-router";
 import { haptics } from "@/ui/haptics";
 import { space, type StatusName, size } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import type { DB, Estimate, PaymentMethod } from "@/data/types";
+import type { DB, Estimate, PaymentMethod, Role } from "@/data/types";
 import { I18nOverride, useI18n, type DictKey } from "@/i18n";
 import { portalFromEstimate } from "@/cloud/portal";
 import { EstimateView } from "@/features/EstimateView";
@@ -59,24 +59,35 @@ export function estimateSubtitle(db: DB, e: Estimate): string {
 export type EstimateFrame = (parts: { more: ReactNode; main: ReactNode | null; mainBar: ReactNode | null; body: ReactNode }) => ReactElement;
 
 type EstAction = "edit" | "client" | "template" | "pdf" | "revoke";
-export type EstMock = "open" | "rename" | "duplicate" | "copyOther" | "client" | "template" | "closeLink" | "delete" | "revokeEst" | "archive" | "signedNote";
+export type EstMock = "rename" | "duplicate" | "client" | "template" | "closeLink" | "delete" | "revokeEst" | "archive" | "signedNote";
 
-/** #2403 map §2: the estimate's «⋯» in three groups — what is done with the document, how it shows, then one dangerous by status (a signed one: a pale line). The same list is the row's long-press / swipe menu in a list (mock: the actions not built yet say so in a toast) */
-export function estimateMenu(e: Estimate, t: (k: DictKey) => string, o: { open?: boolean } = {}): MenuItem<EstMock>[] {
-  const sent = e.status === "sent" || e.status === "awaiting_countersign";
-  return [
-    ...(o.open ? [{ key: "open" as const, label: t("m2403.open"), icon: "doc" as const, testID: "est-m-open" }] : []),
-    { key: "rename", label: t("m2403.rename"), icon: "pencil", group: !!o.open, testID: "est-m-rename" },
+/** who opens the menu: the role (a tech sees only «Дублировать» and his own draft's delete), the link/withdraw right (director, dispatcher) and his id */
+export interface EstMenuWho { role: Role; manage: boolean; me?: string; templatesMissing?: boolean }
+/** #2403 map §2: the estimate's «⋯» in groups — what is done with the document, how it shows, then the dangerous one by what happened to it (a signed one: a quiet line).
+ *  The same list is the row's long-press / swipe menu in a list (mock: the actions not built yet say so in a toast). The roles are the old code's:
+ *  canSeeClientLink, canEditEstimateTemplates, canManageLink; «delete» — only an estimate that never left (no link, not sent), else «withdraw». */
+export function estimateMenu(e: Estimate, t: (k: DictKey) => string, who: EstMenuWho): MenuItem<EstMock>[] {
+  const tech = who.role === "tech";
+  const office = canSeeClientLink(who.role);
+  const everSent = !!e.token || !!e.sentAt;
+  const open = e.status === "draft" || e.status === "sent";
+  const mine = !!who.me && e.createdBy === who.me;
+  const g1: MenuItem<EstMock>[] = [
+    ...(!tech && e.status !== "approved" ? [{ key: "rename" as const, label: t("m2403.rename"), icon: "pencil" as const, testID: "est-m-rename" }] : []),
     { key: "duplicate", label: t("m2403.duplicate"), icon: "copy", testID: "est-m-duplicate" },
-    { key: "copyOther", label: t("m2403.copyOther"), icon: "user", testID: "est-m-copyOther" },
-    { key: "client", label: t("ue.openClient"), icon: "eye", group: true, testID: "est-m-client" },
-    { key: "template", label: t("est.view.saveTemplate"), icon: "template", testID: "est-m-template" },
-    ...(e.token && sent ? [{ key: "closeLink" as const, label: t("m2403.closeLink"), icon: "link" as const, testID: "est-m-closeLink" }] : []),
-    ...(e.status === "draft" ? [{ key: "delete" as const, label: t("m2403.deleteEst"), icon: "trash" as const, destructive: true, testID: "est-m-delete" }] : []),
-    ...(sent ? [{ key: "revokeEst" as const, label: t("m2403.revokeEst"), icon: "close" as const, destructive: true, testID: "est-m-revoke" }] : []),
-    ...(e.status === "declined" ? [{ key: "archive" as const, label: t("m2403.archive"), icon: "box" as const, destructive: true, testID: "est-m-archive" }] : []),
-    ...(e.status === "approved" ? [{ key: "signedNote" as const, label: t("m2403.signedNote"), icon: "check" as const, dim: true, group: true, testID: "est-m-signed" }] : []),
   ];
+  const g2: MenuItem<EstMock>[] = [
+    ...(e.token && office ? [{ key: "client" as const, label: t("ue.openClient"), icon: "eye" as const, testID: "est-m-client" }] : []),
+    ...(e.doc && canEditEstimateTemplates(who.role) && !who.templatesMissing ? [{ key: "template" as const, label: t("m2403.toTemplate"), icon: "template" as const, testID: "est-m-template" }] : []),
+    ...(e.token && !e.linkRevokedAt && open && who.manage ? [{ key: "closeLink" as const, label: t("m2403.closeLink"), icon: "link" as const, testID: "est-m-closeLink" }] : []),
+  ];
+  const g3: MenuItem<EstMock>[] = [
+    ...(e.status === "draft" && !everSent && (!tech || mine) ? [{ key: "delete" as const, label: t("m2403.deleteEst"), icon: "trash" as const, destructive: true, testID: "est-m-delete" }] : []),
+    ...(everSent && open && !e.linkRevokedAt && who.manage ? [{ key: "revokeEst" as const, label: t("m2403.revokeEst"), icon: "close" as const, destructive: true, testID: "est-m-revoke" }] : []),
+    ...(!tech && (e.status === "declined" || (!!e.linkRevokedAt && e.status !== "approved")) ? [{ key: "archive" as const, label: t("m2403.archive"), icon: "box" as const, testID: "est-m-archive" }] : []),
+    ...(!tech && e.status === "approved" ? [{ key: "signedNote" as const, label: t("m2403.signedNote"), muted: true, testID: "est-m-signed" }] : []),
+  ];
+  return [g1, g2, g3].filter((x) => x.length).flatMap((x, i) => x.map((it, j) => (i > 0 && j === 0 ? { ...it, group: true } : it)));
 }
 
 /**
@@ -304,7 +315,7 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
         visible={!!moreAt}
         anchor={moreAt}
         title={t("est.actions")}
-        items={estimateMenu(e, t as never)}
+        items={estimateMenu(e, t as never, { role: store.role, manage: canManageLink(db, db.me), me: db.me, templatesMissing: !!store.db.estimateTemplatesMissing })}
         onSelect={(k) => {
           setMoreAt(null);
           if (k === "client" || k === "template") act(k);
@@ -390,7 +401,8 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
             ? { label: t("sch.title"), onPress: () => router.push(`/job/schedule?jobId=${job!.id}`), reason: t("ue.toSchedule"), testID: "est-schedule-main" }
             : undefined;
   // a second step goes into «⋯» on an object: «Подписать здесь» — the client is beside you
-  const second: MainAction | undefined = signHere && !onSign && canCountersign(db, db.me) ? { label: t("proto.est.second.signHere"), onPress: () => setSection("sign"), testID: "est-sign-here" } : undefined;
+  // #2403 (CRM review 4): not in «⋯» — the tab «Подпись на месте» is the one place for it
+  const second: MainAction | undefined = undefined;
 
   const who = customer?.name ?? "";
   const of = (what: string) => (who ? t("proto.money.actOf", { what, who }) : what);
@@ -412,7 +424,7 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
     ...(canEdit ? [{ icon: "pencil" as const, label: t("ue.edit"), a11y: of(t("ue.edit")), onPress: () => act("edit"), testID: "est-act-edit" }] : []),
   ].slice(0, 5);
   const moreList: MoreAction = [
-    ...estimateMenu(e, t as never),
+    ...estimateMenu(e, t as never, { role: store.role, manage, me: db.me, templatesMissing: !!store.db.estimateTemplatesMissing }),
     ...(countersign && manage ? [{ key: "reopen", label: t("est.reopen.button"), icon: "pencil" as const, testID: "est-act-reopen" }, { key: "decline", label: t("est.decline.button"), icon: "close" as const, testID: "est-act-decline" }] : []),
   ];
   const onMore = (k: string) => {

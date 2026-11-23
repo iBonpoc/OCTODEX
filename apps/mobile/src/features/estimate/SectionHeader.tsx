@@ -72,7 +72,7 @@ function SectionHeaderView(p: SectionHeaderProps) {
     { key: "rename", label: t("est.sec.rename"), icon: "pencil", testID: `est-sec-act-rename-${s.id}` },
     ...(!isModule && p.depth === 0 ? [{ key: "addSub" as const, label: t("est.sec.addSub"), icon: "sections" as const, testID: `est-sec-act-addSub-${s.id}` }] : []),
     // «Удалить раздел» — red, the last, with the line that the lines stay (mock #2403)
-    { key: "delete", label: t("m2403.secDelete"), hint: t("m2403.secKeep"), icon: "trash", destructive: true, group: true, testID: `est-sec-act-delete-${s.id}` },
+    { key: "delete", label: t("m2403.secDelete"), hint: t("m2403.secKeep"), icon: "minusCircle", group: true, testID: `est-sec-act-delete-${s.id}` },
   ];
   const commit = () => p.api.rename(s.id, draft);
   return (
