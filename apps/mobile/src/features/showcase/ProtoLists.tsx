@@ -15,6 +15,8 @@ import { FilterBar, useFilterHeader } from "@/ui/filterBar";
 import { HeaderIcons } from "@/ui/templates/parts";
 import { RowView } from "@/ui/surfaces";
 import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
+import { ModeRow } from "@/ui/modeRow";
+import { MoneyField, PctField } from "@/features/fields";
 import { NowCard } from "@/ui/nowCard";
 import { StatGrid, StatTile } from "@/ui/statTile";
 import { StatusPill } from "@/ui/statusPill";
@@ -36,6 +38,8 @@ export function ProtoLists() {
   const [chip, setChip] = useState("all");
   const [tile, setTile] = useState("overdue");
   const [taskDone, setTaskDone] = useState(false);
+  const [disc, setDisc] = useState<"pct" | "off" | "fixed">("pct");
+  const modes = [{ key: "pct" as const, label: "%" }, { key: "off" as const, label: t("ue.off") }, { key: "fixed" as const, label: "$" }];
   const loads = useMemo(() => new Map<DayKey, DayLoad>([[todayKey(), { n: 3, unassigned: 1 } as DayLoad], [addDays(todayKey(), 2), { n: 1, unassigned: 0 } as DayLoad]]), []);
   const said = (label: string) => () => toast.show(label, NO_UNDO);
   // FilterBar «значки в шапке»: the magnifier and «Фильтры» (with the number on) are icons of the header row
@@ -128,6 +132,11 @@ export function ProtoLists() {
         <ListGroup title={t("ds.proto.rowLeads")} inset={component.listRow.timeW + space[4] + space[3]}>
           <GroupRow title={DEMO[0]!.name} subtitle={DEMO[0]!.line} lead={{ time: "8:30", sub: "AM" }} onPress={said(DEMO[0]!.name)} testID="showcase-row-time" />
           <GroupRow title={t("ds.proto.taskCall")} subtitle={DEMO[1]!.name} lead={{ done: taskDone, onToggle: setTaskDone, label: t("ds.proto.taskCall"), testID: "showcase-row-done-circle" }} onPress={said(t("ds.proto.taskCall"))} testID="showcase-row-done" />
+        </ListGroup>
+        {/* DS §8.7а: a totals row in one line — the word · [% · Выкл. · $] · the value · the sum (the estimate's Скидка / Налог / Депозит) */}
+        <ListGroup title={t("ds.proto.modeRows")}>
+          <ModeRow title={t("ue.discount")} modes={modes} mode={disc} off="off" onMode={setDisc} sum={disc === "off" ? "—" : disc === "pct" ? "−$37.89" : "−$50.00"} field={disc === "pct" ? <PctField bps={500} onChange={() => {}} /> : <MoneyField cents={5000} onChange={() => {}} />} testID="showcase-mode-row" />
+          <ModeRow title={t("ue.deposit")} modes={modes} mode="pct" off="off" onMode={() => {}} sum="$77.24" field={<PctField bps={1000} onChange={() => {}} />} locked testID="showcase-mode-row-locked" />
         </ListGroup>
       </GroupedList>
     </View>

@@ -194,6 +194,8 @@ export const component = {
   chip: { h: 24, px: 10 },
   /** visual v2: the segment 36 high, radius 18 (a pill), the track 3 inside; the chosen one is a 15-radius pill (`h / 2 − pad`), text 13/600 */
   segmented: { h: 36, pad: 3 },
+  /** DS §8.7а (founder 23.11, MAP §12 п.8): a totals row «Скидка / Налог / Депозит» — the value field right in the row, `fieldW` wide */
+  modeRow: { fieldW: 96 },
   /** a tab of a screen (pill); `fadeW` — the row of view tabs fades this wide at an edge that has more tabs past it (DS §9 А1п, #1343) */
   tab: { h: 30, fadeW: 32 },
   /** DS §9 А5 (spec 56 §3.3, wave 1а): the knob 18 (was 16), pad 2 inside the 1-px edge */

@@ -3125,6 +3125,7 @@ export const en: Dict = {
   "ds.tpl.freeDay": "The day is free",
   "ds.tpl.viewBody": "Week, Month or the board by person — the view body instead of the day rows",
   "ds.tpl.undated": "No date · {n}",
+  "ds.proto.modeRows": "Totals row: % · Off · $",
   "ds.rows.drag": "List dragging",
   "ds.rows.dragHint": "Press — the phone answers as when an estimate row is moved.",
   "ds.rows.dragLight": "A row is lifted",

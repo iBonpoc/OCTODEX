@@ -3125,6 +3125,7 @@ export const es: Dict = {
   "ds.tpl.freeDay": "El día está libre",
   "ds.tpl.viewBody": "Semana, Mes o el tablero por persona — el cuerpo de la vista en lugar de las filas del día",
   "ds.tpl.undated": "Sin fecha · {n}",
+  "ds.proto.modeRows": "Fila de totales: % · No · $",
   "ds.rows.drag": "Arrastrar una lista",
   "ds.rows.dragHint": "Pulsa — el teléfono responde como al mover una fila del presupuesto.",
   "ds.rows.dragLight": "Se levanta una fila",
