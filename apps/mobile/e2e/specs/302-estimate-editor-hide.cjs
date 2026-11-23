@@ -41,7 +41,13 @@ exports.run = async (h) => {
   await line.fold(h);
   await tid(`est-hidden-${id}`).waitFor({ timeout: 3000 });
   h.expect(/Скрыто от клиента/.test(await tid(`est-hidden-${id}`).innerText()), "the folded row carries «Скрыто от клиента»");
-  h.expect((await tid(`est-hidden-frame-${id}`).evaluate((e) => getComputedStyle(e).borderTopStyle)) === "dashed", "the hidden row is framed by dashes (no hatch)");
+  h.expect((await tid(`sort-frame-l:${id}`).evaluate((e) => getComputedStyle(e).borderTopStyle)) === "dashed", "the hidden row is framed by dashes (no hatch)");
+  {
+    // around the WHOLE line — its «≡» inside the frame (design review)
+    const [fr, hd] = [await tid(`sort-frame-l:${id}`).boundingBox(), await tid(`sort-handle-l:${id}`).boundingBox()];
+    const mid = hd.x + hd.width / 2; // the «≡» glyph stands in the middle of its 44 zone
+    h.expect(mid > fr.x && mid < fr.x + fr.width, "the frame goes around the line's «≡» too");
+  }
 
   // a price typed into the hidden row shows it again
   await tid(`est-line-${id}`).click();

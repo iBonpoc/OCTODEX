@@ -7,6 +7,7 @@ import { component, gesture, motion, radius, size, space, z } from "@octo/design
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { haptics } from "@/ui/haptics";
+import { DashedFrame } from "@/ui/dashedFrame";
 import { GroupHairline } from "@/ui/groupedList";
 import { Icon } from "@/ui/primitives";
 import { useScreenScroll } from "@/ui/requiredForm";
@@ -96,9 +97,11 @@ export interface SortableListProps {
   rowLook?: (row: ViewRow, index: number) => ViewStyle | undefined;
   /** #2387: an inset hairline over the row (its left inset; `null` — none): the rule of a group's rows runs to the card's right edge, past the «≡» */
   rowRule?: (row: ViewRow, index: number) => number | null;
+  /** #2424: the row is framed by dashes (a hidden estimate line) — drawn by the row WITH its handle, so the frame is around the whole line */
+  rowFrame?: (row: ViewRow) => boolean;
 }
 
-export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, beforeBegin, renderRow, quietLines, onHoldStill, rowLook, rowRule }: SortableListProps) {
+export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, beforeBegin, renderRow, quietLines, onHoldStill, rowLook, rowRule, rowFrame }: SortableListProps) {
   const { c } = useTheme();
   const reduce = useReducedMotion();
   const lock = useScrollLock();
@@ -495,7 +498,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
     <SortCtx.Provider value={ctl}>
       <View ref={boxRef} collapsable={false} onLayout={(e) => (box.current.h = e.nativeEvent.layout.height)} style={{ position: "relative" }}>
         {rows.map((r, i) => (
-          <Item key={rowKey(r)} k={rowKey(r)} index={i} dragKind={dragKind(r) ? "x" : null} open={openKey === rowKey(r)} quiet={!!quietLines} look={rowLook?.(r, i)} rule={rowRule?.(r, i) ?? null}>
+          <Item key={rowKey(r)} k={rowKey(r)} index={i} dragKind={dragKind(r) ? "x" : null} open={openKey === rowKey(r)} quiet={!!quietLines} look={rowLook?.(r, i)} rule={rowRule?.(r, i) ?? null} framed={!!rowFrame?.(r)}>
             {renderRow(r, i)}
           </Item>
         ))}
@@ -506,7 +509,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
   );
 }
 
-function Item({ k, index, dragKind, open, quiet, look, rule, children }: { k: string; index: number; dragKind: "x" | null; open: boolean; quiet: boolean; look?: ViewStyle; rule: number | null; children: ReactNode }) {
+function Item({ k, index, dragKind, open, quiet, look, rule, framed, children }: { k: string; index: number; dragKind: "x" | null; open: boolean; quiet: boolean; look?: ViewStyle; rule: number | null; framed?: boolean; children: ReactNode }) {
   const ctl = useContext(SortCtx)!;
   const { c } = useTheme();
   const { t } = useI18n();
@@ -657,6 +660,8 @@ function Item({ k, index, dragKind, open, quiet, look, rule, children }: { k: st
           <GroupHairline inset={rule} />
         </View>
       ) : null}
+      {/* #2424: a hidden line's dashed frame around the WHOLE line, its «≡» too (not while it is carried: the «acc» frame is its frame) */}
+      {framed && !mine ? <DashedFrame testID={`sort-frame-${k}`} /> : null}
       {mine ? <Animated.View pointerEvents="none" style={[{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: radius.inner, borderWidth: component.selectedBorder, borderColor: c.acc }, frameStyle]} /> : null}
       {flashing ? <Animated.View pointerEvents="none" testID={`sort-flash-${k}`} style={[{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: radius.inner, borderWidth: component.selectedBorder, borderColor: c.acc }, flashStyle]} /> : null}
     </Animated.View>

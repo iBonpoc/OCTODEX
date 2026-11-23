@@ -32,7 +32,9 @@ exports.run = async (h) => {
   await tid(`est-line-${id}`).click();
   await line.menu(h, id);
   await tid(`est-act-hide-${id}`).click();
-  await tid(`est-hidden-frame-${id}`).waitFor({ timeout: 3000 });
+  await tid(`sort-frame-l:${id}`).waitFor({ timeout: 3000 });
+  h.expect((await p.getByTestId(`est-hide-${id}`).count()) === 0, "the open hidden line has no switch «Скрыть от клиента» (#2424)");
+  await h.shot("open-hidden");
   h.expect(/ваш расход \$280/.test(await tid(`est-figures-${id}`).innerText()), "the open hidden row: «Сумма $0 · ваш расход $280»");
   await line.fold(h);
   await tid(`est-hidden-${id}`).waitFor({ timeout: 3000 });

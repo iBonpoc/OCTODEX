@@ -38,7 +38,7 @@ exports.run = async (h) => {
   // #2424: hidden by «⋯ → Скрыть от клиента» (no switch in «Ещё»)
   await line.menu(h, b);
   await tid(`est-act-hide-${b}`).click();
-  await tid(`est-hidden-frame-${b}`).waitFor({ timeout: 3000 });
+  await tid(`sort-frame-l:${b}`).waitFor({ timeout: 3000 });
   await line.fold(h);
   await tid(`est-spend-${b}`).waitFor({ timeout: 3000 });
   // «Только для вас» (cost, profit) under the totals (#1362, DS §8.9)

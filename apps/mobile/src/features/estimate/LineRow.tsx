@@ -93,6 +93,8 @@ export interface LineRowProps {
   /** visual v2 №5: the screen asks the folded row to open its menu (a finger's hold let go in place, SortableList onHoldStill);
    *  each new number opens it once */
   menuAsk?: number;
+  /** #2424: `false` — the list draws the hidden line's dashed frame around the whole row with its «≡» (`SortableList rowFrame`) */
+  frame?: boolean;
 }
 
 export const rowFieldId = (lineId: string, f: "name" | "qty" | "price" | "cost") => `est-${f}-${lineId}`;
@@ -280,7 +282,7 @@ function LineRowView(p: LineRowProps) {
     // finger), a long press (a mouse) and the screen reader's actions; the open line has the same face on top (#2421)
     const row = (
       <View ref={rowRef} collapsable={false}>
-        {hidden ? <DashedFrame testID={`est-hidden-frame-${l.id}`} /> : null}
+        {hidden && p.frame !== false ? <DashedFrame testID={`est-hidden-frame-${l.id}`} /> : null}
         {/* founder 21.11 («5 открытых»: корзина в свёрнутой строке — оставить, всегда; DS §8.3 О8, #2374): the trash stands on the folded
             line too, a quiet icon in the column of the group's «⋯»; the delete gives the «Вернуть» toast (rule 5) */}
         <RowView gap={0}>
@@ -313,7 +315,7 @@ function LineRowView(p: LineRowProps) {
     // its «≡», not by a hold) and the screen reader's actions. The fields come out under it by height (`openClip`)
     <View testID={`est-line-${l.id}`} accessibilityState={{ expanded: true }} onTouchStart={p.onTouchOpen}>
       <View ref={rowRef} collapsable={false} onLayout={(e) => setHeadH?.(e.nativeEvent.layout.height)}>
-        {isHidden(l) ? <DashedFrame testID={`est-hidden-frame-${l.id}`} /> : null}
+        {isHidden(l) && p.frame !== false ? <DashedFrame testID={`est-hidden-frame-${l.id}`} /> : null}
         <RowView gap={0}>
           <View testID={`est-collapse-${l.id}`} style={{ flex: 1 }}>
             <Press onPress={p.api.close} onLongPress={items.length ? () => openMenuAt(rowRef) : undefined} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={l.name || t("est.row.unnamed")} accessibilityHint={t("est.row.collapse")} accessibilityState={{ expanded: true }} accessibilityActions={a11yActs} onAccessibilityAction={onA11yAct} containerStyle={{ flex: 1 }}>
