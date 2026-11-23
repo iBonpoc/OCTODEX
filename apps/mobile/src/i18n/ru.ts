@@ -5622,7 +5622,7 @@ export const ru = {
   "r1.itemsN.many": "{n} пунктов",
   "r1.itemsN.other": "{n} пункта",
   "r1.tab.leadsWaiting": "{n} без ответа",
-  "r1.est.emptyHint": "Добавьте первую — новой строкой или из каталога",
+  "r1.est.emptyHint": "Добавьте первую — новой позицией, из каталога или шаблона; разделы — по желанию",
   "r1.est.changedAfterSend": "изменена после отправки",
   "r1.est.sendChanges": "Отправить изменения",
   "px3.est.addFrom": "Ещё способы добавить",

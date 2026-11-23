@@ -1232,7 +1232,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           {/* #2363 (founder 21.11: «разделители групп некрасиво, непонятно»; both design reviews): with groups each group is a card of
               its own — the rows draw the card (the ground, the first/last corners), the group's title stands OVER it with its sum; one
               list still, so a line drags from group to group */}
-          <ListFrame empty={option.lines.length === 0} missing={missing === "lines"}>
+          {/* (code review: a section added to an empty estimate must show — the list is there once it has a section, lines or not) */}
+          <ListFrame empty={option.lines.length === 0 && !(option.sections ?? []).length} missing={missing === "lines"}>
             <SortableList
               // #2387: the lines of a group are ONE card (ui/groupedList `useGroupEdge`), the inset hairline between them is the list's
               rowLook={(r, i) => groupLook(view, r, i, groupEdge)}

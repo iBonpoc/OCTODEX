@@ -5622,7 +5622,7 @@ export const en: Dict = {
   "r1.itemsN.many": "{n} items",
   "r1.itemsN.other": "{n} items",
   "r1.tab.leadsWaiting": "{n} awaiting reply",
-  "r1.est.emptyHint": "Add the first one — a new line or from the catalog",
+  "r1.est.emptyHint": "Add the first one — a new line, from the catalog or a template; sections if you like",
   "r1.est.changedAfterSend": "changed after sending",
   "r1.est.sendChanges": "Send the changes",
   "px3.est.addFrom": "More ways to add",
