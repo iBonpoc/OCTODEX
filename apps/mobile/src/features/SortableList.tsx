@@ -13,6 +13,7 @@ import { useScreenScroll } from "@/ui/requiredForm";
 import { useScrollLock } from "@/ui/surfaces";
 import { finePointer, sortHandleConfig, sortHoldConfig } from "@/ui/pointer";
 import { dragEnd, holdStill, showsHandle } from "./estimate/rowGesture";
+import { rowClip, rowCorners } from "./rowCorners";
 import { canBegin, crossesSection, dragKind, dragWrite, edgeStep, feelOf, heldGone, ownsDrag, placeWithMargin, resolveDrop, rowKey, shiftOf, withoutBlock, type Drop, type DropResult } from "./sortable";
 import type { ViewRow } from "./sectionLayout";
 
@@ -580,7 +581,9 @@ function Item({ k, index, dragKind, open, quiet, look, rule, children }: { k: st
   const { backgroundColor: lookBg, borderTopLeftRadius, borderTopRightRadius, borderBottomLeftRadius, borderBottomRightRadius, ...lookInner } = look ?? {};
   const lookGround = typeof lookBg === "string" ? lookBg : "transparent";
   // a middle line of a group has square corners (else the wrapper's own `radius.inner` rounded every line into a card of its own)
-  const lookCorners = look ? { borderTopLeftRadius: borderTopLeftRadius ?? 0, borderTopRightRadius: borderTopRightRadius ?? 0, borderBottomLeftRadius: borderBottomLeftRadius ?? 0, borderBottomRightRadius: borderBottomRightRadius ?? 0 } : undefined;
+  const lookCorners = rowCorners(look);
+  // #2427: a folded line is clipped by the same corners — on a phone its swipe's square ground covered the card's left corners
+  const clip = rowClip(look, open);
   const a = useAnimatedStyle(() => {
     const on = mine;
     return {
@@ -640,7 +643,7 @@ function Item({ k, index, dragKind, open, quiet, look, rule, children }: { k: st
   );
   return (
     <Animated.View ref={(n: unknown) => ctl.node(k, n as ComponentRef<typeof View> | null)} collapsable={false} onLayout={(e) => ctl.layout(k, e.nativeEvent.layout.y, e.nativeEvent.layout.height)} style={a}>
-      <View style={[{ flexDirection: "row", alignItems: "center" }, lookInner]}>
+      <View style={[{ flexDirection: "row", alignItems: "center" }, lookInner, clip]}>
         {canDrag && !open ? <GestureDetector gesture={hold}>{body}</GestureDetector> : body}
         {handleEl}
       </View>
