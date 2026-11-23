@@ -298,6 +298,10 @@ export const component = {
   menuW: 240,
   /** a menu shows at most this many rows (the last one half — it scrolls); a longer list is a PickerSheet (DS А2, #1164) */
   menuMaxRows: 6.5,
+  /** choosing a value (DS §9б, council 23.11.2026, #2412): the value menu is as wide as its words — `menuW`…`menuMaxW`, `menuGap` under
+   *  the field; a list (not a menu) opens past `menuMaxItems` items or a label longer than `menuMaxChars`, or when a row has a picture;
+   *  search from `searchFrom`; the picture of a part `thumb`; a colour's sample — `swatchField` in the field, `swatchRow` in the list */
+  select: { menuMaxW: 280, menuGap: 6, menuMaxItems: 12, menuMaxChars: 22, searchFrom: 13, thumb: 40, swatchField: 18, swatchRow: 24 },
   /** list cards (docs/specs/06-list-cards.md): option row in a picker sheet; narrowest figure tile */
   rowOption: 48,
   tileMin: 78,

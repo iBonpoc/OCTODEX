@@ -13,3 +13,18 @@ export function menuScrollTo(o: { rowY: number; rowH: number; viewH: number; con
   if (o.contentH <= o.viewH) return 0;
   return Math.max(0, Math.min(o.rowY - (o.viewH - o.rowH) / 2, o.contentH - o.viewH));
 }
+
+/**
+ * Where a value menu stands (DS §9б.5, #2412): as wide as its words between `minW` and `maxW`. A field at least `maxW` wide — the
+ * menu's right edge on the field's right edge (iOS pop-up); a narrower field — the menu starts at the field's left edge, but never
+ * past the window's edges.
+ */
+export function fitMenuPlace(o: { x: number; w: number; winW: number; minW: number; maxW: number; edgeL: number; edgeR: number }): { left?: number; right?: number; minWidth: number; maxWidth: number } {
+  if (o.w >= o.maxW) return { right: Math.max(o.edgeR, o.winW - (o.x + o.w)), minWidth: o.minW, maxWidth: o.maxW };
+  return { left: Math.max(o.edgeL, Math.min(o.x, o.winW - o.edgeR - o.maxW)), minWidth: o.minW, maxWidth: o.maxW };
+}
+
+/** a label this long, or a picture, or this many items make a list, not a menu (DS §9б.2) */
+export function opensList(items: { label: string; leading?: unknown; subtitle?: string }[], maxItems: number, maxChars: number): boolean {
+  return items.length > maxItems || items.some((i) => i.label.length > maxChars || !!i.leading || !!i.subtitle);
+}

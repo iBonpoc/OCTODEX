@@ -3,7 +3,7 @@ import { toastArmed } from "./toastArm";
 import { stackDrop, stackLife, stackReplace, stackShow, stackTop } from "./toastStack";
 import { useQueueLineHeight } from "./queueLineHeight";
 import { toastBottom, useFooterInset, useToastRight, wideToastBottom } from "./footerInset";
-import { menuListHeight, menuScrollTo } from "./menuLayout";
+import { fitMenuPlace, menuListHeight, menuScrollTo } from "./menuLayout";
 import { Fragment, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ScreenScrollCtx } from "./requiredForm";
 import { AccessibilityInfo, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance } from "react-native";
@@ -74,6 +74,8 @@ export function Menu<K extends string>({
   onClose,
   title,
   matchWidth,
+  fit,
+  a11yLabel,
 }: {
   visible: boolean;
   anchor: { x: number; y: number; w: number; h: number } | null;
@@ -83,6 +85,11 @@ export function Menu<K extends string>({
   title?: string;
   /** a menu of a field: not narrower than its row, not wider than `modalW` (DS А2) */
   matchWidth?: boolean;
+  /** the value menu of a field (DS §9б.5, #2412): as wide as its words (`menuW`…`select.menuMaxW`), its right edge on the field's
+   *  (a field narrower than the menu — its left edge), `select.menuGap` under the field; no title */
+  fit?: boolean;
+  /** what the backdrop reads out when there is no title */
+  a11yLabel?: string;
 }) {
   const { c } = useTheme();
   const { width: winW, height: winH } = useWindowDimensions();
@@ -138,9 +145,11 @@ export function Menu<K extends string>({
   const open = visible && !!anchor;
   // the edges: 16 from the window, and clear of the notch and the home indicator (docs/specs/32)
   const e = { l: Math.max(insets.left, space[4]), r: Math.max(insets.right, space[4]), t: Math.max(insets.top, space[4]), b: Math.max(insets.bottom, space[4]) };
-  const w = Math.min(matchWidth ? Math.min(Math.max(component.menuW, at.w), component.modalW) : component.menuW, winW - e.l - e.r);
+  const w = Math.min(fit ? component.select.menuMaxW : matchWidth ? Math.min(Math.max(component.menuW, at.w), component.modalW) : component.menuW, winW - e.l - e.r);
   const left = Math.max(e.l, Math.min(at.x, winW - w - e.r));
-  const below = at.y + at.h + space[1];
+  // a value menu: the right edge on the field's when the field is as wide as the menu can be; else from the field's left edge
+  const fitPlace = fitMenuPlace({ x: at.x, w: at.w, winW, minW: Math.min(component.menuW, w), maxW: w, edgeL: e.l, edgeR: e.r });
+  const below = at.y + at.h + (fit ? component.select.menuGap : space[1]);
   // the menu never grows past the window (a phone on its side): it scrolls inside, every item can be reached
   const room = winH - e.t - e.b;
   // at most `menuMaxRows` rows show (the last one half: it scrolls); a window shorter than that cuts it further
@@ -161,11 +170,11 @@ export function Menu<K extends string>({
   const top = below + estH > winH - e.b ? Math.max(e.t, Math.min(at.y - estH - space[1], winH - e.b - estH)) : below;
   return (
     <Modal transparent visible={open} animationType="none" onRequestClose={onClose} onDismiss={picker.dismissed} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
-      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={title ?? ""} />
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={title ?? a11yLabel ?? ""} />
       <Animated.View
         entering={reduce ? undefined : FadeIn.duration(motion.durFast)}
         exiting={reduce ? undefined : FadeOut.duration(motion.durFast)}
-        style={{ position: "absolute", left, top, width: w }}
+        style={fit ? { position: "absolute", top, ...fitPlace } : { position: "absolute", left, top, width: w }}
         accessibilityRole="menu"
       >
         <Glass strong style={{ borderRadius: radius.inner, paddingVertical: space[2] }}>
@@ -207,7 +216,7 @@ export function Menu<K extends string>({
               style={{ minHeight: size.hitMin, paddingHorizontal: space[4], flexDirection: "row", alignItems: "center", gap: space[2], opacity: it.dim ? component.dimOpacity : 1 }}
             >
               <View style={{ width: size.iconMd }}>{it.selected ? <Icon name="check" color={c.ink} /> : null}</View>
-              <T v="body" tone={it.destructive ? "bad" : "ink"} style={{ flex: 1 }}>
+              <T v="body" w={fit && it.selected ? "semibold" : undefined} tone={it.destructive ? "bad" : "ink"} style={fit ? { flexShrink: 1 } : { flex: 1 }} numberOfLines={fit ? 1 : undefined}>
                 {it.label}
               </T>
               {it.icon ? <Icon name={it.icon} /> : null}
