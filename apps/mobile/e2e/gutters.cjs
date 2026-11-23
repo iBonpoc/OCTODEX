@@ -237,7 +237,14 @@ async function attrChosen(p, id) {
 /** the open menu or list of a field closed by Esc (again while it stays: an Esc in its first frames is lost), then gone */
 async function attrClose(p, id) {
   const picker = p.getByTestId(`${id}-picker`).locator("visible=true");
-  await pressEscUntilClosed(p, (await picker.count()) ? picker.first() : p.getByRole("menu").first());
+  // a list (the colour field's, G1 PR2) is a sheet of its own over the window's: never Esc (on 390 it may reach the window under it,
+  // and its backdrop is still moving); a menu — Esc
+  if (await picker.count()) {
+    // the chosen row again: the list closes, the value stays (the same value is no edit)
+    const rows = p.locator(`[data-testid^="${id}-picker-"]:not([data-testid^="${id}-picker-search"])`).locator("visible=true");
+    const i = await rows.evaluateAll((es) => Math.max(0, es.findIndex((e) => !!e.querySelector('[aria-selected="true"]') || e.getAttribute("aria-selected") === "true")));
+    await rows.nth(i).click();
+  } else await pressEscUntilClosed(p, p.getByRole("menu").first());
   await attrShut(p, id);
 }
 
