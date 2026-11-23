@@ -168,7 +168,7 @@ exports.run = async (h) => {
   // on: the 7-day trial → the drawing is kept on the phone in the database's shape and comes back
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await waitFor(async () => /^Пробный/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
+  await waitFor(async () => /^Без срока/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
   await tid("module-gutters-draw").getByRole("button").click();
   await p.waitForURL(/\/module\/gutters\/draw$/, { timeout: 5000 });
   await tid("draw-surface").waitFor({ timeout: 8000 });

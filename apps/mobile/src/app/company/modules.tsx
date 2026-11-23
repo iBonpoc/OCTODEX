@@ -4,6 +4,7 @@
  * Only the director switches them (owner / admin in the database); the office sees the page read-only (spec 26 §3).
  * «Подключить» starts the 7-day trial once (founder О2); after it the button is a payment — step «Оплаты», not here yet.
  * «Отключить» deletes nothing, «Отменить» 5 s (rule 5). Locally at once, offline into the queue (rule 6).
+ * #2410: the demo and the developer's company have no term — no price, no «7 дней бесплатно», «Подключить» is just on.
  */
 import { View } from "react-native";
 import { router } from "expo-router";
@@ -32,6 +33,7 @@ export default function CompanyModules() {
     );
   }
   const saved = (key: Parameters<typeof t>[0]) => (store.online ? t(key) : t("offline.queued"));
+  const noTerm = store.mode === "demo" || c.developerAccount === true;
 
   const card = (d: ModuleDef) => {
     const v = moduleView(c.modules?.[d.key]);
@@ -49,7 +51,7 @@ export default function CompanyModules() {
           <View testID={`module-${d.key}-status`}>
             <StatusChip status={v.status} label={t(v.label, { n: v.n ?? 0 })} />
           </View>
-          <T v="caption" tone="mut">{t("mod.price", { days: d.trialDays, price: money(d.priceCentsMonthly) })}</T>
+          {noTerm ? null : <T v="caption" tone="mut">{t("mod.price", { days: d.trialDays, price: money(d.priceCentsMonthly) })}</T>}
           {v.locked ? <T v="caption">{t("mod.lockedHint")}</T> : null}
           {/* the module's own card is its «settings» place: its tools that save nothing show for everyone, on or off (spec 33 П20.3) */}
           {(d.places?.settings?.({ role: store.role }, store.db.moduleData?.[d.key]) ?? []).map((a) => (
@@ -62,9 +64,9 @@ export default function CompanyModules() {
               {v.main === "start" || v.main === "resume" ? (
                 <View testID={`module-${d.key}-enable`}>
                   <Button
-                    label={v.main === "start" ? t("mod.start", { days: d.trialDays }) : t("mod.resume")}
+                    label={v.main === "start" ? (noTerm ? t("mod.startNoTerm") : t("mod.start", { days: d.trialDays })) : t("mod.resume")}
                     icon="check"
-                    onPress={() => toast.show(saved(v.main === "start" ? "mod.started" : "mod.resumed"), store.enableModule(d.key))}
+                    onPress={() => toast.show(saved(v.main === "start" ? (noTerm ? "mod.startedNoTerm" : "mod.started") : "mod.resumed"), store.enableModule(d.key))}
                   />
                 </View>
               ) : null}
