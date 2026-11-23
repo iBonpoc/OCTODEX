@@ -26,6 +26,6 @@ export function fitMenuPlace(o: { x: number; w: number; winW: number; minW: numb
 
 /** more than `maxItems`, a picture or a line under the name make a list, not a menu (DS §9б.1 п.6); long names — the place that
  *  knows its words says `list` (a count of letters would flip with the language and the data) */
-export function opensList(items: { leading?: unknown; subtitle?: string }[], maxItems: number): boolean {
+export function opensList(items: { label?: string; leading?: unknown; subtitle?: string }[], maxItems: number): boolean {
   return items.length > maxItems || items.some((i) => !!i.leading || !!i.subtitle);
 }
