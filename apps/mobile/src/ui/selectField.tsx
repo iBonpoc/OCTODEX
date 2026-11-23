@@ -97,7 +97,7 @@ export function SelectField<K extends string>({
       {/* a form field's label is `caption` (DS §4.1: «Подписи полей форм — caption, а не micro»): one size with NumberField / TextField
           beside it in a row, so their frames stand on one line (#2426) */}
       {labelAbove ? (
-        <T v="caption" tone="mut">
+        <T v="caption" tone="mut" numberOfLines={1}>
           {label}
         </T>
       ) : null}

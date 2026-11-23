@@ -20,7 +20,7 @@ import { canHide, hiddenSpend, isHidden, noPrice, rowActions, rowFigures, rowPri
 import type { RowView as RowLook } from "./rowView";
 import { LineMarks } from "@/features/LineMarks";
 import { SwipeRow, type SwipeBtn } from "./SwipeRow";
-import { useRowHandle } from "@/features/SortableList";
+import { useRowHandle, useRowHead } from "@/features/SortableList";
 import { swipes } from "./swipeState";
 import { rowQtyLine, rowSum } from "./rowLine";
 import { dragEnd, longPressMenu } from "./rowGesture";
@@ -123,6 +123,7 @@ function LineRowView(p: LineRowProps) {
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   // the list draws «≡» of this open line over the right end of its header (DS §8.3): the header keeps the place
   const handleInHeader = useRowHandle();
+  const setHeadH = useRowHead();
   const rowRef = useRef<ComponentRef<typeof View>>(null);
   const openMenuAt = (r: React.RefObject<ComponentRef<typeof View> | null>) => r.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }));
   useEffect(() => {
@@ -329,7 +330,7 @@ function LineRowView(p: LineRowProps) {
     // head folds the line; its actions (the folded row's «⋯») are a long press of the head (a finger too: an open line is dragged by
     // its «≡», not by a hold) and the screen reader's actions. The fields come out under it by height (`openClip`)
     <View testID={`est-line-${l.id}`} accessibilityState={{ expanded: true }} onTouchStart={p.onTouchOpen}>
-      <View ref={rowRef} collapsable={false}>
+      <View ref={rowRef} collapsable={false} onLayout={(e) => setHeadH?.(e.nativeEvent.layout.height)}>
         <RowView gap={0}>
           <View testID={`est-collapse-${l.id}`} style={{ flex: 1 }}>
             <Press onPress={p.api.close} onLongPress={items.length ? () => openMenuAt(rowRef) : undefined} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={l.name || t("est.row.unnamed")} accessibilityHint={t("est.row.collapse")} accessibilityState={{ expanded: true }} accessibilityActions={a11yActs} onAccessibilityAction={onA11yAct} containerStyle={{ flex: 1 }}>

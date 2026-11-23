@@ -60,6 +60,10 @@ const SortCtx = createContext<Ctl | null>(null);
  */
 const HandleCtx = createContext(false);
 export const useRowHandle = (): boolean => useContext(HandleCtx);
+/** #2421: the open line tells the list how high its head is — «≡» stands centred on that head, as it stood on the folded line
+ *  (a name in two lines makes the head taller than a list row) */
+const HeadCtx = createContext<((h: number) => void) | null>(null);
+export const useRowHead = () => useContext(HeadCtx);
 
 export type { DropResult };
 
@@ -618,6 +622,7 @@ function Item({ k, index, dragKind, open, quiet, look, rule, children }: { k: st
   const canDrag = dragKind !== null && ctl.canDrag(k);
   // an open LINE draws its handle in its own header; any other row has it in a column on the right
   const inHeader = open && k.startsWith("l:");
+  const [headH, setHeadH] = useState<number>(component.listRow.h);
   // the held row keeps its «≡» while it is carried (#2350): an open line taken by the «≡» of its header folds as the drag begins —
   // a folded line has no «≡», and the handle leaving the page would end its own gesture (the drag never started)
   const handleEl = canDrag && (!quiet || showsHandle(k, open) || mine) ? (
@@ -626,9 +631,9 @@ function Item({ k, index, dragKind, open, quiet, look, rule, children }: { k: st
         testID={`sort-handle-${k}`}
         accessibilityRole="button"
         accessibilityLabel={t("est.sec.drag")}
-        // in the open line's head (#2421: its folded face, a list row `listRow.h` high): over its right end, centred on that row —
-        // where the folded line's «≡» stood
-        style={inHeader ? { position: "absolute", right: 0, top: (component.listRow.h - size.hitMin) / 2, width: size.hitMin, height: size.hitMin, alignItems: "center", justifyContent: "center" } : { width: size.hitMin, minHeight: size.hitMin, alignItems: "center", justifyContent: "center", alignSelf: "stretch" }}
+        // in the open line's head (#2421: its folded face, as high as the line tells — `useRowHead`): over its right end, centred
+        // on that head — where the folded line's «≡» stood
+        style={inHeader ? { position: "absolute", right: 0, top: (headH - size.hitMin) / 2, width: size.hitMin, height: size.hitMin, alignItems: "center", justifyContent: "center" } : { width: size.hitMin, minHeight: size.hitMin, alignItems: "center", justifyContent: "center", alignSelf: "stretch" }}
       >
         <Icon name="grip" s={size.iconMd} color={c.mut} />
       </View>
@@ -636,7 +641,9 @@ function Item({ k, index, dragKind, open, quiet, look, rule, children }: { k: st
   ) : null;
   const body = (
     <View style={{ flex: 1 }} testID={`sort-row-${k}`}>
-      <HandleCtx.Provider value={inHeader && canDrag}>{children}</HandleCtx.Provider>
+      <HandleCtx.Provider value={inHeader && canDrag}>
+        <HeadCtx.Provider value={setHeadH}>{children}</HeadCtx.Provider>
+      </HandleCtx.Provider>
     </View>
   );
   return (
