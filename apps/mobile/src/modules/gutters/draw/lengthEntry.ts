@@ -16,3 +16,11 @@ export const inchesComplete = (text: string): boolean => /^[02-9]$/.test(text) |
 
 /** the inches typed are 12 or more: wrong at once (a foot is feet's), not at «Применить» */
 export const inchesTooBig = (text: string): boolean => /^\d+$/.test(text) && Number(text) >= 12;
+
+/**
+ * The feet typed in the length window (#2434, founder 23.11.2026): the FIRST time the window opens after a gutter is drawn, the
+ * drawn inches and fraction are only a guess — new feet start a fresh length, the inches and the fraction go to 0. The window opened
+ * again (a length label tapped: the length is a measured one) keeps them. Once the inches or the fraction were touched in this window,
+ * the feet never wipe them.
+ */
+export const feetResetsRest = (o: { firstOpen: boolean; restTouched: boolean }): boolean => o.firstOpen && !o.restTouched;

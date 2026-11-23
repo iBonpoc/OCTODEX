@@ -1,8 +1,8 @@
 /**
- * e2e 525 — #2434 (founder 23.11: «нарисовал линию → открылось окно длины; если поменять футы — дюймы сразу становятся 0»),
- * every view: a gutter drawn → the length window; the feet typed over (they are selected) → the inches and the fraction stay
- * as drawn; «Применить» keeps the new feet with the drawn inches.
- *
+ * e2e 525 — #2434 (founder 23.11.2026, journal ~10:40), every view:
+ * - the FIRST length window after a gutter is drawn: the feet typed over → the inches and the fraction go to 0 (the drawn ones
+ *   were a guess); «Применить» keeps whole feet;
+ * - the window opened again (its length label tapped): the inches set by hand → the feet typed over → the inches stay.
  */
 const KEY = "octo.db.v5";
 
@@ -59,13 +59,21 @@ exports.run = async (h) => {
   await waitFor(async () => (await field("quick-length-ft").inputValue()) === newFt, `the feet are ${newFt}`);
   await p.waitForTimeout(400);
   const after = await fields();
-  h.expect(after.inc === before.inc, `the inches stay as drawn (${before.inc} → ${after.inc})`);
-  h.expect(after.frac === before.frac, `the fraction stays (${before.frac} → ${after.frac})`);
+  h.expect(after.inc === "0", `first window: the inches go to 0 (${before.inc} → ${after.inc})`);
+  h.expect(after.frac === "", `first window: no fraction (${before.frac} → ${after.frac})`);
   await tid("quick-length-apply").getByRole("button").click();
   await tid("quick-length").waitFor({ state: "hidden", timeout: 3000 });
-  const want = Number(newFt) * 12 + Number(before.inc || 0);
-  // the store is written a moment later (saved after the change settles)
-  await waitFor(async () => { const x = (await runs()).pop(); return x && x.geom?.lengthIn !== undefined; }, "the length is saved");
-  const r = (await runs()).pop();
-  h.expect(r && Math.floor(r.geom.lengthIn) === want, `kept: ${newFt}′ ${before.inc}″ (${r && r.geom.lengthIn} in)`);
+  const whole = Number(newFt) * 12;
+  await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === whole), `kept: ${newFt}′ 0″ (${JSON.stringify((await runs()).map((r) => r.geom?.lengthIn))})`);
+
+  // again, from its length label: the inches typed, then the feet → the inches stay
+  const lab = await p.getByTestId("draw-svg").first().locator('[id^="lbl-len:"]').filter({ hasText: `${newFt}′` }).first().boundingBox();
+  await p.mouse.click(lab.x + lab.width / 2, lab.y + lab.height / 2);
+  await tid("quick-length").waitFor({ timeout: 5000 });
+  await field("quick-length-in").fill("7");
+  await field("quick-length-ft").fill(String(Number(newFt) + 1));
+  await p.waitForTimeout(300);
+  h.expect((await field("quick-length-in").inputValue()) === "7", "opened again: the feet keep the inches");
+  await tid("quick-length-apply").getByRole("button").click();
+  await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === (Number(newFt) + 1) * 12 + 7), `kept: ${Number(newFt) + 1}′ 7″`);
 };
