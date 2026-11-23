@@ -26,13 +26,14 @@ exports.run = async (h) => {
 
   // the open row draws «≡» in its head (#2421: the folded face), centred on it, right of the trash (DS §8.3): the fields take the whole width
   // the list puts «≡» on the head's middle once the head told its height (a layout event): wait for it, no fixed pause
-  await p
+  const centred = await p
     .waitForFunction((id) => {
       const a = document.querySelector(`[data-testid="sort-handle-l:${id}"]`)?.getBoundingClientRect();
       const b = document.querySelector(`[data-testid="est-collapse-${id}"]`)?.getBoundingClientRect();
       return !!a && !!b && Math.abs(a.top + a.height / 2 - (b.top + b.height / 2)) < 2;
     }, b, { timeout: 3000 })
-    .catch(() => {});
+    .then(() => true, () => false);
+  h.expect(centred, "«≡» comes to the middle of the open line's head");
   const [col, hdl, trash, row] = [await tid(`est-collapse-${b}`).boundingBox(), await tid(`sort-handle-l:${b}`).boundingBox(), await tid(`est-trash-${b}`).boundingBox(), await tid(`est-line-${b}`).boundingBox()];
   h.expect(Math.abs(hdl.y + hdl.height / 2 - (col.y + col.height / 2)) < 2 && hdl.x >= trash.x + trash.width - 1, `«≡» in the head, centred, right of the trash (≡ ${Math.round(hdl.x)},${Math.round(hdl.y)},${Math.round(hdl.height)} · head ${Math.round(col.y)},${Math.round(col.height)} · trash ${Math.round(trash.x + trash.width)})`);
   const nameBox = await p.locator(`[data-testid="est-name-${b}"]`).locator("visible=true").first().boundingBox();

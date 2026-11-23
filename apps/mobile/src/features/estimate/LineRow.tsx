@@ -334,7 +334,7 @@ function LineRowView(p: LineRowProps) {
         {isHidden(l) ? <Hatch color={c.track} id={`${l.id}-open`} /> : null}
         <RowView gap={0}>
           <View testID={`est-collapse-${l.id}`} style={{ flex: 1 }}>
-            <Press onPress={() => (dragEnd.justDragged(motion.durSlow) ? undefined : p.api.close())} onLongPress={items.length ? () => openMenuAt(rowRef) : undefined} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={l.name || t("est.row.unnamed")} accessibilityHint={t("est.row.collapse")} accessibilityState={{ expanded: true }} accessibilityActions={a11yActs} onAccessibilityAction={onA11yAct} containerStyle={{ flex: 1 }}>
+            <Press onPress={p.api.close} onLongPress={items.length ? () => openMenuAt(rowRef) : undefined} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={l.name || t("est.row.unnamed")} accessibilityHint={t("est.row.collapse")} accessibilityState={{ expanded: true }} accessibilityActions={a11yActs} onAccessibilityAction={onA11yAct} containerStyle={{ flex: 1 }}>
               {face}
             </Press>
           </View>
