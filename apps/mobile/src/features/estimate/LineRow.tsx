@@ -331,9 +331,10 @@ function LineRowView(p: LineRowProps) {
     // its «≡», not by a hold) and the screen reader's actions. The fields come out under it by height (`openClip`)
     <View testID={`est-line-${l.id}`} accessibilityState={{ expanded: true }} onTouchStart={p.onTouchOpen}>
       <View ref={rowRef} collapsable={false} onLayout={(e) => setHeadH?.(e.nativeEvent.layout.height)}>
+        {isHidden(l) ? <Hatch color={c.track} id={`${l.id}-open`} /> : null}
         <RowView gap={0}>
           <View testID={`est-collapse-${l.id}`} style={{ flex: 1 }}>
-            <Press onPress={p.api.close} onLongPress={items.length ? () => openMenuAt(rowRef) : undefined} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={l.name || t("est.row.unnamed")} accessibilityHint={t("est.row.collapse")} accessibilityState={{ expanded: true }} accessibilityActions={a11yActs} onAccessibilityAction={onA11yAct} containerStyle={{ flex: 1 }}>
+            <Press onPress={() => (dragEnd.justDragged(motion.durSlow) ? undefined : p.api.close())} onLongPress={items.length ? () => openMenuAt(rowRef) : undefined} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={l.name || t("est.row.unnamed")} accessibilityHint={t("est.row.collapse")} accessibilityState={{ expanded: true }} accessibilityActions={a11yActs} onAccessibilityAction={onA11yAct} containerStyle={{ flex: 1 }}>
               {face}
             </Press>
           </View>
@@ -349,8 +350,8 @@ function LineRowView(p: LineRowProps) {
       <Animated.View style={clip}>
         <View onLayout={(e) => { fieldsH.value = e.nativeEvent.layout.height; }} style={{ paddingTop: space[1], paddingBottom: space[3], paddingHorizontal: space[4], gap: space[3] }}>
       {marks.length ? (
-        <View testID="ue-line-source-hint" style={{ gap: space[2] }}>
-          <LineMarks marks={marks} lineId={l.id} />
+        // the marks themselves stand in the head (the folded face, #2421) — here only the words under them
+        <View testID="ue-line-source-hint">
           <T v="caption" tone="mut">
             {t("ue.src.hint")}
           </T>

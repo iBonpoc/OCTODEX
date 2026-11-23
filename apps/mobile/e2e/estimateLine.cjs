@@ -104,9 +104,7 @@ exports.grip = async (h, key) => {
   return vis(h, `[data-testid="sort-row-${key}"]`).first();
 };
 exports.menu = async (h, id) => {
-  const more = vis(h, `[data-testid="est-menu-${id}"]`).first();
-  if (await more.count()) await more.getByRole("button").click();
-  else {
+  {
     // a long press (a mouse): the row must stand still under the pointer (a row that moves while held cancels the press), the
     // mouse stays down until the row's own menu shows (the hold time is the app's, `motion.longPressMs`, not a number here),
     // then lets go (no retry: a hold that does not open the menu is a failure)
