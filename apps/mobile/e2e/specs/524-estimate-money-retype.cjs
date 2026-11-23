@@ -26,8 +26,14 @@ exports.run = async (h) => {
     await field(pre).fill(first);
     await field(pre).blur();
     await valueIs(pre, first, `${pre}: «${first}» stands`);
-    // a tap and typing key by key, like a finger — the old number goes, the new one stays
-    await field(pre).click();
+    // coming into the field and typing key by key, like a finger — the old number goes, the new one stays. Focus, not a mouse
+    // click: on the web a click's mouse-up puts the caret back after the select (desktop behaviour); the phone selects by hand
+    // after the tap (ui/fieldFocus) — checked on the iPhone, rule 27
+    await field(pre).focus();
+    // the field selects its text a moment after the focus — wait for that select (rule 19), a field that never selects fails below
+    await p
+      .waitForFunction(() => { const el = document.activeElement; return !!el && el.value !== "" && el.selectionStart === 0 && el.selectionEnd === el.value.length; }, null, { timeout: 2000 })
+      .catch(() => {});
     await field(pre).pressSequentially(typed, { delay: 30 });
     await field(pre).blur();
     await valueIs(pre, want, `${pre}: typing «${typed}» over «${first}» gives ${want}, not a number glued to the old one`);
