@@ -91,7 +91,7 @@ export function SelectorsSection() {
         <T v="caption" tone="mut">{t("ds.pick.hint")}</T>
         <SelectField labelAbove testID="showcase-pick-short" label={t("ds.pick.short")} value={short} items={SHORT.map((k, n) => ({ key: k, label: t(k), top: n === 0 }))} onChange={setShort} />
         <SelectField labelAbove testID="showcase-pick-long" label={t("ds.pick.long")} value={longPick} items={LONGN.map((k) => ({ key: k, label: t(k), leading: { icon: "image" as const } }))} onChange={setLongPick} />
-        <ColorField labelAbove testID="showcase-pick-color" label={t("ds.pick.color")} value={color} onChange={setColor} colors={[{ key: "none", label: t("ds.pick.noPaint"), top: true }, ...PALETTE]} />
+        <ColorField labelAbove testID="showcase-pick-color" label={t("ds.pick.color")} value={color} onChange={setColor} colors={[{ key: "none", label: t("ds.pick.noPaint"), top: true, none: true }, ...PALETTE]} />
       </Card>
       <Card>
         <T v="heading">{t("ds.choice.title")}</T>

@@ -3,7 +3,7 @@
  * is made of. One component: on 390 it sits in the core's Sheet, on 820/1280 it is the column on the right of the
  * canvas. Every choice is one edit of the drawing at once (the canvas's «Назад» takes it back, saved 1 s later) —
  * no «Save» button, like the storey. The tape: feet + inches, «Применить» → confidence `taped` (icon + word, rule 2).
- * Colours are words, never swatches (rule 2). The lists are what the company installs and its palette (settings, M7b);
+ * A colour is its name with its sample in the one colour field (DS §9б.6, rule 2 3rd exception). The lists are what the company installs and its palette (settings, M7b);
  * an element's own value the company no longer offers stays as one more chip «нет в списке» (spec 33 П22.2 №7).
  */
 import { sizeText } from "../sizeText";
@@ -18,6 +18,7 @@ import { Button, StatusChip, Stepper, TextField } from "@/ui/controls";
 import { Collapsible } from "@/ui/collapsible";
 import type { PickerItem } from "@/ui/pickerSheet";
 import { SelectField } from "@/ui/selectField";
+import { ColorField } from "@/ui/colorField";
 import { ToggleRow } from "@/ui/toggleRow";
 import { Icon, Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -25,6 +26,7 @@ import { Menu } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
 import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, elbowCounts, elbowPatch, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
+import { colorChoices } from "./colorChoices";
 import { dsMoreSet, dsRareShown } from "./attrShown";
 import { FracPicker } from "./FracPicker";
 import { feetResetsRest, inchesComplete, inchesTooBig, nextStage, type EntryStage } from "./lengthEntry";
@@ -342,19 +344,11 @@ function ColorPick<A extends { material: string; finish?: "mill" | "painted"; co
   const { t } = useI18n();
   const colorLabel = useColorLabel();
   if (MILL_ONLY.has(a.material)) return null;
-  const palette = withCurrent(ch.palette, a.color);
-  const bare = (a.finish ?? (a.color ? "painted" : "mill")) === "mill";
-  const runBare = run ? (run.finish ?? (run.color ? "painted" : "mill")) === "mill" : false;
-  const sameAsRun = !!run && !MILL_ONLY.has(run.material) && (bare ? runBare : !runBare && run.color === a.color);
-  const value = sameAsRun ? "@run" : bare ? "@mill" : (a.color ?? palette[0]!);
-  const items: PickerItem<string>[] = [
-    ...(run && !MILL_ONLY.has(run.material) ? [{ key: "@run", label: t(k("colorAsRun"), { c: runBare ? t(k("f.mill")) : colorLabel(run.color ?? "") }), top: true }] : []),
-    { key: "@mill", label: t(k("f.mill")), top: true },
-    ...palette.map((c) => ({ key: c, label: colorLabel(c) })),
-  ];
+  // one colour field for a gutter and a downspout (DS §9б.6, founder 23.11 05:25 «цвет — тот же селектор, что у gutter»)
+  const { value, colors } = colorChoices(a, ch.palette, { asRun: (c) => t(k("colorAsRun"), { c }), mill: t(k("f.mill")), notOffered: t(k("notOffered")), color: colorLabel }, run);
   return (
-    <Choice label={t(k("color"))} testID="attr-color" offered={ch.palette} items={items} value={value} onChange={(v) => {
-      if (v === "@run" && run) set((runBare ? { finish: "mill" } : { finish: "painted", color: run.color }) as Partial<A>);
+    <ColorField labelAbove label={t(k("color"))} testID="attr-color" colors={colors} value={value} onChange={(v) => {
+      if (v === "@run" && run) set(((run.finish ?? (run.color ? "painted" : "mill")) === "mill" ? { finish: "mill" } : { finish: "painted", color: run.color }) as Partial<A>);
       else if (v === "@mill") set({ finish: "mill" } as Partial<A>);
       else set({ finish: "painted", color: v } as Partial<A>);
     }} />
