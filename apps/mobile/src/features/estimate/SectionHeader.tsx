@@ -74,8 +74,9 @@ function SectionHeaderView(p: SectionHeaderProps) {
       { key: "catalogHere" as const, label: t("est.sec.catalogHere"), icon: "catalog" as const, testID: `est-sec-act-catalogHere-${s.id}` },
     ] as MenuItem<SectionAction>[])),
     { key: "rename", label: t("est.sec.rename"), icon: "pencil", group: !isModule, testID: `est-sec-act-rename-${s.id}` },
-    ...(!isModule && p.depth === 0 ? [{ key: "addSub" as const, label: t("est.sec.addSub"), icon: "plus" as const, testID: `est-sec-act-addSub-${s.id}` }] : []),
-    { key: "delete", label: t("est.sec.deleteKeep"), icon: "trash", destructive: true, testID: `est-sec-act-delete-${s.id}` },
+    ...(!isModule && p.depth === 0 ? [{ key: "addSub" as const, label: t("est.sec.addSub"), icon: "sections" as const, testID: `est-sec-act-addSub-${s.id}` }] : []),
+    // «Убрать» — not red: the lines stay, nothing is lost (HIG: red only for what destroys data; DS Б4); last, after a line
+    { key: "delete", label: t("est.sec.deleteKeep"), icon: "close", group: true, testID: `est-sec-act-delete-${s.id}` },
   ];
   const commit = () => p.api.rename(s.id, draft);
   return (

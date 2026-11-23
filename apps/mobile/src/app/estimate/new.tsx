@@ -1030,15 +1030,15 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const stepRow = tplEdit ? null : <MainStep placement="bar" main={step} aside={cancelStep} total={barShown ? total : null} folded={fold.folded && option.lines.length > 0} onUnfold={() => setFold({ folded: false, anchor: Number.MAX_SAFE_INTEGER })} foldAdd={signed ? undefined : { a11y: t("px3.est.newLine"), onPress: () => addNew(), testID: "est-fold-add" }} />;
   /** «слои» (visual v2 №5): the sections and the options of the list */
   const layerItems = [
-    ...(!signed ? [{ key: "section", label: t("est.sec.addSectionMenu"), icon: "plus" as const, testID: "est-add-section" }] : []),
+    ...(!signed ? [{ key: "section", label: t("est.sec.addSectionMenu"), icon: "sections" as const, testID: "est-add-section" }] : []),
     // (two options and more: «＋ Вариант» is the options card's own — С4)
-    ...(!signed && !tplEdit && doc.options.length === 1 ? [{ key: "option", label: t("est.var.add"), icon: "copy" as const, testID: "est-add-option" }] : []),
-    ...(!signed && option.lines.length ? [{ key: "layout", label: t("est.sec.layout"), icon: "menu" as const, testID: "est-layers-layout" }] : []),
+    ...(!signed && !tplEdit && doc.options.length === 1 ? [{ key: "option", label: t("est.var.add"), icon: "layers" as const, testID: "est-add-option" }] : []),
+    ...(!signed && option.lines.length ? [{ key: "layout", label: t("est.sec.layout"), icon: "list" as const, testID: "est-layers-layout" }] : []),
   ];
   // #2403 (founder 22.11: «повторяются, пересекаются»; CRM map С5): the round «˅» beside «＋ Позиция» is the ways to add a LINE only —
   // the catalog and a template; the structure (a section, an option, the layout) is the estimate's own «⋯»
   const addItems = [
-    { key: "catalog", label: t("px3.est.fromCatalog"), icon: "catalog" as const, testID: "est-add-catalog" },
+    { key: "catalog", label: t("est.add.fromCatalog"), icon: "catalog" as const, testID: "est-add-catalog" },
     ...(!tplEdit ? [{ key: "template", label: t("ds.rows.fromTemplate"), icon: "template" as const, testID: "est-menu-template" }] : []),
   ];
   const onAdd = (k: string) => {

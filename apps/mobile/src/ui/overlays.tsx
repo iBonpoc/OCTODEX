@@ -128,6 +128,7 @@ export function Menu<K extends string>({
   const contentSize = useRef(0);
   // #2403: the list's real height (a label in two lines, the group lines) — the menu is as high as it, never cutting the last item
   const [contentH, setContentH] = useState(0);
+  const checkable = items.some((it) => it.selected !== undefined);
   if (!(visible && !!anchor)) {
     scrolled.current = false;
     rowAt.current = {};
@@ -209,7 +210,8 @@ export function Menu<K extends string>({
               accessibilityLabel={it.label}
               style={{ minHeight: size.hitMin, paddingHorizontal: space[4], flexDirection: "row", alignItems: "center", gap: space[2], opacity: it.dim ? component.dimOpacity : 1 }}
             >
-              <View style={{ width: size.iconMd }}>{it.selected ? <Icon name="check" color={c.ink} /> : null}</View>
+              {/* the check's column only in a menu that has a checked-or-not item (iOS: no empty gutter in a plain menu, #2403) */}
+              {checkable ? <View style={{ width: size.iconMd }}>{it.selected ? <Icon name="check" color={c.ink} /> : null}</View> : null}
               <T v="body" tone={it.destructive ? "bad" : "ink"} style={{ flex: 1 }}>
                 {it.label}
               </T>

@@ -154,7 +154,8 @@ function LineRowView(p: LineRowProps) {
     duplicate: { label: t("est.row.duplicate"), icon: "copy" },
     hide: { label: t("est.row.hide"), icon: "eye" },
     show: { label: t("est.row.show"), icon: "eye" },
-    move: { label: t("est.sec.moveTitle"), icon: "route" },
+    // (not the paper plane: that is «Отправить» in the header, #2403) — a folder: the line goes to another section
+    move: { label: t("est.row.moveTo"), icon: "sections" },
     delete: { label: t("est.row.delete"), icon: "trash" },
   };
   // «Выше» / «Ниже» first (a line the person may move — not a module's), then what the engine offers
