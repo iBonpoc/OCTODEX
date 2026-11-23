@@ -95,8 +95,8 @@ exports.toMiddle = async (h, loc) => {
 
 /**
  * visual v2 №5 (#2344): a folded line has no «≡» and no «⋯». `grip` — what a line is taken by: its «≡» when it has one (a section,
- * the open line), else its body (a mouse drags it after a move of `gesture.dragStart`). `menu` — the line's actions: the open
- * line's «⋯», else a long press of the folded row (a mouse; a finger's hold is the drag — e2e cannot show that, rule 27).
+ * the open line), else its body (a mouse drags it after a move of `gesture.dragStart`). `menu` — the line's actions: a long press of the line's
+ * face — the open line's head or the folded row (a mouse; a finger's hold is the drag — e2e cannot show that, rule 27).
  */
 exports.grip = async (h, key) => {
   const hd = vis(h, `[data-testid="sort-handle-${key}"]`).first();
@@ -110,7 +110,9 @@ exports.menu = async (h, id) => {
     // a long press (a mouse): the row must stand still under the pointer (a row that moves while held cancels the press), the
     // mouse stays down until the row's own menu shows (the hold time is the app's, `motion.longPressMs`, not a number here),
     // then lets go (no retry: a hold that does not open the menu is a failure)
-    const row = vis(h, `[data-testid="est-line-${id}"]`).first();
+    // an open line (#2421) is held by its head — its folded face, `est-collapse-<id>`; a folded line by its row
+    const head = vis(h, `[data-testid="est-collapse-${id}"]`).first();
+    const row = (await head.count()) ? head : vis(h, `[data-testid="est-line-${id}"]`).first();
     const mine = vis(h, `[data-testid^="est-act-"][data-testid$="-${id}"]`).first();
     {
       await row.scrollIntoViewIfNeeded();

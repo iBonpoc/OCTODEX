@@ -94,8 +94,10 @@ export function SelectField<K extends string>({
   const open = () => (onOpen ? onOpen() : long ? openPicker() : ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h })));
   return (
     <View ref={field?.anchorRef} collapsable={false} style={{ gap: space[1] }} testID={testID ?? field?.testID}>
+      {/* a form field's label is `caption` (DS §4.1: «Подписи полей форм — caption, а не micro»): one size with NumberField / TextField
+          beside it in a row, so their frames stand on one line (#2426) */}
       {labelAbove ? (
-        <T v="micro" tone="mut">
+        <T v="caption" tone="mut">
           {label}
         </T>
       ) : null}
