@@ -5,7 +5,7 @@
  *   its prices — no Cyrillic on the screen (the demo has no Russian names on these screens).
  * Finds things by testID; waits on what it checks.
  */
-const { doubleTap, openProps, skipLength } = require("../gutters.cjs");
+const { doubleTap, openProps, skipLength, openAttrMore, attrClose } = require("../gutters.cjs");
 
 exports.init = { lang: "en" };
 
@@ -62,7 +62,7 @@ exports.run = async (h) => {
     await p.mouse.click(x0 + (x1 - x0) * 0.3, y0);
     if (!wide) await openProps(p);
     await tid("attr-panel").waitFor({ timeout: 5000 });
-    if (await tid("attr-more").count()) await tid("attr-more").getByRole("button").click();
+    await openAttrMore(p);
     await clean("a gutter's properties", lang);
     await closePanel();
 
@@ -70,12 +70,16 @@ exports.run = async (h) => {
     await tid("draw-tool-ds").getByRole("button").click();
     await p.mouse.click(x0 + (x1 - x0) * 0.6, y0 + 2);
     await tid("attr-panel").waitFor({ timeout: 5000 });
-    if (await tid("attr-more").count()) await tid("attr-more").getByRole("button").click();
+    await openAttrMore(p);
     await clean("a downspout's menu", lang);
-    // the kind tiles (#929): four, and no tile's words run over its frame in this language
-    await tid("attr-ds-kind").waitFor({ timeout: 5000 });
-    const over = await p.evaluate(() => [...document.querySelectorAll('[data-testid^="attr-ds-kind-"]')].filter((e) => e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1).map((e) => e.getAttribute("data-testid")));
-    h.expect(over.length === 0 && (await p.locator('[data-testid^="attr-ds-kind-"]').count()) === 4, `${lang}: four kind tiles, none overflows (${over.join(",")})`);
+    // the kind (#929; #2412 G1: a field, its menu): four, and no item's words run over its frame in this language
+    await tid("attr-ds-kind-button").click();
+    const kinds = p.getByRole("menu").locator('[data-testid^="attr-ds-kind-"]').locator("visible=true");
+    await kinds.first().waitFor({ timeout: 5000 });
+    await clean("the downspout's kinds", lang);
+    const over = await kinds.evaluateAll((es) => es.filter((e) => e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1).map((e) => e.getAttribute("data-testid")));
+    h.expect(over.length === 0 && (await kinds.count()) === 4, `${lang}: four kinds, none overflows (${over.join(",")})`);
+    await attrClose(p, "attr-ds-kind");
     await closePanel();
 
     // a corner's sheet

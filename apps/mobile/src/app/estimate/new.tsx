@@ -28,7 +28,7 @@ import { CaWarn } from "@/features/estimate/CaWarn";
 import { NotesTerms } from "@/features/estimate/NotesTerms";
 import { isSignedEstimate } from "@/features/estimate/notesTerms";
 import { docLanguageFor } from "@/data/people";
-import { autoGroups, canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
+import { autoGroups, canAddSection, addSection, deleteSection, foldForDrag, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
 import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, isHidden, leaveDecision, nextSeries, replaceLine, restoreDeleted, type DeleteSeries, restoreLine, rowProblems, setHidden } from "@/features/estimateRows";
 import { FieldError, useRequiredForm, useScreenScroll } from "@/ui/requiredForm";
 import { MainStep } from "@/ui/mainStep";
@@ -50,7 +50,7 @@ import { foldStart, foldStep, type FoldState } from "@/ui/totalFold";
 import { ButtonMenu, ButtonPair } from "@/ui/pairs";
 import { useDayWord } from "@/features/useDayWord";
 import { Icon, Press, T } from "@/ui/primitives";
-import { Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
+import { HelpButton, Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
 import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle, useFooterShown } from "@/ui/surfaces";
 import { draftCtx, draftSnapshot, draftsKey, findDraft, isEditCtx, nextDrafts, removeDraft, restoreDraftOnDevice, useDraftEditorOpen, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
 import { useConfirm } from "@/ui/confirmDialog";
@@ -985,7 +985,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const act = activeLines(option.lines);
   // the sum of each line by its id, once (not `indexOf` for every row: that is n² for a long estimate)
   // a section that is carried folds while it is held (its lines go with it)
-  const view = useMemo(() => withLooseTarget(viewRows(layoutOpt, new Set(holdSection ? [...collapsedIds, holdSection] : collapsedIds)), !!lifted?.startsWith("l:")), [layoutOpt, collapsedIds, holdSection, lifted]);
+  const view = useMemo(() => withLooseTarget(viewRows(layoutOpt, foldForDrag(layoutOpt, collapsedIds, holdSection)), !!lifted?.startsWith("l:")), [layoutOpt, collapsedIds, holdSection, lifted]);
   // the first line on the list: the swipe hint plays on it
   const firstLineId = view.find((r): r is Extract<typeof r, { type: "line" }> => r.type === "line")?.line.id;
   const secTotals = useMemo(() => sectionSubtotals(layoutOpt, s), [layoutOpt, s]);
@@ -1132,13 +1132,17 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           </RowView>
         </View>
       ) : null}
-      {existing && dirty && !signed && !keptAside ? (
+      {/* not while the phone fails to keep them: «уже хранится на телефоне» would contradict the warning above (code review of #2423) */}
+      {existing && dirty && !signed && !keptAside && !drafts.writeFailed ? (
         <View testID="k1-unsaved">
           <RowView>
             <Icon name="note" s={size.iconSm} />
-            <T v="caption" tone="mut" numberOfLines={1} style={{ flex: 1, minWidth: 0 }}>
+            {/* founder 23.11 (#2423: «несохранённые правки — что это значит? Там должен быть знак вопроса»; audit MAP §6): the words say
+                what it is, «?» right after them explains Готово / Отменить (DS Б7) */}
+            <T v="caption" tone="mut" numberOfLines={1} style={{ flexShrink: 1, minWidth: 0 }}>
               {t("k1.unsaved")}
             </T>
+            <HelpButton title={t("k1.unsaved")} text={t("k1.unsavedHelp")} testID="k1-unsaved-help" />
           </RowView>
         </View>
       ) : null}
