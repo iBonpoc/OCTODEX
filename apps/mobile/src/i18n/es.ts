@@ -3712,6 +3712,7 @@ export const es: Dict = {
   "mod.gutters.attr.unitPick": "Unidad: {u} — cambiar",
   "mod.gutters.attr.colorAsRun": "Igual que la canaleta ({c})",
   "mod.gutters.attr.offsetOwn": "Propio",
+  "mod.gutters.attr.offsetLen": "Largo",
   "mod.gutters.attr.quickTitle": "Largo de la canaleta",
   "mod.gutters.attr.quickDrawn": "Según el dibujo: {len}",
   // module M7b: company settings (spec 33 П22)
@@ -3755,8 +3756,8 @@ export const es: Dict = {
   "mod.gutters.set.paletteFull": "La paleta admite hasta {n} colores",
   // module M7c: rules, use, rare downspout fields, corners (spec 33 П22)
   "mod.gutters.attr.more": "Más: altura, desvíos, reducción, parte superior",
-  "mod.gutters.attr.moreRun": "Más: perfil, material, montaje, ganchos",
-  "mod.gutters.attr.moreDs": "Más: forma, material, salida, pared",
+  "mod.gutters.attr.moreRun": "Más",
+  "mod.gutters.attr.moreDs": "Más",
   "mod.gutters.attr.dsLength": "Longitud",
   "mod.gutters.attr.heightAuto": "Por piso",
   "mod.gutters.attr.offsets": "Desvío",
