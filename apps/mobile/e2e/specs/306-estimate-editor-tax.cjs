@@ -88,7 +88,9 @@ exports.run = async (h) => {
   await tid("est-tax-rate").waitFor({ timeout: 3000 });
   h.expect((await tid("est-tax-partial").count()) === 0, "«Пересчитать»: the whole amount now");
 
-  // the old setting with the tax OFF: «%» asks the same question (DS §8.7)
+  // the old setting with the tax OFF: «%» asks the same question (DS §8.7); leave the editor first — its own save must not land
+  // over the seeded setting
+  await h.go("/");
   const raw3 = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)), DB_KEY);
   raw3.db.estimates.find((x) => x.id === saved.id).doc.settings.tax = { enabled: false, rateBps: 1000, groups: { service: false, labor: false, material: true } };
   await h.seed(DB_KEY, raw3);

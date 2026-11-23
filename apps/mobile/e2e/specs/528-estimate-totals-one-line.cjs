@@ -4,7 +4,7 @@
  * - «Выкл.» is in the middle; a press on «%» starts the deposit at 10 %, the discount empty, «$» at $0; «Выкл.» — «—»;
  * - the picked row's field takes the focus (one tap to typing); a press on the chosen position keeps the value; «Выкл.» and back
  *   brings the typed value back;
- * - from 820 the switch, the field and the sum stand on the row's one line; on 390 the field and the sum may go under it, on the right.
+ * - a row wide enough (480) holds the switch, the field and the sum on one line; a narrow one puts the field and the sum under it, on the right.
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -61,15 +61,16 @@ exports.run = async (h) => {
   h.expect((await totals.sumOf(h, "est-deposit-row")) === "$50", "the deposit in $: $50");
   await h.shot("totals");
 
-  // the row's shape: from 820 the switch, the field and the sum on one line; on any width the field and the sum stay in the row
+  // the row's shape: the field and the sum stay in the row on any width
   const box = async (id) => tid(id).boundingBox();
   const [row, seg, field, sum] = [await box("est-deposit-row"), await box("est-deposit-row-mode-pct"), await box("est-deposit-fixed"), await box("est-deposit-row-sum")];
   const inside = (b) => b.x >= row.x - 1 && b.x + b.width <= row.x + row.width + 1 && b.y >= row.y - 1 && b.y + b.height <= row.y + row.height + 1;
   h.expect(inside(seg) && inside(field) && inside(sum), "the switch, the field and the sum lie inside the row");
   h.expect(field.x + field.width <= sum.x + 1, "the field stands left of the sum");
-  if (h.layout.width >= 820) {
+  // (from 820 the totals card is a column of its own: one line wherever the row is wide enough for it)
+  if (row.width >= 480) {
     const mid = (b) => b.y + b.height / 2;
-    h.expect(Math.abs(mid(seg) - mid(sum)) < 4 && Math.abs(mid(field) - mid(sum)) < 4, `one line from 820 (switch ${mid(seg)}, field ${mid(field)}, sum ${mid(sum)})`);
+    h.expect(Math.abs(mid(seg) - mid(sum)) < 4 && Math.abs(mid(field) - mid(sum)) < 4, `one line in a wide row (switch ${mid(seg)}, field ${mid(field)}, sum ${mid(sum)})`);
   }
 
   await totals.mode(h, "est-deposit-row", "off");
