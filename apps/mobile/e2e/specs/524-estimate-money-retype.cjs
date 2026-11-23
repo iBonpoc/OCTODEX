@@ -11,7 +11,10 @@ exports.run = async (h) => {
   const valueIs = (pre, v, what) =>
     p
       .waitForFunction(([s, want]) => document.querySelector(`[data-testid^="${s}"] input`)?.value === want, [pre, v], { timeout: 3000 })
-      .catch(() => h.expect(false, what));
+      .then(
+        () => {},
+        async () => h.expect(false, `${what} (stands: «${await p.locator(`[data-testid^="${pre}"] input`).first().inputValue()}»)`),
+      );
 
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await vis('[data-testid="est-add-new"]').waitFor({ timeout: 8000 });
@@ -24,16 +27,20 @@ exports.run = async (h) => {
   ]) {
     // a number already stands in the field (as after the catalog, or a field shown as 0.00)
     await field(pre).fill(first);
+    // the caret at the end before leaving: the browser keeps a field's last selection for its next focus, and `fill` leaves it
+    // all selected — the select below must be the field's own, not one left over
+    await field(pre).evaluate((el) => el.setSelectionRange(el.value.length, el.value.length));
     await field(pre).blur();
     await valueIs(pre, first, `${pre}: «${first}» stands`);
     // coming into the field and typing key by key, like a finger — the old number goes, the new one stays. Focus, not a mouse
     // click: on the web a click's mouse-up puts the caret back after the select (desktop behaviour); the phone selects by hand
     // after the tap (ui/fieldFocus) — checked on the iPhone, rule 27
     await field(pre).focus();
-    // the field selects its text a moment after the focus — wait for that select (rule 19), a field that never selects fails below
-    await p
+    // the field selects its text a moment after the focus — wait for exactly that (rule 19); a field that never selects fails here
+    const selected = await p
       .waitForFunction(() => { const el = document.activeElement; return !!el && el.value !== "" && el.selectionStart === 0 && el.selectionEnd === el.value.length; }, null, { timeout: 2000 })
-      .catch(() => {});
+      .then(() => true, () => false);
+    h.expect(selected, `${pre}: the old number is selected on focus (typing replaces it)`);
     await field(pre).pressSequentially(typed, { delay: 30 });
     await field(pre).blur();
     await valueIs(pre, want, `${pre}: typing «${typed}» over «${first}» gives ${want}, not a number glued to the old one`);
