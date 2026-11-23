@@ -85,7 +85,7 @@ export function Menu<K extends string>({
   title?: string;
   /** a menu of a field: not narrower than its row, not wider than `modalW` (DS А2) */
   matchWidth?: boolean;
-  /** the value menu of a field (DS §9б.5, #2412): as wide as its words (`menuW`…`select.menuMaxW`), its right edge on the field's
+  /** the value menu of a field (DS §9б.4, #2412): as wide as its words (`menuW`…`select.menuMaxW`), its right edge on the field's
    *  (a field narrower than the menu — its left edge), `select.menuGap` under the field; no title */
   fit?: boolean;
   /** what the backdrop reads out when there is no title */
@@ -167,7 +167,8 @@ export function Menu<K extends string>({
     listRef.current?.scrollTo({ y: menuScrollTo({ rowY: row.y, rowH: row.h, viewH: listH, contentH }), animated: false });
   };
   const estH = Math.min(listH + (title ? size.hitMin : 0) + space[2] * 2, room);
-  const top = below + estH > winH - e.b ? Math.max(e.t, Math.min(at.y - estH - space[1], winH - e.b - estH)) : below;
+  const gap = fit ? component.select.menuGap : space[1];
+  const top = below + estH > winH - e.b ? Math.max(e.t, Math.min(at.y - estH - gap, winH - e.b - estH)) : below;
   return (
     <Modal transparent visible={open} animationType="none" onRequestClose={onClose} onDismiss={picker.dismissed} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={title ?? a11yLabel ?? ""} />

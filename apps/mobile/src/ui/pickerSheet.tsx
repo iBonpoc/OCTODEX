@@ -30,7 +30,13 @@ export function LeadingMark({ leading, inField }: { leading: Leading; inField?: 
   const { c } = useTheme();
   const d = inField ? component.select.swatchField : component.select.swatchRow;
   if ("image" in leading) return <Image source={leading.image} style={{ width: component.select.thumb, height: component.select.thumb, borderRadius: radius.tip }} accessibilityIgnoresInvertColors />;
-  if ("icon" in leading) return <Icon name={leading.icon} s={size.iconMd} color={c.ink} />;
+  // an icon in place of the part's picture (no photo yet): the same tile 40 (DS §9б.5)
+  if ("icon" in leading)
+    return (
+      <View style={{ width: component.select.thumb, height: component.select.thumb, borderRadius: radius.tip, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
+        <Icon name={leading.icon} s={size.iconSm} color={c.mut} />
+      </View>
+    );
   const ring = { width: d, height: d, borderRadius: d / 2, borderWidth: component.selectedBorder, borderColor: c.mut } as const;
   if ("swatch" in leading) return <View testID="swatch" style={{ ...ring, backgroundColor: leading.swatch }} />;
   return (
@@ -107,8 +113,9 @@ export function PickerSheet<K extends string>({
             {[found.filter((i) => i.top), found.filter((i) => !i.top)].map((group, g) =>
               group.length ? (
                 <Card key={g}>
-                  {group.map((i) => (
+                  {group.map((i, n) => (
                     <View key={i.key} testID={`${testID}-${i.key}`}>
+                      {n > 0 ? <View style={{ height: component.hairline, backgroundColor: c.bd }} /> : null}
                       <ListRow
                         title={i.label}
                         subtitle={i.subtitle}

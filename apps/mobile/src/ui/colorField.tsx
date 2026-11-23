@@ -15,7 +15,7 @@ export interface ColorChoice<K extends string> {
  * The one colour field (DS §9б.6, founder 23.11.2026: one colour field for every part of a module): the field shows the sample and the
  * name with «›»; the tap opens the list — the special ones first as their own group, then the palette, a sample and a name in each
  * row, a check at the chosen one. Samples of a colour are drawn only here (CLAUDE.md rule 2, 3rd exception; the guard
- * `designSystem.test.ts` keeps `swatch:` in this file and the showcase).
+ * `selectRules.test.ts` keeps `{ swatch: … }` in this file).
  */
 export function ColorField<K extends string>({
   label,

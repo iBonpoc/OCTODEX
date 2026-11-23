@@ -34,6 +34,7 @@ export function SelectField<K extends string>({
   expanded,
   controls,
   rowRef,
+  list,
 }: {
   label: string;
   value: K | null | undefined;
@@ -58,6 +59,8 @@ export function SelectField<K extends string>({
   expanded?: boolean;
   /** with `expanded`: the id of what opens under the row (`aria-controls`; no `aria-haspopup` — it is not a popup) */
   controls?: string;
+  /** names longer than `select.menuMaxChars` (parts of a supplier's chart): a list, not a menu (DS §9б.1 п.6) — the place says so */
+  list?: boolean;
   /** the row itself — the owner gives the focus back to it (DateField after a pick) */
   rowRef?: (n: React.ComponentRef<typeof View> | null) => void;
 }) {
@@ -69,9 +72,11 @@ export function SelectField<K extends string>({
   const chosen = items.find((i) => i.key === value);
   const shownError = error ?? field?.error;
   const shown = chosen?.label ?? placeholder ?? t("ui.select.choose");
-  const menu: MenuItem<K>[] = items.map((i, n) => ({ key: i.key, label: i.label, selected: i.key === value, group: n > 0 && !!items[n - 1]!.top && !i.top, testID: testID ? `${testID}-${i.key}` : undefined }));
-  // more than 12 values, a long name or a picture are not a menu: a list (DS §9б.2); the field's «›» says so before the tap
-  const long = opensList(items, MENU_MAX, component.select.menuMaxChars);
+  // «Ничего» and the like first, their own group — in the menu as in the list (DS §9б.2)
+  const ordered = [...items.filter((i) => i.top), ...items.filter((i) => !i.top)];
+  const menu: MenuItem<K>[] = ordered.map((i, n) => ({ key: i.key, label: i.label, selected: i.key === value, group: n > 0 && !!ordered[n - 1]!.top && !i.top, testID: testID ? `${testID}-${i.key}` : undefined }));
+  // more than 12 values, a picture or the place's `list` are not a menu: a list (DS §9б.1); the field's «›» says so before the tap
+  const long = !onOpen && (!!list || opensList(items, MENU_MAX));
   const [picker, setPicker] = useState(false);
   // web: the focus goes back to the row when the sheet closes — Esc, a pick or the ✕ (DS А3), as the menu does
   const opener = useRef<Element | null>(null);
@@ -125,7 +130,7 @@ export function SelectField<K extends string>({
               {label}
             </T>
           )}
-          {chosen?.leading && !("image" in chosen.leading) ? <LeadingMark leading={chosen.leading} inField /> : null}
+          {chosen?.leading && ("swatch" in chosen.leading || "none" in chosen.leading) ? <LeadingMark leading={chosen.leading} inField /> : null}
           <T v="body" tone={labelAbove ? "ink" : "mut"} numberOfLines={1} style={labelAbove ? { flex: 1 } : { flexShrink: 1 }}>
             {shown}
           </T>
