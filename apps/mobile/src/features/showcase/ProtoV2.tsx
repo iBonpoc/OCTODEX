@@ -5,7 +5,7 @@
  * words, the checklist, the timer, the three figures, the tiles 2 and 3 in a row (one yellow), the rows «цифры справа», the time and the
  * interval (the nearest in the accent's tone). The names and sums are demo data, the words come from i18n.
  */
-import { useState } from "react";
+import { useRef, useState, type ComponentRef } from "react";
 import { todayKey, type DayKey } from "@/features/calendar";
 import { View } from "react-native";
 import { radius, rhythm, space } from "@octo/design-tokens";
@@ -26,7 +26,7 @@ import { ButtonPair } from "@/ui/pairs";
 import { T } from "@/ui/primitives";
 import { Card, RowView } from "@/ui/surfaces";
 import { StatGrid, StatTile } from "@/ui/statTile";
-import { useToast } from "@/ui/overlays";
+import { Menu, useToast, type MenuItem } from "@/ui/overlays";
 import { NO_UNDO } from "@/data/undo";
 
 export function ProtoV2() {
@@ -196,13 +196,29 @@ function ShowEstimateGroup() {
   const { t } = useI18n();
   const edge = useGroupEdge();
   const [open, setOpen] = useState(true);
+  // #2403: the section's «⋯» live — what to add here │ the section itself │ «Убрать раздел» (plain, last after a line); a plain menu has
+  // no check column, so each label stands in one line
+  const moreRef = useRef<ComponentRef<typeof View>>(null);
+  const [at, setAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const secItems: MenuItem<string>[] = [
+    { key: "addHere", label: t("est.sec.addHere"), icon: "plus" },
+    { key: "catalogHere", label: t("est.sec.catalogHere"), icon: "catalog" },
+    { key: "rename", label: t("est.sec.rename"), icon: "pencil", group: true },
+    { key: "addSub", label: t("est.sec.addSub"), icon: "sections" },
+    { key: "delete", label: t("est.sec.deleteKeep"), icon: "close", group: true },
+  ];
   return (
     <View testID="showcase-v2-estimate-group" style={{ gap: rhythm.headGap }}>
       <ButtonMenu
         main={{ label: t("est.row.addShort"), icon: "plus", variant: "secondary", onPress: () => undefined }}
-        menu={{ icon: "chevronDown", a11y: t("px3.est.addFrom"), items: [{ key: "catalog", label: t("px3.est.fromCatalog"), icon: "catalog" }, { key: "template", label: t("ds.rows.fromTemplate"), icon: "template" }], onSelect: () => undefined }}
+        menu={{ icon: "chevronDown", a11y: t("px3.est.addFrom"), items: [{ key: "catalog", label: t("est.add.fromCatalog"), icon: "catalog" }, { key: "template", label: t("ds.rows.fromTemplate"), icon: "template" }], onSelect: () => undefined }}
       />
-      <GroupHead title={t("est.sec.material")} icon="box" count={2} value="$152.84" fold={{ open, onToggle: () => setOpen(!open), label: t("est.sec.toggle") }} actions={<IconButton bare icon="more" label={t("est.sec.menu")} />} />
+      <GroupHead title={t("est.sec.material")} icon="box" count={2} value="$152.84" fold={{ open, onToggle: () => setOpen(!open), label: t("est.sec.toggle") }} actions={
+        <View ref={moreRef} collapsable={false} testID="showcase-v2-section-menu">
+          <IconButton bare icon="more" label={t("est.sec.menu")} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAt({ x, y, w, h }))} />
+        </View>
+      } />
+      <Menu visible={!!at} anchor={at} items={secItems} onSelect={() => setAt(null)} onClose={() => setAt(null)} />
       {open ? (
         <View>
           <View style={edge(true, false)}>
