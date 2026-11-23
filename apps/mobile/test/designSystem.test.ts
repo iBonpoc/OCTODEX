@@ -270,7 +270,7 @@ describe("design system: components", () => {
     const hits: string[] = [];
     for (const f of code) {
       const src = readFileSync(f, "utf8");
-      if (!/holdConfig\(|activateAfterLongPress/.test(src) || f.endsWith(join("ui", "haptics.ts")) || f.endsWith(join("ui", "pointer.ts"))) continue;
+      if (!/[hH]oldConfig\(|activateAfterLongPress/.test(src) || f.endsWith(join("ui", "haptics.ts")) || f.endsWith(join("ui", "pointer.ts"))) continue;
       // «medium» may come through feelOf(result) — the drop's feel decided by what it came to (sortable.ts)
       for (const k of ["light", "selection", "medium"]) if (!new RegExp(k === "medium" ? "haptics\\.medium\\(|feelOf\\(" : `haptics\\.${k}\\(`).test(src)) hits.push(`${relative(ROOT, f)}: haptics.${k}`);
     }
@@ -290,7 +290,8 @@ describe("design system: components", () => {
     // the shadow is a token
     expect(sortable).toMatch(/component\.liftShadow/);
     // the kind of pointer, not the width, decides how a body starts a drag
-    for (const f of ["SortableList.tsx", "dnd.tsx"]) expect(readFileSync(join(ROOT, "features", f), "utf8")).toMatch(/holdConfig\(/);
+    // (#2375: the estimate's list asks its own — sortHoldConfig, a finger after `sortHoldMs` 500 — by the same kind of pointer)
+    for (const f of ["SortableList.tsx", "dnd.tsx"]) expect(readFileSync(join(ROOT, "features", f), "utf8")).toMatch(/[hH]oldConfig\(/);
   });
   it("text fields only through <TextField> (no raw TextInput outside src/ui)", () => {
     const hits = outsideUiAndPilot.filter((f) =>
