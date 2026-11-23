@@ -1,7 +1,7 @@
 /**
  * The gestures of a folded line of the estimate (visual v2 №5 «Смета, редактор»: no «⋯» and no «≡» on the row — the actions are
  * a swipe and a hold, the drag is a hold). Pure; unit-tested in test/rowGesture.test.ts (rule 27: the phone is not the browser).
- * - a finger: a hold lifts the row (SortableList, `gesture.dragHoldMs`); let go where it was, not moved further than
+ * - a finger: a hold lifts the row (SortableList, `gesture.sortHoldMs` 500, #2375); let go where it was, not moved further than
  *   `gesture.dragStart` — the row's menu opens (as iOS: a held thing that is not carried shows its menu);
  * - a mouse / pen (the web): a move of `dragStart` drags; a long press without a move opens the menu (Pressable onLongPress).
  */
