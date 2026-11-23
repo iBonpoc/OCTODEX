@@ -39,7 +39,7 @@ import { useReducedMotion } from "react-native-reanimated";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { PickerSheet } from "@/ui/pickerSheet";
 import { Labeled, MoneyField, PctField, RatePctField } from "@/features/fields";
-import { MONEY_MODES, TAX_MODES, depositFor, depositMode, discountFor, discountMode, type TotalsMode } from "@/features/estimate/totalsModes";
+import { MONEY_MODES, TAX_MODES, depositFor, depositMode, discountFor, discountMode, remember, type ModeMemo, type TotalsMode } from "@/features/estimate/totalsModes";
 import { ModeRow } from "@/ui/modeRow";
 import { isPartialTax, lastTaxRatePpm, taxChange, wholeTax, type TaxDiff } from "@/features/estimateTax";
 import { Button, IconButton, StatusChip, TextField } from "@/ui/controls";
@@ -292,6 +292,14 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const moneyModes = MONEY_MODES.map(modeLabel);
   const taxModes = TAX_MODES.map(modeLabel);
   const DASH = "—";
+  // what «%» / «$» had before «Выкл.» in this editor (CRM review): back to it brings the value back
+  const discMemo = useRef<ModeMemo<NonNullable<typeof s.discount>>>({});
+  const depMemo = useRef<ModeMemo<DepositSetting>>({});
+  // the field of the row whose «%» / «$» was just picked takes the focus, its text selected (one tap to typing)
+  const [rowFocus, setRowFocus] = useState<{ row: string; n: number }>({ row: "", n: 0 });
+  const focusTotals = (row: string, k: TotalsMode) => k !== "off" && setRowFocus((f) => ({ row, n: f.n + 1 }));
+  const focusOf = (row: string) => (rowFocus.row === row ? rowFocus.n : undefined);
+  const [badRate, setBadRate] = useState(false);
   const lastRate = lastTaxRatePpm(db.estimates, existing?.id);
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
@@ -1335,15 +1343,19 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               modes={moneyModes}
               mode={discountMode(s.discount)}
               off="off"
-              onMode={(k) => setSettings({ discount: discountFor(k, s.discount) })}
+              onMode={(k) => {
+                discMemo.current = remember(discMemo.current, s.discount);
+                setSettings({ discount: discountFor(k, s.discount, discMemo.current) });
+                focusTotals("discount", k);
+              }}
               field={
                 s.discount?.kind === "pct" ? (
-                  <View testID="est-discount-pct"><PctField bps={discountBps(s.discount.value)} onChange={(b) => setSettings({ discount: { kind: "pct", value: String(Math.min(b, 10000) / 10000) } })} /></View>
+                  <View testID="est-discount-pct"><PctField unit a11yLabel={t("ue.discount")} focusNow={focusOf("discount")} bps={discountBps(s.discount.value)} onChange={(b) => setSettings({ discount: { kind: "pct", value: String(Math.min(b, 10000) / 10000) } })} /></View>
                 ) : s.discount?.kind === "fixed" ? (
-                  <View testID="est-discount-fixed"><MoneyField cents={s.discount.cents} onChange={(c) => setSettings({ discount: { kind: "fixed", cents: c } })} /></View>
+                  <View testID="est-discount-fixed"><MoneyField unit a11yLabel={t("ue.discount")} focusNow={focusOf("discount")} cents={s.discount.cents} onChange={(c) => setSettings({ discount: { kind: "fixed", cents: c } })} /></View>
                 ) : undefined
               }
-              sum={totals.discount ? `−${money(totals.discount)}` : DASH}
+              sum={!s.discount ? DASH : totals.discount ? `−${money(totals.discount)}` : money(0)}
               locked={signed}
               testID="est-discount-row"
             />
@@ -1352,12 +1364,16 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               modes={taxModes}
               mode={s.tax.enabled && !exempt ? "pct" : "off"}
               off="off"
-              onMode={(k) => (k === "pct" ? changeTax({ enabled: true }) : setSettings({ tax: { ...s.tax, enabled: false } }))}
+              onMode={(k) => {
+                if (k === "pct") changeTax({ enabled: true });
+                else setSettings({ tax: { ...s.tax, enabled: false } });
+                focusTotals("tax", k);
+              }}
               field={
                 partialTax ? (
                   <T v="caption" tone="mut">{`${ppmToPctText(taxRatePpm(s.tax))}%`}</T>
                 ) : (
-                  <View testID="est-tax-rate"><RatePctField ppm={taxRatePpm(s.tax)} onChange={(p) => setSettings({ tax: wholeTax(s.tax, { ratePpm: Math.min(p, 1_000_000) }) })} /></View>
+                  <View testID="est-tax-rate"><RatePctField unit a11yLabel={t("ue.taxRate")} focusNow={focusOf("tax")} onBad={setBadRate} ppm={taxRatePpm(s.tax)} onChange={(p) => setSettings({ tax: wholeTax(s.tax, { ratePpm: Math.min(p, 1_000_000) }) })} /></View>
                 )
               }
               sum={s.tax.enabled && !exempt ? money(totals.tax) : DASH}
@@ -1366,7 +1382,13 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               note={
                 exempt ? (
                   <View testID="est-tax-exempt"><T v="caption" tone="mut">{t("ue.taxExemptClient")}</T></View>
-                ) : signed ? null : s.tax.enabled && partialTax ? (
+                ) : signed ? (
+                  // a signed estimate: the rows do not change — said once, under the tax (CRM review: «не говорят почему»)
+                  <View testID="est-totals-signed"><T v="caption" tone="mut">{t("ue.taxSigned")}</T></View>
+                ) : s.tax.enabled && badRate ? (
+                  // the field is too narrow for its hint: the hint goes under the row
+                  <FieldError text={t("ue.taxRateHint")} testID="est-tax-bad" />
+                ) : s.tax.enabled && partialTax ? (
                   <View testID="est-tax-partial" style={{ gap: space[2] }}>
                     <T v="caption" tone="mut">{t("ue.taxPartial")}</T>
                     <Button label={t("ue.taxWhole")} variant="secondary" full onPress={() => changeTax({})} />
@@ -1394,12 +1416,16 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               modes={moneyModes}
               mode={depositMode(s.deposit)}
               off="off"
-              onMode={(k) => setSettings({ deposit: depositFor(k, s.deposit) })}
+              onMode={(k) => {
+                depMemo.current = remember(depMemo.current, s.deposit);
+                setSettings({ deposit: depositFor(k, s.deposit, depMemo.current) });
+                focusTotals("deposit", k);
+              }}
               field={
                 s.deposit.kind === "pct" ? (
-                  <View testID="est-deposit-pct"><PctField bps={s.deposit.bps} onChange={(b) => setSettings({ deposit: { kind: "pct", bps: Math.min(b, 10000) } })} /></View>
+                  <View testID="est-deposit-pct"><PctField unit a11yLabel={t("ue.deposit")} focusNow={focusOf("deposit")} bps={s.deposit.bps} onChange={(b) => setSettings({ deposit: { kind: "pct", bps: Math.min(b, 10000) } })} /></View>
                 ) : s.deposit.kind === "fixed" ? (
-                  <View testID="est-deposit-fixed"><MoneyField cents={s.deposit.cents} onChange={(c) => setSettings({ deposit: { kind: "fixed", cents: c } })} /></View>
+                  <View testID="est-deposit-fixed"><MoneyField unit a11yLabel={t("ue.deposit")} focusNow={focusOf("deposit")} cents={s.deposit.cents} onChange={(c) => setSettings({ deposit: { kind: "fixed", cents: c } })} /></View>
                 ) : undefined
               }
               sum={s.deposit.kind === "none" ? DASH : money(totals.deposit)}

@@ -44,7 +44,8 @@ export function ModeRow<K extends string>({
           {title}
         </T>
         <ReadOnly value={!!locked}>
-          <Segmented items={modes} value={mode} onChange={onMode} accent={mode !== off} radio label={title} testID={testID ? `${testID}-mode` : undefined} />
+          {/* a press on the chosen position changes nothing (it never resets a value or asks a question again — code review of #2454) */}
+          <Segmented items={modes} value={mode} onChange={(k) => k !== mode && onMode(k)} accent={mode !== off} radio onCard label={title} testID={testID ? `${testID}-mode` : undefined} />
         </ReadOnly>
         <View style={{ flexDirection: "row", alignItems: "center", columnGap: space[3], marginLeft: "auto" }}>
           {field && mode !== off ? (

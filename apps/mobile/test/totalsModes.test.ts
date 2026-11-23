@@ -1,6 +1,6 @@
 // #2424-wave (MAP §12 п.8, founder 23.11): Скидка / Налог / Депозит — one line each, `[% · Выкл. · $]` right in the row
 import { describe, expect, it } from "vitest";
-import { depositFor, depositMode, discountFor, discountMode, MONEY_MODES, TAX_MODES } from "../src/features/estimate/totalsModes";
+import { depositFor, depositMode, discountFor, discountMode, MONEY_MODES, remember, TAX_MODES } from "../src/features/estimate/totalsModes";
 
 describe("the totals' switch", () => {
   it("reads the setting", () => {
@@ -11,8 +11,8 @@ describe("the totals' switch", () => {
     expect(depositMode({ kind: "pct", bps: 1000 })).toBe("pct");
     expect(depositMode({ kind: "fixed", cents: 0 })).toBe("fixed");
   });
-  it("a press on another position starts it (% — a usual number, $ — empty for the person to type)", () => {
-    expect(discountFor("pct", null)).toEqual({ kind: "pct", value: "0.05" });
+  it("a press on another position starts it (a discount — empty, the person types it; a deposit % — the usual 10)", () => {
+    expect(discountFor("pct", null)).toEqual({ kind: "pct", value: "0" });
     expect(discountFor("fixed", null)).toEqual({ kind: "fixed", cents: 0 });
     expect(discountFor("off", { kind: "pct", value: "0.1" })).toBeNull();
     expect(depositFor("pct", { kind: "none" })).toEqual({ kind: "pct", bps: 1000 });
@@ -24,6 +24,17 @@ describe("the totals' switch", () => {
     expect(discountFor("pct", d)).toBe(d);
     const dep = { kind: "fixed" as const, cents: 7700 };
     expect(depositFor("fixed", dep)).toBe(dep);
+  });
+  it("«Выкл.» and back brings the typed value back (CRM review: a miss on «Выкл.» must not lose it)", () => {
+    const typed = { kind: "fixed" as const, cents: 2500 };
+    const memo = remember({}, typed);
+    expect(discountFor("fixed", discountFor("off", typed, memo), memo)).toEqual(typed);
+    expect(discountFor("pct", typed, memo)).toEqual({ kind: "pct", value: "0" });
+    const dep = { kind: "pct" as const, bps: 2500 };
+    const m2 = remember({}, dep);
+    expect(depositFor("pct", { kind: "none" }, m2)).toEqual(dep);
+    expect(remember(m2, { kind: "none" })).toBe(m2);
+    expect(remember({}, null)).toEqual({});
   });
   it("the order: % · Выкл. · $ (Выкл. in the middle); the tax has no $ until the engine takes a tax sum (#2404)", () => {
     expect(MONEY_MODES).toEqual(["pct", "off", "fixed"]);

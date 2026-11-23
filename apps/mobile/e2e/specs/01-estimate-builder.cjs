@@ -17,7 +17,9 @@ exports.run = async (h) => {
   // optional: #2363 q72 — scrolled down, «Итого» is the capsule (the sum alone); a tap opens the bar with its word «Итого»
   if (await h.page.getByTestId("ue-save-capsule").locator("visible=true").count()) await h.page.getByTestId("ue-save-capsule").click();
   await h.expectText(/Итого \| \$794\.49/, "total");
-  await h.expectText(/10% · \$79\.45/, "deposit");
+  // DS §8.7а: the deposit row — «%», 10 in its field, $79.45 on the right
+  h.expect((await h.page.getByTestId("est-deposit-pct").locator("visible=true").first().locator("input").inputValue()) === "10", "deposit 10%");
+  h.expect((await require("../estimateTotals.cjs").sumIs(h, "est-deposit-row", "$79.45")) === "$79.45", "deposit");
   await h.shot("builder");
   await require("../estimateLine.cjs").saveSend(h); await h.page.waitForTimeout(800);
   await h.expectText(/Отправить клиенту/, "send sheet opens");

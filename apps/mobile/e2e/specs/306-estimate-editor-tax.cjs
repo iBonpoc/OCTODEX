@@ -37,11 +37,11 @@ exports.run = async (h) => {
   await rate.blur();
   await p.waitForFunction(() => document.querySelector('[data-testid="est-tax-rate"] input')?.value === "8.875", null, { timeout: 3000 });
   h.expect((await p.locator('[aria-modal="true"]').locator("visible=true").count()) === 0, "no sheet: the tax is set in its row");
-  h.expect((await totals.sumOf(h, "est-tax-row")) === "$8.88", "the tax on the whole amount: $100.00 × 8.875 % = $8.88");
+  h.expect((await totals.sumIs(h, "est-tax-row", "$8.88")) === "$8.88", "the tax on the whole amount: $100.00 × 8.875 % = $8.88");
   // a 10 % discount: the tax is on the amount after it
   await totals.mode(h, "est-discount-row", "pct");
   await totals.fill(h, "est-discount-pct", "10");
-  h.expect((await totals.sumOf(h, "est-discount-row")) === "−$10.00", "the discount: −$10.00");
+  h.expect((await totals.sumIs(h, "est-discount-row", "−$10.00")) === "−$10.00", "the discount: −$10.00");
   await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="est-tax-row-sum"]')].some((e) => e.offsetParent !== null && e.innerText.trim() === "$7.99"), null, { timeout: 3000 });
   h.expect((await totals.sumOf(h, "est-tax-row")) === "$7.99", "the tax after the discount: $90.00 × 8.875 % = $7.99");
   await h.expectText(/Итого \| \$97\.99/, "the total agrees");
@@ -79,18 +79,38 @@ exports.run = async (h) => {
   await tid("est-tax-ask-no").getByRole("button").click();
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="est-tax-ask"]').length === 0, null, { timeout: 3000 });
   h.expect((await tid("est-tax-partial").count()) === 1, "«Не менять»: still the old setting");
+  // a press on the chosen «%» changes nothing: no question again (code review of #2454)
+  await tid("est-tax-row-mode-pct").click();
+  await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))); // a question that must NOT come: two frames
+  h.expect((await p.getByTestId("est-tax-ask").locator("visible=true").count()) === 0, "a press on the chosen «%» asks nothing");
   await tid("est-tax-partial").getByRole("button").click();
   await tid("est-tax-ask-yes").getByRole("button").click();
   await tid("est-tax-rate").waitFor({ timeout: 3000 });
   h.expect((await tid("est-tax-partial").count()) === 0, "«Пересчитать»: the whole amount now");
 
-  // a signed estimate (awaiting the company's signature, and signed by both): the tax row does not open
+  // the old setting with the tax OFF: «%» asks the same question (DS §8.7)
+  const raw3 = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)), DB_KEY);
+  raw3.db.estimates.find((x) => x.id === saved.id).doc.settings.tax = { enabled: false, rateBps: 1000, groups: { service: false, labor: false, material: true } };
+  await h.seed(DB_KEY, raw3);
+  await h.go(`/estimate/new?id=${saved.id}`);
+  await tid("est-add-new").waitFor({ timeout: 8000 });
+  await tid("est-tax-row-mode-pct").click();
+  await tid("est-tax-ask").waitFor({ timeout: 3000 });
+  h.expect(true, "«%» on an old tax by kind asks «было / станет»");
+  await tid("est-tax-ask-no").getByRole("button").click();
+  await p.waitForFunction(() => document.querySelectorAll('[data-testid="est-tax-ask"]').length === 0, null, { timeout: 3000 });
+
+  // a signed estimate (awaiting the company's signature, and signed by both): the totals rows are read only, and say why
   for (const status of ["awaiting_countersign", "approved"]) {
     const raw2 = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)), DB_KEY);
     raw2.db.estimates.find((x) => x.id === saved.id).status = status;
     await h.seed(DB_KEY, raw2);
     await h.go(`/estimate/new?id=${saved.id}`);
     await tid("ue-save").waitFor({ timeout: 8000 });
-    h.expect((await tid("est-tax-row-mode-off").getAttribute("aria-disabled")) === "true", `a signed estimate (${status}): the tax row is read only`);
+    for (const row of ["est-discount-row", "est-tax-row", "est-deposit-row"]) h.expect((await tid(`${row}-mode-off`).getAttribute("aria-disabled")) === "true", `a signed estimate (${status}): ${row} is read only`);
+    const rateIn = p.getByTestId("est-tax-rate").locator("visible=true").locator("input");
+    if (await rateIn.count()) h.expect(!(await rateIn.first().isEditable()), `a signed estimate (${status}): the rate does not take text`);
+    await tid("est-totals-signed").waitFor({ timeout: 3000 });
+    h.expect(/не меняется/.test(await tid("est-totals-signed").innerText()), `a signed estimate (${status}): says why`);
   }
 };

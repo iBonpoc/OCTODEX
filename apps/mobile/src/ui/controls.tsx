@@ -276,6 +276,7 @@ export function Segmented<K extends string>({
   label,
   equal,
   accent,
+  onCard,
 }: {
   items: { key: K; label: string }[];
   value: K;
@@ -294,6 +295,9 @@ export function Segmented<K extends string>({
   /** visual v2: the chosen segment is the screen's ONE yellow fill (the Plan's «День»); without it the chosen is the neutral cell
    *  `surf3` — a screen has one yellow fill (oneAccent.test.ts counts it) */
   accent?: boolean;
+  /** inside a card (a totals row, DS §8.7а): the track is `track` (the card's `surf` would hide it) and no segment is narrower than
+   *  `size.hitMin` (a one-sign «%» / «$» next to «Выкл.» — a miss must not switch a value off) */
+  onCard?: boolean;
 }) {
   const ro = useReadOnly();
   const { c } = useTheme();
@@ -348,8 +352,8 @@ export function Segmented<K extends string>({
         padding: pad,
         borderRadius: radius.pill,
         // visual v2 «Сегмент»: the track is a card (`surf` + the top highlight), 3 inside
-        backgroundColor: c.surf,
-        borderTopWidth: component.hairline,
+        backgroundColor: onCard ? c.track : c.surf,
+        borderTopWidth: onCard ? 0 : component.hairline,
         borderTopColor: c.hl,
         flexDirection: "row",
         alignSelf: full ? "stretch" : "flex-start",
@@ -370,7 +374,7 @@ export function Segmented<K extends string>({
             onPress={() => onChange(it.key)}
             disabled={ro}
             visibleHeight={h}
-            containerStyle={same ? { flex: 1 } : undefined}
+            containerStyle={same ? { flex: 1 } : onCard ? { minWidth: sizes.hitMin } : undefined}
             accessibilityRole={radio ? "radio" : "tab"}
             accessibilityState={radio ? { selected: sel, checked: sel } : { selected: sel }}
             {...(radio ? ({ "aria-checked": sel } as object) : null)}
@@ -382,9 +386,10 @@ export function Segmented<K extends string>({
               minHeight: h - pad * 2,
               paddingHorizontal: space[3],
               justifyContent: "center",
-              ...(same ? { alignItems: "center" } : null),
-              // a choice in a form never grows past its card: the labels give way, they do not push the segment out
-              ...(radio ? { flexShrink: 1 } : null),
+              ...(same || onCard ? { alignItems: "center" } : null),
+              // a choice in a form never grows past its card: the labels give way, they do not push the segment out (a totals row's
+              // three short labels never need it — shrunk, the track ended before «$», CRM review of #2454)
+              ...(radio && !onCard ? { flexShrink: 1 } : null),
               borderRadius: radius.pill,
               backgroundColor: !ready && sel ? chosenBg : "transparent",
             }}

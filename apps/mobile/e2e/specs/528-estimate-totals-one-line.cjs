@@ -1,8 +1,9 @@
 /**
  * e2e 528 — «Скидка / Налог / Депозит» одной строкой (#2454; founder 23.11, audit MAP §12 п.8; DS §8.7а), every view, by testID:
  * - each row is the word · `[% · Выкл. · $]` · the field · the sum, set right in the row — no sheet opens;
- * - «Выкл.» is in the middle; a press on «%» starts the deposit at 10 %, on «$» at $0 (the person types it); «Выкл.» — «—»;
- * - a press on the position already chosen keeps the typed value;
+ * - «Выкл.» is in the middle; a press on «%» starts the deposit at 10 %, the discount empty, «$» at $0.00; «Выкл.» — «—»;
+ * - the picked row's field takes the focus (one tap to typing); a press on the chosen position keeps the value; «Выкл.» and back
+ *   brings the typed value back;
  * - from 820 the switch, the field and the sum stand on the row's one line; on 390 the field and the sum may go under it, on the right.
  */
 exports.run = async (h) => {
@@ -17,7 +18,6 @@ exports.run = async (h) => {
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await tid("est-add-new").waitFor({ timeout: 8000 });
   await line.addCustom(h, "Roof work", 200);
-  await line.fold(h);
 
   // the order % · Выкл. · $, «Выкл.» in the middle; a new estimate: the discount is off («—»)
   const order = await p.evaluate(() => {
@@ -28,16 +28,27 @@ exports.run = async (h) => {
   h.expect(await chosen("est-discount-row", "off"), "a new estimate: the discount is off");
   h.expect((await totals.sumOf(h, "est-discount-row")) === "—", "off reads «—»");
 
-  // the discount in $: the field is right in the row, no sheet
+  // the discount in $: the field is right in the row, no sheet, the focus in it; $0 reads «$0.00» (on), not «—» (off)
   await totals.mode(h, "est-discount-row", "fixed");
   h.expect((await sheets()) === 0, "no sheet opens: the value is set in the row");
+  await p.waitForFunction(() => !!document.activeElement?.closest('[data-testid="est-discount-fixed"]'), null, { timeout: 3000 });
+  h.expect(true, "the picked row's field has the focus");
+  await sumIs("est-discount-row", "$0.00");
   await totals.fill(h, "est-discount-fixed", "25");
   await sumIs("est-discount-row", "−$25.00");
-  h.expect(true, "the discount in $: −$25.00");
+  h.expect((await totals.sumOf(h, "est-discount-row")) === "−$25.00", "the discount in $: −$25.00");
   // a press on the chosen «$» keeps the typed sum
   await tid("est-discount-row-mode-fixed").click();
   await sumIs("est-discount-row", "−$25.00");
   h.expect((await tid("est-discount-fixed").locator("input").inputValue()) === "25", "a press on the chosen position keeps the value");
+  // «%» starts empty (no number of ours changes the client's sum), «Выкл.» and back to «$» brings the $25 back
+  await totals.mode(h, "est-discount-row", "pct");
+  h.expect(["", "0"].includes(await tid("est-discount-pct").locator("input").inputValue()), "the discount in % starts empty");
+  await sumIs("est-discount-row", "$0.00");
+  await totals.mode(h, "est-discount-row", "off");
+  await totals.mode(h, "est-discount-row", "fixed");
+  await sumIs("est-discount-row", "−$25.00");
+  h.expect((await totals.sumOf(h, "est-discount-row")) === "−$25.00", "«Выкл.» and back: the typed $25 comes back");
 
   // the deposit: «%» starts at 10 % of $175.00 = $17.50; «$» starts empty ($0.00), the person types it; «Выкл.» — «—»
   await totals.mode(h, "est-deposit-row", "pct");
@@ -47,7 +58,7 @@ exports.run = async (h) => {
   await sumIs("est-deposit-row", "$0.00");
   await totals.fill(h, "est-deposit-fixed", "50");
   await sumIs("est-deposit-row", "$50.00");
-  h.expect(true, "the deposit in $: $50.00");
+  h.expect((await totals.sumOf(h, "est-deposit-row")) === "$50.00", "the deposit in $: $50.00");
   await h.shot("totals");
 
   // the row's shape: from 820 the switch, the field and the sum on one line; on any width the field and the sum stay in the row

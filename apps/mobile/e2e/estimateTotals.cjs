@@ -27,4 +27,10 @@ async function setTax(h, rate) {
 /** the text of a row's sum («$68.93», «—») */
 const sumOf = async (h, row) => (await vis(h.page, `${row}-sum`).innerText()).trim();
 
-module.exports = { mode, fill, setTax, sumOf };
+/** wait until a row's sum reads `v` (the totals recount after the field) and return it */
+async function sumIs(h, row, v) {
+  await h.page.waitForFunction(([r, x]) => [...document.querySelectorAll(`[data-testid="${r}-sum"]`)].some((e) => e.offsetParent !== null && e.innerText.trim() === x), [row, v], { timeout: 3000 }).catch(() => {});
+  return sumOf(h, row);
+}
+
+module.exports = { mode, fill, setTax, sumOf, sumIs };
