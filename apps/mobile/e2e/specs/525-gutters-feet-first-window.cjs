@@ -4,6 +4,7 @@
  *   were a guess); «Применить» keeps whole feet;
  * - the window opened again (its length label tapped): the inches set by hand → the feet typed over → the inches stay.
  */
+const { settle } = require("../settle.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -11,7 +12,7 @@ exports.run = async (h) => {
   const tid = (id) => p.getByTestId(id).locator("visible=true");
   const waitFor = async (ok, what, tries = 40) => {
     let v = await ok();
-    for (let i = 0; i < tries && !v; i++) { await p.waitForTimeout(150); v = await ok(); }
+    for (let i = 0; i < tries && !v; i++) { await settle(p, { quietMs: 100, maxMs: 600 }); v = await ok(); }
     h.expect(!!v, what);
   };
   const stroke = async (a, b) => {
@@ -57,7 +58,7 @@ exports.run = async (h) => {
   const newFt = String(Number(before.ft) + 3);
   await p.keyboard.type(newFt, { delay: 60 });
   await waitFor(async () => (await field("quick-length-ft").inputValue()) === newFt, `the feet are ${newFt}`);
-  await p.waitForTimeout(400);
+  await settle(p); // the window has drawn what the feet changed
   const after = await fields();
   h.expect(after.inc === "0", `first window: the inches go to 0 (${before.inc} → ${after.inc})`);
   h.expect(after.frac === "", `first window: no fraction (${before.frac} → ${after.frac})`);
@@ -72,7 +73,7 @@ exports.run = async (h) => {
   await tid("quick-length").waitFor({ timeout: 5000 });
   await field("quick-length-in").fill("7");
   await field("quick-length-ft").fill(String(Number(newFt) + 1));
-  await p.waitForTimeout(300);
+  await settle(p);
   h.expect((await field("quick-length-in").inputValue()) === "7", "opened again: the feet keep the inches");
   await tid("quick-length-apply").getByRole("button").click();
   await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === (Number(newFt) + 1) * 12 + 7), `kept: ${Number(newFt) + 1}′ 7″`);
