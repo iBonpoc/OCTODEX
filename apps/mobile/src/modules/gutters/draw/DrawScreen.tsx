@@ -24,7 +24,7 @@ import { computeGutterParts } from "@octo/estimating-engine";
 import { breakpoint, component, drawing as dt, motion, radius, size as sizes, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
-import { moduleHref, moduleState } from "@/modules/registry";
+import { moduleHref, moduleState, moduleUsable } from "@/modules/registry";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Button, ChoiceChips, IconButton, StatusChip, Toggle } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
@@ -207,7 +207,7 @@ export default function DrawScreen() {
   const params = useLocalSearchParams<{ m?: string; lead?: string; property?: string; estimate?: string }>();
   const ins = useSafeAreaInsets();
   const access = moduleState(store.db.company?.modules?.gutters).access;
-  const canSave = access === "trial" || access === "paid";
+  const canSave = moduleUsable(access);
   // what the company installs, its palette and defaults (settings M7b): new elements and the attribute panel
   const settings = store.db.company?.modules?.gutters?.settings;
   const ch = useMemo(() => choicesFor(settings), [settings]);

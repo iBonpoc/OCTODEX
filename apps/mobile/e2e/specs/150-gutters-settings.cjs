@@ -43,7 +43,7 @@ exports.run = async (h) => {
   await setRole(h, "director");
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await waitFor(async () => !!(await mod()).trialEndsAt, "trial on");
+  await waitFor(async () => !!(await mod()).enabled, "on");
   await tid("module-gutters-settings").getByRole("button").click();
   await p.waitForURL(/\/module\/gutters\/settings$/, { timeout: 5000 });
   await tid("gset-screen").waitFor({ timeout: 5000 });
@@ -124,6 +124,7 @@ exports.run = async (h) => {
   await p.evaluate((k) => {
     const raw = JSON.parse(localStorage.getItem(k));
     raw.db.company.modules.gutters.trialEndsAt = new Date(Date.now() - 86_400_000).toISOString();
+    raw.db.company.modules.gutters.unlimited = false; // #2410: a row with a term (the demo has none of its own)
     localStorage.setItem(k, JSON.stringify(raw));
   }, KEY);
   await h.go("/module/gutters/settings");
@@ -140,7 +141,7 @@ exports.run = async (h) => {
   await setRole(h, "dispatcher");
   await p.evaluate((k) => {
     const raw = JSON.parse(localStorage.getItem(k));
-    raw.db.company.modules.gutters.trialEndsAt = new Date(Date.now() + 86_400_000).toISOString();
+    raw.db.company.modules.gutters.trialEndsAt = new Date(Date.now() + 86_400_000).toISOString(); // a row with a term (unlimited: false above) back in its trial
     localStorage.setItem(k, JSON.stringify(raw));
   }, KEY);
   await h.go("/module/gutters/settings");

@@ -3478,6 +3478,10 @@ export const en: Dict = {
   "mod.st.trial": "Trial · {n} days left",
   "mod.st.paid": "On",
   "mod.st.expired": "Trial ended",
+  // #2410: the developer's company and the demo — on, with no term (not a payment)
+  "mod.st.unlimited": "No time limit",
+  "mod.startNoTerm": "Turn on",
+  "mod.startedNoTerm": "Module turned on",
   "mod.price": "{days} days free, then {price} a month",
   "mod.lockedHint": "Drafts open, but nothing is saved. Set up payment to continue.",
   "mod.start": "Turn on — {days} days free",

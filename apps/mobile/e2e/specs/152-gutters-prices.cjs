@@ -46,7 +46,7 @@ exports.run = async (h) => {
   await editDb((d) => ({ ...d, catalog: [...d.catalog, { id: "own-install-4", kind: "labor", name: "Мой монтаж, 4 этаж", unit: "ft", priceCents: 700 }] }));
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await waitFor(async () => !!(await mod()).trialEndsAt, "trial on");
+  await waitFor(async () => !!(await mod()).enabled, "on");
   await tid("module-gutters-prices").getByRole("button").click();
   await p.waitForURL(/\/module\/gutters\/prices$/, { timeout: 5000 });
   await tid("gpr-screen").waitFor({ timeout: 5000 });
@@ -155,7 +155,7 @@ exports.run = async (h) => {
   // the trial over: read only
   await h.go("/today");
   await setRole(h, "director");
-  await editDb((d) => ({ ...d, company: { ...d.company, modules: { ...d.company.modules, gutters: { ...d.company.modules.gutters, trialEndsAt: "2020-01-01T00:00:00.000Z" } } } }));
+  await editDb((d) => ({ ...d, company: { ...d.company, modules: { ...d.company.modules, gutters: { ...d.company.modules.gutters, trialEndsAt: "2020-01-01T00:00:00.000Z", unlimited: false } } } }));
   await h.go("/module/gutters/prices");
   await tid("gpr-locked").waitFor({ timeout: 5000 });
   h.expect((await tid("gpr-missing-n-action").count()) === 0, "the trial over: nothing to press");
