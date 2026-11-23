@@ -106,7 +106,35 @@ exports.grip = async (h, key) => {
 exports.menu = async (h, id) => {
   const more = vis(h, `[data-testid="est-menu-${id}"]`).first();
   if (await more.count()) await more.getByRole("button").click();
-  else await vis(h, `[data-testid="est-line-${id}"]`).first().click({ delay: 700 });
+  else {
+    // a long press (a mouse): the row must stand still under the pointer (a row that moves while held cancels the press), the
+    // mouse stays down until the row's own menu shows (the hold time is the app's, `motion.longPressMs`, not a number here),
+    // then lets go (no retry: a hold that does not open the menu is a failure)
+    const row = vis(h, `[data-testid="est-line-${id}"]`).first();
+    const mine = vis(h, `[data-testid^="est-act-"][data-testid$="-${id}"]`).first();
+    {
+      await row.scrollIntoViewIfNeeded();
+      await row.evaluate(
+        (el) =>
+          new Promise((done) => {
+            let last = "";
+            let same = 0;
+            const tick = () => {
+              const r = el.getBoundingClientRect();
+              const now = [r.x, r.y, r.width, r.height].join();
+              same = now === last ? same + 1 : 0;
+              last = now;
+              same >= 3 ? done(null) : requestAnimationFrame(tick);
+            };
+            tick();
+          }),
+      );
+      const b = await row.boundingBox();
+      await h.page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+      await h.page.mouse.down();
+      await mine.waitFor({ timeout: 3000 }).finally(() => h.page.mouse.up());
+    }
+  }
   await vis(h, '[data-testid="menu-items"]').first().waitFor({ timeout: 3000 });
 };
 /** «＋ Раздел» is in the menu of «слои» (the round 32 beside «Позиции», visual v2 №5) */
