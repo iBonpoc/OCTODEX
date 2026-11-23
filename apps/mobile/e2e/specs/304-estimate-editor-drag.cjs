@@ -106,6 +106,32 @@ exports.run = async (h) => {
   await line.undo(h);
   await p.waitForFunction((o) => [...document.querySelectorAll('[data-testid^="est-line-"], [data-testid^="est-section-"]')].map((e) => e.getAttribute("data-testid").replace("est-line-", "l:").replace("est-section-", "s:")).join(" ") === o, withYard.join(" "), { timeout: 4000 });
 
+  // #2422 (founder 23.11; MAP §6): a section in the hand folds EVERY section to its title — Roof's line is not in the list while Yard
+  // is carried; let go over nothing — nothing moves, and Roof is open again with its line
+  const inRoof = (await order()).filter((x) => x.startsWith("l:")).pop();
+  const orderNow = (await order()).join(" ");
+  await drag(`l:${inRoof.slice(2)}`, async () => {
+    const sBox = await tid(`est-section-${sec.slice(2)}`).boundingBox();
+    return sBox.y + sBox.height + 12;
+  });
+  await p.waitForFunction(([s, l]) => { const els = [...document.querySelectorAll('[data-testid^="est-line-"], [data-testid^="est-section-"]')].map((e) => e.getAttribute("data-testid")); return els.indexOf(`est-line-${l}`) === els.indexOf(`est-section-${s}`) + 1; }, [sec.slice(2), inRoof.slice(2)], { timeout: 4000 });
+  const lineShown = () => p.evaluate((l) => [...document.querySelectorAll(`[data-testid="est-line-${l}"]`)].some((e) => e.offsetParent !== null), inRoof.slice(2));
+  h.expect(await lineShown(), "the line is in Roof, shown");
+  // the landed line flashes for a moment (DS §14.6): a new hold starts once it has landed
+  await p.waitForFunction(() => document.querySelectorAll('[data-testid^="sort-flash-"]').length === 0, null, { timeout: 3000 });
+  await tid(`est-section-${secs[1].slice(2)}`).evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await drag(`s:${secs[1].slice(2)}`, async () => (await tid(`est-section-${secs[1].slice(2)}`).boundingBox()).y + 4, { release: false });
+  const folded = await require("../sheet.cjs").waited(p.waitForFunction((l) => ![...document.querySelectorAll(`[data-testid="est-line-${l}"]`)].some((e) => e.offsetParent !== null), inRoof.slice(2), { timeout: 3000 }));
+  h.expect(folded, "Yard in the hand: Roof is folded to its title too (its line is not in the list)");
+  await p.mouse.move(5, 4, { steps: 4 });
+  await p.mouse.up();
+  await p.waitForFunction(() => document.querySelectorAll('[data-testid="sort-bar"]').length === 0, null, { timeout: 3000 });
+  await tid(`est-line-${inRoof.slice(2)}`).waitFor({ timeout: 3000 });
+  h.expect((await order()).filter((x) => x.startsWith("s:")).join(" ") === secs.join(" "), "let go over nothing: the sections stand as they stood");
+  h.expect(await lineShown(), "let go: Roof is open again with its line (the person's folding is as it was)");
+  await line.undo(h);
+  await p.waitForFunction((o) => [...document.querySelectorAll('[data-testid^="est-line-"], [data-testid^="est-section-"]')].map((e) => e.getAttribute("data-testid").replace("est-line-", "l:").replace("est-section-", "s:")).join(" ") === o, orderNow, { timeout: 4000 });
+
   // the body of a folded row is taken by the mouse (a move of 5), not only the handle
   const firstLine = (await order()).find((x) => x.startsWith("l:"));
   const body = tid(`sort-row-l:${firstLine.slice(2)}`);
