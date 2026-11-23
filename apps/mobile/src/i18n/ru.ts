@@ -927,7 +927,7 @@ export const ru = {
   "est.row.show": "Показать клиенту",
   "est.row.hideNeedZero": "Скрыть можно позицию с ценой $0",
   "est.row.hideTpl": "В шаблоне скрытие позиции пока не сохраняется",
-  "est.row.hidden": "Скрыта от клиента",
+  "est.row.hidden": "Скрыто от клиента",
   // редактор сметы, часть «а» (#1307, DS §8.3)
   "est2.view.brief": "Кратко",
   "est2.view.full": "Подробно",

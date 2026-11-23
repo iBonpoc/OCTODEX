@@ -35,8 +35,10 @@ exports.run = async (h) => {
   await vis(`[data-testid="est-name-${b}"] input`).first().fill("Haul-away (тестовые)");
   await vis(`[data-testid="est-price-${b}"] input`).first().fill("0");
   await vis(`[data-testid="est-cost-${b}"] input`).first().fill("30");
-  await tid(`est-more-${b}`).click();
-  await tid(`est-hide-${b}`).getByRole("switch").click();
+  // #2424: hidden by «⋯ → Скрыть от клиента» (no switch in «Ещё»)
+  await line.menu(h, b);
+  await tid(`est-act-hide-${b}`).click();
+  await tid(`est-hidden-frame-${b}`).waitFor({ timeout: 3000 });
   await line.fold(h);
   await tid(`est-spend-${b}`).waitFor({ timeout: 3000 });
   // «Только для вас» (cost, profit) under the totals (#1362, DS §8.9)

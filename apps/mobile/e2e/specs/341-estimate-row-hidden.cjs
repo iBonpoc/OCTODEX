@@ -2,9 +2,9 @@
  * e2e 341 — a hidden line and «Нет цены» on the folded row (DS §8.3, spec §11.2.2–11.2.3, #1307 part «а»), every view,
  * by testID:
  * - a visible line at $0 carries «Нет цены» (a soft warning; «Сохранить» still works);
- * - hidden at $0 with a cost: «Скрыта от клиента», the hatch, the name pale; on the right — «расход $X» for the owner
+ * - hidden at $0 with a cost: «Скрыто от клиента», the dashed frame, the name pale; on the right — «расход $X» for the owner
  *   (who sees costs), $0 for the tech; the open row says «Сумма $0 · ваш расход $X»;
- * - a price typed in shows the line again: no «Скрыта», no «расход», no «Нет цены»;
+ * - a price typed in shows the line again: no «Скрыто», no «расход», no «Нет цены»;
  * - «На выбор клиента»: the mark on the folded row («по желанию клиента» in its second line, v2), «на выбор клиента, в итог не входит» in the open one.
  */
 exports.run = async (h) => {
@@ -28,14 +28,15 @@ exports.run = async (h) => {
   await tid(`est-noprice-${id}`).waitFor({ timeout: 3000 });
   h.expect(/Нет цены/.test(await tid(`est-noprice-${id}`).innerText()), "«Нет цены» on a visible $0 line");
 
-  // hide it: «Скрыта от клиента», «расход $280» on the right, no «Нет цены»
+  // hide it (#2424: «⋯ → Скрыть от клиента»): «Скрыто от клиента», «расход $280» on the right, no «Нет цены»
   await tid(`est-line-${id}`).click();
-  await tid(`est-more-${id}`).click();
-  await tid(`est-hide-${id}`).getByRole("switch").click();
+  await line.menu(h, id);
+  await tid(`est-act-hide-${id}`).click();
+  await tid(`est-hidden-frame-${id}`).waitFor({ timeout: 3000 });
   h.expect(/ваш расход \$280/.test(await tid(`est-figures-${id}`).innerText()), "the open hidden row: «Сумма $0 · ваш расход $280»");
   await line.fold(h);
   await tid(`est-hidden-${id}`).waitFor({ timeout: 3000 });
-  h.expect(/Скрыта от клиента/.test(await tid(`est-hidden-${id}`).innerText()), "«Скрыта от клиента»");
+  h.expect(/Скрыто от клиента/.test(await tid(`est-hidden-${id}`).innerText()), "«Скрыто от клиента»");
   h.expect(/расход \$280/.test(await tid(`est-spend-${id}`).innerText()), "the owner sees «расход $280» under the name");
   h.expect(/\$0\b/.test(await tid(`est-sum-${id}`).innerText()), "the sum on the right is $0 — the client pays nothing for it");
   h.expect((await count(`[data-testid="est-noprice-${id}"]`)) === 0, "a hidden line has no «Нет цены»");
@@ -62,7 +63,7 @@ exports.run = async (h) => {
   await vis(`[data-testid="est-price-${id}"] input`).first().fill("30");
   await p.getByText(/снова видна клиенту/i).first().waitFor({ timeout: 3000 });
   await line.fold(h);
-  h.expect((await count(`[data-testid="est-hidden-${id}"]`)) === 0, "shown again: no «Скрыта от клиента»");
+  h.expect((await count(`[data-testid="est-hidden-${id}"]`)) === 0, "shown again: no «Скрыто от клиента»");
   h.expect((await count(`[data-testid="est-spend-${id}"]`)) === 0, "shown again: no «расход»");
   h.expect((await count(`[data-testid="est-noprice-${id}"]`)) === 0, "a line with a price: no «Нет цены»");
 

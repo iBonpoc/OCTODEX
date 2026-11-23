@@ -87,7 +87,7 @@ describe("choice controls (DS §21.2 п.27, spec 56 §9.3)", () => {
     "app/team.tsx": 1,
     "features/EstimateView.tsx": 1,
     "features/PushSettings.tsx": 2,
-    "features/estimate/LineRow.tsx": 4,
+    "features/estimate/LineRow.tsx": 2,
     "features/showcase/Haptics.tsx": 1,
     "features/showcase/Rows.tsx": 2,
     "modules/gutters/draw/AttrPanel.tsx": 1,

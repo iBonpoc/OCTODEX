@@ -3,13 +3,11 @@ import { memo, useEffect, useRef, useState, type ComponentRef } from "react";
 import { Platform, View } from "react-native";
 import Animated, { Easing, useReducedMotion, useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
 import { component, motion, size, space, spaceHalf } from "@octo/design-tokens";
-import Svg, { Defs, Line, Pattern, Rect } from "react-native-svg";
 import type { CustomLine, LineGroup } from "@octo/estimating-engine";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { IconButton, StatusChip, TextField, Toggle } from "@/ui/controls";
-import { Menu, useToast, type MenuItem } from "@/ui/overlays";
-import { ReadOnly } from "@/ui/readOnly";
+import { Menu, type MenuItem } from "@/ui/overlays";
 import { NumberField } from "@/ui/numberField";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import type { RequiredForm } from "@/ui/requiredForm";
@@ -20,6 +18,7 @@ import { canHide, hiddenSpend, isHidden, noPrice, rowActions, rowFigures, rowPri
 import type { RowView as RowLook } from "./rowView";
 import { LineMarks } from "@/features/LineMarks";
 import { SwipeRow, type SwipeBtn } from "./SwipeRow";
+import { DashedFrame } from "@/ui/dashedFrame";
 import { useRowHandle, useRowHead } from "@/features/SortableList";
 import { swipes } from "./swipeState";
 import { rowQtyLine, rowSum } from "./rowLine";
@@ -96,22 +95,6 @@ export interface LineRowProps {
   menuAsk?: number;
 }
 
-/** the hidden line's hatch (DS §8.3): `track` stripes at 45°, `hairline` × 2 wide, a `space[2]` step — no status colour */
-function Hatch({ color, id }: { color: string; /** one pattern id per row: two equal ids on a web page draw only the first */ id: string }) {
-  return (
-    <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }}>
-      <Svg width="100%" height="100%">
-        <Defs>
-          <Pattern id={`est-hatch-${id}`} patternUnits="userSpaceOnUse" width={space[2]} height={space[2]} patternTransform="rotate(45)">
-            <Line x1={0} y1={0} x2={0} y2={space[2]} stroke={color} strokeWidth={component.hairline * 2} />
-          </Pattern>
-        </Defs>
-        <Rect x={0} y={0} width="100%" height="100%" fill={`url(#est-hatch-${id})`} />
-      </Svg>
-    </View>
-  );
-}
-
 export const rowFieldId = (lineId: string, f: "name" | "qty" | "price" | "cost") => `est-${f}-${lineId}`;
 
 function LineRowView(p: LineRowProps) {
@@ -119,7 +102,6 @@ function LineRowView(p: LineRowProps) {
   const { t, money } = useI18n();
   const { c } = useTheme();
   const reduce = useReducedMotion();
-  const toast = useToast();
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   // the list draws «≡» of this open line over the right end of its header (DS §8.3): the header keeps the place
   const handleInHeader = useRowHandle();
@@ -298,7 +280,7 @@ function LineRowView(p: LineRowProps) {
     // finger), a long press (a mouse) and the screen reader's actions; the open line has the same face on top (#2421)
     const row = (
       <View ref={rowRef} collapsable={false}>
-        {hidden ? <Hatch color={c.track} id={l.id} /> : null}
+        {hidden ? <DashedFrame testID={`est-hidden-frame-${l.id}`} /> : null}
         {/* founder 21.11 («5 открытых»: корзина в свёрнутой строке — оставить, всегда; DS §8.3 О8, #2374): the trash stands on the folded
             line too, a quiet icon in the column of the group's «⋯»; the delete gives the «Вернуть» toast (rule 5) */}
         <RowView gap={0}>
@@ -331,7 +313,7 @@ function LineRowView(p: LineRowProps) {
     // its «≡», not by a hold) and the screen reader's actions. The fields come out under it by height (`openClip`)
     <View testID={`est-line-${l.id}`} accessibilityState={{ expanded: true }} onTouchStart={p.onTouchOpen}>
       <View ref={rowRef} collapsable={false} onLayout={(e) => setHeadH?.(e.nativeEvent.layout.height)}>
-        {isHidden(l) ? <Hatch color={c.track} id={`${l.id}-open`} /> : null}
+        {isHidden(l) ? <DashedFrame testID={`est-hidden-frame-${l.id}`} /> : null}
         <RowView gap={0}>
           <View testID={`est-collapse-${l.id}`} style={{ flex: 1 }}>
             <Press onPress={p.api.close} onLongPress={items.length ? () => openMenuAt(rowRef) : undefined} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={l.name || t("est.row.unnamed")} accessibilityHint={t("est.row.collapse")} accessibilityState={{ expanded: true }} accessibilityActions={a11yActs} onAccessibilityAction={onA11yAct} containerStyle={{ flex: 1 }}>
@@ -466,29 +448,13 @@ function LineRowView(p: LineRowProps) {
                 <Toggle label={t("ue.addon")} on={!!l.optional} onChange={(on) => p.api.change(l.id, { optional: on })} />
               </RowView>
             </View>
+            {/* founder 23.11 (MAP §12 п.7): no switch «Скрыть от клиента» here — a line is hidden by the swipe and «⋯ → Скрыть от
+                клиента» (a priced one: the item is pale, a press says «Скрыть можно позицию с ценой $0») */}
             {p.noHide ? (
               <T v="caption" tone="mut">
                 {t("est.row.hideTpl")}
               </T>
-            ) : (
-              <View testID={`est-hide-${l.id}`}>
-                <RowView style={{ minHeight: size.hitMin }}>
-                  <T v="body" tone={isHidden(l) || canHide(l) ? "ink" : "mut"} style={{ flex: 1 }}>
-                    {t("est.row.hide")}
-                  </T>
-                  {isHidden(l) || canHide(l) ? (
-                    <Toggle label={t("est.row.hide")} on={isHidden(l)} onChange={(on) => p.api.change(l.id, { clientVisible: on ? false : undefined })} />
-                  ) : (
-                    // a price on the line: the switch is pale and does not turn; a press says why (DS §8.3, Б13)
-                    <Press onPress={() => toast.show(t("est.row.hideNeedZero"))} visibleHeight={size.hitMin} accessibilityRole="button" accessibilityLabel={`${t("est.row.hide")}. ${t("est.row.hideNeedZero")}`} testID={`est-hide-why-${l.id}`}>
-                      <ReadOnly value>
-                        <Toggle label={t("est.row.hide")} on={false} onChange={() => {}} />
-                      </ReadOnly>
-                    </Press>
-                  )}
-                </RowView>
-              </View>
-            )}
+            ) : null}
           </>
         ) : null}
       </View>

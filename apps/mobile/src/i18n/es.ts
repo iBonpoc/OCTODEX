@@ -928,7 +928,7 @@ export const es: Dict = {
   "est.row.show": "Mostrar al cliente",
   "est.row.hideNeedZero": "Una línea se puede ocultar con precio $0",
   "est.row.hideTpl": "Ocultar una línea aún no se guarda en una plantilla",
-  "est.row.hidden": "Oculta al cliente",
+  "est.row.hidden": "Oculto al cliente",
   // редактор сметы, часть «а» (#1307, DS §8.3)
   "est2.view.brief": "Breve",
   "est2.view.full": "Detallado",
