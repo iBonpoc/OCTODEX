@@ -966,6 +966,7 @@ export const ru = {
   "est.sec.addHere": "Добавить позицию сюда",
   "est.sec.catalogHere": "Из каталога сюда",
   "est.sec.delete": "Удалить раздел",
+  "est.sec.deleteKeep": "Удалить раздел, оставить позиции",
   "est.sec.laidOut": "Разложено по видам",
   "est.sec.deleted": "Раздел удалён",
   "est.sec.moveTitle": "Переместить",

@@ -1031,15 +1031,15 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   /** «слои» (visual v2 №5): the sections and the options of the list */
   const layerItems = [
     ...(!signed ? [{ key: "section", label: t("est.sec.addSectionMenu"), icon: "plus" as const, testID: "est-add-section" }] : []),
-    ...(!signed && !tplEdit && doc.options.length < MAX_OPTIONS ? [{ key: "option", label: t("est.var.add"), icon: "copy" as const, testID: "est-add-option" }] : []),
+    // (two options and more: «＋ Вариант» is the options card's own — С4)
+    ...(!signed && !tplEdit && doc.options.length === 1 ? [{ key: "option", label: t("est.var.add"), icon: "copy" as const, testID: "est-add-option" }] : []),
     ...(!signed && option.lines.length ? [{ key: "layout", label: t("est.sec.layout"), icon: "menu" as const, testID: "est-layers-layout" }] : []),
   ];
-  // the round «˅» beside «＋ Позиция»: the other ways to add (С4) — the catalog first, a template, then the sections and options
+  // #2403 (founder 22.11: «повторяются, пересекаются»; CRM map С5): the round «˅» beside «＋ Позиция» is the ways to add a LINE only —
+  // the catalog and a template; the structure (a section, an option, the layout) is the estimate's own «⋯»
   const addItems = [
     { key: "catalog", label: t("px3.est.fromCatalog"), icon: "catalog" as const, testID: "est-add-catalog" },
     ...(!tplEdit ? [{ key: "template", label: t("ds.rows.fromTemplate"), icon: "template" as const, testID: "est-menu-template" }] : []),
-    // (the layout «Разложить по видам» is the editor's «⋯» only — not a way to add, never twice)
-    ...layerItems.filter((x) => x.key !== "layout"),
   ];
   const onAdd = (k: string) => {
     if (k === "new") addNew();
@@ -1049,18 +1049,18 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     else if (k === "section") addSectionBtn();
     else if (k === "layout") layoutBtn();
   };
-  /** «⋯» of the editor: rare things — send now, the layout of the list, how the rows read, the client's screen */
+  /** «⋯» of the editor (#2403, CRM map С1, С5–С7): the whole estimate, two groups — how it reads, then its structure. The send is the
+   * header's round only (never twice); a section, the layout and a second option live here, not in «˅» */
   const moreList = [
-    // the same words as the header's round «Отправить» (CRM review: one action, one name); in «⋯» it stays for the empty
-    // estimate too — pressed with no line it says what is missing (spec 308)
-    ...(canSend ? [{ key: "send", label: existing && existing.status !== "draft" ? t("r1.est.sendChanges") : t("proto.est.saveSend"), icon: "send" as const, testID: "ue-save-send" }] : []),
-    ...(!signed && option.lines.length ? [{ key: "layout", label: t("est.sec.layout"), icon: "menu" as const, testID: "est-group-by-kind" }] : []),
     ...(option.lines.length ? [{ key: "rows", label: t("proto.est.rowsFull"), icon: "menu" as const, selected: rowLook === "full", testID: "est-row-view" }] : []),
-    { key: "client", label: t("est.client.on"), icon: "eye" as const, selected: clientScreen, testID: "est-menu-client" },
+    // (the cost-free screen changes nothing for a role that never sees the costs — С13)
+    ...(seeCosts ? [{ key: "client", label: t("est.client.on"), icon: "eye" as const, selected: clientScreen, testID: "est-menu-client" }] : []),
+    ...layerItems.map((x, i) => ({ ...x, group: i === 0 })),
   ];
   const onMore = (k: string) => {
-    if (k === "send") void save(true);
-    else if (k === "layout") layoutBtn();
+    if (k === "layout") layoutBtn();
+    else if (k === "section") addSectionBtn();
+    else if (k === "option") addOption();
     else if (k === "rows") setRowLook(rowLook === "full" ? "brief" : "full");
     else toggleClientScreen(!clientScreen);
   };
@@ -1089,9 +1089,10 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       // round 40 of the header before «⋯» (as «＋ · ⋯» of every header); the bottom keeps the lines' buttons and «Итого / Готово»
       right={tplEdit ? undefined : (
         <RowView gap={space[2]}>
-          {canSend && !signed && option.lines.length > 0 ? (
+          {/* #2403 С1–С3: the one place to send — the empty estimate too (a press says what is missing); a sent one says what it sends */}
+          {canSend && !signed ? (
             <View testID="est-send-top">
-              <IconButton icon="send" label={existing && existing.status !== "draft" ? t("r1.est.sendChanges") : t("proto.est.saveSend")} onPress={() => void save(true)} />
+              <IconButton icon="send" label={existing && existing.status !== "draft" ? (dirty || changedAfterSend ? t("r1.est.sendChanges") : t("est.view.sendAgain")) : t("proto.est.saveSend")} onPress={() => void save(true)} />
             </View>
           ) : null}
           <MoreButton items={moreList} onMore={onMore} a11y={t("est.actions")} testID="est-menu" />

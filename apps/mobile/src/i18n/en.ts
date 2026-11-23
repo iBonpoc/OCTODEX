@@ -967,6 +967,7 @@ export const en: Dict = {
   "est.sec.addHere": "Add item here",
   "est.sec.catalogHere": "From catalog here",
   "est.sec.delete": "Delete section",
+  "est.sec.deleteKeep": "Delete section, keep items",
   "est.sec.laidOut": "Grouped by kind",
   "est.sec.deleted": "Section deleted",
   "est.sec.moveTitle": "Move",

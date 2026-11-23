@@ -159,10 +159,12 @@ function LineRowView(p: LineRowProps) {
   };
   // «Выше» / «Ниже» first (a line the person may move — not a module's), then what the engine offers
   const shifts: ("up" | "down")[] = acts.menu.includes("move") && p.api.shift ? ["up", "down"] : [];
-  const items: MenuItem<RowAction | "up" | "down">[] = [
-    ...shifts.map((k) => ({ key: k, label: t(k === "up" ? "est.sec.moveUp" : "est.sec.moveDown"), icon: (k === "up" ? "chevronUp" : "chevronDown") as IconKey, testID: `est-act-${k}-${l.id}` })),
-    ...acts.menu.map((k) => ({ key: k, ...META[k], destructive: k === "delete", dim: k === "hide" && !canHide(l), testID: `est-act-${k}-${l.id}` })),
-  ];
+  // #2403 (CRM map С9–С10): the menu holds only what the row does not show — «Выше / Ниже» are the grip's (and the screen reader's
+  // actions below), the delete is the bin's, the hide is the switch of the open row (and the swipe)
+  const ON_ROW: RowAct[] = ["delete", "hide", "show"];
+  const items: MenuItem<RowAction | "up" | "down">[] = acts.menu
+    .filter((k) => !ON_ROW.includes(k))
+    .map((k) => ({ key: k, ...META[k], testID: `est-act-${k}-${l.id}` }));
   const pick = (a: RowAction | "up" | "down") => (a === "up" || a === "down" ? p.api.shift?.(l.id, a === "up" ? -1 : 1) : p.api.action(l.id, a));
   const swipeBtn = (k: RowAct): SwipeBtn => ({ key: k, ...META[k], tone: k === "delete" ? "bad" : undefined, dim: k === "hide" && !canHide(l), testID: `est-swipe-${k}-${l.id}` });
   const f = (id: "name" | "qty" | "price" | "cost") => p.form.field(rowFieldId(l.id, id));

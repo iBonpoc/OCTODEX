@@ -109,22 +109,15 @@ export function OptionsCard(p: {
                     </View>
                   </Press>
                   {o.recommended ? (
-                    // «★ рекомендуем» — a checkbox with the option's name (DS §8.10): a press takes the mark off
-                    <Press
-                      onPress={p.locked ? undefined : () => p.onRecommend(o.id, false)}
-                      visibleHeight={size.hitMin}
-                      accessibilityRole="checkbox"
-                      accessibilityState={{ checked: true, disabled: !!p.locked }}
-                      accessibilityLabel={`${t("est.var.recommended")}: ${o.name}`}
-                      testID={`est-var-rec-${o.id}`}
-                    >
+                    // «★ рекомендуем» — a mark, not a button (#2403 С11: a press took it off without a word); it is set and taken off in «⋯»
+                    <View testID={`est-var-rec-${o.id}`}>
                       <RowView style={{ gap: space[1], justifyContent: "center", minHeight: size.hitMin }}>
                         <Icon name="star" s={size.iconXs} color={c.mut} />
                         <T v="caption" tone="mut">
                           {t("est.var.recommended")}
                         </T>
                       </RowView>
-                    </Press>
+                    </View>
                   ) : null}
                 </View>
               ))}
