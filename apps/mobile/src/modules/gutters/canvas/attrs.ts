@@ -197,7 +197,14 @@ export function changeDs(a: DsAttrs, patch: Partial<DsAttrs>, ch?: Choices): DsA
   // a round one has no offset styles A/B (G2): a B offset of a rect one is a plain offset there, the length and count stay
   if (shape === "round" && n.offsets?.some((o) => o.style !== undefined)) n.offsets = n.offsets.map(({ style: _s, ...o }) => o);
   // plain ↔ corrugated (G2, leader №24 п.7): the bending is the new kind's own — a plain one bent on site, a corrugated one ready-made
-  if (patch.dsStyle !== undefined && patch.dsStyle !== a.dsStyle) delete n.elbowBend;
+  if (patch.dsStyle !== undefined && patch.dsStyle !== a.dsStyle) {
+    delete n.elbowBend;
+    // a plain one with no bought elbow (a corrugated one's 0 kept as [{A, 0}]) is bent on site — never 0 elbows and 0 bends (review G2 №2)
+    if (n.dsStyle === "plain" && shape === "rect" && !n.elbows?.some((e) => e.qty > 0)) delete n.elbows;
+    // a Y funnel sits on a corrugated rectangular one only: on another it is a funnel (review G2 №7; the engine would drop it)
+    if (n.head === "y_funnel" && !(shape === "rect" && n.dsStyle === "corrugated")) n.head = "funnel";
+  }
+  if (shapeChanged && n.head === "y_funnel" && shape !== "rect") n.head = "funnel";
   // a reducer goes to a smaller size of the same shape: another shape's size, its own or a larger one — gone
   if (n.reducers?.some((r) => !smallerSizes(shape, n.size).includes(r.to))) delete n.reducers;
   // a wall kit of the other shape: the same wall, this shape's default kit

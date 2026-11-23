@@ -3,6 +3,8 @@ import { computeGutterParts } from "@octo/estimating-engine";
 import { boughtElbowCounts, boughtElbowPatch, changeDs, dsCode, dsStoryPatch, dsStoryShown, elbowCounts, type DsAttrs } from "../src/modules/gutters/canvas/attrs";
 import { DEFAULT_DS_ATTRS, fromElements, toElements, type ElementRow } from "../src/modules/gutters/canvas/model";
 import { MODULE_CHOICES, newDsAttrs } from "../src/modules/gutters/settings";
+import { partName } from "../src/modules/gutters/prices";
+import { tFor } from "../src/i18n/translate";
 import { toMeasurement, type Drawing, type DrawnDownspout } from "../src/modules/gutters/geometry";
 
 /** G2 (#2412, v43; leader №24's decision on stage 0): the window's model of elbows, the storey, the new defaults; rule 16 on reload */
@@ -54,6 +56,25 @@ describe("G2: a plain one — the window counts bought elbows, the estimate the 
     const field = { ...plain, elbowBend: "field" as const };
     expect(apply(field, { dsStyle: "corrugated" }).elbowBend).toBeUndefined();
   });
+  it("review №2: corrugated at 0 → plain is bent on site (3 bends), never 0 elbows and 0 bends", () => {
+    const c: DsAttrs = { ...DEFAULT_DS_ATTRS, dsStyle: "corrugated" };
+    const zero = apply(c, boughtElbowPatch(c, "A", 0));
+    const p = apply(zero, { dsStyle: "plain" });
+    expect(bends(p)).toEqual({ bends: "3", elbows: [] });
+    // bought ones stay bought across the change
+    const two = apply(c, boughtElbowPatch(c, "A", 2));
+    expect(bends(apply(two, { dsStyle: "plain" })).elbows).toEqual(["elbow.A.rect.2x3.plain.aluminum.white=2"]);
+  });
+  it("review №7: a Y funnel leaves with the corrugated kind — a funnel on a plain or round one", () => {
+    const y: DsAttrs = { ...DEFAULT_DS_ATTRS, dsStyle: "corrugated", head: "y_funnel" };
+    expect(apply(y, { dsStyle: "plain" }).head).toBe("funnel");
+    expect(apply(y, { shape: "round" }).head).toBe("funnel");
+  });
+  it("review №1: the window's stepper — «−» from 1 to 0 on a plain one shows 0, not a jump to 3", () => {
+    const one = apply(plain, boughtElbowPatch(plain, "A", 1));
+    const zero = apply(one, boughtElbowPatch(one, "A", boughtElbowCounts(one).A! - 1));
+    expect(boughtElbowCounts(zero)).toEqual({ A: 0, B: 0 });
+  });
   it("rect → round: the count stays, an angle and an offset style go (a round one has neither)", () => {
     const a: DsAttrs = { ...DEFAULT_DS_ATTRS, dsStyle: "corrugated", elbows: [{ style: "A", qty: 2, angle: 60 }], offsets: [{ lengthIn: 2, qty: 1, style: "B" }] };
     const r = apply(a, { shape: "round" });
@@ -88,5 +109,18 @@ describe("G2: new defaults, rule 16 on a reload", () => {
     };
     const back = fromElements(JSON.parse(JSON.stringify(toElements(d, "m"))) as ElementRow[]).downspouts[0] as DrawnDownspout & { futureKey?: string };
     expect([back.story, back.elbows, back.offsets, back.futureKey]).toEqual([2, [{ style: "A", qty: 1, angle: 60 }], [{ lengthIn: 2, qty: 1, style: "B" }], "x"]);
+  });
+});
+
+describe("G2: names of the new parts (rule 7: never a code)", () => {
+  const t = tFor("en");
+  const part = (attrs: Record<string, string>, orderAttrs?: Record<string, string>) => ({ key: "x", section: "downspouts" as const, qty: "1", unit: "ea" as const, use: "both" as const, kind: "material" as const, attrs, ...(orderAttrs ? { orderAttrs } : {}) });
+  it("a rect elbow at 60° is named 60°, not 75°", () => {
+    expect(partName(t, part({ part: "elbow", shape: "rect", size: "2x3", style: "A" }, { angle: "60" }))).toContain("60°");
+    expect(partName(t, part({ part: "elbow", shape: "rect", size: "2x3", style: "A" }))).toContain("75°");
+  });
+  it("leader heads by their style, a Y funnel by its word", () => {
+    for (const [head, w] of [["ornate14", "Ornate 14″"], ["tapered", "Tapered"], ["molded", "Molded"]]) expect(partName(t, part({ part: "leader_head", shape: "rect", size: "2x3", head: head! }))).toContain(w);
+    expect(partName(t, part({ part: "y_funnel", shape: "rect", size: "2x3" }))).toContain("Y Funnel");
   });
 });

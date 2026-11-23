@@ -21,7 +21,7 @@ import { Menu } from "@/ui/overlays";
 import { fillStyle } from "@/ui/fill";
 import { SelectedCheck } from "@/ui/selectedCheck";
 import { RowView } from "@/ui/surfaces";
-import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, elbowCounts, elbowPatch, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, boughtElbowCounts, boughtElbowPatch, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
 import { FracPicker } from "./FracPicker";
 import { feetResetsRest, inchesComplete, inchesTooBig, nextStage, type EntryStage } from "./lengthEntry";
@@ -478,15 +478,16 @@ export function RunAttrsView({
   );
 }
 
-/** elbows (founder 08.11): a count for every style of the shape — «A 2 шт, B 1 шт» */
+/** elbows (founder 08.11): a count for every style of the shape — «A 2 шт, B 1 шт»; the BOUGHT ones (G2, leader №24): a plain one bent
+ *  on site shows 0, its bends are the estimate's */
 function Elbows({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void }) {
   const { t } = useI18n();
-  const counts = elbowCounts(ds);
+  const counts = boughtElbowCounts(ds);
   return (
     <Field label={t(k("elbows"))} testID="attr-elbow-qty">
       {Object.entries(counts).map(([style, qty]) => (
         <View key={style} testID={`attr-elbow-${style}`}>
-          <Stepper label={elbow(style)} value={qty} min={0} max={12} onChange={(n) => onAttrs(elbowPatch(ds, style, n))} />
+          <Stepper label={elbow(style)} value={qty} min={0} max={12} onChange={(n) => onAttrs(boughtElbowPatch(ds, style, n))} />
         </View>
       ))}
     </Field>

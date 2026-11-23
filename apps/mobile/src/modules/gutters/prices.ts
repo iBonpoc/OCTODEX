@@ -400,7 +400,7 @@ export interface PartView {
  * two rows; the estimate and the price list have one item for both, `matchAttrs` drops it). `t` — the document's
  * translator (rule 7: the client's language for an estimate line).
  */
-export function partView(t: Tr, p: Pick<PartQty, "key" | "kind" | "attrs">, fmt: LenFormat = "ftin", opts: { side?: boolean } = {}): PartView {
+export function partView(t: Tr, p: Pick<PartQty, "key" | "kind" | "attrs"> & Pick<Partial<PartQty>, "orderAttrs">, fmt: LenFormat = "ftin", opts: { side?: boolean } = {}): PartView {
   const k = (s: string) => `mod.gutters.pr.${s}` as DictKey;
   if (p.kind === "labor") {
     const w = p.attrs.work ?? "";
@@ -459,7 +459,7 @@ export function partView(t: Tr, p: Pick<PartQty, "key" | "kind" | "attrs">, fmt:
   } else if (part === "elbow") {
     // «2×3 A Elbow 75°»; a round one by its angle: «3″ Round Elbow 45°»
     const round = rest.shape === "round" || /^\d+$/.test(rest.style ?? "");
-    title = named(dsSize, "", round ? t(k("elbowRound"), { deg: `${rest.angle ?? rest.style ?? ""}°` }) : t(k("elbowOf"), { style: rest.style ?? "", deg: `${rest.angle ?? ELBOW_DEFAULT_DEG}°` }));
+    title = named(dsSize, "", round ? t(k("elbowRound"), { deg: `${rest.angle ?? rest.style ?? ""}°` }) : t(k("elbowOf"), { style: rest.style ?? "", deg: `${rest.angle ?? p.orderAttrs?.angle ?? ELBOW_DEFAULT_DEG}°` })); // G2: a rect elbow's own angle is in orderAttrs, not the price
     take("size", "shape", "style", "angle");
   } else if (part === "hanger" && rest.hanger) {
     // «5″ Hidden Hanger with Screw»
