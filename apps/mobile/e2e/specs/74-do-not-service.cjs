@@ -106,11 +106,8 @@ exports.run = async (h) => {
   // 4a leftover: a draft with tax for David (c2), then David becomes «Без налога», then the draft is sent
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await require("../estimateLine.cjs").addCatalog(h, "carpet", "Carpet removal", "100"); await require("../estimateLine.cjs").fold(h);
-  await p.getByRole("button", { name: "Налог с продаж" }).click(); await p.waitForTimeout(250);
-  await h.sheet().getByRole("switch", { name: "Налог с продаж" }).click();
-  await h.sheet().locator('input[inputmode="decimal"]').first().fill("9.5");
-  // #2387: the tax sheet applies at once and has no «Понятно» (DS Б1) — it closes as every sheet does
-  await require("../sheet.cjs").pressEscUntilClosed(p);
+  // DS §8.7а (#2454): the tax is set right in its row
+  await require("../estimateTotals.cjs").setTax(h, "9.5");
   // v2: the builder's one step «Готово» saves the draft (`ue-save`)
   await p.getByTestId("ue-save").locator("visible=true").first().click();
   await p.waitForFunction(() => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db.estimates.some((e) => e.customerId === "c2" && e.doc && e.status === "draft" && e.doc.settings?.tax?.enabled), null, { timeout: 8000 });
