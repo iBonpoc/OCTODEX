@@ -4,8 +4,9 @@
  */
 
 /** the list's height: its rows, but no more than `maxRows` (the last one half — it scrolls), and never more than the window leaves */
-export function menuListHeight(o: { count: number; rowH: number; maxRows: number; room: number; pad: number; titleH: number }): number {
-  return Math.max(0, Math.min(o.count * o.rowH, o.maxRows * o.rowH, o.room - o.pad * 2 - o.titleH));
+export function menuListHeight(o: { count: number; rowH: number; maxRows: number; room: number; pad: number; titleH: number; /** the list's measured height (labels in two lines, the lines between groups, #2403); 0 — not measured yet */ contentH?: number }): number {
+  const own = o.contentH && o.contentH > 0 ? o.contentH : o.count * o.rowH;
+  return Math.max(0, Math.min(own, o.maxRows * o.rowH, o.room - o.pad * 2 - o.titleH));
 }
 
 /** where to scroll so the row at `rowY` is in the middle of the window; a list that fits does not scroll; never past the ends */

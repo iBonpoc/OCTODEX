@@ -126,6 +126,8 @@ export function Menu<K extends string>({
   const scrolled = useRef(false);
   const rowAt = useRef<Record<string, { y: number; h: number }>>({});
   const contentSize = useRef(0);
+  // #2403: the list's real height (a label in two lines, the group lines) — the menu is as high as it, never cutting the last item
+  const [contentH, setContentH] = useState(0);
   if (!(visible && !!anchor)) {
     scrolled.current = false;
     rowAt.current = {};
@@ -144,7 +146,7 @@ export function Menu<K extends string>({
   // the menu never grows past the window (a phone on its side): it scrolls inside, every item can be reached
   const room = winH - e.t - e.b;
   // at most `menuMaxRows` rows show (the last one half: it scrolls); a window shorter than that cuts it further
-  const listH = menuListHeight({ count: items.length, rowH: size.hitMin, maxRows: component.menuMaxRows, room, pad: space[2], titleH: title ? size.hitMin : 0 });
+  const listH = menuListHeight({ count: items.length, rowH: size.hitMin, maxRows: component.menuMaxRows, room, pad: space[2], titleH: title ? size.hitMin : 0, contentH });
   const scrollToChosen = () => {
     if (scrolled.current) return;
     const rows = Object.values(rowAt.current);
@@ -184,6 +186,7 @@ export function Menu<K extends string>({
             // places (a long label wraps), once the content has its size (on a phone it can come after the first layout)
             onContentSizeChange={(_, contentH) => {
               contentSize.current = contentH;
+              setContentH((h) => (Math.abs(h - contentH) < 1 ? h : contentH));
               scrollToChosen();
             }}
           >

@@ -26,6 +26,23 @@ describe("the height of a long menu", () => {
   });
 });
 
+/** #2403: a label in two lines and the lines between groups make the list taller than «rows × 44» — the menu took «rows × 44» and
+ * cut the last item («Удалить раздел» half seen, with no scroll to tell). The list is as high as what it holds, up to 6.5 rows */
+describe("a menu with long labels and groups", () => {
+  it("as high as its measured content when that fits 6.5 rows", () => {
+    // 5 items, two of them in two lines (+22 each), two group lines (+9 each)
+    const contentH = 5 * ROW + 2 * 22 + 2 * 9;
+    expect(menuListHeight({ ...base, count: 5, room: 800, contentH })).toBe(contentH);
+  });
+  it("still no higher than 6.5 rows, nor the window", () => {
+    expect(menuListHeight({ ...base, count: 6, room: 800, contentH: 9 * ROW })).toBe(6.5 * ROW);
+    expect(menuListHeight({ ...base, count: 5, room: 200, contentH: 6 * ROW })).toBe(200 - 16);
+  });
+  it("before it is measured: the rows' estimate", () => {
+    expect(menuListHeight({ ...base, count: 5, room: 800, contentH: 0 })).toBe(5 * ROW);
+  });
+});
+
 describe("where a long menu scrolls to", () => {
   const view = 6.5 * ROW;
   const content = 12 * ROW;
