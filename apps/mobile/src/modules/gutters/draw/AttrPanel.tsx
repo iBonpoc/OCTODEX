@@ -120,7 +120,7 @@ function PullOne({ one, unit, onOne, testID }: { one: string; unit: Exclude<LenU
       marks={metric ? mm : Math.round(last.current * DENOM)}
       max={metric ? Math.floor(MAX_RUN_IN * MM_PER_IN) : Math.round(MAX_RUN_IN * DENOM)}
       scale={metric ? MM_SCALE : SIXTEENTHS_SCALE_IN}
-      readout={metric ? `${Math.round((mm / MM_OF[unit]) * 1000) / 1000} ${unit}` : fmtLen(last.current, "in")}
+      readout={metric ? `${(Math.round((mm / MM_OF[unit]) * 1000) / 1000).toLocaleString("en-US", { maximumFractionDigits: 3 })} ${unit}` : fmtLen(last.current, "in")}
       onMarks={(m) => onOne(metric ? String(m / MM_OF[unit]) : String(m / DENOM))}
       testID={testID}
       short={short}

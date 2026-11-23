@@ -153,6 +153,7 @@ describe.each(names)("%s drawing canvas (founder О3: storeys by colour + «эт
 describe.each(names)("%s tape measure (founder 09.11, #674: the number under the mark on a pill like the main button)", (name) => {
   const c = themes[name];
   it("the number on its pill ≥ 4.5:1", () => expect(ratio(parse(c.tape.markText), parse(c.tape.markFill))).toBeGreaterThanOrEqual(4.5));
+  it("the red needle ≥ 3:1 to the tape (#2412, the 5th exception of rule 2)", () => expect(ratio(parse(c.tape.needle), parse(c.ovSolid))).toBeGreaterThanOrEqual(3));
   it("the pill is the main button's colours", () => {
     expect(c.tape.markFill.toLowerCase()).toBe(c.acc.toLowerCase());
     expect(c.tape.markText.toLowerCase()).toBe(c.onAcc.toLowerCase());
