@@ -2,7 +2,7 @@
  * e2e 344 — the list folds while a row is carried (DS §14.6, decision 13.11, #1307 part «б»), every view, by testID, with the mouse:
  * - «Подробно» and an open row: a row taken by «≡» — the open row folds and EVERY row is short («Кратко»: no «× qty») while it is held;
  * - the held row stays under the pointer after the list folded;
- * - the open row has «≡» in its header right of «⋯», its name field takes the row's width;
+ * - the open row has «≡» in its head (the folded face, #2421), centred, right of the trash; its name field takes the row's width;
  * - let go: the row flashes, the list is «Подробно» again, the row stands in its new place, the toast «Позиция перенесена» with «Вернуть».
  */
 exports.run = async (h) => {
@@ -24,9 +24,18 @@ exports.run = async (h) => {
   await tid(`est-line-${b}`).click();
   await tid(`est-collapse-${b}`).waitFor({ timeout: 3000 });
 
-  // the open row draws «≡» in its header, right of «⋯» (DS §8.3): the fields take the whole width
-  const [col, hdl, menu, row] = [await tid(`est-collapse-${b}`).boundingBox(), await tid(`sort-handle-l:${b}`).boundingBox(), await tid(`est-menu-${b}`).boundingBox(), await tid(`est-line-${b}`).boundingBox()];
-  h.expect(Math.abs(hdl.y + hdl.height / 2 - (col.y + col.height / 2)) < 12 && hdl.x > menu.x, `«≡» in the header, right of «⋯» (≡ ${Math.round(hdl.x)},${Math.round(hdl.y)} · «Свернуть» y ${Math.round(col.y)})`);
+  // the open row draws «≡» in its head (#2421: the folded face), centred on it, right of the trash (DS §8.3): the fields take the whole width
+  // the list puts «≡» on the head's middle once the head told its height (a layout event): wait for it, no fixed pause
+  const centred = await p
+    .waitForFunction((id) => {
+      const a = document.querySelector(`[data-testid="sort-handle-l:${id}"]`)?.getBoundingClientRect();
+      const b = document.querySelector(`[data-testid="est-collapse-${id}"]`)?.getBoundingClientRect();
+      return !!a && !!b && Math.abs(a.top + a.height / 2 - (b.top + b.height / 2)) < 2;
+    }, b, { timeout: 3000 })
+    .then(() => true, () => false);
+  h.expect(centred, "«≡» comes to the middle of the open line's head");
+  const [col, hdl, trash, row] = [await tid(`est-collapse-${b}`).boundingBox(), await tid(`sort-handle-l:${b}`).boundingBox(), await tid(`est-trash-${b}`).boundingBox(), await tid(`est-line-${b}`).boundingBox()];
+  h.expect(Math.abs(hdl.y + hdl.height / 2 - (col.y + col.height / 2)) < 2 && hdl.x >= trash.x + trash.width - 1, `«≡» in the head, centred, right of the trash (≡ ${Math.round(hdl.x)},${Math.round(hdl.y)},${Math.round(hdl.height)} · head ${Math.round(col.y)},${Math.round(col.height)} · trash ${Math.round(trash.x + trash.width)})`);
   const nameBox = await p.locator(`[data-testid="est-name-${b}"]`).locator("visible=true").first().boundingBox();
   // #2387: the open row keeps the card's inset space[4] (16) on both sides — the field runs to it, not short of it
   h.expect(nameBox.x + nameBox.width > row.x + row.width - 16 - 4, `the name field takes the row's width inside its inset (${Math.round(nameBox.x + nameBox.width)} of ${Math.round(row.x + row.width)})`);

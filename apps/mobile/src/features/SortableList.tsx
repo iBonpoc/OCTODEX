@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
-import { View, useWindowDimensions, type ViewStyle } from "react-native";
+import { Platform, View, useWindowDimensions, type ViewStyle } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -13,6 +13,7 @@ import { useScreenScroll } from "@/ui/requiredForm";
 import { useScrollLock } from "@/ui/surfaces";
 import { finePointer, sortHandleConfig, sortHoldConfig } from "@/ui/pointer";
 import { dragEnd, holdStill, showsHandle } from "./estimate/rowGesture";
+import { rowClip, rowCorners } from "./rowCorners";
 import { canBegin, crossesSection, dragKind, dragWrite, edgeStep, feelOf, heldGone, ownsDrag, placeWithMargin, resolveDrop, rowKey, shiftOf, withoutBlock, type Drop, type DropResult } from "./sortable";
 import type { ViewRow } from "./sectionLayout";
 
@@ -60,6 +61,10 @@ const SortCtx = createContext<Ctl | null>(null);
  */
 const HandleCtx = createContext(false);
 export const useRowHandle = (): boolean => useContext(HandleCtx);
+/** #2421: the open line tells the list how high its head is — «≡» stands centred on that head, as it stood on the folded line
+ *  (a name in two lines makes the head taller than a list row) */
+const HeadCtx = createContext<((h: number) => void) | null>(null);
+export const useRowHead = () => useContext(HeadCtx);
 
 export type { DropResult };
 
@@ -580,7 +585,16 @@ function Item({ k, index, dragKind, open, quiet, look, rule, children }: { k: st
   const { backgroundColor: lookBg, borderTopLeftRadius, borderTopRightRadius, borderBottomLeftRadius, borderBottomRightRadius, ...lookInner } = look ?? {};
   const lookGround = typeof lookBg === "string" ? lookBg : "transparent";
   // a middle line of a group has square corners (else the wrapper's own `radius.inner` rounded every line into a card of its own)
-  const lookCorners = look ? { borderTopLeftRadius: borderTopLeftRadius ?? 0, borderTopRightRadius: borderTopRightRadius ?? 0, borderBottomLeftRadius: borderBottomLeftRadius ?? 0, borderBottomRightRadius: borderBottomRightRadius ?? 0 } : undefined;
+  const lookCorners = rowCorners(look);
+  // #2427: a folded line is clipped by the same corners — on a phone its swipe's square ground covered the card's left corners
+  // (the web has no swipe: nothing to clip, its focus ring stays whole); a held row is clipped as its outer view is rounded
+  const clip = Platform.OS === "web" ? undefined : rowClip(look, open);
+  // (always all four corners: an animated style that drops a key keeps its last value on a phone)
+  const clipStyle = useAnimatedStyle(() => {
+    if (!clip) return {};
+    const r = mine && held.value > 0.5 ? radius.inner : null;
+    return { borderTopLeftRadius: r ?? clip.borderTopLeftRadius, borderTopRightRadius: r ?? clip.borderTopRightRadius, borderBottomLeftRadius: r ?? clip.borderBottomLeftRadius, borderBottomRightRadius: r ?? clip.borderBottomRightRadius };
+  });
   const a = useAnimatedStyle(() => {
     const on = mine;
     return {
@@ -618,6 +632,7 @@ function Item({ k, index, dragKind, open, quiet, look, rule, children }: { k: st
   const canDrag = dragKind !== null && ctl.canDrag(k);
   // an open LINE draws its handle in its own header; any other row has it in a column on the right
   const inHeader = open && k.startsWith("l:");
+  const [headH, setHeadH] = useState<number>(component.listRow.h);
   // the held row keeps its «≡» while it is carried (#2350): an open line taken by the «≡» of its header folds as the drag begins —
   // a folded line has no «≡», and the handle leaving the page would end its own gesture (the drag never started)
   const handleEl = canDrag && (!quiet || showsHandle(k, open) || mine) ? (
@@ -626,8 +641,9 @@ function Item({ k, index, dragKind, open, quiet, look, rule, children }: { k: st
         testID={`sort-handle-${k}`}
         accessibilityRole="button"
         accessibilityLabel={t("est.sec.drag")}
-        // in the open line's header: over its right end, centred on its buttons (the row's top padding `space[3]`, `dockBtn` high)
-        style={inHeader ? { position: "absolute", right: 0, top: space[3] + (component.dockBtn - size.hitMin) / 2, width: size.hitMin, height: size.hitMin, alignItems: "center", justifyContent: "center" } : { width: size.hitMin, minHeight: size.hitMin, alignItems: "center", justifyContent: "center", alignSelf: "stretch" }}
+        // in the open line's head (#2421: its folded face, as high as the line tells — `useRowHead`): over its right end, centred
+        // on that head — where the folded line's «≡» stood
+        style={inHeader ? { position: "absolute", right: 0, top: (headH - size.hitMin) / 2, width: size.hitMin, height: size.hitMin, alignItems: "center", justifyContent: "center" } : { width: size.hitMin, minHeight: size.hitMin, alignItems: "center", justifyContent: "center", alignSelf: "stretch" }}
       >
         <Icon name="grip" s={size.iconMd} color={c.mut} />
       </View>
@@ -635,15 +651,17 @@ function Item({ k, index, dragKind, open, quiet, look, rule, children }: { k: st
   ) : null;
   const body = (
     <View style={{ flex: 1 }} testID={`sort-row-${k}`}>
-      <HandleCtx.Provider value={inHeader && canDrag}>{children}</HandleCtx.Provider>
+      <HandleCtx.Provider value={inHeader && canDrag}>
+        <HeadCtx.Provider value={setHeadH}>{children}</HeadCtx.Provider>
+      </HandleCtx.Provider>
     </View>
   );
   return (
     <Animated.View ref={(n: unknown) => ctl.node(k, n as ComponentRef<typeof View> | null)} collapsable={false} onLayout={(e) => ctl.layout(k, e.nativeEvent.layout.y, e.nativeEvent.layout.height)} style={a}>
-      <View style={[{ flexDirection: "row", alignItems: "center" }, lookInner]}>
+      <Animated.View style={[{ flexDirection: "row", alignItems: "center" }, lookInner, clip, clipStyle]}>
         {canDrag && !open ? <GestureDetector gesture={hold}>{body}</GestureDetector> : body}
         {handleEl}
-      </View>
+      </Animated.View>
       {rule !== null && !mine ? (
         <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
           <GroupHairline inset={rule} />

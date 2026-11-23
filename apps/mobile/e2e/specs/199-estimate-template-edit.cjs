@@ -98,7 +98,9 @@ exports.run = async (h) => {
   h.expect((await tid("ue-save").count()) === 0 && (await tid("est-start").count()) === 0, "no client, no «Сохранить», no «С чего начать?»");
   await h.shot("edit");
   await tid("est-line-lo2").click();
-  await tid("est-line-lo2").getByRole("button", { name: /Действия со строкой/ }).click();
+  // #2421: the open line's actions are a long press of its head (no «⋯» in it)
+  await tid("est-collapse-lo2").waitFor({ timeout: 3000 });
+  await require("../estimateLine.cjs").menu(h, "lo2");
   await tid("est-act-delete-lo2").click();
   await tid("ue-title").locator("input").fill("Service visit v2 (test)");
   await tid("est-tpl-save").getByRole("button").click();
