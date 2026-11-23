@@ -325,7 +325,7 @@ function Choice<K extends string>({ label, testID, items, value, onChange, offer
   return <SelectField labelAbove list={list} label={label} testID={testID} items={items.map(off)} value={value} onChange={onChange} />;
 }
 
-/** 2–3 fields side by side (Размер · Цвет · Этаж, Вид · Размер): each takes its share of the row */
+/** 2–3 fields side by side (Размер · Этаж, Вид · Размер): each takes its share of the row */
 function FieldRow({ children }: { children: React.ReactNode }) {
   const kids = Children.toArray(children).filter(Boolean);
   return (
@@ -408,7 +408,7 @@ function More({ open0, id, label, children }: { open0: boolean; id: string; labe
 }
 
 /**
- * The gutter's window (#2412 круг 4.3): the length; Размер · Цвет · Этаж in one row; the profile; «Ещё» — the hanger
+ * The gutter's window (#2412 круг 4.3): the length; Размер · Этаж in one row, the colour on its own line (its whole name, design-review G1 PR2); the profile; «Ещё» — the hanger
  * (a list: the parts of the chart), material, gauge, the roof edge, the corners. The same on 390 (the sheet) and in the
  * side column.
  */
@@ -427,9 +427,11 @@ export function RunAttrsView({
       {forNew ? null : <Tape run={run} onLength={onLength} />}
       <FieldRow>
         <Choice label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
-        {MILL_ONLY.has(a.material) ? null : <ColorPick a={a} set={onAttrs} ch={ch} />}
         {forNew ? null : <Choice label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />}
       </FieldRow>
+      {/* the colour on a line of its own: in a row of three its name was cut to «Бе…» (design-review G1 PR2 №1, rule 2 — a sample always
+          beside its whole name) */}
+      {MILL_ONLY.has(a.material) ? null : <ColorPick a={a} set={onAttrs} ch={ch} />}
       <Choice label={t(k("profile"))} testID="attr-profile" offered={ch.offer.profiles} items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)) }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
       <More open0={false} id={run.id} label={t(k("moreRun"))}>
         {/* G2 (#2412): the hangers of the chart by name (NAMES-41) need the model's new kits — the list shows the kits there are */}
