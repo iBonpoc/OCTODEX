@@ -25,6 +25,7 @@ import { Menu } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
 import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, elbowCounts, elbowPatch, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
+import { dsMoreSet, dsRareShown } from "./attrShown";
 import { FracPicker } from "./FracPicker";
 import { feetResetsRest, inchesComplete, inchesTooBig, nextStage, type EntryStage } from "./lengthEntry";
 import { MM_SCALE, SIXTEENTHS_SCALE, SIXTEENTHS_SCALE_IN, Tape as TapeStrip } from "./Tape";
@@ -504,13 +505,13 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, run, forNew }: {
       <Offsets ds={ds} onAttrs={onAttrs} />
       <Choice label={t(k("bottom"))} testID="attr-bottom" offered={ch.offer.bottoms} items={bottoms.map((b) => ({ key: b, label: t(k(`b.${b}`)), top: b === "none" }))} value={ds.bottom.kind} onChange={(kind) => onAttrs({ bottom: { ...ds.bottom, kind } })} />
       <Choice list label={t(k("head"))} testID="attr-head" items={DS_HEADS.map((h) => ({ key: h, label: t(k(`h.${h}`)), top: h === "none", ...(h === "none" ? {} : { leading: { icon: "downspout" as const } }) }))} value={head} onChange={(h) => onAttrs({ head: h === "none" ? undefined : h, funnel: undefined })} />
-      <More open0={rareSet(ds)} id={ds.id} label={t(k("moreDs"))}>
+      <More open0={dsMoreSet(ds, run)} id={ds.id} label={t(k("moreDs"))}>
         {MILL_ONLY.has(ds.material) ? null : <ColorPick a={ds} set={onAttrs} ch={ch} run={run} />}
         <Stock a={ds} set={onAttrs} ch={ch} />
         <Choice label={t(k("wall"))} testID="attr-wall" items={WALLS.map((x) => ({ key: x, label: t(k(`w.${x}`)) }))} value={w.wall} onChange={(wall) => onAttrs({ wall })} />
         <Choice list label={t(k("wallKit"))} testID="attr-wall-kit" offered={wallKitsFor(ds.shape, w.wall, ch)} items={wallKits.map((id) => ({ key: id, label: t(k(`wk.${id}`)), leading: { icon: "downspout" as const } }))} value={w.kit} onChange={(kit) => onAttrs({ wall: kit })} />
         <DsLength ds={ds} onAttrs={onAttrs} />
-        <DsRare ds={ds} onAttrs={onAttrs} />
+        <DsRare key={ds.id} ds={ds} onAttrs={onAttrs} />
       </More>
     </>
   );
@@ -586,20 +587,22 @@ function Offsets({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsA
 /**
  * The rare parts of a downspout behind «Ещё» (M7c): what is not on the supplier's chart is shown only while an old
  * drawing has it set (NAMES-41: no Reducer, no outlet screen on the chart) — the data stays, the window does not offer
- * it. «Cutoff with Diverter» — a square corrugated downspout; «Round Wire Strainer» — a round one. «Ещё» opens by itself
- * when one of them is set.
+ * it (`attrShown.ts`: the diverter — a square corrugated downspout, the outlet screen — a round one). A row the window
+ * opened with stays until it closes. «Ещё» opens by itself when something under it is set (`dsMoreSet`).
  */
-const rareSet = (ds: DrawnDownspout) => !!(ds.offsets?.length || ds.reducers?.length || ds.head || ds.funnel || ds.diverter || ds.outletScreen);
 
 function DsRare({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void }) {
   const { t } = useI18n();
-  const smaller = smallerSizes(ds.shape, ds.size);
-  const ribbed = ds.shape === "rect" && ds.dsStyle === "corrugated";
+  const to = ds.reducers?.[0]?.to ?? "";
+  // a reducer set before the size changed stays named (review G1)
+  const smaller = withCurrent(smallerSizes(ds.shape, ds.size), to || undefined);
+  const [at] = useState(ds); // the downspout as the window opened (DsRare is keyed by its id)
+  const shown = dsRareShown(ds, at);
   return (
     <>
-      {ds.reducers?.length ? <Choice label={t(k("reducer"))} testID="attr-reducer" items={[{ key: "", label: t(k("reducerNone")), top: true }, ...smaller.map((s) => ({ key: s, label: dsSize(s) }))]} value={ds.reducers[0]?.to ?? ""} onChange={(to) => onAttrs({ reducers: to ? [{ to, qty: 1 }] : undefined })} /> : null}
-      {ribbed || ds.diverter ? <ToggleRow testID="attr-diverter" value={!!ds.diverter} onChange={(v) => onAttrs({ diverter: v || undefined })} label={t(k("diverter"))} /> : null}
-      {ds.shape === "round" || ds.outletScreen ? <ToggleRow testID="attr-outlet-screen" value={!!ds.outletScreen} onChange={(v) => onAttrs({ outletScreen: v || undefined })} label={t(k("outletScreen"))} /> : null}
+      {shown.reducer ? <Choice label={t(k("reducer"))} testID="attr-reducer" items={[{ key: "", label: t(k("reducerNone")), top: true }, ...smaller.map((s) => ({ key: s, label: dsSize(s) }))]} value={to} onChange={(to) => onAttrs({ reducers: to ? [{ to, qty: 1 }] : undefined })} /> : null}
+      {shown.diverter ? <ToggleRow testID="attr-diverter" value={!!ds.diverter} onChange={(v) => onAttrs({ diverter: v || undefined })} label={t(k("diverter"))} /> : null}
+      {shown.outletScreen ? <ToggleRow testID="attr-outlet-screen" value={!!ds.outletScreen} onChange={(v) => onAttrs({ outletScreen: v || undefined })} label={t(k("outletScreen"))} /> : null}
     </>
   );
 }

@@ -3756,8 +3756,8 @@ export const ru = {
   "mod.gutters.set.paletteFull": "В палитре не больше {n} цветов",
   // module M7c: rules, use, rare downspout fields, corners (spec 33 П22)
   "mod.gutters.attr.more": "Ещё: высота, смещения, переход, верх",
-  "mod.gutters.attr.moreRun": "Ещё: профиль, материал, крепление, хомуты",
-  "mod.gutters.attr.moreDs": "Ещё: форма, материал, низ, стена",
+  "mod.gutters.attr.moreRun": "Ещё",
+  "mod.gutters.attr.moreDs": "Ещё",
   "mod.gutters.attr.dsLength": "Длина",
   "mod.gutters.attr.heightAuto": "По этажу",
   "mod.gutters.attr.offsets": "Смещение",
