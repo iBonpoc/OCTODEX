@@ -625,8 +625,8 @@ function EstimateListRow({ e }: { e: Estimate }) {
         swipe={swipe}
         onPress={() => router.push(`/estimate/${e.id}`)}
       />
-      {/* mock only (a hold cannot be made in a shot): a 4-px stand-in for the long press on a phone, outside the row's picture */}
-      {!wide ? <Press testID={`client-estimate-hold-${e.id}`} onPress={() => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAt({ x: x + w - space[8], y, w: 0, h }))} accessibilityLabel={t("est.actions")} style={{ position: "absolute", right: 0, top: 0, width: 4, height: 4, opacity: 0 }}>{null}</Press> : null}
+      {/* mock only (a hold cannot be made in a shot): a 12-px stand-in for the long press on a phone, outside the row's picture */}
+      {!wide ? <Press testID={`client-estimate-hold-${e.id}`} onPress={() => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAt({ x: x + w - space[8], y, w: 0, h }))} accessibilityLabel={t("est.actions")} style={{ position: "absolute", right: 0, top: 0, width: 12, height: 12, opacity: 0.01 }}>{null}</Press> : null}
       <Menu visible={!!at} anchor={at} items={items} onSelect={(k) => { setAt(null); if (k !== "signedNote") toast.show(t("m2403.mockToast")); }} onClose={() => setAt(null)} />
     </View>
   );
