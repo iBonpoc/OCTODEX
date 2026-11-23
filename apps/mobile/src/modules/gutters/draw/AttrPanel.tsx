@@ -24,7 +24,7 @@ import { RowView } from "@/ui/surfaces";
 import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, elbowCounts, elbowPatch, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
 import { FracPicker } from "./FracPicker";
-import { inchesComplete, inchesTooBig, nextStage, type EntryStage } from "./lengthEntry";
+import { feetResetsRest, inchesComplete, inchesTooBig, nextStage, type EntryStage } from "./lengthEntry";
 import { MM_SCALE, SIXTEENTHS_SCALE, SIXTEENTHS_SCALE_IN, Tape as TapeStrip } from "./Tape";
 import { DENOM, fmtLen, fracLabel, LEN_UNITS, MM_OF, MM_PER_IN, type LenFormat, type LenUnit } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
@@ -120,7 +120,7 @@ function PullOne({ one, unit, onOne, testID }: { one: string; unit: Exclude<LenU
       marks={metric ? mm : Math.round(last.current * DENOM)}
       max={metric ? Math.floor(MAX_RUN_IN * MM_PER_IN) : Math.round(MAX_RUN_IN * DENOM)}
       scale={metric ? MM_SCALE : SIXTEENTHS_SCALE_IN}
-      readout={metric ? `${Math.round((mm / MM_OF[unit]) * 1000) / 1000} ${unit}` : fmtLen(last.current, "in")}
+      readout={metric ? `${(Math.round((mm / MM_OF[unit]) * 1000) / 1000).toLocaleString("en-US", { maximumFractionDigits: 3 })} ${unit}` : fmtLen(last.current, "in")}
       onMarks={(m) => onOne(metric ? String(m / MM_OF[unit]) : String(m / DENOM))}
       testID={testID}
       short={short}
@@ -260,6 +260,8 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
   // the length in hand, exact (#922): what the fields show, until a field is edited; a unit picked shows THIS length
   const canon = useRef(drawn);
   const edited = useRef(false);
+  // the inches or the fraction set by hand (typed, a fraction, the tape) in this window: the feet never wipe them (#2434)
+  const restTouched = useRef(false);
   const typedIn = () => (unit === "ftin" ? tapeIn(ft, inc, e16) : oneIn(one, unit));
   const edit = <A,>(set: (v: A) => void) => (v: A) => {
     edited.current = true;
@@ -295,17 +297,17 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
         <>
           <RowView style={{ gap: space[2], flexWrap: "wrap", alignItems: "center" }}>
             <View style={{ width: component.qtyFieldW }} testID="quick-length-ft">
-              <TextField type="integer" value={ft} onChangeText={edit(setFt)} label={t(k("ft"))} onSubmit={goNext} onFocus={() => setStage("ft")} chain autoFocus selectOnFocus />
+              <TextField type="integer" value={ft} onChangeText={(v) => { edit(setFt)(v); if (feetResetsRest({ firstOpen: start === undefined, restTouched: restTouched.current })) { setInc("0"); setE16(0); } }} label={t(k("ft"))} onSubmit={goNext} onFocus={() => setStage("ft")} chain autoFocus selectOnFocus />
             </View>
             <T v="body" tone="mut">{t(k("ft"))}</T>
             <View style={{ width: component.qtyFieldW }} testID="quick-length-in">
-              <TextField type="number" value={inc} onChangeText={(v) => { edit(setInc)(v); const big = inchesTooBig(v); setBad(big); setStage(inchesComplete(v) && !big ? "frac" : "in"); }} label={t(k("in"))} onSubmit={stage === "frac" ? apply : goNext} onFocus={() => setStage((s0) => (s0 === "frac" ? s0 : "in"))} focusNow={inFocus} chain selectOnFocus />
+              <TextField type="number" value={inc} onChangeText={(v) => { restTouched.current = true; edit(setInc)(v); const big = inchesTooBig(v); setBad(big); setStage(inchesComplete(v) && !big ? "frac" : "in"); }} label={t(k("in"))} onSubmit={stage === "frac" ? apply : goNext} onFocus={() => setStage((s0) => (s0 === "frac" ? s0 : "in"))} focusNow={inFocus} chain selectOnFocus />
             </View>
             <FracText value={e16} testID="quick-length-frac" />
             <UnitPick unit={unit} onUnit={pickUnit} testID="quick-length-unit" />
           </RowView>
-          <FracPicker value={e16} onChange={(v) => { edited.current = true; setE16(v); setBad(false); }} active={stage === "frac"} testID="quick-length-fracs" />
-          <Pull ft={ft} inc={inc} e16={e16} onPull={(x) => { edited.current = true; setFt(String(x.ft)); setInc(String(x.inch)); setE16(x.sixteenths); setBad(false); }} testID="quick-length-tape" />
+          <FracPicker value={e16} onChange={(v) => { edited.current = true; restTouched.current = true; setE16(v); setBad(false); }} active={stage === "frac"} testID="quick-length-fracs" />
+          <Pull ft={ft} inc={inc} e16={e16} onPull={(x) => { edited.current = true; restTouched.current = true; setFt(String(x.ft)); setInc(String(x.inch)); setE16(x.sixteenths); setBad(false); }} testID="quick-length-tape" />
         </>
       ) : (
         <RowView style={{ gap: space[2], alignItems: "center" }}>

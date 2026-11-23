@@ -10,7 +10,7 @@
  * - only the inches changed → the feet stay (version 475: they were reset); the inches field is selected when reached;
  * - inches alone: 260 → 21′ 8″; mm: 1000 → 39⅜″; m: 3 → 118⅛″; the unit is picked at the end of the number (founder
  *   09.11, #675): no unit row above the fields, a tap on «дюйм» → a menu of the units;
- * - the number under the tape's mark on a pill of the main button's colours (`tape.*`, founder 09.11, #674);
+ * - the value on a pill of the main button's colours under the tape, at the red needle (`tape.*`, #674 → #2412);
  * - a gutter, then «Отменить» → it is gone; another, then a tap outside the sheet → gone too (a stray line);
  * - a length label tapped → the length sheet of that gutter («Отменить» there changes nothing);
  * - nothing drawn (a tap) → no sheet.
@@ -78,17 +78,14 @@ exports.run = async (h) => {
   const ib = await tid("quick-length-in").boundingBox();
   h.expect(ub.x >= ib.x + ib.width - 1 && /дюйм/.test(await tid("quick-length-unit").innerText()), "«дюйм» at the end of the number");
   h.expect(ub.height >= 44, `the unit is a 44 tap (${Math.round(ub.height)})`);
-  // #674: the number under the tape's mark on a pill of the main button's colours (founder: «как у нас кнопки»)
-  const at = p.locator('[id="quick-length-tape-at"]').first();
-  await at.waitFor({ timeout: 3000 });
-  const look = await at.evaluate((el) => {
-    const pill = el.previousElementSibling;
-    const r = el.getBoundingClientRect(), q = pill && pill.getBoundingClientRect();
-    return { text: getComputedStyle(el).fill, pill: pill && pill.tagName.toLowerCase() === "rect" ? getComputedStyle(pill).fill : "", under: !!q && q.left <= r.left && q.right >= r.right };
-  });
-  // v2 (#2350): tokens `tape.markFill`/`markText` = the main button's `acc` #E2C15E / `onAcc` #1C1A12 (both themes)
-  h.expect(look.text === "rgb(28, 26, 18)" && look.pill === "rgb(226, 193, 94)", `the number under the mark: dark on the button's yellow (${JSON.stringify(look)})`);
-  h.expect(look.under, "the pill is under the whole number");
+  // #674 → #2412 (founder 23.11, council B): the value on the yellow pill UNDER the tape (the main button's colours), the red needle
+  const val = tid("quick-length-tape-value");
+  await val.waitFor({ timeout: 3000 });
+  const look = await val.evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, color: getComputedStyle(el.querySelector("div,span") || el).color }));
+  h.expect(look.bg === "rgb(226, 193, 94)" && look.color === "rgb(28, 26, 18)", `the value: dark on the button's yellow (${JSON.stringify(look)})`);
+  const tb = await tid("quick-length-tape").boundingBox(), vb = await val.boundingBox();
+  h.expect(vb.y >= tb.y + tb.height - 1 && Math.abs(vb.x + vb.width / 2 - (tb.x + tb.width / 2)) <= 2, "the pill stands under the tape, at the needle");
+  h.expect((await p.locator('[id="quick-length-tape-at"]').count()) === 0, "no second value inside the tape");
 
   // a bad length: inches 12
   await p.keyboard.type("25");
@@ -191,7 +188,7 @@ exports.run = async (h) => {
   await tid("quick-length-tape-more").getByRole("button").click();
   await tid("quick-length-tape-more").getByRole("button").click();
   await waitFor(async () => (await field("quick-length-one").inputValue()) === "1002", "the mm tape: two marks → 1002 mm");
-  h.expect(/1002 mm/.test(await tid("quick-length-tape-value").innerText()), "the big value says 1002 mm");
+  h.expect(/1,002 mm/.test(await tid("quick-length-tape-value").innerText()), "the big value says 1,002 mm");
   await field("quick-length-one").fill("1000");
   await tid("quick-length-apply").getByRole("button").click();
   await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 39.375), "1000 mm → 39⅜″");
