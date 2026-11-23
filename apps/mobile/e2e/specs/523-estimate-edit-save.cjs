@@ -3,7 +3,7 @@
  * notes/review-v2/k1-2381-stage0.md §4, §10–11; founder 21.11: «закрылось приложение — всё сохранено в телефоне», «Отменить —
  * с подтверждением», «Отменить видно только когда есть правки», «поменяли на другом телефоне — дать выбрать»). Every view, by testID:
  * - a saved estimate opened: no «Отменить», no «несохранённые правки»; an edit → the draft `edit|<id>` on the phone (with its base),
- *   «Отменить» beside «Готово», the line «Есть несохранённые правки»;
+ *   «Отменить» beside «Готово», the line «Правки с момента открытия» with its «?» (#2423);
  * - a reload (the app closed by chance): the edit is still there;
  * - «Отменить» asks in the window in the middle (DS Б3): «Продолжить правку» keeps it; «Отменить изменения» — the estimate as saved;
  * - «×» with edits asks: «Отменить изменения» drops them; «Готово» saves them (the store's estimate changes, the draft goes);
@@ -111,6 +111,13 @@ exports.run = async (h) => {
   h.expect(d && d.title === "Правка 523" && typeof d.baseSavedAt === "string", `the draft edit|e6 with its base (${JSON.stringify(d && { t: d.title, b: d.baseSavedAt })})`);
   await tid("k1-cancel").waitFor({ timeout: 3000 });
   await tid("k1-unsaved").waitFor({ timeout: 3000 });
+  // #2423 (founder 23.11: «несохранённые правки — что это значит?»): the line says «Правки с момента открытия», «?» explains it
+  h.expect(/Правки с момента открытия/.test(await tid("k1-unsaved").innerText()), "the line: «Правки с момента открытия»");
+  await tid("k1-unsaved-help").click();
+  await h.sheet().getByText(/уже хранится на телефоне/).waitFor({ timeout: 3000 });
+  h.expect(/«Готово» принимает правки/.test(await h.sheet().innerText()), "«?» explains «Готово» and «Отменить»");
+  await require("../sheet.cjs").pressEscUntilClosed(p);
+  await require("../sheet.cjs").sheetGone(p);
   await h.shot("edited");
 
   // the app closed by chance: the edit is there
