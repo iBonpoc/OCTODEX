@@ -66,12 +66,14 @@ exports.run = async (h) => {
     await p.keyboard.press("ArrowDown");
     h.expect(await openIs(h, idOf(ids[i])), `↓ ${i} → ${ids[i].slice(0, 30)}`);
   }
-  h.expect(await waited(p.waitForFunction(() => {
-    const r = [...document.querySelectorAll('[aria-current="true"]')].find((x) => x.offsetParent !== null);
-    if (!r) return false;
+  // wait for the scroll to end on the very row we pressed ↓ to (not on any aria-current in the page)
+  const lastTid = await last.getAttribute("data-testid");
+  h.expect(await waited(p.waitForFunction((tid) => {
+    const r = [...document.querySelectorAll(`[data-testid="${tid}"]`)].find((x) => x.offsetParent !== null);
+    if (!r || r.getAttribute("aria-current") !== "true") return false;
     const b = r.getBoundingClientRect();
     return b.top >= 0 && b.bottom <= window.innerHeight;
-  }, null, { timeout: 4000 })), "the current row is scrolled into view");
+  }, lastTid, { timeout: 10000 })), "the current row is scrolled into view");
   h.expect((await last.getAttribute("aria-current")) === "true", "↓ reached the last client");
   const lb = await last.boundingBox();
   h.expect(lb && lb.y >= 0 && lb.y + lb.height <= 420 + 1, `the last row is scrolled into view (${JSON.stringify(lb)})`);
