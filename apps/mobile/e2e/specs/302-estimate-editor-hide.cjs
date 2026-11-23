@@ -61,6 +61,9 @@ exports.run = async (h) => {
   await tid(`est-line-${id}`).click();
   await tid(`est-save-catalog-${id}`).getByRole("switch").click();
   const estBefore = ((await h.db()).estimates ?? []).length;
+  // the page scrolled to the switch may show the totals card — the bar then folds to its capsule (#2405); back up to the lines,
+  // where the bar stands with «Готово»
+  await tid("est-add-new").scrollIntoViewIfNeeded();
   await tid("ue-save").click();
   await p.waitForURL((u) => !/\/estimate\/new/.test(u.pathname), { timeout: 8000 });
   await p.waitForFunction((n) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.estimates ?? []).length === n + 1, estBefore, { timeout: 5000 });
