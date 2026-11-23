@@ -36,7 +36,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
+  await tid("module-gutters-status").filter({ hasText: /^Без срока/ }).waitFor({ timeout: 5000 });
   await h.go("/today");
   if (wide) {
     await tid("side-module-gutters-list").first().waitFor({ timeout: 8000 }); // on: «Gutters» in the side menu

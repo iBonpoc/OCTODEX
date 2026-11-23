@@ -167,6 +167,9 @@ export const z = { /** DS §14.6: the plain level — under its neighbours */ un
 export const gesture = {
   /** a finger holds a folded card / row this long to lift it (otherwise it is a scroll) */
   dragHoldMs: 230,
+  /** #2375 (founder 22.11: «срабатывает моментально, случайно хватаю позицию»; 21.11 «зажал ~0,5 с»): an estimate line is taken
+   *  by a finger only after this hold — its body and its «⠿» alike (the board keeps `dragHoldMs`) */
+  sortHoldMs: 500,
   /** a mouse (or a handle) moves this far to start a drag, px */
   dragStart: 5,
   /** near the top / bottom edge of the screen this wide the page scrolls while a row is held, px */

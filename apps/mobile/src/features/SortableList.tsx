@@ -11,14 +11,14 @@ import { GroupHairline } from "@/ui/groupedList";
 import { Icon } from "@/ui/primitives";
 import { useScreenScroll } from "@/ui/requiredForm";
 import { useScrollLock } from "@/ui/surfaces";
-import { finePointer, holdConfig } from "@/ui/pointer";
+import { finePointer, sortHandleConfig, sortHoldConfig } from "@/ui/pointer";
 import { dragEnd, holdStill, showsHandle } from "./estimate/rowGesture";
 import { canBegin, crossesSection, dragKind, dragWrite, edgeStep, feelOf, heldGone, ownsDrag, placeWithMargin, resolveDrop, rowKey, shiftOf, withoutBlock, type Drop, type DropResult } from "./sortable";
 import type { ViewRow } from "./sectionLayout";
 
 /**
  * The estimate's list you can drag in (DS §14.6, spec Р5): a row is taken by its handle «≡» (at once, after `gesture.dragStart`)
- * or — a folded one — by a hold of `gesture.dragHoldMs` (a mouse: after a move of `dragStart`). It lifts (`motion.liftScale`,
+ * or — a folded one — by a hold of `gesture.sortHoldMs` 500 (a finger, the «⠿» too, #2375; a mouse: after a move of `dragStart`). It lifts (`motion.liftScale`,
  * `liftTilt`, shadow, frame `acc`), the rows make room (`durBase`) and a bar shows the place; near the top or bottom of the
  * screen the page scrolls (`gesture.autoScrollEdge`); let go over the list — it lands (`medium`), over nothing — it springs back.
  * A section is carried whole (it folds while held). Reduced motion: no lift, no spring.
@@ -530,8 +530,11 @@ function Item({ k, index, dragKind, open, quiet, look, rule, children }: { k: st
   const begin = ctl.begin;
   const move = ctl.move;
   const end = ctl.end;
+  // #2375: a finger takes the «⠿» only after the hold too (a mouse — a move of dragStart)
+  const handleCfg = useMemo(() => sortHandleConfig(finePointer()), []);
   const handle = usePanGesture({
-    minDistance: gesture.dragStart,
+    minDistance: handleCfg.minDistance,
+    activateAfterLongPress: handleCfg.activateAfterLongPress,
     maxPointers: 1,
     onActivate: (e) => {
       "worklet";
@@ -550,7 +553,7 @@ function Item({ k, index, dragKind, open, quiet, look, rule, children }: { k: st
     },
   });
   // the body of a row: a mouse / pen starts after a move of `dragStart`, a finger only after a hold (else the page's scroll is lost)
-  const cfg = useMemo(() => holdConfig(finePointer()), []);
+  const cfg = useMemo(() => sortHoldConfig(finePointer()), []);
   const hold = usePanGesture({
     minDistance: cfg.minDistance,
     activateAfterLongPress: cfg.activateAfterLongPress,

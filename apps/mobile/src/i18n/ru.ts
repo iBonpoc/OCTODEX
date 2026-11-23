@@ -3478,6 +3478,10 @@ export const ru = {
   "mod.st.trial": "Пробный · осталось {n} дн.",
   "mod.st.paid": "Подключён",
   "mod.st.expired": "Пробный период закончился",
+  // #2410: the developer's company and the demo — on, with no term (not a payment)
+  "mod.st.unlimited": "Без срока",
+  "mod.startNoTerm": "Подключить",
+  "mod.startedNoTerm": "Модуль подключён",
   "mod.price": "{days} дней бесплатно, потом {price} в месяц",
   "mod.lockedHint": "Черновики открываются, но ничего не сохраняется. Чтобы продолжить, подключите оплату.",
   "mod.start": "Подключить — {days} дней бесплатно",

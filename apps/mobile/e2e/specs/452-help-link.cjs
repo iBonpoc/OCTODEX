@@ -41,7 +41,7 @@ exports.run = async (h) => {
   // Gutters: a group of parts — its «?» next to the title, to the module's settings
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
+  await tid("module-gutters-status").filter({ hasText: /^Без срока/ }).waitFor({ timeout: 5000 });
   await h.go("/module/gutters/draw");
   await tid("draw-surface").waitFor({ timeout: 8000 });
   const b = await p.getByTestId("draw-surface").boundingBox();

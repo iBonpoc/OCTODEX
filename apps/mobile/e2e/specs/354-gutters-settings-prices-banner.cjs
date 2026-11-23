@@ -37,7 +37,7 @@ exports.run = async (h) => {
   await tid("gpr-locked-action").getByRole("button", { name: "Подключить" }).click();
   await p.waitForURL(/\/company\/modules/, { timeout: 8000 });
   await tid("module-gutters-enable").getByRole("button").click();
-  await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
+  await tid("module-gutters-status").filter({ hasText: /^Без срока/ }).waitFor({ timeout: 5000 });
 
   // on, nothing in the price list: one warn banner with the number and its action; the cards do not repeat it
   await h.go("/module/gutters/prices");

@@ -3478,6 +3478,10 @@ export const es: Dict = {
   "mod.st.trial": "Prueba · quedan {n} días",
   "mod.st.paid": "Activado",
   "mod.st.expired": "La prueba terminó",
+  // #2410: the developer's company and the demo — on, with no term (not a payment)
+  "mod.st.unlimited": "Sin límite de tiempo",
+  "mod.startNoTerm": "Activar",
+  "mod.startedNoTerm": "Módulo activado",
   "mod.price": "{days} días gratis, luego {price} al mes",
   "mod.lockedHint": "Los borradores se abren, pero no se guarda nada. Active el pago para continuar.",
   "mod.start": "Activar — {days} días gratis",

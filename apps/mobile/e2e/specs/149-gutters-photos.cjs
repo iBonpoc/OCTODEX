@@ -57,7 +57,7 @@ exports.run = async (h) => {
   // the trial on, a run saved
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await waitFor(async () => /^Пробный/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
+  await waitFor(async () => /^Без срока/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
   await h.go("/module/gutters/draw");
   await tid("draw-surface").waitFor({ timeout: 8000 });
   await drawRun();
@@ -116,6 +116,7 @@ exports.run = async (h) => {
   await p.evaluate(() => {
     const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
     raw.db.company.modules.gutters.trialEndsAt = new Date(Date.now() - 86_400_000).toISOString();
+    raw.db.company.modules.gutters.unlimited = false; // #2410: a row with a term (the demo has none of its own)
     localStorage.setItem("octo.db.v5", JSON.stringify(raw));
   });
   await h.go(`/module/gutters/draw?m=${m.id}`);

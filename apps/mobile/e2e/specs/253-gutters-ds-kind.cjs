@@ -32,7 +32,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await p.waitForFunction(() => /^Пробный/.test(([...document.querySelectorAll('[data-testid="module-gutters-status"]')].find((e) => e.getBoundingClientRect().height > 0)?.innerText ?? "").trim()), null, { timeout: 8000 });
+  await p.waitForFunction(() => /^Без срока/.test(([...document.querySelectorAll('[data-testid="module-gutters-status"]')].find((e) => e.getBoundingClientRect().height > 0)?.innerText ?? "").trim()), null, { timeout: 8000 });
   await h.go("/module/gutters/draw");
   await tid("draw-surface").waitFor({ timeout: 8000 });
   const b = await p.getByTestId("draw-surface").boundingBox();
