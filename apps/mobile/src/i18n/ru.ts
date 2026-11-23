@@ -3712,6 +3712,7 @@ export const ru = {
   "mod.gutters.attr.unitPick": "Единица: {u} — сменить",
   "mod.gutters.attr.colorAsRun": "Как у gutter ({c})",
   "mod.gutters.attr.offsetOwn": "Свой",
+  "mod.gutters.attr.offsetLen": "Вылет",
   "mod.gutters.attr.quickTitle": "Длина gutter",
   "mod.gutters.attr.quickDrawn": "По рисунку: {len}",
   // module M7b: company settings (spec 33 П22)

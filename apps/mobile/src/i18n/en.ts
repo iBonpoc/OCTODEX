@@ -3712,6 +3712,7 @@ export const en: Dict = {
   "mod.gutters.attr.unitPick": "Unit: {u} — change",
   "mod.gutters.attr.colorAsRun": "Same as the gutter ({c})",
   "mod.gutters.attr.offsetOwn": "Custom",
+  "mod.gutters.attr.offsetLen": "Length",
   "mod.gutters.attr.quickTitle": "Gutter length",
   "mod.gutters.attr.quickDrawn": "Drawn: {len}",
   // module M7b: company settings (spec 33 П22)

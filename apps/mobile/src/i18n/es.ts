@@ -3712,6 +3712,7 @@ export const es: Dict = {
   "mod.gutters.attr.unitPick": "Unidad: {u} — cambiar",
   "mod.gutters.attr.colorAsRun": "Igual que la canaleta ({c})",
   "mod.gutters.attr.offsetOwn": "Propio",
+  "mod.gutters.attr.offsetLen": "Largo",
   "mod.gutters.attr.quickTitle": "Largo de la canaleta",
   "mod.gutters.attr.quickDrawn": "Según el dibujo: {len}",
   // module M7b: company settings (spec 33 П22)
