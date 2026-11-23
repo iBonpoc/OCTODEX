@@ -93,6 +93,8 @@ export interface LineRowProps {
   /** visual v2 №5: the screen asks the folded row to open its menu (a finger's hold let go in place, SortableList onHoldStill);
    *  each new number opens it once */
   menuAsk?: number;
+  /** #2403: «Раздел» — the line's section as a field of the open row (instead of «Переместить…» in «⋯»); `null` — the estimate has no sections */
+  sectionField?: { items: { key: string; label: string }[]; onChange: (lineId: string, key: string) => void } | null;
 }
 
 /** the hidden line's hatch (DS §8.3): `track` stripes at 45°, `hairline` × 2 wide, a `space[2]` step — no status colour */
@@ -162,10 +164,12 @@ function LineRowView(p: LineRowProps) {
   const shifts: ("up" | "down")[] = acts.menu.includes("move") && p.api.shift ? ["up", "down"] : [];
   // #2403 (CRM map С9–С10): the menu holds only what the row does not show — «Выше / Ниже» are the grip's (and the screen reader's
   // actions below), the delete is the bin's, the hide is the switch of the open row (and the swipe)
-  const ON_ROW: RowAct[] = ["delete", "hide", "show"];
+  const ON_ROW: RowAct[] = ["delete", "hide", "show", "move"];
   const items: MenuItem<RowAction | "up" | "down">[] = acts.menu
     .filter((k) => !ON_ROW.includes(k))
-    .map((k) => ({ key: k, ...META[k], testID: `est-act-${k}-${l.id}` }));
+    .map((k) => ({ key: k, ...META[k], testID: `est-act-${k}-${l.id}` }))
+    // #2403 map §5: «Дублировать», then «Заменить из каталога…»
+    .sort((a, b) => (a.key === "duplicate" ? -1 : b.key === "duplicate" ? 1 : 0));
   const pick = (a: RowAction | "up" | "down") => (a === "up" || a === "down" ? p.api.shift?.(l.id, a === "up" ? -1 : 1) : p.api.action(l.id, a));
   const swipeBtn = (k: RowAct): SwipeBtn => ({ key: k, ...META[k], tone: k === "delete" ? "bad" : undefined, dim: k === "hide" && !canHide(l), testID: `est-swipe-${k}-${l.id}` });
   const f = (id: "name" | "qty" | "price" | "cost") => p.form.field(rowFieldId(l.id, id));
@@ -385,6 +389,27 @@ function LineRowView(p: LineRowProps) {
           </View>
         ) : null}
       </RowView>
+      {p.sectionField && !p.locked ? (
+        <SelectField<string> labelAbove label={t("m2403.lineSection")} value={l.sectionId ?? "__none__"} items={p.sectionField.items} onChange={(k) => p.sectionField?.onChange(l.id, k)} testID={`est-section-field-${l.id}`} />
+      ) : null}
+      {!p.noHide ? (
+        <View testID={`est-visible-${l.id}`}>
+          <RowView style={{ minHeight: size.hitMin }}>
+            <T v="body" tone={isHidden(l) || canHide(l) ? "ink" : "mut"} style={{ flex: 1 }}>
+              {t("m2403.visible")}
+            </T>
+            {isHidden(l) || canHide(l) ? (
+              <Toggle label={t("m2403.visible")} on={!isHidden(l)} onChange={(on) => p.api.change(l.id, { clientVisible: on ? undefined : false })} />
+            ) : (
+              <Press onPress={() => toast.show(t("est.row.hideNeedZero"))} visibleHeight={size.hitMin} accessibilityRole="button" accessibilityLabel={`${t("m2403.visible")}. ${t("est.row.hideNeedZero")}`} testID={`est-hide-why-${l.id}`}>
+                <ReadOnly value>
+                  <Toggle label={t("m2403.visible")} on onChange={() => {}} />
+                </ReadOnly>
+              </Press>
+            )}
+          </RowView>
+        </View>
+      ) : null}
       {figures ? (
         <View testID={`est-figures-${l.id}`} style={{ gap: space[1] }}>
           <T v="caption" tabular>
@@ -460,29 +485,6 @@ function LineRowView(p: LineRowProps) {
                 <Toggle label={t("ue.addon")} on={!!l.optional} onChange={(on) => p.api.change(l.id, { optional: on })} />
               </RowView>
             </View>
-            {p.noHide ? (
-              <T v="caption" tone="mut">
-                {t("est.row.hideTpl")}
-              </T>
-            ) : (
-              <View testID={`est-hide-${l.id}`}>
-                <RowView style={{ minHeight: size.hitMin }}>
-                  <T v="body" tone={isHidden(l) || canHide(l) ? "ink" : "mut"} style={{ flex: 1 }}>
-                    {t("est.row.hide")}
-                  </T>
-                  {isHidden(l) || canHide(l) ? (
-                    <Toggle label={t("est.row.hide")} on={isHidden(l)} onChange={(on) => p.api.change(l.id, { clientVisible: on ? false : undefined })} />
-                  ) : (
-                    // a price on the line: the switch is pale and does not turn; a press says why (DS §8.3, Б13)
-                    <Press onPress={() => toast.show(t("est.row.hideNeedZero"))} visibleHeight={size.hitMin} accessibilityRole="button" accessibilityLabel={`${t("est.row.hide")}. ${t("est.row.hideNeedZero")}`} testID={`est-hide-why-${l.id}`}>
-                      <ReadOnly value>
-                        <Toggle label={t("est.row.hide")} on={false} onChange={() => {}} />
-                      </ReadOnly>
-                    </Press>
-                  )}
-                </RowView>
-              </View>
-            )}
           </>
         ) : null}
       </View>

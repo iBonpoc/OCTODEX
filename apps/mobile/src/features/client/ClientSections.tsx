@@ -8,7 +8,7 @@
  * Business rules are only called: money through the engine (clientMoneyOf, contractStatement in nextStep), rights (canSeeGateCode,
  * canSeeClientMoney), statuses (invoiceChip, estView, jobStatusView, leadStatusView), the stores' mutations with «Отменить».
  */
-import { useState, type ReactElement, type ReactNode } from "react";
+import { useRef, useState, type ComponentRef, type ReactElement, type ReactNode } from "react";
 import { Linking, View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
@@ -63,7 +63,8 @@ import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
 import { NowCard } from "@/ui/nowCard";
 import { StatGrid, StatTile } from "@/ui/statTile";
 import { statShown } from "@/ui/statTileLogic";
-import { useToast } from "@/ui/overlays";
+import { Menu, useToast } from "@/ui/overlays";
+import { estimateMenu } from "@/features/EstimateCard";
 import { Empty } from "@/ui/surfaces";
 import type { MainAction } from "@/ui/templates";
 
@@ -586,19 +587,35 @@ export function ClientEstimates({ f }: { f: ClientFacts }) {
       ) : (
         <ListGroup>
           {list.map((e) => (
-            <GroupRow
-              key={e.id}
-              testID={`client-estimate-${e.id}`}
-              lead={{ icon: "doc" }}
-              title={e.title || e.number || t("cc.kind.estimate")}
-              subtitle={[e.title ? e.number : null, e.sentAt ? day(e.sentAt) : null].filter(Boolean).join(" · ") || undefined}
-              value={money(e.totalCents)}
-              status={{ status: estView[e.status].s, label: t(estView[e.status].l) }}
-              onPress={() => router.push(`/estimate/${e.id}`)}
-            />
+            <EstimateListRow key={e.id} e={e} />
           ))}
         </ListGroup>
       )}
+    </View>
+  );
+}
+
+/** #2403 map §1: the estimate's row — a press opens it; the long press and the swipe give the card's «⋯» (on the web a «⋯» stands in for the hold; mock) */
+function EstimateListRow({ e }: { e: Estimate }) {
+  const { t, money, day } = useI18n();
+  const toast = useToast();
+  const ref = useRef<ComponentRef<typeof View>>(null);
+  const [at, setAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const items = estimateMenu(e, t as never, { open: true });
+  return (
+    <View ref={ref} collapsable={false}>
+      <GroupRow
+        testID={`client-estimate-${e.id}`}
+        lead={{ icon: "doc" }}
+        title={e.title || e.number || t("cc.kind.estimate")}
+        subtitle={[e.title ? e.number : null, e.sentAt ? day(e.sentAt) : null].filter(Boolean).join(" · ") || undefined}
+        value={money(e.totalCents)}
+        status={{ status: estView[e.status].s, label: t(estView[e.status].l) }}
+        actions={[{ icon: "more", a11y: t("est.actions"), onPress: () => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAt({ x: x + w - space[8], y, w: 0, h })), testID: `client-estimate-more-${e.id}` }]}
+        swipe={{ right: e.status === "draft" ? [{ key: "del", label: t("m2403.deleteEst"), icon: "trash", tone: "bad", onPress: () => toast.show(t("m2403.mockToast")) }] : e.status === "sent" ? [{ key: "rev", label: t("m2403.revokeEst"), icon: "close", tone: "bad", onPress: () => toast.show(t("m2403.mockToast")) }] : e.status === "declined" ? [{ key: "arc", label: t("m2403.archive"), icon: "box", onPress: () => toast.show(t("m2403.mockToast")) }] : undefined }}
+        onPress={() => router.push(`/estimate/${e.id}`)}
+      />
+      <Menu visible={!!at} anchor={at} items={items} onSelect={(k) => { setAt(null); if (k === "open") router.push(`/estimate/${e.id}`); else toast.show(t("m2403.mockToast")); }} onClose={() => setAt(null)} />
     </View>
   );
 }

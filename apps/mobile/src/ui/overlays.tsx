@@ -64,6 +64,8 @@ export interface MenuItem<K extends string> {
   dim?: boolean;
   /** the first item of its own group (after a line): actions after the choices of a label menu — «Сделать основным» (DS §9 А14а) */
   group?: boolean;
+  /** a second line under the label (13 `mut`): what the action leaves alone («Позиции останутся в смете») */
+  hint?: string;
   testID?: string;
 }
 export function Menu<K extends string>({
@@ -212,9 +214,16 @@ export function Menu<K extends string>({
             >
               {/* the check's column only in a menu that has a checked-or-not item (iOS: no empty gutter in a plain menu, #2403) */}
               {checkable ? <View style={{ width: size.iconMd }}>{it.selected ? <Icon name="check" color={c.ink} /> : null}</View> : null}
-              <T v="body" tone={it.destructive ? "bad" : "ink"} style={{ flex: 1 }}>
-                {it.label}
-              </T>
+              <View style={{ flex: 1 }}>
+                <T v="body" tone={it.destructive ? "bad" : "ink"}>
+                  {it.label}
+                </T>
+                {it.hint ? (
+                  <T v="caption" tone="mut">
+                    {it.hint}
+                  </T>
+                ) : null}
+              </View>
               {it.icon ? <Icon name={it.icon} /> : null}
             </Press>
             </Fragment>

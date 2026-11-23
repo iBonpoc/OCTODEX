@@ -1052,18 +1052,35 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   /** «⋯» of the editor (#2403, CRM map С1, С5–С7): the whole estimate, two groups — how it reads, then its structure. The send is the
    * header's round only (never twice); a section, the layout and a second option live here, not in «˅» */
   const moreList = [
-    ...(option.lines.length ? [{ key: "rows", label: t("proto.est.rowsFull"), icon: "menu" as const, selected: rowLook === "full", testID: "est-row-view" }] : []),
-    // (the cost-free screen changes nothing for a role that never sees the costs — С13)
-    ...(seeCosts ? [{ key: "client", label: t("est.client.on"), icon: "eye" as const, selected: clientScreen, testID: "est-menu-client" }] : []),
-    ...layerItems.map((x, i) => ({ ...x, group: i === 0 })),
+    // two items at most (#2403 map §3): the options (only while there is one) and the draft's delete; the rest is on the screen
+    ...(!signed && !tplEdit && doc.options.length === 1 ? [{ key: "option", label: t("m2403.options"), icon: "layers" as const, testID: "est-add-option" }] : []),
+    ...(!signed && !tplEdit && (!existing || existing.status === "draft") ? [{ key: "deleteDraft", label: t("m2403.deleteDraft"), icon: "trash" as const, destructive: true, group: true, testID: "est-menu-delete-draft" }] : []),
   ];
+  const [optSheet, setOptSheet] = useState(false);
   const onMore = (k: string) => {
-    if (k === "layout") layoutBtn();
-    else if (k === "section") addSectionBtn();
-    else if (k === "option") addOption();
-    else if (k === "rows") setRowLook(rowLook === "full" ? "brief" : "full");
-    else toggleClientScreen(!clientScreen);
+    if (k === "option") setOptSheet(true);
+    else if (k === "deleteDraft") toast.show(t("m2403.mockToast"));
   };
+  /** the four buttons over the list (#2403 map §3): two pairs, «＋ Позиция · Каталог» / «＋ Раздел · Шаблон» — no «˅» */
+  const addGrid = signed ? null : (
+    <View testID="est-add-grid" style={{ gap: space[2], alignSelf: "stretch" }}>
+      <ButtonPair
+        main={{ label: t("est.row.addShort"), icon: "plus", variant: "secondary", accessibilityLabel: t("px3.est.newLine"), onPress: () => addNew() }}
+        second={{ label: t("cat.title"), icon: "catalog", accessibilityLabel: t("px3.est.fromCatalog"), onPress: openCatalog }}
+        ids={{ main: "est-add-new", second: "est-add-catalog" }}
+      />
+      <ButtonPair
+        main={{ label: t("m2403.section"), icon: "plus", variant: "secondary", onPress: addSectionBtn }}
+        second={tplEdit ? null : { label: t("m2403.template"), icon: "template", onPress: openTemplates }}
+        ids={{ main: "est-add-section", second: "est-menu-template" }}
+      />
+    </View>
+  );
+  const sectionItems = [...countedSections(option).filter((x) => x.kind !== "module").map((x) => {
+    const parent = x.parentId ? option.sections?.find((y) => y.id === x.parentId) : undefined;
+    return { key: x.id, label: parent ? `${secTitle(parent)} > ${secTitle(x)}` : secTitle(x) };
+  }), { key: "__none__", label: t("est.sec.loose") }];
+  const sectionField = sectionItems.length > 1 ? { items: sectionItems, onChange: (id: string, k: string) => doMove(id, k) } : null;
 
   return (
     <Screen onScrollY={(y, max) => setFold((f) => { if (lifted) return f; /* a row is carried: the bar under the finger never changes */ const n = foldStep(f, y, undefined, max); return n.folded === f.folded && n.anchor === f.anchor ? f : n; })} onScrollBegin={() => {
@@ -1180,7 +1197,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           )}
           <View testID="ue-title">
             {/* the label over the field (LAYOUT-RULES «Редактор»): «Название» */}
-            <Labeled label={tplEdit ? t("est.tpl.name") : t("proto.est.titleLabel")}>
+            <Labeled label={tplEdit ? t("est.tpl.name") : t("m2403.titleLabel")}>
               <TextField plate type="title" value={title} onChangeText={setTitle} placeholder={tplEdit ? t("est.tpl.name") : t("ue.jobTitle")} />
             </Labeled>
           </View>
@@ -1211,13 +1228,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
             <GroupHead title={t("ue.items")} count={act.length ? act.length : undefined} countTestID="est-items-count" />
             {/* founder 21.11 (С4, #2387): ONE «＋ Позиция» — a new line in one press (many new lines go fast); the round beside it
                 opens the other ways: the catalog, a template, a section, an option, the layout */}
-            {signed || option.lines.length === 0 ? null : (
-              <ButtonMenu
-                main={{ label: t("est.row.addShort"), icon: "plus", variant: "secondary", accessibilityLabel: t("px3.est.newLine"), onPress: () => addNew() }}
-                menu={{ icon: "chevronDown", a11y: t("px3.est.addFrom"), items: addItems, onSelect: onAdd, testID: "est-add-layers" }}
-                ids={{ main: "est-add-new" }}
-              />
-            )}
+            {option.lines.length === 0 ? null : addGrid}
           </View>
           <View ref={linesRef} collapsable={false} style={{ gap: space[1] }}>
           {option.lines.length === 0 ? (
@@ -1228,22 +1239,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                 icon="estimate"
                 title={t("est.row.empty")}
                 hint={signed ? undefined : t("r1.est.emptyHint")}
-                action={signed ? undefined : (
-                  // founder 21.11: the two ways in ONE row (not a column), and «Из шаблона…» under them
-                  <View style={{ gap: space[2], alignSelf: "stretch" }}>
-                    {/* #2387: the same pair as over a list of lines («＋ Позиция · Каталог»): one look, the words never cut */}
-                    <ButtonPair
-                      main={{ label: t("est.row.addShort"), icon: "plus", variant: "secondary", accessibilityLabel: t("px3.est.newLine"), onPress: () => addNew() }}
-                      second={{ label: t("cat.title"), icon: "catalog", accessibilityLabel: t("px3.est.fromCatalog"), onPress: openCatalog }}
-                      ids={{ main: "est-add-new", second: "est-add-catalog" }}
-                    />
-                    {!tplEdit ? (
-                      <View testID="est-from-template">
-                        <Button label={t("ds.rows.fromTemplate")} icon="template" variant="secondary" full onPress={openTemplates} />
-                      </View>
-                    ) : null}
-                  </View>
-                )}
+                action={signed ? undefined : addGrid}
               />
             ) : null}
           {/* the lines' card only when there are lines: the empty state is its own card, never a card in a card */}
@@ -1313,6 +1309,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                     onSwipeHintPlayed={onHintPlayed}
                     onTouchOpen={openId === r.line.id ? markTouchInOpen : undefined}
                     menuAsk={menuAsk.id === r.line.id ? menuAsk.n : 0}
+                    sectionField={sectionField}
                   />
                 </View>
               )
@@ -1556,6 +1553,14 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         </View>
       </Sheet>
       {dialog}
+      <Sheet visible={optSheet} onClose={() => setOptSheet(false)} title={t("m2403.optTitle")}>
+        <View testID="est-options-sheet" style={{ gap: space[3] }}>
+          <T v="body" tone="mut">{t("m2403.optBody")}</T>
+          <View testID="est-options-make">
+            <Button label={t("m2403.optMake")} icon="layers" variant="secondary" full onPress={() => { setOptSheet(false); addOption(); }} />
+          </View>
+        </View>
+      </Sheet>
       <Sheet visible={askRestart} onClose={() => setAskRestart(false)} title={t("est.draft.ask")}>
         <View testID="est-draft-ask" style={{ gap: space[3] }}>
           <T v="body" tone="mut">{t("est.draft.askHint")}</T>

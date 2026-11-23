@@ -69,14 +69,10 @@ function SectionHeaderView(p: SectionHeaderProps) {
   const isModule = s.kind === "module";
   // #2403 (CRM map С8): what is added here first, then the section itself, the delete last — it keeps the lines (the label says so)
   const items: MenuItem<SectionAction>[] = [
-    ...(isModule ? [] : ([
-      { key: "addHere" as const, label: t("est.sec.addHere"), icon: "plus" as const, testID: `est-sec-act-addHere-${s.id}` },
-      { key: "catalogHere" as const, label: t("est.sec.catalogHere"), icon: "catalog" as const, testID: `est-sec-act-catalogHere-${s.id}` },
-    ] as MenuItem<SectionAction>[])),
-    { key: "rename", label: t("est.sec.rename"), icon: "pencil", group: !isModule, testID: `est-sec-act-rename-${s.id}` },
+    { key: "rename", label: t("est.sec.rename"), icon: "pencil", testID: `est-sec-act-rename-${s.id}` },
     ...(!isModule && p.depth === 0 ? [{ key: "addSub" as const, label: t("est.sec.addSub"), icon: "sections" as const, testID: `est-sec-act-addSub-${s.id}` }] : []),
-    // «Убрать» — not red: the lines stay, nothing is lost (HIG: red only for what destroys data; DS Б4); last, after a line
-    { key: "delete", label: t("est.sec.deleteKeep"), icon: "close", group: true, testID: `est-sec-act-delete-${s.id}` },
+    // «Удалить раздел» — red, the last, with the line that the lines stay (mock #2403)
+    { key: "delete", label: t("m2403.secDelete"), hint: t("m2403.secKeep"), icon: "trash", destructive: true, group: true, testID: `est-sec-act-delete-${s.id}` },
   ];
   const commit = () => p.api.rename(s.id, draft);
   return (

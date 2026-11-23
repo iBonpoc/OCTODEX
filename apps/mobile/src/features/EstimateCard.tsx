@@ -28,7 +28,7 @@ import { docLanguageFor } from "@/data/people";
 import { termsForClient } from "@/features/estimateTerms";
 import { Button, IconButton, Segmented, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { Menu, Sheet, useToast } from "@/ui/overlays";
+import { Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
 import { Card, Divider, RowView, SectionTitle } from "@/ui/surfaces";
 import { canChangeEstimateCategory, estimateStatusView, isEstimateEditable } from "@/features/estimateStatus";
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
@@ -59,6 +59,25 @@ export function estimateSubtitle(db: DB, e: Estimate): string {
 export type EstimateFrame = (parts: { more: ReactNode; main: ReactNode | null; mainBar: ReactNode | null; body: ReactNode }) => ReactElement;
 
 type EstAction = "edit" | "client" | "template" | "pdf" | "revoke";
+export type EstMock = "open" | "rename" | "duplicate" | "copyOther" | "client" | "template" | "closeLink" | "delete" | "revokeEst" | "archive" | "signedNote";
+
+/** #2403 map §2: the estimate's «⋯» in three groups — what is done with the document, how it shows, then one dangerous by status (a signed one: a pale line). The same list is the row's long-press / swipe menu in a list (mock: the actions not built yet say so in a toast) */
+export function estimateMenu(e: Estimate, t: (k: DictKey) => string, o: { open?: boolean } = {}): MenuItem<EstMock>[] {
+  const sent = e.status === "sent" || e.status === "awaiting_countersign";
+  return [
+    ...(o.open ? [{ key: "open" as const, label: t("m2403.open"), icon: "doc" as const, testID: "est-m-open" }] : []),
+    { key: "rename", label: t("m2403.rename"), icon: "pencil", group: !!o.open, testID: "est-m-rename" },
+    { key: "duplicate", label: t("m2403.duplicate"), icon: "copy", testID: "est-m-duplicate" },
+    { key: "copyOther", label: t("m2403.copyOther"), icon: "user", testID: "est-m-copyOther" },
+    { key: "client", label: t("ue.openClient"), icon: "eye", group: true, testID: "est-m-client" },
+    { key: "template", label: t("est.view.saveTemplate"), icon: "template", testID: "est-m-template" },
+    ...(e.token && sent ? [{ key: "closeLink" as const, label: t("m2403.closeLink"), icon: "link" as const, testID: "est-m-closeLink" }] : []),
+    ...(e.status === "draft" ? [{ key: "delete" as const, label: t("m2403.deleteEst"), icon: "trash" as const, destructive: true, testID: "est-m-delete" }] : []),
+    ...(sent ? [{ key: "revokeEst" as const, label: t("m2403.revokeEst"), icon: "close" as const, destructive: true, testID: "est-m-revoke" }] : []),
+    ...(e.status === "declined" ? [{ key: "archive" as const, label: t("m2403.archive"), icon: "box" as const, destructive: true, testID: "est-m-archive" }] : []),
+    ...(e.status === "approved" ? [{ key: "signedNote" as const, label: t("m2403.signedNote"), icon: "check" as const, dim: true, group: true, testID: "est-m-signed" }] : []),
+  ];
+}
 
 /**
  * What the estimate's screen (`EstimateObject`) and the panel beside the list on 1280 (`EstimateCardBody`) share: who may do what,
@@ -285,10 +304,11 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
         visible={!!moreAt}
         anchor={moreAt}
         title={t("est.actions")}
-        items={actions.map(({ key, label: l, icon, destructive, testID }) => ({ key, label: l, icon, destructive, testID }))}
+        items={estimateMenu(e, t as never)}
         onSelect={(k) => {
           setMoreAt(null);
-          act(k);
+          if (k === "client" || k === "template") act(k);
+          else toast.show(t("m2403.mockToast"));
         }}
         onClose={() => setMoreAt(null)}
       />
@@ -392,14 +412,15 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
     ...(canEdit ? [{ icon: "pencil" as const, label: t("ue.edit"), a11y: of(t("ue.edit")), onPress: () => act("edit"), testID: "est-act-edit" }] : []),
   ].slice(0, 5);
   const moreList: MoreAction = [
-    ...actions.filter((x) => x.key !== "edit" && x.key !== "pdf").map(({ key, label, icon, destructive, testID }) => ({ key, label, icon, destructive, testID })),
+    ...estimateMenu(e, t as never),
     ...(countersign && manage ? [{ key: "reopen", label: t("est.reopen.button"), icon: "pencil" as const, testID: "est-act-reopen" }, { key: "decline", label: t("est.decline.button"), icon: "close" as const, testID: "est-act-decline" }] : []),
   ];
   const onMore = (k: string) => {
     const key = k as EstMore;
     if (key === "reopen" || key === "decline") return setAsk(key);
     if (key === "signHere") return setSection("sign");
-    act(key);
+    if (key === "client" || key === "template") return act(key);
+    toast.show(t("m2403.mockToast"));
   };
 
   const address = [property?.address, property?.city].filter(Boolean).join(", ");
