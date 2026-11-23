@@ -16,6 +16,8 @@ async function fill(h, field, value) {
   const input = vis(h.page, field).locator("input");
   await input.fill(String(value));
   await h.page.waitForFunction(([f, v]) => [...document.querySelectorAll(`[data-testid="${f}"] input`)].some((e) => e.offsetParent !== null && e.value === v), [field, String(value)], { timeout: 3000 });
+  // done typing: the focus leaves the field (a field picked by «%» / «$» takes the focus — the bar below would stay unfolded under it)
+  await input.blur();
 }
 
 /** the sales tax on at `rate` % */

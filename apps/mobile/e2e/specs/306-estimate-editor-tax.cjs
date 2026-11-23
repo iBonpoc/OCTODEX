@@ -94,8 +94,14 @@ exports.run = async (h) => {
   const raw3 = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)), DB_KEY);
   raw3.db.estimates.find((x) => x.id === saved.id).doc.settings.tax = { enabled: false, rateBps: 1000, groups: { service: false, labor: false, material: true } };
   await h.seed(DB_KEY, raw3);
+  // the editor kept «Пересчитать» as an unfinished edit (`edit|<id>`, k1): drop it — else it comes back over the seeded setting
+  const DRAFTS = "octo.drafts.v1.demo";
+  const kept = await p.evaluate((k) => JSON.parse(localStorage.getItem(k) || "[]"), DRAFTS);
+  await h.seed(DRAFTS, kept.filter((d) => d.ctx !== `edit|${saved.id}`));
   await h.go(`/estimate/new?id=${saved.id}`);
   await tid("est-add-new").waitFor({ timeout: 8000 });
+  await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="est-tax-row-mode-off"]')].some((e) => e.offsetParent !== null && e.getAttribute("aria-checked") === "true"), null, { timeout: 3000 });
+  h.expect(true, "the old setting is back: the tax is off");
   await tid("est-tax-row-mode-pct").click();
   await tid("est-tax-ask").waitFor({ timeout: 3000 });
   h.expect(true, "«%» on an old tax by kind asks «было / станет»");
