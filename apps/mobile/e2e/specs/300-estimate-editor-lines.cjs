@@ -54,9 +54,8 @@ exports.run = async (h) => {
   await tid(`est-act-duplicate-${firstId}`).click();
   await waitCount('[data-testid^="est-line-"]', 3, "a copy stands in the list (3 rows)");
 
-  // «⋯» → «Удалить» → «Вернуть»
-  await tid(`est-line-${firstId}`).getByRole("button", { name: /Действия со строкой/ }).click();
-  await tid(`est-act-delete-${firstId}`).click();
+  // the trash → «Вернуть» (#2403: «Удалить» is the bin on the row, not an item of its «⋯»)
+  await require("../estimateLine.cjs").trash(h, firstId);
   await waitCount('[data-testid^="est-line-"]', 2, "deleted: 2 rows");
   // «Отменить» of the newest toast, by testID (the helper presses until it takes)
   await require("../estimateLine.cjs").undo(h);

@@ -74,8 +74,7 @@ exports.run = async (h) => {
   await line.fold(h);
 
   // a folded row (visual v2 №5: no trash on it — a swipe on a phone, its menu on the web): «Удалить» — gone at once, «Вернуть» brings it back
-  await line.menu(h, b);
-  await tid(`est-act-delete-${b}`).click();
+  await line.trash(h, b);
   await p.waitForFunction((id) => !document.querySelector(`[data-testid="est-line-${id}"]`), b, { timeout: 3000 });
   h.expect(await line.undo(h), "«Вернуть» pressed");
   await tid(`est-line-${b}`).waitFor({ timeout: 3000 });

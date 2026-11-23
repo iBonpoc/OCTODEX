@@ -35,7 +35,9 @@ exports.run = async (h) => {
     const [dep, add] = [await box('[data-testid="est-deposit-row"]'), await box('[data-testid="est-bar-add"]')];
     h.expect(add.height > 0 && add.y > dep.y, "from 820 the step stands in the column, after the totals");
   }
-  h.expect(await line.editorMenuHas(h, "ue-save-send"), "«Сохранить и отправить» is in «⋯»");
+  // #2403: one place to send — the header's round ➤ (the empty estimate too: a press says what is missing), never «⋯» again
+  h.expect((await vis('[data-testid="est-send-top"]').count()) === 1, "the round ➤ «Отправить» stands in the header");
+  h.expect(!(await line.editorMenuHas(h, "ue-save-send")), "«Сохранить и отправить» is not in «⋯» (one place)");
 
   // the empty description: one line; it grows with the text
   await tid("est-add-new").getByRole("button").click();
@@ -72,8 +74,7 @@ exports.run = async (h) => {
   const [x, y, keep, z] = before;
   // (visual v2 №5: a folded row has no trash — a swipe on a phone, «⋯ → Удалить» of its menu on the web)
   const del = async (id) => {
-    await line.menu(h, id);
-    await tid(`est-act-delete-${id}`).click();
+    await line.trash(h, id);
   };
   await del(x);
   await p.waitForFunction((id) => !document.querySelector(`[data-testid="est-line-${id}"]`), x, { timeout: 3000 });
@@ -105,6 +106,7 @@ exports.run = async (h) => {
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await tid("est-add-new").waitFor({ timeout: 8000 });
   h.expect(!(await line.editorMenuHas(h, "ue-save-send")), "the tech: no «Сохранить и отправить»");
+  h.expect((await vis('[data-testid="est-send-top"]').count()) === 0, "the tech: no round ➤ either");
   h.expect(/Отправит офис/.test(await tid("est-bar-office").innerText()), "the tech: «Отправит офис»");
   await h.shot("tech");
   await h.seed("octo.role.v1", "director");

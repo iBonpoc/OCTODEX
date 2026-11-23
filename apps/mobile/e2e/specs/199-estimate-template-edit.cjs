@@ -98,8 +98,7 @@ exports.run = async (h) => {
   h.expect((await tid("ue-save").count()) === 0 && (await tid("est-start").count()) === 0, "no client, no «Сохранить», no «С чего начать?»");
   await h.shot("edit");
   await tid("est-line-lo2").click();
-  await tid("est-line-lo2").getByRole("button", { name: /Действия со строкой/ }).click();
-  await tid("est-act-delete-lo2").click();
+  await require("../estimateLine.cjs").trash(h, "lo2");
   await tid("ue-title").locator("input").fill("Service visit v2 (test)");
   await tid("est-tpl-save").getByRole("button").click();
   await p.waitForURL(/estimate\/templates/, { timeout: 8000 });

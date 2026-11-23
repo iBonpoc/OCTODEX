@@ -54,7 +54,7 @@ exports.run = async (h) => {
 
   // «Разложить по видам» and «Отменить»: only the layout goes back
   await line.fold(h);
-  await line.editorMenu(h, "est-group-by-kind");
+  await line.editorMenu(h, "est-layers-layout");
   await p.waitForFunction(() => document.querySelectorAll('[data-testid^="est-section-"]').length >= 3, null, { timeout: 3000 });
   const back = await undo(async () => (await sections()) === 1);
   h.expect(back, "«Отменить» of the layout: one section again");

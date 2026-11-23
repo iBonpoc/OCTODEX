@@ -109,27 +109,26 @@ exports.menu = async (h, id) => {
   else await vis(h, `[data-testid="est-line-${id}"]`).first().click({ delay: 700 });
   await vis(h, '[data-testid="menu-items"]').first().waitFor({ timeout: 3000 });
 };
-/** «＋ Раздел» is in the menu of «слои» (the round 32 beside «Позиции», visual v2 №5) */
-exports.addSection = async (h) => {
-  await vis(h, '[data-testid="est-add-layers"]').first().getByRole("button").click();
-  await vis(h, '[data-testid="est-add-section"]').first().click();
+/** «Добавить раздел» is an item of the estimate's «⋯» (#2403: «˅» beside «＋ Позиция» is the ways to add a line only) */
+exports.addSection = async (h) => exports.editorMenu(h, "est-add-section");
+/** «Добавить вариант» — the same «⋯» while the estimate has one option (#2403; with two the card's «Вариант — копия» adds) */
+exports.addOption = async (h) => exports.editorMenu(h, "est-add-option");
+/** a line's delete is its trash (#2403: not in its «⋯» — the bin is on the row): the open row's, else the folded row's */
+exports.trash = async (h, id) => {
+  const open = vis(h, `[data-testid="est-trash-${id}"]`).first();
+  if (await open.count()) return open.getByRole("button").click();
+  await vis(h, `[data-testid="est-row-trash-${id}"]`).first().getByRole("button").click();
 };
-/** «Добавить вариант» is in the same menu of «слои» (v2: one option shows no options card — the card comes with the second) */
-exports.addOption = async (h) => {
-  await vis(h, '[data-testid="est-add-layers"]').first().getByRole("button").click();
-  await vis(h, '[data-testid="est-add-option"]').first().click();
+
+/** «Сохранить и отправить» of the builder: the header's round ➤ (`est-send-top`) — the one place to send (#2403, not in «⋯») */
+exports.saveSend = async (h) => {
+  await h.page.getByTestId("est-send-top").locator("visible=true").first().getByRole("button").click();
 };
 
 /**
- * «Сохранить и отправить» of the builder (v2 #2350): the bar's one step is «Готово»; sending is an item of the header's «⋯»
- * (`est-menu` → `ue-save-send`), by testID (rule 19). Waits for the menu to be gone (the item runs after it, menuPick).
- */
-exports.saveSend = async (h) => exports.editorMenu(h, "ue-save-send");
-
-/**
- * An item of the builder header's «⋯» (`est-menu`, v2 #2350) by its testID: «Сохранить и отправить» (`ue-save-send`), «Расставить»
- * (`est-group-by-kind`), «Подробно» (`est-row-view`, a check item: a press flips «Кратко ↔ Подробно»), «Экран клиента»
- * (`est-menu-client`). Waits for the menu to be gone (the item runs after it, menuPick).
+ * An item of the builder header's «⋯» (`est-menu`, v2 #2350) by its testID (#2403): «Подробно» (`est-row-view`, a check item: a press flips
+ * «Кратко ↔ Подробно»), «Скрыть себестоимость» (`est-menu-client`) │ «Добавить раздел» (`est-add-section`), «Добавить вариант»
+ * (`est-add-option`), «Разложить по видам» (`est-layers-layout`). Waits for the menu to be gone (the item runs after it, menuPick).
  */
 exports.editorMenu = async (h, item) => {
   const p = h.page;
