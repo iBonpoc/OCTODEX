@@ -1132,7 +1132,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           </RowView>
         </View>
       ) : null}
-      {existing && dirty && !signed && !keptAside ? (
+      {/* not while the phone fails to keep them: «уже хранится на телефоне» would contradict the warning above (code review of #2423) */}
+      {existing && dirty && !signed && !keptAside && !drafts.writeFailed ? (
         <View testID="k1-unsaved">
           <RowView>
             <Icon name="note" s={size.iconSm} />
