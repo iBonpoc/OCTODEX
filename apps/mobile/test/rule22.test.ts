@@ -77,7 +77,7 @@ describe("rule 22 guard", () => {
     expect(docsOnly([])).toBe(false);
   });
   it("the stage containers 1–6 and the old epics are one list", () => {
-    expect(CONTAINERS).toEqual(expect.arrayContaining([769, 770, 771, 772, 773, 774, 775, 1341, 1542, 1878, 1879, 1880, 1526, 1881, 1544, 1882, 2294]));
+    expect(CONTAINERS).toEqual(expect.arrayContaining([769, 770, 771, 772, 773, 774, 775, 1341, 1542, 2431, 1878, 2432, 1879, 1880, 1526, 1881, 1544, 1882, 2294]));
   });
   it("a task in a stage container (directly or through a sub-task) is green; old containers still green", async () => {
     for (const n of [1900, 1901, 1903, 1904]) expect((await run(`Closes #${n}`)).ok, `#${n}`).toBe(true);
