@@ -26,3 +26,18 @@ export function loadPhase(loading: boolean, elapsedMs: number): LoadPhase {
   if (elapsedMs < motion.actionTimeoutMs) return "spinner";
   return "failed";
 }
+
+/**
+ * #2405: how the bar's fold moves (pure; test/totalFoldMotion.test.ts). The capsule slides in from the right (`foldShift`) growing from
+ * `foldScale`; the card comes up by `foldShift`; both fade in over `durBase` (easeOut), the one going fades out over `durFast`.
+ * Reduced motion — null: the swap is a cut.
+ */
+export type FoldFrom = { opacity: number; x?: number; y?: number; scale: number };
+export function foldMotion(reduce: boolean): { capsule: { from: FoldFrom; ms: number }; card: { from: FoldFrom; ms: number }; outMs: number } | null {
+  if (reduce) return null;
+  return {
+    capsule: { from: { opacity: 0, x: motion.foldShift, scale: motion.foldScale }, ms: motion.durBase },
+    card: { from: { opacity: 0, y: motion.foldShift, scale: 1 }, ms: motion.durBase },
+    outMs: motion.durFast,
+  };
+}

@@ -112,6 +112,10 @@ export const motion = {
   menuScale: 0.96,
   /** DS §14 (Н-11): a dialog shrinks from this scale to 1 when it opens */
   alertScale: 1.06,
+  /** #2405 (founder 22.11: «коллапсирует без анимации, просто прыгает»): the estimate's «Итого» folding to the capsule and back —
+   *  the capsule slides in by `foldShift` from the right growing from `foldScale`, the card comes up by `foldShift` (durBase, easeOut) */
+  foldShift: 12,
+  foldScale: 0.92,
   /** DS §14.2 (Н-26): one pulse of a skeleton, ms */
   skeletonCycle: 1800,
   /** Reanimated spring roughly equal to the CSS spring curve above. */
