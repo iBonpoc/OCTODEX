@@ -53,7 +53,7 @@ export function ModeRow<K extends string>({
               <View style={{ width: component.modeRow.fieldW }}>{field}</View>
             </ReadOnly>
           ) : null}
-          <View testID={testID ? `${testID}-sum` : undefined}>
+          <View testID={testID ? `${testID}-sum` : undefined} style={{ minWidth: component.modeRow.sumW, alignItems: "flex-end" }}>
             <T v="body" w="semibold" tabular>
               {sum}
             </T>
