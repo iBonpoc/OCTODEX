@@ -3764,7 +3764,7 @@ export const ru = {
   "mod.gutters.attr.offsetQty": "Смещений",
   "mod.gutters.attr.reducer": "Переход в размер",
   "mod.gutters.attr.reducerNone": "Без перехода",
-  "mod.gutters.attr.head": "Сверху",
+  "mod.gutters.attr.head": "Верх",
   "mod.gutters.attr.h.none": "Ничего",
   "mod.gutters.attr.h.funnel": "Воронка",
   "mod.gutters.attr.h.conductor": "Leader head",

@@ -3764,7 +3764,7 @@ export const en: Dict = {
   "mod.gutters.attr.offsetQty": "Offsets",
   "mod.gutters.attr.reducer": "Reduce to size",
   "mod.gutters.attr.reducerNone": "No reducer",
-  "mod.gutters.attr.head": "On top",
+  "mod.gutters.attr.head": "Top",
   "mod.gutters.attr.h.none": "Nothing",
   "mod.gutters.attr.h.funnel": "Funnel",
   "mod.gutters.attr.h.conductor": "Leader head",
