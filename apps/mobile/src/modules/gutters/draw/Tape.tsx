@@ -32,8 +32,8 @@ const STOP = 0.002;
 const GIVE = 0.3;
 /** a move shorter than this is a tap, not a drag (px) */
 const MOVE_PX = space[1];
-/** labels this close to the needle go pale (px) */
-const NEAR_PX = 26;
+/** labels this close to the needle go pale: a mark and a half each side */
+const NEAR_PX = TICK * 1.5 + spaceHalf.hair;
 /** a tap finds a number this many marks away at most */
 const NEAR = 4;
 /** the share of the tape's width shaded at each side */
