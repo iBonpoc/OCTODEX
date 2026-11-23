@@ -967,14 +967,14 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     // and no part (§2.1 п.3, п.5)
     let pieces = Math.ceil(pipeIn / rules.dsStickIn);
     const ready = bendOf(ds) === "ready";
-    for (const e of ready ? ds.elbows ?? defaultElbowsFor(ds, rules) : []) {
+    for (const e of (ready ? ds.elbows ?? defaultElbowsFor(ds, rules) : []) as NonNullable<MeasuredDownspout["elbows"]>) {
       if (e.qty <= 0) continue;
       pieces += e.qty;
       // a rect A/B elbow at another angle than 75° is a part of its own — in the key and the order, never in the price (G2)
       const angle = ds.shape === "rect" ? elbowAngle(e.angle) : undefined;
       acc.add({ key: angle ? `elbow.${e.style}.a${angle}.${dsKey}` : `elbow.${e.style}.${dsKey}`, section: "downspouts", unit: "ea", use: "both", kind: "material", attrs: { ...dsAttrs, part: "elbow", style: e.style }, ...(angle ? { orderAttrs: { angle } } : {}) }, e.qty);
     }
-    for (const o of ready ? ds.offsets ?? defaultOffsetsFor(ds, rules) : []) {
+    for (const o of (ready ? ds.offsets ?? defaultOffsetsFor(ds, rules) : []) as NonNullable<MeasuredDownspout["offsets"]>) {
       if (o.qty <= 0) continue;
       pieces += o.qty;
       const std = rules.stdOffsetsIn.includes(o.lengthIn);

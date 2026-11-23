@@ -3945,6 +3945,8 @@ export const ru = {
   "mod.gutters.pr.p.reducer": "Reducer",
   "mod.gutters.pr.p.funnel": "Funnel",
   "mod.gutters.pr.p.conductor_head": "Leader Head",
+  "mod.gutters.pr.p.y_funnel": "Y Funnel",
+  "mod.gutters.pr.p.leader_head": "Leader Head",
   "mod.gutters.pr.p.diverter": "Cutoff with Diverter",
   "mod.gutters.pr.p.eave_box": "Eave Box",
   "mod.gutters.pr.p.outlet_screen": "Wire Strainer",

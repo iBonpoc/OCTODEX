@@ -3945,6 +3945,8 @@ export const es: Dict = {
   "mod.gutters.pr.p.reducer": "Reducer",
   "mod.gutters.pr.p.funnel": "Embudo",
   "mod.gutters.pr.p.conductor_head": "Leader head",
+  "mod.gutters.pr.p.y_funnel": "Embudo en Y",
+  "mod.gutters.pr.p.leader_head": "Leader head",
   "mod.gutters.pr.p.diverter": "Desviador",
   "mod.gutters.pr.p.eave_box": "Eave box",
   "mod.gutters.pr.p.outlet_screen": "Filtro de salida",
