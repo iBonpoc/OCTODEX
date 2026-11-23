@@ -15,12 +15,8 @@ exports.addCustom = async (h, name, price, qty) => {
 
 /** «Из каталога»: search, pick the thing (one thing opens its row, the cursor in the quantity), the quantity, the row folded */
 exports.addCatalog = async (h, search, item, qty) => {
-  // #2387 (С4): an empty estimate has «Каталог» in its card; with lines it is in the «˅» menu beside «＋ Позиция»
-  const menu = h.page.getByTestId("est-add-layers").locator("visible=true");
-  if (await menu.count()) {
-    await menu.first().getByRole("button").click();
-    await h.page.getByTestId("est-add-catalog").locator("visible=true").first().click();
-  } else await h.page.getByTestId("est-add-catalog").locator("visible=true").first().getByRole("button").click();
+  // «Каталог» is one of the four add buttons over the lines (2×2, wave 1 п.6) — and in the empty estimate's card the same four
+  await h.page.getByTestId("est-add-catalog").locator("visible=true").first().getByRole("button").click();
   await h.sheet().locator("input").first().fill(search);
   await h.sheet().getByText(item).first().click();
   if (qty !== undefined) {
@@ -137,16 +133,12 @@ exports.menu = async (h, id) => {
   }
   await vis(h, '[data-testid="menu-items"]').first().waitFor({ timeout: 3000 });
 };
-/** «＋ Раздел» is in the menu of «слои» (the round 32 beside «Позиции», visual v2 №5) */
+/** «＋ Раздел» — one of the four add buttons over the lines (2×2, wave 1 п.6) */
 exports.addSection = async (h) => {
-  await vis(h, '[data-testid="est-add-layers"]').first().getByRole("button").click();
-  await vis(h, '[data-testid="est-add-section"]').first().click();
+  await vis(h, '[data-testid="est-add-section"]').first().getByRole("button").click();
 };
-/** «Добавить вариант» is in the same menu of «слои» (v2: one option shows no options card — the card comes with the second) */
-exports.addOption = async (h) => {
-  await vis(h, '[data-testid="est-add-layers"]').first().getByRole("button").click();
-  await vis(h, '[data-testid="est-add-option"]').first().click();
-};
+/** «Добавить вариант» is in the editor's «⋯» (a rare way to add; v2: one option shows no options card — the card comes with the second) */
+exports.addOption = async (h) => exports.editorMenu(h, "est-add-option");
 
 /**
  * «Сохранить и отправить» of the builder (v2 #2350): the bar's one step is «Готово»; sending is an item of the header's «⋯»

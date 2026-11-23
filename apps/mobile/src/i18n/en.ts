@@ -913,6 +913,7 @@ export const en: Dict = {
   "est.row.needPrice": "Price — a number, not below zero",
   "est.row.needCost": "Cost — a number, not below zero",
   "est.row.addNew": "New item",
+  "est2.add.section": "Section",
   "est.row.addShort": "Line item",
   "est.row.addCatalog": "From catalog",
   "est.row.empty": "No items yet",

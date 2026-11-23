@@ -1,5 +1,5 @@
 /**
- * e2e 373 — «задаток сверх лимита Калифорнии» (#1377, rule 2, DS §8.3), every view, by testID:
+ * e2e 373 — «депозит сверх лимита Калифорнии» (#1377, rule 2, DS §8.3), every view, by testID:
  * - a $20,000 line (тестовые цены) with the default deposit 10 % ($2,000) is above the CA limit ($1,000, the lesser of
  *   10 % and $1,000): under «Депозит» the warning has the `warn` icon before its words — not colour alone;
  * - the deposit sheet shows the same warning with its icon;
