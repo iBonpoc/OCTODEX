@@ -1076,11 +1076,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       />
     </View>
   );
-  const sectionItems = [...countedSections(option).filter((x) => x.kind !== "module").map((x) => {
-    const parent = x.parentId ? option.sections?.find((y) => y.id === x.parentId) : undefined;
+  const sectionItems = [...countedSections(layoutOpt).filter((x) => x.kind !== "module").map((x) => {
+    const parent = x.parentId ? layoutOpt.sections?.find((y) => y.id === x.parentId) : undefined;
     return { key: x.id, label: parent ? `${secTitle(parent)} > ${secTitle(x)}` : secTitle(x) };
   }), { key: "__none__", label: t("est.sec.loose") }];
-  const sectionField = sectionItems.length > 1 ? { items: sectionItems, onChange: (id: string, k: string) => doMove(id, k) } : null;
+  const sectionField = sectionItems.length > 1 ? { items: sectionItems, valueOf: (id: string) => layoutOpt.lines.find((x) => x.id === id)?.sectionId ?? "__none__", onChange: (id: string, k: string) => doMove(id, k) } : null;
 
   return (
     <Screen onScrollY={(y, max) => setFold((f) => { if (lifted) return f; /* a row is carried: the bar under the finger never changes */ const n = foldStep(f, y, undefined, max); return n.folded === f.folded && n.anchor === f.anchor ? f : n; })} onScrollBegin={() => {

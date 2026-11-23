@@ -94,7 +94,7 @@ export interface LineRowProps {
    *  each new number opens it once */
   menuAsk?: number;
   /** #2403: «Раздел» — the line's section as a field of the open row (instead of «Переместить…» in «⋯»); `null` — the estimate has no sections */
-  sectionField?: { items: { key: string; label: string }[]; onChange: (lineId: string, key: string) => void } | null;
+  sectionField?: { items: { key: string; label: string }[]; valueOf: (lineId: string) => string; onChange: (lineId: string, key: string) => void } | null;
 }
 
 /** the hidden line's hatch (DS §8.3): `track` stripes at 45°, `hairline` × 2 wide, a `space[2]` step — no status colour */
@@ -390,7 +390,7 @@ function LineRowView(p: LineRowProps) {
         ) : null}
       </RowView>
       {p.sectionField && !p.locked ? (
-        <SelectField<string> labelAbove label={t("m2403.lineSection")} value={l.sectionId ?? "__none__"} items={p.sectionField.items} onChange={(k) => p.sectionField?.onChange(l.id, k)} testID={`est-section-field-${l.id}`} />
+        <SelectField<string> labelAbove label={t("m2403.lineSection")} value={p.sectionField.valueOf(l.id)} items={p.sectionField.items} onChange={(k) => p.sectionField?.onChange(l.id, k)} testID={`est-section-field-${l.id}`} />
       ) : null}
       {!p.noHide ? (
         <View testID={`est-visible-${l.id}`}>
