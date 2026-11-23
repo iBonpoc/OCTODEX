@@ -109,10 +109,10 @@ exports.menu = async (h, id) => {
   else {
     // a long press (a mouse): the row must stand still under the pointer (a row that moves while held cancels the press), the
     // mouse stays down until the row's own menu shows (the hold time is the app's, `motion.longPressMs`, not a number here),
-    // then lets go; a press that brought nothing is let go and tried again
+    // then lets go (no retry: a hold that does not open the menu is a failure)
     const row = vis(h, `[data-testid="est-line-${id}"]`).first();
     const mine = vis(h, `[data-testid^="est-act-"][data-testid$="-${id}"]`).first();
-    for (let k = 0; k < 3 && !(await mine.count()); k++) {
+    {
       await row.scrollIntoViewIfNeeded();
       await row.evaluate(
         (el) =>
@@ -132,8 +132,7 @@ exports.menu = async (h, id) => {
       const b = await row.boundingBox();
       await h.page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
       await h.page.mouse.down();
-      await mine.waitFor({ timeout: 3000 }).catch(() => {});
-      await h.page.mouse.up();
+      await mine.waitFor({ timeout: 3000 }).finally(() => h.page.mouse.up());
     }
   }
   await vis(h, '[data-testid="menu-items"]').first().waitFor({ timeout: 3000 });
