@@ -7,14 +7,12 @@ exports.run = async (h) => {
   await line.fold(h);
   // a kit comes as several folded rows
   await line.addCatalog(h, "railing kit", /Stair railing kit/);
-  await h.page.getByRole("button", { name: "Налог с продаж" }).click(); await h.page.waitForTimeout(250);
-  await h.sheet().getByRole("switch", { name: "Налог с продаж" }).click();
-  await h.sheet().locator('input[inputmode="decimal"]').first().fill("9.5");
-  await require("../sheet.cjs").pressEscUntilClosed(h.page); await h.page.waitForTimeout(300);
+  // DS §8.7а (#2454): the tax is set right in its row — «%» and the rate
+  await require("../estimateTotals.cjs").setTax(h, "9.5");
   // 150 + 120×1.50 + 250 + 12×12.13 = 725.56; a new estimate taxes the whole amount (the founder 12.11, РС-3):
   // 9.5% of 725.56 = 68.93 → 794.49; deposit 10% = 79.45
   await h.expectText(/Сумма \| \$725\.56/, "subtotal");
-  await h.expectText(/\$68\.93 · 9\.5%/, "tax on the whole amount");
+  h.expect((await require("../estimateTotals.cjs").sumOf(h, "est-tax-row")) === "$68.93", "tax on the whole amount");
   h.expect(!/9\.5% · /.test(await h.text()), "no kinds listed after the rate (the tax is on the whole amount, Р6)");
   // optional: #2363 q72 — scrolled down, «Итого» is the capsule (the sum alone); a tap opens the bar with its word «Итого»
   if (await h.page.getByTestId("ue-save-capsule").locator("visible=true").count()) await h.page.getByTestId("ue-save-capsule").click();

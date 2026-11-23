@@ -7,7 +7,8 @@
  *   «Не менять» keeps it, «Пересчитать» makes it the whole amount;
  * - a text that is not a rate («abc») changes nothing and says what to write; leaving the field shows the saved rate;
  * - with a 10 % discount the tax is on the amount after it ($90.00 × 8.875 % = $7.99, total $97.99);
- * - a signed estimate: the tax row does not open (the estimate does not change).
+ * - a signed estimate: the tax row is read only (the estimate does not change).
+ * DS §8.7а (#2454): the tax is set right in its row — `[% · Выкл.]` and the rate field, no sheet; the one sheet left is the question.
  */
 const DB_KEY = "octo.db.v5";
 
@@ -15,23 +16,17 @@ exports.run = async (h) => {
   const p = h.page;
   const line = require("../estimateLine.cjs");
   const tid = (id) => p.getByTestId(id).locator("visible=true").first();
-  const openTax = async () => {
-    await p.getByRole("button", { name: "Налог с продаж" }).click();
-    await tid("est-tax-toggle").waitFor({ timeout: 4000 });
-  };
-  const closeSheet = async () => {
-    await require("../sheet.cjs").pressEscUntilClosed(h.page);
-    await p.waitForFunction(() => document.querySelectorAll('[data-testid="est-tax-toggle"]').length === 0, null, { timeout: 4000 });
-  };
+  const totals = require("../estimateTotals.cjs");
+  const chosen = async (k) => (await tid(`est-tax-row-mode-${k}`).getAttribute("aria-checked")) === "true";
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await tid("est-add-new").waitFor({ timeout: 8000 });
   await line.addCustom(h, "Taxed work", 100);
 
   // a new estimate: off, no «by kind» switches
-  await openTax();
-  h.expect((await tid("est-tax-toggle").getByRole("switch").getAttribute("aria-checked")) === "false", "the tax is off in a new estimate");
-  h.expect((await h.sheet().getByRole("switch", { name: /^Налог с продаж: / }).count()) === 0, "no switches by kind");
-  await tid("est-tax-toggle").getByRole("switch").click();
+  h.expect(await chosen("off"), "the tax is off in a new estimate");
+  h.expect((await p.getByRole("switch", { name: /^Налог с продаж: / }).count()) === 0, "no switches by kind");
+  h.expect((await p.getByTestId("est-tax-row-mode-fixed").count()) === 0, "no tax as a sum yet (#2404)");
+  await totals.mode(h, "est-tax-row", "pct");
   const rate = tid("est-tax-rate").locator("input");
   await rate.waitFor({ timeout: 3000 });
   await rate.fill("8.875");
@@ -41,14 +36,14 @@ exports.run = async (h) => {
   await tid("est-tax-rate").getByText("Впишите ставку, например 10.25").waitFor({ timeout: 3000 });
   await rate.blur();
   await p.waitForFunction(() => document.querySelector('[data-testid="est-tax-rate"] input')?.value === "8.875", null, { timeout: 3000 });
-  await closeSheet();
-  await h.expectText(/\$8\.88 · 8\.875%/, "the tax on the whole amount: $100.00 × 8.875 % = $8.88");
+  h.expect((await p.locator('[aria-modal="true"]').locator("visible=true").count()) === 0, "no sheet: the tax is set in its row");
+  h.expect((await totals.sumOf(h, "est-tax-row")) === "$8.88", "the tax on the whole amount: $100.00 × 8.875 % = $8.88");
   // a 10 % discount: the tax is on the amount after it
-  await p.getByRole("button", { name: "Скидка" }).click();
-  await h.sheet().getByRole("tab", { name: "%", exact: true }).click();
-  await h.sheet().locator('input[inputmode="decimal"]').first().fill("10");
-  await require("../sheet.cjs").pressEscUntilClosed(h.page);
-  await h.expectText(/\$7\.99 · 8\.875%/, "the tax after the discount: $90.00 × 8.875 % = $7.99");
+  await totals.mode(h, "est-discount-row", "pct");
+  await totals.fill(h, "est-discount-pct", "10");
+  h.expect((await totals.sumOf(h, "est-discount-row")) === "−$10.00", "the discount: −$10.00");
+  await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="est-tax-row-sum"]')].some((e) => e.offsetParent !== null && e.innerText.trim() === "$7.99"), null, { timeout: 3000 });
+  h.expect((await totals.sumOf(h, "est-tax-row")) === "$7.99", "the tax after the discount: $90.00 × 8.875 % = $7.99");
   await h.expectText(/Итого \| \$97\.99/, "the total agrees");
 
   // saved: the next estimate offers «как в прошлой»
@@ -59,15 +54,13 @@ exports.run = async (h) => {
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await tid("est-add-new").waitFor({ timeout: 8000 });
   await line.addCustom(h, "Second", 50);
-  await openTax();
-  h.expect((await tid("est-tax-toggle").getByRole("switch").getAttribute("aria-checked")) === "false", "off again in the next estimate: not filled in by itself");
-  await tid("est-tax-toggle").getByRole("switch").click();
+  h.expect(await chosen("off"), "off again in the next estimate: not filled in by itself");
+  await totals.mode(h, "est-tax-row", "pct");
   await tid("est-tax-last").waitFor({ timeout: 3000 });
   h.expect(/8\.875/.test(await tid("est-tax-last").innerText()), "«Как в прошлой смете: 8.875 %»");
   h.expect((await tid("est-tax-rate").locator("input").inputValue()) !== "8.875", "the rate is not filled in until it is pressed");
   await tid("est-tax-last").getByRole("button").click();
   await p.waitForFunction(() => document.querySelector('[data-testid="est-tax-rate"] input')?.value === "8.875", null, { timeout: 3000 });
-  await closeSheet();
 
   // an old estimate: the tax only on materials (written by an older phone)
   const raw = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)), DB_KEY);
@@ -75,13 +68,12 @@ exports.run = async (h) => {
   await h.seed(DB_KEY, raw);
   await h.go(`/estimate/new?id=${saved.id}`);
   await tid("est-add-new").waitFor({ timeout: 8000 });
-  await openTax();
   await tid("est-tax-partial").waitFor({ timeout: 3000 });
   h.expect(/Налог только на часть позиций/.test(await tid("est-tax-partial").innerText()), "the old setting is named");
   await tid("est-tax-partial").getByRole("button").click();
   const ask = tid("est-tax-ask");
   await ask.waitFor({ timeout: 3000 });
-  // the question is a page of the same sheet: one window at a time (a second Modal does not show on iOS)
+  // the question is the one sheet of the totals (one window at a time: a second Modal does not show on iOS)
   h.expect((await p.locator('[aria-modal="true"]').locator("visible=true").count()) === 1, "one sheet open while the question stands");
   h.expect(/Было \$/.test(await ask.innerText()) && /станет \$/.test(await ask.innerText()), `the question has «было / станет» (${(await ask.innerText()).replace(/\n/g, " ")})`);
   await tid("est-tax-ask-no").getByRole("button").click();
@@ -99,6 +91,6 @@ exports.run = async (h) => {
     await h.seed(DB_KEY, raw2);
     await h.go(`/estimate/new?id=${saved.id}`);
     await tid("ue-save").waitFor({ timeout: 8000 });
-    h.expect((await p.getByRole("button", { name: "Налог с продаж" }).count()) === 0, `a signed estimate (${status}): the tax row does not open`);
+    h.expect((await tid("est-tax-row-mode-off").getAttribute("aria-disabled")) === "true", `a signed estimate (${status}): the tax row is read only`);
   }
 };
