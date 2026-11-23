@@ -28,7 +28,7 @@ import { CaWarn } from "@/features/estimate/CaWarn";
 import { NotesTerms } from "@/features/estimate/NotesTerms";
 import { isSignedEstimate } from "@/features/estimate/notesTerms";
 import { docLanguageFor } from "@/data/people";
-import { autoGroups, canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
+import { autoGroups, canAddSection, addSection, deleteSection, foldForDrag, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
 import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, nextSeries, replaceLine, restoreDeleted, type DeleteSeries, restoreLine, rowProblems, setHidden } from "@/features/estimateRows";
 import { FieldError, useRequiredForm, useScreenScroll } from "@/ui/requiredForm";
 import { MainStep } from "@/ui/mainStep";
@@ -985,7 +985,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const act = activeLines(option.lines);
   // the sum of each line by its id, once (not `indexOf` for every row: that is n² for a long estimate)
   // a section that is carried folds while it is held (its lines go with it)
-  const view = useMemo(() => withLooseTarget(viewRows(layoutOpt, new Set(holdSection ? [...collapsedIds, holdSection] : collapsedIds)), !!lifted?.startsWith("l:")), [layoutOpt, collapsedIds, holdSection, lifted]);
+  const view = useMemo(() => withLooseTarget(viewRows(layoutOpt, foldForDrag(layoutOpt, collapsedIds, holdSection)), !!lifted?.startsWith("l:")), [layoutOpt, collapsedIds, holdSection, lifted]);
   // the first line on the list: the swipe hint plays on it
   const firstLineId = view.find((r): r is Extract<typeof r, { type: "line" }> => r.type === "line")?.line.id;
   const secTotals = useMemo(() => sectionSubtotals(layoutOpt, s), [layoutOpt, s]);
