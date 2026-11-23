@@ -64,7 +64,6 @@ const withSections = <T extends Opt>(o: T, sections: EstimateSection[], lines: C
 /** a section may be added while the option has fewer than SECTIONS_MAX counted ones */
 export const canAddSection = (o: Opt): boolean => countedSections(o).length < SECTIONS_MAX;
 
-/** «＋ Раздел» (a top one, at the end) or «Добавить подраздел» (under a top section that is not a module's, one level only) */
 
 /**
  * #2422 (founder 23.11; audit MAP §6): what is folded while a section is in the hand (`held`) — every section, so the place to drop it
@@ -78,6 +77,7 @@ export function foldForDrag(o: Pick<CustomOption, "sections">, own: readonly str
   for (let at = all.find((x) => x.id === held)?.parentId; at && !parents.has(at); at = all.find((x) => x.id === at)?.parentId) parents.add(at);
   return new Set(all.map((x) => x.id).filter((id) => !parents.has(id)));
 }
+/** «＋ Раздел» (a top one, at the end) or «Добавить подраздел» (under a top section that is not a module's, one level only) */
 export function addSection<T extends Opt>(o: T, opts: { parentId?: string; title?: string; kind?: LineGroup } = {}, newId: () => string = uid): { option: T; id: string } | null {
   if (!canAddSection(o)) return null;
   const all = o.sections ?? [];

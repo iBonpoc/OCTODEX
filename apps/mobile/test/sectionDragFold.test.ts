@@ -26,4 +26,13 @@ describe("a section in the hand folds the list (#2422)", () => {
     expect(own).toEqual(["b"]);
     expect(titles(foldForDrag(o, own, null))).toEqual(["§a+", "x", "§a1+", "y", "§b-", "§c+", "w"]);
   });
+  it("a held id that is not a section: everything folds, nothing breaks", () => {
+    expect(titles(foldForDrag(o, [], "nope"))).toEqual(["§a-", "§b-", "§c-"]);
+  });
+  it("a loop in the parents (bad data) does not hang: the loop's sections stay open, the rest fold", () => {
+    const loop = { sections: [{ id: "p", title: "P", parentId: "q" }, { id: "q", title: "Q", parentId: "p" }, { id: "r", title: "R" }] } as Pick<CustomOption, "sections">;
+    const set = foldForDrag(loop, [], "p");
+    expect(set.has("r")).toBe(true);
+    expect(set.has("q")).toBe(false);
+  });
 });

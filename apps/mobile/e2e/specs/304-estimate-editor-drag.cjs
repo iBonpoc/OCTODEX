@@ -127,6 +127,7 @@ exports.run = async (h) => {
   await p.mouse.up();
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="sort-bar"]').length === 0, null, { timeout: 3000 });
   await tid(`est-line-${inRoof.slice(2)}`).waitFor({ timeout: 3000 });
+  h.expect((await order()).filter((x) => x.startsWith("s:")).join(" ") === secs.join(" "), "let go over nothing: the sections stand as they stood");
   h.expect(await lineShown(), "let go: Roof is open again with its line (the person's folding is as it was)");
   await line.undo(h);
   await p.waitForFunction((o) => [...document.querySelectorAll('[data-testid^="est-line-"], [data-testid^="est-section-"]')].map((e) => e.getAttribute("data-testid").replace("est-line-", "l:").replace("est-section-", "s:")).join(" ") === o, orderNow, { timeout: 4000 });
