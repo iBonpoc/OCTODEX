@@ -112,10 +112,19 @@ export interface MeasuredDownspout {
   color?: string;
   /** own height in inches; default = story × story height (the founder: 10 ft per story) */
   heightIn?: number;
-  /** elbows: rect A/B and their angles; round by angle "45".."90"; qty may be 0 */
-  elbows?: { style: string; qty: number }[];
-  /** offsets, inches: standard ones by the rules (1, 2, 4); anything else is a custom part */
-  offsets?: { lengthIn: number; qty: number }[];
+  /**
+   * elbows: rect A/B and their angles; round by angle "45".."90"; qty may be 0. `angle` — a rect A/B elbow's degrees (G2, v43;
+   * none = 75°, the default): never in the price (spec 33-gutters-price-key §2 — a rect elbow is priced by A/B), only in the supplier
+   * order and the work drawing (`orderAttrs`); a round one's angle is its `style`
+   */
+  elbows?: { style: string; qty: number; angle?: number }[];
+  /** offsets, inches: standard ones by the rules (1, 2, 4); anything else is a custom part. `style` A/B (G2; none = A): in the order, not the price */
+  offsets?: { lengthIn: number; qty: number; style?: "A" | "B" }[];
+  /**
+   * the downspout's own storey (G2): its length is 10 ft × this storey; none — the storey of its gutter (old drawings, and the window
+   * writes it only when it differs). Elbows and labor do not depend on it
+   */
+  story?: number;
   /**
    * The elbows are bent on site (`field`) or ready-made (`ready`) — one for the whole downspout (spec 33-gutters-consumption §2.1).
    * Unset: `bendOf` decides (a plain rectangular one with no elbows of its own is bent on site). Old phones do not know it.
@@ -126,8 +135,11 @@ export interface MeasuredDownspout {
   bottom: { kind: DsBottomKind; lengthIn?: number; color?: string; /** drain pipe size, inches */ pipe?: string };
   /** the wall the downspout is fastened to: picks the wall kit (or a wall kit id) */
   wall?: string;
-  /** what sits on top: a funnel or a leader (conductor) head */
-  head?: "funnel" | "conductor";
+  /**
+   * what sits on top (G2, the stand v43): a funnel, a Y funnel (a corrugated one only), a leader head — ornate 14″, tapered, molded.
+   * `conductor` — older drawings' leader head: read and counted as before, new ones never pick it
+   */
+  head?: DsHead;
   /** older drawings: = head "funnel" */
   funnel?: boolean;
   outletScreen?: boolean;
@@ -139,6 +151,11 @@ export interface MeasuredDownspout {
 }
 
 export type ElbowBend = "field" | "ready";
+export type DsHead = "funnel" | "conductor" | "y_funnel" | "ornate14" | "tapered" | "molded";
+/** leader heads of the stand (G2): one part, the style picks the item; none priced — an honest «нет цены» line until the company prices it */
+export const LEADER_HEADS = ["ornate14", "tapered", "molded"] as const;
+/** the angle of a rect A/B elbow without its own (v43) */
+export const DEFAULT_ELBOW_ANGLE = 75;
 
 export interface MeasuredChain {
   id: string;
@@ -400,6 +417,11 @@ export interface PartQty {
   /** what to look up in the price list (profile, size, material, color, …) */
   attrs: Record<string, string>;
   /**
+   * what the supplier order and the work drawing need that never picks the price (G2): a rect elbow's angle, an offset's style B.
+   * Never read by the price lookup (`matchAttrs` reads `attrs` only); its values are in the part's key, so two angles are two parts
+   */
+  orderAttrs?: Record<string, string>;
+  /**
    * Why the engine added it (spec 33-gutters-consumption §2.13, «ничего молча», founder 16.11): the rule, its numbers and the company
    * setting where the number changes. Every part the engine derived itself has it; a part of the drawing (a gutter, a downspout, an
    * elbow, …) has none. Never in `attrs` — those pick the price item. The screen writes the words (i18n `mod.gutters.why.<rule>`).
@@ -461,6 +483,10 @@ export interface GutterPartsResult {
   parts: PartQty[];
   advice: GutterAdvice[];
 }
+
+/** a rect elbow's own angle as text when it is not the default 75° (a whole number of degrees 1…179), else none */
+const elbowAngle = (a: unknown): string | undefined =>
+  typeof a === "number" && Number.isInteger(a) && a > 0 && a < 180 && a !== DEFAULT_ELBOW_ANGLE ? String(a) : undefined;
 
 /** a key segment: dots inside values (".032") would read as separators */
 const seg = (v: string) => v.replace(/\./g, "");
@@ -571,9 +597,15 @@ class Acc {
 /** Downspout length (inches) by the rules. */
 export function downspoutLengthIn(ds: MeasuredDownspout, story: number, rules: GutterRules): number {
   if (ds.heightIn !== undefined) return ds.heightIn + rules.dsExtensionIn;
+  story = dsStoryOf(ds, story);
   // onto the lower roof: from this eave down to the roof one story below
   const stories = ds.bottom.kind === "lower_roof" ? Math.max(story - 1, 0) : story;
   return stories * rules.storyHeightIn + rules.dsExtensionIn;
+}
+
+/** a downspout's storey: its own (G2) when it is a whole number 1…4, else its gutter's */
+export function dsStoryOf(ds: Pick<MeasuredDownspout, "story">, runStory: number): number {
+  return typeof ds.story === "number" && Number.isInteger(ds.story) && ds.story >= 1 && ds.story <= 4 ? ds.story : runStory;
 }
 
 /**
@@ -614,7 +646,7 @@ export function purchaseQty(qty: DecLike, packSize: DecLike): Dec {
  * (a part, its quantity, an elbow rule — as #871 did). Not for a change in the core's money (a line, a discount): that is
  * `ENGINE_VERSION`, and it must not mark every estimate as «расчёт изменился». Estimates remember it in their lines.
  */
-export const GUTTER_PARTS_VERSION = "6"; // 6: «Расход v2» PR-2 — zinc soldered too, a soldered downspout joint 1 point, ONE «Soldering kit» (solder, flux, gas, abrasive, soda inside) instead of solder and flux, the soldering work, copper / zinc fasteners with their metal, expansion joints by metal (spec 33-gutters-consumption §5а); // 5: «Расход v2» PR-1б — a plain rectangular downspout bent on site (3 bends, +6″ each, «гиб по месту»), a round one 1 × 75° and a 2″ offset, the estimate's downspout rounded up to 10 ft each (spec 33-gutters-consumption §2.1, §2.15 №1–6); 4: a plain rectangular downspout has no elbows by default, a corrugated one 3 × A, #1776; 3: the waste is a fixed 10 ft for every gutter stock by default, #1355; 2: waste 10% by default and a separate allowance for an outside corner (14″), #1355
+export const GUTTER_PARTS_VERSION = "7"; // 7: G2 (v43) — a downspout's own storey sets its length, a plain one bent on site with no bought elbows (none, [], all 0) takes the company's bends, a rect elbow's angle and an offset's style B are parts of their own (key, `orderAttrs`, never the price), the stand's heads (Y funnel, leader heads); // 6: «Расход v2» PR-2 — zinc soldered too, a soldered downspout joint 1 point, ONE «Soldering kit» (solder, flux, gas, abrasive, soda inside) instead of solder and flux, the soldering work, copper / zinc fasteners with their metal, expansion joints by metal (spec 33-gutters-consumption §5а); // 5: «Расход v2» PR-1б — a plain rectangular downspout bent on site (3 bends, +6″ each, «гиб по месту»), a round one 1 × 75° and a 2″ offset, the estimate's downspout rounded up to 10 ft each (spec 33-gutters-consumption §2.1, §2.15 №1–6); 4: a plain rectangular downspout has no elbows by default, a corrugated one 3 × A, #1776; 3: the waste is a fixed 10 ft for every gutter stock by default, #1355; 2: waste 10% by default and a separate allowance for an outside corner (14″), #1355
 
 /**
  * How a downspout's elbows are made (spec 33-gutters-consumption §2.1 п.2, founder 16.11 «гнут по месту только гладкий
@@ -654,7 +686,7 @@ export function fieldBendOf(ds: Pick<MeasuredDownspout, "shape" | "size" | "dsSt
   let offsetIn = 0;
   // a count or a length that is not a number is none (an old or broken record never gives NaN inches)
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.max(0, v) : 0);
-  for (const e of ds.elbows ?? defaultElbowsFor(ds, rules)) bends += num(e.qty);
+  for (const e of fieldElbowsOf(ds, rules)) bends += num(e.qty);
   for (const o of ds.offsets ?? defaultOffsetsFor(ds, rules)) {
     const q = num(o.qty);
     if (q <= 0) continue;
@@ -662,6 +694,16 @@ export function fieldBendOf(ds: Pick<MeasuredDownspout, "shape" | "size" | "dsSt
     offsetIn += num(o.lengthIn) * q;
   }
   return { bends, perBendIn, offsetIn, addedIn: bends * perBendIn + offsetIn };
+}
+
+/**
+ * The elbows a downspout bent on site is bent with (G2, leader №24's decision on stage 0): its own when it has any (an older
+ * drawing's count of bends), else — none, [] or all 0 — the company's bends: «no bought elbows» on a plain one IS bending on site
+ * (founder 23.11 05:25), never «no bends»
+ */
+export function fieldElbowsOf(ds: Pick<MeasuredDownspout, "shape" | "dsStyle" | "elbows" | "elbowBend">, rules: Pick<GutterRules, "defaultElbows" | "defaultElbowsPlain" | "defaultElbowsRound" | "fieldBends"> = DEFAULT_GUTTER_RULES): { style: string; qty: number }[] {
+  const own = (ds.elbows ?? []).filter((e) => typeof e.qty === "number" && Number.isFinite(e.qty) && e.qty > 0);
+  return own.length ? own : defaultElbowsFor(ds, rules);
 }
 
 /** a downspout's estimate length: rounded up to the step, inches (Д1); a step of 0 or less — as it is */
@@ -886,7 +928,7 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     const run = runs.get(ds.runId);
     if (!run) { advice.push({ code: "downspout_without_run", downspoutId: ds.id }); continue; }
     dsPerRun.set(run.id, (dsPerRun.get(run.id) ?? 0) + 1);
-    if (ds.bottom.kind === "lower_roof" && run.story <= 1 && ds.heightIn === undefined) advice.push({ code: "lower_roof_from_first_story", downspoutId: ds.id });
+    if (ds.bottom.kind === "lower_roof" && dsStoryOf(ds, run.story) <= 1 && ds.heightIn === undefined) advice.push({ code: "lower_roof_from_first_story", downspoutId: ds.id });
     // the wall's length (fasteners) and the downspout's: bending on site eats downspout (§2.2), the estimate rounds it up (Д1)
     const lenIn = downspoutLengthIn(ds, run.story, rules);
     const fb = fieldBendOf(ds, rules);
@@ -928,13 +970,17 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     for (const e of ready ? ds.elbows ?? defaultElbowsFor(ds, rules) : []) {
       if (e.qty <= 0) continue;
       pieces += e.qty;
-      acc.add({ key: `elbow.${e.style}.${dsKey}`, section: "downspouts", unit: "ea", use: "both", kind: "material", attrs: { ...dsAttrs, part: "elbow", style: e.style } }, e.qty);
+      // a rect A/B elbow at another angle than 75° is a part of its own — in the key and the order, never in the price (G2)
+      const angle = ds.shape === "rect" ? elbowAngle(e.angle) : undefined;
+      acc.add({ key: angle ? `elbow.${e.style}.a${angle}.${dsKey}` : `elbow.${e.style}.${dsKey}`, section: "downspouts", unit: "ea", use: "both", kind: "material", attrs: { ...dsAttrs, part: "elbow", style: e.style }, ...(angle ? { orderAttrs: { angle } } : {}) }, e.qty);
     }
     for (const o of ready ? ds.offsets ?? defaultOffsetsFor(ds, rules) : []) {
       if (o.qty <= 0) continue;
       pieces += o.qty;
       const std = rules.stdOffsetsIn.includes(o.lengthIn);
-      acc.add({ key: `offset.${o.lengthIn}.${dsKey}`, section: "downspouts", unit: "ea", use: "both", kind: "material", attrs: { ...dsAttrs, part: "offset", lengthIn: String(o.lengthIn), ...(std ? {} : { custom: "1" }) } }, o.qty);
+      // style B (rect only) — a part of its own, in the order, not the price (G2); A or none — the key as before
+      const b = ds.shape === "rect" && o.style === "B";
+      acc.add({ key: b ? `offset.B.${o.lengthIn}.${dsKey}` : `offset.${o.lengthIn}.${dsKey}`, section: "downspouts", unit: "ea", use: "both", kind: "material", attrs: { ...dsAttrs, part: "offset", lengthIn: String(o.lengthIn), ...(std ? {} : { custom: "1" }) }, ...(b ? { orderAttrs: { offsetStyle: "B" } } : {}) }, o.qty);
     }
     for (const rd of ds.reducers ?? []) {
       if (rd.qty <= 0) continue;
@@ -944,6 +990,12 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     const head = ds.head ?? (ds.funnel ? "funnel" : undefined);
     if (head === "funnel") acc.add({ key: `funnel.${dsKey}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { ...dsAttrs, part: "funnel" } }, 1);
     if (head === "conductor") acc.add({ key: `conductorhead.${dsKey}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { ...dsAttrs, part: "conductor_head" } }, 1);
+    // a Y funnel sits on a corrugated rectangular one only (the stand): on another it is no part, and it is said
+    if (head === "y_funnel") {
+      if (ds.shape === "rect" && ds.dsStyle === "corrugated") acc.add({ key: `yfunnel.${dsKey}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { ...dsAttrs, part: "y_funnel" } }, 1);
+      else advice.push({ code: "input_fixed", id: ds.id, field: "head" });
+    }
+    if ((LEADER_HEADS as readonly string[]).includes(head ?? "")) acc.add({ key: `leaderhead.${head}.${dsKey}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { ...dsAttrs, part: "leader_head", head: head! } }, 1);
     if (ds.diverter) acc.add({ key: `diverter.${dsKey}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { ...dsAttrs, part: "diverter" } }, 1);
     if (ds.eaveBox) acc.add({ key: `eavebox.${ds.eaveBox}.${dsKey}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { ...dsAttrs, part: "eave_box", eaveBox: ds.eaveBox } }, 1);
     if (ds.outletScreen) acc.add({ key: `outletscreen.${ds.shape}.${ds.size}`, section: "guards", unit: "ea", use: "both", kind: "material", attrs: { part: "outlet_screen", shape: ds.shape, size: ds.size } }, 1);
