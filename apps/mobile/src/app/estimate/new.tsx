@@ -49,7 +49,7 @@ import { dayKeyIn } from "@/features/zone";
 import { dayOffsetOf, todayKey } from "@/features/calendar";
 import { GroupHead, GroupRow, ListGroup, useGroupEdge } from "@/ui/groupedList";
 import { foldStart, foldStep, type FoldState } from "@/ui/totalFold";
-import { ButtonMenu, ButtonPair } from "@/ui/pairs";
+import { ButtonPair } from "@/ui/pairs";
 import { useDayWord } from "@/features/useDayWord";
 import { Icon, Press, T } from "@/ui/primitives";
 import { HelpButton, Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
@@ -1038,19 +1038,6 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // #2381 (founder 21.11: «внизу „Готово“. И „Отменить“» · «Отменить видно, только когда есть правки — да»)
   const cancelStep: MainAction | null = dirty && !signed && !firstLine ? { label: t("k1.cancel"), onPress: () => void cancelEdits(), testID: "k1-cancel" } : null;
   const stepRow = tplEdit ? null : <MainStep placement="bar" main={step} aside={cancelStep} total={barShown ? total : null} folded={fold.folded && option.lines.length > 0} onUnfold={() => setFold({ folded: false, anchor: Number.MAX_SAFE_INTEGER })} foldAdd={signed ? undefined : { a11y: t("px3.est.newLine"), onPress: () => addNew(), testID: "est-fold-add" }} />;
-  /** «слои» (visual v2 №5): the sections and the options of the list */
-  const layerItems = [
-    ...(!signed ? [{ key: "section", label: t("est.sec.addSectionMenu"), icon: "plus" as const, testID: "est-add-section" }] : []),
-    ...(!signed && !tplEdit && doc.options.length < MAX_OPTIONS ? [{ key: "option", label: t("est.var.add"), icon: "copy" as const, testID: "est-add-option" }] : []),
-    ...(!signed && option.lines.length ? [{ key: "layout", label: t("est.sec.layout"), icon: "menu" as const, testID: "est-layers-layout" }] : []),
-  ];
-  // the round «˅» beside «＋ Позиция»: the other ways to add (С4) — the catalog first, a template, then the sections and options
-  const addItems = [
-    { key: "catalog", label: t("px3.est.fromCatalog"), icon: "catalog" as const, testID: "est-add-catalog" },
-    ...(!tplEdit ? [{ key: "template", label: t("ds.rows.fromTemplate"), icon: "template" as const, testID: "est-menu-template" }] : []),
-    // (the layout «Разложить по видам» is the editor's «⋯» only — not a way to add, never twice)
-    ...layerItems.filter((x) => x.key !== "layout"),
-  ];
   const onAdd = (k: string) => {
     if (k === "new") addNew();
     else if (k === "catalog") openCatalog();
@@ -1059,12 +1046,30 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     else if (k === "section") addSectionBtn();
     else if (k === "layout") layoutBtn();
   };
+  // founder 23.11 (audit MAP wave 1 п.6, picture n09): the ways to add are four buttons over the lines, two by two — [«＋ Позиция» ·
+  // «＋ Раздел»] / [«Каталог» · «Шаблон»] — one press each, no «˅» menu (a hidden way is not found); «＋ Вариант» is in «⋯»
+  const addGrid = signed ? null : (
+    <View testID="est-add-grid" style={{ gap: space[2], alignSelf: "stretch" }}>
+      <ButtonPair
+        main={{ label: t("est.row.addShort"), icon: "plus", variant: "secondary", accessibilityLabel: t("px3.est.newLine"), onPress: () => addNew() }}
+        second={{ label: t("est2.add.section"), icon: "plus", variant: "secondary", accessibilityLabel: t("est.sec.addSectionMenu"), onPress: () => onAdd("section") }}
+        ids={{ main: "est-add-new", second: "est-add-section" }}
+      />
+      <ButtonPair
+        main={{ label: t("cat.title"), icon: "catalog", variant: "secondary", accessibilityLabel: t("px3.est.fromCatalog"), onPress: openCatalog }}
+        second={tplEdit ? null : { label: t("px3.est.template"), icon: "template", variant: "secondary", accessibilityLabel: t("ds.rows.fromTemplate"), onPress: openTemplates }}
+        ids={{ main: "est-add-catalog", second: "est-from-template" }}
+      />
+    </View>
+  );
   /** «⋯» of the editor: rare things — send now, the layout of the list, how the rows read, the client's screen */
   const moreList = [
     // the same words as the header's round «Отправить» (CRM review: one action, one name); in «⋯» it stays for the empty
     // estimate too — pressed with no line it says what is missing (spec 308)
     ...(canSend ? [{ key: "send", label: existing && existing.status !== "draft" ? t("r1.est.sendChanges") : t("proto.est.saveSend"), icon: "send" as const, testID: "ue-save-send" }] : []),
     ...(!signed && option.lines.length ? [{ key: "layout", label: t("est.sec.layout"), icon: "menu" as const, testID: "est-group-by-kind" }] : []),
+    // «＋ Вариант» (Good / Better / Best) — a rare way to add, in «⋯» (the four buttons over the lines are the common ones)
+    ...(!signed && !tplEdit && doc.options.length < MAX_OPTIONS ? [{ key: "option", label: t("est.var.add"), icon: "copy" as const, testID: "est-add-option" }] : []),
     ...(option.lines.length ? [{ key: "rows", label: t("proto.est.rowsFull"), icon: "menu" as const, selected: rowLook === "full", testID: "est-row-view" }] : []),
     { key: "client", label: t("est.client.on"), icon: "eye" as const, selected: clientScreen, testID: "est-menu-client" },
   ];
@@ -1072,6 +1077,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     if (k === "send") void save(true);
     else if (k === "layout") layoutBtn();
     else if (k === "rows") setRowLook(rowLook === "full" ? "brief" : "full");
+    else if (k === "option") addOption();
     else toggleClientScreen(!clientScreen);
   };
 
@@ -1222,15 +1228,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               two secondary 40 (the screen's one yellow stays «Готово» of the bar) */}
           <View testID="est-items-head" style={{ marginTop: space[3], gap: rhythm.headGap }}>
             <GroupHead title={t("ue.items")} count={act.length ? act.length : undefined} countTestID="est-items-count" />
-            {/* founder 21.11 (С4, #2387): ONE «＋ Позиция» — a new line in one press (many new lines go fast); the round beside it
-                opens the other ways: the catalog, a template, a section, an option, the layout */}
-            {signed || option.lines.length === 0 ? null : (
-              <ButtonMenu
-                main={{ label: t("est.row.addShort"), icon: "plus", variant: "secondary", accessibilityLabel: t("px3.est.newLine"), onPress: () => addNew() }}
-                menu={{ icon: "chevronDown", a11y: t("px3.est.addFrom"), items: addItems, onSelect: onAdd, testID: "est-add-layers" }}
-                ids={{ main: "est-add-new" }}
-              />
-            )}
+            {option.lines.length === 0 ? null : addGrid}
           </View>
           <View ref={linesRef} collapsable={false} style={{ gap: space[1] }}>
           {option.lines.length === 0 ? (
@@ -1241,29 +1239,15 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                 icon="estimate"
                 title={t("est.row.empty")}
                 hint={signed ? undefined : t("r1.est.emptyHint")}
-                action={signed ? undefined : (
-                  // founder 21.11: the two ways in ONE row (not a column), and «Из шаблона…» under them
-                  <View style={{ gap: space[2], alignSelf: "stretch" }}>
-                    {/* #2387: the same pair as over a list of lines («＋ Позиция · Каталог»): one look, the words never cut */}
-                    <ButtonPair
-                      main={{ label: t("est.row.addShort"), icon: "plus", variant: "secondary", accessibilityLabel: t("px3.est.newLine"), onPress: () => addNew() }}
-                      second={{ label: t("cat.title"), icon: "catalog", accessibilityLabel: t("px3.est.fromCatalog"), onPress: openCatalog }}
-                      ids={{ main: "est-add-new", second: "est-add-catalog" }}
-                    />
-                    {!tplEdit ? (
-                      <View testID="est-from-template">
-                        <Button label={t("ds.rows.fromTemplate")} icon="template" variant="secondary" full onPress={openTemplates} />
-                      </View>
-                    ) : null}
-                  </View>
-                )}
+                action={addGrid ?? undefined}
               />
             ) : null}
           {/* the lines' card only when there are lines: the empty state is its own card, never a card in a card */}
           {/* #2363 (founder 21.11: «разделители групп некрасиво, непонятно»; both design reviews): with groups each group is a card of
               its own — the rows draw the card (the ground, the first/last corners), the group's title stands OVER it with its sum; one
               list still, so a line drags from group to group */}
-          <ListFrame empty={option.lines.length === 0} missing={missing === "lines"}>
+          {/* (code review: a section added to an empty estimate must show — the list is there once it has a section, lines or not) */}
+          <ListFrame empty={option.lines.length === 0 && !(option.sections ?? []).length} missing={missing === "lines"}>
             <SortableList
               // #2387: the lines of a group are ONE card (ui/groupedList `useGroupEdge`), the inset hairline between them is the list's
               rowLook={(r, i) => groupLook(view, r, i, groupEdge)}
