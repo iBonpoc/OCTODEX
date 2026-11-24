@@ -139,15 +139,15 @@ export function OptionsCard(p: {
                 {full ? (
                   // three already: the button is pale and does not copy; a press says why (DS §8.10)
                   <View testID="est-var-copy-max" style={{ opacity: component.dimOpacity }}>
-                    <Button label={t("est.var.copy", { name: cur.name })} icon="copy" variant="ghost" size="sm" accessibilityLabel={`${t("est.var.copy", { name: cur.name })}. ${t("est.var.max")}`} onPress={() => toast.show(t("est.var.max"))} />
+                    <Button label={t("est.var.copy", { name: cur.name })} icon="copy" variant="ghost" accessibilityLabel={`${t("est.var.copy", { name: cur.name })}. ${t("est.var.max")}`} onPress={() => toast.show(t("est.var.max"))} />
                   </View>
                 ) : (
                   <View testID="est-var-copy">
-                    <Button label={t("est.var.copy", { name: cur.name })} icon="copy" variant="ghost" size="sm" onPress={p.onCopy} />
+                    <Button label={t("est.var.copy", { name: cur.name })} icon="copy" variant="ghost" onPress={p.onCopy} />
                   </View>
                 )}
                 <View ref={moreRef} collapsable={false} testID="est-var-more">
-                  <Button label={t("est.var.more")} icon="more" variant="ghost" size="sm" accessibilityLabel={t("est.var.menu", { name: cur.name })} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }))} />
+                  <Button label={t("est.var.more")} icon="more" variant="ghost" accessibilityLabel={t("est.var.menu", { name: cur.name })} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }))} />
                 </View>
               </RowView>
             )}

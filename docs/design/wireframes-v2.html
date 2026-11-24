@@ -1,0 +1,948 @@
+<title>Каркасы GoRix v2</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#E7E7E5;--fg:#232323;--mut:#5C5C5C;--paper:#F4F4F3;--card:#FAFAF9;--blk:#DEDEDC;--blk2:#C6C6C4;
+  --line:#B4B4B2;--main:#3A3A3A;--mainfg:#F1F1F0;--bezel:#2C2C2C;--veil:rgba(40,40,40,.32);--zone:rgba(60,60,60,.06);
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#1A1A1A;--fg:#E4E4E3;--mut:#A6A6A5;--paper:#232323;--card:#2C2C2C;--blk:#393939;--blk2:#4C4C4C;
+  --line:#5C5C5C;--main:#D4D4D3;--mainfg:#1D1D1D;--bezel:#0E0E0E;--veil:rgba(0,0,0,.5);--zone:rgba(255,255,255,.05);color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#1A1A1A;--fg:#E4E4E3;--mut:#A6A6A5;--paper:#232323;--card:#2C2C2C;--blk:#393939;--blk2:#4C4C4C;
+  --line:#5C5C5C;--main:#D4D4D3;--mainfg:#1D1D1D;--bezel:#0E0E0E;--veil:rgba(0,0,0,.5);--zone:rgba(255,255,255,.05);color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:Manrope,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;line-height:1.4;-webkit-text-size-adjust:100%}
+.wrap{max-width:1280px;margin:0 auto;padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px));padding-block:28px 48px}
+h1{font-size:28px;margin:0 0 6px;letter-spacing:-.01em}
+h2.sec{font-size:20px;margin:40px 0 16px}
+.lead{color:var(--mut);margin:0 0 20px;max-width:780px}
+.intro{display:grid;grid-template-columns:1fr;gap:16px;margin-bottom:24px}
+@media (min-width:900px){.intro{grid-template-columns:1.2fr 1fr}}
+.box{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:16px 18px;min-width:0}
+.box h2{font-size:15px;margin:0 0 8px}
+.box ol,.box ul{margin:0;padding-left:22px;font-size:14px}
+.box li{margin:3px 0}
+.note{font-weight:700;border:2px dashed var(--fg);border-radius:14px;padding:12px 16px;margin:0 0 16px}
+.legend{display:flex;flex-wrap:wrap;gap:10px 18px;font-size:13px;color:var(--mut);margin:0 0 8px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.lg-main{display:inline-block;width:38px;height:16px;border-radius:99px;background:var(--main);outline:2px dashed var(--fg);outline-offset:3px}
+.lg-qa{display:inline-flex;flex-direction:column;align-items:center;font-size:9px;font-weight:700;color:var(--fg)}
+.lg-qa::before{content:"";width:16px;height:16px;border-radius:50%;background:var(--blk2)}
+.lg-ic{display:inline-block;width:16px;height:16px;border-radius:50%;background:var(--blk)}
+.lg-g{display:inline-block;width:34px;height:16px;border-radius:6px;outline:1.5px dashed var(--fg)}
+.lg-cap{display:inline-block;width:34px;height:16px;border-radius:6px;border:1.5px dashed var(--line);background:repeating-linear-gradient(135deg,transparent 0 5px,var(--zone) 5px 10px)}
+.lg-sel{display:inline-block;width:34px;height:16px;border-radius:6px;border:2.5px solid var(--fg)}
+.tbl{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:8px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:620px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mut);font-weight:700;font-size:12px}
+.grid{display:grid;grid-template-columns:1fr;gap:36px 24px}
+@media (min-width:700px){.grid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}}
+.shot{margin:0;min-width:0;display:flex;flex-direction:column;align-items:center;padding:6px}
+.shot figcaption{width:100%;max-width:340px;margin-top:16px;font-size:13.5px}
+.shot h3{font-size:15px;margin:0 0 4px}
+.shot p{margin:0 0 4px;color:var(--mut)}
+.shot p b{color:var(--fg)}
+.shot p.met{color:var(--fg);font-weight:700;font-size:12.5px;border-top:1px dashed var(--line);padding-top:6px;margin-top:6px}
+.new{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;border:1.5px solid var(--fg);border-radius:6px;padding:0 5px;margin-left:6px;vertical-align:2px}
+
+/* ---------- phone 390×844, scaled to the column. Inside: 5 font sizes (28/20/15/13/11), spacing 8/12/16 ---------- */
+.ph{--k:.75;width:100%;max-width:293px;aspect-ratio:390/844;position:relative;overflow:hidden;border-radius:calc(46px * var(--k));box-shadow:0 0 0 6px var(--bezel);background:var(--paper)}
+.scr{position:absolute;left:0;top:0;width:390px;height:844px;transform:scale(var(--k));transform-origin:0 0;display:flex;flex-direction:column;background:var(--paper);color:var(--fg);font-size:15px;line-height:20px}
+.sb{height:47px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;padding:0 28px 8px;font-size:15px;font-weight:700}
+.sb i{width:64px;height:12px;border-radius:6px;background:var(--blk2)}
+.hd{flex:none;height:57px;display:flex;align-items:center;gap:12px;padding:0 16px}
+.tt{flex:1;min-width:0}
+.t28{font-size:28px;line-height:34px;font-weight:700;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t20{font-size:20px;line-height:24px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub{font-size:13px;line-height:16px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ct{flex:1;min-height:0;overflow:hidden;padding:0 16px;display:flex;flex-direction:column;gap:12px}
+.ic{flex:none;width:40px;height:40px;border-radius:50%;background:var(--blk);display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--mut)}
+.ic.s{width:32px;height:32px}
+.av{flex:none;width:40px;height:40px;border-radius:50%;background:var(--blk2);display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
+.f1{flex:1;min-width:0}
+.ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m{color:var(--mut)}
+.b{font-weight:700}
+.x13{font-size:13px;line-height:16px}.x11{font-size:11px;line-height:16px}.x20{font-size:20px;line-height:24px}
+.big{font-size:28px;line-height:32px;font-weight:700;letter-spacing:-.01em}
+.row{display:flex;align-items:center;gap:12px;min-width:0}
+/* grouped list (as in iPhone Contacts): one block, rows 56 / 44, separator 1 pt, no gaps */
+.grp{flex:none;background:var(--card);border:1px solid var(--line);border-radius:16px}
+.r{height:56px;display:flex;align-items:center;gap:12px;padding:0 12px;min-width:0;position:relative}
+.r.h44{height:44px}
+.r+.r{box-shadow:inset 0 1px 0 var(--blk)}
+.ti{font-size:15px;line-height:20px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.su{font-size:13px;line-height:16px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.su b{color:var(--fg)}
+.rt{flex:none;display:flex;flex-direction:column;align-items:flex-end;text-align:right}
+.tm{flex:none;width:48px;font-size:15px;font-weight:700}
+.ck{flex:none;width:24px;height:24px;border-radius:50%;border:2px solid var(--blk2)}
+.gh{flex:none;display:flex;justify-content:space-between;align-items:center;height:24px;font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--mut);padding:0 12px;margin-bottom:-8px}
+.gh.i{height:32px}
+.gh .ics{display:flex;gap:8px}
+.st{flex:none;display:inline-flex;align-items:center;height:24px;font-size:13px;font-weight:700;padding:0 8px;border-radius:99px;background:var(--blk);white-space:nowrap}
+.btn{height:40px;border-radius:99px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;padding:0 16px;white-space:nowrap}
+.btn.p{background:var(--main);color:var(--mainfg)}
+.btn.s{background:var(--card);border:1.5px solid var(--line)}
+.btn.sm{height:32px;font-size:13px;padding:0 12px}
+.main{position:relative;outline:2px dashed var(--fg);outline-offset:4px}
+.main::after{content:"ГЛАВНОЕ";position:absolute;top:-21px;right:12px;font-size:11px;font-weight:700;letter-spacing:.08em;line-height:12px;padding:2px 4px;background:var(--paper);color:var(--fg);border:1.5px dashed var(--fg);border-radius:6px}
+/* tiles 2×2 with big numbers */
+.tiles{flex:none;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tl{height:56px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:0 12px;display:flex;flex-direction:column;justify-content:center;min-width:0}
+.tl .x11{color:var(--mut);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl .v{display:flex;align-items:baseline;gap:8px;min-width:0}
+.tl .v .x13{color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl.sel{border:2.5px solid var(--fg)}
+/* quick actions of an object: icon + short caption under it */
+.qa{flex:none;display:flex;gap:8px;height:60px}
+.qa span{width:64px;display:flex;flex-direction:column;align-items:center;font-size:11px;line-height:16px;font-weight:700;white-space:nowrap}
+.qa span::before{content:attr(data-i);width:44px;height:44px;border-radius:50%;background:var(--blk2);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--mut)}
+.line{flex:none;display:flex;align-items:center;gap:8px;min-width:0;font-size:13px;line-height:16px;height:20px}
+/* pills: object sections and filters — one strip, scrolls sideways */
+.strip{flex:none;display:flex;gap:8px;overflow:hidden;white-space:nowrap;-webkit-mask-image:linear-gradient(90deg,#000 84%,transparent);mask-image:linear-gradient(90deg,#000 84%,transparent)}
+.cp{flex:none;height:32px;display:inline-flex;align-items:center;padding:0 12px;border-radius:99px;border:1.5px solid var(--line);font-size:13px;font-weight:700}
+.cp.on{background:var(--blk2);border-color:var(--blk2)}
+.seg{flex:none;display:flex;background:var(--blk);border-radius:99px;padding:0}
+.seg span{flex:1;text-align:center;height:36px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;border-radius:99px;white-space:nowrap}
+.seg .on{background:var(--card);border:1.5px solid var(--line)}
+.days{flex:none;display:flex;gap:8px}
+.days span{flex:1;height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:99px;background:var(--blk);font-size:11px;line-height:16px;font-weight:700;color:var(--mut);position:relative}
+.days span b{font-size:15px;line-height:20px;color:var(--fg)}
+.days span.d::after{content:"";position:absolute;bottom:4px;width:4px;height:4px;border-radius:50%;background:var(--fg)}
+.days .on{background:var(--main);color:var(--mainfg)}
+.days .on b{color:var(--mainfg)}
+.days .on.d::after{background:var(--mainfg)}
+.steps{flex:none;display:flex;gap:8px}
+.steps span{flex:1;height:32px;border-radius:99px;background:var(--blk);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--mut);white-space:nowrap}
+.steps .on{background:var(--blk2);color:var(--fg);border:2px solid var(--fg)}
+.steps .ok{color:var(--fg)}
+/* field inside a grouped card: label inside (11) + value (15) */
+.fl{flex:1;min-width:0;display:flex;flex-direction:column}
+.fl .x11{color:var(--mut);font-weight:700}
+.vr{width:1px;align-self:stretch;background:var(--blk)}
+.card{flex:none;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+.acc{flex:none;background:var(--card);border:2.5px solid var(--fg);border-radius:16px;padding:8px 12px;display:flex;gap:12px;align-items:center}
+.cap{flex:1;min-height:0;border:1.5px dashed var(--line);border-radius:16px;background:repeating-linear-gradient(135deg,transparent 0 8px,var(--zone) 8px 16px);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--mut)}
+.pad{flex:none;height:120px;border:2px dashed var(--line);border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--mut);font-size:13px}
+.why{flex:none;padding:8px 16px;font-size:13px;line-height:16px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-top:1px solid var(--line)}
+.ab{flex:none;height:64px;padding:12px 16px;display:flex;align-items:center;gap:12px;background:var(--paper)}
+.ab .btn.p{flex:1}
+.safe{flex:none;height:34px}
+/* floating tab "pill" with «＋» in the same row (variant В1-б + В2-б) */
+.tbp{flex:none;height:84px;padding:12px 16px 16px;display:flex;gap:8px;align-items:center}
+.pill{flex:1;min-width:0;height:56px;border-radius:28px;background:var(--card);border:1px solid var(--line);display:flex;justify-content:space-around;align-items:center;padding:0 8px}
+.pill span{display:flex;flex-direction:column;align-items:center;font-size:11px;line-height:16px;font-weight:700;color:var(--mut);min-width:0;white-space:nowrap}
+.pill span::before{content:"";width:24px;height:24px;border-radius:50%;border:2px solid var(--blk2);box-sizing:border-box}
+.pill .on{color:var(--fg)}
+.pill .on::before{background:var(--fg);border-color:var(--fg)}
+.plus{flex:none;width:56px;height:56px;border-radius:50%;background:var(--blk2);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700}
+.plus.p{background:var(--main);color:var(--mainfg)}
+.ab .main::after,.sheet .main::after{top:auto;bottom:-24px}
+.card .main::after{top:auto;bottom:-22px}
+.gw{outline:1.5px dashed var(--fg);outline-offset:-3px;border-radius:12px}
+.veil{position:absolute;inset:0;background:var(--veil)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--paper);border-radius:28px 28px 0 0;padding:8px 16px 0;display:flex;flex-direction:column;gap:12px}
+.grab{flex:none;width:40px;height:4px;border-radius:2px;background:var(--blk2);align-self:center}
+.gridt{flex:none;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.gridt span{height:72px;background:var(--card);border:1px solid var(--line);border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:13px;font-weight:700;gap:0}
+.gridt span::before{content:attr(data-i);width:32px;height:32px;border-radius:50%;background:var(--blk);font-size:11px;color:var(--mut);display:flex;align-items:center;justify-content:center}
+.pop{position:absolute;left:16px;right:16px;top:104px;background:var(--paper);border:1px solid var(--line);border-radius:20px;box-shadow:0 8px 24px rgba(0,0,0,.2);padding:12px;display:flex;flex-direction:column;gap:12px}
+.fd{height:40px;border:1.5px solid var(--line);border-radius:99px;background:var(--card);padding:0 16px;display:flex;align-items:center;font-size:15px;min-width:0;white-space:nowrap;overflow:hidden;gap:8px}
+.kbd{flex:none;height:291px;background:var(--blk);display:grid;grid-template-columns:repeat(10,1fr);grid-auto-rows:44px;gap:12px 8px;padding:12px 8px 0;align-content:start}
+.kbd i{border-radius:8px;background:var(--card)}
+.sw{flex:none;width:44px;height:24px;border-radius:99px;background:var(--blk2);position:relative}
+.sw::after{content:"";position:absolute;top:4px;left:4px;width:16px;height:16px;border-radius:50%;background:var(--card)}
+.sw.on{background:var(--main)}.sw.on::after{left:24px}
+/* question mini-schemes */
+.qgrid{display:grid;grid-template-columns:1fr;gap:16px;margin-bottom:24px}
+@media (min-width:760px){.qgrid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.qgrid.two{grid-template-columns:1fr}
+@media (min-width:760px){.qgrid.two{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.qv{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:12px;min-width:0;display:flex;flex-direction:column;gap:10px}
+.qv h4{margin:0;font-size:14px}
+.qv p{margin:0;font-size:13px;color:var(--mut)}
+.qv.rec{border:2.5px solid var(--fg)}
+.rc{font-size:10px;font-weight:700;letter-spacing:.06em;border:1.5px solid var(--fg);border-radius:6px;padding:0 5px;margin-left:6px}
+.mini{height:168px;border-radius:18px;background:var(--card);border:1px solid var(--line);display:flex;flex-direction:column;justify-content:space-between;padding:10px;min-width:0;position:relative;overflow:hidden}
+.mh{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;min-width:0}
+.mh .f1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mh i,.mfab{flex:none;width:22px;height:22px;border-radius:50%;background:var(--blk);font-style:normal;font-size:9px;display:inline-flex;align-items:center;justify-content:center;color:var(--mut);font-weight:700}
+.mb{display:flex;flex-direction:column;gap:5px}
+.mb i{display:block;height:9px;border-radius:5px;background:var(--blk)}
+.mt{display:flex;gap:5px;align-items:center;min-width:0}
+.mpill{flex:1;min-width:0;height:36px;border-radius:18px;border:1px solid var(--line);background:var(--paper);display:flex;justify-content:space-around;align-items:center;padding:0 4px}
+.mpill span{font-size:9.5px;font-weight:700;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.mpill .on{color:var(--fg);text-decoration:underline;text-underline-offset:3px}
+.mpill .md{color:var(--fg);border:1.5px dashed var(--fg);border-radius:6px;padding:0 3px}
+.mplus{flex:none;width:36px;height:36px;border-radius:50%;background:var(--main);color:var(--mainfg);display:flex;align-items:center;justify-content:center;font-weight:700}
+.mfab.big{position:absolute;right:10px;bottom:54px;width:32px;height:32px;background:var(--main);color:var(--mainfg);font-size:15px}
+</style>
+
+<div class="wrap">
+  <h1>Каркасы GoRix v2</h1>
+  <p class="lead">Серые схемы телефона 390×844 после разбора 21.11 (6 проверяющих + раскладка лидеров). Тексты и суммы — из демо приложения (<b>apps/mobile/src/data/seed.ts</b>), время на всех экранах — 8:20. v1 — <b>docs/design/wireframes.html</b>; разбор — <b>docs/design/review-2026-11-21/</b>.</p>
+  <p class="note">Каркас: расположение без цвета. Нужно ваше слово по трём вопросам внизу (В1–В3) и «да» расположению — потом вёрстка.</p>
+
+  <div class="intro">
+    <section class="box">
+      <h2>Что изменилось с v1</h2>
+      <ol>
+        <li>Главная кнопка объекта <b>закреплена внизу</b> (ваш ответ 61-А); на клиенте, работе, выезде, счёте, смете нижнего меню нет — внизу «‹ назад» и главная.</li>
+        <li>Главная кнопка следует состоянию: просроченный счёт → «Напомнить», принятая смета → «Выставить счёт», выезд → «В пути». Таблица — ниже.</li>
+        <li>Списки — <b>сгруппированными строками 56</b> без промежутков (как Контакты iPhone и Linear): 9–11 строк на первом экране вместо 4–6.</li>
+        <li><b>Плитки 2×2</b> с крупными цифрами на Главной и в Деньгах, <b>приветствие</b> «Доброе утро, Алекс», аватар — слева.</li>
+        <li>Повторы убраны: «Клиентов: 7», сумма ×4 в оплате, «Bathroom remodel» ×3, два чек-листа, «Сохранить» при автосохранении, коды CLT/JOB в шапках.</li>
+        <li>Нормы компактности: шапка 104 pt, 5 размеров шрифта (28 / 20 / 15 / 13 / 11), отступы 8 / 12 / 16, служебное ≤ 40 % — посчитано под каждым экраном.</li>
+        <li>Быстрые действия объекта — <b>значок + короткая подпись</b> (Позвонить · SMS · Маршрут); в строках списков — только значки.</li>
+        <li>На выезде <b>первым — «Доступ: код ворот, собака»</b>, дальше чек-лист, позиции, время.</li>
+        <li>Дорисованы 7 экранов: смета «Показать → Подписать → Задаток», подпись клиента, Лиды, Кто должен, «Мой день» мастера, вход в Замер, Поиск; отдельно — меню аватара.</li>
+        <li>По раскладке лидеров (Jobber, ServiceTitan, Housecall Pro, Contacts, Linear): на выезде одна кнопка-шаг «В пути → Начать → Завершить», в оплате первым Tap to Pay, в Плане месяц в заголовке нажимается, есть «Сегодня» и точки на днях.</li>
+      </ol>
+    </section>
+    <section class="box">
+      <h2>Легенда</h2>
+      <div class="legend" style="flex-direction:column;align-items:flex-start;gap:8px">
+        <span><i class="lg-main"></i> главная кнопка экрана (одна, контур «ГЛАВНОЕ»)</span>
+        <span><i class="lg-qa">Звонок</i> быстрое действие объекта: значок + подпись</span>
+        <span><i class="lg-ic"></i> кружок — значок в строке (подпись для VoiceOver)</span>
+        <span><i class="lg-g"></i> строка со смахиванием (какое — в подписи под экраном)</span>
+        <span><i class="lg-sel"></i> выбрано: плитка-раздел, шаг, адрес</span>
+        <span><i class="lg-cap"></i> свободное место первого экрана — столько ещё строк влезет</span>
+      </div>
+      <h2 style="margin-top:12px">Как считал</h2>
+      <ul>
+        <li><b>Служебное</b> — статус-бар, шапка, нижняя зона, заголовки групп, полосы управления и промежутки, % от 844 pt (у шторки — от её высоты). Свободное место не считается служебным.</li>
+        <li><b>Строк на первом экране</b> — строки данных 56/44, видимые без прокрутки; в скобках — сколько ещё влезет.</li>
+        <li>Нижнее меню нарисовано по рекомендованным вариантам В1-б и В2-б — до вашего ответа.</li>
+      </ul>
+    </section>
+  </div>
+
+  <h2 class="sec">Состояние → главная кнопка</h2>
+  <div class="tbl"><table>
+    <tr><th>Объект</th><th>Состояние → главная кнопка (внизу)</th></tr>
+    <tr><td><b>Клиент</b></td><td>нет сметы → «Создать смету» · смета у клиента → «Напомнить» · смета принята → «Выставить счёт» · есть долг → «Напомнить» · всё оплачено → «Создать смету»</td></tr>
+    <tr><td><b>Работа</b></td><td>выезд не назначен → «Записать в план» · выезд сегодня → «В пути» · выезды закрыты, счёта нет → «Выставить счёт» · счёт оплачен → «Завершить работу»</td></tr>
+    <tr><td><b>Выезд</b></td><td>запланирован → «В пути» (клиенту SMS) · в пути → «Начать» · идёт → «Завершить» · завершён → «Подпись клиента» · подписан → «Принять оплату» · оплачен → «Закрыть выезд»</td></tr>
+    <tr><td><b>Смета</b></td><td>черновик → «Готово» (в редакторе) · не отправлена → «Показать клиенту» · отправлена → «Напомнить» · подписана → «Взять задаток» · задаток оплачен → «Создать работу»</td></tr>
+    <tr><td><b>Счёт</b></td><td>не отправлен → «Отправить» · отправлен, срок не прошёл → «Принять оплату» · просрочен → «Напомнить» · клиент рядом (с выезда) → «Принять оплату» · оплачен → «Квитанция»</td></tr>
+  </table></div>
+
+  <h2 class="sec">Экраны v1, пересобранные</h2>
+  <div class="grid">
+
+  <!-- 1 Главная -->
+  <figure class="shot" data-n="1">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><span class="av">AP</span><div class="tt"><div class="t20">Доброе утро, Алекс</div><div class="sub">Пт, 20 ноября</div></div><span class="ic">звон</span></div>
+      <div class="ct">
+        <div class="tiles">
+          <div class="tl"><span class="x11">ЛИДЫ БЕЗ ОТВЕТА</span><div class="v"><span class="big">2</span><span class="x13">! 4 мин</span></div></div>
+          <div class="tl"><span class="x11">СМЕТЫ ЖДУТ ОТВЕТА</span><div class="v"><span class="big">3</span><span class="x13">до 6 дн</span></div></div>
+          <div class="tl"><span class="x11">ДОЛЖНЫ</span><div class="v"><span class="big">$2,800</span><span class="x13">! 1</span></div></div>
+          <div class="tl"><span class="x11">ПОЛУЧЕНО СЕГОДНЯ</span><div class="v"><span class="big">$1,020</span></div></div>
+        </div>
+        <div class="gh ctl">СЕГОДНЯ У БРИГАД<span>ПЛАН ›</span></div>
+        <div class="grp">
+          <div class="r"><span class="tm">7:30</span><div class="f1"><div class="ti">James O'Connor</div><div class="su">Panel upgrade 200A · Valley El.</div></div><span class="st">! Опаздывает</span></div>
+          <div class="r"><span class="tm">9:00</span><div class="f1"><div class="ti">Maria Gonzalez</div><div class="su">Deep clean · Ivan</div></div><span class="st">◷ В работе</span></div>
+          <div class="r"><span class="tm">13:30</span><div class="f1"><div class="ti">David Kim</div><div class="su">Kitchen faucet · Alex</div></div></div>
+          <div class="r"><span class="tm">15:00</span><div class="f1"><div class="ti">Emily Park</div><div class="su"><b>! Без мастера</b> · осмотр</div></div><span class="ic s">назн</span></div>
+          <div class="r"><span class="tm">16:00</span><div class="f1"><div class="ti">Linda Alvarez</div><div class="su">Drywall patch · Alex</div></div></div>
+        </div>
+        <div class="cap">свободно</div>
+        <div class="card">
+          <div class="row"><span class="x13 b f1">ДАЛЬШЕ · 8:30–12:30</span><span class="st">через 10 мин</span></div>
+          <div class="row"><div class="f1"><div class="ti">Sarah Mitchell</div><div class="su">1420 Oak Grove Ave, Pasadena</div></div></div>
+          <div class="btn p main">В пути</div>
+        </div>
+      </div>
+      <div class="tbp"><div class="pill"><span class="on">Главная</span><span>План</span><span>Клиенты</span><span>Деньги</span><span>Лиды</span></div><span class="plus">＋</span></div>
+    </div></div>
+    <figcaption>
+      <h3>1 · Главная — Обзор</h3>
+      <p><b>Работа:</b> что мне делать сейчас — следующий выезд и что горит.</p>
+      <p><b>Почему:</b> «Дальше» с главной кнопкой опущена к большому пальцу, над меню; «Требует действия» и деньги — плитками 2×2, каждая открывает свой отфильтрованный список; бригады — строками дня, без отдельной сводки. «＋» серый: акцент один.</p>
+      <p class="met">Служебное: 30 % · Строк на первом экране: 5 · плиток 4</p>
+    </figcaption>
+  </figure>
+  
+
+  <!-- 2 План -->
+  <figure class="shot" data-n="2">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="t28">Ноябрь ˅</div></div><span class="btn s sm">Сегодня</span><span class="ic">вид</span><span class="ic">поиск</span></div>
+      <div class="ct">
+        <div class="days ctl"><span class="d">Пн<b>16</b></span><span class="d">Вт<b>17</b></span><span>Ср<b>18</b></span><span class="d">Чт<b>19</b></span><span class="on d">Пт<b>20</b></span><span class="d">Сб<b>21</b></span><span>Вс<b>22</b></span></div>
+        <div class="grp">
+          <div class="r"><span class="tm">7:30</span><div class="f1"><div class="ti">James O'Connor</div><div class="su">Panel upgrade 200A · Valley El.</div></div><span class="st">! Опаздывает</span></div>
+          <div class="r gw"><span class="tm">8:30</span><div class="f1"><div class="ti">Sarah Mitchell</div><div class="su">Bathroom remodel · Alex</div></div></div>
+          <div class="r"><span class="tm">9:00</span><div class="f1"><div class="ti">Maria Gonzalez</div><div class="su">Deep clean after move-out · Ivan</div></div><span class="st">◷ В работе</span></div>
+          <div class="r"><span class="tm">13:30</span><div class="f1"><div class="ti">David Kim</div><div class="su">Kitchen faucet + disposal · Alex</div></div></div>
+          <div class="r"><span class="tm">15:00</span><div class="f1"><div class="ti">Emily Park</div><div class="su"><b>! Без мастера</b> · осмотр</div></div><span class="btn s sm">Назначить</span></div>
+          <div class="r"><span class="tm">16:00</span><div class="f1"><div class="ti">Linda Alvarez</div><div class="su">Drywall patch + paint · Alex</div></div></div>
+        </div>
+        <div class="cap">свободно</div>
+      </div>
+      <div class="tbp"><div class="pill"><span>Главная</span><span class="on">План</span><span>Клиенты</span><span>Деньги</span><span>Лиды</span></div><span class="plus p main">＋</span></div>
+    </div></div>
+    <figcaption>
+      <h3>2 · План — Календарь</h3>
+      <p><b>Работа:</b> что когда и у кого.</p>
+      <p><b>Почему:</b> месяц в заголовке нажимается (выбор даты), «Сегодня» возвращает в день, точка на пилюле — в дне есть выезды (как у Jobber, но без тыканья в каждую дату). Мастер — именем, не инициалами; «Без мастера» — на своём часу. Жест по Sarah: → Открыть, Перенести ← (то же в «⋯» строки).</p>
+      <p class="met">Служебное: 31 % · Строк на первом экране: 6 (+4 свободно)</p>
+    </figcaption>
+  </figure>
+  
+
+  <!-- 3 Клиенты -->
+  <figure class="shot" data-n="3">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="t28">Клиенты</div></div><span class="ic">поиск</span><span class="ic">⋯</span></div>
+      <div class="ct">
+        <div class="strip ctl"><span class="cp on">Все 7</span><span class="cp">Должны 2</span><span class="cp">Смета у клиента 3</span><span class="cp">VIP 1</span><span class="cp">Архив</span></div>
+        <div class="grp">
+          <div class="r gw"><span class="av">DK</span><div class="f1"><div class="ti">David Kim</div><div class="su">Сегодня 13:30 · Kitchen faucet</div></div><div class="rt"><b>$1,840</b><span class="x13 b">! 9 дн</span></div></div>
+          <div class="r"><span class="av">EP</span><div class="f1"><div class="ti">Emily Park</div><div class="su">Сегодня 15:00 · осмотр</div></div><span class="ic s">тел</span></div>
+          <div class="r"><span class="av">JO</span><div class="f1"><div class="ti">James O'Connor</div><div class="su">Сейчас · Panel upgrade 200A</div></div><span class="ic s">тел</span></div>
+          <div class="r"><span class="av">LA</span><div class="f1"><div class="ti">Linda Alvarez</div><div class="su">Сегодня 16:00 · Drywall patch</div></div><span class="ic s">тел</span></div>
+          <div class="r"><span class="av">MG</span><div class="f1"><div class="ti">Maria Gonzalez</div><div class="su">Сейчас · Deep clean · Ivan</div></div><span class="ic s">тел</span></div>
+          <div class="r"><span class="av">RC</span><div class="f1"><div class="ti">Robert Chen</div><div class="su">Счёт · срок через 3 дн</div></div><div class="rt"><b>$960</b></div></div>
+          <div class="r"><span class="av">SM</span><div class="f1"><div class="ti">Sarah Mitchell</div><div class="su">Сегодня 8:30 · Bathroom remodel</div></div><span class="ic s">тел</span></div>
+        </div>
+        <div class="cap">свободно</div>
+      </div>
+      <div class="tbp"><div class="pill"><span>Главная</span><span>План</span><span class="on">Клиенты</span><span>Деньги</span><span>Лиды</span></div><span class="plus p main">＋</span></div>
+    </div></div>
+    <figcaption>
+      <h3>3 · Клиенты — Список</h3>
+      <p><b>Работа:</b> найти клиента и позвонить, не открывая.</p>
+      <p><b>Почему:</b> счётчик только в чипе «Все 7»; буквы-разделители и А–Я справа — с 50 клиентов; строка: имя + одна строка «когда · что», справа долг или значок звонка. Поиск — значком в шапке. Жест по David: → Позвонить, В архив ←.</p>
+      <p class="met">Служебное: 29 % · Строк на первом экране: 7 (+3 свободно)</p>
+    </figcaption>
+  </figure>
+  
+
+  <!-- 4 Клиент -->
+  <figure class="shot" data-n="4">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="t20">Sarah Mitchell</div><div class="sub">◷ Активный · VIP</div></div><span class="ic">＋</span><span class="ic">⋯</span></div>
+      <div class="ct">
+        <div class="line"><span class="f1 ell">1420 Oak Grove Ave, Pasadena, CA 91103</span></div>
+        <div class="qa"><span data-i="тел">Позвонить</span><span data-i="смс">SMS</span><span data-i="путь">Маршрут</span><span data-i="почта">Почта</span><span data-i="замер">Замер</span></div>
+        <div class="strip ctl"><span class="cp on">Обзор</span><span class="cp">Работы 2</span><span class="cp">Сметы 1</span><span class="cp">Счета 2</span><span class="cp">Выезды 2</span><span class="cp">Адреса 2</span><span class="cp">Контакты 2</span></div>
+        <div class="grp">
+          <div class="r"><span class="ic s">!</span><div class="f1"><div class="ti">Gate code 4512 · small dog</div><div class="su">Закреплено · видят мастера на выезде</div></div></div>
+          <div class="r"><span class="ic s">выезд</span><div class="f1"><div class="ti">Сегодня 8:30–12:30</div><div class="su">Bathroom remodel · Alex</div></div></div>
+          <div class="r"><span class="ic s">выезд</span><div class="f1"><div class="ti">Завтра 9:00</div><div class="su">Final walkthrough and touch-up</div></div></div>
+          <div class="r"><span class="ic s">раб</span><div class="f1"><div class="ti">TV mount + shelves</div><div class="su">88 Rosemont Ave · ✓ оплачено</div></div><b>$240</b></div>
+          <div class="r"><span class="ic s">конт</span><div class="f1"><div class="ti">Tom Mitchell · супруг</div><div class="su">(626) 555-0144</div></div><span class="ic s">тел</span></div>
+        </div>
+        <div class="cap">свободно</div>
+      </div>
+      <div class="why">Смета принята · остаток $3,078 (задаток $342 оплачен)</div>
+      <div class="ab"><span class="ic">‹</span><div class="btn p main">Выставить счёт</div></div>
+      <div class="safe"></div>
+    </div></div>
+    <figcaption>
+      <h3>4 · Клиент — Объект</h3>
+      <p><b>Работа:</b> понять, что с клиентом, и сделать следующий шаг.</p>
+      <p><b>Почему:</b> главная кнопка внизу, нижнего меню нет; номер клиента — в «⋯»; действия — значками с подписью (Майк не узнаёт голые значки на солнце); разделы начинаются на y = 216; работа и выезд слиты в одну строку — «Bathroom remodel» один раз; код ворот — первым.</p>
+      <p class="met">Служебное: 37 % · Строк на первом экране: 5 (+2 свободно)</p>
+    </figcaption>
+  </figure>
+  
+
+  <!-- 5 Новый клиент -->
+  <figure class="shot" data-n="5">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="t20">Новый клиент</div></div></div>
+      <div class="ct">
+        <div class="grp">
+          <div class="r"><div class="fl"><span class="x11">ИМЯ</span><span>Sarah</span></div><span class="vr"></span><div class="fl"><span class="x11">ФАМИЛИЯ</span><span>Mitchell</span></div></div>
+          <div class="r"><div class="fl"><span class="x11">КОМПАНИЯ</span><span class="m">если нет имени</span></div></div>
+        </div>
+        <div class="gh i ctl">ТЕЛЕФОНЫ<span class="ic s">＋</span></div>
+        <div class="grp">
+          <div class="r"><div class="fl" style="flex:none;width:104px"><span class="x11">ТИП</span><span>Мобильный ˅</span></div><span class="vr"></span><div class="fl"><span class="x11">НОМЕР</span><span>(626) 555-0142</span></div></div>
+        </div>
+        <div class="gh i ctl">ПОЧТА<span class="ic s">＋</span></div>
+        <div class="grp">
+          <div class="r"><div class="fl"><span class="x11">ПОЧТА</span><span class="ell">sarah.m@example.com</span></div></div>
+        </div>
+        <div class="grp">
+          <div class="r"><div class="fl"><span class="x11">АДРЕС · ПОДСКАЗКА ПО МЕРЕ ВВОДА</span><span class="ell">1420 Oak Grove Ave, Pasadena, CA 91103</span></div></div>
+          <div class="r"><div class="fl"><span class="x11">ОТКУДА ПРИШЁЛ</span><span>Google ˅</span></div></div>
+          <div class="r h44"><span class="f1 b">Ещё поля</span><span class="m">налог, адрес счетов, теги ˅</span></div>
+        </div>
+        <div class="cap">свободно</div>
+      </div>
+      <div class="ab"><span class="ic">‹</span><div class="btn p main">Создать клиента</div></div>
+      <div class="safe"></div>
+    </div></div>
+    <figcaption>
+      <h3>5 · Новый клиент — Редактор</h3>
+      <p><b>Работа:</b> быстро и без ошибок завести клиента.</p>
+      <p><b>Почему:</b> подписи внутри полей, «＋» — в заголовке группы, адрес — одно поле с подсказкой вместо двух; обязательно «имя или компания»; удалить телефон — смахиванием, когда их два. Форма целиком без прокрутки. После «Создать» главная у клиента — «Создать смету».</p>
+      <p class="met">Служебное: 38 % · Строк на первом экране: 7 (+2 свободно) (все поля формы)</p>
+    </figcaption>
+  </figure>
+  
+
+  <!-- 6 Работа -->
+  <figure class="shot" data-n="6">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="t20">Bathroom remodel: vanity, toilet, tile</div><div class="sub">◷ Запланирована · $3,420</div></div><span class="ic">⋯</span></div>
+      <div class="ct">
+        <div class="line"><span class="b">Sarah Mitchell ›</span><span class="f1 ell m">1420 Oak Grove Ave, Pasadena</span></div>
+        <div class="qa"><span data-i="тел">Позвонить</span><span data-i="смс">SMS</span><span data-i="путь">Маршрут</span><span data-i="кам">Фото</span><span data-i="＋">Создать</span></div>
+        <div class="strip ctl"><span class="cp on">Обзор</span><span class="cp">Выезды 2</span><span class="cp">Смета</span><span class="cp">Счета 1</span><span class="cp">Расходы 1</span><span class="cp">Заказы 1</span><span class="cp">История</span></div>
+        <div class="grp">
+          <div class="r"><span class="ic s">смета</span><div class="f1"><div class="ti">Смета принята</div><div class="su">Подписана 12 нояб.</div></div><span class="m">›</span></div>
+          <div class="r"><span class="ic s">счёт</span><div class="f1"><div class="ti">Задаток INV-0105</div><div class="su">✓ Оплачен картой</div></div><b>$342</b></div>
+          <div class="r"><span class="ic s">расх</span><div class="f1"><div class="ti">ABC Supply</div><div class="su">Материалы · Alex · вчера</div></div><b>$884</b></div>
+          <div class="r"><span class="ic s">заказ</span><div class="f1"><div class="ti">Заказ PO-0001 · Home Depot</div><div class="su">Отправлен · самовывоз · 2 позиции</div></div></div>
+          <div class="r"><span class="ic s">$</span><div class="f1"><div class="ti">Прибыль сейчас</div><div class="su">только владельцу и офису</div></div><b>$2,536</b></div>
+        </div>
+        <div class="cap">свободно</div>
+      </div>
+      <div class="why">Выезд сегодня 8:30–12:30 · Alex · клиенту уйдёт SMS</div>
+      <div class="ab"><span class="ic">‹</span><div class="btn p main">В пути</div></div>
+      <div class="safe"></div>
+    </div></div>
+    <figcaption>
+      <h3>6 · Работа — Объект</h3>
+      <p><b>Работа:</b> что с работой и какой следующий шаг.</p>
+      <p><b>Почему:</b> название — в шапке, «статус · сумма» под ним; номер JOB — в «⋯»; в строке сметы нет ни названия, ни суммы (они в шапке); «Создать» — с подставленной работой (как Create у Jobber); шаг назван так же, как на выезде, — «В пути».</p>
+      <p class="met">Служебное: 37 % · Строк на первом экране: 5 (+2 свободно)</p>
+    </figcaption>
+  </figure>
+  
+
+  <!-- 7 Выезд -->
+  <figure class="shot" data-n="7">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="t20">Sarah Mitchell</div><div class="sub">◷ Запланирован · сегодня 8:30–12:30</div></div><span class="ic">⋯</span></div>
+      <div class="ct">
+        <div class="acc"><span class="ic s">!</span><div class="f1"><div class="x11 b m">ДОСТУП</div><div class="b">Gate code 4512. Small dog — call before entering</div></div></div>
+        <div class="line"><span class="f1 ell">1420 Oak Grove Ave, Pasadena · Bathroom remodel</span></div>
+        <div class="qa"><span data-i="тел">Позвонить</span><span data-i="смс">SMS</span><span data-i="путь">Маршрут</span><span data-i="кам">Камера</span><span data-i="＋">Ещё</span></div>
+        <div class="steps ctl"><span class="on">1 В пути</span><span>2 Начать</span><span>3 Завершить</span></div>
+                <div class="grp">
+          <div class="r h44"><span class="ck"></span><span class="f1 ell">Remove old vanity and toilet</span></div>
+          <div class="r h44"><span class="ck"></span><span class="f1 ell">Install new vanity, faucet and toilet</span></div>
+          <div class="r h44"><span class="ck"></span><span class="f1 ell">Tile backsplash, 24 sq ft</span></div>
+          <div class="r h44"><span class="ck"></span><span class="f1 ell">Фото «до» — обязательно</span><span class="ic s">кам</span></div>
+        </div>
+        <div class="grp">
+          <div class="r h44"><span class="f1 b">Позиции · 7</span><span class="m">по смете ›</span></div>
+          <div class="r h44"><span class="f1 b">Время</span><span class="m">не начато ›</span></div>
+        </div>
+      </div>
+      <div class="why">Sarah получит SMS: «Alex едет, буду к 8:30»</div>
+      <div class="ab"><span class="ic">‹</span><div class="btn p main">В пути</div></div>
+      <div class="safe"></div>
+    </div></div>
+    <figcaption>
+      <h3>7 · Выезд — Объект (полевой)</h3>
+      <p><b>Работа:</b> доехать, сделать работу, взять подпись и оплату.</p>
+      <p><b>Почему:</b> раскладка Jobber: звонок, SMS, маршрут сверху; ниже «Доступ» (код ворот — первым), чек-лист, позиции, время. Одна кнопка-шаг «В пути → Начать → Завершить», под ней сказано, что уйдёт клиенту. «Что сделать» и чек-лист — один список. Камера — на месте «＋». Сумма к оплате появится на шаге оплаты.</p>
+      <p class="met">Служебное: 39 % · Строк на первом экране: 6</p>
+    </figcaption>
+  </figure>
+  
+
+  <!-- 8 Деньги: сметы -->
+  <figure class="shot" data-n="8">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="t28">Деньги</div><div class="sub">Доброе утро, Алекс · ноябрь</div></div><span class="ic">поиск</span><span class="ic">наст</span></div>
+      <div class="ct">
+        <div class="tiles">
+          <div class="tl sel"><span class="x11">СМЕТЫ · 6 ОТКРЫТЫ</span><div class="v"><span class="big">$16,552</span></div></div>
+          <div class="tl"><span class="x11">ДОЛЖНЫ · ! 1 ПРОСРОЧЕН</span><div class="v"><span class="big">$2,800</span></div></div>
+          <div class="tl"><span class="x11">ПОЛУЧЕНО СЕГОДНЯ · 2</span><div class="v"><span class="big">$1,020</span></div></div>
+          <div class="tl"><span class="x11">РАСХОДЫ ЗА НЕДЕЛЮ · 3</span><div class="v"><span class="big">$1,375</span></div></div>
+        </div>
+        <div class="grp">
+          <div class="r"><span class="av">JO</span><div class="f1"><div class="ti">James O'Connor</div><div class="su">Принята сегодня · <b>выставить счёт</b></div></div><b>$5,180</b></div>
+          <div class="r"><span class="av">SM</span><div class="f1"><div class="ti">Sarah Mitchell</div><div class="su">Принята · <b>счёт на остаток</b></div></div><b>$3,420</b></div>
+          <div class="r"><span class="av">MG</span><div class="f1"><div class="ti">Maria Gonzalez</div><div class="su">Принята · <b>счёт на остаток</b></div></div><b>$1,560</b></div>
+          <div class="r gw"><span class="av">LA</span><div class="f1"><div class="ti">Linda Alvarez</div><div class="su">Backsplash · 6 дн без ответа</div></div><b>$2,640</b></div>
+          <div class="r"><span class="av">EP</span><div class="f1"><div class="ti">Emily Park</div><div class="su">Fence + gate · 3 дн без ответа</div></div><b>$2,980</b></div>
+          <div class="r"><span class="av">LA</span><div class="f1"><div class="ti">Linda Alvarez</div><div class="su">Carpet, railing · отправлена вчера</div></div><b>$772</b></div>
+        </div>
+        <div class="cap">свободно</div>
+      </div>
+      <div class="tbp"><div class="pill"><span>Главная</span><span>План</span><span>Клиенты</span><span class="on">Деньги</span><span>Лиды</span></div><span class="plus p main">＋</span></div>
+    </div></div>
+    <figcaption>
+      <h3>8 · Деньги → Сметы — Список</h3>
+      <p><b>Работа:</b> увидеть, какие сметы ждут меня или клиента, и открыть нужную.</p>
+      <p><b>Почему:</b> плитки 2×2 — они же переключатель «Сметы · Счета · Оплаты · Расходы»: сегмент и чипы убраны, над списком один ряд управления. В строке — глагол «что сделать». Жест по Linda: → Напомнить.</p>
+      <p class="met">Служебное: 25 % · Строк на первом экране: 6 (+3 свободно) · плиток 4</p>
+    </figcaption>
+  </figure>
+  
+
+  <!-- 9 Смета-редактор -->
+  <figure class="shot" data-n="9">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="t20">Смета EST-0006</div><div class="sub">Черновик · сохранено 8:19</div></div><span class="ic">⋯</span></div>
+      <div class="ct">
+        <div class="grp">
+          <div class="r"><span class="av">LA</span><div class="f1"><div class="ti">Linda Alvarez</div><div class="su">2207 Ocean Park Blvd, Santa Monica</div></div><span class="m">›</span></div>
+          <div class="r"><div class="fl"><span class="x11">НАЗВАНИЕ</span><span class="ell">Carpet, railing, bulb, haul-away</span></div></div>
+        </div>
+        <div class="gh i ctl">ПОЗИЦИИ · 7<span class="ics"><span class="ic s">замер</span><span class="ic s">вар</span><span class="ic s">кат</span><span class="ic s">＋</span></span></div>
+        <div class="grp">
+          <div class="r"><div class="f1"><div class="ti">Debris haul-away (pickup load)</div><div class="su">1 flat</div></div><b>$150.00</b></div>
+          <div class="r"><div class="f1"><div class="ti">Carpet removal</div><div class="su">120 sq ft × $1.50</div></div><b>$180.00</b></div>
+          <div class="r"><div class="f1"><div class="ti">Install stair railing</div><div class="su">1 ea</div></div><b>$250.00</b></div>
+          <div class="r"><div class="f1"><div class="ti">Replace light bulb / fixture lamp</div><div class="su">1 ea</div></div><b>$25.00</b></div>
+          <div class="r gw"><div class="f1"><div class="ti">Railing bracket</div><div class="su">12 ea × $12.13</div></div><b>$145.56</b></div>
+          <div class="r"><div class="f1"><div class="ti">LED bulb A19</div><div class="su">1 ea × $7.28</div></div><b>$7.28</b></div>
+          <div class="r"><div class="f1"><div class="ti">Deep clean after work</div><div class="su">по желанию клиента · 1 room</div></div><b>$90.00</b></div>
+        </div>
+        <div class="cap">свободно</div>
+      </div>
+      <div class="ab"><div class="f1"><div class="x11 b m">ИТОГО ˅</div><div class="x20 b">$772.36</div></div><div class="btn p main" style="flex:none;width:160px">Готово</div></div>
+      <div class="safe"></div>
+    </div></div>
+    <figcaption>
+      <h3>9 · Смета — Редактор</h3>
+      <p><b>Работа:</b> собрать смету из позиций.</p>
+      <p><b>Почему:</b> «Сохранить» убран — сохраняется само, это видно в подзаголовке; «замер, вариант, каталог, ＋» — значками в заголовке «Позиции»; ручки порядка — только по долгому нажатию; «итог + кнопка» — одна строка (налог $14.52 и задаток — в «Итого ˅»). «Готово» ведёт к экрану 14. Жест по строке: Удалить ← (+ «Отменить»).</p>
+      <p class="met">Служебное: 31 % · Строк на первом экране: 9 (+1 свободно) (2 строки шапки сметы + 7 позиций)</p>
+    </figcaption>
+  </figure>
+  
+
+  <!-- 10 Счёт -->
+  <figure class="shot" data-n="10">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="t20">David Kim</div><div class="sub">Счёт INV-0101 · Kitchen faucet + garbage disposal</div></div><span class="ic">⋯</span></div>
+      <div class="ct">
+        <div class="row" style="flex:none"><div class="f1"><div class="x13 m">К оплате</div><div class="big">$1,840.00</div></div><span class="st">! Просрочен 9 дн</span></div>
+        <div class="qa"><span data-i="$">Оплата</span><span data-i="ссыл">Ссылка</span><span data-i="pdf">PDF</span><span data-i="почта">Почта</span></div>
+        <div class="gh ctl">ПОЗИЦИИ</div>
+        <div class="grp">
+          <div class="r h44"><span class="f1 ell">Replace kitchen faucet</span></div>
+          <div class="r h44"><span class="f1 ell">Install 3/4 HP garbage disposal</span></div>
+        </div>
+        <div class="grp">
+          <div class="r h44"><span class="f1 m">Оплат пока нет</span></div>
+          <div class="r"><div class="f1"><div class="ti">Автонапоминания</div><div class="su">через 3, 7 и 14 дн после срока</div></div><span class="sw"></span></div>
+        </div>
+        <div class="cap">свободно</div>
+      </div>
+      <div class="why">Отправлен 8 нояб. · напоминаний не было · уйдёт SMS и письмо</div>
+      <div class="ab"><span class="ic">‹</span><div class="btn p main">Напомнить</div></div>
+      <div class="safe"></div>
+    </div></div>
+    <figcaption>
+      <h3>10 · Счёт — Объект</h3>
+      <p><b>Работа:</b> сколько должны — и получить деньги.</p>
+      <p><b>Почему:</b> просрочен 9 дней, клиента рядом нет → главная «Напомнить» (в v1 стояла «Принять оплату»). Оплата — первым быстрым действием и открывает шторку 11; SMS-значок убран: SMS шлёт «Напомнить». Позиции видны; пустые квитанции — одной тихой строкой. «Аннулировать» — только в «⋯».</p>
+      <p class="met">Служебное: 37 % · Строк на первом экране: 4 (+4 свободно)</p>
+    </figcaption>
+  </figure>
+  
+
+  <!-- 11 Приём оплаты -->
+  <figure class="shot" data-n="11">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="t20">David Kim</div><div class="sub">Счёт INV-0101</div></div><span class="ic">⋯</span></div>
+      <div class="ct"></div>
+      <div class="veil"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="row ctl"><div class="tt"><div class="t20">Принять оплату</div><div class="sub">INV-0101 · David Kim</div></div><span class="ic s">×</span></div>
+        <div class="card" style="gap:0"><span class="x11 b m">СУММА · МОЖНО ЧАСТЬ</span><span class="big">$1,840.00</span></div>
+        <div class="seg ctl"><span class="on">Tap to Pay</span><span>Наличные</span><span>Чек</span><span>Zelle</span><span>Ещё</span></div>
+        <div class="grp">
+          <div class="r"><span class="ic s">nfc</span><div class="f1"><div class="ti">Карта к телефону</div><div class="su">Tap to Pay на iPhone</div></div></div>
+          <div class="r h44"><span class="f1 b">Чаевые</span><span class="m">клиент выберет на экране</span></div>
+          <div class="r h44"><span class="f1 b">Ссылка на оплату</span><span class="m">SMS ›</span></div>
+          <div class="r"><div class="f1"><div class="ti">Квитанция по SMS</div><div class="su">(818) 555-0187</div></div><span class="sw on"></span></div>
+        </div>
+        <div class="btn p main">Принять картой</div>
+        <div class="safe"></div>
+      </div>
+    </div></div>
+    <figcaption>
+      <h3>11 · Приём оплаты — Шторка</h3>
+      <p><b>Работа:</b> взять деньги и записать, как заплатили.</p>
+      <p><b>Почему:</b> сумма один раз — она же поле (можно часть); под вуалью суммы нет. Tap to Pay — первым (как Collect Payment у Jobber), квитанция уходит сама. Номер чека / Zelle появляется только у Чека и Zelle. Та же шторка — с выезда и для задатка сметы.</p>
+      <p class="met">Служебное: 38 % шторки · Строк на первом экране: 4</p>
+    </figcaption>
+  </figure>
+  
+
+  <!-- 12 Задачи -->
+  <figure class="shot" data-n="12">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="t28">Задачи</div></div><span class="ic">⋯</span></div>
+      <div class="ct">
+        <div class="gh ctl">ЗАВТРА</div>
+        <div class="grp">
+          <div class="r gw"><span class="ck"></span><div class="f1"><div class="ti">Send the painting estimate</div><div class="su">10:00 · лид Tom Becker · Alex</div></div></div>
+        </div>
+        <div class="cap">свободно</div>
+      </div>
+      <div class="tbp"><div class="pill"><span class="on">Главная</span><span>План</span><span>Клиенты</span><span>Деньги</span><span>Лиды</span></div><span class="plus p main">＋</span></div>
+    </div></div>
+    <figcaption>
+      <h3>12 · Задачи — Список</h3>
+      <p><b>Работа:</b> что не сделано — и отметить готовое.</p>
+      <p><b>Почему:</b> убраны «0 % готово», поиск при одной задаче и подсказка-инструкция; чипы заменены группами «Просрочено · Сегодня · Завтра · Позже» (пустые не рисуются). Кружок — отметить. Жест: → Готово (+ «Отменить»). Открывается из меню аватара — подсвечена вкладка, откуда пришли.</p>
+      <p class="met">Служебное: 27 % · Строк на первом экране: 1 (+9 свободно)</p>
+    </figcaption>
+  </figure>
+  
+
+  <!-- 13 «＋» -->
+  <figure class="shot" data-n="13">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><span class="av">AP</span><div class="tt"><div class="t20">Доброе утро, Алекс</div><div class="sub">Пт, 20 ноября</div></div><span class="ic">звон</span></div>
+      <div class="ct"><div class="tiles"><div class="tl"></div><div class="tl"></div><div class="tl"></div><div class="tl"></div></div></div>
+      <div class="veil"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="row ctl"><div class="tt"><div class="t20">Создать</div></div><span class="ic s">×</span></div>
+        <div class="gridt"><span data-i="лид" class="o">Лид</span><span data-i="клиент">Клиент</span><span data-i="смета">Смета</span><span data-i="расх">Расход</span><span data-i="зад">Задача</span><span data-i="замер">Замер</span></div>
+        <div class="grp">
+          <div class="r h44"><span class="f1 b">Работа без сметы</span><span class="m">›</span></div>
+          <div class="r h44"><span class="f1 b">Событие в план</span><span class="m">›</span></div>
+          <div class="r h44"><span class="f1 b">Смета из шаблона</span><span class="m">›</span></div>
+        </div>
+        <div style="height:84px;flex:none"></div>
+      </div>
+      <div class="tbp" style="position:absolute;left:0;right:0;bottom:0"><div class="pill"><span class="on">Главная</span><span>План</span><span>Клиенты</span><span>Деньги</span><span>Лиды</span></div><span class="plus p">×</span></div>
+    </div></div>
+    <figcaption>
+      <h3>13 · «＋» Создать — Шторка</h3>
+      <p><b>Работа:</b> создать новое одним касанием.</p>
+      <p><b>Почему:</b> плитки 3×2 (значок + слово) вместо 6 строк «Создать …»; первая плитка — для этого экрана (на Главной — Лид); Замер — когда подключён модуль Gutters. «＋» — всегда в одном месте, в ряду меню (вариант В2-б).</p>
+      <p class="met">Служебное: 38 % шторки · Строк на первом экране: 3</p>
+    </figcaption>
+  </figure>
+  
+
+  <!-- 13б Меню аватара -->
+  <figure class="shot" data-n="13б">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><span class="av">AP</span><div class="tt"><div class="t20">Доброе утро, Алекс</div><div class="sub">Пт, 20 ноября</div></div><span class="ic">звон</span></div>
+      <div class="ct"></div>
+      <div class="veil"></div>
+      <div class="pop">
+        <div class="row ctl"><span class="av">AP</span><div class="tt"><div class="ti">Alex Petrov · владелец</div><div class="su">GoRix Demo Home Services</div></div><span class="btn s sm">Сменить</span></div>
+        <div class="gridt"><span data-i="раб">Работы</span><span data-i="зад">Задачи</span><span data-i="сооб">Сообщения</span><span data-i="звон">Звонки</span><span data-i="кат">Каталог</span><span data-i="расх">Расходы</span><span data-i="ком">Команда</span><span data-i="отч">Отчёты</span><span data-i="пост">Поставщики</span></div>
+        <div class="grp">
+          <div class="r h44"><span class="f1 b">Мои настройки</span><span class="m">›</span></div>
+          <div class="r h44"><span class="f1 b">Настройки компании</span><span class="m">›</span></div>
+          <div class="r h44"><span class="f1 b">Помощь</span><span class="m">›</span></div>
+          <div class="r h44"><span class="f1 m">Связь есть · в очереди 0</span></div>
+        </div>
+      </div>
+      <div class="tbp" style="margin-top:auto"><div class="pill"><span class="on">Главная</span><span>План</span><span>Клиенты</span><span>Деньги</span><span>Лиды</span></div><span class="plus">＋</span></div>
+    </div></div>
+    <figcaption>
+      <h3>13б · Меню аватара — Меню</h3>
+      <p><b>Работа:</b> перейти в редкий раздел.</p>
+      <p><b>Почему:</b> у каждого раздела своя цель 72 pt (в v1 три раздела в одной строке); «Сменить компанию», статус связи, «Мои настройки» отдельно от «Настроек компании», Помощь — из разбора археолога. Мастеру закрыты Команда, Отчёты, Поставщики, Расходы компании.</p>
+      <p class="met">Служебное: 15 % меню · Строк на первом экране: 4</p>
+    </figcaption>
+  </figure>
+  
+
+  </div>
+
+  <h2 class="sec">Недостающие экраны</h2>
+  <div class="grid">
+
+  <!-- 14 Смета просмотр -->
+  <figure class="shot" data-n="14">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="t20">Linda Alvarez</div><div class="sub">Смета EST-0006 · Carpet, railing, bulb, haul-away</div></div><span class="ic">⋯</span></div>
+      <div class="ct">
+        <div class="steps ctl"><span class="on">1 Показать</span><span>2 Подписать</span><span>3 Задаток</span></div>
+        <div class="row" style="flex:none"><div class="f1"><div class="x13 m">Итого</div><div class="big">$772.36</div></div><div class="rt"><span class="x13 m">задаток 10 %</span><b>$77.24</b></div></div>
+        <div class="qa"><span data-i="смс">SMS</span><span data-i="почта">Почта</span><span data-i="ссыл">Ссылка</span><span data-i="pdf">PDF</span><span data-i="✎">Изменить</span></div>
+                <div class="grp">
+          <div class="r"><div class="f1"><div class="ti">Вариант Standard · рекомендуем</div><div class="su">7 позиций, 1 по желанию</div></div><span class="m">›</span></div>
+          <div class="r"><div class="f1"><div class="ti">Фото к смете</div><div class="su">пока нет · добавить</div></div><span class="ic s">кам</span></div>
+          <div class="r"><div class="f1"><div class="ti">Условия</div><div class="su">Work in 1 day. Debris hauled away the same day.</div></div><span class="m">›</span></div>
+          <div class="r"><div class="f1"><div class="ti">История</div><div class="su">создана 8:12 · не отправлена</div></div><span class="m">›</span></div>
+        </div>
+        <div class="cap">свободно</div>
+      </div>
+      <div class="why">Не отправлена · клиент рядом — подпишет на этом телефоне</div>
+      <div class="ab"><span class="ic">‹</span><div class="btn p main">Показать клиенту</div></div>
+      <div class="safe"></div>
+    </div></div>
+    <figcaption>
+      <h3>14 · Смета — просмотр и отправка <span class="new">НОВЫЙ</span></h3>
+      <p><b>Работа:</b> отдать смету клиенту — на месте или по ссылке.</p>
+      <p><b>Почему:</b> одна последовательность «Показать клиенту → Подписать → Задаток» и одна главная кнопка (у Housecall Pro — четыре равных, это нарушает П2); отправка по SMS, почте, ссылкой — значками. После отправки главная — «Напомнить», после подписи — «Взять задаток».</p>
+      <p class="met">Служебное: 37 % · Строк на первом экране: 4 (+3 свободно)</p>
+    </figcaption>
+  </figure>
+  
+
+  <!-- 15 Подпись -->
+  <figure class="shot" data-n="15">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="t20">GoRix Demo Home Services</div><div class="sub">Смета EST-0006 для Linda Alvarez</div></div></div>
+      <div class="ct">
+        <div class="steps ctl"><span class="ok">✓ Показать</span><span class="on">2 Подписать</span><span>3 Задаток</span></div>
+        <div class="grp">
+          <div class="r h44"><span class="f1 ell">Debris haul-away (pickup load)</span><b>$150.00</b></div>
+          <div class="r h44"><span class="f1 ell">Carpet removal</span><b>$180.00</b></div>
+          <div class="r h44"><span class="f1 ell">Install stair railing</span><b>$250.00</b></div>
+          <div class="r h44"><span class="f1 ell">Light bulb, bracket ×12, LED</span><b>$177.84</b></div>
+          <div class="r h44"><span class="f1 ell m">Tax 9.5 % на материалы</span><b>$14.52</b></div>
+          <div class="r h44"><span class="ck"></span><span class="f1 ell">Deep clean after work · по желанию</span><b>$90.00</b></div>
+          <div class="r h44"><span class="f1 b">Итого · задаток $77.24 сейчас</span><b>$772.36</b></div>
+        </div>
+        <div class="pad"><span class="b">Подпись пальцем</span><span>Linda Alvarez · 20.11.2026</span></div>
+        <div class="cap">свободно</div>
+      </div>
+      <div class="ab"><span class="ic">‹</span><div class="btn p main">Одобрить и оплатить $77.24</div></div>
+      <div class="safe"></div>
+    </div></div>
+    <figcaption>
+      <h3>15 · Подпись клиента — экран для клиента <span class="new">НОВЫЙ</span></h3>
+      <p><b>Работа:</b> клиент проверяет и подписывает на телефоне мастера.</p>
+      <p><b>Почему:</b> клиенту — одна кнопка «Одобрить и оплатить задаток» + подпись (как Approve &amp; Pay Deposit у Jobber); «по желанию» — галочкой. После подписи сразу шторка 11 с суммой задатка. «‹» возвращает мастеру без подписи.</p>
+      <p class="met">Служебное: 32 % · Строк на первом экране: 7 (+2 свободно)</p>
+    </figcaption>
+  </figure>
+  
+
+  <!-- 16 Лиды -->
+  <figure class="shot" data-n="16">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="t28">Лиды</div></div><span class="ic">поиск</span><span class="ic">наст</span></div>
+      <div class="ct">
+        <div class="strip ctl"><span class="cp on">Новые 2</span><span class="cp">Ответили 1</span><span class="cp">Записаны 1</span><span class="cp">Смета 1</span><span class="cp">Архив</span></div>
+        <div class="grp">
+          <div class="r gw"><span class="av">KB</span><div class="f1"><div class="ti">Kevin Brooks</div><div class="su"><b>! 4 мин</b> · Water heater · Encino</div></div><span class="ic s">тел</span></div>
+          <div class="r"><span class="av">AR</span><div class="f1"><div class="ti">Angela Rossi</div><div class="su"><b>! 22 мин</b> · shelves, door, light · Torrance</div></div><span class="ic s">тел</span></div>
+          <div class="r"><span class="av">TB</span><div class="f1"><div class="ti">Tom Becker</div><div class="su">Ответили · Interior painting · Arcadia</div></div><span class="ic s">смс</span></div>
+          <div class="r"><span class="av">NP</span><div class="f1"><div class="ti">Nina Patel</div><div class="su">Записан на осмотр · outlets · LA</div></div></div>
+          <div class="r"><span class="av">LA</span><div class="f1"><div class="ti">Linda Alvarez</div><div class="su">Смета EST-0006 · Santa Monica</div></div></div>
+        </div>
+        <div class="cap">свободно</div>
+      </div>
+      <div class="tbp"><div class="pill"><span>Главная</span><span>План</span><span>Клиенты</span><span>Деньги</span><span class="on">Лиды</span></div><span class="plus p main">＋</span></div>
+    </div></div>
+    <figcaption>
+      <h3>16 · Лиды — Список (главная роли «Продажи») <span class="new">НОВЫЙ</span></h3>
+      <p><b>Работа:</b> ответить новым лидам первым, пока не ушли к другому.</p>
+      <p><b>Почему:</b> «Лиды — это мои деньги» (Майк): вкладка вместо «Поиска» (В1-б); сколько минут без ответа — первым словом строки; звонок — значком, SMS — тем, кто просил SMS. Источник (Thumbtack, Yelp) — в лиде. Жест по Kevin: → Позвонить, В архив ←. Продажам не видны оплаты.</p>
+      <p class="met">Служебное: 29 % · Строк на первом экране: 5 (+5 свободно)</p>
+    </figcaption>
+  </figure>
+  
+
+  <!-- 17 Кто должен -->
+  <figure class="shot" data-n="17">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="t28">Деньги</div><div class="sub">Доброе утро, Алекс · ноябрь</div></div><span class="ic">поиск</span><span class="ic">наст</span></div>
+      <div class="ct">
+        <div class="tiles">
+          <div class="tl"><span class="x11">СМЕТЫ · 6 ОТКРЫТЫ</span><div class="v"><span class="big">$16,552</span></div></div>
+          <div class="tl sel"><span class="x11">ДОЛЖНЫ · ! 1 ПРОСРОЧЕН</span><div class="v"><span class="big">$2,800</span></div></div>
+          <div class="tl"><span class="x11">ПОЛУЧЕНО СЕГОДНЯ · 2</span><div class="v"><span class="big">$1,020</span></div></div>
+          <div class="tl"><span class="x11">РАСХОДЫ ЗА НЕДЕЛЮ · 3</span><div class="v"><span class="big">$1,375</span></div></div>
+        </div>
+        <div class="grp">
+          <div class="r gw"><span class="av">DK</span><div class="f1"><div class="ti">David Kim</div><div class="su"><b>! 9 дн</b> · INV-0101 · напоминаний 0</div></div><b>$1,840</b></div>
+          <div class="r"><span class="av">RC</span><div class="f1"><div class="ti">Robert Chen</div><div class="su">Срок через 3 дн · INV-0102</div></div><b>$960</b></div>
+          <div class="r"><span class="av">MG</span><div class="f1"><div class="ti">Maria Gonzalez</div><div class="su">✓ Чек #1042 · сегодня</div></div><b>$780</b></div>
+          <div class="r"><span class="av">SM</span><div class="f1"><div class="ti">Sarah Mitchell</div><div class="su">✓ Zelle · сегодня · INV-0103</div></div><b>$240</b></div>
+          <div class="r"><span class="av">SM</span><div class="f1"><div class="ti">Sarah Mitchell</div><div class="su">✓ Задаток картой · 12 нояб.</div></div><b>$342</b></div>
+          <div class="r"><div class="f1"><div class="ti">Автонапоминания</div><div class="su">выключены · 3, 7, 14 дн</div></div><span class="sw"></span></div>
+        </div>
+        <div class="cap">свободно</div>
+        <div class="btn p main" style="flex:none">Напомнить всем · 2</div>
+      </div>
+      <div class="tbp"><div class="pill"><span>Главная</span><span>План</span><span>Клиенты</span><span class="on">Деньги</span><span>Лиды</span></div><span class="plus">＋</span></div>
+    </div></div>
+    <figcaption>
+      <h3>17 · Кто должен — Деньги → Счета <span class="new">НОВЫЙ</span></h3>
+      <p><b>Работа:</b> кто сколько должен и сколько дней — и напомнить всем сразу.</p>
+      <p><b>Почему:</b> плитка «Должны» с Главной открывает этот же список; должники сверху, ниже — оплаченное за неделю; «Напомнить всем» — у большого пальца, «＋» серый (акцент один); автонапоминания включаются здесь же. Жест по David: → Напомнить, Принять оплату ←.</p>
+      <p class="met">Служебное: 27 % · Строк на первом экране: 6 (+2 свободно) · плиток 4</p>
+    </figcaption>
+  </figure>
+  
+
+  <!-- 18 Мой день -->
+  <figure class="shot" data-n="18">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><span class="av">IS</span><div class="tt"><div class="t20">Доброе утро, Иван</div><div class="sub">Пт, 20 ноября</div></div><span class="ic">синх 1</span></div>
+      <div class="ct">
+        <div class="tiles">
+          <div class="tl"><span class="x11">СОБРАЛ СЕГОДНЯ · 1</span><div class="v"><span class="big">$240</span></div></div>
+          <div class="tl"><span class="x11">ВЫЕЗДЫ СЕГОДНЯ</span><div class="v"><span class="big">1</span><span class="x13">0 закрыто</span></div></div>
+        </div>
+        <div class="gh ctl">ЗАДАЧИ И ФОТО</div>
+        <div class="grp">
+          <div class="r"><span class="ic s">кам</span><div class="f1"><div class="ti">Фото «до» · 1 в очереди</div><div class="su">уйдёт, когда будет связь</div></div></div>
+          <div class="r h44"><span class="f1 m">Задач на сегодня нет</span></div>
+        </div>
+        <div class="cap">свободно</div>
+        <div class="card">
+          <div class="row"><span class="x13 b f1">СЕЙЧАС · 9:00–12:00</span><span class="st">◷ В работе</span></div>
+          <div class="row"><div class="f1"><div class="ti">Maria Gonzalez</div><div class="su">Deep clean after move-out · 3901 E 4th St</div></div></div>
+          <div class="btn p main">Продолжить выезд</div>
+        </div>
+      </div>
+      <div class="tbp"><div class="pill"><span class="on">Главная</span><span>План</span><span>Клиенты</span><span>Деньги</span><span>Лиды</span></div><span class="plus">＋</span></div>
+    </div></div>
+    <figcaption>
+      <h3>18 · «Мой день» мастера — Обзор (роль «Мастер») <span class="new">НОВЫЙ</span></h3>
+      <p><b>Работа:</b> куда ехать и что делать сейчас.</p>
+      <p><b>Почему:</b> денег компании, колокольчика и «Без мастера» нет — только своё: собранное им, его выезды, очередь фото без сети (значок синхронизации). «＋» мастера: Фото · Расход · Лид от соседа. Во вкладке Деньги — только его оплаты.</p>
+      <p class="met">Служебное: 30 % · Строк на первом экране: 2 (+5 свободно) · плиток 2</p>
+    </figcaption>
+  </figure>
+  
+
+  <!-- 19 Замер -->
+  <figure class="shot" data-n="19">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="t20">Замер желобов</div><div class="sub">Sarah Mitchell · модуль Gutters</div></div><span class="ic">⋯</span></div>
+      <div class="ct">
+        <div class="gh ctl">АДРЕС</div>
+        <div class="grp">
+          <div class="r gw" style="outline-style:solid;outline-width:2.5px"><span class="ck" style="background:var(--fg);border-color:var(--fg)"></span><div class="f1"><div class="ti">1420 Oak Grove Ave</div><div class="su">Pasadena · 2 этажа · замеров нет</div></div></div>
+          <div class="r"><span class="ck"></span><div class="f1"><div class="ti">88 Rosemont Ave</div><div class="su">Pasadena · 1 этаж · замеров нет</div></div></div>
+          <div class="r h44"><span class="ic s">＋</span><span class="f1 b">Новый адрес</span></div>
+        </div>
+        <div class="gh ctl">ОТКУДА ЕЩЁ ВХОД</div>
+        <div class="grp">
+          <div class="r h44"><span class="f1">Лид, адрес, выезд</span><span class="m">значок «Замер»</span></div>
+          <div class="r h44"><span class="f1">«＋» на Главной</span><span class="m">«Замерить здесь»</span></div>
+          <div class="r h44"><span class="f1">Вкладка «Замеры»</span><span class="m">если В3-а</span></div>
+        </div>
+        <div class="cap">свободно</div>
+      </div>
+      <div class="why">Откроется холст: рисунок, рулетка, фото · замер привяжется к адресу</div>
+      <div class="ab"><span class="ic">‹</span><div class="btn p main">Начать замер</div></div>
+      <div class="safe"></div>
+    </div></div>
+    <figcaption>
+      <h3>19 · Вход в Замер (Gutters) — Объект <span class="new">НОВЫЙ</span></h3>
+      <p><b>Работа:</b> выбрать адрес и начать замер для сметы.</p>
+      <p><b>Почему:</b> у клиента два адреса — один экран выбора вместо догадки; этажи видны сразу (нужны для замера); дальше — холст модуля, ядро про желоба ничего не знает. Где этот вход живёт во вкладках — вопрос В3. Строки «откуда ещё» — пояснение каркаса, в приложении их нет.</p>
+      <p class="met">Служебное: 37 % · Строк на первом экране: 6 (+4 свободно)</p>
+    </figcaption>
+  </figure>
+  
+
+  <!-- 20 Поиск -->
+  <figure class="shot" data-n="20">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>8:20</span><i></i></div>
+      <div class="hd"><div class="fd f1"><span class="m">поиск</span><span class="b">Kim</span></div><span class="b">Отмена</span></div>
+      <div class="ct">
+        <div class="strip ctl"><span class="cp on">Всё</span><span class="cp">Клиенты</span><span class="cp">Работы</span><span class="cp">Счета</span><span class="cp">Сметы</span><span class="cp">Лиды</span></div>
+        <div class="grp">
+          <div class="r"><span class="av">DK</span><div class="f1"><div class="ti">David Kim</div><div class="su">Клиент · 4512 Ventura Canyon Ave</div></div><span class="ic s">тел</span></div>
+          <div class="r"><span class="ic s">раб</span><div class="f1"><div class="ti">Kitchen faucet + garbage disposal</div><div class="su">Работа · выезд сегодня 13:30</div></div></div>
+          <div class="r"><span class="ic s">счёт</span><div class="f1"><div class="ti">INV-0101</div><div class="su"><b>! Просрочен 9 дн</b> · счёт</div></div><b>$1,840</b></div>
+        </div>
+        <div class="cap">свободно</div>
+      </div>
+      <div class="kbd" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    </div></div>
+    <figcaption>
+      <h3>20 · Поиск — Список <span class="new">НОВЫЙ</span></h3>
+      <p><b>Работа:</b> найти что угодно по имени, телефону, адресу, номеру.</p>
+      <p><b>Почему:</b> открывается значком «поиск» в шапке (В1-б) сразу с клавиатурой; результаты — одним списком, тип — второй строкой и значком, фильтр типа — одна полоса. Звонок — прямо из результата.</p>
+      <p class="met">Служебное: 29 % (без клавиатуры) · Строк на первом экране: 3 (+3 свободно)</p>
+    </figcaption>
+  </figure>
+  
+
+  </div>
+
+  <h2 class="sec">Вопросы к вам</h2>
+  <h3 style="font-size:16px;margin:0 0 10px">В1. Нижние вкладки — какой состав?</h3>
+  <div class="qgrid">
+    <div class="qv"><h4>а · с «Поиском» (сейчас в прототипе)</h4>
+      <div class="mini"><div class="mh"><span class="f1">Главная</span><i>звон</i></div><div class="mb"><i></i><i style="width:80%"></i><i style="width:60%"></i></div>
+        <div class="mt"><div class="mpill"><span class="on">Главная</span><span>План</span><span>Клиенты</span><span>Деньги</span><span>Поиск</span></div><span class="mplus">＋</span></div></div>
+      <p>Лиды — в меню аватара (2 касания). Поиск — вкладкой, «я ищу раз в неделю» (Майк).</p></div>
+    <div class="qv rec"><h4>б · с «Лидами», поиск в шапке <span class="rc">СОВЕТУЮ</span></h4>
+      <div class="mini"><div class="mh"><span class="f1">Главная</span><i>поиск</i><i>звон</i></div><div class="mb"><i></i><i style="width:80%"></i><i style="width:60%"></i></div>
+        <div class="mt"><div class="mpill"><span class="on">Главная</span><span>План</span><span>Клиенты</span><span>Деньги</span><span class="md">Лиды</span></div><span class="mplus">＋</span></div></div>
+      <p>«Лиды — это деньги»; роль «Продажи» открывает приложение на Лидах. Поиск — значком в шапке каждой вкладки. Так нарисованы экраны выше.</p></div>
+    <div class="qv"><h4>в · как было до прототипа (06.11)</h4>
+      <div class="mini"><div class="mh"><span class="f1">Главная</span><i>звон</i></div><div class="mb"><i></i><i style="width:80%"></i><i style="width:60%"></i></div>
+        <div class="mt"><div class="mpill"><span class="on">Главная</span><span>План</span><span>Сообщ.</span><span>Клиенты</span><span>Ещё</span></div><span class="mplus">＋</span></div></div>
+      <p>Сметы и счета — за «Ещё» (боль К6 №2). Ваш ответ 60: вариант «Сметы и счета» вместо «Сообщений».</p></div>
+  </div>
+
+  <h3 style="font-size:16px;margin:0 0 10px">В2. Кнопка «＋» — где?</h3>
+  <div class="qgrid two">
+    <div class="qv"><h4>а · плавающая только на Главной, в списках — в шапке (ваше слово 14.11)</h4>
+      <div class="mini"><div class="mh"><span class="f1">Клиенты</span><i>поиск</i><i>＋</i></div><div class="mb"><i></i><i style="width:80%"></i><i style="width:60%"></i></div>
+        <div class="mt"><div class="mpill"><span>Главная</span><span>План</span><span class="on">Клиенты</span><span>Деньги</span><span>Лиды</span></div></div></div>
+      <p>Уже сделано в коде, тесты есть. Но «＋» в правом верхнем углу — в зоне «трудно тянуться», и на Главной он в другом месте.</p></div>
+    <div class="qv rec"><h4>б · «＋» в ряду нижней «таблетки» — всегда одно место <span class="rc">СОВЕТУЮ</span></h4>
+      <div class="mini"><div class="mh"><span class="f1">Клиенты</span><i>поиск</i></div><div class="mb"><i></i><i style="width:80%"></i><i style="width:60%"></i></div>
+        <div class="mt"><div class="mpill"><span>Главная</span><span>План</span><span class="on">Клиенты</span><span>Деньги</span><span>Лиды</span></div><span class="mplus">＋</span></div></div>
+      <p>Как на ваших образцах; под большим пальцем; не налезает на последнюю строку. Тёмный, где «＋» — главное (списки), серый — где главное другое.</p></div>
+  </div>
+
+  <h3 style="font-size:16px;margin:0 0 10px">В3. Gutters — где вход в замеры?</h3>
+  <div class="qgrid two">
+    <div class="qv rec"><h4>а · вкладка «Замеры» вместо «Плана» у компаний с модулем <span class="rc">СОВЕТУЮ</span></h4>
+      <div class="mini"><div class="mh"><span class="f1">Главная</span><i>план</i><i>звон</i></div><div class="mb"><i></i><i style="width:80%"></i><i style="width:60%"></i></div>
+        <div class="mt"><div class="mpill"><span class="on">Главная</span><span class="md">Замеры</span><span>Клиенты</span><span>Деньги</span><span>Лиды</span></div><span class="mplus">＋</span></div></div>
+      <p>Ваше решение 16.11 (#1487) и 18.11 (#2167). План — значком «план» в шапке Главной и строкой «Сегодня у бригад › План».</p></div>
+    <div class="qv"><h4>б · вкладки не трогаем, замер — из работы и «＋»</h4>
+      <div class="mini"><div class="mh"><span class="f1">Работа · Bathroom remodel</span></div><div class="mb"><i></i><i style="width:80%"></i><i style="width:60%"></i></div>
+        <div class="mt"><div class="mpill"><span>Главная</span><span class="on">План</span><span>Клиенты</span><span>Деньги</span><span>Лиды</span></div><span class="mplus">＋</span></div>
+        <span class="mfab big">✎</span></div>
+      <p>Значок «Замер» у клиента, лида, выезда и пункт «Замер» в «＋». Меню одно для всех, но список замеров — в меню аватара.</p></div>
+  </div>
+</div>
+<script>
+(() => {
+  const boxes = document.querySelectorAll(".ph");
+  const fit = () => boxes.forEach((b) => b.style.setProperty("--k", (b.clientWidth / 390).toFixed(4)));
+  fit();
+  if ("ResizeObserver" in window) { const r = new ResizeObserver(fit); boxes.forEach((b) => r.observe(b)); }
+  else addEventListener("resize", fit);
+})();
+</script>

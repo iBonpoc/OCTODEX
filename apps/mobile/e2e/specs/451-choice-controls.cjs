@@ -132,7 +132,7 @@ exports.run = async (h) => {
   h.expect((await rows()) === 2, "MultiValueField: «⊕ Добавить телефон» adds a row");
   await vis("showcase-multi-value-row-0-label").click();
   await vis("showcase-multi-value-row-0-label-home").click();
-  await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="showcase-multi-value-row-0-label"]')].some((e) => e.offsetParent !== null && /Домашний/.test(e.innerText)), null, { timeout: 3000 });
+  await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="showcase-multi-value-row-0-label"]')].some((e) => e.offsetParent !== null && /Домашний/.test(e.getAttribute("aria-label") || "")), null, { timeout: 3000 });
   const minus = await box("showcase-multi-value-row-1-remove");
   h.expect(minus.height >= 44, `MultiValueField: «⊖» zone ≥ 44 (${minus.height})`);
   await vis("showcase-multi-value-row-1-remove").click();

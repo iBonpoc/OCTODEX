@@ -39,7 +39,7 @@ exports.run = async (h) => {
 
   // the job's invoice card (the technician's view of «Деньги»): the balance, and an overpayment shows $0
   await setRole(h, "tech");
-  const money_tab = () => p.getByRole("tab", { name: "Деньги", exact: true }).locator("visible=true").click();
+  const money_tab = () => p.getByTestId("job-screen-sections-invoices").locator("visible=true").click();
   await h.go(`/job/${part.jobId}`);
   await money_tab();
   const cardA = p.getByTestId(`job-invoice-${part.id}`).locator("visible=true");

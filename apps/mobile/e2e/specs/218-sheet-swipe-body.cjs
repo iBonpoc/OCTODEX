@@ -38,7 +38,8 @@ exports.run = async (h) => {
     return [b.x + b.width / 2, b.y + 4];
   };
   const openContact = async () => {
-    await p.getByRole("button", { name: "Изменить: Контакт" }).click();
+    // v2: the lead's contact row opens «Контакты клиента»
+    await p.getByTestId("lead-person-main").locator("visible=true").first().click();
     await body().waitFor({ timeout: 3000 });
     await p.waitForTimeout(400); // the slide-in ends (a drag during it moves a sheet that is still coming)
   };
@@ -81,7 +82,7 @@ exports.run = async (h) => {
   h.expect(await isOpen(), "a sideways drag does not close");
 
   // a swipe that starts in a field closes too
-  const name = h.sheet().getByPlaceholder("Имя", { exact: true });
+  const name = h.sheet().getByTestId("people-0-phones-row-0-value").locator("input").first();
   const nb = await name.boundingBox();
   await drag(nb.x + nb.width / 2, nb.y + nb.height / 2, 0, 220);
   await waitOpen(false, "a swipe from a field closes the sheet");
@@ -120,7 +121,8 @@ exports.run = async (h) => {
 
   // unsaved changes: the swipe asks first
   await openContact();
-  await h.sheet().getByPlaceholder("Имя", { exact: true }).fill("Kevin Brooks Jr");
+  const phone0 = (await h.db()).leads.find((v) => v.id === "l1").phone;
+  await h.sheet().getByTestId("people-0-phones-row-0-value").locator("input").first().fill("(818) 555-0199");
   [x, y] = await bodyPoint();
   await drag(x, y, 0, 220);
   await h.expectText(/Сохранить изменения\?/, "unsaved question on a body swipe");
@@ -129,13 +131,13 @@ exports.run = async (h) => {
   await waitOpen(false, "«Не сохранять» closes");
   await sheetGone(p);
   const l = (await h.db()).leads.find((v) => v.id === "l1");
-  h.expect(l.name === "Kevin Brooks", "not saved");
+  h.expect(l.phone === phone0, `not saved (${l.phone})`);
 
   // Gutters: the tape keeps the finger — a drag down over it does not close «Длина желоба»
   const tid = (id) => p.getByTestId(id).locator("visible=true");
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  for (let i = 0; i < 40 && !/^Пробный/.test((await tid("module-gutters-status").innerText()).trim()); i++) await p.waitForTimeout(150);
+  for (let i = 0; i < 40 && !/^Без срока/.test((await tid("module-gutters-status").innerText()).trim()); i++) await p.waitForTimeout(150);
   await h.go("/module/gutters/draw");
   await tid("draw-surface").waitFor({ timeout: 8000 });
   const s = await p.getByTestId("draw-surface").boundingBox();

@@ -3,10 +3,12 @@
  * anyone on the team in «Кто»; the technician sees only himself — the server gives his task to nobody else.
  */
 const { pressEscUntilClosed } = require("../sheet.cjs");
+const { listCreate } = require("../listScreen.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width > 390;
-  const plus = () => p.locator('[data-testid="fab-header"]:visible');
+  // v2: «＋» of the List template's header
+  const plus = () => listCreate(p, "tasks", "tasks-create-new");
   await h.go("/today");
   const d = await h.db();
   const me = d.members.find((m) => m.id === d.me);
@@ -28,7 +30,7 @@ exports.run = async (h) => {
   // the office: everyone on the team
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("dispatcher")));
   await h.go("/tasks");
-  await plus().click(); await p.waitForTimeout(500);
+  await plus(); await p.waitForTimeout(500);
   let sheet = h.sheet();
   await sheet.getByText("Кто", { exact: true }).last().scrollIntoViewIfNeeded();
   const office = await who(sheet);
@@ -39,7 +41,7 @@ exports.run = async (h) => {
   // the technician: only himself
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go("/tasks");
-  await plus().click(); await p.waitForTimeout(500);
+  await plus(); await p.waitForTimeout(500);
   sheet = h.sheet();
   await sheet.getByText("Кто", { exact: true }).last().scrollIntoViewIfNeeded();
   const tech = await who(sheet);

@@ -35,7 +35,7 @@ async function setCompanyDocLanguage(h, lang) {
 exports.run = async (h) => {
   // English client, Russian app
   await h.go("/estimate/e6");
-  await h.expectText(/Отправить ещё раз/, "the app itself is Russian");
+  await h.expectText(/Отправлена/, "the app itself is Russian");
   let pdf = await capturePdf(h, "PDF");
   h.expect(/<html lang="en"/.test(pdf), "estimate PDF is English");
   h.expect(/>Total</.test(pdf) && /Client/.test(pdf) && !/Customer/.test(pdf), "English words in the PDF");  // i18n-old: ok (no «Customer» left, #889)
@@ -57,5 +57,5 @@ exports.run = async (h) => {
   pdf = await capturePdf(h, "Descargar PDF");
   h.expect(/<html lang="es"/.test(pdf) && /Cliente/.test(pdf), "PDF in Spanish");
   await h.go("/estimate/e6");
-  await h.expectText(/Отправить ещё раз/, "the app is still Russian");
+  await h.expectText(/Отправлена/, "the app is still Russian");
 };

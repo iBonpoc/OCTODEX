@@ -2,7 +2,8 @@ const { listSearch, listSearchClear } = require("../listSearch.cjs");
 /**
  * «Расходы», «Счета» и отчёты по одному правилу фильтров (docs/specs/31-list-filters.md, director 07.11), every view:
  * - «Расходы»: a magnifier (vendor, category, work, client, who paid); nothing found — «В этом отборе никого нет»; ✕ — all;
- * - «Счета»: «Клиент» in the «Фильтры» sheet, one at a time; picked — a chip «Клиент: X ✕» under the row; ✕ — every client;
+ * - «Счета» (prototype v2 #2350, the List template — no FilterBar, no «Фильтры» sheet): one client's invoices are the address
+ *   `?customer=` (a client's «Должен»): the client's name is the title, only his rows (`invoice-row-<id>`); «‹» — back to that client;
  *   no «Все клиенты» button;
  * - a report: the periods are a lane (no magnifier), in one row with «CSV» (a phone: «CSV» under it); a tap changes the period.
  */
@@ -29,32 +30,33 @@ exports.run = async (h) => {
   await listSearchClear(p);
   h.expect((await vis(p.locator(card)).count()) === all, "✕ — every expense again");
 
-  // «Счета»: the client in the sheet → the chip
+  // «Счета»: one client's invoices by the address; «‹» — every client again
   await h.go("/invoice?f=all");
-  const ibar = vis(p.getByTestId("filter-bar")).first();
-  await ibar.waitFor();
-  const got = vis(p.getByRole("button", { name: "Понятно", exact: true }));
-  // optional: the first-visit hint of the screen shows once per device — close it only when it is there (#800)
-  if (await got.count()) { await got.first().click(); await p.waitForTimeout(300); }
+  const irows = () => p.evaluate(() => [...document.querySelectorAll('[data-testid^="invoice-row-"]')].filter((e) => e.offsetParent !== null && !/-swipe$/.test(e.getAttribute("data-testid"))).map((e) => e.getAttribute("data-testid").slice("invoice-row-".length)));
+  await vis(p.getByTestId("invoice-list-groups")).first().waitFor({ timeout: 8000 });
   h.expect((await vis(p.getByRole("button", { name: "Все клиенты" })).count()) === 0, "no «Все клиенты» button");
-  const before = await vis(p.locator(card)).count();
-  const open = h.layout.width === 1280 ? vis(ibar.getByTestId("filter-group-client")).first() : vis(ibar.getByTestId("filter-button")).first();
-  await open.click(); await p.waitForTimeout(400);
-  const rows = h.sheet().getByRole("radio");
-  const labels = await rows.evaluateAll((els) => els.map((e) => e.getAttribute("aria-label") || ""));
-  const i = labels.findIndex((x) => /· [1-9]\d*$/.test(x));
-  h.expect(i >= 0, `a client with invoices (${labels.join(" | ")})`);
-  const name = labels[i].replace(/ · \d+$/, "");
-  const k = Number(labels[i].match(/· (\d+)$/)[1]);
-  await rows.nth(i).click(); await p.waitForTimeout(200);
-  await h.sheet().getByText("Готово", { exact: true }).click(); await p.waitForTimeout(400);
-  const chip = vis(p.getByTestId("filter-chosen-client"));
-  h.expect((await chip.count()) === 1 && (await chip.first().innerText()).trim() === `Клиент: ${name}`, `the chip «Клиент: ${name} ✕»`);
-  h.expect((await vis(p.locator(card)).count()) === k, `only ${name}'s invoices (${k})`);
-  h.expect(new URL(p.url()).searchParams.get("customer"), "the client is in the address");
+  const before = (await irows()).length;
+  h.expect(before === db.invoices.length, `every invoice is a row (${before} / ${db.invoices.length})`);
+  const counts = db.customers.map((c) => ({ c, n: db.invoices.filter((i) => i.customerId === c.id).length })).filter((x) => x.n > 0 && x.n < db.invoices.length);
+  h.expect(counts.length > 0, "a client with some of the invoices");
+  const { c: client, n: k } = counts[0];
+  await vis(p.getByTestId(`invoice-row-${db.invoices.find((i) => i.customerId === client.id).id}`)).first().waitFor({ timeout: 3000 });
+  await h.go(`/invoice?f=all&customer=${client.id}`);
+  await vis(p.getByTestId("invoice-list-groups")).first().waitFor({ timeout: 8000 });
+  h.expect((await vis(p.getByTestId("screen-title")).first().innerText()).includes(client.name), `the title is the client «${client.name}»`);
+  const mine = await irows();
+  h.expect(mine.length === k && mine.every((id) => db.invoices.find((i) => i.id === id)?.customerId === client.id), `only ${client.name}'s invoices (${k}: ${mine.join(", ")})`);
+  h.expect(new URL(p.url()).searchParams.get("customer") === client.id, "the client is in the address");
   await h.shot("invoices-client");
-  await chip.first().click(); await p.waitForTimeout(400);
-  h.expect((await chip.count()) === 0 && (await vis(p.locator(card)).count()) === before, "✕ — every client again");
+  // «‹» goes back to the client (where «Должен» came from); the list without `?customer=` is every client again
+  // a phone: the header's «‹ Sarah Mitchell»; 820/1280: the crumb «Главная › Клиенты › Sarah Mitchell» — both «Назад: <client>»
+  const up = vis(p.getByRole("button", { name: `Назад: ${client.name}`, exact: true })).first();
+  await up.waitFor({ timeout: 5000 });
+  await up.click();
+  await p.waitForURL(new RegExp(`/client/${client.id}`), { timeout: 5000 });
+  await h.go("/invoice?f=all");
+  await vis(p.getByTestId("invoice-list-groups")).first().waitFor({ timeout: 5000 });
+  h.expect((await irows()).length === before, "without the client — every invoice again");
 
   // a report: the periods are a lane, in the row of «CSV»
   await h.go("/reports/collected?p=all");

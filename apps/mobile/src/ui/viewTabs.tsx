@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { Platform, ScrollView, View, type LayoutChangeEvent, type ScrollViewInstance } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useReducedMotion } from "react-native-reanimated";
-import { component, motion, radius, size, space } from "@octo/design-tokens";
+import { component, motion, radius, size, space, spaceHalf } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { fillStyle } from "./fill";
-import { Press, T } from "./primitives";
-import { centerOffset, fadedEdges, nudgeDistance } from "./viewTabsLogic";
+import { Icon, Press, T } from "./primitives";
+import { centerOffset, fadedEdges, nudgeDistance, stepStates } from "./viewTabsLogic";
 
 /** the rows that have nudged already (one nudge per row and app run — «при первом открытии», DS §9 А1п) */
 const nudged = new Set<string>();
@@ -19,7 +19,26 @@ const nudged = new Set<string>();
  * (`tab.fadeW`), and on the first open the row nudges once to show it scrolls (none with reduced motion).
  * `bleed` — the screen's side padding: the row runs to the screen's edges, its pills start at the padding.
  */
-export function ViewTabs<K extends string>({
+export function ViewTabs<K extends string>(p: ViewTabsProps<K> | (ViewStepsProps<K> & { variant: "steps" })) {
+  if (p.variant === "steps") return <ViewSteps items={p.items} value={p.value} label={p.label} testID={p.testID} />;
+  return <Tabs {...p} />;
+}
+
+type ViewTabsProps<K extends string> = {
+  /** `tabs` (default) — the sections of the object; `steps` — the passed / current / next steps (ViewSteps) */
+  variant?: "tabs";
+  items: { key: K; label: string; count?: number }[];
+  value: K;
+  onChange: (k: K) => void;
+  label: string;
+  testID?: string;
+  bleed?: number;
+  fade?: string;
+  /** visual v2 «Клиент» (#2350, макет 3): `chips` — every pill a plate 32 on `surf`, the selected one light (`ink`) with `bg` words */
+  look?: "plain" | "chips";
+};
+
+function Tabs<K extends string>({
   items,
   value,
   onChange,
@@ -27,6 +46,7 @@ export function ViewTabs<K extends string>({
   testID,
   bleed = space[4],
   fade,
+  look = "plain",
 }: {
   items: { key: K; label: string; count?: number }[];
   value: K;
@@ -38,7 +58,9 @@ export function ViewTabs<K extends string>({
   bleed?: number;
   /** the colour the edges fade into — what is behind the row (the page, or the bar once it sticks) */
   fade?: string;
+  look?: "plain" | "chips";
 }) {
+  const chips = look === "chips";
   const { c } = useTheme();
   const reduce = useReducedMotion();
   const strip = useRef<ScrollViewInstance>(null);
@@ -115,7 +137,7 @@ export function ViewTabs<K extends string>({
         onScroll={(e) => setOffset(e.nativeEvent.contentOffset.x)}
         onLayout={(e) => setView(e.nativeEvent.layout.width)}
         onContentSizeChange={(w) => setContent(w)}
-        contentContainerStyle={{ paddingHorizontal: bleed, gap: space[2], alignItems: "center" }}
+        contentContainerStyle={{ paddingHorizontal: bleed, gap: chips ? spaceHalf.tight : space[2], alignItems: "center" }}
       >
         {items.map((it) => {
           const sel = it.key === value;
@@ -139,6 +161,31 @@ export function ViewTabs<K extends string>({
               // nor do two neighbours' zones overlap) — the visible pill of 30 sits in its middle (#1343 review)
               style={{ minHeight: size.hitMin, justifyContent: "center" }}
             >
+              {chips ? (
+                // v2 макет 3 «.chp»: a plate 32 on `surf` each; the selected one light with dark words; the number paler
+                <View
+                  style={{
+                    minHeight: component.button.sm,
+                    paddingHorizontal: space[3],
+                    borderRadius: radius.pill,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: space[1],
+                    backgroundColor: sel ? c.ink : hover === it.key ? c.surf2 : c.surf,
+                  }}
+                >
+                  <T v="caption" w="semibold" style={{ color: sel ? c.bg : c.mut }} numberOfLines={1}>
+                    {it.label}
+                  </T>
+                  {it.count ? (
+                    <View testID={testID ? `${testID}-${it.key}-count` : undefined}>
+                      <T v="caption" w="semibold" tabular style={{ color: sel ? c.surf3 : c.dash }}>
+                        {String(it.count)}
+                      </T>
+                    </View>
+                  ) : null}
+                </View>
+              ) : (
               <View
                 style={{
                   minHeight: component.tab.h,
@@ -162,6 +209,7 @@ export function ViewTabs<K extends string>({
                   </View>
                 ) : null}
               </View>
+              )}
             </Press>
           );
         })}
@@ -169,5 +217,72 @@ export function ViewTabs<K extends string>({
       {Platform.OS !== "web" && edges.left ? edge("left") : null}
       {Platform.OS !== "web" && edges.right ? edge("right") : null}
     </View>
+  );
+}
+
+export interface ViewStepsProps<K extends string> {
+  items: { key: K; label: string }[];
+  /** the current step; `"done"` — all passed */
+  value: K | "done";
+  /** what the steps are of — read with them («Шаги выезда») */
+  label: string;
+  /** each step gets `<testID>-<key>` and `-done` / `-now` / `-next` in `accessibilityValue.text` for the tests */
+  testID?: string;
+}
+
+/**
+ * SectionStrip `steps` (BUILD-SPEC §1; the visit «В пути · На месте · Работа · Подпись · Оплата»): one row of pills `tab.h` 30 — a passed
+ * step is «✓» and its word `ink`; the current one is the accent's TONE `tint` with `accText` words (visual v2: «остальное жёлтое —
+ * тон 16 %»; the visit's one yellow fill is its main button «Завершить»), its number and word semibold; the steps ahead — the number and the word `mut`. Not pressable: the step moves by the screen's main button. A row longer
+ * than the screen scrolls sideways (the current step is in view at the start). VoiceOver reads the row as one: «Шаги выезда: На месте,
+ * 2 / 5». `ViewTabs variant="steps"` is the same.
+ */
+export function ViewSteps<K extends string>({ items, value, label, testID }: ViewStepsProps<K>) {
+  const { c } = useTheme();
+  const states = stepStates(items.map((i) => i.key), value);
+  const at = states.indexOf("now");
+  const said = at >= 0 ? `${label}: ${items[at]!.label}, ${at + 1} / ${items.length}` : `${label}: ${items.map((i) => i.label).join(", ")}`;
+  return (
+    <ScrollView
+      testID={testID}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      accessible
+      accessibilityLabel={said}
+      contentContainerStyle={{ gap: space[2], alignItems: "center", minHeight: size.hitMin }}
+    >
+      {items.map((it, i) => {
+        const st = states[i]!;
+        const now = st === "now";
+        const color = now ? c.accText : st === "done" ? c.ink : c.mut;
+        return (
+          <View
+            key={it.key}
+            testID={testID ? `${testID}-${it.key}` : undefined}
+            accessibilityValue={{ text: st }}
+            style={{
+              minHeight: component.tab.h,
+              paddingHorizontal: space[3],
+              borderRadius: radius.pill,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: space[1],
+              backgroundColor: now ? c.tint : undefined,
+            }}
+          >
+            {st === "done" ? (
+              <Icon name="check" s={size.iconSm} color={c.ink} />
+            ) : (
+              <T v="caption" w={now ? "semibold" : undefined} tabular style={{ color }}>
+                {String(i + 1)}
+              </T>
+            )}
+            <T v="button" w={now ? "semibold" : "medium"} style={{ color }} numberOfLines={1} capped>
+              {it.label}
+            </T>
+          </View>
+        );
+      })}
+    </ScrollView>
   );
 }

@@ -1,6 +1,6 @@
 # #1999 — письмо с кодом входа GoRix (этап 0, макет)
 
-Правило — `design/naryad-ds/DESIGN-SYSTEM.md` §19.5 (1.21.0). Файлы:
+Правило — `design/naryad-ds/DESIGN-SYSTEM.md` §19.5 (1.33.0). Файлы:
 - `signin-code.html` — сам шаблон письма для Supabase Auth (Go templates: `{{ .Token }}`, `{{ .Email }}`, язык `{{ .Data.lang }}`), таблицами, стили в строке; его берёт чат «Вход» в шаблон хостинга (сейчас тема и текст заданы в панели Supabase; `supabase/templates/magic-link.html` — только локальный стек);
 - `index.html` — просмотр: язык, светлая/тёмная почта, картинки вкл/выкл, 390 / 720 (`python3 -m http.server` в этой папке, затем `/index.html`);
 - `texts.md` — темы, превью, тексты RU/EN/ES, текстовая версия;

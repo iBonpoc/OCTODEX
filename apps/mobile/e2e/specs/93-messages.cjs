@@ -65,7 +65,9 @@ exports.run = async (h) => {
   await h.go("/settings");
   await p.getByRole("switch", { name: "Проверка: режим без сети" }).click(); await p.waitForTimeout(300);
   if (!wide) { await p.getByTestId("back-more").locator("visible=true").first().click(); await p.waitForTimeout(600); }
-  await p.getByTestId(wide ? "side-messages" : "tab-messages").locator("visible=true").first().click(); await p.waitForTimeout(700);
+  // v2 (#2350): «Сообщения» is not a bottom tab — on the phone it is a tile of «Ещё» (`more-messages`), wider — the side menu
+  await p.getByTestId(wide ? "side-messages" : "more-messages").locator("visible=true").first().click();
+  await p.waitForURL(/\/messages/, { timeout: 5000 });
   const q0 = await queue(p);
   sheet = await write();
   await sheet.getByRole("button", { name: "Отправить", exact: true }).click(); await p.waitForTimeout(600);

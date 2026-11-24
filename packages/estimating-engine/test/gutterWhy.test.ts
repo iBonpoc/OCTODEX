@@ -119,8 +119,8 @@ describe("every derived part says why (§2.13)", () => {
       expect(sum, `${p.key} ${w.rule}`).toBe(Number(p.qty));
     }
   });
-  it("the parts version is 6: «Расход v2» PR-2 changes what a copper or zinc drawing counts (the soldering kit and work, fasteners' metal, expansion joints by metal)", () => {
-    expect(GUTTER_PARTS_VERSION).toBe("6");
+  it("the parts version is 7 (G2; 6 was «Расход v2» PR-2, which changed what a copper or zinc drawing counts (the soldering kit and work, fasteners' metal, expansion joints by metal)", () => {
+    expect(GUTTER_PARTS_VERSION).toBe("7");
   });
   it("a big drawing still fits the revision (the server takes elements + parts up to 512 KB): the parts of 200 runs and 200 downspouts stay under 384 KB", () => {
     const colors = ["white", "brown", "black", "almond", "bronze"];
