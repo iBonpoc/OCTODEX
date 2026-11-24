@@ -7,6 +7,7 @@
  * The demo's own data, changed in the local base from a page without the app (h.seed).
  */
 const { sheetGone } = require("../sheet.cjs");
+const { visitAct, visitHas } = require("../visitScreen.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -32,18 +33,20 @@ exports.run = async (h) => {
   // С3: at work — no button
   await h.go("/visit/e2e-486-work");
   await p.getByTestId("visit-screen").first().waitFor({ timeout: 8000 });
-  h.expect((await p.getByTestId("visit-no-show").count()) === 0, `С3 ${JSON.stringify(h.layout)}: no «Клиента нет дома» at work`);
+  h.expect(!(await visitHas(p, "visit-no-show")), `С3 ${JSON.stringify(h.layout)}: no «Клиента нет дома» at work`);
 
   // С1: on site — «Не отмечать» leaves the visit as it is
   await h.go("/visit/e2e-486-door");
-  await p.getByTestId("visit-no-show").locator("visible=true").first().getByRole("button").click();
+  // v2: «Клиента нет дома» is an item of the header's «⋯»
+  await visitAct(p, "visit-no-show");
   let sheet = h.sheet();
   await sheet.getByTestId("no-show-sheet").waitFor({ timeout: 5000 });
-  await sheet.getByTestId("no-show-keep").getByRole("button").click();
+  await sheet.getByTestId("no-show-keep").getByRole("button").first().click();
   await sheetGone(p);
   h.expect((await h.db()).visits.some((v) => v.id === "e2e-486-door"), `С1 ${JSON.stringify(h.layout)}: «Не отмечать» — the visit stays`);
   // the sheet, a note, «Отметить»
-  await p.getByTestId("visit-no-show").locator("visible=true").first().getByRole("button").click();
+  // v2: «Клиента нет дома» is an item of the header's «⋯»
+  await visitAct(p, "visit-no-show");
   sheet = h.sheet();
   await sheet.getByTestId("no-show-sheet").waitFor({ timeout: 5000 });
   await h.shot("no-show-sheet");

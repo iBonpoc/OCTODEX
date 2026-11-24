@@ -36,9 +36,9 @@ exports.run = async (h) => {
   await h.go("/settings/design-system");
   await vis("showcase-row-graphite").waitFor({ timeout: 8000 });
   await vis("showcase-row-graphite").click();
-  await vis("showcase-graphite").waitFor({ timeout: 8000 });
+  await vis("showcase-graphite").waitFor({ timeout: 20000 }); // the sheet draws its sections after the fonts (#2286 flake)
   await p.getByTestId("gr-open").locator("visible=true").first().click();
-  await vis("gr-screen").waitFor({ timeout: 8000 });
+  await vis("gr-screen").waitFor({ timeout: 15000 });
 
   // С3 — the beam over the pressed tab; «＋» keeps it
   const centreX = async (id) => {
@@ -46,7 +46,14 @@ exports.run = async (h) => {
     return b.x + b.width / 2;
   };
   const beamOver = async (id) => Math.abs((await centreX("gr-nav-beam")) - (await centreX(id))) < 4;
-  h.expect(await beamOver("gr-nav-today"), "С3: the beam starts over «Сегодня»");
+  // an `until`, not a single look (#2286): the nav's width reaches the beam a moment after the screen shows
+  await until("С3 beam over today", () => {
+    const c = (s) => {
+      const r = document.querySelector(`[data-testid="${s}"]`)?.getBoundingClientRect();
+      return r ? r.x + r.width / 2 : -1;
+    };
+    return Math.abs(c("gr-nav-beam") - c("gr-nav-today")) < 4;
+  });
   await vis("gr-nav-clients").click();
   await until("С3 clients selected", () => document.querySelector('[data-testid="gr-nav-clients"]')?.getAttribute("aria-selected") === "true");
   await until("С3 beam over clients", () => {

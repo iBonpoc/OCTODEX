@@ -25,9 +25,14 @@ exports.run = async (h) => {
   const W = h.layout.width;
   for (const path of FORMS) {
     await h.go(path);
-    const col = p.getByTestId("form-column").locator("visible=true").first();
-    await col.waitFor({ timeout: 8000 });
-    const box = await col.boundingBox();
+    // the form column of `<Screen form>`: it carries the screen's own testID (EditorScreen gives one, v2 #2350) or `form-column`;
+    // found by what it is — the visible column capped at `layout.formMax` (560)
+    await p.waitForFunction(() => [...document.querySelectorAll("div")].some((d) => d.style.maxWidth === "560px" && d.offsetParent !== null), null, { timeout: 8000 });
+    const box = await p.evaluate(() => {
+      const d = [...document.querySelectorAll("div")].find((e) => e.style.maxWidth === "560px" && e.offsetParent !== null);
+      const r = d.getBoundingClientRect();
+      return { x: r.x, width: r.width };
+    });
     h.expect(box.width <= 560.5, `${path}: the column is at most 560 wide (${box.width})`);
     h.expect(box.width >= Math.min(W - 40, 340), `${path}: the column still fills the phone (${box.width})`);
     if (W >= 820) {
@@ -37,6 +42,6 @@ exports.run = async (h) => {
     }
   }
   await h.go("/client/edit?id=c1");
-  await p.getByTestId("form-column").locator("visible=true").first().waitFor({ timeout: 8000 });
+  await p.waitForFunction(() => [...document.querySelectorAll("div")].some((d) => d.style.maxWidth === "560px" && d.offsetParent !== null), null, { timeout: 8000 });
   await h.shot("client-edit");
 };

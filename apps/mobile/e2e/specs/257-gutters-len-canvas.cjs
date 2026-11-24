@@ -14,7 +14,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await p.waitForFunction(() => /^Пробный/.test((document.querySelector('[data-testid="module-gutters-status"]')?.textContent ?? "").trim()), null, { timeout: 8000 });
+  await p.waitForFunction(() => /^Без срока/.test((document.querySelector('[data-testid="module-gutters-status"]')?.textContent ?? "").trim()), null, { timeout: 8000 });
   await h.go("/module/gutters/settings");
   await tid("gset-len-format").waitFor({ timeout: 8000 });
   await tid("gset-len-format-button").click();
@@ -37,15 +37,15 @@ exports.run = async (h) => {
   const sheet = await tid("quick-length").innerText();
   h.expect(/\d+ mm/.test(sheet) && !/\d′/.test(sheet), "the window says the drawn length in mm: " + sheet.replace(/\n/g, " | ").slice(0, 120));
   // #1181 review Б1: the field and the tape start from the drawn length in mm — not from the inches (60 in → «60», «60 mm»)
-  const drawnMm = sheet.match(/(\d+) mm/)[1];
+  const drawnMm = sheet.match(/([\d,]+) mm/)[1].replace(/,/g, ""); // «5,817 mm» (thousands, #2412)
   const typed = await tid("quick-length-one").locator("input").inputValue();
   h.expect(typed === drawnMm, `the field holds the drawn length in mm (${typed} vs ${drawnMm})`);
   const tapeSays = await tid("quick-length-tape-value").innerText();
-  h.expect(tapeSays.includes(drawnMm), `the tape's big value is the drawn length in mm (${tapeSays} vs ${drawnMm})`);
+  h.expect(tapeSays.replace(/,/g, "").includes(drawnMm), `the tape's big value is the drawn length in mm (${tapeSays} vs ${drawnMm})`);
   await skipLength(p);
 
   // the label on the canvas
-  await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="draw-svg"] text')].some((t) => /^\d+ mm$/.test((t.textContent || "").trim())), null, { timeout: 8000 }); // one storey: the length alone (#1275)
+  await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="draw-svg"] text')].some((t) => /^[\d,]+ mm$/.test((t.textContent || "").trim())), null, { timeout: 8000 }); // one storey: the length alone (#1275)
   h.expect(!(await p.getByTestId("draw-svg").first().locator("text").evaluateAll((ts) => ts.some((t) => /\d′/.test(t.textContent || "")))), "no feet on the canvas");
 
   // the picked gutter's panel

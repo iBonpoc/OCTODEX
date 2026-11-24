@@ -7,7 +7,9 @@
  */
 const { expectOneAccent } = require("../accent.cjs");
 
-const SECTIONS = ["base", "buttons", "selectors", "windows", "notices", "motion", "haptics", "spacing"];
+const SECTIONS = ["buttons", "selectors", "windows", "notices", "haptics"];
+// the token tables are not rows any more (#2292: «Основа» is shown on examples on the «Графит» sheet); their addresses still open, folded at the end of the sheet
+const FOLDED = ["base", "motion", "spacing"];
 
 exports.run = async (h) => {
   const p = h.page;
@@ -17,6 +19,7 @@ exports.run = async (h) => {
   await vis("settings-design-system").getByText("Дизайн-система", { exact: true }).click();
   await vis("showcase-sections").waitFor({ timeout: 5000 });
   for (const id of SECTIONS) h.expect((await p.getByTestId(`showcase-row-${id}`).count()) === 1, `row ${id} is in the list`);
+  for (const id of FOLDED) h.expect((await p.getByTestId(`showcase-row-${id}`).count()) === 0, `row ${id} is not in the list any more`);
 
   // a row opens its screen, «Назад» returns
   await vis("showcase-row-buttons").getByText("Кнопки", { exact: true }).click();
@@ -39,6 +42,10 @@ exports.run = async (h) => {
   await vis("showcase-screen-motion").waitFor({ timeout: 5000 });
   const motion = await p.getByTestId("token-motion.durFast").locator("xpath=../..").innerText();
   h.expect(/160/.test(motion), `motion.durFast shows 160 (${motion.replace(/\n/g, " ")})`);
+  // Ш III-1 (#2292): the new tokens are drawn by the group, nothing is added by hand
+  const durPress = await p.getByTestId("token-motion.durPress").locator("xpath=../..").innerText();
+  h.expect(/80/.test(durPress), `motion.durPress shows 80 (${durPress.replace(/\n/g, " ")})`);
+  h.expect((await p.getByTestId("token-motion.easeInOut").count()) === 1, "motion.easeInOut is in the showcase");
 
   // an unknown section returns to the list
   await h.go("/settings/design-system/nothing");

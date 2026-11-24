@@ -16,9 +16,13 @@ exports.run = async (h) => {
   if (h.layout.width >= 1280) await p.getByTestId("list-panel-open").locator("visible=true").click();
   await p.waitForURL(/\/client\//);
   await h.expectText(/Клиент/, "client card open");
-  h.expect(await trails().count() === 1, `one trail while the card is open, the list under it has none (${await trails().count()})`);
+  // v2: the phone has one «‹ Клиенты» and no trail; 820/1280 — the trail (its parent is the back)
+  const phone = h.layout.width < 820;
+  const ups = () => p.getByRole("button", { name: "Назад: Клиенты" }).locator("visible=true");
+  if (phone) h.expect((await ups().count()) === 1, `one «‹ Клиенты» while the card is open, the list under it has none (${await ups().count()})`);
+  else h.expect(await trails().count() === 1, `one trail while the card is open, the list under it has none (${await trails().count()})`);
 
-  await trails().getByRole("button", { name: "Назад: Клиенты" }).click();
+  await (phone ? ups().first() : trails().getByRole("button", { name: "Назад: Клиенты" })).click();
   // 1280: back to the list with the same card open beside it (spec 06 «Панель 1280»)
   await p.waitForURL(/\/clients(\?open=[\w-]+)?$/);
   // right away, not after the slide ends

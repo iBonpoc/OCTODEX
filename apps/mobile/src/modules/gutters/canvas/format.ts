@@ -42,7 +42,8 @@ export const isLenFormat = (v: unknown): v is LenFormat => (LEN_FORMATS as reado
 
 /** a length in the format; US notation, the decimal point is «.» in every language (rule 7) */
 export function fmtLen(inches: number, unit: LenFormat = "ftin"): string {
-  if (unit === "mm") return `${Math.round(inches * MM_PER_IN)} mm`;
+  // a thousands separator in millimetres (founder 23.11.2026, #2412): «3,810 mm»
+  if (unit === "mm") return `${Math.round(inches * MM_PER_IN).toLocaleString("en-US")} mm`;
   if (unit === "cm") return `${Math.round(inches * MM_PER_IN) / 10} cm`;
   if (unit === "m") return `${Math.round(inches * MM_PER_IN) / 1000} m`;
   if (unit === "in") {

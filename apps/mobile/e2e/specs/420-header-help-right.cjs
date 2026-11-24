@@ -1,8 +1,8 @@
 /**
- * e2e 420 — the header of a screen (DS §12.2, #1648), the director, every view, by testID and the «?»'s name:
- * - «?» stands on the right, first: «?» · «＋» · «⋯» (was: right after the title) — on lists (Клиенты, Задачи, Звонки, Сообщения)
- *   and on a screen with «‹ back» (новая смета: in the row above the title);
- * - «Задачи», «Звонки», «Сообщения» have their «?» (they had none);
+ * e2e 420 — the «?» of a screen's header (DS §12.2, #1648), the director, every view, by testID and the «?»'s name.
+ * DS v2 п.26 (#2350): «?» stands right after its own words — next to the title, NOT among the header's actions («＋» · «⋯»)
+ * as it did before (the old «?» · «＋» · «⋯» on the right is gone; helpButton.test.ts keeps the old places shrinking):
+ * - «Звонки», «Сообщения», «Работы» have their «?», on the title's line, close after it, left of «＋»;
  * - a phone, a list opened from «Ещё»: «‹ Ещё» is a row above the title, the title stands where it stands on a tab
  *   (was: a round button left of the title that pushed it right).
  */
@@ -11,48 +11,31 @@ exports.run = async (h) => {
   const phone = h.layout.width < 820;
   const vis = (id) => p.getByTestId(id).locator("visible=true").first();
   const help = (name) => p.getByRole("button", { name: `Справка: ${name}`, exact: true }).locator("visible=true").first();
-  const heading = () => p.locator('[role="heading"][aria-level="1"]').locator("visible=true").first();
 
-  // a tab list: «?» right of the title, before «＋ Клиент»
+  // a tab list: where its title stands
   await h.go("/clients");
-  await vis("fab-header").waitFor({ timeout: 8000 });
-  const tabTitle = await heading().boundingBox();
-  let q = await help("Клиенты").boundingBox();
-  let plus = await vis("fab-header").boundingBox();
-  h.expect(q.x > tabTitle.x + tabTitle.width, "Клиенты: «?» is right of the title, not on it");
-  h.expect(q.x + q.width <= plus.x + 1, `Клиенты: «?» first, then «＋» (${Math.round(q.x)} < ${Math.round(plus.x)})`);
-  // in the right group, next to «＋» (was: right after the title, far from «＋» on wide screens)
-  h.expect(plus.x - (q.x + q.width) < 16, `Клиенты: «?» stands next to «＋» on the right (gap ${Math.round(plus.x - q.x - q.width)})`);
+  await vis("screen-title").waitFor({ timeout: 8000 });
+  const tabTitle = await vis("screen-title").boundingBox();
 
-  // the lists from «Ещё»: their own «?», first on the right; on a phone «‹ Ещё» above the title
-  for (const [path, name] of [["/tasks", "Задачи"], ["/calls", "Звонки"], ["/messages", "Сообщения"]]) {
+  for (const [path, name] of [["/calls", "Звонки"], ["/messages", "Сообщения"], ["/jobs", "Работы"]]) {
     await h.go(path);
     await help(name).waitFor({ timeout: 8000 });
-    q = await help(name).boundingBox();
-    plus = await vis("fab-header").boundingBox();
-    const title = await heading().boundingBox();
-    h.expect(q.x > title.x + title.width && q.x + q.width <= plus.x + 1 && plus.x - (q.x + q.width) < 16, `${name}: «?» right of the title, next to «＋» and before it`);
+    const q = await help(name).boundingBox();
+    const title = await vis("screen-title").boundingBox();
+    const cy = q.y + q.height / 2;
+    h.expect(q.x >= title.x + title.width - 1, `${name}: «?» is right of the title, not on it`);
+    h.expect(q.x - (title.x + title.width) < 16, `${name}: «?» stands right after the title (gap ${Math.round(q.x - title.x - title.width)})`);
+    h.expect(cy > title.y && cy < title.y + title.height, `${name}: «?» is on the title's line`);
+    // optional: a list may have no «＋» (Работы) — then there is no action group to compare with
+    if (await vis("fab-header").count()) {
+      const plus = await vis("fab-header").boundingBox();
+      h.expect(q.x + q.width < plus.x, `${name}: «?» is not among the header's actions (left of «＋»)`);
+    }
     if (phone && path !== "/messages") {
       const back = await vis("back-more").boundingBox();
       h.expect(back.y + back.height <= title.y + 1, `${name}: «‹ Ещё» is a row above the title`);
       h.expect(Math.abs(title.x - tabTitle.x) < 2, `${name}: the title stands where a tab's does (${Math.round(title.x)} vs ${Math.round(tabTitle.x)})`);
     }
+    await h.shot(`${path.slice(1)}-header`);
   }
-  await h.shot("calls-header");
-
-  // a list from «Ещё» with «?» (Работы): «?» first on the right
-  await h.go("/jobs");
-  await help("Работы").waitFor({ timeout: 8000 });
-  q = await help("Работы").boundingBox();
-  h.expect(q.x > (await heading().boundingBox()).x + (await heading().boundingBox()).width, "Работы: «?» right of the title");
-  await h.shot("jobs-header");
-
-  // a screen with «‹ back» (the estimate): «?» on the right of the row above the title, before «⋯»
-  await h.go("/estimate/new?customerId=c2&propertyId=p2");
-  await help("Новая смета").waitFor({ timeout: 8000 });
-  q = await help("Новая смета").boundingBox();
-  const title = await heading().boundingBox();
-  h.expect(q.y + q.height <= title.y + 1, "смета: «?» is in the row above the title");
-  h.expect(q.x + q.width > h.layout.width / 2, "смета: «?» is on the right");
-  await h.shot("estimate-header");
 };

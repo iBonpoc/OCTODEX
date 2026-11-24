@@ -34,9 +34,9 @@ exports.run = async (h) => {
   // the control for the tech's check below: the office does see colleagues' names on the Week's cards (same pattern)
   const techNames = db.members.filter((m) => m.id !== db.me && m.roles.includes("tech")).map((m) => m.name);
   let seen = 0;
-  // the card's «who» fact: «Ivan Sokolov» or «Ivan Sokolov, Dmitry Orlov» (ListCard, 10а)
+  // the row's «who» fact: «работа · Ivan Sokolov» or «работа · Ivan Sokolov, Dmitry Orlov» (v2 GroupRow of the Week)
   // inside the Week's cards only (a «Мастер» filter chip names a person too)
-  for (const name of techNames) seen += await p.getByTestId("plan-feed").getByText(new RegExp(`(^|, )${name}(,|$)`)).locator("visible=true").count();
+  for (const name of techNames) seen += await p.getByTestId("plan-week-list").getByText(new RegExp(`(^|, | · )${name}(,|$| · )`)).locator("visible=true").count();
   h.expect(seen > 0, "the office sees the techs' names on the Week (the pattern below is not blind)");
   await h.shot("plan-week");
 
@@ -47,10 +47,10 @@ exports.run = async (h) => {
   const cell = dayCell(today);
   h.expect(await cell.isVisible(), "month cell of today");
   await h.shot("plan-month");
-  await p.getByRole("button", { name: "Вперёд" }).last().click();
-  await p.waitForTimeout(200);
-  await h.expectText(/Сегодня/, "«Сегодня» appears away from today");
-  await p.getByRole("button", { name: "Сегодня", exact: true }).last().click();
+  // v2: the month head's arrows and «Сегодня» (plan-month-next / plan-month-today)
+  await p.getByTestId("plan-month-next").locator("visible=true").first().click();
+  await p.getByTestId("plan-month-today").locator("visible=true").first().waitFor({ timeout: 3000 });
+  await p.getByTestId("plan-month-today").locator("visible=true").first().click();
   await p.waitForTimeout(200);
   await cell.click();
   await p.waitForTimeout(300);
@@ -65,7 +65,7 @@ exports.run = async (h) => {
   const others = db.members.filter((m) => m.id !== db.me && m.roles.includes("tech")).map((m) => m.name);
   for (const name of others) {
     // the card's «who» fact — the same pattern as the office's control above
-    const visible = await p.getByTestId("plan-feed").getByText(new RegExp(`(^|, )${name}(,|$)`)).locator("visible=true").count();
+    const visible = await p.getByTestId("plan-week-list").getByText(new RegExp(`(^|, | · )${name}(,|$| · )`)).locator("visible=true").count();
     h.expect(visible === 0, `tech does not see ${name}'s visits`);
   }
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));

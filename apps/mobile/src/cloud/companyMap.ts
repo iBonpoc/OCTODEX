@@ -34,6 +34,8 @@ export function companyFromDb(r: Row, ein: string | undefined, licenses: Row[], 
     mailingAddress: mailing.line1 ? mailing : undefined,
     timezone: s(r.timezone) || "America/Los_Angeles",
     docLanguage: DOC_LANGS.find((x) => x === r.doc_language) ?? "en",
+    // #2410: the developer's company — its modules have no term; set by the server only, never written back (companyToDb)
+    ...(r.developer_account === true ? { developerAccount: true } : {}),
     brand: { logo: brand.logo, color: brand.color },
     insurance: contract.insurance ?? {},
     cancelEmail: contract.cancel_email,

@@ -11,7 +11,7 @@
 ## 0. Коротко для основателя
 
 - **Сейчас в приложении** около 60 общих элементов (кнопки, поля, шторки, строки…) и 5 своих в навигации. Цвета, размеры и шрифты почти везде берутся из общих настроек — автопроверка не пускает «свои».
-- **Свёрстано «по месту», мимо общего элемента: 53 места в 31 файле** (§3а). Ещё **117 мест** стоят на старом виде выбора, который по решению 16.11 уходит: чипы-выбор, голые переключатели, сегменты вместо поля.
+- **Свёрстано «по месту», мимо общего элемента: 49 мест в 30 файлах экранов**, ещё 9 — внутри самих общих элементов (§3а). Ещё **117 мест** стоят на старом виде выбора, который по решению 16.11 уходит: чипы-выбор, голые переключатели, сегменты вместо поля.
 - **Пилот «Графит»** уже умеет 13 вещей: текст, нажатие, главная и вторичная кнопка, поле телефона, статус, строка и строка-задача, панель, стекло, шторка, нижнее меню «Прожектор», тосты стопкой.
 - **Нет ни в старом виде, ни в «Графите»:** окно «Точно удалить?», всплывающая подсказка, кружок ожидания, серые заготовки на время загрузки, «потянуть вниз — обновить», меню по долгому нажатию, боковое меню для планшета и компьютера, заставка при запуске. Крупный шрифт из настроек iPhone в коде не включён.
 - **Что увидите:** Ещё → Настройки → Дизайн-система → «Графит». У каждого элемента — «Было» и 2–3 варианта; вы выбираете пальцем «Беру этот».
@@ -76,7 +76,7 @@
 | Элемент | Есть сейчас | В «Графите» | Чего нет | Замечание |
 |---|---|---|---|---|
 | Текст | `TextField`, h 34 / 44 на телефоне; N 65 | токены `fieldBg/fieldEdge/focus` | `GrTextField` (покой / фокус / ошибка) | Правило 7 пакета: заливка поля ≠ панели, кромка ≥ 3:1 |
-| Телефон | `TextField` + `MultiValueField` | `GrPhoneField` (маска US) | правило 22: несколько значений, чип типа «Моб.», ＋ и корзина | Правило 22 — новое правило DS, через ревьюеров |
+| Телефон | `TextField` + `MultiValueField`, строка-действие `ActionRow` | `GrPhoneField` (маска US) | правило 22: несколько значений, чип типа «Моб.», ＋ и корзина | Правило 22 — новое правило DS, через ревьюеров |
 | Число, деньги, % | `NumberField`, `PctUsdField`, `Stepper`, `FracKeys` | — | все | Табличные цифры в Jost — проверить |
 | Дата и время | `DateField`, `features/DatePick.tsx` (свой календарь) | R15 §1: календарь в шторке ½ → полная; выходные `wknd` + вес 500 | `GrDateField`, время | — |
 | Ошибка и обязательность | `useRequiredForm`, `FieldError`, `Anchored`, `FieldGroup`, `FormMain` | — | ошибка под полем в «Графите» | — |
@@ -143,7 +143,7 @@
 | Элемент | Есть сейчас | В «Графите» | Чего нет | Замечание |
 |---|---|---|---|---|
 | Статус | `StatusChip` (soft), N 64 (130 вызовов в 59 файлах); `StatusNote`; кромка `Card status` | `GrStatus`: значок цветом `*Ic` + слово цветом `w`, без заливки | `neutral` | — |
-| Смена статуса | `StatusPicker` (шторка) | — | — | — |
+| Смена статуса | `StatusPicker` (шторка), хук `useStatusPicker` | — | — | — |
 | Метка, аватар | `MetaTag`, `TagChip`, `Avatar` N 10 | `av/onAv` | `GrAvatar` | — |
 | Событие | — | 7 событий (§2.1) | токены и компонент | Лента «Горит» |
 
@@ -153,11 +153,11 @@
 |---|---|---|---|---|
 | Строка | `ListRow` 44–52, `Divider`, `MetaLine`, `CardList` | `GrRow` 56: квадрат-значок 34, разделитель 0.5 | — | — |
 | Строка-задача | `DoneCircle`, `VisitChecklist` (`✓` глифом) | `GrTaskRow`: флажок слева, «›» только при деталях | — | Правило 16 пакета |
-| Карточка | `Card` (стекло + тень), `ListCard` N 44, `CardGrid` 1/2/3 колонки, `ListPanel` | `GrPanel`: матовая панель с заголовком и счётчиком | `ListCard` и сетка в «Графите» | Правило 12 CLAUDE.md: списки — карточками. Как это ляжет на «строку 56» — вопрос к дизайну (§6) |
+| Карточка | `Card` (стекло + тень), `ListCard` N 44, `ListCardHeader`, `CardGrid` 1/2/3 колонки, `Grid`, `ListPanel` | `GrPanel`: матовая панель с заголовком и счётчиком | `ListCard` и сетка в «Графите» | Правило 12 CLAUDE.md: списки — карточками. Как это ляжет на «строку 56» — вопрос к дизайну (§6) |
 | Раскрытие строки | DS §8.3 | 250, одно за раз | — | — |
 | Свайп строки | только `features/estimate/SwipeRow.tsx` | `swDel/swCall` | свайп в списках | Дубль в «⋯» и `accessibilityActions` |
 | Перетаскивание | `dnd.tsx`, `SortableList` | — | — | — |
-| Фильтр и поиск | `FilterBar`, `EmptySearch`, `/` на вебе | — | — | — |
+| Фильтр и поиск | `FilterBar`, `FilterRow`, `EmptySearch`, `/` на вебе | — | — | — |
 
 ### 2.12 Навигация
 
@@ -176,7 +176,7 @@
 | Скелетон | нет | R15 §4: через 300, ≥ 400, 160 к данным; `skel/skelHi` | `Skeleton` | DS Н-49, Н-26 (`motion.skeletonCycle`) ⬜ |
 | Прогресс, шаги | `ProgressBar`, `Steps`, `Meter`, `Columns` | R15 §2: шаги в линию ≤ 5, лента, «Шаг 2 из 4», чек-лист, полоса; кольцо только в виджете | `GrSteps`, `GrProgress` | — |
 | Потянуть вниз | нет (`RefreshControl` 0) | R15 §3: нативный `RefreshControl`, наше — только подпись и время | всё | До 1.0 |
-| Запуск | `BrandLaunch`, `BrandWait` (`ui/brand.tsx`, свой `Easing.bezier(0.45,0,0.55,1)` ×2) | «Рельеф» + знак, 160 к экрану | сплэш (`SplashScreen` 0) | — |
+| Запуск | `BrandLaunch`, `BrandWait`, `BrandIntro`; знак `BrandMark` и логотип `BrandLogo` (`ui/brand.tsx`, свои `Easing.bezier` числами — §3а) | «Рельеф» + знак, 160 к экрану | сплэш (`SplashScreen` 0) | — |
 | «ИИ думает» | нет | R15 §4: этапы, счётчик, мягкий пульс, «Свернуть» | всё | После 1.0 |
 
 ### 2.14 Переходы и анимация
@@ -206,7 +206,7 @@
 
 | Элемент | Есть сейчас | В «Графите» | Чего нет | Замечание |
 |---|---|---|---|---|
-| Экран | `Screen` (шапка, back, «?», вкладки, FAB, footer, aside, form), N 77; DS §12.3 — пять шаблонов | `GraphiteScreen` — один демо-экран | `GrScreen` | Памятка: ≈80 экранов → 6–7 шаблонов: список, карточка, форма, шторка, мастер, документ, настройки |
+| Экран | `Screen` (шапка, back, «?», вкладки, FAB, footer, aside, form), N 77; раскладка `RowView`, заголовок раздела `SectionTitle`; DS §12.3 — пять шаблонов | `GraphiteScreen` — один демо-экран | `GrScreen` | Памятка: ≈80 экранов → 6–7 шаблонов: список, карточка, форма, шторка, мастер, документ, настройки |
 | Форма | `FormMain`, `FieldGroup` | — | — | — |
 | Пусто | `Empty` N 63, `EmptyFilter`, `EmptySearch`, `NotFound`, `PageNotFound` | — | `GrEmpty` | — |
 | Ошибка экрана | ErrorBoundary (6 файлов), CrashScreen, StorageReadError | ошибка строкой на месте + «Повторить» (R15 §3) | — | — |
@@ -286,17 +286,20 @@
 
 Срез `main` = `5424c974`. «Своя кнопка» считается тем же счётчиком, что у сторожа (`styledPress` в `apps/mobile/test/designSystem.test.ts`). Его итог — 22 места вне `src/ui` — совпадает со списком сторожа `RULE29_STYLED_PRESS`. Внутри `src/ui` ещё 23 таких `Press` — это сами общие компоненты, которые задают свой вид (`UI_OWN_STYLED_PRESS`); здесь они не считаются. Пилот `showcase/graphite/**` — исключение DS §25, здесь тоже не считается. Пути — от `apps/mobile/src/`.
 
-### А. Мимо общего компонента — 53 места в 31 файле
+**Правило счёта.** Считаются только экраны и модули: `src/app`, `src/features`, `src/modules`, `src/nav`. Места внутри `src/ui` идут отдельной строкой «долг общих компонентов». Образцы витрины `features/showcase/**` помечены «витрина». Тесты не считаются.
+
+### А. Мимо общего компонента — 49 мест в 30 файлах экранов + 9 мест долга в 4 файлах `src/ui`
 
 | Что | Мест | Где (файл:строка) | Чем заменить |
 |---|---|---|---|
-| Своя кнопка, плитка или чип на `Press` | 22 | `features/LegalAgree.tsx:30`; `features/PhotoStrip.tsx:65, 93`; `features/PlanParts.tsx:270`; `features/estimate/SwipeRow.tsx:96`; `features/showcase/Rows.tsx:57`; `modules/gutters/draw/AttrPanel.tsx:508`; `modules/gutters/draw/CornerSheet.tsx:51`; `modules/gutters/draw/DrawScreen.tsx:95, 1340`; `modules/gutters/draw/FracPicker.tsx:58`; `modules/gutters/settings/SettingsScreen.tsx:120`; `nav/Fab.tsx:79, 129, 150`; `nav/HomeHeader.tsx:28`; `nav/NavMenu.tsx:178, 208`; `nav/SearchEntry.tsx:19`; `nav/SideNav.tsx:102, 151`; `nav/TabBar.tsx:145` | `Button`, `IconButton`, `ListRow`, `OptionTile`; навигация — компоненты «Прожектора» и боковой навигации в `src/ui` |
+| Своя кнопка, плитка или чип на `Press` | 22 | `features/LegalAgree.tsx:30`; `features/PhotoStrip.tsx:65, 93`; `features/PlanParts.tsx:270`; `features/estimate/SwipeRow.tsx:96`; `features/showcase/Rows.tsx:57` (витрина: образец «Наряда»); `modules/gutters/draw/AttrPanel.tsx:508`; `modules/gutters/draw/CornerSheet.tsx:51`; `modules/gutters/draw/DrawScreen.tsx:95, 1340`; `modules/gutters/draw/FracPicker.tsx:58`; `modules/gutters/settings/SettingsScreen.tsx:120`; `nav/Fab.tsx:79, 129, 150`; `nav/HomeHeader.tsx:28`; `nav/NavMenu.tsx:178, 208`; `nav/SearchEntry.tsx:19`; `nav/SideNav.tsx:102, 151`; `nav/TabBar.tsx:145` | `Button`, `IconButton`, `ListRow`, `OptionTile`; навигация — компоненты «Прожектора» и боковой навигации в `src/ui` |
 | Своё окно `Modal` | 3 | `nav/NavMenu.tsx:118`; `modules/gutters/draw/InputWindow.tsx:34`; `features/SignatureFullscreen.tsx:102` | `Sheet`; окно ввода (DS Б1а `InputDialog`); полноэкранный слой (DS `FullscreenOverlay`) |
 | `ScrollView` как лента или своя прокрутка | 8 | `app/(tabs)/plan.tsx:147`; `features/PhotoStrip.tsx:61`; `modules/gutters/draw/FracPicker.tsx:49, 72`; `modules/gutters/draw/InputWindow.tsx:47`; `modules/gutters/draw/AttrPanel.tsx:675`; `nav/NavMenu.tsx:149`; `nav/SideNav.tsx:58` | `ViewTabs`, `FilterBar`, `SheetScroll`, `Screen scroll` |
 | Свой жест `PanResponder` | 3 | `modules/gutters/draw/Tape.tsx:130`; `features/SignaturePad.tsx:37`; `features/SignatureFullscreen.tsx:78` | gesture-handler, как в `dnd`/`SwipeRow`; правило 27 «Натив:» |
 | Ручная работа с клавиатурой | 4 | `modules/gutters/draw/InputWindow.tsx:24, 25`; `modules/gutters/draw/CornerSketch.tsx:184`; `modules/gutters/draw/AttrPanel.tsx:204` | `ui/keyboard.ts` |
 | Знак текстом вместо значка | 5 | `app/team.tsx:254` (⚠); `features/lead/LeadSheets.tsx:235` (⚠); `app/estimate/new.tsx:984` (＋); `features/client/ClientCard.tsx:141` (＋); `features/VisitChecklist.tsx:44` (✓) | `Icon`, `StatusNote` |
-| Своя длительность, кривая или слой | 8 | `ui/primitives.tsx:110` (`duration: 80`); `ui/brand.tsx:117, 191, 244, 245` (`Easing.bezier` числами); `ui/overlays.tsx:879` (`zIndex: 100`); `modules/gutters/draw/DrawScreen.tsx:88` (`SAVE_AFTER_MS` 1000); `features/appUpdate.ts:93` (пауза 150) | токены `motion.*`, `z.*` |
+| Своя длительность или слой в экранах | 4 | `modules/gutters/draw/DrawScreen.tsx:88` (`SAVE_AFTER_MS` 1000); `features/appUpdate.ts:93` (пауза 150); `features/dnd.tsx:100` (`zIndex` 2 / 1); `features/boot.tsx:226` (`zIndex` 1 / 0) | токены `motion.*`, `z.*` |
+| **Долг общих компонентов** (`src/ui`): своя длительность, кривая или слой | 9 | `ui/primitives.tsx:110` (`duration: 80`); `ui/brand.tsx:117, 191, 244, 245` (`Easing.bezier` числами); `ui/overlays.tsx:879` (`zIndex: 100`); `ui/overlays.tsx:440` (`Easing.linear` без токена; вторая кривая — из `motion.easeOut`); `ui/surfaces.tsx:144, 157` (`zIndex` 10 / 0 у `Grid raise`) | токены `motion.*`, `z.*`; чинится в самом компоненте |
 
 **Цель (слово основателя 20.11): ноль вёрстки «по месту».** Исключение — только записью: строка в реестре исключений `DESIGN-SYSTEM.md` (что, где, почему) и свой образец в витрине. Сторож этапа III: элемент вне `src/ui` без записи — красный.
 
@@ -324,6 +327,7 @@
 | `ChoiceChips` (чипы выбора) | 58 | `app/(tabs)/plan.tsx:148`; `app/company/[section].tsx:116, 210, 399`; `app/company/checklist/[id].tsx:140`; `app/company/intake.tsx:140`; `app/company/schedule.tsx:78, 119, 124`; `app/expense/new.tsx:74, 75, 76`; `app/purchase-order/[id].tsx:144`; `app/settings/index.tsx:82`; `app/suppliers/[id].tsx:132`; `app/team.tsx:139, 152`; `features/EventForm.tsx:128, 142`; `features/ServiceCategoryPicker.tsx:95`; `features/comms/CallSheet.tsx:107, 111`; `features/comms/MessageSheet.tsx:134, 143, 154`; `features/estimatePickers.tsx:42`; `features/invoice/InvoiceCard.tsx:255`; `features/lead/LeadCard.tsx:253`; `features/lead/LeadParts.tsx:262, 345, 442`; `features/lead/LeadSheets.tsx:142, 215`; `features/payments/RefundSheet.tsx:153`; `modules/gutters/draw/AttrPanel.tsx:70, 348, 411, 618`; `modules/gutters/draw/FracPicker.tsx:51, 73`; `modules/gutters/settings/SettingsScreen.tsx:58, 368, 371, 377, 384, 404, 415, 419, 424, 439, 444, 448, 455, 475, 480, 484, 487, 495` |
 | `MultiChips` (несколько чипами) | 10 | `app/auth/trade.tsx:49`; `modules/gutters/settings/SettingsScreen.tsx:262, 266, 270, 274, 282, 293, 297, 300, 303` |
 | Голый `Toggle` (не в строке) | 33 | `app/company/[section].tsx:146, 174, 320, 326, 410`; `app/company/checklist/[id].tsx:111, 118, 122, 147, 194`; `app/company/checklists.tsx:133, 140`; `app/company/intake.tsx:126, 127, 154`; `app/company/schedule.tsx:90`; `app/estimate/new.tsx:1153`; `app/purchase-order/[id].tsx:149`; `app/settings/delete-account.tsx:204`; `app/settings/index.tsx:72, 135`; `app/team.tsx:353`; `features/EstimateView.tsx:135`; `features/PushSettings.tsx:80, 119`; `features/estimate/LineRow.tsx:400, 430, 444, 449`; `modules/gutters/draw/AttrPanel.tsx:49`; `modules/gutters/draw/CornerSheet.tsx:104`; `modules/gutters/draw/DrawScreen.tsx:1596`; `modules/gutters/settings/SettingsScreen.tsx:90` |
+| Своя обёртка `Switch` над `Toggle` в Gutters | 11 вызовов, 2 определения | определения: `modules/gutters/draw/AttrPanel.tsx:45`, `modules/gutters/settings/SettingsScreen.tsx:85` (их `Toggle` — строки :49 и :90 выше); вызовы: `modules/gutters/draw/AttrPanel.tsx:656, 657`; `modules/gutters/settings/SettingsScreen.tsx:352, 354, 375, 379, 381, 402, 411, 417, 421`. На этапе III вызовы перевести, обёртка уходит в общий компонент (`ToggleRow`) |
 | `Segmented` — проверить каждое: режим или поле формы | 16 | `app/(tabs)/plan.tsx:107`; `app/(tabs)/today.tsx:216`; `app/company/[section].tsx:215`; `app/estimate/new.tsx:888, 1128, 1186`; `app/job/[id].tsx:486`; `app/settings/index.tsx:42, 55`; `app/settings/profile.tsx:119`; `features/ContractStatement.tsx:132`; `features/EstimateCard.tsx:221`; `features/estimate/OptionsCard.tsx:94`; `features/lead/LeadCard.tsx:185`; `features/lead/LeadParts.tsx:432`; `modules/gutters/draw/LinkSheet.tsx:82` |
 
 ### В. Сводка и оценка числа PR
@@ -333,7 +337,7 @@
 | Элементов в описи (строки §2.1–§2.17) | 116 |
 | Из них общих компонентов `src/ui` | ≈ 60 (+ 5 в `src/nav`) |
 | Нет нигде, нужно создать в `src/ui` | 9 до 1.0: окно подтверждения, спиннер, скелетон, «потянуть вниз», поповер для чтения, баннер пуша, боковая навигация 820/1280, шапка «Графита», заставка |
-| Мест «по месту» (А) | 53 в 31 файле |
+| Мест «по месту» (А) | 49 в 30 файлах экранов + 9 — долг общих компонентов в 4 файлах `src/ui` |
 | Мест на устаревшем виде выбора (Б) | 117 в 39 файлах |
 | **Этап I — витрина с вариантами** | **≈ 20 PR**: токены (1); шрифт и текст (1); иконки (1); новые компоненты `src/ui` — окно подтверждения, спиннер, скелетон (2–3); кнопки, поля, селекторы, меню и поповеры, шторки, окна, уведомления, статусы и бейджи, списки и карточки, навигация, загрузка, переходы, вибрация, шаблоны экранов (по 1, всего 14) |
 | Этап II — выбор основателя в токены | 1 PR на раздел, по мере выбора; может идти вместе с этапом III |

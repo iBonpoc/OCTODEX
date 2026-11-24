@@ -4,11 +4,12 @@ const SCREENS = [
   "/lead/l1", "/lead/new", "/client/c1", "/property/p1", "/client/edit?id=c1", "/client/edit", "/client/import", "/client/imports",
   "/module/gutters/draw", "/module/gutters/list", "/module/gutters/start?customer=c1", "/module/gutters/view", "/module/gutters/settings", "/module/gutters/prices", "/estimate/new?id=e6", "/estimate/e5", "/estimate/signature", "/estimates", "/p/demo0handyman0estimate0000000001", "/f/f00000000000000000000000000000000",
   "/jobs", "/job/j1", "/job/new", "/job/schedule?jobId=j1", "/visit/v1",
-  "/money", "/invoice", "/invoice?f=paid", "/payments", "/reports", "/reports/owed", "/reports/collected?p=all", "/reports/sales", "/reports/sources?p=all", "/reports/categories?p=all", "/invoice/i5", "/receipt/pay5", "/expense/new",
-  "/catalog", "/catalog/cat-haul", "/suppliers", "/suppliers/sup-hd", "/purchase-orders", "/purchase-order/po-demo-1", "/company", "/settings/design-system", "/settings/design-system/base", "/settings/design-system/buttons", "/settings/design-system/selectors", "/settings/design-system/windows", "/settings/design-system/notices", "/settings/design-system/motion", "/settings/design-system/haptics", "/settings/design-system/rows", "/settings/design-system/fields", "/settings/design-system/choice", "/settings/design-system/spacing", "/company/profile", "/company/schedule", "/company/leads", "/company/intake", "/company/payments", "/company/modules", "/company/checklists", "/company/checklist/tpl-job", "/estimate/templates", "/company/licenses", "/company/trades", "/team", "/settings", "/settings/profile", "/settings/delete-account", "/auth/trade", "/auth/terms", "/legal/terms", "/legal/privacy", "/help", "/auth/invite?token=a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+  "/money", "/finance", "/invoice", "/invoice?f=paid", "/payments", "/reports", "/reports/owed", "/reports/collected?p=all", "/reports/sales", "/reports/sources?p=all", "/reports/categories?p=all", "/invoice/i5", "/receipt/pay5", "/expense/new",
+  "/catalog", "/catalog/cat-haul", "/suppliers", "/suppliers/sup-hd", "/purchase-orders", "/purchase-order/po-demo-1", "/company", "/settings/design-system", "/settings/design-system/base", "/settings/design-system/buttons", "/settings/design-system/selectors", "/settings/design-system/windows", "/settings/design-system/notices", "/settings/design-system/motion", "/settings/design-system/haptics", "/settings/design-system/rows", "/settings/design-system/fields", "/settings/design-system/choice", "/settings/design-system/spacing", "/settings/design-system/graphite", "/company/profile", "/company/schedule", "/company/leads", "/company/intake", "/company/payments", "/company/modules", "/company/checklists", "/company/checklist/tpl-job", "/estimate/templates", "/company/licenses", "/company/trades", "/team", "/settings", "/settings/profile", "/settings/delete-account", "/auth/trade", "/auth/terms", "/legal/terms", "/legal/privacy", "/help", "/auth/invite?token=a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
 ];
 /** screens that redirect by design: screen → the path it ends on (empty: nothing yet — filled from the first run, #800) */
-const REDIRECTS = {};
+// by design: the «Графит» sheet is behind the pilot switch (off by default) — its address goes back to the list; the sheet itself is e2e 520 on all 6 views
+const REDIRECTS = { "/settings/design-system/graphite": true };
 /** a screen's words for a record or page that is missing (the app shows them instead of a crash) */
 const NOT_THERE = /не найден[аоы]?|не существует|Такого документа нет|not found|doesn't exist|404/i;
 /** screens where such words are by design (an empty search, an empty list) */
@@ -25,7 +26,8 @@ const NO_HEADER = [
  * Screens already on the new list cards (step 10а, docs/specs/06-list-cards.md): also checked for straight edges and equal
  * rows (e2e/cardsAlignment.cjs). Every PR that moves a list to ListCard adds its screen here.
  */
-const CARD_SCREENS = [{ path: "/clients", reference: (p) => p.getByTestId("filter-bar").locator("visible=true").first() }, { path: "/leads", reference: (p) => p.getByTestId("filter-bar").locator("visible=true").first() }, { path: "/estimates", reference: (p) => p.getByTestId("filter-bar").locator("visible=true").first(), min: 1 }, { path: "/invoice", reference: (p) => p.getByTestId("filter-bar").locator("visible=true").first(), min: 1 }, { path: "/money", reference: (p) => p.locator('[data-testid="list-card"]').first(), min: 1 }, { path: "/catalog", reference: (p) => p.getByTestId("filter-bar").locator("visible=true").first() }, { path: "/jobs", reference: (p) => p.getByTestId("filter-bar").locator("visible=true").first(), min: 1 }, { path: "/figures/leads?period=month", reference: (p) => p.locator('[data-testid="list-card"]').first(), min: 1 }];
+// v2 (rule 12): /clients, /leads, /estimates, /invoice are grouped rows (ListGroup / GroupRow) now — no list cards to align
+const CARD_SCREENS = [{ path: "/money", reference: (p) => p.locator('[data-testid="list-card"]').first(), min: 1 }, { path: "/catalog", reference: (p) => p.getByTestId("filter-bar").locator("visible=true").first() }, { path: "/jobs", reference: (p) => p.getByTestId("filter-bar").locator("visible=true").first(), min: 1 }, { path: "/figures/leads?period=month", reference: (p) => p.locator('[data-testid="list-card"]').first(), min: 1 }];
 const { checkCardAlignment } = require("../cardsAlignment.cjs");
 /** loops over all requested layouts itself (one browser context per layout) */
 exports.ownLayouts = true;
@@ -69,7 +71,8 @@ exports.run = async (h, { browser, BASE, layouts, installClock }) => {
         });
         const missing = shown.match(NOT_THERE);
         if (missing && !NOT_THERE_OK.includes(s)) errs.push(`${s} ${width} ${theme}: the screen says «${missing[0]}»`);
-        if (!/GoRix v\d/.test(body) && !NO_HEADER.includes(s)) errs.push(`${s} ${width} ${theme}: no header with the version label`);
+        // the one header (visual-v2 «Единая шапка»): the row of every screen; the version line is no longer over it
+        if (!(await p.locator('[data-testid="screen-head"]').count()) && !NO_HEADER.includes(s)) errs.push(`${s} ${width} ${theme}: no header (screen-head)`);
         const over = await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
         if (over) errs.push(`horizontal overflow ${s} ${width} ${theme}`);
         const cards = CARD_SCREENS.find((x) => x.path === s);

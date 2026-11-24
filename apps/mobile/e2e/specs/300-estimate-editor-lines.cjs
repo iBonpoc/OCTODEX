@@ -48,34 +48,33 @@ exports.run = async (h) => {
   await rows().first().click();
   await p.waitForFunction(() => document.querySelector('[data-testid^="est-name-"] input')?.value === "Gutter", null, { timeout: 3000 });
 
-  // «⋯» → «Дублировать»
+  // the line's menu (#2421: a long press of its head) → «Дублировать»
   const firstId = (await rows().first().getAttribute("data-testid")).replace("est-line-", "");
-  await tid(`est-line-${firstId}`).getByRole("button", { name: /Действия со строкой/ }).click();
+  await require("../estimateLine.cjs").menu(h, firstId);
   await tid(`est-act-duplicate-${firstId}`).click();
   await waitCount('[data-testid^="est-line-"]', 3, "a copy stands in the list (3 rows)");
 
-  // «⋯» → «Удалить» → «Вернуть»
-  await tid(`est-line-${firstId}`).getByRole("button", { name: /Действия со строкой/ }).click();
+  // the line's menu → «Удалить» → «Вернуть»
+  await require("../estimateLine.cjs").menu(h, firstId);
   await tid(`est-act-delete-${firstId}`).click();
   await waitCount('[data-testid^="est-line-"]', 2, "deleted: 2 rows");
-  // «Отменить» of a toast works a moment after the toast shows (a double tap is not an undo): press until it takes
-  let back = false;
-  for (let i = 0; i < 10 && !back; i++) {
-    await p.getByRole("button", { name: /Отменить|Вернуть/ }).locator("visible=true").last().click();
-    back = await p.waitForFunction(() => document.querySelectorAll('[data-testid^="est-line-"]').length === 3, null, { timeout: 500 }).then(() => true, () => false);
-  }
+  // «Отменить» of the newest toast, by testID (the helper presses until it takes)
+  await require("../estimateLine.cjs").undo(h);
+  const back = await p.waitForFunction(() => document.querySelectorAll('[data-testid^="est-line-"]').length === 3, null, { timeout: 3000 }).then(() => true, () => false);
   h.expect(back, "«Вернуть» brought it back (3 rows)");
 
   // «Из каталога»: one thing — its row opens
-  await tid("est-add-catalog").getByRole("button").click();
+  // #2387 (С4): the catalog is in the «˅» menu beside «＋ Позиция»
+  await tid("est-add-layers").getByRole("button").click();
+  await tid("est-add-catalog").click();
   await h.sheet().locator("input").first().fill("carpet");
   await h.sheet().getByText("Carpet removal").first().click();
   // (the cursor in the quantity is the phone's: the browser gives the focus back to the button that opened the sheet)
   await vis('[data-testid^="est-qty-"]').first().locator("input").fill("7");
   const carpetId = (await vis('[data-testid^="est-collapse-"]').first().getAttribute("data-testid")).replace("est-collapse-", "");
 
-  // «⋯ → Заменить»: another thing in the place, the quantity stays
-  await tid(`est-line-${carpetId}`).getByRole("button", { name: /Действия со строкой/ }).click();
+  // the menu → «Заменить»: another thing in the place, the quantity stays
+  await require("../estimateLine.cjs").menu(h, carpetId);
   await tid(`est-act-replace-${carpetId}`).click();
   await h.sheet().locator("input").first().fill("railing bracket");
   await h.sheet().getByText("Railing bracket", { exact: true }).first().click();

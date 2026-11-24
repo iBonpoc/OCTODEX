@@ -7,7 +7,8 @@ import { useI18n, type DictKey } from "@/i18n";
 import { activeCategories, nameTaken } from "@/features/serviceCategories";
 import { TRADES } from "@/features/companySetup";
 import { pickTrades, tradeMatches } from "@/features/firstSteps";
-import { Button, MultiChips, TextField } from "@/ui/controls";
+import { MultiChips, TextField } from "@/ui/controls";
+import { ButtonPair } from "@/ui/pairs";
 import { T } from "@/ui/primitives";
 import { Card, FieldGroup, Screen } from "@/ui/surfaces";
 import { StatusNote } from "@/ui/statusNote";
@@ -64,8 +65,7 @@ export default function TradeStep() {
         </FieldGroup>
         {/* the main button is always there to press (DS §11 п.3, #1728): with nothing chosen it says what is missing */}
         {need && !ready ? <StatusNote tone="warn">{t("form.need.trade")}</StatusNote> : null}
-        <Button label={t("first.trade.next")} icon="check" full onPress={() => (ready ? save() : setNeed(true))} />
-        <Button label={t("co.skip")} variant="ghost" full onPress={next} />
+        <ButtonPair main={{ label: t("first.trade.next"), icon: "check", onPress: () => (ready ? save() : setNeed(true)) }} second={{ label: t("co.skip"), variant: "ghost", onPress: next }} />
       </View>
     </Screen>
   );

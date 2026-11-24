@@ -1,4 +1,3 @@
-import { space } from "@octo/design-tokens";
 import { useRef, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
@@ -21,15 +20,21 @@ import {
   type NameParts,
   type PhoneLine,
 } from "@/features/clientForm";
-import { Button, TextField } from "@/ui/controls";
+import { TextField } from "@/ui/controls";
 import { MultiValueField } from "@/ui/multiValueField";
 import { SelectField } from "@/ui/selectField";
 import { ToggleRow } from "@/ui/toggleRow";
 import { useToast } from "@/ui/overlays";
-import { Empty, FieldGroup, RowView, Screen } from "@/ui/surfaces";
-import { T } from "@/ui/primitives";
+import { Empty, FieldGroup, Screen } from "@/ui/surfaces";
+import { FieldRow } from "@/ui/pairs";
+import { EditorScreen } from "@/ui/templates";
 
 /**
+ * Новый / правка клиента — шаблон «Редактор» (prototype v2, wireframes-v2 «Новый клиент», LAYOUT-RULES §3): fields in groups with
+ * their titles, labels over the fields, the name as a pair «Имя · Фамилия» in a row, the street and the city in a row; ONE step
+ * «Создать клиента» / «Сохранить» pinned at the bottom (EditorScreen), held back with its reason until the form is enough;
+ * «назад» with unsaved changes asks «Выйти без сохранения?» (rule 5). The rules of the form (features/clientForm) are only called.
+ *
  * The client form (docs/specs/13-app-structure.md §3.3 «Изменить», wave 4; spec 56 §3а.5): first name, last name, company; the
  * main person's phones and emails as iPhone «Контакты» (`MultiValueField`); the main property address; «Источник · Google ⌄»;
  * «Без налога» and «Счета на другой адрес» — switches with their fields right under them (DS §11 п.19).
@@ -59,6 +64,10 @@ export default function EditClient() {
   const [taxExempt, setTaxExempt] = useState(!!c?.taxExempt);
   const [taxNote, setTaxNote] = useState(c?.taxExemptNote ?? "");
   const back = () => (router.canGoBack() ? router.back() : router.replace(id ? `/client/${id}` : "/clients"));
+  // what the form held when it opened: «назад» asks only when something changed
+  const snap = JSON.stringify([name, phones.map((x) => [x.number, x.label]), emails.map((e) => e.address), address, city, sourceId, billingOwn, billing, taxExempt, taxNote]);
+  const [first] = useState(snap);
+  const dirty = snap !== first;
   // the form is the office's: the tech has no «Изменить» and the server refuses his customers update (customers_update)
   if (store.role === "tech" || (!creating && !c)) {
     return (
@@ -110,26 +119,41 @@ export default function EditClient() {
     back();
   };
 
+  // why the step is held back: the first thing missing (the button never just goes grey without a word)
+  const why = !nameOk(name)
+    ? t("client.f.nameNeeded")
+    : !filled.every(phoneOk)
+      ? t("proto.client.form.phoneBad")
+      : creating && !(filled.length > 0 || email.trim().includes("@"))
+        ? t("proto.client.form.reach")
+        : creating && !(address.trim() || city.trim())
+          ? t("proto.client.form.address")
+          : billingOwn && !billingOk(billing)
+            ? t("proto.client.form.billing")
+            : undefined;
   return (
-    <Screen form title={creating ? t("clients.new") : t("client.editTitle")} back={back}>
-      <FieldGroup>
-        <Labeled label={t("client.f.first")}>
-          <TextField type="name" value={name.first} onChangeText={setPart("first")} placeholder={t("client.f.first")} icon="user" />
-        </Labeled>
-        <Labeled label={t("client.f.last")}>
-          <TextField type="name" value={name.last} onChangeText={setPart("last")} placeholder={t("client.f.last")} />
-        </Labeled>
+    <EditorScreen
+      testID="client-form"
+      title={creating ? t("clients.new") : t("client.editTitle")}
+      back={back}
+      dirty={dirty}
+      save={{ testID: "client-save", label: creating ? t("clients.create") : t("ue.save"), disabled: !ok, reason: ok ? undefined : why, onPress: save }}
+    >
+      <FieldGroup title={t("proto.client.form.who")}>
+        <FieldRow>
+          <Labeled label={t("client.f.first")}>
+            <TextField type="name" value={name.first} onChangeText={setPart("first")} placeholder={t("client.f.first")} icon="user" />
+          </Labeled>
+          <Labeled label={t("client.f.last")}>
+            <TextField type="name" value={name.last} onChangeText={setPart("last")} placeholder={t("client.f.last")} />
+          </Labeled>
+        </FieldRow>
         <Labeled label={t("client.f.company")}>
           <TextField type="text" value={name.company} onChangeText={setPart("company")} placeholder={t("client.f.companyHint")} label={t("client.f.company")} />
         </Labeled>
-        {!nameOk(name) ? (
-          <T v="caption" tone="mut">
-            {t("client.f.nameNeeded")}
-          </T>
-        ) : null}
       </FieldGroup>
 
-      <FieldGroup>
+      <FieldGroup title={t("proto.client.form.reachTitle")}>
         {/* as iPhone «Контакты» (spec 56 §3а.5, DS §9 А14а): ⊖ removes (the form is saved or left as a whole — no toast here),
             the label is a menu, «Сделать основным» moves a number up; the first one is the primary */}
         <MultiValueField<PhoneLabel>
@@ -165,7 +189,7 @@ export default function EditClient() {
       </FieldGroup>
 
       {p || creating ? (
-        <FieldGroup>
+        <FieldGroup title={t("proto.client.form.addressTitle")}>
           <Labeled label={t("co.street")}>
             <TextField type="street" value={address} onChangeText={setAddress} placeholder={t("co.street")} icon="pin" />
           </Labeled>
@@ -175,7 +199,7 @@ export default function EditClient() {
         </FieldGroup>
       ) : null}
 
-      <FieldGroup>
+      <FieldGroup title={t("proto.client.form.more")}>
         {/* «Источник · Google ⌄» (spec 56 §3а.5): a row of a form; the company's list with its groups and «＋ Новый источник» is the sheet */}
         <SelectField
           testID="client-source"
@@ -213,20 +237,18 @@ export default function EditClient() {
                 <Labeled label={t("co.city")}>
                   <TextField type="city" value={billing.city} onChangeText={setB("city")} placeholder={t("co.city")} label={`${t("client.row.billing")}: ${t("co.city")}`} />
                 </Labeled>
-                <RowView>
+                <FieldRow>
                   <Labeled label={t("co.state")}>
                     <TextField type="state" value={billing.state ?? ""} onChangeText={setB("state")} placeholder={companyState(store.db.company) || t("co.state")} label={t("co.state")} />
                   </Labeled>
                   <Labeled label={t("lead.missing.zip")}>
                     <TextField type="zip" value={billing.zip ?? ""} onChangeText={setB("zip")} placeholder="91103" label={t("lead.missing.zip")} />
                   </Labeled>
-                </RowView>
+                </FieldRow>
               </FieldGroup>
             </ToggleRow>
           </FieldGroup>
       ) : null}
-
-      <Button label={creating ? t("clients.create") : t("ue.save")} icon="check" full disabled={!ok} onPress={save} />
-    </Screen>
+    </EditorScreen>
   );
 }

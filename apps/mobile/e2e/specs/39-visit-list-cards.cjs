@@ -1,11 +1,11 @@
 const { dayKey, todayKey } = require("../companyTime.cjs");
 /**
- * Technician's «Visits» on the new list cards (step 10а, unslop 05.11), every view (3 widths × 2 themes).
- * - one grid for «Now / Next», «Today», «Later»: cards of a row share top and height, no full-width block or button;
- * - a visit card: time block, client, «from – to», address, work, status in words; «Открыть выезд» is inside the focus card;
- * - one accent on the screen; no «…».
+ * Technician's «Мой день» (v2 #2350, the Overview template; was «Visits» on the list cards of step 10а), every view.
+ * - every visit of his today is said once: the next one is the card «Дальше» (`visits-next`), the rest of the day are rows
+ *   (`visits-row`, GroupRow) — no visit twice (П7), none lost;
+ * - the card «Дальше»: the hour, the client, «работа · адрес», the trio «на месте · чек-лист · что сделать», the ONE main step;
+ * - a row opens its visit; one accent on the screen; no «…».
  */
-const { checkCardAlignment } = require("../cardsAlignment.cjs");
 const { expectOneAccent } = require("../accent.cjs");
 
 exports.init = { role: "tech" };
@@ -13,32 +13,34 @@ exports.run = async (h) => {
   const p = h.page;
   await h.go("/visits");
   const db = await h.db();
-  const mine = db.visits.filter((v) => v.techId === db.me && dayKey(v.start) === todayKey()); // the company's today (П4b)
+  const mine = db.visits.filter((v) => (v.assigneeIds?.length ? v.assigneeIds : [v.techId]).includes(db.me) && dayKey(v.start) === todayKey()); // the company's today (П4b)
   h.expect(mine.length > 0, "tech has visits today");
-  const cards = p.locator('[data-testid="list-card"]');
-  h.expect((await cards.count()) >= mine.length, `every visit is a list card (${await cards.count()} ≥ ${mine.length})`);
+  const next = p.getByTestId("visits-next").locator("visible=true").first();
+  const rows = p.getByTestId("visits-row").locator("visible=true");
+  await rows.first().waitFor({ timeout: 8000 });
+  const focus = (await next.count()) && (await p.getByTestId("home-main-en-route").or(p.getByTestId("home-main-continue")).locator("visible=true").count()) ? 1 : 0;
+  h.expect((await rows.count()) + focus === mine.length, `every visit once: the card «Дальше» (${focus}) and the rows (${await rows.count()}) = ${mine.length}`);
 
-  // a visit card shows the client, the address and the work
-  const v = mine.find((x) => x.step !== "paid") ?? mine[0];
-  const job = db.jobs.find((j) => j.id === v.jobId);
-  const prop = db.properties.find((x) => x.id === job.propertyId);
-  const cust = db.customers.find((c) => c.id === prop.customerId);
-  const txt = await cards.filter({ hasText: cust.name }).first().innerText();
-  for (const s of [cust.name, prop.address, job.title]) h.expect(txt.includes(s), `visit card shows «${s}»: ${txt.slice(0, 200)}`);
-  h.expect(/\d{1,2}:\d\d (AM|PM) – \d{1,2}:\d\d (AM|PM)/.test(txt), "from – to");
+  // the card «Дальше»: the hour, the client, the work and the address, the trio, the main step
+  if (focus) {
+    const now = Date.now();
+    const v = mine.filter((x) => x.step !== "scheduled" && !x.closed && !["paid", "done"].includes(x.step))[0]
+      ?? mine.filter((x) => x.step === "scheduled" && Date.parse(x.start) + x.durationMin * 60_000 > now).sort((a, b) => a.start.localeCompare(b.start))[0];
+    h.expect(!!v, "the card «Дальше» is a visit of today");
+    const job = db.jobs.find((j) => j.id === v.jobId);
+    const prop = db.properties.find((x) => x.id === (job?.propertyId ?? v.propertyId));
+    const cust = db.customers.find((c) => c.id === prop.customerId);
+    const txt = (await next.innerText()).replace(/\s+/g, " ");
+    for (const s of [cust.name, prop.address, ...(job ? [job.title] : [])]) h.expect(txt.includes(s), `the card «Дальше» shows «${s}»: ${txt.slice(0, 240)}`);
+    h.expect(/\d{1,2}:\d\d\s?(AM|PM)/.test(txt), `the hour: ${txt.slice(0, 120)}`);
+    h.expect((await p.getByTestId("visits-next-trio").locator("visible=true").count()) === 1, "the trio of figures");
+  }
   h.expect(!/…|\.\.\./.test(await p.locator("body").innerText()), "no «…»");
-
-  // «Open visit» is inside a card, not a full-width button
-  const open = p.getByRole("button", { name: "Открыть выезд" }).first();
-  const ob = await open.boundingBox();
-  const fb = await cards.first().boundingBox();
-  h.expect(ob && fb && ob.width < fb.width / 2, `«Открыть выезд» is a button inside the card (${ob && ob.width} < ${fb && fb.width / 2})`);
   await expectOneAccent(h, "Visits (tech)");
-  await p.evaluate(() => window.scrollTo(0, 0));
-  await checkCardAlignment(h, { reference: (pg) => pg.getByText("Мой день").first(), min: 1 });
   await h.shot("visits");
 
-  await open.click();
-  await p.waitForTimeout(500);
+  // a row opens its visit
+  await rows.first().click();
+  await p.waitForURL(/\/visit\//, { timeout: 5000 });
   h.expect(/\/visit\//.test(p.url()), `opens the visit (${p.url()})`);
 };
