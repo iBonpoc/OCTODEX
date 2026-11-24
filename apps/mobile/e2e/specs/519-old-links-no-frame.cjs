@@ -70,7 +70,7 @@ exports.run = async (h) => {
   h.expect(drawn2.length === 0, `no canvas for a missing measurement (${drawn2.slice(0, 5).join(", ")})`);
 
   // /leads?tab=invoices → «Счета»: the leads board never mounted
-  const board = (ids) => ids.filter((id) => id === "leads-screen");
+  const board = (ids) => ids.filter((id) => id === "leads" || id === "leads-screen");
   await h.go("/leads?tab=invoices");
   await p.waitForURL((u) => u.pathname === "/invoice", { timeout: 8000 });
   h.expect(board(await seen()).length === 0, `no frame of the leads board on /leads?tab=invoices (${board(await seen()).slice(0, 3).join(", ")})`);
