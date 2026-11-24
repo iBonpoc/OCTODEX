@@ -5,15 +5,16 @@ import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { CalendarEvent, CalendarEventKind, ID } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
-import { todayKey, type DayKey } from "@/features/calendar";
+import { addDays, todayKey, type DayKey } from "@/features/calendar";
 import { uid } from "@/features/estimateDoc";
-import { DatePick } from "@/features/DatePick";
 import { eventFields, eventProblems, eventRange } from "@/features/planFeed";
 import { atMinute, SCHEDULE_DEFAULTS } from "@/features/schedule";
-import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
+import { ChoiceChips, Stepper, TextField } from "@/ui/controls";
+import { DateField } from "@/ui/dateField";
+import { ButtonPair } from "@/ui/pairs";
+import { SelectField } from "@/ui/selectField";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { RowView } from "@/ui/surfaces";
 import { FieldAnchor, FieldError, useRequiredForm, type Problem } from "@/ui/requiredForm";
 
 /**
@@ -68,8 +69,10 @@ function EventSheetBody({ state, onClose, visible, onExited }: { state: NonNulla
   const [startMin, setStartMin] = useState(init.startMin);
   const [duration, setDuration] = useState(init.duration);
   const [description, setDescription] = useState(e?.description ?? "");
-  const [calendar, setCalendar] = useState(false);
   const form = useRequiredForm();
+  // the start every half hour of the day (the one it has, off the grid, stays); a past day can be picked (a record after the fact)
+  const startItems = useMemo(() => [...new Set([...Array.from({ length: DAY_MIN / STEP }, (_, i) => i * STEP), startMin])].sort((a, b) => a - b), [startMin]);
+  const minDay = useMemo(() => { const back = addDays(todayKey(), -366); return init.day < back ? init.day : back; }, [init.day]);
 
   const value = useMemo(() => {
     const r = eventRange({ day, allDay, days, startMin, duration });
@@ -129,16 +132,7 @@ function EventSheetBody({ state, onClose, visible, onExited }: { state: NonNulla
             <FieldError text={errorOf("person")} testID="ev-person-error" />
           </FieldAnchor>
         </Field>
-        <Field label={t("plan5.ev.day")}>
-          <RowView style={{ justifyContent: "space-between" }}>
-            <T v="body" style={{ flex: 1 }}>
-              {dayText(atMinute(day, 12 * 60))}
-            </T>
-            <Button label={t("vf.otherDate")} icon="calendar" size="sm" variant="ghost" onPress={() => setCalendar((x) => !x)} />
-          </RowView>
-          {calendar ? <DatePick value={day} onPick={(k) => { timeEdit(() => setDay(k)); setCalendar(false); }} /> : null}
-        </Field>
-        {/* chips, not a switch: the form keeps one yellow — «Сохранить» (rule 2) */}
+        {/* chips, not a switch: the form keeps one yellow — «Сохранить» (rule 2); above the day: they decide if a time stands beside it */}
         <ChoiceChips
           value={allDay ? "allDay" : "time"}
           onChange={(k) => timeEdit(() => setAllDay(k === "allDay"))}
@@ -147,21 +141,28 @@ function EventSheetBody({ state, onClose, visible, onExited }: { state: NonNulla
             { key: "time", label: t("plan5.withTime") },
           ]}
         />
+        {/* the day and the start in one row while they fit (#2350: «дата, время… горизонтально в ряд»), the calendar under both */}
+        <DateField
+          testID="ev-day"
+          label={t("plan5.ev.day")}
+          value={day}
+          min={minDay}
+          onChange={(k) => { if (k) timeEdit(() => setDay(k)); }}
+          beside={allDay ? undefined : (
+            <SelectField<string>
+              testID="ev-start"
+              label={t("sch.start")}
+              labelAbove
+              value={String(startMin)}
+              items={startItems.map((m) => ({ key: String(m), label: time(atMinute(day, m)) }))}
+              onChange={(k) => timeEdit(() => setStartMin(Number(k)))}
+            />
+          )}
+        />
         {allDay ? (
           <Stepper label={t("plan5.ev.days")} value={days} min={1} max={Math.max(31, init.days)} onChange={(n) => timeEdit(() => setDays(n))} />
         ) : (
-          <>
-            <Field label={t("sch.start")}>
-              <RowView style={{ justifyContent: "space-between" }}>
-                <IconButton icon="minus" label={`${t("sch.start")} −${STEP} ${t("sch.min")}`} onPress={() => timeEdit(() => setStartMin(Math.max(0, startMin - STEP)))} />
-                <T v="title" tabular>
-                  {time(value.startsAt)}
-                </T>
-                <IconButton icon="plus" label={`${t("sch.start")} +${STEP} ${t("sch.min")}`} onPress={() => timeEdit(() => setStartMin(Math.min(DAY_MIN - STEP, startMin + STEP)))} />
-              </RowView>
-            </Field>
-            <Stepper label={t("sch.duration")} unit={t("sch.min")} value={duration} step={15} min={15} max={Math.max(SCHEDULE_DEFAULTS.maxDurationMin, init.duration)} onChange={(n) => timeEdit(() => setDuration(n))} />
-          </>
+          <Stepper label={t("sch.duration")} unit={t("sch.min")} value={duration} step={15} min={15} max={Math.max(SCHEDULE_DEFAULTS.maxDurationMin, init.duration)} onChange={(n) => timeEdit(() => setDuration(n))} />
         )}
         <FieldAnchor field={form.field("time")} testID="ev-time">
           <FieldError text={errorOf("time")} testID="ev-time-error" />
@@ -170,8 +171,10 @@ function EventSheetBody({ state, onClose, visible, onExited }: { state: NonNulla
           <TextField type="note" value={description} onChangeText={setDescription} placeholder={t("plan5.ev.descriptionPh")} field={form.field("description")} testID="ev-description" />
         </Field>
         {/* always live: the errors come only when the person tries to save (#2220) */}
-        <Button label={t("plan5.ev.save")} icon="check" variant="primary" full onPress={trySave} testID="ev-save" />
-        {e ? <Button label={t("plan5.ev.remove")} icon="trash" variant="secondary" full onPress={remove} /> : null}
+        <ButtonPair
+          main={{ label: t("plan5.ev.save"), icon: "check", variant: "primary", onPress: trySave, testID: "ev-save" }}
+          second={e ? { label: t("plan5.ev.remove"), icon: "trash", variant: "secondary", onPress: remove } : null}
+        />
       </View>
     </Sheet>
   );

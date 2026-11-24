@@ -73,12 +73,18 @@ exports.run = async (h) => {
   // 084: the settings title, and the trail back to them from a showcase section
   await h.go("/settings");
   await whole("screen-title", undefined, "084 settings title");
-  await h.go("/settings/design-system/base");
-  await whole("crumb-/settings", "Настройки", "084 the trail «Настройки»");
+  // v2 (#2350): a phone has one «‹ Родитель» (`hdr-parent`, the words beside «‹»); the trail «⌂ › … ›» is from 820 (`crumb-*`)
+  if (h.layout.width >= 820) {
+    await h.go("/settings/design-system/base");
+    await whole("crumb-/settings", "Настройки", "084 the trail «Настройки»");
+  } else {
+    await h.go("/settings/design-system");
+    await whole("hdr-parent", "Настройки", "084 the parent «‹ Настройки»");
+  }
 
   // 061: the showcase sections' captions wrap
   await h.go("/settings/design-system");
-  for (const id of ["base", "buttons", "selectors", "windows", "notices", "motion", "choice", "fields", "rows", "haptics", "spacing", "brand"]) await whole(`showcase-row-${id}`, undefined, `061 showcase row ${id}`);
+  for (const id of ["buttons", "selectors", "windows", "notices", "choice", "fields", "rows", "haptics", "brand"]) await whole(`showcase-row-${id}`, undefined, `061 showcase row ${id}`);
   // 085: «Профиль и аккаунт» — the delete row's caption wraps
   await h.go("/settings/profile");
   await whole("acct-row", undefined, "085 the account row");

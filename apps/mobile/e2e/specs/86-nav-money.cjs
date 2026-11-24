@@ -1,9 +1,9 @@
 /**
  * Navigation to the money lists (wave 8 stitched into the shell; docs/specs/18-money-reports §1, 13 v2 §2.3, §4):
  * - «Ещё» → «Счета» opens the one invoices list /invoice on «Не оплачен · Просрочен»; «Оплаты» → /payments (group «Деньги»);
- * - «Главная» → «Ждёт оплаты» opens the same list /invoice?f=owed (failed before: it opened /figures/awaiting);
+ * - «Главная» → «Должны» (was «Ждёт оплаты») opens the same list /invoice?f=owed (failed before: it opened /figures/awaiting);
  * - «Отчёты» → /reports and «Расходы» → /money in the same group;
- * - «Работа без сметы» on a client's «Работы» tab opens /job/new?customerId= and back goes to that client (S17, #1343);
+ * - «Работа без сметы» in a client's header «＋» opens /job/new?customerId= and back goes to that client (S17, #1343);
  * - the office opens /payments too (the chain «Счета › Счёт» is a unit test: test/hierarchy.test.ts);
  * - sales: «Счета» yes, «Оплаты» no (the tile is missing and /payments is closed); the technician: neither.
  */
@@ -20,11 +20,17 @@ exports.run = async (h) => {
   await setRole(h, "director");
   await h.go("/today");
 
-  // Главная → «Ждёт оплаты» → the invoices list on its owed chip
-  await p.getByText("Ждёт оплаты", { exact: true }).locator("visible=true").first().click();
-  await p.waitForTimeout(800);
-  h.expect(path(h) === "/invoice" && p.url().includes("f=owed"), `«Ждёт оплаты» → /invoice?f=owed (${p.url()})`);
-  await h.expectText(/Не оплачен · Просрочен · \d+/, "the owed chip is on");
+  // v2: the list opens with what is owed first — the overdue group, then the waiting one
+  const owedFirst = async (what) => {
+    await p.getByTestId("invoice-list-group-overdue").locator("visible=true").first().waitFor({ timeout: 5000 });
+    const groups = await p.locator('[data-testid^="invoice-list-group-"]:visible').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
+    h.expect(groups[0] === "invoice-list-group-overdue", `${what}: the overdue group first (${groups.join(", ")})`);
+  };
+  // Главная → the «Должны» tile (v2 «Требует действия») → the invoices list on what is owed
+  await p.getByTestId("tile-owed").locator("visible=true").first().click();
+  await p.waitForURL(/\/invoice/, { timeout: 5000 });
+  h.expect(path(h) === "/invoice" && p.url().includes("f=owed"), `«Должны» → /invoice?f=owed (${p.url()})`);
+  await owedFirst("the owed list");
 
   // «Ещё» → «Счета» and «Оплаты»
   await m.open();
@@ -32,7 +38,7 @@ exports.run = async (h) => {
   await item("Счета").click();
   await p.waitForTimeout(700);
   h.expect(path(h) === "/invoice", `«Счета» → /invoice (${p.url()})`);
-  await h.expectText(/Не оплачен · Просрочен · \d+/, "the list opens on «Не оплачен · Просрочен»");
+  await owedFirst("«Счета»");
   await h.shot("invoices-from-more");
 
   await m.open();
@@ -46,14 +52,13 @@ exports.run = async (h) => {
     h.expect(path(h) === to, `«${name}» → ${to} (${p.url()})`);
   }
 
-  // «Работа без сметы» on a client (its «Работы» tab — no «＋» on the client card, #1343): tied to it, back returns to it
+  // «Работа без сметы» on a client (S17, #1343; v2 — the header «＋»): tied to it, back returns to it
   const db = await h.db();
   const cust = db.customers.find((c) => c.status === "active") ?? db.customers[0];
   await h.go(`/client/${cust.id}`);
-  const jobsTab = p.getByTestId("client-tabs-jobs").locator("visible=true").first();
-  await jobsTab.scrollIntoViewIfNeeded();
-  await jobsTab.click();
-  await p.getByTestId("client-new-job").locator("visible=true").first().getByRole("button").click();
+  // v2: the client's header «＋» menu → «Работа без сметы» (client-create-job)
+  await p.getByTestId("client-screen-create").locator("visible=true").first().click();
+  await p.locator('[data-testid="menu-items"] [data-testid="client-create-job"]').locator("visible=true").first().click();
   await p.waitForURL(/\/job\/new/, { timeout: 5000 });
   h.expect(path(h) === "/job/new" && p.url().includes(`customerId=${cust.id}`), `«Новая работа» → /job/new?customerId= (${p.url()})`);
   await h.expectText(/Новая работа/, "the form is open");

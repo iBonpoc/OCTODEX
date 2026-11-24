@@ -90,11 +90,14 @@ exports.run = async (h) => {
   // the estimate says so; sending and the PDF ask first
   await h.go(`/estimate/${eid}`);
   await tid("module-gutters-stale").waitFor({ timeout: 8000 });
-  // on site: the client signs what they would get by link — the same question first
+  // on site: the client signs what they would get by link — the same question first (v2 #2350: the section «Подпись на месте»
+  // of the estimate's strip `estimate-screen-sections`; the main step «Отправить» stands in «Смета»)
+  await tid("estimate-screen-sections-sign").click();
   await tid("sign-check-module").waitFor({ timeout: 8000 });
   h.expect((await tid("sign-check-force").count()) === 1, "on-site signing: «Всё равно» (not a stop)");
   await h.shot("stale");
-  await tid("est-send").getByRole("button").click();
+  await tid("estimate-screen-sections-doc").click();
+  await tid("est-send").click(); // the MainStep: its testID is on the button itself
   await tid("send-check-module").waitFor({ timeout: 8000 });
   h.expect((await tid("send-check-review").count()) === 1, "«Проверьте перед отправкой», not a stop");
   for (const k of ["noPrice", "testPrice", "gone"]) h.expect((await tid(`send-check-${k}`).count()) === 0, `no ${k}: the word alone holds the send`);

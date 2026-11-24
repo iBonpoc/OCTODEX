@@ -4,7 +4,7 @@
  * not depend on the machine's zone. Which day a moment falls on is a matter of a zone: todayKey / isoDayKey take one,
  * the company's by default (features/zone.ts getZone), never the phone's (П4b-2).
  */
-import { dayKeyIn, dayNumber, daysBetween, getZone, keyOfNumber, weekdayOf } from "./zone";
+import { dayKeyIn, dayNumber, daysBetween, formatDayKey, getZone, keyOfNumber, weekdayOf } from "./zone";
 
 export type DayKey = string; // YYYY-MM-DD
 
@@ -40,3 +40,9 @@ export function monthGrid(k: DayKey, sundayFirst = false): { key: DayKey; inMont
 export const isoDayKey = (iso: string, tz: string = getZone()): DayKey => dayKeyIn(iso, tz);
 /** days from the company's today to a day (0 = today) — the form's day chips */
 export const dayOffsetOf = (k: DayKey, today: DayKey = todayKey()): number => daysBetween(today, k);
+
+/** «Пт, 20 ноября» — the grey line over a root title (Главная, План; #2363 F27): the weekday short with a capital, the month in full */
+export function headDay(k: DayKey, lang: string): string {
+  const s = formatDayKey(k, { weekday: "short", day: "numeric", month: "long" }, lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}

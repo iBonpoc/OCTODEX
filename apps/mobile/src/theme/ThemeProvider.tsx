@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useColorScheme, useWindowDimensions } from "react-native";
 import { usePersistentState } from "@/data/persist";
-import { breakpoint, themes, type ThemeColors, type ThemeName } from "@octo/design-tokens";
+import { accents, breakpoint, themes, type AccentName, type ThemeColors, type ThemeName } from "@octo/design-tokens";
 
 export type ThemePref = "system" | ThemeName;
 export type Device = "phone" | "tablet" | "desktop";
@@ -12,6 +12,9 @@ interface ThemeCtx {
   pref: ThemePref;
   setPref: (p: ThemePref) => void;
   toggle: () => void;
+  /** founder 21.11 (#2350): palette A — one muted yellow (kept as a value for a future choice) */
+  accent: AccentName;
+  setAccent: (a: AccentName) => void;
 }
 
 const Ctx = createContext<ThemeCtx | null>(null);
@@ -19,25 +22,28 @@ const Ctx = createContext<ThemeCtx | null>(null);
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const system = useColorScheme();
   const [pref, setPref, ready] = usePersistentState<ThemePref>("octo.theme.v1", "system");
+  const [accent, setAccent, accReady] = usePersistentState<AccentName>("octo.accent.v3", "yellow", { validate: (v) => v === "yellow" });
   const name: ThemeName = pref === "system" ? (system === "light" ? "light" : "dark") : pref;
   const value = useMemo<ThemeCtx>(
     () => ({
       name,
-      c: themes[name],
+      c: { ...themes[name], ...accents[accent][name] },
       pref,
       setPref,
       toggle: () => setPref(name === "dark" ? "light" : "dark"),
+      accent,
+      setAccent,
     }),
-    [name, pref],
+    [name, pref, accent],
   );
-  if (!ready) return null;
+  if (!ready || !accReady) return null;
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 /** a theme fixed by the system's scheme, before the stored one is read (the boot layer, DS §18.2 «Запуск», #1046):
  *  the ui works in it, the choice cannot be changed there */
 export function StaticThemeProvider({ name, children }: { name: ThemeName; children: ReactNode }) {
-  const value = useMemo<ThemeCtx>(() => ({ name, c: themes[name], pref: "system", setPref: () => {}, toggle: () => {} }), [name]);
+  const value = useMemo<ThemeCtx>(() => ({ name, c: themes[name], pref: "system", setPref: () => {}, toggle: () => {}, accent: "yellow", setAccent: () => {} }), [name]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

@@ -1,347 +1,242 @@
-import { ModulePlaces } from "@/modules/ModulePlaces";
-import { useRef, useState, type ReactElement, type ReactNode } from "react";
-import { isOpenVisit } from "@/features/schedule";
-import { Linking, View } from "react-native";
+/**
+ * The client — template «Объект», by visual v2 «Объект — Клиент» (docs/design/visual-v2.html, #2350):
+ * the one header «Sarah Mitchell ⌄ | VIP · Постоянный / ◷ Активный» («⌄» or a swipe down opens the panel: contacts by person with
+ * types and ★, addresses, facts, «✎ Изменить»); the quick actions — five icons 44 with their words «Позвонить · SMS · Маршрут · Почта ·
+ * Замер»; the «Сейчас» card with its three figures and the ONE main step inside it (the chain «Новая смета → Отправить → Выставить
+ * счёт → Взять оплату», plus «Сообщить время», «В путь» and «Вернуть в активные» — features/client/nextStep.ts); then one strip of
+ * sections «Обзор · Работы · Сметы · Счета · Объекты · Журнал» that scrolls sideways (the tech: «Обзор · Выезды · Объекты · Журнал»).
+ * Nothing twice: the address and the phone live in the panel (and in «Маршрут» / «Позвонить»), the sum once — in the card's figures.
+ * «＋» makes from the client (estimate, job, task, property, note); «⋯» holds the rare: «Изменить», status, tags, people.
+ * Built on `ObjectScreen` (src/ui/templates) — nothing of its own. Business rules are only called.
+ */
+import { useMemo, useState } from "react";
+import { Linking } from "react-native";
 import { router, type Href } from "expo-router";
-import { component, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { peopleOf } from "@/data/people";
-import { canServe, canSeeClientMoney, statusChoices, clientMoneyOf, clientStatusChip, noLateCallsNow, statusOf, tagLabel, tagsOf } from "@/features/clients";
-import { clientRecords, clientTabsFor, clientWaiting, type ClientRow, type ClientTab } from "@/features/clientRows";
-import { ClientSection, PersonRows } from "@/features/client/ClientSections";
-import { AdvancesBlock } from "@/features/payments/AdvancesBlock";
+import type { Customer, CustomerStatus, Person, Property } from "@/data/types";
+import { useI18n, type DictKey } from "@/i18n";
+import { canServe, clientStatusChip, noLateCallsNow, statusChoices, tagLabel, tagsOf } from "@/features/clients";
 import { CallSheet, type CallPreset } from "@/features/comms/CallSheet";
 import { useDialThenAsk } from "@/features/comms/dial";
 import { MessageSheet, type MessagePreset } from "@/features/comms/MessageSheet";
 import { callPlaceForClient } from "@/features/comms/comms";
 import { PeopleSheet, StatusSheet, TagsSheet } from "@/features/client/ClientSheets";
-import { billingLine } from "@/features/clientForm";
-import { propertyTitle } from "@/features/properties";
-import { ClientDupCards } from "@/features/client/ClientDuplicates";
-import { ActionTile } from "@/features/ActionTile";
-import { sourceName } from "@/features/leads";
-import type { Customer, CustomerStatus, Property } from "@/data/types";
 import { newProperty, PropertySheet } from "@/features/client/PropertySheets";
-import { useI18n, type DictKey } from "@/i18n";
-import { fabItems } from "@/nav/sections";
-import { Button, IconButton, StatusChip } from "@/ui/controls";
-import { Icon, Press, T } from "@/ui/primitives";
-import { Sheet, useToast } from "@/ui/overlays";
-import { StatusPicker } from "@/ui/listCard";
-import { ViewTabs } from "@/ui/viewTabs";
-import { MetaLine } from "@/ui/metaLine";
-import { Card, CardList, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
+import { clientSectionKeys, jobChain, type ClientMainStep, type ClientSectionKey } from "@/features/client/nextStep";
+import { ClientContacts } from "@/features/client/ClientContacts";
+import { ClientDetails, ClientEstimates, ClientLog, ClientMoney, ClientNowCard, ClientOverview, ClientPlaces, ClientVisits, ClientWork, clientStepOf, useClientFacts } from "@/features/client/ClientSections";
+import { TaskSheet, type TaskDraft } from "@/features/tasks/TaskSheet";
 import { cleanPhone, mailtoHref } from "@/features/contactLinks";
+import { propertyMapQuery } from "@/features/properties";
+import { fabItems } from "@/nav/sections";
+import { StatusPicker } from "@/ui/listCard";
+import { useToast } from "@/ui/overlays";
+import { ObjectScreen, type MainAction, type MoreAction } from "@/ui/templates";
+import type { IconRowItem } from "@/ui/iconRow";
 
-/** a tab's words (DS §9 А1п, #1343): the client's sections, the same row for every client of a role */
-const TAB_LABEL: Record<ClientTab, DictKey> = {
+const SECTION_LABEL: Record<ClientSectionKey, DictKey> = {
   overview: "client.tab.overview",
+  work: "proto.client.sec.work",
   estimates: "cl6.tab.estimates",
-  invoices: "cl6.tab.invoices",
-  jobs: "cl6.tab.jobs",
-  tasks: "client.tab.tasks",
-  notes: "cl6.tab.notes",
-  files: "client.tab.files",
-  history: "client.tab.history",
+  money: "cl6.tab.invoices",
+  visits: "jobs.visits",
+  places: "proto.client.sec.places",
+  log: "proto.client.sec.log",
 };
 
-/**
- * The client card's body (docs/specs/13-app-structure.md §3.3): one line «number · status · tags», call / SMS / email /
- * route, money (only to whom `canSeeClientMoney` allows), contacts, «next», rows with counters, the sheets.
- * The same body on the client's own screen (`/client/<id>`) and in the panel beside the list on 1280
- * (`/clients?open=<id>`, docs/specs/06-list-cards.md «Панель 1280») — so the panel never shows more than the screen.
- */
-/**
- * Where the card's parts stand (#1416): the client's own screen pins the tabs under a mini header (phone, tablet) or puts the
- * summary in a side column (desktop); the panel beside the list on 1280 keeps one column (no frame).
- */
-export type ClientFrame = (parts: { summary: ReactNode; tabs: ReactNode; content: ReactNode; rest: ReactNode; mini: ReactNode }) => ReactElement;
+const initials = (n: string) => n.split(/\s+/).filter(Boolean).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 
-export function ClientCardBody({ c, tab: tabNow, onTab, frame }: { c: Customer; tab?: ClientTab; onTab?: (t: ClientTab) => void; frame?: ClientFrame }) {
+/** the header's tags: the first one, the rest as «+N» */
+export const headTags = (all: { id: string; label: string }[]) => (all.length > 1 ? [all[0]!, { id: "more", label: `+${all.length - 1}` }] : all);
+
+/** the testID of the main step: the old «Создать смету» keeps its id (e2e), the rest `client-next-<kind>` */
+export const stepTestID = (s: ClientMainStep | null) => (s?.kind === "estimate" ? "client-make-estimate" : `client-next-${s?.kind ?? "none"}`);
+
+export function ClientObject({ c, section, onSection, back }: { c: Customer; section: ClientSectionKey; onSection: (k: ClientSectionKey) => void; back: () => void }) {
   const store = useStore();
   const { db, role } = store;
-  const { t, money, moneyWhole, day } = useI18n();
+  const { t } = useI18n();
   const toast = useToast();
-  const [sheet, setSheet] = useState<null | "tags" | "status" | "people">(null);
-  const [picking, setPicking] = useState(false);
-  const [adding, setAdding] = useState<Property | null>(null);
-  /** wave 6-2: after «Позвонить» — «Чем кончился?» (the call goes to the client; a technician — to his job) */
-  const [calling, setCalling] = useState<CallPreset | null>(null);
+  const f = useClientFacts(c);
+  const { r, office, status } = f;
   const dial = useDialThenAsk();
+  const [picking, setPicking] = useState(false);
+  const [sheet, setSheet] = useState<null | "tags" | "status" | "people">(null);
+  const [calling, setCalling] = useState<CallPreset | null>(null);
   const [writing, setWriting] = useState<MessagePreset | null>(null);
-  /** «Написать»: SMS or email — a small sheet when the client has both (prototype v6) */
-  const [writeAsk, setWriteAsk] = useState(false);
-  const tabs = clientTabsFor(role);
-  const [tabOwn, setTabOwn] = useState<ClientTab>("overview");
-  const tab = tabNow && tabs.includes(tabNow) ? tabNow : tabOwn;
-  const pickTab = (k: ClientTab) => {
-    setTabOwn(k);
-    onTab?.(k);
-  };
-  const office = role !== "tech";
-  const status = statusOf(c);
+  const [taskEdit, setTaskEdit] = useState<TaskDraft | null>(null);
+  const [newProp, setNewProp] = useState<Property | null>(null);
+  const [main] = peopleOf(c);
   const chip = clientStatusChip[status];
   const tags = tagsOf(db, c);
-  /** the same rules as the «＋» of this card: the role, the tie to the client */
-  const fab = fabItems("client", role, { customerId: c.id });
-  const estimateItem = fab.find((i) => i.id === "estimate");
-  /** «Работа без сметы» (warranty, small repair): what the card's «＋» used to offer — now «＋» on the «Работы» tab (#1343) */
-  const jobItem = fab.find((i) => i.id === "job");
-  const [main] = peopleOf(c);
-  const r = clientRecords(db, c, role, store.mode);
-  const waiting = clientWaiting(r);
-  const props = r.properties;
-  const openTasks = r.tasks.filter((x) => !x.doneAt);
-  const m = clientMoneyOf(db, c.id);
   const tel = cleanPhone(c.phone);
   const mail = mailtoHref(c.email);
-  const lateCalls = noLateCallsNow(db, c);
-  const nextVisit = db.visits
-    .filter((v) => r.jobs.some((j) => j.id === v.jobId) && isOpenVisit(v) && new Date(v.start).getTime() >= Date.now() - 86_400_000)
-    .sort((a, b) => a.start.localeCompare(b.start))[0];
-  const open = (row: ClientRow) => router.push(`/client/${c.id}?s=${row}`);
+  const place = r.properties[0];
 
-  // the status is chosen in the one StatusPicker (DS §9 А10, spec 56 wave 4), not in a menu at the chip
+  /* ---------- contact ---------- */
+  const callDone = (p?: Person) => setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), customerId: c.id, contactId: (p ?? main)?.id });
+  const call = () => tel && dial(tel, () => callDone());
+  const sms = (p?: Person) => (tel || p ? setWriting({ owner: { type: "customer", id: c.id }, person: p ?? main }) : mail ? Linking.openURL(mail).catch(() => {}) : undefined);
+  const route = (p: Property) => Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(propertyMapQuery(p))}`).catch(() => {});
+  // the measure starts a new estimate for the client (where the module's drawing lives): the office's, when the client is served
+  const estimateHref = fabItems("client", role, { customerId: c.id }).find((i) => i.id === "estimate")?.href;
+  /** v2 «быстрые действия»: five icons 44 with their words; what cannot be done is dimmed with the reason (VoiceOver) */
+  const quick: IconRowItem[] = [
+    { icon: "phone", label: t("client.call"), a11y: `${t("client.call")} ${c.name}`, onPress: call, testID: "client-call", disabled: !tel, reason: t("w2b.client.noPhone") },
+    { icon: "message", label: t("cc.sms"), a11y: `${t("cc.sms")} ${c.name}`, onPress: () => sms(), testID: "client-write", disabled: !tel || !main, reason: t("w2b.client.noPhone") },
+    { icon: "route", label: t("client.route"), a11y: place ? `${t("client.route")}: ${place.address}` : t("client.route"), onPress: () => place && route(place), testID: "client-route", disabled: !place, reason: t("w2b.client.noPlace") },
+    { icon: "mail", label: t("cl6.writeMail"), a11y: `${t("cl6.writeMail")} ${c.name}`, onPress: () => mail && Linking.openURL(mail).catch(() => {}), testID: "client-mail", disabled: !mail, reason: t("w2b.client.noMail") },
+    ...(estimateHref && canServe(db, c.id) ? [{ icon: "measure" as const, label: t("w2b.client.measure"), a11y: `${t("w2b.client.measure")}: ${c.name}`, onPress: () => router.push(estimateHref as Href), testID: "client-measure" }] : []),
+  ];
+
+  /* ---------- status ---------- */
+  const statusOptions = statusChoices(status, role);
   const chooseStatus = (st: CustomerStatus) => {
     setPicking(false);
     if (st === status) return;
-    if (st === "do_not_service") return setSheet("status"); // needs a reason: the page of that choice
+    if (st === "do_not_service") return setSheet("status"); // needs a reason
     toast.show(t("client.statusSaved"), store.setCustomerStatus(c.id, st));
   };
-  // the mark is the director's and the office's (04 §12.8): sales see no «Не обслуживаем» and cannot lift it
-  const statusOptions = statusChoices(status, role);
 
-  const summary = (
-    <>
-      {/* the summary (status, actions, «Создать смету», money): above the tabs on a phone and a tablet (as wide as they are), in the
-          side column 360 on a desktop (DS §12.3, #1416) */}
-      <View testID="client-summary" style={{ width: "100%", gap: space[3] }}>
-        {/* one line, never wrapped (spec 56 §3а.6): number · status · tags, the tags that do not fit — «+N»; the tags open their sheet */}
-        <View style={{ marginTop: -space[2] }}>
-          <MetaLine
-            testID="client-headline"
-            fixed={[
-              c.number ? (
-                <T key="n" v="caption" tone="mut" tabular numberOfLines={1}>
-                  {c.number}
-                </T>
-              ) : null,
-              office && statusOptions.length ? (
-                <Press key="s" testID="client-status" onPress={() => setPicking(true)} visibleHeight={component.button.sm} accessibilityRole="button" accessibilityLabel={`${t("client.statusTitle")}: ${t(chip.l)}`}>
-                  <StatusChip status={chip.s} label={t(chip.l)} />
-                </Press>
-              ) : (
-                <StatusChip key="s" status={chip.s} label={t(chip.l)} />
-              ),
-              c.taxExempt ? <StatusChip key="x" status="neutral" label={t("client.f.taxExempt")} soft /> : null,
-            ]}
-            tags={tags.map((x) => ({ id: x.id, label: tagLabel(x, t) }))}
-            onTags={office ? () => setSheet("tags") : undefined}
-            tagsLabel={t("cw4.tags", { list: tags.map((x) => tagLabel(x, t)).join(", ") })}
-            addLabel={office ? `＋ ${t("client.addTag")}` : undefined}
-            moreLabel={(n) => t("cw4.moreTags", { n })}
-          />
-        </View>
-        {/* «Контакты · N ›» (spec 56 §3а.6): the office edits them in the sheet at once; the technician reads the list */}
-        {r.people.length > 1 || office ? (
-          <View testID="client-people">
-            <Card style={{ paddingVertical: space[1] }}>
-              <ListRow
-                title={t("client.row.people")}
-                // the number counts people (the client and the others), the names say so (review of wave 4)
-                subtitle={r.people.map((p) => p.name || c.name).join(" · ")}
-                left={<Icon name="users" />}
-                right={
-                  <T v="body" tone="mut" tabular>
-                    {String(r.people.length)}
-                  </T>
-                }
-                onPress={() => (office ? setSheet("people") : open("people"))}
-              />
-            </Card>
-          </View>
-        ) : null}
-        {office && c.sourceId ? (
-          <T v="caption" tone="mut">
-            {t("client.cameFrom", { source: sourceName(db, c.sourceId) })}
-          </T>
-        ) : null}
-        {status === "do_not_service" ? (
-          <T v="caption" tone="mut">
-            {[c.statusReason ? t("client.reason", { r: c.statusReason }) : null, t("client.noServiceHint")].filter(Boolean).join(" · ")}
-          </T>
-        ) : null}
-        {/* step 17 C3: other clients with the same phone / email / address — «Слить» or «Не дубль» (docs/specs/04 §13) */}
-        <ClientDupCards c={c} />
+  /* ---------- the one main step ---------- */
+  const estimateItem = fabItems("client", role, { customerId: c.id }).find((i) => i.id === "estimate");
+  const step = clientStepOf(f, estimateItem && canServe(db, c.id) ? estimateItem.href : undefined);
+  const docNo = (x: { number?: string; title?: string }) => x.number || x.title || "";
+  const nowJob = f.now && (f.now.kind === "working" || f.now.kind === "scheduled") ? f.now.job : undefined;
+  const nowEst = nowJob ? r.estimates.find((e) => e.id === nowJob.estimateId) : undefined;
+  const depositPaid = !!nowJob && jobChain(nowJob, nowEst, r.invoices).some((x) => x.key === "deposit" && x.done);
+  const mainStep: MainAction | undefined = !step
+    ? undefined
+    : (() => {
+        const testID = stepTestID(step);
+        switch (step.kind) {
+          case "pay":
+            return { testID, label: t("w2b.client.pay"), reason: t("w2b.client.payWhy", { n: docNo(step.invoice) }), onPress: () => router.push(step.href as Href) };
+          case "bill":
+            // v2 макет 3 «задаток оплачен, …»: the deposit of the «Сейчас» job paid — say so; else the plain reason
+            return { testID, label: t("inv.issue"), reason: depositPaid ? t("px2.cv.billWhyDeposit") : t("w2b.client.billWhy"), onPress: () => router.push(step.href as Href) };
+          case "send":
+            return { testID, label: t("cc.next.send"), reason: t("cc.why.send", { n: docNo(step.estimate) }), onPress: () => router.push(step.href as Href) };
+          case "estimate":
+            return { testID, label: t("est.new"), reason: r.estimates.length ? undefined : t("cc.why.estimate"), onPress: () => router.push(step.href as Href) };
+          case "restore":
+            return { testID, outline: true, label: t("proto.client.restore"), reason: t("proto.client.restoreWhy"), onPress: () => toast.show(t("client.statusSaved"), store.setCustomerStatus(c.id, "active")) };
+          case "trip":
+            return { testID, label: t("proto.client.trip"), reason: t("proto.client.tripWhy"), onPress: () => router.push(`/visit/${step.visitId}`) };
+          case "remind":
+            return { testID, label: t("proto.client.remindEstimate"), reason: t("proto.client.remindWhy", { n: docNo(step.estimate) }), onPress: () => router.push(`/estimate/${step.estimate.id}`) };
+          case "tellTime":
+            return { testID, label: t("proto.client.tellTime"), reason: t("proto.client.tellTimeWhy"), onPress: () => sms() };
+        }
+      })();
 
-        {/* Позвонить · Написать · Маршрут (prototype v6, #1343): a word under each, nothing to do — no tile */}
-        <View testID="client-actions" style={{ flexDirection: "row", gap: space[2] }}>
-          {tel ? (
-            <ActionTile
-              testID="client-call"
-              icon="phone"
-              label={t("client.call")}
-              // the outcome sheet opens after the call, not under the system dialer (spec 20 §3, founder 07.11)
-              onPress={() => dial(tel, () => setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), customerId: c.id, contactId: main?.id }))}
-            />
-          ) : null}
-          {main && (tel || mail) ? (
-            <ActionTile
-              testID="client-write"
-              icon="sms"
-              label={t("visit.message")}
-              // both — ask how; one — straight to it (wave 6-3: a ready text in the client's language, the event is written)
-              onPress={() => (tel && mail ? setWriteAsk(true) : tel ? setWriting({ owner: { type: "customer", id: c.id }, person: main }) : Linking.openURL(mail!).catch(() => {}))}
-            />
-          ) : null}
-          {props[0] ? (
-            <ActionTile
-              testID="client-route"
-              icon="navigate"
-              label={t("client.route")}
-              onPress={() => Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(`${props[0]!.address}, ${props[0]!.city}`)}`)}
-            />
-          ) : null}
-        </View>
-        {lateCalls ? <StatusChip status="warn" label={t("client.lateCalls")} /> : null}
+  /* ---------- «＋» and «⋯» ---------- */
+  // «Не обслуживаем» (04 §12): no new estimate or job for the client — «＋» keeps the task, the note and the property
+  const made = canServe(db, c.id) ? fabItems("client", role, { customerId: c.id }) : [];
+  const create = office
+    ? {
+        a11y: t("proto.client.createFor", { name: c.name }),
+        items: [
+          ...made.map((i) => ({ key: i.id, label: t(i.label), icon: i.icon, testID: `client-create-${i.id}` })),
+          { key: "task", label: t("task.new"), icon: "check" as const, testID: "client-create-task" },
+          { key: "note", label: t("proto.client.note"), icon: "note" as const, testID: "client-create-note" },
+          { key: "property", label: t("prop.add"), icon: "home2" as const, testID: "client-create-property" },
+        ],
+      }
+    : undefined;
+  const onCreate = (k: string) => {
+    const item = made.find((i) => i.id === k);
+    if (item?.href) return router.push(item.href as Href);
+    if (k === "task") return setTaskEdit({ subjectType: "customer", subjectId: c.id, title: "", assigneeId: db.me });
+    if (k === "note") return onSection("log");
+    if (k === "property") return setNewProp(newProperty(c.id));
+  };
+  const more: MoreAction = office
+    ? [
+        { key: "edit", label: t("ue.edit"), icon: "pencil", testID: "client-act-edit" },
+        ...(statusOptions.length ? [{ key: "status", label: t("client.statusTitle"), icon: "tag" as const, testID: "client-act-status" }] : []),
+        { key: "tags", label: t("proto.client.tags"), icon: "tag", testID: "client-act-tags" },
+        { key: "people", label: t("client.people"), icon: "users", testID: "client-act-people" },
+      ]
+    : [];
+  const onMore = (k: string) => {
+    if (k === "edit") router.push(`/client/edit?id=${c.id}`);
+    else if (k === "status") setPicking(true);
+    else if (k === "tags" || k === "people") setSheet(k);
+  };
 
-        {/* #1094/#879: the card's main action — in one place, a verb: the estimate (the «＋» keeps the rest) */}
-        {estimateItem && canServe(db, c.id) ? (
-          <Button testID="client-make-estimate" label={t("path.estimateNew")} icon="invoice" full onPress={() => router.push(estimateItem.href as Href)} />
-        ) : null}
-
-        {/* add-on modules' place (spec 33 П24 А3): nothing unless a module is switched on */}
-        <ModulePlaces place="client" ctx={{ customerId: c.id, leadIds: db.leads.filter((l) => l.customerId === c.id).map((l) => l.id) }} />
-
-        {canSeeClientMoney(role) ? (
-          // money only, three equal tiles on one line — unslop 05.11
-          <Card>
-            <RowView style={{ alignItems: "flex-start" }}>
-              <MoneyCell testID="client-owes" label={t("cl6.money.owes")} value={moneyWhole(m.owesCents)} tone={m.owesCents > 0 ? "warn" : "ink"} />
-              <MoneyCell testID="client-paid" label={t("cl6.money.paid")} value={moneyWhole(m.paidTotalCents)} />
-              <MoneyCell testID="client-invoiced" label={t("cl6.money.invoiced")} value={moneyWhole(m.invoicedCents)} />
-            </RowView>
-          </Card>
-        ) : null}
-        {/* spec 35 §4г («Деньги и отчёты»): the client's money without an invoice — apply or refund it on its receipt */}
-        {canSeeClientMoney(role) ? <AdvancesBlock customerId={c.id} /> : null}
-      </View>
-
-    </>
+  /* ---------- the strip ---------- */
+  const keys = clientSectionKeys(role, f.hasMoney, r.properties.length > 1);
+  const current: ClientSectionKey = keys.includes(section) ? section : "overview";
+  const workN = office ? r.jobs.length : f.visits.length;
+  const sections = useMemo(
+    () =>
+      keys.map((k) => ({
+        key: k,
+        label: k === "work" && !office ? t("jobs.visits") : t(SECTION_LABEL[k]),
+        // a number only where it means something (v2: «Работы 2 · Сметы 1 · Счета 2»)
+        count: k === "work" ? workN || undefined : k === "estimates" ? r.estimates.length || undefined : k === "money" ? r.invoices.length || undefined : k === "visits" ? f.visits.length || undefined : k === "places" ? r.properties.length : undefined,
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the words of the strip
+    [keys.join(), office, workN, r.estimates.length, r.invoices.length, f.visits.length, r.properties.length, t],
   );
-  const tabsNode = (
-    <>
-      {/* the client's sections as view tabs (DS §9 А1п, #1343): all always, the number — what waits for an action */}
-      <ViewTabs
-        testID="client-tabs"
-        label={t("cl6.tabs")}
-        value={tab}
-        onChange={pickTab}
-        items={tabs.map((k) => ({ key: k, label: t(TAB_LABEL[k]), count: waiting[k] }))}
-      />
-    </>
-  );
-  const content = (
-    <>
-      <View testID={`client-tab-${tab}`} style={{ gap: space[3] }}>
-        {tab === "overview" ? (
-          <>
-            {/* the next visit is what comes, not what waits for an action (#1416): its own line above «Ждёт действия» */}
-            {nextVisit ? (
-              <>
-                <SectionTitle title={t("client.nextVisit")} />
-                <View testID="client-next-visit">
-                  <Card style={{ paddingVertical: space[1] }}>
-                    <ListRow
-                      title={day(nextVisit.start)}
-                      subtitle={r.jobs.find((j) => j.id === nextVisit.jobId)?.title}
-                      lines={2}
-                      left={<Icon name="route" />}
-                      onPress={() => router.push(`/visit/${nextVisit.id}`)}
-                    />
-                  </Card>
-                </View>
-              </>
-            ) : null}
-            {openTasks.length || (canSeeClientMoney(role) && m.owesCents > 0) ? (
-              <>
-                <SectionTitle title={t("cl6.waiting")} />
-                <CardList>
-                  {/* single hints about this client, not lists of objects (06 «10а, остаток» п.6): Card + ListRow */}
-                  {openTasks.length ? (
-                    <Card style={{ paddingVertical: space[1] }}>
-                      <ListRow title={t("client.openTasks", { n: openTasks.length })} subtitle={openTasks[0]!.title} left={<Icon name="check" />} onPress={() => pickTab("tasks")} />
-                    </Card>
-                  ) : null}
-                  {canSeeClientMoney(role) && m.owesCents > 0 ? (
-                    <Card status="warn" style={{ paddingVertical: space[1] }}>
-                      <ListRow title={t("client.unpaid", { amount: money(m.owesCents) })} left={<Icon name="invoice" />} onPress={() => pickTab("invoices")} />
-                    </Card>
-                  ) : null}
-                </CardList>
-              </>
-            ) : null}
-            {/* «Объекты» with «＋ Объект» on the right of the title (spec 56 §3а.6, DS §12.2), not a big button under it */}
-            <SectionTitle
-              title={t("client.row.properties")}
-              right={
-                office && props.length ? (
-                  <Button testID="client-add-property" label={t("cw4.addProperty")} accessibilityLabel={t("prop.new")} icon="plus" variant="secondary" size="sm" onPress={() => setAdding(newProperty(c.id))} />
-                ) : undefined
-              }
-            />
-            <ClientSection c={c} s="properties" noAdd />
-            {office ? (
-              // where the invoices go (office): the property's address until one is set; opens the client's form
-              <View testID="client-billing">
-                <Card style={{ paddingVertical: space[1] }}>
-                  <ListRow
-                    title={t("client.row.billing")}
-                    subtitle={c.billing ? billingLine(c.billing) : props[0] ? `${t("client.row.billingSame")} · ${propertyTitle(props[0])}` : t("client.row.billingSame")}
-                    left={<Icon name="invoice" />}
-                    onPress={() => router.push(`/client/edit?id=${c.id}`)}
-                  />
-                </Card>
-              </View>
-            ) : null}
-            {main && (main.phones.length || main.emails.length) ? (
-              <>
-                <SectionTitle title={t("client.contacts")} />
-                <Card>
-                  <PersonRows p={main} onCall={(x) => setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), customerId: c.id, contactId: x.id })} />
-                </Card>
-              </>
-            ) : null}
-            {r.leads.length ? (
-              <View testID="client-leads">
-              <Card style={{ paddingVertical: space[1] }}>
-                <ListRow title={t("client.row.leads")} right={<T v="body" tone="mut" tabular>{String(r.leads.length)}</T>} left={<Icon name="inbox" />} onPress={() => open("leads")} />
-              </Card>
-              </View>
-            ) : null}
-          </>
-        ) : (
-          <>
-            {/* «＋ Новая …» on its own tab (prototype v6): the same rules as the card's main button — role, «do not service» */}
-            {tab === "estimates" && estimateItem && canServe(db, c.id) && r.estimates.length ? (
-              <View testID="client-new-estimate" style={{ alignSelf: "flex-start" }}>
-                <Button label={t("est.new")} icon="plus" variant="secondary" size="sm" onPress={() => router.push(estimateItem.href as Href)} />
-              </View>
-            ) : null}
-            {tab === "jobs" && jobItem && canServe(db, c.id) ? (
-              <View testID="client-new-job" style={{ alignSelf: "flex-start" }}>
-                <Button label={t("path.jobNew")} icon="plus" variant="secondary" size="sm" onPress={() => router.push(jobItem.href as Href)} />
-              </View>
-            ) : null}
-            <ClientSection c={c} s={tab} />
-          </>
-        )}
-      </View>
 
-    </>
-  );
-  const rest = (
+  const body =
+    current === "work" ? (
+      <ClientWork c={c} f={f} />
+    ) : current === "estimates" ? (
+      <ClientEstimates f={f} />
+    ) : current === "money" ? (
+      <ClientMoney c={c} f={f} />
+    ) : current === "visits" ? (
+      <ClientVisits f={f} />
+    ) : current === "places" ? (
+      <ClientPlaces c={c} f={f} onRoute={route} />
+    ) : current === "log" ? (
+      <ClientLog c={c} f={f} />
+    ) : (
+      <ClientOverview c={c} f={f} onSection={onSection} />
+    );
+  // the header's status: «◷ Активный» (v2) — not «Клиент» on a client's own card; the others say their own word
+  const statusWord = status === "active" ? t("w2b.client.active") : t(chip.l);
+
+  return (
     <>
+      <ObjectScreen<ClientSectionKey>
+        testID="client-screen"
+        back={back}
+        header={{
+          testID: "client-header",
+          title: c.name,
+          avatar: initials(c.name),
+          // v2 макет 3: «◷ Активный» — the clock for an active client
+          status: { name: chip.s, label: statusWord, icon: status === "active" ? "clock" : undefined, onPress: office && statusOptions.length ? () => setPicking(true) : undefined },
+          // the line right of the rule (v2 «Клиент · VIP», the founder 21.11 «нет разделения Клиент · VIP»): what it is and its first
+          // tag — never «VIP · Постоя…»; all of them are in «⋯ Метки»
+          kindWord: t("client.card"),
+          meta: headTags([...tags.map((x) => ({ id: x.id, label: tagLabel(x, t) })), ...(noLateCallsNow(db, c) ? [{ id: "late", label: t("client.lateCalls") }] : [])]).slice(0, 1),
+          details: <ClientDetails c={c} f={f} onCall={(p) => callDone(p)} onSms={(p) => sms(p)} onRoute={route} />,
+          // v2 «⌄ в свёрнутой»: the contacts, one row 48 each, over the page
+          contacts: <ClientContacts c={c} f={f} onCall={(p) => callDone(p)} onSms={(p) => sms(p)} onRoute={route} />,
+          onEdit: office ? () => router.push(`/client/edit?id=${c.id}`) : undefined,
+          // «⌄» says what it opens (the founder 21.11: «стрелочка вниз возле имени — не понимаю, что делает»)
+          labels: { expand: t("hdr.contacts"), collapse: t("hdr.contactsHide"), more: (n) => t("cw4.moreTags", { n }), edit: t("ue.edit") },
+        }}
+        actions={quick}
+        now={<ClientNowCard f={f} main={mainStep} />}
+        sections={sections}
+        section={current}
+        onSection={onSection}
+        sectionsLabel={t("cl6.tabs")}
+        sectionsLook="chips"
+        create={create}
+        onCreate={onCreate}
+        more={more}
+        onMore={onMore}
+      >
+        {body}
+      </ObjectScreen>
       <StatusPicker
         visible={picking}
         onClose={() => setPicking(false)}
@@ -349,77 +244,13 @@ export function ClientCardBody({ c, tab: tabNow, onTab, frame }: { c: Customer; 
         options={statusOptions.map((x) => ({ key: x, tone: clientStatusChip[x].s, label: t(clientStatusChip[x].l), current: x === status, enabled: true, form: x === "do_not_service" }))}
         onPick={(k) => chooseStatus(k as CustomerStatus)}
       />
-      <PropertySheet value={adding} onClose={() => setAdding(null)} />
       <PeopleSheet visible={sheet === "people"} customer={c} onClose={() => setSheet(null)} />
       <TagsSheet visible={sheet === "tags"} customer={c} onClose={() => setSheet(null)} />
       <StatusSheet visible={sheet === "status"} customer={c} preset="do_not_service" onClose={() => setSheet(null)} />
       <CallSheet preset={calling} onClose={() => setCalling(null)} />
       <MessageSheet preset={writing} onClose={() => setWriting(null)} />
-      <Sheet visible={writeAsk} onClose={() => setWriteAsk(false)} title={t("cl6.writeTitle", { name: c.name })}>
-        <View testID="client-write-sheet">
-          <Card>
-            <ListRow
-              title={t("cl6.writeSms")}
-              subtitle={c.phone}
-              left={<Icon name="sms" />}
-              onPress={() => {
-                setWriteAsk(false);
-                if (main) setWriting({ owner: { type: "customer", id: c.id }, person: main });
-              }}
-            />
-            <ListRow
-              title={t("cl6.writeMail")}
-              subtitle={c.email}
-              left={<Icon name="mail" />}
-              onPress={() => {
-                setWriteAsk(false);
-                if (mail) Linking.openURL(mail).catch(() => {});
-              }}
-            />
-          </Card>
-        </View>
-      </Sheet>
-    </>
-  );
-  // the mini header over the stuck tabs (DS §9 А1п «Прилипание», prototype v6, #1416): the name and the same quick actions as icons
-  const mini = (
-    <View testID="client-mini" style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space[2] }}>
-      <T v="heading" numberOfLines={1} style={{ flex: 1 }}>
-        {c.name}
-      </T>
-      <RowView gap={space[2]}>
-        {tel ? <IconButton icon="phone" label={t("client.call")} onPress={() => dial(tel, () => setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), customerId: c.id, contactId: main?.id }))} /> : null}
-        {main && (tel || mail) ? (
-          <IconButton icon="sms" label={t("visit.message")} onPress={() => (tel && mail ? setWriteAsk(true) : tel ? setWriting({ owner: { type: "customer", id: c.id }, person: main }) : Linking.openURL(mail!).catch(() => {}))} />
-        ) : null}
-        {props[0] ? <IconButton icon="navigate" label={t("client.route")} onPress={() => Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(`${props[0]!.address}, ${props[0]!.city}`)}`)} /> : null}
-      </RowView>
-    </View>
-  );
-  if (frame) return frame({ summary, tabs: tabsNode, content, rest, mini });
-  return (
-    <>
-      {summary}
-      {tabsNode}
-      {content}
-      {rest}
+      <TaskSheet value={taskEdit} onClose={() => setTaskEdit(null)} />
+      <PropertySheet value={newProp} onClose={() => setNewProp(null)} />
     </>
   );
 }
-
-
-function MoneyCell({ label, value, tone = "ink", testID }: { label: string; value: string; tone?: "ink" | "warn"; testID?: string }) {
-  return (
-    <View testID={testID} style={{ alignItems: "flex-start", flex: 1 }}>
-      <T v="caption" tone="mut" numberOfLines={1}>
-        {label}
-      </T>
-      {/* a sum is never broken onto two lines (#1417 review): the three stay on one line */}
-      <T v="heading" tabular tone={tone} numberOfLines={1}>
-        {value}
-      </T>
-    </View>
-  );
-}
-
-

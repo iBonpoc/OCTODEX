@@ -37,7 +37,7 @@ exports.run = async (h) => {
   await h.seed("octo.role.v1", "director");
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await waitDb((db) => !!db.company?.modules?.gutters?.trialEndsAt, "trial on");
+  await waitDb((db) => !!db.company?.modules?.gutters?.enabled, "on");
   await h.go("/module/gutters/prices");
   await tid("gpr-screen").waitFor({ timeout: 5000 });
   // the test items, as «Создать позиции сразу» makes them (cost = the test price, no markup)

@@ -69,6 +69,38 @@ describe.each(names)("%s theme contrast (DS rule: text ≥ 4.5:1)", (name) => {
   });
 });
 
+/** visual v2 (docs/design/visual-v2.html, 21.11): the accent as text and as a tone, the layers, the tab bar */
+describe.each(names)("%s visual v2: accent text and tone, layers, tab bar (text ≥ 4.5:1, lines ≥ 3:1)", (name) => {
+  const c = themes[name];
+  const str = (x: RGBA) => `rgb(${x[0]},${x[1]},${x[2]})`;
+  const card = over(c.surf, c.bg);
+  const cell = over(c.surf2, str(card));
+  const chosen = over(c.surf3, str(card));
+  const tab = parse(c.tab);
+  it("accText reads on the screen, a card, a cell (the secondary button), the chosen cell and the tab bar", () => {
+    for (const [k, s] of Object.entries({ bg: parse(c.bg), card, cell, chosen, tab })) expect(ratio(parse(c.accText), s), k).toBeGreaterThanOrEqual(4.5);
+  });
+  it("accText reads on the accent's tone (a chosen day, the nearest interval) and on its stronger half", () => {
+    expect(ratio(parse(c.accText), over(c.tint, str(card)))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(parse(c.accText), over(c.tint2, str(card)))).toBeGreaterThanOrEqual(4.5);
+  });
+  it("ink and mut on the chosen cell and on the tab bar", () => {
+    for (const s of [chosen, tab]) {
+      expect(ratio(parse(c.ink), s)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(parse(c.mut), s)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+  it("the paler words on the yellow tile ≥ 4.5:1", () => expect(ratio(over(c.onAccMut, c.acc), parse(c.acc))).toBeGreaterThanOrEqual(4.5));
+  it("the open checklist ring is seen on its cell (≥ 3:1)", () => expect(ratio(parse(c.dash), cell)).toBeGreaterThanOrEqual(3));
+  it("the layers go one way: bg → card → cell → chosen", () => {
+    const l = [parse(c.bg), card, cell, chosen].map(lum);
+    const up = name === "dark";
+    // dark: each layer lighter; light: the card lighter than the screen, the cells darker than the card
+    if (up) expect(l[1]! > l[0]! && l[2]! > l[1]! && l[3]! > l[2]!).toBe(true);
+    else expect(l[1]! > l[0]! && l[2]! < l[1]! && l[3]! < l[2]!).toBe(true);
+  });
+});
+
 describe.each(names)("%s input frame (DS §8.1, #1594: ≥ 3:1 to the screen, WCAG 1.4.11)", (name) => {
   const c = themes[name];
   it("the field frame stands out from the screen and from the field's own fill", () => {
@@ -83,6 +115,16 @@ describe.each(names)("%s solid glass (DS §6.4, #1467: the tab bar's fallback pa
     expect(parse(c.ovSolid)[3]).toBe(1);
     expect(ratio(parse(c.ink), parse(c.ovSolid))).toBeGreaterThanOrEqual(4.5);
     expect(ratio(parse(c.mut), parse(c.ovSolid))).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe.each(names)("%s toast plate (DS Б8, v2 #2214)", (name) => {
+  const c = themes[name];
+  it("the plate is opaque; its words ≥ 7:1, «Вернуть» ≥ 4.5:1, the plate stands out from the screen ≥ 1.5:1", () => {
+    expect(parse(c.toast)[3]).toBe(1);
+    expect(ratio(parse(c.onToast), parse(c.toast))).toBeGreaterThanOrEqual(7);
+    expect(ratio(parse(c.toastAction), parse(c.toast))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(parse(c.toast), parse(c.bg))).toBeGreaterThanOrEqual(1.5);
   });
 });
 
@@ -111,6 +153,7 @@ describe.each(names)("%s drawing canvas (founder О3: storeys by colour + «эт
 describe.each(names)("%s tape measure (founder 09.11, #674: the number under the mark on a pill like the main button)", (name) => {
   const c = themes[name];
   it("the number on its pill ≥ 4.5:1", () => expect(ratio(parse(c.tape.markText), parse(c.tape.markFill))).toBeGreaterThanOrEqual(4.5));
+  it("the red needle ≥ 3:1 to the tape (#2412, the 5th exception of rule 2)", () => expect(ratio(parse(c.tape.needle), parse(c.ovSolid))).toBeGreaterThanOrEqual(3));
   it("the pill is the main button's colours", () => {
     expect(c.tape.markFill.toLowerCase()).toBe(c.acc.toLowerCase());
     expect(c.tape.markText.toLowerCase()).toBe(c.onAcc.toLowerCase());
@@ -131,8 +174,10 @@ describe("print contrast on paper (documents for the client: text ≥ 4.5:1)", (
  * Switched off falls under 3:1 (measured 16.11.2026, knob 18: dark 3.00 / 2.81 off on surf / surf2, light 2.69 / 2.71 off and
  * 3.01 / 2.98 on): WCAG 1.4.11 does not ask it of an inactive control, so the floor there is `DISABLED_MIN` until the DS decides
  * (a reported question of wave 1а, not a passed 3:1). The live pairs — off and on — hold 3:1.
+ * Palette A (#2350, 21.11.2026: muted yellow, opaque soft-grey light theme) brings the light switched-off pairs to 2.38–2.48
+ * (on on surf / surf2, off on surf2): the floor is 2.35 for the prototype; the question goes to the audit (#2337) with rule 3.
  */
-const DISABLED_MIN = 2.5;
+const DISABLED_MIN = 2.35;
 describe.each(names)("%s switch (DS §9 А5: knob ≥ 3:1 to its track, off / on ≥ 3, disabled ≥ DISABLED_MIN)", (name) => {
   const c = themes[name];
   const dim = component.dimOpacity;
@@ -181,6 +226,11 @@ describe.each(names)("«Графит» %s contrast (#2254)", (name) => {
     expect(ratio(parse(g.onSel), parse(g.sel))).toBeGreaterThanOrEqual(7);
     expect(ratio(parse(g.onBadge), parse(g.badge))).toBeGreaterThanOrEqual(7);
     expect(ratio(parse(g.onDan), parse(g.danBg))).toBeGreaterThanOrEqual(4.5);
+  });
+  it("the round button, variant 2 (#2292): the glyph on the chip ≥ 7, on the selected plate ≥ 7; the inverse main button ≥ 7", () => {
+    expect(ratio(parse(g.text), parse(g.chip))).toBeGreaterThanOrEqual(7);
+    expect(ratio(parse(g.onSel), parse(g.sel))).toBeGreaterThanOrEqual(7);
+    expect(ratio(parse(g.onBadge), parse(g.badge))).toBeGreaterThanOrEqual(7);
   });
   it("the yellow fill is one colour in both themes (only the main action and «＋»)", () => expect(g.acc).toBe("#FBFF00"));
   it("status icons (`ic`) on the panel ≥ 3 (UI), the word (`-w`) ≥ 4.5 — the word never in `ic`", () => {

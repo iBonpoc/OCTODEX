@@ -6,9 +6,10 @@ import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { IconButton, TextField } from "@/ui/controls";
 import { Menu, type MenuItem } from "@/ui/overlays";
-import { Icon, Press, T } from "@/ui/primitives";
+import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { useScreenScroll } from "@/ui/requiredForm";
 import { RowView } from "@/ui/surfaces";
+import { GroupHead } from "@/ui/groupedList";
 import { useRef, type ComponentRef } from "react";
 
 /**
@@ -31,6 +32,8 @@ export interface SectionHeaderProps {
   title: string;
   total: string;
   lineCount: number;
+  /** #2363: a group title over its card keeps a gap above it (not the first row) */
+  gapAbove?: boolean;
   collapsed: boolean;
   renaming: boolean;
   /** a signed estimate: the heading can be folded, nothing else (no «⋯», no rename) */
@@ -75,6 +78,8 @@ function SectionHeaderView(p: SectionHeaderProps) {
   ];
   const commit = () => p.api.rename(s.id, draft);
   return (
+    // #2363 (founder 21.11: «разделители групп некрасиво, непонятно»; both design reviews): a top section is the TITLE OVER its card —
+    // no band: the chevron, the kind's icon, the word and «· N» on the left, «⋯», the group's sum on the right in the column of the lines' sums
     <View ref={rootRef} collapsable={false} testID={`est-section-${s.id}`} style={{ paddingLeft: p.depth === 1 ? space[4] : 0, paddingVertical: space[1] }} accessibilityRole="header">
       <RowView style={{ minHeight: size.rowMin }}>
         {p.renaming && ready ? (
@@ -85,28 +90,23 @@ function SectionHeaderView(p: SectionHeaderProps) {
             </T>
           </View>
         ) : (
-          <Press onPress={() => p.api.toggle(s.id)} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={t("est.sec.toggle")} accessibilityState={{ expanded: !p.collapsed }} containerStyle={{ flex: 1 }} testID={`est-sec-toggle-${s.id}`}>
-            <RowView style={{ minHeight: size.rowMin }}>
-              <Icon name={p.collapsed ? "chevronRight" : "chevronDown"} s={size.iconSm} color={c.mut} />
-              <View style={{ flex: 1 }}>
-                <T v="body" w="semibold" numberOfLines={1}>
-                  {p.title}
-                </T>
-                {p.collapsed ? (
-                  <T v="caption" tone="mut" numberOfLines={1}>
-                    {t("est.sec.count", { n: p.lineCount })}
-                  </T>
-                ) : null}
-              </View>
-              <T v="body" tabular w="semibold">
-                {p.total}
-              </T>
-            </RowView>
-          </Press>
-        )}
-        {p.locked ? null : (
-          <View ref={moreRef} collapsable={false} testID={`est-sec-menu-${s.id}`}>
-            <IconButton icon="more" label={t("est.sec.menu")} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h }))} />
+          // #2387: the same title as every group of the app (GroupHead): «˅», the kind's icon, the word 17/700 and its CountPill;
+          // the group's sum 17/700 on the right in the column of the lines' sums; «⋯» a quiet icon over the lines' trash
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <GroupHead
+              title={p.title}
+              icon={p.depth === 0 && s.kind ? KIND_ICON[s.kind] : undefined}
+              // founder 21.11 («двоечка наезжает на цифру»): the count only on a folded group (DS §8.5) — an open one shows its lines
+              count={p.collapsed ? p.lineCount : undefined}
+              value={p.total}
+              fold={{ open: !p.collapsed, onToggle: () => p.api.toggle(s.id), label: t("est.sec.toggle"), testID: `est-sec-toggle-${s.id}` }}
+              actions={p.locked ? null : (
+                // in the column of the lines' trash: by the «⠿» at the right edge, `space[6]` away from the sum
+                <View ref={moreRef} collapsable={false} testID={`est-sec-menu-${s.id}`} style={{ marginLeft: space[6], width: size.hitMin, alignItems: "center" }}>
+                  <IconButton bare icon="more" label={t("est.sec.menu")} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h }))} />
+                </View>
+              )}
+            />
           </View>
         )}
       </RowView>
@@ -114,5 +114,8 @@ function SectionHeaderView(p: SectionHeaderProps) {
     </View>
   );
 }
+
+/** the kind's own icon on a kind section's band (DS §8.5) */
+const KIND_ICON: Partial<Record<string, IconKey>> = { material: "box", labor: "wrench", service: "toolbox" };
 
 export const SectionHeader = memo(SectionHeaderView);

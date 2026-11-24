@@ -12,7 +12,7 @@
  *   estimate says why not; a draft is deleted and «Отменить» brings it back.
  * Finds things by testID; waits on what it checks.
  */
-const { pressWhenStill, stands } = require("../gutters.cjs");
+const { pressWhenStill, stands, pressUndo } = require("../gutters.cjs");
 const { pressEscUntilClosed } = require("../sheet.cjs");
 const DB_KEY = "octo.db.v5";
 
@@ -45,7 +45,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
+  await tid("module-gutters-status").filter({ hasText: /^Без срока/ }).waitFor({ timeout: 5000 });
   await waitFor(async () => !!(await db())?.company?.modules?.gutters?.enabled, "the trial is on");
 
   const d0 = await db();
@@ -125,7 +125,7 @@ exports.run = async (h) => {
   await waitFor(async () => { const x = await g(); return x.measurements.some((m) => m.id === copy && m.propertyId === place.id && m.status === "draft") && x.elements.filter((e) => e.measurementId === copy).length === 1; }, "a draft copy: the same address, its own gutter");
   await waitFor(async () => /Без сметы/.test(await text("view-state")), "the copy has no estimate");
   await h.shot("copy");
-  await p.getByRole("button", { name: "Отменить", exact: true }).last().click();
+  await pressUndo(p);
   await waitFor(async () => !(await g()).measurements.some((m) => m.id === copy), "«Отменить»: the copy is gone");
 
   // whom → «Отвязать (в черновики)»
@@ -140,7 +140,7 @@ exports.run = async (h) => {
   await menu("Удалить замер");
   await waitFor(async () => !(await g()).measurements.some((m) => m.id === "e2e228-free"), "deleted");
   await waitFor(async () => (await tid("view-screen").count()) === 0, "the card is left");
-  await p.getByRole("button", { name: "Отменить", exact: true }).last().click();
+  await pressUndo(p);
   await waitFor(async () => (await g()).measurements.some((m) => m.id === "e2e228-free"), "«Отменить»: it is back");
 
   // 1280: the same card in the panel of «Замеры» — one column

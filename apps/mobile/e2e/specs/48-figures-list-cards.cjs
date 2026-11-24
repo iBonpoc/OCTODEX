@@ -1,7 +1,7 @@
 /**
  * Lists behind the «Сегодня» figures on the same cards as the main lists (step 10а, PR10b), every view (3 widths × 2 themes).
- * - «Ждёт оплаты»: every invoice card is exactly the card of that invoice in «Деньги» (same amount, status, facts);
- * - «Подписано»: every estimate card is exactly its card in «Сметы»;
+ * - «Ждёт оплаты»: every invoice is the one in «Деньги» (same client, number, amount; as many) — v2 (#2350) «Деньги» has rows;
+ * - «Подписано»: every estimate is in «Сметы» (same client and amount);
  * - «Получено»: a payment card shows «+$…» and opens the receipt; «Новые лиды»: a lead card opens the lead;
  * - no «…»; edges aligned.
  */
@@ -19,20 +19,29 @@ exports.run = async (h) => {
   h.expect(!/…|\.\.\./.test(await p.locator("body").innerText()), "no «…» on the screen");
   await checkCardAlignment(h, { reference: (pg) => pg.locator('[data-testid="list-card"]').first(), min: 1 });
   await h.shot("awaiting");
-  // «Счета» is the one invoices list (spec 31 §7а): the open ones are «Не оплачен · Просрочен»
+  // «Счета» is the one invoices list (spec 31 §7а). v2 (#2350): «Деньги» lists rows (GroupRow `invoice-row-*`), the figure screens
+  // keep their cards (LISTCARD_LEFT) — the same invoice is there with the same client, number and amount, and nothing more or less
+  const key = (c) => ({ name: firstLine(c), amount: (c.match(/\$[\d,.]+/) || [""])[0], number: (c.match(/INV-\d+/) || [""])[0] });
   await h.go("/invoice?f=owed");
-  const money = await texts();
-  for (const c of fig) h.expect(money.includes(c), `invoice card is the same as in «Счета»: ${c.slice(0, 160)}`);
+  await p.locator('[data-testid="invoice-list-groups"]').locator("visible=true").first().waitFor({ timeout: 8000 });
+  const owedRows = (await p.locator('[data-testid="invoice-list-group-overdue"] [data-testid^="invoice-row-"], [data-testid="invoice-list-group-waiting"] [data-testid^="invoice-row-"]').locator("visible=true").allInnerTexts()).map((x) => x.replace(/\n/g, " "));
+  h.expect(owedRows.length === fig.length, `as many open invoices in «Счета» as in «Ждёт оплаты» (${owedRows.length} / ${fig.length})`);
+  for (const c of fig) {
+    const k = key(c);
+    h.expect(owedRows.some((r) => r.includes(k.name) && r.includes(k.number) && r.includes(k.amount)), `invoice ${k.number} is the same in «Счета»: ${JSON.stringify(k)}`);
+  }
 
-  // «Подписано» (month) = the same estimate cards as in «Сметы» (filter «Все»)
+  // «Подписано» (month) = the same estimates as in «Сметы» (all of its groups)
   await h.go("/figures/signed?period=month");
   const signed = await texts();
   if (signed.length) {
     await h.go("/estimates");
-    await p.getByText(/^Все · \d+$/).last().click();
-    await p.waitForTimeout(300);
-    const ests = await texts();
-    for (const c of signed) h.expect(ests.includes(c), `estimate card is the same as in «Сметы»: ${c.slice(0, 160)}`);
+    await p.locator('[data-testid="est-list-groups"]').locator("visible=true").first().waitFor({ timeout: 8000 });
+    const ests = (await p.locator('[data-testid^="est-row-"]').locator("visible=true").allInnerTexts()).map((x) => x.replace(/\n/g, " "));
+    for (const c of signed) {
+      const k = key(c);
+      h.expect(ests.some((r) => r.includes(k.name) && r.includes(k.amount)), `estimate of ${k.name} ${k.amount} is in «Сметы»: ${c.slice(0, 120)}`);
+    }
   }
 
   // «Получено» (month): «+$…» in green-text words, opens the receipt
