@@ -3,7 +3,7 @@ import { FieldRow } from "@/ui/pairs";
 import { View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { useI18n } from "@/i18n";
-import { Labeled } from "@/features/fields";
+import { Labeled, MoneyField } from "@/features/fields";
 import { Button, TextField } from "@/ui/controls";
 import { formatPhoneUS } from "@/ui/inputFormat";
 import { NumberField } from "@/ui/numberField";
@@ -79,6 +79,9 @@ export function FieldsSection() {
         </View>
         <NumberField kind="qty" label={t("ds.fields.qty")} unit="ft" unitWord={t("ds.fields.qtyWord")} qty={qty} onChange={setQty} testID="showcase-num-qty" />
         <NumberField kind="integer" label={t("ds.fields.integer")} value={days} onChange={setDays} testID="showcase-num-integer" />
+        {/* #2455: a field of a totals row hands its screen's total to the iPhone keyboard's bar */}
+        <T v="caption" tone="mut">{t("ds.fields.totalBar")}</T>
+        <MoneyField unit a11yLabel={t("ds.fields.money")} cents={cents} onChange={setCents} barNote={`${t("ue.total")} ${formatCents(cents)}`} />
         {/* DS А7: a day in a form — the row, «Сегодня · Завтра» and the calendar open under it; the second one may be empty */}
         <DateField label={t("ds.fields.date")} value={date} onChange={setDate} testID="showcase-date" />
         <DateField label={t("ds.fields.due")} value={due} onChange={setDue} optional testID="showcase-due" />
