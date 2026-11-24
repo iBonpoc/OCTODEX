@@ -11,7 +11,7 @@ import { PanResponder, View, type LayoutChangeEvent } from "react-native";
 import Svg, { Defs, Line, LinearGradient, Path, Rect, Stop, Text as SvgText } from "react-native-svg";
 import { component, drawing as dt, font, radius, size, space, spaceHalf } from "@octo/design-tokens";
 import { haptics } from "@/ui/haptics";
-import { settleAt, tickDue } from "./tapeMath";
+import { pullAt, settleAt, tickDue } from "./tapeMath";
 import { useTheme } from "@/theme/ThemeProvider";
 import { IconButton } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -28,8 +28,6 @@ const H_SHORT = size.hitMin * 2.5;
 /** a flick: the share of speed kept per millisecond, and the speed (marks per ms) at which it settles */
 const KEEP_PER_MS = 0.996;
 const STOP = 0.002;
-/** past an end: the share of the pull the tape follows */
-const GIVE = 0.3;
 /** a move shorter than this is a tap, not a drag (px) */
 const MOVE_PX = space[1];
 /** labels this close to the needle go pale: a mark and a half each side */
@@ -114,8 +112,6 @@ export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepL
     }
     return n;
   };
-  /** past an end the tape gives a little (a third of the pull), as a real one does — the sample's edge */
-  const give = (f: number) => (f < 1 ? 1 - (1 - f) * GIVE : f > max ? max + (f - max) * GIVE : f);
   // in a sheet: the tape keeps its finger — the sheet's swipe to close never takes it over (#714)
   const hold = useSheetHold();
   const pan = useRef(
@@ -131,13 +127,15 @@ export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepL
       },
       // the tape moves with the finger: dragged left, more of it comes out
       onPanResponderMove: (_, g) => {
-        const f = give(start.current - g.dx / TICK);
+        const f = pullAt(start.current, g.dx, TICK, max);
         setPos(f);
         set(f);
       },
       // let go while moving: it runs on, slowing, and settles on the nearest mark (the sample's inertia)
+      // taken away (iOS: a scroll view around takes the touch): the tape settles on the mark it shows, it never stays between two (#2414)
       onPanResponderTerminate: () => {
         hold.current = false;
+        setPos(null);
       },
       onPanResponderRelease: (_, g) => {
         hold.current = false;
