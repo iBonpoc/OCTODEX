@@ -4,6 +4,7 @@ import { component, motion, size, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { Fab } from "@/nav/Fab";
 import { ActionBar } from "@/ui/actionBar";
+import { ButtonPair } from "@/ui/pairs";
 import { Button, IconButton } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
 import { DEFAULT_TAX, computeAllOptional, computeCustomOption, type CustomOption, type CustomSettings } from "@octo/estimating-engine";
@@ -82,6 +83,11 @@ export function ButtonsSection() {
           <T v="caption" tone="mut">{t("ds.btn.barOne")}</T>
           <ActionBar main={<Button label={t("ds.btn.primary")} size="bar" full onPress={press} />} />
         </View>
+      </Card>
+      {/* ButtonPair (#2350): two short labels — a row of halves; a label that does not fit its half — the column, the main one first */}
+      <Card>
+        <ButtonPair testID="showcase-btn-pair" main={{ label: t("ds.btn.primary"), icon: "check", onPress: press }} second={{ label: t("ds.btn.secondary"), variant: "secondary", onPress: press }} />
+        <ButtonPair testID="showcase-btn-pair-long" main={{ label: t("ds.btn.primaryNote"), onPress: press }} second={{ label: t("ds.btn.ghost"), variant: "ghost", onPress: press }} />
       </Card>
       <Card>
         <T v="heading">{t("ds.btn.kinds")}</T>

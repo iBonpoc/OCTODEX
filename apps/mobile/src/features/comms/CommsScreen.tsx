@@ -22,7 +22,7 @@ type CallFilter = "all" | CallOutcome;
  * of spec 31: the magnifier (who, person, note) and the outcomes as the lane; the outcome is kept on this device, the search is not.
  */
 export function CommsScreen({ kind }: { kind: CommsKind }) {
-  const { t, time, day } = useI18n();
+  const { t, time, day, duration } = useI18n();
   const { db, role } = useStore();
   const calls = kind === "calls";
   const [kept, setFilter] = usePersistentState<CallFilter>(`${filterStoreKey("calls")}.status`, "all");
@@ -72,7 +72,7 @@ export function CommsScreen({ kind }: { kind: CommsKind }) {
                 status={o ? { tone: o.tone, label: t(o.label) } : undefined}
                 tags={[
                   t(it.kind === "call" ? "nav.comms.call" : it.kind === "sms" ? "nav.comms.sms" : "nav.comms.email"),
-                  ...(it.durationMin ? [t("w6.call.min", { n: it.durationMin })] : []),
+                  ...(it.durationMin ? [duration(it.durationMin)] : []), // #2363 F42: the one rule of a length («1 ч 30 мин»)
                   ...(it.by ? [it.by] : []),
                 ]}
                 facts={it.note ? { last: it.note } : undefined}

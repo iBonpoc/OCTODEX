@@ -64,7 +64,7 @@ import { removedUnsent, unsentIn as unsentInOf, withoutUnsentIn, type RemovedUns
 export { mineOf, type OwnedItem } from "./outboxOwner";
 import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
-import { enabledLocally, keepModuleData, moduleActive, moduleDef, modulePurchaseLines, variantWordOf } from "@/modules/registry";
+import { enabledLocally, keepModuleData, moduleActive, moduleDef, modulePurchaseLines, variantWordOf, withoutTerm } from "@/modules/registry";
 import { cleanCatalogItem } from "@/features/catalogExtras";
 import { sameValue, undoOwn } from "@/data/undoOwn";
 import { markOf, markUndo, NO_UNDO, type GuardedUndo } from "@/data/undo";
@@ -592,6 +592,13 @@ function withFields(prev: CatalogItem | undefined, it: CatalogItem): { fields?: 
   return fields ? { fields } : {};
 }
 
+/** #2410: modules without a term — in the demo (no server, no trial: a module switched on stays on) and in the developer's
+ *  company (companies.developer_account) — also a phone's copy read before the flag, and a module row read again alone */
+function withoutTermWhere(d: DB, mode: Mode): DB {
+  if (!d.company?.modules || (mode !== "demo" && d.company.developerAccount !== true)) return d;
+  return { ...d, company: { ...d.company, modules: withoutTerm(d.company.modules) } };
+}
+
 export function StoreProvider({
   children,
   readError,
@@ -675,7 +682,7 @@ export function StoreProvider({
       .catch(() => {}); // not removed now: the next sign-in tries again
   }, [dbReady, mode, auth.userId, cacheKey]);
   const db = useMemo(() => {
-    const d = normalizeDB(saved.db, mode);
+    const d = withoutTermWhere(normalizeDB(saved.db, mode), mode);
     return mode === "cloud" ? withGateCodes(d, gateCodes) : d;
   }, [saved.db, mode, gateCodes]);
   // the company's time zone for the whole app (docs/specs/03 П4b): set during render, before any screen reads a day
@@ -846,7 +853,8 @@ export function StoreProvider({
     const cur = dbRef.current;
     // no answer, or another company signed in meanwhile: the next full read clears it
     if (!row || !cur.company || whoRef.current?.companyId !== cid) return;
-    dbRef.current = { ...cur, company: { ...cur.company, modules: { ...cur.company.modules, [mod]: row } } };
+    // #2410: the developer's company — the row read alone keeps no term, as the full read
+    dbRef.current = withoutTermWhere({ ...cur, company: { ...cur.company, modules: { ...cur.company.modules, [mod]: row } } }, modeRef.current);
     setDb(dbRef.current);
     settingsStale.current.delete(mod);
   };
@@ -2075,7 +2083,8 @@ export function StoreProvider({
         const withModule = (d: DB): DB => {
           if (!d.company) return d;
           const cur = d.company.modules?.[key];
-          const next = { ...enabledLocally(cur, moduleDef(key)), rowVersion: cur ? cur.rowVersion + 1 : 1 };
+          const unlimited = modeRef.current === "demo" || d.company.developerAccount === true; // #2410: no trial of the phone's own
+          const next = { ...enabledLocally(cur, moduleDef(key), Date.now(), { unlimited }), rowVersion: cur ? cur.rowVersion + 1 : 1 };
           return { ...d, company: { ...d.company, modules: { ...d.company.modules, [key]: next } } };
         };
         return mutate("module.enable", withModule, { k: "module.enable", module: key });

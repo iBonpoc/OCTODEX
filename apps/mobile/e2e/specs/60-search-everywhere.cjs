@@ -1,9 +1,9 @@
 const { listSearch } = require("../listSearch.cjs");
 /**
  * Wave 2c-2 of the app shell — «Искать везде» (docs/specs/15-flows.md §1.7, §3.2; 13 v2 §2.2):
- * - the line on «Главная» opens /search with the cursor in the field; on 820/1280 the key «/» opens it from a screen;
+ * - the header's search circle (phone, v2) / the line (820/1280) on «Главная» opens /search with the cursor in the field; on 820/1280 the key «/» opens it from a screen;
  * - a number (EST-…) → the estimate; a phone by digits («555 0144») → the client «найдено: телефон Tom Mitchell»;
- *   an address → the property; groups by 3 with «Показать все»; nothing — «Ничего не нашлось по «…»»;
+ *   an address → the property; groups by 3 with «Все»; nothing — «Ничего не нашлось по «…»»;
  * - the technician finds no invoices or payments.
  * - JOB-0001 → the job (by Job.number).
  */
@@ -14,7 +14,7 @@ exports.run = async (h) => {
   const p = h.page;
   const w = h.layout.width;
   const wide = w >= 820;
-  const field = () => p.locator('[data-testid="search-field"] input').locator("visible=true");
+  const field = () => p.locator('[data-testid="search-search-field"] input').locator("visible=true");
   const hits = () => p.locator('[data-testid="search-hit"]:visible');
   const type = async (q) => {
     await field().fill(q);
@@ -25,8 +25,8 @@ exports.run = async (h) => {
   await setRole(h, "director");
   await h.go("/today");
 
-  // the line on «Главная» → /search, the cursor in the field
-  await p.getByTestId("search-entry").locator("visible=true").click();
+  // «Главная» → /search, the cursor in the field: the header's search circle on the phone (v2), the line on 820/1280
+  await p.getByTestId(wide ? "search-entry" : "hdr-search").locator("visible=true").first().click();
   await p.waitForTimeout(700);
   h.expect(path(h) === "/search", `the line opens /search (${p.url()})`);
   await p.waitForTimeout(300);
@@ -69,9 +69,10 @@ exports.run = async (h) => {
   await type("a");
   const clients = p.getByTestId("search-group-clients").locator("visible=true");
   h.expect((await clients.locator('[data-testid="search-hit"]').count()) === 3, "3 clients first");
-  await clients.getByRole("button", { name: /Показать все/ }).click();
-  await p.waitForTimeout(300);
-  h.expect((await clients.locator('[data-testid="search-hit"]').count()) > 3, "«Показать все» shows the rest");
+  // v2: the group's «Все» (a link in its title) narrows the search to that group, every hit shown
+  await clients.getByRole("link", { name: "Все", exact: true }).click();
+  const more = await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="search-group-clients"]')].some((g) => g.getBoundingClientRect().height > 0 && g.querySelectorAll('[data-testid="search-hit"]').length > 3), null, { timeout: 3000 }).then(() => true, () => false);
+  h.expect(more, "«Все» shows the rest");
 
   // nothing found
   await type("zzqx");

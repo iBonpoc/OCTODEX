@@ -6,6 +6,7 @@ import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { mySignature } from "@/features/estimateSign";
 import { SignaturePad, SignaturePreview } from "@/features/SignaturePad";
+import { StackBackGestureOff } from "@/nav/StackBackGestureOff";
 import { StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
@@ -53,6 +54,7 @@ export default function MySignatureScreen() {
           ) : (
             <TextField type="jobTitle" value={title} onChangeText={setTitle} placeholder={t("est.sig.jobTitle")} />
           )}
+          <StackBackGestureOff />
           <SignaturePad
             label={t("est.countersign.padLabel")}
             consent={null}

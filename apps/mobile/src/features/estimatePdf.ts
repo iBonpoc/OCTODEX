@@ -20,6 +20,9 @@ import { docDay, docMoney, docPage, docTime, esc, type DocOpts } from "./docPdf"
 import { pagesHtml } from "./docPages";
 import { clientRows } from "./clientLayout";
 
+/** not an animation: the print frame goes this long after the print dialog was opened, ms */
+const CLEANUP_MS = 1000;
+
 export interface EstimatePdfOpts extends DocOpts {
   /** company setting «Show unit prices» (docs/specs/07 §3.4); on by default */
   showUnitPrices?: boolean;
@@ -162,7 +165,7 @@ export async function saveEstimatePdf(html: string, fileName: string): Promise<v
     setTimeout(() => {
       w.focus();
       w.print();
-      setTimeout(() => frame.remove(), 1000);
+      setTimeout(() => frame.remove(), CLEANUP_MS);
     }, 250);
     return;
   }

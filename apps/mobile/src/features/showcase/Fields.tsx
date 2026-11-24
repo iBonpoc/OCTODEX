@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { FieldRow } from "@/ui/pairs";
 import { View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { useI18n } from "@/i18n";
@@ -10,7 +11,7 @@ import { DateField } from "@/ui/dateField";
 import { addDays, todayKey, type DayKey } from "@/features/calendar";
 import { formatBps, formatCents } from "@/ui/numberInput";
 import { T } from "@/ui/primitives";
-import { FieldGroup, FormMain, RowView, SectionTitle } from "@/ui/surfaces";
+import { FieldGroup, FormMain, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 
 /**
@@ -83,16 +84,11 @@ export function FieldsSection() {
         <DateField label={t("ds.fields.due")} value={due} onChange={setDue} optional testID="showcase-due" />
         {/* two narrow fields in one row (#1990): the unit stays inside its own frame on a phone */}
         <T v="caption" tone="mut">{t("ds.fields.narrow")}</T>
-        <View testID="showcase-num-narrow">
-        <RowView style={{ alignItems: "flex-start" }}>
-          <View style={{ flex: 1 }}>
-            <NumberField kind="qty" label={t("ds.fields.ft")} unit="ft" unitWord={t("ds.fields.qtyWord")} qty={ft} onChange={setFt} testID="showcase-num-ft" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <NumberField kind="qty" label={t("ds.fields.in")} unit="in" unitWord={t("ds.fields.inWord")} qty={inch} onChange={setInch} testID="showcase-num-in" />
-          </View>
-        </RowView>
-        </View>
+        {/* FieldRow (#2350): a pair in one row while each keeps `component.pair.fieldMin`, a column on a narrower screen */}
+        <FieldRow testID="showcase-num-narrow">
+          <NumberField kind="qty" label={t("ds.fields.ft")} unit="ft" unitWord={t("ds.fields.qtyWord")} qty={ft} onChange={setFt} testID="showcase-num-ft" />
+          <NumberField kind="qty" label={t("ds.fields.in")} unit="in" unitWord={t("ds.fields.inWord")} qty={inch} onChange={setInch} testID="showcase-num-in" />
+        </FieldRow>
       </FieldGroup>
     </View>
   );

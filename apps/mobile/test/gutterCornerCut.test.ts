@@ -122,7 +122,7 @@ describe("part 1 of 09.11: units, the splash guard, the toolbar on top", () => {
     expect(fmtLen(260)).toBe("21′ 8″");
     expect(fmtLen(306.5, "in")).toBe("306½″");
     expect(fmtLen(0.5, "in")).toBe("½″");
-    expect(fmtLen(39.375, "mm")).toBe("1000 mm");
+    expect(fmtLen(39.375, "mm")).toBe("1,000 mm");
     // metres and centimetres too (founder 09.11)
     expect(fmtLen(118.125, "m")).toBe("3 m");
     expect(fmtLen(39.375, "cm")).toBe("100 cm");

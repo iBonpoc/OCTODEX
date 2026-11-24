@@ -32,9 +32,10 @@ export function ListPanel({ title, subtitle, outside, actions, more, onOpen, onC
     <View testID="list-panel" role="complementary" aria-label={title} style={{ width: component.panelW, borderLeftWidth: component.hairline, borderLeftColor: c.bd }}>
       <ScrollView contentContainerStyle={{ padding: space[4], gap: space[3] }}>
         <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
-          {/* 360 beside three buttons: a long name («EST-0006 · Carpet, railing, bulb, haul-away») takes a third line, not «…» (#1728) */}
+          {/* 360 beside three buttons: a long name («EST-0006 · Carpet, railing, bulb, haul-away») wraps whole, not «…» (#1728; the v2 title is 22/25 and needs a fourth line) */}
           <View style={{ flexShrink: 1 }}>
-            <T v="title" numberOfLines={3}>
+            {/* the 22/25 title's last line is taller than its line box: room under it, so nothing is cut at the edge */}
+            <T v="title" style={{ paddingBottom: space[1] }}>
               {title}
             </T>
             {subtitle ? (

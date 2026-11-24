@@ -58,16 +58,24 @@ exports.run = async (h0, { browser, BASE, layout, installClock }) => {
     // the tech's day: the company's today, not empty after the phone's midnight; the company's clock
     await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
     await go("/visits");
-    await expectText(new RegExp(`Готово \\d+ из ${mine.length}`), "the tech's day counts today of the company");
-    await expectText(/8:30\s*AM – 12:30\s*PM/, "the visit on the company's clock");
-    h0.expect(!/11:30\s*AM – 3:30\s*PM/.test(await text()), "not on the phone's clock");
+    // v2 «Мой день»: the tile «Выезды» says «Готово N из M» to a screen reader; the rest of the day by the hour «8:30 AM»
+    const tile = p.getByTestId("tile-visits").locator("visible=true").first();
+    await tile.waitFor({ timeout: 8000 });
+    const said = (await tile.getAttribute("aria-label")) || "";
+    h0.expect(new RegExp(`Готово \\d+ из ${mine.length}`).test(said), `the tech's day counts today of the company: ${said}`);
+    await expectText(/8:30\s*AM/, "the visit on the company's clock");
+    h0.expect(!/11:30\s*AM/.test(await text()), "not on the phone's clock");
 
     // «План», day: «Сегодня» is the company's day with its visits
     await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
     await go("/plan");
     const all = d.visits.filter((v) => dayKey(v.start) === today).length;
-    await expectText(new RegExp(`Сегодня · ${all}`), "«Сегодня» chip of the company's day");
-    await expectText(/8:30\s*AM/, "the visit in the Plan on the company's clock");
+    // v2 «Календарь»: the kicker «Сб, 21 ноября · 6 выездов» is the company's day with its count; the day's list «Выезды сегодня»
+    await expectText(new RegExp(`\\b${Number(today.slice(8))} \\S+ · ${all} выезд`), "the kicker of the company's day");
+    // the day's list «Выезды сегодня» is the phone's; 820 / 1280 draw the board by person under the same kicker
+    if (layout.width < 820) await expectText(/Выезды сегодня/, "«Сегодня» is the company's day");
+    // #2363 q73: in the Plan's plate «AM» stands as two small letters in a column («8:30 A M» in the page's text)
+    await expectText(/8:30\s*A\s*M/, "the visit in the Plan on the company's clock");
 
     // the form: the company's tomorrow (a working day), the 9:00 slot = 9:00 AM in Los Angeles
     let offset = 1;
@@ -86,9 +94,21 @@ exports.run = async (h0, { browser, BASE, layout, installClock }) => {
 
     // and «План» shows it at 9:00 AM on that day
     await go("/plan");
-    for (let i = 0; i < offset; i++) await p.getByRole("button", { name: "Вперёд" }).last().click();
-    await p.waitForTimeout(400);
-    await expectText(/9:00\s*AM/, "the new visit at 9:00 AM in the Plan");
+    if (layout.width >= 820) {
+      // 820 / 1280: the same strip of days over the board by person
+      await p.getByTestId(`plan-strip-${target}`).locator("visible=true").first().click();
+      await expectText(/9:00\s*A\s*M/, "the new visit at 9:00 AM in the Plan");
+    } else {
+      // v2: the day is a pill of the strip (the arrows step by a week)
+      await p.getByTestId(`plan-strip-${target}`).locator("visible=true").first().click();
+      await p.waitForTimeout(400);
+      // v2 TimeSlot: the hour column «9:00» and the plate «9:00 ▸ 12:00 PM» (AM said once, on the end of the same half)
+      const row = p.getByTestId(`plan-row-${added[0].id}`).locator("visible=true").first();
+      await row.waitFor({ timeout: 5000 });
+      const rowSaid = (await row.innerText()).replace(/\s+/g, " ");
+      // #2363 q73: the plate's AM/PM is two small letters in a column — «9:00 A M» in the page's text
+      h0.expect(/^9:00\b/.test(rowSaid) && /\b(A\s?M|P\s?M)\b/.test(rowSaid), `the new visit at 9:00 AM in the Plan: ${rowSaid}`);
+    }
     h0.expect(!errors.length, errors.join("\n"));
   } finally {
     await ctx.close();

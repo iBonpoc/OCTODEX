@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type ComponentRef } from "react";
 import { Modal, PanResponder, Platform, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Path } from "react-native-svg";
+import Svg from "react-native-svg";
+import { SignatureInk } from "./SignatureInkView";
+import { undoStroke } from "./signatureInk";
 import { component, radius, size, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { Button } from "@/ui/controls";
+import { Button, IconButton } from "@/ui/controls";
 import { ALL_ORIENTATIONS } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
@@ -95,6 +97,11 @@ export function SignatureFullscreen({
     pathRef.current = "";
     setPath("");
   };
+  // #2215: «Отменить штрих» — the last stroke goes
+  const undo = () => {
+    pathRef.current = undoStroke(pathRef.current);
+    setPath(pathRef.current);
+  };
   // the turned block is canvas + buttons: laid out upright (w wide), then turned as one
   const blockW = cv.w;
   const blockH = cv.h + space[2] + bar;
@@ -133,12 +140,13 @@ export function SignatureFullscreen({
               </View>
             ) : null}
             <Svg width="100%" height="100%" pointerEvents="none">
-              <Path d={path} stroke={c.ink} strokeWidth={component.signStroke} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              <SignatureInk d={path} color={c.ink} unit={k} />
             </Svg>
           </View>
           <RowView style={{ minHeight: bar, justifyContent: "space-between" }}>
             <Button label={t("common.cancel")} variant="ghost" onPress={onCancel} />
             <RowView>
+              {path ? <IconButton icon="undo" label={t("sig.undoStroke")} onPress={undo} testID="sig-full-undo" /> : null}
               <Button label={t("visit.clear")} variant="secondary" onPress={clear} disabled={!path} />
               <Button label={t("fix.sign.done")} icon="check" onPress={() => onDone(pathRef.current && k > 0 ? scale(pathRef.current, 1 / k) : "")} />
             </RowView>

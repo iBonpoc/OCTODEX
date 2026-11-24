@@ -22,7 +22,8 @@ export function usePanelKeys(on: boolean, act: (k: "up" | "down" | "close") => v
       const onKey = (e: KeyboardEvent) => {
         const el = document.activeElement as HTMLElement | null;
         const typing = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
-        const onList = !el || el === document.body || !!el.closest('[data-testid="list-card"]');
+        // the list's rows: the old ListCard, or the v2 ListScreen's GroupRows (`<screen>-groups`, #2350) — not the panel's own groups
+        const onList = !el || el === document.body || !!el.closest('[data-testid="list-card"]') || (!!el.closest('[data-testid$="-groups"]') && !el.closest('[data-testid="list-panel"]'));
         const k = panelKey(e, { typing, modal: !!document.querySelector('[aria-modal="true"]'), onList });
         if (!k) return;
         e.preventDefault();
@@ -38,14 +39,14 @@ export function usePanelKeys(on: boolean, act: (k: "up" | "down" | "close") => v
 export function focusSelectedRow() {
   if (Platform.OS !== "web" || typeof document === "undefined") return;
   // the visible open row: hidden screens of the stack stay in the page (another list with its own open row)
-  const rows = [...document.querySelectorAll<HTMLElement>('[data-testid="list-card"][aria-current="true"]')];
+  const rows = [...document.querySelectorAll<HTMLElement>('[aria-current="true"]')];
   rows.find((r) => r.offsetParent !== null)?.focus?.({ preventScroll: true });
 }
 
 /** after ↓/↑ (or any change of the open row): the row is scrolled into view if it went past the edge (долги №7) */
 export function scrollSelectedRow() {
   if (Platform.OS !== "web" || typeof document === "undefined") return;
-  const rows = [...document.querySelectorAll<HTMLElement>('[data-testid="list-card"][aria-current="true"]')];
+  const rows = [...document.querySelectorAll<HTMLElement>('[aria-current="true"]')];
   rows.find((r) => r.offsetParent !== null)?.scrollIntoView?.({ block: "nearest" });
 }
 

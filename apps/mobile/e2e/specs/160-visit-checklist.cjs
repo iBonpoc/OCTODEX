@@ -42,8 +42,9 @@ exports.run = async (h) => {
   };
 
   // before work: no photo before — a warning, not a lock
-  const next = p.getByRole("button", { name: /^Дальше: Работа/ }).last();
-  h.expect(await next.isEnabled(), "«Дальше: Работа» is not locked without photos");
+  // v2: the main step «Начать» of the work card (visit-main-work)
+  const next = p.getByTestId("visit-main-work").locator("visible=true").first();
+  h.expect(await next.isEnabled(), "«Начать» is not locked without photos");
   await next.click();
   await missing().waitFor();
   h.expect(/Нет фото до работы/.test(await h.sheet().innerText()), "the warning says what is missing");
@@ -56,14 +57,16 @@ exports.run = async (h) => {
   await p.getByTestId("chk-skip").last().click();
   await waitStep("working");
 
-  // at work: the counter of required items, a tick, a photo for the photo item
-  const left = p.getByTestId("chk-left").last();
+  // at work: the checklist cell of the work card counts what is done («Чек-лист выезда · 0 из 4 · 0 %», v2 макет 4),
+  // a tick, a photo for the photo item
+  const left = p.getByTestId("chk-left").locator("visible=true").first();
   await left.waitFor();
-  h.expect(/Осталось обязательных: 3/.test(await left.innerText()), "3 required left (the optional one does not count)");
-  await p.getByTestId(`chk-item-${A}`).last().click();
+  // #2363 F38: not begun — «4 пункта», not «0 из 4 · 0 %»
+  h.expect(/4 пункта/.test(await left.innerText()) && !/0 %/.test(await left.innerText()), `nothing done yet: ${await left.innerText()}`);
+  await p.getByTestId(`chk-item-${A}`).locator("visible=true").first().click();
   for (let i = 0; i < 10 && !(await visit()).checklist.find((x) => x.id === A).done; i++) await p.waitForTimeout(150);
   h.expect((await visit()).checklist.find((x) => x.id === A).done, "the tick is saved");
-  const add = p.getByTestId(`chk-item-${C}`).last().getByRole("button", { name: "Добавить фото" });
+  const add = p.getByTestId(`chk-item-${C}`).locator("visible=true").first().getByRole("button", { name: "Добавить фото" });
   await add.scrollIntoViewIfNeeded();
   const [chooser] = await Promise.all([p.waitForEvent("filechooser"), add.click()]);
   await chooser.setFiles({ name: "area.png", mimeType: "image/png", buffer: PNG });
@@ -73,13 +76,16 @@ exports.run = async (h) => {
     const c = v.checklist.find((x) => x.id === C);
     h.expect(c.photoIds?.length === 1 && v.photos.some((ph) => ph.id === c.photoIds[0] && ph.kind === "after"), "the item's photo is a photo after work of the visit");
   }
-  await p.waitForTimeout(300);
-  h.expect(/Осталось обязательных: 1/.test(await left.innerText()), "1 required left");
+  // the tick and the photo item are done: 2 of 4
+  await p.waitForFunction((el) => /2 из 4/.test(el.innerText), await left.elementHandle(), { timeout: 3000 });
   await h.shot("work");
 
   // the signature: «Walk through» open and one photo after short → «Не заполнено: 2»
   const draw = async () => {
-    const pad = p.getByLabel(/расписывается/i).last();
+    // v2: «Завершить» turns the body to the signature pad (it stays while «Заполнить» keeps the visit at work)
+    if ((await p.getByLabel(/расписывается/i).locator("visible=true").count()) === 0) await p.getByTestId("visit-main-finish").locator("visible=true").first().click();
+    const pad = p.getByLabel(/расписывается/i).locator("visible=true").last();
+    await pad.waitFor();
     await pad.scrollIntoViewIfNeeded();
     await p.waitForTimeout(250);
     const bb = await pad.boundingBox();
