@@ -22,7 +22,7 @@ import { ColorField } from "@/ui/colorField";
 import { ToggleRow } from "@/ui/toggleRow";
 import { Icon, Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
-import { Menu } from "@/ui/overlays";
+import { Menu, useSheetClose } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
 import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, boughtElbowCounts, boughtElbowPatch, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
@@ -630,5 +630,25 @@ export function AttrBody({ children, inSheet }: { children: React.ReactNode; inS
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: space[4], paddingBottom: space[4] }} testID="attr-panel">
       {children}
     </ScrollView>
+  );
+}
+
+/**
+ * «Закрыть | Сохранить» at the bottom of a gutter's / downspout's window (DS §7.3, Б1 table; founder 16.11, #1857; mock v43): one row,
+ * half the width each, 44 visible (`Button size="bar"`, as the action bar); no ✕ on top. In the sheet (390) «Закрыть» goes the sheet's own
+ * way out — with unsaved edits it asks «Сохранить изменения?» first (`useSheetClose`); in the side column (820/1280) — `onClose`.
+ */
+export function WinButtons({ onClose, onSave }: { onClose: () => void; onSave: () => void }) {
+  const { t } = useI18n();
+  const sheetClose = useSheetClose();
+  return (
+    <View style={{ flexDirection: "row", gap: space[2] }} testID="attr-win-buttons">
+      <View style={{ flex: 1, minWidth: 0 }} testID="attr-win-close">
+        <Button label={t(k("close"))} variant="secondary" size="bar" full onPress={sheetClose ?? onClose} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }} testID="attr-win-save">
+        <Button label={t(k("save"))} size="bar" full onPress={onSave} />
+      </View>
+    </View>
   );
 }

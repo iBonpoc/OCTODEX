@@ -4,7 +4,7 @@
  * colour of every NEW gutter of this drawing, the gutter drawn before keeps its own; after a reload it is still there (kept on this phone);
  * «Сбросить» gives the company's back. The same for «Водосток» (a size). Every view. Finds things by testID; waits on what it checks.
  */
-const { skipLength, pastDoubleTap, doubleTapUntil, pickAttr, attrShown } = require("../gutters.cjs");
+const { skipLength, pastDoubleTap, doubleTapUntil, pickAttr, attrShown, winSave } = require("../gutters.cjs");
 const { pressEscUntilClosed, sheetGone } = require("../sheet.cjs");
 const KEY = "octo.db.v5";
 
@@ -41,11 +41,7 @@ exports.run = async (h) => {
   /** a downspout's menu (it opens by itself when one is put) closed */
   const closeAttrs = async () => {
     await tid("attr-panel").waitFor({ timeout: 5000 });
-    if (wide) await tid("draw-panel-close").getByRole("button").click();
-    else {
-      await pressEscUntilClosed(p);
-      await sheetGone(p);
-    }
+    await winSave(p); // the window's own «Сохранить» (DS §7.3, #2412 PR3): its edits kept
   };
   /** «Водосток» picked, a tap on the gutter drawn at `y` (a share of the surface) */
   const putDs = async (y, n) => {

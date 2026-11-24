@@ -53,7 +53,9 @@ import { ghostChipAt } from "./ghostChip";
 import { haptics } from "@/ui/haptics";
 import { SAVE_ICON, saveMark } from "./saveMark";
 import { InputWindow } from "./InputWindow";
-import { AttrBody, DsAttrsView, QuickLength, RunAttrsView, type RunCorner } from "./AttrPanel";
+import { AttrBody, DsAttrsView, QuickLength, RunAttrsView, WinButtons, type RunCorner } from "./AttrPanel";
+import { winDirty, winDiscard, winSave, winStartOn, type WinStart } from "./winDraft";
+import { useConfirm } from "@/ui/confirmDialog";
 import { MeasurePhotos } from "./Photos";
 import { fmtLen } from "../canvas/format";
 import { dropHaptic, forgetOldDraft, loadToolbarPlace, placeAt, saveToolbarPlace, type ToolbarPlace } from "../canvas/localStore";
@@ -230,6 +232,13 @@ function DrawCanvas() {
 
   const [drawing, setDrawing] = useState<Drawing>(EMPTY);
   const [hist, setHist] = useState<History>({ past: [], future: [] });
+  const histRef = useRef(hist);
+  histRef.current = hist;
+  /** the properties window's draft (DS §7.3, winDraft.ts): the drawing and history before its first edit; null — no edit in it yet */
+  const [winDraft, setWin] = useState<WinStart>(null);
+  const winRef = useRef<WinStart>(null);
+  /** a commit that comes from the window (its edits stay one draft); any other commit keeps the window's edits as they are */
+  const inWin = useRef(false);
   const [m, setM] = useState<MeasurementRow | null>(null);
   const [savedOnce, setSavedOnce] = useState(false);
   const [tool, setTool] = useState<Tool>("line");
@@ -449,7 +458,13 @@ function DrawCanvas() {
       // a downspout put by the program must not stand unseen: the layer of downspouts is switched on (#1246 review)
       if (next.downspouts.length > prev.downspouts.length && !cur.current.layers.ds) setLayers((x) => ({ ...x, ds: true }));
       setHint(null);
-      setHist((h) => pushHistory(h, prev));
+      const w = inWin.current ? null : winRef.current;
+      if (w) {
+        // an edit beside the window (820/1280: the canvas under the open column): the window's edits are kept, as one step
+        winRef.current = null;
+        setWin(null);
+        setHist(pushHistory(winSave(w, prev, histRef.current), prev));
+      } else setHist((h) => pushHistory(h, prev));
       setDrawing(next);
       // written at once, not a second later (founder 09.11: «отвлёкся, смахнул, обновилось — чертёж пропал»; e2e 213):
       // the drawing goes into the phone's copy of the data on every finished edit, and the address names the
@@ -836,16 +851,49 @@ function DrawCanvas() {
   /** the picked downspout's kind icon on the bottom bar (#929): the kind seen at a glance, no colour */
   const selDsIcon = sel && !("a" in sel) ? dsKindOf(sel.shape, sel.dsStyle).icon : null;
 
-  // the attribute panel (П21.8): one choice = one edit of the drawing, taken back by «Назад»
+  // the attribute panel (П21.8): every choice shows on the canvas at once; the window's choices are one draft (DS §7.3, winDraft.ts) —
+  // «Сохранить» keeps them as one step of «Назад», «Закрыть» with edits asks «Сохранить изменения?»
+  const winCommit = (made: Drawing) => {
+    const start = winStartOn(winRef.current, cur.current.drawing, histRef.current);
+    if (start !== winRef.current) {
+      winRef.current = start;
+      setWin(start);
+    }
+    inWin.current = true;
+    try {
+      commit(made);
+    } finally {
+      inWin.current = false;
+    }
+  };
+  /** «Сохранить»: the window's edits stay, as one step */
+  const saveWin = () => {
+    const w = winRef.current;
+    winRef.current = null;
+    setWin(null);
+    if (w) setHist(winSave(w, cur.current.drawing, histRef.current));
+  };
+  /** «Не сохранять» (or «Закрыть» with no edit left): the drawing and its history as before the window */
+  const discardWin = () => {
+    const back = winDiscard(winRef.current);
+    winRef.current = null;
+    setWin(null);
+    if (!back) return;
+    setHist(back.hist);
+    setDrawing(back.drawing);
+    cur.current = { ...cur.current, drawing: back.drawing };
+    flush();
+  };
+  const winEdited = useMemo(() => winDirty(winDraft, drawing), [winDraft, drawing]);
   const onRunAttrs = (p: Partial<RunAttrs>) => {
     const id = cur.current.selected;
     if (!id) return;
     if (p.story !== undefined) setStoryN(storyOf(p.story));
-    commit(setRunAttrs(cur.current.drawing, id, p, cur.current.ch));
+    winCommit(setRunAttrs(cur.current.drawing, id, p, cur.current.ch));
   };
   const onDsAttrs = (p: Partial<DsAttrs>) => {
     const id = cur.current.selected;
-    if (id) commit(setDsAttrs(cur.current.drawing, id, p, cur.current.ch));
+    if (id) winCommit(setDsAttrs(cur.current.drawing, id, p, cur.current.ch));
   };
   // the corners of the picked run (M7c): stored on its runs, else the company's method
   const runCorners: RunCorner[] =
@@ -857,10 +905,39 @@ function DrawCanvas() {
             return { found: f, method: own?.method ?? rules.corner, own: !!own, def: rules.corner };
           })
       : [];
-  const onCorner = (f: FoundCorner, method: CornerChoice["method"] | null) => commit(setCornerMethod(cur.current.drawing, f, method));
+  const onCorner = (f: FoundCorner, method: CornerChoice["method"] | null) => winCommit(setCornerMethod(cur.current.drawing, f, method));
   const onLength = (lengthIn: number | null) => {
     const id = cur.current.selected;
-    if (id) commit(setLength(cur.current.drawing, id, lengthIn));
+    if (id) winCommit(setLength(cur.current.drawing, id, lengthIn));
+  };
+  // the window closed or shows another element by other means (another one picked, the photo removed): its edits are kept
+  const winKey = sel && !newSheet && (wide || sheet) ? sel.id : null;
+  const winKeyRef = useRef(winKey);
+  useEffect(() => {
+    if (winKeyRef.current === winKey) return;
+    winKeyRef.current = winKey;
+    if (winRef.current) saveWin();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [winKey]);
+  const [winAsk, askWin] = useConfirm();
+  /** 820/1280: «Закрыть» of the column — with edits, the same question as the sheet's (DS Б1/Б3 words) */
+  const closePanel = async () => {
+    if (winDirty(winRef.current, cur.current.drawing)) {
+      const a = await askWin({
+        title: t("sheet.unsavedTitle"),
+        text: t("sheet.unsavedText"),
+        testID: "attr-win-ask",
+        actions: [
+          { key: "save", label: t("ue.save"), tone: "primary", testID: "attr-win-ask-save" },
+          { key: "discard", label: t("sheet.discard"), tone: "danger", testID: "attr-win-ask-discard" },
+          { key: "back", label: t("common.cancel"), tone: "cancel", testID: "attr-win-ask-back" },
+        ],
+      });
+      if (a === "save") saveWin();
+      else if (a === "discard") discardWin();
+      else return;
+    } else discardWin();
+    setSelected(null);
   };
   const quick = quickRun ? drawing.runs.find((r) => r.id === quickRun) : undefined;
   const editRun = lenEdit ? drawing.runs.find((r) => r.id === lenEdit) : undefined;
@@ -931,8 +1008,16 @@ function DrawCanvas() {
   /** 820/1280: the panel is a column on the right, always there; the canvas and its bars stay left of it */
   const panelSide = wide ? ins.right + component.panelW + space[3] : 0;
 
+  /** «Назад» / «Вперёд» beside the open column (820/1280): the window's edits are kept first, as one step */
+  const histNow = () => {
+    const w = winRef.current;
+    if (!w) return hist;
+    winRef.current = null;
+    setWin(null);
+    return winSave(w, drawing, hist);
+  };
   const doUndo = () => {
-    const u = undo(hist, drawing);
+    const u = undo(histNow(), drawing);
     if (!u) return;
     setHint(null);
     setHist(u.h);
@@ -941,7 +1026,7 @@ function DrawCanvas() {
     later.current();
   };
   const doRedo = () => {
-    const r = redo(hist, drawing);
+    const r = redo(histNow(), drawing);
     if (!r) return;
     setHint(null);
     setHist(r.h);
@@ -1541,10 +1626,8 @@ function DrawCanvas() {
             </>
           ) : attrs ? (
             <>
-              <RowView style={{ justifyContent: "flex-end" }}>
-                <View testID="draw-panel-close"><IconButton icon="close" label={t("mod.gutters.attr.close")} onPress={() => setSelected(null)} /></View>
-              </RowView>
               <AttrBody>{attrs}</AttrBody>
+              <WinButtons onClose={() => void closePanel()} onSave={() => { saveWin(); setSelected(null); }} />
             </>
           ) : (
             <View style={{ flex: 1, gap: space[4] }}>
@@ -1556,7 +1639,13 @@ function DrawCanvas() {
           )}
         </View>
       ) : null}
-      <Sheet visible={!wide && sheet && !!attrs && !newSheet} onClose={() => setSheet(false)}>
+      <Sheet
+        visible={!wide && sheet && !!attrs && !newSheet}
+        onClose={() => { discardWin(); setSheet(false); }}
+        dirty={winEdited}
+        onSave={() => { saveWin(); setSheet(false); }}
+        footer={<WinButtons onClose={() => { discardWin(); setSheet(false); }} onSave={() => { saveWin(); setSheet(false); }} />}
+      >
         <AttrBody inSheet>{attrs}</AttrBody>
       </Sheet>
       <Sheet visible={!wide && !!newSheet} onClose={() => setNewSheet(null)} title={newSheet ? newTitle : undefined}>
@@ -1627,6 +1716,7 @@ function DrawCanvas() {
       <Sheet visible={!wide && photoSheet && !!mPhotos} onClose={() => setPhotoSheet(false)}>
         {mPhotos}
       </Sheet>
+      {winAsk}
     </View>
   );
 }
