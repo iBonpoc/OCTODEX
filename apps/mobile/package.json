@@ -4,6 +4,7 @@
   "main": "expo-router/entry",
   "dependencies": {
     "@expo-google-fonts/jost": "^0.4.2",
+    "@expo-google-fonts/manrope": "^0.4.3",
     "@expo-google-fonts/onest": "^0.4.2",
     "@octo/design-tokens": "*",
     "@octo/estimating-engine": "*",
@@ -61,7 +62,8 @@
     "preview:web": "expo export --platform web && python3 scripts/prepare-web-preview.py dist ../../.preview-web",
     "test": "vitest run",
     "publish:expo-go": "npx eas-cli@latest update --channel preview --non-interactive --message",
-    "e2e": "node e2e/run.cjs"
+    "e2e": "node e2e/run.cjs",
+    "check:visual": "node e2e/visual/visual.cjs"
   },
   "private": true
 }

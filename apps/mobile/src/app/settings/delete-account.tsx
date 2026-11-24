@@ -6,6 +6,7 @@ import { useStore } from "@/data/store";
 import { useAuth } from "@/cloud/auth";
 import { useI18n } from "@/i18n";
 import { Button, StatusChip, TextField, Toggle } from "@/ui/controls";
+import { ButtonPair } from "@/ui/pairs";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, FieldGroup, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
@@ -241,8 +242,7 @@ export default function DeleteAccount() {
         ) : transfer?.to ? (
           <View testID="acct-transfer-sure" style={{ gap: space[2] }}>
             <T v="body">{t("acct.co.transferSure", { name: transfer.co.name, person: transfer.to.name })}</T>
-            <Button label={t("acct.co.transferYes")} icon="user" variant="danger" full disabled={busy} onPress={doTransfer} />
-            <Button label={t("common.cancel")} variant="ghost" full onPress={() => setTransfer(null)} />
+            <ButtonPair main={{ label: t("acct.co.transferYes"), icon: "user", variant: "danger", disabled: busy, onPress: doTransfer }} second={{ label: t("common.cancel"), variant: "ghost", onPress: () => setTransfer(null) }} />
           </View>
         ) : null}
       </Sheet>
@@ -256,8 +256,7 @@ export default function DeleteAccount() {
               <T v="body" style={{ flex: 1 }}>{t(c.others ? "acct.sure.closes" : "acct.sure.closesAlone", { name: c.name, n: c.others })}</T>
             </RowView>
           ))}
-          <Button label={t("acct.sure.yes")} icon="trash" variant="danger" full disabled={busy} onPress={doDelete} />
-          <Button label={t("common.cancel")} variant="ghost" full onPress={() => setSure(false)} />
+          <ButtonPair main={{ label: t("acct.sure.yes"), icon: "trash", variant: "danger", disabled: busy, onPress: doDelete }} second={{ label: t("common.cancel"), variant: "ghost", onPress: () => setSure(false) }} />
         </View>
       </Sheet>
     </Screen>

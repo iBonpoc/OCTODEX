@@ -7,22 +7,18 @@ import { useState } from "react";
 import { Modal, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-// one file per weight: the package root would bring all 18 weights into the bundle (≈1.1 MB); we need three
-import { useFonts } from "expo-font";
-import { Jost_300Light } from "@expo-google-fonts/jost/300Light";
-import { Jost_400Regular } from "@expo-google-fonts/jost/400Regular";
-import { Jost_500Medium } from "@expo-google-fonts/jost/500Medium";
 import { useI18n } from "@/i18n";
 import { Button } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { ALL_ORIENTATIONS } from "@/ui/overlays";
 import { Card } from "@/ui/surfaces";
+import { useGrFonts } from "./fonts";
 import { GraphiteScreen } from "./GraphiteScreen";
 import { GraphiteProvider } from "./theme";
 
 export function GraphiteSection() {
   const { t } = useI18n();
-  const [loaded] = useFonts({ Jost_300Light, Jost_400Regular, Jost_500Medium });
+  const loaded = useGrFonts();
   const [open, setOpen] = useState(false);
   return (
     <View testID="showcase-graphite" style={{ flex: 1 }}>

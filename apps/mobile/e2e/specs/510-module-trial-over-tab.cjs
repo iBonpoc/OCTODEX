@@ -29,12 +29,13 @@ exports.run = async (h) => {
   // switched on once, then the stored row is made the founder's: the trial ran out a week ago, no payment
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await status(/^Пробный/);
-  await p.waitForFunction((k) => !!(JSON.parse(localStorage.getItem(k) || "null") || {}).db?.company?.modules?.gutters?.trialEndsAt, KEY, { timeout: 8000 });
+  await status(/^Без срока/);
+  await p.waitForFunction((k) => !!(JSON.parse(localStorage.getItem(k) || "null") || {}).db?.company?.modules?.gutters?.enabled, KEY, { timeout: 8000 });
   await h.seed("e2e.510.left", 1); // off the app: it has written its own copy as it left
   const raw = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)), KEY);
   const g = raw.db.company.modules.gutters;
   g.trialEndsAt = new Date(Date.now() - 7 * 86_400_000).toISOString();
+  g.unlimited = false; // #2410: a row with a term, as the founder's cloud phone had it (the demo has none of its own)
   delete g.paidUntil;
   await h.seed(KEY, raw);
   await h.go("/today");

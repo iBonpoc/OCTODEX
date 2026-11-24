@@ -85,6 +85,8 @@ exports.run = async (h) => {
 
   // on site: the same Terms above «Client signs on site»
   await h.go("/estimate/e6");
+  // (v2 #2350: the on-site signature is the section «Подпись на месте» of the estimate — a tab under the header)
+  await tid("estimate-screen-sections-sign").click();
   await tid("onsite-sign").waitFor({ timeout: 8000 });
   h.expect((await tid("estimate-terms").innerText()).includes(OWN), "on site: the client sees the Terms");
   h.expect(await before("estimate-terms", "onsite-sign"), "on site: Terms stand above the signature");

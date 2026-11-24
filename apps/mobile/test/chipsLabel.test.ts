@@ -39,7 +39,7 @@ export function chipTags(src: string): { tag: string; line: number }[] {
 }
 
 /** how many <ChoiceChips> are still the old chips (no `label`). Lower it as screens move over; never raise it. */
-const LEGACY_MAX = 50; // 72 → 59: spec 56 wave 4 (client) took 8 old chips away; 59 → 56: wave 4б (/f/, «Местоположение»); 56 → 55: the catalog item type (§3а.4); 55 → 52: wave 5а (task sheet); 52 → 50: wave 5б (the visit day and start — DateField, SelectField)
+const LEGACY_MAX = 49; // 50 → 49 (21.11): `layout="strip"` is counted as one line, as `nowrap`; 72 → 59: spec 56 wave 4 (client) took 8 old chips away; 59 → 56: wave 4б (/f/, «Местоположение»); 56 → 55: the catalog item type (§3а.4); 55 → 52: wave 5а (task sheet); 52 → 50: wave 5б (the visit day and start — DateField, SelectField)
 
 describe("ChoiceChips name their field (#1095)", () => {
   const legacy: string[] = [];
@@ -50,7 +50,8 @@ describe("ChoiceChips name their field (#1095)", () => {
       const t = tag.replace(/\blabel:/g, "");
       // `label={undefined}` and `label=""` are not a name: the chips stay the old ones (ChoiceChips takes them as no label too)
       const named = /\blabel=/.test(t) && !/\blabel=\{\s*(undefined|null|"")\s*\}/.test(t) && !/\blabel=""/.test(t);
-      if (!named && !/\bnowrap\b/.test(t)) legacy.push(`${relative(ROOT, f)}:${line}`);
+      // `layout="strip"` (prototype v2) is the one sideways line too — ChoiceChips draws it as `nowrap` in its own ScrollView
+      if (!named && !/\bnowrap\b|\blayout="strip"/.test(t)) legacy.push(`${relative(ROOT, f)}:${line}`);
     }
   }
   it("the old chips (no label, not in a horizontal scroll) do not grow", () => {
@@ -62,9 +63,9 @@ describe("ChoiceChips name their field (#1095)", () => {
     expect(/\blabel=""/.test(sample('<ChoiceChips label="" items={x} />'))).toBe(true);
   });
   it("the parser sees the chips (guards the guard)", () => {
-    // 80 → 75: the accuracy choice left the canvas and the card (#768, #1764); 75 → 70: spec 56 wave 4 (client) took 8 away; 70 → 67: wave 4б took 3; 67 → 61: wave 5а took 5 (job/new 2, task sheet 3); 61 → 58: wave 5б (the visit day and start);
+    // 80 → 75: the accuracy choice left the canvas and the card (#768, #1764); 75 → 70: spec 56 wave 4 (client) took 8 away; 70 → 67: wave 4б took 3; 67 → 61: wave 5а took 5 (job/new 2, task sheet 3); 61 → 58: wave 5б (the visit day and start); 58 → 54: Gutters windows G1 (#2412) took 4 (the attribute panel picks through SelectField);
     // the parser still sees every chip
-    expect(all).toBeGreaterThan(58);
+    expect(all).toBeGreaterThan(54);
     expect(all - legacy.length).toBeGreaterThanOrEqual(5);
   });
 });

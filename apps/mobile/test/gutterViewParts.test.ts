@@ -168,7 +168,7 @@ describe("#1766 #1800 «Водостоки»: what the estimate counts, by kind"
     const rules = resolveGutterRules();
     const spec = measureSpec(d, parts);
     expect(spec.ds.every((x) => x.lengthIn === rules.storyHeightIn + rules.dsExtensionIn)).toBe(true);
-    expect(spec.ds[3]).toMatchObject({ shape: "round", dsStyle: "corrugated", offsets: [{ lengthIn: 2, qty: 1 }], bottom: "extension" });
+    expect(spec.ds[3]).toMatchObject({ shape: "round", dsStyle: "corrugated", offsets: [{ lengthIn: 2, qty: 1 }], bottom: "none" }); // G2: a new downspout has nothing at the bottom
     // #1800: the downspouts by kind — the total length, how many, the elbows summed
     const totals = dsTotals(spec.ds);
     expect(totals.map((x) => x.ns)).toEqual([[1, 2, 3], [4]]);

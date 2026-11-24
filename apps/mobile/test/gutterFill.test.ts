@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 const read = (rel: string) => readFileSync(join(__dirname, "..", "src", "modules", "gutters", rel), "utf8");
 
 describe("the module's chosen options use «Заливка»", () => {
-  for (const f of ["draw/AttrPanel.tsx", "settings/SettingsScreen.tsx"]) {
+  for (const f of ["settings/SettingsScreen.tsx"]) {
     it(`${f}: fillStyle, no ink frame (selectedBorder) and no «✓ » text`, () => {
       const s = read(f);
       expect(s).toMatch(/fillStyle\(c\)/);
@@ -17,8 +17,11 @@ describe("the module's chosen options use «Заливка»", () => {
       expect(s).not.toMatch(/"✓ "/);
     });
   }
-  it("the attribute panel's options (rows) carry the check in the corner", () => {
-    expect(read("draw/AttrPanel.tsx")).toMatch(/<SelectedCheck/);
+  // #2412 G1: the attribute panel has no options of its own any more — every value is a SelectField (DS §9б: ⌄ a menu, › a list)
+  it("the attribute panel picks every value through SelectField: no chips, no tiles of its own", () => {
+    const s = read("draw/AttrPanel.tsx");
+    expect(s).toMatch(/<SelectField/);
+    expect(s).not.toMatch(/ChoiceChips|<SelectedCheck|fillStyle|selectedBorder/);
   });
   it("the settings' checkbox chips carry `check` before the word", () => {
     expect(read("settings/SettingsScreen.tsx")).toMatch(/Icon name="check"/);

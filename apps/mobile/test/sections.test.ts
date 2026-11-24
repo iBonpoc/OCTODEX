@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { Role } from "../src/data/types";
 import { canOpen, roleHome, routeKey } from "../src/nav/roles";
 import { moreHref } from "../src/nav/sections";
-import { SECTIONS, meIsSub, menuGroups, sectionHref, sectionOfHref, tabs } from "../src/nav/sections";
+import { SECTIONS, TAB_ORDER, meIsSub, menuGroups, sectionHref, sectionOfHref, tabOf, tabs } from "../src/nav/sections";
 
 const ROLES: Role[] = ["director", "dispatcher", "sales", "tech"];
 const APP = path.join(__dirname, "../src/app");
@@ -14,9 +14,28 @@ const files = new Set(
 );
 const menu = (r: Role) => menuGroups(r).flatMap((g) => g.items.map((i) => i.id));
 
-describe("bottom tabs: the same 5 for every role (13 v2 §2.1, variant Б)", () => {
-  it("Главная · План · Сообщения · Клиенты · Ещё", () => {
-    for (const r of ROLES) expect(tabs(r).map((s) => s.id), r).toEqual(["home", "plan", "messages", "clients", "more"]);
+describe("bottom tabs: the same 5 for the office (13 v2 §2.1, variant Б); the tech — his own 4 (audit 12 §2.6)", () => {
+  it("Главная · План · Клиенты · Деньги · Лиды (prototype v2); search is not a tab, «Ещё» is the avatar", () => {
+    for (const r of ROLES.filter((x) => x !== "tech")) expect(tabs(r).map((s) => s.id), r).toEqual(["home", "plan", "clients", "finance", "leads"]);
+    expect(TAB_ORDER).toEqual(["home", "plan", "clients", "finance", "leads"]);
+    expect(SECTIONS.some((s) => (s.id as string) === "search")).toBe(false);
+    for (const r of ROLES) expect(tabs(r).map((s) => s.id)).not.toContain("more");
+  });
+  it("the tech: no «Деньги» (the company's money is not his — his estimates are a tile of «Ещё»): Мой день · План · Клиенты · Лиды", () => {
+    expect(tabs("tech").map((s) => s.id)).toEqual(["home", "plan", "clients", "leads"]);
+    expect(tabOf("estimates", "tech")).toBeUndefined();
+  });
+  it("a subcontractor never gets leads (noSub): 3 tabs", () => {
+    expect(tabs("tech", false, true).map((s) => s.id)).toEqual(["home", "plan", "clients"]);
+    expect(tabs("tech", true, true).map((s) => s.id)).toEqual(["home", "clients"]);
+  });
+  it("the lit tab: the money lists light «Деньги», a lead «Лиды», a section of «Ещё» none", () => {
+    for (const id of ["estimates", "invoices", "payments", "money", "finance"] as const) expect(tabOf(id, "director"), id).toBe("finance");
+    expect(tabOf("leads", "director")).toBe("leads");
+    expect(tabOf("leads", "tech", false, true)).toBeUndefined();
+    for (const id of ["jobs", "catalog", "settings", "messages", undefined] as const) expect(tabOf(id, "director"), String(id)).toBeUndefined();
+    expect(tabOf("plan", "director")).toBe("plan");
+    expect(tabOf("plan", "director", true)).toBeUndefined();
   });
   it("no «Продажи» and no «Звонки» tab (until the own number)", () => {
     for (const r of ROLES) expect(tabs(r).map((s) => s.id)).not.toContain("calls");
@@ -29,7 +48,7 @@ describe("bottom tabs: the same 5 for every role (13 v2 §2.1, variant Б)", () 
 
 describe("a module's tab takes the place of «План» (founder 16.11, #1487; DS §5.3)", () => {
   it("with a module's tab: four core tabs — «План» is not one; the bar stays at five with the module's", () => {
-    for (const r of ROLES) expect(tabs(r, true).map((s) => s.id), r).toEqual(["home", "messages", "clients", "more"]);
+    for (const r of ROLES) expect(tabs(r, true).map((s) => s.id), r).toEqual(r === "tech" ? ["home", "clients", "leads"] : ["home", "clients", "finance", "leads"]);
   });
   it("«План» is a tile in «Ещё» then, and only then; the side menu (820/1280) has it either way", () => {
     for (const r of ROLES) {
@@ -50,7 +69,7 @@ describe("a module's tab takes the place of «План» (founder 16.11, #1487; 
 
 describe("«Ещё» (phone) and the side menu (820/1280) by rights (13 §2.3, §4)", () => {
   it("owner/admin «Ещё»: everything but the tabs", () => {
-    expect(menu("director")).toEqual(["leads", "jobs", "calls", "tasks", "estimates", "invoices", "catalog", "suppliers", "purchase-orders", "payments", "reports", "money", "team", "company", "settings", "help"]);
+    expect(menu("director")).toEqual(["messages", "jobs", "calls", "tasks", "estimates", "invoices", "catalog", "suppliers", "purchase-orders", "payments", "reports", "money", "team", "company", "settings", "help"]);
   });
   it("the side menu: the tabs too, but never «Ещё» itself", () => {
     const side = menuGroups("director", true).flatMap((g) => g.items.map((i) => i.id));
@@ -71,11 +90,13 @@ describe("«Ещё» (phone) and the side menu (820/1280) by rights (13 §2.3, �
     const m = menu("sales");
     for (const id of ["money", "payments", "reports", "team", "company", "suppliers", "purchase-orders"]) expect(m, id).not.toContain(id);
     expect(m).toContain("invoices");
-    expect(m).toContain("leads");
+    // Leads is a tab now, not a row of «Ещё»; the side menu has it
+    expect(m).not.toContain("leads");
+    expect(menuGroups("sales", true).flatMap((g) => g.items.map((i) => i.id))).toContain("leads");
   });
-  it("tech: his own Leads (13 §2.3); no Invoices, Money, Team, Company settings; his estimates on /estimates", () => {
+  it("tech: his own Leads (13 §2.3, a tab); no Invoices, Money, Team, Company settings; his estimates on /estimates", () => {
     const m = menu("tech");
-    expect(m).toContain("leads");
+    expect(tabs("tech").map((s) => s.id)).toContain("leads");
     expect(sectionHref("leads", "tech")).toBe("/leads?tab=leads");
     for (const id of ["invoices", "payments", "reports", "money", "team", "company", "suppliers", "purchase-orders"]) expect(m, id).not.toContain(id);
     expect(m).toContain("estimates");
@@ -102,8 +123,9 @@ describe("«Ещё» (phone) and the side menu (820/1280) by rights (13 §2.3, �
     expect(SECTIONS.find((s) => s.id === "money")!.label).toBe("nav.expenses");
     expect(sectionOfHref("/reports")).toBe("reports");
   });
-  it("«Ещё» has no «Верх» group (Главная and Сообщения are tabs); the side menu starts with Главная · Сообщения", () => {
-    expect(menuGroups("director")[0]!.group).toBe("work");
+  it("«Ещё» starts with «Верх» (Сообщения — not a tab); the side menu starts with Главная · Сообщения", () => {
+    expect(menuGroups("director")[0]!.group).toBe("top");
+    expect(menuGroups("director")[0]!.items.map((s) => s.id)).toEqual(["messages"]);
     expect(menuGroups("director", true)[0]!.items.map((s) => s.id)).toEqual(["home", "messages"]);
   });
   it("every item a role is shown, it may open (the route guard agrees)", () => {

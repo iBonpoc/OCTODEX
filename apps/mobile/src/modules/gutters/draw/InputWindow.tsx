@@ -12,8 +12,10 @@ import { ALL_ORIENTATIONS, Glass, Scrim, Sheet } from "@/ui/overlays";
  * pinned near the top (space[6] below the safe area), narrower than the screen — and the keyboard never moves it: laid out from the top
  * of the window, with no keyboard avoidance (a sheet sitting on the keyboard jumped with it, founder 11.11). From 820 it
  * is the ordinary centred sheet window (Б1). A tap outside = «Отменить» (`onClose`).
+ * `scroll={false}`: the body scrolls itself and keeps its buttons out of the scroll (QuickLength) — with a keyboard on a short
+ * phone (375×667) the window's room is smaller than its body, and the buttons must stay in view, not scroll away under it.
  */
-export function InputWindow({ visible, onClose, children, testID = "input-window" }: { visible: boolean; onClose: () => void; children: ReactNode; testID?: string }) {
+export function InputWindow({ visible, onClose, children, scroll = true, testID = "input-window" }: { visible: boolean; onClose: () => void; children: ReactNode; scroll?: boolean; testID?: string }) {
   const { wide } = useDevice();
   const reduce = useReducedMotion();
   const { width: winW, height: winH } = useWindowDimensions();
@@ -44,9 +46,13 @@ export function InputWindow({ visible, onClose, children, testID = "input-window
             accessibilityViewIsModal
           >
             <Glass strong testID={testID} style={{ borderRadius: component.sheetRadius, padding: space[4], maxHeight: Math.max(winH - insets.top - space[6] - kb - space[4], 0) }}>
-              <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: space[3] }} showsVerticalScrollIndicator={false}>
-                {children}
-              </ScrollView>
+              {scroll ? (
+                <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: space[3] }} showsVerticalScrollIndicator={false}>
+                  {children}
+                </ScrollView>
+              ) : (
+                children
+              )}
             </Glass>
           </Animated.View>
         </View>

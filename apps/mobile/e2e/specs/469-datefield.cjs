@@ -3,11 +3,13 @@
  * spec is also run at 11:50 PM and 12:10 AM there (E2E_NOW=2026-11-16T07:50:00Z / 08:10:00Z, the lead's condition):
  * - showcase «Поля»: the row «Дата · Завтра, …»; a tap opens «Сегодня · Завтра» and the calendar under it; «Сегодня» — one tap;
  *   a calendar day; days before the company's today are not picked; «Без даты» in an optional one;
- * - the visit form (`/job/schedule`): no day or time chips; «Завтра» from the DateField and a slot of «Начало ⌄» are saved
- *   as that company day and minute; the cancel reasons are rows with a check (radio), no «✓ » in the text.
+ * - the visit form (`/job/schedule`): no day or time chips (#2208: the one row of quick choices is the free windows `vf-windows`;
+ *   the form's DateField has no «Сегодня · Завтра» of its own); a calendar day of the DateField and a slot of «Начало ⌄» are
+ *   saved as that company day and minute; the cancel reasons are rows with a check (radio), no «✓ » in the text.
  */
-const { todayKey, addDays, dayKey, minuteOf } = require("../companyTime.cjs");
+const { todayKey, addDays, dayKey, minuteOf, weekday } = require("../companyTime.cjs");
 const { pressEscUntilClosed } = require("../sheet.cjs");
+const { visitAct } = require("../visitScreen.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -79,15 +81,30 @@ exports.run = async (h) => {
   await tid("showcase-due-none").click();
   h.expect(/Без даты/.test(await tid("showcase-due-row-button").innerText()), "С5 «Без даты» empties it");
 
-  // — the visit form: «Завтра» and a free slot are saved as the company's day and minute
+  // — the visit form: «Завтра» and a free slot are saved as the company's day and minute.
+  // The company works every day here: by default Sunday is a day off (no slots, no «Начало ⌄»), and on a Saturday «Завтра»
+  // was a Sunday — the spec went red every Saturday (21.11.2026, #2356). This spec checks the date field, not the hours.
+  {
+    const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));
+    const open = [480, 1080];
+    raw.db.company.businessHours = { sun: open, mon: open, tue: open, wed: open, thu: open, fri: open, sat: open };
+    await h.seed("octo.db.v5", raw);
+  }
   await h.go("/job/schedule?jobId=j1");
   await tid("vf-date-row-button").waitFor({ timeout: 8000 });
-  const old = await p.locator('[role="radiogroup"]').locator("visible=true").count();
-  h.expect(old === 0, `С6 no day or time chips in the visit form (${old})`);
+  const old = await p.evaluate(() => [...document.querySelectorAll('[role="radiogroup"]')].filter((e) => e.offsetParent !== null && !e.closest('[data-testid="vf-windows"]')).length);
+  h.expect(old === 0, `С6 no day or time chips in the visit form, but the free windows (${old})`);
+  // the company's next working day (the demo's Sunday is off: no free slot that day) — its day of the calendar
+  let ahead = 1;
+  while (weekday(addDays(today, ahead)) === 0) ahead++;
+  const target = addDays(today, ahead);
   await tid("vf-date-row-button").click();
-  await tid("vf-date-tomorrow").click();
+  await tid("vf-date-panel").waitFor({ timeout: 4000 });
+  h.expect((await p.getByTestId("vf-date-tomorrow").locator("visible=true").count()) === 0, "С6 no «Сегодня · Завтра» chips in the form's calendar");
+  for (let i = 0; i < 2 && (await p.getByTestId(`vf-date-day-${target}`).locator("visible=true").count()) === 0; i++) await tid("vf-date-day-next").click();
+  await tid(`vf-date-day-${target}`).click();
   await tid("vf-date-panel").waitFor({ state: "hidden", timeout: 4000 });
-  h.expect(/Завтра/.test(await tid("vf-date-row-button").innerText()), "С7 the visit day: «Завтра»");
+  if (ahead === 1) h.expect(/Завтра/.test(await tid("vf-date-row-button").innerText()), "С7 the visit day: «Завтра»");
   // «Начало ⌄»: the menu of free slots; the second one
   await tid("vf-start-button").click();
   await tid("menu-items").waitFor({ timeout: 4000 });
@@ -101,7 +118,7 @@ exports.run = async (h) => {
   await p.getByRole("button", { name: "Запланировать", exact: true }).last().click();
   await p.waitForFunction(([n]) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.visits || []).length > n, [before.length], { timeout: 8000 });
   const made = (await h.db()).visits.find((v) => !before.includes(v.id));
-  h.expect(dayKey(made.start) === tomorrow, `С7 saved on the company's tomorrow (${dayKey(made.start)} / ${tomorrow})`);
+  h.expect(dayKey(made.start) === target, `С7 saved on the company's day picked (${dayKey(made.start)} / ${target})`);
   h.expect(minuteOf(made.start) === minute, `С7 saved at the slot's minute (${minuteOf(made.start)} / ${minute})`);
   await p.locator('[aria-modal="true"]').last().getByRole("button", { name: "Не сейчас" }).click();
 
@@ -119,7 +136,8 @@ exports.run = async (h) => {
 
   // — the cancel reasons: rows with a check (radio), the text without «✓ »
   await h.go(`/visit/${made.id}`);
-  await p.getByRole("button", { name: "Отменить выезд", exact: true }).first().click();
+  // v2: «Отменить выезд» is the red item of the header's «⋯»
+  await visitAct(p, "visit-act-cancel");
   await tid("vc-reason").waitFor({ timeout: 5000 });
   const sheet = h.sheet();
   h.expect((await sheet.getByRole("radio").count()) >= 4, "С8 the reasons are radio rows");

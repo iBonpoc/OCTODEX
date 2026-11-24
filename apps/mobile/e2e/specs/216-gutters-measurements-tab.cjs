@@ -22,12 +22,13 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
+  await tid("module-gutters-status").filter({ hasText: /^Без срока/ }).waitFor({ timeout: 5000 });
   await h.go("/today");
   await waitFor(async () => (await item().count()) === 1, "on: «Замеры» is there");
   if (!wide) {
+    // v2 (#2350, TAB_ORDER): Главная · План · Клиенты · Деньги · Лиды — «Замеры» in the place of «План»
     const ids = await tid("tab-bar").locator('[data-testid^="tab-"]').evaluateAll((xs) => xs.map((x) => x.getAttribute("data-testid")));
-    h.expect(JSON.stringify(ids) === JSON.stringify(["tab-home", "tab-module-gutters-list", "tab-messages", "tab-clients", "tab-more"]), `five tabs, «Замеры» in the place of «План» (${ids.join(", ")})`);
+    h.expect(JSON.stringify(ids) === JSON.stringify(["tab-home", "tab-module-gutters-list", "tab-clients", "tab-finance", "tab-leads"]), `five tabs, «Замеры» in the place of «План» (${ids.join(", ")})`);
   }
   // five tabs at 390: no name cut short, in RU, EN, ES (#1487: one word «Сообщения» under the tab and in the menu)
   if (!wide) {

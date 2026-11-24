@@ -10,15 +10,17 @@ import { component, font } from "@octo/design-tokens";
 const src = (f: string) => readFileSync(join(__dirname, "..", "src", f), "utf8");
 
 describe("type scale (DS §4.1)", () => {
-  it("28 / 22 / 17 / 15 / 15 / 13 / 11, the field text 17", () => {
-    expect(font.size).toEqual({ display: 28, title: 22, heading: 17, body: 15, button: 15, caption: 13, micro: 11, input: 17 });
+  // visual v2 «Шрифт» (docs/design/visual-v2.html, founder 21.11): the title 30, a tile's figure 26 / 18, the caption 12, the field 16
+  it("30 / 22 / 17 / 15 / 15 / 13 / 12, figures 26 and 18, the field text 16", () => {
+    expect(font.size).toEqual({ display: 30, title: 22, heading: 17, body: 15, button: 15, caption: 13, micro: 12, input: 16, figure: 26, figureSm: 18 });
   });
   it("nothing is smaller than the minimum text size; a field's text is not smaller than 16 (iOS zooms the page on focus)", () => {
     expect(Math.min(...Object.values(font.size))).toBeGreaterThanOrEqual(font.minSize);
     expect(font.size.input).toBeGreaterThanOrEqual(16);
   });
-  it("button heights do not change (rule 3)", () => {
-    expect([component.button.sm, component.button.md, component.button.phone, component.button.hit]).toEqual([28, 32, 36, 44]);
+  // founder 21.11 (#2350): the phone's capsule is 40 (v2 «Кнопки»), the zone stays 44
+  it("button heights (rule 3 as of 21.11: the phone 40, the zone 44)", () => {
+    expect([component.button.sm, component.button.md, component.button.phone, component.button.hit]).toEqual([32, 36, 40, 44]);
   });
   it("a field's text is the input token, not body + 2", () => {
     expect(src("ui/controls.tsx")).not.toMatch(/font\.size\.body \+ 2/);

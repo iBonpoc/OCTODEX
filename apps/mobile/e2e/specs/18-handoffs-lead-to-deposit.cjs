@@ -7,7 +7,7 @@
 /** S8b (docs/specs/07 §2.2 А, founder 05.11): an employee signs the contract for the company on the estimate screen. */
 async function countersign(h, estimateId) {
   await h.go(`/estimate/${estimateId}`);
-  const pad = h.page.getByLabel(/расписывается|signs here/i).last();
+  const pad = await require("../estimateMenu.cjs").countersignPad(h.page);
   await pad.scrollIntoViewIfNeeded(); await h.page.waitForTimeout(250);
   const bb = await pad.boundingBox();
   await h.page.mouse.move(bb.x + 30, bb.y + 90); await h.page.mouse.down();
@@ -29,8 +29,8 @@ exports.run = async (h) => {
   await require("../estimateLine.cjs").addCustom(h, "Replace water heater", "1850");
 
   // S6: sent (the link goes to the client when it is copied / shared)
-  await h.page.getByRole("button", { name: "Сохранить и отправить" }).click(); await h.page.waitForTimeout(700);
-  await h.page.getByRole("button", { name: "Копировать ссылку" }).click(); await h.page.waitForTimeout(400);
+  await require("../estimateLine.cjs").saveSend(h); await h.page.waitForTimeout(700);
+  await h.page.getByTestId("send-copy").getByRole("button").first().click(); await h.page.waitForTimeout(400);
   db = await h.db();
   const lead = db.leads.find((l) => l.id === lead0.id);
   const cust = db.customers.find((c) => c.id === lead.customerId);

@@ -18,7 +18,7 @@ import { useStore } from "@/data/store";
 import type { CatalogItem } from "@/data/types";
 import { catalogUnitPrice } from "@/features/estimateDoc";
 import { useI18n, type DictKey } from "@/i18n";
-import { moduleState } from "@/modules/registry";
+import { moduleState, moduleUsable } from "@/modules/registry";
 import { useDevice } from "@/theme/ThemeProvider";
 import { Banner } from "@/ui/banner";
 import { Button } from "@/ui/controls";
@@ -44,7 +44,7 @@ export default function GutterPricesScreen() {
   const cm = store.db.company?.modules?.gutters;
   const raw = cm?.settings;
   const access = moduleState(cm).access;
-  const active = access === "trial" || access === "paid";
+  const active = moduleUsable(access);
   // the price list's writers (catalog_items: app.is_staff — owner, admin, office, sales; the core's /catalog: all but a tech)
   const staff = store.role !== "tech";
   const ro = !staff || !active;

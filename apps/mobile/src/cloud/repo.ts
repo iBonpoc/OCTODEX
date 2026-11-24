@@ -6,7 +6,7 @@ import { estimateSavedAt } from "@/features/estimateTax";
 import { normalizeDoc } from "@/features/estimateDoc";
 import { companyFromDb } from "./companyMap";
 import { checklistOf, isMissingTable, itemsByVisit, photoMinsFromDb, templateFromDb, visitSettingsFromDb } from "./checklistMap";
-import { companyModulesFromRows, loadModuleData } from "@/modules/registry";
+import { companyModulesFromRows, loadModuleData, withoutTerm } from "@/modules/registry";
 import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, paymentMethodFromDb, paymentShown, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
 import { PROPERTY_KINDS, PUSH_GROUPS, type PushGroup, type PushPrefs, type CatalogItem, type DB, type Note, type Payment, type Advance, type PendingPayment, type Estimate, type EstimateDoc, type EstimateTemplate, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type MemberPrefs, type LocationState, type VisitPoint, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
@@ -795,7 +795,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     pendingPayments: pendingFromRows(payments),
     company: companyRows[0]
       ? {
-          ...companyFromDb(companyRows[0], (secrets[0]?.ein as string | null) ?? undefined, licenseRows, contactRows), modules: companyModules,
+          ...companyFromDb(companyRows[0], (secrets[0]?.ein as string | null) ?? undefined, licenseRows, contactRows),
+          // #2410: the developer's company — its modules without a term (as app.module_active reads the flag)
+          modules: companyRows[0].developer_account === true ? (withoutTerm(companyModules) ?? {}) : companyModules,
           visitSettings: visitSettingsFromDb(companyRows[0].visit_settings), checklistSince: (companyRows[0].checklist_since as string | null) ?? undefined,
         }
       : null,
