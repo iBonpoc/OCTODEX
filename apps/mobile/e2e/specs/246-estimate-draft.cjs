@@ -108,7 +108,7 @@ exports.run = async (h) => {
   await titleInput().fill("Сохранённая");
   await addCustomLine("Вывезти мусор", "150");
   await waitFor(async () => (await stored()).length === 1, "kept before the save");
-  await tid("ue-save").getByRole("button").click();
+  await tid("ue-save").click();
   await waitFor(async () => /\/estimate\/[^n/][^/]*$/.test(new URL(p.url()).pathname), "saved: the estimate opens");
   await waitFor(async () => (await stored()).length === 0, "saved: no draft on the phone");
   await h.go(NEW);

@@ -8,6 +8,7 @@
  * С4 ДАНО «Настройки компании»; ТОГДА у «Лицензии» и «Страховка» — «Необязательно», не «Нужно».
  */
 const KEY = "octo.db.v5";
+const { objCreate } = require("../objectScreen.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const tid = (id) => p.getByTestId(id).locator("visible=true").first();
@@ -43,7 +44,8 @@ exports.run = async (h) => {
 
   // С2: sending an estimate — no license warning
   await h.go(`/estimate/${draft.id}`);
-  await tid("est-send").getByRole("button").click();
+  // v2: «Отправить» is the estimate's main step — the MainStep button itself (`est-send`)
+  await tid("est-send").click();
   await p.locator('[aria-modal="true"]').last().waitFor({ timeout: 8000 });
   const sheet = await p.locator('[aria-modal="true"]').last().innerText();
   h.expect(!/CSLB|лиценз/i.test(sheet), "С2 no license warning when sending an estimate");
@@ -52,7 +54,8 @@ exports.run = async (h) => {
   // С3: a new property of a client starts in the company's state
   const cust = raw.db.customers[0];
   await h.go(`/client/${cust.id}`);
-  await p.getByRole("button", { name: /^(Новый объект|Добавить объект|Объект)$/ }).locator("visible=true").first().click();
+  // v2: a new property is an item of the client's «＋» (`client-screen-create` → `client-create-property`)
+  await objCreate(p, "client-screen", "client-create-property");
   const state = p.locator('[aria-modal="true"]').last().getByRole("textbox", { name: "Штат" }).first();
   await state.waitFor({ timeout: 8000 });
   h.expect((await state.inputValue()) === "TX", `С3 the state of a new property is the company's TX (${await state.inputValue()})`);

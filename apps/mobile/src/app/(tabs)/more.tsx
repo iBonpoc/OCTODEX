@@ -15,6 +15,7 @@ import { Avatar, StatusChip } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Card, Divider, Screen, SyncBadge } from "@/ui/surfaces";
 import { moduleTabs } from "@/modules/registry";
+import { VersionLine } from "@/features/version";
 
 /** the director's «Команда · Настройки компании» get their own group «Компания» (spec 25); sections.ts is not changed */
 const COMPANY: ReadonlySet<SectionId> = new Set<SectionId>(["team", "company"]);
@@ -144,6 +145,8 @@ export default function More() {
             </Card>
           </View>
         ))}
+        {/* the version line lives here, at the bottom of the avatar's menu (visual-v2 «Где строка версии и «Демо»», rule 11) */}
+        <VersionLine testID="more-version" />
       </View>
     </Screen>
   );

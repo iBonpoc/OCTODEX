@@ -23,7 +23,7 @@ const walk = (d: string) => {
 walk(ROOT);
 
 /** the «?» among a row's actions — only shrinks */
-const LEGACY_CORNER: Record<string, number> = { "ui/surfaces.tsx": 2 };
+const LEGACY_CORNER: Record<string, number> = { "ui/surfaces.tsx": 1 };
 
 /** a «?» whose next sibling (within 3 lines) is a slot of header actions */
 function cornerHelps(src: string): number {
@@ -58,5 +58,8 @@ describe("«?» — next to its words, with the way to where it is set (DS Б7)"
     const src = readFileSync(join(ROOT, "modules", "gutters", "view", "ViewScreen.tsx"), "utf8");
     const groupHelp = src.match(/<HelpButton[^>]*view-parts-\$\{g\.key\}-help[^>]*>/)?.[0] ?? "";
     expect(groupHelp).toMatch(/to=\{/);
+    // #2118: the parts' «?» leads where the parts are made and priced — «Цены и прайс»
+    const partsHelp = src.match(/<HelpButton[^>]*testID="view-parts-help"[^>]*>/)?.[0] ?? "";
+    expect(partsHelp).toMatch(/to=\{\{ href: "\/module\/gutters\/prices" \}\}/);
   });
 });

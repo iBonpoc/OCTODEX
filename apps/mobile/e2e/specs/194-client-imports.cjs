@@ -15,20 +15,22 @@ exports.run = async (h) => {
   };
   await h.go("/clients");
   const before = (await h.db()).customers.length;
+  // v2 (#2350): «⋯» of the list's header opens its menu; the items by testID (rule 19)
   const more = async () => {
-    await p.getByRole("button", { name: "Ещё действия" }).first().click();
-    await h.sheet().waitFor();
+    await p.getByTestId("clients-more").locator("visible=true").first().getByRole("button").first().click();
+    await p.getByTestId("menu-items").locator("visible=true").first().waitFor();
   };
+  const item = (k) => p.getByTestId(`clients-more-${k}`).locator("visible=true").first().click();
   // nothing yet: the empty state (in-app navigation keeps the demo's memory of imports)
   await more();
-  await h.sheet().getByRole("button", { name: "Импорты" }).click();
+  await item("imports");
   await p.getByText("Импортов ещё не было").first().waitFor({ timeout: 5000 });
   h.expect(/\/client\/imports$/.test(p.url()), `«…» → «Импорты» (${p.url()})`);
   await p.getByTestId(h.layout.width > 390 ? "side-clients" : "tab-clients").locator("visible=true").first().click();
-  await p.getByRole("button", { name: "Ещё действия" }).first().waitFor();
+  await p.getByTestId("clients-more").locator("visible=true").first().waitFor();
 
   await more();
-  await h.sheet().getByRole("button", { name: "Импорт из CSV" }).click();
+  await item("import");
   const chooser = p.waitForEvent("filechooser");
   await p.getByRole("button", { name: "Выбрать файл CSV" }).click();
   await (await chooser).setFiles({ name: "zed.csv", mimeType: "text/csv", buffer: Buffer.from(CSV, "utf8") });
@@ -40,7 +42,7 @@ exports.run = async (h) => {
   await p.waitForTimeout(400);
 
   await more();
-  await h.sheet().getByRole("button", { name: "Импорты" }).click();
+  await item("imports");
   const card = p.locator('[data-testid^="import-job-"]').locator("visible=true").first();
   await card.waitFor({ timeout: 5000 });
   const text = await card.innerText();

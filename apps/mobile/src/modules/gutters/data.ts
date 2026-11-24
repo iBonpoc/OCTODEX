@@ -116,15 +116,22 @@ export function measureHref(to: MeasureDoors, g: GutterData, by: { leadId?: stri
 
 /**
  * «Замер желобов» on a client's card (spec 33 П24 А3, #697): the measurement is always an address's — one address →
- * straight to it; several → pick; none → the client's card says to add one first
+ * straight to it; several → pick; none → the client's card says to add one first. #2271: worked out from the addresses the
+ * card gives (`places`) at the press — no screen in between
  */
-export function clientStart(to: MeasureDoors, db: Pick<DB, "moduleData" | "leads" | "properties">, customerId: string) {
-  const g = gutterData(db);
-  const places = db.properties.filter((p) => p.customerId === customerId);
-  const go = (propertyId: string) => measureHref(to, g, { propertyId, leadIds: db.leads.filter((l) => l.propertyId === propertyId).map((l) => l.id) }).href;
+export function clientStartFor(to: MeasureDoors, g: GutterData, places: readonly { id: string; address: string; city?: string; leadIds: readonly string[] }[]) {
+  const go = (p: { id: string; leadIds: readonly string[] }) => measureHref(to, g, { propertyId: p.id, leadIds: p.leadIds }).href;
   if (!places.length) return { kind: "none" as const };
-  if (places.length === 1) return { kind: "go" as const, href: go(places[0]!.id) };
-  return { kind: "pick" as const, places: places.map((p) => ({ id: p.id, address: p.address, city: p.city, href: go(p.id) })) };
+  if (places.length === 1) return { kind: "go" as const, href: go(places[0]!) };
+  return { kind: "pick" as const, places: places.map((p) => ({ id: p.id, address: p.address, city: p.city, href: go(p) })) };
+}
+
+/** the same from the phone's data (the start screen of an old link) */
+export function clientStart(to: MeasureDoors, db: Pick<DB, "moduleData" | "leads" | "properties">, customerId: string) {
+  const places = db.properties
+    .filter((p) => p.customerId === customerId)
+    .map((p) => ({ id: p.id, address: p.address, city: p.city, leadIds: db.leads.filter((l) => l.propertyId === p.id).map((l) => l.id) }));
+  return clientStartFor(to, gutterData(db), places);
 }
 
 /** the measurement's own fields (what measurement.save writes) */

@@ -39,7 +39,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
+  await tid("module-gutters-status").filter({ hasText: /^Без срока/ }).waitFor({ timeout: 5000 });
   const d0 = await db();
   const lead = d0.leads.find((l) => !["won", "lost", "declined"].includes(l.status));
   const client = d0.customers.find((c) => d0.properties.filter((q) => q.customerId === c.id).length === 1);
@@ -93,18 +93,20 @@ exports.run = async (h) => {
   await waitFor(async () => { const m = await mOf(m2); return !!m && !m.leadId && !m.propertyId; }, "unlinked: a draft");
   await waitFor(async () => (await tid("draw-to-lead").count()) === 1, "«Привязать» again");
   // its toast stands above what lies at the bottom of the canvas — the toolbar and the chips (#1819: it lay on the toolbar)
-  await tid("toast-text").waitFor({ timeout: 5000 });
+  // (v2 #2211: a stack of up to three toasts, the newest on top — every one of them stands above; the lowest is checked)
+  await tid("toast-text").first().waitFor({ timeout: 5000 });
   await p.waitForFunction(() => {
     const r = (id) => [...document.querySelectorAll(`[data-testid="${id}"]`)].find((e) => e.getClientRects().length)?.getBoundingClientRect();
-    const toast = r("toast-text"), bar = r("draw-toolbar"), chip = r("draw-summary");
+    const toast = [...document.querySelectorAll('[data-testid="toast-text"]')].filter((e) => e.getClientRects().length).map((e) => e.getBoundingClientRect()).sort((a, b) => b.bottom - a.bottom)[0];
+    const bar = r("draw-toolbar"), chip = r("draw-summary");
     if (!toast || !bar) return false;
     const pad = 4; // the toast's own pill is a little taller than its text
     return toast.bottom + pad <= bar.top && (!chip || toast.bottom + pad <= chip.top || toast.top >= chip.bottom || chip.right <= toast.left || chip.left >= toast.right);
-  }, null, { timeout: 3000 }).catch(async () => h.expect(false, `the toast is above the toolbar and the chips (toast ${JSON.stringify(await tid("toast-text").boundingBox())}, toolbar ${JSON.stringify(await tid("draw-toolbar").boundingBox())})`));
+  }, null, { timeout: 3000 }).catch(async () => h.expect(false, `the toast is above the toolbar and the chips (toast ${JSON.stringify(await tid("toast-text").last().boundingBox())}, toolbar ${JSON.stringify(await tid("draw-toolbar").boundingBox())})`));
   // from 820 the side panel of properties stands at the right: the toast (its «Отменить» at its right end) is left of it (#1895)
   if ((await tid("draw-panel").count()) > 0) {
     const panel = await tid("draw-panel").boundingBox();
-    const undo = await tid("toast-undo").boundingBox();
+    const undo = await tid("toast-undo").first().boundingBox();
     h.expect(!!undo && undo.x + undo.width <= panel.x - 4, `the toast is left of the panel of properties (undo ${JSON.stringify(undo)}, panel x ${panel.x})`);
   }
   await h.shot("toast-above-toolbar");
@@ -120,14 +122,14 @@ exports.run = async (h) => {
   // 820 light): «Отменить» is armed (aria-busy false: toastArmMs after it showed) and stands still where it is (the canvas
   // has left, two frames in a row the same place); then the store. Whether the toast can move under the finger on iPhone — #2134
   await p.waitForFunction(() => {
-    const b = [...document.querySelectorAll('[data-testid="toast-undo"]')].find((e) => e.getClientRects().length);
+    const b = [...document.querySelectorAll('[data-testid="toast"]')].find((e) => e.getClientRects().length && /Замер удалён/.test(e.textContent || ""))?.querySelector('[data-testid="toast-undo"]');
     return !!b && b.getAttribute("aria-busy") === "false" && !document.querySelector('[data-testid="draw-surface"]');
   }, null, { timeout: 5000 }).catch(async () => h.expect(false, `«Отменить» armed and the canvas gone (${await p.evaluate(() => JSON.stringify({ undo: [...document.querySelectorAll('[data-testid="toast-undo"]')].map((e) => [e.getAttribute("aria-busy"), e.getClientRects().length]), canvas: document.querySelectorAll('[data-testid="draw-surface"]').length }))})`));
   await p.waitForFunction(() => new Promise((ok) => {
-    const at = () => JSON.stringify([...document.querySelectorAll('[data-testid="toast-undo"]')].find((e) => e.getClientRects().length)?.getBoundingClientRect());
+    const at = () => JSON.stringify([...document.querySelectorAll('[data-testid="toast"]')].find((e) => e.getClientRects().length && /Замер удалён/.test(e.textContent || ""))?.querySelector('[data-testid="toast-undo"]')?.getBoundingClientRect());
     const a = at();
     requestAnimationFrame(() => requestAnimationFrame(() => ok(a === at())));
   }), null, { timeout: 5000 });
-  await tid("toast-undo").click();
+  await p.getByTestId("toast").filter({ hasText: "Замер удалён" }).locator("visible=true").first().getByTestId("toast-undo").click();
   await waitFor(async () => !!(await mOf(m2)), "«Отменить»: back");
 };

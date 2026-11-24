@@ -1,4 +1,5 @@
 import { lateAfterOf } from "@/features/scheduleSettings";
+import { StatusPill } from "@/ui/statusPill";
 import { visitDueCents } from "@/features/visitDue";
 import { View } from "react-native";
 import { router } from "expo-router";
@@ -42,7 +43,9 @@ export function VisitCard({ v, showTech }: { v: Visit; showTech?: boolean }) {
         <T v="caption" tone="mut" tabular>
           {visitWhen(v, time, t("plan5.allDay"))}
         </T>
-        <StatusChip status={st.status} label={t(st.label)} />
+        {/* #2363 N1/74 (founder 21.11: «бурая заливка — нет», значок + слово) and F10 (one word, «· не выехал» is told by the visit
+            screen): the board's card says the state as the phone's Plan does — the quiet StatusPill */}
+        <StatusPill status={st.status} label={st.label === "late.enRoute" || st.label === "late.notLeft" ? t("st.late") : t(st.label)} />
       </RowView>
       <T v="heading" numberOfLines={1}>
         {customer?.name}

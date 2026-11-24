@@ -1,66 +1,66 @@
 const { dueKey, todayKey } = require("../companyTime.cjs");
 /**
- * «Требует внимания» on the new list cards (step 10а, PR7), every view (3 widths × 2 themes).
- * - «Today»: one card per client with all their reasons (a lead without a client — its own card), debt only from overdue invoices;
- *   reason rows open their record; «More» opens «Triage»;
- * - «Triage»: the rest of the queue are cards that open their record (they did not before);
- * - a technician never gets «Сегодня» / «Требует внимания» (route guard → his visits, no reasons, no debts); no «…».
+ * «Требует внимания» (step 10а, PR7 → prototype v2 #2350 макет 1), every view (3 widths × 2 themes), by testID:
+ * - «Главная»: «Требует действия» is the 2 × 2 tiles; «Должны» (`tile-owed`) = what every owed invoice still owes, with the count
+ *   of the overdue ones (by the company's day) — and it opens exactly those debts (`/invoice?f=owed`); «Лиды без ответа» opens the leads;
+ *   «Все ›» (`home-attention-all`) opens «Разбор»;
+ * - «Разбор»: the rest of the queue are cards that open their record;
+ * - a technician never gets «Главная» of the office / «Разбор» (route guard → his visits, no tiles, no debts); no «…».
  */
+const whole = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+
 exports.run = async (h) => {
   const p = h.page;
+  const tid = (id) => p.getByTestId(id).locator("visible=true").first();
   await h.go("/today");
   const db = await h.db();
-  const cards = p.locator('[data-testid="list-card"]');
-  const people = cards.filter({ hasText: /Причин: \d+/ });
-  h.expect((await people.count()) >= 1 && (await people.count()) <= 3, `people cards on Today (${await people.count()})`);
-
-  // the client with an overdue invoice: one card, «Должен $X», the overdue reason inside
   const today = todayKey(); // overdue = due before the company's today (П4b)
-  const inv = db.invoices.find((i) => i.paidCents < i.totalCents && dueKey(i.dueDate) < today);
-  if (inv) {
-    const name = db.customers.find((c) => c.id === inv.customerId).name;
-    const c = people.filter({ hasText: name });
-    // optional: Today shows at most 3 people cards — the debtor's card is only there when he is among them (#800: said so
-    // here instead of a silent skip)
-    if (await c.count()) {
-      h.expect((await c.count()) === 1, `one card for ${name}`);
-      const txt = await c.first().innerText();
-      h.expect(/Должен/.test(txt) && /\$[\d,]+/.test(txt), `debt on the person card: ${txt.slice(0, 200)}`);
-    }
-  }
-  h.expect(!/…|\.\.\./.test(await p.locator("body").innerText()), "no «…» on Today");
+  await tid("today-tiles").waitFor({ timeout: 8000 });
+
+  // «Должны»: every balance, the overdue ones counted
+  const owes = (i) => Math.max(0, i.totalCents - i.paidCents);
+  const owed = db.invoices.filter((i) => owes(i) > 0);
+  const late = owed.filter((i) => dueKey(i.dueDate) < today);
+  const sum = owed.reduce((s, i) => s + owes(i), 0);
+  const tile = (await tid("tile-owed").innerText()).replace(/\n/g, " | ");
+  h.expect(tile.includes(whole.format(Math.round(sum / 100))), `«Должны» = ${whole.format(Math.round(sum / 100))}: ${tile}`);
+  if (late.length) h.expect(new RegExp(`${late.length} просроч`).test(tile), `«${late.length} просроч.» on the tile: ${tile}`);
+  h.expect(!/…|\.\.\./.test(await tid("today-attention").innerText()), "no «…» in «Требует действия»");
   await h.shot("today");
 
-  // a reason row opens its own record
-  const before = p.url();
-  const row = people.first().locator('[data-testid="list-card-reason"]').first();
-  await row.click();
-  await p.waitForTimeout(600);
-  h.expect(p.url() !== before, `a reason row opens its record (${p.url()})`);
+  // each tile opens exactly what it counts
+  await tid("tile-owed").click();
+  await p.waitForURL((u) => u.pathname === "/invoice" && u.searchParams.get("f") === "owed", { timeout: 5000 });
+  h.expect(true, `«Должны» opens the debts (${p.url()})`);
+  await h.go("/today");
+  await tid("tile-leads").click();
+  await p.waitForURL(/\/leads/, { timeout: 5000 });
+  h.expect(true, `«Лиды без ответа» opens the leads (${p.url()})`);
 
-  // «Triage»: the rest of the queue are cards that open their record
-  await h.go("/triage");
-  const rest = p.locator('[data-testid="list-card"]');
-  if ((await rest.count()) > 0) {
-    const u = p.url();
-    await rest.first().click({ position: { x: 20, y: 20 } });
-    await p.waitForTimeout(600);
-    h.expect(p.url() !== u, `a queue card opens its record (${p.url()})`);
-  }
+  // «Все ›» → «Разбор»: the rest of the queue are cards that open their record
+  await h.go("/today");
+  await tid("home-attention-all").click();
+  await p.waitForURL(/\/triage/, { timeout: 5000 });
+  const rest = p.locator('[data-testid="list-card"]').locator("visible=true");
+  await rest.first().waitFor({ timeout: 8000 });
+  const u = p.url();
+  await rest.first().click({ position: { x: 20, y: 20 } });
+  await p.waitForURL((x) => x.href !== u, { timeout: 5000 });
+  h.expect(p.url() !== u, `a queue card opens its record (${p.url()})`);
   await h.shot("triage");
 
-  // technician: «Сегодня» and «Требует внимания» are closed (route guard) — he lands on his visits: no attention cards, no debts
+  // technician: «Главная» of the office and «Разбор» are closed (route guard) — he lands on his visits: no tiles, no debts
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   // what the tech really sees: the open screen only (a tab he was sent away from stays mounted, hidden with aria-hidden)
   const shownText = () => p.evaluate(() => { const c = document.body.cloneNode(true); c.querySelectorAll('[aria-hidden="true"]').forEach((n) => n.remove()); return c.innerText || c.textContent; });
-  const shownCount = (sel) => p.evaluate((s) => [...document.querySelectorAll(s)].filter((n) => !n.closest('[aria-hidden="true"]')).length, sel);
+  const shownCount = (sel) => p.evaluate((s) => [...document.querySelectorAll(s)].filter((n) => !n.closest('[aria-hidden="true"]') && n.offsetParent !== null).length, sel);
   for (const path of ["/today", "/triage"]) {
     await h.go(path);
-    await p.waitForTimeout(500);
+    await p.waitForURL(/\/visits/, { timeout: 5000 });
     h.expect(new URL(p.url()).pathname === "/visits", `tech ${path} → /visits (got ${p.url()})`);
+    await tid("visits").waitFor({ timeout: 8000 });
     const body = await shownText();
-    h.expect((await shownCount('[data-testid="list-card"]')) > 0, "the tech sees his visit cards");
-    h.expect(!body.includes("Требует внимания") && !/Причин: \d+/.test(body) && !/Должен/.test(body), `tech sees no «Требует внимания» and no debts after ${path}`);
-    h.expect((await shownCount('[data-testid="list-card-reason"]')) === 0, "no attention reason rows");
+    h.expect((await shownCount('[data-testid="tile-owed"]')) === 0 && (await shownCount('[data-testid="today-tiles"]')) === 0, `tech: no office tiles after ${path}`);
+    h.expect(!/Должны/.test(body) && !body.includes(whole.format(Math.round(sum / 100))), `tech sees no debts after ${path}`);
   }
 };

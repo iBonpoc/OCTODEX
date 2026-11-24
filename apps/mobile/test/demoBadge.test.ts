@@ -18,8 +18,20 @@ describe("the «Демо» strip", () => {
     expect(demoBadgeTarget(true)).toBe("/auth/company");
     expect(demoBadgeTarget(false)).toBe("/auth/sign-in");
   });
-  it("every screen's header carries it, under the version line", () => {
+  it("every screen's header carries it in its smallest line (visual-v2): a root by the date, an object by the parent, an editor in its state", () => {
+    const h = readFileSync(join(__dirname, "..", "src", "ui", "templates", "screenHeader.tsx"), "utf8");
+    // the root's 13 line and the object's parent word each hold the plate; the editor's state line says the word; folded — the dot
+    expect(h.match(/<DemoPlate \/>/g)?.length).toBe(2);
+    expect(h).toMatch(/demo\.shown \? demo\.word : null/);
+    expect(h).toMatch(/<DemoDot \/>/);
+    // every Screen draws the one header
     const s = readFileSync(join(__dirname, "..", "src", "ui", "surfaces.tsx"), "utf8");
-    expect(s).toMatch(/<VersionBadge \/>\s*<DemoBadge \/>/);
+    expect(s).toMatch(/<HeaderBar\b/);
+    expect(s).toMatch(/<HeaderBig\b/);
+  });
+  it("no version line over the headers any more: it is at the bottom of «Ещё» and in «Настройки → О приложении»", () => {
+    const s = readFileSync(join(__dirname, "..", "src", "ui", "surfaces.tsx"), "utf8");
+    expect(s).not.toMatch(/VersionBadge|VersionLine/);
+    for (const f of [["app", "(tabs)", "more.tsx"], ["app", "settings", "index.tsx"]]) expect(readFileSync(join(__dirname, "..", "src", ...f), "utf8"), f.join("/")).toMatch(/<VersionLine\b/);
   });
 });

@@ -21,7 +21,7 @@ async function cloneEstimate(h, id, patch) {
 const tokenOf = (id) => `demo0${id}0000000000000000000000`.slice(0, 32);
 
 async function draw(h) {
-  const pad = h.page.getByLabel(/расписывается|signs here/i).last();
+  const pad = await require("../estimateMenu.cjs").countersignPad(h.page);
   await pad.scrollIntoViewIfNeeded(); await h.page.waitForTimeout(250);
   const bb = await pad.boundingBox();
   await h.page.mouse.move(bb.x + 30, bb.y + 90); await h.page.mouse.down();
@@ -49,8 +49,10 @@ exports.run = async (h) => {
   await h.expectText(/will sign the contract; your copy will appear here/, "client page: awaiting the company (client's language)");
   await h.go("/estimate/e6");
   await h.expectText(/Ждёт вашей подписи/, "the app: awaiting your signature");
+  // v2 (#2350): the summary is in the section «Подпись компании» (the main step «Подписать договор» opens it); «change it» is in «⋯»
+  await require("../estimateMenu.cjs").countersignPad(h.page);
   await h.expectText(/итог \$772\.36/, "summary: the total the client signed");
-  await h.expectText(/Не подписывать — изменить/, "director sees «change it»");
+  h.expect(await estHas(h.page, "reopen"), "director sees «change it»");
   await countersign(h, "e6");
   await h.go(`/p/${TOKEN}`);
   await h.expectText(/Contract signed by both sides/, "client page: signed by both");
@@ -60,7 +62,7 @@ exports.run = async (h) => {
   await h.go(`/p/${tokenOf("e35d")}`);
   await h.sign("Linda Alvarez");
   await h.go("/estimate/e35d");
-  await h.page.getByRole("button", { name: "Отказать" }).last().click(); await h.page.waitForTimeout(350);
+  await estAct(h.page, "decline"); await h.page.waitForTimeout(350);
   await h.sheet().getByPlaceholder(/Причина/).fill("Мы не успеем в этом месяце");
   await h.sheet().getByRole("button", { name: "Отказать" }).click(); await h.page.waitForTimeout(600);
   await h.expectText(/Отклонена компанией/, "declined by the company");
@@ -77,7 +79,7 @@ exports.run = async (h) => {
   await h.go(`/p/${tokenOf("e35o")}`);
   await h.sign("Linda Alvarez");
   await h.go("/estimate/e35o");
-  await h.page.getByRole("button", { name: "Не подписывать — изменить" }).last().click(); await h.page.waitForTimeout(350);
+  await estAct(h.page, "reopen"); await h.page.waitForTimeout(350);
   await h.sheet().getByRole("button", { name: "Не подписывать — изменить" }).click(); await h.page.waitForTimeout(800);
   db = await h.db();
   h.expect(db.estimates.find((e) => e.id === "e35o").status === "draft", "change it: back to draft");
@@ -131,7 +133,8 @@ exports.run = async (h) => {
   await h.go("/triage");
   await h.expectText(/клиент подписал — подпишите договор/, "attention: sign the contract");
   await h.go("/estimate/e35s");
-  await h.page.getByRole("button", { name: "Подписать сохранённой подписью" }).last().click(); await h.page.waitForTimeout(800);
+  // v2 (#2350): with a saved signature the main step «Подписать договор» signs with it at once
+  await h.page.getByTestId("est-countersign-main").locator("visible=true").first().click(); await h.page.waitForTimeout(800);
   db = await h.db();
   const signed = db.estimates.find((e) => e.id === "e35s");
   h.expect(signed.status === "approved", "approved with the saved signature");

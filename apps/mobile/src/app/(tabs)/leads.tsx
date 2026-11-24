@@ -1,204 +1,230 @@
 import { useEffect, useState } from "react";
-import { useHeldSheet } from "@/ui/heldSheet";
-import { useStore } from "@/data/store";
-import type { Lead, LeadStatus } from "@/data/types";
-import { canSeeLead, canSeeLeadCost, filterLeads, isOpenLead, leadStatusView as statusOf, needsNextStep, openTasks, sourceName, waitingMinutes, waitStatus, type LeadFilter } from "@/features/leads";
-import { leadSigns } from "@/features/listSigns";
-import { canChangeStatus, pickerOptions } from "@/features/statusMoves";
-import { CallResultSheet } from "@/features/lead/LeadSheets";
-import { CardGrid, ListCardHeader, StatusPicker, openContact } from "@/ui/listCard";
-import { LEAD_COLUMNS, LEAD_COLUMNS_PANEL, LeadListCard, leadCardSign } from "@/features/listCards";
-import type { ContactAction } from "@/ui/listCardLayout";
-import { useDevice } from "@/theme/ThemeProvider";
-import { View } from "react-native";
-import { space } from "@octo/design-tokens";
-import { usePersistentState } from "@/data/persist";
+import { Linking } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
+import { useListPanel } from "@/nav/listPanel";
+import { ListPanel } from "@/ui/listPanel";
+import { LeadObject, leadSectionOf, type LeadSectionKey } from "@/features/lead/LeadCard";
+import { useStore } from "@/data/store";
+import { usePersistentState } from "@/data/persist";
+import type { Lead } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
+import { canSeeLead, canSeeLeadCost, filterLeads, isClosedLead, isOpenLead, leadStatusView, leadTurn, sourceName } from "@/features/leads";
+import { leadSettingsOf } from "@/features/leadSettings";
+import { cleanPhone, smsHref } from "@/features/contactLinks";
+import { useDialThenAsk } from "@/features/comms/dial";
+import { CloseSheet } from "@/features/lead/LeadParts";
+import { CallResultSheet } from "@/features/lead/LeadSheets";
+import { leadRowLine, leadWaitLabel, leadWaitPlace } from "@/features/lead/leadRows";
 import { ReplySheet, useTick } from "@/features/sheets";
 import { Button } from "@/ui/controls";
-import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
-import { T } from "@/ui/primitives";
+import { useHeldSheet } from "@/ui/heldSheet";
 import { useToast } from "@/ui/overlays";
-import { CardList, Empty, Screen } from "@/ui/surfaces";
-import { ListPanel } from "@/ui/listPanel";
-import { useListPanel } from "@/nav/listPanel";
-import { LeadCardBody } from "@/features/lead/LeadCard";
+import { Empty } from "@/ui/surfaces";
+import type { SwipeAction } from "@/ui/swipeRow";
+import { ListScreen } from "@/ui/templates";
 
+/** one strip (wireframes-v2 «Лиды»): the open ones, then by the funnel, the snoozed, the archive; «Мои» only for a team */
+type Chip = "open" | "mine" | "new" | "replied" | "booked" | "estimate" | "snoozed" | "archive";
+const CHIP_LABEL: Record<Chip, DictKey> = {
+  open: "proto.leads.f.open",
+  mine: "lead.f.mine",
+  new: "proto.leads.f.new",
+  replied: "proto.leads.f.replied",
+  booked: "proto.leads.f.booked",
+  estimate: "proto.leads.f.estimate",
+  snoozed: "lead.f.snoozed",
+  archive: "proto.leads.f.archive",
+};
+/** an old kept value of the lane (spec 31 §7) lands on its chip */
+const OLD: Record<string, Chip> = { waiting: "new", won: "archive", closed: "archive" };
 
+const initials = (n: string) => n.split(/\s+/).filter(Boolean).map((p) => p[0]).slice(0, 2).join("").toUpperCase() || "#";
 
-const COLUMNS = LEAD_COLUMNS;
-
-/** the lane of «Лиды» (spec 31 §7): the broad default first, then in the order of the work; «Мои» is in the sheet */
-const LANE: readonly LeadFilter[] = ["open", "waiting", "snoozed", "won", "closed"];
-
-/** All requests in one place, with a "waiting N min" timer: whoever replies first wins the job. */
 /**
- * «Лиды» (☰ «Работа»): the leads only. Estimates and invoices are sections of their own, each its own screen
- * (founder 07.11, spec 31 §7а): an old address /leads?tab=estimates|invoices goes there.
+ * Лиды — шаблон «Список» (prototype v2, wireframes-v2 №16, BUILD-SPEC §2.11, object-cards «Лид»): the title with the count,
+ * search an icon of the header, the funnel one strip «Все · Новые · Ответили · Записаны · Смета · Отложенные · Архив», rows 56
+ * in two groups «Нужно действие» / «В работе»: initials, the name, «что · город» (or where it stands), on the right how long the
+ * client waits (StatusPill «! 12 мин») and a call or SMS icon (SMS for whoever asked for SMS). A swipe right calls (then «Чем кончился?»),
+ * left «В архив» — the close sheet with its reason (or «Вернуть» a closed one, with «Отменить»); the same on a long press and to
+ * VoiceOver. «＋» — a new lead; «⋯» — the lead settings (the director). The phone has no board (founder #2350).
+ * Old addresses: `?tab=estimates|invoices` go to their sections (07.11), `?open=<id>` is the 1280 panel beside the list (the lead's own content; 390/820 — its screen).
  */
 export default function Leads() {
-  const want = useLocalSearchParams<{ tab?: string }>().tab;
+  const { tab: want } = useLocalSearchParams<{ tab?: string }>();
   useEffect(() => {
     if (want === "estimates") router.replace("/estimates");
     else if (want === "invoices") router.replace("/invoice");
-  }, [want]);
-  return <LeadsBoard />;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, as the address came
+  }, []);
+  return <LeadsList />;
 }
 
-function LeadsBoard() {
+function LeadsList() {
   useTick();
-  const { t, day, money } = useI18n();
+  const { t, day } = useI18n();
   const store = useStore();
   const { db, role } = store;
   const toast = useToast();
-  const { device } = useDevice();
-  const [reply, setReply] = useState<string | null>(null);
-  // spec 31 §6 п.7: the status, the sources and the people are kept on this device for this list; the search is not.
-  // «Мои» is not a status any more: it is in the sheet («Ответственный»).
-  const key = filterStoreKey("leads");
-  const [keptF, setF] = usePersistentState<LeadFilter>(`${key}.status`, "open");
-  const [srcIds, setSrcIds] = usePersistentState<string[]>(`${key}.sources`, []);
-  const [whoIds, setWhoIds] = usePersistentState<string[]>(`${key}.people`, []);
+  const dial = useDialThenAsk();
+  const settings = leadSettingsOf(db.company);
   const [q, setQ] = useState("");
-  const f: LeadFilter = LANE.includes(keptF) ? keptF : "open";
-  const base = filterLeads(db, role, { filter: f });
-  const usedSources = db.sources.filter((s) => db.leads.some((l) => l.sourceId === s.id));
-  // only people at work make a team (invitations and switched-off people do not, 7-2)
-  const people = db.members.filter((m) => !m.pending);
-  const sources = srcIds.filter((id) => usedSources.some((s) => s.id === id));
-  const who = whoIds.filter((id) => people.some((m) => m.id === id));
-  const leads = filterLeads(db, role, { filter: f, q }).filter((l) => (!sources.length || sources.includes(l.sourceId ?? "")) && (!who.length || who.includes(l.assigneeId ?? "")));
-  const count = (x: LeadFilter) => filterLeads(db, role, { filter: x }).length;
-  const office = role !== "tech";
-  const team = people.length > 1 && !(who.length === 1 && who[0] === db.me);
-  const toggle = (ids: string[], set: (v: string[]) => void) => (id: string) => set(ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
-  const [picking, setPicking] = useState<Lead | null>(null);
-  const pickHeld = useHeldSheet(picking); // the sheet goes out before it is unmounted (#1163)
-  const pk = pickHeld.value;
+  // spec 31 §6 п.7: the chosen chip is kept on this device for this list; the search is not
+  const [kept, setKept] = usePersistentState<string>(`${filterStoreKey("leads")}.status`, "open");
+  const [reply, setReply] = useState<string | null>(null);
   const [calling, setCalling] = useState<Lead | null>(null);
   const callHeld = useHeldSheet(calling); // the sheet goes out before it is unmounted (#1163)
-  /** the same records as the lead page (ContactActions): a call asks «did you get through?», SMS / email count as a reply */
-  const contact = (l: Lead) => (a: ContactAction) => {
-    openContact(a);
-    // a call always asks «Чем кончился?»: the server counts a call without an outcome as answered (20 §3)
-    if (a.kind === "call") return setCalling(l);
-    if (a.kind === "sms" || a.kind === "email") store.touchLead(l.id, a.kind);
+  const [closing, setClosing] = useState<Lead | null>(null);
+  const closeHeld = useHeldSheet(closing);
+  const office = role !== "tech";
+  const team = office && db.members.filter((m) => !m.pending).length > 1;
+
+  const open = filterLeads(db, role, { filter: "open", q });
+  const pass: Record<Chip, () => Lead[]> = {
+    open: () => open,
+    mine: () => filterLeads(db, role, { filter: "mine", q }),
+    new: () => open.filter((l) => l.status === "new"),
+    replied: () => open.filter((l) => l.status === "replied"),
+    booked: () => open.filter((l) => l.status === "booked"),
+    estimate: () => open.filter((l) => l.status === "estimate_sent"),
+    snoozed: () => filterLeads(db, role, { filter: "snoozed", q }),
+    archive: () => [...filterLeads(db, role, { filter: "won", q }), ...filterLeads(db, role, { filter: "closed", q })],
   };
-  /** reopen: one tap with «Undo»; close / won / book need a reason or a date → the lead page with its existing forms */
-  const pickStatus = (l: Lead, s: string) => {
-    setPicking(null);
-    const move = pickerOptions("lead", l.status).find((o) => o.status === s);
-    if (!move?.enabled) return;
-    // the form is on the lead's card: on 1280 the panel, narrower — its screen
-    if (move.how === "form") return panel.open(l.id);
-    toast.show(`${l.name}: ${t(statusOf[s as LeadStatus].label)}`, store.reopenLead(l.id));
+  const chips: Chip[] = ["open", ...(team ? (["mine"] as const) : []), "new", "replied", "booked", "estimate", "snoozed", "archive"];
+  const wanted = (OLD[kept] ?? kept) as Chip;
+  const chip: Chip = chips.includes(wanted) ? wanted : "open";
+  const label = (c: Chip) => {
+    const n = c === "archive" || c === "open" ? 0 : pass[c]().length;
+    return n ? `${t(CHIP_LABEL[c])} ${n}` : t(CHIP_LABEL[c]);
   };
-  // the one lead card (features/listCards.tsx), shared with the «Today» figures; this list adds its own actions
-  const signOf = (l: Lead) => leadCardSign(db, l, t);
-  // urgent first (a sign or a new lead), then the rest in work
-  const urgent = leads.filter((l) => signOf(l) || l.status === "new");
-  const rest = leads.filter((l) => !urgent.includes(l));
-  // 1280: the open lead beside the list, `/leads?open=<id>` (spec 06 «Панель 1280», nav/listPanel.ts); ↑/↓ in the order on screen
-  const panel = useListPanel([...urgent, ...rest].map((l) => l.id), (id) => `/lead/${id}`, (id) => db.leads.some((l) => l.id === id && canSeeLead(role, db.me, l)));
-  const { openId } = panel;
-  const openL = openId ? db.leads.find((l) => l.id === openId) : undefined;
-  const card = (l: Lead) => (
-    <LeadListCard
-      panel={{ selected: l.id === openId, open: () => panel.open(l.id), narrow: !!openId }}
-      key={l.id}
-      l={l}
-      density={device === "desktop" ? "row" : "rich"}
-      showResp={team}
-      onStatus={office && canChangeStatus("lead", l.status) ? () => setPicking(l) : undefined}
-      onContact={contact(l)}
-      onReply={() => setReply(l.id)}
-    />
-  );
-  const section = (title: string, ls: Lead[]) =>
-    ls.length ? (
-      <View key={title} style={{ gap: space[2] }}>
-        <T v="caption" w="semibold" tone="mut">{`${title} · ${ls.length}`}</T>
-        {device === "tablet" ? <CardGrid>{ls.map(card)}</CardGrid> : <CardList>{ls.map(card)}</CardList>}
-      </View>
-    ) : null;
+  const list = pass[chip]().sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
+  // «Нужно действие»: our turn (the client waits, a step is overdue, no step, time to remind); the rest — «В работе»
+  const urgent = (l: Lead) => {
+    const turn = leadTurn(db, l, settings);
+    return turn.kind === "reply" || turn.kind === "noStep" || (turn.kind === "step" && turn.status === "bad") || (turn.kind === "wait" && turn.action !== "none");
+  };
+  const groups =
+    chip === "archive" || chip === "snoozed"
+      ? [{ key: chip, rows: list }]
+      : [
+          { key: "action", title: t("card.group.action"), rows: list.filter(urgent) },
+          { key: "work", title: t("card.group.inWork"), rows: list.filter((l) => !urgent(l)) },
+        ];
+
+  const call = (l: Lead) => dial(cleanPhone(l.phone), () => setCalling(l));
+  const sms = (l: Lead) => {
+    const href = smsHref(l.phone);
+    if (href) Linking.openURL(href).catch(() => {});
+    store.touchLead(l.id, "sms");
+  };
+  const row = (l: Lead) => {
+    const turn = leadTurn(db, l, settings);
+    const wait = leadWaitLabel(turn, t);
+    const place = leadWaitPlace(turn);
+    const tel = cleanPhone(l.phone);
+    const bySms = l.preferredContact === "sms";
+    const swipeLeft: SwipeAction[] = tel ? [{ key: "call", label: t("swipe.call"), icon: "phone", onPress: () => call(l), testID: `lead-row-call-${l.id}` }] : [];
+    const swipeRight: SwipeAction[] = isOpenLead(l)
+      ? [{ key: "archive", label: t("swipe.archive"), icon: "box", tone: "bad", onPress: () => setClosing(l), testID: `lead-row-archive-${l.id}` }]
+      : isClosedLead(l)
+        ? [{ key: "reopen", label: t("swipe.reopen"), icon: "undo", onPress: () => toast.show(t("lead.reopened", { name: l.name }), store.reopenLead(l.id)), testID: `lead-row-reopen-${l.id}` }]
+        : [];
+    const sv = leadStatusView[l.status];
+    return {
+      key: l.id,
+      testID: `lead-row-${l.id}`,
+      title: l.name || "—",
+      // how long the client waits — the first word of the line (wireframes №16); late — the pill on the right (leadWaitPlace)
+      subtitle: [place === "line" ? wait : null, leadRowLine(l, turn, { t, day, source: sourceName(db, l.sourceId) })].filter(Boolean).join(" · "),
+      lead: { initials: initials(l.name) },
+      // a closed or won lead says its status
+      status: wait && place === "pill" ? { status: turn.status, label: wait } : !isOpenLead(l) ? { status: sv.status, label: t(sv.label) } : undefined,
+      actions:
+        isOpenLead(l) && tel
+          ? [
+              bySms
+                ? { icon: "sms" as const, a11y: `${t("cc.sms")} ${l.name}`, onPress: () => sms(l), testID: `lead-row-sms-${l.id}` }
+                : { icon: "phone" as const, a11y: `${t("client.call")} ${l.name}`, onPress: () => call(l), testID: `lead-row-tel-${l.id}` },
+            ]
+          : undefined,
+      swipe: { left: swipeLeft, right: swipeRight },
+      onPress: () => panel.open(l.id),
+      selected: l.id === panel.openId,
+    };
+  };
+  // 1280: the open lead beside the list, `/leads?open=<id>` (spec 06 «Панель 1280»); the rows in the groups' order; 390/820 — its screen
+  const panel = useListPanel(groups.flatMap((g) => g.rows.map((l) => l.id)), (id) => `/lead/${id}`, (id) => db.leads.some((x) => x.id === id && canSeeLead(role, db.me, x)));
+  const openL = panel.openId ? db.leads.find((x) => x.id === panel.openId && canSeeLead(role, db.me, x)) : undefined;
+  const newLead = () => router.push("/lead/new");
+  const visible = db.leads.filter((l) => canSeeLead(role, db.me, l));
   return (
-    <Screen
-      title={t("sales.leads")}
-      help={t("help.inbox")}
-      hintKey="inbox"
-      // sales: this is «Главная» (13а §2) — the bell, the sync badge and the profile on the right
-      home={role === "sales"}
-      right={<Button label={t("quick.lead")} icon="plus" size="sm" variant="secondary" onPress={() => router.push("/lead/new")} />}
-      aside={
-        openL ? (
-          <ListPanel title={openL.name} subtitle={[openL.number, sourceName(db, openL.sourceId), canSeeLeadCost(role) && openL.costCents ? money(openL.costCents) : null, day(openL.receivedAt)].filter(Boolean).join(" · ")} outside={panel.outside} onOpen={panel.full} onClose={panel.close}>
-            <LeadCardBody key={openL.id} l={openL} inPanel openLead={panel.open} />
-          </ListPanel>
-        ) : undefined
-      }
-    >
-      {/* spec 31 (variant Б): the search and «Фильтр» in one row, one lane of statuses; sources and people in the sheet */}
-      <FilterBar<LeadFilter>
-        search={{ value: q, onChange: setQ, placeholder: t("lead.search") }}
-        value={f}
-        onChange={setF}
-        items={LANE.map((k) => ({ key: k, label: t(`lead.f.${k}` as DictKey), count: count(k) }))}
-        groups={[
-          // the office's groups (a tech sees only his own leads; who brought a lead and its price are the office's — canSeeLeadCost)
-          ...(office && people.length > 1
-            ? [{
-                key: "people",
-                title: t("card.filter.people"),
-                // «Мои» first, then the others by name
-                options: [...people].sort((a, b) => (a.id === db.me ? -1 : b.id === db.me ? 1 : a.name.localeCompare(b.name))).map((m) => ({
-                  key: m.id,
-                  label: m.id === db.me ? t("lead.f.mine") : m.name,
-                  count: base.filter((l) => l.assigneeId === m.id).length,
-                  on: who.includes(m.id),
-                })),
-                onToggle: toggle(who, setWhoIds),
-              }]
-            : []),
-          ...(office && usedSources.length > 1
-            ? [{
-                key: "sources",
-                title: t("card.filter.sources"),
-                options: usedSources.map((x) => ({ key: x.id, label: x.name, count: base.filter((l) => l.sourceId === x.id).length, on: sources.includes(x.id) })),
-                onToggle: toggle(sources, setSrcIds),
-              }]
-            : []),
-        ]}
-        onReset={() => { setSrcIds([]); setWhoIds([]); }}
+    <>
+      <ListScreen<Lead>
+        testID="leads"
+        title={t("sales.leads")}
+        count={open.length}
+        create={{ a11y: t("quick.lead"), items: [{ key: "new", label: t("quick.lead"), icon: "leads", testID: "leads-create-new" }] }}
+        onCreate={newLead}
+        search={{ placeholder: t("lead.search"), value: q, onChange: setQ }}
+        chips={{ items: chips.map((c) => ({ key: c, label: label(c) })), value: chip, onChange: setKept }}
+        groups={groups}
+        aside={openL ? <LeadAside key={openL.id} id={openL.id} outside={panel.outside} onOpen={panel.full} onClose={panel.close} /> : undefined}
+        row={row}
+        more={role === "director" ? [{ key: "settings", label: t("co.leads.title"), icon: "settings", testID: "leads-more-settings" }] : undefined}
+        onMore={() => router.push("/company/leads")}
+        empty={
+          <Empty
+            icon="leads"
+            title={q.trim() ? t("proto.leads.emptySearch") : visible.length ? t("proto.leads.emptyChip") : t("inbox.empty")}
+            // the tech sees only his own (13 §2.3): say which, not «from Thumbtack and the website»
+            hint={q.trim() ? undefined : t(office ? "inbox.emptyHint" : "leads.empty.tech")}
+            action={<Button testID="leads-empty-new" label={t("quick.lead")} icon="plus" variant="secondary" onPress={newLead} />}
+          />
+        }
       />
-      {leads.length === 0 ? (
-        <View testID="leads-empty">
-          {/* the tech sees only his own (13 §2.3): say which, not «from Thumbtack and the website» */}
-          <Empty icon="inbox" title={t("inbox.empty")} hint={t(office ? "inbox.emptyHint" : "leads.empty.tech")} />
-        </View>
-      ) : (
-        <>
-          {device === "desktop" ? <ListCardHeader title={t("card.fact.client")} columns={openId ? LEAD_COLUMNS_PANEL : COLUMNS} /> : null}
-          {section(t("card.group.action"), urgent)}
-          {section(t("card.group.inWork"), rest)}
-        </>
-      )}
       <ReplySheet leadId={reply} onClose={() => setReply(null)} />
-      {callHeld.value ? <CallResultSheet key={`${callHeld.value.id}-${callHeld.opening}`} l={callHeld.value} visible={callHeld.visible} onExited={callHeld.onExited} onClose={() => setCalling(null)} onAnswered={() => panel.open(callHeld.value!.id)} /> : null}
-      {pk ? (
-        <StatusPicker
-          visible={pickHeld.visible}
-          onExited={pickHeld.onExited}
-          onClose={() => setPicking(null)}
-          title={`${t("card.statusTitle")} · ${pk.name}`}
-          options={pickerOptions("lead", pk.status).map((o) => {
-            const v = statusOf[o.status as LeadStatus];
-            return { key: o.status, tone: v.status, label: t(v.label), current: o.current, enabled: o.enabled, form: o.how === "form" };
-          })}
-          onPick={(k) => pickStatus(pk, k)}
+      {callHeld.value ? (
+        <CallResultSheet
+          key={`${callHeld.value.id}-${callHeld.opening}`}
+          l={callHeld.value}
+          visible={callHeld.visible}
+          onExited={callHeld.onExited}
+          onClose={() => setCalling(null)}
+          onAnswered={() => router.push(`/lead/${callHeld.value!.id}`)}
         />
       ) : null}
-    </Screen>
+      {closeHeld.value ? <CloseSheet key={`close-${closeHeld.value.id}-${closeHeld.opening}`} l={closeHeld.value} visible={closeHeld.visible} onClose={() => setClosing(null)} /> : null}
+    </>
+  );
+}
+
+/** the lead beside the list on 1280: the panel's head (name, «⤢ Открыть», «✕», «⋯») and the lead's own content with its sections */
+function LeadAside({ id, outside, onOpen, onClose }: { id: string; outside: boolean; onOpen: () => void; onClose: () => void }) {
+  const { db, role } = useStore();
+  const { day, money } = useI18n();
+  const [section, setSection] = useState<LeadSectionKey>(leadSectionOf());
+  const l = db.leads.find((x) => x.id === id);
+  if (!l) return null;
+  return (
+    <LeadObject
+      l={l}
+      section={section}
+      onSection={setSection}
+      back={onClose}
+      frame={({ more, now, tabs, body }) => (
+        <ListPanel
+          title={l.name || "—"}
+          subtitle={[l.number, sourceName(db, l.sourceId), canSeeLeadCost(role) && l.costCents ? money(l.costCents) : null, day(l.receivedAt)].filter(Boolean).join(" · ")}
+          outside={outside}
+          more={more}
+          onOpen={onOpen}
+          onClose={onClose}
+        >
+          {now}
+          {tabs}
+          {body}
+        </ListPanel>
+      )}
+    />
   );
 }

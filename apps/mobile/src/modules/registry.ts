@@ -4,7 +4,8 @@
  * `ModuleDef`) and is found here by Metro's `require.context`. Tests (vitest has no require.context) call
  * `registerModule`.
  *
- * Access mirrors the server's app.module_active (migration company_modules, C1): switched on and in the trial or paid.
+ * Access mirrors the server's app.module_active (migration company_modules, C1): switched on and in the trial or paid —
+ * or without a term: the developer's company (companies.developer_account, #2410) and the demo (no server, no trial).
  * After the trial without payment nothing of the module is saved (founder О2, 07.11.2026): drafts open read-only.
  */
 import type { Company } from "@/data/types";
@@ -26,6 +27,10 @@ export interface CompanyModule {
   settings: Record<string, unknown>;
   /** the version the phone last read: module.saveSettings sends it, a newer one on the server is a conflict */
   rowVersion: number;
+  /** #2410: no term — the developer's company (companies.developer_account, set by the server only) or the demo. Not a
+   *  column of company_modules: the phone puts it on when it reads the company; billing never reads it. `false` — the
+   *  row keeps its term even there (only the demo's e2e of «the trial is over» writes it) */
+  unlimited?: boolean;
 }
 
 /** what a core screen gives a module's place: the screen's own object and who looks */
@@ -39,6 +44,16 @@ export interface PlaceCtx {
   /** the leads of this address or client (a lead that got the address: what was made on the lead shows here too —
    *  spec 33 П24 Б4, S4h) */
   leadIds?: string[];
+  /** #2271: the addresses of the screen's object (a client's card): what an action needs to know its target at the press —
+   *  each with the leads on it */
+  places?: PlaceAddress[];
+}
+/** an address as a module's place sees it (#2271) */
+export interface PlaceAddress {
+  id: string;
+  address: string;
+  city?: string;
+  leadIds: string[];
 }
 /** one action of a module in a core screen: a button (lead, property) or an item of «＋» (home) */
 export interface ModuleAction {
@@ -47,6 +62,11 @@ export interface ModuleAction {
   labelKey: DictKey;
   icon: import("@/ui/primitives").IconKey;
   href: string;
+  /** #2271: a choice before going (several addresses): the press opens a sheet of rows, a row goes to its `href` — one
+   *  transition, no screen in between. `href` is then unused */
+  pick?: { titleKey: DictKey; items: { id: string; title: string; subtitle?: string; href: string }[] };
+  /** #2271: nowhere to go yet (no address): the press shows this line under the buttons instead of a transition */
+  noteKey?: DictKey;
 }
 
 /** a module's change as the queue carries it (Op "module.op"): what to do and with what */
@@ -214,8 +234,11 @@ export interface ModuleDef {
   rejectedKey?: DictKey;
 }
 
-/** off — not switched on; trial — in the trial; paid — paid; expired — switched on, trial over, not paid */
-export type ModuleAccess = "off" | "trial" | "paid" | "expired";
+/** off — not switched on; trial — in the trial; paid — paid; unlimited — switched on, no term (the developer's company,
+ *  the demo; #2410 — not a payment); expired — switched on, trial over, not paid */
+export type ModuleAccess = "off" | "trial" | "paid" | "unlimited" | "expired";
+/** usable now: the module's places show and its data is saved (= app.module_active on the server) */
+export const moduleUsable = (a: ModuleAccess | undefined): boolean => a === "trial" || a === "paid" || a === "unlimited";
 export interface ModuleState {
   access: ModuleAccess;
   /** whole days of the trial left (trial only; the last day counts as 1) */
@@ -231,6 +254,7 @@ export function moduleState(cm: CompanyModule | undefined, now = Date.now()): Mo
   const trialEnds = at(cm?.trialEndsAt);
   const trialUsed = Number.isFinite(trialEnds);
   if (!cm?.enabled) return { access: "off", trialUsed };
+  if (cm.unlimited) return { access: "unlimited", trialUsed };
   if (at(cm.paidUntil) > now) return { access: "paid", trialUsed };
   if (trialEnds > now) return { access: "trial", daysLeft: Math.max(1, Math.ceil((trialEnds - now) / DAY)), trialUsed };
   return { access: "expired", trialUsed };
@@ -238,17 +262,28 @@ export function moduleState(cm: CompanyModule | undefined, now = Date.now()): Mo
 
 /** usable now: the module's places show and its data is saved (= app.module_active on the server) */
 export const moduleActive = (company: Pick<Company, "modules"> | null | undefined, key: string, now = Date.now()): boolean => {
-  const a = moduleState(company?.modules?.[key], now).access;
-  return a === "trial" || a === "paid";
+  return moduleUsable(moduleState(company?.modules?.[key], now).access);
 };
 
-/** what the phone shows right after «Подключить», before the server answers (the server's date wins on the next read) */
-export function enabledLocally(cm: CompanyModule | undefined, def: Pick<ModuleDef, "trialDays"> | undefined, now = Date.now()): CompanyModule {
+/** what the phone shows right after «Подключить», before the server answers (the server's date wins on the next read).
+ *  Without a term (#2410: the demo, the developer's company) the phone starts no trial of its own */
+export function enabledLocally(cm: CompanyModule | undefined, def: Pick<ModuleDef, "trialDays"> | undefined, now = Date.now(), opts?: { unlimited?: boolean }): CompanyModule {
+  if (opts?.unlimited) return { settings: {}, rowVersion: 0, ...cm, enabled: true, unlimited: true };
   const trialEndsAt = cm?.trialEndsAt ?? new Date(now + (def?.trialDays ?? 7) * DAY).toISOString();
   return { settings: {}, rowVersion: 0, ...cm, enabled: true, trialEndsAt };
 }
 
-/** rows of public.company_modules → Company.modules; a broken row is left out */
+/** #2410: every module of the company without a term (the demo; the developer's company) — the rows otherwise as they are.
+ *  A row that says `unlimited: false` keeps its term: the app never writes it; the demo's e2e checks of «the trial is over»
+ *  (the server has no such row: the flag is the company's) */
+export function withoutTerm(modules: Record<string, CompanyModule> | undefined): Record<string, CompanyModule> | undefined {
+  if (!modules) return modules;
+  const out: Record<string, CompanyModule> = {};
+  for (const [k, m] of Object.entries(modules)) out[k] = m.unlimited !== undefined ? m : { ...m, unlimited: true };
+  return out;
+}
+
+/** rows of public.company_modules → Company.modules; a broken row is left out (the developer's company: withoutTerm, #2410) */
 export function companyModulesFromRows(rows: readonly Record<string, unknown>[]): Record<string, CompanyModule> {
   const out: Record<string, CompanyModule> = {};
   for (const r of rows) {

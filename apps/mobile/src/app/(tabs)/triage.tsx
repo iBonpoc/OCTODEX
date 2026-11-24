@@ -16,6 +16,7 @@ import { Card, CardList, Divider, Empty, ListRow, RowView, Screen, SectionTitle 
 import { View } from "react-native";
 import { localUndo } from "@/data/undo";
 import { SNOOZE_DAYS, snoozeDay, snoozeUntil, type SnoozeKey } from "@/features/attentionSnooze";
+import { waitParams } from "@/features/shortTime";
 
 /** Dispatcher home: one item at a time, most urgent first; resolve with one tap or snooze. */
 export default function Triage() {
@@ -106,14 +107,14 @@ export default function Triage() {
             <T v="caption" tone="mut" tabular>
               {t("triage.of", { i: 1, n: all.length })}
             </T>
-            <StatusChip status={cur.status} label={t(cur.chip, cur.params)} />
+            <StatusChip status={cur.status} label={t(cur.chip, waitParams(cur.params, t))} />
           </RowView>
           {/* a reason with no client or lead (a refused money change): its own words as the title */}
           <View testID={`triage-top-${cur.id}`}>
-            <T v="title">{cur.name || t(cur.label, cur.params)}</T>
+            <T v="title">{cur.name || t(cur.label, waitParams(cur.params, t))}</T>
           </View>
           <T v="body" tone="mut">
-            {cur.name ? t(cur.label, cur.params) : cur.kind === "rejected" ? t(cur.hint ?? "sync.rejected.hint") : ""}
+            {cur.name ? t(cur.label, waitParams(cur.params, t)) : cur.kind === "rejected" ? t(cur.hint ?? "sync.rejected.hint") : ""}
           </T>
           {curWho ? (
             <T v="body" tone="mut">

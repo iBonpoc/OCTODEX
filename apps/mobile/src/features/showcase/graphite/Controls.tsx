@@ -3,76 +3,200 @@
  * (handoff §2–§3, §5 п.2, 4, 6, 7). Only three heights: 44 (field, check hit), 52 (buttons), 56 (rows).
  * Yellow fill only on the one main button of the screen (and «＋» in the nav).
  */
-import { useState, type ReactNode } from "react";
-import { TextInput, View } from "react-native";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ActivityIndicator, TextInput, View } from "react-native";
 import { graphite } from "@octo/design-tokens";
 import { formatPhoneUS } from "@/ui/inputFormat";
 import { Icon, type IconKey } from "@/ui/primitives";
 import { useI18n } from "@/i18n";
-import { GrMatte } from "./Glass";
+import { GrLiquid, GrMatte } from "./Glass";
 import { GrPress, GrText, useGr } from "./theme";
 
 const S = graphite.size;
 const R = graphite.radius;
 const SP = graphite.space;
 
+export type GrButtonKind = "primary" | "secondary" | "ghost" | "danger";
+
+/** a spinner that waits `loadDelay` before it shows and stays `spinnerMin` once shown (R15 «время показа») */
+export function useWaitShown(loading: boolean): boolean {
+  const [shown, setShown] = useState(false);
+  const since = useRef(0);
+  const m = graphite.motion;
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | undefined;
+    if (loading) {
+      t = setTimeout(() => {
+        since.current = Date.now();
+        setShown(true);
+      }, m.loadDelay);
+    } else {
+      t = setTimeout(
+        () => setShown(false),
+        Math.max(0, m.spinnerMin - (Date.now() - since.current)),
+      );
+    }
+    return () => {
+      if (t) clearTimeout(t);
+    };
+  }, [loading, m.loadDelay, m.spinnerMin]);
+  return shown;
+}
+
+export function GrSpinner({ tone = "text", testID }: { tone?: "text" | "onAcc" | "onDan" | "onBadge" | "bad"; testID?: string }) {
+  const { g } = useGr();
+  return <ActivityIndicator testID={testID} color={g[tone]} />;
+}
+
+/**
+ * The button of «Графит» (#2292). `variant` is the variant number of the showcase sheet: 1 — the package (yellow main, matte
+ * second, filled danger), 2 — the quieter one (inverse-plate main, outline second, outline danger). Heights are the package's:
+ * 52 (a text button 44). `loading`: the spinner after 300 ms, the press is ignored; `disabled`: dimmed, not pressable.
+ */
 export function GrButton({
   kind,
   label,
   onPress,
   testID,
+  variant = 1,
+  icon,
+  loading,
+  disabled,
 }: {
-  kind: "primary" | "secondary";
+  kind: GrButtonKind;
   label: string;
   onPress: () => void;
   testID?: string;
+  variant?: 1 | 2;
+  icon?: IconKey;
+  loading?: boolean;
+  disabled?: boolean;
 }) {
   const { g } = useGr();
+  const wait = useWaitShown(!!loading);
+  const off = !!disabled || !!loading;
+  const quiet = variant === 2;
+  // variant 2 of the main button is the inverse plate (`badge`/`onBadge`: light on dark, dark on light), not a second yellow
+  const tone: "onAcc" | "onBadge" | "onDan" | "text" | "bad" =
+    kind === "primary"
+      ? quiet ? "onBadge" : "onAcc"
+      : kind === "danger"
+        ? quiet ? "bad" : "onDan"
+        : "text";
   const inner = (
-    <GrText
-      v="body"
-      w={kind === "primary" ? "medium" : "regular"}
-      tone={kind === "primary" ? "onAcc" : "text"}
-      center
-      lines={1}
-    >
-      {label}
-    </GrText>
+    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: SP[2] }}>
+      {/* a danger colour always has its icon (rule 2): the alert mark unless the button has its own */}
+      {wait ? <GrSpinner testID={testID ? `${testID}-spinner` : undefined} tone={tone} /> : (icon ?? (kind === "danger" ? "alert" : null)) ? <Icon name={(icon ?? "alert") as IconKey} s={S.glyph} color={g[tone]} /> : null}
+      <GrText v="body" w={kind === "primary" ? "medium" : "regular"} tone={tone} center maxScale={graphite.font.maxScaleButton} style={{ flexShrink: 1 }}>
+        {label}
+      </GrText>
+    </View>
   );
+  const box = {
+    // a big system text grows the button (and wraps the label) instead of cutting it
+    minHeight: kind === "ghost" ? S.control : S.button,
+    paddingVertical: SP[2],
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    paddingHorizontal: SP[4],
+  };
+  let body;
+  if (kind === "ghost") {
+    body = <View style={box}>{inner}</View>;
+  } else if (kind === "secondary" && !quiet) {
+    body = (
+      // the edge `borderS`: on the light scene the matte plate alone does not stand out
+      <GrMatte flat radius={R.main} style={[box, { borderColor: g.borderS }]}>
+        {inner}
+      </GrMatte>
+    );
+  } else {
+    const fill =
+      kind === "primary" ? (quiet ? g.badge : g.acc) : kind === "danger" ? (quiet ? undefined : g.danBg) : undefined;
+    body = (
+      <View
+        style={[
+          box,
+          {
+            borderRadius: R.main,
+            backgroundColor: fill,
+            borderWidth: fill ? 0 : S.edge,
+            borderColor: kind === "danger" ? g.bad : g.fieldEdge,
+          },
+        ]}
+      >
+        {inner}
+      </View>
+    );
+  }
   return (
     <GrPress
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled: off, busy: !!loading }}
+      {...(loading ? ({ "aria-busy": true } as object) : null)}
+      disabled={off}
       onPress={onPress}
+      style={disabled ? { opacity: graphite.state.disabledDim } : undefined}
     >
-      {kind === "primary" ? (
-        <View
-          style={{
-            height: S.button,
-            borderRadius: R.main,
-            backgroundColor: g.acc,
-            alignItems: "center",
-            justifyContent: "center",
-            paddingHorizontal: SP[4],
-          }}
-        >
-          {inner}
-        </View>
+      {body}
+    </GrPress>
+  );
+}
+
+/** the round icon button: 44, `glass` on the liquid glass (the header circle), `matte` flat (the quieter one) */
+export function GrIconButton({
+  icon,
+  label,
+  onPress,
+  testID,
+  variant = 1,
+  active,
+  disabled,
+}: {
+  icon: IconKey;
+  label: string;
+  onPress: () => void;
+  testID?: string;
+  variant?: 1 | 2;
+  active?: boolean;
+  disabled?: boolean;
+}) {
+  const { g } = useGr();
+  const size = { width: S.control, height: S.control, alignItems: "center" as const, justifyContent: "center" as const };
+  const glyph = <Icon name={icon} s={S.glyph} color={active && variant === 2 ? g.onSel : g.text} />;
+  return (
+    <GrPress
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: !!active, disabled: !!disabled }}
+      {...(active !== undefined ? ({ "aria-pressed": active } as object) : null)}
+      disabled={disabled}
+      onPress={onPress}
+      style={disabled ? { opacity: graphite.state.disabledDim } : undefined}
+    >
+      {variant === 1 ? (
+        <GrLiquid radius={R.pill} style={[size, { borderColor: g.borderS }]}>
+          {/* in its own View: on the web an svg is painted under the glass layers */}
+          <View>{glyph}</View>
+        </GrLiquid>
       ) : (
-        <GrMatte
-          flat
-          radius={R.main}
-          style={{
-            height: S.button,
-            alignItems: "center",
-            justifyContent: "center",
-            paddingHorizontal: SP[4],
-          }}
-        >
-          {inner}
-        </GrMatte>
+        <View style={[size, { borderRadius: R.pill, backgroundColor: active ? g.sel : g.chip, borderWidth: S.edge, borderColor: g.border }]}>{glyph}</View>
       )}
+    </GrPress>
+  );
+}
+
+/** «＋» — create: the 52 yellow circle (the one yellow of its layer, like the button) */
+export function GrPlus({ label, onPress, testID }: { label: string; onPress: () => void; testID?: string }) {
+  const { g } = useGr();
+  return (
+    <GrPress testID={testID} accessibilityRole="button" accessibilityLabel={label} onPress={onPress}>
+      <View style={{ width: S.plus, height: S.plus, borderRadius: R.pill, backgroundColor: g.acc, alignItems: "center", justifyContent: "center" }}>
+        <Icon name="plus" s={S.glyph} color={g.onAcc} />
+      </View>
     </GrPress>
   );
 }

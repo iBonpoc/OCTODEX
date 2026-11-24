@@ -2,7 +2,7 @@
 /** S8b (docs/specs/07 §2.2 А, founder 05.11): an employee signs the contract for the company on the estimate screen. */
 async function countersign(h, estimateId) {
   await h.go(`/estimate/${estimateId}`);
-  const pad = h.page.getByLabel(/расписывается|signs here/i).last();
+  const pad = await require("../estimateMenu.cjs").countersignPad(h.page);
   await pad.scrollIntoViewIfNeeded(); await h.page.waitForTimeout(250);
   const bb = await pad.boundingBox();
   await h.page.mouse.move(bb.x + 30, bb.y + 90); await h.page.mouse.down();
@@ -17,8 +17,8 @@ exports.run = async (h) => {
   await h.clickText("Сметы");
   await h.click("Смета");
   await require("../estimateLine.cjs").addCustom(h, "Replace water heater", "1850");
-  await h.page.getByRole("button", { name: "Сохранить и отправить" }).click(); await h.page.waitForTimeout(700);
-  await h.page.getByRole("button", { name: "Копировать ссылку" }).click(); await h.page.waitForTimeout(400);
+  await require("../estimateLine.cjs").saveSend(h); await h.page.waitForTimeout(700);
+  await h.page.getByTestId("send-copy").getByRole("button").first().click(); await h.page.waitForTimeout(400);
   let db = await h.db();
   const kevin = db.leads.find((l) => l.name === "Kevin Brooks");
   h.expect(kevin.status === "estimate_sent", "lead → estimate sent");
@@ -34,13 +34,13 @@ exports.run = async (h) => {
   h.expect(db.customers.find((c) => c.id === kevin.customerId).status === "active", "prospect → active");
   const tom = db.leads.find((l) => l.name === "Tom Becker");
   await h.go(`/lead/${tom.id}`);
-  await h.page.getByRole("button", { name: /^Статус:/ }).first().click(); await h.page.waitForTimeout(300);
+  await h.page.getByTestId("lead-header-status").locator("visible=true").first().click(); await h.page.waitForTimeout(300);
   await h.sheet().getByRole("button", { name: "Закрыть лид" }).click(); await h.page.waitForTimeout(300);
   await h.sheet().getByRole("radio", { name: "Дорого" }).click();
   await h.sheet().getByRole("button", { name: "Закрыть как потерянный" }).click(); await h.page.waitForTimeout(400);
   const nina = db.leads.find((l) => l.name === "Nina Patel");
   await h.go(`/lead/${nina.id}`);
-  await h.page.getByRole("button", { name: /^Статус:/ }).first().click(); await h.page.waitForTimeout(300);
+  await h.page.getByTestId("lead-header-status").locator("visible=true").first().click(); await h.page.waitForTimeout(300);
   await h.sheet().getByRole("button", { name: "Сделать клиентом" }).click(); await h.page.waitForTimeout(300);
   await h.sheet().getByRole("button", { name: "Сделать клиентом" }).click(); await h.page.waitForTimeout(400);
   db = await h.db();

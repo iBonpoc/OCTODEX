@@ -20,7 +20,8 @@ describe("roles: the app follows the server", () => {
   });
   it("sales lands on the Sales lists (/leads) and has the same 5 tabs, Plan to look at", () => {
     expect(roleHome.sales).toBe("leads");
-    expect(tabs("sales").map((i) => i.id)).toEqual(["home", "plan", "messages", "clients", "more"]);
-    expect(menuGroups("sales").flatMap((g) => g.items.map((i) => i.id))).toContain("leads");
+    expect(tabs("sales").map((i) => i.id)).toEqual(["home", "plan", "clients", "finance", "leads"]);
+    // Leads is a tab (prototype v2): the side menu (820/1280) has it, «Ещё» does not repeat it
+    expect(menuGroups("sales", true).flatMap((g) => g.items.map((i) => i.id))).toContain("leads");
   });
 });

@@ -953,6 +953,9 @@ export interface Company {
   /** add-on modules by key (public.company_modules, docs/specs/33 П15; modules/registry.ts reads them). Written only
    *  through module.enable / module.disable / module.saveSettings, never by company.save; absent = none on this phone. */
   modules?: Record<string, import("@/modules/registry").CompanyModule>;
+  /** #2410: the developer's company (companies.developer_account) — every switched-on module has no term. Read only:
+   *  set by the server (service_role, a migration), never by the app */
+  developerAccount?: boolean;
   /** photo rules for visits (docs/specs/08 §3.3; features/checklist.ts visitSettings fills the gaps). Written only through
    *  company.visitSettings, never by company.save; absent = the defaults */
   visitSettings?: Partial<VisitSettings>;

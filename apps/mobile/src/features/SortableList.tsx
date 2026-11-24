@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
-import { View, useWindowDimensions } from "react-native";
+import { Platform, View, useWindowDimensions, type ViewStyle } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -7,16 +7,19 @@ import { component, gesture, motion, radius, size, space, z } from "@octo/design
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { haptics } from "@/ui/haptics";
+import { GroupHairline } from "@/ui/groupedList";
 import { Icon } from "@/ui/primitives";
 import { useScreenScroll } from "@/ui/requiredForm";
 import { useScrollLock } from "@/ui/surfaces";
-import { finePointer, holdConfig } from "@/ui/pointer";
+import { finePointer, sortHandleConfig, sortHoldConfig } from "@/ui/pointer";
+import { dragEnd, holdStill, showsHandle } from "./estimate/rowGesture";
+import { rowClip, rowCorners } from "./rowCorners";
 import { canBegin, crossesSection, dragKind, dragWrite, edgeStep, feelOf, heldGone, ownsDrag, placeWithMargin, resolveDrop, rowKey, shiftOf, withoutBlock, type Drop, type DropResult } from "./sortable";
 import type { ViewRow } from "./sectionLayout";
 
 /**
  * The estimate's list you can drag in (DS §14.6, spec Р5): a row is taken by its handle «≡» (at once, after `gesture.dragStart`)
- * or — a folded one — by a hold of `gesture.dragHoldMs` (a mouse: after a move of `dragStart`). It lifts (`motion.liftScale`,
+ * or — a folded one — by a hold of `gesture.sortHoldMs` 500 (a finger, the «⠿» too, #2375; a mouse: after a move of `dragStart`). It lifts (`motion.liftScale`,
  * `liftTilt`, shadow, frame `acc`), the rows make room (`durBase`) and a bar shows the place; near the top or bottom of the
  * screen the page scrolls (`gesture.autoScrollEdge`); let go over the list — it lands (`medium`), over nothing — it springs back.
  * A section is carried whole (it folds while held). Reduced motion: no lift, no spring.
@@ -58,6 +61,10 @@ const SortCtx = createContext<Ctl | null>(null);
  */
 const HandleCtx = createContext(false);
 export const useRowHandle = (): boolean => useContext(HandleCtx);
+/** #2421: the open line tells the list how high its head is — «≡» stands centred on that head, as it stood on the folded line
+ *  (a name in two lines makes the head taller than a list row) */
+const HeadCtx = createContext<((h: number) => void) | null>(null);
+export const useRowHead = () => useContext(HeadCtx);
 
 export type { DropResult };
 
@@ -82,9 +89,17 @@ export interface SortableListProps {
   /** before a section is taken (it folds, and an open row inside it would be unmounted): false — the drag does not start */
   beforeBegin?: (row: ViewRow) => boolean;
   renderRow: (row: ViewRow, index: number) => ReactNode;
+  /** visual v2 №5 (#2344): a folded LINE has no «≡» — it is taken by its body (a hold for a finger, a move for a mouse) */
+  quietLines?: boolean;
+  /** a finger held a folded line and let it go where it was (estimate/rowGesture holdStill): the screen opens the row's menu */
+  onHoldStill?: (key: string) => void;
+  /** #2363: the look of a row's frame WITH its handle (a group's card drawn by its rows: the ground, the corners of the first/last) */
+  rowLook?: (row: ViewRow, index: number) => ViewStyle | undefined;
+  /** #2387: an inset hairline over the row (its left inset; `null` — none): the rule of a group's rows runs to the card's right edge, past the «≡» */
+  rowRule?: (row: ViewRow, index: number) => number | null;
 }
 
-export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, beforeBegin, renderRow }: SortableListProps) {
+export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, beforeBegin, renderRow, quietLines, onHoldStill, rowLook, rowRule }: SortableListProps) {
   const { c } = useTheme();
   const reduce = useReducedMotion();
   const lock = useScrollLock();
@@ -130,8 +145,8 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
   const foldGap = useRef(0);
   /** how far the edge zone has scrolled the page since the row was taken (the finger's scroll; any other is the fold's) */
   const edgeScrolled = useRef(0);
-  const latest = useRef({ rows, onDrop, onHold, onLift, beforeBegin, state, scroll, openKey, locked });
-  latest.current = { rows, onDrop, onHold, onLift, beforeBegin, state, scroll, openKey, locked };
+  const latest = useRef({ rows, onDrop, onHold, onLift, beforeBegin, state, scroll, openKey, locked, onHoldStill, quietLines });
+  latest.current = { rows, onDrop, onHold, onLift, beforeBegin, state, scroll, openKey, locked, onHoldStill, quietLines };
 
   const place = useCallback((key: string, ty: number) => {
     const { rows: rs } = latest.current;
@@ -414,6 +429,8 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
       end: (key, canceled, endTy) => {
         // only the held row's own finger ends the drag (the other finger's end took its place, its lastT and its lock)
         if (!ownsDrag(activeKey.current, key)) return;
+        // the release that follows is no tap on the row (the web's click after a mouse drag)
+        dragEnd.ended();
         activeKey.current = null;
         activeSV.value = "";
         lastT.current = endTy;
@@ -443,6 +460,8 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
         // what the drop CAME TO decides the feel, and it is known before the buzz: moved — «medium»; ended where it was — nothing;
         // refused — «warning» (never «medium» for a move that did not happen)
         const res: DropResult = d ? drop(d) : "same";
+        // a finger's hold let go where it was taken: the row's menu (visual v2 №5 — no «⋯» on a folded line)
+        if (res === "same" && latest.current.onHoldStill && holdStill({ canceled, ty: endTy, fine: finePointer(), key, open: latest.current.openKey === key })) latest.current.onHoldStill(key);
         if (res === "moved" && landAt !== null) pendingLand.current = { key, y: landAt - foldGap.current, at: liftAt.current };
         foldGap.current = 0;
         const feel = feelOf(res);
@@ -477,7 +496,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
     <SortCtx.Provider value={ctl}>
       <View ref={boxRef} collapsable={false} onLayout={(e) => (box.current.h = e.nativeEvent.layout.height)} style={{ position: "relative" }}>
         {rows.map((r, i) => (
-          <Item key={rowKey(r)} k={rowKey(r)} index={i} dragKind={dragKind(r) ? "x" : null} open={openKey === rowKey(r)}>
+          <Item key={rowKey(r)} k={rowKey(r)} index={i} dragKind={dragKind(r) ? "x" : null} open={openKey === rowKey(r)} quiet={!!quietLines} look={rowLook?.(r, i)} rule={rowRule?.(r, i) ?? null}>
             {renderRow(r, i)}
           </Item>
         ))}
@@ -488,7 +507,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
   );
 }
 
-function Item({ k, index, dragKind, open, children }: { k: string; index: number; dragKind: "x" | null; open: boolean; children: ReactNode }) {
+function Item({ k, index, dragKind, open, quiet, look, rule, children }: { k: string; index: number; dragKind: "x" | null; open: boolean; quiet: boolean; look?: ViewStyle; rule: number | null; children: ReactNode }) {
   const ctl = useContext(SortCtx)!;
   const { c } = useTheme();
   const { t } = useI18n();
@@ -516,8 +535,11 @@ function Item({ k, index, dragKind, open, children }: { k: string; index: number
   const begin = ctl.begin;
   const move = ctl.move;
   const end = ctl.end;
+  // #2375: a finger takes the «⠿» only after the hold too (a mouse — a move of dragStart)
+  const handleCfg = useMemo(() => sortHandleConfig(finePointer()), []);
   const handle = usePanGesture({
-    minDistance: gesture.dragStart,
+    minDistance: handleCfg.minDistance,
+    activateAfterLongPress: handleCfg.activateAfterLongPress,
     maxPointers: 1,
     onActivate: (e) => {
       "worklet";
@@ -536,7 +558,7 @@ function Item({ k, index, dragKind, open, children }: { k: string; index: number
     },
   });
   // the body of a row: a mouse / pen starts after a move of `dragStart`, a finger only after a hold (else the page's scroll is lost)
-  const cfg = useMemo(() => holdConfig(finePointer()), []);
+  const cfg = useMemo(() => sortHoldConfig(finePointer()), []);
   const hold = usePanGesture({
     minDistance: cfg.minDistance,
     activateAfterLongPress: cfg.activateAfterLongPress,
@@ -558,6 +580,21 @@ function Item({ k, index, dragKind, open, children }: { k: string; index: number
     },
   });
 
+  // #2363 (founder 21.11: «прозрачные полоски» between a group's lines): the row's ground and corners are drawn by the OUTER view
+  // (the one that is carried), so the rows of a group join into one card
+  const { backgroundColor: lookBg, borderTopLeftRadius, borderTopRightRadius, borderBottomLeftRadius, borderBottomRightRadius, ...lookInner } = look ?? {};
+  const lookGround = typeof lookBg === "string" ? lookBg : "transparent";
+  // a middle line of a group has square corners (else the wrapper's own `radius.inner` rounded every line into a card of its own)
+  const lookCorners = rowCorners(look);
+  // #2427: a folded line is clipped by the same corners — on a phone its swipe's square ground covered the card's left corners
+  // (the web has no swipe: nothing to clip, its focus ring stays whole); a held row is clipped as its outer view is rounded
+  const clip = Platform.OS === "web" ? undefined : rowClip(look, open);
+  // (always all four corners: an animated style that drops a key keeps its last value on a phone)
+  const clipStyle = useAnimatedStyle(() => {
+    if (!clip) return {};
+    const r = mine && held.value > 0.5 ? radius.inner : null;
+    return { borderTopLeftRadius: r ?? clip.borderTopLeftRadius, borderTopRightRadius: r ?? clip.borderTopRightRadius, borderBottomLeftRadius: r ?? clip.borderBottomLeftRadius, borderBottomRightRadius: r ?? clip.borderBottomRightRadius };
+  });
   const a = useAnimatedStyle(() => {
     const on = mine;
     return {
@@ -566,17 +603,20 @@ function Item({ k, index, dragKind, open, children }: { k: string; index: number
         { scale: on ? 1 + (motion.liftScale - 1) * lift.value : 1 },
         { rotate: on ? `${motion.liftTilt * lift.value}deg` : "0deg" },
       ],
-      zIndex: on ? z.lift : 0,
+      zIndex: on ? z.lift : z.under,
       shadowOpacity: on ? component.liftShadow * lift.value : 0,
       shadowRadius: c.shadow.radius,
       shadowOffset: { width: 0, height: component.dragHandle },
       shadowColor: c.shadow.color,
-      borderRadius: radius.inner,
-      borderWidth: component.selectedBorder,
-      borderColor: on && held.value > 0.5 ? c.acc : "transparent",
-      backgroundColor: on && held.value > 0.5 ? c.bg : "transparent",
+      // a group's line: its own corners (per corner — a web `borderRadius` set after them would round every line)
+      // (a carried line is rounded whole, like its `acc` frame — its ground never sticks out past the frame's corners)
+      ...(lookCorners && !(on && held.value > 0.5) ? lookCorners : { borderTopLeftRadius: radius.inner, borderTopRightRadius: radius.inner, borderBottomLeftRadius: radius.inner, borderBottomRightRadius: radius.inner }),
+      backgroundColor: on && held.value > 0.5 ? c.bg : lookGround,
     };
   });
+  // the held row's frame `acc` lies OVER the row (not a border around it): a row is as high as it draws (F32: a line 52, as in the
+  // mock), and the rows of a group touch — no transparent frame between them
+  const frameStyle = useAnimatedStyle(() => ({ opacity: mine && held.value > 0.5 ? 1 : 0 }));
 
   // the landed row flashes: a frame `acc` that fades out over `durSlow`
   const fl = useSharedValue(0);
@@ -592,30 +632,42 @@ function Item({ k, index, dragKind, open, children }: { k: string; index: number
   const canDrag = dragKind !== null && ctl.canDrag(k);
   // an open LINE draws its handle in its own header; any other row has it in a column on the right
   const inHeader = open && k.startsWith("l:");
-  const handleEl = canDrag ? (
+  const [headH, setHeadH] = useState<number>(component.listRow.h);
+  // the held row keeps its «≡» while it is carried (#2350): an open line taken by the «≡» of its header folds as the drag begins —
+  // a folded line has no «≡», and the handle leaving the page would end its own gesture (the drag never started)
+  const handleEl = canDrag && (!quiet || showsHandle(k, open) || mine) ? (
     <GestureDetector gesture={handle}>
       <View
         testID={`sort-handle-${k}`}
         accessibilityRole="button"
         accessibilityLabel={t("est.sec.drag")}
-        // in the open line's header: over its right end, centred on its buttons (the row's top padding `space[3]`, `dockBtn` high)
-        style={inHeader ? { position: "absolute", right: 0, top: space[3] + (component.dockBtn - size.hitMin) / 2, width: size.hitMin, height: size.hitMin, alignItems: "center", justifyContent: "center" } : { width: size.hitMin, minHeight: size.hitMin, alignItems: "center", justifyContent: "center", alignSelf: "stretch" }}
+        // in the open line's head (#2421: its folded face, as high as the line tells — `useRowHead`): over its right end, centred
+        // on that head — where the folded line's «≡» stood
+        style={inHeader ? { position: "absolute", right: 0, top: (headH - size.hitMin) / 2, width: size.hitMin, height: size.hitMin, alignItems: "center", justifyContent: "center" } : { width: size.hitMin, minHeight: size.hitMin, alignItems: "center", justifyContent: "center", alignSelf: "stretch" }}
       >
-        <Icon name="menu" s={size.iconMd} color={c.mut} />
+        <Icon name="grip" s={size.iconMd} color={c.mut} />
       </View>
     </GestureDetector>
   ) : null;
   const body = (
     <View style={{ flex: 1 }} testID={`sort-row-${k}`}>
-      <HandleCtx.Provider value={inHeader && canDrag}>{children}</HandleCtx.Provider>
+      <HandleCtx.Provider value={inHeader && canDrag}>
+        <HeadCtx.Provider value={setHeadH}>{children}</HeadCtx.Provider>
+      </HandleCtx.Provider>
     </View>
   );
   return (
     <Animated.View ref={(n: unknown) => ctl.node(k, n as ComponentRef<typeof View> | null)} collapsable={false} onLayout={(e) => ctl.layout(k, e.nativeEvent.layout.y, e.nativeEvent.layout.height)} style={a}>
-      <View style={{ flexDirection: "row", alignItems: "center" }}>
+      <Animated.View style={[{ flexDirection: "row", alignItems: "center" }, lookInner, clip, clipStyle]}>
         {canDrag && !open ? <GestureDetector gesture={hold}>{body}</GestureDetector> : body}
         {handleEl}
-      </View>
+      </Animated.View>
+      {rule !== null && !mine ? (
+        <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
+          <GroupHairline inset={rule} />
+        </View>
+      ) : null}
+      {mine ? <Animated.View pointerEvents="none" style={[{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: radius.inner, borderWidth: component.selectedBorder, borderColor: c.acc }, frameStyle]} /> : null}
       {flashing ? <Animated.View pointerEvents="none" testID={`sort-flash-${k}`} style={[{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: radius.inner, borderWidth: component.selectedBorder, borderColor: c.acc }, flashStyle]} /> : null}
     </Animated.View>
   );
