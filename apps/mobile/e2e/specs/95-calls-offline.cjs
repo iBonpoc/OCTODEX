@@ -44,15 +44,16 @@ exports.run = async (h) => {
   await h.sheet().getByRole("button", { name: "Сохранить звонок" }).click(); await p.waitForTimeout(600);
   h.expect((await queue(p)).length === before + 1, "saved again: in the queue");
 
-  // a task
+  // a task — v2 (#2350): «Задачи» is the List template, its «＋» a menu with «Новая задача» (`tasks-create-new`)
   await go("Задачи");
-  await plus().click(); await p.waitForTimeout(500);
+  await require("../listScreen.cjs").listCreate(p, "tasks", "tasks-create-new");
+  await h.sheet().getByPlaceholder("Клиент, лид, работа или адрес").waitFor();
   await h.sheet().getByPlaceholder("Клиент, лид, работа или адрес").fill("Sarah"); await p.waitForTimeout(300);
   await h.sheet().getByText("Sarah Mitchell", { exact: true }).first().click(); await p.waitForTimeout(300);
   await h.sheet().getByPlaceholder("Например: перезвонить и уточнить объём").fill("Offline task");
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(600);
   await h.expectText(/Без сети\. Сохранено, отправится позже/, "offline: the task is saved and queued");
-  await h.expectText(/Offline task/, "the task is in the list at once");
+  await p.getByTestId("tasks-groups").locator("visible=true").first().getByText("Offline task").first().waitFor({ timeout: 5000 });
   const q2 = await queue(p);
   h.expect(q2.length === before + 2, `the task waits in the queue too (${q2.length})`);
   await h.shot("offline");

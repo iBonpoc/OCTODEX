@@ -21,7 +21,8 @@ exports.run = async (h) => {
   await estMore(p);
   h.expect((await p.getByTestId("est-send").count()) === 0, "a tech: no «Отправить» (its sheet copies the link)");
   h.expect(!(await estHas(p, "client")), "a tech: no «Как видит клиент»");
-  await h.expectText(/Подпись клиента на месте|Подписать на месте/, "the on-site signature is still there for him");
+  // v2 (#2350): the on-site signature is a section of the estimate («Подпись на месте», `estimate-screen-sections-sign`)
+  h.expect((await p.getByTestId("estimate-screen-sections-sign").locator("visible=true").count()) === 1, "the on-site signature is still there for him");
   await h.shot("tech");
   await setRole(h, "director");
 };

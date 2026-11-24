@@ -26,8 +26,10 @@ exports.run = async (h) => {
   };
   await h.go("/clients");
   const before = (await h.db()).customers.length;
-  await p.getByRole("button", { name: "Ещё действия" }).first().click(); await p.waitForTimeout(300);
-  await h.sheet().getByRole("button", { name: "Импорт из CSV" }).click(); await p.waitForTimeout(600);
+  // v2 (#2350): «⋯» of the list's header (`clients-more`) → «Импорт из CSV» (`clients-more-import`)
+  await p.getByTestId("clients-more").locator("visible=true").first().getByRole("button").first().click();
+  await p.getByTestId("clients-more-import").locator("visible=true").first().click();
+  await p.waitForURL(/\/client\/import/, { timeout: 5000 });
   const choose = async () => {
     const chooser = p.waitForEvent("filechooser");
     await p.getByRole("button", { name: /Выбрать файл CSV|Другой файл/ }).click();

@@ -1,5 +1,5 @@
 /**
- * iOS-style sheets: drag the grabber down to close; unsaved changes ask Save / Don't save / Cancel; Undo toast has a countdown ring.
+ * iOS-style sheets: drag the grabber down to close; unsaved changes ask Save / Don't save / Cancel; the Undo toast brings the old value back.
  * On tablet and desktop (820 / 1280) the sheet is a centred dialog without a grabber: closing is the "Закрыть" button, the
  * unsaved-changes question is the same.
  */
@@ -18,53 +18,60 @@ exports.run = async (h) => {
   };
   const sheetOpen = async () => (await p.locator('[aria-modal="true"]').count()) > 0;
 
+  // v2: the lead's contact row (lead-person-main) opens «Контакты клиента»; its phone field is the one edited here
+  const contact = () => p.getByTestId("lead-person-main").locator("visible=true").first();
+  const phone = () => h.sheet().getByTestId("people-0-phones-row-0-value").locator("input").first();
   await h.go("/lead/l1");
   await h.clickText("Обзор");
+  const phone0 = (await h.db()).leads.find((x) => x.id === "l1").phone;
   // no changes: drag down closes
-  await p.getByRole("button", { name: "Изменить: Контакт" }).click();
+  await contact().click();
   await p.waitForTimeout(400);
   h.expect(await sheetOpen(), "sheet opened");
   if (wide) {
     h.expect((await p.getByLabel("Шторка", { exact: true }).count()) === 0, "no grabber on a wide screen");
     await closeBtn();
     h.expect(!(await sheetOpen()), "close button closes the dialog");
-    await p.getByRole("button", { name: "Изменить: Контакт" }).click();
+    await contact().click();
     await p.waitForTimeout(400);
   } else {
     await dragDown(220);
     h.expect(!(await sheetOpen()), "drag down closes the sheet");
     // a small drag springs back
-    await p.getByRole("button", { name: "Изменить: Контакт" }).click();
+    await contact().click();
     await p.waitForTimeout(400);
     await dragDown(40);
     h.expect(await sheetOpen(), "a short drag does not close");
   }
 
   // unsaved changes: close asks; "Don't save" keeps the old value
-  await h.sheet().getByPlaceholder("Имя", { exact: true }).fill("Kevin Brooks Jr");
+  await phone().fill("(818) 555-0199");
   await h.sheet().getByRole("button", { name: "Закрыть" }).last().click();
   await p.waitForTimeout(300);
   await h.expectText(/Сохранить изменения\?/, "unsaved question on close");
   await h.sheet().getByRole("button", { name: "Не сохранять" }).click();
   await p.waitForTimeout(500);
   let l = (await h.db()).leads.find((x) => x.id === "l1");
-  h.expect(l.name === "Kevin Brooks", "not saved");
+  h.expect(l.phone === phone0, `not saved (${l.phone})`);
 
   // drag with changes → question → Save
-  await p.getByRole("button", { name: "Изменить: Контакт" }).click();
+  await contact().click();
   await p.waitForTimeout(400);
-  await h.sheet().getByPlaceholder("Имя", { exact: true }).fill("Kevin Brooks Jr");
+  await phone().fill("(818) 555-0199");
   if (wide) await closeBtn();
   else await dragDown(220);
   await h.expectText(/Сохранить изменения\?/, "unsaved question on drag / close");
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();
   await p.waitForTimeout(500);
   l = (await h.db()).leads.find((x) => x.id === "l1");
-  h.expect(l.name === "Kevin Brooks Jr", "saved from the question");
+  h.expect(l.phone === "(818) 555-0199", `saved from the question (${l.phone})`);
 
-  // toast Undo has the countdown ring
+  // the toast «Отменить» (rule 5; v2: a solid plate, no countdown ring) brings the old value back
   const undo = p.getByRole("button", { name: "Отменить" }).last();
   h.expect(await undo.isVisible(), "undo toast");
-  h.expect((await undo.locator("svg rect").count()) === 1, "countdown ring around Undo");
-  await h.shot("toast-ring");
+  await h.shot("toast");
+  await p.waitForFunction(() => { const b = [...document.querySelectorAll('[role="button"][aria-label="Отменить"]')].pop(); return !!b && b.getAttribute("aria-busy") !== "true"; }, null, { timeout: 3000 });
+  await undo.click();
+  const back = await p.waitForFunction((was) => JSON.parse(localStorage.getItem("octo.db.v5")).db.leads.find((x) => x.id === "l1").phone === was, phone0, { timeout: 3000 }).then(() => true, () => false);
+  h.expect(back, "«Отменить» brings the old phone back");
 };

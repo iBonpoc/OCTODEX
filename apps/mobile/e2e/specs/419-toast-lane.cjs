@@ -22,6 +22,13 @@ exports.run = async (h) => {
   await frames();
   await tid("showcase-note-undo").getByRole("button").click();
   await tid("toast-text").waitFor({ timeout: 3000 });
+  // the click scrolled the demo's button into view (it is not on the page's last screen in v2): the page to its very end again,
+  // with the toast up
+  await p.evaluate(() => {
+    let e = document.querySelector('[data-testid="showcase-note-undo"]');
+    while (e && !(e.scrollHeight > e.clientHeight + 1 && getComputedStyle(e).overflowY !== "visible")) e = e.parentElement;
+    if (e) e.scrollTop = e.scrollHeight;
+  });
   await frames();
   const m = await p.evaluate(() => {
     const text = [...document.querySelectorAll('[data-testid="toast-text"]')].find((e) => e.offsetParent !== null);
@@ -34,7 +41,15 @@ exports.run = async (h) => {
     while (sc && !(sc.scrollHeight > sc.clientHeight + 1 && getComputedStyle(sc).overflowY !== "visible")) sc = sc.parentElement;
     let last = null;
     if (sc) {
-      const blocks = [...sc.querySelectorAll("*")].filter((e) => e.offsetParent !== null && e.getBoundingClientRect().height > 0 && e.children.length === 0);
+      // a leaf cut off by an overflow-hidden parent (a demo's clipped stage) is no block of the page
+      const clipped = (e) => {
+        const r = e.getBoundingClientRect();
+        for (let n = e.parentElement; n && n !== sc; n = n.parentElement) {
+          if (getComputedStyle(n).overflowY !== "visible" && r.top >= n.getBoundingClientRect().bottom - 1) return true;
+        }
+        return false;
+      };
+      const blocks = [...sc.querySelectorAll("*")].filter((e) => e.offsetParent !== null && e.getBoundingClientRect().height > 0 && e.children.length === 0 && !clipped(e));
       last = Math.max(...blocks.map((e) => e.getBoundingClientRect().bottom));
     }
     const tab = [...document.querySelectorAll('[data-testid="tab-bar"]')].find((e) => e.offsetParent !== null);

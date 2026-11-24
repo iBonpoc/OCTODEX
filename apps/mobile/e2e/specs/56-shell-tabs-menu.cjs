@@ -1,13 +1,14 @@
 /**
- * Wave 2a of the app shell, variant Б since 06.11 (docs/specs/13 v2 §2.1–§2.3, §4; 13а): the same 5 tabs for every role
- * (Главная · План · Сообщения · Клиенты · Ещё), «Ещё» (phone) / the side menu (820/1280) by rights,
- * the old «Продажи» and «Ещё» addresses, Calls and Messages from what the app recorded, the company crumb.
+ * Wave 2a of the app shell (docs/specs/13 v2 §2.1–§2.3, §4; 13а), prototype v2 (sections.ts TAB_ORDER): the bottom tabs
+ * Главная · План · Клиенты · Деньги · Лиды (the tech has no «Деньги»), «Ещё» behind the root header's avatar (phone) /
+ * the side menu (820/1280) by rights, the old «Продажи» and «Ещё» addresses, Calls and Messages from what the app
+ * recorded, the company crumb.
  */
-const TABS = ["Главная", "План", "Сообщения", "Клиенты", "Ещё"];
-/** 820/1280: no bottom tabs — the same places (and Звонки) on the side rail; «Ещё» is not there */
-const WIDE_PLACES = ["Главная", "План", "Сообщения", "Клиенты", "Звонки"];
+const TABS = { director: ["Главная", "План", "Клиенты", "Деньги", "Лиды"], dispatcher: ["Главная", "План", "Клиенты", "Деньги", "Лиды"], sales: ["Главная", "План", "Клиенты", "Деньги", "Лиды"], tech: ["Главная", "План", "Клиенты", "Лиды"] };
+/** 820/1280: no bottom tabs — the places on the side rail; «Ещё» is not there */
+const WIDE_PLACES = ["Главная", "План", "Сообщения", "Клиенты", "Звонки", "Лиды"];
 const HOME = { director: "/today", dispatcher: "/triage", sales: "/leads", tech: "/visits" };
-/** ☰ by role (13 §4): [must have, must not have] */
+/** ☰ by role (13 §4): [must have, must not have]; on the phone «Лиды» is a tab, not a row of «Ещё» (see below) */
 const MENU = {
   director: [["Лиды", "Работы", "Звонки", "Сметы", "Счета", "Каталог", "Оплаты", "Отчёты", "Расходы", "Команда", "Настройки компании", "Настройки приложения", "Помощь и поддержка"], []],
   // spec 26 §3: the office sees «Настройки компании» (read-only)
@@ -26,7 +27,7 @@ exports.run = async (h) => {
   const openMenu = m.open;
   const wide = h.layout.width >= 820;
   // phone: the 5 bottom tabs; 820/1280: the same places on the side rail (13 §2.5)
-  const SIDE = { Главная: "home", План: "plan", Сообщения: "messages", Звонки: "calls", Клиенты: "clients" };
+  const SIDE = { Главная: "home", План: "plan", Сообщения: "messages", Звонки: "calls", Клиенты: "clients", Лиды: "leads" };
   const phone = m.phone;
   const place = (name) => (wide ? p.getByTestId(`side-${SIDE[name]}`) : p.getByRole("tab", { name, exact: true }));
   const lit = async (name) => (wide ? (await place(name).getAttribute("aria-current")) === "page" : (await p.getByRole("tab", { name, selected: true }).count()) === 1);
@@ -35,9 +36,9 @@ exports.run = async (h) => {
   for (const role of ["director", "dispatcher", "sales", "tech"]) {
     await setRole(h, role);
     await h.go("/plan");
-    // the same 5 tabs with «Ещё»; no «Звонки» tab (until the own number), no «Продажи»
-    for (const name of wide ? WIDE_PLACES : TABS) h.expect((await place(name).count()) === 1, `${role}: place «${name}»`);
-    for (const name of ["Звонки", "Продажи", "Разбор", "Выезды", "Сегодня", ...(wide ? ["Ещё"] : [])]) h.expect((await p.getByRole("tab", { name, exact: true }).count()) === 0, `${role}: no tab «${name}»`);
+    // v2: the 5 tabs (the tech 4); no «Звонки» tab (until the own number), no «Продажи», «Сообщения» and «Ещё» are not tabs
+    for (const name of wide ? WIDE_PLACES : TABS[role]) h.expect((await place(name).count()) === 1, `${role}: place «${name}»`);
+    for (const name of ["Звонки", "Продажи", "Разбор", "Выезды", "Сегодня", "Ещё", "Сообщения", ...(role === "tech" ? ["Деньги"] : [])]) h.expect((await p.getByRole("tab", { name, exact: true }).count()) === 0, `${role}: no tab «${name}»`);
     // no ☰ in the header on the phone (variant Б)
     if (phone) h.expect((await p.getByRole("button", { name: "Меню", exact: true }).count()) === 0, `${role}: no ☰ on the phone`);
     // «Главная» opens the role's own home
@@ -49,7 +50,9 @@ exports.run = async (h) => {
     // «Ещё» / the side menu by rights
     await openMenu();
     const text = await menu().innerText();
-    const [has, hasNot] = MENU[role];
+    const [has0, hasNot0] = MENU[role];
+    const has = phone ? has0.filter((x) => x !== "Лиды") : has0;
+    const hasNot = phone ? [...hasNot0, "Лиды"] : hasNot0;
     for (const it of has) h.expect(new RegExp(`(^|\\n)${it}(\\n|$)`).test(text), `${role}: the menu has «${it}»`);
     if (role === "director" && !phone) h.expect(/(^|\n)Создать(\n|$)/.test(text), "820/1280: «＋ Создать» in the side menu");
     for (const it of hasNot) h.expect(!new RegExp(`(^|\\n)${it}(\\n|$)`).test(text), `${role}: ☰ has no «${it}»`);
@@ -65,10 +68,14 @@ exports.run = async (h) => {
   await menu().getByRole("button", { name: "Счета", exact: true }).click();
   await p.waitForTimeout(700);
   h.expect(path(h) === "/invoice", `Счета → /invoice (${p.url()})`);
-  await h.expectText(/Не оплачен · Просрочен · \d+/, "the invoices list is open on its first chip");
+  // v2: the list opens with the overdue group first
+  await p.getByTestId("invoice-list-group-overdue").locator("visible=true").first().waitFor({ timeout: 5000 });
+  const groups = await p.locator('[data-testid^="invoice-list-group-"]:visible').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
+  h.expect(groups[0] === "invoice-list-group-overdue", `the invoices list opens on the overdue group (${groups.join(", ")})`);
+  // phone: the bar lights the tab a screen was opened from (tabBarRule litSection) — «Ещё» is no tab, so none is lit
+  if (phone) h.expect((await p.locator('[data-testid="tab-bar"]:visible [role="tab"][aria-selected="true"]').count()) === 0, "phone: «Счета» from «Ещё» lights no tab");
   await openMenu();
-  if (phone) h.expect(await lit("Ещё"), "phone: «Ещё» is lit on a section from it");
-  else h.expect((await menu().locator('[aria-current="page"]').innerText()).includes("Счета"), "«Счета» is marked as the current item");
+  if (!phone) h.expect((await menu().locator('[aria-current="page"]').innerText()).includes("Счета"), "«Счета» is marked as the current item");
   await m.close();
 
   // «Сметы» is a section of its own (founder 07.11, spec 31 §7а): its own screen, no Leads · Estimates · Invoices switch
@@ -76,8 +83,9 @@ exports.run = async (h) => {
   await menu().getByRole("button", { name: "Сметы", exact: true }).click();
   await p.waitForTimeout(600);
   h.expect(path(h) === "/estimates", `Сметы → /estimates (${p.url()})`);
-  await h.expectText(/Открытые · \d+/, "the estimates list is open");
-  h.expect((await p.getByRole("tab", { name: "Лиды", exact: true }).locator("visible=true").count()) === 0, "no Leads · Estimates · Invoices switch");
+  await p.getByTestId("est-list-groups").locator("visible=true").first().waitFor({ timeout: 5000 });
+  const leadsTabs = await p.locator('[role="tab"][aria-label="Лиды"]').evaluateAll((els) => els.filter((e) => e.getBoundingClientRect().height > 0 && !e.closest('[data-testid="tab-bar"]')).length);
+  h.expect(leadsTabs === 0, "no Leads · Estimates · Invoices switch on the screen");
 
   // a ☰ item opened from a tab goes on top: browser / system back returns (failed before: replace closed the app)
   await h.go("/today");
@@ -145,10 +153,19 @@ exports.run = async (h) => {
   await h.go("/messages");
   await h.expectText(/Сообщения/, "Messages opens for the technician");
 
-  // the company crumb ends with the section's own name (failed before: «Настройки компании» twice)
+  // the company crumb ends with the section's own name (failed before: «Настройки компании» twice); v2: the phone has
+  // no trail — one «‹ Настройки компании» and the section's own title
   await setRole(h, "director");
   await h.go("/company/address");
-  const trail = await p.getByRole("toolbar", { name: "Где вы" }).last().innerText();
-  h.expect(/Адрес и часовой пояс/.test(trail), `trail ends with the section: ${trail.replace(/\n/g, " ")}`);
-  h.expect(!/Настройки компании[\s\S]*Настройки компании/.test(trail), "«Настройки компании» once in the trail");
+  if (phone) {
+    const up = p.getByTestId("hdr-back").locator("visible=true").first();
+    await up.waitFor({ timeout: 5000 });
+    h.expect((await up.getAttribute("aria-label")) === "Назад: Настройки компании", `phone: back to «Настройки компании» (${await up.getAttribute("aria-label")})`);
+    const title = await p.getByTestId("screen-title").locator("visible=true").first().innerText();
+    h.expect(/Адрес и часовой пояс/.test(title), `phone: the section's own title (${title})`);
+  } else {
+    const trail = await p.getByRole("toolbar", { name: "Где вы" }).last().innerText();
+    h.expect(/Адрес и часовой пояс/.test(trail), `trail ends with the section: ${trail.replace(/\n/g, " ")}`);
+    h.expect(!/Настройки компании[\s\S]*Настройки компании/.test(trail), "«Настройки компании» once in the trail");
+  }
 };

@@ -24,7 +24,7 @@ exports.run = async (h) => {
   await h.seed("octo.role.v1", "director");
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
+  await tid("module-gutters-status").filter({ hasText: /^Без срока/ }).waitFor({ timeout: 5000 });
   await h.go("/module/gutters/prices");
   await tid("gpr-screen").waitFor({ timeout: 5000 });
 

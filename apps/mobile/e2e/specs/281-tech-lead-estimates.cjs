@@ -6,7 +6,7 @@
  * «＋ Смета», and the builder says the office makes it — «Сохранить» stays active and, pressed, says so and saves
  * nothing. The office sees and adds as before.
  * The demo seed, changed from a page without the app (h.seed): the tech's lead l4 at p7 (no visit of his there) with an
- * estimate made by another (e-281); the card opens on its «Сметы» tab.
+ * estimate made by another (e-281); the card's section «Сметы» is opened by its tab (v2 ObjectScreen, `lead-screen-sections-estimates`).
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -22,11 +22,11 @@ exports.run = async (h) => {
   doc.options = [{ ...doc.options[0], lines: [{ id: "tl281", group: "service", name: "Nightly 281 line (тестовые)", quantity: "1", unit: "ea", unitPriceCents: 10000 }] }];
   db.estimateTemplates = [...(db.estimateTemplates || []), { id: "tpl281", name: "Nightly 281 template", doc }];
   await h.seed("octo.db.v5", raw);
-  await h.seed("octo.leadTab.v2", "estimates");
 
   // the tech: no estimate of another, no «＋ Смета» where he does not work
   await h.seed("octo.role.v1", "tech");
   await h.go("/lead/l4");
+  await p.getByTestId("lead-screen-sections-estimates").locator("visible=true").first().click();
   // the «Сметы» tab has drawn (its section, by testID) — then what is not in it is checked
   await p.getByTestId("lead-estimates").first().waitFor({ state: "visible", timeout: 15000 });
   h.expect((await p.getByTestId("lead-estimate-e-281").count()) === 0, "the tech: the lead card has no estimate he may not see");
@@ -38,7 +38,7 @@ exports.run = async (h) => {
   await h.go("/estimate/new?template=tpl281&customerId=c7&propertyId=p7&leadId=l4");
   await p.getByTestId("ue-not-here").first().waitFor({ state: "visible", timeout: 15000 });
   const before = (await h.db()).estimates.length;
-  await p.getByTestId("ue-save").first().getByRole("button").click();
+  await p.getByTestId("ue-save").locator("visible=true").first().click();
   await p.getByText(/Смету по этому адресу составит офис/).last().waitFor({ state: "visible", timeout: 10000 });
   h.expect((await h.db()).estimates.length === before, "the tech: «Сохранить» saved no estimate where he does not work");
   h.expect(/\/estimate\/new/.test(p.url()), `the tech: still in the builder (${p.url()})`);
@@ -46,6 +46,7 @@ exports.run = async (h) => {
   // the office: the estimate is there, and «＋ Смета»
   await h.seed("octo.role.v1", "director");
   await h.go("/lead/l4");
+  await p.getByTestId("lead-screen-sections-estimates").locator("visible=true").first().click();
   await p.getByTestId("lead-estimate-e-281").first().waitFor({ state: "visible", timeout: 15000 });
   h.expect((await p.getByTestId("lead-new-estimate").count()) > 0, "the office: «＋ Смета» as before");
 };

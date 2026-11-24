@@ -17,3 +17,12 @@ export function finePointer(): boolean {
 export function holdConfig(fine: boolean): { minDistance?: number; activateAfterLongPress?: number } {
   return fine ? { minDistance: gesture.dragStart } : { activateAfterLongPress: gesture.dragHoldMs };
 }
+
+/** #2375: an estimate line's body (SortableList) — a finger after a hold of `gesture.sortHoldMs` 500, a mouse after a move */
+export function sortHoldConfig(fine: boolean): { minDistance?: number; activateAfterLongPress?: number } {
+  return fine ? { minDistance: gesture.dragStart } : { activateAfterLongPress: gesture.sortHoldMs };
+}
+/** #2375: its «⠿» — a finger also waits for the hold (the handles stand where the thumb scrolls: a swipe must never take a line) */
+export function sortHandleConfig(fine: boolean): { minDistance?: number; activateAfterLongPress?: number } {
+  return sortHoldConfig(fine);
+}

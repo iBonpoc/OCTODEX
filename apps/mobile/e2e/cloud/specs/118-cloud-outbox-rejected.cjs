@@ -54,8 +54,10 @@ exports.run = async (h, { seed }) => {
 
   // «Главная»: in «Требует внимания» too
   await h.go("/today");
-  for (let i = 0; i < 20 && !/Расход не записан на сервере/.test(await h.text()); i++) await p.waitForTimeout(500);
-  h.expect(/Расход не записан на сервере/.test(await h.text()), "«Главная»: «Требует внимания» has it");
+  // v2 (#2350): the Home's «Требует действия» is tiles; a refused change keeps its own row above them (testID, rule 19)
+  const homeRow = p.getByTestId("home-rej-q-rej").locator("visible=true").first();
+  await homeRow.waitFor({ timeout: 10000 });
+  h.expect(/Расход не записан на сервере/.test(await homeRow.innerText()), "«Главная»: the refused expense has its row");
 
   // «Открыть» on the top card of «Разобрать»: the record it was about (an expense without a job — the profile, where
   // its card is); the page changes, so the press is seen

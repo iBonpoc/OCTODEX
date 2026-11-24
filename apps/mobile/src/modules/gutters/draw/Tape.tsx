@@ -32,22 +32,14 @@ const STOP = 0.002;
 const GIVE = 0.3;
 /** a move shorter than this is a tap, not a drag (px) */
 const MOVE_PX = space[1];
+/** labels this close to the needle go pale: a mark and a half each side */
+const NEAR_PX = TICK * 1.5 + spaceHalf.hair;
 /** a tap finds a number this many marks away at most */
 const NEAR = 4;
 /** the share of the tape's width shaded at each side */
 const FADE = 0.2;
 /** an arrow with nowhere to go */
 const OFF = 0.35;
-/** a glyph's width and its height above the baseline, as shares of the font size (to size the pill under the mark) */
-const GLYPH_W = 0.62;
-const CAP = 0.78;
-
-/** the pill behind the number under the mark: the main button's colours (founder 09.11, #674 «как у нас кнопки») */
-function MarkPill({ x, y, fs, text, fill }: { x: number; y: number; fs: number; text: string; fill: string }) {
-  const w = text.length * fs * GLYPH_W + space[2] * 2;
-  const h = fs * CAP + space[1] * 2;
-  return <Rect x={x - w / 2} y={y - fs * CAP - space[1]} width={w} height={h} rx={h / 2} fill={fill} />;
-}
 
 /** where a flick ends (marks): from `at` with `speed` marks/ms, slowing by KEEP_PER_MS each ms — the whole path */
 export const coastEnd = (at: number, speed: number) => (Math.abs(speed) < STOP ? at : at + speed / -Math.log(KEEP_PER_MS));
@@ -190,23 +182,23 @@ export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepL
   for (let k = Math.max(0, Math.floor(at) - half); k <= Math.ceil(at) + half; k++) {
     const x = cx + (k - at) * TICK;
     const m = scale(k);
-    // the number under the mark stands out on a pill like the main button (founder 09.11, #674 — the one place of `tape.*`)
+    // the label under the needle steps aside (the value is on the pill under the tape), its neighbours go pale (`mut`):
+    // the red needle reads at once (founder 23.11.2026, #2412 — variant B of the council)
     const on = Math.abs(k - at) < 0.5;
+    const near = Math.abs(k - at) * TICK < NEAR_PX;
     drawn.push(<Line key={`m${k}`} x1={x} y1={0} x2={x} y2={H * m.h} stroke={c.ink} strokeWidth={m.bold ? dt.runW / 2 : 1} />);
     // the fraction under its mark (a real tape: ⅛ ¼ ⅜ ½ ⅝ ¾ ⅞, ½ bigger)
-    if (m.frac) {
+    if (m.frac && !on) {
       const fy = H * m.h + font.size.caption + spaceHalf.hair;
-      if (on) drawn.push(<MarkPill key={`pf${k}`} x={x} y={fy} fs={font.size.heading} text={m.frac} fill={c.tape.markFill} />);
       drawn.push(
-        <SvgText key={`f${k}`} id={on ? `${testID}-at` : undefined} x={x} y={fy} fontSize={m.big || on ? font.size.heading : font.size.caption} fontFamily={m.big || on ? font.families.bold : font.families.medium} fill={on ? c.tape.markText : m.big ? c.ink : c.mut} textAnchor="middle">
+        <SvgText key={`f${k}`} x={x} y={fy} fontSize={m.big ? font.size.heading : font.size.caption} fontFamily={m.big ? font.families.bold : font.families.medium} fill={m.big && !near ? c.ink : c.mut} textAnchor="middle">
           {m.frac}
         </SvgText>,
       );
     }
-    if (m.text) {
-      if (on) drawn.push(<MarkPill key={`pt${k}`} x={x} y={H - space[2]} fs={font.size.title} text={m.text} fill={c.tape.markFill} />);
+    if (m.text && !on) {
       drawn.push(
-        <SvgText key={`t${k}`} id={on ? `${testID}-at` : undefined} x={x} y={H - space[2]} fontSize={m.bold || on ? font.size.title : font.size.heading} fontFamily={m.bold || on ? font.families.bold : font.families.medium} fill={on ? c.tape.markText : c.ink} textAnchor="middle">
+        <SvgText key={`t${k}`} x={x} y={H - space[2]} fontSize={m.bold ? font.size.title : font.size.heading} fontFamily={m.bold ? font.families.bold : font.families.medium} fill={near ? c.mut : c.ink} textAnchor="middle">
           {m.text}
         </SvgText>,
       );
@@ -218,13 +210,6 @@ export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepL
   };
   return (
     <View style={{ gap: space[1] }}>
-      <RowView style={{ alignItems: "center", gap: space[1] }}>
-        <View testID={`${testID}-less`} style={{ opacity: v <= 1 ? OFF : 1 }}><IconButton icon="chevronLeft" label={stepLabels.less} onPress={v <= 1 ? undefined : () => nudge(-1)} /></View>
-        <View style={{ flex: 1, alignItems: "center" }} testID={`${testID}-value`}>
-          <T v="title" w="semibold" tabular>{readout}</T>
-        </View>
-        <View testID={`${testID}-more`} style={{ opacity: v >= max ? OFF : 1 }}><IconButton icon="chevronRight" label={stepLabels.more} onPress={v >= max ? undefined : () => nudge(1)} /></View>
-      </RowView>
       <View
         testID={testID}
         accessible
@@ -266,11 +251,21 @@ export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepL
             <Rect x={0} y={0} width={w} height={H} fill={`url(#${testID}-fade)`} />
             {/* the mark the length is read at */}
             {/* as long as the shortest mark: the fraction and the length written under it stay readable */}
-            <Line x1={cx} y1={0} x2={cx} y2={H * 0.2} stroke={c.ink} strokeWidth={dt.runW} />
-            <Path d={`M${cx - space[2]} 0L${cx + space[2]} 0L${cx} ${space[2]}Z`} fill={c.ink} />
+            {/* the red needle (rule 2, 5th exception — the tape only): the whole height, a notch at both edges — seen over and under the finger */}
+            <Line x1={cx} y1={0} x2={cx} y2={H} stroke={c.tape.needle} strokeWidth={dt.runW / 2} />
+            <Path d={`M${cx - space[2]} 0L${cx + space[2]} 0L${cx} ${space[2]}Z`} fill={c.tape.needle} />
+            <Path d={`M${cx - space[2]} ${H}L${cx + space[2]} ${H}L${cx} ${H - space[2]}Z`} fill={c.tape.needle} />
           </Svg>
         ) : null}
       </View>
+      {/* the value on the yellow pill right under the needle (the one place of `tape.mark*`), the steps beside it */}
+      <RowView style={{ alignItems: "center", justifyContent: "center", gap: space[2] }}>
+        <View testID={`${testID}-less`} style={{ opacity: v <= 1 ? OFF : 1 }}><IconButton icon="chevronLeft" label={stepLabels.less} onPress={v <= 1 ? undefined : () => nudge(-1)} /></View>
+        <View testID={`${testID}-value`} style={{ paddingHorizontal: space[4], minHeight: size.controlMd, borderRadius: radius.pill, backgroundColor: c.tape.markFill, alignItems: "center", justifyContent: "center" }}>
+          <T v="button" tabular style={{ color: c.tape.markText }}>{readout}</T>
+        </View>
+        <View testID={`${testID}-more`} style={{ opacity: v >= max ? OFF : 1 }}><IconButton icon="chevronRight" label={stepLabels.more} onPress={v >= max ? undefined : () => nudge(1)} /></View>
+      </RowView>
     </View>
   );
 }

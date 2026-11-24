@@ -144,7 +144,7 @@ export default function CompanyScreen() {
       <View testID="company-modules">
         <Card onPress={() => router.push("/company/modules")} accessibilityLabel={t("mod.title")}>
           <RowView style={{ alignItems: "flex-start" }}>
-            <Icon name="sliders" />
+            <Icon name="settings" />
             <View style={{ flex: 1, gap: space[1] }}>
               <T v="body" w="semibold">
                 {t("mod.title")}
