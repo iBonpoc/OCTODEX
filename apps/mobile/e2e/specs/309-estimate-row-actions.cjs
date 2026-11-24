@@ -2,7 +2,7 @@
  * e2e 309 — the actions of a FOLDED estimate row on the web: «⋯» next to the row (the web has no swipe), the same list the swipe
  * and the screen reader use (РС-7c2, DS Б13, спека Р2), every view; by testID:
  * - «⋯» is on a folded row and there are no swipe buttons on the web;
- * - «Скрыть» with a price is refused with the reason (nothing changes); at $0 it hides, the row carries «Скрыта»; «Показать» brings it back;
+ * - «Скрыть» with a price is refused with the reason (nothing changes); at $0 it hides, the row carries «Скрыто от клиента»; «Показать» brings it back;
  * - «Дублировать» adds a copy; «Удалить» removes the row WITHOUT a question and the toast takes it back.
  */
 exports.run = async (h) => {

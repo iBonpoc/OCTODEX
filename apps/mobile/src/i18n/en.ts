@@ -382,6 +382,10 @@ export const en: Dict = {
   "triage.later.tomorrow": "Tomorrow · {date}",
   "triage.later.days3": "In 3 days · {date}",
   "triage.later.week": "In a week · {date}",
+  "triage.later.pick": "Pick a date…",
+  "triage.pickTitle": "Put off until a day",
+  "triage.pickDate": "Day",
+  "triage.pickDo": "Put off",
   "triage.laterSaved": "Put off until {date} — it comes back by itself",
 
   "inbox.title": "Inbox",
@@ -3148,7 +3152,7 @@ export const en: Dict = {
   "ds.rows.liveItem": "Item",
   "ds.rows.soon": "⬜ The sample comes with its component (the estimate editor).",
   "ds.rows.row": "Estimate row",
-  "ds.rows.rowHint": "“Brief / Detailed”, the trash always shown; a tap opens it in place, one open; open — “˄ Collapse”, one row “Qty · Unit · Price”, “Kind” as a list, “Total · profit · %”. Hidden — a hatch and “cost” (only when costs are visible). No profit on a folded row (§8.3).",
+  "ds.rows.rowHint": "“Brief / Detailed”, the trash always shown; a tap opens it in place, one open; open — “˄ Collapse”, one row “Qty · Unit · Price”, “Kind” as a list, “Total · profit · %”. Hidden — a dashed frame, “Hidden from client” and “cost” (only when costs are visible). No profit on a folded row (§8.3).",
   "ds.rows.lineA": "Fence painting",
   "ds.rows.lineADesc": "Both sides, primer and one coat",
   "ds.rows.lineB": "Debris haul-away",
@@ -4671,6 +4675,8 @@ export const en: Dict = {
   "pay.online.err.busy": "Too many tries. Please try again in {n} min.",
   // spec 35 §4д п.10 («Деньги и отчёты» №7)
   "est.rej.signatureLost": "The client's signature was not saved on the server",
+  "est.rej.signedMeanwhile": "The client signed the estimate while your edits waited for the network — the edits were not saved",
+  "est.rej.signedMeanwhileWhy": "The client's signature stays. To change the estimate, open it and choose “Don't sign — change it”: the client will have to sign again.",
   // visit payment refused by the server (#857 О1) — the tech hands it to the office
   "visit.rej.moneyInHand": "The money in hand was not recorded — hand the payment to the office",
   "est.signOnSite.afterSend": "The client can sign on site once the office has sent the estimate.",

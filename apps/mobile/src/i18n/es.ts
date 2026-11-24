@@ -382,6 +382,10 @@ export const es: Dict = {
   "triage.later.tomorrow": "Mañana · {date}",
   "triage.later.days3": "En 3 días · {date}",
   "triage.later.week": "En una semana · {date}",
+  "triage.later.pick": "Elegir fecha…",
+  "triage.pickTitle": "Posponer hasta un día",
+  "triage.pickDate": "Día",
+  "triage.pickDo": "Posponer",
   "triage.laterSaved": "Pospuesto hasta {date} — volverá solo",
 
   "inbox.title": "Entrada",
@@ -928,7 +932,7 @@ export const es: Dict = {
   "est.row.show": "Mostrar al cliente",
   "est.row.hideNeedZero": "Una línea se puede ocultar con precio $0",
   "est.row.hideTpl": "Ocultar una línea aún no se guarda en una plantilla",
-  "est.row.hidden": "Oculta al cliente",
+  "est.row.hidden": "Oculto al cliente",
   // редактор сметы, часть «а» (#1307, DS §8.3)
   "est2.view.brief": "Breve",
   "est2.view.full": "Detallado",
@@ -3148,7 +3152,7 @@ export const es: Dict = {
   "ds.rows.liveItem": "Elemento",
   "ds.rows.soon": "⬜ El ejemplo llega con su componente (el editor de presupuestos).",
   "ds.rows.row": "Fila del presupuesto",
-  "ds.rows.rowHint": "«Breve / Detallado», la papelera siempre visible; un toque la abre en su lugar, una abierta; abierta — «˄ Contraer», una fila «Cant. · Ud. · Precio», «Tipo» como lista, «Total · ganancia · %». Oculta — rayado y «gasto» (solo con costos visibles). Sin ganancia en la fila plegada (§8.3).",
+  "ds.rows.rowHint": "«Breve / Detallado», la papelera siempre visible; un toque la abre en su lugar, una abierta; abierta — «˄ Contraer», una fila «Cant. · Ud. · Precio», «Tipo» como lista, «Total · ganancia · %». Oculta — marco punteado, «Oculto al cliente» y «gasto» (solo con costos visibles). Sin ganancia en la fila plegada (§8.3).",
   "ds.rows.lineA": "Pintura de cerca",
   "ds.rows.lineADesc": "Ambos lados, imprimación y una capa",
   "ds.rows.lineB": "Retiro de escombros",
@@ -3199,7 +3203,7 @@ export const es: Dict = {
   "ds.icons.active": "Estado seleccionado",
   "ds.icons.activeHint": "El mismo icono, relleno: la pestaña seleccionada, una acción activa",
   "ds.icons.all": "Todos los iconos · {n}",
-  "ds.rows.eyeOff": "Icono «Oculta al cliente» (eyeOff)",
+  "ds.rows.eyeOff": "Icono «Oculto al cliente» (eyeOff)",
   "ds.rows.swipeToneCard": "Tarjeta",
   "ds.rows.swipeToneSolid": "Tono de la fila (surfSolid) — debe coincidir",
   "ds.rows.section": "Sección del presupuesto",
@@ -4671,6 +4675,8 @@ export const es: Dict = {
   "pay.online.err.busy": "Demasiados intentos. Inténtelo de nuevo en {n} min.",
   // spec 35 §4д п.10 («Деньги и отчёты» №7)
   "est.rej.signatureLost": "La firma del cliente no se guardó en el servidor",
+  "est.rej.signedMeanwhile": "El cliente firmó el presupuesto mientras sus cambios esperaban la red: los cambios no se guardaron",
+  "est.rej.signedMeanwhileWhy": "La firma del cliente se mantiene. Para cambiar el presupuesto, ábralo y elija «No firmar — cambiar»: el cliente tendrá que firmar de nuevo.",
   // visit payment refused by the server (#857 О1) — the tech hands it to the office
   "visit.rej.moneyInHand": "El dinero en mano no se registró: entregue el pago a la oficina",
   "est.signOnSite.afterSend": "El cliente puede firmar en el lugar cuando la oficina haya enviado el presupuesto.",

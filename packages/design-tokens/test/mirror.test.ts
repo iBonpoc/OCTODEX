@@ -106,6 +106,8 @@ describe("app tokens mirror the founder's DS css", () => {
   it("dialog, sheet and popover sizes, the brand splash", () => {
     expect([component.alertMaxW, component.sheetMediumRatio, component.popoverW]).toEqual([px("alert-max-w"), parseFloat(v("sheet-medium-ratio")), px("popover-w")]);
     expect(motion.durBrand).toBe(px("dur-brand"));
+    // #1763: a new downspout's blink before its sheet — 4 beats × 125 ms
+    expect([motion.blinkSteps, motion.blinkStepMs]).toEqual([px("blink-steps"), px("blink-step-ms")]);
     expect([motion.durBrandQuick, motion.durBrandEdge, motion.durBrandPause, motion.durBrandFold]).toEqual([px("dur-brand-quick"), px("dur-brand-edge"), px("dur-brand-pause"), px("dur-brand-fold")]);
     expect([motion.durBrandHold, motion.brandExitScale]).toEqual([px("dur-brand-hold"), px("brand-exit-scale")]);
     expect([motion.brandExitFadeDelay, motion.durBrandBounce, motion.brandBounceLift, motion.brandBounceSquash, motion.durBrandFirstMax, motion.durBrandWaitMin]).toEqual(

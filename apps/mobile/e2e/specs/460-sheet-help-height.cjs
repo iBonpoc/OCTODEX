@@ -102,7 +102,7 @@ exports.run = async (h) => {
   h.expect((await dialogs()) === 1 && (await top().getByTestId("sheet-help").count()) === 1, "Esc on the help page returns to the content; the sheet stays");
   await pressEscUntilClosed(p);
 
-  // with motion: the help slides in from the right and the window's height glides — no jump in one frame
+  // with motion: the help slides in from the right and the window's height changes (the start taken on appearing, the end awaited by state)
   await p.emulateMedia({ reducedMotion: "no-preference" });
   await p.reload();
   await p.getByTestId("showcase-windows").locator("visible=true").first().waitFor({ timeout: 8000 });
@@ -114,28 +114,47 @@ exports.run = async (h) => {
     const el = [...document.querySelectorAll(sel)].pop()?.querySelector('[data-testid="sheet-panel"]');
     return el && getComputedStyle(el).opacity === "1" && !/matrix\(1, 0, 0, 1, 0, [1-9]/.test(getComputedStyle(el).transform);
   }, MODAL, { timeout: 3000 });
+  // Not a frame sampled by time (rule 19, CHECKS §9: a loaded runner drops frames and the middle of the slide is missed).
+  // The START is taken the moment the help page appears in the DOM (a MutationObserver: a microtask, not a frame): its
+  // x is off to the right and the window still has the content's height. The END is awaited by state: x is 0 and the
+  // height stopped changing for 5 frames in a row. The direction (in from the right, back from the left) and the
+  // height's room are the unit test's (test/sheetHelp.test.ts, pageSwitch); the glide's no-jump is not measured here.
   await p.evaluate((sel) => {
     const w = window;
-    w.__sheetFrames = [];
-    const tick = () => {
+    w.__helpStart = null;
+    w.__helpPrev = null;
+    w.__helpSame = 0;
+    const read = () => {
       const m = [...document.querySelectorAll(sel)].pop();
       const panel = m?.querySelector('[data-testid="sheet-panel"]');
       const pg = m?.querySelector('[data-testid="sheet-help-page"]');
-      w.__sheetFrames.push({ h: panel ? panel.getBoundingClientRect().height : 0, x: pg ? new DOMMatrix(getComputedStyle(pg).transform).m41 : null });
-      if (w.__sheetFrames.length < 60) requestAnimationFrame(tick);
+      return { h: panel ? panel.getBoundingClientRect().height : 0, x: pg ? new DOMMatrix(getComputedStyle(pg).transform).m41 : null };
     };
-    requestAnimationFrame(tick);
+    w.__helpRead = read;
+    w.__helpH0 = read().h;
+    const mo = new MutationObserver(() => {
+      if (w.__helpStart) return;
+      const r = read();
+      if (r.x !== null) {
+        w.__helpStart = { x: r.x, h: w.__helpH0 };
+        mo.disconnect();
+      }
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
   }, MODAL);
   await top().getByTestId("sheet-help").click();
-  await p.waitForFunction(() => window.__sheetFrames && window.__sheetFrames.length >= 60, null, { timeout: 5000 });
-  const frames = await p.evaluate(() => window.__sheetFrames);
-  const hs = frames.map((f) => f.h);
-  const total = Math.abs(hs[hs.length - 1] - hs[0]);
-  const step = Math.max(...hs.slice(1).map((v, i) => Math.abs(v - hs[i])));
-  h.expect(total > 50, `the window changes height for the short help (${Math.round(hs[0])} → ${Math.round(hs[hs.length - 1])})`);
-  h.expect(step < total * 0.6, `the height glides, no jump in one frame (largest step ${Math.round(step)} of ${Math.round(total)})`);
-  const xs = frames.map((f) => f.x).filter((x) => x !== null);
-  h.expect(xs.length > 0 && Math.max(...xs) > 20 && Math.abs(xs[xs.length - 1]) < 1, `the help slides in from the right (x from ${Math.round(Math.max(...xs, 0))} to ${xs.length ? Math.round(xs[xs.length - 1]) : "—"})`);
+  await p.waitForFunction(() => window.__helpStart, null, { timeout: 5000 });
+  await p.waitForFunction(() => {
+    const w = window;
+    const r = w.__helpRead();
+    const prev = w.__helpPrev;
+    w.__helpPrev = r;
+    w.__helpSame = prev && r.x !== null && Math.abs(r.x) < 1 && Math.abs(r.h - prev.h) < 0.5 && Math.abs(r.h - w.__helpStart.h) > 1 ? w.__helpSame + 1 : 0;
+    return w.__helpSame >= 5;
+  }, null, { polling: "raf", timeout: 8000 });
+  const { start, end } = await p.evaluate(() => ({ start: window.__helpStart, end: window.__helpRead() }));
+  h.expect(Math.abs(end.h - start.h) > 50, `the window changes height for the short help (${Math.round(start.h)} → ${Math.round(end.h)})`);
+  h.expect(start.x > 20 && Math.abs(end.x) < 1, `the help slides in from the right, not in place (x from ${Math.round(start.x)} to ${Math.round(end.x)})`);
   await pressEscUntilClosed(p, top().getByTestId("sheet-help-page"));
   await pressEscUntilClosed(p);
 };

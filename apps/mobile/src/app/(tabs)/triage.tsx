@@ -15,7 +15,9 @@ import { Menu, useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, Empty, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { View } from "react-native";
 import { localUndo } from "@/data/undo";
-import { SNOOZE_DAYS, snoozeDay, snoozeUntil, type SnoozeKey } from "@/features/attentionSnooze";
+import { SNOOZE_DAYS, canSnoozeTo, snoozeDay, snoozeUntil } from "@/features/attentionSnooze";
+import { PickDaySheet } from "@/features/PickDaySheet";
+import type { DayKey } from "@/features/zone";
 import { waitParams } from "@/features/shortTime";
 
 /** Dispatcher home: one item at a time, most urgent first; resolve with one tap or snooze. */
@@ -40,8 +42,10 @@ export default function Triage() {
   // #2097: «Позже» — put the reason off until a day, for the whole company (the server keeps it; back by itself that day)
   const laterRef = useRef<ComponentRef<typeof View>>(null);
   const [laterAt, setLaterAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  const later = (it: AttentionItem, k: SnoozeKey) => {
-    const day = snoozeDay(SNOOZE_DAYS.find((x) => x.key === k)!.days);
+  // #2123: «Выбрать дату…» — a day of one's own in a sheet (DateField, DS А7); only a day after the company's today
+  const [pickFor, setPickFor] = useState<AttentionItem | null>(null);
+  const later = (it: AttentionItem, day: DayKey) => {
+    if (!canSnoozeTo(day)) return;
     const undo = snoozeAttention(it.id, snoozeUntil(day));
     toast.show(online ? t("triage.laterSaved", { date: dayOf(day) }) : t("offline.queued"), undo);
   };
@@ -149,12 +153,28 @@ export default function Triage() {
         visible={!!laterAt && !!cur}
         anchor={laterAt}
         title={t("triage.laterTitle")}
-        items={SNOOZE_DAYS.map((x) => ({ key: x.key, label: t(`triage.later.${x.key}`, { date: dayOf(snoozeDay(x.days)) }), testID: `triage-later-${x.key}` }))}
+        items={[
+          ...SNOOZE_DAYS.map((x) => ({ key: x.key as string, label: t(`triage.later.${x.key}`, { date: dayOf(snoozeDay(x.days)) }), testID: `triage-later-${x.key}` })),
+          { key: "pick", label: t("triage.later.pick"), testID: "triage-later-pick" },
+        ]}
         onSelect={(k) => {
           setLaterAt(null);
-          if (cur) later(cur, k);
+          if (!cur) return;
+          if (k === "pick") {
+            setPickFor(cur);
+            return;
+          }
+          later(cur, snoozeDay(SNOOZE_DAYS.find((x) => x.key === k)!.days));
         }}
         onClose={() => setLaterAt(null)}
+      />
+      <PickDaySheet
+        open={!!pickFor}
+        onClose={() => setPickFor(null)}
+        onPick={(day) => {
+          if (pickFor) later(pickFor, day);
+          setPickFor(null);
+        }}
       />
       <ReplySheet leadId={reply} onClose={() => setReply(null)} />
       <AssignSheet visitId={assign} onClose={() => setAssign(null)} />

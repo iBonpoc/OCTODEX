@@ -25,11 +25,11 @@ import { OptionsCard } from "@/features/estimate/OptionsCard";
 import { TotalsBreakdown } from "@/features/estimate/TotalsBreakdown";
 import { allOptionalFor, totalsRows } from "@/features/estimate/totalsRows";
 import { CaWarn } from "@/features/estimate/CaWarn";
-import { NotesTerms } from "@/features/estimate/NotesTerms";
+import { NotesTerms } from "@/features/estimate/NotesTermsView";
 import { isSignedEstimate } from "@/features/estimate/notesTerms";
 import { docLanguageFor } from "@/data/people";
 import { autoGroups, canAddSection, addSection, deleteSection, foldForDrag, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
-import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, nextSeries, replaceLine, restoreDeleted, type DeleteSeries, restoreLine, rowProblems, setHidden } from "@/features/estimateRows";
+import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, isHidden, leaveDecision, nextSeries, replaceLine, restoreDeleted, type DeleteSeries, restoreLine, rowProblems, setHidden } from "@/features/estimateRows";
 import { FieldError, useRequiredForm, useScreenScroll } from "@/ui/requiredForm";
 import { MainStep } from "@/ui/mainStep";
 import { CreateButton, MoreButton } from "@/ui/templates/parts";
@@ -1252,6 +1252,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               // #2387: the lines of a group are ONE card (ui/groupedList `useGroupEdge`), the inset hairline between them is the list's
               rowLook={(r, i) => groupLook(view, r, i, groupEdge)}
               rowRule={(r, i) => (r.type === "line" && view[i - 1]?.type === "line" ? space[4] : null)}
+              // #2424: a hidden line's dashed frame goes around the whole line, its «≡» too
+              rowFrame={(r) => r.type === "line" && isHidden(r.line)}
               rows={view}
               openKey={openId ? `l:${openId}` : renamingId ? `s:${renamingId}` : null}
               locked={signed}
@@ -1310,6 +1312,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                     onSwipeHintPlayed={onHintPlayed}
                     onTouchOpen={openId === r.line.id ? markTouchInOpen : undefined}
                     menuAsk={menuAsk.id === r.line.id ? menuAsk.n : 0}
+                    frame={false}
                   />
                 </View>
               )
