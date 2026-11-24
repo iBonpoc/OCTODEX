@@ -51,7 +51,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await p.waitForFunction(() => /^Пробный/.test((document.querySelector('[data-testid="module-gutters-status"]')?.textContent ?? "").trim()), null, { timeout: 8000 });
+  await p.waitForFunction(() => /^Без срока/.test((document.querySelector('[data-testid="module-gutters-status"]')?.textContent ?? "").trim()), null, { timeout: 8000 });
 
   // the setting: feet-inches by default; «Миллиметры» is the fifth item of the field's menu
   await h.go("/module/gutters/settings");

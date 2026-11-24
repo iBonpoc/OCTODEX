@@ -69,11 +69,27 @@ exports.run = async (h) => {
   await tid("est-terms-field").waitFor({ timeout: 3000 });
   await tid("est-nt-done").getByRole("button").click();
   await sheetGone(p);
-  await tid("ue-save").getByRole("button").click();
+  // optional: #2363 q72 — scrolled down, «Итого» is the capsule; a tap opens the bar with «Готово» (at the top it is the bar already)
+  if (await tid("ue-save-capsule").locator("visible=true").count()) await tid("ue-save-capsule").click();
+  // #2381 Р1: «Готово» with nothing changed only closes — nothing is written
+  const read = () => p.evaluate(([k, id]) => JSON.parse(localStorage.getItem(k)).db.estimates.find((x) => x.id === id), [DB_KEY, old.id]);
+  const before = await read();
+  await tid("ue-save").click();
+  await p.getByTestId("est-terms-row").waitFor({ state: "detached", timeout: 8000 });
+  const closed = await read();
+  h.expect(JSON.stringify(closed) === JSON.stringify(before), "«Готово» without a change: closed, nothing written (Р1)");
+
+  // one change (the title), then «Готово»: saved — and the old estimate still gets no Terms key (as before #1304)
+  await h.go(`/estimate/new?id=${old.id}`);
+  await tid("ue-title").waitFor({ timeout: 8000 });
+  await tid("ue-title").locator("input, textarea").first().fill("Old estimate · edited");
+  await p.waitForFunction((id) => JSON.parse(localStorage.getItem("octo.drafts.v1.demo") || "[]").some((d) => d.ctx === `edit|${id}`), old.id, { timeout: 5000 });
+  if (await tid("ue-save-capsule").locator("visible=true").count()) await tid("ue-save-capsule").click();
+  await tid("ue-save").click();
   await p.waitForFunction(([k, id]) => {
     const e = (JSON.parse(localStorage.getItem(k))?.db?.estimates ?? []).find((x) => x.id === id);
-    return !!e && !!e.doc?.savedAt;
+    return !!e && e.title === "Old estimate · edited" && !!e.doc?.savedAt;
   }, [DB_KEY, old.id], { timeout: 8000 });
-  const after = await p.evaluate(([k, id]) => JSON.parse(localStorage.getItem(k)).db.estimates.find((x) => x.id === id), [DB_KEY, old.id]);
+  const after = await read();
   h.expect(!("terms" in after.doc), "an old estimate saved without changing Terms: still no key (as before #1304)");
 };

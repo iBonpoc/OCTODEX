@@ -96,9 +96,9 @@ import { StoreProvider } from "../src/data/store";
 import { makeSeed } from "../src/data/seed";
 import { madeOnQueue } from "../src/data/outboxDeps";
 import type { Company } from "../src/data/types";
-import { companyToDb } from "../src/cloud/companyMap";
+import { companyFromDb, companyToDb } from "../src/cloud/companyMap";
 import {
-  activeModules, allModules, companyModulesFromRows, discoverModules, enabledLocally, moduleActive, moduleDef, moduleState, registerModule,
+  activeModules, allModules, companyModulesFromRows, discoverModules, enabledLocally, moduleActive, moduleDef, moduleState, moduleUsable, registerModule, withoutTerm,
   type CompanyModule,
 } from "../src/modules/registry";
 import gutters from "../src/modules/gutters/module";
@@ -179,6 +179,38 @@ describe("unit:modules — access (= app.module_active)", () => {
     });
     expect(companyModulesFromRows([])).toEqual({});
   });
+  it("#2410 without a term (the developer's company, the demo): switched on = usable, whatever the trial end; off stays off", () => {
+    const co = (m?: CompanyModule) => ({ modules: m ? { gutters: m } : undefined });
+    expect(moduleState(cm({ unlimited: true, trialEndsAt: iso(NOW - 30 * DAY) }), NOW)).toEqual({ access: "unlimited", trialUsed: true });
+    expect(moduleState(cm({ unlimited: true }), NOW)).toEqual({ access: "unlimited", trialUsed: false });
+    expect(moduleState(cm({ unlimited: true, enabled: false, trialEndsAt: iso(NOW - DAY) }), NOW).access).toBe("off");
+    expect(moduleActive(co(cm({ unlimited: true, trialEndsAt: iso(NOW - 30 * DAY) })), "gutters", NOW)).toBe(true);
+    expect(moduleActive(co(cm({ unlimited: true, enabled: false })), "gutters", NOW)).toBe(false);
+    expect(activeModules(co(cm({ unlimited: true, trialEndsAt: iso(NOW - DAY) })), NOW).map((d) => d.key)).toEqual(["gutters"]);
+    expect(["trial", "paid", "unlimited"].every((a) => moduleUsable(a as never))).toBe(true);
+    expect(["off", "expired", undefined].some((a) => moduleUsable(a as never))).toBe(false);
+  });
+  it("#2410 the server's row never carries a term flag of its own; the company's flag maps one way (companyFromDb, not companyToDb)", () => {
+    const rows = [{ module_key: "gutters", enabled: true, trial_ends_at: "2026-10-01T20:00:00+00:00", settings: {}, row_version: 2, unlimited: true }];
+    expect(companyModulesFromRows(rows).gutters).not.toHaveProperty("unlimited");
+    const row = { id: "c1", name: "Co", developer_account: true };
+    const dev = companyFromDb(row, undefined, [], []);
+    expect(dev.developerAccount).toBe(true);
+    expect(companyFromDb({ ...row, developer_account: false }, undefined, [], [])).not.toHaveProperty("developerAccount");
+    expect(companyFromDb({ id: "c1", name: "Co" }, undefined, [], [])).not.toHaveProperty("developerAccount");
+    expect(companyToDb(dev, row)).not.toHaveProperty("developer_account");
+  });
+  it("#2410 withoutTerm: every row without a term; a row that says unlimited: false keeps its term (the demo's e2e of «over»)", () => {
+    const over = cm({ trialEndsAt: iso(NOW - DAY) });
+    expect(withoutTerm({ gutters: over })).toEqual({ gutters: { ...over, unlimited: true } });
+    expect(moduleState(withoutTerm({ gutters: { ...over, unlimited: false } })!.gutters, NOW).access).toBe("expired");
+    expect(withoutTerm(undefined)).toBeUndefined();
+  });
+  it("#2410 switched on locally without a term: no trial end of the phone's own, a server's one kept", () => {
+    expect(enabledLocally(undefined, gutters, NOW, { unlimited: true })).toEqual({ enabled: true, settings: {}, rowVersion: 0, unlimited: true });
+    const used = cm({ enabled: false, trialEndsAt: iso(NOW - DAY), rowVersion: 4 });
+    expect(enabledLocally(used, gutters, NOW, { unlimited: true })).toEqual({ ...used, enabled: true, unlimited: true });
+  });
 });
 
 describe("unit:modules — the registry", () => {
@@ -241,12 +273,13 @@ describe("unit:modules — the store (C2a, rule 5, rule 6)", () => {
     const undoOn = valueOf(r).enableModule("gutters");
     await settle();
     const on = valueOf(r).db.company!.modules!.gutters;
-    expect(moduleState(on).access).toBe("trial");
-    expect(moduleState(on).daysLeft).toBe(7);
+    // #2410: the demo has no trial — switched on is on, with no «N days left»
+    expect(moduleState(on).access).toBe("unlimited");
+    expect(moduleState(on).daysLeft).toBeUndefined();
     expect(on.rowVersion).toBe(1);
     const undoOff = valueOf(r).disableModule("gutters");
     await settle();
-    expect(valueOf(r).db.company!.modules!.gutters).toMatchObject({ enabled: false, trialEndsAt: on.trialEndsAt, rowVersion: 2 });
+    expect(valueOf(r).db.company!.modules!.gutters).toMatchObject({ enabled: false, rowVersion: 2 });
     undoOff();
     await settle();
     expect(valueOf(r).db.company!.modules!.gutters).toEqual(on);
@@ -268,6 +301,56 @@ describe("unit:modules — the store (C2a, rule 5, rule 6)", () => {
     await settle();
     expect(valueOf(r).saveModuleSettings("gutters", { a: 2 })).toBeNull();
     expect(valueOf(r).db.company!.modules!.gutters.settings).toEqual({ a: 1 });
+  });
+  it("#2410 demo: a module switched on 30 days ago (its old 7-day trial long over) is usable, no «trial over»", async () => {
+    const seed = makeSeed();
+    const old = cm({ trialEndsAt: iso(Date.now() - 23 * DAY), rowVersion: 1 });
+    storage.set("octo.db.v5", JSON.stringify({ day: "2026-10-23", db: { ...seed, company: { ...seed.company!, modules: { gutters: old } } } }));
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    expect(valueOf(r).mode).toBe("demo");
+    expect(moduleActive(valueOf(r).db.company, "gutters")).toBe(true);
+    expect(moduleState(valueOf(r).db.company!.modules!.gutters).access).toBe("unlimited");
+    expect(valueOf(r).saveModuleSettings("gutters", { a: 1 })).toBeTypeOf("function");
+  });
+  it("#2410 cloud, the developer's company: «Подключить» is without a term at once; a company without the flag gets the trial", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    const seed = makeSeed();
+    server.loads.splice(0).forEach((d) => d.resolve({ ...seed, company: { ...seed.company!, developerAccount: true, modules: {} } }));
+    await settle();
+    valueOf(r).enableModule("gutters");
+    await settle();
+    expect(moduleState(valueOf(r).db.company!.modules!.gutters).access).toBe("unlimited");
+    root.unmount();
+    signIn("u2", "c2");
+    const r2 = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    server.loads.splice(0).forEach((d) => d.resolve({ ...seed, company: { ...seed.company!, modules: {} } }));
+    await settle();
+    valueOf(r2).enableModule("gutters");
+    await settle();
+    expect(moduleState(valueOf(r2).db.company!.modules!.gutters)).toMatchObject({ access: "trial", daysLeft: 7 });
+  });
+  it("#2410 cloud, the developer's company: a module switched on a month ago (its trial over on the row) is usable; without the flag it is not", async () => {
+    const seed = makeSeed();
+    const old = cm({ trialEndsAt: iso(Date.now() - 30 * DAY), rowVersion: 3 });
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    server.loads.splice(0).forEach((d) => d.resolve({ ...seed, company: { ...seed.company!, developerAccount: true, modules: { gutters: old } } }));
+    await settle();
+    expect(moduleState(valueOf(r).db.company!.modules!.gutters).access).toBe("unlimited");
+    expect(valueOf(r).saveModuleSettings("gutters", { a: 1 })).toBeTypeOf("function");
+    root.unmount();
+    signIn("u2", "c2");
+    const r2 = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    server.loads.splice(0).forEach((d) => d.resolve({ ...seed, company: { ...seed.company!, modules: { gutters: old } } }));
+    await settle();
+    expect(moduleState(valueOf(r2).db.company!.modules!.gutters).access).toBe("expired");
+    expect(valueOf(r2).saveModuleSettings("gutters", { a: 1 })).toBeNull();
   });
   it("cloud: «Подключить» is on the screen at once and goes through the queue; settings carry the version edited", async () => {
     signIn("u1", "c1");
@@ -310,6 +393,11 @@ describe("unit:modules — «Компания → Модули» (C2b, founder �
     expect(moduleView(cm({ trialEndsAt: iso(NOW + 3 * DAY) }), NOW)).toEqual({ status: "info", label: "mod.st.trial", n: 3, main: null, canDisable: true, locked: false });
     expect(moduleView(cm({ trialEndsAt: iso(NOW - DAY), paidUntil: iso(NOW + DAY) }), NOW)).toMatchObject({ status: "ok", label: "mod.st.paid", main: null, canDisable: true });
   });
+  it("#2410 without a term → ok «Без срока», no days, can be switched off, never locked", () => {
+    expect(moduleView(cm({ unlimited: true, trialEndsAt: iso(NOW - 30 * DAY) }), NOW)).toEqual({ status: "ok", label: "mod.st.unlimited", main: null, canDisable: true, locked: false });
+    // switched off: «Включить снова», never «7 дней бесплатно» nor a payment
+    expect(moduleView(cm({ unlimited: true, enabled: false, rowVersion: 2 }), NOW)).toEqual({ status: "neutral", label: "mod.st.disabled", main: "resume", canDisable: false, locked: false });
+  });
   it("trial over, unpaid → warn, locked, the main action is a payment (no new trial)", () => {
     expect(moduleView(cm({ trialEndsAt: iso(NOW - DAY) }), NOW)).toEqual({ status: "warn", label: "mod.st.expired", main: "pay", canDisable: true, locked: true });
   });
@@ -320,7 +408,7 @@ describe("unit:modules — «Компания → Модули» (C2b, founder �
   });
   it("every status label is in the dictionary (RU, EN, ES)", async () => {
     const { ru } = await import("../src/i18n/ru");
-    for (const k of ["mod.st.off", "mod.st.disabled", "mod.st.trial", "mod.st.paid", "mod.st.expired"]) expect(ru, k).toHaveProperty([k]);
+    for (const k of ["mod.st.off", "mod.st.disabled", "mod.st.trial", "mod.st.paid", "mod.st.expired", "mod.st.unlimited"]) expect(ru, k).toHaveProperty([k]);
   });
 });
 

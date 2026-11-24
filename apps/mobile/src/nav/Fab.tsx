@@ -9,6 +9,7 @@ import { useStore } from "@/data/store";
 import { canStartExpense, expenseJobOptions, myVisitsToday } from "@/features/expenseJobs";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
+import { HeaderButton } from "@/ui/headerIcon";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { fabItems, LIST_FABS, meIsSub, type FabCtx, type FabItem, type FabSet } from "./sections";
@@ -122,24 +123,12 @@ export function Fab({ placement, bottom = 0, right = space[4], ...p }: FabProps 
   const press = () => (one ? run(one) : setOpen(true));
   const sheet = one ? null : <FabSheet {...p} visible={open} onClose={() => setOpen(false)} />;
   if (placement === "header") {
-    // «Главная»'s quick actions are its main action: yellow, one on the screen (DS §5.3, audit №2 14.11, #1395); a list's «＋» is secondary
-    const acc = p.set === "home";
+    // the founder 21.11 (#2350): «＋» in the header is an ICON — a tonal circle `headerIcon` 36 (zone 44), never the filled accent:
+    // one filled accent on a screen, and it is the screen's main step, not «make a new one». Its words are the VoiceOver label.
     return (
       <>
-        <Press
-          testID="fab-header"
-          onPress={press}
-          visibleHeight={component.button.sm}
-          accessibilityRole="button"
-          accessibilityLabel={label}
-          aria-haspopup={one ? undefined : "dialog"}
-          style={{ flexDirection: "row", alignItems: "center", gap: space[2], height: component.button.sm, paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: acc ? c.acc : c.surf2, borderWidth: acc ? 0 : component.hairline, borderColor: c.bd }}
-        >
-          <Icon name="plus" s={size.iconSm} color={acc ? c.onAcc : c.ink} />
-          <T v="button" numberOfLines={1} style={acc ? { color: c.onAcc } : undefined}>
-            {label}
-          </T>
-        </Press>
+        {/* the one header's circle 40 (visual-v2 «Единая шапка»): «＋» looks as every other control of the row */}
+        <HeaderButton testID="fab-header" icon="plus" label={label} onPress={press} popup={!one} />
         {sheet}
       </>
     );

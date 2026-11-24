@@ -29,7 +29,7 @@ const IN = 73 * 12 + 2.5; // 73′ 2½″
 
 describe("the six formats", () => {
   it("the same length in each", () => {
-    const want: Record<LenFormat, string> = { ftin: "73′ 2½″", in: "878½″", m: "22.314 m", cm: "2231.4 cm", mm: "22314 mm" };
+    const want: Record<LenFormat, string> = { ftin: "73′ 2½″", in: "878½″", m: "22.314 m", cm: "2231.4 cm", mm: "22,314 mm" };
     for (const f of LEN_FORMATS) expect(fmtLen(IN, f), f).toBe(want[f]);
   });
   it("edges: zero, a whole foot, no decimal feet (the format is not offered), 11 15/16″ stays, 11 31/32″ is the foot, one eighth, a long run", () => {
@@ -43,8 +43,8 @@ describe("the six formats", () => {
     expect(LEN_FORMATS).toEqual(["ftin", "in", "m", "cm", "mm"]);
     expect(isLenFormat("ft")).toBe(false);
   });
-  it("the decimal point is «.» whatever the language (rule 7): no comma anywhere", () => {
-    for (const f of LEN_FORMATS) expect(fmtLen(IN + 0.3, f)).not.toContain(",");
+  it("the decimal point is «.» whatever the language (rule 7): a comma only between thousands of millimetres (#2412)", () => {
+    for (const f of LEN_FORMATS) expect(fmtLen(IN + 0.3, f)).not.toMatch(/,(?!\d{3}\b)/);
   });
   it("the setting: the value or feet-inches; the choices carry it", () => {
     expect(readLenFormat(undefined)).toBe("ftin");
@@ -107,7 +107,7 @@ describe("the documents follow the format, in every language", () => {
   }
   it("parts: the quantity of a length and the coil's blank in the format", () => {
     const en = tFor("en");
-    expect(partQty(en, { qty: "73.1666666667", unit: "ft" }, "mm")).toBe("22301 mm");
+    expect(partQty(en, { qty: "73.1666666667", unit: "ft" }, "mm")).toBe("22,301 mm");
     expect(partQty(en, { qty: "10", unit: "ft" }, "ftin")).toBe("10′");
     const coil = parts.find((p) => p.key.startsWith("coil."))!;
     expect(partName(en, coil, "mm")).toContain("302 mm");
@@ -125,5 +125,13 @@ describe("guard: no length of its own", () => {
       .filter((f) => f !== "canvas/format.ts")
       .filter((f) => /\bftIn\(/.test(readFileSync(join(MODULE, f), "utf8")));
     expect(bad).toEqual([]);
+  });
+});
+
+// founder 23.11.2026 (#2412, circle 4): «миллиметры — в длине разделитель тысяч», US notation (rule 7)
+describe("millimetres with a thousands separator", () => {
+  it("12′ 6″ = 3,810 mm; under a thousand — as is", () => {
+    expect(fmtLen(150, "mm")).toBe("3,810 mm");
+    expect(fmtLen(10, "mm")).toBe("254 mm");
   });
 });

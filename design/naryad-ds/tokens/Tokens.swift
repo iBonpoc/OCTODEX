@@ -21,14 +21,14 @@ struct NaryadPalette {
     let ov: Color            // фон окон и шторок (материал + этот оттенок)
 
     static let dark = NaryadPalette(
-        page: Color(hex: 0x181A1E), bg: Color(hex: 0x24272D), ink: Color(hex: 0xF2F3F5), mut: Color(hex: 0xCDD1DA),
-        bd: Color.white.opacity(0.14), acc: Color(hex: 0xFBFF00), onAcc: Color(hex: 0x0B0C0F),
+        page: Color(hex: 0x181A1E), bg: Color(hex: 0x24272D), ink: Color(hex: 0xF2F3F5), mut: Color(hex: 0xB3B6BE),
+        bd: Color.white.opacity(0.14), acc: Color(hex: 0xE2C15E), onAcc: Color(hex: 0x0B0C0F),
         surf: Color.white.opacity(0.07), surf2: Color.white.opacity(0.11), inset: Color.white.opacity(0.05), track: Color.white.opacity(0.12),
         ov: Color(hex: 0x262930, alpha: 0.72))
 
     static let light = NaryadPalette(
-        page: Color(hex: 0xDDD9D2), bg: Color(hex: 0xEFEBE5), ink: Color(hex: 0x15161A), mut: Color(hex: 0x575C68),
-        bd: Color(hex: 0x14161E, alpha: 0.10), acc: Color(hex: 0xFBFF00), onAcc: Color(hex: 0x0B0C0F),
+        page: Color(hex: 0xDDD9D2), bg: Color(hex: 0xEFEBE5), ink: Color(hex: 0x15161A), mut: Color(hex: 0x42454B),
+        bd: Color(hex: 0x14161E, alpha: 0.10), acc: Color(hex: 0xE2C15E), onAcc: Color(hex: 0x0B0C0F),
         surf: Color.white.opacity(0.62), surf2: Color.white.opacity(0.85), inset: Color.white.opacity(0.55), track: Color(hex: 0x14161E, alpha: 0.09),
         ov: Color(hex: 0xFAF8F4, alpha: 0.78))
 }
@@ -48,10 +48,10 @@ enum NaryadStatus: CaseIterable {
     /// Цвет текста статуса на поверхности темы (контраст не ниже 4.5:1)
     func text(_ theme: NaryadTheme) -> Color {
         switch (self, theme) {
-        case (.ok, .dark): return Color(hex: 0x9CF0A8);   case (.ok, .light): return Color(hex: 0x176428)
-        case (.info, .dark): return Color(hex: 0xC2CCFF); case (.info, .light): return Color(hex: 0x3647C4)
-        case (.warn, .dark): return Color(hex: 0xFFB47E); case (.warn, .light): return Color(hex: 0x944600)
-        case (.bad, .dark): return Color(hex: 0xFFAAAA);  case (.bad, .light): return Color(hex: 0xB4232A)
+        case (.ok, .dark): return Color(hex: 0x86D3A0);   case (.ok, .light): return Color(hex: 0x1B6034)
+        case (.info, .dark): return Color(hex: 0x86C9D4); case (.info, .light): return Color(hex: 0x0E5866)
+        case (.warn, .dark): return Color(hex: 0xE8B67F); case (.warn, .light): return Color(hex: 0x824306)
+        case (.bad, .dark): return Color(hex: 0xF09A90);  case (.bad, .light): return Color(hex: 0x9A2C22)
         case (.neutral, _): return Color.secondary
         }
     }

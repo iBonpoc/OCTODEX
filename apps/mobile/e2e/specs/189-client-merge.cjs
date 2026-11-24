@@ -27,10 +27,11 @@ exports.run = async (h) => {
     localStorage.setItem(k, JSON.stringify(s));
   }, TWIN);
   await h.go("/clients");
-  const twinCard = p.getByTestId("list-card").filter({ hasText: "Sarah M." }).locator("visible=true").first();
+  // v2 (#2350): the rows of the list are GroupRows `client-row-<id>`; the mark is the row's status
+  const twinCard = p.getByTestId(`client-row-${TWIN}`).locator("visible=true").first();
   await twinCard.waitFor({ timeout: 5000 });
   h.expect(/Возможный дубль/.test(await twinCard.innerText()), "the list: the twin is marked «Возможный дубль»");
-  const sarahCard = p.getByTestId("list-card").filter({ hasText: "Sarah Mitchell" }).locator("visible=true").first();
+  const sarahCard = p.getByTestId("client-row-c1").locator("visible=true").first();
   h.expect(/Возможный дубль/.test(await sarahCard.innerText()), "the list: Sarah is marked too");
   await h.shot("list");
 
@@ -71,9 +72,9 @@ exports.run = async (h) => {
   await h.expectText(/Слито в «Sarah Mitchell»/, "merged again");
   await dbWhen((d) => d.customers.find((c) => c.id === TWIN)?.mergedIntoId);
   await h.go("/clients");
-  await p.getByTestId("list-card").filter({ hasText: "Sarah Mitchell" }).locator("visible=true").first().waitFor({ timeout: 5000 });
-  h.expect((await p.getByTestId("list-card").filter({ hasText: "Sarah M." }).filter({ hasNotText: "Mitchell" }).count()) === 0, "the merged card is not in the list");
-  h.expect(!/Возможный дубль/.test(await p.getByTestId("list-card").filter({ hasText: "Sarah Mitchell" }).locator("visible=true").first().innerText()), "Sarah has no mark now");
+  await p.getByTestId("client-row-c1").locator("visible=true").first().waitFor({ timeout: 5000 });
+  h.expect((await p.getByTestId(`client-row-${TWIN}`).count()) === 0, "the merged card is not in the list");
+  h.expect(!/Возможный дубль/.test(await p.getByTestId("client-row-c1").locator("visible=true").first().innerText()), "Sarah has no mark now");
   await h.go(`/client/${TWIN}`);
   await h.expectText(/Карточка слита/, "the old link: the card was merged");
   await h.expectText(/Всё перешло в «Sarah Mitchell»/, "…and where everything went");

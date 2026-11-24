@@ -1,8 +1,9 @@
 /**
- * e2e 188 — «Лиды и клиенты» №13, долги 1, 2 и фото лида. Every view.
- * - phone / tablet (lead's tabs scroll sideways where they do not fit): the remembered tab «Файлы» of the NEXT lead is
- *   scrolled into view on its own — not left past the edge of the line (Segmented `scroll`);
- * - 1280: «Возможный дубль» in the lead's panel opens that lead in the panel (`/leads?open=<id>`), not the whole screen;
+ * e2e 188 — «Лиды и клиенты» №13, долги 1, 2 и фото лида. Every view. v2 (#2350): the lead is the Object template, its section
+ * is in the address (`/lead/<id>?tab=files`), and «Лиды» has no 1280 panel (a row and a link open the lead's screen).
+ * - the sections strip scrolls sideways where it does not fit: the open section «Файлы» (the last pill) is scrolled into view on
+ *   its own — not left past the edge of the line (ViewTabs: «the selected pill comes to the middle»);
+ * - «Возможный дубль» on a lead opens that lead's screen;
  * - the lead's «Файлы»: a visit photo whose `blob:` is of a page that is gone is the picture sign, never loaded.
  * Waits on what it checks; finds things by testID / role.
  */
@@ -10,7 +11,6 @@ const role = (h, r) => h.page.evaluate((v) => localStorage.setItem("octo.role.v1
 
 exports.run = async (h) => {
   const p = h.page;
-  const desk = h.layout.width >= 1280;
   await h.go("/today");
   await role(h, "director");
   // the store writes its state to localStorage 250 ms after it starts: wait for it (under load h.db() was null, #1028)
@@ -37,53 +37,31 @@ exports.run = async (h) => {
   });
   const dead = () => p.evaluate(() => (window.__imgSrc || []).filter((u) => u.includes("dead-188")).length);
 
-  if (!desk) {
-    // the dup lead: «Файлы» picked (remembered); then lead a, whose tabs are longer («Сметы · N»)
-    await h.go("/lead/l-e2e-188");
-    const files = p.getByRole("tab", { name: /^Файлы/ }).locator("visible=true").first();
-    await files.click();
-    await h.go(`/lead/${a.id}`);
-    const tab = p.getByRole("tab", { name: /^Файлы/ }).locator("visible=true").first();
-    await tab.waitFor({ timeout: 8000 });
-    // the remembered tab is open: its photo tile is shown (RNW does not output aria-selected)
-    const tile = p.getByTestId("lead-photo-ph-e2e-188").locator("visible=true").first();
-    await tile.waitFor({ timeout: 4000 });
-    let inside = false;
-    for (let i = 0; i < 30 && !inside; i++) {
-      const b = await tab.boundingBox();
-      inside = !!b && b.x >= 16 - 1 && b.x + b.width <= h.layout.width - 16 + 1;
-      if (!inside) await p.waitForTimeout(100);
-    }
-    h.expect(inside, `${h.layout.width}: the remembered «Файлы» is scrolled into view (${JSON.stringify(await tab.boundingBox())})`);
-    // the dead photo: the sign, never loaded
-    h.expect((await tile.locator("img").count()) === 0, "the dead photo is the picture sign");
-    h.expect((await dead()) === 0, "the dead blob: of the lead's photo is never loaded");
-    await h.shot("tabs-files");
-    return;
-  }
-
-  // 1280: the duplicate opens in the panel
-  await h.go("/leads?open=l-e2e-188");
-  const panel = p.getByTestId("list-panel").locator("visible=true");
-  await panel.waitFor({ timeout: 8000 });
-  const dup = panel.getByTestId(`lead-dup-lead-${a.id}`);
+  // «Возможный дубль» on the planted lead opens lead a
+  await h.go("/lead/l-e2e-188");
+  const dup = p.getByTestId(`lead-dup-lead-${a.id}`).locator("visible=true").first();
   await dup.waitFor({ timeout: 8000 });
   await dup.click();
-  const ok = await p.waitForFunction((w) => location.pathname === "/leads" && new URLSearchParams(location.search).get("open") === w, a.id, { timeout: 4000 }).then(() => true, () => false);
-  h.expect(ok, `the duplicate opens in the panel (${p.url()})`);
-  // the address changes first, the panel swaps to the other lead a moment later: wait for what is checked — the panel now
-  // shows lead a (its own «Возможный дубль» row points back at the planted lead).
-  await panel.getByTestId("lead-dup-lead-l-e2e-188").waitFor({ timeout: 8000 });
-  // …and a press on «Файлы» can still be overridden while the panel mounts: the remembered tab is applied after the press
-  // and the panel stays on «Обзор» (1 of ~25 runs under load). That is a screen bug — #1031: the user's choice must win.
-  // Until it is fixed the spec presses until the tab shows its content (a workaround; remove it with the fix of #1031).
-  const tile = panel.getByTestId("lead-photo-ph-e2e-188");
-  for (let i = 0; i < 4; i++) {
-    await panel.getByRole("tab", { name: /^Файлы/ }).first().click();
-    if (await tile.waitFor({ timeout: 1500 }).then(() => true, () => false)) break;
-  }
+  await p.waitForURL((u) => u.pathname === `/lead/${a.id}`, { timeout: 8000 });
+  // …and lead a points back at the planted one
+  await p.getByTestId("lead-dup-lead-l-e2e-188").locator("visible=true").first().waitFor({ timeout: 8000 });
+  await h.shot("dup");
+
+  // «Файлы» open by the address: the pill in view, the photo tile shown
+  await h.go(`/lead/${a.id}?tab=files`);
+  const tab = p.getByTestId("lead-screen-sections-files").locator("visible=true").first();
+  await tab.waitFor({ timeout: 8000 });
+  const tile = p.getByTestId("lead-photo-ph-e2e-188").locator("visible=true").first();
   await tile.waitFor({ timeout: 4000 });
-  h.expect((await tile.locator("img").count()) === 0, "1280: the dead photo is the picture sign");
-  h.expect((await dead()) === 0, "1280: the dead blob: of the lead's photo is never loaded");
-  await h.shot("dup-panel");
+  let inside = false;
+  for (let i = 0; i < 30 && !inside; i++) {
+    const b = await tab.boundingBox();
+    inside = !!b && b.x >= 0 && b.x + b.width <= h.layout.width + 1;
+    if (!inside) await p.waitForTimeout(100);
+  }
+  h.expect(inside, `${h.layout.width}: the open «Файлы» is scrolled into view (${JSON.stringify(await tab.boundingBox())})`);
+  // the dead photo: the sign, never loaded
+  h.expect((await tile.locator("img").count()) === 0, "the dead photo is the picture sign");
+  h.expect((await dead()) === 0, "the dead blob: of the lead's photo is never loaded");
+  await h.shot("tabs-files");
 };

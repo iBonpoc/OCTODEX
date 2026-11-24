@@ -27,7 +27,7 @@ export default function DesignSystemShowcase() {
       </View>
       <Card>
         <View testID="showcase-sections">
-          {SCREENS.filter((s) => !s.pilot || graphite).map((s, i) => (
+          {SCREENS.filter((s) => !s.hidden && (!s.pilot || graphite)).map((s, i) => (
             <View key={s.id} testID={`showcase-row-${s.id}`}>
               {i ? <Divider /> : null}
               <ListRow

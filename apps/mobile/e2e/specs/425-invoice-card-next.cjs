@@ -18,12 +18,15 @@ exports.run = async (h) => {
   await h.expectText(/Просрочен 9 дн/, "i1: the card's chip says «Просрочен 9 дн», as the list does");
   await h.shot("overdue");
   h.expect(/Ждёт оплаты до /.test(await nextOf("/invoice/i2")), "i2: waiting until the due day");
-  await h.expectText(/Принять оплату/, "i2: the payment is one tap away");
   const empty = (await tid("invoice-no-receipts").innerText()).replace(/\s+/g, " ");
-  h.expect(/Оплат пока нет/.test(empty) && /Принять оплату/.test(empty), `i2: no receipts — the text says where a payment will appear (${empty})`);
+  h.expect(/Оплат пока нет/.test(empty), `i2: no receipts yet (${empty})`);
+  // v2: where a payment comes from is the main step right under the header, not a hint in the empty text
+  h.expect(/Принять оплату/.test(await tid("invoice-take-payment").innerText()), "i2: «Принять оплату» is the main step");
   h.expect(/Оплачен полностью/.test(await nextOf("/invoice/i3")), "i3: paid in full");
 
   // the same word in the list of invoices
+  // v2 (#2350): the list's row says it in its «Срок» column — «−9 дн», never a bare «Просрочено»
   await h.go("/invoice");
-  await h.expectText(/Просрочен 9 дн/, "the list of invoices: «Просрочен 9 дн»");
+  const row = (await tid("invoice-row-i1").innerText()).replace(/\s+/g, " ");
+  h.expect(/Срок −9 дн/.test(row) && !/Просрочено/.test(row), `the list of invoices: i1 is 9 days late (${row})`);
 };

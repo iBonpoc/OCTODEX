@@ -53,7 +53,7 @@ describe("«Замер желобов» on a client and a visit (#697, П24 А3,
     if (two) expect(clientStart(DOORS, db, two.id)).toMatchObject({ kind: "pick" });
     expect(clientStart(DOORS, db, "nobody")).toEqual({ kind: "none" });
   });
-  it("the places: a client → the start screen; a visit → its lead's measurement, else its address's", () => {
+  it("the places: a client of an older core (no addresses given) → the start screen; a visit → its lead's measurement, else its address's", () => {
     expect(placeActions("client", on, { role: "tech", customerId: "c1" }, undefined, {})).toEqual([expect.objectContaining({ labelKey: "mod.gutters.measure", href: "/module/gutters/start?customer=c1" })]);
     expect(placeActions("visit", on, { role: "tech", visitId: "v1", leadId: "l1", propertyId: "p1" }, undefined, {})[0]).toMatchObject({ href: `${DRAW}?lead=l1&property=p1` });
     expect(placeActions("visit", on, { role: "tech", visitId: "v1", propertyId: "p1" }, undefined, {})[0]).toMatchObject({ href: `${DRAW}?property=p1` });
@@ -110,5 +110,41 @@ describe("delete (#690, П24 Б6)", () => {
     expect(signedOn({ estimates: [est("draft")] }, "m1")).toBe(false);
     expect(signedOn({ estimates: [est("sent")] }, "m1")).toBe(false);
     expect(signedOn({ estimates: [est("approved")] }, "m2")).toBe(false);
+  });
+});
+
+describe("#2271: «Замер» on a client's card knows its target at the press — never the start screen in between", () => {
+  const ctx = (places: { id: string; address: string; city?: string; leadIds: string[] }[]) => ({ role: "tech" as const, customerId: "c1", places });
+  const act = (places: Parameters<typeof ctx>[0], data: unknown = {}) => placeActions("client", on, ctx(places), undefined, { gutters: data });
+  const START = "/module/gutters/start";
+  it("one address, nothing measured: the canvas of that address (its leads go with it), no pick, no note", () => {
+    const [a] = act([{ id: "p1", address: "1 Main St", leadIds: ["l1"] }]);
+    expect(a).toMatchObject({ id: "measure", href: `${DRAW}?property=p1` });
+    expect(a!.pick).toBeUndefined();
+    expect(a!.noteKey).toBeUndefined();
+  });
+  it("one address with a measurement of its lead: that measurement's card", () => {
+    const g = { measurements: [M({ id: "mL", leadId: "l1", updatedAt: "2026-11-05" })], elements: [] };
+    expect(act([{ id: "p1", address: "1 Main St", leadIds: ["l1"] }], g)[0]).toMatchObject({ href: `${VIEW}?m=mL` });
+  });
+  it("several addresses: a sheet of them, each row the href of its own measurement", () => {
+    const [a] = act([{ id: "p1", address: "1 Main St", city: "Austin", leadIds: [] }, { id: "p2", address: "2 Oak Ave", leadIds: [] }]);
+    expect(a!.pick).toEqual({
+      titleKey: "mod.gutters.start.pick",
+      items: [
+        { id: "p1", title: "1 Main St", subtitle: "Austin", href: `${DRAW}?property=p1` },
+        { id: "p2", title: "2 Oak Ave", href: `${DRAW}?property=p2` },
+      ],
+    });
+  });
+  it("no address: a line «add an address» instead of a transition", () => {
+    expect(act([])[0]).toMatchObject({ noteKey: "mod.gutters.start.noPlace" });
+  });
+  it("guard: with the addresses given, no target of the button or of a row is the start screen", () => {
+    for (const places of [[{ id: "p1", address: "a", leadIds: [] }], [{ id: "p1", address: "a", leadIds: [] }, { id: "p2", address: "b", leadIds: [] }]]) {
+      const [a] = act(places);
+      const targets = a!.pick ? a!.pick.items.map((x) => x.href) : [a!.href];
+      expect(targets.every((h) => !h.startsWith(START))).toBe(true);
+    }
   });
 });

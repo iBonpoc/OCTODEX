@@ -14,7 +14,9 @@ import { component, font, layout, radius, size, space, spaceHalf, statusIcon, mo
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { Icon, Press, type IconKey } from "./primitives";
-import { Sheet } from "./overlays";
+import { outerPressRole } from "./groupedListLogic";
+import { progressText } from "./controls";
+import { Menu, Sheet } from "./overlays";
 import { SelectedCheck } from "./selectedCheck";
 import {
   FACT_ICON, FACT_MAX_LINES, contactActions, edgeTone, layoutFacts, rowColumns, touchPad,
@@ -222,6 +224,11 @@ export interface ListCardProps {
    */
   onContact?: (a: ContactAction) => void;
   /**
+   * #2350 (founder 21.11): a compact card shows `contact` in small type under the name — the phone (a tap calls), the address
+   * (a tap opens the map) — and one small «Написать» with a menu «SMS / Почта». No row of round buttons.
+   */
+  quickContact?: boolean;
+  /**
    * reasons of a «people» card (attention): each row — tone icon + text (+ a grey detail), opens its own record;
    * an optional verb action (secondary, small) — never «open», the row itself opens
    */
@@ -281,8 +288,8 @@ export function ListCard(p: ListCardProps) {
   return (
     <Press
       onPress={p.onPress}
-      // a card without a tap (e.g. an expense) is not a button and is not dimmed like a disabled control
-      accessibilityRole={p.onPress ? "button" : undefined}
+      // a card without a tap (e.g. an expense) is not a button and is not dimmed like a disabled control; the web: a group, it holds buttons
+      accessibilityRole={p.onPress ? outerPressRole(Platform.OS, true) : undefined}
       // the open row (panel on 1280): «current item of the set», not «selected» — this is a button (ARIA)
       {...({ "aria-current": p.selected ? "true" : undefined } as object)}
       accessibilityLabel={p.title}
@@ -323,6 +330,7 @@ export function ListCard(p: ListCardProps) {
         </View>
         {valueText}
       </View>
+      {compact && p.quickContact ? <QuickContacts contact={p.contact ?? {}} title={p.title} open={open} /> : null}
       {!compact && chips.length ? <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>{chips}</View> : null}
       {/* facts */}
       {lines.length || p.queued ? (
@@ -389,11 +397,8 @@ export function ListCard(p: ListCardProps) {
         </View>
       ) : null}
       {density === "rich" && p.progress ? (
-        <View style={{ gap: space[1] }} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: p.progress.max, now: p.progress.value }}>
-          <View style={{ height: component.stepBar, borderRadius: radius.pill, backgroundColor: c.track, overflow: "hidden" }}>
-            <View style={{ width: `${p.progress.max ? Math.min(100, (p.progress.value / p.progress.max) * 100) : 0}%`, height: "100%", backgroundColor: c.status.ok.fill }} />
-          </View>
-          {p.progress.label ? <Txt v="caption" color={c.mut}>{p.progress.label}</Txt> : null}
+        <View accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: p.progress.max, now: p.progress.value }}>
+          <Txt v="caption" color={c.mut} tabular>{progressText(p.progress.value, p.progress.max, p.progress.label)}</Txt>
         </View>
       ) : null}
       {/* contact buttons (call, SMS, map, email) + main action */}
@@ -422,6 +427,66 @@ export function ListCard(p: ListCardProps) {
   );
 }
 
+/**
+ * the quick contacts of a compact card (#2350): «phone · address» in caption type (a tap: call / map), «Написать» → SMS / Почта.
+ * Each tap is handed to the screen (`onContact`) like the contact buttons.
+ */
+function QuickContacts({ contact, title, open }: { contact: Contact; title: string; open: (a: ContactAction) => () => void }) {
+  const { c } = useTheme();
+  const { t } = useI18n();
+  const all = contactActions(contact, Platform.OS as OS);
+  const call = all.find((a) => a.kind === "call");
+  const map = all.find((a) => a.kind === "map");
+  const write = all.filter((a) => a.kind === "sms" || a.kind === "email");
+  const ref = useRef<ComponentRef<typeof View>>(null);
+  const [at, setAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  if (!call && !map && !write.length) return null;
+  const line = Math.round(font.size.caption * font.lineHeight.snug);
+  const link = (a: ContactAction, icon: IconKey, testID: string) => (
+    <Tap visible={line} onPress={open(a)} label={t(`card.act.${a.kind}`, { v: a.value })} style={{ flexShrink: 1, minWidth: 0, maxWidth: "100%" }}>
+      <View testID={testID} style={{ flexDirection: "row", alignItems: "flex-start", gap: space[1], minWidth: 0, flexShrink: 1 }}>
+        <View style={{ paddingTop: spaceHalf.hair }}>
+          <Icon name={icon} s={size.iconXs} color={c.mut} />
+        </View>
+        <Txt v="caption" color={c.mut} style={{ flexShrink: 1 }}>{a.value}</Txt>
+      </View>
+    </Tap>
+  );
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], paddingLeft: component.avatar.sm + space[3] }}>
+      <View style={{ flex: 1, minWidth: 0, flexDirection: "row", flexWrap: "wrap", columnGap: space[3], rowGap: space[1] }}>
+        {call ? link(call, "phone", "card-quick-call") : null}
+        {map ? link(map, "pin", "card-quick-map") : null}
+      </View>
+      {write.length ? (
+        <View ref={ref} collapsable={false}>
+          <Tap
+            visible={component.button.sm}
+            label={t("contact.writeTo", { name: title })}
+            onPress={() => (write.length === 1 ? open(write[0]!)() : ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAt({ x, y, w, h })))}
+          >
+            <View testID="card-quick-write" style={{ height: component.button.sm, flexDirection: "row", alignItems: "center", gap: space[1], paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd }}>
+              <Icon name="sms" s={size.iconSm} color={c.ink} />
+              <Txt v="button" w="semibold" color={c.ink}>{t("contact.write")}</Txt>
+            </View>
+          </Tap>
+          <Menu<"sms" | "email">
+            visible={!!at}
+            anchor={at}
+            title={t("contact.writeTo", { name: title })}
+            items={write.map((a) => ({ key: a.kind as "sms" | "email", label: t(a.kind === "sms" ? "contact.sms" : "contact.email"), icon: a.icon, testID: `card-quick-${a.kind}` }))}
+            onSelect={(k) => {
+              const a = write.find((x) => x.kind === k);
+              if (a) open(a)();
+            }}
+            onClose={() => setAt(null)}
+          />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 /** desktop row: fixed value column (fits "$12,400.00") and two 28 buttons */
 const ROW_VALUE_W = component.tileMin + space[4];
 const ROW_ACTIONS_W = component.button.sm * 2 + space[1];
@@ -439,8 +504,8 @@ function ListCardRow(p: ListCardProps) {
   return (
     <Press
       onPress={p.onPress}
-      // a card without a tap (e.g. an expense) is not a button and is not dimmed like a disabled control
-      accessibilityRole={p.onPress ? "button" : undefined}
+      // a card without a tap (e.g. an expense) is not a button and is not dimmed like a disabled control; the web: a group, it holds buttons
+      accessibilityRole={p.onPress ? outerPressRole(Platform.OS, true) : undefined}
       // the open row (panel on 1280): «current item of the set», not «selected» — this is a button (ARIA)
       {...({ "aria-current": p.selected ? "true" : undefined } as object)}
       accessibilityLabel={p.title}

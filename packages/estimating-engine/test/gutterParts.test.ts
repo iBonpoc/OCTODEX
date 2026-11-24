@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveGutterRules, computeGutterParts, defaultElbowsFor, bendOf, fieldBendOf, dsRoundedIn, defaultOffsetsFor, sizeGutterRun, pitchFactor, downspoutLengthIn, downspoutSticks, purchaseQty, DEFAULT_GUTTER_RULES, type MeasuredRun, type MeasuredDownspout, type MeasurementInput, type PartQty } from "../src/gutterParts.js";
+import { resolveGutterRules, computeGutterParts, defaultElbowsFor, bendOf, fieldBendOf, dsRoundedIn, defaultOffsetsFor, sizeGutterRun, pitchFactor, downspoutLengthIn, downspoutSticks, purchaseQty, DEFAULT_GUTTER_RULES, GUTTER_PARTS_VERSION, fieldElbowsOf, type MeasuredRun, type MeasuredDownspout, type MeasurementInput, type PartQty } from "../src/gutterParts.js";
 
 /** docs/specs/33-gutters-module.md §9 S5g — parts from a measurement, lengths in inches. */
 
@@ -846,11 +846,13 @@ describe("«Расход v2» PR-1б: Д6, Д7, Р4 — bends on site", () => {
     expect(q(parts({ elbowBend: "field", elbows: [{ style: "A", qty: 2 }], offsets: [{ lengthIn: 2, qty: 1 }] }), "labor.bend")).toBe("4");
   });
   // the spec's «2″ and 4″ → +12″ + 16″ = +28″» slipped: by its own formula (+2 × 6″ + the offset's length) a 2″ one is +14″ — +30″ in all
+  // G2: no bought elbows on site is the company's bends (3) — the offset alone is counted with the company's bends at 0
   it("Д7: an offset on site is 2 bends and its length — 4″ × 1 → +16″; 2″ and 4″ → +14″ + 16″ = +30″, 4 bends; no offset parts", () => {
-    const one = parts({ elbowBend: "field", elbows: [], offsets: [{ lengthIn: 4, qty: 1 }] });
+    const parts0 = (d: Partial<MeasuredDownspout>) => parts(d, { fieldBends: 0 });
+    const one = parts0({ elbowBend: "field", elbows: [], offsets: [{ lengthIn: 4, qty: 1 }] });
     expect(q(one, "labor.bend")).toBe("2");
     expect(one.find((p) => p.key === "labor.bend")!.why!.params.addedIn).toBe(16);
-    const two = parts({ elbowBend: "field", elbows: [], offsets: [{ lengthIn: 2, qty: 1 }, { lengthIn: 4, qty: 1 }] });
+    const two = parts0({ elbowBend: "field", elbows: [], offsets: [{ lengthIn: 2, qty: 1 }, { lengthIn: 4, qty: 1 }] });
     expect(q(two, "labor.bend")).toBe("4");
     expect(dsLine(two).why!.params.lengthIn).toBe(150);
     expect(two.some((p) => p.attrs.part === "offset")).toBe(false);
@@ -872,8 +874,9 @@ describe("«Расход v2» PR-1б: Д6, Д7, Р4 — bends on site", () => {
     expect(proto.find((p) => p.key === "ds.rect.constructor.plain.alu.white")!.why!.params.lengthIn).toBe(138);
     // broken counts and lengths are none, never NaN
     const broken = computeGutterParts({ runs: [run({ id: "1", lengthIn: 240 })], corners: [], downspouts: [ds({ id: "d", runId: "1", dsStyle: "plain", elbowBend: "field", elbows: [{ style: "A", qty: Number.NaN }], offsets: [{ lengthIn: Number.NaN, qty: 1 }, { lengthIn: 4, qty: "x" as never }] })] }).parts;
-    expect(q(broken, "labor.bend")).toBe("2");
-    expect(broken.find((p) => p.key === "ds.rect.3x4.plain.alu.white")!.why!.params.lengthIn).toBe(132);
+    // G2: a broken count is no bought elbow — the company's 3 bends (+18″), and the offset's 2 bends (+12″)
+    expect(q(broken, "labor.bend")).toBe("5");
+    expect(broken.find((p) => p.key === "ds.rect.3x4.plain.alu.white")!.why!.params.lengthIn).toBe(150);
   });
   it("the company's bends of a plain one (Н2): 2 → +12″, 2 bends; 0 → none", () => {
     expect(q(parts({ elbows: undefined }, { fieldBends: 2 }), "labor.bend")).toBe("2");
@@ -902,5 +905,137 @@ describe("«Расход v2» PR-1б: the helpers the app reads", () => {
     expect(dsRoundedIn(258, 0)).toBe(258);
     expect(defaultOffsetsFor({ shape: "round" })).toEqual([{ lengthIn: 2, qty: 1 }]);
     expect(defaultOffsetsFor({ shape: "rect" })).toEqual([]);
+  });
+});
+
+describe("G2 (v43): elbows bent on site vs bought, angles, offset styles, a downspout's storey, the stand's heads", () => {
+  const job = (d: Partial<MeasuredDownspout>, r: Partial<MeasuredRun> = {}, over?: Parameters<typeof computeGutterParts>[1]) =>
+    computeGutterParts({ runs: [run({ id: "1", lengthIn: 240, ...r })], corners: [], downspouts: [ds({ id: "d", runId: "1", ...d })] }, over);
+  const parts = (d: Partial<MeasuredDownspout>, r?: Partial<MeasuredRun>) => job(d, r).parts;
+  const line = (ps: PartQty[], key: string) => ps.find((p) => p.key === key);
+  const dsIn = (ps: PartQty[]) => ps.find((p) => p.key.startsWith("ds."))!.why!.params.lengthIn;
+  const elbowParts = (ps: PartQty[]) => ps.filter((p) => p.attrs.part === "elbow" || p.attrs.part === "offset").map((p) => `${p.key}=${p.qty}`);
+
+  describe("a plain one: bought elbows vs bends on site (leader №24, stage 0 блокер 1)", () => {
+    it("no elbows → the company's 3 bends, +18″, no elbow parts", () => {
+      const ps = parts({ dsStyle: "plain", elbows: undefined });
+      expect(q(ps, "labor.bend")).toBe("3");
+      expect(dsIn(ps)).toBe(138);
+      expect(elbowParts(ps)).toEqual([]);
+    });
+    it("[] and [{A, 0}] bent on site → the same 3 bends (no bought elbows is bending on site, never «no bends»)", () => {
+      for (const elbows of [[], [{ style: "A", qty: 0 }]]) {
+        const ps = parts({ dsStyle: "plain", elbowBend: "field", elbows });
+        expect(q(ps, "labor.bend")).toBe("3");
+        expect(dsIn(ps)).toBe(138);
+      }
+    });
+    it("bought: [{A, 2}] ready → 2 elbow parts, no bends, the pipe as drawn", () => {
+      const ps = parts({ dsStyle: "plain", elbowBend: "ready", elbows: [{ style: "A", qty: 2 }] });
+      expect(q(ps, "labor.bend")).toBeUndefined();
+      expect(elbowParts(ps)).toEqual(["elbow.A.rect.3x4.plain.alu.white=2"]);
+      expect(dsIn(ps)).toBe(120);
+    });
+    it("rule 16: an old drawing — [] without dsStyle and elbowBend — stays ready-made: no bends, no elbows", () => {
+      const ps = computeGutterParts({ runs: [run({ id: "1", lengthIn: 240 })], corners: [], downspouts: [{ ...ds({ id: "d", runId: "1" }), elbows: [] }] }).parts;
+      expect(q(ps, "labor.bend")).toBeUndefined();
+      expect(elbowParts(ps)).toEqual([]);
+    });
+    it("an older count of bends on site ([{A, 2}] field) keeps its 2 bends", () => {
+      expect(q(parts({ dsStyle: "plain", elbowBend: "field", elbows: [{ style: "A", qty: 2 }] }), "labor.bend")).toBe("2");
+    });
+  });
+
+  describe("a rect elbow's angle: in the key and the order, never in the price", () => {
+    it("A 60° and A 75° → two parts; 75° (and none) keeps the version-6 key word for word", () => {
+      const ps = parts({ dsStyle: "corrugated", elbows: [{ style: "A", qty: 2, angle: 60 }, { style: "A", qty: 1, angle: 75 }] });
+      expect(elbowParts(ps)).toEqual(["elbow.A.a60.rect.3x4.corrugated.alu.white=2", "elbow.A.rect.3x4.corrugated.alu.white=1"]);
+      expect(line(ps, "elbow.A.a60.rect.3x4.corrugated.alu.white")!.orderAttrs).toEqual({ angle: "60" });
+      expect(line(ps, "elbow.A.rect.3x4.corrugated.alu.white")!.orderAttrs).toBeUndefined();
+    });
+    it("the angle never picks the price: both parts have the same attrs (the price lookup reads attrs only)", () => {
+      const ps = parts({ dsStyle: "corrugated", elbows: [{ style: "A", qty: 2, angle: 60 }, { style: "A", qty: 1 }] });
+      const [a, b] = ps.filter((p) => p.attrs.part === "elbow");
+      expect(a!.attrs).toEqual(b!.attrs);
+      expect(Object.values(a!.attrs)).not.toContain("60");
+    });
+    it("an elbow without an angle: the part as version 6 made it (no orderAttrs)", () => {
+      const ps = parts({});
+      expect(elbowParts(ps)).toEqual(["elbow.A.rect.3x4.alu.white=3"]);
+      expect(line(ps, "elbow.A.rect.3x4.alu.white")!.orderAttrs).toBeUndefined();
+    });
+    it("a broken angle (not a whole number 1…179) is the default 75°", () => {
+      for (const angle of [0, 180, 62.5, Number.NaN, "60" as never]) expect(elbowParts(parts({ elbows: [{ style: "A", qty: 1, angle }] }))).toEqual(["elbow.A.rect.3x4.alu.white=1"]);
+    });
+    it("a round one: its angle is its style — an `angle` there is never in the key or the order", () => {
+      const ps = parts({ shape: "round", size: "3", elbows: [{ style: "45", qty: 1, angle: 60 }], offsets: [] });
+      expect(elbowParts(ps)).toEqual(["elbow.45.round.3.alu.white=1"]);
+      expect(line(ps, "elbow.45.round.3.alu.white")!.orderAttrs).toBeUndefined();
+    });
+  });
+
+  describe("an offset's style A/B", () => {
+    it("B 2″ → a part of its own with offsetStyle in the order, the same price attrs as A 2″", () => {
+      const ps = parts({ dsStyle: "corrugated", elbows: [], offsets: [{ lengthIn: 2, qty: 1, style: "B" }, { lengthIn: 2, qty: 1, style: "A" }] });
+      expect(elbowParts(ps)).toEqual(["offset.2.rect.3x4.corrugated.alu.white=1", "offset.B.2.rect.3x4.corrugated.alu.white=1"]);
+      expect(line(ps, "offset.B.2.rect.3x4.corrugated.alu.white")!.orderAttrs).toEqual({ offsetStyle: "B" });
+      expect(line(ps, "offset.B.2.rect.3x4.corrugated.alu.white")!.attrs).toEqual(line(ps, "offset.2.rect.3x4.corrugated.alu.white")!.attrs);
+    });
+    it("none = A: the old key; a custom length with B stays custom", () => {
+      const ps = parts({ elbows: [], offsets: [{ lengthIn: 2, qty: 1 }, { lengthIn: 3, qty: 1, style: "B" }] });
+      expect(elbowParts(ps)).toEqual(["offset.2.rect.3x4.alu.white=1", "offset.B.3.rect.3x4.alu.white=1"]);
+      expect(line(ps, "offset.B.3.rect.3x4.alu.white")!.attrs.custom).toBe("1");
+    });
+    it("a round one has no A/B: a style there is the old key", () => {
+      expect(elbowParts(parts({ shape: "round", size: "3", elbows: [], offsets: [{ lengthIn: 2, qty: 1, style: "B" }] }))).toEqual(["offset.2.round.3.alu.white=1"]);
+    });
+  });
+
+  describe("a downspout's own storey: only its length", () => {
+    it("an old one without a storey: the length of its gutter's storey, to the inch", () => {
+      expect(q(parts({}, { story: 2 }), "ds.rect.3x4.alu.white")).toBe("20");
+    });
+    it("storey 2 on a 1-storey gutter → 20 ft; the elbows and the labor line do not change", () => {
+      const one = parts({}), two = parts({ story: 2 });
+      expect(q(two, "ds.rect.3x4.alu.white")).toBe("20");
+      expect(elbowParts(two)).toEqual(elbowParts(one));
+      expect(q(two, "labor.downspout.story1")).toBe("1");
+    });
+    it("onto a lower roof: its own storey − 1; storey 1 of its own on a 2-storey gutter → the advice", () => {
+      expect(downspoutLengthIn(ds({ id: "d", runId: "1", story: 3, bottom: { kind: "lower_roof" } }), 1, DEFAULT_GUTTER_RULES)).toBe(240);
+      expect(job({ story: 1, bottom: { kind: "lower_roof" } }, { story: 2 }).advice).toContainEqual({ code: "lower_roof_from_first_story", downspoutId: "d" });
+      expect(job({ story: 2, bottom: { kind: "lower_roof" } }, { story: 1 }).advice.some((a) => a.code === "lower_roof_from_first_story")).toBe(false);
+    });
+    it("a broken storey (0, 5, 1.5, text) is its gutter's", () => {
+      for (const story of [0, 5, 1.5, "2" as never]) expect(q(parts({ story }, { story: 1 }), "ds.rect.3x4.alu.white")).toBe("10");
+    });
+  });
+
+  describe("the stand's heads", () => {
+    const heads = (d: Partial<MeasuredDownspout>) => job(d);
+    it("a leader head ornate 14″ / tapered / molded → one part each, by its style", () => {
+      for (const head of ["ornate14", "tapered", "molded"] as const) {
+        const p = heads({ head }).parts.find((x) => x.attrs.part === "leader_head")!;
+        expect([p.key, p.qty, p.attrs.head, p.use]).toEqual([`leaderhead.${head}.rect.3x4.alu.white`, "1", head, "both"]);
+      }
+    });
+    it("a Y funnel: on a corrugated one a part; on a plain or round one none, and it is said", () => {
+      expect(q(heads({ head: "y_funnel", dsStyle: "corrugated" }).parts, "yfunnel.rect.3x4.corrugated.alu.white")).toBe("1");
+      const plain = heads({ head: "y_funnel", dsStyle: "plain" });
+      expect(plain.parts.some((p) => p.attrs.part === "y_funnel")).toBe(false);
+      expect(plain.advice).toContainEqual({ code: "input_fixed", id: "d", field: "head" });
+    });
+    it("rule 16: an old conductor head is counted as before; a funnel as before", () => {
+      expect(q(heads({ head: "conductor" }).parts, "conductorhead.rect.3x4.alu.white")).toBe("1");
+      expect(q(heads({ funnel: true }).parts, "funnel.rect.3x4.alu.white")).toBe("1");
+    });
+  });
+
+  it("the parts rule is version 7 (estimates of version 6 say «расчёт изменился», #1165)", () => {
+    expect(GUTTER_PARTS_VERSION).toBe("7");
+  });
+  it("fieldElbowsOf: own bends when any, else the company's", () => {
+    expect(fieldElbowsOf({ shape: "rect", dsStyle: "plain", elbowBend: "field", elbows: [{ style: "A", qty: 0 }] })).toEqual([{ style: "A", qty: 3 }]);
+    expect(fieldElbowsOf({ shape: "rect", dsStyle: "plain", elbowBend: "field", elbows: [{ style: "A", qty: 2 }] })).toEqual([{ style: "A", qty: 2 }]);
   });
 });

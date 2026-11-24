@@ -1,0 +1,52 @@
+import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { component, space } from "@octo/design-tokens";
+import { pillDot, pillLook, stripDays, stripOffset, STRIP_WEEKS } from "../src/ui/dayStripLogic";
+import { weekStart } from "../src/features/calendar";
+
+describe("DayStrip (BUILD-SPEC §1, поток В)", () => {
+  it("the strip is four whole weeks from the Monday a week before the picked day", () => {
+    const d = stripDays("2026-11-20");
+    expect(d).toHaveLength(7 * STRIP_WEEKS);
+    expect(d[0]).toBe("2026-11-09");
+    expect(weekStart(d[0]!)).toBe(d[0]);
+    expect(d).toContain("2026-11-20");
+    expect(d.at(-1)).toBe("2026-12-06");
+  });
+  it("crosses a month and a year without a gap", () => {
+    const d = stripDays("2026-12-31");
+    expect(d).toContain("2027-01-01");
+    for (let i = 1; i < d.length; i++) expect(Date.parse(d[i]!) - Date.parse(d[i - 1]!)).toBe(86_400_000);
+  });
+  it("scrolls so the picked day's week stands from the padding (v2 макет 2: Пн … Вс in one 390 row)", () => {
+    expect(stripOffset(0, 390)).toBe(0);
+    expect(stripOffset(6, 390)).toBe(0);
+    const row = 7 * (component.dayPill.w + component.dayPill.gap);
+    expect(stripOffset(7, 390)).toBe(row);
+    expect(stripOffset(11, 390)).toBe(row);
+    expect(7 * component.dayPill.w + 6 * component.dayPill.gap).toBe(390 - 2 * space[4]);
+  });
+  // visual v2 «Пилюли дней» (21.11): the picked day is the accent's tone with an accent frame, not a fill — the Plan's one fill is «День»
+  it("the picked pill is the accent's tone with an accent frame and accText words; today's number accText; the others surf, no frame", () => {
+    expect(pillLook(true, false)).toEqual({ fill: "tint", edge: "acc", num: "accText", head: "accText", bold: true });
+    expect(pillLook(true, true).num).toBe("accText");
+    expect(pillLook(false, true)).toEqual({ fill: "surf", edge: "transparent", num: "accText", head: "mut", bold: true });
+    expect(pillLook(false, false)).toEqual({ fill: "surf", edge: "transparent", num: "ink", head: "mut", bold: false });
+  });
+  it("the dot: none on an empty day, warn when a visit has nobody, accText on the picked one", () => {
+    expect(pillDot(undefined, false)).toBe("none");
+    expect(pillDot({ n: 0, unassigned: 0 } as never, true)).toBe("none");
+    expect(pillDot({ n: 2, unassigned: 1 } as never, false)).toBe("warn");
+    expect(pillDot({ n: 2, unassigned: 0 } as never, false)).toBe("mut");
+    expect(pillDot({ n: 2, unassigned: 1 } as never, true)).toBe("accText");
+  });
+  it("the pill takes its sizes from the tokens (46 × 64, dot 4) and PlanParts only re-exports the strip", () => {
+    const ui = readFileSync(join(__dirname, "..", "src", "ui", "dayStrip.tsx"), "utf8");
+    expect(ui).toMatch(/minHeight: pill\.h/);
+    expect(ui).toMatch(/width: pill\.dot/);
+    const plan = readFileSync(join(__dirname, "..", "src", "features", "PlanParts.tsx"), "utf8");
+    expect(plan).toMatch(/export \{ DayCell, DayStrip, WeekStrip, stripDays \} from "@\/ui\/dayStrip"/);
+    expect(plan).not.toMatch(/export function (DayCell|DayStrip|WeekStrip|stripDays)\b/);
+  });
+});

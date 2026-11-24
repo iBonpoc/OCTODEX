@@ -5,7 +5,7 @@
  * - hidden at $0 with a cost: «Скрыта от клиента», the hatch, the name pale; on the right — «расход $X» for the owner
  *   (who sees costs), $0 for the tech; the open row says «Сумма $0 · ваш расход $X»;
  * - a price typed in shows the line again: no «Скрыта», no «расход», no «Нет цены»;
- * - «На выбор клиента»: the mark on the folded row, «на выбор клиента, в итог не входит» in the open one.
+ * - «На выбор клиента»: the mark on the folded row («по желанию клиента» in its second line, v2), «на выбор клиента, в итог не входит» in the open one.
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -72,5 +72,6 @@ exports.run = async (h) => {
   await p.getByRole("switch", { name: "На выбор клиента" }).first().click();
   h.expect(/на выбор клиента, в итог не входит/.test(await tid(`est-figures-${id}`).innerText()), "the open row: «на выбор клиента, в итог не входит»");
   await line.fold(h);
-  h.expect(/На выбор клиента/.test(await tid(`est-optional-${id}`).innerText()), "the folded row: «На выбор клиента»");
+  // («Кратко», visual v2 №5: the mark is the row's second line — «по желанию клиента · 1 ea»; «Подробно» keeps the chip «На выбор клиента»)
+  h.expect(/по желанию клиента/.test(await tid(`est-optional-${id}`).innerText()), `the folded row: «по желанию клиента» (${await tid(`est-optional-${id}`).innerText()})`);
 };

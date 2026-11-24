@@ -22,3 +22,14 @@ export function groupByLetter<T extends { name?: string | null }>(list: T[]): [s
   }
   return [...m];
 }
+
+/**
+ * Letters only from 50 clients (wireframes-v2 «Клиенты»: «буквы-разделители — с 50 клиентов»): a short list is ONE group of rows 56
+ * in one card — not a card and a letter for each client (audit 2.1: 115 pt a client). From 50 — the letters, each group its card.
+ */
+export const LETTERS_FROM = 50;
+
+export function clientListGroups<T extends { name?: string | null }>(list: T[]): { key: string; title?: string; rows: T[] }[] {
+  if (list.length < LETTERS_FROM) return list.length ? [{ key: "all", rows: list }] : [];
+  return groupByLetter(list).map(([letter, rows]) => ({ key: letter, title: letter, rows }));
+}

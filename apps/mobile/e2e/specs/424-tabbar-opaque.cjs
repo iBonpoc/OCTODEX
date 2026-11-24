@@ -9,13 +9,19 @@ exports.run = async (h) => {
   if (h.layout.width >= 820) return;
   await h.go("/search?q=a");
   await p.getByTestId("search-hit").locator("visible=true").first().waitFor({ timeout: 8000 });
+  // v2 «Панель вкладок»: the tab row stands on its own painted layer (a sibling under it, the content fades into it from
+  // the top): the painted layer that covers the whole tab row
   const panel = await p.evaluate(() => {
     const bar = [...document.querySelectorAll('[data-testid="tab-bar"]')].find((e) => e.offsetParent !== null);
-    for (let a = bar; a; a = a.parentElement) {
+    const r = bar.getBoundingClientRect();
+    const host = bar.parentElement;
+    for (const a of [host, ...host.querySelectorAll("*")]) {
+      if (a === bar || bar.contains(a)) continue;
       const bg = getComputedStyle(a).backgroundColor;
-      if (bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)") return { bg, top: a.getBoundingClientRect().top };
+      const b = a.getBoundingClientRect();
+      if (bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)" && b.top <= r.top + 0.5 && b.bottom >= r.bottom - 0.5 && b.left <= r.left + 0.5 && b.right >= r.right - 0.5) return { bg, top: r.top };
     }
-    return { bg: "none", top: 0 };
+    return { bg: "none", top: r.top };
   });
   h.expect(/^rgb\(/.test(panel.bg), `the tab bar's panel is opaque (${panel.bg})`);
   // the end of the list
