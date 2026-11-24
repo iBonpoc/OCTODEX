@@ -29,6 +29,7 @@ import { MODULE_CHOICES, type Choices } from "../settings";
 import { colorChoices } from "./colorChoices";
 import { dsMoreSet, dsRareShown } from "./attrShown";
 import { FracPicker } from "./FracPicker";
+import { FRAC_SLOT } from "./fracSlot";
 import { feetResetsRest, inchesComplete, inchesTooBig, nextStage, type EntryStage } from "./lengthEntry";
 import { MM_SCALE, SIXTEENTHS_SCALE, SIXTEENTHS_SCALE_IN, Tape as TapeStrip } from "./Tape";
 import { DENOM, fmtLen, fracLabel, LEN_UNITS, MM_OF, MM_PER_IN, type LenFormat, type LenUnit } from "../canvas/format";
@@ -55,9 +56,18 @@ function Field({ label, children, testID }: { label: string; children: React.Rea
   );
 }
 
-/** the fraction typed by the tape, beside the inches: ⅜, 3/16 (nothing at 0) */
+/**
+ * The fraction typed by the tape, beside the inches: ⅜, 3/16 (nothing at 0). Its place is always the widest fraction's
+ * (`FRAC_SLOT`, unseen): the row keeps its size as the tape runs — it wrapped on 11/16 and back, and the tape and «Применить»
+ * jumped under the finger (#2414).
+ */
 function FracText({ value, testID }: { value: number; testID: string }) {
-  return value ? <View testID={testID}><T v="title" w="semibold">{fracLabel(value)}</T></View> : null;
+  return (
+    <View>
+      <View style={{ opacity: 0 }} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" {...({ "aria-hidden": true } as object)}><T v="heading" w="semibold">{FRAC_SLOT}</T></View>
+      {value ? <View testID={testID} style={{ position: "absolute", top: 0, bottom: 0, left: 0, justifyContent: "center" }}><T v="heading" w="semibold">{fracLabel(value)}</T></View> : null}
+    </View>
+  );
 }
 /**
  * A tape to pull (founder 09.11: «как рулетка, бегунком проматывать длину»): it shows the length in the fields and sets
