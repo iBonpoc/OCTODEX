@@ -166,3 +166,18 @@ exports.editorMenuHas = async (h, item) => {
   await require("./sheet.cjs").pressEscUntilClosed(p, p.getByTestId("menu-items").locator("visible=true").first());
   return has;
 };
+
+/**
+ * The bar «Итого · Готово» whole, not the capsule (#2363 q72 folds it on a scroll down): the page to its top — at the top the bar is
+ * always whole (`foldStep`: y ≤ 0) — and «Готово» on the screen. Not a click on the capsule: the capsule is animated (it comes in, it
+ * goes out with the scroll) and a click waits for it to stand still — CI 24.11 (main 0b60f0a, 01 @390 light) waited 30 s.
+ */
+exports.wholeBar = async (h) => {
+  await h.page.evaluate(() => {
+    // the page's scroller: the first parent that scrolls (the bar is fixed — start from the list)
+    let e = document.querySelector('[data-testid^="est-line-"]') ?? document.body;
+    while (e && !(e.scrollHeight > e.clientHeight + 50)) e = e.parentElement;
+    if (e) e.scrollTop = 0;
+  });
+  await vis(h, '[data-testid="ue-save"]').first().waitFor({ timeout: 5000 });
+};
