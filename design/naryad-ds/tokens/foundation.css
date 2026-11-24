@@ -11,7 +11,7 @@
  --control-md-phone:36px;--field-phone:44px;
  --icon-xs:14px;--icon-sm:18px;--icon-md:24px;--icon-lg:28px;--icon-stroke:1.75;
  --statusbar-h:44px;--tabbar-h:56px;--safe-bottom:34px;--fab:52px;--sheet-radius:28px;
- --dur-fast:160ms;--dur-base:220ms;--dur-slow:350ms;--dur-chart:900ms;--long-press-ms:500ms;--dur-press:80ms;
+ --dur-fast:160ms;--dur-base:220ms;--dur-slow:350ms;--dur-chart:900ms;--long-press-ms:500ms;--blink-steps:4;--blink-step-ms:125ms;--dur-press:80ms;
  --menu-scale:.96;--alert-scale:1.06;--fold-shift:12px;--fold-scale:.92;--skeleton-cycle:1800ms;
  --ease-out:cubic-bezier(.2,.8,.2,1);--ease-in:cubic-bezier(.4,0,1,1);--ease-spring:cubic-bezier(.3,1.25,.5,1);--ease-in-out:cubic-bezier(.45,0,.55,1);--ease-brand-way:cubic-bezier(.4,0,.6,1);--ease-brand-fold:cubic-bezier(.45,0,.35,1);
  --toast-info-ms:2600ms;--toast-undo-a11y-ms:10000ms;--spinner-delay-ms:300ms;--action-timeout-ms:10000ms;

@@ -38,6 +38,7 @@ import { setFooterInset, setToastRight } from "@/ui/footerInset";
 import { fillStyle } from "@/ui/fill";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { isDoubleTap, tapRule, type LastTap } from "../canvas/doubleTap";
+import { blinkPlan, dimAt } from "../canvas/dsBlink";
 import { deleteTarget, hasCap, type PickedEnd } from "../canvas/endPick";
 import { adopt, dsFor, patchDs, patchRun, pruneStored, readDefaults, resetKind, runFor, storeDefaults, type NewDefaults } from "../canvas/toolDefaults";
 import { CornerSheet } from "./CornerSheet";
@@ -282,23 +283,32 @@ function DrawCanvas() {
   const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (openTimer.current) clearTimeout(openTimer.current); }, []);
   useEffect(() => { if (openTimer.current) { clearTimeout(openTimer.current); openTimer.current = null; } }, [tool]);
-  /** a downspout just put blinks three times (founder 08.11: you see what appeared); `dim` — its off beat */
+  /** a downspout just put blinks, then its sheet opens (#1763, DS §19а): `motion.blinkSteps` beats of `motion.blinkStepMs` (≈0.5 s), the
+   *  order and time are `blinkPlan` (canvas/dsBlink.ts, unit-tested); `dim` — its off beat. Reduce motion: no blink, the sheet at once */
   const [fresh, setFresh] = useState<string | null>(null);
   const [dim, setDim] = useState(false);
   const reduce = useReducedMotion();
+  const reduceRef = useRef(reduce);
+  reduceRef.current = reduce;
+  // the sheet of the downspout just put, waiting for its blink to end: any next tap, a tool change or leaving the screen cancels it
+  const sheetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dropSheetTimer = () => { if (sheetTimer.current) { clearTimeout(sheetTimer.current); sheetTimer.current = null; } };
+  useEffect(() => dropSheetTimer, []);
+  useEffect(dropSheetTimer, [tool]);
   useEffect(() => {
-    if (!fresh || reduce) return setFresh(null);
+    const plan = blinkPlan(reduce);
+    if (!fresh || !plan.steps) return setFresh(null);
     let n = 0;
-    setDim(true);
+    setDim(dimAt(0));
     const iv = setInterval(() => {
       n += 1;
-      if (n >= 6) {
+      if (n >= plan.steps) {
         clearInterval(iv);
         setDim(false);
         setFresh(null);
-      } else setDim((x) => !x);
-    }, motion.durBase);
-    return () => clearInterval(iv);
+      } else setDim(dimAt(n));
+    }, plan.stepMs);
+    return () => { clearInterval(iv); setDim(false); };
   }, [fresh, reduce]);
   /** the hint of the tool just picked; gone after the first thing done with it (П20.8) */
   const [hint, setHint] = useState<Tool | "select" | "move" | null>(null);
@@ -693,6 +703,7 @@ function DrawCanvas() {
       liftTap.current = false;
     },
     onActivate: (e) => {
+      dropSheetTimer(); // a tap after a downspout was put: its sheet does not open over what the tap does
       if (Date.now() - canvas.multiAt.current < MULTI_TAP_MS) { lastTap.current = null; return; } // the fingers of a pinch / two-finger pan lifting are not a tap (a pinch that ended over a length label opened its sheet)
       if (!holdIsTap(hold.current)) return; // a touch that picked something up (a hold) is not a tap: the release does not flip a cap or open a menu (#1272)
       const { drawing: d, tool: tl } = cur.current;
@@ -736,9 +747,11 @@ function DrawCanvas() {
           haptics.medium(); // set down on the gutter (DS §15.6)
           setSelected(id);
           setFresh(id);
-          // its menu at once (founder 09.11): fittings, size, colour — on the phone a sheet, wider the side panel is open. Kept (founder 15.11,
-          // README §12 п.20: «ставится одним нажатием на жёлоб, как сейчас — оставить»)
-          setSheet(true);
+          // its menu (founder 09.11): fittings, size, colour — on the phone a sheet, wider the side panel is open. Kept (founder 15.11,
+          // README §12 п.20: «ставится одним нажатием на жёлоб, как сейчас — оставить»); after its blink, so the blink is seen (#1763)
+          const at = blinkPlan(reduceRef.current).sheetAtMs;
+          if (at > 0) sheetTimer.current = setTimeout(() => { sheetTimer.current = null; setSheet(true); }, at);
+          else setSheet(true);
         }
         return;
       }
