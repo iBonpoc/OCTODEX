@@ -29,6 +29,8 @@ export const REJECT_REASONS = {
   estimate_lines_mismatch: "sync.stuck.reason.estimateLines",
   // #1147 (migration 20261112030000): the client signed on the phone another total than the estimate has now
   estimate_total_mismatch: "sync.stuck.reason.estimateTotalChanged",
+  // #2474 (cloud/ops.ts saveEstimate): an edit made while the client signed meanwhile — the signature stays, the edit is not saved
+  estimate_signed_meanwhile: "est.rej.signedMeanwhileWhy",
   // step 17 C3 (migration 20261109120000): the merge of two clients
   merge_payment_in_flight: "clientDup.rej.inFlight",
   merge_already_merged: "clientDup.rej.merged",
@@ -101,6 +103,8 @@ export function rejectedOf(item: OwnedItem, error: string, now: number, who: Own
   // #1147: the client signed on the phone another total than the server's — a refusal for good (22023, never retried);
   // the card says the estimate changed and the client signs again
   if ((op.k === "estimate.sign" || op.k === "estimate.approve") && reason === "estimate_total_mismatch") return { ...base, what: "estimate", href: `/estimate/${op.id}`, labelKey: "est.rej.signatureLost", reason };
+  // #2474: the client signed while the phone's edit waited — the signature stays, the card says the edit was not saved
+  if (op.k === "estimate.save" && reason === "estimate_signed_meanwhile") return { ...base, what: "estimate", href: `/estimate/${op.id}`, labelKey: "est.rej.signedMeanwhile", reason };
   // a merge of two clients the phone showed as done (step 17 C3): never back silently — the kept card, and why
   if ((op.k === "customer.people" || op.k === "customer.tags") && reason === "customer_merged") return { ...base, what: "merge", href: `/client/${op.id}`, labelKey: "clientDup.rej.cardMergedTitle", reason };
   if (op.k === "customer.merge") return { ...base, what: "merge", href: `/client/${op.keepId}`, ...(reason ? { reason } : {}) };
