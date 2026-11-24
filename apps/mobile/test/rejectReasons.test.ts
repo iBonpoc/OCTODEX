@@ -24,6 +24,8 @@ describe("unit:rejectReasons — a refusal we can explain", () => {
       estimate_lines_mismatch: "sync.stuck.reason.estimateLines",
       // #1147: the client signed on the phone another total than the server's (migration 20261112030000, db T195)
       estimate_total_mismatch: "sync.stuck.reason.estimateTotalChanged",
+      // #2474: the client signed while the phone's edit waited (cloud/ops.ts saveEstimate — the phone's own refusal)
+      estimate_signed_meanwhile: "est.rej.signedMeanwhileWhy",
       invoice_over_contract: "inv.rej.overContract",
       invoice_has_payments: "inv.void.rej.paid",
       invoice_void_forbidden: "inv.void.rej.role",
