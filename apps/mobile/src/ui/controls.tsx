@@ -16,7 +16,7 @@ import { fillStyle } from "./fill";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { SelectField } from "./selectField";
 import { FIELD, type FieldType } from "./fieldTypes";
-import { focusPlan } from "./fieldFocus";
+import { focusPlan, lateSelectOk } from "./fieldFocus";
 import { offsetToShow } from "./segmentedScroll";
 
 /**
@@ -651,6 +651,13 @@ export function TextField({
   // a field that opens in a sheet: on a phone focus once the sheet is up and select by hand (#691, ./fieldFocus)
   const plan = focusPlan(Platform.OS, { autoFocus, selectOnFocus, readOnly: ro });
   const selectAll = () => input.current?.setSelection?.(0, len.current);
+  // #2469: a key typed since the field took the focus — a late select (below) never takes what was typed
+  const typed = useRef(false);
+  const isFocused = () => !!input.current?.isFocused?.();
+  const selectNow = () => {
+    selectAll();
+    (input.current as unknown as { select?: () => void } | null)?.select?.();
+  };
   const shownError = error ?? field?.error;
   const tid = testID ?? field?.testID;
   useEffect(() => {
@@ -693,11 +700,28 @@ export function TextField({
         }}
         value={value}
         editable={!ro}
-        onFocus={plan.selectByHand || onFocus ? () => { onFocus?.(); if (plan.selectByHand) setTimeout(selectAll, 0); } : undefined}
+        onFocus={selectOnFocus || onFocus ? () => {
+          onFocus?.();
+          if (!selectOnFocus || ro) return;
+          // all selected AT the focus (a digit typed at once replaces it), again a moment later (Safari's click, iOS) — but only while
+          // nothing has been typed since (#2469: a late select took the first digit on a slow device, «150» → «50»)
+          typed.current = false;
+          selectNow();
+          // the late one: the web (Safari's click puts the caret back) and a phone that selects by hand (iOS does not select a number)
+          if (Platform.OS !== "web" && !plan.selectByHand) return;
+          setTimeout(() => {
+            if (lateSelectOk(typed.current, isFocused())) selectNow();
+          }, 0);
+        } : undefined}
         onBlur={field || onBlurText ? () => { field?.blur(value); onBlurText?.(); } : undefined}
         inputAccessoryViewID={accessoryID}
         aria-disabled={ro || undefined}
+        // a key counts as typed even when it leaves the same text («1» over «1»: React sends no change then — code review of #2469)
+        onKeyPress={() => {
+          typed.current = true;
+        }}
         onChangeText={(v) => {
+          typed.current = true;
           const nv = f.fmt ? f.fmt(v) : v;
           // text taken away: measure again from the smallest height (a textarea's scrollHeight never drops below its height)
           if (multi && nv.length < len.current) setTextH(0);
@@ -720,7 +744,9 @@ export function TextField({
         returnKeyType={multi ? "default" : chain ? "next" : f.ret ?? (onSubmit ? "done" : "next")}
         onSubmitEditing={onSubmit}
         autoFocus={plan.autoFocus}
-        selectTextOnFocus={selectOnFocus}
+        // the phone's own select-on-focus (no round trip to the app); not the web's: it selects only a moment later, and then over a
+        // digit already typed (#2469)
+        selectTextOnFocus={Platform.OS !== "web" && selectOnFocus}
         submitBehavior={multi ? "newline" : chain ? "submit" : "blurAndSubmit"}
         accessibilityLabel={a11yLabel ?? label ?? placeholder}
         aria-invalid={shownError ? true : undefined}
