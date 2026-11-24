@@ -64,7 +64,7 @@ function Field({ label, children, testID }: { label: string; children: React.Rea
 function FracText({ value, testID }: { value: number; testID: string }) {
   return (
     <View>
-      <View style={{ opacity: 0 }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><T v="heading" w="semibold">{FRAC_SLOT}</T></View>
+      <View style={{ opacity: 0 }} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" {...({ "aria-hidden": true } as object)}><T v="heading" w="semibold">{FRAC_SLOT}</T></View>
       {value ? <View testID={testID} style={{ position: "absolute", top: 0, bottom: 0, left: 0, justifyContent: "center" }}><T v="heading" w="semibold">{fracLabel(value)}</T></View> : null}
     </View>
   );

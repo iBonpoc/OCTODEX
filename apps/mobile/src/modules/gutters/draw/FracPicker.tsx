@@ -61,7 +61,7 @@ export function FracPicker({ value, onChange, active, testID }: {
             visibleHeight={component.button.sm}
             accessibilityRole="button"
             accessibilityLabel={t("mod.gutters.attr.fracMoreA11y" as DictKey)}
-            accessibilityState={{ expanded: more }}
+            accessibilityState={{ expanded: more, selected: behind }}
             style={{ height: component.button.sm, paddingHorizontal: space[3], borderRadius: radius.pill, justifyContent: "center", ...(more || behind ? fillStyle(c) : { backgroundColor: "transparent" }), borderWidth: component.hairline, borderColor: more || behind ? "transparent" : c.bd }}
           >
             <T v="button" w={more || behind ? "semibold" : undefined} style={{ color: more || behind ? c.ink : c.mut }}>{t("mod.gutters.attr.fracMore" as DictKey)}</T>

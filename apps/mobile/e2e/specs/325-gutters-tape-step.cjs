@@ -79,6 +79,7 @@ exports.run = async (h) => {
     await p.mouse.down();
     for (let i = 1; i <= 18; i++) {
       await p.mouse.move(px - i * 16, py);
+      await settled();
       const yn = await ys();
       if (Math.abs(yn.tape - y0.tape) > 0.5 || Math.abs(yn.apply - y0.apply) > 0.5) moved.push(`${await value()}: tape ${y0.tape}→${yn.tape}, apply ${y0.apply}→${yn.apply}`);
     }
