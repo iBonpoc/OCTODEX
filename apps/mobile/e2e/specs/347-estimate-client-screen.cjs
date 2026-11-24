@@ -67,8 +67,7 @@ exports.run = async (h) => {
 
   // the options card keeps no owner's button (v2 #2350: with one option there is no card — «Вариант» is in «слои»; a second
   // option brings the card with «Копировать вариант» and «⋯ варианта»)
-  await tid("est-add-layers").getByRole("button").click();
-  await tid("est-add-option").click();
+  await require("../estimateLine.cjs").addOption(h);
   await tid("est-var-copy").waitFor({ timeout: 5000 });
   await tid("est-menu").getByRole("button").click();
   await tid("est-menu-client").click();

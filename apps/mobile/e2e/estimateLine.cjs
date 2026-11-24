@@ -15,12 +15,8 @@ exports.addCustom = async (h, name, price, qty) => {
 
 /** «Из каталога»: search, pick the thing (one thing opens its row, the cursor in the quantity), the quantity, the row folded */
 exports.addCatalog = async (h, search, item, qty) => {
-  // #2387 (С4): an empty estimate has «Каталог» in its card; with lines it is in the «˅» menu beside «＋ Позиция»
-  const menu = h.page.getByTestId("est-add-layers").locator("visible=true");
-  if (await menu.count()) {
-    await menu.first().getByRole("button").click();
-    await h.page.getByTestId("est-add-catalog").locator("visible=true").first().click();
-  } else await h.page.getByTestId("est-add-catalog").locator("visible=true").first().getByRole("button").click();
+  // «Каталог» is one of the four add buttons over the lines (2×2, wave 1 п.6) — and in the empty estimate's card the same four
+  await h.page.getByTestId("est-add-catalog").locator("visible=true").first().getByRole("button").click();
   await h.sheet().locator("input").first().fill(search);
   await h.sheet().getByText(item).first().click();
   if (qty !== undefined) {
@@ -137,16 +133,12 @@ exports.menu = async (h, id) => {
   }
   await vis(h, '[data-testid="menu-items"]').first().waitFor({ timeout: 3000 });
 };
-/** «＋ Раздел» is in the menu of «слои» (the round 32 beside «Позиции», visual v2 №5) */
+/** «＋ Раздел» — one of the four add buttons over the lines (2×2, wave 1 п.6) */
 exports.addSection = async (h) => {
-  await vis(h, '[data-testid="est-add-layers"]').first().getByRole("button").click();
-  await vis(h, '[data-testid="est-add-section"]').first().click();
+  await vis(h, '[data-testid="est-add-section"]').first().getByRole("button").click();
 };
-/** «Добавить вариант» is in the same menu of «слои» (v2: one option shows no options card — the card comes with the second) */
-exports.addOption = async (h) => {
-  await vis(h, '[data-testid="est-add-layers"]').first().getByRole("button").click();
-  await vis(h, '[data-testid="est-add-option"]').first().click();
-};
+/** «Добавить вариант» is in the editor's «⋯» (a rare way to add; v2: one option shows no options card — the card comes with the second) */
+exports.addOption = async (h) => exports.editorMenu(h, "est-add-option");
 
 /**
  * «Сохранить и отправить» of the builder (v2 #2350): the bar's one step is «Готово»; sending is an item of the header's «⋯»
@@ -173,4 +165,19 @@ exports.editorMenuHas = async (h, item) => {
   const has = (await p.getByTestId(item).locator("visible=true").count()) > 0;
   await require("./sheet.cjs").pressEscUntilClosed(p, p.getByTestId("menu-items").locator("visible=true").first());
   return has;
+};
+
+/**
+ * The bar «Итого · Готово» whole, not the capsule (#2363 q72 folds it on a scroll down): the page to its top — at the top the bar is
+ * always whole (`foldStep`: y ≤ 0) — and «Готово» on the screen. Not a click on the capsule: the capsule is animated (it comes in, it
+ * goes out with the scroll) and a click waits for it to stand still — CI 24.11 (main 0b60f0a, 01 @390 light) waited 30 s.
+ */
+exports.wholeBar = async (h) => {
+  await h.page.evaluate(() => {
+    // the page's scroller: the first parent that scrolls (the bar is fixed — start from the list)
+    let e = document.querySelector('[data-testid^="est-line-"]') ?? document.body;
+    while (e && !(e.scrollHeight > e.clientHeight + 50)) e = e.parentElement;
+    if (e) e.scrollTop = 0;
+  });
+  await vis(h, '[data-testid="ue-save"]').first().waitFor({ timeout: 5000 });
 };

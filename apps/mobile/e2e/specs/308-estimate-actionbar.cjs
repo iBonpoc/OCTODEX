@@ -57,6 +57,8 @@ exports.run = async (h) => {
   await tid(`est-line-${id}`).click();
   await tid(`est-save-catalog-${id}`).getByRole("switch").click();
   const cat0 = ((await h.db()).catalog ?? []).length;
+  // (a phone scrolled down: the bar is the capsule «˄ $…» — a tap brings «Готово» back, #2363 q72; the 2×2 add buttons make the page longer)
+  await line.wholeBar(h);
   // two presses in ONE tick (a fast double tap before the screen has redrawn)
   await tid("ue-save").evaluate((el) => { el.click(); el.click(); });
   await p.waitForFunction((n) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.estimates ?? []).length === n + 1, before, { timeout: 8000 });
