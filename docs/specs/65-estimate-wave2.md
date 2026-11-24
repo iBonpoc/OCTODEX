@@ -86,8 +86,12 @@ alter table public.estimates
   add column if not exists archived_by    uuid,
   add column if not exists declined_reason text check (declined_reason is null or length(declined_reason) <= 500),
   add column if not exists declined_by_party text check (declined_by_party in ('customer', 'contractor'));
-insert into app.status_transitions (doc_type, from_status, to_status) values ('estimate', 'declined', 'draft')
+-- колонка — entity_type (core.sql:183); expired → draft / declined в таблице нет — добавляем (ревью №2)
+insert into app.status_transitions (entity_type, from_status, to_status) values
+  ('estimate', 'declined', 'draft'), ('estimate', 'expired', 'draft'), ('estimate', 'expired', 'declined')
   on conflict do nothing;
+-- эти три хода — только через функции §3.2: прямой update status из приложения на них отказывает
+-- (сторож app.tg_guard_status + флаг app.estimate_life, как app.signing_estimate у send_estimate)
 ```
 
 ```sql
@@ -449,6 +453,30 @@ create table public.text_templates (
 
 S6 (отправка и правка отправленной), S7 (клиент открыл — `viewed`, без накрутки при перечитывании), S8 (подпись клиента — ожидаемая версия, замок), S8b (подпись компании — не меняется), S35/S35b (Корзина — сметы), S37a (отзыв — без статуса), S16 (направление — дубль наследует), S90 (создание компании — наценка). Каждый стык — e2e обе стороны (§3.9, §4.4, §9.2).
 
-## 17. Ревью этого документа
+## 17. Ревью этого документа (24.11, три независимых проверки, каждая без выводов автора)
 
-См. описание PR (строка «Ревью: …»). Замечания «блокирует» закрыты в тексте выше.
+Помощники `code-reviewer`, `security-check`, `map-keeper` как отдельные типы недоступны — их роли выполнили три независимых агента общего назначения, каждый получил только документ и код. Найденное проверено автором по коду (`entity_type` — `core.sql:183`; `app.version_lines_mismatch` — `20261112210000_tax_rate_ppm.sql:169–241`; `app.client_doc` — `20261113020000_estimate_terms.sql:141`). **Все «блокирует» закрыты ниже; эти пункты главнее текста §3–§9, где расходятся.**
+
+### 17.1 Закрыто («блокирует»)
+
+1. **Колонка ходов — `entity_type`, не `doc_type`;** ходов `expired → draft` и `expired → declined` нет — добавлены в миграцию §3.2 (code-reviewer, map-keeper). Карта §5 — дописать эти ходы и уже существующие `awaiting_countersign → draft | declined` тем же коммитом карты PR 65-2.
+2. **Новые ходы только через функции:** `declined → draft`, `expired → *` не доступны прямым `update estimates set status` (иначе их сделает любой, кто правит смету, включая мастера) — сторож статуса пропускает их только под флагом функции (security-check).
+3. **Права — внутри каждой `security definer`-функции**, не через RLS: `withdraw_estimate`, `archive_estimates`, `mark_estimate_declined`, `reopen_declined_estimate`, `publish_estimate_version`, `estimate_edit_begin/end` сами проверяют роль (`app.is_staff` / owner-admin-office) и «своё» у sales (до отзыва внутри `archive_estimates`). **Замок правки ставит только `is_staff`** — мастер замок не берёт (иначе мастер, правящий свою смету, закрыл бы клиенту подпись) (security-check). У каждой функции — `revoke all … from public, anon` + `grant execute … to authenticated` (правило 18); вспомогательные `app.*` — `revoke … from public, anon, authenticated`.
+4. **Подмена версии при подписи:** для канала `portal` `p_version_id` **обязателен** — новая сигнатура; старая сигнатура `portal_accept` удаляется в той же миграции (перегрузка даёт PostgREST `PGRST203`; страница `/p/` — веб из `main`, старых копий нет, кроме кэша браузера — он получит отказ и перечитает). `null` допустим только для `on_site` (сотрудник рядом с клиентом). Версия пишется в запись подписи (`estimate_approvals.selection.version_id`). Проверка замка и версии — в самой `app.estimate_client_accept` (и для `on_site`), не только в обёртке. Уже сейчас опция чужой версии отказывает (`option.version_id = sent_version_id`, `20261117260000:62`) — новая проверка добавляет понятный ответ «обновилась» (security-check, code-reviewer).
+5. **Отозванный токен не раскрывает состояние:** ответ по любому токену, которого нет в `estimate_tokens`, — **один и тот же** `{"status":"gone"}` без имени компании и без различия причин (вытеснен пятой ссылкой, «Закрыть ссылку», отзыв, архив, удаление, неизвестный токен). Страница показывает «Смета больше не действует. Свяжитесь с компанией, которая её прислала». §3.5 в части «`gone` с именем компании по хэшу» — заменено этим (security-check).
+6. **Опрос `/p/`:** `p_refresh` без записи и с лимитом частоты на токен (не чаще раза в 10 с; превышение — прежний ответ из кэша функции) — в PR 65-4 (security-check).
+7. **Налог по строке и «$» проходят запирание версии:** триггер запирания (`t50_lock_lines_match` → `app.version_lines_mismatch`) считает облагаемость по группам и налог только ставкой — с флагами или «$» отправка и публикация встанут (`estimate_lines_mismatch`). В PR 65-6 правятся тем же правилом, что движок: `app.version_lines_mismatch`, `app.client_doc` (белый список: `taxable`, `tax.kind`, `tax.fixedCents`), `app.estimate_option_totals`, проверка итога подписи (`sign_total_check`), доля налога работы и счетов (`jobs.tax_*`, `withTaxSplit`, `contractTaxCents`). Тест «телефон = сервер» (T195-набор) — на каждый из этих путей (code-reviewer).
+
+### 17.2 Учтено (замечания)
+
+- **65-1 — новый путь отказа при синхронизации:** ответа `estimate_signed_meanwhile` и окна «копия / сбросить» для очереди в коде нет (`editSession.ts` решает конфликт только до сохранения, с сетью) — 65-1 добавляет отказ на сервере и окно по `outboxRejected`; «переиспользовать» относится только к тексту окна #2381 (code-reviewer).
+- **Публикация берёт версию сервера:** `publish_estimate_version(p_id)` публикует `current_version_id` (без версии с телефона: при повторной правке незапертой версии id телефона и сервера расходятся). Смета стала `draft` (отозвали, пока телефон правил) — публикация ничего не делает, правки остаются черновиком, телефону — ответ «Смета отозвана» (code-reviewer).
+- **`withdrawn_at` снимает `send_estimate`** при новой отправке (иначе у отправленной осталась бы «Отозвана»); `reopen_declined_estimate` его не ставит (code-reviewer).
+- **Название до публикации:** `save_estimate_version` сразу пишет `estimates.title`, а клиент видит его на `/p/`. Пока смета отправлена, название уходит клиенту только публикацией: у `sent/viewed` `save_estimate_version` пишет название в версию (`calc_inputs.title`), `/p/` берёт его из `sent_version_id`; `estimates.title` — при публикации (code-reviewer). «Переименовать» у отправленной = публикация.
+- **Сторож версии (§8) читает `requires` сохранённой версии на сервере**, а не присланной (старый телефон своих `requires` не пришлёт); минимум движка фиксируется в PR 65-5 (сейчас `ENGINE_VERSION = 0.1.3`, `packages/estimating-engine/src/index.ts:12`); путь `saveLegacy` (PGRST202 — сервер без `save_estimate_version`) сторожа не нужен: такого сервера после 65-5 нет (code-reviewer).
+- **Себестоимость не в документе клиенту:** `lineProfit` в `calc_inputs` не пишется; `unitCostCents` из `calc_inputs` отрезает `app.client_doc` (сверить тестом в 65-6, security-check).
+- **Страховка — переключатель печати:** «Печатать на документах» в шаге «Страховка» (в `contract_settings.insurance.onDocuments`, по умолчанию «да», раз основатель сказал «печатать, если указано»); на `/p/` — только заполненные поля (security-check).
+- **`text_templates`:** `select` — `app.is_staff` (не `is_member`: субподрядчик — не сотрудник компании) (security-check). `declined_reason` анониму не отдаётся.
+- **Лид при отказе и возврате:** «Клиент отказался» — лид как при отказе компании сейчас (не меняется; если у лида других живых смет нет — в «Требует внимания» пункт «Лид без живой сметы», без автосмены статуса); «Вернуть в черновик» лид не трогает. Записать в карте S8 тем же коммитом карты (map-keeper).
+- **Признаки** «Отозвана», «В архиве», «в правке», «изменена после отправки» — внести в строку «Вычисляемые признаки» карты §5 (коммит карты PR 65-2). **Старые телефоны** не знают `archived_at` и `withdrawn_at`: архивная и отозванная сметы у них — обычные `sent`/`draft` в списке; действия на них сервер всё равно проверяет. Это допустимо до обновления (правило 16) (map-keeper).
+- `cancelled_by_customer` — тупик (старое, не трогаем в волне; отметить в карте §9 «Расхождения»).
