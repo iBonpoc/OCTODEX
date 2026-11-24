@@ -47,6 +47,9 @@ exports.run = async (h) => {
   await tid("quick-length-tape").waitFor({ timeout: 5000 });
   const v0 = await value();
   const base = s16(v0);
+  /** where the tape and «Применить» stand when the window opens (#2414: they stay there, below) */
+  const ys = async () => ({ tape: (await tid("quick-length-tape").boundingBox()).y, apply: (await tid("quick-length-apply").boundingBox()).y });
+  const y0 = await ys();
   /** the browser has drawn what the lift left: two frames (the tape settles in the one the finger lifts) */
   const settled = () => p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 
@@ -60,5 +63,27 @@ exports.run = async (h) => {
   await settled();
   const v1 = await value();
   h.expect(s16(v1) === base + 1, `16 px = one mark, 1/16″ more (${v0} = ${base}/16 → ${v1} = ${s16(v1)}/16)`);
+  const y1 = await ys();
+  h.expect(Math.abs(y1.tape - y0.tape) <= 0.5 && Math.abs(y1.apply - y0.apply) <= 0.5, `the first 1/16″ moves nothing over the tape (#2414): tape ${y0.tape}→${y1.tape}, apply ${y0.apply}→${y1.apply}`);
   await h.shot("one-mark");
+
+  // #2414 (founder 22.11: «размер прыгает, „Применить“ перескакивает»): a slow pull over 36 marks (every sixteenth — 11/16,
+  // 15/16, a whole inch) — the tape stays under the finger and «Применить» where it was: nothing over them grows or wraps
+  // (the fraction beside the inches wrapped the row by 52 px, the sixteenths' row came in by 40 px)
+  const moved = [];
+  // two pulls of 18 marks (each fits the tape at 390): 36 sixteenths, over an odd one, 11/16 … 15/16 and a whole inch
+  for (let pull = 0; pull < 2; pull++) {
+    const tb = await tid("quick-length-tape").boundingBox();
+    const px = tb.x + tb.width - 8, py = tb.y + tb.height / 2;
+    await p.mouse.move(px, py);
+    await p.mouse.down();
+    for (let i = 1; i <= 18; i++) {
+      await p.mouse.move(px - i * 16, py);
+      const yn = await ys();
+      if (Math.abs(yn.tape - y0.tape) > 0.5 || Math.abs(yn.apply - y0.apply) > 0.5) moved.push(`${await value()}: tape ${y0.tape}→${yn.tape}, apply ${y0.apply}→${yn.apply}`);
+    }
+    await p.mouse.up();
+    await settled();
+  }
+  h.expect(moved.length === 0, `the tape and «Применить» stay put while the tape is pulled (#2414): ${moved.slice(0, 4).join("; ")}`);
 };
