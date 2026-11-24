@@ -6,10 +6,10 @@ import type { StatusName } from "@octo/design-tokens";
 import { clientMoney } from "@octo/estimating-engine";
 import { peopleOf } from "@/data/people";
 import { daysOverdue, isOverdue, visitPropertyId } from "@/data/selectors";
-import type { Customer, CustomerStatus, DB, ID, Role, Tag } from "@/data/types";
+import type { Customer, CustomerStatus, DB, ID, Role, Tag, Visit } from "@/data/types";
 import type { DictKey } from "@/i18n";
 import type { IconKey } from "@/ui/primitives";
-import { isAssigned } from "@/features/schedule";
+import { isAssigned, isOpenVisit } from "@/features/schedule";
 import { getZone, minuteIn } from "@/features/zone";
 
 /** Status label: colour + icon + word (CLAUDE.md rule 2). */
@@ -80,6 +80,17 @@ export function clientOverdueOf(db: Pick<DB, "invoices">, customerId: ID, now = 
   const cents = clientMoney(late, []).owesCents;
   if (cents <= 0) return null;
   return { cents, days: Math.max(...late.map((i) => daysOverdue(i.dueDate, now, tz))) };
+}
+
+/**
+ * The client's next visit (the list card's one line, К6 п.3, 20.11.2026): open, not over yet, at one of the client's
+ * properties; the earliest. None → the card shows the address instead.
+ */
+export function clientNextVisit(db: Pick<DB, "visits" | "jobs" | "properties">, customerId: ID, now = Date.now()): Visit | undefined {
+  const props = new Set(db.properties.filter((p) => p.customerId === customerId).map((p) => p.id));
+  return db.visits
+    .filter((v) => isOpenVisit(v) && Date.parse(v.start) + (v.durationMin || 0) * 60_000 >= now && props.has(visitPropertyId(db, v) ?? ""))
+    .sort((a, b) => a.start.localeCompare(b.start))[0];
 }
 
 /** Money on the card: director and office see it, the tech does not (docs/specs/04 §8). */

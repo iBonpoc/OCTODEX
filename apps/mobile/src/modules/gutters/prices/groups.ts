@@ -16,7 +16,8 @@ import { catalogUnitPrice } from "@/features/estimateDoc";
 /** the version of the key: a new set of the group's properties is `v2`, and the transition offers the items again (§4.3) */
 export const GROUP_KEY_VERSION = "v1";
 
-/** a gutter part's item of a colour: a material of the module's parts with a colour (an item without a colour is never in a group, §9 Б2) */
+/** a gutter part's item of a colour: a material of the module's parts with a colour. A hand-made item without a colour is never
+ *  grouped by its key (§9 Б2); the module's one item for every colour (#2227) carries its group from «Создать позиции сразу» (§11.6) */
 export const colouredPart = (it: CatalogItem): boolean =>
   it.kind === "material" && !!it.attributes?.color?.trim() && PART_WORDS.has(it.attributes?.part ?? "");
 

@@ -23,3 +23,17 @@ export function nudgeDistance(view: number, content: number): number {
   const more = content - view;
   return more > 0 ? Math.min(more, component.tab.fadeW + space[6]) : 0;
 }
+
+/** a step of the `steps` strip: passed («✓»), the current one (the accent), still ahead (`mut`) */
+export type StepState = "done" | "now" | "next";
+
+/**
+ * The steps strip (BUILD-SPEC §1 SectionStrip `steps`; the visit: В пути · На месте · Работа · Подпись · Оплата): every step before
+ * the current one is passed, the current one is now, the rest are ahead. A current key that is not among the steps — nothing is
+ * passed (the visit has not started); `done` — all passed (the visit is closed).
+ */
+export function stepStates(keys: readonly string[], current: string | "done"): StepState[] {
+  if (current === "done") return keys.map(() => "done");
+  const at = keys.indexOf(current);
+  return keys.map((_, i) => (at < 0 ? "next" : i < at ? "done" : i === at ? "now" : "next"));
+}

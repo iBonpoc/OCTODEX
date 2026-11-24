@@ -6,7 +6,7 @@
  * the company's settings (M7b, spec 33 П22), /module/gutters/prices — labor prices and the price list's items (M7d, П22.10).
  */
 import { moduleHref, type ModuleDef } from "../registry";
-import { asGutterData, guttersOps, linkLead, loadGutters, measureHref, rebuildOp } from "./data";
+import { asGutterData, clientStartFor, guttersOps, linkLead, loadGutters, measureHref, rebuildOp } from "./data";
 import { engineStaleMeasurements, staleMeasurements } from "./estimateLink";
 import { starterWant } from "./prices";
 import { benchOfferedHere } from "./bench/visible";
@@ -37,9 +37,18 @@ const gutters: ModuleDef = {
     // everyone who measures (П11): owner, admin, office, sales, tech; a subcontractor has no measuring role here
     lead: (ctx, data) => (ctx.leadId ? measure(data, { leadId: ctx.leadId, ...(ctx.propertyId ? { propertyId: ctx.propertyId } : {}) }) : []),
     property: (ctx, data) => (ctx.propertyId ? measure(data, { propertyId: ctx.propertyId, leadIds: ctx.leadIds }) : []),
-    // П24 А3 (#697): the client's card — one button; the start screen goes to the address (one), a pick (several) or says
-    // to add an address (none)
-    client: (ctx) => (ctx.customerId ? [{ id: "measure", labelKey: "mod.gutters.measure" as const, icon: "pencil" as const, href: `${moduleHref("gutters", "start")}?customer=${encodeURIComponent(ctx.customerId)}` }] : []),
+    // П24 А3 (#697), #2271: the client's card — one button whose target is known at the press: the address's measurement
+    // (one), a sheet of addresses (several), a line «add an address» (none). An older core without `places` — the start screen
+    client: (ctx, data) => {
+      if (!ctx.customerId) return [];
+      const base = { id: "measure", labelKey: "mod.gutters.measure" as const, icon: "pencil" as const };
+      const start = `${moduleHref("gutters", "start")}?customer=${encodeURIComponent(ctx.customerId)}`;
+      if (!ctx.places) return [{ ...base, href: start }];
+      const to = clientStartFor({ draw, view }, asGutterData(data), ctx.places);
+      if (to.kind === "go") return [{ ...base, href: to.href }];
+      if (to.kind === "none") return [{ ...base, href: start, noteKey: "mod.gutters.start.noPlace" as const }];
+      return [{ ...base, href: start, pick: { titleKey: "mod.gutters.start.pick" as const, items: to.places.map((p) => ({ id: p.id, title: p.address, ...(p.city ? { subtitle: p.city } : {}), href: p.href })) } }];
+    },
     // П24 А7: a visit — the measurement of its lead, else of its address
     visit: (ctx, data) => (ctx.leadId || ctx.propertyId ? measure(data, ctx.leadId ? { leadId: ctx.leadId, ...(ctx.propertyId ? { propertyId: ctx.propertyId } : {}) } : { propertyId: ctx.propertyId, leadIds: ctx.leadIds }) : []),
     // «Замерить здесь»: a draft without a lead (S1b → «Сделать заявкой»); the address by location — stage 3 (П21.2 №8)
@@ -107,6 +116,9 @@ const gutters: ModuleDef = {
   // (a test one is marked «тестовая цена» in the list, rule 9); a line without an item is $0 with «проверьте цену». The quantities
   // are only a start. They never touch a measurement's lines — the main way is «Смета из замера»
   starterWant,
+  // #2227 (spec 33-price-key §11.3.3): the core names an item's variant property by the module's word — the supplier order says
+  // «Color code not set» in the order's language; the core itself never knows the word «color»
+  variantWord: (attr, t) => (attr === "color" ? t("mod.gutters.attr.color") : undefined),
   estimateTemplates: [
     {
       key: "clean",

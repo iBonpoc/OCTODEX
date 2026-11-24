@@ -17,7 +17,7 @@ exports.run = async (h) => {
   // `target`: a number, or a function that reads the place on the screen AFTER the row is taken (the page may have moved)
   // `bar: false` — let go where it was taken: the bar shows only once the place differs (DS §14.6)
   const drag = async (key, target, { release = true, bar = true } = {}) => {
-    const hd = tid(`sort-handle-${key}`);
+    const hd = await line.grip(h, key);
     await line.toMiddle(h, hd);
     const b = await hd.boundingBox();
     const x = b.x + b.width / 2;
@@ -45,7 +45,7 @@ exports.run = async (h) => {
 
   // C above A
   // the page is set first (the handle in the middle), then the place is read — `drag` does not move the page again
-  await line.toMiddle(h, tid(`sort-handle-${c}`));
+  await line.toMiddle(h, await line.grip(h, c));
   const aBox = await tid(`est-line-${a.slice(2)}`).boundingBox();
   await drag(`l:${c.slice(2)}`, aBox.y + 2);
   await p.waitForFunction((first) => document.querySelector('[data-testid^="est-line-"]')?.getAttribute("data-testid") === `est-line-${first}`, c.slice(2), { timeout: 4000 });
@@ -61,7 +61,7 @@ exports.run = async (h) => {
   h.expect((await order()).join(" ") === before, "let go over nothing: nothing moved");
 
   // into a section: «＋ Раздел», then the last row under its heading
-  await tid("est-add-section").getByRole("button").click();
+  await line.addSection(h);
   await p.locator('[data-testid^="est-sec-name-"]').locator("visible=true").first().locator("input").pressSequentially("Roof", { delay: 15 });
   await p.locator('[data-testid^="est-sec-name-"]').locator("visible=true").first().locator("input").press("Enter");
   await p.waitForFunction(() => document.querySelectorAll('[data-testid^="est-sec-name-"]').length === 0, null, { timeout: 3000 });
@@ -82,14 +82,16 @@ exports.run = async (h) => {
   // let go where it was taken: nothing moved, no toast
   const keep = (await order()).join(" ");
   const lastKey = (await order()).filter((x) => x.startsWith("l:")).pop();
-  await line.toMiddle(h, tid(`sort-handle-${lastKey}`));
+  await line.toMiddle(h, await line.grip(h, lastKey));
   const lb = await tid(`est-line-${lastKey.slice(2)}`).boundingBox();
+  // (v2 keeps a stack of toasts: older ones may still stand — «no toast» is «no NEW toast»)
+  const toasts0 = await p.getByTestId("toast-undo").count();
   await drag(`l:${lastKey.slice(2)}`, lb.y + lb.height / 2, { bar: false });
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="sort-bar"]').length === 0, null, { timeout: 3000 });
-  h.expect((await order()).join(" ") === keep && (await p.getByTestId("toast-undo").count()) === 0, "let go where it was taken: the same order, no toast");
+  h.expect((await order()).join(" ") === keep && (await p.getByTestId("toast-undo").count()) <= toasts0, "let go where it was taken: the same order, no toast");
 
   // a section is carried whole: a second section goes above the first; «Вернуть» puts it back
-  await tid("est-add-section").getByRole("button").click();
+  await line.addSection(h);
   await p.locator('[data-testid^="est-sec-name-"]').locator("visible=true").first().locator("input").pressSequentially("Yard", { delay: 15 });
   await p.locator('[data-testid^="est-sec-name-"]').locator("visible=true").first().locator("input").press("Enter");
   await p.waitForFunction(() => document.querySelectorAll('[data-testid^="est-sec-name-"]').length === 0, null, { timeout: 3000 });
@@ -103,6 +105,32 @@ exports.run = async (h) => {
   h.expect((await order()).filter((x) => x.startsWith("s:"))[0] === secs[1], "the dragged section is first");
   await line.undo(h);
   await p.waitForFunction((o) => [...document.querySelectorAll('[data-testid^="est-line-"], [data-testid^="est-section-"]')].map((e) => e.getAttribute("data-testid").replace("est-line-", "l:").replace("est-section-", "s:")).join(" ") === o, withYard.join(" "), { timeout: 4000 });
+
+  // #2422 (founder 23.11; MAP §6): a section in the hand folds EVERY section to its title — Roof's line is not in the list while Yard
+  // is carried; let go over nothing — nothing moves, and Roof is open again with its line
+  const inRoof = (await order()).filter((x) => x.startsWith("l:")).pop();
+  const orderNow = (await order()).join(" ");
+  await drag(`l:${inRoof.slice(2)}`, async () => {
+    const sBox = await tid(`est-section-${sec.slice(2)}`).boundingBox();
+    return sBox.y + sBox.height + 12;
+  });
+  await p.waitForFunction(([s, l]) => { const els = [...document.querySelectorAll('[data-testid^="est-line-"], [data-testid^="est-section-"]')].map((e) => e.getAttribute("data-testid")); return els.indexOf(`est-line-${l}`) === els.indexOf(`est-section-${s}`) + 1; }, [sec.slice(2), inRoof.slice(2)], { timeout: 4000 });
+  const lineShown = () => p.evaluate((l) => [...document.querySelectorAll(`[data-testid="est-line-${l}"]`)].some((e) => e.offsetParent !== null), inRoof.slice(2));
+  h.expect(await lineShown(), "the line is in Roof, shown");
+  // the landed line flashes for a moment (DS §14.6): a new hold starts once it has landed
+  await p.waitForFunction(() => document.querySelectorAll('[data-testid^="sort-flash-"]').length === 0, null, { timeout: 3000 });
+  await tid(`est-section-${secs[1].slice(2)}`).evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await drag(`s:${secs[1].slice(2)}`, async () => (await tid(`est-section-${secs[1].slice(2)}`).boundingBox()).y + 4, { release: false });
+  const folded = await require("../sheet.cjs").waited(p.waitForFunction((l) => ![...document.querySelectorAll(`[data-testid="est-line-${l}"]`)].some((e) => e.offsetParent !== null), inRoof.slice(2), { timeout: 3000 }));
+  h.expect(folded, "Yard in the hand: Roof is folded to its title too (its line is not in the list)");
+  await p.mouse.move(5, 4, { steps: 4 });
+  await p.mouse.up();
+  await p.waitForFunction(() => document.querySelectorAll('[data-testid="sort-bar"]').length === 0, null, { timeout: 3000 });
+  await tid(`est-line-${inRoof.slice(2)}`).waitFor({ timeout: 3000 });
+  h.expect((await order()).filter((x) => x.startsWith("s:")).join(" ") === secs.join(" "), "let go over nothing: the sections stand as they stood");
+  h.expect(await lineShown(), "let go: Roof is open again with its line (the person's folding is as it was)");
+  await line.undo(h);
+  await p.waitForFunction((o) => [...document.querySelectorAll('[data-testid^="est-line-"], [data-testid^="est-section-"]')].map((e) => e.getAttribute("data-testid").replace("est-line-", "l:").replace("est-section-", "s:")).join(" ") === o, orderNow, { timeout: 4000 });
 
   // the body of a folded row is taken by the mouse (a move of 5), not only the handle
   const firstLine = (await order()).find((x) => x.startsWith("l:"));
@@ -120,7 +148,7 @@ exports.run = async (h) => {
   for (let i = 1; i <= 22; i++) await line.addCustom(h, `Long ${i}`, 1);
   const ordLong = (await order()).filter((x) => x.startsWith("l:"));
   const first = ordLong[0];
-  const hd = tid(`sort-handle-${first}`);
+  const hd = await line.grip(h, first);
   await line.toMiddle(h, hd);
   // the page's own scroll event reaches the app a frame or two later: take the row once the page has stood still
   await p.waitForFunction(() => new Promise((r) => { let n = 0; const f = () => (++n > 12 ? r(true) : requestAnimationFrame(f)); f(); }), null, { timeout: 5000 });
@@ -131,8 +159,9 @@ exports.run = async (h) => {
   await p.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2 + 12, { steps: 3 });
   await p.mouse.move(hb.x + hb.width / 2, vh - 6, { steps: 8 });
   await p.getByTestId("sort-bar").first().waitFor({ timeout: 3000 });
-  // the page reaches its end ...
-  await p.waitForFunction(() => { let e = document.querySelector('[data-testid^="est-line-"]'); while (e && !(e.scrollTop > 0 && e.scrollHeight > e.clientHeight + 50)) e = e.parentElement; return !!e && e.scrollTop + e.clientHeight >= e.scrollHeight - 2; }, null, { timeout: 15000 });
+  // the page runs down and STOPS — at its end, or where the held row meets the list's end (#2363: with the kind groups drawn as
+  // cards the list ends a little above the page's end — the totals card below; the row never goes past the last line) ...
+  await p.waitForFunction(() => new Promise((r) => { let e = document.querySelector('[data-testid^="est-line-"]'); while (e && !(e.scrollTop > 0 && e.scrollHeight > e.clientHeight + 50)) e = e.parentElement; if (!e) return r(false); let prev = -1; let still = 0; const f = () => { const t = e.scrollTop; still = t > 0 && Math.abs(t - prev) < 0.5 ? still + 1 : 0; prev = t; still >= 30 ? r(e.scrollTop + e.clientHeight >= e.scrollHeight - 60) : requestAnimationFrame(f); }; f(); }), null, { timeout: 15000 });
   // ... and is held there for a while (40 frames): the row must still be with the finger
   await p.waitForFunction(() => new Promise((r) => { let n = 0; const f = () => (++n > 40 ? r(true) : requestAnimationFrame(f)); f(); }), null, { timeout: 5000 });
   // the row is still under the finger (the page's offset used to grow past the end: the row ran away from the finger)
@@ -163,7 +192,7 @@ exports.run = async (h) => {
   h.expect((await p.locator('[data-testid^="est-name-"]').count()) === 0, "after the drop no row is open");
 
   // the module leads its own: its line has no handle; a drop into its section is refused with a toast
-  await tid("ue-save").getByRole("button").click();
+  await tid("ue-save").click();
   await p.waitForFunction(() => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.estimates ?? []).some((e) => e.customerId === "c2" && e.doc?.options?.[0]?.lines?.length >= 25), null, { timeout: 8000 });
   const est = (await h.db()).estimates.find((e) => e.customerId === "c2" && e.doc?.options?.[0]?.lines?.length >= 25);
   const raw2 = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)), "octo.db.v5");

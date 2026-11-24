@@ -10,6 +10,7 @@ import { smsWithBody } from "@/features/sms";
 import type { ID } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { Button, TextField } from "@/ui/controls";
+import { ButtonPair } from "@/ui/pairs";
 import { OptionRows } from "@/ui/optionRow";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -52,10 +53,10 @@ export function AssignSheet({ visitId, onClose }: { visitId: ID | null; onClose:
         value={picked}
         onChange={setPicked}
       />
-      <View style={{ gap: space[2] }}>
-        <Button label={t("plan.assignSave")} icon="user" variant="primary" full disabled={!v} onPress={() => save(picked)} />
-        {v && assigneesOf(v).length ? <Button label={t("plan.unassignAll")} variant="ghost" full onPress={() => save([])} /> : null}
-      </View>
+      <ButtonPair
+        main={{ label: t("plan.assignSave"), icon: "user", variant: "primary", disabled: !v, onPress: () => save(picked) }}
+        second={v && assigneesOf(v).length ? { label: t("plan.unassignAll"), variant: "ghost", onPress: () => save([]) } : null}
+      />
     </Sheet>
   );
 }

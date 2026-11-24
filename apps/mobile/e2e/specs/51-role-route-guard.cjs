@@ -26,12 +26,17 @@ exports.run = async (h) => {
   // the tab bar has no extra «index» tab
   h.expect((await p.getByRole("button", { name: /^index$/i }).count()) === 0 && (await p.getByText(/^index$/).count()) === 0, "no «index» tab");
 
-  // Today's company money, as the director sees it (so the check below means something)
-  const MONEY = [/Подписано\s+\$5,180/, /Ждёт оплаты\s+\$2,800/, /Требует внимания/];
+  // Today's company money, as the director sees it (so the check below means something). v2: the tiles of «Требует
+  // действия» — «Должны» (owed) and «Получено сегодня» — by testID
   await setRole(h, "director");
   await h.go("/today");
-  const own = await p.evaluate(() => document.body.innerText);
-  h.expect(MONEY.every((re) => re.test(own)), "director's Today shows its amounts");
+  await p.getByTestId("tile-owed").locator("visible=true").first().waitFor({ timeout: 8000 });
+  const sum = async (id) => ((await p.getByTestId(id).locator("visible=true").first().innerText()).match(/\$[\d,]+(\.\d\d)?/) ?? [""])[0];
+  const owed = await sum("tile-owed");
+  const received = await sum("tile-received");
+  h.expect(/^\$[\d,]+/.test(owed) && /^\$[\d,]+/.test(received) && owed !== "$0", `director's Today shows its amounts (owed ${owed}, received ${received})`);
+  const MONEY = [owed, received].filter((x) => x && x !== "$0");
+  const PARTS = ["today-tiles", "today-attention", "tile-owed", "tile-received"];
 
   // the technician by a direct link: back to his own home with a toast, no company money on the way
   await setRole(h, "tech");
@@ -40,7 +45,8 @@ exports.run = async (h) => {
     await h.go(path);
     await p.waitForTimeout(800);
     const text = await p.evaluate(() => document.body.innerText + "\n" + document.body.textContent);
-    for (const re of MONEY) h.expect(!re.test(text), `tech after ${path}: no «${re.source}» anywhere in the page`);
+    for (const m of MONEY) h.expect(!text.includes(m), `tech after ${path}: no «${m}» anywhere in the page`);
+    for (const id of PARTS) h.expect((await p.getByTestId(id).count()) === 0, `tech after ${path}: no «${id}» in the page`);
   }
   for (const path of ["/money", "/team", "/company", "/company/hours", "/today", "/figures/profit", "/triage", "/inbox"]) {
     await h.go(path);

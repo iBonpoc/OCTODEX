@@ -201,12 +201,14 @@ describe("стык «замер → смета» по обе стороны пе
 });
 
 describe("созданное модулем (§4.3)", () => {
-  it("С12: «Создать позиции сразу» — цветные позиции модуля сразу в своей группе, работы и без цвета — без группы", () => {
+  it("С12 (#2227 §11.8): «Создать позиции сразу» — белый и коричневый дают ОДНУ позицию без цвета, в группе цены старых цветных (§11.6, ревью #2249 №1); работы — без группы", () => {
     const rows = [{ key: "gw", part: part("white") }, { key: "gb", part: part("brown") }, ...laborRows()];
     const made = missingItems("demo", rows, [], (p) => `x ${p.key}`);
-    const w = made.find((x) => x.attributes?.color === "white")!, b = made.find((x) => x.attributes?.color === "brown")!;
-    expect(w.attributes!.priceGroup).toMatch(/^gutters:v1:[0-9a-f]{16}$/);
-    expect(w.attributes!.priceGroup).toBe(b.attributes!.priceGroup);
+    const mat = made.filter((x) => x.kind === "material");
+    expect(mat).toHaveLength(1);
+    expect(mat[0]!.attributes!.color).toBeUndefined();
+    expect(mat[0]!.attributes!.priceGroup).toBe(priceGroupKey(it_("w", "white")));
+    expect(mat[0]!.attributes!.finish).toBe("painted");
     expect(made.filter((x) => x.kind === "labor").every((x) => !x.attributes?.priceGroup)).toBe(true);
     expect(transitionGroups(made)).toEqual([]);
   });
@@ -233,11 +235,12 @@ describe("ревью PR3 (code-reviewer №1, 3, 5, 6)", () => {
     expect(g.why).toEqual({ k: "real" });
     expect(g.insideId).toBe("m");
   });
-  it("С20: «Создать позиции сразу» при готовой группе — новый цвет сразу с ценой группы (в любом режиме)", () => {
+  it("С20 (#2227): «Создать позиции сразу» при готовой группе — позиция без цвета сразу в группе и с её ценой (в любом режиме); коричневый остаётся своим", () => {
     const b = it_("b", "brown", { priceCents: 900 });
     const grouped = { ...b, attributes: { ...b.attributes!, priceGroup: priceGroupKey(b) } };
-    const made = missingItems("demo", [{ key: "gw", part: { ...part("white"), attrs: { ...part("white").attrs, finish: "painted" } } as PartQty }], [grouped], (p) => `x ${p.key}`);
-    const w = made.find((x) => x.attributes?.color === "white")!;
-    expect([w.attributes!.priceGroup, w.priceCents, w.placeholder]).toEqual([grouped.attributes!.priceGroup, 900, false]);
+    const made = missingItems("demo", [{ key: "gw", part: { ...part("white"), attrs: { ...part("white").attrs, finish: "painted" } } as PartQty }, { key: "gb", part: { ...part("brown"), attrs: { ...part("brown").attrs, finish: "painted" } } as PartQty }], [grouped], (p) => `x ${p.key}`);
+    expect(made).toHaveLength(1);
+    const w = made[0]!;
+    expect([w.attributes!.color, w.attributes!.priceGroup, w.priceCents, w.placeholder]).toEqual([undefined, grouped.attributes!.priceGroup, 900, false]);
   });
 });

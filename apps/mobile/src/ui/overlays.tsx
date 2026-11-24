@@ -1,10 +1,12 @@
 import type { ComponentProps } from "react";
-import { toastArmed, toastExpires, toastIdFor } from "./toastArm";
+import { toastArmed } from "./toastArm";
+import { stackDrop, stackLife, stackReplace, stackShow, stackTop } from "./toastStack";
+import { useQueueLineHeight } from "./queueLineHeight";
 import { toastBottom, useFooterInset, useToastRight, wideToastBottom } from "./footerInset";
-import { menuListHeight, menuScrollTo } from "./menuLayout";
+import { fitMenuPlace, menuListHeight, menuScrollTo } from "./menuLayout";
 import { Fragment, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ScreenScrollCtx } from "./requiredForm";
-import { KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance } from "react-native";
+import { AccessibilityInfo, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance } from "react-native";
 import { avoidBehavior } from "./keyboard";
 import { GestureDetector, GestureHandlerRootView, GestureStateManager, State, useNativeGesture, usePanGesture } from "react-native-gesture-handler";
 import { menuPick } from "./menuPick";
@@ -13,16 +15,16 @@ import { leaveBefore } from "./sheetLeave";
 import { helpBack, helpClosed, helpOpen, pageSwitch, sheetHeader, type HelpPage } from "./sheetHelp";
 import { useScrollFade } from "./scrollFade";
 import { noteQuestionCancelled, registerDirtySheet } from "./dirtySheets";
-import Svg, { Rect } from "react-native-svg";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Animated, { FadeIn, FadeOut, SlideInDown, useAnimatedProps, useAnimatedStyle, ReduceMotion, runOnJS, useReducedMotion, useSharedValue, withSpring, withTiming, Easing } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut, SlideInDown, useAnimatedStyle, ReduceMotion, runOnJS, useReducedMotion, useSharedValue, withSpring, withTiming, Easing } from "react-native-reanimated";
 import { component, motion, radius, size, space } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { router, type Href } from "expo-router";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import type { GuardedUndo } from "@/data/undo";
+import { SheetHead } from "./templates/screenHeader";
 
 /**
  * Every modal turns with the device (docs/specs/32): without it an iPhone shows a modal in portrait only
@@ -74,6 +76,8 @@ export function Menu<K extends string>({
   onClose,
   title,
   matchWidth,
+  fit,
+  a11yLabel,
 }: {
   visible: boolean;
   anchor: { x: number; y: number; w: number; h: number } | null;
@@ -83,6 +87,11 @@ export function Menu<K extends string>({
   title?: string;
   /** a menu of a field: not narrower than its row, not wider than `modalW` (DS А2) */
   matchWidth?: boolean;
+  /** the value menu of a field (DS §9б.4, #2412): as wide as its words (`menuW`…`select.menuMaxW`), its right edge on the field's
+   *  (a field narrower than the menu — its left edge), `select.menuGap` under the field; no title */
+  fit?: boolean;
+  /** what the backdrop reads out when there is no title */
+  a11yLabel?: string;
 }) {
   const { c } = useTheme();
   const { width: winW, height: winH } = useWindowDimensions();
@@ -138,9 +147,11 @@ export function Menu<K extends string>({
   const open = visible && !!anchor;
   // the edges: 16 from the window, and clear of the notch and the home indicator (docs/specs/32)
   const e = { l: Math.max(insets.left, space[4]), r: Math.max(insets.right, space[4]), t: Math.max(insets.top, space[4]), b: Math.max(insets.bottom, space[4]) };
-  const w = Math.min(matchWidth ? Math.min(Math.max(component.menuW, at.w), component.modalW) : component.menuW, winW - e.l - e.r);
+  const w = Math.min(fit ? component.select.menuMaxW : matchWidth ? Math.min(Math.max(component.menuW, at.w), component.modalW) : component.menuW, winW - e.l - e.r);
   const left = Math.max(e.l, Math.min(at.x, winW - w - e.r));
-  const below = at.y + at.h + space[1];
+  // a value menu: the right edge on the field's when the field is as wide as the menu can be; else from the field's left edge
+  const fitPlace = fitMenuPlace({ x: at.x, w: at.w, winW, minW: Math.min(component.menuW, w), maxW: w, edgeL: e.l, edgeR: e.r });
+  const below = at.y + at.h + (fit ? component.select.menuGap : space[1]);
   // the menu never grows past the window (a phone on its side): it scrolls inside, every item can be reached
   const room = winH - e.t - e.b;
   // at most `menuMaxRows` rows show (the last one half: it scrolls); a window shorter than that cuts it further
@@ -158,14 +169,15 @@ export function Menu<K extends string>({
     listRef.current?.scrollTo({ y: menuScrollTo({ rowY: row.y, rowH: row.h, viewH: listH, contentH }), animated: false });
   };
   const estH = Math.min(listH + (title ? size.hitMin : 0) + space[2] * 2, room);
-  const top = below + estH > winH - e.b ? Math.max(e.t, Math.min(at.y - estH - space[1], winH - e.b - estH)) : below;
+  const gap = fit ? component.select.menuGap : space[1];
+  const top = below + estH > winH - e.b ? Math.max(e.t, Math.min(at.y - estH - gap, winH - e.b - estH)) : below;
   return (
     <Modal transparent visible={open} animationType="none" onRequestClose={onClose} onDismiss={picker.dismissed} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
-      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={title ?? ""} />
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={title ?? a11yLabel ?? ""} />
       <Animated.View
         entering={reduce ? undefined : FadeIn.duration(motion.durFast)}
         exiting={reduce ? undefined : FadeOut.duration(motion.durFast)}
-        style={{ position: "absolute", left, top, width: w }}
+        style={fit ? { position: "absolute", top, ...fitPlace } : { position: "absolute", left, top, width: w }}
         accessibilityRole="menu"
       >
         <Glass strong style={{ borderRadius: radius.inner, paddingVertical: space[2] }}>
@@ -207,7 +219,7 @@ export function Menu<K extends string>({
               style={{ minHeight: size.hitMin, paddingHorizontal: space[4], flexDirection: "row", alignItems: "center", gap: space[2], opacity: it.dim ? component.dimOpacity : 1 }}
             >
               <View style={{ width: size.iconMd }}>{it.selected ? <Icon name="check" color={c.ink} /> : null}</View>
-              <T v="body" tone={it.destructive ? "bad" : "ink"} style={{ flex: 1 }}>
+              <T v="body" w={fit && it.selected ? "semibold" : undefined} tone={it.destructive ? "bad" : "ink"} style={fit ? { flexShrink: 1 } : { flex: 1 }} numberOfLines={fit ? 1 : undefined}>
                 {it.label}
               </T>
               {it.icon ? <Icon name={it.icon} /> : null}
@@ -718,37 +730,8 @@ export function Sheet({
                 />
               ) : null}
               {title || onBack ? (
-                <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], minHeight: size.hitMin }}>
-                  {onBack ? (
-                    <Press testID="sheet-back" onPress={onBack} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("common.back")}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: space[1] }}>
-                        <Icon name="chevronLeft" s={size.iconSm} />
-                        <T v="button">{t("common.back")}</T>
-                      </View>
-                    </Press>
-                  ) : null}
-                  {/* «?» right after the title, ✕ stays on the right (DS Б7); a long title gives way, «?» stays by it */}
-                  <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: space[2] }}>
-                    <View testID="sheet-title" style={{ flexShrink: 1 }}>
-                      <T v="title" numberOfLines={2}>{title ?? ""}</T>
-                    </View>
-                    {hdr.showHelp && help ? <HelpMark title={help.title ?? ownTitle ?? ""} onPress={openHelp} testID="sheet-help" /> : null}
-                  </View>
-                  <Press testID="sheet-close" onPress={() => requestClose()} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("common.close")}>
-                    <View
-                      style={{
-                        width: component.dockBtn,
-                        height: component.dockBtn,
-                        borderRadius: radius.pill,
-                        backgroundColor: c.surf2,
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <Icon name="close" s={size.iconSm} />
-                    </View>
-                  </Press>
-                </View>
+                // the one header's sheet kind (visual-v2 «Шторка»): the title 22/700 on the left, «×» 32 on the right
+                <SheetHead title={title} onClose={() => requestClose()} closeLabel={t("common.close")} back={onBack ? { label: t("common.back"), onPress: onBack } : undefined} after={hdr.showHelp && help ? <HelpMark title={help.title ?? ownTitle ?? ""} onPress={openHelp} testID="sheet-help" /> : undefined} />
               ) : (
                 <View style={{ height: space[2] }} />
               )}
@@ -951,91 +934,215 @@ export function HelpButton({ title, text, to, onPress, testID }: { title: string
   );
 }
 
-/* ---------- Toast with 5-second Undo (DS rule 10) ---------- */
+/* ---------- Toasts «Вернуть» — a stack of up to three (DS rule 10, Б8, §15.2; #2211, #2214, closes #2213) ---------- */
 
 interface ToastItem {
-  /** the toast itself (it slides in once); a toast that grows (`grow`) keeps it */
+  /** the toast itself (it comes in once); a toast that grows (`grow`) keeps it */
   id: number;
-  /** when its text last changed: «Вернуть» is armed from it and its ring burns down from it */
+  /** when its text last changed: «Вернуть» is armed from it, its clock runs from it */
   at: number;
   text: string;
   /** false: nothing could be taken back (it was changed since, #1193 п.6) — the toast then says so */
   undo?: GuardedUndo;
 }
 /**
- * One toast at a time: a new one replaces the old (DS §15.2). `grow` — the id of the toast on screen, which then stays and takes the
- * new text and «Вернуть» with 5 fresh seconds (a series of deletions is one toast «Удалено позиций: N»); if it is gone, a new one shows.
- * `show` returns the toast's id; `showing(id)` — is it still on screen.
+ * A stack of up to `motion.toastStack` toasts, the newest on top (moved from the «Графит» pilot): a second action no longer takes
+ * away the «Вернуть» of the first. Each toast has its own clock (≥ 5 s; it stands while a finger is on the toast; with VoiceOver a
+ * toast with «Вернуть» has none — `stackLife`). `grow` — the id of the toast on top, which then stays and takes the new text and
+ * «Вернуть» with 5 fresh seconds (a series of deletions is one toast «Удалено позиций: N»). `show` returns the toast's id;
+ * `showing(id)` — is it still the newest toast on screen. The arithmetic — `toastStack.ts` (unit-tested).
  */
 type ToastApi = { show: (text: string, undo?: GuardedUndo, opts?: { grow?: number }) => number; showing: (id: number) => boolean };
 const ToastCtx = createContext<ToastApi | null>(null);
 
+/** VoiceOver / TalkBack on: the toasts lose their clock (v2 §2.8) */
+function useScreenReader(): boolean {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    // the web cannot tell: react-native-web answers «on» always — there the toasts keep their clock
+    if (Platform.OS === "web") return;
+    let live = true;
+    AccessibilityInfo.isScreenReaderEnabled?.()
+      .then((v) => live && setOn(!!v))
+      .catch(() => undefined);
+    const sub = AccessibilityInfo.addEventListener?.("screenReaderChanged", (v: boolean) => setOn(!!v));
+    return () => {
+      live = false;
+      sub?.remove();
+    };
+  }, []);
+  return on;
+}
+
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [item, setItemState] = useState<ToastItem | null>(null);
-  const current = useRef<ToastItem | null>(null);
-  const setItem = useCallback((next: ToastItem | null | ((cur: ToastItem | null) => ToastItem | null)) => {
-    const v = typeof next === "function" ? next(current.current) : next;
-    current.current = v;
-    setItemState(v);
+  const [stack, setStackState] = useState<ToastItem[]>([]);
+  const current = useRef<ToastItem[]>([]);
+  const setStack = useCallback((f: (cur: ToastItem[]) => ToastItem[]) => {
+    current.current = f(current.current);
+    setStackState(current.current);
   }, []);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const show = useCallback((text: string, undo?: GuardedUndo, opts?: { grow?: number }) => {
-    if (timer.current) clearTimeout(timer.current);
-    const at = Date.now();
-    const id = toastIdFor(current.current?.id, opts?.grow, at);
-    setItem({ id, at, text, undo });
-    timer.current = setTimeout(() => setItem((cur) => (toastExpires(cur, id, at) ? null : cur)), motion.toastUndoMs);
-    return id;
-  }, [setItem]);
-  const showing = useCallback((id: number) => current.current?.id === id, []);
-  useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current);
+  const reader = useScreenReader();
+  const readerRef = useRef(reader);
+  readerRef.current = reader;
+  const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
+  const lastId = useRef(0);
+  const stop = useCallback((id: number) => {
+    const tm = timers.current.get(id);
+    if (tm) clearTimeout(tm);
+    timers.current.delete(id);
   }, []);
+  const arm = useCallback(
+    (id: number) => {
+      stop(id);
+      const item = current.current.find((x) => x.id === id);
+      if (!item) return;
+      const life = stackLife(!!item.undo, readerRef.current);
+      if (life === null) return;
+      const at = item.at;
+      timers.current.set(id, setTimeout(() => {
+        timers.current.delete(id);
+        setStack((cur) => stackDrop(cur, id, at));
+      }, life));
+    },
+    [setStack, stop],
+  );
+  const show = useCallback(
+    (text: string, undo?: GuardedUndo, opts?: { grow?: number }) => {
+      // ids are the moment it showed, made unique: three actions in one tick are three toasts
+      const at = Math.max(Date.now(), lastId.current + 1);
+      lastId.current = at;
+      const before = current.current;
+      setStack((cur) => stackShow(cur, { id: at, at, text, undo }, opts?.grow));
+      const top = stackTop(current.current)!;
+      // a toast pushed out of the stack takes its clock with it
+      before.filter((x) => !current.current.some((y) => y.id === x.id)).forEach((x) => stop(x.id));
+      arm(top.id);
+      return top.id;
+    },
+    [arm, setStack, stop],
+  );
+  const late = useCallback(
+    (id: number, text: string) => {
+      setStack((cur) => stackReplace(cur, id, { id, at: Date.now(), text }));
+      arm(id);
+    },
+    [arm, setStack],
+  );
+  const done = useCallback(
+    (id: number) => {
+      stop(id);
+      setStack((cur) => stackDrop(cur, id));
+    },
+    [setStack, stop],
+  );
+  const showing = useCallback((id: number) => stackTop(current.current)?.id === id, []);
+  // the screen reader turned on or off: every toast takes its clock anew
+  useEffect(() => {
+    current.current.forEach((x) => arm(x.id));
+  }, [reader, arm]);
+  useEffect(() => () => timers.current.forEach((tm) => clearTimeout(tm)), []);
   return (
     <ToastCtx.Provider value={{ show, showing }}>
       {children}
-      <ToastView item={item} onDone={() => setItem(null)} onLate={(text) => show(text)} />
+      <ToastStackView stack={stack} onDone={done} onLate={late} onHold={stop} onLetGo={arm} />
     </ToastCtx.Provider>
   );
 }
 
-function ToastView({ item, onDone, onLate }: { item: ToastItem | null; onDone: () => void; onLate: (text: string) => void }) {
-  const { c } = useTheme();
-  const { t } = useI18n();
+function ToastStackView({
+  stack,
+  onDone,
+  onLate,
+  onHold,
+  onLetGo,
+}: {
+  stack: ToastItem[];
+  onDone: (id: number) => void;
+  onLate: (id: number, text: string) => void;
+  onHold: (id: number) => void;
+  onLetGo: (id: number) => void;
+}) {
   const { wide } = useDevice();
   const insets = useSafeAreaInsets();
-  const reduce = useReducedMotion();
   const bar = useFooterInset();
   // a panel the screen keeps at its right edge (from 820): the toast is centred in the rest (#1895)
   const side = useToastRight();
-  if (!item) return null;
+  // the offline queue's line over the tab bar (#2214) lifts the toasts by its height
+  const queue = useQueueLineHeight();
+  if (!stack.length) return null;
   // above the screen's pinned action bar when it has one (the toast must not cover «Сохранить»), on every width (DS §15.2; a
   // module's full-screen canvas gives the height of its bottom bar the same way — #1819: from 820 the toast lay on it too)
-  const bottom = wide ? toastBottom(wideToastBottom(insets.bottom), bar, space[3]) : toastBottom(Math.max(insets.bottom, space[3]) + size.tabbarH + space[4], bar, space[3]);
+  const bottom = wide ? toastBottom(wideToastBottom(insets.bottom), bar, space[3]) : toastBottom(Math.max(insets.bottom, space[3]) + size.tabbarH + space[4] + queue, bar, space[3]);
   return (
-    <Animated.View
-      key={item.id}
-      entering={reduce ? undefined : SlideInDown.duration(motion.durBase)}
-      exiting={reduce ? undefined : FadeOut.duration(motion.durFast)}
+    <View
       pointerEvents="box-none"
-      style={{ position: "absolute", left: Math.max(insets.left, space[4]), right: Math.max(insets.right, space[4]) + side, bottom, alignItems: "center", zIndex: 100 }}
-      accessibilityLiveRegion="polite"
+      style={{ position: "absolute", left: Math.max(insets.left, space[4]), right: Math.max(insets.right, space[4]) + side, bottom, alignItems: "center", gap: space[2], zIndex: 100 }}
     >
-      <Glass
-        strong
+      {stack.map((item) => (
+        <OneToast key={item.id} item={item} onDone={onDone} onLate={onLate} onHold={onHold} onLetGo={onLetGo} />
+      ))}
+    </View>
+  );
+}
+
+/** One toast of the stack (v2: a solid plate `toast`, radius `inner`, `body` 500, «Вернуть» a word in `toastAction`; no ring) */
+function OneToast({
+  item,
+  onDone,
+  onLate,
+  onHold,
+  onLetGo,
+}: {
+  item: ToastItem;
+  onDone: (id: number) => void;
+  onLate: (id: number, text: string) => void;
+  onHold: (id: number) => void;
+  onLetGo: (id: number) => void;
+}) {
+  const { c } = useTheme();
+  const { t } = useI18n();
+  const reduce = useReducedMotion();
+  // comes in: rises `space[3]` with opacity, ease-out (transform / opacity only); «Уменьшить движение» — only opacity, faster
+  const p = useSharedValue(0);
+  useEffect(() => {
+    p.value = withTiming(1, { duration: reduce ? motion.durFast : motion.durBase, easing: Easing.bezier(...motion.easeOut) });
+  }, [p, reduce]);
+  // iOS: a toast is read out once when it comes (Android and the web: the live region)
+  useEffect(() => {
+    if (Platform.OS === "ios") AccessibilityInfo.announceForAccessibility?.(item.undo ? `${item.text}. ${t("common.undo")}` : item.text);
+  }, [item.text, item.undo, t]);
+  const a = useAnimatedStyle(() => ({ opacity: p.value, transform: [{ translateY: reduce ? 0 : (1 - p.value) * space[3] }] }));
+  return (
+    // the layout animation (leaving) on the outer view, the coming-in look on the inner one (Reanimated: never both on one view)
+    <Animated.View
+      testID="toast"
+      exiting={reduce ? undefined : FadeOut.duration(motion.durFast)}
+      onTouchStart={() => onHold(item.id)}
+      onTouchEnd={() => onLetGo(item.id)}
+      onTouchCancel={() => onLetGo(item.id)}
+      accessibilityLiveRegion="polite"
+      style={{ width: "100%", maxWidth: component.modalW + space[8] }}
+    >
+      <Animated.View style={a}>
+      <View
         style={{
-          borderRadius: radius.pill,
+          borderRadius: radius.inner,
+          backgroundColor: c.toast,
           paddingLeft: space[4],
           paddingRight: item.undo ? space[1] : space[4],
           minHeight: size.hitMin,
           flexDirection: "row",
           alignItems: "center",
           gap: space[3],
-          maxWidth: component.modalW + space[8],
+          shadowColor: c.shadow.color,
+          shadowOpacity: c.shadow.opacity,
+          shadowRadius: c.shadow.radius,
+          shadowOffset: { width: 0, height: c.shadow.offsetY },
+          elevation: component.shadowSm.elevation,
         }}
       >
-        <View testID="toast-text" style={{ flexShrink: 1 }}>
-          <T v="body" w="medium" numberOfLines={2}>
+        <View testID="toast-text" style={{ flex: 1, paddingVertical: space[2] }}>
+          <T v="body" w="medium" numberOfLines={2} style={{ color: c.onToast }}>
             {item.text}
           </T>
         </View>
@@ -1046,24 +1153,22 @@ function ToastView({ item, onDone, onLate }: { item: ToastItem | null; onDone: (
             onPress={() => {
               // the second tap of the double tap that made the thing is not «Отменить» (item.at = when it showed or grew)
               if (!toastArmed(item.at, Date.now())) return;
-              // #1193 п.6: «Отменить» refused (the thing was changed since): say so instead of a silent nothing
-              if (item.undo?.() === false) return onLate(t("common.undoLate"));
-              onDone();
+              // #1193 п.6: «Отменить» refused (the thing was changed since): the same toast says so instead of a silent nothing
+              if (item.undo?.() === false) return onLate(item.id, t("common.undoLate"));
+              onDone(item.id);
             }}
           />
         ) : null}
-      </Glass>
+      </View>
+      </Animated.View>
     </Animated.View>
   );
 }
 
-const ARect = Animated.createAnimatedComponent(Rect);
-
-/** "Undo" with a ring around it that burns down over the 5 seconds the toast stays (reduced motion: static ring). */
+/** «Отменить» — a word in `toastAction` on the plate (v2: no countdown ring — «полос и колец прогресса нет»), hit area 44 */
 function UndoButton({ onPress, shownAt }: { onPress: () => void; shownAt: number }) {
   const { c } = useTheme();
   const { t } = useI18n();
-  const reduce = useReducedMotion();
   // not yet armed (toastArmMs after the toast showed, see toastArm.ts): said as «busy» — a screen reader and an e2e know when a
   // press counts (#2086, #2134: a test pressed once at once; it waits for this, never for seconds)
   const [armed, setArmed] = useState(() => toastArmed(shownAt, Date.now()));
@@ -1073,53 +1178,13 @@ function UndoButton({ onPress, shownAt }: { onPress: () => void; shownAt: number
     const id = setTimeout(() => setArmed(true), left);
     return () => clearTimeout(id);
   }, [armed, shownAt]);
-  const [box, setBox] = useState<{ w: number; h: number } | null>(null);
-  const left = useSharedValue(1);
-  useEffect(() => {
-    left.value = 1;
-    if (!reduce) left.value = withTiming(0, { duration: motion.toastUndoMs, easing: Easing.linear });
-  }, [left, reduce]);
-  const ring = component.toastRing;
-  const w = (box?.w ?? 0) - ring;
-  const h = (box?.h ?? 0) - ring;
-  const perimeter = 2 * Math.max(0, w - h) + Math.PI * h;
-  const props = useAnimatedProps(() => ({ strokeDashoffset: perimeter * (1 - left.value) }));
   return (
-    <Press
-      onPress={onPress}
-      testID="toast-undo"
-      visibleHeight={component.button.md}
-      accessibilityRole="button"
-      accessibilityLabel={t("common.undo")}
-      aria-busy={!armed}
-      onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
-      style={{
-        height: component.button.md,
-        paddingHorizontal: space[3],
-        borderRadius: radius.pill,
-        backgroundColor: c.acc,
-        justifyContent: "center",
-      }}
-    >
-      <T v="button" style={{ color: c.onAcc }}>
-        {t("common.undo")}
-      </T>
-      {box ? (
-        <Svg pointerEvents="none" width={box.w} height={box.h} style={StyleSheet.absoluteFill}>
-          <ARect
-            x={ring / 2}
-            y={ring / 2}
-            width={w}
-            height={h}
-            rx={h / 2}
-            fill="none"
-            stroke={c.onAcc}
-            strokeWidth={ring}
-            strokeDasharray={`${perimeter} ${perimeter}`}
-            animatedProps={props}
-          />
-        </Svg>
-      ) : null}
+    <Press onPress={onPress} testID="toast-undo" visibleHeight={size.hitMin} accessibilityRole="button" accessibilityLabel={t("common.undo")} aria-busy={!armed}>
+      <View style={{ minHeight: size.hitMin, justifyContent: "center", paddingHorizontal: space[3] }}>
+        <T v="button" style={{ color: c.toastAction }}>
+          {t("common.undo")}
+        </T>
+      </View>
     </Press>
   );
 }

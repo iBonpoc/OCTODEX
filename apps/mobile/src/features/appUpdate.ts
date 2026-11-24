@@ -28,6 +28,9 @@ export type UpdateState = {
 };
 
 let state: UpdateState = { checking: false, checkedOnce: false, lastAt: null, downloaded: false, needsBuild: null, hidden: false, applying: false };
+/** not an animation: the wait for the compatibility file, and the pause that lets pending writes settle before a reload, ms */
+const COMPAT_TIMEOUT_MS = 8000;
+const SETTLE_MS = 150;
 const subs = new Set<() => void>();
 const set = (p: Partial<UpdateState>) => {
   state = { ...state, ...p };
@@ -46,7 +49,7 @@ export const updatesSupported = (): boolean => Platform.OS !== "web" && Updates.
 async function readCompat(): Promise<Compat | null> {
   try {
     const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), 8000);
+    const timer = setTimeout(() => ctl.abort(), COMPAT_TIMEOUT_MS);
     const r = await fetch(`${WEB_APP_URL}/app-compat.json?t=${Date.now()}`, { cache: "no-store", signal: ctl.signal });
     clearTimeout(timer);
     return r.ok ? parseCompat(await r.json()) : null;
@@ -90,7 +93,7 @@ export async function applyDownloadedUpdate(): Promise<"reloaded" | "cancelled">
     const r = await applyUpdate({
       settleUnsaved: () => settleDirtySheets(),
       flush: () => flushAllWriters(),
-      settle: () => new Promise((done) => setTimeout(done, 150)),
+      settle: () => new Promise((done) => setTimeout(done, SETTLE_MS)),
       reload: () => Updates.reloadAsync(),
     });
     if (r === "cancelled") set({ applying: false });

@@ -1,15 +1,17 @@
 const { listSearch, listSearchClear } = require("../listSearch.cjs");
+const { listCreate, listChip } = require("../listScreen.cjs");
 /** Clients: new client by hand → active with a property → found by search; filters count; each client a card. */
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/clients");
   const before = await h.db();
   const active = before.customers.filter((c) => c.status !== "prospect").length;
-  await h.expectText(new RegExp(`Все · ${active}`), "All filter count");
+  // v2 (#2350): the chip «Все 7» — the word and its number
+  await listChip(p, "clients", new RegExp(`^Все ${active}$`)).waitFor({ timeout: 5000 });
 
   // Create is disabled until name + phone + address.
-  await p.getByTestId("fab-header").locator("visible=true").click(); // the list header «＋ Клиент» (#1395)
-  const create = p.getByRole("button", { name: "Создать клиента" }).last();
+  await listCreate(p, "clients", "clients-create-new"); // v2: «＋» of the list's header → «Новый клиент»
+  const create = p.getByTestId("client-save").locator("visible=true").last();
   h.expect(await create.isDisabled(), "create disabled when empty");
   await p.getByPlaceholder("Имя", { exact: true }).last().fill("Tom Becker");
   await p.getByPlaceholder("(555) 555-0100").last().fill("(626) 555-0199");
@@ -30,18 +32,18 @@ exports.run = async (h) => {
 
   // List: count +1, search by phone digits and by address.
   await h.go("/clients");
-  await h.expectText(new RegExp(`Все · ${active + 1}`), "All count grew");
+  await listChip(p, "clients", new RegExp(`^Все ${active + 1}$`)).waitFor({ timeout: 5000 }); // the count grew
   await listSearch(p, "5550199");
   await p.waitForTimeout(300);
-  h.expect((await p.getByRole("button", { name: "Tom Becker" }).count()) === 1, "found by phone");
+  h.expect((await p.getByTestId(`client-row-${c.id}`).locator("visible=true").count()) === 1, "found by phone");
   await listSearch(p, "lake ave");
   await p.waitForTimeout(300);
-  h.expect((await p.getByRole("button", { name: "Tom Becker" }).count()) === 1, "found by address");
+  h.expect((await p.getByTestId(`client-row-${c.id}`).locator("visible=true").count()) === 1, "found by address");
   await listSearchClear(p);
 
   // Filters: «Должны» lists only clients with a balance; Tom (no invoices) is not there.
-  await p.getByText(/^Должны · \d+$/).last().click();
+  await listChip(p, "clients", /^Должны \d+$/).click();
   await p.waitForTimeout(300);
-  h.expect((await p.getByRole("button", { name: "Tom Becker" }).count()) === 0, "new client does not owe");
+  h.expect((await p.getByTestId(`client-row-${c.id}`).locator("visible=true").count()) === 0, "new client does not owe");
   await h.shot("owes");
 };

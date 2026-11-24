@@ -5,10 +5,10 @@
  * - the page opened again (the drawing fits itself; the chips and the toolbar's place come after the first frame):
  *   the same; at 390 the toolbar moved to the left edge — the drawing also clear of it on the left;
  * - rule 27 (no jump): once a finger has touched the screen, what lies over the canvas may change (the toolbar moved to
- *   the left through the menu) — the drawing does not move by itself.
+ *   the left by its grip) — the drawing does not move by itself.
  * Waits until the view has settled (two equal measures) before it measures. Finds things by testID.
  */
-const { skipLength, canvasAt, sheetGone, fitAll, pressWhenStill } = require("../gutters.cjs");
+const { skipLength, canvasAt, sheetGone, fitAll } = require("../gutters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -51,12 +51,16 @@ exports.run = async (h) => {
     const s = await settled();
     return [s.n, Math.round(s.top), Math.round(s.low), Math.round(s.left)].join(",");
   };
+  // the toolbar is moved by its grip (#2156: no «Где панель» in the menu any more; the drag as e2e 171 does it) // i18n-old: ok
   const moveToolbar = async (where) => {
-    await pressWhenStill(tid("draw-who").getByRole("button"));
-    await tid("draw-who-place").click();
-    await tid("draw-more-sheet").waitFor({ timeout: 4000 });
-    await tid(`draw-place-${where}`).locator('[role="button"]').first().click();
-    await sheetGone(p);
+    const vp = p.viewportSize();
+    const to = where === "left" ? [8, vp.height / 2] : where === "right" ? [vp.width - 8, vp.height / 2] : [vp.width / 2, vp.height - 8];
+    const g = await tid("draw-grip").boundingBox();
+    const a = [g.x + g.width / 2, g.y + g.height / 2];
+    await p.mouse.move(a[0], a[1]);
+    await p.mouse.down();
+    for (let i = 1; i <= 15; i++) await p.mouse.move(a[0] + ((to[0] - a[0]) * i) / 15, a[1] + ((to[1] - a[1]) * i) / 15);
+    await p.mouse.up();
     await p.waitForFunction((w) => localStorage.getItem("octo.mod.gutters.toolbar.v1") === w, where, { timeout: 5000 });
   };
   const clear = async (what, side) => {
@@ -69,7 +73,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
+  await tid("module-gutters-status").filter({ hasText: /^Без срока/ }).waitFor({ timeout: 5000 });
   await h.go("/module/gutters/draw");
   await tid("draw-surface").waitFor({ timeout: 8000 });
   const b = await p.getByTestId("draw-surface").boundingBox();
@@ -98,7 +102,7 @@ exports.run = async (h) => {
   await clear("opened again", false);
   await h.shot("reopened");
 
-  // rule 27: touched (the menu), then what lies over the canvas changes (the toolbar to the left) — the drawing stays put
+  // rule 27: touched (the grip), then what lies over the canvas changes (the toolbar to the left) — the drawing stays put
   const before = await drawnAt();
   await moveToolbar("left");
   h.expect((await drawnAt()) === before, `after a touch the drawing does not move by itself (${before} → ${await drawnAt()})`);

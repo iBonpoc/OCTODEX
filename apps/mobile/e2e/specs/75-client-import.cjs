@@ -19,8 +19,10 @@ exports.run = async (h) => {
   const p = h.page;
   await h.go("/clients");
   const before = (await h.db()).customers.length;
-  await p.getByRole("button", { name: "Ещё действия" }).first().click(); await p.waitForTimeout(300);
-  await h.sheet().getByRole("button", { name: "Импорт из CSV" }).click(); await p.waitForTimeout(600);
+  // v2 (#2350): «⋯» of the list's header (`clients-more`) → «Импорт из CSV» (`clients-more-import`)
+  await p.getByTestId("clients-more").locator("visible=true").first().getByRole("button").first().click();
+  await p.getByTestId("clients-more-import").locator("visible=true").first().click();
+  await p.waitForURL(/\/client\/import/, { timeout: 5000 });
   h.expect(p.url().includes("/client/import"), `«…» → «Импорт из CSV» opens the import (${p.url()})`);
   h.expect((await p.getByRole("button", { name: /^Импортировать/ }).count()) === 0, "nothing to import before a file");
 
@@ -77,8 +79,10 @@ exports.run = async (h) => {
   // in-app navigation keeps the offline switch (a page load would reset it): settings → back → the Clients tab
   if (!wide) { await p.getByTestId("back-more").locator("visible=true").first().click(); await p.waitForTimeout(600); }
   await p.getByTestId(wide ? "side-clients" : "tab-clients").locator("visible=true").first().click(); await p.waitForTimeout(600);
-  await p.getByRole("button", { name: "Ещё действия" }).first().click(); await p.waitForTimeout(300);
-  await h.sheet().getByRole("button", { name: "Импорт из CSV" }).click(); await p.waitForTimeout(600);
+  // v2 (#2350): «⋯» of the list's header (`clients-more`) → «Импорт из CSV» (`clients-more-import`)
+  await p.getByTestId("clients-more").locator("visible=true").first().getByRole("button").first().click();
+  await p.getByTestId("clients-more-import").locator("visible=true").first().click();
+  await p.waitForURL(/\/client\/import/, { timeout: 5000 });
   const chooser2 = p.waitForEvent("filechooser");
   await p.getByRole("button", { name: "Выбрать файл CSV" }).click();
   await (await chooser2).setFiles({ name: "clients.csv", mimeType: "text/csv", buffer: Buffer.from(CSV, "utf8") });
@@ -89,14 +93,16 @@ exports.run = async (h) => {
   // sales: no «…» any more (was: everyone but the tech; 04 §14.4)
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("sales")));
   await h.go("/clients");
-  h.expect((await p.getByRole("button", { name: "Ещё действия" }).count()) === 0, "sales: no «…» on the clients");
+  await p.getByTestId("clients-chips").locator("visible=true").first().waitFor();
+  h.expect((await p.getByTestId("clients-more").locator("visible=true").count()) === 0, "sales: no «…» on the clients");
   await h.go("/client/import");
   h.expect((await p.getByRole("button", { name: "Выбрать файл CSV" }).count()) === 0, "sales: the import does not open");
 
   // the tech: no «…», no import by address
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go("/clients");
-  h.expect((await p.getByRole("button", { name: "Ещё действия" }).count()) === 0, "tech: no «…» on the clients");
+  await p.getByTestId("clients-groups").locator("visible=true").first().waitFor();
+  h.expect((await p.getByTestId("clients-more").locator("visible=true").count()) === 0, "tech: no «…» on the clients");
   await h.go("/client/import");
   h.expect((await p.getByRole("button", { name: "Выбрать файл CSV" }).count()) === 0, "tech: the import does not open");
 };

@@ -10,7 +10,7 @@
  * - the office and sales change prices; a tech reads only; the trial over: read only.
  * Finds things by testID and the store; waits on what it checks.
  */
-const { skipLength, viewTotal } = require("../gutters.cjs");
+const { skipLength, viewTotal, pressUndo } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 
@@ -46,7 +46,7 @@ exports.run = async (h) => {
   await editDb((d) => ({ ...d, catalog: [...d.catalog, { id: "own-install-4", kind: "labor", name: "Мой монтаж, 4 этаж", unit: "ft", priceCents: 700 }] }));
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await waitFor(async () => !!(await mod()).trialEndsAt, "trial on");
+  await waitFor(async () => !!(await mod()).enabled, "on");
   await tid("module-gutters-prices").getByRole("button").click();
   await p.waitForURL(/\/module\/gutters\/prices$/, { timeout: 5000 });
   await tid("gpr-screen").waitFor({ timeout: 5000 });
@@ -85,7 +85,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await gutterItems()).length > before + 10, "all the missing items made");
   const made = (await gutterItems()).filter((x) => x.id !== "own-install-4");
   h.expect(made.every((x) => x.placeholder === true && Number.isInteger(x.priceCents) && x.priceCents >= 0), "every made item is a sample price in whole cents (rule 9)");
-  await p.getByRole("button", { name: "Отменить", exact: true }).last().click();
+  await pressUndo(p);
   await waitFor(async () => (await gutterItems()).length === before, "«Отменить»: the made items are gone");
   await tid("gpr-missing-n-action").getByRole("button").click();
   await waitFor(async () => (await gutterItems()).length > before + 10, "made again");
@@ -155,7 +155,7 @@ exports.run = async (h) => {
   // the trial over: read only
   await h.go("/today");
   await setRole(h, "director");
-  await editDb((d) => ({ ...d, company: { ...d.company, modules: { ...d.company.modules, gutters: { ...d.company.modules.gutters, trialEndsAt: "2020-01-01T00:00:00.000Z" } } } }));
+  await editDb((d) => ({ ...d, company: { ...d.company, modules: { ...d.company.modules, gutters: { ...d.company.modules.gutters, trialEndsAt: "2020-01-01T00:00:00.000Z", unlimited: false } } } }));
   await h.go("/module/gutters/prices");
   await tid("gpr-locked").waitFor({ timeout: 5000 });
   h.expect((await tid("gpr-missing-n-action").count()) === 0, "the trial over: nothing to press");

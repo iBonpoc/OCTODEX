@@ -5,6 +5,8 @@
  */
 
 const { pressEscUntilClosed } = require("../sheet.cjs");
+const { objSection } = require("../objectScreen.cjs");
+const { dayKey } = require("../companyTime.cjs");
 exports.run = async (h) => {
   const p = h.page;
   // no midnight in this spec (CHECKS §5): at 00:21 LA a demo notice read «в пути с 12:00 AM» (another demo visit,
@@ -34,6 +36,8 @@ exports.run = async (h) => {
   await pressEscUntilClosed(p);
 
   await h.go("/job/j3");
+  // v2: the job's visits are its section «Выезды»
+  await objSection(p, "job-screen", "visits");
   await h.expectText(/Весь день/, "the job's visit card says «Весь день»");
   h.expect((await p.getByText(/12:00 AM/).locator("visible=true").count()) === 0, "no «12:00 AM» on the job");
   // Linda's timed visit of today is done: the next one of j3 is the all-day one
@@ -44,29 +48,40 @@ exports.run = async (h) => {
     localStorage.setItem(k, JSON.stringify(st));
   });
   await h.go("/job/j3");
-  const nextLine = (await h.text()).split(" | ").find((l) => /^Ближайший выезд/.test(l)) || "";
-  h.expect(/Весь день/.test(nextLine) && !/12:00 AM/.test(nextLine), `«Ближайший выезд» says «Весь день» (${nextLine})`);
+  // v2: the card «Ближайший выезд» under the job's header (job-now)
+  const now = p.getByTestId("job-now").locator("visible=true").first();
+  await now.waitFor({ timeout: 8000 });
+  const nextLine = (await now.innerText()).replace(/\s+/g, " ");
+  h.expect(/Ближайший выезд/i.test(nextLine) && /Весь день/i.test(nextLine) && !/12:00 AM/.test(nextLine), `«Ближайший выезд» says «Весь день» (${nextLine})`);
 
   // «Сегодня» of the director (the crew cards: «Дальше: …»): no «12:00 AM»
   await h.go("/today");
   // the crew cards («Дальше: …») are what shows the all-day visit — not the notices of other demo visits
-  const crew = (await p.getByTestId("crew-card").locator("visible=true").allInnerTexts()).join(" | ");
+  const crew = (await p.getByTestId("crew-row").locator("visible=true").allInnerTexts()).join(" | ");
   h.expect(crew.length > 0 && !/12:00 AM/.test(crew), `«Сегодня»: no «12:00 AM» on the crew cards (${crew.slice(0, 160)})`);
 
   // the Plan: «Весь день», no hour, not «опаздывает», no «Накладка»
   await h.go("/plan");
-  await h.clickText("Лента"); await p.waitForTimeout(400);
-  const feed = p.getByTestId("plan-feed").last();
-  // Linda's card in the feed (other demo visits of today may be late — not ours)
-  // the whole card (ListCard, 10а: name, chips, facts) with her name and «Весь день» (her timed visit of today is another card)
-  const card = feed.getByTestId("list-card").filter({ hasText: "Linda Alvarez" }).filter({ hasText: "Весь день" });
-  h.expect((await card.count()) === 1, "the all-day visit is in the Plan's feed");
+  // v2: «Лента» is gone (День · Неделя · Месяц) — the all-day visit is a row of its day (TimeSlot `plan-row-<id>`)
+  if (h.layout.width >= 820) {
+    // 820 / 1280: the day is the board by person; the visit is a row of the Week
+    await h.seed("octo.planMode.v1", "week");
+    await h.go("/plan");
+  } else await p.getByTestId(`plan-strip-${dayKey(v.start)}`).locator("visible=true").first().click();
+  const card = p.getByTestId(`plan-row-${v.id}`).locator("visible=true").first();
+  // (a Sunday: the new visit is on Monday — the next week; the Week shows this one — step to the next, CHECKS §9 «не от настоящего часа»)
+  if (h.layout.width >= 820) {
+    // the Week has drawn its rows (the demo's visits of today) — only then is the visit's row missing for real
+    await p.locator('[data-testid^="plan-row-"]').locator("visible=true").first().waitFor({ timeout: 5000 });
+    if (!(await card.isVisible())) await p.getByTestId("plan-month-next").locator("visible=true").first().click();
+  }
+  await card.waitFor({ timeout: 5000 });
   const text = await card.innerText();
-  h.expect(/Весь день/.test(text), `the Plan card says «Весь день» (${text.replace(/\s+/g, " ").slice(0, 120)})`);
-  h.expect(!/12:00 AM/.test(text), "no «12:00 AM» on the Plan card");
-  // «Весь день» once, whole, under the name — the left block is an icon, not the words cut in two
-  h.expect((text.match(/Весь/g) || []).length === 1, `«Весь день» once on the card (${text.replace(/\s+/g, " ").slice(0, 120)})`);
-  h.expect(/Осмотр|Работа/.test(text), `the card's kind tag is inside the checked block, the checks below are not blind (${text.replace(/\s+/g, " ").slice(0, 160)})`);
+  h.expect(/Весь день/i.test(text), `the Plan row says «Весь день» (${text.replace(/\s+/g, " ").slice(0, 120)})`);
+  h.expect(!/12:00 AM/.test(text), "no «12:00 AM» on the Plan row");
+  // «Весь день» once, whole — the hour column is empty, not the words cut in two
+  h.expect((text.match(/Весь/gi) || []).length === 1, `«Весь день» once on the row (${text.replace(/\s+/g, " ").slice(0, 120)})`);
+  h.expect(/Linda Alvarez/.test(text) && /Drywall/.test(text), `the row is Linda's job, the checks below are not blind (${text.replace(/\s+/g, " ").slice(0, 160)})`);
   h.expect(!/Накладка/.test(text), "no «Накладка» on the all-day visit");
   h.expect(!/[Оо]паздывает/.test(text), "not «опаздывает»");
   await h.shot("plan");

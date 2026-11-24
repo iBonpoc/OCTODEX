@@ -3,13 +3,14 @@ import { timing, type StatusName } from "@octo/design-tokens";
 import { seeCosts } from "./access";
 import { contractStatement, invoiceOwes } from "@octo/estimating-engine";
 import { daysOverdue, daysSince, isOverdue, minutesSince, visitContext } from "@/data/selectors";
-import type { DB, ID, Role, Task } from "@/data/types";
+import type { CancelledVisit, DB, ID, Role, Task } from "@/data/types";
 import { canSeeLead, isBackFromSnooze, leadTurn } from "./leads";
 import { leadSettingsOf } from "./leadSettings";
 import { canCountersign } from "./estimateSign";
 import { canPlan, inspectionsNoEstimate, liveAssignees, dayDiffIn, isOpenVisit, lateToday, unassignedSoon, visitWho } from "./schedule";
 import { businessHoursOf, companyTz, scheduleSettingsOf } from "./scheduleSettings";
 import { dayKeyIn } from "./zone";
+import { isSnoozed } from "@/features/attentionSnooze";
 import { jobAwaitingClose } from "@/features/jobDone";
 import { isContractKind } from "@/features/contractKind";
 import { goneId } from "./team";
@@ -42,7 +43,9 @@ export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "la
   | "photoFailed"
   /* #1807 (spec 53 §5.3б п.4): a price someone sent for a material counted from its cost — the server kept the one from
      the cost (an old build, sales without our costs) */
-  | "priceRecalc";
+  | "priceRecalc"
+  /* #2066: the client was not home — the office plans the visit again (until a new visit, or the job / lead is closed) */
+  | "visitNoShow";
 export interface AttentionItem {
   id: string;
   kind: AttentionKind;
@@ -83,6 +86,7 @@ export function attentionHref(it: AttentionItem): string {
     case "visitMissed":
     case "photoFailed": return `/visit/${it.refId}`;
     case "priceRecalc": return `/catalog/${it.refId}`;
+    case "visitNoShow": return it.href ?? `/job/schedule?jobId=${it.refId}`;
     default: return `/lead/${it.refId}`;
   }
 }
@@ -101,6 +105,32 @@ export const rejectedHint = (r: Pick<RejectedOp, "what" | "href"> & { kind?: Rej
   r.kind === "module.saveSettings" ? "sync.rejected.settingsHint" : r.what !== "module" ? "sync.rejected.hint" : canOpen(role, r.href) ? "sync.rejected.moduleHint" : "sync.rejected.moduleHintAsk";
 /** «Открыть» on a refused change: only where this role may go (a module's card for a tech: nowhere — review M5a №3) */
 export const rejectedOpens = (r: Pick<RejectedOp, "href">, role: Role) => canOpen(role, r.href);
+
+/** #2066 «Клиента нет дома» to plan again: the latest no-show of each job / lead, while nothing happened after it (no
+ *  visit of the same job / lead later than it — open, done or cancelled: once a new visit is booked the no-show is
+ *  answered) and the job / lead is still open (a job waiting for a date or in progress; a lead in contact). One card
+ *  per job / lead — it stands for its «Запланировать» / «нет шага» card. */
+export function noShowsToPlan(db: Pick<DB, "visits" | "cancelledVisits" | "jobs" | "leads">): CancelledVisit[] {
+  const latest = new Map<string, CancelledVisit>();
+  for (const v of db.cancelledVisits ?? []) {
+    if (v.cancelReason !== "no_show") continue;
+    const key = v.jobId ? `j:${v.jobId}` : v.leadId ? `l:${v.leadId}` : null;
+    if (!key) continue;
+    const had = latest.get(key);
+    if (!had || had.cancelledAt < v.cancelledAt) latest.set(key, v);
+  }
+  const same = (a: Pick<CancelledVisit, "jobId" | "leadId">, b: Pick<CancelledVisit, "jobId" | "leadId">) => (a.jobId ? a.jobId === b.jobId : !!a.leadId && !b.jobId && a.leadId === b.leadId);
+  const later = (v: CancelledVisit) => [...db.visits, ...(db.cancelledVisits ?? [])].some((o) => o.id !== v.id && same(v, o) && o.start > v.start);
+  return [...latest.values()].filter((v) => {
+    if (later(v)) return false;
+    if (v.jobId) {
+      const j = db.jobs.find((x) => x.id === v.jobId);
+      return !!j && (j.status === "unscheduled" || j.status === "in_progress") && !db.visits.some((o) => o.jobId === j.id && isOpenVisit(o));
+    }
+    const l = db.leads.find((x) => x.id === v.leadId);
+    return !!l && l.status === "replied" && !l.archivedAt && !db.visits.some((o) => o.leadId === l.id && isOpenVisit(o));
+  });
+}
 
 /** "Требует внимания" / triage queue: everything that needs a human decision now, most urgent first. */
 /** a refused money change is always first: above every other score (a lead waiting N minutes is 1000 + N, review #263 №1) */
@@ -126,9 +156,25 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
     ? inspectionsNoEstimate(db, now, st.inspectionNoEstimateDays, businessHoursOf(db.company), companyTz(db.company))
     : [];
   const noEstLead = new Map(noEst.filter((x) => x.lead).map((x) => [x.lead!.id, x]));
+  // #2066 «Клиента не было дома»: the people who plan (director, dispatcher); the card stands for the job's / lead's own
+  const noShows = canPlan([role]) ? noShowsToPlan(db) : [];
+  const noShowJob = new Set(noShows.filter((v) => v.jobId).map((v) => v.jobId!));
+  const noShowLead = new Map(noShows.filter((v) => !v.jobId && v.leadId).map((v) => [v.leadId!, v]));
+  const noShowCard = (v: CancelledVisit, name: string, amountCents?: number): AttentionItem => ({
+    id: `noshow-${v.id}`, kind: "visitNoShow", refId: (v.jobId ?? v.leadId)!, name, label: "noShow.att", params: { name, note: v.cancelText ?? "" },
+    chip: "noShow.chip", status: "warn", amountCents, score: 940,
+    href: v.jobId ? `/job/schedule?jobId=${v.jobId}` : `/lead/${v.leadId}`,
+  });
+  // a job's card here; a lead's — in the lead loop, as the lead's one card
+  for (const v of noShows) {
+    if (!v.jobId) continue;
+    const job = db.jobs.find((j) => j.id === v.jobId)!;
+    const p = db.properties.find((x) => x.id === job.propertyId);
+    out.push(noShowCard(v, db.customers.find((c) => c.id === p?.customerId)?.name ?? "", job.amountCents));
+  }
   for (const l of db.leads) {
     if (!canSeeLead(role, db.me, l)) continue;
-    const turn = leadTurn(db, l, st);
+    const turn = leadTurn(db, l, st, now);
     const before = out.length;
     // open, not snoozed (leadTurn: done / snoozed), not archived; one card per lead
     if (office3 && goneId(db, l.assigneeId) && turn.kind !== "done" && turn.kind !== "snoozed" && !l.archivedAt) {
@@ -141,7 +187,13 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
       }
       continue;
     }
-    if (isBackFromSnooze(l) && turn.kind !== "reply") {
+    // #2066: the no-show card is this lead's one card (a new message from the client comes instead; snoozed — none)
+    const ns = noShowLead.get(l.id);
+    if (ns && turn.kind !== "reply") {
+      if (turn.kind !== "snoozed" && turn.kind !== "done") out.push(noShowCard(ns, l.name));
+      continue;
+    }
+    if (isBackFromSnooze(l, now) && turn.kind !== "reply") {
       out.push({ id: `back-${l.id}`, kind: "leadBack", refId: l.id, name: l.name, label: "att.leadBack", params: { name: l.name }, chip: "lead.backChip", status: "info", score: 630 });
     } else if (turn.kind === "reply") {
       const m = turn.minutes;
@@ -213,7 +265,7 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
     }
   }
   for (const j of db.jobs) {
-    if (j.status !== "unscheduled" || db.visits.some((v) => v.jobId === j.id)) continue;
+    if (j.status !== "unscheduled" || db.visits.some((v) => v.jobId === j.id) || noShowJob.has(j.id)) continue;
     const p = db.properties.find((x) => x.id === j.propertyId);
     const c = db.customers.find((x) => x.id === p?.customerId);
     out.push({ id: `sch-${j.id}`, kind: "schedule", refId: j.id, name: c?.name ?? "", label: "att.toSchedule", params: { name: c?.name ?? "" }, chip: "st.toSchedule", status: "warn", amountCents: j.amountCents, score: 950 });
@@ -303,7 +355,8 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
     out.push({ id: `photo-${visitId}`, kind: "photoFailed", refId: visitId, name, label: "photoUp.att", params: { n, name, date }, chip: "photoUp.chip", status: "bad", score: PHOTO_FAILED_SCORE });
   }
   out.push(...priceRecalcItems(db, role, now, extra.mode));
-  return out.sort((a, b) => b.score - a.score);
+  // #2097: a reason the office put off («Позже») is not shown — nor counted — until its day; then it is back by itself
+  return out.filter((x) => !isSnoozed(db, x.id, now)).sort((a, b) => b.score - a.score);
 }
 
 /** #1807: below an estimate without a reply (700 +) and an inspection without an estimate (680): a price, not a client */

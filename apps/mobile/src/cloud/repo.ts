@@ -6,7 +6,7 @@ import { estimateSavedAt } from "@/features/estimateTax";
 import { normalizeDoc } from "@/features/estimateDoc";
 import { companyFromDb } from "./companyMap";
 import { checklistOf, isMissingTable, itemsByVisit, photoMinsFromDb, templateFromDb, visitSettingsFromDb } from "./checklistMap";
-import { companyModulesFromRows, loadModuleData } from "@/modules/registry";
+import { companyModulesFromRows, loadModuleData, withoutTerm } from "@/modules/registry";
 import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, paymentMethodFromDb, paymentShown, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
 import { PROPERTY_KINDS, PUSH_GROUPS, type PushGroup, type PushPrefs, type CatalogItem, type DB, type Note, type Payment, type Advance, type PendingPayment, type Estimate, type EstimateDoc, type EstimateTemplate, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type MemberPrefs, type LocationState, type VisitPoint, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
@@ -20,6 +20,7 @@ import { posFromRows } from "@/features/purchaseOrderRows";
 import type { CostHistoryEntry, Photo, PriceHistoryEntry } from "@/data/types";
 import { priceHistoryFromRow } from "@/features/catalogCard";
 import { roleSeesCosts } from "@/features/access";
+import { noticeRead } from "./noticeRead";
 
 type Row = Record<string, unknown>;
 const s = (v: unknown) => (v == null ? "" : String(v));
@@ -195,9 +196,20 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   // wave 7б-1: my personal settings (RLS: only my own row); no row or no table yet → the defaults
   const prefRows = await pages<Row>(() => supabase.from("member_prefs").select("plan_show_done").eq("company_id", companyId).eq("user_id", userId), key("user_id")).catch(() => [] as Row[]);
   const prefs: MemberPrefs = { planShowDone: prefRows[0]?.plan_show_done === true };
+  // #2097: reasons the office put off (RLS: the office of the company; a tech reads none); no table yet → none
+  const snoozeRows = await every<Row>("attention_snoozes", "item_id, until", key("item_id")).catch(() => [] as Row[]);
+  const attentionSnoozes = snoozeRows.filter((r) => typeof r.until === "string").map((r) => ({ itemId: String(r.item_id), until: String(r.until) }));
   // step 18 P4b: my push switches (RLS: only my own rows); no rows or no table yet → the defaults
   const pushRows = await pages<Row>(() => supabase.from("push_prefs").select("kind, enabled").eq("company_id", companyId).eq("user_id", userId), key("kind")).catch(() => [] as Row[]);
   const pushPrefs = pushPrefsFromRows(pushRows);
+  // Р-8b: my own «read» marks of the notices loaded (RLS: only my own rows) and the moment of the split (a constant of the
+  // migration, public.notifications_split_at); a server before the migration has neither — the shared read_at as before
+  const noticeIds = notifications.map((r) => s(r.id));
+  const [readRows, noticeSplitAt] = await Promise.all([
+    noticeIds.length ? q<Row>(supabase.from("notification_reads").select("notification_id").in("notification_id", noticeIds)).catch(() => [] as Row[]) : Promise.resolve([] as Row[]),
+    Promise.resolve(supabase.rpc("notifications_split_at")).then((r) => (r.error ? null : ((r.data as string | null) ?? null)), () => null),
+  ]);
+  const readByMe = new Set(readRows.map((r) => s(r.notification_id)));
   // spec 33 П15 (C2a): the company's add-on modules; empty before the migration company_modules (C1) or if a read fails
   const moduleRows = await every<Row>("company_modules", "module_key, enabled, trial_ends_at, paid_until, settings, row_version", key("module_key")).catch(() => [] as Row[]);
   const companyModules = companyModulesFromRows(moduleRows);
@@ -322,7 +334,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     live<Row>("contact_emails", "contact_id, address, is_primary, position").catch(() => [] as Row[]),
     // directions of the business (docs/specs/11-trade.md): no deleted_at, archived ones stay; empty before the migration
     every<Row>("service_categories", "id, seed_key, name, position, archived_at").catch(() => [] as Row[]),
-    // C2: gate codes — RLS gives the office all of them, a tech only on the visit days (app.can_see_gate_code)
+    // C2: gate codes — RLS gives the office all of them, a tech and sales only on their visit days (app.can_see_gate_code)
     live<Row>("property_secrets", "property_id, gate_code", key("property_id")).catch(() => [] as Row[]),
   ]);
   const people = peopleByCustomer(contacts, phoneRows, emailRows);
@@ -462,6 +474,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       cancelReason: ((v.cancel_reason as CancelReason | null) ?? (v.status === "no_show" ? "no_show" : "other")),
       cancelText: (v.cancel_reason_text as string | null) ?? undefined,
       cancelledAt: s(v.cancelled_at) || s(v.updated_at),
+      cancelledBy: (v.cancelled_by as string | null) ?? undefined,
     }));
 
   const versionOf = new Map(versions.map((v) => [s(v.id), v]));
@@ -638,6 +651,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     taxRateBps: j.tax_rate_bps == null ? undefined : n(j.tax_rate_bps),
     taxRatePpm: j.tax_rate_ppm == null ? undefined : n(j.tax_rate_ppm),
     status: jobStatus[s(j.status)] ?? "scheduled",
+    ...(jobDbCancelled.includes(s(j.status)) ? { cancelReason: s(j.cancel_reason) || undefined, cancelledAt: s(j.cancelled_at) || s(j.updated_at) || undefined } : {}),
     amountCents: n(j.contract_total_cents),
     ...contractTaxOfRow(j),
     estimateId: (j.estimate_id as string | null) ?? undefined,
@@ -764,6 +778,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     jobLines,
     calendarEvents,
     prefs,
+    attentionSnoozes,
     pushPrefs,
     location,
     visitPoints,
@@ -780,7 +795,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     pendingPayments: pendingFromRows(payments),
     company: companyRows[0]
       ? {
-          ...companyFromDb(companyRows[0], (secrets[0]?.ein as string | null) ?? undefined, licenseRows, contactRows), modules: companyModules,
+          ...companyFromDb(companyRows[0], (secrets[0]?.ein as string | null) ?? undefined, licenseRows, contactRows),
+          // #2410: the developer's company — its modules without a term (as app.module_active reads the flag)
+          modules: companyRows[0].developer_account === true ? (withoutTerm(companyModules) ?? {}) : companyModules,
           visitSettings: visitSettingsFromDb(companyRows[0].visit_settings), checklistSince: (companyRows[0].checklist_since as string | null) ?? undefined,
         }
       : null,
@@ -839,7 +856,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       return {
         id: s(r.id), kind: s(r.kind) as Notice["kind"], estimateId: (r.estimate_id as string | null) ?? undefined, jobId: (r.job_id as string | null) ?? undefined,
         invoiceId: (r.invoice_id as string | null) ?? undefined, visitId: (r.visit_id as string | null) ?? undefined, customer: p.customer ?? "",
-        totalCents: p.total, depositCents: p.deposit, at: s(r.created_at), read: !!r.read_at,
+        totalCents: p.total, depositCents: p.deposit, at: s(r.created_at), read: noticeRead(r.read_at as string | null, readByMe.has(s(r.id)), noticeSplitAt),
       };
     }),
   };
@@ -888,8 +905,37 @@ export function catalogCardFromRow(r: Row): Pick<CatalogItem, "sku" | "barcode" 
 }
 
 /** catalog_items.attributes / purchase_unit / pack_size → the item's own fields; a broken value is left out */
-export function catalogExtrasFromRow(r: Row): Pick<CatalogItem, "attributes" | "purchaseUnit" | "packSize"> {
-  const out: Pick<CatalogItem, "attributes" | "purchaseUnit" | "packSize"> = {};
+/** #2227: catalog_items.variant_skus → CatalogItem.variants (strings only; anything else is dropped, never guessed) */
+export function variantsFromRow(raw: unknown): CatalogItem["variants"] | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const out: NonNullable<CatalogItem["variants"]> = {};
+  for (const [attr, values] of Object.entries(raw as Record<string, unknown>)) {
+    if (!values || typeof values !== "object" || Array.isArray(values)) continue;
+    const one: Record<string, import("@/data/types").ItemVariant> = {};
+    for (const [value0, d] of Object.entries(values as Record<string, unknown>)) {
+      // the value as the server keeps it (catalog_set_variant lowers it): an old or hand-written key is still found
+      const value = value0.trim().toLowerCase();
+      if (!value) continue;
+      const o = d && typeof d === "object" && !Array.isArray(d) ? (d as Record<string, unknown>) : {};
+      const str = (k: string) => (typeof o[k] === "string" && (o[k] as string).trim() ? (o[k] as string) : undefined);
+      one[value] = {
+        ...(str("sku") ? { sku: str("sku") } : {}),
+        ...(str("supplierId") ? { supplierId: str("supplierId") } : {}),
+        ...(str("purchaseUnit") ? { purchaseUnit: str("purchaseUnit") } : {}),
+        ...(str("packSize") ? { packSize: str("packSize") } : {}),
+      };
+    }
+    // review #2241 №1: a property with no values yet ({"color":{}}) is kept — it says WHICH property a merged item's value is
+    out[attr] = one;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+export function catalogExtrasFromRow(r: Row): Pick<CatalogItem, "attributes" | "purchaseUnit" | "packSize" | "variants"> {
+  const out: Pick<CatalogItem, "attributes" | "purchaseUnit" | "packSize" | "variants"> = {};
+  // #2227: the variants (absent before the migration and for items without them); only the shape the server keeps
+  const vs = variantsFromRow(r.variant_skus);
+  if (vs) out.variants = vs;
   const a = r.attributes;
   if (a && typeof a === "object" && !Array.isArray(a)) {
     const attrs = Object.fromEntries(Object.entries(a as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === "string" && e[1] !== ""));

@@ -74,7 +74,7 @@ exports.run = async (h) => {
 
   // saved: its own Terms and Notes
   await line.addCustom(h, "Gutter clean (тестовые)", 100);
-  await tid("ue-save").getByRole("button").click();
+  await tid("ue-save").click();
   await p.waitForFunction((k) => (JSON.parse(localStorage.getItem(k))?.db?.estimates ?? []).some((e) => e.doc?.note === "Gate code 1234"), DB_KEY, { timeout: 8000 });
   const saved = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)).db.estimates.find((e) => e.doc?.note === "Gate code 1234"), DB_KEY);
   h.expect(saved.doc.terms === "Disputes go to binding arbitration (тестовые).", `saved with its own Terms (${saved.doc.terms})`);

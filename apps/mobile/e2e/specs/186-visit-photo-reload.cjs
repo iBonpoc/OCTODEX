@@ -1,3 +1,4 @@
+const { visitStep, visitCameraAdd } = require("../visitScreen.cjs");
 /**
  * e2e 186 — фото выезда на вебе после перезагрузки («Лиды и клиенты» №13, долг 4; как в модуле, e2e 149 / #384).
  * The web file picker gives a `blob:` of the open page; after a reload it is dead. The photo stays in the data, the tile
@@ -19,8 +20,9 @@ exports.run = async (h) => {
   const v0 = db.visits.find((v) => v.techId === db.me && v.step === "scheduled" && !v.photos.length);
   h.expect(!!v0, "a visit of mine without photos");
   await h.go(`/visit/${v0.id}`);
-  await h.click("Я в пути");
-  await h.click("На месте"); // the photos are on the work step
+  // v2: the visit's main step is a button of the work card, by its testID
+  await visitStep(p, "en-route");
+  await visitStep(p, "on-site"); // the photos are on the work step
   const add = p.getByRole("button", { name: "Добавить фото" }).locator("visible=true").first();
   await add.waitFor({ timeout: 8000 });
   const [chooser] = await Promise.all([p.waitForEvent("filechooser"), add.click()]);
@@ -30,8 +32,8 @@ exports.run = async (h) => {
   // this page's photo loads
   await waitFor(async () => (await p.locator('img[src^="blob:"]').count()) > 0, "this page's photo is shown");
   // «Создать» → «Фото» picks one too: it is this page's as well and is shown at once (Fab registers it)
-  await p.getByRole("button", { name: "Создать", exact: true }).locator("visible=true").last().click();
-  const [ch2] = await Promise.all([p.waitForEvent("filechooser"), p.getByTestId("fab-photo").locator("visible=true").last().click()]);
+  // v2: «＋» of the header → «Фото» opens the step's photos in a sheet
+  const [ch2] = await visitCameraAdd(p);
   await ch2.setFiles({ name: "before2.png", mimeType: "image/png", buffer: PNG });
   await waitFor(async () => ((await h.db()).visits.find((v) => v.id === v0.id)?.photos?.length ?? 0) === 2, "the «＋» photo is saved");
   await waitFor(async () => (await p.locator('img[src^="blob:"]').count()) >= 2, "the «＋» photo is shown at once");

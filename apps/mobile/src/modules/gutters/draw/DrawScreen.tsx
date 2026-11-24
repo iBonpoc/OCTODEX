@@ -24,11 +24,12 @@ import { computeGutterParts } from "@octo/estimating-engine";
 import { breakpoint, component, drawing as dt, motion, radius, size as sizes, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
-import { moduleHref, moduleState } from "@/modules/registry";
+import { moduleHref, moduleState, moduleUsable } from "@/modules/registry";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Button, ChoiceChips, IconButton, StatusChip, Toggle } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
-import { Menu, Sheet, useToast } from "@/ui/overlays";
+import { HelpButton, Menu, Sheet, useToast } from "@/ui/overlays";
+import { EmptyHelp, helpText } from "./EmptyHelp";
 import { Banner } from "@/ui/banner";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
@@ -54,7 +55,7 @@ import { InputWindow } from "./InputWindow";
 import { AttrBody, DsAttrsView, QuickLength, RunAttrsView, type RunCorner } from "./AttrPanel";
 import { MeasurePhotos } from "./Photos";
 import { fmtLen } from "../canvas/format";
-import { dropHaptic, forgetOldDraft, loadToolbarPlace, placeAt, saveToolbarPlace, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
+import { dropHaptic, forgetOldDraft, loadToolbarPlace, placeAt, saveToolbarPlace, type ToolbarPlace } from "../canvas/localStore";
 import { makeModuleStore } from "../canvas/moduleStore";
 import { gutterData, measurementOf, photosOf, relink } from "../data";
 import { makeSaver } from "../canvas/draftStore";
@@ -89,12 +90,12 @@ const SAVE_AFTER_MS = 1000;
 const EMPTY: Drawing = { runs: [], downspouts: [] };
 
 /** the name in the header (#1274): a button that SHRINKS — a long name is cut (not linked yet — «Привязать», DS §19а, #1665: whole at 390) with «…» in its own width, never under the icons beside it */
-function NameButton({ icon, label, onPress, filled }: { icon: IconKey; label: string; onPress: () => void; filled?: boolean }) {
+function NameButton({ icon, label, onPress, filled }: { icon?: IconKey; label: string; onPress: () => void; filled?: boolean }) {
   const { c } = useTheme();
   return (
     <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={label} visibleHeight={component.button.phone} containerStyle={{ flexShrink: 1, minWidth: 0 }}
       style={{ height: component.button.phone, flexShrink: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space[1], paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: filled ? c.surf2 : "transparent", borderWidth: filled ? 1 : 0, borderColor: c.bd }}>
-      <Icon name={icon} s={sizes.iconSm} color={c.ink} />
+      {icon ? <Icon name={icon} s={sizes.iconSm} color={c.ink} /> : null}
       <T v="button" w="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>{label}</T>
     </Press>
   );
@@ -206,7 +207,7 @@ export default function DrawScreen() {
   const params = useLocalSearchParams<{ m?: string; lead?: string; property?: string; estimate?: string }>();
   const ins = useSafeAreaInsets();
   const access = moduleState(store.db.company?.modules?.gutters).access;
-  const canSave = access === "trial" || access === "paid";
+  const canSave = moduleUsable(access);
   // what the company installs, its palette and defaults (settings M7b): new elements and the attribute panel
   const settings = store.db.company?.modules?.gutters?.settings;
   const ch = useMemo(() => choicesFor(settings), [settings]);
@@ -249,8 +250,8 @@ export default function DrawScreen() {
   /** 390: the sheet of the measurement's photos */
   const [photoSheet, setPhotoSheet] = useState(false);
   /** «Ещё»: «Вернуть» and where the toolbar sits — rare, off the main row (П20.8) */
-  // «⋯» → «Точность замера» or «Где панель инструментов» (founder 10.11, #739: «что такое „как мерили“?»)
-  const [moreSheet, setMoreSheet] = useState<"acc" | "place" | "layers" | null>(null);
+  // «⋯» → «Слои» (the place of the toolbar is by its grip since #2156; «Точность замера» gone, #1764)
+  const [moreSheet, setMoreSheet] = useState<"acc" | "layers" | null>(null);
   // the layers of the view (#930): on this screen only, not saved with the measurement; all on to begin with
   const [layers, setLayers] = useState({ grid: true, labels: true, ds: true });
   /** the gutter just drawn: its length by hand at once (просьба основателя 08.11) */
@@ -874,7 +875,7 @@ export default function DrawScreen() {
   const mPhotos = m && mStored && (canSave || has()) ? <MeasurePhotos measurementId={m.id} testID="draw-photos" onRemoved={() => setPhotoSheet(false)} readOnly={!canSave} /> : null;
   const attrs = !sel ? null : (
     <>
-      {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} compact={!wide} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} ch={ch} compact={!wide} run={drawing.runs.find((r) => r.id === sel.runId)?.attrs} />}
+      {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} ch={ch} run={drawing.runs.find((r) => r.id === sel.runId)?.attrs} />}
       {elPhotos}
     </>
   );
@@ -897,9 +898,9 @@ export default function DrawScreen() {
         <T v="caption" tone="mut">{t("mod.gutters.draw.newDefaults.hint")}</T>
       </View>
       {newSheet === "line" ? (
-        <RunAttrsView forNew run={{ id: "new-run", a: [0, 0], b: [0, 0], attrs: runFor(ch, story, newDef) }} onAttrs={(p) => setNewDef((x) => patchRun(ch, x, p))} onLength={() => {}} ch={ch} compact={!wide} />
+        <RunAttrsView forNew run={{ id: "new-run", a: [0, 0], b: [0, 0], attrs: runFor(ch, story, newDef) }} onAttrs={(p) => setNewDef((x) => patchRun(ch, x, p))} onLength={() => {}} ch={ch} />
       ) : (
-        <DsAttrsView forNew ds={{ ...dsFor(ch, newDef), id: "new-ds", runId: "", atIn: 0 }} onAttrs={(p) => setNewDef((x) => patchDs(ch, x, p))} ch={ch} compact={!wide} run={runFor(ch, story, newDef)} />
+        <DsAttrsView forNew ds={{ ...dsFor(ch, newDef), id: "new-ds", runId: "", atIn: 0 }} onAttrs={(p) => setNewDef((x) => patchDs(ch, x, p))} ch={ch} run={runFor(ch, story, newDef)} />
       )}
     </View>
   );
@@ -974,11 +975,6 @@ export default function DrawScreen() {
       void saveToolbarPlace(p);
     },
   });
-  const pickPlace = (p: ToolbarPlace) => {
-    setPlace(p);
-    setMoreSheet(null);
-    void saveToolbarPlace(p);
-  };
   /** a layer on or off (#930): off with the downspouts — no downspout stays picked, and the downspout tool gives way to «Желоб» */
   const toggleLayer = (l: "grid" | "labels" | "ds", on: boolean) => {
     setLayers((x) => ({ ...x, [l]: on }));
@@ -1073,7 +1069,7 @@ export default function DrawScreen() {
   // «⋯» (founder 09.11, #692 #690; spec 33 П24 Б5, Б6): link to another, unlink back to the drafts, delete the measurement
   const whoRef = useRef<React.ComponentRef<typeof View>>(null);
   const [whoAt, setWhoAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  type WhoKey = "fit" | "props" | "end0" | "end1" | "acc" | "place" | "layers" | "autods" | "relink" | "unlink" | "delete";
+  type WhoKey = "fit" | "props" | "end0" | "end1" | "acc" | "layers" | "autods" | "relink" | "unlink" | "delete";
   const linked = !!leadId || !!placeId;
   // the free ends of the picked gutter (a corner and a butted end have no cap to talk about; «без заглушки» stays one)
   const endRun0 = canSave ? drawing.runs.find((r) => r.id === selected) : undefined;
@@ -1089,8 +1085,7 @@ export default function DrawScreen() {
     // gutter / downspout, and «Конец желоба» of each of its free ends (named by the letter the cap carries on the canvas)
     ...(canSave && sel && !wide ? [{ key: "props" as const, label: t("mod.gutters.attr.props") }] : []),
     ...endRows.map((r) => ({ key: `end${r.end}` as const, label: `${t("mod.gutters.end.title")} · ${r.side}` })),
-    // where the toolbar sits (#739); «Точность замера» is gone — nothing is written about how it was measured (#768, #1764)
-    { key: "place", label: t("mod.gutters.draw.placeItem"), testID: "draw-who-place" },
+    // no «Где панель» (founder 18.11, #2156: «Зачем она там?») — the toolbar moves by its grip; no «Точность замера» (#768, #1764)
     { key: "layers", label: t("mod.gutters.draw.layersItem") },
     // a measurement from before the automatic downspouts gets them only when asked (#1246): not silently, the estimate would change
     ...(canSave && autoDs && drawing.runs.length > 0 && !autoManaged(drawing) ? [{ key: "autods" as const, label: t("mod.gutters.draw.autoDsItem") }] : []),
@@ -1101,7 +1096,7 @@ export default function DrawScreen() {
     if (k === "fit") { if (size.w) setView(fit(drawing, size)); return; }
     if (k === "props") return setSheet(true);
     if (k === "end0" || k === "end1") return setEndSheet(endRun0 ? { id: endRun0.id, end: k === "end1" ? 1 : 0 } : null);
-    if (k === "place" || k === "layers") return setMoreSheet(k);
+    if (k === "layers") return setMoreSheet(k);
     if (k === "autods") return placeAutoDs();
     if (!m) return;
     flush();
@@ -1327,11 +1322,17 @@ export default function DrawScreen() {
               </View>
             ) : inStore && !leadId && !inStore.propertyId ? (
               <View testID="draw-to-lead" style={{ flexShrink: 1 }}>
-                <NameButton icon="plus" label={t("mod.gutters.draw.toLead")} filled onPress={() => setLinkSheet(true)} />
+                {/* the filled pill is the button; no «＋» before the word: with the header's buttons at 40 (rule 3, #2350) «Привязать» is whole at 390 (e2e 412) */}
+                <NameButton label={t("mod.gutters.draw.toLead")} filled onPress={() => setLinkSheet(true)} />
               </View>
             ) : (
               <T v="heading" w="semibold">{t("mod.gutters.draw.title")}</T>
             )}
+            {/* «?» beside the name (DS §12.2): the same steps as on the empty canvas, any time (#2186) */}
+            {/* a gap of a whole step from the name button: their touch zones (44) never overlap (rule 3; second design review) */}
+            <View style={{ marginLeft: space[3] }}>
+              <HelpButton title={t("mod.gutters.draw.help.q")} text={helpText(t)} testID="draw-help" />
+            </View>
             {/* no cloud when all is saved and sent: only «on the phone» (not sent yet / no connection), a tap says it in words (#507 → #1274) */}
             {canSave && !flat && (mark === "sending" || mark === "phone") ? (
               <View testID="draw-local">
@@ -1397,9 +1398,8 @@ export default function DrawScreen() {
 
       {!drawing.runs.length && !ghost ? (
         <View pointerEvents="none" style={{ position: "absolute", left: space[6], right: space[6] + panelSide, top: 0, bottom: 0, alignItems: "center", justifyContent: "center" }} testID="draw-empty">
-          <T tone="mut" center>{t("mod.gutters.draw.empty")}</T>
-          {/* the tools carry pictures only (#1274): where their words are, said while the drawing is still empty (the first opening) */}
-          <T v="caption" tone="mut" center>{t("mod.gutters.draw.emptyTools")}</T>
+          {/* «Как рисовать» (founder 18.11, #2186): the four steps while the canvas is empty; every touch goes through to the canvas */}
+          <EmptyHelp lineIcon={lineIcon} dsIcon={dsIcon} />
         </View>
       ) : null}
       {/* the live length beside the line being drawn (founder 09.11, #689), not at the top of the screen */}
@@ -1548,10 +1548,10 @@ export default function DrawScreen() {
       {m ? <LinkSheet visible={linkSheet} onClose={() => setLinkSheet(false)} measurementId={m.id} /> : null}
       <DeleteMeasurementSheet visible={!!askDelete} on={askDelete ?? NO_ESTIMATES} onDelete={deleteNow} onClose={() => setAskDelete(null)} />
       <Menu visible={!!whoAt} anchor={whoAt} items={whoItems} onSelect={onWho} onClose={() => setWhoAt(null)} />
-      <InputWindow visible={canSave && !!editRun} onClose={() => setLenEdit(null)}>
+      <InputWindow visible={canSave && !!editRun} onClose={() => setLenEdit(null)} scroll={false}>
         {editRun ? <QuickLength key={editRun.id} fmt={ch.lenFormat} run={editRun} start={runLengthIn(editRun)} onLength={(n) => commit(setLength(cur.current.drawing, editRun.id, n))} onDone={() => setLenEdit(null)} onCancel={() => setLenEdit(null)} /> : null}
       </InputWindow>
-      <InputWindow visible={canSave && !!quick} onClose={cancelQuick}>
+      <InputWindow visible={canSave && !!quick} onClose={cancelQuick} scroll={false}>
         {quick ? <QuickLength fmt={ch.lenFormat} run={quick} onLength={(n) => commit(setLength(cur.current.drawing, quick.id, n))} onDone={() => setQuickRun(null)} onCancel={cancelQuick} /> : null}
       </InputWindow>
       {/* «Конец желоба» (a double tap on a free end, #1273): the cap is there / none, the line's face L ↔ R */}
@@ -1604,16 +1604,6 @@ export default function DrawScreen() {
               ))}
               <View testID="draw-layers-hint"><T v="caption" tone="mut">{t("mod.gutters.draw.layersHint")}</T></View>
             </View>
-          ) : null}
-          {moreSheet === "place" ? (
-            <>
-              <T v="caption" tone="mut">{t("mod.gutters.draw.placeTitle")}</T>
-              {TOOLBAR_PLACES.map((p) => (
-                <View key={p} testID={`draw-place-${p}`}>
-                  <ListRow title={t(`mod.gutters.draw.place.${p}`)} left={<Icon name={p === place ? "check" : "sliders"} s={sizes.iconMd} color={p === place ? c.ink : c.mut} />} onPress={() => pickPlace(p)} />
-                </View>
-              ))}
-            </>
           ) : null}
         </View>
       </Sheet>

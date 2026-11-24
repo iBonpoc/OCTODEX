@@ -34,11 +34,16 @@ describe("unit:actionBar — the toast stands above the bar", () => {
 });
 
 describe("unit:actionBar — only a screen without the tab bar pins one", () => {
-  it("every screen that passes `footer=` is in NO_TAB_BAR (else the bar and the tab bar would meet)", () => {
-    const bad = files(APP).filter((f) => /\bfooter=\{/.test(readFileSync(f, "utf8"))).filter((f) => !(NO_TAB_BAR as readonly string[]).includes(routeOf(f)));
+  it("every screen that passes `footer=` is in NO_TAB_BAR, or pins it only where its own route has no tab bar (else the bar and the tab bar would meet)", () => {
+    // the client card (redesign #2348): `footer={pinBar ? bar : undefined}` with `pinBar = !showsTabBar("client/[id]")` — the bar waits for the route to lose the tab bar
+    const guarded = (f: string) => readFileSync(f, "utf8").includes(`!showsTabBar("${routeOf(f)}")`);
+    const bad = files(APP).filter((f) => /\bfooter=\{/.test(readFileSync(f, "utf8"))).filter((f) => !(NO_TAB_BAR as readonly string[]).includes(routeOf(f)) && !guarded(f));
     expect(bad.map((f) => routeOf(f))).toEqual([]);
   });
   it("the screen itself ignores a footer where the tab bar shows", () => {
-    expect(readFileSync(join(__dirname, "..", "src", "ui", "surfaces.tsx"), "utf8")).toMatch(/const footerOn = !!footer && !wide && !showsTabBar\(routeName\)/);
+    // prototype v2: one rule for the Screen and the templates (useFooterShown) — a phone, and a route without the tab bar
+    const src = readFileSync(join(__dirname, "..", "src", "ui", "surfaces.tsx"), "utf8");
+    expect(src).toMatch(/const footerShown = \(wide: boolean, routeName: string\) => !wide && !showsTabBar\(routeName\)/);
+    expect(src).toMatch(/const footerOn = !!footer && footerShown\(wide, routeName\)/);
   });
 });

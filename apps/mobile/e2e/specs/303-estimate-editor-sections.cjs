@@ -35,7 +35,7 @@ exports.run = async (h) => {
   h.expect((await count('[data-testid^="est-line-"]')) === 11, "eleven rows");
 
   // «＋ Раздел»: the title is typed in the heading
-  await tid("est-add-section").getByRole("button").click();
+  await line.addSection(h);
   await typeSectionName("Крыша");
   h.expect((await sections()) === 1, "one section");
   const sid = (await vis('[data-testid^="est-section-"]').first().getAttribute("data-testid")).replace("est-section-", "");
@@ -44,7 +44,7 @@ exports.run = async (h) => {
   // «⋯ → Переместить» the first row into it
   const first = (await vis('[data-testid^="est-line-"]').first().getAttribute("data-testid")).replace("est-line-", "");
   await tid(`est-line-${first}`).click();
-  await tid(`est-menu-${first}`).getByRole("button").click();
+  await line.menu(h, first);
   await tid(`est-act-move-${first}`).click();
   await h.sheet().getByText("Крыша").first().click();
   await p.waitForFunction((s) => !!document.querySelector(`[data-testid="est-section-${s}"]`), sid, { timeout: 3000 });
@@ -54,7 +54,7 @@ exports.run = async (h) => {
 
   // «Разложить по видам» and «Отменить»: only the layout goes back
   await line.fold(h);
-  await tid("est-group-by-kind").getByRole("button").click();
+  await line.editorMenu(h, "est-group-by-kind");
   await p.waitForFunction(() => document.querySelectorAll('[data-testid^="est-section-"]').length >= 3, null, { timeout: 3000 });
   const back = await undo(async () => (await sections()) === 1);
   h.expect(back, "«Отменить» of the layout: one section again");
@@ -63,7 +63,8 @@ exports.run = async (h) => {
   // a folded section keeps its heading and its count
   await tid(`est-sec-toggle-${sid}`).click();
   await p.waitForFunction((i) => !document.querySelector(`[data-testid="est-line-${i}"]`), first, { timeout: 3000 });
-  h.expect(/Позиций: 1/.test(await tid(`est-section-${sid}`).innerText()), "folded: the count");
+  // #2387: the count is the group title's CountPill (GroupHead), as every group of the app
+  h.expect(/(^|\s)1(\s|$)/.test(await tid(`est-section-${sid}`).innerText()), "folded: the count");
   await tid(`est-sec-toggle-${sid}`).click();
 
   const menuGone = () => p.waitForFunction(() => document.querySelectorAll('[role="menu"]').length === 0, null, { timeout: 3000 });
@@ -102,7 +103,7 @@ exports.run = async (h) => {
   await secMenu(sid, "delete");
   await p.waitForFunction((i) => !document.querySelector(`[data-testid="est-section-${i}"]`), sid, { timeout: 3000 });
   h.expect((await count('[data-testid^="est-line-"]')) === 12, "deleted the section: every row stays");
-  await tid("est-add-section").getByRole("button").click();
+  await line.addSection(h);
   await typeSectionName("Двор");
   const yard = (await p.locator('[data-testid^="est-section-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")))).map((x) => x.replace("est-section-", "")).find((x) => x !== sid && x !== sub);
   await secMenu(yard, "addHere");
@@ -118,7 +119,9 @@ exports.run = async (h) => {
 
   // an estimate with sections saves: the sections are kept (the sums on the server are the lines' sums — see unit:estimateSections)
   const before = ((await h.db()).estimates ?? []).length;
-  await tid("ue-save").getByRole("button").click();
+  // optional: #2363 q72 — scrolled down, «Итого» is the capsule; a tap opens the bar with «Готово» (at the top it is the bar already)
+  if (await tid("ue-save-capsule").locator("visible=true").count()) await tid("ue-save-capsule").click();
+  await tid("ue-save").click();
   await p.waitForURL((u) => !/\/estimate\/new/.test(u.pathname), { timeout: 8000 });
   await p.waitForFunction((n) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.estimates ?? []).length === n + 1, before, { timeout: 5000 });
   const est = ((await h.db()).estimates ?? []).find((e) => e.doc?.options?.[0]?.sections?.some((x) => x.title === "Двор"));

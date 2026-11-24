@@ -18,7 +18,7 @@ import { useStore } from "@/data/store";
 import type { CatalogItem } from "@/data/types";
 import { catalogUnitPrice } from "@/features/estimateDoc";
 import { useI18n, type DictKey } from "@/i18n";
-import { moduleState } from "@/modules/registry";
+import { moduleState, moduleUsable } from "@/modules/registry";
 import { useDevice } from "@/theme/ThemeProvider";
 import { Banner } from "@/ui/banner";
 import { Button } from "@/ui/controls";
@@ -26,7 +26,7 @@ import { CardGrid, ListCard, ListCardHeader } from "@/ui/listCard";
 import { useToast, Sheet } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { CardList, ListRow, Screen } from "@/ui/surfaces";
-import { bindable, bindItem, findItem, laborRows, materialRows, missingItems, partName, type PriceRow, priceFromOtherDegree } from "../prices";
+import { bindable, bindItem, findPriced, laborRows, materialRows, missingItems, partName, type PriceRow, priceFromOtherDegree } from "../prices";
 import { withAfter } from "@/data/undo";
 import { QuickPriceSheet } from "@/features/QuickPriceSheet";
 import { quickSheetKey } from "@/features/quickPrice";
@@ -44,7 +44,7 @@ export default function GutterPricesScreen() {
   const cm = store.db.company?.modules?.gutters;
   const raw = cm?.settings;
   const access = moduleState(cm).access;
-  const active = access === "trial" || access === "paid";
+  const active = moduleUsable(access);
   // the price list's writers (catalog_items: app.is_staff — owner, admin, office, sales; the core's /catalog: all but a tech)
   const staff = store.role !== "tech";
   const ro = !staff || !active;
@@ -113,7 +113,8 @@ export default function GutterPricesScreen() {
   const desktop = device === "desktop";
   const card = (row: PriceRow) => {
     // a part priced only by another degree's elbow (§2.7) is shown missing here: the company prices its own
-    const it = priceFromOtherDegree(catalog, row.part) ? undefined : findItem(catalog, row.part);
+    // #2227: a coloured part is priced by the one item of every colour (findPriced), as its estimate line is
+    const it = priceFromOtherDegree(catalog, row.part) ? undefined : findPriced(catalog, row.part).it;
     const title = keep(it ? it.name : nameOf(row.part));
     const unit = row.part.unit;
     if (it) {
@@ -220,7 +221,7 @@ export default function GutterPricesScreen() {
           <T v="caption" tone="mut">{t(k("bindHint"))}</T>
           {bindFor
             ? (() => {
-                const own = missing.find((m) => findItem([m], bindFor.part));
+                const own = missing.find((m) => findPriced([m], bindFor.part).it);
                 return own ? (
                   <View testID="gpr-bind-make">
                     <Button
