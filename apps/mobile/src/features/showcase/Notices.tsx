@@ -8,7 +8,7 @@ import { useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { Card, Empty, SectionTitle, SyncBadge } from "@/ui/surfaces";
 import { EmptyFilter, EmptySearch, NotFound, PageNotFound } from "@/ui/emptyStates";
-import { DemoBadge } from "@/features/DemoBadge";
+import { DemoBadge } from "@/features/DemoBadgeView";
 import { StatusNote } from "@/ui/statusNote";
 import { Banner } from "@/ui/banner";
 import { CrashView } from "@/features/CrashScreen";

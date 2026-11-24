@@ -165,7 +165,7 @@
 |---|---|---|---|---|
 | Нижняя навигация | `nav/TabBar.tsx` (своя «жидкая» пилюля, пружина) | `SpotlightNav` (`graphite/Spotlight.tsx`, `beamMath.ts`): 5 слотов, луч 320, конус, бейдж; жидкое стекло | — | Системный NativeTabs не берём. **Риск:** луч в светлой теме — контраст 3.12 при норме 3, проверить на устройстве |
 | Боковая | `nav/SideNav.tsx`, `nav/NavMenu.tsx` (Modal) | — | для 820/1280 | — |
-| Шапка, назад | `Screen` (`title`, `back`, `help`, `right`, `tabs`), `nav/HomeHeader.tsx`, `nav/BackSwipe.tsx` | круги 44 на жидком стекле; push 320, свайп от края 24 | `GrHeader` | — |
+| Шапка, назад | `Screen` (`title`, `back`, `help`, `right`, `tabs`), `nav/HomeHeader.tsx`, `nav/BackSwipeView.tsx` | круги 44 на жидком стекле; push 320, свайп от края 24 | `GrHeader` | — |
 | Свой вид в nav | `Press` со своим видом: `Fab` 3, `SideNav` 2, `NavMenu` 2, `TabBar` 1, `HomeHeader` 1, `SearchEntry` 1 | — | — | В allowlist сторожа |
 
 ### 2.13 Загрузка и ожидание
@@ -184,7 +184,7 @@
 | Элемент | Есть сейчас | В «Графите» | Чего нет | Замечание |
 |---|---|---|---|---|
 | Движок | только `react-native-reanimated` 4.7 (Animated, LayoutAnimation, moti — 0) | то же, `grTiming`, `grEase` | — | — |
-| Push | Expo Router + `nav/BackSwipe.tsx` | 320, старый экран −30 % и темнее до 35 % | — | — |
+| Push | Expo Router + `nav/BackSwipeView.tsx` | 320, старый экран −30 % и темнее до 35 % | — | — |
 | Лист поверх, полный лист | `Sheet` | 320/240; только создание | — | R15 §6 |
 | Zoom из карточки | нет | после выхода библиотеки из альфы | — | R15 §6 |
 | Общий элемент | нет | имя и сумма → заголовок, 17 → 34 | — | Следующая сборка |

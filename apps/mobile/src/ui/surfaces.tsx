@@ -11,7 +11,7 @@ import { isAppPath, navInsets } from "@/nav/shell";
 import { goTo } from "@/nav/go";
 import { rememberFocus, takeFocus } from "@/nav/focusMemory";
 import { isTabScreen } from "@/nav/roles";
-import { BackSwipe } from "@/nav/BackSwipe";
+import { BackSwipe } from "@/nav/BackSwipeView";
 import { tabBackSwipe } from "@/nav/backSwipe";
 import { showsTabBar } from "@/nav/tabBarRule";
 import { useAuth } from "@/cloud/auth";
