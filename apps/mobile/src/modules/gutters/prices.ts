@@ -182,7 +182,7 @@ export const PART_WORDS = new Set([
   "gutter", "downspout", "end_cap", "hanger", "ds_strap", "elbow", "outlet", "end_outlet", "extension", "splash_block", "flex", "drain", "drain_adapter", "splash_pan", "sealant",
   "shank", "spike", "circle", "bolt", "screw", "anchor", "ferrule", "flat_coil",
   "rivet", "touch_up_paint", "flux", "solder", "soldering_kit", "strip_miter", "wedge", "guard",
-  "slip_joint", "miter", "splash_guard", "expansion_joint", "guard_run", "offset", "reducer", "funnel", "conductor_head", "diverter", "eave_box", "outlet_screen", "wye", "rain_chain", "rain_chain_adapter",
+  "slip_joint", "miter", "splash_guard", "expansion_joint", "guard_run", "offset", "reducer", "funnel", "conductor_head", "y_funnel", "leader_head", "diverter", "eave_box", "outlet_screen", "wye", "rain_chain", "rain_chain_adapter",
   // a downspout's wall fasteners: the kit is named by its part (#1805: they were shown as codes)
   "sickle_hook", "u_bracket", "conductor_bracket", "brick_hook", "brick_hook_hd", "conductor_band", "hinged_hook", "pipe_cleat",
 ]);
@@ -224,7 +224,9 @@ export function sampleJob(raw: unknown): MeasurementInput {
   const run = (id: string, lengthIn: number, ends: MeasurementInput["runs"][number]["ends"]) => ({ ...ra, id, lengthIn, ends, houseSide: "R" as const });
   // the downspout's elbow is in the price list whatever its kind: a plain rectangular one is bent on site by default («Расход v2»,
   // the bend is a labor row), so the sample makes its elbow ready — a company that puts ready elbows on a plain one finds them priced
-  const ds0 = newDsAttrs(ch) as Omit<MeasurementInput["downspouts"][number], "id" | "runId">;
+  const ds1 = newDsAttrs(ch) as Omit<MeasurementInput["downspouts"][number], "id" | "runId">;
+  // a new downspout has nothing at the bottom (G2, founder 23.11 05:25), but the sample keeps a bottom to price: the extension
+  const ds0 = ds1.bottom.kind === "none" ? { ...ds1, bottom: { kind: "extension" as const } } : ds1;
   const sampleDs = ds0.shape !== "round" && !ds0.elbows && bendOf(ds0) === "field" ? { ...ds0, elbows: [{ style: "A", qty: 1 }], elbowBend: "ready" as const } : ds0;
   return {
     runs: [
@@ -398,7 +400,7 @@ export interface PartView {
  * two rows; the estimate and the price list have one item for both, `matchAttrs` drops it). `t` — the document's
  * translator (rule 7: the client's language for an estimate line).
  */
-export function partView(t: Tr, p: Pick<PartQty, "key" | "kind" | "attrs">, fmt: LenFormat = "ftin", opts: { side?: boolean } = {}): PartView {
+export function partView(t: Tr, p: Pick<PartQty, "key" | "kind" | "attrs"> & Pick<Partial<PartQty>, "orderAttrs">, fmt: LenFormat = "ftin", opts: { side?: boolean } = {}): PartView {
   const k = (s: string) => `mod.gutters.pr.${s}` as DictKey;
   if (p.kind === "labor") {
     const w = p.attrs.work ?? "";
@@ -457,7 +459,7 @@ export function partView(t: Tr, p: Pick<PartQty, "key" | "kind" | "attrs">, fmt:
   } else if (part === "elbow") {
     // «2×3 A Elbow 75°»; a round one by its angle: «3″ Round Elbow 45°»
     const round = rest.shape === "round" || /^\d+$/.test(rest.style ?? "");
-    title = named(dsSize, "", round ? t(k("elbowRound"), { deg: `${rest.angle ?? rest.style ?? ""}°` }) : t(k("elbowOf"), { style: rest.style ?? "", deg: `${rest.angle ?? ELBOW_DEFAULT_DEG}°` }));
+    title = named(dsSize, "", round ? t(k("elbowRound"), { deg: `${rest.angle ?? rest.style ?? ""}°` }) : t(k("elbowOf"), { style: rest.style ?? "", deg: `${rest.angle ?? p.orderAttrs?.angle ?? ELBOW_DEFAULT_DEG}°` })); // G2: a rect elbow's own angle is in orderAttrs, not the price
     take("size", "shape", "style", "angle");
   } else if (part === "hanger" && rest.hanger) {
     // «5″ Hidden Hanger with Screw»
