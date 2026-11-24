@@ -382,6 +382,10 @@ export const es: Dict = {
   "triage.later.tomorrow": "Mañana · {date}",
   "triage.later.days3": "En 3 días · {date}",
   "triage.later.week": "En una semana · {date}",
+  "triage.later.pick": "Elegir fecha…",
+  "triage.pickTitle": "Posponer hasta un día",
+  "triage.pickDate": "Día",
+  "triage.pickDo": "Posponer",
   "triage.laterSaved": "Pospuesto hasta {date} — volverá solo",
 
   "inbox.title": "Entrada",
