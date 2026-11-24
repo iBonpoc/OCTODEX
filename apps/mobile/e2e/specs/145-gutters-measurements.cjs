@@ -46,7 +46,7 @@ exports.run = async (h) => {
   // the trial on
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await waitFor(async () => /^Пробный/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
+  await waitFor(async () => /^Без срока/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
 
   // the first measurement: a run and a downspout
   await openCanvas();

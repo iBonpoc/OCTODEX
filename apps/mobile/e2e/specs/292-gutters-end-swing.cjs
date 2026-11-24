@@ -30,7 +30,7 @@ exports.run = async (h) => {
   await p.mouse.up();
   await skipLength(p);
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="draw-svg"] [id^="handle-cap:"]').length === 2, null, { timeout: 8000 });
-  await tid("draw-tool-ds").getByRole("button").click(); // not «Желоб»: across it would be a new gutter (#504)
+  await tid("draw-tool-ds").getByRole("button").click(); // not «Gutter»: across it would be a new gutter (#504)
   await p.waitForFunction((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).some((e) => e.kind === "run" && !e.deletedAt), KEY, { timeout: 8000 });
   const g0 = await geom();
   h.expect(!!g0 && Math.abs(g0.b[1] - g0.a[1]) < 1, "a horizontal gutter, picked");

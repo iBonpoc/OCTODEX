@@ -1,0 +1,129 @@
+# Образец прайса поставщика основателя (.odt, май 2026) — ЧИСЛА ИЗМЕНЕНЫ.
+# Все денежные числа с двумя знаками умножены на случайный множитель; цена за штуку и за коробку друг с другом
+# НЕ сходятся. Имя поставщика заменено на SUPPLIER. Не реальные цены (правило 9). Структура, тексты, опечатки и
+# формы записи — как в документе. « | » — граница колонок таблицы, перенос строки внутри ячейки сохранён.
+# Спека 53 §8б; ожидаемый разбор — aluminum-price-list.expected.md.
+SUPPLIER
+Aluminum Price List
+COIL CONVERSIONS:
+ALUMINUM 11 7/8:
+ft ÷ 2.6 | ALUMINUM 15”:
+ft ÷ 2.0 |
+ALUMINUM .032 11 7/8:
+ft ÷ 2.2 | ALUMINUM 15” .032:
+ft ÷ 1.7 |
+11 7/8 BOND:
+ft ÷ 1.3 | 15” BOND:
+1ft = per # |
+MAY 18, 2026
+PRODUCT | UNIT PRICE |  |
+15” ALUM | $ 3.88lb. |  |
+117/8 coil
+Copper coil 117/8 & 15” | $ 3.20lb.
+---Call for current pricing --- |  |
+DOWNSPOUT(1PC=10FT) |  |  |
+2x3x10 CORRUGATED | 32.74/ pc | $168.29/ Per Box |
+2x3x10 SMOOTH | 37.26/ pc |  |
+3x10 ROUND | 28.14/ pc | $179.35/ Per Box |
+3x4x10 CORRUGATED | 52.31/ pc |  |
+3x4x10 SMOOTH | 36.60/ pc |  |
+ELBOWS |  |  |
+2x3 A or B | 2.97/ pc |  |
+3x4 A or B | 4.59/ pc |  |
+3” round | 2.47/ pc |  |
+D/S straps – cut from coil | 1.87 / pc |  |
+SCREEN |  |  |
+5” Gutter Guard Leaf Exterminator | 19.03/ 6’ pc | $503.69 / 300 ft perbox |
+6” Gutter Guard Leaf Exterminator | 12.35/ 6’ pc | $897.44/ 300 ft per box |
+5” Leaf Destroyer- Stainless Steel Mesh | Full box only | $528.06/ 100 ft per bx |
+6” Leaf Destroyer- Stainless Steel Mesh | Full box only | $395.30100 ft bx |
+5” Leaf ProBlaster Stainless Mesh | Full Box Only (25pc/BX) | $406.83/ 100ft box |
+6” Leaf Pro Blaster Stainless Steel Mesh | Full Box Only (25pc/BX | $378.31/100 ft box |
+5” GT Guard EZ Lock 5”x48” GALV Black | $ 1.74/ per ft
+Full box only | $ 75.75/ per box (100ft) |
+6” GTGuard EZ Lock 6”X48” GALV Black | $1.78/ per ft
+Full box only | $ 111.88/ per box (100ft) |
+6.5” GT Guard EZ HR Deluxe | $1.93/ per ft
+Full box only | $145.79/ per box
+(25 pcs, 4ft/100 ft per box) |
+2x3 OFFSETS |  |  |
+2x3 1” | $4.28/ each |  |
+2x3 2” | $ 7.01 /each | 33pc/box |
+2x3 4” | $ 4.73 / each | 27pc/box |
+3” ROUND OFFSETS |  |  |
+3” Rd. 1” | $8.39/ each |  |
+3” rd. 2” | $9.55/ each |  |
+3” rd. 4” | $ 8.84 / each |  |
+3x4 OFFSETS |  |  |
+MITERS, OUTLETS, ENDCAPS |  |  |
+5” K ends (OG) | $ 1.25 / each | 25L/25R = 50 pc per box |
+5” StraightFace End Cap | $2.48 / each |  |
+6” Straight Face End Caps | $ 3.16 / each |  |
+6” K ends (OG) | $ 2.16 / each |  |
+6” HR endcaps | $ 6.26 / each |  |
+5” Bay Miter | $ 6.09 / each | 20 pc/ per box |
+5” Strip Miter | $ 4.04 / each |  |
+5” Box miters | $ 8.97 / each |  |
+6” K bay miter | $13.73 / each |  |
+6” K strip miters | $ 11.35 / each |  |
+6” K box miters | $ 26.79/ each |  |
+6” HR strip miters | $ 16.04/ each |  |
+6” HR bay miters | $ 21.12 / each |  |
+6” HR box miters-GALV | $ 71.49/ each |  |
+2 3/8” round outlets | $ 2.03/ each | (50 pc or 250pc)1.64/each |
+2 ¾” round outlets | $ 2.37/ each |  |
+2x3 rectangle | $1.82/ each |  |
+3x4 rectangle | $4.89/ each |  |
+3” HR outlets | $7.96/ each |  |
+3” round wire strainers | $ 13.18 / pc |  |
+SPIKES, FERRULES, WEDGES |  | Per box |
+6 ½ “spikes | $ 352.39 / bx | 18 pc per # |
+7”spikes | $ 184.20/bx | 16 pc per # |
+7 ½ “spikes | $ 267.30/ bx | 15 pc per # |
+8” spikes | $ 165.17/ bx | 14 pc per # |
+9” spikes | $ 306.36 / bx | 7 pcs per # |
+10” spikes | $ 331.05 / bx | 6.5 pcs per # |
+5” ferrule | BOX ONLY | $ 84.79 / PER BOX 500 PC |
+6” ferrule | BOX ONLY | $158.22 / per box |
+5” gutter wedge | $ 1.06 / pc |  |
+6” gutter wedge | $ 1.72 /each |  |
+CAULK, PAINT, FLASHING |  |  |
+Geocel 3300 (Black, Grey, White, Bronze, Clear available) | $12.48 | Box = 24 pc |
+Touch up paint (All colors available) | $13. 54 | Box = 12 pc |
+HIDDENHANGERS | BOX ONLY |  |
+GT HANGER 5" U-CHANNEL NO CLIP | $53.62/bx | 100 pc per box |
+GT HANGER 5" BOSS S2 NO CLIP | $71.75/ bx | 100pc / bx |
+GT HANGER 5" U-CHANNEL W/CLIP | $70.51/ bx | 100 pc per box |
+GT HANGER 6" U-CHANNEL W/CLIP | $95.71/bx | 100 pc per box |
+GTHANGER 5" SPEED SCREW NO CLIP | $72.89/ bx | 100 pc per box |
+GT HANGER 6" SPEED SCREW NO CLIP | $124.56/ bx | 100 pc per box |
+GT HANGER 6" SPEED SCREW W/CLIP | $68.73/ bx | 100pc per box |
+GT HANGER 5" HEAVY DUTY SCREW W/CLIP | $129.29/bx | 100 pc per box |
+GTHANGER, 6" HEAVY DUTY SCREW HANGER WITH CLIP | $166.03/ bx | 100 pc per box |
+GT HANGER HALF-ROUND ALUM .060 W/WEDGE | $434.69/ bx | 100 pc/per box |
+T-bar hangar straps | $1.27 each | $70.20 --100pc/ per box |
+LEADER HEADS, MISC. |  |  |
+2x3 leader head | $ 38.79 |  |
+3x4leader head | $ 53.00 |  |
+3” round leader head | $29.96 |  |
+SCREW, RIVETS, ANCHORS, SPLASH BLOCKS |  |  |
+#42 rivet, mill | $ 7.62 / bg | 100pc per bag
+10bg per box (1000 pc) |
+#42 rivet, painted | $ 5.63 / bg |  |
+#8 x ½ screw, mill | $4.94/ bg |  |
+#8 ½ screw, painted | $4.57/bg | 1,000pc —10bg-- 1 bx |
+#10 x 1” screw, mill | $18.08/ bg |  |
+#10 x 1 ½ speed master, no washer | $23.64/ bg |  |
+#10 1 ½ “speed master, washer | $29.62/ bg |  |
+#10x 2” speed master, no washer | $ 37.12 / bg |  |
+#10 x 2 “speed master, washer | $58.14/ bg |  |
+3/16” x 7/8” RED anchor | $ 6.73/ bg | $65.28/ 1,000bx |
+¼ “x 1” BLUE anchor | $10.94/bg | $90.68/ 1,000bx |
+Splash block, concrete | $36.11/pc | 12” X 24” -- $37.19 |
+Solder 50/50 tri-bar | $ 9.14/ pc | $945.53/ per 50# |
+5 Day Return policy
+20 % Re-stocking fee, noexceptions….
+ALL COIL SALES ARE FINAL, NO COIL WILL BE ACCEPTED FOR RETURN
+Returns must be in resale condition, and in original packaging
+No returns on custom orders
+Prices subject to change without notice

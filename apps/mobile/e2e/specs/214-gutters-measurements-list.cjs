@@ -11,9 +11,9 @@ const { skipLength, pressWhenStill } = require("../gutters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
-  const wide = h.layout.width > 390;
   const tid = (id) => p.getByTestId(id).locator("visible=true");
-  const plus = () => p.locator(wide ? '[data-testid="fab-header"]:visible' : '[data-testid="fab"]:visible');
+  // v2 (#2350): the home «＋» is the header's CreateButton (`today-create`, every width), its items `fab-<id>` in the menu
+  const plus = () => tid("today-create").getByRole("button");
   const lines = () => p.getByTestId("draw-svg").first().locator("line:not([id^=halo])").count();
   const cards = () => p.locator('[data-testid^="measurement-"]:visible');
   const waitFor = async (ok, what, tries = 40) => {
@@ -39,7 +39,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
+  await tid("module-gutters-status").filter({ hasText: /^Без срока/ }).waitFor({ timeout: 5000 });
 
   // nothing yet: the list says so
   await fab("list");
@@ -56,7 +56,7 @@ exports.run = async (h) => {
   await fab("list");
   await waitFor(async () => (await cards().count()) === 1, "one card in «Замеры»");
   const text = await cards().first().innerText();
-  h.expect(/Без клиента/.test(text) && /Желобов: 2/.test(text) && /Черновик/.test(text), `the draft's card (${text.replace(/\n/g, " | ")})`);
+  h.expect(/Без клиента/.test(text) && /Gutter: 2/.test(text) && /Черновик/.test(text), `the draft's card (${text.replace(/\n/g, " | ")})`);
   await h.shot("list");
   await cards().first().click();
   await tid("view-screen").waitFor({ timeout: 8000 });
@@ -74,5 +74,5 @@ exports.run = async (h) => {
   await waitFor(async () => (await lines()) === 1, "one gutter in the new one");
   await fab("list");
   await waitFor(async () => (await cards().count()) === 2, "two cards");
-  h.expect(/Желобов: 1/.test(await cards().first().innerText()), "the newest first");
+  h.expect(/Gutter: 1/.test(await cards().first().innerText()), "the newest first");
 };

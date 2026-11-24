@@ -6,7 +6,7 @@
  *   «Когда и кто» on the visit names «Удалённый пользователь»;
  * - «Назначить»: they are not in the sheet and not kept — saving Ivan gives [Ivan] (before 7а-2b the hidden person stayed
  *   on the list and the server refused the whole change);
- * - «Оплаты»: «Принял: Удалённый пользователь»;
+ * - the payment (the client's «Счета», v2): «принял Удалённый пользователь»;
  * - a «Чей план» saved on the deleted person falls back to «Все» (the columns of the people at work are shown).
  * v6 is put an hour back on the company's today (not before its midnight), so it would be «late» if a deleted person
  * counted (review #216: the late rule is checked, not just the text).
@@ -47,18 +47,36 @@ exports.run = async (h) => {
   h.expect(!(await h.text()).includes(GONE), "a deleted person is not on the team");
 
   // «Требует внимания»: the visit is «без мастера», not late
+  // v2 (#2350): «Главная» — the day's crews (`crew-row`): the visit's row says «Без мастера», never «Опаздывает»
   await h.go("/today");
-  await h.expectText(new RegExp(`Выезд без мастера · ${client}`), "the visit with only a deleted person is unassigned");
-  const today = await h.text();
-  h.expect(!today.includes(`→ ${client}`), "never «Мастер опаздывает» for it");
-  if (wouldBeLate) h.expect(!/Мастер опаздывает · +→/.test(today), "no late item without a person (the rule is checked: v6 is 1 h past its start)");
+  const crew = p.getByTestId("crew-row").filter({ hasText: client }).locator("visible=true").first();
+  await crew.waitFor({ timeout: 8000 });
+  const said = (await crew.getAttribute("aria-label")) ?? (await crew.innerText());
+  h.expect(/Без мастера|Не назначен/.test(said), `the visit with only a deleted person is unassigned (${said})`);
+  h.expect(!/Опаздывает/.test(said), "never «Мастер опаздывает» for it");
+  if (wouldBeLate) h.expect(!/Мастер опаздывает · +→/.test(await h.text()), "no late item without a person (the rule is checked: v6 is 1 h past its start)");
 
   // the Plan (day): «Чей план» back to «Все»; v6 is in the group «Не назначено · N»
   await h.go("/plan");
-  await h.expectText(/Ivan Sokolov/, "a «Чей план» on a deleted person falls back to «Все»: the people's columns are shown");
-  const group = p.getByTestId("plan-unassigned").locator("visible=true").first();
-  await group.waitFor({ timeout: 4000 });
-  h.expect((await group.innerText()).includes(client), `v6 (${client}) is in «Не назначено · N» of the day`);
+  const wide = h.layout.width >= 820;
+  if (wide) {
+    // 820 / 1280: the board by person (DayView) with its own «Не назначено» on top — as before v2
+    await h.expectText(/Ivan Sokolov/, "a «Чей план» on a deleted person falls back to «Все»: the people's columns are shown");
+    const group = p.getByTestId("plan-unassigned").locator("visible=true").first();
+    await group.waitFor({ timeout: 4000 });
+    h.expect((await group.innerText()).includes(client), `v6 (${client}) is in «Не назначено · N» of the day`);
+  } else {
+    // v2 (#2350, CalendarScreen): one list of the day — Ivan's visit («… · Ivan») is there, so the plan is everyone's
+    await p.getByTestId("plan-items").locator("visible=true").first().waitFor({ timeout: 8000 });
+    h.expect(/· Ivan\b/.test(await p.getByTestId("plan-items").locator("visible=true").first().innerText()), "a «Чей план» on a deleted person falls back to «Все»: the other people's visits are shown");
+    const group = p.getByTestId("plan-unassigned").locator("visible=true").first();
+    await group.waitFor({ timeout: 4000 });
+    // v2: «Не назначено · N» is one row; it opens the sheet of those visits
+    await group.getByRole("button").first().click();
+    await h.sheet().getByText(client).first().waitFor({ timeout: 4000 });
+    h.expect(true, `v6 (${client}) is in «Не назначено · N»`);
+    await require("../sheet.cjs").pressEscUntilClosed(p);
+  }
 
   // the visit names them; «Назначить» does not keep them
   await h.go("/visit/v6");
@@ -74,9 +92,10 @@ exports.run = async (h) => {
   const v = (await h.db()).visits.find((x) => x.id === "v6");
   h.expect(JSON.stringify(v.assigneeIds) === JSON.stringify(["m-ivan"]) && v.techId === "m-ivan", `only Ivan is kept (${JSON.stringify(v.assigneeIds)})`);
 
-  // «Оплаты»: who took it
-  await h.go("/payments");
-  const html = await p.content();
-  h.expect(html.includes(GONE), "«Принял: Удалённый пользователь» on the payment");
+  // who took the payment: v2 (#2350) the client's «Счета» lists the receipts with «принял …» (the «Оплаты» rows say how and when)
+  await h.go(`/client/${pay.customerId}?tab=money`);
+  const rc = p.getByTestId(`client-receipt-${pay.id}`).locator("visible=true").first();
+  await rc.waitFor({ timeout: 8000 });
+  h.expect((await rc.innerText()).includes(`принял ${GONE}`), `«принял Удалённый пользователь» on the payment (${await rc.innerText()})`);
   await h.shot("payments");
 };

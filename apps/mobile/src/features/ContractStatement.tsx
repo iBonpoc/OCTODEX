@@ -4,19 +4,27 @@ import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { contractStatement, progressAmount } from "@octo/estimating-engine";
 import { isOverdue, useStore } from "@/data/store";
+import { daysOverdue } from "@/data/selectors";
 import type { Invoice } from "@/data/types";
+import { canBill } from "@/features/billRights";
 import { useI18n, type DictKey } from "@/i18n";
 import { MoneyField, PctField } from "./fields";
 import { Button, Segmented, TextField } from "@/ui/controls";
+import { ButtonPair } from "@/ui/pairs";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { VoidInvoiceCards } from "@/features/invoice/VoidInvoice";
+import { invoiceTitle } from "@/features/invoiceTitle";
 
-export function invoiceChip(i: Invoice): { s: "ok" | "info" | "warn" | "bad"; l: DictKey } {
+/**
+ * One word of an invoice's status everywhere it is shown — its card, the list, the job's statement, the client's and the
+ * property's sections (#1495, #1728): an overdue one says «Просрочен N дн», not a bare «Просрочено». Label: t(chip.l, chip.p).
+ */
+export function invoiceChip(i: Invoice): { s: "ok" | "info" | "warn" | "bad"; l: DictKey; p?: { d: number } } {
   if (i.paidCents >= i.totalCents) return { s: "ok", l: "money.paid" };
-  if (isOverdue(i.dueDate)) return { s: "bad", l: "st.overdue" };
+  if (isOverdue(i.dueDate)) return { s: "bad", l: "card.sign.overdueDays", p: { d: daysOverdue(i.dueDate) } };
   if (i.paidCents > 0) return { s: "warn", l: "inv.partial" };
   return { s: "info", l: "money.awaiting" };
 }
@@ -25,7 +33,17 @@ export function invoiceChip(i: Invoice): { s: "ok" | "info" | "warn" | "bad"; l:
  * Contract statement for a job (docs/13 §5): contract / invoiced / paid / left to bill,
  * the job's invoices, "Bill the balance" and "Progress invoice".
  */
-export function ContractStatement({ jobId }: { jobId: string }) {
+export function ContractStatement({
+  jobId,
+  hideContract,
+  quiet,
+}: {
+  jobId: string;
+  /** the screen shows the contract sum already (its head, LAYOUT-RULES П7) */
+  hideContract?: boolean;
+  /** the screen has its own one main button (LAYOUT-RULES П2): «Выставить остаток» here is secondary */
+  quiet?: boolean;
+}) {
   const store = useStore();
   const { db } = store;
   const { t, money, day } = useI18n();
@@ -52,6 +70,8 @@ export function ContractStatement({ jobId }: { jobId: string }) {
     return !!undo;
   };
 
+  const progressButton = { label: t("inv.progress"), testID: "statement-progress", icon: "plus" as const, variant: "secondary" as const, onPress: () => setSheet(true) };
+
   const row = (label: string, v: number, strong?: boolean, testID?: string) => (
     <View testID={testID}>
     <RowView style={{ justifyContent: "space-between" }}>
@@ -69,7 +89,7 @@ export function ContractStatement({ jobId }: { jobId: string }) {
     <View style={{ gap: space[2] }}>
       <SectionTitle title={t("inv.statement")} />
       <Card>
-        {row(t("inv.contract"), st.contract)}
+        {hideContract ? null : row(t("inv.contract"), st.contract)}
         {row(t("inv.invoiced"), st.invoiced, false, "statement-invoiced")}
         {row(t("inv.paid"), st.paid)}
         <Divider />
@@ -91,10 +111,10 @@ export function ContractStatement({ jobId }: { jobId: string }) {
                 density="compact"
                 testID={`statement-invoice-${i.id}`}
                 lead={{ kind: "icon", icon: "invoice" }}
-                title={i.title || t(`inv.kind.${i.kind ?? "final"}` as DictKey)}
+                title={invoiceTitle(i, t)}
                 when={[i.number, t("money.due", { date: day(i.dueDate) }), i.paidCents > 0 && i.paidCents < i.totalCents ? t("inv.paidPart", { amount: money(i.paidCents) }) : undefined].filter(Boolean).join(" · ")}
                 value={money(i.totalCents)}
-                status={{ tone: chip.s, label: t(chip.l) }}
+                status={{ tone: chip.s, label: t(chip.l, chip.p) }}
                 onPress={() => router.push(`/invoice/${i.id}`)}
               />
             );
@@ -102,23 +122,27 @@ export function ContractStatement({ jobId }: { jobId: string }) {
         </CardGrid>
       ) : null}
       <VoidInvoiceCards list={(db.voidInvoices ?? []).filter((i) => i.jobId === jobId)} testPrefix="statement" />
-      {st.toInvoice > 0 ? (
-        <RowView style={{ flexWrap: "wrap" }}>
-          {!hasFinal ? (
-            <Button
-              label={t("inv.billBalance", { amount: money(st.toInvoice) })}
-              testID="statement-bill-balance"
-              icon="invoice"
-              disabled={balanceSent}
-              onPress={() => {
-                if (balanceSent) return;
-                setBalanceSent(true);
-                if (!issue("final", st.toInvoice, "Final balance")) setBalanceSent(false);
-              }}
-            />
-          ) : null}
-          <Button label={t("inv.progress")} testID="statement-progress" icon="plus" variant="secondary" onPress={() => setSheet(true)} />
-        </RowView>
+      {st.toInvoice > 0 && canBill(store.role) ? (
+        // two buttons in a row when they fit (DS §7.4, #2350): «Промежуточный» on the left, «Выставить остаток» on the right
+        <ButtonPair
+          main={
+            !hasFinal
+              ? {
+                  label: t("inv.billBalance", { amount: money(st.toInvoice) }),
+                  testID: "statement-bill-balance",
+                  icon: "invoice",
+                  variant: quiet ? "secondary" : undefined,
+                  disabled: balanceSent,
+                  onPress: () => {
+                    if (balanceSent) return;
+                    setBalanceSent(true);
+                    if (!issue("final", st.toInvoice, "Final balance")) setBalanceSent(false);
+                  },
+                }
+              : progressButton
+          }
+          second={!hasFinal ? progressButton : null}
+        />
       ) : null}
       <Sheet visible={sheet} onClose={() => setSheet(false)} title={t("inv.progress")}>
         <View style={{ gap: space[3] }}>

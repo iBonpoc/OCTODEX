@@ -1,26 +1,19 @@
 const { listSearch } = require("../listSearch.cjs");
 /**
  * Filters over the lists — one rule (docs/specs/31-list-filters.md, variant Б, step 10в), every view (3 widths × 2 themes).
- * Each PR of 10в adds its list to LISTS. For every list:
+ * Each PR of 10в adds its list to LISTS. Prototype v2 (#2350): the lists on the List template (src/ui/templates/ListScreen —
+ * «Клиенты», «Лиды», «Сметы», «Счета», «Задачи», «Оплаты») have no FilterBar: the search is the header's icon `<screen>-search`
+ * (the field `<screen>-search-field`, the focus in it), the sections are one segment `<screen>-chips`; they are checked in TEMPLATE —
+ * the search narrows the rows to none (`<screen>-empty`), the field emptied gives every row back, the search is not kept. For every
+ * FilterBar list (LISTS):
  * - over the list at most two rows (the search with «Фильтр», one lane); at 390 the first card starts in the top 40 %;
  * - the lane is one line, no chip «· 0» but the chosen one; no status colour on the chips;
  * - «Фильтр» → the sheet → an option on → the line «… ✕» under the lane → the list narrows → ✕ takes it off;
  * - the status and the options are kept for this list on this device; the search is not.
  */
 const LISTS = [
-  // PR 1: «Клиенты» — the tags in the sheet
-  { path: "/clients", search: "Имя, телефон или адрес", group: "Метки" },
-  // PR 2: «Лиды» — no Leads · Estimates · Invoices switch; people («Мои») and sources in the sheet
-  { path: "/leads", search: "Имя, телефон, адрес, услуга", group: "Ответственный", noSwitch: true },
-  // PR 3: «Сметы» and «Счета» — sections of their own with a search; nothing in the sheet yet (no «Фильтр» button)
-  { path: "/estimates", search: "Клиент, адрес, работа, EST" },
-  // «Клиент» in the sheet, one at a time (one rule, director 07.11): kept in the address (`?customer=`), the chip «Клиент: X ✕»
-  { path: "/invoice?f=all", search: "Клиент, адрес, работа, INV", group: "Клиент", single: true, inAddress: true },
-  // PR 5: «Задачи» («Только мои» in the sheet), «Каталог» (kinds, no sheet)
-  { path: "/tasks", search: "Искать задачу", group: "Чьи", card: '[data-testid^="task-"]' },
+  // PR 5: «Каталог» (kinds, no sheet)
   { path: "/catalog", search: "Поиск в каталоге" },
-  // «Оплаты» (one rule, founder 07.11): the periods are the lane, the method in the sheet — both in the address (?p=, ?m=)
-  { path: "/payments?p=all", search: "Клиент, RCT, INV", group: "Способ оплаты", inAddress: true },
   // PR 4: «Работы» — «Мастер» (people of the nearest open visit, «Не назначен») and «Направление» in the sheet
   { path: "/jobs", search: "Клиент, адрес, работа, JOB", group: "Мастер" },
   // «Звонки» (one rule, director 07.11): the outcomes are the lane, no sheet; three calls of our own (the demo has one, no outcome)
@@ -36,6 +29,16 @@ const LISTS = [
       localStorage.setItem("octo.db.v5", JSON.stringify(raw));
     },
   },
+];
+
+// v2 List template: the screen's testID and what a row's testID is (a row's own buttons — «позвонить», «готово» — are not rows)
+const TEMPLATE = [
+  { path: "/clients", id: "clients", row: "^client-row-(?!call-)" },
+  { path: "/leads", id: "leads", row: "^lead-row-(?!tel-|sms-)" },
+  { path: "/estimates", id: "est-list", row: "^est-row-", tiles: true },
+  { path: "/invoice?f=all", id: "invoice-list", row: "^invoice-row-", tiles: true },
+  { path: "/tasks", id: "tasks", row: "^task-(?!done-)" },
+  { path: "/payments", id: "payments-list", row: "^payment-row-", tiles: true },
 ];
 
 exports.run = async (h) => {
@@ -61,7 +64,7 @@ exports.run = async (h) => {
     const tb = await toggle.boundingBox();
     const lane = await vis(bar.getByTestId("filter-lane")).first().boundingBox();
     const mid = (b) => b.y + b.height / 2;
-    h.expect(tb && tb.height <= 36 && Math.abs(mid(tb) - mid(lane)) <= 8, `${L.path}: the search icon and the lane in one row (${JSON.stringify(tb)} / ${JSON.stringify(lane)})`);
+    h.expect(tb && tb.height <= (h.layout.width < 820 ? 40 : 36) && /* rule 3 (21.11, #2350): visible 40 on a phone */  Math.abs(mid(tb) - mid(lane)) <= 8, `${L.path}: the search icon and the lane in one row (${JSON.stringify(tb)} / ${JSON.stringify(lane)})`);
     const first = await vis(p.locator(L.card ?? '[data-testid="list-card"]')).first().boundingBox();
     if (h.layout.width === 390) h.expect(first && first.y < 844 * 0.4, `${L.path}: 390 — the first card in the top 40 % (${first && first.y})`);
 
@@ -142,5 +145,51 @@ exports.run = async (h) => {
     await vis(p.getByTestId("filter-chosen")).first().getByRole("button", { name: `Убрать фильтр: ${name}` }).click(); await p.waitForTimeout(300);
     h.expect((await vis(p.getByTestId("filter-chosen")).count()) === 0, `${L.path}: ✕ — the line is gone`);
     h.expect((await vis(p.locator(L.card ?? '[data-testid="list-card"]')).count()) === before, `${L.path}: the list is whole again`);
+  }
+  for (const T of TEMPLATE) {
+    await h.go(T.path);
+    const groups = vis(p.getByTestId(`${T.id}-groups`)).first();
+    await groups.waitFor({ timeout: 8000 });
+    const rows = () => p.evaluate((re) => [...document.querySelectorAll("[data-testid]")].filter((e) => e.offsetParent !== null && new RegExp(re).test(e.getAttribute("data-testid")) && !/-swipe$/.test(e.getAttribute("data-testid"))).length, T.row);
+    const whole = await rows();
+    h.expect(whole > 0, `${T.path}: rows (${whole})`);
+    // the sections: one segment, one line
+    // optional: «Задачи» has no sections (no segment) — the other lists do
+    const seg = vis(p.getByTestId(`${T.id}-chips`));
+    if (await seg.count()) {
+      const tops = await seg.first().getByRole("radio").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+      h.expect(tops.every((y) => Math.abs(y - tops[0]) <= 1), `${T.path}: the sections are one line (${tops.join(", ")})`);
+    }
+    // «Деньги»: the money tiles 2×2 stand over the rows by design (BUILD-SPEC §2.9) — the rows start right under them
+    if (T.tiles) {
+      const tiles = await vis(p.getByTestId("money-tiles")).first().boundingBox();
+      const first = await groups.boundingBox();
+      h.expect(tiles && first && first.y >= tiles.y + tiles.height && first.y - (tiles.y + tiles.height) <= 48, `${T.path}: the rows right under the money tiles (${tiles && tiles.y + tiles.height} → ${first && first.y})`);
+    } else if (h.layout.width === 390) {
+      const first = await groups.boundingBox();
+      h.expect(first && first.y < 844 * 0.4, `${T.path}: 390 — the first row in the top 40 % (${first && first.y})`);
+    }
+    // the search: the header's icon opens the field with the focus; nothing found — the empty state; emptied — every row
+    await vis(p.getByTestId(`${T.id}-search`)).first().click();
+    const field = vis(p.getByTestId(`${T.id}-search-field`)).first();
+    await field.waitFor({ timeout: 3000 });
+    const input = (await field.evaluate((e) => e.tagName)) === "INPUT" ? field : field.locator("input").first();
+    await p.waitForFunction((tid) => {
+      const a = document.activeElement;
+      return !!a && !!a.closest(`[data-testid="${tid}"]`) || a?.getAttribute("data-testid") === tid;
+    }, `${T.id}-search-field`, { timeout: 3000 });
+    await input.fill("zzzqqq");
+    await vis(p.getByTestId(`${T.id}-empty`)).first().waitFor({ timeout: 3000 });
+    h.expect((await rows()) === 0, `${T.path}: the search narrows the list to none`);
+    await h.shot(`${T.id}-search-on`);
+    await input.fill("");
+    await groups.waitFor({ timeout: 3000 });
+    h.expect((await rows()) === whole, `${T.path}: the field emptied — the list is whole again`);
+    // the search is not kept between visits
+    await input.fill("zzzqqq");
+    await vis(p.getByTestId(`${T.id}-empty`)).first().waitFor({ timeout: 3000 });
+    await h.go(T.path);
+    await vis(p.getByTestId(`${T.id}-groups`)).first().waitFor({ timeout: 8000 });
+    h.expect((await rows()) === whole && (await vis(p.getByTestId(`${T.id}-search-field`)).count()) === 0, `${T.path}: the search is not kept`);
   }
 };

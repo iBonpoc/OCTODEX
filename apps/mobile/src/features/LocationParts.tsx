@@ -11,7 +11,8 @@ import { useStore } from "@/data/store";
 import type { Visit } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { Button, ChoiceChips } from "@/ui/controls";
+import { ButtonPair } from "@/ui/pairs";
+import { ToggleRow } from "@/ui/toggleRow";
 import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, RowView } from "@/ui/surfaces";
@@ -68,8 +69,7 @@ export function LocationConsentSheet({ visible, onAnswer }: { visible: boolean; 
     <Sheet visible={visible} onClose={() => onAnswer(false)} title={t("loc7b.noticeTitle")}>
       <View style={{ gap: space[3] }}>
         <T v="body">{t("loc7b.notice")}</T>
-        <Button label={t("loc7b.agree")} full onPress={() => onAnswer(true)} />
-        <Button label={t("loc7b.notNow")} variant="ghost" full onPress={() => onAnswer(false)} />
+        <ButtonPair main={{ label: t("loc7b.agree"), onPress: () => onAnswer(true) }} second={{ label: t("loc7b.notNow"), variant: "ghost", onPress: () => onAnswer(false) }} />
       </View>
     </Sheet>
   );
@@ -87,13 +87,13 @@ export function LocationSetting() {
   return (
     <Card>
       <T v="heading">{t("loc7b.title")}</T>
-      <T v="caption" tone="mut">
-        {t("loc7b.hint")}
-      </T>
-      <ChoiceChips
-        value={loc.on ? "on" : "off"}
-        onChange={(k) => {
-          const on = k === "on";
+      {/* on / off of one property — a row with a switch (spec 56 §3 row 2), not two chips */}
+      <ToggleRow
+        testID="loc7b-switch"
+        label={t("loc7b.on")}
+        caption={t("loc7b.hint")}
+        value={loc.on}
+        onChange={(on) => {
           if (on === loc.on) return;
           if (on && !online) return toast.show(t("loc7b.needOnline"));
           setAsked(true);
@@ -101,10 +101,6 @@ export function LocationSetting() {
           // off goes through the queue; «Отменить» while it waits keeps it on (offline the undo needs no server)
           toast.show(t("loc7b.stopped"), setLocationConsent(false).undo);
         }}
-        items={[
-          { key: "off", label: t("loc7b.off") },
-          { key: "on", label: t("loc7b.on") },
-        ]}
       />
     </Card>
   );

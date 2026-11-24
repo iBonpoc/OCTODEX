@@ -3,7 +3,7 @@
  * docs/specs/33-gutters-canvas.md П20.13). Every view, then the same phone turned on its side (932 × 430).
  * - the canvas has a grid (minor and major lines);
  * - a gutter drawn, its length typed twice the drawn one → «Применить» → the line on the canvas is twice as long;
- * - turned on its side: no app menu, no side panel, no «Сохранено»/«Сделать заявкой» — the back button, the fit button,
+ * - turned on its side: no app menu, no side panel, no «Сохранено»/«Привязать» — the back button, the fit button,
  *   the toolbar and the drawing; a tap on a gutter opens its attributes in a sheet («Свойства»).
  * Finds things by testID / id; waits on what it checks.
  */
@@ -23,7 +23,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await waitFor(async () => /^Пробный/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
+  await waitFor(async () => /^Без срока/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
   await h.go("/module/gutters/draw");
   await tid("draw-surface").waitFor({ timeout: 8000 });
 
@@ -63,7 +63,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await tid("side-nav").count()) === 0, "on its side: no app menu");
   h.expect((await tid("draw-panel").count()) === 0, "on its side: no side panel");
   // wait on it (rule 19): the header row goes with the layout's next render, not with the menu
-  await waitFor(async () => (await tid("draw-local").count()) === 0 && (await tid("draw-to-lead").count()) === 0, "on its side: no «Сохранено» / «Сделать заявкой»");
+  await waitFor(async () => (await tid("draw-local").count()) === 0 && (await tid("draw-to-lead").count()) === 0, "on its side: no «Сохранено» / «Привязать»");
   h.expect((await tid("draw-back").count()) === 1 && (await tid("draw-fit").count()) === 0 && (await tid("draw-toolbar").count()) === 1, "back and the toolbar stay; no «fit» in the header (#1273)");
   // «вписать»: a double tap on the empty place (the header has no button, a phone on its side has no «⋯»)
   const sb = await tid("draw-surface").boundingBox();

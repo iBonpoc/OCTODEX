@@ -10,10 +10,33 @@ export interface Membership {
   companyId: string;
   companyName: string;
   role: DbRole;
+  /** when the person joined (memberships.created_at); absent in an older answer — spec 42 S34: the first by date */
+  createdAt?: string;
 }
 
 /** the company the person last worked in (per person): it stays first when the memberships are read again */
 export const lastCompanyKey = (userId: string) => `octo.company.v1.${userId}`;
+
+/**
+ * Spec 42 S34 (#1673): which company opens. The one the person is in now stays (a read again never switches it — #1633
+ * A2); else the one this phone remembers; else the server's `users.last_active_company_id` (a new phone); else the first
+ * they joined (by date, then by id). Each is taken only when it is among the memberships just read: a closed company or
+ * one the person left is never opened by a remembered id (security-check С6). null — no memberships.
+ */
+export function pickActive(
+  list: readonly Membership[],
+  p: { current?: string | null; phone?: string | null; server?: string | null },
+): string | null {
+  const has = (id: string | null | undefined): id is string => !!id && list.some((m) => m.companyId === id);
+  for (const id of [p.current, p.phone, p.server]) if (has(id)) return id;
+  const first = [...list].sort((a, b) => {
+    const ta = a.createdAt ?? "\uffff";
+    const tb = b.createdAt ?? "\uffff";
+    if (ta !== tb) return ta < tb ? -1 : 1;
+    return a.companyId < b.companyId ? -1 : a.companyId > b.companyId ? 1 : 0;
+  })[0];
+  return first?.companyId ?? null;
+}
 
 /**
  * The memberships in a fixed order (by company), the one the person works in first — a read again never switches the
@@ -28,17 +51,33 @@ export function orderMemberships(list: readonly Membership[], preferred: string 
 
 /** the same answer as before (order, companies, roles, names): the app keeps the old array — no reload for nothing */
 export const sameMemberships = (a: readonly Membership[], b: readonly Membership[]): boolean =>
-  a.length === b.length && a.every((m, i) => m.companyId === b[i].companyId && m.role === b[i].role && m.companyName === b[i].companyName);
+  a.length === b.length &&
+  a.every((m, i) => m.companyId === b[i].companyId && m.role === b[i].role && m.companyName === b[i].companyName && m.createdAt === b[i].createdAt);
 
-/** the server's memberships rows → the app's; anything broken is left out. null — not an answer (not a list) */
+/** spec 42 §14 (П3): the switch is to be written to the server (users.last_active_company_id) — kept until it is */
+export const pendingLastKey = (userId: string) => `octo.company.pending.v1.${userId}`;
+
+const ROLES: readonly string[] = ["owner", "admin", "office", "sales", "tech", "subcontractor"];
+/**
+ * the server's memberships rows → the app's. null — not an answer: not a list, or a row that is broken (no company, a
+ * role this build does not know) — a list with a row left out would read as «removed» and wipe that company's cache
+ * (security-check of #1674: such an answer is not confirmed)
+ */
 export function parseMemberships(rows: unknown): Membership[] | null {
   if (!Array.isArray(rows)) return null;
-  return rows.flatMap((r) => {
-    const m = r as { company_id?: unknown; role?: unknown; companies?: { name?: unknown } | { name?: unknown }[] | null };
-    if (typeof m?.company_id !== "string" || typeof m.role !== "string") return [];
+  const out: Membership[] = [];
+  for (const r of rows) {
+    const m = r as { company_id?: unknown; role?: unknown; created_at?: unknown; companies?: { name?: unknown } | { name?: unknown }[] | null };
+    if (typeof m?.company_id !== "string" || !m.company_id || typeof m.role !== "string" || !ROLES.includes(m.role)) return null;
     const c = Array.isArray(m.companies) ? m.companies[0] : m.companies;
-    return [{ companyId: m.company_id, role: m.role as DbRole, companyName: typeof c?.name === "string" ? c.name : "" }];
-  });
+    out.push({
+      companyId: m.company_id,
+      role: m.role as DbRole,
+      companyName: typeof c?.name === "string" ? c.name : "",
+      ...(typeof m.created_at === "string" ? { createdAt: m.created_at } : {}),
+    });
+  }
+  return out;
 }
 
 /** how the app shows a server role (repo.ts appRoles): owner and admin are both «director» */

@@ -18,3 +18,13 @@ export function focusPlan(os: string, o: { autoFocus?: boolean; selectOnFocus?: 
   const want = !!o.autoFocus && !o.readOnly;
   return { autoFocus: want && !native, focusAfterMs: want && native ? motion.durSlow : null, selectByHand: native && !!o.selectOnFocus };
 }
+
+/**
+ * #2469 (CI twice: «150» over a price gave «50.00»): the select that follows the focus a moment later — the web's own (Safari puts the
+ * caret back after a click), the phone's by hand — comes LATE on a slow device: after the first digit, it selects that digit and the
+ * second one replaces it. The field selects all AT the focus; a late select is only allowed while nothing has been typed since — known
+ * by a keystroke, not by the text (code review: «1» typed over «1» leaves the same text, and «12» would become «2»).
+ */
+export function lateSelectOk(typedSinceFocus: boolean, focused: boolean): boolean {
+  return focused && !typedSinceFocus;
+}

@@ -12,7 +12,10 @@ import { Labeled } from "@/features/fields";
 import { canCreateJob, canDateNewJob, servable } from "@/features/newJob";
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
 import { NotifySheet, useVisitForm, VisitFormFields } from "@/features/VisitForm";
-import { Button, ChoiceChips, Segmented, StatusChip, TextField } from "@/ui/controls";
+import { Button, StatusChip, TextField } from "@/ui/controls";
+import { SelectField } from "@/ui/selectField";
+import { PickerSheet } from "@/ui/pickerSheet";
+import { ToggleRow } from "@/ui/toggleRow";
 import { Sheet, useToast, SheetScroll } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { Card, Divider, Empty, FieldGroup, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
@@ -40,6 +43,7 @@ export default function NewJob() {
     preset ? (db.properties.find((p) => p.id === params.propertyId && p.customerId === preset.id)?.id ?? db.properties.find((p) => p.customerId === preset.id)?.id) : undefined,
   );
   const [picker, setPicker] = useState(false);
+  const [addrPicker, setAddrPicker] = useState(false);
   const [q, setQ] = useState("");
   // a new client (13 §3.3: name and one way to reach; the address of the job is the first property)
   const [name, setName] = useState("");
@@ -63,6 +67,7 @@ export default function NewJob() {
   const newAddress = newClient || propertyId === NEW;
   const client = newClient ? undefined : db.customers.find((c) => c.id === customerId);
   const props = client ? db.properties.filter((p) => p.customerId === client.id) : [];
+  const addressItems = [...props.map((p) => ({ key: p.id as string, label: p.address })), { key: NEW as string, label: t("job3.new.newAddress") }];
   const rows = useMemo(
     () =>
       db.customers
@@ -131,7 +136,7 @@ export default function NewJob() {
   const missing: DictKey | null = !clientOk ? "job3.new.needClient" : !addressOk ? "job3.new.needAddress" : !titleOk ? "job3.new.needTitle" : null;
 
   return (
-    <Screen title={t("job3.newJob")} back={back}>
+    <Screen form title={t("job3.newJob")} back={back}>
       <SectionTitle title={t("job3.new.client")} />
       {client ? (
         <Card>
@@ -172,12 +177,14 @@ export default function NewJob() {
         <>
           {newClient ? <SectionTitle title={t("job3.new.address")} /> : null}
           {!newClient ? (
-            <ChoiceChips
+            // an object (a property of the client) — a row that opens the list with search (spec 56 А3), not chips
+            <SelectField<string>
               label={t("job3.new.address")}
               testID="job-new-address"
-              items={[...props.map((p) => ({ key: p.id, label: p.address })), { key: NEW, label: t("job3.new.newAddress") }]}
-              value={(propertyId ?? "") as string}
+              items={addressItems}
+              value={(propertyId ?? null) as string | null}
               onChange={(k) => setPropertyId(k)}
+              onOpen={() => setAddrPicker(true)}
             />
           ) : null}
           {newAddress ? (
@@ -200,11 +207,11 @@ export default function NewJob() {
           </View>
         </Labeled>
         {types.length ? (
-          <ChoiceChips
+          <SelectField<string>
             label={t("job3.type")}
             testID="job-new-type"
             items={types.map((x) => ({ key: x.id, label: x.name ?? (x.seedKey ? t(`job3.jt.${x.seedKey}` as DictKey) : "") }))}
-            value={jobTypeId}
+            value={jobTypeId || null}
             onChange={setJobTypeId}
           />
         ) : null}
@@ -217,16 +224,10 @@ export default function NewJob() {
       {dating ? (
         <>
           <SectionTitle title={t("job3.schedule")} />
-          <Segmented
-            full
-            value={when}
-            onChange={setWhen}
-            items={[
-              { key: "later", label: t("job3.new.later") },
-              { key: "date", label: t("job3.new.date") },
-            ]}
-          />
-          {when === "date" ? <VisitFormFields f={f} /> : null}
+          {/* «Назначить дату» on / off — a row with a switch, the visit's fields right under it (spec 56 §3 row 2) */}
+          <ToggleRow testID="job-new-date" label={t("job3.new.setDate")} value={when === "date"} onChange={(on) => setWhen(on ? "date" : "later")}>
+            <VisitFormFields f={f} />
+          </ToggleRow>
         </>
       ) : (
         <T v="caption" tone="mut">
@@ -278,6 +279,18 @@ export default function NewJob() {
           setNotifyId(null);
           if (createdId) router.replace(`/job/${createdId}`);
         }}
+      />
+      <PickerSheet<string>
+        visible={addrPicker}
+        title={t("job3.new.address")}
+        items={addressItems}
+        value={(propertyId ?? null) as string | null}
+        onSelect={(k) => {
+          setPropertyId(k);
+          setAddrPicker(false);
+        }}
+        onClose={() => setAddrPicker(false)}
+        testID="job-new-address-picker"
       />
     </Screen>
   );

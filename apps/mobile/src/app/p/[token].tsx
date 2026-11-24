@@ -2,6 +2,7 @@ import { APP_NAME } from "@/config/product";
 import { useEffect, useState } from "react";
 import { Image, Platform, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
+import { invoiceOwes } from "@octo/estimating-engine";
 import { component, radius, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { I18nOverride, useI18n, type DictKey } from "@/i18n";
@@ -14,7 +15,7 @@ import { EstimateView } from "@/features/EstimateView";
 import { SignBlock } from "@/features/SignBlock";
 import { mainOption, optionTotals, withAddons } from "@/features/estimateDoc";
 import { estimateFileName, estimateHtml, saveEstimatePdf } from "@/features/estimatePdf";
-import { Button, StatusChip } from "@/ui/controls";
+import { Button, ReadOnly, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, CardList, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
@@ -29,7 +30,8 @@ export default function ClientEstimatePage() {
   const { token } = useLocalSearchParams<{ token: string }>();
   const store = useStore();
   const { t } = useI18n();
-  const local = localPortal(store.db, token ?? "", store.companyName ?? APP_NAME);
+  // the phone's own data: the demo works as the client's page; a cloud company's «open as client» only shows (preview)
+  const local = localPortal(store.db, token ?? "", store.companyName ?? APP_NAME, store.mode === "demo");
   const [remote, setRemote] = useState<PortalData | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -65,7 +67,7 @@ export default function ClientEstimatePage() {
   // Rule 7: the page, its sheets and toasts speak the client's language, not the app's (or the browser's).
   return (
     <I18nOverride lang={data.lang}>
-      <PortalBody data={data} doc={data.doc} token={token!} back={back} setRemote={setRemote} />
+      <PortalBody data={data} doc={data.doc} token={token!} back={back} setRemote={setRemote} officeNote={t("portalPreview.sign")} />
     </I18nOverride>
   );
 }
@@ -79,6 +81,8 @@ function browserLang(): DocLang {
 /** a failure on the client page in our words: «no connection» or «try again» — never the browser's or the server's text */
 function portalFail(t: (k: DictKey) => string, e: unknown): string {
   const m = String((e as Error)?.message ?? e);
+  // #2020: a person of the company signing by the client's link — the server refuses; say who signs, not «try again»
+  if (/not by the client's link/i.test(m)) return t("portalPreview.sign");
   return /fetch|network|timeout|abort/i.test(m) ? t("portal.offline") : t("portal.failed");
 }
 
@@ -96,7 +100,8 @@ function NoPage({ loading, failed, back }: { loading: boolean; failed: boolean; 
   );
 }
 
-function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; doc: EstimateDoc; token: string; back?: () => void; setRemote: (d: PortalData | null) => void }) {
+/** `officeNote`: the preview's note for the office — in the APP's language (it is not for the client; rule 7) */
+function PortalBody({ data, doc, token, back, setRemote, officeNote }: { data: PortalData; doc: EstimateDoc; token: string; back?: () => void; setRemote: (d: PortalData | null) => void; officeNote: string }) {
   const store = useStore();
   const { t, money, day } = useI18n();
   const toast = useToast();
@@ -127,6 +132,8 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
   const deposit = approved ? data.approval!.depositCents ?? tot.deposit : tot.deposit;
 
   const sign = async (name: string, svg: string) => {
+    // the office's preview never signs: the client signs by the link (the server refuses a member's portal signature too)
+    if (data.preview) return;
     setBusy(true);
     try {
       if (data.source === "local" && data.estimateId) {
@@ -142,10 +149,10 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
   };
   const payingInv = data.invoices.find((i) => i.id === paying);
   const paySim = async () => {
-    if (!payingInv) return;
+    if (!payingInv || data.preview) return;
     try {
       if (data.source === "local") {
-        store.recordPayment(payingInv.id, payingInv.totalCents - payingInv.paidCents, "card", "stripe-simulated", true);
+        store.recordPayment(payingInv.id, invoiceOwes(payingInv), "card", "stripe-simulated", true);
       } else {
         setRemote(await paySimulated(token, payingInv.id));
       }
@@ -215,7 +222,7 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
               <SectionTitle title={t("portal.invoices")} />
               <CardList>
                 {data.invoices.map((inv) => {
-                  const bal = Math.max(0, inv.totalCents - inv.paidCents);
+                  const bal = invoiceOwes(inv);
                   // ACH on its way is not money yet, but the client must not be asked for it again
                   const toPay = Math.max(0, bal - inv.pendingCents);
                   const sent = outcome[inv.id];
@@ -257,6 +264,11 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
                           <T v="caption" tone="mut">
                             {t("pay.online.webOnly")}
                           </T>
+                        ) : toPay > 0 && !sent && data.preview ? (
+                          // the office's preview: the button is where the client will see it, but does not pay
+                          <View testID={`portal-pay-preview-${inv.id}`}>
+                            <Button label={t("pay.payByCard")} icon="wallet" full disabled onPress={() => {}} />
+                          </View>
                         ) : toPay > 0 && !sent && !data.onlinePay && data.simulatedPay ? (
                           <Button label={t("pay.payByCard")} icon="wallet" full onPress={() => setPaying(inv.id)} />
                         ) : null}
@@ -290,7 +302,17 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
                 <SectionTitle title={t("portal.sign")} />
               </View>
               <Card>
-                <SignBlock onSign={sign} busy={busy} />
+                {data.preview ? (
+                  <View testID="portal-preview-note">
+                    <T v="caption" tone="mut">
+                      {officeNote}
+                    </T>
+                  </View>
+                ) : null}
+                {/* the office's preview: the block as the client will see it, nothing in it answers */}
+                <ReadOnly value={!!data.preview}>
+                  <SignBlock onSign={sign} busy={busy} />
+                </ReadOnly>
               </Card>
             </>
           )}
@@ -301,7 +323,7 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
       </View>
       <SimulatedCheckout
         visible={!!payingInv}
-        amountCents={payingInv ? payingInv.totalCents - payingInv.paidCents : 0}
+        amountCents={payingInv ? invoiceOwes(payingInv) : 0}
         title={payingInv ? [payingInv.number, payingInv.title].filter(Boolean).join(" · ") : ""}
         onClose={() => setPaying(null)}
         onPaid={paySim}

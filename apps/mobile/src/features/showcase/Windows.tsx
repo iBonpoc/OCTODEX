@@ -4,10 +4,11 @@ import { View } from "react-native";
 import { motion, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { Button } from "@/ui/controls";
-import { Sheet, SheetScroll } from "@/ui/overlays";
-import { Icon, T } from "@/ui/primitives";
-import { Card, ListRow, SectionTitle } from "@/ui/surfaces";
+import { HelpButton, Sheet, SheetScroll } from "@/ui/overlays";
+import { T } from "@/ui/primitives";
+import { Card, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
+import { useConfirm } from "@/ui/confirmDialog";
 
 type Which = null | "fit" | "footer" | "medium" | "large" | "pages" | "stuck" | "chainA" | "chainB" | "chainC" | "list";
 
@@ -33,6 +34,9 @@ export function WindowsSection() {
   const [selfDone, setSelfDone] = useState(0);
   const chainC = useHeldSheet(open === "chainC" ? "c" : null); // a sheet mounted by the owner's condition: it goes out led, and starts fresh // how many times the stubborn sheet was asked to close
   const s = SECTIONS.find((x) => x.id === "windows")!;
+  // DS Б3 (#2381): the question in the middle — «Показать» opens it; the answer is written under the button
+  const [dialog, ask] = useConfirm();
+  const [answer, setAnswer] = useState<string | null>(null);
   const close = () => {
     setOpen(null);
     setPage(1);
@@ -49,6 +53,36 @@ export function WindowsSection() {
   return (
     <View testID="showcase-windows">
       <SectionTitle title={`${t(s.title)} · ${s.ds}`} />
+      <Card>
+        <View testID="showcase-confirm" style={{ gap: space[2] }}>
+          <T v="body" w="semibold">{t("ds.confirm.title")}</T>
+          <Button
+            label={t("ds.confirm.show")}
+            variant="secondary"
+            onPress={async () => setAnswer(await ask({ title: t("ds.confirm.q"), text: t("ds.confirm.text"), actions: [{ key: "back", label: t("ds.confirm.back"), tone: "cancel", testID: "showcase-confirm-back" }, { key: "yes", label: t("ds.confirm.yes"), tone: "danger", testID: "showcase-confirm-yes" }] }))}
+          />
+          {answer !== null ? <View testID="showcase-confirm-answer"><T v="caption" tone="mut">{answer}</T></View> : null}
+        </View>
+      </Card>
+      {dialog}
+      {/* «?» (DS Б7, #1843, #1853): right after its words; inside — what it is, then the way to where it is set or made */}
+      <Card>
+        <View testID="showcase-help" style={{ gap: space[2] }}>
+        <RowView style={{ gap: space[2], alignItems: "center" }}>
+          <T v="body" w="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>{t("ds.help.setting")}</T>
+          <HelpButton title={t("ds.help.setting")} text={t("ds.help.settingText")} to={{ href: "/company" }} testID="showcase-help-setting" />
+        </RowView>
+        <RowView style={{ gap: space[2], alignItems: "center" }}>
+          <T v="body" w="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>{t("ds.help.object")}</T>
+          <HelpButton title={t("ds.help.object")} text={t("ds.help.objectText")} to={{ href: "/suppliers", label: t("ds.help.objectTo") }} testID="showcase-help-object" />
+        </RowView>
+        <RowView style={{ gap: space[2], alignItems: "center" }}>
+          <T v="body" w="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>{t("ds.help.long")}</T>
+          <HelpButton title={t("ds.help.long")} text={t("ds.help.longText")} testID="showcase-help-long" />
+        </RowView>
+        <T v="caption" tone="mut">{t("ds.help.hint")}</T>
+        </View>
+      </Card>
       <Card>
         {row("fit", t("ds.sheet.fit"), t("ds.sheet.fitHint"))}
         {row("footer", t("ds.sheet.footer"), t("ds.sheet.footerHint"))}
@@ -147,7 +181,7 @@ export function WindowsSection() {
       <Sheet visible={open === "list"} onClose={close} title={t("ds.sheet.list")} height="large">
         <SheetScroll testID="showcase-sheet-list-scroll">
           {Array.from({ length: 24 }, (_, i) => (
-            <ListRow key={i} title={`${t("ds.sheet.listRow")} ${i + 1}`} right={<Icon name="chevronRight" />} onPress={close} />
+            <ListRow key={i} title={`${t("ds.sheet.listRow")} ${i + 1}`} onPress={close} />
           ))}
         </SheetScroll>
       </Sheet>

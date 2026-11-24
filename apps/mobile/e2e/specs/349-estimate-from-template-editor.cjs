@@ -1,8 +1,8 @@
 /**
  * e2e 349 — «Из шаблона…» in the editor (DS §8.13, spec 39 §11.9, #1117), every view, by testID:
- * - the empty editor: «Из шаблона…» under the add buttons → the template's lines (sections as sections), the first open with
+ * - the empty editor: «Из шаблона…» beside the add buttons → the template's lines (sections as sections), the first open with
  *   the cursor in «Кол-во»; a note typed before stays (only adds — code review); no «Вернуть»; the button is gone after;
- * - a typed estimate: «⋯ → Добавить из шаблона…» only adds — the lines at the end, «Добавлено позиций: 2 · Вернуть»;
+ * - a typed estimate: «Добавить из шаблона…» only adds — the lines at the end, «Добавлено позиций: 2 · Вернуть»;
  *   an edit made after it stays when «Вернуть» takes the template's lines out.
  */
 const DB_KEY = "octo.db.v5";
@@ -34,9 +34,8 @@ exports.run = async (h) => {
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await tid("est-start-blank").click();
   await sheetGone(p);
-  // the empty editor: «Из шаблона…» under the add buttons
-  const [add, from] = [await tid("est-add-new").boundingBox(), await tid("est-from-template").boundingBox()];
-  h.expect(from.y > add.y, "«Из шаблона…» under «＋ Новая позиция · Из каталога»");
+  // the empty editor (#2387): «Из шаблона…» is under «＋ Позиция · Каталог» of the empty card; the head of «Позиции» stands bare
+  h.expect((await count("est-from-template")) === 1 && (await count("est-add-new")) === 1 && (await tid("est-items-head").getByTestId("est-from-template").count()) === 0, "«Из шаблона…» under «＋ Позиция» of the empty card, not in the head");
   await h.shot("empty");
   // a note typed in the empty estimate: the template must not take it away
   await tid("est-notes-row").click();
@@ -54,12 +53,12 @@ exports.run = async (h) => {
   h.expect((await p.locator('[data-testid^="est-section-"]').locator("visible=true").count()) >= 1, "its section came as a section");
   h.expect((await count("toast-undo")) === 0, "the empty estimate: no «Вернуть»");
   h.expect(/Gate code 1234/.test(await tid("est-notes-row").innerText()), "the note typed before stays");
-  h.expect((await count("est-from-template")) === 0, "«Из шаблона…» is gone after the first line");
+  h.expect((await count("est-from-template")) === 1, "after the first line «Шаблон» stays one of the four add buttons — it only adds");
   await line.fold(h);
 
-  // a typed estimate: «⋯ → Добавить из шаблона…» only adds
-  await tid("est-menu").getByRole("button").click();
-  await tid("est-menu-template").click();
+  // a typed estimate: «Добавить из шаблона…» (the same round button of «Позиции», v2) only adds
+  // wave 1 п.6: «Шаблон» is one of the four add buttons over the lines
+  await tid("est-from-template").getByRole("button").click();
   await tid(`est-start-${TPL}`).waitFor({ timeout: 5000 });
   await tid(`est-start-${TPL}`).click();
   await sheetGone(p);

@@ -6,6 +6,7 @@
  * The module switched off or past its trial: the page is read-only with «Подключить» (founder О2).
  * Colours are words, never swatches (rule 2).
  */
+import { sizeText } from "../sizeText";
 import { createContext, useContext, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
@@ -13,7 +14,7 @@ import { GUTTER_MOUNTS } from "@octo/estimating-engine";
 import { component, radius, size as sizes, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
-import { moduleHref, moduleState } from "@/modules/registry";
+import { moduleHref, moduleState, moduleUsable } from "@/modules/registry";
 import { ANCHORS, SPIKE_LENGTHS, WOOD_SCREWS } from "@octo/estimating-engine";
 import { Banner } from "@/ui/banner";
 import { Button, ChoiceChips, IconButton, ReadOnly, StatusChip, Stepper, TextField, Toggle, useReadOnly } from "@/ui/controls";
@@ -26,7 +27,7 @@ import { DS_BOTTOMS, DS_SHAPES, DS_SIZES, DS_STYLES, GAUGES_BY_MATERIAL, MATERIA
 import { fmtLen, LEN_FORMATS } from "../canvas/format";
 import { useColorLabel } from "../draw/AttrPanel";
 import {
-  choicesFor, colorName, DEFAULT_OVERHANG_FT, notSavedKey, OVERHANG_FT, CORNER_METHODS, familyKits, GUARD_KINDS, JOINT_KINDS, SPIKE_SIZES, MAX_PALETTE, MODULE_OFFER, PALETTES, readRules, readUse, RULE_NUMS, setPath, settingsFit, STICK_FT, toggleOffer, USE_NUMS,
+  choicesFor, colorName, DEFAULT_OVERHANG_FT, notSavedKey, OVERHANG_FT, CORNER_METHODS, familyKits, GUARD_KINDS, JOINT_KINDS, SPIKE_SIZES, PALETTE_NAMES, MAX_PALETTE, MODULE_OFFER, PALETTES, readRules, readUse, RULE_NUMS, setPath, settingsFit, STICK_FT, toggleOffer, USE_NUMS,
   type Choices, type OfferGroup,
 } from "../settings";
 
@@ -38,7 +39,7 @@ const inch = (s: string) => `${s}″`;
 /** i18n keys of the fastener choices (a value has dots and slashes) */
 const SCREW_KEY = { "10x1": "s10x1", "10x1.5": "s10x15", "10x2": "s10x2" } as const;
 const ANCHOR_KEY = { masonry: "any", "3/16x7/8": "a316", "1/4x1": "a14" } as const;
-const dsSize = (s: string) => (s.includes("x") ? s.replace("x", "×") : inch(s));
+const dsSize = sizeText; // one format everywhere (#1916)
 
 /** the refusal or note said under one field (by its testID): the last choice, too large, being read again */
 const WarnCtx = createContext<{ at: string; text: string } | null>(null);
@@ -151,7 +152,7 @@ export default function GutterSettingsScreen() {
   const use = useMemo(() => readUse(raw), [raw]);
   const [newColor, setNewColor] = useState("");
   const access = moduleState(cm).access;
-  const active = access === "trial" || access === "paid";
+  const active = moduleUsable(access);
   const director = store.role === "director";
   const ro = !director || !active;
   const back = () => (router.canGoBack() ? router.back() : router.replace("/company/modules"));
@@ -332,10 +333,10 @@ export default function GutterSettingsScreen() {
                 <T v="caption" tone="mut">{t(k("paletteFrom"))}</T>
                 <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
                   <View testID="gset-palette-berger">
-                    <Button label={t(k("palBerger"), { n: PALETTES.berger.length })} size="sm" variant="secondary" onPress={() => setPalette([...PALETTES.berger])} />
+                    <Button label={t(k("palOf"), { name: PALETTE_NAMES.berger, n: PALETTES.berger.length })} size="sm" variant="secondary" onPress={() => setPalette([...PALETTES.berger])} />
                   </View>
                   <View testID="gset-palette-sp">
-                    <Button label={t(k("palSP"), { n: PALETTES.servicePartners.length })} size="sm" variant="secondary" onPress={() => setPalette([...PALETTES.servicePartners])} />
+                    <Button label={t(k("palOf"), { name: PALETTE_NAMES.servicePartners, n: PALETTES.servicePartners.length })} size="sm" variant="secondary" onPress={() => setPalette([...PALETTES.servicePartners])} />
                   </View>
                   <View testID="gset-palette-module">
                     <Button label={t(k("palModule"))} size="sm" variant="ghost" onPress={() => setPalette(undefined)} />

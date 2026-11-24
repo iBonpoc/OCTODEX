@@ -14,7 +14,7 @@ const { signIn, waitRows } = require("../signIn.cjs");
 const { helpers } = require("../../h.cjs");
 
 const LINE = "Nightly test line (тестовые)";
-const PRICE = "1850"; // test price
+const PRICE = "1850"; // a sample price (rule 9)
 
 exports.run = async (h, { seed, admin, browser, BASE }) => {
   const p = h.page;
@@ -40,9 +40,9 @@ exports.run = async (h, { seed, admin, browser, BASE }) => {
   await h.clickText("Сметы");
   await h.click("Смета");
   await require("../../estimateLine.cjs").addCustom(h, LINE, PRICE);
-  await p.getByRole("button", { name: "Сохранить и отправить" }).click();
+  await require("../../estimateLine.cjs").saveSend(h);
   await p.waitForTimeout(700);
-  await p.getByRole("button", { name: "Копировать ссылку" }).click();
+  await p.getByTestId("send-copy").getByRole("button", { name: "Копировать ссылку" }).click();
   await p.waitForTimeout(400);
   const [est] = await waitRows(
     admin,
@@ -84,7 +84,7 @@ exports.run = async (h, { seed, admin, browser, BASE }) => {
 
   // S8b: the company signs on the estimate screen
   await h.go(`/estimate/${est.id}`);
-  const pad = p.getByLabel(/расписывается|signs here/i).last();
+  const pad = await require("../../estimateMenu.cjs").countersignPad(p);
   await pad.scrollIntoViewIfNeeded();
   await p.waitForTimeout(250);
   const bb = await pad.boundingBox();
@@ -126,7 +126,9 @@ exports.run = async (h, { seed, admin, browser, BASE }) => {
   const [y, m, d] = inv.due_date.split("-").map(Number);
   const dueLabel = new Intl.DateTimeFormat("ru", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).format(Date.UTC(y, m - 1, d, 12));
   // the visible line of THIS screen (hidden screens of the stack stay in the page and have their own «Срок …»)
-  const dueLine = await p.getByText(/^Срок .+ · Отправлена/).locator("visible=true").last().innerText();
-  h.expect(dueLine.startsWith(`Срок ${dueLabel} ·`), `the due day ${inv.due_date} = «${dueLabel}» on the invoice screen («${dueLine}»)`);
+  // v2: the dates line lives in the header's «⌄» details (testID invoice-next): «Отправлен … · Срок …» — read by testID, not by words
+  await p.getByTestId("invoice-head-toggle").locator("visible=true").last().click();
+  const dueLine = (await p.getByTestId("invoice-next").last().textContent()) ?? "";
+  h.expect(dueLine.includes(`Срок ${dueLabel}`), `the due day ${inv.due_date} = «${dueLabel}» on the invoice screen («${dueLine}»)`);
   await h.shot("paid");
 };

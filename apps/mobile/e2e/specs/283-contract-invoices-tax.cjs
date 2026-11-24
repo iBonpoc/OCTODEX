@@ -16,8 +16,10 @@ exports.run = async (h) => {
   raw.db.invoices = raw.db.invoices.filter((i) => i.jobId !== "j3");
   await h.seed("octo.db.v5", raw);
   await h.go("/job/j3");
-  await p.getByTestId("job-tab-money").locator("visible=true").click();
-  await h.expectText(/Договор \| \$510/, "the contract with its tax");
+  await p.getByTestId("job-screen-sections-invoices").locator("visible=true").click();
+  // v2 (#2350): the contract is the first figure of the «Сейчас» card's trio (said once — LAYOUT-RULES П7)
+  const trio = (await p.getByTestId("job-now-trio").locator("visible=true").first().innerText()).split("\n");
+  h.expect(trio[0] === "$510", `the contract with its tax, the first figure of the job's «Сейчас» (${trio.join(" | ")})`);
 
   await p.getByTestId("statement-progress").click();
   await h.sheet().getByTestId("statement-progress-issue").click();

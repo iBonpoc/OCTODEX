@@ -17,7 +17,7 @@ const routes = new Set(
 
 describe("route-guard: who may open a screen", () => {
   it("every key of the table is a real screen (a renamed screen must not slip out of the guard)", () => {
-    for (const k of Object.keys(routeRoles)) expect(routes.has(k), k).toBe(true);
+    for (const k of Object.keys(routeRoles).filter((x) => !x.includes("/"))) expect(routes.has(k), k).toBe(true);
   });
   it("every role opens its home, every tab and every ☰ item it is shown", () => {
     for (const r of ROLES) {
@@ -90,8 +90,12 @@ describe("«Прибыль» by right (docs/specs/13 §3.4, §4)", () => {
 
 describe("the payment buttons ask the role (#868, #1061: the screens are wired to the rules)", () => {
   const src = (f: string) => fs.readFileSync(path.join(__dirname, "..", f), "utf8");
+  // #2018: the card goes through signedAction(store.role, due) — «pay» only with canTakeVisitPayment(role)
   it("the visit's payment card shows only when canTakeVisitPayment(store.role)", () => {
-    expect(src("src/app/visit/[id].tsx")).toMatch(/v\.step === "signed" && canTakeVisitPayment\(store\.role\)/);
+    const screen = src("src/app/visit/[id].tsx");
+    expect(screen).toMatch(/signedAction\(store\.role, /);
+    expect(screen).toMatch(/v\.step === "signed" && signed === "pay"/);
+    expect(src("src/features/visitSignedAction.ts")).toMatch(/canTakeVisitPayment\(role\) \? "pay"/);
   });
   it("«Принять оплату» on an invoice shows only when paymentRight is not «none»", () => {
     const f = src("src/features/invoice/InvoiceCard.tsx");
@@ -100,5 +104,40 @@ describe("the payment buttons ask the role (#868, #1061: the screens are wired t
   });
   it("«Записать оплату» on an invoice card asks paymentRight too", () => {
     expect(src("src/features/listCards.tsx")).toMatch(/action=\{open && paymentRight\(role, i,/);
+  });
+});
+
+/**
+ * #2016 — «Назначить выезд» and the property card ask the role (docs/15-story-map.md §7 п.9: scenarios, the test carries
+ * the scenario's number).
+ * С1 ДАНО the technician or sales, КОГДА they open /job/schedule?jobId=…, ТОГДА the screen is closed («Нет доступа»); the
+ *    office opens it; /job/<id> stays open to the tech of the job.
+ * С3 the guard: every screen of src/app that calls a planning mutation of the store (schedule a job, move / cancel a visit,
+ *    put people on it) is either closed to all but the planners by routeRoles or asks canPlan / canDateNewJob itself.
+ */
+describe("#2016 planning screens ask the role", () => {
+  it("С1 /job/schedule: closed to the tech and sales, open to the planners; /job/<id> stays open", () => {
+    for (const r of ["tech", "sales"] as Role[]) expect(canOpen(r, "/job/schedule?jobId=j1"), r).toBe(false);
+    for (const r of ["director", "dispatcher"] as Role[]) expect(canOpen(r, "/job/schedule?jobId=j1"), r).toBe(true);
+    for (const r of ROLES) expect(canOpen(r, "/job/j1"), r).toBe(true);
+    expect(canOpen("tech", "/job/new")).toBe(true);
+  });
+  it("С1 a two-part key names a real screen", () => {
+    for (const k of Object.keys(routeRoles).filter((x) => x.includes("/")))
+      expect(fs.existsSync(path.join(APP, `${k}.tsx`)), k).toBe(true);
+  });
+  it("С3 a screen that plans is closed to all but the planners, or asks the role itself", () => {
+    const PLAN = /\b(scheduleJob|rescheduleVisit|cancelVisit|assignVisit)\(/;
+    const walk = (dir: string): string[] =>
+      fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name)) : e.name.endsWith(".tsx") ? [path.join(dir, e.name)] : []));
+    const planning = walk(APP).filter((f) => PLAN.test(fs.readFileSync(f, "utf8")));
+    expect(planning.length).toBeGreaterThan(0);
+    for (const f of planning) {
+      const rel = path.relative(APP, f).replace(/\.tsx$/, "").replace(/\\/g, "/");
+      const route = "/" + rel.replace(/^\(tabs\)\//, "");
+      const closed = (["tech", "sales"] as Role[]).every((r) => !canOpen(r, route));
+      const asks = /\b(canPlan|canDateNewJob)\(/.test(fs.readFileSync(f, "utf8"));
+      expect(closed || asks, `${rel}: closed by routeRoles or asks canPlan / canDateNewJob`).toBe(true);
+    }
   });
 });

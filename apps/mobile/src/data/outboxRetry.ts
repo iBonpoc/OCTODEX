@@ -32,6 +32,10 @@ export function classify(e: unknown): Failure {
   // «someone else changed it first» (40001 + hint row_version_conflict, module_save_settings): a retry never helps — the
   // server's «no» before the code says «serialization, try later» (review #354 Б1)
   if (field(e, "hint") === "row_version_conflict") return "refusal";
+  // #1913: a price group is full (54000, 200 items) — the same write is refused every time, it is no «try later»
+  if (field(e, "hint") === "price_group_full") return "refusal";
+  // #1834: a supplier has more than 1000 items (54000) — the same change is refused every time (a queue stuck on it otherwise)
+  if (field(e, "hint") === "supplier_tax_too_many") return "refusal";
   if (e instanceof Error && e.name === UNKNOWN_OP) return "transient";
   if (code && TRANSIENT_CODE.test(code)) return "transient";
   if (status) return status >= 500 || TRANSIENT_STATUS.has(status) ? "transient" : "refusal";
@@ -45,9 +49,11 @@ export function classify(e: unknown): Failure {
   return NETWORK.test(msg) ? "network" : "refusal";
 }
 /** #1633 A2: the server's «no rights» (42501) — not a module that is off (its own card) */
-export const isAccessDenied = (e: unknown) => String(field(e, "code") ?? "") === "42501" && !isModuleInactive(e);
+export const isAccessDenied = (e: unknown) => String(field(e, "code") ?? "") === "42501" && !isModuleInactive(e) && field(e, "hint") !== LEAD_ASSIGNEE_GONE;
 /** the hint of a refused module.op whose module is not active on the server (cloud/ops.ts; spec 33 П21.1) */
 export const MODULE_INACTIVE = "module_inactive";
+/** Р-7: company.save saved the settings, but the chosen default lead assignee has left the team */
+export const LEAD_ASSIGNEE_GONE = "lead_assignee_gone";
 export const isModuleInactive = (e: unknown) => field(e, "hint") === MODULE_INACTIVE;
 /** «someone else changed it first» (module_save_settings: 40001 + hint row_version_conflict) */
 export const isRowConflict = (e: unknown) => field(e, "hint") === "row_version_conflict";

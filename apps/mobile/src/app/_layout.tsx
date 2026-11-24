@@ -1,13 +1,18 @@
-import { Stack } from "expo-router";
+import { Stack, type ErrorBoundaryProps } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { View } from "react-native";
+import { LogBox, View } from "react-native";
+
+// PROTOTYPE #2348 (simulator review): the dev warnings bar covers the tab bar — off in this branch
+if (__DEV__) LogBox.ignoreAllLogs();
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useFonts, Onest_400Regular, Onest_500Medium, Onest_600SemiBold, Onest_700Bold } from "@expo-google-fonts/onest";
+import { Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold } from "@expo-google-fonts/manrope";
 import { ThemeProvider, useTheme } from "@/theme/ThemeProvider";
 import { I18nProvider } from "@/i18n";
 import { StoreProvider } from "@/data/store";
 import { StorageReadError } from "@/features/StorageReadError";
+import { CrashScreen } from "@/features/CrashScreen";
 import { AuthProvider } from "@/cloud/auth";
 import { ToastProvider } from "@/ui/overlays";
 import { HintsProvider } from "@/ui/hints";
@@ -17,9 +22,13 @@ import { GuardedScreen, RouteGuard } from "@/nav/RouteGuard";
 import { NavMenuProvider } from "@/nav/NavMenu";
 import { SideNav } from "@/nav/SideNav";
 import { TabBar } from "@/nav/TabBar";
+import { UpdateDriver } from "@/features/UpdateBar";
 import { ClosedCompanyNotice } from "@/nav/ClosedCompanyNotice";
 import { SlashToSearch } from "@/nav/SearchEntry";
 import { LegalGate } from "@/nav/LegalGate";
+import { NameAsk } from "@/nav/NameAsk";
+import { RemovedCompanyNotice } from "@/nav/RemovedCompanyNotice";
+import { CompanySheetHost, CompanySwitchNotice } from "@/features/CompanySwitcher";
 import { BootRoot, useBootDone } from "@/features/boot";
 
 function Shell() {
@@ -44,6 +53,15 @@ function Shell() {
               <LegalGate />
               {/* 7а-3 «в»: once per company its owner closed (docs/specs/22 §3.6) */}
               <ClosedCompanyNotice />
+              {/* #1606: once, a sign-in by code made an account without a name */}
+              <NameAsk />
+              {/* #1669: removed from a company — its unsent changes are still here */}
+              <RemovedCompanyNotice />
+              {/* spec 42 S34: the sheet «Компании» and «Вы в «B»» after a switch (#1673) */}
+              <CompanySheetHost />
+              <CompanySwitchNotice />
+              {/* #1912: looks for an over-the-air update (phone builds only) */}
+              <UpdateDriver />
             </View>
           </View>
         </NavMenuProvider>
@@ -52,8 +70,13 @@ function Shell() {
   );
 }
 
+/** a failure anywhere under the root: the crash screen, not a white one (#1555; it stands outside the providers, so it needs none) */
+export function ErrorBoundary(props: ErrorBoundaryProps) {
+  return <CrashScreen {...props} />;
+}
+
 export default function RootLayout() {
-  const [loaded] = useFonts({ Onest_400Regular, Onest_500Medium, Onest_600SemiBold, Onest_700Bold });
+  const [loaded] = useFonts({ Onest_400Regular, Onest_500Medium, Onest_600SemiBold, Onest_700Bold, Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold });
   // never a blank frame (#654, #1046): until the fonts, the theme, the language and the company's cache are read,
   // the boot layer shows the brand in the system's theme
   if (!loaded) return <BootRoot fontsReady={false} />;

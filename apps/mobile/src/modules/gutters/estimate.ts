@@ -12,10 +12,11 @@
  * A line without `source` (typed by hand, or re-picked from the price list on an old phone) is the person's own: never
  * changed, never removed; a part whose price-list item such a line already uses is not added again.
  */
-import { dec, type CustomLine, type LineSource as CoreLineSource, type PartQty } from "@octo/estimating-engine";
+import { dec, jobLineQty, type CustomLine, type LineSource as CoreLineSource, type PartQty } from "@octo/estimating-engine";
 import type { CatalogItem } from "@/data/types";
 import { catalogUnitCost, catalogUnitPrice } from "@/features/estimateDoc";
-import { findItem, matchKey } from "./prices";
+import { findPriced, matchKey, priceFromOtherDegree, VARIANT_ATTR } from "./prices";
+import { mergedInto, resolveMerged } from "@/features/catalogMatch";
 
 /** the engine's sections in the order the estimate shows them; labor last (О4) */
 export const SECTION_ORDER = ["gutter", "corners_caps", "fasteners", "downspouts", "adapters", "ds_bottom", "guards", "consumables", "labor"] as const;
@@ -51,16 +52,20 @@ export interface LineSource extends CoreLineSource {
   measurementId?: string;
   /** when «Смета» / «Обновить смету» wrote it (ISO): the measurement's newest estimate is the one written last (review M8b №3) */
   at?: string;
+  /** #2227 (§11.4, review #2249 №2): the line was made on an old per-colour item, merged since; its name stays the one the draft
+   *  was written with, at every «Обновить смету» (the PDF of the draft does not change) */
+  keepName?: true;
 }
 export type ModuleLine = Omit<CustomLine, "source"> & { source?: LineSource };
 
 const isOurs = (l: ModuleLine): l is ModuleLine & { source: LineSource } => !!l.source && l.source.module === "gutters" && typeof l.source.key === "string";
 
 /**
- * Feet to bill: hundredths, half up (the estimate's quantity is numeric(14,4); 230″ = 19.1666… ft → 19.17).
- * Each and pounds are whole already.
+ * Feet to bill: four places, half up — the estimate's quantity is numeric(14,4), the engine's and the server's own
+ * rounding (`jobLineQty`). The client sees the length as on the drawing, within 1/16″ (founder 11.11, release plan §8.1 п.3,
+ * G-15, #817): 40′ 5″ = 40.4167 ft (it was 40.42 — 40′ 5 1/16″). Each and pounds are whole already.
  */
-export const billQty = (q: string, unit: string) => (unit === "ft" ? dec(q).toDecimalPlaces(2).toString() : dec(q).toString());
+export const billQty = (q: string, unit: string) => (unit === "ft" ? jobLineQty(q) : dec(q).toString());
 
 /**
  * The module's lines for the parts of one measurement: one per item (the same item's parts add up — end caps left and
@@ -77,7 +82,8 @@ export function linesFromParts(parts: readonly PartQty[], catalog: readonly Cata
   }
   const rows = [...byKey.entries()].sort(([, a], [, b]) => sectionAt(a.part.section) - sectionAt(b.part.section));
   return rows.map(([key, { part, qty }]) => {
-    const it = findItem(catalog, part);
+    // #2227: the item without a colour (the line's variant is the colour) — or, before the transition, the same colour's own
+    const { it, variant } = findPriced(catalog, part);
     const quantity = billQty(qty.toString(), part.unit);
     // the core's price and cost of an item (a material: cost × supplier tax × markup) — as a line picked from the list
     const listPrice = it ? catalogUnitPrice(it) : undefined;
@@ -85,7 +91,9 @@ export function linesFromParts(parts: readonly PartQty[], catalog: readonly Cata
     const priceCents = valid ? listPrice : 0;
     // never a silent $0 (П23.1): no item, a broken price, or a $0 test price is «нет цены»; a real $0 is the company's choice
     const noPrice = !it || !valid || (priceCents === 0 && !!it.placeholder);
-    const lineName = it?.name ?? name(part);
+    // a price borrowed from another degree's elbow (§2.7) keeps the part's own name: the client never reads «45°» on a 75° elbow
+    // #2227: an item for every colour — the part's own name, colour included (the client reads «… · White»)
+    const lineName = it && !variant && !priceFromOtherDegree(catalog, part) ? it.name : name(part);
     const cost = it ? catalogUnitCost(it) : undefined;
     return {
       id: uid(),
@@ -98,6 +106,7 @@ export function linesFromParts(parts: readonly PartQty[], catalog: readonly Cata
       ...(it ? { catalogItemId: it.id } : {}),
       source: {
         module: "gutters", key, section: part.section, qty: quantity, priceCents, name: lineName, unit: part.unit,
+        ...(variant ? { variant } : {}),
         ...(noPrice ? { noPrice: true as const } : {}), ...(it?.placeholder ? { testPrice: true as const } : {}), ...(revisionId ? { revisionId } : {}), ...(measurementId ? { measurementId } : {}), ...(at ? { at } : {}), ...(engineVersion ? { engineVersion } : {}),
       },
     };
@@ -135,11 +144,29 @@ const touched = (l: ModuleLine & { source: LineSource }) => Object.values(handCh
  * `other` — lines that belong to something else (another measurement's, M8b): left as they are, where they are, and
  * they neither block nor place a new line (review M8b №5).
  */
-export function resyncLines(old: readonly ModuleLine[], next: readonly ModuleLine[], other: (l: ModuleLine) => boolean = () => false): ModuleLine[] {
+export function resyncLines(old: readonly ModuleLine[], next: readonly ModuleLine[], other: (l: ModuleLine) => boolean = () => false, catalog: readonly CatalogItem[] = []): ModuleLine[] {
   const nextByKey = new Map(next.filter(isOurs).map((l) => [l.source.key, l]));
   // the engine this update computed with: a line kept by hand but no longer computed was looked at too (#1165)
   const engineNow = next.find(isOurs)?.source.engineVersion;
-  const ownItems = new Set(old.filter((l) => !isOurs(l) && !other(l) && l.catalogItemId).map((l) => l.catalogItemId!));
+  // #2227 (spec §11.4, review Б3): a person's own line counts as «item + variant»; one on an old per-colour item merged into
+  // one item counts as that item with its colour — a white own line holds back only the white module line, never the brown
+  const pairOf = (itemId: string, v?: { attr: string; value: string }) => (v ? `${itemId}|${v.attr}=${v.value}` : itemId);
+  const ownItems = new Set(
+    old.filter((l) => !isOurs(l) && !other(l) && l.catalogItemId).flatMap((l) => {
+      const it = catalog.find((c) => c.id === l.catalogItemId);
+      const r = it ? resolveMerged(catalog, it) : undefined;
+      if (r && r.item.id !== l.catalogItemId) return [pairOf(r.item.id, r.variant), l.catalogItemId!];
+      // review #2249 №4: the new item has no variants written yet — the module still knows the old item's colour
+      const to = it ? mergedInto(it) : undefined;
+      const colour = it?.attributes?.[VARIANT_ATTR]?.trim().toLowerCase();
+      return to && colour ? [pairOf(to, { attr: VARIANT_ATTR, value: colour }), l.catalogItemId!] : [l.catalogItemId!];
+    }),
+  );
+  // #2227 (§11.4, audit №5): a line on an old per-colour item that is merged now keeps its name — the draft's PDF stays the same
+  const onMerged = (l: ModuleLine) => {
+    const it = l.catalogItemId ? catalog.find((c) => c.id === l.catalogItemId) : undefined;
+    return !!it && !!mergedInto(it);
+  };
   const mine = (l: ModuleLine): l is ModuleLine & { source: LineSource } => isOurs(l) && !other(l);
   const seen = new Set<string>();
   const out: ModuleLine[] = [];
@@ -161,14 +188,17 @@ export function resyncLines(old: readonly ModuleLine[], next: readonly ModuleLin
     }
     seen.add(l.source.key);
     const ch = handChanges(l);
-    const { gone: _g, ...src } = n.source!;
+    const { gone: _g, keepName: _k, ...src } = n.source!;
+    // review #2249 №2: a line of an old per-colour item keeps its name at this and every later update, and its source says that
+    // name — the line is not «changed by hand» for it (else a part gone from the measurement would stay as «gone»)
+    const keep = !ch.name && (onMerged(l) || !!l.source.keepName);
     const merged: ModuleLine = {
       ...l,
       quantity: ch.qty ? l.quantity : n.quantity,
-      name: ch.name ? l.name : n.name,
+      name: ch.name || keep ? l.name : n.name,
       unitPriceCents: ch.price ? l.unitPriceCents : n.unitPriceCents,
       // what the module computed now: the base for the next update
-      source: src as LineSource,
+      source: (keep ? { ...src, name: l.name, keepName: true } : src) as LineSource,
     };
     if (!ch.price) {
       // the item's price, cost and link — or none, when the item is gone from the list (review M8a №8)
@@ -181,7 +211,8 @@ export function resyncLines(old: readonly ModuleLine[], next: readonly ModuleLin
   }
   for (const n of next) {
     if (!isOurs(n) || seen.has(n.source.key)) continue;
-    if (n.catalogItemId && ownItems.has(n.catalogItemId)) continue;
+    // an own line on the item itself names no colour (picked by hand, or by an old phone): it holds back every colour of it, as before
+    if (n.catalogItemId && (ownItems.has(pairOf(n.catalogItemId, n.source.variant)) || ownItems.has(n.catalogItemId))) continue;
     const at = sectionAt(n.source.section);
     // before the first module line of a later section; else after the module's last line; else at the end (review №10)
     const later = out.findIndex((l) => mine(l) && sectionAt(l.source.section) > at);

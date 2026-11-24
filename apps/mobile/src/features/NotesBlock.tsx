@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { View } from "react-native";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { NoteSubject } from "@/data/types";
 import { useI18n } from "@/i18n";
-import { Button, IconButton, Segmented, StatusChip, TextField } from "@/ui/controls";
+import { IconButton, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { useToast } from "@/ui/overlays";
+import { Menu, useToast } from "@/ui/overlays";
 import { Card, RowView, SectionTitle } from "@/ui/surfaces";
 import { memberName } from "@/features/team";
 
@@ -18,12 +18,17 @@ export function NotesBlock({ subjectType, subjectId, extraSubjects = [] }: { sub
   const toast = useToast();
   const [body, setBody] = useState("");
   const [vis, setVis] = useState<"team" | "private">("team");
+  // «Кто видит» opens its menu at the composer (the icon lives inside the field)
+  const composer = useRef<React.ComponentRef<typeof View>>(null);
+  const [visAt, setVisAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const visName = vis === "team" ? t("notes.team") : t("notes.private");
   const subjects = [{ type: subjectType, id: subjectId }, ...extraSubjects];
   const notes = db.notes
     .filter((n) => subjects.some((s) => s.type === n.subjectType && s.id === n.subjectId))
     .filter((n) => n.visibility === "team" || n.authorId === db.me)
     .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.at.localeCompare(a.at));
   const add = () => {
+    if (!body.trim()) return;
     const undo = store.addNote({ subjectType, subjectId, body: body.trim(), visibility: vis });
     setBody("");
     toast.show(store.online ? t("notes.added") : t("offline.queued"), undo);
@@ -53,22 +58,43 @@ export function NotesBlock({ subjectType, subjectId, extraSubjects = [] }: { sub
           </Card>
         );
       })}
-      <Card>
-        {subjectType === "property" || subjectType === "job" || subjectType === "customer" ? (
-          <T v="caption" tone="mut">{t("notes.accessHint")}</T>
-        ) : null}
-        <TextField type="note" value={body} onChangeText={setBody} placeholder={t("notes.placeholder")} />
-        <Segmented
-          full
-          value={vis}
-          onChange={setVis}
-          items={[
-            { key: "team", label: t("notes.team") },
-            { key: "private", label: t("notes.private") },
+      {/* a composer, as a message (founder 21.11, #2350: «две кнопки рядом — не нравится… более компактное»): one field; inside it
+          on the right «Кто видит» (eye — the team, lock — only me; a menu) and «Добавить» (send); the default stays «team» */}
+      {subjectType === "property" || subjectType === "job" || subjectType === "customer" ? (
+        <T v="caption" tone="mut">{t("notes.accessHint")}</T>
+      ) : null}
+      <View ref={composer} collapsable={false}>
+        <TextField
+          testID="note-composer"
+          type="note"
+          rows={1}
+          value={body}
+          onChangeText={setBody}
+          placeholder={t("notes.placeholder")}
+          label={t("notes.title")}
+          action={[
+            {
+              icon: vis === "team" ? "eye" : "lock",
+              label: `${t("notes.visibleTo")}: ${visName}`,
+              menu: true,
+              testID: "note-visibility-button",
+              onPress: () => composer.current?.measureInWindow((x: number, y: number, w: number, h: number) => setVisAt({ x, y, w, h })),
+            },
+            { icon: "send", label: t("notes.add"), strong: true, disabled: !body.trim(), testID: "note-add", onPress: add },
           ]}
         />
-        <Button label={t("notes.add")} icon="plus" variant="secondary" full disabled={!body.trim()} onPress={add} />
-      </Card>
+      </View>
+      <Menu<"team" | "private">
+        visible={!!visAt}
+        anchor={visAt}
+        title={t("notes.visibleTo")}
+        items={[
+          { key: "team", label: t("notes.team"), icon: "eye", selected: vis === "team", testID: "note-visibility-team" },
+          { key: "private", label: t("notes.private"), icon: "lock", selected: vis === "private", testID: "note-visibility-private" },
+        ]}
+        onSelect={setVis}
+        onClose={() => setVisAt(null)}
+      />
     </View>
   );
 }

@@ -51,7 +51,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await p.waitForFunction(() => /^Пробный/.test((document.querySelector('[data-testid="module-gutters-status"]')?.textContent ?? "").trim()), null, { timeout: 8000 });
+  await p.waitForFunction(() => /^Без срока/.test((document.querySelector('[data-testid="module-gutters-status"]')?.textContent ?? "").trim()), null, { timeout: 8000 });
 
   // the setting: feet-inches by default; «Миллиметры» is the fifth item of the field's menu
   await h.go("/module/gutters/settings");
@@ -86,7 +86,7 @@ exports.run = async (h) => {
   const client = await printed("view-pdf-client");
   h.expect(/\d+ mm/.test(client) && !/\d′/.test(client.slice(client.indexOf("<table"))), "PDF for the client: mm");
   const crew = await printed("view-pdf-crew");
-  const body = crew.slice(crew.indexOf("Желоба"));
+  const body = crew.slice(crew.indexOf("<h2>Gutters"));
   h.expect(/\d+ mm/.test(body) && !/\d′/.test(body), "PDF for the crew: mm in the walls, corners and parts");
 
   // back to feet-inches: one setting, one place

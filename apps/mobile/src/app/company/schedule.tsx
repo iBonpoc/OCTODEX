@@ -63,7 +63,7 @@ export default function CompanySchedule() {
   );
 
   return (
-    <Screen title={t("schs.title")} back={back} subtitle={t("schs.who")}>
+    <Screen form title={t("schs.title")} back={back} subtitle={t("schs.who")}>
       {ro ? <StatusChip status="info" label={t("fix.co.readOnly")} soft /> : null}
       <ReadOnly value={ro}>
       <Card>

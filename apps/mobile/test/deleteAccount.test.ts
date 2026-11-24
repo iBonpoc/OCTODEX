@@ -163,7 +163,7 @@ describe("unit:deleteAccount — when the sign-in asks «is it deleted» (review
 });
 
 describe("unit:deleteAccount — the device is wiped", () => {
-  const keys = ["octo.cloud.v1.co-1", "octo.cloud.v1.co-2", "octo.outbox.v1", "octo.queue.v1", "octo.role.v1", "octo.planWho.v1", "octo.nav.open.u1", "octo.invite.token.v1", "octo.legal.pending.v1", "octo.storageLog.v1", "octo.signoutWipe.v1", "octo.theme.v1", "octo.lang.v1", "octo.db.v5"];
+  const keys = ["octo.cloud.v1.co-1", "octo.cloud.v1.co-2", "octo.outbox.v1", "octo.queue.v1", "octo.role.v1", "octo.planWho.v1", "octo.nav.open.u1", "octo.invite.token.v1", "octo.legal.pending.v1", "octo.storageLog.v1", "octo.signoutWipe.v1", "octo.signoutDrafts.v1", "octo.theme.v1", "octo.lang.v1", "octo.db.v5"];
   const store = (fail = false) => {
     const st = { removed: [] as string[], set: {} as Record<string, string>, gone: [] as string[] };
     return {
@@ -292,6 +292,13 @@ describe("unit:deleteAccount — one tap, and what the screen does (review #220 
 describe("unit:deleteAccount — a broken outbox copy leaves with the account (review of #910 №1)", () => {
   it("octo.broken.* is a device key", () => {
     expect(isDeviceKey("octo.broken.octo.outbox.v1.1700000000000")).toBe(true);
+  });
+});
+
+describe("unit:deleteAccount — the person's last company leaves with the account (spec 42 §14, security-check)", () => {
+  it("octo.company.v1.<user> and octo.company.pending.v1.<user> are device keys", () => {
+    expect(isDeviceKey("octo.company.v1.u1")).toBe(true);
+    expect(isDeviceKey("octo.company.pending.v1.u1")).toBe(true);
   });
 });
 

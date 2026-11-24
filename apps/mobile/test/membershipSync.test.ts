@@ -28,19 +28,18 @@ describe("unit:membershipSync — order (#1633 A2)", () => {
     expect(sameMemberships([m("c1"), m("c2")], [m("c2"), m("c1")])).toBe(false);
     expect(sameMemberships([m("c1")], [])).toBe(false);
   });
-  it("an answer that is not a list is not an answer; broken rows are left out", () => {
+  it("an answer that is not a list, or with one broken row, is not an answer (a dropped row would read as «removed»)", () => {
     expect(parseMemberships(null)).toBeNull();
     expect(parseMemberships({ company_id: "c1" })).toBeNull();
     expect(parseMemberships([])).toEqual([]);
-    expect(
-      parseMemberships([
-        { company_id: "c1", role: "owner", companies: { name: "A" } },
-        { company_id: "c2", role: "tech", companies: [{ name: "B" }] },
-        { company_id: "c3", role: "sales", companies: null },
-        { company_id: 4, role: "tech" },
-        { role: "tech" },
-      ]),
-    ).toEqual([m("c1", "owner", "A"), m("c2", "tech", "B"), m("c3", "sales", "")]);
+    const good = [
+      { company_id: "c1", role: "owner", companies: { name: "A" } },
+      { company_id: "c2", role: "tech", companies: [{ name: "B" }] },
+      { company_id: "c3", role: "sales", companies: null },
+    ];
+    expect(parseMemberships(good)).toEqual([m("c1", "owner", "A"), m("c2", "tech", "B"), m("c3", "sales", "")]);
+    for (const bad of [{ company_id: 4, role: "tech" }, { role: "tech" }, { company_id: "c4", role: "manager" }, { company_id: "", role: "tech" }, null])
+      expect(parseMemberships([...good, bad]), JSON.stringify(bad)).toBeNull();
   });
 });
 

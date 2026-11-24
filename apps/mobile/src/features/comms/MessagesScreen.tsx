@@ -19,7 +19,7 @@ export function MessagesScreen() {
   const threads = messageThreads(db, role, t("acct.deletedName"));
   const write = () => setWriting({});
   return (
-    <Screen fab="messages" fabOn={{ message: write }} title={t("nav.messages")} subtitle={t("nav.messages.hint")}>
+    <Screen fab="messages" fabOn={{ message: write }} title={t("nav.messages")} subtitle={t("nav.messages.hint")} help={t("help.messages")}>
       {threads.length === 0 ? (
         <Empty icon="sms" title={t("nav.messages.empty")} hint={t("nav.messages.emptyHint")} action={<Button testID="messages-empty-new" label={t("w6.msg.new")} icon="sms" variant="secondary" onPress={write} />} />
       ) : (

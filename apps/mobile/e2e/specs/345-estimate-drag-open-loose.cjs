@@ -12,7 +12,7 @@ exports.run = async (h) => {
   const ids = async () => (await p.locator('[data-testid^="est-line-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")))).map((x) => x.replace("est-line-", ""));
   const order = () => p.locator('[data-testid^="est-line-"], [data-testid="est-sec-loose"]').evaluateAll((els) => els.map((e) => (e.getAttribute("data-testid") === "est-sec-loose" ? "u" : e.getAttribute("data-testid").replace("est-line-", ""))));
   const take = async (key) => {
-    const hd = tid(`sort-handle-${key}`);
+    const hd = await line.grip(h, key);
     await line.toMiddle(h, hd);
     const b = await hd.boundingBox();
     const x = b.x + b.width / 2;
@@ -26,7 +26,8 @@ exports.run = async (h) => {
 
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await tid("est-add-new").waitFor({ timeout: 8000 });
-  for (const [n, v] of [["Alpha (тестовые)", 10], ["Bravo (тестовые)", 20], ["Charlie (тестовые)", 30]]) await line.addCustom(h, n, v);
+  // short names: one line each, as before #1427 (long names wrap now — the drop places would move; wrapping is e2e 457)
+  for (const [n, v] of [["Alpha", 10], ["Bravo", 20], ["Charlie", 30]]) await line.addCustom(h, n, v);
   const [a, , c] = await ids();
 
   // the open line C, taken by the «≡» in its header
@@ -42,7 +43,17 @@ exports.run = async (h) => {
   await h.shot("open-moved");
 
   // every line in a section: save, put them into «Roof», open again
-  await tid("ue-save").getByRole("button").click();
+  // optional: #2363 q72 — scrolled down, «Итого» is the capsule; a tap opens the bar with «Готово»
+  // (#2387: a late scroll may fold «Итого» into the capsule right as it is pressed — open it and try again)
+  for (let i = 0; ; i++) {
+    if (await p.getByTestId("ue-save-capsule").locator("visible=true").count()) await p.getByTestId("ue-save-capsule").click({ timeout: 2000 }).catch(() => {});
+    try {
+      await tid("ue-save").click({ timeout: 2000 });
+      break;
+    } catch (e) {
+      if (i >= 3) throw e;
+    }
+  }
   await p.waitForFunction(() => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.estimates ?? []).some((e) => e.customerId === "c2" && e.doc?.options?.[0]?.lines?.length === 3), null, { timeout: 8000 });
   const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));
   const est = raw.db.estimates.find((e) => e.customerId === "c2" && e.doc?.options?.[0]?.lines?.length === 3);

@@ -1,9 +1,22 @@
 /**
- * Rule 22 guard (CLAUDE.md, #902): every PR refers to a task labelled «до-1.0» that sits in a release epic (#769–#775),
- * directly or through up to 2 levels of sub-tasks. `decide` is pure (the issue lookups are passed in); the CLI part reads
+ * Rule 22 guard (CLAUDE.md, #902; stages 1–6 since the founder's decision of 15.11.2026): every PR refers to a task labelled
+ * «до-1.0» that sits in a stage container or an old epic (CONTAINERS), directly or through up to 2 levels of sub-tasks.
+ * The label keeps its old name: it marks "a task of stages 1–6", not a release boundary. `decide` is pure (the issue lookups are passed in); the CLI part reads
  * the PR and the issues from GitHub (REST, GITHUB_TOKEN with pull-requests/issues read) and exits 1 with the reason.
  */
-const EPICS = [769, 770, 771, 772, 773, 774, 775];
+/** Stage containers and old epics, one list (CLAUDE.md rule 22). A new stage container is added here and in rule22.test.ts. */
+const CONTAINERS = [
+  769, 770, 771, 772, 773, 774, 775, // old epics Э0–Э6, kept as task folders
+  1341, // Э5 continued
+  1542, 2431, // stage 1 «Надёжность» (part 2 — #1542 hit GitHub's 100 sub-issue limit)
+  1878, 2432, // stage 2 «Главный путь» (part 2 — same limit)
+  1879, // stage 3 «Gutters»
+  1880, 1526, // stage 4 «Люди и компании»
+  1881, 1544, // stage 5 «ИИ-помощник и сканеры»
+  1882, // stage 6 «Админ-панель и магазин»
+  2294, // «Редизайн Графит — всё приложение» (решение основателя 20.11, вопрос 52)
+];
+const EPICS = CONTAINERS; // old name, kept for callers
 const LABEL = "до-1.0";
 const SKIP_LABEL = "починка-main";
 const MAX_LEVELS = 2;
@@ -22,9 +35,9 @@ function referencedIssues(body) {
 
 const docsOnly = (files) => files.length > 0 && files.every((f) => /^docs\//.test(f) || /\.md$/.test(f));
 
-/** is the task `n` a «до-1.0» task inside an epic? getIssue(n) -> {labels: string[]} | null; getParent(n) -> number | null */
+/** is the task `n` a «до-1.0» task inside a stage container or an epic? getIssue(n) -> {labels: string[]} | null; getParent(n) -> number | null */
 async function inEpic(n, { getIssue, getParent }) {
-  if (EPICS.includes(n)) return { ok: false, why: `#${n} is an epic itself: refer to a task inside it` };
+  if (CONTAINERS.includes(n)) return { ok: false, why: `#${n} is a stage container or an epic itself: refer to a task inside it` };
   const issue = await getIssue(n);
   if (!issue) return { ok: false, why: `#${n} is not a task of this repository` };
   if (!issue.labels.includes(LABEL)) return { ok: false, why: `#${n} has no label «${LABEL}»` };
@@ -32,10 +45,10 @@ async function inEpic(n, { getIssue, getParent }) {
   for (let level = 0; level < MAX_LEVELS; level++) {
     const parent = await getParent(at);
     if (parent === null || parent === undefined) break;
-    if (EPICS.includes(parent)) return { ok: true };
+    if (CONTAINERS.includes(parent)) return { ok: true };
     at = parent;
   }
-  return { ok: false, why: `#${n} is not inside an epic #769–#775 (parent chain of ${MAX_LEVELS} levels)` };
+  return { ok: false, why: `#${n} is not inside a stage container or an epic (${CONTAINERS.map((c) => `#${c}`).join(", ")}; parent chain of ${MAX_LEVELS} levels)` };
 }
 
 /** -> { ok, skip?, message } */
@@ -43,24 +56,24 @@ async function decide({ body, prLabels, files, getIssue, getParent }) {
   if (prLabels.includes(SKIP_LABEL)) return { ok: true, skip: `label «${SKIP_LABEL}»` };
   if (docsOnly(files)) return { ok: true, skip: "documents only" };
   const refs = referencedIssues(body);
-  const head = "PR не ссылается на задачу до-1.0 в эпике (правило 22)";
+  const head = "PR не ссылается на задачу до-1.0 в контейнере этапа или эпике (правило 22)";
   if (refs.length === 0) return { ok: false, message: `${head}: добавьте в описание «Closes #N» или «Refs #N».` };
   const whys = [];
   for (const n of refs) {
     const r = await inEpic(n, { getIssue, getParent });
-    if (r.ok) return { ok: true, message: `#${n} is a «${LABEL}» task in an epic` };
+    if (r.ok) return { ok: true, message: `#${n} is a «${LABEL}» task in a stage container or an epic` };
     whys.push(r.why);
   }
   return { ok: false, message: `${head}. ${whys.join("; ")}.` };
 }
 
-module.exports = { EPICS, referencedIssues, docsOnly, inEpic, decide };
+module.exports = { CONTAINERS, EPICS, referencedIssues, docsOnly, inEpic, decide };
 
 if (require.main === module) {
   const { execFileSync } = require("node:child_process");
   const repo = process.env.GITHUB_REPOSITORY;
   const pr = process.env.PR_NUMBER;
-  const api = (p, extra = []) => JSON.parse(execFileSync("gh", ["api", ...extra, p], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }) || "null");
+  const api = (p, extra = []) => JSON.parse(execFileSync("gh", ["api", ...extra, p], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] }) || "null");
   const tryApi = (p) => { try { return api(p); } catch (e) { if (/HTTP 404/.test(String(e.stderr || e.message))) return null; throw e; } };
   (async () => {
     const prData = api(`repos/${repo}/pulls/${pr}`);

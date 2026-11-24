@@ -16,7 +16,7 @@ exports.run = async (h) => {
     return h.db();
   };
   await h.go("/job/j6");
-  await p.getByTestId("job-tab-money").locator("visible=true").click();
+  await p.getByTestId("job-screen-sections-invoices").locator("visible=true").click();
   await p.getByTestId("statement-bill-balance").click();
   let db = await pick((d) => d.invoices.some((i) => i.jobId === "j6"), "the wrong invoice is issued");
   const wrong = db.invoices.find((i) => i.jobId === "j6");
@@ -35,7 +35,7 @@ exports.run = async (h) => {
   h.expect(/Wrong amount/.test(await p.getByTestId("invoice-void-reason-line").innerText()), "its screen says why");
 
   await h.go("/job/j6");
-  await p.getByTestId("job-tab-money").locator("visible=true").click();
+  await p.getByTestId("job-screen-sections-invoices").locator("visible=true").click();
   await p.getByTestId(`statement-void-${wrong.id}`).waitFor();
   await p.waitForFunction(() => /\$0(\.00)?$/.test((document.querySelector('[data-testid="statement-invoiced"]')?.textContent ?? "").trim()));
   h.expect(true, "the statement counts nothing for it (Выставлено $0)");

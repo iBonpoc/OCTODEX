@@ -15,9 +15,12 @@ exports.run = async (h) => {
   // a person's own language beats the company's: Tom Becker reads Russian
   const tom = db.leads.find((x) => x.name === "Tom Becker");
   await h.go(`/lead/${tom.id}`);
-  await h.clickText("Обзор");
-  await h.click("Телефоны, email и люди");
-  await h.sheet().getByRole("radio", { name: "Русский" }).first().click();
+  // v2 (#2350): the lead's «Контакт» group — its main person's row opens the people sheet
+  await p.getByTestId("lead-person-main").locator("visible=true").first().click();
+  // «Язык · Любой ⌄» — a row with a menu (spec 56 §3а.3)
+  await h.sheet().getByTestId("people-0-lang-button").click();
+  await p.getByTestId("people-0-lang-ru").click();
+  await p.getByRole("menu").waitFor({ state: "detached" });
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();
   await p.waitForTimeout(400);
   db = await h.db();
@@ -25,5 +28,5 @@ exports.run = async (h) => {
   h.expect(t2.people && t2.people[0].language === "ru", "main person: Russian");
   await h.expectText(/RU/, "language on the lead card");
   // the app itself stays in Russian
-  await h.expectText(/Телефоны, email и люди/, "app language unchanged");
+  await h.expectText(/Контакты клиента|Контакт/, "app language unchanged");
 };

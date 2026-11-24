@@ -29,6 +29,8 @@ exports.run = async (h) => {
   }
   await h.seed(DB_KEY, s);
   await h.go(`/estimate/${EID}`);
+  // v2 (#2350): signing on site is the estimate's section «Подпись на месте»
+  await tid("estimate-screen-sections-sign").first().click();
   await tid("sign-client-doc").waitFor({ timeout: 8000 });
   await tid("est-client-line-l-shown").waitFor({ timeout: 3000 });
   h.expect((await tid("est-client-line-l-hidden").count()) === 0, "a line hidden from the client at $0 is not shown on site");
@@ -59,7 +61,7 @@ exports.run = async (h) => {
   const status = async () => ((await h.db()).estimates.find((e) => e.id === EID) ?? {}).status;
   await p.waitForFunction((id) => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.estimates?.find((e) => e.id === id)?.status === "awaiting_countersign", EID, { timeout: 8000 });
   // the company signs too (the estimate screen, in the app's language) → the signed card
-  const cpad = p.getByLabel(/расписывается/).locator("visible=true").last();
+  const cpad = await require("../estimateMenu.cjs").countersignPad(p);
   await cpad.scrollIntoViewIfNeeded();
   const cb = await cpad.boundingBox();
   await p.mouse.move(cb.x + 30, cb.y + 90);

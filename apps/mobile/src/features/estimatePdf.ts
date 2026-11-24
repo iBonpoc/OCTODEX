@@ -15,10 +15,13 @@ import { SIG_BOX, fitSignature } from "./signaturePath";
 import type { DictKey } from "@/i18n";
 import { tFor } from "@/i18n/translate";
 import type { PortalData } from "@/cloud/portal";
-import { optionTotals, shownQty, withAddons } from "./estimateDoc";
+import { isFeetUnit, optionTotals, shownQtyUnit, withAddons } from "./estimateDoc";
 import { docDay, docMoney, docPage, docTime, esc, type DocOpts } from "./docPdf";
 import { pagesHtml } from "./docPages";
 import { clientRows } from "./clientLayout";
+
+/** not an animation: the print frame goes this long after the print dialog was opened, ms */
+const CLEANUP_MS = 1000;
 
 export interface EstimatePdfOpts extends DocOpts {
   /** company setting «Show unit prices» (docs/specs/07 §3.4); on by default */
@@ -51,7 +54,7 @@ export function estimateHtml(p: PortalData, opts: EstimatePdfOpts): string {
         const l = act[i]!;
         return `<tr class="${[l.optional && !l.selected ? "opt" : "", depth ? "d1" : ""].filter(Boolean).join(" ")}"><td>${esc(l.name)}${l.optional ? ` <span class="mut">(${esc(t("ue.addonChip"))})</span>` : ""}${
           l.description ? `<div class="mut">${esc(l.description)}</div>` : ""
-        }</td><td class="r">${esc(shownQty(l.quantity))} ${esc(l.unit)}</td>${unit ? `<td class="r">${money(l.unitPriceCents)}</td>` : ""}<td class="r">${l.optional && !l.selected ? "+ " : ""}${money(tot.lineTotals[i] ?? 0)}</td></tr>`;
+        }</td><td class="r">${esc(shownQtyUnit(l.quantity, l.unit))}</td>${unit ? `<td class="r">${money(l.unitPriceCents)}${isFeetUnit(l.unit) ? `/${esc(l.unit)}` : ""}</td>` : ""}<td class="r">${l.optional && !l.selected ? "+ " : ""}${money(tot.lineTotals[i] ?? 0)}</td></tr>`;
       };
       // sections (when the option has them) with their lines, subsections and subtotals, then «Other items»; else the lines by kind.
       // Every word a person typed (a section's title, a line's name) goes through esc(); the dictionary's words are the client's language.
@@ -162,10 +165,21 @@ export async function saveEstimatePdf(html: string, fileName: string): Promise<v
     setTimeout(() => {
       w.focus();
       w.print();
-      setTimeout(() => frame.remove(), 1000);
+      setTimeout(() => frame.remove(), CLEANUP_MS);
     }, 250);
     return;
   }
   const { uri } = await Print.printToFileAsync({ html });
   if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: fileName });
+}
+
+/**
+ * «Открыть» a document — to LOOK at it first (founder 18.11, #2157: «Нажимаю „Открыть“ — он сразу предлагает их
+ * отправить»). A phone: the system's document view (expo-print `printAsync` — the pages to scroll and zoom; send, save or
+ * print from there by its own share button); `page` — the sheet's own size in points, margins 0. The web: the browser's
+ * print preview, as before. Sending the file at once stays `saveEstimatePdf` («Отправить»).
+ */
+export async function openPdfPreview(html: string, fileName: string, page?: { width: number; height: number }): Promise<void> {
+  if (Platform.OS === "web") return saveEstimatePdf(html, fileName);
+  await Print.printAsync(page ? { html, width: page.width, height: page.height, margins: { top: 0, bottom: 0, left: 0, right: 0 } } : { html });
 }
