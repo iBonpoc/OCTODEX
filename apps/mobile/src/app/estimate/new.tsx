@@ -25,7 +25,7 @@ import { OptionsCard } from "@/features/estimate/OptionsCard";
 import { TotalsBreakdown } from "@/features/estimate/TotalsBreakdown";
 import { allOptionalFor, totalsRows } from "@/features/estimate/totalsRows";
 import { CaWarn } from "@/features/estimate/CaWarn";
-import { NotesTerms } from "@/features/estimate/NotesTerms";
+import { NotesTerms } from "@/features/estimate/NotesTermsView";
 import { isSignedEstimate } from "@/features/estimate/notesTerms";
 import { docLanguageFor } from "@/data/people";
 import { autoGroups, canAddSection, addSection, deleteSection, foldForDrag, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";

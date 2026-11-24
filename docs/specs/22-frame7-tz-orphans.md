@@ -144,7 +144,7 @@
 
 **Сделано (PR «Каркас» №9):** миграция `20261107130000_closed_company_people.sql` (время выдал руководитель);
 T77 — компания закрыта настоящим `delete_account`; `cloud/auth.tsx` → `closedCompanies`; `features/closedCompany.ts`
-(чистые помощники, unit), `features/ClosedCompany.tsx` (карточка), `nav/ClosedCompanyNotice.tsx` (шторка в оболочке);
+(чистые помощники, unit), `features/ClosedCompanyView.tsx` (карточка), `nav/ClosedCompanyNotice.tsx` (шторка в оболочке);
 стор — `unsentIn` / `dropUnsentIn`: `discardOp` из #259 работает только с операциями текущей компании, а у человека
 без компании её нет. Дата закрытия — en-US («Nov 5, 2026», правило 7). **e2e 135** — обычная сборка, сервер подставлен
 в браузере (`page.route`, как e2e 113), 6 видов. Облачный прогон не нужен: серверную сторону проверяет T77.
