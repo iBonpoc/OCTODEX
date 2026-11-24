@@ -244,7 +244,7 @@ export function choicesFor(raw: unknown): Choices {
     size: one(dr.size, offer.dsSizes[shape], offer.dsSizes[shape][0]!),
     dsStyle: one(dr.dsStyle, offer.dsStyles, "plain"),
     ...stock(dr, offer, palette, { material: "aluminum", color: "white" }),
-    bottom: one(dr.bottom, offer.bottoms, "extension"),
+    bottom: one(dr.bottom, offer.bottoms, "none"), // G2: a new downspout has nothing at the bottom unless the company says (founder 23.11 05:25)
     wall: one(dr.wall, WALLS, "wood"),
   };
   return { offer, palette, hangerByMount, wallKitByWall, run, ds, lenFormat: readLenFormat(r.lenFormat), roofOverhangFt: readOverhangFt(r.roofOverhangFt), dsSizeSet: dr.size !== undefined && offer.dsSizes[shape].includes(dr.size as never) };

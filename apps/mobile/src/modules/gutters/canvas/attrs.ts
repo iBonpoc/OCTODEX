@@ -7,7 +7,7 @@
  * Changing a choice another one depends on (profile → size and hanger kit, material → gauge and finish, shape →
  * size and elbows, mount → the default kit, wall → the default wall kit) fixes the dependent fields in the same step.
  */
-import { DEFAULT_HANGER_KITS, DEFAULT_WALL_KIT_BY_WALL, DEFAULT_WALL_KITS, bendOf, defaultElbowsFor, defaultHangerKit, defaultOffsetsFor, GUTTER_MOUNTS, type DsBottomKind, type GutterMount, type GutterProfile } from "@octo/estimating-engine";
+import { DEFAULT_HANGER_KITS, DEFAULT_WALL_KIT_BY_WALL, DEFAULT_WALL_KITS, bendOf, defaultElbowsFor, defaultHangerKit, defaultOffsetsFor, dsStoryOf, fieldElbowsOf, GUTTER_MOUNTS, type DsBottomKind, type GutterMount, type GutterProfile } from "@octo/estimating-engine";
 import type { DrawnDownspout, DrawnRun } from "../geometry";
 import type { Choices } from "../settings";
 import { DENOM, MM_OF, MM_PER_IN, type LenUnit } from "./format";
@@ -194,6 +194,17 @@ export function changeDs(a: DsAttrs, patch: Partial<DsAttrs>, ch?: Choices): DsA
     const own = shape === "round" ? defaultElbowsFor({ shape: "round" })[0]?.style : undefined;
     n.elbows = [{ style: own && ELBOW_STYLES.round.includes(own) ? own : ELBOW_STYLES[shape][0]!, qty }];
   }
+  // a round one has no offset styles A/B (G2): a B offset of a rect one is a plain offset there, the length and count stay
+  if (shape === "round" && n.offsets?.some((o) => o.style !== undefined)) n.offsets = n.offsets.map(({ style: _s, ...o }) => o);
+  // plain ↔ corrugated (G2, leader №24 п.7): the bending is the new kind's own — a plain one bent on site, a corrugated one ready-made
+  if (patch.dsStyle !== undefined && patch.dsStyle !== a.dsStyle) {
+    delete n.elbowBend;
+    // a plain one with no bought elbow (a corrugated one's 0 kept as [{A, 0}]) is bent on site — never 0 elbows and 0 bends (review G2 №2)
+    if (n.dsStyle === "plain" && shape === "rect" && !n.elbows?.some((e) => e.qty > 0)) delete n.elbows;
+    // a Y funnel sits on a corrugated rectangular one only: on another it is a funnel (review G2 №7; the engine would drop it)
+    if (n.head === "y_funnel" && !(shape === "rect" && n.dsStyle === "corrugated")) n.head = "funnel";
+  }
+  if (shapeChanged && n.head === "y_funnel" && shape !== "rect") n.head = "funnel";
   // a reducer goes to a smaller size of the same shape: another shape's size, its own or a larger one — gone
   if (n.reducers?.some((r) => !smallerSizes(shape, n.size).includes(r.to))) delete n.reducers;
   // a wall kit of the other shape: the same wall, this shape's default kit
@@ -212,9 +223,48 @@ export function changeDs(a: DsAttrs, patch: Partial<DsAttrs>, ch?: Choices): DsA
 export function elbowCounts(a: Pick<DsAttrs, "shape" | "dsStyle" | "elbows" | "elbowBend">): Record<string, number> {
   const shape = a.shape === "round" ? "round" : "rect";
   const out: Record<string, number> = Object.fromEntries(ELBOW_STYLES[shape].map((s) => [s, 0]));
-  for (const e of a.elbows ?? defaultElbowsFor({ shape, ...(a.dsStyle ? { dsStyle: a.dsStyle } : {}), ...(a.elbowBend ? { elbowBend: a.elbowBend } : {}) })) if (e.style in out) out[e.style] = (out[e.style] ?? 0) + e.qty;
+  const k = { shape, ...(a.dsStyle ? { dsStyle: a.dsStyle } : {}), ...(a.elbows ? { elbows: a.elbows } : {}), ...(a.elbowBend ? { elbowBend: a.elbowBend } : {}) } as const;
+  // bent on site: the bends the engine counts (G2: no bought elbows — the company's bends), so the mark and the work drawing say them
+  for (const e of bendOf(k) === "field" ? fieldElbowsOf(k) : a.elbows ?? defaultElbowsFor(k)) if (e.style in out) out[e.style] = (out[e.style] ?? 0) + e.qty;
   return out;
 }
+
+/**
+ * The BOUGHT elbows by style (G2, leader №24's decision on stage 0, founder 23.11 05:25): what the window's Elbow rows count. A plain
+ * one bent on site has none bought — 0, its bends are the engine's (`fieldBendOf`), never shown as elbows to buy.
+ */
+export function boughtElbowCounts(a: Pick<DsAttrs, "shape" | "dsStyle" | "elbows" | "elbowBend">): Record<string, number> {
+  const shape = a.shape === "round" ? "round" : "rect";
+  if (bendOf({ ...a, shape }) === "field") return Object.fromEntries(ELBOW_STYLES[shape].map((s) => [s, 0]));
+  return elbowCounts(a);
+}
+
+/**
+ * One style's BOUGHT count changed in the window (G2, leader №24 п.2–4): a plain rectangular one with any bought — ready-made, its
+ * elbows parts, no bends; all bought back to 0 — bent on site again (the keys gone: `bendOf` says field, the company's bends). A
+ * corrugated or round one is ready-made anyway: its list, 0 kept as 0 (`withElbowQty`). An angle of a style stays with it.
+ */
+export function boughtElbowPatch(a: Pick<DsAttrs, "shape" | "dsStyle" | "elbows" | "elbowBend">, style: string, qty: number): Pick<DsAttrs, "elbows" | "elbowBend"> {
+  const plain = a.shape !== "round" && a.dsStyle === "plain";
+  const n = { ...boughtElbowCounts(a), [style]: Math.max(0, Math.round(qty)) };
+  const angleOf = (s: string) => (bendOf(a) === "ready" ? a.elbows?.find((e) => e.style === s && e.angle !== undefined)?.angle : undefined);
+  const list = Object.entries(n).filter(([, q]) => q > 0).map(([s, q]) => {
+    const angle = angleOf(s);
+    return angle !== undefined ? { style: s, qty: q, angle } : { style: s, qty: q };
+  });
+  if (plain) return list.length ? { elbows: list, elbowBend: "ready" } : { elbows: undefined, elbowBend: undefined };
+  return { elbows: list.length ? list : [{ style, qty: 0 }] };
+}
+
+/**
+ * A downspout's own storey picked in the window (G2): written only when it differs from its gutter's (rule 16 — an old phone counts
+ * by the gutter's storey; most drawings have no difference, so they carry no new key), else the key gone
+ */
+export function dsStoryPatch(runStory: number, story: number): Pick<DsAttrs, "story"> {
+  return { story: story === runStory ? undefined : story };
+}
+/** the storey the window shows for a downspout: its own, else its gutter's */
+export const dsStoryShown = (a: Pick<DsAttrs, "story">, runStory: number) => dsStoryOf(a, runStory);
 
 /**
  * One style's count changed in the window: the patch. A downspout bent on site stays bent on site — its count is of bends
