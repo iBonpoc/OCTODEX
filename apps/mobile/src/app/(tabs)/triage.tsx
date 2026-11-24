@@ -11,12 +11,12 @@ import { telHref } from "@/features/contactLinks";
 import { AssignSheet, ReplySheet, useTick } from "@/features/sheets";
 import { Button, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { Menu, Sheet, useToast } from "@/ui/overlays";
-import { DateField } from "@/ui/dateField";
+import { Menu, useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, Empty, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { View } from "react-native";
 import { localUndo } from "@/data/undo";
-import { SNOOZE_DAYS, canSnoozeTo, pickMin, snoozeDay, snoozeUntil } from "@/features/attentionSnooze";
+import { SNOOZE_DAYS, canSnoozeTo, snoozeDay, snoozeUntil } from "@/features/attentionSnooze";
+import { PickDaySheet } from "@/features/PickDaySheet";
 import type { DayKey } from "@/features/zone";
 import { waitParams } from "@/features/shortTime";
 
@@ -44,7 +44,6 @@ export default function Triage() {
   const [laterAt, setLaterAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   // #2123: «Выбрать дату…» — a day of one's own in a sheet (DateField, DS А7); only a day after the company's today
   const [pickFor, setPickFor] = useState<AttentionItem | null>(null);
-  const [pickDay, setPickDay] = useState<DayKey | null>(null);
   const later = (it: AttentionItem, day: DayKey) => {
     if (!canSnoozeTo(day)) return;
     const undo = snoozeAttention(it.id, snoozeUntil(day));
@@ -162,7 +161,6 @@ export default function Triage() {
           setLaterAt(null);
           if (!cur) return;
           if (k === "pick") {
-            setPickDay(null);
             setPickFor(cur);
             return;
           }
@@ -170,20 +168,14 @@ export default function Triage() {
         }}
         onClose={() => setLaterAt(null)}
       />
-      <Sheet visible={!!pickFor} onClose={() => setPickFor(null)} title={t("triage.pickTitle")}>
-        <DateField label={t("triage.pickDate")} value={pickDay} onChange={setPickDay} min={pickMin()} quick={false} testID="triage-pick-date" />
-        <Button
-          label={t("triage.pickDo")}
-          variant="primary"
-          full
-          disabled={!pickDay || !canSnoozeTo(pickDay)}
-          testID="triage-pick-do"
-          onPress={() => {
-            if (pickFor && pickDay) later(pickFor, pickDay);
-            setPickFor(null);
-          }}
-        />
-      </Sheet>
+      <PickDaySheet
+        open={!!pickFor}
+        onClose={() => setPickFor(null)}
+        onPick={(day) => {
+          if (pickFor) later(pickFor, day);
+          setPickFor(null);
+        }}
+      />
       <ReplySheet leadId={reply} onClose={() => setReply(null)} />
       <AssignSheet visitId={assign} onClose={() => setAssign(null)} />
     </Screen>
