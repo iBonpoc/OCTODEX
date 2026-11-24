@@ -1,4 +1,5 @@
 /** Rule 22 guard (#902; stages 1–6 since 15.11.2026): a PR must refer to a «до-1.0» task inside a stage container or an old epic (directly or through a sub-task). */
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 
@@ -76,7 +77,7 @@ describe("rule 22 guard", () => {
     expect(docsOnly([])).toBe(false);
   });
   it("the stage containers 1–6 and the old epics are one list", () => {
-    expect(CONTAINERS).toEqual(expect.arrayContaining([769, 770, 771, 772, 773, 774, 775, 1341, 1542, 1878, 1879, 1880, 1526, 1881, 1544, 1882]));
+    expect(CONTAINERS).toEqual(expect.arrayContaining([769, 770, 771, 772, 773, 774, 775, 1341, 1542, 2431, 1878, 2432, 1879, 1880, 1526, 1881, 1544, 1882, 2294]));
   });
   it("a task in a stage container (directly or through a sub-task) is green; old containers still green", async () => {
     for (const n of [1900, 1901, 1903, 1904]) expect((await run(`Closes #${n}`)).ok, `#${n}`).toBe(true);
@@ -85,4 +86,7 @@ describe("rule 22 guard", () => {
     for (const n of [1878, 1542, 1905]) expect((await run(`Closes #${n}`)).ok, `#${n}`).toBe(false);
   });
   it("the label «починка-main» skips the check", async () => expect((await run("", { prLabels: ["починка-main"] })).skip).toContain("починка-main"));
+  // a PR of 500+ files makes `gh api --paginate` print > 1 MB: without maxBuffer execFileSync dies with ENOBUFS (PR #2349)
+  it("the gh call has a big maxBuffer (a 500-file PR is more than the 1 MB default)", () =>
+    expect(readFileSync(new URL("../../../scripts/rule22.cjs", import.meta.url), "utf8")).toMatch(/execFileSync\("gh", \["api", \.\.\.extra, p\], \{[^}]*maxBuffer: 64 \* 1024 \* 1024/));
 });

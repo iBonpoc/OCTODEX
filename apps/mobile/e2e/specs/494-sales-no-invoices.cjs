@@ -7,8 +7,9 @@
 exports.run = async (h) => {
   const p = h.page;
   const statement = () => p.getByTestId("statement-invoiced").locator("visible=true").first().waitFor();
+  // v2 (#2350): a job's lines (JobLinesBlock) are on its «Обзор» section (`job-screen-sections-overview`), the statement under «Счета»
   const money = async () => {
-    await p.getByTestId("job-tab-money").locator("visible=true").click();
+    await p.getByTestId("job-screen-sections-overview").locator("visible=true").first().click();
     await p.getByText(/Позиций нет|Позиции/).locator("visible=true").first().waitFor();
   };
 
@@ -20,7 +21,7 @@ exports.run = async (h) => {
   h.expect((await p.getByTestId("statement-progress").locator("visible=true").count()) > 0, "the director: «Счёт на этап» is there");
   await h.go("/job/j3");
   await money();
-  await p.getByRole("button", { name: "Позиция", exact: true }).first().waitFor();
+  await p.getByTestId("job-lines-add").locator("visible=true").first().waitFor();
   h.expect(true, "the director: «Позиция» on a job without an estimate");
 
   // sales: the same statement without the invoice buttons; the lines without «Позиция» and without the tax switch
@@ -34,7 +35,7 @@ exports.run = async (h) => {
   await h.go("/job/j3");
   await money();
   await h.expectText(/Позиций нет/, "sales: the lines block is there");
-  h.expect((await p.getByRole("button", { name: "Позиция", exact: true }).count()) === 0, "sales: no «Позиция»");
+  h.expect((await p.getByTestId("job-lines-add").count()) === 0, "sales: no «Позиция»");
   h.expect((await p.getByRole("switch", { name: "Налог с продаж" }).count()) === 0, "sales: no tax switch");
   await h.shot("sales-lines");
   h.expect(!(await h.db()).invoices.some((i) => i.jobId === "j1" && i.kind === "final"), "nothing was billed");

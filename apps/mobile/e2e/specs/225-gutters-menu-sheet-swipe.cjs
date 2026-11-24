@@ -72,7 +72,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await waitFor(async () => /^Пробный/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
+  await waitFor(async () => /^Без срока/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
   await h.go("/module/gutters/draw");
   await tid("draw-surface").waitFor({ timeout: 8000 });
 
@@ -118,7 +118,8 @@ exports.run = async (h) => {
   await panel().waitFor({ timeout: 5000 });
   await stands(tid("sheet-panel").last());
   { const n = await scrollers(); h.expect(n === 1, `the gutter's sheet: only the sheet's own scroll (${n})`); }
-  await swipeMiddle(["attr-story", "attr-size", "attr-color", "attr-more"]);
+  // the rows of the window (#2412 G1): the tape's fields, Размер · Цвет · Этаж, the profile, «Ещё»
+  await swipeMiddle(["attr-length", "attr-story", "attr-size", "attr-color", "attr-profile", "attr-more"]);
   await waitFor(async () => (await panel().count()) === 0, "a swipe down from the middle closes the gutter's sheet");
   await sheetGone(p);
 
@@ -128,7 +129,8 @@ exports.run = async (h) => {
   await panel().waitFor({ timeout: 5000 });
   await stands(tid("sheet-panel").last());
   { const n = await scrollers(); h.expect(n === 1, `the downspout's sheet: only the sheet's own scroll (${n})`); }
-  await swipeMiddle(["attr-ds-size", "attr-color", "attr-elbow-qty", "attr-ds-kind", "attr-more"]);
+  // the rows of the window (#2412 G1): Вид · Размер, elbows, offsets, Низ, Верх, «Ещё»
+  await swipeMiddle(["attr-ds-kind", "attr-ds-size", "attr-elbow-qty", "attr-offsets", "attr-bottom", "attr-head", "attr-more"]);
   await waitFor(async () => (await panel().count()) === 0, "a swipe down from the middle closes the downspout's sheet");
   await sheetGone(p);
 };

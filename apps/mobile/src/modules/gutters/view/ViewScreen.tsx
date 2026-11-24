@@ -408,7 +408,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
             <View testID="view-parts"><RowView style={{ alignItems: "center", gap: space[2] }}>
               <T v="heading" w="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>{t("mod.gutters.view.parts")}</T>
               {/* the list's «?», right after its title (DS Б7, #1843): what the list is, and what «для заказа» means (#1800) */}
-              <HelpButton title={t("mod.gutters.view.parts")} text={t("mod.gutters.view.partsHelp")} testID="view-parts-help" />
+              <HelpButton title={t("mod.gutters.view.parts")} text={t("mod.gutters.view.partsHelp")} to={{ href: "/module/gutters/prices" }} testID="view-parts-help" />
             </RowView></View>
             {/* DS §8.14 (#1766): three groups, a name in one line, the properties below, the quantity on its own column */}
             {partGroups(t, spec.parts, fmt).map((g) => (

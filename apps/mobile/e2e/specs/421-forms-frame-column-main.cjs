@@ -5,7 +5,8 @@
  * - the main button of the request form stands apart from the fields: at least 11 more than the gap between two fields (`space[4]` on top of the usual gap).
  */
 const TOKEN = "f0123456789abcdef0123456789abcdef";
-const FRAME = { dark: "rgba(255, 255, 255, 0.38)", light: "rgba(20, 22, 30, 0.5)" };
+// `bdField` of the v2 themes (packages/design-tokens: dark #80838C, light #6F7279; #2350 — solid, no longer a white/ink alpha)
+const FRAME = { dark: "rgb(128, 131, 140)", light: "rgb(111, 114, 121)" };
 
 exports.run = async (h) => {
   const p = h.page;

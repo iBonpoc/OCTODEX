@@ -11,7 +11,7 @@ import { useStore } from "@/data/store";
 import type { Visit } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { Button } from "@/ui/controls";
+import { ButtonPair } from "@/ui/pairs";
 import { ToggleRow } from "@/ui/toggleRow";
 import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -69,8 +69,7 @@ export function LocationConsentSheet({ visible, onAnswer }: { visible: boolean; 
     <Sheet visible={visible} onClose={() => onAnswer(false)} title={t("loc7b.noticeTitle")}>
       <View style={{ gap: space[3] }}>
         <T v="body">{t("loc7b.notice")}</T>
-        <Button label={t("loc7b.agree")} full onPress={() => onAnswer(true)} />
-        <Button label={t("loc7b.notNow")} variant="ghost" full onPress={() => onAnswer(false)} />
+        <ButtonPair main={{ label: t("loc7b.agree"), onPress: () => onAnswer(true) }} second={{ label: t("loc7b.notNow"), variant: "ghost", onPress: () => onAnswer(false) }} />
       </View>
     </Sheet>
   );

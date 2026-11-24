@@ -57,8 +57,10 @@ describe("the wiring", () => {
   });
   it("SelectField opens a PickerSheet for more than 12 items, never a menu", () => {
     const f = src("ui", "selectField.tsx");
-    expect(f).toMatch(/MENU_MAX = 12/);
-    expect(f).toMatch(/items\.length > MENU_MAX/);
+    // DS §9б.2 (#2412): 12 is the token `select.menuMaxItems`; a long name or a picture opens the list too (selectRules.test.ts)
+    expect(component.select.menuMaxItems).toBe(12);
+    expect(f).toMatch(/MENU_MAX = component\.select\.menuMaxItems/);
+    expect(f).toMatch(/opensList\(items, MENU_MAX/);
     expect(f).toMatch(/<PickerSheet/);
   });
   it("the picker's list is the sheet's own scroll: no ScrollView of its own", () => {

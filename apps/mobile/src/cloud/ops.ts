@@ -20,7 +20,7 @@ import { supabase } from "./client";
 import { expenseCategoryToDb, pages } from "./repo";
 import { classify } from "@/data/outboxRetry";
 import { photoFailOf, storageNotNow, tooBig } from "@/data/photoUpload";
-import { companyModulesFromRows, moduleDef, moduleState } from "@/modules/registry";
+import { companyModulesFromRows, moduleDef, moduleState, moduleUsable } from "@/modules/registry";
 import { LEAD_ASSIGNEE_GONE, MODULE_INACTIVE, unknownOp } from "@/data/outboxRetry";
 import { withSendablePages } from "@/features/docPages";
 import { versionRows } from "./estimateRows";
@@ -361,8 +361,15 @@ async function moduleActiveOnServer(companyId: string, module: string): Promise<
     const { data } = await read(supabase.from("company_modules").select("module_key, enabled, trial_ends_at, paid_until, settings, row_version").eq("company_id", companyId).eq("module_key", module).maybeSingle());
     // the phone's clock may run ahead of the server's: near the trial's end judge it 10 minutes late, so another refusal
     // is never read as «not active» (then it stays a plain refusal — review M5a)
-    const a = moduleState(companyModulesFromRows(data ? [data as Record<string, unknown>] : [])[module], Date.now() - 10 * 60_000).access;
-    return a === "trial" || a === "paid";
+    const row = companyModulesFromRows(data ? [data as Record<string, unknown>] : [])[module];
+    if (moduleUsable(moduleState(row, Date.now() - 10 * 60_000).access)) return true;
+    if (!row?.enabled) return false;
+    // #2410: switched on, the term over — the developer's company has none (app.module_active reads the same flag). A
+    // server before the column: no flag, as before; any other failed read — not known (the queue keeps the changes, rule 6)
+    return read(supabase.from("companies").select("developer_account").eq("id", companyId).maybeSingle()).then(
+      (r) => (r.data as { developer_account?: unknown } | null)?.developer_account === true,
+      (e: { code?: string }) => (e?.code === "42703" || e?.code === "PGRST204" ? false : undefined),
+    );
   } catch {
     return undefined;
   }

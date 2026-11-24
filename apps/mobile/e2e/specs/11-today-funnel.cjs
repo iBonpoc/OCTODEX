@@ -4,7 +4,7 @@ const { expectOneAccent } = require("../accent.cjs");
 /** S8b (docs/specs/07 §2.2 А, founder 05.11): an employee signs the contract for the company on the estimate screen. */
 async function countersign(h, estimateId) {
   await h.go(`/estimate/${estimateId}`);
-  const pad = h.page.getByLabel(/расписывается|signs here/i).last();
+  const pad = await require("../estimateMenu.cjs").countersignPad(h.page);
   await pad.scrollIntoViewIfNeeded(); await h.page.waitForTimeout(250);
   const bb = await pad.boundingBox();
   await h.page.mouse.move(bb.x + 30, bb.y + 90); await h.page.mouse.down();
@@ -13,14 +13,27 @@ async function countersign(h, estimateId) {
   await h.page.getByRole("button", { name: "Подписать договор" }).last().click(); await h.page.waitForTimeout(700);
 }
 
+const today = require("../today.cjs");
+/** the count a funnel row shows (GroupRow `today-f-<key>`, its value is the last number of the row) */
+async function funnelCount(p, key) {
+  const t = await p.getByTestId(`today-f-${key}`).locator("visible=true").first().innerText();
+  const m = t.replace(/\n/g, " ").match(/(\d+)\s*$/);
+  return m ? Number(m[1]) : NaN;
+}
+
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/today");
   await expectOneAccent(h, "Today");
+  // v2 (#2350): the period, «Получено» and the funnel are in the folded «Подробнее»
+  await today.openDetails(p);
   await h.expectText(/Воронка продаж/, "funnel card");
   // spec 24 A (founder 07.11): the funnel is counts; money received lives in «Получено» (the old «Деньги получены» row repeated it)
-  for (const label of ["Новые лиды", "Сметы отправлены", "Сметы подписаны", "Получено"]) await h.expectText(new RegExp(label), label);
-  await h.expectText(/Счетов: \d+/, "awaiting is all open invoices (spec 24: «Счетов: N»)");
+  for (const key of ["leads", "sent", "signed"]) h.expect(Number.isFinite(await funnelCount(p, key)), `funnel row ${key} shows a count`);
+  h.expect(/^Получено: \$/.test((await p.getByRole("button", { name: /^Получено: \$/ }).first().getAttribute("aria-label")) ?? ""), "«Получено» card");
+  // what is owed is the «Должны» tile of «Требует действия» (v2: the sum of all open invoices; was «Счетов: N»)
+  const owed = await p.getByTestId("tile-owed").locator("visible=true").first().getAttribute("aria-label");
+  h.expect(/\$[\d,]+/.test(owed ?? ""), `the owed tile shows the open invoices' sum (${owed})`);
 
   // A card payment today must show up in «Получено» for today, week and month.
   const before = await h.db();
@@ -32,15 +45,17 @@ exports.run = async (h) => {
   const db = await h.db();
   const signedToday = db.estimates.filter((e) => e.status === "approved" && e.approvedAt && dayKey(e.approvedAt) === todayKey()); // the company's today (П4b)
   h.expect(signedToday.length >= 1, "an estimate signed today");
-  await h.expectText(/Смет: [1-9]/, "signed count today");
-  for (const period of ["Неделя", "Месяц"]) {
-    await h.clickText(period);
-    await h.expectText(/Смет: [1-9]/, `signed count in ${period}`);
+  await today.period(p, "today");
+  h.expect((await funnelCount(p, "signed")) >= 1, "signed count today");
+  for (const [key, period] of [["week", "Неделя"], ["month", "Месяц"]]) {
+    await today.period(p, key);
+    h.expect((await funnelCount(p, "signed")) >= 1, `signed count in ${period}`);
     await h.shot(`period-${period}`);
   }
   // The choice is remembered; back to «today».
   await p.evaluate(() => localStorage.setItem("octo.todayPeriod.v1", JSON.stringify("today")));
   await h.go("/today");
-  await h.expectText(/Смет: [1-9]/, "signed count today after reload");
+  await today.openDetails(p);
+  h.expect((await funnelCount(p, "signed")) >= 1, "signed count today after reload");
   h.expect(leadsMonth > 0, "demo has leads");
 };

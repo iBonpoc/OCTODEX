@@ -27,9 +27,14 @@ export function moduleView(cm: CompanyModule | undefined, now = Date.now()): Mod
       return { status: "info", label: "mod.st.trial", n: st.daysLeft, main: null, canDisable: true, locked: false };
     case "paid":
       return { status: "ok", label: "mod.st.paid", main: null, canDisable: true, locked: false };
+    // #2410: the developer's company, the demo — on with no term; not «paid» (billing never reads this)
+    case "unlimited":
+      return { status: "ok", label: "mod.st.unlimited", main: null, canDisable: true, locked: false };
     case "expired":
       return { status: "warn", label: "mod.st.expired", main: "pay", canDisable: true, locked: true };
     case "off": {
+      // #2410: no term (the demo, the developer's company) — switched off once, on again is just on: no trial, no payment
+      if (cm?.unlimited) return { status: "neutral", label: "mod.st.disabled", main: "resume", canDisable: false, locked: false };
       if (!st.trialUsed) return { status: "neutral", label: "mod.st.off", main: "start", canDisable: false, locked: false };
       const paid = !!cm?.paidUntil && Date.parse(cm.paidUntil) > now;
       const trialLeft = !!cm?.trialEndsAt && Date.parse(cm.trialEndsAt) > now;

@@ -14,7 +14,10 @@ exports.run = async (h) => {
   const vis = (loc) => loc.locator("visible=true").first();
   const live = async (btn, what) => {
     h.expect(!(await btn.isDisabled()), `${what}: not disabled`);
-    const op = await btn.evaluate((e) => { let o = 1; for (let a = e; a; a = a.parentElement) o *= parseFloat(getComputedStyle(a).opacity || "1"); return o; });
+    // a sheet fades in (DS motion): wait until it has come in (up to 3 s) — a button that stays dimmed fails here
+    const opacity = (e) => { let o = 1; for (let a = e; a; a = a.parentElement) o *= parseFloat(getComputedStyle(a).opacity || "1"); return o; };
+    await p.waitForFunction(([e, f]) => new Function("e", `return (${f})(e)`)(e) > 0.99, [await btn.elementHandle(), opacity.toString()], { timeout: 3000 });
+    const op = await btn.evaluate((e, f) => new Function("e", `return (${f})(e)`)(e), opacity.toString());
     h.expect(op > 0.99, `${what}: not dimmed (opacity ${op})`);
   };
 

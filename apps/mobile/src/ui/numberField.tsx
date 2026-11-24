@@ -109,7 +109,9 @@ export function NumberField(props: NumberFieldProps) {
   const unit = props.unit ?? sign.after;
   return (
     <View style={{ gap: space[1] }}>
-      <T v="caption" tone="mut">
+      {/* one line (#2426): a label in two lines would push its frame below the row's other frames — a long word is cut, the
+          screen reader reads the whole label from the field */}
+      <T v="caption" tone="mut" numberOfLines={1}>
         {props.label}
       </T>
       <TextField

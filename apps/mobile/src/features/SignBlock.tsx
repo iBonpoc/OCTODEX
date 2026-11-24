@@ -3,6 +3,7 @@ import { View } from "react-native";
 import { space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { SignaturePad } from "./SignaturePad";
+import { StackBackGestureOff } from "@/nav/StackBackGestureOff";
 import { TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { ToggleRow } from "@/ui/toggleRow";
@@ -29,6 +30,7 @@ export function SignBlock({ onSign, defaultName = "", busy }: { onSign: (name: s
           {t("est.rescission")}
         </T>
       </View>
+      <StackBackGestureOff />
       <SignaturePad consent="est.signConsent" confirmLabel={t("portal.approve")} disabled={!ready} onConfirm={(svg) => onSign(name.trim(), svg)} />
     </View>
   );

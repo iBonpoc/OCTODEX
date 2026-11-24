@@ -44,9 +44,10 @@ describe("clientOverdueOf", () => {
     const db = { invoices: [inv("c1", 10_000, 15_000, -4), inv("c1", 20_000, 0, -2)] };
     expect(clientOverdueOf(db, "c1", NOW, TZ)).toEqual({ cents: 20_000, days: 2 });
   });
-  it("the list card takes the sign from clientOverdueOf (one rule)", () => {
+  it("the list row takes the sign from clientOverdueOf (one rule)", () => {
     const src = readFileSync(join(__dirname, "../src/app/(tabs)/clients.tsx"), "utf8");
     expect(src).toMatch(/clientOverdueOf\(/);
-    expect(src).toMatch(/fix\.client\.overdue/);
+    // prototype v2 (BUILD-SPEC §2.3): the debt is the row's sum, the sign says only the days («! 9 дн») — the sum is not said twice (П7)
+    expect(src).toMatch(/proto\.client\.lateDays", \{ d: overdue\.days \}/);
   });
 });

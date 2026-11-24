@@ -30,7 +30,8 @@ export type SectionId =
   | "company"
   | "settings"
   | "help"
-  | "more";
+  | "more"
+  | "finance";
 export type MenuGroup = "top" | "work" | "docs" | "money" | "bottom";
 
 export interface Section {
@@ -38,7 +39,7 @@ export interface Section {
   label: DictKey;
   icon: IconKey;
   group: MenuGroup;
-  /** a bottom tab (phone) — the same 5 for every role; a tab is not repeated in «Ещё» */
+  /** a bottom tab (phone) — the same 5 for every role (a subcontractor: 4, no Leads); a tab is not repeated in «Ещё» */
   tab?: boolean;
   /** the phone's «Ещё» tab itself: never a section in «Ещё» or in the side menu */
   phoneOnly?: boolean;
@@ -54,20 +55,25 @@ const PLANNERS: readonly Role[] = ["director", "dispatcher"];
 /** Order = menu order inside a group (13 §2.3). */
 export const SECTIONS: readonly Section[] = [
   { id: "home", label: "nav.home", icon: "home", group: "top", tab: true },
-  { id: "plan", label: "nav.plan", icon: "calendar", group: "work", tab: true },
-  { id: "messages", label: "nav.messages", icon: "sms", group: "top", tab: true },
+  { id: "plan", label: "nav.plan", icon: "plan", group: "work", tab: true },
+  { id: "messages", label: "nav.messages", icon: "sms", group: "top" },
   // the tech sees his own leads — assigned to him or brought by him (13 §2.3, §4; canSeeLead and RLS leads_select);
   // a subcontractor does not (he never gets leads: features/leadAssignee.ts)
-  { id: "leads", label: "nav.leads", icon: "inbox", group: "work", roles: [...OFFICE, "tech"], noSub: true },
+  // prototype v2 (BUILD-PLAN §2 п.1): «Лиды» is the fifth tab
+  { id: "leads", label: "nav.leads", icon: "leads", group: "work", tab: true, roles: [...OFFICE, "tech"], noSub: true },
   { id: "jobs", label: "nav.jobs", icon: "wrench", group: "work" },
   { id: "clients", label: "nav.clients", icon: "users", group: "work", tab: true },
+  // redesign #2348: «Деньги» — estimates, invoices, payments behind one tab (a segment switches them)
+  // the tech has no «Деньги» tab (audit 12 §2.6): the company's money is the office's; his own estimates are a tile of «Ещё»
+  { id: "finance", label: "nav.money", icon: "money", group: "docs", tab: true, phoneOnly: true, roles: OFFICE },
+  // prototype v2: search is an icon in the header (HeaderIcons, /search stays), not a tab
   // «Звонки» is not a tab until the company has its own number (founder 06.11, variant Б; 13 v2 §2.1)
   { id: "calls", label: "nav.calls", icon: "phone", group: "work" },
   // wave 6 (20 §7): every role; the technician sees his own (RLS)
   { id: "tasks", label: "task.title", icon: "check", group: "work" },
-  { id: "estimates", label: "nav.estimates", icon: "invoice", group: "docs" },
-  { id: "invoices", label: "nav.invoices", icon: "wallet", group: "docs", roles: OFFICE },
-  { id: "catalog", label: "nav.catalog", icon: "note", group: "docs" },
+  { id: "estimates", label: "nav.estimates", icon: "estimate", group: "docs" },
+  { id: "invoices", label: "nav.invoices", icon: "invoice", group: "docs", roles: OFFICE },
+  { id: "catalog", label: "nav.catalog", icon: "catalog", group: "docs" },
   // spec 36: owner, admin, office — the account number is not for the tech or sales
   { id: "suppliers", label: "nav.suppliers", icon: "truck", group: "docs", roles: PLANNERS },
   // spec 37: owner, admin, office; the tech sees the orders of his jobs on the job
@@ -77,13 +83,13 @@ export const SECTIONS: readonly Section[] = [
   { id: "reports", label: "rpt.title", icon: "chart", group: "money", roles: PLANNERS },
   // «Расходы» (13 §2.3): the /money screen
   { id: "money", label: "nav.expenses", icon: "wallet", group: "money", roles: PLANNERS },
-  { id: "team", label: "nav.team", icon: "users", group: "bottom", roles: ["director"] },
+  { id: "team", label: "nav.team", icon: "crew", group: "bottom", roles: ["director"] },
   // spec 26 §3 (07.11): the office (dispatcher) sees the company settings read-only; only the director changes them
   { id: "company", label: "nav.companySettings", icon: "home2", group: "bottom", roles: ["director", "dispatcher"] },
-  { id: "settings", label: "nav.mySettings", icon: "sliders", group: "bottom" },
+  { id: "settings", label: "nav.mySettings", icon: "settings", group: "bottom" },
   // «Помощь и поддержка» (7а-1; App Store 1.5): for everyone, last in the menu
   { id: "help", label: "support.title", icon: "help", group: "bottom" },
-  { id: "more", label: "nav.more", icon: "more", group: "bottom", tab: true, phoneOnly: true },
+  { id: "more", label: "nav.more", icon: "more", group: "bottom", phoneOnly: true },
 ];
 
 /** Where a section opens for this role. Home = the role's own home screen; Leads, Estimates, Invoices — each its own screen. */
@@ -96,6 +102,9 @@ export function sectionHref(id: SectionId, role: Role): string {
     case "estimates":
       // a section of its own for every role (founder 07.11, spec 31 §7а); /leads holds the leads only
       return "/estimates";
+    case "finance":
+      // visual v2 №6 (#2344): the tab opens its overview; the tech has no «Деньги» tab (his estimates are in «Ещё»)
+      return role === "tech" ? "/estimates" : "/finance";
     case "invoices":
       // the one path to debts (18 §1): the list opens on «Не оплачен · Просрочен»
       return "/invoice";
@@ -116,9 +125,26 @@ export const MODULE_TAB_REPLACES: SectionId = "plan";
 /** a bottom tab now: `modTab` — the company has a module's tab (moduleTabs), it stands where «План» was */
 const isTab = (s: Section, modTab: boolean) => !!s.tab && !(modTab && s.id === MODULE_TAB_REPLACES);
 
-/** The 5 bottom tabs: the same set for every role (13 §2.1) — what is inside is filtered by rights. With a module's tab
- *  (`modTab`) «План» is not a tab: the module's tab takes its place (TabBar puts it there), «План» is a tile in «Ещё». */
-export const tabs = (_role: Role, modTab = false): Section[] => SECTIONS.filter((s) => isTab(s, modTab));
+/** the order of the bottom bar (prototype v2, BUILD-SPEC: Главная · План · Клиенты · Деньги · Лиды) */
+export const TAB_ORDER: readonly SectionId[] = ["home", "plan", "clients", "finance", "leads"];
+const tabRank = (id: SectionId) => TAB_ORDER.indexOf(id);
+
+/** The 5 bottom tabs: the same set for the office (13 §2.1); the tech has no «Деньги» (audit 12 §2.6) — what is inside is filtered by rights. With a module's tab
+ *  (`modTab`) «План» is not a tab: the module's tab takes its place (TabBar puts it there), «План» is in «Ещё».
+ *  A subcontractor (`sub`) never gets leads (noSub): 4 tabs. */
+export const tabs = (role: Role, modTab = false, sub = false): Section[] =>
+  SECTIONS.filter((s) => isTab(s, modTab) && !(sub && s.noSub) && (!s.roles || s.roles.includes(role))).sort((a, b) => tabRank(a.id) - tabRank(b.id));
+
+/** the money sections behind the one «Деньги» tab (its segment switches them) */
+const FINANCE: ReadonlySet<SectionId> = new Set<SectionId>(["finance", "estimates", "invoices", "payments", "money"]);
+
+/** Which bottom tab is lit for a section: the tab itself, «Деньги» for the money lists, none for a section of «Ещё»
+ *  (it opens from the avatar; no tab is it — HIG: the bar never shows a place you are not in). */
+export function tabOf(id: SectionId | undefined, role: Role, modTab = false, sub = false): SectionId | undefined {
+  if (!id) return undefined;
+  const t = FINANCE.has(id) ? "finance" : id;
+  return tabs(role, modTab, sub).some((s) => s.id === t) ? t : undefined;
+}
 
 /**
  * The sections by group for this role, in order (13 v2 §2.3); a group with nothing the role may open is left out.
@@ -141,6 +167,7 @@ export const hasSection = (role: Role, id: SectionId) => tabs(role).some((s) => 
 export function sectionOfRoute(route: string): SectionId | undefined {
   if (HOME_ROUTES.has(route) || route === "figures") return "home";
   if (route === "inbox") return "leads";
+  // the lists keep their own item (the side menu lights it); the bar maps them to «Деньги» (tabOf)
   if (route === "invoice") return "invoices";
   return SECTIONS.some((s) => s.id === route) ? (route as SectionId) : undefined;
 }
@@ -206,7 +233,7 @@ const FAB_LOOK: Record<FabId, { label: DictKey; icon: IconKey; hint?: DictKey }>
   lead: { label: "path.leadNew", icon: "user" },
   client: { label: "path.clientNew", icon: "users" },
   job: { label: "path.jobNew", icon: "wrench", hint: "path.jobHint" },
-  estimate: { label: "path.estimateNew", icon: "invoice", hint: "path.estimateHint" },
+  estimate: { label: "path.estimateNew", icon: "estimate", hint: "path.estimateHint" },
   expense: { label: "path.expenseNew", icon: "wallet" },
   visit: { label: "path.visitAdd", icon: "calendar" },
   planAdd: { label: "plan.add", icon: "calendar" },

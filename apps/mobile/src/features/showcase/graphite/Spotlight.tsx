@@ -5,7 +5,7 @@
  * in 320 ms with the one curve, only at the change. «Уменьшить движение»: no run, the beam fades in 120 ms in place.
  * Where it stands — beamMath.ts (unit-tested).
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -18,7 +18,7 @@ import { graphite } from "@octo/design-tokens";
 import { useI18n, type DictKey } from "@/i18n";
 import { Icon, type IconKey } from "@/ui/primitives";
 import { GrLiquid } from "./Glass";
-import { alphaOf, beamWidth, beamX, nextBeamSlot, rgbOf } from "./beamMath";
+import { alphaOf, beamStart, beamWidth, beamX, nextBeamSlot, rgbOf } from "./beamMath";
 import { GrPress, GrText, grTiming, useGr } from "./theme";
 
 const SLOTS: { id: string; label: DictKey; icon: IconKey }[] = [
@@ -49,14 +49,20 @@ export function SpotlightNav({
   const glow = useSharedValue(1);
   const lineH = graphite.beam[name];
 
+  /** the width the beam was last placed at (0: not placed yet — its first place is taken at once, #2286) */
+  const placedAt = useRef(0);
   useEffect(() => {
     const to = beamX(sel, w, SLOTS.length, bw);
-    if (reduceMotion) {
+    const how = beamStart(placedAt.current, w, reduceMotion);
+    placedAt.current = w;
+    if (how === "jump") {
       x.value = to;
-      glow.value = withSequence(
-        withTiming(0, { duration: 0 }),
-        withTiming(1, grTiming(graphite.motion.beam, true)),
-      );
+      if (reduceMotion) {
+        glow.value = withSequence(
+          withTiming(0, { duration: 0 }),
+          withTiming(1, grTiming(graphite.motion.beam, true)),
+        );
+      }
     } else x.value = withTiming(to, grTiming(graphite.motion.beam, false));
     // the beam moves only when the slot or the width changes
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -2,17 +2,23 @@
  * The filters of «План» (docs/specs/31-list-filters.md, one rule — director 07.11): «Мастер» and «Выполненные» are groups
  * of the «Фильтры» sheet; what is on is a chip under the row («Мастер: Ivan Sokolov ✕», «Выполненные ✕»).
  * planMaster(p, name) — pick a person (null: nobody, i.e. everyone); planShowDone(p, on) — show the done ones or not.
- * Found by testID; 1280 opens the group's own button, 390 / 820 the «Фильтры» button.
+ * Found by testID; 1280 opens the group's own button, 390 / 820 the «Фильтры» button — v2 (#2350, FilterBar «значки в шапке»):
+ * on 390 / 820 the header's icon `plan-filters` opens the sheet of all groups.
  */
 const vis = (loc) => loc.locator("visible=true");
 const sheet = (p) => p.locator('[aria-modal="true"]').last();
 
 async function openGroup(p, key) {
-  const bar = vis(p.getByTestId("filter-bar")).first();
-  await bar.waitFor();
-  const all = vis(bar.getByTestId("filter-button"));
-  if (await all.count()) await all.first().click();
-  else await vis(bar.getByTestId(`filter-group-${key}`)).first().click();
+  await vis(p.getByTestId("plan")).first().waitFor();
+  const icon = vis(p.getByTestId("plan-filters"));
+  if (await icon.count()) await icon.first().click();
+  else {
+    const bar = vis(p.getByTestId("filter-bar")).first();
+    await bar.waitFor();
+    const all = vis(bar.getByTestId("filter-button"));
+    if (await all.count()) await all.first().click();
+    else await vis(bar.getByTestId(`filter-group-${key}`)).first().click();
+  }
   await p.waitForTimeout(400);
 }
 async function done(p) {

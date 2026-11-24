@@ -64,6 +64,19 @@ const withSections = <T extends Opt>(o: T, sections: EstimateSection[], lines: C
 /** a section may be added while the option has fewer than SECTIONS_MAX counted ones */
 export const canAddSection = (o: Opt): boolean => countedSections(o).length < SECTIONS_MAX;
 
+
+/**
+ * #2422 (founder 23.11; audit MAP §6): what is folded while a section is in the hand (`held`) — every section, so the place to drop it
+ * is found on a short list of titles; the held section's parents stay open (a sub-section must not vanish with its parent). The
+ * person's own folding (`own`) is not changed: nothing held — it as it is; on the drop the list is as before.
+ */
+export function foldForDrag(o: Pick<CustomOption, "sections">, own: readonly string[], held: string | null): Set<string> {
+  if (!held) return new Set(own);
+  const all = o.sections ?? [];
+  const parents = new Set<string>();
+  for (let at = all.find((x) => x.id === held)?.parentId; at && !parents.has(at); at = all.find((x) => x.id === at)?.parentId) parents.add(at);
+  return new Set(all.map((x) => x.id).filter((id) => !parents.has(id)));
+}
 /** «＋ Раздел» (a top one, at the end) or «Добавить подраздел» (under a top section that is not a module's, one level only) */
 export function addSection<T extends Opt>(o: T, opts: { parentId?: string; title?: string; kind?: LineGroup } = {}, newId: () => string = uid): { option: T; id: string } | null {
   if (!canAddSection(o)) return null;
@@ -328,4 +341,17 @@ export function sameLayout(a: Opt, b: Opt): boolean {
   const x = view(a);
   const y = view(b);
   return x.length === y.length && x.every((k, i) => k === y[i]);
+}
+
+/**
+ * #2363 q75 (founder 21.11.2026: «по видам, автоматически»): the option as it is SHOWN — with no sections of its own and lines of two
+ * kinds or more, its lines stand in kind sections («Материалы · Работа · Услуги», `layoutByKind`) with fixed ids `auto-1…` (in the kinds' order),
+ * so the view is the same on every render. Null — show the option as it is (own sections, one kind, a module's lines only).
+ */
+export function autoGroups<T extends Opt>(o: T): T | null {
+  if ((o.sections ?? []).length) return null;
+  const kinds = new Set(o.lines.filter((l) => !l.source).map((l) => l.group));
+  if (kinds.size < 2) return null;
+  let n = 0;
+  return layoutByKind(o, () => `auto-${++n}`);
 }

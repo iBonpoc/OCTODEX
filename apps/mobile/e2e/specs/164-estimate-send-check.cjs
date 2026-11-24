@@ -22,7 +22,7 @@ exports.run = async (h) => {
   };
   const est = async () => ((await h.db())?.estimates ?? []).find((e) => e.id === EID);
   const disabled = async (key) => (await tid(`send-${key}`).getByRole("button").getAttribute("aria-disabled")) === "true";
-  const openSend = async () => { await tid("est-send").getByRole("button").click(); await tid("send-check").waitFor({ timeout: 8000 }); };
+  const openSend = async () => { await tid("est-send").first().click(); await tid("send-check").waitFor({ timeout: 8000 }); };
 
   await h.go("/today");
   await p.evaluate(({ k, id }) => {
@@ -44,9 +44,11 @@ exports.run = async (h) => {
 
   // the check: «нет цены» stops the send
   await h.go(`/estimate/${EID}`);
-  // on site: the client cannot sign it either (review C5 №2)
+  // on site: the client cannot sign it either (review C5 №2) — v2: the section «Подпись на месте» of the estimate
+  await tid("estimate-screen-sections-sign").first().click();
   await tid("sign-check-blocked").waitFor({ timeout: 8000 });
   h.expect((await tid("sign-check-noPrice").count()) === 1, "on-site signing is stopped by «нет цены»");
+  await tid("estimate-screen-sections-doc").first().click();
   await openSend();
   h.expect((await tid("send-check-blocked").count()) === 1, "«Нельзя отправить»");
   for (const k of ["noPrice", "testPrice", "gone"]) h.expect((await tid(`send-check-${k}`).count()) === 1, `the ${k} group is listed`);
@@ -64,7 +66,7 @@ exports.run = async (h) => {
   await tid("est-price-l-np").locator("input").fill("12");
   await tid("est-collapse-l-np").getByRole("button").click();
   await waitFor(async () => (await tid("est-price-l-np").count()) === 0, "the row closed");
-  await tid("ue-save").getByRole("button").click();
+  await tid("ue-save").first().click();
   await waitFor(async () => (await est())?.doc?.options?.[0]?.lines?.find((l) => l.id === "l-np")?.unitPriceCents === 1200, "the price is saved");
   await p.waitForURL(new RegExp(`/estimate/${EID}`), { timeout: 8000 });
 

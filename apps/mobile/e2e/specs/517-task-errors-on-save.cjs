@@ -6,6 +6,7 @@
  * Finds things by testID and the store; waits on what it checks (no pauses).
  */
 const { sheetGone } = require("../sheet.cjs");
+const { listCreate } = require("../listScreen.cjs");
 const KEY = "octo.db.v5";
 const TITLE = "T517 call about the gutters";
 
@@ -15,7 +16,8 @@ exports.run = async (h) => {
   const tasks = () => p.evaluate((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.tasks || []).length, KEY);
 
   await h.go("/tasks");
-  await p.locator('[data-testid="fab-header"]:visible, [data-testid="fab"]:visible').first().click();
+  // v2: «＋» of the List template's header
+  await listCreate(p, "tasks", "tasks-create-new");
   await tid("task-save").waitFor({ timeout: 5000 });
   const before = await tasks();
 

@@ -107,6 +107,60 @@ export function VoidInvoiceMenu({ inv, items = [] }: { inv: Invoice; items?: Inv
   );
 }
 
+/**
+ * «Аннулировать…» for the Object template's «⋯» (prototype v2 #2350): the item (the director's only — red and last; with a payment
+ * it is dimmed and says why, never a dead end), what picking it does, and the reason sheet (В1-5, unchanged rules). The template
+ * asks «Аннулировать?» first for a red item; the sheet then takes the reason.
+ */
+export function useVoidInvoice(inv: Invoice) {
+  const store = useStore();
+  const { t } = useI18n();
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const director = store.role === "director";
+  const blocked = voidRefusal(store.db, inv.id, "x", store.role);
+  const close = () => {
+    setOpen(false);
+    setReason("");
+  };
+  const confirm = () => {
+    const why = store.voidInvoice(inv.id, reason);
+    if (why) {
+      toast.show(t(`inv.void.why.${why}` as DictKey));
+      if (why !== "reason" && why !== "long") close();
+      return;
+    }
+    close();
+    toast.show(t("inv.void.done"));
+  };
+  const item = director ? { key: "void", label: t("inv.void.menu"), icon: "close" as const, destructive: !blocked, dim: !!blocked, testID: "invoice-void-item" } : null;
+  const pick = () => (blocked ? toast.show(t(`inv.void.why.${blocked}` as DictKey)) : setOpen(true));
+  const sheet = (
+    <Sheet
+      visible={open}
+      onClose={close}
+      title={t("inv.void.title")}
+      dirty={reason.trim() !== ""}
+      footer={
+        <View testID="invoice-void-confirm">
+          <Button label={t("inv.void.confirm")} icon="close" variant="danger" full disabled={!reason.trim()} onPress={confirm} />
+        </View>
+      }
+    >
+      <View style={{ gap: space[3] }}>
+        <T v="body" tone="mut">
+          {t("inv.void.body")}
+        </T>
+        <View testID="invoice-void-reason">
+          <TextField type="note" value={reason} onChangeText={(x) => setReason(x.slice(0, VOID_REASON_MAX))} label={t("inv.void.reason")} placeholder={t("inv.void.reasonPh")} autoFocus />
+        </View>
+      </View>
+    </Sheet>
+  );
+  return { item, pick, sheet };
+}
+
 /** a voided invoice's own screen: what it was, «Аннулирован» and why — no payment, reminder or PDF (the client never
  *  gets it: /p/ and the PDF show only live invoices) */
 export function VoidInvoiceBody({ inv }: { inv: Invoice }) {
