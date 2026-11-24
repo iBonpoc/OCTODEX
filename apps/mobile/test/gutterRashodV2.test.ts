@@ -68,7 +68,7 @@ describe("Т1: the parts version 5 — told, never recounted by itself", () => {
   const d = drawing();
   // what version 4 counted for the plain one: no elbows, no bends, the feet as drawn (20 ft)
   const v4 = linesFromParts(partsOf(d, { fieldBends: 0, dsRoundUpFt: 1 }), [], name, uid, "rev1", M, "2026-11-16T10:00:00Z", "4") as ModuleLine[];
-  it("the version is 6 (PR-2 after PR-1б)", () => expect(GUTTER_PARTS_VERSION).toBe("6"));
+  it("the version is 7 (G2 after PR-2 after PR-1б)", () => expect(GUTTER_PARTS_VERSION).toBe("7"));
   it("a draft of version 4 says «Расчёт изменился», «Обновить» is offered, and asking changes nothing in it", () => {
     const e = estimate(v4);
     const before = JSON.stringify(e.doc);

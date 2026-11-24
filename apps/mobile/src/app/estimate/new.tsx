@@ -39,8 +39,10 @@ import { useReducedMotion } from "react-native-reanimated";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { PickerSheet } from "@/ui/pickerSheet";
 import { Labeled, MoneyField, PctField, RatePctField } from "@/features/fields";
+import { MONEY_MODES, TAX_MODES, depositFor, depositMode, discountFor, discountMode, remember, type ModeMemo, type TotalsMode } from "@/features/estimate/totalsModes";
+import { ModeRow } from "@/ui/modeRow";
 import { isPartialTax, lastTaxRatePpm, taxChange, wholeTax, type TaxDiff } from "@/features/estimateTax";
-import { Button, IconButton, Segmented, StatusChip, TextField, Toggle } from "@/ui/controls";
+import { Button, IconButton, StatusChip, TextField } from "@/ui/controls";
 import { CountPill, FigureRow } from "@/ui/figures";
 import type { IconKey } from "@/ui/primitives";
 import { dayKeyIn } from "@/features/zone";
@@ -59,7 +61,6 @@ import { useAuth } from "@/cloud/auth";
 import { NO_UNDO, localUndo, withAfter } from "@/data/undo";
 import { StatusNote } from "@/ui/statusNote";
 
-type SettingKind = "discount" | "tax" | "deposit" | null;
 const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 
 /**
@@ -188,7 +189,6 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const afterPicker = useRef<(() => void) | null>(null);
   // number fields of the open row that hold text which is not a number (the line keeps the last right value): "<line>:<field>"
   const badFields = useRef(new Set<string>());
-  const [setting, setSetting] = useState<SettingKind>(null);
   const [clientPicker, setClientPicker] = useState(!customerId && !startOpen && !tplEdit && !draft);
   // every CHANGE of a new estimate is kept on the phone; opening it (a template's lines and name) is not a change
   // (#859 №1); nothing worth keeping — no draft (#760)
@@ -287,6 +287,19 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const optionSums = useMemo(() => Object.fromEntries(counted.options.map((o) => [o.id, optionTotals(counted, o).total])), [counted]);
   const s = counted.settings;
   const partialTax = isPartialTax(doc.settings.tax);
+  // the totals' switch «% · Выкл. · $» (DS §8.7а); a value turned off reads «—»
+  const modeLabel = (k: TotalsMode) => ({ key: k, label: k === "pct" ? "%" : k === "fixed" ? "$" : t("ue.off") });
+  const moneyModes = MONEY_MODES.map(modeLabel);
+  const taxModes = TAX_MODES.map(modeLabel);
+  const DASH = "—";
+  // what «%» / «$» had before «Выкл.» in this editor (CRM review): back to it brings the value back
+  const discMemo = useRef<ModeMemo<NonNullable<typeof s.discount>>>({});
+  const depMemo = useRef<ModeMemo<DepositSetting>>({});
+  // the field of the row whose «%» / «$» was just picked takes the focus, its text selected (one tap to typing)
+  const [rowFocus, setRowFocus] = useState<{ row: string; n: number }>({ row: "", n: 0 });
+  const focusTotals = (row: string, k: TotalsMode) => k !== "off" && setRowFocus((f) => ({ row, n: f.n + 1 }));
+  const focusOf = (row: string) => (rowFocus.row === row ? rowFocus.n : undefined);
+  const [badRate, setBadRate] = useState(false);
   const lastRate = lastTaxRatePpm(db.estimates, existing?.id);
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
@@ -991,9 +1004,6 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const secTotals = useMemo(() => sectionSubtotals(layoutOpt, s), [layoutOpt, s]);
   const hasGroups = (layoutOpt.sections ?? []).length > 0;
   const totalById = new Map(act.map((l, i) => [l.id, totals.lineTotals[i] ?? 0] as const));
-  const taxValue = !s.tax.enabled ? t("ue.off") : partialTax ? `${ppmToPctText(taxRatePpm(s.tax))}% · ${t("ue.taxPartialShort")}` : `${ppmToPctText(taxRatePpm(s.tax))}%`;
-  const discValue = !s.discount ? t("ue.add") : s.discount.kind === "pct" ? `${discountBps(s.discount.value) / 100}%` : money(s.discount.cents);
-  const depValue = s.deposit.kind === "none" ? t("ue.none") : s.deposit.kind === "pct" ? `${s.deposit.bps / 100}% · ${money(totals.deposit)}` : money(totals.deposit);
 
   /** sending is the office's (#1113): «Сохранить и отправить» is in «⋯» — the bar's one step is «Готово» (BUILD-SPEC §2.7, LAYOUT-RULES П3) */
   const canSend = canSeeClientLink(store.role);
@@ -1333,8 +1343,70 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           {/* #2387: the totals are a group of GroupRows (one look with Деньги and a client): the word, the figure on the right, «›» where it opens */}
           <ListGroup inset={space[4]} testID="est-totals">
             <GroupRow title={t("ue.subtotal")} value={money(totals.subtotal)} />
-            <GroupRow title={t("ue.discount")} value={totals.discount ? `−${money(totals.discount)}` : discValue} chevron={!signed} onPress={signed ? undefined : () => setSetting("discount")} testID="est-discount-row" />
-            <GroupRow wrap title={t("ue.tax")} value={totals.tax ? `${money(totals.tax)} · ${taxValue}` : taxValue} chevron={!signed} onPress={signed ? undefined : () => setSetting("tax")} testID="est-tax-row" />
+            {/* founder 23.11 (MAP §12 п.8, DS §8.7а): Скидка / Налог / Депозит — one line each: the word · [% · Выкл. · $] · the value ·
+                the sum, set right in the row (no sheet); applies at once */}
+            <ModeRow
+              title={t("ue.discount")}
+              modes={moneyModes}
+              mode={discountMode(s.discount)}
+              off="off"
+              onMode={(k) => {
+                discMemo.current = remember(discMemo.current, s.discount);
+                setSettings({ discount: discountFor(k, s.discount, discMemo.current) });
+                focusTotals("discount", k);
+              }}
+              field={
+                s.discount?.kind === "pct" ? (
+                  <View testID="est-discount-pct"><PctField unit a11yLabel={t("ue.discount")} focusNow={focusOf("discount")} bps={discountBps(s.discount.value)} onChange={(b) => setSettings({ discount: { kind: "pct", value: String(Math.min(b, 10000) / 10000) } })} /></View>
+                ) : s.discount?.kind === "fixed" ? (
+                  <View testID="est-discount-fixed"><MoneyField unit a11yLabel={t("ue.discount")} focusNow={focusOf("discount")} cents={s.discount.cents} onChange={(c) => setSettings({ discount: { kind: "fixed", cents: c } })} /></View>
+                ) : undefined
+              }
+              sum={!s.discount ? DASH : totals.discount ? `−${money(totals.discount)}` : money(0)}
+              locked={signed}
+              testID="est-discount-row"
+            />
+            <ModeRow
+              title={t("ue.tax")}
+              modes={taxModes}
+              mode={s.tax.enabled && !exempt ? "pct" : "off"}
+              off="off"
+              onMode={(k) => {
+                if (k === "pct") changeTax({ enabled: true });
+                else setSettings({ tax: { ...s.tax, enabled: false } });
+                focusTotals("tax", k);
+              }}
+              field={
+                partialTax ? (
+                  <T v="caption" tone="mut">{`${ppmToPctText(taxRatePpm(s.tax))}%`}</T>
+                ) : (
+                  <View testID="est-tax-rate"><RatePctField unit a11yLabel={t("ue.taxRate")} focusNow={focusOf("tax")} onBad={setBadRate} ppm={taxRatePpm(s.tax)} onChange={(p) => setSettings({ tax: wholeTax(s.tax, { ratePpm: Math.min(p, 1_000_000) }) })} /></View>
+                )
+              }
+              sum={s.tax.enabled && !exempt ? money(totals.tax) : DASH}
+              locked={signed || exempt}
+              testID="est-tax-row"
+              note={
+                exempt ? (
+                  <View testID="est-tax-exempt"><T v="caption" tone="mut">{t("ue.taxExemptClient")}</T></View>
+                ) : signed ? (
+                  // a signed estimate: the rows do not change — said once, under the tax (CRM review: «не говорят почему»)
+                  <View testID="est-totals-signed"><T v="caption" tone="mut">{t("ue.taxSigned")}</T></View>
+                ) : s.tax.enabled && badRate ? (
+                  // the field is too narrow for its hint: the hint goes under the row
+                  <FieldError text={t("ue.taxRateHint")} testID="est-tax-bad" />
+                ) : s.tax.enabled && partialTax ? (
+                  <View testID="est-tax-partial" style={{ gap: space[2] }}>
+                    <T v="caption" tone="mut">{t("ue.taxPartial")}</T>
+                    <Button label={t("ue.taxWhole")} variant="secondary" full onPress={() => changeTax({})} />
+                  </View>
+                ) : s.tax.enabled && lastRate !== null && lastRate !== taxRatePpm(s.tax) ? (
+                  <View testID="est-tax-last" style={{ alignSelf: "flex-start" }}>
+                    <Button label={t("ue.taxLast", { rate: ppmToPctText(lastRate) })} variant="ghost" onPress={() => setSettings({ tax: wholeTax(s.tax, { ratePpm: lastRate }) })} />
+                  </View>
+                ) : null
+              }
+            />
             {/* the total once (П7): in the pinned bar on a phone, here only where there is no bar (820/1280) */}
             {barShown ? null : (
               <View style={{ paddingHorizontal: space[4] }}>
@@ -1346,7 +1418,27 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                 </RowView>
               </View>
             )}
-            <GroupRow title={t("ue.deposit")} value={depValue} chevron={!signed} onPress={signed ? undefined : () => setSetting("deposit")} testID="est-deposit-row" />
+            <ModeRow
+              title={t("ue.deposit")}
+              modes={moneyModes}
+              mode={depositMode(s.deposit)}
+              off="off"
+              onMode={(k) => {
+                depMemo.current = remember(depMemo.current, s.deposit);
+                setSettings({ deposit: depositFor(k, s.deposit, depMemo.current) });
+                focusTotals("deposit", k);
+              }}
+              field={
+                s.deposit.kind === "pct" ? (
+                  <View testID="est-deposit-pct"><PctField unit a11yLabel={t("ue.deposit")} focusNow={focusOf("deposit")} bps={s.deposit.bps} onChange={(b) => setSettings({ deposit: { kind: "pct", bps: Math.min(b, 10000) } })} /></View>
+                ) : s.deposit.kind === "fixed" ? (
+                  <View testID="est-deposit-fixed"><MoneyField unit a11yLabel={t("ue.deposit")} focusNow={focusOf("deposit")} cents={s.deposit.cents} onChange={(c) => setSettings({ deposit: { kind: "fixed", cents: c } })} /></View>
+                ) : undefined
+              }
+              sum={s.deposit.kind === "none" ? DASH : money(totals.deposit)}
+              locked={signed}
+              testID="est-deposit-row"
+            />
             {totals.depositOverCaLimit ? <View style={{ padding: space[4] }}><CaWarn limitCents={totals.caDepositLimit} testID="est-ca-warn" /></View> : null}
             {/* from 820 (no panel): «если клиент включит всё на выбор» and «Только для вас» here; a phone has them in the panel's «Итого ˅» */}
             {totalRows.client.some((r) => r.key === "ifAll") || totalRows.own.length ? (
@@ -1441,16 +1533,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         onClose={() => setMoveFor(null)}
         testID="est-move-picker"
       />
-      {/* the question of the tax is a PAGE of this sheet (one window at a time: a second Modal does not show on iOS, #743) */}
-      <Sheet
-        visible={setting !== null}
-        onClose={() => {
-          setTaxAsk(null);
-          setSetting(null);
-        }}
-        title={taxAsk ? t("ue.taxAskTitle") : setting ? t(`ue.${setting}` as DictKey) : undefined}
-        onBack={taxAsk ? () => setTaxAsk(null) : undefined}
-      >
+      {/* the question of the tax (an old estimate taxed by kind: turning it on changes the client's sum) — the one sheet of the
+          totals; the values themselves are set in their rows (DS §8.7а) */}
+      <Sheet visible={taxAsk !== null} onClose={() => setTaxAsk(null)} title={taxAsk ? t("ue.taxAskTitle") : undefined}>
         <View style={{ gap: space[3] }}>
           {taxAsk ? (
             <View testID="est-tax-ask" style={{ gap: space[3] }}>
@@ -1467,98 +1552,6 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               </View>
             </View>
           ) : null}
-          {!taxAsk && setting === "discount" ? (
-            <>
-              <Segmented
-                full
-                value={s.discount ? s.discount.kind : "none"}
-                onChange={(k) => setSettings({ discount: k === "none" ? null : k === "pct" ? { kind: "pct", value: "0.05" } : { kind: "fixed", cents: 0 } })}
-                items={[
-                  { key: "none", label: t("ue.none") },
-                  { key: "pct", label: "%" },
-                  { key: "fixed", label: "$" },
-                ]}
-              />
-              {s.discount?.kind === "pct" ? (
-                <PctField bps={discountBps(s.discount.value)} onChange={(b) => setSettings({ discount: { kind: "pct", value: String(Math.min(b, 10000) / 10000) } })} />
-              ) : s.discount?.kind === "fixed" ? (
-                <MoneyField cents={s.discount.cents} onChange={(c) => setSettings({ discount: { kind: "fixed", cents: c } })} />
-              ) : null}
-              {/* #2387 (CRM review: «не видно, что изменились деньги»): the change applies at once — the sheet says what it did */}
-              <View testID="est-discount-result">
-                <ListRow title={t("ue.discount")} chevron={false} right={<T v="body" w="semibold" tabular>{totals.discount ? `−${money(totals.discount)}` : money(0)}</T>} />
-                <ListRow title={t("ue.total")} chevron={false} right={<T v="body" w="semibold" tabular>{money(totals.total)}</T>} />
-              </View>
-            </>
-          ) : null}
-          {!taxAsk && setting === "tax" ? (
-            <>
-              <RowView style={{ minHeight: size.hitMin }}>
-                <T v="body" style={{ flex: 1 }}>
-                  {t("ue.taxOn")}
-                </T>
-                {/* a client without tax: the switch is pale and says why (the server refuses tax for them, П-2a) */}
-                <View testID="est-tax-toggle">
-                  <Toggle label={t("ue.tax")} on={s.tax.enabled} disabled={exempt || signed} onChange={(on) => (on ? changeTax({ enabled: true }) : setSettings({ tax: { ...s.tax, enabled: false } }))} />
-                </View>
-              </RowView>
-              <T v="caption" tone="mut">
-                {exempt ? t("ue.taxExemptClient") : signed ? t("ue.taxSigned") : t("ue.taxHint")}
-              </T>
-              {s.tax.enabled && !exempt && !signed ? (
-                partialTax ? (
-                  <View testID="est-tax-partial" style={{ gap: space[2] }}>
-                    <T v="caption" tone="mut">
-                      {t("ue.taxPartial")}
-                    </T>
-                    <Button label={t("ue.taxWhole")} variant="secondary" full onPress={() => changeTax({})} />
-                  </View>
-                ) : (
-                  <>
-                    <Labeled label={t("ue.taxRate")}>
-                      <View testID="est-tax-rate">
-                        <RatePctField ppm={taxRatePpm(s.tax)} onChange={(p) => setSettings({ tax: wholeTax(s.tax, { ratePpm: Math.min(p, 1_000_000) }) })} />
-                      </View>
-                    </Labeled>
-                    {lastRate !== null && lastRate !== taxRatePpm(s.tax) ? (
-                      <View testID="est-tax-last">
-                        <Button label={t("ue.taxLast", { rate: ppmToPctText(lastRate) })} variant="ghost" onPress={() => setSettings({ tax: wholeTax(s.tax, { ratePpm: lastRate }) })} />
-                      </View>
-                    ) : null}
-                  </>
-                )
-              ) : null}
-              {/* #2387 (CRM review): the tax applies at once — its sum and the new total under the rate */}
-              <View testID="est-tax-result">
-                <ListRow title={t("ue.tax")} chevron={false} right={<T v="body" w="semibold" tabular>{money(totals.tax)}</T>} />
-                <ListRow title={t("ue.total")} chevron={false} right={<T v="body" w="semibold" tabular>{money(totals.total)}</T>} />
-              </View>
-            </>
-          ) : null}
-          {!taxAsk && setting === "deposit" ? (
-            <>
-              <Segmented
-                full
-                value={s.deposit.kind}
-                onChange={(k) => setSettings({ deposit: (k === "pct" ? { kind: "pct", bps: 1000 } : k === "fixed" ? { kind: "fixed", cents: 0 } : { kind: "none" }) as DepositSetting })}
-                items={[
-                  { key: "pct", label: t("ue.depositPct") },
-                  { key: "fixed", label: t("ue.depositUsd") },
-                  { key: "none", label: t("ue.none") },
-                ]}
-              />
-              {s.deposit.kind === "pct" ? (
-                <View testID="est-deposit-pct">
-                  <PctField bps={s.deposit.bps} onChange={(b) => setSettings({ deposit: { kind: "pct", bps: Math.min(b, 10000) } })} />
-                </View>
-              ) : s.deposit.kind === "fixed" ? (
-                <MoneyField cents={s.deposit.cents} onChange={(c) => setSettings({ deposit: { kind: "fixed", cents: c } })} />
-              ) : null}
-              <ListRow title={t("ue.deposit")} chevron={false} right={<T v="body" w="semibold" tabular>{money(totals.deposit)}</T>} />
-              {totals.depositOverCaLimit ? <CaWarn limitCents={totals.caDepositLimit} testID="est-ca-warn-sheet" /> : null}
-            </>
-          ) : null}
-          {/* #2387 (DS Б1: no button in a sheet's body; a setting applies at once): the sheet closes by «✕» or a swipe — no «Понятно» */}
         </View>
       </Sheet>
       {dialog}

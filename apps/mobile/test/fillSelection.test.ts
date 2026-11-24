@@ -32,8 +32,10 @@ describe("«Заливка» of the chosen (#1306)", () => {
     expect(bar).not.toMatch(/fillStyle|backgroundColor: c\.acc/);
     expect(bar).toMatch(/sel \? c\.accText : c\.mut/);
     const ctl = src("ui/controls.tsx");
-    expect(ctl).toMatch(/const chosenBg = accent \? c\.acc : c\.surf3;/);
-    expect(ctl).toMatch(/borderRadius: radius\.pill, backgroundColor: chosenBg \}, pill\]/);
+    // (#2454, DS §8.7а: on a card's `track` — `onCard` — the neutral chosen is the card's `surf` framed by `bdField`, ≥ 3:1; off a card it
+    // stays `surf3`; the yellow only with `accent`)
+    expect(ctl).toMatch(/const chosenBg = accent \? c\.acc : onCard \? c\.surf : c\.surf3;/);
+    expect(ctl).toMatch(/borderRadius: radius\.pill, backgroundColor: chosenBg, \.\.\.\(onCard && !accent \? \{ borderWidth: component\.hairline, borderColor: c\.bdField \} : null\) \}, pill\]/);
   });
   it("the chosen is never the accent and never an ink frame", () => {
     const c = src("ui/controls.tsx");

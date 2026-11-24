@@ -12,8 +12,9 @@ import { useRequiredForm } from "@/ui/requiredForm";
 import { Segmented } from "@/ui/controls";
 import { SortableList } from "@/features/SortableList";
 import { moveLine, sameLayout, viewRows } from "@/features/sectionLayout";
-import { Button, Toggle } from "@/ui/controls";
-import { Labeled, RatePctField } from "@/features/fields";
+import { Button } from "@/ui/controls";
+import { ModeRow } from "@/ui/modeRow";
+import { RatePctField } from "@/features/fields";
 import { PhotoStrip } from "@/features/PhotoStrip";
 import { haptics } from "@/ui/haptics";
 import { fillStyle } from "@/ui/fill";
@@ -167,33 +168,29 @@ function SwipeSample() {
   );
 }
 
-/** the tax sheet of the estimate (DS §8.7): the switch, the rate by hand, «as in the last estimate» (nothing is saved) */
+/** the tax of the estimate (DS §8.7, §8.7а): one totals row «% · Выкл.» with the rate by hand, «as in the last estimate»; under it
+ *  the row of a tax-exempt client — read only, says why (nothing is saved) */
 function TaxSample() {
   const { t } = useI18n();
-  const [on, setOn] = useState(true);
+  const [mode, setMode] = useState<"pct" | "off">("pct");
   const [ppm, setPpm] = useState(0);
+  const modes = [{ key: "pct" as const, label: "%" }, { key: "off" as const, label: t("ue.off") }];
   return (
     <Card>
       <View testID="showcase-rows-tax" style={{ gap: space[2] }}>
         <T v="heading">{t("ds.rows.tax")}</T>
         <T v="caption" tone="mut">{t("ds.rows.taxHint")}</T>
-        <RowView style={{ justifyContent: "space-between" }}>
-          <T v="body">{t("ue.taxOn")}</T>
-          <Toggle label={t("ue.tax")} on={on} onChange={setOn} />
-        </RowView>
-        {on ? (
-          <>
-            <Labeled label={t("ue.taxRate")}>
-              <RatePctField ppm={ppm} onChange={setPpm} />
-            </Labeled>
-            {ppm !== 88750 ? <Button label={t("ue.taxLast", { rate: "8.875" })} variant="ghost" onPress={() => setPpm(88750)} /> : null}
-          </>
-        ) : null}
-        <RowView style={{ justifyContent: "space-between" }}>
-          <T v="body" tone="mut">{t("ue.taxOn")}</T>
-          <Toggle label={t("ue.tax")} on={false} onChange={() => {}} disabled />
-        </RowView>
-        <T v="caption" tone="mut">{t("ue.taxExemptClient")}</T>
+        <ModeRow
+          title={t("ue.tax")}
+          modes={modes}
+          mode={mode}
+          off="off"
+          onMode={setMode}
+          field={<RatePctField unit a11yLabel={t("ue.taxRate")} ppm={ppm} onChange={setPpm} />}
+          sum={mode === "off" ? "—" : t("ds.rows.taxSum")}
+          note={mode === "pct" && ppm !== 88750 ? <View style={{ alignSelf: "flex-start" }}><Button label={t("ue.taxLast", { rate: "8.875" })} variant="ghost" onPress={() => setPpm(88750)} /></View> : null}
+        />
+        <ModeRow title={t("ue.tax")} modes={modes} mode="off" off="off" onMode={() => {}} sum="—" locked note={<T v="caption" tone="mut">{t("ue.taxExemptClient")}</T>} />
       </View>
     </Card>
   );

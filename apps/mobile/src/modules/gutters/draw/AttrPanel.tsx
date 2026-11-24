@@ -3,7 +3,7 @@
  * is made of. One component: on 390 it sits in the core's Sheet, on 820/1280 it is the column on the right of the
  * canvas. Every choice is one edit of the drawing at once (the canvas's «Назад» takes it back, saved 1 s later) —
  * no «Save» button, like the storey. The tape: feet + inches, «Применить» → confidence `taped` (icon + word, rule 2).
- * Colours are words, never swatches (rule 2). The lists are what the company installs and its palette (settings, M7b);
+ * A colour is its name with its sample in the one colour field (DS §9б.6, rule 2 3rd exception). The lists are what the company installs and its palette (settings, M7b);
  * an element's own value the company no longer offers stays as one more chip «нет в списке» (spec 33 П22.2 №7).
  */
 import { sizeText } from "../sizeText";
@@ -18,13 +18,15 @@ import { Button, StatusChip, Stepper, TextField } from "@/ui/controls";
 import { Collapsible } from "@/ui/collapsible";
 import type { PickerItem } from "@/ui/pickerSheet";
 import { SelectField } from "@/ui/selectField";
+import { ColorField } from "@/ui/colorField";
 import { ToggleRow } from "@/ui/toggleRow";
 import { Icon, Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Menu } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
-import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, elbowCounts, elbowPatch, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, boughtElbowCounts, boughtElbowPatch, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
+import { colorChoices } from "./colorChoices";
 import { dsMoreSet, dsRareShown } from "./attrShown";
 import { FracPicker } from "./FracPicker";
 import { feetResetsRest, inchesComplete, inchesTooBig, nextStage, type EntryStage } from "./lengthEntry";
@@ -323,7 +325,7 @@ function Choice<K extends string>({ label, testID, items, value, onChange, offer
   return <SelectField labelAbove list={list} label={label} testID={testID} items={items.map(off)} value={value} onChange={onChange} />;
 }
 
-/** 2–3 fields side by side (Размер · Цвет · Этаж, Вид · Размер): each takes its share of the row */
+/** 2–3 fields side by side (Размер · Этаж, Вид · Размер): each takes its share of the row */
 function FieldRow({ children }: { children: React.ReactNode }) {
   const kids = Children.toArray(children).filter(Boolean);
   return (
@@ -342,19 +344,11 @@ function ColorPick<A extends { material: string; finish?: "mill" | "painted"; co
   const { t } = useI18n();
   const colorLabel = useColorLabel();
   if (MILL_ONLY.has(a.material)) return null;
-  const palette = withCurrent(ch.palette, a.color);
-  const bare = (a.finish ?? (a.color ? "painted" : "mill")) === "mill";
-  const runBare = run ? (run.finish ?? (run.color ? "painted" : "mill")) === "mill" : false;
-  const sameAsRun = !!run && !MILL_ONLY.has(run.material) && (bare ? runBare : !runBare && run.color === a.color);
-  const value = sameAsRun ? "@run" : bare ? "@mill" : (a.color ?? palette[0]!);
-  const items: PickerItem<string>[] = [
-    ...(run && !MILL_ONLY.has(run.material) ? [{ key: "@run", label: t(k("colorAsRun"), { c: runBare ? t(k("f.mill")) : colorLabel(run.color ?? "") }), top: true }] : []),
-    { key: "@mill", label: t(k("f.mill")), top: true },
-    ...palette.map((c) => ({ key: c, label: colorLabel(c) })),
-  ];
+  // one colour field for a gutter and a downspout (DS §9б.6, founder 23.11 05:25 «цвет — тот же селектор, что у gutter»)
+  const { value, colors } = colorChoices(a, ch.palette, { asRun: (c) => t(k("colorAsRun"), { c }), mill: t(k("f.mill")), notOffered: t(k("notOffered")), color: colorLabel }, run);
   return (
-    <Choice label={t(k("color"))} testID="attr-color" offered={ch.palette} items={items} value={value} onChange={(v) => {
-      if (v === "@run" && run) set((runBare ? { finish: "mill" } : { finish: "painted", color: run.color }) as Partial<A>);
+    <ColorField labelAbove label={t(k("color"))} testID="attr-color" colors={colors} value={value} onChange={(v) => {
+      if (v === "@run" && run) set(((run.finish ?? (run.color ? "painted" : "mill")) === "mill" ? { finish: "mill" } : { finish: "painted", color: run.color }) as Partial<A>);
       else if (v === "@mill") set({ finish: "mill" } as Partial<A>);
       else set({ finish: "painted", color: v } as Partial<A>);
     }} />
@@ -414,7 +408,7 @@ function More({ open0, id, label, children }: { open0: boolean; id: string; labe
 }
 
 /**
- * The gutter's window (#2412 круг 4.3): the length; Размер · Цвет · Этаж in one row; the profile; «Ещё» — the hanger
+ * The gutter's window (#2412 круг 4.3): the length; Размер · Этаж in one row, the colour on its own line (its whole name, design-review G1 PR2); the profile; «Ещё» — the hanger
  * (a list: the parts of the chart), material, gauge, the roof edge, the corners. The same on 390 (the sheet) and in the
  * side column.
  */
@@ -433,9 +427,11 @@ export function RunAttrsView({
       {forNew ? null : <Tape run={run} onLength={onLength} />}
       <FieldRow>
         <Choice label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
-        {MILL_ONLY.has(a.material) ? null : <ColorPick a={a} set={onAttrs} ch={ch} />}
         {forNew ? null : <Choice label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />}
       </FieldRow>
+      {/* the colour on a line of its own: in a row of three its name was cut to «Бе…» (design-review G1 PR2 №1, rule 2 — a sample always
+          beside its whole name) */}
+      {MILL_ONLY.has(a.material) ? null : <ColorPick a={a} set={onAttrs} ch={ch} />}
       <Choice label={t(k("profile"))} testID="attr-profile" offered={ch.offer.profiles} items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)) }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
       <More open0={false} id={run.id} label={t(k("moreRun"))}>
         {/* G2 (#2412): the hangers of the chart by name (NAMES-41) need the model's new kits — the list shows the kits there are */}
@@ -448,15 +444,16 @@ export function RunAttrsView({
   );
 }
 
-/** elbows (founder 08.11): a count for every style of the shape — «A 2 шт, B 1 шт» (G1 next PR: «Elbow A · 75° ⌄ · − n +») */
+/** elbows (founder 08.11): a count for every style of the shape — «A 2 шт, B 1 шт»; the BOUGHT ones (G2, leader №24): a plain one bent
+ *  on site shows 0, its bends are the estimate's (G1 next PR: «Elbow A · 75° ⌄ · − n +») */
 function Elbows({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void }) {
   const { t } = useI18n();
-  const counts = elbowCounts(ds);
+  const counts = boughtElbowCounts(ds);
   return (
     <Field label={t(k("elbows"))} testID="attr-elbow-qty">
       {Object.entries(counts).map(([style, qty]) => (
         <View key={style} testID={`attr-elbow-${style}`}>
-          <Stepper label={elbow(style)} value={qty} min={0} max={12} onChange={(n) => onAttrs(elbowPatch(ds, style, n))} />
+          <Stepper label={elbow(style)} value={qty} min={0} max={12} onChange={(n) => onAttrs(boughtElbowPatch(ds, style, n))} />
         </View>
       ))}
     </Field>
