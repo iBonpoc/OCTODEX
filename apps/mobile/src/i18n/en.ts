@@ -3141,7 +3141,7 @@ export const en: Dict = {
   "ds.rows.liveItem": "Item",
   "ds.rows.soon": "⬜ The sample comes with its component (the estimate editor).",
   "ds.rows.row": "Estimate row",
-  "ds.rows.rowHint": "“Brief / Detailed”, the trash always shown; a tap opens it in place, one open; open — “˄ Collapse”, one row “Qty · Unit · Price”, “Kind” as a list, “Total · profit · %”. Hidden — a hatch and “cost” (only when costs are visible). No profit on a folded row (§8.3).",
+  "ds.rows.rowHint": "“Brief / Detailed”, the trash always shown; a tap opens it in place, one open; open — “˄ Collapse”, one row “Qty · Unit · Price”, “Kind” as a list, “Total · profit · %”. Hidden — a dashed frame, “Hidden from client” and “cost” (only when costs are visible). No profit on a folded row (§8.3).",
   "ds.rows.lineA": "Fence painting",
   "ds.rows.lineADesc": "Both sides, primer and one coat",
   "ds.rows.lineB": "Debris haul-away",

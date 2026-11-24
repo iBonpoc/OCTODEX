@@ -96,7 +96,7 @@ function FillSample() {
 
 /** the swipe of an estimate row (DS Б13): on a phone — swipe it; the web has no swipe, its actions are in «⋯» of the row */
 /** the estimate line live (DS §8.3, #1307 «а»): «Кратко / Подробно», the trash, a tap opens it in place (one open),
- *  the open row's numbers in one row and «Сумма · прибыль · %», a hidden line with its hatch and «расход» (tests prices) */
+ *  the open row's numbers in one row and «Сумма · прибыль · %», a hidden line in its dashed frame (DashedFrame) with «Скрыто от клиента» and «расход» (tests prices) */
 function LineSample() {
   const { t } = useI18n();
   const form = useRequiredForm();
