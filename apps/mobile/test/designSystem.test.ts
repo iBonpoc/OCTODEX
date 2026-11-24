@@ -1,12 +1,13 @@
 /**
  * Design-system guard (CLAUDE.md rule 1, "Naryad"): components use tokens only.
  * Fails on raw colors, raw numbers for size/spacing/radius/font, raw font families, and lists of objects
- * rendered as rows inside one card (rule 12 — ListCard in CardGrid / CardList), and the removed ItemCard.
+ * as Divider-separated ListRows inside one Card, a new list on ListCard (rule 12 as of 21.11 — ListGroup / GroupRow), and the removed ItemCard.
  * A deliberate exception needs `// ds-allow: <reason>` on the same line.
  */
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { V2_VARIANTS } from "../src/features/showcase/registry";
 
 const ROOT = join(__dirname, "..", "src");
 const files: string[] = [];
@@ -32,6 +33,14 @@ const rules: { name: string; re: RegExp }[] = [
 ];
 
 const outsideUi = code.filter((f) => !f.includes(`${join("src", "ui")}`));
+/**
+ * «Графит» — пилот витрины #2254, НЕ ПРАВИЛО (условие аудита 1; DS §8.0 и §25): ONE named exception — its own folder may
+ * have its own Text, Pressable, TextInput and Modal (the pilot does not touch src/ui). Every tokens-only rule below still
+ * holds there, through the `graphite` tokens. Roll-back = delete the folder (and this line).
+ */
+const PILOT_GRAPHITE = join("src", "features", "showcase", "graphite");
+const inPilot = (f: string) => f.includes(PILOT_GRAPHITE);
+const outsideUiAndPilot = outsideUi.filter((f) => !inPilot(f));
 
 /** #816 (C-08): the general rule lets a bare 0 and 1 through; the module's screens carry no such border — `component.hairline` */
 describe("design system: the module's hairline is a token", () => {
@@ -50,14 +59,14 @@ describe("design system: the module's hairline is a token", () => {
 
 describe("design system: components", () => {
   it("text only through <T> (no raw react-native Text outside src/ui)", () => {
-    const hits = outsideUi.filter((f) => {
+    const hits = outsideUiAndPilot.filter((f) => {
       const imp = readFileSync(f, "utf8").split("\n").find((l) => /from "react-native"/.test(l) && /\bText\b/.test(l) && !l.includes("ds-allow"));
       return !!imp;
     });
     expect(hits.map((f) => relative(ROOT, f))).toEqual([]);
   });
   it("taps only through Press / Button / IconButton / Card (44 pt hit area), no raw Pressable / Touchable* outside src/ui", () => {
-    const hits = outsideUi.filter((f) =>
+    const hits = outsideUiAndPilot.filter((f) =>
       readFileSync(f, "utf8")
         .split("\n")
         .some((l) => /from "react-native"/.test(l) && /\b(Pressable|TouchableOpacity|TouchableHighlight|TouchableWithoutFeedback)\b/.test(l) && !l.includes("ds-allow")),
@@ -75,7 +84,7 @@ describe("design system: components", () => {
   const countIn = (src: string, re: RegExp) => (src.match(re) || []).length;
   it("rule 29: no own Modal outside src/ui (sheets and windows — Sheet / InputDialog of src/ui); the old ones only go down", () => {
     const now: Record<string, number> = {};
-    for (const f of outsideUi) {
+    for (const f of outsideUiAndPilot) {
       const src = readFileSync(f, "utf8");
       if (!/import\s*\{[^}]*\bModal\b[^}]*\}\s*from\s*"react-native"/.test(src)) continue;
       const n = countIn(src, /<Modal\b/g);
@@ -90,20 +99,16 @@ describe("design system: components", () => {
   const RULE29_STYLED_PRESS: Record<string, number> = {
     "features/LegalAgree.tsx": 1, // the Terms / Privacy links drawn as underlined text (#2022); spec 56 §11.1 waits for the lawyer
     "features/PhotoStrip.tsx": 2,
-    "features/PlanParts.tsx": 1,
     "features/estimate/SwipeRow.tsx": 1,
     "features/showcase/Rows.tsx": 1,
-    "modules/gutters/draw/AttrPanel.tsx": 1,
     "modules/gutters/draw/CornerSheet.tsx": 1,
     "modules/gutters/draw/DrawScreen.tsx": 2,
     "modules/gutters/draw/FracPicker.tsx": 1,
     "modules/gutters/settings/SettingsScreen.tsx": 1,
-    "nav/Fab.tsx": 3,
-    "nav/HomeHeader.tsx": 1,
+    "nav/Fab.tsx": 2, // the header «＋» is the one header's HeaderButton now (visual-v2)
     "nav/NavMenu.tsx": 2,
     "nav/SearchEntry.tsx": 1,
     "nav/SideNav.tsx": 2,
-    "nav/TabBar.tsx": 1,
   };
   // #2022: an own look is also a style kept in a variable (`style={hitBox}`), a link drawn in the child text (`textDecorationLine`),
   // or a button-sized Press (`accessibilityRole="button"` + `minHeight: component.button…`) — not only a background in the tag
@@ -161,15 +166,18 @@ describe("design system: components", () => {
   // or border) belongs only to the component that defines that look — listed here by file, with what it defines. A new file,
   // or one more in a listed file, is an own button hidden in ui (as the old «Сохранить изменения?» of Sheet was, #1996).
   const UI_OWN_STYLED_PRESS: Record<string, number> = {
+    "ui/dayStrip.tsx": 1, // DayCell — the weekday and the day pill (moved from features/PlanParts.tsx, BUILD-PLAN §1 поток В)
     "ui/controls.tsx": 7, // Button, IconButton, Toggle, Segmented, TagChip, TextField's action; + a style kept in a variable (#2022)
     "ui/filterBar.tsx": 4, // FilterBar (chip, «Фильтр», «Сброс»), FilterRow
     "ui/fracKeys.tsx": 1, // FracKeys — the key
+    "ui/headerIcon.tsx": 1, // HeaderButton — the one header's circle 40 («←», «×», search, the bell, «＋», «⋯»; visual-v2 «Единая шапка»)
     "ui/listCard.tsx": 2, // ListCard, its open panel
     "ui/optionTile.tsx": 1, // OptionTile
-    "ui/overlays.tsx": 3, // Menu row; LEGACY ×2 — the old unsaved question of Sheet, goes with #1996 (UnsavedAsk from Button)
+    "ui/overlays.tsx": 2, // Menu row; LEGACY — the old unsaved question of Sheet, goes with #1996 (UnsavedAsk from Button); the toast's filled «Отменить» left with the v2 stack (#2214)
     "ui/pctUsdField.tsx": 1, // PctUsdField — the «% | $» switch
     "ui/selectField.tsx": 1, // SelectField — the row
-    "ui/surfaces.tsx": 3, // Card (pressable, its `base` style — seen since #2022), ListRow
+    "ui/surfaces.tsx": 2, // Card (pressable, its `base` style — seen since #2022), ListRow
+    "ui/swipeRow.tsx": 1, // SwipeRow — the action button under a swiped row (#2350, DS §8.11а)
   };
   it("rule 29 inside src/ui (#1997): an own look only in the component that defines it; the list only goes down", () => {
     const now: Record<string, number> = {};
@@ -261,7 +269,7 @@ describe("design system: components", () => {
     const hits: string[] = [];
     for (const f of code) {
       const src = readFileSync(f, "utf8");
-      if (!/holdConfig\(|activateAfterLongPress/.test(src) || f.endsWith(join("ui", "haptics.ts")) || f.endsWith(join("ui", "pointer.ts"))) continue;
+      if (!/[hH]oldConfig\(|activateAfterLongPress/.test(src) || f.endsWith(join("ui", "haptics.ts")) || f.endsWith(join("ui", "pointer.ts"))) continue;
       // «medium» may come through feelOf(result) — the drop's feel decided by what it came to (sortable.ts)
       for (const k of ["light", "selection", "medium"]) if (!new RegExp(k === "medium" ? "haptics\\.medium\\(|feelOf\\(" : `haptics\\.${k}\\(`).test(src)) hits.push(`${relative(ROOT, f)}: haptics.${k}`);
     }
@@ -281,10 +289,11 @@ describe("design system: components", () => {
     // the shadow is a token
     expect(sortable).toMatch(/component\.liftShadow/);
     // the kind of pointer, not the width, decides how a body starts a drag
-    for (const f of ["SortableList.tsx", "dnd.tsx"]) expect(readFileSync(join(ROOT, "features", f), "utf8")).toMatch(/holdConfig\(/);
+    // (#2375: the estimate's list asks its own — sortHoldConfig, a finger after `sortHoldMs` 500 — by the same kind of pointer)
+    for (const f of ["SortableList.tsx", "dnd.tsx"]) expect(readFileSync(join(ROOT, "features", f), "utf8")).toMatch(/[hH]oldConfig\(/);
   });
   it("text fields only through <TextField> (no raw TextInput outside src/ui)", () => {
-    const hits = outsideUi.filter((f) =>
+    const hits = outsideUiAndPilot.filter((f) =>
       readFileSync(f, "utf8")
         .split("\n")
         .some((l) => /from "react-native"/.test(l) && /\bTextInput\b/.test(l) && !l.includes("ds-allow")),
@@ -317,6 +326,22 @@ describe("design system: components", () => {
   });
 });
 
+describe("design system: «Графит» stays a pilot (#2254)", () => {
+  const REL = (f: string) => relative(ROOT, f).split("\\").join("/");
+  it("the `graphite` tokens are read only inside the pilot folder", () => {
+    const hits = code.filter((f) => !inPilot(f) && /\bgraphite(Themes)?\b[^\n]*from "@octo\/design-tokens"|from "@octo\/design-tokens"[^\n]*\bgraphite\b/.test(readFileSync(f, "utf8"))).map(REL);
+    expect(hits).toEqual([]);
+  });
+  it("the pilot folder is opened only by the showcase (its first screen and its section screen)", () => {
+    const hits = code.filter((f) => !inPilot(f) && /features\/showcase\/graphite\//.test(readFileSync(f, "utf8"))).map(REL);
+    expect(hits.sort()).toEqual(["app/settings/design-system/[section].tsx", "app/settings/design-system/index.tsx"]);
+  });
+  it("Jost is loaded only by the pilot (the app's start is not touched)", () => {
+    const hits = code.filter((f) => !inPilot(f) && /@expo-google-fonts\/jost/.test(readFileSync(f, "utf8"))).map(REL);
+    expect(hits).toEqual([]);
+  });
+});
+
 describe("design system: the showcase covers everything (#1093, Настройки → Дизайн-система)", () => {
   const reg = readFileSync(join(ROOT, "features", "showcase", "registry.ts"), "utf8");
   const listed = (name: string) => reg.includes(`"${name}"`);
@@ -340,6 +365,21 @@ describe("design system: the showcase covers everything (#1093, Настройк
       if (!new RegExp(`^#{2,3} ${n.replace(".", "\\.")}\\.`, "m").test(ds)) bad.push(`§${n}`);
     }
     expect(bad).toEqual([]);
+  });
+});
+
+// #2350 (SCREEN-SPECS.md): every variant of the last v2 pass is written in DS §12.14 and drawn by the showcase
+describe("design system: the v2 variants are written and shown (DS §12.14)", () => {
+  const ds = readFileSync(join(__dirname, "..", "..", "..", "design", "naryad-ds", "DESIGN-SYSTEM.md"), "utf8");
+  const sec = ds.slice(ds.indexOf("### 12.14."), ds.indexOf("### 12.15."));
+  it("DS §12.14 exists and comes before §12.15", () => expect(sec.length).toBeGreaterThan(1000));
+  it.each(V2_VARIANTS.map((v) => [`${v.part} ${v.prop}`, v] as const))("%s", (_, v) => {
+    const src = readFileSync(join(ROOT, v.src), "utf8");
+    expect(new RegExp(`\\b${v.part}\\b`).test(src), `${v.part} is not in ${v.src} any more — update V2_VARIANTS`).toBe(true);
+    expect(new RegExp(`\\b${v.prop}\\b`).test(src), `${v.part}: prop «${v.prop}» is not in ${v.src} any more`).toBe(true);
+    expect(sec.includes(v.part) && new RegExp(`\\b${v.prop}\\b`).test(sec.slice(sec.indexOf(v.part))), `write ${v.part} «${v.prop}» in DESIGN-SYSTEM.md §12.14`).toBe(true);
+    if (v.shown) expect(readFileSync(join(ROOT, "features", "showcase", v.shown), "utf8").includes(v.use), `show ${v.part} ${v.use.trim()} in features/showcase/${v.shown}`).toBe(true);
+    else expect(v.why ?? "", "a variant not in the showcase says where it is seen").not.toBe("");
   });
 });
 
@@ -406,11 +446,38 @@ describe("design system: tokens only", () => {
     }
     expect(hits, hits.join("\n")).toEqual([]);
   });
+
+  // Rule 12 as of 21.11 (founder, #2350): a list is grouped rows in one card — ListGroup / GroupRow (ui/groupedList.tsx),
+  // not a card per object. The lists still on ListCard move over in waves; this list may only shrink — a new file with
+  // <ListCard is red, a moved one must be struck off here.
+  it("lists are ListGroup/GroupRow: ListCard only in the files not moved yet (the list only shrinks)", () => {
+    const LISTCARD_LEFT = new Set([
+      "app/catalog/index.tsx", "app/client/import.tsx", "app/client/imports.tsx", "app/company/checklists.tsx",
+      "app/company/intake.tsx", "app/estimate/templates.tsx", "app/job/[id].tsx", "app/jobs.tsx", "app/messages/[key].tsx",
+      "app/money.tsx", "app/property/[id].tsx", "app/purchase-orders/index.tsx", "app/reports/[id].tsx",
+      "app/reports/index.tsx", "app/suppliers/[id].tsx", "app/suppliers/index.tsx", "app/team.tsx",
+      "features/AttentionCards.tsx", "features/ContractStatement.tsx", "features/JobOrdersBlock.tsx",
+      "features/ServiceCategoryPicker.tsx", "features/client/ClientDuplicates.tsx", "features/client/PropertySections.tsx",
+      "features/comms/CommsScreen.tsx", "features/comms/MessagesScreen.tsx", "features/invoice/VoidInvoice.tsx",
+      "features/lead/LeadParts.tsx", "features/listCards.tsx", "features/notices.tsx", "features/payments/AdvancesBlock.tsx",
+      "modules/gutters/list/MeasurementsScreen.tsx", "modules/gutters/list/StartScreen.tsx",
+      "modules/gutters/prices/PricesScreen.tsx",
+    ]);
+    const using = outsideUi
+      .filter((f) => /<ListCard\b/.test(readFileSync(f, "utf8")))
+      .map((f) => relative(ROOT, f).split("\\").join("/"))
+      .filter((f) => !f.startsWith("features/showcase/"));
+    const added = using.filter((f) => !LISTCARD_LEFT.has(f));
+    expect(added, `a new list on ListCard — use ListGroup/GroupRow (rule 12):\n${added.join("\n")}`).toEqual([]);
+    const moved = [...LISTCARD_LEFT].filter((f) => !using.includes(f));
+    expect(moved, `moved to ListGroup — strike it off LISTCARD_LEFT:\n${moved.join("\n")}`).toEqual([]);
+  });
 });
 
 describe("design system: the tape's yellow (founder 09.11, #674 — an exception to rule 2)", () => {
   it("`tape.*` only in the Gutters tape measure", () => {
-    const hits = code.filter((f) => /\btape\.mark(Text|Fill)\b/.test(readFileSync(f, "utf8"))).map((f) => relative(ROOT, f));
+    // the red needle too (#2412, the 5th exception of rule 2): only the tape draws it
+    const hits = code.filter((f) => /\btape\.(markText|markFill|needle)\b/.test(readFileSync(f, "utf8"))).map((f) => relative(ROOT, f));
     expect(hits).toEqual([join("modules", "gutters", "draw", "Tape.tsx")]);
   });
 });
@@ -482,7 +549,6 @@ describe("design system: a form's fields have no plate (#1411)", () => {
     "features/client/ClientSheets.tsx": { n: 1, why: "каждый дополнительный человек клиента — объект списка, карточка (правило 12)" },
     "app/purchase-order/[id].tsx": { n: 1, why: "карточка объекта (шаблон «К»), не форма" },
     "features/JobLinesBlock.tsx": { n: 1, why: "блок карточки работы (налог), не форма" },
-    "features/NotesBlock.tsx": { n: 1, why: "блок заметок карточки объекта, не форма" },
     "features/VisitChecklist.tsx": { n: 2, why: "чек-лист выезда — блок карточки, не форма" },
   };
   it("no <TextField> inside a <Card> (outside the written exceptions)", () => {
@@ -500,7 +566,6 @@ describe("design system: a form's fields have no plate (#1411)", () => {
    * exact counts by file (a new row with a button beside a field fails: a helper goes into the field as an icon).
    */
   const SUBMIT_ROWS: Record<string, { n: number; why: string }> = {
-    "app/job/[id].tsx": { n: 1, why: "«Добавить» заметку — отправляет набранное" },
     "features/JobLinesBlock.tsx": { n: 1, why: "«Сохранить» ставку налога" },
     "features/VisitChecklist.tsx": { n: 2, why: "«Добавить» пункт чек-листа" },
     "features/client/ClientSheets.tsx": { n: 1, why: "«Добавить» метку" },
@@ -556,9 +621,8 @@ describe("design system: a record's card has no row of pill buttons (#1412)", ()
     return rows;
   };
   /** cards still to move (#1474) and rows that are not a card's actions — exact counts, the list only shrinks */
-  const ALLOWED: Record<string, { n: number; why: string }> = {
-    "features/EstimateCard.tsx": { n: 1, why: "шторка «Отправить»: три способа отправки — выбор внутри начатого действия, не действия карточки" },
-  };
+  // EstimateCard's «Отправить» sheet: one main button with «Отменить · 5» and two in a row under it (#2218) — the list is empty
+  const ALLOWED: Record<string, { n: number; why: string }> = {};
   it("no row of 3+ buttons on a record's card (src/app/**/[id].tsx, features/**/*Card.tsx)", () => {
     const bad: string[] = [];
     for (const f of code.filter((x) => /\[id\]\.tsx$|Card\.tsx$/.test(x) && !x.includes(join("src", "ui")) && !x.includes(join("src", "modules")) && !x.includes(join("features", "estimate", "")))) {
@@ -568,5 +632,31 @@ describe("design system: a record's card has no row of pill buttons (#1412)", ()
       if (n !== allowed) bad.push(`${rel}: ${n} row(s) of pill buttons, the list says ${allowed}`);
     }
     expect(bad, "one main button (ActionBar / the top of the content from 820) and «⋯» with the rest (Б4)").toEqual([]);
+  });
+});
+
+/**
+ * Ш III-1 (спека 63 §3а, #2292): «ноль значений по месту» for what the eye sees in motion — a bezier curve, the duration
+ * of an animation, a layer. The scan is the codemod's own (scripts/codemod/motionLiterals.cjs, TypeScript API): the guard and
+ * the tool cannot disagree. `DEBT` is the places an open PR holds right now; each batch shortens it, a new place is red.
+ */
+describe("design system: no curve, animation time or layer written in place (Ш III-1)", () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { scan } = require("../../../scripts/codemod/motionLiterals.cjs") as { scan: () => { file: string; line: number; kind: string; text: string; hasToken: boolean }[] };
+  const DEBT = new Set([
+    "src/ui/overlays.tsx zIndex 100", // PR 1996 / 1975 / 1964 hold the file; the toast layer has no token yet (z.toast is 8, the toast is above the modal)
+    "src/ui/surfaces.tsx zIndex 10", // PR 2141 holds the file
+    "src/ui/surfaces.tsx zIndex 0",
+  ]);
+  const left = () => scan().map((h) => ({ ...h, key: `${h.file.split("\\").join("/")} ${h.kind} ${h.text}` }));
+  it("every literal that has a token is already written as the token", () => {
+    expect(left().filter((h) => h.hasToken && !DEBT.has(h.key)).map((h) => `${h.file}:${h.line} ${h.kind} ${h.text}`)).toEqual([]);
+  });
+  it("a literal without a token needs its token first (or a line of DEBT, with the PR that holds the file)", () => {
+    expect(left().filter((h) => !h.hasToken && !DEBT.has(h.key)).map((h) => `${h.file}:${h.line} ${h.kind} ${h.text}`)).toEqual([]);
+  });
+  it("DEBT has no line that is already paid", () => {
+    const keys = new Set(left().map((h) => h.key));
+    expect([...DEBT].filter((k) => !keys.has(k))).toEqual([]);
   });
 });

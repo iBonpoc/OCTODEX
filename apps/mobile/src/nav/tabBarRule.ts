@@ -8,12 +8,15 @@
  *
  * Every route of src/app is in exactly one of the two lists (test/tabBarRule.test.ts): a new screen must choose.
  */
+import { isTabScreen } from "./roles";
+import { sectionOfRoute, type SectionId } from "./sections";
 
 /** creating or editing something, signing, signing in, the client page, the legal texts */
 export const NO_TAB_BAR = [
   "auth/company", "auth/invite", "auth/sign-in", "auth/terms", "auth/trade",
   // a catalog item is a form («Новая позиция» / edit, «Сохранить»): a tab would drop what is not saved (review #274)
   "catalog/[id]",
+  // founder 21.11 (#2350): an object's card keeps the tab bar — its next step lives in the «Сейчас» card at the top, no pinned slab
   "client/edit", "client/import",
   "company/[section]", "company/schedule",
   // a checklist template is a form («Сохранить»): a tab would drop what is not saved
@@ -43,20 +46,22 @@ export const NO_TAB_BAR = [
 /** lists, cards, sections of «Ещё», settings pages: the bar stays */
 export const WITH_TAB_BAR = [
   "index", "inbox",
-  "calls", "catalog", "client/[id]", "client/imports", "clients", "company",
+  "calls", "catalog", "client/imports", "clients", "company",
+  // founder 21.11 (#2350): an object's card keeps the bar (no pinned slab); its next step is in the «Сейчас» card
+  "client/[id]", "job/[id]", "visit/[id]", "lead/[id]", "property/[id]",
   // a settings page saved from its sheet at once (no form to lose)
   "company/leads",
   "company/intake",
   "company/payments",
   "company/modules",
   "company/checklists",
-  "estimate/templates", "estimates", "figures/[metric]", "help",
-  "invoice", "job/[id]", "jobs", "lead/[id]", "leads",
+  "estimate/templates", "estimates", "figures/[metric]", "finance", "help",
+  "invoice", "jobs", "leads",
   // a module's own screens (spec 33 П20.3): its lists and cards keep the bar (#1426, design audit: «Замеры» had none, the
   // core's lists have it); the full-screen ones (ModuleDef.fullScreen: the canvas) hide it themselves (useHideTabBar in the route)
   "module/[key]/[screen]",
-  "messages", "messages/[key]", "money", "more", "notifications", "payments", "plan", "property/[id]",
-  "reports", "reports/[id]", "search", "settings", "settings/profile", "settings/design-system", "settings/design-system/[section]", "suppliers", "purchase-orders", "tasks", "team", "today", "triage", "visit/[id]", "visits",
+  "messages", "messages/[key]", "money", "more", "notifications", "payments", "plan",
+  "reports", "reports/[id]", "search", "settings", "settings/profile", "settings/design-system", "settings/design-system/[section]", "suppliers", "purchase-orders", "tasks", "team", "today", "triage", "visits",
 ] as const;
 
 const hidden = new Set<string>(NO_TAB_BAR);
@@ -111,6 +116,34 @@ export function appStackRoutes(state: NavState): string[] {
     s = s.routes?.[s.index ?? 0]?.state;
   }
   return [];
+}
+
+/** routes that are no place of any tab: they light none (prototype audit 12 §1 — «Поиск» lit «Главная») */
+export const LIGHTS_NO_TAB: readonly string[] = ["search"];
+/** the bar's own targets that are cards over the tabs, not tabs («Деньги» → /finance, its lists): they light their section, not the tab lying under them */
+export const LIGHTS_OWN: readonly string[] = ["finance", "estimates"];
+
+/** the tab a card was opened from: the focused route of the tab navigator lying under the cards; none when the tabs are on top
+ *  or not in the stack (a deep link) */
+export function tabUnder(state: NavState): string | undefined {
+  const s = appStack(state);
+  const routes = s?.routes ?? [];
+  let at = -1;
+  routes.forEach((r, i) => r.name === "(tabs)" && (at = i));
+  if (at < 0 || at === routes.length - 1) return undefined;
+  const tabs = routes[at]!.state;
+  return tabs?.routes?.[tabs.index ?? 0]?.name;
+}
+
+/**
+ * Which section the phone's bar lights (audit 12 §1, «подсветка вкладки — по источнику»): a search — none; a tab screen — its own;
+ * a card over the tabs — the tab it was opened from (a visit from the Plan lights «План», not «Клиенты» of the hierarchy); a card
+ * with no tabs under it (a deep link) — its own section. `route` — tabRouteKey of the segments; `own` — the hierarchy's section.
+ */
+export function litSection(route: string, own: SectionId | undefined, under: string | undefined): SectionId | undefined {
+  if (LIGHTS_NO_TAB.includes(route)) return undefined;
+  if (isTabScreen(route.split("/")[0] ?? "") || !under || LIGHTS_OWN.includes(route)) return own;
+  return under === "index" ? "home" : sectionOfRoute(under) ?? own;
 }
 
 /** the app's own stack (app/_layout: the one that has «(tabs)»), or undefined */

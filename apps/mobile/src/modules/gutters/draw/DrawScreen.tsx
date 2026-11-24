@@ -24,11 +24,12 @@ import { computeGutterParts } from "@octo/estimating-engine";
 import { breakpoint, component, drawing as dt, motion, radius, size as sizes, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
-import { moduleHref, moduleState } from "@/modules/registry";
+import { moduleHref, moduleState, moduleUsable } from "@/modules/registry";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Button, ChoiceChips, IconButton, StatusChip, Toggle } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
-import { Menu, Sheet, useToast } from "@/ui/overlays";
+import { HelpButton, Menu, Sheet, useToast } from "@/ui/overlays";
+import { EmptyHelp, helpText } from "./EmptyHelp";
 import { Banner } from "@/ui/banner";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
@@ -89,12 +90,12 @@ const SAVE_AFTER_MS = 1000;
 const EMPTY: Drawing = { runs: [], downspouts: [] };
 
 /** the name in the header (#1274): a button that SHRINKS — a long name is cut (not linked yet — «Привязать», DS §19а, #1665: whole at 390) with «…» in its own width, never under the icons beside it */
-function NameButton({ icon, label, onPress, filled }: { icon: IconKey; label: string; onPress: () => void; filled?: boolean }) {
+function NameButton({ icon, label, onPress, filled }: { icon?: IconKey; label: string; onPress: () => void; filled?: boolean }) {
   const { c } = useTheme();
   return (
     <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={label} visibleHeight={component.button.phone} containerStyle={{ flexShrink: 1, minWidth: 0 }}
       style={{ height: component.button.phone, flexShrink: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space[1], paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: filled ? c.surf2 : "transparent", borderWidth: filled ? 1 : 0, borderColor: c.bd }}>
-      <Icon name={icon} s={sizes.iconSm} color={c.ink} />
+      {icon ? <Icon name={icon} s={sizes.iconSm} color={c.ink} /> : null}
       <T v="button" w="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>{label}</T>
     </Press>
   );
@@ -217,7 +218,7 @@ function DrawCanvas() {
   const params = useLocalSearchParams<{ m?: string; lead?: string; property?: string; estimate?: string }>();
   const ins = useSafeAreaInsets();
   const access = moduleState(store.db.company?.modules?.gutters).access;
-  const canSave = access === "trial" || access === "paid";
+  const canSave = moduleUsable(access);
   // what the company installs, its palette and defaults (settings M7b): new elements and the attribute panel
   const settings = store.db.company?.modules?.gutters?.settings;
   const ch = useMemo(() => choicesFor(settings), [settings]);
@@ -885,7 +886,7 @@ function DrawCanvas() {
   const mPhotos = m && mStored && (canSave || has()) ? <MeasurePhotos measurementId={m.id} testID="draw-photos" onRemoved={() => setPhotoSheet(false)} readOnly={!canSave} /> : null;
   const attrs = !sel ? null : (
     <>
-      {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} compact={!wide} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} ch={ch} compact={!wide} run={drawing.runs.find((r) => r.id === sel.runId)?.attrs} />}
+      {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} ch={ch} run={drawing.runs.find((r) => r.id === sel.runId)?.attrs} />}
       {elPhotos}
     </>
   );
@@ -908,9 +909,9 @@ function DrawCanvas() {
         <T v="caption" tone="mut">{t("mod.gutters.draw.newDefaults.hint")}</T>
       </View>
       {newSheet === "line" ? (
-        <RunAttrsView forNew run={{ id: "new-run", a: [0, 0], b: [0, 0], attrs: runFor(ch, story, newDef) }} onAttrs={(p) => setNewDef((x) => patchRun(ch, x, p))} onLength={() => {}} ch={ch} compact={!wide} />
+        <RunAttrsView forNew run={{ id: "new-run", a: [0, 0], b: [0, 0], attrs: runFor(ch, story, newDef) }} onAttrs={(p) => setNewDef((x) => patchRun(ch, x, p))} onLength={() => {}} ch={ch} />
       ) : (
-        <DsAttrsView forNew ds={{ ...dsFor(ch, newDef), id: "new-ds", runId: "", atIn: 0 }} onAttrs={(p) => setNewDef((x) => patchDs(ch, x, p))} ch={ch} compact={!wide} run={runFor(ch, story, newDef)} />
+        <DsAttrsView forNew ds={{ ...dsFor(ch, newDef), id: "new-ds", runId: "", atIn: 0 }} onAttrs={(p) => setNewDef((x) => patchDs(ch, x, p))} ch={ch} run={runFor(ch, story, newDef)} />
       )}
     </View>
   );
@@ -1325,11 +1326,17 @@ function DrawCanvas() {
               </View>
             ) : inStore && !leadId && !inStore.propertyId ? (
               <View testID="draw-to-lead" style={{ flexShrink: 1 }}>
-                <NameButton icon="plus" label={t("mod.gutters.draw.toLead")} filled onPress={() => setLinkSheet(true)} />
+                {/* the filled pill is the button; no «＋» before the word: with the header's buttons at 40 (rule 3, #2350) «Привязать» is whole at 390 (e2e 412) */}
+                <NameButton label={t("mod.gutters.draw.toLead")} filled onPress={() => setLinkSheet(true)} />
               </View>
             ) : (
               <T v="heading" w="semibold">{t("mod.gutters.draw.title")}</T>
             )}
+            {/* «?» beside the name (DS §12.2): the same steps as on the empty canvas, any time (#2186) */}
+            {/* a gap of a whole step from the name button: their touch zones (44) never overlap (rule 3; second design review) */}
+            <View style={{ marginLeft: space[3] }}>
+              <HelpButton title={t("mod.gutters.draw.help.q")} text={helpText(t)} testID="draw-help" />
+            </View>
             {/* no cloud when all is saved and sent: only «on the phone» (not sent yet / no connection), a tap says it in words (#507 → #1274) */}
             {canSave && !flat && (mark === "sending" || mark === "phone") ? (
               <View testID="draw-local">
@@ -1395,9 +1402,8 @@ function DrawCanvas() {
 
       {!drawing.runs.length && !ghost ? (
         <View pointerEvents="none" style={{ position: "absolute", left: space[6], right: space[6] + panelSide, top: 0, bottom: 0, alignItems: "center", justifyContent: "center" }} testID="draw-empty">
-          <T tone="mut" center>{t("mod.gutters.draw.empty")}</T>
-          {/* the tools carry pictures only (#1274): where their words are, said while the drawing is still empty (the first opening) */}
-          <T v="caption" tone="mut" center>{t("mod.gutters.draw.emptyTools")}</T>
+          {/* «Как рисовать» (founder 18.11, #2186): the four steps while the canvas is empty; every touch goes through to the canvas */}
+          <EmptyHelp lineIcon={lineIcon} dsIcon={dsIcon} />
         </View>
       ) : null}
       {/* the live length beside the line being drawn (founder 09.11, #689), not at the top of the screen */}
@@ -1546,10 +1552,10 @@ function DrawCanvas() {
       {m ? <LinkSheet visible={linkSheet} onClose={() => setLinkSheet(false)} measurementId={m.id} /> : null}
       <DeleteMeasurementSheet visible={!!askDelete} on={askDelete ?? NO_ESTIMATES} onDelete={deleteNow} onClose={() => setAskDelete(null)} />
       <Menu visible={!!whoAt} anchor={whoAt} items={whoItems} onSelect={onWho} onClose={() => setWhoAt(null)} />
-      <InputWindow visible={canSave && !!editRun} onClose={() => setLenEdit(null)}>
+      <InputWindow visible={canSave && !!editRun} onClose={() => setLenEdit(null)} scroll={false}>
         {editRun ? <QuickLength key={editRun.id} fmt={ch.lenFormat} run={editRun} start={runLengthIn(editRun)} onLength={(n) => commit(setLength(cur.current.drawing, editRun.id, n))} onDone={() => setLenEdit(null)} onCancel={() => setLenEdit(null)} /> : null}
       </InputWindow>
-      <InputWindow visible={canSave && !!quick} onClose={cancelQuick}>
+      <InputWindow visible={canSave && !!quick} onClose={cancelQuick} scroll={false}>
         {quick ? <QuickLength fmt={ch.lenFormat} run={quick} onLength={(n) => commit(setLength(cur.current.drawing, quick.id, n))} onDone={() => setQuickRun(null)} onCancel={cancelQuick} /> : null}
       </InputWindow>
       {/* «Конец желоба» (a double tap on a free end, #1273): the cap is there / none, the line's face L ↔ R */}

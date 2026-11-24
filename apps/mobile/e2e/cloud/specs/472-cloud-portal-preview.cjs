@@ -10,7 +10,7 @@
  */
 const { execFileSync } = require("node:child_process");
 const { signIn, waitRows } = require("../signIn.cjs");
-const { estAct } = require("../../estimateMenu.cjs");
+const { estAct, estMore } = require("../../estimateMenu.cjs");
 
 const uuid = () => "xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx".replace(/x/g, () => Math.floor(Math.random() * 16).toString(16));
 
@@ -66,7 +66,7 @@ exports.run = async (h, { seed, admin }) => {
 
   // С1: the sent estimate «as client» — the page shows, nothing in the signing block answers
   await h.go(`/estimate/${est[0].e}`);
-  await p.getByTestId("est-more").locator("visible=true").first().waitFor({ timeout: 30000 });
+  await estMore(p, 30000);
   await estAct(p, "client");
   await p.waitForURL(/\/p\//, { timeout: 8000 });
   await p.getByTestId("portal-preview-note").locator("visible=true").first().waitFor({ timeout: 8000 });
@@ -89,7 +89,7 @@ exports.run = async (h, { seed, admin }) => {
 
   // С5: the signed estimate «as client» — the deposit's card button is there and off; no payment on the server
   await h.go(`/estimate/${est[1].e}`);
-  await p.getByTestId("est-more").locator("visible=true").first().waitFor({ timeout: 30000 });
+  await estMore(p, 30000);
   await estAct(p, "client");
   await p.waitForURL(/\/p\//, { timeout: 8000 });
   const pay = p.getByTestId(`portal-pay-preview-${inv.id}`).locator("visible=true").first();

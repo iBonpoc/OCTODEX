@@ -3,6 +3,8 @@
  * with it, the job leaves «Ждёт даты» / the live list and appears in «Отменённые» with the reason; its own screen says «Отменена» and why.
  * A job with a payment is not cancelled: the item is dim and says «сначала возврат» (no dead end). Server side — db T383–T390.
  */
+const { objMore } = require("../objectScreen.cjs");
+
 exports.run = async (h) => {
   const p = h.page;
   const tid = (id) => p.getByTestId(id).locator("visible=true").first();
@@ -14,10 +16,6 @@ exports.run = async (h) => {
     h.expect(true, what);
     return h.db();
   };
-  const openMenu = async () => {
-    await tid("job-more").getByRole("button").click();
-    await tid("menu-items").waitFor({ timeout: 3000 });
-  };
 
   // 1) a job with money taken: the item is there, dim, and the click says why (nothing is cancelled)
   await h.go("/jobs");
@@ -25,15 +23,14 @@ exports.run = async (h) => {
   const paid = seed.jobs.find((j) => seed.invoices.some((i) => i.jobId === j.id && i.paidCents > 0));
   h.expect(!!paid, "the demo has a job with a payment");
   await h.go(`/job/${paid.id}`);
-  await openMenu();
-  await tid("job-act-cancel").click();
+  // v2: «Отменить работу…» is an item of the job's header «⋯» (job-screen-more)
+  await objMore(p, "job-screen", "job-act-cancel");
   await p.getByText("сначала оформите возврат").locator("visible=true").first().waitFor({ timeout: 5000 });
   h.expect((await h.db()).jobs.some((j) => j.id === paid.id), "a job with a payment stays");
 
   // 2) j6: an open visit, no money — cancelled with a reason
   await h.go("/job/j6");
-  await openMenu();
-  await tid("job-act-cancel").click();
+  await objMore(p, "job-screen", "job-act-cancel");
   await h.sheet().getByTestId("job-cancel-reason").locator("input, textarea").fill("Client changed his mind");
   await h.sheet().getByTestId("job-cancel-confirm").getByRole("button").click();
   const db = await pick((d) => (d.cancelledJobs ?? []).some((j) => j.id === "j6" && j.cancelReason === "Client changed his mind"), "j6 is cancelled with its reason");

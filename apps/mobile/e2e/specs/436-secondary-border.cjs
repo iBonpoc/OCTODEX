@@ -1,7 +1,8 @@
 /**
- * e2e 436 — the edge of a secondary button is seen (#1728, DS §7.3 «Вторичная», 1.15.6), every view, by testID:
- * a «Связано» chip (Button secondary sm) has a 1 px frame of `bdField` whose contrast to the page under it is ≥ 3:1
- * (WCAG 1.4.11) in both themes — `bd` (≈1.2:1 in the light theme) left the chip without an edge on 390.
+ * e2e 436 — a secondary button is seen (#1728, DS §7.3 «Вторичная»), every view, by testID.
+ * v2 (#2350, DS §12.12, controls.tsx Button): a secondary button has NO frame — it is told by its own cell (`surf2`) and its yellow
+ * words (`accText`); WCAG 1.4.11 is met by the words: on the «Связано» chip (Button secondary sm) the words are ≥ 4.5:1 to the
+ * chip's cell in both themes, and the cell is not the page colour (the chip is not a bare word on the screen).
  */
 const lum = ([r, g, b]) => { const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
 const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
@@ -14,17 +15,19 @@ exports.run = async (h) => {
     await tid(`related-${k}`).waitFor({ timeout: 8000 });
     const r = await tid(`related-${k}`).evaluate((e) => {
       const all = [e, ...e.querySelectorAll("*")];
-      const framed = all.find((el) => parseFloat(getComputedStyle(el).borderTopWidth) > 0);
-      // the page's own colour under the chip (the screen paints it on body / the root)
-      return { border: framed ? getComputedStyle(framed).borderTopColor : "", width: framed ? parseFloat(getComputedStyle(framed).borderTopWidth) : 0 };
+      const filled = all.find((el) => { const b = getComputedStyle(el).backgroundColor; return b && b !== "transparent" && b !== "rgba(0, 0, 0, 0)"; });
+      const word = all.find((el) => el.childElementCount === 0 && (el.textContent || "").trim().length > 1);
+      const framed = all.find((el) => parseFloat(getComputedStyle(el).borderTopWidth) > 0 && getComputedStyle(el).borderTopColor !== "rgba(0, 0, 0, 0)");
+      // the page's colour under the chip: the first painted ancestor
+      let pg = "";
+      for (let a = e.parentElement; a && !pg; a = a.parentElement) { const b = getComputedStyle(a).backgroundColor; if (b && b !== "transparent" && b !== "rgba(0, 0, 0, 0)") pg = b; }
+      return { cell: filled ? getComputedStyle(filled).backgroundColor : "", ink: word ? getComputedStyle(word).color : "", frame: !!framed, page: pg || getComputedStyle(document.body).backgroundColor };
     });
-    h.expect(r.width >= 1, `«${k}» chip has a frame`);
-    const [br, bg, bb, ba = 1] = rgba(r.border);
-    // the page colour of this theme (tokens: light bg #EFEBE5, dark bg #24272D) under a frame of alpha ba
-    const page = h.layout.theme === "light" ? [0xef, 0xeb, 0xe5] : [0x24, 0x27, 0x2d];
-    const seen = [br, bg, bb].map((v, i) => v * ba + page[i] * (1 - ba));
-    const cr = ratio(seen, page);
-    h.expect(cr >= 3, `«${k}» chip frame contrast ${cr.toFixed(2)}:1 ≥ 3:1 (${r.border})`);
+    h.expect(!!r.cell, `«${k}» chip has its own cell`);
+    h.expect(!r.frame, `«${k}» chip: no frame (v2)`);
+    h.expect(r.cell !== r.page, `«${k}» chip's cell is not the page colour (${r.cell} / ${r.page})`);
+    const cr = ratio(rgba(r.ink).slice(0, 3), rgba(r.cell).slice(0, 3));
+    h.expect(cr >= 4.5, `«${k}» chip words contrast ${cr.toFixed(2)}:1 ≥ 4.5:1 (${r.ink} on ${r.cell})`);
   }
   await h.shot("chips");
 };

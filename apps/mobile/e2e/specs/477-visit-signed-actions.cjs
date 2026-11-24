@@ -42,7 +42,7 @@ exports.run = async (h) => {
   h.expect((await p.getByTestId("visit-record-payment").locator("visible=true").count()) === 0, "С1 no «Принять оплату»");
   h.expect((await p.getByTestId("visit-method").locator("visible=true").count()) === 0, "С1 no payment method");
   await h.shot("close-zero");
-  await p.getByTestId("visit-close").locator("visible=true").first().getByRole("button").click();
+  await p.getByTestId("visit-close").locator("visible=true").first().click();
   await p.waitForFunction(([k, id]) => ["paid", "done"].includes(JSON.parse(localStorage.getItem(k) || "null")?.db?.visits?.find((x) => x.id === id)?.step), [KEY, a.id], { timeout: 8000 });
   let db = await h.db();
   h.expect((db.payments || []).length === payments0, `С1 no payment written (${(db.payments || []).length} / ${payments0})`);
@@ -56,12 +56,13 @@ exports.run = async (h) => {
   await h.go(`/visit/${b.id}`);
   const due = p.getByTestId("visit-amount-due").locator("visible=true").first();
   await due.waitFor({ timeout: 8000 });
-  const shown = (await due.innerText()).trim();
+  // v2: the row «К оплате · $300» — the amount is the row's value
+  const shown = ((await due.innerText()).match(/\$[\d,]+(\.\d\d)?/) ?? [""])[0];
   h.expect(/^\$300(\.00)?$/.test(shown), `С4 the screen shows $300: ${shown}`);
   h.expect((await p.getByTestId("visit-close").locator("visible=true").count()) === 0, "С4 no «Закрыть выезд» while there is money to take");
   await p.getByTestId("visit-method-button").locator("visible=true").first().click();
   await p.getByTestId("visit-method-cash").locator("visible=true").first().click();
-  await p.getByTestId("visit-record-payment").locator("visible=true").first().getByRole("button").click();
+  await p.getByTestId("visit-record-payment").locator("visible=true").first().click();
   await p.waitForFunction(([k, id]) => JSON.parse(localStorage.getItem(k) || "null")?.db?.visits?.find((x) => x.id === id)?.step === "paid", [KEY, b.id], { timeout: 8000 });
   db = await h.db();
   const vb = db.visits.find((x) => x.id === b.id);

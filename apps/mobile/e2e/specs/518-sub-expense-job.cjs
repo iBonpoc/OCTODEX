@@ -30,12 +30,15 @@ exports.run = async (h) => {
   await h.shot("sub-no-job");
 
   // the home «＋»: no «Создать расход» (left with one item — «Лид» — the «＋» opens it straight away, no sheet)
-  await h.go("/visits");
-  if (h.layout.width >= 820) await p.getByTestId("side-nav").getByRole("button", { name: "Создать", exact: true }).click();
-  else await p.getByTestId("fab").locator("visible=true").click();
-  await p.waitForFunction(() => /Быстрые действия/.test(document.body.innerText) || location.pathname.startsWith("/lead/new"), null, { timeout: 8000 });
-  const sheetOpen = await p.evaluate(() => /Быстрые действия/.test(document.body.innerText));
-  h.expect(sheetOpen ? !(await h.sheet().innerText()).includes("Создать расход") : p.url().includes("/lead/new"), "no «Создать расход» in the «＋»");
+  // v2 (#2350): «＋» is the header's menu (`visits-create`; its items `fab-…`); with one item it opens it straight away
+  const plus = async () => {
+    await h.go("/visits");
+    await p.getByTestId("visits-create").locator("visible=true").first().getByRole("button").first().click();
+    await p.waitForFunction(() => !!document.querySelector('[data-testid="menu-items"]') || location.pathname.startsWith("/lead/new"), null, { timeout: 8000 });
+  };
+  await plus();
+  const menuOpen = (await p.getByTestId("menu-items").locator("visible=true").count()) > 0;
+  h.expect(menuOpen ? (await p.getByTestId("fab-expense").locator("visible=true").count()) === 0 : p.url().includes("/lead/new"), "no «Создать расход» in the «＋»");
 
   // a visit of his today on a job: the form offers that job and no «Общий расход»
   const v = raw.db.visits.find((x) => x.jobId === job.id && x.id !== insp.id) ?? raw.db.visits.find((x) => x.id !== insp.id);
@@ -48,10 +51,8 @@ exports.run = async (h) => {
   h.expect(chips.includes(job.number || job.title), `the job of his visit is offered (${chips})`);
   await h.shot("sub-job-today");
   // the «＋» of home has «Создать расход» again
-  await h.go("/visits");
-  if (h.layout.width >= 820) await p.getByTestId("side-nav").getByRole("button", { name: "Создать", exact: true }).click();
-  else await p.getByTestId("fab").locator("visible=true").click();
-  await h.expectText(/Быстрые действия/, "the «＋» sheet is open");
-  h.expect((await h.sheet().innerText()).includes("Создать расход"), "«Создать расход» with a job of his today");
+  await plus();
+  await p.getByTestId("fab-expense").locator("visible=true").first().waitFor({ timeout: 3000 });
+  h.expect((await p.getByTestId("fab-expense").locator("visible=true").first().innerText()).includes("Создать расход"), "«Создать расход» with a job of his today");
   await h.seed("octo.role.v1", "director");
 };

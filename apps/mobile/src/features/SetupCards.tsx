@@ -1,36 +1,37 @@
+/**
+ * The setup of a new company on the owner's «Главная» (prototype v2, template OverviewScreen): grouped rows 56 like the rest of the
+ * Overview — no accent frames, no progress cards (LAYOUT-RULES §8 п.19: no «hero» cards). «Настройка компании · 3 из 8» — one row,
+ * the next step; «Первые шаги · 2 из 4» (13 §3.11 п.2) — a row per step, «Скрыть» the last row (13 §5а). Both go when all is done.
+ */
 import { useState } from "react";
 import { Platform, View } from "react-native";
 import { router } from "expo-router";
-import { space, size } from "@octo/design-tokens";
+import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { usePersistentState } from "@/data/persist";
 import { setupProgress, stepTitle } from "./companySetup";
 import { firstSteps, firstStepsLeft } from "./firstSteps";
-import { Button, ProgressBar } from "@/ui/controls";
-import { Icon, T } from "@/ui/primitives";
+import { GroupRow, ListGroup } from "@/ui/groupedList";
+import { T } from "@/ui/primitives";
 import { Sheet } from "@/ui/overlays";
-import { Card, RowView } from "@/ui/surfaces";
 
-/** "Company setup 3 of 8" on Today until everything is filled in. */
+/** «Настройка компании · 3 из 8» until everything is filled in: one row with the next step, the whole row opens it. */
 export function CompanySetupCard() {
   const { db } = useStore();
   const { t } = useI18n();
   const p = setupProgress(db.company, db.serviceCategories);
   if (!db.company || p.done === p.total) return null;
   return (
-    <Card status="warn" onPress={() => router.push("/company")} accessibilityLabel={t("co.setupTitle")}>
-      <RowView style={{ justifyContent: "space-between" }}>
-        <T v="heading">{t("co.setupTitle")}</T>
-      </RowView>
-      <ProgressBar value={p.done} max={p.total} label={t("co.progress", { done: p.done, total: p.total })} />
-      {p.next ? (
-        <T v="caption" tone="mut">
-          {t("co.nextStep", { step: t(stepTitle(p.next)) })}
-        </T>
-      ) : null}
-      {p.next ? <Button label={t("co.continue")} icon="chevronRight" size="sm" variant="secondary" onPress={() => router.push(`/company/${p.next}?wizard=1`)} /> : null}
-    </Card>
+    <ListGroup title={`${t("co.setupTitle")} · ${t("co.progress", { done: p.done, total: p.total })}`} testID="company-setup">
+      <GroupRow
+        testID="company-setup-next"
+        lead={{ icon: "settings" }}
+        title={p.next ? t(stepTitle(p.next)) : t("co.setupTitle")}
+        subtitle={p.next ? t("co.continue") : undefined}
+        onPress={() => router.push(p.next ? `/company/${p.next}?wizard=1` : "/company")}
+      />
+    </ListGroup>
   );
 }
 
@@ -55,31 +56,20 @@ export function FirstStepsCard() {
   const done = steps.length - firstStepsLeft(steps);
   return (
     <View testID="first-steps">
-    <Card>
-      <RowView style={{ justifyContent: "space-between" }}>
-        <T v="heading">{t("first.title")}</T>
-        <Button label={t("first.hide")} size="sm" variant="ghost" onPress={() => setHidden(true)} />
-      </RowView>
-      <ProgressBar value={done} max={steps.length} label={t("co.progress", { done, total: steps.length })} />
-      <View style={{ gap: space[1] }}>
+      <ListGroup title={`${t("first.title")} · ${t("co.progress", { done, total: steps.length })}`}>
         {steps.map((s) => (
-          <View key={s.id} testID={`first-${s.id}`}>
-          <RowView style={{ minHeight: size.controlMdPhone }}>
-            <Icon name={s.done ? "check" : "chevronRight"} s={size.iconSm} />
-            <T v="body" tone={s.done ? "mut" : "ink"} style={{ flex: 1 }}>
-              {t(s.label)}
-            </T>
-            {!s.done ? (
-              <Button label={t("first.go")} size="sm" variant="secondary" onPress={() => (s.href ? router.push(s.href) : setHowTo(true))} />
-            ) : (
-              <T v="caption" tone="mut">
-                {t("first.done")}
-              </T>
-            )}
-          </RowView>
-          </View>
+          <GroupRow
+            key={s.id}
+            testID={`first-${s.id}`}
+            lead={{ icon: s.done ? "check" : "chevronRight" }}
+            title={t(s.label)}
+            subtitle={s.done ? t("first.done") : undefined}
+            compact
+            onPress={s.done ? undefined : () => (s.href ? router.push(s.href) : setHowTo(true))}
+          />
         ))}
-      </View>
+        <GroupRow testID="first-hide" lead={{ icon: "close" }} title={t("first.hide")} compact onPress={() => setHidden(true)} />
+      </ListGroup>
       <Sheet visible={howTo} onClose={() => setHowTo(false)} title={t("first.install")}>
         <View style={{ gap: space[2] }}>
           <T v="body">{t("first.install.ios")}</T>
@@ -89,7 +79,6 @@ export function FirstStepsCard() {
           </T>
         </View>
       </Sheet>
-    </Card>
     </View>
   );
 }

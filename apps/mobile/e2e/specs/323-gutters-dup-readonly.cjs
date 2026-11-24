@@ -34,6 +34,7 @@ exports.run = async (h) => {
   g.elements.push({ ...r, id: r.id + "-dup", geom: { ...r.geom }, attrs: { ...r.attrs } });
   const mid = r.measurementId;
   state.db.company.modules.gutters.trialEndsAt = new Date(Date.now() - 86_400_000).toISOString(); // past the trial: read only
+  state.db.company.modules.gutters.unlimited = false; // #2410: a row with a term (the demo has none of its own)
   await h.seed(KEY, state);
   h.expect((await live()) === 2, "the old drawing has two rows on one line");
   await h.go(`/module/gutters/draw?m=${mid}`);

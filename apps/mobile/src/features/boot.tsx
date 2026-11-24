@@ -22,7 +22,7 @@ import Animated, {
 import type * as SplashModule from "expo-splash-screen";
 import * as Updates from "expo-updates";
 import { getLocales } from "expo-localization";
-import { component, motion, space, themes } from "@octo/design-tokens";
+import { component, motion, space, themes, z } from "@octo/design-tokens";
 import { tFor, type DocLang } from "@/i18n/translate";
 import { StaticThemeProvider } from "@/theme/ThemeProvider";
 import { BrandLaunch, BrandWait } from "@/ui/brand";
@@ -223,7 +223,7 @@ export function BootRoot({ fontsReady, children }: { fontsReady: boolean; childr
       {gone ? null : (
         <Animated.View
           testID={leaving ? "boot-leaving" : "boot-layer"}
-          style={[StyleSheet.absoluteFill, { zIndex: ready ? 1 : 0, backgroundColor: ready ? themes[name].bg : undefined }, leave.layer]}
+          style={[StyleSheet.absoluteFill, { zIndex: ready ? z.over : z.under, backgroundColor: ready ? themes[name].bg : undefined }, leave.layer]}
           // over the app before it leaves: no blind taps on a screen not seen yet; leaving — the first screen takes them
           pointerEvents={leaving ? "none" : ready ? "auto" : "box-none"}
         >

@@ -24,7 +24,8 @@ exports.run = async (h) => {
   const menu = p.getByRole("menu").locator("visible=true").last();
   await menu.waitFor({ timeout: 3000 });
   const menuW = (await menu.boundingBox()).width;
-  h.expect(menuW >= Math.min(rowW, 380) - 1 && menuW <= 381, `the menu is not narrower than its row and not wider than the window (${menuW} vs row ${rowW})`);
+  // DS §9б.4 (#2412): the value menu is as wide as its words — 240…280, never the row's width (was «not narrower than its row», А2)
+  h.expect(menuW >= 239 && menuW <= 281 && menuW <= rowW + 1, `the menu is 240…280 wide, not the row's width (${menuW} vs row ${rowW})`);
   const items = menu.getByRole("menuitem");
   h.expect((await items.count()) === 6, `six choices in the menu (${await items.count()})`);
   // the mark is the check icon (react-native-web gives a menu item no aria-selected)

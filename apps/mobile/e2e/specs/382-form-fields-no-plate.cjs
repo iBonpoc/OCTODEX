@@ -1,7 +1,7 @@
 /**
  * e2e 382 — a form's fields lie straight on the background, the field's helper action is an icon inside it (DS §11 п.17–18,
  * founder 14.11, #1411), «Новый лид», every view, by testID:
- * - the fields are as wide as the screen's main button (no card around them eats the width: before, they were 2 × 16 narrower);
+ * - the fields are as wide as the bar of the screen's main button (no card around them eats the width: before, they were 2 × 16 narrower);
  * - «Вставить» is no button beside the phone: an icon inside the phone field's frame, its touch box 44 high, named for the
  *   screen reader; the field is as wide as the other fields;
  * - a press pastes the number from the clipboard, formatted «(555) 555-0199».
@@ -15,9 +15,10 @@ exports.run = async (h) => {
 
   const box = (id) => tid(id).boundingBox();
   const fields = await box("new-lead-fields");
-  const save = await box("lead-save");
-  h.expect(fields && save, "the fields and «Сохранить лид» are there");
-  h.expect(Math.abs(fields.x - save.x) <= 1 && Math.abs(fields.width - save.width) <= 1, `the fields span the column like the main button (fields ${fields.x}/${fields.width}, button ${save.x}/${save.width})`);
+  // v2 (#2350, EditorScreen): «Сохранить лид» sits at the right of the bottom bar; the bar spans the column — the fields match it
+  const save = await box("lead-save-bar");
+  h.expect(fields && save && (await box("lead-save")), "the fields and «Сохранить лид» are there");
+  h.expect(Math.abs(fields.x - save.x) <= 1 && Math.abs(fields.width - save.width) <= 1, `the fields span the column like the main button's bar (fields ${fields.x}/${fields.width}, bar ${save.x}/${save.width})`);
   // no plate under the fields: nothing between the group and the screen paints a background of its own
   const plate = await p.evaluate(() => {
     const el = [...document.querySelectorAll('[data-testid="new-lead-fields"]')].find((e) => e.offsetParent !== null);

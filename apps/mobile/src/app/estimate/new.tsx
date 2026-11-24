@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { canSeeClientLink } from "@/features/estimateSign";
-import { View } from "react-native";
+import { View, type ViewStyle } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { haptics } from "@/ui/haptics";
-import { component, motion, space, size } from "@octo/design-tokens";
+import { component, motion, radius, rhythm, space, spaceHalf, size } from "@octo/design-tokens";
 import { LINE_GROUPS, activeLines, countedSections, discountBps, ppmToPctText, sectionSubtotals, taxRatePpm, type TaxSettings, type EstimateSection, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
 import { canMakeEstimateAt, canSeeEstimate, keepCosts, seeCosts as seesCosts } from "@/features/access";
@@ -15,6 +15,7 @@ import { LineMarks } from "@/features/LineMarks";
 import { ClientPicker, itemPrice, kindLabel } from "@/features/estimatePickers";
 import { LineRow, rowFieldId, type RowAction, type RowApi } from "@/features/estimate/LineRow";
 import { useRowView } from "@/features/estimate/rowView";
+import { rowSum } from "@/features/estimate/rowLine";
 import { swipeHintDue, useSwipeHint } from "@/features/estimate/swipeHint";
 import { SortableList, type DropResult } from "@/features/SortableList";
 import { withLooseTarget, type Drop } from "@/features/sortable";
@@ -27,25 +28,39 @@ import { CaWarn } from "@/features/estimate/CaWarn";
 import { NotesTerms } from "@/features/estimate/NotesTerms";
 import { isSignedEstimate } from "@/features/estimate/notesTerms";
 import { docLanguageFor } from "@/data/people";
-import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
+import { autoGroups, canAddSection, addSection, deleteSection, foldForDrag, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
 import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, nextSeries, replaceLine, restoreDeleted, type DeleteSeries, restoreLine, rowProblems, setHidden } from "@/features/estimateRows";
 import { FieldError, useRequiredForm, useScreenScroll } from "@/ui/requiredForm";
-import { ActionBar } from "@/ui/actionBar";
+import { MainStep } from "@/ui/mainStep";
+import { CreateButton, MoreButton } from "@/ui/templates/parts";
+import type { MainAction } from "@/ui/templates";
+import { estimateStatusView } from "@/features/estimateStatus";
 import { useReducedMotion } from "react-native-reanimated";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { PickerSheet } from "@/ui/pickerSheet";
 import { Labeled, MoneyField, PctField, RatePctField } from "@/features/fields";
+import { MONEY_MODES, TAX_MODES, depositFor, depositMode, discountFor, discountMode, remember, type ModeMemo, type TotalsMode } from "@/features/estimate/totalsModes";
+import { ModeRow } from "@/ui/modeRow";
 import { isPartialTax, lastTaxRatePpm, taxChange, wholeTax, type TaxDiff } from "@/features/estimateTax";
-import { Avatar, Button, IconButton, Segmented, StatusChip, TextField, Toggle } from "@/ui/controls";
+import { Button, IconButton, StatusChip, TextField } from "@/ui/controls";
+import { CountPill, FigureRow } from "@/ui/figures";
+import type { IconKey } from "@/ui/primitives";
+import { dayKeyIn } from "@/features/zone";
+import { dayOffsetOf, todayKey } from "@/features/calendar";
+import { GroupHead, GroupRow, ListGroup, useGroupEdge } from "@/ui/groupedList";
+import { foldStart, foldStep, type FoldState } from "@/ui/totalFold";
+import { ButtonPair } from "@/ui/pairs";
+import { useDayWord } from "@/features/useDayWord";
 import { Icon, Press, T } from "@/ui/primitives";
-import { Menu, Sheet, useToast } from "@/ui/overlays";
-import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
-import { draftCtx, draftSnapshot, draftsKey, findDraft, nextDrafts, removeDraft, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
+import { HelpButton, Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
+import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle, useFooterShown } from "@/ui/surfaces";
+import { draftCtx, draftSnapshot, draftsKey, findDraft, isEditCtx, nextDrafts, removeDraft, restoreDraftOnDevice, useDraftEditorOpen, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
+import { useConfirm } from "@/ui/confirmDialog";
+import { doneAction, gateAtOpen, gateBeforeSave, markOf, takeMine } from "@/features/estimate/editSession";
 import { useAuth } from "@/cloud/auth";
-import { localUndo, withAfter } from "@/data/undo";
+import { NO_UNDO, localUndo, withAfter } from "@/data/undo";
 import { StatusNote } from "@/ui/statusNote";
 
-type SettingKind = "discount" | "tax" | "deposit" | null;
 const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 
 /**
@@ -76,18 +91,24 @@ export default function EstimateBuilderScreen() {
 type Params = { id?: string; customerId?: string; propertyId?: string; leadId?: string; template?: string; editTemplate?: string; pick?: string };
 
 function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDrafts> }) {
+  // #2381 review 4: while an editor is open it owns the drafts list — a draft put back by an undo waits until it closes
+  useDraftEditorOpen();
   const params = useLocalSearchParams<Params>();
   const store = useStore();
   const { db } = store;
-  const { t, money } = useI18n();
+  const { t, money, time, day } = useI18n();
   const toast = useToast();
   const existing = params.id ? db.estimates.find((e) => e.id === params.id) : undefined;
   // a new estimate opened from the same place as an unfinished one: it goes on (#760, audit Q-01)
   const ctx = draftCtx(params);
   const [draft, setDraft] = useState(() => findDraft(drafts.list, ctx, Date.now(), (id) => db.estimates.some((e) => e.id === id)));
   const [estimateId] = useState(() => existing?.id ?? draft?.estimateId ?? uid());
-  const [customerId, setCustomerId] = useState(existing?.customerId ?? draft?.customerId ?? params.customerId);
-  const [propertyId, setPropertyId] = useState(existing?.propertyId ?? draft?.propertyId ?? params.propertyId);
+  // #2381: a saved estimate's edit found on the phone (the app closed by chance, «×» left them): the screen opens ON the edits
+  const fromEdit = existing && draft && isEditCtx(ctx) ? draft : undefined;
+  const [customerId, setCustomerId] = useState(fromEdit?.customerId ?? existing?.customerId ?? draft?.customerId ?? params.customerId);
+  const [propertyId, setPropertyId] = useState(fromEdit?.propertyId ?? existing?.propertyId ?? draft?.propertyId ?? params.propertyId);
+  /** #2381: the estimate's `savedAt` when its edit began (kept in the draft): the conflict is «the store's savedAt ≠ this» */
+  const [baseSavedAt, setBaseSavedAt] = useState<string | undefined>(() => (existing ? (fromEdit ? fromEdit.baseSavedAt : markOf(existing)) : undefined));
   // E3 (S5t): a template to start from — given by the templates screen, or picked in «С чего начать?»
   const seeCosts = seesCosts(db, store.role, store.mode);
   // #1837: what a write carries — a template's costs the phone holds go into the estimate (and back) unless the server
@@ -127,18 +148,21 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const [doc, setDoc] = useState<EstimateDoc>(() =>
     existing
       ? // an estimate saved already never gets the key here (one without a doc — an older phone's — starts empty, no Terms)
-        existing.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : newDoc(db.company?.estimate.depositBps)
+        fromEdit
+        ? (JSON.parse(JSON.stringify(fromEdit.doc)) as EstimateDoc)
+        : existing.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : newDoc(db.company?.estimate.depositBps)
       : tplEdit
         ? templateForEdit(tplEdit, keep)
         : withNewTerms(draft?.doc ?? fromTpl?.doc ?? newDoc(db.company?.estimate.depositBps), draft?.customerId ?? params.customerId),
   );
-  const [title, setTitle] = useState(existing?.doc ? existing.title : draft?.title ?? tplEdit?.name ?? given?.name ?? "");
+  const [title, setTitle] = useState(fromEdit ? fromEdit.title : existing?.doc ? existing.title : draft?.title ?? tplEdit?.name ?? given?.name ?? "");
   const [cur, setCur] = useState(() => Math.max(0, doc.options.findIndex((o) => o.recommended)));
   // the open row of the list (DS §8.3: one open; it closes and keeps what is typed when another opens, «Новая позиция»,
   // «Из каталога», a finger starts to scroll or the estimate is saved); the focus it takes when it opens
   const [openId, setOpenId] = useState<string | null>(null);
   // «Кратко / Подробно» of the folded rows — the device remembers it (DS §8.3)
   const [rowLook, setRowLook] = useRowView();
+  const groupEdge = useGroupEdge();
   // a finger went down on the open row: a scroll that starts there leaves it open (DS §8.3, spec §11 п.5)
   const touchInOpen = useRef(0);
   const [focusRow, setFocusRow] = useState<{ id: string; field: "name" | "qty" } | null>(null);
@@ -165,7 +189,6 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const afterPicker = useRef<(() => void) | null>(null);
   // number fields of the open row that hold text which is not a number (the line keeps the last right value): "<line>:<field>"
   const badFields = useRef(new Set<string>());
-  const [setting, setSetting] = useState<SettingKind>(null);
   const [clientPicker, setClientPicker] = useState(!customerId && !startOpen && !tplEdit && !draft);
   // every CHANGE of a new estimate is kept on the phone; opening it (a template's lines and name) is not a change
   // (#859 №1); nothing worth keeping — no draft (#760)
@@ -175,9 +198,12 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const [opened, setOpened] = useState(() => ({ snapshot: draftSnapshot(held), restored: !!draft }));
   useEffect(() => {
     if (!ctx) return;
-    const d: EstimateDraft = { ctx, at: new Date().toISOString(), estimateId, customerId, propertyId, title, doc, templateId, checkPrice, wantCatalog };
+    const d: EstimateDraft = { ctx, at: new Date().toISOString(), estimateId, customerId, propertyId, title, doc, templateId, checkPrice, wantCatalog, ...(isEditCtx(ctx) ? { baseSavedAt } : {}) };
     setDrafts((list) => nextDrafts(list, d, opened, Date.now()), keyOfDrafts);
-  }, [ctx, estimateId, customerId, propertyId, title, doc, templateId, checkPrice, wantCatalog, opened, setDrafts, keyOfDrafts]);
+  }, [ctx, estimateId, customerId, propertyId, title, doc, templateId, checkPrice, wantCatalog, opened, setDrafts, keyOfDrafts, baseSavedAt]);
+  /** #2381: there are edits not saved («Отменить» shows only then — founder 21.11): this place's draft is on the phone */
+  const dirty = !!ctx && !tplEdit && drafts.list.some((x) => x.ctx === ctx);
+  const [dialog, ask] = useConfirm();
   const dropDraft = () => {
     if (ctx) setDrafts((list) => removeDraft(list, ctx), keyOfDrafts);
   };
@@ -245,6 +271,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const customer = db.customers.find((c) => c.id === customerId);
   const property = db.properties.find((p) => p.id === propertyId) ?? db.properties.find((p) => p.customerId === customerId);
   const option = doc.options[Math.min(cur, doc.options.length - 1)]!;
+  // #2363 q75 (founder 21.11: «по видам, автоматически»): an option with no sections of its own and lines of two kinds or more is
+  // SHOWN in groups by kind («Материалы · Работа · Услуги», DS §8.5) — a view, not data: the document, the PDF and /p/ do not change
+  // until the person moves a row or a section (then the grouping becomes the option's own sections, with «Вернуть»)
+  const grouped = useMemo(() => autoGroups(option), [option]);
+  const layoutOpt = grouped ?? option;
   // a tax-exempt client: no sales tax on the estimate (the server refuses it, П-2a)
   const exempt = !!customer?.taxExempt;
   const counted = useMemo(() => exemptDoc(doc, exempt), [doc, exempt]);
@@ -256,6 +287,19 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const optionSums = useMemo(() => Object.fromEntries(counted.options.map((o) => [o.id, optionTotals(counted, o).total])), [counted]);
   const s = counted.settings;
   const partialTax = isPartialTax(doc.settings.tax);
+  // the totals' switch «% · Выкл. · $» (DS §8.7а); a value turned off reads «—»
+  const modeLabel = (k: TotalsMode) => ({ key: k, label: k === "pct" ? "%" : k === "fixed" ? "$" : t("ue.off") });
+  const moneyModes = MONEY_MODES.map(modeLabel);
+  const taxModes = TAX_MODES.map(modeLabel);
+  const DASH = "—";
+  // what «%» / «$» had before «Выкл.» in this editor (CRM review): back to it brings the value back
+  const discMemo = useRef<ModeMemo<NonNullable<typeof s.discount>>>({});
+  const depMemo = useRef<ModeMemo<DepositSetting>>({});
+  // the field of the row whose «%» / «$» was just picked takes the focus, its text selected (one tap to typing)
+  const [rowFocus, setRowFocus] = useState<{ row: string; n: number }>({ row: "", n: 0 });
+  const focusTotals = (row: string, k: TotalsMode) => k !== "off" && setRowFocus((f) => ({ row, n: f.n + 1 }));
+  const focusOf = (row: string) => (rowFocus.row === row ? rowFocus.n : undefined);
+  const [badRate, setBadRate] = useState(false);
   const lastRate = lastTaxRatePpm(db.estimates, existing?.id);
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
@@ -441,6 +485,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     showUndo("est.sec.laidOut", option, next);
   };
   const sectionAction = (id: string, a: SectionAction) => {
+    const option = layoutOpt; // the shown layout: a move makes the auto groups the option's own
     if (signed) return;
     if (a === "rename") return setRenamingId(id);
     if (a === "addSub") return addSectionBtn(id);
@@ -451,6 +496,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     showUndo("est.sec.deleted", option, next);
   };
   const doMove = (lineId: string, key: string) => {
+    const option = layoutOpt; // the shown layout: a move makes the auto groups the option's own
     if (signed) return setMoveFor(null);
     const index = option.lines.findIndex((l) => l.id === lineId);
     const line = option.lines[index];
@@ -473,6 +519,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   };
   /** a row was let go in the list (DS §14.6): the line or the section lands where the bar stood; «Вернуть» takes back this move only */
   const dropRow = (d: Drop): DropResult => {
+    const option = layoutOpt; // the shown layout: a move makes the auto groups the option's own
     if (signed) return "same";
     const refuse = (why: string): DropResult => {
       toast.show(t("est.sec.moduleBlocked"));
@@ -519,8 +566,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     setFocusRow({ id, field: "qty" });
     setOpenId(id);
   };
-  const latest = useRef({ openRow, leaveRow, patchLine, rowAction, openInCatalog, sectionAction, nextQty });
-  latest.current = { openRow, leaveRow, patchLine, rowAction, openInCatalog, sectionAction, nextQty };
+  const latest = useRef({ openRow, leaveRow, patchLine, rowAction, openInCatalog, sectionAction, nextQty, doMove });
+  latest.current = { openRow, leaveRow, patchLine, rowAction, openInCatalog, sectionAction, nextQty, doMove };
   const sectionApi = useMemo<SectionApi>(
     () => ({
       // folding a section closes the open row first: a wrong row speaks and stays, the section does not fold over it
@@ -549,6 +596,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       wantCatalog: (id, on) => setWantCatalog((ids) => (on ? [...ids.filter((x) => x !== id), id] : ids.filter((x) => x !== id))),
       openInCatalog: (id) => latest.current.openInCatalog(id),
       nextQty: (id) => latest.current.nextQty(id),
+      // «⋯ → Выше / Ниже»: the same move as the sheet's «Выше» / «Ниже» (its «Вернуть»)
+      shift: (id, dir) => latest.current.doMove(id, dir < 0 ? "__up__" : "__down__"),
     }),
     [],
   );
@@ -649,10 +698,12 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   /** «Экран для клиента» (DS §8.3): cost, profit, the spend of hidden lines and «Только для вас» go from the screen */
   const [clientScreen, setClientScreen] = useState(false);
   /** «Итого ˅» of the phone's panel: open or folded (the screen's own state, not remembered) */
-  const [totalOpen, setTotalOpen] = useState(false);
+  // #2387 С2 — the lead's call (22.11: «А, капсула», as the founder chose in q72): scrolled down, «Итого» folds into the capsule;
+  // at the page's end the whole card «Итого · Готово» again (foldStep with `max`) — the capsule never lies over the totals at rest
+  const [fold, setFold] = useState<FoldState>(foldStart);
+  /** a folded line asked to show its menu (SortableList onHoldStill): its id and a counter, each ask opens it once */
+  const [menuAsk, setMenuAsk] = useState<{ id: string; n: number }>({ id: "", n: 0 });
   const totalRows = totalsRows({ totals, allOptional, own: seeCosts && !clientScreen, costKnown: costComplete(option) });
-  const [estMenu, setEstMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  const estMenuRef = useRef<ComponentRef<typeof View>>(null);
   const toggleClientScreen = (on: boolean) => {
     setClientScreen(on);
     toast.show(t(on ? "est.client.onToast" : "est.client.offToast"));
@@ -678,7 +729,147 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const savingRef = useRef(false);
   const { wide } = useDevice();
   const { c } = useTheme();
-  const save = (send: boolean) => {
+  /** #2381: the edit of a saved estimate as it was saved (theirs taken, or «Сбросить правки»): the screen shows the store's estimate */
+  const resetToSaved = () => {
+    const live = db.estimates.find((e) => e.id === estimateId);
+    if (!live) return;
+    const fresh = { estimateId, customerId: live.customerId, propertyId: live.propertyId, title: live.doc ? live.title : "", doc: live.doc ? (JSON.parse(JSON.stringify(live.doc)) as EstimateDoc) : newDoc(db.company?.estimate.depositBps), templateId: live.templateId, checkPrice: [] as string[] };
+    dropDraft();
+    setDraft(undefined);
+    setOpened({ snapshot: draftSnapshot(fresh), restored: false });
+    setBaseSavedAt(markOf(live));
+    setDoc(fresh.doc);
+    setCur(Math.max(0, fresh.doc.options.findIndex((o) => o.recommended)));
+    setTitle(fresh.title);
+    setCustomerId(fresh.customerId);
+    setPropertyId(fresh.propertyId);
+    setTemplateId(fresh.templateId);
+    setCheckPrice([]);
+    setWantCatalog([]);
+  };
+  /** Р2: «Оставить черновик» of a signed estimate — the screen shows the estimate AS SAVED (signed: its lines and total), the edits
+   *  stay on the phone and the line says so; nothing of the draft is drawn as if it were the estimate */
+  const [keptAside, setKeptAside] = useState(false);
+  const keepAside = () => {
+    const live = db.estimates.find((e) => e.id === estimateId);
+    if (!live) return;
+    const fresh = { estimateId, customerId: live.customerId, propertyId: live.propertyId, title: live.doc ? live.title : "", doc: live.doc ? (JSON.parse(JSON.stringify(live.doc)) as EstimateDoc) : newDoc(db.company?.estimate.depositBps), templateId: live.templateId, checkPrice: [] as string[] };
+    // the draft list is not touched: «restored» keeps this place's draft as it is (nextDrafts)
+    setOpened({ snapshot: draftSnapshot(fresh), restored: true });
+    setKeptAside(true);
+    setDoc(fresh.doc);
+    setCur(Math.max(0, fresh.doc.options.findIndex((o) => o.recommended)));
+    setTitle(fresh.title);
+    setCustomerId(fresh.customerId);
+    setPropertyId(fresh.propertyId);
+    setTemplateId(fresh.templateId);
+    // (Б-1 of review 3: every part of the held state as in the snapshot — a «проверить цену» or «в каталог» of the edit left on the
+    // screen made the screen differ from the snapshot, and the draft was overwritten with the signed estimate)
+    setCheckPrice([]);
+    setWantCatalog([]);
+    toast.show(t("k1.kept"));
+  };
+  /** Б-2 of review 3 (rule 5): «Сбросить правки» of an estimate kept aside — asked in the window first */
+  const dropKept = async () => {
+    const k = await ask({ title: t("k1.cancelQ"), text: t("k1.dropKeptText"), actions: [{ key: "back", label: t("k1.back"), tone: "cancel", testID: "k1-kept-reset-no" }, { key: "yes", label: t("k1.reset"), tone: "danger", testID: "k1-kept-reset-yes" }], testID: "k1-kept-reset-ask" });
+    if (k !== "yes") return;
+    dropDraft();
+    setKeptAside(false);
+  };
+  /** «Отменить» (founder 21.11: «отменяет все мои действия» · «Отменить спрашивает подтверждение — да»): the window in the middle
+   *  (DS Б3); yes — the edits on the phone go, the estimate stays as saved (a new one is not made), the screen closes */
+  const cancelEdits = async () => {
+    const k = await ask({
+      title: t("k1.cancelQ"),
+      text: existing ? t("k1.cancelText") : t("k1.cancelTextNew"),
+      actions: [{ key: "back", label: t("k1.keepEditing"), tone: "cancel", testID: "k1-cancel-no" }, { key: "yes", label: t("k1.cancelYes"), tone: "danger", testID: "k1-cancel-yes" }],
+      testID: "k1-cancel-ask",
+    });
+    if (k !== "yes") return;
+    dropDraft();
+    back();
+  };
+  /** «×» of a saved estimate with edits (founder 21.11: «когда выхожу, я могу их отменить»): save, take them back, or stay.
+   *  A new estimate leaves as before — its draft waits on the phone (#760). */
+  const close = async (proceed: () => void = back) => {
+    if (!(existing && dirty)) return proceed();
+    const k = await ask({
+      title: t("k1.closeQ"),
+      text: t("k1.closeText"),
+      actions: [{ key: "save", label: t("proto.est.done"), tone: "primary", testID: "k1-close-save" }, { key: "drop", label: t("k1.cancelYes"), tone: "danger", testID: "k1-close-drop" }, { key: "back", label: t("k1.keepEditing"), tone: "cancel", testID: "k1-close-back" }],
+      testID: "k1-close-ask",
+    });
+    if (k === "save") void save(false);
+    else if (k === "drop") {
+      dropDraft();
+      proceed();
+    }
+  };
+  /** «Сделать копию с правками» (#2381 §11 п.2): a NEW estimate from the edits — the same client and property, no lead (it is won),
+   *  no template; the edit's draft goes only once the copy is in; «Отменить» on the toast takes the copy out and the draft back */
+  const copyWithEdits = (clean: EstimateDoc, cust: { id: string; name: string }, prop: { id: string }) => {
+    const id = uid();
+    const was = drafts.list.find((x) => x.ctx === ctx);
+    // Р8: the copy is a NEW estimate — the company's Terms in its client's language (termsForNew), not the signed one's
+    const doc2: EstimateDoc = { ...clean, terms: store.estimateTerms({ customerId: cust.id }).text };
+    const undo = store.saveEstimate({ id, customerId: cust.id, propertyId: prop.id, doc: doc2, title: title.trim() || estimateTitle(doc2, t("ue.title")) });
+    if (undo === NO_UNDO) return void toast.show(t("k1.refused"));
+    dropDraft();
+    // the editor is closed by the time «Отменить» is pressed: the edit goes back to the device straight (not through this screen's list)
+    toast.show(t("k1.copied"), withAfter(undo, () => void (was && restoreDraftOnDevice(keyOfDrafts, was))));
+    router.replace(`/estimate/${id}`);
+  };
+  /** #2381: «Сохранено» is never said where the edits did not go in; the edits stay on the phone (spec §10–11, review 2) */
+  const askSigned = async (clean: EstimateDoc, cust: { id: string; name: string }, prop: { id: string }) => {
+    const k = await ask({ title: t("k1.signedQ"), text: t("k1.signedText"), actions: [{ key: "copy", label: t("k1.copy"), tone: "primary", testID: "k1-signed-copy" }, { key: "keep", label: t("k1.keepDraft"), tone: "cancel", testID: "k1-signed-keep" }], testID: "k1-signed-ask" });
+    if (k === "copy") copyWithEdits(clean, cust, prop);
+    else keepAside();
+  };
+  const askMissing = async (clean: EstimateDoc, cust: { id: string; name: string } | undefined, prop: { id: string } | undefined) => {
+    const k = await ask({ title: t("k1.missingQ"), text: t("k1.missingText"), actions: [...(cust && prop ? [{ key: "copy", label: t("k1.copyNew"), tone: "primary" as const, testID: "k1-missing-copy" }] : []), { key: "reset", label: t("k1.reset"), tone: "danger", testID: "k1-missing-reset" }, { key: "back", label: t("k1.back"), tone: "cancel", testID: "k1-missing-back" }], testID: "k1-missing-ask" });
+    if (k === "copy" && cust && prop) copyWithEdits(clean, cust, prop);
+    else if (k === "reset") {
+      dropDraft();
+      back();
+    }
+  };
+  /** what stands between «Готово» and the save — editSession.gateBeforeSave; "go" — save */
+  const checkBeforeSave = async (clean: EstimateDoc, cust: { id: string; name: string }, prop: { id: string }, answered?: "await"): Promise<"go" | "stop"> => {
+    const live = db.estimates.find((e) => e.id === estimateId);
+    const g = gateBeforeSave({ isEdit: isEditCtx(ctx), live, base: baseSavedAt, dirty, storeLoaded: store.companyLoaded });
+    // the question answered already («Сохранить и снять подпись» at the opening): not asked a second time (review 3)
+    if (g === "go" || (g === "await" && answered === "await")) return "go";
+    if (g === "wait") {
+      toast.show(t("k1.wait"));
+      return "stop";
+    }
+    if (g === "missing") {
+      await askMissing(clean, cust, prop);
+      return "stop";
+    }
+    if (g === "signed") {
+      await askSigned(clean, cust, prop);
+      return "stop";
+    }
+    if (g === "await") {
+      const k = await ask({ title: t("k1.awaitQ"), text: t("k1.awaitText"), actions: [{ key: "save", label: t("k1.saveUnsign"), tone: "danger", testID: "k1-await-save" }, { key: "copy", label: t("k1.copy"), testID: "k1-await-copy" }, { key: "back", label: t("k1.back"), tone: "cancel", testID: "k1-await-back" }], testID: "k1-await-ask" });
+      if (k === "copy") copyWithEdits(clean, cust, prop);
+      return k === "save" ? "go" : "stop";
+    }
+    const k = await ask({ title: t("k1.conflictQ"), text: live?.savedAt ? t("k1.conflictText", { time: time(live.savedAt) }) : undefined, actions: [{ key: "mine", label: t("k1.mine"), tone: "primary", testID: "k1-conflict-mine" }, { key: "theirs", label: t("k1.theirs"), testID: "k1-conflict-theirs" }, { key: "back", label: t("k1.back"), tone: "cancel", testID: "k1-conflict-back" }], testID: "k1-conflict-ask" });
+    if (k === "theirs") resetToSaved();
+    // Р4: only «Мои правки» goes on; «Назад» and Esc stay with the edits, nothing saved
+    return takeMine(k) ? "go" : "stop";
+  };
+  const save = async (send: boolean, answered?: "await") => {
+    // Р1 (spec §4 п.2): a saved estimate with no edits — «Готово» only closes (nothing written: «sent» and its time stay); «Отправить»
+    // goes to the send of the estimate as it is. An estimate kept aside (signed, «Оставить черновик») is shown as saved — closes too
+    // stale: what a save would write differs from the saved document (the client became tax exempt since — e2e 72)
+    const stale = !!existing?.doc && !!customer && JSON.stringify(exemptDoc(existing.doc, customer.taxExempt)) !== JSON.stringify(existing.doc);
+    if (existing && (keptAside || doneAction({ existing: true, dirty, stale, status: existing.status }) === "close")) {
+      if (send && canSeeClientLink(store.role)) return void router.replace(`/estimate/${estimateId}?send=1`);
+      return void back();
+    }
     // #1138: the main button stays active (DS §11 п.3, the director's review of #1169): where the tech may not make one, it says why
     if (!mayHere) return void toast.show(t("est.tech.notHere"));
     // something is missing (no client, no line): the button is not off — it says what and takes the person there (DS §11 п.3, Р10)
@@ -694,13 +885,24 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     if (!settled.closed) return;
     if (savingRef.current) return;
     savingRef.current = true;
-    haptics.success();
     const clean: EstimateDoc = exemptDoc({ ...docWith(settled.option), options: docWith(settled.option).options.map((o) => ({ ...o, lines: activeLines(o.lines).filter((l) => !isBlank(l)) })) }, customer.taxExempt);
+    // #2381: signed meanwhile, or saved on another phone — asked first; nothing is lost («стоп» keeps the edits on the phone)
+    if ((await checkBeforeSave(clean, customer, property, answered)) === "stop") {
+      savingRef.current = false;
+      return;
+    }
+    haptics.success();
     const catalogUndos = writeCatalog(settled.newItems);
     const undo = store.saveEstimate({
       id: estimateId, customerId: customer.id, propertyId: property.id, doc: clean, leadId: params.leadId, templateId,
       title: title.trim() || estimateTitle(clean, t("ue.title")),
     });
+    // #2381 (review 1 №1): the store refused (signed, no right) — the edits stay on the phone, never «Сохранено»
+    if (undo === NO_UNDO) {
+      for (const u of catalogUndos) u();
+      savingRef.current = false;
+      return void toast.show(t("k1.refused"));
+    }
     // saved: the store holds it now. «Отменить» on the toast takes the saved estimate back out of the store; the builder
     // is closed by then, so its content does not come back as a draft (#860)
     dropDraft();
@@ -709,6 +911,52 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     toast.show(settled.newItems.length ? `${saved} · ${t("est.row.catalogAdded")}` : saved, store.undoTogether([...catalogUndos, undo]));
     router.replace(`/estimate/${estimateId}${send && canSeeClientLink(store.role) ? "?send=1" : ""}`);
   };
+
+  /** #2381 §11 п.1: opened with the edits of an estimate that got signed meanwhile, saved on another phone or deleted — asked ONCE
+   *  (the draft never hangs on for good); a store not loaded yet (Р5) — asked once it is */
+  const askedAtOpen = useRef(false);
+  useEffect(() => {
+    if (askedAtOpen.current || !isEditCtx(ctx) || !draft) return;
+    const live = db.estimates.find((e) => e.id === estimateId);
+    const g = gateAtOpen({ hasEditDraft: true, live, base: draft.baseSavedAt, storeLoaded: store.companyLoaded });
+    if (g === "wait") return; // the store comes: this runs again
+    askedAtOpen.current = true;
+    if (g === "go") return;
+    const cust = db.customers.find((x) => x.id === customerId);
+    const prop = db.properties.find((x) => x.id === propertyId);
+    const clean = (): EstimateDoc => exemptDoc({ ...doc, options: doc.options.map((o) => ({ ...o, lines: activeLines(o.lines).filter((l) => !isBlank(l)) })) }, !!cust?.taxExempt);
+    void (async () => {
+      if (g === "missing") return void askMissing(clean(), cust, prop);
+      if (g === "signed" || g === "await") {
+        const k = await ask({
+          title: g === "signed" ? t("k1.signedQ") : t("k1.awaitQ"),
+          text: g === "signed" ? t("k1.signedText") : t("k1.awaitText"),
+          actions: [
+            ...(g === "await" ? [{ key: "save", label: t("k1.saveUnsign"), tone: "danger" as const, testID: "k1-open-unsign" }] : []),
+            { key: "copy", label: t("k1.copy"), tone: "primary", testID: "k1-open-copy" },
+            { key: "reset", label: t("k1.reset"), tone: g === "signed" ? "danger" : undefined, testID: "k1-open-reset" },
+            { key: "keep", label: t("k1.keepDraft"), tone: "cancel", testID: "k1-open-keep" },
+          ],
+          testID: "k1-open-signed",
+        });
+        if (k === "reset") resetToSaved();
+        else if (k === "copy" && cust && prop) copyWithEdits(clean(), cust, prop);
+        else if (k === "save") void save(false, "await");
+        else keepAside();
+        return;
+      }
+      const k = await ask({
+        title: t("k1.conflictQ"),
+        text: live?.savedAt ? t("k1.conflictText", { time: time(live.savedAt) }) : undefined,
+        actions: [{ key: "mine", label: t("k1.mine"), tone: "primary", testID: "k1-open-mine" }, { key: "theirs", label: t("k1.theirs"), testID: "k1-open-theirs" }],
+        testID: "k1-open-conflict",
+      });
+      if (k === "theirs") resetToSaved();
+      // mine: the edits go on, made over the version now in the store — «Готово» does not ask again for the same change
+      else if (takeMine(k) && live) setBaseSavedAt(markOf(live));
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.companyLoaded]);
 
   const saveTemplate = () => {
     if (!tplEdit) return;
@@ -750,92 +998,182 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const act = activeLines(option.lines);
   // the sum of each line by its id, once (not `indexOf` for every row: that is n² for a long estimate)
   // a section that is carried folds while it is held (its lines go with it)
-  const view = useMemo(() => withLooseTarget(viewRows(option, new Set(holdSection ? [...collapsedIds, holdSection] : collapsedIds)), !!lifted?.startsWith("l:")), [option, collapsedIds, holdSection, lifted]);
+  const view = useMemo(() => withLooseTarget(viewRows(layoutOpt, foldForDrag(layoutOpt, collapsedIds, holdSection)), !!lifted?.startsWith("l:")), [layoutOpt, collapsedIds, holdSection, lifted]);
   // the first line on the list: the swipe hint plays on it
   const firstLineId = view.find((r): r is Extract<typeof r, { type: "line" }> => r.type === "line")?.line.id;
-  const secTotals = useMemo(() => sectionSubtotals(option, s), [option, s]);
+  const secTotals = useMemo(() => sectionSubtotals(layoutOpt, s), [layoutOpt, s]);
+  const hasGroups = (layoutOpt.sections ?? []).length > 0;
   const totalById = new Map(act.map((l, i) => [l.id, totals.lineTotals[i] ?? 0] as const));
-  const taxValue = !s.tax.enabled ? t("ue.off") : partialTax ? `${ppmToPctText(taxRatePpm(s.tax))}% · ${t("ue.taxPartialShort")}` : `${ppmToPctText(taxRatePpm(s.tax))}%`;
-  const discValue = !s.discount ? t("ue.add") : s.discount.kind === "pct" ? `${discountBps(s.discount.value) / 100}%` : money(s.discount.cents);
-  const depValue = s.deposit.kind === "none" ? t("ue.none") : s.deposit.kind === "pct" ? `${s.deposit.bps / 100}% · ${money(totals.deposit)}` : money(totals.deposit);
 
-  /** «Сохранить и отправить» (the office: sending is theirs, #1113) and «Сохранить»: always active — a press with something missing says what */
-  // the pinned bar: in one row, «Сохранить» 2 : 3 «Сохранить и отправить», 44 high; the tech has one «Сохранить» across (DS §8.9)
+  /** sending is the office's (#1113): «Сохранить и отправить» is in «⋯» — the bar's one step is «Готово» (BUILD-SPEC §2.7, LAYOUT-RULES П3) */
   const canSend = canSeeClientLink(store.role);
-  const sendButton = (bar: boolean) => (canSend ? <View testID="ue-save-send"><Button label={t("ue.saveSend")} icon="send" size={bar ? "bar" : undefined} full onPress={() => save(true)} /></View> : null);
-  const saveButton = (bar: boolean) => (
-    <View testID="ue-save">
-      <Button label={t("ue.save")} icon="check" size={bar ? "bar" : undefined} variant={canSend ? "secondary" : "primary"} full onPress={() => save(false)} />
+  // «сохранено 8:19» (visual v2 №5): the version's own save mark; another day — the day
+  // (an estimate saved before the mark existed: the time it was sent — the type's own fallback)
+  const savedIso = existing?.doc?.savedAt ?? existing?.savedAt ?? existing?.sentAt;
+  const dw = useDayWord();
+  // #2363 F46 (founder 21.11): «сохранено 8:19» today, «сохранено вчера» the day before, else «сохранено пт, 19 нояб.» — no «позавчера»
+  // #2363 F33: saved after it went to the client — the client has not seen these edits
+  const changedAfterSend = !!existing && existing.status !== "draft" && !!existing.sentAt && !!savedIso && savedIso > existing.sentAt;
+  const savedWord = savedIso
+    ? t("px3.est.saved", { time: dayKeyIn(savedIso) === todayKey() ? time(savedIso) : dw(savedIso, true) })
+    : undefined;
+  // the pinned bar's ONE main step (direction 20.11 §3, the founder 21.11 #2350: «большая кнопка всегда светится, перекрывает» —
+  // so one compact row «Итого ˅ $… · кнопка по словам»): no line yet — «Добавить позицию» (the price list when there is one, else
+  // a line of its own); lines — «Готово» (saves and opens the estimate: send, sign, deposit are there). Always active: a press with
+  // something missing says what (DS §11 п.3).
+  const firstLine = !signed && !hasContent(doc);
+  const addFirst = () => (db.catalog.length ? openCatalog() : addNew());
+  // #2387 (CRM review: «одни слова — два разных действия»): the empty estimate's step says what it does — «Из каталога» when there is one
+  const step: MainAction = firstLine ? { label: db.catalog.length ? t("px3.est.fromCatalog") : t("px3.est.newLine"), onPress: addFirst, testID: "est-bar-add" } : { label: t("proto.est.done"), onPress: () => void save(false), testID: "ue-save" };
+  // «Итого ˅ $…» (DS §8.9, #1362): a press opens what the total is made of (a sheet over the bar, not a plate growing under the thumb)
+  // visual v2 №5: «Итого ⌄ $772.36 налог $14.52» — the sum with cents (the engine's fmtUsd), the tax after it when there is one
+  // founder 21.11 (С5: «шторку убрать, разбор суммы только в карточке внизу», #2387): the bar's «Итого» is a figure, not a button —
+  // the breakdown («если клиент включит всё», «Только для вас») is the totals card's, on every width
+  const total = { label: t("ue.total"), value: rowSum(totals.total), sub: totals.tax ? t("px3.est.tax", { sum: rowSum(totals.tax) }) : undefined, testID: "est-bar-total" };
+  // where the screen has no pinned bar (820/1280) the same row stands after the totals (as EditorScreen does)
+  const barShown = useFooterShown();
+  // (there the totals card says «Итого» already — the row is the button only, П7)
+  // #2363 q72 (founder 21.11, вариант А): scrolled down, the «Итого» card folds into the capsule on the right; up 8 pt, the top, or a
+  // tap opens it (ui/totalFold.ts). An open total panel («Итого ˅») never folds under the finger
+  // #2381 (founder 21.11: «внизу „Готово“. И „Отменить“» · «Отменить видно, только когда есть правки — да»)
+  const cancelStep: MainAction | null = dirty && !signed && !firstLine ? { label: t("k1.cancel"), onPress: () => void cancelEdits(), testID: "k1-cancel" } : null;
+  const stepRow = tplEdit ? null : <MainStep placement="bar" main={step} aside={cancelStep} total={barShown ? total : null} folded={fold.folded && option.lines.length > 0} onUnfold={() => setFold({ folded: false, anchor: Number.MAX_SAFE_INTEGER })} foldAdd={signed ? undefined : { a11y: t("px3.est.newLine"), onPress: () => addNew(), testID: "est-fold-add" }} />;
+  const onAdd = (k: string) => {
+    if (k === "new") addNew();
+    else if (k === "catalog") openCatalog();
+    else if (k === "template") openTemplates();
+    else if (k === "option") addOption();
+    else if (k === "section") addSectionBtn();
+    else if (k === "layout") layoutBtn();
+  };
+  // founder 23.11 (audit MAP wave 1 п.6, picture n09): the ways to add are four buttons over the lines, two by two — [«＋ Позиция» ·
+  // «＋ Раздел»] / [«Каталог» · «Шаблон»] — one press each, no «˅» menu (a hidden way is not found); «＋ Вариант» is in «⋯»
+  const addGrid = signed ? null : (
+    <View testID="est-add-grid" style={{ gap: space[2], alignSelf: "stretch" }}>
+      <ButtonPair
+        main={{ label: t("est.row.addShort"), icon: "plus", variant: "secondary", accessibilityLabel: t("px3.est.newLine"), onPress: () => addNew() }}
+        second={{ label: t("est2.add.section"), icon: "plus", variant: "secondary", accessibilityLabel: t("est.sec.addSectionMenu"), onPress: () => onAdd("section") }}
+        ids={{ main: "est-add-new", second: "est-add-section" }}
+      />
+      <ButtonPair
+        main={{ label: t("cat.title"), icon: "catalog", variant: "secondary", accessibilityLabel: t("px3.est.fromCatalog"), onPress: openCatalog }}
+        second={tplEdit ? null : { label: t("px3.est.template"), icon: "template", variant: "secondary", accessibilityLabel: t("ds.rows.fromTemplate"), onPress: openTemplates }}
+        ids={{ main: "est-add-catalog", second: "est-from-template" }}
+      />
     </View>
   );
-  const saveButtons = (
-    <>
-      {sendButton(false)}
-      {saveButton(false)}
-    </>
-  );
+  /** «⋯» of the editor: rare things — send now, the layout of the list, how the rows read, the client's screen */
+  const moreList = [
+    // the same words as the header's round «Отправить» (CRM review: one action, one name); in «⋯» it stays for the empty
+    // estimate too — pressed with no line it says what is missing (spec 308)
+    ...(canSend ? [{ key: "send", label: existing && existing.status !== "draft" ? t("r1.est.sendChanges") : t("proto.est.saveSend"), icon: "send" as const, testID: "ue-save-send" }] : []),
+    ...(!signed && option.lines.length ? [{ key: "layout", label: t("est.sec.layout"), icon: "menu" as const, testID: "est-group-by-kind" }] : []),
+    // «＋ Вариант» (Good / Better / Best) — a rare way to add, in «⋯» (the four buttons over the lines are the common ones)
+    ...(!signed && !tplEdit && doc.options.length < MAX_OPTIONS ? [{ key: "option", label: t("est.var.add"), icon: "copy" as const, testID: "est-add-option" }] : []),
+    ...(option.lines.length ? [{ key: "rows", label: t("proto.est.rowsFull"), icon: "menu" as const, selected: rowLook === "full", testID: "est-row-view" }] : []),
+    { key: "client", label: t("est.client.on"), icon: "eye" as const, selected: clientScreen, testID: "est-menu-client" },
+  ];
+  const onMore = (k: string) => {
+    if (k === "send") void save(true);
+    else if (k === "layout") layoutBtn();
+    else if (k === "rows") setRowLook(rowLook === "full" ? "brief" : "full");
+    else if (k === "option") addOption();
+    else toggleClientScreen(!clientScreen);
+  };
 
   return (
-    <Screen onScrollBegin={() => {
+    <Screen onScrollY={(y, max) => setFold((f) => { if (lifted) return f; /* a row is carried: the bar under the finger never changes */ const n = foldStep(f, y, undefined, max); return n.folded === f.folded && n.anchor === f.anchor ? f : n; })} onScrollBegin={() => {
       swipes.closeOpen();
       // the finger that starts this scroll went down a moment ago; an older touch (a tap on a field) does not count
       const inOpen = Date.now() - touchInOpen.current < motion.durSlow * 3;
       touchInOpen.current = 0;
       // the page scrolls from a finger on the open row (to its lower fields): the row stays open; anywhere else it folds
       if (!inOpen) void leaveRow(true);
-    }} title={tplEdit ? t("est.tpl.editTitle") : existing ? t("ue.title") : t("ue.newTitle")} back={back} help={t("ue.help")} hintKey="estimate-builder" right={tplEdit ? undefined : (
-      <View ref={estMenuRef} collapsable={false} testID="est-menu">
-        <IconButton icon="more" label={t("est.actions")} onPress={() => estMenuRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setEstMenu({ x, y, w, h }))} />
-      </View>
-    )} footer={tplEdit ? undefined : (
-      <ActionBar testID="est-actionbar" summary={(
-        <View style={{ gap: space[1] }}>
-          {/* «Итого $… ˅» (DS §8.9, #1362): a press opens what the total is made of, above the buttons */}
-          {totalOpen ? <TotalsBreakdown panel client={totalRows.client.filter((r) => r.key !== "total")} own={totalRows.own} testID="est-bar-breakdown" /> : null}
-          <Press
-            onPress={() => setTotalOpen((o) => !o)}
-            visibleHeight={size.hitMin}
-            accessibilityRole="button"
-            accessibilityState={{ expanded: totalOpen }}
-            {...({ "aria-expanded": totalOpen } as object)}
-            accessibilityLabel={`${t("ue.total")} ${money(totals.total)}. ${t(totalOpen ? "est.tot.close" : "est.tot.open")}`}
-            testID="est-bar-total"
-          >
-            <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin }}>
-              <T v="body" tone="mut">{t("ue.total")}</T>
-              <RowView gap={space[1]}>
-                <T v="body" w="semibold" tabular>{money(totals.total)}</T>
-                <Icon name={totalOpen ? "chevronUp" : "chevronDown"} s={size.iconSm} />
-              </RowView>
-            </RowView>
-          </Press>
-          {/* the tech saves; the office sends (#1113, DS §8.9) */}
-          {canSend ? null : <View testID="est-bar-office"><T v="caption" tone="mut">{t("est2.bar.officeSends")}</T></View>}
-        </View>
-      )} second={canSend ? saveButton(true) : undefined} main={canSend ? sendButton(true) : saveButton(true)} />
-    )}>
+    }}
+      // the Editor template's places (EditorScreen keeps no `onScrollBegin` — the open row must fold on a scroll, DS §8.3: the screen
+      // stands them itself): «‹» left, «⋯» the last on the right, the step pinned at the bottom in one compact row
+      testID="estimate-editor"
+      // the one header's editor kind (visual-v2 «Редактор»): «×» · «Смета EST-0006» + the state line («Черновик сохраняется сам · Демо») · «⋯»
+      head={{ kind: "editor" }}
+      title={tplEdit ? t("est.tpl.editTitle") : existing ? [t("ue.title"), existing.number].filter(Boolean).join(" ") : t("ue.newTitle")}
+      // visual v2 №5: «Черновик · сохранено 8:19» (the version's own save time), «Демо» joins it in the header; no «?» by the title
+      subtitle={tplEdit ? undefined : existing ? [t(estimateStatusView(existing.status).l), changedAfterSend ? t("r1.est.changedAfterSend") : null, savedWord].filter(Boolean).join(" · ") : t("proto.est.autosave")}
+      back={back}
+      onLeave={(proceed) => void close(proceed)}
+      hintKey="estimate-builder"
+      // founder 21.11 («5 открытых»: «Отправить — не внизу редактора, а вверху сметы… здесь работаем с позициями», #2379): the send is a
+      // round 40 of the header before «⋯» (as «＋ · ⋯» of every header); the bottom keeps the lines' buttons and «Итого / Готово»
+      right={tplEdit ? undefined : (
+        <RowView gap={space[2]}>
+          {canSend && !signed && option.lines.length > 0 ? (
+            <View testID="est-send-top">
+              <IconButton icon="send" label={existing && existing.status !== "draft" ? t("r1.est.sendChanges") : t("proto.est.saveSend")} onPress={() => void save(true)} />
+            </View>
+          ) : null}
+          <MoreButton items={moreList} onMore={onMore} a11y={t("est.actions")} testID="est-menu" />
+        </RowView>
+      )}
+      footer={barShown && stepRow ? stepRow : undefined}
+    >
       <RevealOnTick tick={revealTick} target={missing === "client" ? clientRef : linesRef} />
       {clientScreen ? (
         <View testID="est-client-off" style={{ alignSelf: "flex-start" }}>
-          <Button label={t("est.client.off")} icon="eye" variant="secondary" size="sm" onPress={() => toggleClientScreen(false)} />
+          <Button label={t("est.client.off")} icon="eye" variant="secondary" onPress={() => toggleClientScreen(false)} />
         </View>
       ) : null}
-      {existing && existing.status !== "draft" ? (
-        <StatusNote tone="warn">{t("ue.editSentNote")}</StatusNote>
+      {/* #2363 F33: no line over the estimate that pushes everything down — the header line says «изменена после отправки» */}
+      {/* #2381: the phone refused to keep the edits (full storage) — said, with the way out («Готово» saves them) */}
+      {drafts.writeFailed ? (
+        <View testID="k1-write-failed">
+          <RowView>
+            <Icon name="alert" s={size.iconSm} color={c.status.warn.text} />
+            <T v="caption" tone="warn" style={{ flex: 1, minWidth: 0 }}>
+              {t("k1.writeFailed")}
+            </T>
+          </RowView>
+        </View>
       ) : null}
-      {draft ? (
+      {/* #2381: a saved estimate with edits on the phone — said in one line; «Отменить» takes them back (asked first) */}
+      {/* Р2: a signed estimate shown as saved; the edits kept aside on the phone — said, with the way to drop them */}
+      {keptAside ? (
+        <View testID="k1-kept">
+          <RowView>
+            <Icon name="note" s={size.iconSm} />
+            <T v="caption" tone="mut" style={{ flex: 1, minWidth: 0 }}>
+              {t("k1.keptLine")}
+            </T>
+            <View testID="k1-kept-reset">
+              <Button label={t("k1.reset")} variant="ghost" onPress={() => void dropKept()} />
+            </View>
+          </RowView>
+        </View>
+      ) : null}
+      {/* not while the phone fails to keep them: «уже хранится на телефоне» would contradict the warning above (code review of #2423) */}
+      {existing && dirty && !signed && !keptAside && !drafts.writeFailed ? (
+        <View testID="k1-unsaved">
+          <RowView>
+            <Icon name="note" s={size.iconSm} />
+            {/* founder 23.11 (#2423: «несохранённые правки — что это значит? Там должен быть знак вопроса»; audit MAP §6): the words say
+                what it is, «?» right after them explains Готово / Отменить (DS Б7) */}
+            <T v="caption" tone="mut" numberOfLines={1} style={{ flexShrink: 1, minWidth: 0 }}>
+              {t("k1.unsaved")}
+            </T>
+            <HelpButton title={t("k1.unsaved")} text={t("k1.unsavedHelp")} testID="k1-unsaved-help" />
+          </RowView>
+        </View>
+      ) : null}
+      {draft && !existing ? (
         <View testID="est-draft">
-          <Card>
-            <RowView>
-              <Icon name="note" s={size.iconSm} />
-              <T v="caption" tone="mut" style={{ flex: 1 }}>
-                {t("est.draft.restored")}
-              </T>
-              <View testID="est-draft-restart">
-                <Button label={t("est.draft.restart")} variant="secondary" onPress={() => setAskRestart(true)} />
-              </View>
-            </RowView>
-          </Card>
+          {/* a hint in one line, the way out beside it (not a card) */}
+          <RowView>
+            <Icon name="note" s={size.iconSm} />
+            <T v="caption" tone="mut" numberOfLines={1} style={{ flex: 1, minWidth: 0 }}>
+              {t("proto.est.draftBack")}
+            </T>
+            <View testID="est-draft-restart">
+              <Button label={t("est.draft.restart")} variant="ghost" onPress={() => setAskRestart(true)} />
+            </View>
+          </RowView>
         </View>
       ) : null}
       <Grid>
@@ -846,29 +1184,28 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
             </View>
           ) : (
           <View ref={clientRef} collapsable={false} style={{ gap: space[1] }} testID="est-client">
-          <Card onPress={() => setClientPicker(true)} accessibilityLabel={t("est.for")} style={missing === "client" ? { borderColor: c.status.bad.fill } : undefined}>
-            <RowView>
-              {customer ? <Avatar initials={initials(customer.name)} /> : <Icon name="user" />}
-              <View style={{ flex: 1 }}>
-                <T v="body" w="semibold">
-                  {customer?.name ?? t("ue.pickClient")}
-                </T>
-                {property ? (
-                  <T v="caption" tone="mut">
-                    {property.address}, {property.city}
-                  </T>
-                ) : null}
-              </View>
-              <Icon name="chevronRight" s={size.iconSm} />
-            </RowView>
-          </Card>
+          {/* visual v2 №5: «LA Linda Alvarez / 2207 Ocean Park Blvd, Santa Monica ›» — the row card «цифры справа» with the pastel initials */}
+          <FigureRow
+            testID="est-client-card"
+            title={customer?.name ?? t("ue.pickClient")}
+            line={property ? [property.address, property.city.split(",")[0]].filter(Boolean).join(", ") : undefined}
+            avatar={customer ? { initials: initials(customer.name), name: customer.name } : undefined}
+            icon={customer ? undefined : "user"}
+            tone={missing === "client" ? "warn" : undefined}
+            onPress={() => setClientPicker(true)}
+          />
           {missing === "client" ? <FieldError text={t("ue.pickClient")} testID="ue-missing-client" /> : null}
           </View>
           )}
           <View testID="ue-title">
-            <TextField type="title" value={title} onChangeText={setTitle} placeholder={tplEdit ? t("est.tpl.name") : t("ue.jobTitle")} icon="note" />
+            {/* the label over the field (LAYOUT-RULES «Редактор»): «Название» */}
+            <Labeled label={tplEdit ? t("est.tpl.name") : t("proto.est.titleLabel")}>
+              <TextField plate type="title" value={title} onChangeText={setTitle} placeholder={tplEdit ? t("est.tpl.name") : t("ue.jobTitle")} />
+            </Labeled>
           </View>
 
+          {/* one option: nothing to choose — «Вариант» is in «＋» of the lines; several: the segments and their totals (DS §8.10) */}
+          {doc.options.length > 1 ? (
           <OptionsCard
             options={doc.options}
             curId={option.id}
@@ -881,23 +1218,40 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
             onRename={renameOption}
             onDelete={removeOption}
           />
-
-          <SectionTitle title={t("ue.items")} right={act.length ? <T v="caption" tone="mut">{act.length}</T> : undefined} />
-          {option.lines.length ? (
-            <View testID="est-row-view">
-              <Segmented<"brief" | "full"> full label={t("est2.view.label")} value={rowLook} onChange={setRowLook} items={[{ key: "brief", label: t("est2.view.brief") }, { key: "full", label: t("est2.view.full") }]} />
-            </View>
           ) : null}
+
+          {/* «Позиции · 7» and ONE «＋» (wireframes-v2 №9): the ways to add are its menu; «Кратко / Подробно» is in «⋯» */}
+          {/* visual v2 №5: «Позиции  7» and the round 32 on the right — the catalog (the measured things), sections and options,
+              a template, «＋» a new line (the ways to add as buttons, not a menu: one press each) */}
+          {/* #2387 + founder 21.11 (q3: «кнопки над списком — 40», a row with words): the group title «Позиции 7» as every group's
+              (GroupHead), the sections and a template as quiet icons on its right; under it «＋ Новая позиция · Из каталога» — a ButtonPair of
+              two secondary 40 (the screen's one yellow stays «Готово» of the bar) */}
+          <View testID="est-items-head" style={{ marginTop: space[3], gap: rhythm.headGap }}>
+            <GroupHead title={t("ue.items")} count={act.length ? act.length : undefined} countTestID="est-items-count" />
+            {option.lines.length === 0 ? null : addGrid}
+          </View>
           <View ref={linesRef} collapsable={false} style={{ gap: space[1] }}>
-          <Card style={missing === "lines" ? { borderColor: c.status.bad.fill } : undefined}>
-            {option.lines.length === 0 ? (
-              <View testID="est-empty">
-                <T v="body" tone="mut">
-                  {t("est.row.empty")}
-                </T>
-              </View>
+          {option.lines.length === 0 ? (
+              // #2363 (founder 21.11: «Позиций пока нет — блок некрасивый»): DS §13 «Пусто — данных нет вообще» — the object's icon,
+              // the words, one line why, and the two ways to add (secondary: the screen's main action is the bar below)
+              <Empty
+                testID="est-empty"
+                icon="estimate"
+                title={t("est.row.empty")}
+                hint={signed ? undefined : t("r1.est.emptyHint")}
+                action={addGrid ?? undefined}
+              />
             ) : null}
+          {/* the lines' card only when there are lines: the empty state is its own card, never a card in a card */}
+          {/* #2363 (founder 21.11: «разделители групп некрасиво, непонятно»; both design reviews): with groups each group is a card of
+              its own — the rows draw the card (the ground, the first/last corners), the group's title stands OVER it with its sum; one
+              list still, so a line drags from group to group */}
+          {/* (code review: a section added to an empty estimate must show — the list is there once it has a section, lines or not) */}
+          <ListFrame empty={option.lines.length === 0 && !(option.sections ?? []).length} missing={missing === "lines"}>
             <SortableList
+              // #2387: the lines of a group are ONE card (ui/groupedList `useGroupEdge`), the inset hairline between them is the list's
+              rowLook={(r, i) => groupLook(view, r, i, groupEdge)}
+              rowRule={(r, i) => (r.type === "line" && view[i - 1]?.type === "line" ? space[4] : null)}
               rows={view}
               openKey={openId ? `l:${openId}` : renamingId ? `s:${renamingId}` : null}
               locked={signed}
@@ -907,12 +1261,15 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               // the open row folds first (the whole list folds): a wrong one stays, says why (the errors, the scroll) and the drag does
               // not start — never silently (code review of «б»)
               beforeBegin={() => leaveRow(false)}
+              // #2363 (founder 21.11: «не вижу, как перетаскивать»; DS §8.3): every folded line shows its «≡»; a hold still drags too
+              onHoldStill={(k) => setMenuAsk((m) => ({ id: k.replace(/^l:/, ""), n: m.n + 1 }))}
               renderRow={(r, i) =>
 
               r.type === "section" ? (
                 <View key={`s-${r.section.id}`}>
-                  {i > 0 ? <Divider /> : null}
+                  {i > 0 && !hasGroups ? <Divider /> : null}
                   <SectionHeader
+                    gapAbove={hasGroups && i > 0}
                     section={r.section}
                     depth={r.depth}
                     title={secTitle(r.section)}
@@ -925,15 +1282,14 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                   />
                 </View>
               ) : r.type === "unsectioned" ? (
-                <View key="unsectioned" testID="est-sec-loose">
-                  {i > 0 ? <Divider /> : null}
+                <View key="unsectioned" testID="est-sec-loose" style={hasGroups && i > 0 ? { paddingTop: space[3] } : undefined}>
+                  {i > 0 && !hasGroups ? <Divider /> : null}
                   <T v="caption" tone="mut" w="semibold">
                     {t("est.sec.loose")}
                   </T>
                 </View>
               ) : (
                 <View key={r.line.id} style={{ paddingLeft: r.depth === 1 ? space[4] : 0 }}>
-                  {i > 0 ? <Divider /> : null}
                   <LineRow
                     line={r.line}
                     open={openId === r.line.id}
@@ -953,72 +1309,131 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                     swipeHint={!hintDone && !signed && !lifted && !!swipeHint.state && swipeHintDue(swipeHint.state, reduceMotion) && r.line.id === firstLineId}
                     onSwipeHintPlayed={onHintPlayed}
                     onTouchOpen={openId === r.line.id ? markTouchInOpen : undefined}
+                    menuAsk={menuAsk.id === r.line.id ? menuAsk.n : 0}
                   />
                 </View>
               )
               }
             />
-          </Card>
+          </ListFrame>
           {missing === "lines" ? <FieldError text={t("ue.empty")} testID="ue-missing-lines" /> : null}
           </View>
-          <RowView>
-            <View style={{ flex: 1 }} testID="est-add-new">
-              <Button label={t("est.row.addNew")} icon="plus" variant="secondary" full onPress={() => addNew()} />
-            </View>
-            <View style={{ flex: 1 }} testID="est-add-catalog">
-              <Button label={t("est.row.addCatalog")} icon="search" variant="secondary" full onPress={openCatalog} />
-            </View>
-          </RowView>
-          {/* the empty editor: «Из шаблона…» — a way to add lines, as its neighbours; gone after the first line (DS §8.13) */}
-          {!signed && !tplEdit && !hasContent(doc) ? (
-            <View testID="est-from-template">
-              <Button label={t("est.tplIn.from")} icon="doc" variant="secondary" full onPress={openTemplates} />
-            </View>
-          ) : null}
-          {signed ? null : (
-            <RowView>
-              <View style={{ flex: 1 }} testID="est-group-by-kind">
-                <Button label={t("est.sec.layout")} variant="ghost" full onPress={layoutBtn} />
-              </View>
-              <View style={{ flex: 1 }} testID="est-add-section">
-                <Button label={`＋ ${t("est.sec.addSection")}`} variant="ghost" full onPress={() => addSectionBtn()} />
-              </View>
-            </RowView>
-          )}
         </View>
 
         <View style={{ gap: space[3] }}>
-          <Card>
-            <SumRow label={t("ue.subtotal")} value={money(totals.subtotal)} />
-            <Divider />
-            <SumRow label={t("ue.discount")} value={totals.discount ? `−${money(totals.discount)}` : discValue} onPress={signed ? undefined : () => setSetting("discount")} />
-            <Divider />
-            <SumRow label={t("ue.tax")} value={totals.tax ? `${money(totals.tax)} · ${taxValue}` : taxValue} onPress={signed ? undefined : () => setSetting("tax")} />
-            <Divider />
-            <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin }}>
-              <T v="title">{t("ue.total")}</T>
-              <T v="display" tabular>
-                {money(totals.total)}
-              </T>
-            </RowView>
-            <Divider />
-            <SumRow label={t("ue.deposit")} value={depValue} onPress={signed ? undefined : () => setSetting("deposit")} testID="est-deposit-row" />
-            {totals.depositOverCaLimit ? <CaWarn limitCents={totals.caDepositLimit} testID="est-ca-warn" /> : null}
-            {/* the same as «Итого ˅» of the phone's panel: «если клиент включит всё на выбор» and «Только для вас» (DS §8.9) */}
-            {/* from 820 (no panel): the same «если включит» and «Только для вас» here; a phone has them in the panel's «Итого ˅» */}
-            {wide && (totalRows.client.some((r) => r.key === "ifAll") || totalRows.own.length) ? (
-              <>
-                <Divider />
+          {/* #2387: the totals are a group of GroupRows (one look with Деньги and a client): the word, the figure on the right, «›» where it opens */}
+          <ListGroup inset={space[4]} testID="est-totals">
+            <GroupRow title={t("ue.subtotal")} value={money(totals.subtotal)} />
+            {/* founder 23.11 (MAP §12 п.8, DS §8.7а): Скидка / Налог / Депозит — one line each: the word · [% · Выкл. · $] · the value ·
+                the sum, set right in the row (no sheet); applies at once */}
+            <ModeRow
+              title={t("ue.discount")}
+              modes={moneyModes}
+              mode={discountMode(s.discount)}
+              off="off"
+              onMode={(k) => {
+                discMemo.current = remember(discMemo.current, s.discount);
+                setSettings({ discount: discountFor(k, s.discount, discMemo.current) });
+                focusTotals("discount", k);
+              }}
+              field={
+                s.discount?.kind === "pct" ? (
+                  <View testID="est-discount-pct"><PctField unit a11yLabel={t("ue.discount")} focusNow={focusOf("discount")} bps={discountBps(s.discount.value)} onChange={(b) => setSettings({ discount: { kind: "pct", value: String(Math.min(b, 10000) / 10000) } })} /></View>
+                ) : s.discount?.kind === "fixed" ? (
+                  <View testID="est-discount-fixed"><MoneyField unit a11yLabel={t("ue.discount")} focusNow={focusOf("discount")} cents={s.discount.cents} onChange={(c) => setSettings({ discount: { kind: "fixed", cents: c } })} /></View>
+                ) : undefined
+              }
+              sum={!s.discount ? DASH : totals.discount ? `−${money(totals.discount)}` : money(0)}
+              locked={signed}
+              testID="est-discount-row"
+            />
+            <ModeRow
+              title={t("ue.tax")}
+              modes={taxModes}
+              mode={s.tax.enabled && !exempt ? "pct" : "off"}
+              off="off"
+              onMode={(k) => {
+                if (k === "pct") changeTax({ enabled: true });
+                else setSettings({ tax: { ...s.tax, enabled: false } });
+                focusTotals("tax", k);
+              }}
+              field={
+                partialTax ? (
+                  <T v="caption" tone="mut">{`${ppmToPctText(taxRatePpm(s.tax))}%`}</T>
+                ) : (
+                  <View testID="est-tax-rate"><RatePctField unit a11yLabel={t("ue.taxRate")} focusNow={focusOf("tax")} onBad={setBadRate} ppm={taxRatePpm(s.tax)} onChange={(p) => setSettings({ tax: wholeTax(s.tax, { ratePpm: Math.min(p, 1_000_000) }) })} /></View>
+                )
+              }
+              sum={s.tax.enabled && !exempt ? money(totals.tax) : DASH}
+              locked={signed || exempt}
+              testID="est-tax-row"
+              note={
+                exempt ? (
+                  <View testID="est-tax-exempt"><T v="caption" tone="mut">{t("ue.taxExemptClient")}</T></View>
+                ) : signed ? (
+                  // a signed estimate: the rows do not change — said once, under the tax (CRM review: «не говорят почему»)
+                  <View testID="est-totals-signed"><T v="caption" tone="mut">{t("ue.taxSigned")}</T></View>
+                ) : s.tax.enabled && badRate ? (
+                  // the field is too narrow for its hint: the hint goes under the row
+                  <FieldError text={t("ue.taxRateHint")} testID="est-tax-bad" />
+                ) : s.tax.enabled && partialTax ? (
+                  <View testID="est-tax-partial" style={{ gap: space[2] }}>
+                    <T v="caption" tone="mut">{t("ue.taxPartial")}</T>
+                    <Button label={t("ue.taxWhole")} variant="secondary" full onPress={() => changeTax({})} />
+                  </View>
+                ) : s.tax.enabled && lastRate !== null && lastRate !== taxRatePpm(s.tax) ? (
+                  <View testID="est-tax-last" style={{ alignSelf: "flex-start" }}>
+                    <Button label={t("ue.taxLast", { rate: ppmToPctText(lastRate) })} variant="ghost" onPress={() => setSettings({ tax: wholeTax(s.tax, { ratePpm: lastRate }) })} />
+                  </View>
+                ) : null
+              }
+            />
+            {/* the total once (П7): in the pinned bar on a phone, here only where there is no bar (820/1280) */}
+            {barShown ? null : (
+              <View style={{ paddingHorizontal: space[4] }}>
+                <RowView style={{ justifyContent: "space-between", minHeight: component.listRow.h }}>
+                  <T v="title">{t("ue.total")}</T>
+                  <T v="display" tabular>
+                    {money(totals.total)}
+                  </T>
+                </RowView>
+              </View>
+            )}
+            <ModeRow
+              title={t("ue.deposit")}
+              modes={moneyModes}
+              mode={depositMode(s.deposit)}
+              off="off"
+              onMode={(k) => {
+                depMemo.current = remember(depMemo.current, s.deposit);
+                setSettings({ deposit: depositFor(k, s.deposit, depMemo.current) });
+                focusTotals("deposit", k);
+              }}
+              field={
+                s.deposit.kind === "pct" ? (
+                  <View testID="est-deposit-pct"><PctField unit a11yLabel={t("ue.deposit")} focusNow={focusOf("deposit")} bps={s.deposit.bps} onChange={(b) => setSettings({ deposit: { kind: "pct", bps: Math.min(b, 10000) } })} /></View>
+                ) : s.deposit.kind === "fixed" ? (
+                  <View testID="est-deposit-fixed"><MoneyField unit a11yLabel={t("ue.deposit")} focusNow={focusOf("deposit")} cents={s.deposit.cents} onChange={(c) => setSettings({ deposit: { kind: "fixed", cents: c } })} /></View>
+                ) : undefined
+              }
+              sum={s.deposit.kind === "none" ? DASH : money(totals.deposit)}
+              locked={signed}
+              testID="est-deposit-row"
+            />
+            {totals.depositOverCaLimit ? <View style={{ padding: space[4] }}><CaWarn limitCents={totals.caDepositLimit} testID="est-ca-warn" /></View> : null}
+            {/* from 820 (no panel): «если клиент включит всё на выбор» and «Только для вас» here; a phone has them in the panel's «Итого ˅» */}
+            {totalRows.client.some((r) => r.key === "ifAll") || totalRows.own.length ? (
+              <View style={{ padding: space[4] }}>
                 <TotalsBreakdown client={totalRows.client.filter((r) => r.key === "ifAll")} own={totalRows.own} testID="est-card-breakdown" />
-              </>
+              </View>
             ) : null}
-          </Card>
+          </ListGroup>
           <NotesTerms
             doc={doc}
             company={db.company}
             lang={docLanguageFor(db, { customerId, leadId: leadOf })}
-            onNote={(v) => setDoc((d) => ({ ...d, note: v }))}
-            onTerms={(v) => setDoc((d) => ({ ...d, terms: v }))}
+            onNote={(v: string) => setDoc((d) => ({ ...d, note: v }))}
+            onTerms={(v: string) => setDoc((d) => ({ ...d, terms: v }))}
             noTerms={!!tplEdit}
             locked={signed}
             signed={signed}
@@ -1036,8 +1451,10 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                   </T>
                 </View>
               ) : null}
-              {/* a phone: the buttons are in the pinned bar (Screen footer); from 820 — here, in the column of the totals */}
-              {wide ? saveButtons : null}
+              {/* the tech saves; the office sends (#1113, DS §8.9) */}
+              {canSend ? null : <View testID="est-bar-office"><T v="caption" tone="mut" numberOfLines={1}>{t("est2.bar.officeSends")}</T></View>}
+              {/* a phone: the step is the pinned bar (Screen footer); from 820 — here, in the column of the totals */}
+              {barShown ? null : stepRow}
             </>
           )}
         </View>
@@ -1097,16 +1514,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         onClose={() => setMoveFor(null)}
         testID="est-move-picker"
       />
-      {/* the question of the tax is a PAGE of this sheet (one window at a time: a second Modal does not show on iOS, #743) */}
-      <Sheet
-        visible={setting !== null}
-        onClose={() => {
-          setTaxAsk(null);
-          setSetting(null);
-        }}
-        title={taxAsk ? t("ue.taxAskTitle") : setting ? t(`ue.${setting}` as DictKey) : undefined}
-        onBack={taxAsk ? () => setTaxAsk(null) : undefined}
-      >
+      {/* the question of the tax (an old estimate taxed by kind: turning it on changes the client's sum) — the one sheet of the
+          totals; the values themselves are set in their rows (DS §8.7а) */}
+      <Sheet visible={taxAsk !== null} onClose={() => setTaxAsk(null)} title={taxAsk ? t("ue.taxAskTitle") : undefined}>
         <View style={{ gap: space[3] }}>
           {taxAsk ? (
             <View testID="est-tax-ask" style={{ gap: space[3] }}>
@@ -1123,90 +1533,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               </View>
             </View>
           ) : null}
-          {!taxAsk && setting === "discount" ? (
-            <>
-              <Segmented
-                full
-                value={s.discount ? s.discount.kind : "none"}
-                onChange={(k) => setSettings({ discount: k === "none" ? null : k === "pct" ? { kind: "pct", value: "0.05" } : { kind: "fixed", cents: 0 } })}
-                items={[
-                  { key: "none", label: t("ue.none") },
-                  { key: "pct", label: "%" },
-                  { key: "fixed", label: "$" },
-                ]}
-              />
-              {s.discount?.kind === "pct" ? (
-                <PctField bps={discountBps(s.discount.value)} onChange={(b) => setSettings({ discount: { kind: "pct", value: String(Math.min(b, 10000) / 10000) } })} />
-              ) : s.discount?.kind === "fixed" ? (
-                <MoneyField cents={s.discount.cents} onChange={(c) => setSettings({ discount: { kind: "fixed", cents: c } })} />
-              ) : null}
-            </>
-          ) : null}
-          {!taxAsk && setting === "tax" ? (
-            <>
-              <RowView style={{ minHeight: size.hitMin }}>
-                <T v="body" style={{ flex: 1 }}>
-                  {t("ue.taxOn")}
-                </T>
-                {/* a client without tax: the switch is pale and says why (the server refuses tax for them, П-2a) */}
-                <View testID="est-tax-toggle">
-                  <Toggle label={t("ue.tax")} on={s.tax.enabled} disabled={exempt || signed} onChange={(on) => (on ? changeTax({ enabled: true }) : setSettings({ tax: { ...s.tax, enabled: false } }))} />
-                </View>
-              </RowView>
-              <T v="caption" tone="mut">
-                {exempt ? t("ue.taxExemptClient") : signed ? t("ue.taxSigned") : t("ue.taxHint")}
-              </T>
-              {s.tax.enabled && !exempt && !signed ? (
-                partialTax ? (
-                  <View testID="est-tax-partial" style={{ gap: space[2] }}>
-                    <T v="caption" tone="mut">
-                      {t("ue.taxPartial")}
-                    </T>
-                    <Button label={t("ue.taxWhole")} variant="secondary" full onPress={() => changeTax({})} />
-                  </View>
-                ) : (
-                  <>
-                    <Labeled label={t("ue.taxRate")}>
-                      <View testID="est-tax-rate">
-                        <RatePctField ppm={taxRatePpm(s.tax)} onChange={(p) => setSettings({ tax: wholeTax(s.tax, { ratePpm: Math.min(p, 1_000_000) }) })} />
-                      </View>
-                    </Labeled>
-                    {lastRate !== null && lastRate !== taxRatePpm(s.tax) ? (
-                      <View testID="est-tax-last">
-                        <Button label={t("ue.taxLast", { rate: ppmToPctText(lastRate) })} variant="ghost" onPress={() => setSettings({ tax: wholeTax(s.tax, { ratePpm: lastRate }) })} />
-                      </View>
-                    ) : null}
-                  </>
-                )
-              ) : null}
-            </>
-          ) : null}
-          {!taxAsk && setting === "deposit" ? (
-            <>
-              <Segmented
-                full
-                value={s.deposit.kind}
-                onChange={(k) => setSettings({ deposit: (k === "pct" ? { kind: "pct", bps: 1000 } : k === "fixed" ? { kind: "fixed", cents: 0 } : { kind: "none" }) as DepositSetting })}
-                items={[
-                  { key: "pct", label: t("ue.depositPct") },
-                  { key: "fixed", label: t("ue.depositUsd") },
-                  { key: "none", label: t("ue.none") },
-                ]}
-              />
-              {s.deposit.kind === "pct" ? (
-                <View testID="est-deposit-pct">
-                  <PctField bps={s.deposit.bps} onChange={(b) => setSettings({ deposit: { kind: "pct", bps: Math.min(b, 10000) } })} />
-                </View>
-              ) : s.deposit.kind === "fixed" ? (
-                <MoneyField cents={s.deposit.cents} onChange={(c) => setSettings({ deposit: { kind: "fixed", cents: c } })} />
-              ) : null}
-              <SumRow label={t("ue.deposit")} value={money(totals.deposit)} />
-              {totals.depositOverCaLimit ? <CaWarn limitCents={totals.caDepositLimit} testID="est-ca-warn-sheet" /> : null}
-            </>
-          ) : null}
-          <Button label={t("common.gotIt")} icon="check" full onPress={() => setSetting(null)} />
         </View>
       </Sheet>
+      {dialog}
       <Sheet visible={askRestart} onClose={() => setAskRestart(false)} title={t("est.draft.ask")}>
         <View testID="est-draft-ask" style={{ gap: space[3] }}>
           <T v="body" tone="mut">{t("est.draft.askHint")}</T>
@@ -1271,49 +1600,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           if (next) requestAnimationFrame(() => requestAnimationFrame(next));
         }}
       />
-      <Menu
-        visible={!!estMenu}
-        anchor={estMenu}
-        title={t("est.actions")}
-        items={[
-          { key: "client" as const, label: t("est.client.on"), icon: "eye" as const, selected: clientScreen, testID: "est-menu-client" },
-          // a typed estimate: a template only adds to it (the empty one has «Из шаблона…» under the add buttons)
-          ...(!signed && hasContent(doc) ? [{ key: "template" as const, label: t("est.tplIn.add"), icon: "doc" as const, testID: "est-menu-template" }] : []),
-        ]}
-        onSelect={(k) => {
-          setEstMenu(null);
-          if (k === "template") openTemplates();
-          else toggleClientScreen(!clientScreen);
-        }}
-        onClose={() => setEstMenu(null)}
-      />
+      {/* «Итого ˅» of the bar: what the total is made of — «если клиент включит всё на выбор», «Только для вас» (DS §8.9, #1362) */}
+
     </Screen>
   );
 }
-
-function SumRow({ label, value, onPress, testID }: { label: string; value: string; onPress?: () => void; testID?: string }) {
-  const row = (
-    <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin }}>
-      <T v="body" tone="mut">
-        {label}
-      </T>
-      <RowView gap={space[1]}>
-        <T v="body" tabular>
-          {value}
-        </T>
-        {onPress ? <Icon name="chevronRight" s={size.iconSm} /> : null}
-      </RowView>
-    </RowView>
-  );
-  return onPress ? (
-    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={label} testID={testID}>
-      {row}
-    </Press>
-  ) : (
-    row
-  );
-}
-
 
 /** the page scrolls to the thing a press of «Сохранить» found missing (the screen's scroll is for its children: this is one) */
 function RevealOnTick({ tick, target }: { tick: number; target: React.RefObject<ComponentRef<typeof View> | null> }) {
@@ -1324,4 +1615,19 @@ function RevealOnTick({ tick, target }: { tick: number; target: React.RefObject<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tick]);
   return null;
+}
+
+
+/** the lines' frame: no card of its own — the rows draw their group's card (`groupLook`); a missing list is framed in `bad` */
+function ListFrame({ empty, missing, children }: { empty: boolean; missing: boolean; children: ReactNode }) {
+  const { c } = useTheme();
+  return <View style={{ gap: 0, ...(empty ? { display: "none" } : null), ...(missing ? { borderWidth: component.hairline, borderColor: c.status.bad.fill, borderRadius: radius.card } : null) }}>{children}</View>;
+}
+
+/** #2387: a line of a group takes the group card's edge (ui/groupedList) — its ground and the corners of the first and the last line */
+function groupLook(view: readonly { type: string }[], r: { type: string }, i: number, edge: (first: boolean, last: boolean) => ViewStyle): ViewStyle | undefined {
+  // the gap over a group's title (not the first row) is the title row's own top margin — the whole row (with its «⠿») moves down,
+  // so the handle stands on the title's line (design review: «ручка выше „⋯“»); the drag measures a row by what it draws
+  if (r.type !== "line") return i > 0 && r.type === "section" ? { marginTop: space[3] } : undefined;
+  return edge(view[i - 1]?.type !== "line", view[i + 1]?.type !== "line");
 }

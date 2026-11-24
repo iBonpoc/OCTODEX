@@ -27,6 +27,8 @@ const PLANNERS: readonly Role[] = ["dispatcher", "director"];
 export const routeRoles: Record<string, readonly Role[]> = {
   today: OFFICE,
   money: OFFICE,
+  // «Деньги» — the overview of the tab (visual v2 №6): the office's figures
+  finance: OFFICE,
   // Payments: owner, admin, office — not the technician, not sales (13 §4)
   payments: PLANNERS,
   // Reports: owner, admin, office (looks) — not sales, not the technician (13 §4; 18 §5)

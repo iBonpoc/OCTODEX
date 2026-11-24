@@ -22,7 +22,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
+  await tid("module-gutters-status").filter({ hasText: /^Без срока/ }).waitFor({ timeout: 5000 });
 
   // the module's lists and cards: the chrome is there
   for (const [path, mark] of [["/module/gutters/list", "measurements-empty"], ["/module/gutters/view?m=nope", "not-found"], ["/module/gutters/settings", "gset-screen"], ["/module/gutters/prices", "gpr-screen"]]) {

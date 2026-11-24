@@ -6,6 +6,7 @@
  * - Sales without our costs: told who does it, nothing to press.
  * By testID and the store; waits on what it checks. Seeded on the app's own data (editDb, as e2e 152).
  */
+const { pressUndo } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 const ATTR = { part: "gutter", profile: "k", size: "5", material: "aluminum", gauge: ".027", finish: "painted" };
 
@@ -61,8 +62,8 @@ exports.run = async (h) => {
   await h.shot("done");
 
   // «Отменить»: all of it back
-  // the transition's own toast (the newest)
-  await p.getByTestId("toast-undo").locator("visible=true").last().click();
+  // the transition's own toast (the newest — on top of the stack, first in the page; armed first: `pressUndo`)
+  await pressUndo(p);
   await p.waitForFunction((k) => {
     const c = ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.catalog || []).filter((x) => x.id.startsWith("e2e-470"));
     const by = Object.fromEntries(c.map((x) => [x.id, x]));

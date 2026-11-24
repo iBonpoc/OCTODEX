@@ -21,9 +21,11 @@ exports.run = async (h) => {
   }, visit);
   await h.go("/plan");
   await p.waitForTimeout(300);
-  // recipe C (ListCard): «11:00 / PM» on the left, the client is the card's name
-  const card = p.getByRole("button", { name: client.name, exact: true }).filter({ hasText: "11:00" }).locator("visible=true");
-  h.expect((await card.count()) > 0, `the inspection's card names its client (${client.name})`);
-  h.expect((await p.getByRole("button", { name: "—", exact: true }).filter({ hasText: "11:00" }).locator("visible=true").count()) === 0, "no card named «—» at 11:00 PM");
+  // v2 GroupRow of the Week (`plan-row-<id>`): «11:00 / PM» on the left, the client is the row's title
+  const card = p.getByTestId("plan-week-list").getByTestId("plan-row-e2e-108").locator("visible=true").first();
+  await card.waitFor({ timeout: 5000 });
+  const text = (await card.innerText()).replace(/\s+/g, " ");
+  h.expect(text.includes(client.name) && /11:00/.test(text), `the inspection's row names its client (${client.name}): ${text}`);
+  h.expect(!/(^|\s)—(\s|$)/.test(text), `no row named «—» at 11:00 PM: ${text}`);
   await h.shot("week-inspection");
 };
