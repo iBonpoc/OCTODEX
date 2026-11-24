@@ -45,4 +45,23 @@ exports.run = async (h) => {
     await field(pre).blur();
     await valueIs(pre, want, `${pre}: typing «${typed}» over «${first}» gives ${want}, not a number glued to the old one`);
   }
+
+  // #2469 (CI twice: «150» over a price gave «50.00»): a slow device — the select that comes a moment after the focus (the web's
+  // `selectTextOnFocus`, the phone's select by hand) comes AFTER the first digit and selects it, the second digit replaces it. The
+  // field is all selected the moment it takes the focus, and a late select never takes what was typed. A slow device is made here:
+  // every timer of 0 ms waits 15 ms (between the digits typed 30 ms apart)
+  for (const [pre, typed, want] of [["est-price-", "150", "150.00"], ["est-cost-", "190", "190.00"]]) {
+    await field(pre).evaluate((el) => el.select()); // the field's own selection left all selected, as after `fill`
+    await field(pre).blur();
+    await p.evaluate(() => {
+      const orig = window.setTimeout;
+      window.__slowTimers = orig;
+      window.setTimeout = (fn, ms, ...a) => orig(fn, ms ? ms : 15, ...a);
+    });
+    await field(pre).focus();
+    await field(pre).pressSequentially(typed, { delay: 30 });
+    await p.evaluate(() => { window.setTimeout = window.__slowTimers; });
+    await field(pre).blur();
+    await valueIs(pre, want, `${pre} (a slow device): typing «${typed}» right after the focus gives ${want} — the late select never takes the first digit`);
+  }
 };

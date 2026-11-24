@@ -19,3 +19,18 @@ describe("a field that opens in a sheet takes the focus (#691)", () => {
     expect(focusPlan("ios", { selectOnFocus: true }).selectByHand).toBe(true);
   });
 });
+
+// #2469: the late select (a moment after the focus) never takes what was typed since — «150» over a price stays «150»
+import { lateSelectOk } from "../src/ui/fieldFocus";
+describe("the late select (#2469)", () => {
+  it("selects again while the field holds what it held at the focus", () => {
+    expect(lateSelectOk("12.13", "12.13", true)).toBe(true);
+  });
+  it("never after a digit was typed (a slow device: the select comes after «1» — «5» would replace it)", () => {
+    expect(lateSelectOk("12.13", "1", true)).toBe(false);
+  });
+  it("never once the field has lost the focus, nor without a focus", () => {
+    expect(lateSelectOk("12.13", "12.13", false)).toBe(false);
+    expect(lateSelectOk(null, "12.13", true)).toBe(false);
+  });
+});
