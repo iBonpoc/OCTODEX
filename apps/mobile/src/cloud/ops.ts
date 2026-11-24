@@ -153,6 +153,9 @@ export type Op =
       totalCents: number;
       depositCents: number;
       marginPct: string | null;
+      /** #2474: the phone saw the client's signature and the person chose «Сохранить и снять подпись» (#2381) — only then
+       *  the cloud save reopens a client-signed estimate; absent in older builds and for any other save */
+      fromStatus?: "awaiting_countersign";
     }
   | {
       k: "estimate.approve";
@@ -1461,7 +1464,12 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
   // the connection dropped after the insert: «try later», never «not visible» (that would drop the estimate, review #244)
   const { data: est } = await read(supabase.from("estimates").select("status, current_version_id").eq("id", op.id).maybeSingle());
   if (!est) throw new PermanentError("estimate is not visible");
-  // «don't sign — change it» (E2a): the client signed, the company changes it → back to draft on the server, signature kept in history
+  // «don't sign — change it» (E2a): the client signed, the company changes it → back to draft on the server, signature kept in history.
+  // #2474: only when the phone edited the signed estimate on purpose (fromStatus). An edit of a sent estimate made without
+  // the network while the client signed meanwhile never takes the signature off: refused for good, nothing written, a card
+  if (est.status === "awaiting_countersign" && op.fromStatus !== "awaiting_countersign") {
+    throw new PermanentError("the client signed the estimate meanwhile", 409, "22023", "estimate_signed_meanwhile");
+  }
   if (est.status === "awaiting_countersign") {
     const { error, status } = await supabase.rpc("reopen_estimate", { p_estimate_id: op.id, p_reason: null });
     await run(Promise.resolve({ error, status }));

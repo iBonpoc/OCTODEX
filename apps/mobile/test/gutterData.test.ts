@@ -396,6 +396,21 @@ describe("unit:gutterData — M5d: photos of a measurement and its element (spec
     expect(calls.map((c) => [c.table, c.verb])).toEqual([["files", "upsert"], ["files", "select"], ["files", "update"]]);
     expect(calls[2]!.row).toEqual({ upload_status: "failed" });
   });
+  it("#1441: photo.add and photo.retry answer how the file went — refused (with why) for the store's mark, as a visit's photo", async () => {
+    const r = await guttersOps({ kind: K.pAdd, payload: { f: { id: "f4", measurementId: "m1", uri: "nope://gone.jpg" } } }, ctx);
+    expect(r).toEqual({ photo: { id: "f4", failed: "gone" } });
+    calls.length = 0;
+    const again = await guttersOps({ kind: K.pRetry, payload: { id: "f4", uri: "nope://gone.jpg" } }, ctx);
+    expect(again).toEqual({ photo: { id: "f4", failed: "gone" } });
+    // a row without a file on the phone answers nothing to mark
+    expect(await guttersOps({ kind: K.pAdd, payload: { f: { id: "f5", measurementId: "m1" } } }, ctx)).toBeUndefined();
+    await expect(guttersOps({ kind: K.pRetry, payload: { id: "f4" } }, ctx)).rejects.toMatchObject({ name: "PermanentError" });
+  });
+  it("#1441: the queue's answer of a module.op reaches the store as the core's photo answer (applyOp passes it on)", async () => {
+    registerModule(gutters);
+    const r = await applyOp({ k: "module.op", module: "gutters", kind: K.pRetry, payload: { id: "f6", uri: "nope://gone.jpg" } } as Op, "c1", "u1");
+    expect(r).toEqual({ photo: { id: "f6", failed: "gone" } });
+  });
   it("a broken photo change: PermanentError, nothing sent", async () => {
     for (const payload of [{}, { f: { id: "x" } }, { f: { measurementId: "m1" } }]) await expect(guttersOps({ kind: K.pAdd, payload }, ctx)).rejects.toMatchObject({ name: "PermanentError" });
     await expect(guttersOps({ kind: K.pRemove, payload: {} }, ctx)).rejects.toMatchObject({ name: "PermanentError" });
@@ -425,6 +440,30 @@ describe("unit:gutterData — M5d: photos of a measurement and its element (spec
     expect(photosOf(db, "m1", "e1")).toEqual([]);
     undo();
     expect(photosOf(db, "m1", "e1").map((f) => f.id)).toEqual(["p2"]);
+  });
+  it("#1441 retryPhoto: only a plain refusal of a file on this phone; the mark goes at once, the file goes again (photo.retry)", async () => {
+    const { retryPhoto } = await import("../src/modules/gutters/data");
+    let db = makeSeed();
+    const at = "2026-11-18T10:00:00Z";
+    db = { ...db, files: [
+      { id: "r1", kind: "photo", measurementId: "m1", uri: "file:///a.jpg", at, upload: { failed: "refused", at } },
+      { id: "r2", kind: "photo", measurementId: "m1", uri: "file:///b.jpg", at, upload: { failed: "tooBig", at } },
+      { id: "r3", kind: "photo", measurementId: "m1", at, upload: { failed: "refused", at } },
+    ] };
+    const sent: { kind: string; payload: Record<string, unknown> }[] = [];
+    const store = {
+      get db() { return db; },
+      moduleOp: (_m: string, ch: { kind: string; payload: Record<string, unknown>; apply: (d: typeof db) => typeof db }) => {
+        db = ch.apply(db);
+        sent.push(ch);
+        return markUndo(() => true);
+      },
+    };
+    expect(retryPhoto(store as never, "r2")).toBeNull(); // too big: the same file would be refused again
+    expect(retryPhoto(store as never, "r3")).toBeNull(); // no file on this phone: nothing to send
+    expect(retryPhoto(store as never, "r1")).not.toBeNull();
+    expect(sent).toEqual([expect.objectContaining({ kind: K.pRetry, payload: { id: "r1", uri: "file:///a.jpg" } })]);
+    expect(db.files!.find((f) => f.id === "r1")!.upload).toBeUndefined();
   });
   it("the queue: a newer write of an element never jumps ahead of a photo that names it (real UUIDs)", async () => {
     const { coalesceAt } = await import("../src/data/outboxCoalesce");

@@ -56,9 +56,12 @@ import { render, settle, type Root } from "./support/miniReact";
 import { StoreProvider } from "../src/data/store";
 import { makeSeed } from "../src/data/seed";
 import type { DB, Photo } from "../src/data/types";
+import { registerModule } from "../src/modules/registry";
+import gutters from "../src/modules/gutters/module";
+import { addPhoto as addMeasurePhoto, retryPhoto as retryMeasurePhoto } from "../src/modules/gutters/data";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-type Value = { db: DB; queue: { label: string }[]; addPhoto: (v: string, k: "before" | "after", uri?: string) => () => void; retryPhoto: (v: string, p: string) => () => void };
+type Value = { db: DB; moduleOp: (...a: unknown[]) => unknown; queue: { label: string }[]; addPhoto: (v: string, k: "before" | "after", uri?: string) => () => void; retryPhoto: (v: string, p: string) => () => void };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: Value } }).props.value;
 let root: Root<P> | null = null;
@@ -174,5 +177,61 @@ describe("unit:photoUploadStore — a refused photo on the phone (#1431)", () =>
     await settle();
     expect(valueOf(r).queue.filter((q) => q.label === "photo.retry")).toEqual([]);
     expect(photoOf(r, v.id, "p-gone").upload?.failed).toBe("gone");
+  });
+});
+
+/** #1441: the same cycle for a module's photo (a measurement's, in db.files) through module.op */
+describe("unit:photoUploadStore — a measurement's refused photo (#1441)", () => {
+  registerModule(gutters);
+  const fileOf = (r: Root<P>, id: string) => (valueOf(r).db.files ?? []).find((f) => f.id === id)!;
+  it("photo.add refused → marked; the reload keeps the file and the reason; «Повторить» → photo.retry; refused again → back; taken → off", { timeout: 20_000 }, async () => {
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    const seed = makeSeed();
+    const on = { ...seed, company: { ...seed.company!, modules: { ...(seed.company?.modules ?? {}), gutters: { enabled: true, trialEndsAt: new Date(Date.now() + 86_400_000).toISOString(), settings: {}, rowVersion: 1 } } } } as DB;
+    (server.loads[0] as { done?: boolean }).done = true;
+    server.loads[0]!.resolve(on);
+    await settle();
+    const ms = () => valueOf(r) as unknown as Parameters<typeof addMeasurePhoto>[0];
+    addMeasurePhoto(ms(), { id: "mp1", measurementId: "m1", uri: "file:///m.jpg", at: "2026-11-18T10:00:00Z" });
+    await settle();
+    expect(fileOf(r, "mp1").upload).toBeUndefined();
+    const add = await sent(1);
+    expect(add.op).toMatchObject({ k: "module.op", module: "gutters", kind: "photo.add" });
+    add.d.resolve({ photo: { id: "mp1", failed: "refused" } });
+    await settle();
+    expect(fileOf(r, "mp1").upload?.failed).toBe("refused");
+
+    // the reload: the server's files carry «failed» and no file — the phone keeps both
+    for (let i = 0; i < 40 && !server.loads.some((d) => !(d as { done?: boolean }).done); i++) {
+      await wait(100);
+      await settle();
+    }
+    const d = server.loads.find((x) => !(x as { done?: boolean }).done)!;
+    (d as { done?: boolean }).done = true;
+    const now = valueOf(r).db;
+    d.resolve({ ...now, files: (now.files ?? []).map(({ uri: _u, upload: _x, ...f }) => ({ ...f, ...(f.id === "mp1" ? { upload: { failed: "refused" as const, at: "2026-11-18T00:00:00Z" } } : {}) })) });
+    await settle();
+    await wait(50);
+    await settle();
+    expect(fileOf(r, "mp1")).toMatchObject({ uri: "file:///m.jpg", upload: { failed: "refused" } });
+
+    // «Повторить»: the mark goes at once, photo.retry of the module with the file
+    retryMeasurePhoto(ms(), "mp1");
+    await settle();
+    expect(fileOf(r, "mp1").upload).toBeUndefined();
+    const retry = await sent(2);
+    expect(retry.op).toMatchObject({ k: "module.op", module: "gutters", kind: "photo.retry", payload: { id: "mp1", uri: "file:///m.jpg" } });
+    retry.d.resolve({ photo: { id: "mp1", failed: "refused" } });
+    await settle();
+    expect(fileOf(r, "mp1").upload?.failed).toBe("refused");
+
+    // once more — taken: the mark goes
+    retryMeasurePhoto(ms(), "mp1");
+    await settle();
+    const third = await sent(3);
+    third.d.resolve({ photo: { id: "mp1", failed: null } });
+    await settle();
+    expect(fileOf(r, "mp1").upload).toBeUndefined();
   });
 });

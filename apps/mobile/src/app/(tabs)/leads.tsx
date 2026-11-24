@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Linking } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useListPanel } from "@/nav/listPanel";
 import { ListPanel } from "@/ui/listPanel";
 import { LeadObject, leadSectionOf, type LeadSectionKey } from "@/features/lead/LeadCard";
@@ -52,11 +52,9 @@ const initials = (n: string) => n.split(/\s+/).filter(Boolean).map((p) => p[0]).
  */
 export default function Leads() {
   const { tab: want } = useLocalSearchParams<{ tab?: string }>();
-  useEffect(() => {
-    if (want === "estimates") router.replace("/estimates");
-    else if (want === "invoices") router.replace("/invoice");
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, as the address came
-  }, []);
+  // #2273: the section at once — the leads list never mounts (it used to show a frame, then replace itself)
+  if (want === "estimates") return <Redirect href="/estimates" />;
+  if (want === "invoices") return <Redirect href="/invoice" />;
   return <LeadsList />;
 }
 

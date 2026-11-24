@@ -382,6 +382,10 @@ export const en: Dict = {
   "triage.later.tomorrow": "Tomorrow · {date}",
   "triage.later.days3": "In 3 days · {date}",
   "triage.later.week": "In a week · {date}",
+  "triage.later.pick": "Pick a date…",
+  "triage.pickTitle": "Put off until a day",
+  "triage.pickDate": "Day",
+  "triage.pickDo": "Put off",
   "triage.laterSaved": "Put off until {date} — it comes back by itself",
 
   "inbox.title": "Inbox",
@@ -2735,6 +2739,13 @@ export const en: Dict = {
   "ds.sheet.listHint": "The scroll bar stands in the sheet’s side inset, not over the “›” arrows (Б1, #1339).",
   "ds.sheet.listRow": "Row",
   "ds.sheet.pagesHint": "A nested step is a page inside the sheet with «‹ Back», not a second sheet.",
+  "ds.sheet.help": "Sheet with «?» help",
+  "ds.sheet.helpHint": "«?» right after the title; the help is a page in the same sheet, «‹ Back» returns to the content. A long body scrolls; from 820 the window stays 32 from the edges.",
+  "ds.sheet.helpTitle": "Estimate items",
+  "ds.sheet.helpBody": "Items are labor and materials from the catalog. Price and unit come from the catalog; in an estimate you can change them for that estimate only.",
+  "ds.sheet.helpTo": "Open catalog",
+  "ds.sheet.helpPicked": "Marked: {n}",
+  "ds.sheet.helpPick": "Mark",
   "ds.sheet.body": "Sheet text: a short, self-contained task over the screen.",
   "ds.sheet.line": "Line",
   "ds.sheet.save": "Save",
@@ -4664,6 +4675,8 @@ export const en: Dict = {
   "pay.online.err.busy": "Too many tries. Please try again in {n} min.",
   // spec 35 §4д п.10 («Деньги и отчёты» №7)
   "est.rej.signatureLost": "The client's signature was not saved on the server",
+  "est.rej.signedMeanwhile": "The client signed the estimate while your edits waited for the network — the edits were not saved",
+  "est.rej.signedMeanwhileWhy": "The client's signature stays. To change the estimate, open it and choose “Don't sign — change it”: the client will have to sign again.",
   // visit payment refused by the server (#857 О1) — the tech hands it to the office
   "visit.rej.moneyInHand": "The money in hand was not recorded — hand the payment to the office",
   "est.signOnSite.afterSend": "The client can sign on site once the office has sent the estimate.",

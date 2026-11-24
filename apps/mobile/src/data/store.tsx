@@ -2514,7 +2514,7 @@ export function StoreProvider({
               : {};
             return { ...d, ...used, estimates: prev ? d.estimates.map((e) => (e.id === id ? next : e)) : [...d.estimates, next] };
           },
-          { k: "estimate.save", id, versionId, customerId, propertyId, leadId: leadId0 ?? prev?.leadId, templateId: prev ? prev.templateId : templateId0, title, doc: storedDoc(doc), costs: costsOf(doc), ...(linesFrom ? { linesFrom } : {}), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct },
+          { k: "estimate.save", id, versionId, customerId, propertyId, leadId: leadId0 ?? prev?.leadId, templateId: prev ? prev.templateId : templateId0, title, doc: storedDoc(doc), costs: costsOf(doc), ...(linesFrom ? { linesFrom } : {}), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct, ...(prev?.status === "awaiting_countersign" ? { fromStatus: "awaiting_countersign" as const } : {}) },
         );
       },
       approveEstimate: (id, a) => {

@@ -89,6 +89,11 @@ export const motion = {
   longPressMs: 500,
   /** a second tap on the same object within this is a double tap (app-only like longPressMs; = the toast's arm time): the canvas opens properties by it (spec 33, #1273) */
   doubleTapMs: 300,
+  /** a downspout just put blinks this many beats (off, on, …) and only then its sheet opens (founder 16.11, #1763: «вначале
+   *  моргнул, помигал, а потом открылось меню… полсекунды»); app-only like doubleTapMs; reduce motion — no blink, the sheet at once */
+  blinkSteps: 4,
+  /** one beat of that blink, ms: blinkSteps × blinkStepMs = 0.5 s */
+  blinkStepMs: 125,
   durChart: 900,
   /** DS §14 (Ш III-1): a press shrinks the control this fast, ms (the release is the spring) */
   durPress: 80,
