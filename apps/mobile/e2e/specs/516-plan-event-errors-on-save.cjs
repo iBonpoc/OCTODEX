@@ -13,10 +13,11 @@ const { sheetGone } = require("../sheet.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const tid = (id) => p.getByTestId(id).locator("visible=true");
+  // v2: «＋» of the Plan's header → «Событие» / «Выходной» opens its form at once
   const openAdd = async (what) => {
-    await p.locator('[data-testid="fab"]:visible, [data-testid="fab-header"]:visible').first().click();
-    await tid("fab-planAdd").click();
-    await h.sheet().getByText(what, { exact: true }).click();
+    await tid("plan-create").first().getByRole("button").first().click();
+    await tid("menu-items").first().waitFor({ timeout: 3000 });
+    await tid(what === "Событие" ? "plan-create-event" : "plan-create-time-off").first().click();
     await tid("ev-save").waitFor({ timeout: 5000 });
   };
   const count = () => h.db().then((db) => (db.calendarEvents || []).length);

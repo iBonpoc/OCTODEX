@@ -41,12 +41,13 @@ exports.run = async (h) => {
   body = await h.text();
   h.expect(!/Прибыль/.test(body), "tech: no «Прибыль» on the job card");
 
-  // the home «＋» (phone: floating; 820/1280: «＋ Создать» in the side menu): only what works, no «wave N»
+  // the home «＋» (phone: the header's «＋»; 820/1280: «＋ Создать» in the side menu): only what works, no «wave N»
   await h.go("/visits");
   if (h.layout.width >= 820) await p.getByTestId("side-nav").getByRole("button", { name: "Создать", exact: true }).click();
-  else await p.getByTestId("fab").locator("visible=true").click();
-  await p.waitForTimeout(400);
-  await h.expectText(/Быстрые действия/, "the «＋» sheet is open");
+  // v2: the home's «＋» is in its header (<screen>-create), no floating button
+  else await p.getByTestId("visits-create").locator("visible=true").first().click();
+  // the «＋» sheet (v2: no title, its rows are fab-<id>)
+  await h.sheet().locator('[data-testid^="fab-"]').first().waitFor({ timeout: 5000 });
   body = await h.text();
   h.expect(!/Голосовая заметка/.test(body), "no «Голосовая заметка» until it works");
   h.expect(!/волн[еыа]/i.test(body), "no «Появится в волне N»");

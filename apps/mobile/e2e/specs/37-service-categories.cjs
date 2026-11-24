@@ -28,17 +28,18 @@ exports.run = async (h) => {
   h.expect(db.serviceCategories.some((c) => c.seedKey === "roofing" && !c.archivedAt), "preset added by key");
 
   // rename keeps the id
-  await p.getByRole("button", { name: "Покраска" }).first().click();
-  await p.waitForTimeout(300);
+  await p.getByTestId("dir-cat-painting").locator("visible=true").first().click();
+  // the sheet's field starts with the name (the form fills itself at the opening): wait for it, then type
+  await p.waitForFunction(() => [...document.querySelectorAll('[aria-modal="true"] input')].some((e) => e.value === "Покраска"), null, { timeout: 5000 });
   await h.sheet().locator("input").first().fill("Interior painting");
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();
-  await p.waitForTimeout(350);
+  await p.waitForFunction(() => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db.serviceCategories.find((c) => c.id === "cat-painting")?.name === "Interior painting", null, { timeout: 5000 });
   db = await h.db();
   h.expect(db.serviceCategories.find((c) => c.id === "cat-painting")?.name === "Interior painting", "renamed, same id");
 
   // archive, then bring back
-  await p.getByRole("button", { name: "Электрика" }).first().click();
-  await p.waitForTimeout(300);
+  await p.getByTestId("dir-cat-electrical").locator("visible=true").first().click();
+  await h.sheet().getByRole("button", { name: "В архив", exact: true }).waitFor();
   await h.sheet().getByRole("button", { name: "В архив", exact: true }).click();
   await p.waitForTimeout(350);
   await h.expectText(/В архиве/, "archived section");
@@ -67,8 +68,11 @@ exports.run = async (h) => {
 
   // S16, lead side: choose the direction on the lead
   await h.go("/inbox");
-  await p.getByText("Kevin Brooks", { exact: true }).first().click();
-  await p.waitForTimeout(700);
+  // v2 (#2350): the leads' rows `lead-row-<id>` open the lead's screen
+  await p.getByTestId("lead-row-l1").locator("visible=true").first().click();
+  // 1280: the panel beside the list first, «Открыть» — the lead's screen
+  if (h.layout.width >= 1280) await p.getByTestId("list-panel-open").locator("visible=true").first().click();
+  await p.waitForURL(/\/lead\/l1/, { timeout: 8000 });
   await p.getByRole("button", { name: "Направление" }).first().click();
   await p.waitForTimeout(300);
   await h.sheet().getByRole("radio", { name: "Pressure washing" }).click(); // option rows (spec 56 wave 5а)
@@ -79,10 +83,12 @@ exports.run = async (h) => {
   await h.expectText(/Pressure washing/, "direction shown on the lead");
 
   // S16, estimate side: an estimate made from the lead takes it
-  await h.clickText("Сметы");
-  await h.click("Смета");
+  await require("../objectScreen.cjs").objSection(p, "lead-screen", "estimates");
+  await p.getByTestId("lead-new-estimate").locator("visible=true").first().click();
   await require("../estimateLine.cjs").addCustom(h, "Wash the driveway", "350");
-  await p.getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(700);
+  // v2: the builder's one step «Готово» saves (`ue-save`)
+  await p.getByTestId("ue-save").locator("visible=true").first().click();
+  await p.waitForFunction((lid) => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db.estimates.some((e) => e.leadId === lid && e.doc), lead.id, { timeout: 8000 });
   db = await h.db();
   const est = db.estimates.find((e) => e.leadId === lead.id);
   h.expect(est && est.serviceCategoryId === wash.id, `estimate from the lead takes its direction: ${est && est.serviceCategoryId}`);

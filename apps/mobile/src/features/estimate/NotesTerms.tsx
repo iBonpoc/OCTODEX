@@ -1,3 +1,4 @@
+import { GroupRow, ListGroup } from "@/ui/groupedList";
 import { useState } from "react";
 import { View } from "react-native";
 import { size, space } from "@octo/design-tokens";
@@ -69,33 +70,38 @@ export function NotesTerms(p: {
   const empty = t("est.nt.empty");
   return (
     <View testID="est-notes-terms">
-      <Card>
+      {/* #2387: the note and the terms are a group of GroupRows, as the totals above (one look); the client's language a quiet mark */}
+      <ListGroup inset={space[4]}>
         <View testID="est-notes-row">
-          <ListRow title={t("est.nt.notes")} subtitle={firstWords(p.doc.note) ?? empty} onPress={p.locked ? undefined : () => show("note")} />
+          <GroupRow wrap title={t("est.nt.notes")} subtitle={firstWords(p.doc.note) ?? empty} chevron={!p.locked} onPress={p.locked ? undefined : () => show("note")} />
         </View>
         {p.noTerms ? null : (
-          <>
-            <Divider />
-            <View testID="est-terms-row">
-              <ListRow
-                title={t("est.nt.terms")}
-                subtitle={firstWords(terms.text) ?? empty}
-                // the language never cut with the text (design review): a short mark before the chevron, read out in full
-                right={
-                  <View accessibilityLabel={DOC_LANG_LABEL[p.lang]} testID="est-terms-lang">
-                    <T v="caption" tone="mut">
-                      {p.lang.toUpperCase()}
-                    </T>
-                  </View>
-                }
-                onPress={p.locked ? undefined : () => show("terms")}
-              />
-            </View>
-            <ArbitrationWarn text={terms.text} testID="est-terms-arb" short />
-          </>
+          <View testID="est-terms-row">
+            <GroupRow
+              wrap
+              title={t("est.nt.terms")}
+              subtitle={firstWords(terms.text) ?? empty}
+              value={p.lang.toUpperCase()}
+              valueTestID="est-terms-lang"
+              valueMark
+              chevron={!p.locked}
+              onPress={p.locked ? undefined : () => show("terms")}
+            />
+          </View>
         )}
-      </Card>
-      <Sheet visible={open !== null} onClose={done} title={open === "terms" ? t("est.nt.terms") : t("est.nt.notes")}>
+      </ListGroup>
+      {p.noTerms ? null : <ArbitrationWarn text={terms.text} testID="est-terms-arb" short />}
+      {/* DS Б1: a form sheet's «Сохранить» is its footer (never a button in the body); «✕» and a swipe keep the text too (as before) */}
+      <Sheet
+        visible={open !== null}
+        onClose={done}
+        title={open === "terms" ? t("est.nt.terms") : t("est.nt.notes")}
+        footer={
+          <View testID="est-nt-done">
+            <Button label={t("ue.save")} icon="check" full onPress={done} />
+          </View>
+        }
+      >
         <View testID={open === "terms" ? "est-terms-sheet" : "est-notes-sheet"} style={{ gap: space[3] }}>
           <View testID={open === "terms" ? "est-terms-field" : "est-notes-field"}>
             <TextField type="note" value={draft} onChangeText={(v) => setDraft(open === "terms" ? Array.from(v).slice(0, TERMS_MAX).join("") : v)} placeholder={open === "terms" ? t("est.nt.termsHint") : t("est.nt.notesHint")} />
@@ -116,9 +122,6 @@ export function NotesTerms(p: {
               <ArbitrationWarn text={draft} testID="est-terms-sheet-arb" />
             </>
           ) : null}
-          <View testID="est-nt-done">
-            <Button label={t("ue.doneLine")} icon="check" full onPress={done} />
-          </View>
         </View>
       </Sheet>
     </View>

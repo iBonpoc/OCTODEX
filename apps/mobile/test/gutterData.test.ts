@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type Call = { table: string; verb: string; row?: unknown; opts?: unknown; eq: [string, unknown][] };
 const calls: Call[] = [];
-const answer = { error: null as null | { message: string; code?: string }, modules: [] as Record<string, unknown>[], modulesError: null as null | { message: string } };
+const answer = { error: null as null | { message: string; code?: string }, modules: [] as Record<string, unknown>[], modulesError: null as null | { message: string }, company: null as null | Record<string, unknown>, companyError: null as null | { message: string; code?: string } };
 vi.mock("@/cloud/client", () => ({
   supabase: {
     from: (table: string) => {
@@ -17,7 +17,7 @@ vi.mock("@/cloud/client", () => ({
         update: (row: unknown) => ((c.verb = "update"), (c.row = row), chain),
         select: () => ((c.verb = "select"), chain),
         eq: (k: string, v: unknown) => (c.eq.push([k, v]), chain),
-        maybeSingle: () => ({ then: (ok: (v: unknown) => unknown, no: (e: unknown) => unknown) => Promise.resolve({ data: answer.modules[0] ?? null, error: answer.modulesError }).then(ok, no) }),
+        maybeSingle: () => ({ then: (ok: (v: unknown) => unknown, no: (e: unknown) => unknown) => Promise.resolve(table === "companies" ? { data: answer.company, error: answer.companyError } : { data: answer.modules[0] ?? null, error: answer.modulesError }).then(ok, no) }),
         then: (ok: (v: unknown) => unknown, no: (e: unknown) => unknown) =>
           Promise.resolve(c.verb === "select" ? { data: answer.modules, error: answer.modulesError } : { error: answer.error, status: answer.error ? 403 : 201 }).then(ok, no),
       };
@@ -45,6 +45,8 @@ beforeEach(() => {
   answer.error = null;
   answer.modules = [];
   answer.modulesError = null;
+  answer.company = null;
+  answer.companyError = null;
 });
 
 describe("unit:gutterData — the phone's slice", () => {
@@ -123,7 +125,26 @@ describe("unit:gutterData — a refused module.op: is the module active on the s
     answer.error = rls;
     answer.modules = [{ module_key: "gutters", enabled: true, trial_ends_at: new Date(Date.now() - DAY).toISOString(), settings: {}, row_version: 2 }];
     await expect(applyOp(op(K.eSave, { e: E }), "c1", "u1")).rejects.toMatchObject({ name: "PermanentError", hint: "module_inactive" });
-    expect(calls.at(-1)).toMatchObject({ table: "company_modules", verb: "select", eq: [["company_id", "c1"], ["module_key", "gutters"]] });
+    expect(calls.find((c) => c.table === "company_modules")).toMatchObject({ verb: "select", eq: [["company_id", "c1"], ["module_key", "gutters"]] });
+  });
+  it("#2410 refused, the trial over, but the developer's company (no term) → the refusal as it was, not module_inactive", async () => {
+    answer.error = rls;
+    answer.modules = [{ module_key: "gutters", enabled: true, trial_ends_at: new Date(Date.now() - 30 * DAY).toISOString(), settings: {}, row_version: 2 }];
+    answer.company = { developer_account: true };
+    const e = await applyOp(op(K.eSave, { e: E }), "c1", "u1").catch((x) => x);
+    expect(e).toMatchObject({ name: "PermanentError", code: "42501" });
+    expect(e.hint).toBeUndefined();
+    expect(calls.find((c) => c.table === "companies")).toMatchObject({ verb: "select", eq: [["id", "c1"]] });
+  });
+  it("#2410 the flag's read failed → not known: the refusal as it was, the queue keeps the module's changes (rule 6)", async () => {
+    answer.error = rls;
+    answer.modules = [{ module_key: "gutters", enabled: true, trial_ends_at: new Date(Date.now() - 30 * DAY).toISOString(), settings: {}, row_version: 2 }];
+    answer.companyError = { message: "down", code: "500" };
+    const e = await applyOp(op(K.eSave, { e: E }), "c1", "u1").catch((x) => x);
+    expect(e.hint).toBeUndefined();
+    // a server before the column: no flag — as before, module_inactive
+    answer.companyError = { message: "column companies.developer_account does not exist", code: "42703" };
+    await expect(applyOp(op(K.eSave, { e: E }), "c1", "u1")).rejects.toMatchObject({ hint: "module_inactive" });
   });
   it("switched off → module_inactive too", async () => {
     answer.error = rls;

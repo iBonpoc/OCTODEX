@@ -1,16 +1,16 @@
+const { objCreate, objSection } = require("../objectScreen.cjs");
 /**
- * Properties inside a client (wave C2, docs/specs/04 §7.3): "+ Property" in the client's row «Объекты», the property card
+ * Properties inside a client (wave C2, docs/specs/04 §7.3): v2 (#2350) «＋ → Объект» of the client, its section «Объекты», the property card
  * (address, now at the property, access notes + gate code, people of the property), and "‹ Client" above it.
  */
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/client/c1");
-  // the client's properties are on its «Обзор» tab, «＋ Объект» right of the title (#1343, DS §9 А1п; spec 56 §3а.6)
-  await p.getByTestId("client-tab-overview").locator("visible=true").first().waitFor({ timeout: 8000 });
-  h.expect(/Объекты/.test(await p.getByTestId("client-tab-overview").locator("visible=true").first().innerText()), "«Объекты» on the client's overview");
+  // v2: the client's properties are the section «Объекты» of the strip; «＋» of the header makes one (#2350)
+  await p.getByTestId("client-screen-sections-places").locator("visible=true").first().waitFor({ timeout: 8000 });
 
   // + property
-  await p.getByTestId("client-add-property").locator("visible=true").first().click();
+  await objCreate(p, "client-screen", "client-create-property");
   await h.sheet().getByPlaceholder("Улица и дом", { exact: true }).fill("77 Maple Dr");
   await h.sheet().getByPlaceholder("Квартира / офис", { exact: true }).fill("3");
   await h.sheet().getByPlaceholder("Город", { exact: true }).fill("Pasadena");
@@ -26,14 +26,16 @@ exports.run = async (h) => {
   let pr = db.properties.find((x) => x.address === "77 Maple Dr");
   h.expect(pr && pr.customerId === "c1" && pr.unit === "3" && pr.kind === "multi_family" && pr.label === "Сдаётся", `property saved: ${JSON.stringify(pr)}`);
   h.expect(pr.city === "Pasadena, CA 91105", `city line: ${pr.city}`);
-  h.expect((await p.getByRole("button", { name: /^77 Maple Dr/ }).count()) >= 1, "the new property is in the list");
   await h.go("/client/c1");
-  // «Обзор» lists the client's three properties (#1343: no row with a counter any more)
-  await p.getByTestId("client-tab-overview").locator("visible=true").first().waitFor({ timeout: 8000 });
-  h.expect((await p.getByRole("button", { name: /77 Maple Dr/ }).locator("visible=true").count()) >= 1, "the new property on the client's overview");
+  // «Объекты» lists the client's three properties, the new one with its unit
+  await objSection(p, "client-screen", "places");
+  const row = p.getByTestId(`client-property-${pr.id}`).locator("visible=true").first();
+  await row.waitFor({ timeout: 5000 });
+  h.expect(/77 Maple Dr, #3/.test(await row.innerText()), "the new property in the client's «Объекты»");
+  h.expect(/Объекты[\s\S]*3/.test(await p.getByTestId("client-screen-sections-places").locator("visible=true").first().innerText()), "«Объекты 3» on the strip");
 
   // the property card
-  await p.getByRole("button", { name: /77 Maple Dr, #3/ }).first().click();
+  await row.getByRole("button").first().click();
   await p.waitForTimeout(400);
   h.expect(p.url().includes(`/property/${pr.id}`), "card opens the property");
   await h.expectText(/Сейчас на объекте/, "now at the property");

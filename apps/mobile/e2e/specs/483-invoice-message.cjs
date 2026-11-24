@@ -8,6 +8,7 @@
  * The demo's own data, changed in the local base from a page without the app (h.seed).
  */
 const { sheetGone } = require("../sheet.cjs");
+const { invRemind } = require("../invoiceMenu.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -35,7 +36,7 @@ exports.run = async (h) => {
   await h.go(`/invoice/${inv.id}`);
   await p.getByTestId("invoice-no-how").locator("visible=true").first().waitFor({ timeout: 8000 });
   h.expect((await p.getByTestId("invoice-fill-how").locator("visible=true").count()) > 0, `С1 ${JSON.stringify(h.layout)}: the director has «Заполнить способы оплаты»`);
-  await p.getByTestId("invoice-remind").locator("visible=true").first().getByRole("button").click();
+  await invRemind(p);
   const sheet = h.sheet();
   const msg = sheet.getByTestId("remind-text");
   await msg.getByText(new RegExp(`/p/${est.token}`)).first().waitFor({ timeout: 8000 });

@@ -12,9 +12,9 @@ const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
   const p = h.page;
-  const wide = h.layout.width > 390;
   const tid = (id) => p.getByTestId(id).locator("visible=true");
-  const plus = () => p.locator(wide ? '[data-testid="fab-header"]:visible' : '[data-testid="fab"]:visible');
+  // v2 (#2350): the home «＋» is the header's CreateButton (`today-create`, every width), its items `fab-<id>` in the menu
+  const plus = () => tid("today-create").getByRole("button");
   const waitFor = async (ok, what, tries = 40) => {
     let v = await ok();
     for (let i = 0; i < tries && !v; i++) { await p.waitForTimeout(150); v = await ok(); }
@@ -32,7 +32,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
+  await tid("module-gutters-status").filter({ hasText: /^Без срока/ }).waitFor({ timeout: 5000 });
 
   await h.go("/today");
   await plus().first().click();

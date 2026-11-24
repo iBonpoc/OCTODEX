@@ -161,6 +161,7 @@ describe("слова деталей и причина «не сохранено�
   it("saveModuleSettings → null: модуль активен — «перечитывается»; не подключён или пробный кончился — «не подключён»", () => {
     expect(notSavedKey("trial")).toBe("rereading");
     expect(notSavedKey("paid")).toBe("rereading");
+    expect(notSavedKey("unlimited")).toBe("rereading"); // #2410: the developer's company, the demo
     for (const a of ["expired", "off", "never", undefined]) expect(notSavedKey(a)).toBe("notActive");
   });
 });

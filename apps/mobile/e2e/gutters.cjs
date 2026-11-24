@@ -1,3 +1,4 @@
+const { pressEscUntilClosed } = require("./sheet.cjs");
 // Gutters canvas: right after a gutter is drawn the «Длина желоба» sheet opens (feet focused, the drawn length in the
 // fields). Tests that do not check the length press «Применить» — the drawn length stays («Отменить» takes the gutter away).
 async function skipLength(p) {
@@ -191,16 +192,106 @@ async function fitAll(p) {
   await p.evaluate(() => { delete globalThis.__fitW; });
 }
 
-/** the open downspout's kind (its menu is open): «Ещё» first where the phone folds it (as e2e 253); `key` — rectPlain, rectRibbed, … */
-async function pickDsKind(p, key) {
+// The fields of the gutter's / downspout's window (#2412 G1): every value is a SelectField — the field `<id>`, its button
+// `<id>-button` (shows the value), a menu at it (items `<id>-<key>`) or a list over the sheet (rows `<id>-picker-<key>`).
+/** «Ещё» of the window open (every width has it; a no-op when it is open already) */
+async function openAttrMore(p) {
   const tid = (id) => p.getByTestId(id).locator("visible=true");
   await tid("attr-panel").first().waitFor({ timeout: 5000 });
-  if (!(await tid(`attr-ds-kind-${key}`).count()) && (await tid("attr-more").count())) {
-    await tid("attr-more").getByRole("button").click();
-    await tid("attr-more-open").waitFor({ timeout: 5000 });
+  if (await tid("attr-more").count()) {
+    await tid("attr-more-toggle").first().click();
+    await tid("attr-more-open").first().waitFor({ timeout: 5000 });
   }
-  await tid(`attr-ds-kind-${key}`).click();
-  await p.waitForFunction((k) => document.querySelector(`[data-testid="attr-ds-kind-${k}"]`)?.getAttribute("aria-checked") === "true", key, { timeout: 5000 });
 }
 
-module.exports = { pickDsKind, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
+/** what a field shows (its button's text) */
+async function attrShown(p, id) {
+  return (await p.getByTestId(`${id}-button`).locator("visible=true").first().innerText()).trim();
+}
+
+/** the keys a field offers: opens its menu or list, reads the items, closes it (attrClose) */
+async function attrKeys(p, id) {
+  const button = p.getByTestId(`${id}-button`).locator("visible=true").first();
+  await button.scrollIntoViewIfNeeded();
+  await button.click();
+  const items = p.locator(`[data-testid^="${id}-"]:not([data-testid="${id}-button"]):not([data-testid="${id}-picker"]):not([data-testid^="${id}-picker-search"])`).locator("visible=true");
+  await items.first().waitFor({ timeout: 5000 });
+  const ids = await items.evaluateAll((es) => es.map((e) => e.getAttribute("data-testid")));
+  await attrClose(p, id);
+  return ids.map((t) => t.slice(id.length + 1).replace(/^picker-/, ""));
+}
+
+/** the key a field's MENU marks as chosen (read as selected): opens it, reads, closes it (attrClose) */
+async function attrChosen(p, id) {
+  const button = p.getByTestId(`${id}-button`).locator("visible=true").first();
+  await button.scrollIntoViewIfNeeded();
+  await button.click();
+  const items = p.getByRole("menu").locator(`[data-testid^="${id}-"]`).locator("visible=true");
+  await items.first().waitFor({ timeout: 5000 });
+  // the chosen item: read as selected, or (the web does not always say it) its check — the mark in the item's first place
+  const on = await items.evaluateAll((es) => es.filter((e) => e.getAttribute("aria-selected") === "true" || !!e.firstElementChild?.querySelector("svg")).map((e) => e.getAttribute("data-testid")));
+  await attrClose(p, id);
+  return on.length === 1 ? on[0].slice(id.length + 1) : null;
+}
+
+/** the open menu or list of a field closed by Esc (again while it stays: an Esc in its first frames is lost), then gone */
+async function attrClose(p, id) {
+  const picker = p.getByTestId(`${id}-picker`).locator("visible=true");
+  // a list (the colour field's, G1 PR2) is a sheet of its own over the window's: never Esc (on 390 it may reach the window under it,
+  // and its backdrop is still moving); a menu — Esc
+  if (await picker.count()) {
+    // the chosen row again: the list closes, the value stays (the same value is no edit)
+    const rows = p.locator(`[data-testid^="${id}-picker-"]:not([data-testid^="${id}-picker-search"])`).locator("visible=true");
+    const i = await rows.evaluateAll((es) => Math.max(0, es.findIndex((e) => !!e.querySelector('[aria-selected="true"]') || e.getAttribute("aria-selected") === "true")));
+    await rows.nth(i).click();
+  } else await pressEscUntilClosed(p, p.getByRole("menu").first());
+  await attrShut(p, id);
+}
+
+// the field's menu or list is gone (not only its items: the menu's own layer takes touches while it goes out)
+async function attrShut(p, id) {
+  await p.waitForFunction((x) => {
+    const shown = (sel) => [...document.querySelectorAll(sel)].some((e) => e.getClientRects().length > 0);
+    const b = [...document.querySelectorAll(`[data-testid="${x}-button"]`)].find((e) => e.getClientRects().length > 0);
+    return !!b && b.getAttribute("aria-expanded") !== "true" && !shown('[role="menu"]') && !shown(`[data-testid="${x}-picker"]`);
+  }, id, { timeout: 5000 });
+}
+
+/** pick `key` in a field: opens its menu or list, taps the item, waits until it is gone; returns the item's name */
+async function pickAttr(p, id, key) {
+  const button = p.getByTestId(`${id}-button`).locator("visible=true").first();
+  await button.scrollIntoViewIfNeeded();
+  await button.click();
+  const item = p.locator(`[data-testid="${id}-${key}"], [data-testid="${id}-picker-${key}"]`).locator("visible=true").first();
+  await item.waitFor({ timeout: 5000 });
+  const name = ((await item.getAttribute("aria-label")) || (await item.innerText())).trim();
+  await item.click();
+  await item.waitFor({ state: "hidden", timeout: 5000 });
+  await attrShut(p, id);
+  return name;
+}
+
+/** the open downspout's kind (its menu is open): a field on top (#2412 G1); `key` — rectPlain, rectRibbed, roundPlain, roundRibbed */
+async function pickDsKind(p, key) {
+  await p.getByTestId("attr-panel").locator("visible=true").first().waitFor({ timeout: 5000 });
+  const name = await pickAttr(p, "attr-ds-kind", key);
+  await p.waitForFunction((n) => {
+    const b = [...document.querySelectorAll('[data-testid="attr-ds-kind-button"]')].find((e) => e.getClientRects().length > 0);
+    return !!b && b.innerText.trim() === n;
+  }, name, { timeout: 5000 });
+}
+
+// «Отменить» of a toast (v2, #2086): the word ignores a tap until it is armed (`aria-busy` false, motion.toastArmMs after the toast
+// showed) — waits for that, then presses. A stack of up to three toasts, the NEWEST ON TOP (first in the page; the old
+// `getByRole("button", { name: "Отменить" }).last()` took the oldest — «Уже не отменить» of another action). `text` — the newest toast
+// with that text; none — the newest one.
+async function pressUndo(p, text) {
+  const all = p.getByTestId("toast").locator("visible=true");
+  const toast = (text ? all.filter({ hasText: text }) : all).first();
+  const undo = toast.getByTestId("toast-undo");
+  await undo.waitFor({ timeout: 5000 });
+  await p.waitForFunction((el) => el.getAttribute("aria-busy") !== "true", await undo.elementHandle(), { timeout: 5000 });
+  await undo.click();
+}
+
+module.exports = { pressUndo, pickDsKind, pickAttr, attrShown, attrKeys, attrChosen, attrClose, attrShut, openAttrMore, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };

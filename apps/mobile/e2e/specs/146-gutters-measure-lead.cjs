@@ -46,7 +46,7 @@ exports.run = async (h) => {
   // on (the trial)
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
+  await tid("module-gutters-status").filter({ hasText: /^Без срока/ }).waitFor({ timeout: 5000 });
 
   await h.go(`/lead/${lead.id}`);
   await measureBtn().waitFor({ timeout: 8000 });

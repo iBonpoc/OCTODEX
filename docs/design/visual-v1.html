@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Визуальный язык GoRix</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+<style>
+/* ---------- страница ---------- */
+:root{--pg:#E9EAE6;--fg:#18191C;--mut:#4A4D54;--card:#F4F4F1;--line:rgba(20,21,24,.12);--hi:#6E5A12;color-scheme:light}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--pg:#18191C;--fg:#EDEEF0;--mut:#A9ACB4;--card:#222327;--line:rgba(255,255,255,.1);--hi:#E2C15E;color-scheme:dark}}
+:root[data-theme="dark"]{--pg:#18191C;--fg:#EDEEF0;--mut:#A9ACB4;--card:#222327;--line:rgba(255,255,255,.1);--hi:#E2C15E;color-scheme:dark}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--pg);color:var(--fg);font:15px/1.45 Manrope,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;overflow-x:hidden;font-variant-numeric:tabular-nums}
+.wrap{max-width:1280px;margin:0 auto;padding:28px max(16px,env(safe-area-inset-right,0px)) 56px max(16px,env(safe-area-inset-left,0px))}
+h1{font-size:30px;line-height:1.15;margin:0 0 8px;font-weight:800;letter-spacing:-.015em}
+h2{font-size:20px;line-height:1.25;margin:40px 0 12px;font-weight:700}
+.lead{color:var(--mut);max-width:800px;margin:0 0 6px}
+.src{font-size:13px;color:var(--mut);max-width:900px;margin:8px 0 0}
+.src b{color:var(--fg)}
+/* таблица чисел */
+.tb{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden;font-size:14px;table-layout:fixed}
+.tb th,.tb td{text-align:left;vertical-align:top;padding:10px 14px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+.tb tr:last-child td{border-bottom:0}
+.tb th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);font-weight:700}
+.tb td:first-child{font-weight:700;width:22%}
+.tb td:nth-child(3){color:var(--fg)}
+.tb .dev{display:inline-block;font-size:11px;font-weight:700;color:var(--hi);border:1px solid currentColor;border-radius:6px;padding:0 4px;margin-left:4px;vertical-align:1px}
+@media (max-width:640px){
+  .tb,.tb tbody,.tb tr,.tb td{display:block;width:100%!important}
+  .tb thead{display:none}
+  .tb tr{border-bottom:1px solid var(--line);padding:8px 0}
+  .tb tr:last-child{border-bottom:0}
+  .tb td{border:0;padding:3px 14px}
+  .tb td:nth-child(2)::before{content:"Образцы: ";color:var(--mut);font-weight:600}
+  .tb td:nth-child(3)::before{content:"GoRix v1: ";color:var(--mut);font-weight:600}
+}
+.two{display:grid;grid-template-columns:1fr;gap:16px;margin-top:16px}
+@media (min-width:860px){.two{grid-template-columns:1fr 1fr}}
+.box{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 18px;min-width:0}
+.box h3{margin:0 0 6px;font-size:16px}
+.box ul{margin:0;padding-left:20px}.box li{margin:5px 0}
+.map{font-size:12.5px;color:var(--mut);margin-top:10px;line-height:1.6}
+/* сетка телефонов */
+.phones{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,390px),390px));gap:44px 32px;justify-content:center;margin-top:20px}
+figure{margin:0;min-width:0;display:flex;flex-direction:column;align-items:center}
+figcaption{width:100%;max-width:390px;margin-top:22px;font-size:13.5px;line-height:1.45}
+figcaption h3{font-size:16px;margin:0 0 2px}
+figcaption .no{color:var(--mut);font-size:12.5px;margin:0 0 6px}
+figcaption p{margin:3px 0}
+
+/* ---------- телефон: фиксированные цвета палитры A ---------- */
+.ph{width:min(390px,100%);height:844px;border-radius:54px;position:relative;overflow:hidden;display:flex;flex-direction:column;
+  background:var(--bg);color:var(--ink);font-family:Manrope,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:15px;line-height:1.35;
+  box-shadow:0 0 0 7px #0C0D0F,0 0 0 8px #3A3C42,0 40px 70px -30px rgba(0,0,0,.55);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.ph-d{--bg:#26282C;--surf:#303237;--surf2:#3A3C42;--ink:#EEEFF1;--mut:#B3B6BE;--acc:#E2C15E;--on:#1C1A12;--edge:transparent;--acct:#E2C15E;--bd:rgba(255,255,255,.07);--track:rgba(255,255,255,.10);
+  --nav:#3A3C42;--navm:#B3B6BE;--navi:#EEEFF1;--map:#2C2E33;--street:#383A40;
+  --lav:#C9C1EC;--lavT:#2A2452;--lavB:#C9C1EC;--mint:#B6DCC6;--mintT:#173A28;--mintB:#B6DCC6;--but:#E8DCA0;--butT:#3A300E;--butB:#E8DCA0;--pch:#EDC6AC;--pchT:#4A2512;--pchB:#EDC6AC;
+  --okF:#1C2E23;--okT:#86D3A0;--infF:#182A2E;--infT:#86C9D4;--wrF:#33281C;--wrT:#E8B67F;--bdF:#3A2122;--bdT:#F09A90;--neF:#3A3C42;--neT:#B9BCC4}
+.ph-l{--bg:#D6D7D1;--surf:#E3E4DE;--surf2:#CDCEC8;--ink:#17181B;--mut:#42454B;--acc:#E2C15E;--on:#1C1A12;--edge:#7A6418;--acct:#6E5A12;--bd:rgba(20,21,24,.08);--track:rgba(20,21,24,.09);
+  --nav:#303237;--navm:#B3B6BE;--navi:#EEEFF1;--map:#CDCEC8;--street:#BFC0BA;
+  --lav:#DDD7F4;--lavT:#3A2F78;--lavB:#6E61B8;--mint:#CFE8D9;--mintT:#1E5236;--mintB:#3E8A60;--but:#F1E7B8;--butT:#5A4708;--butB:#8F7514;--pch:#F5D9C6;--pchT:#6E3416;--pchB:#B0623A;
+  --okF:#DCEBDF;--okT:#1B6034;--infF:#D8EAED;--infT:#0E5866;--wrF:#F2E2CC;--wrT:#824306;--bdF:#F4DAD6;--bdT:#9A2C22;--neF:#CDCEC8;--neT:#3E4147;
+  box-shadow:0 0 0 7px #0C0D0F,0 0 0 8px #3A3C42,0 40px 70px -30px rgba(0,0,0,.35)}
+.ph *{box-sizing:border-box}
+.i{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.i.s16{width:16px;height:16px}.i.s18{width:18px;height:18px}.i.s22{width:22px;height:22px}
+/* статус-бар */
+.sb{flex:none;height:54px;display:flex;align-items:center;justify-content:space-between;padding:6px 30px 0 34px;font-size:16px;font-weight:700;position:relative}
+.sb::after{content:"";position:absolute;left:50%;top:11px;width:122px;height:35px;margin-left:-61px;border-radius:20px;background:#050506}
+.sb svg{width:66px;height:13px;fill:currentColor}
+.hb{position:absolute;left:50%;bottom:8px;width:134px;height:5px;margin-left:-67px;border-radius:3px;background:var(--ink);opacity:.85;z-index:9}
+/* общие */
+.scr{flex:1;min-height:0;display:flex;flex-direction:column;gap:18px;padding:4px 16px 0;overflow:hidden}
+.row{display:flex;align-items:center;gap:12px;min-width:0}
+.grow{flex:1;min-width:0}
+.ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cb{flex:none;width:40px;height:40px;border-radius:50%;background:var(--surf);color:var(--ink);display:grid;place-items:center;position:relative}
+.cb.sm{width:36px;height:36px;background:var(--surf2)}
+.cb .dot{position:absolute;top:9px;right:10px;width:8px;height:8px;border-radius:50%;background:var(--acc);box-shadow:0 0 0 2px var(--surf)}
+.av{flex:none;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:800;letter-spacing:.02em}
+.av.lg{width:46px;height:46px;font-size:15px}
+.m13{font-size:13px;color:var(--mut);line-height:1.3}
+.t15{font-size:15px;font-weight:700;line-height:1.3}
+.cap{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+.lnk{color:var(--acct);font-weight:600}
+/* плитки */
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;flex:none}
+.tile{border-radius:22px;padding:14px 14px 14px 16px;min-height:104px;display:flex;flex-direction:column;position:relative;min-width:0}
+.tile .tl{font-size:13px;font-weight:700;line-height:1.25;padding-right:34px;min-height:32px}
+.tile .tic{position:absolute;top:12px;right:12px;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:rgba(0,0,0,.09)}
+.tile .num{font-size:30px;font-weight:800;line-height:1.05;letter-spacing:-.02em;margin-top:auto;white-space:nowrap}
+.tile .num small{font-size:15px;font-weight:700;letter-spacing:0;opacity:.75;margin-left:3px}
+.tile .meta{font-size:12px;font-weight:600;opacity:.82;margin-top:3px;display:flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden}
+.tile .ex{flex:none;width:15px;height:15px;border-radius:50%;display:inline-grid;place-items:center;font-size:10px;font-weight:800;opacity:1}
+.lav{background:var(--lav);color:var(--lavT)}.lav .ex{background:var(--lavT);color:var(--lav)}
+.mint{background:var(--mint);color:var(--mintT)}.mint .ex{background:var(--mintT);color:var(--mint)}
+.but{background:var(--but);color:var(--butT)}.but .ex{background:var(--butT);color:var(--but)}
+.pch{background:var(--pch);color:var(--pchT)}.pch .ex{background:var(--pchT);color:var(--pch)}
+/* группы и строки */
+.gh{display:flex;justify-content:space-between;align-items:baseline;padding:0 4px;margin-bottom:-10px;flex:none}
+.gh .lnk{font-size:13px}
+.grp{flex:none;background:var(--surf);border-radius:22px;overflow:hidden}
+.r{min-height:62px;display:flex;align-items:center;gap:12px;padding:10px 14px;position:relative;min-width:0}
+.r+.r::before{content:"";position:absolute;top:0;left:72px;right:0;height:1px;background:var(--bd)}
+.tm{flex:none;width:46px;font-size:15px;font-weight:800;letter-spacing:-.01em}
+.tm small{display:block;font-size:12px;font-weight:600;color:var(--mut);letter-spacing:0}
+.sp{flex:none;height:24px;display:inline-flex;align-items:center;gap:4px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+.sp.ok{background:var(--okF);color:var(--okT)}.sp.info{background:var(--infF);color:var(--infT)}.sp.warn{background:var(--wrF);color:var(--wrT)}.sp.bad{background:var(--bdF);color:var(--bdT)}.sp.neu{background:var(--neF);color:var(--neT)}
+.ob{flex:none;height:32px;padding:0 14px;border-radius:999px;border:1.5px solid var(--mut);font-size:13px;font-weight:700;display:inline-flex;align-items:center;color:var(--ink)}
+/* прогресс */
+.bar{height:6px;border-radius:999px;background:var(--track);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:999px}
+.chain{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.chain .seg{height:6px;border-radius:999px;background:var(--track);overflow:hidden}
+.chain .seg i{display:block;height:100%;border-radius:999px}
+.chain .lb{font-size:12px;font-weight:600;color:var(--mut);margin-top:6px;white-space:nowrap}
+.chain .lb.on{color:var(--ink);font-weight:700}
+/* кнопки */
+.btn{height:40px;border-radius:999px;background:var(--acc);color:var(--on);font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:inset 0 0 0 1.5px var(--edge);white-space:nowrap}
+.btn.h44{height:44px}
+/* «Дальше» */
+.now{background:var(--surf);border-radius:24px;padding:14px 16px 16px;box-shadow:inset 0 0 0 1px var(--acc);display:flex;flex-direction:column;gap:4px}
+.ph-l .now{box-shadow:inset 0 0 0 1px var(--edge)}
+.now .hd{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.now .nm{font-size:18px;font-weight:800;letter-spacing:-.01em;margin-top:2px}
+/* низ с меню */
+.dock{position:absolute;left:0;right:0;bottom:0;padding:22px 16px 28px;background:linear-gradient(to bottom,transparent 0,var(--bg) 26px);display:flex;flex-direction:column;gap:12px;z-index:5}
+.nav{height:64px;border-radius:32px;background:var(--nav);display:flex;align-items:center;padding:0 6px;box-shadow:0 12px 30px -12px rgba(0,0,0,.45)}
+.ni{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--navm);font-size:12px;font-weight:600;line-height:14px;position:relative}
+.ni .ic{width:40px;height:38px;border-radius:50%;display:grid;place-items:center}
+.ni.on{color:var(--navi);font-weight:800}
+.ni.on .ic{width:38px;height:38px;background:var(--acc);color:var(--on)}
+.ni .bdg{position:absolute;top:0;left:calc(50% + 6px);min-width:17px;height:17px;border-radius:9px;background:var(--pch);color:var(--pchT);font-size:11px;font-weight:800;display:grid;place-items:center;padding:0 4px;box-shadow:0 0 0 2px var(--nav)}
+.ph-l .ni .bdg{background:#EDC6AC;color:#4A2512}
+/* шапка объекта */
+.strip{display:flex;gap:6px;overflow:hidden;-webkit-mask-image:linear-gradient(to right,#000 82%,transparent);mask-image:linear-gradient(to right,#000 82%,transparent);flex:none}
+.strip span{flex:none;height:32px;padding:0 13px;border-radius:999px;font-size:13px;font-weight:700;color:var(--mut);display:inline-flex;align-items:center;gap:5px;background:var(--surf)}
+.strip span b{font-weight:700;opacity:.8}
+.strip span.on{background:var(--ink);color:var(--bg)}
+.acc-n{background:var(--wrF);border-radius:22px;padding:14px 16px;display:flex;gap:12px;align-items:flex-start;flex:none}
+.acc-n .k{flex:none;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:rgba(232,182,127,.14);color:var(--wrT)}
+.ph-l .acc-n .k{background:rgba(130,67,6,.1)}
+.msb{position:absolute;left:0;right:0;bottom:0;padding:30px 16px 34px;background:linear-gradient(to bottom,transparent 0,var(--bg) 28px);z-index:5;display:flex;flex-direction:column;gap:8px}
+/* план */
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;flex:none}
+.day{height:62px;border-radius:999px;background:var(--surf);display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
+.day small{font-size:12px;font-weight:600;color:var(--mut);line-height:15px}
+.day b{font-size:17px;font-weight:800;line-height:22px}
+.day i{position:absolute;bottom:7px;width:4px;height:4px;border-radius:50%;background:var(--mut)}
+.day.sel{background:var(--acc);color:var(--on);box-shadow:inset 0 0 0 1.5px var(--edge)}
+.day.sel small{color:var(--on);opacity:.8}.day.sel i{background:var(--on)}
+.mapc{flex:none;height:128px;border-radius:22px;background:var(--map);position:relative;overflow:hidden}
+.mapc svg{position:absolute;inset:0;width:100%;height:100%}
+.mapc .ov{position:absolute;left:10px;top:8px;right:56px}
+.mapc .cb{position:absolute;right:10px;top:10px;width:36px;height:36px;background:var(--surf)}
+.nowl{display:flex;align-items:center;gap:8px;padding:0 14px 0 14px;height:14px;position:relative}
+.nowl b{flex:none;font-size:12px;font-weight:800;color:var(--acct);width:46px}
+.nowl i{flex:1;height:2px;border-radius:2px;background:var(--acc);position:relative}
+.nowl i::before{content:"";position:absolute;left:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--acc)}
+.ph-l .nowl i,.ph-l .nowl i::before{background:var(--edge)}
+.mini{display:flex;align-items:center;gap:8px;margin-top:6px}
+.mini .bar{flex:1;height:4px}
+.mini span{font-size:12px;font-weight:700;color:var(--mut)}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+ <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/></symbol>
+ <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
+ <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 19.5c.6-3 3-4.8 6-4.8s5.4 1.8 6 4.8M16 4.7a3.2 3.2 0 0 1 0 6.2M18 14.6c1.6.6 2.7 2.3 3 4.6"/></symbol>
+ <symbol id="i-wallet" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="3.5"/><path d="M3 10.5h18M15.5 15h2.5"/></symbol>
+ <symbol id="i-lead" viewBox="0 0 24 24"><path d="M4 13.5 6.5 6h11l2.5 7.5V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18zM4 13.5h4.5l1 2h5l1-2H20"/></symbol>
+ <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></symbol>
+ <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+ <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0"/></symbol>
+ <symbol id="i-back" viewBox="0 0 24 24"><path d="M14.5 5.5 8 12l6.5 6.5"/></symbol>
+ <symbol id="i-more" viewBox="0 0 24 24"><path d="M5.5 12h.01M12 12h.01M18.5 12h.01" stroke-width="3"/></symbol>
+ <symbol id="i-phone" viewBox="0 0 24 24"><path d="M6.6 3.5h2.8l1.4 4.2-2 1.4a12 12 0 0 0 6.1 6.1l1.4-2 4.2 1.4v2.8a2 2 0 0 1-2.2 2A17 17 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2z"/></symbol>
+ <symbol id="i-msg" viewBox="0 0 24 24"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 3.5V17A2.5 2.5 0 0 1 4 14.5z"/></symbol>
+ <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12 19 4M16 7l2.5 2.5M14 9l2 2"/></symbol>
+ <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9.5 6 6 6-6"/></symbol>
+ <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M7 17 17 7M9 7h8v8"/></symbol>
+ <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 2"/></symbol>
+ <symbol id="i-doc" viewBox="0 0 24 24"><path d="M7 3.5h7l4 4V20a.5.5 0 0 1-.5.5h-10.5a.5.5 0 0 1-.5-.5V4a.5.5 0 0 1 .5-.5zM13.5 3.5V8H18M9.5 12.5h5M9.5 16h5"/></symbol>
+ <symbol id="i-dollar" viewBox="0 0 24 24"><path d="M12 3.5v17M16 7.5c-.8-1.3-2.2-2-4-2-2.3 0-4 1.2-4 3s1.6 2.5 4 3 4 1.3 4 3.2-1.8 3.1-4 3.1c-2 0-3.5-.8-4.3-2.2"/></symbol>
+ <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5 10 17.5 19 7"/></symbol>
+ <symbol id="i-expand" viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></symbol>
+ <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8.2 18H16a3 3 0 0 0 0-6H8a3 3 0 0 1 0-6h7.8"/></symbol>
+ <symbol id="sb" viewBox="0 0 66 13"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="6" width="3" height="6" rx="1"/><rect x="10" y="3.5" width="3" height="8.5" rx="1"/><rect x="15" y="1" width="3" height="11" rx="1"/><path d="M29 3.2a9 9 0 0 1 11.6 0l-1.4 1.6a7 7 0 0 0-8.8 0zM31.4 6a5.4 5.4 0 0 1 6.8 0l-1.5 1.6a3.2 3.2 0 0 0-3.8 0zM34.8 11.5l-1.9-2.1a2.6 2.6 0 0 1 3.8 0z"/><rect x="45" y="1" width="18" height="11" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.1" opacity=".5"/><rect x="47" y="3" width="13" height="7" rx="1.8"/><rect x="64" y="4.5" width="1.6" height="4" rx=".8" opacity=".5"/></symbol>
+</svg>
+
+<div class="wrap">
+<h1>Визуальный язык GoRix</h1>
+<p class="lead">Разбор 12 образцов основателя в числах и четыре цветных макета на данных демо. Структура экранов — по BUILD-SPEC и каркасам v2, цвета — палитра A (акцент #E2C15E, графит и светло-серый фон, пастели). Шрифт Manrope. Код приложения не менялся.</p>
+<p class="src"><b>Номера образцов:</b> №1 06c3f4d9 (пастельные плитки Users) · №2 dbed7876 (Stay Productive) · №3 09d35864 (жёлтый трекер привычек) · №4 33c21da8 (тёмное с жёлтым: календарь, плитки, карта — главный) · №5 de146c8a (Workouts) · №6 b2c84531 (жёлтый календарь записей) · №7 c5d0520e (курсы, меню-таблетка) · №8 11a1f6f9 (Hello, Mary) · №9 04aa8245 (Planning) · №10 53381eac (Welcome Home) · №11 2e3c5bc8 (три экрана задач) · №12 bd551a32 (Hi, Anowar: пилюли дней).</p>
+
+<h2>Визуальный язык числами</h2>
+<p class="src">Снято на глаз со снимков и пересчитано в pt при ширине экрана 390. Метка <span class="tb"><span class="dev" style="margin:0">≠ спец</span></span> — число расходится с BUILD-SPEC, предлагаю поменять токен.</p>
+<table class="tb">
+<thead><tr><th>Элемент</th><th>В образцах</th><th>GoRix v1</th></tr></thead>
+<tbody>
+<tr><td>Поля экрана</td><td>18–20 по бокам (№4, №12), сверху от статус-бара 8–12</td><td>16 по бокам (space 4); первый блок через 4 от статус-бара</td></tr>
+<tr><td>Ритм отступов</td><td>между блоками 20–28, внутри карточки 12–16, между плитками 8–10</td><td>между блоками 20, внутри 14–16, плитки через 12</td></tr>
+<tr><td>Радиусы</td><td>карточка 20–24, плитка 16–24, вложенная ячейка 10–12, всё скруглено одинаково (№3, №1, №7)</td><td>карточка и плитка 22 (radius.card), «Дальше» 24, ячейки 14, кнопки и чипы — капсула</td></tr>
+<tr><td>Плитки</td><td>сетка 2×2, 1+2 или 1+3; 105–120 высотой; значок в круге 26–30 в углу; одна плитка залита акцентом (№4, №1)</td><td>2×2, 173×110, круг 28 со значком справа сверху, пастель вместо одной жёлтой <span class="dev">≠ спец: от 88</span></td></tr>
+<tr><td>Крупные цифры</td><td>24–34, 600–700; единица рядом в 2 раза мельче и бледнее («7.4 km», №4)</td><td>30, 800, трекинг −2 %; единица 15 bold с прозрачностью 75 %</td></tr>
+<tr><td>Заголовки</td><td>экран 28–40 («Workouts» 34 bold, «Planning» 40 тонкий); раздел 17–19 semibold</td><td>экран 28–30, 800; раздел — 12 прописными (группы) или 18 (имя в «Дальше»)</td></tr>
+<tr><td>Подписи</td><td>11–13, обычный регистр, 400–500, серые; на плитке — над цифрой (№4)</td><td>плитка 13 bold обычным регистром <span class="dev">≠ спец: прописные</span>; группа 12 прописными, трекинг +0,06 em; пояснение 12–13</td></tr>
+<tr><td>Пилюли дней</td><td>капсула 40–46 × 56–76; выбранная залита жёлтым; день 11–12 сверху, число 16–18; точка 4 (№4, №6, №12)</td><td>7 в ряд, ≈ 46 × 62, капсула, 12 / 17 bold, точка 4 внизу <span class="dev">≠ спец: 52</span></td></tr>
+<tr><td>Меню-таблетка</td><td>капсула 56–64, отступ от краёв 16–20; активный круг 40–48 залит; значки 22 без слов (№12, №7, №11)</td><td>64, радиус 32, круг 38 под значком 22; слово 12 оставлено (правило «голый значок на солнце не узнают»)</td></tr>
+<tr><td>Круглые кнопки</td><td>36–44, заливка на тон светлее фона, значок 18–20 линией 1,5–2 (№3, №5, №9)</td><td>40 на surf (в шапке), 36 на surf2 (тел/смс), значок 20, линия 1,75, зона 44 <span class="dev">≠ спец: без заливки</span></td></tr>
+<tr><td>Полосы прогресса</td><td>капсула 4–8 на треке +10 % светлоты; толстая 24 со штриховкой (№9); тонкая 2–3 с % над бегунком (№12)</td><td>6 капсула, пастель по треку 10 %; цепочка «Смета · Депозит · Работа · Счёт» из 4 сегментов; % 12–13 bold справа</td></tr>
+<tr><td>Аватары</td><td>36–44 круг, фото с кольцом 2 (№3, №12)</td><td>40 (в шапке объекта 46), инициалы 13–15 bold на пастели</td></tr>
+<tr><td>Кнопки и чипы</td><td>кнопка 40–48 капсула; чип 22–26, 12 (№12 «High», «Progress»)</td><td>кнопка 40, закреплённая внизу 44; чип статуса 24, значок + слово 12</td></tr>
+<tr><td>Слои цвета</td><td>фон → карточка → ячейка на +4–6 % светлоты, без рамок и теней; одна заливка акцентом на экран (№4, №5)</td><td>#26282C → #303237 → #3A3C42; светлая #D6D7D1 → #E3E4DE → #CDCEC8</td></tr>
+<tr><td>Шрифт</td><td>геометрический гротеск (Poppins-типа), 400–700, цифры моноширинные</td><td>Manrope 500–800, tabular-nums</td></tr>
+</tbody>
+</table>
+
+<div class="two">
+<div class="box"><h3>Что делает образцы «дорогими»</h3><ul>
+<li><b>Контраст масштаба:</b> цифра 30 рядом с подписью 12–13: разница в 2,5 раза, а не 15 против 17.</li>
+<li><b>Один крупный радиус везде</b> (22–24) и капсулы для всего мелкого: нет острых углов и разнобоя.</li>
+<li><b>Слои тоном, без рамок и теней:</b> карточка на 4–6 % светлее фона, и этого хватает.</li>
+<li><b>Один яркий цвет на экран:</b> жёлтым выделено только выбранное (день, вкладка, главная кнопка), всё остальное серое или пастельное.</li>
+<li><b>Воздух:</b> в плитке 2–3 строки текста, поля 16–20, между блоками 20+. Пустое место тоже работает на вид.</li>
+<li><b>Тонкие линейные значки</b> одной толщины 1,5–2 в одинаковых кругах.</li>
+</ul></div>
+<div class="box"><h3>Что НЕ берём (не для CRM в поле)</h3><ul>
+<li>Тонкие заголовки 300 на 40 pt (№9, №8): на солнце не читаются.</li>
+<li>Подписи 9–11 pt и серый текст на сером без контраста: у нас минимум 12 и 4,5:1.</li>
+<li>Меню из одних значков без слов (№4, №12), квадратную активную плитку (№4).</li>
+<li>Неон-лайм, светящиеся градиентные рамки (№10), цветные полосы слева у карточек (№2).</li>
+<li>Тепловую сетку на 365 клеток (№3), фото-аватары, настоящие карты-тайлы как фон, наклонённые мокапы.</li>
+<li>FAB поверх карточек (№2, №6): «＋» у нас в шапке.</li>
+</ul></div>
+</div>
+
+<h2>Макеты, 390 × 844</h2>
+<div class="phones">
+
+<!-- ======================= 1. ГЛАВНАЯ, ТЁМНАЯ ======================= -->
+<figure>
+<div class="ph ph-d" role="img" aria-label="Главная, тёмная тема">
+ <div class="sb"><span>8:20</span><svg><use href="#sb"/></svg></div>
+ <div class="scr">
+  <div class="row">
+   <span class="av" style="background:#E8DCA0;color:#3A300E">AP</span>
+   <div class="grow"><div class="m13 ell" style="font-weight:600">Пт, 20 ноября</div></div>
+   <span class="cb"><svg class="i"><use href="#i-search"/></svg></span>
+   <span class="cb"><svg class="i"><use href="#i-plus"/></svg></span>
+   <span class="cb"><svg class="i"><use href="#i-bell"/></svg><i class="dot"></i></span>
+  </div>
+  <div style="font-size:28px;font-weight:800;letter-spacing:-.02em;line-height:1.1;margin-top:-6px">Доброе утро, Алекс</div>
+  <div class="tiles">
+   <div class="tile pch"><div class="tl">Лиды без ответа</div><span class="tic"><svg class="i s16"><use href="#i-lead"/></svg></span><div class="num">2</div><div class="meta"><span class="ex">!</span>4 мин ждёт</div></div>
+   <div class="tile lav"><div class="tl">Сметы ждут ответа</div><span class="tic"><svg class="i s16"><use href="#i-doc"/></svg></span><div class="num">3</div><div class="meta">до 6 дней</div></div>
+   <div class="tile but"><div class="tl">Должны</div><span class="tic"><svg class="i s16"><use href="#i-dollar"/></svg></span><div class="num">$2,800</div><div class="meta"><span class="ex">!</span>1 просрочен</div></div>
+   <div class="tile mint"><div class="tl">Получено сегодня</div><span class="tic"><svg class="i s16"><use href="#i-check"/></svg></span><div class="num">$1,020</div><div class="meta">2 оплаты</div></div>
+  </div>
+  <div class="gh"><span class="cap">Сегодня у бригад</span><span class="lnk">План ›</span></div>
+  <div class="grp">
+   <div class="r"><span class="tm">7:30</span><div class="grow"><div class="t15 ell">James O'Connor</div><div class="m13 ell">Panel upgrade · Valley El.</div></div><span class="sp warn">! Опаздывает</span></div>
+   <div class="r"><span class="tm">9:00</span><div class="grow"><div class="t15 ell">Maria Gonzalez</div><div class="m13 ell">Deep clean · Ivan</div></div><span class="sp info">◷ В работе</span></div>
+   <div class="r"><span class="tm">13:30</span><div class="grow"><div class="t15 ell">David Kim</div><div class="m13 ell">Kitchen faucet · Alex</div></div><span class="sp neu">◷ Ждёт</span></div>
+   <div class="r"><span class="tm">15:00</span><div class="grow"><div class="t15 ell">Emily Park</div><div class="m13 ell">Осмотр · без мастера</div></div><span class="ob">Назначить</span></div>
+  </div>
+ </div>
+ <div class="dock">
+  <div class="now">
+   <div class="hd"><span class="cap">Дальше · 8:30–12:30</span><span class="lnk" style="font-size:12px;font-weight:700">через 10 мин</span></div>
+   <div class="nm">Sarah Mitchell</div>
+   <div class="m13 ell">Bathroom remodel · Alex · <span class="lnk">1420 Oak Grove Ave, Pasadena ›</span></div>
+   <div class="mini"><div class="bar"><i style="width:62%;background:var(--lavB)"></i></div><span>работа 62%</span></div>
+   <div class="btn" style="margin-top:8px"><svg class="i s18"><use href="#i-route"/></svg>В пути</div>
+  </div>
+  <nav class="nav">
+   <span class="ni on"><span class="ic"><svg class="i s22"><use href="#i-home"/></svg></span>Главная</span>
+   <span class="ni"><span class="ic"><svg class="i s22"><use href="#i-cal"/></svg></span>План</span>
+   <span class="ni"><span class="ic"><svg class="i s22"><use href="#i-users"/></svg></span>Клиенты</span>
+   <span class="ni"><span class="ic"><svg class="i s22"><use href="#i-wallet"/></svg></span>Деньги</span>
+   <span class="ni"><span class="ic"><svg class="i s22"><use href="#i-lead"/></svg></span>Лиды<span class="bdg">2</span></span>
+  </nav>
+ </div>
+ <i class="hb"></i>
+</div>
+<figcaption><h3>1 · Главная — тёмная</h3><p class="no">Образцы: №4, №3, №12, №1</p>
+<p><b>Взято:</b> пастельные плитки 2×2 с цифрой 30 и подписью обычным регистром, круг со значком в углу (№4 «Distance / Steps», №1); крупное приветствие 28, как «Hello, Mary» (№8).</p>
+<p><b>Взято:</b> круглые кнопки 40 в шапке (№3), меню-таблетка 64 с залитым кругом (№12, №7); жёлтым залиты только «В пути» и активная вкладка.</p></figcaption>
+</figure>
+
+<!-- ======================= 2. КЛИЕНТ, ТЁМНАЯ ======================= -->
+<figure>
+<div class="ph ph-d" role="img" aria-label="Карточка клиента Sarah Mitchell, обзор, тёмная тема">
+ <div class="sb"><span>8:20</span><svg><use href="#sb"/></svg></div>
+ <div class="scr" style="gap:16px">
+  <div class="row" style="justify-content:space-between">
+   <span class="cb"><svg class="i"><use href="#i-back"/></svg></span>
+   <span class="row" style="gap:8px"><span class="cb"><svg class="i"><use href="#i-plus"/></svg></span><span class="cb"><svg class="i"><use href="#i-more"/></svg></span></span>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:10px">
+   <div class="row">
+    <span class="av lg" style="background:#C9C1EC;color:#2A2452">SM</span>
+    <div class="grow"><div class="ell" style="font-size:22px;font-weight:800;letter-spacing:-.015em;line-height:1.2">Sarah Mitchell</div>
+     <div class="row" style="gap:6px;margin-top:3px"><span class="sp ok" style="height:22px">✓ Активный</span><span class="m13 ell">VIP · Regular</span></div></div>
+    <span class="cb" style="background:transparent;width:36px"><svg class="i"><use href="#i-down"/></svg></span>
+   </div>
+   <div class="row">
+    <span class="grow m13 lnk ell" style="font-size:13.5px">1420 Oak Grove Ave, Pasadena ›</span>
+    <span class="cb sm"><svg class="i s18"><use href="#i-phone"/></svg></span>
+    <span class="cb sm"><svg class="i s18"><use href="#i-msg"/></svg></span>
+   </div>
+  </div>
+  <div class="strip"><span class="on">Обзор</span><span>Работы <b>2</b></span><span>Деньги</span><span>Объекты <b>2</b></span><span>Журнал</span></div>
+  <div class="now" style="gap:6px">
+   <div class="hd"><span class="cap">Сейчас · идёт работа</span><span class="sp info">◷ 8:30–12:30</span></div>
+   <div class="row" style="gap:8px"><div class="grow"><div class="t15" style="font-size:17px;font-weight:800">Bathroom remodel</div><div class="m13">Выезд сегодня · Alex Petrov</div></div><span style="font-size:22px;font-weight:800;letter-spacing:-.02em">62<small style="font-size:13px;color:#B3B6BE">%</small></span></div>
+   <div class="chain" style="margin-top:6px">
+    <div><div class="seg"><i style="width:100%;background:var(--mintB)"></i></div><div class="lb">✓ Смета</div></div>
+    <div><div class="seg"><i style="width:100%;background:var(--mintB)"></i></div><div class="lb">✓ Депозит</div></div>
+    <div><div class="seg"><i style="width:62%;background:var(--lavB)"></i></div><div class="lb on">Работа</div></div>
+    <div><div class="seg"></div><div class="lb">Счёт</div></div>
+   </div>
+  </div>
+  <div class="tiles">
+   <div class="tile mint" style="min-height:104px"><div class="tl">Долг</div><span class="tic"><svg class="i s16"><use href="#i-check"/></svg></span><div class="num">$0</div><div class="meta">всё оплачено</div></div>
+   <div class="tile lav" style="min-height:104px"><div class="tl">Оплачено всего</div><span class="tic"><svg class="i s16"><use href="#i-dollar"/></svg></span><div class="num">$582</div><div class="meta">2 счёта · с 2026</div></div>
+   <div class="tile but" style="min-height:104px"><div class="tl">Следующий выезд</div><span class="tic"><svg class="i s16"><use href="#i-cal"/></svg></span><div class="num" style="font-size:24px">Завтра <small>9:00</small></div><div class="meta">итоговый обход</div></div>
+   <div class="tile pch" style="min-height:104px"><div class="tl">Последний контакт</div><span class="tic"><svg class="i s16"><use href="#i-phone"/></svg></span><div class="num">2 <small>дня</small></div><div class="meta">звонок · 3 мин</div></div>
+  </div>
+  <div class="acc-n"><span class="k"><svg class="i s18"><use href="#i-key"/></svg></span><div class="grow"><div class="cap" style="color:var(--wrT)">Доступ · Oak Grove</div><div style="font-size:15px;margin-top:3px">Код ворот <b style="font-size:17px">4512</b>. Маленькая собака во дворе — звонить перед входом.</div></div></div>
+ </div>
+ <div class="msb">
+  <div class="m13 ell" style="text-align:center">Смета одобрена: выставлено $342 из $3,420</div>
+  <div class="row" style="gap:10px"><span class="cb" style="width:44px;height:44px"><svg class="i"><use href="#i-plus"/></svg></span><div class="btn h44 grow">Выставить счёт · $3,078</div></div>
+ </div>
+ <i class="hb"></i>
+</div>
+<figcaption><h3>2 · Клиент — обзор, шапка свёрнута</h3><p class="no">Образцы: №1, №9, №12, №4</p>
+<p><b>Взято:</b> круглые «‹ ＋ ⋯» 40 и тел/смс 36 (№9, №12), имя 22 с чипом статуса 24; плитки клиента пастелью, как «Users» в №1.</p>
+<p><b>Взято:</b> прогресс работы — цепочка «Смета · Депозит · Работа · Счёт» из 4 капсул 6 и крупный % (№12, №9); одна жёлтая кнопка внизу.</p></figcaption>
+</figure>
+
+<!-- ======================= 3. ПЛАН, ТЁМНАЯ ======================= -->
+<figure>
+<div class="ph ph-d" role="img" aria-label="План на день, тёмная тема">
+ <div class="sb"><span>8:20</span><svg><use href="#sb"/></svg></div>
+ <div class="scr" style="gap:16px">
+  <div class="row">
+   <div class="grow"><div class="row" style="gap:4px"><span style="font-size:30px;font-weight:800;letter-spacing:-.02em;line-height:1.1">Ноябрь</span><svg class="i s22" style="margin-top:4px"><use href="#i-down"/></svg></div>
+    <div class="m13" style="font-weight:600;margin-top:2px">Пт, 20 · 6 выездов</div></div>
+   <span class="ob" style="height:40px;border-color:#80838C">Сегодня</span>
+   <span class="cb"><svg class="i"><use href="#i-search"/></svg></span>
+   <span class="cb"><svg class="i"><use href="#i-plus"/></svg></span>
+  </div>
+  <div class="days">
+   <div class="day"><small>Пн</small><b>16</b><i></i></div>
+   <div class="day"><small>Вт</small><b>17</b><i></i></div>
+   <div class="day"><small>Ср</small><b>18</b></div>
+   <div class="day"><small>Чт</small><b>19</b><i></i></div>
+   <div class="day sel"><small>Пт</small><b>20</b><i></i></div>
+   <div class="day"><small>Сб</small><b>21</b></div>
+   <div class="day"><small>Вс</small><b>22</b></div>
+  </div>
+  <div class="mapc">
+   <svg viewBox="0 0 358 128" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <g stroke="var(--street)" stroke-width="7" fill="none" stroke-linecap="round">
+     <path d="M-10 64 H370M-10 100 H370M40 -10 V140M130 -10 V140M200 -10 V140M318 -10 V140"/>
+    </g>
+    <g stroke="var(--street)" stroke-width="2" fill="none" opacity=".8">
+     <path d="M-10 30 H370M-10 122 H370M86 -10 V140M165 -10 V140M270 -10 V140M230 -10 L360 140"/>
+    </g>
+    <path d="M40 100 L130 100 L130 64 L270 64 L270 100 L318 100 L318 64" fill="none" stroke="#E2C15E" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    <g font-family="Manrope,system-ui,sans-serif" font-size="11" font-weight="800" text-anchor="middle">
+     <circle cx="40" cy="100" r="10" fill="#3A3C42" stroke="#26282C" stroke-width="2"/><text x="40" y="104" fill="#EEEFF1">1</text>
+     <circle cx="130" cy="100" r="12" fill="#E2C15E" stroke="#26282C" stroke-width="2"/><text x="130" y="104" fill="#1C1A12">2</text>
+     <circle cx="200" cy="64" r="10" fill="#3A3C42" stroke="#26282C" stroke-width="2"/><text x="200" y="68" fill="#EEEFF1">3</text>
+     <circle cx="270" cy="64" r="10" fill="#3A3C42" stroke="#26282C" stroke-width="2"/><text x="270" y="68" fill="#EEEFF1">4</text>
+     <circle cx="270" cy="100" r="10" fill="#3A3C42" stroke="#26282C" stroke-width="2"/><text x="270" y="104" fill="#EEEFF1">5</text>
+     <circle cx="318" cy="64" r="10" fill="#3A3C42" stroke="#26282C" stroke-width="2"/><text x="318" y="68" fill="#EEEFF1">6</text>
+    </g>
+   </svg>
+   <div class="ov"><span style="display:inline-block;background:rgba(38,40,44,.9);border-radius:12px;padding:5px 10px"><span class="t15" style="font-size:14px">Маршрут дня</span><span class="m13" style="display:block;font-size:12px">6 точек · 41 mi · 1 ч 50 в пути</span></span></div>
+   <span class="cb"><svg class="i s18"><use href="#i-expand"/></svg></span>
+  </div>
+  <div class="grp">
+   <div class="r"><span class="tm">7:30<small>2 ч</small></span><div class="grow"><div class="t15 ell">James O'Connor</div><div class="m13 ell">Panel upgrade 200A · Valley El.</div></div><span class="sp warn">! Опаздывает</span></div>
+   <div class="nowl"><b>8:20</b><i></i></div>
+   <div class="r" style="padding-top:6px"><span class="tm">8:30<small>4 ч</small></span><div class="grow"><div class="t15 ell">Sarah Mitchell</div><div class="m13 ell">Bathroom remodel · Alex</div><div class="mini"><div class="bar"><i style="width:62%;background:var(--lavB)"></i></div><span>62%</span></div></div><span class="sp neu">◷ Скоро</span></div>
+   <div class="r"><span class="tm">9:00<small>3 ч</small></span><div class="grow"><div class="t15 ell">Maria Gonzalez</div><div class="m13 ell">Deep clean after move-out · Ivan</div></div><span class="sp info">◷ В работе</span></div>
+   <div class="r"><span class="tm">13:30<small>1 ч</small></span><div class="grow"><div class="t15 ell">David Kim</div><div class="m13 ell">Kitchen faucet + disposal · Alex</div></div></div>
+   <div class="r"><span class="tm">15:00<small>1 ч</small></span><div class="grow"><div class="t15 ell">Emily Park</div><div class="m13 ell">Осмотр · без мастера</div></div><span class="ob">Назначить</span></div>
+   <div class="r"><span class="tm">16:00<small>2 ч</small></span><div class="grow"><div class="t15 ell">Linda Alvarez</div><div class="m13 ell">Drywall patch + paint · Alex</div></div></div>
+  </div>
+ </div>
+ <div class="dock" style="padding-top:36px">
+  <nav class="nav">
+   <span class="ni"><span class="ic"><svg class="i s22"><use href="#i-home"/></svg></span>Главная</span>
+   <span class="ni on"><span class="ic"><svg class="i s22"><use href="#i-cal"/></svg></span>План</span>
+   <span class="ni"><span class="ic"><svg class="i s22"><use href="#i-users"/></svg></span>Клиенты</span>
+   <span class="ni"><span class="ic"><svg class="i s22"><use href="#i-wallet"/></svg></span>Деньги</span>
+   <span class="ni"><span class="ic"><svg class="i s22"><use href="#i-lead"/></svg></span>Лиды<span class="bdg">2</span></span>
+  </nav>
+ </div>
+ <i class="hb"></i>
+</div>
+<figcaption><h3>3 · План — день</h3><p class="no">Образцы: №4, №6, №12, №8</p>
+<p><b>Взято:</b> пилюли дней 62 с жёлтым выбранным днём и точками (№4, №6, №12); месяц крупно 30 с «˅», как «Monday» в №8.</p>
+<p><b>Взято:</b> свёрнутая карта маршрута — жёлтая линия по тёмным кварталам, номера точек в кругах (№4); тонкая линия «сейчас 8:20» в ленте (№6). Карта — предложение: по «вид» раскрывается на весь экран.</p></figcaption>
+</figure>
+
+<!-- ======================= 4. ГЛАВНАЯ, СВЕТЛАЯ ======================= -->
+<figure>
+<div class="ph ph-l" role="img" aria-label="Главная, светлая тема">
+ <div class="sb"><span>8:20</span><svg><use href="#sb"/></svg></div>
+ <div class="scr">
+  <div class="row">
+   <span class="av" style="background:#F1E7B8;color:#5A4708">AP</span>
+   <div class="grow"><div class="m13 ell" style="font-weight:600">Пт, 20 ноября</div></div>
+   <span class="cb"><svg class="i"><use href="#i-search"/></svg></span>
+   <span class="cb"><svg class="i"><use href="#i-plus"/></svg></span>
+   <span class="cb"><svg class="i"><use href="#i-bell"/></svg><i class="dot" style="box-shadow:0 0 0 2px #E3E4DE,0 0 0 3px #7A6418"></i></span>
+  </div>
+  <div style="font-size:28px;font-weight:800;letter-spacing:-.02em;line-height:1.1;margin-top:-6px">Доброе утро, Алекс</div>
+  <div class="tiles">
+   <div class="tile pch"><div class="tl">Лиды без ответа</div><span class="tic"><svg class="i s16"><use href="#i-lead"/></svg></span><div class="num">2</div><div class="meta"><span class="ex">!</span>4 мин ждёт</div></div>
+   <div class="tile lav"><div class="tl">Сметы ждут ответа</div><span class="tic"><svg class="i s16"><use href="#i-doc"/></svg></span><div class="num">3</div><div class="meta">до 6 дней</div></div>
+   <div class="tile but"><div class="tl">Должны</div><span class="tic"><svg class="i s16"><use href="#i-dollar"/></svg></span><div class="num">$2,800</div><div class="meta"><span class="ex">!</span>1 просрочен</div></div>
+   <div class="tile mint"><div class="tl">Получено сегодня</div><span class="tic"><svg class="i s16"><use href="#i-check"/></svg></span><div class="num">$1,020</div><div class="meta">2 оплаты</div></div>
+  </div>
+  <div class="gh"><span class="cap">Сегодня у бригад</span><span class="lnk">План ›</span></div>
+  <div class="grp">
+   <div class="r"><span class="tm">7:30</span><div class="grow"><div class="t15 ell">James O'Connor</div><div class="m13 ell">Panel upgrade · Valley El.</div></div><span class="sp warn">! Опаздывает</span></div>
+   <div class="r"><span class="tm">9:00</span><div class="grow"><div class="t15 ell">Maria Gonzalez</div><div class="m13 ell">Deep clean · Ivan</div></div><span class="sp info">◷ В работе</span></div>
+   <div class="r"><span class="tm">13:30</span><div class="grow"><div class="t15 ell">David Kim</div><div class="m13 ell">Kitchen faucet · Alex</div></div><span class="sp neu">◷ Ждёт</span></div>
+   <div class="r"><span class="tm">15:00</span><div class="grow"><div class="t15 ell">Emily Park</div><div class="m13 ell">Осмотр · без мастера</div></div><span class="ob">Назначить</span></div>
+  </div>
+ </div>
+ <div class="dock">
+  <div class="now">
+   <div class="hd"><span class="cap">Дальше · 8:30–12:30</span><span class="lnk" style="font-size:12px;font-weight:700">через 10 мин</span></div>
+   <div class="nm">Sarah Mitchell</div>
+   <div class="m13 ell">Bathroom remodel · Alex · <span class="lnk">1420 Oak Grove Ave, Pasadena ›</span></div>
+   <div class="mini"><div class="bar"><i style="width:62%;background:var(--lavB)"></i></div><span>работа 62%</span></div>
+   <div class="btn" style="margin-top:8px"><svg class="i s18"><use href="#i-route"/></svg>В пути</div>
+  </div>
+  <nav class="nav">
+   <span class="ni on"><span class="ic"><svg class="i s22"><use href="#i-home"/></svg></span>Главная</span>
+   <span class="ni"><span class="ic"><svg class="i s22"><use href="#i-cal"/></svg></span>План</span>
+   <span class="ni"><span class="ic"><svg class="i s22"><use href="#i-users"/></svg></span>Клиенты</span>
+   <span class="ni"><span class="ic"><svg class="i s22"><use href="#i-wallet"/></svg></span>Деньги</span>
+   <span class="ni"><span class="ic"><svg class="i s22"><use href="#i-lead"/></svg></span>Лиды<span class="bdg">2</span></span>
+  </nav>
+ </div>
+ <i class="hb"></i>
+</div>
+<figcaption><h3>4 · Главная — светлая</h3><p class="no">Образцы: №4 и №3, переведённые в светлую тему</p>
+<p><b>Взято:</b> та же сетка и цифры; фон #D6D7D1 и карточки #E3E4DE — не белые; пастели светлее, текст плиток темнее (7:1 и выше), полоса прогресса — тёмный тон пастели.</p>
+<p><b>Взято:</b> меню-таблетка остаётся графитовой #303237, жёлтый круг на ней виден, как в №12; у жёлтой кнопки на светлом — обводка #7A6418.</p></figcaption>
+</figure>
+
+</div>
+</div>
+</body>
+</html>

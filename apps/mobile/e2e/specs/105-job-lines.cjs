@@ -3,14 +3,16 @@
  * total is the engine's (qty × price, half up) and becomes the job's total; a change that brings the total below what
  * is already invoiced is refused (db T69); «Отменить» brings a removed line back. Test prices.
  */
+const { objSection } = require("../objectScreen.cjs");
+
 exports.run = async (h) => {
   const p = h.page;
   const job = async () => (await h.db()).jobs.find((j) => j.id === "j3");
-  const money = async () => {
-    await p.getByRole("tab", { name: "Деньги", exact: true }).locator("visible=true").click(); await p.waitForTimeout(300);
-  };
+  // v2 (#2350): the job's own lines are on its «Обзор» (JobLinesBlock: «＋ Позиция» `job-lines-add`, the total `job-lines-total`)
+  const money = () => objSection(p, "job-screen", "overview");
+  const total = async () => (await p.getByTestId("job-lines-total").locator("visible=true").first().innerText()).replace(/\n/g, " ");
   const addLine = async (name, qty, price) => {
-    await p.getByRole("button", { name: "Позиция", exact: true }).first().click(); await p.waitForTimeout(400);
+    await p.getByTestId("job-lines-add").locator("visible=true").first().click(); await p.waitForTimeout(400);
     const s = h.sheet();
     await s.getByPlaceholder("Название").fill(name);
     await s.getByPlaceholder("Кол-во").fill(qty);
@@ -24,7 +26,7 @@ exports.run = async (h) => {
   await addLine("Drywall patch", "2.5", "19.99");
   await addLine("Labor", "3", "45");
   await h.expectText(/Drywall patch/, "the first line shows");
-  await h.expectText(/\$184\.98/, "the total: 49.98 (2.5 × 19.99, half up) + 135.00");
+  h.expect(/\$184\.98/.test(await total()), `the total: 49.98 (2.5 × 19.99, half up) + 135.00 (${await total()})`);
   h.expect((await job()).amountCents === 18498, `the job total follows (${(await job()).amountCents})`);
   const lines = (await h.db()).jobLines.filter((l) => l.jobId === "j3");
   h.expect(lines.length === 2 && lines[0].totalCents === 4998, "two lines, totals half up");
@@ -61,5 +63,6 @@ exports.run = async (h) => {
   // a job from an estimate: no own lines
   await h.go("/job/j1");
   await money();
-  h.expect((await p.getByRole("button", { name: "Позиция", exact: true }).count()) === 0, "a job from an estimate has no «＋ Позиция»");
+  await p.getByTestId("job-section-overview").locator("visible=true").first().waitFor({ timeout: 5000 });
+  h.expect((await p.getByTestId("job-lines-add").count()) === 0, "a job from an estimate has no «＋ Позиция»");
 };

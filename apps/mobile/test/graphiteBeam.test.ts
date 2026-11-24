@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  beamStart,
   beamWidth,
   beamX,
   nextBeamSlot,
@@ -64,3 +65,22 @@ describe("graphite cone stops (rgba split for SVG)", () => {
     expect(alphaOf("#5F6100")).toBe(1);
   });
 });
+
+/** #2286: the beam does not fly in when the screen opens — the first place after the layout is taken at once */
+describe("graphite beam: the first place (#2286)", () => {
+  it("before any layout (width was 0) the beam jumps to its place, no glide", () => {
+    expect(beamStart(0, 358, false)).toBe("jump");
+  });
+  it("a later move (a tap, or a new width) glides", () => {
+    expect(beamStart(358, 358, false)).toBe("glide");
+    expect(beamStart(358, 390, false)).toBe("glide");
+  });
+  it("with «уменьшить движение» the beam always jumps", () => {
+    expect(beamStart(358, 358, true)).toBe("jump");
+    expect(beamStart(0, 358, true)).toBe("jump");
+  });
+  it("no layout yet (width 0) is not a place to glide to: jump (to 0)", () => {
+    expect(beamStart(0, 0, false)).toBe("jump");
+  });
+});
+
