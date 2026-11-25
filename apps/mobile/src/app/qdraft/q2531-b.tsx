@@ -1,5 +1,5 @@
 // ЧЕРНОВИК (#2531): после «Применить» — тост «Вернуть» на 5 с и отмена загрузки целиком 30 дней. Не для влития.
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { router } from "expo-router";
 import { Screen } from "@/ui/surfaces";
 import { ListGroup, GroupRow, GroupedList } from "@/ui/groupedList";
@@ -10,7 +10,10 @@ import { Source } from "./q2531-a";
 
 export default function Q2531b() {
   const toast = useToast();
+  const once = useRef(false);
   useEffect(() => {
+    if (once.current) return;
+    once.current = true;
     toast.show("Цены обновлены: 1 позиция", markUndo(() => true));
   }, [toast]);
   return (

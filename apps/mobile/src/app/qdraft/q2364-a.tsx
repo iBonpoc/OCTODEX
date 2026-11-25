@@ -10,8 +10,8 @@ export default function Q2364a() {
   return (
     <EstimateFrame caption="Вариант «а»: строка 52 — те же две строки, меньше воздуха сверху и снизу">
       {LINES.map((l) => (
-        <RowView key={l.id} gap={space[3]} style={{ paddingLeft: space[4], paddingRight: space[2], paddingVertical: spaceHalf.tight }}>
-          <View style={{ flex: 1 }}>
+        <RowView key={l.id} gap={space[3]} style={{ paddingLeft: space[4], paddingRight: space[2] }}>
+          <View style={{ flex: 1, paddingVertical: spaceHalf.tight }}>
             <T v="body" w="semibold" numberOfLines={1}>
               {l.name}
             </T>

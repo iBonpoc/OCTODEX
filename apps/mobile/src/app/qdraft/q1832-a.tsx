@@ -31,7 +31,7 @@ export default function Q1832a() {
       <ActionBar
           summary={<T v="caption" tone="mut" tabular>Итого $2,118.00</T>}
           second={<Button size="bar" full variant="secondary" label="Сохранить" onPress={() => undefined} />}
-          main={<Button size="bar" full label="Попросить согласие" icon="send" onPress={() => undefined} />}
+          main={<Button size="bar" full label="Попросить согласие" onPress={() => undefined} />}
         />
     </Screen>
   );

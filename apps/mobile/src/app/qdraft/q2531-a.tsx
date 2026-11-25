@@ -31,16 +31,18 @@ export default function Q2531a() {
       <Source />
       <GroupedList>
         <ListGroup title="На проверку" count={1}>
-          <GroupRow title="Gutter 5″ K-style" subtitle="Закупка $2.10 → $21.00 · клиенту $2.52 → $25.20" status={{ status: "bad", label: "+900 %" }} onPress={() => undefined} />
+          <GroupRow wrap title="Gutter 5″ K-style" subtitle="Закупка $2.10 → $21.00 · клиенту $2.52 → $25.20" status={{ status: "bad", label: "+900 %" }} onPress={() => undefined} />
         </ListGroup>
         <View style={{ gap: space[1] }}>
           <T v="caption" tone="mut">Цена выросла больше чем на 25 %. Отметьте, если это не ошибка в прайсе.</T>
         </View>
         <ListGroup title="Обычные" count={1}>
-          <OptionRow multiple selected={on} onPress={() => setOn(!on)} title="Downspout 2×3 · +10 %" subtitle="Закупка $1.80 → $1.98 · клиенту $2.16 → $2.38 · наценка 20 %" />
+          <View style={{ paddingHorizontal: space[4] }}>
+            <OptionRow multiple selected={on} onPress={() => setOn(!on)} title="Downspout 2×3 · +10 %" subtitle="Закупка $1.80 → $1.98 · клиенту $2.16 → $2.38 · наценка 20 %" />
+          </View>
         </ListGroup>
         <ListGroup title="Не меняем" count={1}>
-          <GroupRow title="Hidden hanger" subtitle="Закупка $0.95 → $1.02 · клиенту $2.40 — как было" status={{ status: "warn", label: "Цена вручную" }} />
+          <GroupRow wrap title="Hidden hanger" subtitle="Закупка $0.95 → $1.02 · клиенту $2.40 — как было" status={{ status: "warn", label: "Цена вручную" }} />
         </ListGroup>
       </GroupedList>
       <T v="caption" tone="mut">
