@@ -76,6 +76,13 @@ exports.run = async (h) => {
   await waitFor(async () => JSON.stringify((await live("downspout"))[0]?.attrs?.elbows) === JSON.stringify([{ style: "A", qty: 2, angle: 60 }, { style: "B", qty: 1 }]), "the store: A 2 at 60°, B 1 at 75° (no angle written)");
   await tid("attr-offset-B-qty").getByRole("button", { name: /\+1$/ }).click();
   await waitFor(async () => JSON.stringify((await live("downspout"))[0]?.attrs?.offsets) === JSON.stringify([{ lengthIn: 2, qty: 1, style: "B" }]), "the store: one 2″ offset of style B");
+  // v43 PR D: the downspout's own storey — the pipe's length follows it; written only when it differs from the gutter's
+  h.expect(/10 ft/.test(await tid("attr-ds-length-line").innerText()), "the line under the row: 10 ft on the gutter's storey");
+  await pickAttr(p, "attr-ds-story", "2");
+  await waitFor(async () => (await live("downspout"))[0]?.attrs?.story === 2, "the store: the downspout's own storey 2");
+  await waitFor(async () => /20 ft/.test(await tid("attr-ds-length-line").innerText()), "the line: 20 ft — 2 pieces");
+  await pickAttr(p, "attr-ds-story", "1");
+  await waitFor(async () => (await live("downspout"))[0]?.attrs?.story === undefined, "the store: back to the gutter's storey — no key written");
   await h.shot("ds");
   await winSave(p); // the window's own «Сохранить» (DS §7.3, #2412 PR3): its edits kept
 

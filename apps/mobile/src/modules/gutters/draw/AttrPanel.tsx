@@ -23,7 +23,7 @@ import { Icon, Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Menu, useSheetClose } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
-import { COLORS, ELBOW_STYLES, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, boughtElbowCounts, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import { COLORS, ELBOW_STYLES, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, boughtElbowCounts, dsStoryPatch, dsStoryShown, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
 import { colorChoices } from "./colorChoices";
 import { dsMoreSet, dsRareShown } from "./attrShown";
@@ -33,6 +33,7 @@ import { feetResetsRest, inchesComplete, inchesTooBig, mmDraft, nextStage, tapeD
 import { MM_SCALE, SIXTEENTHS_SCALE, SIXTEENTHS_SCALE_IN, Tape as TapeStrip } from "./Tape";
 import { DENOM, fmtLen, fracLabel, LEN_UNITS, MM_OF, MM_PER_IN, type LenFormat, type LenUnit } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
+import { dsLengthLine } from "../canvas/dsLength";
 import { ELBOW_ANGLES, offsetRow, offsetsPatch, offsetStylesOf, rectElbowAngle, rectElbowPatch, roundElbow, roundElbowPatch, type OffsetStyle } from "../canvas/fittingRows";
 import { drawnLengthIn, type CornerChoice, type DrawnDownspout, type DrawnRun, type FoundCorner } from "../geometry";
 
@@ -374,11 +375,11 @@ function Choice<K extends string>({ label, testID, items, value, onChange, offer
 }
 
 /** 2–3 fields side by side (Размер · Этаж, Вид · Размер): each takes its share of the row */
-function FieldRow({ children }: { children: React.ReactNode }) {
+function FieldRow({ children, weights }: { children: React.ReactNode; /** each field's share of the row (v43: Вид 2.2 · Размер .85 · Этаж .85 — «Прямой ребристый» is read whole); equal by default */ weights?: number[] }) {
   const kids = Children.toArray(children).filter(Boolean);
   return (
     <RowView style={{ gap: space[2], alignItems: "flex-start" }}>
-      {kids.map((ch, i) => <View key={i} style={{ flex: 1, minWidth: 0 }}>{ch}</View>)}
+      {kids.map((ch, i) => <View key={i} style={{ flex: weights?.[i] ?? 1, minWidth: 0 }}>{ch}</View>)}
     </RowView>
   );
 }
@@ -586,13 +587,21 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, run, forNew, no 
   const bottoms = withCurrent(ch.offer.bottoms, ds.bottom.kind);
   const wallKits = withCurrent(wallKitsFor(ds.shape, w.wall, ch), w.kit);
   const head = ds.head ?? (ds.funnel ? "funnel" : "none");
+  const runStory = storyOf(run?.story);
+  const ln = dsLengthLine(ds, runStory);
+  const lenText = ln.own ? t(k("dsLenOwn"), { ft: ln.ft }) : ln.stories > 1 ? t(k("dsLenMany"), { ft: ln.ft, n: ln.stories, stick: ln.stickFt }) : t(k("dsLenStory"), { ft: ln.ft, n: ln.stories });
   return (
     <>
       {forNew ? null : <View testID="attr-title"><T v="heading" w="semibold">{no ? t(k("dsNo"), { n: no }) : t(k("ds"))}</T></View>}
+      {/* three fields in one row do not fit 390 (a value is cut to «2…», «1…»): «Вид» has its line, «Размер · Этаж» the next (v43 shows the three in one row;
+          the shared field has a padding the mock's has not — the words come first) */}
+      <DsKindPick ds={ds} onAttrs={onAttrs} ch={ch} />
       <FieldRow>
-        <DsKindPick ds={ds} onAttrs={onAttrs} ch={ch} />
         <Choice label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
+        {/* its own storey (G2 #2465): the length of the pipe follows it; written only when it differs from the gutter's (rule 16) */}
+        {forNew ? null : <Choice label={t(k("story"))} testID="attr-ds-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t(k("storyWin"), { n }) }))} value={String(dsStoryShown(ds, runStory)) as "1"} onChange={(n) => onAttrs(dsStoryPatch(runStory, Number(n)))} />}
       </FieldRow>
+      {forNew ? null : <View testID="attr-ds-length-line"><T v="caption" tone="mut">{lenText}</T></View>}
       <Elbows ds={ds} onAttrs={onAttrs} />
       <Offsets ds={ds} onAttrs={onAttrs} />
       <Choice label={t(k("bottom"))} testID="attr-bottom" offered={ch.offer.bottoms} items={bottoms.map((b) => ({ key: b, label: t(k(`b.${b}`)), top: b === "none" }))} value={ds.bottom.kind} onChange={(kind) => onAttrs({ bottom: { ...ds.bottom, kind } })} />
