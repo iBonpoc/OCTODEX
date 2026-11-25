@@ -54,6 +54,7 @@
       }
     },
     "android": {
+      "allowBackup": false,
       "adaptiveIcon": {
         "backgroundColor": "#0B0C0F",
         "foregroundImage": "./assets/android-icon-foreground.png",

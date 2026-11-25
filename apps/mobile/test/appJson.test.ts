@@ -50,3 +50,9 @@ describe("app.json: permission texts", () => {
     expect(Object.keys(plist).some((k) => /Always|Background/i.test(k) && /Location/.test(k))).toBe(false);
   });
 });
+
+describe("app.json: no backup of the app's data on Android (#1634)", () => {
+  it("allowBackup is off: a backup would carry the device's copy of the company off the phone", () => {
+    expect(app.android.allowBackup).toBe(false);
+  });
+});

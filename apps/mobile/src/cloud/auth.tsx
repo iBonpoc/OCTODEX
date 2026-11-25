@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { AppState } from "react-native";
+import { readSessionRetrying } from "./sessionStore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LEGAL_RETRY_MS, legalState, legalTickets, PENDING_LEGAL_KEY, resolveLegal, type LegalState } from "@/features/legal";
 import { supabase } from "./client";
@@ -368,7 +369,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let alive = true;
     void wipeIfPending();
-    supabase.auth.getSession().then(async ({ data }) => {
+    // #1634: the protected store may refuse the read before the first unlock — tried again, never «signed out»
+    void readSessionRetrying(() => supabase.auth.getSession(), () => alive).then(async (got) => {
+      if (!got) return;
+      const { data } = got;
       // #1633: a sign-out wipe the app did not finish (never of the person signed in now)
       void wipeSignOutIfPending(data.session?.user.id ?? null);
       if (!alive) return;
