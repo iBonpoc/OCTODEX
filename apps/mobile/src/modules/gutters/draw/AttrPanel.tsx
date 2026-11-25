@@ -139,7 +139,9 @@ function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | 
   const [bad, setBad] = useState(false);
   const own = useRef<number | null>(null); // the length this tape just wrote: the fields already show it (retyping must not rewrite them)
   // another run picked, «Назад», or a dragged end: the fields show the length it has now
+  const lastRun = useRef(run.id);
   useEffect(() => {
+    if (lastRun.current !== run.id) { lastRun.current = run.id; own.current = null; } // another gutter: its fields, even at the same length
     if (own.current === cur) return;
     own.current = null;
     const x = unitFields(cur, "ftin");

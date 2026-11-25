@@ -47,10 +47,11 @@ export function unitPickStep(o: { edited: boolean; typed: number | null; canon: 
 /**
  * The length window's tape has no «Применить» (v43, founder 24.11): every change of a field is read at once. A length that is good and
  * not the one the run has goes in (`len`; the window's draft keeps it or takes it back); a wrong one writes nothing and says so (`bad`);
- * both fields empty — a field being retyped — is neither. Pure.
+ * both fields empty is wrong too (the run keeps the length it had; the warning says so). Pure.
  */
 export function tapeDraft(ft: string, inc: string, e16: number, have: number): { len: number | null; bad: boolean; same: boolean } {
-  const n = tapeIn(ft, inc, e16);
-  if (n === null) return { len: null, bad: ft.trim() !== "" || inc.trim() !== "", same: false };
+  // a field being retyped (empty) is not a zero foot: nothing moves the gutter until both are there
+  const n = ft.trim() === "" || inc.trim() === "" ? null : tapeIn(ft, inc, e16);
+  if (n === null) return { len: null, bad: true, same: false };
   return { len: n, bad: false, same: n === have };
 }
