@@ -44,7 +44,7 @@ exports.run = async (h) => {
   db = await h.db();
   v = db.visits.find((x) => x.id === "v6");
   h.expect(v.techId === null && v.assigneeIds.length === 0, "everyone taken off");
-  await p.getByRole("button", { name: "Отменить", exact: true }).last().click(); await p.waitForTimeout(500);
+  await p.getByTestId("toast-undo").last().click(); await p.waitForTimeout(500);
   db = await h.db();
   v = db.visits.find((x) => x.id === "v6");
   h.expect(v.assigneeIds.length === 2, "undo: both are back");

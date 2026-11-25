@@ -41,7 +41,7 @@ exports.run = async (h) => {
     await p.waitForTimeout(400);
     // v2: the row's round «done» (its name is «Выполнено: <task>»)
     await p.locator('[data-testid^="task-done-"]:not([data-testid$="-circle"]):visible').first().click();
-    const undo = p.getByRole("button", { name: "Отменить" }).locator("visible=true");
+    const undo = p.getByTestId("toast-undo").locator("visible=true");
     await undo.waitFor({ timeout: 3000 });
     await p.waitForTimeout(600); // the slide-in
     await h.shot("toast");

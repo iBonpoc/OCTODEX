@@ -76,10 +76,10 @@ exports.run = async (h) => {
   h.expect(l.phone === "(818) 555-0199", `saved from the question (${l.phone})`);
 
   // the toast «Отменить» (rule 5; v2: a solid plate, no countdown ring) brings the old value back
-  const undo = p.getByRole("button", { name: "Отменить" }).last();
+  const undo = p.getByTestId("toast-undo").last();
   h.expect(await undo.isVisible(), "undo toast");
   await h.shot("toast");
-  await p.waitForFunction(() => { const b = [...document.querySelectorAll('[role="button"][aria-label="Отменить"]')].pop(); return !!b && b.getAttribute("aria-busy") !== "true"; }, null, { timeout: 3000 });
+  await p.waitForFunction(() => { const b = [...document.querySelectorAll('[data-testid="toast-undo"]')].pop(); return !!b && b.getAttribute("aria-busy") !== "true"; }, null, { timeout: 3000 });
   await undo.click();
   const back = await p.waitForFunction((was) => JSON.parse(localStorage.getItem("octo.db.v5")).db.leads.find((x) => x.id === "l1").phone === was, phone0, { timeout: 3000 }).then(() => true, () => false);
   h.expect(back, "«Отменить» brings the old phone back");

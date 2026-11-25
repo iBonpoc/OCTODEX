@@ -43,7 +43,7 @@ exports.run = async (h) => {
   h.expect((await p.getByTestId("chk-starter-gutters-pre").count()) === 0, "added: not offered");
 
   // «Отменить»: the offer comes back
-  await p.getByRole("button", { name: "Отменить", exact: true }).last().click();
+  await p.getByTestId("toast-undo").last().click();
   list = await until((l) => !l.some((x) => x.module === "gutters"));
   h.expect(!list.some((x) => x.module === "gutters"), "undone");
   await tid("chk-starter-gutters-pre").waitFor();

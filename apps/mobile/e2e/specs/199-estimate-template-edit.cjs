@@ -83,7 +83,7 @@ exports.run = async (h) => {
   await tid(`est-tpl-${copy.id}`).waitFor({ timeout: 8000 });
   h.expect((await tpls()).find((x) => x.id === T_OWN).doc.options[0].lines.length === 2, "the original untouched");
   // «Отменить» the copy: gone (the insert waits on the phone while the toast is up), not archived
-  await p.getByRole("button", { name: /Отменить|Undo|Deshacer/ }).first().click();
+  await p.getByTestId("toast-undo").first().click();
   await waitFor(async () => !(await tpls()).some((x) => x.id === copy.id), "«Отменить» takes the copy away");
   h.expect((await tpls()).length === 2, "no copy left, not even archived");
 
@@ -112,7 +112,7 @@ exports.run = async (h) => {
   h.expect(own.uses === 2, "editing is no use");
   h.expect((await h.db()).estimates.length === estimatesBefore, "no estimate made");
   // «Отменить»: the template as it was (a change of its own — the edit may have been sent already)
-  await p.getByRole("button", { name: /Отменить|Undo|Deshacer/ }).first().click();
+  await p.getByTestId("toast-undo").first().click();
   await waitFor(async () => {
     const x = (await tpls()).find((y) => y.id === T_OWN);
     return x?.name === "Service visit (test)" && x.doc.options[0].lines.length === 2;

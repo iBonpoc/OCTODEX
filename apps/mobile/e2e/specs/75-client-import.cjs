@@ -63,7 +63,7 @@ exports.run = async (h) => {
   await h.expectText(/Ann Lee/, "Ann in the list");
 
   // «Отменить» takes the whole import back
-  await p.getByRole("button", { name: "Отменить" }).last().click();
+  await p.getByTestId("toast-undo").last().click();
   await h.expectText(/Импорт отменён: снято клиентов 2/, "the toast says the import was undone");
   db = await h.db();
   for (let i = 0; i < 40 && db.customers.length !== before; i++) { await p.waitForTimeout(150); db = await h.db(); }

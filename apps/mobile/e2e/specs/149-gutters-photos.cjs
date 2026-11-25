@@ -87,7 +87,7 @@ exports.run = async (h) => {
   await p.getByRole("button", { name: "Удалить фото" }).click();
   await waitFor(async () => !(await photos()).some((f) => f.id === ownId), "removed");
   await p.waitForTimeout(400); // the toast ignores a press in its first 300 ms
-  await p.getByRole("button", { name: "Отменить" }).last().click();
+  await p.getByTestId("toast-undo").last().click();
   await waitFor(async () => (await photos()).some((f) => f.id === ownId), "«Отменить» brings it back");
 
   // a reload keeps both. On the web a picked photo is a blob: of this page — dead after a reload: the screen must not
