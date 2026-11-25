@@ -144,26 +144,16 @@ export function PhotoStrip({ photos, onAdd, onAddPreparing, onRemove, onRetry, o
             onPress={() => setOpen(nextFailed)}
           />
         ) : null}
-        {open && onRetry && canRetry({ ...open, upload: openFailed }) ? (
+        {/* the sheet's one main step (one filled accent, #2350): «Повторить», or «Подготовить снова» for «не открывается» — never both */}
+        {open && ((onRetry && canRetry({ ...open, upload: openFailed })) || (openFailed?.failed === "unreadable" && open.uri)) ? (
           <Button
-            label={t("photoUp.retry")}
+            label={t(openFailed?.failed === "unreadable" ? "photoUp.prep.again" : "photoUp.retry")}
             icon="cloudUp"
             full
-            testID="photo-upload-retry"
+            testID={openFailed?.failed === "unreadable" ? "photo-prep-again" : "photo-upload-retry"}
             onPress={() => {
-              onRetry(open.id);
-              setOpen(null);
-            }}
-          />
-        ) : null}
-        {open && openFailed?.failed === "unreadable" && open.uri ? (
-          <Button
-            label={t("photoUp.prep.again")}
-            icon="cloudUp"
-            full
-            testID="photo-prep-again"
-            onPress={() => {
-              prepareAgain(open.id);
+              if (openFailed?.failed === "unreadable") prepareAgain(open.id);
+              else onRetry?.(open.id);
               setOpen(null);
             }}
           />

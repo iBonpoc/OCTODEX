@@ -8,6 +8,7 @@
  * Every view. Waits on what it checks; ids by testID.
  */
 const { pressEscUntilClosed, sheetGone } = require("../sheet.cjs");
+const { visitStep, visitCameraAdd } = require("../visitScreen.cjs");
 
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 const MIN = 60 * 1000;
@@ -59,19 +60,19 @@ exports.run = async (h) => {
   const v0 = db.visits.find((v) => v.techId === db.me && v.step === "scheduled" && !v.photos.length);
   h.expect(!!v0, "a visit of mine without photos");
   await h.go(`/visit/${v0.id}`);
-  await h.click("Я в пути");
-  await h.click("На месте");
-  await vis("photo-add").waitFor({ timeout: 8000 });
+  await visitStep(p, "en-route");
+  await visitStep(p, "on-site");
 
-  // ---- the decoder is off: «＋ → Фото» keeps the photo here, «Готовится»
+  // ---- the decoder is off: «＋ → Фото» (the visit's camera sheet, v2) keeps the photo here, «Готовится»
   await p.evaluate(() => (window.__e2ePhotoDecodeFail = true));
-  await p.getByRole("button", { name: "Создать", exact: true }).locator("visible=true").last().click();
-  const [chooser] = await Promise.all([p.waitForEvent("filechooser"), p.getByTestId("fab-photo").locator("visible=true").last().click()]);
+  const [chooser] = await visitCameraAdd(p);
   await chooser.setFiles({ name: "with-gps.png", mimeType: "image/png", buffer: PNG });
   await waitPhoto(v0.id, (ph) => ph.upload?.failed === "preparing" && ph.prep?.length === 1, "the photo is kept as «preparing» with its first round");
   const picked = (await photoIn(v0.id)).uri;
   h.expect(picked?.startsWith("blob:"), "the picked file stays on this phone only (its tile)");
   await p.waitForFunction(() => /Фото готовится — уйдёт само/.test(document.body.innerText), null, { timeout: 8000 });
+  // the camera sheet closed: the visit's own strip shows it (the sheet's strip is the same strip)
+  await pressEscUntilClosed(p);
 
   await vis("photo-prep-strip").waitFor({ timeout: 8000 });
   h.expect((await vis("photo-prep-strip").innerText()).includes("Готовятся к отправке: 1 — уйдут сами"), "the strip: how many, and that they go on their own");
