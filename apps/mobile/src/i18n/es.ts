@@ -2991,6 +2991,7 @@ export const es: Dict = {
   "ds.fields.date": "Fecha de la visita",
   "ds.fields.due": "Plazo (puede quedar vacío)",
   "ds.fields.narrow": "Dos campos estrechos en una fila: la unidad queda dentro de su marco",
+  "ds.fields.totalBar": "Campo de una fila de totales: en iPhone, en la barra sobre el teclado — «Total $…» (a la izquierda) y «Listo»",
   "ds.fields.ft": "Pies",
   "ds.fields.in": "Pulgadas",
   "ds.fields.inWord": "pulgadas",

@@ -1,4 +1,5 @@
 import { useRef, useState, type ComponentRef } from "react";
+import { docMoney } from "./rowLine";
 import { View } from "react-native";
 import { component, size, space } from "@octo/design-tokens";
 import type { CustomOption } from "@octo/estimating-engine";
@@ -36,7 +37,7 @@ export function OptionsCard(p: {
   onRename: (name: string) => void;
   onDelete: () => void;
 }) {
-  const { t, money } = useI18n();
+  const { t } = useI18n();
   const { c } = useTheme();
   const toast = useToast();
   const [help, setHelp] = useState(false);
@@ -99,12 +100,12 @@ export function OptionsCard(p: {
                     onPress={() => p.onPick(o.id)}
                     visibleHeight={size.hitMin}
                     accessibilityRole="button"
-                    accessibilityLabel={`${o.name}: ${money(p.totals[o.id] ?? 0)}`}
+                    accessibilityLabel={`${o.name}: ${docMoney(p.totals[o.id] ?? 0)}`}
                     testID={`est-var-total-${o.id}`}
                   >
                     <View style={{ minHeight: size.hitMin, alignItems: "center", justifyContent: "center" }}>
                       <T v="body" w={o.id === cur.id ? "semibold" : undefined} tone={o.id === cur.id ? "ink" : "mut"} tabular center>
-                        {money(p.totals[o.id] ?? 0)}
+                        {docMoney(p.totals[o.id] ?? 0)}
                       </T>
                     </View>
                   </Press>

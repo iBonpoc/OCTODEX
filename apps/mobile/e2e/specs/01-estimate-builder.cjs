@@ -7,6 +7,27 @@ exports.run = async (h) => {
   await line.fold(h);
   // a kit comes as several folded rows
   await line.addCatalog(h, "railing kit", /Stair railing kit/);
+  // #2471: the page went on while the catalog sheet was going out (here: down to the tax row, as the next step does) — it stays
+  // there and the bar stands still once the sheet has gone. The web Modal gave the focus back to «Каталог» by a plain focus() as
+  // it unmounted: the page jumped up to the button (539 → 0) and «Итого» unfolded under the click (CI: 30 s «stable»)
+  const pageY = () => h.page.evaluate(() => {
+    let e = document.querySelector('[data-testid^="est-line-"]');
+    while (e && !(e.scrollHeight > e.clientHeight + 50)) e = e.parentElement;
+    return e ? Math.round(e.scrollTop) : 0;
+  });
+  await h.page.evaluate(() => [...document.querySelectorAll('[data-testid="est-tax-row"]')].find((e) => e.offsetParent !== null)?.scrollIntoView({ block: "center" }));
+  const y0 = await pageY();
+  await h.page.waitForFunction(() => document.querySelectorAll('[aria-modal="true"]').length === 0, null, { timeout: 5000 });
+  // 30 frames after the sheet has gone: the same place of the page, the same frame of the bar (the capsule or the card)
+  const still = await h.page.evaluate(() => new Promise((res) => {
+    const box = () => { const b = document.querySelector('[data-testid="ue-save-capsule"], [data-testid="ue-save-bar"]'); const r = b && b.getBoundingClientRect(); return r ? `${b.getAttribute("data-testid")} ${r.x},${r.y},${r.width},${r.height}` : "none"; };
+    const seen = new Set(); let n = 0;
+    const f = () => { seen.add(box()); if (++n < 30) requestAnimationFrame(f); else res([...seen]); };
+    requestAnimationFrame(f);
+  }));
+  const y1 = await pageY();
+  h.expect(Math.abs(y1 - y0) <= 1, `the page stays put as the catalog sheet goes (${y0} → ${y1})`);
+  h.expect(still.length === 1, `the bar stands still 30 frames after the sheet: ${still.join(" | ")}`);
   // DS §8.7а (#2454): the tax is set right in its row — «%» and the rate
   await require("../estimateTotals.cjs").setTax(h, "9.5");
   // 150 + 120×1.50 + 250 + 12×12.13 = 725.56; a new estimate taxes the whole amount (the founder 12.11, РС-3):

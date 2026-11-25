@@ -36,3 +36,17 @@ export function depositFor(mode: TotalsMode, now: DepositSetting, memo: ModeMemo
 /** the sales tax has «%» and «Выкл.» only: a tax as a sum is the engine's (#2404) */
 export const TAX_MODES: readonly TotalsMode[] = ["pct", "off"];
 export const MONEY_MODES: readonly TotalsMode[] = ["pct", "off", "fixed"];
+
+/** the rows of the totals that take a typed value */
+export type TotalsRow = "discount" | "tax" | "deposit";
+
+/**
+ * #2455: while a totals field is typed in, the phone's keyboard is up and the pinned bar with «Итого» is hidden (DS §8.9) — the new
+ * total must stay in sight. iOS carries it in the keyboard's own bar (`"bar"`: InputAccessoryView, always right above the keys);
+ * elsewhere it is a line under the row being typed in (`"note"`). `null` — nothing to add (not typing here, or no keyboard: the
+ * pinned bar shows the total itself). Pure; unit-tested in test/totalsTyping.test.ts.
+ */
+export function totalWhileTyping(o: { typing: TotalsRow | null; row: TotalsRow; keyboard: boolean; os: string }): "bar" | "note" | null {
+  if (!o.keyboard || o.typing !== o.row) return null;
+  return o.os === "ios" ? "bar" : "note";
+}
