@@ -746,7 +746,6 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
                 label={t("ue.send")}
                 accessibilityLabel={`${t("ue.send")}: ${t(mainHow === "sms" ? "ue.sendSms" : "ue.sendEmail")}`}
                 icon={mainHow === "sms" ? "message" : "send"}
-                variant="primary"
                 size="bar"
                 full
                 onPress={() => go(mainHow)}

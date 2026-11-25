@@ -9,11 +9,6 @@ const EID = "e-e2e-538";
 exports.run = async (h) => {
   const p = h.page;
   const tid = (id) => p.getByTestId(id).locator("visible=true");
-  const waitFor = async (ok, what, tries = 60) => {
-    let v = await ok();
-    for (let i = 0; i < tries && !v; i++) { await p.waitForTimeout(150); v = await ok(); }
-    h.expect(!!v, what);
-  };
   const est = async () => ((await h.db())?.estimates ?? []).find((e) => e.id === EID);
 
   await h.go("/today");
@@ -33,9 +28,10 @@ exports.run = async (h) => {
   await tid("send-sms").waitFor({ timeout: 8000 });
   h.expect((await est())?.status === "draft", "a draft before the press");
   await tid("send-sms").getByRole("button").click();
-  await waitFor(async () => (await est())?.status === "sent", "the press sends at once — no countdown to wait out");
-  h.expect((await tid("send-undo").count()) === 0, "no «Отменить · 5» button");
+  await p.waitForFunction(([k, id]) => JSON.parse(localStorage.getItem(k) ?? "{}")?.db?.estimates?.find((e) => e.id === id)?.status === "sent", [DB_KEY, EID], { timeout: 5000 });
+  h.expect((await est())?.status === "sent", "the press sends at once — no countdown to wait out");
+  h.expect((await tid("send-undo").count()) === 0, "no countdown button (send-undo)");
   h.expect((await tid("send-going").count()) === 0, "no «Отправляется…» line");
-  h.expect(!/·\s*\d\b/.test(await tid("send-sms").innerText().catch(() => "")), "the main button carries no seconds");
+  h.expect(!/\d/.test(await tid("send-sms").innerText().catch(() => "")), "the main button carries no seconds");
   await h.shot("sent");
 };

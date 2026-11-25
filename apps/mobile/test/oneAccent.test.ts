@@ -72,7 +72,7 @@ const DEBT: Record<string, number> = {
   "app/settings/profile.tsx": 3,
   "app/suppliers/[id].tsx": 2,
   "app/team.tsx": 6,
-  "features/EstimateCard.tsx": 5,
+  "features/EstimateCard.tsx": 6, // 5 + the send sheet's one main button: its `variant` was a ternary the scanner did not see (counting ? secondary : primary); with no countdown it is a plain primary (#2636)
   "features/VisitChecklist.tsx": 2,
   "features/client/ClientSheets.tsx": 2,
   "features/client/PropertySheets.tsx": 3,
