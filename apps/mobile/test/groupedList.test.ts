@@ -25,6 +25,18 @@ describe("GroupedList / GroupRow 56 (BUILD-SPEC §1)", () => {
     expect(s).toMatch(/accessibilityActions=/);
     expect(s).toMatch(/onLongPress=/);
   });
+  it("a wide column («Просрочен 9 дн») never lies over the subtitle: the columns do not shrink (a floor, not a fixed width), the text column shrinks and cuts with «…»", () => {
+    for (const f of ["groupedList.tsx", "figures.tsx"]) {
+      const s = src(f);
+      const col = s.slice(s.indexOf("alignItems: \"flex-end\""), s.indexOf("alignItems: \"flex-end\"") + 200);
+      expect(col, f).toMatch(/minWidth: i < all\.length - 1 \? [A-Za-z.]*colW : undefined/);
+      expect(col, f).toMatch(/flexShrink: 0/);
+      expect(col, f).not.toMatch(/\bwidth: i < all/);
+    }
+    const body = src("groupedList.tsx");
+    expect(body).toMatch(/<View style=\{\{ flex: 1, minWidth: 0 \}\}>/);
+    expect(body).toMatch(/numberOfLines=\{wrap \? 2 : 1\}/);
+  });
   it("no button inside a button (web «<button> cannot contain a nested <button>», wave 3): the row's actions stand beside its Press", () => {
     const s = src("groupedList.tsx");
     const press = s.slice(s.indexOf("const tap ="), s.indexOf("const row ="));

@@ -179,7 +179,7 @@ export interface GroupRowProps {
   /** a sum on the right (15, tabular) */
   value?: string;
   /** visual v2 «цифры справа» (FigureRow): columns «word 12 / value 15» on the right instead of a bare `value` — «Срок Просрочен 9 дн ·
-   *  Сумма $1,840»; each but the last `figureRow.colW` wide, so the columns of a group stand under each other */
+   *  Сумма $1,840»; each but the last at least `figureRow.colW` wide (a floor, not a fixed width: a wide word «Просрочен 9 дн» widens its column, never overlaps the line — the subtitle shrinks and is cut with «…») */
   cols?: FigureCol[];
   /** a StatusPill on the right */
   status?: { status: StatusName; label: string; draft?: boolean };
@@ -259,7 +259,7 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
       </View>
       {cols?.length
         ? cols.map((x, i, all) => (
-            <View key={x.label} style={{ alignItems: "flex-end", width: i < all.length - 1 ? component.figureRow.colW : undefined }}>
+            <View key={x.label} style={{ alignItems: "flex-end", flexShrink: 0, minWidth: i < all.length - 1 ? component.figureRow.colW : undefined }}>
               <T v="micro" tone="mut" numberOfLines={1}>
                 {x.label}
               </T>
