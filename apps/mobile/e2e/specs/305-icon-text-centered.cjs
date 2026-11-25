@@ -10,7 +10,7 @@ exports.run = async (h) => {
   const tid = (id) => p.getByTestId(id).locator("visible=true");
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await p.waitForFunction(() => /^Пробный/.test(document.querySelector('[data-testid="module-gutters-status"]')?.textContent?.trim() ?? ""), null, { timeout: 8000 });
+  await p.waitForFunction(() => /^Без срока/.test(document.querySelector('[data-testid="module-gutters-status"]')?.textContent?.trim() ?? ""), null, { timeout: 8000 });
   await h.go("/module/gutters/draw");
   await tid("draw-surface").first().waitFor({ timeout: 8000 });
   const b = await p.getByTestId("draw-surface").boundingBox();

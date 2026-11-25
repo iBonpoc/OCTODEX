@@ -41,14 +41,16 @@ exports.run = async (h) => {
   await h.go("/triage");
   await p.getByText(new RegExp(`${LEAD}: ответственный не работает`)).locator("visible=true").first().click(); await p.waitForTimeout(700);
   h.expect(path(h) === "/lead/e2e-orph", `the card opens the lead (${p.url()})`);
-  await p.getByText("Кто ведёт", { exact: true }).locator("visible=true").first().click(); await p.waitForTimeout(500);
-  await h.sheet().getByText(me.name, { exact: true }).first().click(); await p.waitForTimeout(500);
+  // v2: «Кто ведёт» is a group of the lead's overview; its row `lead-assignee-row` opens the choice
+  await p.getByTestId("lead-assignee-row").locator("visible=true").first().click();
+  await h.sheet().getByRole("button", { name: me.name }).first().click();
+  await p.waitForFunction((id) => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db.leads.find((l) => l.id === "e2e-orph")?.assigneeId === id, me.id, { timeout: 5000 });
   let db = await h.db();
   h.expect(db.leads.find((l) => l.id === "e2e-orph").assigneeId === me.id, "the lead is mine now");
 
   // the task: the gone person is not chosen, «Сохранить» asks for a choice
   await h.go("/tasks");
-  await p.getByTestId("task-e2e-torph").locator("visible=true").first().click(); await p.waitForTimeout(500);
+  await p.getByTestId("task-e2e-torph").locator("visible=true").first().click();
   const sheet = h.sheet();
   const save = sheet.getByRole("button", { name: "Сохранить", exact: true }).last();
   // #2220: a try with nobody chosen says «Выберите, кто сделает» and saves nothing

@@ -1,51 +1,54 @@
 const { dayKey, todayKey } = require("../companyTime.cjs");
 /**
- * «Ещё» → Оплаты (wave 8, 13 §3.15), every view: period, total, method chips with sums, a card per payment → receipt → invoice.
+ * «Деньги → Оплаты» (wave 8, 13 §3.15; prototype v2 #2350 — the List template), every view: a row per payment, grouped by the
+ * company's days «Сегодня · На этой неделе · В этом месяце · Раньше», each group with its sum (the groups are the periods: v2 has no
+ * period or method filter to set — BUILD-SPEC §2.9); the sums of the groups are all the payments; a row → receipt → invoice.
  * Sales and the technician have no «Оплаты» (13 §4).
  */
 const whole = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const cents2 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
 const money = (c) => (c % 100 === 0 ? whole.format(c / 100) : cents2.format(c / 100));
-const METHOD = { card: "Карта", cash: "Наличные", check: "Чек", zelle: "Zelle" };
+const cents = (s) => Math.round(Number(s.replace(/[$,]/g, "")) * 100);
 
 exports.run = async (h) => {
   const p = h.page;
-  await h.go("/payments?p=all");
+  await h.go("/payments");
   const db = await h.db();
   h.expect(db.payments.length > 0, "demo has payments");
-  const cards = p.locator('[data-testid="list-card"]');
+  const rows = p.locator('[data-testid^="payment-row-"]').locator("visible=true");
+  await rows.first().waitFor({ timeout: 8000 });
+  h.expect((await rows.count()) === db.payments.length, `one row per payment (${await rows.count()} / ${db.payments.length})`);
+  for (const x of db.payments) {
+    const txt = await p.getByTestId(`payment-row-${x.id}`).locator("visible=true").first().innerText();
+    h.expect(txt.includes(money(x.amountCents)), `the row of ${x.id} shows its sum ${money(x.amountCents)} (${txt.replace(/\n/g, " | ")})`);
+  }
+  // the groups' sums: each its own rows, together all the payments
   const all = db.payments.reduce((s, x) => s + x.amountCents, 0);
-  await h.expectText(new RegExp(`Собрано · оплат: ${db.payments.length}`), "count of payments");
-  h.expect((await p.locator("body").innerText()).includes(money(all)), `total ${money(all)}`);
-  h.expect((await cards.count()) === db.payments.length, "one card per payment");
+  let sum = 0;
+  for (const g of ["today", "week", "month", "earlier"]) {
+    const group = p.getByTestId(`payments-list-group-${g}`).locator("visible=true");
+    if (!(await group.count())) continue;
+    const title = (await group.first().innerText()).split("\n")[0];
+    const m = title.match(/·\s*(\$[\d,]+(?:\.\d\d)?)/);
+    h.expect(m, `the group «${title}» names its sum`);
+    const ids = await group.first().locator('[data-testid^="payment-row-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid").slice("payment-row-".length)));
+    const own = db.payments.filter((x) => ids.includes(x.id)).reduce((s, x) => s + x.amountCents, 0);
+    h.expect(cents(m[1]) === own, `«${title}» = the sum of its rows ${money(own)}`);
+    sum += own;
+  }
+  h.expect(sum === all, `the groups hold all the payments: ${money(sum)} = ${money(all)}`);
   await h.shot("all");
 
   // today by the company's day (П4b)
-  await h.go("/payments?p=today");
   const today = db.payments.filter((x) => dayKey(x.at) === todayKey());
-  h.expect((await cards.count()) === today.length, `today: ${today.length} payments`);
-
-  // method filter (when the period has more than one method)
-  await h.go("/payments?p=all");
-  const methods = [...new Set(db.payments.map((x) => x.method))];
-  if (methods.length > 1) {
-    const m = methods[0];
-    const ofM = db.payments.filter((x) => x.method === m);
-    const label = METHOD[m] ?? m;
-    // spec 31 §7: the method is in the «Фильтр» sheet (1280: «Способ оплаты ▾»), a row «Карта · $…»
-    const open = h.layout.width === 1280 ? p.getByTestId("filter-group-method") : p.getByTestId("filter-button");
-    await open.locator("visible=true").first().click(); await p.waitForTimeout(400);
-    await h.sheet().getByRole("checkbox", { name: new RegExp(`^${label} · \\$`) }).click();
-    await h.sheet().getByText("Готово", { exact: true }).click(); await p.waitForTimeout(400);
-    h.expect((await cards.count()) === ofM.length, `${label}: ${ofM.length} payments`);
-    h.expect(/[?&]m=/.test(p.url()), "the method is kept in the address");
-  }
+  const todayRows = p.getByTestId("payments-list-group-today").locator("visible=true").locator('[data-testid^="payment-row-"]');
+  h.expect((await todayRows.count()) === today.length, `today: ${today.length} payments`);
 
   // payment → receipt → invoice
-  await h.go("/payments?p=all");
-  await cards.first().click();
-  await p.waitForTimeout(600);
-  h.expect(/\/receipt\//.test(p.url()), `card opens the receipt (${p.url()})`);
+  await h.go("/payments");
+  await rows.first().click();
+  await p.waitForURL(/\/receipt\//, { timeout: 5000 });
+  h.expect(/\/receipt\//.test(p.url()), `the row opens the receipt (${p.url()})`);
   // the receipt links to its invoice through «Связано» (PR-3)
   await p.getByRole("button", { name: /^Связано: Счёт / }).locator("visible=true").first().click();
   await p.waitForTimeout(600);

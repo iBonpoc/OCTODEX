@@ -1,12 +1,10 @@
 const { dayKey, todayKey } = require("../companyTime.cjs");
 /**
- * «Бригады сейчас» on «Сегодня» as list cards (step 10а, PR10a), every view (3 widths × 2 themes).
- * - a tech on a visit: name, «N выездов сегодня», the visit's status in words, the client of the visit «now», call / SMS;
- * - the card opens the current visit; a tech with nothing started opens «План»;
- * - assignees through assigneeIds (#105); no «…».
+ * «Сегодня у бригад» on «Главная» (step 10а, PR10a → prototype v2 #2350 макет 1), every view (3 widths × 2 themes), by testID:
+ * - a row per visit of the company's today (`crew-row`, at most 6): the client, «работа · мастера» (every assignee through
+ *   assigneeIds, #105 — their first names), the visit's state in words when it says more than its hour («Идёт работа»);
+ * - the row opens its visit; «План ›» (`crew-plan`) opens the Plan; no «…».
  */
-// «3 выезда сегодня» (#1427: a counted phrase through Intl.PluralRules, not «Выездов сегодня: 3»)
-const visitsToday = (n) => `${n} ${({ one: "выезд", few: "выезда", many: "выездов" })[new Intl.PluralRules("ru-RU").select(n)] ?? "выезда"} сегодня`;
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/today");
@@ -14,40 +12,42 @@ exports.run = async (h) => {
   const today = todayKey(); // the company's today (П4b)
   const assigned = (v, id) => (v.assigneeIds?.length ? v.assigneeIds : v.techId ? [v.techId] : []).includes(id);
   const techs = db.members.filter((m) => m.roles.includes("tech"));
-  // put one of today's visits «in work» so a tech has a current visit
+  // put one of today's visits «in work», with two people on it, so the row has a state and two names
   const tech = techs.find((m) => db.visits.some((v) => dayKey(v.start) === today && assigned(v, m.id)));
   h.expect(tech, "demo has a tech with a visit today");
+  const mate = techs.find((m) => m.id !== tech.id);
+  h.expect(mate, "demo has a second tech");
   const visit = db.visits.filter((v) => dayKey(v.start) === today && assigned(v, tech.id)).sort((a, b) => a.start.localeCompare(b.start))[0];
-  await p.evaluate((id) => {
+  await p.evaluate(([id, ids]) => {
     const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
-    raw.db.visits = raw.db.visits.map((v) => (v.id === id ? { ...v, step: "working", closed: false } : v));
+    raw.db.visits = raw.db.visits.map((v) => (v.id === id ? { ...v, step: "working", closed: false, techId: ids[0], assigneeIds: ids } : v));
     localStorage.setItem("octo.db.v5", JSON.stringify(raw));
-  }, visit.id);
+  }, [visit.id, [tech.id, mate.id]]);
   await h.go("/today");
-  const cards = p.locator('[data-testid="crew-card"]');
-  h.expect((await cards.count()) === techs.length, `one card per tech (${await cards.count()} vs ${techs.length})`);
-  const card = cards.filter({ hasText: tech.name }).first();
-  await card.scrollIntoViewIfNeeded();
-  const txt = await card.innerText();
-  const n = db.visits.filter((v) => dayKey(v.start) === today && assigned(v, tech.id)).length;
+  const rows = p.getByTestId("crew-row").locator("visible=true");
+  await rows.first().waitFor({ timeout: 8000 });
+  const todays = db.visits.filter((v) => dayKey(v.start) === today);
+  const n = await rows.count();
+  h.expect(n >= 1 && n <= Math.min(6, todays.length), `a row per visit of today, at most 6 (${n} of ${todays.length})`);
   const prop = db.properties.find((x) => x.id === db.jobs.find((j) => j.id === visit.jobId)?.propertyId) ?? db.properties.find((x) => x.id === visit.propertyId);
   const client = prop && db.customers.find((c) => c.id === prop.customerId);
-  for (const s of [tech.name, visitsToday(n), "Идёт работа", client?.name].filter(Boolean)) h.expect(txt.includes(s), `crew card shows «${s}»: ${txt.slice(0, 220)}`);
-  if (tech.phone) h.expect((await card.getByRole("button", { name: /Позвонить/ }).count()) > 0, "call button for the tech");
-  h.expect(!/…|\.\.\./.test(await p.locator("body").innerText()), "no «…» on the screen");
+  h.expect(client, "the visit has a client");
+  const row = rows.filter({ hasText: client.name }).first();
+  await row.scrollIntoViewIfNeeded();
+  const txt = await row.innerText();
+  const first = (m) => m.name.split(/\s+/)[0];
+  for (const s of [client.name, "Идёт работа", first(tech), first(mate)]) h.expect(txt.includes(s), `crew row shows «${s}»: ${txt.replace(/\n/g, " | ")}`);
+  h.expect(!/…|\.\.\./.test(await p.getByTestId("today-crews").locator("visible=true").first().innerText()), "no «…» in «Сегодня у бригад»");
   await h.shot("crews");
 
-  // the card opens the current visit
-  await card.click();
-  await p.waitForTimeout(600);
-  h.expect(p.url().includes(`/visit/${visit.id}`), `card opens the current visit (${p.url()})`);
+  // the row opens its visit
+  await row.click();
+  await p.waitForURL(new RegExp(`/visit/${visit.id}`), { timeout: 5000 });
+  h.expect(true, `the row opens its visit (${p.url()})`);
 
-  // a tech with nothing started → «План»
+  // «План ›» → the Plan
   await h.go("/today");
-  const idle = techs.find((m) => !db.visits.some((v) => dayKey(v.start) === today && assigned(v, m.id) && v.step !== "scheduled" && v.step !== "paid" && v.step !== "done") && m.id !== tech.id);
-  if (idle) {
-    await cards.filter({ hasText: idle.name }).first().click();
-    await p.waitForTimeout(600);
-    h.expect(p.url().includes("/plan"), `a tech without a current visit opens the plan (${p.url()})`);
-  }
+  await p.getByTestId("crew-plan").locator("visible=true").first().click();
+  await p.waitForURL(/\/plan/, { timeout: 5000 });
+  h.expect(true, `«План ›» opens the plan (${p.url()})`);
 };

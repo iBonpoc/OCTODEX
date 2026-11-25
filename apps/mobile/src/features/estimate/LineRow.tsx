@@ -1,14 +1,13 @@
+import { GroupRowBody } from "@/ui/groupedList";
 import { memo, useEffect, useRef, useState, type ComponentRef } from "react";
 import { Platform, View } from "react-native";
 import Animated, { Easing, useReducedMotion, useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
-import { component, motion, size, space } from "@octo/design-tokens";
-import Svg, { Defs, Line, Pattern, Rect } from "react-native-svg";
+import { component, motion, size, space, spaceHalf } from "@octo/design-tokens";
 import type { CustomLine, LineGroup } from "@octo/estimating-engine";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { Button, IconButton, StatusChip, TextField, Toggle } from "@/ui/controls";
-import { Menu, useToast, type MenuItem } from "@/ui/overlays";
-import { ReadOnly } from "@/ui/readOnly";
+import { IconButton, StatusChip, TextField, Toggle } from "@/ui/controls";
+import { Menu, type MenuItem } from "@/ui/overlays";
 import { NumberField } from "@/ui/numberField";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import type { RequiredForm } from "@/ui/requiredForm";
@@ -19,8 +18,13 @@ import { canHide, hiddenSpend, isHidden, noPrice, rowActions, rowFigures, rowPri
 import type { RowView as RowLook } from "./rowView";
 import { LineMarks } from "@/features/LineMarks";
 import { SwipeRow, type SwipeBtn } from "./SwipeRow";
-import { useRowHandle } from "@/features/SortableList";
+import { DashedFrame } from "@/ui/dashedFrame";
+import { useRowHandle, useRowHead } from "@/features/SortableList";
 import { swipes } from "./swipeState";
+import { rowQtyLine, rowSum } from "./rowLine";
+import { dragEnd, longPressMenu } from "./rowGesture";
+import { finePointer } from "@/ui/pointer";
+import { kindWidth, openClip } from "./rowOpen";
 
 /**
  * A line of the estimate, in place (DS §8.3, spec 2026-11-12-estimate-editor §11.2.2): folded — «Кратко» (the name, the
@@ -51,6 +55,8 @@ export interface RowApi {
   openInCatalog: (id: string) => void;
   /** «›» in «Кол-во» of a line from a template: the next line from it opens, the cursor in its «Кол-во» (DS §8.13) */
   nextQty?: (id: string) => void;
+  /** «Выше» / «Ниже» of «⋯» — the drag's stand-in (direction 20.11 §8: every gesture has one in «⋯») */
+  shift?: (id: string, dir: -1 | 1) => void;
 }
 
 export interface LineRowProps {
@@ -84,31 +90,11 @@ export interface LineRowProps {
   /** the swipe hint of the first estimates plays on this row (DS §8.11): the screen gives it to the first line only */
   swipeHint?: boolean;
   onSwipeHintPlayed?: () => void;
-}
-
-/** the hidden line's hatch (DS §8.3): `track` stripes at 45°, `hairline` × 2 wide, a `space[2]` step — no status colour */
-function Hatch({ color, id }: { color: string; /** one pattern id per row: two equal ids on a web page draw only the first */ id: string }) {
-  return (
-    <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }}>
-      <Svg width="100%" height="100%">
-        <Defs>
-          <Pattern id={`est-hatch-${id}`} patternUnits="userSpaceOnUse" width={space[2]} height={space[2]} patternTransform="rotate(45)">
-            <Line x1={0} y1={0} x2={0} y2={space[2]} stroke={color} strokeWidth={component.hairline * 2} />
-          </Pattern>
-        </Defs>
-        <Rect x={0} y={0} width="100%" height="100%" fill={`url(#est-hatch-${id})`} />
-      </Svg>
-    </View>
-  );
-}
-
-/** the trash on the row (DS §8.3): visible 36, the zone 44; `space[6]` from the handle «≡» that the list draws after it */
-function Trash({ label, onPress, testID, gap = true }: { label: string; onPress: () => void; testID: string; /** the gap to «≡» — false where «⋯» stands between */ gap?: boolean }) {
-  return (
-    <View testID={testID} style={gap ? { marginRight: space[6] } : undefined}>
-      <IconButton icon="trash" label={label} onPress={onPress} />
-    </View>
-  );
+  /** visual v2 №5: the screen asks the folded row to open its menu (a finger's hold let go in place, SortableList onHoldStill);
+   *  each new number opens it once */
+  menuAsk?: number;
+  /** #2424: `false` — the list draws the hidden line's dashed frame around the whole row with its «≡» (`SortableList rowFrame`) */
+  frame?: boolean;
 }
 
 export const rowFieldId = (lineId: string, f: "name" | "qty" | "price" | "cost") => `est-${f}-${lineId}`;
@@ -118,11 +104,15 @@ function LineRowView(p: LineRowProps) {
   const { t, money } = useI18n();
   const { c } = useTheme();
   const reduce = useReducedMotion();
-  const toast = useToast();
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  const moreRef = useRef<ComponentRef<typeof View>>(null);
   // the list draws «≡» of this open line over the right end of its header (DS §8.3): the header keeps the place
   const handleInHeader = useRowHandle();
+  const setHeadH = useRowHead();
+  const rowRef = useRef<ComponentRef<typeof View>>(null);
+  const openMenuAt = (r: React.RefObject<ComponentRef<typeof View> | null>) => r.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }));
+  useEffect(() => {
+    if (p.menuAsk) openMenuAt(rowRef);
+  }, [p.menuAsk]);
   const [more, setMore] = useState(false);
   // «Своя…»: the unit is written by hand — chosen so, or not one of the list (a catalog thing, a module, «Отменить»)
   const known = (UNITS as readonly string[]).includes(l.unit);
@@ -130,13 +120,17 @@ function LineRowView(p: LineRowProps) {
   useEffect(() => {
     if (known) setPickedOwn(false);
   }, [known, l.unit]);
-  const ownUnit = pickedOwn || !known;
+  // #2387 (design audit: «Ед. — „Св…“ и отдельное поле „flat“»): a unit written by hand stands IN the choice (the list holds it); the
+  // field to write one shows only after «Своя…» is chosen (or while there is no unit at all)
+  const ownUnit = pickedOwn || (!known && !l.unit);
   // the height of the row opens in `durBase` (reduced motion: at once)
   const grow = useSharedValue(open ? 1 : 0);
   useEffect(() => {
     grow.value = reduce ? (open ? 1 : 0) : withTiming(open ? 1 : 0, { duration: motion.durBase, easing: Easing.out(Easing.cubic) });
   }, [open, reduce, grow]);
-  const fade = useAnimatedStyle(() => ({ opacity: grow.value }));
+  // #2421/#2426: the fields come out by height under the line's face (not a fade) — see `openClip`
+  const fieldsH = useSharedValue(0);
+  const clip = useAnimatedStyle(() => openClip(grow.value, fieldsH.value));
 
   const marks = lineMarks(l);
   const figures = open ? rowFigures(l, p.costsVisible) : null;
@@ -147,176 +141,201 @@ function LineRowView(p: LineRowProps) {
     duplicate: { label: t("est.row.duplicate"), icon: "copy" },
     hide: { label: t("est.row.hide"), icon: "eye" },
     show: { label: t("est.row.show"), icon: "eye" },
-    move: { label: t("est.sec.moveTitle"), icon: "route" },
+    move: { label: t("est.sec.moveTitle"), icon: "sections" },
     delete: { label: t("est.row.delete"), icon: "trash" },
   };
-  const items: MenuItem<RowAction>[] = acts.menu.map((k) => ({ key: k, ...META[k], destructive: k === "delete", dim: k === "hide" && !canHide(l), testID: `est-act-${k}-${l.id}` }));
+  // «Выше» / «Ниже» are the screen reader's actions only (a line the person may move — not a module's): in the menu they were two
+  // more items (7 rows — «Удалить» out of the list's 6½, #2448) and «Переместить» opens the sheet that has both (#2450)
+  const shifts: ("up" | "down")[] = acts.menu.includes("move") && p.api.shift ? ["up", "down"] : [];
+  const items: MenuItem<RowAction>[] = [
+    ...acts.menu.map((k) => ({ key: k, ...META[k], destructive: k === "delete", dim: k === "hide" && !canHide(l), testID: `est-act-${k}-${l.id}` })),
+  ];
+  const pick = (a: RowAction) => p.api.action(l.id, a);
   const swipeBtn = (k: RowAct): SwipeBtn => ({ key: k, ...META[k], tone: k === "delete" ? "bad" : undefined, dim: k === "hide" && !canHide(l), testID: `est-swipe-${k}-${l.id}` });
   const f = (id: "name" | "qty" | "price" | "cost") => p.form.field(rowFieldId(l.id, id));
 
-  if (!open) {
-    const web = Platform.OS === "web";
-    const full = p.view === "full";
-    const hidden = isHidden(l);
-    const spend = hiddenSpend(l, { costsVisible: p.costsVisible, clientScreen: !!p.clientScreen });
-    // the right side of a folded row: the line's sum ($0 for a hidden line — the client pays nothing for it); the hidden
-    // line's «расход» goes under the name, by its mark, for who sees costs — the name keeps its width
-    const right = hidden ? money(0) : money(p.total);
-    const chips = (
-      <>
-        {hidden ? (
-          <View testID={`est-hidden-${l.id}`}>
-            <RowView gap={space[1]}>
-              <Icon name="eyeOff" s={size.iconSm} color={c.mut} />
-              <T v="caption" tone="mut">
-                {t("est.row.hidden")}
-              </T>
-            </RowView>
-          </View>
-        ) : null}
-        {spend !== null ? (
-          <View testID={`est-spend-${l.id}`}>
-            <T v="caption" tone="mut" tabular>
-              {t("est2.row.spend", { spend: money(spend) })}
-            </T>
-          </View>
-        ) : null}
-        {l.optional ? (
-          <View testID={`est-optional-${l.id}`}>
-            <RowView gap={space[1]}>
-              <Icon name="plus" s={size.iconSm} color={c.mut} />
-              <T v="caption" tone="mut">
-                {t("ue.addon")}
-              </T>
-            </RowView>
-          </View>
-        ) : null}
-        {noPrice(l) ? (
-          <View testID={`est-noprice-${l.id}`}>
-            <StatusChip status="warn" label={t("est2.row.noPrice")} />
-          </View>
-        ) : null}
-        {p.unhiddenMark ? (
-          <View testID={`est-unhidden-${l.id}`}>
-            <StatusChip status="info" label={t("est.row.unhiddenMark")} />
-          </View>
-        ) : null}
-        {p.checkPrice ? (
-          <View testID={`est-checkprice-${l.id}`}>
-            <StatusChip status="warn" label={t("est.tpl.checkLine")} />
-          </View>
-        ) : null}
-      </>
-    );
-    const sum = (
-      <View testID={`est-sum-${l.id}`}>
-        <T v="body" w="semibold" tabular tone={hidden || l.optional ? "mut" : "ink"}>
-          {right}
-        </T>
-      </View>
-    );
-    const body = (
-      <Press onPress={p.locked ? undefined : () => (swipes.justSwiped(motion.durSlow) || swipes.closeOpen() ? undefined : p.api.open(l.id))} disabled={p.locked} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={l.name || t("est.row.unnamed")} accessibilityState={{ expanded: false }} accessibilityActions={acts.menu.map((k) => ({ name: k, label: META[k].label }))} onAccessibilityAction={(e) => {
-          const a = actOfName(e.nativeEvent.actionName, acts);
+  // the line's actions for the screen reader — the folded row and the open line's head take the same
+  const a11yActs = [...shifts.map((k) => ({ name: k, label: t(k === "up" ? "est.sec.moveUp" : "est.sec.moveDown") })), ...acts.menu.map((k) => ({ name: k, label: META[k].label }))];
+  const onA11yAct = (e: { nativeEvent: { actionName: string } }) => {
+          const n = e.nativeEvent.actionName;
+          if ((n === "up" || n === "down") && shifts.length) return p.api.shift?.(l.id, n === "up" ? -1 : 1);
+          const a = actOfName(n, acts);
           if (a) p.api.action(l.id, a);
-        }} testID={`est-line-${l.id}`} containerStyle={{ flex: 1 }}>
-        <View style={{ minHeight: size.rowMin, paddingVertical: space[2], gap: space[1], justifyContent: "center" }}>
-          {full ? (
-            <>
-              <View testID={`est-title-${l.id}`}>
-                <T v="body" w="semibold" tone={hidden ? "mut" : "ink"}>
-                  {l.name || t("est.row.unnamed")}
+        };
+  const web = Platform.OS === "web";
+  const full = p.view === "full";
+  const hidden = isHidden(l);
+  const spend = hiddenSpend(l, { costsVisible: p.costsVisible, clientScreen: !!p.clientScreen });
+  // the right side of a folded row: the line's sum ($0 for a hidden line — the client pays nothing for it); the hidden
+  // line's «расход» goes under the name, by its mark, for who sees costs — the name keeps its width
+  const right = hidden ? rowSum(0) : rowSum(p.total);
+  const chipsOf = (withOptional: boolean) => (
+    <>
+      {hidden ? (
+        <View testID={`est-hidden-${l.id}`}>
+          <RowView gap={space[1]}>
+            <Icon name="eyeOff" s={size.iconSm} color={c.mut} />
+            <T v="caption" tone="mut">
+              {t("est.row.hidden")}
+            </T>
+          </RowView>
+        </View>
+      ) : null}
+      {spend !== null ? (
+        <View testID={`est-spend-${l.id}`}>
+          <T v="caption" tone="mut" tabular>
+            {t("est2.row.spend", { spend: money(spend) })}
+          </T>
+        </View>
+      ) : null}
+      {withOptional && l.optional ? (
+        <View testID={`est-optional-${l.id}`}>
+          <RowView gap={space[1]}>
+            <Icon name="plus" s={size.iconSm} color={c.mut} />
+            <T v="caption" tone="mut">
+              {t("ue.addon")}
+            </T>
+          </RowView>
+        </View>
+      ) : null}
+      {noPrice(l) ? (
+        <View testID={`est-noprice-${l.id}`}>
+          <StatusChip status="warn" label={t("est2.row.noPrice")} />
+        </View>
+      ) : null}
+      {p.unhiddenMark ? (
+        <View testID={`est-unhidden-${l.id}`}>
+          <StatusChip status="info" label={t("est.row.unhiddenMark")} />
+        </View>
+      ) : null}
+      {p.checkPrice ? (
+        <View testID={`est-checkprice-${l.id}`}>
+          <StatusChip status="warn" label={t("est.tpl.checkLine")} />
+        </View>
+      ) : null}
+    </>
+  );
+  const chips = chipsOf(true);
+  // «Кратко»: the optional word is in the second line, not a chip under it
+  const briefChips = chipsOf(false);
+  const sum = (
+    <View testID={`est-sum-${l.id}`}>
+      <T v="body" w="semibold" tabular tone={hidden || l.optional ? "mut" : "ink"}>
+        {right}
+      </T>
+    </View>
+  );
+  // the line's face: the folded row, and the head of the open one — the same tree, so nothing moves when it opens (#2421)
+  const face = full ? (
+          <View style={{ minHeight: size.rowMin, paddingVertical: space[2], paddingLeft: space[4], gap: space[1], justifyContent: "center" }}>
+            <View testID={`est-title-${l.id}`}>
+              <T v="body" w="semibold" tone={hidden ? "mut" : "ink"}>
+                {l.name || t("est.row.unnamed")}
+              </T>
+            </View>
+            {l.description ? (
+              <View testID={`est-desc-${l.id}`}>
+                <T v="caption" tone="mut" numberOfLines={2}>
+                  {l.description}
                 </T>
               </View>
-              {l.description ? (
-                <View testID={`est-desc-${l.id}`}>
-                  <T v="caption" tone="mut" numberOfLines={2}>
-                    {l.description}
-                  </T>
-                </View>
-              ) : null}
-              <RowView style={{ justifyContent: "space-between" }}>
-                <View testID={`est-times-${l.id}`}>
-                  <T v="caption" tone="mut" tabular numberOfLines={1}>
-                    {rowPriceTimes(l, money, shownQty)}
-                  </T>
-                </View>
-                {sum}
-              </RowView>
-              <RowView style={{ flexWrap: "wrap" }}>{chips}</RowView>
-            </>
-          ) : (
-            <>
-              <RowView gap={space[4]}>
-                {/* the name wraps, never «…» (DS §4.3, #1427): the sum beside it keeps its width */}
-                <View testID={`est-title-${l.id}`} style={{ flex: 1, minWidth: 0 }}>
-                  <T v="body" w="semibold" tone={hidden ? "mut" : "ink"}>
-                    {l.name || t("est.row.unnamed")}
-                  </T>
-                </View>
-                {sum}
-              </RowView>
-              {hidden || l.optional || noPrice(l) || p.unhiddenMark || p.checkPrice ? <RowView style={{ flexWrap: "wrap" }}>{chips}</RowView> : null}
-            </>
-          )}
-          <LineMarks marks={marks} lineId={l.id} />
-        </View>
+            ) : null}
+            <RowView style={{ justifyContent: "space-between" }}>
+              <View testID={`est-times-${l.id}`}>
+                <T v="caption" tone="mut" tabular numberOfLines={1}>
+                  {rowPriceTimes(l, money, shownQty)}
+                </T>
+              </View>
+              {sum}
+            </RowView>
+            <RowView style={{ flexWrap: "wrap" }}>{chips}</RowView>
+            <LineMarks marks={marks} lineId={l.id} />
+          </View>
+        ) : (
+          // #2387: the folded line is a GroupRow's inside (one look with every list of the app): the name 15/600 over
+          // «кол-во × цена» 13, the sum 15 on the right; a hidden or optional line reads `mut`; its marks under the line
+          <GroupRowBody
+            title={l.name || t("est.row.unnamed")}
+            subtitle={[l.optional ? t("px3.est.optional") : null, rowQtyLine(l, shownQty)].filter(Boolean).join(" · ") || undefined}
+            value={right}
+            quiet={hidden || !!l.optional}
+            wrap
+            padRight={0}
+            ids={{ title: `est-title-${l.id}`, subtitle: `est-times-${l.id}`, subtitleInner: l.optional ? `est-optional-${l.id}` : undefined, value: `est-sum-${l.id}` }}
+            below={
+              <>
+                {hidden || noPrice(l) || p.unhiddenMark || p.checkPrice ? <RowView style={{ flexWrap: "wrap", marginTop: space[1] }}>{briefChips}</RowView> : null}
+                <LineMarks marks={marks} lineId={l.id} />
+              </>
+            }
+          />
+        );
+  if (!open) {
+    const body = (
+      <Press onPress={p.locked ? undefined : () => (swipes.justSwiped(motion.durSlow) || dragEnd.justDragged(motion.durSlow) || swipes.closeOpen() ? undefined : p.api.open(l.id))} onLongPress={items.length && longPressMenu(finePointer()) ? () => openMenuAt(rowRef) : undefined} accessibilityHint={items.length ? t("px3.est.lineActions") : undefined} disabled={p.locked} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={l.name || t("est.row.unnamed")} accessibilityState={{ expanded: false }} accessibilityActions={a11yActs} onAccessibilityAction={onA11yAct} testID={`est-line-${l.id}`} containerStyle={{ flex: 1 }}>
+        {face}
       </Press>
     );
-    const trash = p.locked || !acts.menu.includes("delete") ? null : <Trash label={t("est2.row.trash")} onPress={() => p.api.action(l.id, "delete")} testID={`est-trash-${l.id}`} />;
-    const row = (inner: React.ReactNode) => (
-      <View>
-        {hidden ? <Hatch color={c.track} id={l.id} /> : null}
-        <RowView style={{ alignItems: full ? "flex-start" : "center" }}>
-          {inner}
-          {trash}
+    // the row's other actions are in «⋯» (and, on a phone, the swipe): no trash or buttons standing on every row (direction 20.11,
+    // the founder's «простыня, на которой 44 кнопки»); «⋯» is the bare glyph, the handle «≡» the list draws after it
+    // visual v2 №5 (#2344): no «⋯» and no «≡» on a folded row — its actions are the swipe (a phone), a hold let go in place (a
+    // finger), a long press (a mouse) and the screen reader's actions; the open line has the same face on top (#2421)
+    const row = (
+      <View ref={rowRef} collapsable={false}>
+        {hidden && p.frame !== false ? <DashedFrame testID={`est-hidden-frame-${l.id}`} /> : null}
+        {/* founder 21.11 («5 открытых»: корзина в свёрнутой строке — оставить, всегда; DS §8.3 О8, #2374): the trash stands on the folded
+            line too, a quiet icon in the column of the group's «⋯»; the delete gives the «Вернуть» toast (rule 5) */}
+        <RowView gap={0}>
+          {body}
+          {p.locked ? null : (
+            // founder 21.11 (#2387: «корзину — к драг-н-дропу, всё поравнял бы по краю»): the trash stands by the «⠿» at the right
+            // edge, its zone 44 wide beside the handle's 44 (they meet, never overlap), `space[6]` away from the sum
+            <View testID={`est-row-trash-${l.id}`} style={{ marginLeft: space[6], width: size.hitMin, alignItems: "center" }}>
+              <IconButton bare icon="trash" label={t("est2.row.trash")} onPress={() => p.api.action(l.id, "delete")} />
+            </View>
+          )}
         </RowView>
+        <Menu visible={!!menu} anchor={menu} items={items} onSelect={pick} onClose={() => setMenu(null)} />
       </View>
     );
-    if (web) {
-      // the web has no swipe: the same actions are in «⋯» (DS Б13), next to the row
-      return acts.menu.length
-        ? row(
-            <>
-              {body}
-              <View ref={moreRef} collapsable={false}>
-                <View testID={`est-menu-${l.id}`}>
-                  <IconButton icon="more" label={t("est.row.actions")} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }))} />
-                </View>
-              </View>
-              <Menu visible={!!menu} anchor={menu} items={items} onSelect={(a) => p.api.action(l.id, a)} onClose={() => setMenu(null)} />
-            </>,
-          )
-        : row(body);
-    }
+    // the web has no swipe: the same actions are in «⋯» (DS Б13)
+    if (web) return row;
     return (
       <SwipeRow left={acts.swipeRight.map(swipeBtn)} right={acts.swipeLeft.map(swipeBtn)} onAct={(k) => p.api.action(l.id, k as RowAct)} hint={p.swipeHint} onHintPlayed={p.onSwipeHintPlayed}>
-        {row(body)}
+        {row}
       </SwipeRow>
     );
   }
   const unitItems = [...UNITS, ...(l.unit && !(UNITS as readonly string[]).includes(l.unit) ? [l.unit] : [])].map((u) => ({ key: u as string, label: u }));
   unitItems.push({ key: OWN, label: t("est.row.unitOwn") });
   return (
-    <Animated.View style={[{ paddingVertical: space[3], gap: space[3] }, fade]} testID={`est-line-${l.id}`} accessibilityState={{ expanded: true }} onTouchStart={p.onTouchOpen}>
-      {/* the header (DS §8.3): «˄ Свернуть» on the left (the founder's words); on the right the trash, «⋯» and «≡» (the list's handle) */}
-      <RowView style={{ justifyContent: "space-between" }}>
-        <View testID={`est-collapse-${l.id}`}>
-          <Button label={t("est.row.collapse")} icon="chevronUp" variant="ghost" size="sm" onPress={p.api.close} />
-        </View>
-        <RowView>
-          {p.locked ? null : <Trash gap={false} label={t("est2.row.trash")} onPress={() => p.api.action(l.id, "delete")} testID={`est-trash-${l.id}`} />}
-          <View ref={moreRef} collapsable={false} style={{ marginRight: space[6] }}>
-            <View testID={`est-menu-${l.id}`}>
-              <IconButton icon="more" label={t("est.row.actions")} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }))} />
-            </View>
+    // #2421/#2426 (founder 23.11: «ничего мне не дёргается»; the accepted picture n10): the open line's head IS its folded face — the
+    // name, «кол-во × цена» and the sum stay where they stood, the trash and «≡» in their column; no «˄ Свернуть» row. A tap on the
+    // head folds the line; its actions (the folded row's «⋯») are a long press of the head (a finger too: an open line is dragged by
+    // its «≡», not by a hold) and the screen reader's actions. The fields come out under it by height (`openClip`)
+    <View testID={`est-line-${l.id}`} accessibilityState={{ expanded: true }} onTouchStart={p.onTouchOpen}>
+      <View ref={rowRef} collapsable={false} onLayout={(e) => setHeadH?.(e.nativeEvent.layout.height)}>
+        {isHidden(l) && p.frame !== false ? <DashedFrame testID={`est-hidden-frame-${l.id}`} /> : null}
+        <RowView gap={0}>
+          <View testID={`est-collapse-${l.id}`} style={{ flex: 1 }}>
+            <Press onPress={p.api.close} onLongPress={items.length ? () => openMenuAt(rowRef) : undefined} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={l.name || t("est.row.unnamed")} accessibilityHint={t("est.row.collapse")} accessibilityState={{ expanded: true }} accessibilityActions={a11yActs} onAccessibilityAction={onA11yAct} containerStyle={{ flex: 1 }}>
+              {face}
+            </Press>
           </View>
+          {p.locked ? null : (
+            <View testID={`est-trash-${l.id}`} style={{ marginLeft: space[6], width: size.hitMin, alignItems: "center" }}>
+              <IconButton bare icon="trash" label={t("est2.row.trash")} onPress={() => p.api.action(l.id, "delete")} />
+            </View>
+          )}
+          {/* the list draws «≡» of the open line over this place (a folded line has it in the list's own column beside the row) */}
           {handleInHeader ? <View style={{ width: size.hitMin }} /> : null}
         </RowView>
-      </RowView>
+      </View>
+      <Animated.View style={clip}>
+        <View onLayout={(e) => { fieldsH.value = e.nativeEvent.layout.height; }} style={{ paddingTop: space[1], paddingBottom: space[3], paddingHorizontal: space[4], gap: space[3] }}>
       {marks.length ? (
-        <View testID="ue-line-source-hint" style={{ gap: space[2] }}>
-          <LineMarks marks={marks} lineId={l.id} />
+        // the marks themselves stand in the head (the folded face, #2421) — here only the words under them
+        <View testID="ue-line-source-hint">
           <T v="caption" tone="mut">
             {t("ue.src.hint")}
           </T>
@@ -340,18 +359,19 @@ function LineRowView(p: LineRowProps) {
           />
         </View>
         <View style={{ flex: 1 }}>
-          <NumberField kind="money" label={t("est.row.price")} unitWord={t("est.row.dollars")} cents={l.unitPriceCents} onChange={(cents) => p.api.change(l.id, { unitPriceCents: cents })} field={f("price")} onBad={(b) => p.api.bad(l.id, "price", b)} testID={`est-price-${l.id}`} />
+          <NumberField kind="money" label={t("est.row.price")} unitWord={t("est.row.dollars")} cents={l.unitPriceCents} onChange={(cents) => p.api.change(l.id, { unitPriceCents: cents })} field={f("price")} onBad={(b) => p.api.bad(l.id, "price", b)} selectOnFocus testID={`est-price-${l.id}`} />
         </View>
       </RowView>
       {ownUnit ? <TextField type="unit" value={l.unit} onChangeText={(v) => p.api.change(l.id, { unit: v })} placeholder="ea" label={t("est.row.unitOwn")} testID={`est-unit-own-${l.id}`} /> : null}
       {/* «Вид» — a list, not segments (the founder: «это тоже должен быть селектор»); the cost — only for who sees costs */}
+      {/* #2426: one grid with the row above — «Вид» under «Кол-во · Ед.», the cost under «Цена» (`kindWidth`) */}
       <RowView style={{ alignItems: "flex-start" }}>
-        <View style={{ flex: 1 }}>
+        <View style={{ width: kindWidth() }}>
           <SelectField<LineGroup> labelAbove label={t("est2.row.kind")} value={l.group} items={GROUPS.map((g) => ({ key: g, label: t(`ue.group.${g}` as DictKey) }))} onChange={(g) => p.api.change(l.id, { group: g })} testID={`est-kind-${l.id}`} />
         </View>
         {p.costsVisible && !p.clientScreen ? (
           <View style={{ flex: 1 }}>
-            <NumberField kind="money" label={t("est.row.cost")} unitWord={t("est.row.dollars")} cents={l.unitCostCents} onChange={(cents) => p.api.change(l.id, { unitCostCents: cents })} onClear={() => p.api.change(l.id, { unitCostCents: undefined })} field={f("cost")} onBad={(b) => p.api.bad(l.id, "cost", b)} placeholder="" testID={`est-cost-${l.id}`} />
+            <NumberField kind="money" label={t("est.row.cost")} unitWord={t("est.row.dollars")} cents={l.unitCostCents} onChange={(cents) => p.api.change(l.id, { unitCostCents: cents })} onClear={() => p.api.change(l.id, { unitCostCents: undefined })} field={f("cost")} onBad={(b) => p.api.bad(l.id, "cost", b)} placeholder="" selectOnFocus testID={`est-cost-${l.id}`} />
           </View>
         ) : null}
       </RowView>
@@ -430,34 +450,20 @@ function LineRowView(p: LineRowProps) {
                 <Toggle label={t("ue.addon")} on={!!l.optional} onChange={(on) => p.api.change(l.id, { optional: on })} />
               </RowView>
             </View>
+            {/* founder 23.11 (MAP §12 п.7): no switch «Скрыть от клиента» here — a line is hidden by the swipe and «⋯ → Скрыть от
+                клиента» (a priced one: the item is pale, a press says «Скрыть можно позицию с ценой $0») */}
             {p.noHide ? (
               <T v="caption" tone="mut">
                 {t("est.row.hideTpl")}
               </T>
-            ) : (
-              <View testID={`est-hide-${l.id}`}>
-                <RowView style={{ minHeight: size.hitMin }}>
-                  <T v="body" tone={isHidden(l) || canHide(l) ? "ink" : "mut"} style={{ flex: 1 }}>
-                    {t("est.row.hide")}
-                  </T>
-                  {isHidden(l) || canHide(l) ? (
-                    <Toggle label={t("est.row.hide")} on={isHidden(l)} onChange={(on) => p.api.change(l.id, { clientVisible: on ? false : undefined })} />
-                  ) : (
-                    // a price on the line: the switch is pale and does not turn; a press says why (DS §8.3, Б13)
-                    <Press onPress={() => toast.show(t("est.row.hideNeedZero"))} visibleHeight={size.hitMin} accessibilityRole="button" accessibilityLabel={`${t("est.row.hide")}. ${t("est.row.hideNeedZero")}`} testID={`est-hide-why-${l.id}`}>
-                      <ReadOnly value>
-                        <Toggle label={t("est.row.hide")} on={false} onChange={() => {}} />
-                      </ReadOnly>
-                    </Press>
-                  )}
-                </RowView>
-              </View>
-            )}
+            ) : null}
           </>
         ) : null}
       </View>
-      <Menu visible={!!menu} anchor={menu} items={items} onSelect={(a) => p.api.action(l.id, a)} onClose={() => setMenu(null)} />
-    </Animated.View>
+        </View>
+      </Animated.View>
+      <Menu visible={!!menu} anchor={menu} items={items} onSelect={pick} onClose={() => setMenu(null)} />
+    </View>
   );
 }
 

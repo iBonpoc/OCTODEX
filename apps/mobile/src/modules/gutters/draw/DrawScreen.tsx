@@ -14,7 +14,7 @@ import { registerDirtySheet } from "@/ui/dirtySheets";
 import { sizeText } from "../sizeText";
 import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
 import { useWindowDimensions, View, type LayoutChangeEvent } from "react-native";
-import { router, Stack, useLocalSearchParams, type Href } from "expo-router";
+import { Redirect, router, Stack, useLocalSearchParams, type Href } from "expo-router";
 import * as Crypto from "expo-crypto";
 import Svg, { Line } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -24,11 +24,12 @@ import { computeGutterParts } from "@octo/estimating-engine";
 import { breakpoint, component, drawing as dt, motion, radius, size as sizes, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
-import { moduleHref, moduleState } from "@/modules/registry";
+import { moduleHref, moduleState, moduleUsable } from "@/modules/registry";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Button, ChoiceChips, IconButton, StatusChip, Toggle } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
-import { Menu, Sheet, useToast } from "@/ui/overlays";
+import { HelpButton, Menu, Sheet, useToast } from "@/ui/overlays";
+import { EmptyHelp, helpText } from "./EmptyHelp";
 import { Banner } from "@/ui/banner";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
@@ -37,6 +38,7 @@ import { setFooterInset, setToastRight } from "@/ui/footerInset";
 import { fillStyle } from "@/ui/fill";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { isDoubleTap, tapRule, type LastTap } from "../canvas/doubleTap";
+import { blinkPlan, dimAt } from "../canvas/dsBlink";
 import { deleteTarget, hasCap, type PickedEnd } from "../canvas/endPick";
 import { adopt, dsFor, patchDs, patchRun, pruneStored, readDefaults, resetKind, runFor, storeDefaults, type NewDefaults } from "../canvas/toolDefaults";
 import { CornerSheet } from "./CornerSheet";
@@ -89,12 +91,12 @@ const SAVE_AFTER_MS = 1000;
 const EMPTY: Drawing = { runs: [], downspouts: [] };
 
 /** the name in the header (#1274): a button that SHRINKS — a long name is cut (not linked yet — «Привязать», DS §19а, #1665: whole at 390) with «…» in its own width, never under the icons beside it */
-function NameButton({ icon, label, onPress, filled }: { icon: IconKey; label: string; onPress: () => void; filled?: boolean }) {
+function NameButton({ icon, label, onPress, filled }: { icon?: IconKey; label: string; onPress: () => void; filled?: boolean }) {
   const { c } = useTheme();
   return (
     <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={label} visibleHeight={component.button.phone} containerStyle={{ flexShrink: 1, minWidth: 0 }}
       style={{ height: component.button.phone, flexShrink: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space[1], paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: filled ? c.surf2 : "transparent", borderWidth: filled ? 1 : 0, borderColor: c.bd }}>
-      <Icon name={icon} s={sizes.iconSm} color={c.ink} />
+      {icon ? <Icon name={icon} s={sizes.iconSm} color={c.ink} /> : null}
       <T v="button" w="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>{label}</T>
     </Press>
   );
@@ -189,7 +191,18 @@ function NextDsLine({ gutterFt, icon, text }: { gutterFt: number; icon: IconKey;
   );
 }
 
+/**
+ * #2273: an old link «Смета из замера» to the canvas (estimate=1 with a measurement) goes to the review at once — the canvas never
+ * mounts (it used to draw a frame, then replace itself). The review finds the measurement or says it is not there.
+ */
 export default function DrawScreen() {
+  const params = useLocalSearchParams<{ m?: string; estimate?: string }>();
+  if (params.estimate === "1" && typeof params.m === "string" && params.m)
+    return <Redirect href={`${moduleHref("gutters", "view")}?m=${encodeURIComponent(params.m)}&estimate=1` as Href} />;
+  return <DrawCanvas />;
+}
+
+function DrawCanvas() {
   const { t, money } = useI18n();
   const { c } = useTheme();
   const { wide: wideScreen } = useDevice();
@@ -206,7 +219,7 @@ export default function DrawScreen() {
   const params = useLocalSearchParams<{ m?: string; lead?: string; property?: string; estimate?: string }>();
   const ins = useSafeAreaInsets();
   const access = moduleState(store.db.company?.modules?.gutters).access;
-  const canSave = access === "trial" || access === "paid";
+  const canSave = moduleUsable(access);
   // what the company installs, its palette and defaults (settings M7b): new elements and the attribute panel
   const settings = store.db.company?.modules?.gutters?.settings;
   const ch = useMemo(() => choicesFor(settings), [settings]);
@@ -270,23 +283,32 @@ export default function DrawScreen() {
   const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (openTimer.current) clearTimeout(openTimer.current); }, []);
   useEffect(() => { if (openTimer.current) { clearTimeout(openTimer.current); openTimer.current = null; } }, [tool]);
-  /** a downspout just put blinks three times (founder 08.11: you see what appeared); `dim` — its off beat */
+  /** a downspout just put blinks, then its sheet opens (#1763, DS §19а): `motion.blinkSteps` beats of `motion.blinkStepMs` (≈0.5 s), the
+   *  order and time are `blinkPlan` (canvas/dsBlink.ts, unit-tested); `dim` — its off beat. Reduce motion: no blink, the sheet at once */
   const [fresh, setFresh] = useState<string | null>(null);
   const [dim, setDim] = useState(false);
   const reduce = useReducedMotion();
+  const reduceRef = useRef(reduce);
+  reduceRef.current = reduce;
+  // the sheet of the downspout just put, waiting for its blink to end: any next tap, a tool change or leaving the screen cancels it
+  const sheetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dropSheetTimer = () => { if (sheetTimer.current) { clearTimeout(sheetTimer.current); sheetTimer.current = null; } };
+  useEffect(() => dropSheetTimer, []);
+  useEffect(dropSheetTimer, [tool]);
   useEffect(() => {
-    if (!fresh || reduce) return setFresh(null);
+    const plan = blinkPlan(reduce);
+    if (!fresh || !plan.steps) return setFresh(null);
     let n = 0;
-    setDim(true);
+    setDim(dimAt(0));
     const iv = setInterval(() => {
       n += 1;
-      if (n >= 6) {
+      if (n >= plan.steps) {
         clearInterval(iv);
         setDim(false);
         setFresh(null);
-      } else setDim((x) => !x);
-    }, motion.durBase);
-    return () => clearInterval(iv);
+      } else setDim(dimAt(n));
+    }, plan.stepMs);
+    return () => { clearInterval(iv); setDim(false); };
   }, [fresh, reduce]);
   /** the hint of the tool just picked; gone after the first thing done with it (П20.8) */
   const [hint, setHint] = useState<Tool | "select" | "move" | null>(null);
@@ -681,6 +703,7 @@ export default function DrawScreen() {
       liftTap.current = false;
     },
     onActivate: (e) => {
+      dropSheetTimer(); // a tap after a downspout was put: its sheet does not open over what the tap does
       if (Date.now() - canvas.multiAt.current < MULTI_TAP_MS) { lastTap.current = null; return; } // the fingers of a pinch / two-finger pan lifting are not a tap (a pinch that ended over a length label opened its sheet)
       if (!holdIsTap(hold.current)) return; // a touch that picked something up (a hold) is not a tap: the release does not flip a cap or open a menu (#1272)
       const { drawing: d, tool: tl } = cur.current;
@@ -724,9 +747,11 @@ export default function DrawScreen() {
           haptics.medium(); // set down on the gutter (DS §15.6)
           setSelected(id);
           setFresh(id);
-          // its menu at once (founder 09.11): fittings, size, colour — on the phone a sheet, wider the side panel is open. Kept (founder 15.11,
-          // README §12 п.20: «ставится одним нажатием на жёлоб, как сейчас — оставить»)
-          setSheet(true);
+          // its menu (founder 09.11): fittings, size, colour — on the phone a sheet, wider the side panel is open. Kept (founder 15.11,
+          // README §12 п.20: «ставится одним нажатием на жёлоб, как сейчас — оставить»); after its blink, so the blink is seen (#1763)
+          const at = blinkPlan(reduceRef.current).sheetAtMs;
+          if (at > 0) sheetTimer.current = setTimeout(() => { sheetTimer.current = null; setSheet(true); }, at);
+          else setSheet(true);
         }
         return;
       }
@@ -874,7 +899,7 @@ export default function DrawScreen() {
   const mPhotos = m && mStored && (canSave || has()) ? <MeasurePhotos measurementId={m.id} testID="draw-photos" onRemoved={() => setPhotoSheet(false)} readOnly={!canSave} /> : null;
   const attrs = !sel ? null : (
     <>
-      {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} compact={!wide} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} ch={ch} compact={!wide} run={drawing.runs.find((r) => r.id === sel.runId)?.attrs} />}
+      {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} ch={ch} run={drawing.runs.find((r) => r.id === sel.runId)?.attrs} />}
       {elPhotos}
     </>
   );
@@ -897,9 +922,9 @@ export default function DrawScreen() {
         <T v="caption" tone="mut">{t("mod.gutters.draw.newDefaults.hint")}</T>
       </View>
       {newSheet === "line" ? (
-        <RunAttrsView forNew run={{ id: "new-run", a: [0, 0], b: [0, 0], attrs: runFor(ch, story, newDef) }} onAttrs={(p) => setNewDef((x) => patchRun(ch, x, p))} onLength={() => {}} ch={ch} compact={!wide} />
+        <RunAttrsView forNew run={{ id: "new-run", a: [0, 0], b: [0, 0], attrs: runFor(ch, story, newDef) }} onAttrs={(p) => setNewDef((x) => patchRun(ch, x, p))} onLength={() => {}} ch={ch} />
       ) : (
-        <DsAttrsView forNew ds={{ ...dsFor(ch, newDef), id: "new-ds", runId: "", atIn: 0 }} onAttrs={(p) => setNewDef((x) => patchDs(ch, x, p))} ch={ch} compact={!wide} run={runFor(ch, story, newDef)} />
+        <DsAttrsView forNew ds={{ ...dsFor(ch, newDef), id: "new-ds", runId: "", atIn: 0 }} onAttrs={(p) => setNewDef((x) => patchDs(ch, x, p))} ch={ch} run={runFor(ch, story, newDef)} />
       )}
     </View>
   );
@@ -1158,13 +1183,6 @@ export default function DrawScreen() {
     if (cur.current.canSave) await saver.flush(mm, toElements(cur.current.drawing, mm.id));
     router.push(`${moduleHref("gutters", "view")}?m=${encodeURIComponent(mm.id)}&from=draw` as Href);
   };
-  // an old link «Смета из замера» (estimate=1) to the canvas: the review does the estimate now
-  const toView = useRef(params.estimate === "1");
-  useEffect(() => {
-    if (!toView.current || !inStore) return;
-    toView.current = false;
-    router.replace(`${moduleHref("gutters", "view")}?m=${encodeURIComponent(inStore.id)}&estimate=1` as Href);
-  });
 
   // on its side (founder 08.11): one strip at the bottom — the card and the toolbar as a row beside it (a column would
   // not fit the height); the grip puts the toolbar left or right of the card
@@ -1321,11 +1339,17 @@ export default function DrawScreen() {
               </View>
             ) : inStore && !leadId && !inStore.propertyId ? (
               <View testID="draw-to-lead" style={{ flexShrink: 1 }}>
-                <NameButton icon="plus" label={t("mod.gutters.draw.toLead")} filled onPress={() => setLinkSheet(true)} />
+                {/* the filled pill is the button; no «＋» before the word: with the header's buttons at 40 (rule 3, #2350) «Привязать» is whole at 390 (e2e 412) */}
+                <NameButton label={t("mod.gutters.draw.toLead")} filled onPress={() => setLinkSheet(true)} />
               </View>
             ) : (
               <T v="heading" w="semibold">{t("mod.gutters.draw.title")}</T>
             )}
+            {/* «?» beside the name (DS §12.2): the same steps as on the empty canvas, any time (#2186) */}
+            {/* a gap of a whole step from the name button: their touch zones (44) never overlap (rule 3; second design review) */}
+            <View style={{ marginLeft: space[3] }}>
+              <HelpButton title={t("mod.gutters.draw.help.q")} text={helpText(t)} testID="draw-help" />
+            </View>
             {/* no cloud when all is saved and sent: only «on the phone» (not sent yet / no connection), a tap says it in words (#507 → #1274) */}
             {canSave && !flat && (mark === "sending" || mark === "phone") ? (
               <View testID="draw-local">
@@ -1391,9 +1415,8 @@ export default function DrawScreen() {
 
       {!drawing.runs.length && !ghost ? (
         <View pointerEvents="none" style={{ position: "absolute", left: space[6], right: space[6] + panelSide, top: 0, bottom: 0, alignItems: "center", justifyContent: "center" }} testID="draw-empty">
-          <T tone="mut" center>{t("mod.gutters.draw.empty")}</T>
-          {/* the tools carry pictures only (#1274): where their words are, said while the drawing is still empty (the first opening) */}
-          <T v="caption" tone="mut" center>{t("mod.gutters.draw.emptyTools")}</T>
+          {/* «Как рисовать» (founder 18.11, #2186): the four steps while the canvas is empty; every touch goes through to the canvas */}
+          <EmptyHelp lineIcon={lineIcon} dsIcon={dsIcon} />
         </View>
       ) : null}
       {/* the live length beside the line being drawn (founder 09.11, #689), not at the top of the screen */}
@@ -1542,10 +1565,10 @@ export default function DrawScreen() {
       {m ? <LinkSheet visible={linkSheet} onClose={() => setLinkSheet(false)} measurementId={m.id} /> : null}
       <DeleteMeasurementSheet visible={!!askDelete} on={askDelete ?? NO_ESTIMATES} onDelete={deleteNow} onClose={() => setAskDelete(null)} />
       <Menu visible={!!whoAt} anchor={whoAt} items={whoItems} onSelect={onWho} onClose={() => setWhoAt(null)} />
-      <InputWindow visible={canSave && !!editRun} onClose={() => setLenEdit(null)}>
+      <InputWindow visible={canSave && !!editRun} onClose={() => setLenEdit(null)} scroll={false}>
         {editRun ? <QuickLength key={editRun.id} fmt={ch.lenFormat} run={editRun} start={runLengthIn(editRun)} onLength={(n) => commit(setLength(cur.current.drawing, editRun.id, n))} onDone={() => setLenEdit(null)} onCancel={() => setLenEdit(null)} /> : null}
       </InputWindow>
-      <InputWindow visible={canSave && !!quick} onClose={cancelQuick}>
+      <InputWindow visible={canSave && !!quick} onClose={cancelQuick} scroll={false}>
         {quick ? <QuickLength fmt={ch.lenFormat} run={quick} onLength={(n) => commit(setLength(cur.current.drawing, quick.id, n))} onDone={() => setQuickRun(null)} onCancel={cancelQuick} /> : null}
       </InputWindow>
       {/* «Конец желоба» (a double tap on a free end, #1273): the cap is there / none, the line's face L ↔ R */}

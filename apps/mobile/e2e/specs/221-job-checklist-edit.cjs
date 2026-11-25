@@ -4,6 +4,8 @@
  * «Ниже»; the visit shows the item. A job whose only visit has started (j5 → v4 «working») — no editor; the tech — none.
  * Found by testID and the db.
  */
+const { objSection } = require("../objectScreen.cjs");
+
 exports.run = async (h) => {
   const p = h.page;
   const visit = async (id) => (await h.db()).visits.find((x) => x.id === id);
@@ -14,6 +16,7 @@ exports.run = async (h) => {
   const editor = () => p.getByTestId("chk-editor").last();
 
   await h.go("/job/j1");
+  await objSection(p, "job-screen", "visits"); // v2: the editor is under the job's «Выезды»
   await editor().waitFor();
   await editor().getByText(/^Чек-лист выезда · /).waitFor();
   const before = (await visit("v1")).checklist.length;
@@ -42,17 +45,23 @@ exports.run = async (h) => {
   await h.shot("edited");
 
   // the visit shows what the job card changed
+  // v2: the visit's checklist is its rows `chk-item-<item id>`
+  const ladder = v.checklist.find((c) => c.label === "Ladder on site");
   await h.go("/visit/v1");
-  await editor().getByText("Ladder on site").waitFor();
+  const item = p.getByTestId(`chk-item-${ladder.id}`).locator("visible=true").first();
+  await item.waitFor({ timeout: 8000 });
+  h.expect((await item.innerText()).includes("Ladder on site"), "the visit shows the item the job card added");
 
   // a job whose visit has started: nothing to edit before the visit
   await h.go("/job/j5");
+  await objSection(p, "job-screen", "visits");
   await p.getByTestId("job-visit-v4").waitFor();
   h.expect((await p.getByTestId("chk-editor").count()) === 0, "j5: the visit has started — no editor");
 
   // the tech: no editor on the job card (the server would refuse the edits)
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go("/job/j1");
+  await objSection(p, "job-screen", "visits");
   await p.getByTestId("job-visit-v1").waitFor();
   h.expect((await p.getByTestId("chk-editor").count()) === 0, "tech: no editor");
 };

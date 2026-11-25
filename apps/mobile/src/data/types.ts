@@ -250,6 +250,9 @@ export interface FileItem {
   elementId?: ID;
   /** the photo on this phone until it is uploaded (never sent as a field) */
   uri?: string;
+  /** #1441: the cloud refused the file — the same mark as a visit's photo (Photo.upload): shown with «Повторить». Optional:
+   *  a record from an older build has none (rule 16) */
+  upload?: { failed: PhotoFail; at: string };
 }
 
 export type VisitStep = "scheduled" | "en_route" | "on_site" | "working" | "signed" | "paid" | "done";
@@ -950,6 +953,9 @@ export interface Company {
   /** add-on modules by key (public.company_modules, docs/specs/33 П15; modules/registry.ts reads them). Written only
    *  through module.enable / module.disable / module.saveSettings, never by company.save; absent = none on this phone. */
   modules?: Record<string, import("@/modules/registry").CompanyModule>;
+  /** #2410: the developer's company (companies.developer_account) — every switched-on module has no term. Read only:
+   *  set by the server (service_role, a migration), never by the app */
+  developerAccount?: boolean;
   /** photo rules for visits (docs/specs/08 §3.3; features/checklist.ts visitSettings fills the gaps). Written only through
    *  company.visitSettings, never by company.save; absent = the defaults */
   visitSettings?: Partial<VisitSettings>;

@@ -1,7 +1,7 @@
 /**
  * #1669 (continuing #1633): the person was REMOVED from a company (the server confirmed it) and changes made there are still on
  * this phone — the server accepts none of them now. A sheet at the start, whether or not the person has another company (the
- * closed-company card, features/ClosedCompany.tsx, is only for a person with none). It says how many; «Оставить» closes it
+ * closed-company card, features/ClosedCompanyView.tsx, is only for a person with none). It says how many; «Оставить» closes it
  * (they stay on the phone, it comes back next start), «Убрать…» asks first (rule 5: they cannot come back) and then drops
  * them (store.dropUnsentIn). Not over sign-in, the company setup, the client page and the legal texts.
  */

@@ -8,13 +8,13 @@ import type { Role } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { roleHome } from "@/nav/roles";
 import { goTo } from "@/nav/go";
-import { ClosedCompanies } from "@/features/ClosedCompany";
+import { ClosedCompanies } from "@/features/ClosedCompanyView";
 import { Button, Segmented, StatusChip, TextField } from "@/ui/controls";
 import { useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { Card, FieldGroup, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { StuckOps } from "@/features/StuckOps";
-import { useSignOutAsk } from "@/features/SignOutAsk";
+import { useSignOutAsk } from "@/features/SignOutAskView";
 
 /**
  * «Профиль и аккаунт» (spec 26, founder 07.11: the profile card and «Мои настройки» led to the same screen).

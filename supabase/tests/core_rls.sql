@@ -19464,4 +19464,65 @@ select tst.ok(tst.cnt($q$select seq from public.catalog_price_history where item
 rollback;
 \echo 'T468–T469 ok'
 
+-- ================================================================ T470: the developer's company — modules without a term
+-- (founder 22.11.2026, #2410, migration 20261117660000). companies.developer_account: app.module_active is true for a
+-- switched-on module whatever its trial end; only the server sets the flag; members read their own company's.
+:as_super
+begin;
+insert into public.company_modules (company_id, module_key, enabled, trial_ends_at)
+values ('ca000000-0000-0000-0000-000000000000', 'gutters', true, now() - interval '30 days'),
+       ('cb000000-0000-0000-0000-000000000000', 'gutters', true, now() - interval '30 days')
+on conflict (company_id, module_key) do update set enabled = true, trial_ends_at = excluded.trial_ends_at, paid_until = null;
+:as_owner_a
+select tst.ok(not app.module_active('ca000000-0000-0000-0000-000000000000', 'gutters'), 'T470 without the flag: the trial is over, the module is not active (as before)');
+select tst.ok((select developer_account = false from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'T470 a member reads the flag of the own company (off by default)');
+select tst.fails_like($q$update public.companies set developer_account = true where id = 'ca000000-0000-0000-0000-000000000000'$q$,
+  '%permission denied%', 'T470 the owner does not set the flag on the own company');
+select tst.fails_like($q$insert into public.companies (id, name, developer_account) values (gen_random_uuid(), 'Self Dev', true)$q$,
+  '%permission denied%', 'T470 a new company is never created with the flag');
+-- as PostgREST sends an upsert: insert (id, name) … on conflict do update the flag
+select tst.fails_like($q$insert into public.companies (id, name) values ('ca000000-0000-0000-0000-000000000000', 'Bonpoc Gutters')
+  on conflict (id) do update set developer_account = true$q$, '%permission denied%', 'T470 an upsert does not set the flag either');
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a4700000-0000-4000-8000-000000000001', 'admin470@a.test', '{"full_name":"Ada Admin"}');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a4700000-0000-4000-8000-000000000001', 'admin', 'active');
+\set as_admin470 'reset role; set request.jwt.claim.sub = ''a4700000-0000-4000-8000-000000000001''; set role authenticated;'
+:as_admin470
+select tst.fails_like($q$update public.companies set developer_account = true where id = 'ca000000-0000-0000-0000-000000000000'$q$,
+  '%permission denied%', 'T470 an admin does not set the flag');
+-- the second lock: even a write that reached the row (as if a grant opened the column) never changes the flag
+:as_super
+grant update (developer_account) on public.companies to authenticated;
+:as_owner_a
+update public.companies set developer_account = true where id = 'ca000000-0000-0000-0000-000000000000';
+:as_super
+revoke update (developer_account) on public.companies from authenticated;
+select tst.ok(not (select developer_account from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'T470 the trigger keeps the flag off for the app''s own write');
+:as_super
+update public.companies set developer_account = true where id = 'ca000000-0000-0000-0000-000000000000';
+:as_owner_a
+select tst.ok(app.module_active('ca000000-0000-0000-0000-000000000000', 'gutters'), 'T470 with the flag the module is active a month after the trial end');
+select tst.ok((select developer_account from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'T470 a member sees the flag of the own company');
+:as_tech_a
+select tst.ok(app.module_active('ca000000-0000-0000-0000-000000000000', 'gutters'), 'T470 a tech of the company: active too');
+select tst.ok((select developer_account from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'T470 a tech reads the flag of the own company');
+:as_owner_b
+select tst.ok(not app.module_active('cb000000-0000-0000-0000-000000000000', 'gutters'), 'T470 the flag of A does not open B''s module');
+select tst.ok(not app.module_active('ca000000-0000-0000-0000-000000000000', 'gutters'), 'T470 another company does not learn whether A''s module is active');
+select tst.ok(tst.cnt($q$select 1 from public.companies where id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0, 'T470 another company does not read A''s flag');
+:as_super
+update public.company_modules set enabled = false where company_id = 'ca000000-0000-0000-0000-000000000000' and module_key = 'gutters';
+:as_owner_a
+select tst.ok(not app.module_active('ca000000-0000-0000-0000-000000000000', 'gutters'), 'T470 with the flag a switched-off module stays off');
+:as_super
+select tst.ok(not has_column_privilege('authenticated', 'public.companies', 'developer_account', 'UPDATE')
+          and not has_column_privilege('authenticated', 'public.companies', 'developer_account', 'INSERT')
+          and has_column_privilege('authenticated', 'public.companies', 'developer_account', 'SELECT')
+          and not has_column_privilege('anon', 'public.companies', 'developer_account', 'SELECT')
+          and not has_function_privilege('anon', 'app.module_active(uuid, text)', 'EXECUTE')
+          and has_function_privilege('authenticated', 'app.module_active(uuid, text)', 'EXECUTE'),
+  'T470 rights: the app reads the flag, never writes it; anon nothing');
+rollback;
+\echo 'T470 developer company: modules without a term, the flag only from the server ok'
+
 \echo 'ALL TESTS PASSED'

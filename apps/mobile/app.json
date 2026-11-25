@@ -86,10 +86,10 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 120,
           "resizeMode": "contain",
-          "backgroundColor": "#EFEBE5",
+          "backgroundColor": "#D6D7D1",
           "dark": {
             "image": "./assets/splash-icon-dark.png",
-            "backgroundColor": "#24272D"
+            "backgroundColor": "#26282C"
           }
         }
       ],

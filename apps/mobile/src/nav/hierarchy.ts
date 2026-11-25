@@ -87,7 +87,11 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
     }
     case "invoice": {
       // «Ещё» → Счета: the list is a root, the end of the chain «Счета › Счёт»
-      if (!id) return { section: "invoices" };
+      // one client's debts (`/invoice?customer=<id>` — the client's «Должен»): «‹» goes back to that client (v2 has no chip ✕)
+      if (!id) {
+        const cid = one(params.customer);
+        return cid && client(cid) ? { section: "invoices", up: toClient(cid) } : { section: "invoices" };
+      }
       const inv = db.invoices.find((x) => x.id === id);
       const j = inv ? job(inv.jobId) : undefined;
       const up = j?.estimateId ? toEstimate(j.estimateId) : j ? toJob(j.id) : invList;
@@ -111,8 +115,7 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
       if (id === "import") return { section: "clients", kind: "client.import.title", up: { href: "/clients", label: K("tab.clients") } };
       // step 17 C3 (04 §14.4): the imports of clients are under Clients too
       if (id === "imports") return { section: "clients", kind: "client.imports.title", up: { href: "/clients", label: K("tab.clients") } };
-      // wave 4 (13 §3.3): a row's list of the client (/client/<id>?s=jobs) sits under its client
-      if (one(params.s)) return { section: "clients", kind: "client.card", up: toClient(id) };
+      // redesign #2350: the client's sections are a tab strip on the card itself — ?s= is the same card, under Clients
       return { section: "clients", kind: "client.card", up: { href: "/clients", label: K("tab.clients") } };
     case "property": {
       // C2: a property lives only inside its client
@@ -135,8 +138,9 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
     case "visit": {
       if (role === "tech") return { section: "home", kind: "visit.title", up: { href: "/visits", label: K("nav.home") } };
       const v = db.visits.find((x) => x.id === id);
-      // an inspection has no job: up to the Plan
-      return { section: v?.jobId ? "clients" : "plan", kind: "visit.title", up: v?.jobId ? toJob(v.jobId) : { href: "/plan", label: K("nav.plan") } };
+      // an inspection has no job: up to the Plan. #2363 F14: a visit lives in the Plan — opened with no history (a link, a push)
+      // it lights «План», not «Клиенты» (opened from a list, the tab it came from stays lit: tabBarRule litSection)
+      return { section: "plan", kind: "visit.title", up: v?.jobId ? toJob(v.jobId) : { href: "/plan", label: K("nav.plan") } };
     }
     case "catalog":
       return id ? { section: "catalog", kind: "cat.item", up: { href: "/catalog", label: K("cat.title") } } : { section: "catalog" };
@@ -177,8 +181,9 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
       // a number opened from "Today": back goes to Today, whatever tab the role has
       return { section: "home", up: { href: "/today", label: K("today.title") } };
     case "messages":
-      // a conversation sits under «Сообщения» (LOG п.16: after a reload there was no way back); the list is a tab root
-      return id ? { section: "messages", kind: "w6.msg.thread", up: { href: "/messages", label: K("nav.messages") } } : {};
+      // a conversation sits under «Сообщения» (LOG п.16: after a reload there was no way back); the list is a section of
+      // «Ещё» since v2 (the tab is gone, sections.ts) — a ☰ root like Jobs: from «Ещё» it has «‹ Ещё» and the back swipe
+      return id ? { section: "messages", kind: "w6.msg.thread", up: { href: "/messages", label: K("nav.messages") } } : { section: "messages" };
     case "settings":
       // «Профиль и аккаунт» (spec 26): opened from the profile card of «Ещё» / the menus — a page of its own
       if (id === "profile") return { section: "settings", kind: "fix.settings.profile" };

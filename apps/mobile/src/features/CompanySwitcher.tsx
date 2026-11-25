@@ -21,6 +21,7 @@ import { localUndo } from "@/data/undo";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button, StatusChip } from "@/ui/controls";
+import { ButtonPair } from "@/ui/pairs";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Icon, Press, T } from "@/ui/primitives";
@@ -135,8 +136,10 @@ export function CompanySheetHost() {
           <View testID="company-left" style={{ gap: space[3] }}>
             <T v="heading">{t("people.switch.leftTitle", { name: left.from.companyName })}</T>
             <T v="body">{t("people.switch.leftBody", { name: left.from.companyName, n: left.n })}</T>
-            <Button testID="company-left-go" label={t("people.switch.go")} variant="primary" full onPress={() => go(left.to)} />
-            <Button testID="company-left-stay" label={t("people.switch.stay")} variant="secondary" full onPress={close} />
+            <ButtonPair
+              main={{ testID: "company-left-go", label: t("people.switch.go"), variant: "primary", onPress: () => go(left.to) }}
+              second={{ testID: "company-left-stay", label: t("people.switch.stay"), variant: "secondary", onPress: close }}
+            />
           </View>
         ) : (
           <>

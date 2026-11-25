@@ -14,9 +14,11 @@ const INKS = ["rgb(242, 243, 245)", "rgb(21, 22, 26)"];
 
 exports.run = async (h) => {
   const p = h.page;
-  // the day cell (Week strip, Month): its screen-reader label says «В плане: N» (24 §B, review of #267)
-  const dayCell = (k) => p.getByTestId(`plan-day-${k}`).locator("visible=true").first();
+  // the day (v2: the Week's pill `plan-strip-<k>` of the DayStrip, the Month's cell `plan-day-<k>`): its screen-reader label says
+  // «В плане: N» (24 §B, review of #267)
+  const dayCell = (k) => p.locator(`[data-testid="plan-strip-${k}"], [data-testid="plan-day-${k}"]`).locator("visible=true").first();
   const countOf = async (k) => Number((String(await dayCell(k).getAttribute("aria-label")).match(/В плане: (\d+)/) || [])[1]);
+  const pills = () => p.getByTestId("plan-days").locator("visible=true").first().locator('[data-testid^="plan-strip-"]');
   const today = todayKey();
   // a day of this week other than today (the week runs Monday–Sunday: on a Sunday take Saturday)
   const tomorrow = weekday(today) === 0 ? addDays(today, -1) : addDays(today, 1);
@@ -27,7 +29,8 @@ exports.run = async (h) => {
   });
   await h.go("/plan");
   await p.waitForTimeout(300);
-  h.expect((await p.getByTestId("plan-week-strip").locator("visible=true").count()) === 1, "the Week has a strip of 7 days");
+  await p.getByTestId("plan-days").locator("visible=true").first().waitFor({ timeout: 8000 });
+  h.expect((await pills().count()) === 7, `the Week has a strip of 7 days (${await pills().count()})`);
   const n0 = await countOf(today);
 
   // our rows: a task at 10, an event at 12, our own done visit today; Ivan is off the next day of the week
@@ -58,12 +61,11 @@ exports.run = async (h) => {
 
   // Ivan's plan: tomorrow is his day off — said in a word, no colour
   await planMaster(p, "Ivan");
-  const strip = p.getByTestId("plan-week-strip").locator("visible=true").first();
-  const tCell = strip.getByTestId(`plan-day-${tomorrow}`);
+  // v2: the strip's pill «Пн / 23 / •» has no room for a word — the day off is said to a screen reader, no colour
+  const tCell = p.getByTestId("plan-days").locator("visible=true").first().getByTestId(`plan-strip-${tomorrow}`);
   h.expect((await tCell.count()) === 1, "the strip has the day off");
-  h.expect(/вых\./.test(await tCell.innerText()), "Ivan's day off: «вых.» in the strip (the whole word does not fit a phone cell)");
   await h.shot("week-dayoff");
-  h.expect(/выходной/.test(String(await tCell.getAttribute("aria-label"))), "… and the screen reader hears it");
+  h.expect(/выходной/.test(String(await tCell.getAttribute("aria-label"))), "Ivan's day off: the screen reader hears «выходной»");
   await planMaster(p, null);
 
   // the Month: the same count; the picked day is «Заливка» with a check (DS «Выделение выбранного»), not the accent, no ink frame
@@ -81,20 +83,21 @@ exports.run = async (h) => {
   await expectOneAccent(h, "the Month");
   await h.shot("month");
 
-  // tap a day of the strip → that Day
+  // v2: a day's «День ›» of the Week list → that Day (the strip's pill only picks the day)
   await h.clickText("Неделя"); await p.waitForTimeout(300);
-  await p.getByTestId("plan-week-strip").locator("visible=true").first().getByTestId(`plan-day-${today}`).click();
+  await p.getByTestId(`plan-week-day-${today}`).locator("visible=true").first().click();
   await p.waitForTimeout(300);
-  h.expect((await p.getByTestId("plan-week-strip").locator("visible=true").count()) === 0, "a strip day leaves the Week");
-  h.expect((await p.getByRole("radio", { name: /^Сегодня/ }).locator("visible=true").count()) > 0, "… for the Day: its day chips");
+  h.expect((await p.getByTestId("plan-week-list").locator("visible=true").count()) === 0, "«День ›» leaves the Week");
+  h.expect((await pills().count()) > 7, "… for the Day: its strip of four weeks");
 
-  // «＋» of a free row (review of #267: it opened the form at a fixed 9:00): the form takes its own first free time on
-  // that day — the company opens at 8:00 (demo hours), nobody is on a day 8 weeks ahead
+  // «＋» of a free day (review of #267: it opened the form at a fixed 9:00): the form takes its own first free time on
+  // that day — the company opens at 8:00 (demo hours), nobody is on a day 8 weeks ahead. v2: the free run of the Week is a quiet
+  // line; «＋» of the header → «Выезд или осмотр» books on the picked day
   await h.clickText("Неделя"); await p.waitForTimeout(300);
-  for (let i = 0; i < 8; i++) { await p.getByRole("button", { name: "Вперёд" }).last().click(); await p.waitForTimeout(150); }
-  const plus = p.getByTestId("plan-free").locator("visible=true").first().getByRole("button");
-  h.expect((await plus.count()) === 1, "a free row has its «＋»");
-  await plus.click(); await p.waitForTimeout(400);
+  for (let i = 0; i < 8; i++) { await p.getByTestId("plan-month-next").locator("visible=true").first().click(); await p.waitForTimeout(150); }
+  h.expect((await p.getByTestId("plan-free").locator("visible=true").count()) > 0, "8 weeks ahead: the free days are a quiet line");
+  await p.getByTestId("plan-create").locator("visible=true").first().getByRole("button").first().click();
+  await p.getByTestId("plan-create-visit").locator("visible=true").first().click(); await p.waitForTimeout(400);
   await h.sheet().getByText("Осмотр — выберите объект").waitFor();
   await h.sheet().locator('[role="button"]').filter({ hasText: /,/ }).first().click(); await p.waitForTimeout(400);
   const form = await h.sheet().innerText();
@@ -115,15 +118,16 @@ exports.run = async (h) => {
     await h.go("/plan"); await p.waitForTimeout(300);
     await h.clickText("Неделя"); await p.waitForTimeout(300);
     h.expect((await p.getByText("Опаздывает · не выехал", { exact: true }).locator("visible=true").count()) === 0, "no long «Опаздывает · не выехал» chip");
-    h.expect((await p.getByText("Опаздывает", { exact: true }).locator("visible=true").count()) > 0, "the chip says «Опаздывает»");
-    // ListCard (10а): the detail is a grey tag next to the chip
-    h.expect((await p.getByText("не выехал", { exact: true }).locator("visible=true").count()) > 0, "the detail «не выехал» is a tag of its own");
+    // v2 GroupRow: the pill says «Опаздывает»; the row's line is «работа · мастер» only — the state is never glued into it (#2363 F10,
+    // founder 21.11: «подпись слота — только работа · мастер, статус отдельной плашкой»)
+    const late = p.getByTestId("plan-row-v109late").locator("visible=true").first();
+    await late.waitFor({ timeout: 5000 });
+    h.expect((await late.getByText("Опаздывает", { exact: true }).count()) > 0, "the chip says «Опаздывает»");
+    h.expect(!/не выехал/.test(await late.innerText()), `the state is not in the row's line: ${await late.innerText()}`);
   }
   await h.clickText("Неделя"); await p.waitForTimeout(300);
-  // ListCard (10а): the job number is a fact of its own, whole (06 §0: no «…»)
-  const feedText = await p.getByTestId("plan-feed").locator("visible=true").first().innerText();
-  // the number is on the 1280 row-card; a phone / tablet card keeps to where and who (an overview of the day)
-  if (h.layout.width >= 1280) h.expect(/JOB-\d+/.test(feedText), "at least one card carries a job number");
-  h.expect(!feedText.includes("…"), "no «…» on the Week's cards");
+  // v2 GroupRow of the Week: the hour, the client, «работа · мастер» — no job number (the visit holds it); nothing cut with «…»
+  const feedText = await p.getByTestId("plan-week-list").locator("visible=true").first().innerText();
+  h.expect(!feedText.includes("…"), "no «…» on the Week's rows");
 
 };

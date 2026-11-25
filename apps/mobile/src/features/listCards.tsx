@@ -21,6 +21,7 @@ import type { DB } from "@/data/types";
 import { memberName } from "@/features/team";
 import { paymentRight } from "./moneyLists";
 import { invoiceTitle } from "@/features/invoiceTitle";
+import { waitShort } from "@/features/shortTime";
 
 type T = ReturnType<typeof useI18n>["t"];
 
@@ -43,7 +44,7 @@ export function leadCardSign(db: DB, l: Lead, t: T): CardSign | undefined {
   const w = waitingMinutes(l);
   if (w !== null) {
     const tone = waitStatus(w);
-    if (tone === "warn" || tone === "bad") return { tone, label: t("inbox.waiting", { m: w }) };
+    if (tone === "warn" || tone === "bad") return { tone, label: t("inbox.waiting", { m: waitShort(w, t) }) };
   }
   const missed = leadSigns(l)[0];
   if (missed) return { tone: missed.tone, label: t(missed.key, missed.params) };

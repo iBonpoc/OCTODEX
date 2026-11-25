@@ -49,8 +49,9 @@ exports.run = async (h, { seed, admin }) => {
   await h.shot("done");
 
   // «Импорты» (PR 3): the job from the server, «Отменить импорт» → the server takes the 300 cards back
-  await p.getByRole("button", { name: "Ещё действия" }).first().click();
-  await h.sheet().getByRole("button", { name: "Импорты" }).click();
+  // v2 (#2350): «⋯» of the list's header opens its menu; the item by testID (rule 19)
+  await p.getByTestId("clients-more").locator("visible=true").first().getByRole("button").first().click();
+  await p.getByTestId("clients-more-imports").locator("visible=true").first().click();
   const card = p.locator('[data-testid^="import-job-"]').filter({ hasText: "cloud193.csv" }).locator("visible=true").first();
   await card.waitFor({ timeout: 15000 });
   const text = await card.innerText();
