@@ -250,8 +250,12 @@ export const component = {
   sheetFormMax: 560,
   /** narrow numeric field (qty in a kit) */
   qtyFieldW: 72,
+  /** the name column of a part's count row «Elbow A · 75° ⌄ · − n +» (a module window, v43): the row's fields stand in one column */
+  countRowLabelW: 92,
   /** value column of a stepper */
   stepperValueW: 56,
+  /** the same, in a row that has the room of a field beside it (a part's count row) */
+  stepperValueCompactW: 28,
   /** two side by side (founder 21.11.2026, #2350: «две кнопки в столбик — две кнопки в ряд… селекторы… в ряд, если помещаются»; DS §7.4):
    *  `labelMax` — the longest label (characters) a button of a pair may have and still stand in a row; `charEm` — the average width of a
    *  button character as a share of `size.button` (Manrope, Latin and Cyrillic), to tell if a label fits its half; `fieldMin` — the
