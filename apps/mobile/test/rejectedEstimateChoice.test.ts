@@ -7,10 +7,12 @@ import { describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { canChooseSignedMeanwhile, runSignedMeanwhileChoice, signedMeanwhileAsk, SIGNED_MEANWHILE_KEYS } from "../src/features/signedMeanwhileModel";
-import { rejectedHint } from "../src/features/attention";
+import { buildAttention, rejectedHint } from "../src/features/attention";
+import type { DB, Role } from "../src/data/types";
+import { makeSeed } from "../src/data/seed";
 import { localUndo } from "../src/data/undo";
 import { canCopyRejectedEstimate } from "../src/features/access";
-import type { RejectedOp } from "../src/data/outboxRejected";
+import { REJECTED_KEEP_MS, type RejectedOp } from "../src/data/outboxRejected";
 import { ru } from "../src/i18n/ru";
 import { en } from "../src/i18n/en";
 import { es } from "../src/i18n/es";
@@ -110,15 +112,46 @@ describe("Б3: подсказка карточки с правками гово�
 });
 
 describe("Б2′: право на копию — по назначению, а не по режиму (в облаке canMakeEstimateAt у мастера всегда true)", () => {
-  const db = { visits: [{ id: "v1", propertyId: "p1", jobId: "j1", assigneeIds: ["me"], status: "scheduled", date: "2026-11-25" }], jobs: [{ id: "j1", propertyId: "p1" }], leads: [] } as never;
-  it("мастер в облаке без выезда на этом объекте — нельзя; на своём — можно; офис — всегда", () => {
-    expect(canCopyRejectedEstimate(db, { role: "tech", mode: "cloud", me: "someone-else" }, "p1")).toBe(false);
-    expect(canCopyRejectedEstimate(db, { role: "tech", mode: "cloud", me: "me" }, "p9")).toBe(false);
-    expect(canCopyRejectedEstimate(db, { role: "director", mode: "cloud", me: "x" }, "p9")).toBe(true);
+  // the clock is fixed (rule 19): «now» goes into the check, the visit is dated by its `start` (the server's app.tech_visit_counts)
+  const NOW = Date.UTC(2026, 10, 25, 18, 0, 0);
+  const visit = (start: string, over: Record<string, unknown> = {}) => ({ id: "v1", propertyId: "p1", jobId: "j1", assigneeIds: ["me"], status: "scheduled", start, ...over });
+  const mk = (v: Record<string, unknown>, job: Record<string, unknown> = {}) => ({ visits: [v], jobs: [{ id: "j1", propertyId: "p1", status: "scheduled", ...job }], leads: [] }) as never;
+  const tech = (me: string) => ({ role: "tech" as const, mode: "cloud" as const, me });
+  it("мастер в облаке: свой выезд на объекте → можно; чужой выезд, другой объект, выезд старше 14 дней, работа сделана → нельзя; офис — всегда", () => {
+    const own = mk(visit("2026-11-25T15:00:00Z"));
+    expect(canCopyRejectedEstimate(own, tech("me"), "p1", NOW)).toBe(true);
+    expect(canCopyRejectedEstimate(own, tech("someone-else"), "p1", NOW)).toBe(false);
+    expect(canCopyRejectedEstimate(own, tech("me"), "p9", NOW)).toBe(false);
+    expect(canCopyRejectedEstimate(mk(visit("2026-11-01T15:00:00Z")), tech("me"), "p1", NOW)).toBe(false); // 24 days ago
+    expect(canCopyRejectedEstimate(mk(visit("2026-11-25T15:00:00Z"), { status: "done" }), tech("me"), "p1", NOW)).toBe(false);
+    expect(canCopyRejectedEstimate(own, { role: "director", mode: "cloud", me: "x" }, "p9", NOW)).toBe(true);
+  });
+  it("Ж1: «Требует внимания» — мастеру без права подсказка whyOffice, директору why (связка buildAttention → rejectedHint)", () => {
+    const seed = makeSeed();
+    const own = { ...seed, me: "me", jobs: [{ id: "j1", propertyId: "p1", status: "scheduled" }], visits: [visit("2026-11-25T15:00:00Z", { photos: [] })] } as unknown as DB;
+    const other = { ...own, me: "other" } as DB;
+    const rej = { ...base, at: "2026-11-24T10:00:00Z", estimateEdit: edit } as RejectedOp;
+    const hintOf = (db: DB, role: Role) => buildAttention(db, role, NOW, { rejected: [rej] }).find((i) => i.kind === "rejected");
+    expect(hintOf(other, "tech")?.hint).toBe("est.rej.choice.whyOffice"); // not assigned at p1
+    expect(hintOf(own, "tech")?.hint).toBe("est.rej.choice.why"); // his own visit at p1
+    expect(hintOf(other, "director")?.hint).toBe("est.rej.choice.why");
+    // Ж4: the card says until when the phone keeps the edits (30 days after the refusal)
+    expect(hintOf(other, "director")?.hintUntil).toBe(Date.parse("2026-11-24T10:00:00Z") + REJECTED_KEEP_MS);
   });
   it("подсказка карточки без права на копию не зовёт к копии, а говорит, что копию сделает офис", () => {
     expect(rejectedHint({ ...base, estimateEdit: edit } as never, "tech", false)).toBe("est.rej.choice.whyOffice");
     expect(rejectedHint({ ...base, estimateEdit: edit } as never, "tech", true)).toBe("est.rej.choice.why");
+  });
+  it("Б1: подсказка без права не обещает копию от офиса — правки только на этом телефоне, нужно назначение на объект (RU/EN/ES)", () => {
+    expect((ru as Record<string, string>)["est.rej.choice.whyOffice"]).toMatch(/только на этом телефоне/);
+    expect((ru as Record<string, string>)["est.rej.choice.whyOffice"]).toMatch(/назначить/);
+    expect((ru as Record<string, string>)["est.rej.choice.whyOffice"]).not.toMatch(/может сделать/);
+    expect((en as Record<string, string>)["est.rej.choice.whyOffice"]).toMatch(/only on this phone/);
+    expect((en as Record<string, string>)["est.rej.choice.whyOffice"]).toMatch(/assign/);
+    expect((en as Record<string, string>)["est.rej.choice.whyOffice"]).not.toMatch(/can make/);
+    expect((es as Record<string, string>)["est.rej.choice.whyOffice"]).toMatch(/solo en este teléfono/);
+    expect((es as Record<string, string>)["est.rej.choice.whyOffice"]).toMatch(/asigne/);
+    expect((es as Record<string, string>)["est.rej.choice.whyOffice"]).not.toMatch(/puede hacer/);
   });
   it("М4: заголовок без даты — «до ваших правок»", () => {
     expect((ru as Record<string, string>)["est.rej.choice.titleNoDate"]).toBe("Клиент подписал смету до ваших правок");

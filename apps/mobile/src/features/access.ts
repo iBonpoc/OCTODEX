@@ -63,7 +63,7 @@ export function leadEstimatePropertyId(db: Pick<DB, "properties">, l: Pick<Lead,
 export const canMakeEstimateAt = (db: Pick<DB, "visits" | "jobs" | "leads">, w: Who, propertyId: ID | undefined): boolean => free(w) || isPropertyAssignee(db, w, propertyId);
 /** #2674 Б2′: «Сделать копию» из отказа — новая смета, и мастер делает её только там, где он назначен. В облаке `canMakeEstimateAt`
  *  у мастера всегда true (`free`: сервер решает сам), а карточки отказа бывают только в облаке — поэтому для окна проверяется назначение напрямую */
-export const canCopyRejectedEstimate = (db: Pick<DB, "visits" | "jobs" | "leads">, w: Who, propertyId: ID | undefined): boolean => w.role === "tech" ? isPropertyAssignee(db, w, propertyId) : true;
+export const canCopyRejectedEstimate = (db: Pick<DB, "visits" | "jobs" | "leads">, w: Who, propertyId: ID | undefined, now = Date.now()): boolean => w.role === "tech" ? isPropertyAssignee(db, w, propertyId, now) : true;
 /** the price list is the office's to change (catalog_items_update — staff); the tech only reads it */
 export const canEditCatalog = (role: Role) => role !== "tech";
 

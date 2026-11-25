@@ -4713,7 +4713,8 @@ export const en: Dict = {
   "est.rej.choice.copied": "Copy ready — a draft",
   "est.rej.choice.resetDone": "Edits discarded",
   "est.rej.choice.why": "Your edits are kept here and the client's signature stays. Make a copy of the estimate from them, or discard them.",
-  "est.rej.choice.whyOffice": "Your edits are kept here and the client's signature stays. The office can make a copy of the estimate from them — do not discard them.",
+  "est.rej.choice.whyOffice": "Your edits are kept only on this phone, and the client's signature stays. To make a copy of the estimate from them, ask the office to assign you to this property.",
+  "est.rej.choice.keepUntil": "Kept until {date}.",
   "est.rej.signedMeanwhile": "The client signed the estimate while your edits waited for the network — the edits were not saved",
   "est.rej.signedMeanwhileWhy": "The client's signature stays. To change the estimate, open it and choose “Don't sign — change it”: the client will have to sign again.",
   // visit payment refused by the server (#857 О1) — the tech hands it to the office

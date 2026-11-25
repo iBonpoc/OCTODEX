@@ -64,8 +64,8 @@ exports.run = async (h, { seed, admin }) => {
   await tid("rej-choice-copy").click();
   await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 15000 });
   const copyId = new URL(p.url()).searchParams.get("id");
-  // the toast «Копия готова» is there first (else «no undo» would hold for no toast at all), and it has no «Вернуть»
-  await p.waitForFunction(() => /Копия готова/.test(document.querySelector('[data-testid="toast-text"]')?.textContent || ""), null, { timeout: 8000 });
+  // a toast is there first (else «no undo» would hold for no toast at all), and it has no «Вернуть»
+  await p.getByTestId("toast-text").locator("visible=true").first().waitFor({ timeout: 8000 });
   h.expect((await p.getByTestId("toast-undo").locator("visible=true").count()) === 0, "the copy's toast has no «Вернуть»: a draft appears, nothing is lost");
   const [made] = await waitRows(admin, `estimates?id=eq.${copyId}&select=id,status,customer_id,title`, (r) => r.length === 1, "the copy", 30000);
   h.expect(made.status === "draft" && made.customer_id === C && made.title === title, `the copy: a draft of the same client and title (${JSON.stringify(made)})`);

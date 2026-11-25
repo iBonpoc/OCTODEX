@@ -24,7 +24,7 @@ import { waitParams } from "@/features/shortTime";
 /** Dispatcher home: one item at a time, most urgent first; resolve with one tap or snooze. */
 export default function Triage() {
   useTick();
-  const { t, money, dayOf } = useI18n();
+  const { t, money, dayOf, day } = useI18n();
   const { db, role, rejectedOps, dismissRejected, online, reviewVisitMissed, mode, snoozeAttention } = useStore();
   const toast = useToast();
   const rejChoice = useRejectedEstimateChoice();
@@ -136,7 +136,7 @@ export default function Triage() {
             <T v="title">{cur.name || t(cur.label, waitParams(cur.params, t))}</T>
           </View>
           <T v="body" tone="mut">
-            {cur.name ? t(cur.label, waitParams(cur.params, t)) : cur.kind === "rejected" ? t(cur.hint ?? "sync.rejected.hint") : ""}
+            {cur.name ? t(cur.label, waitParams(cur.params, t)) : cur.kind === "rejected" ? `${t(cur.hint ?? "sync.rejected.hint")}${cur.hintUntil != null ? ` ${t("est.rej.choice.keepUntil", { date: day(new Date(cur.hintUntil).toISOString()) })}` : ""}` : ""}
           </T>
           {curWho ? (
             <T v="body" tone="mut">

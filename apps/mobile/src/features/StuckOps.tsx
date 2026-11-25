@@ -9,7 +9,7 @@ import { space } from "@octo/design-tokens";
 import { router, type Href } from "expo-router";
 import { useStore, type StuckOp } from "@/data/store";
 import type { RejectedOp } from "@/data/outboxRejected";
-import { rejectedHint, rejectedLabel, rejectedOpens } from "@/features/attention";
+import { rejectedHint, rejectedKeepUntil, rejectedLabel, rejectedOpens } from "@/features/attention";
 import { useRejectedEstimateChoice } from "@/features/RejectedEstimateChoice";
 import { useI18n } from "@/i18n";
 import { stuckKindKey } from "@/data/syncLink";
@@ -109,6 +109,7 @@ function RejectedCard({ r }: { r: RejectedOp }) {
         </View>
         <T v="caption" tone="mut">
           {`${day(r.at)} ${time(r.at)}`} · {t(rejectedHint(r, role, choice.mayCopy(r)))}
+          {r.estimateEdit && rejectedKeepUntil(r.at) != null ? ` ${t("est.rej.choice.keepUntil", { date: day(new Date(rejectedKeepUntil(r.at)!).toISOString()) })}` : ""}
         </T>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
           {choice.can(r) ? <Button testID={`rejected-choose-${r.id}`} label={t("est.rej.choice.open")} icon="copy" variant="secondary" onPress={() => void choice.choose(r)} /> : null}
