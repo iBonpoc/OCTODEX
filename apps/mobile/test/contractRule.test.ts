@@ -20,7 +20,8 @@ import { visitDueCents } from "../src/features/visitDue";
 import { invoiceHtml } from "../src/features/docPdf";
 import { buildAttention } from "../src/features/attention";
 import { portalFromEstimate } from "../src/cloud/portal";
-import type { DB, Invoice, Job } from "../src/data/types";
+import { clientNextStep, clientToBill, jobFigures, jobStatement } from "../src/features/client/nextStep";
+import type { DB, Estimate, Invoice, Job } from "../src/data/types";
 
 const JOB = "j2061";
 function withInvoices(invs: Partial<Invoice>[], price = 50000): { db: DB; job: Job } {
@@ -35,6 +36,8 @@ function withInvoices(invs: Partial<Invoice>[], price = 50000): { db: DB; job: J
   ];
   return { db, job };
 }
+/** #2486: the approved estimate the client card finds the job by */
+const EST = { id: "e2486", status: "approved", savedAt: "2026-11-10T10:00:00Z" } as Estimate;
 const S = (t: number, p = 0) => ({ kind: "standalone" as const, totalCents: t, paidCents: p });
 const R = (t: number) => ({ kind: "recurring" as const, totalCents: t });
 
@@ -69,6 +72,11 @@ describe("#2061 one rule: the contract's own invoices", () => {
       expect(contractInvoice(db, job, left + 1)).toBeNull();
       // the visit's «К оплате» with no final yet bills the same rest
       if (!invs.some((i) => i.kind === "final" || i.kind === undefined)) expect(visitDueCents(db, { jobId: JOB })).toBe(left);
+      // #2486: the «Договор» block (ContractStatement) and the client card («Ещё выставить») — the same number and kind
+      const st = jobStatement(job, db.invoices);
+      expect(st.toInvoice).toBe(left);
+      expect(st.restKind).toBe(kind);
+      expect(clientToBill([EST], [{ ...job, estimateId: EST.id }], db.invoices)).toBe(left);
     });
   }
   it("a job with no price or old data with none: 0, never NaN", () => {
@@ -111,5 +119,47 @@ describe("#2061 one rule: the contract's own invoices", () => {
     expect(secondFinal(one.db, "other-job", "final")).toBe(false);
     // the rest after a final is issued as a progress invoice (restInvoiceKind), so it is never refused by this rule
     expect(secondFinal(one.db, JOB, restInvoiceKind(one.db, JOB))).toBe(false);
+  });
+
+  /**
+   * #2486: the client card and the «Договор» block read the job's statement by the same rule as the job screen's button.
+   * [case, invoices, still to invoice, paid on the contract, left of the contract («Остаток»)]
+   */
+  const MONEY: [string, Partial<Invoice>[], number, number, number][] = [
+    ["a standalone $200 paid", [S(20000, 20000)], 50000, 0, 50000],
+    ["a recurring for the whole price, paid", [{ ...R(50000), paidCents: 50000 }], 50000, 0, 50000],
+    ["a voided final left in the list", [{ kind: "final", totalCents: 50000, paidCents: 0, status: "void" }], 50000, 0, 50000],
+    ["a deposit paid in part", [{ kind: "deposit", totalCents: 15000, paidCents: 5000 }], 35000, 5000, 45000],
+    ["a deposit overpaid: no more than its total is paid on the contract", [{ kind: "deposit", totalCents: 15000, paidCents: 20000 }], 35000, 15000, 35000],
+    ["a deposit + a progress + a standalone", [{ kind: "deposit", totalCents: 15000, paidCents: 15000 }, { kind: "progress", totalCents: 10000 }, S(20000, 20000)], 25000, 15000, 35000],
+  ];
+  for (const [name, invs, left, paid, remaining] of MONEY) {
+    it(`#2486 client card and statement — ${name}: to invoice ${left / 100}, paid ${paid / 100}, left ${remaining / 100}`, () => {
+      const { db, job } = withInvoices(invs);
+      const j = { ...job, estimateId: EST.id } as Job;
+      // the job screen's button: void invoices live apart in the store (normalize) — the card's list may still carry one
+      const screen = contractToInvoiceCents({ invoices: db.invoices.filter((i) => i.status !== "void") }, j);
+      expect(screen).toBe(left);
+      const st = jobStatement(j, db.invoices);
+      expect(st.toInvoice).toBe(screen);
+      expect([st.paid, st.remaining]).toEqual([paid, remaining]);
+      expect(clientToBill([EST], [j], db.invoices)).toBe(screen);
+      expect(jobFigures(j, db.invoices)).toEqual({ contract: 50000, paid, remaining });
+    });
+  }
+  it("#2486 the client's next step «Выставить счёт» carries the job screen's rest: a paid standalone does not lower it", () => {
+    const { db, job } = withInvoices([S(20000, 20000), { kind: "deposit", totalCents: 15000, paidCents: 15000 }]);
+    const j = { ...job, estimateId: EST.id } as Job;
+    const mine = db.invoices.filter((i) => i.jobId === JOB);
+    const step = clientNextStep({ estimates: [EST], jobs: [j], invoices: mine, role: "director" });
+    expect(step?.kind).toBe("bill");
+    expect(step?.kind === "bill" ? step.toInvoiceCents : -1).toBe(contractToInvoiceCents(db, j));
+    expect(contractToInvoiceCents(db, j)).toBe(35000);
+  });
+  it("#2486 a recurring invoice for the whole price, paid: the contract is still to bill (was: nothing to bill)", () => {
+    const { db, job } = withInvoices([{ ...R(50000), paidCents: 50000 }]);
+    const j = { ...job, estimateId: EST.id } as Job;
+    const step = clientNextStep({ estimates: [EST], jobs: [j], invoices: db.invoices.filter((i) => i.jobId === JOB), role: "director" });
+    expect(step?.kind === "bill" ? step.toInvoiceCents : -1).toBe(50000);
   });
 });

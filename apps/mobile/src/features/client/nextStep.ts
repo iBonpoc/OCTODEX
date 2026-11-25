@@ -9,6 +9,7 @@
 import { contractStatement } from "@octo/estimating-engine";
 import type { Estimate, Invoice, Job, Role } from "@/data/types";
 import { canBill } from "@/features/billRights";
+import { contractInvoices, contractToInvoiceCents, restInvoiceKind } from "@/features/contractKind";
 import { invoiceBalance } from "@/features/invoiceStatus";
 import { paymentRight } from "@/features/moneyLists";
 
@@ -29,6 +30,18 @@ export interface NextStepInput {
 }
 
 const live = (i: Invoice) => i.status !== "void";
+
+/**
+ * #2486: the job's contract statement by the ONE rule of features/contractKind.ts (#2061, rule А) — only the contract's own
+ * invoices (deposit / progress / final, an older final with no kind) are «выставлено» and «оплачено» of the contract; a
+ * standalone or recurring invoice is extra work and never lowers what is left. `toInvoice` is `contractToInvoiceCents`
+ * itself and `restKind` is `restInvoiceKind` — the same answers as the job screen's «Счёт на остаток». One function for the
+ * client card (the next step, «Ещё выставить», the three figures) and the «Договор» block (ContractStatement).
+ */
+export function jobStatement(job: Pick<Job, "id" | "amountCents">, invoices: Invoice[]) {
+  const d = { invoices: invoices.filter(live) };
+  return { ...contractStatement(job.amountCents, contractInvoices(d, job.id)), toInvoice: contractToInvoiceCents(d, job), restKind: restInvoiceKind(d, job.id) };
+}
 /** the newest first: what the person touched last is what he is on */
 const newest = (a: Estimate, b: Estimate) => (b.savedAt ?? b.sentAt ?? "").localeCompare(a.savedAt ?? a.sentAt ?? "");
 
@@ -47,7 +60,7 @@ export function clientNextStep({ estimates, jobs, invoices, role, newEstimateHre
     for (const estimate of estimates.filter((e) => e.status === "approved").sort(newest)) {
       const job = jobs.find((j) => j.estimateId === estimate.id && !j.cancelledAt);
       if (!job || job.amountCents <= 0) continue;
-      const toInvoiceCents = contractStatement(job.amountCents, invoices.filter((i) => live(i) && i.jobId === job.id)).toInvoice;
+      const toInvoiceCents = jobStatement(job, invoices).toInvoice;
       if (toInvoiceCents > 0) return { kind: "bill", estimate, job, toInvoiceCents, href: `/job/${job.id}` };
     }
   }
@@ -127,24 +140,25 @@ export function clientSectionOf(v: unknown): ClientSectionKey {
 
 /**
  * «Тройка цифр» of the «Сейчас» card (visual v2 «Клиент»: «Смета $3,420 · Оплачено $342 · Остаток $3,078»): the job's contract, what
- * is paid on it and what is left — by the engine's contract statement (rule 8), the void invoices left out. A job without a sum — none.
+ * is paid on it and what is left — by the engine's contract statement (rule 8) over the contract's own invoices (#2486: a
+ * standalone or recurring one is outside it), the void invoices left out. A job without a sum — none.
  */
 export function jobFigures(job: Job, invoices: Invoice[]): { contract: number; paid: number; remaining: number } | null {
   if (job.amountCents <= 0) return null;
-  const st = contractStatement(job.amountCents, invoices.filter((i) => live(i) && i.jobId === job.id));
+  const st = jobStatement(job, invoices);
   return { contract: st.contract, paid: st.paid, remaining: st.remaining };
 }
 
 /**
  * «Ещё выставить» (client-card.html «Что надо решить» п.3): of every live job made from an approved estimate — what its contract
- * statement still has to bill. Computed by the engine (`contractStatement`), nothing new in the model.
+ * statement still has to bill. Computed by the one rule (`jobStatement` → `contractToInvoiceCents`), nothing new in the model.
  */
 export function clientToBill(estimates: Estimate[], jobs: Job[], invoices: Invoice[]): number {
   let cents = 0;
   for (const e of estimates.filter((x) => x.status === "approved")) {
     const job = jobs.find((j) => j.estimateId === e.id && !j.cancelledAt);
     if (!job || job.amountCents <= 0) continue;
-    cents += Math.max(0, contractStatement(job.amountCents, invoices.filter((i) => live(i) && i.jobId === job.id)).toInvoice);
+    cents += jobStatement(job, invoices).toInvoice;
   }
   return cents;
 }
