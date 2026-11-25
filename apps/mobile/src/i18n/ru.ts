@@ -2806,7 +2806,7 @@ export const ru = {
   "ds.scr.motionHint": "Длительности и кривые",
   "ds.scr.haptics": "Вибрация",
   "ds.scr.hapticsHint": "Каждый отклик — кнопкой «почувствовать»",
-  "ds.scr.spacingHint": "Отступы, радиусы, размеры, слои",
+  "ds.scr.spacingHint": "Воздух между деталями, скругления углов, высоты, что поверх чего",
   "ds.scr.selectorsHint": "Поле-меню, строки с галочкой, вкладки",
   "ds.scr.windowsHint": "Шторки всех высот",
   "ds.rule": "Правило: DESIGN-SYSTEM.md {ds}",

@@ -2807,7 +2807,7 @@ export const en: Dict = {
   "ds.scr.motionHint": "Durations and curves",
   "ds.scr.haptics": "Haptics",
   "ds.scr.hapticsHint": "Every response with a «feel it» button",
-  "ds.scr.spacingHint": "Spacing, radii, sizes, layers",
+  "ds.scr.spacingHint": "Air between parts, rounded corners, heights, what lies over what",
   "ds.scr.selectorsHint": "Menu field, rows with a check, tabs",
   "ds.scr.windowsHint": "Sheets of every height",
   "ds.rule": "Rule: DESIGN-SYSTEM.md {ds}",
