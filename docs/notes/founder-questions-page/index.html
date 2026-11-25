@@ -1,0 +1,342 @@
+<title>Вопросы GoRix</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+/* Раскладка: одна колонка как экран GoRix на телефоне (390), карточки-группы «Наряда» (DS: слои ground → surf → surf2, радиус 22/14, один акцент — главная кнопка). Токены — копия design/naryad-ds/tokens (theme.css, status.css, foundation.css). */
+:root{
+  --font:'Manrope',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --fs-display:30px;--fs-title:22px;--fs-heading:17px;--fs-body:15px;--fs-caption:13px;--fs-micro:12px;--fs-input:16px;
+  --lh-tight:1.15;--lh-body:1.45;--lh-snug:1.35;
+  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;
+  --r:22px;--ri:14px;--radius-pill:999px;--radius-field:12px;
+  --control-lg:40px;--hit-min:44px;--field-phone:44px;
+  --dur-fast:160ms;--dur-base:220ms;
+  /* светлая тема «Наряда» */
+  --acc:#E2C15E;--on-acc:#1C1A12;--acc-text:#5E4C0C;--acc-edge:#7A6418;--tint:rgba(226,193,94,.30);
+  --page:#CBCCC6;--bg:#D6D7D1;--ink:#17181B;--mut:#42454B;--surf:#E3E4DE;--surf2:#CDCEC8;--surf3:#C4C5BF;--in:#DBDCD6;
+  --bd:rgba(20,21,24,.08);--bd-field:#6F7279;--sh:0 10px 28px rgba(60,50,40,.12);--hl:rgba(255,255,255,.50);
+  --ground:linear-gradient(170deg,#E1D9CA 0%,#D6D7D1 55%,#BBBCB6 100%);
+  --scrim:rgba(0,0,0,.42);--toast:#26282C;--on-toast:#EEEFF1;
+  --st-ok:#DCEBDF;--st-ok-text:#1B6034;--st-info:#D8EAED;--st-info-text:#0E5866;
+  --st-warn:#F2E2CC;--st-warn-text:#824306;--st-bad:#F4DAD6;--st-bad-text:#9A2C22;--st-neutral:#CDCEC8;--st-neutral-text:#3E4147;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --acc-text:#E2C15E;--acc-edge:transparent;--tint:rgba(226,193,94,.16);
+  --page:#1F2024;--bg:#26282C;--ink:#EEEFF1;--mut:#B3B6BE;--surf:#303237;--surf2:#3A3C42;--surf3:#44464D;--in:#3A3C42;
+  --bd:rgba(255,255,255,.07);--bd-field:#80838C;--sh:0 10px 30px rgba(0,0,0,.3);--hl:rgba(255,255,255,.05);
+  --ground:linear-gradient(170deg,#43392F 0%,#26282C 55%,#191A1D 100%);--toast:#44464D;
+  --st-ok:#1C2E23;--st-ok-text:#86D3A0;--st-info:#182A2E;--st-info-text:#86C9D4;
+  --st-warn:#33281C;--st-warn-text:#E8B67F;--st-bad:#3A2122;--st-bad-text:#F09A90;--st-neutral:#3A3C42;--st-neutral-text:#B9BCC4;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --acc-text:#E2C15E;--acc-edge:transparent;--tint:rgba(226,193,94,.16);
+  --page:#1F2024;--bg:#26282C;--ink:#EEEFF1;--mut:#B3B6BE;--surf:#303237;--surf2:#3A3C42;--surf3:#44464D;--in:#3A3C42;
+  --bd:rgba(255,255,255,.07);--bd-field:#80838C;--sh:0 10px 30px rgba(0,0,0,.3);--hl:rgba(255,255,255,.05);
+  --ground:linear-gradient(170deg,#43392F 0%,#26282C 55%,#191A1D 100%);--toast:#44464D;
+  --st-ok:#1C2E23;--st-ok-text:#86D3A0;--st-info:#182A2E;--st-info-text:#86C9D4;
+  --st-warn:#33281C;--st-warn-text:#E8B67F;--st-bad:#3A2122;--st-bad-text:#F09A90;--st-neutral:#3A3C42;--st-neutral-text:#B9BCC4;
+  color-scheme:dark}
+
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{background:var(--ground) fixed,var(--bg);color:var(--ink);font-family:var(--font);font-size:var(--fs-body);line-height:var(--lh-body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:var(--space-5) var(--space-8);
+  -webkit-font-smoothing:antialiased;min-height:100%}
+.wrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:var(--space-6)}
+h1,h2,h3{margin:0;text-wrap:balance}
+p{margin:0}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--acc-text);outline-offset:2px}
+
+/* шапка */
+.head{display:flex;flex-direction:column;gap:var(--space-2);padding-top:var(--space-2)}
+.eyebrow{font-size:var(--fs-caption);color:var(--mut);font-weight:500}
+h1{font-size:var(--fs-display);line-height:var(--lh-tight);font-weight:700;letter-spacing:-0.02em}
+.lead{font-size:var(--fs-heading);font-weight:600}
+.sub{font-size:var(--fs-caption);color:var(--mut)}
+
+/* группа = карточка «Наряда» со строками */
+.group-title{font-size:var(--fs-caption);font-weight:600;color:var(--mut);padding:0 var(--space-4) var(--space-2)}
+.group{background:var(--surf);border-radius:var(--r);box-shadow:var(--sh),inset 0 1px 0 var(--hl);overflow:hidden}
+.row{display:flex;gap:var(--space-3);align-items:flex-start;padding:var(--space-3) var(--space-4);min-height:var(--hit-min)}
+.row+.row{border-top:1px solid var(--bd)}
+.row .k{flex:0 0 auto;font-weight:600;min-width:7.5em}
+.row .v{flex:1;min-width:0;color:var(--mut)}
+.row .v ul{margin:0;padding-left:1.1em}
+.empty{padding:var(--space-5) var(--space-4);display:flex;flex-direction:column;gap:var(--space-2)}
+.empty b{font-size:var(--fs-heading)}
+.empty span{color:var(--mut)}
+
+/* плашка статуса: значок + слово (правило 2) */
+.pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:var(--radius-pill);font-size:var(--fs-micro);font-weight:600;white-space:nowrap;flex:0 0 auto}
+.pill.warn{background:var(--st-warn);color:var(--st-warn-text)}
+.pill.ok{background:var(--st-ok);color:var(--st-ok-text)}
+.pill.info{background:var(--st-info);color:var(--st-info-text)}
+
+/* вопрос */
+.q{background:var(--surf);border-radius:var(--r);box-shadow:var(--sh),inset 0 1px 0 var(--hl);display:flex;flex-direction:column}
+.q-top{padding:var(--space-4) var(--space-4) var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)}
+.q-meta{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;font-size:var(--fs-caption);color:var(--mut)}
+.q h3{font-size:var(--fs-title);line-height:var(--lh-snug);font-weight:700}
+.q .what{color:var(--ink)}
+.sec{padding:var(--space-3) var(--space-4);border-top:1px solid var(--bd);display:flex;flex-direction:column;gap:var(--space-2)}
+.sec-t{font-size:var(--fs-caption);font-weight:600;color:var(--mut)}
+.advice{background:var(--tint);border-radius:var(--ri);padding:var(--space-3);display:flex;flex-direction:column;gap:var(--space-1)}
+.advice b{color:var(--acc-text)}
+
+/* вариант ответа: строка выбора с галочкой */
+.opts{display:flex;flex-direction:column;gap:var(--space-2)}
+.opt{background:var(--surf2);border-radius:var(--ri);border:2px solid transparent;display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-3);cursor:pointer;text-align:left;width:100%}
+.opt[aria-checked="true"]{border-color:var(--acc);background:var(--surf3)}
+.opt-h{display:flex;gap:var(--space-3);align-items:flex-start}
+.radio{flex:0 0 auto;width:22px;height:22px;border-radius:50%;border:2px solid var(--bd-field);display:grid;place-items:center;margin-top:1px}
+.opt[aria-checked="true"] .radio{border-color:var(--acc);background:var(--acc)}
+.opt[aria-checked="true"] .radio::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--on-acc)}
+.opt-l{font-weight:600}
+.opt-t{color:var(--mut);font-size:var(--fs-caption);margin-top:2px}
+.tag{font-size:var(--fs-micro);font-weight:600;color:var(--acc-text);margin-left:6px}
+
+/* картинки «как сейчас | как будет» */
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
+.shot{display:flex;flex-direction:column;gap:var(--space-1);min-width:0}
+.shot-l{font-size:var(--fs-micro);font-weight:600;color:var(--mut)}
+.shot img{width:100%;max-width:100%;border-radius:10px;border:1px solid var(--bd);background:var(--in);display:block;cursor:zoom-in}
+.cap{font-size:var(--fs-caption);color:var(--mut)}
+
+/* поле и кнопки */
+.field{width:100%;min-height:var(--field-phone);border-radius:var(--radius-field);border:1px solid var(--bd-field);background:var(--in);color:var(--ink);font:inherit;font-size:var(--fs-input);padding:10px 12px;resize:vertical}
+.actions{display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center}
+.btn{min-height:var(--hit-min);display:inline-flex;align-items:center;justify-content:center;background:none;border:0;padding:2px 0;cursor:pointer}
+.btn>span{height:var(--control-lg);display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 18px;border-radius:var(--radius-pill);font-weight:600;font-size:var(--fs-body)}
+.btn.primary>span{background:var(--acc);color:var(--on-acc);box-shadow:inset 0 0 0 1px var(--acc-edge)}
+.btn.plain>span{background:var(--surf2);color:var(--ink)}
+.btn:disabled{cursor:default;opacity:.45}
+.btn.mic[aria-pressed="true"]>span{background:var(--st-bad);color:var(--st-bad-text)}
+
+details.more{border-top:1px solid var(--bd)}
+details.more summary{padding:var(--space-3) var(--space-4);cursor:pointer;color:var(--mut);font-size:var(--fs-caption);font-weight:600;min-height:var(--hit-min);display:flex;align-items:center}
+details.more .body{padding:0 var(--space-4) var(--space-4);font-size:var(--fs-caption);color:var(--mut);white-space:pre-wrap;overflow-wrap:anywhere}
+
+.answered{display:flex;flex-direction:column;gap:var(--space-1)}
+.answered .you{font-weight:600}
+.answered .quote{color:var(--mut);font-size:var(--fs-caption)}
+
+/* окно с картинкой */
+dialog{border:0;padding:0;background:transparent;max-width:min(96vw,900px);max-height:92vh}
+dialog::backdrop{background:var(--scrim)}
+dialog img{max-width:100%;max-height:86vh;border-radius:14px;display:block}
+dialog .x{margin:var(--space-2) auto 0;display:flex}
+
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--toast);color:var(--on-toast);border-radius:var(--radius-pill);padding:10px 18px;font-weight:600;font-size:var(--fs-caption);opacity:0;transition:opacity var(--dur-base);pointer-events:none}
+.toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (max-width:420px){.row .k{min-width:6.5em}}
+</style>
+
+<div class="wrap">
+  <header class="head">
+    <div class="eyebrow">GoRix · руководитель проекта</div>
+    <h1>Вопросы GoRix</h1>
+    <div class="lead" id="lead">Загружаю…</div>
+    <div class="sub" id="sub">Время — Лос-Анджелес. Отвечайте как удобно: кнопкой, словами или голосом.</div>
+  </header>
+
+  <section aria-labelledby="t-wait">
+    <h2 class="group-title" id="t-wait">Ждут вашего ответа</h2>
+    <div id="wait" style="display:flex;flex-direction:column;gap:var(--space-4)">
+      <div class="group empty" id="wait-empty">
+        <b>Вопросы готовятся</b>
+        <span>Каждый вопрос сначала проходит ресёрч, варианты, проверку дизайнером и проверяющими. Картинки «как сейчас | как будет» — только по нашей дизайн-системе. Готовые вопросы появятся здесь.</span>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="t-sum">
+    <h2 class="group-title" id="t-sum">Сводка</h2>
+    <div class="group" id="sum">
+      <div class="empty"><span>Сводка появится после первого обхода.</span></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="t-done" id="done-sec" hidden>
+    <h2 class="group-title" id="t-done">Отвечено</h2>
+    <div class="group" id="done"></div>
+  </section>
+</div>
+
+<dialog id="zoom"><img id="zoom-img" alt=""><button class="btn plain x" id="zoom-x" type="button"><span>Закрыть</span></button></dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+  const $ = (s, el=document) => el.querySelector(s);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const safeUrl = u => (typeof u === 'string' && (u.startsWith('https://') || u.startsWith('/_blob/'))) ? u : null;
+  const fmt = iso => { try { return new Date(iso).toLocaleString('ru-RU',{timeZone:'America/Los_Angeles',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } };
+  const plural = n => { const a=n%10,b=n%100; return (a===1&&b!==11)?'вопрос':(a>=2&&a<=4&&(b<10||b>=20))?'вопроса':'вопросов'; };
+
+  let db = null, dict = null, questions = [], answers = {}, picked = {}, drafts = {}, editing = {};
+
+  function toast(t){ const x=$('#toast'); x.textContent=t; x.classList.add('on'); clearTimeout(toast._t); toast._t=setTimeout(()=>x.classList.remove('on'),2600); }
+
+  const zoom = $('#zoom');
+  $('#zoom-x').addEventListener('click',()=>zoom.close());
+  zoom.addEventListener('click',e=>{ if(e.target===zoom) zoom.close(); });
+  function openZoom(src, alt){ $('#zoom-img').src=src; $('#zoom-img').alt=alt||''; try{ zoom.showModal(); }catch(e){} }
+
+  function shot(label, src, alt){
+    const w = el('div','shot'); w.append(el('div','shot-l',label));
+    const u = safeUrl(src);
+    if (u){ const i = el('img'); i.src=u; i.alt=alt||label; i.loading='lazy'; i.addEventListener('click',ev=>{ev.stopPropagation();openZoom(u,i.alt);}); w.append(i); }
+    else w.append(el('div','cap','Картинки нет'));
+    return w;
+  }
+
+  function imagesBlock(images){
+    const box = el('div'); box.style.display='flex'; box.style.flexDirection='column'; box.style.gap='8px';
+    (images||[]).forEach(p=>{
+      const pair = el('div','pair');
+      pair.append(shot('Как сейчас', p.now, p.caption ? 'Как сейчас: '+p.caption : ''), shot('Как будет', p.next, p.caption ? 'Как будет: '+p.caption : ''));
+      box.append(pair);
+      if (p.caption) box.append(el('div','cap',p.caption));
+    });
+    return box;
+  }
+
+  function renderQuestion(q){
+    const n = String(q.n);
+    const card = el('article','q'); card.id = 'q'+n;
+    const top = el('div','q-top');
+    const meta = el('div','q-meta');
+    const pill = el('span','pill warn'); pill.textContent = '▲ Ждёт ответа';
+    meta.append(pill, el('span',null,'Вопрос №'+n + (q.topic ? ' · '+q.topic : '')));
+    top.append(meta, el('h3',null,q.title||''));
+    if (q.what) top.append(el('p','what',q.what));
+    card.append(top);
+
+    if (q.images && q.images.length){ const s=el('div','sec'); s.append(el('div','sec-t','Как сейчас и как будет'), imagesBlock(q.images)); card.append(s); }
+
+    const optSec = el('div','sec'); optSec.append(el('div','sec-t','Варианты'));
+    const opts = el('div','opts'); opts.setAttribute('role','radiogroup'); opts.setAttribute('aria-label','Варианты ответа');
+    (q.options||[]).forEach(o=>{
+      const b = el('button','opt'); b.type='button'; b.setAttribute('role','radio');
+      b.setAttribute('aria-checked', picked[n]===o.id ? 'true':'false');
+      const h = el('div','opt-h'); const r = el('span','radio'); const txt = el('div');
+      const l = el('div','opt-l', o.label||''); if (o.id===q.recommended){ l.append(el('span','tag','совет')); }
+      txt.append(l); if (o.text) txt.append(el('div','opt-t',o.text));
+      h.append(r, txt); b.append(h);
+      if (o.images && o.images.length) b.append(imagesBlock(o.images));
+      b.addEventListener('click',()=>{ picked[n]=o.id; render(); });
+      opts.append(b);
+    });
+    optSec.append(opts); card.append(optSec);
+
+    if (q.advice || q.why){
+      const s = el('div','sec'); const a = el('div','advice');
+      const head = el('b',null,'Совет: '+(q.advice||'')); a.append(head);
+      if (q.why) a.append(el('p',null,'Почему: '+q.why));
+      s.append(a); card.append(s);
+    }
+    if (q.fallback){ const s=el('div','sec'); s.append(el('div','sec-t','Если не ответите'), el('p',null,q.fallback)); card.append(s); }
+
+    const ans = el('div','sec'); ans.append(el('div','sec-t','Ваш ответ'));
+    const ta = el('textarea','field'); ta.id='a'+n; ta.rows=2; ta.placeholder='Своими словами (необязательно)'; ta.value = drafts[n]||'';
+    ta.addEventListener('input',()=>{ drafts[n]=ta.value; send.disabled = !canSend(); });
+    const row = el('div','actions');
+    const send = el('button','btn primary'); send.type='button'; send.append(el('span',null,'Отправить ответ'));
+    const canSend = () => !!(picked[n] || (drafts[n]||'').trim());
+    send.disabled = !canSend() || !db;
+    send.addEventListener('click',()=>submit(q, send));
+    row.append(send);
+    if (dict){
+      const mic = el('button','btn plain mic'); mic.type='button'; mic.setAttribute('aria-pressed','false'); mic.append(el('span',null,'🎙 Голосом'));
+      mic.addEventListener('click',()=>toggleMic(n, mic, ta));
+      row.append(mic);
+    }
+    if (editing[n]){ const c=el('button','btn plain'); c.type='button'; c.append(el('span',null,'Оставить прежний')); c.addEventListener('click',()=>{ editing[n]=false; render(); }); row.append(c); }
+    if (!db) ans.append(el('p','cap','Ответы сохраняются, когда вы вошли в claude.ai.'));
+    ans.append(ta,row); card.append(ans);
+
+    if (q.details){ const d=el('details','more'); const s=el('summary',null,'Подробности для команды'); const b=el('div','body',q.details); d.append(s,b); card.append(d); }
+    return card;
+  }
+
+  let micFor = null;
+  async function toggleMic(n, btn, ta){
+    if (micFor===n){ try{ await dict.stop(); }catch(e){} return; }
+    micFor = n; btn.setAttribute('aria-pressed','true');
+    const offF = dict.onFinal(({text})=>{ drafts[n]=((drafts[n]||'')+' '+text).trim(); ta.value=drafts[n]; });
+    const offS = dict.onState(({state})=>{ if(state==='idle'){ micFor=null; btn.setAttribute('aria-pressed','false'); offF(); offS(); render(); } });
+    dict.start().catch(e=>{ micFor=null; btn.setAttribute('aria-pressed','false'); offF(); offS(); if (e && e.code==='not_granted') toast('Микрофон выключен — напишите словами'); });
+  }
+
+  async function submit(q, btn){
+    const n = String(q.n); btn.disabled = true;
+    const opt = (q.options||[]).find(o=>o.id===picked[n]);
+    const data = { n:q.n, title:q.title||'', choice: opt?opt.id:'', choiceLabel: opt?opt.label:'', text:(drafts[n]||'').trim(), at:new Date().toISOString(), by:'основатель (на странице)' };
+    try{ await db.collection('answers').doc(n).set(data); editing[n]=false; delete drafts[n]; toast('Ответ сохранён. Руководитель запишет его в задачу.'); }
+    catch(e){ btn.disabled=false; toast('Не сохранилось. Проверьте сеть и нажмите ещё раз.'); }
+  }
+
+  function renderDone(list){
+    const box = $('#done'); box.replaceChildren();
+    $('#done-sec').hidden = list.length===0;
+    list.forEach(({q,a})=>{
+      const r = el('div','row');
+      const v = el('div','answered'); v.style.flex='1'; v.style.minWidth='0';
+      const t = el('div',null,'№'+q.n+' · '+(q.title||'')); t.style.fontWeight='600';
+      v.append(t, el('div','you','Ваш ответ: '+(a.choiceLabel || '—')));
+      if (a.text) v.append(el('div','quote','«'+a.text+'»'));
+      v.append(el('div','quote',fmt(a.at)));
+      const ch = el('button','btn plain'); ch.type='button'; ch.append(el('span',null,'Изменить'));
+      ch.addEventListener('click',()=>{ editing[String(q.n)]=true; picked[String(q.n)]=a.choice||''; drafts[String(q.n)]=a.text||''; render(); const c=document.getElementById('q'+q.n); if(c) c.scrollIntoView({behavior:'smooth',block:'start'}); });
+      const pill = el('span','pill ok','✓ Отвечено');
+      const side = el('div'); side.style.display='flex'; side.style.flexDirection='column'; side.style.alignItems='flex-end'; side.style.gap='4px'; side.append(pill, ch);
+      r.append(v, side); box.append(r);
+    });
+  }
+
+  function render(){
+    const open = [], done = [];
+    questions.filter(q=>q.state!=='closed').sort((a,b)=>(a.priority??99)-(b.priority??99) || a.n-b.n).forEach(q=>{
+      const a = answers[String(q.n)];
+      if (a && !editing[String(q.n)]) done.push({q,a}); else open.push(q);
+    });
+    const wait = $('#wait'); wait.replaceChildren();
+    if (!open.length){
+      const e = el('div','group empty'); e.append(el('b',null, done.length ? 'Новых вопросов нет' : 'Вопросы готовятся'), el('span',null, done.length ? 'Все вопросы отвечены. Новые появятся здесь.' : 'Каждый вопрос сначала проходит ресёрч, варианты, проверку дизайнером и проверяющими. Картинки «как сейчас | как будет» — только по нашей дизайн-системе. Готовые вопросы появятся здесь.'));
+      wait.append(e);
+    } else open.forEach(q=>wait.append(renderQuestion(q)));
+    $('#lead').textContent = open.length ? 'Есть '+open.length+' '+plural(open.length) : 'Вопросов нет';
+    renderDone(done);
+  }
+
+  function renderSummary(s){
+    const box = $('#sum'); box.replaceChildren();
+    if (!s){ const e=el('div','empty'); e.append(el('span',null,'Сводка появится после первого обхода.')); box.append(e); return; }
+    const parts = [['Ждёт вас', s.waiting],['В работе', s.working],['Влито', s.merged],['Хвосты', s.tails]];
+    parts.forEach(([k,list])=>{
+      if (!list || !list.length) return;
+      const r = el('div','row'); r.append(el('div','k',k));
+      const v = el('div','v'); const ul = el('ul'); list.forEach(t=>ul.append(el('li',null,String(t)))); v.append(ul); r.append(v); box.append(r);
+    });
+    if (s.at){ const r=el('div','row'); r.append(el('div','k','Обновлено')); r.append(el('div','v',fmt(s.at))); box.append(r); }
+  }
+
+  render();
+
+  (async function boot(){
+    const claude = window.claude;
+    if (!claude || !claude.use){ $('#lead').textContent='Откройте страницу в claude.ai'; return; }
+    const timer = setTimeout(()=>{ if(!db) $('#lead').textContent='Нет связи с сохранёнными вопросами'; },10000);
+    db = await claude.use('db');
+    clearTimeout(timer);
+    if (!db){ $('#lead').textContent='Войдите в claude.ai, чтобы видеть вопросы'; return; }
+    claude.use('dictation').then(d=>{ dict=d; render(); }).catch(()=>{});
+    db.collection('questions').onSnapshot(snap=>{ questions = snap.docs.map(d=>({ ...(d.data()||{}), n: Number((d.data()||{}).n ?? d.id) })); render(); }, ()=>{ $('#lead').textContent='Вопросы не загрузились'; });
+    db.collection('answers').onSnapshot(snap=>{ answers = {}; snap.docs.forEach(d=>{ answers[d.id]=d.data()||{}; }); render(); });
+    db.doc('summary/today').onSnapshot(s=>renderSummary(s.exists ? s.data() : null));
+  })();
+})();
+</script>
