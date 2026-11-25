@@ -108,17 +108,20 @@
   .gnote { font-size: 13px; font-weight: 500; color: var(--mut); margin: 8px 4px 0; }
   /* три карточки под чертежом: gutter · переходники (делится на части) · downspout */
   /* тройка: одна карточка surf (NumberTrio), ячейки surf2 одной высоты */
-  .kpi { display: grid; grid-template-columns: 84px 1fr 96px; gap: 8px; margin-top: 8px; padding: 8px; background: var(--surf); border-radius: 22px; box-shadow: inset 0 1px 0 var(--hl); align-items: stretch; }
+  .kpi { display: grid; grid-template-columns: 80px 1fr 108px; gap: 8px; margin-top: 8px; padding: 8px; background: var(--surf); border-radius: 22px; box-shadow: inset 0 1px 0 var(--hl); align-items: stretch; }
   .kc { background: var(--surf2); border-radius: 14px; padding: 10px 10px; min-width: 0; }
   .kc b { display: block; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .kc > span { font-size: 12px; font-weight: 600; color: var(--mut); display: block; }
   .kc em { display: block; font-style: normal; font-size: 12px; font-weight: 500; color: var(--mut); margin-top: 4px; }
   .kc small { font-size: 12px; font-weight: 600; color: var(--mut); }
+  .kc .sep { display: block; height: 1px; background: var(--bd); margin: 10px 0; }
+  .kc b.mn { font-size: 15px; margin-bottom: 6px; white-space: nowrap; } .kc.m > span { font-size: 12px; white-space: nowrap; } .kc b.mn.sm { font-size: 13px; }
+  .kpi.two { grid-template-columns: 96px 1fr; }
   .kc.fit { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
   .kc.fit > span { padding: 8px 10px; display: flex; align-items: center; gap: 4px; box-shadow: inset 0 -1px 0 var(--bd); }
   .kc.fit i.help { font-style: normal; }
   .kc.fit .parts { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--bd); flex: 1; }
-  .kc.fit .parts div { padding: 8px 8px; background: var(--surf2); min-width: 0; }
+  .kc.fit .parts div { padding: 8px 6px; background: var(--surf2); min-width: 0; }
   .kc.fit.odd .parts div:last-child { grid-column: 1 / -1; }
   .kc.fit .parts span { font-size: 12px; font-weight: 600; color: var(--mut); white-space: nowrap; }
   .kc.fit .more b { font-size: 15px; }
@@ -161,12 +164,13 @@ const I = {
   ruler: '<path d="M3 15 15 3l6 6L9 21z"/><path d="m7 11 2 2M10 8l2 2M13 5l2 2"/>', box: '<path d="M4 7 12 3l8 4v10l-8 4-8-4z"/><path d="M4 7l8 4 8-4M12 11v10"/>',
   cal: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>', expand: '<path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/>', wifiOff: '<path d="M2 8.5a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0M8.5 15.5a6 6 0 0 1 7 0"/><circle cx="12" cy="19" r="1"/><path d="M3 3l18 18"/>', bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>', alert: '<path d="M12 4 2 20h20z"/><path d="M12 10v4M12 17v.5"/>', arrowLeft: '<path d="M19 12H5M11 6l-6 6 6 6"/>', camera: '<rect x="3" y="7" width="18" height="13" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M9 7l1.5-3h3L15 7"/>', list: '<path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/>',
   userPlus: '<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M19 8v6M16 11h6"/>',
+  measure: '<path d="M3 11.5 9.5 6l6.5 5.5V20H3ZM20 5v15M18.5 6.5 20 5l1.5 1.5M18.5 18.5 20 20l1.5-1.5"/>',
   dot: '<circle cx="12" cy="12" r="7" stroke-dasharray="2.5 2.5"/>', check: '<path d="m5 12 5 5 9-10"/>', send: '<path d="M4 12 20 4l-6 16-3-7z"/>',
 };
 const ic = (n, s) => svg(I[n], s);
 // миниатюра чертежа — тот же контур, что на холсте
 const mini = (w = 28) => `<svg width="${w}" height="${w}" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 9h26v22H6"/><circle cx="6" cy="9" r="2.5" fill="currentColor"/><circle cx="6" cy="31" r="2.5" fill="currentColor"/></svg>`;
-const big = `<svg width="270" height="171" viewBox="0 0 300 190" fill="none" stroke="currentColor"><path d="M40 40h190v110H40" stroke-width="3.5"/><circle cx="40" cy="40" r="6" fill="var(--bg)" stroke-width="2.5"/><circle cx="40" cy="150" r="6" fill="var(--bg)" stroke-width="2.5"/><circle cx="230" cy="95" r="6" fill="var(--bg)" stroke-width="2.5"/><g font-family="system-ui" font-size="13" fill="currentColor" stroke="none"><text x="96" y="28">28′ 9″ · 5″ K</text><text x="240" y="99">33′ 2″</text><text x="96" y="172">28′ 9″ · 6″ K</text><text x="30" y="62">D1</text><text x="30" y="140">D2</text><text x="206" y="118">D3</text></g></svg>`;
+const big = `<svg width="270" height="171" viewBox="0 0 300 190" fill="none" stroke="currentColor"><path d="M40 40h190v110H40" stroke-width="3.5"/><circle cx="40" cy="40" r="6" fill="var(--bg)" stroke-width="2.5"/><circle cx="40" cy="150" r="6" fill="var(--bg)" stroke-width="2.5"/><circle cx="230" cy="95" r="6" fill="var(--bg)" stroke-width="2.5"/><g font-family="system-ui" font-size="13" fill="currentColor" stroke="none"><text x="112" y="28">28′ 9″</text><text x="240" y="99">33′ 2″</text><text x="112" y="172">28′ 9″</text><text x="30" y="62">D1</text><text x="30" y="140">D2</text><text x="206" y="118">D3</text></g></svg>`;
 
 // мастер (§8.3 п.3, nav/sections.ts: у мастера «Денег» нет): Главная · План · Gutters · Клиенты · Лиды — макет по совету §8.3, ждёт ответа
 const TABS = [["home", "Главная"], ["gut", "Gutters"], ["users", "Клиенты"], ["money", "Деньги"], ["leads", "Лиды"]];
@@ -206,7 +210,7 @@ const rMark = row(thumb("l"), "Mark Chen", when("1520 Elm St"), rt(pill("info", 
 const rRosa = row(thumb("z"), "Rosa Diaz", when("88 Pine Ave"), rt(pill("ok", "check", "Подписана"), "21&nbsp;нояб."));
 // смета не собралась — в той же группе, вместо суммы «⚠ Нет цен · 2»
 const rNoPrice = row(th, "Paul Kim", "15 Cedar Ct", rt(`<span class="warnnote nw">${ic("alert", 13)} Нет цен · 2</span>`, "24&nbsp;нояб."));
-const rDraft = row(thumb("s"), "Без клиента", "Gutter 46&nbsp;ft · Downspout&nbsp;1", `<span class="nw">сегодня 9:15</span>`);
+const rDraft = row(thumb("s"), "Без клиента", `<span class="nw">Gutter 46&nbsp;ft · Downspout&nbsp;1</span>`, `<span class="nw">сегодня</span><span class="nw">9:15</span>`);
 // выезд-осмотр — значок календаря (не «часы» тона info)
 const visit = (n, when, a) => row(`<div class="ico">${ic("cal")}</div>`, n, `${when}<br><span class="nw">${a}</span>`, "");
 // #2678 решено брейнштормом (25.11, поручение основателя): записанные осмотры без замера — сегодня и просроченные до 7 дней (первыми, warn «Просрочен»); мастер — свои, офис — все; до 3 строк, «Все ›»; нажатие — холст, привязанный к выезду
@@ -218,8 +222,13 @@ const waitRowsOffice = [visit("Kevin Wu", `${late} · вчера 15:00`, "41 Oak
 const S = {};
 S["v1-list"] = () => `<div class="phone"><div class="scroll">${headRoot("Gutters")}
   ${group("Черновики", [rDraft], "", 1)}
-  ${group("Замеры", [rLinda, rMark, rRosa], "", 3)}
+  ${group("Замеры", [rLinda, rNoPrice, rMark, rRosa], "", 4)}
   </div>${tabbar("Gutters")}</div>`;
+// основатель 25.11 выбрал вариант 1 «Два списка»; мастер — без сумм, своё слово «Смета у офиса»
+S["v1-list-master"] = () => `<div class="phone"><div class="scroll">${headRoot("Gutters")}
+  ${group("Черновики", [rDraft], "", 1)}
+  ${group("Замеры", [rLindaMaster, rMark, rRosa], "", 3)}
+  </div>${tabbar("Gutters", TABS_MASTER)}</div>`;
 // В2 (выбор #2517). «Ждут замера» — по умолчанию #2678: только записанные осмотры без замера (сегодня и ближайшие дни); нажатие строки — замер.
 // Смета собирается сама (#2676): «Ждут отправки» — у офиса и директора; у мастера группы нет (экран v2-list-master)
 S["v2-list"] = () => `<div class="phone"><div class="scroll">${headRoot("Gutters")}
@@ -235,9 +244,9 @@ S["v2-list-master"] = () => `<div class="phone"><div class="scroll">${headRoot("
   ${group("Последние", [rLindaMaster, rMark, rRosa], "Все ›")}
   </div>${tabbar("Gutters", TABS_MASTER)}</div>`;
 S["v2-list-empty"] = () => `<div class="phone"><div class="scroll">${headRoot("Gutters")}
-  <div class="card" style="margin-top:20px;padding:24px 20px;text-align:center"><div class="ico" style="margin:0 auto">${mini()}</div>
+  <div class="card" style="margin-top:20px;padding:24px 20px;text-align:center"><div class="ico" style="margin:0 auto">${ic("measure", 24)}</div>
   <div class="tt" style="font-size:17px;font-weight:700;margin-top:12px">Замеров пока нет</div>
-  <div class="m" style="font-size:13px;color:var(--mut);margin-top:4px">Записанный осмотр появится здесь</div>
+  <div class="m" style="font-size:13px;color:var(--mut);margin-top:4px">Здесь появятся черновики и замеры</div>
   <span class="btn sec" style="margin-top:16px">${ic("plus", 18)}Замер</span></div>
   </div>${tabbar("Gutters")}</div>`;
 // превью чертежа — одна поверхность (без рамки в рамке), значок «развернуть»
@@ -246,32 +255,38 @@ const act = (pri, priIcon, sec = "Править чертёж") => `<div class="
 const next = (t) => `<div class="next">${t}</div>`;
 // тройка (#2677) — одна карточка surf с ячейками surf2, как NumberTrio (§12.12): слева ft gutter (по профилям второй строкой),
 // в центре «Переходники» (2 — в ряд, 3 — 2 + 1 во всю ширину, 4 — 2×2, 5 — 2+2+1, 6 — 2×3, 7+ — 5 и «ещё N ›»), справа downspout и его футы
-const kpi = (fits, more = 0) => {
+const kpi = (fits, more = 0, money = true) => {
   const cells = fits.map(([n, l]) => `<div><b>${n}</b><span>${l}</span></div>`).join("") + (more ? `<div class="more"><b>ещё ${more}</b><span>Состав ›</span></div>` : "");
   const odd = (fits.length + (more ? 1 : 0)) % 2 === 1;
-  return `<div class="kpi"><div class="kc"><b>91 <small>ft</small></b><span>Gutter</span><em>5″&nbsp;K · 62&nbsp;ft<br>6″&nbsp;K · 29&nbsp;ft</em></div>
+  return `<div class="kpi${money ? "" : " two"}"><div class="kc g"><b>91 <small>ft</small></b><span>Gutter</span><em>5″&nbsp;Fascia</em><i class="sep"></i><b>3</b><span>Downspout</span></div>
   <div class="kc fit${odd ? " odd" : ""}"><span>Переходники <i class="help">?</i></span><div class="parts">${cells}</div></div>
-  <div class="kc"><b>3</b><span>Downspout</span><em>52 ft</em></div></div>`;
+  ${money ? `<div class="kc m"><span>Цена</span><b class="mn">$2,113.67</b><span>Себестоимость</span><b class="mn sm">$1,268.20</b><span>Маржа</span><b class="mn sm">40%<small style="font-weight:600"> · $845.47</small></b></div>` : ""}</div>`;
 };
 // числа фитингов — макет (3 downspout по одному каждого); в коде — из движка для этого чертежа
 const FITS = [["3", "A Elbow"], ["3", "B Elbow"], ["2", "A Offset"]];
 // #2679 решено основателем 25.11: «Переходники» — все фитинги downspout
 const fitNote = "";
-const trio = kpi(FITS) + fitNote + `<div class="sost"><span>Состав · 14</span>${ic("chev", 16)}</div>`;
+const sost = `<div class="sost"><span>Состав · 14</span>${ic("chev", 16)}</div>`;
+const trio = kpi(FITS) + fitNote + sost;
+// мастер денег не видит — третьей карточки нет
+const trioMaster = kpi(FITS, 0, false) + sost;
 const addr = group("", [row(`<div class="ico">${ic("pin")}</div>`, "2207 Ocean Park Blvd", "Santa Monica, CA", `<span class="go">Маршрут</span>`)]);
-const docs = group("Файлы", [
+const docsOld = group("Файлы", [
   row(`<div class="ico">${ic("doc")}</div>`, "Клиенту", "Чертёж без цен · EN", ""),
   row(`<div class="ico">${ic("crew")}</div>`, "Бригаде", "Раскрой и детали · RU", ""),
   row(`<div class="ico">${ic("ruler")}</div>`, "Рабочие чертежи", "План, ведомости · 11×17", ""),
   row(`<div class="ico">${ic("box")}</div>`, "Заказ материалов", "Поставщику · EN", ""),
 ], "", 4);
+const docs = group("Сметы", [row(`<div class="ico">${ic("doc")}</div>`, "Смета · $2,113.67", "Чертёж и заказ поставщику — внутри", "")], "", 1);
 const noEst = hst("doc", "Смета готова");
 // статус уже в шапке — здесь только сумма и шаг
 const officeNext = `<div class="next"><span class="money">$2,113.67</span> · проверьте и отправьте</div>`;
 const saved = (t) => `<div class="saved">${ic("check", 14)}${t}</div>`;
 // очередь без сети — DS §15.3б: значок wifiOff, тон warn
 const offline = (t) => `<div class="saved warnline">${ic("wifiOff", 14)}${t}</div>`;
-const tabs = (est = true) => `<div class="vt"><div class="on">Обзор</div><div>Фото</div><div>Файлы</div>${est ? `<div>Сметы <small>1</small></div>` : ""}<div>История</div></div>`;
+// основатель 25.11: документы в одном месте — смета, к ней прикреплены чертёж и заказ поставщику; отдельных «Файлов» нет.
+// офис: 4 раздела — ViewTabs (А1п); мастер: 3 вида — Segmented (DS А1: 2–3 вида)
+const tabs = (est = true) => est ? `<div class="vt"><div class="on">Обзор</div><div>Фото</div><div>Сметы <small>1</small></div><div>История</div></div>` : `<div class="seg"><div class="on">Обзор</div><div>Фото</div><div>История</div></div>`;
 S["v1-card"] = () => `<div class="phone"><div class="scroll">${headObj("Linda Alvarez", noEst)}${officeNext}${sheet}${saved("Сохранено в облаке · 10:42")}${act("Отправить смету", "send")}${trio}${addr}${docs}
   </div>${tabbar("Gutters")}</div>`;
 // В2 «Вкладки» (#2518): у вкладки «Сметы» число — неотправленная смета ждёт действия (А1п)
@@ -280,11 +295,11 @@ S["v2-card"] = () => `<div class="phone"><div class="scroll">${headObj("Linda Al
   </div>${tabbar("Gutters")}</div>`;
 // мастер: без денег, без вкладки «Сметы», без жёлтой
 S["v2-card-master"] = () => `<div class="phone"><div class="scroll">${headObj("Linda Alvarez", hst("doc", "Смета собрана"))}${tabs(false)}
-  ${next("Уйдёт в офис, когда появится сеть")}${sheet}${act("", "", "Править чертёж")}${trio}${addr}
+  ${next("Уйдёт в офис, когда появится сеть")}${sheet}${act("", "", "Править чертёж")}${trioMaster}${addr}
   </div><div class="qline">${ic("wifiOff", 16)}Нет сети · ждёт отправки · 1</div>${tabbar("Gutters", TABS_MASTER)}</div>`;
 // мастер на iPhone SE (667), в сети
 S["v2-card-master-se"] = () => `<div class="phone se"><div class="scroll">${headObj("Linda Alvarez", hst("doc", "Смета у офиса"))}${tabs(false)}
-  ${next("Офис проверит и отправит")}${sheet}${saved("Сохранено в облаке · 10:42")}${act("", "", "Править чертёж")}${trio}
+  ${next("Офис проверит и отправит")}${sheet}${saved("Сохранено в облаке · 10:42")}${act("", "", "Править чертёж")}${trioMaster}
   </div>${tabbar("Gutters", TABS_MASTER)}</div>`;
 // iPhone SE (667): кнопка и тройка — над вкладками?
 S["v2-card-se"] = () => `<div class="phone se"><div class="scroll">${headObj("Linda Alvarez", noEst)}${tabs()}
@@ -319,19 +334,19 @@ const frame = (s) => `<iframe src="mockups.html#screen=${s}&theme=${theme}"></if
 const fig = (cap, sub, body) => `<figure><figcaption>${cap}<small>${sub}</small></figcaption>${body}</figure>`;
 S["compare-list"] = () => `<div class="cmp">
   ${fig("Как сейчас", "Заголовок «Замеры», фильтры-кнопки, каждая запись — большая карточка", `<img src="asis-05-list-${theme}.png">`)}
-  ${fig("Как будет · вариант 1 «Два списка»", "Поиск значком, «＋ Замер» словом вверху. Черновики и замеры — строками: картинка чертежа, имя, адрес, состояние", frame("v1-list"))}
-  ${fig("Как будет · вариант 2 «Сначала — что замерить» (выбран)", "Сверху — к кому сегодня ехать мерить (нажали строку — начался замер), потом готовые сметы, которые не отправлены, черновики, последние", frame("v2-list"))}</div>`;
+  ${fig("Как будет · вариант 1 «Два списка» (выбран 25.11)", "Поиск значком, «＋ Замер» словом вверху. Черновики и замеры — строками: картинка чертежа, имя, адрес, состояние", frame("v1-list"))}
+  ${fig("Как будет · вариант 2 «Сначала — что замерить»", "Сверху — к кому сегодня ехать мерить (нажали строку — начался замер), потом готовые сметы, которые не отправлены, черновики, последние", frame("v2-list"))}</div>`;
 S["compare-card"] = () => `<div class="cmp">
   ${fig("Как сейчас", "«Просмотр замера»: имя два раза, кнопку «Сделать смету» не видно без прокрутки", `<img src="asis-06-card-top-${theme}.png">`)}
   ${fig("Как будет · вариант 1 «Одна лента»", "Смета уже собрана из чертежа. Под чертежом «Отправить» и «Править чертёж», ниже три карточки: gutter · переходники · downspout", frame("v1-card"))}
-  ${fig("Как будет · вариант 2 «Вкладки» (выбран)", "Вкладки под именем. Смета уже собрана из чертежа: под чертежом «Отправить» и «Править чертёж», ниже три карточки: gutter · переходники · downspout", frame("v2-card"))}</div>`;
+  ${fig("Как будет · вариант 2 «Вкладки» (выбран)", "Вкладки под именем. Смета уже собрана из чертежа: под чертежом «Отправить» и «Править чертёж», ниже три карточки: gutter и downspout · переходники · цена, себестоимость и маржа", frame("v2-card"))}</div>`;
 // пары «было (84a8435) | предлагаем» для ревью
 const pair = (s, what) => `<div class="cmp">${fig("Было (5d05a55)", what, `<img src="r4-${s}-${theme}.png">`)}${fig("Предлагаем", "После проверки №4 (7173319468)", frame(s))}</div>`;
 S["pair-v2-card"] = () => pair("v2-card", "Карточка, вариант 2 «Вкладки»");
 S["pair-v1-card"] = () => pair("v1-card", "Карточка, вариант 1 «Одна лента»");
 S["pair-v2-list"] = () => pair("v2-list", "Первый экран, вариант 2");
 S["pair-states"] = () => pair("now-states", "Другие состояния");
-S["pair-master"] = () => `<div class="cmp">${fig("Мастер · первый экран", "Без «Ждут отправки» и сумм", frame("v2-list-master"))}${fig("Мастер · карточка, без сети", "Без денег и «Смет», без жёлтой; без сети — строка очереди над вкладками", frame("v2-card-master"))}${fig("Мастер · отправлена и подписана", "Следующий шаг мастера", frame("now-states-master"))}${fig("Мастер · iPhone SE (667)", "«Править чертёж» видна без прокрутки", frame("v2-card-master-se").replace("<iframe", '<iframe style="height:667px;width:375px"'))}</div>`;
+S["pair-master"] = () => `<div class="cmp">${fig("Мастер · первый экран", "Без «Ждут отправки» и сумм", frame("v1-list-master"))}${fig("Мастер · карточка, без сети", "Без денег и «Смет», без жёлтой; без сети — строка очереди над вкладками", frame("v2-card-master"))}${fig("Мастер · отправлена и подписана", "Следующий шаг мастера", frame("now-states-master"))}${fig("Мастер · iPhone SE (667)", "«Править чертёж» видна без прокрутки", frame("v2-card-master-se").replace("<iframe", '<iframe style="height:667px;width:375px"'))}</div>`;
 S["pair-v1-list"] = () => pair("v1-list", "Первый экран, вариант 1");
 S["compare-tab"] = () => `<div class="cmp">
   ${fig("Модуль выключен (как есть)", "Вторая вкладка — «План»", `<img src="asis-01-tabs-off-${theme}.png">`)}
