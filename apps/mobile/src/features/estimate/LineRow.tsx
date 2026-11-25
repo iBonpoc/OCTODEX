@@ -141,16 +141,16 @@ function LineRowView(p: LineRowProps) {
     duplicate: { label: t("est.row.duplicate"), icon: "copy" },
     hide: { label: t("est.row.hide"), icon: "eye" },
     show: { label: t("est.row.show"), icon: "eye" },
-    move: { label: t("est.sec.moveTitle"), icon: "route" },
+    move: { label: t("est.sec.moveTitle"), icon: "sections" },
     delete: { label: t("est.row.delete"), icon: "trash" },
   };
-  // «Выше» / «Ниже» first (a line the person may move — not a module's), then what the engine offers
+  // «Выше» / «Ниже» are the screen reader's actions only (a line the person may move — not a module's): in the menu they were two
+  // more items (7 rows — «Удалить» out of the list's 6½, #2448) and «Переместить» opens the sheet that has both (#2450)
   const shifts: ("up" | "down")[] = acts.menu.includes("move") && p.api.shift ? ["up", "down"] : [];
-  const items: MenuItem<RowAction | "up" | "down">[] = [
-    ...shifts.map((k) => ({ key: k, label: t(k === "up" ? "est.sec.moveUp" : "est.sec.moveDown"), icon: (k === "up" ? "chevronUp" : "chevronDown") as IconKey, testID: `est-act-${k}-${l.id}` })),
+  const items: MenuItem<RowAction>[] = [
     ...acts.menu.map((k) => ({ key: k, ...META[k], destructive: k === "delete", dim: k === "hide" && !canHide(l), testID: `est-act-${k}-${l.id}` })),
   ];
-  const pick = (a: RowAction | "up" | "down") => (a === "up" || a === "down" ? p.api.shift?.(l.id, a === "up" ? -1 : 1) : p.api.action(l.id, a));
+  const pick = (a: RowAction) => p.api.action(l.id, a);
   const swipeBtn = (k: RowAct): SwipeBtn => ({ key: k, ...META[k], tone: k === "delete" ? "bad" : undefined, dim: k === "hide" && !canHide(l), testID: `est-swipe-${k}-${l.id}` });
   const f = (id: "name" | "qty" | "price" | "cost") => p.form.field(rowFieldId(l.id, id));
 
@@ -158,7 +158,7 @@ function LineRowView(p: LineRowProps) {
   const a11yActs = [...shifts.map((k) => ({ name: k, label: t(k === "up" ? "est.sec.moveUp" : "est.sec.moveDown") })), ...acts.menu.map((k) => ({ name: k, label: META[k].label }))];
   const onA11yAct = (e: { nativeEvent: { actionName: string } }) => {
           const n = e.nativeEvent.actionName;
-          if ((n === "up" || n === "down") && shifts.length) return pick(n);
+          if ((n === "up" || n === "down") && shifts.length) return p.api.shift?.(l.id, n === "up" ? -1 : 1);
           const a = actOfName(n, acts);
           if (a) p.api.action(l.id, a);
         };

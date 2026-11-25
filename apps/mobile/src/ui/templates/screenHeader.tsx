@@ -618,7 +618,7 @@ const noRing = (Platform.OS === "web" ? { outlineStyle: "none" } : {}) as ViewSt
  * A sheet's head (v2 «Шторка»): the row 52 — the title 22/700 on the left (a 12 line under it), «×» 32 on the right; no «←», no
  * avatar (a sheet with a step back keeps its «‹» before the title). testIDs `sheet-title`, `sheet-close`.
  */
-export function SheetHead({ title, sub, onClose, closeLabel, back }: { title?: string; sub?: string; onClose: () => void; closeLabel: string; back?: { label: string; onPress: () => void } }) {
+export function SheetHead({ title, sub, onClose, closeLabel, back, after }: { title?: string; sub?: string; onClose: () => void; closeLabel: string; back?: { label: string; onPress: () => void }; /** right after the title («?» of the sheet, DS Б7) */ after?: ReactNode }) {
   const { c } = useTheme();
   const s = H.sheetClose;
   return (
@@ -630,15 +630,19 @@ export function SheetHead({ title, sub, onClose, closeLabel, back }: { title?: s
           </View>
         </Press>
       ) : null}
-      <View testID="sheet-title" style={{ flex: 1, minWidth: 0 }}>
-        <T v="title" w="bold" numberOfLines={2}>
-          {title ?? ""}
-        </T>
-        {sub ? (
-          <T v="micro" tone="mut" numberOfLines={1}>
-            {sub}
+      {/* «?» right after the title, «×» stays on the right; a long title gives way, «?» stays by it */}
+      <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space[2] }}>
+        <View testID="sheet-title" style={{ flexShrink: 1, minWidth: 0 }}>
+          <T v="title" w="bold" numberOfLines={2}>
+            {title ?? ""}
           </T>
-        ) : null}
+          {sub ? (
+            <T v="micro" tone="mut" numberOfLines={1}>
+              {sub}
+            </T>
+          ) : null}
+        </View>
+        {after}
       </View>
       <Press testID="sheet-close" onPress={onClose} visibleHeight={s} accessibilityRole="button" accessibilityLabel={closeLabel}>
         <View style={{ width: s, height: s, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
