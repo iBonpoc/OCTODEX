@@ -24,11 +24,14 @@ describe("the question about unsaved changes — one rule", () => {
   }
   it("the sheet and the window dialog use the key, not common.cancel / common.back", () => {
     const sheet = readFileSync(join(app, "src/ui/overlays.tsx"), "utf8");
-    const ask = sheet.slice(sheet.indexOf('t("sheet.unsavedTitle")'), sheet.indexOf('data-testid="sheet-body"') > 0 ? undefined : sheet.indexOf("sheet-body"));
+    const j = sheet.indexOf('t("sheet.unsavedTitle")');
+    expect(j).toBeGreaterThan(0);
+    const ask = sheet.slice(j, j + 1800);
     expect(ask).toContain('t("sheet.keepEditing")');
+    expect(ask).not.toMatch(/common\.(cancel|back)/);
     const draw = readFileSync(join(app, "src/modules/gutters/draw/DrawScreen.tsx"), "utf8");
     const i = draw.indexOf('t("sheet.unsavedTitle")');
-    const block = draw.slice(i, i + 700);
+    const block = draw.slice(i, i + 1200);
     expect(block).toContain('t("sheet.keepEditing")');
     expect(block).not.toMatch(/common\.(cancel|back)/);
   });
