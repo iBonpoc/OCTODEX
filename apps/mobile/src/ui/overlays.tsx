@@ -155,7 +155,9 @@ export function Menu<K extends string>({
   // the menu never grows past the window (a phone on its side): it scrolls inside, every item can be reached
   const room = winH - e.t - e.b;
   // at most `menuMaxRows` rows show (the last one half: it scrolls); a window shorter than that cuts it further
-  const listH = menuListHeight({ count: items.length, rowH: size.hitMin, maxRows: component.menuMaxRows, room, pad: space[2], titleH: title ? size.hitMin : 0 });
+  // the lines between groups (drawn below, before a group's first item) take their place too
+  const lines = items.filter((it, i) => i > 0 && ((it.destructive && !items[i - 1]!.destructive) || it.group)).length;
+  const listH = menuListHeight({ count: items.length, rowH: size.hitMin, maxRows: component.menuMaxRows, room, pad: space[2], titleH: title ? size.hitMin : 0, extra: lines * (component.hairline + space[1] * 2) });
   const scrollToChosen = () => {
     if (scrolled.current) return;
     const rows = Object.values(rowAt.current);
