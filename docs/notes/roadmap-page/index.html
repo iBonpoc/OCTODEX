@@ -32,22 +32,29 @@ nav a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visibl
 .lanehead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .lanehead .n{font:500 13px var(--f-num);color:var(--muted)}
 .list{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 10px;padding:10px 12px;border-top:1px solid var(--line);align-items:start}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px 10px;padding:10px 12px;border-top:1px solid var(--line);align-items:start}
 .row:first-child{border-top:0}
-.num{font:500 13px var(--f-num);color:var(--info);text-decoration:none;padding-top:1px}
+.num{font:500 12px var(--f-num);color:var(--info);text-decoration:none}
+.title{font-weight:600}
 .title{min-width:0;overflow-wrap:anywhere}
-.chips{grid-column:2/4;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.chips{grid-column:1/4;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .chip{font-size:12px;background:var(--chip);color:var(--muted);border-radius:6px;padding:1px 7px}
 .pill{font-size:12px;font-weight:600;border-radius:999px;padding:2px 9px;white-space:nowrap;border:1px solid currentColor}
 .ok{color:var(--ok)}.info{color:var(--info)}.warn{color:var(--warn)}.bad{color:var(--bad)}.neutral{color:var(--muted)}
-.edit{grid-column:2/4;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.edit{grid-column:1/4;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 select,input,textarea,button{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:8px}
 select,input{min-height:36px;padding:0 8px}
 textarea{width:100%;min-height:64px;padding:8px;box-sizing:border-box;resize:vertical}
 button{min-height:36px;padding:0 12px;cursor:pointer}
 button.primary{background:var(--acc);color:var(--accfg);border-color:var(--acc);font-weight:600}
 button.link{border:0;background:none;color:var(--info);padding:0 4px;min-height:28px}
-.note{grid-column:2/4;font-size:13.5px;background:var(--chip);border-radius:8px;padding:6px 9px;white-space:pre-wrap}
+.desc{grid-column:1/4;color:var(--muted);font-size:14px;max-width:70ch}
+.prog{grid-column:1/4;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
+.bar{flex:0 0 120px;height:6px;border-radius:3px;background:var(--chip);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ok)}
+.stagebar{display:flex;gap:10px;align-items:center;font-size:13px;color:var(--muted)}
+.stagebar .bar{flex-basis:160px}
+.note{grid-column:1/4;font-size:13.5px;background:var(--chip);border-radius:8px;padding:6px 9px;white-space:pre-wrap}
 .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .filters input[type=search]{flex:1 1 220px;min-width:0}
 label.ck{display:flex;gap:6px;align-items:center;font-size:14px}
@@ -119,10 +126,18 @@ function chips(it){
   if(it.q)c.push("вопрос");
   return c.map(x=>`<span class="chip">${esc(x)}</span>`).join("")+`<span class="chip">${esc(fmt(it.u))}</span>`;
 }
+const PRS={queue:"в очереди на влитие",review:"на проверке",draft:"в работе",merged:"влито",red:"проверки красные — чинится"};
+function progress(it){
+  const out=[];
+  if(it.sub&&it.sub[1]){const [c,t]=it.sub;out.push(`<span class="bar" aria-hidden="true"><i style="width:${Math.round(100*c/t)}%"></i></span><span>Готово ${c} из ${t} частей</span>`)}
+  if(it.prs&&it.prs.length){const last=it.prs[it.prs.length-1];out.push(`<span>Работа: ${esc(PRS[last[1]]||"в работе")}</span>`)}
+  else if(it.k==="is"&&it.s==="todo")out.push(`<span class="neutral">Работа ещё не начата</span>`);
+  return out.length?`<div class="prog">${out.join("")}</div>`:"";
+}
 function row(it,editable){
   const e=edits[it.n]||{}, p=priOf(it);
   let right = it.k==="pr" ? prPill(it) : (it.s==="done"?`<span class="pill ok">✓ сделано</span>`:(p==="urgent"?`<span class="pill bad">срочно</span>`:p==="high"?`<span class="pill warn">высокий</span>`:p==="later"?`<span class="pill neutral">потом</span>`:""));
-  let h=`<div class="row"><a class="num" href="${GH}${it.n}" target="_blank" rel="noopener">#${it.n}</a><div class="title">${esc(it.t)}</div><div>${right}</div><div class="chips">${chips(it)}</div>`;
+  let h=`<div class="row"><div class="title">${esc(it.t)}</div><div>${right}</div><a class="num" href="${GH}${it.n}" target="_blank" rel="noopener" title="Открыть на GitHub">#${it.n}</a>${it.d?`<div class="desc">${esc(it.d)}</div>`:""}${progress(it)}<div class="chips">${chips(it)}</div>`;
   if(e.note)h+=`<div class="note">${esc(e.note)}</div>`;
   if(editable&&db){
     h+=`<div class="edit"><label class="sub" for="p-${it.n}">Приоритет</label><select id="p-${it.n}" data-pri="${it.n}">${PRI.map(([v,l])=>`<option value="${v}"${v===p?" selected":""}>${l}</option>`).join("")}</select><button class="link" data-note="${it.n}">${e.note?"Изменить заметку":"Заметка"}</button></div>`;
@@ -145,16 +160,17 @@ function vNow(){
 }
 function filtered(){
   const q=st.q.trim().toLowerCase();
-  return data.items.filter(i=>i.s==="todo"&&(!q||i.t.toLowerCase().includes(q)||String(i.n).includes(q))&&(!st.area||i.a===st.area)&&(!st.pri||priOf(i)===st.pri)&&(!st.mine||i.f)&&(!st.bugs||i.b))
+  return data.items.filter(i=>i.s==="todo"&&(!q||i.t.toLowerCase().includes(q)||(i.d||"").toLowerCase().includes(q)||String(i.n).includes(q))&&(!st.area||i.a===st.area)&&(!st.pri||priOf(i)===st.pri)&&(!st.mine||i.f)&&(!st.bugs||i.b))
     .sort((a,b)=>(PRI_ORDER[priOf(a)]-PRI_ORDER[priOf(b)])||b.n-a.n);
 }
+function stageBar(s){const p=(data.stages||{})[s];if(!p||!p[1])return "";return `<div class="stagebar"><span class="bar" aria-hidden="true"><i style="width:${Math.round(100*p[0]/p[1])}%"></i></span><span>Этап сделан на ${Math.round(100*p[0]/p[1])}%: закрыто ${p[0]} задач из ${p[1]}</span></div>`}
 function vPlan(){
   const areas=[...new Set(data.items.map(i=>i.a).filter(Boolean))].sort();
-  const f=`<div class="filters"><input type="search" id="f-q" placeholder="Поиск по названию или номеру" value="${esc(st.q)}" aria-label="Поиск"><select id="f-area" aria-label="Направление"><option value="">Все направления</option>${areas.map(a=>`<option${a===st.area?" selected":""}>${esc(a)}</option>`).join("")}</select><select id="f-pri" aria-label="Приоритет"><option value="">Любой приоритет</option>${PRI.filter(p=>p[0]).map(([v,l])=>`<option value="${v}"${v===st.pri?" selected":""}>${l}</option>`).join("")}</select><label class="ck"><input type="checkbox" id="f-mine"${st.mine?" checked":""}> Только ваши просьбы</label><label class="ck"><input type="checkbox" id="f-bugs"${st.bugs?" checked":""}> Только ошибки</label></div>`;
+  const f=`<div class="filters"><input type="search" id="f-q" placeholder="Поиск по задачам" value="${esc(st.q)}" aria-label="Поиск"><select id="f-area" aria-label="Направление"><option value="">Все направления</option>${areas.map(a=>`<option${a===st.area?" selected":""}>${esc(a)}</option>`).join("")}</select><select id="f-pri" aria-label="Приоритет"><option value="">Любой приоритет</option>${PRI.filter(p=>p[0]).map(([v,l])=>`<option value="${v}"${v===st.pri?" selected":""}>${l}</option>`).join("")}</select><label class="ck"><input type="checkbox" id="f-mine"${st.mine?" checked":""}> Только ваши просьбы</label><label class="ck"><input type="checkbox" id="f-bugs"${st.bugs?" checked":""}> Только ошибки</label></div>`;
   const items=filtered(), groups={};
   items.forEach(i=>(groups[i.st||0]=groups[i.st||0]||[]).push(i));
   const order=[1,2,3,4,5,6,0].filter(s=>groups[s]);
-  const body=order.length?order.map(s=>`<details class="stage" ${s!==0?"open":""}><summary><h2>${esc(STAGE_NAMES[s])}</h2><span class="sub">${groups[s].length}</span></summary>${lane("",groups[s],true,"","s"+s).replace('<div class="lanehead"><h2></h2>','<div class="lanehead" hidden><h2></h2>')}</details>`).join(""):`<div class="list"><div class="empty">Ничего не найдено. Снимите фильтры.</div></div>`;
+  const body=order.length?order.map(s=>`<details class="stage" ${s!==0?"open":""}><summary><h2>${esc(STAGE_NAMES[s])}</h2><span class="sub">${groups[s].length} впереди</span></summary>${stageBar(s)}${lane("",groups[s],true,"","s"+s).replace('<div class="lanehead"><h2></h2>','<div class="lanehead" hidden><h2></h2>')}</details>`).join(""):`<div class="list"><div class="empty">Ничего не найдено. Снимите фильтры.</div></div>`;
   return `<div style="display:flex;flex-direction:column;gap:16px">${f}<div class="sub">Сначала срочное, потом высокий приоритет. Приоритет и заметка сохраняются сразу.</div>${body}</div>`;
 }
 function vDone(){
@@ -164,7 +180,7 @@ function vDone(){
 function vWishes(){
   const list=wishes.slice().sort((a,b)=>(b.at||"").localeCompare(a.at||""));
   const form=db?`<form class="wish" id="wish-form"><h2>Новое пожелание</h2><div class="line"><input type="text" id="w-title" required maxlength="200" placeholder="Что хотите, одной строкой"><select id="w-pri" aria-label="Приоритет">${PRI.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></div><textarea id="w-text" maxlength="4000" placeholder="Подробности: где, почему, как должно быть (можно не заполнять)"></textarea><div class="line"><button class="primary" type="submit">Добавить</button><span class="status" id="w-status" role="status"></span></div></form>`:`<div class="list"><div class="empty">Чтобы добавить пожелание, откройте страницу, войдя в свой аккаунт Claude.</div></div>`;
-  const rows=list.length?list.map(w=>`<div class="row"><span class="num">${w.issue?`<a class="num" href="${GH}${Number(w.issue)}" target="_blank" rel="noopener">#${Number(w.issue)}</a>`:"новое"}</span><div class="title">${esc(w.title)}</div><div>${w.issue?`<span class="pill ok">✓ в задачах</span>`:`<span class="pill info">ждёт руководителя</span>`}</div>${w.text?`<div class="note">${esc(w.text)}</div>`:""}<div class="chips"><span class="chip">${esc((PRI.find(p=>p[0]===(w.pri||""))||PRI[2])[1])}</span><span class="chip">${esc(fmt(w.at))}</span></div></div>`).join(""):`<div class="empty">Пожеланий пока нет. Напишите первое выше — руководитель заведёт по нему задачу.</div>`;
+  const rows=list.length?list.map(w=>`<div class="row"><div class="title">${esc(w.title)}</div><div>${w.issue?`<span class="pill ok">✓ в задачах</span>`:`<span class="pill info">ждёт руководителя</span>`}</div><span class="num">${w.issue?`<a class="num" href="${GH}${Number(w.issue)}" target="_blank" rel="noopener">#${Number(w.issue)}</a>`:""}</span>${w.text?`<div class="note">${esc(w.text)}</div>`:""}<div class="chips"><span class="chip">${esc((PRI.find(p=>p[0]===(w.pri||""))||PRI[2])[1])}</span><span class="chip">${esc(fmt(w.at))}</span></div></div>`).join(""):`<div class="empty">Пожеланий пока нет. Напишите первое выше — руководитель заведёт по нему задачу.</div>`;
   return `<div style="display:flex;flex-direction:column;gap:16px">${form}<section class="lane"><div class="lanehead"><h2>Все пожелания</h2><span class="n">${list.length}</span></div><div class="list">${rows}</div></section></div>`;
 }
 function view(){const h=location.hash.slice(1);return ["now","plan","done","wishes"].includes(h)?h:"now"}
