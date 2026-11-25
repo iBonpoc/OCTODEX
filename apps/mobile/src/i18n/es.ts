@@ -804,6 +804,7 @@ export const es: Dict = {
   "ue.sendEmail": "Email",
   "ue.copyLink": "Copiar enlace",
   "est.menu.copyLink": "Copiar enlace",
+  "est.menu.copyLinkFail": "El enlace no se copió",
   "ue.linkCopied": "Enlace copiado",
   "ue.openClient": "Mostrar al cliente",
   "ue.pdf": "PDF",

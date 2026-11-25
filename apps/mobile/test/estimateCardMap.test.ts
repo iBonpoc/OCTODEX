@@ -22,7 +22,8 @@ describe("карточка сметы: значки под шапкой (#2640)"
   });
   it("«Скопировать ссылку» (#2652): пункт «⋯» только у отправленной и дальше, с токеном, без отзыва; копирует, а не отправляет", () => {
     expect(src).toContain('testID: "est-act-copy-link"');
-    expect(src).toMatch(/e\.token && !e\.linkRevokedAt && e\.status !== "draft"/);
+    expect(src).toMatch(/e\.token && !e\.linkRevokedAt && e\.status !== "draft" && e\.status !== "declined"/);
+    expect(src).toContain("est.menu.copyLinkFail");
     expect(src).toContain("copyText(clientLink(e.token))");
     expect((ru as Record<string, string>)["est.menu.copyLink"]).toBe("Скопировать ссылку");
   });

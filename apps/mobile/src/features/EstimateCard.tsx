@@ -383,7 +383,7 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
   const moreList: MoreAction = [
     ...actions.filter((x) => x.key !== "edit" && x.key !== "pdf" && x.key !== "client").map(({ key, label, icon, destructive, testID }) => ({ key, label, icon, destructive, testID })),
     // MAP §4: the link — only in «⋯» and only from «sent» on (the draft has none); a plain copy: nothing is sent, the status stays
-    ...(universal && maySend && e.token && !e.linkRevokedAt && e.status !== "draft" ? [{ key: "copyLink", label: t("est.menu.copyLink"), icon: "link" as const, testID: "est-act-copy-link" }] : []),
+    ...(universal && maySend && e.token && !e.linkRevokedAt && e.status !== "draft" && e.status !== "declined" ? [{ key: "copyLink", label: t("est.menu.copyLink"), icon: "link" as const, testID: "est-act-copy-link" }] : []),
     // «Подписать здесь» keeps its place in «⋯» when «Позвонить» holds the second step
     ...(callSecond && signSecond ? [{ key: "signHere", label: signSecond.label, icon: "pencil" as const, testID: "est-sign-here" }] : []),
     ...(countersign && manage ? [{ key: "reopen", label: t("est.reopen.button"), icon: "pencil" as const, testID: "est-act-reopen" }, { key: "decline", label: t("est.decline.button"), icon: "close" as const, testID: "est-act-decline" }] : []),
@@ -393,7 +393,7 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
     if (key === "reopen" || key === "decline") return setAsk(key);
     if (key === "signHere") return setSection("sign");
     if (key === "copyLink") {
-      if (e.token) copyText(clientLink(e.token)).then(() => toast.show(t("ue.linkCopied")), () => toast.show(t("err.linkSend")));
+      if (e.token) copyText(clientLink(e.token)).then(() => toast.show(t("ue.linkCopied")), () => toast.show(t("est.menu.copyLinkFail")));
       return;
     }
     act(key);

@@ -53,6 +53,8 @@ exports.run = async (h) => {
   const before = (await h.db()).estimates.find((x) => x.id === "e6");
   await tid("est-act-copy-link").click();
   await p.waitForFunction(() => /Ссылка скопирована/.test(document.querySelector('[data-testid="toast-text"]')?.textContent || ""), null, { timeout: 4000 });
+  const clip = await p.evaluate(() => navigator.clipboard.readText()).catch(() => null);
+  if (clip !== null) h.expect(/\/p\/\S+$/.test(clip), `the clipboard holds the client link (${clip})`);
   const after = (await h.db()).estimates.find((x) => x.id === "e6");
   h.expect(after.status === before.status && (after.sentAt ?? null) === (before.sentAt ?? null), "copying the link sends nothing: the status and the date of sending are as before");
   // the menu closed with the pick: open it again for «Отозвать ссылку»
