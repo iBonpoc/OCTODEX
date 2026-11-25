@@ -74,7 +74,7 @@ export default function PriceUpdate() {
           <ListGroup title="Обновлено" count={1} inset={space[4]}>
             <GroupRow title={bulb?.name ?? ""} subtitle={`Клиенту ${money(clientCents(cost(bulb), bulb))} → ${money(clientCents(bulbNew, bulb))} · закупка +10\u00a0%`} value={money(clientCents(bulbNew, bulb))} />
           </ListGroup>
-          <ListGroup title="Не обновлено" count={1} inset={space[4]} note="Цена выросла больше чем на 25\u00a0% — ждёт вашей проверки.">
+          <ListGroup title="Не обновлено" count={1} inset={space[4]} note={"Цена выросла больше чем на 25\u00a0% — ждёт вашей проверки."}>
             <GroupRow wrap title={bracketTitle} subtitle={bracketLine} status={{ status: "bad", label: "Проверьте" }} />
             <ActionRow inGroup label="Проверить" icon="search" onPress={() => setApplied(false)} testID="pu-check" />
           </ListGroup>
@@ -93,7 +93,7 @@ export default function PriceUpdate() {
     >
       {source}
       <GroupedList>
-        <ListGroup title="На проверку" count={1} inset={space[4]} note="Выросла больше чем на 25\u00a0%. Отметьте, если в прайсе нет ошибки.">
+        <ListGroup title="На проверку" count={1} inset={space[4]} note={"Выросла больше чем на 25\u00a0%. Отметьте, если в прайсе нет ошибки."}>
           <OptionRow inGroup multiple selected={picked.includes("cat-bracket")} onPress={() => toggle("cat-bracket")} title={bracketTitle} subtitle={bracketLine} status={{ status: "bad", label: "Проверьте" }} testID="pu-bracket" />
         </ListGroup>
         <ListGroup title="Обычные" count={1} inset={space[4]}>
