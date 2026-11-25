@@ -184,9 +184,13 @@ exports.run = async (h) => {
       await h.go(path);
       await insets(p, c);
       await clear(h, c, name);
+      // #2363 F22: «Дальше» is a line taller (the address on its own line) — on a landscape phone its button is below the fold (and the
+      // header snaps a small scroll back): on «Главная» the content's left is the first card's own button, wherever it stands
       // no double padding: after the side menu the content starts 16 from it, the notch is the menu's (useNavInsets)
       const cl = await contentLeft(p);
-      const want = wide ? cl.nav + 16 : Math.max(c.l, 16);
+      if (name === "Главная") cl.left = Math.min(cl.left, await p.evaluate(() => { const e = document.querySelector('[data-testid="home-main-en-route"]') || document.querySelector('[data-testid="home-main-open"]'); return e ? e.getBoundingClientRect().left : Infinity; }));
+      // v2 «Главная» has no avatar from 820 (the profile is in the side menu): at 820 the leftmost button is the one inside the first card, 16 further
+      const want = wide ? cl.nav + 16 + (name === "Главная" && c.w < 1280 ? 16 : 0) : Math.max(c.l, 16);
       if (wide && cl.nav === null) h.failures.push(`${c.name} ${name}: no side menu`);
       else if (Math.abs(cl.left - want) > 1) h.failures.push(`${c.name} ${c.w}×${c.h}: ${name} — the content starts at ${Math.round(cl.left)}, not ${want}`);
       // the fixed parts are there to check
@@ -198,6 +202,9 @@ exports.run = async (h) => {
     // the status bar backdrop (spec 32 §7): scrolled, the list passes under the clock on glass, not bare;
     // at the top of the scroll nothing is drawn there
     if (c.t > 0 && !wide) {
+      // v2: the clients are grouped rows, the list may not fill a tall phone — «Главная» always scrolls
+      await h.go("/");
+      await insets(p, c);
       const backdrop = () => p.evaluate(() => { const e = [...document.querySelectorAll('[data-testid="status-backdrop"]')].find((x) => x.getBoundingClientRect().height > 0); return e ? e.getBoundingClientRect().height : 0; });
       h.expect((await backdrop()) === 0, `${c.name}: no backdrop at the top of the scroll`);
       await p.mouse.move(c.w / 2, c.h / 2);
@@ -209,10 +216,11 @@ exports.run = async (h) => {
       if (Math.abs(bh - c.t) > 0.5) h.failures.push(`${c.name}: scrolled — the backdrop under the clock is ${bh}, not ${c.t}`);
     }
 
-    // «＋» on «Главная» (on «Клиенты» it opens the new client at once): the floating button (phone) or the header one → its sheet
+    // «＋» on «Главная»: the header's «＋» → its menu
     await h.go("/");
     await insets(p, c);
-    const fab = p.locator(wide ? '[data-testid="fab-header"]' : '[data-testid="fab"]').locator("visible=true").first();
+    // v2: the «＋» is in the header on every width (today-create), its items open as a menu
+    const fab = p.getByTestId("today-create").locator("visible=true").first().getByRole("button").first();
     await fab.click();
     await h.sheet().locator('[data-testid^="fab-"]').first().waitFor({ timeout: 3000 });
     await applied(p, c);
@@ -221,7 +229,7 @@ exports.run = async (h) => {
     await pressEscUntilClosed(p);
     await p.waitForFunction(() => !document.querySelector('[aria-modal="true"] [data-testid^="fab-"]'), null, { timeout: 3000 });
 
-    // the menu: the phone has the «Ещё» tab (a screen); 820 — ☰ opens the drawer; 1280 — the side menu opens in place
+    // the menu: the phone has «Ещё» (a screen behind the avatar); 820 — ☰ opens the drawer; 1280 — the side menu opens in place
     if (!wide) {
       await h.go("/more");
       await insets(p, c);

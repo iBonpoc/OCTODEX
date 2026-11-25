@@ -18,6 +18,7 @@ import { editionLabel, LEGAL_VERSIONS, legalHref } from "@/features/legal";
 import Constants from "expo-constants";
 import { component, space } from "@octo/design-tokens";
 import { BUILD } from "@/config/version";
+import { VersionLine } from "@/features/version";
 import { BrandLogo } from "@/ui/brand";
 
 /**
@@ -110,6 +111,8 @@ export default function Settings() {
             <T v="caption" tone="mut" tabular>
               {t("brand.about.version", { v: Constants.expoConfig?.version ?? "1.0.0", b: BUILD || "dev" })}
             </T>
+            {/* the full version line (with the moment it was published) — it left the headers (visual-v2, rule 11) */}
+            <VersionLine testID="about-version" />
           </View>
           <UpdateRow />
           <Divider />

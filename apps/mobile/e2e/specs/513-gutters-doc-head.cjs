@@ -68,7 +68,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
+  await tid("module-gutters-status").filter({ hasText: /^Без срока/ }).waitFor({ timeout: 5000 });
   const d0 = await db();
   const lead = d0.leads.find((l) => l.address && l.city && !["won", "lost", "declined"].includes(l.status));
   h.expect(!!lead, "the sample data has an open lead with an address");

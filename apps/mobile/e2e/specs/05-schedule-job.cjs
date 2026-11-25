@@ -2,7 +2,7 @@
 /** S8b (docs/specs/07 §2.2 А, founder 05.11): an employee signs the contract for the company on the estimate screen. */
 async function countersign(h, estimateId) {
   await h.go(`/estimate/${estimateId}`);
-  const pad = h.page.getByLabel(/расписывается|signs here/i).last();
+  const pad = await require("../estimateMenu.cjs").countersignPad(h.page);
   await pad.scrollIntoViewIfNeeded(); await h.page.waitForTimeout(250);
   const bb = await pad.boundingBox();
   await h.page.mouse.move(bb.x + 30, bb.y + 90); await h.page.mouse.down();
@@ -12,7 +12,7 @@ async function countersign(h, estimateId) {
 }
 
 // a working day (П4a: by default Mon–Sat, Sunday off = no slots); the form counts days on the company's calendar (П4b)
-const { minuteOf, workdayOffset } = require("../companyTime.cjs");
+const { addDays, minuteOf, todayKey, workdayOffset } = require("../companyTime.cjs");
 
 const { pickVisitDay, pickVisitStart } = require("../visitForm.cjs");
 exports.run = async (h) => {
@@ -44,7 +44,10 @@ exports.run = async (h) => {
   await h.go(`/visit/${v.id}`);
   await h.expectText(/Заметка мастеру[\s\S]*Gate code at the office/, "the note is on the visit card");
   await h.go("/plan");
-  for (let i = 0; i < dayOffset; i++) await h.page.getByRole("button", { name: "Вперёд" }).last().click();
-  await h.page.waitForTimeout(400);
+  // v2 (#2350): the arrows of the Plan step a week — the day is picked from the month under «Ноябрь ⌄»
+  const day = addDays(todayKey(), dayOffset);
+  await h.page.getByTestId("plan-month-title").locator("visible=true").first().click();
+  await h.page.getByTestId(`plan-month-pick-${day}`).locator("visible=true").first().click();
+  await h.page.getByText(/Carpet, railing, bulb, haul-away/).locator("visible=true").first().waitFor({ timeout: 8000 });
   await h.expectText(/Carpet, railing, bulb, haul-away/, "on the plan that day");
 };

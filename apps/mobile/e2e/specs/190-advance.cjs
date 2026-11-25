@@ -11,8 +11,12 @@
 const { rcptAct, rcptHas } = require("../receiptMenu.cjs");
 exports.run = async (h) => {
   const p = h.page;
-  await h.go("/payments?p=all");
-  const total0 = await p.getByTestId("payments-total").locator("visible=true").first().innerText();
+  // v2 (#2350): «Оплаты» are groups by the company's days, each with its sum — the sums are the titles of these groups
+  const sums = () =>
+    p.evaluate(() => ["today", "week", "month", "earlier"].map((g) => document.querySelector(`[data-testid="payments-list-group-${g}"]`)?.innerText.split("\n")[0] ?? "").join(" | "));
+  await h.go("/payments");
+  await p.locator('[data-testid^="payment-row-"]').locator("visible=true").first().waitFor({ timeout: 8000 });
+  const total0 = await sums();
   const db0 = await h.db();
   const inv = db0.invoices.find((i) => i.totalCents - i.paidCents >= 5000 && db0.customers.some((c) => c.id === i.customerId));
   h.expect(!!inv, "the demo has an invoice owing $50 or more");
@@ -26,15 +30,15 @@ exports.run = async (h) => {
   }, [advance("e2e-adv-190", 5000), advance("e2e-adv-191", 2000)]);
 
   // 1) «Оплаты»: its own section, outside the sum
-  await h.go("/payments?p=all");
-  const section = p.getByTestId("advances-section").locator("visible=true").first();
+  await h.go("/payments");
+  const section = p.getByTestId("payments-list-group-advances").locator("visible=true").first();
   await section.waitFor({ timeout: 5000 });
-  await section.getByTestId("advance-card-e2e-adv-190").first().waitFor({ timeout: 3000 });
-  h.expect((await p.getByTestId("payments-total").locator("visible=true").first().innerText()) === total0, "«Собрано» is the same: an advance is not counted");
+  await section.getByTestId("payment-row-e2e-adv-190").first().waitFor({ timeout: 3000 });
+  h.expect((await sums()) === total0, `the groups' sums are the same: an advance is not counted (${await sums()} / ${total0})`);
   await h.shot("payments");
 
   // the client card
-  await h.go(`/client/${cust.id}`);
+  await h.go(`/client/${cust.id}?tab=money`);
   await p.getByTestId("client-advance-e2e-adv-190").locator("visible=true").first().waitFor({ timeout: 5000 });
 
   // 2) the receipt → «Зачесть в счёт»

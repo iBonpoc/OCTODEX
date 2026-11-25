@@ -174,7 +174,7 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
   }
   for (const l of db.leads) {
     if (!canSeeLead(role, db.me, l)) continue;
-    const turn = leadTurn(db, l, st);
+    const turn = leadTurn(db, l, st, now);
     const before = out.length;
     // open, not snoozed (leadTurn: done / snoozed), not archived; one card per lead
     if (office3 && goneId(db, l.assigneeId) && turn.kind !== "done" && turn.kind !== "snoozed" && !l.archivedAt) {
@@ -193,7 +193,7 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
       if (turn.kind !== "snoozed" && turn.kind !== "done") out.push(noShowCard(ns, l.name));
       continue;
     }
-    if (isBackFromSnooze(l) && turn.kind !== "reply") {
+    if (isBackFromSnooze(l, now) && turn.kind !== "reply") {
       out.push({ id: `back-${l.id}`, kind: "leadBack", refId: l.id, name: l.name, label: "att.leadBack", params: { name: l.name }, chip: "lead.backChip", status: "info", score: 630 });
     } else if (turn.kind === "reply") {
       const m = turn.minutes;

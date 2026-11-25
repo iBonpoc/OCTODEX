@@ -24,6 +24,8 @@ exports.run = async (h) => {
   // English: the signature field of the visit says «Client»
   await h.seed("octo.lang.v1", "en");
   await h.go("/visit/v1");
+  // v2 (#2350): the pad is the step after the work — the visit's main «Finish» (MainStep `visit-main-finish`) turns the body to it
+  await p.getByTestId("visit-main-finish").locator("visible=true").first().click();
   const pad = p.getByTestId("signature-pad").last();
   await pad.waitFor();
   const said = `${await pad.getAttribute("aria-label")} ${await pad.innerText()}`;

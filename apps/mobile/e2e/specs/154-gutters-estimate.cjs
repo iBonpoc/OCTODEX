@@ -78,7 +78,7 @@ exports.run = async (h) => {
   await tid(`est-price-${g.id}`).locator("input").fill("99");
   await tid(`est-collapse-${g.id}`).getByRole("button").click();
   await waitFor(async () => (await tid("ue-line-source-hint").count()) === 0, "the row closed");
-  await tid("ue-save").getByRole("button").click();
+  await tid("ue-save").click(); // v2: the bar's MainStep «Готово» — the testID is on the button itself
   await waitFor(async () => (await lineOf(eid, g.id))?.unitPriceCents === 9900, "the hand price is saved");
 
   // the review: nothing changed → «Открыть смету» (never «Перенести»); «Править чертёж», another run → «Готово» →

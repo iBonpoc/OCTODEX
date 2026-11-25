@@ -8,7 +8,7 @@ import { useI18n } from "@/i18n";
 import { Button, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { FieldGroup, FormMain, Screen } from "@/ui/surfaces";
-import { ClosedCompanies } from "@/features/ClosedCompany";
+import { ClosedCompanies } from "@/features/ClosedCompanyView";
 import { View } from "react-native";
 import { component, space } from "@octo/design-tokens";
 import { BrandMark } from "@/ui/brand";

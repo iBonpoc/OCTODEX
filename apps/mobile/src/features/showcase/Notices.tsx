@@ -8,12 +8,16 @@ import { useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { Card, Empty, SectionTitle, SyncBadge } from "@/ui/surfaces";
 import { EmptyFilter, EmptySearch, NotFound, PageNotFound } from "@/ui/emptyStates";
-import { DemoBadge } from "@/features/DemoBadge";
+import { DemoBadge } from "@/features/DemoBadgeView";
 import { StatusNote } from "@/ui/statusNote";
 import { Banner } from "@/ui/banner";
 import { CrashView } from "@/features/CrashScreen";
 import { SECTIONS } from "./registry";
 import { localUndo, TOO_LATE } from "@/data/undo";
+import { QueueLine } from "@/ui/queueLine";
+import { queueLine } from "@/ui/queueLineRules";
+import { SignaturePad } from "@/features/SignaturePad";
+import { StackBackGestureOff } from "@/nav/StackBackGestureOff";
 
 /** Notices (DS §15): a toast, a toast with «Отменить» for 5 seconds, the «no network» badge. Each one is live. */
 export function NoticesSection() {
@@ -108,6 +112,38 @@ export function NoticesSection() {
         </View>
         <View testID="showcase-note-undone">
           <T v="body">{t("ds.note.undone", { n: undone })}</T>
+        </View>
+      </Card>
+      {/* #2213/#2214 (DS Б8): three actions in a row — three toasts, each with its own «Отменить» and its own clock */}
+      <Card>
+        <T v="heading">{t("ds.note.stack")}</T>
+        <T v="caption" tone="mut">{t("ds.note.stackHint", { s: motion.toastUndoMs / 1000 })}</T>
+        <View testID="showcase-note-stack">
+          <Button
+            label={t("ds.note.stackShow")}
+            variant="secondary"
+            onPress={() => [1, 2, 3].forEach((n) => toast.show(t("ds.note.stackText", { n }), localUndo(() => setUndone((k) => k + 1))))}
+          />
+        </View>
+      </Card>
+      {/* #2214 (DS §15.3б): the offline queue's line — the live one sits over the tab bar; here its three states, fixed */}
+      <Card>
+        <T v="heading">{t("ds.note.queue")}</T>
+        <T v="caption" tone="mut">{t("ds.note.queueHint")}</T>
+        <View testID="showcase-queue-line" style={{ gap: space[2] }}>
+          <QueueLine say={queueLine(true, "ok", 3)} />
+          <QueueLine say={queueLine(false, "offline", 2)} />
+          <QueueLine say={queueLine(false, "offline", 0)} />
+        </View>
+      </Card>
+      {/* #2215: the smooth pen — draw slowly and fast; «Отменить штрих» takes the last stroke back; nothing is saved here */}
+      <Card>
+        <T v="heading">{t("ds.note.sign")}</T>
+        <T v="caption" tone="mut">{t("ds.note.signHint")}</T>
+        <View testID="showcase-signature">
+          {/* the swipe back would take the stroke (#2329), as on every signature field */}
+          <StackBackGestureOff />
+          <SignaturePad consent={null} onConfirm={() => setPressed(t("visit.confirmSign"))} />
         </View>
       </Card>
       {/* #1193 п.6 (DS §15.2): «Отменить» that is too late — the thing was changed since: nothing is taken back, the toast says so */}

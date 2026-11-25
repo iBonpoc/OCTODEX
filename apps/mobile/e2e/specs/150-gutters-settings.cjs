@@ -8,9 +8,9 @@
  * - offline (the demo's «no network»): a change is saved on the phone and waits in the queue (the badge);
  * - the trial over: read only, «Подключить» for the director;
  * - the office (dispatcher): read only, «ask the owner».
- * Finds things by testID and the store; waits on what it checks (the toast's «Отменить» has no testID — by its name).
+ * Finds things by testID and the store; waits on what it checks (the toast's «Отменить» — `pressUndo`, once it is armed).
  */
-const { openProps, skipLength } = require("../gutters.cjs");
+const { openProps, skipLength, pressUndo, attrKeys, openAttrMore } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 /** an in-app move: a full load would put the demo back online */
@@ -20,13 +20,6 @@ exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width > 390;
   const tid = (id) => p.getByTestId(id).locator("visible=true");
-  // 390: what is changed seldom sits under «Ещё» (spec 33 П20.9) — open it; 820/1280 show every field
-  const more = async () => {
-    if (await tid("attr-more").count()) {
-      await tid("attr-more").getByRole("button").click();
-      await tid("attr-more-open").waitFor({ timeout: 5000 });
-    }
-  };
   const waitFor = async (ok, what, tries = 40) => {
     let v = await ok();
     for (let i = 0; i < tries && !v; i++) { await p.waitForTimeout(150); v = await ok(); }
@@ -43,7 +36,7 @@ exports.run = async (h) => {
   await setRole(h, "director");
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await waitFor(async () => !!(await mod()).trialEndsAt, "trial on");
+  await waitFor(async () => !!(await mod()).enabled, "on");
   await tid("module-gutters-settings").getByRole("button").click();
   await p.waitForURL(/\/module\/gutters\/settings$/, { timeout: 5000 });
   await tid("gset-screen").waitFor({ timeout: 5000 });
@@ -56,7 +49,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await off("profiles")).join() === "box", "Box off is saved as «not installed» only");
   h.expect(!(await checked("gset-profiles-box")) && (await tid("gset-sizes-box").count()) === 0, "Box off, no sizes of it");
   // «Отменить» (rule 5): back in the store and on the page
-  await p.getByRole("button", { name: "Отменить", exact: true }).last().click();
+  await pressUndo(p);
   await waitFor(async () => (await off("profiles")).length === 0 && (await checked("gset-profiles-box")), "«Отменить»: Box is back");
   await tid("gset-profiles-box").click();
   await waitFor(async () => (await off("profiles")).join() === "box", "Box off again");
@@ -102,11 +95,12 @@ exports.run = async (h) => {
   await waitFor(async () => (((await db()).moduleData?.gutters?.elements) || []).some((e) => e.kind === "run" && e.attrs.color === pal[4]), "a new run has the company's colour");
   if (!wide) await openProps(p);
   await tid("attr-panel").waitFor({ timeout: 5000 });
-  await more();
-  await tid("attr-profile-open").click(); // a dropdown (#677)
-  h.expect((await radios("attr-profile").count()) === 4, "the panel offers 4 profiles (no Box)");
-  await tid("attr-color-open").click(); // folded (founder 09.11)
-  h.expect((await radios("attr-color").count()) === 9, "the panel offers the palette's 8 colours and «Без покраски»");
+  await openAttrMore(p);
+  // the fields (#2412 G1): a menu at each — read what it offers
+  const profiles = await attrKeys(p, "attr-profile");
+  h.expect(profiles.length === 4 && !profiles.includes("box"), `the panel offers 4 profiles (no Box): ${profiles.join(",")}`);
+  const colors = await attrKeys(p, "attr-color");
+  h.expect(colors.length === 9 && colors.includes("@mill"), `the panel offers the palette's 8 colours and «Без покраски»: ${colors.join(",")}`);
   await h.shot("canvas");
 
   // offline: saved on the phone, waits in the queue
@@ -124,6 +118,7 @@ exports.run = async (h) => {
   await p.evaluate((k) => {
     const raw = JSON.parse(localStorage.getItem(k));
     raw.db.company.modules.gutters.trialEndsAt = new Date(Date.now() - 86_400_000).toISOString();
+    raw.db.company.modules.gutters.unlimited = false; // #2410: a row with a term (the demo has none of its own)
     localStorage.setItem(k, JSON.stringify(raw));
   }, KEY);
   await h.go("/module/gutters/settings");
@@ -140,7 +135,7 @@ exports.run = async (h) => {
   await setRole(h, "dispatcher");
   await p.evaluate((k) => {
     const raw = JSON.parse(localStorage.getItem(k));
-    raw.db.company.modules.gutters.trialEndsAt = new Date(Date.now() + 86_400_000).toISOString();
+    raw.db.company.modules.gutters.trialEndsAt = new Date(Date.now() + 86_400_000).toISOString(); // a row with a term (unlimited: false above) back in its trial
     localStorage.setItem(k, JSON.stringify(raw));
   }, KEY);
   await h.go("/module/gutters/settings");

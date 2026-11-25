@@ -4,7 +4,7 @@
  * part: if the founder does not like it, this file and its one place in AttrPanel go away in one PR («не понравится — кнопки убираем»);
  * its rows' constants live here for that.
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ScrollView, View } from "react-native";
 import { useI18n } from "@/i18n";
 import type { DictKey } from "@/i18n";
@@ -14,6 +14,7 @@ import { Press, T } from "@/ui/primitives";
 import { fillStyle } from "@/ui/fill";
 import { useTheme } from "@/theme/ThemeProvider";
 import { fracLabel } from "../canvas/format";
+import { sixteenthBehind, sixteenthsOpenAtStart } from "./fracSlot";
 
 /** the main row: eighths, 0 … 7 of 8 (a fraction in sixteenths = 2 × this) */
 export const EIGHTHS = [0, 1, 2, 3, 4, 5, 6, 7] as const;
@@ -34,11 +35,10 @@ export function FracPicker({ value, onChange, active, testID }: {
 }) {
   const { t } = useI18n();
   const { c } = useTheme();
-  // the second row: open by the user's tap, and by itself when an odd sixteenth comes in (from the tape) — the tap closes it again
-  const [more, setMore] = useState(value % 2 === 1);
-  useEffect(() => {
-    if (value % 2 === 1) setMore(true);
-  }, [value]);
+  // the second row: open when the window opens on an odd sixteenth, then by the user's tap only — a sixteenth from the tape
+  // does not open it (the row grew over the tape under the finger, #2414); «1/16» looks chosen instead
+  const [more, setMore] = useState(sixteenthsOpenAtStart(value));
+  const behind = sixteenthBehind(value, more);
   const eighth = eighthKey(value);
   return (
     // the same padding either way (the rows do not shift): the ground only changes
@@ -61,10 +61,10 @@ export function FracPicker({ value, onChange, active, testID }: {
             visibleHeight={component.button.sm}
             accessibilityRole="button"
             accessibilityLabel={t("mod.gutters.attr.fracMoreA11y" as DictKey)}
-            accessibilityState={{ expanded: more }}
-            style={{ height: component.button.sm, paddingHorizontal: space[3], borderRadius: radius.pill, justifyContent: "center", ...(more ? fillStyle(c) : { backgroundColor: "transparent" }), borderWidth: component.hairline, borderColor: more ? "transparent" : c.bd }}
+            accessibilityState={{ expanded: more, selected: behind }}
+            style={{ height: component.button.sm, paddingHorizontal: space[3], borderRadius: radius.pill, justifyContent: "center", ...(more || behind ? fillStyle(c) : { backgroundColor: "transparent" }), borderWidth: component.hairline, borderColor: more || behind ? "transparent" : c.bd }}
           >
-            <T v="button" w={more ? "semibold" : undefined} style={{ color: more ? c.ink : c.mut }}>{t("mod.gutters.attr.fracMore" as DictKey)}</T>
+            <T v="button" w={more || behind ? "semibold" : undefined} style={{ color: more || behind ? c.ink : c.mut }}>{t("mod.gutters.attr.fracMore" as DictKey)}</T>
           </Press>
         </View>
       </ScrollView>

@@ -5,14 +5,14 @@
  * state (П25.4) — the chip is kept on this device. One ListCard per measurement (rule 12; recipe `measurement`, spec 06).
  * A card opens the measurement's card («Просмотр замера», `view`); 1280 — beside the list in the ListPanel.
  */
-import { useState } from "react";
+import { useRef, useState, type ComponentRef } from "react";
 import { View } from "react-native";
 import { router, type Href } from "expo-router";
 import { usePersistentState } from "@/data/persist";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { estimateStatusView } from "@/features/estimateStatus";
-import { moduleHref, moduleState, moduleTabs } from "@/modules/registry";
+import { moduleDef, moduleHref, moduleState, moduleTabs } from "@/modules/registry";
 import { Banner } from "@/ui/banner";
 import { useListPanel } from "@/nav/listPanel";
 import { useDevice } from "@/theme/ThemeProvider";
@@ -22,7 +22,8 @@ import { filterStoreKey } from "@/ui/filterBarRules";
 import { CardGrid, ListCard, ListCardHeader, type CardSign, type CardStatus } from "@/ui/listCard";
 import type { FactKey } from "@/ui/listCardLayout";
 import { ListPanel } from "@/ui/listPanel";
-import { CardList, Empty, Screen } from "@/ui/surfaces";
+import { CardList, Empty, RowView, Screen } from "@/ui/surfaces";
+import { Menu } from "@/ui/overlays";
 import { asMeasurementFilter, filterMeasurements, MEASUREMENT_FILTERS, measurementList, type MeasurementFilter, type MeasurementItem } from "../measurements";
 import { MeasurementView } from "../view/ViewScreen";
 
@@ -116,6 +117,22 @@ export default function MeasurementsScreen() {
     </View>
   );
 
+  // #1919 (founder 16.11: «настройки спрятаны очень далеко… открываешь Gutters, там сверху»): the module's settings and prices from
+  // its own tab — «⋯» last in the header (DS §12.2 «прочие действия»), the same places and roles as «Компания → Модули» (one truth:
+  // places.settings); nothing for this role (a tech) — no «⋯»
+  const links = (moduleDef("gutters")?.places?.settings?.({ role: store.role }, store.db.moduleData?.gutters) ?? []).filter((a) => a.id === "settings" || a.id === "prices");
+  const moreRef = useRef<ComponentRef<typeof View>>(null);
+  const [moreAt, setMoreAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const more = links.length ? (
+    <View ref={moreRef} collapsable={false} testID="measurements-more">
+      <IconButton
+        icon="more"
+        label={`${t("lead.more")}: ${t("mod.gutters.list.title")}`}
+        onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMoreAt({ x, y, w, h }))}
+      />
+    </View>
+  ) : null;
+
   return (
     <Screen
       title={t("mod.gutters.list.title")}
@@ -123,7 +140,16 @@ export default function MeasurementsScreen() {
       back={asTab ? undefined : back}
       // DS §12.2: «?» first on the right of the header
       help={t("mod.gutters.list.help")}
-      right={add}
+      right={
+        more ? (
+          <RowView>
+            {add}
+            {more}
+          </RowView>
+        ) : (
+          add
+        )
+      }
       aside={
         openItem ? (
           <ListPanel title={titleOf(openItem)} subtitle={openItem.address ?? undefined} outside={panel.outside} onOpen={panel.full} onClose={panel.close}>
@@ -176,6 +202,18 @@ export default function MeasurementsScreen() {
           )}
         </>
       )}
+      <Menu
+        visible={!!moreAt}
+        anchor={moreAt}
+        title={t("mod.gutters.list.title")}
+        items={links.map((a) => ({ key: a.id, label: t(a.labelKey), icon: a.icon }))}
+        onSelect={(k) => {
+          setMoreAt(null);
+          const a = links.find((x) => x.id === k);
+          if (a) router.push(a.href as Href);
+        }}
+        onClose={() => setMoreAt(null)}
+      />
     </Screen>
   );
 }

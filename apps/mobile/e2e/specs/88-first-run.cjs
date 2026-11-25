@@ -39,13 +39,14 @@ exports.run = async (h) => {
   // each step opens its screen
   for (const [id, to] of [["job", "/job/new"], ["team", "/team"], ["profile", "/company/profile"]]) {
     await h.go("/today");
-    await vis(`first-${id}`).getByRole("button", { name: "Начать" }).click();
+    // v2: a step is one row, the row itself opens its screen (no «Начать» button)
+    await vis(`first-${id}`).first().click();
     await p.waitForTimeout(700);
     h.expect(path(h) === to, `«${id}» → ${to} (${p.url()})`);
   }
   // «Установить на телефон»: how, in a sheet
   await h.go("/today");
-  await vis("first-install").getByRole("button", { name: "Начать" }).click();
+  await vis("first-install").first().click();
   await h.expectText(/На экран „Домой“/, "the iPhone way");
   await h.expectText(/Установить приложение/, "the Android way");
   await pressEscUntilClosed(p);
@@ -59,7 +60,7 @@ exports.run = async (h) => {
   // «Скрыть»: gone, and stays gone
   await setRole(h, "director");
   await h.go("/today");
-  await card().getByRole("button", { name: "Скрыть" }).click();
+  await vis("first-hide").first().click();
   await p.waitForTimeout(500);
   h.expect((await card().count()) === 0, "hidden");
   await h.go("/today");
