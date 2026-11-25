@@ -30,7 +30,7 @@ import { colorChoices } from "./colorChoices";
 import { dsMoreSet, dsRareShown } from "./attrShown";
 import { FracPicker } from "./FracPicker";
 import { FRAC_SLOT } from "./fracSlot";
-import { feetResetsRest, inchesComplete, inchesTooBig, nextStage, restTouchedAfterUnitPick, type EntryStage } from "./lengthEntry";
+import { feetResetsRest, inchesComplete, inchesTooBig, nextStage, unitPickStep, type EntryStage } from "./lengthEntry";
 import { MM_SCALE, SIXTEENTHS_SCALE, SIXTEENTHS_SCALE_IN, Tape as TapeStrip } from "./Tape";
 import { DENOM, fmtLen, fracLabel, LEN_UNITS, MM_OF, MM_PER_IN, type LenFormat, type LenUnit } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
@@ -261,15 +261,14 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
     set(v);
   };
   const pickUnit = (u: LenUnit) => {
-    // an edited field is read first; a half-typed or empty one keeps the length it had
-    const typed = edited.current ? typedIn() : canon.current;
-    const n = typed ?? canon.current;
-    canon.current = n;
-    restTouched.current = restTouchedAfterUnitPick({ restTouched: restTouched.current, edited: edited.current });
-    edited.current = false;
+    // an edited field is read first; a half-typed or empty one keeps the length it had (lengthEntry.unitPickStep)
+    const s = unitPickStep({ edited: edited.current, typed: edited.current ? typedIn() : null, canon: canon.current, restTouched: restTouched.current, unit: u });
+    canon.current = s.canon;
+    restTouched.current = s.restTouched;
+    edited.current = s.edited;
     setUnit(u);
-    setBad(typed === null); // a wrong number typed: the length it had comes back, and it says so
-    const f = unitFields(n, u);
+    setBad(s.bad); // a wrong number typed: the length it had comes back, and it says so
+    const f = s.fields;
     setFt(f.ft);
     setInc(f.inc);
     setE16(f.e16);

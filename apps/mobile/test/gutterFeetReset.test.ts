@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { feetResetsRest, restTouchedAfterUnitPick } from "../src/modules/gutters/draw/lengthEntry";
+import { feetResetsRest, restTouchedAfterUnitPick, unitPickStep } from "../src/modules/gutters/draw/lengthEntry";
 
 // #2434 (founder 23.11.2026): the first length window after drawing — new feet put the inches and the fraction to 0;
 // the window opened again keeps them; inches or fraction touched in this window are never wiped
@@ -21,26 +21,40 @@ describe("a unit picked: is the rest touched", () => {
   });
 });
 
-// the wiring in the window (this suite has no renderer: the source is read; the behaviour — e2e 525)
-describe("QuickLength is wired to the rules (#2446)", () => {
+// the whole step of a unit picked
+describe("unitPickStep: what a unit pick does to the window", () => {
+  const base = { edited: false, typed: null, canon: 100.5, restTouched: false, unit: "ftin" as const };
+  it("feet typed, inches by hand in «in», back to feet+inches: the inches stay touched and shown", () => {
+    const s = unitPickStep({ ...base, edited: true, typed: 113.625 });
+    expect(s.fields).toMatchObject({ ft: "9", inc: "5", e16: 10 });
+    expect(s.restTouched).toBe(true);
+    expect(s.edited).toBe(false);
+    expect(s.bad).toBe(false);
+    expect(s.canon).toBe(113.625);
+  });
+  it("nothing edited: the drawn length, the rest stays the drawn guess", () => {
+    const s = unitPickStep(base);
+    expect(s.canon).toBe(100.5);
+    expect(s.restTouched).toBe(false);
+    expect(s.bad).toBe(false);
+  });
+  it("edited but half-typed: the length in hand comes back, «bad» says so, the rest is touched", () => {
+    const s = unitPickStep({ ...base, edited: true, typed: null });
+    expect(s.canon).toBe(100.5);
+    expect(s.bad).toBe(true);
+    expect(s.restTouched).toBe(true);
+  });
+  it("then feet typed again: the inches are not wiped", () => {
+    const s = unitPickStep({ ...base, edited: true, typed: 113.625 });
+    expect(feetResetsRest({ firstOpen: true, restTouched: s.restTouched })).toBe(false);
+  });
+});
+
+// the window really uses them (one minimal check; the behaviour — e2e 525)
+describe("QuickLength uses the rules", () => {
   const src = readFileSync(new URL("../src/modules/gutters/draw/AttrPanel.tsx", import.meta.url), "utf8");
-  const lines = src.split("\n");
-  const line = (needle: string) => lines.find((l) => l.includes(needle)) ?? "";
-  it("the feet field resets the inches and the fraction only through feetResetsRest, in the first window", () => {
-    const l = line("feetResetsRest({");
-    expect(l).toContain("firstOpen: start === undefined");
-    expect(l).toContain("restTouched: restTouched.current");
-    expect(l).toContain('setInc("0"); setE16(0);');
-  });
-  it("the inches, the fraction and the tape mark the rest as touched", () => {
-    expect(line("onChangeText={(v) => { restTouched.current = true; edit(setInc)(v)")).not.toBe("");
-    expect(src.match(/edited\.current = true; restTouched\.current = true;/g)?.length).toBe(2); // the fraction + the tape
-  });
-  it("pickUnit marks the rest as touched from `edited`, before `edited` is cleared", () => {
-    const from = src.indexOf("const pickUnit = (u: LenUnit)");
-    const pick = src.slice(from, src.indexOf("const apply = ()", from));
-    const call = "restTouched.current = restTouchedAfterUnitPick({ restTouched: restTouched.current, edited: edited.current })";
-    expect(pick).toContain(call);
-    expect(pick.indexOf(call)).toBeLessThan(pick.indexOf("edited.current = false"));
+  it("the pick and the feet go through lengthEntry", () => {
+    expect(src).toContain("unitPickStep(");
+    expect(src).toContain("feetResetsRest(");
   });
 });

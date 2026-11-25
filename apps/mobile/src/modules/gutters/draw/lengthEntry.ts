@@ -1,6 +1,8 @@
 /**
  * The chain of typing a length without «Done» (#1316, founder 13.11): feet → inches → the fraction by buttons. Pure.
  */
+import { unitFields } from "../canvas/attrs";
+import type { LenUnit } from "../canvas/format";
 
 /** the stage of the entry: the feet are typed, then the inches, then the fraction is chosen (no keyboard needed for it) */
 export type EntryStage = "ft" | "in" | "frac";
@@ -30,3 +32,14 @@ export const feetResetsRest = (o: { firstOpen: boolean; restTouched: boolean }):
  * the fraction now show a length the user typed, not the drawn guess — the feet typed after it never wipe them.
  */
 export const restTouchedAfterUnitPick = (o: { restTouched: boolean; edited: boolean }): boolean => o.restTouched || o.edited;
+
+/**
+ * The whole step of a unit picked (#2446): an edited field is read first (`typed`, null — half-typed or wrong: the length in hand comes
+ * back and `bad` says so); the fields are rewritten from the length in hand in the new unit; the edit is spent, but the rest stays
+ * «touched» if the user had edited a field.
+ */
+export function unitPickStep(o: { edited: boolean; typed: number | null; canon: number; restTouched: boolean; unit: LenUnit }) {
+  const typed = o.edited ? o.typed : o.canon;
+  const canon = typed ?? o.canon;
+  return { canon, bad: typed === null, edited: false, restTouched: restTouchedAfterUnitPick({ restTouched: o.restTouched, edited: o.edited }), fields: unitFields(canon, o.unit) };
+}
