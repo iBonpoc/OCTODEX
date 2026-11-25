@@ -1,0 +1,1 @@
+- 21.11.2026 · Interactive map — https://21st.dev/@lovesickfromthe6ix/components/interactive-map — основатель: «сохрани в список компонентов… спутниковые снимки… отсюда будем брать». Назначение скажет позже. Задача 2367. Внести в DS-V2-COMPLETENESS «Дополнения» с docs-PR #2361.
