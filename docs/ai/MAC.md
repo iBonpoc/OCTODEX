@@ -22,3 +22,24 @@
 | Память чатов | `~/.claude/projects/-Users-*-GoRix*/memory/` | Копия текстом — `docs/notes/memory/` (24.11). Новое правило — сразу в репозиторий. |
 
 Диагноз окружения Mac (типы, тесты, нет PostgreSQL) — `docs/ai/MAC-ENV-2026-11-24.md`.
+
+## Сборка для симулятора iPhone — рецепт (проверено 25.11.2026, #2358)
+
+Делает чат-мост на Mac. Полный рецепт стенда (версии, первая установка Ruby и CocoaPods) — `docs/notes/mac-2026-11-25/STAND.md` (PR #2503).
+
+1. Обновить основную копию и зависимости (без `npm install` после обновления экран падает красным «Unable to resolve module» — так было 25.11 с `@expo-google-fonts/manrope`):
+   ```bash
+   cd ~/GoRix/OCTODEX && git pull --ff-only origin main && npm install
+   ```
+2. Собрать, поставить в симулятор «iPhone 17» (iOS 27.2) и поднять Metro на порту 8081 — одной командой, из `apps/mobile`:
+   ```bash
+   T=~/GoRix/tools; RB=$(MISE_DATA_DIR=$T/data MISE_CONFIG_DIR=$T/config $T/bin/mise where ruby@3.4)/bin
+   cd ~/GoRix/OCTODEX/apps/mobile && PATH="$RB:$T/gems/bin:$PATH" GEM_HOME=$T/gems LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 CI=1 npx expo run:ios --device "iPhone 17"
+   ```
+   25.11: сборка с готовой папкой `ios/` — 2 минуты (22:00–22:02 PT), «Build Succeeded», приложение `com.gorix.app` открылось само. Metro остаётся работать в этом же процессе.
+3. Только JS поменялся (ветка PR без новых нативных модулей) — пересборка не нужна: `git checkout` ветки в основной копии, `npm install`, затем `npx expo start --dev-client` и «Reload» в приложении.
+4. Проверка: чат-мост сам нажимает и снимает экран (инструмент симулятора), снимки — `xcrun simctl io <UDID> screenshot файл.png`, видео — `recordVideo`.
+
+Проверено 25.11 на main `0a6110a9c`: приложение открывается в демо-режиме без входа; пройдено «Лиды → Клиенты → Sarah Mitchell → Сметы → Bathroom remodel» — экраны открываются, суммы на месте. Снимки — `docs/notes/mac-2026-11-25/dev-2358/`. Надпись «Позиции не сохранены в этой смете» на «Bathroom remodel» (снимок 05) — демо-данные: в `src/data/seed.ts` сметы e1–e5 заданы только суммой, без позиций; EST-0006 с позициями показывает их (снимок 06).
+
+Чего эта сборка НЕ закрывает из #2358: отдельного приложения «GoRix Dev» со своим bundle id и значком для iPhone основателя нет — это правка `app.config` (код, зона руководителя) и установка по кабелю на его телефон. В симуляторе стоит обычное `com.gorix.app` в режиме разработки. Настоящая камера, GPS, Face ID, вибрация в симуляторе не проверяются.
