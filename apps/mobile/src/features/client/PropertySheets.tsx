@@ -5,12 +5,15 @@
 import { useEffect, useState } from "react";
 import * as Crypto from "expo-crypto";
 import { useStore } from "@/data/store";
+import { companyState } from "@/features/companySetup";
 import { PROPERTY_KINDS, type Property, type PropertyKind } from "@/data/types";
 import { peopleOf } from "@/data/people";
-import { canSaveProperty, placeOf } from "@/features/properties";
+import { canSaveProperty, canSeeGateCode, placeOf } from "@/features/properties";
 import { Labeled } from "@/features/fields";
 import { useI18n, type DictKey } from "@/i18n";
-import { Button, ChoiceChips, MultiChips, TextField } from "@/ui/controls";
+import { Button, TextField } from "@/ui/controls";
+import { OptionRows } from "@/ui/optionRow";
+import { SelectField } from "@/ui/selectField";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
@@ -22,7 +25,8 @@ export const newProperty = (customerId: string): Property => ({
   customerId,
   address: "",
   city: "",
-  place: { city: "", state: "CA", zip: "" },
+  // the state is the company's, filled in by the sheet (#2065: no «CA» in the core)
+  place: { city: "", state: "", zip: "" },
   stories: 1,
   contactIds: [],
 });
@@ -34,7 +38,9 @@ export function PropertySheet({ value, onClose }: { value: Property | null; onCl
   const [d, setD] = useState<Property | null>(value);
   const [d0, setD0] = useState<string>("");
   useEffect(() => {
-    const v = value ? { ...value, place: placeOf(value) } : null;
+    const pl = value ? placeOf(value) : undefined;
+    // a new address starts in the company's state (#2065); a saved one keeps its own
+    const v = value ? { ...value, place: pl && !pl.state ? { ...pl, state: companyState(store.db.company) } : pl } : null;
     setD(v);
     setD0(JSON.stringify(v));
   }, [value]);
@@ -61,7 +67,7 @@ export function PropertySheet({ value, onClose }: { value: Property | null; onCl
       </Labeled>
       <RowView>
         <Labeled label={t("co.state")}>
-          <TextField type="state" value={place.state ?? ""} onChangeText={(v) => setPlace({ state: v })} placeholder="CA" label={t("co.state")} />
+          <TextField type="state" value={place.state ?? ""} onChangeText={(v) => setPlace({ state: v })} placeholder={companyState(store.db.company) || t("co.state")} label={t("co.state")} />
         </Labeled>
         <Labeled label={t("lead.missing.zip")}>
           <TextField type="zip" value={place.zip ?? ""} onChangeText={(v) => setPlace({ zip: v })} placeholder="91103" label={t("lead.missing.zip")} />
@@ -70,13 +76,14 @@ export function PropertySheet({ value, onClose }: { value: Property | null; onCl
       <Labeled label={t("prop.label")}>
         <TextField type="text" value={d.label ?? ""} onChangeText={(v) => set({ label: v })} placeholder={t("prop.labelHint")} label={t("prop.label")} />
       </Labeled>
-      <Labeled label={t("prop.kind")}>
-        <ChoiceChips<PropertyKind | "">
-          value={d.kind ?? ""}
-          onChange={(v) => set({ kind: v || undefined })}
-          items={[{ key: "", label: t("lead.any") }, ...PROPERTY_KINDS.map((k) => ({ key: k, label: t(`prop.kind.${k}` as DictKey) }))]}
-        />
-      </Labeled>
+      {/* «Тип · Любой ⌄» — a value of the form, a row with a menu (DS §9 А2, spec 56 wave 4) */}
+      <SelectField<PropertyKind | "any">
+        testID="prop-kind"
+        label={t("prop.kind")}
+        value={d.kind ?? "any"}
+        onChange={(v) => set({ kind: v === "any" ? undefined : v })}
+        items={[{ key: "any", label: t("lead.any") }, ...PROPERTY_KINDS.map((k) => ({ key: k, label: t(`prop.kind.${k}` as DictKey) }))]}
+      />
       <Button label={t("ue.save")} icon="check" full disabled={!ok} onPress={save} />
     </Sheet>
   );
@@ -89,17 +96,20 @@ export function AccessSheet({ value, onClose }: { value: Property | null; onClos
   const toast = useToast();
   const [notes, setNotes] = useState("");
   const [gate, setGate] = useState("");
+  // the code only by the same rule as the property's card (canSeeGateCode, server app.can_see_gate_code): a code loaded in
+  // the visit window is not shown after it (sales, a tech) — the field is empty and only a new code is sent (Р-3)
+  const known = value && canSeeGateCode(store.db, store.role, value.id) ? (value.gateCode ?? "") : "";
   useEffect(() => {
     setNotes(value?.accessNotes ?? "");
-    setGate(value?.gateCode ?? "");
-  }, [value]);
+    setGate(known);
+  }, [value, known]);
   if (!value) return <Sheet visible={false} onClose={onClose}>{null}</Sheet>;
-  const dirty = notes !== (value.accessNotes ?? "") || gate !== (value.gateCode ?? "");
+  const dirty = notes !== (value.accessNotes ?? "") || gate !== known;
   const save = () => {
     const undos: GuardedUndo[] = [];
     if (notes !== (value.accessNotes ?? "")) undos.push(store.saveProperty({ ...value, accessNotes: notes }));
-    if (gate !== (value.gateCode ?? "")) undos.push(store.setGateCode(value.id, gate));
-    toast.show(gate !== (value.gateCode ?? "") ? t("prop.gateSaved") : t("prop.saved"), store.undoTogether(undos));
+    if (gate !== known) undos.push(store.setGateCode(value.id, gate));
+    toast.show(gate !== known ? t("prop.gateSaved") : t("prop.saved"), store.undoTogether(undos));
     onClose();
   };
   return (
@@ -138,7 +148,8 @@ export function PropertyPeopleSheet({ value, onClose }: { value: Property | null
       <T v="caption" tone="mut">
         {t("prop.peopleHint")}
       </T>
-      <MultiChips<string> value={sel} onChange={setSel} items={people.map((p) => ({ key: p.id, label: `${p.name || "—"} · ${t(`person.role.${p.role}` as DictKey)}` }))} />
+      {/* which of them — rows with a check (DS §9 А4), the role under the name */}
+      <OptionRows<string> multiple testID="prop-people-rows" label={t("prop.people")} value={sel} onChange={setSel} items={people.map((p) => ({ key: p.id, title: p.name || "—", subtitle: t(`person.role.${p.role}` as DictKey) }))} />
       <Button label={t("ue.save")} icon="check" full disabled={!dirty} onPress={save} />
     </Sheet>
   );

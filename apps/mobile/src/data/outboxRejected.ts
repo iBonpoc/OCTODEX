@@ -19,7 +19,7 @@ export const REJECTED_KEEP_MS = 30 * 24 * 3600_000;
 
 /** module: a batch of an add-on module's changes the server refused because the module is not active (spec 33 П21.1);
  *  estimate: a send the server refused for a known reason (REJECT_REASONS) */
-export type RejectedWhat = "deposit" | "invoice" | "payment" | "expense" | "module" | "estimate" | "merge";
+export type RejectedWhat = "deposit" | "invoice" | "payment" | "expense" | "module" | "estimate" | "merge" | "price" | "supplier" | "job";
 /**
  * The server's refusals we can explain: its hint (a code we chose in a migration) → our own words. Only these: the
  * server's text is never shown (review #259). estimate_lines_mismatch — the lock check of a version (migration
@@ -29,6 +29,8 @@ export const REJECT_REASONS = {
   estimate_lines_mismatch: "sync.stuck.reason.estimateLines",
   // #1147 (migration 20261112030000): the client signed on the phone another total than the estimate has now
   estimate_total_mismatch: "sync.stuck.reason.estimateTotalChanged",
+  // #2474 (cloud/ops.ts saveEstimate): an edit made while the client signed meanwhile — the signature stays, the edit is not saved
+  estimate_signed_meanwhile: "est.rej.signedMeanwhileWhy",
   // step 17 C3 (migration 20261109120000): the merge of two clients
   merge_payment_in_flight: "clientDup.rej.inFlight",
   merge_already_merged: "clientDup.rej.merged",
@@ -47,6 +49,13 @@ export const REJECT_REASONS = {
   invoice_void_forbidden: "inv.void.rej.role",
   // a payment into an invoice voided meanwhile (migration 20261112090000, t06_payment_not_void)
   invoice_void: "inv.void.rej.payment",
+  // #2015 (migration 20261117570000, cancel_job): the cancel the server refused — the job stays as it was
+  job_paid: "job.cancel.rej.paid",
+  job_invoice_open: "job.cancel.rej.invoiceOpen",
+  job_visit_on_site: "job.cancel.rej.onSite",
+  job_done: "job.cancel.rej.done",
+  // #1913 (migration 20261117210000): a price group has at most 200 items
+  price_group_full: "price.group.rejFull",
 } as const;
 export type RejectReason = keyof typeof REJECT_REASONS;
 /** a refused signature (estimate.sign, estimate.approve): the client's signature was not kept — take it again (review #415 №4) */
@@ -73,6 +82,9 @@ export interface RejectedOp {
   /** the server's text, kept for support; never shown (our own words on the card, review #259) */
   error: string;
   at: string;
+  /** what = price (#1913): the group whose price someone changed first, the item it was written through, the price the
+   *  person meant (the screen offers «Поставить $X» — a new write against the price the server has now) */
+  groupPrice?: { group: string; itemId: string; mineCents: number; placeholder: boolean };
 }
 
 /**
@@ -91,9 +103,13 @@ export function rejectedOf(item: OwnedItem, error: string, now: number, who: Own
   // #1147: the client signed on the phone another total than the server's — a refusal for good (22023, never retried);
   // the card says the estimate changed and the client signs again
   if ((op.k === "estimate.sign" || op.k === "estimate.approve") && reason === "estimate_total_mismatch") return { ...base, what: "estimate", href: `/estimate/${op.id}`, labelKey: "est.rej.signatureLost", reason };
+  // #2474: the client signed while the phone's edit waited — the signature stays, the card says the edit was not saved
+  if (op.k === "estimate.save" && reason === "estimate_signed_meanwhile") return { ...base, what: "estimate", href: `/estimate/${op.id}`, labelKey: "est.rej.signedMeanwhile", reason };
   // a merge of two clients the phone showed as done (step 17 C3): never back silently — the kept card, and why
   if ((op.k === "customer.people" || op.k === "customer.tags") && reason === "customer_merged") return { ...base, what: "merge", href: `/client/${op.id}`, labelKey: "clientDup.rej.cardMergedTitle", reason };
   if (op.k === "customer.merge") return { ...base, what: "merge", href: `/client/${op.keepId}`, ...(reason ? { reason } : {}) };
+  // #1913: an item that did not go into its price group (full): never dropped silently
+  if (op.k === "catalog.save" && reason === "price_group_full") return { ...base, what: "price", href: `/catalog/${op.item.id}`, labelKey: "price.group.rejFull", reason };
   if (!isMoneyOp(item, MONEY_KINDS)) return null;
   switch (op.k) {
     case "estimate.deposit": return { ...base, what: "deposit", href: `/estimate/${op.id}`, amountCents: op.depositCents };
@@ -106,6 +122,8 @@ export function rejectedOf(item: OwnedItem, error: string, now: number, who: Own
     case "invoice.issue": return { ...base, what: "invoice", href: `/job/${op.jobId}`, amountCents: op.totalCents, ...(reason === "invoice_over_contract" ? { reason } : {}) };
     // В1-5: the void the server did not take — the invoice stays live; the card says why
     case "invoice.void": return { ...base, what: "invoice", href: `/invoice/${op.id}`, amountCents: op.totalCents, labelKey: "inv.void.rej.title", ...(reason ? { reason } : {}) };
+    // #2015: the cancel of a job the server did not take — the job is back in its list; the card says why
+    case "job.cancel": return { ...base, what: "job", href: `/job/${op.jobId}`, labelKey: "job.cancel.rej.title", ...(reason ? { reason } : {}) };
     case "invoice.pay": return { ...base, what: "payment", href: `/invoice/${op.invoiceId}`, amountCents: op.amountCents, ...(reason === "invoice_void" ? { reason } : {}) };
     case "payment.record": return { ...base, what: "payment", href: `/invoice/${op.invoiceId}`, amountCents: op.amountCents, ...(reason === "invoice_void" ? { reason } : {}) };
     // the money in the tech's hand the server did not take (more than due, the visit cancelled meanwhile…): say it in
@@ -173,7 +191,69 @@ export function dropTemplateOps(items: readonly OwnedItem[], templateId: string,
   return { kept: items.filter((x) => !isGone(x)), gone: items.filter(isGone) };
 }
 
+/**
+ * #1913 (the price-key spec, §4.6): a group's price refused as «someone changed it first» (row_version_conflict):
+ * it and every later waiting price write of the same group go — each was built on this one's expected price.
+ */
+export function dropGroupPriceOps(items: readonly OwnedItem[], group: string, who: Owner | null): { kept: OwnedItem[]; gone: OwnedItem[] } {
+  const mine = new Set(mineOf(items, who).map((x) => x.id));
+  const isGone = (x: OwnedItem) => mine.has(x.id) && x.op.k === "catalog.groupPrice" && x.op.group === group;
+  return { kept: items.filter((x) => !isGone(x)), gone: items.filter(isGone) };
+}
+
+/**
+ * #1834: a supplier's tax refused as «someone changed it first» (row_version_conflict): it and every later waiting tax write of
+ * the same supplier go — each was built on the rate this one saw; sending them would quietly overwrite the other office's rate.
+ */
+export function dropSupplierTaxOps(items: readonly OwnedItem[], supplierId: string, who: Owner | null): { kept: OwnedItem[]; gone: OwnedItem[] } {
+  const mine = new Set(mineOf(items, who).map((x) => x.id));
+  const isGone = (x: OwnedItem) => mine.has(x.id) && x.op.k === "supplier.tax" && x.op.supplierId === supplierId;
+  return { kept: items.filter((x) => !isGone(x)), gone: items.filter(isGone) };
+}
+
+/** the card «the supplier's tax was not saved: someone changed it first» — it opens the supplier; one card per supplier and person */
+export function supplierTaxRejected(prev: readonly RejectedOp[], gone: readonly OwnedItem[], error: string, now: number, who: Owner | null): RejectedOp[] {
+  const last = [...gone].reverse().find((x) => x.op.k === "supplier.tax");
+  if (!last || last.op.k !== "supplier.tax") return [...prev];
+  const id = `supplierTax.${last.op.supplierId}.${who?.userId ?? ""}.${who?.companyId ?? ""}`;
+  const owner = last.owner ?? who ?? undefined;
+  const rec: RejectedOp = { id, ...(owner ? { owner } : {}), kind: "supplier.tax", what: "supplier", href: `/suppliers/${last.op.supplierId}`, labelKey: "sup.rej.taxStale", error, at: new Date(now).toISOString() };
+  return [...freshRejected(prev, now).filter((x) => x.id !== id), rec];
+}
+
+/** the one card per group and person «the group's price was changed by someone else — yours $X is not saved»: the last
+ *  price meant (the latest of the dropped writes) */
+export function groupPriceRejected(prev: readonly RejectedOp[], gone: readonly OwnedItem[], error: string, now: number, who: Owner | null, labelKey = "price.group.rejConflict"): RejectedOp[] {
+  const last = [...gone].reverse().find((x) => x.op.k === "catalog.groupPrice");
+  if (!last || last.op.k !== "catalog.groupPrice") return [...prev];
+  const op = last.op;
+  const id = `groupPrice.${op.group}.${who?.userId ?? ""}.${who?.companyId ?? ""}`;
+  const owner = last.owner ?? who ?? undefined;
+  const rec: RejectedOp = {
+    id, ...(owner ? { owner } : {}), kind: "catalog.groupPrice", what: "price", href: `/catalog/${op.itemId}`, labelKey,
+    groupPrice: { group: op.group, itemId: op.itemId, mineCents: op.priceCents, placeholder: op.placeholder }, error, at: new Date(now).toISOString(),
+  };
+  return [...freshRejected(prev, now).filter((x) => x.id !== id), rec];
+}
+
 /** the card «the template was not saved: changed on another phone» — it opens «Шаблоны смет» (spec 07 §12.7) */
+/**
+ * #1958 (а): an item's cost refused as «changed meanwhile» (catalog_set_item_costs, row_version_conflict — another phone
+ * or a price-list upload changed it first): one card per item and person, the newest refusal; it opens the item, and the
+ * truth is read again. The rest of the save (name, unit…) was written — only the cost was not. The same card, other words,
+ * for «the tax of this item is its supplier's» (hint supplier_tax, #1834).
+ */
+export function itemCostRejected(prev: readonly RejectedOp[], item: OwnedItem, error: string, now: number, who: Owner | null, labelKey = "price.cost.rejConflict"): RejectedOp[] {
+  if (item.op.k !== "catalog.save") return [...prev];
+  const owner = item.owner ?? who ?? undefined;
+  const id = `cost.${item.op.item.id}.${owner?.userId ?? ""}.${owner?.companyId ?? ""}`;
+  const rec: RejectedOp = {
+    id, ...(owner ? { owner } : {}), kind: "catalog.save", what: "price", href: `/catalog/${item.op.item.id}`,
+    labelKey, error, at: new Date(now).toISOString(),
+  };
+  return [...prev.filter((x) => x.id !== id), rec];
+}
+
 export function templateRejected(item: OwnedItem, error: string, now: number, who: Owner | null): RejectedOp {
   const owner = item.owner ?? who ?? undefined;
   return { id: item.id, ...(owner ? { owner } : {}), kind: item.op.k, what: "estimate", href: "/estimate/templates", labelKey: "est.tpl.rejConflict", error, at: new Date(now).toISOString() };

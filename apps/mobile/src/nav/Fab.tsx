@@ -6,11 +6,13 @@ import { prepPicked } from "@/data/photoShrink";
 import { router, type Href } from "expo-router";
 import { component, radius, size, space, z } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
+import { canStartExpense, expenseJobOptions, myVisitsToday } from "@/features/expenseJobs";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
+import { HeaderButton } from "@/ui/headerIcon";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { fabItems, LIST_FABS, type FabCtx, type FabItem, type FabSet } from "./sections";
+import { fabItems, LIST_FABS, meIsSub, type FabCtx, type FabItem, type FabSet } from "./sections";
 import type { DictKey } from "@/i18n/ru";
 import { placeActions } from "@/modules/registry";
 
@@ -30,7 +32,9 @@ export interface FabProps {
 /** the items this screen offers this role, with the actions the screen did not wire left out */
 export function useFabItems({ set, ctx, on }: FabProps): FabItem[] {
   const { role, db } = useStore();
-  const all = fabItems(set, role, ctx).filter((it) => !it.act || it.act === "photo" || !!on?.[it.act]);
+  // a subcontractor's expense goes only to a job of his today (Р-8a): without one, no «Расход» in the «＋»
+  const subNoJob = meIsSub(db) && !canStartExpense(expenseJobOptions(db, myVisitsToday(db), true));
+  const all = fabItems(set, role, ctx).filter((it) => (!it.act || it.act === "photo" || !!on?.[it.act]) && !(subNoJob && it.id === "expense"));
   // «Работа без сметы» is always the last line, after a module's items too (main-path spec §2.2 п.4)
   const core = all.filter((it) => it.id !== "job");
   const tail = all.filter((it) => it.id === "job");
@@ -119,24 +123,12 @@ export function Fab({ placement, bottom = 0, right = space[4], ...p }: FabProps 
   const press = () => (one ? run(one) : setOpen(true));
   const sheet = one ? null : <FabSheet {...p} visible={open} onClose={() => setOpen(false)} />;
   if (placement === "header") {
-    // «Главная»'s quick actions are its main action: yellow, one on the screen (DS §5.3, audit №2 14.11, #1395); a list's «＋» is secondary
-    const acc = p.set === "home";
+    // the founder 21.11 (#2350): «＋» in the header is an ICON — a tonal circle `headerIcon` 36 (zone 44), never the filled accent:
+    // one filled accent on a screen, and it is the screen's main step, not «make a new one». Its words are the VoiceOver label.
     return (
       <>
-        <Press
-          testID="fab-header"
-          onPress={press}
-          visibleHeight={component.button.sm}
-          accessibilityRole="button"
-          accessibilityLabel={label}
-          aria-haspopup={one ? undefined : "dialog"}
-          style={{ flexDirection: "row", alignItems: "center", gap: space[2], height: component.button.sm, paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: acc ? c.acc : c.surf2, borderWidth: acc ? 0 : component.hairline, borderColor: c.bd }}
-        >
-          <Icon name="plus" s={size.iconSm} color={acc ? c.onAcc : c.ink} />
-          <T v="button" numberOfLines={1} style={acc ? { color: c.onAcc } : undefined}>
-            {label}
-          </T>
-        </Press>
+        {/* the one header's circle 40 (visual-v2 «Единая шапка»): «＋» looks as every other control of the row */}
+        <HeaderButton testID="fab-header" icon="plus" label={label} onPress={press} popup={!one} />
         {sheet}
       </>
     );

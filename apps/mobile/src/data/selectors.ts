@@ -1,5 +1,6 @@
 import type { DB, Visit } from "./types";
 import { dayKeyIn, daysBetween, dueDayKey, getZone } from "@/features/zone";
+import { invoicesOwe } from "@octo/estimating-engine";
 
 /* ---------- selectors ---------- */
 /** the same calendar day as now, of the company (or of the zone given) — QuickActions, a new expense (П4b) */
@@ -30,7 +31,7 @@ export function daysSince(iso: string): number {
 
 /** What the customer owes now = unpaid part of their invoices (balance is derived, never stored). */
 export function customerBalance(db: DB, customerId: string): number {
-  return db.invoices.filter((i) => i.customerId === customerId).reduce((s, i) => s + Math.max(0, i.totalCents - i.paidCents), 0);
+  return invoicesOwe(db.invoices.filter((i) => i.customerId === customerId));
 }
 
 /** Job profit = revenue (job amount) − expenses linked to the job. Labor cost arrives with time tracking. */

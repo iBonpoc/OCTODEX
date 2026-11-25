@@ -23,7 +23,7 @@ export function benchDrawing(): { drawing: Drawing; marks: { id: string; at: P; 
       const q = pts[(j + 1) % pts.length]!;
       const id = `b${h}r${j}`;
       runs.push({ id, a: p, b: q, attrs: { story: 1 + ((h + j) % 4) } as DrawnRun["attrs"] });
-      if (j < BENCH.dsPerHouse) downspouts.push({ id: `b${h}d${j}`, runId: id, atIn: Math.round(Math.hypot(q[0] - p[0], q[1] - p[1]) / 2) } as DrawnDownspout);
+      if (j < BENCH.dsPerHouse) downspouts.push({ id: `b${h}d${j}`, runId: id, atIn: Math.round(Math.hypot(q[0] - p[0], q[1] - p[1]) / 2), dsStyle: "corrugated" } as DrawnDownspout); // corrugated: its «AAA» is one of the 150 labels (a plain one has none by default, #1776)
     });
     for (let m = 0; m < BENCH.marksPerHouse; m++) {
       const p = pts[m % pts.length]!;

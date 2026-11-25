@@ -1,14 +1,14 @@
 /**
  * e2e 170 — водосток на холсте и продолжение линии (просьба основателя 08.11; docs/specs/33-gutters-canvas.md П20.11).
  * Every view.
- * - a downspout put on a gutter: «D1» inside its mark; over it the fittings in one word (default 3 × A → «AAA»);
+ * - a downspout put on a gutter: «D1» inside its mark; over it the fittings in one word (a corrugated one by default 3 × A → «AAA»; a plain one its 3 bends on site → «AAA» too, «Расход v2»);
  * - elbows by style in the panel: B +1 → «AAAB», A −1 → «AAB»;
  * - dragged by the finger, it slides along its run (the store's atIn changes, it stays on the run);
  * - «Желоб»: a plain drag from a free end → a new gutter from that end (a corner). A LONG press on an end takes it instead
  *   (docs/specs/33-gutters-canvas-ideas.md П35, founder 12.11: replaces «a long press on an end = a new line» of 08.11; e2e 292, 295).
  * Finds things by id / testID; waits on what it checks.
  */
-const { skipLength, canvasAt } = require("../gutters.cjs");
+const { pickDsKind, skipLength, canvasAt } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -39,7 +39,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await waitFor(async () => /^Пробный/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
+  await waitFor(async () => /^Без срока/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
   await h.go("/module/gutters/draw");
   await tid("draw-surface").waitFor({ timeout: 8000 });
   const b = await p.getByTestId("draw-surface").boundingBox();
@@ -48,16 +48,20 @@ exports.run = async (h) => {
   await drag([x0, y], [x1, y]);
   await waitFor(async () => (await live("run")).length === 1, "one gutter");
 
-  // a downspout: «D1» inside, «AAA» over it
+  // a downspout: «D1» inside; a plain one is bent on site by default — its 3 bends over it, «AAA» («Расход v2» §2.1 п.6: the
+  // drawing shows what the engine counts)
   await tid("draw-tool-ds").getByRole("button").click();
   await p.mouse.click(x0 + (x1 - x0) * 0.3, y + 2);
   await waitFor(async () => (await svg().locator("circle").count()) === 1, "a downspout mark");
   await waitFor(async () => (await texts()).includes("D1"), "«D1» inside the mark");
-  await waitFor(async () => (await texts()).includes("AAA"), "the default fittings over it: «AAA»");
+  h.expect((await texts()).includes("AAA"), `a plain one: its bends over it, «AAA» (${(await texts()).join(" ")})`);
 
   // elbows by style
   // the menu opened by itself when it was put (founder 09.11)
   if (!wide) await tid("attr-panel").waitFor({ timeout: 5000 });
+  await pickDsKind(p, "rectRibbed");
+  await waitFor(async () => (await live("downspout"))[0]?.attrs?.dsStyle === "corrugated", "the store: corrugated");
+  await waitFor(async () => (await texts()).includes("AAA"), "a corrugated one: its default fittings over it, «AAA»");
   await tid("attr-elbow-qty").waitFor({ timeout: 5000 });
   await step("B", 1);
   await waitFor(async () => (await texts()).includes("AAAB"), "B +1 → «AAAB»");

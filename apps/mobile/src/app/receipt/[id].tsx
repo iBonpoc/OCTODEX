@@ -2,6 +2,7 @@ import { APP_NAME } from "@/config/product";
 import { useRef, useState, type ComponentRef } from "react";
 import { View } from "react-native";
 import { space } from "@octo/design-tokens";
+import { invoiceOwes } from "@octo/estimating-engine";
 import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
 import { useAuth } from "@/cloud/auth";
@@ -71,7 +72,7 @@ export default function ReceiptScreen() {
     </RowView>
   );
   // #1474 (DS §7.3, §8.9, Б4; as the estimate #1412): one main button and «⋯» with the rest — no row of five pills
-  const pdf = () => saveEstimatePdf(html(), `Receipt ${p.receiptNumber ?? ""}`.trim()).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
+  const pdf = () => saveEstimatePdf(html(), `Receipt ${p.receiptNumber ?? ""}`.trim()).catch(() => toast.show(t("err.pdfSave")));
   const sms = cust?.phone ? () => void openSms(cust.phone, msg.text).catch(() => {}) : undefined;
   const email = cust?.email ? () => void openEmail(cust.email!, msg.subject, msg.text).catch(() => {}) : undefined;
   const send = sms ?? email;
@@ -107,26 +108,31 @@ export default function ReceiptScreen() {
   const barMain = !wide ? mainBtn(true) : null;
   return (
     <Screen
-      title={`${t("rcpt.title")} ${p.receiptNumber ?? ""}`.trim()}
+      // the number alone is the name («Квитанция RCT-0105» was cut to «Квитанция RCT…» at 390); the parent line says «INV-…»
+      title={p.receiptNumber ?? t("rcpt.title")}
       back={back}
-      subtitle={cust?.name}
       right={more}
       footer={barMain ? <ActionBar testID="rcpt-actionbar" main={barMain} second={secondBtn(true) ?? undefined} /> : undefined}
     >
-      {/* «Связано»: invoice, job, client (15-flows §2 «квитанция → счёт → работа → клиент») */}
+      {/* LAYOUT-RULES §3 «Объект», compact (#2350): the invoice, the job and the client — chips in one row (DS §12.3 п.6; the client
+          is not repeated under the title, the invoice not repeated in the card); the sum large with its status, how and when in one line */}
       <RelatedBlock of={{ type: "receipt", id: p.id }} />
       <Card status="ok">
-        <StatusChip status="ok" label={t("rcpt.received")} />
-        <T v="display" tabular>
-          {money(p.amountCents)}
-        </T>
-        {line(t("rcpt.date"), day(p.at))}
-        {line(t("rcpt.method"), `${t(`pay.${p.method}` as DictKey)}${p.reference ? ` · ${p.reference === "stripe-simulated" ? t("pay.testMode") : p.reference}` : ""}`)}
-        {inv ? line(t("rcpt.forInvoice"), [inv.number, inv.title].filter(Boolean).join(" · ")) : null}
+        <RowView style={{ justifyContent: "space-between", alignItems: "center" }}>
+          <T v="display" tabular>
+            {money(p.amountCents)}
+          </T>
+          <StatusChip status="ok" label={t("rcpt.received")} />
+        </RowView>
+        <View testID="rcpt-how">
+          <T v="body" tone="mut">
+            {[t(`pay.${p.method}` as DictKey), p.reference ? (p.reference === "stripe-simulated" ? t("pay.testMode") : p.reference) : undefined, day(p.at)].filter(Boolean).join(" · ")}
+          </T>
+        </View>
         {advance ? <View testID="rcpt-advance">{line(t("rcpt.forInvoice"), t("mny.adv.noInvoice"))}</View> : null}
         {fee ? <View testID="rcpt-fee">{line(t("mny.refund.fee"), money(fee))}</View> : null}
         <Divider />
-        {inv ? line(t("rcpt.balanceAfter"), money(Math.max(0, inv.totalCents - inv.paidCents))) : null}
+        {inv ? line(t("rcpt.balanceAfter"), money(invoiceOwes(inv))) : null}
         {p.refundedCents ? <View testID="rcpt-refunded">{line(t("mny.refund.refundedLabel"), money(p.refundedCents))}</View> : null}
         {p.refundPendingCents ? <View testID="rcpt-refund-pending">{line(t("mny.refund.inTransit"), money(p.refundPendingCents))}</View> : null}
         {advance ? (

@@ -4,7 +4,7 @@
  * Supabase (what goes to the files row, what the phone is told back).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { DB, Photo, Visit } from "../src/data/types";
+import type { DB, FileItem, Photo, Visit } from "../src/data/types";
 
 // ---- a stand-in Supabase: rows written, the storage's answer chosen per test
 const writes: { table: string; op: string; row?: Record<string, unknown>; id?: unknown }[] = [];
@@ -33,6 +33,8 @@ vi.mock("../src/cloud/client", () => ({
 }));
 const { applyOp, uploadPhoto } = await import("../src/cloud/ops");
 const { FILES_MAX_BYTES, canRetry, failedPhotos, hasReceipt, keepPhotoLocal, keepReceiptLocal, markPhoto, photoFailOf, tooBig } = await import("../src/data/photoUpload");
+const { makeSeed } = await import("../src/data/seed");
+const { normalizeDB } = await import("../src/data/normalize");
 
 let file: { size: number; type: string } | "gone" = { size: 300_000, type: "image/jpeg" };
 beforeEach(() => {
@@ -264,5 +266,31 @@ describe("#1558 — a photo or a receipt «preparing» (spec 46 §5.3а)", () =>
     expect(out).toMatchObject({ receiptUri: "file:///r.heic", receiptFailed: "preparing", receiptPrep: prep });
     expect(hasReceipt(out)).toBe(true);
     expect(hasReceipt({ ...out, receiptFailed: "unreadable" })).toBe(false);
+  });
+});
+
+describe("#1441: a module's photo (db.files) — the same mark and what a reload keeps", () => {
+  const at = "2026-11-18T10:00:00Z";
+  const withFiles = (files: FileItem[]): DB => ({ ...makeSeed(), files });
+  it("markPhoto marks a measurement's photo and takes the mark off; the same answer twice changes nothing", () => {
+    const db = withFiles([{ id: "f1", kind: "photo", measurementId: "m1", uri: "file:///a.jpg", at }]);
+    const marked = markPhoto(db, "f1", "tooBig", at);
+    expect(marked.files![0]!.upload).toEqual({ failed: "tooBig", at });
+    expect(markPhoto(marked, "f1", "tooBig", at)).toBe(marked);
+    const off = markPhoto(marked, "f1", null, "");
+    expect(off.files![0]!.upload).toBeUndefined();
+    expect(markPhoto(off, "f1", null, "")).toBe(off);
+  });
+  it("a reload keeps the file on this phone and the phone's own reason; taken by the cloud — no mark; an older record without the field loads", () => {
+    const prev = withFiles([{ id: "f1", kind: "photo", measurementId: "m1", uri: "file:///a.jpg", at, upload: { failed: "tooBig", at } }, { id: "f2", kind: "photo", measurementId: "m1", uri: "file:///b.jpg", at, upload: { failed: "refused", at } }]);
+    const next = withFiles([{ id: "f1", kind: "photo", measurementId: "m1", at, upload: { failed: "refused", at } }, { id: "f2", kind: "photo", measurementId: "m1", at }]);
+    const kept = keepPhotoLocal(next, prev);
+    expect(kept.files![0]).toMatchObject({ uri: "file:///a.jpg", upload: { failed: "tooBig" } });
+    expect(kept.files![1]!.uri).toBe("file:///b.jpg");
+    expect(kept.files![1]!.upload).toBeUndefined();
+    // rule 16: a record an older build wrote (no `upload`) goes through normalize as it was
+    const old = normalizeDB({ ...makeSeed(), files: [{ id: "f9", kind: "photo", measurementId: "m1", at } as FileItem] }, "cloud");
+    expect(old.files!.find((f) => f.id === "f9")).toMatchObject({ id: "f9", measurementId: "m1" });
+    expect(old.files!.find((f) => f.id === "f9")!.upload).toBeUndefined();
   });
 });

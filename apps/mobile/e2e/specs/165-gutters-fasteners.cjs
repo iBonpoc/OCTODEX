@@ -31,7 +31,7 @@ exports.run = async (h) => {
   await setRole(h, "director");
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await waitFor(async () => /^Пробный/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
+  await waitFor(async () => /^Без срока/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
 
   await prices();
   await waitFor(async () => (await tid("gpr-miss-sealant").count()) === 1, "plain sealant by default");

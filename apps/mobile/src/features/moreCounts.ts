@@ -1,3 +1,4 @@
+import type { Mode } from "@/data/store";
 import type { DB, Role } from "@/data/types";
 import { hasSection, type SectionId } from "@/nav/sections";
 import type { DictKey } from "@/i18n";
@@ -18,10 +19,25 @@ export interface MoreCount {
 }
 
 const LEAD_KINDS = new Set<AttentionItem["kind"]>(["lead", "leadBack", "leadNoStep", "leadIdle", "leadOrphan"]);
+/** «Работы»: what is to schedule, and what is done and waits for the office (#2060) */
+const JOB_PLAN_KINDS = new Set<AttentionItem["kind"]>(["schedule"]);
+// #2048: a done job with part of its price on no invoice is the office's to check too
+const JOB_CHECK_KINDS = new Set<AttentionItem["kind"]>(["jobDone", "jobNotInvoiced"]);
 
-export function moreCounts(db: DB, role: Role, now: number = Date.now(), tz: string = getZone()): Partial<Record<SectionId, MoreCount>> {
-  const att = buildAttention(db, role, now);
+/**
+ * The word of the «Работы» counter says what is counted (#2060): only jobs to schedule → «К плану: N»,
+ * only done jobs that wait for the office → «Проверить: N», both → «Требуют внимания: N».
+ */
+export function jobsCountLabel(plan: number, check: number): DictKey {
+  if (plan > 0 && check > 0) return "fix.more.jobsAll";
+  return check > 0 ? "fix.more.jobsCheck" : "fix.more.jobs";
+}
+
+export function moreCounts(db: DB, role: Role, now: number = Date.now(), tz: string = getZone(), mode?: Mode): Partial<Record<SectionId, MoreCount>> {
+  const att = buildAttention(db, role, now, { mode });
   const kinds = (pass: (k: AttentionItem["kind"]) => boolean) => att.filter((a) => pass(a.kind)).length;
+  const plan = kinds((k) => JOB_PLAN_KINDS.has(k));
+  const check = kinds((k) => JOB_CHECK_KINDS.has(k));
   const today = dayKeyIn(now, tz);
   // my tasks for today: overdue or due / starting today (not done)
   const tasks = tasksOf(db, "mine").filter((x) => {
@@ -34,7 +50,7 @@ export function moreCounts(db: DB, role: Role, now: number = Date.now(), tz: str
   const out: Partial<Record<SectionId, MoreCount>> = {
     leads: { n: kinds((k) => LEAD_KINDS.has(k)), label: "fix.more.leads" },
     tasks: { n: tasks, label: "fix.more.tasks" },
-    jobs: { n: kinds((k) => k === "schedule" || k === "jobDone"), label: "fix.more.jobs" },
+    jobs: { n: plan + check, label: jobsCountLabel(plan, check) },
     estimates: { n: kinds((k) => k === "estimateSign"), label: "fix.more.estimates" },
     invoices: { n: kinds((k) => k === "overdue"), label: "fix.more.invoices", bad: true },
   };

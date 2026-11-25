@@ -1,6 +1,6 @@
 /**
  * e2e 346 — «Варианты для клиента» (DS §8.10, spec 2026-11-12 §11.2.6, #1307 part «г»), every view, by testID:
- * - one option: «Клиент увидит одну смету» and «Добавить вариант»;
+ * - one option: no options card (v2), «Добавить вариант» in the menu of «слои»;
  * - «Вариант — копия»: a second option with the same list; a change in the copy does not reach the first;
  * - each option's total under the segments, live; a press on a total picks that option;
  * - «?» — five steps and «Общее для всех»;
@@ -23,9 +23,9 @@ exports.run = async (h) => {
   const toastSays = (re) => p.waitForFunction((src) => [...document.querySelectorAll('[data-testid="toast-text"]')].some((e) => new RegExp(src).test(e.textContent || "")), re.source, { timeout: 3000 });
 
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
-  await tid("est-variants").waitFor({ timeout: 8000 });
-  // one option: a line and «Добавить вариант», no segments
-  h.expect(/Клиент увидит одну смету/.test(await tid("est-variants").innerText()), "one option: «Клиент увидит одну смету»");
+  await tid("est-add-new").waitFor({ timeout: 8000 });
+  // one option (v2 #2350): nothing to choose — no options card; «Добавить вариант» is in the menu of «слои»
+  h.expect((await count('[data-testid="est-variants"]')) === 0, "one option: no options card");
   h.expect((await count('[data-testid^="est-var-total-"]')) === 0, "one option: no totals under segments");
   await line.addCustom(h, "Gutter clean (тестовые)", 100);
   await h.shot("one");
@@ -33,7 +33,8 @@ exports.run = async (h) => {
   // «Добавить вариант» with a blank row open: the row goes, the copy has only the real line
   await tid("est-add-new").getByRole("button").click();
   await vis('[data-testid^="est-collapse-"]').first().waitFor({ timeout: 3000 });
-  await tid("est-var-add").getByRole("button").click();
+  await line.addOption(h);
+  await tid("est-variants").waitFor({ timeout: 3000 });
   await tid("est-var-copy").waitFor({ timeout: 3000 });
   await toastSays(/копия/);
   h.expect((await count('[data-testid^="est-line-"]')) === 1, "the copy has the same one line");

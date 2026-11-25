@@ -1,6 +1,8 @@
 /**
  * Property card (docs/specs/13-app-structure.md §3.3 «Объект», wave 4a-2): lives only inside its client («‹ Client»).
- * Header: «Записать на оценку» (the card's step, #1474), address, label and kind, Маршрут · Клиент tiles, «＋ Смета»; «now at this property»; access notes and
+ * The one header «Объект | 1420 Oak Grove Ave / Pasadena, CA 91103» (visual v2 «Объект»: the address once, never cut to «1420 Oak
+ * Grov…» as a 30 title; the client is «‹» — not a second line under it, #2350); the card: label and kind, «✎», Маршрут · Клиент tiles;
+ * «Записать на оценку» (the card's step, #1474), «＋ Смета»; «now at this property»; access notes and
  * the gate code (a tech sees it only on the visit day and the day before). Below — rows with counters, each opens its
  * list at /property/<id>?s=<row>: people of the property, leads, jobs, estimates, invoices, visits, tasks, notes, files, history.
  */
@@ -10,13 +12,13 @@ import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
-import { canSeeGateCode, propertyMapQuery, propertyNow, propertyTitle } from "@/features/properties";
+import { canSeeGateCode, canSeeProperty, propertyMapQuery, propertyNow, propertyTitle } from "@/features/properties";
 import { isPropertyRow, propertyCounts, propertyRecords, propertyRowsFor, type PropertyRow } from "@/features/propertyRows";
 import { PropertySection, propertyRowLabel, RowCount } from "@/features/client/PropertySections";
 import { AddObject } from "@/features/client/AddObject";
 import { AccessSheet, PropertySheet } from "@/features/client/PropertySheets";
 import { jobStatusView } from "@/features/jobs";
-import { canServe } from "@/features/clients";
+import { canServe, visibleClients } from "@/features/clients";
 import { Button, IconButton, StatusChip } from "@/ui/controls";
 import { ActionTile } from "@/features/ActionTile";
 import { useDevice } from "@/theme/ThemeProvider";
@@ -60,15 +62,29 @@ export default function PropertyScreen() {
         <Empty icon="home2" title={t("client.empty.properties")} />
       </Screen>
     );
+  // #2016: a property of a client this role does not see is closed (the tech: also his own inspection's address)
+  if (!canSeeProperty(db, role, p, visibleClients))
+    return (
+      <Screen title={t("prop.card")} back={back}>
+        <View testID="property-no-access">
+          <Empty icon="home2" title={t("propGuard.noAccess")} />
+        </View>
+      </Screen>
+    );
   const c = db.customers.find((x) => x.id === p.customerId);
   const office = role !== "tech";
   // «не обслуживаем»: nothing new for this property — no «＋», no inspection (S4 / S5 / S17, Customer §5)
   const servable = canServe(db, p.customerId);
   const rows = propertyRowsFor(role);
+  // from 820 the list's «＋ …» button stands in the header on the right, not over the grid (DS §12.2, #1664); an empty list keeps its own
+  const listAdd =
+    wide && (sec === "jobs" || sec === "estimates") && propertyRecords(db, p, role)[sec].length ? (
+      <AddObject kind={sec === "jobs" ? "job" : "estimate"} customerId={p.customerId} propertyId={p.id} testID={`property-section-new-${sec === "jobs" ? "job" : "estimate"}`} />
+    ) : undefined;
   // a row's own list: the same address with ?s=<row>
   if (isPropertyRow(sec) && rows.includes(sec))
     return (
-      <Screen title={t(propertyRowLabel(sec))} subtitle={propertyTitle(p)} back={back}>
+      <Screen title={t(propertyRowLabel(sec))} subtitle={propertyTitle(p)} back={back} right={listAdd}>
         <PropertySection p={p} s={sec} />
       </Screen>
     );
@@ -84,21 +100,19 @@ export default function PropertyScreen() {
   const overview = (
     <>
       <Card>
-        <RowView style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-          <RowView style={{ flex: 1, alignItems: "flex-start" }}>
-            <Icon name="pin" />
-            <T v="body" style={{ flex: 1 }}>
-              {[propertyTitle(p), p.city].filter(Boolean).join("\n")}
-            </T>
+        {/* the address is the header's (once); here — what kind of place it is and the pencil, one line */}
+        <RowView style={{ justifyContent: "space-between" }}>
+          <RowView style={{ flex: 1, minWidth: 0 }}>
+            {p.label ? <StatusChip status="neutral" label={p.label} soft /> : null}
+            {p.kind ? <StatusChip status="neutral" label={t(`prop.kind.${p.kind}` as DictKey)} soft /> : null}
+            {!p.label && !p.kind ? (
+              <T v="caption" tone="mut" numberOfLines={1}>
+                {p.stories ? t("proto.client.stories", { n: p.stories }) : t("prop.card")}
+              </T>
+            ) : null}
           </RowView>
           {pencil("edit", t("prop.card"))}
         </RowView>
-        {p.label || p.kind ? (
-          <RowView style={{ flexWrap: "wrap" }}>
-            {p.label ? <StatusChip status="neutral" label={p.label} soft /> : null}
-            {p.kind ? <StatusChip status="neutral" label={t(`prop.kind.${p.kind}` as DictKey)} soft /> : null}
-          </RowView>
-        ) : null}
         {/* Маршрут · Клиент — round tiles with a word, as on the client's and the job's cards (#1474) */}
         <View testID="prop-tiles" style={{ flexDirection: "row", gap: space[2], maxWidth: wide ? component.panelW : undefined }}>
           <ActionTile testID="prop-route" icon="navigate" label={t("client.route")} onPress={route} />
@@ -233,9 +247,9 @@ export default function PropertyScreen() {
 
   return (
     <Screen
-      title={propertyTitle(p)}
+      title={t("prop.card")}
+      head={{ kind: "object", sub: { line1: propertyTitle(p), line2: p.city || undefined } }}
       back={back}
-      subtitle={c?.name}
     >
       {overview}
 

@@ -1,6 +1,6 @@
 /**
  * 3b-2 (docs/specs/17-job.md §11.1): the CA written-contract warning (a CA company, a home, no estimate, the lines over
- * $500.00 — engine caWrittenContractRequired; a commercial property — none); «Тип работы» and «Метки» on «Детали».
+ * $500.00 — engine caWrittenContractRequired; a commercial property — none); «Тип работы» and «Метки» on «Обзор».
  * Test prices.
  */
 exports.run = async (h) => {
@@ -17,7 +17,7 @@ exports.run = async (h) => {
   };
 
   await h.go("/job/j3");
-  await tab("Деньги");
+  await tab("Обзор");
   await line("5", "100");
   h.expect((await p.getByText("Нужен договор", { exact: true }).count()) === 0, "exactly $500.00 — no warning");
   await p.getByText("Repair", { exact: true }).first().click(); await p.waitForTimeout(400);
@@ -36,12 +36,12 @@ exports.run = async (h) => {
     localStorage.setItem(k, JSON.stringify(s));
   });
   await h.go("/job/j3");
-  await tab("Деньги");
+  await tab("Обзор");
   await h.expectText(/\$500\.05/, "the lines are there");
   h.expect((await p.getByText("Нужен договор", { exact: true }).count()) === 0, "a commercial property — no warning");
 
   // «Тип работы»: Ремонт → Гарантия
-  await tab("Детали");
+  await tab("Обзор");
   await p.getByText("Тип работы", { exact: true }).first().click(); await p.waitForTimeout(400);
   await h.sheet().getByText("Гарантия", { exact: true }).click(); await p.waitForTimeout(500);
   h.expect((await h.db()).jobs.find((j) => j.id === "j3").jobTypeId === "jt-warranty", "the job type changed");
@@ -58,19 +58,19 @@ exports.run = async (h) => {
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go("/job/j3");
   await h.expectText(/Drywall patch/, "the technician sees the job of his visit");
-  await tab("Деньги");
+  await tab("Обзор");
   await h.expectText(/Repair/, "the technician reads the lines");
   h.expect((await p.getByRole("button", { name: "Позиция", exact: true }).count()) === 0, "the technician has no «＋ Позиция»");
   await p.getByText("Repair", { exact: true }).locator("visible=true").first().click(); await p.waitForTimeout(400);
   h.expect((await p.getByRole("button", { name: "Удалить позицию" }).count()) === 0, "a line does not open for the technician");
   h.expect((await p.getByRole("switch", { name: "Налог с продаж" }).count()) === 0, "no tax switch for the technician");
-  await tab("Детали");
+  await tab("Обзор");
   await p.getByText("Тип работы", { exact: true }).first().click(); await p.waitForTimeout(300);
   h.expect((await p.getByText("Обслуживание", { exact: true }).count()) === 0, "the technician does not get the type sheet");
   await h.shot("tech");
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
 
-  // sales change lines, type and tags too (the server's is_staff, S17)
+  // sales change the type and tags too (the server's is_staff, S17); the lines and the tax are the office's (#2075, spec 494)
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("sales")));
   await h.go("/job/j3");
   await p.getByText("Тип работы", { exact: true }).first().click(); await p.waitForTimeout(400);

@@ -1,0 +1,559 @@
+<title>Каркасы GoRix</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#E7E7E5;--fg:#232323;--mut:#5C5C5C;--paper:#F4F4F3;--card:#FAFAF9;--blk:#DEDEDC;--blk2:#C6C6C4;
+  --line:#B4B4B2;--main:#3A3A3A;--mainfg:#F1F1F0;--bezel:#2C2C2C;--veil:rgba(40,40,40,.32);--zone:rgba(60,60,60,.06);
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#1A1A1A;--fg:#E4E4E3;--mut:#A6A6A5;--paper:#232323;--card:#2C2C2C;--blk:#393939;--blk2:#4C4C4C;
+  --line:#5C5C5C;--main:#D4D4D3;--mainfg:#1D1D1D;--bezel:#0E0E0E;--veil:rgba(0,0,0,.5);--zone:rgba(255,255,255,.05);color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#1A1A1A;--fg:#E4E4E3;--mut:#A6A6A5;--paper:#232323;--card:#2C2C2C;--blk:#393939;--blk2:#4C4C4C;
+  --line:#5C5C5C;--main:#D4D4D3;--mainfg:#1D1D1D;--bezel:#0E0E0E;--veil:rgba(0,0,0,.5);--zone:rgba(255,255,255,.05);color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:Manrope,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;line-height:1.4;-webkit-text-size-adjust:100%}
+.wrap{max-width:1280px;margin:0 auto;padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px));padding-block:28px 48px}
+h1{font-size:28px;margin:0 0 6px;letter-spacing:-.01em}
+.lead{color:var(--mut);margin:0 0 20px;max-width:760px}
+.intro{display:grid;grid-template-columns:1fr;gap:16px;margin-bottom:24px}
+@media (min-width:900px){.intro{grid-template-columns:1fr 1fr}}
+.box{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:16px 18px;min-width:0}
+.box h2{font-size:15px;margin:0 0 8px}
+.box ol{margin:0;padding-left:22px;font-size:14px}
+.box li{margin:2px 0}
+.note{font-weight:700;border:2px dashed var(--fg);border-radius:14px;padding:12px 16px;margin:0 0 16px}
+.legend{display:flex;flex-wrap:wrap;gap:10px 18px;font-size:13px;color:var(--mut);margin:0 0 28px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.lg-main{display:inline-block;width:38px;height:16px;border-radius:99px;background:var(--main);outline:2px dashed var(--fg);outline-offset:3px}
+.lg-ic{display:inline-block;width:16px;height:16px;border-radius:50%;background:var(--blk2)}
+.lg-g{border:1.5px dashed var(--fg);border-radius:99px;padding:0 6px;font-weight:700;color:var(--fg);font-size:11px}
+.lg-z{display:inline-block;width:28px;height:14px;border:1.5px dashed var(--fg);border-radius:14px 14px 0 0}
+.grid{display:grid;grid-template-columns:1fr;gap:36px 24px}
+@media (min-width:700px){.grid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}}
+.shot{margin:0;min-width:0;display:flex;flex-direction:column;align-items:center;padding:6px}
+.shot figcaption{width:100%;max-width:340px;margin-top:16px;font-size:13.5px}
+.shot h3{font-size:15px;margin:0 0 4px}
+.shot p{margin:0 0 4px;color:var(--mut)}
+.shot p b{color:var(--fg)}
+
+/* ---------- the phone: 390×844 drawn, scaled to the column ---------- */
+.ph{--k:.75;width:100%;max-width:293px;aspect-ratio:390/844;position:relative;overflow:hidden;border-radius:calc(46px * var(--k));box-shadow:0 0 0 6px var(--bezel);background:var(--paper)}
+.scr{position:absolute;left:0;top:0;width:390px;height:844px;transform:scale(var(--k));transform-origin:0 0;display:flex;flex-direction:column;background:var(--paper);color:var(--fg);font-size:15px;line-height:1.3}
+.sb{height:47px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;padding:0 28px 8px;font-size:14px;font-weight:700}
+.sb i{width:64px;height:12px;border-radius:6px;background:var(--blk2)}
+.hd{flex:none;display:flex;align-items:center;gap:10px;padding:6px 16px 10px;min-height:58px}
+.hd .tt{flex:1;min-width:0}
+.h1{font-size:28px;font-weight:700;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.h2{font-size:21px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub{font-size:13px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ct{flex:1;min-height:0;overflow:hidden;padding:2px 16px 0;display:flex;flex-direction:column;gap:12px}
+.ic{flex:none;width:40px;height:40px;border-radius:50%;background:var(--blk);display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--mut);text-transform:lowercase}
+.ic.sm{width:32px;height:32px;font-size:9px}
+.av{flex:none;width:40px;height:40px;border-radius:50%;background:var(--blk2);display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
+.row{display:flex;align-items:center;gap:10px;min-width:0}
+.icons{display:flex;gap:12px}
+.f1{flex:1;min-width:0}
+.m{color:var(--mut)}
+.s11{font-size:11px}.s12{font-size:12.5px}.s13{font-size:13.5px}.s17{font-size:17px}.s20{font-size:20px}
+.b{font-weight:700}
+.ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.u{text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px}
+.c{text-align:center}
+.big{font-size:36px;font-weight:700;letter-spacing:-.01em}
+.cd{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.li{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:10px 12px;display:flex;align-items:center;gap:12px;min-width:0}
+.list{display:flex;flex-direction:column;gap:8px}
+.sh{display:flex;justify-content:space-between;align-items:baseline;font-weight:700;font-size:15px;margin-top:2px}
+.sh small{font-weight:600;color:var(--mut);font-size:13px}
+.letter{font-size:12px;font-weight:700;color:var(--mut);margin-bottom:-4px}
+.st{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;padding:3px 9px;border-radius:99px;background:var(--blk);white-space:nowrap}
+.btn{height:40px;border-radius:99px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;padding:0 16px;white-space:nowrap}
+.btn.p{background:var(--main);color:var(--mainfg)}
+.btn.s{background:var(--card);border:1.5px solid var(--line)}
+.btn.sm{height:32px;font-size:13px;padding:0 12px}
+.main{position:relative;outline:2px dashed var(--fg);outline-offset:4px}
+.main::after{content:"ГЛАВНОЕ";position:absolute;top:-17px;right:14px;font-size:9.5px;font-weight:700;letter-spacing:.08em;line-height:1;padding:2px 5px;background:var(--paper);color:var(--fg);border:1.5px dashed var(--fg);border-radius:6px}
+.strip{display:flex;gap:8px;overflow:hidden;white-space:nowrap;-webkit-mask-image:linear-gradient(90deg,#000 82%,transparent);mask-image:linear-gradient(90deg,#000 82%,transparent);flex:none}
+.cp{flex:none;height:32px;display:inline-flex;align-items:center;padding:0 12px;border-radius:99px;border:1.5px solid var(--line);font-size:13px;font-weight:600}
+.cp.on{background:var(--blk2);border-color:var(--blk2)}
+.tabs{display:flex;gap:18px;overflow:hidden;white-space:nowrap;border-bottom:1.5px solid var(--line);-webkit-mask-image:linear-gradient(90deg,#000 80%,transparent);mask-image:linear-gradient(90deg,#000 80%,transparent);flex:none}
+.tabs span{flex:none;padding:6px 0 8px;font-size:14px;font-weight:600;color:var(--mut)}
+.tabs .on{color:var(--fg);font-weight:700;box-shadow:inset 0 -3px 0 var(--fg)}
+.seg{display:flex;background:var(--blk);border-radius:99px;padding:3px;flex:none}
+.seg span{flex:1;text-align:center;padding:7px 0;font-size:13px;font-weight:600;border-radius:99px;white-space:nowrap}
+.seg .on{background:var(--card);font-weight:700}
+.fd{height:44px;border:1.5px solid var(--line);border-radius:14px;background:var(--card);padding:0 12px;display:flex;align-items:center;font-size:15px;min-width:0;white-space:nowrap;overflow:hidden}
+.fd.m{color:var(--mut)}
+.lb{font-size:12px;color:var(--mut);font-weight:600;margin-bottom:4px}
+.pair{display:flex;gap:10px}.pair>*{flex:1;min-width:0}
+.tb{flex:none;height:83px;padding:8px 6px 0;display:flex;justify-content:space-around;border-top:1px solid var(--line);background:var(--paper)}
+.tb span{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--mut);width:68px}
+.tb span::before{content:"";width:26px;height:26px;border-radius:50%;border:2px solid var(--blk2)}
+.tb .on{color:var(--fg);font-weight:700}
+.tb .on::before{background:var(--fg);border-color:var(--fg)}
+.fab{position:absolute;right:16px;bottom:99px;height:52px;min-width:52px;padding:0 18px;border-radius:99px;display:flex;align-items:center;justify-content:center;gap:6px;font-weight:700;font-size:16px;background:var(--main);color:var(--mainfg);box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.fab.t{background:var(--blk2);color:var(--fg)}
+.ab{flex:none;border-top:1px solid var(--line);background:var(--paper);padding:12px 16px 10px;display:flex;flex-direction:column;gap:18px}
+.safe{flex:none;height:34px}
+.days{display:flex;gap:6px;flex:none}
+.days span{flex:1;display:flex;flex-direction:column;align-items:center;padding:6px 0;border-radius:99px;background:var(--blk);font-size:11px;font-weight:600;color:var(--mut)}
+.days span b{font-size:15px;color:var(--fg)}
+.days .on{background:var(--main);color:var(--mainfg)}
+.days .on b{color:var(--mainfg)}
+.tm{width:46px;flex:none;font-size:13px;font-weight:700}
+.steps{display:flex;gap:4px}.steps i{flex:1;height:6px;border-radius:3px;background:var(--blk)}.steps i.on{background:var(--main)}
+.stepl{display:flex;justify-content:space-between;font-size:11px;color:var(--mut);font-weight:600}
+.ln{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--blk);min-width:0}
+.ln:first-child{border-top:0}
+.hdl{color:var(--mut);font-weight:700;width:14px;flex:none}
+.veil{position:absolute;inset:0;background:var(--veil)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--paper);border-radius:28px 28px 0 0;padding:10px 16px 0;display:flex;flex-direction:column;gap:12px}
+.grab{width:40px;height:5px;border-radius:3px;background:var(--blk2);align-self:center}
+.pop{position:absolute;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:0 6px 20px rgba(0,0,0,.18);padding:6px 0}
+.pop .ln{padding:10px 14px;border-top:1px solid var(--blk)}
+.pop .ln:first-child{border-top:0}
+.tag{font-size:10px;font-weight:700;border:1.5px dashed var(--fg);border-radius:6px;padding:1px 5px;white-space:nowrap}
+/* gestures: the row is outlined dashed, the swipes are labels on its edges */
+.gw{position:relative;outline:1.5px dashed var(--fg);outline-offset:3px;border-radius:18px}
+.g{position:absolute;top:-13px;font-size:10.5px;font-weight:700;line-height:1;padding:3px 7px;border:1.5px dashed var(--fg);border-radius:99px;background:var(--paper);color:var(--fg);white-space:nowrap;z-index:2}
+.g.l{left:10px}.g.r{right:10px}
+.zone{position:absolute;inset:0;pointer-events:none}
+.zone{z-index:0}.scr.zoned>.hd,.scr.zoned>.ct,.scr.zoned>.tb,.scr.zoned>.sb{position:relative;z-index:1;background:transparent}
+.scr.zoned>.tb{background:var(--paper)}
+.zl{position:absolute;left:1px;z-index:2;writing-mode:vertical-rl;transform:rotate(180deg);font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--fg)}
+</style>
+
+<div class="wrap">
+  <h1>Каркасы GoRix</h1>
+  <p class="lead">Серые схемы экранов телефона 390×844: где что стоит и в каком порядке. Тексты — из демо приложения. Подробно по каждому экрану, «было → стало → почему» — <b>docs/design/SCREENS.md</b>; правила — <b>docs/design/LAYOUT-RULES.md</b>.</p>
+  <p class="note">Это каркас: расположение без цвета. Утвердите расположение — после этого вёрстка в приложении.</p>
+
+  <div class="intro">
+    <section class="box">
+      <h2>6 шаблонов экранов</h2>
+      <ol>
+        <li><b>Обзор</b> (Главная) — что мне делать сейчас.</li>
+        <li><b>Список</b> (Клиенты, Деньги, Задачи…) — найти и сделать быстрое действие, не открывая.</li>
+        <li><b>Объект</b> (Клиент, Работа, Выезд, Счёт) — понять, что с ним, и сделать следующий шаг.</li>
+        <li><b>Редактор</b> (Смета, Форма клиента) — быстро и без ошибок заполнить.</li>
+        <li><b>Календарь</b> (План) — что когда и у кого.</li>
+        <li><b>Шторка / меню</b> (оплата, «＋») — выбрать одно.</li>
+      </ol>
+    </section>
+    <section class="box">
+      <h2>10 принципов</h2>
+      <ol>
+        <li>У экрана одна работа — остальное ниже, в разделе или в «⋯».</li>
+        <li>Одна главная кнопка — «следующий шаг».</li>
+        <li>Главное — под большим пальцем.</li>
+        <li>Компакт: две кнопки и пара полей — в ряд.</li>
+        <li>Не полотна: чипов не больше ряда, разделы — полосой вбок.</li>
+        <li>Значок вместо слова для вторичных действий (с подписью VoiceOver).</li>
+        <li>Одно — один раз: имя, адрес, сумма не повторяются.</li>
+        <li>Жест — ускоритель; то же действие есть в «⋯».</li>
+        <li>Детали по требованию — «Подробнее».</li>
+        <li>Цвет 60/30/10: акцент только у главного (на каркасе — тёмно-серый).</li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="legend">
+    <span><i class="lg-main"></i> главная кнопка (контур «ГЛАВНОЕ»)</span>
+    <span><i class="lg-ic"></i> кружок — значок, подпись для VoiceOver</span>
+    <span><i class="lg-g">→ жест</i> смахивание по строке</span>
+    <span><i class="lg-z"></i> зона большого пальца (экран 1)</span>
+  </div>
+
+  <div class="grid">
+
+  <!-- 1 Главная -->
+  <figure class="shot">
+    <div class="ph"><div class="scr zoned">
+      <svg class="zone" viewBox="0 0 390 844" aria-hidden="true">
+        <path d="M0 250 Q 195 175 390 235" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="7 6"/>
+        <path d="M0 520 Q 210 430 390 470 L390 844 L0 844 Z" fill="var(--zone)" stroke="currentColor" stroke-width="2" stroke-dasharray="7 6"/>
+      </svg>
+      <span class="zl" style="top:120px">трудно</span>
+      <span class="zl" style="top:330px">тянуться</span>
+      <span class="zl" style="top:600px">легко</span>
+      <div class="sb"><span>9:41</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="h1">Главная</div><div class="sub">Пт, 20 ноября</div></div><span class="ic">звон</span><span class="av">AP</span></div>
+      <div class="ct">
+        <div class="sh">Дальше</div>
+        <div class="cd">
+          <div class="row"><span class="s20 b f1">8:30 – 12:30</span><span class="st">◷ Запланирован</span></div>
+          <div class="s17 b">Sarah Mitchell</div>
+          <div class="s13 m">1420 Oak Grove Ave, Pasadena</div>
+          <div class="btn p main" style="margin-top:6px">Открыть выезд</div>
+          <div class="s12 m">Ещё сегодня: 2</div>
+        </div>
+        <div class="sh">Требует действия <small>Все ›</small></div>
+        <div class="list">
+          <div class="li"><span class="st">! Просрочен</span><span class="f1 s13 ell">Счёт · David Kim</span><b class="s13">$1,840</b></div>
+          <div class="li"><span class="st">◷ 6 дн</span><span class="f1 s13 ell">Смета без ответа · Linda Alvarez</span></div>
+          <div class="li"><span class="st">! 4 мин</span><span class="f1 s13 ell">Лид без ответа · Kevin Brooks</span></div>
+        </div>
+        <div class="cd" style="flex-direction:row;gap:6px">
+          <div class="f1"><div class="s11 m">Получено</div><div class="b">$1,020</div></div>
+          <div class="f1"><div class="s11 m">Ждёт оплаты</div><div class="b">$2,800</div></div>
+          <div class="f1"><div class="s11 m">Просрочено</div><div class="b">! 1 счёт</div></div>
+        </div>
+        <div class="row s13"><span class="f1 m">Бригады: 1 в работе · 1 опаздывает ›</span><span class="b">Подробнее ˅</span></div>
+      </div>
+      <div class="tb"><span class="on">Главная</span><span>План</span><span>Клиенты</span><span>Деньги</span><span>Поиск</span></div>
+      <div class="fab t">＋</div>
+
+    </div></div>
+    <figcaption>
+      <h3>1 · Главная — Обзор (экран-легенда)</h3>
+      <p><b>Работа:</b> что мне делать сейчас — ближайший выезд и то, что горит.</p>
+      <p><b>Почему так:</b> внизу вкладки, поэтому главная кнопка — первая под шапкой; «＋» серый, чтобы акцент был один. Бригады — одной строкой, графики — в «Подробнее».</p>
+    </figcaption>
+  </figure>
+
+  <!-- 2 План -->
+  <figure class="shot">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>9:41</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="h1">План</div></div><span class="ic">поиск</span><span class="ic">фильтр</span></div>
+      <div class="ct">
+        <div class="seg"><span class="on">День</span><span>Лента</span><span>Неделя</span><span>Месяц</span></div>
+        <div class="days"><span>Пн<b>16</b></span><span>Вт<b>17</b></span><span>Ср<b>18</b></span><span>Чт<b>19</b></span><span class="on">Пт<b>20</b></span><span>Сб<b>21</b></span><span>Вс<b>22</b></span></div>
+        <div class="li"><span class="st">! Без мастера</span><span class="f1 s13 ell">15:00 · Осмотр · 520 W Olive Ave</span><span class="btn s sm">Назначить</span></div>
+        <div class="list">
+          <div class="li gw"><span class="g l">→ Открыть</span><span class="g r">Перенести ←</span><span class="tm">8:30</span><div class="f1"><div class="b ell">Sarah Mitchell</div><div class="s12 m ell">Bathroom remodel: vanity, toilet, tile</div></div><span class="av">AP</span></div>
+          <div class="li"><span class="tm">9:00</span><div class="f1"><div class="b ell">Maria Gonzalez</div><div class="s12 m ell">Deep clean · <b>◷ В работе</b></div></div><span class="av">IS</span></div>
+          <div class="li"><span class="tm">в пути</span><div class="f1"><div class="b ell">James O'Connor</div><div class="s12 m ell">Panel upgrade 200A · <b>! Опаздывает</b></div></div><span class="av">VE</span></div>
+          <div class="li"><span class="tm">13:30</span><div class="f1"><div class="b ell">David Kim</div><div class="s12 m ell">Kitchen faucet + garbage disposal</div></div><span class="av">AP</span></div>
+          <div class="li"><span class="tm">16:00</span><div class="f1"><div class="b ell">Linda Alvarez</div><div class="s12 m ell">Drywall patch + paint touch-up</div></div><span class="av">AP</span></div>
+        </div>
+        <div class="s13 m">Работы без даты ›</div>
+      </div>
+      <div class="tb"><span>Главная</span><span class="on">План</span><span>Клиенты</span><span>Деньги</span><span>Поиск</span></div>
+      <div class="fab main">＋</div>
+    </div></div>
+    <figcaption>
+      <h3>2 · План — Календарь</h3>
+      <p><b>Работа:</b> что когда и у кого сегодня.</p>
+      <p><b>Почему так:</b> поиск и фильтр ушли в шапку — день виден сразу; «Без мастера» — одна строка с одной кнопкой; смахивание: открыть / перенести.</p>
+    </figcaption>
+  </figure>
+
+  <!-- 3 Клиенты -->
+  <figure class="shot">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>9:41</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="h1">Клиенты</div><div class="sub">Клиентов: 7</div></div><span class="ic">⋯</span></div>
+      <div class="ct">
+        <div class="row"><div class="fd m f1">Имя, телефон или адрес</div><span class="ic">фильтр</span></div>
+        <div class="strip"><span class="cp on">Все 7</span><span class="cp">Должны 2</span><span class="cp">Смета у клиента 2</span><span class="cp">Потенциальные</span><span class="cp">Архив</span></div>
+        <div class="letter">D</div>
+        <div class="li gw"><span class="g l">→ Позвонить</span><span class="g r">В архив ←</span><span class="av">DK</span><div class="f1"><div class="b ell">David Kim</div><div class="s12 ell">Сегодня, 13:30 · Kitchen faucet</div><div class="s11 m ell"><span class="u">(818) 555-0187</span> · <span class="u">4512 Ventura Canyon Ave</span></div></div><div style="text-align:right"><div class="b">$1,840</div><div class="s11 b">! 9 дн</div></div><span class="ic sm">напис</span></div>
+        <div class="letter">E</div>
+        <div class="li"><span class="av">EP</span><div class="f1"><div class="b ell">Emily Park</div><div class="s12 ell">Сегодня, 15:00 · Осмотр</div><div class="s11 m ell"><span class="u">(213) 555-0121</span> · <span class="u">520 W Olive Ave</span></div></div><span class="ic sm">напис</span></div>
+        <div class="letter">L</div>
+        <div class="li"><span class="av">LA</span><div class="f1"><div class="b ell">Linda Alvarez</div><div class="s12 ell">Сегодня, 16:00 · Drywall patch</div><div class="s11 m ell"><span class="u">(310) 555-0110</span> · <span class="u">2207 Ocean Park Blvd</span></div></div><span class="ic sm">напис</span></div>
+        <div class="letter">R</div>
+        <div class="li"><span class="av">RC</span><div class="f1"><div class="b ell">Robert Chen</div><div class="s11 m ell"><span class="u">(323) 555-0166</span> · <span class="u">735 N Kenwood St</span></div></div><div class="b">$960</div><span class="ic sm">напис</span></div>
+      </div>
+      <div class="tb"><span>Главная</span><span>План</span><span class="on">Клиенты</span><span>Деньги</span><span>Поиск</span></div>
+      <div class="fab main">＋ Клиент</div>
+    </div></div>
+    <figcaption>
+      <h3>3 · Клиенты — Список</h3>
+      <p><b>Работа:</b> найти клиента и позвонить, написать или поехать — не открывая.</p>
+      <p><b>Почему так:</b> телефон и адрес нажимаются прямо в карточке; один знак долга вместо трёх тегов; чипы — одна полоса вбок.</p>
+    </figcaption>
+  </figure>
+
+  <!-- 4 Клиент -->
+  <figure class="shot">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>9:41</span><i></i></div>
+      <div class="hd"><span class="ic">‹</span><div class="tt"><div class="h2">Sarah Mitchell</div></div><span class="ic">＋</span><span class="ic">⋯</span></div>
+      <div class="ct">
+        <div class="s13 m">CLT-0001 · <span class="st">◷ Активный</span> · VIP</div>
+        <div class="s13 m u">1420 Oak Grove Ave, Pasadena, CA 91103 ↗</div>
+        <div class="icons"><span class="ic">тел</span><span class="ic">смс</span><span class="ic">путь</span><span class="ic">почта</span></div>
+        <div class="btn p main">Выставить счёт</div>
+        <div class="s12 m c">Смета «Bathroom remodel» принята · выставить $3,078</div>
+        <div class="tabs"><span class="on">Обзор</span><span>Работы 2</span><span>Сметы 1</span><span>Счета 2</span><span>Выезды 2</span><span>Объекты 2</span><span>Контакты 2</span></div>
+        <div class="sh">Сейчас</div>
+        <div class="list">
+          <div class="li"><span class="ic sm">раб</span><div class="f1"><div class="b s13 ell">Bathroom remodel: vanity, toilet, tile</div><div class="s12 m ell">Работа · JOB-0001 · Запланирована</div></div><b class="s13">$3,420</b></div>
+          <div class="li"><span class="ic sm">выезд</span><div class="f1"><div class="b s13 ell">Следующий выезд · Сегодня, 8:30</div><div class="s12 m ell">Bathroom remodel</div></div></div>
+        </div>
+        <div class="cd"><div class="s11 m b">ЗАКРЕПЛЕНО</div><div class="s13">Gate code 4512. Small dog in the backyard — call before entering.</div></div>
+      </div>
+      <div class="tb"><span>Главная</span><span>План</span><span class="on">Клиенты</span><span>Деньги</span><span>Поиск</span></div>
+    </div></div>
+    <figcaption>
+      <h3>4 · Клиент — Объект</h3>
+      <p><b>Работа:</b> понять, что с клиентом сейчас, и сделать следующий шаг.</p>
+      <p><b>Почему так:</b> имя один раз; действия — значками; разделы — полосой вверху (слово основателя 21.11); деньги клиента — в разделе «Счета»; «＋» — значок в шапке, акцент один.</p>
+    </figcaption>
+  </figure>
+
+  <!-- 5 Новый клиент -->
+  <figure class="shot">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>9:41</span><i></i></div>
+      <div class="hd"><span class="ic">‹</span><div class="tt"><div class="h2">Новый клиент</div></div></div>
+      <div class="ct">
+        <div class="cd">
+          <div class="pair"><div><div class="lb">Имя</div><div class="fd">Sarah</div></div><div><div class="lb">Фамилия</div><div class="fd">Mitchell</div></div></div>
+          <div><div class="lb">Компания</div><div class="fd m">Необязательно</div></div>
+        </div>
+        <div class="cd">
+          <div class="lb" style="margin:0">Телефоны</div>
+          <div class="row"><div class="fd" style="width:118px">Мобильный ˅</div><div class="fd f1">(626) 555-0142</div><span class="ic sm">удал</span></div>
+          <div class="row"><div class="fd" style="width:118px">Рабочий ˅</div><div class="fd f1">(626) 555-0143</div><span class="ic sm">удал</span></div>
+          <div class="row" style="justify-content:flex-end"><span class="ic sm">＋</span></div>
+          <div class="lb" style="margin:0">Почта</div>
+          <div class="row"><div class="fd f1">sarah.m@example.com</div><span class="ic sm">удал</span></div>
+          <div class="row" style="justify-content:flex-end"><span class="ic sm">＋</span></div>
+        </div>
+        <div class="cd">
+          <div><div class="lb">Улица</div><div class="fd">1420 Oak Grove Ave</div></div>
+          <div><div class="lb">Город, штат, ZIP</div><div class="fd">Pasadena, CA 91103</div></div>
+        </div>
+        <div class="cd" style="flex-direction:row;align-items:center"><span class="f1">Источник</span><span class="b">Google ˅</span></div>
+      </div>
+      <div class="ab"><div class="btn p main">Создать клиента</div></div>
+      <div class="safe"></div>
+    </div></div>
+    <figcaption>
+      <h3>5 · Новый / правка клиента — Редактор</h3>
+      <p><b>Работа:</b> быстро и без ошибок завести клиента.</p>
+      <p><b>Почему так:</b> имя и фамилия — в ряд; «добавить» и «удалить» — значками; кнопка закреплена внизу, не уезжает в конец формы.</p>
+    </figcaption>
+  </figure>
+
+  <!-- 6 Работа -->
+  <figure class="shot">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>9:41</span><i></i></div>
+      <div class="hd"><span class="ic">‹</span><div class="tt"><div class="h2">Работа JOB-0001</div></div><span class="ic">＋</span><span class="ic">⋯</span></div>
+      <div class="ct">
+        <div class="s20 b">Bathroom remodel: vanity, toilet, tile</div>
+        <div class="row s13"><span class="st">◷ Запланирована</span><b>· $3,420</b></div>
+        <div class="row"><span class="f1 b u">Sarah Mitchell ›</span><span class="ic">тел</span><span class="ic">смс</span></div>
+        <div class="s12 m u">1420 Oak Grove Ave, Pasadena, CA 91103 ↗</div>
+        <div class="row"><div class="btn p main f1">Начать выезд</div><span class="ic">в пути</span></div>
+        <div class="s12 m c">Ближайший выезд: 20 нояб., 8:30</div>
+        <div class="tabs"><span class="on">Обзор</span><span>Выезды 2</span><span>Сметы 1</span><span>Счета 1</span><span>Расходы 1</span><span>Заказы 1</span><span>Фото</span></div>
+        <div class="list">
+          <div class="li"><span class="ic sm">смета</span><div class="f1"><div class="b s13 ell">Bathroom remodel</div><div class="s12 m">Смета · принята</div></div><b class="s13">$3,420</b></div>
+          <div class="li"><span class="ic sm">счёт</span><div class="f1"><div class="b s13 ell">INV-0105 · Депозит</div><div class="s12 m">✓ Оплачен</div></div><b class="s13">$342</b></div>
+        </div>
+        <div class="cd"><div class="b s13">Что сделать</div><div class="s13">Remove old vanity and toilet</div><div class="s13">Install new vanity, faucet and toilet</div><div class="s13">Tile backsplash, 24 sq ft</div></div>
+      </div>
+      <div class="tb"><span>Главная</span><span>План</span><span class="on">Клиенты</span><span>Деньги</span><span>Поиск</span></div>
+    </div></div>
+    <figcaption>
+      <h3>6 · Работа — Объект</h3>
+      <p><b>Работа:</b> что с работой и какой следующий шаг по цепочке.</p>
+      <p><b>Почему так:</b> «статус · сумма» одной строкой, клиент — ссылкой со значками; расписание и чек-лист — в разделе «Выезды», не в «Обзоре».</p>
+    </figcaption>
+  </figure>
+
+  <!-- 7 Выезд -->
+  <figure class="shot">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>9:41</span><i></i></div>
+      <div class="hd"><span class="ic">‹</span><div class="tt"><div class="h2">Sarah Mitchell</div><div class="sub">Bathroom remodel: vanity, toilet, tile</div></div><span class="ic">⋯</span></div>
+      <div class="ct">
+        <div class="row s13"><span class="st">◷ Запланирован</span><b>· $3,078 к оплате</b></div>
+        <div class="s17 b">Сегодня · 8:30–12:30</div>
+        <div class="s13 m u">1420 Oak Grove Ave, Pasadena ↗</div>
+        <div class="icons"><span class="ic">путь</span><span class="ic">тел</span><span class="ic">смс</span></div>
+        <div><div class="steps"><i class="on"></i><i></i><i></i><i></i><i></i></div><div class="stepl" style="margin-top:6px"><span>Я в пути</span><span>На месте</span><span>Работа</span><span>Подпись</span><span>Оплата</span></div></div>
+        <div class="sh">Что сделать</div>
+        <div class="cd"><div class="s13">○ Remove old vanity and toilet</div><div class="s13">○ Install new vanity, faucet and toilet</div><div class="s13">○ Tile backsplash, 24 sq ft</div></div>
+        <div class="list">
+          <div class="li"><span class="f1 s13 b">Чек-лист</span><span class="m">›</span></div>
+          <div class="li"><span class="f1 s13 b">Заметка мастеру</span><span class="m">›</span></div>
+          <div class="li"><span class="f1 s13 b">Фото до · 0</span><span class="m">›</span></div>
+        </div>
+      </div>
+      <div class="ab"><div class="btn p main">Я в пути</div></div>
+      <div class="tb"><span class="on">Главная</span><span>План</span><span>Клиенты</span><span>Деньги</span><span>Поиск</span></div>
+    </div></div>
+    <figcaption>
+      <h3>7 · Выезд — Объект (полевой)</h3>
+      <p><b>Работа:</b> доехать, сделать работу, взять подпись и оплату.</p>
+      <p><b>Почему так:</b> шаг цепочки закреплён внизу под большим пальцем (одна рука, улица — исключение, ждёт слова основателя); маршрут и звонок — значками; без плавающего «＋».</p>
+    </figcaption>
+  </figure>
+
+  <!-- 8 Деньги: сметы -->
+  <figure class="shot">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>9:41</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="h1">Деньги</div></div></div>
+      <div class="ct">
+        <div class="seg"><span class="on">Сметы</span><span>Счета</span><span>Оплаты</span></div>
+        <div class="row"><div class="fd m f1">Клиент, адрес, номер</div><span class="ic">фильтр</span></div>
+        <div class="strip"><span class="cp on">Открытые</span><span class="cp">Закрытые</span><span class="cp">Все</span></div>
+        <div class="sh">Нужно действие</div>
+        <div class="li gw"><span class="g l">→ Открыть</span><span class="av">JO</span><div class="f1"><div class="b ell">James O'Connor</div><div class="s12 m ell">Panel upgrade 200A · принята</div></div><b>$5,180</b></div>
+        <div class="sh">Ждём клиента</div>
+        <div class="list">
+          <div class="li"><span class="av">EP</span><div class="f1"><div class="b ell">Emily Park</div><div class="s12 m ell">Fence repair + new gate · 3 дн</div></div><b>$2,980</b></div>
+          <div class="li"><span class="av">LA</span><div class="f1"><div class="b ell">Linda Alvarez</div><div class="s12 m ell">Kitchen backsplash tile · 6 дн</div></div><b>$2,640</b></div>
+          <div class="li"><span class="av">LA</span><div class="f1"><div class="b ell">Linda Alvarez</div><div class="s12 m ell">EST-0006 · Carpet, railing, bulb · 1 дн</div></div><b>$772</b></div>
+        </div>
+        <div class="s13 m">Готово · 2 ˅</div>
+      </div>
+      <div class="tb"><span>Главная</span><span>План</span><span>Клиенты</span><span class="on">Деньги</span><span>Поиск</span></div>
+      <div class="fab main">＋ Смета</div>
+    </div></div>
+    <figcaption>
+      <h3>8 · Деньги → Сметы — Список</h3>
+      <p><b>Работа:</b> увидеть, какие сметы ждут меня или клиента, и открыть нужную.</p>
+      <p><b>Почему так:</b> сметы, счета, оплаты — одна вкладка с сегментом; «＋» переехал из правого верхнего угла к большому пальцу, как во всех списках.</p>
+    </figcaption>
+  </figure>
+
+  <!-- 9 Смета-редактор -->
+  <figure class="shot">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>9:41</span><i></i></div>
+      <div class="hd"><span class="ic">‹</span><div class="tt"><div class="h2">Новая смета</div></div><span class="b s13">Сохранить</span><span class="ic">⋯</span></div>
+      <div class="ct">
+        <div class="li"><span class="av">LA</span><div class="f1"><div class="b ell">Linda Alvarez</div><div class="s12 m ell">2207 Ocean Park Blvd, Santa Monica</div></div><span class="m">›</span></div>
+        <div class="fd">Carpet, railing, bulb, haul-away</div>
+        <div class="row s13"><span class="f1 m">Варианты для клиента: один</span><span class="cp">＋ Вариант</span></div>
+        <div class="sh">Позиции · 7 <span class="ic sm">крат</span></div>
+        <div class="cd" style="gap:0;padding:4px 14px">
+          <div class="ln"><span class="hdl">≡</span><div class="f1"><div class="s13 b ell">Debris haul-away (pickup load)</div><div class="s11 m">1 flat</div></div><b class="s13">$150.00</b></div>
+          <div class="ln"><span class="hdl">≡</span><div class="f1"><div class="s13 b ell">Carpet removal</div><div class="s11 m">120 sq ft × $1.50</div></div><b class="s13">$180.00</b></div>
+          <div class="ln"><span class="hdl">≡</span><div class="f1"><div class="s13 b ell">Install stair railing</div><div class="s11 m">1 ea</div></div><b class="s13">$250.00</b></div>
+          <div class="ln"><span class="hdl">≡</span><div class="f1"><div class="s13 b ell">Replace light bulb / fixture lamp</div><div class="s11 m">1 ea</div></div><b class="s13">$25.00</b></div>
+          <div class="ln gw" style="border-radius:10px;margin-top:10px"><span class="g l">≡ тянуть — порядок</span><span class="g r">Удалить ←</span><span class="hdl">≡</span><div class="f1"><div class="s13 b ell">Railing bracket</div><div class="s11 m">12 ea × $12.13</div></div><b class="s13">$145.56</b></div>
+          <div class="ln"><span class="hdl">≡</span><div class="f1"><div class="s13 b ell">LED bulb A19</div><div class="s11 m">1 ea × $7.28</div></div><b class="s13">$7.28</b></div>
+        </div>
+        <div class="pair"><div class="btn s">＋ Позиция</div><div class="btn s">Из каталога</div></div>
+      </div>
+      <div class="ab"><div class="row"><span class="f1 m">Итого ˅</span><span class="s20 b">$772.36</span></div><div class="btn p main">Отправить клиенту</div></div>
+      <div class="safe"></div>
+    </div></div>
+    <figcaption>
+      <h3>9 · Смета — Редактор</h3>
+      <p><b>Работа:</b> собрать смету из позиций и отправить клиенту.</p>
+      <p><b>Почему так:</b> позиции — сразу под клиентом; «Варианты» — одной строкой, «Кратко/Подробно» — значком; итог и «Отправить» закреплены внизу; налог и депозит — в «Итого ˅».</p>
+    </figcaption>
+  </figure>
+
+  <!-- 10 Счёт -->
+  <figure class="shot">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>9:41</span><i></i></div>
+      <div class="hd"><span class="ic">‹</span><div class="tt"><div class="h2">Счёт INV-0101</div></div><span class="ic">⋯</span></div>
+      <div class="ct">
+        <div class="s13 m"><span class="u">David Kim</span> · <span class="u">Kitchen faucet + garbage disposal</span></div>
+        <div><span class="st">! Просрочен 9 дн · напоминание не отправлялось</span></div>
+        <div class="cd"><div class="s12 m">К оплате</div><div class="big">$1,840.00</div><div class="s12 m">Отправлен 8 нояб.</div></div>
+        <div class="icons"><span class="ic">смс</span><span class="ic">ссыл</span><span class="ic">pdf</span><span class="ic">напом</span></div>
+        <div class="sh">Квитанции об оплате</div>
+        <div class="s13 m">Оплат пока нет</div>
+      </div>
+      <div class="ab"><div class="btn p main">Принять оплату</div></div>
+      <div class="safe"></div>
+    </div></div>
+    <figcaption>
+      <h3>10 · Счёт — Объект</h3>
+      <p><b>Работа:</b> сколько должны — и взять оплату.</p>
+      <p><b>Почему так:</b> сумма крупно один раз (раньше — трижды: карточка, строка «Final balance», кнопка); вторичные — значками; «Аннулировать» — только в «⋯».</p>
+    </figcaption>
+  </figure>
+
+  <!-- 11 Приём оплаты -->
+  <figure class="shot">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>9:41</span><i></i></div>
+      <div class="hd"><span class="ic">‹</span><div class="tt"><div class="h2">Счёт INV-0101</div></div><span class="ic">⋯</span></div>
+      <div class="ct"><div class="cd"><div class="s12 m">К оплате</div><div class="big">$1,840.00</div></div></div>
+      <div class="veil"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="row"><span class="f1 s20 b">Принять оплату</span><span class="ic sm">закр</span></div>
+        <div><div class="s12 m">К оплате</div><div class="big">$1,840.00</div></div>
+        <div><div class="lb">Способ</div><div class="seg"><span class="on">Карта</span><span>Наличные</span><span>Чек</span><span>Zelle</span><span>ACH</span></div></div>
+        <div class="pair"><div><div class="lb">Сумма</div><div class="fd">$1,840.00</div></div><div><div class="lb">Номер чека / Zelle</div><div class="fd m">Необязательно</div></div></div>
+        <div class="btn p main" style="margin-top:6px">Записать $1,840.00</div>
+        <div class="safe"></div>
+      </div>
+    </div></div>
+    <figcaption>
+      <h3>11 · Приём оплаты — Шторка</h3>
+      <p><b>Работа:</b> записать, сколько и как заплатили.</p>
+      <p><b>Почему так:</b> способ — одной полосой, сумма и номер — в ряд; сумма в кнопке — исключение П7: её можно изменить (часть), кнопка подтверждает, что запишется. Та же шторка — на выезде.</p>
+    </figcaption>
+  </figure>
+
+  <!-- 12 Задачи -->
+  <figure class="shot">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>9:41</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="h1">Задачи</div><div class="sub">0 % готово</div></div></div>
+      <div class="ct">
+        <div class="row"><div class="fd m f1">Искать задачу</div><span class="ic">фильтр</span></div>
+        <div class="strip"><span class="cp on">Открытые 1</span><span class="cp">Просроченные</span><span class="cp">Выполненные</span></div>
+        <div class="li gw" style="margin-top:8px"><span class="g l">→ Готово</span><span class="ic" style="background:transparent;border:2px solid var(--blk2)"></span><div class="f1"><div class="b ell">Send the painting estimate</div><div class="s12 m ell">Завтра · Лид: Tom Becker · Alex Petrov</div></div></div>
+        <div class="s13 m c" style="margin-top:8px">Кружок слева — отметить «Выполнено»</div>
+      </div>
+      <div class="tb"><span class="on">Главная</span><span>План</span><span>Клиенты</span><span>Деньги</span><span>Поиск</span></div>
+      <div class="fab main">＋ Задача</div>
+    </div></div>
+    <figcaption>
+      <h3>12 · Задачи — Список</h3>
+      <p><b>Работа:</b> что не сделано — и отметить готовое.</p>
+      <p><b>Почему так:</b> прогресс один раз (подзаголовком, без полосы); «готово» — кружок и смахивание вместо кнопки «Выполнено», смахивания и чипа сразу.</p>
+    </figcaption>
+  </figure>
+
+  <!-- 13 Нижнее меню и «＋» -->
+  <figure class="shot">
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>9:41</span><i></i></div>
+      <div class="hd"><div class="tt"><div class="h1">Главная</div><div class="sub">Пт, 20 ноября</div></div><span class="ic">звон</span><span class="av">AP</span></div>
+      <div class="ct"><div class="cd" style="height:200px"></div><div class="cd" style="height:140px"></div></div>
+      <div class="tb"><span class="on">Главная</span><span>План</span><span>Клиенты</span><span>Деньги</span><span>Поиск</span></div>
+      <div class="veil"></div>
+      <div class="pop" style="right:16px;top:108px;width:226px">
+        <div class="ln s13 m b">Меню аватара</div>
+        <div class="ln s13">Лиды · Работы · Задачи</div><div class="ln s13">Каталог · Команда · Отчёты</div><div class="ln s13">Настройки</div>
+      </div>
+      <div class="pop" style="right:16px;bottom:164px;width:250px">
+        <div class="ln s13 m b">Создать</div>
+        <div class="ln"><span class="ic sm">лид</span><span class="f1 s13 b ell">Создать лид</span><span class="tag">ДЛЯ ЭКРАНА</span></div>
+        <div class="ln"><span class="ic sm">клиент</span><span class="f1 s13">Создать клиента</span></div>
+        <div class="ln"><span class="ic sm">смета</span><span class="f1 s13">Создать смету</span></div>
+        <div class="ln"><span class="ic sm">расход</span><span class="f1 s13">Создать расход</span></div>
+        <div class="ln"><span class="ic sm">работа</span><span class="f1 s13">Работа без сметы</span></div>
+      </div>
+      <div class="fab t">×</div>
+    </div></div>
+    <figcaption>
+      <h3>13 · Нижнее меню и «＋» — Шторка / меню</h3>
+      <p><b>Работа:</b> перейти в раздел или создать новое одним касанием.</p>
+      <p><b>Почему так:</b> 5 вкладок без «Ещё», поиск справа (HIG); «＋» у большого пальца, первый пункт — для этого экрана; редкие разделы — в меню аватара.</p>
+    </figcaption>
+  </figure>
+
+  </div>
+</div>
+<script>
+(() => {
+  const boxes = document.querySelectorAll(".ph");
+  const fit = () => boxes.forEach((b) => b.style.setProperty("--k", (b.clientWidth / 390).toFixed(4)));
+  fit();
+  if ("ResizeObserver" in window) { const r = new ResizeObserver(fit); boxes.forEach((b) => r.observe(b)); }
+  else addEventListener("resize", fit);
+})();
+</script>

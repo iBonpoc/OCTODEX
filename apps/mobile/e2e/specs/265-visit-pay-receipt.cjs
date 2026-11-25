@@ -11,13 +11,22 @@ const cents = (s) => Math.round(Number(String(s).replace(/[^0-9.]/g, "")) * 100)
 /** the card shows whole dollars: three rounded figures agree within $1 (the bug: $500 apart) */
 const agree = (f) => Math.abs(f.invoiced - f.owes - f.paid) <= 100;
 
+// v2 (#2350): the client's «Деньги» section — the trio «Долг · Ещё выставить · Оплачено» and the invoices' rows with their
+// totals; «Выставлено» is the sum of the invoices' rows (the old tile is gone)
 async function figures(h, customerId) {
-  await h.go(`/client/${customerId}`);
+  await h.go(`/client/${customerId}?tab=money`);
   const p = h.page;
-  const cell = (id) => p.getByTestId(id).first();
-  await cell("client-invoiced").waitFor({ state: "visible", timeout: 15000 });
-  const read = async (id) => cents((await cell(id).innerText()).split("\n").pop());
-  return { owes: await read("client-owes"), paid: await read("client-paid"), invoiced: await read("client-invoiced") };
+  const trio = p.getByTestId("client-money-figures").locator("visible=true").first();
+  await trio.waitFor({ state: "visible", timeout: 15000 });
+  const vals = ((await trio.innerText()).match(/\$[\d,]+(\.\d\d)?/g) ?? []).map(cents);
+  h.expect(vals.length === 3, `the trio has three sums: ${await trio.innerText()}`);
+  const rows = p.locator('[data-testid^="client-invoice-"]').locator("visible=true");
+  let invoiced = 0;
+  for (let i = 0; i < (await rows.count()); i++) {
+    const sums = (await rows.nth(i).innerText()).match(/\$[\d,]+(\.\d\d)?/g) ?? [];
+    invoiced += sums.length ? cents(sums[sums.length - 1]) : 0;
+  }
+  return { owes: vals[0], paid: vals[2], invoiced };
 }
 
 exports.run = async (h) => {
@@ -43,8 +52,9 @@ exports.run = async (h) => {
 
   await h.go(`/visit/${visit.id}`);
   await p.getByTestId("visit-amount-due").last().waitFor({ state: "visible", timeout: 15000 });
+  await p.getByTestId("visit-method-button").locator("visible=true").first().click(); // the method is a row with a menu (spec 56 wave 5а)
   await p.getByTestId("visit-method-cash").last().click();
-  await p.getByTestId("visit-record-payment").last().getByRole("button").click();
+  await p.getByTestId("visit-record-payment").locator("visible=true").first().click();
   // wait for what is checked: the visit is paid in the store (CHECKS §9 п.3)
   await p.waitForFunction((id) => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.visits?.find((x) => x.id === id)?.step === "paid", visit.id);
 

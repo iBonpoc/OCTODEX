@@ -8,7 +8,7 @@
  * The button: no lines of it anywhere → «Смета»; the measurement changed since (status draft) → «Обновить смета»;
  * nothing changed (ready) → «Открыть смету». No lead and no property → «Сделать заявкой» first (an estimate needs a client).
  */
-import { ENGINE_VERSION, GUTTER_PARTS_VERSION, type PartQty } from "@octo/estimating-engine";
+import { computeGutterParts, ENGINE_VERSION, GUTTER_PARTS_VERSION, type PartQty } from "@octo/estimating-engine";
 import type { DocAttachPage } from "@/features/docPages";
 import { pagesProblem } from "@/features/docPages";
 import type { DB, Estimate, EstimateDoc } from "@/data/types";
@@ -17,9 +17,11 @@ import { moduleActive, type ModuleEstimateStore } from "../registry";
 import { leadEstimatePropertyId } from "@/features/access";
 import { docLanguageFor } from "@/data/people";
 import type { DocLang } from "@/i18n/translate";
-import { gutterData, K, KEY, ownFields, putMeasurement, undoAll, withGutterData } from "./data";
+import { gutterData, K, KEY, ownFields, putMeasurement, removeMeasurement, undoAll, withGutterData } from "./data";
 import { linesFromParts, resyncLines, type LineSource, type ModuleLine } from "./estimate";
-import type { ElementRow, MeasurementRow } from "./canvas/model";
+import { fromElements, type ElementRow, type MeasurementRow } from "./canvas/model";
+import { toMeasurement } from "./geometry";
+import { readRules, toRulesOverride } from "./settings";
 import type { CatalogItem } from "@/data/types";
 import { type GuardedUndo, NO_UNDO } from "@/data/undo";
 
@@ -73,17 +75,64 @@ export function engineOlder(was: unknown, now: string = GUTTER_PARTS_VERSION): b
   return false;
 }
 
-/** the measurement's estimate was computed by an older engine (#1165): any line of this measurement carries an older version */
-export function engineChangedFor(e: Estimate | undefined, measurementId: string, now: string = GUTTER_PARTS_VERSION): boolean {
-  return !!e?.doc?.options?.some((o) => o.lines.some((l) => ofMeasurement(l, measurementId) && engineOlder(sourceOf(l)?.engineVersion, now)));
+/** what the module wrote, key → quantity (П23.1 `source`), of one option's lines of this measurement; lines kept by hand («gone») are not the module's */
+function writtenQty(lines: readonly { source?: unknown }[], measurementId: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const l of lines) {
+    const s = sourceOf(l);
+    if (!ofMeasurement(l, measurementId) || !s || s.gone || typeof s.key !== "string") continue;
+    out.set(s.key, String(s.qty));
+  }
+  return out;
 }
 
 /**
- * #1165: the measurements of this estimate whose lines the engine computed in an older version than now — the estimate is still
- * theirs (no newer one took over). A hint «расчёт изменился — обновите»; a signed estimate is only shown the hint, never changed.
+ * The measurement's lines as «Обновить» would write them now, key → quantity (#1776): its drawing, the company's rules,
+ * the same `linesFromParts` («как будет»; prices are not part of it — a price change is not the engine's).
  */
-export function engineStaleMeasurements(db: Pick<DB, "estimates" | "moduleData">, e: Estimate, now: string = GUTTER_PARTS_VERSION): MeasurementRow[] {
-  return gutterData(db).measurements.filter((m) => hasLinesOf(e, m.id) && estimateOfMeasurement(db, m.id)?.id === e.id && engineChangedFor(e, m.id, now));
+export function linesNowOf(db: Partial<Pick<DB, "moduleData" | "company">>, measurementId: string): Map<string, string> {
+  const all = gutterData(db).elements;
+  const settings = db.company?.modules?.gutters?.settings;
+  // the list of measurements asks this for every old draft on every render: one count per drawing and settings (review of #1776)
+  let memo = nowMemo.get(all);
+  if (!memo || memo.settings !== settings) nowMemo.set(all, (memo = { settings, byM: new Map() }));
+  const hit = memo.byM.get(measurementId);
+  if (hit) return hit;
+  const d = fromElements(all.filter((x) => x.measurementId === measurementId));
+  const out = d.runs.length
+    ? writtenQty(linesFromParts(computeGutterParts(toMeasurement(d, { method: readRules(settings).corner }), toRulesOverride(settings)).parts, [], () => "", () => "", undefined, measurementId), measurementId)
+    : new Map<string, string>();
+  memo.byM.set(measurementId, out);
+  return out;
+}
+const nowMemo = new WeakMap<readonly ElementRow[], { settings: unknown; byM: Map<string, Map<string, string>> }>();
+
+const sameQty = (a: Map<string, string>, b: Map<string, string>) => a.size === b.size && [...a].every(([k, q]) => b.has(k) && Number(b.get(k)) === Number(q));
+
+/**
+ * «Расчёт изменился — обновите» (#1165): the measurement's lines in this estimate were computed by an older engine AND
+ * «Обновить» would change them now (#1776, director №13 16.11: a rule that changes nothing here says nothing — a corrugated
+ * downspout, a round one, elbows set by hand). Only a DRAFT is told: a sent estimate stays as it went to the client, a
+ * signed one is never changed. An emptied drawing says nothing («Обновить» makes no lines of it, as `staleMeasurements`).
+ * Without the module's data (`db` without `moduleData`) the drawing can not be read: an older engine alone says it (a draft).
+ */
+export function engineChangedFor(e: Estimate | undefined, measurementId: string, now: string = GUTTER_PARTS_VERSION, db?: Partial<Pick<DB, "moduleData" | "company">>): boolean {
+  if (!e || e.status !== "draft") return false;
+  const opts = (e.doc?.options ?? []).filter((o) => o.lines.some((l) => ofMeasurement(l, measurementId) && engineOlder(sourceOf(l)?.engineVersion, now)));
+  if (!opts.length) return false;
+  if (!db || !("moduleData" in db)) return true;
+  if (!gutterData(db).elements.some((x) => x.measurementId === measurementId && x.kind === "run")) return false;
+  const willBe = linesNowOf(db, measurementId);
+  return opts.some((o) => !sameQty(writtenQty(o.lines, measurementId), willBe));
+}
+
+/**
+ * #1165: the measurements of this estimate whose lines «Обновить» would change because the engine's rule changed since
+ * (`engineChangedFor`) — the estimate is still theirs (no newer one took over). A hint «расчёт изменился — обновите», on a
+ * draft only.
+ */
+export function engineStaleMeasurements(db: Pick<DB, "estimates" | "moduleData"> & Partial<Pick<DB, "company">>, e: Estimate, now: string = GUTTER_PARTS_VERSION): MeasurementRow[] {
+  return gutterData(db).measurements.filter((m) => hasLinesOf(e, m.id) && estimateOfMeasurement(db, m.id)?.id === e.id && engineChangedFor(e, m.id, now, db));
 }
 
 /** the client's language for the lines of a measurement's estimate (rule 7): the lead's, else the property's client's */
@@ -101,12 +150,12 @@ export type EstimateAction =
   | { kind: "open"; estimateId: string; signed?: true };
 
 /** what the estimate button does for a measurement now */
-export function estimateAction(db: Pick<DB, "estimates">, m: Pick<MeasurementRow, "id" | "status" | "leadId" | "propertyId"> | null, hasElements: boolean): EstimateAction {
+export function estimateAction(db: Pick<DB, "estimates"> & Partial<Pick<DB, "moduleData" | "company">>, m: Pick<MeasurementRow, "id" | "status" | "leadId" | "propertyId"> | null, hasElements: boolean): EstimateAction {
   if (!m || !hasElements) return { kind: "none" };
   const e = estimateOfMeasurement(db, m.id);
   if (e && SIGNED.has(e.status)) return { kind: "open", estimateId: e.id, signed: true };
   // an estimate the engine computed in an older version is updated too, though the drawing is as it was (#1165)
-  if (e) return m.status === "ready" && !engineChangedFor(e, m.id) ? { kind: "open", estimateId: e.id } : { kind: "update", estimateId: e.id };
+  if (e) return m.status === "ready" && !engineChangedFor(e, m.id, GUTTER_PARTS_VERSION, db) ? { kind: "open", estimateId: e.id } : { kind: "update", estimateId: e.id };
   if (!m.leadId && !m.propertyId) return { kind: "needLead" };
   return { kind: "make" };
 }
@@ -118,7 +167,7 @@ export function estimateAction(db: Pick<DB, "estimates">, m: Pick<MeasurementRow
  * (review M8b №5). A line someone deleted comes back on «Обновить» — to keep a part out, set its quantity to 0
  * (a hand change: it stays 0); spec П23.8.
  */
-export function docWithLines(prev: EstimateDoc | undefined, next: readonly ModuleLine[], measurementId: string, fresh: () => EstimateDoc): EstimateDoc {
+export function docWithLines(prev: EstimateDoc | undefined, next: readonly ModuleLine[], measurementId: string, fresh: () => EstimateDoc, catalog: readonly CatalogItem[] = []): EstimateDoc {
   if (!prev) {
     const d = fresh();
     return { ...d, options: d.options.map((o, i) => (i === 0 ? { ...o, lines: [...(next as EstimateDoc["options"][number]["lines"])] } : o)) };
@@ -130,7 +179,7 @@ export function docWithLines(prev: EstimateDoc | undefined, next: readonly Modul
       const mine = o.lines.some((l) => ofMeasurement(l, measurementId));
       // no option has lines of it (they were all removed by hand): the first option gets them again
       if (!mine && (touched || i > 0)) return o;
-      const out = resyncLines(o.lines as ModuleLine[], next, (l) => sourceOf(l)?.module === KEY && !ofMeasurement(l, measurementId));
+      const out = resyncLines(o.lines as ModuleLine[], next, (l) => sourceOf(l)?.module === KEY && !ofMeasurement(l, measurementId), catalog);
       return { ...o, lines: out as typeof o.lines };
     }),
   };
@@ -223,7 +272,7 @@ export function makeEstimate(store: ModuleEstimateStore, x: MakeInput): MakeResu
   const undoReady = store.moduleOp(KEY, { kind: K.mSave, payload: { m: row }, apply: (d) => withGutterData(d, putMeasurement({ ...was, status: "ready" })), coalesceKey: was.id, made: [was.id] });
 
   const lines = linesFromParts(x.parts, x.catalog, x.name, uid, revisionId, x.m.id, (x.now ?? (() => new Date().toISOString()))(), GUTTER_PARTS_VERSION);
-  const withLines = docWithLines(e?.doc, lines, x.m.id, () => newDoc(db.company?.estimate?.depositBps));
+  const withLines = docWithLines(e?.doc, lines, x.m.id, () => newDoc(db.company?.estimate?.depositBps), x.catalog);
   // the drawing of this revision goes with the estimate (S6g): the client sees on /p/ and in the PDF what it was counted from
   const doc = x.page ? withMeasurementPage(withLines, x.m.id, x.page) : withLines;
   const estimateId = e?.id ?? uid();
@@ -244,4 +293,62 @@ export function makeEstimate(store: ModuleEstimateStore, x: MakeInput): MakeResu
     // the lead's new client: all of them go back or none (DS §15.2)
     undo: undoAll(store, [t.undo, undoReady, undoSave]),
   };
+}
+
+/* ---------- «Удалить замер» with an estimate on it (#2013) ---------- */
+
+/** the open estimates with this measurement's lines: drafts (their lines are let go of the measurement) and sent ones (left as they are) */
+export function estimatesOn(db: Pick<DB, "estimates">, measurementId: string): { drafts: Estimate[]; sent: Estimate[] } {
+  const mine = db.estimates.filter((e) => !SIGNED.has(e.status) && e.status !== "declined" && hasLinesOf(e, measurementId));
+  return { drafts: mine.filter((e) => e.status === "draft"), sent: mine.filter((e) => e.status === "sent") };
+}
+
+/**
+ * The estimate's lines of this measurement become ordinary lines (#2013, director's option Б): the same name, quantity, price, cost —
+ * only the module's mark goes (no «Из замера», no «Обновить из замера» to a measurement that is gone). The drawing's page in the
+ * document is a picture of what was counted (withMeasurementPage): it stays. The same document back when nothing is of it.
+ */
+export function detachDoc(doc: EstimateDoc, measurementId: string): EstimateDoc {
+  let changed = false;
+  const options = doc.options.map((o) => ({
+    ...o,
+    lines: o.lines.map((l) => {
+      if (!ofMeasurement(l, measurementId)) return l;
+      changed = true;
+      const { source: _s, ...rest } = l as typeof l & { source?: unknown };
+      return rest as typeof l;
+    }),
+  }));
+  return changed ? { ...doc, options } : doc;
+}
+
+/** who deletes: a tech edits only the estimates he made (the server's can_edit_estimate: created_by = auth.uid()) */
+export interface Deleter { role: string; me?: string | null }
+const mayEdit = (e: Estimate, w: Deleter) => w.role !== "tech" || (!!w.me && e.createdBy === w.me);
+
+/**
+ * What stops «Удалить замер» (#2013): a signed estimate on it (never deleted — the server refuses too), or a draft estimate on it this
+ * person may not change (a tech and the office's draft: its lines could not be let go — the server would refuse the estimate's save
+ * and keep the removal). Null — it may go.
+ */
+export function deleteBlock(db: Pick<DB, "estimates">, measurementId: string, w: Deleter): "signed" | "notYours" | null {
+  if (signedOn(db, measurementId)) return "signed";
+  return estimatesOn(db, measurementId).drafts.some((e) => !mayEdit(e, w)) ? "notYours" : null;
+}
+
+/**
+ * «Удалить замер» (#2013): the measurement goes (soft, removeMeasurement) FIRST — not removed (the module is off meanwhile), nothing else
+ * is written; then its draft estimates keep their lines as ordinary ones (one save each, through the core's save — money through the
+ * engine, the queue); a sent estimate is not touched (its status and the client's copy stay — the director, 17.11). One «Отменить» takes
+ * all of it back, offline too. Null — nothing done (blocked: deleteBlock, or nothing to delete).
+ */
+export function removeMeasurementDetached(store: ModuleEstimateStore & { role?: string }, measurementId: string, w: Deleter = { role: store.role ?? "owner", me: store.db.me }): GuardedUndo | null {
+  if (deleteBlock(store.db, measurementId, w)) return null;
+  const { drafts } = estimatesOn(store.db, measurementId);
+  const del = removeMeasurement(store, measurementId);
+  if (!del) return null;
+  const saves = drafts.map((e) =>
+    store.saveEstimate({ id: e.id, customerId: e.customerId, propertyId: e.propertyId, title: e.title, doc: detachDoc(e.doc!, measurementId), ...(e.leadId ? { leadId: e.leadId } : {}) }),
+  );
+  return undoAll(store, [del, ...saves]);
 }

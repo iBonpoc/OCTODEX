@@ -23,7 +23,9 @@ export function fillStyle(c: ThemeColors): ViewStyle {
  * «Заливка» without the shadow: for a moving slider only — the tab bar's pill (inside the iOS 26 GlassView) and Segmented's.
  * Their width and left animate every frame; a shadow (shadow* / elevation) on that layer is the main suspect of the iOS crash
  * on «Сегодня» (#1354, build 1351), so the slider carries the fill alone. Static chips, days and cards keep `fillStyle`.
+ * Palette A (#2350): the surfaces are opaque and `surf2` over the segment's `track` is the same tone (1.03 : 1 dark, 1.09 light) —
+ * the slider is `surf` (1.20 / 1.34 : 1 over the track), the raised card tone; the weight and ink-vs-mut text stay the sure sign.
  */
 export function fillStyleFlat(c: ThemeColors): ViewStyle {
-  return { backgroundColor: c.surf2 };
+  return { backgroundColor: c.surf };
 }

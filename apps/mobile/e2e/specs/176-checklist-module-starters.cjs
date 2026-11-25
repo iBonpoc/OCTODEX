@@ -4,6 +4,7 @@
  * starters → «Добавить» one: a company template with the module's mark and the module's item ids, the offer is gone.
  * Added, it applies to «работа» visits (#607). «Отменить» brings the offer back. Archived — still not offered again. Found by testID and the db.
  */
+const { pickVisitDay, pickVisitStart } = require("../visitForm.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const tid = (id) => p.getByTestId(id).last();
@@ -71,7 +72,7 @@ exports.run = async (h) => {
   await h.go("/p/demo0handyman0estimate0000000001");
   await h.sign("Linda Alvarez");
   await h.go("/estimate/e6");
-  const pad = p.getByLabel(/расписывается|signs here/i).last();
+  const pad = await require("../estimateMenu.cjs").countersignPad(p);
   await pad.scrollIntoViewIfNeeded();
   const bb = await pad.boundingBox();
   await p.mouse.move(bb.x + 30, bb.y + 90);
@@ -82,9 +83,9 @@ exports.run = async (h) => {
   await p.waitForFunction((k) => (JSON.parse(localStorage.getItem(k)).db.jobs || []).some((j) => j.estimateId === "e6"), "octo.db.v5", { timeout: 8000 });
   const job = (await h.db()).jobs.find((j) => j.estimateId === "e6");
   await h.go(`/job/schedule?jobId=${job.id}`);
-  await p.getByRole("radiogroup").first().getByRole("radio").nth(require("../companyTime.cjs").workdayOffset(3)).click();
-  await p.getByRole("button", { name: "Ivan Sokolov" }).last().click();
-  await p.getByRole("radio", { name: /^1:00/ }).last().click();
+  await pickVisitDay(p, require("../companyTime.cjs").workdayOffset(3)); // the day — DateField (spec 56 wave 5б)
+  await p.getByRole("option", { name: "Ivan Sokolov" }).last().click();
+  await pickVisitStart(p, 13 * 60); // «Начало ⌄» — 1:00 PM
   await p.getByRole("button", { name: "Запланировать", exact: true }).last().click();
   await p.getByRole("button", { name: "Не сейчас" }).last().waitFor({ timeout: 8000 });
   await p.getByRole("button", { name: "Не сейчас" }).last().click();
@@ -100,10 +101,10 @@ exports.run = async (h) => {
   await h.go("/inbox");
   const angela = (await h.db()).leads.find((x) => x.name === "Angela Rossi");
   await h.go(`/lead/${angela.id}`);
-  await h.clickText("Задачи");
-  await h.click("Что дальше?");
-  await h.sheet().getByRole("button", { name: "Записать на оценку" }).click();
-  await h.sheet().getByRole("button", { name: "Ivan Sokolov" }).click();
+  // v2 (#2350): «Записать на оценку» is an item of the lead's «＋» (ObjectScreen `create`), it opens the booking sheet
+  await tid("lead-screen-create").getByRole("button").first().click();
+  await tid("lead-create-book").click();
+  await h.sheet().getByRole("option", { name: "Ivan Sokolov" }).click();
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).last().click();
   await p.waitForFunction(([k, id]) => (JSON.parse(localStorage.getItem(k)).db.visits || []).some((v) => v.leadId === id), ["octo.db.v5", angela.id], { timeout: 8000 });
   const iv = (await h.db()).visits.find((x) => x.leadId === angela.id);

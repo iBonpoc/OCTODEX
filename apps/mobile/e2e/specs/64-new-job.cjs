@@ -5,10 +5,12 @@
  * - office: a new client in the same form → «Назначить позже» → the job waits for a date, the client is active;
  * - sales: no date block, the job waits for a date; a «do not service» client is not offered.
  */
-const { minuteOf, workdayOffset } = require("../companyTime.cjs");
+const { minuteOf, workdayOffset, addDays, todayKey } = require("../companyTime.cjs");
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 const path = (h) => new URL(h.page.url()).pathname;
+const { objMoreText } = require("../objectScreen.cjs");
 
+const { pickVisitDay, pickVisitStart } = require("../visitForm.cjs");
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/today");
@@ -36,11 +38,11 @@ exports.run = async (h) => {
   // «Тип работы» — five options: a field with a menu at the row (#1095)
   await p.getByTestId("job-new-type-button").locator("visible=true").last().click();
   await p.getByTestId("job-new-type-jt-repair").locator("visible=true").last().click();
-  await p.getByRole("tab", { name: "Дата и время", exact: true }).last().click();
+  await p.getByRole("switch", { name: "Назначить дату" }).last().click(); // «Назначить дату» is a row with a switch (spec 56 wave 5а)
   const dayOffset = workdayOffset(3);
-  await p.getByRole("radiogroup").filter({ has: p.getByRole("radio", { name: "Сегодня" }) }).first().getByRole("radio").nth(dayOffset).click();
-  await p.getByRole("button", { name: "Ivan Sokolov" }).last().click();
-  await p.getByRole("radio", { name: /^1:00/ }).last().click();
+  await pickVisitDay(p, dayOffset); // the day — DateField (spec 56 wave 5б)
+  await p.getByRole("option", { name: "Ivan Sokolov" }).last().click();
+  await pickVisitStart(p, 13 * 60); // «Начало ⌄» — 1:00 PM
   await h.shot("filled");
   await h.click("Создать работу");
   await p.waitForTimeout(600);
@@ -54,11 +56,19 @@ exports.run = async (h) => {
   const v = db.visits.find((x) => x.jobId === job.id);
   h.expect(v && v.techId === "m-ivan" && minuteOf(v.start) === 13 * 60, `its visit, 1:00 PM of the company: ${v && v.start}`);
   h.expect(path(h) === `/job/${job.id}`, `opens the new job (${p.url()})`);
-  await h.expectText(new RegExp(`Работа ${job.number}`), "the job's header");
+  // v2 (#2350): the job's title is its name, its number in «⋯» (wireframe №6)
+  await p.getByTestId("job-screen").locator("visible=true").first().waitFor({ timeout: 8000 });
+  h.expect((await p.getByTestId("screen-title").locator("visible=true").first().innerText()).includes("Downspout reattach"), "the job's header names it");
+  const num = await objMoreText(p, "job-screen", "job-act-number");
+  h.expect(num.includes(`Работа ${job.number}`), `its number in «⋯» (${num})`);
   await h.go("/plan");
-  for (let i = 0; i < dayOffset; i++) await p.getByRole("button", { name: "Вперёд" }).last().click();
-  await p.waitForTimeout(400);
-  await h.expectText(/Downspout reattach/, "on the Plan that day");
+  // v2 «Календарь»: the day is a pill of the strip (`plan-strip-<day>`); the strip may show the next week first
+  const target = addDays(todayKey(), dayOffset);
+  const pill = p.getByTestId(`plan-strip-${target}`).locator("visible=true");
+  for (let i = 0; i < 6 && (await pill.count()) === 0; i++) await p.getByRole("button", { name: "Вперёд" }).last().click();
+  await pill.first().click();
+  await p.getByText("Downspout reattach").locator("visible=true").first().waitFor({ timeout: 5000 });
+  h.expect(true, "on the Plan that day");
 
   // 2. a new client from the form, «Назначить позже»
   await h.go("/job/new");
@@ -82,7 +92,7 @@ exports.run = async (h) => {
   // 3. sales: no date
   await setRole(h, "sales");
   await h.go("/job/new");
-  h.expect((await p.getByRole("tab", { name: "Дата и время", exact: true }).count()) === 0, "sales: no date block");
+  h.expect((await p.getByRole("switch", { name: "Назначить дату" }).count()) === 0, "sales: no date block");
   await h.expectText(/Дату и мастеров назначит офис/, "sales: why there is no date");
   await h.click("Выбрать клиента");
   await h.sheet().getByPlaceholder("Имя, телефон или адрес").fill(client.name);

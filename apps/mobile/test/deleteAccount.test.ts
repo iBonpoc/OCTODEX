@@ -295,6 +295,13 @@ describe("unit:deleteAccount — a broken outbox copy leaves with the account (r
   });
 });
 
+describe("unit:deleteAccount — the person's last company leaves with the account (spec 42 §14, security-check)", () => {
+  it("octo.company.v1.<user> and octo.company.pending.v1.<user> are device keys", () => {
+    expect(isDeviceKey("octo.company.v1.u1")).toBe(true);
+    expect(isDeviceKey("octo.company.pending.v1.u1")).toBe(true);
+  });
+});
+
 describe("unit:deleteAccount — the mark of a wipe to repeat (#911)", () => {
   it("«<id>» / «1»: the whole wipe; «filter:<id>[,<id>…]»: only the shared outbox, for every person listed", () => {
     expect(pendingOf("u1")).toEqual({ userId: "u1", userIds: ["u1"], filterOnly: false });

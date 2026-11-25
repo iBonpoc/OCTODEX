@@ -5,7 +5,8 @@
  * pg_cron wakes it once a minute (app.push_kick → one POST with the header x-push-key). verify_jwt = false: the only key
  * is PUSH_FN_KEY, compared in constant time; anything else is 401 with no details.
  * 1) public.push_claim(100) → rows with the person's phones (looked up at sending time, checked again in the database);
- * 2) the words come from the kind and the phone's language (en / es / ru) — never sums, names or addresses (Apple 4.5.4);
+ * 2) the words come from the kind and the phone's language (en / es / ru) — never sums, names or addresses (Apple 4.5.4); the one exception —
+ *    the company's own name before the title for a person in two or more companies (spec 42 S27, §11 М3);
  * 3) POST https://exp.host/--/api/v2/push/send in batches of ≤ 100 messages (Authorization: Bearer EXPO_ACCESS_TOKEN —
  *    enhanced push security);
  * 4) a ticket ok → push_finish(sent); DeviceNotRegistered → the phone goes off; 429 / 5xx / network / rate → retry
@@ -27,6 +28,11 @@ export interface ClaimRow {
   kind: string;
   route: string;
   devices: ClaimDevice[];
+  /** spec 42 S27 (#1673; push_claim since 20261116013100, absent before): the outbox row's company, its name and how many
+   *  open companies the recipient is active in. Only `company` (a uuid) goes into the push's data. */
+  company?: string | null;
+  company_name?: string | null;
+  companies?: number | null;
 }
 export interface Ticket {
   ticket_id: string;
@@ -40,7 +46,7 @@ export interface ExpoMessage {
   to: string;
   title: string;
   body: string;
-  data: { route: string };
+  data: { route: string; company?: string };
   sound: "default";
   channelId: "default";
   priority: "high";
@@ -108,13 +114,26 @@ const ROUTE = /^\/[A-Za-z0-9/_-]{0,199}$/;
 const TOKEN = /^Expo(nent)?PushToken\[[A-Za-z0-9_-]{1,200}\]$/;
 const TICKET = /^[A-Za-z0-9_-]{1,64}$/;
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** the company's name for a title: no control or direction marks (the lock screen), at most 40 characters */
+export const NAME_MAX = 40;
+export function titleName(name: unknown): string {
+  if (typeof name !== "string") return "";
+  const clean = name.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, "").replace(/\s+/g, " ").trim();
+  const chars = Array.from(clean);
+  return chars.length > NAME_MAX ? `${chars.slice(0, NAME_MAX - 1).join("").trimEnd()}…` : clean;
+}
+
 export function message(row: ClaimRow, dev: ClaimDevice): ExpoMessage {
   const w = words(row.kind, dev.lang);
+  // spec 42 S27 (§11 М3): a person in two or more companies reads whose it is; the name is the company's, never a client's
+  const name = (row.companies ?? 0) >= 2 ? titleName(row.company_name) : "";
+  const company = typeof row.company === "string" && UUID.test(row.company) ? row.company : null;
   return {
     to: dev.token,
-    title: w.title,
+    title: name ? `${name}: ${w.title}` : w.title,
     body: w.body,
-    data: { route: ROUTE.test(row.route) ? row.route : "/notifications" },
+    data: { route: ROUTE.test(row.route) ? row.route : "/notifications", ...(company ? { company } : {}) },
     sound: "default",
     channelId: "default",
     priority: "high",
