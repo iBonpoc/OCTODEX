@@ -233,6 +233,12 @@ describe("row actions: menu, swipe and screen reader share one list (DS Б13, Р
     expect(a.swipeLeft).toEqual(["replace", "delete"]);
     expect(a.swipeRight).toEqual(["hide"]);
   });
+  it("E19: «Добавить в каталог» is a menu item (before «Удалить»), only when asked; not in the swipes; a signed estimate has none", () => {
+    expect(rowActions(line(), { catalog: true }).menu).toEqual(["replace", "duplicate", "hide", "move", "catalog", "delete"]);
+    expect(rowActions(line(), { catalog: true }).swipeLeft).toEqual(["replace", "delete"]);
+    expect(rowActions(line(), {}).menu).not.toContain("catalog");
+    expect(rowActions(line(), { catalog: true, locked: true }).menu).toEqual([]);
+  });
   it("a hidden line offers «show», not «hide»", () => {
     const a = rowActions(line({ unitPriceCents: 0, clientVisible: false }), {});
     expect(a.menu).toContain("show");

@@ -231,21 +231,21 @@ export function settleOpenRow<O extends { lines: CustomLine[] }>(o: O, c: Settle
 }
 
 /** what can be done with a row of the estimate (Р2): one list for the «⋯» menu, the swipe and the screen reader's actions */
-export type RowAct = "replace" | "duplicate" | "hide" | "show" | "move" | "delete";
+export type RowAct = "replace" | "duplicate" | "hide" | "show" | "move" | "catalog" | "delete";
 export interface RowActions {
-  /** the «⋯» menu, in order: «Удалить» last (red) */
+  /** the «⋯» menu, in order: «Добавить в каталог» (E19: an action, not a switch that works when the row folds) when the line is not in the catalog yet; «Удалить» last (red) */
   menu: RowAct[];
   /** a swipe LEFT shows these buttons on the right: «Заменить», «Удалить» */
   swipeLeft: RowAct[];
   /** a swipe RIGHT shows this one on the left: «Скрыть» (pale while the price is not $0, the press explains) / «Показать» */
   swipeRight: RowAct[];
 }
-export function rowActions(l: Pick<CustomLine, "unitPriceCents" | "clientVisible" | "source">, o: { locked?: boolean; noHide?: boolean }): RowActions {
+export function rowActions(l: Pick<CustomLine, "unitPriceCents" | "clientVisible" | "source">, o: { locked?: boolean; noHide?: boolean; catalog?: boolean }): RowActions {
   // a signed estimate does not change; the template editor keeps no hidden line yet
   if (o.locked) return { menu: [], swipeLeft: [], swipeRight: [] };
   const hide: RowAct[] = o.noHide ? [] : isHidden(l) ? ["show"] : ["hide"];
   return {
-    menu: ["replace", "duplicate", ...hide, ...(l.source ? [] : (["move"] as RowAct[])), "delete"],
+    menu: ["replace", "duplicate", ...hide, ...(l.source ? [] : (["move"] as RowAct[])), ...(o.catalog ? (["catalog"] as RowAct[]) : []), "delete"],
     // «Заменить» keeps the module's mark (Р2); a module's line is replaced and deleted like any other
     swipeLeft: ["replace", "delete"],
     swipeRight: hide,

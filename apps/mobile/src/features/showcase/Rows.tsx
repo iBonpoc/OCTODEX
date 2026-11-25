@@ -112,7 +112,6 @@ function LineSample() {
     change: (id, patch) => setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l))),
     action: (id, a) => (a === "delete" ? setLines((ls) => ls.filter((l) => l.id !== id)) : undefined),
     bad: () => {},
-    wantCatalog: () => {},
     openInCatalog: () => {},
   };
   return (
