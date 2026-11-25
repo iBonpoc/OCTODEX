@@ -76,7 +76,7 @@ export function LocationConsentSheet({ visible, onAnswer }: { visible: boolean; 
 }
 
 /** «My settings → Location»: only when the company allows it; turning it off deletes the points (toast with Undo) */
-export function LocationSetting() {
+export function LocationSetting({ row }: { /** ЧЕРНОВИК #2552: only the switch — a row of the settings' group */ row?: boolean } = {}) {
   const { db, setLocationConsent, online } = useStore();
   const toast = useToast();
   const { t } = useI18n();
@@ -84,11 +84,9 @@ export function LocationSetting() {
   const switchOn = useSwitchOn();
   const loc = db.location ?? LOCATION_OFF;
   if (!loc.allowed) return null;
-  return (
-    <Card>
-      <T v="heading">{t("loc7b.title")}</T>
-      {/* on / off of one property — a row with a switch (spec 56 §3 row 2), not two chips */}
+  const sw = (
       <ToggleRow
+        inGroup={row}
         testID="loc7b-switch"
         label={t("loc7b.on")}
         caption={t("loc7b.hint")}
@@ -102,6 +100,13 @@ export function LocationSetting() {
           toast.show(t("loc7b.stopped"), setLocationConsent(false).undo);
         }}
       />
+  );
+  if (row) return sw;
+  return (
+    <Card>
+      <T v="heading">{t("loc7b.title")}</T>
+      {/* on / off of one property — a row with a switch (spec 56 §3 row 2), not two chips */}
+      {sw}
     </Card>
   );
 }

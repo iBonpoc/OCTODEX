@@ -13,6 +13,7 @@ import { useAuth } from "@/cloud/auth";
 import { useStore } from "@/data/store";
 import { demoBadgeTarget, showsDemoBadge } from "@/features/demoBadge";
 import { useI18n } from "@/i18n";
+import { qflag } from "@/features/qdraft/qv";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Press, T } from "../primitives";
 
@@ -23,7 +24,8 @@ export function useDemo(always?: boolean) {
   const { t } = useI18n();
   const auth = useAuth();
   return {
-    shown: !!always || showsDemoBadge(mode, path),
+    // ЧЕРНОВИК #2546: `?store=1` — вид магазинной сборки, без метки «Демо»
+    shown: qflag("store") !== "1" && (!!always || showsDemoBadge(mode, path)),
     word: t("hdr.demo"),
     label: `${t("demo.badge")}. ${t("demo.badgeAction")}`,
     go: () => router.push(demoBadgeTarget(!!auth.session)),

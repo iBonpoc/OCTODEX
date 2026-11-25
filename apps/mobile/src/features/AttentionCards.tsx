@@ -56,7 +56,7 @@ export function useAttentionVerbs() {
       // #2066 «Клиента не было дома»: plan it again (a job — its planning; an inspection — its lead)
       case "visitNoShow":
         // ЧЕРНОВИК #2093 (`?qv=a`): одно действие словом — «Перенести»; затем «Сообщить клиенту новое время»
-        return { label: qv() === "a" ? "Перенести" : t("sch.title"), onPress: () => router.push(attentionHref(it)) };
+        return { label: qv() === "a" ? "Перенести выезд" : t("sch.title"), onPress: () => router.push(attentionHref(it)) };
       case "late": {
         const v = db.visits.find((x) => x.id === it.refId);
         const phone = v ? visitContext(db, v).customer?.phone?.replace(/[^\d+]/g, "") : undefined;
@@ -256,10 +256,14 @@ export function AttentionRows({ items }: { items: AttentionItem[] }) {
   // ЧЕРНОВИК #1832 (`?qv=m`): владельцу — просьба о согласии на цену ниже наценки; решает в окне, может открыть смету
   const qEst = qv() === "m" ? db.estimates.find((e) => e.id === "e6") : undefined;
   const qWho = qEst ? db.customers.find((c) => c.id === qEst.customerId)?.name ?? "" : "";
+  // the lines under the least markup (draft: 20 % over the cost): what is missing to it, and the markup they have
+  const qLines = (qEst?.doc?.options ?? []).flatMap((o) => o.lines).filter((l) => !!l.unitCostCents && (l.unitPriceCents ?? 0) * 100 < l.unitCostCents! * 120);
+  const short = Math.round(qLines.reduce((a, l) => a + (l.unitCostCents! * 1.2 - (l.unitPriceCents ?? 0)) * Number(l.quantity || 0), 0));
+  const markPct = qLines.length ? Math.round(((qLines[0]!.unitPriceCents ?? 0) / qLines[0]!.unitCostCents! - 1) * 100) : 0;
   const decide = async () => {
     const k = await ask({
       title: "Разрешить цену ниже наценки?",
-      text: `${qEst?.number ?? ""} · ${qWho}. Просит Ivan Sokolov. Согласие — только на эту цену.`,
+      text: `${qEst?.number ?? ""} · ${qWho}. Просит Ivan Sokolov.\nНе хватает ${money(short)} · наценка ${markPct} % вместо 20 %. Согласие — только на эту цену.`,
       actions: [
         { key: "yes", label: "Разрешить", tone: "primary", testID: "q-allow" },
         { key: "open", label: "Открыть смету", testID: "q-open" },
@@ -274,12 +278,12 @@ export function AttentionRows({ items }: { items: AttentionItem[] }) {
       {qEst ? (
         <View testID="att-q1832">
           <ListCard
-            title={`${qEst.number ?? ""} · ждёт согласия на цену ниже наценки`}
+            title={`${qEst.number ?? ""} · цена ниже наценки`}
             when={qWho}
             lead={{ kind: "initials", text: initials(qWho) }}
             status={{ tone: "warn", label: "Ждёт согласия" }}
             edge="warn"
-            action={{ label: "Решить", onPress: () => void decide() }}
+            action={{ label: "Разрешить цену", onPress: () => void decide() }}
             density="regular"
             onPress={() => void decide()}
           />
@@ -303,7 +307,7 @@ export function AttentionRows({ items }: { items: AttentionItem[] }) {
             status={{ tone: it.status, label: t(it.chip, waitParams(it.params, t)) }}
             edge={it.status === "bad" || it.status === "warn" ? it.status : null}
             facts={{ phone: who?.phone ?? lead?.phone }}
-            contact={qv() === "a" && it.kind === "visitNoShow" ? {} : { phone: who?.phone ?? lead?.phone }}
+            contact={{ phone: who?.phone ?? lead?.phone }}
             action={verb(it)}
             density="regular"
             onPress={() => router.push(attentionHref(it))}

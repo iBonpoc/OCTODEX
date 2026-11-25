@@ -1,3 +1,4 @@
+import { qv } from "@/features/qdraft/qv";
 import { View } from "react-native";
 import { scheduleSettingsOf } from "@/features/scheduleSettings";
 import { useState } from "react";
@@ -56,6 +57,8 @@ export default function ScheduleJob() {
     );
   }
   const already = db.visits.filter((v) => v.jobId === job.id);
+  // ЧЕРНОВИК #2093 (`?qv=a`): после «нет дома» — то же слово, что на кнопке в «Требует внимания»
+  const moving = qv() === "a" && (db.cancelledVisits ?? []).some((x) => x.jobId === job.id && x.cancelReason === "no_show");
 
   const save = () => {
     if (f.past) return;
@@ -67,7 +70,7 @@ export default function ScheduleJob() {
   };
 
   return (
-    <Screen form title={t("sch.title")} back={back} subtitle={[customer?.name, property?.address].filter(Boolean).join(" · ")}>
+    <Screen form title={moving ? "Перенести выезд" : t("sch.title")} back={back} subtitle={[customer?.name, property?.address].filter(Boolean).join(" · ")}>
       <Card>
         <T v="heading">{job.title}</T>
         <T v="title" tabular>
@@ -81,7 +84,7 @@ export default function ScheduleJob() {
       </Card>
       <VisitFormFields f={f} />
       <View testID="sch-save">
-        <Button label={t("sch.save")} icon="calendar" variant="primary" full disabled={f.past} onPress={save} />
+        <Button label={moving ? "Перенести выезд" : t("sch.save")} icon="calendar" variant="primary" full disabled={f.past} onPress={save} />
       </View>
       <NotifySheet visitId={notifyId} onClose={() => { setNotifyId(null); back(); }} />
     </Screen>

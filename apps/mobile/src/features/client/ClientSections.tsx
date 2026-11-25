@@ -249,13 +249,11 @@ export function ClientOverview({ c, f, onSection, withNow }: {
             />
           ) : null}
           {ahead.map((v) => aheadRow(v))}
+          {/* ЧЕРНОВИК #2536 (а): «Ответственный» — строкой в группе фактов «Обзора»; только в компании больше одного человека */}
+          {qv() === "a" && db.members.filter((m) => m.kind !== "sub").length > 1 ? (
+            <GroupRow testID="client-owner" lead={{ icon: "userCheck" }} title="Ответственный" value={db.members.find((m) => m.id === db.me)?.name ?? ""} valueMark chevron onPress={() => undefined} />
+          ) : null}
         </ListGroup>
-        {/* ЧЕРНОВИК #2536 (а): «Ответственный» — одна строка; только в компании больше одного человека */}
-        {qv() === "a" && db.members.filter((m) => m.kind !== "sub").length > 1 ? (
-          <ListGroup testID="client-owner-group">
-            <GroupRow testID="client-owner" lead={{ icon: "user" }} title="Ответственный" value={db.members.find((m) => m.id === db.me)?.name ?? ""} valueMark chevron onPress={() => undefined} />
-          </ListGroup>
-        ) : null}
       </GroupedList>
       {(() => {
         // only the tiles that have something to say; a lone one is dropped (its line is in the sections)
@@ -736,11 +734,14 @@ export function ClientLog({ c, f }: { c: Customer; f: ClientFacts }) {
   const [taskEdit, setTaskEdit] = useState<TaskDraft | null>(null);
   const feed0 = clientHistory(db, c.id, f.role).filter((h) => h.icon !== "note");
   // ЧЕРНОВИК #2536 (б): «Клиент добавлен» — последней (самой старой) записью Истории, одна запись (дата — данные черновика)
-  const feed: HistoryItem[] = qv() === "b" ? [...feed0, { ...feed0[0]!, id: "q-added", icon: "user", title: "q.clientAdded" as never, detail: "12 мар. 2025 · источник Google", cents: undefined, href: undefined, at: "2025-03-12T18:00:00.000Z" }] : feed0;
+  const feed: HistoryItem[] = qv() === "b" ? [...feed0, { ...feed0[0]!, id: "q-added", icon: "user", title: "q.clientAdded" as never, detail: "источник Google", cents: undefined, href: undefined, at: "2025-03-12T18:00:00.000Z" }] : feed0;
   // the feed by day: «Сегодня», «18 нояб.»
   const days: [string, HistoryItem[]][] = [];
   for (const h of feed) {
-    const k = ago(h.at) === t("common.today") ? t("common.today") : day(h.at);
+    const k0 = ago(h.at) === t("common.today") ? t("common.today") : day(h.at);
+    // ЧЕРНОВИК #2536 (б): день прошлого года — с годом в заголовке
+    const yr = new Date(h.at).getFullYear();
+    const k = qv() === "b" && yr !== new Date().getFullYear() ? `${k0} ${yr}` : k0;
     const last = days[days.length - 1];
     if (last && last[0] === k) last[1].push(h);
     else days.push([k, [h]]);

@@ -188,7 +188,7 @@ export function MultiValueField<L extends string>({
  * the words in `ink` (green is a status colour, never an action, rule 2); «Удалить контакт» — `tone="bad"`, the words in
  * `status.bad.text`, no icon (iOS Contacts' red row). The zone is 44; it is a `button`.
  */
-export function ActionRow({ label, onPress, icon, tone, testID }: { label: string; onPress: () => void; icon?: IconKey; tone?: "bad"; testID?: string }) {
+export function ActionRow({ label, onPress, icon, tone, testID, inGroup }: { label: string; onPress: () => void; icon?: IconKey; tone?: "bad"; testID?: string; /** ЧЕРНОВИК #2549 (нужно в ДС §22.4): a row of a ListGroup — the group's side inset */ inGroup?: boolean }) {
   const { c } = useTheme();
   const ro = useReadOnly();
   const color = tone === "bad" ? c.status.bad.text : c.ink;
@@ -200,7 +200,7 @@ export function ActionRow({ label, onPress, icon, tone, testID }: { label: strin
       visibleHeight={size.hitMin}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={{ minHeight: size.hitMin, flexDirection: "row", alignItems: "center", gap: space[2] }}
+      style={{ minHeight: size.hitMin, flexDirection: "row", alignItems: "center", gap: space[2], paddingHorizontal: inGroup ? space[4] : undefined }}
     >
       {icon ? (
         <View style={{ width: component.dockBtn, alignItems: "center" }}>

@@ -28,7 +28,10 @@ import { NotFound } from "@/ui/emptyStates";
 import { localUndo } from "@/data/undo";
 import { StatusNote } from "@/ui/statusNote";
 import { qv } from "@/features/qdraft/qv";
-import { GroupRow, ListGroup } from "@/ui/groupedList";
+import { ToggleRow } from "@/ui/toggleRow";
+import { useConfirm } from "@/ui/confirmDialog";
+import { Icon } from "@/ui/primitives";
+import { useTheme } from "@/theme/ThemeProvider";
 
 export default function PurchaseOrderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -59,6 +62,10 @@ export default function PurchaseOrderScreen() {
   const [pickItem, setPickItem] = useState(false);
   const [askCancel, setAskCancel] = useState(false);
   const [receiving, setReceiving] = useState<Record<string, string> | null>(null);
+  // ЧЕРНОВИК #586 (`?qv=a`): «Отправить поставщику» сначала спрашивает, как отправить
+  const [howSend, setHowSend] = useState(false);
+  const { c } = useTheme();
+  const [sentDialog, askSent] = useConfirm();
   const back = () =>
     router.canGoBack() ? router.back() : router.replace(canEditOrders(role) ? "/purchase-orders" : found?.jobId ? `/job/${found.jobId}` : "/");
   if (!found || !o) {
@@ -89,8 +96,18 @@ export default function PurchaseOrderScreen() {
     setTouched(false);
     if (isNew) router.replace(`/purchase-order/${o.id}`);
   };
-  // ЧЕРНОВИК #586 (`?qv=a`): «Отправить поставщику» сначала спрашивает, как отправить
-  const [howSend, setHowSend] = useState(false);
+  const sentAsk = async (pdf: boolean) => {
+    setHowSend(false);
+    const k = await askSent({
+      title: "Заказ отправлен?",
+      text: pdf ? "Отметим «Отправлен», если вы поделились PDF с поставщиком." : "Отметим «Отправлен», если сообщение ушло поставщику.",
+      actions: [
+        { key: "no", label: "Ещё нет", tone: "cancel" },
+        { key: "yes", label: "Да, отправлен", tone: "primary", testID: "po-sent-yes" },
+      ],
+    });
+    if (k === "yes") send();
+  };
   const send = () => {
     // one tap is one send (review SUP2-б №2)
     if (sending.current) return;
@@ -150,7 +167,7 @@ export default function PurchaseOrderScreen() {
             <TextField type="date" value={dateText} onChangeText={(v) => { setDateText(v); set({ neededOn: isoDate(v) }); }} placeholder={t("po.neededOn")} />
             {dateBad ? <StatusNote tone="bad">{t("po.neededOn")}</StatusNote> : null}
             <TextField type="note" value={o.note ?? ""} onChangeText={(v) => set({ note: v })} placeholder={t("po.note")} multiline />
-            {costs ? <Toggle on={o.printPrices} onChange={(v) => set({ printPrices: v })} label={t("po.printPrices")} /> : null}
+            {costs ? (qv() === "a" ? <ToggleRow label={t("po.printPrices")} value={o.printPrices} onChange={(v) => set({ printPrices: v })} testID="po-print-prices" /> : <Toggle on={o.printPrices} onChange={(v) => set({ printPrices: v })} label={t("po.printPrices")} />) : null}
           </>
         ) : (
           <View testID="po-where">
@@ -272,14 +289,14 @@ export default function PurchaseOrderScreen() {
         }}
       />
       <Sheet visible={howSend} onClose={() => setHowSend(false)} title="Как отправить заказ?">
+        {/* ЧЕРНОВИК #586: меню шторки — строками ListRow (правило 12, DS А2а), без «›»; после отправки — «Заказ отправлен?» */}
         <View testID="po-how-send">
-          <ListGroup>
-            <GroupRow lead={{ icon: "invoice" }} title="Отправить PDF-заказ" subtitle="Почтой, в сообщении или файлом" onPress={() => { setHowSend(false); send(); }} testID="po-how-pdf" />
-            <GroupRow lead={{ icon: "sms" }} title="Отправить текстом" subtitle="Все позиции одним сообщением" onPress={() => setHowSend(false)} testID="po-how-text" />
-            {sup?.phone ? <GroupRow wrap lead={{ icon: "phone" }} title="Позвонить поставщику" subtitle={`${sup.phone} · после звонка спросим «Заказ принят?»`} onPress={() => setHowSend(false)} testID="po-how-call" /> : null}
-          </ListGroup>
+          <ListRow left={<Icon name="doc" color={c.ink} />} title="Отправить PDF-заказ" subtitle="Почтой, в сообщении или файлом" chevron={false} onPress={() => void sentAsk(true)} />
+          <ListRow left={<Icon name="sms" color={c.ink} />} title="Отправить текстом" subtitle="Все позиции одним сообщением" chevron={false} onPress={() => void sentAsk(false)} />
+          {sup?.phone ? <ListRow left={<Icon name="phone" color={c.ink} />} lines={2} title="Позвонить поставщику" subtitle={`${sup.phone} · после звонка спросим «Заказ принят?»`} chevron={false} onPress={() => setHowSend(false)} /> : null}
         </View>
       </Sheet>
+      {sentDialog}
       <Sheet visible={askCancel} onClose={() => setAskCancel(false)} title={t("po.cancel")}>
         <View style={{ gap: space[3] }}>
           <T v="body">{t("po.cancelAsk")}</T>

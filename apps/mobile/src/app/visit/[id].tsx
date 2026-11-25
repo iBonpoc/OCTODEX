@@ -639,7 +639,7 @@ export default function VisitScreen() {
           <TextField type="note" label={t("noShow.note")} placeholder={t("noShow.notePh")} value={noShowNote} onChangeText={setNoShowNote} />
           {qv() === "a" ? (
             // ЧЕРНОВИК #2093: две кнопки в ряд (DS §7.3 ButtonPair), главная справа
-            <ButtonPair main={{ label: t("noShow.confirm"), icon: "check", onPress: markNoShow }} second={{ label: t("noShow.keep"), onPress: () => setNoShow(false) }} ids={{ main: "no-show-confirm", second: "no-show-keep" }} />
+            <ButtonPair main={{ label: "Отметить: нет дома", icon: "check", onPress: markNoShow }} second={{ label: t("noShow.keep"), onPress: () => setNoShow(false) }} ids={{ main: "no-show-confirm", second: "no-show-keep" }} />
           ) : (
             <>
               <View testID="no-show-confirm">

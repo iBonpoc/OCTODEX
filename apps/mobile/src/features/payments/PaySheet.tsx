@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { View } from "react-native";
+import { Linking, View } from "react-native";
 import { space } from "@octo/design-tokens";
 import { invoiceOwes } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
@@ -78,6 +78,16 @@ export function PaySheet({ inv, visible, onClose, startCents, balanceCents, fixe
   const notStarted = draft && !!job && (job.status === "unscheduled" || job.status === "scheduled");
   const caLimit = job ? Math.min(100000, Math.round(job.amountCents / 10)) : 0;
   const quick = (fixed ? [] : quickAmounts(balanceCents, depositCents)).filter((q) => !(notStarted && q.key === "half"));
+  // before the work under CA: «Весь остаток · Депозит · Предел» — the company's deposit and the state's limit (the smaller of 10 % of
+  // the contract and $1,000); the same sum — one button «Депозит = предел»
+  const coDep = job ? Math.round((job.amountCents * (db.company?.estimate?.depositBps ?? 0)) / 10000) : 0;
+  const draftQuick: { key: string; cents: number; label: string }[] = notStarted && !fixed
+    ? [
+        { key: "all", cents: balanceCents, label: t("w2m.pay.all") },
+        ...(coDep > 0 && coDep < balanceCents ? [{ key: "deposit", cents: coDep, label: coDep === caLimit ? `Депозит = предел · ${money(coDep)}` : `${t("w2m.pay.deposit")} · ${money(coDep)}` }] : []),
+        ...(caLimit > 0 && caLimit < balanceCents && caLimit !== coDep ? [{ key: "limit", cents: caLimit, label: `Предел · ${money(caLimit)}` }] : []),
+      ]
+    : [];
   const chosen = quickChosen(amount, quick);
   const shown = recordedCents(amount, balanceCents);
   const number = inv.number ?? "";
@@ -121,7 +131,7 @@ export function PaySheet({ inv, visible, onClose, startCents, balanceCents, fixe
         footer={
           <View testID="pay-receipt-buttons">
             <ButtonPair
-              main={sendReceipt ? { label: t("w2m.rcpt.send"), accessibilityLabel: t("w2m.rcpt.sendA11y"), icon: "send", onPress: () => { sendReceipt(); close(); }, testID: "pay-receipt-send" } : { label: t("w2m.rcpt.ok"), icon: "check", onPress: close, testID: "pay-receipt-done" }}
+              main={sendReceipt ? { label: "Отправить квитанцию", accessibilityLabel: t("w2m.rcpt.sendA11y"), icon: "send", onPress: () => { sendReceipt(); close(); }, testID: "pay-receipt-send" } : { label: t("w2m.rcpt.ok"), icon: "check", onPress: close, testID: "pay-receipt-done" }}
               second={null}
             />
           </View>
@@ -144,7 +154,10 @@ export function PaySheet({ inv, visible, onClose, startCents, balanceCents, fixe
           </Card>
           {cash12 > 1000000 ? (
             <View testID="pay-irs8300">
-              <StatusNote tone="info">{`Наличные от клиента за 12 мес — ${money(cash12)}, больше $10,000. Подайте форму IRS 8300 в течение 15 дней.`}</StatusNote>
+              <StatusNote tone="warn">{`Наличные от клиента за 12 мес — ${money(cash12)}, больше $10,000. Подайте форму IRS 8300 в течение 15 дней.`}</StatusNote>
+              <View style={{ alignSelf: "flex-start" }}>
+                <Button label="Что это?" icon="help" variant="ghost" size="sm" onPress={() => void Linking.openURL("https://www.irs.gov/form8300").catch(() => undefined)} testID="pay-irs8300-help" />
+              </View>
             </View>
           ) : null}
           {sendReceipt ? (
@@ -242,7 +255,22 @@ export function PaySheet({ inv, visible, onClose, startCents, balanceCents, fixe
         ) : (
           <View testID="pay-owed" style={{ gap: space[2] }}>
             <MoneyField big cents={amount} onChange={setAmount} label={t("proto.money.pay.amount")} testID="pay-amount" />
-            {quick.length > 1 ? (
+            {draftQuick.length > 1 ? (
+              <Segmented<string>
+                full
+                equal
+                radio
+                label={t("w2m.pay.quick")}
+                testID="pay-quick"
+                value={draftQuick.find((q) => q.cents === amount)?.key ?? "own"}
+                onChange={(k) => {
+                  const q = draftQuick.find((x) => x.key === k);
+                  if (q) setAmount(q.cents);
+                }}
+                items={draftQuick.map((q) => ({ key: q.key, label: q.label }))}
+              />
+            ) : null}
+            {quick.length > 1 && !notStarted ? (
               // the quick amounts in one row (#2217): a tap puts the sum in the field; the one that matches is shown chosen
               <Segmented<QuickKey | "own">
                 full
@@ -263,7 +291,7 @@ export function PaySheet({ inv, visible, onClose, startCents, balanceCents, fixe
             </T>
             {notStarted && amount > caLimit && job ? (
           <View testID="pay-ca-limit">
-            <StatusNote tone="warn">{`Больше предела до начала работ: в Калифорнии — не больше ${money(caLimit)} (10 % от ${money(job.amountCents)}). Записать можно.`}</StatusNote>
+            <StatusNote tone="warn">{`Больше предела до начала работ: в Калифорнии — не больше ${money(caLimit)} (меньшее из $1,000 и 10 % от договора ${money(job.amountCents)}). Записать можно.`}</StatusNote>
           </View>
         ) : null}
           </View>

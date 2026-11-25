@@ -279,7 +279,8 @@ export default function Today() {
             <ListGroup key={a.id} testID="today-advance">
               <GroupRow
                 lead={{ icon: "info" }}
-                title={`Без счёта · ${moneyWhole(a.amountCents)}`}
+                title="Оплата без счёта"
+                value={moneyWhole(a.amountCents)}
                 subtitle={`${db.customers.find((x) => x.id === a.customerId)?.name ?? ""} · зачесть или вернуть`}
                 chevron
                 onPress={() => router.push(`/receipt/${a.id}`)}

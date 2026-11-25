@@ -1,5 +1,6 @@
 import { belowMinDraft, qv } from "@/features/qdraft/qv";
 import { StatusNote } from "@/ui/statusNote";
+import { ActionRow } from "@/ui/multiValueField";
 import { GroupRowBody } from "@/ui/groupedList";
 import { memo, useEffect, useRef, useState, type ComponentRef } from "react";
 import { Platform, View } from "react-native";
@@ -258,7 +259,8 @@ function LineRowView(p: LineRowProps) {
           // «кол-во × цена» 13, the sum 15 on the right; a hidden or optional line reads `mut`; its marks under the line
           <GroupRowBody
             title={l.name || t("est.row.unnamed")}
-            subtitle={[l.optional ? t("px3.est.optional") : null, rowQtyLine(l, shownQty)].filter(Boolean).join(" · ") || undefined}
+            // ЧЕРНОВИК #2364 (б): строка 48 — одной строкой (название и сумма, без «кол-во × цена»)
+            subtitle={qv() === "b" ? undefined : [l.optional ? t("px3.est.optional") : null, rowQtyLine(l, shownQty)].filter(Boolean).join(" · ") || undefined}
             value={right}
             quiet={hidden || !!l.optional}
             wrap
@@ -406,7 +408,9 @@ function LineRowView(p: LineRowProps) {
       {/* ЧЕРНОВИК #1832 (`?qv=m`): ниже минимальной наценки (черновик: 20 % к себестоимости) — сотруднику без сумм и без «себестоимости» */}
       {qv() === "m" && belowMinDraft(l) ? (
         <View testID={`est-belowmin-${l.id}`}>
-          <StatusNote tone="warn">Ниже минимальной цены — нужно согласие</StatusNote>
+          <StatusNote tone="warn">Ниже наценки — нужно согласие владельца</StatusNote>
+          {/* the request is the estimate's send for this person: the same as the header's «Отправить» (window event — draft only) */}
+          <ActionRow label="Попросить согласия" icon="send" onPress={() => { if (typeof window !== "undefined") window.dispatchEvent(new Event("qdraft-ask")); }} testID="est-ask-ok-row" />
         </View>
       ) : null}
       {p.catalog ? (
