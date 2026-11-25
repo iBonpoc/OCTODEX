@@ -78,8 +78,8 @@ export function ProtoV2() {
           ]}
         />
       </Card>
-      {/* the segment: the Plan's one yellow; a form's choice — the neutral chosen cell */}
-      <Segmented accent full testID="showcase-v2-seg-accent" value={mode} onChange={setMode} items={[{ key: "day", label: t("plan.day") }, { key: "week", label: t("plan.week") }, { key: "month", label: t("plan.month") }]} />
+      {/* the segment: the chosen cell is neutral `surf3` everywhere, the Plan's «День» too (DS §3.1 п.3, §12.12) */}
+      <Segmented full testID="showcase-v2-seg-accent" value={mode} onChange={setMode} items={[{ key: "day", label: t("plan.day") }, { key: "week", label: t("plan.week") }, { key: "month", label: t("plan.month") }]} />
       <Segmented full testID="showcase-v2-seg" value={kind} onChange={setKind} items={[{ key: "a", label: t("ds.v2.work") }, { key: "b", label: t("ds.v2.jobs") }]} />
       {/* the visit: the checklist, the timer, the three figures, the pair «Завершить · Фото · ✎» */}
       <Card>
@@ -98,7 +98,7 @@ export function ProtoV2() {
       </Card>
       {/* the tiles: two in a row (one yellow) and three in a row */}
       <StatGrid testID="showcase-v2-tiles">
-        <StatTile icon="invoice" accent label={t("ds.v2.owed")} value="$4,120" sub={t("ds.v2.days", { n: 9 })} testID="showcase-v2-tile-owed" />
+        <StatTile icon="invoice" label={t("ds.v2.owed")} value="$4,120" sub={t("ds.v2.days", { n: 9 })} testID="showcase-v2-tile-owed" />
         <StatTile icon="wallet" label={t("st.paid")} value="$1,240" testID="showcase-v2-tile-paid" />
       </StatGrid>
       <StatGrid cols={3} testID="showcase-v2-tiles3">
