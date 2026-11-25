@@ -927,7 +927,7 @@ export const ru = {
   "est.row.emptyCatalog": "Каталог пуст",
   "est.row.openCatalog": "Открыть каталог",
   "est.row.hide": "Скрыть от клиента",
-  "est.row.show": "Показать клиенту",
+  "est.row.show": "Видно клиенту",
   "est.row.hideNeedZero": "Скрыть можно позицию с ценой $0",
   "est.row.hideTpl": "В шаблоне скрытие позиции пока не сохраняется",
   "est.row.hidden": "Скрыто от клиента",
