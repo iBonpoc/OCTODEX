@@ -1,5 +1,6 @@
+import { qv as qdraftQv } from "@/features/qdraft/qv";
 import { View } from "react-native";
-import { component, radius, size } from "@octo/design-tokens";
+import { space, component, radius, size } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T } from "./primitives";
 import { ICON_ROW_LABEL_LINES, iconRowItems, type IconRowVariant } from "./iconRowRules";
@@ -22,6 +23,8 @@ export function IconRow({ actions, variant = "row", testID }: { actions: IconRow
   if (problem && __DEV__) console.warn(problem);
   const inline = variant === "inline";
   const d = inline ? component.quickAction.inline : component.roundButton.quick;
+  // ЧЕРНОВИК #2533 (нужно в ДС «QuickActions»): ячейка 64 мала для «Напомнить» — слово рвётся; за `?qv` — шире на space[4], одной строкой
+  const labelW = qdraftQv() ? component.quickAction.labelW + space[4] : component.quickAction.labelW;
   return (
     <View testID={testID} style={{ flexDirection: "row", alignItems: "flex-start", gap: component.iconRow.gap, ...(inline ? null : { alignSelf: "stretch", justifyContent: "space-around" }) }}>
       {shown.map((a) => (
@@ -35,7 +38,7 @@ export function IconRow({ actions, variant = "row", testID }: { actions: IconRow
           accessibilityLabel={a.a11y}
           accessibilityHint={a.disabled ? a.reason : undefined}
           accessibilityState={{ disabled: !!a.disabled }}
-          containerStyle={inline ? undefined : { flex: 1, maxWidth: component.quickAction.labelW, alignItems: "center" }}
+          containerStyle={inline ? undefined : { flex: 1, maxWidth: labelW, alignItems: "center" }}
           style={{ alignItems: "center", gap: component.iconRow.gap }}
         >
           {/* the circle is the look this component defines (BUILD-SPEC §1 QuickActions); the touch is the whole column */}
@@ -45,7 +48,7 @@ export function IconRow({ actions, variant = "row", testID }: { actions: IconRow
           </View>
           {!inline && a.label ? (
             // up to two lines, never «…»: «Напомнить» / «Записать в план» do not fit the 64 cell at 12 (wave 3); the circles stay on one line
-            <T v="micro" w="medium" tone="mut" numberOfLines={ICON_ROW_LABEL_LINES} center capped style={{ maxWidth: component.quickAction.labelW }}>
+            <T v="micro" w="medium" tone="mut" numberOfLines={qdraftQv() ? 1 : ICON_ROW_LABEL_LINES} center capped style={{ maxWidth: labelW }}>
               {a.label}
             </T>
           ) : null}
