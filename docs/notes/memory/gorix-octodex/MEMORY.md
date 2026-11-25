@@ -1,0 +1,19 @@
+- [Памятка №23 → №24](project-handover-leader23.md) — ЧИТАТЬ ПЕРВОЙ (23.11): лимит, пауза PR, исполнители, будильник
+- [Руководитель №22](project-leader22.md) — с 21.11 руководитель №22 (5c7f41e5…), лимит до 24.11 08:00 PT, план — §4 памятки №21
+- [Папки и маэстро](project-leader22-maestro.md) — папки GoRix и 9 правил маэстро для №22
+- [Общие снимки экранов](feedback-shared-screenshots.md) — фотограф + разборщики по одной папке
+- [Логи и уборка чатов](feedback-logs-and-chat-hygiene.md) — фильтры логов, архив сдавших
+- [Ветки после squash](feedback-squash-followup-branches.md) — cherry-pick, не merge
+- [Вопросы — сразу и явно](feedback-questions-notify.md)
+- [Одно место для ответов](feedback-one-answer-place.md)
+- [Один журнал решений](feedback-single-decision-log.md)
+- [Говорить с руководителем самому](feedback-talk-to-leader-directly.md) — вопросы руководителю через SendMessage, не через основателя
+- [Памятка №22 → №23](project-handover-leader22.md) — читать первой
+- [Не ждать молча](feedback-no-passive-waiting.md) — срок ожидания, сам спрашиваю исполнителя, основателю «ждём X до HH:MM»
+- [Падения — сразу](feedback-report-failures-early.md) — в длинном прогоне смотреть ✗ по ходу и сразу сообщать
+- [Руководитель №24 → №26](project-leader24.md) — №24 сдал 24.11; руководитель теперь №26 local_baa73be5…
+- [Руководитель не решает дизайн](feedback-leader-no-design-decisions.md) — только исполнитель+дизайнер; мне — ссылка основателю
+- [Порог контекста 50 %](feedback-context-threshold-50.md) — сдача дел на 50 %, не 35 %
+- [Сначала старые ответы](feedback-check-old-answers-first.md) — спеки 33-*, Issues до ресёрча и вопросов
+- [Время основателю — LA](feedback-founder-time-la.md) — PT или «через сколько», не UTC
+- [Витрина ДС отложена](project-ds-showcase-deferred.md) — 23.11 аудит витрины/Графита на потом; Графит не удалять, всё в notes/review-v2/ds-showcase

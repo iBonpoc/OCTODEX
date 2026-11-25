@@ -1,0 +1,50 @@
+diff --git a/apps/mobile/src/ui/overlays.tsx b/apps/mobile/src/ui/overlays.tsx
+index 5ee28a52a..ac4a9f1e5 100644
+--- a/apps/mobile/src/ui/overlays.tsx
++++ b/apps/mobile/src/ui/overlays.tsx
+@@ -288,7 +288,9 @@ export function Sheet({
+   footer: footerNow,
+   height: heightNow = "fit",
+   onBack: onBackNow,
++  hideClose,
+ }: {
++  hideClose?: boolean;
+   visible: boolean;
+   onClose: () => void;
+   title?: string;
+@@ -635,7 +637,7 @@ export function Sheet({
+               ) : null}
+               {title || onBack ? (
+                 // the one header's sheet kind (visual-v2 «Шторка»): the title 22/700 on the left, «×» 32 on the right
+-                <SheetHead title={title} onClose={() => requestClose()} closeLabel={t("common.close")} back={onBack ? { label: t("common.back"), onPress: onBack } : undefined} />
++                <SheetHead hideClose={hideClose} title={title} onClose={() => requestClose()} closeLabel={t("common.close")} back={onBack ? { label: t("common.back"), onPress: onBack } : undefined} />
+               ) : (
+                 <View style={{ height: space[2] }} />
+               )}
+diff --git a/apps/mobile/src/ui/templates/screenHeader.tsx b/apps/mobile/src/ui/templates/screenHeader.tsx
+index 6f744f947..5144fc3a3 100644
+--- a/apps/mobile/src/ui/templates/screenHeader.tsx
++++ b/apps/mobile/src/ui/templates/screenHeader.tsx
+@@ -618,7 +618,7 @@ const noRing = (Platform.OS === "web" ? { outlineStyle: "none" } : {}) as ViewSt
+  * A sheet's head (v2 «Шторка»): the row 52 — the title 22/700 on the left (a 12 line under it), «×» 32 on the right; no «←», no
+  * avatar (a sheet with a step back keeps its «‹» before the title). testIDs `sheet-title`, `sheet-close`.
+  */
+-export function SheetHead({ title, sub, onClose, closeLabel, back }: { title?: string; sub?: string; onClose: () => void; closeLabel: string; back?: { label: string; onPress: () => void } }) {
++export function SheetHead({ title, sub, onClose, closeLabel, back, hideClose }: { title?: string; sub?: string; hideClose?: boolean; onClose: () => void; closeLabel: string; back?: { label: string; onPress: () => void } }) {
+   const { c } = useTheme();
+   const s = H.sheetClose;
+   return (
+@@ -640,11 +640,11 @@ export function SheetHead({ title, sub, onClose, closeLabel, back }: { title?: s
+           </T>
+         ) : null}
+       </View>
+-      <Press testID="sheet-close" onPress={onClose} visibleHeight={s} accessibilityRole="button" accessibilityLabel={closeLabel}>
++      {hideClose ? null : <Press testID="sheet-close" onPress={onClose} visibleHeight={s} accessibilityRole="button" accessibilityLabel={closeLabel}>
+         <View style={{ width: s, height: s, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
+           <Icon name="close" s={size.iconSm} color={c.ink} />
+         </View>
+-      </Press>
++      </Press>}
+     </View>
+   );
+ }

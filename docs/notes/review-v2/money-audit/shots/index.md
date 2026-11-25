@@ -3,14 +3,14 @@
 Все — фотограф `npm run shot`, web-движок. Имя: `экран__состояние__тема-ширина-язык-роль`.
 
 ## Вкладка «Деньги» как открывается (/finance — обзор, переключателя НЕТ)
-- finance__open__dark-390-ru-director.png — 390 тёмная: шапка, 2+3 плитки, «К оплате», «Оплачены сегодня»
-- finance__open__light-390-ru-director.png — 390 светлая
-- finance__scrolled__dark-390-ru-director-s300.png — прокрутка вниз
+- finance__open__dark-390-ru-director.jpg — 390 тёмная: шапка, 2+3 плитки, «К оплате», «Оплачены сегодня»
+- finance__open__light-390-ru-director.jpg — 390 светлая
+- finance__scrolled__dark-390-ru-director-s300.jpg — прокрутка вниз
 - finance__open__dark-820 / light-820 / dark-1280 — 820 и 1280 (на 1280 в боковой рейке нет «Денег»)
 - finance__en__dark-390-en / finance__es__dark-390-es — EN/ES
 
 ## После «Все ›» (это уже /invoice — другой экран, появился сегмент Сметы · Счета · Оплаты)
-- finance__after-vse__dark-390-ru-director.png, finance__after-vse__light-390-ru-director.png
+- finance__after-vse__dark-390-ru-director.jpg, finance__after-vse__light-390-ru-director.jpg
 - Другие плитки (Ждёт оплаты / Просрочено / Получено / Ещё выставить), жёлтая плитка
 
 ## Каждый сегмент (прямой адрес)

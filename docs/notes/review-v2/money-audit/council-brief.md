@@ -1,7 +1,7 @@
 # Совет по экрану «Деньги» (#2435) — записка участникам (23.11.2026)
 
 GoRix — CRM/FSM для подрядчиков США, работа с телефона; RU/EN/ES; роли director, dispatcher, sales, tech.
-Читать (папка `/Users/yuriisurhuchov/GoRix/notes/review-v2/money-audit/`): `inventory.md` (что есть, файл:строка, разд.10 — варианты), `research.md` (Jobber/HCP/QuickBooks/Invoice2go/Stripe с URL), снимки `shots/` (`shots/index.md`, PNG смотреть). Код (только чтение) — `/Users/yuriisurhuchov/GoRix/design-2344`, `git show origin/main:<путь>`; DS — `design/naryad-ds/DESIGN-SYSTEM.md` §8.13.
+Читать (папка `~/GoRix/notes/review-v2/money-audit/`): `inventory.md` (что есть, файл:строка, разд.10 — варианты), `research.md` (Jobber/HCP/QuickBooks/Invoice2go/Stripe с URL), снимки `shots/` (`shots/index.md`, PNG смотреть). Код (только чтение) — `~/GoRix/design-2344`, `git show origin/main:<путь>`; DS — `design/naryad-ds/DESIGN-SYSTEM.md` §8.13.
 
 **Слово основателя 23.11:** «нажимаю „Деньги“ — нет переключателей на сметы, счета и оплаты; нужно вначале нажать „Все“, и потом появляется эта штука. Нажимаешь „Деньги“ — там должно быть сразу „Сметы, счета и оплаты“». Сейчас вкладка открывает обзор `/finance` без сегмента (так решили в #2363; e2e 521 это проверяет), сегмент «Сметы · Счета · Оплаты» есть только на трёх списках.
 Решения основателя, не пересматривать: списки — сгруппированные строки (`ListGroup`/`GroupRow`); цвет только для статуса; число лидов на вкладке «Лиды» — красное; карта сметы (`../estimate-audit/MAP.md`) — смета: черновик → отправлена → подписана → в работу.

@@ -1,0 +1,36 @@
+diff --git a/apps/mobile/package.json b/apps/mobile/package.json
+index 064b80f9a..dbe5ccd1c 100644
+--- a/apps/mobile/package.json
++++ b/apps/mobile/package.json
+@@ -52,8 +52,8 @@
+   },
+   "scripts": {
+     "start": "expo start",
+-    "android": "expo start --android",
+-    "ios": "expo start --ios",
++    "android": "expo run:android",
++    "ios": "expo run:ios",
+     "ios:first": "bash scripts/ios-first-build.sh",
+     "web": "expo start --web",
+     "typecheck": "tsc --noEmit",
+diff --git a/apps/mobile/tsconfig.json b/apps/mobile/tsconfig.json
+index 6e0f88f3e..87adcaa27 100644
+--- a/apps/mobile/tsconfig.json
++++ b/apps/mobile/tsconfig.json
+@@ -2,7 +2,14 @@
+   "extends": "expo/tsconfig.base",
+   "compilerOptions": {
+     "strict": true,
+-    "paths": { "@/*": ["./src/*"] }
++    "paths": {
++      "@/*": [
++        "./src/*"
++      ]
++    }
+   },
+-  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"]
++  "include": [
++    "**/*.ts",
++    "**/*.tsx"
++  ]
+ }
