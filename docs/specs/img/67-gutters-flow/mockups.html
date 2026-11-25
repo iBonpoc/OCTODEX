@@ -92,6 +92,15 @@
   .pair { display: flex; gap: 8px; margin-top: 12px; } .pair .btn { flex: 1; padding: 0 12px; }
   .next { margin-top: 16px; font-size: 15px; font-weight: 500; color: var(--ink); }
   .sheet .edit.btn { position: absolute; right: 20px; top: 20px; }
+  .gnote { font-size: 13px; font-weight: 500; color: var(--mut); margin: 8px 4px 0; }
+  /* три карточки под чертежом: gutter · переходники (делится на части) · downspout */
+  .kpi { display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 8px; margin-top: 8px; }
+  .kc { background: var(--surf2); border-radius: 14px; padding: 10px 12px; min-width: 0; }
+  .kc b { display: block; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .kc span { font-size: 12px; font-weight: 600; color: var(--mut); white-space: nowrap; }
+  .kc.fit { padding: 0; display: grid; grid-template-columns: repeat(var(--n), 1fr); gap: 1px; background: var(--off); overflow: hidden; }
+  .kc.fit div { padding: 10px 8px; min-width: 0; background: var(--surf2); }
+  .kc.fit span { white-space: normal; display: block; line-height: 1.25; }
   .money { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink); }
   /* сравнение */
   .cmp { display: flex; gap: 28px; padding: 24px; background: var(--page); width: max-content; }
@@ -148,7 +157,7 @@ const th = `<div class="thumb">${mini()}</div>`;
 // одни слова везде: названия деталей — английскими терминами (DS 1.19.0: «названия деталей Gutters — английскими терминами»)
 const what = "Gutter 91 ft · Downspout 3";
 // дата — во второй строке, справа только состояние: адрес не режется
-const rLinda = row(th, "Linda Alvarez", "2207 Ocean Park Blvd · сегодня", pill("neutral", "dot", "Без сметы"));
+const rLinda = row(th, "Linda Alvarez", "2207 Ocean Park Blvd · сегодня", pill("neutral", "doc", "Не отправлена"));
 const rMark = row(th, "Mark Chen", "1520 Elm St · вчера", pill("info", "doc", "Отправлена"));
 const rRosa = row(th, "Rosa Diaz", "88 Pine Ave · 22 нояб.", pill("ok", "check", "Подписана"));
 const rDraft = row(th, "Черновик · 10:42", what, `<span class="go">Привязать</span>`);
@@ -160,13 +169,14 @@ S["v1-list"] = () => `<div class="phone"><div class="scroll">${headRoot("Gutters
   ${group("Замеры", [rLinda, rMark, rRosa], "", 3)}
   </div>${tabbar("Gutters")}</div>`;
 // В2 «Сначала — что замерить» (выбор основателя #2517). «Ждут замера»: нажатие строки начинает замер («Замерить» — подпись, «›» нет);
-// черновик появляется только после первой линии. «Ждут сметы» — у офиса и директора (у мастера группы нет)
+// черновик появляется только после первой линии. Кто в «Ждут замера» — по умолчанию из совета #2678 (записанные осмотры без замера), ждёт ответа.
+// Смета собирается из чертежа сама (#2676): «Ждут отправки» — готовые сметы, которые ещё не ушли клиенту (у офиса и директора; у мастера группы нет)
 S["v2-list"] = () => `<div class="phone"><div class="scroll">${headRoot("Gutters")}
   ${group("Ждут замера", [
     row(`<div class="ico">${ic("clock")}</div>`, "Tom Reyes · 10:00", "73 Birch Ln", `<span class="go">Замерить</span>`, false),
     row(`<div class="ico">${ic("leads")}</div>`, "Лид: Ann Park", "41 Oak Rd", `<span class="go">Замерить</span>`, false),
-  ], "", 2)}
-  ${group("Ждут сметы", [rLinda], "", 1)}
+  ], "", 2)}<div class="gnote">Записанные осмотры без замера · по умолчанию, ждёт ответа #2678</div>
+  ${group("Ждут отправки", [rLinda], "", 1)}
   ${group("Черновики", [rDraft], "", 1)}
   ${group("Последние", [rMark, rRosa], "Все замеры ›")}
   </div>${tabbar("Gutters")}</div>`;
@@ -181,7 +191,13 @@ const sheet = `<div class="sheet"><div class="paper">${big}</div></div>`;
 // главный шаг и «Править чертёж» — одним рядом сразу под чертежом (DS §8.14, экран с вкладками без нижней панели)
 const act = (pri, priIcon, sec = "Править чертёж") => `<div class="pair">${pri ? `<span class="btn pri">${ic(priIcon, 18)}${pri}</span>` : ""}<span class="btn sec">${ic("pencil", 18)}${sec}</span></div>`;
 const next = (t) => `<div class="next">${t}</div>`;
-const trio = `<div class="trio"><div><b>91 ft</b><span>Gutter</span></div><div><b>2</b><span>Corners</span></div><div><b>3</b><span>Downspout</span></div></div>`;
+// три карточки (решение основателя #2677): слева ft gutter, в центре одна карточка с переходниками — столько частей, сколько видов на чертеже
+// (2 / 3 / 4 / 6; что считать переходниками — по умолчанию из совета #2679: все фитинги downspout, нулевые не показываются), справа downspout
+const kpi = (fits) => `<div class="kpi"><div class="kc"><b>91 ft</b><span>Gutter</span></div>
+  <div class="kc fit" style="--n:${fits.length === 4 ? 2 : Math.min(fits.length, 3)}">${fits.map(([n, l]) => `<div><b>${n}</b><span>${l}</span></div>`).join("")}</div>
+  <div class="kc"><b>3</b><span>Downspout</span></div></div>`;
+const FITS = [["4", "Elbow A"], ["2", "Elbow B"], ["2", "Offset A"]];
+const trio = kpi(FITS);
 const addr = group("", [row(`<div class="ico">${ic("pin")}</div>`, "2207 Ocean Park Blvd", "Santa Monica, CA", `<span class="go">Маршрут</span>`)]);
 const sostav = group("", [row(`<div class="ico">${ic("list")}</div>`, "Состав", "Линии, углы, водостоки, детали", "")]);
 const docs = group("Документы", [
@@ -190,36 +206,44 @@ const docs = group("Документы", [
   row(`<div class="ico">${ic("ruler")}</div>`, "Рабочие чертежи", "План, ведомости · 11×17", ""),
   row(`<div class="ico">${ic("box")}</div>`, "Заказ материалов", "Поставщику · EN", ""),
 ], "", 4);
-const noEst = hst("dot", "Без сметы");
-const officeNext = next("Чертёж готов — сделайте смету. Примерно $2,113.67 по прайсу");
+const noEst = hst("doc", "Смета готова · не отправлена");
+const officeNext = next("Смета собрана из чертежа по вашим ценам — $2,113.67. Проверьте и отправьте клиенту");
 // карточка В1 «Одна лента»
-S["v1-card"] = () => `<div class="phone"><div class="scroll">${headObj("Linda Alvarez", noEst)}${officeNext}${sheet}${act("Сделать смету", "plus")}${trio}${addr}${docs}
+S["v1-card"] = () => `<div class="phone"><div class="scroll">${headObj("Linda Alvarez", noEst)}${officeNext}${sheet}${act("Отправить", "send", "Править чертёж")}${trio}${addr}${docs}
   </div>${tabbar("Gutters")}</div>`;
 // карточка В2 «Вкладки» (выбор основателя #2518): полоса ViewTabs сразу под шапкой (ObjectScreen); пять разделов — «Состав» строкой на «Обзоре»,
 // «Фото» вторым (частое в поле); у края справа затухание tab.fadeW 32, выглядывает «История»
 S["v2-card"] = () => `<div class="phone"><div class="scroll">${headObj("Linda Alvarez", noEst)}
   <div class="vt"><div class="on">Обзор</div><div>Фото</div><div>Документы</div><div>Сметы</div><div>История</div></div>
-  ${officeNext}${sheet}${act("Сделать смету", "plus")}${trio}${sostav}${addr}
+  ${officeNext}${sheet}${act("Отправить", "send", "Править чертёж")}${trio}${sostav}${addr}
   </div>${tabbar("Gutters")}</div>`;
 // ряд под чертежом в других состояниях и у мастера (денег не видит, жёлтой нет — С9)
 const mini2 = `<div class="sheet" style="margin-top:8px"><div class="paper" style="height:90px">${mini(56)}</div></div>`;
+// средняя карточка: 2, 3, 4 и 6 частей
+S["fit-split"] = () => `<div class="phone"><div class="scroll" style="padding-top:12px">
+  <div class="cap">2 вида</div>${kpi([["4", "Elbow A"], ["2", "Elbow B"]])}
+  <div class="cap">3 вида</div>${kpi(FITS)}
+  <div class="cap">4 вида</div>${kpi([["4", "Elbow A"], ["2", "Elbow B"], ["2", "Offset A"], ["1", "Offset B"]])}
+  <div class="cap">6 видов (круглый и прямоугольный на одном чертеже)</div>${kpi([["4", "Elbow A"], ["2", "Elbow B"], ["2", "Offset A"], ["1", "Offset B"], ["3", "Elbow 45°"], ["1", "Elbow 90°"]])}
+  <div class="gnote" style="margin-top:16px">Что считать переходниками — по умолчанию из совета, ждёт ответа #2679</div>
+  </div></div>`;
 S["now-states"] = () => `<div class="phone"><div class="scroll" style="padding-top:12px">
   <div class="cap">Смета отправлена · офис</div>${next("Смета отправлена вчера — ждём ответа клиента. $2,113.67")}${mini2}${act("Напомнить", "send")}
   <div class="cap">Смета подписана · офис</div>${next("Смета подписана 22 нояб. — запланируйте работу. $2,113.67")}${mini2}${act("Запланировать", "cal")}
-  <div class="cap">Без сметы · мастер</div>${next("Чертёж готов — смету сделает офис")}${mini2}${act("", "", "Править чертёж")}
+  <div class="cap">Смета не отправлена · мастер</div>${next("Смета собрана — офис проверит и отправит")}${mini2}${act("", "", "Править чертёж")}
   </div></div>`;
 const frame = (s) => `<iframe src="mockups.html#screen=${s}&theme=${theme}"></iframe>`;
 const fig = (cap, sub, body) => `<figure><figcaption>${cap}<small>${sub}</small></figcaption>${body}</figure>`;
 S["compare-list"] = () => `<div class="cmp">
   ${fig("Как сейчас", "Заголовок «Замеры», фильтры-кнопки, каждая запись — большая карточка", `<img src="asis-05-list-${theme}.png">`)}
   ${fig("Как будет · вариант 1 «Два списка»", "Поиск и «＋» значками вверху. Черновики и замеры — строками: картинка чертежа, имя, адрес, состояние", frame("v1-list"))}
-  ${fig("Как будет · вариант 2 «Сначала — что замерить» (выбран)", "Сверху — кому нужен замер сегодня (нажали строку — начался замер), потом замеры, которым нужна смета, черновики, последние", frame("v2-list"))}</div>`;
+  ${fig("Как будет · вариант 2 «Сначала — что замерить» (выбран)", "Сверху — к кому сегодня ехать мерить (нажали строку — начался замер), потом готовые сметы, которые не отправлены, черновики, последние", frame("v2-list"))}</div>`;
 S["compare-card"] = () => `<div class="cmp">
   ${fig("Как сейчас", "«Просмотр замера»: имя два раза, кнопку «Сделать смету» не видно без прокрутки", `<img src="asis-06-card-top-${theme}.png">`)}
-  ${fig("Как будет · вариант 1 «Одна лента»", "Имя один раз, под ним «Замер» и состояние. «Сделать смету» и «Править чертёж» — рядом сразу под чертежом. Ниже цифры, адрес, документы — лентой", frame("v1-card"))}
-  ${fig("Как будет · вариант 2 «Вкладки» (выбран)", "Вкладки сразу под именем: Обзор · Фото · Документы · Сметы · История. На «Обзоре» чертёж, под ним «Сделать смету» и «Править чертёж»", frame("v2-card"))}</div>`;
+  ${fig("Как будет · вариант 1 «Одна лента»", "Смета уже собрана из чертежа. Под чертежом «Отправить» и «Править чертёж», ниже три карточки: gutter · переходники · downspout", frame("v1-card"))}
+  ${fig("Как будет · вариант 2 «Вкладки» (выбран)", "Вкладки под именем. Смета уже собрана из чертежа: под чертежом «Отправить» и «Править чертёж», ниже три карточки: gutter · переходники · downspout", frame("v2-card"))}</div>`;
 // пары «было (84a8435) | предлагаем» для ревью
-const pair = (s, what) => `<div class="cmp">${fig("Было (84a8435)", what, `<img src="r1-${s}-${theme}.png">`)}${fig("Предлагаем", "После проверки 7172275566", frame(s))}</div>`;
+const pair = (s, what) => `<div class="cmp">${fig("Было (86f0f92)", what, `<img src="r2-${s}-${theme}.png">`)}${fig("Предлагаем", "Смета собирается сама (#2676), три карточки (#2677)", frame(s))}</div>`;
 S["pair-v2-card"] = () => pair("v2-card", "Карточка, вариант 2 «Вкладки»");
 S["pair-v1-card"] = () => pair("v1-card", "Карточка, вариант 1 «Одна лента»");
 S["pair-v2-list"] = () => pair("v2-list", "Первый экран, вариант 2");
