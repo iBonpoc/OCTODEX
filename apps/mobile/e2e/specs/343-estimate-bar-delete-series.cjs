@@ -85,6 +85,12 @@ exports.run = async (h) => {
   await del(z);
   await p.waitForFunction(() => /Удалено позиций: 3/.test(document.querySelector('[data-testid="toast-text"]')?.textContent || ""), null, { timeout: 3000 });
   h.expect((await p.getByTestId("toast-text").count()) === 1, "one toast");
+  // #2428: the toast stands ABOVE the pinned bar («Итого» · «Готово», or its capsule) on a phone — never on it
+  if (phone) {
+    const tb = await box('[data-testid="toast"]');
+    const bb2 = await box('[data-testid="ue-save-bar"], [data-testid="ue-save-capsule"]');
+    h.expect(tb.height > 0 && bb2.height > 0 && tb.y + tb.height <= bb2.y + 0.5, `the toast stands above the bar (${Math.round(tb.y + tb.height)} ≤ ${Math.round(bb2.y)})`);
+  }
   await h.shot("series");
   h.expect(await line.undo(h), "«Вернуть» pressed");
   await p.waitForFunction((n) => document.querySelectorAll('[data-testid^="est-line-"]').length === n, before.length, { timeout: 3000 });
