@@ -16,6 +16,9 @@ const { signIn, waitRows } = require("../signIn.cjs");
 const uuid = () => "xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx".replace(/x/g, () => Math.floor(Math.random() * 16).toString(16));
 const REJECTED_KEY = "octo.cloud.v1.rejected";
 
+// the browser logs the requests it could not make while the network is off on purpose
+exports.allowConsole = [/Failed to fetch|ERR_INTERNET_DISCONNECTED|net::/];
+
 exports.run = async (h, { seed, admin }) => {
   const p = h.page;
   const tid = (id) => p.getByTestId(id).locator("visible=true").first();
@@ -64,7 +67,11 @@ exports.run = async (h, { seed, admin }) => {
   await p.getByTestId("rejected-r-reset").waitFor({ state: "detached", timeout: 5000 });
   h.expect((await admin(`estimates?title=eq.${encodeURIComponent(title)}&select=id`)).length === before, "«Сбросить»: nothing was made on the server");
 
-  // «Сделать копию» and at once «Вернуть» (the toast): the editor of the copy goes too, the card is back, the copy is not made (Б1)
+  // «Сделать копию» and at once «Вернуть» (the toast): the editor of the copy goes too, the card is back, the copy is not made (Б1).
+  // OFFLINE on purpose: online the save reaches the server in a moment (the copy gets its number, EST-0003 in CI 25.11) and the
+  // store's undo is then too late; with the network gone the save waits in the phone's queue — where «Вернуть» takes it out
+  const ctx = p.context();
+  await ctx.setOffline(true);
   await tid("rejected-choose-r-undo").click();
   await tid("rej-choice-copy").click();
   await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 15000 });
@@ -75,6 +82,8 @@ exports.run = async (h, { seed, admin }) => {
   // the undo took the save out of the phone's queue (it may be on its way already: then the server gets it — checked below by id)
   const queued = await p.evaluate((id) => JSON.parse(localStorage.getItem("octo.outbox.v1") || "[]").some((x) => x.op?.k === "estimate.save" && x.op?.id === id), undoneId);
   h.expect(!queued, "«Вернуть»: the copy's save is not in the phone's queue");
+  await ctx.setOffline(false);
+  await p.evaluate(() => window.dispatchEvent(new Event("online")));
   h.expect((await admin(`estimates?id=eq.${undoneId}&select=id`)).length === 0, "«Вернуть»: the copy was not made on the server");
 
   // «Сделать копию»: the editor of a new draft, the card goes, the copy reaches the server as a draft with the same client
