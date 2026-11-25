@@ -17,6 +17,12 @@ export type SnoozeKey = (typeof SNOOZE_DAYS)[number]["key"];
 /** the company's day `days` after today */
 export const snoozeDay = (days: number, now: number = Date.now(), tz: string = getZone()): DayKey => keyOfNumber(dayNumber(dayKeyIn(now, tz)) + days);
 
+/** #2123: the first day «Выбрать дату…» lets one pick — the company's tomorrow (today and the past are not a «later») */
+export const pickMin = (now: number = Date.now(), tz: string = getZone()): DayKey => snoozeDay(1, now, tz);
+
+/** #2123 С2: a day of one's own puts off only to a day after the company's today */
+export const canSnoozeTo = (day: DayKey, now: number = Date.now(), tz: string = getZone()): boolean => dayNumber(day) > dayNumber(dayKeyIn(now, tz));
+
 /** when a reason put off to `day` comes back: 00:00 of that day in the company's zone */
 export const snoozeUntil = (day: DayKey, tz: string = getZone()): string => wallToInstant(day, 0, tz);
 

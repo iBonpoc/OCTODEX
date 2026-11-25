@@ -44,7 +44,7 @@ import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { docForSave, newToken, normalizeDoc, storedDoc, summarize } from "@/features/estimateDoc";
 import { syncCompanyTerms, termsForNew, termsOnClientChange, withFrozenTerms, type TermsFor } from "@/features/estimateTerms";
 import { withSnooze } from "@/features/attentionSnooze";
-import { contractInvoice, contractInvoices, voidRefusal, withTaxSplit, type VoidRefusal } from "@/features/contractInvoice";
+import { contractInvoice, contractInvoices, secondFinal, voidRefusal, withTaxSplit, type VoidRefusal } from "@/features/contractInvoice";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment, invoiceOwes, sumCents, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
@@ -2394,6 +2394,8 @@ export function StoreProvider({
         const customerId = job ? d0.properties.find((p) => p.id === job.propertyId)?.customerId : undefined;
         if (!job || !customerId || amountCents <= 0) return NO_UNDO;
         // #865: never more than the contract (engine canIssue; the server refuses the same from В1-4б); the tax inside the total
+        // #2061: one live final per job, as the server's invoices_one_deposit_final_idx
+        if (secondFinal(d0, jobId, kind)) return null;
         const split = contractInvoice(d0, job, amountCents);
         if (!split) return null;
         const id = uid();
@@ -2514,7 +2516,7 @@ export function StoreProvider({
               : {};
             return { ...d, ...used, estimates: prev ? d.estimates.map((e) => (e.id === id ? next : e)) : [...d.estimates, next] };
           },
-          { k: "estimate.save", id, versionId, customerId, propertyId, leadId: leadId0 ?? prev?.leadId, templateId: prev ? prev.templateId : templateId0, title, doc: storedDoc(doc), costs: costsOf(doc), ...(linesFrom ? { linesFrom } : {}), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct },
+          { k: "estimate.save", id, versionId, customerId, propertyId, leadId: leadId0 ?? prev?.leadId, templateId: prev ? prev.templateId : templateId0, title, doc: storedDoc(doc), costs: costsOf(doc), ...(linesFrom ? { linesFrom } : {}), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct, ...(prev?.status === "awaiting_countersign" ? { fromStatus: "awaiting_countersign" as const } : {}) },
         );
       },
       approveEstimate: (id, a) => {

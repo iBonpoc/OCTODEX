@@ -10,7 +10,7 @@ import { Card, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 import { useConfirm } from "@/ui/confirmDialog";
 
-type Which = null | "fit" | "footer" | "medium" | "large" | "pages" | "stuck" | "chainA" | "chainB" | "chainC" | "list";
+type Which = null | "fit" | "footer" | "medium" | "large" | "pages" | "stuck" | "chainA" | "chainB" | "chainC" | "list" | "help";
 
 /** the third step of the chain: mounted by the owner's condition and recreated at each opening — the way a sheet is meant to be mounted */
 function ChainSheetC({ visible, onExited, onClose }: { visible: boolean; onExited: () => void; onClose: () => void }) {
@@ -19,6 +19,18 @@ function ChainSheetC({ visible, onExited, onClose }: { visible: boolean; onExite
     <Sheet visible={visible} onExited={onExited} onClose={onClose} title={t("ds.sheet.chainC")}>
       <T v="body">{t("ds.sheet.chainBodyC")}</T>
     </Sheet>
+  );
+}
+
+/** the content's own state (inside the sheet): it is kept while the help page is open — the content stays mounted under it */
+function HelpSheetPick() {
+  const { t } = useI18n();
+  const [picked, setPicked] = useState(0);
+  return (
+    <View testID="showcase-help-sheet-picked" style={{ gap: space[1] }}>
+      <Button testID="showcase-help-sheet-pick" label={t("ds.sheet.helpPick")} variant="secondary" onPress={() => setPicked((n) => n + 1)} />
+      <T v="caption" tone="mut">{t("ds.sheet.helpPicked", { n: picked })}</T>
+    </View>
   );
 }
 
@@ -90,6 +102,7 @@ export function WindowsSection() {
         {row("large", t("ds.sheet.large"), t("ds.sheet.largeHint"))}
         {row("pages", t("ds.sheet.pages"), t("ds.sheet.pagesHint"))}
         {row("list", t("ds.sheet.list"), t("ds.sheet.listHint"))}
+        {row("help", t("ds.sheet.help"), t("ds.sheet.helpHint"))}
         {row("stuck", t("ds.sheet.stuck"), t("ds.sheet.stuckHint"))}
         {row("chainA", t("ds.sheet.chain"), t("ds.sheet.chainHint"))}
         <View testID="showcase-sheet-self" style={{ gap: space[1] }}>
@@ -184,6 +197,19 @@ export function WindowsSection() {
             <ListRow key={i} title={`${t("ds.sheet.listRow")} ${i + 1}`} onPress={close} />
           ))}
         </SheetScroll>
+      </Sheet>
+      {/* «?» right after the title, the help is a page in the same sheet; a long body scrolls inside, the window keeps space[8] from the edges (DS Б1, Б7) */}
+      <Sheet
+        visible={open === "help"}
+        onClose={close}
+        title={t("ds.sheet.helpTitle")}
+        help={{ body: t("ds.sheet.helpBody"), to: { href: "/catalog", label: t("ds.sheet.helpTo") } }}
+        footer={<Button label={t("ds.sheet.save")} full onPress={close} />}
+      >
+        <HelpSheetPick />
+        {long.map((n) => (
+          <T key={n} v="body">{`${t("ds.sheet.line")} ${n}`}</T>
+        ))}
       </Sheet>
       <Sheet visible={open === "large"} onClose={close} title={t("ds.sheet.large")} height="large" footer={<Button label={t("ds.sheet.save")} full onPress={close} />}>
         <T v="body">{t("ds.sheet.body")}</T>

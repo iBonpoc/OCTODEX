@@ -3,9 +3,12 @@
  * scrolls to so the chosen row is in view.
  */
 
-/** the list's height: its rows, but no more than `maxRows` (the last one half — it scrolls), and never more than the window leaves */
-export function menuListHeight(o: { count: number; rowH: number; maxRows: number; room: number; pad: number; titleH: number }): number {
-  return Math.max(0, Math.min(o.count * o.rowH, o.maxRows * o.rowH, o.room - o.pad * 2 - o.titleH));
+/** the list's height: its rows (and the lines between groups), but no more than `maxRows` (the last one half — it scrolls), and never more than the window leaves */
+export function menuListHeight(o: { count: number; rowH: number; maxRows: number; room: number; pad: number; titleH: number; extra?: number }): number {
+  // `extra` — what the rows do not count: the lines between groups (#2448: a menu of 5 rows with a line scrolled by the line's height,
+  // and its last item, «Удалить», stood half out of sight)
+  const x = o.extra ?? 0;
+  return Math.max(0, Math.min(o.count * o.rowH + x, o.maxRows * o.rowH + x, o.room - o.pad * 2 - o.titleH));
 }
 
 /** where to scroll so the row at `rowY` is in the middle of the window; a list that fits does not scroll; never past the ends */

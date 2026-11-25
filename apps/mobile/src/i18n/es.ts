@@ -382,6 +382,10 @@ export const es: Dict = {
   "triage.later.tomorrow": "Mañana · {date}",
   "triage.later.days3": "En 3 días · {date}",
   "triage.later.week": "En una semana · {date}",
+  "triage.later.pick": "Elegir fecha…",
+  "triage.pickTitle": "Posponer hasta un día",
+  "triage.pickDate": "Día",
+  "triage.pickDo": "Posponer",
   "triage.laterSaved": "Pospuesto hasta {date} — volverá solo",
 
   "inbox.title": "Entrada",
@@ -2735,6 +2739,13 @@ export const es: Dict = {
   "ds.sheet.listHint": "La barra de desplazamiento queda en el margen lateral de la hoja, no sobre las flechas «›» (Б1, #1339).",
   "ds.sheet.listRow": "Fila",
   "ds.sheet.pagesHint": "Un paso anidado es una página dentro de la hoja con «‹ Atrás», no una segunda hoja.",
+  "ds.sheet.help": "Hoja con ayuda «?»",
+  "ds.sheet.helpHint": "«?» justo después del título; la ayuda es una página en la misma hoja, «‹ Atrás» vuelve al contenido. Un cuerpo largo se desplaza; desde 820 la ventana queda a 32 de los bordes.",
+  "ds.sheet.helpTitle": "Partidas del presupuesto",
+  "ds.sheet.helpBody": "Las partidas son mano de obra y materiales del catálogo. El precio y la unidad vienen del catálogo; en un presupuesto solo se cambian para ese presupuesto.",
+  "ds.sheet.helpTo": "Abrir catálogo",
+  "ds.sheet.helpPicked": "Marcadas: {n}",
+  "ds.sheet.helpPick": "Marcar",
   "ds.sheet.body": "Texto de la hoja: una tarea corta e independiente sobre la pantalla.",
   "ds.sheet.line": "Línea",
   "ds.sheet.save": "Guardar",
@@ -4665,6 +4676,8 @@ export const es: Dict = {
   "pay.online.err.busy": "Demasiados intentos. Inténtelo de nuevo en {n} min.",
   // spec 35 §4д п.10 («Деньги и отчёты» №7)
   "est.rej.signatureLost": "La firma del cliente no se guardó en el servidor",
+  "est.rej.signedMeanwhile": "El cliente firmó el presupuesto mientras sus cambios esperaban la red: los cambios no se guardaron",
+  "est.rej.signedMeanwhileWhy": "La firma del cliente se mantiene. Para cambiar el presupuesto, ábralo y elija «No firmar — cambiar»: el cliente tendrá que firmar de nuevo.",
   // visit payment refused by the server (#857 О1) — the tech hands it to the office
   "visit.rej.moneyInHand": "El dinero en mano no se registró: entregue el pago a la oficina",
   "est.signOnSite.afterSend": "El cliente puede firmar en el lugar cuando la oficina haya enviado el presupuesto.",

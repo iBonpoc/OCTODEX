@@ -21,7 +21,7 @@ import { SwipeRow, type SwipeBtn } from "./SwipeRow";
 import { DashedFrame } from "@/ui/dashedFrame";
 import { useRowHandle, useRowHead } from "@/features/SortableList";
 import { swipes } from "./swipeState";
-import { rowQtyLine, rowSum } from "./rowLine";
+import { docMoney, rowQtyLine, rowSum } from "./rowLine";
 import { dragEnd, longPressMenu } from "./rowGesture";
 import { finePointer } from "@/ui/pointer";
 import { kindWidth, openClip } from "./rowOpen";
@@ -101,7 +101,7 @@ export const rowFieldId = (lineId: string, f: "name" | "qty" | "price" | "cost")
 
 function LineRowView(p: LineRowProps) {
   const { l, open } = { l: p.line, open: p.open };
-  const { t, money } = useI18n();
+  const { t } = useI18n();
   const { c } = useTheme();
   const reduce = useReducedMotion();
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -141,16 +141,16 @@ function LineRowView(p: LineRowProps) {
     duplicate: { label: t("est.row.duplicate"), icon: "copy" },
     hide: { label: t("est.row.hide"), icon: "eye" },
     show: { label: t("est.row.show"), icon: "eye" },
-    move: { label: t("est.sec.moveTitle"), icon: "route" },
+    move: { label: t("est.sec.moveTitle"), icon: "sections" },
     delete: { label: t("est.row.delete"), icon: "trash" },
   };
-  // «Выше» / «Ниже» first (a line the person may move — not a module's), then what the engine offers
+  // «Выше» / «Ниже» are the screen reader's actions only (a line the person may move — not a module's): in the menu they were two
+  // more items (7 rows — «Удалить» out of the list's 6½, #2448) and «Переместить» opens the sheet that has both (#2450)
   const shifts: ("up" | "down")[] = acts.menu.includes("move") && p.api.shift ? ["up", "down"] : [];
-  const items: MenuItem<RowAction | "up" | "down">[] = [
-    ...shifts.map((k) => ({ key: k, label: t(k === "up" ? "est.sec.moveUp" : "est.sec.moveDown"), icon: (k === "up" ? "chevronUp" : "chevronDown") as IconKey, testID: `est-act-${k}-${l.id}` })),
+  const items: MenuItem<RowAction>[] = [
     ...acts.menu.map((k) => ({ key: k, ...META[k], destructive: k === "delete", dim: k === "hide" && !canHide(l), testID: `est-act-${k}-${l.id}` })),
   ];
-  const pick = (a: RowAction | "up" | "down") => (a === "up" || a === "down" ? p.api.shift?.(l.id, a === "up" ? -1 : 1) : p.api.action(l.id, a));
+  const pick = (a: RowAction) => p.api.action(l.id, a);
   const swipeBtn = (k: RowAct): SwipeBtn => ({ key: k, ...META[k], tone: k === "delete" ? "bad" : undefined, dim: k === "hide" && !canHide(l), testID: `est-swipe-${k}-${l.id}` });
   const f = (id: "name" | "qty" | "price" | "cost") => p.form.field(rowFieldId(l.id, id));
 
@@ -158,7 +158,7 @@ function LineRowView(p: LineRowProps) {
   const a11yActs = [...shifts.map((k) => ({ name: k, label: t(k === "up" ? "est.sec.moveUp" : "est.sec.moveDown") })), ...acts.menu.map((k) => ({ name: k, label: META[k].label }))];
   const onA11yAct = (e: { nativeEvent: { actionName: string } }) => {
           const n = e.nativeEvent.actionName;
-          if ((n === "up" || n === "down") && shifts.length) return pick(n);
+          if ((n === "up" || n === "down") && shifts.length) return p.api.shift?.(l.id, n === "up" ? -1 : 1);
           const a = actOfName(n, acts);
           if (a) p.api.action(l.id, a);
         };
@@ -184,7 +184,7 @@ function LineRowView(p: LineRowProps) {
       {spend !== null ? (
         <View testID={`est-spend-${l.id}`}>
           <T v="caption" tone="mut" tabular>
-            {t("est2.row.spend", { spend: money(spend) })}
+            {t("est2.row.spend", { spend: docMoney(spend) })}
           </T>
         </View>
       ) : null}
@@ -243,7 +243,7 @@ function LineRowView(p: LineRowProps) {
             <RowView style={{ justifyContent: "space-between" }}>
               <View testID={`est-times-${l.id}`}>
                 <T v="caption" tone="mut" tabular numberOfLines={1}>
-                  {rowPriceTimes(l, money, shownQty)}
+                  {rowPriceTimes(l, docMoney, shownQty)}
                 </T>
               </View>
               {sum}
@@ -381,10 +381,10 @@ function LineRowView(p: LineRowProps) {
             {(() => {
               // a hidden line costs the client $0; «ваш расход» only for who sees costs (and a known cost)
               const spend = isHidden(l) ? hiddenSpend(l, { costsVisible: p.costsVisible, clientScreen: !!p.clientScreen }) : null;
-              if (isHidden(l)) return spend !== null ? t("est2.row.sumSpend", { total: money(0), spend: money(spend) }) : t("est.row.sum", { total: money(0) });
-              return t("est.row.sum", { total: money(figures.total) });
+              if (isHidden(l)) return spend !== null ? t("est2.row.sumSpend", { total: docMoney(0), spend: docMoney(spend) }) : t("est.row.sum", { total: docMoney(0) });
+              return t("est.row.sum", { total: docMoney(figures.total) });
             })()}
-            {!isHidden(l) && figures.profit !== null && !p.clientScreen ? ` · ${t("est.row.profit", { profit: money(figures.profit) })}${figures.marginPct !== null ? ` · ${String(figures.marginPct).replace(/^-/, "−")} %` : ""}` : ""}
+            {!isHidden(l) && figures.profit !== null && !p.clientScreen ? ` · ${t("est.row.profit", { profit: docMoney(figures.profit) })}${figures.marginPct !== null ? ` · ${String(figures.marginPct).replace(/^-/, "−")} %` : ""}` : ""}
             {l.optional ? ` · ${t("est2.row.optionalNote")}` : ""}
           </T>
           {!isHidden(l) && !p.clientScreen && figures.profit !== null && figures.profit < 0 ? (

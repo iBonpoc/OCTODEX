@@ -15,7 +15,7 @@ import { LineMarks } from "@/features/LineMarks";
 import { ClientPicker, itemPrice, kindLabel } from "@/features/estimatePickers";
 import { LineRow, rowFieldId, type RowAction, type RowApi } from "@/features/estimate/LineRow";
 import { useRowView } from "@/features/estimate/rowView";
-import { rowSum } from "@/features/estimate/rowLine";
+import { docMoney, rowSum } from "@/features/estimate/rowLine";
 import { swipeHintDue, useSwipeHint } from "@/features/estimate/swipeHint";
 import { SortableList, type DropResult } from "@/features/SortableList";
 import { withLooseTarget, type Drop } from "@/features/sortable";
@@ -1289,7 +1289,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                     section={r.section}
                     depth={r.depth}
                     title={secTitle(r.section)}
-                    total={money(secTotals.bySection[r.section.id] ?? 0)}
+                    total={docMoney(secTotals.bySection[r.section.id] ?? 0)}
                     lineCount={r.lineCount}
                     collapsed={r.collapsed}
                     renaming={renamingId === r.section.id}
@@ -1340,7 +1340,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         <View style={{ gap: space[3] }}>
           {/* #2387: the totals are a group of GroupRows (one look with Деньги and a client): the word, the figure on the right, «›» where it opens */}
           <ListGroup inset={space[4]} testID="est-totals">
-            <GroupRow title={t("ue.subtotal")} value={money(totals.subtotal)} />
+            <GroupRow title={t("ue.subtotal")} value={docMoney(totals.subtotal)} />
             {/* founder 23.11 (MAP §12 п.8, DS §8.7а): Скидка / Налог / Депозит — one line each: the word · [% · Выкл. · $] · the value ·
                 the sum, set right in the row (no sheet); applies at once */}
             <ModeRow
@@ -1360,7 +1360,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                   <View testID="est-discount-fixed"><MoneyField unit a11yLabel={t("ue.discount")} focusNow={focusOf("discount")} onTyping={typingOf("discount")} barNote={hintText} cents={s.discount.cents} onChange={(c) => setSettings({ discount: { kind: "fixed", cents: c } })} /></View>
                 ) : undefined
               }
-              sum={!s.discount ? DASH : totals.discount ? `−${money(totals.discount)}` : money(0)}
+              sum={!s.discount ? DASH : totals.discount ? `−${docMoney(totals.discount)}` : docMoney(0)}
               locked={signed}
               testID="est-discount-row"
               note={totalNote("discount")}
@@ -1382,7 +1382,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                   <View testID="est-tax-rate"><RatePctField unit a11yLabel={t("ue.taxRate")} focusNow={focusOf("tax")} onTyping={typingOf("tax")} barNote={hintText} onBad={setBadRate} ppm={taxRatePpm(s.tax)} onChange={(p) => setSettings({ tax: wholeTax(s.tax, { ratePpm: Math.min(p, 1_000_000) }) })} /></View>
                 )
               }
-              sum={s.tax.enabled && !exempt ? money(totals.tax) : DASH}
+              sum={s.tax.enabled && !exempt ? docMoney(totals.tax) : DASH}
               locked={signed || exempt}
               testID="est-tax-row"
               note={
@@ -1412,7 +1412,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                 <RowView style={{ justifyContent: "space-between", minHeight: component.listRow.h }}>
                   <T v="title">{t("ue.total")}</T>
                   <T v="display" tabular>
-                    {money(totals.total)}
+                    {docMoney(totals.total)}
                   </T>
                 </RowView>
               </View>
@@ -1434,7 +1434,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                   <View testID="est-deposit-fixed"><MoneyField unit a11yLabel={t("ue.deposit")} focusNow={focusOf("deposit")} onTyping={typingOf("deposit")} barNote={hintText} cents={s.deposit.cents} onChange={(c) => setSettings({ deposit: { kind: "fixed", cents: c } })} /></View>
                 ) : undefined
               }
-              sum={s.deposit.kind === "none" ? DASH : money(totals.deposit)}
+              sum={s.deposit.kind === "none" ? DASH : docMoney(totals.deposit)}
               locked={signed}
               testID="est-deposit-row"
               note={totalNote("deposit")}
@@ -1541,7 +1541,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
             <View testID="est-tax-ask" style={{ gap: space[3] }}>
               {taxAsk.diffs.map((d, i) => (
                 <T key={i} v="body" tone="mut">
-                  {taxAsk.diffs.length > 1 ? t("ue.taxAskOption", { name: d.name, was: money(d.was), will: money(d.will) }) : t("ue.taxAskBody", { was: money(d.was), will: money(d.will) })}
+                  {taxAsk.diffs.length > 1 ? t("ue.taxAskOption", { name: d.name, was: docMoney(d.was), will: docMoney(d.will) }) : t("ue.taxAskBody", { was: docMoney(d.was), will: docMoney(d.will) })}
                 </T>
               ))}
               <View testID="est-tax-ask-yes">

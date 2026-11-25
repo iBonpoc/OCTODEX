@@ -9,6 +9,8 @@
  *   photo.add         {f}   a photo of the measurement or of one element: a files row (measurement_id, element_id) and
  *                           the bytes through the core's upload (spec П21.10); no key; `made` = the file id
  *   photo.remove      {id}  deleted_at of that files row; no key
+ *   photo.retry       {id, uri} «Повторить» on a photo the cloud refused (#1441): its file sent again, as the core's photo.retry;
+ *                           an older build without this kind never queued one (only this build offers «Повторить»)
  *   revision.add      {r}   a snapshot when «Смета» / «Обновить смету» is pressed (M8b, П23.8): insert or nothing (a replay
  *                           adds nothing); the number is the server's (trigger t03, T98) — the phone sends 1
  * The photos live in the core's DB.files (one list of files), the measurement only names them.
@@ -20,9 +22,11 @@ import { PermanentError, uploadPhoto } from "@/cloud/ops";
 import type { ModuleOpHandler, ModuleRead, ModuleStore } from "../registry";
 import type { ElementRow, MeasurementRow } from "./canvas/model";
 import { type GuardedUndo, markOf, NO_UNDO, TOO_LATE } from "@/data/undo";
+import { canRetry, markPhoto } from "@/data/photoUpload";
+import { liveUri } from "./photoUri";
 
 export const KEY = "gutters";
-export const K = { mSave: "measurement.save", mRemove: "measurement.remove", eSave: "element.save", eRemove: "element.remove", pAdd: "photo.add", pRemove: "photo.remove", rAdd: "revision.add" } as const;
+export const K = { mSave: "measurement.save", mRemove: "measurement.remove", eSave: "element.save", eRemove: "element.remove", pAdd: "photo.add", pRemove: "photo.remove", pRetry: "photo.retry", rAdd: "revision.add" } as const;
 
 export interface GutterData {
   measurements: MeasurementRow[];
@@ -334,6 +338,19 @@ export function addPhoto(store: ModuleStore, x: { id: string; measurementId: str
   });
 }
 
+/**
+ * #1441 «Повторить» on a measurement's photo the cloud refused: the mark goes at once (it is being sent), the file goes again
+ * through the queue; a second refusal puts the mark back with its reason (the store's `markPhoto` on the op's answer). Only a
+ * plain refusal of a file still on this phone (`canRetry`, as a visit's photo).
+ */
+export function retryPhoto(store: ModuleStore, id: string) {
+  const f = (store.db.files ?? []).find((x) => x.id === id);
+  // the same rule as a visit's photo (`canRetry`), on the file this page can still read (a dead `blob:` of another page — nothing to send)
+  const uri = liveUri(f?.uri);
+  if (!f || !uri || !canRetry({ id: f.id, kind: "before", uri, ...(f.upload ? { upload: f.upload } : {}) })) return null;
+  return asUndo(store.moduleOp(KEY, { kind: K.pRetry, payload: { id, uri }, apply: (d) => markPhoto(d, id, null, "") }));
+}
+
 /** a photo removed (deleted_at); the returned undo puts it back (rule 5) */
 export function removePhoto(store: ModuleStore, id: string) {
   return asUndo(store.moduleOp(KEY, { kind: K.pRemove, payload: { id }, apply: (d) => ({ ...d, files: (d.files ?? []).filter((y) => y.id !== id) }) }));
@@ -383,8 +400,15 @@ export const guttersOps: ModuleOpHandler = async (op, { companyId, run }) => {
         ),
       );
       const uri = str(f.uri);
-      if (uri) await uploadPhoto(companyId, id, uri);
+      // #1441: how the file went — the store marks the photo (refused, with why) or takes the mark off, as a visit's photo
+      if (uri) return { photo: { id, failed: await uploadPhoto(companyId, id, uri) } };
       return;
+    }
+    case K.pRetry: {
+      const id = str(p.id);
+      const uri = str(p.uri);
+      if (!id || !uri) throw bad("photo.retry without a photo");
+      return { photo: { id, failed: await uploadPhoto(companyId, id, uri) } };
     }
     case K.pRemove: {
       const id = str(p.id);

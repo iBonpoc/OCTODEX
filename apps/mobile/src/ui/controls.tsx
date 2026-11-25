@@ -124,7 +124,7 @@ export function IconButton({
   active?: boolean;
   /** «bad»: a dangerous small action (the «⊖» of a repeated value, DS §9 А14а) — the icon `status.bad.text` */
   tone?: "acc" | "plain" | "bad";
-  /** no plate: the icon alone, visible `valueIcon` 22, the box 36 × 44 (iOS Contacts' «⊖», DS §9 А14а) */
+  /** no plate: the icon alone, visible `valueIcon` 22, the box 44 × 44 (iOS Contacts' «⊖», DS §9 А14а) */
   bare?: boolean;
   /** visual v2 «Круглые кнопки»: `card` — 32 inside a card (the timer's «⌃», a row's call); default 40 (the zone is 44 either way) */
   size?: "card";
@@ -140,7 +140,7 @@ export function IconButton({
         visibleHeight={s}
         accessibilityRole="button"
         accessibilityLabel={label}
-        style={{ width: s, minHeight: sizes.hitMin, alignItems: "center", justifyContent: "center" }}
+        style={{ width: sizes.hitMin, minHeight: sizes.hitMin, alignItems: "center", justifyContent: "center" }}
       >
         <Icon name={icon} s={component.valueIcon} color={tone === "bad" ? c.status.bad.text : c.ink} />
       </Press>
