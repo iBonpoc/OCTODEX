@@ -3723,6 +3723,7 @@ export const es: Dict = {
   "mod.gutters.attr.storyWin": "{n} p.",
   "mod.gutters.attr.dsLenStory": "Longitud {ft} ft · {n} p.",
   "mod.gutters.attr.dsLenMany": "Longitud {ft} ft — {n} pzs de {stick} ft",
+  "mod.gutters.attr.dsLenRoof": "Hacia el tejado inferior — sin longitud propia; indique «Altura propia»",
   "mod.gutters.attr.dsLenOwn": "Longitud {ft} ft (altura propia)",
   "mod.gutters.attr.lengthMm": "Longitud, mm",
   "mod.gutters.attr.tapeInchesOnly": "La cinta es solo en pulgadas",

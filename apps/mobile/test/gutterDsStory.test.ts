@@ -1,6 +1,6 @@
 /** v43 PR D: the downspout's own storey in its window and the length line under it */
 import { describe, expect, it } from "vitest";
-import { downspoutLengthIn, DEFAULT_GUTTER_RULES } from "@octo/estimating-engine";
+import { downspoutLengthIn, DEFAULT_GUTTER_RULES, resolveGutterRules } from "@octo/estimating-engine";
 import { dsLengthLine } from "../src/modules/gutters/canvas/dsLength";
 import { dsStoryPatch, dsStoryShown } from "../src/modules/gutters/canvas/attrs";
 
@@ -28,5 +28,22 @@ describe("the storey field of the window", () => {
     expect(dsStoryShown({}, 2)).toBe(2);
     expect(dsStoryPatch(2, 3)).toEqual({ story: 3 });
     expect(dsStoryPatch(2, 2)).toEqual({ story: undefined });
+  });
+});
+
+describe("the company's rules (the window says what the estimate counts)", () => {
+  it("a storey of 9 ft: 9 ft, and 2 storeys 18 ft in 2 sticks of the company's stick length", () => {
+    expect(dsLengthLine(ds(), 1, { storyHeightIn: 108 })).toMatchObject({ ft: 9, pieces: 1 });
+    expect(dsLengthLine(ds(), 2, { storyHeightIn: 108 })).toMatchObject({ ft: 18, pieces: 2 });
+    expect(dsLengthLine(ds(), 2, { storyHeightIn: 108, dsStickIn: 96 })).toMatchObject({ ft: 18, pieces: 3, stickFt: 8 });
+  });
+  it("it is what the engine counts with the same rules (minus its extension)", () => {
+    const over = { storyHeightIn: 108 };
+    const rules = resolveGutterRules(over);
+    expect(dsLengthLine(ds({ story: 2 }), 1, over).ft * 12 + rules.dsExtensionIn).toBe(downspoutLengthIn(ds({ story: 2 }) as never, 1, rules));
+  });
+  it("a storey of 9.5 ft gives 28.5 ft (a tenth, no float tail); onto the lower roof from the first storey — no storeys", () => {
+    expect(dsLengthLine(ds(), 3, { storyHeightIn: 114 }).ft).toBe(28.5);
+    expect(dsLengthLine(ds({ bottom: { kind: "lower_roof" } }), 1).stories).toBe(0);
   });
 });

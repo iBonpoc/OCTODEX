@@ -3723,6 +3723,7 @@ export const ru = {
   "mod.gutters.attr.storyWin": "{n} эт.",
   "mod.gutters.attr.dsLenStory": "Длина {ft} ft · {n} эт.",
   "mod.gutters.attr.dsLenMany": "Длина {ft} ft — {n} шт. по {stick} ft",
+  "mod.gutters.attr.dsLenRoof": "Труба на нижнюю крышу — своей длины нет, задайте «Свою высоту»",
   "mod.gutters.attr.dsLenOwn": "Длина {ft} ft (своя высота)",
   "mod.gutters.attr.lengthMm": "Длина, мм",
   "mod.gutters.attr.tapeInchesOnly": "Рулетка — только дюймы",

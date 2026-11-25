@@ -34,6 +34,7 @@ import { MM_SCALE, SIXTEENTHS_SCALE, SIXTEENTHS_SCALE_IN, Tape as TapeStrip } fr
 import { DENOM, fmtLen, fracLabel, LEN_UNITS, MM_OF, MM_PER_IN, type LenFormat, type LenUnit } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
 import { dsLengthLine } from "../canvas/dsLength";
+import type { GutterRulesOverride } from "@octo/estimating-engine";
 import { ELBOW_ANGLES, offsetRow, offsetsPatch, offsetStylesOf, rectElbowAngle, rectElbowPatch, roundElbow, roundElbowPatch, type OffsetStyle } from "../canvas/fittingRows";
 import { drawnLengthIn, type CornerChoice, type DrawnDownspout, type DrawnRun, type FoundCorner } from "../geometry";
 
@@ -580,7 +581,7 @@ function DsKindPick({ ds, onAttrs, ch }: { ds: DrawnDownspout; onAttrs: (p: Part
  * Верх (a list); «Ещё» — the colour, material, wall and its hook, its own length, the rare parts. G2 (#2412): its own
  * storey, Elbow / Offset A·B with an angle, the heads of the chart, the hooks by shape.
  */
-export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, run, forNew, no }: { /** its number among the drawing's downspouts (D{n} on the canvas): «Downspout № 2» */ no?: number; ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void; ch?: Choices; /** its gutter: «Как у gutter» */ run?: DrawnRun["attrs"]; /** «Новые водостоки» of this drawing (#1563 PR B): the same rows, its own title */ forNew?: boolean }) {
+export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, run, forNew, no, rulesOver }: { /** the company's rules (settings): the length line counts by them, as the estimate does */ rulesOver?: GutterRulesOverride; /** its number among the drawing's downspouts (D{n} on the canvas): «Downspout № 2» */ no?: number; ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void; ch?: Choices; /** its gutter: «Как у gutter» */ run?: DrawnRun["attrs"]; /** «Новые водостоки» of this drawing (#1563 PR B): the same rows, its own title */ forNew?: boolean }) {
   const { t } = useI18n();
   const w = wallOf(ds.shape, ds.wall);
   const sizes = withCurrent(ch.offer.dsSizes[ds.shape], ds.size);
@@ -588,8 +589,8 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, run, forNew, no 
   const wallKits = withCurrent(wallKitsFor(ds.shape, w.wall, ch), w.kit);
   const head = ds.head ?? (ds.funnel ? "funnel" : "none");
   const runStory = storyOf(run?.story);
-  const ln = dsLengthLine(ds, runStory);
-  const lenText = ln.own ? t(k("dsLenOwn"), { ft: ln.ft }) : ln.stories > 1 ? t(k("dsLenMany"), { ft: ln.ft, n: ln.stories, stick: ln.stickFt }) : t(k("dsLenStory"), { ft: ln.ft, n: ln.stories });
+  const ln = dsLengthLine(ds, runStory, rulesOver);
+  const lenText = ln.own ? t(k("dsLenOwn"), { ft: ln.ft }) : ln.stories === 0 ? t(k("dsLenRoof")) : ln.pieces > 1 ? t(k("dsLenMany"), { ft: ln.ft, n: ln.pieces, stick: ln.stickFt }) : t(k("dsLenStory"), { ft: ln.ft, n: ln.stories });
   return (
     <>
       {forNew ? null : <View testID="attr-title"><T v="heading" w="semibold">{no ? t(k("dsNo"), { n: no }) : t(k("ds"))}</T></View>}

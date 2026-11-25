@@ -3723,6 +3723,7 @@ export const en: Dict = {
   "mod.gutters.attr.storyWin": "{n} fl.",
   "mod.gutters.attr.dsLenStory": "Length {ft} ft · {n} fl.",
   "mod.gutters.attr.dsLenMany": "Length {ft} ft — {n} pcs of {stick} ft",
+  "mod.gutters.attr.dsLenRoof": "Onto the lower roof — no length of its own; set «Own height»",
   "mod.gutters.attr.dsLenOwn": "Length {ft} ft (own height)",
   "mod.gutters.attr.lengthMm": "Length, mm",
   "mod.gutters.attr.tapeInchesOnly": "The tape strip is inches only",
