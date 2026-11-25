@@ -803,6 +803,7 @@ export const es: Dict = {
   "ue.sendSms": "SMS",
   "ue.sendEmail": "Email",
   "ue.copyLink": "Copiar enlace",
+  "est.menu.copyLink": "Copiar enlace",
   "ue.linkCopied": "Enlace copiado",
   "ue.openClient": "Mostrar al cliente",
   "ue.pdf": "PDF",

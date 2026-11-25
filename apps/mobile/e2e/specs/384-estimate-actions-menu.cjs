@@ -45,8 +45,19 @@ exports.run = async (h) => {
   const order = await tid("menu-items").evaluate((m) =>
     [...m.querySelectorAll('[role="menuitem"]')].filter((e) => e.getBoundingClientRect().height > 0).map((e) => ({ id: e.getAttribute("data-testid"), y: e.getBoundingClientRect().y })).sort((a, b) => a.y - b.y).map((x) => x.id),
   );
-  h.expect(JSON.stringify(order) === JSON.stringify(["est-act-template", "est-sign-here", "est-call", "est-act-revoke"]), `the menu: ${order.join(", ")}`);
+  h.expect(JSON.stringify(order) === JSON.stringify(["est-act-template", "est-act-copy-link", "est-sign-here", "est-call", "est-act-revoke"]), `the menu: ${order.join(", ")}`);
   await h.shot("menu");
+
+  // «Скопировать ссылку» (#2652): a plain copy — the link is copied, nothing is sent again, the status and the date stay
+  await p.context().grantPermissions(["clipboard-read", "clipboard-write"]).catch(() => {});
+  const before = (await h.db()).estimates.find((x) => x.id === "e6");
+  await tid("est-act-copy-link").click();
+  await p.waitForFunction(() => /Ссылка скопирована/.test(document.querySelector('[data-testid="toast-text"]')?.textContent || ""), null, { timeout: 4000 });
+  const after = (await h.db()).estimates.find((x) => x.id === "e6");
+  h.expect(after.status === before.status && (after.sentAt ?? null) === (before.sentAt ?? null), "copying the link sends nothing: the status and the date of sending are as before");
+  // the menu closed with the pick: open it again for «Отозвать ссылку»
+  await tid("estimate-screen-more").getByRole("button").first().click();
+  await tid("menu-items").waitFor({ timeout: 3000 });
 
   // «Отозвать ссылку»: asks first, then runs with «Отменить»
   const revoked = async () => (await h.db()).estimates.find((x) => x.id === "e6").linkRevokedAt ?? null;
