@@ -13,14 +13,14 @@ exports.run = async (h) => {
   await setRole(h, "director");
   await h.go("/estimate/e6");
   await p.getByTestId("est-send").waitFor();
-  h.expect(await estHas(p, "client"), "the director: «Как видит клиент» in «⋯»");
+  h.expect(await estHas(p, "client"), "the director: «Показать клиенту» (an icon of the row)");
   await h.shot("director");
 
   await setRole(h, "tech");
   await h.go("/estimate/e6");
   await estMore(p);
   h.expect((await p.getByTestId("est-send").count()) === 0, "a tech: no «Отправить» (its sheet copies the link)");
-  h.expect(!(await estHas(p, "client")), "a tech: no «Как видит клиент»");
+  h.expect(!(await estHas(p, "client")), "a tech: no «Показать клиенту»");
   // v2 (#2350): the on-site signature is a section of the estimate («Подпись на месте», `estimate-screen-sections-sign`)
   h.expect((await p.getByTestId("estimate-screen-sections-sign").locator("visible=true").count()) === 1, "the on-site signature is still there for him");
   await h.shot("tech");

@@ -1,5 +1,5 @@
 /**
- * e2e 472 (#2020) — «Как видит клиент» in the demo: the page works as the client's, as before (story map S8 «Подпись клиента»).
+ * e2e 472 (#2020) — «Показать клиенту» in the demo: the page works as the client's, as before (story map S8 «Подпись клиента»).
  * С2 ДАНО the demo (no cloud), КОГДА the office opens a sent estimate «as client» from its «⋯», ТОГДА there is no «Так увидит
  * клиент» note, the client's signing works and the estimate awaits the company. The cloud side (a preview that does not sign
  * or pay) — e2e/cloud/specs/472-cloud-portal-preview.cjs, against a real server. Six views (h.layout).

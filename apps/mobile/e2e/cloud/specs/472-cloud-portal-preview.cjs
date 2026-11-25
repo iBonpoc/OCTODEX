@@ -1,5 +1,5 @@
 /**
- * e2e 472 (cloud, #2020) — «Как видит клиент» of a cloud company only shows, against a real Supabase (story map S8 «Подпись
+ * e2e 472 (cloud, #2020) — «Показать клиенту» of a cloud company only shows, against a real Supabase (story map S8 «Подпись
  * клиента», S9 «Оплата»). The demo side (the page works as the client's) — e2e/specs/472-portal-preview-demo.cjs.
  * С1 ДАНО the owner of company A signed in, a sent estimate, КОГДА they open it «as client», ТОГДА the note «Так увидит клиент»
  *    is there, the name field and the signature do not answer, «Approve and sign» is off — and the SERVER still has the
