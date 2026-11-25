@@ -158,6 +158,8 @@ export type Op =
       /** #2474: the phone saw the client's signature and the person chose «Сохранить и снять подпись» (#2381) — only then
        *  the cloud save reopens a client-signed estimate; absent in older builds and for any other save */
       fromStatus?: "awaiting_countersign";
+      /** #2478: with fromStatus — the option the phone saw the client sign (reopen_signed_estimate); absent in older builds */
+      signedOptionId?: string;
     }
   | {
       k: "estimate.approve";
@@ -306,7 +308,7 @@ export type Op =
   | { k: "estimate.revoke"; id: string }
   /* ---- wave E2b-1 ---- */
   | { k: "estimate.decline"; id: string; text: string }
-  | { k: "estimate.reopen"; id: string; reason: string }
+  | { k: "estimate.reopen"; id: string; reason: string; /** #2478: the option the phone saw the client sign; absent in older builds */ signedOptionId?: string }
   /* ---- wave E2b-2 ---- */
   | { k: "member.signature"; id: string; userId: string; svg: string; name: string; title?: string }
   | { k: "member.update"; id: string; title?: string; hisNumber?: string; canSignContracts?: boolean }
@@ -1322,10 +1324,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       const { error, status } = await supabase.rpc("decline_countersign", { p_estimate_id: op.id, p_text: op.text });
       return run(Promise.resolve({ error, status }));
     }
-    case "estimate.reopen": {
-      const { error, status } = await supabase.rpc("reopen_estimate", { p_estimate_id: op.id, p_reason: op.reason || null });
-      return run(Promise.resolve({ error, status }));
-    }
+    case "estimate.reopen":
+      return reopenSigned(op.id, op.reason || null, op.signedOptionId);
     case "estimate.revoke": {
       const { error, status } = await supabase.rpc("revoke_estimate_link", { p_estimate_id: op.id });
       return run(Promise.resolve({ error, status }));
@@ -1457,6 +1457,20 @@ export const withCostsSeen = (prev: CatalogItem | undefined, costs: CatalogCostC
 };
 
 /**
+ * #2478: «don't sign — change it» names the client's signature it takes off — the option the phone saw signed. The server
+ * refuses for good when the client signed another one meanwhile (22023 + hint estimate_signed_meanwhile, T473). An op of an
+ * older build (no option) and a server without the function yet (PGRST202): the old reopen_estimate (rule 16, step 1).
+ */
+async function reopenSigned(id: string, reason: string | null, signedOptionId: string | undefined) {
+  if (signedOptionId) {
+    const { error, status } = await supabase.rpc("reopen_signed_estimate", { p_estimate_id: id, p_reason: reason, p_signed_option_id: signedOptionId });
+    if (error?.code !== "PGRST202") return run(Promise.resolve({ error, status }));
+  }
+  const { error, status } = await supabase.rpc("reopen_estimate", { p_estimate_id: id, p_reason: reason });
+  return run(Promise.resolve({ error, status }));
+}
+
+/**
  * Draft estimate → database: estimate row, an unlocked version (a new one if the current is already sent),
  * options and line items mirrored from the doc (same ids), costs in the restricted side table.
  * The doc without costs is kept in estimate_versions.calc_inputs for the app and the client page.
@@ -1475,8 +1489,7 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
     throw new PermanentError("the client signed the estimate meanwhile", 409, "22023", "estimate_signed_meanwhile");
   }
   if (est.status === "awaiting_countersign") {
-    const { error, status } = await supabase.rpc("reopen_estimate", { p_estimate_id: op.id, p_reason: null });
-    await run(Promise.resolve({ error, status }));
+    await reopenSigned(op.id, null, op.signedOptionId);
     est.status = "draft";
   }
   if (!["draft", "sent", "viewed"].includes(est.status as string)) return;
