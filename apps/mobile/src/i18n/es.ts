@@ -1725,6 +1725,7 @@ export const es: Dict = {
   "sheet.unsavedTitle": "¿Guardar cambios?",
   "sheet.unsavedText": "Cambió algo en esta ventana.",
   "sheet.discard": "No guardar",
+  "sheet.keepEditing": "Seguir editando",
   // C2: properties inside a client (docs/specs/04 §7.3)
   "prop.card": "Propiedad",
   "prop.add": "Agregar propiedad",
