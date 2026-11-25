@@ -79,6 +79,7 @@ import { makeSeed } from "../src/data/seed";
 import type { DB, Photo } from "../src/data/types";
 import { registerModule } from "../src/modules/registry";
 import gutters from "../src/modules/gutters/module";
+import { sweepLocalFiles, SWEEP_MIN_AGE_MS } from "../src/data/localFiles";
 import { addPhoto as addMeasurePhoto, retryPhoto as retryMeasurePhoto } from "../src/modules/gutters/data";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -91,6 +92,7 @@ type Value = {
   retryPhoto: (v: string, p: string) => () => void;
   preparePhotoAgain: (ref: { visitId?: string; photoId: string } | { expenseId: string }) => void;
   addExpense: (x: object, receipt?: Picked) => () => void;
+  removePhoto: (v: string, p: string) => () => boolean | void;
 };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: Value } }).props.value;
@@ -245,6 +247,44 @@ describe("unit:photoUploadStore — #1558 the original never goes to the cloud (
     expect(retry.op).toEqual({ k: "photo.retry", id: p.id, visitId, uri: "file:///made-1.jpg" });
     expect(photoOf(r, visitId, p.id)).toEqual({ id: p.id, kind: "before", uri: "file:///made-1.jpg" });
     expect(JSON.stringify(server.sends.map((x) => x.op))).not.toContain("orig-with-gps");
+  });
+
+  it("#1659 (review 25.11): a deleted photo's file is not swept while «Вернуть» may bring it back", { timeout: 20_000 }, async () => {
+    const r = await start();
+    const seed = makeSeed();
+    await load(seed);
+    const visitId = seed.visits[0]!.id;
+    const dir = "file:///C/Caches/ImagePicker/";
+    const file = `${dir}undo-me.jpg`;
+    valueOf(r).addPhoto(visitId, "before", file);
+    await settle();
+    const p = valueOf(r).db.visits.find((v) => v.id === visitId)!.photos.at(-1)!;
+    // sent: the queue names the file no more — only the visit does
+    const add = await sent(1);
+    add.d.resolve(undefined);
+    await settle();
+    await wait(50);
+    const undo = valueOf(r).removePhoto(visitId, p.id);
+    // the phone's record is written without the photo: only the undo names the file now
+    for (let i = 0; i < 40 && [...storage.values()].some((v) => v.includes("undo-me")); i++) {
+      await wait(100);
+      await settle();
+    }
+    expect([...storage.values()].some((v) => v.includes("undo-me"))).toBe(false);
+    const left = new Set([file, `${dir}orphan.jpg`]);
+    const now = Date.now();
+    const gone = await sweepLocalFiles({
+      dirs: () => [dir],
+      list: () => [...left].map((uri) => ({ uri, modified: now - SWEEP_MIN_AGE_MS - 1 })),
+      remove: (u) => void left.delete(u),
+      keys: async () => [...storage.keys()],
+      read: async (k) => storage.get(k) ?? null,
+    }, now);
+    expect(gone).toBe(1);
+    expect([...left]).toEqual([file]);
+    undo();
+    await settle();
+    expect(photoOf(r, visitId, p.id).uri).toBe(file);
   });
 
   it("at the start: a photo «preparing» long enough is tried again by itself", { timeout: 20_000 }, async () => {
