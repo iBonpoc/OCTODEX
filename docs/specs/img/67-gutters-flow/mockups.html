@@ -172,7 +172,7 @@ const ic = (n, s) => svg(I[n], s);
 const mini = (w = 28) => `<svg width="${w}" height="${w}" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 9h26v22H6"/><circle cx="6" cy="9" r="2.5" fill="currentColor"/><circle cx="6" cy="31" r="2.5" fill="currentColor"/></svg>`;
 const big = `<svg width="270" height="171" viewBox="0 0 300 190" fill="none" stroke="currentColor"><path d="M40 40h190v110H40" stroke-width="3.5"/><circle cx="40" cy="40" r="6" fill="var(--bg)" stroke-width="2.5"/><circle cx="40" cy="150" r="6" fill="var(--bg)" stroke-width="2.5"/><circle cx="230" cy="95" r="6" fill="var(--bg)" stroke-width="2.5"/><g font-family="system-ui" font-size="13" fill="currentColor" stroke="none"><text x="112" y="28">28′ 9″</text><text x="240" y="99">33′ 2″</text><text x="112" y="172">28′ 9″</text><text x="30" y="62">D1</text><text x="30" y="140">D2</text><text x="206" y="118">D3</text></g></svg>`;
 
-// мастер (§8.3 п.3, nav/sections.ts: у мастера «Денег» нет): Главная · План · Gutters · Клиенты · Лиды — макет по совету §8.3, ждёт ответа
+// мастер (§8.8 п.4): Главная · Gutters · План · Клиенты · Лиды, «Денег» нет
 const TABS = [["home", "Главная"], ["gut", "Gutters"], ["users", "Клиенты"], ["money", "Деньги"], ["leads", "Лиды"]];
 // решено брейнштормом 25.11: у мастера Gutters вторым, как у офиса; «План» не вытесняется (вкладок < 6); «Лиды» с числом — последними
 const TABS_MASTER = [["home", "Главная"], ["gut", "Gutters"], ["cal", "План"], ["users", "Клиенты"], ["leads", "Лиды"]];
@@ -191,6 +191,8 @@ const headObj = (name, status, kind = "Замер · 24 нояб.") => `<div cla
   <div class="row"><div class="round">${ic("more")}</div></div></div>
   <h1>${name}</h1><div class="rule"></div>
   <div class="kind">${kind}<span class="help">?</span></div><div class="hst">${status}</div>`;
+// у мастера адрес — строкой «›» в шапке (проверка №9 Ж1): на объекте он нужен первым
+const addrLine = `<div class="hst" style="color:var(--ink);font-weight:600;margin-top:6px">${ic("pin", 14)}<span>2207 Ocean Park Blvd · Маршрут</span>${ic("chev", 14)}</div>`;
 const hst = (icon, word) => `${ic(icon, 14)}<span>${word}</span>`;
 const row = (lead, n, m, right, chev = true) => `<div class="gr">${lead}<div class="t"><div class="n">${n}</div>${m ? `<div class="m">${m}</div>` : ""}</div>${right ? `<div class="r">${right}</div>` : ""}${chev ? `<span class="chev">${ic("chev", 18)}</span>` : ""}</div>`;
 const group = (title, rows, link, n) => `<div class="gh"><b>${title}${n != null ? `<span class="cnt">${n}</span>` : ""}</b>${link ? `<span>${link}</span>` : ""}</div><div class="card">${rows.join("")}</div>`;
@@ -210,6 +212,8 @@ const rMark = row(thumb("l"), "Mark Chen", when("1520 Elm St"), rt(pill("info", 
 const rRosa = row(thumb("z"), "Rosa Diaz", when("88 Pine Ave"), rt(pill("ok", "check", "Подписана"), "21&nbsp;нояб."));
 // смета не собралась — в той же группе, вместо суммы «⚠ Нет цен · 2»
 const rNoPrice = row(th, "Paul Kim", "15 Cedar Ct", rt(`<span class="warnnote nw">${ic("alert", 13)} Нет цен · 2</span>`, "24&nbsp;нояб."));
+// у мастера — нейтрально, сделать он ничего не может (проверка №9 Ж3)
+const rNoPriceMaster = row(th, "Paul Kim", "15 Cedar Ct", rt(pill("neutral", "doc", "Смета у офиса"), "24&nbsp;нояб."));
 const rDraft = row(thumb("l"), "Без клиента", `<span class="nw">Gutter 46&nbsp;ft · Downspout&nbsp;1</span>`, `<span class="nw">9:15</span>`);
 // выезд-осмотр — значок календаря (не «часы» тона info)
 const visit = (n, when, a) => row(`<div class="ico">${ic("cal")}</div>`, n, `${when}<br><span class="nw">${a}</span>`, "");
@@ -227,7 +231,7 @@ S["v1-list"] = () => `<div class="phone"><div class="scroll">${headRoot("Gutters
 // основатель 25.11 выбрал вариант 1 «Два списка»; мастер — без сумм, своё слово «Смета у офиса»
 S["v1-list-master"] = () => `<div class="phone"><div class="scroll">${headRoot("Gutters")}
   ${group("Черновики", [rDraft], "", 1)}
-  ${group("Замеры", [rLindaMaster, rNoPrice, rMark, rRosa], "", 4)}
+  ${group("Замеры", [rLindaMaster, rNoPriceMaster, rMark, rRosa], "", 4)}
   </div>${tabbar("Gutters", TABS_MASTER)}</div>`;
 // В2 (выбор #2517). «Ждут замера» — по умолчанию #2678: только записанные осмотры без замера (сегодня и ближайшие дни); нажатие строки — замер.
 // Смета собирается сама (#2676): «Ждут отправки» — у офиса и директора; у мастера группы нет (экран v2-list-master)
@@ -295,19 +299,19 @@ S["v2-card"] = () => `<div class="phone"><div class="scroll">${headObj("Linda Al
   ${officeNext}${sheet}${saved("Сохранено в облаке · 10:42")}${act("Отправить смету", "send")}${trio}${addr}
   </div>${tabbar("Gutters")}</div>`;
 // мастер: без денег, без вкладки «Сметы», без жёлтой
-S["v2-card-master"] = () => `<div class="phone"><div class="scroll">${headObj("Linda Alvarez", hst("doc", "Смета собрана"))}${tabs(false)}
+S["v2-card-master"] = () => `<div class="phone"><div class="scroll">${headObj("Linda Alvarez", hst("doc", "Смета собрана"))}${addrLine}${tabs(false)}
   ${next("Офис проверит и отправит")}${sheet}${saved("Сохранено на телефоне · 10:42")}${act("", "", "Править чертёж")}${trioMaster}${addr}
   </div><div class="qline">${ic("wifiOff", 16)}Нет сети · ждёт отправки · 1</div>${tabbar("Gutters", TABS_MASTER)}</div>`;
 // вкладка «Сметы» у офиса (#2734): смета, к ней прикреплены чертёж и заказ поставщику — документы в одном месте
 const tabsEst = `<div class="vt"><div>Обзор</div><div>Фото</div><div class="on">Сметы <small>1</small></div><div>История</div></div>`;
 S["v2-card-estimates"] = () => `<div class="phone"><div class="scroll">${headObj("Linda Alvarez", noEst)}${tabsEst}
-  ${group("", [row(`<div class="ico">${ic("doc")}</div>`, "Смета #1024", "24&nbsp;нояб.", rt(`<span class="money">$2,113.67</span>`, pill("neutral", "doc", "Смета готова")))])}
+  ${group("", [row(`<div class="ico">${ic("doc")}</div>`, "Смета #1024", "24&nbsp;нояб.", `<span class="money">$2,113.67</span>`)])}
   <div class="cap">Прикреплено к смете</div>
-  <div class="card" style="margin-top:8px">${row(`<div class="ico">${ic("ruler")}</div>`, "Чертёж", "PDF · уходит клиенту со сметой", "")}${row(`<div class="ico">${ic("box")}</div>`, "Заказ поставщику", "На английском · 14&nbsp;позиций · не отправлен", "")}</div>
+  <div class="card" style="margin-top:8px">${row(`<div class="ico">${ic("ruler")}</div>`, "Чертёж", "PDF · уходит клиенту со сметой", "")}${row(`<div class="ico">${ic("box")}</div>`, "Заказ поставщику", "На английском · не&nbsp;отправлен", "")}</div>
   <div class="gnote">«＋ Доп. смета» появляется здесь только после подписи (#2728)</div>
   </div>${tabbar("Gutters")}</div>`;
 // мастер на iPhone SE (667), в сети
-S["v2-card-master-se"] = () => `<div class="phone se"><div class="scroll">${headObj("Linda Alvarez", hst("doc", "Смета у офиса"))}${tabs(false)}
+S["v2-card-master-se"] = () => `<div class="phone se"><div class="scroll">${headObj("Linda Alvarez", hst("doc", "Смета у офиса"))}${addrLine}${tabs(false)}
   ${next("Офис проверит и отправит")}${sheet}${saved("Сохранено в облаке · 10:42")}${act("", "", "Править чертёж")}${trioMaster}
   </div>${tabbar("Gutters", TABS_MASTER)}</div>`;
 // iPhone SE (667): кнопка и тройка — над вкладками?
