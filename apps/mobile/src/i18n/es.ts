@@ -804,7 +804,7 @@ export const es: Dict = {
   "ue.sendEmail": "Email",
   "ue.copyLink": "Copiar enlace",
   "ue.linkCopied": "Enlace copiado",
-  "ue.openClient": "Vista del cliente",
+  "ue.openClient": "Mostrar al cliente",
   "ue.pdf": "PDF",
   "ue.sendText": "{company}: presupuesto para {name}, {total}. Abra, elija una opción y firme: {link}",
   "ue.sendSubject": "Presupuesto {number} de {company}",

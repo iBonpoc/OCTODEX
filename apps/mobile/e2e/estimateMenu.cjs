@@ -1,7 +1,7 @@
 /**
- * The estimate card's «⋯» (#1412, DS Б4): «Изменить», «Как видит клиент», «Сохранить как шаблон», «PDF», «Отозвать ссылку» live in
+ * The estimate card's «⋯» (#1412, DS Б4): «Изменить», «Показать клиенту», «Сохранить как шаблон», «PDF», «Отозвать ссылку» live in
  * the menu, not on the page. `estMore(p)` — the card is up (its «⋯» is there); `estAct(p, key)` opens «⋯» and presses the item
- * (`edit` | `client` | `template` | `pdf` | `revoke`); `estHas(p, key)` — the item is in the menu (it opens and closes «⋯»).
+ * (`edit` | `client` (a row icon) | `template` | `pdf` | `revoke`); `estHas(p, key)` — the item is in the menu (it opens and closes «⋯»).
  * The main button «Отправить клиенту» stays on the page (`est-send`: the pinned bar on a phone, the top of the content from 820).
  * Prototype v2 (#2350): the estimate is the Object template — its «⋯» is the header's `estimate-screen-more`, and «PDF», «Изменить»,
  * «SMS», «Почта», «Ссылка» are icons of the row under the header (`est-act-pdf`, `est-act-edit`…), not menu items: `estAct`
