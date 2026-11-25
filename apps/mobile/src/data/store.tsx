@@ -20,6 +20,7 @@ import { applyOp, catalogCostChange, catalogItemChange, renewSession, sendVisitP
 import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
 import { defaultLeadAssignee } from "@/features/leadAssignee";
 import { keepLast, stepPending } from "@/features/location";
+import { canChangeEstimateClient } from "@/features/estimateStatus";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
 import { canMakeEstimateAt, keepCosts, leadEstimatePropertyId, serverSaysCosts } from "@/features/access";
@@ -2573,9 +2574,13 @@ export function StoreProvider({
       },
       estimateTerms: (at) => termsForNew(dbRef.current, at),
       estimateTermsOnClientChange: (current, at) => termsOnClientChange(dbRef.current, current, at.from, at.to),
-      saveEstimate: ({ id, customerId, propertyId, title, doc: doc0, leadId: leadId0, templateId: templateId0 }) => {
+      saveEstimate: ({ id, customerId: customerId0, propertyId: propertyId0, title, doc: doc0, leadId: leadId0, templateId: templateId0 }) => {
         const prev = dbRef.current.estimates.find((e) => e.id === id);
         if (prev?.status === "approved") return NO_UNDO;
+        // #2406: the client of an estimate that went out is not changed by a save (the screen does not offer it; this is the other way in)
+        const keep = !!prev && !canChangeEstimateClient(prev.status);
+        const customerId = keep ? prev.customerId : customerId0;
+        const propertyId = keep ? prev.propertyId : propertyId0;
         // #1138: a tech makes a new estimate only where the server lets him (estimates_insert — a property he works at);
         // elsewhere it would vanish behind «нет доступа» after saving (demo) or be refused (cloud)
         if (!prev && !canMakeEstimateAt(dbRef.current, { role, mode, me: dbRef.current.me }, propertyId)) return NO_UNDO;
