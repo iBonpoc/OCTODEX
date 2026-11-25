@@ -109,6 +109,25 @@ describe("unit:localFiles — the sweep (#1659)", () => {
     expect([...left]).toEqual([man("unsaved.jpg")]);
     off();
   });
+  it("a record that moves to another key while the keys are read one by one still names its file (review 24.11)", async () => {
+    const recs: Record<string, string> = { "octo.a.v1": JSON.stringify({ uri: man("moving.jpg") }), "octo.z.v1": "{}" };
+    const { d, left } = deps(recs, [man("moving.jpg"), man("orphan.jpg")]);
+    let moved = false;
+    const read = async (k: string) => {
+      const v = recs[k] ?? null;
+      // «a» read as empty first (moved away just before), «z» gets the record after it was read
+      if (k === "octo.a.v1" && !moved) return "{}";
+      if (k === "octo.z.v1" && !moved) {
+        moved = true;
+        recs["octo.z.v1"] = recs["octo.a.v1"]!;
+        delete recs["octo.a.v1"];
+        return "{}";
+      }
+      return v;
+    };
+    expect(await sweepLocalFiles({ ...d, keys: async () => Object.keys(recs), read }, now)).toBe(1);
+    expect([...left]).toEqual([man("moving.jpg")]);
+  });
   it("the web / no file system, a device that refuses — nothing, never throws", async () => {
     const { d } = deps({}, [man("a.jpg")]);
     expect(await sweepLocalFiles({ ...d, dirs: () => null }, now)).toBe(0);

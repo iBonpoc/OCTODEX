@@ -59,7 +59,7 @@ export function namesIn(raw: string, strict = true): Set<string> | null {
     v = JSON.parse(raw);
   } catch {
     // a record that should be JSON and is cut or broken: whose files is not known. A plain word under the same prefix
-    // (the Gutters toolbar's place «bottom», octo.mod.gutters.toolbar.v1) names no file and calls nothing off
+    // (a module's toolbar place «bottom») names no file and calls nothing off
     if (strict && /^\s*[[{"]/.test(raw)) return null;
     v = raw;
   }
@@ -138,24 +138,35 @@ export async function sweepLocalFiles(deps?: SweepDeps, now = Date.now()): Promi
     const d = deps ?? deviceDeps();
     const dirs = d.dirs();
     if (!dirs) return 0;
-    const inMemory = memory();
-    if (inMemory === null) {
-      d.log?.("photo files: not swept (the store is not saved on the device)");
-      return 0;
-    }
     const named = new Set<string>();
-    for (const k of await d.keys()) {
-      const raw = await d.read(k);
-      if (raw == null) continue;
-      const names = namesIn(raw, holdsPhotos(k));
-      // a record that is not JSON (a broken one kept for a copy): whose files it names is not known — called off
-      if (!names) {
-        d.log?.(`photo files: not swept (${k} is not readable)`);
+    // two passes, the store's memory before and after: a record that moves from one key to another while the keys are read
+    // one by one (a key's new version at the start, a draft saved as an estimate) is named in one of them (review 24.11)
+    for (let pass = 0; pass < 2; pass++) {
+      const inMemory = memory();
+      if (inMemory === null) {
+        d.log?.("photo files: not swept (the store is not saved on the device)");
         return 0;
       }
-      names.forEach((n) => named.add(n));
+      for (const raw of inMemory) {
+        const names = namesIn(raw);
+        if (!names) return 0;
+        names.forEach((n) => named.add(n));
+      }
+      for (const k of await d.keys()) {
+        const raw = await d.read(k);
+        if (raw == null) continue;
+        const names = namesIn(raw, holdsPhotos(k));
+        // a record that is not JSON (a broken one kept for a copy): whose files it names is not known — called off
+        if (!names) {
+          d.log?.(`photo files: not swept (${k} is not readable)`);
+          return 0;
+        }
+        names.forEach((n) => named.add(n));
+      }
     }
-    for (const raw of inMemory) {
+    const last = memory();
+    if (last === null) return 0;
+    for (const raw of last) {
       const names = namesIn(raw);
       if (!names) return 0;
       names.forEach((n) => named.add(n));
