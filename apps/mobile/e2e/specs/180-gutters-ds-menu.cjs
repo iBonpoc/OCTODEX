@@ -87,7 +87,6 @@ exports.run = async (h) => {
   await waitFor(async () => JSON.stringify((await els()).find((e) => e.kind === "downspout")?.attrs.offsets) === JSON.stringify([{ lengthIn: 4, qty: 1 }]), "one 4″ offset");
   await pickIn("attr-offset-len", "own");
   await tid("attr-offset-own").locator("input").fill("2.5");
-  await tid("attr-offset-own-apply").getByRole("button").click();
   await waitFor(async () => JSON.stringify((await els()).find((e) => e.kind === "downspout")?.attrs.offsets) === JSON.stringify([{ lengthIn: 2.5, qty: 1 }]), "its own 2½″ offset");
   await h.shot("ds-menu");
   await closePanel();
