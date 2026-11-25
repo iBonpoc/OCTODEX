@@ -144,7 +144,8 @@ const stamp = (f: string) => path.basename(f).slice(0, 14);
  */
 export function outOfOrder(main: readonly string[], head: readonly string[], ok: readonly string[] = []): string[] {
   const merged = new Set(main.map((f) => path.basename(f)));
-  const last = main.map(stamp).sort().at(-1) ?? "";
+  // only the .sql files: RESERVED.md (#2110) sorts after every 14-digit time and would be «the last migration»
+  const last = main.filter((f) => f.endsWith(".sql")).map(stamp).sort().at(-1) ?? "";
   const fresh = head.map((f) => path.basename(f)).filter((f) => f.endsWith(".sql") && !merged.has(f));
   const errs: string[] = [];
   for (const f of fresh) {
@@ -169,6 +170,8 @@ describe("migrationGuard — a new migration is dated after the last on main (#7
   });
   it("after main's last — passes; merged files are never checked again", () => {
     expect(outOfOrder(main, [...main, "20261111040000_new.sql"])).toEqual([]);
+    // RESERVED.md beside the migrations (#2110) is no migration: it is never «main's last»
+    expect(outOfOrder([...main, "RESERVED.md"], [...main, "RESERVED.md", "20261111040000_new.sql"])).toEqual([]);
     expect(outOfOrder(main, main)).toEqual([]);
   });
   it("two new ones with one time — refused", () => {
