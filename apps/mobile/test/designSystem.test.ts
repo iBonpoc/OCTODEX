@@ -621,7 +621,7 @@ describe("design system: a record's card has no row of pill buttons (#1412)", ()
     return rows;
   };
   /** cards still to move (#1474) and rows that are not a card's actions — exact counts, the list only shrinks */
-  // EstimateCard's «Отправить» sheet: one main button with «Отменить · 5» and two in a row under it (#2218) — the list is empty
+  // EstimateCard's «Отправить» sheet: one main button (sends at once, MAP §13 п.1) and two in a row under it (#2218) — the list is empty
   const ALLOWED: Record<string, { n: number; why: string }> = {};
   it("no row of 3+ buttons on a record's card (src/app/**/[id].tsx, features/**/*Card.tsx)", () => {
     const bad: string[] = [];
