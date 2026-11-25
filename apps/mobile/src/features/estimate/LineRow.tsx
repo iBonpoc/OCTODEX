@@ -272,7 +272,7 @@ function LineRowView(p: LineRowProps) {
                 {hidden || noPrice(l) || p.unhiddenMark || p.checkPrice ? <RowView style={{ flexWrap: "wrap", marginTop: space[1] }}>{briefChips}</RowView> : null}
                 <LineMarks marks={marks} lineId={l.id} />
                 {/* ЧЕРНОВИК #1832 (`?qv=m`): пометка видна и у свёрнутой строки */}
-                {qv() === "m" && belowMinDraft(l) ? <StatusNote tone="warn">Ниже наценки — нужно согласие владельца</StatusNote> : null}
+                {qv() === "m" && belowMinDraft(l) ? <StatusNote tone="warn">Ниже наценки</StatusNote> : null}
               </>
             }
           />
