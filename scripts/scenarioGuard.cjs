@@ -16,7 +16,8 @@
  *
  * `decide` is pure (file texts and added line numbers are passed in); the CLI part reads them from git (BASE_SHA … HEAD_SHA).
  */
-const SPEC = /^docs\/(specs\/[^/]+|14-[^/]+)\.md$/;
+/** A spec is docs/specs/<name>.md or docs/14-*.md; a folder table of contents (README.md) is not a spec (#2684). */
+const SPEC = /^docs\/(specs\/(?!README\.md$)[^/]+|14-[^/]+)\.md$/;
 const TEST = /(^|\/)(test|tests|e2e\/specs|e2e\/cloud)\/.+\.(ts|tsx|cjs|mjs|js|sql)$|\.test\.(ts|tsx|cjs|mjs|js)$/;
 const OPT_OUT = /<!--\s*без сценариев\s*:\s*\S[^>]*-->/i;
 const HEADING = /^(#{1,6})\s+\S/;

@@ -976,7 +976,7 @@ function DrawCanvas() {
   const mPhotos = m && mStored && (canSave || has()) ? <MeasurePhotos measurementId={m.id} testID="draw-photos" onRemoved={() => setPhotoSheet(false)} readOnly={!canSave} /> : null;
   const attrs = !sel ? null : (
     <>
-      {"a" in sel ? <RunAttrsView no={drawing.runs.findIndex((r) => r.id === sel.id) + 1} run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} /> : <DsAttrsView no={drawing.downspouts.findIndex((d) => d.id === sel.id) + 1} ds={sel} onAttrs={onDsAttrs} ch={ch} run={drawing.runs.find((r) => r.id === sel.runId)?.attrs} />}
+      {"a" in sel ? <RunAttrsView key={sel.id} no={drawing.runs.findIndex((r) => r.id === sel.id) + 1} run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} /> : <DsAttrsView key={sel.id} rulesOver={rules.over} no={drawing.downspouts.findIndex((d) => d.id === sel.id) + 1} ds={sel} onAttrs={onDsAttrs} ch={ch} run={drawing.runs.find((r) => r.id === sel.runId)?.attrs} />}
       {elPhotos}
     </>
   );

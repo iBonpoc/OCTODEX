@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { View } from "react-native";
 import { useI18n, type DictKey } from "@/i18n";
-import { Button, ChoiceChips, ReadOnly, TextField } from "@/ui/controls";
+import { Button, ChoiceChips, ReadOnly, Stepper, TextField } from "@/ui/controls";
+import { component, space } from "@octo/design-tokens";
 import { Anchored, useRequiredForm } from "@/ui/requiredForm";
 import { SelectField } from "@/ui/selectField";
 import { ColorField } from "@/ui/colorField";
@@ -55,6 +56,8 @@ export function SelectorsSection() {
   const [color, setColor] = useState<string | null>("white");
   const [vtab, setVtab] = useState<VTab>("overview");
   const [many, setMany] = useState<Unit>("ft");
+  const [angle, setAngle] = useState<string | null>("75");
+  const [count, setCount] = useState(2);
   // a required field (DS §11 п.3–4): the button is always on; pressed with the field empty it shows the error under it
   const form = useRequiredForm();
   const [reqName, setReqName] = useState("");
@@ -92,6 +95,16 @@ export function SelectorsSection() {
         <SelectField labelAbove testID="showcase-pick-short" label={t("ds.pick.short")} value={short} items={SHORT.map((k, n) => ({ key: k, label: t(k), top: n === 0 }))} onChange={setShort} />
         <SelectField labelAbove testID="showcase-pick-long" label={t("ds.pick.long")} value={longPick} items={LONGN.map((k) => ({ key: k, label: t(k), leading: { icon: "image" as const } }))} onChange={setLongPick} />
         <ColorField labelAbove testID="showcase-pick-color" label={t("ds.pick.color")} value={color} onChange={setColor} colors={[{ key: "none", label: t("ds.pick.noPaint"), top: true, none: true }, ...PALETTE]} />
+      </Card>
+      <Card>
+        <T v="heading">{t("ds.count.title")}</T>
+        <T v="caption" tone="mut">{t("ds.count.hint")}</T>
+        {/* a part's count row (a module's property windows, DS §12.14): the name on the left, the value in the field, the count — no word of its own */}
+        <View testID="showcase-count-row" style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+          <View style={{ width: component.countRowLabelW }}><T v="body" w="semibold" numberOfLines={2}>{t("ds.count.name")}</T></View>
+          <View style={{ flex: 1 }}><SelectField bare testID="showcase-count-angle" label={t("ds.count.name")} value={angle} items={["30", "45", "60", "75", "90"].map((a) => ({ key: a, label: `${a}°` }))} onChange={setAngle} /></View>
+          <Stepper hideLabel compact label={t("ds.count.name")} value={count} min={0} max={12} onChange={setCount} />
+        </View>
       </Card>
       <Card>
         <T v="heading">{t("ds.choice.title")}</T>

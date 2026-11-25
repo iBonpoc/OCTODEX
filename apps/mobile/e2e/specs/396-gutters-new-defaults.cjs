@@ -26,6 +26,9 @@ exports.run = async (h) => {
     await tid(`draw-tool-${tool}`).getByRole("button").click();
     const b1 = await tid(`draw-tool-${tool}`).boundingBox(); // inside the window of a second tap: where the second tap goes
     h.expect(Math.abs(b1.y - b.y) < 1 && Math.abs(b1.x - b.x) < 1, `picking «${tool}» does not move the toolbar (${Math.round(b.y)} → ${Math.round(b1.y)})`);
+    // the pick is NOT the first half of the two taps: with it they were three, and the third landed in the sheet the first two had opened —
+    // on whatever field stands over the toolbar there (#2662: «Вид» on its own line put «Верх» there; its list covered «Размер»)
+    await pastDoubleTap(p);
     await doubleTapUntil(p, b.x + b.width / 2, b.y + b.height / 2, { fn: () => [...document.querySelectorAll('[data-testid="draw-new-defaults"]')].some((e) => e.getClientRects().length > 0), arg: null }, `two taps on «${tool}»: its new ones' properties`);
   };
   const closeNew = async () => {
