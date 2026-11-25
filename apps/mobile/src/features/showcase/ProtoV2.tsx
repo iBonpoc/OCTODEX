@@ -78,8 +78,8 @@ export function ProtoV2() {
           ]}
         />
       </Card>
-      {/* the segment: the Plan's one yellow; a form's choice — the neutral chosen cell */}
-      <Segmented accent full testID="showcase-v2-seg-accent" value={mode} onChange={setMode} items={[{ key: "day", label: t("plan.day") }, { key: "week", label: t("plan.week") }, { key: "month", label: t("plan.month") }]} />
+      {/* the segment: the chosen cell is neutral `surf3` everywhere, the Plan's «День» too (DS §3.1 п.3, §12.12) */}
+      <Segmented full testID="showcase-v2-seg-accent" value={mode} onChange={setMode} items={[{ key: "day", label: t("plan.day") }, { key: "week", label: t("plan.week") }, { key: "month", label: t("plan.month") }]} />
       <Segmented full testID="showcase-v2-seg" value={kind} onChange={setKind} items={[{ key: "a", label: t("ds.v2.work") }, { key: "b", label: t("ds.v2.jobs") }]} />
       {/* the visit: the checklist, the timer, the three figures, the pair «Завершить · Фото · ✎» */}
       <Card>
