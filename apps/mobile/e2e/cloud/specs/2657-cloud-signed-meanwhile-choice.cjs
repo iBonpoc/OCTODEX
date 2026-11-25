@@ -81,6 +81,7 @@ exports.run = async (h, { seed, admin }) => {
   await p.getByTestId("rejected-r-reset").waitFor({ state: "detached", timeout: 5000 });
   h.expect((await admin(`estimates?title=eq.${encodeURIComponent(title)}&select=id`)).length === afterCopy, "«Сбросить»: nothing was made on the server");
   // its toast has «Вернуть» (the edits are lost here; the undo is local, before any sending): the card is back
-  await tid("toast-undo").click();
+  // «Вернуть» ignores a tap until it is armed (aria-busy false, toastArmMs after the toast showed, #2086): wait for that, never for seconds
+  await p.locator('[data-testid="toast-undo"][aria-busy="false"]').locator("visible=true").first().click({ timeout: 8000 });
   await tid("rejected-r-reset").waitFor({ timeout: 8000 });
 };
