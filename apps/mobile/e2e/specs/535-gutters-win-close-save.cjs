@@ -15,7 +15,7 @@ exports.run = async (h) => {
   const tid = (id) => p.getByTestId(id).locator("visible=true");
   const waitFor = async (ok, what, tries = 40) => {
     let v = await ok();
-    for (let i = 0; i < tries && !v; i++) { await p.waitForTimeout(150); v = await ok(); }
+    for (let i = 0; i < tries * 9 && !v; i++) { await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => r()))); v = await ok(); }
     h.expect(!!v, what);
   };
   const storyStored = () =>
