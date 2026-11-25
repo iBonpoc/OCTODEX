@@ -142,7 +142,7 @@ function LineRowView(p: LineRowProps) {
     hide: { label: t("est.row.hide"), icon: "eye" },
     show: { label: t("est.row.show"), icon: "eye" },
     move: { label: t("est.sec.moveTitle"), icon: "sections" },
-    catalog: { label: t("est.row.addToCatalog"), icon: "plus" },
+    catalog: { label: t("est.row.addToCatalog"), icon: "catalog" },
     delete: { label: t("est.row.delete"), icon: "trash" },
   };
   // «Выше» / «Ниже» are the screen reader's actions only (a line the person may move — not a module's): in the menu they were two
