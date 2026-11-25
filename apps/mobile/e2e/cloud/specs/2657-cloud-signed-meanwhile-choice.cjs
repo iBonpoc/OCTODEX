@@ -72,7 +72,9 @@ exports.run = async (h, { seed, admin }) => {
   await tid("toast-undo").click();
   await p.waitForFunction(() => !/\/estimate\/new/.test(location.pathname), null, { timeout: 8000 });
   await tid("rejected-r-undo").waitFor({ timeout: 8000 });
-  await p.waitForTimeout(3000);
+  // the undo took the save out of the phone's queue (it may be on its way already: then the server gets it — checked below by id)
+  const queued = await p.evaluate((id) => JSON.parse(localStorage.getItem("octo.outbox.v1") || "[]").some((x) => x.op?.k === "estimate.save" && x.op?.id === id), undoneId);
+  h.expect(!queued, "«Вернуть»: the copy's save is not in the phone's queue");
   h.expect((await admin(`estimates?id=eq.${undoneId}&select=id`)).length === 0, "«Вернуть»: the copy was not made on the server");
 
   // «Сделать копию»: the editor of a new draft, the card goes, the copy reaches the server as a draft with the same client
