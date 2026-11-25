@@ -1,0 +1,77 @@
+diff --git a/apps/mobile/src/ui/groupedList.tsx b/apps/mobile/src/ui/groupedList.tsx
+index b786aa0..e306910 100644
+--- a/apps/mobile/src/ui/groupedList.tsx
++++ b/apps/mobile/src/ui/groupedList.tsx
+@@ -24,6 +24,15 @@ import { SwipeRow, type SwipeAction } from "./swipeRow";
+ import type { IconAction } from "./templates/types";
+ import { rowActions, rowSaid } from "./groupedListLogic";
+ 
++// TEMP (ds66 shots only, never committed): the «Графит» look of a row
++const Q = typeof window !== "undefined" ? ((globalThis as { location?: { search?: string } }).location?.search ?? "") : "";
++const ALL = Q.includes("gr=1");
++const GI = ALL || Q.includes("gi=1"); // square type icon instead of initials
++const GC = ALL || Q.includes("gc=1"); // «›» on every row, no quick actions
++const GH = ALL || Q.includes("gh=1"); // the group title inside the card, hairline 16..16
++const GW = ALL || Q.includes("gw=1"); // the name in regular weight
++const GR = GI;
++
+ /** A column of groups, `rhythm.blockGap` 20 apart (visual v2 «Поля и ритм»). */
+ export function GroupedList({ children, testID }: { children: ReactNode; testID?: string }) {
+   return (
+@@ -58,14 +67,15 @@ export function ListGroup({ title, count, all, children, inset = component.listR
+   if (!rows.length) return null;
+   return (
+     <View style={{ gap: rhythm.headGap }} testID={testID}>
+-      {title || all || count != null ? <GroupHead title={title ?? ""} count={count} countTestID={testID ? `${testID}-count` : undefined} all={all} /> : null}
++      {!GH && (title || all || count != null) ? <GroupHead title={title ?? ""} count={count} countTestID={testID ? `${testID}-count` : undefined} all={all} /> : null}
+       {bare ? (
+         <View style={{ gap: rhythm.cardGap }}>{rows}</View>
+       ) : (
+       <Card style={{ padding: 0, gap: 0 }}>
++        {GH && (title || all || count != null) ? <View style={{ paddingHorizontal: space[4], paddingTop: space[3] }}><GroupHead title={title ?? ""} count={count} all={all} /></View> : null}
+         {rows.map((r, i) => (
+           <View key={i}>
+-            {i ? <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.bd, marginLeft: inset }} /> : null}
++            {i ? <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.bd, marginLeft: GH ? space[4] : inset, marginRight: GH ? space[4] : 0 }} /> : null}
+             {r}
+           </View>
+         ))}
+@@ -222,7 +232,11 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
+   return (
+     <RowView style={[pad, { paddingLeft: check ? 0 : space[4], paddingRight: padRight }]}>
+       {selected ? <SelectedCheck left /> : null}
+-      {!lead || check ? null : "initials" in lead ? (
++      {GR && lead && !check && !("time" in lead) ? (
++        <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
++          <Icon name={"initials" in lead ? "user" : (lead as { icon: IconKey }).icon} s={20} color={c.ink} />
++        </View>
++      ) : !lead || check ? null : "initials" in lead ? (
+         <Avatar initials={lead.initials} s={component.avatar.md} />
+       ) : "time" in lead ? (
+         <View style={{ width: component.listRow.timeW }}>
+@@ -242,7 +256,7 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
+       ) : null}
+       <View style={{ flex: 1, minWidth: 0 }}>
+         <View testID={ids?.title}>
+-          <T v="body" w="semibold" tone={check?.done || quiet ? "mut" : "ink"} numberOfLines={wrap ? 2 : 1} style={check?.done ? { textDecorationLine: "line-through" } : undefined}>
++          <T v="body" w={GW ? undefined : "semibold"} tone={check?.done || quiet ? "mut" : "ink"} numberOfLines={wrap ? 2 : 1} style={check?.done ? { textDecorationLine: "line-through" } : undefined}>
+             {title}
+           </T>
+         </View>
+@@ -286,13 +300,14 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
+             </View>
+           ) : null}
+       {status ? <StatusPill status={status.status} label={status.label} /> : null}
+-      {chevron ? <Icon name="chevronRight" s={size.iconSm} color={c.mut} /> : null}
++      {chevron || GC ? <Icon name="chevronRight" s={size.iconSm} color={c.mut} /> : null}
+     </RowView>
+   );
+ }
+ 
+-export function GroupRow({ title, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, wrap, selected, chevron, valueTestID, valueMark, testID }: GroupRowProps) {
++export function GroupRow({ title, subtitle, lead, value, cols, status, actions: actions0 = [], swipe, onPress, compact, wrap, selected, chevron, valueTestID, valueMark, testID }: GroupRowProps) {
+   const { c } = useTheme();
++  const actions = GC ? [] : actions0;
+   const [down, setDown] = useState(false);
+   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+   const more = rowActions(swipe);
