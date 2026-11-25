@@ -103,12 +103,14 @@ interface CacheRecord {
     me?: string;
     visits?: { photos?: { upload?: unknown }[] }[];
     expenses?: { receiptFailed?: unknown }[];
+    /** a Gutters measurement's photo the cloud refused (#1441) */
+    files?: { upload?: unknown }[];
   };
 }
-/** what only this phone has in a cache: a refused photo or receipt (pure) */
+/** what only this phone has in a cache: a refused photo, a measurement's refused photo or a receipt (pure) */
 export function holdsLocalOnly(r: CacheRecord): boolean {
   const d = r.db;
-  return !!(d?.visits?.some((v) => v.photos?.some((p) => p.upload)) || d?.expenses?.some((x) => x.receiptFailed));
+  return !!(d?.visits?.some((v) => v.photos?.some((p) => p.upload)) || d?.expenses?.some((x) => x.receiptFailed) || d?.files?.some((f) => f.upload));
 }
 
 export interface WipeStore {
