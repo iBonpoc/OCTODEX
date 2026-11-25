@@ -52,7 +52,10 @@ describe("unit:localFiles — what names a file (#1659)", () => {
   it("names by file name, in any depth; a record that is not JSON — not known", () => {
     const rec = JSON.stringify({ db: { visits: [{ photos: [{ uri: `${C}/ImageManipulator/p%201.jpg` }] }], expenses: [{ receiptUri: "file:///other/prefix/ImageManipulator/r.jpg" }] }, n: 3 });
     expect([...namesIn(rec)!].sort()).toEqual(["p 1.jpg", "r.jpg"]);
-    expect(namesIn("not json")).toBeNull();
+    expect(namesIn('{"db": {"visits": [')).toBeNull();
+    expect(namesIn("[1,")).toBeNull();
+    // a plain word (JSON never written that way) names no file — it is not a cut record
+    expect([...namesIn("bottom")!]).toEqual([]);
     expect(fileName("file:///a/b/c.jpg?x=1")).toBe("c.jpg");
   });
   it("named (even under another container path), fresh or without a time — stays; old and named by nothing — goes", () => {
@@ -131,7 +134,9 @@ describe("unit:localFiles — review of #1659", () => {
     const plain = { "octo.company.v1.u1": "9f1c-company-uuid", "octo.signoutWipe.v1": "u1", "octo.push.token.v1": "ExponentPushToken[x]" };
     expect((await run(plain, [man("orphan.jpg")])).gone).toBe(1);
     expect((await run({ ...plain, "octo.outbox.v1": "{broken" }, [man("orphan.jpg")])).gone).toBe(0);
-    expect((await run({ "octo.mod.gutters.place.v1": "not json" }, [man("o.jpg")])).gone).toBe(0); // a module's record: strict
+    expect((await run({ "octo.mod.gutters.draft.v1": '{"m": {"photos": ["file:///x/ImagePicker/o.jpg"' }, [man("o.jpg")])).gone).toBe(0); // a module's record cut: strict
+    // the Gutters toolbar's place is a plain word under octo.mod. (localStore.ts): never calls the sweep off
+    expect((await run({ "octo.mod.gutters.toolbar.v1": "bottom" }, [man("o.jpg")])).gone).toBe(1);
   });
   it("a file made in this run (an «Отменить» still up, a form not saved) stays until the next start", async () => {
     keptHere(man("this-run.jpg"));

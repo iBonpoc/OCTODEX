@@ -58,7 +58,9 @@ export function namesIn(raw: string, strict = true): Set<string> | null {
   try {
     v = JSON.parse(raw);
   } catch {
-    if (strict) return null;
+    // a record that should be JSON and is cut or broken: whose files is not known. A plain word under the same prefix
+    // (the Gutters toolbar's place «bottom», octo.mod.gutters.toolbar.v1) names no file and calls nothing off
+    if (strict && /^\s*[[{"]/.test(raw)) return null;
     v = raw;
   }
   const out = new Set<string>();
