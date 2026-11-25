@@ -250,7 +250,7 @@ export const component = {
   sheetFormMax: 560,
   /** narrow numeric field (qty in a kit) */
   qtyFieldW: 72,
-  /** the name column of a part's count row «Elbow A · 75° ⌄ · − n +» (Gutters window, v43): the row's fields stand in one column */
+  /** the name column of a part's count row «Elbow A · 75° ⌄ · − n +» (a module window, v43): the row's fields stand in one column */
   countRowLabelW: 104,
   /** value column of a stepper */
   stepperValueW: 56,
