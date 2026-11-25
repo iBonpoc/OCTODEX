@@ -30,6 +30,7 @@ export function SelectField<K extends string>({
   disabled,
   field,
   labelAbove,
+  bare,
   onOpen,
   expanded,
   controls,
@@ -52,6 +53,9 @@ export function SelectField<K extends string>({
   /** the label over the field, as a number field has it (a row of narrow fields, DS §8.3 «Кол-во · Ед. · Цена»); the
    *  field itself shows only the value */
   labelAbove?: boolean;
+  /** the field shows only its value and has no label of its own (the row names it: a part's count row «Elbow A · 75° ⌄ · − n +», DS §9б.2) —
+   *  the label is still read aloud */
+  bare?: boolean;
   /** the owner's own sheet opens instead of the menu — a list with groups and «＋ Новый …» (the sources, spec 56 §3а.5); `items` then
    *  only name the chosen value */
   onOpen?: () => void;
@@ -96,7 +100,7 @@ export function SelectField<K extends string>({
     <View ref={field?.anchorRef} collapsable={false} style={{ gap: space[1] }} testID={testID ?? field?.testID}>
       {/* a form field's label is `caption` (DS §4.1: «Подписи полей форм — caption, а не micro»): one size with NumberField / TextField
           beside it in a row, so their frames stand on one line (#2426) */}
-      {labelAbove ? (
+      {labelAbove && !bare ? (
         <T v="caption" tone="mut" numberOfLines={1}>
           {label}
         </T>
@@ -127,13 +131,13 @@ export function SelectField<K extends string>({
             backgroundColor: c.in,
           }}
         >
-          {labelAbove ? null : (
+          {labelAbove || bare ? null : (
             <T v="body" style={{ flex: 1 }} numberOfLines={1}>
               {label}
             </T>
           )}
           {chosen?.leading && ("swatch" in chosen.leading || "none" in chosen.leading) ? <LeadingMark leading={chosen.leading} inField /> : null}
-          <T v="body" tone={labelAbove ? "ink" : "mut"} numberOfLines={1} style={labelAbove ? { flex: 1 } : { flexShrink: 1 }}>
+          <T v="body" tone={labelAbove || bare ? "ink" : "mut"} numberOfLines={1} style={labelAbove || bare ? { flex: 1 } : { flexShrink: 1 }}>
             {shown}
           </T>
           <Icon name={long ? "chevronRight" : "chevronDown"} s={size.iconSm} color={c.mut} />
