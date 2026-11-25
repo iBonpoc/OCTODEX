@@ -803,6 +803,8 @@ export const ru = {
   "ue.sendEmail": "Email",
   "ue.copyLink": "Копировать ссылку",
   "ue.linkCopied": "Ссылка скопирована",
+  "est.menu.copyLink": "Скопировать ссылку",
+  "est.menu.copyLinkFail": "Ссылка не скопировалась",
   "ue.openClient": "Показать клиенту",
   "ue.pdf": "PDF",
   "ue.sendText": "{company}: смета для {name} на {total}. Откройте, выберите вариант и подпишите: {link}",
