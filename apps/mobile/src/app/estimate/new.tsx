@@ -34,7 +34,7 @@ import { FieldError, useRequiredForm, useScreenScroll } from "@/ui/requiredForm"
 import { MainStep } from "@/ui/mainStep";
 import { CreateButton, MoreButton } from "@/ui/templates/parts";
 import type { MainAction } from "@/ui/templates";
-import { estimateStatusView } from "@/features/estimateStatus";
+import { canChangeEstimateClient, estimateStatusView } from "@/features/estimateStatus";
 import { useReducedMotion } from "react-native-reanimated";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { PickerSheet } from "@/ui/pickerSheet";
@@ -42,7 +42,7 @@ import { Labeled, MoneyField, PctField, RatePctField } from "@/features/fields";
 import { MONEY_MODES, TAX_MODES, depositFor, depositMode, discountFor, discountMode, remember, totalWhileTyping, type ModeMemo, type TotalsMode, type TotalsRow } from "@/features/estimate/totalsModes";
 import { useKeyboardHeight } from "@/ui/keyboard";
 import { ModeRow } from "@/ui/modeRow";
-import { isPartialTax, lastTaxRatePpm, taxChange, wholeTax, type TaxDiff } from "@/features/estimateTax";
+import { isPartialTax, lastTaxRatePpm, prefillTaxRatePpm, taxChange, wholeTax, type TaxDiff } from "@/features/estimateTax";
 import { Button, IconButton, StatusChip, TextField } from "@/ui/controls";
 import { CountPill, FigureRow } from "@/ui/figures";
 import type { IconKey } from "@/ui/primitives";
@@ -719,6 +719,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // a signed estimate: its rows do not open (DS §8.3)
   // one rule with the card, /p/ and the PDF: a signature on it, or a status after signing (review of #1376)
   const signed = isSignedEstimate(existing);
+  const clientLocked = !tplEdit && !canChangeEstimateClient(existing?.status);
   const mayHere = !!existing || canMakeEstimateAt(db, { role: store.role, mode: store.mode, me: db.me }, property?.id);
   const ok = !!customer && !!property && hasContent(doc);
   /** what a press of «Сохранить» found missing (shown under it, the page scrolls there) and the nudge for the scroll */
@@ -1206,7 +1207,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
             avatar={customer ? { initials: initials(customer.name), name: customer.name } : undefined}
             icon={customer ? undefined : "user"}
             tone={missing === "client" ? "warn" : undefined}
-            onPress={() => setClientPicker(true)}
+            // #2406: the client is picked in a draft (or a new estimate) only; one that went out stays with its client
+            onPress={clientLocked ? undefined : () => setClientPicker(true)}
           />
           {missing === "client" ? <FieldError text={t("ue.pickClient")} testID="ue-missing-client" /> : null}
           </View>
@@ -1371,7 +1373,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               mode={s.tax.enabled && !exempt ? "pct" : "off"}
               off="off"
               onMode={(k) => {
-                if (k === "pct") changeTax({ enabled: true });
+                if (k === "pct") changeTax({ enabled: true, ratePpm: prefillTaxRatePpm(s.tax, lastRate) }); // #2456: the rate of the last estimate is put at once, seen and editable
                 else setSettings({ tax: { ...s.tax, enabled: false } });
                 focusTotals("tax", k);
               }}
@@ -1398,10 +1400,6 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                   <View testID="est-tax-partial" style={{ gap: space[2] }}>
                     <T v="caption" tone="mut">{t("ue.taxPartial")}</T>
                     <Button label={t("ue.taxWhole")} variant="secondary" full onPress={() => changeTax({})} />
-                  </View>
-                ) : s.tax.enabled && lastRate !== null && lastRate !== taxRatePpm(s.tax) ? (
-                  <View testID="est-tax-last" style={{ alignSelf: "flex-start" }}>
-                    <Button label={t("ue.taxLast", { rate: ppmToPctText(lastRate) })} variant="ghost" onPress={() => setSettings({ tax: wholeTax(s.tax, { ratePpm: lastRate }) })} />
                   </View>
                 ) : null}</>
               }
