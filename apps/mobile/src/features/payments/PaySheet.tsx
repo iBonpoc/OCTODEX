@@ -84,10 +84,21 @@ export function PaySheet({ inv, visible, onClose, startCents, balanceCents, fixe
   const draftQuick: { key: string; cents: number; label: string }[] = notStarted && !fixed
     ? [
         { key: "all", cents: balanceCents, label: t("w2m.pay.all") },
-        ...(coDep > 0 && coDep < balanceCents ? [{ key: "deposit", cents: coDep, label: coDep === caLimit ? `Депозит = предел · ${money(coDep)}` : `${t("w2m.pay.deposit")} · ${money(coDep)}` }] : []),
+        ...(coDep > 0 && coDep < balanceCents ? [{ key: "deposit", cents: coDep, label: coDep === caLimit ? `Предел · ${money(coDep)}` : `${t("w2m.pay.deposit")} · ${money(coDep)}` }] : []),
         ...(caLimit > 0 && caLimit < balanceCents && caLimit !== coDep ? [{ key: "limit", cents: caLimit, label: `Предел · ${money(caLimit)}` }] : []),
       ]
     : [];
+  // ЧЕРНОВИК #2533: счёт выше предела до начала работ — по умолчанию предел; больше — только вписав сумму (тогда предупреждение)
+  const limitSet = useRef(false);
+  useEffect(() => {
+    if (!visible) {
+      limitSet.current = false;
+      return;
+    }
+    if (limitSet.current || !notStarted || fixed || caLimit <= 0 || startCents <= caLimit) return;
+    limitSet.current = true;
+    setAmount(caLimit);
+  }, [visible, notStarted, fixed, caLimit, startCents]);
   const chosen = quickChosen(amount, quick);
   const shown = recordedCents(amount, balanceCents);
   const number = inv.number ?? "";
