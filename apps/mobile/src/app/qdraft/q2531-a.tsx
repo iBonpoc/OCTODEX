@@ -24,6 +24,7 @@ export default function Q2531a() {
   const [on, setOn] = useState(true);
   return (
     <Screen
+      footer={<ActionBar summary={<T v="caption" tone="mut">Отмечено {on ? 1 : 0} из 3</T>} main={<Button size="bar" full label="Применить" icon="check" onPress={() => undefined} />} />}
       title="Обновить прайс"
       back={() => router.back()}
       
@@ -48,8 +49,6 @@ export default function Q2531a() {
       <T v="caption" tone="mut">
         Отправленные и подписанные сметы не меняются. Черновики — только по «Пересчитать».
       </T>
-    {/* в настоящем экране — закреплено внизу (ActionBar); черновой маршрут не в NO_TAB_BAR, поэтому стоит в конце страницы */}
-      <ActionBar summary={<T v="caption" tone="mut">Отмечено {on ? 1 : 0} из 3</T>} main={<Button size="bar" full label="Применить" icon="check" onPress={() => undefined} />} />
     </Screen>
   );
 }

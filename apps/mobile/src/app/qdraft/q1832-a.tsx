@@ -13,6 +13,11 @@ import { T } from "@/ui/primitives";
 export default function Q1832a() {
   return (
     <Screen
+      footer={<ActionBar
+          summary={<T v="caption" tone="mut" tabular>Итого $2,118.00</T>}
+          second={<Button size="bar" full variant="secondary" label="Сохранить" onPress={() => undefined} />}
+          main={<Button size="bar" full label="Попросить согласие" onPress={() => undefined} />}
+        />}
       title="EST-1042"
       subtitle="Sarah Mitchell · Seamless gutters"
       back={() => router.back()}
@@ -27,12 +32,6 @@ export default function Q1832a() {
       <T v="caption" tone="mut">
         Жёлтое — ниже минимальной наценки. Красное — в минус, ниже себестоимости.
       </T>
-    {/* в настоящем экране — закреплено внизу (ActionBar); черновой маршрут не в NO_TAB_BAR, поэтому стоит в конце страницы */}
-      <ActionBar
-          summary={<T v="caption" tone="mut" tabular>Итого $2,118.00</T>}
-          second={<Button size="bar" full variant="secondary" label="Сохранить" onPress={() => undefined} />}
-          main={<Button size="bar" full label="Попросить согласие" onPress={() => undefined} />}
-        />
     </Screen>
   );
 }

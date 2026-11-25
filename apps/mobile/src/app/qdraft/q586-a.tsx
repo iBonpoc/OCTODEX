@@ -12,6 +12,7 @@ import { Icon, T } from "@/ui/primitives";
 export function OrderBehind() {
   return (
     <Screen
+      footer={<ActionBar main={<Button size="bar" full label="Отправить поставщику" icon="send" onPress={() => undefined} />} />}
       title="PO-0007"
       subtitle="Home Depot · Seamless gutters"
       back={() => router.back()}
@@ -25,8 +26,6 @@ export function OrderBehind() {
       <ListGroup title="Доставка" inset={space[4]}>
         <GroupRow title="1420 Oak St, Pasadena, CA" subtitle="Nov 27, 2026" />
       </ListGroup>
-    {/* в настоящем экране — закреплено внизу (ActionBar); черновой маршрут не в NO_TAB_BAR, поэтому стоит в конце страницы */}
-      <ActionBar main={<Button size="bar" full label="Отправить поставщику" icon="send" onPress={() => undefined} />} />
     </Screen>
   );
 }
