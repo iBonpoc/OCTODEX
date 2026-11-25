@@ -19393,7 +19393,7 @@ rollback;
 \echo 'T460–T467 ok'
 
 -- ================================================================ T468–T469: the last row of a history is the last written (#2250,
--- migration 20261117650000). Rows of one transaction share «at», a uuid v7's order inside a millisecond is random:
+-- migration 20261117670000). Rows of one transaction share «at», a uuid v7's order inside a millisecond is random:
 -- «at desc, id desc» picked any of them. seq (an identity) is the order they were written in. Its own rows, rolled back.
 :as_super
 begin;
@@ -19437,7 +19437,7 @@ select tst.ok((select count(*) = 3 from information_schema.columns where table_s
                  and is_nullable = 'NO' and is_identity = 'YES'
                  and table_name in ('catalog_cost_history', 'catalog_price_history', 'catalog_price_recalc')),
   'T469 seq is a not null bigint identity on the cost history, the price history and the recalc notes');
--- the old rows numbered by (at, id): supabase/tests/upgrade/20261117650000_history_seq.after.sql (UPG468)
+-- the old rows numbered by (at, id): supabase/tests/upgrade/20261117670000_history_seq.after.sql (UPG468)
 select tst.ok((select count(*) = 3 from pg_index i join pg_class c on c.oid = i.indexrelid
                 where i.indisunique and c.relname in ('catalog_cost_history_seq_key', 'catalog_price_history_seq_key', 'catalog_price_recalc_seq_key')),
   'T469 one seq once');
