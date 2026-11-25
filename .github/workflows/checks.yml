@@ -359,7 +359,11 @@ jobs:
   checks:
     name: checks
     needs: [pause, changes, fast, bundle, build-web, e2e, rule22, scenarios, numbers]
-    if: always()
+    # #2480: not always() — when the whole run is cancelled (a newer run of the same PR took its concurrency group, e.g. the
+    # label «к-влитию» right after a push) this job is SKIPPED, not failed: a cancelled duplicate must not leave a red
+    # «checks» beside the live run's green one. A real failure, or one cancelled job inside a live run, still reaches the
+    # steps below (cancelled() is false) and stays red.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     steps:
       - name: All checks green

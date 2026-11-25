@@ -39,3 +39,17 @@ describe("Checks: which runs cancel which (#2192)", () => {
     expect(checks).toMatch(/schedule:\s*\n\s*- cron:/);
   });
 });
+
+describe("Checks: a cancelled duplicate run leaves no red «checks» (#2480)", () => {
+  const start = checks.indexOf("\n  checks:\n    name: checks");
+  const job = checks.slice(start, checks.indexOf("\n  nightly-alert:", start));
+  it("the summary job is skipped when the whole run is cancelled (not if: always())", () => {
+    expect(job).toMatch(/\n    if: \$\{\{ !cancelled\(\) \}\}/);
+    expect(job).not.toMatch(/\n    if: always\(\)/);
+  });
+  it("a live run still goes red on a failed or cancelled needed job", () => {
+    expect(job).toMatch(/needs\.rule22\.result \}\}" != "cancelled"/);
+    expect(job).toMatch(/needs\.fast\.result \}\}" = "success" \] && \[ "\$e2e" = "success"/);
+    expect(job).toMatch(/needs\.pause\.result \}\}" = "success"/);
+  });
+});
