@@ -1,0 +1,14 @@
+{
+  "task": "#2472",
+  "prototype": "prototype.html",
+  "note": "Пары «снимок сейчас (тёмная, 390) → экран прототипа». Снимки не встроены (размер). Для «Лиды», диалога и тоста свежих снимков нет.",
+  "pairs": [
+    { "now": "notes/screens/94339f9/client_c3__02-client-linda-dark__dark-390-ru-director__94339f9.png", "proto": "prototype.html#screen-client" },
+    { "now": "notes/screens/94339f9/estimate_new_id_e6__06-editor-e6-top-dark__dark-390-ru-director__94339f9.png", "proto": "prototype.html#screen-estimate" },
+    { "now": "notes/screens/b5f2321/estimate_new_id_e6__dark-390-ru-director-sest-totals__b5f2321.png", "proto": "prototype.html#screen-estimate" },
+    { "now": "notes/screens/94339f9/estimate_new_id_e6__06-editor-e6-sheet-discount__dark-390-ru-director-s5000__94339f9__f02.png", "proto": "prototype.html#screen-sheet" },
+    { "now": "notes/screens/94339f9/estimates__01-list-dark__dark-390-ru-director__94339f9.png", "proto": "prototype.html#screen-leads", "comment": "снимка «Лиды» нет; ближайший аналог — список «Деньги → Сметы» (те же группы строк и нижняя панель)" }
+  ],
+  "noShots": ["prototype.html#screen-dialog", "prototype.html#screen-toast"],
+  "ownShots": "notes/review-v2/blue-depth/shots/ (390, deviceScaleFactor 2)"
+}

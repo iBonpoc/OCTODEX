@@ -9,7 +9,7 @@
  * - the grip: while dragged it says where to let go.
  * Finds things by testID / id; waits on what it checks.
  */
-const { openProps, skipLength, canvasAt, pickAttr, attrShown, openAttrMore } = require("../gutters.cjs");
+const { openProps, skipLength, canvasAt, pickAttr, attrShown, openAttrMore, winSave } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -34,8 +34,7 @@ exports.run = async (h) => {
   const panel = () => tid("attr-panel");
   const pickIn = (field, key) => pickAttr(p, field, key);
   const closePanel = async () => {
-    if (wide) await tid("draw-panel-close").getByRole("button").click();
-    else await p.getByRole("button", { name: "Закрыть", exact: true }).first().click({ position: { x: 10, y: 10 } });
+    await winSave(p); // the window's own «Сохранить» (DS §7.3, #2412 PR3): its edits kept
     await waitFor(async () => (await panel().count()) === 0, "the menu is closed");
   };
 

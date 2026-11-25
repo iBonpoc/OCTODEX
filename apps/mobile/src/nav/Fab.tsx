@@ -2,7 +2,7 @@ import { useState } from "react";
 import { View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { madeHere } from "@/features/photoUri";
-import { shrinkPicked } from "@/data/photoShrink";
+import { prepPicked } from "@/data/photoShrink";
 import { router, type Href } from "expo-router";
 import { component, radius, size, space, z } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -54,11 +54,11 @@ function useRun({ ctx, on }: Pick<FabProps, "ctx" | "on">) {
     const v = db.visits.find((x) => x.id === visitId);
     if (!v) return;
     const kind = v.step === "working" || v.step === "signed" ? "after" : "before";
-    // made smaller before it is kept and queued (#642)
-    const uri = await shrinkPicked(res);
-    if (!uri) return;
-    madeHere(uri);
-    toast.show(t("toast.photo"), addPhoto(v.id, kind, uri));
+    // made anew before it is kept and queued (#642); not made yet — kept here as «preparing», the original never sent (#1558)
+    const got = await prepPicked(res);
+    if (!got) return;
+    madeHere("uri" in got ? got.uri : got.preparing.uri);
+    toast.show(t("uri" in got ? "toast.photo" : "photoUp.prep.toast"), addPhoto(v.id, kind, got));
   };
   return (it: FabItem) => {
     if (it.href) router.push(it.href as Href);

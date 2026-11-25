@@ -8,7 +8,7 @@
  * - the office reads the rules, cannot change them.
  * Finds things by testID; waits on what it checks.
  */
-const { openProps, skipLength, pickAttr, pickDsKind, attrChosen, attrShown, openAttrMore } = require("../gutters.cjs");
+const { openProps, skipLength, pickAttr, pickDsKind, attrChosen, attrShown, openAttrMore, winSave } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 
@@ -38,8 +38,7 @@ exports.run = async (h) => {
   };
   const closeAttrs = async () => {
     if (wide) return;
-    await p.getByRole("button", { name: "Закрыть", exact: true }).first().click({ position: { x: 10, y: 10 } });
-    await waitFor(async () => (await panel().count()) === 0, "the sheet is closed");
+    await winSave(p); // the window's own «Сохранить» (DS §7.3, #2412 PR3): its edits kept
   };
   const stroke = async (a, b) => {
     await p.mouse.move(a[0], a[1]);

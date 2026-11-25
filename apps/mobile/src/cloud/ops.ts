@@ -32,6 +32,8 @@ export type Op =
   | { k: "photo.remove"; id: string }
   /** #1431 «Повторить»: the file of a photo the cloud refused, sent again (its files row is already there) */
   | { k: "photo.retry"; id: string; visitId: string; uri: string }
+  /** #1558: a receipt's bytes once the phone could prepare them (the files row went with expense.add) */
+  | { k: "file.send"; id: string; expenseId: string; uri: string }
   /** the whole list at once — what the app sent before step 14; kept for ops still in old queues (the server's
    *  legacy trigger moves only ticks and new optional items of it into the rows, migration 20261108140000) */
   | { k: "visit.checklist"; visitId: string; checklist: { id: string; label: string; done: boolean }[] }
@@ -626,6 +628,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "photo.retry":
       return { photo: { id: op.id, failed: await uploadPhoto(c, op.id, op.uri) } };
+    case "file.send":
+      return { receipt: { expenseId: op.expenseId, failed: await uploadPhoto(c, op.id, op.uri) } };
     case "photo.remove":
       return run(supabase.from("files").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
     case "visit.checklist":

@@ -29,8 +29,10 @@ async function closeDsMenu(p) {
     return;
   }
   if ((p.viewportSize()?.width ?? 0) > 390) return;
-  await p.getByRole("button", { name: "Закрыть", exact: true }).first().click({ position: { x: 10, y: 10 } });
+  // the window's own «Сохранить» (DS §7.3, #2412 PR3): what was picked in it stays; nothing picked — it just closes
+  await p.getByTestId("attr-win-save").locator("visible=true").first().getByRole("button").click();
   await panel.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+  await sheetGone(p);
 }
 
 // A sheet just closed may still lie over the canvas for a moment (slow machines, GitHub 09.11: a drag or a tap right
@@ -294,4 +296,17 @@ async function pressUndo(p, text) {
   await undo.click();
 }
 
-module.exports = { pressUndo, pickDsKind, pickAttr, attrShown, attrKeys, attrChosen, attrClose, attrShut, openAttrMore, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
+/**
+ * The gutter / downspout window's own buttons (DS §7.3, #2412 PR3): «Сохранить» keeps its edits (as one step of «Назад»),
+ * «Закрыть» closes it (with edits it asks «Сохранить изменения?» first). Waits until the window — and on 390 its sheet — has left.
+ */
+async function winSave(p) {
+  await p.getByTestId("attr-win-save").locator("visible=true").first().getByRole("button").click();
+  await p.waitForFunction(() => ![...document.querySelectorAll('[data-testid="attr-panel"]')].some((e) => e.getBoundingClientRect().height > 0), null, { timeout: 5000 });
+  await sheetGone(p);
+}
+async function winClose(p) {
+  await p.getByTestId("attr-win-close").locator("visible=true").first().getByRole("button").click();
+}
+
+module.exports = { winSave, winClose, pressUndo, pickDsKind, pickAttr, attrShown, attrKeys, attrChosen, attrClose, attrShut, openAttrMore, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };

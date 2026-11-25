@@ -28,27 +28,27 @@ exports.run = async (h) => {
   h.expect(await chosen("est-discount-row", "off"), "a new estimate: the discount is off");
   h.expect((await totals.sumOf(h, "est-discount-row")) === "—", "off reads «—»");
 
-  // the discount in $: the field is right in the row, no sheet, the focus in it; $0 reads «$0» (on), not «—» (off)
+  // the discount in $: the field is right in the row, no sheet, the focus in it; $0 reads «$0.00» (on), not «—» (off)
   await totals.mode(h, "est-discount-row", "fixed");
   h.expect((await sheets()) === 0, "no sheet opens: the value is set in the row");
   await p.waitForFunction(() => !!document.activeElement?.closest('[data-testid="est-discount-fixed"]'), null, { timeout: 3000 }).catch(async () => { throw new Error(`focus is not in the field: ${await p.evaluate(() => document.activeElement?.outerHTML.slice(0, 120))}`); });
   h.expect(true, "the picked row's field has the focus");
-  await sumIs("est-discount-row", "$0");
+  await sumIs("est-discount-row", "$0.00");
   await totals.fill(h, "est-discount-fixed", "25");
-  await sumIs("est-discount-row", "−$25");
-  h.expect((await totals.sumOf(h, "est-discount-row")) === "−$25", "the discount in $: −$25");
+  await sumIs("est-discount-row", "−$25.00");
+  h.expect((await totals.sumOf(h, "est-discount-row")) === "−$25.00", "the discount in $: −$25.00");
   // a press on the chosen «$» keeps the typed sum
   await tid("est-discount-row-mode-fixed").click();
-  await sumIs("est-discount-row", "−$25");
+  await sumIs("est-discount-row", "−$25.00");
   h.expect((await tid("est-discount-fixed").locator("input").inputValue()) === "25", "a press on the chosen position keeps the value");
   // «%» starts empty (no number of ours changes the client's sum), «Выкл.» and back to «$» brings the $25 back
   await totals.mode(h, "est-discount-row", "pct");
   h.expect(["", "0"].includes(await tid("est-discount-pct").locator("input").inputValue()), "the discount in % starts empty");
-  await sumIs("est-discount-row", "$0");
+  await sumIs("est-discount-row", "$0.00");
   await totals.mode(h, "est-discount-row", "off");
   await totals.mode(h, "est-discount-row", "fixed");
-  await sumIs("est-discount-row", "−$25");
-  h.expect((await totals.sumOf(h, "est-discount-row")) === "−$25", "«Выкл.» and back: the typed $25 comes back");
+  await sumIs("est-discount-row", "−$25.00");
+  h.expect((await totals.sumOf(h, "est-discount-row")) === "−$25.00", "«Выкл.» and back: the typed $25 comes back");
 
   // the deposit: «%» starts at 10 % of $175.00 = $17.50; «$» starts empty ($0.00), the person types it; «Выкл.» — «—»
   await totals.mode(h, "est-deposit-row", "pct");
@@ -56,10 +56,10 @@ exports.run = async (h) => {
   await h.shot("pct");
   await sumIs("est-deposit-row", "$17.50");
   await totals.mode(h, "est-deposit-row", "fixed");
-  await sumIs("est-deposit-row", "$0");
+  await sumIs("est-deposit-row", "$0.00");
   await totals.fill(h, "est-deposit-fixed", "50");
-  await sumIs("est-deposit-row", "$50");
-  h.expect((await totals.sumOf(h, "est-deposit-row")) === "$50", "the deposit in $: $50");
+  await sumIs("est-deposit-row", "$50.00");
+  h.expect((await totals.sumOf(h, "est-deposit-row")) === "$50.00", "the deposit in $: $50.00");
   await h.shot("totals");
 
   // the row's shape: the field and the sum stay in the row on any width
