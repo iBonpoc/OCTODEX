@@ -14,7 +14,7 @@ import type { RequiredForm } from "@/ui/requiredForm";
 import { SelectField } from "@/ui/selectField";
 import { RowView } from "@/ui/surfaces";
 import { shownQty, lineMarks } from "@/features/estimateDoc";
-import { canHide, hiddenSpend, isHidden, noPrice, rowActions, rowFigures, rowPriceTimes, actOfName, type CatalogRefusal, type RowAct } from "@/features/estimateRows";
+import { canHide, hiddenSpend, isHidden, noPrice, rowActions, rowFigures, rowPriceTimes, actOfName, type RowAct } from "@/features/estimateRows";
 import type { RowView as RowLook } from "./rowView";
 import { LineMarks } from "@/features/LineMarks";
 import { SwipeRow, type SwipeBtn } from "./SwipeRow";
@@ -49,8 +49,6 @@ export interface RowApi {
   action: (id: string, a: RowAction) => void;
   /** a number field of the row holds text that is not a number (the line itself keeps the last right value) */
   bad: (id: string, field: "qty" | "price" | "cost", bad: boolean) => void;
-  /** «Сохранить в каталог» on / off for the row */
-  wantCatalog: (id: string, on: boolean) => void;
   /** «Открыть в каталоге ›» */
   openInCatalog: (id: string) => void;
   /** «›» in «Кол-во» of a line from a template: the next line from it opens, the cursor in its «Кол-во» (DS §8.13) */
@@ -78,7 +76,9 @@ export interface LineRowProps {
   /** the template editor: a hidden line is not kept in a template yet (the server does not take it) — no «Скрыть» */
   noHide?: boolean;
   /** the open row's place in the catalog (not for the tech): in it already, or the choice to save it and what the engine says */
-  catalog?: { linked: boolean; want: boolean; offer: "offered" | "later" | "refused"; reason?: CatalogRefusal };
+  catalog?: { linked: boolean };
+  /** «Добавить в каталог» is in the «⋯» (not the tech's; not for a line that is in the catalog already) */
+  catalogAdd?: boolean;
   /** the estimate came from a template / a module with this line hidden and priced: it was shown again */
   unhiddenMark?: boolean;
   /** «Кратко» / «Подробно» — how a folded row looks (the device's choice) */
@@ -135,13 +135,14 @@ function LineRowView(p: LineRowProps) {
   const marks = lineMarks(l);
   const figures = open ? rowFigures(l, p.costsVisible) : null;
   // one list of what can be done: the «⋯» menu, the swipe and the screen reader's actions all take it (DS Б13, Р2)
-  const acts = rowActions(l, { locked: p.locked, noHide: p.noHide });
+  const acts = rowActions(l, { locked: p.locked, noHide: p.noHide, catalog: p.catalogAdd });
   const META: Record<RowAct, { label: string; icon: IconKey }> = {
     replace: { label: t("est.row.replace"), icon: "refresh" },
     duplicate: { label: t("est.row.duplicate"), icon: "copy" },
     hide: { label: t("est.row.hide"), icon: "eye" },
     show: { label: t("est.row.show"), icon: "eye" },
     move: { label: t("est.sec.moveTitle"), icon: "sections" },
+    catalog: { label: t("est.row.addToCatalog"), icon: "plus" },
     delete: { label: t("est.row.delete"), icon: "trash" },
   };
   // «Выше» / «Ниже» are the screen reader's actions only (a line the person may move — not a module's): in the menu they were two
@@ -399,8 +400,7 @@ function LineRowView(p: LineRowProps) {
           ) : null}
         </View>
       ) : null}
-      {p.catalog ? (
-        p.catalog.linked ? (
+      {p.catalog?.linked ? (
           <View testID={`est-open-catalog-${l.id}`}>
             <Press onPress={() => p.api.openInCatalog(l.id)} visibleHeight={size.rowMin} accessibilityRole="link">
               <RowView style={{ minHeight: size.rowMin }}>
@@ -411,25 +411,6 @@ function LineRowView(p: LineRowProps) {
               </RowView>
             </Press>
           </View>
-        ) : (
-          <View testID={`est-save-catalog-${l.id}`} style={{ gap: space[1] }}>
-            <RowView style={{ minHeight: size.hitMin }}>
-              <T v="body" tone={p.catalog.offer === "refused" ? "mut" : "ink"} style={{ flex: 1 }}>
-                {t("est.row.saveCatalog")}
-              </T>
-              <Toggle label={t("est.row.saveCatalog")} on={p.catalog.want && p.catalog.offer !== "refused"} onChange={(on) => p.catalog?.offer !== "refused" && p.api.wantCatalog(l.id, on)} />
-            </RowView>
-            {p.catalog.offer === "refused" && p.catalog.reason ? (
-              <T v="caption" tone="mut">
-                {t(`est.row.refuse.${p.catalog.reason}` as DictKey)}
-              </T>
-            ) : p.catalog.want && p.catalog.offer === "later" ? (
-              <T v="caption" tone="mut">
-                {t("est.row.catalogNeed")}
-              </T>
-            ) : null}
-          </View>
-        )
       ) : null}
       <View>
         <Press onPress={() => setMore((m) => !m)} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityState={{ expanded: more }} testID={`est-more-${l.id}`}>

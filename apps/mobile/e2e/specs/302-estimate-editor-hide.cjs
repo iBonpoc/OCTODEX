@@ -2,10 +2,11 @@
  * e2e 302 — «Скрыть от клиента» и «Сохранить в каталог» в строке сметы (РС-4b-2, спека Р1 и Р3, ревью #1231), every view; by testID:
  * - «Ещё → Скрыть от клиента»: with a price the switch is pale and a press says why («Скрыть можно позицию с ценой $0»); at $0 it
  *   hides (#2424: by «⋯ → Скрыть от клиента», no switch) — the folded row carries «Скрыто от клиента» in its dashed frame; a price typed into the hidden row shows it again, with a toast;
- * - «Сохранить в каталог»: a service goes to the catalog at the line's price, the row gets «Открыть в каталоге»; «Отменить» takes
- *   it out (and the link goes) — nothing else; a material with no cost is refused with the reason, nothing goes;
- * - «Сохранить» with the row open: the thing is in the catalog, the saved estimate carries the link, ONE toast takes both back;
- * - «Заменить» of a row where the catalog was on creates no copy; the tech sees no switch.
+ * - «⋯ → Добавить в каталог» (E19, no switch): a service goes to the catalog at once at the line's price, the row gets «Открыть в
+ *   каталоге», the item is gone from the menu; «Вернуть» takes it out (and the link goes) — nothing else; a material with no cost is
+ *   refused with the reason in a toast, nothing goes;
+ * - «Сохранить»: the saved estimate carries the link to the item;
+ * - the tech has no «Добавить в каталог» in the menu.
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -59,7 +60,8 @@ exports.run = async (h) => {
   // «Сохранить в каталог»: a service at the line's price; «Отменить» takes out that item and the link, nothing else
   const before = await catalogLen();
   await tid(`est-line-${id}`).click();
-  await tid(`est-save-catalog-${id}`).getByRole("switch").click();
+  await openMenu(id);
+  await tid(`est-act-catalog-${id}`).click();
   await line.fold(h);
   await p.waitForFunction((n) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.catalog ?? []).length === n + 1, before, { timeout: 5000 });
   const item = (await h.db()).catalog.find((x) => x.name === "Courtesy check (тестовые)");
@@ -73,12 +75,11 @@ exports.run = async (h) => {
   h.expect((await count('[data-testid^="est-open-catalog-"]')) === 0, "«Отменить»: the item is out and the row has no link");
   await line.fold(h);
 
-  // «Сохранить» with the row open: the item is made, the saved estimate has the link, one «Отменить» takes both back
+  // «Сохранить»: the item is made (the menu), the saved estimate carries the link to it
   await tid(`est-line-${id}`).click();
-  await tid(`est-save-catalog-${id}`).getByRole("switch").click();
+  await openMenu(id);
+  await tid(`est-act-catalog-${id}`).click();
   const estBefore = ((await h.db()).estimates ?? []).length;
-  // the page scrolled to the switch may show the totals card — the bar then folds to its capsule (#2405); back up to the lines,
-  // where the bar stands with «Готово»
   await tid("est-add-new").scrollIntoViewIfNeeded();
   await tid("ue-save").click();
   await p.waitForURL((u) => !/\/estimate\/new/.test(u.pathname), { timeout: 8000 });
@@ -87,9 +88,6 @@ exports.run = async (h) => {
   const made = db1.catalog.find((x) => x.name === "Courtesy check (тестовые)");
   const est = db1.estimates.find((e) => e.doc?.options?.[0]?.lines?.some((l) => l.name === "Courtesy check (тестовые)"));
   h.expect(!!made && !!est && est.doc.options[0].lines.find((l) => l.name === "Courtesy check (тестовые)").catalogItemId === made.id, "the saved estimate carries the link to the made item");
-  await line.undo(h);
-  await p.waitForFunction(() => !JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.catalog?.some((x) => x.name === "Courtesy check (тестовые)"), null, { timeout: 5000 });
-  h.expect((await catalogLen()) === before, "one «Отменить» took out the estimate and the item");
 
   // a material with no cost is refused, with the reason; the tech sees no switch
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
@@ -101,13 +99,18 @@ exports.run = async (h) => {
   // «Вид» is a list now (DS §8.3, #1307): open it, then pick «Материал»
   await tid(`est-kind-${sid}-button`).click();
   await tid(`est-kind-${sid}-material`).click();
-  await tid(`est-save-catalog-${sid}`).waitFor({ timeout: 3000 });
-  h.expect(/себестоимост/.test(await tid(`est-save-catalog-${sid}`).innerText()), "a material with no cost: the reason under the toggle");
+  const cat1 = await catalogLen();
+  await openMenu(sid);
+  await tid(`est-act-catalog-${sid}`).click();
+  await p.getByText(/себестоимост/).first().waitFor({ timeout: 3000 });
+  h.expect((await catalogLen()) === cat1, "a material with no cost: the reason in a toast, nothing goes to the catalog");
   await h.seed("octo.role.v1", "tech");
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await tid("est-add-new").waitFor({ timeout: 8000 });
   await tid("est-add-new").getByRole("button").click();
   await vis('[data-testid^="est-price-"]').first().waitFor({ timeout: 3000 });
-  h.expect((await count('[data-testid^="est-save-catalog-"]')) === 0, "the tech: no «Сохранить в каталог»");
+  const tid2 = (await vis('[data-testid^="est-collapse-"]').first().getAttribute("data-testid")).replace("est-collapse-", "");
+  await openMenu(tid2);
+  h.expect((await count('[data-testid^="est-act-catalog-"]')) === 0, "the tech: no «Добавить в каталог» in the menu");
   await h.seed("octo.role.v1", "director");
 };
