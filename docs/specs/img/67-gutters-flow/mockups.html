@@ -166,7 +166,7 @@ const I = {
 const ic = (n, s) => svg(I[n], s);
 // миниатюра чертежа — тот же контур, что на холсте
 const mini = (w = 28) => `<svg width="${w}" height="${w}" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 9h26v22H6"/><circle cx="6" cy="9" r="2.5" fill="currentColor"/><circle cx="6" cy="31" r="2.5" fill="currentColor"/></svg>`;
-const big = `<svg width="270" height="171" viewBox="0 0 300 190" fill="none" stroke="currentColor"><path d="M40 40h190v110H40" stroke-width="3.5"/><circle cx="40" cy="40" r="6" fill="var(--bg)" stroke-width="2.5"/><circle cx="40" cy="150" r="6" fill="var(--bg)" stroke-width="2.5"/><circle cx="230" cy="95" r="6" fill="var(--bg)" stroke-width="2.5"/><g font-family="system-ui" font-size="13" fill="currentColor" stroke="none"><text x="112" y="28">28′ 9″</text><text x="240" y="99">33′ 2″</text><text x="96" y="172">28′ 9″ · 6″ K</text><text x="30" y="62">D1</text><text x="30" y="140">D2</text><text x="206" y="118">D3</text></g></svg>`;
+const big = `<svg width="270" height="171" viewBox="0 0 300 190" fill="none" stroke="currentColor"><path d="M40 40h190v110H40" stroke-width="3.5"/><circle cx="40" cy="40" r="6" fill="var(--bg)" stroke-width="2.5"/><circle cx="40" cy="150" r="6" fill="var(--bg)" stroke-width="2.5"/><circle cx="230" cy="95" r="6" fill="var(--bg)" stroke-width="2.5"/><g font-family="system-ui" font-size="13" fill="currentColor" stroke="none"><text x="96" y="28">28′ 9″ · 5″ K</text><text x="240" y="99">33′ 2″</text><text x="96" y="172">28′ 9″ · 6″ K</text><text x="30" y="62">D1</text><text x="30" y="140">D2</text><text x="206" y="118">D3</text></g></svg>`;
 
 // мастер (§8.3 п.3, nav/sections.ts: у мастера «Денег» нет): Главная · План · Gutters · Клиенты · Лиды — макет по совету §8.3, ждёт ответа
 const TABS = [["home", "Главная"], ["gut", "Gutters"], ["users", "Клиенты"], ["money", "Деньги"], ["leads", "Лиды"]];
@@ -191,22 +191,24 @@ const hst = (icon, word) => `${ic(icon, 14)}<span>${word}</span>`;
 const row = (lead, n, m, right, chev = true) => `<div class="gr">${lead}<div class="t"><div class="n">${n}</div>${m ? `<div class="m">${m}</div>` : ""}</div>${right ? `<div class="r">${right}</div>` : ""}${chev ? `<span class="chev">${ic("chev", 18)}</span>` : ""}</div>`;
 const group = (title, rows, link, n) => `<div class="gh"><b>${title}${n != null ? `<span class="cnt">${n}</span>` : ""}</b>${link ? `<span>${link}</span>` : ""}</div><div class="card">${rows.join("")}</div>`;
 const pill = (tone, icon, word) => `<span class="pill ${tone}">${ic(icon, 13)}${word}</span>`;
-const th = `<div class="thumb">${mini()}</div>`;
+const shapes = { u: "M6 9h26v22H6", l: "M8 8v24h24", s: "M6 12h28", z: "M6 8h16v12h12v12" };
+const thumb = (k) => `<div class="thumb"><svg width="28" height="28" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="${shapes[k]}"/></svg></div>`;
+const th = thumb("u");
 // «сегодня» — 25 нояб.; замер Linda — 24 нояб. (одна дата на карточке и в списке)
 // дата — справа под состоянием, адрес — одной строкой (не рвать число и слово)
 const when = (a) => a;
 const rt = (x, d) => `${x}<span class="nw">${d}</span>`;
-const rLinda = row(th, "Linda Alvarez", when("2207 Ocean Park Blvd"), rt(pill("neutral", "doc", "Не отправлена"), "24&nbsp;нояб."));
+const rLinda = row(th, "Linda Alvarez", when("2207 Ocean Park Blvd"), rt(pill("neutral", "doc", "Смета готова"), "24&nbsp;нояб."));
 // у мастера то же состояние тем же словом, что в карточке
 const rLindaMaster = row(th, "Linda Alvarez", when("2207 Ocean Park Blvd"), rt(pill("neutral", "doc", "Смета у офиса"), "24&nbsp;нояб."));
 const rLindaSum = row(th, "Linda Alvarez", when("2207 Ocean Park Blvd"), rt(`<span class="money">$2,113.67</span>`, "24&nbsp;нояб."));
-const rMark = row(th, "Mark Chen", when("1520 Elm St"), rt(pill("info", "doc", "Отправлена"), "23&nbsp;нояб."));
-const rRosa = row(th, "Rosa Diaz", when("88 Pine Ave"), rt(pill("ok", "check", "Подписана"), "21&nbsp;нояб."));
+const rMark = row(thumb("l"), "Mark Chen", when("1520 Elm St"), rt(pill("info", "doc", "Отправлена"), "23&nbsp;нояб."));
+const rRosa = row(thumb("z"), "Rosa Diaz", when("88 Pine Ave"), rt(pill("ok", "check", "Подписана"), "21&nbsp;нояб."));
 // смета не собралась — в той же группе, вместо суммы «⚠ Нет цен · 2»
 const rNoPrice = row(th, "Paul Kim", "15 Cedar Ct", rt(`<span class="warnnote nw">${ic("alert", 13)} Нет цен · 2</span>`, "24&nbsp;нояб."));
-const rDraft = row(th, "Без клиента · сегодня 9:15", "Gutter 46 ft · Downspout 1", "");
+const rDraft = row(thumb("s"), "Без клиента", "Gutter 46&nbsp;ft · Downspout&nbsp;1", `<span class="nw">сегодня 9:15</span>`);
 // выезд-осмотр — значок календаря (не «часы» тона info)
-const visit = (n, when, a) => row(`<div class="ico">${ic("cal")}</div>`, n, `${when} · ${a}`, "");
+const visit = (n, when, a) => row(`<div class="ico">${ic("cal")}</div>`, n, `${when}<br><span class="nw">${a}</span>`, "");
 // #2678 решено брейнштормом (25.11, поручение основателя): записанные осмотры без замера — сегодня и просроченные до 7 дней (первыми, warn «Просрочен»); мастер — свои, офис — все; до 3 строк, «Все ›»; нажатие — холст, привязанный к выезду
 const late = `<span class="warnnote">${ic("alert", 13)} Просрочен</span>`;
 // мастер — свои осмотры; офис — все, у строки исполнитель
@@ -224,13 +226,13 @@ S["v2-list"] = () => `<div class="phone"><div class="scroll">${headRoot("Gutters
   ${group("Ждут замера", waitRowsOffice, "Все ›", 2)}
   ${group("Ждут отправки", [rLindaSum, rNoPrice], "", 2)}
   ${group("Черновики", [rDraft], "", 1)}
-  ${group("Последние", [rMark, rRosa], "Все замеры ›")}
+  ${group("Последние", [rMark, rRosa], "Все ›")}
   </div>${tabbar("Gutters")}</div>`;
 // мастер: денег нет — нет «Ждут отправки», в строках без сумм
 S["v2-list-master"] = () => `<div class="phone"><div class="scroll">${headRoot("Gutters")}
   ${group("Ждут замера", waitRows, "Все ›", 2)}
   ${group("Черновики", [rDraft], "", 1)}
-  ${group("Последние", [rLindaMaster, rMark, rRosa], "Все замеры ›")}
+  ${group("Последние", [rLindaMaster, rMark, rRosa], "Все ›")}
   </div>${tabbar("Gutters", TABS_MASTER)}</div>`;
 S["v2-list-empty"] = () => `<div class="phone"><div class="scroll">${headRoot("Gutters")}
   <div class="card" style="margin-top:20px;padding:24px 20px;text-align:center"><div class="ico" style="margin:0 auto">${mini()}</div>
@@ -277,8 +279,8 @@ S["v2-card"] = () => `<div class="phone"><div class="scroll">${headObj("Linda Al
   ${officeNext}${sheet}${saved("Сохранено в облаке · 10:42")}${act("Отправить смету", "send")}${trio}${addr}
   </div>${tabbar("Gutters")}</div>`;
 // мастер: без денег, без вкладки «Сметы», без жёлтой
-S["v2-card-master"] = () => `<div class="phone"><div class="scroll">${headObj("Linda Alvarez", hst("doc", "Смета собрана · ждёт отправки"))}${tabs(false)}
-  ${next("Офис проверит и отправит")}${sheet}${act("", "", "Править чертёж")}${trio}${addr}
+S["v2-card-master"] = () => `<div class="phone"><div class="scroll">${headObj("Linda Alvarez", hst("doc", "Смета собрана"))}${tabs(false)}
+  ${next("Уйдёт в офис, когда появится сеть")}${sheet}${act("", "", "Править чертёж")}${trio}${addr}
   </div><div class="qline">${ic("wifiOff", 16)}Нет сети · ждёт отправки · 1</div>${tabbar("Gutters", TABS_MASTER)}</div>`;
 // мастер на iPhone SE (667), в сети
 S["v2-card-master-se"] = () => `<div class="phone se"><div class="scroll">${headObj("Linda Alvarez", hst("doc", "Смета у офиса"))}${tabs(false)}
@@ -303,13 +305,13 @@ S["now-states"] = () => `<div class="phone" style="height:1120px"><div class="sc
   <div class="cap">Черновик без клиента · офис</div>${next("Смета собрана, но отправить некому")}${act("Привязать клиента", "userPlus").replace('class="pair"', 'class="pair col"')}
   <div class="cap">Отправлена · офис</div>${next("<span class=\"money\">$2,113.67</span> · отправлена вчера, клиент открыл 2&nbsp;раза")}${act("Напомнить клиенту", "bell").replace('class="pair"', 'class="pair col"')}
   <div class="cap">Изменена после отправки · офис</div>${next("Было <span class=\"money\">$2,113.67</span> → стало <span class=\"money\">$2,348.20</span>. Клиент видит версию от 24&nbsp;нояб.")}${act("Отправить изменения", "send").replace('class="pair"', 'class="pair col"')}<div class="gnote">Макет: в «⋯» — «Восстановить версию клиента» (с подтверждением)</div>
-  <div class="cap">Подписана, депозит не оплачен · офис</div>${next("<span class=\"money\">$2,113.67</span> · подписана сегодня")}${act("Получить депозит", "money").replace('class="pair"', 'class="pair col"')}
-  <div class="gnote">Решение основателя 25.11 (#2720): «Править чертёж» после подписи — сначала подтверждение «Чертёж подписан клиентом 25 нояб. Изменить его?»</div>
+  <div class="cap">Подписана, депозит не оплачен · офис</div>${next("<span class=\"money\">$2,113.67</span> · подписана сегодня")}${act("Получить депозит", "money", "")}
+  <div class="gnote">После подписи «Править чертёж» — в «⋯», сначала подтверждение «Чертёж подписан клиентом 25 нояб. Изменить его?» (основатель 25.11, #2720). Компания без депозита — главная «Назначить работу»</div>
   </div></div>`;
 // мастер в тех же состояниях: денег нет, жёлтой нет, следующий шаг — свой
 S["now-states-master"] = () => `<div class="phone"><div class="scroll" style="padding-top:4px">
   <div class="cap">Отправлена · мастер</div><div class="hst">${hst("doc", "Отправлена")}</div>${next("Офис ждёт ответа клиента")}${act("", "", "Править чертёж")}<div class="gnote">Макет: при первой правке — окно «Смета уже у клиента. Офис отправит изменения»</div>
-  <div class="cap">Подписана · мастер</div><div class="hst">${hst("check", "Подписана")}</div>${next("Дальше — работа: дату ставит офис, она появится в «Плане»")}${act("", "", "Править чертёж")}<div class="gnote">Макет: как у офиса (#2720) — сначала окно «Чертёж подписан клиентом 25 нояб. Изменить его?»</div>
+  <div class="cap">Подписана · мастер</div><div class="hst">${hst("check", "Подписана")}</div>${next("Дальше — работа: дату ставит офис, она появится в «Плане»")}<div class="gnote">Как у офиса: «Править чертёж» — в «⋯», сначала подтверждение «Чертёж подписан…» (#2720)</div>
   <div class="cap">Черновик без клиента · мастер</div><div class="hst">${hst("doc", "Смета собрана · без клиента")}</div>${next("Офис привяжет клиента — делать ничего не нужно")}${act("", "", "Править чертёж")}
   <div class="cap">Смета не собралась · мастер</div><div class="hst">${hst("alert", "Смета не собралась")}</div>${next("Офис укажет цены у 2 деталей — делать ничего не нужно")}${act("", "", "Править чертёж")}
   </div></div>`;
