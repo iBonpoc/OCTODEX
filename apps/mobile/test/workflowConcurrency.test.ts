@@ -40,12 +40,19 @@ describe("Checks: which runs cancel which (#2192)", () => {
   });
 });
 
-describe("Checks: a cancelled duplicate run leaves no red «checks» (#2480)", () => {
+describe("Checks: the «labeled» run queues behind the run in progress (#2480)", () => {
   const start = checks.indexOf("\n  checks:\n    name: checks");
   const job = checks.slice(start, checks.indexOf("\n  nightly-alert:", start));
-  it("the summary job is skipped when the whole run is cancelled (not if: always())", () => {
-    expect(job).toMatch(/\n    if: \$\{\{ !cancelled\(\) \}\}/);
-    expect(job).not.toMatch(/\n    if: always\(\)/);
+  it("labeled does not cancel the run in progress; a push and any other PR event still do", () => {
+    expect(cancel).toMatch(/github\.event_name == 'pull_request' && github\.event\.action != 'labeled'/);
+    expect(cancel).toMatch(/\|\| github\.event_name == 'push'/);
+    // same group for labeled and synchronize: the labeled run waits in the PR's group
+    expect(group).toMatch(/format\('pr-\{0\}', github\.event\.pull_request\.number\)/);
+    expect(group).not.toMatch(/action/);
+  });
+  it("the summary job keeps if: always(): a skipped «checks» would read as passed", () => {
+    expect(job).toMatch(/\n    if: always\(\)/);
+    expect(job).not.toMatch(/cancelled\(\)/);
   });
   it("a live run still goes red on a failed or cancelled needed job", () => {
     expect(job).toMatch(/needs\.rule22\.result \}\}" != "cancelled"/);

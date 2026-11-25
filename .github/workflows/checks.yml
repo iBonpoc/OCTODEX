@@ -35,7 +35,10 @@ permissions:
 
 concurrency:
   group: checks-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.event_name == 'push' && 'main' || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+  # #2480: the «labeled» run of a PR (the label «к-влитию») does NOT cancel the run in progress — it waits behind it in the
+  # same group, so no cancelled duplicate leaves a red «checks» (and a skipped one would read as «passed» without the full
+  # matrix). A new push (synchronize) still cancels everything older.
+  cancel-in-progress: ${{ (github.event_name == 'pull_request' && github.event.action != 'labeled') || github.event_name == 'push' }}
 
 jobs:
   # Pipeline pause (#1087, rule 26): while a task labelled «остановка» is open, a pull request without the label «починка» stops
@@ -359,11 +362,7 @@ jobs:
   checks:
     name: checks
     needs: [pause, changes, fast, bundle, build-web, e2e, rule22, scenarios, numbers]
-    # #2480: not always() — when the whole run is cancelled (a newer run of the same PR took its concurrency group, e.g. the
-    # label «к-влитию» right after a push) this job is SKIPPED, not failed: a cancelled duplicate must not leave a red
-    # «checks» beside the live run's green one. A real failure, or one cancelled job inside a live run, still reaches the
-    # steps below (cancelled() is false) and stays red.
-    if: ${{ !cancelled() }}
+    if: always()
     runs-on: ubuntu-24.04
     steps:
       - name: All checks green
