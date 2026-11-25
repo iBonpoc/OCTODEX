@@ -11,5 +11,11 @@ export function rowQtyLine(l: Pick<CustomLine, "quantity" | "unit" | "unitPriceC
   return q === "1" ? qty : `${qty} × ${fmtUsd(l.unitPriceCents)}`;
 }
 
-/** the row's sum on the right: always with cents, as the mockup's «$150.00» (the sums of a document line up by the point) */
-export const rowSum = (cents: number): string => fmtUsd(cents);
+/**
+ * Money in the estimate editor: always with cents, as the mockup's «$150.00» / «$772.36» (DS §4.5 «в документах — с центами»; the sums
+ * of a document line up by the point, #2451 «Сумма $36», #2457 «$200 и $200.00»). The estimate's screens do not use the app's
+ * `money` (whole dollars when whole — for lists and tiles). A negative amount takes «−» (U+2212). Pure, the engine's `fmtUsd`.
+ */
+export const docMoney = (cents: number): string => fmtUsd(cents);
+/** the row's sum on the right (the same, kept under its old name) */
+export const rowSum = docMoney;
