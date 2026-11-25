@@ -52,7 +52,7 @@ exports.run = async (h) => {
   await h.shot("brief");
 
   // «Подробно»: «$10.00 × 3 ea»; kept after a reload
-  // («⋯ → Строки подробно», v2: an item of the header menu — a press flips «Кратко ↔ Подробно»)
+  // («⋯ → Позиции подробно», v2: an item of the header menu — a press flips «Кратко ↔ Подробно»)
   await line.editorMenu(h, "est-row-view");
   await p.waitForFunction((id) => /^\$10(\.00)? × 3 ea$/.test((document.querySelector(`[data-testid="est-times-${id}"]`)?.textContent || "").trim()), a, { timeout: 3000 });
   h.expect(/^\$10(\.00)? × 3 ea$/.test((await tid(`est-times-${a}`).innerText()).trim()), "«Подробно»: the price × the quantity");
