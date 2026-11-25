@@ -6,6 +6,7 @@
  * Own visits on a free client (no reliance on the demo time).
  */
 const { pressEscUntilClosed } = require("../sheet.cjs");
+const { objCreate } = require("../objectScreen.cjs");
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/company");
@@ -29,9 +30,9 @@ exports.run = async (h) => {
   // the visit form takes the length from the settings and tells the client's window
   const angela = db.leads.find((x) => x.name === "Angela Rossi");
   await h.go(`/lead/${angela.id}`);
-  await h.clickText("Задачи");
-  await h.click("Что дальше?");
-  await h.sheet().getByRole("button", { name: "Записать на оценку" }).click(); await p.waitForTimeout(400);
+  // v2: «Записать на оценку» is an item of the lead's «＋»
+  await objCreate(p, "lead-screen", "lead-create-book");
+  await h.sheet().getByText(/Длительность/).first().waitFor();
   const form = await h.sheet().innerText();
   h.expect(/Длительность\s*[\s\S]{0,20}?60\s*мин/.test(form), `the inspection is 60 min by default: ${form.slice(0, 300)}`);
   h.expect(/Клиент увидит окно \d{1,2}:\d{2}[\s ]?[AP]M–\d{1,2}:\d{2}[\s ]?[AP]M/.test(form), "the form says the client's window");

@@ -5,9 +5,9 @@
  *   with the button apart; «Подключить» leads to «Модули»;
  * - the module on, nothing in the price list: ONE warn banner «Нет в прайсе: N» with «Создать позиции сразу (N)»; the cards say «—»
  *   and never repeat «нет в прайсе» (it was 24 same orange chips);
- * - one row made while others are missing: its card says «тестовая цена» (no test-price banner then; rule 9);
- * - made: the banner says «Тестовые цены: N» (the state by its name); the cards do not repeat «тестовая цена» while all are test;
- * - a tech (read only): the «read only» banner, and every test price marked on its card.
+ * - one row made while others are missing: its card shows its price with «в прайсе» — no «test price» mark (#1873);
+ * - made: the banner says «Всё есть в прайсе»; no card and no banner names a «test price» (the founder 16.11: «Нигде нет её»);
+ * - a tech (read only): the «read only» banner, and no card marked «test price».
  * Finds things by testID; waits on what it checks.
  */
 exports.run = async (h) => {
@@ -37,7 +37,7 @@ exports.run = async (h) => {
   await tid("gpr-locked-action").getByRole("button", { name: "Подключить" }).click();
   await p.waitForURL(/\/company\/modules/, { timeout: 8000 });
   await tid("module-gutters-enable").getByRole("button").click();
-  await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
+  await tid("module-gutters-status").filter({ hasText: /^Без срока/ }).waitFor({ timeout: 5000 });
 
   // on, nothing in the price list: one warn banner with the number and its action; the cards do not repeat it
   await h.go("/module/gutters/prices");
@@ -48,36 +48,26 @@ exports.run = async (h) => {
   const misses = await p.locator('[data-testid^="gpr-miss-"]').locator("visible=true").count();
   h.expect(misses > 10, `the cards are there (${misses})`);
   h.expect(!/нет в прайсе/.test(await text()), "no card repeats «нет в прайсе» (the banner says it once)"); // i18n-old: ok — the old chip must be gone
-  // the banner's action is not repeated on every row: one row is made from its card (a tap → the sheet with «Создать с тестовой ценой»)
-  h.expect((await p.locator('[data-testid^="gpr-miss-"]').locator("visible=true").getByRole("button", { name: "Создать с тестовой ценой" }).count()) === 0, "no «Создать с тестовой ценой» button on the rows");
+  // the banner's action is not repeated on every row: one row is made from its card (a tap → the sheet with «Создать позицию»)
+  h.expect((await p.locator('[data-testid^="gpr-miss-"]').locator("visible=true").getByRole("button", { name: "Создать позицию" }).count()) === 0, "no «Создать позицию» button on the rows");
   await h.shot("prices-missing");
 
-  // one row made with a test price while others are still missing: no «Тестовые цены» banner (the missing one is more urgent) —
-  // so the card itself says «тестовая цена» (rule 9: a test price is never shown unmarked)
+  // one row made while others are still missing: its card shows the price with «в прайсе», no «test price» mark (#1873)
   const first = p.locator('[data-testid^="gpr-miss-"]').locator("visible=true").first();
   const key = (await first.getAttribute("data-testid")).slice("gpr-miss-".length);
   await first.click();
   await tid("gpr-bind-make").getByRole("button").click();
   await tid(`gpr-test-${key}`).waitFor({ timeout: 8000 });
-  h.expect(/тестовая цена/.test(await tid(`gpr-test-${key}`).innerText()), "a test price under the «missing» banner is marked on its card");
+  h.expect(/в прайсе/.test(await tid(`gpr-test-${key}`).innerText()) && !/тестовая цена/.test(await tid(`gpr-test-${key}`).innerText()), "a made row: «в прайсе», no «test price» mark"); // i18n-old: ok — the old mark must be gone
   await tid("gpr-missing-n").waitFor({ timeout: 5000 });
 
-  // made: «Тестовые цены: N» — one banner again
+  // made: «Всё есть в прайсе» — one banner again
   await tid("gpr-missing-n-action").getByRole("button").click();
   await tid("gpr-all-found").waitFor({ timeout: 8000 });
   h.expect((await banners()) === 1, `one state banner after «Создать» (${await banners()})`);
-  h.expect(/Тестовые цены: \d+/.test(await tid("gpr-all-found").innerText()), "the banner names the state: the test prices left to set");
-  // its number is the price list's test items — the one made from a card before + the ones «Создать позиции сразу» made (its toast)
-  const shown = Number((await tid("gpr-all-found").innerText()).match(/Тестовые цены: (\d+)/)[1]);
-  // the store is written to the phone a moment later: wait for the saved list to have them, then compare
-  const testItems = await p.waitForFunction((n) => {
-    const db = (JSON.parse(localStorage.getItem("octo.db.v5") || "null") || {}).db || {};
-    const c = (db.catalog || []).filter((x) => x.placeholder && x.attributes && Object.keys(x.attributes).length).length;
-    return c >= n ? c : false;
-  }, shown, { timeout: 8000 }).then((r) => r.jsonValue());
-  h.expect(shown === testItems, `«Тестовые цены: ${shown}» = the test items in the price list (${testItems})`);
-  // all of them test: the cards do not repeat «тестовая цена» (DS Б9: only while own and test prices are mixed)
-  h.expect(!/тестовая цена/.test(await text()), "no card repeats «тестовая цена» while all prices are test ones");
+  h.expect(/Всё есть в прайсе/.test(await tid("gpr-all-found").innerText()), "the banner: everything is in the price list");
+  // no card and no banner names a «test price» (#1873)
+  h.expect(!/тестов\S* цен/i.test(await text()), "no «test price» anywhere on the screen"); // i18n-old: ok — the old words must be gone
   await h.shot("prices-made");
 
   // a tech reads the prices: the «read only» banner is the one shown — every test price is marked on its card
@@ -85,7 +75,6 @@ exports.run = async (h) => {
   await h.go("/module/gutters/prices");
   await tid("gpr-ro").waitFor({ timeout: 8000 });
   const tests = await p.locator('[data-testid^="gpr-test-"]').locator("visible=true").count();
-  const marked = await p.locator('[data-testid^="gpr-test-"]').locator("visible=true").filter({ hasText: "тестовая цена" }).count();
-  h.expect(tests > 10 && marked === tests, `read only: every test price is marked on its card (${marked} of ${tests})`);
+  h.expect(tests > 10 && !/тестов\S* цен/i.test(await text()), `read only: the prices are there (${tests}), none marked «test price»`); // i18n-old: ok
   await h.seed("octo.role.v1", "director");
 };

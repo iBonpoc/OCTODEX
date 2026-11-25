@@ -8,12 +8,13 @@ import type { Role } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { roleHome } from "@/nav/roles";
 import { goTo } from "@/nav/go";
-import { ClosedCompanies } from "@/features/ClosedCompany";
+import { ClosedCompanies } from "@/features/ClosedCompanyView";
 import { Button, Segmented, StatusChip, TextField } from "@/ui/controls";
 import { useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { Card, FieldGroup, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { StuckOps } from "@/features/StuckOps";
+import { useSignOutAsk } from "@/features/SignOutAskView";
 
 /**
  * «Профиль и аккаунт» (spec 26, founder 07.11: the profile card and «Мои настройки» led to the same screen).
@@ -25,6 +26,7 @@ export default function Profile() {
   const { role, setRole, mode, companyName, availableRoles, queue, syncError, refresh, loading, db, setMyName } = useStore();
   const auth = useAuth();
   const toast = useToast();
+  const signOutAsk = useSignOutAsk();
   // my name (#1606): what colleagues see and what the company's signature carries; saved at once, offline through the queue
   const myName = db.members.find((m) => m.id === db.me)?.name ?? "";
   const [name, setName] = useState<string | null>(null);
@@ -70,8 +72,19 @@ export default function Profile() {
             />
             <RowView style={{ flexWrap: "wrap" }}>
               <Button label={t("account.refresh")} icon="sync" variant="secondary" disabled={loading} onPress={refresh} />
-              <Button testID="account-sign-out" label={t("account.signOut")} variant="ghost" onPress={auth.signOut} />
+              <Button testID="account-sign-out" label={t("account.signOut")} variant="ghost" onPress={signOutAsk.ask} />
             </RowView>
+            {/* #1673 (founder's check 18.11): a person with one company had no way to a second one — the switcher and its
+                «＋ Создать компанию» show only with two or more */}
+            {auth.memberships.length >= 1 ? (
+              <Button
+                testID="account-create-company"
+                label={t("account.createAnother")}
+                icon="plus"
+                variant="secondary"
+                onPress={() => router.push("/auth/company?new=1")}
+              />
+            ) : null}
           </>
         ) : auth.session ? (
           <>
@@ -82,7 +95,7 @@ export default function Profile() {
             <ClosedCompanies />
             <RowView style={{ flexWrap: "wrap" }}>
               <Button label={t("company.create")} icon="plus" onPress={() => router.push("/auth/company")} />
-              <Button testID="account-sign-out" label={t("account.signOut")} variant="ghost" onPress={auth.signOut} />
+              <Button testID="account-sign-out" label={t("account.signOut")} variant="ghost" onPress={signOutAsk.ask} />
             </RowView>
           </>
         ) : (
@@ -118,9 +131,12 @@ export default function Profile() {
       {/* 7а-2b (S22, Apple 5.1.1(v)): the very bottom; signed in with or without a company, and in the demo (it explains) */}
       <Card>
         <View testID="settings-delete-account">
-          <ListRow title={t("acct.title")} subtitle={t("acct.row")} onPress={() => router.push("/settings/delete-account")} />
+          <View testID="acct-row">
+            <ListRow title={t("acct.title")} subtitle={t("acct.row")} lines={0} onPress={() => router.push("/settings/delete-account")} />
+          </View>
         </View>
       </Card>
+      {signOutAsk.sheet}
     </Screen>
   );
 }

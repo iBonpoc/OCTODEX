@@ -46,11 +46,11 @@ exports.run = async (h) => {
   // on (the trial)
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
+  await tid("module-gutters-status").filter({ hasText: /^Без срока/ }).waitFor({ timeout: 5000 });
 
   await h.go(`/lead/${lead.id}`);
   await measureBtn().waitFor({ timeout: 8000 });
-  h.expect(/^Замер желобов$/.test((await measureBtn().innerText()).trim()), "«Замер желобов» (founder 09.11, #697)");
+  h.expect(/^Замер gutter$/.test((await measureBtn().innerText()).trim()), "«Замер gutter» (founder 09.11, #697)");
   await h.shot("lead");
   await measureBtn().getByRole("button").click();
   await p.waitForURL(/\/module\/gutters\/draw\?/, { timeout: 5000 });
@@ -62,7 +62,7 @@ exports.run = async (h) => {
   const mid = idInUrl();
   await waitFor(async () => (await data()).measurements.some((m) => m.id === mid && m.leadId === lead.id && m.propertyId === (lead.propertyId ?? null)), "the measurement is the lead's (and its property's)");
   await tid("draw-lead").waitFor({ timeout: 3000 });
-  h.expect((await tid("draw-to-lead").count()) === 0, "on a lead: no «Сделать заявкой»");
+  h.expect((await tid("draw-to-lead").count()) === 0, "on a lead: no «Привязать»");
   await h.shot("canvas");
 
   // back on the lead: «Открыть замер» opens the same one's card (spec 33 П25.3 В), «Править чертёж» — its drawing
@@ -81,7 +81,7 @@ exports.run = async (h) => {
   const prop = (await db()).properties.find((x) => x.id !== lead.propertyId);
   await h.go(`/property/${prop.id}`);
   await measureBtn().waitFor({ timeout: 8000 });
-  h.expect(/^Замер желобов$/.test((await measureBtn().innerText()).trim()), "another property: «Замер желобов» (no measurement yet)");
+  h.expect(/^Замер gutter$/.test((await measureBtn().innerText()).trim()), "another property: «Замер gutter» (no measurement yet)");
   await measureBtn().getByRole("button").click();
   await p.waitForURL(/\/module\/gutters\/draw\?property=/, { timeout: 5000 });
   await tid("draw-surface").waitFor({ timeout: 8000 });

@@ -1,103 +1,101 @@
 import { useState } from "react";
 import { useStore } from "@/data/store";
-import type { Task } from "@/data/types";
-import { useI18n } from "@/i18n";
-import { ProgressBar, Button } from "@/ui/controls";
-import { FilterBar } from "@/ui/filterBar";
-import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
-import { CardList, Empty, Screen } from "@/ui/surfaces";
-import { ListCard } from "@/ui/listCard";
-import { useToast } from "@/ui/overlays";
+import type { Task } from "@/data/types";
+import { useI18n, type DictKey } from "@/i18n";
 import { TaskSheet, type TaskDraft } from "@/features/tasks/TaskSheet";
 import { memberName } from "@/features/team";
-import {
-  defaultTaskScope, filterTasks, matchTask, SUBJECT_KIND, TASK_STATE, taskCounts, taskProgress, taskState, taskSubject, taskWhen, tasksOf,
-  type TaskFilter, type TaskScope,
-} from "@/features/tasks/tasks";
+import { defaultTaskScope, matchTask, SUBJECT_KIND, taskSubject, taskWhen, tasksOf, type TaskScope } from "@/features/tasks/tasks";
+import { groupTasks, TASK_GROUPS, type TaskGroup } from "@/features/tasks/taskGroups";
+import { Button } from "@/ui/controls";
+import { filterStoreKey } from "@/ui/filterBarRules";
+import { useToast } from "@/ui/overlays";
+import { Empty } from "@/ui/surfaces";
+import { ListScreen } from "@/ui/templates";
 
-const FILTERS: TaskFilter[] = ["open", "overdue", "done"];
+const GROUP_LABEL: Record<TaskGroup, DictKey> = {
+  overdue: "task.overdue",
+  today: "common.today",
+  tomorrow: "common.tomorrow",
+  later: "proto.tasks.later",
+  noDate: "task.noDate",
+  done: "task.doneList",
+};
 
-/** «Задачи» (docs/specs/13 §3.7, 20 §7): progress, search, filters, one card per task with «Выполнено». */
+/**
+ * Задачи — шаблон «Список» (prototype v2, wireframes-v2 №12, BUILD-SPEC §2.12, object-cards «Задача»): no «0 % готово», no status
+ * chips — groups «Просрочено · Сегодня · Завтра · Позже · Без срока» (an empty group is not drawn); a row: what to do, «10:00 · лид
+ * Tom Becker · Alex», on the left the DoneCircle (a tap — done / back, with «Отменить»). A swipe right — «Готово» with «Отменить» (5 s);
+ * the same on a long press and to VoiceOver. A tap opens the task's sheet (it saves by itself; «Вернуть в работу» there for a done one).
+ * «＋» — a new task; «⋯» — «Только мои / Все» and «Показать выполненные» (kept on this device, spec 31 §6 п.7). A tech sees «Мои» first.
+ */
 export default function Tasks() {
   const store = useStore();
   const { db, role } = store;
   const { t, day, time } = useI18n();
   const toast = useToast();
-  // spec 31 §6 п.7: the status and «Только мои» are kept on this device for this list; the search is not
   const key = filterStoreKey("tasks");
   const [keptScope, setScope] = usePersistentState<TaskScope | null>(`${key}.scope`, null);
   const scope: TaskScope = keptScope ?? defaultTaskScope(role);
-  const [keptFilter, setFilter] = usePersistentState<TaskFilter>(`${key}.status`, "open");
-  const filter: TaskFilter = FILTERS.includes(keptFilter) ? keptFilter : "open";
+  const [showDone, setShowDone] = usePersistentState<boolean>(`${key}.done`, false);
   const [q, setQ] = useState("");
   const [edit, setEdit] = useState<TaskDraft | null>(null);
-  const now = Date.now();
-  const mine = tasksOf(db, scope);
-  const progress = taskProgress(mine);
-  const counts = taskCounts(mine, now);
-  const list = filterTasks(mine, filter, now).filter((x) => matchTask(db, x, q));
+  const mine = tasksOf(db, scope).filter((x) => matchTask(db, x, q));
+  const by = groupTasks(mine);
+  const groups = TASK_GROUPS.filter((g) => g !== "done" || showDone).map((g) => ({ key: g, title: t(GROUP_LABEL[g]), rows: by[g] }));
+  const openN = mine.filter((x) => !x.doneAt).length;
   const newTask = () => setEdit({ subjectType: "customer", subjectId: "", title: "", assigneeId: db.me });
 
   const toggle = (x: Task) => {
     const r = store.saveTask({ ...x, doneAt: x.doneAt ? undefined : new Date().toISOString() });
-    toast.show(t(x.doneAt ? "task.reopened" : "task.doneToast"), r.undo);
+    toast.show(store.online ? t(x.doneAt ? "task.reopened" : "task.doneToast") : t("offline.queued"), r.undo);
   };
-  const card = (x: Task) => {
-    const st = TASK_STATE[taskState(x, now)];
+  const row = (x: Task) => {
     const s = taskSubject(db, x);
-    const who = memberName(db, x.assigneeId, t);
     const when = taskWhen(x);
-    return (
-      <ListCard
-        key={x.id}
-        testID={`task-${x.id}`}
-        title={x.title}
-        when={when ? (x.allDay && x.startsAt ? day(x.startsAt) : `${day(when)} · ${time(when)}`) : t("task.noDate")}
-        lead={{ kind: "icon", icon: x.doneAt ? "check" : "clock", tone: st.tone }}
-        status={{ tone: st.tone, label: t(st.label) }}
-        tags={[s.label ? `${t(SUBJECT_KIND[s.kind])}: ${s.label}` : "", ...(who ? [who] : [])].filter(Boolean)}
-        action={{ label: t(x.doneAt ? "task.undo" : "w6.task.doneBtn"), icon: x.doneAt ? "undo" : "check", onPress: () => toggle(x) }}
-        onPress={() => setEdit(x)}
-      />
-    );
+    const g = by.today.includes(x) || by.tomorrow.includes(x) ? "near" : "far";
+    // «10:00 · лид Tom Becker · Alex»: the hour when the group already says the day, else the day
+    const at = when ? (x.allDay && x.startsAt ? day(x.startsAt) : g === "near" ? time(when) : `${day(when)} ${time(when)}`) : undefined;
+    const subject = s.label ? `${t(SUBJECT_KIND[s.kind]).toLowerCase()} ${s.label}` : undefined;
+    const who = memberName(db, x.assigneeId, t);
+    return {
+      key: x.id,
+      testID: `task-${x.id}`,
+      title: x.title,
+      subtitle: [at, subject, who].filter(Boolean).join(" · ") || undefined,
+      // the DoneCircle on the left (the row's neighbour, not inside its press): a tap marks it done or brings it back, with «Отменить»
+      lead: { done: !!x.doneAt, onToggle: () => toggle(x), label: `${t(x.doneAt ? "task.undo" : "w6.task.doneBtn")}: ${x.title}`, testID: `task-done-${x.id}` },
+      // #2350: a swipe right marks it done (or brings a done one back) — the same toggle as the button, with «Отменить»
+      swipe: { left: [{ key: "done", label: t(x.doneAt ? "swipe.reopen" : "swipe.done"), icon: x.doneAt ? ("undo" as const) : ("check" as const), tone: x.doneAt ? undefined : ("ok" as const), full: true, onPress: () => toggle(x), testID: `task-swipe-${x.id}` }] },
+      onPress: () => setEdit(x),
+    };
   };
-
   return (
-    <Screen
-      title={t("task.title")}
-      subtitle={t("w6.task.progress", { n: progress.total, pct: progress.pct })}
-      fab="tasks"
-      fabOn={{ task: newTask }}
-    >
-      {progress.total ? <ProgressBar value={progress.done} max={progress.total} label={t("w6.task.progressA11y", { done: progress.done, n: progress.total })} /> : null}
-      {/* spec 31 (variant Б): the search and «Фильтр» in one row, one lane; «Мои / Все» went to the sheet («Только мои») */}
-      <FilterBar<TaskFilter>
-        search={{ value: q, onChange: setQ, placeholder: t("w6.task.search") }}
-        value={filter}
-        onChange={setFilter}
-        items={FILTERS.map((f) => ({ key: f, label: t(`w6.task.f.${f}`), count: counts[f] }))}
-        groups={[
-          {
-            key: "scope",
-            title: t("card.filter.whose"),
-            options: [{ key: "mine", label: t("w6.task.mine"), count: filterTasks(tasksOf(db, "mine"), filter, now).length, on: scope === "mine" }],
-            onToggle: () => setScope(scope === "mine" ? "all" : "mine"),
-          },
+    <>
+      <ListScreen<Task>
+        testID="tasks"
+        title={t("task.title")}
+        count={openN}
+        create={{ a11y: t("task.new"), items: [{ key: "task", label: t("task.new"), icon: "check", testID: "tasks-create-new" }] }}
+        onCreate={newTask}
+        search={{ placeholder: t("w6.task.search"), value: q, onChange: setQ }}
+        groups={groups}
+        row={row}
+        more={[
+          { key: "scope", label: t(scope === "mine" ? "proto.tasks.showAll" : "proto.tasks.showMine"), icon: "users", testID: "tasks-more-scope" },
+          { key: "done", label: t(showDone ? "proto.tasks.hideDone" : "proto.tasks.showDone"), icon: "check", testID: "tasks-more-done" },
         ]}
-        onReset={() => setScope("all")}
+        onMore={(k) => (k === "scope" ? setScope(scope === "mine" ? "all" : "mine") : setShowDone(!showDone))}
+        empty={
+          <Empty
+            icon="check"
+            title={t(q.trim() ? "w6.task.emptySearch" : "task.none")}
+            hint={q.trim() ? undefined : t("w6.task.emptyHint")}
+            action={q.trim() ? undefined : <Button testID="tasks-empty-new" label={t("task.new")} icon="plus" variant="secondary" onPress={newTask} />}
+          />
+        }
       />
-      {list.length === 0 ? (
-        <Empty
-          icon="check"
-          title={t(q.trim() ? "w6.task.emptySearch" : filter === "done" ? "w6.task.emptyDone" : "task.none")}
-          hint={q.trim() || filter === "done" ? undefined : t("w6.task.emptyHint")}
-          action={!q.trim() && filter !== "done" ? <Button label={t("task.new")} icon="plus" variant="secondary" onPress={newTask} /> : undefined}
-        />
-      ) : (
-        <CardList>{list.map(card)}</CardList>
-      )}
       <TaskSheet value={edit} onClose={() => setEdit(null)} />
-    </Screen>
+    </>
   );
 }

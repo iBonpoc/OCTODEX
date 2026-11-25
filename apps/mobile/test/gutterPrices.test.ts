@@ -1,11 +1,13 @@
 /** Цены модуля Gutters в прайсе компании (docs/specs/33-gutters-settings.md П22.10, M7d): поиск позиции, тестовые позиции без дублей, $ под рисунком. */
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { computeGutterParts, type PartQty } from "@octo/estimating-engine";
 import type { CatalogItem } from "../src/data/types";
 import { TEST_RATES } from "../src/modules/gutters/canvas/testRates";
 import {
   bindable, bindItem, findItem, LABOR_PARTS, laborRows, listPreview, matchAttrs, matchKey, materialRows, missingItems, sampleJob, stableItemId, testPriceCents,
-  PART_WORDS, WORK_WORDS,
+  PART_WORDS, WORK_WORDS, dsLine, partName,
 } from "../src/modules/gutters/prices";
 import { notSavedKey } from "../src/modules/gutters/settings";
 import { uuidV5 } from "../src/modules/gutters/uuid5";
@@ -39,7 +41,7 @@ describe("какие свойства важны по виду детали", ()
   it("образец работы: только то, за что платит клиент (без рулона, палок, заклёпок), без работы", () => {
     expect(rows.every((r) => r.part.use !== "purchase" && r.part.kind === "material")).toBe(true);
     expect(rows.map((r) => matchAttrs(r.part).part)).toEqual(expect.arrayContaining(["gutter", "end_cap", "hanger", "downspout", "elbow", "outlet", "extension"]));
-    expect(laborRows().map((r) => r.part.attrs.work)).toEqual(["install", "install", "install", "install", "downspout", "downspout", "downspout", "downspout", "corner_cut", "tearoff", "tile", "cleaning", "flush", "guard_install"]);
+    expect(laborRows().map((r) => r.part.attrs.work)).toEqual(["install", "install", "install", "install", "downspout", "downspout", "downspout", "downspout", "corner_cut", "bend", "solder", "tearoff", "tile", "cleaning", "flush", "guard_install"]);
   });
   it("образец — по умолчаниям компании: K6 медь → строки K6 медь; метод угла strip → угол strip", () => {
     const raw = { run: { profile: "k", size: "6", material: "copper" }, rules: { corner: "strip" } };
@@ -159,6 +161,7 @@ describe("слова деталей и причина «не сохранено�
   it("saveModuleSettings → null: модуль активен — «перечитывается»; не подключён или пробный кончился — «не подключён»", () => {
     expect(notSavedKey("trial")).toBe("rereading");
     expect(notSavedKey("paid")).toBe("rereading");
+    expect(notSavedKey("unlimited")).toBe("rereading"); // #2410: the developer's company, the demo
     for (const a of ["expired", "off", "never", undefined]) expect(notSavedKey(a)).toBe("notActive");
   });
 });
@@ -171,5 +174,35 @@ describe("цена материала — как в ядре (ревью M8a №
     const r = listPreview([g], [it]);
     // $10.00 + 10.25 % + 10 % = $12.1275 → $12.13 a foot
     expect(r.totalCents).toBe(Math.round(Number(g.qty) * 1213));
+  });
+});
+
+// #814 (audit Q-04): «Детали» speaks words, not codes, and shows no zero rows
+describe("#814 the details in words", () => {
+  const t = (k: string, p?: Record<string, string | number>) => `${k}${p ? JSON.stringify(p) : ""}`;
+  it("every part code the engine can put out has a word (PART_WORDS) — a source guard, so a new part can not reach a person as a code", () => {
+    const dir = join(__dirname, "../../../packages/estimating-engine/src");
+    const codes = new Set<string>();
+    for (const f of readdirSync(dir).filter((n) => /\.ts$/.test(n))) for (const m of readFileSync(join(dir, f), "utf8").matchAll(/\bpart: "([a-z_]+)"/g)) codes.add(m[1]!);
+    expect(codes.size).toBeGreaterThan(20);
+    expect([...codes].filter((c) => !PART_WORDS.has(c)), "add the part to PART_WORDS and mod.gutters.pr.p.<code> in ru/en/es").toEqual([]);
+  });
+  it("a downspout's line (#1747, #1766): «колена» once, elbows by style, offsets by length; only what it has — nothing at all is \"\"", () => {
+    const el = (style: string, n: number) => `mod.gutters.view.dsElbow{"style":"${style}","n":${n}}`;
+    expect(dsLine(t as never, { elbows: [{ style: "A", qty: 3 }], offsets: [] })).toBe(`mod.gutters.view.dsElbows${JSON.stringify({ list: el("A 75°", 3) })}`);
+    expect(dsLine(t as never, { elbows: [{ style: "A", qty: 2 }, { style: "B", qty: 1 }], offsets: [{ lengthIn: 2, qty: 1 }] })).toBe(
+      `mod.gutters.view.dsElbows${JSON.stringify({ list: `${el("A 75°", 2)}, ${el("B 75°", 1)}` })} · mod.gutters.view.dsOffset{"len":"2″","n":1}`,
+    );
+    expect(dsLine(t as never, { shape: "round", elbows: [{ style: "45", qty: 2 }], offsets: [] })).toBe(`mod.gutters.view.dsElbows${JSON.stringify({ list: el("45°", 2) })}`);
+    expect(dsLine(t as never, { elbows: [{ style: "A", qty: 0 }], offsets: [] })).toBe("");
+  });
+});
+
+describe("#1747 the parts' properties in words: no raw value in «Детали»", () => {
+  it("the sample job: a hanger kind is a word (not «hidden»), a downspout size reads «2×3» (not «2x3»)", () => {
+    const t = (k: string) => ({ "mod.gutters.attr.k.hidden": "Скрытое", "mod.gutters.attr.st.plain": "Гладкий" } as Record<string, string>)[k] ?? k;
+    const names = materialRows({}).map((r) => partName(t as never, r.part));
+    expect(names.filter((n) => /\bhidden\b|\bplain\b|\bcorrugated\b/.test(n))).toEqual([]);
+    expect(names.filter((n) => /\b\d+x\d+\b/.test(n))).toEqual([]); // nor a screw «10x1.5» — «#10 × 1½″»
   });
 });

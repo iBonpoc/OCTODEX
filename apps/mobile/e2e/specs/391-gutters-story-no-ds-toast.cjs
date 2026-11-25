@@ -6,7 +6,7 @@
  * a gutter drawn after that, with the button on 2, is on story 2.
  * Every view. Finds things by testID / stored elements; waits on what it checks (no pauses).
  */
-const { openProps, sheetGone, skipLength } = require("../gutters.cjs");
+const { openProps, sheetGone, skipLength, pickAttr } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.autoDs = true; // about the automatic downspouts (the runner switches them off for the others)
@@ -50,19 +50,19 @@ exports.run = async (h) => {
   for (const want of [2, 3, 4, 1]) {
     await story.click();
     await p.waitForFunction((n) => [...document.querySelectorAll('[data-testid="draw-story"]')].some((e) => e.offsetParent && (e.textContent || "").includes(String(n))), want, { timeout: 5000 });
-    h.expect(/эт 1/.test(await tid("draw-selected").innerText()), `«Эт» → ${want}: the picked gutter still says «эт 1»`);
+    h.expect(!/эт/.test(await tid("draw-selected").innerText()), `«Эт» → ${want}: the picked gutter stays on one storey — no «эт N» in the summary (#1666)`);
     const xs = await runs();
     h.expect(xs.length === 2 && xs.every((e) => Number(e.attrs?.story ?? 1) === 1), `«Эт» → ${want}: the gutters stay on story 1 (${JSON.stringify(xs.map((e) => e.attrs?.story ?? 1))})`);
     h.expect((await els()).filter((e) => e.kind === "downspout").length === 1, `«Эт» → ${want}: still one downspout`);
   }
   // nothing was edited: no toast about a count of downspouts, and «Назад» has nothing of the story button's to take back
   const toasts = await p.getByTestId("toast-text").locator("visible=true").allInnerTexts();
-  h.expect(!toasts.some((x) => /Водостоков|downspouts|bajantes/i.test(x)), `no toast «Водостоков стало N» after the story button (${JSON.stringify(toasts)})`);
+  h.expect(!toasts.some((x) => /Downspout стало|downspouts|bajantes/i.test(x)), `no toast «Downspout стало N» after the story button (${JSON.stringify(toasts)})`);
   await h.shot("story-back");
 
   // a gutter goes to another story by its properties (the «Этаж» row): the picked one → 2, the button follows; «Назад» takes it back
   await openProps(p);
-  await tid("attr-story").getByRole("radio", { name: "эт 2", exact: true }).click();
+  await pickAttr(p, "attr-story", "2"); // a field (#2412 G1): its menu, the key of storey 2
   await waitStored((k) => { const r = ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => !e.deletedAt && e.kind === "run"); return r.filter((e) => Number(e.attrs?.story ?? 1) === 2).length === 1 && r.filter((e) => Number(e.attrs?.story ?? 1) === 1).length === 1; }, KEY, "the properties moved the picked gutter to story 2");
   await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="draw-story"]')].some((e) => e.offsetParent && (e.textContent || "").includes("2")), null, { timeout: 5000 });
   if ((p.viewportSize()?.width ?? 0) <= 390) {

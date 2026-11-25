@@ -4,7 +4,7 @@
  * not depend on the machine's zone. Which day a moment falls on is a matter of a zone: todayKey / isoDayKey take one,
  * the company's by default (features/zone.ts getZone), never the phone's (П4b-2).
  */
-import { dayKeyIn, dayNumber, daysBetween, getZone, keyOfNumber, weekdayOf } from "./zone";
+import { dayKeyIn, dayNumber, daysBetween, formatDayKey, getZone, keyOfNumber, weekdayOf } from "./zone";
 
 export type DayKey = string; // YYYY-MM-DD
 
@@ -25,10 +25,12 @@ export const addMonths = (k: DayKey, n: number): DayKey => {
 /** Monday of the week containing k. */
 export const weekStart = (k: DayKey): DayKey => addDays(k, -((weekdayOf(k) + 6) % 7));
 export const weekDays = (k: DayKey): DayKey[] => Array.from({ length: 7 }, (_, i) => addDays(weekStart(k), i));
-/** 6 × 7 cells starting on the Monday on/before the 1st; inMonth marks days of k's month. */
-export function monthGrid(k: DayKey): { key: DayKey; inMonth: boolean }[] {
+/** 6 × 7 cells starting on the Monday (or, `sundayFirst`, the Sunday — en-US, DateField) on/before the 1st; inMonth marks days
+ *  of k's month. The Plan keeps Monday (it does not pass `sundayFirst`). */
+export function monthGrid(k: DayKey, sundayFirst = false): { key: DayKey; inMonth: boolean }[] {
   const month = k.slice(0, 7);
-  const start = weekStart(`${month}-01`);
+  const first = `${month}-01`;
+  const start = sundayFirst ? addDays(first, -weekdayOf(first)) : weekStart(first);
   return Array.from({ length: 42 }, (_, i) => {
     const key = addDays(start, i);
     return { key, inMonth: key.startsWith(month) };
@@ -38,3 +40,9 @@ export function monthGrid(k: DayKey): { key: DayKey; inMonth: boolean }[] {
 export const isoDayKey = (iso: string, tz: string = getZone()): DayKey => dayKeyIn(iso, tz);
 /** days from the company's today to a day (0 = today) — the form's day chips */
 export const dayOffsetOf = (k: DayKey, today: DayKey = todayKey()): number => daysBetween(today, k);
+
+/** «Пт, 20 ноября» — the grey line over a root title (Главная, План; #2363 F27): the weekday short with a capital, the month in full */
+export function headDay(k: DayKey, lang: string): string {
+  const s = formatDayKey(k, { weekday: "short", day: "numeric", month: "long" }, lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}

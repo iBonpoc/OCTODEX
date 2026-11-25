@@ -19,6 +19,15 @@ export const stepIcon: Record<SetupStep, IconKey> = {
 export const stepTitle = (s: SetupStep): DictKey => `co.step.${s}` as DictKey;
 export const stepHint = (s: SetupStep): DictKey => `co.hint.${s}` as DictKey;
 
+/**
+ * #2007 (founder 17.11: «один и тот же экран показывается дважды»): the first run asks «Чем вы занимаетесь?» (auth/trade) and then
+ * the wizard asked the same at its step «Направления». The wizard skips that step when the company already has an active
+ * direction — unless the person stands on it now (it stays in the list while shown).
+ */
+export function wizardSteps(c: Company, cats: ServiceCategory[], current?: SetupStep): SetupStep[] {
+  return SETUP_STEPS.filter((s) => s !== "trades" || s === current || !stepDone(c, "trades", cats));
+}
+
 /** `cats` — the company's directions (docs/specs/11-trade.md): the "trades" step is done with at least one active */
 export function stepDone(c: Company, s: SetupStep, cats: ServiceCategory[] = []): boolean {
   switch (s) {
@@ -41,16 +50,26 @@ export function stepDone(c: Company, s: SetupStep, cats: ServiceCategory[] = [])
   }
 }
 
+/**
+ * #2065 (founder 18.11: «кто хочет, добавляет лицензию, кто не хочет — не добавляет… приложение об этом не должно думать»):
+ * licenses and insurance are asked, never required — in any state. They never count as unfinished and are never «the next
+ * step»; the wizard still shows them (the question is asked) and «Пропустить» on them is as good as filling them in.
+ */
+export const OPTIONAL_STEPS: readonly SetupStep[] = ["licenses", "insurance"];
+export const isOptionalStep = (s: SetupStep) => OPTIONAL_STEPS.includes(s);
+/** a step that needs nothing more: filled in, or an optional one (#2065) */
+export const stepSettled = (c: Company, s: SetupStep, cats: ServiceCategory[] = []) => isOptionalStep(s) || stepDone(c, s, cats);
+
 export function setupProgress(c: Company | null, cats: ServiceCategory[] = []) {
   if (!c) return { done: 0, total: SETUP_STEPS.length, next: null as SetupStep | null };
-  const done = SETUP_STEPS.filter((s) => stepDone(c, s, cats)).length;
-  const next = SETUP_STEPS.find((s) => !stepDone(c, s, cats) && !c.skipped.includes(s)) ?? SETUP_STEPS.find((s) => !stepDone(c, s, cats)) ?? null;
+  const done = SETUP_STEPS.filter((s) => stepSettled(c, s, cats)).length;
+  const open = (s: SetupStep) => !stepSettled(c, s, cats);
+  const next = SETUP_STEPS.find((s) => open(s) && !c.skipped.includes(s)) ?? SETUP_STEPS.find(open) ?? null;
   return { done, total: SETUP_STEPS.length, next };
 }
 
-/** CSLB license that is not expired (CA: number must be on estimates and contracts). */
-export const hasValidCslb = (c: Company | null) =>
-  !!c?.licenses.some((l) => l.kind === "cslb" && (!l.expiresOn || new Date(l.expiresOn).getTime() >= Date.now() - 86_400_000));
+/** the company's own state (two letters) — the default for new addresses; empty when it has none (#2065: no «CA» in the core) */
+export const companyState = (c: Pick<Company, "address"> | null | undefined) => (c?.address.state ?? "").trim().toUpperCase();
 
 export const TRADES = [
   "handyman", "plumbing", "electrical", "hvac", "painting", "cleaning", "remodeling", "flooring",

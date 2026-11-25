@@ -1,3 +1,6 @@
+const { visitAct } = require("../visitScreen.cjs");
+const { objCreate } = require("../objectScreen.cjs");
+const { pressUndo } = require("../gutters.cjs");
 // e2e 132: «Сообщить клиенту?» after a cancel (S4a / S9a; docs/specs/03 §7.4, §13), every view
 /**
  * - S9a: the office cancels a job visit of a Spanish-speaking client → «Сообщить клиенту об отмене?» with the text in
@@ -24,8 +27,9 @@ exports.run = async (h) => {
   // S9a: cancel a job visit (demo v1 of j1)
   await h.go("/visit/v1");
   await p.evaluate(() => { window.__opened = []; window.open = (u) => { window.__opened.push(String(u)); return null; }; });
-  await p.getByRole("button", { name: "Отменить выезд", exact: true }).first().click(); await p.waitForTimeout(400);
-  await h.sheet().getByRole("button", { name: "Клиент отменил" }).click();
+  // v2: «Отменить выезд» is the red item of the header's «⋯» (asked in the template's sheet, then the reason sheet)
+  await visitAct(p, "visit-act-cancel"); await p.waitForTimeout(400);
+  await h.sheet().getByRole("radio", { name: "Клиент отменил" }).click(); // the reason — a row with a check (spec 56 wave 5б)
   await h.sheet().getByRole("button", { name: "Отменить выезд", exact: true }).last().click(); await p.waitForTimeout(600);
   await h.expectText(/Сообщить клиенту об отмене\?/, "after the cancel the office is asked to tell the client");
   await h.expectText(/visita de trabajo .+ está cancelada/, "the text is in the client's language (es), not the app's");
@@ -39,24 +43,24 @@ exports.run = async (h) => {
   db = await h.db();
   h.expect(sms(db).length === 1, "S9a → spec 20: an sms event on the job");
   // «Отменить» on the toast takes the event back (the last toast is the message's)
-  await p.getByRole("button", { name: "Отменить", exact: true }).last().click(); await p.waitForTimeout(500);
+  await pressUndo(p); await p.waitForTimeout(500);
   db = await h.db();
   h.expect(sms(db).length === 0, "undo: the event is taken back");
 
   // S4a: a lead's inspection — book it, then cancel; «Не сейчас» writes nothing and leaves the visit screen
   const angela = db.leads.find((x) => x.name === "Angela Rossi");
   await h.go(`/lead/${angela.id}`);
-  await h.clickText("Задачи");
-  await h.click("Что дальше?");
-  await h.sheet().getByRole("button", { name: "Записать на оценку" }).click(); await p.waitForTimeout(400);
+  // v2: «Записать на оценку» is an item of the lead's «＋»
+  await objCreate(p, "lead-screen", "lead-create-book"); await p.waitForTimeout(400);
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).last().click(); await p.waitForTimeout(500);
   await h.sheet().getByRole("button", { name: "Не сейчас" }).click(); await p.waitForTimeout(300);
   db = await h.db();
   const v = db.visits.find((x) => x.leadId === angela.id);
   h.expect(!!v, "inspection booked");
   await h.go(`/visit/${v.id}`);
-  await p.getByRole("button", { name: "Отменить выезд", exact: true }).first().click(); await p.waitForTimeout(400);
-  await h.sheet().getByRole("button", { name: "Мы отменили" }).click();
+  // v2: «Отменить выезд» is the red item of the header's «⋯» (asked in the template's sheet, then the reason sheet)
+  await visitAct(p, "visit-act-cancel"); await p.waitForTimeout(400);
+  await h.sheet().getByRole("radio", { name: "Мы отменили" }).click(); // the reason — a row with a check (spec 56 wave 5б)
   await h.sheet().getByRole("button", { name: "Отменить выезд", exact: true }).last().click(); await p.waitForTimeout(600);
   await h.expectText(/Сообщить клиенту об отмене\?/, "S4a: asked after an inspection cancel too");
   await h.expectText(/осмотр .+ отменён|estimate visit .+ is cancelled|visita de evaluación .+ está cancelada/, "the inspection text");

@@ -23,6 +23,7 @@ import { T } from "@/ui/primitives";
 import { Empty } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { memberName } from "@/features/team";
+import { invoiceTitle } from "@/features/invoiceTitle";
 
 /** the row's name: shared with the client card where the word is the same */
 export function propertyRowLabel(row: PropertyRow): DictKey {
@@ -98,7 +99,7 @@ export function PropertySection({ p, s }: { p: Property; s: PropertyRow }) {
         <Empty icon="wrench" title={t("client.empty.jobs")} action={<AddObject kind="job" customerId={p.customerId} propertyId={p.id} testID="property-section-new-job" />} />
       ) : (
         <>
-        <AddObject kind="job" customerId={p.customerId} propertyId={p.id} testID="property-section-new-job" />
+        <AddObject kind="job" customerId={p.customerId} propertyId={p.id} testID="property-section-new-job" inList />
         <CardGrid>
           {r.jobs.map((j) => {
             const v = jobStatusView[j.status];
@@ -125,7 +126,7 @@ export function PropertySection({ p, s }: { p: Property; s: PropertyRow }) {
         <Empty icon="invoice" title={t("client.empty.estimates")} action={<AddObject kind="estimate" customerId={p.customerId} propertyId={p.id} testID="property-section-new-estimate" />} />
       ) : (
         <>
-        <AddObject kind="estimate" customerId={p.customerId} propertyId={p.id} testID="property-section-new-estimate" />
+        <AddObject kind="estimate" customerId={p.customerId} propertyId={p.id} testID="property-section-new-estimate" inList />
         <CardGrid>
           {r.estimates.map((e) => (
             <ListCard
@@ -157,10 +158,10 @@ export function PropertySection({ p, s }: { p: Property; s: PropertyRow }) {
                 density="compact"
                 testID={`property-invoice-${i.id}`}
                 lead={{ kind: "icon", icon: "wallet" }}
-                title={i.title || i.number || t("inv.title")}
+                title={(i.title && invoiceTitle(i, t)) || i.number || t("inv.title")}
                 when={i.title ? i.number : undefined}
                 value={money(i.totalCents)}
-                status={{ tone: ch.s, label: t(ch.l) }}
+                status={{ tone: ch.s, label: t(ch.l, ch.p) }}
                 onPress={() => router.push(`/invoice/${i.id}`)}
               />
             );

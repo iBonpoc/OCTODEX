@@ -38,7 +38,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
+  await tid("module-gutters-status").filter({ hasText: /^Без срока/ }).waitFor({ timeout: 5000 });
   await h.go("/module/gutters/draw");
   await tid("draw-surface").waitFor({ timeout: 8000 });
   await tid("draw-tool-line").waitFor({ timeout: 5000 });
@@ -64,5 +64,5 @@ exports.run = async (h) => {
   await p.waitForFunction(() => document.querySelector('[data-testid="draw-tool-ds"] [role="button"]')?.getAttribute("aria-pressed") === "true", null, { timeout: 5000 });
   line = await look("draw-tool-line");
   ds = await look("draw-tool-ds");
-  h.expect(ds.selected && ds.filled && !ds.yellow && !line.filled, `after the pick: «Водосток» filled, «Желоб» not (${JSON.stringify({ line, ds })})`);
+  h.expect(ds.selected && ds.filled && !ds.yellow && !line.filled, `after the pick: «Downspout» filled, «Gutter» not (${JSON.stringify({ line, ds })})`);
 };

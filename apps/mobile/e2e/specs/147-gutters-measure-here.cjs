@@ -1,8 +1,8 @@
 /**
- * e2e 147 — «Замер желобов» (было «Замерить здесь») → «Сделать заявкой» (docs/specs/33-gutters-screens.md П21 M5b; стык S1b). Every view.
+ * e2e 147 — «Замер желобов» (было «Замерить здесь») → «Привязать» (docs/specs/33-gutters-screens.md П21 M5b; стык S1b). Every view.
  * - the home «＋» has «Замер желобов» (было «Замерить здесь») only while the module is active;
- * - it opens a new draft without a lead; before the first save there is no «Сделать заявкой»; after it — there is;
- * - «Сделать заявкой» → «Привязать замер» → a new lead by its phone right in the sheet (founder 09.11, #688); saved → the new lead's card has «Открыть замер», and the draft
+ * - it opens a new draft without a lead; before the first save there is no «Привязать»; after it — there is;
+ * - «Привязать» → «Привязать замер» → a new lead by its phone right in the sheet (founder 09.11, #688); saved → the new lead's card has «Открыть замер», and the draft
  *   is now the lead's; the canvas shows the lead.
  * Finds things by testID; waits on what it checks.
  */
@@ -12,9 +12,9 @@ const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
   const p = h.page;
-  const wide = h.layout.width > 390;
   const tid = (id) => p.getByTestId(id).locator("visible=true");
-  const plus = () => p.locator(wide ? '[data-testid="fab-header"]:visible' : '[data-testid="fab"]:visible');
+  // v2 (#2350): the home «＋» is the header's CreateButton (`today-create`, every width), its items `fab-<id>` in the menu
+  const plus = () => tid("today-create").getByRole("button");
   const waitFor = async (ok, what, tries = 40) => {
     let v = await ok();
     for (let i = 0; i < tries && !v; i++) { await p.waitForTimeout(150); v = await ok(); }
@@ -32,7 +32,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
+  await tid("module-gutters-status").filter({ hasText: /^Без срока/ }).waitFor({ timeout: 5000 });
 
   await h.go("/today");
   await plus().first().click();
@@ -41,7 +41,7 @@ exports.run = async (h) => {
   await here().click();
   await p.waitForURL(/\/module\/gutters\/draw$/, { timeout: 5000 });
   await tid("draw-surface").waitFor({ timeout: 8000 });
-  h.expect((await tid("draw-to-lead").count()) === 0, "nothing saved yet: no «Сделать заявкой»");
+  h.expect((await tid("draw-to-lead").count()) === 0, "nothing saved yet: no «Привязать»");
 
   const b = await p.getByTestId("draw-surface").boundingBox();
   const y = b.y + b.height * 0.42;
@@ -57,7 +57,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await data()).measurements.some((m) => m.id === mid && !m.leadId && !m.propertyId), "a draft without a lead or a property");
   await h.shot("draft");
 
-  // «Сделать заявкой» → the core's new-lead form
+  // «Привязать» → the core's new-lead form
   await tid("draw-to-lead").getByRole("button").click();
   // «Привязать замер» (founder 09.11): a new lead, an open lead or a client — here «Новая заявка»
   await tid("link-sheet").waitFor({ timeout: 5000 });

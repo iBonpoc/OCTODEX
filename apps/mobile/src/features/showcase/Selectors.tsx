@@ -4,6 +4,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { Button, ChoiceChips, ReadOnly, TextField } from "@/ui/controls";
 import { Anchored, useRequiredForm } from "@/ui/requiredForm";
 import { SelectField } from "@/ui/selectField";
+import { ColorField } from "@/ui/colorField";
 import { T } from "@/ui/primitives";
 import { Card, FieldGroup, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
@@ -11,6 +12,16 @@ import { StatusNote } from "@/ui/statusNote";
 import { ViewTabs } from "@/ui/viewTabs";
 
 const UNITS = ["ft", "in", "yd", "m", "cm", "mm"] as const;
+/** DS §9б: short words → the menu at the field; long names → the list («›»); a colour → the colour field (demo palette — data, not tokens) */
+const SHORT: DictKey[] = ["ds.pick.none", "ds.pick.s1", "ds.pick.s2", "ds.pick.s3", "ds.pick.s4"];
+const LONGN: DictKey[] = ["ds.pick.l1", "ds.pick.l2", "ds.pick.l3", "ds.pick.l4", "ds.pick.l5"];
+const PALETTE: { key: string; label: string; hex?: string }[] = [
+  { key: "white", label: "High Gloss White", hex: "#F7F7F4" },
+  { key: "black", label: "Black", hex: "#1B1B1B" },
+  { key: "clay", label: "Natural Clay", hex: "#B5A488" },
+  { key: "royal", label: "Royal Brown", hex: "#4A3226" },
+  { key: "green", label: "Grecian Green", hex: "#4F6B52" },
+];
 const TWENTY = Array.from({ length: 20 }, (_, i) => `n${i + 1}`);
 const MANY = ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9", "a10", "a11", "a12"] as const;
 type Unit = (typeof UNITS)[number];
@@ -39,6 +50,9 @@ export function SelectorsSection() {
   const [twenty, setTwenty] = useState<string | null>(null);
   const items = UNITS.map((u) => ({ key: u, label: u }));
   const [few, setFew] = useState<"a" | "b" | "c">("a");
+  const [short, setShort] = useState<string | null>("ds.pick.s1");
+  const [longPick, setLongPick] = useState<string | null>(null);
+  const [color, setColor] = useState<string | null>("white");
   const [vtab, setVtab] = useState<VTab>("overview");
   const [many, setMany] = useState<Unit>("ft");
   // a required field (DS §11 п.3–4): the button is always on; pressed with the field empty it shows the error under it
@@ -70,6 +84,14 @@ export function SelectorsSection() {
         <SelectField testID="showcase-select-long" label={t("ds.select.twelve")} value={long} items={MANY.map((m) => ({ key: m, label: m }))} onChange={setLong} />
         <SelectField testID="showcase-select-tenth" label={t("ds.select.tenth")} value={tenth} items={MANY.map((m) => ({ key: m, label: m }))} onChange={setTenth} />
         <SelectField testID="showcase-select-search" label={t("ds.select.twenty")} value={twenty} items={TWENTY.map((m) => ({ key: m, label: m }))} onChange={setTwenty} />
+      </Card>
+      {/* DS §9б (#2412, council 23.11.2026): one field, what opens is said by its arrow — ⌄ the menu at the field, › the list */}
+      <Card>
+        <T v="heading">{t("ds.pick.title")}</T>
+        <T v="caption" tone="mut">{t("ds.pick.hint")}</T>
+        <SelectField labelAbove testID="showcase-pick-short" label={t("ds.pick.short")} value={short} items={SHORT.map((k, n) => ({ key: k, label: t(k), top: n === 0 }))} onChange={setShort} />
+        <SelectField labelAbove testID="showcase-pick-long" label={t("ds.pick.long")} value={longPick} items={LONGN.map((k) => ({ key: k, label: t(k), leading: { icon: "image" as const } }))} onChange={setLongPick} />
+        <ColorField labelAbove testID="showcase-pick-color" label={t("ds.pick.color")} value={color} onChange={setColor} colors={[{ key: "none", label: t("ds.pick.noPaint"), top: true, none: true }, ...PALETTE]} />
       </Card>
       <Card>
         <T v="heading">{t("ds.choice.title")}</T>

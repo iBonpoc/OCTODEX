@@ -42,13 +42,17 @@ export function markPhoto(db: DB, id: string, failed: PhotoFail | null, at: stri
     changed = true;
     return { ...v, photos: v.photos.map((p): Photo => (p.id !== id ? p : failed ? { ...p, upload: { failed, at } } : withoutMark(p))) };
   });
-  return changed ? { ...db, visits } : db;
+  // #1441: a module's photo (a measurement's) lives in db.files — the same mark
+  const f = (db.files ?? []).find((x) => x.id === id);
+  const fileNow = f && (failed ? f.upload?.failed !== failed : !!f.upload);
+  const files = fileNow ? (db.files ?? []).map((x) => (x.id !== id ? x : failed ? { ...x, upload: { failed, at } } : withoutMark(x))) : db.files;
+  return changed || fileNow ? { ...db, visits, ...(fileNow ? { files } : {}) } : db;
 }
 
-const withoutMark = (p: Photo): Photo => {
+const withoutMark = <X extends { upload?: unknown }>(p: X): X => {
   if (!p.upload) return p;
   const { upload: _gone, ...rest } = p;
-  return rest;
+  return rest as X;
 };
 
 /**
@@ -57,6 +61,30 @@ const withoutMark = (p: Photo): Photo => {
  * took (no failed mark) is not marked, whatever the phone thought.
  */
 export function keepPhotoLocal(next: DB, prev: DB): DB {
+  return keepFileLocal(keepVisitPhotoLocal(next, prev), prev);
+}
+
+/** #1441: the same for a module's photos (db.files): the file on this phone and why the cloud refused it */
+function keepFileLocal(next: DB, prev: DB): DB {
+  const before = new Map((prev.files ?? []).filter((f) => f.uri || f.upload).map((f) => [f.id, f]));
+  if (!before.size || !next.files?.length) return next;
+  let changed = false;
+  const files = next.files.map((f) => {
+    const old = before.get(f.id);
+    if (!old) return f;
+    const uri = f.uri ?? old.uri;
+    const upload = f.upload ? (old.upload ?? f.upload) : undefined;
+    if (uri === f.uri && upload === f.upload) return f;
+    changed = true;
+    const out = { ...f, ...(uri ? { uri } : {}) };
+    if (upload) out.upload = upload;
+    else delete out.upload;
+    return out;
+  });
+  return changed ? { ...next, files } : next;
+}
+
+function keepVisitPhotoLocal(next: DB, prev: DB): DB {
   const before = new Map<string, Photo>();
   for (const v of prev.visits) for (const p of v.photos) before.set(p.id, p);
   if (!before.size) return next;

@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Визуальный язык GoRix v2</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+<style>
+/* ================= страница ================= */
+:root{--pg:#E4E5E0;--fg:#17181B;--mut:#42454B;--card:#EEEFEA;--line:rgba(20,21,24,.12);--hi:#6E5A12;color-scheme:light}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--pg:#1F2024;--fg:#EEEFF1;--mut:#B3B6BE;--card:#26282C;--line:rgba(255,255,255,.09);--hi:#E2C15E;color-scheme:dark}}
+:root[data-theme="dark"]{--pg:#1F2024;--fg:#EEEFF1;--mut:#B3B6BE;--card:#26282C;--line:rgba(255,255,255,.09);--hi:#E2C15E;color-scheme:dark}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--pg);color:var(--fg);font:15px/1.45 Manrope,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;overflow-x:hidden;font-variant-numeric:tabular-nums}
+.wrap{max-width:1260px;margin:0 auto;padding:28px max(16px,env(safe-area-inset-right,0px)) 64px max(16px,env(safe-area-inset-left,0px))}
+h1{font-size:30px;line-height:1.15;margin:0 0 8px;font-weight:700;letter-spacing:-.02em}
+h2{font-size:22px;line-height:1.25;margin:48px 0 12px;font-weight:700;letter-spacing:-.01em}
+h3{font-size:16px;margin:0 0 6px}
+.lead{color:var(--mut);max-width:820px;margin:0 0 6px}
+.note{font-size:13px;color:var(--mut);max-width:900px;margin:8px 0 0}
+.note b{color:var(--fg)}
+.tb{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden;font-size:14px;table-layout:fixed}
+.tb th,.tb td{text-align:left;vertical-align:top;padding:9px 14px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+.tb tr:last-child td{border-bottom:0}
+.tb th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);font-weight:700}
+.tb td:first-child{font-weight:700;width:20%}
+.tb td:nth-child(3){color:var(--mut);width:22%}
+@media (max-width:680px){
+  .tb,.tb tbody,.tb tr,.tb td{display:block;width:100%!important}
+  .tb thead{display:none}
+  .tb tr{border-bottom:1px solid var(--line);padding:8px 0}
+  .tb tr:last-child{border-bottom:0}
+  .tb td{border:0;padding:2px 14px}
+  .tb td:nth-child(3)::before{content:"Образец: ";font-weight:600}
+}
+.box{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 18px;min-width:0}
+.box ul{margin:0;padding-left:18px}.box li{margin:4px 0}
+.hdrow{display:grid;grid-template-columns:1fr;gap:14px;margin-top:18px;align-items:start}
+@media (min-width:900px){.hdrow{grid-template-columns:390px 1fr;gap:28px}}
+.hdrow h3{margin-top:2px}
+.hdrow .box{font-size:14px}
+.k{font-weight:700;color:var(--hi)}
+
+/* масштаб макетов: внутри всегда 390 pt, снаружи — сколько есть места */
+.pw{width:min(390px,100%);aspect-ratio:390/var(--h,844);position:relative;flex:none}
+.pw.mini{width:min(292px,100%)}
+.pw>.ph{position:absolute;left:0;top:0;width:390px;height:calc(var(--h,844) * 1px);transform:scale(var(--k,1));transform-origin:0 0}
+@media (max-width:421px){.pw{--k:.918}}
+
+.phones{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,390px),390px));gap:44px 28px;justify-content:center;margin-top:22px}
+figure{margin:0;min-width:0;display:flex;flex-direction:column;align-items:center}
+figcaption{width:100%;max-width:390px;margin-top:18px;font-size:13.5px;line-height:1.45}
+figcaption .no{color:var(--mut);font-size:12.5px;margin:0 0 4px}
+figcaption p{margin:3px 0}
+.story{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,292px),292px));gap:22px 18px;margin-top:16px;justify-content:start}
+.story figcaption{max-width:292px;margin-top:10px;font-size:13px}
+.story figcaption b{display:block;font-size:14px}
+
+/* ================= телефон: фиксированные цвета палитры A ================= */
+.ph{border-radius:48px;overflow:hidden;font-family:Manrope,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:15px;line-height:1.35;
+  font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;box-shadow:0 0 0 1px rgba(255,255,255,.06),0 30px 60px -30px rgba(0,0,0,.6)}
+.ph.strip{border-radius:28px}
+.ph svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+/* тёмная */
+.dk{--bg:#26282C;--card:#303237;--cell:#3A3C42;--cell2:#44464D;--ink:#EEEFF1;--mut:#B3B6BE;--off:#4A4D54;--line:rgba(255,255,255,.07);--hl:rgba(255,255,255,.05);
+  --acc:#E2C15E;--on:#1C1A12;--accEdge:transparent;--acct:#E2C15E;--tint:rgba(226,193,94,.16);--tint2:rgba(226,193,94,.28);
+  --okF:#1C2E23;--okT:#86D3A0;--infF:#182A2E;--infT:#86C9D4;--wF:#33281C;--wT:#E8B67F;--bF:#3A2122;--bT:#F09A90;
+  --lav:#C9C1EC;--lavT:#2A2452;--mint:#B6DCC6;--mintT:#173A28;--but:#E8DCA0;--butT:#3A300E;--pea:#EDC6AC;--peaT:#4A2512;
+  --tab:#1F2024;--white:#EEEFF1;--dash:#8C9098;
+  background:linear-gradient(180deg,#33363C 0%,#2A2C31 22%,#26282C 48%,#222327 100%);color:var(--ink)}
+/* светлая */
+.lt{--bg:#D6D7D1;--card:#E3E4DE;--cell:#CDCEC8;--cell2:#C4C5BF;--ink:#17181B;--mut:#42454B;--off:#B7B8B2;--line:rgba(20,21,24,.08);--hl:rgba(255,255,255,.5);
+  --acc:#E2C15E;--on:#1C1A12;--accEdge:#7A6418;--acct:#6E5A12;--tint:rgba(226,193,94,.30);--tint2:rgba(226,193,94,.5);
+  --okF:#DCEBDF;--okT:#1B6034;--infF:#D8EAED;--infT:#0E5866;--wF:#F2E2CC;--wT:#824306;--bF:#F4DAD6;--bT:#9A2C22;
+  --lav:#DDD7F4;--lavT:#3A2F78;--mint:#CFE8D9;--mintT:#1E5236;--but:#F1E7B8;--butT:#5A4708;--pea:#F5D9C6;--peaT:#6E3416;
+  --tab:#E3E4DE;--white:#17181B;--dash:#6F7279;
+  background:linear-gradient(180deg,#E1E2DC 0%,#D9DAD4 30%,#D6D7D1 55%,#D0D1CB 100%);color:var(--ink)}
+
+/* статус-бар */
+.sb{position:absolute;left:0;right:0;top:0;height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 30px 0 34px;font-weight:700;font-size:15px;z-index:3}
+.sb .isl{position:absolute;left:50%;top:9px;width:110px;height:30px;margin-left:-55px;border-radius:16px;background:#0D0E10}
+.sb .sy{display:flex;gap:6px;align-items:center}
+.sb .sy i{display:block;background:currentColor;border-radius:1px}
+.scr{position:absolute;left:0;right:0;top:44px;bottom:0;padding:0 16px;overflow:hidden}
+
+/* общие */
+.row{display:flex;align-items:center;gap:12px;min-width:0}
+.sp{flex:1}
+.mut{color:var(--mut)}
+.c12{font-size:12px;font-weight:600;color:var(--mut);line-height:1.3}
+.c13{font-size:13px;font-weight:500;color:var(--mut);line-height:1.35}
+.t15{font-size:15px;font-weight:600}
+.t17{font-size:17px;font-weight:700;letter-spacing:-.005em}
+.el{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.rb{width:40px;height:40px;border-radius:20px;background:var(--card);display:grid;place-items:center;flex:none;position:relative;box-shadow:inset 0 1px 0 var(--hl)}
+.rb.s32{width:32px;height:32px;border-radius:16px}.rb.s32 svg{width:18px;height:18px}
+.rb .bd{position:absolute;top:8px;right:9px;width:8px;height:8px;border-radius:4px;background:var(--bT);box-shadow:0 0 0 2px var(--card)}
+.av{width:40px;height:40px;border-radius:20px;display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.av.s28{width:28px;height:28px;font-size:11.5px}
+.av.s36{width:36px;height:36px}
+.av.ring{box-shadow:0 0 0 2px var(--bg),0 0 0 3.5px var(--acc)}
+.demo{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:10px;background:var(--wF);color:var(--wT);font-size:12px;font-weight:600;vertical-align:middle}
+.demo::before{content:"";width:6px;height:6px;border-radius:3px;background:currentColor}
+.pl{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 9px 0 7px;border-radius:12px;font-size:12px;font-weight:600;white-space:nowrap;flex:none}
+.pl svg{width:13px;height:13px;stroke-width:2.2}
+.pl.ok{background:var(--okF);color:var(--okT)}.pl.inf{background:var(--infF);color:var(--infT)}.pl.w{background:var(--wF);color:var(--wT)}.pl.b{background:var(--bF);color:var(--bT)}.pl.n{background:var(--cell);color:var(--mut)}
+.card{background:var(--card);border-radius:22px;padding:16px;box-shadow:inset 0 1px 0 var(--hl)}
+.cell{background:var(--cell);border-radius:14px}
+.sec{display:flex;align-items:baseline;justify-content:space-between;margin:20px 0 10px}
+.sec a{font-size:13px;font-weight:600;color:var(--mut);text-decoration:none}
+
+/* единая шапка */
+.hrow{height:48px;display:flex;align-items:center;gap:8px}
+.hrow .par{font-size:15px;font-weight:600;color:var(--mut);margin-left:4px}
+.big{display:flex;align-items:center;gap:12px;min-height:64px;padding:2px 0 6px}
+.big .kick{font-size:13px;font-weight:600;color:var(--mut);display:flex;align-items:center;gap:8px;margin-bottom:2px}
+.big .tt{font-size:30px;line-height:1.15;font-weight:600;letter-spacing:-.02em;white-space:nowrap}
+.big .tt .mut{font-weight:500}
+.big .vb{width:1px;align-self:stretch;margin:6px 0;background:var(--off)}
+.big .sub{min-width:0;display:flex;flex-direction:column;gap:2px}
+.big .sub b{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.big .sub span{font-size:13px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chev{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:12px;background:var(--card);vertical-align:4px;margin-left:6px}
+.chev svg{width:15px!important;height:15px!important;stroke-width:2.2!important}
+.hed{height:52px;display:flex;align-items:center;gap:10px}
+.hed .mid{flex:1;text-align:center;min-width:0;display:flex;flex-direction:column}
+.hed .mid b{font-size:17px;font-weight:700}
+.hed .mid span{font-size:12px;font-weight:600;color:var(--mut)}
+/* свёрнутая строка */
+.hcol{height:52px;display:flex;align-items:center;gap:10px;margin:0 -16px;padding:0 16px;background:rgba(38,40,44,.92);border-bottom:1px solid var(--line)}
+.lt .hcol{background:rgba(214,215,209,.92)}
+.hcol .ttl{font-size:17px;font-weight:700;min-width:0}
+
+/* кнопки */
+.by{height:40px;border-radius:20px;background:var(--acc);color:var(--on);font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px;padding:0 18px;box-shadow:inset 0 0 0 1px var(--accEdge)}
+.by svg{width:18px;height:18px;stroke-width:2.2}
+.bd2{height:40px;border-radius:20px;background:var(--cell);color:var(--acct);font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px;padding:0 18px}
+.bd2 svg{width:18px;height:18px}
+.sq{width:40px;height:40px;border-radius:20px;background:var(--cell);display:grid;place-items:center;flex:none}
+
+/* прогресс — только словами и числом (основатель 21.11: полос нет) */
+.prg{display:flex;align-items:baseline;justify-content:space-between;gap:10px;min-width:0}
+.prg span{font-size:12px;font-weight:600;color:var(--mut)}
+.prg b{font-size:15px;font-weight:700}
+.tri{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tri>div{padding:9px 10px;text-align:center}
+.tri b{display:block;font-size:17px;font-weight:700}
+.tri span{font-size:12px;font-weight:600;color:var(--mut)}
+.num3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.num3 span{font-size:12px;font-weight:600;color:var(--mut);display:block}
+.num3 b{font-size:20px;font-weight:600;display:flex;align-items:center;gap:6px;letter-spacing:-.01em}
+
+/* сегмент, пилюли дней */
+.seg{height:36px;border-radius:18px;background:var(--card);padding:3px;display:flex;box-shadow:inset 0 1px 0 var(--hl)}
+.seg span{flex:1;border-radius:15px;display:grid;place-items:center;font-size:13px;font-weight:600;color:var(--mut)}
+.seg span.on{background:var(--acc);color:var(--on)}
+.seg.neu span.on{background:var(--cell2);color:var(--ink)}
+.days{display:flex;justify-content:space-between}
+.dp{width:46px;height:64px;border-radius:23px;background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;position:relative}
+.dp small{font-size:12px;font-weight:600;color:var(--mut)}
+.dp b{font-size:17px;font-weight:700}
+.dp i{position:absolute;bottom:7px;width:4px;height:4px;border-radius:2px;background:var(--mut)}
+.dp.sel{box-shadow:inset 0 0 0 1.5px var(--acc);background:var(--tint)}
+.dp.sel small,.dp.sel b{color:var(--acct)}
+.dp.sel i{background:var(--acct)}
+.cnt{display:inline-grid;place-items:center;min-width:34px;height:28px;border-radius:14px;background:var(--card);font-size:15px;font-weight:700;margin-left:8px}
+
+/* план: лента */
+.tl{display:grid;grid-template-columns:44px 1fr;gap:10px;margin-bottom:8px}
+.tl .tm b{display:block;font-size:15px;font-weight:700}
+.tl .tm span{font-size:12px;font-weight:600;color:var(--mut)}
+.ev{background:var(--card);border-radius:18px;padding:10px 12px;min-width:0;box-shadow:inset 0 1px 0 var(--hl)}
+.iv{display:inline-flex;height:26px;border-radius:13px;overflow:hidden;font-size:13px;font-weight:700;background:var(--cell)}
+.iv b{display:grid;place-items:center;padding:0 10px 0 10px}
+.iv b:first-child{background:var(--cell2);clip-path:polygon(0 0,calc(100% - 8px) 0,100% 50%,calc(100% - 8px) 100%,0 100%);padding-right:16px}
+.iv.y{background:var(--tint);color:var(--acct)}
+.iv.y b:first-child{background:var(--tint2)}
+.hatch{height:30px;border-radius:12px;background:repeating-linear-gradient(135deg,var(--card) 0 7px,transparent 7px 13px);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--mut);box-shadow:inset 0 0 0 1px var(--line)}
+.now{position:relative;height:1px;background:var(--acc);margin:2px 0 10px 54px;opacity:.85}
+.now::before{content:"";position:absolute;left:-4px;top:-3.5px;width:8px;height:8px;border-radius:4px;background:var(--acc)}
+.now span{position:absolute;left:-54px;top:-9px;font-size:12px;font-weight:700;color:var(--acct)}
+
+/* плитки */
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tile{background:var(--card);border-radius:20px;padding:12px;min-height:100px;display:flex;flex-direction:column;box-shadow:inset 0 1px 0 var(--hl);min-width:0}
+.tile .ic{width:28px;height:28px;border-radius:14px;background:var(--cell);display:grid;place-items:center;margin-bottom:auto}
+.tile .ic svg{width:15px;height:15px}
+.tile span{font-size:12px;font-weight:600;color:var(--mut);margin-top:10px}
+.tile b{font-size:22px;font-weight:700;letter-spacing:-.01em;line-height:1.2}
+.tile b small{font-size:12px;font-weight:600;color:var(--mut);margin-left:4px;letter-spacing:0}
+.tile.y{background:var(--acc);color:var(--on);box-shadow:inset 0 0 0 1px var(--accEdge)}
+.tile.y .ic{background:rgba(28,26,18,.12)}
+.tile.y span,.tile.y b small{color:rgba(28,26,18,.78)}
+.tile .sub{font-style:normal;font-size:12px;font-weight:600;color:var(--mut)}
+.tile.y .sub{color:rgba(28,26,18,.78)}
+.tiles3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.tiles3 .tile{min-height:92px;padding:10px 11px}
+.tiles3 .tile b{font-size:18px}
+.tiles.big1 .tile{min-height:112px}
+.tiles.big1 .tile b{font-size:26px}
+
+/* строки «с цифрами справа» */
+.ln{background:var(--card);border-radius:18px;padding:10px 12px;display:flex;align-items:center;gap:12px;margin-bottom:8px;box-shadow:inset 0 1px 0 var(--hl)}
+.ln .ico{width:40px;height:40px;border-radius:13px;background:var(--cell);display:grid;place-items:center;flex:none}
+.ln .tx{flex:1;min-width:0}
+.ln .tx b{display:block;font-size:15px;font-weight:700}
+.ln .tx span{display:block;font-size:12px;font-weight:600;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ln .cl{text-align:right;flex:none}
+.ln .cl span{display:block;font-size:12px;font-weight:600;color:var(--mut)}
+.ln .cl b{font-size:15px;font-weight:700}
+.ln .cl.w2{width:64px}
+.bad{color:var(--bT)!important}
+
+/* чек-лист (AGFlow) */
+.ck{position:relative;padding-left:2px;margin-top:10px}
+.ck::before{content:"";position:absolute;left:11px;top:14px;bottom:14px;width:1px;background:var(--off)}
+.ck div{display:flex;align-items:center;gap:12px;height:34px;position:relative}
+.ck .o{width:20px;height:20px;border-radius:10px;border:1.5px dashed var(--dash);background:var(--cell);flex:none}
+.ck .d{width:20px;height:20px;border-radius:10px;background:var(--white);color:var(--cell);display:grid;place-items:center;flex:none}
+.ck .d svg{width:13px;height:13px;stroke-width:2.6}
+.ck span{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ck .dn span{color:var(--mut)}
+
+/* панель вкладок */
+.tab{position:absolute;left:0;right:0;bottom:0;height:90px;padding:6px 8px 34px;display:flex;background:linear-gradient(180deg,rgba(31,32,36,.0) 0,var(--tab) 18px);z-index:2}
+.lt .tab{background:linear-gradient(180deg,rgba(227,228,222,0) 0,var(--tab) 18px)}
+.tab div{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding-top:12px;font-size:12px;font-weight:600;color:var(--mut);position:relative}
+.tab div svg{width:22px;height:22px}
+.tab div.on{color:var(--acct)}
+.tab div .n{position:absolute;top:6px;left:calc(50% + 6px);min-width:16px;height:16px;border-radius:8px;background:var(--bT);color:var(--bF);font-size:11px;font-weight:700;display:grid;place-items:center;padding:0 4px}
+.hi{position:absolute;bottom:8px;left:50%;width:134px;height:5px;margin-left:-67px;border-radius:3px;background:var(--ink);opacity:.9;z-index:4}
+.chips{display:flex;gap:6px;overflow:hidden}
+.chp{height:32px;border-radius:16px;padding:0 12px;display:flex;align-items:center;gap:5px;font-size:13px;font-weight:600;color:var(--mut);background:var(--card);white-space:nowrap;flex:none}
+.chp.on{background:var(--white);color:var(--bg)}
+.chp em{font-style:normal;opacity:.7}
+.qa{display:flex;justify-content:space-between;margin-top:6px}
+.qa div{display:flex;flex-direction:column;align-items:center;gap:5px;width:64px;font-size:12px;font-weight:600;color:var(--mut)}
+.qa .rb{width:44px;height:44px;border-radius:22px}
+.fld{height:44px;border-radius:12px;background:var(--card);display:flex;align-items:center;padding:0 14px;font-size:15px;font-weight:600;box-shadow:inset 0 1px 0 var(--hl)}
+.items{background:var(--card);border-radius:22px;padding:0 14px;box-shadow:inset 0 1px 0 var(--hl)}
+.it{display:flex;align-items:center;gap:12px;height:52px;border-bottom:1px solid var(--line)}
+.it:last-child{border-bottom:0}
+.it .tx{flex:1;min-width:0}
+.it .tx b{display:block;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.it .tx span{display:block;font-size:12px;font-weight:600;color:var(--mut)}
+.it>b{font-size:15px;font-weight:700}
+.dock{position:absolute;left:16px;right:16px;bottom:42px;height:64px;border-radius:22px;background:var(--cell);display:flex;align-items:center;gap:12px;padding:0 12px 0 16px;box-shadow:0 -10px 30px -10px rgba(0,0,0,.5),inset 0 1px 0 var(--hl);z-index:2}
+.dock .tx{flex:1}
+.dock .tx span{font-size:12px;font-weight:600;color:var(--mut);display:flex;align-items:center;gap:2px}
+.dock .tx span svg{width:14px;height:14px}
+.dock .tx b{font-size:22px;font-weight:700;letter-spacing:-.01em}
+.dock .tx b small{font-size:12px;font-weight:600;color:var(--mut);margin-left:6px;letter-spacing:0}
+.sheet{position:absolute;left:0;right:0;bottom:0;border-radius:28px 28px 0 0;background:#2C2E33;padding:8px 16px 0}
+.grab{width:36px;height:5px;border-radius:3px;background:var(--off);margin:0 auto 6px}
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.5)}
+.cpanel{background:var(--cell);border-radius:22px;padding:6px 14px;margin-top:6px;box-shadow:0 16px 40px -12px rgba(0,0,0,.6)}
+.cpanel .r{display:flex;align-items:center;gap:12px;height:48px;border-bottom:1px solid var(--line)}
+.cpanel .r:last-child{border-bottom:0}
+.cpanel .r .tx{flex:1;min-width:0}
+.cpanel .r .tx b{display:block;font-size:15px;font-weight:600}
+.cpanel .r .tx span{font-size:12px;font-weight:600;color:var(--mut)}
+.fadeout{opacity:.35}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<defs>
+<symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 10a6 6 0 1 1 12 0c0 5 2 6.5 2 6.5H4S6 15 6 10Z"/><path d="M10 19.5a2 2 0 0 0 4 0"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-dots" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1.6" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></symbol>
+<symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 7h16M7 12h10M10 17h4"/></symbol>
+<symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+<symbol id="i-cl" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+<symbol id="i-cr" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+<symbol id="i-cd" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+<symbol id="i-cu" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></symbol>
+<symbol id="i-phone" viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></symbol>
+<symbol id="i-msg" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4V5Z"/></symbol>
+<symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11Z"/><circle cx="12" cy="10" r="2"/></symbol>
+<symbol id="i-cam" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4Z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+<symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></symbol>
+<symbol id="i-ruler" viewBox="0 0 24 24"><path d="M3 17 17 3l4 4L7 21Z"/><path d="m7 13 2 2M10 10l2 2M13 7l2 2"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7"/></symbol>
+<symbol id="i-hg" viewBox="0 0 24 24"><path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+<symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 6v8M12 18v.5"/></symbol>
+<symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4Z"/></symbol>
+<symbol id="i-cal" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></symbol>
+<symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6M16 4.5a3.5 3.5 0 0 1 0 7M18 14c2 .8 3 3 3 6"/></symbol>
+<symbol id="i-wallet" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18M16 14.5h2"/></symbol>
+<symbol id="i-inbox" viewBox="0 0 24 24"><path d="M4 13l2.5-8h11L20 13v6H4Z"/><path d="M4 13h5l1 2h4l1-2h5"/></symbol>
+<symbol id="i-doc" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7Z"/><path d="M14 3v4h4M10 12h5M10 16h5"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 4 8 4-8 4-8-4Z"/><path d="m4 12 8 4 8-4M4 16l8 4 8-4"/></symbol>
+<symbol id="i-book" viewBox="0 0 24 24"><path d="M5 17V6a2 2 0 0 1 2-2h12v13H7a2 2 0 0 0-2 2 2 2 0 0 0 2 2h12"/></symbol>
+<symbol id="i-trend" viewBox="0 0 24 24"><path d="m4 17 5-5 4 3 7-7"/><path d="M15 8h5v5"/></symbol>
+<symbol id="i-rcpt" viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z"/><path d="M9 8h6M9 12h6"/></symbol>
+<symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M16 7l3 3"/></symbol>
+<symbol id="i-tool" viewBox="0 0 24 24"><path d="M15 4a5 5 0 0 0-4.6 6.9L4 17.3V20h2.7l6.4-6.4A5 5 0 0 0 20 9l-3 1-2-2 1-3Z"/></symbol>
+<symbol id="i-note" viewBox="0 0 24 24"><path d="M5 4h14v12l-4 4H5Z"/><path d="M15 20v-4h4M9 9h6M9 13h4"/></symbol>
+<symbol id="i-lead" viewBox="0 0 24 24"><path d="M5 21V4h11l-2 4 2 4H5"/></symbol>
+<symbol id="i-dollar" viewBox="0 0 24 24"><path d="M12 3v18M16.5 7.5C16 6 14.5 5 12 5S7.5 6.2 7.5 8s1.8 2.6 4.5 3.2 4.5 1.4 4.5 3.3S14.8 19 12 19s-4.4-1-5-2.6"/></symbol>
+</defs>
+</svg>
+
+<div class="wrap">
+<h1>Визуальный язык GoRix v2</h1>
+<p class="lead">Вторая попытка: ближе к пяти главным образцам основателя. Палитра A (жёлтый #E2C15E, графит, светло-серый, пастели), шрифт Manrope, компакт, кнопка 40. Структура экранов — по BUILD-SPEC, LAYOUT-RULES и каркасам v2; данные — из демо. Код приложения не менялся.</p>
+<p class="note"><b>Образцы:</b> №1 AGFlow (графит, плашки, чек-лист, таймер) · №2 трекер привычек (шапка, тройка цифр, «Done + Add Note») · №3 жёлтые календарь, обзор и карта (сегмент, одна жёлтая плитка, строки с цифрами) · №4 бронирования (пилюли дней, время слева, интервал плашкой) · №5 Dell Planning (← круглой кнопкой, «Заголовок | подзаголовок», низ «итог + кнопка»).</p>
+
+<h2>Визуальный язык числами</h2>
+<table class="tb">
+<thead><tr><th>Элемент</th><th>Число</th><th>Образец</th></tr></thead>
+<tbody>
+<tr><td>Фон экрана</td><td>мягкий градиент сверху вниз: #33363C → #2A2C31 (22 %) → #26282C (48 %) → #222327. Светлая: #E1E2DC → #D6D7D1 → #D0D1CB. Чистого чёрного и белого нет.</td><td>№1, №5</td></tr>
+<tr><td>Слои</td><td>фон → карточка #303237 (радиус 22) → ячейка #3A3C42 (14) → выбранная ячейка #44464D. Без рамок; у карточки верхний блик 1 pt rgba(255,255,255,.05).</td><td>№1, №2</td></tr>
+<tr><td>Поля и ритм</td><td>поля экрана 16; между карточками 8; внутри карточки 16 (строки 12); между блоками 20; заголовок блока → содержимое 10.</td><td>№3</td></tr>
+<tr><td>Шрифт</td><td>Manrope: заголовок экрана 30/600, трекинг −0,02 em · цифра плитки 22–26/700 · карточка 17/700 · текст 15/500–600 · вторичный 13/500 · подпись 12/600. Цифры моноширинные. Не больше пяти размеров на экране.</td><td>№5, №3</td></tr>
+<tr><td>Кнопки</td><td>капсула 40, текст 15/700, значок 18. Пара в ряд: залитая жёлтая + тёмная #3A3C42 с жёлтым текстом + квадрат-значок 40. Зона нажатия 44.</td><td>№2</td></tr>
+<tr><td>Круглые кнопки</td><td>40 на карточке #303237 в шапке, 32 внутри карточек, 44 в ряду быстрых действий с подписью 12; значок 20, линия 1,75.</td><td>№2, №5</td></tr>
+<tr><td>Сегмент</td><td>высота 36, радиус 18, дорожка #303237, отступ 3, выбранный — жёлтый 15-радиусный, текст 13/600.</td><td>№3</td></tr>
+<tr><td>Пилюли дней</td><td>46 × 64, радиус 23, день 12/600 сверху, число 17/700, точка 4 внизу «в дне есть выезды».</td><td>№3, №4</td></tr>
+<tr><td>Прогресс</td><td>только словами и числом: «3 из 5 · 62 %» 15/700 справа, подпись («Работа», «Чек-лист») 12/600 серым слева. Полос, штрихов и сегментов нет (основатель 21.11).</td><td>—</td></tr>
+<tr><td>Плашка статуса</td><td>24, радиус 12, значок 13 + слово 12/600; тихие тона: ok #86D3A0/#1C2E23, info #86C9D4/#182A2E, warn #E8B67F/#33281C, bad #F09A90/#3A2122.</td><td>№1</td></tr>
+<tr><td>Чек-лист</td><td>кружок 20: пустой — пунктир 1,5 #8C9098; готово — светлый круг с галочкой; строка 34; слева общая линия 1 pt.</td><td>№1</td></tr>
+<tr><td>Таймер</td><td>песочные часы 20 + «1:12:40» 17/700 моноширинно + «с 8:34» 13; справа круглая 32 «⌃».</td><td>№1</td></tr>
+<tr><td>Тройка цифр</td><td>три ячейки #3A3C42 радиус 14, цифра 17/700 над подписью 12, через 8.</td><td>№2</td></tr>
+<tr><td>Плитки</td><td>2 в ряд 112 высотой (цифра 26) + 3 в ряд 92 (цифра 18); значок 15 в круге 28 сверху слева; подпись над цифрой, единица 12 бледнее. Жёлтая — одна.</td><td>№3</td></tr>
+<tr><td>Строки «цифры справа»</td><td>карточка 64, значок 40 в квадрате-13, имя 15/700, строка 12; справа колонки «подпись 12 / значение 15/700».</td><td>№3</td></tr>
+<tr><td>Время и интервал</td><td>колонка времени 44: час 15/700, длительность 12; интервал — плашка 26 «8:30 ▸ 12:30» из двух половин; ближайший — жёлтым тоном, не заливкой.</td><td>№4</td></tr>
+<tr><td>Панель вкладок</td><td>56 + 34 нижней зоны, значок 22 + слово 12; активная — жёлтые значок и слово, без заливки.</td><td>№2</td></tr>
+<tr><td>Жёлтая заливка</td><td><span class="k">одна на экран</span>: Главная — «В пути»; План — сегмент «День»; Клиент — «Выставить счёт»; Выезд — «Завершить»; Смета — «Готово»; Деньги — плитка «Должны». Остальное жёлтое — тон 16 % или текст.</td><td>все</td></tr>
+</tbody>
+</table>
+
+<h2>Единая шапка</h2>
+<p class="lead">Одна система из двух частей: <b>строка значков 48</b> (всегда на месте) и <b>крупный блок 64</b> под ней (заголовок 30 или «Заголовок | подзаголовок»). Статус-бар 44. При прокрутке крупный блок сжимается в строку — см. раскадровку ниже.</p>
+
+<div class="hdrow">
+<div class="pw" style="--h:156"><div class="ph strip dk">
+<div class="sb"><span>8:20</span><span class="isl"></span><span class="sy"><i style="width:3px;height:6px"></i><i style="width:3px;height:8px"></i><i style="width:3px;height:10px"></i><i style="width:22px;height:11px;border-radius:3px"></i></span></div>
+<div class="scr">
+<div class="hrow"><span class="av ring" style="background:var(--lav);color:var(--lavT)">AP</span><span class="sp"></span><span class="rb"><svg><use href="#i-bell"/></svg><i class="bd"></i></span><span class="rb"><svg><use href="#i-plus"/></svg></span></div>
+<div class="big"><div><div class="kick">Пт, 20 ноября <span class="demo">Демо</span></div><div class="tt">Доброе утро, Алекс</div></div></div>
+</div></div></div>
+<div class="box"><h3>1 · Корень вкладки (Главная, План, Клиенты, Деньги, Лиды)</h3>
+<ul><li>Строка 48: аватар 40 с кольцом 1,5 слева (меню аватара), справа ≤ 3 круглых 40 через 8: колокольчик (точка 8), «＋», поиск/фильтр по вкладке.</li>
+<li>Крупный блок 64: строка 13/600 серым (дата) + заголовок 30/600, трекинг −0,02 em. Главная — приветствие, План — «Ноябрь ⌄» и ‹ › 32, остальные — имя вкладки.</li>
+<li>Итого 44 + 48 + 64 = 156 развёрнуто, 44 + 52 = 96 свёрнуто.</li></ul></div>
+</div>
+
+<div class="hdrow">
+<div class="pw" style="--h:156"><div class="ph strip dk">
+<div class="sb"><span>8:20</span><span class="isl"></span><span class="sy"><i style="width:3px;height:6px"></i><i style="width:3px;height:8px"></i><i style="width:3px;height:10px"></i><i style="width:22px;height:11px;border-radius:3px"></i></span></div>
+<div class="scr">
+<div class="hrow"><span class="rb"><svg><use href="#i-back"/></svg></span><span class="par">Клиенты</span><span class="demo">Демо</span><span class="sp"></span><span class="rb"><svg><use href="#i-plus"/></svg></span><span class="rb"><svg><use href="#i-dots"/></svg></span></div>
+<div class="big"><div class="tt" style="font-size:28px">Sarah Mitchell<span class="chev"><svg><use href="#i-cd"/></svg></span></div><span class="vb"></span><div class="sub"><b>Клиент · VIP</b><span>◷ Активный</span></div></div>
+</div></div></div>
+<div class="box"><h3>2 · Объект (Клиент, Работа, Выезд, Смета, Счёт, Лид)</h3>
+<ul><li>Строка 48: «←» круглой 40 + подпись родителя 15/600 серым (куда вернёт) — как «← Scheduler» в №5; справа «＋» и «⋯» по 40.</li>
+<li>Крупный блок 64: имя 30/600 (сжимается до 22,5 по fitMinScale, потом «…») · вертикальная черта 1 × 40 · справа две строки: 15/600 и 13/500. У клиента после имени «⌄» 24 — панель контактов.</li>
+<li>Итого 156 развёрнуто, 96 свёрнуто.</li></ul></div>
+</div>
+
+<div class="hdrow">
+<div class="pw" style="--h:108"><div class="ph strip dk">
+<div class="sb"><span>8:20</span><span class="isl"></span><span class="sy"><i style="width:3px;height:6px"></i><i style="width:3px;height:8px"></i><i style="width:3px;height:10px"></i><i style="width:22px;height:11px;border-radius:3px"></i></span></div>
+<div class="scr">
+<div class="hed"><span class="rb"><svg><use href="#i-x"/></svg></span><div class="mid"><b>Смета EST-0006</b><span>Черновик · сохранено 8:19 · Демо</span></div><span class="rb"><svg><use href="#i-dots"/></svg></span></div>
+</div></div></div>
+<div class="box"><h3>3 · Редактор (Смета, форма клиента, событие)</h3>
+<ul><li>Одна строка 52: «×» 40 слева, по центру название 17/700 и строка 12/600 «состояние · сохранено» (здесь же слово «Демо»), справа «⋯» 40. Не сворачивается.</li>
+<li>Низ закреплён: карточка 64, радиус 22, в 16 от краёв и 8 над нижней зоной: «Итого ⌄» 12 + сумма 22/700 · кнопка 40 справа — как «Approximate amount 640 · Schedule» в №5.</li></ul></div>
+</div>
+
+<div class="hdrow">
+<div class="pw" style="--h:150"><div class="ph strip dk" style="background:#1A1B1E">
+<div class="sheet" style="top:24px">
+<div class="grab"></div>
+<div class="row" style="height:52px"><div style="flex:1;min-width:0"><div class="t17" style="font-size:22px">Принять оплату</div><div class="c12">INV-0101 · David Kim</div></div><span class="rb s32"><svg><use href="#i-x"/></svg></span></div>
+<div class="fld" style="margin-top:6px;background:#3A3C42;font-size:22px;font-weight:700">$1,840.00</div>
+</div></div></div>
+<div class="box"><h3>4 · Шторка</h3>
+<ul><li>Радиус 28, ручка 36 × 5 в 8 от края. Строка 52: заголовок 22/700 слева + строка 12 под ним, «×» 32 справа. Без «←» и аватара.</li>
+<li>Фон шторки #2C2E33 (на тон светлее экрана), вуаль rgba(0,0,0,.5).</li></ul></div>
+</div>
+
+<div class="two box" style="margin-top:18px">
+<h3>Где строка версии и «Демо»</h3>
+<ul>
+<li><b>Строка версии</b> (сейчас мелким текстом над каждой шапкой) уходит из шапок: в низ меню аватара («GoRix 1.4 · сборка 812 · 20.11 8:02», 12/600 серым) и в «Настройки → О приложении». Экран получает обратно 16 pt.</li>
+<li><b>«Демо»</b> остаётся на каждом экране, но не отдельной строкой: плашка warn 20 высотой («● Демо», 12/600) живёт в самой мелкой строке шапки — у корня рядом с датой, у объекта рядом с подписью родителя, в редакторе — словом в строке состояния. В свёрнутой шапке — точка 6 warn на аватаре / у «←». Нажатие ведёт ко входу, как сейчас.</li>
+</ul>
+</div>
+
+<h2>Сворачивающаяся шапка</h2>
+<p class="lead">Три состояния: <b>развёрнута</b> при открытии → <b>сжимается</b> по мере прокрутки (ведёт палец, а не таймер) → <b>свёрнута</b> в одну строку 52 с прилипшей полосой разделов/сегментом под ней.</p>
+<table class="tb">
+<thead><tr><th>Что</th><th>Число</th><th>Где</th></tr></thead>
+<tbody>
+<tr><td>Высоты</td><td>развёрнута 156 (44 + 48 + 64); свёрнута 96 (44 + 52) + прилипшая полоса 44 (сегмент 36 или чипы 32 + 8 воздуха); у Клиента развёрнута 236 (+ быстрые действия 80).</td><td>корень / объект</td></tr>
+<tr><td>Порядок исчезновения, корень</td><td>прокрутка 0–24: строка даты 13 → opacity 0. 16–64: заголовок 30 уезжает вверх на 48 и сжимается до 0,57 (30 → 17), opacity 1 → 0 на 40–64. 40–64: малый заголовок 17 в строке — opacity 0 → 1 и сдвиг 8 → 0. 48–64: подложка строки rgba 92 % + линия 1 pt — opacity 0 → 1. С 64 — свёрнута.</td><td>Главная, План, Деньги</td></tr>
+<tr><td>Порядок исчезновения, объект</td><td>0–48: быстрые действия (значки 44 с подписями) — opacity 0, сдвиг −12. 32–72: подзаголовок справа от черты — opacity 0. 56–112: имя 30 → 17, уезжает в строку справа от «←»; «Клиенты» (родитель) гаснет на 56–80. С 112 — строка «← Sarah Mitchell ⌄ · ⋯», «＋» уходит в «⋯».</td><td>Клиент, Работа, Выезд</td></tr>
+<tr><td>Всегда на месте</td><td>статус-бар, «←» или аватар, «⋯», поиск (у корня), колокольчик с точкой; «⌄» у имени клиента; полоса разделов/сегмент прилипает к низу строки.</td><td>все</td></tr>
+<tr><td>Отпустил посередине</td><td>докатывается к ближнему состоянию (порог — половина пути: 32 у корня, 56 у объекта) за 220 мс, кривая easeOut [0.2, 0.8, 0.2, 1]. Ease-in нет. Быстрый взмах вниз сразу сворачивает.</td><td>все</td></tr>
+<tr><td>Анимация</td><td>только transform (translateY, scale) и opacity. Высота блока не анимируется: контент под шапкой едет сам вместе с прокруткой, шапка просто «уезжает» вверх под строку.</td><td>все</td></tr>
+<tr><td>Reduce Motion</td><td>без сдвигов и масштаба: на пороге (32 / 56) крупный блок и малый заголовок меняются растворением 160 мс.</td><td>все</td></tr>
+<tr><td>«⌄» у Клиента</td><td>развёрнута: «⌄» у имени раскрывает панель контактов на месте (телефоны, почта, адрес, Tom Mitchell; 4 строки 48 = 200), контент ниже сдвигается transform-ом. Свёрнута: «⌄» в строке открывает ту же панель поверх контента, под ней вуаль 50 %. Пока панель открыта, шапка не сворачивается; прокрутка больше 8 или нажатие на вуаль закрывает панель.</td><td>Клиент</td></tr>
+</tbody>
+</table>
+
+<h3 style="margin-top:24px">Корень вкладки — Главная (кадры 1–3)</h3>
+<div class="story">
+<figure><div class="pw mini" style="--h:330"><div class="ph strip dk"><div class="sb"><span>8:20</span><span class="isl"></span><span class="sy"><i style="width:22px;height:11px;border-radius:3px"></i></span></div>
+<div class="scr">
+<div class="hrow"><span class="av ring" style="background:var(--lav);color:var(--lavT)">AP</span><span class="sp"></span><span class="rb"><svg><use href="#i-bell"/></svg><i class="bd"></i></span><span class="rb"><svg><use href="#i-plus"/></svg></span></div>
+<div class="big"><div><div class="kick">Пт, 20 ноября <span class="demo">Демо</span></div><div class="tt">Доброе утро, Алекс</div></div></div>
+<div class="card" style="margin-top:8px"><div class="row"><span class="pl inf"><svg><use href="#i-clock"/></svg>через 10 мин</span><span class="sp"></span><span class="c13">8:30–12:30</span></div><div class="t17" style="font-size:22px;margin-top:10px">Sarah Mitchell</div><div class="c13">Bathroom remodel · Alex</div></div>
+</div></div></div>
+<figcaption><b>1 · Развёрнута, y = 0</b>Высота 156. Дата 13 + приветствие 30 под строкой значков.</figcaption></figure>
+
+<figure><div class="pw mini" style="--h:330"><div class="ph strip dk"><div class="sb"><span>8:20</span><span class="isl"></span><span class="sy"><i style="width:22px;height:11px;border-radius:3px"></i></span></div>
+<div class="scr">
+<div class="hrow" style="position:relative;z-index:2"><span class="av ring" style="background:var(--lav);color:var(--lavT)">AP</span><span class="t17" style="opacity:.35;transform:translateY(5px)">Сегодня, 20 нояб.</span><span class="sp"></span><span class="rb"><svg><use href="#i-bell"/></svg><i class="bd"></i></span><span class="rb"><svg><use href="#i-plus"/></svg></span></div>
+<div class="big" style="transform:translateY(-30px) scale(.8);transform-origin:0 0;opacity:.55;margin-bottom:-40px"><div><div class="kick" style="opacity:0">Пт, 20 ноября</div><div class="tt">Доброе утро, Алекс</div></div></div>
+<div class="card" style="margin-top:8px"><div class="row"><span class="pl inf"><svg><use href="#i-clock"/></svg>через 10 мин</span><span class="sp"></span><span class="c13">8:30–12:30</span></div><div class="t17" style="font-size:22px;margin-top:10px">Sarah Mitchell</div><div class="c13">Bathroom remodel · Alex</div><div class="prg" style="margin-top:12px"><span>Работа</span><b>3 из 5 · 62 %</b></div></div>
+</div></div></div>
+<figcaption><b>2 · Сжимается, y = 44</b>Дата погасла; заголовок ×0,8, opacity 55 %, уезжает под строку; малый «Сегодня, 20 нояб.» проявляется.</figcaption></figure>
+
+<figure><div class="pw mini" style="--h:330"><div class="ph strip dk"><div class="sb"><span>8:20</span><span class="isl"></span><span class="sy"><i style="width:22px;height:11px;border-radius:3px"></i></span></div>
+<div class="scr">
+<div class="hcol"><span class="av s36 ring" style="background:var(--lav);color:var(--lavT);position:relative">AP<i style="position:absolute;right:-1px;top:-1px;width:9px;height:9px;border-radius:5px;background:#E8B67F;box-shadow:0 0 0 2px #26282C"></i></span><span class="ttl el">Сегодня, <span class="mut" style="font-weight:600">20 нояб.</span></span><span class="sp"></span><span class="rb"><svg><use href="#i-bell"/></svg><i class="bd"></i></span><span class="rb"><svg><use href="#i-plus"/></svg></span></div>
+<div class="card" style="margin-top:-10px;border-radius:0 0 22px 22px;padding-top:4px"><div class="prg" style="margin-top:12px"><span>Работа</span><b>3 из 5 · 62 %</b></div><div class="row" style="gap:8px;margin-top:14px"><div class="by" style="flex:1">В пути</div><div class="bd2" style="flex:1"><svg><use href="#i-pin"/></svg>Маршрут</div></div></div>
+</div></div></div>
+<figcaption><b>3 · Свёрнута, y ≥ 64</b>Одна строка 52: аватар 36 (точка «Демо») · «Сегодня, 20 нояб.» 17 · значки. У Плана под строкой прилипает сегмент 36 и пилюли.</figcaption></figure>
+</div>
+
+<h3 style="margin-top:24px">Объект — Клиент (кадры 1–3 + панель «⌄»)</h3>
+<div class="story">
+<figure><div class="pw mini" style="--h:360"><div class="ph strip dk"><div class="sb"><span>8:20</span><span class="isl"></span><span class="sy"><i style="width:22px;height:11px;border-radius:3px"></i></span></div>
+<div class="scr">
+<div class="hrow"><span class="rb"><svg><use href="#i-back"/></svg></span><span class="par">Клиенты</span><span class="sp"></span><span class="rb"><svg><use href="#i-plus"/></svg></span><span class="rb"><svg><use href="#i-dots"/></svg></span></div>
+<div class="big"><div class="tt" style="font-size:28px">Sarah Mitchell<span class="chev"><svg><use href="#i-cd"/></svg></span></div><span class="vb"></span><div class="sub"><b>Клиент · VIP</b><span>◷ Активный</span></div></div>
+<div class="qa"><div><span class="rb"><svg><use href="#i-phone"/></svg></span>Позвонить</div><div><span class="rb"><svg><use href="#i-msg"/></svg></span>SMS</div><div><span class="rb"><svg><use href="#i-pin"/></svg></span>Маршрут</div><div><span class="rb"><svg><use href="#i-mail"/></svg></span>Почта</div><div><span class="rb"><svg><use href="#i-ruler"/></svg></span>Замер</div></div>
+<div class="chips" style="margin-top:16px"><span class="chp on">Обзор</span><span class="chp">Работы <em>2</em></span><span class="chp">Сметы <em>1</em></span><span class="chp">Счета <em>2</em></span></div>
+</div></div></div>
+<figcaption><b>1 · Развёрнута, y = 0</b>Высота 236: строка 48 · имя | подзаголовок 64 · быстрые действия 80. Полоса разделов — ниже, в контенте.</figcaption></figure>
+
+<figure><div class="pw mini" style="--h:360"><div class="ph strip dk"><div class="sb"><span>8:20</span><span class="isl"></span><span class="sy"><i style="width:22px;height:11px;border-radius:3px"></i></span></div>
+<div class="scr">
+<div class="hrow" style="position:relative;z-index:2"><span class="rb"><svg><use href="#i-back"/></svg></span><span class="par" style="opacity:.25">Клиенты</span><span class="sp"></span><span class="rb"><svg><use href="#i-plus"/></svg></span><span class="rb"><svg><use href="#i-dots"/></svg></span></div>
+<div class="big" style="transform:translateY(-14px) scale(.82);transform-origin:0 0;margin-bottom:-14px"><div class="tt" style="font-size:28px">Sarah Mitchell<span class="chev"><svg><use href="#i-cd"/></svg></span></div><span class="vb" style="opacity:.3"></span><div class="sub" style="opacity:.3"><b>Клиент · VIP</b><span>◷ Активный</span></div></div>
+<div class="qa" style="opacity:0;height:0;overflow:hidden"></div>
+<div class="chips" style="margin-top:6px"><span class="chp on">Обзор</span><span class="chp">Работы <em>2</em></span><span class="chp">Сметы <em>1</em></span><span class="chp">Счета <em>2</em></span></div>
+<div class="card" style="margin-top:10px"><div class="row"><span class="t15">Сейчас · Bathroom remodel</span></div><div class="prg" style="margin-top:10px"><span>Работа</span><b>3 из 5 · 62 %</b></div></div>
+</div></div></div>
+<figcaption><b>2 · Сжимается, y = 72</b>Быстрые действия уже погасли (0–48), подзаголовок на 30 %, имя ×0,82 едет к «←», «Клиенты» гаснет.</figcaption></figure>
+
+<figure><div class="pw mini" style="--h:360"><div class="ph strip dk"><div class="sb"><span>8:20</span><span class="isl"></span><span class="sy"><i style="width:22px;height:11px;border-radius:3px"></i></span></div>
+<div class="scr">
+<div class="hcol"><span class="rb"><svg><use href="#i-back"/></svg></span><span class="ttl el">Sarah Mitchell</span><span class="chev" style="margin-left:0;background:#303237"><svg><use href="#i-cd"/></svg></span><span class="sp"></span><span class="rb"><svg><use href="#i-dots"/></svg></span></div>
+<div class="chips" style="margin:0 -16px;padding:6px 16px;background:rgba(38,40,44,.92)"><span class="chp on">Обзор</span><span class="chp">Работы <em>2</em></span><span class="chp">Сметы <em>1</em></span><span class="chp">Счета <em>2</em></span></div>
+<div class="ln" style="margin-top:10px"><span class="ico"><svg><use href="#i-cal"/></svg></span><div class="tx"><b>Сегодня 8:30–12:30</b><span>Bathroom remodel · Alex</span></div><span class="pl inf"><svg><use href="#i-clock"/></svg>Скоро</span></div>
+<div class="ln"><span class="ico"><svg><use href="#i-cal"/></svg></span><div class="tx"><b>Завтра 9:00</b><span>Final walkthrough and touch-up</span></div></div>
+</div></div></div>
+<figcaption><b>3 · Свёрнута, y ≥ 112</b>Строка 52 «← Sarah Mitchell ⌄ · ⋯» + прилипшая полоса разделов 44. «＋» — в «⋯».</figcaption></figure>
+
+<figure><div class="pw mini" style="--h:360"><div class="ph strip dk"><div class="sb"><span>8:20</span><span class="isl"></span><span class="sy"><i style="width:22px;height:11px;border-radius:3px"></i></span></div>
+<div class="scr">
+<div class="hcol" style="position:relative;z-index:3"><span class="rb"><svg><use href="#i-back"/></svg></span><span class="ttl el">Sarah Mitchell</span><span class="chev" style="margin-left:0;background:#44464D"><svg><use href="#i-cu"/></svg></span><span class="sp"></span><span class="rb"><svg><use href="#i-dots"/></svg></span></div>
+<div class="scrim" style="top:52px"></div>
+<div class="cpanel" style="position:relative;z-index:3">
+<div class="r"><span class="rb s32"><svg><use href="#i-phone"/></svg></span><div class="tx"><b>(626) 555-0142</b><span>мобильный</span></div><span class="rb s32"><svg><use href="#i-msg"/></svg></span></div>
+<div class="r"><span class="rb s32"><svg><use href="#i-mail"/></svg></span><div class="tx"><b>sarah.m@example.com</b><span>почта</span></div></div>
+<div class="r"><span class="rb s32"><svg><use href="#i-pin"/></svg></span><div class="tx"><b class="el">1420 Oak Grove Ave</b><span>Pasadena, CA 91103</span></div></div>
+<div class="r"><span class="av s28" style="background:var(--mint);color:var(--mintT);width:32px;height:32px">TM</span><div class="tx"><b>Tom Mitchell</b><span>супруг · (626) 555-0144</span></div></div>
+</div>
+</div></div></div>
+<figcaption><b>«⌄» в свёрнутой</b>Панель контактов 4 × 48 поверх контента, вуаль 50 %. Пока открыта — шапка не меняется; прокрутка &gt; 8 закрывает.</figcaption></figure>
+</div>
+
+<h2>Макеты 390 × 844, демо</h2>
+<div class="phones">
+
+<!-- ============ 1 Главная (тёмная) ============ -->
+<figure>
+<div class="pw" id="m-home"><div class="ph dk">
+<div class="sb"><span>8:20</span><span class="isl"></span><span class="sy"><i style="width:3px;height:6px"></i><i style="width:3px;height:8px"></i><i style="width:3px;height:10px"></i><i style="width:22px;height:11px;border-radius:3px"></i></span></div>
+<div class="scr">
+<div class="hrow"><span class="av ring" style="background:var(--lav);color:var(--lavT)">AP</span><span class="sp"></span><span class="rb"><svg><use href="#i-search"/></svg></span><span class="rb"><svg><use href="#i-bell"/></svg><i class="bd"></i></span><span class="rb"><svg><use href="#i-plus"/></svg></span></div>
+<div class="big"><div><div class="kick">Пт, 20 ноября <span class="demo">Демо</span></div><div class="tt">Доброе утро, Алекс</div></div></div>
+<div class="card" style="margin-top:4px">
+ <div class="row"><span class="c12" style="letter-spacing:.04em">ДАЛЬШЕ</span><span class="pl inf"><svg><use href="#i-clock"/></svg>через 10 мин</span><span class="sp"></span><span class="c13">8:30–12:30</span></div>
+ <div class="t17" style="font-size:22px;margin-top:10px">Sarah Mitchell</div>
+ <div class="c13 el">Bathroom remodel · 1420 Oak Grove Ave, Pasadena</div>
+ <div class="prg" style="margin-top:12px"><span>Работа</span><b>3 из 5 · 62 %</b></div>
+ <div class="tri" style="margin-top:12px"><div class="cell"><b>4 ч</b><span>на месте</span></div><div class="cell"><b>12 мин</b><span>в дороге</span></div><div class="cell"><b>Alex</b><span>мастер</span></div></div>
+ <div class="row" style="gap:8px;margin-top:14px"><div class="by" style="flex:1.1"><svg><use href="#i-check"/></svg>В пути</div><div class="bd2" style="flex:1"><svg><use href="#i-pin"/></svg>Маршрут</div><span class="sq"><svg><use href="#i-phone"/></svg></span></div>
+</div>
+<div class="sec"><span class="t17">Требует действия</span><a>Все ›</a></div>
+<div class="tiles">
+ <div class="tile"><span class="ic"><svg><use href="#i-lead"/></svg></span><span>Лиды без ответа</span><b>2 <small>4 мин ждёт</small></b></div>
+ <div class="tile"><span class="ic"><svg><use href="#i-doc"/></svg></span><span>Сметы ждут</span><b>3 <small>до 6 дн</small></b></div>
+ <div class="tile"><span class="ic"><svg><use href="#i-dollar"/></svg></span><span>Должны</span><b>$2,800 <small class="bad">1 просроч.</small></b></div>
+ <div class="tile"><span class="ic"><svg><use href="#i-trend"/></svg></span><span>Получено сегодня</span><b>$1,020 <small>2 оплаты</small></b></div>
+</div>
+<div class="sec"><span class="t17">Сегодня у бригад</span><a>План ›</a></div>
+<div class="ln"><span class="ico" style="font-weight:700;font-size:13px">7:30</span><div class="tx"><b>James O'Connor</b><span>Panel upgrade 200A · Valley El.</span></div><span class="pl b"><svg><use href="#i-alert"/></svg>Опаздывает</span></div>
+</div>
+<div class="tab"><div class="on"><svg><use href="#i-home"/></svg>Главная</div><div><svg><use href="#i-cal"/></svg>План</div><div><svg><use href="#i-users"/></svg>Клиенты</div><div><svg><use href="#i-wallet"/></svg>Деньги</div><div><svg><use href="#i-inbox"/></svg>Лиды<span class="n">2</span></div></div>
+<div class="hi"></div>
+</div></div>
+<figcaption><div class="no">1 · Главная, тёмная · образцы №2, №1, №3</div>
+<p>№2: шапка «аватар · значки 40», тройка цифр в ячейках, пара «жёлтая кнопка + тёмная с жёлтым текстом + квадрат».</p>
+<p>№1/№3: «Дальше» слоями, прогресс словами «3 из 5 · 62 %»; графитовые плитки со значком в круге 28, строки с плашкой справа.</p></figcaption>
+</figure>
+
+<!-- ============ 2 План ============ -->
+<figure>
+<div class="pw" id="m-plan"><div class="ph dk">
+<div class="sb"><span>8:20</span><span class="isl"></span><span class="sy"><i style="width:3px;height:6px"></i><i style="width:3px;height:8px"></i><i style="width:3px;height:10px"></i><i style="width:22px;height:11px;border-radius:3px"></i></span></div>
+<div class="scr">
+<div class="hrow"><span class="av ring" style="background:var(--lav);color:var(--lavT)">AP</span><span class="sp"></span><span class="rb"><svg><use href="#i-search"/></svg></span><span class="rb"><svg><use href="#i-filter"/></svg></span><span class="rb"><svg><use href="#i-plus"/></svg></span></div>
+<div class="big" style="min-height:58px"><div style="flex:1"><div class="kick">Пт, 20 ноября · 6 выездов <span class="demo">Демо</span></div><div class="tt">Ноябрь<span class="chev"><svg><use href="#i-cd"/></svg></span></div></div><span class="rb s32"><svg><use href="#i-cl"/></svg></span><span class="rb s32"><svg><use href="#i-cr"/></svg></span></div>
+<div class="seg"><span class="on">День</span><span>Неделя</span><span>Месяц</span></div>
+<div class="days" style="margin-top:12px">
+<div class="dp"><small>Пн</small><b>16</b><i></i></div><div class="dp"><small>Вт</small><b>17</b><i></i></div><div class="dp"><small>Ср</small><b>18</b></div><div class="dp"><small>Чт</small><b>19</b><i></i></div><div class="dp sel"><small>Пт</small><b>20</b><i></i></div><div class="dp"><small>Сб</small><b>21</b></div><div class="dp"><small>Вс</small><b>22</b></div></div>
+<div class="row" style="margin:16px 0 10px"><span class="t17">Выезды сегодня</span><span class="cnt" style="margin-left:-4px">06</span><span class="sp"></span><span class="c13">41 mi · 1 ч 50</span></div>
+<div class="tl"><div class="tm"><b>7:30</b><span>2 ч</span></div><div class="ev"><div class="row"><span class="iv"><b>7:30</b><b>9:30</b></span><span class="sp"></span><span class="pl b"><svg><use href="#i-alert"/></svg>Опаздывает</span></div><div class="t15" style="margin-top:6px">James O'Connor</div><div class="c13 el">Panel upgrade 200A · Valley El.</div></div></div>
+<div class="now"><span>8:20</span></div>
+<div class="tl"><div class="tm"><b>8:30</b><span>4 ч</span></div><div class="ev"><div class="hatch" style="margin-bottom:8px">в дороге · 12 мин</div><div class="row"><span class="iv y"><b>8:30</b><b>12:30</b></span><span class="sp"></span><span class="av s28" style="background:var(--pea);color:var(--peaT)">AL</span></div><div class="t15" style="margin-top:6px">Sarah Mitchell</div><div class="c13 el">Bathroom remodel · Alex</div></div></div>
+<div class="tl"><div class="tm"><b>9:00</b><span>3 ч</span></div><div class="ev"><div class="row"><span class="iv"><b>9:00</b><b>12:00</b></span><span class="sp"></span><span class="pl inf"><svg><use href="#i-clock"/></svg>В работе</span></div><div class="t15" style="margin-top:6px">Maria Gonzalez</div><div class="c13 el">Deep clean after move-out · Ivan</div></div></div>
+<div class="tl"><div class="tm"><b>13:30</b><span>1 ч</span></div><div class="ev"><div class="row"><span class="iv"><b>13:30</b><b>14:30</b></span><span class="sp"></span><span class="av s28" style="background:var(--pea);color:var(--peaT)">AL</span></div><div class="t15" style="margin-top:6px">David Kim</div><div class="c13 el">Kitchen faucet + disposal · Alex</div></div></div>
+</div>
+<div class="tab"><div><svg><use href="#i-home"/></svg>Главная</div><div class="on"><svg><use href="#i-cal"/></svg>План</div><div><svg><use href="#i-users"/></svg>Клиенты</div><div><svg><use href="#i-wallet"/></svg>Деньги</div><div><svg><use href="#i-inbox"/></svg>Лиды<span class="n">2</span></div></div>
+<div class="hi"></div>
+</div></div>
+<figcaption><div class="no">2 · План, день · образцы №4, №3</div>
+<p>№4: «Ноябрь ‹ ›», пилюли 46 × 64, счётчик «06» в ячейке, время слева, интервал «8:30 ▸ 12:30» плашкой, штриховка «в дороге».</p>
+<p>№3: сегмент «День · Неделя · Месяц» — единственная жёлтая заливка; выбранный день — обводкой и тоном, ближайший интервал — жёлтым тоном.</p></figcaption>
+</figure>
+
+<!-- ============ 3 Клиент ============ -->
+<figure>
+<div class="pw" id="m-client"><div class="ph dk">
+<div class="sb"><span>8:20</span><span class="isl"></span><span class="sy"><i style="width:3px;height:6px"></i><i style="width:3px;height:8px"></i><i style="width:3px;height:10px"></i><i style="width:22px;height:11px;border-radius:3px"></i></span></div>
+<div class="scr">
+<div class="hrow"><span class="rb"><svg><use href="#i-back"/></svg></span><span class="par">Клиенты</span><span class="demo">Демо</span><span class="sp"></span><span class="rb"><svg><use href="#i-plus"/></svg></span><span class="rb"><svg><use href="#i-dots"/></svg></span></div>
+<div class="big"><div class="tt" style="font-size:28px">Sarah Mitchell<span class="chev"><svg><use href="#i-cd"/></svg></span></div><span class="vb"></span><div class="sub"><b>Клиент · VIP</b><span>◷ Активный</span></div></div>
+<div class="qa"><div><span class="rb"><svg><use href="#i-phone"/></svg></span>Позвонить</div><div><span class="rb"><svg><use href="#i-msg"/></svg></span>SMS</div><div><span class="rb"><svg><use href="#i-pin"/></svg></span>Маршрут</div><div><span class="rb"><svg><use href="#i-mail"/></svg></span>Почта</div><div><span class="rb"><svg><use href="#i-ruler"/></svg></span>Замер</div></div>
+<div class="card" style="margin-top:16px">
+ <div class="row"><span class="t15 el">Bathroom remodel</span><span class="sp"></span><span class="pl ok"><svg><use href="#i-check"/></svg>Смета принята</span></div>
+ <div class="prg" style="margin-top:12px"><span>Смета ✓ · задаток ✓ · работа</span><b>3 из 5 · 62 %</b></div>
+ <div class="num3"><div><span>Смета</span><b>$3,420</b></div><div><span>Оплачено</span><b>$342</b></div><div><span>Остаток</span><b>$3,078</b></div></div>
+ <div class="row" style="margin-top:14px;gap:10px"><div class="by" style="flex:none">Выставить счёт</div><span class="c12" style="line-height:1.3">задаток оплачен,<br>работа идёт</span></div>
+</div>
+<div class="chips" style="margin-top:16px"><span class="chp on">Обзор</span><span class="chp">Работы <em>2</em></span><span class="chp">Сметы <em>1</em></span><span class="chp">Счета <em>2</em></span><span class="chp">Выезды <em>2</em></span></div>
+<div class="ln" style="margin-top:10px;background:var(--wF)"><span class="ico" style="background:rgba(232,182,127,.16);color:var(--wT)"><svg><use href="#i-key"/></svg></span><div class="tx"><b style="color:var(--wT)">Gate code 4512 · small dog</b><span style="color:var(--wT);opacity:.85">закреплено · видят мастера</span></div></div>
+<div class="ln"><span class="ico"><svg><use href="#i-cal"/></svg></span><div class="tx"><b>Сегодня 8:30–12:30</b><span>Bathroom remodel · Alex</span></div><span class="pl inf"><svg><use href="#i-clock"/></svg>Скоро</span></div>
+<div class="ln"><span class="ico"><svg><use href="#i-cal"/></svg></span><div class="tx"><b>Завтра 9:00</b><span>Final walkthrough and touch-up</span></div><div class="cl"><span>Длит.</span><b>1 ч</b></div></div>
+</div>
+<div class="tab"><div><svg><use href="#i-home"/></svg>Главная</div><div><svg><use href="#i-cal"/></svg>План</div><div class="on"><svg><use href="#i-users"/></svg>Клиенты</div><div><svg><use href="#i-wallet"/></svg>Деньги</div><div><svg><use href="#i-inbox"/></svg>Лиды<span class="n">2</span></div></div>
+<div class="hi"></div>
+</div></div>
+<figcaption><div class="no">3 · Клиент, обзор · образцы №5, №1</div>
+<p>№5: «← Клиенты» круглой кнопкой, «Sarah Mitchell | Клиент · VIP» через черту, прогресс словами «3 из 5 · 62 %» и три цифры с метками.</p>
+<p>№1: «Сейчас» карточкой-слоем с плашкой «✓ Смета принята»; код ворот — тёплой плашкой первым в содержимом.</p></figcaption>
+</figure>
+
+<!-- ============ 4 Выезд ============ -->
+<figure>
+<div class="pw" id="m-visit"><div class="ph dk">
+<div class="sb"><span>10:32</span><span class="isl"></span><span class="sy"><i style="width:3px;height:6px"></i><i style="width:3px;height:8px"></i><i style="width:3px;height:10px"></i><i style="width:22px;height:11px;border-radius:3px"></i></span></div>
+<div class="scr">
+<div class="hrow"><span class="rb"><svg><use href="#i-back"/></svg></span><span class="par">План</span><span class="demo">Демо</span><span class="sp"></span><span class="rb"><svg><use href="#i-cam"/></svg></span><span class="rb"><svg><use href="#i-dots"/></svg></span></div>
+<div class="big"><div class="tt">Выезд</div><span class="vb"></span><div class="sub"><b>Sarah Mitchell</b><span>8:30–12:30 · Alex</span></div></div>
+<div class="row" style="gap:8px;margin-top:2px"><span class="pl inf"><svg><use href="#i-clock"/></svg>Идёт</span><span class="pl w"><svg><use href="#i-key"/></svg>Код 4512 · собака</span><span class="sp"></span><span class="rb s32"><svg><use href="#i-phone"/></svg></span><span class="rb s32"><svg><use href="#i-msg"/></svg></span><span class="rb s32"><svg><use href="#i-pin"/></svg></span></div>
+<div class="card" style="margin-top:12px;padding:12px">
+ <div class="row"><span class="sq" style="background:var(--cell)"><svg><use href="#i-tool"/></svg></span><div style="min-width:0"><div class="t17">Bathroom remodel</div><div class="c13">работа · выезд 2 из 3</div></div></div>
+ <div class="prg" style="margin-top:10px"><span>Работа</span><b>3 из 5 · 62 %</b></div>
+ <div class="cell" style="margin-top:12px;padding:12px;background:#3A3C42">
+  <div class="prg"><span>Чек-лист выезда</span><b>2 из 5 · 40 %</b></div>
+  <div class="ck">
+   <div class="dn"><span class="d"><svg><use href="#i-check"/></svg></span><span>Фото «до»</span></div>
+   <div class="dn"><span class="d"><svg><use href="#i-check"/></svg></span><span>Remove old vanity and toilet</span></div>
+   <div><span class="o"></span><span>Install new vanity, faucet, toilet</span></div>
+   <div><span class="o"></span><span>Tile backsplash, 24 sq ft</span></div>
+   <div><span class="o"></span><span>Фото «после»</span></div>
+  </div>
+  <div class="row" style="margin-top:8px;padding-top:10px;border-top:1px solid var(--line)"><svg><use href="#i-hg"/></svg><b style="font-size:17px">1:58:12</b><span class="c13">с 8:34</span><span class="sp"></span><span class="rb s32" style="background:#44464D"><svg><use href="#i-cu"/></svg></span></div>
+ </div>
+ <div class="row" style="gap:8px;margin-top:12px"><div class="by" style="flex:1.15"><svg><use href="#i-check"/></svg>Завершить</div><div class="bd2" style="flex:1"><svg><use href="#i-cam"/></svg>Фото</div><span class="sq"><svg><use href="#i-note"/></svg></span></div>
+</div>
+<div class="ln" style="margin-top:8px"><span class="ico"><svg><use href="#i-doc"/></svg></span><div class="tx"><b>Позиции · 7</b><span>по смете EST-0004</span></div><svg class="mut"><use href="#i-cr"/></svg></div>
+<div class="ln"><span class="ico"><svg><use href="#i-rcpt"/></svg></span><div class="tx"><b>Материалы</b><span>ABC Supply · вчера</span></div><div class="cl"><span>Сумма</span><b>$884</b></div></div>
+</div>
+<div class="tab"><div><svg><use href="#i-home"/></svg>Главная</div><div class="on"><svg><use href="#i-cal"/></svg>План</div><div><svg><use href="#i-users"/></svg>Клиенты</div><div><svg><use href="#i-wallet"/></svg>Деньги</div><div><svg><use href="#i-inbox"/></svg>Лиды<span class="n">2</span></div></div>
+<div class="hi"></div>
+</div></div>
+<figcaption><div class="no">4 · Выезд, в работе · образцы №1, №2, №5</div>
+<p>№1: карточка в карточке, прогресс словами (работа «3 из 5 · 62 %», чек-лист «2 из 5 · 40 %»), чек-лист пунктирными кружками с общей линией, таймер с «⌃».</p>
+<p>№2/№5: «Завершить» жёлтая + «Фото» тёмная с жёлтым текстом + квадрат-заметка в ряд; шапка «Выезд | Sarah Mitchell».</p></figcaption>
+</figure>
+
+<!-- ============ 5 Смета-редактор ============ -->
+<figure>
+<div class="pw" id="m-estimate"><div class="ph dk">
+<div class="sb"><span>8:20</span><span class="isl"></span><span class="sy"><i style="width:3px;height:6px"></i><i style="width:3px;height:8px"></i><i style="width:3px;height:10px"></i><i style="width:22px;height:11px;border-radius:3px"></i></span></div>
+<div class="scr">
+<div class="hed"><span class="rb"><svg><use href="#i-x"/></svg></span><div class="mid"><b>Смета EST-0006</b><span>Черновик · сохранено 8:19 · Демо</span></div><span class="rb"><svg><use href="#i-dots"/></svg></span></div>
+<div class="ln" style="margin-top:10px"><span class="av s36" style="background:var(--pea);color:var(--peaT)">LA</span><div class="tx"><b>Linda Alvarez</b><span>2207 Ocean Park Blvd, Santa Monica</span></div><svg class="mut"><use href="#i-cr"/></svg></div>
+<div class="c12" style="margin:12px 0 6px 4px">Название</div>
+<div class="fld">Carpet, railing, bulb, haul-away</div>
+<div class="row" style="margin:18px 0 10px"><span class="t17">Позиции</span><span class="cnt" style="margin-left:-4px;height:24px;min-width:28px;font-size:13px">7</span><span class="sp"></span><span class="rb s32"><svg><use href="#i-ruler"/></svg></span><span class="rb s32"><svg><use href="#i-layers"/></svg></span><span class="rb s32"><svg><use href="#i-book"/></svg></span><span class="rb s32"><svg><use href="#i-plus"/></svg></span></div>
+<div class="items">
+<div class="it"><div class="tx"><b>Debris haul-away (pickup load)</b><span>1 flat</span></div><b>$150.00</b></div>
+<div class="it"><div class="tx"><b>Carpet removal</b><span>120 sq ft × $1.50</span></div><b>$180.00</b></div>
+<div class="it"><div class="tx"><b>Install stair railing</b><span>1 ea</span></div><b>$250.00</b></div>
+<div class="it"><div class="tx"><b>Replace light bulb / fixture lamp</b><span>1 ea</span></div><b>$25.00</b></div>
+<div class="it"><div class="tx"><b>Railing bracket</b><span>12 ea × $12.13</span></div><b>$145.56</b></div>
+<div class="it"><div class="tx"><b>LED bulb A19</b><span>1 ea × $7.28</span></div><b>$7.28</b></div>
+<div class="it"><div class="tx"><b>Deep clean after work</b><span>по желанию клиента · 1 room</span></div><b class="mut">$90.00</b></div>
+</div>
+</div>
+<div class="dock"><div class="tx"><span>Итого <svg><use href="#i-cd"/></svg></span><b>$772.36<small>налог $14.52</small></b></div><div class="by" style="padding:0 26px">Готово</div></div>
+<div class="hi"></div>
+</div></div>
+<figcaption><div class="no">5 · Смета, редактор · образцы №5, №2</div>
+<p>№5: низ «Approximate amount 640 · Schedule» → карточка 64 «Итого ⌄ $772.36 · Готово»; значки 32 у «Позиций» — как круглые ‹ › у даты.</p>
+<p>№2: поле-плашка вместо рамки, счётчик «7» в ячейке как «Your Habit (18)»; панели вкладок нет — это редактор.</p></figcaption>
+</figure>
+
+<!-- ============ 6 Деньги ============ -->
+<figure>
+<div class="pw" id="m-money"><div class="ph dk">
+<div class="sb"><span>8:20</span><span class="isl"></span><span class="sy"><i style="width:3px;height:6px"></i><i style="width:3px;height:8px"></i><i style="width:3px;height:10px"></i><i style="width:22px;height:11px;border-radius:3px"></i></span></div>
+<div class="scr">
+<div class="hrow"><span class="av ring" style="background:var(--lav);color:var(--lavT)">AP</span><span class="sp"></span><span class="rb"><svg><use href="#i-search"/></svg></span><span class="rb"><svg><use href="#i-filter"/></svg></span><span class="rb"><svg><use href="#i-plus"/></svg></span></div>
+<div class="big"><div><div class="kick">Ноябрь 2026 <span class="demo">Демо</span></div><div class="tt">Деньги</div></div></div>
+<div class="tiles big1">
+ <div class="tile y"><span class="ic"><svg><use href="#i-dollar"/></svg></span><span>Должны · счета</span><b>$2,800</b><em class="sub">! 1 просрочен · 2 счёта</em></div>
+ <div class="tile"><span class="ic"><svg><use href="#i-doc"/></svg></span><span>Сметы открыты</span><b>$16,552</b><em class="sub">6 смет · 3 ждут ответа</em></div>
+</div>
+<div class="tiles3">
+ <div class="tile"><span class="ic"><svg><use href="#i-trend"/></svg></span><span>Сегодня</span><b>$1,020</b></div>
+ <div class="tile"><span class="ic"><svg><use href="#i-rcpt"/></svg></span><span>Расходы, нед.</span><b>$1,375</b></div>
+ <div class="tile"><span class="ic"><svg><use href="#i-wallet"/></svg></span><span>Задатки</span><b>$342</b></div>
+</div>
+<div class="sec"><span class="t17">К оплате</span><a>Все ›</a></div>
+<div class="ln"><span class="ico"><svg><use href="#i-doc"/></svg></span><div class="tx"><b>David Kim</b><span>INV-0101 · Kitchen faucet</span></div><div class="cl w2"><span>Срок</span><b class="bad">−9 дн</b></div><div class="cl"><span>Сумма</span><b>$1,840</b></div></div>
+<div class="ln"><span class="ico"><svg><use href="#i-doc"/></svg></span><div class="tx"><b>Robert Chen</b><span>INV-0103 · Water heater</span></div><div class="cl w2"><span>Срок</span><b>3 дн</b></div><div class="cl"><span>Сумма</span><b>$960</b></div></div>
+<div class="sec"><span class="t17">Оплачены сегодня</span><a>2</a></div>
+<div class="ln"><span class="ico" style="color:var(--okT)"><svg><use href="#i-check"/></svg></span><div class="tx"><b>Maria Gonzalez</b><span>INV-0104 · карта · 9:12</span></div><div class="cl w2"><span>Способ</span><b>Карта</b></div><div class="cl"><span>Сумма</span><b>$678</b></div></div>
+<div class="ln"><span class="ico" style="color:var(--okT)"><svg><use href="#i-check"/></svg></span><div class="tx"><b>Sarah Mitchell</b><span>INV-0105 · задаток</span></div><div class="cl w2"><span>Способ</span><b>Карта</b></div><div class="cl"><span>Сумма</span><b>$342</b></div></div>
+</div>
+<div class="tab"><div><svg><use href="#i-home"/></svg>Главная</div><div><svg><use href="#i-cal"/></svg>План</div><div><svg><use href="#i-users"/></svg>Клиенты</div><div class="on"><svg><use href="#i-wallet"/></svg>Деньги</div><div><svg><use href="#i-inbox"/></svg>Лиды<span class="n">2</span></div></div>
+<div class="hi"></div>
+</div></div>
+<figcaption><div class="no">6 · Деньги · образец №3</div>
+<p>№3 «Overview»: одна жёлтая плитка (выбранный раздел «Должны») + графитовая рядом, ниже три маленькие; значки 15 в круге 28.</p>
+<p>№3 «Recent Activity»: строки со значком в квадрате и колонками «Срок / Сумма» справа; просрочка — красным словом, не заливкой.</p></figcaption>
+</figure>
+
+<!-- ============ 7 Главная (светлая) ============ -->
+<figure>
+<div class="pw" id="m-home-light"><div class="ph lt">
+<div class="sb"><span>8:20</span><span class="isl"></span><span class="sy"><i style="width:3px;height:6px"></i><i style="width:3px;height:8px"></i><i style="width:3px;height:10px"></i><i style="width:22px;height:11px;border-radius:3px"></i></span></div>
+<div class="scr">
+<div class="hrow"><span class="av ring" style="background:var(--lav);color:var(--lavT)">AP</span><span class="sp"></span><span class="rb"><svg><use href="#i-search"/></svg></span><span class="rb"><svg><use href="#i-bell"/></svg><i class="bd"></i></span><span class="rb"><svg><use href="#i-plus"/></svg></span></div>
+<div class="big"><div><div class="kick">Пт, 20 ноября <span class="demo">Демо</span></div><div class="tt">Доброе утро, Алекс</div></div></div>
+<div class="card" style="margin-top:4px">
+ <div class="row"><span class="c12" style="letter-spacing:.04em">ДАЛЬШЕ</span><span class="pl inf"><svg><use href="#i-clock"/></svg>через 10 мин</span><span class="sp"></span><span class="c13">8:30–12:30</span></div>
+ <div class="t17" style="font-size:22px;margin-top:10px">Sarah Mitchell</div>
+ <div class="c13 el">Bathroom remodel · 1420 Oak Grove Ave, Pasadena</div>
+ <div class="prg" style="margin-top:12px"><span>Работа</span><b>3 из 5 · 62 %</b></div>
+ <div class="tri" style="margin-top:12px"><div class="cell"><b>4 ч</b><span>на месте</span></div><div class="cell"><b>12 мин</b><span>в дороге</span></div><div class="cell"><b>Alex</b><span>мастер</span></div></div>
+ <div class="row" style="gap:8px;margin-top:14px"><div class="by" style="flex:1.1"><svg><use href="#i-check"/></svg>В пути</div><div class="bd2" style="flex:1"><svg><use href="#i-pin"/></svg>Маршрут</div><span class="sq"><svg><use href="#i-phone"/></svg></span></div>
+</div>
+<div class="sec"><span class="t17">Требует действия</span><a>Все ›</a></div>
+<div class="tiles">
+ <div class="tile"><span class="ic"><svg><use href="#i-lead"/></svg></span><span>Лиды без ответа</span><b>2 <small>4 мин ждёт</small></b></div>
+ <div class="tile"><span class="ic"><svg><use href="#i-doc"/></svg></span><span>Сметы ждут</span><b>3 <small>до 6 дн</small></b></div>
+ <div class="tile"><span class="ic"><svg><use href="#i-dollar"/></svg></span><span>Должны</span><b>$2,800 <small class="bad">1 просроч.</small></b></div>
+ <div class="tile"><span class="ic"><svg><use href="#i-trend"/></svg></span><span>Получено сегодня</span><b>$1,020 <small>2 оплаты</small></b></div>
+</div>
+<div class="sec"><span class="t17">Сегодня у бригад</span><a>План ›</a></div>
+<div class="ln"><span class="ico" style="font-weight:700;font-size:13px">7:30</span><div class="tx"><b>James O'Connor</b><span>Panel upgrade 200A · Valley El.</span></div><span class="pl b"><svg><use href="#i-alert"/></svg>Опаздывает</span></div>
+</div>
+<div class="tab"><div class="on"><svg><use href="#i-home"/></svg>Главная</div><div><svg><use href="#i-cal"/></svg>План</div><div><svg><use href="#i-users"/></svg>Клиенты</div><div><svg><use href="#i-wallet"/></svg>Деньги</div><div><svg><use href="#i-inbox"/></svg>Лиды<span class="n">2</span></div></div>
+<div class="hi"></div>
+</div></div>
+<figcaption><div class="no">7 · Главная, светлая · образцы №2, №3 в светлой теме</div>
+<p>Та же сетка: фон-градиент #E1E2DC → #D0D1CB, карточки #E3E4DE, ячейки #CDCEC8 — ничего белого.</p>
+<p>Жёлтая «В пути» с обводкой #7A6418; жёлтый текст — тёмный #6E5A12; прогресс — словами, без полос.</p></figcaption>
+</figure>
+
+</div>
+</div>
+<script>
+function fit(){document.querySelectorAll('.pw').forEach(function(w){w.style.setProperty('--k',(w.clientWidth/390).toFixed(4));});}
+fit();addEventListener('resize',fit);
+</script>
+</body>
+</html>

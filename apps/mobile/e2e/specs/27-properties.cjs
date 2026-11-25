@@ -1,36 +1,41 @@
+const { objCreate, objSection } = require("../objectScreen.cjs");
 /**
- * Properties inside a client (wave C2, docs/specs/04 §7.3): "+ Property" in the client's row «Объекты», the property card
+ * Properties inside a client (wave C2, docs/specs/04 §7.3): v2 (#2350) «＋ → Объект» of the client, its section «Объекты», the property card
  * (address, now at the property, access notes + gate code, people of the property), and "‹ Client" above it.
  */
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/client/c1");
-  // the client's properties are on its «Обзор» tab, with «Добавить объект» (#1343, DS §9 А1п)
-  await p.getByTestId("client-tab-overview").locator("visible=true").first().waitFor({ timeout: 8000 });
-  h.expect(/Объекты/.test(await p.getByTestId("client-tab-overview").locator("visible=true").first().innerText()), "«Объекты» on the client's overview");
+  // v2: the client's properties are the section «Объекты» of the strip; «＋» of the header makes one (#2350)
+  await p.getByTestId("client-screen-sections-places").locator("visible=true").first().waitFor({ timeout: 8000 });
 
   // + property
-  await h.click("Добавить объект");
+  await objCreate(p, "client-screen", "client-create-property");
   await h.sheet().getByPlaceholder("Улица и дом", { exact: true }).fill("77 Maple Dr");
   await h.sheet().getByPlaceholder("Квартира / офис", { exact: true }).fill("3");
   await h.sheet().getByPlaceholder("Город", { exact: true }).fill("Pasadena");
   await h.sheet().getByPlaceholder("91103", { exact: true }).fill("91105");
   await h.sheet().getByPlaceholder("Дом, Сдаётся, Офис…", { exact: true }).fill("Сдаётся");
-  await h.sheet().getByRole("radio", { name: "Многоквартирный" }).click();
+  // «Тип · Любой ⌄» — a row with a menu (DS §9 А2)
+  await h.sheet().getByTestId("prop-kind-button").click();
+  await p.getByTestId("prop-kind-multi_family").click();
+  await p.getByRole("menu").waitFor({ state: "detached" });
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();
   await p.waitForTimeout(400);
   let db = await h.db();
   let pr = db.properties.find((x) => x.address === "77 Maple Dr");
   h.expect(pr && pr.customerId === "c1" && pr.unit === "3" && pr.kind === "multi_family" && pr.label === "Сдаётся", `property saved: ${JSON.stringify(pr)}`);
   h.expect(pr.city === "Pasadena, CA 91105", `city line: ${pr.city}`);
-  h.expect((await p.getByRole("button", { name: /^77 Maple Dr/ }).count()) >= 1, "the new property is in the list");
   await h.go("/client/c1");
-  // «Обзор» lists the client's three properties (#1343: no row with a counter any more)
-  await p.getByTestId("client-tab-overview").locator("visible=true").first().waitFor({ timeout: 8000 });
-  h.expect((await p.getByRole("button", { name: /77 Maple Dr/ }).locator("visible=true").count()) >= 1, "the new property on the client's overview");
+  // «Объекты» lists the client's three properties, the new one with its unit
+  await objSection(p, "client-screen", "places");
+  const row = p.getByTestId(`client-property-${pr.id}`).locator("visible=true").first();
+  await row.waitFor({ timeout: 5000 });
+  h.expect(/77 Maple Dr, #3/.test(await row.innerText()), "the new property in the client's «Объекты»");
+  h.expect(/Объекты[\s\S]*3/.test(await p.getByTestId("client-screen-sections-places").locator("visible=true").first().innerText()), "«Объекты 3» on the strip");
 
   // the property card
-  await p.getByRole("button", { name: /77 Maple Dr, #3/ }).first().click();
+  await row.getByRole("button").first().click();
   await p.waitForTimeout(400);
   h.expect(p.url().includes(`/property/${pr.id}`), "card opens the property");
   await h.expectText(/Сейчас на объекте/, "now at the property");
@@ -58,7 +63,7 @@ exports.run = async (h) => {
   h.expect(p.url().includes(`${card}?s=people`), `people row opens its list (${p.url()})`);
   await p.getByRole("button", { name: "Люди объекта", exact: true }).last().click();
   await p.waitForTimeout(300);
-  await h.sheet().getByText(/^Tom Mitchell · /).click();
+  await h.sheet().getByTestId("prop-people-rows-pp-c1-2").click();
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();
   await p.waitForTimeout(400);
   db = await h.db();

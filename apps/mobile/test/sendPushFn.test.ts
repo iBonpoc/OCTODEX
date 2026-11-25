@@ -7,7 +7,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import {
-  BATCH, TITLES, handlePush, message, sameKey, words, code,
+  BATCH, NAME_MAX, TITLES, handlePush, message, sameKey, titleName, words, code,
   type ClaimRow, type ExpoMessage, type HttpAnswer, type PushDeps, type Ticket,
 } from "../../../supabase/functions/send-push/handler";
 
@@ -112,6 +112,33 @@ describe("send-push: the words", () => {
       sound: "default", channelId: "default", priority: "high" });
     const bad = message({ ...row("1", 1), route: "https://evil.test" }, { device_id: "d", token: tok(1), lang: "en" });
     expect(bad.data.route).toBe("/notifications");
+  });
+  // spec 42 S27 (#1673): whose company — the uuid in data, the name in the title only for a person in two or more
+  const B = "cb000000-0000-4000-8000-000000000000";
+  const dev = { device_id: "d", token: tok(1), lang: "en" };
+  it("unit:sendPush handler — a person in two companies: the company in data, its name before the title", () => {
+    const m = message({ ...row("1", 1), company: B, company_name: "Rival Roofing", companies: 2 }, dev);
+    expect(m.title).toBe("Rival Roofing: Payment received");
+    expect(m.data).toEqual({ route: "/invoice/abc", company: B });
+    // the count and the name never travel in data
+    expect(JSON.stringify(m.data)).not.toMatch(/Rival|companies/);
+  });
+  it("unit:sendPush handler — one company: the title as before; still the company in data", () => {
+    const m = message({ ...row("1", 1), company: B, company_name: "Rival Roofing", companies: 1 }, dev);
+    expect(m.title).toBe("Payment received");
+    expect(m.data).toEqual({ route: "/invoice/abc", company: B });
+  });
+  it("unit:sendPush handler — an old push_claim (no keys) and a company that is not a uuid: nothing added", () => {
+    expect(message(row("1", 1), dev).data).toEqual({ route: "/invoice/abc" });
+    expect(message({ ...row("1", 1), company: "x' or 1=1", company_name: "A", companies: 2 }, dev).data).toEqual({ route: "/invoice/abc" });
+  });
+  it("unit:sendPush handler — the name in a title: no control or direction marks, at most 40 characters", () => {
+    expect(titleName("Acme\u202e\u0007 Gutters\n  LLC")).toBe("Acme Gutters LLC");
+    const long = titleName("W".repeat(80));
+    expect(Array.from(long).length).toBe(NAME_MAX);
+    expect(long.endsWith("…")).toBe(true);
+    expect(titleName(null)).toBe("");
+    expect(message({ ...row("1", 1), company: B, company_name: "\u200f\u2066", companies: 3 }, dev).title).toBe("Payment received");
   });
 });
 

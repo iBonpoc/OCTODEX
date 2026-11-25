@@ -86,10 +86,10 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 120,
           "resizeMode": "contain",
-          "backgroundColor": "#EFEBE5",
+          "backgroundColor": "#D6D7D1",
           "dark": {
             "image": "./assets/splash-icon-dark.png",
-            "backgroundColor": "#24272D"
+            "backgroundColor": "#26282C"
           }
         }
       ],
@@ -109,8 +109,8 @@
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false,
           "isAndroidForegroundServiceEnabled": false,
-          "locationAlwaysAndWhenInUsePermission": "GoRix never uses your location in the background: only while the app is open, during your visit and with your consent.",
-          "locationAlwaysPermission": "GoRix never uses your location in the background: only while the app is open, during your visit and with your consent.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
           "motionUsagePermission": false,
           "locationFullAccuracyPermission": false
         }

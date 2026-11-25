@@ -19,7 +19,8 @@ exports.run = async (h) => {
   await wipe("customers");
   await h.go("/clients");
   await vis("clients-empty-new").waitFor({ timeout: 8000 });
-  h.expect((await vis("fab-header").count()) === 1 && (await vis("fab").count()) === 0, "clients: «＋» in the header, none floating");
+  // v2 (#2350): «Клиенты» is a ListScreen — its header «＋» is `clients-create`
+  h.expect((await vis("clients-create").count()) === 1 && (await vis("fab").count()) === 0, "clients: «＋» in the header, none floating");
   await h.shot("clients-empty");
   await vis("clients-empty-new").click();
   await p.waitForURL(/\/client\/edit/, { timeout: 5000 });

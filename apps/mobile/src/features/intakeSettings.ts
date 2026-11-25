@@ -4,6 +4,7 @@
  * The form takes requests only when the operator set the function's secret INTAKE_IP_SECRET — the screen says so in words.
  */
 import type { StatusName } from "@octo/design-tokens";
+import type { DictKey } from "@/i18n";
 
 export interface IntakeEndpoint {
   id: string;
@@ -42,11 +43,12 @@ export function siteSnippet(link: string, label: string): string {
   return `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(label)}</a>`;
 }
 
-export type Readiness = "checking" | "unknown" | "noSecret" | "none" | "off" | "on" | "notMine";
+export type Readiness = "checking" | "unknown" | "noSecret" | "none" | "off" | "on" | "held" | "notMine";
 /**
  * One line on top of the screen (the director's rule 08.11: a form without the IP secret is never silently «on»):
  * unknown — the function did not answer (offline); noSecret — the operator has not set INTAKE_IP_SECRET, the form takes
- * nothing; none — no form yet; off — switched off; on — takes requests.
+ * nothing; none — no form yet; off — switched off; on — takes requests; held — the form asks for a captcha the page has no
+ * widget for yet (В3): every request waits in the journal for a person (#2012), never a silent «on».
  */
 export function readiness(status: { ipSecret: boolean } | null | undefined, form: IntakeEndpoint | undefined, director = true): Readiness {
   if (status === undefined) return "checking"; // the function has not answered yet — not «no connection»
@@ -54,9 +56,10 @@ export function readiness(status: { ipSecret: boolean } | null | undefined, form
   if (!status.ipSecret) return "noSecret";
   if (!director) return "notMine"; // the office does not read the ways in (owner / admin only): never «no form»
   if (!form) return "none";
-  return form.enabled ? "on" : "off";
+  if (!form.enabled) return "off";
+  return form.captcha ? "held" : "on";
 }
-export const READINESS_TONE: Record<Readiness, StatusName> = { checking: "neutral", unknown: "neutral", noSecret: "bad", none: "neutral", off: "warn", on: "ok", notMine: "neutral" };
+export const READINESS_TONE: Record<Readiness, StatusName> = { checking: "neutral", unknown: "neutral", noSecret: "bad", none: "neutral", off: "warn", on: "ok", held: "warn", notMine: "neutral" };
 
 /** held requests first (they wait for a decision), newest first */
 export const heldFirst = (events: IntakeEvent[]) =>
@@ -80,4 +83,10 @@ export function endpointFromRow(r: Record<string, unknown>): IntakeEndpoint {
     smsConsent: r.sms_consent_enabled === true, captcha: r.captcha_required === true,
     dailyLimit: Number(r.daily_limit ?? 100), rotatedAt: typeof r.rotated_at === "string" ? r.rotated_at : undefined,
   };
+}
+
+/** the words of a held request's reason; a reason this build does not know (a newer server) says «Заявка отложена», never its key */
+const HELD_REASONS = ["ip_limit", "daily_limit", "too_fast", "no_ip", "old_link", "net_limit", "no_captcha"] as const;
+export function heldReasonKey(reason: string | null | undefined): DictKey {
+  return (HELD_REASONS as readonly string[]).includes(reason ?? "") ? (`intake.set.reason.${reason}` as DictKey) : "intake.set.reason.other";
 }

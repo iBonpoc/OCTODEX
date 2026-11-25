@@ -1,10 +1,9 @@
 /**
- * e2e 174 — точность замера (#739; было «как мерили»), один выбор на весь чертёж (просьба основателя 08.11; docs/specs/33-gutters-canvas.md П20.16).
- * Every view.
- * - a new drawing is «Примерно» (the choice in «⋯ → Точность замера»; no words at the top, #681); a corner's cut
- *   says to re-measure with a tape;
- * - «⋯» → «Точность замера» → «Рулетка» → in the store, the cut has no warning; after a reload too; the attribute
- *   panel has no «рулетка / нарисовано» per line.
+ * e2e 174 — nothing is written about how a measurement was taken (#768, #1764; founder 16.11: «этой надписи не должно
+ * быть», «вообще ничего не пишем»). Was: the choice «Точность замера» (#739). Every view.
+ * - the canvas: no accuracy words at the top, «⋯» has no «Точность замера»; a corner's cut has no «перемерьте рулеткой»;
+ * - the measurement's card: no «Рулетка / Примерно» chip, no «примерный» note;
+ * - the field stays in the data (rule 16): a new drawing still writes it, nothing shows it.
  * Finds things by testID; waits on what it checks.
  */
 const { pressEscUntilClosed } = require("../sheet.cjs");
@@ -41,7 +40,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await waitFor(async () => /^Пробный/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
+  await waitFor(async () => /^Без срока/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
   await h.go("/module/gutters/draw");
   await tid("draw-surface").waitFor({ timeout: 8000 });
   const b = await p.getByTestId("draw-surface").boundingBox();
@@ -50,42 +49,21 @@ exports.run = async (h) => {
   await stroke([x0, y0], [x1, y0]);
   await stroke([x1, y0], [x1, y1]);
 
-  // «⋯» → «Точность замера»: the sheet with the choice (#681: no «Примерно — не для резки» at the top)
-  const openMore = async () => {
-    await tid("draw-who").getByRole("button").click();
-    const item = p.getByRole("menuitem", { name: "Точность замера", exact: true });
-    await item.waitFor({ timeout: 3000 });
-    await item.click();
-    await tid("draw-accuracy-pick").waitFor({ timeout: 5000 });
-    h.expect(/перед резкой промерьте рулеткой/.test(await tid("draw-accuracy-hint").innerText()), "the hint says what «Примерно» means");
-    h.expect((await p.locator('[data-testid^="draw-place-"]').count()) === 0, "the toolbar place is its own item now");
-  };
-  const picked = async () => (await tid("draw-accuracy-pick").getByRole("radio", { checked: true }).first().innerText()).trim();
-  h.expect((await tid("draw-accuracy").count()) === 0, "no accuracy words at the top (#681)");
+  // the canvas: no words at the top, no «Точность замера» in «⋯»
+  h.expect((await tid("draw-accuracy").count()) === 0, "no accuracy words at the top");
+  await tid("draw-who").getByRole("button").click();
+  await p.getByRole("menuitem", { name: /Слои|Панель/ }).first().waitFor({ timeout: 3000 });
+  h.expect((await p.getByRole("menuitem", { name: "Точность замера", exact: true }).count()) === 0, "no «Точность замера» in «⋯»"); // i18n-old: ok — the old item must be gone
+  await pressEscUntilClosed(p);
+  await waitFor(async () => (await p.getByRole("menuitem").count()) === 0, "the menu is closed");
 
-  // rough by default
-  await openMore();
-  h.expect(/^Примерно/.test(await picked()), "a new drawing: «Примерно»");
-  await closeSheet();
-  h.expect((await tid("attr-confidence").count()) === 0, "no «рулетка / нарисовано» per line");
+  // a corner's cut: no «перемерьте рулеткой»
   await openCorner();
-  h.expect((await tid("corner-cut-rough").count()) === 1, "a rough measure: the cut says to re-measure with a tape");
+  h.expect((await tid("corner-cut-rough").count()) === 0, "the cut has no re-measure note");
+  h.expect(!/перемер|промер|можно резать/.test(await tid("corner-cut").innerText()), "no words about the tape in the cut");
+  await h.shot("corner");
   await closeSheet();
 
-  // «⋯» → «Точность замера» → tape
-  await openMore();
-  await tid("draw-accuracy-pick").getByRole("radio", { name: /^Рулетка/ }).click();
-  await waitFor(async () => /^Рулетка/.test(await picked()), "«Рулетка» picked");
-  await closeSheet();
-  await waitFor(async () => (await accuracy()) === "tape", "the store: tape");
-  await openCorner();
-  h.expect((await tid("corner-cut-rough").count()) === 0, "measured with a tape: no warning on the cut");
-  await h.shot("tape");
-  await closeSheet();
-
-  await p.reload();
-  await tid("draw-surface").waitFor({ timeout: 8000 });
-  await openMore();
-  h.expect(/^Рулетка/.test(await picked()), "after a reload: still a tape");
-  await closeSheet();
+  // the data keeps the field (rule 16); nothing shows it
+  await waitFor(async () => (await accuracy()) !== undefined, "the field is still written");
 };

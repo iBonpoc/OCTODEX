@@ -10,8 +10,8 @@ describe("invoice status", () => {
     expect(invoiceStatusView({ totalCents: 10000, paidCents: 2500 })).toEqual({ s: "info", l: "card.st.partial", state: "partial" });
     expect(invoiceBalance({ totalCents: 10000, paidCents: 2500 }).owesCents).toBe(7500);
   });
-  it("paid in full → «Оплачено» (ok)", () => {
-    expect(invoiceStatusView({ totalCents: 10000, paidCents: 10000 })).toEqual({ s: "ok", l: "st.paid", state: "paid" });
+  it("paid in full → «Оплачен» (ok, the one word of the filter and the group)", () => {
+    expect(invoiceStatusView({ totalCents: 10000, paidCents: 10000 })).toEqual({ s: "ok", l: "inv.st.paid", state: "paid" });
   });
   it("overpaid → paid, owes 0 (the extra is the client's credit, not a negative debt)", () => {
     expect(invoiceState({ totalCents: 10000, paidCents: 12000 })).toBe("paid");

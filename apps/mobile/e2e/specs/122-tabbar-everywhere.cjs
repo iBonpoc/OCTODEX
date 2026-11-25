@@ -18,17 +18,18 @@ exports.run = async (h) => {
     h.expect(wide ? n === 0 : n === 1, `${url}: ${wide ? "no bottom bar at " + h.layout.width : "the bottom bar"} (${n})`);
   }
   if (!wide) {
-    // a card lights its section's tab (a client → «Клиенты»), a section of «Ещё» lights «Ещё»
+    // a card lights its section's tab (a client → «Клиенты»); v2: a section of «Ещё» (the avatar) lights no tab (HIG)
     await h.go(`/client/${client}`);
     h.expect((await p.getByRole("tab", { name: "Клиенты", selected: true }).count()) === 1, "a client card lights «Клиенты»");
     await h.go("/jobs");
-    h.expect((await p.getByRole("tab", { name: "Ещё", selected: true }).count()) === 1, "Jobs lights «Ещё»");
+    await p.getByTestId("back-more").locator("visible=true").first().waitFor({ timeout: 5000 });
+    h.expect((await p.locator('[data-testid="tab-bar"]:visible [role="tab"][aria-selected="true"]').count()) === 0, "Jobs (a section of «Ещё») lights no tab");
     await h.shot("jobs");
     // a card opened FROM a tab, then another tab: the card is closed (dismissTo), back never walks into it, the history
     // does not grow with every round (before: navigate pushed a new copy of the tabs, review #274)
     const len = () => p.evaluate(() => history.length);
     await h.go("/clients");
-    await p.locator('[data-testid="list-card"]:visible').first().click();
+    await p.locator('[data-testid^="client-row-c"]:not([data-testid^="client-row-call-"]):visible').first().click();
     await p.waitForTimeout(700);
     h.expect(/^\/client\//.test(new URL(p.url()).pathname), `a client card from the tab (${p.url()})`);
     h.expect((await bars()) === 1, "the card opened from the tab has the bar");
@@ -39,7 +40,7 @@ exports.run = async (h) => {
     for (let i = 0; i < 2; i++) {
       await p.getByRole("tab", { name: "Клиенты", exact: true }).click();
       await p.waitForTimeout(500);
-      await p.locator('[data-testid="list-card"]:visible').first().click();
+      await p.locator('[data-testid^="client-row-c"]:not([data-testid^="client-row-call-"]):visible').first().click();
       await p.waitForTimeout(600);
       await p.getByRole("tab", { name: "План", exact: true }).click();
       await p.waitForTimeout(600);
@@ -65,7 +66,9 @@ exports.run = async (h) => {
     v.checklist = [];
     await h.seed("octo.db.v5", raw);
     await h.go("/visit/v1");
-    await p.waitForTimeout(600);
+    // v2: the main step «Завершить» turns the body to the client's signature (visit/[id].tsx)
+    await p.getByTestId("visit-main-finish").locator("visible=true").first().click();
+    await p.getByTestId("visit-signature").locator("visible=true").first().waitFor({ timeout: 5000 });
     const pad = p.getByTestId("signature-pad").locator("visible=true").first();
     h.expect((await pad.count()) === 1, "the visit v1 at «Работа» shows the signature pad");
     h.expect((await bars()) === 1, "the pad is there, nothing drawn yet: the bar stays (review #274)");

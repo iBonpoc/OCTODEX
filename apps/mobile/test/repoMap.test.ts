@@ -354,9 +354,38 @@ describe("loadCompanyDB — a photo the cloud refused (#1431)", () => {
       { id: "f4", kind: "before", uri: undefined },
     ]);
   });
+  it("#1441: a module's photo (measurement_id) with upload_status 'failed' is marked in db.files; uploaded and local are not", async () => {
+    rows.files = [
+      { id: "g1", kind: "photo", measurement_id: "m1", element_id: null, storage_key: "co-1/g1.jpg", created_at: "2026-11-18T10:00:00Z", upload_status: "uploaded" },
+      { id: "g2", kind: "photo", measurement_id: "m1", element_id: "e1", storage_key: null, created_at: "2026-11-18T11:00:00Z", upload_status: "failed" },
+      { id: "g3", kind: "photo", measurement_id: "m1", element_id: null, storage_key: null, created_at: "2026-11-18T12:00:00Z", upload_status: "local" },
+    ];
+    const db = await loadCompanyDB(CO, "u1");
+    const f = (id: string) => db.files!.find((x) => x.id === id)!;
+    expect(f("g1").upload).toBeUndefined();
+    expect(f("g2")).toMatchObject({ measurementId: "m1", elementId: "e1", upload: { failed: "refused", at: "2026-11-18T11:00:00Z" } });
+    expect(f("g3").upload).toBeUndefined();
+  });
   it("a server without the column reads the photos as before (rule 16)", async () => {
     missing.add("files.upload_status");
     const db = await loadCompanyDB(CO, "u1");
     expect(db.visits.find((v) => v.id === "v1")!.photos).toEqual([{ id: "f1", kind: "after", uri: undefined }]);
+  });
+});
+
+// #2075 (20261117560000): sales load only the money of their deals — a payment whose invoice they do not see, an invoice
+// whose job they do not see; the load goes through and keeps what it got (an old phone simply gets fewer rows)
+describe("loadCompanyDB — a partial set of money (#2075)", () => {
+  it("a payment without its invoice and an invoice without its job do not break the load", async () => {
+    rows.invoices = [
+      { id: "i-seen", customer_id: "c1", job_id: "j-unseen", number: "INV-0007", kind: "progress", status: "sent", total_cents: 5000, paid_cents: 0, balance_cents: 5000, due_date: "2026-11-30", sent_at: "2026-11-10T10:00:00Z" },
+    ];
+    rows.payments = [
+      { id: "pay-orphan", invoice_id: "i-unseen", customer_id: "c1", method: "cash", amount_cents: 3000, refunded_cents: 0, status: "succeeded", received_at: "2026-11-11T10:00:00Z", idempotency_key: "k1" },
+    ];
+    rows.notifications = [];
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.invoices.map((i) => i.id)).toContain("i-seen");
+    expect(db.payments.map((p) => p.id)).toContain("pay-orphan");
   });
 });

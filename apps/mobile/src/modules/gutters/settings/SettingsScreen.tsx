@@ -6,6 +6,7 @@
  * The module switched off or past its trial: the page is read-only with «Подключить» (founder О2).
  * Colours are words, never swatches (rule 2).
  */
+import { sizeText } from "../sizeText";
 import { createContext, useContext, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
@@ -13,7 +14,7 @@ import { GUTTER_MOUNTS } from "@octo/estimating-engine";
 import { component, radius, size as sizes, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
-import { moduleHref, moduleState } from "@/modules/registry";
+import { moduleHref, moduleState, moduleUsable } from "@/modules/registry";
 import { ANCHORS, SPIKE_LENGTHS, WOOD_SCREWS } from "@octo/estimating-engine";
 import { Banner } from "@/ui/banner";
 import { Button, ChoiceChips, IconButton, ReadOnly, StatusChip, Stepper, TextField, Toggle, useReadOnly } from "@/ui/controls";
@@ -21,12 +22,12 @@ import { Icon, Press, T } from "@/ui/primitives";
 import { fillStyle } from "@/ui/fill";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useToast } from "@/ui/overlays";
-import { Card, RowView, Screen } from "@/ui/surfaces";
+import { Card, ListRow, RowView, Screen } from "@/ui/surfaces";
 import { DS_BOTTOMS, DS_SHAPES, DS_SIZES, DS_STYLES, GAUGES_BY_MATERIAL, MATERIALS, MILL_ONLY, PROFILES, SIZES_BY_PROFILE, WALL_KITS_BY_WALL, WALLS } from "../canvas/attrs";
 import { fmtLen, LEN_FORMATS } from "../canvas/format";
 import { useColorLabel } from "../draw/AttrPanel";
 import {
-  choicesFor, colorName, DEFAULT_OVERHANG_FT, notSavedKey, OVERHANG_FT, CORNER_METHODS, familyKits, GUARD_KINDS, JOINT_KINDS, SPIKE_SIZES, MAX_PALETTE, MODULE_OFFER, PALETTES, readRules, readUse, RULE_NUMS, setPath, settingsFit, STICK_FT, toggleOffer, USE_NUMS,
+  choicesFor, colorName, DEFAULT_OVERHANG_FT, notSavedKey, OVERHANG_FT, CORNER_METHODS, familyKits, GUARD_KINDS, JOINT_KINDS, SPIKE_SIZES, PALETTE_NAMES, MAX_PALETTE, MODULE_OFFER, PALETTES, readRules, readUse, RULE_NUMS, setPath, settingsFit, STICK_FT, toggleOffer, USE_NUMS,
   type Choices, type OfferGroup,
 } from "../settings";
 
@@ -38,7 +39,7 @@ const inch = (s: string) => `${s}″`;
 /** i18n keys of the fastener choices (a value has dots and slashes) */
 const SCREW_KEY = { "10x1": "s10x1", "10x1.5": "s10x15", "10x2": "s10x2" } as const;
 const ANCHOR_KEY = { masonry: "any", "3/16x7/8": "a316", "1/4x1": "a14" } as const;
-const dsSize = (s: string) => (s.includes("x") ? s.replace("x", "×") : inch(s));
+const dsSize = sizeText; // one format everywhere (#1916)
 
 /** the refusal or note said under one field (by its testID): the last choice, too large, being read again */
 const WarnCtx = createContext<{ at: string; text: string } | null>(null);
@@ -151,7 +152,7 @@ export default function GutterSettingsScreen() {
   const use = useMemo(() => readUse(raw), [raw]);
   const [newColor, setNewColor] = useState("");
   const access = moduleState(cm).access;
-  const active = access === "trial" || access === "paid";
+  const active = moduleUsable(access);
   const director = store.role === "director";
   const ro = !director || !active;
   const back = () => (router.canGoBack() ? router.back() : router.replace("/company/modules"));
@@ -237,25 +238,16 @@ export default function GutterSettingsScreen() {
         ) : null}
 
         {/* M7d (spec П22.10): prices live in the company's price list — their own page */}
+        {/* #1919: the most frequent change first — a row that opens the price list (a row with «›», DS §12.2), not a card with a button */}
         <View testID="gset-prices">
           <Card>
-            <T v="heading">{t("mod.gutters.pr.title")}</T>
-            <T v="caption" tone="mut">{t("mod.gutters.pr.fromSettings")}</T>
-            <Button label={t("mod.gutters.pr.open")} icon="box" variant="secondary" size="sm" onPress={() => router.push(moduleHref("gutters", "prices"))} />
+            <ListRow title={t("mod.gutters.pr.title")} subtitle={t("mod.gutters.pr.fromSettings")} lines={2} left={<Icon name="box" />} onPress={() => router.push(moduleHref("gutters", "prices"))} />
           </Card>
         </View>
 
         <ReadOnly value={ro}>
-          {/* #1092: one format for every length — the drawing, the review, the documents, the parts */}
-          <Part title={t(k("len"))} hint={t(k("lenHint"))} testID="gset-len">
-            <ChoiceWarn label={t(k("lenFormat"))} testID="gset-len-format" items={LEN_FORMATS.map((f) => ({ key: f, label: t(k(`lenf.${f}`)) }))} value={ch.lenFormat} onChange={(f) => put("gset-len-format", ["lenFormat"], f)} />
-            <View testID="gset-len-sample"><T v="caption" tone="mut">{t(k("lenSample"), { len: fmtLen(LEN_SAMPLE_IN, ch.lenFormat) })}</T></View>
-          </Part>
-          {/* #932 (founder 11.11): where the roof's overhang is set */}
-          <Part title={t(k("house"))} hint={t(k("houseHint"))} testID="gset-house">
-            <ChoiceWarn label={t(k("roofOverhang"))} testID="gset-roof-overhang" items={OVERHANG_FT.map((n) => ({ key: String(n), label: fmtLen(n * 12, ch.lenFormat) }))} value={String(ch.roofOverhangFt)} onChange={(v) => put("gset-roof-overhang", ["roofOverhangFt"], Number(v))} />
-            <T v="caption" tone="mut">{t(k("roofOverhangHint"), { def: fmtLen(DEFAULT_OVERHANG_FT * 12, ch.lenFormat) })}</T>
-          </Part>
+          {/* #1919: what changes often first — what we install and the colours; the defaults of new parts; how parts are counted;
+              set once — the length format and the house — last (as iOS Settings: frequent on top, the rare grouped below) */}
           <Part title={t(k("offer"))} hint={t(k("offerHint"))} testID="gset-offer">
             <Field label={t(k("profiles"))} testID="gset-profiles">
               <MultiChips items={PROFILES.map((p) => ({ key: p, label: t(a(`p.${p}`)) }))} value={offer.profiles} testID="gset-profiles" onToggle={(x) => toggle("gset-profiles", "profiles", null, x)} />
@@ -332,10 +324,10 @@ export default function GutterSettingsScreen() {
                 <T v="caption" tone="mut">{t(k("paletteFrom"))}</T>
                 <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
                   <View testID="gset-palette-berger">
-                    <Button label={t(k("palBerger"), { n: PALETTES.berger.length })} size="sm" variant="secondary" onPress={() => setPalette([...PALETTES.berger])} />
+                    <Button label={t(k("palOf"), { name: PALETTE_NAMES.berger, n: PALETTES.berger.length })} size="sm" variant="secondary" onPress={() => setPalette([...PALETTES.berger])} />
                   </View>
                   <View testID="gset-palette-sp">
-                    <Button label={t(k("palSP"), { n: PALETTES.servicePartners.length })} size="sm" variant="secondary" onPress={() => setPalette([...PALETTES.servicePartners])} />
+                    <Button label={t(k("palOf"), { name: PALETTE_NAMES.servicePartners, n: PALETTES.servicePartners.length })} size="sm" variant="secondary" onPress={() => setPalette([...PALETTES.servicePartners])} />
                   </View>
                   <View testID="gset-palette-module">
                     <Button label={t(k("palModule"))} size="sm" variant="ghost" onPress={() => setPalette(undefined)} />
@@ -343,6 +335,81 @@ export default function GutterSettingsScreen() {
                 </RowView>
               </>
             )}
+          </Part>
+
+          <Part title={t(k("defRun"))} hint={t(k("defRunHint"))} testID="gset-def-run">
+            <ChoiceWarn label={t(a("profile"))} testID="gset-run-profile" items={offer.profiles.map((p) => ({ key: p, label: t(a(`p.${p}`)) }))} value={ch.run.profile} onChange={(profile) => setRun("profile", profile)} />
+            <ChoiceWarn label={t(a("size"))} testID="gset-run-size" items={offer.sizes[runProfile].map((s) => ({ key: s, label: inch(s) }))} value={ch.run.size} onChange={(size) => setRun("size", size)} />
+            <ChoiceWarn label={t(a("material"))} testID="gset-run-material" items={offer.materials.map((m) => ({ key: m, label: t(a(`m.${m}`)) }))} value={ch.run.material} onChange={(material) => setRun("material", material)} />
+            {runGauges.length ? (
+              <ChoiceWarn label={t(a("gauge"))} testID="gset-run-gauge" items={runGauges.map((g) => ({ key: g, label: g }))} value={ch.run.gauge ?? runGauges[0]!} onChange={(gauge) => setRun("gauge", gauge)} />
+            ) : null}
+            {MILL_ONLY.has(ch.run.material) ? null : (
+              <Field label={t(a("finish"))} testID="gset-run-finish">
+                <ChoiceChips items={(["painted", "mill"] as const).map((f) => ({ key: f, label: t(a(`f.${f}`)) }))} value={ch.run.finish} onChange={(finish) => setRun("finish", finish)} />
+              </Field>
+            )}
+            {ch.run.finish === "painted" ? (
+              <Field label={t(a("color"))} testID="gset-run-color">
+                <ChoiceChips items={ch.palette.map((c) => ({ key: c, label: colorLabel(c) }))} value={ch.run.color ?? ch.palette[0]!} onChange={(color) => setRun("color", color)} />
+              </Field>
+            ) : null}
+            <Field label={t(a("mount"))} testID="gset-run-mount">
+              <ChoiceChips items={GUTTER_MOUNTS.map((m) => ({ key: m, label: t(a(`mt.${m}`)) }))} value={ch.run.mount} onChange={(mount) => setRun("mount", mount)} />
+            </Field>
+            <T v="caption" tone="mut">{t(k("byMountHint"), { what: t(a(`p.${runProfile}`)) })}</T>
+            {GUTTER_MOUNTS.map((m) => {
+              const kits = familyKits(runProfile, offer.hangers);
+              return (
+                <Field key={m} label={t(a(`mt.${m}`))} testID={`gset-mount-${m}`}>
+                  <ChoiceChips
+                    items={(kits.length ? kits : familyKits(runProfile)).map((id) => ({ key: id, label: t(a(`k.${id}`)) }))}
+                    value={ch.hangerByMount[runProfile][m]}
+                    onChange={(kit) => put(`gset-mount-${m}`, ["hangerByMount", runProfile, m], kit)}
+                  />
+                </Field>
+              );
+            })}
+          </Part>
+
+          <Part title={t(k("defDs"))} hint={t(k("defDsHint"))} testID="gset-def-ds">
+            <ChoiceWarn label={t(a("shape"))} testID="gset-ds-shape" items={DS_SHAPES.map((s) => ({ key: s, label: t(a(`sh.${s}`)) }))} value={ch.ds.shape} onChange={(shape) => setDs("shape", shape)} />
+            <ChoiceWarn label={t(a("size"))} testID="gset-ds-size" items={offer.dsSizes[ch.ds.shape].map((s) => ({ key: s, label: dsSize(s) }))} value={ch.ds.size} onChange={(size) => setDs("size", size)} />
+            <ChoiceWarn label={t(a("dsStyle"))} testID="gset-ds-style" items={offer.dsStyles.map((s) => ({ key: s, label: t(a(`st.${s}`)) }))} value={ch.ds.dsStyle} onChange={(dsStyle) => setDs("dsStyle", dsStyle)} />
+            <ChoiceWarn label={t(a("material"))} testID="gset-ds-material" items={offer.materials.map((m) => ({ key: m, label: t(a(`m.${m}`)) }))} value={ch.ds.material} onChange={(material) => setDs("material", material)} />
+            {dsGauges.length ? (
+              <ChoiceWarn label={t(a("gauge"))} testID="gset-ds-gauge" items={dsGauges.map((g) => ({ key: g, label: g }))} value={ch.ds.gauge ?? dsGauges[0]!} onChange={(gauge) => setDs("gauge", gauge)} />
+            ) : null}
+            {MILL_ONLY.has(ch.ds.material) ? null : (
+              <Field label={t(a("finish"))} testID="gset-ds-finish">
+                <ChoiceChips items={(["painted", "mill"] as const).map((f) => ({ key: f, label: t(a(`f.${f}`)) }))} value={ch.ds.finish} onChange={(finish) => setDs("finish", finish)} />
+              </Field>
+            )}
+            {ch.ds.finish === "painted" ? (
+              <Field label={t(a("color"))} testID="gset-ds-color">
+                <ChoiceChips items={ch.palette.map((c) => ({ key: c, label: colorLabel(c) }))} value={ch.ds.color ?? ch.palette[0]!} onChange={(color) => setDs("color", color)} />
+              </Field>
+            ) : null}
+            <Field label={t(a("bottom"))} testID="gset-ds-bottom">
+              <ChoiceChips items={offer.bottoms.map((b) => ({ key: b, label: t(a(`b.${b}`)) }))} value={ch.ds.bottom} onChange={(bottom) => setDs("bottom", bottom)} />
+            </Field>
+            <Field label={t(a("wall"))} testID="gset-ds-wall">
+              <ChoiceChips items={WALLS.map((w) => ({ key: w, label: t(a(`w.${w}`)) }))} value={ch.ds.wall} onChange={(wall) => setDs("wall", wall)} />
+            </Field>
+            <T v="caption" tone="mut">{t(k("byWallHint"), { what: t(a(`sh.${ch.ds.shape}`)) })}</T>
+            {WALLS.map((w) => {
+              const all = WALL_KITS_BY_WALL[ch.ds.shape][w];
+              const kits = all.filter((id) => offer.wallKits.includes(id));
+              return (
+                <Field key={w} label={t(a(`w.${w}`))} testID={`gset-wall-${w}`}>
+                  <ChoiceChips
+                    items={(kits.length ? kits : all).map((id) => ({ key: id, label: t(a(`wk.${id}`)) }))}
+                    value={ch.wallKitByWall[ch.ds.shape][w]}
+                    onChange={(kit) => put(`gset-wall-${w}`, ["wallKitByWall", ch.ds.shape, w], kit)}
+                  />
+                </Field>
+              );
+            })}
           </Part>
 
           <Part title={t(k("rules"))} hint={t(k("rulesHint"))} testID="gset-rules">
@@ -426,79 +493,16 @@ export default function GutterSettingsScreen() {
             <T v="caption" tone="mut">{t(k("u.fastenersHint"))}</T>
           </Part>
 
-          <Part title={t(k("defRun"))} hint={t(k("defRunHint"))} testID="gset-def-run">
-            <ChoiceWarn label={t(a("profile"))} testID="gset-run-profile" items={offer.profiles.map((p) => ({ key: p, label: t(a(`p.${p}`)) }))} value={ch.run.profile} onChange={(profile) => setRun("profile", profile)} />
-            <ChoiceWarn label={t(a("size"))} testID="gset-run-size" items={offer.sizes[runProfile].map((s) => ({ key: s, label: inch(s) }))} value={ch.run.size} onChange={(size) => setRun("size", size)} />
-            <ChoiceWarn label={t(a("material"))} testID="gset-run-material" items={offer.materials.map((m) => ({ key: m, label: t(a(`m.${m}`)) }))} value={ch.run.material} onChange={(material) => setRun("material", material)} />
-            {runGauges.length ? (
-              <ChoiceWarn label={t(a("gauge"))} testID="gset-run-gauge" items={runGauges.map((g) => ({ key: g, label: g }))} value={ch.run.gauge ?? runGauges[0]!} onChange={(gauge) => setRun("gauge", gauge)} />
-            ) : null}
-            {MILL_ONLY.has(ch.run.material) ? null : (
-              <Field label={t(a("finish"))} testID="gset-run-finish">
-                <ChoiceChips items={(["painted", "mill"] as const).map((f) => ({ key: f, label: t(a(`f.${f}`)) }))} value={ch.run.finish} onChange={(finish) => setRun("finish", finish)} />
-              </Field>
-            )}
-            {ch.run.finish === "painted" ? (
-              <Field label={t(a("color"))} testID="gset-run-color">
-                <ChoiceChips items={ch.palette.map((c) => ({ key: c, label: colorLabel(c) }))} value={ch.run.color ?? ch.palette[0]!} onChange={(color) => setRun("color", color)} />
-              </Field>
-            ) : null}
-            <Field label={t(a("mount"))} testID="gset-run-mount">
-              <ChoiceChips items={GUTTER_MOUNTS.map((m) => ({ key: m, label: t(a(`mt.${m}`)) }))} value={ch.run.mount} onChange={(mount) => setRun("mount", mount)} />
-            </Field>
-            <T v="caption" tone="mut">{t(k("byMountHint"), { what: t(a(`p.${runProfile}`)) })}</T>
-            {GUTTER_MOUNTS.map((m) => {
-              const kits = familyKits(runProfile, offer.hangers);
-              return (
-                <Field key={m} label={t(a(`mt.${m}`))} testID={`gset-mount-${m}`}>
-                  <ChoiceChips
-                    items={(kits.length ? kits : familyKits(runProfile)).map((id) => ({ key: id, label: t(a(`k.${id}`)) }))}
-                    value={ch.hangerByMount[runProfile][m]}
-                    onChange={(kit) => put(`gset-mount-${m}`, ["hangerByMount", runProfile, m], kit)}
-                  />
-                </Field>
-              );
-            })}
+          {/* #1092: one format for every length — the drawing, the review, the documents, the parts */}
+          <Part title={t(k("len"))} hint={t(k("lenHint"))} testID="gset-len">
+            <ChoiceWarn label={t(k("lenFormat"))} testID="gset-len-format" items={LEN_FORMATS.map((f) => ({ key: f, label: t(k(`lenf.${f}`)) }))} value={ch.lenFormat} onChange={(f) => put("gset-len-format", ["lenFormat"], f)} />
+            <View testID="gset-len-sample"><T v="caption" tone="mut">{t(k("lenSample"), { len: fmtLen(LEN_SAMPLE_IN, ch.lenFormat) })}</T></View>
           </Part>
 
-          <Part title={t(k("defDs"))} hint={t(k("defDsHint"))} testID="gset-def-ds">
-            <ChoiceWarn label={t(a("shape"))} testID="gset-ds-shape" items={DS_SHAPES.map((s) => ({ key: s, label: t(a(`sh.${s}`)) }))} value={ch.ds.shape} onChange={(shape) => setDs("shape", shape)} />
-            <ChoiceWarn label={t(a("size"))} testID="gset-ds-size" items={offer.dsSizes[ch.ds.shape].map((s) => ({ key: s, label: dsSize(s) }))} value={ch.ds.size} onChange={(size) => setDs("size", size)} />
-            <ChoiceWarn label={t(a("dsStyle"))} testID="gset-ds-style" items={offer.dsStyles.map((s) => ({ key: s, label: t(a(`st.${s}`)) }))} value={ch.ds.dsStyle} onChange={(dsStyle) => setDs("dsStyle", dsStyle)} />
-            <ChoiceWarn label={t(a("material"))} testID="gset-ds-material" items={offer.materials.map((m) => ({ key: m, label: t(a(`m.${m}`)) }))} value={ch.ds.material} onChange={(material) => setDs("material", material)} />
-            {dsGauges.length ? (
-              <ChoiceWarn label={t(a("gauge"))} testID="gset-ds-gauge" items={dsGauges.map((g) => ({ key: g, label: g }))} value={ch.ds.gauge ?? dsGauges[0]!} onChange={(gauge) => setDs("gauge", gauge)} />
-            ) : null}
-            {MILL_ONLY.has(ch.ds.material) ? null : (
-              <Field label={t(a("finish"))} testID="gset-ds-finish">
-                <ChoiceChips items={(["painted", "mill"] as const).map((f) => ({ key: f, label: t(a(`f.${f}`)) }))} value={ch.ds.finish} onChange={(finish) => setDs("finish", finish)} />
-              </Field>
-            )}
-            {ch.ds.finish === "painted" ? (
-              <Field label={t(a("color"))} testID="gset-ds-color">
-                <ChoiceChips items={ch.palette.map((c) => ({ key: c, label: colorLabel(c) }))} value={ch.ds.color ?? ch.palette[0]!} onChange={(color) => setDs("color", color)} />
-              </Field>
-            ) : null}
-            <Field label={t(a("bottom"))} testID="gset-ds-bottom">
-              <ChoiceChips items={offer.bottoms.map((b) => ({ key: b, label: t(a(`b.${b}`)) }))} value={ch.ds.bottom} onChange={(bottom) => setDs("bottom", bottom)} />
-            </Field>
-            <Field label={t(a("wall"))} testID="gset-ds-wall">
-              <ChoiceChips items={WALLS.map((w) => ({ key: w, label: t(a(`w.${w}`)) }))} value={ch.ds.wall} onChange={(wall) => setDs("wall", wall)} />
-            </Field>
-            <T v="caption" tone="mut">{t(k("byWallHint"), { what: t(a(`sh.${ch.ds.shape}`)) })}</T>
-            {WALLS.map((w) => {
-              const all = WALL_KITS_BY_WALL[ch.ds.shape][w];
-              const kits = all.filter((id) => offer.wallKits.includes(id));
-              return (
-                <Field key={w} label={t(a(`w.${w}`))} testID={`gset-wall-${w}`}>
-                  <ChoiceChips
-                    items={(kits.length ? kits : all).map((id) => ({ key: id, label: t(a(`wk.${id}`)) }))}
-                    value={ch.wallKitByWall[ch.ds.shape][w]}
-                    onChange={(kit) => put(`gset-wall-${w}`, ["wallKitByWall", ch.ds.shape, w], kit)}
-                  />
-                </Field>
-              );
-            })}
+          {/* #932 (founder 11.11): where the roof's overhang is set */}
+          <Part title={t(k("house"))} hint={t(k("houseHint"))} testID="gset-house">
+            <ChoiceWarn label={t(k("roofOverhang"))} testID="gset-roof-overhang" items={OVERHANG_FT.map((n) => ({ key: String(n), label: fmtLen(n * 12, ch.lenFormat) }))} value={String(ch.roofOverhangFt)} onChange={(v) => put("gset-roof-overhang", ["roofOverhangFt"], Number(v))} />
+            <T v="caption" tone="mut">{t(k("roofOverhangHint"), { def: fmtLen(DEFAULT_OVERHANG_FT * 12, ch.lenFormat) })}</T>
           </Part>
         </ReadOnly>
       </View>

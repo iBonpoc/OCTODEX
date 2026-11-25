@@ -97,7 +97,7 @@ export function DropZone({ id, children, style }: { id: string; children: ReactN
         { borderRadius: radius.card, borderWidth: component.selectedBorder, borderStyle: "dashed", borderColor: "transparent", padding: component.selectedBorder },
         dragging ? { borderColor: c.bd } : null,
         active ? { borderColor: c.acc, backgroundColor: c.surf } : null,
-        { zIndex: dragFrom === id ? 2 : 1 },
+        { zIndex: dragFrom === id ? z.dragged : z.over },
         style,
       ]}
     >
@@ -170,7 +170,7 @@ export function Draggable({ id, from, onDrop, children }: { id: string; from: st
       { scale: 1 + (motion.liftScale - 1) * lift.value },
       { rotate: `${motion.liftTilt * lift.value}deg` },
     ],
-    zIndex: held.value > 0.5 ? z.lift : 0,
+    zIndex: held.value > 0.5 ? z.lift : z.under,
     shadowOpacity: component.liftShadow * lift.value,
     shadowRadius: c.shadow.radius,
     shadowOffset: { width: 0, height: component.dragHandle },

@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Смахивание и выбор</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
+<style>
+/* Прототип #2069: DS «Наряд» Б13 п.2 (смахивание карточки) и Б14 (режим выбора).
+   Все значения — токены packages/design-tokens/src/index.ts (theme, space, radius, component, motion, gesture).
+   Параметры адреса: ?w=390|820 &theme=light|dark &list=meas|tasks &state=swiped|select|full|toast */
+:root{
+  --font:'Onest',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s8:32px;
+  --r-card:24px;--r-inner:18px;--r-pill:999px;--r-field:12px;
+  --fs-display:28px;--fs-title:20px;--fs-heading:15px;--fs-body:13px;--fs-btn:12.5px;--fs-caption:11.5px;--fs-micro:10.5px;
+  --btn-sm:28px;--btn-phone:36px;--hit:44px;--chip-h:24px;--icon-md:20px;--icon-sm:16px;--tabbar:56px;
+  --swipe-w:80px;--sel-border:2px;--dim:.45;
+  --dur-fast:160ms;--dur-base:220ms;--dur-slow:350ms;--ease-out:cubic-bezier(.2,.8,.2,1);--ease-spring:cubic-bezier(.3,1.25,.5,1);
+  --st-ok:#7CE08A;--st-info:#8FA2FF;--st-warn:#FF8A3D;--st-bad:#FF6B6B;--st-on:#0B0C0F;
+  --acc:#FBFF00;--on-acc:#0B0C0F;
+  /* светлая тёплая */
+  --page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--surf-solid:#F9F7F5;
+  --bd:rgba(20,22,30,.1);--bd-field:rgba(20,22,30,.5);--ov:rgba(250,248,244,.78);--scrim:rgba(20,22,30,.25);
+  --t-ok:#176428;--t-info:#3647C4;--t-warn:#944600;--t-bad:#B4232A;--n-fill:rgba(20,22,30,.09);
+  --g1:rgba(124,224,138,.3);--g2:rgba(255,160,60,.24);--g3:rgba(143,162,255,.2);--shadow:0 10px 28px rgba(60,50,40,.12);--shadow-sm:0 2px 8px rgba(60,50,40,.25);
+}
+[data-theme=dark]{
+  --page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--surf-solid:#33363C;
+  --bd:rgba(255,255,255,.14);--bd-field:rgba(255,255,255,.38);--ov:rgba(38,41,48,.72);--scrim:rgba(0,0,0,.42);
+  --t-ok:#9CF0A8;--t-info:#C2CCFF;--t-warn:#FFB47E;--t-bad:#FFAAAA;--n-fill:rgba(255,255,255,.11);
+  --g1:rgba(124,224,138,.08);--g2:rgba(255,160,60,.07);--g3:rgba(143,162,255,.06);--shadow:0 10px 30px rgba(0,0,0,.3);--shadow-sm:0 2px 8px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box;margin:0}
+html,body{background:#8a8780;font-family:var(--font);-webkit-font-smoothing:antialiased}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;padding:12px 16px;background:#1d1f23;color:#eee;font-size:13px;align-items:center}
+.ctl b{font-weight:600;margin-right:4px}
+.ctl button{font:inherit;padding:4px 10px;border-radius:8px;border:1px solid #555;background:#2b2e33;color:#eee;cursor:pointer}
+.ctl button[aria-pressed=true]{background:#eee;color:#111}
+.stage{display:flex;justify-content:center;padding:24px 16px}
+.dev{position:relative;overflow:hidden;background:var(--bg);color:var(--ink);border-radius:36px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.dev.w390{width:390px;height:844px}
+.dev.w820{width:820px;height:1000px;border-radius:24px}
+.dev.w1280{width:1280px;height:800px;border-radius:24px}
+.glow{position:absolute;inset:0;pointer-events:none;background:
+  radial-gradient(600px 420px at 6% 0%,var(--g1),transparent 70%),radial-gradient(700px 500px at 100% 100%,var(--g2),transparent 70%),radial-gradient(520px 420px at 60% 35%,var(--g3),transparent 70%)}
+.app{position:absolute;inset:0;display:flex}
+.rail{display:none}
+.w820 .rail,.w1280 .rail{display:flex;flex-direction:column;gap:var(--s2);width:200px;padding:var(--s6) var(--s3);border-right:1px solid var(--bd)}
+.rail .it{height:36px;display:flex;align-items:center;gap:var(--s2);padding:0 var(--s3);border-radius:var(--r-field);color:var(--mut);font-size:var(--fs-body)}
+.rail .it.on{background:var(--surf2);box-shadow:var(--shadow-sm);color:var(--ink);font-weight:600}
+.col{position:relative;flex:1;display:flex;flex-direction:column;min-width:0}
+.status{height:47px;flex:none}
+.w820 .status,.w1280 .status{height:20px}
+.hdr{display:flex;align-items:center;gap:var(--s2);padding:var(--s2) var(--s4) var(--s3);min-height:52px}
+.hdr h1{font-size:var(--fs-display);font-weight:700;letter-spacing:-.01em;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hdr h1.ttl{display:flex;align-items:center;gap:var(--s2)}
+.hdr.sel h1{font-size:var(--fs-heading);font-weight:600;text-align:center}
+.q{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--mut);color:var(--mut);font-size:11px;display:grid;place-items:center;font-weight:700}
+.btn{height:var(--btn-phone);padding:0 var(--s3);border-radius:var(--r-pill);font:600 var(--fs-btn)/1 var(--font);display:inline-flex;align-items:center;gap:6px;border:1px solid transparent;cursor:pointer;color:var(--ink);background:none;white-space:nowrap}
+.w820 .btn,.w1280 .btn{height:var(--btn-sm)}
+.btn.sec{background:var(--surf2);border-color:var(--bd-field)}
+.btn.pri{background:var(--acc);color:var(--on-acc)}
+.btn.ghost{padding:0 var(--s2)}
+.btn.badw{color:var(--t-bad)}
+.btn.dim{opacity:var(--dim)}
+.btn svg{width:var(--icon-sm);height:var(--icon-sm)}
+.filters{display:flex;gap:var(--s2);padding:0 var(--s4) var(--s3)}
+.chip{height:30px;padding:0 var(--s3);border-radius:var(--r-pill);font-size:var(--fs-btn);display:flex;align-items:center;color:var(--mut)}
+.chip.on{background:var(--surf2);box-shadow:var(--shadow-sm);color:var(--ink);font-weight:600}
+.list{flex:1;overflow:auto;padding:0 var(--s4) calc(var(--tabbar) + 60px);display:grid;gap:var(--s3);align-content:start}
+.w820 .list{grid-template-columns:1fr 1fr;padding-bottom:120px}
+.w1280 .list{grid-template-columns:1fr 1fr 1fr;padding-bottom:120px}
+.row{position:relative;border-radius:var(--r-card);overflow:hidden;transition:height var(--dur-base) var(--ease-out),opacity var(--dur-base) var(--ease-out),margin var(--dur-base) var(--ease-out)}
+.row.gone{height:0!important;opacity:0;margin-top:calc(-1 * var(--s3))}
+.acts{position:absolute;inset:0;display:flex;justify-content:flex-end;visibility:hidden;border-radius:var(--r-card);overflow:hidden}
+.row.active .acts{visibility:visible}
+.acts.lead{justify-content:flex-start}
+.act{width:var(--swipe-w);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font:600 var(--fs-caption)/1 var(--font);border:0;cursor:pointer;color:var(--ink);background:var(--surf2);transition:width var(--dur-fast) var(--ease-out)}
+.act svg{width:var(--icon-md);height:var(--icon-md)}
+.act.bad{background:var(--st-bad);color:var(--st-on)}
+.act.ok{background:var(--st-ok);color:var(--st-on)}
+.act.full{width:100%;align-items:flex-end;padding-right:var(--s5)}
+.card{position:relative;background:var(--surf-solid);border:1px solid var(--bd);border-radius:var(--r-card);padding:var(--s4);box-shadow:var(--shadow);touch-action:pan-y;user-select:none;cursor:grab}
+.card.anim{transition:transform var(--dur-slow) var(--ease-spring)}
+.card .t{font-size:var(--fs-heading);font-weight:600}
+.card .top{display:flex;gap:var(--s2);align-items:flex-start;justify-content:space-between}
+.card .top .stc{position:static;flex:none}
+.selmode .card .top{padding-right:24px}
+.card.dimc{opacity:var(--dim)}
+.selmode .circ{visibility:hidden}
+.card .m{font-size:var(--fs-body);color:var(--mut);margin-top:4px}
+.card .f{font-size:var(--fs-caption);color:var(--mut);margin-top:var(--s2);font-variant-numeric:tabular-nums}
+.card .stc{position:absolute;top:var(--s4);right:var(--s4);height:var(--chip-h);padding:0 10px;border-radius:var(--r-pill);display:flex;align-items:center;gap:4px;font-size:var(--fs-caption);font-weight:600}
+.stc.neutral{background:var(--n-fill);color:var(--mut)} .stc.ok{background:color-mix(in srgb,var(--st-ok) 22%,transparent);color:var(--t-ok)} .stc.info{background:color-mix(in srgb,var(--st-info) 22%,transparent);color:var(--t-info)}
+.stc svg{width:12px;height:12px}
+.card .done{display:flex;gap:var(--s3);align-items:flex-start}
+.circ{flex:none;width:22px;height:22px;border-radius:50%;border:1.5px solid var(--mut);margin-top:1px}
+.card.picked{background:linear-gradient(var(--surf2),var(--surf2)),var(--surf-solid);outline:var(--sel-border) solid var(--ink);outline-offset:-2px}
+.card .pick{display:none;position:absolute;top:var(--s2);right:var(--s2);width:var(--icon-md);height:var(--icon-md);color:var(--ink)}
+.card.picked .pick{display:block}
+
+.selmode .card{cursor:pointer}
+.hov{display:none;position:absolute;right:var(--s3);bottom:var(--s3);width:var(--btn-sm);height:var(--btn-sm);border-radius:50%;background:var(--surf2);border:1px solid var(--bd-field);color:var(--ink);place-items:center}
+.hov svg{width:var(--icon-sm);height:var(--icon-sm)}
+.dev:is(.w820,.w1280):not(.selmodeDev) .card:hover .hov{display:grid}
+.tabbar,.selbar{position:absolute;left:0;right:0;bottom:0;padding:0 var(--s4) 34px;display:flex;align-items:center;background:var(--ov);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid var(--bd);transition:transform var(--dur-base) var(--ease-out)}
+.tabbar{height:calc(var(--tabbar) + 34px);justify-content:space-around}
+.tabbar .tb{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:var(--fs-micro);color:var(--mut);width:64px}
+.tabbar .tb.on{color:var(--ink);font-weight:600}
+.tabbar .tb svg{width:22px;height:22px}
+.selbar{gap:var(--s2);padding-top:var(--s3);transform:translateY(110%);border-radius:var(--r-card) var(--r-card) 0 0}
+.selbar{justify-content:flex-end}
+.selbar .btn{height:var(--hit);min-width:var(--hit);justify-content:center}
+.selmode .selbar{transform:none}
+.selmode .tabbar{transform:translateY(110%)}
+.w820 .tabbar,.w1280 .tabbar{display:none}
+.w820 .selbar,.w1280 .selbar{left:0;right:0;padding-bottom:var(--s4);border-radius:var(--r-card) var(--r-card) 0 0}
+.toast{position:absolute;left:var(--s4);right:var(--s4);bottom:calc(var(--tabbar) + 34px + var(--s4));min-height:var(--hit);padding:var(--s2) var(--s2) var(--s2) var(--s4);display:flex;align-items:center;gap:var(--s3);border-radius:var(--r-inner);background:var(--ov);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid var(--bd);box-shadow:var(--shadow);font-size:var(--fs-body);opacity:0;transform:translateY(8px);transition:opacity var(--dur-base) var(--ease-out),transform var(--dur-base) var(--ease-out);pointer-events:none}
+.toast.on{opacity:1;transform:none;pointer-events:auto}
+.toast span{flex:1}
+.w820 .toast,.w1280 .toast{left:50%;right:auto;width:444px;margin-left:-222px;bottom:var(--s6)}
+.note{max-width:820px;margin:0 auto 32px;padding:0 16px;color:#1b1b1b;font-size:13px;line-height:1.5}
+.note code{background:rgba(255,255,255,.5);padding:0 4px;border-radius:4px}
+@media (prefers-reduced-motion:reduce){.card.anim,.row,.act,.tabbar,.selbar,.toast{transition:none}}
+</style>
+</head>
+<body>
+<div class="ctl" role="toolbar" aria-label="Вид прототипа">
+  <b>Ширина</b><button data-k="w" data-v="390">390</button><button data-k="w" data-v="820">820</button><button data-k="w" data-v="1280">1280</button>
+  <b>Тема</b><button data-k="theme" data-v="light">светлая</button><button data-k="theme" data-v="dark">тёмная</button>
+  <b>Список</b><button data-k="list" data-v="meas">Замеры (#2063)</button><button data-k="list" data-v="tasks">Задачи</button>
+  <button id="reset">Сбросить</button>
+</div>
+<div class="stage"><div class="dev" id="dev"><div class="glow"></div>
+  <div class="app">
+    <nav class="rail" aria-label="Разделы"></nav>
+    <div class="col" id="col">
+      <div class="status"></div>
+      <header class="hdr" id="hdr"></header>
+      <div class="filters" id="filters"></div>
+      <main class="list" id="list" aria-label="Список"></main>
+      <div class="toast" id="toast" role="status" aria-live="polite"><span id="toastText"></span><button class="btn ghost" id="undo">Вернуть</button></div>
+      <nav class="tabbar" id="tabbar" aria-label="Вкладки"></nav>
+      <div class="selbar" id="selbar" role="toolbar" aria-label="Выбрано"></div>
+    </div>
+  </div>
+</div></div>
+<div class="note">
+  <p><b>Как пробовать.</b> Смахните карточку пальцем (или протяните мышью — только в прототипе; в приложении мышь карточку не тащит, Б13). Влево — «Удалить», только нажатием. В «Задачах» вправо — «Готово»; протяните дальше 0,6 ширины — кнопка растянется (на телефоне — вибрация <code>light</code>), отпустите — задача сделана. «Выбрать» в шапке — режим выбора Б14. «Подписан» влево не едет: удалить нельзя. На 820 с мышью — значок корзины при наведении.</p>
+  <p>Числа жеста (DS Б13 п.2): взят — |dx| ≥ 10 и |dx| &gt; 1,2·|dy|; начинать с x ≥ 24; открыть — смещение ≥ ½ кнопок или скорость ≥ 500 пикс/с; резина 0,2; через ноль — стоп; полное — ≥ 0,6·W, снято при &lt; 0,6·W − 10; нажатие в 350 мс после жеста не открывает карточку. «Выбрать» → «Подписан» бледный и не отмечается.</p>
+</div>
+<script>
+const I={
+ trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
+ check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+ plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+ home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 11l8-7 8 7v9H4z"/></svg>',
+ cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
+ users:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="9" r="3.5"/><path d="M3 20c.8-3.5 3.2-5 6-5s5.2 1.5 6 5M16 5.5a3.5 3.5 0 010 7M18 15c1.6.6 2.6 2.2 3 5"/></svg>',
+ pencil:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1 11-11-3-3L5 16z"/></svg>',
+ send:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 12l16-8-6 16-2-6z"/></svg>',
+ invoice:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>',
+ more:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="6" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18" cy="12" r="1.7"/></svg>',
+ channel:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 8v5a4 4 0 004 4h8a4 4 0 004-4V8"/></svg>',
+};
+const P=new URLSearchParams(location.search);
+const st={w:P.get('w')||'390',theme:P.get('theme')||'light',list:P.get('list')||'meas',sel:false,picked:new Set(),open:null,lastGesture:0,undo:null};
+const DATA={
+ meas:[
+  {id:'m1',t:'1420 Oak St',m:'Без клиента',f:'Gutters: 3 · 124 ft · Downspouts: 4 · Nov 17',s:['neutral','Черновик'],left:'del'},
+  {id:'m2',t:'Brooks family',m:'88 Pine Ave',f:'Gutters: 5 · 212 ft · Downspouts: 6 · Nov 16',s:['neutral','Черновик'],left:'del'},
+  {id:'m3',t:'Lead: Garcia',m:'903 Lake Rd',f:'Gutters: 2 · 60 ft · Downspouts: 2 · Nov 15',s:['info','Смета отправлена'],left:'del'},
+  {id:'m4',t:'Nguyen residence',m:'15 Hill Ct',f:'Gutters: 4 · 176 ft · Downspouts: 5 · Nov 12',s:['ok','Подписан'],left:null},
+  {id:'m5',t:'2200 Elm St',m:'Без клиента',f:'Gutters: 1 · 38 ft · Downspouts: 1 · Nov 10',s:['neutral','Черновик'],left:'del'},
+  {id:'m6',t:'Patel family',m:'41 River Way',f:'Gutters: 6 · 240 ft · Downspouts: 7 · Nov 9',s:['neutral','Черновик'],left:'del'},
+ ],
+ tasks:[
+  {id:'t1',t:'Позвонить Brooks',m:'Уточнить цвет водостоков',f:'Сегодня, 2:00 PM',left:'del',lead:'done'},
+  {id:'t2',t:'Заказать материалы',m:'Замер 88 Pine Ave',f:'Сегодня, 4:30 PM',left:'del',lead:'done'},
+  {id:'t3',t:'Отправить смету Garcia',m:'Смета EST-0042',f:'Завтра, 9:00 AM',left:'del',lead:'done'},
+  {id:'t4',t:'Проверить оплату Nguyen',m:'Счёт INV-0017',f:'Пт, 21 нояб.',left:null,lead:'done'},
+ ]};
+let items=[];
+function setView(){
+  const d=document.getElementById('dev');
+  d.className='dev w'+st.w+(st.sel?' selmode selmodeDev':'');d.dataset.theme=st.theme;
+  document.querySelectorAll('.ctl [data-k]').forEach(b=>b.setAttribute('aria-pressed',st[b.dataset.k]===b.dataset.v));
+}
+function header(){
+  const h=document.getElementById('hdr');h.classList.toggle('sel',st.sel);
+  const title=st.list==='meas'?'Замеры':'Задачи';
+  if(!st.sel){
+    h.innerHTML=`<h1 class="ttl">${title}<span class="q" aria-label="Что это">?</span></h1><button class="btn sec" id="selBtn">Выбрать</button><button class="btn sec">${I.plus}${st.list==='meas'?'Замер':'Задача'}</button>`;
+    document.getElementById('selBtn').onclick=()=>{closeOpen();st.sel=true;render();};
+  }else{
+    const n=st.picked.size,all=n===items.filter(pickable).length;
+    h.innerHTML=`<button class="btn ghost" id="allBtn">${all?'Снять все':'Выбрать все'}</button><h1 tabindex="-1">${n?'Выбрано: '+n:'Выберите карточки'}</h1><button class="btn sec" id="doneBtn">Отмена</button>`;
+    document.getElementById('allBtn').onclick=()=>{if(all)st.picked.clear();else items.filter(pickable).forEach(i=>st.picked.add(i.id));render();};
+    document.getElementById('doneBtn').onclick=()=>{st.sel=false;st.picked.clear();render();};
+  }
+  document.getElementById('filters').innerHTML=st.list==='meas'?'<span class="chip on">Все</span><span class="chip">Черновики</span><span class="chip">Со сметой</span>':'<span class="chip on">Мои</span><span class="chip">Все</span><span class="chip">Сделано</span>';
+  document.querySelector('.rail').innerHTML=['Сегодня','Клиенты','Сметы','Замеры','Задачи','Ещё'].map(x=>`<div class="it ${x===title?'on':''}">${x}</div>`).join('');
+}
+function bars(){
+  document.getElementById('tabbar').innerHTML=[['home','Сегодня'],['users','Клиенты'],['invoice','Сметы'],['cal','План'],['more','Ещё']].map(([i,l])=>`<div class="tb ${l==='Ещё'?'on':''}">${I[i]}${l}</div>`).join('');
+  const pk=[...st.picked].map(id=>items.find(i=>i.id===id)).filter(Boolean);
+  const nDel=pk.filter(i=>i.left==='del').length,nDone=pk.filter(i=>i.lead==='done').length;
+  const b=document.getElementById('selbar');
+  b.innerHTML=(st.list==='tasks'?`<button class="btn sec ${nDone?'':'dim'}" id="bDone">${I.check}Выполнить${nDone?' ('+nDone+')':''}</button>`:'')+
+    `<button class="btn sec badw ${nDel?'':'dim'}" id="bDel">${I.trash}Удалить${nDel?' ('+nDel+')':''}</button>`;
+  document.getElementById('bDel').onclick=()=>{if(!st.picked.size)return toast('Сначала выберите карточки');bulk('del');};
+  const bd=document.getElementById('bDone');if(bd)bd.onclick=()=>{if(!st.picked.size)return toast('Сначала выберите карточки');bulk('done');};
+}
+const pickable=i=>st.list==='meas'?i.left==='del':true;
+const chipIcon={neutral:I.pencil,info:I.send,ok:I.check};
+function cardHTML(i){
+  const status=i.s?`<span class="stc ${i.s[0]}">${chipIcon[i.s[0]]}${i.s[1]}</span>`:'';
+  const top=`<div class="top"><div class="t">${i.t}</div>${status}</div>`;
+  const body=st.list==='tasks'?`<div class="done"><span class="circ" aria-hidden="true"></span><div style="flex:1">${top}<div class="m">${i.m}</div><div class="f">${i.f}</div></div></div>`
+    :`${top}<div class="m">${i.m}</div><div class="f">${i.f}</div>`;
+  const lead=i.lead==='done'?`<div class="acts lead" style="background:var(--st-ok)"><button class="act ok" data-a="done">${I.check}Готово</button></div>`:'';
+  const left=i.left==='del'?`<div class="acts trail" style="background:var(--st-bad)"><button class="act bad" data-a="del">${I.trash}Удалить</button></div>`:'';
+  const dim=st.sel&&!pickable(i)?' dimc':'';
+  return `<div class="row" data-id="${i.id}">${lead}${left}<div class="card ${st.picked.has(i.id)?'picked':''}${dim}" role="button" tabindex="0" aria-selected="${st.picked.has(i.id)}">${body}<span class="pick">${I.check}</span>${i.left==='del'?`<span class="hov" title="Удалить">${I.trash}</span>`:''}</div></div>`;
+}
+function render(){setView();header();bars();const l=document.getElementById('list');l.innerHTML=items.map(cardHTML).join('');l.querySelectorAll('.row').forEach(bind);}
+function toast(t,undo){const e=document.getElementById('toast');document.getElementById('toastText').textContent=t;document.getElementById('undo').style.display=undo?'':'none';st.undo=undo||null;e.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>e.classList.remove('on'),undo?5000:2600);}
+document.getElementById('undo').onclick=()=>{if(st.undo){st.undo();st.undo=null;document.getElementById('toast').classList.remove('on');}};
+function removeIds(ids,word){
+  const before=items.slice();
+  ids.forEach(id=>{const r=document.querySelector(`.row[data-id="${id}"]`);if(r){r.style.height=r.offsetHeight+'px';requestAnimationFrame(()=>r.classList.add('gone'));}});
+  setTimeout(()=>{items=items.filter(i=>!ids.includes(i.id));render();},220);
+  toast(word,()=>{items=before;render();});
+}
+function bulk(kind){
+  const pk=[...st.picked].map(id=>items.find(i=>i.id===id));
+  const ok=pk.filter(i=>kind==='del'?i.left==='del':i.lead==='done').map(i=>i.id),skip=pk.length-ok.length;
+  st.sel=false;st.picked.clear();render();
+  const w=kind==='del'?'Удалено: ':'Сделано: ';
+  removeIds(ok,w+ok.length+(skip?` · не ${kind==='del'?'удалено':'выполнено'} ${skip}: смета подписана`:''));
+}
+function closeOpen(except){if(st.open&&st.open!==except){const c=st.open.querySelector('.card');c.classList.add('anim');c.style.transform='';st.open.dataset.off='0';const r=st.open;setTimeout(()=>r.classList.remove('active'),350);st.open=null;}}
+// Б13: swipeDecide — те же правила, что в таблице «Числа жеста»
+const SLOP=10,RATIO=1.2,VEL=.5/*=500 пикс/с*/,RUBBER=.2,FULL=.6,EDGE=24,BTN=80,FULL_HYST=10;
+function bind(row){
+  const card=row.querySelector('.card'),id=row.dataset.id,it=items.find(i=>i.id===id);
+  const canL=it.left==='del',canR=it.lead==='done';
+  card.addEventListener('click',e=>{
+    if(Date.now()-st.lastGesture<350)return; // нажатие после жеста не открывает
+    if(st.sel){if(!pickable(it))return toast('Смета подписана — удалить нельзя');st.picked.has(id)?st.picked.delete(id):st.picked.add(id);render();return;}
+    if(st.open){closeOpen();return;}
+    if(e.target.closest('.hov')){removeIds([id],'Удалено');return;}
+    toast('Открыть: '+it.t);
+  });
+  row.querySelectorAll('.act').forEach(b=>b.onclick=()=>{if(b.dataset.fired)return;b.dataset.fired=1;removeIds([id],b.dataset.a==='del'?'Удалено':'Сделано');st.open=null;});
+  let x0,y0,t0,taken=false,dir=0,off=0,armed=false,lastX,lastT,v=0,startOff=0;
+  card.addEventListener('pointerdown',e=>{
+    if(st.sel)return;const rect=document.getElementById('dev').getBoundingClientRect();
+    if(e.clientX-rect.left<EDGE)return; // системный «назад»
+    x0=lastX=e.clientX;y0=e.clientY;t0=lastT=performance.now();taken=false;startOff=+row.dataset.off||0;card.setPointerCapture(e.pointerId);card.classList.remove('anim');
+  });
+  card.addEventListener('pointermove',e=>{
+    if(x0==null)return;const dx=e.clientX-x0,dy=e.clientY-y0;
+    if(!taken){if(Math.abs(dx)>=SLOP&&Math.abs(dx)>RATIO*Math.abs(dy)){taken=true;closeOpen(row);row.classList.add('active');}else if(Math.abs(dy)>=SLOP){x0=null;return;}else return;}
+    const now=performance.now();v=(e.clientX-lastX)/Math.max(1,now-lastT);lastX=e.clientX;lastT=now;
+    let raw=startOff+dx,W=card.offsetWidth;
+    if(raw<0&&!canL)raw=0; if(raw>0&&!canR)raw=0;
+    if(startOff<0&&raw>0)raw=0; if(startOff>0&&raw<0)raw=0; // через ноль — стоп
+    const lim=BTN;
+    if(raw<-lim)raw=-lim+(raw+lim)*RUBBER; // влево — без полного смахивания
+    if(raw>0&&canR){const fullAt=FULL*W;if(!armed&&raw>=fullAt){armed=true;navigator.vibrate&&navigator.vibrate(10);}else if(armed&&raw<fullAt-FULL_HYST)armed=false;}
+    row.querySelector('.acts.lead .act')?.classList.toggle('full',armed);
+    off=raw;card.style.transform=`translateX(${off}px)`;
+  });
+  const end=()=>{
+    if(x0==null)return;x0=null;if(!taken)return;st.lastGesture=Date.now();card.classList.add('anim');
+    if(armed){armed=false;removeIds([id],'Сделано');return;}
+    let target=0;
+    if(off<0){target=(-off>=BTN/2||v<=-VEL)&&!(v>=VEL)?-BTN:0;}
+    else if(off>0){target=(off>=BTN/2||v>=VEL)&&!(v<=-VEL)?BTN:0;}
+    card.style.transform=target?`translateX(${target}px)`:'';row.dataset.off=target;st.open=target?row:null;if(!target)setTimeout(()=>row.classList.remove('active'),350);
+  };
+  card.addEventListener('pointerup',end);card.addEventListener('pointercancel',end);
+}
+document.getElementById('list').addEventListener('scroll',()=>closeOpen());
+document.querySelectorAll('.ctl [data-k]').forEach(b=>b.onclick=()=>{st[b.dataset.k]=b.dataset.v;if(b.dataset.k==='list'){items=DATA[st.list].slice();st.sel=false;st.picked.clear();}render();});
+document.getElementById('reset').onclick=()=>{items=DATA[st.list].slice();st.sel=false;st.picked.clear();st.open=null;render();};
+items=DATA[st.list].slice();render();
+// Состояния для снимков (?state=…)
+const S=P.get('state');
+if(S==='swiped'){const r=document.querySelector('.row[data-id="'+items[0].id+'"]');r.classList.add('active');r.querySelector('.card').style.transform='translateX(-80px)';r.dataset.off=-80;st.open=r;}
+if(S==='full'){const r=document.querySelector('.row');r.classList.add('active');const c=r.querySelector('.card');c.style.transform=`translateX(${Math.round(c.offsetWidth*.66)}px)`;r.querySelector('.acts.lead .act').classList.add('full');}
+if(S==='select'){st.sel=true;st.picked.add(items[0].id);st.picked.add(items[1].id);render();}
+if(S==='toast'){toast('Удалено: 2',()=>{});}
+if(S==='empty'){st.sel=true;render();}
+</script>
+</body>
+</html>

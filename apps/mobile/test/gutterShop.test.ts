@@ -32,7 +32,8 @@ describe("shop drawings: the measurement as a drawing reads it", () => {
   });
   it("a downspout: its segment, the distance from the nearer end, what was measured — and nothing else", () => {
     expect(m.ds.map((d) => [d.tag, d.seg.tag, d.fromEndIn, d.dropIn])).toEqual([["DS1", "1-1", 24, 120], ["DS2", "1-4", 24, 120], ["DS3", "2-2", 24, 120]]);
-    expect(m.ds[0]!.offsets).toBeUndefined();
+    // #1973: offsets not measured are the engine's default — a rectangular one has none («—»), never «TBD»
+    expect(m.ds[0]!.offsets).toEqual([]);
   });
   it("the typed length wins over the sketch: the plan is laid out by the tape", () => {
     const d = { runs: [{ id: "a", a: [0, 0], b: [100, 0], lengthIn: 240, attrs: { profile: "k", size: "5", story: 1 } }, { id: "b", a: [100, 0], b: [100, 50], lengthIn: 120, attrs: { profile: "k", size: "5", story: 1 } }], downspouts: [] } as unknown as Drawing;
@@ -87,25 +88,25 @@ describe("shop drawings: the sheets of the reference job", () => {
     const all = set.drawings.slice(1).flatMap((s) => text(s.svg()));
     expect(all).toEqual(expect.arrayContaining(["End cap L to 90° outside miter", "126° bay miter to 126° bay miter", "Subtotal", "146'-7\"", "104'-9\"", "251'-4\"", "TOTAL"]));
     expect(all).toEqual(expect.arrayContaining(["Seg 1-1, 2'-0\" from end", "A ×2, B ×1", "B ×2", '4"', "10'-0\""]));
-    // DS1's offsets were not measured: «TBD», not a guess
-    expect(all).toContain("TBD");
+    // DS1's offsets were not measured: the engine's default for a rectangular one — none («—», #1973), not «TBD»
+    expect(all).not.toContain("TBD");
     expect(segWord(x.t, shopModel(REF).chains[1]!.segs[1]!)).toBe("90° outside miter to end cap L");
   });
   it("the material list is the estimate's: the engine's quantities, each with its basis", () => {
     const rows = materialRows(x, shopModel(REF));
     const qty = (key: string) => Number(x.parts.find((p) => p.key.startsWith(key))!.qty);
     const row = (re: RegExp) => rows.find((r) => re.test(r.item))!;
-    expect(row(/^Hanger/).qty).toBe(`${qty("hanger.")} ea`);
-    expect(row(/^Hanger/).basis).toBe('24" o.c. + ends');
-    expect(row(/Seamless coil/).qty).toBe(fi(qty("coil.") * 12));
-    expect(row(/Seamless coil/).basis).toBe("251'-4\" + 10 ft waste per gutter stock");
+    expect(row(/Hanger/).qty).toBe(`${qty("hanger.")} ea`);
+    expect(row(/Hanger/).basis).toBe('24" o.c. + ends');
+    expect(row(/^Coil /).qty).toBe(fi(qty("coil.") * 12));
+    expect(row(/^Coil /).basis).toBe("251'-4\" + 10 ft waste per gutter stock");
     expect(rows.slice(0, 4).map((r) => [r.tag, r.qty, r.basis])).toEqual([["A", "2 ea", "Plan tag A"], ["B", "2 ea", "Plan tag B"], ["C", "2 ea", "45° cut each side"], ["D", "2 ea", "27° cut each side"]]);
     // every material of the estimate is on the list, none twice
     expect(rows.length).toBe(x.parts.filter((p) => p.kind === "material" && Number(p.qty) > 0).length + 2);
   });
   it("the order: what is bought (the coil, the sticks), not the finished lengths; in a Letter page's shape", () => {
     const rows = orderRows(x, shopModel(REF));
-    expect(rows.some((r) => /Seamless coil/.test(r.item))).toBe(true);
+    expect(rows.some((r) => /^Coil /.test(r.item))).toBe(true);
     expect(rows.some((r) => r.basis === "Sum of segments" || r.basis === "Sum of drops")).toBe(false);
     // only what the engine says is bought (review of #1349): none of the estimate-only rows
     expect(rows.length).toBe(x.parts.filter((p) => p.kind === "material" && Number(p.qty) > 0 && p.use !== "estimate").length);
@@ -196,10 +197,12 @@ describe("shop drawings: a hard measurement", () => {
       expect(text(set.drawings[1]!.svg()).some((w) => /LEVEL 2|ЭТАЖ 2|NIVEL 2/.test(w)), lang).toBe(true);
     }
   });
-  it("what was not measured is «TBD»: elbows, offsets, a drop", () => {
+  it("#1973: elbows and offsets not measured are the engine's default (bent on site × 3), never «TBD»; a drop by the storey", () => {
     const x = ctxOf(HARD);
     const all = shopSheets(HARD, x).drawings.flatMap((s) => text(s.svg()));
-    expect(all.filter((w) => w === "TBD").length).toBeGreaterThanOrEqual(4);
+    expect(all.filter((w) => w === "TBD")).toEqual([]);
+    // DS2 and DS4: a plain rectangular one with no elbows of its own is bent on site, 3 bends (the engine's bendOf / fieldBendOf)
+    expect(all.filter((w) => w === "Bent on site × 3").length).toBe(2);
     // a downspout with no elbows measured is «—», not «TBD»: nothing is a measured answer
     const m = shopModel(HARD, x.rules.storyFt);
     expect(m.ds[2]!.elbows).toEqual([]);
@@ -237,7 +240,7 @@ describe("shop drawings: the check before saving", () => {
   it("a text's width is counted from Arial's metrics: Latin, Russian, the drawing's signs", () => {
     expect(textW("44'-6\"", 0.716)).toBeCloseTo((556 * 3 + 191 + 333 + 355) / 1000, 3);
     expect(textW("Ж", 0.716, true)).toBeGreaterThan(0.8);
-    expect(tFor("ru")("mod.gutters.shop.planTitle")).toBe("План водостоков");
+    expect(tFor("ru")("mod.gutters.shop.planTitle")).toBe("План gutters");
   });
 });
 
@@ -245,7 +248,7 @@ describe("#1355: the coil's basis says the waste the engine counts", () => {
   const basisOf = (wasteFt: number) => {
     const c = ctxOf(REF);
     const x2 = { ...c, rules: { ...c.rules, wasteFt } };
-    return materialRows(x2, shopModel(REF)).find((r) => /Seamless coil/.test(r.item))!.basis;
+    return materialRows(x2, shopModel(REF)).find((r) => /^Coil /.test(r.item))!.basis;
   };
   it("10 ft of waste for every gutter stock", () => expect(basisOf(10)).toBe("251'-4\" + 10 ft waste per gutter stock"));
   it("no waste: «no waste», not «+ 0 ft»", () => expect(basisOf(0)).toBe("251'-4\", no waste"));
@@ -253,8 +256,34 @@ describe("#1355: the coil's basis says the waste the engine counts", () => {
     // run 2 (104'-9") in white 6", run 1 (146'-7") stays black 5"
     const d = { ...REF, runs: REF.runs.map((r) => (r.id === "e" || r.id === "f" ? { ...r, attrs: { ...r.attrs, size: "6", color: "white" } } : r)) } as Drawing;
     const x2 = ctxOf(d);
-    const coils = materialRows(x2, shopModel(d)).filter((r) => /Seamless coil/.test(r.item));
+    const coils = materialRows(x2, shopModel(d)).filter((r) => /^Coil /.test(r.item));
     expect(coils.map((r) => [r.color, r.basis]).sort()).toEqual([["Black", "146'-7\" + 10 ft waste per gutter stock"], ["White", "104'-9\" + 10 ft waste per gutter stock"]]);
-    expect(orderRows(x2, shopModel(d)).filter((r) => /Seamless coil/.test(r.item)).map((r) => r.basis).sort()).toEqual(["104'-9\" + 10 ft waste per gutter stock", "146'-7\" + 10 ft waste per gutter stock"]);
+    expect(orderRows(x2, shopModel(d)).filter((r) => /^Coil /.test(r.item)).map((r) => r.basis).sort()).toEqual(["104'-9\" + 10 ft waste per gutter stock", "146'-7\" + 10 ft waste per gutter stock"]);
+  });
+});
+
+describe("#1973: the downspout schedule takes the engine's default elbows", () => {
+  const one = (o: Record<string, unknown>) => ({ runs: [{ id: "a", a: [0, 0], b: [240, 0], lengthIn: 240, attrs: { profile: "k", size: "5", material: "aluminum", gauge: ".027", color: "white", story: 1, mount: "fascia", hanger: "hidden" } }], downspouts: [{ id: "1", runId: "a", atIn: 12, size: "2x3", material: "aluminum", color: "white", bottom: { kind: "none" }, ...o }] }) as unknown as Drawing;
+  const ds = (o: Record<string, unknown>, rules?: object) => shopModel(one(o), 10, "cut", rules).ds[0]!;
+  it("a round one without elbows: 1 × 75° and a 2″ offset; a corrugated one: A × 3; a plain one: bent on site × 3", () => {
+    expect(ds({ shape: "round", size: "3" })).toMatchObject({ elbows: [{ style: "75", qty: 1 }], offsets: [{ lengthIn: 2, qty: 1 }] });
+    expect(ds({ shape: "round", size: "3" }).bends).toBeUndefined();
+    expect(ds({ shape: "rect", dsStyle: "corrugated" })).toMatchObject({ elbows: [{ style: "A", qty: 3 }], offsets: [] });
+    expect(ds({ shape: "rect", dsStyle: "plain" }).bends).toBe(3);
+    // its own elbows win; a rectangular one without a style (an old drawing) has none, as the engine
+    expect(ds({ shape: "rect", dsStyle: "plain", elbows: [{ style: "A", qty: 1 }] })).toMatchObject({ elbows: [{ style: "A", qty: 1 }] });
+    expect(ds({ shape: "rect", dsStyle: "plain", elbows: [{ style: "A", qty: 1 }] }).bends).toBeUndefined();
+    expect(ds({ shape: "rect" }).elbows).toEqual([]);
+  });
+  it("the company's rules: 2 bends on site, a round default of 45°", () => {
+    expect(ds({ shape: "rect", dsStyle: "plain" }, { fieldBends: 2 }).bends).toBe(2);
+    expect(ds({ shape: "round", size: "3" }, { defaultElbowsRound: [{ style: "45", qty: 1 }] }).elbows).toEqual([{ style: "45", qty: 1 }]);
+  });
+  it("the words on the sheet: «75 ×1» and 2\" for a round one, «Bent on site × 3» for a plain one", () => {
+    const words = (o: Record<string, unknown>) => shopSheets(one(o), ctxOf(one(o))).drawings.flatMap((s) => text(s.svg()));
+    const round = words({ shape: "round", size: "3" });
+    expect(round).toContain("75 ×1");
+    expect(round).toContain('2"');
+    expect(words({ shape: "rect", dsStyle: "plain" })).toContain("Bent on site × 3");
   });
 });

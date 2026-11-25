@@ -17,8 +17,8 @@ for (const v of ['--st-ok:', '--st-info:', '--st-warn:', '--st-bad:', '--st-ok-t
 
 const num = (name) => parseFloat((found.match(new RegExp(name + ':\\s*([\\d.]+)px')) || [])[1]);
 ok(num('--hit-min') >= 44, 'зона нажатия меньше 44');
-ok(num('--control-lg') <= 36, 'кнопка выше 36');
-ok(num('--control-md-phone') <= 36, 'видимая кнопка на телефоне выше 36');ok(num('--field-phone') >= 44, 'поле на телефоне ниже 44');ok(num('--fab') <= 36, 'плавающая кнопка выше 36');
+ok(num('--control-lg') <= 40, 'кнопка выше 40');
+ok(num('--control-md-phone') <= 40, 'видимая кнопка на телефоне выше 40');ok(num('--field-phone') >= 44, 'поле на телефоне ниже 44');ok(num('--fab') <= 52, 'плавающая кнопка выше 52');
 ok(num('--fs-micro') >= 10.5 && num('--fs-body') >= 13, 'шрифт меньше допустимого');
 ok(num('--tabbar-h') === 56 && num('--safe-bottom') === 34 && num('--statusbar-h') === 44, 'нижняя панель, безопасная зона или строка статуса изменены');
 
@@ -26,8 +26,8 @@ ok(!/data-style=|matte|soft/i.test(theme), 'в theme.css остались сти
 const icons = JSON.parse(rd('tokens/icons.json')).icons;
 ok(Object.keys(icons).length >= 30, 'иконок меньше 30');
 for (const k of ['phone', 'pin', 'message', 'sms', 'mail', 'camera', 'mic', 'calendar', 'home', 'search', 'bell', 'route', 'copy', 'undo', 'trash', 'invoice', 'clock', 'close']) ok(!!icons[k], `нет иконки ${k}`);
-ok(/Color\(hex: 0xFBFF00\)/.test(rd('tokens/Tokens.swift')), 'в Tokens.swift нет акцента');
-ok(/9CF0A8/.test(rd('tokens/Tokens.swift')) && /9CF0A8/i.test(status), 'цвет статуса в Tokens.swift не совпадает с status.css');
-ok(/CDD1DA/i.test(theme) && /CDD1DA/i.test(rd('tokens/Tokens.swift')), '--mut в Tokens.swift не совпадает с theme.css');
+ok(/Color\(hex: 0xE2C15E\)/.test(rd('tokens/Tokens.swift')), 'в Tokens.swift нет акцента');
+ok(/86D3A0/.test(rd('tokens/Tokens.swift')) && /86D3A0/i.test(status), 'цвет статуса в Tokens.swift не совпадает с status.css');
+ok(/B3B6BE/i.test(theme) && /B3B6BE/i.test(rd('tokens/Tokens.swift')), '--mut в Tokens.swift не совпадает с theme.css');
 console.log(`токены: проверено ${checked}, ошибок ${failed}`);
 process.exit(failed ? 1 : 0);

@@ -27,7 +27,7 @@ exports.run = async (h) => {
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await waitFor(async () => /^Пробный/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
+  await waitFor(async () => /^Без срока/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
   await h.go("/module/gutters/draw");
   await tid("draw-surface").waitFor({ timeout: 8000 });
   const b = await p.getByTestId("draw-surface").boundingBox();
@@ -54,7 +54,7 @@ exports.run = async (h) => {
   h.expect(words.includes("D1"), "the downspout «D1»");
   h.expect(words.some((w) => /^(наруж\.|внутр\.) \d+°$/.test(w)), "the corner with its angle");
   h.expect(words.some((w) => /^Масштаб: /.test(w)), "the scale in the title block");
-  h.expect(words.some((w) => /перед резкой промерьте/.test(w)), "«примерно» in the title block");
+  h.expect(!words.some((w) => /промер|перемер|можно резать|Рулетка/.test(w)), "nothing about how it was measured in the title block (#768, #1764)"); // i18n-old: ok — checks the old words are gone
   h.expect(!words.includes("R") && !words.some((w) => /^[AB]+O?\d*$/.test(w)), "none of the canvas's own marks");
   // a dimension line by every gutter: two grey extension lines each
   const ext = await sheet.locator('line[stroke-width="1"]').count();

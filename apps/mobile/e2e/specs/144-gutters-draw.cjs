@@ -6,7 +6,7 @@
  *   its end sticks to it (a corner); the downspout tool puts one on a run; the storey button leaves the picked run
  *   on its storey (#1608: «Эт» is for what is drawn next); «Удалить» → «Отменить» brings it back; «Назад»/«Вернуть»;
  * - П20.8: every toolbar cell has its word under it, none cut off (Желоб, Водосток, Свойства on the phone — «Выбрать» is gone, #687 — Эт 1 / Этаж, Назад, Вперёд);
- *   a picked tool says what to do («Нажмите на желоб, где водосток») until it is used; a downspout is «D1» on the canvas;
+ *   a picked tool says what to do («Установите downspout — нажмите на gutter») until it is used; a downspout is «D1» on the canvas;
  *   «Удалить» stands by what is picked; «Вернуть» and the toolbar's place are in «Ещё»;
  * - П20.9: after the first gutter «Дальше: поставьте водостоки» + «Водосток» turns the tool on;
  * - the toolbar goes bottom → under the right hand → under the left → bottom (from «Ещё»);
@@ -55,14 +55,16 @@ exports.run = async (h) => {
   await tid("draw-not-saved").waitFor({ timeout: 5000 });
   h.expect(/Модуль не подключён — рисунок не сохранится/.test(await tid("draw-not-saved").innerText()), "off: says nothing will be saved");
   await tid("draw-empty").waitFor({ timeout: 3000 });
+  // no «roof» on an empty grid (founder 16.11, #1819: «Про какую крышу он говорит?»)
+  h.expect(/gutter/.test(await tid("draw-empty").innerText()) && !/крыш|желоб/.test(await tid("draw-empty").innerText()), `the empty canvas: how to draw a gutter (#2186), no roof, no «желоб» (founder 16.11) (${await tid("draw-empty").innerText()})`); // i18n-old: ok — checks the old word is gone
   h.expect((await tid("draw-money").count()) === 0 && (await tid("draw-total").count()) === 0, "no total under the drawing (#700)");
   h.expect((await tid("tab-bar").count()) === 0, "no bottom bar over the canvas");
   await h.shot("empty");
   // #1274 (founder 12.11): the toolbar has pictures only — the words are the cells' names (screen reader), not drawn under them
   const bar = await tid("draw-toolbar").innerText();
   const phone = (h.layout?.width ?? 390) < 600;
-  h.expect(!/Желоб|Водосток|Назад|Вперёд|Этаж|Свойства/.test(bar), `no words on the toolbar (${bar.replace(/\n/g, " | ")})`);
-  for (const [id, w] of [["draw-tool-line", "Желоб"], ["draw-tool-ds", "Водосток"], ["draw-story", "Этаж"], ["draw-undo", "Назад"], ["draw-redo", "Вперёд"]]) {
+  h.expect(!/Gutter|Downspout|Назад|Вперёд|Этаж|Свойства/.test(bar), `no words on the toolbar (${bar.replace(/\n/g, " | ")})`);
+  for (const [id, w] of [["draw-tool-line", "Gutter"], ["draw-tool-ds", "Downspout"], ["draw-story", "Этаж"], ["draw-undo", "Назад"], ["draw-redo", "Вперёд"]]) {
     const name = (await tid(id).getByRole("button").getAttribute("aria-label")) || "";
     h.expect(name.includes(w), `${id} is named «${w}» (${name})`);
   }
@@ -81,7 +83,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await count("line")) === 1, "one run drawn");
   // one storey: the label is the length alone (no «· эт 1», founder 12.11, #1275)
   await waitFor(async () => (await labels()).some((t) => /^\d+(′|″)/.test(t) && !/эт/.test(t)), "its label: the length alone (one storey)");
-  h.expect(/Желоб · .* · эт 1/.test(await tid("draw-selected").innerText()), "the new run is picked");
+  h.expect(/^Gutter · [^·]+$/.test((await tid("draw-selected").innerText()).trim()), "the new run is picked: «Gutter · <length>», no «эт 1» with one storey (#1666)");
   h.expect((await tid("draw-empty").count()) === 0, "the empty hint is gone");
 
   // a second run from near its end: sticks to it → a corner, more $
@@ -94,7 +96,7 @@ exports.run = async (h) => {
   h.expect((await tid("draw-next").count()) === 0, "off: no «what next» — no estimate comes of it");
   await tid("draw-tool-ds").getByRole("button").click();
   await tid("draw-hint").waitFor({ timeout: 3000 });
-  h.expect(/Нажмите на желоб, где водосток/.test(await tid("draw-hint").innerText()), "the downspout tool says where to tap");
+  h.expect(/Установите downspout — нажмите на gutter/.test(await tid("draw-hint").innerText()), "the downspout tool says where to tap");
   await h.shot("hint");
   await p.mouse.click((x0 + x1) / 2, y + 3);
   await closeDsMenu(p);
@@ -108,11 +110,11 @@ exports.run = async (h) => {
   // a tap with «Желоб» picks (#687: no «Выбрать»)
   await tid("draw-tool-line").getByRole("button").click();
   await p.mouse.click(x0 + (x1 - x0) * 0.2, y);
-  await waitFor(async () => /Желоб/.test(await tid("draw-selected").innerText().catch(() => "")), "picked the run");
+  await waitFor(async () => /Gutter/.test(await tid("draw-selected").innerText().catch(() => "")), "picked the run");
   const before = new Set(await svg().locator("line:not([id^=halo])").evaluateAll((ls) => ls.map((l) => l.getAttribute("stroke"))));
   await tid("draw-story").click();
   await waitFor(async () => /2/.test(await tid("draw-story").innerText()), "the story button says 2");
-  h.expect(/эт 1/.test(await tid("draw-selected").innerText()), "the picked run stays on storey 1");
+  h.expect(!/эт/.test(await tid("draw-selected").innerText()), "the picked run stays on storey 1: still one storey, no «эт N» in the summary (#1666)");
   h.expect(!(await labels()).some((t) => / · эт \d$/.test(t)), "one storey on the drawing: no «эт N» on the lengths");
   const after = new Set(await svg().locator("line:not([id^=halo])").evaluateAll((ls) => ls.map((l) => l.getAttribute("stroke"))));
   h.expect(after.size === 1 && before.size === 1, `the picked run keeps its colour (${[...before]} → ${[...after]})`);
@@ -166,7 +168,7 @@ exports.run = async (h) => {
   // on: the 7-day trial → the drawing is kept on the phone in the database's shape and comes back
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await waitFor(async () => /^Пробный/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
+  await waitFor(async () => /^Без срока/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
   await tid("module-gutters-draw").getByRole("button").click();
   await p.waitForURL(/\/module\/gutters\/draw$/, { timeout: 5000 });
   await tid("draw-surface").waitFor({ timeout: 8000 });
@@ -179,10 +181,12 @@ exports.run = async (h) => {
   // the chip says what is picked while the new gutter is; the hint «Дальше: водостоки» is for nothing picked (#1274): a tap on the empty canvas
   await p.mouse.click(b2.x + b2.width * 0.5, b2.y + b2.height * 0.65);
   await tid("draw-next").waitFor({ timeout: 3000 });
-  h.expect(/Дальше: водостоки/.test(await tid("draw-next").innerText()), "what next: the downspouts (in the summary chip)");
+  h.expect(/Дальше: downspout/.test(await tid("draw-next").innerText()), "what next: the downspouts (in the summary chip)");
   await h.shot("next");
   await tid("draw-next").click(); // the hint is the chip: a tap puts the downspout tool on
   await tid("draw-hint").waitFor({ timeout: 3000 });
+  // it goes once the window of a second tap on the tool is over (#1563 PR B: the toolbar does not move under the second tap)
+  await p.waitForFunction(() => !document.querySelector('[data-testid="draw-next"]'), null, { timeout: 3000 });
   h.expect((await tid("draw-next").count()) === 0, "the downspout tool is on: no «what next» line");
   await p.mouse.click(b2.x + b2.width * 0.47, yy + 3);
   await waitFor(async () => (await count("circle")) === 1, "a downspout");

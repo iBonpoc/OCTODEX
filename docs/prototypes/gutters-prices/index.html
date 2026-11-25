@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gutters prices and settings</title>
+<!-- Прототип спеки 57 (#1914 «Цены и прайс», #1919 настройки Gutters из вкладки), ред. 2 — по ревью дизайна 16.11.
+     Значения — токены «Наряда» (как docs/prototypes/gutters-windows): кнопки 36 / зона 44, строки и поля 44, радиусы card 16 /
+     field 12, шрифт 15/13/11.5, один акцент acc — главное действие; цвет — только статус (значок + слово).
+     ?f=<кадр>&t=light|dark — один кадр (для снимков); без f — все «было → станет». Кадры: tab hub prices system missing
+     search transition item unit offer offer-sheet rules prices-1280. Цены — ТЕСТОВЫЕ (правило 9). -->
+<style>
+:root,[data-t=light]{--page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--solid:#F9F7F5;--bd:rgba(20,22,30,.1);--bdField:rgba(20,22,30,.5);--track:rgba(20,22,30,.09);--acc:#FBFF00;--onacc:#0B0C0F;--scrim:rgba(20,22,30,.25);--warnT:#944600;--warnF:rgba(240,140,30,.55);--okT:#176428;--infoT:#3647C4;--badT:#B4232A;--sh:0 1px 3px rgba(60,50,40,.12)}
+[data-t=dark]{--page:#111214;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--solid:#33363C;--bd:rgba(255,255,255,.14);--bdField:rgba(255,255,255,.5);--track:rgba(255,255,255,.14);--acc:#FBFF00;--onacc:#0B0C0F;--scrim:rgba(0,0,0,.5);--warnT:#FFB86B;--warnF:rgba(255,170,80,.6);--okT:#7EE29A;--infoT:#AAB6FF;--badT:#FF8A8F;--sh:0 1px 3px rgba(0,0,0,.4)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Onest,-apple-system,"SF Pro Text",system-ui,sans-serif;background:var(--page);color:var(--ink);font-size:15px;line-height:1.35}
+.wall{display:flex;flex-direction:column;gap:40px;padding:24px}
+.pair{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap}
+.pair h3{width:100%;font-size:17px}
+.cap{font-size:13px;color:var(--mut);margin:6px 2px;max-width:390px}
+.bef img{width:390px;border-radius:24px;display:block;box-shadow:var(--sh)}
+.scr{position:relative;width:390px;height:844px;overflow:hidden;background:var(--bg);color:var(--ink);border-radius:24px}
+.scr.w1280{width:1280px;height:800px}
+.single .scr{border-radius:0}
+.ic{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ic.s{width:16px;height:16px}
+.top{padding:14px 16px 0;font-size:13px;color:var(--mut)}
+.hd{display:flex;align-items:center;gap:8px;padding:10px 16px 4px}
+.hd h1{font-size:34px;font-weight:700;letter-spacing:-.01em}
+.hd h2{font-size:22px;font-weight:700}
+.hd .sp{flex:1}
+.back{display:flex;align-items:center;gap:4px;padding:8px 12px 0;font-size:17px}
+.sub{padding:0 16px;color:var(--mut);font-size:15px}
+.b36{height:36px;min-width:36px;border-radius:18px;background:var(--surf2);border:1px solid var(--bd);display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 12px;font-size:15px;font-weight:600;color:var(--ink);white-space:nowrap}
+.b36.round{padding:0;width:36px}
+.b36.acc{background:var(--acc);color:var(--onacc);border-color:transparent}
+.qm{width:22px;height:22px;border-radius:11px;border:1px solid var(--bd);background:var(--surf2);display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex:none}
+.stub{position:relative;outline:2px dashed var(--infoT);outline-offset:3px;border-radius:20px}
+.stubnote{position:absolute;right:12px;top:112px;background:var(--solid);border:1px dashed var(--infoT);color:var(--infoT);font-size:11.5px;font-weight:600;border-radius:8px;padding:4px 8px;z-index:3}
+.body{padding:12px 16px 120px;display:flex;flex-direction:column;gap:12px}
+.grp{background:var(--surf2);border:1px solid var(--bd);border-radius:16px;overflow:hidden}
+.row{display:flex;align-items:center;gap:12px;min-height:44px;padding:8px 14px;font-size:15px}
+.row+.row{border-top:1px solid var(--bd)}
+.row .k{flex:1;min-width:0}
+.row .k small{display:block;font-size:13px;color:var(--mut)}
+.row .v{color:var(--mut);display:flex;align-items:center;gap:4px;text-align:right;white-space:nowrap}
+.tile{width:30px;height:30px;border-radius:8px;background:var(--track);display:flex;align-items:center;justify-content:center;flex:none}
+.sect{font-size:17px;font-weight:600;margin:6px 2px -4px;display:flex;gap:8px;align-items:center}
+.sect .n{margin-left:auto}
+.st{font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:4px}
+.st.warn{color:var(--warnT)}.st.ok{color:var(--okT)}.st.info{color:var(--infoT)}
+.banner{border-radius:16px;border:1px solid var(--bd);background:var(--surf2);padding:12px 14px;display:flex;gap:10px;align-items:flex-start}
+.banner.warn{border-color:var(--warnF)}
+.banner .t{font-weight:600}.banner .m{font-size:13px;color:var(--mut);margin-top:2px}
+.banner .acts{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.sysrow{margin:4px 16px 0;height:44px;border-radius:12px;border:1px solid var(--bd);background:var(--surf2);display:flex;align-items:center;gap:8px;padding:0 12px}
+.sysrow .k{color:var(--mut);font-size:13px}
+.sysrow .v{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fbar{display:flex;gap:8px;padding:8px 16px 0;white-space:nowrap}
+.fchip{white-space:nowrap;flex:none;height:32px;border-radius:16px;border:1px solid var(--bd);display:inline-flex;align-items:center;gap:6px;padding:0 12px;font-size:13px;font-weight:600;color:var(--mut)}
+.fchip.on{background:var(--surf2);box-shadow:var(--sh);color:var(--ink)}
+.lc{background:var(--surf2);border:1px solid var(--bd);border-radius:16px;padding:10px 14px;display:flex;align-items:center;gap:12px;min-height:56px}
+.lc .k{flex:1;font-weight:600;min-width:0}
+.lc .k small{display:block;font-weight:400;font-size:13px;color:var(--mut)}
+.lc .v{font-weight:600;text-align:right;white-space:nowrap}
+.lc .v .u{font-weight:400;color:var(--mut)}
+.lc.sel{box-shadow:inset 3px 0 0 var(--ink)}
+.list{display:flex;flex-direction:column;gap:8px}
+.tabs{position:absolute;left:16px;right:16px;bottom:16px;height:64px;border-radius:32px;background:var(--solid);border:1px solid var(--bd);display:flex;align-items:center;justify-content:space-around;font-size:11.5px;color:var(--mut)}
+.tabs span{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border-radius:24px}
+.tabs span.on{background:var(--surf2);box-shadow:var(--sh);color:var(--ink);font-weight:600}
+.empty{margin:12px 16px;background:var(--surf2);border:1px solid var(--bd);border-radius:24px;padding:28px 20px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
+.scrim{position:absolute;inset:0;background:var(--scrim);z-index:3}
+.menu{position:absolute;background:var(--solid);border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.25);border:1px solid var(--bd);min-width:220px;overflow:hidden;z-index:6}
+.menu .mi{display:flex;align-items:center;gap:8px;min-height:44px;padding:0 14px;font-size:15px}
+.menu .mi+.mi,.menu .hdm+.mi{border-top:1px solid var(--bd)}
+.menu .mi .ck{width:16px}
+.menu .mi .r{margin-left:auto}
+.menu .hdm{font-size:13px;color:var(--mut);padding:8px 14px 6px}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--solid);border-radius:20px 20px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.2);z-index:4}
+.panel{position:absolute;right:0;top:0;bottom:0;width:444px;background:var(--solid);border-left:1px solid var(--bd);z-index:2}
+.grab{width:36px;height:4px;border-radius:2px;background:var(--track);margin:8px auto 0}
+.shd{display:flex;align-items:center;gap:8px;padding:10px 16px 6px}
+.shd h2{font-size:20px;font-weight:700;flex:1}
+.shd h2 small{display:block;font-size:13px;color:var(--mut);font-weight:500}
+.sbody{padding:4px 16px 34px;display:flex;flex-direction:column;gap:12px}
+.fl{display:flex;flex-direction:column;gap:4px}
+.fl label{font-size:13px;color:var(--mut);margin-left:2px}
+.inp{height:44px;border-radius:12px;border:1px solid var(--bdField);display:flex;align-items:center;padding:0 12px;gap:8px;font-size:17px}
+.inp .u{margin-left:auto;color:var(--mut);font-size:15px}
+.inp.sel{justify-content:space-between}
+.inp.sel span{color:var(--mut);display:flex;align-items:center;gap:4px}
+.total{display:flex;justify-content:space-between;align-items:baseline;padding:4px 2px;font-size:15px}
+.total b{font-size:20px}
+.stp{display:flex;align-items:center;gap:6px}
+.stp b{width:36px;height:36px;border-radius:18px;border:1px solid var(--bd);display:inline-flex;align-items:center;justify-content:center;font-weight:500}
+.stp span{min-width:56px;text-align:center;color:var(--mut)}
+.tog{width:42px;height:24px;border-radius:12px;background:var(--track);position:relative;flex:none}
+.tog::after{content:"";position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:9px;background:var(--solid);box-shadow:var(--sh)}
+.tog.on{background:var(--acc)}.tog.on::after{left:21px;background:var(--onacc)}
+.note{font-size:13px;color:var(--mut);margin:0 4px}
+.btnw{height:44px;border-radius:22px;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:15px;background:var(--surf2);border:1px solid var(--bd)}
+.btnw.acc{background:var(--acc);color:var(--onacc);border:0}
+.btnw.ghost{background:transparent;border:0}
+.search{height:36px;border-radius:12px;background:var(--track);display:flex;align-items:center;gap:6px;padding:0 10px;font-size:15px;margin:4px 16px 0}
+.tr{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mut)}
+.tr s{color:var(--mut)}
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+ <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+ <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+ <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+ <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+ <symbol id="i-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+ <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+ <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></symbol>
+ <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.01"/></symbol>
+ <symbol id="i-ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></symbol>
+ <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></symbol>
+ <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.2"/></symbol>
+ <symbol id="i-box" viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></symbol>
+ <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.5-.8 1.5-1.5 0-1-.8-1.3-.8-2.2 0-.9.7-1.6 1.6-1.6H17a4 4 0 0 0 4-4c0-4.7-4-8.7-9-8.7z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/></symbol>
+ <symbol id="i-calc" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"/></symbol>
+ <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 3c4 5 6 8 6 11a6 6 0 0 1-12 0c0-3 2-6 6-11z"/></symbol>
+ <symbol id="i-ruler" viewBox="0 0 24 24"><path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/></symbol>
+ <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></symbol>
+ <symbol id="i-clip" viewBox="0 0 24 24"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4h6v3H9zM9 11h6M9 15h4"/></symbol>
+ <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9H4z"/></symbol>
+ <symbol id="i-msg" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
+ <symbol id="i-ppl" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M16 5a3 3 0 0 1 0 6M18 15c2 .5 3 2 3 5"/></symbol>
+ <symbol id="i-more" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01"/></symbol>
+</svg>
+
+<!-- ===== shared pieces ===== -->
+<template id="p-tabs"><div class="tabs"><span><svg class="ic"><use href="#i-home"/></svg>Главная</span><span class="on"><svg class="ic"><use href="#i-clip"/></svg>Gutters</span><span><svg class="ic"><use href="#i-msg"/></svg>Сообщения</span><span><svg class="ic"><use href="#i-ppl"/></svg>Клиенты</span><span><svg class="ic"><use href="#i-more"/></svg>Ещё</span></div></template>
+<template id="p-pricehd">
+  <div class="top">GoRix v1.0.0 · 1923</div>
+  <div class="back"><svg class="ic"><use href="#i-back"/></svg>Настройки</div>
+  <div class="hd"><h2>Цены и прайс</h2><span class="qm">?</span><span class="sp"></span><span class="b36 round" aria-label="Поиск"><svg class="ic"><use href="#i-search"/></svg></span></div>
+  <div class="sysrow" style="height:auto;min-height:56px;padding:6px 12px"><span style="flex:1;display:flex;flex-direction:column"><span class="k">Система · последнего замера</span><span class="v" style="white-space:normal">K 5″ · Aluminum 0.027″ · Painted<br>Downspout 2×3 Plain</span></span><svg class="ic s"><use href="#i-down"/></svg></div>
+</template>
+<template id="p-list">
+   <div class="sect">Gutter</div>
+   <div class="list">
+    <div class="lc"><span class="k">5″ K-Style Gutter<small>Painted · 3 цвета</small></span><span class="v">$6.40 <span class="u">/ ft</span></span></div>
+    <div class="lc"><span class="k">Slip Joint<small>Painted · 3 цвета</small></span><span class="v">$3.10 <span class="u">/ ea</span></span></div>
+   </div>
+   <div class="sect">Corners & End Caps<span class="n st warn"><svg class="ic s"><use href="#i-warn"/></svg>Нет цены: 1</span></div>
+   <div class="list">
+    <div class="lc"><span class="k">End Cap<small>Left и Right — одна цена</small></span><span class="v">$2.80 <span class="u">/ ea</span></span></div>
+    <div class="lc"><span class="k">Box Miter, outside</span><span class="v">$14.00 <span class="u">/ ea</span></span></div>
+    <div class="lc"><span class="k">Box Miter, inside<small><span class="st warn"><svg class="ic s"><use href="#i-warn"/></svg>Нет цены</span></small></span><span class="v">— <span class="u">/ ea</span></span></div>
+   </div>
+   <div class="sect">Outlets<span class="n st warn"><svg class="ic s"><use href="#i-warn"/></svg>Нет цены: 1</span></div>
+   <div class="list">
+    <div class="lc"><span class="k">Outlet 2×3</span><span class="v">$4.50 <span class="u">/ ea</span></span></div>
+    <div class="lc"><span class="k">End Section with Outlet, 5″ × 2×3<small><span class="st warn"><svg class="ic s"><use href="#i-warn"/></svg>Нет цены</span></small></span><span class="v">— <span class="u">/ ea</span></span></div>
+   </div>
+   <div class="sect">Downspout Bottom</div>
+   <div class="list">
+    <div class="lc"><span class="k">Downspout Extension 2×3</span><span class="v">$9.00 <span class="u">/ ea</span></span></div>
+   </div>
+</template>
+
+<!-- ===== frames ===== -->
+<template id="t-tab">
+ <div class="scr">
+  <div class="top">GoRix v1.0.0 · 1923</div>
+  <div class="hd"><h1>Gutters</h1><span class="sp"></span>
+   <span class="stub"><span class="b36 round" aria-label="Настройки Gutters"><svg class="ic"><use href="#i-gear"/></svg></span></span>
+   <span class="b36 round"><svg class="ic"><use href="#i-plus"/></svg></span></div>
+  <div class="stubnote">место входа — по правилу #1920</div>
+  
+  <div class="empty"><div class="tile" style="width:52px;height:52px;border-radius:26px"><svg class="ic"><use href="#i-clip"/></svg></div><b>Замеров пока нет</b><span class="note">Нарисуйте gutters — всё сохраняется само, черновик без клиента тоже.</span><span class="b36 acc"><svg class="ic"><use href="#i-plus"/></svg>Новый замер</span></div>
+  <slot data-p="p-tabs"></slot>
+ </div>
+</template>
+
+<template id="t-hub">
+ <div class="scr">
+  <div class="top">GoRix v1.0.0 · 1923</div>
+  <div class="back"><svg class="ic"><use href="#i-back"/></svg>Gutters</div>
+  <div class="hd"><h2>Настройки Gutters</h2><span class="qm">?</span></div>
+  <div class="body">
+   <div class="grp">
+    <div class="row"><span class="tile"><svg class="ic"><use href="#i-tag"/></svg></span><span class="k">Цены и прайс<small>Все системы из «Что ставим»</small></span><span class="v"><span class="st warn"><svg class="ic s"><use href="#i-warn"/></svg>Нет цены: 31</span><svg class="ic"><use href="#i-chev"/></svg></span></div>
+   </div>
+   <div class="grp">
+    <div class="row"><span class="tile"><svg class="ic"><use href="#i-box"/></svg></span><span class="k">Что ставим<small>K, Fascia · 5″, 6″ · Aluminum, Steel</small></span><span class="v"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+    <div class="row"><span class="tile"><svg class="ic"><use href="#i-palette"/></svg></span><span class="k">Цвета</span><span class="v">24 цвета<svg class="ic"><use href="#i-chev"/></svg></span></div>
+    <div class="row"><span class="tile"><svg class="ic"><use href="#i-calc"/></svg></span><span class="k">Правила расчёта<small>Hangers, углы, запас, downspout</small></span><span class="v"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+    <div class="row"><span class="tile"><svg class="ic"><use href="#i-drop"/></svg></span><span class="k">Supplies<small>Заклёпки, герметик, краска, саморезы</small></span><span class="v"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+    <div class="row"><span class="tile"><svg class="ic"><use href="#i-ruler"/></svg></span><span class="k">Замер<small>Формат длины, свес крыши</small></span><span class="v">ft-in<svg class="ic"><use href="#i-chev"/></svg></span></div>
+   </div>
+   <div class="note">Размер, цвет и форма выбираются в каждом замере — умолчаний компании нет. Этот же экран открывается из «Компания → Модули → Gutters».</div>
+  </div>
+ </div>
+</template>
+
+<template id="t-prices">
+ <div class="scr">
+  <slot data-p="p-pricehd"></slot>
+  <div class="fbar"><span class="fchip on">Все · 42</span><span class="fchip">Без цены · 7</span></div>
+  <div class="body" style="padding-top:10px">
+   <div class="banner warn"><span class="st warn"><svg class="ic"><use href="#i-warn"/></svg></span><div style="flex:1"><div class="t">Нет цены: 7 из 42</div><div class="m">Без цены деталь идёт в смету за $0 с пометкой «нет цены».</div><div class="acts"><span class="b36">Создать 7 с примерной ценой</span></div></div></div>
+   <slot data-p="p-list"></slot>
+  </div>
+ </div>
+</template>
+
+<template id="t-system">
+ <div class="scr">
+  <slot data-p="p-pricehd"></slot>
+  <div class="scrim"></div>
+  <div class="sheet"><div class="grab"></div>
+   <div class="shd"><h2>Система</h2><span class="b36 round" aria-label="Закрыть"><svg class="ic"><use href="#i-x"/></svg></span></div>
+   <div class="sbody">
+    <div class="note">Цены показываются для этой системы. Выбор сразу меняет список.</div>
+    <div class="grp">
+     <div class="row"><span class="k">Gutter</span><span class="v">K 5″<svg class="ic s"><use href="#i-down"/></svg></span></div>
+     <div class="row"><span class="k">Материал gutter</span><span class="v">Aluminum 0.027″<svg class="ic s"><use href="#i-down"/></svg></span></div>
+     <div class="row"><span class="k">Отделка</span><span class="v">Painted<svg class="ic s"><use href="#i-down"/></svg></span></div>
+     <div class="row"><span class="k">Downspout</span><span class="v">2×3 Plain<svg class="ic s"><use href="#i-down"/></svg></span></div>
+     <div class="row"><span class="k">Материал downspout</span><span class="v">Как у gutter<svg class="ic s"><use href="#i-down"/></svg></span></div>
+    </div>
+   </div>
+  </div>
+  <div class="menu" style="right:16px;top:372px;width:300px">
+   <div class="mi"><svg class="ic ck"><use href="#i-check"/></svg>K 5″<span class="r st warn"><svg class="ic s"><use href="#i-warn"/></svg>нет цены: 7</span></div>
+   <div class="mi"><span class="ck"></span>K 6″<span class="r st warn"><svg class="ic s"><use href="#i-warn"/></svg>нет цены: 12</span></div>
+   <div class="mi"><span class="ck"></span>Fascia 6″<span class="r st ok"><svg class="ic s"><use href="#i-ok"/></svg>все цены</span></div>
+   <div class="mi">Изменить «Что ставим»…</div>
+  </div>
+ </div>
+</template>
+
+<template id="t-missing">
+ <div class="scr">
+  <slot data-p="p-pricehd"></slot>
+  <div class="fbar"><span class="fchip">Все · 42</span><span class="fchip on">Без цены · 7</span></div>
+  <div class="body" style="padding-top:10px">
+   <div class="sect">Corners & End Caps</div>
+   <div class="list"><div class="lc"><span class="k">Box Miter, inside<small><span class="st warn"><svg class="ic s"><use href="#i-warn"/></svg>Нет цены</span></small></span><span class="v">— <span class="u">/ ea</span></span></div></div>
+   <div class="sect">Outlets</div>
+   <div class="list"><div class="lc"><span class="k">End Section with Outlet, 5″ × 2×3<small><span class="st warn"><svg class="ic s"><use href="#i-warn"/></svg>Нет цены</span></small></span><span class="v">— <span class="u">/ ea</span></span></div></div>
+   <div class="sect">Adapters</div>
+   <div class="list">
+    <div class="lc"><span class="k">Conductor Head 2×3<small><span class="st warn"><svg class="ic s"><use href="#i-warn"/></svg>Нет цены</span></small></span><span class="v">— <span class="u">/ ea</span></span></div>
+    <div class="lc"><span class="k">Diverter 2×3<small><span class="st warn"><svg class="ic s"><use href="#i-warn"/></svg>Нет цены</span></small></span><span class="v">— <span class="u">/ ea</span></span></div>
+   </div>
+   <div class="sect">Downspout Fasteners</div>
+   <div class="list"><div class="lc"><span class="k">Sickle Hook 2×3<small><span class="st warn"><svg class="ic s"><use href="#i-warn"/></svg>Нет цены</span></small></span><span class="v">— <span class="u">/ ea</span></span></div></div>
+  </div>
+ </div>
+</template>
+
+<template id="t-search">
+ <div class="scr">
+  <div class="top">GoRix v1.0.0 · 1923</div>
+  <div class="hd"><h2>Цены и прайс</h2><span class="sp"></span><span class="btnw ghost" style="height:36px">Отмена</span></div>
+  <div class="search"><svg class="ic s"><use href="#i-search"/></svg>elbow</div>
+  <div class="body" style="padding-top:10px">
+   <div class="note">Во всех системах из «Что ставим»</div>
+   <div class="list">
+    <div class="lc"><span class="k">Elbow A 2×3<small>Plain · Aluminum 0.027″</small></span><span class="v">$3.90 <span class="u">/ ea</span></span></div>
+    <div class="lc"><span class="k">Elbow B 2×3<small>Plain · Aluminum 0.027″</small></span><span class="v">$3.90 <span class="u">/ ea</span></span></div>
+    <div class="lc"><span class="k">Elbow A 3×4<small>Corrugated · Aluminum 0.032″</small></span><span class="v">$5.20 <span class="u">/ ea</span></span></div>
+    <div class="lc"><span class="k">Elbow 45° Round 3″<small>Steel 26 ga<br><span class="st warn"><svg class="ic s"><use href="#i-warn"/></svg>Нет цены</span></small></span><span class="v">— <span class="u">/ ea</span></span></div>
+   </div>
+  </div>
+ </div>
+</template>
+
+<template id="t-transition">
+ <div class="scr">
+  <div class="top">GoRix v1.0.0 · 1923</div>
+  <div class="back"><svg class="ic"><use href="#i-back"/></svg>Настройки</div>
+  <div class="hd"><h2>Одна цена на все цвета</h2><span class="qm">?</span></div>
+  <div class="body">
+   <div class="note" style="font-size:15px">Цвет больше не влияет на цену. Один раз сведём цены цветов одной детали в одну — дальше она будет общей.</div>
+   <div class="sect">Разные цены у цветов: 2</div>
+   <div class="grp">
+    <div class="row"><span class="k">Box Miter, outside<small>White $14.00 · Brown $12.00<br>Предложена $14.00 — её меняли последней (12.11)</small></span><span class="v" style="color:var(--ink)">$14.00<svg class="ic s"><use href="#i-down"/></svg></span></div>
+    <div class="row"><span class="k">5″ K-Style Gutter<small>White $6.40 · Black $6.80 · Brown $6.40<br>Предложена $6.40 — у двух цветов из трёх</small></span><span class="v" style="color:var(--ink)">$6.40<svg class="ic s"><use href="#i-down"/></svg></span></div>
+   </div>
+   <div class="note">Цену выбираете вы: у каждой детали написано, почему предложена эта. Нажмите, чтобы выбрать другую.</div>
+   <div class="sect">Уже одна цена: 18 деталей</div>
+   <div class="grp"><div class="row"><span class="k">End Cap, Slip Joint, Outlet 2×3 и ещё 15</span><span class="v"><svg class="ic"><use href="#i-chev"/></svg></span></div></div>
+   <div class="btnw acc">Сделать одну цену</div>
+   <div class="note">Отправленные сметы не меняются. Черновики возьмут новую цену при «Обновить смету».</div>
+  </div>
+ </div>
+</template>
+
+<template id="t-item">
+ <div class="scr">
+  <slot data-p="p-pricehd"></slot>
+  <div class="scrim"></div>
+  <div class="sheet"><div class="grab"></div>
+   <div class="shd"><h2>Downspout Extension<small>2×3 · Downspout Bottom</small></h2><span class="b36 round" aria-label="Закрыть"><svg class="ic"><use href="#i-x"/></svg></span></div>
+   <div class="sbody">
+    <div class="fl"><label>Единица</label><div class="inp sel">штука (ea)<span><svg class="ic s"><use href="#i-down"/></svg></span></div></div>
+    <div class="fl"><label>Себестоимость за штуку</label><div class="inp">$ 6.00</div></div>
+    <div class="fl"><label>Наценка</label><div class="inp">50<span class="u">%</span></div></div>
+    <div class="total"><span>Цена клиенту</span><b>$9.00 / ea</b></div>
+    <div class="note">Цвета: White, Brown, Black — цена одна на все цвета. Цены в прототипе — образцы.</div>
+    <div class="btnw acc">Сохранить цену</div>
+    <div class="btnw ghost">Открыть в прайсе</div>
+   </div>
+  </div>
+ </div>
+</template>
+
+<template id="t-unit">
+ <div class="scr">
+  <slot data-p="p-pricehd"></slot>
+  <div class="scrim"></div>
+  <div class="sheet"><div class="grab"></div>
+   <div class="shd"><h2>Downspout Extension<small>2×3 · Downspout Bottom</small></h2><span class="b36 round" aria-label="Закрыть"><svg class="ic"><use href="#i-x"/></svg></span></div>
+   <div class="sbody">
+    <div class="fl"><label>Единица</label><div class="inp sel">фут (ft)<span><svg class="ic s"><use href="#i-down"/></svg></span></div></div>
+    <div class="banner"><span class="st info"><svg class="ic"><use href="#i-info"/></svg></span><div><div class="t">Extension будет считаться в футах</div><div class="m">В замере у downspout bottom появится длина (обычно 4′). Отправленные сметы не меняются. Было: $9.00 за штуку.</div></div></div>
+    <div class="fl"><label>Себестоимость за фут</label><div class="inp">$ 1.50</div></div>
+    <div class="fl"><label>Наценка</label><div class="inp">50<span class="u">%</span></div></div>
+    <div class="total"><span>Цена клиенту</span><b>$2.25 / ft</b></div>
+    <div class="btnw acc">Считать в футах</div>
+    <div class="btnw ghost">Отмена</div>
+   </div>
+  </div>
+ </div>
+</template>
+
+<template id="t-offer">
+ <div class="scr">
+  <div class="top">GoRix v1.0.0 · 1923</div>
+  <div class="back"><svg class="ic"><use href="#i-back"/></svg>Настройки</div>
+  <div class="hd"><h2>Что ставим</h2><span class="qm">?</span></div>
+  <div class="body">
+   <div class="sect">Gutter <span class="qm">?</span></div>
+   <div class="grp">
+    <div class="row"><span class="k">Профили</span><span class="v">K, Fascia<svg class="ic"><use href="#i-chev"/></svg></span></div>
+    <div class="row"><span class="k">Размеры K</span><span class="v">5″, 6″<svg class="ic"><use href="#i-chev"/></svg></span></div>
+    <div class="row"><span class="k">Размеры Fascia</span><span class="v">6″<svg class="ic"><use href="#i-chev"/></svg></span></div>
+    <div class="row"><span class="k">Gutter Fasteners</span><span class="v">Hidden, Hidden HD<svg class="ic"><use href="#i-chev"/></svg></span></div>
+   </div>
+   <div class="sect">Материал <span class="qm">?</span></div>
+   <div class="grp">
+    <div class="row"><span class="k">Материалы</span><span class="v">Aluminum, Steel<svg class="ic"><use href="#i-chev"/></svg></span></div>
+    <div class="row"><span class="k">Толщина Aluminum</span><span class="v">0.027″, 0.032″<svg class="ic"><use href="#i-chev"/></svg></span></div>
+    <div class="row"><span class="k">Толщина Steel</span><span class="v">26 ga<svg class="ic"><use href="#i-chev"/></svg></span></div>
+   </div>
+   <div class="sect">Downspout <span class="qm">?</span></div>
+   <div class="grp">
+    <div class="row"><span class="k">Размеры downspout, прямоугольный</span><span class="v">2×3, 3×4<svg class="ic"><use href="#i-chev"/></svg></span></div>
+    <div class="row"><span class="k">Размеры downspout, круглый</span><span class="v">3″<svg class="ic"><use href="#i-chev"/></svg></span></div>
+    <div class="row"><span class="k">Вид</span><span class="v">Plain, Corrugated<svg class="ic"><use href="#i-chev"/></svg></span></div>
+    <div class="row"><span class="k">Downspout Bottom</span><span class="v">Extension, Splash Block<svg class="ic"><use href="#i-chev"/></svg></span></div>
+    <div class="row"><span class="k">Extension считать</span><span class="v">штука<svg class="ic s"><use href="#i-down"/></svg></span></div>
+    <div class="row"><span class="k">Downspout Fasteners</span><span class="v">Strap, Sickle Hook<svg class="ic"><use href="#i-chev"/></svg></span></div>
+   </div>
+  </div>
+ </div>
+</template>
+
+<template id="t-offer-sheet">
+ <div class="scr">
+  <div class="top">GoRix v1.0.0 · 1923</div>
+  <div class="hd"><h2>Что ставим</h2></div>
+  <div class="scrim"></div>
+  <div class="sheet"><div class="grab"></div>
+   <div class="shd"><h2>Профили</h2><span class="b36 round" aria-label="Закрыть"><svg class="ic"><use href="#i-x"/></svg></span></div>
+   <div class="sbody">
+    <div class="note">Какие профили gutter мастер видит в замере. Отметка сохраняется сразу.</div>
+    <div class="grp">
+     <div class="row"><span class="k">K-Style</span><svg class="ic"><use href="#i-check"/></svg></div>
+     <div class="row"><span class="k">Half Round</span></div>
+     <div class="row"><span class="k">Fascia</span><svg class="ic"><use href="#i-check"/></svg></div>
+     <div class="row"><span class="k">Box</span></div>
+     <div class="row"><span class="k">Euro</span></div>
+    </div>
+   </div>
+  </div>
+ </div>
+</template>
+
+<template id="t-rules">
+ <div class="scr">
+  <div class="top">GoRix v1.0.0 · 1923</div>
+  <div class="back"><svg class="ic"><use href="#i-back"/></svg>Настройки</div>
+  <div class="hd"><h2>Правила расчёта</h2><span class="qm">?</span></div>
+  <div class="body">
+   <div class="sect">Gutter <span class="qm">?</span></div>
+   <div class="grp">
+    <div class="row"><span class="k">Бесшовный</span><span class="tog on"></span></div>
+    <div class="row"><span class="k">Угол</span><span class="v">Режем на месте<svg class="ic s"><use href="#i-down"/></svg></span></div>
+    <div class="row"><span class="k">Шаг hangers</span><span class="stp"><b>−</b><span>24″</span><b>+</b></span></div>
+    <div class="row"><span class="k">Лишний hanger у угла</span><span class="tog on"></span></div>
+    <div class="row"><span class="k">Запас, один участок</span><span class="stp"><b>−</b><span>3 ft</span><b>+</b></span></div>
+    <div class="row"><span class="k">Запас, два и больше</span><span class="stp"><b>−</b><span>6 ft</span><b>+</b></span></div>
+   </div>
+   <div class="sect">Дом <span class="qm">?</span></div>
+   <div class="grp"><div class="row"><span class="k">Высота этажа<small>Для длины downspout и цены работы по этажам</small></span><span class="stp"><b>−</b><span>10 ft</span><b>+</b></span></div></div>
+   <div class="sect">Downspout <span class="qm">?</span></div>
+   <div class="grp">
+    <div class="row"><span class="k">Длина хлыста</span><span class="v">10 ft<svg class="ic s"><use href="#i-down"/></svg></span></div>
+    <div class="row"><span class="k">Обрезки в другой downspout</span><span class="tog on"></span></div>
+    <div class="row"><span class="k">Добавлять downspout автоматически</span><span class="tog"></span></div>
+   </div>
+   <div class="sect">Дождь <span class="qm">?</span></div>
+   <div class="grp"><div class="row"><span class="k">Расчёт дождя</span><span class="v">SMACNA<svg class="ic s"><use href="#i-down"/></svg></span></div></div>
+  </div>
+ </div>
+</template>
+
+<template id="t-prices-1280">
+ <div class="scr w1280">
+  <div style="position:absolute;left:0;top:0;bottom:0;right:444px;overflow:hidden">
+   <div class="top">GoRix v1.0.0 · 1923</div>
+   <div class="back"><svg class="ic"><use href="#i-back"/></svg>Настройки</div>
+   <div class="hd"><h2>Цены и прайс</h2><span class="qm">?</span><span class="sp"></span><span class="search" style="width:280px;margin:0"><svg class="ic s"><use href="#i-search"/></svg>Поиск деталей</span></div>
+   <div style="display:flex;gap:8px;padding:4px 16px 0;align-items:center">
+    <span class="sysrow" style="margin:0;width:200px"><span class="k">Gutter</span><span class="v">K 5″</span><svg class="ic s"><use href="#i-down"/></svg></span>
+    <span class="sysrow" style="margin:0;width:260px"><span class="k">Материал</span><span class="v">Aluminum 0.027″</span><svg class="ic s"><use href="#i-down"/></svg></span>
+    <span class="sysrow" style="margin:0;width:200px"><span class="k">Downspout</span><span class="v">2×3 Plain</span><svg class="ic s"><use href="#i-down"/></svg></span>
+    <span class="fchip on">Все · 42</span><span class="fchip">Без цены · 7</span>
+   </div>
+   <div class="body" style="padding-top:12px;max-width:640px">
+    <div class="banner warn" style="align-items:center"><span class="st warn"><svg class="ic"><use href="#i-warn"/></svg></span><div style="flex:1"><div class="t">Нет цены: 7 из 42</div><div class="m">Без цены деталь идёт в смету за $0 с пометкой «нет цены».</div></div><span class="b36">Создать 7 с примерной ценой</span></div>
+    <div style="display:flex;padding:0 14px;font-size:13px;color:var(--mut)"><span style="flex:1">Деталь</span><span>Цена</span></div>
+    <div class="sect">Gutter</div>
+    <div class="list"><div class="lc"><span class="k">5″ K-Style Gutter<small>Painted · 3 цвета</small></span><span class="v">$6.40 <span class="u">/ ft</span></span></div></div>
+    <div class="sect">Downspout Bottom</div>
+    <div class="list"><div class="lc sel"><span class="k">Downspout Extension 2×3</span><span class="v">$9.00 <span class="u">/ ea</span></span></div><div class="lc"><span class="k">Splash Block</span><span class="v">$11.00 <span class="u">/ ea</span></span></div></div>
+   </div>
+  </div>
+  <div class="panel">
+   <div class="shd" style="padding-top:20px"><h2>Downspout Extension<small>2×3 · Downspout Bottom</small></h2><span class="b36 round" aria-label="Закрыть"><svg class="ic"><use href="#i-x"/></svg></span></div>
+   <div class="sbody">
+    <div class="fl"><label>Единица</label><div class="inp sel">штука (ea)<span><svg class="ic s"><use href="#i-down"/></svg></span></div></div>
+    <div class="fl"><label>Себестоимость за штуку</label><div class="inp">$ 6.00</div></div>
+    <div class="fl"><label>Наценка</label><div class="inp">50<span class="u">%</span></div></div>
+    <div class="total"><span>Цена клиенту</span><b>$9.00 / ea</b></div>
+    <div class="btnw acc">Сохранить цену</div>
+   </div>
+  </div>
+ </div>
+</template>
+
+<div id="root"></div>
+<script>
+const PAIRS = [
+  { h: "1. Вкладка Gutters — вход в настройки", before: ["before-tab-1.png", "before-modules.png"], after: "tab",
+    cap: "Было: настроек во вкладке нет, путь — «Ещё → Компания → Модули». Станет: один вход в шапке. Место и значок — по правилу #1920 (Экраны №9); здесь временное место." },
+  { h: "2. Настройки Gutters — оглавление", before: ["before-settings-1.png", "before-settings-2.png"], after: "hub",
+    cap: "Было: одна длинная страница из 8 групп. Станет: оглавление как «Настройки» iPhone; первая строка — «Цены и прайс» с числом деталей без цены по всем системам." },
+  { h: "3. Цены и прайс", before: ["before-prices-1.png", "before-prices-3.png"], after: "prices",
+    cap: "Было: одна система (пробный замер), строка на цвет. Станет: строка «Система» вверху, фильтр «Без цены», одна строка на деталь, «Нет цены» у раздела." },
+  { h: "4. Выбор системы", before: [], after: "system", cap: "Шторка: пять строк-меню с подписями. В меню у каждого значения — число деталей без цены; в конце — «Изменить «Что ставим»…»." },
+  { h: "5. Только без цены", before: [], after: "missing", cap: "Фильтр в одну строку (спека 56): только детали без цены этой системы." },
+  { h: "6. Поиск", before: [], after: "search", cap: "Поиск — по всем системам; система — строкой под названием." },
+  { h: "7. Одна цена на все цвета — один раз", before: [], after: "transition", cap: "Разовый переход (#1913): разные цены цветов сводятся в одну, «было → станет». Дальше цену держит база." },
+  { h: "8. Цена позиции", before: [], after: "item", cap: "Поля с подписями; итог «Цена клиенту»; «Сохранить цену»." },
+  { h: "9. Единица: extension в футах", before: [], after: "unit", cap: "Сначала единица, потом объяснение, потом цена за фут теми же полями. Старая позиция «за штуку» остаётся для старых смет." },
+  { h: "10. Что ставим", before: ["before-settings-3.png", "before-settings-4.png"], after: "offer", cap: "Было: 16 рядов чипов. Станет: строки-итоги, выбор — в шторке с галочками." },
+  { h: "11. Выбор нескольких", before: [], after: "offer-sheet", cap: "Шторка с галочками справа (спека 56, стр. 7), крестик в шапке; отметка сохраняется сразу." },
+  { h: "12. Правила расчёта", before: ["before-settings-6.png", "before-settings-7.png"], after: "rules", cap: "Одно значение — меню у строки; да/нет — переключатель; числа — степпер." },
+  { h: "13. Тёмная тема", before: [], after: "prices", t: "dark", cap: "Тот же экран в тёмной теме." },
+  { h: "14. Цена позиции, тёмная", before: [], after: "item", t: "dark", cap: "" },
+  { h: "15. 1280", before: [], after: "prices-1280", cap: "Широкий экран: система — три меню в ряд, позиция — панель справа 444 (DS Б1); открытая карточка — полоса у левого края." },
+];
+const q = new URLSearchParams(location.search);
+const f = q.get("f"), theme = q.get("t") || "light";
+const root = document.getElementById("root");
+const fill = (node) => { node.querySelectorAll("slot[data-p]").forEach((s) => s.replaceWith(document.getElementById(s.dataset.p).content.cloneNode(true))); return node; };
+const frame = (id, t) => { const n = fill(document.getElementById("t-" + id).content.cloneNode(true)); const w = document.createElement("div"); w.setAttribute("data-t", t); w.appendChild(n); return w; };
+if (f) { document.body.classList.add("single"); root.appendChild(frame(f, theme)); }
+else {
+  const wall = document.createElement("div"); wall.className = "wall";
+  for (const p of PAIRS) {
+    const d = document.createElement("div"); d.className = "pair";
+    d.innerHTML = `<h3>${p.h}</h3>` + p.before.map((b) => `<div class="bef"><div class="cap">Было</div><img src="before/${b}" alt="было"></div>`).join("");
+    const a = document.createElement("div"); a.innerHTML = `<div class="cap">Станет</div>`; a.appendChild(frame(p.after, p.t || "light"));
+    d.appendChild(a);
+    if (p.cap) { const c = document.createElement("div"); c.className = "cap"; c.style.width = "100%"; c.textContent = p.cap; d.appendChild(c); }
+    wall.appendChild(d);
+  }
+  root.appendChild(wall);
+}
+</script>
+</body></html>
