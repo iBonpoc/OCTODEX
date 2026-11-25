@@ -711,7 +711,7 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
   };
   /** MAP §13 п.1: no countdown — the press IS the confirmation; the send is in the queue at once (rule 6), the toast's «Вернуть» takes a draft's send back (rule 5) */
   const go = async (how: "sms" | "email" | "copy") => {
-    if (await send(how)) setForce(false);
+    if (await send(how)) close(); // sent: the sheet goes (a second press would send again), the toast says it and offers «Вернуть»
   };
   const mainHow: "sms" | "email" | null = customer?.phone ? "sms" : customer?.email ? "email" : null;
   return (

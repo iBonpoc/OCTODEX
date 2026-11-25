@@ -32,6 +32,7 @@ exports.run = async (h) => {
   h.expect((await est())?.status === "sent", "the press sends at once — no countdown to wait out");
   h.expect((await tid("send-undo").count()) === 0, "no countdown button (send-undo)");
   h.expect((await tid("send-going").count()) === 0, "no «Отправляется…» line");
-  h.expect(!/\d/.test(await tid("send-sms").innerText().catch(() => "")), "the main button carries no seconds");
+    await tid("send-sms").waitFor({ state: "detached", timeout: 5000 });
+  h.expect((await tid("send-sms").count()) === 0, "the sheet is gone after the send (no second press by mistake)");
   await h.shot("sent");
 };
