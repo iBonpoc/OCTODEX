@@ -367,7 +367,7 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
   const signSecond: MainAction | undefined = signHere && !onSign && canCountersign(db, db.me) ? { label: t("proto.est.second.signHere"), onPress: () => setSection("sign"), testID: "est-sign-here" } : undefined;
   // MAP «S»: the second button is «Позвонить» — the client's own phone, only when there is one; nothing goes out by itself
   const phone = customer?.phone;
-  const callSecond: MainAction | undefined = canSend && e.status === "sent" && !onSign && phone ? { label: t("proto.visit.call"), onPress: () => void Linking.openURL(`tel:${phone}`).catch(() => undefined), testID: "est-call" } : undefined;
+  const callSecond: MainAction | undefined = canSend && e.status === "sent" && !onSign && phone ? { label: t("proto.visit.call"), onPress: () => void Linking.openURL(`tel:${phone.replace(/[^\d+]/g, "")}`).catch(() => undefined), testID: "est-call" } : undefined;
   const second = callSecond ?? signSecond;
 
   const who = customer?.name ?? "";

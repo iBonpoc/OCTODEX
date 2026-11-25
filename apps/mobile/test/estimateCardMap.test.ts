@@ -22,7 +22,7 @@ describe("карточка сметы: значки под шапкой (#2640)"
   });
   it("«Позвонить» — второе действие отправленной сметы (по DS объекта — в «⋯»), звонок — tel:", () => {
     expect(src).toContain('testID: "est-call"');
-    expect(src).toContain("tel:${phone}");
+    expect(src).toContain("tel:${phone.replace(");
     expect(src).toContain("const second = callSecond ?? signSecond");
   });
 });
