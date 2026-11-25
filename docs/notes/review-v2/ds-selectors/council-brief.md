@@ -3,11 +3,11 @@
 Задача основателя (23.11 ~07:20 UTC, дословно по журналу): селекторы в приложении разнобойные — цвет у gutter и downspout выглядит по-разному; выпадающее меню «Низ» некрасивое; непонятно, чем меню «Низ» отличается от «Крепление к стене». Нужны правила дизайн-системы: какие типы селекторов, шторок снизу, меню, списков бывают, когда какой, иерархия. Это последние правки окон Gutters перед кодом.
 
 Материалы (читать):
-- Правила сейчас: `/Users/yuriisurhuchov/GoRix/wt-2412/design/naryad-ds/DESIGN-SYSTEM.md` §9 (А1–А16, особенно вводная, А2, А2а, А3), §10 Б1, Б6, §20 (таблица выбора).
-- Инвентаризация мест в коде: `/Users/yuriisurhuchov/GoRix/notes/review-v2/ds-selectors/inventory.md`.
-- Ресёрч (HIG, Material 3, iOS-приложения, Jobber/HCP): `/Users/yuriisurhuchov/GoRix/notes/review-v2/ds-selectors/research.md`.
-- Макет окон Gutters круг 4.2 (как сейчас, на что жалуется основатель): `/Users/yuriisurhuchov/GoRix/notes/review-v2/q10-gutters-menu/v42/img/` — `now-menu-bottom-*` (меню «Низ»), `now-menu-wall-*` (шторка «Крепление к стене»), `now-ds-color-set2-*` (цвет у downspout), `now-g-ready-*` (цвет у gutter, рулетка), `now-menu-color-*`, `now-menu-angle-*`, `now-menu-top-*`, `now-menu-mount-g-*`.
-- Пробы круга 4.3: `/Users/yuriisurhuchov/GoRix/notes/review-v2/q10-gutters-menu/v43/try/`:
+- Правила сейчас: `~/GoRix/wt-2412/design/naryad-ds/DESIGN-SYSTEM.md` §9 (А1–А16, особенно вводная, А2, А2а, А3), §10 Б1, Б6, §20 (таблица выбора).
+- Инвентаризация мест в коде: `~/GoRix/notes/review-v2/ds-selectors/inventory.md`.
+- Ресёрч (HIG, Material 3, iOS-приложения, Jobber/HCP): `~/GoRix/notes/review-v2/ds-selectors/research.md`.
+- Макет окон Gutters круг 4.2 (как сейчас, на что жалуется основатель): `~/GoRix/notes/review-v2/q10-gutters-menu/v42/img/` — `now-menu-bottom-*` (меню «Низ»), `now-menu-wall-*` (шторка «Крепление к стене»), `now-ds-color-set2-*` (цвет у downspout), `now-g-ready-*` (цвет у gutter, рулетка), `now-menu-color-*`, `now-menu-angle-*`, `now-menu-top-*`, `now-menu-mount-g-*`.
+- Пробы круга 4.3: `~/GoRix/notes/review-v2/q10-gutters-menu/v43/try/`:
   - меню «Низ»: `menu-bottom-a.png` (А — компактное меню у поля, как pop-up iOS 26: ширина 240, справа под полем, тень, без заголовка, галочка слева), `menu-bottom-b.png` (Б — шторка-список снизу, как «Крепление к стене»), `menu-bottom-c.png` (В — список раскрывается на месте под полем);
   - метка рулетки: `g-ready.png` (A — красная стрелка с выемкой сверху идёт по выбранному делению до ряда цифр, выбранная дробь — жёлтая плашка на месте цифры, соседние цифры убраны), `g-ready-b.png` (B — красная линия во всю высоту с выемками сверху и снизу, соседние цифры бледнеют, плашка под рулеткой).
 

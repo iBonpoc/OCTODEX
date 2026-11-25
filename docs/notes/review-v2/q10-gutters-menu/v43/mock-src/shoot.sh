@@ -1,7 +1,7 @@
 #!/bin/zsh
 # usage: shoot.sh [theme...] — круг 4.3 (frames list below); result -> v42/img (names now-<name>-<theme>-390.png)
-cd /Users/yuriisurhuchov/GoRix/wt-2412
-OUT=/Users/yuriisurhuchov/GoRix/notes/review-v2/q10-gutters-menu/v43/img
+cd ~/GoRix/wt-2412
+OUT=~/GoRix/notes/review-v2/q10-gutters-menu/v43/img
 FR=(
 "g-new:g-new:0:g-new" "g-new-s:g-new:9999:g-new-more"
 "g-ready:g-ready:0:g-ready" "g-ready-tapeA:g-ready-tapeA:0:g-ready-tapeA"

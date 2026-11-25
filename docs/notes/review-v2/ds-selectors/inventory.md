@@ -1,6 +1,6 @@
 # Инвентаризация селекторов GoRix (выбор значения)
 
-Источник: `/Users/yuriisurhuchov/GoRix/wt-2412/apps/mobile/src` (коммит a2435d4, в чекауте лежат чужие правки: `ui/overlays.tsx`, `ui/templates/screenHeader.tsx` и временный `app/mockq10.tsx`).
+Источник: `~/GoRix/wt-2412/apps/mobile/src` (коммит a2435d4, в чекауте лежат чужие правки: `ui/overlays.tsx`, `ui/templates/screenHeader.tsx` и временный `app/mockq10.tsx`).
 Счёт: `src/app`, `src/features`, `src/modules`, без витрины `features/showcase` и без `app/mockq10.tsx` (временный мок #2412, не в коммите; там ещё 12 SelectField, 4 Stepper и т.д.).
 Правила: DS §9 (А1–А16), §10, §20 в `design/naryad-ds/DESIGN-SYSTEM.md`.
 
@@ -93,7 +93,7 @@
 
 ## 5. Снимки (витрина «Дизайн-система», тёмная, 390)
 
-Папка `inv-img/`. Снято из чекаута `/Users/yuriisurhuchov/GoRix/design-2344` (коммит e651de1, ветка docs/leader22-handover), потому что `wt-2412` не собирается: `app/mockq10.tsx` — синтаксическая ошибка (`Identifier 'text' has already been declared`, строка 124). Правок в репозитории не делалось. Сервер: `GORIX_SHOT_PORT=8095`.
+Папка `inv-img/`. Снято из чекаута `~/GoRix/design-2344` (коммит e651de1, ветка docs/leader22-handover), потому что `wt-2412` не собирается: `app/mockq10.tsx` — синтаксическая ошибка (`Identifier 'text' has already been declared`, строка 124). Правок в репозитории не делалось. Сервер: `GORIX_SHOT_PORT=8095`.
 
 | Файл | Что |
 |---|---|
