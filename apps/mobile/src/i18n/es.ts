@@ -4685,6 +4685,13 @@ export const es: Dict = {
   "pay.online.err.busy": "Demasiados intentos. Inténtelo de nuevo en {n} min.",
   // spec 35 §4д п.10 («Деньги и отчёты» №7)
   "est.rej.signatureLost": "La firma del cliente no se guardó en el servidor",
+  "est.rej.choice.open": "¿Qué hago con mis cambios?",
+  "est.rej.choice.title": "El cliente firmó la versión del {date}",
+  "est.rej.choice.text": "Tus cambios esperaron la red y no se guardaron: la firma se mantiene. La copia es un borrador nuevo con tus cambios, sin vínculo con la medición.",
+  "est.rej.choice.copy": "Hacer una copia",
+  "est.rej.choice.reset": "Descartar",
+  "est.rej.choice.later": "Más tarde",
+  "est.rej.choice.copied": "Copia lista: un borrador",
   "est.rej.signedMeanwhile": "El cliente firmó el presupuesto mientras sus cambios esperaban la red: los cambios no se guardaron",
   "est.rej.signedMeanwhileWhy": "La firma del cliente se mantiene. Para cambiar el presupuesto, ábralo y elija «No firmar — cambiar»: el cliente tendrá que firmar de nuevo.",
   // visit payment refused by the server (#857 О1) — the tech hands it to the office

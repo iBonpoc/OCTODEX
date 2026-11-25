@@ -4685,6 +4685,13 @@ export const en: Dict = {
   "pay.online.err.busy": "Too many tries. Please try again in {n} min.",
   // spec 35 §4д п.10 («Деньги и отчёты» №7)
   "est.rej.signatureLost": "The client's signature was not saved on the server",
+  "est.rej.choice.open": "What about my edits?",
+  "est.rej.choice.title": "The client signed the version of {date}",
+  "est.rej.choice.text": "Your edits waited for the network and were not saved — the signature stays. The copy is a new draft with your edits, not tied to a measurement.",
+  "est.rej.choice.copy": "Make a copy",
+  "est.rej.choice.reset": "Discard",
+  "est.rej.choice.later": "Later",
+  "est.rej.choice.copied": "Copy ready — a draft",
   "est.rej.signedMeanwhile": "The client signed the estimate while your edits waited for the network — the edits were not saved",
   "est.rej.signedMeanwhileWhy": "The client's signature stays. To change the estimate, open it and choose “Don't sign — change it”: the client will have to sign again.",
   // visit payment refused by the server (#857 О1) — the tech hands it to the office
