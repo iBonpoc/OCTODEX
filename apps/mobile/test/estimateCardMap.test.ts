@@ -13,6 +13,8 @@ const row = src.slice(src.indexOf("const iconActions: IconRowItem[] = ["), src.i
 describe("карточка сметы: значки под шапкой (#2640)", () => {
   it("значков, что шлют сразу (SMS, почта, ссылка), нет", () => {
     for (const bad of ["est-act-sms", "est-act-email", "quick.go"]) expect(src, bad).not.toContain(bad);
+    // the old «Ссылка» icon (it sent at once) — exact: «est-act-copy-link» is the menu item of #2652
+    expect(src).not.toMatch(/est-act-copy(?!-link)/);
   });
   it("ряд: Изменить · PDF · Показать клиенту; «Показать клиенту» одно — в «⋯» его нет", () => {
     expect(row.indexOf("est-act-edit")).toBeLessThan(row.indexOf("est-act-pdf"));
