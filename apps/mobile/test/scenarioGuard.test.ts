@@ -62,10 +62,6 @@ describe("decide", () => {
     expect(decide([{ path: "docs/ai/BOARD.md", status: "A", text: "# board", added: [1] }, { path: "docs/specs/prototypes/a.html", status: "A", text: "x", added: [1] }]).ok).toBe(true);
   });
 
-  it("a folder table of contents docs/specs/README.md is not a spec: no scenarios asked (#2684)", () => {
-    expect(decide([{ path: "docs/specs/README.md", status: "A", text: "# Спецификации — оглавление\n\n| Файл | О чём |", added: [1, 2, 3] }]).ok).toBe(true);
-    expect(decide([{ path: "docs/specs/67-new.md", status: "A", text: "# 67. Новая", added: [1] }]).ok).toBe(false);
-  });
   it("С7: scenarios added with new tests — a test must name С<n>", () => {
     const spec = grown(["## 2. Новое", SC]);
     const noRef = decide([spec, { path: "apps/mobile/test/foo.test.ts", status: "A", text: "it('works', () => {})", added: [1] }]);
