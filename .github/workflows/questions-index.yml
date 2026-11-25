@@ -1,0 +1,37 @@
+# The founder's questions index (#2521, the founder's word of 25.11.2026): the body of #2521 is rebuilt from the issues
+# labelled «вопрос» (scripts/questionsIndex.cjs) on every change of such an issue and once a day (the 14-day «answered» list
+# moves on by itself). No key: only the run's own token, issues: write; contents: read is for the checkout. Commits nothing.
+# The token's own edit of #2521 starts no new run (GitHub does not start workflows on events made by GITHUB_TOKEN).
+name: Questions index
+on:
+  issues:
+    types: [opened, closed, reopened, labeled, unlabeled, edited]
+  issue_comment:
+    types: [created, edited]
+  schedule:
+    - cron: '17 11 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: questions-index
+  cancel-in-progress: false
+jobs:
+  index:
+    name: Rebuild the questions index
+    # only a question's own change (or the label «вопрос» just taken off); the daily and a manual run always
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
+      contains(github.event.issue.labels.*.name, 'вопрос') || github.event.label.name == 'вопрос'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts
+      - name: Rewrite the body of #2521
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/questionsIndex.cjs
