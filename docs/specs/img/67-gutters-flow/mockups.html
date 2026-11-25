@@ -67,7 +67,7 @@
   .seg div.on { background: var(--surf3); color: var(--ink); }
   /* ViewTabs (DS §9 А1п): без дорожки, невыбранная без подложки mut, выбранная — заливка, ink 600; пилюля 30 */
   .vt { margin: 16px -16px 0; padding: 0 16px; display: flex; gap: 8px; overflow: hidden; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--tab-fade-w)), transparent); }
-  .vt div { height: var(--tab-h); padding: 0 12px; border-radius: 15px; display: inline-flex; align-items: center; gap: 5px; font-size: 15px; font-weight: 500; color: var(--mut); white-space: nowrap; flex: none; }
+  .vt div { height: var(--tab-h); padding: 0 12px; border-radius: 15px; display: inline-flex; align-items: center; gap: 5px; font-size: 15px; font-weight: 500; color: var(--mut); white-space: nowrap; flex: none; font-weight: 400; }
   .vt div.on { background: var(--surf3); color: var(--ink); font-weight: 600; }
   .vt small { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--mut); }
   /* NowCard «Сейчас» (DS §12.12): surf, радиус карточки, рамка acc (светлая — accEdge), кикер 12 прописными, имя 17, строка 13, кнопка 40 во всю ширину */
@@ -78,6 +78,17 @@
   .now .tt { font-size: 17px; font-weight: 700; margin-top: 8px; }
   .now .ln { font-size: 13px; font-weight: 500; color: var(--mut); margin-top: 2px; }
   .now .btn { margin-top: 12px; }
+  /* «● Демо» (DS §12.13 «Где версия и „Демо“»): плашка 20, warn — точка + слово */
+  .demo { height: 20px; border-radius: 10px; padding: 0 8px 0 6px; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; background: var(--st-warn); color: var(--st-warn-text); }
+  .demo i { width: 6px; height: 6px; border-radius: 3px; background: currentColor; }
+  .rootline { margin-top: 6px; font-size: 13px; }
+  .parent { font-size: 15px; font-weight: 600; color: var(--ink); }
+  .rule { height: 1px; background: var(--off); margin-top: 12px; }
+  .kind { font-size: 15px; font-weight: 600; margin-top: 10px; }
+  .hst { display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; color: var(--mut); margin-top: 2px; }
+  .go { font-size: 13px; font-weight: 600; color: var(--mut); }
+  .cap { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--mut); margin: 16px 4px -8px; }
+  .sheet .edit.btn { position: absolute; right: 20px; top: 20px; }
   .money { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink); }
   /* сравнение */
   .cmp { display: flex; gap: 28px; padding: 24px; background: var(--page); width: max-content; }
@@ -104,7 +115,7 @@ const I = {
   gut: '<path d="M4 4h12l4 4v12H4z"/><path d="M8 12h8M8 16h5"/>', clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
   doc: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>', crew: '<path d="M4 18c0-3 3-5 8-5s8 2 8 5"/><path d="M7 11a5 5 0 0 1 10 0z"/>',
   ruler: '<path d="M3 15 15 3l6 6L9 21z"/><path d="m7 11 2 2M10 8l2 2M13 5l2 2"/>', box: '<path d="M4 7 12 3l8 4v10l-8 4-8-4z"/><path d="M4 7l8 4 8-4M12 11v10"/>',
-  camera: '<rect x="3" y="7" width="18" height="13" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M9 7l1.5-3h3L15 7"/>', list: '<path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/>',
+  arrowLeft: '<path d="M19 12H5M11 6l-6 6 6 6"/>', camera: '<rect x="3" y="7" width="18" height="13" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M9 7l1.5-3h3L15 7"/>', list: '<path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/>',
   dot: '<circle cx="12" cy="12" r="7" stroke-dasharray="2.5 2.5"/>', check: '<path d="m5 12 5 5 9-10"/>', send: '<path d="M4 12 20 4l-6 16-3-7z"/>',
 };
 const ic = (n, s) => svg(I[n], s);
@@ -114,78 +125,94 @@ const big = `<svg width="300" height="190" viewBox="0 0 300 190" fill="none" str
 
 const tabbar = (on) => `<div class="tabbar">${[["home", "Главная"], ["gut", "Gutters"], ["users", "Клиенты"], ["money", "Деньги"], ["leads", "Лиды"]]
   .map(([i, l]) => `<div class="${l === on ? "on" : ""}">${ic(i, 22)}${l}${l === "Лиды" ? '<span class="badge">2</span>' : ""}</div>`).join("")}</div>`;
-const head = (title, opts = {}) => `<div class="top">${opts.back ? `<div class="back">${ic("back", 22)}${opts.back}</div>` : `<div class="round" style="background:var(--tint)"><b style="font-size:15px">AP</b></div>`}
-  <div class="row">${opts.plus === false ? "" : `<div class="round">${ic("plus")}</div>`}<div class="round">${ic("more")}</div></div></div>
-  <h1>${title}<span class="help">?</span></h1>${opts.sub ? `<div class="sub">${opts.sub}</div>` : ""}`;
+const demo = `<span class="demo"><i></i>Демо</span>`;
+// шапка корня (DS §12.13 root, «Обвязка списка»): аватар; справа поиск значком · «＋» · «⋯»; строка 13 с «● Демо»; заголовок 30/600 и «?»
+const headRoot = (title) => `<div class="top"><div class="round" style="background:var(--tint)"><b style="font-size:15px">AP</b></div>
+  <div class="row"><div class="round">${ic("search")}</div><div class="round">${ic("plus")}</div><div class="round">${ic("more")}</div></div></div>
+  <div class="rootline">${demo}</div><h1 style="margin-top:4px">${title}<span class="help">?</span></h1>`;
+// шапка объекта (DS §12.13 object): «←» 40 (arrowLeft) и слово родителя, «● Демо» рядом; справа значок камеры · «⋯»; имя 30/600 · черта ·
+// «что это · метка» 15/600 · статус значком и словом 13/500 mut без плашки (HeadStatus) · адрес
+const headObj = (name, status) => `<div class="top"><div class="row"><div class="round">${ic("arrowLeft", 22)}</div><span class="parent">Gutters</span>${demo}</div>
+  <div class="row"><div class="round">${ic("camera")}</div><div class="round">${ic("more")}</div></div></div>
+  <h1>${name}<span class="help">?</span></h1><div class="rule"></div>
+  <div class="kind">Замер · Gutters</div><div class="hst">${status}</div>
+  <div class="meta"><span>${ic("pin", 14)}</span><span>2207 Ocean Park Blvd</span></div>`;
+const hst = (icon, word) => `${ic(icon, 14)}<span>${word}</span>`;
 const row = (lead, n, m, right, chev = true) => `<div class="gr">${lead}<div class="t"><div class="n">${n}</div>${m ? `<div class="m">${m}</div>` : ""}</div>${right ? `<div class="r">${right}</div>` : ""}${chev ? `<span class="chev">${ic("chev", 18)}</span>` : ""}</div>`;
 const group = (title, rows, link) => `<div class="gh"><b>${title}</b>${link ? `<span>${link}</span>` : ""}</div><div class="card">${rows.join("")}</div>`;
 const pill = (tone, icon, word) => `<span class="pill ${tone}">${ic(icon, 13)}${word}</span>`;
 const th = `<div class="thumb">${mini()}</div>`;
-const what = "3 gutter · 91 ft · 3 downspout";
+// одни слова везде (мелочь ревью): «Gutter 91 ft · Downspout 3»
+const what = "Gutter 91 ft · Downspout 3";
+const rLinda = row(th, "Linda Alvarez", "2207 Ocean Park Blvd", `${pill("neutral", "dot", "Без сметы")}<span>сегодня</span>`);
+const rMark = row(th, "Mark Chen", "1520 Elm St", `${pill("info", "doc", "Отправлена")}<span>вчера</span>`);
+const rRosa = row(th, "Rosa Diaz", "88 Pine Ave", `${pill("ok", "check", "Подписана")}<span>22 нояб.</span>`);
+const rDraft = row(th, "Без клиента", what, "<span>сегодня</span>");
 
 const S = {};
-// В1 «Два списка» (слово основателя #1753): Черновики и Замеры, строки GroupRow, без чипов-фильтров
-S["v1-list"] = () => `<div class="phone"><div class="scroll">${head("Gutters")}
-  <div class="search">${ic("search", 18)}Клиент, адрес, телефон</div>
-  ${group("Черновики · 1", [row(th, "Без клиента", what, "сегодня")], "")}
-  ${group("Замеры · 3", [
-    row(th, "Linda Alvarez", "2207 Ocean Park Blvd", `${pill("neutral", "dot", "Без сметы")}<span>сегодня</span>`),
-    row(th, "Mark Chen", "1520 Elm St", `${pill("info", "doc", "Отправлена")}<span>вчера</span>`),
-    row(th, "Rosa Diaz", "88 Pine Ave", `${pill("ok", "check", "Подписана")}<span>22 нояб.</span>`),
-  ])}
+// В1 «Два списка»: Черновики и Замеры строками GroupRow
+S["v1-list"] = () => `<div class="phone"><div class="scroll">${headRoot("Gutters")}
+  ${group("Черновики · 1", [rDraft])}
+  ${group("Замеры · 3", [rLinda, rMark, rRosa])}
   </div>${tabbar("Gutters")}</div>`;
-// В2 «Сначала — что замерить»: кому нужен замер сегодня, черновики, последние; «Все замеры ›»
-S["v2-list"] = () => `<div class="phone"><div class="scroll">${head("Gutters")}
-  <div class="search">${ic("search", 18)}Клиент, адрес, телефон</div>
+// В2 «Сначала — что замерить» (выбор основателя #2517): кому нужен замер сегодня — вся строка начинает замер (одна цель, «нет кнопки в кнопке»)
+S["v2-list"] = () => `<div class="phone"><div class="scroll">${headRoot("Gutters")}
   ${group("Ждут замера · 2", [
-    row(`<div class="ico">${ic("clock")}</div>`, "Mark Chen · 10:00", "1520 Elm St · выезд сегодня", `<span class="act">Замерить</span>`, false),
-    row(`<div class="ico">${ic("leads")}</div>`, "Лид: Ann Park", "41 Oak Rd · без замера 2 дня", `<span class="act">Замерить</span>`, false),
+    row(`<div class="ico">${ic("clock")}</div>`, "Tom Reyes · 10:00", "73 Birch Ln", `<span class="go">Замерить</span>`),
+    row(`<div class="ico">${ic("leads")}</div>`, "Лид: Ann Park", "41 Oak Rd", `<span class="go">Замерить</span>`),
   ])}
-  ${group("Черновики · 1", [row(th, "Без клиента", what, "сегодня")])}
-  ${group("Последние", [
-    row(th, "Linda Alvarez", "2207 Ocean Park Blvd", pill("neutral", "dot", "Без сметы")),
-    row(th, "Rosa Diaz", "88 Pine Ave", pill("ok", "check", "Подписана")),
-  ], "Все замеры ›")}
+  ${group("Черновики · 1", [rDraft])}
+  ${group("Последние", [rLinda, rMark, rRosa], "Все замеры ›")}
   </div>${tabbar("Gutters")}</div>`;
-const cardTop = (title) => `${head(title, { back: "Gutters", plus: false })}
-  <div class="meta"><span>${ic("pin", 14)}</span><span>2207 Ocean Park Blvd</span></div>
-  <div class="now"><div class="k"><span>Сейчас</span>${pill("neutral", "dot", "Без сметы")}</div>
-    <div class="tt">Чертёж готов — сделайте смету</div><div class="ln">Примерно $2,113.67 по прайсу · точная сумма — в смете</div>
-    <span class="btn pri wide">${ic("plus", 18)}Сделать смету</span></div>
-  <div class="sheet"><div class="paper">${big}</div><div class="edit round sm">${ic("pencil", 16)}</div></div>`;
+const sheet = `<div class="sheet"><div class="paper">${big}</div><span class="edit btn sec">${ic("pencil", 16)}Править</span></div>`;
+const trio = `<div class="trio"><div><b>91 ft</b><span>Gutter</span></div><div><b>2</b><span>Углы</span></div><div><b>3</b><span>Downspout</span></div></div>`;
+// «Сейчас» (NowCard, DS §12.12): статус уже в шапке — здесь его нет; сумма с центами (решение основателя #2672)
+const now = (title, line, btn) => `<div class="now"><div class="k"><span>Сейчас</span></div><div class="tt">${title}</div><div class="ln">${line}</div>${btn}</div>`;
+const nowOffice = now("Чертёж готов — сделайте смету", "Примерно $2,113.67 по прайсу · точная сумма — в смете", `<span class="btn pri wide">${ic("plus", 18)}Сделать смету</span>`);
 const docs = group("Документы", [
   row(`<div class="ico">${ic("doc")}</div>`, "Клиенту", "Чертёж без цен · EN", ""),
   row(`<div class="ico">${ic("crew")}</div>`, "Бригаде", "Раскрой и детали · RU", ""),
   row(`<div class="ico">${ic("ruler")}</div>`, "Рабочие чертежи", "План, ведомости · 11×17", ""),
   row(`<div class="ico">${ic("box")}</div>`, "Заказ материалов", "Поставщику · EN", ""),
 ]);
-// карточка В1: шапка объекта (DS §12.3), чертёж, тройка цифр, итог, группы; главное — в ActionBar
-S["v1-card"] = () => `<div class="phone"><div class="scroll">${cardTop("Linda Alvarez")}
-  <div class="trio"><div><b>91 ft</b><span>Gutter · 3</span></div><div><b>2</b><span>Угла</span></div><div><b>3</b><span>Downspout</span></div></div>
+const noEst = hst("dot", "Без сметы");
+// карточка В1 «Одна лента»: шапка, «Сейчас», чертёж, три цифры, состав, документы
+S["v1-card"] = () => `<div class="phone"><div class="scroll">${headObj("Linda Alvarez", noEst)}${nowOffice}${sheet}${trio}
   ${group("Состав", [row(`<div class="ico">${ic("list")}</div>`, "Линии, углы, водостоки", "Подробно — отдельным экраном", "")])}
   ${docs}
-  </div>
-  ${tabbar("Gutters")}</div>`;
-// карточка В2: те же блоки, но разделы — вкладками вида (DS §12.3 п.5, §9 А1п): Обзор · Состав · Документы · Фото
-S["v2-card"] = () => `<div class="phone"><div class="scroll">${cardTop("Linda Alvarez")}
+  </div>${tabbar("Gutters")}</div>`;
+// карточка В2 «Вкладки» (выбор основателя #2518): шапка → «Сейчас» → ряд ViewTabs (DS §9 А1п, ObjectScreen: полоса под шапкой) →
+// «Обзор»: чертёж и три цифры. Ряд во всю ширину, справа затухание tab.fadeW 32, «Фото» выглядывает
+S["v2-card"] = () => `<div class="phone"><div class="scroll">${headObj("Linda Alvarez", noEst)}${nowOffice}
   <div class="vt"><div class="on">Обзор</div><div>Состав</div><div>Документы</div><div>Сметы</div><div>Фото</div><div>История</div></div>
-  <div class="trio"><div><b>91 ft</b><span>Gutter · 3</span></div><div><b>2</b><span>Угла</span></div><div><b>3</b><span>Downspout</span></div></div>
-  ${group("Сметы замера", [row(`<div class="ico">${ic("doc")}</div>`, "Смет пока нет", "Появится после «Сделать смету»", "", false)])}
-  </div>
-  ${tabbar("Gutters")}</div>`;
+  ${sheet}${trio}
+  </div>${tabbar("Gutters")}</div>`;
+// что «Сейчас» говорит в других состояниях и мастеру (без денег, С9)
+S["now-states"] = () => `<div class="phone"><div class="scroll" style="padding-top:12px">
+  <div class="cap">Смета отправлена · офис</div>${now("Ждём ответа клиента", "Отправлена вчера · $2,113.67", `<span class="btn pri wide">${ic("send", 18)}Напомнить клиенту</span>`)}
+  <div class="cap">Смета подписана · офис</div>${now("Подписана — поставьте работу в план", "22 нояб. · $2,113.67", `<span class="btn pri wide">${ic("clock", 18)}В план</span>`)}
+  <div class="cap">Без сметы · мастер (денег не видит)</div>${now("Чертёж готов — смету сделает офис", "Что-то поменялось на месте — поправьте чертёж", `<span class="btn pri wide">${ic("pencil", 18)}Править чертёж</span>`)}
+  </div></div>`;
 const frame = (s) => `<iframe src="mockups.html#screen=${s}&theme=${theme}"></iframe>`;
+const fig = (cap, sub, body) => `<figure><figcaption>${cap}<small>${sub}</small></figcaption>${body}</figure>`;
 S["compare-list"] = () => `<div class="cmp">
-  <figure><figcaption>Как сейчас<small>Заголовок «Замеры», фильтры-кнопки, каждая запись — большая карточка</small></figcaption><img src="asis-05-list-${theme}.png"></figure>
-  <figure><figcaption>Как будет · вариант 1 «Два списка»<small>Поиск, «＋» вверху. Черновики и замеры — строками: картинка чертежа, имя, адрес, состояние</small></figcaption>${frame("v1-list")}</figure>
-  <figure><figcaption>Как будет · вариант 2 «Сначала — что замерить» (совет)<small>Поиск, «＋» вверху. Сверху — кому нужен замер сегодня (серая «Замерить»), потом черновики и последние</small></figcaption>${frame("v2-list")}</figure></div>`;
+  ${fig("Как сейчас", "Заголовок «Замеры», фильтры-кнопки, каждая запись — большая карточка", `<img src="asis-05-list-${theme}.png">`)}
+  ${fig("Как будет · вариант 1 «Два списка»", "Поиск и «＋» значками вверху. Черновики и замеры — строками: картинка чертежа, имя, адрес, состояние", frame("v1-list"))}
+  ${fig("Как будет · вариант 2 «Сначала — что замерить» (выбран)", "Сверху — кому нужен замер сегодня: нажали строку — начался замер. Потом черновики и последние", frame("v2-list"))}</div>`;
 S["compare-card"] = () => `<div class="cmp">
-  <figure><figcaption>Как сейчас<small>«Просмотр замера»: имя два раза, кнопку «Сделать смету» не видно без прокрутки</small></figcaption><img src="asis-06-card-top-${theme}.png"></figure>
-  <figure><figcaption>Как будет · вариант 1 «Одна лента»<small>Имя сверху один раз. «Сделать смету» — в карточке «Сейчас» наверху. Ниже чертёж, цифры, документы — одной лентой. Панели кнопок внизу нет</small></figcaption>${frame("v1-card")}</figure>
-  <figure><figcaption>Как будет · вариант 2 «Вкладки» (совет)<small>Так же «Сейчас» наверху. Под чертежом вкладки: Обзор · Состав · Документы · Сметы · Фото · История — как у клиента. Панели кнопок внизу нет</small></figcaption>${frame("v2-card")}</figure></div>`;
+  ${fig("Как сейчас", "«Просмотр замера»: имя два раза, кнопку «Сделать смету» не видно без прокрутки", `<img src="asis-06-card-top-${theme}.png">`)}
+  ${fig("Как будет · вариант 1 «Одна лента»", "Имя один раз, под ним «Замер · Gutters» и состояние. «Сделать смету» — в «Сейчас» наверху. Ниже чертёж, цифры, документы", frame("v1-card"))}
+  ${fig("Как будет · вариант 2 «Вкладки» (выбран)", "Так же шапка и «Сейчас». Под ними вкладки, листаются вбок; на «Обзоре» — чертёж и цифры", frame("v2-card"))}</div>`;
+// пары «было (84a8435) | предлагаем» для ревью
+const pair = (s, what) => `<div class="cmp">${fig("Было (84a8435)", what, `<img src="r1-${s}-${theme}.png">`)}${fig("Предлагаем", "После проверки 7172275566", frame(s))}</div>`;
+S["pair-v2-card"] = () => pair("v2-card", "Карточка, вариант 2 «Вкладки»");
+S["pair-v1-card"] = () => pair("v1-card", "Карточка, вариант 1 «Одна лента»");
+S["pair-v2-list"] = () => pair("v2-list", "Первый экран, вариант 2");
+S["pair-v1-list"] = () => pair("v1-list", "Первый экран, вариант 1");
 S["compare-tab"] = () => `<div class="cmp">
-  <figure><figcaption>Модуль выключен (как есть)<small>Вторая вкладка — «План»</small></figcaption><img src="asis-01-tabs-off-${theme}.png"></figure>
-  <figure><figcaption>Модуль включён (как есть)<small>«Gutters» встаёт на место «План», «План» уходит в «Ещё»</small></figcaption><img src="asis-05-list-${theme}.png"></figure>
-  <figure><figcaption>Где включают (как есть)<small>Ещё → Компания → Модули, только директор</small></figcaption><img src="asis-03-modules-on-${theme}.png"></figure></div>`;
+  ${fig("Модуль выключен (как есть)", "Вторая вкладка — «План»", `<img src="asis-01-tabs-off-${theme}.png">`)}
+  ${fig("Модуль включён (как есть)", "«Gutters» встаёт на место «План», «План» уходит в «Ещё»", `<img src="asis-05-list-${theme}.png">`)}
+  ${fig("Где включают (как есть)", "Ещё → Компания → Модули, только директор", `<img src="asis-03-modules-on-${theme}.png">`)}</div>`;
 document.getElementById("app").innerHTML = (S[screen] || S["v1-list"])();
 </script>
 </body>
