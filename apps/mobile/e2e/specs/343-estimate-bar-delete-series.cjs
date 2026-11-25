@@ -35,7 +35,7 @@ exports.run = async (h) => {
     const [dep, add] = [await box('[data-testid="est-deposit-row"]'), await box('[data-testid="est-bar-add"]')];
     h.expect(add.height > 0 && add.y > dep.y, "from 820 the step stands in the column, after the totals");
   }
-  h.expect(await line.editorMenuHas(h, "ue-save-send"), "«Сохранить и отправить» is in «⋯»");
+  h.expect(!(await line.editorMenuHas(h, "ue-save-send")), "«Отправить» is not in «⋯» (one place: the round ➤, #2403)");
 
   // the empty description: one line; it grows with the text
   await tid("est-add-new").getByRole("button").click();
@@ -110,7 +110,7 @@ exports.run = async (h) => {
   await h.seed("octo.role.v1", "tech");
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await tid("est-add-new").waitFor({ timeout: 8000 });
-  h.expect(!(await line.editorMenuHas(h, "ue-save-send")), "the tech: no «Сохранить и отправить»");
+  h.expect(!(await line.editorMenuHas(h, "ue-save-send")) && (await tid("est-send-top").count()) === 0, "the tech: no «Отправить»");
   h.expect(/Отправит офис/.test(await tid("est-bar-office").innerText()), "the tech: «Отправит офис»");
   await h.shot("tech");
   await h.seed("octo.role.v1", "director");

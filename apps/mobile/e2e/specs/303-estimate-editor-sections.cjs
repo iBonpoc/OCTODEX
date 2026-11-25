@@ -1,6 +1,6 @@
 /**
  * e2e 303 — разделы сметы (РС-5a, DS §8.5, спека Р4–Р5), every view; finds by testID (rule 19):
- * «＋ Раздел» (the title is typed in the heading), «⋯ → Переместить» a row into it (its total follows), «Разложить по видам»
+ * «＋ Раздел» (the title is typed in the heading), «⋯ → Переместить» a row into it (its total follows), «Разложить по типам»
  * (and «Отменить»: only the layout goes back), a folded section keeps its count, «Удалить раздел» loses no row, and an
  * estimate with sections saves (the server's check of the sums passes). A long estimate (11 rows): the new section's title
  * is typed LETTER BY LETTER (a field out of sight lost the focus on the browser's scroll and closed after 0–1 letters, #1241),
