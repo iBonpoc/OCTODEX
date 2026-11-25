@@ -19525,6 +19525,89 @@ select tst.ok(not has_column_privilege('authenticated', 'public.companies', 'dev
 rollback;
 \echo 'T470 developer company: modules without a term, the flag only from the server ok'
 
+-- ================================================================ T471: the client of an estimate changes only in a draft
+-- (#2630, the server side of #2406 / PR #2629, migration 20261117680000). t26_estimate_client_lock: once an estimate left
+-- «draft» (sent, viewed, expired, declined, signed, approved…) its customer_id stays — for the app and for the server's
+-- own jobs alike (an old phone, a direct API call). The only way through: merge_customers (B → A, app.merging_customer).
+-- The same value sent again (an old build's echo) and every other column are not touched by the lock.
+:as_super
+begin;
+insert into public.customers (id, company_id, display_name) values
+  ('54710000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'T471 first'),
+  ('54710000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', 'T471 second');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('54710000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', '54710000-0000-4000-8000-0000000000c1', '471 First St', 'Pasadena'),
+  ('54710000-0000-4000-8000-0000000000d2', 'ca000000-0000-0000-0000-000000000000', '54710000-0000-4000-8000-0000000000c2', '471 Second St', 'Glendale');
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('54710000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', '54710000-0000-4000-8000-0000000000c1', '54710000-0000-4000-8000-0000000000d1', 'T471 draft'),
+  ('54710000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', '54710000-0000-4000-8000-0000000000c1', '54710000-0000-4000-8000-0000000000d1', 'T471 sent'),
+  ('54710000-0000-4000-8000-0000000000e3', 'ca000000-0000-0000-0000-000000000000', '54710000-0000-4000-8000-0000000000c1', '54710000-0000-4000-8000-0000000000d1', 'T471 viewed'),
+  ('54710000-0000-4000-8000-0000000000e4', 'ca000000-0000-0000-0000-000000000000', '54710000-0000-4000-8000-0000000000c1', '54710000-0000-4000-8000-0000000000d1', 'T471 expired'),
+  ('54710000-0000-4000-8000-0000000000e5', 'ca000000-0000-0000-0000-000000000000', '54710000-0000-4000-8000-0000000000c1', '54710000-0000-4000-8000-0000000000d1', 'T471 declined'),
+  ('54710000-0000-4000-8000-0000000000e6', 'ca000000-0000-0000-0000-000000000000', '54710000-0000-4000-8000-0000000000c2', '54710000-0000-4000-8000-0000000000d2', 'T471 sent of the second');
+update public.estimates set status = 'sent'
+ where id in ('54710000-0000-4000-8000-0000000000e2', '54710000-0000-4000-8000-0000000000e3', '54710000-0000-4000-8000-0000000000e4',
+              '54710000-0000-4000-8000-0000000000e5', '54710000-0000-4000-8000-0000000000e6');
+update public.estimates set status = 'viewed' where id = '54710000-0000-4000-8000-0000000000e3';
+update public.estimates set status = 'expired' where id = '54710000-0000-4000-8000-0000000000e4';
+update public.estimates set status = 'declined', declined_reason = 'price' where id = '54710000-0000-4000-8000-0000000000e5';
+select tst.ok((select array_agg(status order by id) from public.estimates where id::text like '54710000-%')
+              = array['draft', 'sent', 'viewed', 'expired', 'declined', 'sent'],
+  'T471 fixtures: a draft, a sent, a viewed, an expired, a declined estimate');
+
+:as_owner_a
+-- a draft: the client and the place change (as in the app, canChangeEstimateClient)
+update public.estimates set customer_id = '54710000-0000-4000-8000-0000000000c2', property_id = '54710000-0000-4000-8000-0000000000d2'
+ where id = '54710000-0000-4000-8000-0000000000e1';
+select tst.ok((select customer_id from public.estimates where id = '54710000-0000-4000-8000-0000000000e1') = '54710000-0000-4000-8000-0000000000c2',
+  'T471 a draft changes its client');
+-- not a draft: the app's write is refused with the lock's code (22023 + hint, not 42501: that is «no rights» in the app)
+select tst.fails_like(format($q$update public.estimates set customer_id = '54710000-0000-4000-8000-0000000000c2', property_id = '54710000-0000-4000-8000-0000000000d2' where id = %L$q$, e.id),
+                      'estimate_client_locked%', 'T471 the app does not change the client of a «' || e.status || '» estimate')
+  from public.estimates e where e.id::text like '54710000-%' and e.status <> 'draft' and e.customer_id = '54710000-0000-4000-8000-0000000000c1';
+create function pg_temp.t471_code() returns text language plpgsql as $$
+begin
+  update public.estimates set customer_id = '54710000-0000-4000-8000-0000000000c2' where id = '54710000-0000-4000-8000-0000000000e2';
+  return 'no error';
+exception when others then
+  declare v_hint text; begin get stacked diagnostics v_hint = pg_exception_hint; return sqlstate || ' ' || coalesce(v_hint, ''); end;
+end $$;
+select tst.ok(pg_temp.t471_code() = '22023 estimate_client_locked', format('T471 the code: 22023 + hint estimate_client_locked (%s)', pg_temp.t471_code()));
+-- an old build's echo (the same client) and the other columns: no lock
+update public.estimates set customer_id = '54710000-0000-4000-8000-0000000000c1', title = 'T471 sent, renamed' where id = '54710000-0000-4000-8000-0000000000e2';
+select tst.ok((select (customer_id, title) = ('54710000-0000-4000-8000-0000000000c1'::uuid, 'T471 sent, renamed') from public.estimates where id = '54710000-0000-4000-8000-0000000000e2'),
+  'T471 the same client sent again and the title: saved');
+-- «draft» and another client in one write: the estimate was not a draft — refused
+select tst.fails_like($q$update public.estimates set status = 'draft', customer_id = '54710000-0000-4000-8000-0000000000c2', property_id = '54710000-0000-4000-8000-0000000000d2'
+                         where id = '54710000-0000-4000-8000-0000000000e3'$q$,
+                      'estimate_client_locked%', 'T471 back to «draft» and another client in one write: refused');
+
+:as_super
+-- the server's own jobs too (a definer function, service_role): the lock is for every caller
+select tst.fails_like($q$update public.estimates set customer_id = '54710000-0000-4000-8000-0000000000c2', property_id = '54710000-0000-4000-8000-0000000000d2'
+                         where id = '54710000-0000-4000-8000-0000000000e2'$q$,
+                      'estimate_client_locked%', 'T471 the server does not change the client of a sent estimate either');
+select tst.ok((select count(*) from public.estimates where id::text like '54710000-%' and status <> 'draft' and customer_id = '54710000-0000-4000-8000-0000000000c1') = 4,
+  'T471 the sent, viewed, expired and declined estimates kept their client');
+
+:as_owner_a
+-- the merge of two clients moves a sent estimate to the kept one (merge_customers, app.merging_customer)
+select public.merge_customers('54710000-0000-4000-8000-0000000000c1', '54710000-0000-4000-8000-0000000000c2');
+select tst.ok((select (customer_id, status) = ('54710000-0000-4000-8000-0000000000c1'::uuid, 'sent') from public.estimates where id = '54710000-0000-4000-8000-0000000000e6'),
+  'T471 merge_customers moves a sent estimate to the kept client');
+-- an old phone still sends the merged client for it: t01_follow_merged_customer lands it on the kept one, no lock
+update public.estimates set customer_id = '54710000-0000-4000-8000-0000000000c2' where id = '54710000-0000-4000-8000-0000000000e6';
+select tst.ok((select customer_id from public.estimates where id = '54710000-0000-4000-8000-0000000000e6') = '54710000-0000-4000-8000-0000000000c1',
+  'T471 an old phone''s merged client lands on the kept one (no error)');
+
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_estimate_client_lock()', 'EXECUTE')
+          and not has_function_privilege('anon', 'app.tg_estimate_client_lock()', 'EXECUTE')
+          and not has_function_privilege('public', 'app.tg_estimate_client_lock()', 'EXECUTE'),
+  'T471 rule 18: the trigger function is executed by no one');
+rollback;
+\echo 'T471 the client of an estimate changes only in a draft ok'
+
 -- ================================================================ T472: a tech moves his draft only to a property he is assigned
 -- (#2647, found by the review of #2646, migration 20261117690000). estimates_insert lets a tech create a draft only on a
 -- property he is assigned (is_property_assignee); estimates_update checked only «draft». t27_estimate_property_assignee:
