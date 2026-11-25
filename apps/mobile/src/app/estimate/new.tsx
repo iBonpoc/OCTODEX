@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { canSeeClientLink } from "@/features/estimateSign";
-import { View, type ViewStyle } from "react-native";
+import { Platform, View, type ViewStyle } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { haptics } from "@/ui/haptics";
 import { component, motion, radius, rhythm, space, spaceHalf, size } from "@octo/design-tokens";
@@ -39,7 +39,8 @@ import { useReducedMotion } from "react-native-reanimated";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { PickerSheet } from "@/ui/pickerSheet";
 import { Labeled, MoneyField, PctField, RatePctField } from "@/features/fields";
-import { MONEY_MODES, TAX_MODES, depositFor, depositMode, discountFor, discountMode, remember, type ModeMemo, type TotalsMode } from "@/features/estimate/totalsModes";
+import { MONEY_MODES, TAX_MODES, depositFor, depositMode, discountFor, discountMode, remember, totalWhileTyping, type ModeMemo, type TotalsMode, type TotalsRow } from "@/features/estimate/totalsModes";
+import { useKeyboardHeight } from "@/ui/keyboard";
 import { ModeRow } from "@/ui/modeRow";
 import { isPartialTax, lastTaxRatePpm, taxChange, wholeTax, type TaxDiff } from "@/features/estimateTax";
 import { Button, IconButton, StatusChip, TextField } from "@/ui/controls";
@@ -300,6 +301,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const focusTotals = (row: string, k: TotalsMode) => k !== "off" && setRowFocus((f) => ({ row, n: f.n + 1 }));
   const focusOf = (row: string) => (rowFocus.row === row ? rowFocus.n : undefined);
   const [badRate, setBadRate] = useState(false);
+  // #2455: the totals row being typed in — while the keyboard hides the pinned bar, its new total shows in the keyboard's bar (iOS) or
+  // under the row (see `totalWhileTyping`)
+  const [typingRow, setTypingRow] = useState<TotalsRow | null>(null);
+  const keyboardUp = useKeyboardHeight() > 0;
+  const typingOf = (row: TotalsRow) => (on: boolean) => setTypingRow((r) => (on ? row : r === row ? null : r));
   const lastRate = lastTaxRatePpm(db.estimates, existing?.id);
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
@@ -1029,6 +1035,14 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // visual v2 №5: «Итого ⌄ $772.36 налог $14.52» — the sum with cents (the engine's fmtUsd), the tax after it when there is one
   // founder 21.11 (С5: «шторку убрать, разбор суммы только в карточке внизу», #2387): the bar's «Итого» is a figure, not a button —
   // the breakdown («если клиент включит всё», «Только для вас») is the totals card's, on every width
+  // #2455: «Итого $…» for the totals row being typed in (the bar is under the keyboard): the keyboard's bar on iOS, else a line under the row
+  const hintText = `${t("ue.total")} ${rowSum(totals.total)}`;
+  const totalNote = (row: TotalsRow) =>
+    totalWhileTyping({ typing: typingRow, row, keyboard: keyboardUp, os: Platform.OS }) === "note" ? (
+      <View testID="est-total-hint" style={{ alignSelf: "flex-end" }}>
+        <T v="body" w="semibold" tabular>{hintText}</T>
+      </View>
+    ) : null;
   const total = { label: t("ue.total"), value: rowSum(totals.total), sub: totals.tax ? t("px3.est.tax", { sum: rowSum(totals.tax) }) : undefined, testID: "est-bar-total" };
   // where the screen has no pinned bar (820/1280) the same row stands after the totals (as EditorScreen does)
   const barShown = useFooterShown();
@@ -1341,14 +1355,15 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               }}
               field={
                 s.discount?.kind === "pct" ? (
-                  <View testID="est-discount-pct"><PctField unit a11yLabel={t("ue.discount")} focusNow={focusOf("discount")} bps={discountBps(s.discount.value)} onChange={(b) => setSettings({ discount: { kind: "pct", value: String(Math.min(b, 10000) / 10000) } })} /></View>
+                  <View testID="est-discount-pct"><PctField unit a11yLabel={t("ue.discount")} focusNow={focusOf("discount")} onTyping={typingOf("discount")} barNote={hintText} bps={discountBps(s.discount.value)} onChange={(b) => setSettings({ discount: { kind: "pct", value: String(Math.min(b, 10000) / 10000) } })} /></View>
                 ) : s.discount?.kind === "fixed" ? (
-                  <View testID="est-discount-fixed"><MoneyField unit a11yLabel={t("ue.discount")} focusNow={focusOf("discount")} cents={s.discount.cents} onChange={(c) => setSettings({ discount: { kind: "fixed", cents: c } })} /></View>
+                  <View testID="est-discount-fixed"><MoneyField unit a11yLabel={t("ue.discount")} focusNow={focusOf("discount")} onTyping={typingOf("discount")} barNote={hintText} cents={s.discount.cents} onChange={(c) => setSettings({ discount: { kind: "fixed", cents: c } })} /></View>
                 ) : undefined
               }
               sum={!s.discount ? DASH : totals.discount ? `−${docMoney(totals.discount)}` : docMoney(0)}
               locked={signed}
               testID="est-discount-row"
+              note={totalNote("discount")}
             />
             <ModeRow
               title={t("ue.tax")}
@@ -1364,14 +1379,14 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                 partialTax ? (
                   <T v="caption" tone="mut">{`${ppmToPctText(taxRatePpm(s.tax))}%`}</T>
                 ) : (
-                  <View testID="est-tax-rate"><RatePctField unit a11yLabel={t("ue.taxRate")} focusNow={focusOf("tax")} onBad={setBadRate} ppm={taxRatePpm(s.tax)} onChange={(p) => setSettings({ tax: wholeTax(s.tax, { ratePpm: Math.min(p, 1_000_000) }) })} /></View>
+                  <View testID="est-tax-rate"><RatePctField unit a11yLabel={t("ue.taxRate")} focusNow={focusOf("tax")} onTyping={typingOf("tax")} barNote={hintText} onBad={setBadRate} ppm={taxRatePpm(s.tax)} onChange={(p) => setSettings({ tax: wholeTax(s.tax, { ratePpm: Math.min(p, 1_000_000) }) })} /></View>
                 )
               }
               sum={s.tax.enabled && !exempt ? docMoney(totals.tax) : DASH}
               locked={signed || exempt}
               testID="est-tax-row"
               note={
-                exempt ? (
+                <>{totalNote("tax")}{exempt ? (
                   <View testID="est-tax-exempt"><T v="caption" tone="mut">{t("ue.taxExemptClient")}</T></View>
                 ) : signed ? (
                   // a signed estimate: the rows do not change — said once, under the tax (CRM review: «не говорят почему»)
@@ -1388,7 +1403,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                   <View testID="est-tax-last" style={{ alignSelf: "flex-start" }}>
                     <Button label={t("ue.taxLast", { rate: ppmToPctText(lastRate) })} variant="ghost" onPress={() => setSettings({ tax: wholeTax(s.tax, { ratePpm: lastRate }) })} />
                   </View>
-                ) : null
+                ) : null}</>
               }
             />
             {/* the total once (П7): in the pinned bar on a phone, here only where there is no bar (820/1280) */}
@@ -1414,14 +1429,15 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               }}
               field={
                 s.deposit.kind === "pct" ? (
-                  <View testID="est-deposit-pct"><PctField unit a11yLabel={t("ue.deposit")} focusNow={focusOf("deposit")} bps={s.deposit.bps} onChange={(b) => setSettings({ deposit: { kind: "pct", bps: Math.min(b, 10000) } })} /></View>
+                  <View testID="est-deposit-pct"><PctField unit a11yLabel={t("ue.deposit")} focusNow={focusOf("deposit")} onTyping={typingOf("deposit")} barNote={hintText} bps={s.deposit.bps} onChange={(b) => setSettings({ deposit: { kind: "pct", bps: Math.min(b, 10000) } })} /></View>
                 ) : s.deposit.kind === "fixed" ? (
-                  <View testID="est-deposit-fixed"><MoneyField unit a11yLabel={t("ue.deposit")} focusNow={focusOf("deposit")} cents={s.deposit.cents} onChange={(c) => setSettings({ deposit: { kind: "fixed", cents: c } })} /></View>
+                  <View testID="est-deposit-fixed"><MoneyField unit a11yLabel={t("ue.deposit")} focusNow={focusOf("deposit")} onTyping={typingOf("deposit")} barNote={hintText} cents={s.deposit.cents} onChange={(c) => setSettings({ deposit: { kind: "fixed", cents: c } })} /></View>
                 ) : undefined
               }
               sum={s.deposit.kind === "none" ? DASH : docMoney(totals.deposit)}
               locked={signed}
               testID="est-deposit-row"
+              note={totalNote("deposit")}
             />
             {totals.depositOverCaLimit ? <View style={{ padding: space[4] }}><CaWarn limitCents={totals.caDepositLimit} testID="est-ca-warn" /></View> : null}
             {/* from 820 (no panel): «если клиент включит всё на выбор» and «Только для вас» here; a phone has them in the panel's «Итого ˅» */}

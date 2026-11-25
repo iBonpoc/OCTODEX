@@ -2986,6 +2986,7 @@ export const en: Dict = {
   "ds.fields.date": "Visit date",
   "ds.fields.due": "Due (may be empty)",
   "ds.fields.narrow": "Two narrow fields in a row: the unit stays inside its frame",
+  "ds.fields.totalBar": "A totals-row field: on iPhone the bar over the keyboard carries «Total $…» (left) and «Done»",
   "ds.fields.ft": "Feet",
   "ds.fields.in": "Inches",
   "ds.fields.inWord": "inches",
