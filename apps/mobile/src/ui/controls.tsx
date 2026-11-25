@@ -10,7 +10,7 @@ import Animated, {
   withTiming,
   Easing,
 } from "react-native-reanimated";
-import { component, spaceHalf, font, motion, radius, space, statusIcon, type StatusName, size as sizes } from "@octo/design-tokens";
+import { component, spaceHalf, font, motion, radius, space, statusGlyph, type StatusName, size as sizes } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { fillStyle } from "./fill";
 import { Icon, Press, T, type IconKey } from "./primitives";
@@ -176,7 +176,7 @@ export function IconButton({
 }
 
 /* ---------- StatusChip (DS: color = status, always icon + word) ---------- */
-export function StatusChip({ status, label, soft }: { status: StatusName; label: string; soft?: boolean }) {
+export function StatusChip({ status, label, soft, draft }: { status: StatusName; label: string; soft?: boolean; draft?: boolean }) {
   const { c } = useTheme();
   const st = c.status[status];
   const neutral = status === "neutral";
@@ -202,7 +202,7 @@ export function StatusChip({ status, label, soft }: { status: StatusName; label:
         paddingVertical: spaceHalf.hair,
       }}
     >
-      <Icon name={statusIcon[status]} s={sizes.iconSm} color={fg} />
+      <Icon name={statusGlyph(status, draft)} s={sizes.iconSm} color={fg} />
       <T v="caption" w="semibold" style={{ color: fg, flexShrink: 1 }}>
         {label}
       </T>

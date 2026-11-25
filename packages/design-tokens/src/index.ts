@@ -699,6 +699,14 @@ export const statusIcon: Record<StatusName, "ok" | "info" | "warn" | "bad" | "ne
   neutral: "neutral",
 };
 
+/**
+ * The glyph of a status (DS §3.3): grey `neutral` means two things — «draft» (not finished, dashed ring) and «none / cancelled»
+ * (ring with a dash). Only a caller that knows it is a draft says so; the status itself stays the same five.
+ */
+export function statusGlyph(status: StatusName, draft?: boolean): "ok" | "info" | "warn" | "bad" | "neutral" | "draft" {
+  return draft && status === "neutral" ? "draft" : statusIcon[status];
+}
+
 /** Business timing rules from HANDOFF: estimate without reply 2–4 days → warn, 5+ → bad. */
 /** Estimate follow-up thresholds. Lead thresholds are company settings (apps/mobile/src/features/leadSettings.ts), not tokens. */
 export const timing = { estimateWarnDays: 2, estimateBadDays: 5 } as const;

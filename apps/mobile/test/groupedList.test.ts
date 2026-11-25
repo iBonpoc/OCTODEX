@@ -25,6 +25,24 @@ describe("GroupedList / GroupRow 56 (BUILD-SPEC §1)", () => {
     expect(s).toMatch(/accessibilityActions=/);
     expect(s).toMatch(/onLongPress=/);
   });
+  it("a wide column («Просрочен 9 дн») never lies over the subtitle: the columns do not shrink (a floor, not a fixed width), the text column shrinks and cuts with «…»", () => {
+    for (const f of ["groupedList.tsx", "figures.tsx"]) {
+      const s = src(f);
+      const col = s.slice(s.indexOf("alignItems: \"flex-end\""), s.indexOf("alignItems: \"flex-end\"") + 200);
+      expect(col, f).toMatch(/minWidth: i < all\.length - 1 \? [A-Za-z.]*colW : undefined/);
+      expect(col, f).toMatch(/flexShrink: 0/);
+      expect(col, f).not.toMatch(/\bwidth: i < all/);
+    }
+    const body = src("groupedList.tsx");
+    expect(body).toMatch(/<View style=\{\{ flex: 1, minWidth: 0 \}\}>/);
+    expect(body).toMatch(/numberOfLines=\{wrap \? 2 : 1\}/);
+  });
+  it("a row with a status-word column («Просрочен 9 дн») lets the name take two lines — the name is not cut, the subtitle is cut first", () => {
+    const s = src("groupedList.tsx");
+    expect(s).toMatch(/const wordCol = !!cols\?\.some\(\(x\) => x\.tone\)/);
+    expect(s).toMatch(/numberOfLines=\{wrap \|\| wordCol \? 2 : 1\}[^>]*>\s*\{title\}/);
+    expect(s).toMatch(/numberOfLines=\{wrap \? 2 : 1\}[^>]*>\s*\{subtitle\}/);
+  });
   it("no button inside a button (web «<button> cannot contain a nested <button>», wave 3): the row's actions stand beside its Press", () => {
     const s = src("groupedList.tsx");
     const press = s.slice(s.indexOf("const tap ="), s.indexOf("const row ="));
@@ -50,11 +68,11 @@ describe("ChoiceChips / MultiChips layout=\"strip\" (BUILD-SPEC §1)", () => {
 });
 
 describe("StatusPill (visual v2 «Плашка статуса», 21.11)", () => {
-  it("icon 13 and word 12 semibold on the quiet status fill, 24 high, padding 7 · 9", () => {
+  it("icon 13 and word 13 (`caption`) semibold on the quiet status fill, 24 high, padding 7 · 9", () => {
     const s = src("statusPill.tsx");
-    expect(s).toMatch(/statusIcon\[status\]/);
+    expect(s).toMatch(/statusGlyph\(status, draft\)/);
     expect(s).toMatch(/component\.statusPill\.icon/);
-    expect(s).toMatch(/v="micro" w="semibold"/);
+    expect(s).toMatch(/v="caption" w="semibold"/);
     expect(s).toMatch(/component\.chip\.h/);
     expect(s).toMatch(/component\.statusPill\.padL/);
     expect(s).toMatch(/st\.fill/);

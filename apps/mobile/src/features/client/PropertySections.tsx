@@ -137,7 +137,7 @@ export function PropertySection({ p, s }: { p: Property; s: PropertyRow }) {
               title={e.title || e.number || ""}
               when={e.title ? e.number : undefined}
               value={office ? money(e.totalCents) : undefined}
-              status={{ tone: estView[e.status].s, label: t(estView[e.status].l) }}
+              status={{ tone: estView[e.status].s, label: t(estView[e.status].l), draft: estView[e.status].d }}
               onPress={() => router.push(`/estimate/${e.id}`)}
             />
           ))}
@@ -232,7 +232,7 @@ export function PropertySection({ p, s }: { p: Property; s: PropertyRow }) {
                 lead={{ kind: "icon", icon: "invoice" }}
                 title={h.estimate.title || h.estimate.number || t("prop.h.estimate")}
                 when={[t("prop.h.estimate"), h.estimate.title ? h.estimate.number : null, day(h.at)].filter(Boolean).join(" · ")}
-                status={{ tone: estView[h.estimate.status].s, label: t(estView[h.estimate.status].l) }}
+                status={{ tone: estView[h.estimate.status].s, label: t(estView[h.estimate.status].l), draft: estView[h.estimate.status].d }}
                 onPress={() => router.push(`/estimate/${h.estimate.id}`)}
               />
             ) : (

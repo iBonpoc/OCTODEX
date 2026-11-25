@@ -29,7 +29,7 @@ export interface NowCardProps {
   big?: boolean;
   /** the icon of the filled `main` («✓ В пути») */
   mainIcon?: IconKey;
-  status?: { status: StatusName; label: string };
+  status?: { status: StatusName; label: string; draft?: boolean };
   /** the client / the visit's name; none — the card is the `empty` line */
   title?: string;
   /** «работа · мастер» */
@@ -81,7 +81,7 @@ export function NowCard({ kicker, when, soon, window: span, big, mainIcon, statu
               {span}
             </T>
           ) : null}
-          {status ? <StatusPill status={status.status} label={status.label} /> : when && !soon ? (
+          {status ? <StatusPill status={status.status} label={status.label} draft={status.draft} /> : when && !soon ? (
             <T v="micro" w="semibold" tone="mut" numberOfLines={1}>
               {when}
             </T>
@@ -97,7 +97,7 @@ export function NowCard({ kicker, when, soon, window: span, big, mainIcon, statu
                   <T v="body" w="semibold" numberOfLines={1} style={{ flex: 1, minWidth: 0 }}>
                     {title}
                   </T>
-                  {status ? <StatusPill status={status.status} label={status.label} /> : null}
+                  {status ? <StatusPill status={status.status} label={status.label} draft={status.draft} /> : null}
                 </RowView>
               ) : (
                 <RowView style={gapAt(rhythm.headGap)}>

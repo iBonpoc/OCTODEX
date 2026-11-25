@@ -1,16 +1,18 @@
 /**
  * StatusPill (visual v2 «Плашка статуса»): a status as an icon and a word — `chip.h` 24, radius 12, the icon `statusPill.icon` 13
- * and the word 12/600 in the quiet tones `status[x].fill` / `.text` of the theme (ok #86D3A0/#1C2E23 …), padding 7 · 9. Five: ok ✓, info ◷, warn !, bad ×, neutral ✎. It presses only
+ * and the word `caption` 13/600 (as in «Графит») in the quiet tones `status[x].fill` / `.text` of the theme (ok #86D3A0/#1C2E23 …), padding 7 · 9. Five: ok ✓, info ◷, warn !, bad ×, neutral — with `draft` a dashed ring (черновик), without it a ring with a dash (нет / отменён). It presses only
  * where the office changes the status (the object's header → `StatusPicker`); elsewhere it is text.
  */
 import { View } from "react-native";
-import { component, radius, space, spaceHalf, statusIcon, type StatusName } from "@octo/design-tokens";
+import { component, radius, space, spaceHalf, statusGlyph, type StatusName } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T } from "./primitives";
 
-export function StatusPill({ status, label, onPress, a11y, testID }: {
+export function StatusPill({ status, label, draft, onPress, a11y, testID }: {
   status: StatusName;
   label: string;
+  /** grey «draft» (not finished) — the dashed ring; without it the grey one is «none / cancelled» (DS §3.3) */
+  draft?: boolean;
   /** the office in the object's header: opens the status picker */
   onPress?: () => void;
   /** what a screen reader hears on a pressable pill («Статус: Отправлена, изменить») — default the word */
@@ -41,8 +43,8 @@ export function StatusPill({ status, label, onPress, a11y, testID }: {
         maxWidth: "100%",
       }}
     >
-      <Icon name={statusIcon[status]} s={component.statusPill.icon} color={st.text} />
-      <T v="micro" w="semibold" capped style={{ color: st.text, flexShrink: 1 }}>
+      <Icon name={statusGlyph(status, draft)} s={component.statusPill.icon} color={st.text} />
+      <T v="caption" w="semibold" capped style={{ color: st.text, flexShrink: 1 }}>
         {label}
       </T>
     </View>

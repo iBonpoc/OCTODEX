@@ -375,7 +375,7 @@ export function ClientNowCard({ f, main }: { f: ClientFacts; main?: MainAction }
   const jobPill = (j: Job, going: boolean) => {
     const e = f.r.estimates.find((x) => x.id === j.estimateId);
     if (going) return { status: "info" as const, label: t("px2.cv.going") };
-    if (e) return { status: estView[e.status].s, label: t(e.status === "approved" ? "px2.cv.accepted" : estView[e.status].l) };
+    if (e) return { status: estView[e.status].s, label: t(e.status === "approved" ? "px2.cv.accepted" : estView[e.status].l), draft: estView[e.status].d };
     return { status: jobStatusView[j.status].status, label: t(jobStatusView[j.status].label) };
   };
   /** the card's name: the estimate's (the figures are its), else the job's */
@@ -447,7 +447,7 @@ export function ClientNowCard({ f, main }: { f: ClientFacts; main?: MainAction }
         <NowCard
           testID="client-now"
           kicker={t("proto.client.now")}
-          status={{ status: estView[n.estimate.status].s, label: t(estView[n.estimate.status].l) }}
+          status={{ status: estView[n.estimate.status].s, label: t(estView[n.estimate.status].l), draft: estView[n.estimate.status].d }}
           title={n.estimate.title || n.estimate.number || t("cc.kind.estimate")}
           sub={[n.estimate.number, f.office ? money(n.estimate.totalCents) : null, n.estimate.sentAt ? day(n.estimate.sentAt) : null].filter(Boolean).join(" · ")}
           main={main}
@@ -593,7 +593,7 @@ export function ClientEstimates({ f }: { f: ClientFacts }) {
               title={e.title || e.number || t("cc.kind.estimate")}
               subtitle={[e.title ? e.number : null, e.sentAt ? day(e.sentAt) : null].filter(Boolean).join(" · ") || undefined}
               value={money(e.totalCents)}
-              status={{ status: estView[e.status].s, label: t(estView[e.status].l) }}
+              status={{ status: estView[e.status].s, label: t(estView[e.status].l), draft: estView[e.status].d }}
               onPress={() => router.push(`/estimate/${e.id}`)}
             />
           ))}

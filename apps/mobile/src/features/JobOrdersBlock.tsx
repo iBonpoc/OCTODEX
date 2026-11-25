@@ -9,7 +9,7 @@ import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { Job } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
-import { canEditOrders, ordersOfJob, PO_TONE, receivedCount } from "./purchaseOrders";
+import { canEditOrders, ordersOfJob, PO_DRAFT, PO_TONE, receivedCount } from "./purchaseOrders";
 import { Button } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
@@ -61,7 +61,7 @@ export function JobOrdersBlock({ job }: { job: Job }) {
                   // spec 37 §6: where to pick it up, on the card (the tech)
                   o.fulfillment === "pickup" && o.status !== "draft" ? t("po.pickupAt", { where: [o.supplierName, o.supplierAddress].filter(Boolean).join(", ") }) : undefined,
                 ].filter(Boolean).join(" · ")}
-                status={{ tone: PO_TONE[o.status], label: t(`po.status.${o.status}` as DictKey) }}
+                status={{ tone: PO_TONE[o.status], label: t(`po.status.${o.status}` as DictKey), draft: PO_DRAFT[o.status] }}
                 onPress={() => router.push(`/purchase-order/${o.id}`)}
               />
             );

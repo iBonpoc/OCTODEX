@@ -189,7 +189,7 @@ export default function PropertyScreen() {
                     title={e.title || e.number || ""}
                     when={e.title ? e.number : undefined}
                     value={office ? money(e.totalCents) : undefined}
-                    status={{ tone: estView[e.status].s, label: t(estView[e.status].l) }}
+                    status={{ tone: estView[e.status].s, label: t(estView[e.status].l), draft: estView[e.status].d }}
                     onPress={() => router.push(`/estimate/${e.id}`)}
                   />
                 )),

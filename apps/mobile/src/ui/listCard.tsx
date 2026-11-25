@@ -10,7 +10,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ComponentR
 import { Linking, Platform, Pressable, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native"; // ds-allow: src/ui primitive
 import { useReducedMotion } from "react-native-reanimated";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
-import { component, font, layout, radius, size, space, spaceHalf, statusIcon, motion, type StatusName } from "@octo/design-tokens";
+import { component, font, layout, radius, size, space, spaceHalf, statusIcon, statusGlyph, motion, type StatusName } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { Icon, Press, type IconKey } from "./primitives";
@@ -148,6 +148,8 @@ function Lead({ lead, small }: { lead: CardLead; small: boolean }) {
 export interface CardStatus {
   tone: StatusName;
   label: string;
+  /** grey «draft» — the dashed ring (DS §3.3) */
+  draft?: boolean;
   /** the status can be changed by hand from the card (statusMoves): shows a chevron and opens the picker */
   onPress?: () => void;
 }
@@ -156,14 +158,14 @@ export interface CardSign {
   label: string;
 }
 
-function Chip({ tone, label, soft, onPress, a11y }: { tone: StatusName; label: string; soft?: boolean; onPress?: () => void; a11y?: string }) {
+function Chip({ tone, label, soft, onPress, a11y, draft }: { tone: StatusName; label: string; soft?: boolean; onPress?: () => void; a11y?: string; draft?: boolean }) {
   const { c } = useTheme();
   const st = c.status[tone];
   const neutral = tone === "neutral";
   const fg = soft || neutral ? (neutral ? c.ink : st.text) : st.on;
   const body = (
     <View style={{ flexDirection: "row", alignItems: "center", gap: space[1], height: component.chip.h, paddingHorizontal: component.chip.px, borderRadius: radius.chip, backgroundColor: soft ? undefined : neutral ? c.surf2 : st.fill, borderWidth: component.hairline, borderColor: soft || neutral ? c.bd : st.fill }}>
-      <Icon name={statusIcon[tone]} s={size.iconSm} color={fg} />
+      <Icon name={statusGlyph(tone, draft)} s={size.iconSm} color={fg} />
       <Txt v="caption" w="semibold" color={fg}>{label}</Txt>
       {onPress ? <Icon name="chevronDown" s={size.iconXs} color={fg} /> : null}
     </View>
@@ -279,7 +281,7 @@ export function ListCard(p: ListCardProps) {
   ) : null;
 
   const chips = [
-    p.status ? <Chip key="st" tone={p.status.tone} label={p.status.label} soft={compact} onPress={p.status.onPress} a11y={t("card.changeStatus", { s: p.status.label })} /> : null,
+    p.status ? <Chip key="st" draft={p.status.draft} tone={p.status.tone} label={p.status.label} soft={compact} onPress={p.status.onPress} a11y={t("card.changeStatus", { s: p.status.label })} /> : null,
     ...(p.signs ?? []).map((s, i) => <Chip key={`sg${i}`} tone={s.tone} label={s.label} soft />),
     p.trade && !compact ? <Tag key="tr" label={p.trade} icon="toolbox" /> : null,
     ...(compact ? [] : (p.tags ?? []).map((x) => <Tag key={`t${x}`} label={x} />)),
@@ -533,7 +535,7 @@ function ListCardRow(p: ListCardProps) {
         {/* the document number is not a column: it sits under the name, with "when" */}
         {p.facts?.num || p.when ? <Txt v="caption" color={c.mut}>{[p.facts?.num, p.when].filter(Boolean).join(" · ")}</Txt> : null}
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[1], marginTop: space[1] }}>
-          {p.status ? <Chip tone={p.status.tone} label={p.status.label} soft onPress={p.status.onPress} a11y={t("card.changeStatus", { s: p.status.label })} /> : null}
+          {p.status ? <Chip draft={p.status.draft} tone={p.status.tone} label={p.status.label} soft onPress={p.status.onPress} a11y={t("card.changeStatus", { s: p.status.label })} /> : null}
           {(p.signs ?? []).map((s, i) => <Chip key={i} tone={s.tone} label={s.label} soft />)}
           {p.trade ? <Tag label={p.trade} icon="toolbox" /> : null}
           {(p.tags ?? []).map((x) => <Tag key={x} label={x} />)}

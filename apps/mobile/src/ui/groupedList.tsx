@@ -178,11 +178,11 @@ export interface GroupRowProps {
   lead?: RowLead;
   /** a sum on the right (15, tabular) */
   value?: string;
-  /** visual v2 «цифры справа» (FigureRow): columns «word 12 / value 15» on the right instead of a bare `value` — «Срок −9 дн ·
-   *  Сумма $1,840»; each but the last `figureRow.colW` wide, so the columns of a group stand under each other */
+  /** visual v2 «цифры справа» (FigureRow): columns «word 12 / value 15» on the right instead of a bare `value` — «Срок Просрочен 9 дн ·
+   *  Сумма $1,840»; each but the last at least `figureRow.colW` wide (a floor, not a fixed width: a wide word «Просрочен 9 дн» widens its column, never overlaps the line — the subtitle shrinks and is cut with «…») */
   cols?: FigureCol[];
   /** a StatusPill on the right */
-  status?: { status: StatusName; label: string };
+  status?: { status: StatusName; label: string; draft?: boolean };
   /** small quick actions on the right (call, SMS): ≤ 2, the label names the object (П6) */
   actions?: IconAction[];
   /** the swipe (native): `left` — revealed by a swipe right, `right` — by a swipe left; the same on a long press and to VoiceOver */
@@ -218,6 +218,8 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
 }) {
   const { c } = useTheme();
   const check = lead && "done" in lead ? lead : null;
+  /** a column with a status word («Просрочен 9 дн», DS §3.3) is wide and never shrinks: the name takes a second line, the subtitle is cut first */
+  const wordCol = !!cols?.some((x) => x.tone);
   const pad = { minHeight: compact ? component.rowCompact : component.listRow.h, paddingVertical: space[2], gap: space[3] };
   return (
     <RowView style={[pad, { paddingLeft: check ? 0 : space[4], paddingRight: padRight }]}>
@@ -242,7 +244,7 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
       ) : null}
       <View style={{ flex: 1, minWidth: 0 }}>
         <View testID={ids?.title}>
-          <T v="body" w="semibold" tone={check?.done || quiet ? "mut" : "ink"} numberOfLines={wrap ? 2 : 1} style={check?.done ? { textDecorationLine: "line-through" } : undefined}>
+          <T v="body" w="semibold" tone={check?.done || quiet ? "mut" : "ink"} numberOfLines={wrap || wordCol ? 2 : 1} style={check?.done ? { textDecorationLine: "line-through" } : undefined}>
             {title}
           </T>
         </View>
@@ -259,11 +261,11 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
       </View>
       {cols?.length
         ? cols.map((x, i, all) => (
-            <View key={x.label} style={{ alignItems: "flex-end", width: i < all.length - 1 ? component.figureRow.colW : undefined }}>
+            <View key={x.label} style={{ alignItems: "flex-end", flexShrink: 0, minWidth: i < all.length - 1 ? component.figureRow.colW : undefined }}>
               <T v="micro" tone="mut" numberOfLines={1}>
                 {x.label}
               </T>
-              {/* a value in a status tone («−9 дн» overdue) carries its status icon — rule 2, never the colour alone (#2363 X01) */}
+              {/* a value in a status tone («Просрочен 9 дн» overdue) carries its status icon — rule 2, never the colour alone (#2363 X01) */}
               <RowView gap={spaceHalf.tight}>
                 {x.tone ? <Icon name={statusIcon[x.tone]} s={size.iconXs} color={c.status[x.tone].text} /> : null}
                 <T v="body" w="bold" tabular tone={x.tone ?? "ink"} numberOfLines={1}>
@@ -285,7 +287,7 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
               )}
             </View>
           ) : null}
-      {status ? <StatusPill status={status.status} label={status.label} /> : null}
+      {status ? <StatusPill status={status.status} label={status.label} draft={status.draft} /> : null}
       {chevron ? <Icon name="chevronRight" s={size.iconSm} color={c.mut} /> : null}
     </RowView>
   );

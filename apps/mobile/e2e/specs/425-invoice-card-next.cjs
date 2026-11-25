@@ -25,8 +25,8 @@ exports.run = async (h) => {
   h.expect(/Оплачен полностью/.test(await nextOf("/invoice/i3")), "i3: paid in full");
 
   // the same word in the list of invoices
-  // v2 (#2350): the list's row says it in its «Срок» column — «−9 дн», never a bare «Просрочено»
+  // v2 (#2350): the list's row says it in its «Срок» column — «Просрочен 9 дн», never a bare «Просрочено»
   await h.go("/invoice");
   const row = (await tid("invoice-row-i1").innerText()).replace(/\s+/g, " ");
-  h.expect(/Срок −9 дн/.test(row) && !/Просрочено/.test(row), `the list of invoices: i1 is 9 days late (${row})`);
+  h.expect(/Срок Просрочен 9 дн/.test(row) && !/Просрочено/.test(row), `the list of invoices: i1 is 9 days late (${row})`);
 };

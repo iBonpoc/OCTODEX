@@ -18,6 +18,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { CardList, Empty } from "@/ui/surfaces";
+import { estimateStatusView } from "@/features/estimateStatus";
 import { canSeeEstimate } from "@/features/access";
 import { estimateSigns } from "@/features/listSigns";
 import { estimateListAmount } from "@/features/estimateDoc";
@@ -26,12 +27,12 @@ import { router } from "expo-router";
 import type { GroupRowProps } from "@/ui/groupedList";
 
 /** status chip of an estimate — the one place for it (lists, client and property documents) */
-export const estView: Record<EstimateStatus, { s: StatusName; l: DictKey }> = {
-  draft: { s: "neutral", l: "st.draft" },
-  sent: { s: "info", l: "st.sent" },
-  awaiting_countersign: { s: "warn", l: "est.awaitingCountersign" },
-  approved: { s: "ok", l: "st.approved" },
-  declined: { s: "bad", l: "st.declined" },
+export const estView: Record<EstimateStatus, { s: StatusName; l: DictKey; d?: true }> = {
+  draft: estimateStatusView("draft"),
+  sent: estimateStatusView("sent"),
+  awaiting_countersign: estimateStatusView("awaiting_countersign"),
+  approved: estimateStatusView("approved"),
+  declined: estimateStatusView("declined"),
 };
 
 /** the lane of «Сметы» (spec 31 §7): the open ones first, then the closed, «Все» last */

@@ -30,8 +30,8 @@ export function isEstimateEditable(s: EstimateStatus): boolean {
   return s === "draft" || canMoveEstimate(s, "draft");
 }
 
-const VIEW: Record<EstimateStatus, { s: StatusName; l: DictKey }> = {
-  draft: { s: "neutral", l: "st.draft" },
+const VIEW: Record<EstimateStatus, { s: StatusName; l: DictKey; d?: true }> = {
+  draft: { s: "neutral", l: "st.draft", d: true },
   sent: { s: "info", l: "st.sent" },
   awaiting_countersign: { s: "warn", l: "est.awaitingCountersign" },
   approved: { s: "ok", l: "st.approved" },
@@ -39,7 +39,7 @@ const VIEW: Record<EstimateStatus, { s: StatusName; l: DictKey }> = {
 };
 
 /** Status chip for an estimate: colour only from the status, always with a word. */
-export function estimateStatusView(s: EstimateStatus): { s: StatusName; l: DictKey } {
+export function estimateStatusView(s: EstimateStatus): { s: StatusName; l: DictKey; d?: true } {
   return VIEW[s];
 }
 
