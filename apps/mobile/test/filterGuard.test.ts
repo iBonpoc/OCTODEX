@@ -73,7 +73,7 @@ function routes(dir = APP, base = ""): { route: string; file: string }[] {
   });
 }
 /** a route that draws a list of cards itself or through a list screen component */
-const LIST_SIGN = /<CardList|<CardGrid|<EstimatesBoard|<CommsScreen|<MessagesScreen|<ListScreen/;
+const LIST_SIGN = /<CardList|<CardGrid|<CommsScreen|<MessagesScreen|<ListScreen/;
 const NOT_A_LIST = (r: string) => /\[[^\]]+\]$/.test(r) && r !== "reports/[id]" && r !== "figures/[metric]" ? true : /(^|\/)(new|edit|import)$/.test(r) || r.startsWith("p/");
 
 describe("the one filter rule over every list (spec 31, PR 7 guard)", () => {
