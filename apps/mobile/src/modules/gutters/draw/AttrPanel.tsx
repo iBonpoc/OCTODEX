@@ -7,7 +7,6 @@
  * an element's own value the company no longer offers stays as one more chip «нет в списке» (spec 33 П22.2 №7).
  */
 import { sizeText } from "../sizeText";
-import { defaultOffsetsFor } from "@octo/estimating-engine";
 import { Children, useEffect, useRef, useState } from "react";
 import { Keyboard, ScrollView, useWindowDimensions, View } from "react-native";
 import { measureAfterKeyboard } from "./afterKeyboard";
@@ -24,7 +23,7 @@ import { Icon, Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Menu, useSheetClose } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
-import { COLORS, ELBOW_STYLES, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, boughtElbowCounts, boughtElbowPatch, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import { COLORS, ELBOW_STYLES, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, boughtElbowCounts, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
 import { colorChoices } from "./colorChoices";
 import { dsMoreSet, dsRareShown } from "./attrShown";
@@ -499,12 +498,12 @@ export function RunAttrsView({
  * One fitting row (v43 PR C): «Elbow A · 75° ⌄ · − n +» — the field (its label is the part, its value the angle or the length) and
  * the count. At 0 the value picked waits in the row (nothing to write it on) and goes in with the first «+».
  */
-function CountRow({ label, testID, valueTestID, items, value, onValue, qty, onQty, max, stepLabel }: { label: string; testID: string; valueTestID: string; items: PickerItem<string>[]; value: string; onValue: (v: string) => void; qty: number; onQty: (n: number) => void; max: number; stepLabel?: string }) {
+function CountRow({ label, testID, valueTestID, items, value, onValue, qty, onQty, max }: { label: string; testID: string; valueTestID: string; items: PickerItem<string>[]; value: string; onValue: (v: string) => void; qty: number; onQty: (n: number) => void; max: number }) {
   return (
     <RowView style={{ gap: space[2], alignItems: "center" }}>
-      <View style={{ width: component.countRowLabelW }}><T v="body" w="semibold" numberOfLines={1}>{label}</T></View>
+      <View style={{ width: component.countRowLabelW }}><T v="body" w="semibold" numberOfLines={2}>{label}</T></View>
       <View style={{ flex: 1 }}><SelectField bare label={label} testID={valueTestID} items={items} value={value} onChange={onValue} /></View>
-      <View testID={testID}><Stepper label={stepLabel ?? ""} value={qty} min={0} max={max} onChange={onQty} /></View>
+      <View testID={testID}><Stepper hideLabel label={label} value={qty} min={0} max={max} onChange={onQty} /></View>
     </RowView>
   );
 }
@@ -518,6 +517,7 @@ function RectElbow({ ds, style, onAttrs }: { ds: DrawnDownspout; style: string; 
   const qty = boughtElbowCounts(ds)[style] ?? 0;
   const own = rectElbowAngle(ds, style);
   const [pend, setPend] = useState(own); // the angle picked at 0 waits for the first «+»
+  useEffect(() => { if (qty > 0) setPend(own); }, [qty, own]); // what is written is what waits when the count comes back to 0
   const angle = qty > 0 ? own : pend;
   return (
     <CountRow
@@ -534,6 +534,7 @@ function RoundElbow({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<
   const { t } = useI18n();
   const cur = roundElbow(ds);
   const [pend, setPend] = useState(cur.style);
+  useEffect(() => { if (cur.qty > 0) setPend(cur.style); }, [cur.qty, cur.style]);
   const style = cur.qty > 0 ? cur.style : pend;
   return (
     <CountRow
@@ -633,6 +634,7 @@ function OffsetRow({ ds, style, onAttrs }: { ds: DrawnDownspout; style: OffsetSt
   const row = offsetRow(ds, style);
   const std = (OFFSETS_IN as readonly number[]).includes(row.lengthIn);
   const [pend, setPend] = useState(row.lengthIn); // the length picked at 0 waits for the first «+»
+  useEffect(() => { if (row.qty > 0) setPend(row.lengthIn); }, [row.qty, row.lengthIn]);
   const [own, setOwn] = useState(std ? "" : String(row.lengthIn));
   const [ownOpen, setOwnOpen] = useState(!std);
   const len = row.qty > 0 ? row.lengthIn : pend;
@@ -656,7 +658,7 @@ function OffsetRow({ ds, style, onAttrs }: { ds: DrawnDownspout; style: OffsetSt
         <RowView style={{ gap: space[2] }}>
           <View style={{ width: component.qtyFieldW }} testID={`attr-offset${sfx}-own`}>
             {/* read at once, like the gutter's length: a good number (up to 24″, 1/16″) goes in; nothing else does */}
-            <TextField type="number" value={own} onChangeText={(v) => { setOwn(v); const n = Number(v); if (n > 0 && n <= 24) put(Math.round(n * DENOM) / DENOM); }} label={t(k("offsetOwn"))} />
+            <TextField type="number" value={own} onChangeText={(v) => { setOwn(v); const n = Math.round(Number(v) * DENOM) / DENOM; if (n > 0 && n <= 24) put(n); }} label={t(k("offsetOwn"))} />
           </View>
           <T v="body" tone="mut">{t(k("in"))}</T>
         </RowView>

@@ -251,7 +251,7 @@ export const component = {
   /** narrow numeric field (qty in a kit) */
   qtyFieldW: 72,
   /** the name column of a part's count row «Elbow A · 75° ⌄ · − n +» (a module window, v43): the row's fields stand in one column */
-  countRowLabelW: 104,
+  countRowLabelW: 80,
   /** value column of a stepper */
   stepperValueW: 56,
   /** two side by side (founder 21.11.2026, #2350: «две кнопки в столбик — две кнопки в ряд… селекторы… в ряд, если помещаются»; DS §7.4):
