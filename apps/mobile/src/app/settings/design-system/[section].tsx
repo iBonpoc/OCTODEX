@@ -8,6 +8,7 @@ import { Screen, SectionTitle } from "@/ui/surfaces";
 import { canSeeShowcase } from "@/features/showcase/access";
 import { SCREENS } from "@/features/showcase/registry";
 import { TokenSections } from "@/features/showcase/Tokens";
+import { ShowcaseThemeSwitch } from "@/features/showcase/ThemeSwitch";
 import { WindowsSection } from "@/features/showcase/Windows";
 import { SelectorsSection } from "@/features/showcase/Selectors";
 import { ButtonsSection } from "@/features/showcase/Buttons";
@@ -42,6 +43,8 @@ export default function DesignSystemSection() {
       <View testID={`showcase-screen-${s.id}`} style={{ gap: 0 }}>
         <T v="caption" tone="mut">{`${t("ds.rule", { ds: s.ds })} · ${t(s.where)}`}</T>
       </View>
+      {/* #2745: both themes are compared on the page itself */}
+      <ShowcaseThemeSwitch />
       {s.id === "base" ? <TokenSections screen="base" /> : null}
       {s.id === "spacing" ? <TokenSections screen="spacing" /> : null}
       {s.id === "motion" ? <TokenSections screen="motion" /> : null}

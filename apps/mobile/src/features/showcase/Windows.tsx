@@ -65,7 +65,7 @@ export function WindowsSection() {
     </View>
   );
   return (
-    <View testID="showcase-windows">
+    <View testID="showcase-windows" style={{ gap: space[3] }}>
       <SectionTitle title={`${t(s.title)} · ${s.ds}`} />
       <Card>
         <View testID="showcase-confirm" style={{ gap: space[2] }}>

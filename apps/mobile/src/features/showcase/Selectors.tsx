@@ -64,7 +64,7 @@ export function SelectorsSection() {
   const [reqKind, setReqKind] = useState<"a" | "b" | null>(null);
   const [reqDone, setReqDone] = useState(false);
   return (
-    <View testID="showcase-selectors">
+    <View testID="showcase-selectors" style={{ gap: space[3] }}>
       <SectionTitle title={`${t(s.title)} · ${s.ds}`} />
       {/* DS §9 А1п (#1343): the row of view tabs of an object's screen — live: a press opens a tab, the row scrolls */}
       <Card>

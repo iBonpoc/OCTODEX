@@ -49,7 +49,7 @@ export function ButtonsSection() {
     </View>
   );
   return (
-    <View testID="showcase-buttons">
+    <View testID="showcase-buttons" style={{ gap: space[3] }}>
       <SectionTitle title={`${t(s.title)} · ${s.ds}`} />
       <Card>
         <View testID="showcase-btn-counter">

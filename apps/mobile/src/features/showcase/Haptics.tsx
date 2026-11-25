@@ -26,7 +26,7 @@ export function HapticsSection() {
   const [last, setLast] = useState<Kind | null>(null);
   const web = Platform.OS === "web";
   return (
-    <View testID="showcase-haptics">
+    <View testID="showcase-haptics" style={{ gap: space[3] }}>
       <SectionTitle title={`${t(s.title)} · ${s.ds}`} />
       <Card>
         <RowView style={{ justifyContent: "space-between" }}>

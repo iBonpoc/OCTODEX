@@ -21,6 +21,9 @@ export function flatten(value: unknown, path = ""): [string, string | number][] 
   return [[path, value as string | number]];
 }
 
+/** a value longer than this many characters stands under the token's name, not beside it (#2741 п.3) */
+const LONG_VALUE = 12;
+
 /** a niche module's own tokens (rule 2 exceptions): the drawing canvas storeys, the tape's mark */
 const MODULE_ONLY = /^(drawing|tape)\b|\.(drawing|tape)\b/;
 
@@ -42,6 +45,10 @@ function Sample({ group, path, value }: { group: string; path: string; value: st
   } else if (typeof value === "number" && group === "radius") {
     sample = <View style={{ width: box, height: box, borderWidth: component.hairline, borderColor: c.mut, borderRadius: Math.min(value, box / 2) }} />;
   }
+  // #2741 п.3: a long value (four colours, a font file) took the row and broke the token's name letter by letter —
+  // such a value goes on a line of its own under the name, the name keeps the whole width
+  const shown = String(value);
+  const long = shown.length > LONG_VALUE;
   return (
     <RowView style={{ paddingVertical: space[1] }} >
       <View style={{ width: space[8], alignItems: "flex-start" }}>{sample}</View>
@@ -49,8 +56,9 @@ function Sample({ group, path, value }: { group: string; path: string; value: st
         <View testID={`token-${group}.${path}`}>
           <T v="caption" tone="mut">{`${group}.${path}`}</T>
         </View>
+        {long ? <T v="caption" tabular>{shown}</T> : null}
       </View>
-      <T v="caption" tabular>{String(value)}</T>
+      {long ? null : <T v="caption" tabular>{shown}</T>}
     </RowView>
   );
 }
@@ -59,7 +67,7 @@ export function TokenSection({ s }: { s: ShowcaseSection }) {
   const { t } = useI18n();
   const { name } = useTheme();
   return (
-    <View testID={`showcase-${s.id}`}>
+    <View testID={`showcase-${s.id}`} style={{ gap: space[3] }}>
       <SectionTitle title={`${t(s.title)} · ${s.ds}`} />
       {s.tokenGroups.map((g) => {
         const rows = groupRows(g, name);

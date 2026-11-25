@@ -238,7 +238,7 @@ export function RowsSection() {
     </View>
   );
   return (
-    <View testID="showcase-rows">
+    <View testID="showcase-rows" style={{ gap: space[3] }}>
       <SectionTitle title={`${t(s.title)} · ${s.ds}`} />
       <Card>
         <T v="heading">{t("ds.rows.drag")}</T>

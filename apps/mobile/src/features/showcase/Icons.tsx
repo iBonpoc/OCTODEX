@@ -19,7 +19,7 @@ export function IconsSection() {
   const [active, setActive] = useState(false);
   const names = Object.keys(icons) as IconKey[];
   return (
-    <View testID="showcase-icons">
+    <View testID="showcase-icons" style={{ gap: space[3] }}>
       <SectionTitle title={`${t(s.title)} · ${s.ds}`} />
       <Card>
         <ToggleRow testID="showcase-icons-active" label={t("ds.icons.active")} caption={t("ds.icons.activeHint")} value={active} onChange={setActive} />
