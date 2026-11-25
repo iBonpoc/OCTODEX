@@ -1,7 +1,7 @@
 /**
- * What the downspout window says under «Вид · Размер · Этаж» (v43 PR D): «Длина 10 ft · 1 эт.», «Длина 20 ft — 2 шт. по 10 ft». The
- * length the estimate takes (engine `downspoutLengthIn`: the downspout's own storey, else its gutter's; onto a lower roof — a storey
- * less; «Своя высота» wins). Pure — unit-tested (test/gutterDsStory.test.ts).
+ * What the downspout window says under «Вид · Размер · Этаж» (v43 PR D): «Высота 10 ft», «Высота 15 ft (своя)». The
+ * height by the storeys, as the engine counts them before its extension and bends (`downspoutLengthIn`: the downspout's own storey, else
+ * its gutter's; onto a lower roof — a storey less; «Своя высота» wins). Pure — unit-tested (test/gutterDsStory.test.ts).
  */
 import { DEFAULT_GUTTER_RULES, dsStoryOf, resolveGutterRules, type GutterRulesOverride } from "@octo/estimating-engine";
 import type { DsAttrs } from "./attrs";
