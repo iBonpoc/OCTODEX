@@ -98,7 +98,9 @@ const SUBJECT_PATH: Record<Task["subjectType"], string> = { lead: "/lead", custo
 export const rejectedLabel = (r: Pick<RejectedOp, "what" | "labelKey">): DictKey => (r.labelKey ?? `att.rejected.${r.what}`) as DictKey;
 
 /** what to do about a refused change: «Открыть» → «Подключить» for who may open where it leads, else «ask the owner» */
-export const rejectedHint = (r: Pick<RejectedOp, "what" | "href"> & { kind?: RejectedOp["kind"]; reason?: RejectedOp["reason"] }, role: Role): DictKey =>
+export const rejectedHint = (r: Pick<RejectedOp, "what" | "href"> & { kind?: RejectedOp["kind"]; reason?: RejectedOp["reason"]; estimateEdit?: RejectedOp["estimateEdit"] }, role: Role): DictKey =>
+  // #2657: the edits are kept right here — copy or reset them (not «open the estimate»: its edits are not there)
+  r.reason === "estimate_signed_meanwhile" && r.estimateEdit ? "est.rej.choice.why" :
   // a refusal we can explain: its own words (outboxRejected REJECT_REASONS)
   r.reason ? rejectReasonKey(r.reason, r.kind) :
   // settings changed by someone else first: not «the module is off» — read again, make the change again (review #374 №3)

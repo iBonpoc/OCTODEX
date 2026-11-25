@@ -5,6 +5,7 @@
  * (as the store writes them), by testID:
  * - «Что с правками?» on the card of «Профиль и аккаунт» opens the window (rej-choice) — «Позже» closes it, the card stays;
  * - «Сбросить» takes the card away (with «Вернуть»), nothing new on the server;
+ * - «Сделать копию» → «Вернуть» (the toast): the editor of the copy closes, the card is back, no copy on the server (#2674 Б1);
  * - «Сделать копию» opens the editor of a NEW DRAFT (/estimate/new?id=…), the card goes, the copy reaches the server as a draft
  *   with the same client and title; the estimate the card was about is not touched.
  * The data is this run's own (rule 19, CHECKS §9 п.6): a client and a place of company A made through psql (DB_URL, as 280).
@@ -42,7 +43,7 @@ exports.run = async (h, { seed, admin }) => {
   });
   // written from a same-origin page where the app does not run (the favicon) — the running app would overwrite it (CHECKS §9 п.3)
   await p.goto(new URL("/favicon.ico", p.url()).href);
-  await p.evaluate(([k, v]) => localStorage.setItem(k, JSON.stringify(v)), [REJECTED_KEY, [card("r-later", uuid()), card("r-reset", uuid()), card("r-copy", uuid())]]);
+  await p.evaluate(([k, v]) => localStorage.setItem(k, JSON.stringify(v)), [REJECTED_KEY, [card("r-later", uuid()), card("r-reset", uuid()), card("r-undo", uuid()), card("r-copy", uuid())]]);
   await h.go("/settings/profile");
   await tid("rejected-r-copy").waitFor({ timeout: 30000 });
   const before = (await admin(`estimates?title=eq.${encodeURIComponent(title)}&select=id`)).length;
@@ -54,6 +55,7 @@ exports.run = async (h, { seed, admin }) => {
   await h.shot("choice");
   await tid("rej-choice-later").click();
   await p.getByTestId("rej-choice").locator("visible=true").waitFor({ state: "hidden", timeout: 4000 });
+  await tid("rejected-r-later").waitFor({ timeout: 5000 });
   h.expect((await p.getByTestId("rejected-r-later").count()) > 0, "«Позже»: the card stays");
 
   // «Сбросить»: the card goes (the toast's «Вернуть» puts it back), nothing new on the server
@@ -61,6 +63,17 @@ exports.run = async (h, { seed, admin }) => {
   await tid("rej-choice-reset").click();
   await p.getByTestId("rejected-r-reset").waitFor({ state: "detached", timeout: 5000 });
   h.expect((await admin(`estimates?title=eq.${encodeURIComponent(title)}&select=id`)).length === before, "«Сбросить»: nothing was made on the server");
+
+  // «Сделать копию» and at once «Вернуть» (the toast): the editor of the copy goes too, the card is back, the copy is not made (Б1)
+  await tid("rejected-choose-r-undo").click();
+  await tid("rej-choice-copy").click();
+  await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 15000 });
+  const undoneId = new URL(p.url()).searchParams.get("id");
+  await tid("toast-undo").click();
+  await p.waitForFunction(() => !/\/estimate\/new/.test(location.pathname), null, { timeout: 8000 });
+  await tid("rejected-r-undo").waitFor({ timeout: 8000 });
+  await p.waitForTimeout(3000);
+  h.expect((await admin(`estimates?id=eq.${undoneId}&select=id`)).length === 0, "«Вернуть»: the copy was not made on the server");
 
   // «Сделать копию»: the editor of a new draft, the card goes, the copy reaches the server as a draft with the same client
   await tid("rejected-choose-r-copy").click();

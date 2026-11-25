@@ -113,7 +113,13 @@ function RejectedCard({ r }: { r: RejectedOp }) {
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
           {choice.can(r) ? <Button testID={`rejected-choose-${r.id}`} label={t("est.rej.choice.open")} icon="copy" variant="secondary" onPress={() => void choice.choose(r)} /> : null}
           {rejectedOpens(r, role) ? <Button label={t("sync.rejected.open")} icon="chevronRight" variant="secondary" onPress={() => router.push(r.href as Href)} /> : null}
-          <Button label={t("sync.rejected.ok")} icon="check" variant="ghost" onPress={() => toast.show(t("sync.rejected.dismissed"), dismissRejected(r.id))} />
+          {/* #2674 Б3: the edits are kept on this card — «Понятно» would throw them away without a word: it says «Сбросить» */}
+          <Button
+            label={t(r.estimateEdit ? "est.rej.choice.reset" : "sync.rejected.ok")}
+            icon={r.estimateEdit ? "trash" : "check"}
+            variant="ghost"
+            onPress={() => toast.show(t(r.estimateEdit ? "est.rej.choice.resetDone" : "sync.rejected.dismissed"), dismissRejected(r.id))}
+          />
         </View>
       </View>
       {choice.dialog}
