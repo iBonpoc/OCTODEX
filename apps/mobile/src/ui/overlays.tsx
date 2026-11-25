@@ -826,10 +826,10 @@ export function Sheet({
                   onPress={() => { setAsk(false); noteQuestionCancelled(); }}
                   visibleHeight={component.button.phone}
                   accessibilityRole="button"
-                  accessibilityLabel={t("common.cancel")}
+                  accessibilityLabel={t("sheet.keepEditing")}
                   style={{ height: component.button.phone, alignItems: "center", justifyContent: "center" }}
                 >
-                  <T v="button">{t("common.cancel")}</T>
+                  <T v="button">{t("sheet.keepEditing")}</T>
                 </Press>
               </View>
             ) : (

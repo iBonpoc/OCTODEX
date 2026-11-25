@@ -84,6 +84,10 @@ exports.run = async (h) => {
   await winClose(p);
   await waitFor(asked, "an edit — «Закрыть» asks «Сохранить изменения?»");
   await h.shot("ask");
+  // DS Б1 «Вопрос о несохранённом — одно правило»: the third button is «Продолжить правку», never «Отмена» / «Назад»
+  const third = wide ? tid("attr-win-ask-back").getByRole("button") : p.getByRole("button", { name: "Продолжить правку" }).locator("visible=true");
+  h.expect((await third.count()) === 1 && (await third.first().innerText()).trim() === "Продолжить правку", "the question's third button says «Продолжить правку»");
+  h.expect((await p.getByRole("button", { name: "Отмена", exact: true }).locator("visible=true").count()) === 0, "no «Отмена» in the question");
   // 820/1280: the column stays under the question; 390: the question is in the sheet itself (DS Б1), the sheet stays
   h.expect(wide ? await panelShown() : (await tid("sheet-panel").count()) > 0, "the window stays while it asks");
   await discard();

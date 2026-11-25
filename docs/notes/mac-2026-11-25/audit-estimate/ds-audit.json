@@ -1,0 +1,298 @@
+[
+ {
+  "rule": "ИТОГ",
+  "status": "—",
+  "where": "~/GoRix/wt-audit-est (main 27a2ca3)",
+  "what": "Проверено правил: 36; нарушено: 23; соблюдено: 12; правила нет: 1. Главное: (1) DS внутри себя противоречит — §8.3/§8.4/§8.5/§8.9/§8.11 описывают прототип v9, §12.11–12.14 и код — v2; (2) смета не взяла общих компонентов, которые взяли клиент и Деньги: ListGroup/GroupRow, шаблон EditorScreen, ToggleRow, ListRow, ConfirmDialog (его ещё нет); (3) в шторках кнопки лежат в теле, жёлтых больше одной (долг oneAccent=3).",
+  "same_as_other_screens": "—",
+  "fix": "Сначала переписать §8.3–8.5, §8.9, §8.11 по коду и сравнить с решением основателя; потом переводить смету на GroupRow/EditorScreen/ToggleRow."
+ },
+ {
+  "rule": "Правило 29 / DS §8.0: экран — только из компонентов src/ui; своих Pressable нет",
+  "status": "соблюдено",
+  "where": "grep Pressable|Touchable по new.tsx и features/estimate/*",
+  "what": "Импортов Pressable/Touchable нет; везде Press/Button/IconButton из src/ui. Сторож UI_OWN_STYLED_PRESS: у сметы 1 запись (SwipeRow.tsx).",
+  "same_as_other_screens": "да (клиент и деньги так же)",
+  "fix": "—"
+ },
+ {
+  "rule": "Правило 1 / DS §2: только токены (цвета, размеры, радиусы)",
+  "status": "соблюдено",
+  "where": "new.tsx, features/estimate/*, ui/mainStep.tsx",
+  "what": "Голых hex/rgba и числовых размеров в стилях нет: space/size/component/radius/rhythm. Арифметика токенов (space[3]+spaceHalf.hair) — токены, не свои числа.",
+  "same_as_other_screens": "да",
+  "fix": "—"
+ },
+ {
+  "rule": "Правило 29 / DS §8.0: свои стили элемента на экране — запрещены",
+  "status": "нарушено",
+  "where": "apps/mobile/src/app/estimate/new.tsx:1409-1428 (ListFrame, groupLook); LineRow.tsx:247",
+  "what": "Экран сам рисует карточку списка позиций: backgroundColor c.surf, borderTop/BottomRadius radius.card, paddingLeft, рамку ошибки borderColor bad — через groupLook/ListFrame. Это стиль карточки/группы вне src/ui (должно быть пропом ListGroup/GroupRow).",
+  "same_as_other_screens": "нет: клиент и Деньги берут ListGroup+GroupRow (src/ui/groupedList.tsx), карточку не рисуют",
+  "fix": "Добавить в src/ui/groupedList.tsx режим «сортируемая группа» (drag-ручка, SwipeRow, раскрытие на месте) и убрать groupLook/ListFrame из экрана; до этого — записать исключение в DS §8.0 (экран, причина, чьё слово)."
+ },
+ {
+  "rule": "Правило 29: локальные компоненты в файле экрана",
+  "status": "нарушено",
+  "where": "apps/mobile/src/app/estimate/new.tsx:1361 SumRow, :1397 MenuIcon; LineRow.tsx:114 Trash",
+  "what": "SumRow — своя строка «подпись · значение ›» на Press+RowView; MenuIcon — свой IconButton+Menu; Trash — свой IconButton с отступом. Все три — «своя кнопка/строка в экране».",
+  "same_as_other_screens": "нет: Деньги — ListRow/GroupRow/CreateButton из src/ui",
+  "fix": "SumRow → GroupRow/ListRow с right=значение; MenuIcon → компонент в ui/templates/parts рядом с MoreButton/CreateButton (там уже есть такие); Trash → проп IconButton."
+ },
+ {
+  "rule": "Правило 12 / DS §12.14 ListGroup: список объекта — строки GroupRow в ListGroup",
+  "status": "нарушено",
+  "where": "apps/mobile/src/app/estimate/new.tsx:956-1056, LineRow.tsx",
+  "what": "Позиции сметы — Card/ListFrame + SortableList + LineRow, не ListGroup/GroupRow; итоги (SumRow) — не GroupRow. Исключение записано только в тексте DS §8.3 (строка раскрывается на месте), в LISTCARD_LEFT/каталоге исключений экрана нет.",
+  "same_as_other_screens": "нет: клиент (ClientSections) и Деньги — ListGroup/GroupRow",
+  "fix": "Внести в DS §8.3/§12.14 явную запись «позиции сметы — исключение правила 12: причина (раскрытие на месте, перетаскивание, смахивание), чьё слово» либо дать GroupRow режимы expandable/sortable."
+ },
+ {
+  "rule": "Правило 12 / DS §12.14: заголовок блока = ListGroup title 17/700 + CountPill через 8",
+  "status": "нарушено",
+  "where": "apps/mobile/src/app/estimate/new.tsx:930-955",
+  "what": "«Позиции 7» собран руками: RowView + T heading + CountPill + spacer + 4 IconButton. ListGroup имеет count, но не умеет действия справа, поэтому экран обошёл компонент.",
+  "same_as_other_screens": "нет: Деньги — ListGroup title/count/all",
+  "fix": "Добавить в ListGroup слот actions (круглые кнопки 32) и взять его."
+ },
+ {
+  "rule": "DS §12.3/§12.8 «Редактор» (EditorScreen): экран выбирает шаблон",
+  "status": "нарушено",
+  "where": "apps/mobile/src/app/estimate/new.tsx:840-861",
+  "what": "Смета собирает Screen head={{kind:'editor'}} + MainStep вручную, шаблон EditorScreen (ui/templates) не используется (в файле он упомянут только в комментарии «EditorScreen keeps no onScrollBegin»). DS §12.11 (стр. 1629) говорит, что onScrollBegin у EditorScreen уже проброшен — комментарий устарел. Нет onScrollY/totalFold у шаблона.",
+  "same_as_other_screens": "нет: клиент — ObjectScreen; Деньги — Screen root; лид/клиент-форма — EditorScreen",
+  "fix": "Дать EditorScreen onScrollY+fold, перевести смету на шаблон; убрать устаревший комментарий. До этого — строка исключения в DS §12.8 (там уже есть «исключение: длинная форма с итогом»)."
+ },
+ {
+  "rule": "DS §8.9 «Закреплённая панель действия» (текст про «Сохранить» / «Сохранить и отправить», 2:3, высота 44, Glass strong)",
+  "status": "нарушено",
+  "where": "apps/mobile/src/app/estimate/new.tsx:802; ui/mainStep.tsx",
+  "what": "Код: одна кнопка «Готово» 40 по словам справа + «Итого» слева, карточка surf2, без Glass; «Сохранить и отправить» только в «⋯». DS §8.9 и §8.4 так не говорят. Расхождение внутри DS: §12.11/§12.12 («Смета — Готово», кнопка 40, ≤56) верны коду, §8.4/§8.9 устарели.",
+  "same_as_other_screens": "нет: у клиента MainStep top; у редактора лида — тот же шаблон",
+  "fix": "Переписать §8.4 и §8.9 по коду (MainStep bar, «Готово», «Сохранить и отправить» в ⋯) и записать, как «Готово» относится к «Сохранить» (DS нигде не говорит, что «Готово» сохраняет и открывает смету)."
+ },
+ {
+  "rule": "DS §8.9 / q72: капсула «˄ $ …» при прокрутке (вариант А)",
+  "status": "нарушено",
+  "where": "ui/mainStep.tsx foldAdd; apps/mobile/src/app/estimate/new.tsx:811",
+  "what": "Код реализует вариант Г: рядом с капсулой круглый «＋» (foldAdd). DS §8.9 описывает только капсулу (вариант А). Скрин est-bottom: в конце страницы виден только «＋ ˄ $772.36», главной «Готово» нет.",
+  "same_as_other_screens": "нет",
+  "fix": "Записать вариант Г в DS §8.9; решить (вопрос основателю/CRM): внизу страницы главный шаг должен быть виден (totalFold.up/верх), иначе человек не видит «Готово» там, где закончил."
+ },
+ {
+  "rule": "Правило 3 / DS §12.11: кнопки видимые 40 на телефоне",
+  "status": "нарушено",
+  "where": "apps/mobile/src/app/estimate/new.tsx:865,878; apps/mobile/src/features/estimate/LineRow.tsx:328; features/estimate/OptionsCard.tsx:142,146,150",
+  "what": "Шесть Button size='sm' = 32 на телефоне («Свернуть», «Начать заново», «Экран для клиента·выйти», «Вариант — копия», «Ещё»). Правило 3: 40; sm в DS разрешён поимённо (MonthArrows «Сегодня»), для сметы записи нет. Зона нажатия 44 есть.",
+  "same_as_other_screens": "нет: Деньги/клиент sm не используют",
+  "fix": "Убрать size='sm' на телефоне (или записать в DS, что ghost-кнопки внутри карточки/строки — 32)."
+ },
+ {
+  "rule": "Правило 3: поля 44 на телефоне",
+  "status": "соблюдено",
+  "where": "TextField/NumberField/SelectField из src/ui",
+  "what": "Поля — компоненты src/ui, высота field.phone 44.",
+  "same_as_other_screens": "да",
+  "fix": "—"
+ },
+ {
+  "rule": "DS §11 п.3 / §8.9: главная кнопка формы всегда активна",
+  "status": "нарушено",
+  "where": "apps/mobile/src/app/estimate/new.tsx:1104 (est.tpl.saveTemplate); features/estimate/OptionsCard.tsx:185",
+  "what": "«Сохранить шаблон» disabled={!title.trim()} и «Готово» переименования варианта disabled при пустом — молча выключенная кнопка (шаблон: без причины рядом).",
+  "same_as_other_screens": "нет: клиент-форма — «Сохранить» всегда активна, подсвечивает пустое поле",
+  "fix": "Кнопка активна, при пустом названии — прокрутка к полю и FieldError (useRequiredForm уже в экране)."
+ },
+ {
+  "rule": "Правило 2 + DS §12.12 oneAccent: одна жёлтая заливка на экран",
+  "status": "нарушено",
+  "where": "apps/mobile/src/app/estimate/new.tsx (Button без variant: 1104, 1197; MainStep 811); NotesTerms.tsx:120; OptionsCard.tsx:178,185",
+  "what": "oneAccent.test.ts DEBT: new.tsx=3, OptionsCard=2 (плюс NotesTerms 1). На экране одновременно жёлтая «Готово» панели и жёлтая «Готово»/«Понятно» в шторке поверх; «Пересчитать» в шторке налога — жёлтая. Долг записан в сторожа, не в DS.",
+  "same_as_other_screens": "да, долг есть и у других экранов (список DEBT 21 файл), но у клиента/Денег — по одной",
+  "fix": "В шторках — secondary или footer по Б1; долг только вниз."
+ },
+ {
+  "rule": "DS Б1: кнопка в теле шторки запрещена; footer только трёх видов",
+  "status": "нарушено",
+  "where": "apps/mobile/src/app/estimate/new.tsx:1286 («Понятно»), :1197-1200; NotesTerms.tsx:120; OptionsCard.tsx:178,185",
+  "what": "Во всех шторках сметы закрывающая/сохраняющая кнопка лежит В ТЕЛЕ (Button full), а не в Sheet.footer/onSave; «Понятно» (закрыть без действия) — вообще не из трёх видов footer. Сторожа §21.2 п.27.7 ещё нет.",
+  "same_as_other_screens": "нет: Деньги — Sheet только со строками ListRow, кнопок нет",
+  "fix": "«Готово» Notes/Terms → Sheet onSave/footer; «Понятно» убрать (закрытие «✕»/смахиванием, правка применяется сразу, как у скидки)."
+ },
+ {
+  "rule": "DS DS-V2-COMPLETENESS §1 «правило оверлеев» + Б3: подтверждение — окно ConfirmDialog, не шторка",
+  "status": "нарушено",
+  "where": "apps/mobile/src/app/estimate/new.tsx:1289-1299 (est-draft-ask: danger «Удалить черновик»/«Отмена»); :1189-1202 (tax-ask «Пересчитать»/«Не менять»)",
+  "what": "Два подтверждения — Sheet с кнопками. ui/confirmDialog.tsx в репозитории ещё нет (правило есть, компонент не построен), overlayRules.test.ts тоже нет.",
+  "same_as_other_screens": "нет (там подтверждений нет)",
+  "fix": "Построить ConfirmDialog (DS-V2-COMPLETENESS §5 шаг 1) и перевести оба; пока — запись в исключения."
+ },
+ {
+  "rule": "DS Б1а: одно значение с клавиатурой — InputDialog, не шторка",
+  "status": "нарушено",
+  "where": "features/estimate/OptionsCard.tsx:181-188 (переименовать вариант); apps/mobile/src/app/estimate/new.tsx:1204-1222 (скидка/депозит)",
+  "what": "Шторка с одним TextField (переименование варианта) — именно то, что Б1а переводит на InputDialog; компонента в src/ui нет (есть только modules/gutters/draw/InputWindow). Шторки скидки/налога/депозита — Segmented+поле+«Понятно»: 2 связанных значения, допустимо, но «Понятно» — см. Б1.",
+  "same_as_other_screens": "нет",
+  "fix": "Ждёт InputDialog (⬜ DS Н-85); записать в список мест."
+ },
+ {
+  "rule": "DS §9 А5: Toggle только в ToggleRow",
+  "status": "нарушено",
+  "where": "apps/mobile/src/app/estimate/new.tsx:1231 (1); apps/mobile/src/features/estimate/LineRow.tsx:423,453,467,472 (4)",
+  "what": "Переключатели собраны руками: RowView+T+Toggle (налог, «Сохранить в каталог», «На выбор клиента», «Скрыть от клиента»). Есть ToggleRow (ui/toggleRow.tsx), choiceControls.test TOGGLE_LEGACY держит 5 долгов именно на эти файлы.",
+  "same_as_other_screens": "нет",
+  "fix": "Заменить на ToggleRow (вся строка нажимается, подпись — подпись переключателя)."
+ },
+ {
+  "rule": "DS §12.14 / правило 12: «Открыть в каталоге ›», «Ещё ˅» в открытой строке — строки ListRow",
+  "status": "нарушено",
+  "where": "apps/mobile/src/features/estimate/LineRow.tsx:405-445",
+  "what": "Две строки «подпись … ›» собраны Press+RowView+T+Icon вручную (est-open-catalog, est-more). Это ListRow/Collapsible по DS (Collapsible «Подробнее ˅» есть в ui).",
+  "same_as_other_screens": "нет",
+  "fix": "ListRow для «Открыть в каталоге», Collapsible для «Ещё»."
+ },
+ {
+  "rule": "DS §8.3 «Раскрытая строка»: корзина всегда на виду; «⋯» у каждой свёрнутой строки на вебе; «≡»",
+  "status": "нарушено",
+  "where": "apps/mobile/src/features/estimate/LineRow.tsx:302-318; apps/mobile/src/features/estimate/LineRow.tsx:314 (web → row без «⋯»); DS Б13 п.1, §14.6",
+  "what": "DS: у свёрнутой — корзина и «≡», на вебе «⋯» у каждой строки, у строк сметы долгое нажатие = перетаскивание и контекстного меню НЕТ. Код: в свёрнутой строке ни корзины, ни «⋯» (решение направления 20.11 / v2 №5 — ‘тихая строка’), на вебе действия только долгим нажатием/правой кнопкой (longPressMenu) — это как раз запрещённое DS контекстное меню. Правило ‘каждое действие жестом есть и кнопкой’ на 820/1280 без раскрытия строки не выполнено.",
+  "same_as_other_screens": "нет",
+  "fix": "Решить: обновить §8.3/Б13 под тихую строку и вернуть «⋯» на вебе, либо вернуть «⋯» в код. Сейчас DS и код противоречат."
+ },
+ {
+  "rule": "DS §8.3: сегменты «Кратко / Подробно» над списком",
+  "status": "нарушено",
+  "where": "apps/mobile/src/app/estimate/new.tsx:830 (rows → «⋯»)",
+  "what": "DS: сегмент над списком, по умолчанию «Кратко». Код: переключатель спрятан в «⋯» шапки (selected-пункт). DS не обновлён.",
+  "same_as_other_screens": "нет",
+  "fix": "Обновить §8.3 или вернуть сегмент."
+ },
+ {
+  "rule": "DS §8.4 «Блок добавления»: два ряда «＋ Новая позиция»/«Из каталога» (secondary), ghost «Разложить»/«＋Раздел»",
+  "status": "нарушено",
+  "where": "apps/mobile/src/app/estimate/new.tsx:930-955",
+  "what": "Код: 4 круглые кнопки 32 в заголовке «Позиции» (＋, каталог, разделы/варианты-меню, шаблон), в пустом состоянии — те же слова кнопками в Empty. Круглые 32 стоят вне карточки (DS §12.12: 32 — внутри карточки; 40 — шапка). Подписей у значков нет — только a11y-метки.",
+  "same_as_other_screens": "нет",
+  "fix": "Обновить §8.4 под v2 №5, дать значкам подписи/подсказку («?» §8.11) или вернуть слова."
+ },
+ {
+  "rule": "DS §8.5 «Раздел сметы» (подложка surf2, граница, «˅», итог, ⋯, ≡)",
+  "status": "нарушено",
+  "where": "features/estimate/SectionHeader.tsx:80-118",
+  "what": "Код — «заголовок над своей карточкой без подложки» (решение основателя 21.11), «⋯» у раздела = IconButton 40 (header) рядом с «Позиции» 32 — два размера круглых кнопок в одной колонке. DS §8.5 описывает старую подложку.",
+  "same_as_other_screens": "нет",
+  "fix": "Обновить §8.5; привести «⋯» раздела к одному размеру (card 32)."
+ },
+ {
+  "rule": "DS §8.11 «Подсказки первой сметы»: карточка «Как работать с позициями», «?» у заголовка",
+  "status": "нарушено",
+  "where": "apps/mobile/src/app/estimate/new.tsx:858 (hintKey без help); ui/surfaces.tsx:854",
+  "what": "Screen получает hintKey, но не help → ни «?», ни карточки первого показа нет (комментарий в коде: «no «?» by the title»). Сдвиг-подсказка (swipeHint) есть. Жестов-«≡» без подсказки: основатель уже говорил «не вижу, как перетаскивать».",
+  "same_as_other_screens": "нет: Gutters/объекты дают help",
+  "fix": "Передать help (шторка Б7 со всеми жестами словами) либо вычеркнуть §8.11."
+ },
+ {
+  "rule": "DS §8.10 Варианты Good/Better/Best",
+  "status": "соблюдено",
+  "where": "features/estimate/OptionsCard.tsx",
+  "what": "Segmented, итоги вариантов зона 44, «★ рекомендуем» зона 44. Но: «★ рекомендуем» — Press role=checkbox вручную (долг CHECKED_LEGACY 2) и итог каждого варианта — свой Press+View.",
+  "same_as_other_screens": "—",
+  "fix": "Перевести ★ на OptionRow/ToggleRow (долг волны 2–6 спеки 56)."
+ },
+ {
+  "rule": "DS §8.12 Notes и Terms",
+  "status": "соблюдено",
+  "where": "features/estimate/NotesTerms.tsx:74,91",
+  "what": "ListRow в Card, окно снизу, закрытие сохраняет. Единственное: кнопка «Готово» в теле (см. Б1).",
+  "same_as_other_screens": "да (ListRow в Card)",
+  "fix": "—"
+ },
+ {
+  "rule": "DS §12.14 TextField plate: поле-плашка в Смете",
+  "status": "нарушено",
+  "where": "apps/mobile/src/app/estimate/new.tsx:907 vs apps/mobile/src/features/estimate/LineRow.tsx:348-377",
+  "what": "«Название» — plate; поля раскрытой строки и шторок — обычная рамка (скрин est-line-open: рамки). На одном экране два вида поля. DS §12.14 приписывает plate «Смета, макет 5» без разбора раскрытой строки; расхождение 15/600 vs 16/600 (Е5) так и не объяснено.",
+  "same_as_other_screens": "нет: Клиент-форма — одним видом",
+  "fix": "Дописать в DS, где plate, а где обычное; либо включить plate в раскрытой строке."
+ },
+ {
+  "rule": "DS §4.1 / §8.9: подпись кнопки не режется, растёт",
+  "status": "нарушено",
+  "where": "apps/mobile/src/app/estimate/new.tsx:968-975 (Empty: «Новая позиция»/«Каталог» full в двух половинах)",
+  "what": "Скрин est-empty 390 RU: «Новая пози…» обрезана многоточием (Button numberOfLines=1 вне bar). Кнопки в Empty — secondary, но текст жёлтый accText: на экране 5 «жёлтых» слов + жёлтая «Добавить позицию».",
+  "same_as_other_screens": "нет",
+  "fix": "Кнопки Empty — колонкой на узких или numberOfLines=2; значок без слова."
+ },
+ {
+  "rule": "DS §8.7 Налог / §8.9 Итоги: строки «Скидка/Налог/Депозит»",
+  "status": "соблюдено",
+  "where": "apps/mobile/src/app/estimate/new.tsx:1062-1091",
+  "what": "По содержанию совпадает (‘Если клиент включит’, ‘Только для вас’). Но визуально это SumRow (подпись mut + значение) рядом с ListRow Notes/Terms (заголовок 15/600 + подпись) — две разные строки одной формы на одном экране.",
+  "same_as_other_screens": "нет: у клиента/Денег одна строка GroupRow",
+  "fix": "Единая строка (GroupRow) — см. правило 29."
+ },
+ {
+  "rule": "DS §12.13 шапка editor",
+  "status": "соблюдено",
+  "where": "Screen head={{kind:'editor'}} :853; скрин est-top",
+  "what": "«×» 40 · заголовок 17/700 · строка состояния 12/600 «Отправлена · сохранено вчера · Демо» · «⋯». Совпадает с таблицей.",
+  "same_as_other_screens": "да (EditorScreen того же вида)",
+  "fix": "—"
+ },
+ {
+  "rule": "DS §12.3 «Форма»: «Уход с несохранённым — «Выйти без сохранения?»»",
+  "status": "правила нет",
+  "where": "apps/mobile/src/app/estimate/new.tsx:275 (back = router.back), :74 useEstimateDrafts",
+  "what": "Смета автосохраняет черновик (v2: «Черновик сохраняется сам»), назад не спрашивает. DS §12.3 и EditorScreen (dirty → вопрос) требуют вопроса; для сметы с автосохранением правила нет.",
+  "same_as_other_screens": "нет: EditorScreen спрашивает",
+  "fix": "Записать в DS: у сметы автосохранение вместо вопроса (и что значит «×» при несохранённой раскрытой строке)."
+ },
+ {
+  "rule": "DS §8.9 / §14.4 «Отправит офис» у мастера",
+  "status": "нарушено",
+  "where": "apps/mobile/src/app/estimate/new.tsx:1116",
+  "what": "Подпись «Отправит офис» лежит в колонке содержимого после Notes/Terms, а не рядом с кнопкой панели (DS: «подпись «Отправит офис»» у единственной кнопки). Мастер видит её только прокрутив в конец.",
+  "same_as_other_screens": "нет",
+  "fix": "Перенести в reason MainStep (reason есть: 13 mut над/рядом с кнопкой)."
+ },
+ {
+  "rule": "DS §8.3 свёрнутая строка: скрытая — штриховка, «Нет цены» warn, цвет только статус",
+  "status": "соблюдено",
+  "where": "apps/mobile/src/features/estimate/LineRow.tsx:97-111, 184-230",
+  "what": "Hatch через track, StatusChip warn «Нет цены» со значком и словом; прибыли в свёрнутой нет.",
+  "same_as_other_screens": "да",
+  "fix": "—"
+ },
+ {
+  "rule": "DS §8.14 / правило 2: цвет только статус со значком",
+  "status": "соблюдено",
+  "where": "apps/mobile/src/features/estimate/LineRow.tsx:393-401 (loss), CaWarn",
+  "what": "bad — значок alert + слово «в минус»; warn — CaWarn со значком и словом. Прибыль плюс — без цвета.",
+  "same_as_other_screens": "да",
+  "fix": "—"
+ },
+ {
+  "rule": "Правило 4 / 7 / 5 (темы, i18n, необратимое→«Вернуть»)",
+  "status": "соблюдено",
+  "where": "скрины dark/light 390/820/1280; t() по всему файлу",
+  "what": "Тексты через t(); удаление позиции/раздела — тост «Вернуть» (undoTogether/localUndo). Одно исключение-литерал: placeholder=\"ea\" (LineRow.tsx:369) — единица, не текст интерфейса.",
+  "same_as_other_screens": "да",
+  "fix": "—"
+ },
+ {
+  "rule": "DS §14.6 / Б13 жесты: смахивание строк сметы, перетаскивание ≡ / удержание 230",
+  "status": "соблюдено",
+  "where": "features/estimate/SwipeRow.tsx, SortableList",
+  "what": "Влево «Заменить/Удалить», вправо «Скрыть», без полного смахивания, нажатие после жеста гасится; сторож 1 запись (SwipeRow фон). Натив (правило 27) этим аудитом не проверен.",
+  "same_as_other_screens": "нет (у общих списков смахивание ⬜)",
+  "fix": "—"
+ },
+ {
+  "rule": "DS §10 Б1 «вложенные шторки запрещены»",
+  "status": "соблюдено",
+  "where": "apps/mobile/src/app/estimate/new.tsx:1179-1288",
+  "what": "Вопрос налога — страница внутри той же Sheet (onBack), а не вторая Sheet.",
+  "same_as_other_screens": "да",
+  "fix": "—"
+ }
+]

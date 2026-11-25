@@ -930,7 +930,7 @@ function DrawCanvas() {
         actions: [
           { key: "save", label: t("ue.save"), tone: "primary", testID: "attr-win-ask-save" },
           { key: "discard", label: t("sheet.discard"), tone: "danger", testID: "attr-win-ask-discard" },
-          { key: "back", label: t("common.cancel"), tone: "cancel", testID: "attr-win-ask-back" },
+          { key: "back", label: t("sheet.keepEditing"), tone: "cancel", testID: "attr-win-ask-back" },
         ],
       });
       if (a === "save") saveWin();
