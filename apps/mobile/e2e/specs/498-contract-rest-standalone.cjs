@@ -1,8 +1,9 @@
 /**
  * e2e 498 — #2061 (rule А, the lead 18.11): only the contract's own invoices count against it, as the server.
  * С1 ДАНО работа $500 выполнена, по ней только standalone-счёт $200 (доп. работа); КОГДА директор открывает работу;
- *    ТОГДА «Создать счёт на остаток $500.00», и нажатие выставляет final на $500 — standalone договор не съедает.
- * С2 ДАНО standalone $200 + депозит $150; ТОГДА остаток $350.
+ *    ТОГДА главный шаг «Счёт на остаток» (v2: без суммы на кнопке), и нажатие выставляет final на $500 — standalone
+ *    договор не съедает.
+ * С2 ДАНО standalone $200 + депозит $150; ТОГДА остаток выставляется final на $350.
  * С3 (ревью) ДАНО старый final $150, выставленный по старому правилу (500 − депозит 150 − standalone 200); ТОГДА остаток
  *    $200 выставляется счётом за этап (progress): второго final сервер не примет.
  * Every view; seeded from a page without the app (h.seed).
@@ -31,31 +32,35 @@ exports.run = async (h) => {
   await h.seed(KEY, raw);
   await h.seed("octo.role.v1", "director");
 
+  // v2 (#2349): the main step «Счёт на остаток» carries no sum — the sum is the invoice it makes
+  const rest = () => p.getByTestId("job-next-rest").locator("visible=true").first();
+  const added = async (jid, before, n) => {
+    await p.waitForFunction(([k, j, c]) => (JSON.parse(localStorage.getItem(k) || "null")?.db?.invoices ?? []).filter((i) => i.jobId === j).length === c, [KEY, jid, n], { timeout: 8000 });
+    const db = await h.db();
+    return { db, inv: db.invoices.find((i) => i.jobId === jid && !before.includes(i.id)) };
+  };
+
   // С1
   await h.go("/job/j498a");
-  const rest = p.getByText(/^Создать счёт на остаток \$500(\.00)?$/).locator("visible=true").first();
-  await rest.waitFor({ timeout: 8000 });
-  h.expect(true, "С1 the rest is the whole $500: a standalone invoice does not eat the contract");
+  await rest().waitFor({ timeout: 8000 });
   await h.shot("rest-500");
-  await rest.click();
-  await p.waitForFunction((k) => (JSON.parse(localStorage.getItem(k) || "null")?.db?.invoices ?? []).some((i) => i.jobId === "j498a" && i.kind === "final"), KEY, { timeout: 8000 });
-  const db = await h.db();
-  const fin = db.invoices.filter((i) => i.jobId === "j498a" && i.kind === "final");
-  h.expect(fin.length === 1 && fin[0].totalCents === 50000, `С1 one final for $500: ${JSON.stringify(fin.map((i) => i.totalCents))}`);
+  await rest().click();
+  const a = await added("j498a", ["i498s"], 2);
+  const fin = a.db.invoices.filter((i) => i.jobId === "j498a" && i.kind === "final");
+  h.expect(fin.length === 1 && fin[0].totalCents === 50000, `С1 one final for $500, a standalone invoice does not eat the contract: ${JSON.stringify(fin.map((i) => i.totalCents))}`);
 
   // С2
   await h.go("/job/j498b");
-  await p.getByText(/^Создать счёт на остаток \$350(\.00)?$/).locator("visible=true").first().waitFor({ timeout: 8000 });
-  h.expect(true, "С2 standalone $200 + deposit $150: the rest is $350");
+  await rest().waitFor({ timeout: 8000 });
+  await rest().click();
+  const b = await added("j498b", ["i498t", "i498d"], 3);
+  h.expect(b.inv?.kind === "final" && b.inv?.totalCents === 35000, `С2 standalone $200 + deposit $150: the rest $350 as a final: ${JSON.stringify(b.inv)}`);
 
   // С3
   await h.go("/job/j498c");
-  const rest3 = p.getByText(/^Создать счёт на остаток \$200(\.00)?$/).locator("visible=true").first();
-  await rest3.waitFor({ timeout: 8000 });
-  await rest3.click();
-  await p.waitForFunction((k) => (JSON.parse(localStorage.getItem(k) || "null")?.db?.invoices ?? []).filter((i) => i.jobId === "j498c").length === 4, KEY, { timeout: 8000 });
-  const db3 = await h.db();
-  const finals = db3.invoices.filter((i) => i.jobId === "j498c" && i.kind === "final");
-  const added = db3.invoices.find((i) => i.jobId === "j498c" && !["i498cd", "i498cs", "i498cf"].includes(i.id));
-  h.expect(finals.length === 1 && added?.kind === "progress" && added?.totalCents === 20000, `С3 the gap $200 as a progress invoice, still one final: ${JSON.stringify(added)}`);
+  await rest().waitFor({ timeout: 8000 });
+  await rest().click();
+  const c = await added("j498c", ["i498cd", "i498cs", "i498cf"], 4);
+  const finals = c.db.invoices.filter((i) => i.jobId === "j498c" && i.kind === "final");
+  h.expect(finals.length === 1 && c.inv?.kind === "progress" && c.inv?.totalCents === 20000, `С3 the gap $200 as a progress invoice, still one final: ${JSON.stringify(c.inv)}`);
 };
