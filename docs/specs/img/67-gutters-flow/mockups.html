@@ -240,7 +240,8 @@ const kpi = (fits, more = 0) => {
 };
 // числа фитингов — макет (3 downspout по одному каждого); в коде — из движка для этого чертежа
 const FITS = [["3", "A Elbow"], ["3", "B Elbow"], ["2", "A Offset"]];
-const fitNote = `<div class="gnote">Макет: состав «Переходников» — умолчание, ждёт ответа #2679</div>`;
+// #2679 решено основателем 25.11: «Переходники» — все фитинги downspout
+const fitNote = "";
 const trio = kpi(FITS) + fitNote + `<div class="sost"><span>Состав · 14</span>${ic("chev", 16)}</div>`;
 const addr = group("", [row(`<div class="ico">${ic("pin")}</div>`, "2207 Ocean Park Blvd", "Santa Monica, CA", `<span class="go">Маршрут</span>`)]);
 const docs = group("Файлы", [
@@ -285,8 +286,8 @@ S["now-states"] = () => `<div class="phone" style="height:1010px"><div class="sc
   <div class="cap">Черновик без клиента · офис</div>${next("Смета собрана, но отправить некому")}${act("Привязать клиента", "userPlus").replace('class="pair"', 'class="pair col"')}
   <div class="cap">Отправлена · офис</div>${next("<span class=\"money\">$2,113.67</span> · отправлена вчера, клиент открыл 2&nbsp;раза")}${act("Напомнить клиенту", "bell").replace('class="pair"', 'class="pair col"')}
   <div class="cap">Изменена после отправки · офис</div>${next("Было <span class=\"money\">$2,113.67</span> → стало <span class=\"money\">$2,348.20</span>. Клиент видит версию от 24&nbsp;нояб.")}${act("Отправить изменения", "send", "")}<div class="later">В «⋯» — «Восстановить версию клиента» (с подтверждением)</div>
-  <div class="cap">Подписана, депозит не оплачен · офис</div>${next("<span class=\"money\">$2,113.67</span> · подписана сегодня")}${act("Получить депозит", "money", "")}
-  <div class="gnote">Макет: правка чертежа после подписи — решение до кода, #2676 (этап 0)</div>
+  <div class="cap">Подписана, депозит не оплачен · офис</div>${next("<span class=\"money\">$2,113.67</span> · подписана сегодня")}${act("Получить депозит", "money").replace('class="pair"', 'class="pair col"')}
+  <div class="later">«Править чертёж» после подписи — сначала подтверждение: «Чертёж подписан клиентом 25 нояб. Изменить его?» (основатель 25.11, #2720)</div>
   </div></div>`;
 // мастер в тех же состояниях: денег нет, жёлтой нет, следующий шаг — свой
 S["now-states-master"] = () => `<div class="phone"><div class="scroll" style="padding-top:4px">
