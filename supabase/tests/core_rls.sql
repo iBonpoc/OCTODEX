@@ -19431,7 +19431,7 @@ select tst.ok(tst.cnt($q$select 1 from public.catalog_price_recalc where item_id
          tst.cnt($q$select 1 from public.catalog_price_recalc where item_id = '54680000-0000-4000-8000-0000000000a1' and sent_price_cents = 444$q$)));
 \echo 'T468 ok'
 
--- T469: seq on the three tables — always there, once, the server's; it never goes against «at»; who sees costs reads it
+-- T469: seq on the three tables — always there, once, the server's (the order of insert, not of «at»: a trigger row may have a later «at» and a smaller seq); who sees costs reads it
 \echo 'T469 seq is the order of a history'
 select tst.ok((select count(*) = 3 from information_schema.columns where table_schema = 'public' and column_name = 'seq' and data_type = 'bigint'
                  and is_nullable = 'NO' and is_identity = 'YES'
