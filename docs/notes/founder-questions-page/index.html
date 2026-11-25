@@ -1,5 +1,6 @@
 <title>Вопросы GoRix</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<script type="application/json" id="claude-artifacts-manifest">{"permissions": []}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap">
 <style>
@@ -139,6 +140,7 @@ dialog .x{margin:var(--space-2) auto 0;display:flex}
     <div class="eyebrow">GoRix · руководитель проекта</div>
     <h1>Вопросы GoRix</h1>
     <div class="lead" id="lead">Загружаю…</div>
+    <div class="actions" id="install-row" hidden><button class="btn primary" id="install" type="button"><span>Установить на компьютер</span></button></div>
     <div class="sub" id="sub">Время — Лос-Анджелес. Отвечайте как удобно: кнопкой, словами или голосом.</div>
   </header>
 
@@ -176,6 +178,7 @@ dialog .x{margin:var(--space-2) auto 0;display:flex}
   const fmt = iso => { try { return new Date(iso).toLocaleString('ru-RU',{timeZone:'America/Los_Angeles',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } };
   const plural = n => { const a=n%10,b=n%100; return (a===1&&b!==11)?'вопрос':(a>=2&&a<=4&&(b<10||b>=20))?'вопроса':'вопросов'; };
 
+  let desk = null;
   let db = null, dict = null, questions = [], answers = {}, picked = {}, drafts = {}, editing = {};
 
   function toast(t){ const x=$('#toast'); x.textContent=t; x.classList.add('on'); clearTimeout(toast._t); toast._t=setTimeout(()=>x.classList.remove('on'),2600); }
@@ -317,6 +320,7 @@ dialog .x{margin:var(--space-2) auto 0;display:flex}
       wait.append(e);
     } else open.forEach(q=>wait.append(renderQuestion(q)));
     $('#lead').textContent = open.length ? 'Есть '+open.length+' '+plural(open.length) : 'Вопросов нет';
+    if (desk && desk.app && desk.app.dock && desk.app.dock.setBadge){ desk.app.dock.setBadge(open.length ? String(open.length) : '').catch(()=>{}); }
     renderDone(done);
   }
 
@@ -342,6 +346,16 @@ dialog .x{margin:var(--space-2) auto 0;display:flex}
     clearTimeout(timer);
     if (!db){ $('#lead').textContent='Войдите в claude.ai, чтобы видеть вопросы'; return; }
     claude.use('dictation').then(d=>{ dict=d; render(); }).catch(()=>{});
+    claude.use('desktop').then(async d=>{
+      desk = d; if (!d) return;
+      if (d.fs || d.app){ render(); }
+      try{
+        if (d.install && (await d.install.state())==='available'){
+          const row=$('#install-row'); row.hidden=false;
+          $('#install').addEventListener('click',()=>{ d.install.request().then(r=>{ if(r==='installed'){ row.hidden=true; toast('Устанавливаю…'); } }).catch(()=>{}); });
+        }
+      }catch(e){}
+    }).catch(()=>{});
     db.collection('questions').onSnapshot(snap=>{ questions = snap.docs.map(d=>({ ...(d.data()||{}), n: Number((d.data()||{}).n ?? d.id) })); render(); }, ()=>{ $('#lead').textContent='Вопросы не загрузились'; });
     db.collection('answers').onSnapshot(snap=>{ answers = {}; snap.docs.forEach(d=>{ answers[d.id]=d.data()||{}; }); render(); });
     db.doc('summary/today').onSnapshot(s=>renderSummary(s.exists ? s.data() : null));
