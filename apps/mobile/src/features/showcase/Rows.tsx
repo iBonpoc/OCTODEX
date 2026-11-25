@@ -173,7 +173,7 @@ function SwipeSample() {
 function TaxSample() {
   const { t } = useI18n();
   const [mode, setMode] = useState<"pct" | "off">("pct");
-  const [ppm, setPpm] = useState(0);
+  const [ppm, setPpm] = useState(88750);
   const modes = [{ key: "pct" as const, label: "%" }, { key: "off" as const, label: t("ue.off") }];
   return (
     <Card>
@@ -188,7 +188,6 @@ function TaxSample() {
           onMode={setMode}
           field={<RatePctField unit a11yLabel={t("ue.taxRate")} ppm={ppm} onChange={setPpm} />}
           sum={mode === "off" ? "—" : t("ds.rows.taxSum")}
-          note={mode === "pct" && ppm !== 88750 ? <View style={{ alignSelf: "flex-start" }}><Button label={t("ue.taxLast", { rate: "8.875" })} variant="ghost" onPress={() => setPpm(88750)} /></View> : null}
         />
         <ModeRow title={t("ue.tax")} modes={modes} mode="off" off="off" onMode={() => {}} sum="—" locked note={<T v="caption" tone="mut">{t("ue.taxExemptClient")}</T>} />
       </View>
