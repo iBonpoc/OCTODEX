@@ -17,6 +17,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CLOUD_CACHE_PREFIX } from "@/data/cacheKey";
 import { REJECTED_KEY } from "@/data/outboxOwner";
 import { BROKEN_PREFIX, forgetPendingWrites } from "@/data/persist";
+import { sweepSoon } from "@/data/localFiles";
 import { DRAFT_DAYS, DRAFTS_PREFIX, draftWorthKeeping, isEditCtx, type EstimateDraft } from "@/features/estimateDraft";
 
 /** the mark of a sign-out wipe not finished: the person's id */
@@ -102,12 +103,14 @@ interface CacheRecord {
     me?: string;
     visits?: { photos?: { upload?: unknown }[] }[];
     expenses?: { receiptFailed?: unknown }[];
+    /** a measurement's photo (a module file) the cloud refused (#1441) */
+    files?: { upload?: unknown }[];
   };
 }
-/** what only this phone has in a cache: a refused photo or receipt (pure) */
+/** what only this phone has in a cache: a refused photo, a module file's refused photo or a receipt (pure) */
 export function holdsLocalOnly(r: CacheRecord): boolean {
   const d = r.db;
-  return !!(d?.visits?.some((v) => v.photos?.some((p) => p.upload)) || d?.expenses?.some((x) => x.receiptFailed));
+  return !!(d?.visits?.some((v) => v.photos?.some((p) => p.upload)) || d?.expenses?.some((x) => x.receiptFailed) || d?.files?.some((f) => f.upload));
 }
 
 export interface WipeStore {
@@ -162,7 +165,8 @@ export async function wipeAfterSignOut(me: string, o: WipeOpts): Promise<void> {
     for (let i = 0; i < 4; i++) {
       if (o.signedIn() === me) return void (await dropMarks(s));
       const found = await pass(s, me, undefined, drafts);
-      if (i > 0 && found === 0) return void (await dropMarks(s));
+      // #1659: the caches are gone — the photo and receipt files they named go with the next sweep
+      if (i > 0 && found === 0) return void (await dropMarks(s), sweepSoon());
       await new Promise((r) => setTimeout(r, pause));
     }
   } catch {
@@ -184,6 +188,7 @@ export async function wipeSignOutIfPending(signedIn: string | null, s: WipeStore
     const drafts = (await s.getItem(SIGNOUT_DRAFTS_KEY)) === me;
     if (me !== signedIn) await pass(s, me, undefined, drafts);
     await dropMarks(s);
+    sweepSoon();
   } catch {
     // tried again on the next start
   }
@@ -219,12 +224,15 @@ export async function wipeLeftCompanies(me: string, o: LeftOpts): Promise<void> 
   const s = o.s ?? deviceStore;
   const pause = o.pauseMs ?? 1000;
   const gone = (c: string) => !o.active().has(c);
+  let total = 0;
   try {
     for (let i = 0; i < 4; i++) {
       if (o.signedIn() !== me) return;
       const found = await pass(s, me, gone);
       // the second pass at least: the store's last write of a company just left lands after the first
-      if (i > 0 && found === 0) return;
+      total += found;
+      // #1659: caches went — the photo files only they named go with the next sweep
+      if (i > 0 && found === 0) return void (total > 0 && sweepSoon());
       await new Promise((r) => setTimeout(r, pause));
     }
   } catch {

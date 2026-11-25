@@ -12,6 +12,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as Crypto from "expo-crypto";
 import { motion } from "@octo/design-tokens";
 import { useAuth, type DbRole } from "@/cloud/auth";
+import { keepTakenBack, keptHere, setMemoryRecords, sweepSoon } from "./localFiles";
 import { MEMBERSHIP_REREAD_MS, memberMatches } from "@/cloud/membershipSync";
 import { appRoles, loadCompanyDB, loadCompanyModule, loadCostHistory, loadPriceHistory } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
@@ -749,6 +750,17 @@ export function StoreProvider({
   onlineRef.current = online;
   const outboxRef = useRef(outbox);
   outboxRef.current = outbox;
+  // #1659: what the store holds only in memory names photo files too (a write not landed yet); a write the device refused
+  // — no sweep of photo files at all (the file may be the only copy of a queued photo). The first sweep after the start
+  // waits: the store's records are read and written by then
+  const memRecords = useRef<() => string[] | null>(() => null);
+  memRecords.current = () =>
+    notSavedOnDevice ? null : [JSON.stringify(dbRef.current), JSON.stringify(outboxRef.current), JSON.stringify(queue), JSON.stringify(rejected)];
+  useEffect(() => {
+    const off = setMemoryRecords(() => memRecords.current());
+    sweepSoon(30_000);
+    return off;
+  }, []);
   // the outbox key is one for the phone: each op knows whose it is, the signed-in person sends only theirs
   // (review #231: after a plain sign-out the next person must never send someone else's ops in their company)
   const who = mode === "cloud" ? { userId: auth.userId!, companyId: company!.companyId } : null;
@@ -995,7 +1007,10 @@ export function StoreProvider({
         const now = Date.now();
         const a = applyPrep(dbRef.current, t, r, now);
         if (!a) continue;
-        if (r.ok) madeHere(r.uri);
+        if (r.ok) {
+          madeHere(r.uri);
+          keptHere(r.uri); // #1659: made in this run — not swept before the next start
+        }
         if (a.op && mutateRef.current) mutateRef.current(t.kind === "photo" ? "photo.prepared" : "receipt.prepared", (d) => applyPrep(d, t, r, now)?.db ?? d, a.op);
         else {
           dbRef.current = a.db;
@@ -1323,6 +1338,8 @@ export function StoreProvider({
       if (process.env.NODE_ENV === "test") assertNormalized(label, next, modeRef.current);
       dbRef.current = next;
       setDb(next);
+      // #1659 (review 25.11): a file «Вернуть» may bring back is never swept while the app runs
+      keepTakenBack(prev, next);
       let qid: string | null = null;
       let oid: string | null = null;
       /** a waiting op this one replaced (module.op coalesceKey): «Отменить» puts it back in its place */
@@ -1335,6 +1352,7 @@ export function StoreProvider({
         const at = coalesceAt(outboxRef.current, op, whoRef.current, inFlight.current);
         if (at >= 0) {
           replaced = outboxRef.current[at]!;
+          keepTakenBack({ op: replaced.op }, {});
           foldedInto.current.set(replaced.id, oid);
           outboxRef.current = outboxRef.current.map((x, i) => (i === at ? coalesced(replaced!, item) : x));
         } else outboxRef.current = [...outboxRef.current, item];
