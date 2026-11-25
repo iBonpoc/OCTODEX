@@ -80,7 +80,8 @@ describe("tapeDraft: the tape without «Применить»", () => {
 });
 
 // v43 PR B: «футы | мм» — the length in millimetres is read at once too
-import { mmDraft } from "../src/modules/gutters/draw/lengthEntry";
+import { mmDraft, mmNumber } from "../src/modules/gutters/draw/lengthEntry";
+import { unitFields } from "../src/modules/gutters/canvas/attrs";
 
 describe("mmDraft: the tape in millimetres", () => {
   it("3810 mm is 150″ (12′ 6″); the thousands comma and spaces are the same number", () => {
@@ -90,6 +91,20 @@ describe("mmDraft: the tape in millimetres", () => {
   });
   it("the length the run has already is not written again", () => {
     expect(mmDraft("3810", 150).same).toBe(true);
+  });
+  it("a comma groups thousands only by three: «762,5» is 762.5 mm (not 7625), «1,234,567» is a number of millions", () => {
+    expect(mmNumber("762,5")).toBe("762.5");
+    expect(mmNumber("3,810")).toBe("3810");
+    expect(mmNumber("1,234,567")).toBe("1234567");
+    expect(mmNumber("3,81")).toBe("3.81");
+    expect(mmDraft("762,5", 100).len).toBe(30); // 762.5 mm = 30.02″ → 30″ at 1/16″
+  });
+  it("a gutter shorter than MIN_RUN_IN can not be drawn: «3», «38» (a half-typed 3810) write nothing; 305 mm (12″) goes", () => {
+    for (const s of ["3", "38", "300"]) expect(mmDraft(s, 150).len).toBeNull();
+    expect(mmDraft("305", 150).len).toBeGreaterThanOrEqual(12);
+  });
+  it("mm → inches → mm comes back to the same number (3810 ↔ 150″)", () => {
+    expect(unitFields(mmDraft("3810", 0).len!, "mm").one).toBe("3810");
   });
   it("empty, zero, letters: nothing is written, the warning shows", () => {
     for (const s of ["", "0", "abc", "-5"]) expect(mmDraft(s, 150)).toEqual({ len: null, bad: true, same: false });

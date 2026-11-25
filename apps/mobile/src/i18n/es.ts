@@ -3719,6 +3719,7 @@ export const es: Dict = {
   "mod.gutters.attr.lineLen": "línea · {len}",
   "mod.gutters.attr.runNo": "Canaleta n.º {n}",
   "mod.gutters.attr.dsNo": "Bajante n.º {n}",
+  "mod.gutters.attr.badLengthMm": "De 305 a 152 400 mm",
   "mod.gutters.attr.lengthMm": "Longitud, mm",
   "mod.gutters.attr.tapeInchesOnly": "La cinta es solo en pulgadas",
   "mod.gutters.attr.apply": "Aplicar",

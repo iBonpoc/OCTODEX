@@ -205,7 +205,7 @@ function Tape({ run, onLength, fmt = "ftin" }: { run: DrawnRun; onLength: (lengt
       </>
       )}
       {taped ? <View testID="attr-length-reset"><Button label={t(k("reset"))} size="sm" variant="ghost" onPress={() => onLength(null)} /></View> : null}
-      {bad ? <View testID="attr-length-bad"><StatusChip status="warn" label={t(k("badLength"))} soft /></View> : null}
+      {bad ? <View testID="attr-length-bad"><StatusChip status="warn" label={t(k(unit === "mm" ? "badLengthMm" : "badLength"))} soft /></View> : null}
     </Field>
   );
 }
@@ -350,7 +350,7 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
       )}
       {unit !== "ftin" ? <PullOne one={one} unit={unit} onOne={(v) => { edited.current = true; setOne(v); setBad(false); }} testID="quick-length-tape" /> : null}
       <T v="caption" tone="mut">{t(k("quickDrawn"), { len: fmtLen(drawn, fmt) })}</T>
-      {bad ? <View testID="quick-length-bad"><StatusChip status="warn" label={t(k("badLength"))} soft /></View> : null}
+      {bad ? <View testID="quick-length-bad"><StatusChip status="warn" label={t(k(unit === "mm" ? "badLengthMm" : "badLength"))} soft /></View> : null}
       </ScrollView>
       <RowView style={{ gap: space[2], justifyContent: "flex-end" }}>
         {unit === "ftin" && stage !== "frac" ? <View testID="quick-length-next"><Button label={t(k("next"))} size="sm" variant="secondary" onPress={goNext} /></View> : null}

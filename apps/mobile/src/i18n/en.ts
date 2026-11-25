@@ -3719,6 +3719,7 @@ export const en: Dict = {
   "mod.gutters.attr.lineLen": "line · {len}",
   "mod.gutters.attr.runNo": "Gutter #{n}",
   "mod.gutters.attr.dsNo": "Downspout #{n}",
+  "mod.gutters.attr.badLengthMm": "From 305 to 152,400 mm",
   "mod.gutters.attr.lengthMm": "Length, mm",
   "mod.gutters.attr.tapeInchesOnly": "The tape strip is inches only",
   "mod.gutters.attr.apply": "Apply",

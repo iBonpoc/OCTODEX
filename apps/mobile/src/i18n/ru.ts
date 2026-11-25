@@ -3719,6 +3719,7 @@ export const ru = {
   "mod.gutters.attr.lineLen": "линия · {len}",
   "mod.gutters.attr.runNo": "Gutter № {n}",
   "mod.gutters.attr.dsNo": "Downspout № {n}",
+  "mod.gutters.attr.badLengthMm": "От 305 до 152 400 мм",
   "mod.gutters.attr.lengthMm": "Длина, мм",
   "mod.gutters.attr.tapeInchesOnly": "Рулетка — только дюймы",
   "mod.gutters.attr.apply": "Применить",
