@@ -54,6 +54,8 @@ exports.run = async (h) => {
   await waitFor(() => field("quick-length-ft").evaluate((el) => el === document.activeElement), "the feet field has the focus");
   const before = await fields();
   h.expect(Number(before.ft) > 0, `the drawn feet are there (${before.ft})`);
+  // the drawn length has inches too (a stroke is never exact feet): else the reset below proves nothing (#2446)
+  h.expect(before.inc !== "0", `the drawn inches are there (${before.inc})`);
   // the feet typed over, digit by digit, as on a phone
   const newFt = String(Number(before.ft) + 3);
   await p.keyboard.type(newFt, { delay: 60 });
@@ -77,4 +79,46 @@ exports.run = async (h) => {
   h.expect((await field("quick-length-in").inputValue()) === "7", "opened again: the feet keep the inches");
   await tid("quick-length-apply").getByRole("button").click();
   await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === (Number(newFt) + 1) * 12 + 7), `kept: ${Number(newFt) + 1}′ 7″`);
+
+  // #2446: a SECOND gutter, its first window: the inches typed (then a fraction), THEN the feet → the inches and the fraction stay
+  const known = (await runs()).length;
+  const y2 = b.y + b.height * 0.7;
+  await stroke([x0, y2], [x1, y2]);
+  await waitFor(async () => (await runs()).length > known, "the second gutter is drawn");
+  await tid("quick-length").waitFor({ timeout: 5000 });
+  await waitFor(() => field("quick-length-ft").evaluate((el) => el === document.activeElement), "second: the feet field has the focus");
+  await field("quick-length-in").fill("5");
+  await tid("quick-length-fracs").getByRole("radio", { name: "⅝", exact: true }).click();
+  await field("quick-length-ft").fill("9");
+  await settle(p);
+  const kept = await fields();
+  h.expect(kept.ft === "9", `second window: the feet are 9 (${kept.ft})`);
+  h.expect(kept.inc === "5", `first window, inches first: the feet keep the inches (${kept.inc})`);
+  h.expect(kept.frac === "⅝", `first window, fraction first: the feet keep the fraction (${kept.frac})`);
+  await tid("quick-length-apply").getByRole("button").click();
+  await tid("quick-length").waitFor({ state: "hidden", timeout: 3000 });
+  await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 9 * 12 + 5.625), "kept: 9′ 5⅝″");
+
+  // #2446 п.4: a THIRD gutter, its first window (each drawn gutter opens its own first window — `firstOpen` is per window): the feet typed,
+  // «дюймы» → the total inches by hand → «фут + дюйм» → the feet typed again → the inches and the fraction stay (the unit pick took them as touched)
+  const known3 = (await runs()).length;
+  const y3 = b.y + b.height * 0.25;
+  await stroke([x0, y3], [x1, y3]);
+  await waitFor(async () => (await runs()).length > known3, "the third gutter is drawn");
+  await tid("quick-length").waitFor({ timeout: 5000 });
+  await waitFor(() => field("quick-length-ft").evaluate((el) => el === document.activeElement), "third: the feet field has the focus");
+  await field("quick-length-ft").fill("9");
+  await pickUnit("дюймы");
+  await field("quick-length-one").fill("113.625");
+  await pickUnit("фут + дюйм");
+  await waitFor(async () => (await field("quick-length-ft").count()) === 1, "third: the feet field is back");
+  const back = await fields();
+  h.expect(back.ft === "9" && back.inc === "5" && back.frac === "⅝", `a unit round trip keeps 9′ 5⅝″ (${back.ft} ${back.inc} ${back.frac})`);
+  await field("quick-length-ft").fill("7");
+  await settle(p);
+  const after3 = await fields();
+  h.expect(after3.ft === "7" && after3.inc === "5" && after3.frac === "⅝", `after a unit pick the feet keep the inches and the fraction (${after3.ft} ${after3.inc} ${after3.frac})`);
+  await tid("quick-length-apply").getByRole("button").click();
+  await tid("quick-length").waitFor({ state: "hidden", timeout: 3000 });
+  await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 7 * 12 + 5.625), "kept: 7′ 5⅝″");
 };
