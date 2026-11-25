@@ -35,7 +35,10 @@ permissions:
 
 concurrency:
   group: checks-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.event_name == 'push' && 'main' || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+  # #2480: the «labeled» run of a PR (the label «к-влитию») does NOT cancel the run in progress — it waits behind it in the
+  # same group, so no cancelled duplicate leaves a red «checks» (and a skipped one would read as «passed» without the full
+  # matrix). A new push (synchronize) still cancels everything older.
+  cancel-in-progress: ${{ (github.event_name == 'pull_request' && github.event.action != 'labeled') || github.event_name == 'push' }}
 
 jobs:
   # Pipeline pause (#1087, rule 26): while a task labelled «остановка» is open, a pull request without the label «починка» stops
