@@ -263,7 +263,7 @@ S["v2-card"] = () => `<div class="phone"><div class="scroll">${headObj("Linda Al
   ${officeNext}${sheet}${saved("Сохранено в облаке · 10:42")}${act("Отправить смету", "send")}${trio}${addr}
   </div>${tabbar("Gutters")}</div>`;
 // мастер: без денег, без вкладки «Сметы», без жёлтой
-S["v2-card-master"] = () => `<div class="phone"><div class="scroll">${headObj("Linda Alvarez", hst("doc", "Смета у офиса"))}${tabs(false)}
+S["v2-card-master"] = () => `<div class="phone"><div class="scroll">${headObj("Linda Alvarez", hst("wifiOff", "На телефоне · уйдёт в офис"))}${tabs(false)}
   ${next("Смета собрана — офис проверит и отправит")}${sheet}${offline("Нет сети · уйдёт в офис, когда появится сеть")}${act("", "", "Править чертёж")}${trio}${addr}
   </div>${tabbar("Gutters", TABS_MASTER)}</div>`;
 // iPhone SE (667): кнопка и тройка — над вкладками?
@@ -284,14 +284,15 @@ S["now-states"] = () => `<div class="phone" style="height:1010px"><div class="sc
   <div class="cap">Смета не собралась · офис</div>${next(`${ic("alert", 15)} Нет цены у 2 деталей — смета не полная`)}${act("Указать цены", "list").replace('class="pair"', 'class="pair col"')}
   <div class="cap">Черновик без клиента · офис</div>${next("Смета собрана, но отправить некому")}${act("Привязать клиента", "userPlus").replace('class="pair"', 'class="pair col"')}
   <div class="cap">Отправлена · офис</div>${next("<span class=\"money\">$2,113.67</span> · отправлена вчера, клиент открыл 2&nbsp;раза")}${act("Напомнить клиенту", "bell").replace('class="pair"', 'class="pair col"')}
-  <div class="cap">Изменена после отправки · офис</div>${next("Было <span class=\"money\">$2,113.67</span> → стало <span class=\"money\">$2,348.20</span>. Клиент видит версию от 24&nbsp;нояб.")}${act("Отправить изменения", "send", "")}<div class="later">В «⋯» — «Вернуть версию клиента» (с подтверждением)</div>
+  <div class="cap">Изменена после отправки · офис</div>${next("Было <span class=\"money\">$2,113.67</span> → стало <span class=\"money\">$2,348.20</span>. Клиент видит версию от 24&nbsp;нояб.")}${act("Отправить изменения", "send", "")}<div class="later">В «⋯» — «Восстановить версию клиента» (с подтверждением)</div>
   <div class="cap">Подписана, депозит не оплачен · офис</div>${next("<span class=\"money\">$2,113.67</span> · подписана сегодня")}${act("Получить депозит", "money", "")}
   <div class="gnote">Макет: правка чертежа после подписи — решение до кода, #2676 (этап 0)</div>
   </div></div>`;
 // мастер в тех же состояниях: денег нет, жёлтой нет, следующий шаг — свой
 S["now-states-master"] = () => `<div class="phone"><div class="scroll" style="padding-top:4px">
-  <div class="cap">Отправлена · мастер</div><div class="hst">${hst("clock", "Смета у клиента")}</div>${next("Офис ждёт ответа клиента. Чертёж можно поправить — офис увидит изменения")}${act("", "", "Править чертёж")}
-  <div class="cap">Подписана · мастер</div><div class="hst">${hst("check", "Подписана")}</div>${next("Дальше — работа: дату ставит офис, она появится в «Плане»")}${act("", "", "Открыть план")}
+  <div class="cap">Отправлена · мастер</div><div class="hst">${hst("doc", "Отправлена")}</div>${next("Офис ждёт ответа клиента. Чертёж можно поправить — офис увидит изменения")}${act("", "", "Править чертёж")}
+  <div class="cap">Подписана · мастер</div><div class="hst">${hst("check", "Подписана")}</div>${next("Дальше — работа: дату ставит офис, она появится в «Плане»")}${act("", "", "Открыть план").replace(ic("pencil", 18), ic("cal", 18))}
+  <div class="cap">Смета не собралась · мастер</div><div class="hst">${hst("alert", "Нет цены у 2 деталей")}</div>${next("Офис укажет цены — делать ничего не нужно")}${act("", "", "Править чертёж")}
   </div></div>`;
 const frame = (s) => `<iframe src="mockups.html#screen=${s}&theme=${theme}"></iframe>`;
 const fig = (cap, sub, body) => `<figure><figcaption>${cap}<small>${sub}</small></figcaption>${body}</figure>`;
