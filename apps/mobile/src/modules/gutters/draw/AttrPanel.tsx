@@ -30,7 +30,7 @@ import { colorChoices } from "./colorChoices";
 import { dsMoreSet, dsRareShown } from "./attrShown";
 import { FracPicker } from "./FracPicker";
 import { FRAC_SLOT } from "./fracSlot";
-import { feetResetsRest, inchesComplete, inchesTooBig, nextStage, unitPickStep, type EntryStage } from "./lengthEntry";
+import { feetResetsRest, inchesComplete, inchesTooBig, nextStage, tapeDraft, unitPickStep, type EntryStage } from "./lengthEntry";
 import { MM_SCALE, SIXTEENTHS_SCALE, SIXTEENTHS_SCALE_IN, Tape as TapeStrip } from "./Tape";
 import { DENOM, fmtLen, fracLabel, LEN_UNITS, MM_OF, MM_PER_IN, type LenFormat, type LenUnit } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
@@ -127,7 +127,7 @@ const split = (n: number) => {
   return { ft: Math.floor(e / 192), inch: Math.floor((e % 192) / 16), sixteenths: e % 16 };
 };
 
-/** the tape: feet and inches; «Применить» sets the length, «По рисунку» puts the drawn one back */
+/** the tape: feet and inches; every change goes in at once (v43: no «Применить» — the window's «Сохранить» keeps it), «По рисунку» puts the drawn one back */
 function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | null) => void }) {
   const { t } = useI18n();
   const cur = run.lengthIn ?? drawnLengthIn(run);
@@ -137,36 +137,44 @@ function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | 
   const [inc, setInc] = useState(f0.inc);
   const [e16, setE16] = useState(f0.e16);
   const [bad, setBad] = useState(false);
+  const own = useRef<number | null>(null); // the length this tape just wrote: the fields already show it (retyping must not rewrite them)
   // another run picked, «Назад», or a dragged end: the fields show the length it has now
   useEffect(() => {
+    if (own.current === cur) return;
+    own.current = null;
     const x = unitFields(cur, "ftin");
     setFt(x.ft);
     setInc(x.inc);
     setE16(x.e16);
     setBad(false);
   }, [run.id, cur]);
-  const apply = () => {
-    const n = tapeIn(ft, inc, e16);
-    setBad(n === null);
-    if (n !== null) onLength(n);
+  const put = (nft: string, ninc: string, ne16: number) => {
+    setFt(nft);
+    setInc(ninc);
+    setE16(ne16);
+    const d = tapeDraft(nft, ninc, ne16, cur);
+    setBad(d.bad);
+    if (d.len !== null && !d.same) {
+      own.current = d.len;
+      onLength(d.len);
+    }
   };
   const taped = run.lengthIn !== undefined;
   return (
     <Field label={t(k("length"))} testID="attr-length">
       <RowView style={{ gap: space[2], flexWrap: "wrap", alignItems: "center" }}>
         <View style={{ width: component.qtyFieldW }} testID="attr-length-ft">
-          <TextField type="integer" value={ft} onChangeText={setFt} label={t(k("ft"))} onSubmit={apply} />
+          <TextField type="integer" value={ft} onChangeText={(v) => put(v, inc, e16)} label={t(k("ft"))} />
         </View>
         <T v="body" tone="mut">{t(k("ft"))}</T>
         <View style={{ width: component.qtyFieldW }} testID="attr-length-in">
-          <TextField type="number" value={inc} onChangeText={setInc} label={t(k("in"))} onSubmit={apply} />
+          <TextField type="number" value={inc} onChangeText={(v) => put(ft, v, e16)} label={t(k("in"))} />
         </View>
         <FracText value={e16} testID="attr-length-frac" />
         <T v="body" tone="mut">{t(k("in"))}</T>
-        <View testID="attr-length-apply"><Button label={t(k("apply"))} size="sm" variant="secondary" onPress={apply} /></View>
         {taped ? <View testID="attr-length-reset"><Button label={t(k("reset"))} size="sm" variant="ghost" onPress={() => onLength(null)} /></View> : null}
       </RowView>
-      <Pull ft={ft} inc={inc} e16={e16} onPull={(x) => { setFt(String(x.ft)); setInc(String(x.inch)); setE16(x.sixteenths); setBad(false); }} testID="attr-length-tape" />
+      <Pull ft={ft} inc={inc} e16={e16} onPull={(x) => put(String(x.ft), String(x.inch), x.sixteenths)} testID="attr-length-tape" />
       {bad ? <View testID="attr-length-bad"><StatusChip status="warn" label={t(k("badLength"))} soft /></View> : null}
     </Field>
   );
@@ -423,8 +431,8 @@ function More({ open0, id, label, children }: { open0: boolean; id: string; labe
  * side column.
  */
 export function RunAttrsView({
-  run, onAttrs, onLength, ch = MODULE_CHOICES, corners = [], onCorner, forNew,
-}: { run: DrawnRun; onAttrs: (p: Partial<RunAttrs>) => void; onLength: (lengthIn: number | null) => void; ch?: Choices; corners?: RunCorner[]; onCorner?: (f: FoundCorner, m: CornerChoice["method"] | null) => void; /** «Новые желоба» of this drawing (#1563 PR B): no length, story, corners — the same rows otherwise */ forNew?: boolean; }) {
+  run, onAttrs, onLength, ch = MODULE_CHOICES, corners = [], onCorner, forNew, no,
+}: { /** its number among the drawing's gutters: «Gutter № 2» */ no?: number; run: DrawnRun; onAttrs: (p: Partial<RunAttrs>) => void; onLength: (lengthIn: number | null) => void; ch?: Choices; corners?: RunCorner[]; onCorner?: (f: FoundCorner, m: CornerChoice["method"] | null) => void; /** «Новые желоба» of this drawing (#1563 PR B): no length, story, corners — the same rows otherwise */ forNew?: boolean; }) {
   const { t } = useI18n();
   const a = run.attrs;
   const profiles = withCurrent(ch.offer.profiles, a.profile);
@@ -433,7 +441,7 @@ export function RunAttrsView({
   return (
     <>
       {/* «Для новых желобов»: its title, «Сбросить» and the line under it are the owner's (DrawScreen), above these rows */}
-      {forNew ? null : <T v="heading" w="semibold">{`${t(k("run"))} · ${fmtLen(run.lengthIn ?? drawnLengthIn(run), ch.lenFormat)}`}</T>}
+      {forNew ? null : <View testID="attr-title"><T v="heading" w="semibold">{no ? t(k("runNo"), { n: no }) : t(k("run"))}</T></View>}
       {forNew ? null : <Tape run={run} onLength={onLength} />}
       <FieldRow>
         <Choice label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
@@ -494,7 +502,7 @@ function DsKindPick({ ds, onAttrs, ch }: { ds: DrawnDownspout; onAttrs: (p: Part
  * Верх (a list); «Ещё» — the colour, material, wall and its hook, its own length, the rare parts. G2 (#2412): its own
  * storey, Elbow / Offset A·B with an angle, the heads of the chart, the hooks by shape.
  */
-export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, run, forNew }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void; ch?: Choices; /** its gutter: «Как у gutter» */ run?: DrawnRun["attrs"]; /** «Новые водостоки» of this drawing (#1563 PR B): the same rows, its own title */ forNew?: boolean }) {
+export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, run, forNew, no }: { /** its number among the drawing's downspouts (D{n} on the canvas): «Downspout № 2» */ no?: number; ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void; ch?: Choices; /** its gutter: «Как у gutter» */ run?: DrawnRun["attrs"]; /** «Новые водостоки» of this drawing (#1563 PR B): the same rows, its own title */ forNew?: boolean }) {
   const { t } = useI18n();
   const w = wallOf(ds.shape, ds.wall);
   const sizes = withCurrent(ch.offer.dsSizes[ds.shape], ds.size);
@@ -503,7 +511,7 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, run, forNew }: {
   const head = ds.head ?? (ds.funnel ? "funnel" : "none");
   return (
     <>
-      {forNew ? null : <T v="heading" w="semibold">{t(k("ds"))}</T>}
+      {forNew ? null : <View testID="attr-title"><T v="heading" w="semibold">{no ? t(k("dsNo"), { n: no }) : t(k("ds"))}</T></View>}
       <FieldRow>
         <DsKindPick ds={ds} onAttrs={onAttrs} ch={ch} />
         <Choice label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
