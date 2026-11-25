@@ -8,7 +8,7 @@
  *   (docs/specs/33-gutters-canvas-ideas.md П35, founder 12.11: replaces «a long press on an end = a new line» of 08.11; e2e 292, 295).
  * Finds things by id / testID; waits on what it checks.
  */
-const { pickDsKind, skipLength, canvasAt, winSave } = require("../gutters.cjs");
+const { pickDsKind, pickAttr, skipLength, canvasAt, winSave } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -71,6 +71,11 @@ exports.run = async (h) => {
     const ds = (await live("downspout"))[0];
     return JSON.stringify(ds?.attrs?.elbows) === JSON.stringify([{ style: "A", qty: 2 }, { style: "B", qty: 1 }]);
   }, "the store: A 2, B 1");
+  // v43 PR C: «Elbow A · 75° ⌄ · − n +» — the angle of a style, written only when it is not 75°; «Offset B» is its own row
+  await pickAttr(p, "attr-elbow-A-angle", "60");
+  await waitFor(async () => JSON.stringify((await live("downspout"))[0]?.attrs?.elbows) === JSON.stringify([{ style: "A", qty: 2, angle: 60 }, { style: "B", qty: 1 }]), "the store: A 2 at 60°, B 1 at 75° (no angle written)");
+  await tid("attr-offset-B-qty").getByRole("button", { name: /\+1$/ }).click();
+  await waitFor(async () => JSON.stringify((await live("downspout"))[0]?.attrs?.offsets) === JSON.stringify([{ lengthIn: 2, qty: 1, style: "B" }]), "the store: one 2″ offset of style B");
   await h.shot("ds");
   await winSave(p); // the window's own «Сохранить» (DS §7.3, #2412 PR3): its edits kept
 

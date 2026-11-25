@@ -536,7 +536,7 @@ function RoundElbow({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<
   const style = cur.qty > 0 ? cur.style : pend;
   return (
     <CountRow
-      label={t(k("elbowRowRound"))} stepLabel={t(k("elbowRowRound"))} testID="attr-elbow-round" valueTestID="attr-elbow-round-angle"
+      label={t(k("elbowRowRound"))} stepLabel="" testID="attr-elbow-round" valueTestID="attr-elbow-round-angle"
       items={angleItems(style)} value={style}
       onValue={(v) => (cur.qty > 0 ? onAttrs(roundElbowPatch(ds, { style: v })) : setPend(v))}
       qty={cur.qty} onQty={(n) => onAttrs(roundElbowPatch(ds, { style, qty: n }))} max={12}
@@ -642,7 +642,7 @@ function OffsetRow({ ds, style, onAttrs }: { ds: DrawnDownspout; style: OffsetSt
   return (
     <View style={{ gap: space[2] }}>
       <CountRow
-        label={label} stepLabel={label} testID={`attr-offset${sfx}-qty`} valueTestID={`attr-offset${sfx}-len`}
+        label={label} stepLabel={ds.shape === "round" ? "" : style} testID={`attr-offset${sfx}-qty`} valueTestID={`attr-offset${sfx}-len`}
         items={[...OFFSETS_IN.map((n) => ({ key: String(n), label: inch(String(n)) })), { key: "own", label: t(k("offsetOwn")) }]}
         value={ownOpen ? "own" : String(len)}
         onValue={(v) => {
