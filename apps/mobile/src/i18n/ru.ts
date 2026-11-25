@@ -1724,6 +1724,7 @@ export const ru = {
   "sheet.unsavedTitle": "Сохранить изменения?",
   "sheet.unsavedText": "Вы что-то изменили в этом окне.",
   "sheet.discard": "Не сохранять",
+  "sheet.keepEditing": "Продолжить правку",
   // C2: properties inside a client (docs/specs/04 §7.3)
   "prop.card": "Объект",
   "prop.add": "Добавить объект",

@@ -1,5 +1,5 @@
 /**
- * iOS-style sheets: drag the grabber down to close; unsaved changes ask Save / Don't save / Cancel; the Undo toast brings the old value back.
+ * iOS-style sheets: drag the grabber down to close; unsaved changes ask Save / Don't save / Keep editing (DS Б1, one rule); the Undo toast brings the old value back.
  * On tablet and desktop (820 / 1280) the sheet is a centred dialog without a grabber: closing is the "Закрыть" button, the
  * unsaved-changes question is the same.
  */
@@ -49,6 +49,15 @@ exports.run = async (h) => {
   await h.sheet().getByRole("button", { name: "Закрыть" }).last().click();
   await p.waitForTimeout(300);
   await h.expectText(/Сохранить изменения\?/, "unsaved question on close");
+  // DS Б1: the third button is «Продолжить правку», never «Отмена»; it returns to the form with the edit kept
+  h.expect((await h.sheet().getByRole("button", { name: "Продолжить правку" }).count()) === 1, "third button «Продолжить правку»");
+  h.expect((await h.sheet().getByRole("button", { name: "Отмена", exact: true }).count()) === 0, "no «Отмена» in the question");
+  await h.sheet().getByRole("button", { name: "Продолжить правку" }).click();
+  await h.sheet().getByRole("button", { name: "Продолжить правку" }).waitFor({ state: "hidden", timeout: 3000 });
+  h.expect(await sheetOpen(), "«Продолжить правку» keeps the sheet open");
+  h.expect((await phone().inputValue()) === "(818) 555-0199", "the edit is kept");
+  await h.sheet().getByRole("button", { name: "Закрыть" }).last().click();
+  await h.expectText(/Сохранить изменения\?/, "unsaved question again");
   await h.sheet().getByRole("button", { name: "Не сохранять" }).click();
   await p.waitForTimeout(500);
   let l = (await h.db()).leads.find((x) => x.id === "l1");
