@@ -20,7 +20,7 @@ export default function QSettings() {
   const [vib, setVib] = useState(true);
   const [done, setDone] = useState(false);
   const [loc, setLoc] = useState(true);
-  const [push, setPush] = useState(true);
+  const [push, setPush] = useState(false);
   const [pLeads, setPLeads] = useState(true);
   const [pPaid, setPPaid] = useState(true);
   const [off, setOff] = useState(false);

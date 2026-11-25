@@ -7,7 +7,7 @@ import { EstimateFrame, LINES, Tail } from "./q2364-c";
 
 export default function Q2364b() {
   return (
-    <EstimateFrame caption="Вариант «б»: строка 48 — видно на 2 позиции больше, но цены за единицу не видно">
+    <EstimateFrame caption="Вариант «б»: строка 48 — одна строка, цены за единицу не видно">
       {LINES.map((l) => (
         <RowView key={l.id} gap={0} style={{ paddingLeft: space[4], paddingRight: space[2] }}>
           <View style={{ flex: 1 }}>

@@ -1,22 +1,28 @@
-// ЧЕРНОВИК (#2364, вариант «а» — 52): две строки (название + «кол-во × цена»), сумма справа, высота rowMin+поля.
-// Своего пропа `dense` у GroupRowBody нет — ближайшее: ListRow (minHeight = size.rowMin) с отступом слева. Не для влития.
+// ЧЕРНОВИК (#2364, вариант «а» — 52): две строки (название в одну строку + «кол-во × цена»), сумма справа, поля spaceHalf.tight 6.
+// Пропа `dense` у GroupRowBody ещё нет (мини-спека п.4) — здесь та же раскладка собрана из T + RowView на токенах. Не для влития.
 import { View } from "react-native";
-import { size, space } from "@octo/design-tokens";
-import { RowView, ListRow } from "@/ui/surfaces";
+import { space, spaceHalf } from "@octo/design-tokens";
+import { RowView } from "@/ui/surfaces";
 import { T } from "@/ui/primitives";
 import { EstimateFrame, LINES, Tail } from "./q2364-c";
 
 export default function Q2364a() {
   return (
-    <EstimateFrame caption="Вариант «а»: строка 52 — видно на 1 позицию больше, цена за единицу на месте">
+    <EstimateFrame caption="Вариант «а»: строка 52 — те же две строки, меньше воздуха сверху и снизу">
       {LINES.map((l) => (
-        <RowView key={l.id} gap={0} style={{ paddingLeft: space[4], paddingRight: space[2] }}>
+        <RowView key={l.id} gap={space[3]} style={{ paddingLeft: space[4], paddingRight: space[2], paddingVertical: spaceHalf.tight }}>
           <View style={{ flex: 1 }}>
-            <ListRow title={l.name} subtitle={l.times} minHeight={size.rowMin} right={<T v="body" tabular>{l.sum}</T>} />
+            <T v="body" w="semibold" numberOfLines={1}>
+              {l.name}
+            </T>
+            <T v="caption" tone="mut" tabular numberOfLines={1}>
+              {l.times}
+            </T>
           </View>
-          <View style={{ marginLeft: space[3] }}>
-            <Tail grip />
-          </View>
+          <T v="body" tabular>
+            {l.sum}
+          </T>
+          <Tail grip />
         </RowView>
       ))}
     </EstimateFrame>

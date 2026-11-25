@@ -44,7 +44,7 @@ export function EstimateFrame({ caption, children }: { caption: string; children
       <T v="caption" tone="mut">
         {caption}
       </T>
-      <ListGroup title="Позиции" count={LINES.length}>
+      <ListGroup title="Позиции" count={LINES.length} inset={space[4]}>
         {children}
       </ListGroup>
     </Screen>
@@ -53,7 +53,7 @@ export function EstimateFrame({ caption, children }: { caption: string; children
 
 export default function Q2364c() {
   return (
-    <EstimateFrame caption="Как сейчас: строка ≈ 57, видно 8 позиций на экране">
+    <EstimateFrame caption="Как сейчас («в»): строка 57 — название, «кол-во × цена», сумма; корзина">
       {LINES.map((l) => (
         <RowView key={l.id} gap={0} style={{ paddingRight: space[2] }}>
           <View style={{ flex: 1 }}>

@@ -15,7 +15,7 @@ export function OrderBehind() {
       title="PO-0007"
       subtitle="Home Depot · Seamless gutters"
       back={() => router.back()}
-      footer={<ActionBar main={<Button size="bar" full label="Отправить поставщику" icon="send" onPress={() => undefined} />} />}
+      
     >
       <ListGroup title="Позиции" count={3} inset={space[4]}>
         <GroupRow title="Hidden hanger 5″" subtitle="SKU 100123456" value="12 ea" />
@@ -25,6 +25,8 @@ export function OrderBehind() {
       <ListGroup title="Доставка" inset={space[4]}>
         <GroupRow title="1420 Oak St, Pasadena, CA" subtitle="Nov 27, 2026" />
       </ListGroup>
+    {/* в настоящем экране — закреплено внизу (ActionBar); черновой маршрут не в NO_TAB_BAR, поэтому стоит в конце страницы */}
+      <ActionBar main={<Button size="bar" full label="Отправить поставщику" icon="send" onPress={() => undefined} />} />
     </Screen>
   );
 }
