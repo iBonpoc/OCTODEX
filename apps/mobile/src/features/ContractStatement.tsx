@@ -2,11 +2,12 @@ import { useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
-import { contractStatement, progressAmount } from "@octo/estimating-engine";
+import { progressAmount } from "@octo/estimating-engine";
 import { isOverdue, useStore } from "@/data/store";
 import { daysOverdue } from "@/data/selectors";
 import type { Invoice } from "@/data/types";
 import { canBill } from "@/features/billRights";
+import { jobStatement } from "@/features/client/nextStep";
 import { useI18n, type DictKey } from "@/i18n";
 import { MoneyField, PctField } from "./fields";
 import { Button, Segmented, TextField } from "@/ui/controls";
@@ -57,8 +58,12 @@ export function ContractStatement({
   const job = db.jobs.find((j) => j.id === jobId);
   if (!job) return null;
   const invoices = db.invoices.filter((i) => i.jobId === jobId).sort((a, b) => (a.sentAt ?? a.dueDate).localeCompare(b.sentAt ?? b.dueDate));
-  const st = contractStatement(job.amountCents, invoices);
-  const hasFinal = invoices.some((i) => i.kind === "final");
+  // #2486: the figures by the ONE rule (features/contractKind.ts, #2061) — only the contract's own invoices are «выставлено» /
+  // «оплачено» and lower the rest; a standalone or recurring one stays in the list below as extra work. The rest and its
+  // kind are the job screen's «Счёт на остаток» (contractToInvoiceCents / restInvoiceKind): one final per job, an older
+  // final with no kind counts as one
+  const st = jobStatement(job, invoices);
+  const hasFinal = st.restKind === "progress";
   const progress = mode === "pct" ? progressAmount(job.amountCents, st.invoiced, bps) : Math.min(cents, st.toInvoice);
   const q = (msg: string) => (store.online ? msg : t("offline.queued"));
   // #865: an invoice the store refused (above the contract) says so, with no «Отменить»; a second tap on «Выставить
