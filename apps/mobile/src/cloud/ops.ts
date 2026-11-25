@@ -1480,8 +1480,13 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
     ins("estimates", { id: op.id, company_id: c, customer_id: op.customerId, property_id: op.propertyId, lead_id: op.leadId ?? null, title: op.title, created_via: op.templateId ? "template" : "manual", number: "" }),
   );
   // the connection dropped after the insert: «try later», never «not visible» (that would drop the estimate, review #244)
-  const { data: est } = await read(supabase.from("estimates").select("status, current_version_id").eq("id", op.id).maybeSingle());
+  const { data: est } = await read(supabase.from("estimates").select("status, current_version_id, customer_id, property_id").eq("id", op.id).maybeSingle());
   if (!est) throw new PermanentError("estimate is not visible");
+  // #2643: the client / property chosen for a draft after its first sync (the insert above leaves an existing row as it
+  // is). Only for the server's draft as it was read here — a sent / viewed one keeps its client (#2406, #2630), also when
+  // this save turns it back into a draft below. Written after the version (end of this function).
+  const clientMoved = est.status === "draft"
+    && (est.customer_id !== op.customerId || est.property_id !== op.propertyId);
   // «don't sign — change it» (E2a): the client signed, the company changes it → back to draft on the server, signature kept in history.
   // #2474: only when the phone edited the signed estimate on purpose (fromStatus). An edit of a sent estimate made without
   // the network while the client signed meanwhile never takes the signature off: refused for good, nothing written, a card
@@ -1552,9 +1557,14 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
       const { pages: _refused, ...bare } = op.doc;
       await run(saveTx(bare));
     }
-    return;
+  } else {
+    await saveLegacy(op, c, versionId!, rows, taxOn, s);
   }
-  await saveLegacy(op, c, versionId!, rows, taxOn, s);
+  // #2643: after the version — a refused client (e.g. «do not service») never takes the lines with it; only while it is
+  // still a draft (sent meanwhile from another phone: nothing written)
+  if (clientMoved) {
+    await run(supabase.from("estimates").update({ customer_id: op.customerId, property_id: op.propertyId }).eq("id", op.id).eq("status", "draft"));
+  }
 }
 
 /** the separate requests of a save (a server before #1220's public.save_estimate_version) — as they were */

@@ -1,7 +1,8 @@
 /**
  * The chain of typing a length without «Done» (#1316, founder 13.11): feet → inches → the fraction by buttons. Pure.
  */
-import { tapeIn, unitFields } from "../canvas/attrs";
+import { oneIn, tapeIn, unitFields } from "../canvas/attrs";
+import { MIN_RUN_IN } from "../canvas/edit";
 import type { LenUnit } from "../canvas/format";
 
 /** the stage of the entry: the feet are typed, then the inches, then the fraction is chosen (no keyboard needed for it) */
@@ -53,5 +54,22 @@ export function tapeDraft(ft: string, inc: string, e16: number, have: number): {
   // a field being retyped (empty) is not a zero foot: nothing moves the gutter until both are there
   const n = ft.trim() === "" || inc.trim() === "" ? null : tapeIn(ft, inc, e16);
   if (n === null) return { len: null, bad: true, same: false };
+  return { len: n, bad: false, same: n === have };
+}
+
+/** a number typed in mm: spaces go; a comma is the thousands comma only when it groups by three («3,810», «1,234,567»), otherwise it is the decimal point («762,5») */
+export const mmNumber = (text: string): string => {
+  const t0 = text.replace(/\s/g, "");
+  return /^\d{1,3}(,\d{3})+(\.\d+)?$/.test(t0) ? t0.replace(/,/g, "") : t0.replace(",", ".");
+};
+
+/**
+ * The same for the tape's second unit, millimetres (v43 PR B «футы | мм»): one number read at once. «3810», «3 810» and «3,810» are the
+ * same length, «762,5» is 762.5 mm. Nothing sensible, or shorter than a gutter can be drawn (MIN_RUN_IN) — nothing is written and the
+ * warning shows (`bad`); a half-typed «3» is not a 1/8″ gutter.
+ */
+export function mmDraft(text: string, have: number): { len: number | null; bad: boolean; same: boolean } {
+  const n = oneIn(mmNumber(text), "mm");
+  if (n === null || n < MIN_RUN_IN) return { len: null, bad: true, same: false };
   return { len: n, bad: false, same: n === have };
 }

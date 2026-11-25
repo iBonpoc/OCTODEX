@@ -19608,6 +19608,67 @@ select tst.ok(not has_function_privilege('authenticated', 'app.tg_estimate_clien
 rollback;
 \echo 'T471 the client of an estimate changes only in a draft ok'
 
+-- ================================================================ T472: a tech moves his draft only to a property he is assigned
+-- (#2647, found by the review of #2646, migration 20261117690000). estimates_insert lets a tech create a draft only on a
+-- property he is assigned (is_property_assignee); estimates_update checked only «draft». t27_estimate_property_assignee:
+-- a tech (not staff) changes property_id only to a property he is assigned. The same property (a save of a draft whose
+-- property was taken off him meanwhile) is not touched; the office / owner and the server move it as before.
+:as_super
+begin;
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('54720000-0000-4000-8000-0000000000d9', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', '472 Nobody St', 'Pasadena');
+:as_tech_a
+select tst.ok(app.is_property_assignee('d1a00000-0000-0000-0000-000000000001') and not app.is_property_assignee('54720000-0000-4000-8000-0000000000d9'),
+  'T472 fixtures: the tech is assigned the first property, not the new one');
+insert into public.estimates (id, company_id, customer_id, property_id, title)
+  values ('54720000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T472 tech draft');
+-- as on insert: not onto a property he is not assigned
+select tst.fails($q$insert into public.estimates (id, company_id, customer_id, property_id, title)
+                    values ('54720000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', '54720000-0000-4000-8000-0000000000d9', 'T472 x')$q$,
+  'T472 (as before) a tech does not create a draft on a property he is not assigned');
+select tst.fails_like($q$update public.estimates set property_id = '54720000-0000-4000-8000-0000000000d9' where id = '54720000-0000-4000-8000-0000000000e1'$q$,
+                      'estimate_property_not_assigned%', 'T472 a tech does not move his draft to a property he is not assigned');
+create function pg_temp.t472_code() returns text language plpgsql as $$
+begin
+  update public.estimates set property_id = '54720000-0000-4000-8000-0000000000d9' where id = '54720000-0000-4000-8000-0000000000e1';
+  return 'no error';
+exception when others then
+  declare v_hint text; begin get stacked diagnostics v_hint = pg_exception_hint; return sqlstate || ' ' || coalesce(v_hint, ''); end;
+end $$;
+select tst.ok(pg_temp.t472_code() = '22023 estimate_property_not_assigned', format('T472 the code: 22023 + hint, not 42501 («no rights» in the app) (%s)', pg_temp.t472_code()));
+-- the same property sent again and the title: saved (also once the property is no longer his — below)
+update public.estimates set property_id = 'd1a00000-0000-0000-0000-000000000001', title = 'T472 renamed' where id = '54720000-0000-4000-8000-0000000000e1';
+select tst.ok((select title from public.estimates where id = '54720000-0000-4000-8000-0000000000e1') = 'T472 renamed', 'T472 the same property and the title: saved');
+
+:as_super
+-- the draft sits on the not-assigned property (the office moved it): the tech still saves its title
+update public.estimates set property_id = '54720000-0000-4000-8000-0000000000d9' where id = '54720000-0000-4000-8000-0000000000e1';
+:as_tech_a
+update public.estimates set title = 'T472 saved on a property not his' where id = '54720000-0000-4000-8000-0000000000e1';
+:as_super
+select tst.ok((select (property_id, title) = ('54720000-0000-4000-8000-0000000000d9'::uuid, 'T472 saved on a property not his') from public.estimates where id = '54720000-0000-4000-8000-0000000000e1'),
+  'T472 a draft whose property is not his: the tech''s save without a move goes through (old builds are not broken)');
+:as_tech_a
+-- back to a property he is assigned: allowed
+update public.estimates set property_id = 'd1a00000-0000-0000-0000-000000000001' where id = '54720000-0000-4000-8000-0000000000e1';
+:as_super
+select tst.ok((select property_id from public.estimates where id = '54720000-0000-4000-8000-0000000000e1') = 'd1a00000-0000-0000-0000-000000000001',
+  'T472 a tech moves his draft to a property he is assigned');
+
+:as_owner_a
+-- the office / owner moves a draft anywhere, as before
+update public.estimates set property_id = '54720000-0000-4000-8000-0000000000d9' where id = '54720000-0000-4000-8000-0000000000e1';
+select tst.ok((select property_id from public.estimates where id = '54720000-0000-4000-8000-0000000000e1') = '54720000-0000-4000-8000-0000000000d9',
+  'T472 the owner moves a draft to any property');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_estimate_property_assignee()', 'EXECUTE')
+          and not has_function_privilege('anon', 'app.tg_estimate_property_assignee()', 'EXECUTE')
+          and not has_function_privilege('public', 'app.tg_estimate_property_assignee()', 'EXECUTE'),
+  'T472 rule 18: the trigger function is executed by no one');
+rollback;
+\echo 'T472 a tech moves his draft only to a property he is assigned ok'
+
+
 -- T473 (#2478): «don't sign — change it» names the client's signature it takes off (reopen_signed_estimate). A phone's
 -- queued choice never takes off a signature it did not see: another option signed (a newer signature) or none named —
 -- refused for good (22023 + hint estimate_signed_meanwhile, the app's card); the signature stays. Red before 20261117700000.
