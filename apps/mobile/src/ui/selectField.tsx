@@ -35,7 +35,11 @@ export function SelectField<K extends string>({
   controls,
   rowRef,
   list,
+  row,
 }: {
+  /** ЧЕРНОВИК #2549 (нужно в ДС §9 А2): the field as a row of a ListGroup (settings «Тема · Как в системе»): no frame, no field
+   *  ground, the group's side inset, the row height `listRow.h` */
+  row?: boolean;
   label: string;
   value: K | null | undefined;
   /** a picture / a sample / a line under the name, or a long name, open a list instead of the menu (DS §9б.2); `top` — its own group first */
@@ -116,15 +120,19 @@ export function SelectField<K extends string>({
           {...({ "aria-expanded": !!anchor || picker || !!expanded } as object)}
           {...(expanded !== undefined && onOpen ? ({ "aria-controls": controls } as object) : ({ "aria-haspopup": long || onOpen ? "dialog" : "menu" } as object))}
           style={{
-            minHeight: size.fieldPhone,
+            minHeight: row ? component.listRow.h : size.fieldPhone,
             flexDirection: "row",
             alignItems: "center",
             gap: space[2],
-            paddingHorizontal: space[3],
-            borderRadius: radius.field,
-            borderWidth: component.hairline,
-            borderColor: shownError ? c.status.bad.fill : c.bdField,
-            backgroundColor: c.in,
+            paddingHorizontal: row ? space[4] : space[3],
+            ...(row
+              ? null
+              : {
+                  borderRadius: radius.field,
+                  borderWidth: component.hairline,
+                  borderColor: shownError ? c.status.bad.fill : c.bdField,
+                  backgroundColor: c.in,
+                }),
           }}
         >
           {labelAbove ? null : (

@@ -21,7 +21,10 @@ export function ToggleRow({
   disabled,
   testID,
   children,
+  inGroup,
 }: {
+  /** ЧЕРНОВИК #2549 (нужно в ДС §9 А5): a row of a ListGroup — the row keeps the group's side inset itself (`space[4]`) */
+  inGroup?: boolean;
   label: string;
   caption?: string;
   value: boolean;
@@ -42,7 +45,7 @@ export function ToggleRow({
     onChange(!value);
   };
   return (
-    <View style={{ gap: space[2] }}>
+    <View style={{ gap: space[2], paddingHorizontal: inGroup ? space[4] : undefined }}>
       <View
         // web: Space flips a switch (React Native Web presses a Pressable on Space only for a `button`); Enter is the Pressable's own
         {...(Platform.OS === "web"
