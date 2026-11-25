@@ -1,7 +1,7 @@
 /**
  * The chain of typing a length without «Done» (#1316, founder 13.11): feet → inches → the fraction by buttons. Pure.
  */
-import { tapeIn, unitFields } from "../canvas/attrs";
+import { oneIn, tapeIn, unitFields } from "../canvas/attrs";
 import type { LenUnit } from "../canvas/format";
 
 /** the stage of the entry: the feet are typed, then the inches, then the fraction is chosen (no keyboard needed for it) */
@@ -52,6 +52,16 @@ export function unitPickStep(o: { edited: boolean; typed: number | null; canon: 
 export function tapeDraft(ft: string, inc: string, e16: number, have: number): { len: number | null; bad: boolean; same: boolean } {
   // a field being retyped (empty) is not a zero foot: nothing moves the gutter until both are there
   const n = ft.trim() === "" || inc.trim() === "" ? null : tapeIn(ft, inc, e16);
+  if (n === null) return { len: null, bad: true, same: false };
+  return { len: n, bad: false, same: n === have };
+}
+
+/**
+ * The same for the tape's second unit, millimetres (v43 PR B «футы | мм»): one number read at once. «3810», «3 810» and a pasted
+ * «3,810» (the thousands comma of the US format) are the same length; nothing sensible — nothing is written and the warning shows.
+ */
+export function mmDraft(text: string, have: number): { len: number | null; bad: boolean; same: boolean } {
+  const n = oneIn(text.replace(/[\s,]/g, ""), "mm");
   if (n === null) return { len: null, bad: true, same: false };
   return { len: n, bad: false, same: n === have };
 }

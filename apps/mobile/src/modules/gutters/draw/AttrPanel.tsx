@@ -14,7 +14,7 @@ import { measureAfterKeyboard } from "./afterKeyboard";
 import { component, size as sizes, space } from "@octo/design-tokens";
 import type { DictKey } from "@/i18n";
 import { useI18n } from "@/i18n";
-import { Button, StatusChip, Stepper, TextField } from "@/ui/controls";
+import { Button, Segmented, StatusChip, Stepper, TextField } from "@/ui/controls";
 import { Collapsible } from "@/ui/collapsible";
 import type { PickerItem } from "@/ui/pickerSheet";
 import { SelectField } from "@/ui/selectField";
@@ -30,7 +30,7 @@ import { colorChoices } from "./colorChoices";
 import { dsMoreSet, dsRareShown } from "./attrShown";
 import { FracPicker } from "./FracPicker";
 import { FRAC_SLOT } from "./fracSlot";
-import { feetResetsRest, inchesComplete, inchesTooBig, nextStage, tapeDraft, unitPickStep, type EntryStage } from "./lengthEntry";
+import { feetResetsRest, inchesComplete, inchesTooBig, mmDraft, nextStage, tapeDraft, unitPickStep, type EntryStage } from "./lengthEntry";
 import { MM_SCALE, SIXTEENTHS_SCALE, SIXTEENTHS_SCALE_IN, Tape as TapeStrip } from "./Tape";
 import { DENOM, fmtLen, fracLabel, LEN_UNITS, MM_OF, MM_PER_IN, type LenFormat, type LenUnit } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
@@ -130,7 +130,7 @@ const split = (n: number) => {
 };
 
 /** the tape: feet and inches; every change goes in at once (v43: no «Применить» — the window's «Сохранить» keeps it), «По рисунку» puts the drawn one back */
-function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | null) => void }) {
+function Tape({ run, onLength, fmt = "ftin" }: { run: DrawnRun; onLength: (lengthIn: number | null) => void; /** the company's format of lengths: the unit the window starts in */ fmt?: LenFormat }) {
   const { t } = useI18n();
   const cur = run.lengthIn ?? drawnLengthIn(run);
   // the fields show the length as it is, to the sixteenth: feet, inches and sixteenths
@@ -139,6 +139,9 @@ function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | 
   const [inc, setInc] = useState(f0.inc);
   const [e16, setE16] = useState(f0.e16);
   const [bad, setBad] = useState(false);
+  // «футы | мм» (v43): feet · inches · fraction, or one number in millimetres (the tape strip is inches only)
+  const [unit, setUnit] = useState<"ftin" | "mm">(fmt === "mm" || fmt === "cm" || fmt === "m" ? "mm" : "ftin");
+  const [mm, setMm] = useState(unitFields(cur, "mm").one);
   const own = useRef<number | null>(null); // the length this tape just wrote: the fields already show it (retyping must not rewrite them)
   // another run picked, «Назад», or a dragged end: the fields show the length it has now
   const lastRun = useRef(run.id);
@@ -150,8 +153,21 @@ function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | 
     setFt(x.ft);
     setInc(x.inc);
     setE16(x.e16);
+    setMm(unitFields(cur, "mm").one);
     setBad(false);
   }, [run.id, cur]);
+  const pickUnit = (u: "ftin" | "mm") => {
+    // the fields are rewritten from the length the run has (a half-typed or wrong one is dropped, its warning with it)
+    const x = unitFields(cur, "ftin");
+    setFt(x.ft); setInc(x.inc); setE16(x.e16); setMm(unitFields(cur, "mm").one); setBad(false);
+    setUnit(u);
+  };
+  const putMm = (text: string) => {
+    setMm(text);
+    const d = mmDraft(text, cur);
+    setBad(d.bad);
+    if (d.len !== null && !d.same) { own.current = d.len; onLength(d.len); }
+  };
   const put = (nft: string, ninc: string, ne16: number) => {
     setFt(nft);
     setInc(ninc);
@@ -166,6 +182,14 @@ function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | 
   const taped = run.lengthIn !== undefined;
   return (
     <Field label={t(k("length"))} testID="attr-length">
+      <Segmented full equal radio label={t(k("unitTitle"))} testID="attr-length-unit" items={[{ key: "ftin", label: t(k("unit.ftin")) }, { key: "mm", label: t(k("unit.mm")) }]} value={unit} onChange={pickUnit} />
+      {unit === "mm" ? (
+        <>
+          <View testID="attr-length-mm"><TextField type="number" value={mm} onChangeText={putMm} suffix={t(k("unit.mm"))} label={t(k("lengthMm"))} /></View>
+          <T v="caption" tone="mut">{t(k("tapeInchesOnly"))}</T>
+        </>
+      ) : (
+      <>
       <RowView style={{ gap: space[2], flexWrap: "wrap", alignItems: "center" }}>
         <View style={{ width: component.qtyFieldW }} testID="attr-length-ft">
           <TextField type="integer" value={ft} onChangeText={(v) => put(v, inc, e16)} label={t(k("ft"))} />
@@ -176,9 +200,11 @@ function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | 
         </View>
         <FracText value={e16} testID="attr-length-frac" />
         <T v="body" tone="mut">{t(k("in"))}</T>
-        {taped ? <View testID="attr-length-reset"><Button label={t(k("reset"))} size="sm" variant="ghost" onPress={() => onLength(null)} /></View> : null}
       </RowView>
       <Pull ft={ft} inc={inc} e16={e16} onPull={(x) => put(String(x.ft), String(x.inch), x.sixteenths)} testID="attr-length-tape" />
+      </>
+      )}
+      {taped ? <View testID="attr-length-reset"><Button label={t(k("reset"))} size="sm" variant="ghost" onPress={() => onLength(null)} /></View> : null}
       {bad ? <View testID="attr-length-bad"><StatusChip status="warn" label={t(k("badLength"))} soft /></View> : null}
     </Field>
   );
@@ -448,7 +474,7 @@ export function RunAttrsView({
       {forNew ? null : <View testID="attr-title"><T v="heading" w="semibold">{no ? t(k("runNo"), { n: no }) : t(k("run"))}</T></View>}
       {/* the length of the line in the company's format (and in feet when it is another): the window's title no longer carries it (v43: «линия · 3,810 мм · 12′ 6″») */}
       {forNew ? null : <View testID="attr-line-len"><T v="caption" tone="mut">{t(k("lineLen"), { len: lineLenText(run.lengthIn ?? drawnLengthIn(run), ch.lenFormat) })}</T></View>}
-      {forNew ? null : <Tape run={run} onLength={onLength} />}
+      {forNew ? null : <Tape run={run} onLength={onLength} fmt={ch.lenFormat} />}
       <FieldRow>
         <Choice label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
         {forNew ? null : <Choice label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />}

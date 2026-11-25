@@ -78,3 +78,20 @@ describe("tapeDraft: the tape without «Применить»", () => {
     expect(tapeDraft("0", "0", 0, 300)).toEqual({ len: null, bad: true, same: false });
   });
 });
+
+// v43 PR B: «футы | мм» — the length in millimetres is read at once too
+import { mmDraft } from "../src/modules/gutters/draw/lengthEntry";
+
+describe("mmDraft: the tape in millimetres", () => {
+  it("3810 mm is 150″ (12′ 6″); the thousands comma and spaces are the same number", () => {
+    expect(mmDraft("3810", 100)).toEqual({ len: 150, bad: false, same: false });
+    expect(mmDraft("3,810", 100)).toEqual({ len: 150, bad: false, same: false });
+    expect(mmDraft("3 810", 100)).toEqual({ len: 150, bad: false, same: false });
+  });
+  it("the length the run has already is not written again", () => {
+    expect(mmDraft("3810", 150).same).toBe(true);
+  });
+  it("empty, zero, letters: nothing is written, the warning shows", () => {
+    for (const s of ["", "0", "abc", "-5"]) expect(mmDraft(s, 150)).toEqual({ len: null, bad: true, same: false });
+  });
+});
