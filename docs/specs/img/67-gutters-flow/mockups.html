@@ -1,0 +1,183 @@
+<!doctype html>
+<!-- Спека 67, макеты «как предлагаю» (#2511). Только токены дизайн-системы: design/naryad-ds/tokens/*.css.
+     Открыть: mockups.html#screen=v1-list&theme=light  (screen: v1-list, v1-card, v2-list, v2-card, compare-list, compare-card). -->
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gutters — макеты</title>
+<link rel="stylesheet" href="../../../../design/naryad-ds/tokens/foundation.css">
+<link rel="stylesheet" href="../../../../design/naryad-ds/tokens/theme.css">
+<link rel="stylesheet" href="../../../../design/naryad-ds/tokens/status.css">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: var(--font); color: var(--ink); background: var(--ground); -webkit-font-smoothing: antialiased; }
+  .phone { width: 390px; height: 844px; position: relative; overflow: hidden; background: var(--ground); }
+  .scroll { position: absolute; inset: 0 0 0 0; padding: 0 16px 200px; overflow: hidden; }
+  /* шапка v2 (DS §12.13): круги 40 сверху, заголовок 30/600 */
+  .top { display: flex; justify-content: space-between; align-items: center; padding-top: 6px; height: 52px; }
+  .round { width: 40px; height: 40px; border-radius: 20px; background: var(--surf2); display: grid; place-items: center; }
+  .round.sm { width: 32px; height: 32px; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .back { display: flex; align-items: center; gap: 4px; color: var(--mut); font-size: 15px; font-weight: 600; }
+  h1 { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .help { width: 22px; height: 22px; border-radius: 11px; background: var(--surf2); font-size: 13px; font-weight: 700; display: grid; place-items: center; color: var(--mut); }
+  .sub { font-size: 13px; color: var(--mut); font-weight: 500; margin-top: 4px; }
+  .search { margin-top: 16px; height: 44px; border-radius: 22px; background: var(--surf); display: flex; align-items: center; gap: 8px; padding: 0 14px; color: var(--mut); font-size: 15px; }
+  /* ListGroup / GroupRow (src/ui/groupedList.tsx): заголовок 17/700, справа «Все ›» 13/600 */
+  .gh { display: flex; justify-content: space-between; align-items: baseline; margin: 20px 4px 10px; }
+  .gh b { font-size: 17px; font-weight: 700; }
+  .gh span { font-size: 13px; font-weight: 600; color: var(--mut); }
+  .card { background: var(--surf); border-radius: 22px; box-shadow: inset 0 1px 0 var(--hl); overflow: hidden; }
+  .gr { display: flex; align-items: center; gap: 12px; padding: 12px 16px; min-height: 64px; position: relative; }
+  .gr + .gr::before { content: ""; position: absolute; top: 0; left: 68px; right: 0; height: 1px; background: var(--off); }
+  .gr .t { flex: 1; min-width: 0; }
+  .gr .n { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gr .m { font-size: 13px; color: var(--mut); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .gr .r { text-align: right; font-size: 12px; color: var(--mut); font-weight: 600; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  .thumb { width: 40px; height: 40px; border-radius: 13px; background: var(--surf2); display: grid; place-items: center; flex: none; }
+  .ico { width: 40px; height: 40px; border-radius: 13px; background: var(--surf2); display: grid; place-items: center; flex: none; color: var(--ink); }
+  .chev { color: var(--mut); flex: none; }
+  /* плашка статуса: 24, радиус 12, значок 13 + слово 12/600 */
+  .pill { height: 24px; border-radius: 12px; padding: 0 9px 0 7px; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .pill.ok { background: var(--st-ok); color: var(--st-ok-text); } .pill.info { background: var(--st-info); color: var(--st-info-text); }
+  .pill.warn { background: var(--st-warn); color: var(--st-warn-text); } .pill.neutral { background: var(--st-neutral); color: var(--st-neutral-text); }
+  .act { font-size: 13px; font-weight: 600; color: var(--acc-text); white-space: nowrap; }
+  /* кнопки: капсула 40, 15/700; залитая acc — одна на экран */
+  .btn { height: 40px; border-radius: 20px; padding: 0 18px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px; font-weight: 700; white-space: nowrap; }
+  .btn.pri { background: var(--acc); color: var(--on-acc); box-shadow: inset 0 0 0 1px var(--acc-edge); }
+  .btn.sec { background: var(--surf2); color: var(--acc-text); }
+  .btn.wide { width: 100%; }
+  /* ActionBar (DS §8.9): видимые 44 */
+  .actionbar { position: absolute; left: 0; right: 0; bottom: 84px; padding: 12px 16px; display: flex; gap: 8px; background: linear-gradient(to bottom, transparent, var(--page) 30%); }
+  .actionbar .btn { height: 44px; border-radius: 22px; flex: 1; }
+  .actionbar .btn.icon { flex: none; width: 44px; padding: 0; }
+  /* панель вкладок: 56 + нижняя зона, значок 22 + слово 12, активная accText без заливки */
+  .tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 84px; background: var(--tab); display: flex; padding: 8px 6px 0; }
+  .tabbar div { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--mut); position: relative; }
+  .tabbar div.on { color: var(--acc-text); }
+  .badge { position: absolute; top: -4px; left: 50%; margin-left: 6px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--st-bad-text); color: var(--surf-solid); font-size: 11px; display: grid; place-items: center; padding: 0 4px; }
+  .next { margin-top: 12px; font-size: 15px; font-weight: 500; color: var(--ink); }
+  .meta { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; font-size: 13px; color: var(--mut); font-weight: 500; }
+  .sheet { margin-top: 16px; background: var(--surf); border-radius: 22px; padding: 12px; box-shadow: inset 0 1px 0 var(--hl); position: relative; }
+  .paper { background: #fff; border-radius: 14px; height: 210px; display: grid; place-items: center; }
+  .sheet .edit { position: absolute; right: 20px; top: 20px; }
+  .trio { display: flex; gap: 8px; margin-top: 8px; }
+  .trio div { flex: 1; background: var(--surf2); border-radius: 14px; padding: 10px 12px; }
+  .trio b { display: block; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .trio span { font-size: 12px; font-weight: 600; color: var(--mut); }
+  .seg { margin-top: 16px; height: 36px; border-radius: 18px; background: var(--surf); padding: 3px; display: flex; box-shadow: inset 0 1px 0 var(--hl); }
+  .seg div { flex: 1; display: grid; place-items: center; font-size: 13px; font-weight: 600; color: var(--mut); border-radius: 15px; }
+  .seg div.on { background: var(--surf3); color: var(--ink); }
+  .money { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink); }
+  /* сравнение */
+  .cmp { display: flex; gap: 28px; padding: 24px; background: var(--page); width: max-content; }
+  .cmp figure { display: flex; flex-direction: column; gap: 10px; }
+  .cmp figcaption { font-size: 17px; font-weight: 700; color: var(--ink); }
+  .cmp figcaption small { display: block; font-size: 13px; font-weight: 500; color: var(--mut); margin-top: 2px; max-width: 390px; }
+  .cmp img, .cmp .phone { width: 390px; height: 844px; border-radius: 28px; box-shadow: 0 0 0 1px var(--off); }
+  .cmp iframe { width: 390px; height: 844px; border: 0; border-radius: 28px; box-shadow: 0 0 0 1px var(--off); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const P = new URLSearchParams(location.hash.slice(1));
+const theme = P.get("theme") || "light", screen = P.get("screen") || "v1-list";
+document.documentElement.dataset.theme = theme;
+const svg = (d, s = 20) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const I = {
+  plus: '<path d="M12 5v14M5 12h14"/>', more: '<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>',
+  search: '<circle cx="11" cy="11" r="6"/><path d="m20 20-4-4"/>', chev: '<path d="m9 6 6 6-6 6"/>', back: '<path d="m15 6-6 6 6 6"/>',
+  pencil: '<path d="M4 20h4L19 9l-4-4L4 16z"/>', pin: '<path d="M12 21s7-6 7-11a7 7 0 1 0-14 0c0 5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+  home: '<path d="M4 11 12 4l8 7v9H4z"/>', users: '<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M16 5a3 3 0 0 1 0 6M21 20c0-2-1-4-3-5"/>',
+  money: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M12 9v6M10 10.5h3a1.5 1.5 0 0 1 0 3h-2"/>', leads: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1"/>',
+  gut: '<path d="M4 4h12l4 4v12H4z"/><path d="M8 12h8M8 16h5"/>', clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+  doc: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>', crew: '<path d="M4 18c0-3 3-5 8-5s8 2 8 5"/><path d="M7 11a5 5 0 0 1 10 0z"/>',
+  ruler: '<path d="M3 15 15 3l6 6L9 21z"/><path d="m7 11 2 2M10 8l2 2M13 5l2 2"/>', box: '<path d="M4 7 12 3l8 4v10l-8 4-8-4z"/><path d="M4 7l8 4 8-4M12 11v10"/>',
+  camera: '<rect x="3" y="7" width="18" height="13" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M9 7l1.5-3h3L15 7"/>', list: '<path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/>',
+  dot: '<circle cx="12" cy="12" r="7" stroke-dasharray="2.5 2.5"/>', check: '<path d="m5 12 5 5 9-10"/>', send: '<path d="M4 12 20 4l-6 16-3-7z"/>',
+};
+const ic = (n, s) => svg(I[n], s);
+// миниатюра чертежа — тот же контур, что на холсте
+const mini = (w = 28) => `<svg width="${w}" height="${w}" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 9h26v22H6"/><circle cx="6" cy="9" r="2.5" fill="currentColor"/><circle cx="6" cy="31" r="2.5" fill="currentColor"/></svg>`;
+const big = `<svg width="300" height="190" viewBox="0 0 300 190" fill="none" stroke="#1a1a1a"><path d="M40 40h190v110H40" stroke-width="3.5"/><circle cx="40" cy="40" r="6" fill="#fff" stroke-width="2.5"/><circle cx="40" cy="150" r="6" fill="#fff" stroke-width="2.5"/><circle cx="230" cy="95" r="6" fill="#fff" stroke-width="2.5"/><g font-family="system-ui" font-size="13" fill="#1a1a1a" stroke="none"><text x="112" y="28">28′ 9″</text><text x="240" y="99">33′ 2″</text><text x="112" y="172">28′ 9″</text><text x="30" y="62">D1</text><text x="30" y="140">D2</text><text x="206" y="118">D3</text></g></svg>`;
+
+const tabbar = (on) => `<div class="tabbar">${[["home", "Главная"], ["gut", "Gutters"], ["users", "Клиенты"], ["money", "Деньги"], ["leads", "Лиды"]]
+  .map(([i, l]) => `<div class="${l === on ? "on" : ""}">${ic(i, 22)}${l}${l === "Лиды" ? '<span class="badge">2</span>' : ""}</div>`).join("")}</div>`;
+const head = (title, opts = {}) => `<div class="top">${opts.back ? `<div class="back">${ic("back", 22)}${opts.back}</div>` : `<div class="round" style="background:var(--tint)"><b style="font-size:15px">AP</b></div>`}
+  <div class="row">${opts.plus === false ? "" : `<div class="round">${ic("plus")}</div>`}<div class="round">${ic("more")}</div></div></div>
+  <h1>${title}<span class="help">?</span></h1>${opts.sub ? `<div class="sub">${opts.sub}</div>` : ""}`;
+const row = (lead, n, m, right, chev = true) => `<div class="gr">${lead}<div class="t"><div class="n">${n}</div>${m ? `<div class="m">${m}</div>` : ""}</div>${right ? `<div class="r">${right}</div>` : ""}${chev ? `<span class="chev">${ic("chev", 18)}</span>` : ""}</div>`;
+const group = (title, rows, link) => `<div class="gh"><b>${title}</b>${link ? `<span>${link}</span>` : ""}</div><div class="card">${rows.join("")}</div>`;
+const pill = (tone, icon, word) => `<span class="pill ${tone}">${ic(icon, 13)}${word}</span>`;
+const th = `<div class="thumb">${mini()}</div>`;
+const what = "3 gutter · 91 ft · 3 downspout";
+
+const S = {};
+// В1 «Два списка» (слово основателя #1753): Черновики и Замеры, строки GroupRow, без чипов-фильтров
+S["v1-list"] = () => `<div class="phone"><div class="scroll">${head("Gutters")}
+  <div class="search">${ic("search", 18)}Клиент, адрес, телефон</div>
+  ${group("Черновики · 1", [row(th, "Без клиента", what, "сегодня")], "")}
+  ${group("Замеры · 3", [
+    row(th, "Linda Alvarez", "2207 Ocean Park Blvd", `${pill("neutral", "dot", "Без сметы")}<span>сегодня</span>`),
+    row(th, "Mark Chen", "1520 Elm St", `${pill("info", "doc", "Отправлена")}<span>вчера</span>`),
+    row(th, "Rosa Diaz", "88 Pine Ave", `${pill("ok", "check", "Подписана")}<span>22 нояб.</span>`),
+  ])}
+  </div>${tabbar("Gutters")}</div>`;
+// В2 «Сначала — что замерить»: кому нужен замер сегодня, черновики, последние; «Все замеры ›»
+S["v2-list"] = () => `<div class="phone"><div class="scroll">${head("Gutters", { plus: false })}
+  <div style="margin-top:16px"><span class="btn pri wide">${ic("plus", 18)}Новый замер</span></div>
+  ${group("Ждут замера · 2", [
+    row(`<div class="ico">${ic("clock")}</div>`, "Mark Chen · 10:00", "1520 Elm St · выезд сегодня", `<span class="act">Замерить</span>`, false),
+    row(`<div class="ico">${ic("leads")}</div>`, "Лид: Ann Park", "41 Oak Rd · без замера 2 дня", `<span class="act">Замерить</span>`, false),
+  ])}
+  ${group("Черновики · 1", [row(th, "Без клиента", what, "сегодня")])}
+  ${group("Последние", [
+    row(th, "Linda Alvarez", "2207 Ocean Park Blvd", pill("neutral", "dot", "Без сметы")),
+    row(th, "Rosa Diaz", "88 Pine Ave", pill("ok", "check", "Подписана")),
+  ], "Все замеры ›")}
+  </div>${tabbar("Gutters")}</div>`;
+const cardTop = (title) => `${head(title, { back: "Gutters", plus: false })}
+  <div class="meta">${pill("neutral", "dot", "Без сметы")}<span>${ic("pin", 14)}</span><span>2207 Ocean Park Blvd</span></div>
+  <div class="next">Чертёж готов — сделайте смету.</div>
+  <div class="sheet"><div class="paper">${big}</div><div class="edit round sm">${ic("pencil", 16)}</div></div>`;
+const docs = group("Документы", [
+  row(`<div class="ico">${ic("doc")}</div>`, "Клиенту", "Чертёж без цен · EN", ""),
+  row(`<div class="ico">${ic("crew")}</div>`, "Бригаде", "Раскрой и детали · RU", ""),
+  row(`<div class="ico">${ic("ruler")}</div>`, "Рабочие чертежи", "План, ведомости · 11×17", ""),
+  row(`<div class="ico">${ic("box")}</div>`, "Заказ материалов", "Поставщику · EN", ""),
+]);
+// карточка В1: шапка объекта (DS §12.3), чертёж, тройка цифр, итог, группы; главное — в ActionBar
+S["v1-card"] = () => `<div class="phone"><div class="scroll">${cardTop("Linda Alvarez")}
+  <div class="trio"><div><b>91 ft</b><span>Gutter · 3</span></div><div><b>2</b><span>Угла</span></div><div><b>3</b><span>Downspout</span></div></div>
+  ${group("Итог", [row(`<div class="ico">${ic("money")}</div>`, "Примерно по прайсу", "Точная сумма — в смете", `<span class="money">$2,113.67</span>`, false), row(`<div class="ico">${ic("list")}</div>`, "Состав", "Линии, углы, водостоки, детали", "")])}
+  ${docs}
+  </div>
+  <div class="actionbar"><span class="btn pri">${ic("plus", 18)}Сделать смету</span><span class="btn sec">${ic("pencil", 18)}Править</span><span class="btn sec icon">${ic("send", 18)}</span></div>
+  ${tabbar("Gutters")}</div>`;
+// карточка В2: те же блоки, но разделы — вкладками вида (DS §12.3 п.5, §9 А1п): Обзор · Состав · Документы · Фото
+S["v2-card"] = () => `<div class="phone"><div class="scroll">${cardTop("Linda Alvarez")}
+  <div class="seg"><div class="on">Обзор</div><div>Состав</div><div>Документы</div><div>Фото</div></div>
+  ${group("Итог", [row(`<div class="ico">${ic("money")}</div>`, "Примерно по прайсу", "3 gutter · 91 ft · 3 downspout", `<span class="money">$2,113.67</span>`, false)])}
+  ${group("Сметы замера", [row(`<div class="ico">${ic("doc")}</div>`, "Смет пока нет", "Появится после «Сделать смету»", "", false)])}
+  </div>
+  <div class="actionbar"><span class="btn pri">${ic("plus", 18)}Сделать смету</span><span class="btn sec">${ic("pencil", 18)}Править</span></div>
+  ${tabbar("Gutters")}</div>`;
+const frame = (s) => `<iframe src="mockups.html#screen=${s}&theme=${theme}"></iframe>`;
+S["compare-list"] = () => `<div class="cmp">
+  <figure><figcaption>Как есть<small>«Замеры»: чипы-фильтры, большие карточки ListCard</small></figcaption><img src="asis-05-list-${theme}.png"></figure>
+  <figure><figcaption>Вариант 1 · «Два списка»<small>Черновики и Замеры строками в группах, миниатюра чертежа, статус справа</small></figcaption>${frame("v1-list")}</figure>
+  <figure><figcaption>Вариант 2 · «Сначала — что замерить»<small>Новый замер, кто ждёт замера сегодня, черновики, последние</small></figcaption>${frame("v2-list")}</figure></div>`;
+S["compare-card"] = () => `<div class="cmp">
+  <figure><figcaption>Как есть<small>«Просмотр замера»: имя дважды, кнопка сметы ниже экрана</small></figcaption><img src="asis-06-card-top-${theme}.png"></figure>
+  <figure><figcaption>Вариант 1 · одна лента<small>Шапка объекта, чертёж, цифры, группы; кнопки внизу</small></figcaption>${frame("v1-card")}</figure>
+  <figure><figcaption>Вариант 2 · вкладки<small>Обзор · Состав · Документы · Фото; кнопки внизу</small></figcaption>${frame("v2-card")}</figure></div>`;
+S["compare-tab"] = () => `<div class="cmp">
+  <figure><figcaption>Модуль выключен (как есть)<small>Вторая вкладка — «План»</small></figcaption><img src="asis-01-tabs-off-${theme}.png"></figure>
+  <figure><figcaption>Модуль включён (как есть)<small>«Gutters» встаёт на место «План», «План» уходит в «Ещё»</small></figcaption><img src="asis-05-list-${theme}.png"></figure>
+  <figure><figcaption>Где включают (как есть)<small>Ещё → Компания → Модули, только директор</small></figcaption><img src="asis-03-modules-on-${theme}.png"></figure></div>`;
+document.getElementById("app").innerHTML = (S[screen] || S["v1-list"])();
+</script>
+</body>
+</html>
