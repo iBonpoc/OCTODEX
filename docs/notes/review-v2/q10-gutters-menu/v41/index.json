@@ -1,0 +1,137 @@
+[
+ {
+  "title": "Gutter: новый",
+  "note": "Gutter № 1 (первый в замере): строка «Задаёт все Gutter этого замера»; Размер уже «5″» (стандарт), Цвет пуст («Выберите цвет»), подпись «Цвет один на весь замер»; Крепление — в «Ещё» (названия по стенду Berger)",
+  "was": "was-g-new-dark-390.png",
+  "now": [
+   "now-g-new-dark-390.png",
+   "now-g-new-more-dark-390.png"
+  ]
+ },
+ {
+  "title": "Gutter: готовый",
+  "note": "Заполненный gutter: 12′ 6 5/16″, High Gloss White, 5″; «Ещё» свёрнут со сводкой; второй и третий кадры — «Ещё» раскрыт и прокручен",
+  "was": "was-g-ready-dark-390.png",
+  "now": [
+   "now-g-ready-dark-390.png",
+   "now-g-ready-more-dark-390.png",
+   "now-g-ready-more2-dark-390.png"
+  ]
+ },
+ {
+  "title": "Gutter: единицы мм",
+  "note": "Переключатель «мм»: одно поле длины (3810 мм), в подзаголовке пересчёт 12′ 6″; рулетки нет — подпись «Рулетка — только дюймы»",
+  "was": null,
+  "now": [
+   "now-g-mm-dark-390.png"
+  ]
+ },
+ {
+  "title": "Downspout: прямой гладкий (новый)",
+  "note": "Низ/Верх «Ничего»; в «Ещё» нет переключателей (у прямого гладкого diverter и strainer нет), строка «Крепление к стене не выбрано — в смету не входит»",
+  "was": "was-ds-dark-390.png",
+  "now": [
+   "now-ds-new-smooth-dark-390.png",
+   "now-ds-new-smooth-more-dark-390.png",
+   "now-ds-new-smooth-more2-dark-390.png"
+  ]
+ },
+ {
+  "title": "Downspout: ребристый (новый)",
+  "note": "Ребристый: Elbow A 3; в «Ещё» переключатель «Cutoff with Diverter»",
+  "was": "was-ds-dark-390.png",
+  "now": [
+   "now-ds-new-ribbed-dark-390.png",
+   "now-ds-new-ribbed-more-dark-390.png",
+   "now-ds-new-ribbed-more2-dark-390.png"
+  ]
+ },
+ {
+  "title": "Downspout: круглый (новый)",
+  "note": "Круглый: Elbow/Offset без A/B; в «Ещё» переключатель «Round Wire Strainer»; меню стены дополнительно «#31 Pipe Cleat»",
+  "was": "was-ds-dark-390.png",
+  "now": [
+   "now-ds-new-round-dark-390.png",
+   "now-ds-new-round-more-dark-390.png",
+   "now-ds-new-round-more2-dark-390.png"
+  ]
+ },
+ {
+  "title": "Downspout: готовый",
+  "note": "Elbow A 75°×2, Offset A 2″×1, Низ «Splash Blocks»; «Ещё»: цвет с образцом, Стена —, «Крепление к стене не выбрано — в смету не входит»",
+  "was": "was-ds-dark-390.png",
+  "now": [
+   "now-ds-ready-dark-390.png",
+   "now-ds-ready-more-dark-390.png",
+   "now-ds-ready-more2-dark-390.png"
+  ]
+ },
+ {
+  "title": "Downspout: 2 этажа (новый)",
+  "note": "«Длина 20 ft · 2 эт. · 2 шт.», подпись «1 эт. = 10 ft»; колена те же, что на 1 этаже (прямой гладкий — 0)",
+  "was": null,
+  "now": [
+   "now-ds-new-2floor-dark-390.png"
+  ]
+ },
+ {
+  "title": "Меню угла Elbow",
+  "note": "30° · 45° · 60° · 75° · 90°",
+  "was": null,
+  "now": [
+   "now-menu-angle-dark-390.png"
+  ]
+ },
+ {
+  "title": "Меню Offset",
+  "note": "1″ · 2″ · 4″ · Свой…",
+  "was": null,
+  "now": [
+   "now-menu-offset-dark-390.png"
+  ]
+ },
+ {
+  "title": "Меню «Низ»",
+  "note": "Ничего · Splash Blocks · Flex-A-Spout · В землю · На нижнюю крышу",
+  "was": null,
+  "now": [
+   "now-menu-bottom-dark-390.png"
+  ]
+ },
+ {
+  "title": "Меню «Верх»",
+  "note": "Ничего · Funnel · Square Corrugated “Y” Funnel · #14 Ornate Conductor Head, Soldered · Plain Tapered Conductor Head, Riveted · Molded Universal Conductor Head",
+  "was": null,
+  "now": [
+   "now-menu-top-dark-390.png"
+  ]
+ },
+ {
+  "title": "Окно «Цвет»",
+  "note": "«Как у gutter (High Gloss White)» (отмечено), «Без покраски» (перечёркнутый кружок), 9 цветов по стенду Half Round + High Gloss White; второй кадр — прокручено",
+  "was": null,
+  "now": [
+   "now-menu-color-dark-390.png",
+   "now-menu-color-more2-dark-390.png"
+  ]
+ },
+ {
+  "title": "Окно «Цвет»: gutter без цвета",
+  "note": "Цвет gutter не выбран: пункта «Как у gutter» нет, цвет Downspout — «Выберите цвет»",
+  "was": null,
+  "now": [
+   "now-menu-color-empty-dark-390.png"
+  ]
+ },
+ {
+  "title": "Меню «Крепление к стене»",
+  "note": "— · Universal Band · Square Stamped Sickle Hook · Heavy Duty Channel Brick Hook · Metco Ornamental Conductor Band · U-Bracket Downspout Hanger · Conductor Bracket Downspout Hanger · Sq. Side Fasten / Wire Downspout Hooks; третий кадр — круглый (+ #31 Pipe Cleat)",
+  "was": null,
+  "now": [
+   "now-menu-wall-dark-390.png",
+   "now-menu-wall-more2-dark-390.png",
+   "now-menu-wall-round-dark-390.png",
+   "now-menu-wall-round-more2-dark-390.png"
+  ]
+ }
+]

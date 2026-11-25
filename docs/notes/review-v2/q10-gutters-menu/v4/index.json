@@ -1,0 +1,103 @@
+[
+ {
+  "title": "Gutter: новый",
+  "note": "Gutter № 1, только что нарисован: единицы ft·in·дробь | мм, футы / дюймы / дробь в одной строке, рулетка 1″ на ширину с красной короткой меткой и жёлтым овалом, ряд [Размер | Цвет | Этаж]; Профиль K заполнен; «Ещё» раскрыт сам (крепление «Выберите»); второй кадр — окно прокручено вниз",
+  "was": "was-g-new-dark-390.png",
+  "now": [
+   "now-g-new-dark-390.png",
+   "now-g-new-more-dark-390.png"
+  ]
+ },
+ {
+  "title": "Gutter: готовый",
+  "note": "Заполненный gutter: 12′ 6 5/16″, High Gloss White, 5″; «Ещё» свёрнут со сводкой; второй и третий кадры — «Ещё» раскрыт и прокручен",
+  "was": "was-g-ready-dark-390.png",
+  "now": [
+   "now-g-ready-dark-390.png",
+   "now-g-ready-more-dark-390.png",
+   "now-g-ready-more2-dark-390.png"
+  ]
+ },
+ {
+  "title": "Gutter: единицы мм",
+  "note": "Переключатель «мм»: одно поле длины (3810 мм), в подзаголовке пересчёт 12′ 6″; рулетки нет — подпись «Рулетка — только дюймы»",
+  "was": null,
+  "now": [
+   "now-g-mm-dark-390.png"
+  ]
+ },
+ {
+  "title": "Downspout: прямой гладкий (новый)",
+  "note": "Вид · Размер · Этаж одной строкой, Elbow A 0 (по месту), Offset A/B, Низ и Верх «Ничего»; «Ещё» свёрнут; дальше раскрыт и прокручен",
+  "was": "was-ds-dark-390.png",
+  "now": [
+   "now-ds-new-smooth-dark-390.png",
+   "now-ds-new-smooth-more-dark-390.png",
+   "now-ds-new-smooth-more2-dark-390.png"
+  ]
+ },
+ {
+  "title": "Downspout: ребристый (новый)",
+  "note": "Прямой ребристый: Elbow A 3 по умолчанию; значение вида в 2 строки",
+  "was": "was-ds-dark-390.png",
+  "now": [
+   "now-ds-new-ribbed-dark-390.png",
+   "now-ds-new-ribbed-more-dark-390.png",
+   "now-ds-new-ribbed-more2-dark-390.png"
+  ]
+ },
+ {
+  "title": "Downspout: круглый (новый)",
+  "note": "Круглый: «Elbow» 75°×3 и «Offset» без A/B",
+  "was": "was-ds-dark-390.png",
+  "now": [
+   "now-ds-new-round-dark-390.png",
+   "now-ds-new-round-more-dark-390.png",
+   "now-ds-new-round-more2-dark-390.png"
+  ]
+ },
+ {
+  "title": "Downspout: готовый",
+  "note": "Elbow A 75°×2, Offset A 2″×1, Низ Splash block; «Ещё» раскрыт и прокручен (цвет с образцом, Стена —, Wire Strainer, Rain barrel diverter, Reducer)",
+  "was": "was-ds-dark-390.png",
+  "now": [
+   "now-ds-ready-dark-390.png",
+   "now-ds-ready-more-dark-390.png",
+   "now-ds-ready-more2-dark-390.png"
+  ]
+ },
+ {
+  "title": "Меню угла Elbow",
+  "note": "30° · 45° · 60° · 75° · 90°",
+  "was": null,
+  "now": [
+   "now-menu-angle-dark-390.png"
+  ]
+ },
+ {
+  "title": "Меню Offset",
+  "note": "1″ · 2″ · 4″ · Свой…",
+  "was": null,
+  "now": [
+   "now-menu-offset-dark-390.png"
+  ]
+ },
+ {
+  "title": "Окно «Цвет»",
+  "note": "Подпись «один на весь замер», «Как у gutter», «Без покраски», 10 цветов с образцами и галочкой; второй кадр — прокручено",
+  "was": null,
+  "now": [
+   "now-menu-color-dark-390.png",
+   "now-menu-color-more2-dark-390.png"
+  ]
+ },
+ {
+  "title": "Меню «Крепление к стене»",
+  "note": "— · Downspout Band · Hidden Band · Sickle Hook · Brick Hook · Pipe Cleat · Conductor Band · Rack & Key Set; второй кадр — прокручено",
+  "was": null,
+  "now": [
+   "now-menu-wall-dark-390.png",
+   "now-menu-wall-more2-dark-390.png"
+  ]
+ }
+]

@@ -1,0 +1,560 @@
+[
+ {
+  "id": "client_c1__client-h0__dark-390-ru-director__721a1ff",
+  "screen": "client",
+  "theme": "dark",
+  "state": "client-h0",
+  "scroll": 0,
+  "our_img": "screens/721a1ff/client_c1__client-h0__dark-390-ru-director__721a1ff.png",
+  "mock_img": "review-v2/mock/m-client.png"
+ },
+ {
+  "id": "client_c1__client-h0__light-390-ru-director__721a1ff",
+  "screen": "client",
+  "theme": "light",
+  "state": "client-h0",
+  "scroll": 0,
+  "our_img": "screens/721a1ff/client_c1__client-h0__light-390-ru-director__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "client_c1__client-h112__dark-390-ru-director-s112__721a1ff",
+  "screen": "client",
+  "theme": "dark",
+  "state": "client-h112",
+  "scroll": 112,
+  "our_img": "screens/721a1ff/client_c1__client-h112__dark-390-ru-director-s112__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "client_c1__client-h112__light-390-ru-director-s112__721a1ff",
+  "screen": "client",
+  "theme": "light",
+  "state": "client-h112",
+  "scroll": 112,
+  "our_img": "screens/721a1ff/client_c1__client-h112__light-390-ru-director-s112__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "client_c1__client-h300__dark-390-ru-director-s300__721a1ff",
+  "screen": "client",
+  "theme": "dark",
+  "state": "client-h300",
+  "scroll": 300,
+  "our_img": "screens/721a1ff/client_c1__client-h300__dark-390-ru-director-s300__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "client_c1__client-h300__light-390-ru-director-s300__721a1ff",
+  "screen": "client",
+  "theme": "light",
+  "state": "client-h300",
+  "scroll": 300,
+  "our_img": "screens/721a1ff/client_c1__client-h300__light-390-ru-director-s300__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "client_c1__client-h44__dark-390-ru-director-s44__721a1ff",
+  "screen": "client",
+  "theme": "dark",
+  "state": "client-h44",
+  "scroll": 44,
+  "our_img": "screens/721a1ff/client_c1__client-h44__dark-390-ru-director-s44__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "client_c1__client-h44__light-390-ru-director-s44__721a1ff",
+  "screen": "client",
+  "theme": "light",
+  "state": "client-h44",
+  "scroll": 44,
+  "our_img": "screens/721a1ff/client_c1__client-h44__light-390-ru-director-s44__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "client_c1__client-h72__dark-390-ru-director-s72__721a1ff",
+  "screen": "client",
+  "theme": "dark",
+  "state": "client-h72",
+  "scroll": 72,
+  "our_img": "screens/721a1ff/client_c1__client-h72__dark-390-ru-director-s72__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "client_c1__client-h72__light-390-ru-director-s72__721a1ff",
+  "screen": "client",
+  "theme": "light",
+  "state": "client-h72",
+  "scroll": 72,
+  "our_img": "screens/721a1ff/client_c1__client-h72__light-390-ru-director-s72__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "client_c1__panel-open__dark-390-ru-director__721a1ff",
+  "screen": "client",
+  "theme": "dark",
+  "state": "panel-open",
+  "scroll": 0,
+  "our_img": "screens/721a1ff/client_c1__panel-open__dark-390-ru-director__721a1ff.png",
+  "mock_img": "review-v2/mock/ (strips)"
+ },
+ {
+  "id": "client_c1__panel-open__light-390-ru-director__721a1ff",
+  "screen": "client",
+  "theme": "light",
+  "state": "panel-open",
+  "scroll": 0,
+  "our_img": "screens/721a1ff/client_c1__panel-open__light-390-ru-director__721a1ff.png",
+  "mock_img": "review-v2/mock/ (strips)"
+ },
+ {
+  "id": "estimate_new_id_e6__estimate-h0__dark-390-ru-director__721a1ff",
+  "screen": "estimate",
+  "theme": "dark",
+  "state": "estimate-h0",
+  "scroll": 0,
+  "our_img": "screens/721a1ff/estimate_new_id_e6__estimate-h0__dark-390-ru-director__721a1ff.png",
+  "mock_img": "review-v2/mock/m-estimate.png"
+ },
+ {
+  "id": "estimate_new_id_e6__estimate-h0__light-390-ru-director__721a1ff",
+  "screen": "estimate",
+  "theme": "light",
+  "state": "estimate-h0",
+  "scroll": 0,
+  "our_img": "screens/721a1ff/estimate_new_id_e6__estimate-h0__light-390-ru-director__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "estimate_new_id_e6__estimate-h112__dark-390-ru-director-s112__721a1ff",
+  "screen": "estimate",
+  "theme": "dark",
+  "state": "estimate-h112",
+  "scroll": 112,
+  "our_img": "screens/721a1ff/estimate_new_id_e6__estimate-h112__dark-390-ru-director-s112__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "estimate_new_id_e6__estimate-h112__light-390-ru-director-s112__721a1ff",
+  "screen": "estimate",
+  "theme": "light",
+  "state": "estimate-h112",
+  "scroll": 112,
+  "our_img": "screens/721a1ff/estimate_new_id_e6__estimate-h112__light-390-ru-director-s112__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "estimate_new_id_e6__estimate-h300__dark-390-ru-director-s300__721a1ff",
+  "screen": "estimate",
+  "theme": "dark",
+  "state": "estimate-h300",
+  "scroll": 300,
+  "our_img": "screens/721a1ff/estimate_new_id_e6__estimate-h300__dark-390-ru-director-s300__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "estimate_new_id_e6__estimate-h300__light-390-ru-director-s300__721a1ff",
+  "screen": "estimate",
+  "theme": "light",
+  "state": "estimate-h300",
+  "scroll": 300,
+  "our_img": "screens/721a1ff/estimate_new_id_e6__estimate-h300__light-390-ru-director-s300__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "estimate_new_id_e6__estimate-h44__dark-390-ru-director-s44__721a1ff",
+  "screen": "estimate",
+  "theme": "dark",
+  "state": "estimate-h44",
+  "scroll": 44,
+  "our_img": "screens/721a1ff/estimate_new_id_e6__estimate-h44__dark-390-ru-director-s44__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "estimate_new_id_e6__estimate-h44__light-390-ru-director-s44__721a1ff",
+  "screen": "estimate",
+  "theme": "light",
+  "state": "estimate-h44",
+  "scroll": 44,
+  "our_img": "screens/721a1ff/estimate_new_id_e6__estimate-h44__light-390-ru-director-s44__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "estimate_new_id_e6__estimate-h72__dark-390-ru-director-s72__721a1ff",
+  "screen": "estimate",
+  "theme": "dark",
+  "state": "estimate-h72",
+  "scroll": 72,
+  "our_img": "screens/721a1ff/estimate_new_id_e6__estimate-h72__dark-390-ru-director-s72__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "estimate_new_id_e6__estimate-h72__light-390-ru-director-s72__721a1ff",
+  "screen": "estimate",
+  "theme": "light",
+  "state": "estimate-h72",
+  "scroll": 72,
+  "our_img": "screens/721a1ff/estimate_new_id_e6__estimate-h72__light-390-ru-director-s72__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "finance__money-h0__dark-390-ru-director__721a1ff",
+  "screen": "money",
+  "theme": "dark",
+  "state": "money-h0",
+  "scroll": 0,
+  "our_img": "screens/721a1ff/finance__money-h0__dark-390-ru-director__721a1ff.png",
+  "mock_img": "review-v2/mock/m-money.png"
+ },
+ {
+  "id": "finance__money-h0__light-390-ru-director__721a1ff",
+  "screen": "money",
+  "theme": "light",
+  "state": "money-h0",
+  "scroll": 0,
+  "our_img": "screens/721a1ff/finance__money-h0__light-390-ru-director__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "finance__money-h112__dark-390-ru-director-s112__721a1ff",
+  "screen": "money",
+  "theme": "dark",
+  "state": "money-h112",
+  "scroll": 112,
+  "our_img": "screens/721a1ff/finance__money-h112__dark-390-ru-director-s112__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "finance__money-h112__light-390-ru-director-s112__721a1ff",
+  "screen": "money",
+  "theme": "light",
+  "state": "money-h112",
+  "scroll": 112,
+  "our_img": "screens/721a1ff/finance__money-h112__light-390-ru-director-s112__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "finance__money-h300__dark-390-ru-director-s300__721a1ff",
+  "screen": "money",
+  "theme": "dark",
+  "state": "money-h300",
+  "scroll": 300,
+  "our_img": "screens/721a1ff/finance__money-h300__dark-390-ru-director-s300__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "finance__money-h300__light-390-ru-director-s300__721a1ff",
+  "screen": "money",
+  "theme": "light",
+  "state": "money-h300",
+  "scroll": 300,
+  "our_img": "screens/721a1ff/finance__money-h300__light-390-ru-director-s300__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "finance__money-h44__dark-390-ru-director-s44__721a1ff",
+  "screen": "money",
+  "theme": "dark",
+  "state": "money-h44",
+  "scroll": 44,
+  "our_img": "screens/721a1ff/finance__money-h44__dark-390-ru-director-s44__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "finance__money-h44__light-390-ru-director-s44__721a1ff",
+  "screen": "money",
+  "theme": "light",
+  "state": "money-h44",
+  "scroll": 44,
+  "our_img": "screens/721a1ff/finance__money-h44__light-390-ru-director-s44__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "finance__money-h72__dark-390-ru-director-s72__721a1ff",
+  "screen": "money",
+  "theme": "dark",
+  "state": "money-h72",
+  "scroll": 72,
+  "our_img": "screens/721a1ff/finance__money-h72__dark-390-ru-director-s72__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "finance__money-h72__light-390-ru-director-s72__721a1ff",
+  "screen": "money",
+  "theme": "light",
+  "state": "money-h72",
+  "scroll": 72,
+  "our_img": "screens/721a1ff/finance__money-h72__light-390-ru-director-s72__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "plan__plan-h0__dark-390-ru-director__721a1ff",
+  "screen": "plan",
+  "theme": "dark",
+  "state": "plan-h0",
+  "scroll": 0,
+  "our_img": "screens/721a1ff/plan__plan-h0__dark-390-ru-director__721a1ff.png",
+  "mock_img": "review-v2/mock/m-plan.png"
+ },
+ {
+  "id": "plan__plan-h0__light-390-ru-director__721a1ff",
+  "screen": "plan",
+  "theme": "light",
+  "state": "plan-h0",
+  "scroll": 0,
+  "our_img": "screens/721a1ff/plan__plan-h0__light-390-ru-director__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "plan__plan-h112__dark-390-ru-director-s112__721a1ff",
+  "screen": "plan",
+  "theme": "dark",
+  "state": "plan-h112",
+  "scroll": 112,
+  "our_img": "screens/721a1ff/plan__plan-h112__dark-390-ru-director-s112__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "plan__plan-h112__light-390-ru-director-s112__721a1ff",
+  "screen": "plan",
+  "theme": "light",
+  "state": "plan-h112",
+  "scroll": 112,
+  "our_img": "screens/721a1ff/plan__plan-h112__light-390-ru-director-s112__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "plan__plan-h300__dark-390-ru-director-s300__721a1ff",
+  "screen": "plan",
+  "theme": "dark",
+  "state": "plan-h300",
+  "scroll": 300,
+  "our_img": "screens/721a1ff/plan__plan-h300__dark-390-ru-director-s300__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "plan__plan-h300__light-390-ru-director-s300__721a1ff",
+  "screen": "plan",
+  "theme": "light",
+  "state": "plan-h300",
+  "scroll": 300,
+  "our_img": "screens/721a1ff/plan__plan-h300__light-390-ru-director-s300__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "plan__plan-h44__dark-390-ru-director-s44__721a1ff",
+  "screen": "plan",
+  "theme": "dark",
+  "state": "plan-h44",
+  "scroll": 44,
+  "our_img": "screens/721a1ff/plan__plan-h44__dark-390-ru-director-s44__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "plan__plan-h44__light-390-ru-director-s44__721a1ff",
+  "screen": "plan",
+  "theme": "light",
+  "state": "plan-h44",
+  "scroll": 44,
+  "our_img": "screens/721a1ff/plan__plan-h44__light-390-ru-director-s44__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "plan__plan-h72__dark-390-ru-director-s72__721a1ff",
+  "screen": "plan",
+  "theme": "dark",
+  "state": "plan-h72",
+  "scroll": 72,
+  "our_img": "screens/721a1ff/plan__plan-h72__dark-390-ru-director-s72__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "plan__plan-h72__light-390-ru-director-s72__721a1ff",
+  "screen": "plan",
+  "theme": "light",
+  "state": "plan-h72",
+  "scroll": 72,
+  "our_img": "screens/721a1ff/plan__plan-h72__light-390-ru-director-s72__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "today__home-h0__dark-390-ru-director__721a1ff",
+  "screen": "home",
+  "theme": "dark",
+  "state": "home-h0",
+  "scroll": 0,
+  "our_img": "screens/721a1ff/today__home-h0__dark-390-ru-director__721a1ff.png",
+  "mock_img": "review-v2/mock/m-home.png"
+ },
+ {
+  "id": "today__home-h0__light-390-ru-director__721a1ff",
+  "screen": "home",
+  "theme": "light",
+  "state": "home-h0",
+  "scroll": 0,
+  "our_img": "screens/721a1ff/today__home-h0__light-390-ru-director__721a1ff.png",
+  "mock_img": "review-v2/mock/m-home-light.png"
+ },
+ {
+  "id": "today__home-h112__dark-390-ru-director-s112__721a1ff",
+  "screen": "home",
+  "theme": "dark",
+  "state": "home-h112",
+  "scroll": 112,
+  "our_img": "screens/721a1ff/today__home-h112__dark-390-ru-director-s112__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "today__home-h112__light-390-ru-director-s112__721a1ff",
+  "screen": "home",
+  "theme": "light",
+  "state": "home-h112",
+  "scroll": 112,
+  "our_img": "screens/721a1ff/today__home-h112__light-390-ru-director-s112__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "today__home-h300__dark-390-ru-director-s300__721a1ff",
+  "screen": "home",
+  "theme": "dark",
+  "state": "home-h300",
+  "scroll": 300,
+  "our_img": "screens/721a1ff/today__home-h300__dark-390-ru-director-s300__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "today__home-h300__light-390-ru-director-s300__721a1ff",
+  "screen": "home",
+  "theme": "light",
+  "state": "home-h300",
+  "scroll": 300,
+  "our_img": "screens/721a1ff/today__home-h300__light-390-ru-director-s300__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "today__home-h44__dark-390-ru-director-s44__721a1ff",
+  "screen": "home",
+  "theme": "dark",
+  "state": "home-h44",
+  "scroll": 44,
+  "our_img": "screens/721a1ff/today__home-h44__dark-390-ru-director-s44__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "today__home-h44__light-390-ru-director-s44__721a1ff",
+  "screen": "home",
+  "theme": "light",
+  "state": "home-h44",
+  "scroll": 44,
+  "our_img": "screens/721a1ff/today__home-h44__light-390-ru-director-s44__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "today__home-h72__dark-390-ru-director-s72__721a1ff",
+  "screen": "home",
+  "theme": "dark",
+  "state": "home-h72",
+  "scroll": 72,
+  "our_img": "screens/721a1ff/today__home-h72__dark-390-ru-director-s72__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "today__home-h72__light-390-ru-director-s72__721a1ff",
+  "screen": "home",
+  "theme": "light",
+  "state": "home-h72",
+  "scroll": 72,
+  "our_img": "screens/721a1ff/today__home-h72__light-390-ru-director-s72__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "visit_v4__visit-h0__dark-390-ru-director__721a1ff",
+  "screen": "visit",
+  "theme": "dark",
+  "state": "visit-h0",
+  "scroll": 0,
+  "our_img": "screens/721a1ff/visit_v4__visit-h0__dark-390-ru-director__721a1ff.png",
+  "mock_img": "review-v2/mock/m-visit.png"
+ },
+ {
+  "id": "visit_v4__visit-h0__light-390-ru-director__721a1ff",
+  "screen": "visit",
+  "theme": "light",
+  "state": "visit-h0",
+  "scroll": 0,
+  "our_img": "screens/721a1ff/visit_v4__visit-h0__light-390-ru-director__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "visit_v4__visit-h112__dark-390-ru-director-s112__721a1ff",
+  "screen": "visit",
+  "theme": "dark",
+  "state": "visit-h112",
+  "scroll": 112,
+  "our_img": "screens/721a1ff/visit_v4__visit-h112__dark-390-ru-director-s112__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "visit_v4__visit-h112__light-390-ru-director-s112__721a1ff",
+  "screen": "visit",
+  "theme": "light",
+  "state": "visit-h112",
+  "scroll": 112,
+  "our_img": "screens/721a1ff/visit_v4__visit-h112__light-390-ru-director-s112__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "visit_v4__visit-h300__dark-390-ru-director-s300__721a1ff",
+  "screen": "visit",
+  "theme": "dark",
+  "state": "visit-h300",
+  "scroll": 300,
+  "our_img": "screens/721a1ff/visit_v4__visit-h300__dark-390-ru-director-s300__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "visit_v4__visit-h300__light-390-ru-director-s300__721a1ff",
+  "screen": "visit",
+  "theme": "light",
+  "state": "visit-h300",
+  "scroll": 300,
+  "our_img": "screens/721a1ff/visit_v4__visit-h300__light-390-ru-director-s300__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "visit_v4__visit-h44__dark-390-ru-director-s44__721a1ff",
+  "screen": "visit",
+  "theme": "dark",
+  "state": "visit-h44",
+  "scroll": 44,
+  "our_img": "screens/721a1ff/visit_v4__visit-h44__dark-390-ru-director-s44__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "visit_v4__visit-h44__light-390-ru-director-s44__721a1ff",
+  "screen": "visit",
+  "theme": "light",
+  "state": "visit-h44",
+  "scroll": 44,
+  "our_img": "screens/721a1ff/visit_v4__visit-h44__light-390-ru-director-s44__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "visit_v4__visit-h72__dark-390-ru-director-s72__721a1ff",
+  "screen": "visit",
+  "theme": "dark",
+  "state": "visit-h72",
+  "scroll": 72,
+  "our_img": "screens/721a1ff/visit_v4__visit-h72__dark-390-ru-director-s72__721a1ff.png",
+  "mock_img": null
+ },
+ {
+  "id": "visit_v4__visit-h72__light-390-ru-director-s72__721a1ff",
+  "screen": "visit",
+  "theme": "light",
+  "state": "visit-h72",
+  "scroll": 72,
+  "our_img": "screens/721a1ff/visit_v4__visit-h72__light-390-ru-director-s72__721a1ff.png",
+  "mock_img": null
+ }
+]

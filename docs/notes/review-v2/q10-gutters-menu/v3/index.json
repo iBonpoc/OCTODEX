@@ -1,0 +1,176 @@
+{
+ "round": 3,
+ "width": 390,
+ "themes": [
+  "dark",
+  "light"
+ ],
+ "pairs": [
+  {
+   "title": "Gutter: новый",
+   "was": [
+    "был-g-dark-390.png",
+    "был-g-light-390.png"
+   ],
+   "now": [
+    "станет-g-new-dark-390.png",
+    "станет-g-new-light-390.png"
+   ]
+  },
+  {
+   "title": "Gutter: готовый",
+   "was": [
+    "был-g-dark-390.png",
+    "был-g-light-390.png"
+   ],
+   "now": [
+    "станет-g-dark-390.png",
+    "станет-g-light-390.png",
+    "станет-g-more-b-dark-390.png",
+    "станет-g-more-b-light-390.png",
+    "станет-g-more-dark-390.png",
+    "станет-g-more-light-390.png",
+    "станет-g-new-dark-390.png",
+    "станет-g-new-light-390.png"
+   ]
+  },
+  {
+   "title": "Gutter: «Ещё»",
+   "was": [
+    "был-g-dark-390.png",
+    "был-g-light-390.png"
+   ],
+   "now": [
+    "станет-g-more-b-dark-390.png",
+    "станет-g-more-b-light-390.png",
+    "станет-g-more-dark-390.png",
+    "станет-g-more-light-390.png",
+    "станет-g-more-b-dark-390.png",
+    "станет-g-more-b-light-390.png"
+   ]
+  },
+  {
+   "title": "Downspout прямой гладкий: новый",
+   "was": [
+    "был-d-dark-390.png",
+    "был-d-light-390.png"
+   ],
+   "now": [
+    "станет-d-new-dark-390.png",
+    "станет-d-new-light-390.png"
+   ]
+  },
+  {
+   "title": "Downspout ребристый: новый (3×Elbow A)",
+   "was": [
+    "был-d-dark-390.png",
+    "был-d-light-390.png"
+   ],
+   "now": [
+    "станет-d-ribbed-dark-390.png",
+    "станет-d-ribbed-light-390.png"
+   ]
+  },
+  {
+   "title": "Downspout прямой: готовый",
+   "was": [
+    "был-d-dark-390.png",
+    "был-d-light-390.png"
+   ],
+   "now": [
+    "станет-d-ready-dark-390.png",
+    "станет-d-ready-light-390.png"
+   ]
+  },
+  {
+   "title": "Downspout круглый",
+   "was": [
+    "был-d-dark-390.png",
+    "был-d-light-390.png"
+   ],
+   "now": [
+    "станет-d-round-dark-390.png",
+    "станет-d-round-light-390.png"
+   ]
+  },
+  {
+   "title": "Downspout: «Ещё»",
+   "was": [
+    "был-d-dark-390.png",
+    "был-d-light-390.png"
+   ],
+   "now": [
+    "станет-d-more-dark-390.png",
+    "станет-d-more-light-390.png",
+    "станет-d-more2-dark-390.png",
+    "станет-d-more2-light-390.png"
+   ]
+  },
+  {
+   "title": "Меню угла Elbow",
+   "was": [],
+   "now": [
+    "станет-m-angle-dark-390.png",
+    "станет-m-angle-light-390.png"
+   ]
+  },
+  {
+   "title": "Меню Offset",
+   "was": [],
+   "now": [
+    "станет-m-offset-dark-390.png",
+    "станет-m-offset-light-390.png"
+   ]
+  },
+  {
+   "title": "Выбор цвета",
+   "was": [],
+   "now": [
+    "станет-color-b-dark-390.png",
+    "станет-color-b-light-390.png",
+    "станет-color-dark-390.png",
+    "станет-color-light-390.png",
+    "станет-color-b-dark-390.png",
+    "станет-color-b-light-390.png"
+   ]
+  }
+ ],
+ "files": [
+  "img/был-d-dark-390.png",
+  "img/был-d-light-390.png",
+  "img/был-g-dark-390.png",
+  "img/был-g-light-390.png",
+  "img/станет-color-b-dark-390.png",
+  "img/станет-color-b-light-390.png",
+  "img/станет-color-dark-390.png",
+  "img/станет-color-light-390.png",
+  "img/станет-d-more-dark-390.png",
+  "img/станет-d-more-light-390.png",
+  "img/станет-d-more2-dark-390.png",
+  "img/станет-d-more2-light-390.png",
+  "img/станет-d-new-dark-390.png",
+  "img/станет-d-new-light-390.png",
+  "img/станет-d-ready-dark-390.png",
+  "img/станет-d-ready-light-390.png",
+  "img/станет-d-ribbed-dark-390.png",
+  "img/станет-d-ribbed-light-390.png",
+  "img/станет-d-round-dark-390.png",
+  "img/станет-d-round-light-390.png",
+  "img/станет-g-dark-390.png",
+  "img/станет-g-light-390.png",
+  "img/станет-g-more-b-dark-390.png",
+  "img/станет-g-more-b-light-390.png",
+  "img/станет-g-more-dark-390.png",
+  "img/станет-g-more-light-390.png",
+  "img/станет-g-new-dark-390.png",
+  "img/станет-g-new-light-390.png",
+  "img/станет-m-angle-dark-390.png",
+  "img/станет-m-angle-light-390.png",
+  "img/станет-m-offset-dark-390.png",
+  "img/станет-m-offset-light-390.png"
+ ],
+ "older": [
+  "img-r1/",
+  "img-r2/"
+ ]
+}

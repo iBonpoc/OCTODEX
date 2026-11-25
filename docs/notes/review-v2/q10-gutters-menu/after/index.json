@@ -1,0 +1,202 @@
+{
+ "pairs": [
+  {
+   "was": "ds-was",
+   "now": [
+    "ds-now",
+    "ds-now-more",
+    "ds-now-color"
+   ],
+   "title": "Downspout"
+  },
+  {
+   "was": "new-was",
+   "now": [
+    "new-now"
+   ],
+   "title": "Новые gutter"
+  }
+ ],
+ "files": [
+  {
+   "file": "ds-was-dark-390.png",
+   "screen": "ds-was",
+   "theme": "dark",
+   "width": 390,
+   "role": "было"
+  },
+  {
+   "file": "ds-now-dark-390.png",
+   "screen": "ds-now",
+   "theme": "dark",
+   "width": 390,
+   "role": "станет"
+  },
+  {
+   "file": "new-was-dark-390.png",
+   "screen": "new-was",
+   "theme": "dark",
+   "width": 390,
+   "role": "было"
+  },
+  {
+   "file": "new-now-dark-390.png",
+   "screen": "new-now",
+   "theme": "dark",
+   "width": 390,
+   "role": "станет"
+  },
+  {
+   "file": "ds-now-more-dark-390.png",
+   "screen": "ds-now-more",
+   "theme": "dark",
+   "width": 390,
+   "role": "станет"
+  },
+  {
+   "file": "ds-now-color-dark-390.png",
+   "screen": "ds-now-color",
+   "theme": "dark",
+   "width": 390,
+   "role": "станет"
+  },
+  {
+   "file": "ds-was-light-390.png",
+   "screen": "ds-was",
+   "theme": "light",
+   "width": 390,
+   "role": "было"
+  },
+  {
+   "file": "ds-now-light-390.png",
+   "screen": "ds-now",
+   "theme": "light",
+   "width": 390,
+   "role": "станет"
+  },
+  {
+   "file": "new-was-light-390.png",
+   "screen": "new-was",
+   "theme": "light",
+   "width": 390,
+   "role": "было"
+  },
+  {
+   "file": "new-now-light-390.png",
+   "screen": "new-now",
+   "theme": "light",
+   "width": 390,
+   "role": "станет"
+  },
+  {
+   "file": "ds-now-more-light-390.png",
+   "screen": "ds-now-more",
+   "theme": "light",
+   "width": 390,
+   "role": "станет"
+  },
+  {
+   "file": "ds-now-color-light-390.png",
+   "screen": "ds-now-color",
+   "theme": "light",
+   "width": 390,
+   "role": "станет"
+  }
+ ],
+ "v2": {
+  "note": "макет v2 по словам основателя 22.11; A — короткий downspout, B — полный",
+  "pairs": [
+   {
+    "A": [
+     "v2-A-top",
+     "v2-A-bottom",
+     "v2-A-more"
+    ],
+    "B": [
+     "v2-B-top",
+     "v2-B-bottom"
+    ],
+    "title": "Downspout A vs B"
+   },
+   {
+    "was": "new-was",
+    "now": [
+     "v2-gutter-new"
+    ],
+    "title": "Новые gutter"
+   }
+  ],
+  "files": [
+   {
+    "file": "v2-A-bottom-dark-390.png",
+    "theme": "dark",
+    "width": 390
+   },
+   {
+    "file": "v2-A-bottom-light-390.png",
+    "theme": "light",
+    "width": 390
+   },
+   {
+    "file": "v2-A-more-dark-390.png",
+    "theme": "dark",
+    "width": 390
+   },
+   {
+    "file": "v2-A-more-light-390.png",
+    "theme": "light",
+    "width": 390
+   },
+   {
+    "file": "v2-A-top-dark-390.png",
+    "theme": "dark",
+    "width": 390
+   },
+   {
+    "file": "v2-A-top-light-390.png",
+    "theme": "light",
+    "width": 390
+   },
+   {
+    "file": "v2-B-bottom-dark-390.png",
+    "theme": "dark",
+    "width": 390
+   },
+   {
+    "file": "v2-B-bottom-light-390.png",
+    "theme": "light",
+    "width": 390
+   },
+   {
+    "file": "v2-B-top-dark-390.png",
+    "theme": "dark",
+    "width": 390
+   },
+   {
+    "file": "v2-B-top-light-390.png",
+    "theme": "light",
+    "width": 390
+   },
+   {
+    "file": "v2-color-dark-390.png",
+    "theme": "dark",
+    "width": 390
+   },
+   {
+    "file": "v2-color-light-390.png",
+    "theme": "light",
+    "width": 390
+   },
+   {
+    "file": "v2-gutter-new-dark-390.png",
+    "theme": "dark",
+    "width": 390
+   },
+   {
+    "file": "v2-gutter-new-light-390.png",
+    "theme": "light",
+    "width": 390
+   }
+  ]
+ }
+}
