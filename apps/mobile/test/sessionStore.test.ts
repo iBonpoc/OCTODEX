@@ -244,3 +244,23 @@ describe("unit:sessionStore — which store the app takes (#1634)", () => {
     expect(nativeSecure("android", () => ({}), load)).toBeNull();
   });
 });
+
+describe("unit:sessionStore — the start reads the session again while the store refuses (#1634, review 24.11)", () => {
+  it("a refused read (before the first unlock) is tried again, never read as «signed out»; a screen gone stops it", async () => {
+    const { readSessionRetrying } = await import("../src/cloud/sessionStore");
+    let n = 0;
+    const get = async () => {
+      n += 1;
+      if (n < 3) throw new Error("User interaction is not allowed");
+      return { data: { session: "s" } };
+    };
+    expect(await readSessionRetrying(get, () => true, 1)).toEqual({ data: { session: "s" } });
+    expect(n).toBe(3);
+    let alive = true;
+    const never = async () => {
+      alive = false;
+      throw new Error("refused");
+    };
+    expect(await readSessionRetrying(never, () => alive, 1)).toBeNull();
+  });
+});

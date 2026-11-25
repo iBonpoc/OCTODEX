@@ -249,3 +249,19 @@ export const sessionStore: ReturnType<typeof makeSessionStore> = {
   removeItem: (k) => real().removeItem(k),
   forget: (ks) => real().forget(ks),
 };
+
+/**
+ * the session read at the start, tried again while the protected store refuses (iOS before the first unlock: the read
+ * throws — never «no session»); stops when `alive` says the screen is gone (review 24.11: the start never hangs on it)
+ */
+export async function readSessionRetrying<T>(get: () => Promise<T>, alive: () => boolean, pauseMs = 2000): Promise<T | null> {
+  for (;;) {
+    try {
+      return await get();
+    } catch {
+      if (!alive()) return null;
+      await new Promise((r) => setTimeout(r, pauseMs));
+      if (!alive()) return null;
+    }
+  }
+}
