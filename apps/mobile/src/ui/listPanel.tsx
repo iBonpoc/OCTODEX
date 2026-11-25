@@ -8,18 +8,20 @@ import { ScrollView, View } from "react-native";
 import { component, space } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
-import { Button, IconButton, StatusChip } from "./controls";
+import { IconButton, StatusChip } from "./controls";
 import { RowView } from "./surfaces";
 import { T } from "./primitives";
 import { OneColumn } from "./listCard";
 
-export function ListPanel({ title, subtitle, outside, actions, onOpen, onClose, children }: {
+export function ListPanel({ title, subtitle, outside, actions, more, onOpen, onClose, children }: {
   title: string;
   subtitle?: string;
   /** the open card is not in the list now (another filter): a neutral mark under the header */
   outside?: boolean;
   /** the card screen's own header actions («Изменить», «＋»): a row under the title */
   actions?: ReactNode;
+  /** the card's «⋯» menu button: in the header's right cluster, between «Открыть» and «✕» (DS Б10, Б4) */
+  more?: ReactNode;
   onOpen: () => void;
   onClose: () => void;
   children: ReactNode;
@@ -30,20 +32,23 @@ export function ListPanel({ title, subtitle, outside, actions, onOpen, onClose, 
     <View testID="list-panel" role="complementary" aria-label={title} style={{ width: component.panelW, borderLeftWidth: component.hairline, borderLeftColor: c.bd }}>
       <ScrollView contentContainerStyle={{ padding: space[4], gap: space[3] }}>
         <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
+          {/* 360 beside three buttons: a long name («EST-0006 · Carpet, railing, bulb, haul-away») wraps whole, not «…» (#1728; the v2 title is 22/25 and needs a fourth line) */}
           <View style={{ flexShrink: 1 }}>
-            <T v="title" numberOfLines={2}>
+            {/* the 22/25 title's last line is taller than its line box: room under it, so nothing is cut at the edge */}
+            <T v="title" style={{ paddingBottom: space[1] }}>
               {title}
             </T>
             {subtitle ? (
-              <T v="body" tone="mut" numberOfLines={2}>
+              <T v="body" tone="mut" numberOfLines={3}>
                 {subtitle}
               </T>
             ) : null}
           </View>
           <RowView gap={space[1]} style={{ flexShrink: 0 }}>
             <View testID="list-panel-open">
-              <Button label={t("card.panel.open")} icon="expand" variant="ghost" size="sm" onPress={onOpen} />
+              <IconButton icon="expand" label={t("card.panel.open")} onPress={onOpen} />
             </View>
+            {more ? <View testID="list-panel-more">{more}</View> : null}
             <View testID="list-panel-close">
               <IconButton icon="close" label={t("card.panel.close")} onPress={onClose} />
             </View>

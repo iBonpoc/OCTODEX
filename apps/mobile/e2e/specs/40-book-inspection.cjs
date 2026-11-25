@@ -1,4 +1,6 @@
 const { expectOneAccent } = require("../accent.cjs");
+const { objCreate } = require("../objectScreen.cjs");
+const { visitStep } = require("../visitScreen.cjs");
 /**
  * S4 (docs/specs/03-visit-and-plan.md §1, wave П1): an inspection is a visit of the lead at the property, WITHOUT a job.
  * Both sides: the lead goes to "booked", a prospect client + property appear once (S3), the visit carries lead and
@@ -14,11 +16,11 @@ exports.run = async (h) => {
   const visits0 = db.visits.length;
 
   await h.go(`/lead/${angela.id}`);
-  await h.clickText("Задачи");
-  await h.click("Что дальше?");
-  await h.sheet().getByRole("button", { name: "Записать на оценку" }).click(); await p.waitForTimeout(400);
+  // v2: «Записать на оценку» is an item of the lead's «＋»
+  await objCreate(p, "lead-screen", "lead-create-book");
+  await h.sheet().getByRole("option", { name: "Ivan Sokolov" }).waitFor();
   await expectOneAccent(h, "the visit form", '[aria-modal="true"]');
-  await h.sheet().getByRole("button", { name: "Ivan Sokolov" }).click();
+  await h.sheet().getByRole("option", { name: "Ivan Sokolov" }).click();
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).last().click(); await p.waitForTimeout(600);
   // «Сообщить клиенту?»: a ready text; copying it marks the visit as told (nothing is sent by us)
   await h.expectText(/Сообщить клиенту\?/, "notify sheet after booking");
@@ -42,9 +44,10 @@ exports.run = async (h) => {
   await h.expectText(/План/, "up to the Plan");
 
   // S10: on site the inspection ends with "Done" — no work, signature or payment
-  await p.getByRole("button", { name: /в пути/i }).last().click(); await p.waitForTimeout(400);
-  await p.getByRole("button", { name: /На месте/ }).last().click(); await p.waitForTimeout(400);
-  await p.getByRole("button", { name: "Готово", exact: true }).last().click(); await p.waitForTimeout(500);
+  await visitStep(p, "en-route");
+  await visitStep(p, "on-site");
+  await visitStep(p, "done");
+  await p.waitForFunction((id) => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.visits?.find((x) => x.id === id)?.step === "done", v.id, { timeout: 5000 });
   db = await h.db();
   const done = db.visits.find((x) => x.id === v.id);
   h.expect(done.step === "done" && done.closed, `inspection done and closed (${done.step})`);

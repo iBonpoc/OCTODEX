@@ -172,12 +172,13 @@ export async function deleteWithRepeat(
 /** the keys of this person on this device (the cloud cache of every company, the outbox, the role, the Plan's person, …) */
 // octo.storageLog.v1 — records the phone started over without a copy (persist.ts noteStorageLoss, #1189): the key names
 // carry the company and the person
-export const DEVICE_KEYS: readonly string[] = ["octo.outbox.v1", "octo.queue.v1", "octo.invite.token.v1", "octo.role.v1", "octo.planWho.v1", "octo.legal.pending.v1", "octo.storageLog.v1", "octo.signoutWipe.v1"];
+export const DEVICE_KEYS: readonly string[] = ["octo.outbox.v1", "octo.queue.v1", "octo.invite.token.v1", "octo.role.v1", "octo.planWho.v1", "octo.legal.pending.v1", "octo.storageLog.v1", "octo.signoutWipe.v1", "octo.signoutDrafts.v1"];
 // octo.drafts.v1. — unsaved estimates on the phone (estimateDraft.ts, #760): the client's data among them
 // octo.broken. — a broken record kept aside (persist.ts brokenKeyOf: the outbox, review of #910 №1; a cache, #1189)
 // octo.mod. — what a module keeps on the phone with no owner (the old canvas draft of an earlier build, #1044, among it): it is
 // wiped when the account is deleted; after a sign-out the old draft stays until the module opens (a sign-out wipes only the person's caches, cloud/signOutWipe.ts)
-export const DEVICE_PREFIXES: readonly string[] = ["octo.cloud.v1.", "octo.nav.open.", "octo.drafts.v1.", "octo.broken.", "octo.mod."];
+// spec 42 §14: the person's last company (octo.company.v1.<user>) and a switch not yet on the server (octo.company.pending.v1.<user>)
+export const DEVICE_PREFIXES: readonly string[] = ["octo.cloud.v1.", "octo.nav.open.", "octo.drafts.v1.", "octo.broken.", "octo.mod.", "octo.company."];
 export const isDeviceKey = (k: string) => DEVICE_KEYS.includes(k) || DEVICE_PREFIXES.some((p) => k.startsWith(p));
 /** set when a wipe failed: the next start wipes again (review #220 №6); its value is the deleted person's id (or "1"
  *  from older versions), so the repeat knows whose ops leave the shared outbox (review #240 №2) */

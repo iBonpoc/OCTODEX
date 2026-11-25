@@ -1,3 +1,4 @@
+const { pressEscUntilClosed } = require("./sheet.cjs");
 // Gutters canvas: right after a gutter is drawn the «Длина желоба» sheet opens (feet focused, the drawn length in the
 // fields). Tests that do not check the length press «Применить» — the drawn length stays («Отменить» takes the gutter away).
 async function skipLength(p) {
@@ -104,6 +105,8 @@ const savedOnce = (p, timeout = 8000) => p.waitForFunction(() => { const g = (JS
 // opens them; wider, the panel is beside the canvas already. The tool is «Желоб» first (with «Водосток» a tap on a gutter puts a downspout).
 async function openProps(p, { force = false } = {}) {
   if (!force && (p.viewportSize()?.width ?? 0) > 390) return; // wider: the panel is beside the canvas already (a phone on its side asks with force)
+  // the spec may have tapped «Желоб» just before: two taps on a tool open «Для новых желобов» (#1563 PR B) — this one is a first tap again
+  await pastDoubleTap(p);
   await p.getByTestId("draw-tool-line").locator("visible=true").getByRole("button").click();
   const at = await p.evaluate(() => {
     const dots = [...document.querySelectorAll('[data-testid="draw-svg"] circle')].map((c) => { const r = c.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; });
@@ -160,6 +163,17 @@ async function pastDoubleTap(p) {
   await p.waitForFunction((t0) => Date.now() - t0 > 400, Date.now(), { polling: 50, timeout: 3000 });
 }
 
+// The downspout's menu (#1563, founder 14.11): it no longer opens by itself when one is put, nor on one tap with «Водосток» — two taps on its
+// mark open it, as on anything else. `near` (page px): the mark nearest to it (the one just put); none — the last mark drawn.
+async function openDsMenu(p, near) {
+  await pastDoubleTap(p); // the tap that put it is not the first half of these two
+  const marks = await p.getByTestId("draw-svg").first().locator("circle").evaluateAll((cs) => cs.map((c) => { const r = c.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }));
+  if (!marks.length) throw new Error("openDsMenu: no downspout mark on the drawing");
+  const at = near ? marks.sort((u, v) => Math.hypot(u[0] - near[0], u[1] - near[1]) - Math.hypot(v[0] - near[0], v[1] - near[1]))[0] : marks[marks.length - 1];
+  const open = { fn: () => [...document.querySelectorAll('[data-testid="attr-panel"]')].some((e) => e.getClientRects().length > 0), arg: null };
+  await doubleTapUntil(p, at[0], at[1], open, "the downspout's menu opens on two taps");
+}
+
 // «Весь рисунок» (#1273): «вписать» left the header — it is a row of «⋯» (and a double tap on the empty place)
 async function fitAll(p) {
   await p.getByTestId("draw-who").locator("visible=true").getByRole("button").click();
@@ -178,4 +192,106 @@ async function fitAll(p) {
   await p.evaluate(() => { delete globalThis.__fitW; });
 }
 
-module.exports = { openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
+// The fields of the gutter's / downspout's window (#2412 G1): every value is a SelectField — the field `<id>`, its button
+// `<id>-button` (shows the value), a menu at it (items `<id>-<key>`) or a list over the sheet (rows `<id>-picker-<key>`).
+/** «Ещё» of the window open (every width has it; a no-op when it is open already) */
+async function openAttrMore(p) {
+  const tid = (id) => p.getByTestId(id).locator("visible=true");
+  await tid("attr-panel").first().waitFor({ timeout: 5000 });
+  if (await tid("attr-more").count()) {
+    await tid("attr-more-toggle").first().click();
+    await tid("attr-more-open").first().waitFor({ timeout: 5000 });
+  }
+}
+
+/** what a field shows (its button's text) */
+async function attrShown(p, id) {
+  return (await p.getByTestId(`${id}-button`).locator("visible=true").first().innerText()).trim();
+}
+
+/** the keys a field offers: opens its menu or list, reads the items, closes it (attrClose) */
+async function attrKeys(p, id) {
+  const button = p.getByTestId(`${id}-button`).locator("visible=true").first();
+  await button.scrollIntoViewIfNeeded();
+  await button.click();
+  const items = p.locator(`[data-testid^="${id}-"]:not([data-testid="${id}-button"]):not([data-testid="${id}-picker"]):not([data-testid^="${id}-picker-search"])`).locator("visible=true");
+  await items.first().waitFor({ timeout: 5000 });
+  const ids = await items.evaluateAll((es) => es.map((e) => e.getAttribute("data-testid")));
+  await attrClose(p, id);
+  return ids.map((t) => t.slice(id.length + 1).replace(/^picker-/, ""));
+}
+
+/** the key a field's MENU marks as chosen (read as selected): opens it, reads, closes it (attrClose) */
+async function attrChosen(p, id) {
+  const button = p.getByTestId(`${id}-button`).locator("visible=true").first();
+  await button.scrollIntoViewIfNeeded();
+  await button.click();
+  const items = p.getByRole("menu").locator(`[data-testid^="${id}-"]`).locator("visible=true");
+  await items.first().waitFor({ timeout: 5000 });
+  // the chosen item: read as selected, or (the web does not always say it) its check — the mark in the item's first place
+  const on = await items.evaluateAll((es) => es.filter((e) => e.getAttribute("aria-selected") === "true" || !!e.firstElementChild?.querySelector("svg")).map((e) => e.getAttribute("data-testid")));
+  await attrClose(p, id);
+  return on.length === 1 ? on[0].slice(id.length + 1) : null;
+}
+
+/** the open menu or list of a field closed by Esc (again while it stays: an Esc in its first frames is lost), then gone */
+async function attrClose(p, id) {
+  const picker = p.getByTestId(`${id}-picker`).locator("visible=true");
+  // a list (the colour field's, G1 PR2) is a sheet of its own over the window's: never Esc (on 390 it may reach the window under it,
+  // and its backdrop is still moving); a menu — Esc
+  if (await picker.count()) {
+    // the chosen row again: the list closes, the value stays (the same value is no edit)
+    const rows = p.locator(`[data-testid^="${id}-picker-"]:not([data-testid^="${id}-picker-search"])`).locator("visible=true");
+    const i = await rows.evaluateAll((es) => Math.max(0, es.findIndex((e) => !!e.querySelector('[aria-selected="true"]') || e.getAttribute("aria-selected") === "true")));
+    await rows.nth(i).click();
+  } else await pressEscUntilClosed(p, p.getByRole("menu").first());
+  await attrShut(p, id);
+}
+
+// the field's menu or list is gone (not only its items: the menu's own layer takes touches while it goes out)
+async function attrShut(p, id) {
+  await p.waitForFunction((x) => {
+    const shown = (sel) => [...document.querySelectorAll(sel)].some((e) => e.getClientRects().length > 0);
+    const b = [...document.querySelectorAll(`[data-testid="${x}-button"]`)].find((e) => e.getClientRects().length > 0);
+    return !!b && b.getAttribute("aria-expanded") !== "true" && !shown('[role="menu"]') && !shown(`[data-testid="${x}-picker"]`);
+  }, id, { timeout: 5000 });
+}
+
+/** pick `key` in a field: opens its menu or list, taps the item, waits until it is gone; returns the item's name */
+async function pickAttr(p, id, key) {
+  const button = p.getByTestId(`${id}-button`).locator("visible=true").first();
+  await button.scrollIntoViewIfNeeded();
+  await button.click();
+  const item = p.locator(`[data-testid="${id}-${key}"], [data-testid="${id}-picker-${key}"]`).locator("visible=true").first();
+  await item.waitFor({ timeout: 5000 });
+  const name = ((await item.getAttribute("aria-label")) || (await item.innerText())).trim();
+  await item.click();
+  await item.waitFor({ state: "hidden", timeout: 5000 });
+  await attrShut(p, id);
+  return name;
+}
+
+/** the open downspout's kind (its menu is open): a field on top (#2412 G1); `key` — rectPlain, rectRibbed, roundPlain, roundRibbed */
+async function pickDsKind(p, key) {
+  await p.getByTestId("attr-panel").locator("visible=true").first().waitFor({ timeout: 5000 });
+  const name = await pickAttr(p, "attr-ds-kind", key);
+  await p.waitForFunction((n) => {
+    const b = [...document.querySelectorAll('[data-testid="attr-ds-kind-button"]')].find((e) => e.getClientRects().length > 0);
+    return !!b && b.innerText.trim() === n;
+  }, name, { timeout: 5000 });
+}
+
+// «Отменить» of a toast (v2, #2086): the word ignores a tap until it is armed (`aria-busy` false, motion.toastArmMs after the toast
+// showed) — waits for that, then presses. A stack of up to three toasts, the NEWEST ON TOP (first in the page; the old
+// `getByRole("button", { name: "Отменить" }).last()` took the oldest — «Уже не отменить» of another action). `text` — the newest toast
+// with that text; none — the newest one.
+async function pressUndo(p, text) {
+  const all = p.getByTestId("toast").locator("visible=true");
+  const toast = (text ? all.filter({ hasText: text }) : all).first();
+  const undo = toast.getByTestId("toast-undo");
+  await undo.waitFor({ timeout: 5000 });
+  await p.waitForFunction((el) => el.getAttribute("aria-busy") !== "true", await undo.elementHandle(), { timeout: 5000 });
+  await undo.click();
+}
+
+module.exports = { pressUndo, pickDsKind, pickAttr, attrShown, attrKeys, attrChosen, attrClose, attrShut, openAttrMore, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };

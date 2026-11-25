@@ -6,7 +6,7 @@ import { DOC_LANG_LABEL, DOC_LANGS, useI18n, type DocLang } from "@/i18n";
 import { Button, TextField, useReadOnly } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
-import { ArbitrationWarn } from "@/features/estimate/NotesTerms";
+import { ArbitrationWarn } from "@/features/estimate/NotesTermsView";
 import { companyTermsWrite, termsLangsShown } from "@/features/estimate/notesTerms";
 
 /**

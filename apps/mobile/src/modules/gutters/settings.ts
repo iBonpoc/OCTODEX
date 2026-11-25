@@ -19,6 +19,7 @@ import {
   WOOD_SCREW,
   WOOD_SCREWS,
 } from "@octo/estimating-engine";
+import { moduleUsable, type ModuleAccess } from "@/modules/registry";
 import { isLenFormat, type LenFormat } from "./canvas/format";
 import { COLORS, DS_BOTTOMS, DS_SHAPES, DS_SIZES, DS_STYLES, GAUGES_BY_MATERIAL, MATERIALS, MILL_ONLY, PROFILES, SIZES_BY_PROFILE, WALL_KITS_BY_WALL, wallValue, WALLS, type Wall } from "./canvas/attrs";
 
@@ -85,6 +86,18 @@ export const PALETTES = {
     "Colonial Grey", "Dark Grey", "Terratone", "Tuxedo Grey", "Royal Brown", "Musket Brown", "Harvest Brown", "Bronze", "Black", "Blue", "Green", "Red",
   ],
 } as const;
+/** a palette's name is the module's data, never an app string (#1885: no brand in i18n) */
+export const PALETTE_NAMES: Record<keyof typeof PALETTES, string> = { berger: "Berger", servicePartners: "Service Partners" };
+/**
+ * The founder's full list (#679, founder 16.11: «вернуть мой полный список цветов, взять у двух поставщиков, объединить в
+ * единый список»): both cards of docs/prototypes/gutters-ref, one name once (case ignored), English names, the bigger card
+ * first. Names only — never a supplier's name in the app (#1885).
+ */
+export const PALETTE_ALL: readonly string[] = (() => {
+  const out: string[] = [];
+  for (const n of [...PALETTES.servicePartners, ...PALETTES.berger]) if (!out.some((o) => o.toLowerCase() === n.toLowerCase())) out.push(n);
+  return out;
+})();
 export const MAX_PALETTE = 60;
 export const MAX_COLOR_LEN = 40;
 /** what module_save_settings takes (bytes of the JSON; Postgres counts its own jsonb a little differently — a margin) */
@@ -231,7 +244,7 @@ export function choicesFor(raw: unknown): Choices {
     size: one(dr.size, offer.dsSizes[shape], offer.dsSizes[shape][0]!),
     dsStyle: one(dr.dsStyle, offer.dsStyles, "plain"),
     ...stock(dr, offer, palette, { material: "aluminum", color: "white" }),
-    bottom: one(dr.bottom, offer.bottoms, "extension"),
+    bottom: one(dr.bottom, offer.bottoms, "none"), // G2: a new downspout has nothing at the bottom unless the company says (founder 23.11 05:25)
     wall: one(dr.wall, WALLS, "wood"),
   };
   return { offer, palette, hangerByMount, wallKitByWall, run, ds, lenFormat: readLenFormat(r.lenFormat), roofOverhangFt: readOverhangFt(r.roofOverhangFt), dsSizeSet: dr.size !== undefined && offer.dsSizes[shape].includes(dr.size as never) };
@@ -479,4 +492,4 @@ export function toRulesOverride(raw: unknown): GutterRulesOverride {
  * or — the module active — its settings are being read again after someone else's change (core #374). Said under the
  * field (debt №7, spec П22.10 №6; review M7d №3).
  */
-export const notSavedKey = (access: string | undefined): "notActive" | "rereading" => (access === "trial" || access === "paid" ? "rereading" : "notActive");
+export const notSavedKey = (access: string | undefined): "notActive" | "rereading" => (moduleUsable(access as ModuleAccess | undefined) ? "rereading" : "notActive");

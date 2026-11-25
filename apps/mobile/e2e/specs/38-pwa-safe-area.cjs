@@ -28,8 +28,8 @@ const measure = (page) =>
       const r = document.createRange(); r.selectNodeContents(n);
       for (const b of r.getClientRects()) if (b.height > 0 && b.width > 0) top = Math.min(top, b.top);
     }
-    // the section tabs only (a segmented control has role="tab" too)
-    const names = ["Главная", "План", "Чаты", "Клиенты", "Ещё"];
+    // the section tabs only (a segmented control has role="tab" too); v2: Главная · План · Клиенты · Деньги · Лиды
+    const names = ["Главная", "План", "Клиенты", "Деньги", "Лиды"];
     const tabs = [...document.querySelectorAll('[role="tab"]')].filter((e) => names.includes(e.getAttribute("aria-label"))).map((e) => e.getBoundingClientRect()).filter((b) => b.height > 0);
     // the side menu (820/1280): its places and the profile at the bottom
     const nav = document.querySelector('[data-testid="side-nav"]');

@@ -1,4 +1,4 @@
-/* Цвет = только статус. Текст на заливке всегда #0B0C0F. Значок + слово обязательны. */
+/* Цвет = только статус. Значок + слово обязательны. Палитра A (#2350): тональные плашки своей темы — заливка --st-x, слово и значок --st-x-text, текст на плашке --st-x-on. :root — старые значения, только запасные. */
 :root{
   --st-ok:#7CE08A;   /* ✓ выполнено, оплачено, согласовано */
   --st-info:#8FA2FF; /* ● в работе, новый */
@@ -6,5 +6,5 @@
   --st-bad:#FF6B6B;  /* ✕ просрочено, отказ, проблема */
   --st-on:#0B0C0F;
 }
-[data-theme="dark"]{--st-ok-text:#9CF0A8;--st-info-text:#C2CCFF;--st-warn-text:#FFB47E;--st-bad-text:#FFAAAA}
-[data-theme="light"]{--st-ok-text:#176428;--st-info-text:#3647C4;--st-warn-text:#944600;--st-bad-text:#B4232A}
+[data-theme="dark"]{--st-ok:#1C2E23;--st-ok-text:#86D3A0;--st-ok-on:#86D3A0;--st-info:#182A2E;--st-info-text:#86C9D4;--st-info-on:#86C9D4;--st-warn:#33281C;--st-warn-text:#E8B67F;--st-warn-on:#E8B67F;--st-bad:#3A2122;--st-bad-text:#F09A90;--st-bad-on:#F09A90;--st-neutral:#3A3C42;--st-neutral-text:#B9BCC4;--st-neutral-on:#EEEFF1}
+[data-theme="light"]{--st-ok:#DCEBDF;--st-ok-text:#1B6034;--st-ok-on:#1B6034;--st-info:#D8EAED;--st-info-text:#0E5866;--st-info-on:#0E5866;--st-warn:#F2E2CC;--st-warn-text:#824306;--st-warn-on:#824306;--st-bad:#F4DAD6;--st-bad-text:#9A2C22;--st-bad-on:#9A2C22;--st-neutral:#CDCEC8;--st-neutral-text:#3E4147;--st-neutral-on:#17181B}

@@ -1,5 +1,5 @@
 /**
- * The «Демо» strip (#1183 п.1, DS §13), every view: in the demo every screen says that the data is made up and lives on
+ * The «Демо» plate (#1183 п.1, DS §13; v2 — a plate under the title, not a strip), every view: in the demo every screen says that the data is made up and lives on
  * this phone only; a tap goes to sign-in, where the strip is not shown. (In the cloud it is never shown — the unit test
  * test/demoBadge.test.ts holds the rule; the strip reads the store's mode.)
  */
@@ -9,8 +9,10 @@ exports.run = async (h) => {
   for (const path of ["/today", "/clients", "/settings"]) {
     await h.go(path);
     await vis("demo-badge").waitFor({ timeout: 5000 });
+    // v2: a small «Демо» plate under the title; what it means is its button's name (VoiceOver), the tap opens sign-in
     const text = await vis("demo-badge").innerText();
-    h.expect(/Демо · данные только на этом телефоне/.test(text), `${path}: the strip says it (${text.replace(/\n/g, " ")})`);
+    const name = (await vis("demo-badge").getByRole("button").first().getAttribute("aria-label")) ?? "";
+    h.expect(/^Демо$/.test(text.trim()) && /Демо · данные только на этом устройстве/.test(name), `${path}: the plate says it (${text.replace(/\n/g, " ")} | ${name})`);
   }
   await h.go("/today");
   await vis("demo-badge").getByRole("button").first().click();

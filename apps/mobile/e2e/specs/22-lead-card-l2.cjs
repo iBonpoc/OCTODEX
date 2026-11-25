@@ -1,45 +1,48 @@
 /**
  * Lead card, wave L2 (docs/14-leads-spec.md §7.2–7.3): what is missing, interest, "what next?" → book an estimate visit with
  * date / time / tech (S4: no second client when the lead already has one), status sheet → snooze, "lost or wait?", tabs.
+ * v2 (#2350, the Object template): the booking is «＋ → Записать на оценку» (`lead-create-book`), the status — the header's
+ * `lead-header-status`, the one main step of «Сейчас» `lead-next-<step>`, the sections `lead-screen-sections-<key>`; by testID.
  */
 // a working day (П4a: by default Mon–Sat, Sunday off = no slots); the form counts days on the company's calendar (П4b)
 const { pressEscUntilClosed, waited } = require("../sheet.cjs");
 const { minuteOf, workdayOffset } = require("../companyTime.cjs");
 
+const { pickVisitDay, pickVisitStart } = require("../visitForm.cjs");
+const { objSection, objCreate } = require("../objectScreen.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const lead = async (name) => (await h.db()).leads.find((x) => x.name === name);
-  const openStatus = async () => { await p.getByRole("button", { name: /^Статус:/ }).first().click(); await p.waitForTimeout(300); };
+  const tid = (id) => p.getByTestId(id).locator("visible=true").first();
+  const openStatus = async () => { await tid("lead-header-status").click(); await h.sheet().getByRole("button").first().waitFor(); };
 
   // Tom Becker: in touch, no step yet
   await h.go("/inbox?tab=leads");
   let tom = await lead("Tom Becker");
   await h.go(`/lead/${tom.id}`);
-  await h.expectText(/LEA-\d{4}/, "lead number");
+  h.expect(/^LEA-\d{4}$/.test(tom.number ?? ""), `the lead has its number (${tom.number})`);
   await h.expectText(/Чего не хватает для сметы/, "what is missing");
 
   // interest: one tap
-  await p.getByText("Горячий", { exact: true }).last().click(); await p.waitForTimeout(300);
-  h.expect((await lead("Tom Becker")).interest === "hot", "interest saved");
+  await p.getByRole("radio", { name: "Горячий" }).locator("visible=true").first().click();
+  await p.waitForFunction(() => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db.leads.find((x) => x.name === "Tom Becker")?.interest === "hot", null, { timeout: 5000 });
 
   // the estimate first: it makes the prospect client + property (S3)
-  await h.clickText("Сметы");
-  await h.click("Смета");
-  await p.waitForTimeout(500);
+  await objSection(p, "lead-screen", "estimates");
+  await tid("lead-new-estimate").click();
+  await p.waitForURL(/\/estimate\/new/, { timeout: 8000 });
+  await p.waitForFunction(() => { const l = JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db.leads.find((x) => x.name === "Tom Becker"); return !!l?.customerId && !!l?.propertyId; }, null, { timeout: 5000 });
   tom = await lead("Tom Becker");
   const clients0 = (await h.db()).customers.length;
   h.expect(!!tom.customerId && !!tom.propertyId, "estimate gave the lead a client and property");
 
   // "what next?" → book the estimate visit: in 2 days, 10:30, Ivan, 90 min
   await h.go(`/lead/${tom.id}`);
-  await h.clickText("Задачи");
-  await h.click("Что дальше?");
-  await h.sheet().getByRole("button", { name: "Записать на оценку" }).click(); await p.waitForTimeout(400);
+  await objCreate(p, "lead-screen", "lead-create-book");
   // the visit form (docs/specs/03 §7.1): day → person (with the day's load) → a free slot → note
-  const chips = h.sheet().getByRole("radio");
-  await chips.nth(workdayOffset(2)).click();
-  await h.sheet().getByRole("button", { name: "Ivan Sokolov" }).click();
-  await h.sheet().getByRole("radio", { name: /^10:30/ }).click();
+  await pickVisitDay(h.page, workdayOffset(2), h.sheet()); // the day — DateField (spec 56 wave 5б)
+  await h.sheet().getByRole("option", { name: "Ivan Sokolov" }).click();
+  await pickVisitStart(h.page, 10 * 60 + 30, h.sheet()); // «Начало ⌄» — 10:30 AM
   await h.sheet().getByPlaceholder(/Собака во дворе, где парковаться/).fill("Dog in the yard");
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).last().click(); await p.waitForTimeout(500);
   await h.sheet().getByRole("button", { name: "Не сейчас" }).click(); await p.waitForTimeout(300);
@@ -54,14 +57,15 @@ exports.run = async (h) => {
 
   // status sheet → snooze 3 months → leaves "open", shows under "snoozed", keeps its stage
   await openStatus();
-  await h.sheet().getByRole("button", { name: "Отложить" }).click(); await p.waitForTimeout(300);
+  await h.sheet().getByRole("button", { name: "Отложить" }).click();
+  await h.sheet().getByPlaceholder("Позвонить весной").waitFor();
   await h.sheet().getByPlaceholder("Позвонить весной").fill("spring");
   await h.sheet().getByRole("button", { name: "Отложить" }).last().click(); await p.waitForTimeout(400);
   tom = await lead("Tom Becker");
   h.expect(!!tom.snoozedUntil && tom.status === "booked" && tom.snoozeReason === "spring", "snoozed, stage kept");
-  await h.expectText(/Отложен до/, "snoozed on the card");
-  await h.click("Вернуть сейчас");
-  h.expect(!(await lead("Tom Becker")).snoozedUntil, "back now");
+  h.expect(/Отложен до/.test(await tid("lead-now").innerText()), "snoozed on the card");
+  await tid("lead-next-unsnooze").click();
+  await p.waitForFunction(() => !JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db.leads.find((x) => x.name === "Tom Becker")?.snoozedUntil, null, { timeout: 5000 });
 
   // "lost or wait?" after the reminder went unanswered 15 days
   const nina = await lead("Nina Patel");
@@ -77,7 +81,7 @@ exports.run = async (h) => {
     localStorage.setItem("octo.db.v5", JSON.stringify(raw));
   }, nina.id);
   await h.go(`/lead/${nina.id}`);
-  await h.click("Потерян или подождать?");
+  await tid("lead-next-lowOrWait").click();
   await h.sheet().getByRole("button", { name: /Подождать 7/ }).click(); await p.waitForTimeout(400);
   h.expect(!!(await lead("Nina Patel")).askAgainAt && (await lead("Nina Patel")).status === "estimate_sent", "wait 7 more days, still open");
 
@@ -86,7 +90,8 @@ exports.run = async (h) => {
   const c0 = (await h.db()).customers.length;
   await h.go(`/lead/${angela.id}`);
   // closing "did you get through?" without an answer still counts the call as an attempt
-  await p.getByRole("button", { name: "Позвонить" }).first().click(); await p.waitForTimeout(400);
+  await tid("lead-call").click();
+  await h.sheet().getByRole("button", { name: "Не ответил" }).waitFor();
   await pressEscUntilClosed(p);
   // the store saves a moment later: wait for the attempt itself (before: a fixed 500 ms, and «Не ответил» pressed when
   // the Esc was lost — that hid whether Esc counts)
@@ -94,9 +99,7 @@ exports.run = async (h) => {
   angela = await lead("Angela Rossi");
   h.expect(counted && angela.status === "new", "a dismissed call is an attempt, not lost");
   const bookAngela = async () => {
-    await h.clickText("Задачи");
-    await h.click("Что дальше?");
-    await h.sheet().getByRole("button", { name: "Записать на оценку" }).click(); await p.waitForTimeout(400);
+    await objCreate(p, "lead-screen", "lead-create-book");
     await h.sheet().getByRole("button", { name: "Записать на оценку" }).last().click(); await p.waitForTimeout(500);
     if (await h.sheet().getByRole("button", { name: "Не сейчас" }).count()) { await h.sheet().getByRole("button", { name: "Не сейчас" }).click(); await p.waitForTimeout(300); }
   };
@@ -118,14 +121,16 @@ exports.run = async (h) => {
   await h.go(`/lead/${kevin.id}`);
   await openStatus();
   h.expect((await h.sheet().getByRole("button", { name: "Сделать клиентом" }).count()) === 0, "tech: no make-client");
-  await h.sheet().getByRole("button", { name: "Закрыть", exact: true }).last().click(); await p.waitForTimeout(300);
-  await h.clickText("Задачи");
-  await h.click("Что дальше?");
-  h.expect((await h.sheet().getByRole("button", { name: "Записать на оценку" }).count()) === 0, "tech: no booking (the server would refuse it)");
-  await h.sheet().getByRole("button", { name: "Позже" }).click(); await p.waitForTimeout(300);
+  await pressEscUntilClosed(p);
+  // «＋» of a tech: no booking (the server would refuse it), and «⋯» has no «Сделать клиентом»
+  await tid("lead-screen-create").getByRole("button").first().click();
+  await tid("menu-items").waitFor({ timeout: 3000 });
+  h.expect((await p.getByTestId("lead-create-book").locator("visible=true").count()) === 0, "tech: no booking (the server would refuse it)");
+  await pressEscUntilClosed(p, p.getByTestId("menu-items").locator("visible=true").first());
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
 
-  // tabs: files has a real empty state with an action
-  await h.clickText("Файлы");
+  // sections: files has a real empty state
+  await objSection(p, "lead-screen", "files");
+  await tid("lead-files").waitFor();
   await h.expectText(/Фото|Файлов нет|Нет фото/, "files tab");
 };

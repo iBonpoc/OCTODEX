@@ -47,9 +47,12 @@ export function adoptLegacy(items: readonly OwnedItem[], who: Owner | null): rea
   return items.map((o) => (o.owner ? o : { ...o, owner: { ...who } }));
 }
 
-/** the person's unsent ops in every company (an account deletion removes them all, review #240 №4) */
-export const unsentOf = (items: readonly OwnedItem[], userId: string | null): number =>
-  userId ? items.filter((o) => !o.owner || o.owner.userId === userId).length : 0;
+/**
+ * the person's unsent ops in every company (an account deletion removes them all, review #240 №4); `inCompany` — only
+ * the companies the person is still in (#1633 A2: a removed one's ops do not hold the deletion; an op without owner counts)
+ */
+export const unsentOf = (items: readonly OwnedItem[], userId: string | null, inCompany?: (companyId: string) => boolean): number =>
+  userId ? items.filter((o) => !o.owner || (o.owner.userId === userId && (!inCompany || inCompany(o.owner.companyId)))).length : 0;
 
 /** the account of `userId` is deleted: what stays in the outbox — other people's ops (an op without owner counts as theirs) */
 export const othersOf = (items: readonly OwnedItem[], userId: string | null): OwnedItem[] =>

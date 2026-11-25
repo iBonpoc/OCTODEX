@@ -24,6 +24,8 @@ describe("unit:rejectReasons — a refusal we can explain", () => {
       estimate_lines_mismatch: "sync.stuck.reason.estimateLines",
       // #1147: the client signed on the phone another total than the server's (migration 20261112030000, db T195)
       estimate_total_mismatch: "sync.stuck.reason.estimateTotalChanged",
+      // #2474: the client signed while the phone's edit waited (cloud/ops.ts saveEstimate — the phone's own refusal)
+      estimate_signed_meanwhile: "est.rej.signedMeanwhileWhy",
       invoice_over_contract: "inv.rej.overContract",
       invoice_has_payments: "inv.void.rej.paid",
       invoice_void_forbidden: "inv.void.rej.role",
@@ -38,6 +40,13 @@ describe("unit:rejectReasons — a refusal we can explain", () => {
       po_stale: "po.rej.stale",
       po_received_office: "po.rej.officeOnly",
       po_not_open: "po.rej.notOpen",
+      // #2015: the cancel of a job the server refused (migration 20261117570000, db T383–T390)
+      job_paid: "job.cancel.rej.paid",
+      job_invoice_open: "job.cancel.rej.invoiceOpen",
+      job_visit_on_site: "job.cancel.rej.onSite",
+      job_done: "job.cancel.rej.done",
+      // #1913: a price group has at most 200 items (migration 20261117210000, db T362)
+      price_group_full: "price.group.rejFull",
     });
     for (const key of Object.values(REJECT_REASONS))
       for (const dict of [ru, en, es] as Record<string, string>[]) expect(dict[key], key).toMatch(/\S/);

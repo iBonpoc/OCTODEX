@@ -7,6 +7,7 @@
 // day the invoice was made (op.dueDate, set when the op is queued), not the day the op reaches the server
 import { companyToday } from "@/features/zone";
 import { cleanText, TEMPLATE_NAME_MAX } from "@/features/checklist";
+import { cleanName } from "@/features/nameAsk";
 import { supplierToRow } from "@/features/suppliers";
 import { normalizeBarcode, normalizeProductUrl } from "@/features/catalogCard";
 import { poLineToRow, poToRow } from "@/features/purchaseOrderRows";
@@ -14,13 +15,13 @@ import { linesEditable as poLinesEditable } from "@/features/purchaseOrders";
 import { realJob } from "./inspectionBridge";
 import { ENGINE_VERSION, bpsFromPpm, jobLineQty, taxRatePpm } from "@octo/estimating-engine";
 import type { PhotoFail, PurchaseOrder, EstimateTemplate, BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep, Supplier } from "@/data/types";
-import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
+import { assigneeToSend, COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb, pages } from "./repo";
 import { classify } from "@/data/outboxRetry";
 import { photoFailOf, storageNotNow, tooBig } from "@/data/photoUpload";
-import { companyModulesFromRows, moduleDef, moduleState } from "@/modules/registry";
-import { MODULE_INACTIVE, unknownOp } from "@/data/outboxRetry";
+import { companyModulesFromRows, moduleDef, moduleState, moduleUsable } from "@/modules/registry";
+import { LEAD_ASSIGNEE_GONE, MODULE_INACTIVE, unknownOp } from "@/data/outboxRetry";
 import { withSendablePages } from "@/features/docPages";
 import { versionRows } from "./estimateRows";
 
@@ -65,6 +66,8 @@ export type Op =
   | { k: "chk.template.save"; template: ChecklistTemplate; ifNew?: boolean }
   /** spec 36: a supplier made, changed, archived or restored (the whole row) */
   | { k: "supplier.save"; supplier: Supplier }
+  /** #1834: the supplier's purchase tax through the one door (supplier_set_tax); seenBps — the rate the phone saw (a stale one → «changed first») */
+  | { k: "supplier.tax"; supplierId: string; taxBps: number | null; seenBps: number | null }
   /** spec 37: a purchase order made or changed (header, its lines, the lines taken out) */
   | { k: "po.save"; order: PurchaseOrder; removedLineIds: string[] }
   /** spec 37: what came, line by line (public.po_receive) */
@@ -96,6 +99,8 @@ export type Op =
   | { k: "visit.inspection"; leadId?: string; propertyId: string; visitId: string; start: string; durationMin: number; techId: string | null; assigneeIds?: string[]; note?: string; scope: string[] }
   /** the office cancels a visit with a reason; S4a / S9a roll the lead / job back when nothing open is left */
   | { k: "visit.cancel"; visitId: string; reason: CancelReason; text?: string; leadBack?: string; jobBack?: string }
+  /** #2066 «Клиента нет дома»: the visit's own tech (or the office) at the door — public.visit_no_show (20261117580000) */
+  | { k: "visit.noShow"; visitId: string; note?: string; leadBack?: string; jobBack?: string }
   /** the office moves a visit (time, length); the status does not change */
   | { k: "visit.reschedule"; visitId: string; start: string; durationMin: number; allDay?: boolean }
   /** estimate visit for a lead whose client and property already exist (lead.prospect or earlier); replaced by visit.inspection */
@@ -148,6 +153,9 @@ export type Op =
       totalCents: number;
       depositCents: number;
       marginPct: string | null;
+      /** #2474: the phone saw the client's signature and the person chose «Сохранить и снять подпись» (#2381) — only then
+       *  the cloud save reopens a client-signed estimate; absent in older builds and for any other save */
+      fromStatus?: "awaiting_countersign";
     }
   | {
       k: "estimate.approve";
@@ -167,8 +175,11 @@ export type Op =
   | { k: "invoice.issue"; id: string; jobId: string; customerId: string; kind: "progress" | "final"; title: string; totalCents: number; dueDate?: string }
   /** В1-5 (#1107): void a sent invoice without payments, with the reason (owner / admin; the server checks the same) */
   | { k: "invoice.void"; id: string; jobId: string; reason: string; totalCents: number }
+  /** #2015 (spec 38 §12): cancel a job — the visits, the unpaid invoices and the job in one server transaction */
+  | { k: "job.cancel"; jobId: string; reason: string }
   | { k: "job.schedule"; jobId: string; visitId: string; start: string; end: string; techId: string | null; assigneeIds?: string[]; note?: string; scope: string[]; allDay?: boolean }
-  | { k: "company.save"; company: Company; einChanged: boolean; /** the zone was chosen (docs/specs/22 §1.3); absent in older ops */ tzChanged?: boolean }
+  | { k: "company.save"; company: Company; einChanged: boolean; /** the zone was chosen (docs/specs/22 §1.3); absent in older ops */ tzChanged?: boolean;
+      /** Р-7: the default lead assignee was chosen in this save; absent in older ops */ assigneeChanged?: boolean }
   | { k: "license.save"; license: CompanyLicense }
   | { k: "license.remove"; id: string }
   | { k: "contact.save"; contact: CompanyContact }
@@ -202,10 +213,14 @@ export type Op =
   | { k: "calendarEvent.remove"; id: string }
   /** wave 7б-1: my personal settings in this company (public.set_my_prefs: only for yourself) */
   | { k: "me.prefs"; prefs: MemberPrefs }
+  /** #2097: a reason of «Разбор дел» put off until a day (null — back now), for the company */
+  | { k: "attention.snooze"; itemId: string; until: string | null }
   /** wave 7б-2: my location consent (public.set_location_consent: only for yourself; on — after the notice) */
   | { k: "me.location"; on: boolean }
   /** step 18 P4b: my push switch of one group (public.set_push_kind: only for yourself, an active member) */
   | { k: "me.pushKind"; kind: PushGroup; enabled: boolean }
+  /** #1606: my own name (public.users.full_name: update of the own row only, column grant + users_update) */
+  | { k: "me.name"; name: string }
   /** spec 33 П15 (C2a): owner / admin switch an add-on module on (the first time — the 7-day trial) or off; its settings
    *  (only while it is active — founder О2; baseRowVersion = the version edited, a newer one is a conflict) */
   | { k: "module.enable"; module: string }
@@ -260,9 +275,25 @@ export type Op =
    *  phone or a second send never overwrites a price someone already set */
   /**
    * costs: the cost fields this save changed (19 §9) — only these are written; a field left out keeps the server's value
-   * (a cache without costs never erases them). No `costs` (an op queued by an older build): every cost field as before.
+   * (a cache without costs never erases them). No `costs` (an op queued by an older build): no cost field at all (#1958 —
+   * its three cached fields would put back a cost changed meanwhile; a cost change queued before the update is not sent),
+   * but onlyNew as before (an insert only).
+   * costsSeen (#1958 (а)): what the phone had in the same fields before the change — the server writes them only over
+   * that (catalog_set_item_costs), else 40001 row_version_conflict and nothing; none (a new item) — as before.
    */
-  | { k: "catalog.save"; item: CatalogItem; onlyNew?: true; costs?: CatalogCostChange }
+  /** fields (spec 53-0): the item's columns this save changed (catalogItemChange) — an item already on the server gets only
+   *  these (PRD 04 §9, merge by field); none (a new item, an op queued by an older build) — the whole row */
+  | { k: "catalog.save"; item: CatalogItem; onlyNew?: true; costs?: CatalogCostChange; costsSeen?: CatalogCostChange; fields?: string[] }
+  /** #1913 (the price-key spec, §4.6): one price for the whole price group of `itemId` (catalog_set_group_price).
+   *  `expected*` — the item's values on the phone before the change: someone else changed them first → 40001
+   *  row_version_conflict, nothing written. Costs only for who sees them (absent otherwise). `group` — its priceGroup, for
+   *  merging and dropping in the queue. */
+  | { k: "catalog.groupPrice"; itemId: string; group: string; priceCents: number; placeholder: boolean;
+      costCents?: number | null; vendorTaxBps?: number | null; markupBps?: number | null;
+      expectedPriceCents: number; expectedCostCents?: number | null; expectedTaxBps?: number | null; expectedMarkupBps?: number | null }
+  /** #2227 (spec 33-price-key §11.5): ONE value of the item's variant property (catalog_set_variant); null data — removed.
+   *  One value at a time: two phones writing two colours never erase each other */
+  | { k: "catalog.variant"; itemId: string; attr: string; value: string; data: { sku?: string; supplierId?: string; purchaseUnit?: string; packSize?: string } | null }
   | { k: "catalog.remove"; id: string }
   | { k: "notice.read"; ids: string[] }
   /** sent: the estimate was already sent when the client signed on the phone (#1126; an older app's op has none);
@@ -333,8 +364,15 @@ async function moduleActiveOnServer(companyId: string, module: string): Promise<
     const { data } = await read(supabase.from("company_modules").select("module_key, enabled, trial_ends_at, paid_until, settings, row_version").eq("company_id", companyId).eq("module_key", module).maybeSingle());
     // the phone's clock may run ahead of the server's: near the trial's end judge it 10 minutes late, so another refusal
     // is never read as «not active» (then it stays a plain refusal — review M5a)
-    const a = moduleState(companyModulesFromRows(data ? [data as Record<string, unknown>] : [])[module], Date.now() - 10 * 60_000).access;
-    return a === "trial" || a === "paid";
+    const row = companyModulesFromRows(data ? [data as Record<string, unknown>] : [])[module];
+    if (moduleUsable(moduleState(row, Date.now() - 10 * 60_000).access)) return true;
+    if (!row?.enabled) return false;
+    // #2410: switched on, the term over — the developer's company has none (app.module_active reads the same flag). A
+    // server before the column: no flag, as before; any other failed read — not known (the queue keeps the changes, rule 6)
+    return read(supabase.from("companies").select("developer_account").eq("id", companyId).maybeSingle()).then(
+      (r) => (r.data as { developer_account?: unknown } | null)?.developer_account === true,
+      (e: { code?: string }) => (e?.code === "42703" || e?.code === "PGRST204" ? false : undefined),
+    );
   } catch {
     return undefined;
   }
@@ -635,6 +673,19 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return saveEstimateTemplate(op.template, c, { ifNew: op.ifNew, baseRowVersion: op.baseRowVersion, clearCosts: op.clearCosts });
     case "po.save":
       return savePurchaseOrder(op, c);
+    case "catalog.groupPrice": {
+      const { error, status } = await supabase.rpc("catalog_set_group_price", {
+        p_item_id: op.itemId, p_price_cents: op.priceCents, p_placeholder: op.placeholder,
+        p_cost_cents: op.costCents ?? null, p_tax_bps: op.vendorTaxBps ?? null, p_markup_bps: op.markupBps ?? null,
+        p_expected_price_cents: op.expectedPriceCents,
+        p_expected_cost_cents: op.expectedCostCents ?? null, p_expected_tax_bps: op.expectedTaxBps ?? null, p_expected_markup_bps: op.expectedMarkupBps ?? null,
+      });
+      return run(Promise.resolve({ error, status }));
+    }
+    case "catalog.variant": {
+      const { error, status } = await supabase.rpc("catalog_set_variant", { p_item: op.itemId, p_attr: op.attr, p_value: op.value, p_data: op.data });
+      return run(Promise.resolve({ error, status }));
+    }
     case "po.receive": {
       const { error, status } = await supabase.rpc("po_receive", {
         p_po_id: op.id, p_lines: op.lines.map((l) => ({ id: l.id, received: Number(l.received) })),
@@ -644,6 +695,10 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "supplier.save":
       return run(supabase.from("suppliers").upsert(supplierToRow(op.supplier, c), { onConflict: "id" }));
+    case "supplier.tax": {
+      const { error, status } = await supabase.rpc("supplier_set_tax", { p_supplier: op.supplierId, p_tax_bps: op.taxBps, p_seen_bps: op.seenBps });
+      return run(Promise.resolve({ error, status }));
+    }
     case "chk.template.save":
       return run(supabase.from("checklist_templates").upsert(templateToDb(op.template, c), { onConflict: "id", ...(op.ifNew ? { ignoreDuplicates: true } : {}) }));
     case "company.visitSettings":
@@ -691,6 +746,13 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       // one server function for S4a / S9a (migration 20261105300000): the cancel and the roll-backs in one transaction;
       // a repeat after a partial failure changes nothing
       return run(supabase.rpc("cancel_visit", { p_visit_id: op.visitId, p_reason: op.reason, p_text: op.text ?? null }));
+    case "visit.noShow":
+      // one server function: the no-show, who and when, and the roll-backs (S4a / S9a); a repeat from the queue changes nothing
+      return run(supabase.rpc("visit_no_show", { p_visit_id: op.visitId, p_note: op.note ?? null }));
+    case "job.cancel":
+      // public.cancel_job (migration 20261117570000): rights, the same refusals as the guard, the visits and invoices of the job;
+      // a repeat on a cancelled job changes nothing
+      return run(supabase.rpc("cancel_job", { p_job: op.jobId, p_reason: op.reason }));
     case "visit.notified":
       // the time is the server's (t07_visit_notified_stamp sets now()); any non-null value only marks «told»
       return run(supabase.from("visits").update({ customer_notified_at: new Date(0).toISOString() }).eq("id", op.visitId));
@@ -782,8 +844,12 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "me.prefs":
       return run(supabase.rpc("set_my_prefs", { p_company_id: c, p_plan_show_done: op.prefs.planShowDone }));
+    case "attention.snooze":
+      return run(supabase.rpc("snooze_attention", { p_company_id: c, p_item_id: op.itemId, p_until: op.until }));
     case "me.location":
       return run(supabase.rpc("set_location_consent", { p_company_id: c, p_on: op.on }));
+    case "me.name":
+      return run(supabase.from("users").update({ full_name: cleanName(op.name) }).eq("id", userId));
     case "me.pushKind":
       return run(supabase.rpc("set_push_kind", { p_company_id: c, p_kind: op.kind, p_enabled: op.enabled }));
     case "module.enable":
@@ -907,8 +973,19 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return assignPeople(op.visitId, op.assigneeIds ?? (op.techId ? [op.techId] : []));
     }
     case "company.save": {
-      const { data: stored } = await read(supabase.from("companies").select([...COMPANY_STORED_COLUMNS, "timezone"].join(", ")).eq("id", c).maybeSingle());
-      await run(supabase.from("companies").update(companyToDb(op.company, (stored ?? {}) as Record<string, unknown>, op.tzChanged)).eq("id", c));
+      const { data: stored } = await read(supabase.from("companies").select([...COMPANY_STORED_COLUMNS, "timezone", "lead_default_assignee_id"].join(", ")).eq("id", c).maybeSingle());
+      const st = (stored ?? {}) as Record<string, unknown>;
+      await run(supabase.from("companies").update(companyToDb(op.company, st, op.tzChanged)).eq("id", c));
+      // Р-7: the lead assignee by its own request, after the rest — the server refuses one who has left the team
+      // (42501), and that drops only the assignee, not the name, hours and brand saved above
+      if (assigneeToSend(op.company.leadDefaultAssigneeId, st.lead_default_assignee_id, op.assigneeChanged)) {
+        try {
+          await run(supabase.from("companies").update({ lead_default_assignee_id: op.company.leadDefaultAssigneeId ?? null }).eq("id", c));
+        } catch (e) {
+          if (e instanceof PermanentError && e.code === "42501") throw new PermanentError("the default lead assignee is no longer on the team", e.status, "42501", LEAD_ASSIGNEE_GONE);
+          throw e;
+        }
+      }
       if (op.einChanged) {
         const ein = op.company.ein?.trim() || null;
         await run(supabase.from("company_secrets").upsert({ company_id: c, ein }, { onConflict: "company_id" }));
@@ -1048,7 +1125,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         supabase.from("properties").upsert(
           {
             id: p.id, company_id: c, customer_id: p.customerId, address_line1: p.address || "—", address_unit: p.unit ?? null,
-            address_city: place.city || "—", address_state: place.state || "CA", address_zip: place.zip || null,
+            // #2065: the store fills the company's state; never a guessed «CA» (the column is NOT NULL)
+            address_city: place.city || "—", address_state: place.state || "", address_zip: place.zip || null,
             label: p.label ?? null, kind: p.kind ?? null, access_notes: p.accessNotes ?? null, contact_ids: p.contactIds ?? [], stories: p.stories || 1,
           },
           { onConflict: "id" },
@@ -1056,8 +1134,9 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       );
     }
     case "property.gate":
-      // kept apart from the property (migration 20261105160000): the office writes it, a tech reads it only on the visit days
-      return run(supabase.from("property_secrets").upsert({ property_id: op.id, company_id: c, gate_code: op.code || null, deleted_at: null }, { onConflict: "property_id" }));
+      // kept apart from the property (migration 20261105160000); written through the server's function (20261117568000):
+      // sales set the code without reading it back, a tech and sales read it only on the visit days
+      return run(supabase.rpc("set_gate_code", { p_property_id: op.id, p_code: op.code || "" }));
     case "property.update": {
       const patch: Record<string, string> = {};
       if (op.address !== undefined) patch.address_line1 = op.address || "—";
@@ -1075,29 +1154,77 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "catalog.save": {
       const it = op.item;
-      const costCols = catalogCostCols(op);
+      // #1958 (а): an item already there whose cost this save changed — the cost goes over what the phone saw
+      // (catalog_set_item_costs), never in the item's row (t30 would put it over whatever is there)
+      let seen = op.costsSeen && !op.onlyNew && Object.keys(catalogCostCols(op)).length ? op.costsSeen : undefined;
+      let costCols = seen ? {} : catalogCostCols(op);
       const card = catalogCardCols(it);
+      const seenWrite = async () => {
+        const r = await supabase.rpc("catalog_set_item_costs", { p_item_id: it.id, p_costs: catalogCostCols(op), p_seen: costColsOf(seen!) });
+        // a server before the migration (no such function, PGRST202): the side table as before
+        if (r.error?.code === "PGRST202") {
+          const k = await supabase.from("catalog_item_costs").upsert({ item_id: it.id, company_id: c, ...catalogCostCols(op) }, { onConflict: "item_id" });
+          if (k.error && !["42501", "42P01", "PGRST205"].includes(k.error.code ?? "")) await run(Promise.resolve(k));
+          return;
+        }
+        // no right to our costs (42501 no_costs: the right was taken meanwhile), or the item went to the Trash (P0002) —
+        // the item itself is saved, as the side table's refusal below (code review of #1958 №5)
+        if (r.error?.code === "42501" || r.error?.code === "P0002") return;
+        await run(Promise.resolve(r));
+      };
+      // spec 53-0 (PRD 04 §9 «merge by field»): an item already there gets only the columns this save changed — a save
+      // queued on another phone before a price update never puts back the fields its person did not touch. A new item,
+      // onlyNew and an op queued by an older build (no `fields`): the whole row, as before (rule 16)
+      let r: { error: { message: string; code?: string; hint?: string } | null; status?: number; data?: unknown } | null = null;
+      if (op.fields && !op.onlyNew) {
+        const cols = catalogItemCols(it);
+        /** the changed columns, but those named in `drop` */
+        const pick = (drop: readonly string[] = []): Record<string, unknown> => ({
+          ...Object.fromEntries(op.fields!.filter((f) => own(cols, f) && !drop.includes(f)).map((f) => [f, cols[f]])),
+          ...costCols,
+        });
+        const update = (row: Record<string, unknown>) => supabase.from("catalog_items").update(row).eq("id", it.id).eq("company_id", c).select("id");
+        let row = pick();
+        if (!Object.keys(row).length) return seen ? seenWrite() : undefined; // nothing else changed: only the cost
+        r = await update(row);
+        // the card's fields never cost the save (as the upsert below): a refused direction — without it alone; a server
+        // before the migration (no such column) — without the card's fields
+        const refused =
+          r.error?.code === "23503" && "service_category_id" in row && /service_category/.test(r.error.message ?? "")
+            ? ["service_category_id"]
+            : r.error?.code === "PGRST204"
+              ? Object.keys(card)
+              : null;
+        if (refused) {
+          row = pick(refused);
+          // only the card's fields changed and the server takes none of them: nothing else to write
+          if (!Object.keys(row).length) return seen ? seenWrite() : undefined;
+          r = await update(row);
+        }
+        await run(Promise.resolve(r));
+        // no row updated (not on the server yet, or not ours to change) — the whole row, as before: the server decides;
+        // its cost goes with it (a new row: nothing there to be changed meanwhile — code review of #1958 №3)
+        if (!(Array.isArray(r.data) && r.data.length)) {
+          r = null;
+          seen = undefined;
+          costCols = catalogCostCols(op);
+        }
+      }
       const upsertItem = (cardCols: Record<string, string | null>) =>
         supabase.from("catalog_items").upsert(
-          {
-            id: it.id, company_id: c, kind: it.kind, name: it.name, description: it.description ?? null, unit: it.unit,
-            unit_price_cents: it.priceCents, vendor: it.vendor ?? null, ...costCols,
-            components: (it.components ?? []).map((x) => ({ item_id: x.itemId, qty: x.qty })), is_placeholder_price: !!it.placeholder,
-            // C3 (docs/specs/33 П16): only what is set — an item without them never writes the new columns
-            ...(it.attributes !== undefined ? { attributes: it.attributes } : {}),
-            ...(it.purchaseUnit !== undefined ? { purchase_unit: it.purchaseUnit.trim() || null } : {}),
-            ...(it.packSize !== undefined ? { pack_size: it.packSize || null } : {}),
-            // spec 36: the same — only once set ("" = cleared)
-            ...(it.supplierId !== undefined ? { supplier_id: it.supplierId || null } : {}),
-            ...(it.supplierSku !== undefined ? { supplier_sku: it.supplierSku || null } : {}),
-            // РС-10: the card's fields, the same — only once set ("" = cleared); the link and the barcode as the server
-            // keeps them, and one the server would refuse is not sent (the item itself is saved; the store cleans first)
-            ...cardCols,
-          },
+          { id: it.id, company_id: c, ...catalogItemCols({ ...it, sku: undefined, barcode: undefined, productUrl: undefined, serviceCategoryId: undefined }), ...costCols, ...cardCols },
           // onlyNew: INSERT … ON CONFLICT (id) DO NOTHING — the row there stays as it is; a refusal (RLS) stays a refusal
           op.onlyNew ? { onConflict: "id", ignoreDuplicates: true } : { onConflict: "id" },
         );
-      let r = await upsertItem(card);
+      if (op.fields && !op.onlyNew && r) {
+        // written by field: the side table of costs as below
+        if (seen) return seenWrite();
+        if (!op.costs || !Object.keys(costCols).length) return;
+        const k = await supabase.from("catalog_item_costs").upsert({ item_id: it.id, company_id: c, ...costCols }, { onConflict: "item_id" });
+        if (k.error && !["42501", "42P01", "PGRST205"].includes(k.error.code ?? "")) await run(Promise.resolve(k));
+        return;
+      }
+      r = await upsertItem(card);
       // РС-10 (code-reviewer): the card's fields never cost the item's save — a direction the server does not have (made
       // offline and refused, 23503 on catalog_items_service_category_fk) goes without it; a server before the migration
       // (PGRST204, no such column) gets the item without the card's fields
@@ -1113,6 +1240,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         // phones); the changed fields go to the side table as they are, so a cost can be cleared. Nothing changed —
         // nothing written (an upsert sets only the columns it sends). No right to see costs (42501, sales) or a server
         // before the migration (no table) — the item itself is saved.
+        if (seen) return seenWrite();
         if (!op.costs || !Object.keys(costCols).length) return;
         const r = await supabase.from("catalog_item_costs").upsert({ item_id: it.id, company_id: c, ...costCols }, { onConflict: "item_id" });
         if (r.error && !["42501", "42P01", "PGRST205"].includes(r.error.code ?? "")) await run(Promise.resolve(r));
@@ -1130,8 +1258,17 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "catalog.remove":
       return run(supabase.from("catalog_items").update({ deleted_at: new Date().toISOString(), is_active: false }).eq("id", op.id));
-    case "notice.read":
-      return run(supabase.from("notifications").update({ read_at: new Date().toISOString() }).in("id", op.ids));
+    case "notice.read": {
+      // Р-8b (20261117569000): read for me only — my own marks; the server sets who and when. A server before the migration
+      // (no such table): the shared column, as before
+      // (public.mark_notifications_read: an id the server does not know, or one not visible, is left out, the others marked)
+      // (only server ids: a notice made on the phone has no uuid and never reaches the server)
+      const ids = op.ids.filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+      if (!ids.length) return;
+      const r = await supabase.rpc("mark_notifications_read", { p_ids: ids });
+      if (r.error?.code === "PGRST202") return run(supabase.from("notifications").update({ read_at: new Date().toISOString() }).in("id", ids));
+      return run(Promise.resolve(r));
+    }
     case "estimate.send": {
       // E2a, security-check 05.11: the server locks the version, sets "valid until" and the link token
       // (it takes the phone's token only if it was never revoked; otherwise makes its own — the next refresh brings it)
@@ -1242,6 +1379,44 @@ export function catalogCardCols(it: Pick<CatalogItem, "sku" | "barcode" | "produ
   return out;
 }
 
+/**
+ * The item's own columns a save writes (not the id, the company or the costs): what it has; the module's properties,
+ * the purchase unit, the supplier and the card's fields only once set (an item without them never writes them).
+ */
+export function catalogItemCols(it: CatalogItem): Record<string, unknown> {
+  return {
+    kind: it.kind, name: it.name, description: it.description ?? null, unit: it.unit,
+    unit_price_cents: it.priceCents, vendor: it.vendor ?? null,
+    components: (it.components ?? []).map((x) => ({ item_id: x.itemId, qty: x.qty })), is_placeholder_price: !!it.placeholder,
+    // C3 (docs/specs/33 П16): only what is set — an item without them never writes the new columns
+    ...(it.attributes !== undefined ? { attributes: it.attributes } : {}),
+    ...(it.purchaseUnit !== undefined ? { purchase_unit: it.purchaseUnit.trim() || null } : {}),
+    ...(it.packSize !== undefined ? { pack_size: it.packSize || null } : {}),
+    // spec 36: the same — only once set ("" = cleared)
+    ...(it.supplierId !== undefined ? { supplier_id: it.supplierId || null } : {}),
+    ...(it.supplierSku !== undefined ? { supplier_sku: it.supplierSku || null } : {}),
+    // РС-10: the card's fields, the same — only once set ("" = cleared); the link and the barcode as the server keeps
+    // them, and one the server would refuse is not sent (the item itself is saved; the store cleans first)
+    ...catalogCardCols(it),
+  };
+}
+/** the object's own key (never an inherited one such as «__proto__»: a queued op's field names are only data) */
+const own = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
+/** a value as text with an object's keys in order: {a, b} and {b, a} are the same properties */
+const canon = (v: unknown): string =>
+  JSON.stringify(v ?? null, (_k, x: unknown) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))) : x));
+/**
+ * spec 53-0 (PRD 04 §9 «merge by field»): the item's columns this save changed — both sides through the same columns
+ * (catalogItemCols cleans the card's fields alike), so a value written another way is no change. A new item (no prev):
+ * undefined — written whole. Only what the phone has now counts: a field it does not carry is never sent.
+ */
+export function catalogItemChange(prev: CatalogItem | undefined, it: CatalogItem): string[] | undefined {
+  if (!prev) return undefined;
+  const a = catalogItemCols(prev);
+  const b = catalogItemCols(it);
+  return Object.keys(b).filter((k) => canon(a[k]) !== canon(b[k]));
+}
+
 const COST_COL = { costCents: "unit_cost_cents", vendorTaxBps: "vendor_tax_bps", markupBps: "markup_bps" } as const;
 /** what changed between the item on the phone before and now (a new item: what it has); empty — nothing */
 export function catalogCostChange(prev: CatalogItem | undefined, it: CatalogItem): CatalogCostChange {
@@ -1252,11 +1427,30 @@ export function catalogCostChange(prev: CatalogItem | undefined, it: CatalogItem
   }
   return out;
 }
-/** the cost columns a save writes: the changed ones; an old op without `costs` — all of them, as it did */
+/**
+ * the cost columns a save writes: the changed ones. An old op without `costs`: none (#1958 — its three cached fields
+ * would put back a cost changed meanwhile), but an onlyNew one all three as before (an insert that never touches a row
+ * already there: ON CONFLICT DO NOTHING moves no cost — T99)
+ */
 function catalogCostCols(op: Extract<Op, { k: "catalog.save" }>): Record<string, number | null> {
-  const ch: CatalogCostChange = op.costs ?? { costCents: op.item.costCents ?? null, vendorTaxBps: op.item.vendorTaxBps ?? null, markupBps: op.item.markupBps ?? null };
-  return Object.fromEntries((Object.keys(ch) as (keyof typeof COST_COL)[]).map((f) => [COST_COL[f], ch[f] ?? null]));
+  if (!op.costs && op.onlyNew) return costColsOf({ costCents: op.item.costCents ?? null, vendorTaxBps: op.item.vendorTaxBps ?? null, markupBps: op.item.markupBps ?? null });
+  return costColsOf(op.costs ?? {});
 }
+const costColsOf = (ch: CatalogCostChange): Record<string, number | null> =>
+  Object.fromEntries((Object.keys(ch).filter((f) => f in COST_COL) as (keyof typeof COST_COL)[]).map((f) => [COST_COL[f], ch[f] ?? null]));
+/**
+ * #1958 (а): what the phone had in the fields it changed, before the change — from the item as the phone saw it. Only for
+ * an item already there (a new one has nothing to be changed meanwhile).
+ */
+export function catalogCostSeen(prev: CatalogItem | undefined, costs: CatalogCostChange): CatalogCostChange | undefined {
+  if (!prev || !Object.keys(costs).length) return undefined;
+  return Object.fromEntries((Object.keys(costs) as (keyof CatalogCostChange)[]).map((f) => [f, prev[f] ?? null]));
+}
+/** the op's `costsSeen` field, or nothing (a new item, no cost change) */
+export const withCostsSeen = (prev: CatalogItem | undefined, costs: CatalogCostChange): { costsSeen?: CatalogCostChange } => {
+  const seen = catalogCostSeen(prev, costs);
+  return seen ? { costsSeen: seen } : {};
+};
 
 /**
  * Draft estimate → database: estimate row, an unlocked version (a new one if the current is already sent),
@@ -1270,7 +1464,12 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
   // the connection dropped after the insert: «try later», never «not visible» (that would drop the estimate, review #244)
   const { data: est } = await read(supabase.from("estimates").select("status, current_version_id").eq("id", op.id).maybeSingle());
   if (!est) throw new PermanentError("estimate is not visible");
-  // «don't sign — change it» (E2a): the client signed, the company changes it → back to draft on the server, signature kept in history
+  // «don't sign — change it» (E2a): the client signed, the company changes it → back to draft on the server, signature kept in history.
+  // #2474: only when the phone edited the signed estimate on purpose (fromStatus). An edit of a sent estimate made without
+  // the network while the client signed meanwhile never takes the signature off: refused for good, nothing written, a card
+  if (est.status === "awaiting_countersign" && op.fromStatus !== "awaiting_countersign") {
+    throw new PermanentError("the client signed the estimate meanwhile", 409, "22023", "estimate_signed_meanwhile");
+  }
   if (est.status === "awaiting_countersign") {
     const { error, status } = await supabase.rpc("reopen_estimate", { p_estimate_id: op.id, p_reason: null });
     await run(Promise.resolve({ error, status }));

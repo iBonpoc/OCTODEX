@@ -13,7 +13,9 @@ import { eventRange } from "@/features/planFeed";
 import { dayAtHour } from "@/features/lead/bookRules";
 import { atMinute, SCHEDULE_DEFAULTS } from "@/features/schedule";
 import { minuteIn, getZone } from "@/features/zone";
-import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
+import { Button, IconButton, Stepper, TextField } from "@/ui/controls";
+import { SelectField } from "@/ui/selectField";
+import { FieldAnchor, FieldError, useRequiredForm, type Problem } from "@/ui/requiredForm";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast, SheetScroll } from "@/ui/overlays";
 import { Divider, ListRow, RowView } from "@/ui/surfaces";
@@ -25,6 +27,8 @@ import { goneId } from "@/features/team";
  * «В Плане» (no time / all day / with a time — then the task shows in the Plan), the description, who.
  * Used by the «Задачи» screen, the lead and the client. A new task without a subject first asks «к чему» (13 §2.4:
  * nothing is created loose). One id per opening: a double tap saves the same task twice, never two tasks.
+ * «Сохранить» is always live; what is missing is said only after a try, under its field, read aloud, the first one focused
+ * (#2220, the same as the event form: a new task no longer greets with a dimmed button and no word why).
  */
 export type TaskDraft = Omit<Task, "id"> & { id?: ID };
 
@@ -78,6 +82,7 @@ function TaskSheetBody({ value, onClose, visible, onExited }: { value: TaskDraft
   );
   const [calendar, setCalendar] = useState(false);
   const [placeQuery, setPlaceQuery] = useState("");
+  const form = useRequiredForm();
   // the technician gives a task only to himself (S26); the office to anyone
   const people = taskAssignees(db, role, value.assigneeId);
 
@@ -96,11 +101,16 @@ function TaskSheetBody({ value, onClose, visible, onExited }: { value: TaskDraft
       description: description.trim() || undefined,
     };
   }, [id, subject, title, dueAt, assigneeId, value.doneAt, mode, day, startMin, duration, description, tz]);
-  const ok = !!draft.subjectId && draft.title.length >= 2 && !(wasGone && !assigneeId);
+  // what is missing, in the order of the form (the first one gets the scroll and the focus)
+  const problems: Problem[] = [
+    ...(!draft.subjectId ? [{ id: "subject", text: t("task.req.subject") }] : []),
+    ...(draft.title.length < 2 ? [{ id: "title", text: t("task.req.title") }] : []),
+    ...(wasGone && !assigneeId ? [{ id: "who", text: t("task.req.who") }] : []),
+  ];
   const dirty = JSON.stringify({ ...draft, id: undefined }) !== JSON.stringify({ ...value, id: undefined, title: value.title.trim(), description: value.description || undefined, allDay: value.allDay || undefined });
 
+  const trySave = () => form.submit(problems, save);
   const save = () => {
-    if (!ok) return;
     const r = store.saveTask(draft);
     toast.show(store.online ? t("task.saved") : t("offline.queued"), r.undo);
     onClose();
@@ -114,9 +124,10 @@ function TaskSheetBody({ value, onClose, visible, onExited }: { value: TaskDraft
   const places = draft.subjectId ? [] : taskPlaces(db, role, placeQuery).slice(0, 20);
 
   return (
-    <Sheet visible={visible} onExited={onExited} onClose={onClose} title={value.id ? t("task.edit") : t("task.new")} dirty={dirty} onSave={ok ? save : undefined}>
+    <Sheet visible={visible} onExited={onExited} onClose={onClose} title={value.id ? t("task.edit") : t("task.new")} dirty={dirty} onSave={trySave}>
       <View style={{ gap: space[3] }}>
         <Field label={t("w6.task.subject")}>
+          <FieldAnchor field={form.field("subject")} testID="task-subject">
           {s ? (
             <ListRow
               title={s.label || t("w6.task.subjectGone")}
@@ -134,32 +145,39 @@ function TaskSheetBody({ value, onClose, visible, onExited }: { value: TaskDraft
                   places.map((p, i) => (
                     <View key={`${p.kind}-${p.subjectId}`}>
                       {i > 0 ? <Divider /> : null}
-                      <ListRow title={p.label} subtitle={t(SUBJECT_KIND[p.kind])} onPress={() => setSubject({ subjectType: p.kind, subjectId: p.subjectId })} />
+                      <ListRow title={p.label} subtitle={t(SUBJECT_KIND[p.kind])} onPress={() => { setSubject({ subjectType: p.kind, subjectId: p.subjectId }); form.field("subject").clear(); }} />
                     </View>
                   ))
                 )}
               </SheetScroll>
             </View>
           )}
+          <FieldError text={form.errors.subject} testID="task-subject-error" />
+          </FieldAnchor>
         </Field>
         <Field label={t("task.what")}>
-          <TextField type="title" value={title} onChangeText={setTitle} placeholder={t("task.whatPh")} />
+          <TextField type="title" value={title} onChangeText={setTitle} placeholder={t("task.whatPh")} field={form.field("title")} testID="task-title" />
         </Field>
-        <Field label={t("task.when")}>
-          <ChoiceChips<string>
-            value={WHEN.find((w) => dueAt === dayAtHour(w.n, w.h))?.key ?? (dueAt ? "" : "none")}
+        <View style={{ gap: space[1] }}>
+          {/* quick dates and «Без даты» — a value of the form, a row with a menu (spec 56 §3 row 4); a date set elsewhere shows as is */}
+          <SelectField<string>
+            testID="task-when"
+            label={t("task.when")}
+            value={WHEN.find((w) => dueAt === dayAtHour(w.n, w.h))?.key ?? (dueAt ? null : "none")}
+            placeholder={dueAt ? dayText(dueAt) : undefined}
             onChange={(k) => {
               if (k === "none") return setDueAt(undefined);
               const w = WHEN.find((x) => x.key === k);
               if (w) setDueAt(dayAtHour(w.n, w.h));
             }}
-            items={[...WHEN.map((w) => ({ key: w.key, label: t(`task.when.${w.key}` as DictKey) })), { key: "none", label: t("task.noDate") }]}
+            items={[...WHEN.map((w) => ({ key: w.key as string, label: t(`task.when.${w.key}` as DictKey) })), { key: "none", label: t("task.noDate") }]}
           />
           {dueAt ? <T v="caption" tone="mut">{`${dayText(dueAt)} ${time(dueAt)}`}</T> : null}
-        </Field>
-        <Field label={t("w6.task.inPlan")}>
-          {/* chips, not a switch: the form keeps one yellow — «Сохранить» (rule 2) */}
-          <ChoiceChips<PlanMode>
+        </View>
+          {/* three named values — a row with a menu (spec 56 §3 row 4), not chips */}
+          <SelectField<PlanMode>
+            testID="task-plan-mode"
+            label={t("w6.task.inPlan")}
             value={mode}
             onChange={setMode}
             items={[
@@ -168,7 +186,6 @@ function TaskSheetBody({ value, onClose, visible, onExited }: { value: TaskDraft
               { key: "time", label: t("plan5.withTime") },
             ]}
           />
-        </Field>
         {mode !== "none" ? (
           <>
             <Field label={t("plan5.ev.day")}>
@@ -199,10 +216,10 @@ function TaskSheetBody({ value, onClose, visible, onExited }: { value: TaskDraft
         <Field label={t("plan5.ev.description")}>
           <TextField type="note" value={description} onChangeText={setDescription} placeholder={t("w6.task.descriptionPh")} />
         </Field>
-        <Field label={t("task.who")}>
-          <ChoiceChips<string> value={assigneeId ?? ""} onChange={setAssigneeId} items={people.map((m) => ({ key: m.id, label: m.name }))} />
-        </Field>
-        <Button label={t("ue.save")} icon="check" variant="primary" full disabled={!ok} onPress={save} />
+          {/* a person — a row (spec 56 §3 row 3): a menu for a team this size, the list with search from 13 people (SelectField) */}
+          <SelectField<string> testID="task-who" label={t("task.who")} value={assigneeId ?? null} onChange={(k) => { setAssigneeId(k); form.field("who").clear(); }} items={people.map((m) => ({ key: m.id, label: m.name }))} field={form.field("who")} />
+        {/* always live: what is missing comes only after a try (#2220) */}
+        <Button label={t("ue.save")} icon="check" variant="primary" full onPress={trySave} testID="task-save" />
         {value.id ? <Button label={t(draft.doneAt ? "task.undo" : "task.done")} icon={draft.doneAt ? "undo" : "check"} variant="secondary" full onPress={toggleDone} /> : null}
       </View>
     </Sheet>

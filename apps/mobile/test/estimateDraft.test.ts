@@ -3,9 +3,11 @@
  * e2e 246-estimate-draft.
  */
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: async () => null, setItem: async () => {} } }));
-import { DRAFT_DAYS, MAX_DRAFTS, cleanDrafts, draftCtx, draftSnapshot, draftWorthKeeping, draftsKey, findDraft, nextDrafts, removeDraft, upsertDraft, type EstimateDraft } from "../src/features/estimateDraft";
+import { DRAFT_DAYS, MAX_DRAFTS, cleanDraft, cleanDrafts, draftCtx, markEditorOpen, restoreDraftOnDevice, draftSnapshot, draftWorthKeeping, draftsKey, findDraft, isEditCtx, nextDrafts, removeDraft, upsertDraft, type EstimateDraft } from "../src/features/estimateDraft";
 import { newDoc } from "../src/features/estimateDoc";
 import { isDeviceKey } from "../src/features/deleteAccount";
 import type { EstimateDoc } from "../src/data/types";
@@ -22,11 +24,12 @@ const draft = (ctx: string, over: Partial<EstimateDraft> = {}): EstimateDraft =>
 const none = () => false;
 
 describe("unit:estimateDraft — where a draft belongs", () => {
-  it("a new estimate has a place; a saved one's edit and a template's lines have none", () => {
+  it("a new estimate has a place; a saved one's edit too (#2381); a template's lines have none", () => {
     expect(draftCtx({ customerId: "c1", propertyId: "p1" })).toBe("new||c1|p1|");
     expect(draftCtx({ leadId: "l1" })).toBe("new|l1|||");
     expect(draftCtx({})).toBe("new||||");
-    expect(draftCtx({ id: "e1" })).toBeNull();
+    // #2381: a saved estimate's edit has its own place — the edits live on the phone until «Готово»
+    expect(draftCtx({ id: "e1" })).toBe("edit|e1");
     expect(draftCtx({ editTemplate: "t1" })).toBeNull();
   });
   it("one list per person and company; the demo has its own; all are wiped with the account", () => {
@@ -100,5 +103,62 @@ describe("unit:estimateDraft — review of #859", () => {
     expect(out[1]!.doc.settings).toEqual(newDoc().settings);
     expect(out[1]!.checkPrice).toEqual([]);
     expect(cleanDrafts("not a list")).toEqual([]);
+  });
+});
+
+describe("unit:estimateDraft — #2381 the edit of a saved estimate («Готово / Отменить»)", () => {
+  const edit = (id: string, over: Partial<EstimateDraft> = {}) => draft(`edit|${id}`, { estimateId: id, baseSavedAt: "2026-11-10T10:00:00.000Z", ...over });
+  it("its draft is found though the estimate is saved (a new one's is not)", () => {
+    const list = [edit("e1")];
+    expect(isEditCtx("edit|e1")).toBe(true);
+    expect(isEditCtx("new||c1|p1|")).toBe(false);
+    expect(findDraft(list, "edit|e1", NOW, () => true)?.estimateId).toBe("e1");
+  });
+  it("never too old: an edit's draft is kept past DRAFT_DAYS", () => {
+    const old = edit("e1", { at: new Date(NOW - (DRAFT_DAYS + 5) * 86_400_000).toISOString() });
+    expect(findDraft([old], "edit|e1", NOW, () => true)).toBeDefined();
+    expect(upsertDraft([old], draft("new|a|||"), NOW).some((d) => d.ctx === "edit|e1")).toBe(true);
+  });
+  it("never pushed out by the limit: MAX_DRAFTS counts the new estimates only", () => {
+    const edits = Array.from({ length: 3 }, (_, i) => edit(`e${i}`));
+    const news = Array.from({ length: MAX_DRAFTS + 2 }, (_, i) => draft(`new|l${i}|||`));
+    let list: EstimateDraft[] = edits;
+    for (const n of news) list = upsertDraft(list, n, NOW);
+    expect(list.filter((d) => isEditCtx(d.ctx))).toHaveLength(3);
+    expect(list.filter((d) => !isEditCtx(d.ctx))).toHaveLength(MAX_DRAFTS);
+  });
+  it("the base survives the store: cleanDraft keeps baseSavedAt; an old draft without it reads as before", () => {
+    expect(cleanDraft(JSON.parse(JSON.stringify(edit("e1"))))?.baseSavedAt).toBe("2026-11-10T10:00:00.000Z");
+    const old = cleanDraft(JSON.parse(JSON.stringify(draft("new||c1|p1|"))));
+    expect(old?.ctx).toBe("new||c1|p1|");
+    expect(old?.baseSavedAt).toBeUndefined();
+  });
+  it("no sums in a draft: the engine counts them from the doc (rule 8) — the stored shape itself (interface EstimateDraft) has none", () => {
+    const src = readFileSync(join(__dirname, "..", "src", "features", "estimateDraft.ts"), "utf8");
+    const shape = src.slice(src.indexOf("export interface EstimateDraft"), src.indexOf("}", src.indexOf("export interface EstimateDraft")));
+    expect(shape.length).toBeGreaterThan(100);
+    for (const field of shape.matchAll(/^\s+(\w+)\??:/gm)) expect(/total|sum|cents|deposit|tax/i.test(field[1]!), field[1]).toBe(false);
+  });
+});
+
+describe("unit:estimateDraft — #2381 review 4: the copy's «Отменить» after its editor closed", () => {
+  it("an editor open meanwhile: the restore waits until it closes — its own last write never covers the restore", async () => {
+    vi.useFakeTimers();
+    const m = new Map<string, string>([["k", "[]"]]);
+    const s = { getItem: async (k: string) => m.get(k) ?? null, setItem: async (k: string, v: string) => void m.set(k, v) };
+    const close = markEditorOpen();
+    await restoreDraftOnDevice("k", draft("edit|e1", { estimateId: "e1", baseSavedAt: "" }), NOW, s);
+    expect(JSON.parse(m.get("k")!)).toHaveLength(0); // waits: the open editor owns the list
+    m.set("k", JSON.stringify([draft("new|b|||")])); // the editor's last write as it closes
+    close();
+    await vi.runAllTimersAsync();
+    vi.useRealTimers();
+    expect(JSON.parse(m.get("k")!).map((d: EstimateDraft) => d.ctx).sort()).toEqual(["edit|e1", "new|b|||"]);
+  });
+  it("puts the edit back on the device (one read, one write), next to what is there", async () => {
+    const m = new Map<string, string>([["k", JSON.stringify([draft("new|a|||")])]]);
+    const s = { getItem: async (k: string) => m.get(k) ?? null, setItem: async (k: string, v: string) => void m.set(k, v) };
+    expect(await restoreDraftOnDevice("k", draft("edit|e1", { estimateId: "e1", baseSavedAt: "" }), NOW, s)).toBe(true);
+    expect(JSON.parse(m.get("k")!).map((d: EstimateDraft) => d.ctx).sort()).toEqual(["edit|e1", "new|a|||"]);
   });
 });

@@ -1,75 +1,42 @@
-import { useEffect, useMemo, useState } from "react";
-import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
-import { lateAfterOf } from "@/features/scheduleSettings";
-import { View } from "react-native";
-import { isOpenVisit, visitWhen } from "@/features/schedule";
+import { useMemo } from "react";
+import { Linking, Platform, View } from "react-native";
 import { router } from "expo-router";
-import { component, font, motion, size, space } from "@octo/design-tokens";
+import { size, space } from "@octo/design-tokens";
+import { visitDueCents } from "@/features/visitDue";
+import { lateAfterOf } from "@/features/scheduleSettings";
+import { daysSince, isAssigned, isOpenVisit, visitEnd } from "@/features/schedule";
 import { useStore } from "@/data/store";
 import { usePersistentState } from "@/data/persist";
-import { awaitingCounts, funnelShare, periodNumbers, prevReceivedCents, receivedBuckets, receivedIndex, receivedSoFar, type Bucket, type Figure, type Period, type ReceivedIndex } from "@/features/metrics";
+import { awaitingCounts, funnelShare, periodNumbers, prevReceivedCents, receivedBuckets, receivedIndex, receivedSoFar, type Bucket, type Period, type ReceivedIndex } from "@/features/metrics";
 import { todayKey } from "@/features/calendar";
 import { formatDayKey, getZone, minuteIn } from "@/features/zone";
-import { Columns, Meter } from "@/ui/charts";
+import { plateHalves, problemSummary, quietStatuses } from "@/features/planSlots";
+import { timeLead } from "@/features/planFeed";
+import { Columns } from "@/ui/charts";
 import { useI18n } from "@/i18n";
-import { useDevice, useTheme } from "@/theme/ThemeProvider";
-import { buildAttention } from "@/features/attention";
-import { AttentionPeople } from "@/features/AttentionCards";
+import { useTheme } from "@/theme/ThemeProvider";
+import { attentionHref, buildAttention } from "@/features/attention";
+import { waitParams } from "@/features/shortTime";
+import { startsIn, useAttentionNow, useEnRoute, useGreeting, useHomeHeader } from "@/features/AttentionCards";
 import { todayVisits, visitStatus } from "@/features/visits";
 import { crewNow } from "@/features/crewList";
+import { roadShort, visitWho, waitShort } from "@/features/shortTime";
 import { visitContext } from "@/data/selectors";
-import { ListCard } from "@/ui/listCard";
 import { useTick } from "@/features/sheets";
-import { NoticesCard } from "@/features/notices";
 import { CompanySetupCard, FirstStepsCard } from "@/features/SetupCards";
-import { Button, Segmented, StatusChip } from "@/ui/controls";
-import { Icon, Press, T, type IconKey } from "@/ui/primitives";
-import { Card, Grid, RowView, Screen, SectionTitle } from "@/ui/surfaces";
-import { StatusNote } from "@/ui/statusNote";
+import { Segmented } from "@/ui/controls";
+import { Collapsible } from "@/ui/collapsible";
+import { GroupRow, ListGroup } from "@/ui/groupedList";
+import { mapsUrl } from "@/ui/listCardLayout";
+import type { NowCardProps } from "@/ui/nowCard";
+import { Icon, T } from "@/ui/primitives";
+import { StatGrid, StatTile } from "@/ui/statTile";
+import { Card, RowView } from "@/ui/surfaces";
+import { OverviewScreen } from "@/ui/templates";
+import type { Visit } from "@/data/types";
 
-/** a tile: label · amount · one line of detail (spec 24 A3: two side by side, the label never wraps) */
-function Kpi({ label, cents, icon, hint, chip, onPress }: { label: string; cents: number; icon: IconKey; hint?: string; chip?: string; onPress?: () => void }) {
-  const { moneyWhole } = useI18n();
-  const { c } = useTheme();
-  const [w, setW] = useState(0);
-  const value = moneyWhole(cents);
-  // long amounts in a narrow tile (820 two-up) take the smaller size instead of «…» (unslop 05.11)
-  // w is the content width (measured inside the card padding): compare with it once, and show the amount only then
-  const small = value.length * font.size.title * 0.65 > w;
-  return (
-    <Card
-      style={{ padding: space[3], flex: 1 }}
-      containerStyle={{ flex: 1 }}
-      onPress={onPress}
-      // the amount and the overdue status are read too, not only the title (review #270)
-      accessibilityLabel={[`${label}: ${value}`, hint, chip].filter(Boolean).join(", ")}
-    >
-      <View onLayout={(e) => setW(e.nativeEvent.layout.width)}>
-        <RowView gap={space[1]}>
-          <Icon name={icon} s={size.iconSm} color={c.mut} />
-          <T v="caption" tone="mut" numberOfLines={1} style={{ flex: 1 }}>
-            {label}
-          </T>
-        </RowView>
-      </View>
-      <T v={small ? "heading" : "title"} tabular numberOfLines={1} style={{ opacity: w > 0 ? 1 : 0 }}>
-        {value}
-      </T>
-      <RowView gap={space[1]} style={{ flexWrap: "wrap" }}>
-        {hint ? (
-          <T v="micro" tone="mut">
-            {hint}
-          </T>
-        ) : null}
-        {/* overdue is a status: icon + word (rule 2) */}
-        {chip ? <StatusChip status="bad" label={chip} soft /> : null}
-      </RowView>
-    </Card>
-  );
-}
-
-/** «Получено»: the main number of the period with columns by days / weeks and the change against the same span before */
-function Received({ period, idx, onPress }: { period: Period; idx: ReceivedIndex; onPress: () => void }) {
+/** «Получено» (folded under «Подробнее»): the main number of the period, columns by days / weeks, the change against the span before */
+function Received({ period, idx }: { period: Period; idx: ReceivedIndex }) {
   const { t, moneyWhole, lang } = useI18n();
   const { c } = useTheme();
   const today = todayKey();
@@ -87,8 +54,7 @@ function Received({ period, idx, onPress }: { period: Period; idx: ReceivedIndex
   const chart = t("today2.chartA11y", { list: buckets.filter((b) => !b.future).map((b) => `${label(b)} ${moneyWhole(b.cents)}`).join(", ") });
   return (
     <Card
-      onPress={onPress}
-      // the card is one button: it carries the change and the chart for VoiceOver (the chart inside is not focusable)
+      onPress={() => router.push(`/figures/received?period=${period}`)}
       accessibilityLabel={[`${t("today.received")}: ${moneyWhole(total.cents)}`, change, empty ? t("today2.empty") : chart].filter(Boolean).join(". ")}
       style={{ gap: space[3] }}
     >
@@ -97,7 +63,7 @@ function Received({ period, idx, onPress }: { period: Period; idx: ReceivedIndex
         <T v="caption" tone="mut" style={{ flex: 1 }} numberOfLines={1}>
           {t("today.received")}
         </T>
-        {/* growth is not a status — an arrow and words, no colour (spec 24 A3); nothing to compare with → nothing */}
+        {/* growth is not a status — an arrow and words, no colour (spec 24 A3) */}
         {change ? (
           <T v="caption" tone="mut" tabular numberOfLines={1}>
             {change}
@@ -116,6 +82,7 @@ function Received({ period, idx, onPress }: { period: Period; idx: ReceivedIndex
         testID="received-chart"
         items={buckets.map((b) => ({ key: b.from, value: b.cents, label: label(b), valueLabel: moneyWhole(b.cents), current: b.current, future: b.future }))}
       />
+      {/* nothing came in yet: only the tracks and this line (spec 24 A, e2e 116) */}
       {empty ? (
         <T v="caption" tone="mut">
           {t("today2.empty")}
@@ -125,181 +92,226 @@ function Received({ period, idx, onPress }: { period: Period; idx: ReceivedIndex
   );
 }
 
-/** One funnel step: a count (no money — it is in «Получено» and the tiles), a neutral bar, the share in words. */
-function FunnelRow({ icon, label, count, max, share, index, onPress }: { icon: IconKey; label: string; count: number; max: number; share?: string; index: number; onPress?: () => void }) {
-  const { c } = useTheme();
-  return (
-    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={`${label}: ${count}`}>
-      <View style={{ minHeight: component.rowOption, justifyContent: "center", gap: space[1] }}>
-        <RowView gap={space[3]}>
-          <Icon name={icon} />
-          <T v="body" w="semibold" style={{ flex: 1 }} numberOfLines={1}>
-            {label}
-          </T>
-          <T v="body" w="semibold" tabular>
-            {String(count)}
-          </T>
-          {onPress ? <Icon name="chevronRight" s={size.iconSm} color={c.mut} /> : null}
-        </RowView>
-        <Meter share={max > 0 ? count / max : 0} index={index} />
-        {share ? (
-          <T v="caption" tone="mut" tabular>
-            {share}
-          </T>
-        ) : null}
-      </View>
-    </Press>
-  );
-}
+/** how many visits of the crews the Overview lists before «План ›» */
+const CREW_MAX = 6;
 
-/** Owner home: money for today / week / month, the sales funnel and what needs a decision. */
-/** the home cards have come in once in this session (spec 24 A4) */
-let homeAppeared = false;
-
+/**
+ * «Главная» of the office — template «Обзор» (BUILD-SPEC §2.1, wireframes v2 №1, LAYOUT-RULES §3).
+ * Работа экрана: что мне делать сейчас — следующий выезд и что горит.
+ * The greeting with search · bell · profile and «＋» → «Дальше» (the NowCard, the ONE main button: «В пути» on my own visit,
+ * «Открыть выезд» on a crew's, the first verb of «Требует действия» when the day is over) → «Требует действия» (≤ 3, «Все ›»)
+ * → the tiles 2×2 (each opens its filtered list) → «Сегодня у бригад» (rows of the day, «Назначить» on a visit with no tech)
+ * → «Подробнее» (folded: the period, «Получено» with columns, the funnel) → the setup of a new company.
+ */
 export default function Today() {
   useTick();
-  const reduce = useReducedMotion();
-  // the cards come in once per session (A4): opacity 0 → 1 and 8 px up, durSlow; own shared values, so nothing can
-  // stay hidden on the web (a layout «entering» with initial values left the cards at opacity 0 there)
-  const [animate] = useState(() => !reduce && !homeAppeared);
-  const shown = useSharedValue(animate ? 0 : 1);
-  useEffect(() => {
-    homeAppeared = true;
-    if (animate) shown.value = withTiming(1, { duration: motion.durSlow, easing: Easing.bezier(...motion.easeOut) });
-  }, [animate, shown]);
-  const appearStyle = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ translateY: (1 - shown.value) * space[2] }] }));
-  const { t, day, time } = useI18n();
-  const { db, role, rejectedOps } = useStore();
+  const { t, time, day: dayOf, moneyWhole, tn, duration } = useI18n();
+  const { db, role, rejectedOps, mode } = useStore();
+  const greeting = useGreeting();
+  const header = useHomeHeader();
   const [period, setPeriod] = usePersistentState<Period>("octo.todayPeriod.v1", "today");
-  // the company's day and zone are part of the key: left open overnight (useTick re-renders), the numbers move to
-  // the new day at midnight, not when db changes next (review #270); a new company zone re-sorts the payments
+  const [details, setDetails] = usePersistentState<boolean>("octo.todayDetails.v1", false);
+  // the company's day and zone are part of the key: left open overnight the numbers move to the new day (review #270)
   const today = todayKey();
   const zone = getZone();
   const n = useMemo(() => periodNumbers(db, period, today), [db, period, today]);
-  // received money by day: one pass over the payments, rebuilt only when they or the zone change (review #270)
   const idx = useMemo(() => receivedIndex(db.payments, zone), [db.payments, zone]);
-  const { device } = useDevice();
-  // every number opens exactly the records it counts, for the same period (founder 05.11); back → Today
-  const open = (f: Figure) => router.push(`/figures/${f}?period=${period}`);
   // a money change the server refused is first here too (docs/specs/23 §3)
-  const attention = buildAttention(db, role, undefined, { rejected: rejectedOps });
-  // invited or switched off people are not a crew (7-2)
-  const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
+  const attention = buildAttention(db, role, undefined, { rejected: rejectedOps, mode });
+  const att = useAttentionNow(attention);
   const aw = awaitingCounts(db);
-  const fmax = Math.max(n.leads, n.sent, n.signed);
-  const shareText = (key: "today2.ofLeads" | "today2.ofSent", v: number | undefined) => (v === undefined ? undefined : t(key, { n: v }));
-  const received = <Received period={period} idx={idx} onPress={() => open("received")} />;
-  const tiles = (
-    <View style={{ flexDirection: "row", gap: space[2] }}>
-      <Kpi label={t("today.signed")} cents={n.signedCents} icon="signature" hint={t("today.nEstimates", { n: n.signed })} onPress={() => open("signed")} />
-      <Kpi
-        label={t("today.awaiting")}
-        cents={n.awaitingCents}
-        icon="invoice"
-        hint={t("today2.nInvoices", { n: aw.open })}
-        chip={aw.overdue > 0 ? t("today2.overdue", { n: aw.overdue }) : undefined}
-        onPress={() => router.push("/invoice?f=owed")}
+  const got = receivedSoFar(idx, "today", today);
+  const leadsWaiting = attention.filter((x) => x.kind === "lead");
+  // a refused money change is never only a tile away (docs/specs/23 §3, rule 6): its own row above the tiles until it is sorted out
+  const refused = attention.filter((x) => x.kind === "rejected");
+  const longest = Math.max(0, ...leadsWaiting.map((x) => Number(x.params.m) || 0));
+  const estWaiting = db.estimates.filter((e) => e.status === "sent").length;
+
+  // «Дальше»: the next visit of the day; the running ones are in «Сегодня у бригад»
+  const day = todayVisits(db);
+  // a visit nobody started whose window is over is «Пропущен» (a row of «Сегодня у бригад»), never «Дальше» with «В пути»
+  const nowMs = Date.now();
+  const { current, next } = crewNow(day.filter((x) => isOpenVisit(x) && !(x.step === "scheduled" && Date.parse(visitEnd(x)) <= nowMs)));
+  const v: Visit | undefined = next ?? current;
+  const enRoute = useEnRoute(v);
+  const nextCard = ((): Omit<NowCardProps, "testID"> => {
+    if (!v) {
+      // the day has no more visits: the first of «Требует действия» is the step («Ответить Kevin»)
+      const first = att.lines.find((x) => x.verb);
+      if (first?.verb)
+        return {
+          kicker: t("todayR.next"),
+          status: { status: first.status, label: first.chip },
+          title: first.name,
+          sub: first.reason,
+          main: { label: t("proto.home.verbFor", { verb: first.verb.label, name: first.name.split(/\s+/)[0] ?? "" }), onPress: first.verb.onPress, testID: "home-main-verb" },
+        };
+      return { kicker: t("todayR.next"), empty: t("todayR.noVisits") };
+    }
+    const { customer, property, job } = visitContext(db, v);
+    const running = v.step !== "scheduled";
+    const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, v));
+    const mine = isAssigned(v, db.me);
+    // «мастер»: the assignee's first name; a sub — its company and «субподрядчик» (bug 20.11: «Valley · мастер»); nobody — «Не назначен»
+    const who = visitWho(v, db.members, t);
+    const tel = customer?.phone?.replace(/[^\d+]/g, "");
+    const addr = property ? `${property.address}, ${property.city}` : undefined;
+    // visual v2 макет 1: «1420 Oak Grove Ave, Pasadena» — the street and the city, no state and zip in the card's one line
+    const place = property ? [property.address, property.place?.city ?? property.city.split(",")[0]].filter(Boolean).join(", ") : undefined;
+    const soon = running ? undefined : startsIn(v.start, Date.now(), t);
+    // «8:30–12:30 PM»: one «PM» when both ends share it (planSlots.plateHalves)
+    const [a, b] = plateHalves(time(v.start), time(visitEnd(v)));
+    const due = visitDueCents(db, v);
+    // «в дороге»: only what the visit knows — the minutes since the tech left (`enRouteAt`); the demo has no route time to the address
+    // (no geo of the properties), so a visit not on its way says what is due on it instead (px1, report 21.11)
+    // short words (bug 20.11: «20 ч 26 мин в дороге»): «25 мин», «2 ч», past 3 h — since when («с 8:34», «с вчера»)
+    const road = v.step === "en_route" && v.enRouteAt ? roadShort(v.enRouteAt, Date.now(), t, { time, day: dayOf }) : null;
+    return {
+      kicker: t(running ? "px1.now" : "todayR.next"),
+      soon,
+      window: v.allDay ? t("plan5.allDay") : `${a}–${b}`,
+      big: true,
+      status: running || !soon ? (st.status === "neutral" ? undefined : { status: st.status, label: t(st.label) }) : undefined,
+      title: customer?.name ?? db.leads.find((l) => l.id === v.leadId)?.name ?? "—",
+      // visual v2 «Дальше»: «работа · адрес» in one quiet line; the route is the dark button of the pair, not a link
+      // v2 макет 1 «Bathroom remodel · 1420 Oak Grove Ave, Pasadena»: the job's name before its «: details», so the address fits the line
+      // #2363 F22: the job and the address are two lines — the address is never cut in the middle of a word
+      sub: [job?.title.split(":")[0]?.trim(), place].filter(Boolean).join("\n"),
+      // «Работа · 0 из 4 · 0 %» — the visit's work list in words (no bar)
+      progress: v.checklist.length ? { caption: t("px1.work"), value: v.checklist.filter((x) => x.done).length, max: v.checklist.length, label: v.checklist.some((x) => x.done) ? t("w2a.ofN", { a: v.checklist.filter((x) => x.done).length, b: v.checklist.length }) : tn("r1.itemsN", v.checklist.length) } : undefined,
+      // «тройка цифр»: how long on site · on the way (or what is due) · who
+      trio: [
+        { value: v.allDay ? t("plan5.allDay") : duration(v.durationMin), label: t("w2a.onSite") },
+        road !== null ? { value: road, label: t("px1.onRoad") } : due > 0 ? { value: moneyWhole(due), label: t("px1.due") } : { value: t("w2a.ofN", { a: v.checklist.filter((x) => x.done).length, b: v.checklist.length }), label: t("w2a.checklist") },
+        { value: who.value, label: who.label },
+      ],
+      // my own visit not started — «✓ В пути» (the same step as on the visit); a crew's or a running one — open it
+      main:
+        !running && mine
+          ? { label: t("proto.visit.enRoute"), onPress: enRoute.go, testID: "home-main-en-route" }
+          : { label: t("todayR.openVisit"), onPress: () => router.push(`/visit/${v.id}`), testID: "home-main-open" },
+      mainIcon: !running && mine ? "check" : undefined,
+      // the pair is the driver's: «В пути» · «Маршрут» · «☎» on my own visit; a crew's one only opens
+      second: addr && !running && mine ? { label: t("proto.visit.route"), icon: "route", onPress: () => void Linking.openURL(mapsUrl(addr, Platform.OS)).catch(() => {}), testID: "home-route" } : undefined,
+      icon: tel && !running && mine ? { icon: "phone", a11y: `${t("proto.visit.call")} ${customer?.name ?? ""}`, onPress: () => void Linking.openURL(`tel:${tel}`).catch(() => {}), testID: "home-call" } : undefined,
+    };
+  })();
+
+  // «Сегодня у бригад» (v2 макет 1): a card per visit — the hour in the square 40, the client 15/700, «работа · мастер» 12, a pill on the
+  // right; a problem (late, missed, no tech) is a pill on its FIRST row only, the others say it as a quiet word (audit 12 §2.3)
+  const crew = day.slice(0, CREW_MAX);
+  const crewSt = crew.map((x) => {
+    const free = !(x.assigneeIds ?? (x.techId ? [x.techId] : [])).some((id) => db.members.some((m) => m.id === id));
+    if (free) return { status: "warn" as const, label: t("proto.home.noTech"), kind: null };
+    const st = visitStatus(x, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, x));
+    const kind = st.label === "st.missed" ? ("missed" as const) : st.label === "late.enRoute" || st.label === "late.notLeft" ? ("late" as const) : null;
+    // «Запланирован» says nothing more than its hour
+    return x.step === "scheduled" && st.status === "neutral" ? undefined : { status: st.status, label: kind === "late" ? t("st.late") : t(st.label), kind };
+  });
+  const crewShown = quietStatuses(crewSt.map((s) => s?.status));
+  const sum = problemSummary(crewSt.map((s) => s?.kind));
+  const crewRows = crew.map((x, i) => {
+    const { customer, job } = visitContext(db, x);
+    const name = customer?.name ?? db.leads.find((l) => l.id === x.leadId)?.name ?? "—";
+    const techs = (x.assigneeIds ?? (x.techId ? [x.techId] : [])).map((id) => db.members.find((m) => m.id === id)?.name?.split(/\s+/)[0]).filter(Boolean).join(", ");
+    const s = crewSt[i];
+    // #2363 F20/F24: a row of ONE group (rule 12); the line is «работа · мастер» only, the state is a one-word pill on every
+    // row whose state says more than its hour — never glued into the line
+    // the office's overview: every state beyond «Запланирован» is a pill («Идёт работа» says which crew works)
+    const odd = !!s;
+    return (
+      <GroupRow
+        key={x.id}
+        testID="crew-row"
+        wrap
+        lead={x.allDay ? { icon: "calendar" } : { time: timeLead(time(x.start)).top, sub: timeLead(time(x.start)).bottom || undefined }}
+        title={name}
+        // #2363 F24: «работа · мастер» — the tech never stands alone on the second line (no-break spaces around «·»)
+        subtitle={[job?.title?.split(":")[0]?.trim() ?? t("st.inspection"), techs].filter(Boolean).join("\u00a0·\u00a0")}
+        status={odd ? { status: s.status, label: s.label } : undefined}
+        onPress={() => router.push(`/visit/${x.id}`)}
       />
-    </View>
-  );
-  const funnel = (
-    <Card>
-      <SectionTitle title={`${t("today.funnel")} · ${t(period === "today" ? "today.title" : period === "week" ? "plan.week" : "plan.month")}`} />
-      <FunnelRow icon="inbox" index={0} label={t("today.f.leads")} count={n.leads} max={fmax} onPress={() => open("leads")} />
-      <FunnelRow icon="send" index={1} label={t("today.f.sent")} count={n.sent} max={fmax} share={shareText("today2.ofLeads", funnelShare(n.sent, n.leads))} onPress={() => open("sent")} />
-      <FunnelRow icon="signature" index={2} label={t("today.f.signed")} count={n.signed} max={fmax} share={shareText("today2.ofSent", funnelShare(n.signed, n.sent))} onPress={() => open("signed")} />
-    </Card>
-  );
+    );
+  });
+  void crewShown;
+  void sum;
+  // «Сметы ждут · до 6 дн»: the longest wait of a sent estimate
+  const estDays = Math.max(0, ...db.estimates.filter((e) => e.status === "sent").map((e) => daysSince(e.sentAt) ?? 0));
+
   return (
-    <Screen title={t("today.title")} help={t("help.today")} hintKey="today" fab="home" home subtitle={day(new Date().toISOString())}>
-      <Segmented<Period>
-        value={period}
-        onChange={setPeriod}
-        items={[
-          { key: "today", label: t("today.title") },
-          { key: "week", label: t("plan.week") },
-          { key: "month", label: t("plan.month") },
-        ]}
-      />
-      {/* spec 24 A: the main number with columns, two tiles, the funnel in counts as bars (founder 07.11) */}
-      {/* the cards come in once per session (A4: FadeInDown 8, durSlow); not again on coming back to the tab */}
-      <Animated.View style={[{ gap: space[3] }, appearStyle]}>
-        {device === "desktop" ? (
-          // 1280: «Получено» | funnel | tiles + company setup (A3) — three full columns
-          <Grid>
-            {received}
-            {funnel}
-            <View style={{ gap: space[3] }}>
-              {tiles}
-              <CompanySetupCard />
-            </View>
-          </Grid>
-        ) : (
-          <>
-            <Grid>
-              {received}
-              <View style={{ gap: space[3] }}>
-                {tiles}
-                {funnel}
-              </View>
-            </Grid>
-            <CompanySetupCard />
-          </>
-        )}
-      </Animated.View>
+    <OverviewScreen
+      testID="today"
+      title={greeting}
+      greeting={header.greeting}
+      headerIcons={header.icons}
+      create={header.create}
+      onCreate={header.onCreate}
+      next={nextCard}
+    >
+      {/* v2 макет 1: «Требует действия» is the 2 × 2 tiles (the rows of the queue are «Все ›» — Triage); each opens exactly the records
+          it counts (founder 05.11); a zero tile is not drawn; none is yellow — the Home's one yellow is «В пути» */}
+      {refused.length ? (
+        <ListGroup testID="today-refused">
+          {refused.map((it) => (
+            <GroupRow
+              key={it.id}
+              testID={`home-${it.id}`}
+              title={t(it.label, waitParams(it.params, t))}
+              status={{ status: it.status, label: t(it.chip, waitParams(it.params, t)) }}
+              lead={{ icon: "alert" }}
+              onPress={() => router.push(attentionHref(it))}
+            />
+          ))}
+        </ListGroup>
+      ) : null}
+      <ListGroup title={t("todayR.action")} all={{ label: t("todayR.all"), onPress: () => router.push("/triage"), testID: "home-attention-all" }} bare testID="today-attention">
+        <StatGrid testID="today-tiles">
+          <StatTile testID="tile-leads" icon="leads" dense label={t("proto.home.tile.leads")} value={leadsWaiting.length} unit={longest ? t("px1.tile.leadsWait", { m: waitShort(longest, t) }) : undefined} onPress={() => router.push("/leads")} />
+          <StatTile testID="tile-estimates" icon="doc" dense label={t("px1.tile.estimates")} value={estWaiting} unit={estDays ? t("px1.tile.estDays", { n: estDays }) : undefined} onPress={() => router.push("/estimates")} />
+          <StatTile testID="tile-owed" icon="dollar" dense label={t("proto.home.tile.owed")} value={moneyWhole(n.awaitingCents)} unit={aw.overdue ? t("px1.tile.overdue", { n: aw.overdue }) : undefined} unitTone="bad" onPress={() => router.push("/invoice?f=owed")} />
+          <StatTile testID="tile-received" icon="trend" dense label={t("proto.home.tile.received")} value={moneyWhole(got.cents)} unit={got.count ? tn("px1.payN", got.count) : undefined} onPress={() => router.push("/figures/received?period=today")} />
+        </StatGrid>
+      </ListGroup>
+      <ListGroup title={t("proto.home.crews")} all={{ label: t("plan.title"), onPress: () => router.push("/plan"), testID: "crew-plan" }} testID="today-crews">
+        {crewRows}
+      </ListGroup>
+      {/* the chart and the funnel are details (П9): folded by default, the choice is kept */}
+      <Collapsible testID="today-details" title={t("todayR.details")} open={details} onToggle={setDetails}>
+        <View style={{ gap: space[3] }}>
+          <Segmented<Period>
+            testID="today-period"
+            value={period}
+            onChange={setPeriod}
+            items={[
+              { key: "today", label: t("today.title") },
+              { key: "week", label: t("plan.week") },
+              { key: "month", label: t("plan.month") },
+            ]}
+          />
+          <Received period={period} idx={idx} />
+          <ListGroup title={t("today.funnel")} inset={space[4]}>
+            <GroupRow testID="today-f-leads" title={t("today.f.leads")} value={String(n.leads)} onPress={() => router.push(`/figures/leads?period=${period}`)} />
+            <GroupRow
+              testID="today-f-sent"
+              title={t("today.f.sent")}
+              subtitle={funnelShare(n.sent, n.leads) === undefined ? undefined : t("today2.ofLeads", { n: funnelShare(n.sent, n.leads)! })}
+              value={String(n.sent)}
+              onPress={() => router.push(`/figures/sent?period=${period}`)}
+            />
+            <GroupRow
+              testID="today-f-signed"
+              title={t("today.f.signed")}
+              subtitle={[moneyWhole(n.signedCents), funnelShare(n.signed, n.sent) === undefined ? undefined : t("today2.ofSent", { n: funnelShare(n.signed, n.sent)! })].filter(Boolean).join(" · ")}
+              value={String(n.signed)}
+              onPress={() => router.push(`/figures/signed?period=${period}`)}
+            />
+          </ListGroup>
+        </View>
+      </Collapsible>
+      <CompanySetupCard />
       <FirstStepsCard />
-      <NoticesCard />
-      <Grid>
-        <View style={{ gap: space[2] }}>
-          {/* the count sits next to the title, not at the far edge (unslop 05.11) */}
-          <SectionTitle title={attention.length ? `${t("today.attention")} · ${attention.length}` : t("today.attention")} />
-          {attention.length === 0 ? (
-            <StatusNote tone="ok" v="body">
-              {t("today.allClear")}
-            </StatusNote>
-          ) : (
-            // people view (spec 06 decision 5): one card per client with all reasons, 3 people + «More» → Triage
-            <AttentionPeople items={attention} max={3} />
-          )}
-        </View>
-        <View style={{ gap: space[2] }}>
-          <SectionTitle title={t("today.crew")} right={<Button label={t("plan.title")} icon="calendar" size="sm" variant="ghost" onPress={() => router.push("/plan")} />} />
-          {/* one list card per tech (spec 06, PR10a): where now, what next, call / SMS; a column like «Требует внимания» */}
-          <View style={{ gap: space[2] }}>
-            {techs.map((m) => {
-              const vs = todayVisits(db, m.id);
-              const { current, next } = crewNow(vs);
-              const st = current ? visitStatus(current, db.members, Date.now(), lateAfterOf(db)) : next ? visitStatus(next, db.members, Date.now(), lateAfterOf(db)) : null;
-              const where = (v: typeof current) => {
-                if (!v) return undefined;
-                const { customer, property } = visitContext(db, v);
-                return [customer?.name, property ? `${property.address}, ${property.city}` : undefined].filter(Boolean).join(" · ");
-              };
-              return (
-                <ListCard
-                  key={m.id}
-                  testID="crew-card"
-                  title={m.name}
-                  when={t("visits.count", { n: vs.length })}
-                  lead={{ kind: "initials", text: m.initials, dashed: m.kind === "sub" }}
-                  // read only: the visit's own status (its steps move on the visit screen)
-                  status={st ? { tone: st.status, label: t(st.label) } : { tone: "neutral", label: t("plan.free") }}
-                  facts={{
-                    phone: m.phone,
-                    now: where(current),
-                    next: next ? [visitWhen(next, time, t("plan5.allDay"), false), visitContext(db, next).customer?.name].filter(Boolean).join(" · ") : undefined,
-                  }}
-                  // a tech: call / SMS only (his address is not a place to go)
-                  contact={{ phone: m.phone }}
-                  edge={null}
-                  density="rich"
-                  onPress={() => router.push(current ? `/visit/${current.id}` : "/plan")}
-                />
-              );
-            })}
-          </View>
-        </View>
-      </Grid>
-    </Screen>
+      {att.sheets}
+      {enRoute.sheet}
+    </OverviewScreen>
   );
 }

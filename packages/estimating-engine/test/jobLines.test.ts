@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { jobLineQty, jobLinesTotals, taxModeFor } from "../src/jobLines.js";
+import { dec } from "../src/decimal.js";
+import { lineTotal } from "../src/estimate.js";
 
 // The same numbers are checked in the database (supabase/tests/core_rls.sql T41, app.job_lines_totals). Test prices.
 const JOB_LINES_CASE = {
@@ -39,5 +41,23 @@ describe("job lines (a job without an estimate)", () => {
     expect(taxModeFor(true)).toBe("exempt");
     expect(taxModeFor(false)).toBe("added_on_top");
     expect(taxModeFor(undefined)).toBe("added_on_top");
+  });
+});
+
+// #817 (founder 11.11, release plan §8.1 п.3, G-15): a gutter's length in the estimate as on the drawing, within 1/16″ —
+// four places of a foot (numeric(14,4)); the line's cents are qty × price, half up, the same as the server's
+// floor(quantity * unit_price_cents + 0.5)
+describe("#817 a length in feet to four places, and its cents", () => {
+  it("40′ 5″ → 40.4167 ft (not 40.42 = 40′ 5 1/16″); 19′ 2″ → 19.1667", () => {
+    expect(jobLineQty(dec(485).div(12))).toBe("40.4167");
+    expect(jobLineQty(dec(230).div(12))).toBe("19.1667");
+  });
+  it("the line: 40.4167 × $12.34 = $498.74 (49874.2078¢ → 49874); 19.1667 × $11.99 → 22981 (it was 19.17 → 22985)", () => {
+    expect(lineTotal({ name: "Gutter", quantity: jobLineQty(dec(485).div(12)), unitPriceCents: 1234 })).toBe(49874);
+    expect(lineTotal({ name: "Gutter", quantity: jobLineQty(dec(230).div(12)), unitPriceCents: 1199 })).toBe(22981);
+  });
+  it("half a cent goes up, as on the server", () => {
+    expect(lineTotal({ name: "x", quantity: "0.0005", unitPriceCents: 1000 })).toBe(1); // 0.5¢ → 1
+    expect(lineTotal({ name: "x", quantity: "0.0004", unitPriceCents: 1000 })).toBe(0); // 0.4¢ → 0
   });
 });

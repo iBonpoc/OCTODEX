@@ -54,7 +54,8 @@ exports.run = async (h) => {
   await h.go("/settings");
   await h.expectText(/Местоположение/, "«Настройки приложения» has the section when the company allows it");
   await h.expectText(/Хранится 30 дней/, "it says how long and what turning off does");
-  await p.getByRole("radio", { name: "Не делиться", exact: true }).last().click();
+  await p.getByTestId("loc7b-switch").locator("visible=true").first().click(); // the row with the switch (spec 56 wave 4б), not two chips
+  h.expect((await p.getByRole("switch", { name: "Делиться во время выезда" }).last().getAttribute("aria-checked")) !== "true", "the switch is off");
   await h.expectText(/Геопозиция выключена, точки удалены/, "a toast with Undo (rule 5)");
   await p.waitForTimeout(5500);
   const d = await h.db();

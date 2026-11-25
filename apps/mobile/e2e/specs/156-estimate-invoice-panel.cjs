@@ -12,19 +12,20 @@ const panel = (h) => h.page.getByTestId("list-panel").locator("visible=true");
 const openIs = (h, id) => h.page.waitForFunction((w) => (new URLSearchParams(location.search).get("open") ?? "") === w, id, { timeout: 4000 }).then(() => true, () => false);
 
 /** the first two rows of a list, as ids (a row's label starts with the client's name; the ids come from the db in order) */
-async function rows(h, list) {
-  const cards = h.page.locator('[data-testid="list-card"]:visible');
+async function rows(h, list, rowId) {
+  // v2 (rule 12): the rows are GroupRows, `est-row-<id>` / `invoice-row-<id>`
+  const cards = h.page.locator(`[data-testid^="${rowId}-"]:visible`);
   await cards.first().waitFor();
   const n = await cards.count();
   h.expect(n >= 2, `${list}: two rows at least (${n})`);
   return cards;
 }
 
-async function check(h, { list, card, query = "" }) {
+async function check(h, { list, card, rowId, query = "" }) {
   const p = h.page;
   const desk = h.layout.width >= 1280;
   await h.go(list + query);
-  const cards = await rows(h, list);
+  const cards = await rows(h, list, rowId);
   const keep = new URLSearchParams(query.slice(1));
   // the list's own address (?f=, ?customer=) stays with ?open= through open, ↓ and Esc
   const kept = () => [...keep].every(([k, v]) => new URLSearchParams(new URL(h.page.url()).search).get(k) === v);
@@ -59,8 +60,8 @@ exports.run = async (h) => {
   const p = h.page;
   await h.go("/today");
   await role(h, "director");
-  await check(h, { list: "/estimates", card: "/estimate" });
-  await check(h, { list: "/invoice", card: "/invoice", query: "?f=all" });
+  await check(h, { list: "/estimates", card: "/estimate", rowId: "est-row" });
+  await check(h, { list: "/invoice", card: "/invoice", rowId: "invoice-row", query: "?f=all" });
   const db = await h.db();
 
   // narrow window + a link with ?open=: the card's own screen

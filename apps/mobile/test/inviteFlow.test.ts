@@ -59,6 +59,16 @@ describe("joining by the link", () => {
     expect((await joinInvite(undefined, { store: s, reload, accept })).kind).toBe("joined");
     expect(s.m.has(peekInviteKey)).toBe(false);
   });
+  it("spec 42 S28(в), #1673: joined — the company just joined is handed to the reload (it opens), an odd answer — none", async () => {
+    const B = "cb000000-0000-4000-8000-000000000000";
+    const asked: (string | null)[] = [];
+    const rl = async (id: string | null) => void asked.push(id);
+    const r = await joinInvite(TOKEN, { store: rec(), reload: rl, accept: async () => ({ company_id: B, role: "tech", repeat: false }) });
+    expect(r).toEqual({ kind: "joined", companyId: B });
+    const odd = await joinInvite(TOKEN, { store: rec(), reload: rl, accept: async () => ({ company_id: "../x" }) });
+    expect(odd).toEqual({ kind: "joined", companyId: null });
+    expect(asked).toEqual([B, null]);
+  });
   it("a link in the address is remembered for the retry when the consent is missing", async () => {
     const s = rec();
     const r = await joinInvite(TOKEN, { store: s, reload, accept: async () => { throw new Error("legal not accepted"); } });

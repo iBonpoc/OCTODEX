@@ -40,3 +40,4 @@ yarn-error.*
 /ios
 /android
 e2e/out/
+e2e/visual/out/

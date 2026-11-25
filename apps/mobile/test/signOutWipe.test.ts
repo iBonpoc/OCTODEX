@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: {} }));
 
-import { holdsLocalOnly, SIGNOUT_WIPE_KEY, signOutAndMark, signOutKeys, wipeAfterSignOut, wipeSignOutIfPending, forgetSignOutMark, type WipeStore } from "../src/cloud/signOutWipe";
+import { countUnsentDrafts, holdsLocalOnly, SIGNOUT_DRAFTS_KEY, SIGNOUT_WIPE_KEY, signOutAndMark, signOutKeys, wipeAfterSignOut, wipeLeftCompanies, wipeSignOutIfPending, forgetSignOutMark, type WipeStore } from "../src/cloud/signOutWipe";
 import { createWriter, liveWriters, type Writer } from "../src/data/persist";
 
 const me = "u1";
@@ -26,7 +26,7 @@ function mem(init: Record<string, string>) {
 }
 
 describe("unit:signOutWipe — which keys (#1633)", () => {
-  it("my caches (every company), their copies and the person-less ones to check; the outbox, refused changes, drafts, others' stay", () => {
+  it("my caches (every company), their copies and the person-less ones to check; my drafts only when asked to; the outbox, refused changes, the demo's drafts, others' stay", () => {
     const keys = [
       "octo.cloud.v1.c1.u1",
       "octo.cloud.v1.c2.u1",
@@ -35,6 +35,9 @@ describe("unit:signOutWipe — which keys (#1633)", () => {
       "octo.cloud.v1.rejected",
       "octo.outbox.v1",
       "octo.drafts.v1.c1.u1",
+      "octo.drafts.v1.c1.u2",
+      "octo.drafts.v1.demo",
+      "octo.broken.octo.drafts.v1.c2.u1.1700000000000",
       "octo.broken.octo.cloud.v1.c1.u1.1700000000000",
       "octo.broken.octo.cloud.v1.c1.u2.1700000000000",
       "octo.broken.octo.cloud.v1.c1.1700000000000",
@@ -43,6 +46,14 @@ describe("unit:signOutWipe — which keys (#1633)", () => {
     ];
     const { mine, legacy } = signOutKeys(keys, me);
     expect(mine.sort()).toEqual(["octo.broken.octo.cloud.v1.c1.u1.1700000000000", "octo.cloud.v1.c1.u1", "octo.cloud.v1.c2.u1"]);
+    // #1662: «Выйти и стереть» — my drafts and their copies too, never the demo's or another person's
+    expect(signOutKeys(keys, me, undefined, true).mine.sort()).toEqual([
+      "octo.broken.octo.cloud.v1.c1.u1.1700000000000",
+      "octo.broken.octo.drafts.v1.c2.u1.1700000000000",
+      "octo.cloud.v1.c1.u1",
+      "octo.cloud.v1.c2.u1",
+      "octo.drafts.v1.c1.u1",
+    ]);
     expect(legacy.sort()).toEqual(["octo.broken.octo.cloud.v1.c1.1700000000000", "octo.cloud.v1.c1"]);
   });
   it("a refused photo or receipt is what only the phone has", () => {
@@ -67,6 +78,7 @@ describe("unit:signOutWipe — the wipe (#1633)", () => {
       "octo.drafts.v1.c1.u1": "{}",
     });
     await wipeAfterSignOut(me, { ...nobody, s });
+    // #1662: nobody asked (another device, an expired session): my drafts stay
     expect([...m.keys()].sort()).toEqual(["octo.cloud.v1.c1.u2", "octo.cloud.v1.c8", "octo.cloud.v1.rejected", "octo.drafts.v1.c1.u1", "octo.outbox.v1"]);
     expect(m.get("octo.outbox.v1")).toBe(outbox);
     expect(m.get("octo.cloud.v1.rejected")).toBe(rejected);
@@ -202,5 +214,132 @@ describe("unit:signOutWipe — the sign-out itself (#1633)", () => {
     const { m, s } = mem({});
     await signOutAndMark(authOf({}).auth, null, () => {}, s);
     expect(m.has(SIGNOUT_WIPE_KEY)).toBe(false);
+  });
+});
+
+describe("unit:signOutWipe — the companies the person is no longer in (#1633 A2)", () => {
+  const signedMe = { signedIn: () => me, pauseMs: 0 };
+  const active = (...ids: string[]) => () => new Set(ids);
+  it("read from the device: a company left while the app was closed goes (cache, copy, my person-less one); the active ones stay", async () => {
+    const { m, s } = mem({
+      "octo.cloud.v1.c1.u1": cache(me), // still in
+      "octo.cloud.v1.c2.u1": cache(me), // removed
+      "octo.broken.octo.cloud.v1.c2.u1.1700000000000": cache(me),
+      "octo.cloud.v1.c3": cache(me), // an older person-less one of a company left
+      "octo.cloud.v1.c4": cache("u2"), // someone else's person-less one: whose is not mine
+      "octo.cloud.v1.c2.u2": cache("u2"), // another person in that company
+      "octo.cloud.v1.c1": cache(me), // my person-less one of a company I am still in: the store adopts it
+      "octo.outbox.v1": "[]",
+      "octo.cloud.v1.rejected": "[]",
+    });
+    await wipeLeftCompanies(me, { ...signedMe, active: active("c1"), s });
+    expect([...m.keys()].sort()).toEqual(["octo.cloud.v1.c1", "octo.cloud.v1.c1.u1", "octo.cloud.v1.c2.u2", "octo.cloud.v1.c4", "octo.cloud.v1.rejected", "octo.outbox.v1"]);
+  });
+  it("a cache holding a refused photo or receipt stays", async () => {
+    const { m, s } = mem({ "octo.cloud.v1.c2.u1": cache(me, { expenses: [{ receiptFailed: "x" }] }) });
+    await wipeLeftCompanies(me, { ...signedMe, active: active(), s });
+    expect(m.has("octo.cloud.v1.c2.u1")).toBe(true);
+  });
+  it("the store's last write of the company just left (after the first pass) goes too", async () => {
+    const { m, s } = mem({});
+    const getAllKeys = s.getAllKeys;
+    let n = 0;
+    s.getAllKeys = async () => {
+      if (n++ === 1) m.set("octo.cloud.v1.c2.u1", cache(me)); // landed between the passes
+      return getAllKeys();
+    };
+    await wipeLeftCompanies(me, { ...signedMe, active: active("c1"), s });
+    expect(m.has("octo.cloud.v1.c2.u1")).toBe(false);
+  });
+  it("back in the company meanwhile, or another person signed in: nothing of it goes", async () => {
+    const { m, s } = mem({ "octo.cloud.v1.c2.u1": cache(me) });
+    const now = new Set<string>();
+    const getAllKeys = s.getAllKeys;
+    s.getAllKeys = async () => (now.add("c2"), getAllKeys()); // the newest answer has it again
+    await wipeLeftCompanies(me, { ...signedMe, active: () => now, s });
+    expect(m.has("octo.cloud.v1.c2.u1")).toBe(true);
+    await wipeLeftCompanies(me, { signedIn: () => "u2", pauseMs: 0, active: active(), s });
+    expect(m.has("octo.cloud.v1.c2.u1")).toBe(true);
+  });
+  it("a device that refuses never throws", async () => {
+    const { s } = mem({});
+    s.getAllKeys = async () => Promise.reject(new Error("SQLITE_BUSY"));
+    await expect(wipeLeftCompanies(me, { ...signedMe, active: active(), s })).resolves.toBeUndefined();
+  });
+});
+
+describe("unit:signOutWipe — drafts not saved, asked about before the sign-out (#1662)", () => {
+  const now = Date.parse("2026-11-15T12:00:00Z");
+  const draft = (at: string, title = "Roof", lines = 0) => ({ ctx: `new|${at}`, at, estimateId: "e", title, doc: { options: [{ id: "o", name: "A", lines: Array.from({ length: lines }, (_, i) => ({ id: `l${i}`, name: "x", qty: 1, unitPriceCents: 100 })) }] }, checkPrice: [] });
+  it("counts my fresh drafts with a title or a line, in every company; not old ones, empty ones, the demo's or another person's", async () => {
+    const { s } = mem({
+      "octo.drafts.v1.c1.u1": JSON.stringify([draft("2026-11-15T10:00:00Z"), draft("2026-11-14T10:00:00Z", "", 2), draft("2026-11-15T09:00:00Z", "  "), draft("2026-09-01T10:00:00Z")]),
+      "octo.drafts.v1.c2.u1": JSON.stringify([draft("2026-11-15T11:00:00Z")]),
+      "octo.drafts.v1.c1.u2": JSON.stringify([draft("2026-11-15T11:00:00Z")]),
+      "octo.drafts.v1.demo": JSON.stringify([draft("2026-11-15T11:00:00Z")]),
+    });
+    expect(await countUnsentDrafts(me, s, now)).toBe(3);
+  });
+  it("a list that cannot be read counts as one (asked, never wiped silently); a device that refuses never throws", async () => {
+    const { s } = mem({ "octo.drafts.v1.c1.u1": "not json", "octo.drafts.v1.c2.u1": JSON.stringify({ not: "a list" }) });
+    expect(await countUnsentDrafts(me, s, now)).toBe(2);
+    s.getAllKeys = async () => Promise.reject(new Error("SQLITE_BUSY"));
+    await expect(countUnsentDrafts(me, s, now)).resolves.toBe(0);
+  });
+  it("an estimate already saved is not «unsent» (findDraft leaves its draft out the same way)", async () => {
+    const { s } = mem({ "octo.drafts.v1.c1.u1": JSON.stringify([{ ...draft("2026-11-15T10:00:00Z"), estimateId: "e-saved" }, { ...draft("2026-11-15T10:00:00Z"), estimateId: "e-new" }]) });
+    expect(await countUnsentDrafts(me, s, now)).toBe(2);
+    expect(await countUnsentDrafts(me, s, now, (id) => id === "e-saved")).toBe(1);
+  });
+  it("#2381 Б2/Р9: the edits of a SAVED estimate (edit|<id>) are unsent — counted always: the estimate saved, the draft old, the estimate gone", async () => {
+    const edit = (id: string, at: string) => ({ ...draft(at), ctx: `edit|${id}`, estimateId: id, baseSavedAt: "2026-11-01T10:00:00Z" });
+    const { s } = mem({ "octo.drafts.v1.c1.u1": JSON.stringify([edit("e-saved", "2026-09-01T10:00:00Z"), edit("e-gone", "2026-11-15T10:00:00Z")]) });
+    expect(await countUnsentDrafts(me, s, now, (id) => id === "e-saved")).toBe(2);
+  });
+  it("#2381 Ж1 (review 3): the edits of an estimate deleted on another phone (this company, the store loaded) are not asked about", async () => {
+    const edit = (id: string) => ({ ...draft("2026-11-15T10:00:00Z"), ctx: `edit|${id}`, estimateId: id, baseSavedAt: "" });
+    const { s } = mem({ "octo.drafts.v1.c1.u1": JSON.stringify([edit("gone"), edit("e-live")]), "octo.drafts.v1.c2.u1": JSON.stringify([edit("other")]) });
+    // c1 is this company and its estimates are loaded: «gone» is an orphan; c2's edit is not known here — counted
+    const orphan = (key: string, id: string) => key === "octo.drafts.v1.c1.u1" && id === "gone";
+    expect(await countUnsentDrafts(me, s, now, (id) => id === "e-live", orphan)).toBe(2);
+  });
+  const authOk = { getSession: async () => ({ data: { session: null } }), signOut: async () => ({ error: null }) };
+  const three = () => mem({ "octo.drafts.v1.c1.u1": JSON.stringify([draft("2026-11-15T10:00:00Z")]), "octo.drafts.v1.c2.u1": "[]", "octo.drafts.v1.demo": "[]" });
+  it("«Выйти и стереть»: the wipe takes my drafts of every company (the demo's stay); both marks go", async () => {
+    const { m, s } = three();
+    await signOutAndMark(authOk, me, () => {}, s, { wipeDrafts: true });
+    expect(m.get(SIGNOUT_DRAFTS_KEY)).toBe(me);
+    await wipeAfterSignOut(me, { ...nobody, s });
+    expect([...m.keys()]).toEqual(["octo.drafts.v1.demo"]);
+  });
+  it("a plain sign-out, another device or an expired session (no choice made): my drafts stay; an old «wipe» choice is taken away", async () => {
+    const { m, s } = three();
+    m.set(SIGNOUT_DRAFTS_KEY, me); // left over from a sign-out that never happened
+    await signOutAndMark(authOk, me, () => {}, s);
+    expect(m.has(SIGNOUT_DRAFTS_KEY)).toBe(false);
+    await wipeAfterSignOut(me, { ...nobody, s });
+    expect([...m.keys()].sort()).toEqual(["octo.drafts.v1.c1.u1", "octo.drafts.v1.c2.u1", "octo.drafts.v1.demo"]);
+    // the «signed out» event with no sign-out of ours at all (another device): no mark — the same
+    const other = three();
+    await wipeAfterSignOut(me, { ...nobody, s: other.s });
+    expect(other.m.has("octo.drafts.v1.c1.u1")).toBe(true);
+  });
+  it("killed after «Выйти и стереть»: the next start wipes the drafts too; the same person back in — nothing, both marks go", async () => {
+    const a = three();
+    a.m.set(SIGNOUT_WIPE_KEY, me);
+    a.m.set(SIGNOUT_DRAFTS_KEY, me);
+    await wipeSignOutIfPending(null, a.s);
+    expect([...a.m.keys()]).toEqual(["octo.drafts.v1.demo"]);
+    const b = three();
+    b.m.set(SIGNOUT_WIPE_KEY, me);
+    b.m.set(SIGNOUT_DRAFTS_KEY, me);
+    await forgetSignOutMark(me, b.s);
+    expect(b.m.has(SIGNOUT_DRAFTS_KEY)).toBe(false);
+    expect(b.m.has("octo.drafts.v1.c1.u1")).toBe(true);
+  });
+  it("removed from a company (A2): nobody was asked — its drafts stay", async () => {
+    const { m, s } = three();
+    await wipeLeftCompanies(me, { signedIn: () => me, pauseMs: 0, active: () => new Set(["c1"]), s });
+    expect([...m.keys()].sort()).toEqual(["octo.drafts.v1.c1.u1", "octo.drafts.v1.c2.u1", "octo.drafts.v1.demo"]);
   });
 });

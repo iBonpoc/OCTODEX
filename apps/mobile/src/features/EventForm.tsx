@@ -5,21 +5,25 @@ import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { CalendarEvent, CalendarEventKind, ID } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
-import { todayKey, type DayKey } from "@/features/calendar";
+import { addDays, todayKey, type DayKey } from "@/features/calendar";
 import { uid } from "@/features/estimateDoc";
-import { DatePick } from "@/features/DatePick";
 import { eventFields, eventProblems, eventRange } from "@/features/planFeed";
 import { atMinute, SCHEDULE_DEFAULTS } from "@/features/schedule";
-import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
+import { ChoiceChips, Stepper, TextField } from "@/ui/controls";
+import { DateField } from "@/ui/dateField";
+import { ButtonPair } from "@/ui/pairs";
+import { SelectField } from "@/ui/selectField";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { RowView } from "@/ui/surfaces";
-import { StatusNote } from "@/ui/statusNote";
+import { FieldAnchor, FieldError, useRequiredForm, type Problem } from "@/ui/requiredForm";
 
 /**
  * «Событие» and «Выходной» of the Plan (docs/specs/13-app-structure.md §3.2, §2.4; wave 5 PR-B): a name, the person (a day
  * off is always someone's; an event may be the whole company's), the day, «Весь день» with a number of days or a start
- * and a length, a description. Saving with problems is not possible (the same rules as the server, eventProblems).
+ * and a length, a description. Saving with problems is not possible (the same rules as the server, eventProblems) — but nothing
+ * is said before the person tries (#2220, founder 19.11: a new empty form greeted him with «Нужно название» and a dimmed
+ * «Сохранить»): «Сохранить» is always live; pressed with a problem, the form stays, the error is under its field, read aloud,
+ * the first one gets the scroll and the focus (`useRequiredForm`, DS §11 п.2, the same as the other forms).
  * An existing one can be changed or removed («Отменить» for 5 s, rule 5). Days and times are the company's.
  */
 /** `day` — the day picked in the Plan, for a new one */
@@ -65,7 +69,10 @@ function EventSheetBody({ state, onClose, visible, onExited }: { state: NonNulla
   const [startMin, setStartMin] = useState(init.startMin);
   const [duration, setDuration] = useState(init.duration);
   const [description, setDescription] = useState(e?.description ?? "");
-  const [calendar, setCalendar] = useState(false);
+  const form = useRequiredForm();
+  // the start every half hour of the day (the one it has, off the grid, stays); a past day can be picked (a record after the fact)
+  const startItems = useMemo(() => [...new Set([...Array.from({ length: DAY_MIN / STEP }, (_, i) => i * STEP), startMin])].sort((a, b) => a - b), [startMin]);
+  const minDay = useMemo(() => { const back = addDays(todayKey(), -366); return init.day < back ? init.day : back; }, [init.day]);
 
   const value = useMemo(() => {
     const r = eventRange({ day, allDay, days, startMin, duration });
@@ -77,6 +84,24 @@ function EventSheetBody({ state, onClose, visible, onExited }: { state: NonNulla
   const changed = e
     ? (e.title ?? "") !== title || (e.userId ?? "") !== (value.userId ?? "") || e.startsAt !== value.startsAt || e.endsAt !== value.endsAt || e.allDay !== allDay || (e.description ?? "") !== description
     : !!title.trim() || !!description.trim();
+
+  // a problem → the field it is under: «long» is the field that is too long
+  const problemField = (p: (typeof problems)[number]) => (p === "long" ? (title.trim().length > 200 ? "title" : "description") : p);
+  const trySave = () =>
+    form.submit(
+      problems.map((p): Problem => ({ id: problemField(p), text: t(`plan5.ev.problem.${p}` as DictKey) })),
+      save,
+    );
+  const errorOf = (id: string) => form.errors[id];
+  // the error of a chip group or of the time goes when the person changes it (a text field clears its own)
+  const changeWho = (k: string) => {
+    setWho(k as ID | "all");
+    form.field("person").clear();
+  };
+  const timeEdit = (f: () => void) => {
+    f();
+    form.field("time").clear();
+  };
 
   const save = () => {
     const r = store.saveCalendarEvent({ ...value, id });
@@ -96,58 +121,60 @@ function EventSheetBody({ state, onClose, visible, onExited }: { state: NonNulla
   const sheetTitle = t(kind === "time_off" ? (e ? "plan5.timeOff" : "plan5.ev.newTimeOff") : e ? "plan5.event" : "plan5.ev.newEvent");
 
   return (
-    <Sheet visible={visible} onExited={onExited} onClose={onClose} title={sheetTitle} dirty={changed} onSave={problems.length ? undefined : save}>
+    <Sheet visible={visible} onExited={onExited} onClose={onClose} title={sheetTitle} dirty={changed} onSave={trySave}>
       <View style={{ gap: space[3] }}>
         <Field label={t("plan5.ev.name")}>
-          <TextField type="title" value={title} onChangeText={setTitle} placeholder={t(kind === "time_off" ? "plan5.ev.namePhOff" : "plan5.ev.namePh")} />
+          <TextField type="title" value={title} onChangeText={setTitle} placeholder={t(kind === "time_off" ? "plan5.ev.namePhOff" : "plan5.ev.namePh")} field={form.field("title")} testID="ev-title" />
         </Field>
         <Field label={t("plan5.ev.who")}>
-          <ChoiceChips value={who || "_"} onChange={(k) => setWho(k as ID | "all")} items={whoItems} />
+          <FieldAnchor field={form.field("person")} testID="ev-person">
+            <ChoiceChips value={who || "_"} onChange={changeWho} items={whoItems} />
+            <FieldError text={errorOf("person")} testID="ev-person-error" />
+          </FieldAnchor>
         </Field>
-        <Field label={t("plan5.ev.day")}>
-          <RowView style={{ justifyContent: "space-between" }}>
-            <T v="body" style={{ flex: 1 }}>
-              {dayText(atMinute(day, 12 * 60))}
-            </T>
-            <Button label={t("vf.otherDate")} icon="calendar" size="sm" variant="ghost" onPress={() => setCalendar((x) => !x)} />
-          </RowView>
-          {calendar ? <DatePick value={day} onPick={(k) => { setDay(k); setCalendar(false); }} /> : null}
-        </Field>
-        {/* chips, not a switch: the form keeps one yellow — «Сохранить» (rule 2) */}
+        {/* chips, not a switch: the form keeps one yellow — «Сохранить» (rule 2); above the day: they decide if a time stands beside it */}
         <ChoiceChips
           value={allDay ? "allDay" : "time"}
-          onChange={(k) => setAllDay(k === "allDay")}
+          onChange={(k) => timeEdit(() => setAllDay(k === "allDay"))}
           items={[
             { key: "allDay", label: t("plan5.allDay") },
             { key: "time", label: t("plan5.withTime") },
           ]}
         />
+        {/* the day and the start in one row while they fit (#2350: «дата, время… горизонтально в ряд»), the calendar under both */}
+        <DateField
+          testID="ev-day"
+          label={t("plan5.ev.day")}
+          value={day}
+          min={minDay}
+          onChange={(k) => { if (k) timeEdit(() => setDay(k)); }}
+          beside={allDay ? undefined : (
+            <SelectField<string>
+              testID="ev-start"
+              label={t("sch.start")}
+              labelAbove
+              value={String(startMin)}
+              items={startItems.map((m) => ({ key: String(m), label: time(atMinute(day, m)) }))}
+              onChange={(k) => timeEdit(() => setStartMin(Number(k)))}
+            />
+          )}
+        />
         {allDay ? (
-          <Stepper label={t("plan5.ev.days")} value={days} min={1} max={Math.max(31, init.days)} onChange={setDays} />
+          <Stepper label={t("plan5.ev.days")} value={days} min={1} max={Math.max(31, init.days)} onChange={(n) => timeEdit(() => setDays(n))} />
         ) : (
-          <>
-            <Field label={t("sch.start")}>
-              <RowView style={{ justifyContent: "space-between" }}>
-                <IconButton icon="minus" label={`${t("sch.start")} −${STEP} ${t("sch.min")}`} onPress={() => setStartMin(Math.max(0, startMin - STEP))} />
-                <T v="title" tabular>
-                  {time(value.startsAt)}
-                </T>
-                <IconButton icon="plus" label={`${t("sch.start")} +${STEP} ${t("sch.min")}`} onPress={() => setStartMin(Math.min(DAY_MIN - STEP, startMin + STEP))} />
-              </RowView>
-            </Field>
-            <Stepper label={t("sch.duration")} unit={t("sch.min")} value={duration} step={15} min={15} max={Math.max(SCHEDULE_DEFAULTS.maxDurationMin, init.duration)} onChange={setDuration} />
-          </>
+          <Stepper label={t("sch.duration")} unit={t("sch.min")} value={duration} step={15} min={15} max={Math.max(SCHEDULE_DEFAULTS.maxDurationMin, init.duration)} onChange={(n) => timeEdit(() => setDuration(n))} />
         )}
+        <FieldAnchor field={form.field("time")} testID="ev-time">
+          <FieldError text={errorOf("time")} testID="ev-time-error" />
+        </FieldAnchor>
         <Field label={t("plan5.ev.description")}>
-          <TextField type="note" value={description} onChangeText={setDescription} placeholder={t("plan5.ev.descriptionPh")} />
+          <TextField type="note" value={description} onChangeText={setDescription} placeholder={t("plan5.ev.descriptionPh")} field={form.field("description")} testID="ev-description" />
         </Field>
-        {problems.map((p) => (
-          <StatusNote key={p} tone="warn">
-            {t(`plan5.ev.problem.${p}` as DictKey)}
-          </StatusNote>
-        ))}
-        <Button label={t("plan5.ev.save")} icon="check" variant="primary" full disabled={problems.length > 0} onPress={save} />
-        {e ? <Button label={t("plan5.ev.remove")} icon="trash" variant="secondary" full onPress={remove} /> : null}
+        {/* always live: the errors come only when the person tries to save (#2220) */}
+        <ButtonPair
+          main={{ label: t("plan5.ev.save"), icon: "check", variant: "primary", onPress: trySave, testID: "ev-save" }}
+          second={e ? { label: t("plan5.ev.remove"), icon: "trash", variant: "secondary", onPress: remove } : null}
+        />
       </View>
     </Sheet>
   );

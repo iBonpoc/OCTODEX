@@ -1,3 +1,4 @@
+const { visitStep, visitCameraAdd } = require("../visitScreen.cjs");
 /**
  * e2e 381 — #642 (Ф1 of #1083): a photo is made smaller before the app keeps it. A 4000×3000 picture picked on a visit
  * («Добавить фото»), by «Создать» → «Фото» and as an expense receipt is kept with the long side ≤ 2048 px, as a JPEG, and
@@ -54,8 +55,9 @@ exports.run = async (h) => {
   const v0 = db.visits.find((v) => v.techId === db.me && v.step === "scheduled" && !v.photos.length);
   h.expect(!!v0, "a visit of mine without photos");
   await h.go(`/visit/${v0.id}`);
-  await h.click("Я в пути");
-  await h.click("На месте");
+  // v2: the visit's main step is a button of the work card, by its testID
+  await visitStep(p, "en-route");
+  await visitStep(p, "on-site");
   const add = p.getByRole("button", { name: "Добавить фото" }).locator("visible=true").first();
   await add.waitFor({ timeout: 8000 });
   const photos = async () => (await h.db()).visits.find((v) => v.id === v0.id)?.photos ?? [];
@@ -79,8 +81,8 @@ exports.run = async (h) => {
   h.expect(k2.type === "image/jpeg", `a PNG is kept as a JPEG (${k2.type})`);
 
   // 3) «Создать» → «Фото»: the same
-  await p.getByRole("button", { name: "Создать", exact: true }).locator("visible=true").last().click();
-  const [ch3] = await Promise.all([p.waitForEvent("filechooser"), p.getByTestId("fab-photo").locator("visible=true").last().click()]);
+  // v2: «＋» of the header → «Фото» opens the step's photos in a sheet
+  const [ch3] = await visitCameraAdd(p);
   await ch3.setFiles({ name: "big2.jpg", mimeType: "image/jpeg", buffer: big });
   await photosSaved(v0.id, 3);
   const k3 = await kept((await photos())[2].uri);

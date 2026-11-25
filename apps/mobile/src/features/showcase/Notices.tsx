@@ -8,11 +8,16 @@ import { useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { Card, Empty, SectionTitle, SyncBadge } from "@/ui/surfaces";
 import { EmptyFilter, EmptySearch, NotFound, PageNotFound } from "@/ui/emptyStates";
-import { DemoBadge } from "@/features/DemoBadge";
+import { DemoBadge } from "@/features/DemoBadgeView";
 import { StatusNote } from "@/ui/statusNote";
 import { Banner } from "@/ui/banner";
+import { CrashView } from "@/features/CrashScreen";
 import { SECTIONS } from "./registry";
 import { localUndo, TOO_LATE } from "@/data/undo";
+import { QueueLine } from "@/ui/queueLine";
+import { queueLine } from "@/ui/queueLineRules";
+import { SignaturePad } from "@/features/SignaturePad";
+import { StackBackGestureOff } from "@/nav/StackBackGestureOff";
 
 /** Notices (DS §15): a toast, a toast with «Отменить» for 5 seconds, the «no network» badge. Each one is live. */
 export function NoticesSection() {
@@ -52,11 +57,23 @@ export function NoticesSection() {
         </View>
       </View>
       {/* DS Б9, §15.3 (#957): the screen's state — one banner, the tone's icon + words, one action; «✕» only on info */}
+      {/* DS §13 «Экран сбоя» (#1555): what the root's ErrorBoundary draws when the app itself fails */}
+      <Card>
+        <View testID="showcase-crash" style={{ gap: space[3] }}>
+          <T v="heading">{t("ds.crash.title")}</T>
+          <T v="caption" tone="mut">{t("ds.crash.hint")}</T>
+          <CrashView t={t} onRetry={() => setPressed(t("crash.retry"))} onRestart={() => setPressed(t("crash.restart"))} />
+        </View>
+      </Card>
       <Card>
         <View testID="showcase-banners" style={{ gap: space[3] }}>
           <T v="heading">{t("ds.banner.title")}</T>
           <T v="caption" tone="mut">{t("ds.banner.hint")}</T>
           <Banner tone="warn" testID="showcase-banner-warn" title={t("ds.banner.warnTitle")} hint={t("ds.banner.warnHint")} action={{ label: t("ds.banner.warnBtn"), onPress: () => setPressed(t("ds.banner.warnBtn")) }} />
+          {/* #1912 (DS §15.3а): the strip a ready over-the-air update shows under every header */}
+          <Banner tone="info" testID="showcase-update-bar" title={t("upd.ready.title")} hint={t("upd.ready.hint")} action={{ label: t("upd.apply"), onPress: () => setPressed(t("upd.apply")) }} onClose={() => setPressed("✕")} />
+          <Banner tone="info" testID="showcase-update-applying" title={t("upd.applying")} />
+          <Banner tone="warn" testID="showcase-update-needs-build" title={t("upd.needsBuild.title")} hint={t("upd.needsBuild.hint")} />
           {infoShown ? (
             <Banner tone="info" testID="showcase-banner-info" title={t("ds.banner.infoTitle")} hint={t("ds.banner.infoHint")} onClose={() => setInfoShown(false)} />
           ) : (
@@ -95,6 +112,38 @@ export function NoticesSection() {
         </View>
         <View testID="showcase-note-undone">
           <T v="body">{t("ds.note.undone", { n: undone })}</T>
+        </View>
+      </Card>
+      {/* #2213/#2214 (DS Б8): three actions in a row — three toasts, each with its own «Отменить» and its own clock */}
+      <Card>
+        <T v="heading">{t("ds.note.stack")}</T>
+        <T v="caption" tone="mut">{t("ds.note.stackHint", { s: motion.toastUndoMs / 1000 })}</T>
+        <View testID="showcase-note-stack">
+          <Button
+            label={t("ds.note.stackShow")}
+            variant="secondary"
+            onPress={() => [1, 2, 3].forEach((n) => toast.show(t("ds.note.stackText", { n }), localUndo(() => setUndone((k) => k + 1))))}
+          />
+        </View>
+      </Card>
+      {/* #2214 (DS §15.3б): the offline queue's line — the live one sits over the tab bar; here its three states, fixed */}
+      <Card>
+        <T v="heading">{t("ds.note.queue")}</T>
+        <T v="caption" tone="mut">{t("ds.note.queueHint")}</T>
+        <View testID="showcase-queue-line" style={{ gap: space[2] }}>
+          <QueueLine say={queueLine(true, "ok", 3)} />
+          <QueueLine say={queueLine(false, "offline", 2)} />
+          <QueueLine say={queueLine(false, "offline", 0)} />
+        </View>
+      </Card>
+      {/* #2215: the smooth pen — draw slowly and fast; «Отменить штрих» takes the last stroke back; nothing is saved here */}
+      <Card>
+        <T v="heading">{t("ds.note.sign")}</T>
+        <T v="caption" tone="mut">{t("ds.note.signHint")}</T>
+        <View testID="showcase-signature">
+          {/* the swipe back would take the stroke (#2329), as on every signature field */}
+          <StackBackGestureOff />
+          <SignaturePad consent={null} onConfirm={() => setPressed(t("visit.confirmSign"))} />
         </View>
       </Card>
       {/* #1193 п.6 (DS §15.2): «Отменить» that is too late — the thing was changed since: nothing is taken back, the toast says so */}

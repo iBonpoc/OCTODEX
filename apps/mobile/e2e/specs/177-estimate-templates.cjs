@@ -71,7 +71,8 @@ exports.run = async (h) => {
   await tid("ue-save").waitFor({ timeout: 8000 });
   h.expect((await tid("est-start").count()) === 0, "a template given: no «С чего начать?»");
   // the folded rows say «$150 × 1 ea» in «Подробно» (DS §8.3, #1307 «а»; «Кратко» shows only the sum) — read them by testID
-  await tid("est-row-view").getByText("Подробно", { exact: true }).click();
+  // v2 (#2350): «Подробно» is a check item of the builder header's «⋯» (a press flips «Кратко ↔ Подробно»)
+  await require("../estimateLine.cjs").editorMenu(h, "est-row-view");
   await p.locator('[data-testid^="est-times-"]').first().waitFor({ timeout: 5000 });
   const times = (await p.locator('[data-testid^="est-times-"]').locator("visible=true").allInnerTexts()).join(" | ");
   h.expect(/\$150(\.00)? ×/.test(times) && !/\$99\b/.test(times), `the catalog line takes today's catalog price ($150, not $99): ${times}`);
@@ -86,7 +87,7 @@ exports.run = async (h) => {
   await h.shot("start");
   await tid(`est-start-${tpl.id}`).click();
   await waitFor(async () => (await tid("est-start").count()) === 0, "the sheet closes");
-  await tid("ue-save").getByRole("button").click();
+  await tid("ue-save").click();
   await waitFor(async () => ((await h.db()).estimates ?? []).some((e) => e.templateId === tpl.id), "the estimate keeps its template");
   await waitFor(async () => (await tpls())[0].uses === 1, "the template counts one use");
 

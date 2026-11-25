@@ -19,6 +19,12 @@ describe("the height of a long menu", () => {
     expect(menuListHeight({ ...base, count: 1, room: 800 })).toBe(ROW);
     expect(menuListHeight({ ...base, count: 6, room: 800 })).toBe(6 * ROW);
   });
+  it("#2448: the lines between groups take their height — a menu of 5 rows and a line shows all five, no scroll", () => {
+    const line = component.hairline + 8;
+    expect(menuListHeight({ ...base, count: 5, room: 800, extra: line })).toBe(5 * ROW + line);
+    // a long menu keeps its 6.5 rows (and the line)
+    expect(menuListHeight({ ...base, count: 12, room: 800, extra: line })).toBe(6.5 * ROW + line);
+  });
   it("a low window (a phone on its side) cuts it further, the title takes its row", () => {
     expect(menuListHeight({ ...base, count: 12, room: 300 })).toBe(300 - 16);
     expect(menuListHeight({ ...base, count: 12, room: 300, titleH: ROW })).toBe(300 - 16 - ROW);
@@ -57,8 +63,10 @@ describe("the wiring", () => {
   });
   it("SelectField opens a PickerSheet for more than 12 items, never a menu", () => {
     const f = src("ui", "selectField.tsx");
-    expect(f).toMatch(/MENU_MAX = 12/);
-    expect(f).toMatch(/items\.length > MENU_MAX/);
+    // DS §9б.2 (#2412): 12 is the token `select.menuMaxItems`; a long name or a picture opens the list too (selectRules.test.ts)
+    expect(component.select.menuMaxItems).toBe(12);
+    expect(f).toMatch(/MENU_MAX = component\.select\.menuMaxItems/);
+    expect(f).toMatch(/opensList\(items, MENU_MAX/);
     expect(f).toMatch(/<PickerSheet/);
   });
   it("the picker's list is the sheet's own scroll: no ScrollView of its own", () => {

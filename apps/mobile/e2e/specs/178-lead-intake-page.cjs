@@ -3,7 +3,8 @@
  * homeowner without the app. The edge function is put in by the browser (page.route, no network):
  * GET → the company's form; POST → always {ok: true}. The page speaks the client's language (the browser's, ?lang=, the
  * chips), sends only what the form has (the hidden field empty, the opening time, a nonce kept for a retry), shows the
- * SMS box only when the company turned it on, and says «Request sent». An unknown token: «not available».
+ * SMS box only when the company turned it on, and says «Request sent». An unknown token: «not available». A form that asks
+ * for a captcha opens and sends too (no widget yet, В3): the server holds its request for a person (#2012).
  */
 const TOKEN = "f0123456789abcdef0123456789abcdef";
 exports.run = async (h) => {
@@ -41,20 +42,23 @@ exports.run = async (h) => {
   await h.expectText(/Tell Sunset Gutters what you need/, "in English");
   h.expect(await p.locator('[data-testid="intake-consent"]').count() === 1, "the SMS box is there when the company turned it on");
   await h.expectText(/Gutters/, "a preset kind of work in the client's language");
-  await h.expectText(/Window cleaning/, "the company's own kind of work");
+  // the kinds of work are a «Type of work ⌄» row now (spec 56 §3 row 4): the company's own kind is in its menu (picked below)
+  h.expect(await p.getByTestId("intake-category-button").locator("visible=true").count() === 1, "«Type of work» is a row with a menu");
   h.expect(await send().getAttribute("aria-disabled") === "true", "no phone and no email: «Send request» is off");
   await h.expectText(/Leave a phone or an email/, "the page says what is missing");
   await h.shot("form-en");
 
-  // Spanish by the chip: the whole page follows
-  await h.clickText("Español");
-  await h.expectText(/Cuéntele a Sunset Gutters lo que necesita/, "the chips change the page's language");
+  // Spanish from the «Language ⌄» row's menu (spec 56 §3 row 4): the whole page follows
+  await p.getByTestId("intake-lang-button").locator("visible=true").first().click();
+  await p.getByTestId("intake-lang-es").locator("visible=true").first().click();
+  await h.expectText(/Cuéntele a Sunset Gutters lo que necesita/, "the language menu changes the page's language");
   h.expect(await p.getByRole("switch", { name: /Acepto recibir mensajes de texto de Sunset Gutters/ }).count() === 1, "the SMS consent text in Spanish");
 
   await input("intake-name").fill("Ana López");
   await input("intake-phone").fill("6265550113");
   await input("intake-message").fill("Limpiar canaletas, 2 pisos");
-  await h.clickText("Window cleaning");
+  await p.getByTestId("intake-category-button").locator("visible=true").first().click();
+  await h.clickText("Window cleaning"); // the company's own kind of work, in the menu
   await p.getByRole("switch", { name: /Acepto recibir/ }).click();
   failNext = true; // the first send meets a busy server
   await send().click();
@@ -87,10 +91,17 @@ exports.run = async (h) => {
   await h.expectText(/Request sent/, "sent after a double tap");
   h.expect(posts.length === 1, `a double tap sends once: ${posts.length}`);
 
-  // a form that requires a captcha: no widget here yet (В3) — «not available», never a lost request
+  // a form that asks for a captcha: no widget here yet (В3) — the form opens and sends; the server holds the request
+  // for a person (held / no_captcha, #2012), never «not available», never a lost request
   captcha = true;
+  posts.length = 0;
   await h.go(`/f/${TOKEN}`);
-  await h.expectText(/This request form is not available/, "a captcha form is not offered without its widget");
+  await input("intake-email").waitFor({ timeout: 6000 });
+  h.expect(await p.getByText(/This request form is not available/).count() === 0, "a captcha form is not «not available»");
+  await input("intake-email").fill("cap@example.com");
+  await send().click();
+  await h.expectText(/Request sent/, "a captcha form sends");
+  h.expect(posts.length === 1 && posts[0].email === "cap@example.com" && !("captcha" in posts[0]), "sent once, with no captcha answer (the server holds it)");
   captcha = false;
 
   // a company without the SMS box; ?lang=ru

@@ -6,23 +6,19 @@
  *   25′ 6″ → «По рисунку» offered, the label follows; a bad tape (12 in) says so and changes nothing;
  *   «Назад» on the canvas takes the tape back;
  * - a downspout: «Круглый» → size 3″; wall «Кирпич» → its default wall kit;
+ * - every value is a field (SelectField, #2412 G1): the field shows the value, a menu or a list picks it; «Ещё» on every width;
  * - everything is in the store (DB.moduleData.gutters) and comes back after a reload.
  * Finds things by testID; waits on what it checks.
  */
-const { openProps, skipLength } = require("../gutters.cjs");
+const { openProps, skipLength, pickAttr, attrShown, attrChosen, openAttrMore } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width > 390;
   const tid = (id) => p.getByTestId(id).locator("visible=true");
-  // 390: what is changed seldom sits under «Ещё» (spec 33 П20.9) — open it; 820/1280 show every field
-  const more = async () => {
-    if (await tid("attr-more").count()) {
-      await tid("attr-more").getByRole("button").click();
-      await tid("attr-more-open").waitFor({ timeout: 5000 });
-    }
-  };
+  // what is changed seldom sits under «Ещё» (spec 33 П20.9, #2412 G1: on every width) — open it
+  const more = () => openAttrMore(p);
   const svg = () => p.getByTestId("draw-svg").first();
   const labels = () => svg().locator("text").evaluateAll((ts) => ts.map((t) => t.textContent || ""));
   const waitFor = async (ok, what, tries = 40) => {
@@ -44,13 +40,9 @@ exports.run = async (h) => {
       return g ? g.elements : [];
     }, KEY);
   const panel = () => tid("attr-panel");
-  /** the chosen chip of a field */
-  // a folded choice (size, colour — founder 09.11) shows what is picked in a row; a tap opens the choices
-  const chosen = async (field) => ((await tid(`${field}-value`).count()) ? tid(`${field}-value`).innerText() : tid(field).locator('[aria-checked="true"]').innerText());
-  const choose = async (field, name) => {
-    if ((await tid(`${field}-open`).count()) && !(await tid(field).getByRole("radio").count())) await tid(`${field}-open`).click();
-    await tid(field).getByRole("radio", { name, exact: true }).click();
-  };
+  /** what a field shows (#2412 G1: a field, its value in it); `choose` picks a stored key in its menu or list */
+  const chosen = (field) => attrShown(p, field);
+  const choose = (field, key) => pickAttr(p, field, key);
   /** open the attributes of what is picked: the sheet on 390; the panel is already there on 820/1280 */
   const openAttrs = async () => {
     if (!wide) {
@@ -70,7 +62,7 @@ exports.run = async (h) => {
   // the trial on, a run and a downspout on it
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await waitFor(async () => /^Пробный/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
+  await waitFor(async () => /^Без срока/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
   await h.go("/module/gutters/draw");
   await tid("draw-surface").waitFor({ timeout: 8000 });
   if (wide) await tid("draw-panel-empty").waitFor({ timeout: 5000 }); // nothing picked: how to pick
@@ -87,22 +79,22 @@ exports.run = async (h) => {
 
   // the run
   await openAttrs();
-  if (!wide) {
-    // 390 (П20.9): storey, size, colour and the tape on top; the rest under «Ещё»
-    for (const id of ["attr-story", "attr-size", "attr-color", "attr-length"]) h.expect((await tid(id).count()) === 1, `390: ${id} on top`);
-    h.expect((await tid("attr-finish").count()) === 0, "no separate painted / bare: «Без покраски» is a colour (founder 09.11)");
-    h.expect((await tid("attr-profile").count()) === 0 && (await tid("attr-hanger").count()) === 0, "390: profile and hangers under «Ещё»");
-    h.expect(/профиль/.test(await tid("attr-more").innerText()), "«Ещё» says what is in it");
-    await h.shot("props");
-  } else h.expect((await tid("attr-profile").count()) === 1 && (await tid("attr-more").count()) === 0, "820/1280: every field of the gutter, no «Ещё»");
+  // #2412 G1 (every width): the tape, Размер · Цвет · Этаж, the profile on top; the hanger, material, gauge, roof edge under «Ещё»
+  for (const id of ["attr-story", "attr-size", "attr-color", "attr-length", "attr-profile"]) h.expect((await tid(id).count()) === 1, `${id} on top`);
+  for (const id of ["attr-size", "attr-color", "attr-story", "attr-profile"]) h.expect((await tid(`${id}-button`).count()) === 1, `${id} is a field (no chips)`);
+  h.expect((await tid("attr-finish").count()) === 0, "no separate painted / bare: «Без покраски» is a colour (founder 09.11)");
+  h.expect((await tid("attr-hanger").count()) === 0 && (await tid("attr-mount").count()) === 0, "hangers and the roof edge under «Ещё»");
+  h.expect((await tid("attr-more").count()) === 1, "one «Ещё», closed");
+  if (!wide) await h.shot("props");
   await more();
+  for (const id of ["attr-hanger", "attr-material", "attr-mount"]) h.expect((await tid(id).count()) === 1, `«Ещё»: ${id}`);
   h.expect((await tid("attr-length-reset").count()) === 0, "a drawn length: no «По рисунку» (П20.16: the accuracy is the drawing's, not a line's)");
   h.expect((await chosen("attr-profile")) === "K", "K-style by default");
-  await choose("attr-profile", "Полукруглый");
+  await choose("attr-profile", "half_round");
   await waitFor(async () => (await chosen("attr-profile")) === "Полукруглый", "half round picked");
   h.expect((await chosen("attr-size")) === "5″", "the size follows: 5″");
   h.expect((await chosen("attr-hanger")) === "Shank #10 (доска)", "the hanger follows the profile: shank #10 on fascia");
-  await choose("attr-color", "Коричневый");
+  await choose("attr-color", "brown");
   await waitFor(async () => (await chosen("attr-color")) === "Коричневый", "brown picked");
   await h.shot("run");
 
@@ -115,14 +107,14 @@ exports.run = async (h) => {
   // the tape
   await tid("attr-length-in").locator("input").fill("6");
   await tid("attr-length-apply").getByRole("button").click();
-  await waitFor(async () => (await tid("attr-length-reset").count()) === 1, "taped: «По рисунку» puts the drawn one back");
+  await waitFor(async () => (await tid("attr-length-reset").count()) === 1, "taped: «По рисунку» puts the drawn one back"); // i18n-old: ok — «taped» is the data value, not a label
   h.expect((await tid("attr-length-bad").count()) === 0, "the warning is gone");
-  await waitFor(async () => (await labels()).some((t) => /^25′ 6″/.test(t)), "the label shows the taped length");
+  await waitFor(async () => (await labels()).some((t) => /^25′ 6″/.test(t)), "the label shows the taped length"); // i18n-old: ok — «taped» is the data value, not a label
   await waitFor(async () => {
     const r = (await stored()).find((e) => e.kind === "run");
-    return r && r.confidence === "taped" && r.geom.lengthIn === 306 && r.attrs.profile === "half_round" && r.attrs.color === "brown" && r.attrs.hanger === "hr_shank_fascia";
+    return r && r.confidence === "taped" && r.geom.lengthIn === 306 && r.attrs.profile === "half_round" && r.attrs.color === "brown" && r.attrs.hanger === "hr_shank_fascia"; // i18n-old: ok — «taped» is the data value, not a label
   }, "the store: the run's attributes and the tape");
-  await h.shot("taped");
+  await h.shot("taped"); // i18n-old: ok — «taped» is the data value, not a label
 
   // «Назад» on the canvas takes the tape back
   await closeAttrs();
@@ -136,20 +128,17 @@ exports.run = async (h) => {
   await p.mouse.click(b.x + b.width * 0.25, y + 3);
   await waitFor(async () => (await svg().locator("circle").count()) === 1, "a downspout");
   await openAttrs();
-  if (!wide) {
-    // 390 (П20.9): size, colour, elbows on top; one «Ещё» for the rest — closed again for this new element
-    for (const id of ["attr-ds-size", "attr-color", "attr-elbow-qty"]) h.expect((await tid(id).count()) === 1, `390: ${id} on top`);
-    for (const id of ["attr-ds-kind", "attr-bottom", "attr-wall", "attr-head"]) h.expect((await tid(id).count()) === 0, `390: ${id} under «Ещё»`);
-    h.expect((await tid("attr-more").count()) === 1, "390: one «Ещё», closed for the new element");
-  } else h.expect((await tid("attr-ds-kind").count()) === 1, "820/1280: the kind without «Ещё»");
-  await more();
-  h.expect((await tid("attr-ds-kind-rectPlain").getAttribute("aria-checked")) === "true", "rectangular, smooth by default");
-  // «Заливка» (DS «Выделение выбранного», #1306): the chosen kind carries the `check` in its corner, the other none
-  h.expect((await tid("attr-ds-kind-rectPlain").getByTestId("selected-check").count()) === 1 && (await tid("attr-ds-kind-roundPlain").getByTestId("selected-check").count()) === 0, "the chosen kind has the check, the other has none");
-  await tid("attr-ds-kind-roundPlain").click(); // the kind: round
-  await waitFor(async () => (await tid("attr-ds-kind-roundPlain").getByTestId("selected-check").count()) === 1 && (await tid("attr-ds-kind-rectPlain").getByTestId("selected-check").count()) === 0, "the check moved to the round kind");
+  // #2412 G1 (every width): Вид · Размер, elbows, offsets, Низ, Верх on top; one «Ещё» (colour, material, wall…) — closed for this new element
+  for (const id of ["attr-ds-kind", "attr-ds-size", "attr-elbow-qty", "attr-bottom", "attr-head"]) h.expect((await tid(id).count()) === 1, `${id} on top`);
+  for (const id of ["attr-color", "attr-wall", "attr-wall-kit"]) h.expect((await tid(id).count()) === 0, `${id} under «Ещё»`);
+  h.expect((await tid("attr-more").count()) === 1, "one «Ещё», closed for the new element");
+  // the kind is a field (no tiles): its menu marks the chosen one (a check, read as selected)
+  h.expect((await attrChosen(p, "attr-ds-kind")) === "rectPlain", "rectangular, smooth by default");
+  await choose("attr-ds-kind", "roundPlain"); // the kind: round
+  h.expect((await attrChosen(p, "attr-ds-kind")) === "roundPlain", "the menu marks the round kind now");
   await waitFor(async () => (await chosen("attr-ds-size")) === "3″", "round: the size follows (3″)");
-  await choose("attr-wall", "Кирпич");
+  await more();
+  await choose("attr-wall", "brick");
   await waitFor(async () => (await chosen("attr-wall-kit")) === "Conductor band + анкеры", "brick: its default wall kit");
   await h.shot("downspout");
   await waitFor(async () => {
@@ -161,7 +150,7 @@ exports.run = async (h) => {
   await p.waitForTimeout(1300); // the 1 s save after the last edit
   await p.reload();
   await tid("draw-surface").waitFor({ timeout: 8000 });
-  await waitFor(async () => (await labels()).some((t) => /^25′ 6″/.test(t)), "after a reload: the taped length");
+  await waitFor(async () => (await labels()).some((t) => /^25′ 6″/.test(t)), "after a reload: the taped length"); // i18n-old: ok — «taped» is the data value, not a label
   // the reload fits the drawing anew: tap the run where it is drawn now («Желоб» tool: a tap picks)
   const at = await svg().locator("line:not([id^=halo])").first().evaluate((l) => {
     const r = l.ownerSVGElement.getBoundingClientRect();
@@ -170,9 +159,9 @@ exports.run = async (h) => {
     return [r.x + (n("x1") + n("x2") * 3) / 4, r.y + (n("y1") + n("y2") * 3) / 4];
   });
   await p.mouse.click(at[0], at[1]);
-  await waitFor(async () => /Желоб/.test((await tid("draw-selected").count()) ? await tid("draw-selected").innerText() : ""), "the run picked");
+  await waitFor(async () => /Gutter/.test((await tid("draw-selected").count()) ? await tid("draw-selected").innerText() : ""), "the run picked");
   await openAttrs();
   await more();
-  h.expect((await tid("attr-length-reset").count()) === 1, "after a reload: still taped");
+  h.expect((await tid("attr-length-reset").count()) === 1, "after a reload: still taped"); // i18n-old: ok — «taped» is the data value, not a label
   h.expect((await chosen("attr-profile")) === "Полукруглый" && (await chosen("attr-color")) === "Коричневый", "after a reload: profile and colour");
 };

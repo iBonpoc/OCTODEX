@@ -40,13 +40,13 @@ export const DEFAULT_RUN_ATTRS: DrawnRun["attrs"] = {
   mount: "fascia",
   hanger: DEFAULT_HANGER_BY_MOUNT.k?.fascia ?? "hidden",
 };
-/** a new downspout: 2×3 aluminum, white, an extension at the bottom */
+/** a new downspout: 2×3 aluminum, white, nothing at the bottom (founder 23.11 05:25: «Низ и Верх — „Ничего“»; it was an extension) */
 export const DEFAULT_DS_ATTRS: Omit<DrawnDownspout, "id" | "runId" | "atIn"> = {
   shape: "rect",
   size: "2x3",
   material: "aluminum",
   color: "white",
-  bottom: { kind: "extension" },
+  bottom: { kind: "none" },
 };
 
 const int = (n: number) => Math.round(n);
@@ -73,7 +73,9 @@ const isPt = (v: unknown): v is [number, number] => Array.isArray(v) && v.length
  * list would change).
  */
 const { gauge: _rg, color: _rc, ...RUN_BASE } = DEFAULT_RUN_ATTRS;
-const { color: _dc, ...DS_BASE } = DEFAULT_DS_ATTRS;
+// a stored element without a bottom is read as before (an extension): the new default is for new downspouts only (rule 16 — an
+// old record's money never changes on a reload)
+const { color: _dc, ...DS_BASE } = { ...DEFAULT_DS_ATTRS, bottom: { kind: "extension" as const } };
 
 /** rows back to a drawing; a broken row is left out (an old phone, a bad write) */
 export function fromElements(rows: readonly ElementRow[]): Drawing {

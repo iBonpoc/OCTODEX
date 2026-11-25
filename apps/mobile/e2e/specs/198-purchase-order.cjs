@@ -7,6 +7,8 @@
  * - «Отменить заказ» asks first → cancelled; sales has no «Заказы поставщикам».
  * By testID (CHECKS §9 №2); waits for what it checks.
  */
+const { objSection } = require("../objectScreen.cjs");
+
 exports.run = async (h) => {
   const p = h.page;
   const dbWhen = async (ok) => {
@@ -24,6 +26,7 @@ exports.run = async (h) => {
     localStorage.setItem(k, JSON.stringify(s));
   });
   await h.go("/job/j2");
+  await objSection(p, "job-screen", "orders"); // v2: the orders are a section of the job
   await p.getByTestId("job-orders").locator("visible=true").first().waitFor({ timeout: 5000 });
   await tap("job-orders-make");
   await p.waitForURL(/\/purchase-order\//, { timeout: 5000 });
@@ -37,6 +40,7 @@ exports.run = async (h) => {
   await h.shot("draft");
   // a second tap opens the same draft, no double
   await h.go("/job/j2");
+  await objSection(p, "job-screen", "orders"); // v2: the orders are a section of the job
   await tap("job-orders-make");
   await p.waitForURL(new RegExp(`/purchase-order/${ord.id}`), { timeout: 5000 });
   db = await h.db();
@@ -67,6 +71,7 @@ exports.run = async (h) => {
 
   // the job and the list show it
   await h.go("/job/j2");
+  await objSection(p, "job-screen", "orders"); // v2: the orders are a section of the job
   h.expect(/Отправлен/.test(await p.getByTestId(`job-po-${ord.id}`).locator("visible=true").first().innerText()), "the job shows the sent order");
   await h.go("/purchase-orders");
   await p.getByTestId(`po-card-${ord.id}`).locator("visible=true").first().waitFor({ timeout: 5000 });

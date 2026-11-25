@@ -4,10 +4,9 @@
  * Menus in sheets are rows (rule 12); one accent: the save button.
  */
 import { useHeldSheet } from "@/ui/heldSheet";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Linking, Platform, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { docLanguageFor } from "@/data/people";
@@ -16,17 +15,22 @@ import type { CancelReason, ID, Visit } from "@/data/types";
 import { CANCEL_REASONS } from "@/data/types";
 import { tFor } from "@/i18n/translate";
 import { useI18n, type DictKey } from "@/i18n";
-import { assigneesOf, atMinute, canPlan, visitWhen, wholeDay, canReschedule, dayVisits, formHours, formWarnings, freeSlots, jobRollsBack, leadRollsBack, quickStarts, SCHEDULE_DEFAULTS } from "@/features/schedule";
+import { assigneesOf, atMinute, canPlan, visitWhen, wholeDay, canReschedule, dayVisits, formHours, formWarnings, freeSlots, jobRollsBack, leadRollsBack, SCHEDULE_DEFAULTS } from "@/features/schedule";
+import { nearestWindows } from "@/features/visitWindows";
 import { arrivalWindow, businessHoursOf, clientDate, companyTime, companyTz, scheduleSettingsOf } from "@/features/scheduleSettings";
 import { AssignSheet } from "@/features/sheets";
-import { DatePick, dayOffsetOf } from "@/features/DatePick";
+import { dayOffsetOf } from "@/features/DatePick";
+import { DateField } from "@/ui/dateField";
+import { SelectField } from "@/ui/selectField";
 import { addDays, isoDayKey, todayKey, type DayKey } from "@/features/calendar";
 import { formDayOffset } from "@/features/planFeed";
 import { minuteIn } from "@/features/zone";
-import { Button, ChoiceChips, IconButton, Segmented, Stepper, TextField } from "@/ui/controls";
+import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
+import { OptionRows } from "@/ui/optionRow";
+import { ToggleRow } from "@/ui/toggleRow";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, Divider, ListRow, RowView } from "@/ui/surfaces";
+import { Card, Divider, RowView } from "@/ui/surfaces";
 import { mailtoHref, smsHref } from "@/features/contactLinks";
 import { memberName } from "@/features/team";
 import { cancelNotice } from "@/features/cancelNotify";
@@ -34,6 +38,10 @@ import { NO_UNDO } from "@/data/undo";
 import { StatusNote } from "@/ui/statusNote";
 
 export type VisitFormValue = { start: string; durationMin: number; techId: ID | null; assigneeIds: ID[]; note: string; allDay?: boolean };
+
+/** «Начало ⌄»: the first 12 free slots as before (a menu, not a sheet: MENU_MAX), the chosen minute always among them */
+export const startMinutes = (slots: number[], chosen: number): number[] =>
+  (slots.slice(0, 12).includes(chosen) ? slots.slice(0, 12) : [...slots.slice(0, 11), chosen]).sort((x, y) => x - y);
 
 /** a day of the company, `offset` days after its today (the form works on the company's calendar, П4b) */
 const dayAt = (offset: number) => addDays(todayKey(), offset);
@@ -101,74 +109,65 @@ export function useVisitForm(init: { durationMin: number; techId?: ID | null; te
 export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof useVisitForm>; noteLabel?: boolean }) {
   const { db, role } = useStore();
   const planner = canPlan([role]);
-  const { t, day, dayOf, time } = useI18n();
-  const [calendar, setCalendar] = useState(false);
+  const { t, tn, day, time } = useI18n();
   const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
-  const days = useMemo(() => {
-    const label = (i: number) => (i === 0 ? t("common.today") : i === 1 ? t("common.tomorrow") : dayOf(dayAt(i)));
-    const list = Array.from({ length: SCHEDULE_DEFAULTS.formDays }, (_, i) => ({ key: String(i), label: label(i) }));
-    // a day picked in «Другая дата» beyond the chips gets its own chip, so the choice is visible
-    return f.dayOffset >= SCHEDULE_DEFAULTS.formDays ? [...list, { key: String(f.dayOffset), label: label(f.dayOffset) }] : list;
-  }, [t, dayOf, f.dayOffset]);
   const range = (v: Visit) => visitWhen(v, time, t("plan5.allDay"));
   const load = (id: ID) => {
     const vs = dayVisits(db, id, f.day, f.exceptId);
-    return vs.length ? t("vf.load", { n: vs.length, ranges: vs.map(range).join(", ") }) : t("vf.free");
+    return vs.length ? tn("vf.load", vs.length, { ranges: vs.map(range).join(", ") }) : t("vf.free");
   };
   return (
     <View style={{ gap: space[3] }}>
-      <Field label={t("sch.date")}>
-        <ChoiceChips value={String(f.dayOffset)} onChange={(k) => { f.setDayOffset(Number(k)); f.setMinute(null); }} items={days} />
-        {f.exceptId ? (
-          // moving a visit: quick dates on the company's calendar and clock (13 §3.6)
-          <RowView style={{ flexWrap: "wrap" }}>
-            {quickStarts(todayKey(), minuteIn(new Date().toISOString())).map((q) => (
-              <Button
-                key={q.key}
-                label={t(`job3.q.${q.key}` as DictKey, { time: time(atMinute(q.day, q.minute)) })}
-                size="sm"
-                variant="secondary"
-                onPress={() => { f.setDayOffset(dayOffsetOf(q.day)); f.setMinute(q.minute); }}
-              />
-            ))}
-          </RowView>
-        ) : null}
-        <Button label={t("vf.otherDate")} icon="calendar" size="sm" variant="ghost" onPress={() => setCalendar((x) => !x)} />
-        {calendar ? (
-          <DatePick
-            value={f.day}
-            onPick={(k) => { f.setDayOffset(dayOffsetOf(k)); f.setMinute(null); setCalendar(false); }}
-          />
-        ) : null}
-      </Field>
+      {/* the day — one row, the calendar opens under it (DS А7, spec 56 §3: «день в форме — DateField»); the company's days */}
+      <DateField
+        testID="vf-date"
+        label={t("sch.date")}
+        value={f.day}
+        // the quick choices are the free windows below (#2208) — one row of quick choices, not two
+        quick={false}
+        // the same day again keeps the chosen time; another day takes its own first free one
+        onChange={(k) => { if (k && k !== f.day) { f.setDayOffset(dayOffsetOf(k)); f.setMinute(null); } }}
+      />
+      {/* #2208 «ближайшие свободные окна»: the chosen people's nearest free windows (freeSlots — the one busy rule), one row of chips
+          that scrolls sideways; a tap takes the window's day and its first start. «Перенести» had quick dates here — one row, not two */}
+      {f.allDay ? null : <FreeWindows f={f} />}
       <Field label={t("sch.tech")}>
         {/* sales books, the office assigns (the server refuses sales: public.assign_visit) */}
         {!planner ? <T v="body" tone="mut">{t("vf.dispatcherAssigns")}</T> : <T v="caption" tone="mut">{t("vf.techsHint")}</T>}
-        {planner ? <View>
-          <ListRow title={`${f.techIds.length === 0 ? "✓ " : ""}${t("vf.dispatcherAssigns")}`} onPress={() => f.setTechId(null)} />
-          {techs.map((m) => (
-            <ListRow key={m.id} title={`${f.techIds.includes(m.id) ? "✓ " : ""}${m.name}`} subtitle={load(m.id)} onPress={() => { f.toggleTech(m.id); f.setMinute(null); }} />
-          ))}
-        </View> : null}
+        {/* several people — rows with a check, the day's load under each (spec 56 §3 row 7); none chosen — the dispatcher assigns */}
+        {planner ? (
+          <OptionRows<string>
+            multiple
+            testID="vf-tech"
+            label={t("sch.tech")}
+            items={techs.map((m) => ({ key: m.id, title: m.name, subtitle: load(m.id) }))}
+            value={f.techIds}
+            onChange={(ids) => {
+              const added = ids.find((id) => !f.techIds.includes(id));
+              const removed = f.techIds.find((id) => !ids.includes(id));
+              const id = added ?? removed;
+              if (id) f.toggleTech(id);
+              f.setMinute(null);
+            }}
+          />
+        ) : null}
+        {planner && f.techIds.length === 0 ? <View testID="vf-tech-none"><T v="caption" tone="mut">{t("vf.dispatcherAssigns")}</T></View> : null}
       </Field>
       {f.allowAllDay ? (
-        <Segmented
-          full
-          value={f.allDay ? "allDay" : "time"}
-          onChange={(k) => f.setAllDay(k === "allDay")}
-          items={[
-            { key: "time", label: t("job5.byTime") },
-            { key: "allDay", label: t("plan5.allDay") },
-          ]}
-        />
+        // on / off — a row with a switch (spec 56 §3 row 2: «Весь день»)
+        <ToggleRow testID="vf-all-day" label={t("plan5.allDay")} value={f.allDay} onChange={(on) => f.setAllDay(on)} />
       ) : null}
       {f.allDay ? null : (<>
-      <Field label={t("sch.start")}>
+      {/* «Начало» once: the row says it (the old caption over the chips is gone, review of 5б) */}
+      <View style={{ gap: space[1] }}>
+        {/* «Начало ⌄» — the free slots of the day (display only: the busy rule is formWarnings/freeSlots, unchanged); ± below */}
         {f.slots.length ? (
-          <ChoiceChips
+          <SelectField<string>
+            testID="vf-start"
+            label={t("sch.start")}
             value={String(f.startMin)}
+            items={startMinutes(f.slots, f.startMin).map((m) => ({ key: String(m), label: time(atMinute(f.day, m)) }))}
             onChange={(k) => f.setMinute(Number(k))}
-            items={f.slots.slice(0, 12).map((m) => ({ key: String(m), label: time(atMinute(f.day, m)) }))}
           />
         ) : (
           <T v="caption" tone="mut">{t("vf.noSlots")}</T>
@@ -178,7 +177,7 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
           <T v="title" tabular>{time(f.value.start)}</T>
           <IconButton icon="plus" label={`${t("vf.otherTime")} +${f.hours.stepMin}`} onPress={() => f.setMinute(Math.min(SCHEDULE_DEFAULTS.latestMin, f.startMin + f.hours.stepMin))} />
         </RowView>
-      </Field>
+      </View>
       <Stepper label={t("sch.duration")} unit={t("sch.min")} value={f.duration} step={SCHEDULE_DEFAULTS.durationStepMin} min={SCHEDULE_DEFAULTS.durationStepMin} max={SCHEDULE_DEFAULTS.maxDurationMin} onChange={f.setDuration} />
       </>)}
       {noteLabel ? (
@@ -203,6 +202,36 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
       {/* what the client is told (§7.1 п. 8): the window from the start, company time zone (П4a) */}
       <T v="caption" tone="mut">{f.allDay ? t("job5.clientDay") : clientSees(f.value.start, db, t)}</T>
     </View>
+  );
+}
+
+/** #2208: the nearest free windows from the form's day on (test/visitWindows.test.ts) — chips «Сегодня · 10:00 AM–1:00 PM» */
+function FreeWindows({ f }: { f: ReturnType<typeof useVisitForm> }) {
+  const { db } = useStore();
+  const { t, time, dayOf } = useI18n();
+  const sch = scheduleSettingsOf(db.company);
+  const bh = businessHoursOf(db.company);
+  const from = f.dayOffset > 0 ? f.day : todayKey();
+  const list = nearestWindows(db, f.techIds, from, f.duration, { hoursOf: (d) => formHours(bh, sch.stepMin, d), exceptId: f.exceptId, max: 6 });
+  if (!list.length) return null;
+  const today = todayKey();
+  const label = (d: DayKey) => (d === today ? t("plan5.today") : d === addDays(today, 1) ? t("plan5.tomorrow") : dayOf(d));
+  const key = (d: DayKey, m: number) => `${d}|${m}`;
+  return (
+    <Field label={t("w2a.windows")}>
+      <ChoiceChips<string>
+        layout="strip"
+        testID="vf-windows"
+        items={list.map((w) => ({ key: key(w.day, w.from), label: `${label(w.day)} · ${time(atMinute(w.day, w.from))}–${time(atMinute(w.day, w.to))}` }))}
+        value={key(f.day, f.startMin)}
+        onChange={(k) => {
+          const w = list.find((x) => key(x.day, x.from) === k);
+          if (!w) return;
+          f.setDayOffset(dayOffsetOf(w.day));
+          f.setMinute(w.from);
+        }}
+      />
+    </Field>
   );
 }
 
@@ -364,9 +393,14 @@ export function CancelVisitSheet({ visitId, onClose, onDone }: { visitId: ID | n
   };
   return (
     <Sheet visible={!!visitId} onClose={onClose} title={t("vc.title")} dirty={text.trim().length > 0}>
-      {CANCEL_REASONS.map((r) => (
-        <ListRow key={r} title={`${reason === r ? "✓ " : ""}${t(`vc.r.${r}` as DictKey)}`} onPress={() => setReason(r)} />
-      ))}
+      {/* the reason — the one question of this sheet: rows, the chosen one with a check on the right (spec 56 §3 row 5) */}
+      <OptionRows<CancelReason>
+        testID="vc-reason"
+        label={t("vc.title")}
+        items={CANCEL_REASONS.map((r) => ({ key: r, title: t(`vc.r.${r}` as DictKey) }))}
+        value={reason}
+        onChange={setReason}
+      />
       {reason === "other" ? <TextField type="note" value={text} onChangeText={setText} placeholder={t("vc.otherPh")} /> : null}
       <Divider />
       {leadBack ? <T v="caption" tone="mut">{t("vc.leadBack")}</T> : null}
@@ -383,14 +417,15 @@ export function CancelVisitSheet({ visitId, onClose, onDone }: { visitId: ID | n
   );
 }
 
-/** «Когда и кто» on the visit card, for the office (§7.3): date, time – end, the person; «Перенести» · «Отменить выезд»
- *  (only before the tech is on site); «Клиенту сообщили …» or «Сообщить клиенту». */
-export function WhenWho({ visitId, onCancelled }: { visitId: ID; onCancelled?: (visitId: ID) => void }) {
+/** «Когда и кто» on the visit card, for the office (§7.3): date, time – end, the person; «Перенести» · «Назначить»
+ *  (only before the tech is on site); «Клиенту сообщили …» or «Сообщить клиенту». «Отменить выезд» is not here: a dangerous
+ *  action never sits beside an ordinary one (K6) — the visit screen keeps it in its «⋯» menu (CancelVisitSheet). */
+export function WhenWho({ visitId }: { visitId: ID }) {
   const store = useStore();
   const { db } = store;
   const { t, day, time } = useI18n();
   const toast = useToast();
-  const [sheet, setSheet] = useState<"move" | "cancel" | "notify" | "assign" | null>(null);
+  const [sheet, setSheet] = useState<"move" | "notify" | "assign" | null>(null);
   const moveHeld = useHeldSheet(sheet === "move" ? true : null); // the sheet goes out before it is unmounted (#1163)
   const v = db.visits.find((x) => x.id === visitId);
   if (!v) return null;
@@ -399,20 +434,18 @@ export function WhenWho({ visitId, onCancelled }: { visitId: ID; onCancelled?: (
   const open = canReschedule(v);
   return (
     <Card>
-      <T v="heading">{t("vw.title")}</T>
-      <T v="body" tabular>{`${day(v.start)} · ${visitWhen(v, time, t("plan5.allDay"))} · ${who}`}</T>
-      {v.customerNotifiedAt ? (
-        <T v="caption" tone="mut">{t("vw.notified", { date: day(v.customerNotifiedAt) })}</T>
-      ) : (
-        <Button label={t("vw.notify")} icon="send" variant="secondary" size="sm" onPress={() => setSheet("notify")} />
-      )}
-      {open ? (
-        <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
-          <Button label={t("vw.reschedule")} icon="calendar" variant="secondary" size="sm" onPress={() => setSheet("move")} />
-          <Button label={t("plan.assign")} icon="user" variant="secondary" size="sm" onPress={() => setSheet("assign")} />
-          <Button label={t("vc.title")} icon="close" variant="secondary" size="sm" onPress={() => setSheet("cancel")} />
+      {/* the actions are icons in the card's header (founder 21.11, #2350: «Сообщить клиенту, Перенести, Назначить… их слишком
+          много… растягиваются»): send · calendar · user, their words for the screen reader and the hover hint */}
+      <RowView style={{ justifyContent: "space-between", alignItems: "center" }}>
+        <T v="heading" style={{ flex: 1 }}>{t("vw.title")}</T>
+        <RowView gap={space[1]}>
+          {v.customerNotifiedAt ? null : <IconButton icon="send" label={t("vw.notify")} testID="vw-notify" onPress={() => setSheet("notify")} />}
+          {open ? <IconButton icon="calendar" label={t("vw.reschedule")} testID="vw-reschedule" onPress={() => setSheet("move")} /> : null}
+          {open ? <IconButton icon="user" label={t("plan.assign")} testID="vw-assign" onPress={() => setSheet("assign")} /> : null}
         </RowView>
-      ) : null}
+      </RowView>
+      <T v="body" tabular>{`${day(v.start)} · ${visitWhen(v, time, t("plan5.allDay"))} · ${who}`}</T>
+      {v.customerNotifiedAt ? <T v="caption" tone="mut">{t("vw.notified", { date: day(v.customerNotifiedAt) })}</T> : null}
       {moveHeld.value ? (
         <VisitFormSheet
           key={moveHeld.opening}
@@ -432,8 +465,6 @@ export function WhenWho({ visitId, onCancelled }: { visitId: ID; onCancelled?: (
           }}
         />
       ) : null}
-      {/* a cancelled visit leaves the screens: the screen asks «Сообщить клиенту?» (it outlives this card), then goes back */}
-      <CancelVisitSheet visitId={sheet === "cancel" ? v.id : null} onClose={() => setSheet(null)} onDone={(id) => (onCancelled ? onCancelled(id) : router.canGoBack() ? router.back() : router.replace("/plan"))} />
       <NotifySheet visitId={sheet === "notify" ? v.id : null} onClose={() => setSheet(null)} />
       <AssignSheet visitId={sheet === "assign" ? v.id : null} onClose={() => setSheet(null)} />
     </Card>

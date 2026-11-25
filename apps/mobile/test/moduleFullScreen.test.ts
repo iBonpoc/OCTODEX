@@ -11,9 +11,10 @@ import gutters from "../src/modules/gutters/module";
 registerModule(gutters);
 
 describe("moduleFullScreen", () => {
-  it("Gutters: the canvas and the speed check take the whole screen", () => {
+  it("Gutters: the canvas takes the whole screen; the speed check — only in a build that has it (test/gutterBenchRegistry.test.ts)", () => {
     expect(moduleFullScreen("gutters", "draw")).toBe(true);
-    expect(moduleFullScreen("gutters", "bench")).toBe(true);
+    // tests are not Expo Go nor a dev build: the speed check is not a screen here, so it is not a full-screen one either
+    expect(moduleFullScreen("gutters", "bench")).toBe(false);
   });
   it("its lists, cards, settings and prices keep the bottom tabs and the side menu", () => {
     for (const s of ["list", "view", "start", "settings", "prices"]) expect(moduleFullScreen("gutters", s)).toBe(false);

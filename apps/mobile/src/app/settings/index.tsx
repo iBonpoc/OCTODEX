@@ -12,11 +12,13 @@ import { useHapticsEnabled } from "@/ui/haptics";
 import { usePlanShowDone } from "@/features/prefs";
 import { LocationSetting } from "@/features/LocationParts";
 import { PushSettingsSection } from "@/features/PushSettings";
+import { UpdateRow } from "@/features/UpdateRow";
 import { Card, Divider, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { editionLabel, LEGAL_VERSIONS, legalHref } from "@/features/legal";
 import Constants from "expo-constants";
 import { component, space } from "@octo/design-tokens";
 import { BUILD } from "@/config/version";
+import { VersionLine } from "@/features/version";
 import { BrandLogo } from "@/ui/brand";
 
 /**
@@ -57,7 +59,7 @@ export default function Settings() {
       {canSeeShowcase(mode, role) ? (
         <Card>
           <View testID="settings-design-system">
-            <ListRow title={t("ds.title")} subtitle={t("ds.rowHint")} onPress={() => router.push("/settings/design-system")} />
+            <ListRow title={t("ds.title")} subtitle={t("ds.rowHint")} lines={0} onPress={() => router.push("/settings/design-system")} />
           </View>
         </Card>
       ) : null}
@@ -109,7 +111,10 @@ export default function Settings() {
             <T v="caption" tone="mut" tabular>
               {t("brand.about.version", { v: Constants.expoConfig?.version ?? "1.0.0", b: BUILD || "dev" })}
             </T>
+            {/* the full version line (with the moment it was published) — it left the headers (visual-v2, rule 11) */}
+            <VersionLine testID="about-version" />
           </View>
+          <UpdateRow />
           <Divider />
           <ListRow title={t("legal.terms.title")} subtitle={t("legal.edition", { date: editionLabel(LEGAL_VERSIONS.terms) })} onPress={() => router.push(legalHref("terms"))} />
           <Divider />

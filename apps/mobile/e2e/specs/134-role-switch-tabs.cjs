@@ -8,6 +8,8 @@
  * the one that fails without tabLeave; the screen's «‹ up» (goTo) had the same no-op there.
  * 820/1280: no bottom bar; the role change and the side menu still lead on.
  */
+const { clickAvatar } = require("../menu.cjs");
+
 exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width >= 820;
@@ -16,20 +18,31 @@ exports.run = async (h) => {
     await p.getByText(name, { exact: true }).locator("visible=true").first().click();
     await p.waitForTimeout(800);
   };
-  // every tab, in an order that leaves each screen for another; «Главная» is the role's home
-  const walk = async (home, label) => {
-    for (const [name, want] of [["План", "/plan"], ["Чаты", "/messages"], ["Клиенты", "/clients"], ["Главная", home], ["Ещё", "/more"], ["План", "/plan"]]) {
-      await p.getByRole("tab", { name, exact: true }).click();
-      await p.waitForTimeout(600);
-      h.expect(path() === want, `${label}: «${name}» → ${want} (${path()})`);
+  // every tab, in an order that leaves each screen for another; «Главная» is the role's home. v2: the tabs are
+  // Главная · План · Клиенты · Деньги · Лиды (the tech has no «Деньги»); «Ещё» is the avatar of a root's header
+  const openMore = async () => {
+    h.expect(await clickAvatar(p), `the header's avatar on ${path()}`);
+    await p.locator('[data-testid="more-screen"]:visible').waitFor({ timeout: 5000 });
+  };
+  const walk = async (home, label, money = true) => {
+    const steps = [["План", "/plan"], ["Лиды", "/leads"], ["Клиенты", "/clients"], ...(money ? [["Деньги", "/finance"]] : []), ["Главная", home], ["Ещё", "/more"], ["План", "/plan"]];
+    for (const [name, want] of steps) {
+      if (name === "Ещё") await openMore();
+      else await p.getByRole("tab", { name, exact: true }).click();
+      h.expect(await p.waitForFunction((w) => location.pathname === w, want, { timeout: 4000 }).then(() => true, () => false), `${label}: «${name}» → ${want} (${path()})`);
       h.expect((await p.locator('[aria-modal="true"]').count()) === 0, `${label}: «${name}» asks nothing`);
     }
   };
   // «Профиль и аккаунт» (spec 26, #289): the profile card in «Ещё» on a phone, the profile in the side menu at 820/1280
   const openSettings = async () => {
     if (!wide) {
-      await p.getByRole("tab", { name: "Ещё", exact: true }).click();
-      await p.waitForTimeout(600);
+      if (path() !== "/more") {
+        await p.getByRole("tab", { name: "Главная", exact: true }).click();
+        // the home has come (the screen it left keeps its own avatar on the same spot while it goes)
+        await p.locator('[role="tab"][aria-label="Главная"][aria-selected="true"]').waitFor({ timeout: 4000 });
+        await p.waitForFunction(() => /^\/(today|visits|triage)$/.test(location.pathname), null, { timeout: 4000 });
+        await openMore();
+      }
     }
     await p.getByTestId(wide ? "side-profile" : "more-profile").locator("visible=true").first().click();
     await p.waitForTimeout(700);
@@ -48,7 +61,7 @@ exports.run = async (h) => {
     h.expect(path() === "/clients", `side menu → /clients (${path()})`);
   } else {
     await h.shot("tech");
-    await walk("/visits", "tech");
+    await walk("/visits", "tech", false);
   }
   // back to the director: the tabs still answer (before: dead until a restart)
   await openSettings();
@@ -56,27 +69,29 @@ exports.run = async (h) => {
   h.expect(path() === "/today", `the director's home after the role change back (${path()})`);
   if (!wide) await walk("/today", "director");
   if (!wide) {
-    // the same stack and the screen's own «‹ Ещё» (goTo): Leads from «Ещё» → back to «Ещё» (#286; before: dead)
+    // the same stack and the screen's own «‹ Ещё» (goTo): a section from «Ещё» → back to «Ещё» (#286; before: dead).
+    // v2: «Лиды» is a tab — «Сообщения» is the tab screen that opens from «Ещё» (from=more)
     const db = await h.db();
     await h.go(`/client/${db.customers[0].id}`);
-    await p.getByRole("tab", { name: "Ещё", exact: true }).click();
-    await p.waitForTimeout(600);
-    await p.getByText("Лиды", { exact: true }).locator("visible=true").first().click();
+    await p.getByRole("tab", { name: "Главная", exact: true }).click();
+    await p.waitForFunction(() => location.pathname === "/today", null, { timeout: 4000 });
+    await openMore();
+    await p.locator('[data-testid="more-messages"]:visible').click();
     await p.waitForTimeout(700);
-    h.expect(path() === "/leads", `a card by a link → «Ещё» → «Лиды» (${path()})`);
-    await p.getByRole("button", { name: "Ещё", exact: true }).locator("visible=true").first().click();
+    h.expect(path() === "/messages", `a card by a link → «Ещё» → «Сообщения» (${path()})`);
+    await p.getByTestId("back-more").locator("visible=true").first().click();
     await p.waitForTimeout(700);
-    h.expect(path() === "/more", `«‹ Ещё» on Leads after a card by a link → /more (${path()})`);
+    h.expect(path() === "/more", `«‹ Ещё» on Messages after a card by a link → /more (${path()})`);
   }
   // a typed /settings/profile (no tabs under it), then the role change
   await h.go("/settings/profile");
   await role("Мастер");
   h.expect(path() === "/visits", `typed /settings/profile → the technician's home (${path()})`);
-  if (!wide) await walk("/visits", "tech from a typed /settings/profile");
+  if (!wide) await walk("/visits", "tech from a typed /settings/profile", false);
   // a card by a link (a push notification, a typed address): the first tab, then every other one still answers
   if (!wide) {
     const db = await h.db();
     await h.go(`/client/${db.customers[0].id}`);
-    await walk("/visits", "a card by a link");
+    await walk("/visits", "a card by a link", false);
   }
 };

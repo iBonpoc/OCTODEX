@@ -155,7 +155,7 @@ export interface Property {
   kind?: PropertyKind;
   /** dog, side gate, parking — whoever sees the property sees these */
   accessNotes?: string;
-  /** office always; a tech only on the day of their visit and the day before (server: app.can_see_gate_code) */
+  /** office always; a tech and sales only on the day of their visit and the day before (server: app.can_see_gate_code) */
   gateCode?: string;
   /** people of the property: links to the client's people (tenant, property manager) */
   contactIds?: ID[];
@@ -193,6 +193,17 @@ export interface Job {
   taxRateBps?: number;
   /** #1219: the rate in ppm (8.875 % = 88750; server jobs.tax_rate_ppm) — the rate when set; absent — the basis points */
   taxRatePpm?: number;
+  /** #2015 (spec 38 §12): a cancelled job (db.cancelledJobs) — why and when (server: jobs.cancel_reason / cancelled_at) */
+  cancelReason?: string;
+  cancelledAt?: string;
+}
+
+/** #2227: the supplier's data of one variant of an item (catalog_items.variant_skus); absent — the item's own */
+export interface ItemVariant {
+  sku?: string;
+  supplierId?: ID;
+  purchaseUnit?: string;
+  packSize?: string;
 }
 
 /** A line of a job made without an estimate (wave П-2a, server: job_line_items). The server owns the totals:
@@ -239,6 +250,9 @@ export interface FileItem {
   elementId?: ID;
   /** the photo on this phone until it is uploaded (never sent as a field) */
   uri?: string;
+  /** #1441: the cloud refused the file — the same mark as a visit's photo (Photo.upload): shown with «Повторить». Optional:
+   *  a record from an older build has none (rule 16) */
+  upload?: { failed: PhotoFail; at: string };
 }
 
 export type VisitStep = "scheduled" | "en_route" | "on_site" | "working" | "signed" | "paid" | "done";
@@ -252,7 +266,13 @@ export type VisitKind = "inspection" | "install" | "service" | "follow_up";
 export const CANCEL_REASONS = ["client_cancelled", "no_show", "reschedule_later", "we_cancelled", "other"] as const;
 export type CancelReason = (typeof CANCEL_REASONS)[number];
 /** a visit the office cancelled: the visit as it was + why and when */
-export type CancelledVisit = Visit & { cancelReason: CancelReason; cancelText?: string; cancelledAt: string };
+export type CancelledVisit = Visit & {
+  cancelReason: CancelReason;
+  cancelText?: string;
+  cancelledAt: string;
+  /** who closed it (server: visits.cancelled_by) — #2066: the tech at the door, or the office */
+  cancelledBy?: ID;
+};
 
 /** a checklist item: a tick, or a photo (docs/specs/08 §3.2) */
 export type ChecklistItemKind = "check" | "photo";
@@ -718,6 +738,9 @@ export interface CatalogItem {
   components?: { itemId: ID; qty: string }[];
   /** test price (founder rule: real prices never in code) */
   placeholder?: boolean;
+  /** #1807 (53-0б): the server counts this material's price from its cost (catalog_items.price_from_cost). Who does not
+   *  see our costs reads the price and cannot change it. Absent = not counted (before the migration, local data). */
+  priceFromCost?: boolean;
   /** properties set by a trade module: name → text (catalog_items.attributes, docs/specs/33 П16). The core keeps no list
    *  of names or values. Absent = none (and not sent: an old server without the column is never written to) */
   attributes?: Record<string, string>;
@@ -729,6 +752,12 @@ export interface CatalogItem {
   supplierId?: ID;
   /** the supplier's own code of the item */
   supplierSku?: string;
+  /**
+   * #2227 (spec 33-price-key §11.5; catalog_items.variant_skus): the item's variants — the values of ONE property (the
+   * module chooses which; the core never names it), one price for all, the supplier's data per value. Values lower-cased
+   * and trimmed. Absent = no variants. Written only by catalog.variant (one value at a time), never by catalog.save
+   */
+  variants?: Record<string, Record<string, ItemVariant>>;
   /* ---- РС-10 (the item's card, spec 2026-11-12-estimate-editor Р11): absent = not set, and not sent ---- */
   /** our own code of the item (catalog_items.sku) */
   sku?: string;
@@ -924,6 +953,9 @@ export interface Company {
   /** add-on modules by key (public.company_modules, docs/specs/33 П15; modules/registry.ts reads them). Written only
    *  through module.enable / module.disable / module.saveSettings, never by company.save; absent = none on this phone. */
   modules?: Record<string, import("@/modules/registry").CompanyModule>;
+  /** #2410: the developer's company (companies.developer_account) — every switched-on module has no term. Read only:
+   *  set by the server (service_role, a migration), never by the app */
+  developerAccount?: boolean;
   /** photo rules for visits (docs/specs/08 §3.3; features/checklist.ts visitSettings fills the gaps). Written only through
    *  company.visitSettings, never by company.save; absent = the defaults */
   visitSettings?: Partial<VisitSettings>;
@@ -1048,6 +1080,12 @@ export interface ServiceCategory {
 }
 
 /** wave 7б-1 (docs/specs/03 §12): personal settings (server table member_prefs, one row per person in a company) */
+/** #2097: a reason of «Разбор дел» (AttentionItem.id) hidden until `until` (ISO) — then it comes back by itself */
+export interface AttentionSnooze {
+  itemId: string;
+  until: string;
+}
+
 export interface MemberPrefs {
   /** «Показывать выполненные» in the Plan */
   planShowDone: boolean;
@@ -1095,6 +1133,17 @@ export interface PendingPayment {
   at: string;
 }
 
+/** #1807 (spec 53 §5.3б п.4): a price someone sent for a material counted from its cost, and the price that stayed */
+export interface PriceRecalc {
+  id: ID;
+  itemId: ID;
+  sentCents: number;
+  serverCents: number;
+  /** who sent it (a member's user id; absent — unknown) */
+  by?: ID;
+  at: string;
+}
+
 export interface DB {
   me: ID;
   members: Member[];
@@ -1117,6 +1166,9 @@ export interface DB {
   customFieldValues?: CustomFieldValue[];
   /** wave 7б-1: the personal settings of `me` in this company, the same on every device (absent in old saved data → defaults) */
   prefs?: MemberPrefs;
+  /** #2097: reasons of «Разбор дел» put off by the office until a day, for the whole company (public.attention_snoozes;
+   *  absent in old saved data → none). Only the ones still put off; a lifted one is not kept */
+  attentionSnoozes?: AttentionSnooze[];
   /** step 18 P4b: my push switches by group here (absent in old saved data → the defaults) */
   pushPrefs?: PushPrefs;
   /** wave 7б-2: my location consent here (absent in old saved data → off) */
@@ -1166,6 +1218,9 @@ export interface DB {
    * so a material's price is edited as it is. undefined — not known (demo, a cache from before): as before.
    */
   costsVisible?: boolean;
+  /** #1807: prices a phone sent that the server replaced with the one from the cost (catalog_price_recalc; only who sees
+   *  our costs gets rows) — the office's «Требует внимания». Absent / empty: none. */
+  priceRecalc?: PriceRecalc[];
   notices: Notice[];
   company: Company | null;
   notes: Note[];
