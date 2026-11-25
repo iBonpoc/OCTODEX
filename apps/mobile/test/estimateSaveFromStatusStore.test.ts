@@ -125,3 +125,32 @@ describe("unit:estimateSaveFromStatusStore — #2474", () => {
     expect((await saved("awaiting_countersign")).fromStatus).toBe("awaiting_countersign");
   });
 });
+
+describe("unit:estimateSaveFromStatusStore — #2478 the signature the phone saw", () => {
+  it("the save and «Не подписывать — изменить» carry the option the client signed", async () => {
+    const base = company();
+    const e0 = base.estimates.find((e) => e.doc)!;
+    const optionId = e0.doc!.options[0]!.id;
+    const approval = { optionId, addonIds: [], signerName: "Client (test)", signature: "M0 0", at: "2026-11-24T10:00:00Z", channel: "portal" as const, totalCents: 1000, depositCents: 0 };
+    // the director reopens (canManageLink): «u1» is the director here
+    const members = base.members.map((m) => (m.id === "m-alex" ? { ...m, id: "u1" } : m));
+    const r = await signedIn({ members, estimates: base.estimates.map((e) => (e.id === e0.id ? { ...e, status: "awaiting_countersign" as const, approval } : e)) });
+    (valueOf(r).reopenEstimate as (id: string, reason: string) => unknown)(e0.id, "gate");
+    await settle();
+    await tick();
+    expect(server.sends.map((x) => x.op.k)).toContain("estimate.reopen");
+    expect(server.sends.find((x) => x.op.k === "estimate.reopen")!.op.signedOptionId).toBe(optionId);
+  });
+  it("the save of the client-signed estimate names the option too", async () => {
+    const base = company();
+    const e0 = base.estimates.find((e) => e.doc)!;
+    const optionId = e0.doc!.options[0]!.id;
+    const approval = { optionId, addonIds: [], signerName: "Client (test)", signature: "M0 0", at: "2026-11-24T10:00:00Z", channel: "portal" as const, totalCents: 1000, depositCents: 0 };
+    const r = await signedIn({ estimates: base.estimates.map((e) => (e.id === e0.id ? { ...e, status: "awaiting_countersign" as const, approval } : e)) });
+    const e = valueOf(r).db.estimates.find((x) => x.id === e0.id)!;
+    valueOf(r).saveEstimate({ id: e.id, customerId: e.customerId, propertyId: e.propertyId, title: e.title, doc: e.doc! });
+    await settle();
+    await tick();
+    expect(server.sends.find((x) => x.op.k === "estimate.save")!.op.signedOptionId).toBe(optionId);
+  });
+});

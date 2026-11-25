@@ -115,6 +115,8 @@ export function rejectedOf(item: OwnedItem, error: string, now: number, who: Own
     };
     return { ...base, what: "estimate", href: `/estimate/${op.id}`, labelKey: "est.rej.signedMeanwhile", reason, estimateEdit };
   }
+  // #2478: «don't sign — change it» queued while the client signed another version — that signature stays, the card says so
+  if (op.k === "estimate.reopen" && reason === "estimate_signed_meanwhile") return { ...base, what: "estimate", href: `/estimate/${op.id}`, labelKey: "est.rej.signedMeanwhile", reason };
   // a merge of two clients the phone showed as done (step 17 C3): never back silently — the kept card, and why
   if ((op.k === "customer.people" || op.k === "customer.tags") && reason === "customer_merged") return { ...base, what: "merge", href: `/client/${op.id}`, labelKey: "clientDup.rej.cardMergedTitle", reason };
   if (op.k === "customer.merge") return { ...base, what: "merge", href: `/client/${op.keepId}`, ...(reason ? { reason } : {}) };

@@ -4068,7 +4068,7 @@ begin
                         'portal_accept(text,uuid,uuid[],text,text,boolean,text,uuid,uuid,uuid)', 'portal_estimate(text)',
                         'portal_pay_simulated(text,uuid)', 'record_estimate_deposit(uuid,uuid,text)',
                         'record_visit_payment(uuid,uuid,uuid,text,date,bigint)', 'refund_record(uuid,bigint,text,text,text)',
-                        'register_push_device(text,text,text,text)', 'reissue_estimate_link(uuid)', 'reopen_estimate(uuid,text)',
+                        'register_push_device(text,text,text,text)', 'reissue_estimate_link(uuid)', 'reopen_estimate(uuid,text)', 'reopen_signed_estimate(uuid,text,uuid)',
                         'resend_invitation(uuid)', 'resend_signed_copy(uuid)', 'revoke_estimate_link(uuid)', 'revoke_invitation(uuid)',
                         'save_customer_people(uuid,jsonb)', 'save_estimate_version(uuid,uuid,text,jsonb,jsonb,jsonb,jsonb)',
                         'save_lead_people(uuid,jsonb)', 'send_estimate(uuid,text)', 'set_customer_tags(uuid,uuid[])', 'set_gate_code(uuid,text)',
@@ -19607,5 +19607,151 @@ select tst.ok(not has_function_privilege('authenticated', 'app.tg_estimate_clien
   'T471 rule 18: the trigger function is executed by no one');
 rollback;
 \echo 'T471 the client of an estimate changes only in a draft ok'
+
+-- ================================================================ T472: a tech moves his draft only to a property he is assigned
+-- (#2647, found by the review of #2646, migration 20261117690000). estimates_insert lets a tech create a draft only on a
+-- property he is assigned (is_property_assignee); estimates_update checked only «draft». t27_estimate_property_assignee:
+-- a tech (not staff) changes property_id only to a property he is assigned. The same property (a save of a draft whose
+-- property was taken off him meanwhile) is not touched; the office / owner and the server move it as before.
+:as_super
+begin;
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('54720000-0000-4000-8000-0000000000d9', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', '472 Nobody St', 'Pasadena');
+:as_tech_a
+select tst.ok(app.is_property_assignee('d1a00000-0000-0000-0000-000000000001') and not app.is_property_assignee('54720000-0000-4000-8000-0000000000d9'),
+  'T472 fixtures: the tech is assigned the first property, not the new one');
+insert into public.estimates (id, company_id, customer_id, property_id, title)
+  values ('54720000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T472 tech draft');
+-- as on insert: not onto a property he is not assigned
+select tst.fails($q$insert into public.estimates (id, company_id, customer_id, property_id, title)
+                    values ('54720000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', '54720000-0000-4000-8000-0000000000d9', 'T472 x')$q$,
+  'T472 (as before) a tech does not create a draft on a property he is not assigned');
+select tst.fails_like($q$update public.estimates set property_id = '54720000-0000-4000-8000-0000000000d9' where id = '54720000-0000-4000-8000-0000000000e1'$q$,
+                      'estimate_property_not_assigned%', 'T472 a tech does not move his draft to a property he is not assigned');
+create function pg_temp.t472_code() returns text language plpgsql as $$
+begin
+  update public.estimates set property_id = '54720000-0000-4000-8000-0000000000d9' where id = '54720000-0000-4000-8000-0000000000e1';
+  return 'no error';
+exception when others then
+  declare v_hint text; begin get stacked diagnostics v_hint = pg_exception_hint; return sqlstate || ' ' || coalesce(v_hint, ''); end;
+end $$;
+select tst.ok(pg_temp.t472_code() = '22023 estimate_property_not_assigned', format('T472 the code: 22023 + hint, not 42501 («no rights» in the app) (%s)', pg_temp.t472_code()));
+-- the same property sent again and the title: saved (also once the property is no longer his — below)
+update public.estimates set property_id = 'd1a00000-0000-0000-0000-000000000001', title = 'T472 renamed' where id = '54720000-0000-4000-8000-0000000000e1';
+select tst.ok((select title from public.estimates where id = '54720000-0000-4000-8000-0000000000e1') = 'T472 renamed', 'T472 the same property and the title: saved');
+
+:as_super
+-- the draft sits on the not-assigned property (the office moved it): the tech still saves its title
+update public.estimates set property_id = '54720000-0000-4000-8000-0000000000d9' where id = '54720000-0000-4000-8000-0000000000e1';
+:as_tech_a
+update public.estimates set title = 'T472 saved on a property not his' where id = '54720000-0000-4000-8000-0000000000e1';
+:as_super
+select tst.ok((select (property_id, title) = ('54720000-0000-4000-8000-0000000000d9'::uuid, 'T472 saved on a property not his') from public.estimates where id = '54720000-0000-4000-8000-0000000000e1'),
+  'T472 a draft whose property is not his: the tech''s save without a move goes through (old builds are not broken)');
+:as_tech_a
+-- back to a property he is assigned: allowed
+update public.estimates set property_id = 'd1a00000-0000-0000-0000-000000000001' where id = '54720000-0000-4000-8000-0000000000e1';
+:as_super
+select tst.ok((select property_id from public.estimates where id = '54720000-0000-4000-8000-0000000000e1') = 'd1a00000-0000-0000-0000-000000000001',
+  'T472 a tech moves his draft to a property he is assigned');
+
+:as_owner_a
+-- the office / owner moves a draft anywhere, as before
+update public.estimates set property_id = '54720000-0000-4000-8000-0000000000d9' where id = '54720000-0000-4000-8000-0000000000e1';
+select tst.ok((select property_id from public.estimates where id = '54720000-0000-4000-8000-0000000000e1') = '54720000-0000-4000-8000-0000000000d9',
+  'T472 the owner moves a draft to any property');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_estimate_property_assignee()', 'EXECUTE')
+          and not has_function_privilege('anon', 'app.tg_estimate_property_assignee()', 'EXECUTE')
+          and not has_function_privilege('public', 'app.tg_estimate_property_assignee()', 'EXECUTE'),
+  'T472 rule 18: the trigger function is executed by no one');
+rollback;
+\echo 'T472 a tech moves his draft only to a property he is assigned ok'
+
+
+-- T473 (#2478): «don't sign — change it» names the client's signature it takes off (reopen_signed_estimate). A phone's
+-- queued choice never takes off a signature it did not see: another option signed (a newer signature) or none named —
+-- refused for good (22023 + hint estimate_signed_meanwhile, the app's card); the signature stays. Red before 20261117700000.
+begin;
+:as_owner_a
+do $$
+declare e uuid; v uuid; o1 uuid; o2 uuid; e2 uuid; v2 uuid; p1 uuid; p2 uuid; t1 text; t2 text;
+begin
+  insert into public.estimates (company_id, customer_id, property_id, title) values
+    ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T473 a') returning id into e;
+  insert into public.estimate_versions (company_id, estimate_id, version_no) values ('ca000000-0000-0000-0000-000000000000', e, 1) returning id into v;
+  update public.estimates set current_version_id = v where id = e;
+  insert into public.estimate_options (company_id, version_id, name) values ('ca000000-0000-0000-0000-000000000000', v, 'Good') returning id into o1;
+  insert into public.estimate_options (company_id, version_id, name, position) values ('ca000000-0000-0000-0000-000000000000', v, 'Better', 1) returning id into o2;
+  insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents) values
+    ('ca000000-0000-0000-0000-000000000000', o1, 'labor', 'Work', 1, 50000), ('ca000000-0000-0000-0000-000000000000', o2, 'labor', 'Work+', 1, 70000);
+  insert into public.estimates (company_id, customer_id, property_id, title) values
+    ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T473 b') returning id into e2;
+  insert into public.estimate_versions (company_id, estimate_id, version_no) values ('ca000000-0000-0000-0000-000000000000', e2, 1) returning id into v2;
+  update public.estimates set current_version_id = v2 where id = e2;
+  insert into public.estimate_options (company_id, version_id, name) values ('ca000000-0000-0000-0000-000000000000', v2, 'Only') returning id into p1;
+  insert into public.estimate_options (company_id, version_id, name, position) values ('ca000000-0000-0000-0000-000000000000', v2, 'Other', 1) returning id into p2;
+  insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents) values
+    ('ca000000-0000-0000-0000-000000000000', p1, 'labor', 'Work', 1, 40000), ('ca000000-0000-0000-0000-000000000000', p2, 'labor', 'Work', 1, 45000);
+  t1 := public.send_estimate(e);
+  t2 := public.send_estimate(e2);
+  perform set_config('tst.t473', concat_ws(',', e, o1, o2, e2, p1, p2, t1, t2), false);
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$ begin
+  perform public.portal_accept(split_part(current_setting('tst.t473'), ',', 7), split_part(current_setting('tst.t473'), ',', 2)::uuid, null, 'T473 Client', 'M0 0 L4 4', true);
+  perform public.portal_accept(split_part(current_setting('tst.t473'), ',', 8), split_part(current_setting('tst.t473'), ',', 5)::uuid, null, 'T473 Client', 'M0 0 L4 4', true);
+end $$;
+:as_super
+select tst.ok((select count(*) from public.estimates where title like 'T473 %' and status = 'awaiting_countersign') = 2,
+  'T473 fixtures: two estimates the client signed (a on «Good», b on «Only»)');
+-- b: a newer client signature on another option (the estimate was reopened, changed and signed again meanwhile)
+insert into public.estimate_approvals (company_id, estimate_id, option_id, signer_name, channel, party, decision, signed_at)
+  values ('ca000000-0000-0000-0000-000000000000', split_part(current_setting('tst.t473'), ',', 4)::uuid, split_part(current_setting('tst.t473'), ',', 6)::uuid,
+          'T473 Client', 'portal', 'customer', 'approved', now() + interval '1 minute');
+
+:as_office_a
+-- the phone saw the signature on «Better» — the client signed «Good»: refused, the signature stays
+select tst.fails_like(format($q$select public.reopen_signed_estimate(%L, null, %L)$q$, split_part(current_setting('tst.t473'), ',', 1), split_part(current_setting('tst.t473'), ',', 3)),
+                      'estimate_signed_meanwhile%', 'T473 another signature than the phone saw: refused');
+-- no signature named (a phone that did not see one): refused too
+select tst.fails_like(format($q$select public.reopen_signed_estimate(%L, 'x', null)$q$, split_part(current_setting('tst.t473'), ',', 1)),
+                      'estimate_signed_meanwhile%', 'T473 no signature named: refused');
+create function pg_temp.t473_code() returns text language plpgsql as $$
+begin
+  perform public.reopen_signed_estimate(split_part(current_setting('tst.t473'), ',', 1)::uuid, null, split_part(current_setting('tst.t473'), ',', 3)::uuid);
+  return 'no error';
+exception when others then
+  declare v_hint text; begin get stacked diagnostics v_hint = pg_exception_hint; return sqlstate || ' ' || coalesce(v_hint, ''); end;
+end $$;
+select tst.ok(pg_temp.t473_code() = '22023 estimate_signed_meanwhile', format('T473 the code: 22023 + hint estimate_signed_meanwhile (%s)', pg_temp.t473_code()));
+-- b: the phone saw the first signature («Only»), the newer one is on «Other»: refused
+select tst.fails_like(format($q$select public.reopen_signed_estimate(%L, null, %L)$q$, split_part(current_setting('tst.t473'), ',', 4), split_part(current_setting('tst.t473'), ',', 5)),
+                      'estimate_signed_meanwhile%', 'T473 a newer signature than the phone saw: refused');
+:as_super
+select tst.ok((select count(*) from public.estimates where title like 'T473 %' and status = 'awaiting_countersign') = 2,
+  'T473 both client signatures stay');
+:as_tech_a
+select tst.fails(format($q$select public.reopen_signed_estimate(%L, null, %L)$q$, split_part(current_setting('tst.t473'), ',', 1), split_part(current_setting('tst.t473'), ',', 2)),
+                 'T473 a tech does not take a signature off');
+:as_office_a
+-- the signature the phone saw: off, back to a draft, the reason in history
+select public.reopen_signed_estimate(split_part(current_setting('tst.t473'), ',', 1)::uuid, 'client asked for a gate', split_part(current_setting('tst.t473'), ',', 2)::uuid);
+select tst.ok((select status from public.estimates where id = split_part(current_setting('tst.t473'), ',', 1)::uuid) = 'draft',
+  'T473 the signature the phone saw: the estimate is a draft again');
+select tst.ok((select count(*) from public.activities where subject_id = split_part(current_setting('tst.t473'), ',', 1)::uuid
+                 and meta ->> 'action' = 'reopened' and body = 'client asked for a gate') = 1,
+  'T473 the reopen and its reason are in the history');
+-- a repeat of the queue (already a draft): quiet
+select public.reopen_signed_estimate(split_part(current_setting('tst.t473'), ',', 1)::uuid, null, split_part(current_setting('tst.t473'), ',', 2)::uuid);
+select tst.ok((select count(*) from public.activities where subject_id = split_part(current_setting('tst.t473'), ',', 1)::uuid and meta ->> 'action' = 'reopened') = 1,
+  'T473 a repeat changes nothing');
+:as_super
+select tst.ok(has_function_privilege('authenticated', 'public.reopen_signed_estimate(uuid,text,uuid)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.reopen_signed_estimate(uuid,text,uuid)', 'EXECUTE')
+          and not has_function_privilege('public', 'public.reopen_signed_estimate(uuid,text,uuid)', 'EXECUTE'),
+  'T473 rule 18: the app runs it, anon and public do not');
+rollback;
+\echo 'T473 «don''t sign — change it» takes off only the signature the phone saw ok'
 
 \echo 'ALL TESTS PASSED'
