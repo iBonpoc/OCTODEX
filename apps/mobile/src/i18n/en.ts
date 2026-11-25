@@ -3715,6 +3715,7 @@ export const en: Dict = {
   "mod.gutters.attr.pull": "drag the strip: the length is under the mark",
   "mod.gutters.attr.pullLess": "Shorter by {step}",
   "mod.gutters.attr.pullMore": "Longer by {step}",
+  "mod.gutters.attr.lineLen": "line · {len}",
   "mod.gutters.attr.runNo": "Gutter #{n}",
   "mod.gutters.attr.dsNo": "Downspout #{n}",
   "mod.gutters.attr.apply": "Apply",

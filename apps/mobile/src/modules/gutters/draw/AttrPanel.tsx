@@ -39,6 +39,8 @@ import { drawnLengthIn, type CornerChoice, type DrawnDownspout, type DrawnRun, t
 const k = (s: string) => `mod.gutters.attr.${s}` as DictKey;
 const inch = (s: string) => `${s}″`;
 const dsSize = sizeText; // one format everywhere (#1916)
+/** «3,810 mm · 12′ 6″»: the company's format, and feet and inches beside it when the format is another */
+const lineLenText = (inches: number, fmt: LenFormat) => (fmt === "ftin" ? fmtLen(inches, "ftin") : `${fmtLen(inches, fmt)} · ${fmtLen(inches, "ftin")}`);
 const elbow = (s: string) => (/^\d+$/.test(s) ? `${s}°` : s);
 
 /** a colour: the module's own words are translated; the company's palette names are its supplier's words (data) */
@@ -444,6 +446,8 @@ export function RunAttrsView({
     <>
       {/* «Для новых желобов»: its title, «Сбросить» and the line under it are the owner's (DrawScreen), above these rows */}
       {forNew ? null : <View testID="attr-title"><T v="heading" w="semibold">{no ? t(k("runNo"), { n: no }) : t(k("run"))}</T></View>}
+      {/* the length of the line in the company's format (and in feet when it is another): the window's title no longer carries it (v43: «линия · 3,810 мм · 12′ 6″») */}
+      {forNew ? null : <View testID="attr-line-len"><T v="caption" tone="mut">{t(k("lineLen"), { len: lineLenText(run.lengthIn ?? drawnLengthIn(run), ch.lenFormat) })}</T></View>}
       {forNew ? null : <Tape run={run} onLength={onLength} />}
       <FieldRow>
         <Choice label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />

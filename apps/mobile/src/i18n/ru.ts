@@ -3715,6 +3715,7 @@ export const ru = {
   "mod.gutters.attr.pull": "лента: тяните, длина под меткой",
   "mod.gutters.attr.pullLess": "Короче на {step}",
   "mod.gutters.attr.pullMore": "Длиннее на {step}",
+  "mod.gutters.attr.lineLen": "линия · {len}",
   "mod.gutters.attr.runNo": "Gutter № {n}",
   "mod.gutters.attr.dsNo": "Downspout № {n}",
   "mod.gutters.attr.apply": "Применить",

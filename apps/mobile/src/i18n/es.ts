@@ -3715,6 +3715,7 @@ export const es: Dict = {
   "mod.gutters.attr.pull": "arrastre la regla: el largo está bajo la marca",
   "mod.gutters.attr.pullLess": "Más corto en {step}",
   "mod.gutters.attr.pullMore": "Más largo en {step}",
+  "mod.gutters.attr.lineLen": "línea · {len}",
   "mod.gutters.attr.runNo": "Canaleta n.º {n}",
   "mod.gutters.attr.dsNo": "Bajante n.º {n}",
   "mod.gutters.attr.apply": "Aplicar",
