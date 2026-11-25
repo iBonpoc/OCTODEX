@@ -75,7 +75,7 @@ function TrioCell({ f }: { f: Fig }) {
   );
 }
 
-/** a value column on the right of a FigureRow; `tone` — a status word («−9 дн» bad) */
+/** a value column on the right of a FigureRow; `tone` — a status word («Просрочен 9 дн» bad) */
 export type FigureCol = { label: string; value: string; tone?: StatusName };
 
 export function FigureRow({ title, line, icon, lead, cols, status, onPress, testID, tone, iconTone, avatar }: {

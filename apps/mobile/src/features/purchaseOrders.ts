@@ -233,6 +233,9 @@ export function isoDate(us: string): string | undefined {
 /** «Получено: 1 из 2» — lines that have all their quantity */
 export const receivedCount = (o: Pick<PurchaseOrder, "lines">) => o.lines.filter((l) => Number(l.receivedQty) >= Number(l.qty)).length;
 
+/** which PO statuses show the «draft» glyph (dashed ring), not «cancelled» (DS §3.3) */
+export const PO_DRAFT: Record<PoStatus, boolean> = { draft: true, sent: false, partially_received: false, received: false, cancelled: false };
+
 /** the status chip: draft / cancelled — neutral, sent — info, partially — warn, received — ok (colour only with the word) */
 export const PO_TONE: Record<PoStatus, "neutral" | "info" | "warn" | "ok"> = {
   draft: "neutral", sent: "info", partially_received: "warn", received: "ok", cancelled: "neutral",

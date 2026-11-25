@@ -25,7 +25,7 @@ const SHOWN = 3;
  * «Деньги» — the tab's overview (visual-v2 «Макеты 390 × 844» №6, образец №3 «Overview»). The root header: the avatar, search ·
  * the lists · «＋», «Ноябрь 2026 · Демо» over «Деньги». The one yellow of the screen — the tile «Должны · счета» (it opens
  * «Счета»); «Сметы открыты» beside it; «Сегодня · Расходы, нед. · Задатки» three small ones; «К оплате» — the live invoices,
- * «Срок / Сумма» on the right, an overdue one says «−9 дн» in the bad word, not a fill; «Оплачены сегодня» — «Способ / Сумма».
+ * «Срок / Сумма» on the right, an overdue one says «Просрочен 9 дн» in the bad word, not a fill; «Оплачены сегодня» — «Способ / Сумма».
  * The lists «Сметы · Счета · Оплаты» (their segment) are behind the tiles and «Все ›»; «Расходы» — behind its tile.
  */
 export default function Finance() {

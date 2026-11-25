@@ -178,11 +178,11 @@ export interface GroupRowProps {
   lead?: RowLead;
   /** a sum on the right (15, tabular) */
   value?: string;
-  /** visual v2 «цифры справа» (FigureRow): columns «word 12 / value 15» on the right instead of a bare `value` — «Срок −9 дн ·
+  /** visual v2 «цифры справа» (FigureRow): columns «word 12 / value 15» on the right instead of a bare `value` — «Срок Просрочен 9 дн ·
    *  Сумма $1,840»; each but the last `figureRow.colW` wide, so the columns of a group stand under each other */
   cols?: FigureCol[];
   /** a StatusPill on the right */
-  status?: { status: StatusName; label: string };
+  status?: { status: StatusName; label: string; draft?: boolean };
   /** small quick actions on the right (call, SMS): ≤ 2, the label names the object (П6) */
   actions?: IconAction[];
   /** the swipe (native): `left` — revealed by a swipe right, `right` — by a swipe left; the same on a long press and to VoiceOver */
@@ -263,7 +263,7 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
               <T v="micro" tone="mut" numberOfLines={1}>
                 {x.label}
               </T>
-              {/* a value in a status tone («−9 дн» overdue) carries its status icon — rule 2, never the colour alone (#2363 X01) */}
+              {/* a value in a status tone («Просрочен 9 дн» overdue) carries its status icon — rule 2, never the colour alone (#2363 X01) */}
               <RowView gap={spaceHalf.tight}>
                 {x.tone ? <Icon name={statusIcon[x.tone]} s={size.iconXs} color={c.status[x.tone].text} /> : null}
                 <T v="body" w="bold" tabular tone={x.tone ?? "ink"} numberOfLines={1}>
@@ -285,7 +285,7 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
               )}
             </View>
           ) : null}
-      {status ? <StatusPill status={status.status} label={status.label} /> : null}
+      {status ? <StatusPill status={status.status} label={status.label} draft={status.draft} /> : null}
       {chevron ? <Icon name="chevronRight" s={size.iconSm} color={c.mut} /> : null}
     </RowView>
   );

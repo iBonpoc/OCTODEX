@@ -404,7 +404,7 @@ export default function JobScreen() {
         title={e.title || e.number || t("cc.kind.estimate")}
         when={e.title ? e.number : undefined}
         value={money(e.totalCents)}
-        status={{ tone: v.s, label: t(v.l) }}
+        status={{ tone: v.s, label: t(v.l), draft: v.d }}
         onPress={() => router.push(`/estimate/${e.id}`)}
       />
     );

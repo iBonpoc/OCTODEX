@@ -2106,7 +2106,7 @@ export const en: Dict = {
   "w2m.col.way": "Method",
   "w2m.col.paid": "Paid",
   "w2m.col.state": "Status",
-  "w2m.due.late": "−{d} d",
+  "w2m.due.late": "Overdue {d} d",
   "w2m.due.in": "{d} d",
   "w2m.due.today": "today",
   // визуал v2, Смета-редактор и Деньги (#2344, px3)

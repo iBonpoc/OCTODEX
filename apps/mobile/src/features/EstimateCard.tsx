@@ -186,7 +186,7 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
             {e.number ? `${e.number} · ` : ""}
             {e.title}
           </T>
-          <StatusChip status={st.s} label={t(st.l)} />
+          <StatusChip status={st.s} label={t(st.l)} draft={st.d} />
         </RowView>
         <T v="display" tabular>
           {money(e.totalCents)}
@@ -477,7 +477,7 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
           // the number alone is the name (30 → 22,5, then «…»): with the work's title too it took the line and cut the status off;
           // the work goes into the line under it, after the client
           title: e.number || e.title || t("est.detail"),
-          status: { name: st.s, label: t(st.l) },
+          status: { name: st.s, label: t(st.l), draft: st.d },
           amount: money(e.totalCents),
           // «Linda Alvarez › · задаток $77.24» (object-cards): who, and what is taken before the work — once
           link: customer ? { label: [customer.name, e.number ? e.title : "", e.depositCents ? t("proto.est.depositShort", { amount: money(e.depositCents) }) : ""].filter(Boolean).join(" · "), onPress: () => router.push(`/client/${customer.id}`) } : undefined,

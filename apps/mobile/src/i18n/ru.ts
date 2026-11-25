@@ -2105,7 +2105,7 @@ export const ru = {
   "w2m.col.way": "Способ",
   "w2m.col.paid": "Оплачен",
   "w2m.col.state": "Что с ней",
-  "w2m.due.late": "−{d} дн",
+  "w2m.due.late": "Просрочен {d} дн",
   "w2m.due.in": "{d} дн",
   "w2m.due.today": "сегодня",
   // визуал v2, Смета-редактор и Деньги (#2344, px3)

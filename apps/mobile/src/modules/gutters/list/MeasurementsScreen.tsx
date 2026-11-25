@@ -69,9 +69,9 @@ export default function MeasurementsScreen() {
     if (v.state === "signed") return { tone: "ok", label: t("mod.gutters.list.s.signed") };
     if (v.state === "estimate" && v.estimate) {
       const s = estimateStatusView(v.estimate.status);
-      return { tone: s.s, label: t(s.l) };
+      return { tone: s.s, label: t(s.l), draft: s.d };
     }
-    return { tone: "neutral", label: t(v.state === "unlinked" ? "mod.gutters.list.draft" : "mod.gutters.list.s.noEstimate") };
+    return { tone: "neutral", label: t(v.state === "unlinked" ? "mod.gutters.list.draft" : "mod.gutters.list.s.noEstimate"), draft: v.state === "unlinked" };
   };
   const signsOf = (m: MeasurementItem): CardSign[] | undefined => {
     const out: CardSign[] = [];

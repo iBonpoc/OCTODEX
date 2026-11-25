@@ -108,7 +108,7 @@ export function ProtoV2() {
       </StatGrid>
       {/* the rows «цифры справа» */}
       <View style={{ gap: rhythm.cardGap }}>
-        <FigureRow testID="showcase-v2-row-late" icon="doc" title="David Kim" line="INV-0101 · Kitchen faucet" cols={[{ label: t("ds.v2.due"), value: t("ds.v2.days", { n: -9 }), tone: "bad" }, { label: t("ds.v2.sum"), value: "$1,840" }]} onPress={said("David Kim")} />
+        <FigureRow testID="showcase-v2-row-late" icon="doc" title="David Kim" line="INV-0101 · Kitchen faucet" cols={[{ label: t("ds.v2.due"), value: t("w2m.due.late", { d: 9 }), tone: "bad" }, { label: t("ds.v2.sum"), value: "$1,840" }]} onPress={said("David Kim")} />
         <FigureRow testID="showcase-v2-row-soon" icon="calendar" title="8:30–12:30" line="Bathroom remodel · Alex" status={{ status: "info", label: t("st.sent") }} />
         {/* №5 «Смета, редактор»: the client card with the pastel initials, «Позиции  7» with its count */}
         <FigureRow testID="showcase-v2-row-client" avatar={{ initials: "LA", name: "Linda Alvarez" }} title="Linda Alvarez" line="2207 Ocean Park Blvd, Santa Monica" onPress={said("Linda Alvarez")} />
@@ -152,7 +152,7 @@ export function ProtoV2() {
       />
       <ListGroup bare title={t("ds.tpl.attention")} all={{ label: t("ds.tpl.all"), onPress: said(t("ds.tpl.all")) }} testID="showcase-v2-group-bare">
         <StatGrid>
-          <StatTile dense icon="invoice" label={t("ds.v2.owed")} value="$2,800" unit={t("ds.v2.days", { n: -9 })} unitTone="bad" testID="showcase-v2-tile-dense" />
+          <StatTile dense icon="invoice" label={t("ds.v2.owed")} value="$2,800" unit={t("w2m.due.late", { d: 9 })} unitTone="bad" testID="showcase-v2-tile-dense" />
           <StatTile dense icon="wallet" label={t("st.paid")} value="$1,020" unit={t("ds.v2.days", { n: 0 })} testID="showcase-v2-tile-dense2" />
           <StatTile icon="dollar" label={t("st.paid")} value="$2,800" sub="2" subNote={{ tone: "bad", text: t("st.overdue") }} testID="showcase-v2-tile-subnote" />
         </StatGrid>
