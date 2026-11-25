@@ -8,7 +8,7 @@
  *   (docs/specs/33-gutters-canvas-ideas.md П35, founder 12.11: replaces «a long press on an end = a new line» of 08.11; e2e 292, 295).
  * Finds things by id / testID; waits on what it checks.
  */
-const { pickDsKind, skipLength, canvasAt } = require("../gutters.cjs");
+const { pickDsKind, skipLength, canvasAt, winSave } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -72,8 +72,7 @@ exports.run = async (h) => {
     return JSON.stringify(ds?.attrs?.elbows) === JSON.stringify([{ style: "A", qty: 2 }, { style: "B", qty: 1 }]);
   }, "the store: A 2, B 1");
   await h.shot("ds");
-  if (!wide) await p.getByRole("button", { name: "Закрыть", exact: true }).first().click({ position: { x: 10, y: 10 } });
-  else await tid("draw-panel-close").getByRole("button").click();
+  await winSave(p); // the window's own «Сохранить» (DS §7.3, #2412 PR3): its edits kept
 
   // drag the downspout along its run
   await waitFor(async () => (await tid("attr-panel").count()) === 0, "the downspout's menu is closed");

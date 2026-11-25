@@ -5,7 +5,7 @@
  *   its prices — no Cyrillic on the screen (the demo has no Russian names on these screens).
  * Finds things by testID; waits on what it checks.
  */
-const { doubleTap, openProps, skipLength, openAttrMore, attrClose } = require("../gutters.cjs");
+const { doubleTap, openProps, skipLength, openAttrMore, attrClose, winSave } = require("../gutters.cjs");
 
 exports.init = { lang: "en" };
 
@@ -40,8 +40,7 @@ exports.run = async (h) => {
   };
   const scrim = () => p.getByRole("button", { name: /^(Закрыть|Close|Cerrar)$/ }).last().click({ position: { x: 10, y: 10 } });
   const closePanel = async () => {
-    if (wide) await tid("draw-panel-close").getByRole("button").click();
-    else await scrim();
+    await winSave(p); // the window's own «Сохранить» (DS §7.3, #2412 PR3): its edits kept
     await waitFor(async () => (await tid("attr-panel").count()) === 0, "the panel is closed");
   };
 

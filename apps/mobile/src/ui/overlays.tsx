@@ -243,6 +243,11 @@ export function Menu<K extends string>({
 const SheetHold = createContext<{ current: boolean }>({ current: false });
 export const useSheetHold = () => useContext(SheetHold);
 
+/** the sheet's own way out for its body and `footer` (DS Б1, §7.3): a «Закрыть» button of the sheet's own goes the way ✕, the scrim and the
+ *  swipe go — with `dirty` it asks «Сохранить изменения?» first. Outside a sheet — null (the caller closes by itself) */
+const SheetCloseCtx = createContext<(() => void) | null>(null);
+export const useSheetClose = () => useContext(SheetCloseCtx);
+
 const SheetEscapeCtx = createContext<{ add: (f: () => boolean) => () => void } | null>(null);
 /**
  * Inside a `Sheet`: `onEscape` runs first on Esc / Android «Назад»; it returns true when it closed something of its own (an open
@@ -638,6 +643,7 @@ export function Sheet({
     },
     [drag, before, animateOut],
   );
+  const closeByOwnButton = useCallback(() => requestClose(), [requestClose]);
   // #1912: while the sheet holds unsaved work, «Обновить» asks it through its own question and never reloads over it
   useEffect(() => {
     if (!visible || !dirty) return;
@@ -858,7 +864,7 @@ export function Sheet({
                 >
                   {/* the content stays mounted under the help page (its fields, its choices are kept) */}
                   <Animated.View style={[{ gap: space[3], display: helpPage.on ? "none" : "flex" }, pageSlide]} testID="sheet-content">
-                    <SheetHold.Provider value={held}>{children}</SheetHold.Provider>
+                    <SheetHold.Provider value={held}><SheetCloseCtx.Provider value={closeByOwnButton}>{children}</SheetCloseCtx.Provider></SheetHold.Provider>
                   </Animated.View>
                   {helpPage.on && help ? (
                     <Animated.View testID="sheet-help-page" style={[{ gap: space[3] }, pageSlide]}>
@@ -886,7 +892,7 @@ export function Sheet({
             ) : null}
             {footer && !ask ? (
               <View testID="sheet-footer" style={{ paddingTop: space[2] }}>
-                {footer}
+                <SheetCloseCtx.Provider value={closeByOwnButton}>{footer}</SheetCloseCtx.Provider>
               </View>
             ) : null}
           </Glass>

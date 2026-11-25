@@ -8,7 +8,7 @@
  * - «Назад» takes the last pick back.
  * No fixed pauses: it waits on what it checks.
  */
-const { skipLength, pickAttr, attrKeys, attrChosen, attrClose } = require("../gutters.cjs");
+const { skipLength, pickAttr, attrKeys, attrChosen, attrClose, winSave } = require("../gutters.cjs");
 const { sheetGone } = require("../sheet.cjs");
 const KEY = "octo.db.v5";
 
@@ -84,12 +84,8 @@ exports.run = async (h) => {
   await h.shot("kinds");
   await attrClose(p, "attr-ds-kind");
 
-  // «Назад» takes the last pick back (on the phone the properties sheet is closed first)
-  if (!wide) {
-    await p.getByRole("button", { name: "Закрыть", exact: true }).first().click({ position: { x: 10, y: 10 } }); // the scrim above the sheet
-    await tid("attr-panel").waitFor({ state: "detached", timeout: 5000 });
-    await sheetGone(p);
-  }
+  // «Сохранить» keeps the window's picks as ONE step (DS §7.3, #2412 PR3): one «Назад» takes them all back — smooth rectangular again
+  await winSave(p);
   await tid("draw-undo").getByRole("button").click();
-  await stored("«Назад»: ribbed round again", "a.shape === 'round' && a.dsStyle === 'corrugated'");
+  await stored("«Назад»: the window's three picks as one step — smooth rectangular again", "a.shape === 'rect' && (a.dsStyle === 'plain' || a.dsStyle === undefined)");
 };

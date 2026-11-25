@@ -10,7 +10,7 @@
  * - everything is in the store (DB.moduleData.gutters) and comes back after a reload.
  * Finds things by testID; waits on what it checks.
  */
-const { openProps, skipLength, pickAttr, attrShown, attrChosen, openAttrMore } = require("../gutters.cjs");
+const { openProps, skipLength, pickAttr, attrShown, attrChosen, openAttrMore, winSave } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -53,9 +53,7 @@ exports.run = async (h) => {
     await panel().waitFor({ timeout: 5000 });
   };
   const closeAttrs = async () => {
-    if (wide) await tid("draw-panel-close").getByRole("button").click();
-    // the scrim above the sheet (its middle is under the sheet)
-    else await p.getByRole("button", { name: "Закрыть", exact: true }).first().click({ position: { x: 10, y: 10 } });
+    await winSave(p); // the window's own «Сохранить» (DS §7.3, #2412 PR3): its edits kept
     await waitFor(async () => (await panel().count()) === 0, "the attributes are closed");
   };
 
