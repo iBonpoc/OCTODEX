@@ -26,7 +26,7 @@ exports.run = async (h) => {
   await card.scrollIntoViewIfNeeded();
   const txt = await card.innerText();
   for (const s of [name, overdue.number]) h.expect(txt.includes(s), `overdue row shows «${s}»: ${txt.slice(0, 200)}`);
-  h.expect(/−\d+ дн/.test(txt), `overdue in words: ${txt.replace(/\n/g, " | ")}`);
+  h.expect(/Просрочен \d+ дн/.test(txt), `overdue in words: ${txt.replace(/\n/g, " | ")}`);
   h.expect(txt.includes(usd(owes(overdue))), `the amount to pay ${usd(owes(overdue))}`);
   h.expect((await p.getByTestId("invoice-list-group-overdue").locator("visible=true").first().getByTestId(`invoice-row-${overdue.id}`).count()) === 1, "overdue invoice is under «Должны»");
   h.expect(!/…|\.\.\./.test(await p.getByTestId("invoice-list-groups").locator("visible=true").first().innerText()), "no «…» in the list");

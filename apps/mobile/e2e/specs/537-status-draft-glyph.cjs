@@ -26,5 +26,6 @@ exports.run = async (h) => {
   await h.go("/settings/design-system/proto");
   await p.getByText(/Просрочен 9 дн|Overdue 9 d/).first().waitFor({ timeout: 8000 });
   h.expect(!(await p.getByText(/−9 дн/).count()), "no bare «−9 дн» is left in the showcase");
+  await vis("showcase-pill-press").scrollIntoViewIfNeeded();
   await h.shot("draft-and-none");
 };
