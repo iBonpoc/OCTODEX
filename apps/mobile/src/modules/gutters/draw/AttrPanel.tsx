@@ -499,11 +499,12 @@ export function RunAttrsView({
  * One fitting row (v43 PR C): «Elbow A · 75° ⌄ · − n +» — the field (its label is the part, its value the angle or the length) and
  * the count. At 0 the value picked waits in the row (nothing to write it on) and goes in with the first «+».
  */
-function CountRow({ label, stepLabel, testID, valueTestID, items, value, onValue, qty, onQty, max }: { label: string; stepLabel: string; testID: string; valueTestID: string; items: PickerItem<string>[]; value: string; onValue: (v: string) => void; qty: number; onQty: (n: number) => void; max: number }) {
+function CountRow({ label, testID, valueTestID, items, value, onValue, qty, onQty, max, stepLabel }: { label: string; testID: string; valueTestID: string; items: PickerItem<string>[]; value: string; onValue: (v: string) => void; qty: number; onQty: (n: number) => void; max: number; stepLabel?: string }) {
   return (
-    <RowView style={{ gap: space[2], alignItems: "flex-end" }}>
-      <View style={{ flex: 1 }}><SelectField label={label} testID={valueTestID} items={items} value={value} onChange={onValue} /></View>
-      <View testID={testID}><Stepper label={stepLabel} value={qty} min={0} max={max} onChange={onQty} /></View>
+    <RowView style={{ gap: space[2], alignItems: "center" }}>
+      <View style={{ width: component.countRowLabelW }}><T v="body" w="semibold" numberOfLines={1}>{label}</T></View>
+      <View style={{ flex: 1 }}><SelectField bare label={label} testID={valueTestID} items={items} value={value} onChange={onValue} /></View>
+      <View testID={testID}><Stepper label={stepLabel ?? ""} value={qty} min={0} max={max} onChange={onQty} /></View>
     </RowView>
   );
 }
@@ -520,7 +521,7 @@ function RectElbow({ ds, style, onAttrs }: { ds: DrawnDownspout; style: string; 
   const angle = qty > 0 ? own : pend;
   return (
     <CountRow
-      label={t(k("elbowRow"), { s: style })} stepLabel={elbow(style)} testID={`attr-elbow-${style}`} valueTestID={`attr-elbow-${style}-angle`}
+      label={t(k("elbowRow"), { s: style })} testID={`attr-elbow-${style}`} valueTestID={`attr-elbow-${style}-angle`}
       items={angleItems(String(angle))} value={String(angle)}
       onValue={(v) => (qty > 0 ? onAttrs(rectElbowPatch(ds, style, qty, Number(v))) : setPend(Number(v)))}
       qty={qty} onQty={(n) => onAttrs(rectElbowPatch(ds, style, n, angle))} max={12}
@@ -536,7 +537,7 @@ function RoundElbow({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<
   const style = cur.qty > 0 ? cur.style : pend;
   return (
     <CountRow
-      label={t(k("elbowRowRound"))} stepLabel="" testID="attr-elbow-round" valueTestID="attr-elbow-round-angle"
+      label={t(k("elbowRowRound"))} testID="attr-elbow-round" valueTestID="attr-elbow-round-angle"
       items={angleItems(style)} value={style}
       onValue={(v) => (cur.qty > 0 ? onAttrs(roundElbowPatch(ds, { style: v })) : setPend(v))}
       qty={cur.qty} onQty={(n) => onAttrs(roundElbowPatch(ds, { style, qty: n }))} max={12}
@@ -546,11 +547,10 @@ function RoundElbow({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<
 
 /** elbows (founder 08.11, v43): a row for every style of the shape — rect «Elbow A», «Elbow B» with an angle each, round one row */
 function Elbows({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void }) {
-  const { t } = useI18n();
   return (
-    <Field label={t(k("elbows"))} testID="attr-elbow-qty">
+    <View testID="attr-elbow-qty" style={{ gap: space[2] }}>
       {ds.shape === "round" ? <RoundElbow ds={ds} onAttrs={onAttrs} /> : ELBOW_STYLES.rect.map((style) => <RectElbow key={style} ds={ds} style={style} onAttrs={onAttrs} />)}
-    </Field>
+    </View>
   );
 }
 
@@ -642,7 +642,7 @@ function OffsetRow({ ds, style, onAttrs }: { ds: DrawnDownspout; style: OffsetSt
   return (
     <View style={{ gap: space[2] }}>
       <CountRow
-        label={label} stepLabel={ds.shape === "round" ? "" : style} testID={`attr-offset${sfx}-qty`} valueTestID={`attr-offset${sfx}-len`}
+        label={label} testID={`attr-offset${sfx}-qty`} valueTestID={`attr-offset${sfx}-len`}
         items={[...OFFSETS_IN.map((n) => ({ key: String(n), label: inch(String(n)) })), { key: "own", label: t(k("offsetOwn")) }]}
         value={ownOpen ? "own" : String(len)}
         onValue={(v) => {
@@ -667,11 +667,10 @@ function OffsetRow({ ds, style, onAttrs }: { ds: DrawnDownspout; style: OffsetSt
 
 /** Offsets (founder 09.11, v43): a rect downspout has «Offset A» and «Offset B» rows, a round one a single «Offset» row */
 function Offsets({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void }) {
-  const { t } = useI18n();
   return (
-    <Field label={t(k("offsets"))} testID="attr-offsets">
+    <View testID="attr-offsets" style={{ gap: space[2] }}>
       {offsetStylesOf(ds.shape).map((style) => <OffsetRow key={style} ds={ds} style={style} onAttrs={onAttrs} />)}
-    </Field>
+    </View>
   );
 }
 

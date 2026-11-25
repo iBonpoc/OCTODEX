@@ -34,7 +34,7 @@ exports.run = async (h) => {
   const g = () => p.evaluate((k) => (JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || [], KEY);
   const live = async (kind) => (await g()).filter((e) => e.kind === kind && !e.deletedAt);
   const step = async (style, sign) => {
-    await tid(`attr-elbow-${style}`).getByRole("button", { name: new RegExp(`^${style} ${sign === 1 ? "\\+" : "−"}1$`) }).click();
+    await tid(`attr-elbow-${style}`).getByRole("button", { name: new RegExp(`${sign === 1 ? "\\+" : "−"}1$`) }).click();
   };
 
   await h.go("/company/modules");
