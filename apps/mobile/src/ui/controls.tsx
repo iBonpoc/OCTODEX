@@ -814,6 +814,8 @@ export function Stepper({
   max = 9999,
   label,
   unit,
+  hideLabel,
+  compact,
 }: {
   value: number;
   onChange: (v: number) => void;
@@ -822,6 +824,11 @@ export function Stepper({
   max?: number;
   label: string;
   unit?: string;
+  /** a row names the count by itself (a part's count row «Elbow A · 75° ⌄ · − n +», DS §9б.2): the word is not drawn here, but still read aloud
+   *  («Колено A +1») */
+  hideLabel?: boolean;
+  /** a narrower number and gap: the stepper shares a row with a field (a part's count row, DS §9б.2) */
+  compact?: boolean;
 }) {
   const ro = useReadOnly();
   const { c } = useTheme();
@@ -839,12 +846,14 @@ export function Stepper({
     </Press>
   );
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: sizes.hitMin }} accessibilityLabel={label}>
-      <T v="body" style={{ flex: 1 }}>
-        {label}
-      </T>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: compact ? space[2] : space[3], minHeight: sizes.hitMin }} accessibilityLabel={label} accessibilityValue={{ now: value }}>
+      {hideLabel ? null : (
+        <T v="body" style={{ flex: 1 }}>
+          {label}
+        </T>
+      )}
       {btn("minus", -step, `${label} −${step}`)}
-      <T v="heading" tabular style={{ minWidth: component.stepperValueW, textAlign: "center" }}>
+      <T v="heading" tabular style={{ minWidth: compact ? component.stepperValueCompactW : component.stepperValueW, textAlign: "center" }}>
         {value}
         {unit ? <T v="caption" tone="mut">{` ${unit}`}</T> : null}
       </T>

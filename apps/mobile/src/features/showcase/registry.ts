@@ -115,6 +115,9 @@ export const UI_NOT_SHOWN: Record<string, string> = {
  * (a function or a screen part), `why` says where it is seen. A new variant of a detail is added here in the same PR.
  */
 export const V2_VARIANTS: readonly { part: string; prop: string; src: string; use: string; shown: string | null; why?: string }[] = [
+  { part: "SelectField", prop: "bare", src: "ui/selectField.tsx", use: "<SelectField bare", shown: "Selectors.tsx" },
+  { part: "Stepper", prop: "hideLabel", src: "ui/controls.tsx", use: "<Stepper hideLabel", shown: "Selectors.tsx" },
+  { part: "Stepper", prop: "compact", src: "ui/controls.tsx", use: "compact", shown: "Selectors.tsx" },
   { part: "ViewTabs", prop: "look", src: "ui/viewTabs.tsx", use: 'look="chips"', shown: "ProtoV2.tsx" },
   { part: "ProgressWords", prop: "caption", src: "ui/figures.tsx", use: "<ProgressWords", shown: "ProtoV2.tsx" },
   { part: "TonePill", prop: "tone", src: "ui/figures.tsx", use: "<TonePill", shown: "ProtoV2.tsx" },
