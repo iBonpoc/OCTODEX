@@ -1,0 +1,14 @@
+[
+ {"name":"now-2546-settings","path":"/settings"},
+ {"name":"now-2546-showcase","path":"/settings/design-system"},
+ {"name":"now-2552-settings","path":"/settings","full":true,"themes":["light","dark"]},
+ {"name":"now-2536-overview","path":"/client/c1","themes":["light","dark"]},
+ {"name":"now-2536-money","path":"/client/c1?tab=money","themes":["light","dark"]},
+ {"name":"now-2536-log","path":"/client/c1?tab=log","themes":["light","dark"]},
+ {"name":"now-2364-lines","path":"/estimate/new?id=e6","themes":["light","dark"]},
+ {"name":"now-2529-sections","path":"/settings/design-system"},
+ {"name":"now-2529-windows","path":"/settings/design-system/windows"},
+ {"name":"now-2529-buttons","path":"/settings/design-system/buttons"},
+ {"name":"now-2529-clients","path":"/clients"},
+ {"name":"now-2531-catalog","path":"/catalog"}
+]

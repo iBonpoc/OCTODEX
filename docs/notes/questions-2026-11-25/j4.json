@@ -1,0 +1,4 @@
+[{"name":"next-1832-a","path":"/qdraft/q1832-a","themes":["light"]},
+{"name":"next-2531-a-bottom","path":"/qdraft/q2531-a","themes":["light"],"steps":[{"scroll":1200,"wait":1200}]},
+{"name":"next-settings-2","path":"/qdraft/qsettings","themes":["light","dark"],"steps":[{"scroll":1300,"wait":1200}]},
+{"name":"next-settings-3","path":"/qdraft/qsettings","themes":["light","dark"],"steps":[{"scroll":5000,"wait":1200}]}]

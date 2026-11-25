@@ -1,0 +1,6 @@
+[
+ {"name":"now-2546-settings-marked","path":"/settings","height":560,"steps":[{"outline":"settings-design-system"}]},
+ {"name":"now-2552-settings","path":"/settings","tall":true,"themes":["light","dark"]},
+ {"name":"now-2536-log","path":"/client/c1?tab=log","themes":["light","dark"],"steps":[{"scrollEnd":true,"wait":1500}]},
+ {"name":"now-2529-sections","path":"/settings/design-system","tall":true}
+]
