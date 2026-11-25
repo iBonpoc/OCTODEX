@@ -98,7 +98,7 @@ export function ProtoV2() {
       </Card>
       {/* the tiles: two in a row (one yellow) and three in a row */}
       <StatGrid testID="showcase-v2-tiles">
-        <StatTile icon="invoice" accent label={t("ds.v2.owed")} value="$4,120" sub={t("ds.v2.days", { n: 9 })} testID="showcase-v2-tile-owed" />
+        <StatTile icon="invoice" label={t("ds.v2.owed")} value="$4,120" sub={t("ds.v2.days", { n: 9 })} testID="showcase-v2-tile-owed" />
         <StatTile icon="wallet" label={t("st.paid")} value="$1,240" testID="showcase-v2-tile-paid" />
       </StatGrid>
       <StatGrid cols={3} testID="showcase-v2-tiles3">

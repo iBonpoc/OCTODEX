@@ -80,7 +80,7 @@ export function ProtoLists() {
       />
       <StatGrid testID="showcase-stat-grid">
         <StatTile label={t("money.overdue")} value="$4,120" icon="clock" warn={t("st.overdue")} selected={tile === "overdue"} onPress={() => setTile("overdue")} testID="showcase-tile-overdue" />
-        <StatTile label={t("visit.amountDue")} value="$9,800" icon="invoice" accent selected={tile === "due"} onPress={() => setTile("due")} testID="showcase-tile-due" />
+        <StatTile label={t("visit.amountDue")} value="$9,800" icon="invoice" selected={tile === "due"} onPress={() => setTile("due")} testID="showcase-tile-due" />
         <StatTile label={t("st.paid")} value="$22,300" icon="wallet" selected={tile === "paid"} onPress={() => setTile("paid")} testID="showcase-tile-paid" />
         <StatTile label={t("st.draft")} value={0} icon="doc" testID="showcase-tile-zero" />
       </StatGrid>

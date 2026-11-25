@@ -51,7 +51,7 @@ export function tagsOf(src: string, name: string): string[] {
 export function filledCount(src: string): number {
   const buttons = tagsOf(src, "Button").filter((t) => !/\bvariant=/.test(t) || /\bvariant=["']primary["']/.test(t)).length;
   const steps = tagsOf(src, "MainStep").filter((t) => !/\boutline\b/.test(t)).length;
-  // visual v2 (21.11): the one yellow may also be a tile (Деньги — «Должны») or the chosen segment (План — «День»)
+  // a StatTile `accent` or a chosen `Segmented accent` still counts as a yellow fill (tiles are never yellow since q77 Б, DS §12.12)
   const yellow = [...tagsOf(src, "StatTile"), ...tagsOf(src, "Segmented")].filter((t) => /\baccent\b/.test(t)).length;
   return buttons + steps + yellow;
 }
