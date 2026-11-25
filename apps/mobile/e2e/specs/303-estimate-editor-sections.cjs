@@ -52,7 +52,7 @@ exports.run = async (h) => {
   h.expect(order[0] === `est-section-${sid}` && order[1] === `est-line-${first}` && order[2] === "est-sec-loose", `the row stands under the heading, the other one is «без раздела» (${order.join(" ")})`);
   h.expect(/\$10/.test(await tid(`est-section-${sid}`).innerText()), "the section total follows ($10)");
 
-  // «Разложить по видам» and «Отменить»: only the layout goes back
+  // «Разложить по типам» and «Отменить»: only the layout goes back
   await line.fold(h);
   await line.editorMenu(h, "est-group-by-kind");
   await p.waitForFunction(() => document.querySelectorAll('[data-testid^="est-section-"]').length >= 3, null, { timeout: 3000 });

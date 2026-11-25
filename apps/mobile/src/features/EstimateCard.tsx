@@ -328,7 +328,6 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
   const quick = useSendGo(e, false);
   const [section, setSection] = useState<EstSection>("doc");
   const [ask, setAsk] = useState<"reopen" | "decline" | null>(null);
-  const [depositOpen, setDepositOpen] = useState(false);
   const planner = canPlan([store.role]);
   const visits = job ? db.visits.filter((v) => v.jobId === job.id) : [];
   const mine = mySignature(db, db.me);
@@ -340,7 +339,6 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
   const countersign = universal && e.status === "awaiting_countersign";
   const sections: { key: EstSection; label: string }[] = signHere || countersign ? [{ key: "doc", label: t("proto.est.sec.doc") }, { key: "sign", label: t(countersign ? "proto.est.sec.countersign" : "proto.est.sec.sign") }] : [];
   const onSign = sections.length > 0 && section === "sign";
-  const depositDue = e.status === "approved" && !job && !!e.depositCents && !e.depositPaidAt;
   const toSchedule = e.status === "approved" && !!job && visits.length === 0 && planner;
   const sentOn = e.sentAt ? t("proto.est.reason.sentOn", { date: day(e.sentAt) }) : undefined;
 
@@ -364,11 +362,9 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
             reason: a?.at ? t("est.countersign.clientSigned", { name: a.signerName, date: day(a.at) }) : t("est.countersign.clientSignedNoDate"),
             testID: "est-countersign-main",
           }
-        : depositDue
-          ? { label: t("proto.est.main.deposit", { amount: money(e.depositCents ?? 0) }), onPress: () => setDepositOpen(true), reason: t("proto.est.reason.deposit"), testID: "est-deposit-main" }
-          : toSchedule
-            ? { label: t("sch.title"), onPress: () => router.push(`/job/schedule?jobId=${job!.id}`), reason: t("ue.toSchedule"), testID: "est-schedule-main" }
-            : undefined;
+        : toSchedule
+          ? { label: t("sch.title"), onPress: () => router.push(`/job/schedule?jobId=${job!.id}`), reason: t("ue.toSchedule"), testID: "est-schedule-main" }
+          : undefined;
   // a second step goes into «⋯» on an object: «Подписать здесь» — the client is beside you
   const second: MainAction | undefined = signHere && !onSign && canCountersign(db, db.me) ? { label: t("proto.est.second.signHere"), onPress: () => setSection("sign"), testID: "est-sign-here" } : undefined;
 
@@ -499,36 +495,6 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
       </ObjectScreen>
       {sheets}
       {countersign ? <ReasonSheets e={e} sheet={ask} onClose={() => setAsk(null)} /> : null}
-      {/* «Взять задаток»: the way, then the record (prototype — the payment sheet of the invoice comes with the deposit invoice) */}
-      <Sheet visible={depositOpen} onClose={() => setDepositOpen(false)} title={t("est.depositDue")}>
-        <View testID="est-deposit-sheet" style={{ gap: space[3] }}>
-          <T v="display" tabular>
-            {money(e.depositCents ?? 0)}
-          </T>
-          <Segmented
-            full
-            value={method}
-            onChange={setMethod}
-            items={[
-              { key: "card", label: t("visit.payCard") },
-              { key: "cash", label: t("visit.payCash") },
-              { key: "check", label: t("visit.payCheck") },
-              { key: "zelle", label: t("visit.payZelle") },
-            ]}
-          />
-          <View testID="est-deposit-record">
-            <Button
-              label={t("est.recordDeposit")}
-              icon="dollar"
-              full
-              onPress={() => {
-                setDepositOpen(false);
-                toast.show(q(t("est.depositToast", { amount: money(e.depositCents ?? 0) })), store.payDeposit(e.id, method));
-              }}
-            />
-          </View>
-        </View>
-      </Sheet>
     </>
   );
 }

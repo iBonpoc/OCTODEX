@@ -94,7 +94,7 @@ describe("add / rename / delete", () => {
   });
 });
 
-describe("«Разложить по видам» (Р4)", () => {
+describe("«Разложить по типам» (Р4)", () => {
   it("lines of no section go to Материалы, Работа, Услуги in that order; the order among lines stays", () => {
     n = 0;
     const o = opt([L("s1", "service"), L("m1", "material"), L("l1", "labor"), L("m2", "material")]);
