@@ -5,7 +5,7 @@
  * copy, and what a reload keeps (the server's photos carry no local address; without it «Повторить» has nothing to send).
  * Pure: test/photoUpload.test.ts.
  */
-import type { DB, Expense, Photo, PhotoFail, Visit } from "./types";
+import type { DB, Expense, Photo, PhotoFail, PhotoPrepFail, Visit } from "./types";
 
 /** the cloud bucket's limit (migration 20261114200000_files_size_limit, #1430): a bigger file is refused with 413 */
 export const FILES_MAX_BYTES = 25 * 1024 * 1024;
@@ -95,12 +95,18 @@ function keepVisitPhotoLocal(next: DB, prev: DB): DB {
       const old = before.get(p.id);
       if (!old) return p;
       const uri = p.uri ?? old.uri;
-      const upload = p.upload ? (old.upload ?? p.upload) : undefined;
-      if (uri === p.uri && upload === p.upload) return p;
+      // #1558: «preparing» / «unreadable» only this phone knows — the server has a row without bytes, not «failed»
+      const prepHere = isPrepFail(old.upload?.failed);
+      const upload = prepHere ? old.upload : p.upload ? (old.upload ?? p.upload) : undefined;
+      const prep = prepHere ? old.prep : undefined;
+      const small = p.small ?? old.small;
+      if (uri === p.uri && upload === p.upload && prep === p.prep && small === p.small) return p;
       vChanged = true;
-      const out: Photo = { ...p, ...(uri ? { uri } : {}) };
+      const out: Photo = { ...p, ...(uri ? { uri } : {}), ...(small ? { small } : {}) };
       if (upload) out.upload = upload;
       else delete out.upload;
+      if (prep) out.prep = prep;
+      else delete out.prep;
       return out;
     });
     if (!vChanged) return v;
@@ -125,12 +131,17 @@ export function keepReceiptLocal(next: DB, prev: DB): DB {
     if (!old) return x;
     const receiptUri = x.receiptUri ?? old.receiptUri;
     // the server's «failed» carries no reason: the phone's own reason wins; the server took it — no mark
-    const receiptFailed = x.receiptFailed ? (old.receiptFailed ?? x.receiptFailed) : x.receiptFileId ? undefined : old.receiptFailed;
-    if (receiptUri === x.receiptUri && receiptFailed === x.receiptFailed) return x;
+    // #1558: a receipt still being prepared here — the server has the row without bytes, which reads as «есть чек»
+    const prepHere = isPrepFail(old.receiptFailed);
+    const receiptFailed = prepHere ? old.receiptFailed : x.receiptFailed ? (old.receiptFailed ?? x.receiptFailed) : x.receiptFileId ? undefined : old.receiptFailed;
+    const receiptPrep = prepHere ? old.receiptPrep : undefined;
+    if (receiptUri === x.receiptUri && receiptFailed === x.receiptFailed && receiptPrep === x.receiptPrep) return x;
     changed = true;
     const out: Expense = { ...x, ...(receiptUri ? { receiptUri } : {}), ...(old.receiptFileId && !x.receiptFileId ? { receiptFileId: old.receiptFileId } : {}) };
     if (receiptFailed) out.receiptFailed = receiptFailed;
     else delete out.receiptFailed;
+    if (receiptPrep) out.receiptPrep = receiptPrep;
+    else delete out.receiptPrep;
     return out;
   });
   return changed ? { ...next, expenses } : next;
@@ -146,13 +157,17 @@ export function markReceipt(db: DB, expenseId: string, failed: PhotoFail | null)
   return { ...db, expenses: (db.expenses ?? []).map((e) => (e.id === expenseId ? next : e)) };
 }
 
-/** a receipt to show as «есть чек»: on this phone, or taken by the cloud; not one the cloud refused */
-export const hasReceipt = (x: Expense) => !x.receiptFailed && !!(x.receiptUri || x.receiptFileId);
+/** #1558: the file is not sent yet because it could not be made anew here (not the cloud's «no») */
+export const isPrepFail = (f: PhotoFail | undefined): f is PhotoPrepFail => f === "preparing" || f === "unreadable";
+
+/** a receipt to show as «есть чек»: on this phone (also one being prepared, #1558), or taken by the cloud; not one the cloud refused */
+export const hasReceipt = (x: Expense) => (!x.receiptFailed || x.receiptFailed === "preparing") && !!(x.receiptUri || x.receiptFileId);
 
 /** every photo the cloud did not take, with its visit (newest refusal first) */
 export function failedPhotos(db: DB): { visitId: string; photo: Photo & { upload: NonNullable<Photo["upload"]> } }[] {
   const out: { visitId: string; photo: Photo & { upload: NonNullable<Photo["upload"]> } }[] = [];
-  for (const v of db.visits) for (const p of v.photos) if (p.upload) out.push({ visitId: v.id, photo: p as Photo & { upload: NonNullable<Photo["upload"]> } });
+  // #1558: a photo being prepared is no reason to worry — it goes on its own; «unreadable» is
+  for (const v of db.visits) for (const p of v.photos) if (p.upload && p.upload.failed !== "preparing") out.push({ visitId: v.id, photo: p as Photo & { upload: NonNullable<Photo["upload"]> } });
   return out.sort((a, b) => (a.photo.upload.at < b.photo.upload.at ? 1 : a.photo.upload.at > b.photo.upload.at ? -1 : 0));
 }
 

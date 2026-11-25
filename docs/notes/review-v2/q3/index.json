@@ -1,0 +1,62 @@
+[
+ {
+  "q": 2,
+  "label": "А · корзина и ручка у каждой строки всегда (как в DS)",
+  "img": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q3/q2-A.png",
+  "note": "Удалить и перетащить — сразу, одним касанием. Строки теснее: название и сумма короче."
+ },
+ {
+  "q": 2,
+  "label": "Б · обычный вид — строки чистые",
+  "img": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q3/q2-B1.png",
+  "note": "Только название и сумма; справа вверху «Изменить». На экране больше позиций."
+ },
+ {
+  "q": 2,
+  "label": "Б · нажали «Изменить» — корзина и ручка появились",
+  "img": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q3/q2-B2.png",
+  "note": "Как в «Напоминаниях» iPhone: красный «−» удаляет, «⋮⋮» перетаскивает; «Готово» — обратно."
+ },
+ {
+  "q": 3,
+  "label": "А · круглые значки 32 (как сейчас)",
+  "img": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q3/q3-A.png",
+  "note": "Мало места, но значки без слов; видимые 32 — меньше правила 3 (40)."
+ },
+ {
+  "q": 3,
+  "label": "Б · ряд кнопок 40 со словами (по DS)",
+  "img": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q3/q3-B.png",
+  "note": "«＋ Новая позиция» и «Из каталога» словами — сразу понятно; разделы и шаблон — значками рядом."
+ },
+ {
+  "q": 4,
+  "label": "А · одна кнопка «Готово» (как сейчас)",
+  "img": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q3/q4-A.png",
+  "note": "Сохраняет; отправить — из «⋯»."
+ },
+ {
+  "q": 4,
+  "label": "Б · «Сохранить» и «Сохранить и отправить» (по DS)",
+  "img": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q3/q4-B.png",
+  "note": "Отправка клиенту — одним нажатием, без «⋯»."
+ },
+ {
+  "q": 5,
+  "label": "значки сейчас 24",
+  "img": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q3/q5-24.png",
+  "note": "Как сейчас."
+ },
+ {
+  "q": 5,
+  "label": "значки 26",
+  "img": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q3/q5-26.png",
+  "note": "Все значки строк, шапки и вкладок крупнее на 8 %."
+ },
+ {
+  "q": 5,
+  "label": "значки 28",
+  "img": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q3/q5-28.png",
+  "note": "Все значки строк, шапки и вкладок крупнее на 17 %."
+ }
+]

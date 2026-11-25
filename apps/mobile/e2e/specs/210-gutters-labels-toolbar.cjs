@@ -9,7 +9,7 @@
  * - the toolbar dropped at the top → it stands at the top.
  * Finds things by testID / id; waits on what it checks.
  */
-const { pickDsKind, openProps, savedOnce, skipLength, sheetGone, openDsMenu } = require("../gutters.cjs");
+const { pickDsKind, openProps, savedOnce, skipLength, sheetGone, openDsMenu, winSave } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -89,7 +89,7 @@ exports.run = async (h) => {
   await p.mouse.click((x0 + x1) / 2, y0 + 2);
   await tid("attr-panel").waitFor({ timeout: 5000 });
   await pickDsKind(p, "rectRibbed"); // a corrugated one has a fittings word by default (3 × A); a plain one none (#1776)
-  if (!wide) await closeSheet();
+  if (!wide) await winSave(p); // the window's own «Сохранить» (DS §7.3, #2412 PR3)
   await waitFor(async () => (await svg().locator('[id^="lbl-ds:"]').count()) === 1, "its fittings word");
   await p.mouse.click(...(await centre(svg().locator('[id^="lbl-ds:"]').first())));
   await tid("attr-ds-size").waitFor({ timeout: 5000 });
@@ -120,8 +120,7 @@ exports.run = async (h) => {
   if (!wide) await openProps(p);
   await tid("attr-panel").waitFor({ timeout: 5000 });
   h.expect((await tid("attr-unit").count()) === 0, "no unit choice per line any more");
-  if (!wide) await closeSheet();
-  else await tid("draw-panel-close").getByRole("button").click();
+  await winSave(p); // the window's own «Сохранить» (DS §7.3, #2412 PR3): its edits kept
   await h.shot("labels");
 
   // the toolbar at the top

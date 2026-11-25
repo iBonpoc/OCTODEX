@@ -41,7 +41,7 @@ exports.run = async (h) => {
   // a 10 % discount: the tax is on the amount after it
   await totals.mode(h, "est-discount-row", "pct");
   await totals.fill(h, "est-discount-pct", "10");
-  h.expect((await totals.sumIs(h, "est-discount-row", "−$10")) === "−$10", "the discount: −$10");
+  h.expect((await totals.sumIs(h, "est-discount-row", "−$10.00")) === "−$10.00", "the discount: −$10.00");
   await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="est-tax-row-sum"]')].some((e) => e.offsetParent !== null && e.innerText.trim() === "$7.99"), null, { timeout: 3000 });
   h.expect((await totals.sumOf(h, "est-tax-row")) === "$7.99", "the tax after the discount: $90.00 × 8.875 % = $7.99");
   await h.expectText(/Итого \| \$97\.99/, "the total agrees");

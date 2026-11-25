@@ -6,7 +6,7 @@
  * a gutter drawn after that, with the button on 2, is on story 2.
  * Every view. Finds things by testID / stored elements; waits on what it checks (no pauses).
  */
-const { openProps, sheetGone, skipLength, pickAttr } = require("../gutters.cjs");
+const { openProps, sheetGone, skipLength, pickAttr, winSave } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.autoDs = true; // about the automatic downspouts (the runner switches them off for the others)
@@ -65,10 +65,7 @@ exports.run = async (h) => {
   await pickAttr(p, "attr-story", "2"); // a field (#2412 G1): its menu, the key of storey 2
   await waitStored((k) => { const r = ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => !e.deletedAt && e.kind === "run"); return r.filter((e) => Number(e.attrs?.story ?? 1) === 2).length === 1 && r.filter((e) => Number(e.attrs?.story ?? 1) === 1).length === 1; }, KEY, "the properties moved the picked gutter to story 2");
   await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="draw-story"]')].some((e) => e.offsetParent && (e.textContent || "").includes("2")), null, { timeout: 5000 });
-  if ((p.viewportSize()?.width ?? 0) <= 390) {
-    await p.getByRole("button", { name: "Закрыть", exact: true }).last().click({ position: { x: 10, y: 10 } });
-    await sheetGone(p);
-  }
+  if ((p.viewportSize()?.width ?? 0) <= 390) await winSave(p); // the window's own «Сохранить» (DS §7.3, #2412 PR3)
   await tid("draw-undo").getByRole("button").click();
   await waitStored((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => !e.deletedAt && e.kind === "run").every((e) => Number(e.attrs?.story ?? 1) === 1), KEY, "«Назад»: both gutters back on story 1");
   await dsCount(1, "back on one story: one downspout");

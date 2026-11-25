@@ -9,7 +9,7 @@
  * - web: a photo picked before a reload (a dead blob:) is never loaded — the tile shows the picture sign (CI 08.11).
  * Finds things by testID; waits on what it checks.
  */
-const { openProps, skipLength } = require("../gutters.cjs");
+const { openProps, skipLength, winSave } = require("../gutters.cjs");
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 
 exports.run = async (h) => {
@@ -73,12 +73,8 @@ exports.run = async (h) => {
   await h.shot("element");
 
   // the measurement's photo
-  if (wide) await tid("draw-panel-close").getByRole("button").click();
-  else {
-    await p.getByRole("button", { name: "Закрыть", exact: true }).first().click({ position: { x: 10, y: 10 } });
-    await waitFor(async () => (await tid("attr-panel").count()) === 0, "the sheet closed");
-    await tid("draw-photos-open").getByRole("button").click();
-  }
+  await winSave(p); // the window's own «Сохранить» (DS §7.3, #2412 PR3): its edits kept
+  if (!wide) await tid("draw-photos-open").getByRole("button").click();
   await tid("draw-photos").waitFor({ timeout: 5000 });
   await addIn("draw-photos");
   await waitFor(async () => (await photos()).some((f) => f.measurementId === m.id && !f.elementId), "a photo of the measurement: no element");

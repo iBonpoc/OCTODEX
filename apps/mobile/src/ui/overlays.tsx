@@ -4,7 +4,7 @@ import { stackDrop, stackLife, stackReplace, stackShow, stackTop } from "./toast
 import { useQueueLineHeight } from "./queueLineHeight";
 import { toastBottom, useFooterInset, useToastRight, wideToastBottom } from "./footerInset";
 import { fitMenuPlace, menuListHeight, menuScrollTo } from "./menuLayout";
-import { Fragment, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ScreenScrollCtx } from "./requiredForm";
 import { AccessibilityInfo, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance } from "react-native";
 import { avoidBehavior } from "./keyboard";
@@ -12,6 +12,7 @@ import { GestureDetector, GestureHandlerRootView, GestureStateManager, State, us
 import { menuPick } from "./menuPick";
 import { exitDuration, scrimLevel, swipeCloses, swipeStart, swipeStep, type SwipeState } from "./sheetSwipe";
 import { leaveBefore } from "./sheetLeave";
+import { focusBack } from "./sheetFocus";
 import { helpBack, helpClosed, helpOpen, pageSwitch, sheetHeader, type HelpPage } from "./sheetHelp";
 import { useScrollFade } from "./scrollFade";
 import { noteQuestionCancelled, registerDirtySheet } from "./dirtySheets";
@@ -242,6 +243,11 @@ export function Menu<K extends string>({
 const SheetHold = createContext<{ current: boolean }>({ current: false });
 export const useSheetHold = () => useContext(SheetHold);
 
+/** the sheet's own way out for its body and `footer` (DS Б1, §7.3): a «Закрыть» button of the sheet's own goes the way ✕, the scrim and the
+ *  swipe go — with `dirty` it asks «Сохранить изменения?» first. Outside a sheet — null (the caller closes by itself) */
+const SheetCloseCtx = createContext<(() => void) | null>(null);
+export const useSheetClose = () => useContext(SheetCloseCtx);
+
 const SheetEscapeCtx = createContext<{ add: (f: () => boolean) => () => void } | null>(null);
 /**
  * Inside a `Sheet`: `onEscape` runs first on Esc / Android «Назад»; it returns true when it closed something of its own (an open
@@ -423,6 +429,8 @@ export function Sheet({
   // `session` marks one opening or one exit: the callback of an earlier one does nothing.
   const before = leaveBefore();
   const [present, setPresent] = useState(visible);
+  const presentRef = useRef(present);
+  presentRef.current = present;
   const open = before ? visible : visible || present;
   // iOS: the sheet is going out by the person's close — its body takes no touches meanwhile (a second answer must not be possible)
   const [goingOut, setGoingOut] = useState(false);
@@ -540,10 +548,61 @@ export function Sheet({
     },
     [reduce, wide, winH, drag, fade, sheetH, before],
   );
+  // #2471 web: what had the focus when the sheet opened — react-native-web's Modal focuses it again by a plain focus() as it
+  // unmounts: the page scrolled up to it (the estimate jumped 539 → 0, «Итого» unfolded under the click) and the cursor left a
+  // field taken meanwhile. The sheet gives it back itself as it begins to go, without scrolling (`focusBack`), and that late
+  // focus() of the Modal scrolls nothing and takes nothing from a field the person chose
+  const opener = useRef<HTMLElement | null>(null);
+  // the opener whose focus() is shadowed while the sheet goes, and how to let it go
+  const guarded = useRef<HTMLElement | null>(null);
+  const unguardRef = useRef<() => void>(() => {});
+  // (before the Modal's own effects: its focus trap may take the focus into the sheet at once)
+  useLayoutEffect(() => {
+    if (Platform.OS !== "web" || typeof document === "undefined" || !visible) return;
+    const a = document.activeElement;
+    // opened again while it was still going out: the Modal never unmounted and still gives the focus to the first opener
+    opener.current = guarded.current ?? (a instanceof HTMLElement && a !== document.body && !a.closest('[aria-modal="true"]') ? a : null);
+  }, [visible]);
+  const giveFocusBack = useCallback(() => {
+    unguardRef.current(); // an earlier going-out's own focus() is let go first (never left on the element)
+    const el = opener.current;
+    opener.current = null;
+    if (!el || !el.isConnected) return;
+    const at = (): "none" | "sheet" | "opener" | "other" => {
+      const a = document.activeElement;
+      if (!a || a === document.body) return "none";
+      if (a === el) return "opener";
+      // (only this sheet: the focus in the next sheet of a chain is the person's place, not a lost one)
+      return (rootRef.current as unknown as HTMLElement | null)?.contains(a) ? "sheet" : "other";
+    };
+    const own = HTMLElement.prototype.focus;
+    if (focusBack(at()) === "give") own.call(el, { preventScroll: true });
+    // the Modal's own focus() on its way out (an own property shadows the prototype's while the sheet goes); it comes a commit
+    // or more after the sheet is taken off (react-native-web unmounts the Modal's content in an effect of its own)
+    const unguard = () => {
+      if (guarded.current !== el) return;
+      delete (el as { focus?: unknown }).focus;
+      guarded.current = null;
+    };
+    el.focus = (o?: FocusOptions) => {
+      if (focusBack(at()) === "give") own.call(el, { ...o, preventScroll: true });
+      if (!presentRef.current) unguard();
+    };
+    guarded.current = el;
+    unguardRef.current = unguard;
+  }, []);
+  // (a net: a Modal that gave nothing back — its own focus() was the first after the sheet went, or never came)
+  useEffect(() => {
+    if (present || !guarded.current) return;
+    const id = setTimeout(() => unguardRef.current(), motion.durSlow * 6);
+    return () => clearTimeout(id);
+  }, [present]);
+  useEffect(() => () => unguardRef.current(), []);
   // after-way: the owner closed it (after its own «Сохранить», or because we asked): now it goes out
   useEffect(() => {
     if (before || visible || !present) return;
     passThrough(true);
+    giveFocusBack();
     animateOut(exitSpeed.current, gone);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
@@ -584,6 +643,7 @@ export function Sheet({
     },
     [drag, before, animateOut],
   );
+  const closeByOwnButton = useCallback(() => requestClose(), [requestClose]);
   // #1912: while the sheet holds unsaved work, «Обновить» asks it through its own question and never reloads over it
   useEffect(() => {
     if (!visible || !dirty) return;
@@ -804,7 +864,7 @@ export function Sheet({
                 >
                   {/* the content stays mounted under the help page (its fields, its choices are kept) */}
                   <Animated.View style={[{ gap: space[3], display: helpPage.on ? "none" : "flex" }, pageSlide]} testID="sheet-content">
-                    <SheetHold.Provider value={held}>{children}</SheetHold.Provider>
+                    <SheetHold.Provider value={held}><SheetCloseCtx.Provider value={closeByOwnButton}>{children}</SheetCloseCtx.Provider></SheetHold.Provider>
                   </Animated.View>
                   {helpPage.on && help ? (
                     <Animated.View testID="sheet-help-page" style={[{ gap: space[3] }, pageSlide]}>
@@ -832,7 +892,7 @@ export function Sheet({
             ) : null}
             {footer && !ask ? (
               <View testID="sheet-footer" style={{ paddingTop: space[2] }}>
-                {footer}
+                <SheetCloseCtx.Provider value={closeByOwnButton}>{footer}</SheetCloseCtx.Provider>
               </View>
             ) : null}
           </Glass>

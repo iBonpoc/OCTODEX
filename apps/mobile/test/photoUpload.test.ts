@@ -32,7 +32,7 @@ vi.mock("../src/cloud/client", () => ({
   },
 }));
 const { applyOp, uploadPhoto } = await import("../src/cloud/ops");
-const { FILES_MAX_BYTES, canRetry, failedPhotos, keepPhotoLocal, markPhoto, photoFailOf, tooBig } = await import("../src/data/photoUpload");
+const { FILES_MAX_BYTES, canRetry, failedPhotos, hasReceipt, keepPhotoLocal, keepReceiptLocal, markPhoto, photoFailOf, tooBig } = await import("../src/data/photoUpload");
 const { makeSeed } = await import("../src/data/seed");
 const { normalizeDB } = await import("../src/data/normalize");
 
@@ -150,6 +150,18 @@ describe("applyOp — photo.add and photo.retry tell the phone back", () => {
   it("photo.add without a file: nothing to tell", async () => {
     expect(await applyOp({ k: "photo.add", id: "f1", visitId: "v1", stage: "before" }, "c1", "u1")).toBeUndefined();
   });
+  it("#1558 file.send: a receipt's bytes once prepared — the answer is for its expense", async () => {
+    const r = await applyOp({ k: "file.send", id: "f7", expenseId: "x7", uri: "file:///r.jpg" }, "c1", "u1");
+    expect(r).toEqual({ receipt: { expenseId: "x7", failed: null } });
+    expect(writes.filter((w) => w.op === "upsert")).toEqual([]);
+    expect(statusOf()).toEqual(["uploaded"]);
+  });
+  it("#1558 expense.add with a receipt «preparing»: its row goes, no bytes, nothing told back", async () => {
+    const r = await applyOp({ k: "expense.add", id: "x1", jobId: null, vendor: "V", category: "materials", amountCents: 100, receiptFileId: "f1" }, "c1", "u1");
+    expect(r).toBeUndefined();
+    expect(storage.uploads).toBe(0);
+    expect(writes.find((w) => w.table === "files")?.row).toMatchObject({ id: "f1", kind: "receipt" });
+  });
   it("photo.retry: only the file again (the row is there); taken — null", async () => {
     const r = await applyOp({ k: "photo.retry", id: "f1", visitId: "v1", uri: "file:///p.jpg" }, "c1", "u1");
     expect(r).toEqual({ photo: { id: "f1", failed: null } });
@@ -223,6 +235,37 @@ describe("failedPhotos / canRetry", () => {
     expect(canRetry({ id: "a", kind: "before", upload: { failed: "refused", at: "x" } })).toBe(false);
     expect(canRetry({ id: "a", kind: "before", uri: "file:///a", upload: { failed: "gone", at: "x" } })).toBe(false);
     expect(canRetry({ id: "a", kind: "before", uri: "file:///a" })).toBe(false);
+  });
+});
+
+describe("#1558 — a photo or a receipt «preparing» (spec 46 §5.3а)", () => {
+  const at = "2026-11-15T10:00:00Z";
+  const prep = [{ at, way: "c2" as const, why: "out of memory" }];
+  it("«Повторить» is not shown for «preparing» or «unreadable» (the phone tries by itself / «Подготовить снова»)", () => {
+    expect(canRetry({ id: "a", kind: "before", uri: "file:///a", upload: { failed: "preparing", at } })).toBe(false);
+    expect(canRetry({ id: "a", kind: "before", uri: "file:///a", upload: { failed: "unreadable", at } })).toBe(false);
+  });
+  it("«Требует внимания»: «preparing» is no reason to worry; «unreadable» is", () => {
+    const d = dbOf(visit("v1", [
+      { id: "a", kind: "before", uri: "file:///a", upload: { failed: "preparing", at } },
+      { id: "b", kind: "before", uri: "file:///b", upload: { failed: "unreadable", at } },
+    ]));
+    expect(failedPhotos(d).map((x) => x.photo.id)).toEqual(["b"]);
+  });
+  it("a reload keeps «preparing» and its log — the server has a row without bytes, not «failed»", () => {
+    const prev = dbOf(visit("v1", [{ id: "p1", kind: "before", uri: "file:///orig.heic", upload: { failed: "preparing", at }, prep }]));
+    const next = dbOf(visit("v1", [{ id: "p1", kind: "before" }]));
+    const p = keepPhotoLocal(next, prev).visits[0]!.photos[0]!;
+    expect(p).toEqual({ id: "p1", kind: "before", uri: "file:///orig.heic", upload: { failed: "preparing", at }, prep });
+  });
+  it("a reload keeps a receipt «preparing» (the server reads the row as «есть чек»); it still counts as a receipt", () => {
+    const x = { id: "x1", jobId: null, vendor: "V", category: "materials", amountCents: 1, at, memberId: "m" } as const;
+    const prev = { visits: [], expenses: [{ ...x, receiptFileId: "f1", receiptUri: "file:///r.heic", receiptFailed: "preparing" as const, receiptPrep: prep }] } as unknown as DB;
+    const next = { visits: [], expenses: [{ ...x, receiptFileId: "f1" }] } as unknown as DB;
+    const out = keepReceiptLocal(next, prev).expenses![0]!;
+    expect(out).toMatchObject({ receiptUri: "file:///r.heic", receiptFailed: "preparing", receiptPrep: prep });
+    expect(hasReceipt(out)).toBe(true);
+    expect(hasReceipt({ ...out, receiptFailed: "unreadable" })).toBe(false);
   });
 });
 

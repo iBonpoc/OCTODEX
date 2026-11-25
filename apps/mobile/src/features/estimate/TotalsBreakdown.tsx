@@ -1,4 +1,5 @@
 import { View } from "react-native";
+import { docMoney } from "./rowLine";
 import { size, space } from "@octo/design-tokens";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -18,14 +19,14 @@ const LABEL: Record<TotalsRow["key"], DictKey> = {
 };
 
 function Row({ r }: { r: TotalsRow }) {
-  const { t, money } = useI18n();
+  const { t } = useI18n();
   const { c } = useTheme();
   const big = r.key === "total";
   // a loss reads «в минус $200 · 16.7 %» — the word carries the sign, no second minus
   const loss = r.key === "profit" && r.loss;
-  const amount = (c: number) => money(loss ? Math.abs(c) : c);
+  const amount = (c: number) => docMoney(loss ? Math.abs(c) : c);
   const pct = r.key === "profit" && r.pct !== null ? (loss ? r.pct.replace(/^-/, "") : r.pct) : null;
-  const value = r.cents === null ? "—" : r.key === "discount" ? `−${money(r.cents)}` : pct !== null ? `${amount(r.cents)} · ${pct}%` : amount(r.cents);
+  const value = r.cents === null ? "—" : r.key === "discount" ? `−${docMoney(r.cents)}` : pct !== null ? `${amount(r.cents)} · ${pct}%` : amount(r.cents);
   return (
     <View testID={`est-tot-${r.key}`}>
       <RowView style={{ justifyContent: "space-between", alignItems: "flex-start", gap: space[2] }}>

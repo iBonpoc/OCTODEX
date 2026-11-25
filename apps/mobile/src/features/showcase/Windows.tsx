@@ -4,13 +4,14 @@ import { View } from "react-native";
 import { motion, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { Button } from "@/ui/controls";
-import { HelpButton, Sheet, SheetScroll } from "@/ui/overlays";
+import { HelpButton, Sheet, SheetScroll, useSheetClose } from "@/ui/overlays";
+import { ToggleRow } from "@/ui/toggleRow";
 import { T } from "@/ui/primitives";
 import { Card, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 import { useConfirm } from "@/ui/confirmDialog";
 
-type Which = null | "fit" | "footer" | "medium" | "large" | "pages" | "stuck" | "chainA" | "chainB" | "chainC" | "list" | "help";
+type Which = null | "fit" | "footer" | "closeSave" | "medium" | "large" | "pages" | "stuck" | "chainA" | "chainB" | "chainC" | "list" | "help";
 
 /** the third step of the chain: mounted by the owner's condition and recreated at each opening — the way a sheet is meant to be mounted */
 function ChainSheetC({ visible, onExited, onClose }: { visible: boolean; onExited: () => void; onClose: () => void }) {
@@ -38,6 +39,7 @@ function HelpSheetPick() {
 export function WindowsSection() {
   const { t } = useI18n();
   const [open, setOpen] = useState<Which>(null);
+  const [edited, setEdited] = useState(false); // «Закрыть | Сохранить»: the sheet has an unsaved edit
   const [page, setPage] = useState(1);
   const [item, setItem] = useState<string | null>(null); // the owner that empties its data when it closes
   const [asked, setAsked] = useState(0);
@@ -98,6 +100,7 @@ export function WindowsSection() {
       <Card>
         {row("fit", t("ds.sheet.fit"), t("ds.sheet.fitHint"))}
         {row("footer", t("ds.sheet.footer"), t("ds.sheet.footerHint"))}
+        {row("closeSave", t("ds.sheet.closeSave"), t("ds.sheet.closeSaveHint"))}
         {row("medium", t("ds.sheet.medium"), t("ds.sheet.mediumHint"))}
         {row("large", t("ds.sheet.large"), t("ds.sheet.largeHint"))}
         {row("pages", t("ds.sheet.pages"), t("ds.sheet.pagesHint"))}
@@ -168,6 +171,17 @@ export function WindowsSection() {
           <Button label={t("ds.sheet.stuckDone")} onPress={close} />
         </View>
       </Sheet>
+      {/* DS §7.3 (#2412 PR3): «Закрыть | Сохранить» below, no ✕; «Закрыть» goes the sheet's own way out (useSheetClose) — with an edit it asks */}
+      <Sheet
+        visible={open === "closeSave"}
+        onClose={() => { setEdited(false); close(); }}
+        dirty={edited}
+        onSave={() => { setEdited(false); close(); }}
+        footer={<CloseSaveRow onSave={() => { setEdited(false); close(); }} />}
+      >
+        <T v="body">{t("ds.sheet.closeSaveBody")}</T>
+        <ToggleRow testID="showcase-close-save-edit" value={edited} onChange={setEdited} label={t("ds.sheet.closeSaveEdit")} />
+      </Sheet>
       <Sheet visible={open === "fit"} onClose={close} title={t("ds.sheet.fit")}>
         <T v="body">{t("ds.sheet.body")}</T>
       </Sheet>
@@ -223,6 +237,22 @@ export function WindowsSection() {
       >
         <T v="body">{page === 1 ? t("ds.sheet.body") : t("ds.sheet.page2Body")}</T>
       </Sheet>
+    </View>
+  );
+}
+
+/** the row of a sheet with «Закрыть | Сохранить» (DS §7.3): «Закрыть» asks the sheet to close its own way (the question when `dirty`) */
+function CloseSaveRow({ onSave }: { onSave: () => void }) {
+  const { t } = useI18n();
+  const sheetClose = useSheetClose();
+  return (
+    <View style={{ flexDirection: "row", gap: space[2] }}>
+      <View style={{ flex: 1, minWidth: 0 }} testID="showcase-close-save-close">
+        <Button label={t("ds.sheet.close")} variant="secondary" size="bar" full onPress={() => sheetClose?.()} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Button label={t("ds.sheet.save")} size="bar" full onPress={onSave} />
+      </View>
     </View>
   );
 }

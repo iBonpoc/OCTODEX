@@ -1,0 +1,1165 @@
+[
+ {
+  "screen": "visit",
+  "theme": "dark+light",
+  "state": "visit-h0",
+  "severity": "блокирует",
+  "what": "Главная кнопка выезда обрезана: «Заверши…» вместо «Завершить»",
+  "expected": "«Завершить» целиком (галочка + слово), ширина кнопки ~146 при паре с «Фото» и квадратной кнопкой",
+  "actual": "«Заверши…» с многоточием, кнопка 144 px; то же в светлой теме",
+  "mock_img": "review-v2/mock/m-visit.png",
+  "our_img": "screens/721a1ff/visit_v4__visit-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/visit_v4__visit-h0__dark-390-ru-director__721a1ff.png",
+   "screens/721a1ff/visit_v4__visit-h0__light-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   32,
+   500,
+   145,
+   42
+  ],
+  "spec_ref": "SCREEN-SPECS «Выезд», ряд кнопок; DS правило 1: главное действие читается · visual-v2: Кнопки; DS §12.12 · visual-v2: Кнопки · §12.13",
+  "spec_known": false,
+  "reviewer": "а-вёрстка, б-одинаковость, в-тексты",
+  "dups": 4,
+  "id": "F01"
+ },
+ {
+  "screen": "client",
+  "theme": "dark+light",
+  "state": "client-h0",
+  "severity": "блокирует",
+  "what": "В строке выезда у клиента время обрезано до «Сегодня 8:…», подпись до «Bathroom rem…»",
+  "expected": "«Сегодня 8:30–12:30», подпись «Bathroom remodel · Alex», справа плашка «Скоро» (≈60 px)",
+  "actual": "плашка «Опаздывает · не выехал» (≈175 px) съела место: «Сегодня 8:…», «Bathroom rem…»; время не прочитать",
+  "mock_img": "review-v2/mock/m-client.png",
+  "our_img": "screens/721a1ff/client_c1__client-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/client_c1__client-h0__dark-390-ru-director__721a1ff.png",
+   "screens/721a1ff/client_c1__client-h0__light-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   16,
+   540,
+   358,
+   56
+  ],
+  "spec_ref": "SCREEN-SPECS Клиент, плитка «Обзор»; DS читаемость: время нельзя обрезать · §12.12 · visual-v2: Плашка статуса; DS §12.12 · тот же пункт, светлая тема",
+  "spec_known": false,
+  "reviewer": "а-вёрстка, в-тексты, б-одинаковость",
+  "dups": 4,
+  "id": "F02"
+ },
+ {
+  "screen": "client",
+  "theme": "dark",
+  "state": "client-h0",
+  "severity": "блокирует",
+  "what": "В тёмной теме в русских словах кривые буквы: «ь» на кнопке выглядит как «Б», над «Смета» и «Остаток» лишние чёрточки",
+  "expected": "«Выставить счёт», «Смета», «Остаток» без искажений (в светлой теме у нас так и есть)",
+  "actual": "«ВыставитБ счёт»; черта под «м» в «Смета» и над «О» в «Остаток»",
+  "mock_img": "review-v2/mock/m-client.png",
+  "our_img": "screens/721a1ff/client_c1__client-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/client_c1__client-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   16,
+   285,
+   358,
+   110
+  ],
+  "spec_ref": "visual-v2.html, карточка работы клиента; DS §12.12 (шрифт) · §12.12 · visual-v2: Шрифт",
+  "spec_known": false,
+  "reviewer": "а-вёрстка, в-тексты, б-одинаковость",
+  "dups": 3,
+  "id": "F03"
+ },
+ {
+  "screen": "client",
+  "theme": "dark+light",
+  "state": "client-h112",
+  "severity": "блокирует",
+  "what": "Шапка клиента свёрнута, но между ней и карточкой пустая полоса, а полоса вкладок не прилипает под шапкой",
+  "expected": "на 112: строка «← Имя ⌄ ⋯», сразу под ней вкладки «Обзор · Работы…» (прилипшая полоса 44), карточка уехала вверх (strip-10)",
+  "actual": "на 72/112/300 кадры одинаковые: под шапкой пустота ≈58 px (y 52–110), вкладки остаются на y≈320 и не прилипают; экран не прокручивается дальше",
+  "mock_img": "review-v2/mock/strip-10.png",
+  "our_img": "screens/721a1ff/client_c1__client-h112__dark-390-ru-director-s112__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/client_c1__client-h112__dark-390-ru-director-s112__721a1ff.png",
+   "screens/721a1ff/client_c1__client-h112__light-390-ru-director-s112__721a1ff.png"
+  ],
+  "crop": [
+   0,
+   52,
+   390,
+   270
+  ],
+  "spec_ref": "DS §Сворачивающаяся шапка, object end 112; «стик-полоса 44» · visual-v2: Сворачивающаяся шапка",
+  "spec_known": false,
+  "reviewer": "а-вёрстка, б-одинаковость",
+  "dups": 2,
+  "id": "F04"
+ },
+ {
+  "screen": "client",
+  "theme": "dark",
+  "state": "panel-open",
+  "severity": "блокирует",
+  "what": "Панель «⌄» развёрнута на весь экран и содержит лишнее: контакты, адреса и «Сведения»",
+  "expected": "панель контактов поверх контента: телефон+SMS, почта, адрес, другие люди; строки 48 (мок ≈36 на уменьшенном кадре ×1/0.75), панель короткая, под ней вуаль 50 %",
+  "actual": "панель от y 132 до низа вкладок (≈640 px), строки ≈58, разделы «Контакты · 2», «Адреса · 2», «Сведения (Номер CLT-0001, Откуда…)»; вуали не видно",
+  "mock_img": "review-v2/mock/strip-11.png",
+  "our_img": "screens/721a1ff/client_c1__panel-open__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/client_c1__panel-open__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   16,
+   130,
+   358,
+   650
+  ],
+  "spec_ref": "DS §Сворачивающаяся шапка «⌄ у Клиента»; GroupRow 56 vs v2 48",
+  "spec_known": false,
+  "reviewer": "а-вёрстка",
+  "dups": 1,
+  "id": "F05"
+ },
+ {
+  "screen": "plan",
+  "theme": "dark",
+  "state": "plan-h0,home-h0",
+  "severity": "желательно",
+  "what": "Время слота написано с AM/PM и плашка шире; стрелка между половинами обрезана",
+  "expected": "«8:30 ▸ 12:30» без AM/PM, плашка ≈100 px, стрелка читается",
+  "actual": "«8:30 AM›  12:30 PM» плотно, у «›» почти нет места, в «1:30› 3:30 PM» «PM» опущено в первой половине",
+  "mock_img": "review-v2/mock/m-plan.png",
+  "our_img": "screens/721a1ff/plan__plan-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/plan__plan-h0__dark-390-ru-director__721a1ff.png",
+   "screens/721a1ff/today__home-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   80,
+   345,
+   150,
+   24
+  ],
+  "spec_ref": "SCREEN-SPECS План: расхождение «время в колонке и плашке» (причина записана, но читаемость хуже) · SCREEN-SPECS: время в колонке и плашке · SCREEN-SPECS: окно времени «Дальше» · SCREEN-SPECS: форма плашки интервала",
+  "spec_known": true,
+  "reviewer": "а-вёрстка, в-тексты",
+  "dups": 4,
+  "id": "F06"
+ },
+ {
+  "screen": "home",
+  "theme": "dark",
+  "state": "home-h44,client-h72,plan-h44",
+  "severity": "желательно",
+  "what": "На 44 pt шапка Главной уже полностью свёрнута, а в макете это середина перехода",
+  "expected": "на 44: большой заголовок ×0,75, прозрачность 0,83, малый заголовок только входит (strip-06)",
+  "actual": "на 44 и 72 кадры одинаковые: только «Сегодня, 20 нояб.», большого заголовка нет",
+  "mock_img": "review-v2/mock/strip-06.png",
+  "our_img": "screens/721a1ff/today__home-h44__dark-390-ru-director-s44__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/today__home-h44__dark-390-ru-director-s44__721a1ff.png",
+   "screens/721a1ff/client_c1__client-h72__dark-390-ru-director-s72__721a1ff.png",
+   "screens/721a1ff/plan__plan-h44__dark-390-ru-director-s44__721a1ff.png"
+  ],
+  "crop": [
+   0,
+   0,
+   390,
+   60
+  ],
+  "spec_ref": "DS «Порядок исчезновения» root end 64 (возможно кадр уже доведён по паузе) · DS «Порядок исчезновения» object end 112 · visual-v2: Сворачивающаяся шапка",
+  "spec_known": false,
+  "reviewer": "а-вёрстка, б-одинаковость",
+  "dups": 3,
+  "id": "F07"
+ },
+ {
+  "screen": "plan",
+  "theme": "dark",
+  "state": "plan-h0,money-h0",
+  "severity": "желательно",
+  "what": "Счётчик у заголовка секции выглядит по-разному: на Плане «06» в тёмной таблетке (с нулём), на Деньгах «2» просто серым справа, на Смете «7» в светлой таблетке рядом",
+  "expected": "Один вид счётчика (CountPill) и одно написание числа",
+  "actual": "План: таблетка «06»; Деньги: голая «2» у правого края; Смета: таблетка «7» с другим фоном",
+  "mock_img": "review-v2/mock/m-plan.png",
+  "our_img": "screens/721a1ff/plan__plan-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/plan__plan-h0__dark-390-ru-director__721a1ff.png",
+   "screens/721a1ff/finance__money-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   0,
+   265,
+   390,
+   30
+  ],
+  "spec_ref": "DS §12.14 CountPill · visual-v2 .cnt",
+  "spec_known": false,
+  "reviewer": "б-одинаковость, а-вёрстка",
+  "dups": 3,
+  "id": "F08"
+ },
+ {
+  "screen": "estimate",
+  "theme": "dark+light",
+  "state": "estimate-h300,estimate-h0",
+  "severity": "желательно",
+  "what": "При прокрутке слова позиций видны сквозь верхнюю строку и по краям нижней карточки «Итого»",
+  "expected": "плашка шапки плотная (plateAlpha 0.92), под плавающим низом полосы нет",
+  "actual": "на y≈45 читается обрезок «Debris haul-away», у нижней карточки «Не заполнено» торчит на y 840",
+  "mock_img": "review-v2/mock/m-estimate.png",
+  "our_img": "screens/721a1ff/estimate_new_id_e6__estimate-h300__dark-390-ru-director-s300__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/estimate_new_id_e6__estimate-h300__dark-390-ru-director-s300__721a1ff.png",
+   "screens/721a1ff/estimate_new_id_e6__estimate-h0__dark-390-ru-director__721a1ff.png",
+   "screens/721a1ff/estimate_new_id_e6__estimate-h300__light-390-ru-director-s300__721a1ff.png"
+  ],
+  "crop": [
+   0,
+   40,
+   390,
+   20
+  ],
+  "spec_ref": "DS «Подложка свёрнутой строки» plateAlpha 0,92; editor · visual-v2: Редактор — низ закреплён · visual-v2: Слои",
+  "spec_known": false,
+  "reviewer": "а-вёрстка, б-одинаковость",
+  "dups": 3,
+  "id": "F09"
+ },
+ {
+  "screen": "plan",
+  "theme": "dark",
+  "state": "plan-h0,visit-h0",
+  "severity": "желательно",
+  "what": "Подпись под именем склеена со статусом и обрезана; одно и то же состояние названо по-разному",
+  "expected": "В макете строка: «Bathroom remodel · Alex», статус отдельной плашкой",
+  "actual": "Опаздывает · в пути · Panel upgrade 200A · V…",
+  "mock_img": "review-v2/mock/m-plan.png",
+  "our_img": "screens/721a1ff/plan__plan-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/plan__plan-h0__dark-390-ru-director__721a1ff.png",
+   "screens/721a1ff/visit_v4__visit-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   80,
+   620,
+   290,
+   20
+  ],
+  "spec_ref": "SCREEN-SPECS «выезд в пути» · SCREEN-SPECS: слово статуса работы · §12.13",
+  "spec_known": false,
+  "reviewer": "в-тексты",
+  "dups": 3,
+  "id": "F10"
+ },
+ {
+  "screen": "visit",
+  "theme": "dark",
+  "state": "visit-h0",
+  "severity": "желательно",
+  "what": "Пункт чек-листа обрезан: «Согласовать обьём работ с клиент…»",
+  "expected": "каждый пункт чек-листа в одну строку без многоточия (в макете короткие; длинный — в 2 строки)",
+  "actual": "текст в одну строку с «…» на 3-м пункте, слово «клиентом» потеряно",
+  "mock_img": "review-v2/mock/m-visit.png",
+  "our_img": "screens/721a1ff/visit_v4__visit-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/visit_v4__visit-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   44,
+   365,
+   315,
+   26
+  ],
+  "spec_ref": "SCREEN-SPECS «Выезд» чек-лист; правило читаемости: нет «…» там, где нужен смысл · §12.13",
+  "spec_known": false,
+  "reviewer": "а-вёрстка, в-тексты",
+  "dups": 2,
+  "id": "F11"
+ },
+ {
+  "screen": "client",
+  "theme": "dark+light",
+  "state": "client-h0",
+  "severity": "желательно",
+  "what": "Закреплённая заметка «Gate code…» залита оранжевым на всю карточку и спорит с жёлтой кнопкой «Выставить счёт» — на экране два тёплых акцента; на других экранах тёплой заливки целой карточки нет",
+  "expected": "Одна жёлтая заливка на экран; тихая заметка — тон warn только плашкой/значком",
+  "actual": "Целая карточка заметки в тёплой заливке, в светлой теме — заметный персиковый блок",
+  "mock_img": "review-v2/mock/m-client.png",
+  "our_img": "screens/721a1ff/client_c1__client-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/client_c1__client-h0__dark-390-ru-director__721a1ff.png",
+   "screens/721a1ff/client_c1__client-h0__light-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   15,
+   468,
+   360,
+   60
+  ],
+  "spec_ref": "DS §12.12 (одна заливка), §12.14 ListGroup note · DS §12.12",
+  "spec_known": false,
+  "reviewer": "б-одинаковость",
+  "dups": 2,
+  "id": "F12"
+ },
+ {
+  "screen": "client",
+  "theme": "dark",
+  "state": "panel-open",
+  "severity": "желательно",
+  "what": "Разделители строк в панели «⌄» начинаются в разных местах, у строки «Tom Mitchell» линия сдвинута вправо",
+  "expected": "линии на одной левой кромке (strip-11: от иконки)",
+  "actual": "линии у почты и у человека начинаются на x≈48/96 вразнобой, у «Tom Mitchell» обрывается у аватара",
+  "mock_img": "review-v2/mock/strip-11.png",
+  "our_img": "screens/721a1ff/client_c1__panel-open__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/client_c1__panel-open__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   32,
+   300,
+   330,
+   130
+  ],
+  "spec_ref": "visual-v2 панель контактов",
+  "spec_known": false,
+  "reviewer": "а-вёрстка",
+  "dups": 1,
+  "id": "F13"
+ },
+ {
+  "screen": "visit",
+  "theme": "dark",
+  "state": "visit-h0",
+  "severity": "желательно",
+  "what": "Внизу подсвечена вкладка «Клиенты», хотя человек пришёл из Плана и в макете подсвечен «План»",
+  "expected": "подсвечен «План» (gold-значок на ряду вкладок)",
+  "actual": "подсвечены «Клиенты»",
+  "mock_img": "review-v2/mock/m-visit.png",
+  "our_img": "screens/721a1ff/visit_v4__visit-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/visit_v4__visit-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   160,
+   780,
+   60,
+   50
+  ],
+  "spec_ref": "visual-v2 вкладки; HIG: вкладка = откуда пришли",
+  "spec_known": false,
+  "reviewer": "а-вёрстка",
+  "dups": 1,
+  "id": "F14"
+ },
+ {
+  "screen": "home",
+  "theme": "dark",
+  "state": "home-h0",
+  "severity": "желательно",
+  "what": "Плитки «Требует действия» ниже, чем в макете",
+  "expected": "высота плитки ≈111 px, зазор 12",
+  "actual": "высота ≈99 px, зазор 10",
+  "mock_img": "review-v2/mock/m-home.png",
+  "our_img": "screens/721a1ff/today__home-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/today__home-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   16,
+   449,
+   358,
+   208
+  ],
+  "spec_ref": "visual-v2 .tile; SCREEN-SPECS Главная",
+  "spec_known": false,
+  "reviewer": "а-вёрстка",
+  "dups": 1,
+  "id": "F15"
+ },
+ {
+  "screen": "money",
+  "theme": "dark",
+  "state": "money-h0",
+  "severity": "желательно",
+  "what": "Верхние плитки «Должны» и ряд из трёх ниже на ≈12 px, чем в макете",
+  "expected": "большая плитка ≈135 px, ряд из трёх ≈105 px",
+  "actual": "большая ≈123 px, ряд ≈92 px; зазоры 9–10",
+  "mock_img": "review-v2/mock/m-money.png",
+  "our_img": "screens/721a1ff/finance__money-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/finance__money-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   16,
+   124,
+   358,
+   226
+  ],
+  "spec_ref": "visual-v2 Деньги, плитки",
+  "spec_known": false,
+  "reviewer": "а-вёрстка",
+  "dups": 1,
+  "id": "F16"
+ },
+ {
+  "screen": "plan",
+  "theme": "dark",
+  "state": "plan-h0",
+  "severity": "желательно",
+  "what": "Аватары исполнителей в слотах серые и с «VE»/«AP»; в макете цветные пастельные круги «AL»",
+  "expected": "пастельный круг (персиковый, 34 px) с инициалами по сотруднику",
+  "actual": "тёмно-серый круг 28 px «VE», «AP» одинаковый для всех",
+  "mock_img": "review-v2/mock/m-plan.png",
+  "our_img": "screens/721a1ff/plan__plan-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/plan__plan-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   333,
+   588,
+   30,
+   30
+  ],
+  "spec_ref": "DS pastels (аватары); visual-v2 .ev аватар",
+  "spec_known": false,
+  "reviewer": "а-вёрстка",
+  "dups": 1,
+  "id": "F17"
+ },
+ {
+  "screen": "visit",
+  "theme": "dark",
+  "state": "visit-h0",
+  "severity": "желательно",
+  "what": "В строке «назад» на Выезде вместо подписи родителя стоит название работы («Deep clean after move-out»), а у Клиента — «Клиенты»; то же название сразу повторяется в карточке ниже",
+  "expected": "«←» + подпись родителя 15/600 серым (куда вернёт: «План»/«Клиенты»); имя объекта — в крупном блоке",
+  "actual": "Подпись = заголовок работы; родителя не видно, название дважды на экране",
+  "mock_img": "review-v2/mock/m-visit.png",
+  "our_img": "screens/721a1ff/visit_v4__visit-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/visit_v4__visit-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   0,
+   5,
+   390,
+   50
+  ],
+  "spec_ref": "visual-v2: Единая шапка, п.2 Объект",
+  "spec_known": false,
+  "reviewer": "б-одинаковость",
+  "dups": 1,
+  "id": "F18"
+ },
+ {
+  "screen": "plan",
+  "theme": "dark",
+  "state": "plan-h0",
+  "severity": "желательно",
+  "what": "Выбор «выбранного» устроен по-разному: на Плане выбранный сегмент «День» залит жёлтым, на Клиенте выбранная вкладка «Обзор» — белая/чёрная таблетка",
+  "expected": "Сегмент (36, выбранный жёлтый) и чипы (32) — разные вещи, но на одном экране жёлтого должно быть не больше одного",
+  "actual": "План сразу четыре жёлтых места: сегмент, день 20, таблетка 1:30, линия 12:00 (+ вкладка); Клиент — один жёлтый + белый чип",
+  "mock_img": "review-v2/mock/m-plan.png",
+  "our_img": "screens/721a1ff/plan__plan-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/plan__plan-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   0,
+   130,
+   390,
+   130
+  ],
+  "spec_ref": "DS §12.12: одна жёлтая заливка; visual-v2 «Сегмент»",
+  "spec_known": false,
+  "reviewer": "б-одинаковость",
+  "dups": 1,
+  "id": "F19"
+ },
+ {
+  "screen": "estimate",
+  "theme": "dark",
+  "state": "estimate-h0",
+  "severity": "желательно",
+  "what": "Один тип списка собран по-разному: позиции сметы — одна карточка со строками и линиями, а на Клиенте, Деньгах и Главной каждая строка — своя карточка",
+  "expected": "Один способ: либо группа строк в одной карточке, либо отдельные; промежуток 8",
+  "actual": "Смета и панель контактов — одна карточка; Клиент/Деньги/Главная — карточка на строку",
+  "mock_img": "review-v2/mock/m-estimate.png",
+  "our_img": "screens/721a1ff/estimate_new_id_e6__estimate-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/estimate_new_id_e6__estimate-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   15,
+   328,
+   360,
+   370
+  ],
+  "spec_ref": "LAYOUT-RULES: карточки; DS правило 12",
+  "spec_known": false,
+  "reviewer": "б-одинаковость",
+  "dups": 1,
+  "id": "F20"
+ },
+ {
+  "screen": "client",
+  "theme": "dark",
+  "state": "client-h0",
+  "severity": "желательно",
+  "what": "Закреплённая заметка обрезана многоточием посреди слова",
+  "expected": "Gate code 4512 · small dog",
+  "actual": "Gate code 4512. Small dog in the bac…",
+  "mock_img": "review-v2/mock/m-client.png",
+  "our_img": "screens/721a1ff/client_c1__client-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/client_c1__client-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   16,
+   470,
+   360,
+   60
+  ],
+  "spec_ref": "SCREEN-SPECS расхождение «обрезка …»",
+  "spec_known": true,
+  "reviewer": "в-тексты",
+  "dups": 1,
+  "id": "F21"
+ },
+ {
+  "screen": "home",
+  "theme": "dark",
+  "state": "home-h0",
+  "severity": "желательно",
+  "what": "Адрес в карточке «Дальше» обрезан на середине слова",
+  "expected": "Адрес виден целиком (макет: «Bathroom remodel · 1420 Oak Grove Ave, Pasadena»)",
+  "actual": "Kitchen faucet + garbage disposal · 4512 Ventura Ca…",
+  "mock_img": "review-v2/mock/m-home.png",
+  "our_img": "screens/721a1ff/today__home-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/today__home-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   32,
+   175,
+   330,
+   30
+  ],
+  "spec_ref": "§12.12",
+  "spec_known": false,
+  "reviewer": "в-тексты",
+  "dups": 1,
+  "id": "F22"
+ },
+ {
+  "screen": "home",
+  "theme": "dark",
+  "state": "home-h0",
+  "severity": "желательно",
+  "what": "Приветствие и имя на разных языках: макет по-русски, у нас имя латиницей и другая формула",
+  "expected": "Доброе утро, Алекс",
+  "actual": "Добрый день, Alex",
+  "mock_img": "review-v2/mock/m-home.png",
+  "our_img": "screens/721a1ff/today__home-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/today__home-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   16,
+   75,
+   260,
+   36
+  ],
+  "spec_ref": "§12.12",
+  "spec_known": false,
+  "reviewer": "в-тексты",
+  "dups": 1,
+  "id": "F23"
+ },
+ {
+  "screen": "home",
+  "theme": "dark",
+  "state": "home-h300",
+  "severity": "желательно",
+  "what": "В строке выезда статус «Опаздывает» просочился в подзаголовок и подпись срезана",
+  "expected": "Bathroom remodel · Alex / одно слово статуса",
+  "actual": "Bathroom remodel: vanity, … ; «Опаздывает · в пути · Panel upgrade 200A · Valley»; Deep clean after move-out…",
+  "mock_img": null,
+  "our_img": "screens/721a1ff/today__home-h300__dark-390-ru-director-s300__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/today__home-h300__dark-390-ru-director-s300__721a1ff.png"
+  ],
+  "crop": [
+   16,
+   490,
+   360,
+   270
+  ],
+  "spec_ref": "§12.12",
+  "spec_known": false,
+  "reviewer": "в-тексты",
+  "dups": 1,
+  "id": "F24"
+ },
+ {
+  "screen": "client",
+  "theme": "dark",
+  "state": "client-h0",
+  "severity": "желательно",
+  "what": "Полоса разделов набор отличается от макета, последняя вкладка срезана без подсказки на «Объ…»",
+  "expected": "Обзор · Работы 2 · Сметы 1 · Счета 2 · Выезды 2",
+  "actual": "Обзор · Работы 2 · Сметы 1 · Счета 2 · Объе…",
+  "mock_img": "review-v2/mock/m-client.png",
+  "our_img": "screens/721a1ff/client_c1__client-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/client_c1__client-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   16,
+   415,
+   374,
+   36
+  ],
+  "spec_ref": "SCREEN-SPECS расхождение полосы",
+  "spec_known": true,
+  "reviewer": "в-тексты",
+  "dups": 1,
+  "id": "F25"
+ },
+ {
+  "screen": "visit",
+  "theme": "dark",
+  "state": "visit-h0,estimate-h0",
+  "severity": "мелочь",
+  "what": "Слово «Демо» стоит в разных местах шапок: у Главной рядом с датой, у Плана и Денег рядом со строкой даты/месяца, у Клиента после «Клиенты», у Выезда после названия работы, у Сметы — внутри строки статуса",
+  "expected": "Один и тот же приём на всех шапках (рядом с серой строкой над заголовком; в свёрнутой — точка на «←»/аватаре)",
+  "actual": "Шесть вариантов расположения: плашка слева, плашка в строке «назад», слово в конце подзаголовка",
+  "mock_img": "review-v2/mock/m-estimate.png",
+  "our_img": "screens/721a1ff/visit_v4__visit-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/visit_v4__visit-h0__dark-390-ru-director__721a1ff.png",
+   "screens/721a1ff/estimate_new_id_e6__estimate-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   0,
+   10,
+   390,
+   40
+  ],
+  "spec_ref": "visual-v2: Единая шапка · visual-v2: Единая шапка, п.3 (допускает слово в строке — но на корнях/объектах плашка)",
+  "spec_known": false,
+  "reviewer": "б-одинаковость",
+  "dups": 2,
+  "id": "F26"
+ },
+ {
+  "screen": "home",
+  "theme": "dark",
+  "state": "home-h0",
+  "severity": "мелочь",
+  "what": "Строка даты на Главной — «пятница, 20 ноября» строчными полностью, на Плане — «Пт, 20 ноября · 6 выездов», на Деньгах — «Ноябрь 2026»",
+  "expected": "Серая строка 13/600 одного вида: «Пт, 20 ноября»",
+  "actual": "Главная: день недели целиком с маленькой буквы",
+  "mock_img": "review-v2/mock/m-home.png",
+  "our_img": "screens/721a1ff/today__home-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/today__home-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   10,
+   52,
+   280,
+   24
+  ],
+  "spec_ref": "visual-v2: Единая шапка, п.1 · SCREEN-SPECS: расхождение «кикер даты»",
+  "spec_known": true,
+  "reviewer": "б-одинаковость, в-тексты",
+  "dups": 2,
+  "id": "F27"
+ },
+ {
+  "screen": "plan",
+  "theme": "dark",
+  "state": "plan-h0,home-h0",
+  "severity": "мелочь",
+  "what": "Над списком добавлена плашка «2 опаздывают», которой нет в макете",
+  "expected": "сразу «Выезды сегодня», потом слоты",
+  "actual": "плашка 24 px (y 305–327) сдвигает первый слот на 12 вниз (на 335 вместо 323)",
+  "mock_img": "review-v2/mock/m-plan.png",
+  "our_img": "screens/721a1ff/plan__plan-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/plan__plan-h0__dark-390-ru-director__721a1ff.png",
+   "screens/721a1ff/today__home-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   16,
+   304,
+   120,
+   26
+  ],
+  "spec_ref": "SCREEN-SPECS План (расхождение записано, причина audit 12 §2.3) · visual-v2: Плашка статуса",
+  "spec_known": true,
+  "reviewer": "а-вёрстка, б-одинаковость",
+  "dups": 2,
+  "id": "F28"
+ },
+ {
+  "screen": "money",
+  "theme": "dark",
+  "state": "money-h0",
+  "severity": "мелочь",
+  "what": "Строки счетов чуть выше макета, значок «Срок/Сумма» справа тот же",
+  "expected": "высота строки ≈58, зазор 10",
+  "actual": "≈61–62, зазор 10",
+  "mock_img": "review-v2/mock/m-money.png",
+  "our_img": "screens/721a1ff/finance__money-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/finance__money-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   16,
+   404,
+   358,
+   130
+  ],
+  "spec_ref": "visual-v2 .ln",
+  "spec_known": false,
+  "reviewer": "а-вёрстка",
+  "dups": 1,
+  "id": "F29"
+ },
+ {
+  "screen": "home",
+  "theme": "dark",
+  "state": "home-h0",
+  "severity": "мелочь",
+  "what": "На плитке и кнопках другие значки",
+  "expected": "«Маршрут» — булавка, «Лиды» — inbox, «Получено» — тренд",
+  "actual": "«Маршрут» — стрелка-навигатор, «Лиды» — коробка, «Получено» — столбики",
+  "mock_img": "review-v2/mock/m-home.png",
+  "our_img": "screens/721a1ff/today__home-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/today__home-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   175,
+   338,
+   134,
+   40
+  ],
+  "spec_ref": "SCREEN-SPECS Главная: значки плиток (записано)",
+  "spec_known": true,
+  "reviewer": "а-вёрстка",
+  "dups": 1,
+  "id": "F30"
+ },
+ {
+  "screen": "estimate",
+  "theme": "dark",
+  "state": "estimate-h0",
+  "severity": "мелочь",
+  "what": "Значки в панели «Позиции» не те, что в макете",
+  "expected": "линейка · слои · книга · «+»",
+  "actual": "линейка · копия · заметка · «+»",
+  "mock_img": "review-v2/mock/m-estimate.png",
+  "our_img": "screens/721a1ff/estimate_new_id_e6__estimate-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/estimate_new_id_e6__estimate-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   222,
+   284,
+   150,
+   34
+  ],
+  "spec_ref": "visual-v2 смета, ряд значков",
+  "spec_known": false,
+  "reviewer": "а-вёрстка",
+  "dups": 1,
+  "id": "F31"
+ },
+ {
+  "screen": "estimate",
+  "theme": "dark",
+  "state": "estimate-h0",
+  "severity": "мелочь",
+  "what": "Строки позиций выше макета",
+  "expected": "высота строки 52",
+  "actual": "высота строки 56",
+  "mock_img": "review-v2/mock/m-estimate.png",
+  "our_img": "screens/721a1ff/estimate_new_id_e6__estimate-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/estimate_new_id_e6__estimate-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   16,
+   330,
+   358,
+   370
+  ],
+  "spec_ref": "visual-v2 .ln; GroupRow 56 в DS",
+  "spec_known": false,
+  "reviewer": "а-вёрстка",
+  "dups": 1,
+  "id": "F32"
+ },
+ {
+  "screen": "estimate",
+  "theme": "dark",
+  "state": "estimate-h0",
+  "severity": "мелочь",
+  "what": "Над сметой жёлтая строка «Уже отправлена…» сдвигает всё на 38 px",
+  "expected": "сразу карточка клиента (y≈106)",
+  "actual": "строка 20 px + отступ; карточка клиента на y 115",
+  "mock_img": "review-v2/mock/m-estimate.png",
+  "our_img": "screens/721a1ff/estimate_new_id_e6__estimate-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/estimate_new_id_e6__estimate-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   16,
+   80,
+   358,
+   30
+  ],
+  "spec_ref": "SCREEN-SPECS Е1 (записано: причина — демо-данные)",
+  "spec_known": true,
+  "reviewer": "а-вёрстка",
+  "dups": 1,
+  "id": "F33"
+ },
+ {
+  "screen": "home",
+  "theme": "dark",
+  "state": "home-h0",
+  "severity": "мелочь",
+  "what": "В нижней панели у «Лиды» нет красного числа 2 и значок другой",
+  "expected": "значок inbox + точка-число «2»",
+  "actual": "значок мишени, числа нет",
+  "mock_img": "review-v2/mock/m-home.png",
+  "our_img": "screens/721a1ff/today__home-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/today__home-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   310,
+   780,
+   50,
+   50
+  ],
+  "spec_ref": "visual-v2 вкладки, badge",
+  "spec_known": false,
+  "reviewer": "а-вёрстка",
+  "dups": 1,
+  "id": "F34"
+ },
+ {
+  "screen": "client",
+  "theme": "dark",
+  "state": "client-h0",
+  "severity": "мелочь",
+  "what": "Значок «Замер» не тот, что в макете",
+  "expected": "линейка",
+  "actual": "дом с чертой",
+  "mock_img": "review-v2/mock/m-client.png",
+  "our_img": "screens/721a1ff/client_c1__client-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/client_c1__client-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   320,
+   128,
+   50,
+   70
+  ],
+  "spec_ref": "SCREEN-SPECS Клиент, быстрые действия",
+  "spec_known": false,
+  "reviewer": "а-вёрстка",
+  "dups": 1,
+  "id": "F35"
+ },
+ {
+  "screen": "home",
+  "theme": "light",
+  "state": "home-h0",
+  "severity": "мелочь",
+  "what": "Жёлтые заливки в светлой теме обведены тёмно-жёлтой линией (кнопка «В путь», «Должны» на Деньгах, «Завершить», «Готово»), в тёмной линии нет",
+  "expected": "Одинаковый вид заливки в обеих темах; без рамок",
+  "actual": "Светлая: рамка 1 px вокруг жёлтого; тёмная: без рамки",
+  "mock_img": null,
+  "our_img": "screens/721a1ff/today__home-h0__light-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/today__home-h0__light-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   30,
+   335,
+   140,
+   42
+  ],
+  "spec_ref": "visual-v2: Слои «Без рамок»",
+  "spec_known": false,
+  "reviewer": "б-одинаковость",
+  "dups": 1,
+  "id": "F36"
+ },
+ {
+  "screen": "visit",
+  "theme": "dark",
+  "state": "visit-h0",
+  "severity": "мелочь",
+  "what": "Прогресс «0 из 4 · 0 %» показан дважды в одной карточке («Работа» и «Чек-лист выезда») с одним значением",
+  "expected": "Прогресс — один раз словами и числом",
+  "actual": "Две строки с одинаковым «0 из 4 · 0 %»",
+  "mock_img": "review-v2/mock/m-visit.png",
+  "our_img": "screens/721a1ff/visit_v4__visit-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/visit_v4__visit-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   30,
+   255,
+   330,
+   70
+  ],
+  "spec_ref": "visual-v2: Прогресс",
+  "spec_known": false,
+  "reviewer": "б-одинаковость",
+  "dups": 1,
+  "id": "F37"
+ },
+ {
+  "screen": "home",
+  "theme": "dark",
+  "state": "home-h0",
+  "severity": "мелочь",
+  "what": "Прогресс работы: пробелы и знак процента разъезжаются; значение «0 из 4 · 0 %» при не начатой работе",
+  "expected": "3 из 5 · 62 %",
+  "actual": "0 из 4 · 0 %",
+  "mock_img": "review-v2/mock/m-home.png",
+  "our_img": "screens/721a1ff/today__home-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/today__home-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   275,
+   232,
+   90,
+   20
+  ],
+  "spec_ref": "SCREEN-SPECS «0 из 4 · 0 %»",
+  "spec_known": false,
+  "reviewer": "в-тексты",
+  "dups": 1,
+  "id": "F38"
+ },
+ {
+  "screen": "home",
+  "theme": "dark",
+  "state": "home-h0",
+  "severity": "мелочь",
+  "what": "Вторая ячейка тройки не как в макете у не начатого выезда",
+  "expected": "12 мин / в дороге",
+  "actual": "$1,840 / к оплате",
+  "mock_img": "review-v2/mock/m-home.png",
+  "our_img": "screens/721a1ff/today__home-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/today__home-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   143,
+   265,
+   110,
+   55
+  ],
+  "spec_ref": "SCREEN-SPECS: 2-я ячейка тройки",
+  "spec_known": false,
+  "reviewer": "в-тексты",
+  "dups": 1,
+  "id": "F39"
+ },
+ {
+  "screen": "visit",
+  "theme": "dark",
+  "state": "visit-h0",
+  "severity": "мелочь",
+  "what": "Подпись «Сегодня» с большой буквы в середине строки, в макете день строчными",
+  "expected": "ABC Supply · вчера",
+  "actual": "Home Depot · Сегодня",
+  "mock_img": "review-v2/mock/m-visit.png",
+  "our_img": "screens/721a1ff/visit_v4__visit-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/visit_v4__visit-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   80,
+   675,
+   150,
+   20
+  ],
+  "spec_ref": "§12.13",
+  "spec_known": false,
+  "reviewer": "в-тексты",
+  "dups": 1,
+  "id": "F40"
+ },
+ {
+  "screen": "client",
+  "theme": "dark",
+  "state": "client-h0",
+  "severity": "мелочь",
+  "what": "Подпись причины шага отличается от макета",
+  "expected": "задаток оплачен, работа идёт",
+  "actual": "задаток оплачен, остаток не выставлен",
+  "mock_img": "review-v2/mock/m-client.png",
+  "our_img": "screens/721a1ff/client_c1__client-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/client_c1__client-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   190,
+   345,
+   185,
+   50
+  ],
+  "spec_ref": "SCREEN-SPECS: причина шага",
+  "spec_known": false,
+  "reviewer": "в-тексты",
+  "dups": 1,
+  "id": "F41"
+ },
+ {
+  "screen": "client",
+  "theme": "dark",
+  "state": "client-h0",
+  "severity": "мелочь",
+  "what": "Длительность по-разному записана и не по макету",
+  "expected": "Длит. 1 ч",
+  "actual": "Длит. 1 ч 30 мин",
+  "mock_img": "review-v2/mock/m-client.png",
+  "our_img": "screens/721a1ff/client_c1__client-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/client_c1__client-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   285,
+   625,
+   80,
+   30
+  ],
+  "spec_ref": "SCREEN-SPECS: длительность демо",
+  "spec_known": true,
+  "reviewer": "в-тексты",
+  "dups": 1,
+  "id": "F42"
+ },
+ {
+  "screen": "client",
+  "theme": "dark",
+  "state": "panel-open",
+  "severity": "мелочь",
+  "what": "В «Контактах» подписи не по правилам: «Мобильный ★», «Супруг(а)» со скобками; три телефона и счётчик «2»",
+  "expected": "Контакты · 2 — склонения и роли без скобок",
+  "actual": "Контакты · 2 при пяти строках; «Супруг(а)»; «Мобильный ★»",
+  "mock_img": null,
+  "our_img": "screens/721a1ff/client_c1__panel-open__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/client_c1__panel-open__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   32,
+   180,
+   340,
+   290
+  ],
+  "spec_ref": "DS правила текстов",
+  "spec_known": false,
+  "reviewer": "в-тексты",
+  "dups": 1,
+  "id": "F43"
+ },
+ {
+  "screen": "money",
+  "theme": "dark",
+  "state": "money-h0",
+  "severity": "мелочь",
+  "what": "Способ оплаты пишется по-разному: в подписи строчными, в колонке с заглавной; в макете «карта · 9:12»",
+  "expected": "INV-0104 · карта · 9:12 / Способ Карта",
+  "actual": "INV-0104 · чек · 11:00 AM / Способ Чек; INV-0103 · zelle · 9:40 AM / Zelle",
+  "mock_img": "review-v2/mock/m-money.png",
+  "our_img": "screens/721a1ff/finance__money-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/finance__money-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   16,
+   595,
+   358,
+   110
+  ],
+  "spec_ref": "§12.15",
+  "spec_known": false,
+  "reviewer": "в-тексты",
+  "dups": 1,
+  "id": "F44"
+ },
+ {
+  "screen": "money",
+  "theme": "dark",
+  "state": "money-h0",
+  "severity": "мелочь",
+  "what": "Сводка «Сметы открыты» с неверным склонением и счётом, не как в макете",
+  "expected": "Сметы открыты $16,552 — «6 смет · 3 ждут ответа»",
+  "actual": "$6,392 — «3 сметы · 3 ждут ответа»",
+  "mock_img": "review-v2/mock/m-money.png",
+  "our_img": "screens/721a1ff/finance__money-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/finance__money-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   200,
+   125,
+   175,
+   125
+  ],
+  "spec_ref": "§12.15",
+  "spec_known": false,
+  "reviewer": "в-тексты",
+  "dups": 1,
+  "id": "F45"
+ },
+ {
+  "screen": "estimate",
+  "theme": "dark",
+  "state": "estimate-h0",
+  "severity": "мелочь",
+  "what": "Дата сохранения сокращена с точкой и «чт», не как «сохранено 8:19» в макете; шапка в одну строку тесна",
+  "expected": "Черновик · сохранено 8:19 · Демо",
+  "actual": "Отправлена · сохранено чт, 19 нояб. · Демо",
+  "mock_img": "review-v2/mock/m-estimate.png",
+  "our_img": "screens/721a1ff/estimate_new_id_e6__estimate-h0__dark-390-ru-director__721a1ff.png",
+  "our_imgs": [
+   "screens/721a1ff/estimate_new_id_e6__estimate-h0__dark-390-ru-director__721a1ff.png"
+  ],
+  "crop": [
+   60,
+   30,
+   270,
+   30
+  ],
+  "spec_ref": "§12.14",
+  "spec_known": false,
+  "reviewer": "в-тексты",
+  "dups": 1,
+  "id": "F46"
+ }
+]

@@ -366,7 +366,21 @@ export interface VisitSettings {
  * why the cloud did not take a photo's file (#1431): tooBig — over the bucket's 25 MB (#1430); type — a type it does not
  * keep; gone — the file is no longer on this phone (nothing to send again); refused — any other «no» of the storage
  */
-export type PhotoFail = "tooBig" | "type" | "gone" | "refused";
+export type PhotoFail = "tooBig" | "type" | "gone" | "refused" | PhotoPrepFail;
+
+/**
+ * #1558 (spec 46 §5.3а): the file could not be made anew here, so nothing was sent — the original never goes to the
+ * cloud. preparing — the phone tries again on its own; unreadable — 5 rounds and a day passed, «Подготовить снова»
+ */
+export type PhotoPrepFail = "preparing" | "unreadable";
+/** a way of making the file anew (data/photoShrink.ts) */
+export type PrepWay = "c1" | "c2" | "c3";
+/** one failed round on this phone: when, the last way tried and its error text (never the photo) */
+export interface PrepTry {
+  at: string;
+  way: PrepWay;
+  why: string;
+}
 
 export interface Photo {
   id: ID;
@@ -374,6 +388,10 @@ export interface Photo {
   uri?: string;
   /** the cloud refused the file (#1431): shown on the photo with «Повторить»; none — sent, waiting, or never asked */
   upload?: { failed: PhotoFail; at: string };
+  /** #1558: the file was made by the second way (long side 1024) — a gallery knows it is a small frame */
+  small?: true;
+  /** #1558: the rounds that could not prepare it (this phone only) */
+  prep?: PrepTry[];
 }
 
 /** ach — a bank payment online (Stripe, step 20; docs/specs/35); people record only card / cash / check / zelle by hand */
@@ -1060,6 +1078,8 @@ export interface Expense {
   receiptFileId?: ID;
   /** #1538: the cloud did not take the receipt's file (this phone knows why; another phone — «refused») */
   receiptFailed?: PhotoFail;
+  /** #1558: the rounds that could not prepare the receipt (this phone only) */
+  receiptPrep?: PrepTry[];
   /** who paid; reimbursements later */
   memberId: ID;
 }

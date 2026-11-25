@@ -92,6 +92,17 @@ describe("unit:localFiles — the sweep (#1659)", () => {
     expect(await sweepLocalFiles(d, now)).toBe(2);
     expect([...left].sort()).toEqual([man("g.jpg"), man("kept.jpg"), man("queued.jpg"), man("shown.jpg")].sort());
   });
+  it("an original kept as «preparing» (#1558) stays in the picker's folder — on the device and in memory", async () => {
+    const prep = (u: string) => JSON.stringify({ db: { visits: [{ photos: [{ uri: u, upload: { failed: "preparing" } }] }], expenses: [{ receiptUri: pic("r.jpg"), receiptFailed: "preparing" }] } });
+    const { d, left } = deps({ "octo.cloud.v1.c1.u1": prep(pic("orig.jpg")) }, [pic("orig.jpg"), pic("r.jpg"), pic("mem.jpg"), pic("stale.jpg")]);
+    const off = setMemoryRecords(() => [JSON.stringify({ visits: [{ photos: [{ uri: pic("mem.jpg"), upload: { failed: "unreadable" } }] }] })]);
+    try {
+      expect(await sweepLocalFiles(d, now)).toBe(1);
+    } finally {
+      off();
+    }
+    expect([...left].sort()).toEqual([pic("mem.jpg"), pic("orig.jpg"), pic("r.jpg")].sort());
+  });
   it("a record that cannot be read, or a store that could not save — nothing goes", async () => {
     const a = deps({ "octo.cloud.v1.c1.u1": "{broken" }, [man("x.jpg")]);
     expect(await sweepLocalFiles(a.d, now)).toBe(0);

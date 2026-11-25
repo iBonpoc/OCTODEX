@@ -45,7 +45,7 @@ import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { docForSave, newToken, normalizeDoc, storedDoc, summarize } from "@/features/estimateDoc";
 import { syncCompanyTerms, termsForNew, termsOnClientChange, withFrozenTerms, type TermsFor } from "@/features/estimateTerms";
 import { withSnooze } from "@/features/attentionSnooze";
-import { contractInvoice, contractInvoices, voidRefusal, withTaxSplit, type VoidRefusal } from "@/features/contractInvoice";
+import { contractInvoice, contractInvoices, secondFinal, voidRefusal, withTaxSplit, type VoidRefusal } from "@/features/contractInvoice";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment, invoiceOwes, sumCents, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
@@ -55,6 +55,7 @@ import { cloudCacheKey, isNewCacheKey, othersCaches, othersCopies } from "./cach
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { backoffMs, classify, isAccessDenied, isModuleInactive, isUnknownOp, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, liveOf, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
+import { SEND_AFTER_MS } from "@/cloud/outboxTiming";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
 import { jobCancelRefusal, type JobCancelRefusal } from "@/features/jobCancel";
 import { dropGroupPriceOps, dropModuleOps, dropSettingsOps, dropSupplierTaxOps, dropTemplateOps, groupPriceRejected, itemCostRejected, supplierTaxRejected, templateRejected, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
@@ -75,6 +76,9 @@ import { canEditOrders, canMove, canReceive, draftsForJob, linesEditable, openDr
 import { variantOk } from "@/features/catalogMatch";
 import { canSeeSuppliers, cleanSupplier, cleanSupplierLink, itemsOfSupplier, itemsWithOtherTax, keepCostHistory, localHistoryEntry, mergeHistory } from "@/features/suppliers";
 import { coalesceAt, coalesced } from "./outboxCoalesce";
+import type { PickedPhoto } from "./photoShrink";
+import { applyPrep, firstTry, prepTargetOf, prepTargets, type PrepTarget } from "./photoPrepare";
+import { madeHere } from "@/features/photoUri";
 import {
   type CalendarEvent,
   type MemberPrefs,
@@ -125,6 +129,7 @@ import {
   type Supplier,
   type PurchaseOrder,
   type ItemVariant,
+  type Photo,
 } from "./types";
 import { cleanEstimateTemplate, canEditEstimateTemplates } from "@/features/estimateTemplate";
 import { cleanName } from "@/features/nameAsk";
@@ -288,11 +293,15 @@ interface StoreCtx {
   refresh: () => Promise<void>;
   loading: boolean;
   advanceVisit: (id: ID) => Undo;
-  addPhoto: (visitId: ID, kind: "before" | "after", uri?: string) => Undo;
+  /** #1558: only a file made anew here (`prepPicked`) — or the original kept on this phone as «preparing» (never sent) */
+  addPhoto: (visitId: ID, kind: "before" | "after", photo?: string | PickedPhoto) => Undo;
   toggleCheck: (visitId: ID, itemId: ID) => Undo;
   removePhoto: (visitId: ID, photoId: ID) => Undo;
-  /** #1431 «Повторить»: a photo the cloud refused is sent again (its mark goes until the cloud answers); nothing to send — no-op */
+  /** #1431 «Повторить»: a photo the cloud refused is sent again — made anew first (#1558: the file on this phone may be
+   * an original), «preparing» until then; nothing to send — no-op */
   retryPhoto: (visitId: ID, photoId: ID) => Undo;
+  /** #1558 «Подготовить снова»: one round for a photo (or with `expenseId` a receipt) marked «unreadable» */
+  preparePhotoAgain: (ref: { visitId?: ID; photoId: ID } | { expenseId: ID }) => void;
   /** extra checklist item added on site by the tech (always optional, docs/specs/08 §11.2 №9) */
   addCheckItem: (visitId: ID, label: string) => Undo;
   /* step 14 (docs/specs/08 §10.1): one row per item — a tick and an office edit never overwrite each other */
@@ -301,7 +310,7 @@ interface StoreCtx {
   /** «Пропустить»: the items stay «not done» (not a tick); the reason is optional */
   skipItems: (visitId: ID, itemIds: ID[], reason?: NaReason, text?: string) => Undo;
   /** a photo for a photo item: into the visit's photos (stage by the step) and onto the item, which is then done */
-  attachItemPhoto: (visitId: ID, itemId: ID, uri?: string) => Undo;
+  attachItemPhoto: (visitId: ID, itemId: ID, photo?: string | PickedPhoto) => Undo;
   /** the office: an item of a visit (required or not) */
   addVisitItem: (visitId: ID, label: string, required: boolean, kind?: ChecklistItemKind) => Undo;
   /** the office (a required one — the director); a tech — only his own optional item. The server checks */
@@ -404,7 +413,8 @@ interface StoreCtx {
   addEstimate: (e: Omit<Estimate, "id">) => Undo;
   sendEstimate: (id: ID, token?: string) => Undo;
   payInvoice: (id: ID, method: PaymentMethod) => Undo;
-  addExpense: (x: Omit<Expense, "id" | "at" | "memberId">) => Undo;
+  /** #1558 `receipt`: the picked receipt (`prepPicked`) — a «preparing» one stays on this phone and only its row goes */
+  addExpense: (x: Omit<Expense, "id" | "at" | "memberId">, receipt?: PickedPhoto) => Undo;
   signEstimate: (id: ID, path: string) => Undo;
   /** fromClient: paid on the client page → unread notice for the office */
   payDeposit: (id: ID, method: PaymentMethod, fromClient?: boolean) => Undo;
@@ -971,6 +981,56 @@ export function StoreProvider({
       sendPoint(w.p, w.source);
     }
   }, [sendPoint]);
+  /**
+   * #1558 (spec 46 §5.3а): photos and receipts «preparing» are made anew again — at the start, every minute while the
+   * app is open (each one at most every 10 minutes, photoPrepare.prepDue) and by «Повторить» / «Подготовить снова».
+   * Made — the new file replaces the original on this phone and its bytes are queued; never the original.
+   */
+  const prepBusy = useRef(false);
+  const mutateRef = useRef<((label: string, fn: (d: DB) => DB, op?: Op) => unknown) | null>(null);
+  // asked while a round runs (a tap on «Подготовить снова», the timer after «Повторить»): done right after it, never lost
+  const prepLater = useRef<{ all: boolean; only: PrepTarget[] }>({ all: false, only: [] });
+  const prepRound = useCallback(async (only?: PrepTarget): Promise<void> => {
+    if (prepBusy.current) {
+      if (only) prepLater.current.only.push(only);
+      else prepLater.current.all = true;
+      return;
+    }
+    prepBusy.current = true;
+    try {
+      const list = only ? [only] : prepTargets(dbRef.current, Date.now(), false, SEND_AFTER_MS);
+      if (!list.length) return;
+      // loaded only when there is something to prepare (the image module is native; the store's tests run without it)
+      const { prepareForCloud } = await import("./photoShrink");
+      for (const t of list) {
+        const r = await prepareForCloud({ uri: t.uri });
+        const now = Date.now();
+        const a = applyPrep(dbRef.current, t, r, now);
+        if (!a) continue;
+        if (r.ok) madeHere(r.uri);
+        if (a.op && mutateRef.current) mutateRef.current(t.kind === "photo" ? "photo.prepared" : "receipt.prepared", (d) => applyPrep(d, t, r, now)?.db ?? d, a.op);
+        else {
+          dbRef.current = a.db;
+          setDb(a.db);
+        }
+      }
+    } finally {
+      prepBusy.current = false;
+      const later = prepLater.current;
+      prepLater.current = { all: false, only: [] };
+      // a tapped photo first (it may be «unreadable», which a plain round skips), then the due ones
+      for (const t of later.only) await prepRound(t);
+      if (later.all) await prepRound();
+    }
+  }, [setDb]);
+  useEffect(() => {
+    const first = setTimeout(() => void prepRound(), 2000);
+    const tick = setInterval(() => void prepRound(), 60_000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(tick);
+    };
+  }, [prepRound]);
   const flushing = useRef(false);
   const flush = useCallback(async () => {
     // the person and the company this send is for: chosen once, sent to the same, never to whoever is signed in by the
@@ -1598,12 +1658,19 @@ export function StoreProvider({
     );
   };
 
-  const addPhotoFn = (visitId: ID, kind: "before" | "after", uri?: string): Undo => {
+  mutateRef.current = mutate;
+  const addPhotoFn = (visitId: ID, kind: "before" | "after", photo?: string | PickedPhoto): Undo => {
     const id = uid();
     const v = dbRef.current.visits.find((x) => x.id === visitId);
+    const at = new Date().toISOString();
+    // #1558: a photo not made anew yet stays here with its original (shown on its tile); only its row goes to the cloud
+    const prep = photo && typeof photo === "object" && "preparing" in photo ? photo.preparing : null;
+    const uri = typeof photo === "string" ? photo : photo && "uri" in photo ? photo.uri : undefined;
+    const small = photo && typeof photo === "object" && "small" in photo && photo.small ? { small: true as const } : {};
+    const kept: Photo = prep ? { id, kind, uri: prep.uri, upload: { failed: "preparing", at }, prep: firstTry(prep, at) } : { id, kind, uri, ...small };
     return mutate(
       "photo.add",
-      (d) => patchVisit(d, visitId, (x) => ({ ...x, photos: [...x.photos, { id, kind, uri }] })),
+      (d) => patchVisit(d, visitId, (x) => ({ ...x, photos: [...x.photos, kept] })),
       v ? { k: "photo.add", id, visitId, jobId: v.jobId, stage: kind, uri } : undefined,
     );
   };
@@ -1785,12 +1852,12 @@ export function StoreProvider({
           { k: "chk.item.set", visitId, itemIds: ids, done: false, skipped: true, naReason: reason ?? null, naText: note ?? null, at },
         );
       },
-      attachItemPhoto: (visitId, itemId, uri) => {
+      attachItemPhoto: (visitId, itemId, photo) => {
         const v = visitOf(visitId);
         const item = v?.checklist.find((c) => c.id === itemId);
         if (!v || !item || !canAttachPhoto(role) || (item.photoIds?.length ?? 0) >= PHOTOS_PER_ITEM_MAX) return noop;
         // the photo first: the server takes only a photo of this visit on an item, so the item's op waits behind it
-        const undoPhoto = addPhotoFn(visitId, photoStageOf(v), uri);
+        const undoPhoto = addPhotoFn(visitId, photoStageOf(v), photo);
         const photoId = visitOf(visitId)?.photos.at(-1)?.id;
         if (!photoId) return undoPhoto;
         const at = new Date().toISOString();
@@ -1908,9 +1975,16 @@ export function StoreProvider({
       retryPhoto: (visitId, photoId) => {
         const p = visitOf(visitId)?.photos.find((x) => x.id === photoId);
         if (!p || !canRetry(p) || !p.uri) return noop;
-        const uri = p.uri;
-        // the mark goes at once (the photo is being sent); a second refusal puts it back with the reason
-        return mutate("photo.retry", (d) => markPhoto(d, photoId, null, ""), { k: "photo.retry", id: photoId, visitId, uri });
+        // #1558: the file is made anew before it is sent (a photo kept by an older build may be the original): «preparing»
+        // now, the round right after sends it (photo.retry); a second refusal puts the cloud's reason back
+        const undo = mutate("photo.retry", (d) => markPhoto(d, photoId, "preparing", new Date().toISOString()));
+        // after the toast's «Отменить» window, as a queued op: an undone «Повторить» is never sent
+        setTimeout(() => void prepRound(), SEND_AFTER_MS + 100);
+        return undo;
+      },
+      preparePhotoAgain: (ref) => {
+        const t = prepTargetOf(dbRef.current, ref);
+        if (t) void prepRound(t);
       },
       addCheckItem: (visitId, label) => addVisitItemFn(visitId, label, false),
       signVisit: (visitId, path) =>
@@ -2324,14 +2398,19 @@ export function StoreProvider({
           totalCents: e.totalCents, depositCents: e.depositCents, marginPct: e.marginPct ?? null, lines: e.lines ?? [],
         });
       },
-      addExpense: (x) => {
+      addExpense: (x, picked) => {
         const id = uid();
+        const at = new Date().toISOString();
+        // #1558: a receipt not made anew yet stays here (its original, «preparing»); the cloud gets its row, never the bytes
+        const prep = picked && "preparing" in picked ? picked.preparing : null;
+        const receiptUri = picked ? ("uri" in picked ? picked.uri : undefined) : x.receiptUri;
         // #1538: a receipt goes to the cloud with the expense (its own files row)
-        const receiptFileId = x.receiptUri ? uid() : undefined;
-        const receipt = receiptFileId ? { receiptFileId, receiptUri: x.receiptUri } : {};
+        const receiptFileId = receiptUri || prep ? uid() : undefined;
+        const receipt = receiptFileId ? { receiptFileId, ...(receiptUri ? { receiptUri } : {}) } : {};
+        const local = prep ? { receiptUri: prep.uri, receiptFailed: "preparing" as const, receiptPrep: firstTry(prep, at) } : {};
         return mutate(
           "expense.add",
-          (d) => ({ ...d, expenses: [{ ...x, ...receipt, id, at: new Date().toISOString(), memberId: d.me }, ...(d.expenses ?? [])] }),
+          (d) => ({ ...d, expenses: [{ ...x, ...receipt, ...local, id, at, memberId: d.me }, ...(d.expenses ?? [])] }),
           { k: "expense.add", id, jobId: x.jobId, vendor: x.vendor, category: x.category, amountCents: x.amountCents, ...receipt },
         );
       },
@@ -2406,6 +2485,8 @@ export function StoreProvider({
         const customerId = job ? d0.properties.find((p) => p.id === job.propertyId)?.customerId : undefined;
         if (!job || !customerId || amountCents <= 0) return NO_UNDO;
         // #865: never more than the contract (engine canIssue; the server refuses the same from В1-4б); the tax inside the total
+        // #2061: one live final per job, as the server's invoices_one_deposit_final_idx
+        if (secondFinal(d0, jobId, kind)) return null;
         const split = contractInvoice(d0, job, amountCents);
         if (!split) return null;
         const id = uid();

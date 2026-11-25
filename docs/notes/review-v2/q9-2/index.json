@@ -1,0 +1,176 @@
+[
+ {
+  "label": "1. Список смет у клиента — меню строки (тёмная)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-1-list-dark.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-1-list-dark.png",
+  "note": "Было: у строки сметы нет ни меню, ни смахивания. Станет: на телефоне «⋯» в строке нет (название не обрезается), то же меню — долгим нажатием (снято через подставную кнопку: на вебе долгое нажатие не сделать); «Открыть» убрано; смахивание — одно действие по статусу и роли. Макет: пункты показывают тост."
+ },
+ {
+  "label": "2. «⋯» карточки сметы, отправленная (тёмная)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-2-card-dark.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-2-card-dark.png",
+  "note": "Станет (исправлено): подписи короче — «Дублировать…» (копия для другого клиента внутри), «В шаблоны…», «Закрыть ссылку»; «Подписать здесь» убрано (есть вкладка «Подпись на месте»); пункты по ролям как в старом коде (мастеру — только «Дублировать» и удаление своего черновика); красным только «Отозвать смету…»."
+ },
+ {
+  "label": "2б. «⋯» карточки, подписанная смета (тёмная)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-2b-signed-dark.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-2b-signed-dark.png",
+  "note": "Станет (исправлено): подписанная — «Дублировать…» и тихая строка «Подписанную смету не удаляют, только хранят» цветом mut, без галочки; «Переименовать…» не показывается. «Как видит клиент» и «В шаблоны…» нет только потому, что у демо-сметы e5 нет ссылки и документа."
+ },
+ {
+  "label": "3. Верх редактора: сетка 2×2 (тёмная, RU 390)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-3-grid-dark.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-3-grid-dark.png",
+  "note": "Было: «＋ Позиция» и круг «˅» (каталог/шаблон), раздел и вариант прятались в «⋯». Станет: четыре кнопки сеткой 2×2 «＋ Позиция · Каталог / ＋ Раздел · Шаблон», без «˅». Основатель 22.11: «три кнопки без селектора»; 23.11: «разделы — сразу, кровля → материал, работа». Поле «Название» → «Название сметы»."
+ },
+ {
+  "label": "3б. Пустая смета: тот же блок 2×2 (тёмная)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-3b-empty-dark.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-3b-empty-dark.png",
+  "note": "Станет: блок 2×2 тот же; круг ➤ в шапке бледный, пока нет позиций (нажатие скажет, чего не хватает)."
+ },
+ {
+  "label": "4. «⋯» редактора, отправленная смета (тёмная)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-4-more-dark.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-4-more-dark.png",
+  "note": "Было: Отправить изменения · Разложить по видам · Строки подробно · Экран для клиента (пять слов, основатель не понял). Станет: один пункт «Варианты на выбор…» (пока вариант один). «Строки подробно» и «Скрыть себестоимость» убраны; отправка — только кругом ➤ в шапке; налог/депозит — строки итогов."
+ },
+ {
+  "label": "4б. «⋯» редактора, черновик (тёмная)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-4b-draft-dark.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-4b-draft-dark.png",
+  "note": "Станет: «⋯» черновика — два пункта; красным только «Удалить черновик»; круг ➤ бледный (позиций нет)."
+ },
+ {
+  "label": "5. Шторка «Варианты на выбор» (тёмная)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-5-options-dark.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-5-options-dark.png",
+  "note": "Было: пункт «Добавить вариант» среди прочих, без объяснения (читается как «копия сметы»). Станет: «Варианты на выбор…» открывает шторку «клиент увидит 2–3 варианта и выберет один» с кнопкой «Сделать 2 варианта» (Good/Better/Best, как Jobber/HCP)."
+ },
+ {
+  "label": "6. «⋯» раздела (тёмная)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-6-section-dark.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-6-section-dark.png",
+  "note": "Станет (исправлено): «Убрать раздел» обычным цветом, значок — минус в круге (не корзина), подпись «Позиции останутся в смете»."
+ },
+ {
+  "label": "7. Раскрытая позиция: «Раздел» и «Видно клиенту» (тёмная)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-7-open-dark.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-7-open-dark.png",
+  "note": "Станет (исправлено): сделан раздел вручную («Кровля») — поле «Раздел» показано под «Вид»; пока позиции в автогруппе по виду, поле «Раздел» не показывается (не будет «Вид: Материалы» и «Раздел: Материалы»). Светлая: переключатель «Видно клиенту» читается слабо — токен переключателя, не трогал."
+ },
+ {
+  "label": "7б. «⋯» позиции (тёмная)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-7b-line-menu-dark.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-7b-line-menu-dark.png",
+  "note": "Было: Заменить из каталога · Дублировать · Переместить… Станет: Дублировать · Заменить из каталога…; «Переместить» ушло в поле «Раздел», «Выше/Ниже» остались только для диктора, корзина и ⠿ — как были."
+ },
+ {
+  "label": "8. «Разложить по видам» (тёмная)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-8-layout-dark.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-8-layout-dark.png",
+  "note": "Было: пункт «Разложить по видам» в «⋯» редактора. Станет: пункта нет (строки и так группируются по виду сами). Это просьба основателя #1099 — решает он: оставить пункт или убрать."
+ },
+ {
+  "label": "1. Список смет у клиента — меню строки (светлая)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-1-list-light.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-1-list-light.png",
+  "note": "Было: у строки сметы нет ни меню, ни смахивания. Станет: на телефоне «⋯» в строке нет (название не обрезается), то же меню — долгим нажатием (снято через подставную кнопку: на вебе долгое нажатие не сделать); «Открыть» убрано; смахивание — одно действие по статусу и роли. Макет: пункты показывают тост."
+ },
+ {
+  "label": "2. «⋯» карточки сметы, отправленная (светлая)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-2-card-light.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-2-card-light.png",
+  "note": "Станет (исправлено): подписи короче — «Дублировать…» (копия для другого клиента внутри), «В шаблоны…», «Закрыть ссылку»; «Подписать здесь» убрано (есть вкладка «Подпись на месте»); пункты по ролям как в старом коде (мастеру — только «Дублировать» и удаление своего черновика); красным только «Отозвать смету…»."
+ },
+ {
+  "label": "2б. «⋯» карточки, подписанная смета (светлая)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-2b-signed-light.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-2b-signed-light.png",
+  "note": "Станет (исправлено): подписанная — «Дублировать…» и тихая строка «Подписанную смету не удаляют, только хранят» цветом mut, без галочки; «Переименовать…» не показывается. «Как видит клиент» и «В шаблоны…» нет только потому, что у демо-сметы e5 нет ссылки и документа."
+ },
+ {
+  "label": "3. Верх редактора: сетка 2×2 (светлая, RU 390)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-3-grid-light.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-3-grid-light.png",
+  "note": "Было: «＋ Позиция» и круг «˅» (каталог/шаблон), раздел и вариант прятались в «⋯». Станет: четыре кнопки сеткой 2×2 «＋ Позиция · Каталог / ＋ Раздел · Шаблон», без «˅». Основатель 22.11: «три кнопки без селектора»; 23.11: «разделы — сразу, кровля → материал, работа». Поле «Название» → «Название сметы»."
+ },
+ {
+  "label": "3б. Пустая смета: тот же блок 2×2 (светлая)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-3b-empty-dark.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-3b-empty-light.png",
+  "note": "Станет: блок 2×2 тот же; круг ➤ в шапке бледный, пока нет позиций (нажатие скажет, чего не хватает)."
+ },
+ {
+  "label": "4. «⋯» редактора, отправленная смета (светлая)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-4-more-light.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-4-more-light.png",
+  "note": "Было: Отправить изменения · Разложить по видам · Строки подробно · Экран для клиента (пять слов, основатель не понял). Станет: один пункт «Варианты на выбор…» (пока вариант один). «Строки подробно» и «Скрыть себестоимость» убраны; отправка — только кругом ➤ в шапке; налог/депозит — строки итогов."
+ },
+ {
+  "label": "4б. «⋯» редактора, черновик (светлая)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-4b-draft-light.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-4b-draft-light.png",
+  "note": "Станет: «⋯» черновика — два пункта; красным только «Удалить черновик»; круг ➤ бледный (позиций нет)."
+ },
+ {
+  "label": "5. Шторка «Варианты на выбор» (светлая)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-5-options-light.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-5-options-light.png",
+  "note": "Было: пункт «Добавить вариант» среди прочих, без объяснения (читается как «копия сметы»). Станет: «Варианты на выбор…» открывает шторку «клиент увидит 2–3 варианта и выберет один» с кнопкой «Сделать 2 варианта» (Good/Better/Best, как Jobber/HCP)."
+ },
+ {
+  "label": "6. «⋯» раздела (светлая)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-6-section-light.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-6-section-light.png",
+  "note": "Станет (исправлено): «Убрать раздел» обычным цветом, значок — минус в круге (не корзина), подпись «Позиции останутся в смете»."
+ },
+ {
+  "label": "7. Раскрытая позиция: «Раздел» и «Видно клиенту» (светлая)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-7-open-light.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-7-open-light.png",
+  "note": "Станет (исправлено): сделан раздел вручную («Кровля») — поле «Раздел» показано под «Вид»; пока позиции в автогруппе по виду, поле «Раздел» не показывается (не будет «Вид: Материалы» и «Раздел: Материалы»). Светлая: переключатель «Видно клиенту» читается слабо — токен переключателя, не трогал."
+ },
+ {
+  "label": "7б. «⋯» позиции (светлая)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-7b-line-menu-light.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-7b-line-menu-light.png",
+  "note": "Было: Заменить из каталога · Дублировать · Переместить… Станет: Дублировать · Заменить из каталога…; «Переместить» ушло в поле «Раздел», «Выше/Ниже» остались только для диктора, корзина и ⠿ — как были."
+ },
+ {
+  "label": "8. «Разложить по видам» (светлая)",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-8-layout-light.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-8-layout-light.png",
+  "note": "Было: пункт «Разложить по видам» в «⋯» редактора. Станет: пункта нет (строки и так группируются по виду сами). Это просьба основателя #1099 — решает он: оставить пункт или убрать."
+ },
+ {
+  "label": "3 (ES). Сетка 2×2, испанский, 390 тёмная",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-3-grid-es-dark.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-3-grid-es-dark.png",
+  "note": "Те же четыре кнопки на ES: Partida · Catálogo / Sección · Plantilla — слова помещаются, ничего не обрезано."
+ },
+ {
+  "label": "3 (ES). Сетка 2×2, испанский, 390 светлая",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-3-grid-es-dark.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-3-grid-es-light.png",
+  "note": "То же, светлая тема (до-снимок тёмный)."
+ },
+ {
+  "label": "3 (820). Сетка 2×2, планшет, тёмная",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-3-grid-820-dark.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-3-grid-820-dark.png",
+  "note": "Сетка 2×2 на 820."
+ },
+ {
+  "label": "3 (1280). Сетка 2×2, десктоп, тёмная",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-3-grid-1280-dark.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-3-grid-1280-dark.png",
+  "note": "Сетка 2×2 на 1280 (колонка слева, итоги справа)."
+ },
+ {
+  "label": "2 (ES). «⋯» карточки, испанский, 390 тёмная",
+  "before": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/before-2-card-dark.png",
+  "after": "/Users/yuriisurhuchov/GoRix/notes/review-v2/q9-2/after-2-card-es-dark.png",
+  "note": "Станет: подписи короче, в одну строку («Duplicar…», «A plantillas…», «Cerrar enlace», «Retirar presupuesto…»), меню помещается целиком."
+ }
+]

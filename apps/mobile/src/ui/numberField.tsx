@@ -155,7 +155,7 @@ export function NumberField(props: NumberFieldProps) {
 }
 
 /** the bar above the iOS number keyboard: «‹ ›» on the left, «Готово» on the right (DS А6.2) */
-function NumberBar({ id, onPrev, onNext }: { id: string; onPrev?: () => void; onNext?: () => void }) {
+export function NumberBar({ id, onPrev, onNext, note, arrows = true }: { id: string; onPrev?: () => void; onNext?: () => void; /** #2455: a word in the middle — «Итого $794.49» of the totals row being typed in; with it `arrows` are off (no neighbour field) */ note?: string; arrows?: boolean }) {
   const { t } = useI18n();
   const { c } = useTheme();
   const arrow = (name: "chevronLeft" | "chevronRight", on: (() => void) | undefined, label: string) => (
@@ -171,10 +171,17 @@ function NumberBar({ id, onPrev, onNext }: { id: string; onPrev?: () => void; on
         testID={`${id}-bar`}
         style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: c.bg, paddingHorizontal: space[2], borderTopWidth: component.hairline, borderTopColor: c.bd }}
       >
-        <View style={{ flexDirection: "row" }}>
-          {arrow("chevronLeft", onPrev, t("num.prev"))}
-          {arrow("chevronRight", onNext, t("num.next"))}
-        </View>
+        {arrows ? (
+          <View style={{ flexDirection: "row" }}>
+            {arrow("chevronLeft", onPrev, t("num.prev"))}
+            {arrow("chevronRight", onNext, t("num.next"))}
+          </View>
+        ) : null}
+        {note ? (
+          <View testID={`${id}-note`} style={{ flex: 1, paddingHorizontal: space[3] }}>
+            <T w="semibold" tabular numberOfLines={1}>{note}</T>
+          </View>
+        ) : null}
         <Press onPress={() => Keyboard.dismiss()} accessibilityLabel={t("num.done")} visibleHeight={component.field.phone}>
           <View style={{ paddingHorizontal: space[3], minHeight: component.field.phone, justifyContent: "center" }}>
             <T w="semibold">{t("num.done")}</T>

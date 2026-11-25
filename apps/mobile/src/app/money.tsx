@@ -54,7 +54,7 @@ export default function Money() {
         lead={{ kind: "icon", icon: receipt ? "camera" : "dollar" }}
         value={`−${money(x.amountCents)}`}
         // category first, «no receipt» as a grey tag: not a status (map §5 has no expense status)
-        tags={[t(`exp.cat.${x.category}`), ...(receipt ? [] : [t(x.receiptFailed ? "photoUp.chip" : "card.tag.noReceipt")])]}
+        tags={[t(`exp.cat.${x.category}`), ...(x.receiptFailed === "preparing" ? [t("photoUp.prep.chip")] : receipt ? [] : [t(x.receiptFailed ? "photoUp.chip" : "card.tag.noReceipt")])]}
         facts={{ work: job ? [job.title, client?.name].filter(Boolean).join(" · ") : t("card.noJob"), by: memberName(db, x.memberId, t) }}
         density={device === "desktop" ? "row" : "rich"}
         columns={EXP_COLUMNS}
