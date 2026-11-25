@@ -12,11 +12,11 @@ export const SIGNED_MEANWHILE_KEYS = { copy: "copy", reset: "reset", later: "lat
 export const canChooseSignedMeanwhile = (r: RejectedOp): boolean => r.reason === "estimate_signed_meanwhile" && !!r.estimateEdit;
 
 
-/** the question; `signedOn` is the day the client signed (formatted by the caller) */
+/** the question; `signedOn` is the day the client signed (formatted by the caller; none known — the title says it without a day) */
 export function signedMeanwhileAsk(t: (key: string, params?: Record<string, unknown>) => string, signedOn: string): ConfirmAsk {
   return {
     testID: "rej-choice",
-    title: t("est.rej.choice.title", { date: signedOn }),
+    title: signedOn ? t("est.rej.choice.title", { date: signedOn }) : t("est.rej.choice.titleNoDate"),
     text: t("est.rej.choice.text"),
     actions: [
       { key: SIGNED_MEANWHILE_KEYS.copy, label: t("est.rej.choice.copy"), tone: "primary", testID: "rej-choice-copy" },

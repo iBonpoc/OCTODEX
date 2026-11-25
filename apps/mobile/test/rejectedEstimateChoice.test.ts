@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { canChooseSignedMeanwhile, signedMeanwhileAsk, SIGNED_MEANWHILE_KEYS } from "../src/features/rejectedEstimateChoice";
+import { canChooseSignedMeanwhile, signedMeanwhileAsk, SIGNED_MEANWHILE_KEYS } from "../src/features/signedMeanwhileModel";
 import type { RejectedOp } from "../src/data/outboxRejected";
 
 const t = (k: string, p?: Record<string, unknown>) => (p ? `${k}:${JSON.stringify(p)}` : k);
@@ -23,6 +23,7 @@ describe("окно «Клиент подписал» (#2657)", () => {
     expect(a.title).toContain("est.rej.choice.title");
     expect(a.title).toContain("Nov 20");
     expect(a.text).toContain("est.rej.choice.text");
+    expect(signedMeanwhileAsk(t, "").title).toBe("est.rej.choice.titleNoDate"); // the day is not known — no empty «от »
     expect(a.actions.map((x) => [x.key, x.tone])).toEqual([[SIGNED_MEANWHILE_KEYS.copy, "primary"], [SIGNED_MEANWHILE_KEYS.reset, undefined], [SIGNED_MEANWHILE_KEYS.later, "cancel"]]);
     expect(a.actions.every((x) => !!x.testID)).toBe(true);
   });

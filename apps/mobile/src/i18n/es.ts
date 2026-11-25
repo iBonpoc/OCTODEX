@@ -4687,6 +4687,7 @@ export const es: Dict = {
   "est.rej.signatureLost": "La firma del cliente no se guardó en el servidor",
   "est.rej.choice.open": "¿Qué hago con mis cambios?",
   "est.rej.choice.title": "El cliente firmó la versión del {date}",
+  "est.rej.choice.titleNoDate": "El cliente firmó el presupuesto",
   "est.rej.choice.text": "Tus cambios esperaron la red y no se guardaron: la firma se mantiene. La copia es un borrador nuevo con tus cambios, sin vínculo con la medición.",
   "est.rej.choice.copy": "Hacer una copia",
   "est.rej.choice.reset": "Descartar",

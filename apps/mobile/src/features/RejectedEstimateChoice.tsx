@@ -10,7 +10,7 @@ import type { RejectedOp } from "@/data/outboxRejected";
 import { useI18n } from "@/i18n";
 import { useConfirm } from "@/ui/confirmDialog";
 import { useToast } from "@/ui/overlays";
-import { canChooseSignedMeanwhile, signedMeanwhileAsk, SIGNED_MEANWHILE_KEYS } from "./rejectedEstimateChoice";
+import { canChooseSignedMeanwhile, signedMeanwhileAsk, SIGNED_MEANWHILE_KEYS } from "./signedMeanwhileModel";
 
 export function useRejectedEstimateChoice(): { dialog: ReactNode; can: (r: RejectedOp) => boolean; choose: (r: RejectedOp) => Promise<void> } {
   const { t, day } = useI18n();

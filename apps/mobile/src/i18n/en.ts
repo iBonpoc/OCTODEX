@@ -4687,6 +4687,7 @@ export const en: Dict = {
   "est.rej.signatureLost": "The client's signature was not saved on the server",
   "est.rej.choice.open": "What about my edits?",
   "est.rej.choice.title": "The client signed the version of {date}",
+  "est.rej.choice.titleNoDate": "The client signed the estimate",
   "est.rej.choice.text": "Your edits waited for the network and were not saved — the signature stays. The copy is a new draft with your edits, not tied to a measurement.",
   "est.rej.choice.copy": "Make a copy",
   "est.rej.choice.reset": "Discard",

@@ -4687,6 +4687,7 @@ export const ru = {
   "est.rej.signatureLost": "Подпись клиента не записана на сервере",
   "est.rej.choice.open": "Что с правками?",
   "est.rej.choice.title": "Клиент подписал версию от {date}",
+  "est.rej.choice.titleNoDate": "Клиент подписал смету",
   "est.rej.choice.text": "Ваши правки ждали сети и не сохранились — подпись осталась. Копия — новый черновик с вашими правками, без связи с замером.",
   "est.rej.choice.copy": "Сделать копию",
   "est.rej.choice.reset": "Сбросить",
