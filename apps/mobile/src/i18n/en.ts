@@ -5008,6 +5008,14 @@ export const en: Dict = {
   "photoUp.retry": "Retry",
   "photoUp.retried": "Sending the photo again",
   "photoUp.a11y": "not uploaded",
+  // #1558 (spec 46 §5.3а): a photo being prepared on this phone
+  "photoUp.prep.chip": "Preparing",
+  "photoUp.prep.strip": "Getting ready to send: {n} — they will go on their own",
+  "photoUp.prep.reason": "The photo is getting ready and will be sent on its own. You can close the app.",
+  "photoUp.prep.unreadable": "This photo doesn’t open here. Add it from the phone it was taken on, or save it as JPEG and pick it again.",
+  "photoUp.prep.again": "Prepare again",
+  "photoUp.prep.toast": "Photo is getting ready — it will be sent on its own",
+  "photoUp.prep.notAdded": "The photo wasn’t added — add it again",
   // people.switch.* — the company switcher (spec 42 S34, §14, #1673)
   "people.switch.title": "Companies",
   "people.switch.open": "Switch company: {name}",

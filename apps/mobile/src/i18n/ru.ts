@@ -5008,6 +5008,14 @@ export const ru = {
   "photoUp.retry": "Повторить",
   "photoUp.retried": "Отправляем фото ещё раз",
   "photoUp.a11y": "не загрузилось",
+  // #1558 (spec 46 §5.3а): a photo being prepared on this phone
+  "photoUp.prep.chip": "Готовится",
+  "photoUp.prep.strip": "Готовятся к отправке: {n} — уйдут сами",
+  "photoUp.prep.reason": "Фото готовится к отправке и уйдёт само. Приложение можно закрыть.",
+  "photoUp.prep.unreadable": "Это фото здесь не открывается. Добавьте его с телефона, где его сняли, или сохраните как JPEG и выберите снова.",
+  "photoUp.prep.again": "Подготовить снова",
+  "photoUp.prep.toast": "Фото готовится — уйдёт само",
+  "photoUp.prep.notAdded": "Фото не добавилось — добавьте его снова",
   // people.switch.* — the company switcher (spec 42 S34, §14, #1673)
   "people.switch.title": "Компании",
   "people.switch.open": "Сменить компанию: {name}",

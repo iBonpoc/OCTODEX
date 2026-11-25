@@ -5008,6 +5008,14 @@ export const es: Dict = {
   "photoUp.retry": "Reintentar",
   "photoUp.retried": "Enviando la foto otra vez",
   "photoUp.a11y": "sin subir",
+  // #1558 (spec 46 §5.3а): a photo being prepared on this phone
+  "photoUp.prep.chip": "Preparando",
+  "photoUp.prep.strip": "Preparándose para enviar: {n} — se enviarán solas",
+  "photoUp.prep.reason": "La foto se está preparando y se enviará sola. Puede cerrar la app.",
+  "photoUp.prep.unreadable": "Esta foto no se abre aquí. Agréguela desde el teléfono donde se tomó o guárdela como JPEG y elíjala de nuevo.",
+  "photoUp.prep.again": "Preparar de nuevo",
+  "photoUp.prep.toast": "La foto se está preparando — se enviará sola",
+  "photoUp.prep.notAdded": "La foto no se agregó — agréguela de nuevo",
   // people.switch.* — the company switcher (spec 42 S34, §14, #1673)
   "people.switch.title": "Empresas",
   "people.switch.open": "Cambiar de empresa: {name}",

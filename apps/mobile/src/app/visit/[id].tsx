@@ -30,6 +30,7 @@ import { visitStatus } from "@/features/visits";
 import { SignaturePad } from "@/features/SignaturePad";
 import { StackBackGestureOff } from "@/nav/StackBackGestureOff";
 import { PhotoStrip } from "@/features/PhotoStrip";
+import type { PickedPhoto } from "@/data/photoShrink";
 import { canAddItem, canEditVisitItems, checklistGate, visitSettings } from "@/features/checklist";
 import { ChecklistCard, ChecklistEditor, MissingSheet } from "@/features/VisitChecklist";
 import { OfficeLocation, TechLocation, useConsentQuestion } from "@/features/LocationParts";
@@ -151,7 +152,9 @@ export default function VisitScreen() {
     toast.show(queuedHint() ?? msg, undo);
   };
   const removePhoto = (photoId: string) => toast.show(queuedHint() ?? t("photo.deleted"), store.removePhoto(v.id, photoId));
-  const addPhoto = (kind: "before" | "after") => (uri?: string) => toast.show(queuedHint() ?? t("toast.photo"), store.addPhoto(v.id, kind, uri));
+  const addPhoto = (kind: "before" | "after") => (uri?: string, small?: true) => toast.show(queuedHint() ?? t("toast.photo"), store.addPhoto(v.id, kind, uri && small ? { uri, small } : uri));
+  // #1558: not made anew yet — kept on this phone as «preparing» (the original never sent), the phone tries again by itself
+  const addPreparing = (kind: "before" | "after") => (got: Extract<PickedPhoto, { preparing: unknown }>) => toast.show(queuedHint() ?? t("photoUp.prep.toast"), store.addPhoto(v.id, kind, got));
   const sign = (path: string) => {
     haptic();
     setSigning(false);
@@ -575,13 +578,13 @@ export default function VisitScreen() {
         {photoStep && !signing ? (
           <View testID="visit-photos-before" style={{ gap: space[2] }}>
             <SectionTitle title={v.step === "on_site" && v.kind !== "inspection" && gate.missing.photosBefore > 0 ? t("proto.visit.photoBeforeReq") : t("visit.photosBefore")} />
-            <PhotoStrip photos={before} onAdd={addPhoto("before")} onRemove={removePhoto} onRetry={retryPhoto} />
+            <PhotoStrip photos={before} onAdd={addPhoto("before")} onAddPreparing={addPreparing("before")} onRemove={removePhoto} onRetry={retryPhoto} />
           </View>
         ) : null}
         {v.step === "working" && !signing ? (
           <View testID="visit-photos-after" style={{ gap: space[2] }}>
             <SectionTitle title={t("visit.photosAfter")} />
-            <PhotoStrip photos={after} onAdd={addPhoto("after")} onRemove={removePhoto} onRetry={retryPhoto} />
+            <PhotoStrip photos={after} onAdd={addPhoto("after")} onAddPreparing={addPreparing("after")} onRemove={removePhoto} onRetry={retryPhoto} />
             {gate.missing.photosAfter > 0 ? <StatusNote tone="warn">{t("chk.needAfter", { n: gate.missing.photosAfter })}</StatusNote> : null}
           </View>
         ) : null}
@@ -619,7 +622,7 @@ export default function VisitScreen() {
       <Sheet visible={camera && photoStep} onClose={() => setCamera(false)} title={t("proto.visit.photos")}>
         <View testID="visit-camera-sheet" style={{ gap: space[3] }}>
           <SectionTitle title={v.step === "working" ? t("visit.photosAfter") : t("visit.photosBefore")} />
-          <PhotoStrip photos={v.step === "working" ? after : before} onAdd={addPhoto(v.step === "working" ? "after" : "before")} onRemove={removePhoto} onRetry={retryPhoto} />
+          <PhotoStrip photos={v.step === "working" ? after : before} onAdd={addPhoto(v.step === "working" ? "after" : "before")} onAddPreparing={addPreparing(v.step === "working" ? "after" : "before")} onRemove={removePhoto} onRetry={retryPhoto} />
         </View>
       </Sheet>
       <Sheet visible={noShow} onClose={() => setNoShow(false)} title={t("noShow.title")}>
@@ -630,7 +633,7 @@ export default function VisitScreen() {
           <T v="caption" tone="mut">
             {t("noShow.photo")}
           </T>
-          <PhotoStrip photos={before} onAdd={addPhoto("before")} onRemove={removePhoto} onRetry={retryPhoto} />
+          <PhotoStrip photos={before} onAdd={addPhoto("before")} onAddPreparing={addPreparing("before")} onRemove={removePhoto} onRetry={retryPhoto} />
           <TextField type="note" label={t("noShow.note")} placeholder={t("noShow.notePh")} value={noShowNote} onChangeText={setNoShowNote} />
           <View testID="no-show-confirm">
             <Button label={t("noShow.confirm")} icon="check" full onPress={markNoShow} />

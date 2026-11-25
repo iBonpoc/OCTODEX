@@ -5,7 +5,7 @@
  * to tap a photo; the viewer says why in plain words and offers «Повторить» only for a plain refusal of a file on this phone
  * (a too big file would be refused again: «удалите и снимите заново»); a signed visit shows its refused photos too;
  * «Требует внимания» has one reason per visit with its date, «Повторить» where a photo can be sent, «Отменить» brings the
- * mark back. Every view. Waits on what it checks; ids by testID.
+ * mark back. #1558: «Повторить» makes the file anew first — «preparing», then the mark goes. Every view. Waits on what it checks; ids by testID.
  */
 const { pressEscUntilClosed, sheetGone } = require("../sheet.cjs");
 
@@ -17,12 +17,14 @@ exports.run = async (h) => {
   const vis = (id) => p.getByTestId(id).locator("visible=true").first();
   const markOf = (visitId, photoId) =>
     p.evaluate(([v, ph]) => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.visits?.find((x) => x.id === v)?.photos?.find((x) => x.id === ph)?.upload?.failed ?? null, [visitId, photoId]);
-  const waitMark = (visitId, photoId, want) =>
+  const waitMark = (visitId, photoId, want, timeout = 8000) =>
     p.waitForFunction(
       ([v, ph, w]) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.visits?.find((x) => x.id === v)?.photos?.find((x) => x.id === ph)?.upload?.failed ?? null) === w,
       [visitId, photoId, want],
-      { timeout: 8000 },
-    );
+      { timeout },
+    ).catch(async (e) => {
+      throw new Error(`the mark of ${photoId}: want ${want}, is ${await markOf(visitId, photoId)} (${e.message})`);
+    });
   const reasonOf = async (thumb) => {
     await vis(thumb).click();
     const reason = h.sheet().getByTestId("photo-upload-reason");
@@ -91,7 +93,9 @@ exports.run = async (h) => {
   await h.shot("viewer");
   await h.sheet().getByTestId("photo-upload-retry").click();
   await sheetGone(p);
-  await waitMark(v.id, "e383-here", null);
+  // #1558: made anew before it is sent — «preparing» first, then (after the «Отменить» window) the mark goes
+  await waitMark(v.id, "e383-here", "preparing");
+  await waitMark(v.id, "e383-here", null, 20000);
   await p.waitForFunction(() => /Не загрузились в облако: 2/.test(document.body.innerText), null, { timeout: 5000 });
   h.expect((await markOf(v.id, "e383-far")) === "refused" && (await markOf(v.id, "e383-big")) === "tooBig", "the other photos keep their marks");
 
@@ -113,7 +117,7 @@ exports.run = async (h) => {
   const retry = cards.getByRole("button", { name: "Повторить", exact: true });
   h.expect((await retry.count()) === 1, `«Повторить» only on the signed visit's card (${await retry.count()})`);
   await retry.first().click();
-  await waitMark(w.id, "e383-done", null);
+  await waitMark(w.id, "e383-done", "preparing");
   // «Отменить»: the toast ignores a tap in its first toastArmMs (src/ui/toastArm.ts — the second tap of a double tap is
   // not «Отменить»), a tap that came too early is lost (CHECKS §9 №31, the red run of #1587 @390 dark): tap again until
   // the mark is back, a few frames between the taps, never a fixed pause

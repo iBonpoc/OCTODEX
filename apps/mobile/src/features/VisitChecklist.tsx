@@ -137,7 +137,8 @@ function ItemRow({ v, item, quiet }: { v: Visit; item: ChecklistItem; quiet?: bo
         <PhotoStrip
           photos={photos}
           title={t("chk.photoItem")}
-          onAdd={canAttachPhoto(store.role) ? (uri) => toast.show(t("toast.photo"), store.attachItemPhoto(v.id, item.id, uri)) : undefined}
+          onAdd={canAttachPhoto(store.role) ? (uri, small) => toast.show(t("toast.photo"), store.attachItemPhoto(v.id, item.id, small ? { uri, small } : uri)) : undefined}
+          onAddPreparing={canAttachPhoto(store.role) ? (p) => toast.show(t("photoUp.prep.toast"), store.attachItemPhoto(v.id, item.id, p)) : undefined}
           onRemove={(id) => toast.show(t("photo.deleted"), store.removePhoto(v.id, id))}
           onRetry={(id) => toast.show(store.online ? t("photoUp.retried") : t("offline.queued"), store.retryPhoto(v.id, id))}
         />
