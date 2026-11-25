@@ -3,7 +3,7 @@ import { keepCosts, seeCosts } from "./access";
 import { canPlan, visitWhen } from "@/features/schedule";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { useEffect, useMemo, useRef, useState, type ComponentRef, type ReactElement, type ReactNode } from "react";
-import { View } from "react-native";
+import { Linking, View } from "react-native";
 import { router } from "expo-router";
 import { haptics } from "@/ui/haptics";
 import { space, type StatusName, size } from "@octo/design-tokens";
@@ -325,7 +325,6 @@ type EstMore = EstAction | "signHere" | "reopen" | "decline";
  */
 export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: boolean; back: () => void }) {
   const { store, db, t, money, day, toast, method, setMethod, setSendOpen, customer, property, st, q, universal, margin, job, notes, pdf, canEdit, canSend, actions, act, sheets } = useEstimateCore(e, openSend);
-  const quick = useSendGo(e, false);
   const [section, setSection] = useState<EstSection>("doc");
   const [ask, setAsk] = useState<"reopen" | "decline" | null>(null);
   const planner = canPlan([store.role]);
@@ -366,29 +365,26 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
           ? { label: t("sch.title"), onPress: () => router.push(`/job/schedule?jobId=${job!.id}`), reason: t("ue.toSchedule"), testID: "est-schedule-main" }
           : undefined;
   // a second step goes into «⋯» on an object: «Подписать здесь» — the client is beside you
-  const second: MainAction | undefined = signHere && !onSign && canCountersign(db, db.me) ? { label: t("proto.est.second.signHere"), onPress: () => setSection("sign"), testID: "est-sign-here" } : undefined;
+  const signSecond: MainAction | undefined = signHere && !onSign && canCountersign(db, db.me) ? { label: t("proto.est.second.signHere"), onPress: () => setSection("sign"), testID: "est-sign-here" } : undefined;
+  // MAP «S»: the second button is «Позвонить» — the client's own phone, only when there is one; nothing goes out by itself
+  const phone = customer?.phone;
+  const callSecond: MainAction | undefined = canSend && e.status === "sent" && !onSign && phone ? { label: t("proto.visit.call"), onPress: () => void Linking.openURL(`tel:${phone}`).catch(() => undefined), testID: "est-call" } : undefined;
+  const second = callSecond ?? signSecond;
 
   const who = customer?.name ?? "";
   const of = (what: string) => (who ? t("proto.money.actOf", { what, who }) : what);
-  const send = (how: "sms" | "email" | "copy") => () => {
-    // C5 or a module's word stops it: the sheet shows why and the way out
-    if (quick.issues) return setSendOpen(true);
-    void quick.go(how);
-  };
-  // QuickActions — the icon and its word (П6): sending (the office, an unsigned estimate) · PDF · Изменить (≤ 5)
+  // QuickActions — the icon and its word (П6), only the safe ones (MAP §4): Изменить · PDF · Показать клиенту. Nothing here sends
+  // by a single tap: sending is the main step («Отправить» / «Напомнить») and its sheet
+  const showClient = actions.some((x) => x.key === "client");
   const iconActions: IconRowItem[] = [
-    ...(canSend
-      ? [
-          { icon: "sms" as const, label: t("proto.money.act.sms"), a11y: of(t("ue.sendSms")), onPress: send("sms"), disabled: !customer?.phone, testID: "est-act-sms" },
-          { icon: "mail" as const, label: t("proto.money.act.mail"), a11y: of(t("ue.sendEmail")), onPress: send("email"), disabled: !customer?.email, testID: "est-act-email" },
-          { icon: "link" as const, label: t("proto.money.act.link"), a11y: of(t("ue.copyLink")), onPress: send("copy"), testID: "est-act-copy" },
-        ]
-      : []),
-    ...(universal ? [{ icon: "invoice" as const, label: t("proto.money.act.pdf"), a11y: of(t("ue.pdf")), onPress: () => pdf(), testID: "est-act-pdf" }] : []),
     ...(canEdit ? [{ icon: "pencil" as const, label: t("ue.edit"), a11y: of(t("ue.edit")), onPress: () => act("edit"), testID: "est-act-edit" }] : []),
-  ].slice(0, 5);
+    ...(universal ? [{ icon: "invoice" as const, label: t("proto.money.act.pdf"), a11y: of(t("ue.pdf")), onPress: () => pdf(), testID: "est-act-pdf" }] : []),
+    ...(showClient ? [{ icon: "eye" as const, label: t("ue.openClient"), a11y: of(t("ue.openClient")), onPress: () => act("client"), testID: "est-act-client" }] : []),
+  ];
   const moreList: MoreAction = [
-    ...actions.filter((x) => x.key !== "edit" && x.key !== "pdf").map(({ key, label, icon, destructive, testID }) => ({ key, label, icon, destructive, testID })),
+    ...actions.filter((x) => x.key !== "edit" && x.key !== "pdf" && x.key !== "client").map(({ key, label, icon, destructive, testID }) => ({ key, label, icon, destructive, testID })),
+    // «Подписать здесь» keeps its place in «⋯» when «Позвонить» holds the second step
+    ...(callSecond && signSecond ? [{ key: "signHere", label: signSecond.label, icon: "pencil" as const, testID: "est-sign-here" }] : []),
     ...(countersign && manage ? [{ key: "reopen", label: t("est.reopen.button"), icon: "pencil" as const, testID: "est-act-reopen" }, { key: "decline", label: t("est.decline.button"), icon: "close" as const, testID: "est-act-decline" }] : []),
   ];
   const onMore = (k: string) => {
