@@ -310,7 +310,7 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
 }
 
 type EstSection = "doc" | "sign";
-type EstMore = EstAction | "signHere" | "reopen" | "decline";
+type EstMore = EstAction | "signHere" | "reopen" | "decline" | "copyLink";
 
 /**
  * «Смета — просмотр» — the Object template (prototype v2 #2350, LAYOUT-RULES §3, BUILD-SPEC §2.8, object-cards «Смета»).
@@ -323,7 +323,7 @@ type EstMore = EstAction | "signHere" | "reopen" | "decline";
  * «Сохранить как шаблон», «Не подписывать — изменить», «Отказать», «Отозвать ссылку» (red, last).
  */
 export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: boolean; back: () => void }) {
-  const { store, db, t, money, day, toast, method, setMethod, setSendOpen, customer, property, st, q, universal, margin, job, notes, pdf, canEdit, canSend, actions, act, sheets } = useEstimateCore(e, openSend);
+  const { store, db, t, money, day, toast, method, setMethod, maySend, setSendOpen, customer, property, st, q, universal, margin, job, notes, pdf, canEdit, canSend, actions, act, sheets } = useEstimateCore(e, openSend);
   const [section, setSection] = useState<EstSection>("doc");
   const [ask, setAsk] = useState<"reopen" | "decline" | null>(null);
   const planner = canPlan([store.role]);
@@ -382,6 +382,8 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
   ];
   const moreList: MoreAction = [
     ...actions.filter((x) => x.key !== "edit" && x.key !== "pdf" && x.key !== "client").map(({ key, label, icon, destructive, testID }) => ({ key, label, icon, destructive, testID })),
+    // MAP §4: the link — only in «⋯» and only from «sent» on (the draft has none); a plain copy: nothing is sent, the status stays
+    ...(universal && maySend && e.token && !e.linkRevokedAt && e.status !== "draft" && e.status !== "declined" ? [{ key: "copyLink", label: t("est.menu.copyLink"), icon: "link" as const, testID: "est-act-copy-link" }] : []),
     // «Подписать здесь» keeps its place in «⋯» when «Позвонить» holds the second step
     ...(callSecond && signSecond ? [{ key: "signHere", label: signSecond.label, icon: "pencil" as const, testID: "est-sign-here" }] : []),
     ...(countersign && manage ? [{ key: "reopen", label: t("est.reopen.button"), icon: "pencil" as const, testID: "est-act-reopen" }, { key: "decline", label: t("est.decline.button"), icon: "close" as const, testID: "est-act-decline" }] : []),
@@ -390,6 +392,10 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
     const key = k as EstMore;
     if (key === "reopen" || key === "decline") return setAsk(key);
     if (key === "signHere") return setSection("sign");
+    if (key === "copyLink") {
+      if (e.token) copyText(clientLink(e.token)).then(() => toast.show(t("ue.linkCopied")), () => toast.show(t("est.menu.copyLinkFail")));
+      return;
+    }
     act(key);
   };
 
