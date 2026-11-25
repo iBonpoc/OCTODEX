@@ -1,6 +1,6 @@
 /**
- * e2e 347 — «Экран для клиента» (DS §8.3, spec 2026-11-12 §11.2.8, #1307 part «г»), every view, by testID:
- * - «⋯» in the header → «Экран для клиента»: the «расход» of a hidden line, the profit of the open row and the margin under
+ * e2e 347 — «Показать клиенту» (DS §8.3, spec 2026-11-12 §11.2.8, #1307 part «г»), every view, by testID:
+ * - «⋯» in the header → «Показать клиенту»: the «расход» of a hidden line, the profit of the open row and the margin under
  *   the totals are gone; under the title — «Экран для клиента · выйти»;
  * - the options card keeps no owner's button («Копировать вариант», its «⋯»; v2: the card comes with a second option);
  * - «выйти» brings them back.

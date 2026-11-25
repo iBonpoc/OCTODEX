@@ -2,8 +2,8 @@
  * e2e 308 — закреплённая панель сметы (РС-7c1, DS §8.9, #1169), every view; by testID (rule 19):
  * - a phone (390): the bar is pinned at the bottom (its one step in it), the content can be scrolled clear of it; from 820 there is no bar,
  *   the step stands in the column;
- * - never off (v2 #2350): with no line the step is «Добавить позицию» (it opens the price list); «⋯ → Сохранить и отправить» with no
- *   line says what is missing under the list and takes the page there;
+ * - never off (v2 #2350): with no line the step is «Добавить позицию» (it opens the price list); the round ➤ of the header is drawn once
+ *   there is a line, «⋯» has no send (#2403); ➤ with no client says what is missing and takes the page there;
  * - the hint goes when ITS thing is there: no client → «Выберите клиента», the client chosen → gone (the empty list is another hint);
  * - the missing thing is scrolled into view ABOVE the bar;
  * - a double press saves once (one catalog item for the line that is sent to the catalog).
@@ -44,15 +44,13 @@ exports.run = async (h) => {
   await addBtn.click();
   await tid("est-catalog-picker").waitFor({ timeout: 3000 });
   await pressEscUntilClosed(p);
-  // «⋯ → Сохранить и отправить» with no line: what is missing, under the list — in view above the bar (a phone); nothing is saved
+  // no line: no ➤ in the header (#2403: sending is the round ➤ only, drawn once there is a line; «⋯» does not hold it) — nothing to send, nothing saved
   const before = ((await h.db()).estimates ?? []).length;
-  await line.saveSend(h);
-  await tid("ue-missing-lines").waitFor({ timeout: 3000 });
-  h.expect(((await h.db()).estimates ?? []).length === before, "nothing was saved");
-  await p.waitForFunction((phone) => { const e = document.querySelector('[data-testid="ue-missing-lines"]'); if (!e) return false; const r = e.getBoundingClientRect(); const bar = document.querySelector('[data-testid="est-bar-add-bar"]'); const limit = phone && bar ? bar.getBoundingClientRect().top : window.innerHeight; return r.top >= 0 && r.bottom <= limit + 1; }, phone, { timeout: 5000 });
-  // a line: the hint goes, a double press saves once
+  h.expect((await tid("est-send-top").count()) === 0, "no line: no ➤ in the header");
+  h.expect(!(await line.editorMenuHas(h, "ue-save-send")), "«⋯» has no send");
+  // a line: the ➤ comes, a double press saves once
   await line.addCustom(h, "Work", 50);
-  await p.waitForFunction(() => document.querySelectorAll('[data-testid="ue-missing-lines"]').length === 0, null, { timeout: 3000 });
+  await tid("est-send-top").locator("visible=true").first().waitFor({ timeout: 3000 });
   const id = (await p.locator('[data-testid^="est-line-"]').first().getAttribute("data-testid")).replace("est-line-", "");
   await tid(`est-line-${id}`).click();
   await tid(`est-save-catalog-${id}`).getByRole("switch").click();
@@ -65,14 +63,15 @@ exports.run = async (h) => {
   await p.waitForFunction(() => !/\/estimate\/new/.test(location.pathname), null, { timeout: 8000 });
   h.expect(((await h.db()).catalog ?? []).length === cat0 + 1, "a double press made one catalog item, not two");
 
-  // no client: the picker stands first; closed, «Сохранить и отправить» says «Выберите клиента»; choosing one takes that hint away
+  // no client: the picker stands first; closed, ➤ says «Выберите клиента»; choosing one takes that hint away
   await h.go("/estimate/new");
   await h.sheet().waitFor({ timeout: 8000 });
   await pressEscUntilClosed(p);
+  await line.addCustom(h, "Work", 50);
   await line.saveSend(h);
   await tid("ue-missing-client").waitFor({ timeout: 3000 });
   await tid("est-client-card").click();
   await h.sheet().getByText("David Kim").first().click();
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="ue-missing-client"]').length === 0, null, { timeout: 4000 });
-  h.expect((await tid("est-bar-add").count()) === 1, "the hint of the client is gone with the client chosen; the step stands");
+  h.expect((await tid("ue-save").count()) >= 1, "the hint of the client is gone with the client chosen; the step stands");
 };
