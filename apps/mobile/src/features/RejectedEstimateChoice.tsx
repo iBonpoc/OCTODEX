@@ -32,7 +32,6 @@ export function useRejectedEstimateChoice(): { dialog: ReactNode; can: (r: Rejec
       dismissRejected,
       toast: (text, undo) => toast.show(text, undo),
       open: (id) => router.push(`/estimate/new?id=${id}` as Href),
-      back: () => (router.canGoBack() ? router.back() : router.replace("/")),
       online,
       t: (k) => t(k as never),
     });

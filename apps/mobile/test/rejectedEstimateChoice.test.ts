@@ -1,7 +1,7 @@
 /**
  * #2657 (хвост #2478): по карточке отказа «клиент подписал, пока ждали сети» — окно «Сделать копию / Сбросить»
  * (ConfirmDialog, DS Б3). Чистая модель окна и её поведение (источники: docs/notes/review-v2/founder-answers-1.md:467 (В3),
- * estimate-audit/decisions.md:9 (C11), k1-2381-stage0.md §11). Проверка К2 #2674: Б1–Б5.
+ * estimate-audit/decisions.md:9 (C11), k1-2381-stage0.md §11). Проверка К2 #2674: Б1–Б5 (Б1 решён вариантом D руководителя: у копии «Вернуть» убран).
  */
 import { describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
@@ -39,30 +39,37 @@ describe("окно «Клиент подписал» (#2657)", () => {
   });
 });
 
-describe("Б1: «Вернуть» после «Сделать копию» закрывает редактор копии", () => {
+describe("Б1 (D): «Сделать копию» ничего не разрушает — тост «Копия готова» БЕЗ «Вернуть», сразу редактор копии", () => {
   const deps = () => {
     const calls: string[] = [];
     const undo = localUndo(() => void calls.push("undo"));
+    let cards = 1;
     return {
       calls, undo,
       d: {
-        copyRejectedEstimate: vi.fn((_id: string) => ({ estimateId: "new1", undo }) as { estimateId: string; undo: typeof undo } | null),
+        // the store takes the card with the copy: a second press finds none (null) — one copy only
+        copyRejectedEstimate: vi.fn((_id: string) => (cards-- > 0 ? ({ estimateId: "new1", undo }) : null) as { estimateId: string; undo: typeof undo } | null),
         dismissRejected: vi.fn(() => undo),
-        toast: vi.fn((_: string, u?: unknown) => void (u && calls.push("toast+undo"))),
+        toast: vi.fn((_: string, u?: unknown) => void calls.push(u ? "toast+undo" : "toast")),
         open: vi.fn((id: string) => void calls.push(`open:${id}`)),
-        back: vi.fn(() => void calls.push("back")),
         online: true,
         t,
       },
     };
   };
-  it("копия: тост с «Вернуть», редактор копии открыт; «Вернуть» откатывает копию и закрывает редактор", () => {
+  it("копия: тост БЕЗ «Вернуть», потом редактор копии (онлайн копия уже на сервере — откатывать нечем)", () => {
     const { d, calls } = deps();
     runSignedMeanwhileChoice(SIGNED_MEANWHILE_KEYS.copy, base, d);
-    expect(calls).toEqual(["toast+undo", "open:new1"]);
-    const wrapped = d.toast.mock.calls[0]![1] as () => unknown;
-    wrapped();
-    expect(calls).toEqual(["toast+undo", "open:new1", "undo", "back"]);
+    expect(calls).toEqual(["toast", "open:new1"]);
+    expect(d.toast.mock.calls[0]![0]).toBe("est.rej.choice.copied");
+    expect(d.toast.mock.calls[0]![1]).toBeUndefined();
+  });
+  it("двойное «Сделать копию»: одна копия, один редактор", () => {
+    const { d, calls } = deps();
+    runSignedMeanwhileChoice(SIGNED_MEANWHILE_KEYS.copy, base, d);
+    runSignedMeanwhileChoice(SIGNED_MEANWHILE_KEYS.copy, base, d);
+    expect(d.copyRejectedEstimate).toHaveBeenCalledTimes(2);
+    expect(calls).toEqual(["toast", "open:new1"]);
   });
   it("Б2: стор не сделал копию (null) — ни тоста, ни перехода в пустой редактор", () => {
     const { d, calls } = deps();
@@ -76,7 +83,7 @@ describe("Б1: «Вернуть» после «Сделать копию» за�
     runSignedMeanwhileChoice(SIGNED_MEANWHILE_KEYS.copy, base, d);
     expect(d.toast.mock.calls[0]![0]).toBe("offline.queued");
   });
-  it("сброс: тост «Правки сброшены» с «Вернуть», редактор не открывается; «Позже» ничего не делает", () => {
+  it("сброс: тост «Правки сброшены» с «Вернуть» (там правки теряются, откат локальный), редактор не открывается; «Позже» ничего не делает", () => {
     const { d, calls } = deps();
     runSignedMeanwhileChoice(SIGNED_MEANWHILE_KEYS.reset, base, d);
     expect(d.toast.mock.calls[0]![0]).toBe("est.rej.choice.resetDone");

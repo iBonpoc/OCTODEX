@@ -5,7 +5,7 @@
  */
 import type { ConfirmAsk } from "@/ui/confirmLayout";
 import type { RejectedOp } from "@/data/outboxRejected";
-import { withAfter, type GuardedUndo } from "@/data/undo";
+import type { GuardedUndo } from "@/data/undo";
 
 export const SIGNED_MEANWHILE_KEYS = { copy: "copy", reset: "reset", later: "later" } as const;
 
@@ -36,8 +36,6 @@ export interface ChoiceDeps {
   toast: Toast;
   /** the editor of the new draft */
   open: (estimateId: string) => void;
-  /** closes the editor of the copy (its «Вернуть» removed the draft it shows, #2674 Б1) */
-  back: () => void;
   online: boolean;
   t: (key: string) => string;
 }
@@ -48,8 +46,10 @@ export function runSignedMeanwhileChoice(key: string | null, r: RejectedOp, d: C
     const made = d.copyRejectedEstimate(r.id);
     // the store made nothing (no right here, no edits): no «copy is ready» and no empty editor
     if (!made) return;
-    // «Вернуть» takes the draft away — the editor that shows it goes too, else its «Сохранить» would make it again
-    d.toast(d.online ? d.t("est.rej.choice.copied") : d.t("offline.queued"), withAfter(made.undo, d.back));
+    // «Сделать копию» destroys nothing — a draft appears, the edits are kept in it: no «Вернуть» (rule 5 is for what is lost) and
+    // online the copy is on the server at once, where the store's undo is too late. Taking the draft away is #2419 (delete a draft).
+    // A second press finds no card (the store took it) → null above: one copy only
+    d.toast(d.online ? d.t("est.rej.choice.copied") : d.t("offline.queued"));
     d.open(made.estimateId);
   } else if (key === SIGNED_MEANWHILE_KEYS.reset) {
     d.toast(d.t("est.rej.choice.resetDone"), d.dismissRejected(r.id));
