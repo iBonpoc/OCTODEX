@@ -78,6 +78,14 @@ describe("unit:opsEstimateClientDraft — #2643", () => {
     expect(clientWrites()).toHaveLength(0);
     expect(rpcs.map((r) => r.fn)).toEqual(["save_estimate_version"]);
   });
+  it("the phone changed the client of its draft offline, another phone sent the estimate meanwhile: no client write", async () => {
+    // the phone saw a draft (fromStatus: draft) and chose c-new; the server already has «sent» with c-old
+    found.estimates = { status: "sent", current_version_id: "v-1", customer_id: "c-old", property_id: "p-old" };
+    await applyOp(op({ fromStatus: "draft" }), "co-1", "u-1");
+    expect(clientWrites()).toHaveLength(0);
+    // the edit of the lines goes on as before (back to draft, a new version) — only the client stays the server's
+    expect(rpcs.map((r) => r.fn)).toEqual(["save_estimate_version"]);
+  });
   it("a viewed estimate keeps its client too", async () => {
     found.estimates = { status: "viewed", current_version_id: "v-1", customer_id: "c-old", property_id: "p-old" };
     await applyOp(op(), "co-1", "u-1");
