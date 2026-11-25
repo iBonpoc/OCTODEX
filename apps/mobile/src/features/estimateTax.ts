@@ -67,3 +67,9 @@ export function lastTaxRatePpm(estimates: Estimate[], exceptId?: string): number
   }
   return null;
 }
+
+/** #2456: «%» is pressed — the rate to put in the field at once: the last estimate's, only while the field has no rate yet (a rate
+ *  typed before «Выкл.» stays); none known — undefined (the field stays empty; the company has no rate of its own to fall back on) */
+export function prefillTaxRatePpm(current: TaxSettings, last: number | null): number | undefined {
+  return taxRatePpm(current) === 0 && last !== null ? last : undefined;
+}

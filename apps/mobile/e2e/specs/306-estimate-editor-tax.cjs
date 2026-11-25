@@ -54,13 +54,12 @@ exports.run = async (h) => {
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await tid("est-add-new").waitFor({ timeout: 8000 });
   await line.addCustom(h, "Second", 50);
-  h.expect(await chosen("off"), "off again in the next estimate: not filled in by itself");
+  h.expect(await chosen("off"), "off again in the next estimate: the tax is not on by itself");
   await totals.mode(h, "est-tax-row", "pct");
-  await tid("est-tax-last").waitFor({ timeout: 3000 });
-  h.expect(/8\.875/.test(await tid("est-tax-last").innerText()), "«Как в прошлой смете: 8.875 %»");
-  h.expect((await tid("est-tax-rate").locator("input").inputValue()) !== "8.875", "the rate is not filled in until it is pressed");
-  await tid("est-tax-last").getByRole("button").click();
+  // #2456: «%» puts the rate of the last estimate at once (seen, editable); there is no «Как в прошлой» button any more
   await p.waitForFunction(() => document.querySelector('[data-testid="est-tax-rate"] input')?.value === "8.875", null, { timeout: 3000 });
+  await h.shot("tax-prefilled");
+  h.expect((await p.getByTestId("est-tax-last").count()) === 0, "no «Как в прошлой смете» button");
 
   // an old estimate: the tax only on materials (written by an older phone)
   const raw = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)), DB_KEY);

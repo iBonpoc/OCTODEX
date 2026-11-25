@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_TAX, taxRatePpm, type CustomLine, type CustomOption } from "@octo/estimating-engine";
 import { newDoc, optionTotals } from "../src/features/estimateDoc";
-import { estimateSavedAt, isPartialTax, lastTaxRatePpm, taxChange, wholeTax } from "../src/features/estimateTax";
+import { estimateSavedAt, isPartialTax, lastTaxRatePpm, prefillTaxRatePpm, taxChange, wholeTax } from "../src/features/estimateTax";
 import type { Estimate, EstimateDoc } from "../src/data/types";
 
 const L = (id: string, group: CustomLine["group"], cents: number): CustomLine => ({ id, name: id, group, quantity: "1", unit: "ea", unitPriceCents: cents });
@@ -105,5 +105,25 @@ describe("unit:estimateTax — «the last estimate» is the last SAVED, not the 
     const recent = E("recent", 1025, { savedAt: "2026-11-08T10:00:00Z" }, "2026-11-08T10:00:00Z");
     expect(lastTaxRatePpm([old, recent])).toBe(102500);
     expect(lastTaxRatePpm([recent, old])).toBe(102500);
+  });
+});
+
+describe("unit:estimateTax — #2456: «%» puts the rate at once", () => {
+  const off = docWith({ enabled: false }).settings.tax;
+  it("no rate typed yet: the rate of the last estimate (seen and editable)", () => {
+    expect(prefillTaxRatePpm(off, 88750)).toBe(88750);
+  });
+  it("no last estimate: nothing is put (the field stays empty — the company has no rate of its own)", () => {
+    expect(prefillTaxRatePpm(off, null)).toBeUndefined();
+  });
+  it("a rate already there (typed, then «Выкл.», then «%» again): it stays, the last one does not overwrite it", () => {
+    const typed = wholeTax(off, { ratePpm: 102500 });
+    expect(prefillTaxRatePpm(typed, 88750)).toBeUndefined();
+  });
+  it("through taxChange: on with the prefilled rate counts on the whole amount", () => {
+    const doc = docWith({});
+    const ch = taxChange(doc, { enabled: true, ratePpm: prefillTaxRatePpm(doc.settings.tax, 88750) });
+    expect(taxRatePpm(ch.tax)).toBe(88750);
+    expect(ch.tax.enabled).toBe(true);
   });
 });
