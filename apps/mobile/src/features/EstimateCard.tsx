@@ -20,7 +20,6 @@ import { canEditEstimateTemplates, cleanEstimateTemplate, ESTIMATE_TEMPLATE_NAME
 import { ContractStatement } from "@/features/ContractStatement";
 import { estimateFileName, estimateHtml, saveEstimatePdf } from "@/features/estimatePdf";
 import { beforeSend, clientLink, copyText, estimateMessage, openEmail, openSms } from "@/features/sendEstimate";
-import { useUndoSend } from "@/features/useUndoSend";
 import type { GuardedUndo } from "@/data/undo";
 import { canServe } from "@/features/clients";
 import { estimateNotes, type ModuleNote } from "@/modules/registry";
@@ -625,7 +624,7 @@ function useSendGo(e: Estimate, force: boolean) {
   const check = beforeSend(store.db, e, { force });
   const notes = estimateNotes(store.db, e);
   const issues = linesOrNotes(check, notes, force);
-  /** the store's send — into the queue at once (rule 6), its «Отменить» (rule 5); null when it may not go (and the toast says why) */
+  /** the store's send — into the queue at once (rule 6), its undo (rule 5); null when it may not go (and the toast says why) */
   const queue = (): { undo: GuardedUndo; url: string } | null => {
     // «do not service» sends nothing; a taxed draft of a client who became «Без налога» is re-saved first (04 §12)
     const pre = beforeSend(store.db, e, { force });
@@ -660,46 +659,23 @@ function useSendGo(e: Estimate, force: boolean) {
 
 /**
  * «Отправить клиенту» (#2218, visual v2 «Шторка»): who and where; the check (C5) when something holds it; ONE main button — by SMS
- * when there is a phone, else by mail — that, pressed, puts the send into the queue at once and counts «Отменить · 5 … 1» in itself
- * (rule 5: a press takes it back; after 5 s the SMS / mail with the link opens); under it two in a row: the other way and «Ссылка».
+ * when there is a phone, else by mail — that, pressed, sends at once (MAP §13 п.1: no countdown, the press is the confirmation; rule 5:
+ * the toast's «Вернуть» takes a draft's send back); under it two in a row: the other way and «Ссылка».
  */
 function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onClose: () => void }) {
   const store = useStore();
   const { t } = useI18n();
-  const toast = useToast();
   const [force, setForce] = useState(false);
-  const { customer, notes, issues, go: send, queue, deliver } = useSendGo(e, force);
-  const pending = useRef<{ how: "sms" | "email"; url: string } | null>(null);
-  const undoSend = useUndoSend(
-    () => {
-      const q = queue();
-      if (!q) return () => undefined;
-      pending.current = { how: pending.current?.how ?? "sms", url: q.url };
-      return q.undo;
-    },
-    () => {
-      const p = pending.current;
-      pending.current = null;
-      if (!p?.url) return;
-      void deliver(p.how, p.url).then((ok) => (ok ? toast.show(t("est.sentToast", { name: customer?.name ?? "" })) : undefined));
-      setForce(false);
-    },
-  );
-  const counting = undoSend.phase === "counting";
+  const { customer, notes, issues, go: send } = useSendGo(e, force);
   const close = () => {
     setForce(false);
     onClose();
   };
+  /** MAP §13 п.1: no countdown — the press IS the confirmation; the send is in the queue at once (rule 6), the toast's «Вернуть» takes a draft's send back (rule 5) */
   const go = async (how: "sms" | "email" | "copy") => {
-    if (await send(how)) setForce(false);
+    if (await send(how)) close(); // sent: the sheet goes (a second press would send again), the toast says it and offers «Вернуть»
   };
   const mainHow: "sms" | "email" | null = customer?.phone ? "sms" : customer?.email ? "email" : null;
-  const pressMain = (how: "sms" | "email") => {
-    if (!counting) pending.current = { how, url: "" };
-    const was = undoSend.phase;
-    undoSend.press();
-    if (was === "counting") toast.show(t("w2m.send.cancelled"));
-  };
   return (
     <Sheet visible={visible} onClose={close} title={t("ue.send")}>
       <View style={{ gap: space[3] }}>
@@ -727,15 +703,14 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
         ) : null}
         <View testID="send-buttons" style={{ gap: space[2] }}>
           {mainHow ? (
-            <View testID={counting ? "send-undo" : mainHow === "sms" ? "send-sms" : "send-email"}>
+            <View testID={mainHow === "sms" ? "send-sms" : "send-email"}>
               <Button
-                label={counting ? t("w2m.send.undo", { s: undoSend.left }) : t("ue.send")}
-                accessibilityLabel={counting ? t("w2m.send.undoA11y", { s: undoSend.left }) : `${t("ue.send")}: ${t(mainHow === "sms" ? "ue.sendSms" : "ue.sendEmail")}`}
-                icon={counting ? "undo" : mainHow === "sms" ? "message" : "send"}
-                variant={counting ? "secondary" : "primary"}
+                label={t("ue.send")}
+                accessibilityLabel={`${t("ue.send")}: ${t(mainHow === "sms" ? "ue.sendSms" : "ue.sendEmail")}`}
+                icon={mainHow === "sms" ? "message" : "send"}
                 size="bar"
                 full
-                onPress={() => pressMain(mainHow)}
+                onPress={() => go(mainHow)}
                 disabled={!!issues}
               />
             </View>
@@ -744,20 +719,13 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
           <RowView gap={space[2]}>
             {mainHow === "sms" && customer?.email ? (
               <View testID="send-email" style={{ flex: 1, minWidth: 0 }}>
-                <Button label={t("ue.sendEmail")} icon="send" variant="secondary" full onPress={() => pressMain("email")} disabled={!!issues || counting} />
+                <Button label={t("ue.sendEmail")} icon="send" variant="secondary" full onPress={() => go("email")} disabled={!!issues} />
               </View>
             ) : null}
             <View testID="send-copy" style={{ flex: 1, minWidth: 0 }}>
-              <Button label={t("proto.money.act.link")} accessibilityLabel={t("ue.copyLink")} icon="link" variant="secondary" full onPress={() => go("copy")} disabled={!!issues || counting} />
+              <Button label={t("proto.money.act.link")} accessibilityLabel={t("ue.copyLink")} icon="link" variant="secondary" full onPress={() => go("copy")} disabled={!!issues} />
             </View>
           </RowView>
-          {counting ? (
-            <View testID="send-going">
-              <T v="caption" tone="mut">
-                {t("w2m.send.going")}
-              </T>
-            </View>
-          ) : null}
         </View>
         <Divider />
         <T v="caption" tone="mut">

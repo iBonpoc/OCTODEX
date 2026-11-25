@@ -54,9 +54,11 @@ exports.run = async (h) => {
   await line.addCustom(h, "Work", 50);
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="ue-missing-lines"]').length === 0, null, { timeout: 3000 });
   const id = (await p.locator('[data-testid^="est-line-"]').first().getAttribute("data-testid")).replace("est-line-", "");
-  await tid(`est-line-${id}`).click();
-  await tid(`est-save-catalog-${id}`).getByRole("switch").click();
+  // «⋯ → Добавить в каталог» (E19): the item is made at once — a double press of «Готово» makes no second one
   const cat0 = ((await h.db()).catalog ?? []).length;
+  await line.menu(h, id);
+  await tid(`est-act-catalog-${id}`).click();
+  await p.waitForFunction((n) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.catalog ?? []).length === n + 1, cat0, { timeout: 5000 });
   // (a phone scrolled down: the bar is the capsule «˄ $…» — a tap brings «Готово» back, #2363 q72; the 2×2 add buttons make the page longer)
   await line.wholeBar(h);
   // two presses in ONE tick (a fast double tap before the screen has redrawn)

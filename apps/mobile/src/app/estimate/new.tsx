@@ -449,10 +449,24 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     };
     toast.show(t("est.row.replaced"), localUndo(() => setOption((o) => ({ ...o, lines: restoreLine(o.lines, old) }))));
   };
+  /** «⋯ → Добавить в каталог» (E19): an action, not a switch that works when the row folds — the item is made now, the line gets the link, «Вернуть» takes both back */
+  const addToCatalog = (id: string) => {
+    if (signed || store.role === "tech") return;
+    const l = option.lines.find((x) => x.id === id);
+    if (!l || (l.catalogItemId && db.catalog.some((x) => x.id === l.catalogItemId))) return;
+    const offer = catalogOffer(l, seeCosts);
+    if (offer.state === "later") return void toast.show(t("est.row.catalogNeed"));
+    if (offer.state === "refused") return void toast.show(t(`est.row.refuse.${offer.reason}` as DictKey));
+    const item: CatalogItem = { id: uid(), ...offer.item };
+    const back = store.saveCatalogItem(item);
+    setOption((o) => ({ ...o, lines: o.lines.map((x) => (x.id === id ? { ...x, catalogItemId: item.id } : x)) }));
+    toast.show(t("est.row.addedToCatalog"), withAfter(back, () => setOption((o) => ({ ...o, lines: o.lines.map((x) => (x.id === id && x.catalogItemId === item.id ? { ...x, catalogItemId: undefined } : x)) }))));
+  };
   const rowAction = (id: string, a: RowAction) => {
     if (a === "delete") return removeLine(id);
     if (a === "replace") return setPicker({ replace: id });
     if (a === "move") return setMoveFor(id);
+    if (a === "catalog") return addToCatalog(id);
     if (a === "hide" || a === "show") {
       if (signed || tplEdit) return;
       const r = setHidden(option.lines, id, a);
@@ -599,7 +613,6 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       change: (id, patch) => latest.current.patchLine(id, patch),
       action: (id, a) => latest.current.rowAction(id, a),
       bad: (id, field, bad) => void (bad ? badFields.current.add(`${id}:${field}`) : badFields.current.delete(`${id}:${field}`)),
-      wantCatalog: (id, on) => setWantCatalog((ids) => (on ? [...ids.filter((x) => x !== id), id] : ids.filter((x) => x !== id))),
       openInCatalog: (id) => latest.current.openInCatalog(id),
       nextQty: (id) => latest.current.nextQty(id),
       // «⋯ → Выше / Ниже»: the same move as the sheet's «Выше» / «Ниже» (its «Вернуть»)
@@ -999,8 +1012,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // the open row's place in the catalog (not for the tech): linked, or the choice and what the engine says of it
   const catalogStateOf = (l: CustomLine) => {
     const linked = !!l.catalogItemId && db.catalog.some((x) => x.id === l.catalogItemId);
-    const offer = catalogOffer(l, seeCosts);
-    return { linked, want: wantCatalog.includes(l.id), offer: offer.state, reason: offer.state === "refused" ? offer.reason : undefined };
+    return { linked };
   };
   const act = activeLines(option.lines);
   // the sum of each line by its id, once (not `indexOf` for every row: that is n² for a long estimate)
@@ -1321,6 +1333,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                     noHide={!!tplEdit}
                     unhiddenMark={unhiddenIds.includes(r.line.id)}
                     catalog={openId === r.line.id && store.role !== "tech" ? catalogStateOf(r.line) : undefined}
+                    catalogAdd={store.role !== "tech" && !catalogStateOf(r.line).linked}
                     autoFocus={focusRow?.id === r.line.id ? focusRow.field : undefined}
                     checkPrice={checkPrice.includes(r.line.id)}
                     view={lifted ? "brief" : rowLook}
