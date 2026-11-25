@@ -2,7 +2,7 @@
  * The figures of visual v2 (docs/design/visual-v2.html «Визуальный язык числами»):
  * - NumberTrio — «тройка цифр»: three cells `surf2` (radius 14) 8 apart, the figure 17/700 over its word 12/600 `mut`.
  * - FigureRow — a row «цифры справа»: a card from `figureRow.h` 64, an icon in a square 40 (radius 13) on the cell, the name 15/700 and
- *   a line 12/600 `mut`; on the right columns «word 12 / value 15/700» (`colW` 64 each but the last), or a StatusPill, or «›».
+ *   a line 12/600 `mut`; on the right columns «word 12 / value 15/700» (`colW` 64 at least each but the last; a wider value widens the column, the text beside it is cut), or a StatusPill, or «›».
  * - TimerLine — «таймер»: the hourglass 20, «1:12:40» 17/700 tabular, «с 8:34» 13 `mut`; on the right a round 32 («⌃»).
  * - TimeSlot — «время и интервал»: the hour column `timeSlot.timeW` 44 (the hour 15/700, the length 12) and the visit's card with the
  *   interval plate 26 «8:30 ▸ 12:30» of two halves; the nearest one in the accent's TONE (`tint`/`tint2` + `accText`), never a fill.
@@ -75,7 +75,7 @@ function TrioCell({ f }: { f: Fig }) {
   );
 }
 
-/** a value column on the right of a FigureRow; `tone` — a status word («−9 дн» bad) */
+/** a value column on the right of a FigureRow; `tone` — a status word («Просрочен 9 дн» bad) */
 export type FigureCol = { label: string; value: string; tone?: StatusName };
 
 export function FigureRow({ title, line, icon, lead, cols, status, onPress, testID, tone, iconTone, avatar }: {
@@ -144,7 +144,7 @@ export function FigureRow({ title, line, icon, lead, cols, status, onPress, test
         ) : null}
       </View>
       {(cols ?? []).map((x, i, all) => (
-        <View key={x.label} style={{ alignItems: "flex-end", width: i < all.length - 1 ? k.colW : undefined }}>
+        <View key={x.label} style={{ alignItems: "flex-end", flexShrink: 0, minWidth: i < all.length - 1 ? k.colW : undefined }}>
           <T v="micro" tone="mut" numberOfLines={1}>
             {x.label}
           </T>

@@ -57,3 +57,24 @@ describe("the fraction buttons (FracPicker): eighths in the main row, the odd si
     expect(eighthKey(1)).toBeNull();
   });
 });
+
+// v43 PR A: the length in the window has no «Применить» — every valid change goes in at once (the window's draft keeps or takes it back)
+import { tapeDraft } from "../src/modules/gutters/draw/lengthEntry";
+
+describe("tapeDraft: the tape without «Применить»", () => {
+  it("a valid length is taken at once, no warning", () => {
+    expect(tapeDraft("25", "6", 0, 300)).toEqual({ len: 306, bad: false, same: false });
+    expect(tapeDraft("25", "6", 8, 300)).toEqual({ len: 306.5, bad: false, same: false });
+  });
+  it("the length the run already has is not written again", () => {
+    expect(tapeDraft("25", "0", 0, 300)).toEqual({ len: 300, bad: false, same: true });
+  });
+  it("inches of 12 or more are wrong: nothing is written, the warning shows", () => {
+    expect(tapeDraft("25", "12", 0, 300)).toEqual({ len: null, bad: true, same: false });
+  });
+  it("both fields empty: nothing is written, the warning shows (the screen never differs silently from the data)", () => {
+    expect(tapeDraft("", "", 0, 300)).toEqual({ len: null, bad: true, same: false });
+    expect(tapeDraft("", "6", 0, 300)).toEqual({ len: null, bad: true, same: false }); // 40′ retyped: «6″» alone must not shrink the line
+    expect(tapeDraft("0", "0", 0, 300)).toEqual({ len: null, bad: true, same: false });
+  });
+});

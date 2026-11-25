@@ -15,7 +15,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
 import { CatalogPicker } from "@/features/estimatePickers";
 import { SupplierPicker } from "@/features/SupplierParts";
-import { canEditOrders, canReceive, isoDate, linesEditable, orderTotalCents, packCost, PO_TONE, receivedCount, usDate } from "@/features/purchaseOrders";
+import { canEditOrders, canReceive, isoDate, linesEditable, orderTotalCents, packCost, PO_DRAFT, PO_TONE, receivedCount, usDate } from "@/features/purchaseOrders";
 import { poHtml } from "@/features/poPdf";
 import { saveEstimatePdf } from "@/features/estimatePdf";
 import { companyForPortal } from "@/cloud/portal";
@@ -127,7 +127,7 @@ export default function PurchaseOrderScreen() {
       <Card>
         <RowView style={{ justifyContent: "space-between" }}>
           <View testID="po-status">
-            <StatusChip status={PO_TONE[found.status]} label={t(`po.status.${found.status}` as DictKey)} />
+            <StatusChip status={PO_TONE[found.status]} draft={PO_DRAFT[found.status]} label={t(`po.status.${found.status}` as DictKey)} />
           </View>
           {found.lines.length && found.status !== "draft" ? <T v="caption" tone="mut">{t("po.receivedOf", { done: receivedCount(found), n: found.lines.length })}</T> : null}
         </RowView>

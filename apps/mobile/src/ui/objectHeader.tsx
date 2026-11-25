@@ -38,7 +38,7 @@ export interface ObjectHeaderProps {
   /** the sum at the end of the meta line («$1,840») */
   amount?: string;
   /** StatusPill; `onPress` — the office's StatusPicker */
-  status?: { name: StatusName; label: string; onPress?: () => void; /** the icon of the status line instead of the status's own (v2 «◷ Активный») */ icon?: IconKey };
+  status?: { name: StatusName; label: string; /** grey «draft» — the dashed ring */ draft?: boolean; onPress?: () => void; /** the icon of the status line instead of the status's own (v2 «◷ Активный») */ icon?: IconKey };
   /** the address line 13 `accText` «›» — opens the route in the platform's maps (#2353); hidden while the panel is open */
   address?: { text: string; onPress: () => void };
   /** «Клиент ›» — the parent object */
@@ -71,7 +71,7 @@ export function objectHeadSub(p: ObjectHeaderProps): { line1?: string; line2?: R
   const id = (part: string) => `${p.testID}-${part}`;
   const line1 = [p.kindWord, ...(p.meta ?? []).map((m) => m.label), p.amount].filter(Boolean).join(" · ") || undefined;
   // v2: «◷ Активный» 13/500 — the status's icon and word, no plate
-  const line2 = p.status ? <HeadStatus testID={id("status")} status={p.status.name} icon={p.status.icon} label={p.status.label} onPress={p.status.onPress} /> : undefined;
+  const line2 = p.status ? <HeadStatus testID={id("status")} status={p.status.name} draft={p.status.draft} icon={p.status.icon} label={p.status.label} onPress={p.status.onPress} /> : undefined;
   return { line1, line2 };
 }
 

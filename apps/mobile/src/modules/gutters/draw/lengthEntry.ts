@@ -1,7 +1,7 @@
 /**
  * The chain of typing a length without «Done» (#1316, founder 13.11): feet → inches → the fraction by buttons. Pure.
  */
-import { unitFields } from "../canvas/attrs";
+import { tapeIn, unitFields } from "../canvas/attrs";
 import type { LenUnit } from "../canvas/format";
 
 /** the stage of the entry: the feet are typed, then the inches, then the fraction is chosen (no keyboard needed for it) */
@@ -42,4 +42,16 @@ export function unitPickStep(o: { edited: boolean; typed: number | null; canon: 
   const typed = o.edited ? o.typed : o.canon;
   const canon = typed ?? o.canon;
   return { canon, bad: typed === null, edited: false, restTouched: restTouchedAfterUnitPick({ restTouched: o.restTouched, edited: o.edited }), fields: unitFields(canon, o.unit) };
+}
+
+/**
+ * The length window's tape has no «Применить» (v43, founder 24.11): every change of a field is read at once. A length that is good and
+ * not the one the run has goes in (`len`; the window's draft keeps it or takes it back); a wrong one writes nothing and says so (`bad`);
+ * both fields empty is wrong too (the run keeps the length it had; the warning says so). Pure.
+ */
+export function tapeDraft(ft: string, inc: string, e16: number, have: number): { len: number | null; bad: boolean; same: boolean } {
+  // a field being retyped (empty) is not a zero foot: nothing moves the gutter until both are there
+  const n = ft.trim() === "" || inc.trim() === "" ? null : tapeIn(ft, inc, e16);
+  if (n === null) return { len: null, bad: true, same: false };
+  return { len: n, bad: false, same: n === have };
 }

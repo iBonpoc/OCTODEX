@@ -19,7 +19,7 @@ exports.run = async (h) => {
   // «К оплате»: the overdue one first, «−N дн»
   const rows = p.locator('[data-testid^="money-topay-i"]').locator("visible=true");
   h.expect((await rows.count()) >= 1, "«К оплате» has rows");
-  h.expect(/−\d+/.test(await rows.first().innerText()), "the first row is overdue: «−N дн»");
+  h.expect(/Просрочен \d+ дн/.test(await rows.first().innerText()), "the first row is overdue: «Просрочен N дн»");
   h.expect((await p.locator('[data-testid^="money-paid-"]').locator("visible=true").count()) >= 1, "«Оплачены сегодня» has today's payments");
   // the segment «Сметы · Счета · Оплаты» (Segmented `est-list-chips`: its tabs are `est-list-chips-<key>`)
   h.expect((await p.locator('[data-testid^="est-list-chips"]').locator("visible=true").count()) === 0, "no segment on the overview");

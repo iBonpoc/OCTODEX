@@ -20,7 +20,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Platform, View, type ViewStyle } from "react-native";
 import Animated, { runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 import { BlurView } from "expo-blur";
-import { component, motion, pastels, radius, size, space, spaceHalf, statusIcon, type StatusName } from "@octo/design-tokens";
+import { component, motion, pastels, radius, size, space, spaceHalf, statusGlyph, type StatusName } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Avatar } from "../controls";
 import { HeaderButton } from "../headerIcon";
@@ -589,11 +589,11 @@ export function HeaderBig({
  * The status as the second line right of the rule (v2 «Клиент · VIP / ◷ Активный»): the status's icon and its word, 13/500 `mut` —
  * no plate (rule 2: an icon and a word, never a colour alone). A tap — the office's StatusPicker.
  */
-export function HeadStatus({ status, icon, label, onPress, testID }: { status: StatusName; icon?: IconKey; label: string; onPress?: () => void; testID?: string }) {
+export function HeadStatus({ status, icon, label, draft, onPress, testID }: { status: StatusName; icon?: IconKey; label: string; draft?: boolean; onPress?: () => void; testID?: string }) {
   const { c } = useTheme();
   const line = (
     <View style={{ flexDirection: "row", alignItems: "center", gap: space[1], minWidth: 0 }}>
-      <Icon name={icon ?? statusIcon[status]} s={size.iconXs} color={c.mut} />
+      <Icon name={icon ?? statusGlyph(status, draft)} s={size.iconXs} color={c.mut} />
       <T v="caption" w="medium" tone="mut" numberOfLines={1} style={{ flexShrink: 1 }}>
         {label}
       </T>

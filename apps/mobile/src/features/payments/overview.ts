@@ -69,7 +69,7 @@ export function moneyOverview(
   };
 }
 
-/** «Срок» of a row: «−9 дн» (overdue, the bad word), «сегодня», «3 дн» */
+/** «Срок» of a row: «Просрочен 9 дн» (overdue, the bad word), «сегодня», «3 дн» */
 export function dueWord(dueIn: number): { key: "w2m.due.late" | "w2m.due.today" | "w2m.due.in"; d: number; late: boolean } {
   if (dueIn < 0) return { key: "w2m.due.late", d: -dueIn, late: true };
   if (dueIn === 0) return { key: "w2m.due.today", d: 0, late: false };

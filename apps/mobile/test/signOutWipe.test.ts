@@ -61,6 +61,10 @@ describe("unit:signOutWipe — which keys (#1633)", () => {
     expect(holdsLocalOnly({ db: { visits: [{ photos: [{ upload: { failed: "big" } }] }] } })).toBe(true);
     expect(holdsLocalOnly({ db: { expenses: [{ receiptFailed: "type" }] } })).toBe(true);
   });
+  it("a refused photo of a module measurement (db.files[].upload, #1441) is what only the phone has too (review of #1691)", () => {
+    expect(holdsLocalOnly({ db: { files: [{}] } })).toBe(false);
+    expect(holdsLocalOnly({ db: { files: [{ upload: { failed: "refused", at: "2026-11-14T00:00:00Z" } }] } })).toBe(true);
+  });
 });
 
 describe("unit:signOutWipe — the wipe (#1633)", () => {
@@ -91,6 +95,13 @@ describe("unit:signOutWipe — the wipe (#1633)", () => {
     const { m, s } = mem({ "octo.cloud.v1.c1.u1": photo, "octo.cloud.v1.c2.u1": receipt, "octo.cloud.v1.c3.u1": cache(me) });
     await wipeAfterSignOut(me, { ...nobody, s });
     expect([...m.keys()].sort()).toEqual(["octo.cloud.v1.c1.u1", "octo.cloud.v1.c2.u1"]);
+  });
+
+  it("sign-out with a module file's refused photo (db.files[].upload): the cache stays, as for a visit's photo (review of #1691)", async () => {
+    const meas = cache(me, { files: [{ id: "m1", uri: "file:///m1.jpg", upload: { failed: "refused", at: "x" } }] });
+    const { m, s } = mem({ "octo.cloud.v1.c1.u1": meas, "octo.cloud.v1.c3.u1": cache(me) });
+    await wipeAfterSignOut(me, { ...nobody, s });
+    expect([...m.keys()]).toEqual(["octo.cloud.v1.c1.u1"]);
   });
 
   it("a write of the cache under way when the session went is removed by a later pass", async () => {

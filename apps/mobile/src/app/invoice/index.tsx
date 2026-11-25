@@ -91,7 +91,7 @@ export default function Invoices() {
     const sign = invoiceSigns(i, now, tz)[0];
     const left = i.dueDate ? daysBetween(dayKeyIn(now, tz), dueDayKey(i.dueDate, tz)) : 0;
     const late = owes > 0 && sign?.tone === "bad";
-    // visual v2 «цифры справа»: «Срок −9 дн» (red word, not a fill) · «Сумма $1,840»; the line — the number, the work, the reminders
+    // visual v2 «цифры справа»: «Срок Просрочен 9 дн» (red word, not a fill) · «Сумма $1,840»; the line — the number, the work, the reminders
     const due: FigureCol =
       owes <= 0
         ? { label: t("w2m.col.paid"), value: i.paidAt ? formatDayKey(dayKeyIn(i.paidAt, tz), { month: "numeric", day: "numeric" }) : "—" }

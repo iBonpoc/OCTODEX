@@ -94,7 +94,8 @@ export function ProtoLists() {
         <StatusPill status="info" label={t("st.sent")} />
         <StatusPill status="warn" label={t("st.late")} />
         <StatusPill status="bad" label={t("st.overdue")} />
-        <StatusPill status="neutral" label={t("st.draft")} onPress={said(t("st.draft"))} testID="showcase-pill-press" />
+        <StatusPill status="neutral" label={t("st.cancelled")} testID="showcase-pill-none" />
+        <StatusPill status="neutral" draft label={t("st.draft")} onPress={said(t("st.draft"))} testID="showcase-pill-press" />
       </View>
       <GroupedList testID="showcase-grouped">
         <ListGroup title={t("nav.clients")} all={{ label: t("cat.all"), onPress: said(t("cat.all")), testID: "showcase-group-all" }}>

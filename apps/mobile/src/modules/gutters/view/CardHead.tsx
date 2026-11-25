@@ -92,8 +92,8 @@ export function CardHead({ m, drawn, onGone }: { m: MeasurementRow; drawn: boole
 
   const stateChip =
     v.state === "signed" ? <StatusChip status="ok" label={t("mod.gutters.list.s.signed")} />
-    : est ? <StatusChip status={est.s} label={t(est.l)} />
-    : <StatusChip status="neutral" label={t(v.state === "unlinked" ? "mod.gutters.list.draft" : "mod.gutters.list.s.noEstimate")} />;
+    : est ? <StatusChip status={est.s} draft={est.d} label={t(est.l)} />
+    : <StatusChip status="neutral" draft={v.state === "unlinked"} label={t(v.state === "unlinked" ? "mod.gutters.list.draft" : "mod.gutters.list.s.noEstimate")} />;
 
   const whoText = (
     <View style={{ flexShrink: 1, gap: space[1] }}>

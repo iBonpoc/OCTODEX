@@ -44,6 +44,13 @@ vi.mock("expo-image-manipulator", () => ({
   },
 }));
 
+const dropped: { picked: string; kept: string }[] = [];
+const kept: string[] = [];
+vi.mock("../src/data/localFiles", () => ({
+  dropPickedCopy: (picked: string, k: string) => void dropped.push({ picked, kept: k }),
+  keptHere: (u: string) => void kept.push(u),
+}));
+
 const { fitLongSide, prepareForCloud, prepPicked, shrinkPicked, PHOTO_LONG_SIDE, PHOTO_QUALITY, PHOTO_SMALL_SIDE, PHOTO_SMALL_QUALITY } = await import("../src/data/photoShrink");
 /** the file made, or the test fails (never the original) */
 const shrinkPhoto = async (img: { uri: string; width?: number; height?: number }) => {
@@ -54,6 +61,8 @@ const shrinkPhoto = async (img: { uri: string; width?: number; height?: number }
 beforeEach(() => {
   Object.assign(log, { resized: [], saved: [], renders: 0, released: 0, refsReleased: 0, failSave: false, fail: false, failRenders: 0, src: { width: 0, height: 0 } });
   delete (globalThis as { __e2ePhotoDecodeFail?: boolean }).__e2ePhotoDecodeFail;
+  dropped.length = 0;
+  kept.length = 0;
 });
 
 describe("fitLongSide", () => {
@@ -204,6 +213,35 @@ describe("shrinkPhoto", () => {
     expect((await prepareForCloud({ uri: "file:///s.jpg", width: 800, height: 600 }, true)).ok).toBe(false);
     expect(log.renders).toBe(0);
     warn.mockRestore();
+  });
+});
+
+describe("prepPicked — the picker's copy (#1659 after #1558)", () => {
+  const pick = (uri: string) => ({ canceled: false, assets: [{ uri, width: 4032, height: 3024 }] });
+  it("prepared: the picker's copy is offered to go, the new file is kept for this run", async () => {
+    log.src = { width: 4032, height: 3024 };
+    expect(await prepPicked(pick("file:///Caches/ImagePicker/a.jpg"), false)).toEqual({ uri: "file:///out-2048x1536.jpg" });
+    expect(dropped).toEqual([{ picked: "file:///Caches/ImagePicker/a.jpg", kept: "file:///out-2048x1536.jpg" }]);
+    expect(kept).toEqual(["file:///out-2048x1536.jpg"]);
+  });
+  it("prepared the small way (c2): the copy goes too", async () => {
+    log.src = { width: 4032, height: 3024 };
+    log.failRenders = 2;
+    expect(await prepPicked(pick("file:///Caches/ImagePicker/s.jpg"), false)).toEqual({ uri: "file:///out-1024x768.jpg", small: true });
+    expect(dropped).toEqual([{ picked: "file:///Caches/ImagePicker/s.jpg", kept: "file:///out-1024x768.jpg" }]);
+  });
+  it("not prepared («preparing»): nothing goes — the original is kept for «Подготовить снова»", async () => {
+    log.src = { width: 4032, height: 3024 };
+    log.fail = true;
+    const got = await prepPicked(pick("file:///Caches/ImagePicker/b.jpg"), false);
+    expect(got).toEqual({ preparing: { uri: "file:///Caches/ImagePicker/b.jpg", way: "c2", why: "cannot decode" } });
+    expect(dropped).toEqual([]);
+    expect(kept).toEqual(["file:///Caches/ImagePicker/b.jpg"]);
+  });
+  it("a later round (prepareForCloud, «Подготовить снова»): never drops the original — the sweep takes it once nothing names it", async () => {
+    log.src = { width: 4032, height: 3024 };
+    expect((await prepareForCloud({ uri: "file:///Caches/ImagePicker/c.jpg" }, false)).ok).toBe(true);
+    expect(dropped).toEqual([]);
   });
 });
 

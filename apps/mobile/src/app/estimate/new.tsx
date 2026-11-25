@@ -42,7 +42,7 @@ import { Labeled, MoneyField, PctField, RatePctField } from "@/features/fields";
 import { MONEY_MODES, TAX_MODES, depositFor, depositMode, discountFor, discountMode, remember, totalWhileTyping, type ModeMemo, type TotalsMode, type TotalsRow } from "@/features/estimate/totalsModes";
 import { useKeyboardHeight } from "@/ui/keyboard";
 import { ModeRow } from "@/ui/modeRow";
-import { isPartialTax, lastTaxRatePpm, taxChange, wholeTax, type TaxDiff } from "@/features/estimateTax";
+import { isPartialTax, lastTaxRatePpm, prefillTaxRatePpm, taxChange, wholeTax, type TaxDiff } from "@/features/estimateTax";
 import { Button, IconButton, StatusChip, TextField } from "@/ui/controls";
 import { CountPill, FigureRow } from "@/ui/figures";
 import type { IconKey } from "@/ui/primitives";
@@ -1371,7 +1371,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               mode={s.tax.enabled && !exempt ? "pct" : "off"}
               off="off"
               onMode={(k) => {
-                if (k === "pct") changeTax({ enabled: true });
+                if (k === "pct") changeTax({ enabled: true, ratePpm: prefillTaxRatePpm(s.tax, lastRate) }); // #2456: the rate of the last estimate is put at once, seen and editable
                 else setSettings({ tax: { ...s.tax, enabled: false } });
                 focusTotals("tax", k);
               }}
@@ -1398,10 +1398,6 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                   <View testID="est-tax-partial" style={{ gap: space[2] }}>
                     <T v="caption" tone="mut">{t("ue.taxPartial")}</T>
                     <Button label={t("ue.taxWhole")} variant="secondary" full onPress={() => changeTax({})} />
-                  </View>
-                ) : s.tax.enabled && lastRate !== null && lastRate !== taxRatePpm(s.tax) ? (
-                  <View testID="est-tax-last" style={{ alignSelf: "flex-start" }}>
-                    <Button label={t("ue.taxLast", { rate: ppmToPctText(lastRate) })} variant="ghost" onPress={() => setSettings({ tax: wholeTax(s.tax, { ratePpm: lastRate }) })} />
                   </View>
                 ) : null}</>
               }

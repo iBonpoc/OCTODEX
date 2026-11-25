@@ -49,7 +49,7 @@ exports.run = async (h) => {
     const gl = await vis("invoice-list-group-overdue").first().boundingBox();
     const gw = await vis("invoice-list-group-waiting").first().boundingBox();
     h.expect(gl.y < gw.y, "the overdue group comes first");
-    h.expect(/−\d+ дн/.test(await vis(`invoice-row-${late[0].id}`).first().innerText()), "the overdue row says how many days late");
+    h.expect(/Просрочен \d+ дн/.test(await vis(`invoice-row-${late[0].id}`).first().innerText()), "the overdue row says how many days late");
   }
   await h.shot("owed");
 

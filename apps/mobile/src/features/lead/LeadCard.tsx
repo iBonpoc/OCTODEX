@@ -476,7 +476,7 @@ function LeadEstimatesList({ list, onNew }: { list: Estimate[]; onNew?: () => vo
             title={e.title || e.number || t("est.detail")}
             subtitle={[e.title ? e.number : undefined, e.sentAt ? `${t("st.sent")} ${day(e.sentAt)}` : undefined, e.viewedAt ? t("ue.viewed", { date: day(e.viewedAt) }) : undefined].filter(Boolean).join(" · ") || undefined}
             value={canSeeClientMoney(role) ? money(e.totalCents) : undefined}
-            status={canSeeClientMoney(role) ? undefined : { status: estView[e.status].s, label: t(estView[e.status].l) }}
+            status={canSeeClientMoney(role) ? undefined : { status: estView[e.status].s, label: t(estView[e.status].l), draft: estView[e.status].d }}
             onPress={() => router.push(`/estimate/${e.id}`)}
           />
         ))}

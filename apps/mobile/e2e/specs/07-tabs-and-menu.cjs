@@ -36,7 +36,7 @@ exports.run = async (h) => {
   await og.waitFor({ timeout: 5000 });
   h.expect(/\$[\d,]+/.test(await og.innerText()), "overdue invoices group with its sum");
   const orow = og.locator(`[data-testid="invoice-row-${overdue[0].id}"]`);
-  h.expect(/−\d+ дн/.test(await orow.innerText()), "overdue sign (−N дн) on the invoice row");
+  h.expect(/Просрочен \d+ дн/.test(await orow.innerText()), "overdue sign (Просрочен N дн) on the invoice row");
   await h.go("/jobs");
   // the job filters, by key (the words follow the status: a job is «Запланирована», #1417)
   await h.page.getByTestId("filter-lane-scheduled").locator("visible=true").first().waitFor({ timeout: 5000 });

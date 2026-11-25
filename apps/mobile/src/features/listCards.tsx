@@ -120,7 +120,7 @@ export function EstimateListCard({ e, density, panel }: { e: Estimate; density: 
       value={amount.from ? t("card.fromAmount", { amount: money(amount.cents) }) : money(amount.cents)}
       valueLabel={amount.option ?? t("card.val.total")}
       // read only: an estimate has no hand moves in the store (statusMoves); new statuses come from estimateStatusView
-      status={{ tone: v.s, label: t(v.l) }}
+      status={{ tone: v.s, label: t(v.l), draft: v.d }}
       signs={sign ? [{ tone: sign.tone, label: t(sign.key, sign.params) }] : undefined}
       // edge only for what needs the contractor: a sign or our signature; a declined estimate is done, no red edge
       edge={sign ? sign.tone : e.status === "awaiting_countersign" ? "warn" : null}

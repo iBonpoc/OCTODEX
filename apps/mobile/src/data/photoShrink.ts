@@ -8,6 +8,7 @@
  * Pure part (`fitLongSide`): test/photoShrink.test.ts.
  */
 import * as ImageManipulator from "expo-image-manipulator";
+import { dropPickedCopy, keptHere } from "./localFiles";
 import type { PrepWay } from "./types";
 
 /** the long side of a kept photo, px (decision of the director 14.11, #642) */
@@ -136,6 +137,10 @@ export async function prepPicked(res: { canceled: boolean; assets?: PickedImage[
   const a = res && !res.canceled ? res.assets?.[0] : undefined;
   if (!a?.uri) return undefined;
   const r = await prepareForCloud(a, web);
+  // #1659: the picker's full-size copy goes only once a new file is made (never the person's library); a «preparing»
+  // original stays — its record names it and «Подготовить снова» needs it. A later round (store) drops nothing: the sweep does
+  if (r.ok) dropPickedCopy(a.uri, r.uri);
+  keptHere(r.ok ? r.uri : a.uri);
   return r.ok ? (r.small ? { uri: r.uri, small: true } : { uri: r.uri }) : { preparing: { uri: a.uri, way: r.way, why: r.why } };
 }
 

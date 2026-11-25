@@ -8,7 +8,7 @@ import { router } from "expo-router";
 import { useStore } from "@/data/store";
 import type { PurchaseOrder } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
-import { PO_TONE, receivedCount } from "@/features/purchaseOrders";
+import { PO_DRAFT, PO_TONE, receivedCount } from "@/features/purchaseOrders";
 import { Button } from "@/ui/controls";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
@@ -50,7 +50,7 @@ export default function PurchaseOrders() {
         testID={`po-card-${o.id}`}
         title={o.number ?? t("po.noNumber")}
         lead={{ kind: "icon", icon: "truck" }}
-        status={{ tone: PO_TONE[o.status], label: t(`po.status.${o.status}` as DictKey) }}
+        status={{ tone: PO_TONE[o.status], label: t(`po.status.${o.status}` as DictKey), draft: PO_DRAFT[o.status] }}
         facts={{
           supplier: supName(o) ?? t("po.noSupplier"),
           work: job ? [job.number, job.title].filter(Boolean).join(" · ") : t("po.stock"),

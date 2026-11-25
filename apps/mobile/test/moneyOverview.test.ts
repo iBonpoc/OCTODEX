@@ -56,7 +56,7 @@ describe("moneyOverview", () => {
   it("«Оплачены сегодня» — newest first", () => {
     expect(o.paidToday.map((x) => x.id)).toEqual(["p2", "p1"]);
   });
-  it("«Срок» — «−9 дн» bad, «сегодня», «3 дн»", () => {
+  it("«Срок» — «Просрочен 9 дн» bad, «сегодня», «3 дн»", () => {
     expect(dueWord(-9)).toEqual({ key: "w2m.due.late", d: 9, late: true });
     expect(dueWord(0).key).toBe("w2m.due.today");
     expect(dueWord(3)).toEqual({ key: "w2m.due.in", d: 3, late: false });

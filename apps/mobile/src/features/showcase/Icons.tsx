@@ -32,6 +32,8 @@ export function IconsSection() {
           {(Object.keys(statusIcon) as (keyof typeof statusIcon)[]).map((k) => (
             <Icon key={k} name={statusIcon[k]} s={size.iconMd} color={k === "neutral" ? c.mut : c.status[k].text} active={active} />
           ))}
+          {/* grey has two glyphs (DS §3.3): `neutral` — none / cancelled, `draft` — a draft */}
+          <Icon name="draft" s={size.iconMd} color={c.mut} active={active} />
         </RowView>
       </Card>
       <Card>
