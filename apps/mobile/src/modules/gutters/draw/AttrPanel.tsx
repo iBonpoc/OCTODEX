@@ -30,7 +30,7 @@ import { colorChoices } from "./colorChoices";
 import { dsMoreSet, dsRareShown } from "./attrShown";
 import { FracPicker } from "./FracPicker";
 import { FRAC_SLOT } from "./fracSlot";
-import { feetResetsRest, inchesComplete, inchesTooBig, nextStage, type EntryStage } from "./lengthEntry";
+import { feetResetsRest, inchesComplete, inchesTooBig, nextStage, restTouchedAfterUnitPick, type EntryStage } from "./lengthEntry";
 import { MM_SCALE, SIXTEENTHS_SCALE, SIXTEENTHS_SCALE_IN, Tape as TapeStrip } from "./Tape";
 import { DENOM, fmtLen, fracLabel, LEN_UNITS, MM_OF, MM_PER_IN, type LenFormat, type LenUnit } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
@@ -64,8 +64,8 @@ function Field({ label, children, testID }: { label: string; children: React.Rea
 function FracText({ value, testID }: { value: number; testID: string }) {
   return (
     <View>
-      <View style={{ opacity: 0 }} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" {...({ "aria-hidden": true } as object)}><T v="heading" w="semibold">{FRAC_SLOT}</T></View>
-      {value ? <View testID={testID} style={{ position: "absolute", top: 0, bottom: 0, left: 0, justifyContent: "center" }}><T v="heading" w="semibold">{fracLabel(value)}</T></View> : null}
+      <View style={{ opacity: 0 }} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" {...({ "aria-hidden": true } as object)}><T v="heading" w="semibold" tabular>{FRAC_SLOT}</T></View>
+      {value ? <View testID={testID} style={{ position: "absolute", top: 0, bottom: 0, left: 0, justifyContent: "center" }}><T v="heading" w="semibold" tabular>{fracLabel(value)}</T></View> : null}
     </View>
   );
 }
@@ -265,6 +265,7 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
     const typed = edited.current ? typedIn() : canon.current;
     const n = typed ?? canon.current;
     canon.current = n;
+    restTouched.current = restTouchedAfterUnitPick({ restTouched: restTouched.current, edited: edited.current });
     edited.current = false;
     setUnit(u);
     setBad(typed === null); // a wrong number typed: the length it had comes back, and it says so

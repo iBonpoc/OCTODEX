@@ -24,3 +24,9 @@ export const inchesTooBig = (text: string): boolean => /^\d+$/.test(text) && Num
  * the feet never wipe them.
  */
 export const feetResetsRest = (o: { firstOpen: boolean; restTouched: boolean }): boolean => o.firstOpen && !o.restTouched;
+
+/**
+ * A unit picked in the window (#2446): the fields are rewritten from the length in hand. If a field was edited before, the inches and
+ * the fraction now show a length the user typed, not the drawn guess — the feet typed after it never wipe them.
+ */
+export const restTouchedAfterUnitPick = (o: { restTouched: boolean; edited: boolean }): boolean => o.restTouched || o.edited;
