@@ -1,6 +1,6 @@
 import type { Mode } from "@/data/store";
 import { timing, type StatusName } from "@octo/design-tokens";
-import { seeCosts } from "./access";
+import { canCopyRejectedEstimate, seeCosts } from "./access";
 import { contractStatement, invoiceOwes } from "@octo/estimating-engine";
 import { daysOverdue, daysSince, isOverdue, minutesSince, visitContext } from "@/data/selectors";
 import type { CancelledVisit, DB, ID, Role, Task } from "@/data/types";
@@ -15,7 +15,7 @@ import { jobAwaitingClose } from "@/features/jobDone";
 import { isContractKind } from "@/features/contractKind";
 import { goneId } from "./team";
 import type { DictKey } from "@/i18n";
-import { rejectReasonKey, type RejectedOp } from "@/data/outboxRejected";
+import { rejectReasonKey, REJECTED_KEEP_MS, type RejectedOp } from "@/data/outboxRejected";
 import { canOpen } from "@/nav/roles";
 import { canReview, missedCount, visitMissed, visitSettings } from "./checklist";
 import { failedPhotos } from "@/data/photoUpload";
@@ -65,6 +65,8 @@ export interface AttentionItem {
   href?: string;
   /** the explanation under a reason with no client or lead (a refused change); absent — the kind's own */
   hint?: DictKey;
+  /** a refused change that keeps the person's edits: until when the phone keeps them (outboxRejected REJECTED_KEEP_MS), epoch ms */
+  hintUntil?: number;
 }
 
 /** Where an attention item opens: its own record, never a general list. */
@@ -98,13 +100,21 @@ const SUBJECT_PATH: Record<Task["subjectType"], string> = { lead: "/lead", custo
 export const rejectedLabel = (r: Pick<RejectedOp, "what" | "labelKey">): DictKey => (r.labelKey ?? `att.rejected.${r.what}`) as DictKey;
 
 /** what to do about a refused change: «Открыть» → «Подключить» for who may open where it leads, else «ask the owner» */
-export const rejectedHint = (r: Pick<RejectedOp, "what" | "href"> & { kind?: RejectedOp["kind"]; reason?: RejectedOp["reason"] }, role: Role): DictKey =>
+export const rejectedHint = (r: Pick<RejectedOp, "what" | "href"> & { kind?: RejectedOp["kind"]; reason?: RejectedOp["reason"]; estimateEdit?: RejectedOp["estimateEdit"] }, role: Role, mayCopy = true): DictKey =>
+  // #2657: the edits are kept right here — copy or reset them (not «open the estimate»: its edits are not there); who may not make the
+  // copy (a tech where he is not assigned, #2674 Б2′) is told the office does
+  r.reason === "estimate_signed_meanwhile" && r.estimateEdit ? (mayCopy ? "est.rej.choice.why" : "est.rej.choice.whyOffice") :
   // a refusal we can explain: its own words (outboxRejected REJECT_REASONS)
   r.reason ? rejectReasonKey(r.reason, r.kind) :
   // settings changed by someone else first: not «the module is off» — read again, make the change again (review #374 №3)
   r.kind === "module.saveSettings" ? "sync.rejected.settingsHint" : r.what !== "module" ? "sync.rejected.hint" : canOpen(role, r.href) ? "sync.rejected.moduleHint" : "sync.rejected.moduleHintAsk";
 /** «Открыть» on a refused change: only where this role may go (a module's card for a tech: nowhere — review M5a №3) */
 export const rejectedOpens = (r: Pick<RejectedOp, "href">, role: Role) => canOpen(role, r.href);
+/** the day the phone stops keeping a refused change (30 days after it was refused); null — the time is unreadable (such a record stays) */
+export const rejectedKeepUntil = (at: string): number | null => {
+  const t = Date.parse(at);
+  return Number.isNaN(t) ? null : t + REJECTED_KEEP_MS;
+};
 
 /** #2066 «Клиента нет дома» to plan again: the latest no-show of each job / lead, while nothing happened after it (no
  *  visit of the same job / lead later than it — open, done or cancelled: once a new visit is booked the no-show is
@@ -140,8 +150,11 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
   // a money change the server refused (the store's list — the signed-in person's own): first, the phone showed it as done
   for (const r of extra.rejected ?? []) {
     out.push({
+      // the right to copy is the role's alone (access.canCopyRejectedEstimate looks at the role and his visits, never at the mode), so «cloud» here
+      // gives the same answer as the window's `store.mode` (#2674 Ж2)
       id: `rej-${r.id}`, kind: "rejected", refId: r.id, name: "", label: rejectedLabel(r), params: r.what === "module" ? { count: r.count ?? 0 } : {}, chip: "att.rejectedChip",
-      status: "bad", amountCents: r.amountCents, score: REJECTED_SCORE, href: r.href, ...(r.what === "module" || r.reason ? { hint: rejectedHint(r, role) } : {}),
+      status: "bad", amountCents: r.amountCents, score: REJECTED_SCORE, href: r.href, ...(r.what === "module" || r.reason ? { hint: rejectedHint(r, role, r.estimateEdit ? canCopyRejectedEstimate(db, { role, mode: "cloud", me: db.me }, r.estimateEdit.propertyId, now) : true) } : {}),
+      ...(r.estimateEdit && rejectedKeepUntil(r.at) != null ? { hintUntil: rejectedKeepUntil(r.at)! } : {}),
     });
   }
   // Leads by "whose turn" (docs/14-leads-spec.md §3.2, §7.4): reply · remind · lost or wait? · no step · back from snooze.
