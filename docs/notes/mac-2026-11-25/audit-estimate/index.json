@@ -1,0 +1,146 @@
+[
+ {
+  "state": "est-empty",
+  "theme": "dark",
+  "width": 390,
+  "file": "~/GoRix/notes/audit-estimate/shots/estimate_new_customerId_c2_propertyId_p2__est-empty__dark-390-ru-director__27a2ca3.png",
+  "route": "/estimate/new?customerId=c2&propertyId=p2",
+  "note": "пустая новая смета (c2/p2)"
+ },
+ {
+  "state": "est-empty",
+  "theme": "light",
+  "width": 390,
+  "file": "~/GoRix/notes/audit-estimate/shots/estimate_new_customerId_c2_propertyId_p2__est-empty__light-390-ru-director__27a2ca3.png",
+  "route": "/estimate/new?customerId=c2&propertyId=p2",
+  "note": "пустая новая смета (c2/p2)"
+ },
+ {
+  "state": "est-bottom",
+  "theme": "dark",
+  "width": 390,
+  "file": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-bottom__dark-390-ru-director-s3000__27a2ca3.png",
+  "route": "/estimate/new?id=e6",
+  "note": "прокрутка 3000, капсула «Итого»"
+ },
+ {
+  "state": "est-bottom",
+  "theme": "light",
+  "width": 390,
+  "file": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-bottom__light-390-ru-director-s3000__27a2ca3.png",
+  "route": "/estimate/new?id=e6",
+  "note": "прокрутка 3000, капсула «Итого»"
+ },
+ {
+  "state": "est-line-open",
+  "theme": "dark",
+  "width": 390,
+  "file": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-line-open__dark-390-ru-director__27a2ca3.png",
+  "route": "/estimate/new?id=e6",
+  "note": "позиция l-e6-1 открыта"
+ },
+ {
+  "state": "est-line-open",
+  "theme": "light",
+  "width": 390,
+  "file": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-line-open__light-390-ru-director__27a2ca3.png",
+  "route": "/estimate/new?id=e6",
+  "note": "позиция l-e6-1 открыта"
+ },
+ {
+  "state": "est-menu",
+  "theme": "dark",
+  "width": 390,
+  "file": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-menu__dark-390-ru-director__27a2ca3.png",
+  "route": "/estimate/new?id=e6",
+  "note": "меню «⋯»"
+ },
+ {
+  "state": "est-menu",
+  "theme": "light",
+  "width": 390,
+  "file": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-menu__light-390-ru-director__27a2ca3.png",
+  "route": "/estimate/new?id=e6",
+  "note": "меню «⋯»"
+ },
+ {
+  "state": "est-mid",
+  "theme": "dark",
+  "width": 1280,
+  "file": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-mid__dark-1280-ru-director-s450__27a2ca3.png",
+  "route": "/estimate/new?id=e6",
+  "note": "прокрутка 450"
+ },
+ {
+  "state": "est-mid",
+  "theme": "dark",
+  "width": 390,
+  "file": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-mid__dark-390-ru-director-s450__27a2ca3.png",
+  "route": "/estimate/new?id=e6",
+  "note": "прокрутка 450"
+ },
+ {
+  "state": "est-mid",
+  "theme": "dark",
+  "width": 820,
+  "file": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-mid__dark-820-ru-director-s450__27a2ca3.png",
+  "route": "/estimate/new?id=e6",
+  "note": "прокрутка 450"
+ },
+ {
+  "state": "est-mid",
+  "theme": "light",
+  "width": 390,
+  "file": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-mid__light-390-ru-director-s450__27a2ca3.png",
+  "route": "/estimate/new?id=e6",
+  "note": "прокрутка 450"
+ },
+ {
+  "state": "est-top",
+  "theme": "dark",
+  "width": 1280,
+  "file": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-top__dark-1280-ru-director-s0__27a2ca3.png",
+  "route": "/estimate/new?id=e6",
+  "note": "e6, верх (демо-смета отправлена)"
+ },
+ {
+  "state": "est-top",
+  "theme": "dark",
+  "width": 390,
+  "file": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-top__dark-390-ru-director__27a2ca3.png",
+  "route": "/estimate/new?id=e6",
+  "note": "e6, верх (демо-смета отправлена)"
+ },
+ {
+  "state": "est-top",
+  "theme": "dark",
+  "width": 820,
+  "file": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-top__dark-820-ru-director-s0__27a2ca3.png",
+  "route": "/estimate/new?id=e6",
+  "note": "e6, верх (демо-смета отправлена)"
+ },
+ {
+  "state": "est-top",
+  "theme": "light",
+  "width": 390,
+  "file": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-top__light-390-ru-director__27a2ca3.png",
+  "route": "/estimate/new?id=e6",
+  "note": "e6, верх (демо-смета отправлена)"
+ },
+ {
+  "state": "est-totals-open",
+  "theme": "dark",
+  "width": 390,
+  "file": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-totals-open__dark-390-ru-director-s3000__27a2ca3.png",
+  "route": "/estimate/new?id=e6",
+  "note": "нажата капсула — шторка «Итого»"
+ },
+ {
+  "state": "est-totals-open",
+  "theme": "light",
+  "width": 390,
+  "file": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-totals-open__light-390-ru-director-s3000__27a2ca3.png",
+  "route": "/estimate/new?id=e6",
+  "note": "нажата капсула — шторка «Итого»"
+ }
+]
