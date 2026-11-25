@@ -2,7 +2,7 @@
 
 Продукт: GoRix — CRM/FSM для подрядчиков США любых направлений, работа с телефона (одна рука, на объекте), планшет и десктоп — то же приложение. Языки интерфейса RU/EN/ES; клиент видит документ на своём языке.
 
-Читать: `inventory.md` (что есть сейчас, по коду, с файл:строка), `scenarios.md` (12 сценариев, нажатия сейчас vs Jobber/HCP), `research.md` (как у Jobber/HCP/ServiceTitan/Joist/Markate и Apple — с URL), снимки `shots/` (`shots/index.md`; PNG можно смотреть). Всё в `/Users/yuriisurhuchov/GoRix/notes/review-v2/estimate-audit/`. Код (только чтение): `/Users/yuriisurhuchov/GoRix/design-2344`, читать `git show origin/main:<путь>`. Дизайн-система: `design/naryad-ds/DESIGN-SYSTEM.md`; карта пути и статусы: `docs/15-story-map.md` §4–§5.
+Читать: `inventory.md` (что есть сейчас, по коду, с файл:строка), `scenarios.md` (12 сценариев, нажатия сейчас vs Jobber/HCP), `research.md` (как у Jobber/HCP/ServiceTitan/Joist/Markate и Apple — с URL), снимки `shots/` (`shots/index.md`; PNG можно смотреть). Всё в `~/GoRix/notes/review-v2/estimate-audit/`. Код (только чтение): `~/GoRix/design-2344`, читать `git show origin/main:<путь>`. Дизайн-система: `design/naryad-ds/DESIGN-SYSTEM.md`; карта пути и статусы: `docs/15-story-map.md` §4–§5.
 
 Статусы сметы сейчас: D черновик · S отправлена (в т.ч. «открыл» = `viewedAt`, «истекла» = вычисляется) · AC ждёт подписи компании · A одобрена (подписали обе стороны) · X отказ (только компанией из AC). Нет: удаления, архива, отзыва сметы, дублирования, «отказ клиента», «истекла».
 Роли: director (владелец), dispatcher (офис), sales, tech (мастер).

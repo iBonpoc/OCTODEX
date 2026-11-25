@@ -1,0 +1,21 @@
+01-estimate-builder.cjs [390-dark,390-light,]   expected /Итого \| \$794\.49/ (total)   DK | David Kim | 4512 Ventura Canyon Ave, Sherman Oaks | Название | Позиции | 4 | Материалы | · 1 | $145.56 | Railing bracket | 12 ea × $12.13  
+02-sign-deposit-card.cjs [1280-dark,1280-light,820-dark,820-light,]   locator.waitFor: Timeout 8000ms exceeded.   Call log: 
+04-lead-funnel.cjs [1280-dark,1280-light,820-dark,820-light,]   locator.waitFor: Timeout 8000ms exceeded.   Call log: 
+05-schedule-job.cjs [1280-dark,1280-light,820-dark,820-light,]   locator.waitFor: Timeout 8000ms exceeded.   Call log: 
+11-today-funnel.cjs [1280-dark,1280-light,820-dark,820-light,]   locator.waitFor: Timeout 8000ms exceeded.   Call log: 
+12-tech-day.cjs [1280-dark,1280-light,390-dark,390-light,820-dark,820-light,]   expect failed: checklist visible before work: Чек-лист выезда   4 пункта 
+134-role-switch-tabs.cjs [390-dark,390-light,]   locator.click: Timeout 30000ms exceeded.   Call log: 
+137-safe-areas.cjs [820-dark,820-light,]   expect failed:    landscape 844×390: Главная — the content starts at 245, not 163 
+164-estimate-send-check.cjs [1280-dark,1280-light,820-dark,820-light,]   locator.click: Timeout 30000ms exceeded.   Call log: 
+167-gutters-estimate-stale.cjs [1280-dark,1280-light,820-dark,820-light,]   locator.click: Timeout 30000ms exceeded.   Call log: 
+176-checklist-module-starters.cjs [1280-dark,1280-light,820-dark,820-light,]   locator.waitFor: Timeout 8000ms exceeded.   Call log: 
+18-handoffs-lead-to-deposit.cjs [1280-dark,1280-light,820-dark,820-light,]   locator.waitFor: Timeout 8000ms exceeded.   Call log: 
+197-tech-no-client-link.cjs [1280-dark,1280-light,820-dark,820-light,]   locator.waitFor: Timeout 30000ms exceeded.   Call log: 
+35-estimate-countersign.cjs [1280-dark,1280-light,820-dark,820-light,]   locator.waitFor: Timeout 8000ms exceeded.   Call log: 
+371-company-terms-old-estimate.cjs [390-dark,390-light,]   locator.click: Timeout 30000ms exceeded.   Call log: 
+384-estimate-actions-menu.cjs [1280-dark,1280-light,820-dark,820-light,]   locator.waitFor: Timeout 3000ms exceeded.   Call log: 
+484-licenses-optional.cjs [1280-dark,1280-light,820-dark,820-light,]   locator.click: Timeout 30000ms exceeded.   Call log: 
+56-shell-tabs-menu.cjs [390-dark,390-light,]   expect failed: director: place «Лиды» ✗ 58-company-zone.cjs @390 dark 
+58-company-zone.cjs [390-dark,390-light,]   expect failed: the visit in the Plan on the company's clock: expected /8:30\s*AM/   Сб, 21 ноября · 6 выездов Демо   Ноябрь День Неделя Месяц Пн 9 Вт 10 Ср 11 Чт 12 Пт 13 Сб 14 Вс 15 Пн 16 Вт 17 
+61-more-tab.cjs [390-dark,390-light,]   expect failed: tab «Лиды» ✓ 63-job-screen.cjs @390 dark (2.7s) 
+74-do-not-service.cjs [1280-dark,1280-light,820-dark,820-light,]   locator.click: Timeout 30000ms exceeded.   Call log: 

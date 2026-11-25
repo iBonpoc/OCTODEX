@@ -1,0 +1,17 @@
+422-objects-review-rest.cjs [1280-dark,1280-light,390-dark,390-light,820-dark,820-light,]   locator.innerText: Timeout 30000ms exceeded.   Call log: 
+31-estimate-list-cards.cjs [1280-dark,1280-light,390-dark,390-light,820-dark,820-light,]   locator.scrollIntoViewIfNeeded: Timeout 30000ms exceeded.   Call log: 
+98-deleted-member.cjs [1280-dark,1280-light,820-dark,820-light,]   locator.waitFor: Timeout 8000ms exceeded.   Call log: 
+90-tasks.cjs [1280-dark,1280-light,820-dark,820-light,]   expected /Позвонить про водостоки/ (the task with a time shows in the Plan)   Создать | Главная | Сообщения | План | Лиды | Работы | Клиенты | Звонки | Задачи | Сметы | Счета | Ка 
+62-related-links.cjs [1280-dark,1280-light,820-dark,820-light,]   locator.innerText: Timeout 30000ms exceeded.   Call log: 
+58-company-zone.cjs [1280-dark,1280-light,820-dark,820-light,]   expect failed: «Сегодня» is the company's day: expected /Выезды сегодня/   Создать Главная Сообщения План Лиды Работы Клиенты Звонки Задачи Сметы Счета Каталог Поста� 
+419-toast-lane.cjs [1280-dark,1280-light,820-dark,820-light,]   expect failed: from 820 the last block of the page stands above the toast (last 1683, toast top 832) ✓ 420-header-help-right.cjs @820 light (3.2s) 
+36-nav-wide.cjs [1280-dark,1280-light,820-dark,820-light,]   expect failed: the client's status button is on the client screen ✓ 37-service-categories.cjs @820 dark (7.1s) 
+187-report-crumb-line-qty.cjs [1280-dark,1280-light,820-dark,820-light,]   expect failed: the parent is the list of reports ✓ 189-client-merge.cjs @820 light (6.4s) 
+107-visit-all-day.cjs [1280-dark,1280-light,820-dark,820-light,]   locator.waitFor: Timeout 5000ms exceeded.   Call log: 
+438-forms-line-center.cjs [1280-dark,1280-light,]   locator.waitFor: Timeout 8000ms exceeded.   Call log: 
+430-row-check-no-overlap.cjs [1280-dark,1280-light,]   locator.waitFor: Timeout 8000ms exceeded.   Call log: 
+429-listpanel-more.cjs [1280-dark,1280-light,]   locator.waitFor: Timeout 8000ms exceeded.   Call log: 
+426-invoice-desktop-columns.cjs [1280-dark,1280-light,]   expect failed: 1280: the summary stands in the side column ✓ 428-related-chips.cjs @1280 light (1.6s) 
+158-panel-debts.cjs [1280-dark,1280-light,]   locator.waitFor: Timeout 30000ms exceeded.   Call log: 
+139-money-filters.cjs [390-dark,390-light,]   expect failed: the four periods fit ({"x":289,"y":128,"width":102,"height":36}) ✓ 140-plan-day-accent.cjs @390 light (2.1s) 
+137-safe-areas.cjs [820-dark,820-light,]   expect failed:    landscape 844×390: Главная — the content starts at 163, not 147 
