@@ -1,0 +1,162 @@
+[
+ {
+  "title": "Gutter: новый",
+  "note": "Gutter № 1: «Задаёт все Gutter этого замера»; Размер 5″ по умолчанию, Цвет пуст + «Выберите цвет»; «Ещё» раскрыт: Крепление пусто + «Выберите крепление»",
+  "was": "was-g-new",
+  "now": [
+   "now-g-new",
+   "now-g-new-more"
+  ]
+ },
+ {
+  "title": "Gutter: готовый",
+  "note": "12′ 6 5/16″, High Gloss White (цвет в одну строку), 5″; «Ещё» свёрнут: «Ещё: Hidden Hanger with Screw»",
+  "was": "was-g-ready",
+  "now": [
+   "now-g-ready"
+  ]
+ },
+ {
+  "title": "Gutter: «Ещё» раскрыт",
+  "note": "Крепление / Материал / Толщина / Край крыши; второй кадр — прокручено",
+  "was": "was-g-ready",
+  "now": [
+   "now-g-ready-more",
+   "now-g-ready-more2"
+  ]
+ },
+ {
+  "title": "Gutter: меню «Крепление»",
+  "note": "8 креплений со стенда Berger (K 10–24), список прокручивается",
+  "was": "was-g-ready",
+  "now": [
+   "now-menu-mount-g"
+  ]
+ },
+ {
+  "title": "Gutter: единицы мм",
+  "note": "Одно поле длины в мм, рулетки нет",
+  "was": "was-g-ready",
+  "now": [
+   "now-g-mm"
+  ]
+ },
+ {
+  "title": "Downspout: прямой гладкий",
+  "note": "Низ/Верх «Ничего»; «Ещё» свёрнут: «⚠ Крепление не выбрано»; раскрыт и прокручен",
+  "was": "was-ds",
+  "now": [
+   "now-ds-new-smooth",
+   "now-ds-new-smooth-more",
+   "now-ds-new-smooth-more2"
+  ]
+ },
+ {
+  "title": "Downspout: прямой ребристый",
+  "note": "3 Elbow A; в «Ещё» — Cutoff with Diverter",
+  "was": "was-ds",
+  "now": [
+   "now-ds-new-ribbed",
+   "now-ds-new-ribbed-more",
+   "now-ds-new-ribbed-more2"
+  ]
+ },
+ {
+  "title": "Downspout: круглый",
+  "note": "3″, Elbow/Offset одной строкой каждый; в «Ещё» — Round Wire Strainer",
+  "was": "was-ds",
+  "now": [
+   "now-ds-new-round",
+   "now-ds-new-round-more",
+   "now-ds-new-round-more2"
+  ]
+ },
+ {
+  "title": "Downspout: 2 этажа",
+  "note": "Длина 20 ft · 2 эт. · 2 шт. · 1 эт. = 10 ft одной строкой",
+  "was": null,
+  "now": [
+   "now-ds-new-2floor"
+  ]
+ },
+ {
+  "title": "Downspout: готовый",
+  "note": "Elbow A 2, Offset A 1, Низ Splash Blocks; «Ещё» свёрнут «⚠ Крепление не выбрано»; раскрыт",
+  "was": "was-ds",
+  "now": [
+   "now-ds-ready",
+   "now-ds-ready-more",
+   "now-ds-ready-more2"
+  ]
+ },
+ {
+  "title": "Downspout: «Ещё» при невыбранном креплении",
+  "note": "Свёрнутая строка «Ещё: ⚠ Крепление не выбрано» (кадры: гладкий, 2 этажа, круглый — выше)",
+  "was": null,
+  "now": [
+   "now-ds-ready"
+  ]
+ },
+ {
+  "title": "Downspout: цвет без цвета gutter / с цветом",
+  "note": "Первые два кадра: gutter без цвета → «Выберите цвет gutter» + пояснение; вторые два: «Как у gutter · High Gloss White»; (верх / прокручено)",
+  "was": null,
+  "now": [
+   "now-ds-color-empty",
+   "now-ds-color-empty2",
+   "now-ds-color-set",
+   "now-ds-color-set2"
+  ]
+ },
+ {
+  "title": "Downspout: меню «Верх»",
+  "note": "Гладкий: Funnel + 3 головы; ребристый добавляет Square Corrugated “Y” Funnel (только K 43); круглый — без Y (HR 29/38/39)",
+  "was": null,
+  "now": [
+   "now-menu-top",
+   "now-menu-top-round"
+  ]
+ },
+ {
+  "title": "Меню угла Elbow",
+  "note": "30–90° (поле Elbow A)",
+  "was": null,
+  "now": [
+   "now-menu-angle"
+  ]
+ },
+ {
+  "title": "Меню Offset",
+  "note": "1 · 2 · 4″ · Свой…",
+  "was": null,
+  "now": [
+   "now-menu-offset"
+  ]
+ },
+ {
+  "title": "Меню цвета",
+  "note": "«Как у gutter · …», «Без покраски» (перечёркнутый кружок), цвета Berger с обводкой образцов; прокручено; без «Как у gutter» при пустом цвете gutter",
+  "was": null,
+  "now": [
+   "now-menu-color",
+   "now-menu-color-empty"
+  ]
+ },
+ {
+  "title": "Меню «Крепление к стене»",
+  "note": "Шторка снизу (не поповер): квадратный K 17–28; круглый только HR 16, 17, 24, 25, 26. Меню «Верх» и «Крепление» gutter — тоже шторки",
+  "was": null,
+  "now": [
+   "now-menu-wall",
+   "now-menu-wall-round"
+  ]
+ },
+ {
+  "title": "Меню «Низ»",
+  "note": "Ничего · Splash Blocks · Flex-A-Spout · В землю · На нижнюю крышу",
+  "was": null,
+  "now": [
+   "now-menu-bottom"
+  ]
+ }
+]
