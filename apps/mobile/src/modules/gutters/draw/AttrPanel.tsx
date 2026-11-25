@@ -35,7 +35,7 @@ import { DENOM, fmtLen, fracLabel, LEN_UNITS, MM_OF, MM_PER_IN, type LenFormat, 
 import { storyOf } from "../canvas/scene";
 import { dsLengthLine } from "../canvas/dsLength";
 import type { GutterRulesOverride } from "@octo/estimating-engine";
-import { ELBOW_ANGLES, offsetRow, offsetsPatch, offsetStylesOf, rectElbowAngle, rectElbowPatch, roundElbow, roundElbowPatch, type OffsetStyle } from "../canvas/fittingRows";
+import { ELBOW_ANGLES, offsetRest, offsetRow, offsetsPatch, offsetStylesOf, rectElbowAngle, rectElbowPatch, roundElbow, roundElbowPatch, roundElbowRest, type OffsetStyle } from "../canvas/fittingRows";
 import { drawnLengthIn, type CornerChoice, type DrawnDownspout, type DrawnRun, type FoundCorner } from "../geometry";
 
 const k = (s: string) => `mod.gutters.attr.${s}` as DictKey;
@@ -376,11 +376,11 @@ function Choice<K extends string>({ label, testID, items, value, onChange, offer
 }
 
 /** 2–3 fields side by side (Размер · Этаж, Вид · Размер): each takes its share of the row */
-function FieldRow({ children, weights }: { children: React.ReactNode; /** each field's share of the row (v43: Вид 2.2 · Размер .85 · Этаж .85 — «Прямой ребристый» is read whole); equal by default */ weights?: number[] }) {
+function FieldRow({ children }: { children: React.ReactNode }) {
   const kids = Children.toArray(children).filter(Boolean);
   return (
     <RowView style={{ gap: space[2], alignItems: "flex-start" }}>
-      {kids.map((ch, i) => <View key={i} style={{ flex: weights?.[i] ?? 1, minWidth: 0 }}>{ch}</View>)}
+      {kids.map((ch, i) => <View key={i} style={{ flex: 1, minWidth: 0 }}>{ch}</View>)}
     </RowView>
   );
 }
@@ -503,9 +503,9 @@ export function RunAttrsView({
 function CountRow({ label, testID, valueTestID, items, value, onValue, qty, onQty, max }: { label: string; testID: string; valueTestID: string; items: PickerItem<string>[]; value: string; onValue: (v: string) => void; qty: number; onQty: (n: number) => void; max: number }) {
   return (
     <RowView style={{ gap: space[2], alignItems: "center" }}>
-      <View style={{ width: component.countRowLabelW }}><T v="body" w="semibold" numberOfLines={2}>{label}</T></View>
+      <View style={{ width: component.countRowLabelW }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><T v="body" w="semibold" numberOfLines={2}>{label}</T></View>
       <View style={{ flex: 1 }}><SelectField bare label={label} testID={valueTestID} items={items} value={value} onChange={onValue} /></View>
-      <View testID={testID}><Stepper hideLabel label={label} value={qty} min={0} max={max} onChange={onQty} /></View>
+      <View testID={testID}><Stepper hideLabel compact label={label} value={qty} min={0} max={max} onChange={onQty} /></View>
     </RowView>
   );
 }
@@ -538,13 +538,18 @@ function RoundElbow({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<
   const [pend, setPend] = useState(cur.style);
   useEffect(() => { if (cur.qty > 0) setPend(cur.style); }, [cur.qty, cur.style]);
   const style = cur.qty > 0 ? cur.style : pend;
+  const rest = roundElbowRest(ds);
   return (
-    <CountRow
-      label={t(k("elbowRowRound"))} testID="attr-elbow-round" valueTestID="attr-elbow-round-angle"
-      items={angleItems(style)} value={style}
-      onValue={(v) => (cur.qty > 0 ? onAttrs(roundElbowPatch(ds, { style: v })) : setPend(v))}
-      qty={cur.qty} onQty={(n) => onAttrs(roundElbowPatch(ds, { style, qty: n }))} max={12}
-    />
+    <>
+      <CountRow
+        label={t(k("elbowRowRound"))} testID="attr-elbow-round" valueTestID="attr-elbow-round-angle"
+        items={angleItems(style)} value={style}
+        onValue={(v) => (cur.qty > 0 ? onAttrs(roundElbowPatch(ds, { style: v })) : setPend(v))}
+        qty={cur.qty} onQty={(n) => onAttrs(roundElbowPatch(ds, { style, qty: n }))} max={12}
+      />
+      {/* an old drawing may carry other angles: the row does not rewrite them, it says them (rule 16) */}
+      {rest.length ? <View testID="attr-elbow-rest"><T v="caption" tone="mut">{t(k("fittingRest"), { list: rest.map((e) => `${elbow(e.style)} × ${e.qty}`).join(", ") })}</T></View> : null}
+    </>
   );
 }
 
@@ -590,7 +595,7 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, run, forNew, no,
   const head = ds.head ?? (ds.funnel ? "funnel" : "none");
   const runStory = storyOf(run?.story);
   const ln = dsLengthLine(ds, runStory, rulesOver);
-  const lenText = ln.own ? t(k("dsLenOwn"), { ft: ln.ft }) : ln.stories === 0 ? t(k("dsLenRoof")) : ln.pieces > 1 ? t(k("dsLenMany"), { ft: ln.ft, n: ln.pieces, stick: ln.stickFt }) : t(k("dsLenStory"), { ft: ln.ft, n: ln.stories });
+  const lenText = ln.own ? t(k("dsLenOwn"), { ft: ln.ft }) : ln.stories === 0 ? t(k("dsLenRoof")) : t(k("dsLenStory"), { ft: ln.ft });
   return (
     <>
       {forNew ? null : <View testID="attr-title"><T v="heading" w="semibold">{no ? t(k("dsNo"), { n: no }) : t(k("ds"))}</T></View>}
@@ -647,6 +652,8 @@ function OffsetRow({ ds, style, onAttrs }: { ds: DrawnDownspout; style: OffsetSt
   useEffect(() => { if (row.qty > 0) setPend(row.lengthIn); }, [row.qty, row.lengthIn]);
   const [own, setOwn] = useState(std ? "" : String(row.lengthIn));
   const [ownOpen, setOwnOpen] = useState(!std);
+  const [ownBad, setOwnBad] = useState(false);
+  const rest = offsetRest(ds, style); // the other lengths of an old drawing: not rewritten (rule 16)
   const len = row.qty > 0 ? row.lengthIn : pend;
   const put = (lengthIn: number) => (row.qty > 0 ? onAttrs(offsetsPatch(ds, style, { lengthIn })) : setPend(lengthIn));
   const sfx = style === "A" ? "" : `-${style}`; // the A row (the only one of a round downspout) keeps the ids it always had
@@ -665,14 +672,15 @@ function OffsetRow({ ds, style, onAttrs }: { ds: DrawnDownspout; style: OffsetSt
         qty={row.qty} onQty={(qty) => onAttrs(offsetsPatch(ds, style, { qty, lengthIn: len }))} max={8}
       />
       {ownOpen ? (
-        <RowView style={{ gap: space[2] }}>
-          <View style={{ width: component.qtyFieldW }} testID={`attr-offset${sfx}-own`}>
-            {/* read at once, like the gutter's length: a good number (up to 24″, 1/16″) goes in; nothing else does */}
-            <TextField type="number" value={own} onChangeText={(v) => { setOwn(v); const n = Math.round(Number(v) * DENOM) / DENOM; if (n > 0 && n <= 24) put(n); }} label={t(k("offsetOwn"))} />
+        <View style={{ gap: space[1] }}>
+          <View testID={`attr-offset${sfx}-own`}>
+            {/* read at once, like the gutter's length: a good number (up to 24″, 1/16″) goes in; anything else says so and goes in nowhere */}
+            <TextField type="number" value={own} suffix={t(k("in"))} onChangeText={(v) => { setOwn(v); const n = Math.round(Number(v) * DENOM) / DENOM; const ok = v.trim() !== "" && n > 0 && n <= 24; setOwnBad(!ok); if (ok) put(n); }} label={t(k("offsetOwn"))} />
           </View>
-          <T v="body" tone="mut">{t(k("in"))}</T>
-        </RowView>
+          {ownBad ? <View testID={`attr-offset${sfx}-own-bad`}><StatusChip status="warn" label={t(k("badOffset"))} soft /></View> : null}
+        </View>
       ) : null}
+      {rest.length ? <View testID={`attr-offset${sfx}-rest`}><T v="caption" tone="mut">{t(k("fittingRest"), { list: rest.map((o) => `${inch(String(o.lengthIn))} × ${o.qty}`).join(", ") })}</T></View> : null}
     </View>
   );
 }

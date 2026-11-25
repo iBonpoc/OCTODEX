@@ -2,7 +2,8 @@
  * e2e 170 — водосток на холсте и продолжение линии (просьба основателя 08.11; docs/specs/33-gutters-canvas.md П20.11).
  * Every view.
  * - a downspout put on a gutter: «D1» inside its mark; over it the fittings in one word (a corrugated one by default 3 × A → «AAA»; a plain one its 3 bends on site → «AAA» too, «Расход v2»);
- * - elbows by style in the panel: B +1 → «AAAB», A −1 → «AAB»;
+ * - elbows by style in the panel: B +1 → «AAAB», A −1 → «AAB»; v43: «Колено A · 60° ⌄ · − n +» (the angle is written only when it is not 75°),
+ *   «Смещение B» is its own row, the downspout's own storey («Этаж») and the height line under the row («Высота 10 ft» / «Высота 20 ft»);
  * - dragged by the finger, it slides along its run (the store's atIn changes, it stays on the run);
  * - «Желоб»: a plain drag from a free end → a new gutter from that end (a corner). A LONG press on an end takes it instead
  *   (docs/specs/33-gutters-canvas-ideas.md П35, founder 12.11: replaces «a long press on an end = a new line» of 08.11; e2e 292, 295).
@@ -75,12 +76,15 @@ exports.run = async (h) => {
   await pickAttr(p, "attr-elbow-A-angle", "60");
   await waitFor(async () => JSON.stringify((await live("downspout"))[0]?.attrs?.elbows) === JSON.stringify([{ style: "A", qty: 2, angle: 60 }, { style: "B", qty: 1 }]), "the store: A 2 at 60°, B 1 at 75° (no angle written)");
   await tid("attr-offset-B-qty").getByRole("button", { name: /\+1$/ }).click();
+  // the values of the count rows are read whole on every width (K2 #2662: «Свой» was cut to «С…» in the 360 column)
+  const cuts = await p.evaluate(() => [...document.querySelectorAll('[data-testid="attr-elbow-A-angle-button"], [data-testid="attr-offset-B-len-button"]')].filter((b) => b.getBoundingClientRect().width > 0).map((b) => [b, ...b.querySelectorAll("*")].some((n) => n.scrollWidth > n.clientWidth + 1)));
+  h.expect(cuts.length >= 2 && !cuts.some(Boolean), "a count row's value is not cut («75°», «2″» whole)");
   await waitFor(async () => JSON.stringify((await live("downspout"))[0]?.attrs?.offsets) === JSON.stringify([{ lengthIn: 2, qty: 1, style: "B" }]), "the store: one 2″ offset of style B");
   // v43 PR D: the downspout's own storey — the pipe's length follows it; written only when it differs from the gutter's
-  h.expect(/10 ft/.test(await tid("attr-ds-length-line").innerText()), "the line under the row: 10 ft on the gutter's storey");
+  await waitFor(async () => /\b10 ft\b/.test(await tid("attr-ds-length-line").innerText()), "the line under the row: 10 ft on the gutter's storey");
   await pickAttr(p, "attr-ds-story", "2");
   await waitFor(async () => (await live("downspout"))[0]?.attrs?.story === 2, "the store: the downspout's own storey 2");
-  await waitFor(async () => /20 ft/.test(await tid("attr-ds-length-line").innerText()), "the line: 20 ft — 2 pieces");
+  await waitFor(async () => /\b20 ft\b/.test(await tid("attr-ds-length-line").innerText()), "the line: 20 ft (by the storeys, no sticks)");
   await pickAttr(p, "attr-ds-story", "1");
   await waitFor(async () => (await live("downspout"))[0]?.attrs?.story === undefined, "the store: back to the gutter's storey — no key written");
   await h.shot("ds");

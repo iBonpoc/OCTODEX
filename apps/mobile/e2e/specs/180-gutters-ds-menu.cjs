@@ -5,7 +5,7 @@
  * - a 2nd storey gutter and a 3rd storey one from its end: no corner, a cap at each end (four);
  * - a downspout put → its menu opens by itself; size and colour are fields (#2412 G1; the colour under «Ещё»); the colour is «Как у желоба»;
  *   the gutter turns black → the downspout's colour follows; «Без покраски» is one of the colours (no painted/bare pair);
- * - offsets: 1, then 4″ (the stocked ones are 1, 2, 4″), then its own 2½″;
+ * - offsets: 1, then 4″ (the stocked ones are 1, 2, 4″), then its own 2½″ (read at once, no «Применить»; «Свой» is read whole on every width);
  * - the grip: while dragged it says where to let go.
  * Finds things by testID / id; waits on what it checks.
  */
@@ -87,6 +87,8 @@ exports.run = async (h) => {
   await waitFor(async () => JSON.stringify((await els()).find((e) => e.kind === "downspout")?.attrs.offsets) === JSON.stringify([{ lengthIn: 4, qty: 1 }]), "one 4″ offset");
   await pickIn("attr-offset-len", "own");
   await tid("attr-offset-own").locator("input").fill("2.5");
+  const ownCut = await p.evaluate(() => [...document.querySelectorAll('[data-testid="attr-offset-len-button"]')].filter((b) => b.getBoundingClientRect().width > 0).map((b) => [b, ...b.querySelectorAll("*")].some((n) => n.scrollWidth > n.clientWidth + 1)));
+  h.expect(ownCut.length >= 1 && !ownCut.some(Boolean), "«Свой» is read whole in the value field (K2 #2662)");
   await waitFor(async () => JSON.stringify((await els()).find((e) => e.kind === "downspout")?.attrs.offsets) === JSON.stringify([{ lengthIn: 2.5, qty: 1 }]), "its own 2½″ offset");
   await h.shot("ds-menu");
   await closePanel();

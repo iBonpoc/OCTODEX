@@ -32,10 +32,10 @@ describe("the storey field of the window", () => {
 });
 
 describe("the company's rules (the window says what the estimate counts)", () => {
-  it("a storey of 9 ft: 9 ft, and 2 storeys 18 ft in 2 sticks of the company's stick length", () => {
-    expect(dsLengthLine(ds(), 1, { storyHeightIn: 108 })).toMatchObject({ ft: 9, pieces: 1 });
-    expect(dsLengthLine(ds(), 2, { storyHeightIn: 108 })).toMatchObject({ ft: 18, pieces: 2 });
-    expect(dsLengthLine(ds(), 2, { storyHeightIn: 108, dsStickIn: 96 })).toMatchObject({ ft: 18, pieces: 3, stickFt: 8 });
+  it("a storey of 9 ft: 9 ft, and 2 storeys 18 ft; the window tells no sticks (the estimate adds the extension and the bends, then rounds up)", () => {
+    expect(dsLengthLine(ds(), 1, { storyHeightIn: 108 })).toMatchObject({ ft: 9 });
+    expect(dsLengthLine(ds(), 2, { storyHeightIn: 108 })).toMatchObject({ ft: 18 });
+    expect(Object.keys(dsLengthLine(ds(), 2, { storyHeightIn: 108 })).sort()).toEqual(["ft", "own", "stories"]);
   });
   it("it is what the engine counts with the same rules (minus its extension)", () => {
     const over = { storyHeightIn: 108 };
