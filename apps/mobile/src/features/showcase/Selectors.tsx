@@ -99,7 +99,7 @@ export function SelectorsSection() {
       <Card>
         <T v="heading">{t("ds.count.title")}</T>
         <T v="caption" tone="mut">{t("ds.count.hint")}</T>
-        {/* a part's count row (Gutters windows, DS §12.14): the name on the left, the value in the field, the count — no word of its own */}
+        {/* a part's count row (a module's property windows, DS §12.14): the name on the left, the value in the field, the count — no word of its own */}
         <View testID="showcase-count-row" style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
           <View style={{ width: component.countRowLabelW }}><T v="body" w="semibold" numberOfLines={2}>{t("ds.count.name")}</T></View>
           <View style={{ flex: 1 }}><SelectField bare testID="showcase-count-angle" label={t("ds.count.name")} value={angle} items={["30", "45", "60", "75", "90"].map((a) => ({ key: a, label: `${a}°` }))} onChange={setAngle} /></View>
