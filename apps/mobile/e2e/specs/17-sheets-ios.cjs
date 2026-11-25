@@ -53,11 +53,10 @@ exports.run = async (h) => {
   h.expect((await h.sheet().getByRole("button", { name: "Продолжить правку" }).count()) === 1, "third button «Продолжить правку»");
   h.expect((await h.sheet().getByRole("button", { name: "Отмена", exact: true }).count()) === 0, "no «Отмена» in the question");
   await h.sheet().getByRole("button", { name: "Продолжить правку" }).click();
-  await p.waitForTimeout(400);
+  await h.sheet().getByRole("button", { name: "Продолжить правку" }).waitFor({ state: "hidden", timeout: 3000 });
   h.expect(await sheetOpen(), "«Продолжить правку» keeps the sheet open");
   h.expect((await phone().inputValue()) === "(818) 555-0199", "the edit is kept");
   await h.sheet().getByRole("button", { name: "Закрыть" }).last().click();
-  await p.waitForTimeout(300);
   await h.expectText(/Сохранить изменения\?/, "unsaved question again");
   await h.sheet().getByRole("button", { name: "Не сохранять" }).click();
   await p.waitForTimeout(500);
