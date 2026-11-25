@@ -87,7 +87,7 @@ export function ButtonsSection() {
       {/* ButtonPair (#2350): two short labels — a row of halves; a label that does not fit its half — the column, the main one first */}
       <Card>
         <ButtonPair testID="showcase-btn-pair" main={{ label: t("ds.btn.primary"), icon: "check", onPress: press }} second={{ label: t("ds.btn.secondary"), variant: "secondary", onPress: press }} />
-        <ButtonPair testID="showcase-btn-pair-long" main={{ label: t("ds.btn.primaryNote"), onPress: press }} second={{ label: t("ds.btn.ghost"), variant: "ghost", onPress: press }} />
+        <ButtonPair testID="showcase-btn-pair-long" main={{ label: t("ds.btn.pairLong"), onPress: press }} second={{ label: t("ds.btn.ghost"), variant: "ghost", onPress: press }} />
       </Card>
       <Card>
         <T v="heading">{t("ds.btn.kinds")}</T>
@@ -116,7 +116,7 @@ export function ButtonsSection() {
             <IconButton icon="phone" label={t("ds.btn.iconButton")} onPress={press} />
             <T v="caption" tone="mut">{`component.dockBtn ${component.dockBtn}`}</T>
           </View>
-          <View testID="showcase-btn-iconbutton-active" style={{ gap: space[1] }}>
+          <View testID="showcase-btn-iconbutton-active" style={{ gap: space[1], flex: 1 }}>
             <IconButton icon="star" label={t("ds.btn.iconButtonActive")} active={active} onPress={() => { setActive((v) => !v); press(); }} />
             <T v="caption" tone="mut">{t("ds.btn.toggle")}</T>
           </View>

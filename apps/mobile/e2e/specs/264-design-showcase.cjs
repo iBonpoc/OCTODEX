@@ -24,13 +24,8 @@ exports.run = async (h) => {
   for (const id of TOKENS) h.expect((await p.getByTestId("showcase-sections-tokens").getByTestId(`showcase-row-${id}`).count()) === 1, `row ${id} is in the tokens group`);
   h.expect((await p.getByTestId("showcase-sections").getByTestId("showcase-row-base").count()) === 0, "the tokens are not among the parts");
 
-  // #2745: the theme switch of the showcase changes the app's theme (the same stored choice as in Settings)
-  const other = h.layout.theme === "dark" ? "Светлая" : "Тёмная";
-  await vis("showcase-theme").getByText(other, { exact: true }).click();
-  const want = h.layout.theme === "dark" ? "light" : "dark";
-  await p.waitForFunction((th) => JSON.parse(localStorage.getItem("octo.theme.v1") || "null") === th, want, { timeout: 5000 });
-  await vis("showcase-theme").getByText(h.layout.theme === "dark" ? "Тёмная" : "Светлая", { exact: true }).click();
-  await p.waitForFunction((th) => JSON.parse(localStorage.getItem("octo.theme.v1") || "null") === th, h.layout.theme, { timeout: 5000 });
+  // #2745: the theme field on the first screen (DS §9 А16 — a stored value is a field «Тема ⌄»)
+  h.expect((await vis("showcase-theme").getByText("Тема", { exact: true }).count()) === 1, "the first screen has the field «Тема»");
 
   // a row opens its screen, «Назад» returns
   await vis("showcase-row-buttons").getByText("Кнопки", { exact: true }).click();
@@ -48,7 +43,12 @@ exports.run = async (h) => {
   const ok = await p.getByTestId("token-themes.status.ok.text").locator("xpath=../..").innerText();
   h.expect(/#[0-9A-Fa-f]{6}/.test(ok), `themes.status.ok.text shows a colour (${ok.replace(/\n/g, " ")})`);
   h.expect(/Только для модуля ниши/.test(await h.text()), "the niche module's own tokens carry their note");
-  h.expect((await p.getByTestId("showcase-theme").count()) === 1, "a section has the theme switch too");
+  // #2745: the header's sun / moon turns the other theme on in one tap (the same stored choice as Settings), and back
+  const want = h.layout.theme === "dark" ? "light" : "dark";
+  await vis("showcase-theme-toggle").click();
+  await p.waitForFunction((th) => JSON.parse(localStorage.getItem("octo.theme.v1") || "null") === th, want, { timeout: 5000 });
+  await vis("showcase-theme-toggle").click();
+  await p.waitForFunction((th) => JSON.parse(localStorage.getItem("octo.theme.v1") || "null") === th, h.layout.theme, { timeout: 5000 });
   // #2745 (#2741 п.3): four colours as a value used to squeeze the name into a column of letters — the name stays one line
   const name = p.getByTestId("token-themes.drawing.story").locator("visible=true").first();
   const box = await name.boundingBox();

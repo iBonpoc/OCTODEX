@@ -21,8 +21,9 @@ export function flatten(value: unknown, path = ""): [string, string | number][] 
   return [[path, value as string | number]];
 }
 
-/** a value longer than this many characters stands under the token's name, not beside it (#2741 п.3) */
-const LONG_VALUE = 12;
+/** the name and the value of a token, together longer than this many characters, do not fit one row at 390: the value stands
+ *  under the name, not beside it (#2741 п.3; design-reviewer 25.11: a count of the value alone moved short rows too) */
+const ROW_CHARS = 44;
 
 /** a niche module's own tokens (rule 2 exceptions): the drawing canvas storeys, the tape's mark */
 const MODULE_ONLY = /^(drawing|tape)\b|\.(drawing|tape)\b/;
@@ -48,7 +49,7 @@ function Sample({ group, path, value }: { group: string; path: string; value: st
   // #2741 п.3: a long value (four colours, a font file) took the row and broke the token's name letter by letter —
   // such a value goes on a line of its own under the name, the name keeps the whole width
   const shown = String(value);
-  const long = shown.length > LONG_VALUE;
+  const long = `${group}.${path}`.length + shown.length > ROW_CHARS;
   return (
     <RowView style={{ paddingVertical: space[1] }} >
       <View style={{ width: space[8], alignItems: "flex-start" }}>{sample}</View>
