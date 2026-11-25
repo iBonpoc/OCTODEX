@@ -8,6 +8,7 @@
  * Business rules are only called: money through the engine (clientMoneyOf, contractStatement in nextStep), rights (canSeeGateCode,
  * canSeeClientMoney), statuses (invoiceChip, estView, jobStatusView, leadStatusView), the stores' mutations with «Отменить».
  */
+import { qv } from "@/features/qdraft/qv";
 import { useState, type ReactElement, type ReactNode } from "react";
 import { Linking, View } from "react-native";
 import { router } from "expo-router";
@@ -249,6 +250,12 @@ export function ClientOverview({ c, f, onSection, withNow }: {
           ) : null}
           {ahead.map((v) => aheadRow(v))}
         </ListGroup>
+        {/* ЧЕРНОВИК #2536 (а): «Ответственный» — одна строка; только в компании больше одного человека */}
+        {qv() === "a" && db.members.filter((m) => m.kind !== "sub").length > 1 ? (
+          <ListGroup testID="client-owner-group">
+            <GroupRow testID="client-owner" lead={{ icon: "user" }} title="Ответственный" value={db.members.find((m) => m.id === db.me)?.name ?? ""} valueMark chevron onPress={() => undefined} />
+          </ListGroup>
+        ) : null}
       </GroupedList>
       {(() => {
         // only the tiles that have something to say; a lone one is dropped (its line is in the sections)
@@ -727,7 +734,9 @@ export function ClientLog({ c, f }: { c: Customer; f: ClientFacts }) {
   const ago = useAgo();
   const { db, r, office } = f;
   const [taskEdit, setTaskEdit] = useState<TaskDraft | null>(null);
-  const feed = clientHistory(db, c.id, f.role).filter((h) => h.icon !== "note");
+  const feed0 = clientHistory(db, c.id, f.role).filter((h) => h.icon !== "note");
+  // ЧЕРНОВИК #2536 (б): «Клиент добавлен» — последней (самой старой) записью Истории, одна запись (дата — данные черновика)
+  const feed: HistoryItem[] = qv() === "b" ? [...feed0, { ...feed0[0]!, id: "q-added", icon: "user", title: "q.clientAdded" as never, detail: "12 мар. 2025 · источник Google", cents: undefined, href: undefined, at: "2025-03-12T18:00:00.000Z" }] : feed0;
   // the feed by day: «Сегодня», «18 нояб.»
   const days: [string, HistoryItem[]][] = [];
   for (const h of feed) {
@@ -771,7 +780,7 @@ export function ClientLog({ c, f }: { c: Customer; f: ClientFacts }) {
                 key={h.id}
                 compact={!h.detail}
                 lead={{ icon: h.icon }}
-                title={t(h.title)}
+                title={(h.title as string) === "q.clientAdded" ? "Клиент добавлен" : t(h.title)}
                 subtitle={h.detail}
                 value={h.cents !== undefined ? money(h.cents) : undefined}
                 onPress={h.href ? () => router.push(h.href as never) : undefined}

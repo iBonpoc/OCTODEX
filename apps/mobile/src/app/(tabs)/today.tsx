@@ -1,3 +1,4 @@
+import { qv } from "@/features/qdraft/qv";
 import { useMemo } from "react";
 import { Linking, Platform, View } from "react-native";
 import { router } from "expo-router";
@@ -272,6 +273,20 @@ export default function Today() {
           <StatTile testID="tile-received" icon="trend" dense label={t("proto.home.tile.received")} value={moneyWhole(got.cents)} unit={got.count ? tn("px1.payN", got.count) : undefined} onPress={() => router.push("/figures/received?period=today")} />
         </StatGrid>
       </ListGroup>
+      {/* ЧЕРНОВИК #568 (`?qv=a`): аванс без счёта — одна строка под плитками (сумма не в «Получено») */}
+      {qv() === "a"
+        ? (db.advances ?? []).filter((a) => a.needsReview).slice(0, 1).map((a) => (
+            <ListGroup key={a.id} testID="today-advance">
+              <GroupRow
+                lead={{ icon: "info" }}
+                title={`Без счёта · ${moneyWhole(a.amountCents)}`}
+                subtitle={`${db.customers.find((x) => x.id === a.customerId)?.name ?? ""} · зачесть или вернуть`}
+                chevron
+                onPress={() => router.push(`/receipt/${a.id}`)}
+              />
+            </ListGroup>
+          ))
+        : null}
       <ListGroup title={t("proto.home.crews")} all={{ label: t("plan.title"), onPress: () => router.push("/plan"), testID: "crew-plan" }} testID="today-crews">
         {crewRows}
       </ListGroup>

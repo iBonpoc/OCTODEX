@@ -16,8 +16,8 @@ export const NO_TAB_BAR = [
   "auth/company", "auth/invite", "auth/sign-in", "auth/terms", "auth/trade",
   // a catalog item is a form («Новая позиция» / edit, «Сохранить»): a tab would drop what is not saved (review #274)
   "catalog/[id]",
-  // draft only (not for merge): question mock-ups of screens that have no tab bar
-  "qdraft/q2531-a", "qdraft/q2531-b", "qdraft/q1832-a", "qdraft/q1832-b", "qdraft/q586-a", "qdraft/q586-b", "qdraft/q2364-a", "qdraft/q2364-b", "qdraft/q2364-c", "qdraft/q2533-a", "qdraft/q2533-b",
+  // draft only (not for merge, #2549): «Обновить прайс» — a form with its ActionBar, as catalog/[id]
+  "catalog/price-update",
   // founder 21.11 (#2350): an object's card keeps the tab bar — its next step lives in the «Сейчас» card at the top, no pinned slab
   "client/edit", "client/import",
   "company/[section]", "company/schedule",

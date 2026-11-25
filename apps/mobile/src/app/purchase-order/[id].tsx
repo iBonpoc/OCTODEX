@@ -27,6 +27,8 @@ import { Card, Divider, Empty, ListRow, RowView, Screen } from "@/ui/surfaces";
 import { NotFound } from "@/ui/emptyStates";
 import { localUndo } from "@/data/undo";
 import { StatusNote } from "@/ui/statusNote";
+import { qv } from "@/features/qdraft/qv";
+import { GroupRow, ListGroup } from "@/ui/groupedList";
 
 export default function PurchaseOrderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -87,6 +89,8 @@ export default function PurchaseOrderScreen() {
     setTouched(false);
     if (isNew) router.replace(`/purchase-order/${o.id}`);
   };
+  // ЧЕРНОВИК #586 (`?qv=a`): «Отправить поставщику» сначала спрашивает, как отправить
+  const [howSend, setHowSend] = useState(false);
   const send = () => {
     // one tap is one send (review SUP2-б №2)
     if (sending.current) return;
@@ -214,7 +218,7 @@ export default function PurchaseOrderScreen() {
             icon="send"
             full
             disabled={!o.supplierId || !o.lines.length || dateBad}
-            onPress={send}
+            onPress={qv() === "a" ? () => setHowSend(true) : send}
           />
         </View>
       ) : null}
@@ -267,6 +271,15 @@ export default function PurchaseOrderScreen() {
           setPickItem(false);
         }}
       />
+      <Sheet visible={howSend} onClose={() => setHowSend(false)} title="Как отправить заказ?">
+        <View testID="po-how-send">
+          <ListGroup>
+            <GroupRow lead={{ icon: "invoice" }} title="Отправить PDF-заказ" subtitle="Почтой, в сообщении или файлом" onPress={() => { setHowSend(false); send(); }} testID="po-how-pdf" />
+            <GroupRow lead={{ icon: "sms" }} title="Отправить текстом" subtitle="Все позиции одним сообщением" onPress={() => setHowSend(false)} testID="po-how-text" />
+            {sup?.phone ? <GroupRow lead={{ icon: "phone" }} title="Позвонить поставщику" subtitle={`${sup.phone} · после звонка спросим «Заказ принят?»`} onPress={() => setHowSend(false)} testID="po-how-call" /> : null}
+          </ListGroup>
+        </View>
+      </Sheet>
       <Sheet visible={askCancel} onClose={() => setAskCancel(false)} title={t("po.cancel")}>
         <View style={{ gap: space[3] }}>
           <T v="body">{t("po.cancelAsk")}</T>

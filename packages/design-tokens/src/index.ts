@@ -324,7 +324,7 @@ export const component = {
   /* ---- prototype v2 (docs/design/BUILD-SPEC.md §1, BUILD-PLAN §1 поток А; approved by the lead №21, 21.11.2026) ---- */
   /** GroupedList / ListRow: a row from `h` 56 (initials 36 · title 15 · line 13); separators start `inset` 64 from the left (past the initials) */
   /** `timeW` — the hour column of a row («8:30», as in the Plan; GroupRow `lead={{ time }}`) */
-  listRow: { h: 56, inset: 64, timeW: 52 },
+  listRow: { h: 56, inset: 64, timeW: 52, /** ЧЕРНОВИК #2364: варианты плотной строки сметы */ dense52: 52, dense48: 48 },
   /** StatTile (visual v2): two in a row `h` 112 (figure 26), three in a row `hSm` 92 (figure 18); the icon `glyph` 15 in a circle `icon` 28
    *  top left, the word 12 over the figure, the unit 12 paler; one tile of a screen may be the yellow one */
   statTile: { h: 112, hSm: 92, icon: 28, glyph: 18 },

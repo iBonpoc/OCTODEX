@@ -1,3 +1,4 @@
+import { belowMinDraft, qv } from "@/features/qdraft/qv";
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { canSeeClientLink } from "@/features/estimateSign";
 import { Platform, View, type ViewStyle } from "react-native";
@@ -1030,7 +1031,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const firstLine = !signed && !hasContent(doc);
   const addFirst = () => (db.catalog.length ? openCatalog() : addNew());
   // #2387 (CRM review: «одни слова — два разных действия»): the empty estimate's step says what it does — «Из каталога» when there is one
-  const step: MainAction = firstLine ? { label: db.catalog.length ? t("px3.est.fromCatalog") : t("px3.est.newLine"), onPress: addFirst, testID: "est-bar-add" } : { label: t("proto.est.done"), onPress: () => void save(false), testID: "ue-save" };
+  let step: MainAction = firstLine ? { label: db.catalog.length ? t("px3.est.fromCatalog") : t("px3.est.newLine"), onPress: addFirst, testID: "est-bar-add" } : { label: t("proto.est.done"), onPress: () => void save(false), testID: "ue-save" };
   // «Итого ˅ $…» (DS §8.9, #1362): a press opens what the total is made of (a sheet over the bar, not a plate growing under the thumb)
   // visual v2 №5: «Итого ⌄ $772.36 налог $14.52» — the sum with cents (the engine's fmtUsd), the tax after it when there is one
   // founder 21.11 (С5: «шторку убрать, разбор суммы только в карточке внизу», #2387): the bar's «Итого» is a figure, not a button —
@@ -1050,7 +1051,10 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // #2363 q72 (founder 21.11, вариант А): scrolled down, the «Итого» card folds into the capsule on the right; up 8 pt, the top, or a
   // tap opens it (ui/totalFold.ts). An open total panel («Итого ˅») never folds under the finger
   // #2381 (founder 21.11: «внизу „Готово“. И „Отменить“» · «Отменить видно, только когда есть правки — да»)
-  const cancelStep: MainAction | null = dirty && !signed && !firstLine ? { label: t("k1.cancel"), onPress: () => void cancelEdits(), testID: "k1-cancel" } : null;
+  // ЧЕРНОВИК #1832 (`?qv=m`): сотруднику с ценой ниже минимальной — «Попросить согласия» вместо «Готово», без «Отменить»
+  const askOk = qv() === "m" && store.role !== "director" && option.lines.some((l) => belowMinDraft(l as never));
+  if (askOk) step = { label: "Попросить согласия", onPress: () => toast.show("Запрос отправлен владельцу"), testID: "est-ask-ok" };
+  const cancelStep: MainAction | null = !askOk && dirty && !signed && !firstLine ? { label: t("k1.cancel"), onPress: () => void cancelEdits(), testID: "k1-cancel" } : null;
   const stepRow = tplEdit ? null : <MainStep placement="bar" main={step} aside={cancelStep} total={barShown ? total : null} folded={fold.folded && option.lines.length > 0} onUnfold={() => setFold({ folded: false, anchor: Number.MAX_SAFE_INTEGER })} foldAdd={signed ? undefined : { a11y: t("px3.est.newLine"), onPress: () => addNew(), testID: "est-fold-add" }} />;
   const onAdd = (k: string) => {
     if (k === "new") addNew();

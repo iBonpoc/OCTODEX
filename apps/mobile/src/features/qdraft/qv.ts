@@ -19,3 +19,7 @@ function read(name: string): string | null {
 export const qv = (): string | null => read("qv");
 /** another draft flag of the address (`?store=1`) */
 export const qflag = (name: string): string | null => read(name);
+
+/** ЧЕРНОВИК #1832: a line under the company's least markup (draft: 20 % over the cost) — the real rule is the engine's (rule 8) */
+export const belowMinDraft = (l: { unitPriceCents?: number; unitCostCents?: number }): boolean =>
+  !!l.unitCostCents && (l.unitPriceCents ?? 0) * 100 < l.unitCostCents * 120;

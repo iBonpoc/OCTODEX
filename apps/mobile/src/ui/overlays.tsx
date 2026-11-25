@@ -1,3 +1,4 @@
+import { qv as qdraftQv } from "@/features/qdraft/qv";
 import type { ComponentProps } from "react";
 import { toastArmed } from "./toastArm";
 import { stackDrop, stackLife, stackReplace, stackShow, stackTop } from "./toastStack";
@@ -1241,10 +1242,11 @@ function UndoButton({ onPress, shownAt }: { onPress: () => void; shownAt: number
     return () => clearTimeout(id);
   }, [armed, shownAt]);
   return (
-    <Press onPress={onPress} testID="toast-undo" visibleHeight={size.hitMin} accessibilityRole="button" accessibilityLabel={t("common.undo")} aria-busy={!armed}>
+    <Press onPress={onPress} testID="toast-undo" visibleHeight={size.hitMin} accessibilityRole="button" accessibilityLabel={qdraftQv() ? "Вернуть" : t("common.undo")} aria-busy={!armed}>
       <View style={{ minHeight: size.hitMin, justifyContent: "center", paddingHorizontal: space[3] }}>
         <T v="button" style={{ color: c.toastAction }}>
-          {t("common.undo")}
+          {/* ЧЕРНОВИК #2549: правило 5 — «Вернуть» (в коде `common.undo` = «Отменить», долг) */}
+          {qdraftQv() ? "Вернуть" : t("common.undo")}
         </T>
       </View>
     </Press>

@@ -33,6 +33,8 @@ import { useToast } from "@/ui/overlays";
 import type { IconKey } from "@/ui/primitives";
 import type { CreateAction, IconAction } from "@/ui/templates/types";
 import { waitParams } from "./shortTime";
+import { qv } from "@/features/qdraft/qv";
+import { useConfirm } from "@/ui/confirmDialog";
 
 const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 
@@ -53,7 +55,8 @@ export function useAttentionVerbs() {
         return { label: t("sch.title"), onPress: () => router.push(`/job/schedule?jobId=${it.refId}`) };
       // #2066 «Клиента не было дома»: plan it again (a job — its planning; an inspection — its lead)
       case "visitNoShow":
-        return { label: t("sch.title"), onPress: () => router.push(attentionHref(it)) };
+        // ЧЕРНОВИК #2093 (`?qv=a`): одно действие словом — «Перенести»; затем «Сообщить клиенту новое время»
+        return { label: qv() === "a" ? "Перенести" : t("sch.title"), onPress: () => router.push(attentionHref(it)) };
       case "late": {
         const v = db.visits.find((x) => x.id === it.refId);
         const phone = v ? visitContext(db, v).customer?.phone?.replace(/[^\d+]/g, "") : undefined;
@@ -248,8 +251,41 @@ export function AttentionRows({ items }: { items: AttentionItem[] }) {
   const { t, money } = useI18n();
   const { verb, sheets } = useAttentionVerbs();
   const office = role !== "tech";
+  const toast = useToast();
+  const [dialog, ask] = useConfirm();
+  // ЧЕРНОВИК #1832 (`?qv=m`): владельцу — просьба о согласии на цену ниже наценки; решает в окне, может открыть смету
+  const qEst = qv() === "m" ? db.estimates.find((e) => e.id === "e6") : undefined;
+  const qWho = qEst ? db.customers.find((c) => c.id === qEst.customerId)?.name ?? "" : "";
+  const decide = async () => {
+    const k = await ask({
+      title: "Разрешить цену ниже наценки?",
+      text: `${qEst?.number ?? ""} · ${qWho}. Просит Ivan Sokolov. Согласие — только на эту цену.`,
+      actions: [
+        { key: "yes", label: "Разрешить", tone: "primary", testID: "q-allow" },
+        { key: "open", label: "Открыть смету", testID: "q-open" },
+        { key: "no", label: "Не разрешать", tone: "cancel", testID: "q-deny" },
+      ],
+    });
+    if (k === "open" && qEst) router.push(`/estimate/new?id=${qEst.id}`);
+    if (k === "yes") toast.show("Разрешено: продавец может отправить смету");
+  };
   return (
     <View style={{ gap: space[2] }}>
+      {qEst ? (
+        <View testID="att-q1832">
+          <ListCard
+            title={`${qEst.number ?? ""} · ждёт согласия на цену ниже наценки`}
+            when={qWho}
+            lead={{ kind: "initials", text: initials(qWho) }}
+            status={{ tone: "warn", label: "Ждёт согласия" }}
+            edge="warn"
+            action={{ label: "Решить", onPress: () => void decide() }}
+            density="regular"
+            onPress={() => void decide()}
+          />
+        </View>
+      ) : null}
+      {dialog}
       {items.map((it) => {
         const s = subjectOf(db, it);
         const who = s.customerId ? db.customers.find((c) => c.id === s.customerId) : undefined;
@@ -267,7 +303,7 @@ export function AttentionRows({ items }: { items: AttentionItem[] }) {
             status={{ tone: it.status, label: t(it.chip, waitParams(it.params, t)) }}
             edge={it.status === "bad" || it.status === "warn" ? it.status : null}
             facts={{ phone: who?.phone ?? lead?.phone }}
-            contact={{ phone: who?.phone ?? lead?.phone }}
+            contact={qv() === "a" && it.kind === "visitNoShow" ? {} : { phone: who?.phone ?? lead?.phone }}
             action={verb(it)}
             density="regular"
             onPress={() => router.push(attentionHref(it))}

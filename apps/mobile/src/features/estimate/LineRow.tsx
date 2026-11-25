@@ -1,3 +1,5 @@
+import { belowMinDraft, qv } from "@/features/qdraft/qv";
+import { StatusNote } from "@/ui/statusNote";
 import { GroupRowBody } from "@/ui/groupedList";
 import { memo, useEffect, useRef, useState, type ComponentRef } from "react";
 import { Platform, View } from "react-native";
@@ -260,6 +262,8 @@ function LineRowView(p: LineRowProps) {
             value={right}
             quiet={hidden || !!l.optional}
             wrap
+            // ЧЕРНОВИК #2364: (а) строка 52, (б) 48 — `?qv=a|b`; без параметра — как сейчас
+            dense={qv() === "a" ? "52" : qv() === "b" ? "48" : undefined}
             padRight={0}
             ids={{ title: `est-title-${l.id}`, subtitle: `est-times-${l.id}`, subtitleInner: l.optional ? `est-optional-${l.id}` : undefined, value: `est-sum-${l.id}` }}
             below={
@@ -397,6 +401,12 @@ function LineRowView(p: LineRowProps) {
               </RowView>
             </View>
           ) : null}
+        </View>
+      ) : null}
+      {/* ЧЕРНОВИК #1832 (`?qv=m`): ниже минимальной наценки (черновик: 20 % к себестоимости) — сотруднику без сумм и без «себестоимости» */}
+      {qv() === "m" && belowMinDraft(l) ? (
+        <View testID={`est-belowmin-${l.id}`}>
+          <StatusNote tone="warn">Ниже минимальной цены — нужно согласие</StatusNote>
         </View>
       ) : null}
       {p.catalog ? (

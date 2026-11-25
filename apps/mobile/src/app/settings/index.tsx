@@ -20,6 +20,8 @@ import { component, space } from "@octo/design-tokens";
 import { BUILD } from "@/config/version";
 import { VersionLine } from "@/features/version";
 import { BrandLogo } from "@/ui/brand";
+import { qv } from "@/features/qdraft/qv";
+import { SettingsNext } from "@/features/qdraft/settingsNext";
 
 /**
  * «Настройки приложения» (spec 26; was «Мои настройки», docs/specs/05 §4.1): how the app looks and behaves for me —
@@ -27,6 +29,11 @@ import { BrandLogo } from "@/ui/brand";
  * deleting the account are in «Профиль и аккаунт» (/settings/profile). Company-wide settings live in /company.
  */
 export default function Settings() {
+  // ЧЕРНОВИК #2549: «как будет» (#2552, #2546) — `?qv=a`
+  return qv() === "a" ? <SettingsNext /> : <SettingsNow />;
+}
+
+function SettingsNow() {
   const { t, lang, setLang } = useI18n();
   const { online, setOnline, resetDemo, mode, role } = useStore();
   const { pref, setPref } = useTheme();

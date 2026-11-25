@@ -1,5 +1,5 @@
 import { Platform, View } from "react-native";
-import { component, size, space } from "@octo/design-tokens";
+import { component, radius, size, space } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { CheckMark } from "./checkMark";
 import { Icon, Press, T, type IconKey } from "./primitives";
@@ -22,7 +22,11 @@ export function OptionRow({
   disabled,
   iconSlot,
   testID,
+  inGroup,
 }: {
+  /** ЧЕРНОВИК #2531 (нужно в ДС §9 А2а): a row of a ListGroup — the group's side inset (`space[4]`); with `multiple` an unchosen row
+   *  shows an empty ring in the mark's place (so a row that can be ticked says so before the tap) */
+  inGroup?: boolean;
   title: string;
   subtitle?: string;
   icon?: IconKey;
@@ -52,7 +56,7 @@ export function OptionRow({
       {...a11y}
       accessibilityState={{ selected, disabled: !!(disabled || ro) }}
       accessibilityLabel={subtitle ? `${title}, ${subtitle}` : title}
-      style={{ minHeight, flexDirection: "row", alignItems: "center", gap: space[3], paddingVertical: space[2] }}
+      style={{ minHeight, flexDirection: "row", alignItems: "center", gap: space[3], paddingVertical: space[2], paddingHorizontal: inGroup ? space[4] : undefined }}
     >
       {icon ? <Icon name={icon} color={c.ink} /> : iconSlot ? <View style={{ width: size.iconMd }} /> : null}
       <View style={{ flex: 1 }}>
@@ -66,7 +70,7 @@ export function OptionRow({
         ) : null}
       </View>
       {/* the mark's place is kept: a row does not jump when it is chosen */}
-      <View style={{ width: size.iconMd, alignItems: "center" }}>{selected ? <CheckMark testID={testID ? `${testID}-check` : undefined} /> : null}</View>
+      <View style={{ width: size.iconMd, alignItems: "center" }}>{selected ? <CheckMark testID={testID ? `${testID}-check` : undefined} /> : inGroup && multiple ? <View style={{ width: size.iconMd, height: size.iconMd, borderRadius: radius.pill, borderWidth: component.hairline * 2, borderColor: c.mut }} /> : null}</View>
     </Press>
   );
 }

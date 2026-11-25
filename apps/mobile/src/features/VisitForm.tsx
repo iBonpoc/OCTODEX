@@ -3,6 +3,7 @@
  * работу», «Перенести»; «Сообщить клиенту?» after saving; «Отменить выезд» (§7.4). Rules — features/schedule.ts.
  * Menus in sheets are rows (rule 12); one accent: the save button.
  */
+import { qv } from "@/features/qdraft/qv";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { useEffect, useState, type ReactNode } from "react";
 import { Linking, Platform, View } from "react-native";
@@ -327,7 +328,7 @@ export function NotifySheet({ visitId, onClose }: { visitId: ID | null; onClose:
     onClose();
   };
   return (
-    <Sheet visible={!!v} onClose={onClose} title={t("vf.notify.title")}>
+    <Sheet visible={!!v} onClose={onClose} title={qv() === "a" ? "Сообщить клиенту новое время?" : t("vf.notify.title")}>
       <T v="body">{text}</T>
       {sms ? <Button label={t("vf.notify.sms")} icon="sms" variant="secondary" full onPress={() => { Linking.openURL(sms).catch(() => {}); done(); }} /> : null}
       {mail ? <Button label={t("vf.notify.email")} icon="mail" variant="secondary" full onPress={() => { Linking.openURL(mail).catch(() => {}); done(); }} /> : null}

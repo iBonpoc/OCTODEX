@@ -20,6 +20,7 @@ import { Sheet, useToast } from "@/ui/overlays";
 import { Card, RowView } from "@/ui/surfaces";
 import { StatusNote } from "@/ui/statusNote";
 import { useTheme } from "@/theme/ThemeProvider";
+import { qv } from "@/features/qdraft/qv";
 
 /** the ways of the payment sheet: Tap to Pay first (as Collect Payment of Jobber; prototype — recorded as a card payment) */
 type Way = "tap" | Exclude<PaymentMethod, "card" | "ach">;
@@ -70,7 +71,13 @@ export function PaySheet({ inv, visible, onClose, startCents, balanceCents, fixe
     }
     wasOpen.current = visible;
   }, [visible, startCents]);
-  const quick = fixed ? [] : quickAmounts(balanceCents, depositCents);
+  // ЧЕРНОВИК #2533 (`?qv=a`): подсказки по закону, без запрета. Работа не начата → предел задатка CA (10 %, не больше $1,000),
+  // «Половина» не предлагается; после записи — наличные клиента за 12 мес > $10,000 → IRS 8300. Числа — черновик, не движок.
+  const draft = qv() === "a";
+  const job = db.jobs.find((j) => j.id === inv.jobId);
+  const notStarted = draft && !!job && (job.status === "unscheduled" || job.status === "scheduled");
+  const caLimit = job ? Math.min(100000, Math.round(job.amountCents / 10)) : 0;
+  const quick = (fixed ? [] : quickAmounts(balanceCents, depositCents)).filter((q) => !(notStarted && q.key === "half"));
   const chosen = quickChosen(amount, quick);
   const shown = recordedCents(amount, balanceCents);
   const number = inv.number ?? "";
@@ -81,6 +88,7 @@ export function PaySheet({ inv, visible, onClose, startCents, balanceCents, fixe
     const undo = store.recordPayment(inv.id, amount, method, way === "check" || way === "zelle" ? ref : undefined);
     // online the receipt below says it; offline the toast says it waits for the network (rule 6) — «Отменить» on both
     if (!store.online) toast.show(t("offline.queued"), undo);
+    else if (draft) toast.show(t("w2m.rcpt.done"), undo);
     setDone({ before, undo });
     setRef("");
   };
@@ -102,6 +110,51 @@ export function PaySheet({ inv, visible, onClose, startCents, balanceCents, fixe
   const left = db.invoices.find((i) => i.id === inv.id);
   const leftCents = left ? invoiceOwes(left) : 0;
 
+  const yearAgo = new Date(Date.now() - 365 * 864e5).toISOString();
+  const cash12 = draft ? db.payments.filter((p) => p.customerId === inv.customerId && p.method === "cash" && p.at >= yearAgo).reduce((a, p) => a + p.amountCents, 0) : 0;
+  if (paid && draft)
+    return (
+      <Sheet
+        visible={visible}
+        onClose={close}
+        title={`${t("rcpt.title")} ${paid.receiptNumber ?? ""}`.trim()}
+        footer={
+          <View testID="pay-receipt-buttons">
+            <ButtonPair
+              main={sendReceipt ? { label: t("w2m.rcpt.send"), accessibilityLabel: t("w2m.rcpt.sendA11y"), icon: "send", onPress: () => { sendReceipt(); close(); }, testID: "pay-receipt-send" } : { label: t("w2m.rcpt.ok"), icon: "check", onPress: close, testID: "pay-receipt-done" }}
+              second={null}
+            />
+          </View>
+        }
+      >
+        <View testID="pay-receipt" style={{ gap: space[3] }}>
+          <Card>
+            <StatusNote tone="ok" v="heading">{t("w2m.rcpt.done")}</StatusNote>
+            <View testID="pay-receipt-amount">
+              <T v="display" tabular>
+                {money(paid.amountCents)}
+              </T>
+            </View>
+            <T v="caption" tone="mut" numberOfLines={2}>
+              {t("w2m.rcpt.line", { way: t(`pay.${paid.method}` as DictKey), num: paid.receiptNumber ?? t("rcpt.pendingNumber"), date: day(paid.at) })}
+            </T>
+            <T v="caption" tone="mut">
+              {leftCents > 0 ? t("w2m.rcpt.left", { amount: money(leftCents) }) : t("w2m.rcpt.paidFull")}
+            </T>
+          </Card>
+          {cash12 > 1000000 ? (
+            <View testID="pay-irs8300">
+              <StatusNote tone="info">{`Наличные от клиента за 12 мес — ${money(cash12)}, больше $10,000. Подайте форму IRS 8300 в течение 15 дней.`}</StatusNote>
+            </View>
+          ) : null}
+          {sendReceipt ? (
+            <T v="caption" tone="mut">
+              {t("w2m.rcpt.lang", { lang: DOC_LANG_LABEL[lang] })}
+            </T>
+          ) : null}
+        </View>
+      </Sheet>
+    );
   if (paid)
     return (
       <Sheet
@@ -244,6 +297,11 @@ export function PaySheet({ inv, visible, onClose, startCents, balanceCents, fixe
           <ListGroup inset={space[4]}>
             <GroupRow compact testID="pay-link-sms" title={`${t("proto.money.pay.link")} ›`} onPress={payLink} />
           </ListGroup>
+        ) : null}
+        {notStarted && amount > caLimit && job ? (
+          <View testID="pay-ca-limit">
+            <StatusNote tone="warn">{`Больше предела до начала работ: в Калифорнии — не больше ${money(caLimit)} (10 % от ${money(job.amountCents)}). Записать можно.`}</StatusNote>
+          </View>
         ) : null}
         {amount > balanceCents ? <StatusNote tone="warn">{t("inv.capped", { max: money(balanceCents) })}</StatusNote> : null}
       </View>

@@ -200,6 +200,9 @@ export interface GroupRowProps {
   valueTestID?: string;
   /** the right side is a quiet mark (a document's language «EN»), not a figure: 13 `mut` */
   valueMark?: boolean;
+  /** ЧЕРНОВИК #2549 (нужно в ДС §12.3 «строка-действие»): a row that does a thing in place, not a way somewhere — its title in
+   *  `accText` (or `bad` for a reset), no «›» */
+  action?: "acc" | "bad";
   testID?: string;
 }
 
@@ -207,7 +210,9 @@ export interface GroupRowProps {
  * The inside of a GroupRow — the lead, the title 15/600 over its line 13 `mut`, the figure or columns, a StatusPill and «›» — for a
  * row whose press is its owner's (an estimate's line: it opens in place, it is held to be carried). One look for every row (#2387).
  */
-export function GroupRowBody({ title, subtitle, lead, value, cols, status, compact, wrap, selected, chevron, quiet, valueMark, padRight = space[4], below, ids }: Pick<GroupRowProps, "title" | "subtitle" | "lead" | "value" | "cols" | "status" | "compact" | "wrap" | "selected" | "chevron" | "valueMark"> & {
+export function GroupRowBody({ title, subtitle, lead, value, cols, status, compact, wrap, selected, chevron, quiet, valueMark, padRight = space[4], below, ids, action, dense }: Pick<GroupRowProps, "title" | "subtitle" | "lead" | "value" | "cols" | "status" | "compact" | "wrap" | "selected" | "chevron" | "valueMark" | "action"> & {
+  /** ЧЕРНОВИК #2364 (нужно в ДС §8.2а/§8.3): a denser row of a long list (an estimate's lines) — its least height from `component.listRow.dense*` */
+  dense?: "52" | "48";
   /** a row that counts for nothing now (a hidden line, a line on the client's choice): the title and the figure `mut` */
   quiet?: boolean;
   padRight?: number;
@@ -218,7 +223,7 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
 }) {
   const { c } = useTheme();
   const check = lead && "done" in lead ? lead : null;
-  const pad = { minHeight: compact ? component.rowCompact : component.listRow.h, paddingVertical: space[2], gap: space[3] };
+  const pad = { minHeight: compact ? component.rowCompact : dense === "48" ? component.listRow.dense48 : dense === "52" ? component.listRow.dense52 : component.listRow.h, paddingVertical: dense ? space[1] : space[2], gap: space[3] };
   return (
     <RowView style={[pad, { paddingLeft: check ? 0 : space[4], paddingRight: padRight }]}>
       {selected ? <SelectedCheck left /> : null}
@@ -242,7 +247,7 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
       ) : null}
       <View style={{ flex: 1, minWidth: 0 }}>
         <View testID={ids?.title}>
-          <T v="body" w="semibold" tone={check?.done || quiet ? "mut" : "ink"} numberOfLines={wrap ? 2 : 1} style={check?.done ? { textDecorationLine: "line-through" } : undefined}>
+          <T v="body" w="semibold" tone={action === "bad" ? "bad" : check?.done || quiet ? "mut" : "ink"} numberOfLines={wrap ? 2 : 1} style={check?.done ? { textDecorationLine: "line-through" } : action === "acc" ? { color: c.accText } : undefined}>
             {title}
           </T>
         </View>
@@ -291,7 +296,7 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
   );
 }
 
-export function GroupRow({ title, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, wrap, selected, chevron, valueTestID, valueMark, testID }: GroupRowProps) {
+export function GroupRow({ title, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, wrap, selected, chevron, valueTestID, valueMark, action, testID }: GroupRowProps) {
   const { c } = useTheme();
   const [down, setDown] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -300,7 +305,7 @@ export function GroupRow({ title, subtitle, lead, value, cols, status, actions =
   const onLong = more.length ? (e: GestureResponderEvent) => setMenu({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, w: 0, h: 0 }) : undefined;
   const onAction = (e: AccessibilityActionEvent) => more.find((a) => a.key === e.nativeEvent.actionName)?.onPress();
   const check = lead && "done" in lead ? lead : null;
-  const main = <GroupRowBody title={title} subtitle={subtitle} lead={lead} value={value} cols={cols} status={status} compact={compact} wrap={wrap} selected={selected} chevron={chevron} padRight={actions.length ? 0 : space[4]} ids={valueTestID ? { value: valueTestID } : undefined} valueMark={valueMark} />;
+  const main = <GroupRowBody title={title} subtitle={subtitle} lead={lead} value={value} cols={cols} status={status} compact={compact} wrap={wrap} selected={selected} chevron={chevron} padRight={actions.length ? 0 : space[4]} ids={valueTestID ? { value: valueTestID } : undefined} valueMark={valueMark} action={action} />;
   const tap = onPress || onLong ? (
     <Press
       onPress={onPress}

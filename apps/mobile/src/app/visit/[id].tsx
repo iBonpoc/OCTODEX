@@ -1,3 +1,4 @@
+import { qv } from "@/features/qdraft/qv";
 import { ModulePlaces } from "@/modules/ModulePlaces";
 import { visitDueCents } from "@/features/visitDue";
 import { signedAction } from "@/features/visitSignedAction";
@@ -628,19 +629,27 @@ export default function VisitScreen() {
       <Sheet visible={noShow} onClose={() => setNoShow(false)} title={t("noShow.title")}>
         <View testID="no-show-sheet" style={{ gap: space[3] }}>
           <T v="body" tone="mut">
-            {t("noShow.hint")}
+            {/* ЧЕРНОВИК #2093 (`?qv=a`): одна фраза — кто дальше делает шаг */}
+            {qv() === "a" ? "Выезд закроется. Офис увидит и свяжется с клиентом." : t("noShow.hint")}
           </T>
           <T v="caption" tone="mut">
             {t("noShow.photo")}
           </T>
           <PhotoStrip photos={before} onAdd={addPhoto("before")} onAddPreparing={addPreparing("before")} onRemove={removePhoto} onRetry={retryPhoto} />
           <TextField type="note" label={t("noShow.note")} placeholder={t("noShow.notePh")} value={noShowNote} onChangeText={setNoShowNote} />
-          <View testID="no-show-confirm">
-            <Button label={t("noShow.confirm")} icon="check" full onPress={markNoShow} />
-          </View>
-          <View testID="no-show-keep">
-            <Button label={t("noShow.keep")} variant="secondary" full onPress={() => setNoShow(false)} />
-          </View>
+          {qv() === "a" ? (
+            // ЧЕРНОВИК #2093: две кнопки в ряд (DS §7.3 ButtonPair), главная справа
+            <ButtonPair main={{ label: t("noShow.confirm"), icon: "check", onPress: markNoShow }} second={{ label: t("noShow.keep"), onPress: () => setNoShow(false) }} ids={{ main: "no-show-confirm", second: "no-show-keep" }} />
+          ) : (
+            <>
+              <View testID="no-show-confirm">
+                <Button label={t("noShow.confirm")} icon="check" full onPress={markNoShow} />
+              </View>
+              <View testID="no-show-keep">
+                <Button label={t("noShow.keep")} variant="secondary" full onPress={() => setNoShow(false)} />
+              </View>
+            </>
+          )}
         </View>
       </Sheet>
       {/* «Отменить выезд» asks the reason first — the sheet is the confirmation; a cancelled visit leaves the screens: the
