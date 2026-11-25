@@ -96,15 +96,15 @@ exports.run = async (h) => {
   await waitFor(async () => (await chosen("attr-color")) === "Коричневый", "brown picked");
   await h.shot("run");
 
+  h.expect(/^Gutter № \d+$/.test((await tid("attr-title").innerText()).trim()), "v43: the window's title is «Gutter № N»");
   // a bad tape changes nothing
+  await tid("attr-length-in").locator("input").fill("12"); // inches first: a valid foot typed first is a length already (v43: read at once)
   await tid("attr-length-ft").locator("input").fill("25");
-  await tid("attr-length-in").locator("input").fill("12");
-  await tid("attr-length-apply").getByRole("button").click();
   await tid("attr-length-bad").waitFor({ timeout: 3000 });
   h.expect((await tid("attr-length-reset").count()) === 0, "a bad tape keeps the drawn length");
   // the tape
   await tid("attr-length-in").locator("input").fill("6");
-  await tid("attr-length-apply").getByRole("button").click();
+  h.expect((await tid("attr-length-apply").count()) === 0, "v43: no «Применить» at the length — the field is read at once");
   await waitFor(async () => (await tid("attr-length-reset").count()) === 1, "taped: «По рисунку» puts the drawn one back"); // i18n-old: ok — «taped» is the data value, not a label
   h.expect((await tid("attr-length-bad").count()) === 0, "the warning is gone");
   await waitFor(async () => (await labels()).some((t) => /^25′ 6″/.test(t)), "the label shows the taped length"); // i18n-old: ok — «taped» is the data value, not a label
