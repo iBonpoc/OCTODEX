@@ -52,3 +52,12 @@ export function canChangeEstimateCategory(s: EstimateStatus, role: Role): boolea
   if (role === "tech") return s === "draft";
   return s === "draft" || s === "sent";
 }
+
+/**
+ * Who the estimate is for: picked while it is a draft (or not yet saved) — once it has gone to the client (sent, signed, declined)
+ * it stays with that client; to give it to another, make a new estimate (#2406, founder 22.11.2026). The screen, the store and
+ * the cloud op all follow this one rule.
+ */
+export function canChangeEstimateClient(s: EstimateStatus | undefined): boolean {
+  return s === undefined || s === "draft";
+}

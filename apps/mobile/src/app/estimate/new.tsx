@@ -34,7 +34,7 @@ import { FieldError, useRequiredForm, useScreenScroll } from "@/ui/requiredForm"
 import { MainStep } from "@/ui/mainStep";
 import { CreateButton, MoreButton } from "@/ui/templates/parts";
 import type { MainAction } from "@/ui/templates";
-import { estimateStatusView } from "@/features/estimateStatus";
+import { canChangeEstimateClient, estimateStatusView } from "@/features/estimateStatus";
 import { useReducedMotion } from "react-native-reanimated";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { PickerSheet } from "@/ui/pickerSheet";
@@ -719,6 +719,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // a signed estimate: its rows do not open (DS §8.3)
   // one rule with the card, /p/ and the PDF: a signature on it, or a status after signing (review of #1376)
   const signed = isSignedEstimate(existing);
+  const clientLocked = !tplEdit && !canChangeEstimateClient(existing?.status);
   const mayHere = !!existing || canMakeEstimateAt(db, { role: store.role, mode: store.mode, me: db.me }, property?.id);
   const ok = !!customer && !!property && hasContent(doc);
   /** what a press of «Сохранить» found missing (shown under it, the page scrolls there) and the nudge for the scroll */
@@ -1206,7 +1207,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
             avatar={customer ? { initials: initials(customer.name), name: customer.name } : undefined}
             icon={customer ? undefined : "user"}
             tone={missing === "client" ? "warn" : undefined}
-            onPress={() => setClientPicker(true)}
+            // #2406: the client is picked in a draft (or a new estimate) only; one that went out stays with its client
+            onPress={clientLocked ? undefined : () => setClientPicker(true)}
           />
           {missing === "client" ? <FieldError text={t("ue.pickClient")} testID="ue-missing-client" /> : null}
           </View>
