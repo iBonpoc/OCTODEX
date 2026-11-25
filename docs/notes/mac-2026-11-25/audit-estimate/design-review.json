@@ -1,0 +1,182 @@
+[
+ {
+  "element": "Шапка (крест, заголовок, ⋯)",
+  "verdict": "ok",
+  "severity": null,
+  "what": "Круги 40, заголовок по центру, ⋯ справа — как у Клиента/Денег.",
+  "rule": "DS §12.13",
+  "compare_with": "~/GoRix/notes/review-v2/round1/img/after-client-dark.png",
+  "estimate_img": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-top__dark-390-ru-director__27a2ca3.png",
+  "fix": ""
+ },
+ {
+  "element": "Подпись под заголовком",
+  "verdict": "differs",
+  "severity": "мелочь",
+  "what": "«Отправлена · сохранено вчера · Демо» — три факта в одну серую строку, «Демо» простым текстом; на других экранах «Демо» — отдельная плашка с точкой. На 820/1280 статуса сметы нет вовсе (только «Смета EST-0006»).",
+  "rule": "DS §12.13, §3.3 (статус = значок + слово)",
+  "compare_with": "~/GoRix/notes/review-v2/round1/img/after-client-dark.png, after-money-dark.png",
+  "estimate_img": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-top__dark-390-ru-director__27a2ca3.png",
+  "fix": "«Демо» — плашкой как на других; статус сметы — TonePill (значок+слово) в строке под заголовком на всех ширинах."
+ },
+ {
+  "element": "Карточка клиента и поле «Название»",
+  "verdict": "ok",
+  "severity": null,
+  "what": "Карточка с аватаром и шеврон — как строка клиента на Главной/Клиентах; поле 44.",
+  "rule": "DS §11",
+  "compare_with": "~/GoRix/notes/review-v2/round1/img/after-estimate-dark.png",
+  "estimate_img": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-top__dark-390-ru-director__27a2ca3.png",
+  "fix": ""
+ },
+ {
+  "element": "Кнопки над списком (+, каталог, папка, из шаблона)",
+  "verdict": "differs",
+  "severity": "желательно",
+  "what": "Четыре круга-значка без слов: книга, папка, документ-плюс не расшифровываются; порядок «+» первым, а в утверждённом снимке round1 было книга/слои/док/«+» последним. DS §8.4 требует текстовые «Новая позиция», «Из каталога» (secondary) и ghost «Раздел». Вдобавок «+» в шапке списка дублирует «+» в плавающей капсуле.",
+  "rule": "DS §8.4; HIG: значок без слова непонятен (пункт 7 ревью); одно действие — одно место",
+  "compare_with": "~/GoRix/notes/review-v2/round1/img/after-estimate-dark.png (round1: круги другого набора и порядка)",
+  "estimate_img": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-top__dark-390-ru-director__27a2ca3.png",
+  "fix": "Либо подписать (секондари-кнопки «Новая позиция» / «Из каталога» + ⋯ для остального), либо оставить круги с подсказкой/диктором и один порядок как в round1; убрать дубль «+»."
+ },
+ {
+  "element": "Заголовок группы (Материалы · 2 · ⋯ · $ · ≡)",
+  "verdict": "differs",
+  "severity": "блокирует",
+  "what": "Сделан не по ListGroup (заголовок 12 прописными mut или 17/700 + «Все ›»). Здесь: значок вида + 17/700 + «· 2» (DS: число только у свёрнутого) + крупный круг «⋯» 44 с заливкой + сумма + «≡». Столбцы «⋯» и сумма плавают: у «Материалы» ⋯ на x=232, у «Работа» x=258, у «Услуги» x=258 — зависят от ширины суммы. Ручка «≡» заголовков стоит выше центра сумм (y 503 против 511). Подложки surf2 и верхней границы по DS §8.5 нет. Три тяжёлых заливных круга на экране шумят сильнее, чем главная кнопка.",
+  "rule": "DS §8.5, §12.12 (Заголовок блока ListGroup), §12.14; правило 29 (SectionHeader — свой элемент, не из groupedList)",
+  "compare_with": "~/GoRix/notes/review-v2/round1/img/after-home-dark.png / after-client-dark.png (заголовки групп ListGroup)",
+  "estimate_img": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-top__dark-390-ru-director__27a2ca3.png",
+  "fix": "Привести к ListGroup-заголовку: название слева, итог раздела справа tabular, «⋯» и «≡» в фиксированных колонках справа (одна ширина для всех разделов); «⋯» 36 без заливки в покое (ghost); счёт позиций — только в свёрнутом."
+ },
+ {
+  "element": "Строка позиции (свёрнутая)",
+  "verdict": "differs",
+  "severity": "блокирует",
+  "what": "Строки — свой LineRow (RowView), а не GroupRow в ListGroup: нет чёткой карточки-группы на раздел с тем же радиусом/разделителем inset 64, нет шеврона/признака «раскрывается». Разделитель между строками еле виден (светлая тема — почти сливается), высота ~52 (DS: от 56 для GroupRow). В утверждённом round1 все позиции — одна карточка с ровными волосяными линиями и сумма 17/600; теперь разделы — несколько карточек с зазором 4–8. «≡» мелкий (16) рядом с суммой, тянется вплотную к правому краю карточки.",
+  "rule": "Правило 12 (списки = GroupRow в ListGroup), правило 29, DS §8.3, §12.12, listRow.h 56",
+  "compare_with": "~/GoRix/notes/review-v2/round1/img/after-estimate-dark.png (round1: единая карточка, строки 56), after-money-dark.png",
+  "estimate_img": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-top__dark-390-ru-director__27a2ca3.png",
+  "fix": "Строки позиций рисовать через GroupRow (trailing: сумма, «≡» отдельной колонкой), раздел = ListGroup; развёртка на месте оставить как есть (DS §8.3). Высота ≥56."
+ },
+ {
+  "element": "Разделители",
+  "verdict": "differs",
+  "severity": "мелочь",
+  "what": "Волосяная линия между позициями и между блоками итогов отличается по контрасту и отступам: в списке позиций без inset, в блоке «Сумма/Скидка/Налог» — с полной шириной; в Клиенте/Деньгах линия с отступом под значок.",
+  "rule": "DS listRow.inset 64, hairline",
+  "compare_with": "~/GoRix/notes/review-v2/round1/img/after-client-dark.png",
+  "estimate_img": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-mid__dark-390-ru-director-s450__27a2ca3.png",
+  "fix": "Один токен: hairline `bd` с отступом listRow.inset везде."
+ },
+ {
+  "element": "Ручка «≡»",
+  "verdict": "differs",
+  "severity": "желательно",
+  "what": "16 px серый значок без видимой зоны, на заголовках стоит у самого края карточки (за пределами правого края строк), и не выровнен с суммой; удержание открытой строки её не берёт — ок, но визуально ручка и «⋯» соседствуют плотно (центры <64).",
+  "rule": "DS §8.3 (зазор space[6], зоны 44 не касаются), токен dragHandle 16",
+  "compare_with": "—",
+  "estimate_img": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-top__dark-390-ru-director__27a2ca3.png",
+  "fix": "Фиксированная правая колонка 44 для ручки, везде одна x; зазор между «⋯»/корзиной и «≡» как в §8.3."
+ },
+ {
+  "element": "Корзина",
+  "verdict": "ok",
+  "severity": null,
+  "what": "В открытой строке — круг 40 с корзиной слева от «⋯», ≡ — по DS §8.3; удаление с тостом «Вернуть».",
+  "rule": "DS §8.3",
+  "compare_with": "—",
+  "estimate_img": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-line-open__dark-390-ru-director__27a2ca3.png",
+  "fix": ""
+ },
+ {
+  "element": "Капсула «Итого» (плавающая, при прокрутке)",
+  "verdict": "differs",
+  "severity": "блокирует",
+  "what": "Вверху — закреплённая нижняя панель «Итого ˅ $772.36 · налог · Готово» (ок, как round1). При прокрутке/открытой позиции она превращается в маленькую плавающую капсулу «˄ $772.36» + круг «+», а «Готово» пропадает: главное действие экрана исчезает с глаз. Сумма в капсуле жёлтая (accText) — цвет акцента на числе, не на действии. Капсула и «+» налезают на содержимое (в est-mid закрывают строку Notes, в line-open — «Сумма $150»). Два разных вида одного элемента в одном экране.",
+  "rule": "Правило 2 (acc — только главное действие), DS §8.9 / §12.14 (низ редактора одной строкой ≤56, итог слева, главная справа), ревью п.1 иерархия",
+  "compare_with": "~/GoRix/notes/review-v2/round1/img/after-estimate-dark.png (панель с «Готово» всегда на месте)",
+  "estimate_img": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-mid__dark-390-ru-director-s450__27a2ca3.png",
+  "fix": "Одна панель всегда: слева «Итого ˅», справа «Готово»; сумма цвета ink; «+» — в шапку списка, не в панель."
+ },
+ {
+  "element": "Шторка «Итого»",
+  "verdict": "differs",
+  "severity": "желательно",
+  "what": "Заголовок «Итого $772.36» 20/700 + крестик; ниже плотные строки ~24 px 13 px — Депозит, «Если клиент включит всё», Сумма, Налог; блок «Только для вас» со значком-глазом и прочерками. Не группа GroupRow: строки в 4 раза плотнее, чем во всех шторках с ListRow; нет Готово/действия. Порядок «Депозит» раньше «Сумма» нелогичен.",
+  "rule": "DS §10 Б1, §12.14 (строки 56; ListRow в шторках), правило 12",
+  "compare_with": "~/GoRix/notes/review-v2/round1/img/after-client-dark.png (ClientContacts: GroupRow 56 в шторке)",
+  "estimate_img": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-totals-open__dark-390-ru-director-s3000__27a2ca3.png",
+  "fix": "Собрать из ListGroup/GroupRow; порядок Сумма → Налог → Итого → Депозит; «Только для вас» отдельной группой с заголовком."
+ },
+ {
+  "element": "Блок итогов (Сумма, Скидка, Налог, Депозит)",
+  "verdict": "ok",
+  "severity": null,
+  "what": "Один ListGroup-подобный блок, строки 56, шевроны — как на других экранах. Но на 390 «Налог с продаж» переносится на две строки, а значение справа прижато.",
+  "rule": "DS §12.12",
+  "compare_with": "~/GoRix/notes/review-v2/round1/img/after-money-dark.png",
+  "estimate_img": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-mid__dark-390-ru-director-s450__27a2ca3.png",
+  "fix": ""
+ },
+ {
+  "element": "Notes и Terms",
+  "verdict": "differs",
+  "severity": "мелочь",
+  "what": "Заголовки «Notes — заметка», «Terms — условия» смешивают EN и RU в одной строке; описание «Work in 1 day. Debris hauled away the same day.» обрезается на 390.",
+  "rule": "DS §4.4 (три языка, один язык в строке), правило 7",
+  "compare_with": "—",
+  "estimate_img": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-mid__dark-390-ru-director-s450__27a2ca3.png",
+  "fix": "Заголовок на языке интерфейса («Заметка», «Условия»), язык клиента — отдельным значком «EN»; описание 2 строки."
+ },
+ {
+  "element": "Пустое состояние",
+  "verdict": "differs",
+  "severity": "блокирует",
+  "what": "Три жёлтых акцентных кнопки в карточке («Новая пози…», «Каталог», «Из шаблона…») + жёлтая главная «Добавить позицию» в панели = четыре акцента на экране. Подписи обрезаны «…» (потерян смысл). «+» и круги в шапке списка дублируют те же действия. Под карточкой панель «Итого $0.00» перекрывает блок «Сумма/Скидка».",
+  "rule": "DS §8.4 (блок добавления без жёлтого; «Новая позиция», «Из каталога» — secondary, не три в ряд), §3.1, oneAccent сторож, правило 2, ревью п.2 (нет «…» где нужен смысл), п.8",
+  "compare_with": "~/GoRix/notes/review-v2/round1/img/after-money-dark.png (пустые состояния/плотность), after-client-dark.png",
+  "estimate_img": "~/GoRix/notes/audit-estimate/shots/estimate_new_customerId_c2_propertyId_p2__est-empty__dark-390-ru-director__27a2ca3.png",
+  "fix": "Один акцент (панель). В карточке — две secondary кнопки в один ряд 1:1, «Из шаблона…» ghost-строкой ниже; без обрезки; убрать дубли с шапки."
+ },
+ {
+  "element": "Редактор позиции (раскрытая строка)",
+  "verdict": "differs",
+  "severity": "желательно",
+  "what": "Структура по DS §8.3 соблюдена (Свернуть, корзина, ⋯, ≡, ряд Кол-во/Ед./Цена, Вид/Себестоимость). Но: единица показывает «Св…» (обрезано «Своя…» при единице «flat»), поле «Себестоимость» без подписи слева обрезано, подпись «Сумма $150» висит под полями без группы и частично под капсулой. Поля 44 — ок.",
+  "rule": "DS §8.3, §11 (подписи, обрезка), ревью п.2",
+  "compare_with": "~/GoRix/notes/review-v2/round1/img/after-estimate-dark.png",
+  "estimate_img": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-line-open__dark-390-ru-director__27a2ca3.png",
+  "fix": "Показать введённую единицу, а не «Своя…»; ширина единицы не меньше значения; строку «Сумма» в ряд с «Вид»."
+ },
+ {
+  "element": "Меню «⋯»",
+  "verdict": "differs",
+  "severity": "желательно",
+  "what": "Снимок est-menu не показывает открытое меню (идентичен est-top) — меню не проверено; круги «⋯» на разделах 44 с заливкой против 36 ghost в шапке.",
+  "rule": "DS Б4 (меню у кнопки, опасное последним), §7.1 (видимые ≤ 36–40)",
+  "compare_with": "—",
+  "estimate_img": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-menu__dark-390-ru-director__27a2ca3.png",
+  "fix": "Переснять с реально открытым меню; круг ⋯ раздела — 36."
+ },
+ {
+  "element": "Широкие экраны 820 / 1280",
+  "verdict": "differs",
+  "severity": "желательно",
+  "what": "Левая колонка позиций узкая (~385 px на 1280, ~350 на 820), правая колонка итогов ~385; контент заканчивается на x≈870, справа ~400 px пустоты, не центровано. На 820 «Готово» стоит в отдельной пустой карточке (серая плита с одной кнопкой справа). Подпись статуса сметы и «Сохранено» не видны. «+»-кнопки и круг «⋯» 44 на широком крупнее остальных.",
+  "rule": "DS §5.2, §8.9 (от 820 кнопки в колонке итогов), ревью п.5 (нет растянутых и «потерянных» зон)",
+  "compare_with": "—",
+  "estimate_img": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-top__dark-1280-ru-director-s0__27a2ca3.png",
+  "fix": "Центровать/ограничить контейнер по DS §5.2, колонки позиций пошире (минимум 480); «Готово» — строкой внутри блока итогов, а не пустой плитой."
+ },
+ {
+  "element": "Светлая тема",
+  "verdict": "differs",
+  "severity": "мелочь",
+  "what": "Карточки позиций светло-серые на светло-сером фоне — разделитель и граница почти не читаются; капсула жёлтая на светлом — контраст сумм ниже, чем у ink.",
+  "rule": "DS §3.5 контраст, §3.2",
+  "compare_with": "—",
+  "estimate_img": "~/GoRix/notes/audit-estimate/shots/estimate_new_id_e6__est-top__light-390-ru-director__27a2ca3.png",
+  "fix": "Проверить surf/bd в light; сумма в капсуле ink."
+ }
+]
