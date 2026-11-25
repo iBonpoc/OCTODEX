@@ -15,9 +15,10 @@ exports.run = async (h) => {
 
   await h.go("/estimate/e6");
   await tid("estimate-screen-more").waitFor({ timeout: 8000 });
-  const row = ["est-act-sms", "est-act-email", "est-act-copy", "est-act-pdf", "est-act-edit"];
+  const row = ["est-act-edit", "est-act-pdf", "est-act-client"];
   for (const id of row) h.expect((await tid("estimate-screen-actions").getByTestId(id).count()) === 1, `«${id}» is an icon of the row under the header`);
-  for (const id of ["est-act-client", "est-act-template", "est-act-revoke"]) h.expect(!(await visible(id)), `«${id}» is not on the page (it lives in «⋯»)`);
+  for (const id of ["est-act-sms", "est-act-email", "est-act-copy"]) h.expect((await p.getByTestId(id).count()) === 0, `«${id}» is gone: nothing goes out by one tap`);
+  for (const id of ["est-act-template", "est-act-revoke"]) h.expect(!(await visible(id)), `«${id}» is not on the page (it lives in «⋯»)`);
 
   // the main step: the first thing of «Смета», UNDER the sections strip — the strip stands still when «Подпись на месте» has no
   // step (#2363, founder 21.11: «кнопка сдвигает контент»); no pinned bar
@@ -44,7 +45,7 @@ exports.run = async (h) => {
   const order = await tid("menu-items").evaluate((m) =>
     [...m.querySelectorAll('[role="menuitem"]')].filter((e) => e.getBoundingClientRect().height > 0).map((e) => ({ id: e.getAttribute("data-testid"), y: e.getBoundingClientRect().y })).sort((a, b) => a.y - b.y).map((x) => x.id),
   );
-  h.expect(JSON.stringify(order) === JSON.stringify(["est-act-client", "est-act-template", "est-sign-here", "est-act-revoke"]), `the menu: ${order.join(", ")}`);
+  h.expect(JSON.stringify(order) === JSON.stringify(["est-act-template", "est-sign-here", "est-call", "est-act-revoke"]), `the menu: ${order.join(", ")}`);
   await h.shot("menu");
 
   // «Отозвать ссылку»: asks first, then runs with «Отменить»

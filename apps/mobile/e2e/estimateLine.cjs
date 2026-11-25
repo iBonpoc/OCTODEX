@@ -141,14 +141,14 @@ exports.addSection = async (h) => {
 exports.addOption = async (h) => exports.editorMenu(h, "est-add-option");
 
 /**
- * «Сохранить и отправить» of the builder (v2 #2350): the bar's one step is «Готово»; sending is an item of the header's «⋯»
- * (`est-menu` → `ue-save-send`), by testID (rule 19). Waits for the menu to be gone (the item runs after it, menuPick).
+ * «Отправить» of the builder (#2403, the button map): the bar's one step is «Готово»; sending is the round ➤ of the header
+ * (`est-send-top`, drawn once the estimate has a line; «⋯» no longer holds it), by testID (rule 19).
  */
-exports.saveSend = async (h) => exports.editorMenu(h, "ue-save-send");
+exports.saveSend = async (h) => h.page.getByTestId("est-send-top").locator("visible=true").first().getByRole("button").click();
 
 /**
- * An item of the builder header's «⋯» (`est-menu`, v2 #2350) by its testID: «Сохранить и отправить» (`ue-save-send`), «Расставить»
- * (`est-group-by-kind`), «Подробно» (`est-row-view`, a check item: a press flips «Кратко ↔ Подробно»), «Экран клиента»
+ * An item of the builder header's «⋯» (`est-menu`, v2 #2350) by its testID: «Разложить по типам»
+ * (`est-group-by-kind`), «Позиции подробно» (`est-row-view`, a check item: a press flips «Кратко ↔ Подробно»), «Показать клиенту»
  * (`est-menu-client`). Waits for the menu to be gone (the item runs after it, menuPick).
  */
 exports.editorMenu = async (h, item) => {

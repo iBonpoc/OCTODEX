@@ -1089,11 +1089,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       />
     </View>
   );
-  /** «⋯» of the editor: rare things — send now, the layout of the list, how the rows read, the client's screen */
+  /** «⋯» of the editor: rare things — the layout of the list, how the rows read, the client's screen */
   const moreList = [
-    // the same words as the header's round «Отправить» (CRM review: one action, one name); in «⋯» it stays for the empty
-    // estimate too — pressed with no line it says what is missing (spec 308)
-    ...(canSend ? [{ key: "send", label: existing && existing.status !== "draft" ? t("r1.est.sendChanges") : t("proto.est.saveSend"), icon: "send" as const, testID: "ue-save-send" }] : []),
     ...(!signed && option.lines.length ? [{ key: "layout", label: t("est.sec.layout"), icon: "menu" as const, testID: "est-group-by-kind" }] : []),
     // «＋ Вариант» (Good / Better / Best) — a rare way to add, in «⋯» (the four buttons over the lines are the common ones)
     ...(!signed && !tplEdit && doc.options.length < MAX_OPTIONS ? [{ key: "option", label: t("est.var.add"), icon: "copy" as const, testID: "est-add-option" }] : []),
@@ -1101,8 +1098,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     { key: "client", label: t("est.client.on"), icon: "eye" as const, selected: clientScreen, testID: "est-menu-client" },
   ];
   const onMore = (k: string) => {
-    if (k === "send") void save(true);
-    else if (k === "layout") layoutBtn();
+    if (k === "layout") layoutBtn();
     else if (k === "rows") setRowLook(rowLook === "full" ? "brief" : "full");
     else if (k === "option") addOption();
     else toggleClientScreen(!clientScreen);

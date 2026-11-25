@@ -16,7 +16,7 @@ exports.run = async (h) => {
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await tid("est-add-new").waitFor({ timeout: 8000 });
   for (const [n, v] of [["Alpha (тестовые)", 10], ["Bravo (тестовые)", 20], ["Charlie (тестовые)", 30], ["Delta (тестовые)", 40]]) await line.addCustom(h, n, v, 2);
-  await line.editorMenu(h, "est-row-view"); // «⋯ → Строки подробно» (v2: an item of the header menu)
+  await line.editorMenu(h, "est-row-view"); // «⋯ → Позиции подробно» (v2: an item of the header menu)
   const [a, b, , d] = await ids();
   // «Подробно» (v2): the row's line reads «$10.00 × 2 ea» («Кратко» reads «2 ea × $10.00»)
   await p.waitForFunction((id) => /^\$[\d,.]+ × /.test((document.querySelector(`[data-testid="est-times-${id}"]`)?.textContent || "").trim()), a, { timeout: 3000 });

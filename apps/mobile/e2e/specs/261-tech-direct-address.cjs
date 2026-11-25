@@ -58,7 +58,7 @@ exports.run = async (h) => {
   h.expect((await p.getByTestId("est-send").count()) === 0, "the tech: no «Отправить» button");
   await h.go("/estimate/new?id=e6");
   await p.getByTestId("ue-save").first().waitFor({ state: "visible", timeout: 15000 });
-  h.expect((await p.getByTestId("ue-save-send").count()) === 0, "the tech: the builder has no «Сохранить и отправить»");
+  h.expect((await p.getByTestId("ue-save-send").count()) === 0, "the tech: the builder has no «Отправить»");
 
   // the lists: only his own — counted once the list has drawn his own card
   await h.go("/jobs");

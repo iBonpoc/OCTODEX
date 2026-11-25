@@ -113,6 +113,20 @@ exports.run = async (h) => {
     return r && r.confidence === "taped" && r.geom.lengthIn === 306 && r.attrs.profile === "half_round" && r.attrs.color === "brown" && r.attrs.hanger === "hr_shank_fascia"; // i18n-old: ok — «taped» is the data value, not a label
   }, "the store: the run's attributes and the tape");
   await h.shot("taped"); // i18n-old: ok — «taped» is the data value, not a label
+  // v43 PR B: «фут + дюйм | мм» — the same length in millimetres, read at once; the strip is inches only
+  await tid("attr-length-unit-mm").click();
+  h.expect((await tid("attr-length-tape").count()) === 0, "in mm there is no tape strip");
+  await tid("attr-length-mm").locator("input").fill("9144"); // 360″ = 30′
+  await waitFor(async () => (await labels()).some((t) => /^30′/.test(t)), "9144 mm: the label shows 30′");
+  await tid("attr-length-unit-ftin").click();
+  await waitFor(async () => (await tid("attr-length-ft").locator("input").inputValue()) === "30", "back in feet: the field shows 30");
+  await tid("attr-length-unit-mm").click();
+  await tid("attr-length-mm").locator("input").fill("7772"); // 25′ 6″ again (306″) — the steps below go on from it
+  await waitFor(async () => (await labels()).some((t) => /^25′ 6″/.test(t)), "7772 mm: 25′ 6″ again");
+  await tid("attr-length-mm").locator("input").fill("0");
+  await tid("attr-length-bad").waitFor({ timeout: 3000 });
+  await tid("attr-length-mm").locator("input").fill("7772");
+  await tid("attr-length-unit-ftin").click();
 
   // «Назад» on the canvas takes the tape back
   await closeAttrs();

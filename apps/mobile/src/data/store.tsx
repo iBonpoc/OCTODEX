@@ -59,6 +59,7 @@ import { dependentsOf, isMoneyOp, liveOf, madeOnQueue, nextToSend, waitingFor } 
 import { SEND_AFTER_MS } from "@/cloud/outboxTiming";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
 import { jobCancelRefusal, type JobCancelRefusal } from "@/features/jobCancel";
+import { copyOfRejectedEstimate } from "./rejectedEstimateCopy";
 import { dropGroupPriceOps, dropModuleOps, dropSettingsOps, dropSupplierTaxOps, dropTemplateOps, groupPriceRejected, itemCostRejected, supplierTaxRejected, templateRejected, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
 import type { DictKey } from "@/i18n";
 import { onAppActive, onAppLeave } from "./appActive";
@@ -271,6 +272,13 @@ interface StoreCtx {
   rejectedOps: RejectedOp[];
   /** «Понятно»: the toast's «Отменить» puts it back (rule 5) */
   dismissRejected: (id: ID) => Undo;
+  /**
+   * #2478 «Сделать копию»: the edits of a save the server refused because the client signed meanwhile
+   * (estimate_signed_meanwhile) become a new draft estimate (same client, place, lead, title; fresh ids; costs kept) and
+   * the card goes. «Сбросить» is dismissRejected. Returns the new estimate's id (the editor opens it) and the undo of both;
+   * null: no such refusal or it kept no edits.
+   */
+  copyRejectedEstimate: (id: ID) => { estimateId: ID; undo: Undo } | null;
   /**
    * 7а-3 «в» (docs/specs/22 §3.6): the signed-in person's changes still waiting for a company closed by its owner (the
    * server refuses them now), and «Убрать» them (after a confirmation, rule 5). Other people's ops stay.
@@ -1786,6 +1794,8 @@ export function StoreProvider({
     return undoTogether(undos);
   };
 
+  // #2478: copyRejectedEstimate calls the store's own saveEstimate (the value below)
+  const valueRef = useRef<StoreCtx | null>(null);
   const value = useMemo<StoreCtx>(
     () => ({
       db,
@@ -1805,6 +1815,16 @@ export function StoreProvider({
       discardOp,
       rejectedOps,
       dismissRejected,
+      copyRejectedEstimate: (rid) => {
+        const rec = rejectedOps.find((x) => x.id === rid);
+        const store = valueRef.current;
+        if (!rec?.estimateEdit || !store) return null;
+        const copy = copyOfRejectedEstimate(rec.estimateEdit, uid);
+        const estimateId = uid();
+        const saved = store.saveEstimate({ id: estimateId, ...copy });
+        const gone = dismissRejected(rid);
+        return { estimateId, undo: undoTogether([saved, gone]) };
+      },
       unsentIn: unsentInCompany,
       dropUnsentIn,
       unsentRemoved,
@@ -2618,7 +2638,7 @@ export function StoreProvider({
               : {};
             return { ...d, ...used, estimates: prev ? d.estimates.map((e) => (e.id === id ? next : e)) : [...d.estimates, next] };
           },
-          { k: "estimate.save", id, versionId, customerId, propertyId, leadId: leadId0 ?? prev?.leadId, templateId: prev ? prev.templateId : templateId0, title, doc: storedDoc(doc), costs: costsOf(doc), ...(linesFrom ? { linesFrom } : {}), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct, ...(prev?.status === "awaiting_countersign" ? { fromStatus: "awaiting_countersign" as const } : {}) },
+          { k: "estimate.save", id, versionId, customerId, propertyId, leadId: leadId0 ?? prev?.leadId, templateId: prev ? prev.templateId : templateId0, title, doc: storedDoc(doc), costs: costsOf(doc), ...(linesFrom ? { linesFrom } : {}), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct, ...(prev?.status === "awaiting_countersign" ? { fromStatus: "awaiting_countersign" as const, ...(prev.approval ? { signedOptionId: prev.approval.optionId } : {}) } : {}) },
         );
       },
       approveEstimate: (id, a) => {
@@ -2685,7 +2705,7 @@ export function StoreProvider({
       reopenEstimate: (id, reason) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
         if (!e || e.status !== "awaiting_countersign" || !canManageLink(dbRef.current, dbRef.current.me)) return NO_UNDO;
-        return mutate("estimate.reopen", (d) => reopened(d, id), { k: "estimate.reopen", id, reason: reason.trim() });
+        return mutate("estimate.reopen", (d) => reopened(d, id), { k: "estimate.reopen", id, reason: reason.trim(), ...(e.approval ? { signedOptionId: e.approval.optionId } : {}) });
       },
       revokeEstimateLink: (id) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
@@ -3337,6 +3357,7 @@ export function StoreProvider({
   }
   if (!auth.ready || !dbReady || !roleReady || !queueReady || !outboxReady || !rejectedReady) return null;
 
+  valueRef.current = value;
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
