@@ -37,6 +37,12 @@ describe("GroupedList / GroupRow 56 (BUILD-SPEC §1)", () => {
     expect(body).toMatch(/<View style=\{\{ flex: 1, minWidth: 0 \}\}>/);
     expect(body).toMatch(/numberOfLines=\{wrap \? 2 : 1\}/);
   });
+  it("a row with a status-word column («Просрочен 9 дн») lets the name take two lines — the name is not cut, the subtitle is cut first", () => {
+    const s = src("groupedList.tsx");
+    expect(s).toMatch(/const wordCol = !!cols\?\.some\(\(x\) => x\.tone\)/);
+    expect(s).toMatch(/numberOfLines=\{wrap \|\| wordCol \? 2 : 1\}[^>]*>\s*\{title\}/);
+    expect(s).toMatch(/numberOfLines=\{wrap \? 2 : 1\}[^>]*>\s*\{subtitle\}/);
+  });
   it("no button inside a button (web «<button> cannot contain a nested <button>», wave 3): the row's actions stand beside its Press", () => {
     const s = src("groupedList.tsx");
     const press = s.slice(s.indexOf("const tap ="), s.indexOf("const row ="));

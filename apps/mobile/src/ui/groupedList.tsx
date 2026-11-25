@@ -218,6 +218,8 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
 }) {
   const { c } = useTheme();
   const check = lead && "done" in lead ? lead : null;
+  /** a column with a status word («Просрочен 9 дн», DS §3.3) is wide and never shrinks: the name takes a second line, the subtitle is cut first */
+  const wordCol = !!cols?.some((x) => x.tone);
   const pad = { minHeight: compact ? component.rowCompact : component.listRow.h, paddingVertical: space[2], gap: space[3] };
   return (
     <RowView style={[pad, { paddingLeft: check ? 0 : space[4], paddingRight: padRight }]}>
@@ -242,7 +244,7 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
       ) : null}
       <View style={{ flex: 1, minWidth: 0 }}>
         <View testID={ids?.title}>
-          <T v="body" w="semibold" tone={check?.done || quiet ? "mut" : "ink"} numberOfLines={wrap ? 2 : 1} style={check?.done ? { textDecorationLine: "line-through" } : undefined}>
+          <T v="body" w="semibold" tone={check?.done || quiet ? "mut" : "ink"} numberOfLines={wrap || wordCol ? 2 : 1} style={check?.done ? { textDecorationLine: "line-through" } : undefined}>
             {title}
           </T>
         </View>
