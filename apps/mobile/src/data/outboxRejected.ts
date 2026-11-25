@@ -104,7 +104,8 @@ export function rejectedOf(item: OwnedItem, error: string, now: number, who: Own
   // the card says the estimate changed and the client signs again
   if ((op.k === "estimate.sign" || op.k === "estimate.approve") && reason === "estimate_total_mismatch") return { ...base, what: "estimate", href: `/estimate/${op.id}`, labelKey: "est.rej.signatureLost", reason };
   // #2474: the client signed while the phone's edit waited — the signature stays, the card says the edit was not saved
-  if (op.k === "estimate.save" && reason === "estimate_signed_meanwhile") return { ...base, what: "estimate", href: `/estimate/${op.id}`, labelKey: "est.rej.signedMeanwhile", reason };
+  // #2478: «don't sign — change it» queued while the client signed another version — that signature stays, the card says so
+  if ((op.k === "estimate.save" || op.k === "estimate.reopen") && reason === "estimate_signed_meanwhile") return { ...base, what: "estimate", href: `/estimate/${op.id}`, labelKey: "est.rej.signedMeanwhile", reason };
   // a merge of two clients the phone showed as done (step 17 C3): never back silently — the kept card, and why
   if ((op.k === "customer.people" || op.k === "customer.tags") && reason === "customer_merged") return { ...base, what: "merge", href: `/client/${op.id}`, labelKey: "clientDup.rej.cardMergedTitle", reason };
   if (op.k === "customer.merge") return { ...base, what: "merge", href: `/client/${op.keepId}`, ...(reason ? { reason } : {}) };

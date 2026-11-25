@@ -2618,7 +2618,7 @@ export function StoreProvider({
               : {};
             return { ...d, ...used, estimates: prev ? d.estimates.map((e) => (e.id === id ? next : e)) : [...d.estimates, next] };
           },
-          { k: "estimate.save", id, versionId, customerId, propertyId, leadId: leadId0 ?? prev?.leadId, templateId: prev ? prev.templateId : templateId0, title, doc: storedDoc(doc), costs: costsOf(doc), ...(linesFrom ? { linesFrom } : {}), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct, ...(prev?.status === "awaiting_countersign" ? { fromStatus: "awaiting_countersign" as const } : {}) },
+          { k: "estimate.save", id, versionId, customerId, propertyId, leadId: leadId0 ?? prev?.leadId, templateId: prev ? prev.templateId : templateId0, title, doc: storedDoc(doc), costs: costsOf(doc), ...(linesFrom ? { linesFrom } : {}), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct, ...(prev?.status === "awaiting_countersign" ? { fromStatus: "awaiting_countersign" as const, ...(prev.approval ? { signedOptionId: prev.approval.optionId } : {}) } : {}) },
         );
       },
       approveEstimate: (id, a) => {
@@ -2685,7 +2685,7 @@ export function StoreProvider({
       reopenEstimate: (id, reason) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
         if (!e || e.status !== "awaiting_countersign" || !canManageLink(dbRef.current, dbRef.current.me)) return NO_UNDO;
-        return mutate("estimate.reopen", (d) => reopened(d, id), { k: "estimate.reopen", id, reason: reason.trim() });
+        return mutate("estimate.reopen", (d) => reopened(d, id), { k: "estimate.reopen", id, reason: reason.trim(), ...(e.approval ? { signedOptionId: e.approval.optionId } : {}) });
       },
       revokeEstimateLink: (id) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
