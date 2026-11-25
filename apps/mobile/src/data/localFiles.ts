@@ -63,6 +63,11 @@ export function namesIn(raw: string, strict = true): Set<string> | null {
     if (strict && /^\s*[[{"]/.test(raw)) return null;
     v = raw;
   }
+  return namesOf(v);
+}
+
+/** the file names every string in a value names (namesIn without the JSON) */
+function namesOf(v: unknown): Set<string> {
   const out = new Set<string>();
   const walk = (x: unknown, depth: number): void => {
     if (depth > 64) return;
@@ -118,6 +123,26 @@ const madeThisRun = new Set<string>();
 export function keptHere(uri: string): void {
   const n = fileName(uri);
   if (n) madeThisRun.add(n);
+}
+
+/**
+ * review 25.11: what a «Вернуть» may bring back — every file the state before an action named and the state after it
+ * does not (a photo deleted, a folded op) — is kept till the next start, like a file made in this run (an undo never
+ * lives past the run). Only the parts the action changed are read (the same object — not walked)
+ */
+export function keepTakenBack(prev: object, next: object): void {
+  try {
+    const after = next as Record<string, unknown>;
+    for (const [k, v] of Object.entries(prev)) {
+      if (v === after[k]) continue;
+      const stay = namesOf(after[k]);
+      namesOf(v).forEach((n) => {
+        if (!stay.has(n)) madeThisRun.add(n);
+      });
+    }
+  } catch {
+    // never stops an action; the 10-minute age still guards the file
+  }
 }
 
 /**

@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: {} }));
 
-import { asMs, dropPickedCopy, fileName, inAppDir, keptHere, namesIn, setMemoryRecords, SWEEP_MIN_AGE_MS, sweepLocalFiles, sweepSoon, toSweep, type FoundFile, type SweepDeps } from "../src/data/localFiles";
+import { asMs, dropPickedCopy, fileName, inAppDir, keepTakenBack, keptHere, namesIn, setMemoryRecords, SWEEP_MIN_AGE_MS, sweepLocalFiles, sweepSoon, toSweep, type FoundFile, type SweepDeps } from "../src/data/localFiles";
 
 const C = "file:///var/mobile/Containers/Data/Application/AAAA/Library/Caches";
 const DIRS = [`${C}/ImagePicker/`, `${C}/ImageManipulator/`];
@@ -172,6 +172,14 @@ describe("unit:localFiles — review of #1659", () => {
     keptHere(man("this-run.jpg"));
     const { left } = await run({}, [man("this-run.jpg"), man("orphan.jpg")]);
     expect([...left]).toEqual([man("this-run.jpg")]);
+  });
+  it("a file an action stopped naming (a photo deleted, a folded op) stays while «Вернуть» may bring it back (review 25.11)", async () => {
+    const pic = (n: string) => `${C}/ImagePicker/${n}`;
+    const prev = { visits: [{ photos: [{ uri: pic("deleted.jpg") }, { uri: pic("still.jpg") }] }], tags: [{ note: pic("untouched.jpg") }] };
+    const next = { visits: [{ photos: [{ uri: pic("still.jpg") }] }], tags: prev.tags };
+    keepTakenBack(prev, next);
+    keepTakenBack({ op: { k: "module.op", uri: man("folded.jpg") } }, {});
+    expect((await run({}, [pic("deleted.jpg"), man("folded.jpg"), pic("untouched.jpg"), pic("still.jpg")])).left).toEqual(new Set([pic("deleted.jpg"), man("folded.jpg")]));
   });
   it("a sweep asked while one runs is not lost: it runs right after", async () => {
     let calls = 0;
