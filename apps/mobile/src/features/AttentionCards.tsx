@@ -258,12 +258,14 @@ export function AttentionRows({ items }: { items: AttentionItem[] }) {
   const qWho = qEst ? db.customers.find((c) => c.id === qEst.customerId)?.name ?? "" : "";
   // the lines under the least markup (draft: 20 % over the cost): what is missing to it, and the markup they have
   const qLines = (qEst?.doc?.options ?? []).flatMap((o) => o.lines).filter((l) => !!l.unitCostCents && (l.unitPriceCents ?? 0) * 100 < l.unitCostCents! * 120);
-  const short = Math.round(qLines.reduce((a, l) => a + (l.unitCostCents! * 1.2 - (l.unitPriceCents ?? 0)) * Number(l.quantity || 0), 0));
+  // the one line the person asked about (Railing bracket): its shortfall to 20 % and its own markup
+  const qLine = qLines[0];
+  const short = qLine ? Math.round((qLine.unitCostCents! * 1.2 - (qLine.unitPriceCents ?? 0)) * Number(qLine.quantity || 0)) : 0;
   const markPct = qLines.length ? Math.round(((qLines[0]!.unitPriceCents ?? 0) / qLines[0]!.unitCostCents! - 1) * 100) : 0;
   const decide = async () => {
     const k = await ask({
       title: "Разрешить цену ниже наценки?",
-      text: `${qEst?.number ?? ""} · ${qWho}. Просит Ivan Sokolov.\nНе хватает ${money(short)} · наценка ${markPct} % вместо 20 %. Согласие — только на эту цену.`,
+      text: `${qEst?.number ?? ""} · ${qWho}. Просит Ivan Sokolov.\n${qLine?.name ?? ""}: не хватает ${money(short)} · наценка ${markPct}\u00a0% вместо 20\u00a0%. Согласие — только на эту цену.`,
       actions: [
         { key: "yes", label: "Разрешить", tone: "primary", testID: "q-allow" },
         { key: "open", label: "Открыть смету", testID: "q-open" },

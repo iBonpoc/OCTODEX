@@ -5,6 +5,7 @@
  */
 import { qv } from "@/features/qdraft/qv";
 import { ListRow as QListRow } from "@/ui/surfaces";
+import { Icon } from "@/ui/primitives";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { useEffect, useState, type ReactNode } from "react";
 import { Linking, Platform, View } from "react-native";
@@ -338,8 +339,8 @@ export function NotifySheet({ visitId, onClose }: { visitId: ID | null; onClose:
         // ЧЕРНОВИК #2093: одна главная «Отправить SMS»; остальные способы — строками
         <>
           {sms ? <Button label="Отправить SMS" icon="sms" full onPress={() => { Linking.openURL(sms).catch(() => {}); done(); }} /> : null}
-          {mail ? <QListRow title="Отправить письмом" chevron={false} onPress={() => { Linking.openURL(mail).catch(() => {}); done(); }} /> : null}
-          <QListRow title="Скопировать текст" chevron={false} onPress={() => { Clipboard.setStringAsync(text).catch(() => {}); toast.show(t("vf.notify.copied")); done(); }} />
+          {mail ? <QListRow left={<Icon name="mail" />} title="Отправить письмом" chevron={false} onPress={() => { Linking.openURL(mail).catch(() => {}); done(); }} /> : null}
+          <QListRow left={<Icon name="copy" />} title="Скопировать текст" chevron={false} onPress={() => { Clipboard.setStringAsync(text).catch(() => {}); toast.show(t("vf.notify.copied")); done(); }} />
           <Button label={t("vf.notify.later")} variant="ghost" full onPress={onClose} />
         </>
       ) : null}

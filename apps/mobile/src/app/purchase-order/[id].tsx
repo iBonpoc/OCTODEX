@@ -144,7 +144,7 @@ export default function PurchaseOrderScreen() {
   const canRecv = canReceive(role) && ["sent", "partially_received", "received"].includes(found.status);
 
   return (
-    <Screen form title={title} back={back} subtitle={[supName ?? t("po.noSupplier"), job ? job.title : t("po.stock")].join(" · ")}>
+    <Screen form title={qv() === "a" && found.status === "draft" ? "Заказ · черновик" : title} back={back} subtitle={[supName ?? t("po.noSupplier"), job ? job.title : t("po.stock")].join(" · ")}>
       <Card>
         <RowView style={{ justifyContent: "space-between" }}>
           <View testID="po-status">
@@ -167,7 +167,7 @@ export default function PurchaseOrderScreen() {
             <TextField type="date" value={dateText} onChangeText={(v) => { setDateText(v); set({ neededOn: isoDate(v) }); }} placeholder={t("po.neededOn")} />
             {dateBad ? <StatusNote tone="bad">{t("po.neededOn")}</StatusNote> : null}
             <TextField type="note" value={o.note ?? ""} onChangeText={(v) => set({ note: v })} placeholder={t("po.note")} multiline />
-            {costs ? (qv() === "a" ? <ToggleRow label={t("po.printPrices")} value={o.printPrices} onChange={(v) => set({ printPrices: v })} testID="po-print-prices" /> : <Toggle on={o.printPrices} onChange={(v) => set({ printPrices: v })} label={t("po.printPrices")} />) : null}
+            {costs ? (qv() === "a" ? <ToggleRow label={t("po.printPrices")} caption="Поставщик увидит ваши цены закупки" value={o.printPrices} onChange={(v) => set({ printPrices: v })} testID="po-print-prices" /> : <Toggle on={o.printPrices} onChange={(v) => set({ printPrices: v })} label={t("po.printPrices")} />) : null}
           </>
         ) : (
           <View testID="po-where">

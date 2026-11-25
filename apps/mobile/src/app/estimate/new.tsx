@@ -1056,6 +1056,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // ЧЕРНОВИК #1832 (`?qv=m`): у сотрудника с ценой ниже наценки «Отправить» становится «Попросить согласия»; «Готово» остаётся
   const askOk = qv() === "m" && store.role !== "director" && option.lines.some((l) => belowMinDraft(l as never));
   const askOwner = () => {
+    if (asked) return toast.show("Уже ждёт согласия владельца");
     setAsked(true);
     toast.show("Запрос отправлен владельцу");
   };
@@ -1148,7 +1149,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     >
       <RevealOnTick tick={revealTick} target={missing === "client" ? clientRef : linesRef} />
       {/* ЧЕРНОВИК #1832 (`?qv=m`): после просьбы — баннер; смету можно править, отправить — после согласия */}
-      {asked ? <Banner tone="warn" title="Ждёт согласия владельца" hint="Цена ниже наценки. Смету можно править; отправить клиенту — после согласия." testID="est-wait-ok" /> : null}
+      {asked ? (
+        <Banner tone="warn" title="Ждёт согласия владельца" hint="Цена ниже наценки. Смету можно править; отправить клиенту — после согласия." testID="est-wait-ok" />
+      ) : askOk ? (
+        <Banner tone="warn" title="Цена ниже наценки" hint="Отправить клиенту можно после согласия владельца." action={{ label: "Попросить согласия", onPress: askOwner }} testID="est-need-ok" />
+      ) : null}
       {clientScreen ? (
         <View testID="est-client-off" style={{ alignSelf: "flex-start" }}>
           <Button label={t("est.client.off")} icon="eye" variant="secondary" onPress={() => toggleClientScreen(false)} />
