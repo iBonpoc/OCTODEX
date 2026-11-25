@@ -61,6 +61,7 @@ exports.run = async (h) => {
   const before = await catalogLen();
   await tid(`est-line-${id}`).click();
   await openMenu(id);
+  await h.shot("catalog-menu");
   await tid(`est-act-catalog-${id}`).click();
   await line.fold(h);
   await p.waitForFunction((n) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.catalog ?? []).length === n + 1, before, { timeout: 5000 });
