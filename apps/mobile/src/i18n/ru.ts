@@ -2985,6 +2985,7 @@ export const ru = {
   "ds.fields.date": "Дата выезда",
   "ds.fields.due": "Срок (может быть пустым)",
   "ds.fields.narrow": "Два узких поля в строке: единица — внутри своей рамки",
+  "ds.fields.totalBar": "Поле строки итогов: на iPhone в панели над клавиатурой — «Итого $…» (слева) и «Готово»",
   "ds.fields.ft": "Футы",
   "ds.fields.in": "Дюймы",
   "ds.fields.inWord": "дюймов",

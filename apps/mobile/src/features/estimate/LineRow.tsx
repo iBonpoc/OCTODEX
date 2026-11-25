@@ -21,7 +21,7 @@ import { SwipeRow, type SwipeBtn } from "./SwipeRow";
 import { DashedFrame } from "@/ui/dashedFrame";
 import { useRowHandle, useRowHead } from "@/features/SortableList";
 import { swipes } from "./swipeState";
-import { rowQtyLine, rowSum } from "./rowLine";
+import { docMoney, rowQtyLine, rowSum } from "./rowLine";
 import { dragEnd, longPressMenu } from "./rowGesture";
 import { finePointer } from "@/ui/pointer";
 import { kindWidth, openClip } from "./rowOpen";
@@ -101,7 +101,7 @@ export const rowFieldId = (lineId: string, f: "name" | "qty" | "price" | "cost")
 
 function LineRowView(p: LineRowProps) {
   const { l, open } = { l: p.line, open: p.open };
-  const { t, money } = useI18n();
+  const { t } = useI18n();
   const { c } = useTheme();
   const reduce = useReducedMotion();
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -184,7 +184,7 @@ function LineRowView(p: LineRowProps) {
       {spend !== null ? (
         <View testID={`est-spend-${l.id}`}>
           <T v="caption" tone="mut" tabular>
-            {t("est2.row.spend", { spend: money(spend) })}
+            {t("est2.row.spend", { spend: docMoney(spend) })}
           </T>
         </View>
       ) : null}
@@ -243,7 +243,7 @@ function LineRowView(p: LineRowProps) {
             <RowView style={{ justifyContent: "space-between" }}>
               <View testID={`est-times-${l.id}`}>
                 <T v="caption" tone="mut" tabular numberOfLines={1}>
-                  {rowPriceTimes(l, money, shownQty)}
+                  {rowPriceTimes(l, docMoney, shownQty)}
                 </T>
               </View>
               {sum}
@@ -381,10 +381,10 @@ function LineRowView(p: LineRowProps) {
             {(() => {
               // a hidden line costs the client $0; «ваш расход» only for who sees costs (and a known cost)
               const spend = isHidden(l) ? hiddenSpend(l, { costsVisible: p.costsVisible, clientScreen: !!p.clientScreen }) : null;
-              if (isHidden(l)) return spend !== null ? t("est2.row.sumSpend", { total: money(0), spend: money(spend) }) : t("est.row.sum", { total: money(0) });
-              return t("est.row.sum", { total: money(figures.total) });
+              if (isHidden(l)) return spend !== null ? t("est2.row.sumSpend", { total: docMoney(0), spend: docMoney(spend) }) : t("est.row.sum", { total: docMoney(0) });
+              return t("est.row.sum", { total: docMoney(figures.total) });
             })()}
-            {!isHidden(l) && figures.profit !== null && !p.clientScreen ? ` · ${t("est.row.profit", { profit: money(figures.profit) })}${figures.marginPct !== null ? ` · ${String(figures.marginPct).replace(/^-/, "−")} %` : ""}` : ""}
+            {!isHidden(l) && figures.profit !== null && !p.clientScreen ? ` · ${t("est.row.profit", { profit: docMoney(figures.profit) })}${figures.marginPct !== null ? ` · ${String(figures.marginPct).replace(/^-/, "−")} %` : ""}` : ""}
             {l.optional ? ` · ${t("est2.row.optionalNote")}` : ""}
           </T>
           {!isHidden(l) && !p.clientScreen && figures.profit !== null && figures.profit < 0 ? (
