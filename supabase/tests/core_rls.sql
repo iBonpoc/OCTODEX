@@ -19552,7 +19552,7 @@ begin
 exception when others then
   declare v_hint text; begin get stacked diagnostics v_hint = pg_exception_hint; return sqlstate || ' ' || coalesce(v_hint, ''); end;
 end $$;
-select tst.ok(pg_temp.t472_code() = '42501 estimate_property_not_assigned', format('T472 the code: 42501 + hint (%s)', pg_temp.t472_code()));
+select tst.ok(pg_temp.t472_code() = '22023 estimate_property_not_assigned', format('T472 the code: 22023 + hint, not 42501 («no rights» in the app) (%s)', pg_temp.t472_code()));
 -- the same property sent again and the title: saved (also once the property is no longer his — below)
 update public.estimates set property_id = 'd1a00000-0000-0000-0000-000000000001', title = 'T472 renamed' where id = '54720000-0000-4000-8000-0000000000e1';
 select tst.ok((select title from public.estimates where id = '54720000-0000-4000-8000-0000000000e1') = 'T472 renamed', 'T472 the same property and the title: saved');

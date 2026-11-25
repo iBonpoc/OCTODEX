@@ -7,7 +7,8 @@
 --   change of property_id is checked; the same property is no change.
 -- * Only the app's own role (authenticated) that is not staff: owner / admin / office, the server's functions and the
 --   client merge move estimates as before.
--- * Code 42501 (it is a matter of rights) + hint estimate_property_not_assigned.
+-- * Code 22023 + hint estimate_property_not_assigned — not 42501: the app reads 42501 as «no rights» for the whole company
+--   (outboxRetry.isAccessDenied); one refused estimate is a plain refusal of its op (classify → refusal, dropped after MAX_TRIES).
 -- Rule 16: only added (a function, a trigger). Rule 18: the trigger function is executed by no one.
 
 create or replace function app.tg_estimate_property_assignee()
@@ -18,7 +19,7 @@ begin
      and not app.is_staff(new.company_id)
      and not app.is_property_assignee(new.property_id) then
     raise exception 'estimate_property_not_assigned: a tech moves an estimate only to a property he is assigned'
-      using errcode = '42501', hint = 'estimate_property_not_assigned';
+      using errcode = '22023', hint = 'estimate_property_not_assigned';
   end if;
   return new;
 end;
