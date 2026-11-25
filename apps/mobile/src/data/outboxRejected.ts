@@ -12,6 +12,7 @@ import type { Op } from "@/cloud/ops";
 import { isMoneyOp } from "./outboxDeps";
 import { mineOf, REJECTED_KEY, sameOwner, type Owner, type OwnedItem } from "./outboxOwner";
 import { MONEY_KINDS } from "./syncLink";
+import type { RejectedEstimateEdit } from "./rejectedEstimateCopy";
 
 export { REJECTED_KEY };
 /** a refused change older than this leaves the list by itself (review #263 №10) */
@@ -85,6 +86,8 @@ export interface RejectedOp {
   /** what = price (#1913): the group whose price someone changed first, the item it was written through, the price the
    *  person meant (the screen offers «Поставить $X» — a new write against the price the server has now) */
   groupPrice?: { group: string; itemId: string; mineCents: number; placeholder: boolean };
+  /** #2478: an estimate's save refused because the client signed meanwhile — the edits, for «Сделать копию» */
+  estimateEdit?: RejectedEstimateEdit;
 }
 
 /**
@@ -104,7 +107,14 @@ export function rejectedOf(item: OwnedItem, error: string, now: number, who: Own
   // the card says the estimate changed and the client signs again
   if ((op.k === "estimate.sign" || op.k === "estimate.approve") && reason === "estimate_total_mismatch") return { ...base, what: "estimate", href: `/estimate/${op.id}`, labelKey: "est.rej.signatureLost", reason };
   // #2474: the client signed while the phone's edit waited — the signature stays, the card says the edit was not saved
-  if (op.k === "estimate.save" && reason === "estimate_signed_meanwhile") return { ...base, what: "estimate", href: `/estimate/${op.id}`, labelKey: "est.rej.signedMeanwhile", reason };
+  // #2478: the edits are kept for «Сделать копию» (rejectedEstimateCopy) — never lost with the refusal
+  if (op.k === "estimate.save" && reason === "estimate_signed_meanwhile") {
+    const estimateEdit: RejectedEstimateEdit = {
+      title: op.title, customerId: op.customerId, propertyId: op.propertyId, ...(op.leadId ? { leadId: op.leadId } : {}),
+      ...(op.templateId ? { templateId: op.templateId } : {}), doc: op.doc, ...(op.costs ? { costs: op.costs } : {}),
+    };
+    return { ...base, what: "estimate", href: `/estimate/${op.id}`, labelKey: "est.rej.signedMeanwhile", reason, estimateEdit };
+  }
   // a merge of two clients the phone showed as done (step 17 C3): never back silently — the kept card, and why
   if ((op.k === "customer.people" || op.k === "customer.tags") && reason === "customer_merged") return { ...base, what: "merge", href: `/client/${op.id}`, labelKey: "clientDup.rej.cardMergedTitle", reason };
   if (op.k === "customer.merge") return { ...base, what: "merge", href: `/client/${op.keepId}`, ...(reason ? { reason } : {}) };
