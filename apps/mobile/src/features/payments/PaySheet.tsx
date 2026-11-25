@@ -261,6 +261,11 @@ export function PaySheet({ inv, visible, onClose, startCents, balanceCents, fixe
             <T v="caption" tone="mut" numberOfLines={1}>
               {t("w2m.pay.of", { amount: money(balanceCents) })}
             </T>
+            {notStarted && amount > caLimit && job ? (
+          <View testID="pay-ca-limit">
+            <StatusNote tone="warn">{`Больше предела до начала работ: в Калифорнии — не больше ${money(caLimit)} (10 % от ${money(job.amountCents)}). Записать можно.`}</StatusNote>
+          </View>
+        ) : null}
           </View>
         )}
         <Segmented<Way>
@@ -297,11 +302,6 @@ export function PaySheet({ inv, visible, onClose, startCents, balanceCents, fixe
           <ListGroup inset={space[4]}>
             <GroupRow compact testID="pay-link-sms" title={`${t("proto.money.pay.link")} ›`} onPress={payLink} />
           </ListGroup>
-        ) : null}
-        {notStarted && amount > caLimit && job ? (
-          <View testID="pay-ca-limit">
-            <StatusNote tone="warn">{`Больше предела до начала работ: в Калифорнии — не больше ${money(caLimit)} (10 % от ${money(job.amountCents)}). Записать можно.`}</StatusNote>
-          </View>
         ) : null}
         {amount > balanceCents ? <StatusNote tone="warn">{t("inv.capped", { max: money(balanceCents) })}</StatusNote> : null}
       </View>

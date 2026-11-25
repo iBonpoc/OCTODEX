@@ -276,7 +276,7 @@ export default function PurchaseOrderScreen() {
           <ListGroup>
             <GroupRow lead={{ icon: "invoice" }} title="Отправить PDF-заказ" subtitle="Почтой, в сообщении или файлом" onPress={() => { setHowSend(false); send(); }} testID="po-how-pdf" />
             <GroupRow lead={{ icon: "sms" }} title="Отправить текстом" subtitle="Все позиции одним сообщением" onPress={() => setHowSend(false)} testID="po-how-text" />
-            {sup?.phone ? <GroupRow lead={{ icon: "phone" }} title="Позвонить поставщику" subtitle={`${sup.phone} · после звонка спросим «Заказ принят?»`} onPress={() => setHowSend(false)} testID="po-how-call" /> : null}
+            {sup?.phone ? <GroupRow wrap lead={{ icon: "phone" }} title="Позвонить поставщику" subtitle={`${sup.phone} · после звонка спросим «Заказ принят?»`} onPress={() => setHowSend(false)} testID="po-how-call" /> : null}
           </ListGroup>
         </View>
       </Sheet>

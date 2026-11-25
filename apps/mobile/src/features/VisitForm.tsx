@@ -315,11 +315,14 @@ export function NotifySheet({ visitId, onClose }: { visitId: ID | null; onClose:
   const company = db.company?.name ?? "";
   const insp = v.kind === "inspection";
   // «Весь день»: the client gets the date only, no hour (17-job §11.1)
-  const text = v.allDay
+  // ЧЕРНОВИК #2093 (`?qv=a`): после переноса из-за «нет дома» — сначала «мы приезжали» (EN-клиент; в работе — i18n клиента, правило 7)
+  const missed = qv() === "a" && (db.cancelledVisits ?? []).some((x) => x.cancelReason === "no_show" && !!v.jobId && x.jobId === v.jobId);
+  const text0 = v.allDay
     ? ct("job5.msg.allDay", { name, company, date })
     : w
     ? ct(insp ? "schs.msg.inspection" : "schs.msg.job", { name, company, date, from: companyTime(w.from, tz), to: companyTime(w.to, tz) })
     : ct(insp ? "vf.msg.inspection" : "vf.msg.job", { name, company, date, time: at });
+  const text = missed ? text0.replace(/^(Hi [^!]*!) /, "$1 We came by today and missed you. ") : text0;
   // numbers and addresses may come from outside (a web form): only digits and + for SMS; an address that looks like one, encoded
   const sms = smsHref(ctx.customer?.phone ?? lead?.phone, text, Platform.OS);
   const mail = mailtoHref(ctx.customer?.email ?? lead?.email, { subject: company, body: text });
