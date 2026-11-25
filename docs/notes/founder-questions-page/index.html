@@ -214,6 +214,14 @@ dialog .x{margin:var(--space-2) auto 0;display:flex}
     top.append(meta, el('h3',null,q.title||''));
     if (q.what) top.append(el('p','what',q.what));
     card.append(top);
+    if (Array.isArray(q.list) && q.list.length){
+      const s = el('div','sec'); s.append(el('div','sec-t','Что сделано'));
+      const ul = el('ul'); ul.style.margin='0'; ul.style.paddingLeft='1.1em'; ul.style.color='var(--mut)';
+      q.list.slice(0,7).forEach(t=>ul.append(el('li',null,String(t))));
+      s.append(ul);
+      if (q.list.length>7){ const d=el('details'); const sm=el('summary',null,'Ещё '+(q.list.length-7)); sm.style.cursor='pointer'; sm.style.minHeight='var(--hit-min)'; sm.style.display='flex'; sm.style.alignItems='center'; sm.style.color='var(--mut)'; sm.style.fontSize='var(--fs-caption)'; const u2=el('ul'); u2.style.margin='0'; u2.style.paddingLeft='1.1em'; u2.style.color='var(--mut)'; q.list.slice(7).forEach(t=>u2.append(el('li',null,String(t)))); d.append(sm,u2); s.append(d); }
+      card.append(s);
+    }
 
     if (q.images && q.images.length){ const s=el('div','sec'); s.append(el('div','sec-t','Как сейчас и как будет'), imagesBlock(q.images)); card.append(s); }
 
