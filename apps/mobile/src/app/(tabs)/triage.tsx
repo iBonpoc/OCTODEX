@@ -6,6 +6,7 @@ import { useI18n } from "@/i18n";
 import { attentionHref, buildAttention, type AttentionItem } from "@/features/attention";
 import { canOpen } from "@/nav/roles";
 import { AttentionRows } from "@/features/AttentionCards";
+import { useRejectedEstimateChoice } from "@/features/RejectedEstimateChoice";
 import { subjectOf } from "@/features/attentionPeople";
 import { telHref } from "@/features/contactLinks";
 import { AssignSheet, ReplySheet, useTick } from "@/features/sheets";
@@ -26,6 +27,7 @@ export default function Triage() {
   const { t, money, dayOf } = useI18n();
   const { db, role, rejectedOps, dismissRejected, online, reviewVisitMissed, mode, snoozeAttention } = useStore();
   const toast = useToast();
+  const rejChoice = useRejectedEstimateChoice();
   const [snoozed, setSnoozed] = useState<string[]>([]);
   const [reply, setReply] = useState<string | null>(null);
   const [assign, setAssign] = useState<string | null>(null);
@@ -79,6 +81,10 @@ export default function Triage() {
       case "rejected":
         return (
           <>
+            {(() => {
+              const rej = rejectedOps.find((x) => x.id === it.refId);
+              return rej && rejChoice.can(rej) ? <Button testID={`rejected-choose-${rej.id}`} label={t("est.rej.choice.open")} icon="copy" variant="secondary" onPress={() => void rejChoice.choose(rej)} /> : null;
+            })()}
             {canOpen(role, attentionHref(it)) ? <Button label={t("sync.rejected.open")} icon="chevronRight" onPress={() => router.push(attentionHref(it) as Href)} /> : null}
             <Button label={t("sync.rejected.ok")} icon="check" variant="secondary" onPress={() => toast.show(t("sync.rejected.dismissed"), dismissRejected(it.refId))} />
           </>
@@ -103,6 +109,7 @@ export default function Triage() {
 
   return (
     <Screen title={t("triage.title")} help={t("help.triage")} hintKey="triage" fab="home" home>
+      {rejChoice.dialog}
       {!cur ? (
         <Empty icon="check" title={t("triage.done")} hint={t("triage.doneHint")} />
       ) : (

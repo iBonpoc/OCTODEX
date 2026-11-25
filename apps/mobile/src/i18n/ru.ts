@@ -4685,6 +4685,13 @@ export const ru = {
   "pay.online.err.busy": "Слишком много попыток. Попробуйте через {n} мин.",
   // spec 35 §4д п.10 («Деньги и отчёты» №7)
   "est.rej.signatureLost": "Подпись клиента не записана на сервере",
+  "est.rej.choice.open": "Что с правками?",
+  "est.rej.choice.title": "Клиент подписал версию от {date}",
+  "est.rej.choice.text": "Ваши правки ждали сети и не сохранились — подпись осталась. Копия — новый черновик с вашими правками, без связи с замером.",
+  "est.rej.choice.copy": "Сделать копию",
+  "est.rej.choice.reset": "Сбросить",
+  "est.rej.choice.later": "Позже",
+  "est.rej.choice.copied": "Копия готова — черновик",
   "est.rej.signedMeanwhile": "Клиент подписал смету, пока ваши правки ждали сети — правки не сохранены",
   "est.rej.signedMeanwhileWhy": "Подпись клиента осталась. Чтобы изменить смету, откройте её и выберите «Не подписывать — изменить»: клиенту придётся подписать заново.",
   // visit payment refused by the server (#857 О1) — the tech hands it to the office

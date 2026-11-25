@@ -10,6 +10,7 @@ import { router, type Href } from "expo-router";
 import { useStore, type StuckOp } from "@/data/store";
 import type { RejectedOp } from "@/data/outboxRejected";
 import { rejectedHint, rejectedLabel, rejectedOpens } from "@/features/attention";
+import { useRejectedEstimateChoice } from "@/features/RejectedEstimateChoice";
 import { useI18n } from "@/i18n";
 import { stuckKindKey } from "@/data/syncLink";
 import { Button, StatusChip } from "@/ui/controls";
@@ -94,6 +95,7 @@ function RejectedCard({ r }: { r: RejectedOp }) {
   const { t, money, day, time } = useI18n();
   const { dismissRejected, role } = useStore();
   const toast = useToast();
+  const choice = useRejectedEstimateChoice();
   return (
     <Card status="bad">
       <View testID={`rejected-${r.id}`} style={{ gap: space[2] }}>
@@ -109,10 +111,12 @@ function RejectedCard({ r }: { r: RejectedOp }) {
           {`${day(r.at)} ${time(r.at)}`} · {t(rejectedHint(r, role))}
         </T>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
+          {choice.can(r) ? <Button testID={`rejected-choose-${r.id}`} label={t("est.rej.choice.open")} icon="copy" variant="secondary" onPress={() => void choice.choose(r)} /> : null}
           {rejectedOpens(r, role) ? <Button label={t("sync.rejected.open")} icon="chevronRight" variant="secondary" onPress={() => router.push(r.href as Href)} /> : null}
           <Button label={t("sync.rejected.ok")} icon="check" variant="ghost" onPress={() => toast.show(t("sync.rejected.dismissed"), dismissRejected(r.id))} />
         </View>
       </View>
+      {choice.dialog}
     </Card>
   );
 }
