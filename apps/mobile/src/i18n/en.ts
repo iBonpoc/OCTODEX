@@ -4696,7 +4696,7 @@ export const en: Dict = {
   "est.rej.signatureLost": "The client's signature was not saved on the server",
   "est.rej.choice.open": "What about my edits?",
   "est.rej.choice.title": "The client signed the estimate {date} — before your edits",
-  "est.rej.choice.titleNoDate": "The client signed the estimate",
+  "est.rej.choice.titleNoDate": "The client signed the estimate before your edits",
   "est.rej.choice.text": "Your edits waited for the network and were not saved — the signature stays. The copy is a new draft with your edits.",
   "est.rej.choice.copy": "Make a copy",
   "est.rej.choice.reset": "Discard",
@@ -4704,6 +4704,7 @@ export const en: Dict = {
   "est.rej.choice.copied": "Copy ready — a draft",
   "est.rej.choice.resetDone": "Edits discarded",
   "est.rej.choice.why": "Your edits are kept here and the client's signature stays. Make a copy of the estimate from them, or discard them.",
+  "est.rej.choice.whyOffice": "Your edits are kept here and the client's signature stays. The office can make a copy of the estimate from them — do not discard them.",
   "est.rej.signedMeanwhile": "The client signed the estimate while your edits waited for the network — the edits were not saved",
   "est.rej.signedMeanwhileWhy": "The client's signature stays. To change the estimate, open it and choose “Don't sign — change it”: the client will have to sign again.",
   // visit payment refused by the server (#857 О1) — the tech hands it to the office

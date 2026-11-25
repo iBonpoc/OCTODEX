@@ -108,7 +108,7 @@ function RejectedCard({ r }: { r: RejectedOp }) {
           <StatusChip status="bad" label={t("att.rejectedChip")} />
         </View>
         <T v="caption" tone="mut">
-          {`${day(r.at)} ${time(r.at)}`} · {t(rejectedHint(r, role))}
+          {`${day(r.at)} ${time(r.at)}`} · {t(rejectedHint(r, role, choice.mayCopy(r)))}
         </T>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
           {choice.can(r) ? <Button testID={`rejected-choose-${r.id}`} label={t("est.rej.choice.open")} icon="copy" variant="secondary" onPress={() => void choice.choose(r)} /> : null}

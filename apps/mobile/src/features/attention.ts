@@ -1,6 +1,6 @@
 import type { Mode } from "@/data/store";
 import { timing, type StatusName } from "@octo/design-tokens";
-import { seeCosts } from "./access";
+import { canCopyRejectedEstimate, seeCosts } from "./access";
 import { contractStatement, invoiceOwes } from "@octo/estimating-engine";
 import { daysOverdue, daysSince, isOverdue, minutesSince, visitContext } from "@/data/selectors";
 import type { CancelledVisit, DB, ID, Role, Task } from "@/data/types";
@@ -98,9 +98,10 @@ const SUBJECT_PATH: Record<Task["subjectType"], string> = { lead: "/lead", custo
 export const rejectedLabel = (r: Pick<RejectedOp, "what" | "labelKey">): DictKey => (r.labelKey ?? `att.rejected.${r.what}`) as DictKey;
 
 /** what to do about a refused change: «Открыть» → «Подключить» for who may open where it leads, else «ask the owner» */
-export const rejectedHint = (r: Pick<RejectedOp, "what" | "href"> & { kind?: RejectedOp["kind"]; reason?: RejectedOp["reason"]; estimateEdit?: RejectedOp["estimateEdit"] }, role: Role): DictKey =>
-  // #2657: the edits are kept right here — copy or reset them (not «open the estimate»: its edits are not there)
-  r.reason === "estimate_signed_meanwhile" && r.estimateEdit ? "est.rej.choice.why" :
+export const rejectedHint = (r: Pick<RejectedOp, "what" | "href"> & { kind?: RejectedOp["kind"]; reason?: RejectedOp["reason"]; estimateEdit?: RejectedOp["estimateEdit"] }, role: Role, mayCopy = true): DictKey =>
+  // #2657: the edits are kept right here — copy or reset them (not «open the estimate»: its edits are not there); who may not make the
+  // copy (a tech where he is not assigned, #2674 Б2′) is told the office does
+  r.reason === "estimate_signed_meanwhile" && r.estimateEdit ? (mayCopy ? "est.rej.choice.why" : "est.rej.choice.whyOffice") :
   // a refusal we can explain: its own words (outboxRejected REJECT_REASONS)
   r.reason ? rejectReasonKey(r.reason, r.kind) :
   // settings changed by someone else first: not «the module is off» — read again, make the change again (review #374 №3)
@@ -143,7 +144,7 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
   for (const r of extra.rejected ?? []) {
     out.push({
       id: `rej-${r.id}`, kind: "rejected", refId: r.id, name: "", label: rejectedLabel(r), params: r.what === "module" ? { count: r.count ?? 0 } : {}, chip: "att.rejectedChip",
-      status: "bad", amountCents: r.amountCents, score: REJECTED_SCORE, href: r.href, ...(r.what === "module" || r.reason ? { hint: rejectedHint(r, role) } : {}),
+      status: "bad", amountCents: r.amountCents, score: REJECTED_SCORE, href: r.href, ...(r.what === "module" || r.reason ? { hint: rejectedHint(r, role, r.estimateEdit ? canCopyRejectedEstimate(db, { role, mode: "cloud", me: db.me }, r.estimateEdit.propertyId) : true) } : {}),
     });
   }
   // Leads by "whose turn" (docs/14-leads-spec.md §3.2, §7.4): reply · remind · lost or wait? · no step · back from snooze.

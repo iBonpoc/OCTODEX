@@ -9,6 +9,7 @@ import path from "node:path";
 import { canChooseSignedMeanwhile, runSignedMeanwhileChoice, signedMeanwhileAsk, SIGNED_MEANWHILE_KEYS } from "../src/features/signedMeanwhileModel";
 import { rejectedHint } from "../src/features/attention";
 import { localUndo } from "../src/data/undo";
+import { canCopyRejectedEstimate } from "../src/features/access";
 import type { RejectedOp } from "../src/data/outboxRejected";
 import { ru } from "../src/i18n/ru";
 import { en } from "../src/i18n/en";
@@ -105,6 +106,22 @@ describe("Б3: подсказка карточки с правками гово�
       expect(src(f), f).toContain("est.rej.choice.resetDone");
     }
     expect(src("app/(tabs)/triage.tsx")).toMatch(/rejChoice\.can\(rej\)/);
+  });
+});
+
+describe("Б2′: право на копию — по назначению, а не по режиму (в облаке canMakeEstimateAt у мастера всегда true)", () => {
+  const db = { visits: [{ id: "v1", propertyId: "p1", jobId: "j1", assigneeIds: ["me"], status: "scheduled", date: "2026-11-25" }], jobs: [{ id: "j1", propertyId: "p1" }], leads: [] } as never;
+  it("мастер в облаке без выезда на этом объекте — нельзя; на своём — можно; офис — всегда", () => {
+    expect(canCopyRejectedEstimate(db, { role: "tech", mode: "cloud", me: "someone-else" }, "p1")).toBe(false);
+    expect(canCopyRejectedEstimate(db, { role: "tech", mode: "cloud", me: "me" }, "p9")).toBe(false);
+    expect(canCopyRejectedEstimate(db, { role: "director", mode: "cloud", me: "x" }, "p9")).toBe(true);
+  });
+  it("подсказка карточки без права на копию не зовёт к копии, а говорит, что копию сделает офис", () => {
+    expect(rejectedHint({ ...base, estimateEdit: edit } as never, "tech", false)).toBe("est.rej.choice.whyOffice");
+    expect(rejectedHint({ ...base, estimateEdit: edit } as never, "tech", true)).toBe("est.rej.choice.why");
+  });
+  it("М4: заголовок без даты — «до ваших правок»", () => {
+    expect((ru as Record<string, string>)["est.rej.choice.titleNoDate"]).toBe("Клиент подписал смету до ваших правок");
   });
 });
 

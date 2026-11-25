@@ -1,6 +1,6 @@
 /**
- * e2e 2657 (cloud) — «Клиент подписал версию от …»: the window «Сделать копию / Сбросить» over a refused save (#2657, tail of #2478,
- * spec 65 §3.5, С7), against a real Supabase. The refusal itself (estimate_signed_meanwhile) and the kept edits are #2659's
+ * e2e 2657 (cloud) — «Клиент подписал смету …»: the window «Сделать копию / Сбросить» over a refused save (#2657, tail of #2478;
+ * the founder's call В3 — docs/notes/review-v2/founder-answers-1.md:467, C11 — estimate-audit/decisions.md:9), against a real Supabase. The refusal itself (estimate_signed_meanwhile) and the kept edits are #2659's
  * (unit tests); here is the screen: the cards that hold the edits (`estimateEdit`) are put into the phone's list of refusals
  * (as the store writes them), by testID:
  * - «Что с правками?» on the card of «Профиль и аккаунт» opens the window (rej-choice) — «Позже» closes it, the card stays;
@@ -50,7 +50,8 @@ exports.run = async (h, { seed, admin }) => {
   // «Позже»: the window closes, the card stays
   await tid("rejected-choose-r-later").click();
   await tid("rej-choice").waitFor({ timeout: 5000 });
-  h.expect(/Клиент подписал смету/.test(await tid("rej-choice").innerText()), "the window says the client signed (no day known for this card)");
+  // by testID (rule 19): the three buttons are the window's content; their words are the unit test's (signedMeanwhileAsk)
+  for (const id of ["rej-choice-copy", "rej-choice-reset", "rej-choice-later"]) h.expect((await p.getByTestId(id).locator("visible=true").count()) === 1, `the window has «${id}»`);
   await h.shot("choice");
   await tid("rej-choice-later").click();
   await p.getByTestId("rej-choice").locator("visible=true").waitFor({ state: "hidden", timeout: 4000 });
@@ -63,6 +64,8 @@ exports.run = async (h, { seed, admin }) => {
   await tid("rej-choice-copy").click();
   await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 15000 });
   const copyId = new URL(p.url()).searchParams.get("id");
+  // the toast «Копия готова» is there first (else «no undo» would hold for no toast at all), and it has no «Вернуть»
+  await p.waitForFunction(() => /Копия готова/.test(document.querySelector('[data-testid="toast-text"]')?.textContent || ""), null, { timeout: 8000 });
   h.expect((await p.getByTestId("toast-undo").locator("visible=true").count()) === 0, "the copy's toast has no «Вернуть»: a draft appears, nothing is lost");
   const [made] = await waitRows(admin, `estimates?id=eq.${copyId}&select=id,status,customer_id,title`, (r) => r.length === 1, "the copy", 30000);
   h.expect(made.status === "draft" && made.customer_id === C && made.title === title, `the copy: a draft of the same client and title (${JSON.stringify(made)})`);
@@ -77,4 +80,7 @@ exports.run = async (h, { seed, admin }) => {
   await tid("rej-choice-reset").click();
   await p.getByTestId("rejected-r-reset").waitFor({ state: "detached", timeout: 5000 });
   h.expect((await admin(`estimates?title=eq.${encodeURIComponent(title)}&select=id`)).length === afterCopy, "«Сбросить»: nothing was made on the server");
+  // its toast has «Вернуть» (the edits are lost here; the undo is local, before any sending): the card is back
+  await tid("toast-undo").click();
+  await tid("rejected-r-reset").waitFor({ timeout: 8000 });
 };

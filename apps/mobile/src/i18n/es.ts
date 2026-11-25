@@ -4696,7 +4696,7 @@ export const es: Dict = {
   "est.rej.signatureLost": "La firma del cliente no se guardó en el servidor",
   "est.rej.choice.open": "¿Qué hago con mis cambios?",
   "est.rej.choice.title": "El cliente firmó el presupuesto {date}, antes de sus cambios",
-  "est.rej.choice.titleNoDate": "El cliente firmó el presupuesto",
+  "est.rej.choice.titleNoDate": "El cliente firmó el presupuesto antes de sus cambios",
   "est.rej.choice.text": "Sus cambios esperaron la red y no se guardaron: la firma se mantiene. La copia es un borrador nuevo con sus cambios.",
   "est.rej.choice.copy": "Hacer una copia",
   "est.rej.choice.reset": "Descartar",
@@ -4704,6 +4704,7 @@ export const es: Dict = {
   "est.rej.choice.copied": "Copia lista: un borrador",
   "est.rej.choice.resetDone": "Cambios descartados",
   "est.rej.choice.why": "Sus cambios están guardados aquí y la firma del cliente se mantiene. Haga una copia del presupuesto con ellos o descártelos.",
+  "est.rej.choice.whyOffice": "Sus cambios están guardados aquí y la firma del cliente se mantiene. La oficina puede hacer una copia del presupuesto con ellos: no los descarte.",
   "est.rej.signedMeanwhile": "El cliente firmó el presupuesto mientras sus cambios esperaban la red: los cambios no se guardaron",
   "est.rej.signedMeanwhileWhy": "La firma del cliente se mantiene. Para cambiar el presupuesto, ábralo y elija «No firmar — cambiar»: el cliente tendrá que firmar de nuevo.",
   // visit payment refused by the server (#857 О1) — the tech hands it to the office
