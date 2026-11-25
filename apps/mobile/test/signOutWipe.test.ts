@@ -62,8 +62,8 @@ describe("unit:signOutWipe — which keys (#1633)", () => {
     expect(holdsLocalOnly({ db: { expenses: [{ receiptFailed: "type" }] } })).toBe(true);
   });
   it("a refused photo of a Gutters measurement (db.files[].upload, #1441) is what only the phone has too (review of #1691)", () => {
-    expect(holdsLocalOnly({ db: { files: [{ id: "f1" }] } })).toBe(false);
-    expect(holdsLocalOnly({ db: { files: [{ id: "f1", upload: { failed: "refused", at: "2026-11-14T00:00:00Z" } }] } })).toBe(true);
+    expect(holdsLocalOnly({ db: { files: [{}] } })).toBe(false);
+    expect(holdsLocalOnly({ db: { files: [{ upload: { failed: "refused", at: "2026-11-14T00:00:00Z" } }] } })).toBe(true);
   });
 });
 
