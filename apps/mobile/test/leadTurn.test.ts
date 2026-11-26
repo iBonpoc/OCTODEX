@@ -84,7 +84,7 @@ describe("whose turn", () => {
 });
 
 describe("review findings of wave L1", () => {
-  const act = (kind: "call" | "sms", at: string) => ({ id: `a-${kind}-${at}`, subjectType: "lead" as const, subjectId: "L", kind, at, actorId: "m-alex" });
+  const act = (kind: "call" | "sms" | "reply", at: string) => ({ id: `a-${kind}-${at}`, subjectType: "lead" as const, subjectId: "L", kind, at, actorId: "m-alex" });
   it("'wait 7 more days' asks again after 7 days, not 14", () => {
     const { d, l } = db({ status: "estimate_sent", lastOutboundAt: days(30), remindedAt: days(21), askAgainAt: days(0.1) });
     expect(leadTurn(d, l, LEAD_SETTINGS_DEFAULT, NOW)).toMatchObject({ kind: "wait", action: "lostOrWait" });
@@ -153,6 +153,12 @@ describe("review findings of wave L1", () => {
     expect(leadTurn(sms.d, sms.l, LEAD_SETTINGS_DEFAULT, NOW).kind).toBe("wait");
     const call = db({ status: "replied", lastOutboundAt: min(60) }, { activities: [act("call", min(60))] });
     expect(leadTurn(call.d, call.l, LEAD_SETTINGS_DEFAULT, NOW).kind).toBe("noStep");
+  });
+  it("#2760: «Ответил» without an estimate waits on the message, not on an estimate", () => {
+    const r = db({ status: "replied", lastOutboundAt: min(1) }, { activities: [act("reply", min(1))] });
+    expect(leadTurn(r.d, r.l, LEAD_SETTINGS_DEFAULT, NOW)).toMatchObject({ kind: "wait", days: 0, about: "message" });
+    const sent = db({ status: "estimate_sent", lastOutboundAt: days(1) });
+    expect(leadTurn(sent.d, sent.l, LEAD_SETTINGS_DEFAULT, NOW)).toMatchObject({ kind: "wait", about: "estimate" });
   });
   it("a planned estimate visit is the step for any open lead (also after the estimate went out)", () => {
     const d0 = makeSeed();

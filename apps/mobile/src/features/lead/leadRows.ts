@@ -64,7 +64,8 @@ export function leadStepOf(l: Pick<Lead, "status" | "customerId">, turn: LeadTur
   if (turn.kind === "reply") return "reply";
   if (!o.servable && l.customerId && !isClosedLead(l as Lead)) return "client";
   if (turn.kind === "noStep") return "next";
-  if (turn.kind === "wait") return turn.action === "lostOrWait" ? "lowOrWait" : "remind";
+  // waiting after only our message (no estimate went out): nothing to remind about yet — the next step is chosen (#2760)
+  if (turn.kind === "wait") return turn.action === "lostOrWait" ? "lowOrWait" : turn.about === "estimate" ? "remind" : "next";
   if (turn.kind === "step") return l.status === "booked" && !o.tech ? "estimate" : "tasks";
   if (turn.kind === "snoozed") return "unsnooze";
   if (isClosedLead(l as Lead)) return "reopen";

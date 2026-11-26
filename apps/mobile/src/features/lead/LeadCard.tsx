@@ -143,7 +143,7 @@ export function LeadObject({ l, section, onSection, back, frame }: { l: Lead; se
       case "client":
         return t(servable ? "proto.leads.why.won" : "proto.leads.why.noService");
       case "next":
-        return t("proto.leads.why.next");
+        return turn.kind === "wait" ? t("proto.leads.why.waitMessage") : t("proto.leads.why.next");
       case "lowOrWait":
         return t("proto.leads.why.low");
       case "remind":
