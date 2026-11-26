@@ -19,3 +19,14 @@ export function iconRowItems<A>(actions: readonly A[], variant: IconRowVariant):
 
 /** a `row` caption wraps to at most this many lines under its circle (a 64 cell at 12: «Напомнить», «Записать в план») — not «…» */
 export const ICON_ROW_LABEL_LINES = 2;
+
+/**
+ * A `row` cell at the system text size (DS §4.3, #2761): at the standard size (≤ 1) the cells are equal, `labelW` 64 at most
+ * (`flex: 1`). Bigger, the caption grows with it (capped at `labelMaxScale`) and an equal 64 cell broke one long word by
+ * syllables («Позвони / ть», «Маршру / т» at 1.25 on 390): the cell is then as wide as its word (`flexBasis` auto), up to
+ * `labelW × scale` — five RU captions at 1.25 take 313 of the 358 a 390 phone gives the row.
+ */
+export function iconRowCell(fontScale: number, labelW: number, labelMaxScale: number): { equal: boolean; maxWidth: number } {
+  const k = Math.min(Math.max(fontScale || 1, 1), labelMaxScale);
+  return { equal: k <= 1, maxWidth: Math.round(labelW * k) };
+}

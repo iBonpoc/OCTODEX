@@ -27,6 +27,7 @@ import { HeaderButton } from "../headerIcon";
 import { Icon, Press, T, type IconKey } from "../primitives";
 import { DemoDot, DemoPlate, useDemo } from "./demoMark";
 import { bigClip, fitScale, foldStage, headerFrame, reducedFrame, type HeaderFrame, type HeaderKind } from "./headerMath";
+import { useFontScale } from "../fontScale";
 
 const H = component.header;
 
@@ -402,7 +403,9 @@ export function HeaderPlate({ top, testID = "screen-head-plate" }: { top: number
 export function FitTitle({ text, track }: { text: string; track?: number }) {
   const [nat, setNat] = useState(0);
   const [room, setRoom] = useState(0);
-  useEffect(() => setNat(0), [text]);
+  // measured again when the system text size changes while the screen is open (#2761: the old width put the name over the status)
+  const fontScale = useFontScale();
+  useEffect(() => setNat(0), [text, fontScale]);
   const s = fitScale(nat, room);
   const measuring = nat <= 0;
   return (
