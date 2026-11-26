@@ -13,10 +13,10 @@ describe("high contrast: the system switch changes the words, not the look", () 
       expect(c.mut).toBe(themes[name].mut);
       expect(c.status.bad.text).toBe(themes[name].status.bad.text);
     });
-    it(`${name}: on — mut, accText and the status words take the high-contrast colours; grounds and the accent stay`, () => {
+    it(`${name}: on — mut and the status words take the high-contrast colours; grounds, the accent and accText stay`, () => {
       const c = themeColors(name, "yellow", true);
       expect(c.mut).toBe(highContrast[name].mut);
-      expect(c.accText).toBe(highContrast[name].accText);
+      expect(c.accText).toBe(themes[name].accText);
       expect(c.status.warn.text).toBe(highContrast[name].status.warn);
       expect(c.status.warn.on).toBe(highContrast[name].status.warn);
       expect(c.bg).toBe(themes[name].bg);

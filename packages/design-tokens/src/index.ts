@@ -639,28 +639,29 @@ export const themes: Record<ThemeName, ThemeColors> = {
 /**
  * GoRix этап 3 «Основа» (опись 26.11.2026, работа на улице): «Повышение контраста» — iOS «Настройки → Универсальный доступ →
  * Дисплей и размер текста → Повышение контраста» (darker system colors), Android «Текст с высоким контрастом», веб
- * `prefers-contrast: more`. Включено в системе — серые и жёлтые слова и слова статусов берут эти цвета: ≥ 7:1 на всех
- * поверхностях (bg, surf, surf2, surf3) и на заливке своего статуса. Обычный вид не меняется. Проверяет contrast.test.ts.
+ * `prefers-contrast: more`. Включено в системе — серые слова и слова статусов берут эти цвета: тот же оттенок, только
+ * светлота (design-reviewer 27.11: оттенки статусов должны остаться различимы). Светлая тема — ≥ 7:1 на всех поверхностях
+ * (bg, surf, surf2, surf3) и на заливке статуса; тёмная — ≥ 7:1 на экране и карточке (bg, surf), где живут слова.
+ * Жёлтые слова (`accText`) и красный кружок «Лиды» (правило 2, исключение 4) режим не трогает. Обычный вид не меняется.
+ * Проверяет contrast.test.ts.
  */
-export const highContrast: Record<ThemeName, { mut: string; accText: string; status: Record<StatusName, string> }> = {
+export const highContrast: Record<ThemeName, { mut: string; status: Record<StatusName, string> }> = {
   dark: {
-    mut: "#DDDEE2",
-    accText: "#EFDEA8",
-    status: { ok: "#BFE8CD", info: "#C4E5EA", warn: "#F4DABF", bad: "#F9D7D3", neutral: "#DDDEE2" },
+    mut: "#BDC0C7",
+    status: { ok: "#86D3A0", info: "#89CAD5", warn: "#E8B780", bad: "#F3AFA7", neutral: "#BDC0C7" },
   },
   light: {
     mut: "#33353A",
-    accText: "#413408",
-    status: { ok: "#113D21", info: "#093B44", warn: "#532B04", bad: "#631C16", neutral: "#33353A" },
+    status: { ok: "#113D21", info: "#093B45", warn: "#542B04", bad: "#641C16", neutral: "#33353A" },
   },
 };
 
-/** the theme's colours with «Повышение контраста» laid over them (the status text and its word-on-fill both take it) */
+/** the theme's colours with «Повышение контраста» laid over them (the status word and its word-on-plate both take it) */
 export function withHighContrast(c: ThemeColors, name: ThemeName): ThemeColors {
   const h = highContrast[name];
   const status = { ...c.status } as ThemeColors["status"];
   for (const k of Object.keys(h.status) as StatusName[]) status[k] = { ...c.status[k], text: h.status[k], on: k === "neutral" ? c.status[k].on : h.status[k] };
-  return { ...c, mut: h.mut, accText: h.accText, status };
+  return { ...c, mut: h.mut, status };
 }
 
 export type PrintStyleName = "classic" | "modern" | "compact";
