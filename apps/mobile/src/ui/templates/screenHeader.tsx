@@ -222,7 +222,15 @@ export function HeaderBack({ label, onPress, testID = "hdr-back" }: { label: str
     "worklet";
     return { opacity: f.demoDot };
   });
-  return <HeaderButton testID={testID} icon="arrowLeft" label={label} onPress={onPress} dot={<DemoDotAt look={dot} />} />;
+  // PROTOTYPE #2865 (iOS): a bare chevron «‹» 24 with no circle, as the iOS navigation bar (the parent's word stays next to it)
+  const { c } = useTheme();
+  return (
+    <Press testID={testID} onPress={onPress} visibleHeight={component.header.circle} accessibilityRole="button" accessibilityLabel={label}
+      style={{ width: component.header.circle, height: component.header.circle, alignItems: "flex-start", justifyContent: "center" }}>
+      <Icon name="chevronLeft" s={size.iconLg} color={c.ink} />
+      <DemoDotAt look={dot} />
+    </Press>
+  );
 }
 
 /** the editor's «×» 40 (it asks first when something is not saved — the screen's `back` does) */
