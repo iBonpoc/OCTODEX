@@ -5,6 +5,10 @@
  *   Header: a document has «Статус:» in its first lines (действует / черновик / заменён на …) and the date it was checked.
  *     Old documents without a header are listed in docsHeaderLeft.json; the list only shrinks: a new document
  *     without a header is red, and a listed one that got its header must leave the list.
+ *   Nested: a document in a sub-folder of a section (docs/notes and docs/archive aside) is named by a README on its way up
+ *     to the section — by its file name or its path from that README; a folder without its own README may instead be named
+ *     whole, as «folder/» (#2896).
+ *   design/README.md names every file and folder of design/ (an .html by its name without the extension, a folder as «name/»).
  */
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
@@ -79,5 +83,60 @@ describe("docs library: header", () => {
       .filter((f) => fs.existsSync(f))
       .concat(walk(path.join(DOCS, "decisions")));
     expect(must.filter((f) => !hasHeader(f) && !HEADER_LEFT.includes(rel(f))).map(rel)).toEqual([]);
+  });
+});
+
+/** the README files on the way from a document's folder up to its section (nearest first) */
+function readmesUp(file: string): string[] {
+  const out: string[] = [];
+  for (let dir = path.dirname(file); dir.startsWith(DOCS + path.sep); dir = path.dirname(dir)) {
+    const r = path.join(dir, "README.md");
+    if (fs.existsSync(r)) out.push(r);
+  }
+  return out;
+}
+/** is a nested document named by one of the README files above it (`readmes`: path → text, nearest first)? */
+function nestedNamed(file: string, readmes: { path: string; text: string }[]): boolean {
+  const ownReadme = readmes.some((r) => path.dirname(r.path) === path.dirname(file));
+  return readmes.some(({ path: r, text }) => {
+    const from = path.relative(path.dirname(r), file).split(path.sep).join("/");
+    const folders = path.dirname(from).split("/").filter((d) => d !== ".");
+    return text.includes(path.basename(file)) || text.includes(from) || (!ownReadme && folders.some((d) => text.includes("`" + d + "/")));
+  });
+}
+/** names of design/ entries its README misses */
+function designMissing(entries: { name: string; dir: boolean }[], text: string): string[] {
+  return entries
+    .filter((e) => e.name !== "README.md")
+    .filter((e) => !text.includes(e.dir ? e.name + "/" : e.name.replace(/\.html$/, "")))
+    .map((e) => e.name);
+}
+
+describe("docs library: nested folders and design/", () => {
+  const SKIP = ["notes/", "archive/"];
+  const nested = walk(DOCS).filter(
+    (f) => rel(f).split("/").length > 2 && path.basename(f) !== "README.md" && !SKIP.some((p) => rel(f).startsWith(p)),
+  );
+  it("every document in a sub-folder of a section is named by a README above it", () => {
+    const missing = nested.filter((f) => !nestedNamed(f, readmesUp(f).map((r) => ({ path: r, text: read(r) }))));
+    expect(missing.map(rel)).toEqual([]);
+  });
+  it("design/README.md names every file and folder of design/", () => {
+    const dir = path.join(ROOT, "design");
+    const entries = fs.readdirSync(dir, { withFileTypes: true }).map((e) => ({ name: e.name, dir: e.isDirectory() }));
+    expect(designMissing(entries, read(path.join(dir, "README.md")))).toEqual([]);
+  });
+  it("the checks catch an unnamed document (they do not pass idly)", () => {
+    const file = path.join(DOCS, "specs", "53-samples", "new.expected.md");
+    const readme = path.join(DOCS, "specs", "README.md");
+    expect(nestedNamed(file, [{ path: readme, text: "Папки: `img/` — снимки" }])).toBe(false);
+    expect(nestedNamed(file, [{ path: readme, text: "Папки: `53-samples/` — образцы" }])).toBe(true);
+    expect(nestedNamed(file, [{ path: readme, text: "| `53-samples/new.expected.md` |" }])).toBe(true);
+    // a folder with its own README: naming the folder above is not enough
+    const own = path.join(DOCS, "specs", "53-samples", "README.md");
+    const both = [{ path: own, text: "Образцы: `other.md`" }, { path: readme, text: "Папки: `53-samples/` — образцы" }];
+    expect(nestedNamed(file, both)).toBe(false);
+    expect(designMissing([{ name: "new-style.html", dir: false }, { name: "gorix", dir: true }], "`naryad-ds/`")).toEqual(["new-style.html", "gorix"]);
+    expect(designMissing([{ name: "paper-air.html", dir: false }, { name: "review", dir: true }], "`paper-air`, `review/`")).toEqual([]);
   });
 });
