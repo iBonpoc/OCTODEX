@@ -20,7 +20,7 @@
 | Журнал | `docs/ai/LOG.md` | что влито, ошибки, решения, открытые расхождения |
 | Кто чем занят | `docs/ai/BOARD.md` (живая доска), `docs/ai/BOARD-archive.md` (старые памятки) | чаты, файлы, очередь вливания, номера |
 | Работа чатов | `docs/ai/DIRECTOR.md`, `WORKER.md`, `CHECKS.md`, этот файл | руководитель, исполнитель, проверки, проектирование |
-| Продукт | `docs/02-product-vision.md`, `02a-pricing-and-unit-economics.md`, `00-roadmap.md` | для кого, зачем, тарифы, фазы |
+| Продукт | `docs/02-product-vision.md`, `docs/archive/02a-pricing-and-unit-economics.md`, `docs/archive/00-roadmap.md` | для кого, зачем, тарифы, фазы |
 | Требования | `docs/03-prd/*` (`mvp-scope.md`, `00-decisions-for-founder.md`, `18-money-test-cases.md`) | что должен уметь каждый модуль; решения основателя; денежные примеры |
 | Сущности и пути | `docs/04-domain-model.md`, `05-user-flows.md`, `13-core-workflow-spec.md` | словарь сущностей, сценарии, основной путь лид → оплата |
 | Спеки шагов | `docs/14-leads-spec.md` (образец), `docs/specs/*` | точное описание шага: варианты, решение, стыки, тесты |

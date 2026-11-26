@@ -12,7 +12,7 @@
 | Разделять estimate / revenue / cash collected / direct costs / gross profit | PRD: отчёты, job costing |
 | Стоимость платного лида: считать и неудачные лиды, CAC по заказу, а не по контакту | PRD: ROI |
 | **Idempotency** (двойной клик, повтор запроса: платёж, Estimate → Job), audit log, серверная валидация | Архитектура и безопасность |
-| **Definition of Done**, цикл задачи Analyze → Plan → Review → Implement → Test → Review → Document, отчёт о реально запущенных проверках | Процесс (`00-roadmap.md`) |
+| **Definition of Done**, цикл задачи Analyze → Plan → Review → Implement → Test → Review → Document, отчёт о реально запущенных проверках | Процесс (`docs/archive/00-roadmap.md`) |
 | Тестовая стратегия: unit для формул, RLS между компаниями, E2E «лид → оплата», failure-тесты (нет сети, двойное нажатие, конфликт) и **утверждённые тест-кейсы для движка смет** | Архитектура, Фаза 4 |
 | **Discovery-интервью** о прошлом поведении («как в последний раз…»), а не «нравится ли идея» | Фаза 2 (тест с подрядчиками) |
 | Метрики: сначала baseline, потом цели | PRD, бета |

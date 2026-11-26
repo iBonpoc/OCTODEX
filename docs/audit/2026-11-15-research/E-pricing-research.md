@@ -83,7 +83,7 @@
 | Google Places (подсказка адреса) | Autocomplete Session Usage — «Unlimited free usage»; Place Details — 10 000 бесплатно, дальше $5 за 1 000 | developers.google.com/maps/billing-and-pricing/pricing | [проверено] |
 | Stripe Instant Payouts | 1.5% (мин. 50¢) на общей странице; «1% of payout volume» на странице Connect | stripe.com/pricing; stripe.com/connect/pricing | [проверено — расхождение] |
 
-**Поправки к `docs/02a-pricing-and-unit-economics.md`:** чтение кэша Sonnet 5.5 — $0.10, а не $0.20; у Haiku 5.5 для промптов больше 100 000 токенов цены **в 5 раз** выше ($0.50 / $2.50); Supabase включает $10 кредита на compute; Twilio — $0.0083 за сегмент, а не $0.008; SES подтверждён.
+**Поправки к `docs/archive/02a-pricing-and-unit-economics.md`:** чтение кэша Sonnet 5.5 — $0.10, а не $0.20; у Haiku 5.5 для промптов больше 100 000 токенов цены **в 5 раз** выше ($0.50 / $2.50); Supabase включает $10 кредита на compute; Twilio — $0.0083 за сегмент, а не $0.008; SES подтверждён.
 
 ## 4. Себестоимость на компанию в месяц
 
