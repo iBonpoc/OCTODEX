@@ -1,6 +1,7 @@
 /**
  * Шаблон «Редактор» (BUILD-PLAN §1 поток Г, DS §12.3): Новый клиент, Смета, Выезд-форма.
  * Guarantees: «‹ назад» at the top left — with unsaved changes (`dirty`) it asks «Выйти без сохранения?» first (rule 5);
+ * so does every other «back» (the iOS swipe, the Android system «Назад», the browser's back — #2853, ./leaveGuard.ts);
  * «⋯» the last on the right; the fields (`children`: FieldGroup / FieldRow) in the form column; ONE main step — `save` is a single
  * slot, pinned at the bottom in ONE compact row (MainStep "bar": the total or the reason on the left, the button 40 by its words on the
  * right, ≤ 56 — LAYOUT-RULES П3, 21.11 #2350); where the screen has no pinned bar (820/1280) the same row stands after the fields.
@@ -8,11 +9,13 @@
  */
 import { useMemo, useState, type ReactNode } from "react";
 import { View } from "react-native";
+import { useIsFocused, usePreventRemove } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { MainStep, type MainStepTotal } from "../mainStep";
 import { Screen, useFooterShown } from "../surfaces";
 import { ConfirmSheet, MoreButton, TemplateFrame } from "./parts";
+import { guardOn, leaveNow, stepLeaves } from "./leaveGuard";
 import { SECOND_KEY, moreItems, templateLayout } from "./templateRules";
 import type { MainAction, MoreAction } from "./types";
 
@@ -43,11 +46,24 @@ export function EditorScreen(p: EditorScreenProps) {
   const bar = useFooterShown();
   const noBar = p.preview ? false : !bar;
   const [leave, setLeave] = useState(false);
+  // #2853: a «back» that is not the header's (a swipe, the system or browser back) is held while there are edits — the same question;
+  // `held` goes on with it after «Выйти»
+  const [held, setHeld] = useState<(() => void) | null>(null);
+  const focused = useIsFocused();
+  const lift = usePreventRemove(guardOn(p.dirty, focused, !!p.preview), ({ repeat }) => {
+    setHeld(() => repeat);
+    setLeave(true);
+  });
+  // a ready main step (a save) leaves the screen itself: the guard steps aside for it
+  const save: MainAction = { ...p.save, onPress: () => {
+    if (stepLeaves(p.save)) lift();
+    p.save.onPress();
+  } };
   const layout = templateLayout("editor", { back: true, more: !!p.more?.length, main: p.save, second: p.second, total: p.total, summary: !!p.summary, noBar });
   const items = useMemo(() => moreItems(p.more, p.second, p.total, false, p.save.reason), [p.more, p.second, p.total, p.save.reason]);
   const onMore = (k: string) => (k === SECOND_KEY ? p.second?.onPress() : p.onMore?.(k));
   const secondShown = layout.bottom.includes("second") || layout.body.includes("second");
-  const step = <MainStep placement="bar" main={p.save} second={secondShown ? p.second : null} total={p.total} />;
+  const step = <MainStep placement="bar" main={save} second={secondShown ? p.second : null} total={p.total} />;
   const back = () => (p.dirty ? setLeave(true) : p.back());
   const right = items.length ? <MoreButton items={items} onMore={onMore} testID={`${p.testID}-more`} /> : null;
   const body = (
@@ -57,7 +73,7 @@ export function EditorScreen(p: EditorScreenProps) {
       {layout.body.includes("main") ? step : null}
     </View>
   );
-  const ask = leave ? { title: t("tpl.leaveTitle"), text: t("tpl.leaveText"), yes: t("tpl.leave"), onYes: p.back } : null;
+  const ask = leave ? { title: t("tpl.leaveTitle"), text: t("tpl.leaveText"), yes: t("tpl.leave"), onYes: () => leaveNow(held, lift, p.back) } : null;
   return (
     <>
       {p.preview ? (
@@ -69,7 +85,13 @@ export function EditorScreen(p: EditorScreenProps) {
           {body}
         </Screen>
       )}
-      <ConfirmSheet ask={ask} onClose={() => setLeave(false)} />
+      <ConfirmSheet
+        ask={ask}
+        onClose={() => {
+          setLeave(false);
+          setHeld(null);
+        }}
+      />
     </>
   );
 }
