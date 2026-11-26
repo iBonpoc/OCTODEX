@@ -26,7 +26,7 @@ exports.run = async (h) => {
 
   // visible at $0: «Нет цены»
   await tid(`est-noprice-${id}`).waitFor({ timeout: 3000 });
-  h.expect(/Нет цены/.test(await tid(`est-noprice-${id}`).innerText()), "«Нет цены» on a visible $0 line");
+  h.expect(/Нет цены/.test(await tid(`est-noprice-${id}`).innerText()), "«Нет цены» on a visible $0.00 line");
 
   // hide it (#2424: «⋯ → Скрыть от клиента»): «Скрыто от клиента», «расход $280» on the right, no «Нет цены»
   await tid(`est-line-${id}`).click();
@@ -35,12 +35,12 @@ exports.run = async (h) => {
   await tid(`sort-frame-l:${id}`).waitFor({ timeout: 3000 });
   h.expect((await p.getByTestId(`est-hide-${id}`).count()) === 0, "the open hidden line has no switch «Скрыть от клиента» (#2424)");
   await h.shot("open-hidden");
-  h.expect(/ваш расход \$280/.test(await tid(`est-figures-${id}`).innerText()), "the open hidden row: «Сумма $0 · ваш расход $280»");
+  h.expect(/ваш расход \$280\.00/.test(await tid(`est-figures-${id}`).innerText()), "the open hidden row: «Сумма $0.00 · ваш расход $280.00»");
   await line.fold(h);
   await tid(`est-hidden-${id}`).waitFor({ timeout: 3000 });
   h.expect(/Скрыто от клиента/.test(await tid(`est-hidden-${id}`).innerText()), "«Скрыто от клиента»");
-  h.expect(/расход \$280/.test(await tid(`est-spend-${id}`).innerText()), "the owner sees «расход $280» under the name");
-  h.expect(/\$0\b/.test(await tid(`est-sum-${id}`).innerText()), "the sum on the right is $0 — the client pays nothing for it");
+  h.expect(/расход \$280\.00/.test(await tid(`est-spend-${id}`).innerText()), "the owner sees «расход $280.00» under the name");
+  h.expect(/\$0\.00\b/.test(await tid(`est-sum-${id}`).innerText()), "the sum on the right is $0.00 — the client pays nothing for it");
   h.expect((await count(`[data-testid="est-noprice-${id}"]`)) === 0, "a hidden line has no «Нет цены»");
   await h.shot("hidden");
 
@@ -50,11 +50,11 @@ exports.run = async (h) => {
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await tid(`est-line-${id}`).waitFor({ timeout: 8000 });
   const right = await tid(`est-sum-${id}`).innerText();
-  h.expect(/\$0\b/.test(right) && (await count(`[data-testid="est-spend-${id}"]`)) === 0, `the tech: $0, no «расход» (${right})`);
+  h.expect(/\$0\.00\b/.test(right) && (await count(`[data-testid="est-spend-${id}"]`)) === 0, `the tech: $0, no «расход» (${right})`);
   // open for the tech: «Сумма $0», no «ваш расход»
   await tid(`est-line-${id}`).click();
   const techFig = await tid(`est-figures-${id}`).innerText();
-  h.expect(/\$0\b/.test(techFig) && !/расход/.test(techFig), `the tech's open hidden row: no «ваш расход» (${techFig})`);
+  h.expect(/\$0\.00\b/.test(techFig) && !/расход/.test(techFig), `the tech's open hidden row: no «ваш расход» (${techFig})`);
   await line.fold(h);
   await h.seed("octo.role.v1", "director");
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
