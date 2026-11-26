@@ -33,11 +33,13 @@ export const doneAction = (p: { existing: boolean; dirty: boolean; stale?: boole
  * the first step adds one (#2387). The press of «Отправить» with no client says what is missing (DS §11 п.3: the main one is never
  * off). Pure: test/editSession.test.ts; the screen — app/estimate/new.tsx, e2e 308.
  */
-export type BarStep = "add" | "send" | "done";
-export const barSteps = (p: { mayShare: boolean; signed: boolean; hasLines: boolean; dirty: boolean }): { main: BarStep; second: "done" | null; cancel: "bar" | "more" | null } => {
+export type BarStep = "add" | "send" | "sendChanges" | "done";
+/** `sent` — the estimate already went to the client (saved, status not `draft`): its send is «Отправить изменения» (`r1.est.sendChanges`,
+ *  as the header's ➤ said before #2935; CRM review 27.11: the client gets a new version, not a first one); a draft keeps «Отправить» */
+export const barSteps = (p: { mayShare: boolean; signed: boolean; hasLines: boolean; dirty: boolean; sent?: boolean }): { main: BarStep; second: "done" | null; cancel: "bar" | "more" | null } => {
   if (!p.signed && !p.hasLines) return { main: "add", second: null, cancel: null };
   const cancel = p.dirty && !p.signed;
-  if (p.mayShare && !p.signed) return { main: "send", second: "done", cancel: cancel ? "more" : null };
+  if (p.mayShare && !p.signed) return { main: p.sent ? "sendChanges" : "send", second: "done", cancel: cancel ? "more" : null };
   return { main: "done", second: null, cancel: cancel ? "bar" : null };
 };
 

@@ -2,8 +2,8 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { component, motion } from "@octo/design-tokens";
-import { loadPhase, mainStepLayout } from "../src/ui/mainStepRules";
+import { component, font, motion, space } from "@octo/design-tokens";
+import { loadPhase, mainStepLayout, shrinkFloor, stackedBar, totalNeed } from "../src/ui/mainStepRules";
 
 describe("mainStepLayout", () => {
   it("one main button", () => expect(mainStepLayout({})).toEqual({ layout: "single", secondInMore: false }));
@@ -40,5 +40,29 @@ describe("loadPhase", () => {
     expect(loadPhase(true, motion.spinnerDelayMs)).toBe("spinner");
     expect(loadPhase(true, motion.actionTimeoutMs - 1)).toBe("spinner");
     expect(loadPhase(true, motion.actionTimeoutMs)).toBe("failed");
+  });
+});
+
+/** review 27.11 (#2935 п.1): «Итого · налог» and the sum are never cut — the sum shrinks to the next size down, then the total takes its own line */
+describe("the bar's total never cut", () => {
+  it("the sum shrinks at most to the next size of the scale below `title` (22 → `figureSm` 18)", () => {
+    expect(shrinkFloor()).toBeCloseTo(font.size.figureSm / font.size.title, 6);
+    expect(shrinkFloor(font.size.caption)).toBeCloseTo(font.size.micro / font.size.caption, 6);
+  });
+  it("the width it needs: the caption line whole, the sum at the floor", () => {
+    expect(totalNeed(150, 100)).toBe(150);
+    expect(totalNeed(60, 140)).toBe(Math.ceil(140 * shrinkFloor()));
+  });
+  it("one row while it stands beside the buttons; else stacked (red before: one row always — «налог ˎ» cut on 390)", () => {
+    // 390: the bar's inner row 330; «Готово» 84 + «Отправить» 112 + gap → right 208
+    expect(stackedBar({ row: 330, right: 208, need: 100 })).toBe(false);
+    expect(stackedBar({ row: 330, right: 208, need: 330 - 208 - space[3] + 1 })).toBe(true);
+    // «Готово · Отправить изменения» (~294) leaves no room for any total
+    expect(stackedBar({ row: 330, right: 294, need: 80 })).toBe(true);
+  });
+  it("nothing measured yet — one row (no jump at the first frame)", () => {
+    expect(stackedBar({ row: 0, right: 208, need: 100 })).toBe(false);
+    expect(stackedBar({ row: 330, right: 0, need: 100 })).toBe(false);
+    expect(stackedBar({ row: 330, right: 208, need: 0 })).toBe(false);
   });
 });

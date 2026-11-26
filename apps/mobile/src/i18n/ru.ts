@@ -2843,6 +2843,8 @@ export const ru = {
   "ds.btn.pairLong": "Длинная надпись — кнопки столбцом",
   "ds.btn.secondary": "Вторичная",
   "ds.btn.secondaryNote": "Рядом с главной: surf2 и рамка",
+  "ds.btn.outline": "Обводка",
+  "ds.btn.outlineNote": "Без заливки, тонкая рамка `dash`: вторая рядом с главной на ячейке `surf2` («Готово» в низу сметы)",
   "ds.btn.ghost": "Тихая",
   "ds.btn.ghostNote": "Без заливки: «Отменить», «Назад»",
   "ds.btn.danger": "Опасная",

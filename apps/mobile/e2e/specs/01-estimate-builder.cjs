@@ -37,7 +37,7 @@ exports.run = async (h) => {
   h.expect(!/9\.5% · /.test(await h.text()), "no kinds listed after the rate (the tax is on the whole amount, Р6)");
   // optional: #2363 q72 — scrolled down, «Итого» is the capsule (the sum alone); a tap opens the bar with its word «Итого»
   await require("../estimateLine.cjs").wholeBar(h);
-  await h.expectText(/Итого \| \$794\.49/, "total");
+  await h.expectText(/Итого(?: · налог \$[\d,.]+)?[ |]*\$794\.49/, "total");
   // DS §8.7а: the deposit row — «%», 10 in its field, $79.45 on the right
   h.expect((await h.page.getByTestId("est-deposit-pct").locator("visible=true").first().locator("input").inputValue()) === "10", "deposit 10%");
   h.expect((await require("../estimateTotals.cjs").sumIs(h, "est-deposit-row", "$79.45")) === "$79.45", "deposit");

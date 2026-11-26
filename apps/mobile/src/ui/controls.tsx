@@ -29,7 +29,10 @@ import { useReadOnly } from "./readOnly";
 export { fieldSpec, type FieldType } from "./fieldTypes";
 
 /* ---------- Button (DS: visible ≤ 36, hit 44) ---------- */
-type BtnVariant = "primary" | "secondary" | "ghost" | "danger";
+/** `outline` (review 27.11, #2935 п.3): no fill, a `hairline` edge in `dash` (≥ 3:1 on the bar's cell `surf2` and on the screen, contrast.test.ts),
+ *  `ink` words — the second step beside the yellow one where the ground is itself `surf2` (the estimate bar's «Готово» by «Отправить»):
+ *  a `secondary` there is the bar's own colour and reads as a bare word */
+type BtnVariant = "primary" | "secondary" | "outline" | "ghost" | "danger";
 export function Button({
   label,
   onPress,
@@ -82,10 +85,11 @@ export function Button({
           borderRadius: radius.pill,
           ...(bar ? { paddingVertical: space[1] } : null),
           backgroundColor: bg,
-          // v2: no frame on any button — the words identify it (WCAG 1.4.11 asks no edge of a control told by its label);
+          // v2: no frame on any button — the words identify it (WCAG 1.4.11 asks no edge of a control told by its label); the one
+          // exception is `outline` (no fill of its own on a `surf2` ground — its edge is what shows it, Д-кнопка-7);
           // #2363 F36: the yellow fill looks the same in both themes, the dark `accEdge` line in the light one is gone
-          borderWidth: 0,
-          borderColor: "transparent",
+          borderWidth: variant === "outline" ? component.hairline : 0,
+          borderColor: variant === "outline" ? c.dash : "transparent",
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "center",

@@ -1,4 +1,4 @@
-import { component, motion } from "@octo/design-tokens";
+import { component, font, motion, space } from "@octo/design-tokens";
 
 /**
  * MainStep's rules, pure (BUILD-SPEC §1 MainStepBar):
@@ -40,4 +40,25 @@ export function foldMotion(reduce: boolean): { capsule: { from: FoldFrom; ms: nu
     card: { from: { opacity: 0, y: motion.foldShift, scale: 1 }, ms: motion.durBase },
     outMs: motion.durFast,
   };
+}
+
+/**
+ * Review 27.11 (#2935, «налог ˎ» cut on 390): the bar's sum shrinks to fit its room — never cut — down to the next size of the scale
+ * below its own (`title` 22 → `figureSm` 18): the least part it may take. Pure: test/mainStepRules.test.ts.
+ */
+export function shrinkFloor(fs: number = font.size.title): number {
+  const below = Object.values(font.size).filter((x) => x < fs);
+  return below.length ? Math.max(...below) / fs : 1;
+}
+
+/** the width the bar's total needs not to be cut: its caption line whole, the sum at its `shrinkFloor` (rounded up) */
+export function totalNeed(caption: number, sum: number, floor: number = shrinkFloor()): number {
+  return Math.max(caption, Math.ceil(sum * floor));
+}
+
+/** the total gets its own line over the buttons when it and the buttons (`right`, natural) do not stand in one `row` (gap `space[3]`);
+ *  nothing measured yet — one row */
+export function stackedBar(m: { row: number; right: number; need: number }): boolean {
+  if (!(m.row > 0 && m.right > 0 && m.need > 0)) return false;
+  return m.need + space[3] + m.right > m.row;
 }

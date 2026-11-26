@@ -81,6 +81,15 @@ describe("unit:editSession — the bar of the editor of a document sent to the c
   it("signed: no send, no «Отменить» — «Готово» only", () => {
     expect(barSteps({ ...base, signed: true, dirty: true })).toEqual({ main: "done", second: null, cancel: null });
   });
+  it("already sent (status not draft): «Отправить изменения», «Готово» beside it (red before: «Отправить» for a sent one, CRM review)", () => {
+    expect(barSteps({ ...base, sent: true })).toEqual({ main: "sendChanges", second: "done", cancel: null });
+    expect(barSteps({ ...base, sent: true, dirty: true })).toEqual({ main: "sendChanges", second: "done", cancel: "more" });
+    expect(barSteps({ ...base, sent: false })).toEqual({ main: "send", second: "done", cancel: null });
+  });
+  it("already sent but signed or the tech's: no send at all — «Готово» main", () => {
+    expect(barSteps({ ...base, sent: true, signed: true })).toEqual({ main: "done", second: null, cancel: null });
+    expect(barSteps({ ...base, sent: true, mayShare: false })).toEqual({ main: "done", second: null, cancel: null });
+  });
   it("no line yet: the first step adds one (#2387), nothing to send", () => {
     expect(barSteps({ ...base, hasLines: false, dirty: true })).toEqual({ main: "add", second: null, cancel: null });
   });

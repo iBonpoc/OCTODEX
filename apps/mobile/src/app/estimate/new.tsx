@@ -1046,11 +1046,15 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // #2935 п.1 (founder 27.11: «Давай кнопку отправить вниз, как у Джобер»): where the estimate can be sent, the main yellow one at the
   // bottom is «Отправить» (the same press the header's ➤ had: save, then the send of the estimate — the way and the queue offline as
   // before) and «Готово» is the second, unfilled, beside it; «Отменить» then goes into «⋯» (editSession.barSteps)
-  const bar = barSteps({ mayShare: canSend && !tplEdit, signed, hasLines: hasContent(doc), dirty });
+  // CRM review 27.11: an estimate the client already has — «Отправить изменения» (as the header's ➤ said), a draft — «Отправить»
+  const sentBefore = !!existing && existing.status !== "draft";
+  const bar = barSteps({ mayShare: canSend && !tplEdit, signed, hasLines: hasContent(doc), dirty, sent: sentBefore });
   const doneStep: MainAction = { label: t("proto.est.done"), onPress: () => void save(false), testID: "ue-save" };
   const step: MainAction =
     bar.main === "add" ? { label: db.catalog.length ? t("px3.est.fromCatalog") : t("px3.est.newLine"), onPress: addFirst, testID: "est-bar-add" }
-    : bar.main === "send" ? { label: t("est.bar.send"), onPress: () => void save(true), testID: "est-bar-send" }
+    // the header ➤'s words for VoiceOver (it said «Сохранить и отправить» / «Отправить изменения») stay with the press that took its place
+    : bar.main === "send" ? { label: t("est.bar.send"), a11y: t("proto.est.saveSend"), onPress: () => void save(true), testID: "est-bar-send" }
+    : bar.main === "sendChanges" ? { label: t("r1.est.sendChanges"), a11y: t("r1.est.sendChanges"), onPress: () => void save(true), testID: "est-bar-send" }
     : doneStep;
   // «Итого ˅ $…» (DS §8.9, #1362): a press opens what the total is made of (a sheet over the bar, not a plate growing under the thumb)
   // visual v2 №5: «Итого ⌄ $772.36 налог $14.52» — the sum with cents (the engine's fmtUsd), the tax after it when there is one
@@ -1098,12 +1102,13 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       />
     </View>
   );
-  /** «⋯» of the editor: rare things — the layout of the list, how the rows read, the client's screen */
+  /** «⋯» of the editor: rare things — the layout of the list, how the rows read, the client's screen; one meaning — one icon
+   *  (Д-значок-3, review 27.11: «Разложить по типам» — `sections`, «Позиции подробно» — `list`, were both `menu`) */
   const moreList = [
-    ...(!signed && option.lines.length ? [{ key: "layout", label: t("est.sec.layout"), icon: "menu" as const, testID: "est-group-by-kind" }] : []),
+    ...(!signed && option.lines.length ? [{ key: "layout", label: t("est.sec.layout"), icon: "sections" as const, testID: "est-group-by-kind" }] : []),
     // «＋ Вариант» (Good / Better / Best) — a rare way to add, in «⋯» (the four buttons over the lines are the common ones)
     ...(!signed && !tplEdit && doc.options.length < MAX_OPTIONS ? [{ key: "option", label: t("est.var.add"), icon: "copy" as const, testID: "est-add-option" }] : []),
-    ...(option.lines.length ? [{ key: "rows", label: t("proto.est.rowsFull"), icon: "menu" as const, selected: rowLook === "full", testID: "est-row-view" }] : []),
+    ...(option.lines.length ? [{ key: "rows", label: t("proto.est.rowsFull"), icon: "list" as const, selected: rowLook === "full", testID: "est-row-view" }] : []),
     { key: "client", label: t("est.client.on"), icon: "eye" as const, selected: clientScreen, testID: "est-menu-client" },
     // #2935: the bar holds «Итого · Готово · Отправить» — «Отменить» (only with edits, #2381) is the last item here; it asks as before
     ...(bar.cancel === "more" ? [{ key: "cancel", label: t("k1.cancel"), icon: "undo" as const, testID: "k1-cancel" }] : []),

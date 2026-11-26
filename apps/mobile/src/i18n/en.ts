@@ -2844,6 +2844,8 @@ export const en: Dict = {
   "ds.btn.pairLong": "A long label — the buttons in a column",
   "ds.btn.secondary": "Secondary",
   "ds.btn.secondaryNote": "Next to the main one: surf2 and a border",
+  "ds.btn.outline": "Outline",
+  "ds.btn.outlineNote": "No fill, a thin `dash` edge: the second one beside the main on a `surf2` cell («Done» on the estimate bar)",
   "ds.btn.ghost": "Quiet",
   "ds.btn.ghostNote": "No fill: «Cancel», «Back»",
   "ds.btn.danger": "Danger",
