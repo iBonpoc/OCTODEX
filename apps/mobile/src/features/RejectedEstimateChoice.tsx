@@ -25,7 +25,7 @@ export function useRejectedEstimateChoice(): { dialog: ReactNode; can: (r: Rejec
   const mayCopy = (r: RejectedOp) => !r.estimateEdit || canCopyRejectedEstimate(db, who, r.estimateEdit.propertyId);
   const can = (r: RejectedOp) => canChooseSignedMeanwhile(r, mayCopy(r));
   // #2715 М4: what the answer acts on is read after it (the latest render), not from the render that opened the window
-  const latest = useRef<() => ChoiceDeps>(() => null as never);
+  const latest = useRef<() => ChoiceDeps>(null!); // set on every render, before any `choose`
   latest.current = () => ({
     copyRejectedEstimate,
     dismissRejected,

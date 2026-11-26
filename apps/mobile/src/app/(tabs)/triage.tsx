@@ -78,39 +78,28 @@ export default function Triage() {
         return <Button label={t("triage.assign")} icon="user" onPress={() => setAssign(it.refId)} />;
       // a money change the server refused (docs/specs/23 §3): open the record it was about
       // and «Понятно» takes it away (docs/specs/23 §3; the toast's «Отменить» puts it back, rule 5)
-      case "rejected":
+      case "rejected": {
+        // worked out once (#2826): the main step and «Открыть» cannot disagree — two yellow buttons, or none
+        const rej = rejectedOps.find((x) => x.id === it.refId);
+        const choose = !!rej && rejChoice.can(rej);
+        // #2674 Б3: the edits are kept on this card — «Понятно» would throw them away without a word: it says «Сбросить»
+        const kept = !!rej?.estimateEdit;
         return (
           <>
-            {(() => {
-              const rej = rejectedOps.find((x) => x.id === it.refId);
-              // #2715 Ж5: the main step is what to do with the edits (the estimate it opens is signed and has none of them)
-              return rej && rejChoice.can(rej) ? <Button testID={`rejected-choose-${rej.id}`} label={t("est.rej.choice.open")} onPress={() => void rejChoice.choose(rej)} /> : null;
-            })()}
+            {/* #2715 Ж5: the main step is what to do with the edits (the estimate it opens is signed and has none of them) */}
+            {rej && choose ? <Button testID={`rejected-choose-${rej.id}`} label={t("est.rej.choice.open")} onPress={() => void rejChoice.choose(rej)} /> : null}
             {canOpen(role, attentionHref(it)) ? (
-              <Button
-                label={t("sync.rejected.open")}
-                icon="chevronRight"
-                variant={(() => {
-                  const rej = rejectedOps.find((x) => x.id === it.refId);
-                  return rej && rejChoice.can(rej) ? "secondary" : undefined;
-                })()}
-                onPress={() => router.push(attentionHref(it) as Href)}
-              />
+              <Button label={t("sync.rejected.open")} icon="chevronRight" variant={choose ? "secondary" : undefined} onPress={() => router.push(attentionHref(it) as Href)} />
             ) : null}
-            {/* #2674 Б3: the edits are kept on this card — «Понятно» would throw them away without a word: it says «Сбросить» */}
-            {(() => {
-              const kept = !!rejectedOps.find((x) => x.id === it.refId)?.estimateEdit;
-              return (
-                <Button
-                  label={t(kept ? "est.rej.choice.reset" : "sync.rejected.ok")}
-                  icon={kept ? "trash" : "check"}
-                  variant="secondary"
-                  onPress={() => toast.show(t(kept ? "est.rej.choice.resetDone" : "sync.rejected.dismissed"), dismissRejected(it.refId))}
-                />
-              );
-            })()}
+            <Button
+              label={t(kept ? "est.rej.choice.reset" : "sync.rejected.ok")}
+              icon={kept ? "trash" : "check"}
+              variant="secondary"
+              onPress={() => toast.show(t(kept ? "est.rej.choice.resetDone" : "sync.rejected.dismissed"), dismissRejected(it.refId))}
+            />
           </>
         );
+      }
       // «Не сделано» on a finished visit (docs/specs/08 §8): open it, or «Просмотрено» with «Отменить» 5 s
       case "visitMissed":
         return (

@@ -211,6 +211,21 @@ describe("#2715: хвосты проверки #2674", () => {
     await done;
     expect(toast.mock.calls[0]![0]).toBe("offline.queued");
   });
+  // #2826 (review of #2825, «желательно» 2): one answer for both buttons — three copies of the same IIFE could part (two yellow or none)
+  it("#2826: в «Требует внимания» карточка отказа ищет и решает один раз — главная и «Открыть» от одного `choose`", () => {
+    const s = src("app/(tabs)/triage.tsx");
+    const card = s.slice(s.indexOf('case "rejected"'), s.indexOf("case", s.indexOf('case "rejected"') + 5));
+    expect(card.match(/rejectedOps\.find\(/g) ?? []).toHaveLength(1);
+    expect(card.match(/rejChoice\.can\(/g) ?? []).toHaveLength(1);
+  });
+  // #2826 (review of #2825, «желательно» 1): the М4 model test passes `deps` as a function; this one holds the hook to give it
+  // the LATEST render's values — `() => ({ online, … })` from the render that opened the window would pass the model test
+  it("#2826 М4: хук отдаёт модели `latest.current()`, а не значения рендера, открывшего окно", () => {
+    const s = src("features/RejectedEstimateChoice.tsx");
+    const choose = s.slice(s.indexOf("const choose = "), s.indexOf("return { dialog"));
+    expect(choose).toMatch(/latest\.current\(\)/);
+    expect(choose).not.toMatch(/\bonline\b|copyRejectedEstimate|dismissRejected/);
+  });
   it("Ж5 + находка «Разбор дел»: в «Требует внимания» главная (жёлтая) — выбор по правкам, «Открыть» при ней серая; в профиле (список карточек) — первая, но серая: один жёлтый на экран (DS §3.1 п.4); значка копии нет", () => {
     // the tag of a Button up to its `/>` (the guard oneAccent.test.ts counts a Button with no `variant` as the filled one)
     const tag = (f: string, needle: string) => {
@@ -221,7 +236,7 @@ describe("#2715: хвосты проверки #2674", () => {
     const tri = "app/(tabs)/triage.tsx";
     expect(tag(tri, "rejected-choose-"), "triage: главная").not.toMatch(/\bvariant=/);
     expect(tag(tri, '"sync.rejected.open"')).toMatch(/variant=/);
-    expect(src(tri)).toMatch(/rejChoice\.can\(rej\) \? "secondary" : undefined/);
+    expect(src(tri)).toMatch(/variant=\{choose \? "secondary" : undefined\}/);
     expect(tag("features/StuckOps.tsx", "rejected-choose-"), "профиль: серая").toMatch(/variant="secondary"/);
     for (const f of [tri, "features/StuckOps.tsx"]) expect(tag(f, "rejected-choose-"), f).not.toMatch(/icon="copy"/);
   });
