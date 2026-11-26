@@ -5530,6 +5530,7 @@ export const ru = {
   "proto.leads.why.next": "Шага нет — выберите, что дальше",
   "proto.leads.why.noService": "Клиента не обслуживаем — решение в его карточке",
   "proto.leads.why.won": "Лид стал клиентом",
+  "proto.leads.why.waitMessage": "Вы ответили — ждём клиента. Выберите, что дальше",
   "proto.leads.why.remind": "Смета у клиента {n} дн без ответа",
   "proto.leads.why.reply": "Клиент ждёт {time} — первые {n} мин решают",
   "proto.leads.wroteIn": "написал в {source}",

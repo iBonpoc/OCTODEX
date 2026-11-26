@@ -5530,6 +5530,7 @@ export const en: Dict = {
   "proto.leads.why.next": "No next step — choose one",
   "proto.leads.why.noService": "We don't serve this client — see the client card",
   "proto.leads.why.won": "The lead became a client",
+  "proto.leads.why.waitMessage": "You replied — waiting for the client. Choose what's next",
   "proto.leads.why.remind": "Estimate with the client {n} d, no answer",
   "proto.leads.why.reply": "Client waiting {time} — the first {n} min decide",
   "proto.leads.wroteIn": "wrote via {source}",

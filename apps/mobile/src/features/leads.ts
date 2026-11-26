@@ -129,7 +129,7 @@ export const isOverdueTask = (t: Task, now = Date.now()) => !t.doneAt && !!t.due
 export type LeadTurn =
   | { kind: "reply"; minutes: number; attempts: number; status: StatusName }
   | { kind: "step"; dueAt?: string; title?: string; status: StatusName }
-  | { kind: "wait"; days: number; action: "none" | "remind" | "lostOrWait"; status: StatusName }
+  | { kind: "wait"; days: number; action: "none" | "remind" | "lostOrWait"; status: StatusName; about: "estimate" | "message" }
   | { kind: "noStep"; status: StatusName }
   | { kind: "snoozed"; until: string; status: StatusName }
   | { kind: "done"; status: StatusName };
@@ -181,14 +181,16 @@ export function leadTurn(db: DB, l: Lead, st: LeadSettings = LEAD_SETTINGS_DEFAU
   if (l.status === "estimate_sent" || sentAt || wroteLast) {
     const from = after([sentAt, wroteLast ? lastOut!.at : undefined].filter((x): x is string => !!x).sort().pop() ?? l.lastOutboundAt ?? l.lastActivityAt ?? l.receivedAt)!;
     const days = Math.max(0, daysBetween(from, now));
+    // what we wait an answer to: an estimate that went out, or only our message (#2760: «Ответил» is not an estimate)
+    const about = l.status === "estimate_sent" || sentAt ? "estimate" : "message";
     // a reminder counts only for what is waiting now: a newer estimate or message starts over
     const reminded = l.remindedAt && (!sentAt || l.remindedAt >= sentAt) ? after(l.remindedAt)! : undefined;
     if (reminded && l.askAgainAt) {
-      return new Date(l.askAgainAt).getTime() > now ? { kind: "wait", days, action: "none", status: "neutral" } : { kind: "wait", days, action: "lostOrWait", status: "warn" };
+      return new Date(l.askAgainAt).getTime() > now ? { kind: "wait", days, action: "none", status: "neutral", about } : { kind: "wait", days, action: "lostOrWait", status: "warn", about };
     }
-    if (reminded) return daysBetween(reminded, now) >= st.lostOrWaitDays ? { kind: "wait", days, action: "lostOrWait", status: "warn" } : { kind: "wait", days, action: "none", status: "neutral" };
-    if (days >= st.remindDays) return { kind: "wait", days, action: "remind", status: "warn" };
-    return { kind: "wait", days, action: "none", status: "neutral" };
+    if (reminded) return daysBetween(reminded, now) >= st.lostOrWaitDays ? { kind: "wait", days, action: "lostOrWait", status: "warn", about } : { kind: "wait", days, action: "none", status: "neutral", about };
+    if (days >= st.remindDays) return { kind: "wait", days, action: "remind", status: "warn", about };
+    return { kind: "wait", days, action: "none", status: "neutral", about };
   }
   return { kind: "noStep", status: "warn" };
 }
