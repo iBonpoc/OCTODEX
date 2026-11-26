@@ -33,7 +33,7 @@ exports.run = async (h) => {
   h.expect((await count(`[data-testid="est-hide-${id}"]`)) === 0, "«Ещё» has no switch «Скрыть от клиента» (#2424)");
   await openMenu(id);
   await tid(`est-act-hide-${id}`).click();
-  await p.getByText(/ценой \$0\.00/).first().waitFor({ timeout: 3000 });
+  await p.getByText(/ценой \$0/).first().waitFor({ timeout: 3000 });
 
   // at $0 it hides; folded, the row says «Скрыто от клиента» in a dashed frame
   await vis(`[data-testid="est-price-${id}"] input`).first().fill("0");

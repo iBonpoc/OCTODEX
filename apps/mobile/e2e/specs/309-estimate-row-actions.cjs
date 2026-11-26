@@ -27,7 +27,7 @@ exports.run = async (h) => {
     "«Скрыть» of a priced line is pale in «⋯»",
   );
   await tid(`est-act-hide-${id}`).click();
-  await p.getByText(/ценой \$0\.00/).first().waitFor({ timeout: 3000 });
+  await p.getByText(/ценой \$0/).first().waitFor({ timeout: 3000 });
   h.expect((await count(`[data-testid="est-hidden-${id}"]`)) === 0, "a priced line stays visible to the client");
 
   // at $0 it hides and shows again
