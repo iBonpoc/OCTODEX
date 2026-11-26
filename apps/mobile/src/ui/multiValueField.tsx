@@ -167,9 +167,12 @@ export function MultiValueField<L extends string>({
                   row has no «🗑»: removing it would leave a bare «＋» (crm-reviewer) */}
               {ro ? null : (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
-                  <View style={{ width: size.hitMin, alignItems: "center" }}>
-                    {rows.length === 1 && !r.value.trim() ? null : <IconButton bare icon="trash" label={removeLabel} onPress={() => onRemove(r.id)} testID={id ? `${id}-remove` : undefined} />}
-                  </View>
+                  {/* no «🗑» (a lone empty row): its place goes to the field, the «＋» stays at the right edge (design review) */}
+                  {rows.length === 1 && !r.value.trim() ? null : (
+                    <View style={{ width: size.hitMin, alignItems: "center" }}>
+                      <IconButton bare icon="trash" label={removeLabel} onPress={() => onRemove(r.id)} testID={id ? `${id}-remove` : undefined} />
+                    </View>
+                  )}
                   <View style={{ width: size.hitMin, alignItems: "center" }}>
                     {i === rows.length - 1 ? <IconButton icon="plus" label={addLabel} onPress={onAdd} testID={testID ? `${testID}-add` : undefined} /> : null}
                   </View>

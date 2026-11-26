@@ -47,12 +47,14 @@ export function ModeRow<K extends string>({
   const withField = !!field && mode !== off;
   const items = modes.map((m) => ({ ...m, sign: m.key !== off && m.label.length <= 2 ? m.label : undefined }));
   const word = (
-    <T v="body" numberOfLines={2} style={shape === "wide" ? { width: component.modeRow.titleW } : { flex: 1, minWidth: component.modeToggle.titleMinW }}>
+    <T v="body" numberOfLines={2} style={shape === "wide" ? { width: component.modeRow.titleW } : { flex: 1, minWidth: 0 }}>
       {title}
     </T>
   );
   const sw = (
-    <View onLayout={(e) => setTw(e.nativeEvent.layout.width)}>
+    // the toggle stands in a slot of the widest one (3 positions): a 2-position toggle (tax) starts there too and its field starts
+    // where the deposit's does — the fields stand in one column (design review of #2954)
+    <View onLayout={(e) => setTw(e.nativeEvent.layout.width)} style={{ width: modeToggleW(3) }}>
       <ReadOnly value={!!locked}>
         {/* a press on the chosen position changes nothing (it never resets a value or asks a question again — code review of #2454) */}
         <ModeToggle items={items} value={mode} off={off} onChange={onMode} label={title} testID={testID ? `${testID}-mode` : undefined} />

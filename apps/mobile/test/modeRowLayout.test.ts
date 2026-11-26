@@ -13,6 +13,9 @@ describe("modeRowShape — the totals row's layout (DS §8.7а, #2954)", () => {
     expect(lineNeed).toBeLessThanOrEqual(326);
     expect(modeRowShape(326, tog)).toBe("line");
   });
+  it("the 820 totals column (the row is 320 wide — narrower than a phone's): one line too", () => {
+    expect(modeRowShape(320, tog)).toBe("line");
+  });
   it("a wide row: one line with the word as a column", () => {
     expect(modeRowShape(wideNeed, tog)).toBe("wide");
     expect(modeRowShape(wideNeed - 1, tog)).toBe("line");

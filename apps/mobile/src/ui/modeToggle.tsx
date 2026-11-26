@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { View } from "react-native";
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from "react-native-reanimated";
-import { component, motion, radius } from "@octo/design-tokens";
+import { component, motion, radius, size } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Press, T } from "./primitives";
 import { useReadOnly } from "./readOnly";
@@ -40,6 +40,8 @@ export function ModeToggle<K extends string>({
   const idx = Math.max(0, items.findIndex((i) => i.key === value));
   const on = value !== off;
   const inset = (cell - knob) / 2;
+  // the end zones reach past the track: 30 + 7 = 37 (the zone is never narrower than the knob's cell)
+  const edge = (size.hitMin - cell) / 2;
   const x = useSharedValue(idx * cell);
   useEffect(() => {
     const to = idx * cell;
@@ -53,8 +55,13 @@ export function ModeToggle<K extends string>({
       <View pointerEvents="none" style={{ position: "absolute", left: -1, top: 0, bottom: 0, flexDirection: "row" }}>
         {items.map((i) => (
           <View key={i.key} style={{ width: cell, alignItems: "center", justifyContent: "center" }}>
+            {i.key === off && on ? (
+              // a value on: the middle «Выкл.» keeps a quiet mark, so the place to press to turn it off is seen (design review)
+              <View style={{ width: component.modeToggle.dot, height: component.modeToggle.dot, borderRadius: component.modeToggle.dot / 2, backgroundColor: c.onAcc, opacity: component.dimOpacity }} />
+            ) : null}
             {i.sign ? (
-              <T v="caption" w="semibold" style={{ color: on ? c.onAcc : c.mut }}>
+              // on the yellow track the sign of the other position is pale (only the knob's sign reads as chosen — crm-reviewer)
+              <T v="caption" w="semibold" style={{ color: on ? c.onAcc : c.mut, opacity: on ? component.dimOpacity : 1 }}>
                 {i.sign}
               </T>
             ) : null}
@@ -63,25 +70,26 @@ export function ModeToggle<K extends string>({
       </View>
       <Animated.View pointerEvents="none" style={[{ position: "absolute", left: inset - 1, width: knob, height: knob, borderRadius: knob / 2, backgroundColor: on ? c.onAcc : c.mut, alignItems: "center", justifyContent: "center" }, a]}>
         {on && sign ? (
-          <T v="caption" w="semibold" style={{ color: c.acc }}>
+          <T v="body" w="semibold" style={{ color: c.acc }}>
             {sign}
           </T>
         ) : null}
       </Animated.View>
-      <View style={{ position: "absolute", left: -1, top: 0, bottom: 0, flexDirection: "row" }}>
-        {items.map((i) => (
+      {/* the zones: 44 high (size.hitMin); the end positions reach `edge` past the track (crm-reviewer: a finger at the edge picks
+          the end, as iOS segments), so «%» and «$» are 37 wide, the middle «Выкл.» 30 — the founder's small toggle (DS §8.7а) */}
+      <View style={{ position: "absolute", left: -1 - edge, top: (h - size.hitMin) / 2 - 1, height: size.hitMin, flexDirection: "row" }}>
+        {items.map((i, k) => (
           <Press
             key={i.key}
             testID={testID ? `${testID}-${i.key}` : undefined}
             onPress={() => i.key !== value && onChange(i.key)}
             disabled={ro}
-            visibleHeight={h}
             accessibilityRole="radio"
             accessibilityState={{ selected: i.key === value, disabled: ro }}
             // web: a radio is read by aria-checked
             {...({ "aria-checked": i.key === value } as object)}
             accessibilityLabel={i.label}
-            style={{ width: cell, height: h, minHeight: h }}
+            style={{ width: cell + (k === 0 || k === items.length - 1 ? edge : 0), height: size.hitMin }}
           >
             {null}
           </Press>

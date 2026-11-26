@@ -37,16 +37,15 @@ exports.run = async (h) => {
   await tid("est-deposit-row").scrollIntoViewIfNeeded();
   const [seg, field, sum] = [await box("est-deposit-row-mode-pct"), await box("est-deposit-row-field"), await box("est-deposit-row-sum")];
   const head = await box("est-deposit-row-head");
-  // a phone (390) and 1280 hold it on one line; the 820 totals column is narrower than a phone's row — there, and only there, the
-  // sum stays on the word's line and the toggle with its field go under it (DS §8.7а «две строки — только когда не входит»)
-  const one = Math.abs(mid(seg) - mid(sum)) < 4;
-  if (h.layout.width !== 820) h.expect(one, `С2: one line at ${h.layout.width} (toggle ${Math.round(mid(seg))}, sum ${Math.round(mid(sum))})`);
-  if (one) {
-    h.expect([seg, field, sum].every((b) => Math.abs(mid(b) - mid(head)) < 4), "С2: one line — the toggle, the field and the sum");
-    h.expect(seg.x + seg.width <= field.x && field.x + field.width <= sum.x + 1, "С2: from left to right — the toggle, the field, the sum");
-  } else {
-    h.expect(Math.abs(mid(head) - mid(sum)) < 4 && sum.y + sum.height <= seg.y + 1 && Math.abs(mid(field) - mid(seg)) < 4, "С2: two lines — «word · sum», the toggle with its field under it");
-  }
+  // one line on every width — 390, the 820 totals column (narrower than a phone's row) and 1280
+  h.expect([seg, field, sum].every((b) => Math.abs(mid(b) - mid(head)) < 4), `С2: one line — the toggle, the field and the sum (toggle ${Math.round(mid(seg))}, field ${Math.round(mid(field))}, sum ${Math.round(mid(sum))})`);
+  h.expect(seg.x + seg.width <= field.x && field.x + field.width <= sum.x + 1, "С2: from left to right — the toggle, the field, the sum");
+  // the fields stand in one column: the tax's 2-position toggle keeps the slot of the 3-position one
+  const taxField = await p.getByTestId("est-tax-row-head").locator("visible=true").first().evaluate((e) => {
+    const t = [...e.querySelectorAll("*")].find((x) => /%/.test(x.textContent || "") && x.children.length === 0 && !x.closest('[role="radio"]') && !x.closest('[data-testid$="-mode"]'));
+    return t ? t.getBoundingClientRect().x : null;
+  });
+  if (taxField !== null) h.expect(Math.abs(taxField - field.x) < 24, `С2: the tax's rate starts in the deposit's field column (${Math.round(taxField)}, ${Math.round(field.x)})`);
   const dSeg = await box("est-discount-row-mode-pct");
   h.expect(Math.abs(dSeg.x - seg.x) < 2, `С2: the toggles stand in one column (discount ${Math.round(dSeg.x)}, deposit ${Math.round(seg.x)})`);
   await h.shot("deposit");
