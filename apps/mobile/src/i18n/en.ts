@@ -2763,8 +2763,6 @@ export const en: Dict = {
   "ds.confirm3.show": "Show the window of three buttons",
   "ds.confirm3.q": "The client signed — before your edits",
   "ds.confirm3.text": "The signature stays. Keep the edits as a copy or discard them.",
-  "ds.confirm3.copy": "Make a copy",
-  "ds.confirm3.reset": "Discard",
   "ds.confirm3.later": "Later",
   "ds.sheet.next": "Next",
   "ds.sheet.page2": "Second page",
@@ -4706,7 +4704,7 @@ export const en: Dict = {
   "pay.online.err.busy": "Too many tries. Please try again in {n} min.",
   // spec 35 §4д п.10 («Деньги и отчёты» №7)
   "est.rej.signatureLost": "The client's signature was not saved on the server",
-  "est.rej.choice.open": "Save my changes…",
+  "est.rej.choice.open": "Make a copy…",
   "est.rej.choice.title": "The client signed the estimate {date} — before your edits",
   "est.rej.choice.titleNoDate": "The client signed the estimate before your edits",
   "est.rej.choice.text": "Your edits waited for the network and were not saved — the signature stays. The copy is a new draft with your edits.",
@@ -4719,7 +4717,7 @@ export const en: Dict = {
   "est.rej.choice.why": "Your edits are kept here and the client's signature stays. Make a copy of the estimate from them, or discard them.",
   "est.rej.choice.whyOffice": "Your edits are kept only on this phone, and the client's signature stays. To make a copy of the estimate from them, ask the office to assign you to this property.",
   "est.rej.choice.keepUntil": "Kept until {date}.",
-  "est.rej.signedMeanwhile": "The client signed the estimate while your edits waited for the network — the edits were not saved",
+  "est.rej.signedMeanwhile": "The client signed the estimate while your edits waited for the network — they did not get into it",
   "est.rej.signedMeanwhileWhy": "The client's signature stays. To change the estimate, open it and choose “Don't sign — change it”: the client will have to sign again.",
   // visit payment refused by the server (#857 О1) — the tech hands it to the office
   "visit.rej.moneyInHand": "The money in hand was not recorded — hand the payment to the office",

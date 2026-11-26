@@ -2763,8 +2763,6 @@ export const es: Dict = {
   "ds.confirm3.show": "Mostrar la ventana de tres botones",
   "ds.confirm3.q": "El cliente firmó, antes de sus cambios",
   "ds.confirm3.text": "La firma se mantiene. Guarde los cambios como copia o descártelos.",
-  "ds.confirm3.copy": "Hacer una copia",
-  "ds.confirm3.reset": "Descartar",
   "ds.confirm3.later": "Más tarde",
   "ds.sheet.next": "Siguiente",
   "ds.sheet.page2": "Segunda página",
@@ -4706,7 +4704,7 @@ export const es: Dict = {
   "pay.online.err.busy": "Demasiados intentos. Inténtelo de nuevo en {n} min.",
   // spec 35 §4д п.10 («Деньги и отчёты» №7)
   "est.rej.signatureLost": "La firma del cliente no se guardó en el servidor",
-  "est.rej.choice.open": "Guardar mis cambios…",
+  "est.rej.choice.open": "Crear una copia…",
   "est.rej.choice.title": "El cliente firmó el presupuesto {date}, antes de sus cambios",
   "est.rej.choice.titleNoDate": "El cliente firmó el presupuesto antes de sus cambios",
   "est.rej.choice.text": "Sus cambios esperaron la red y no se guardaron: la firma se mantiene. La copia es un borrador nuevo con sus cambios.",
@@ -4719,7 +4717,7 @@ export const es: Dict = {
   "est.rej.choice.why": "Sus cambios están guardados aquí y la firma del cliente se mantiene. Haga una copia del presupuesto con ellos o descártelos.",
   "est.rej.choice.whyOffice": "Sus cambios están guardados solo en este teléfono y la firma del cliente se mantiene. Para hacer una copia del presupuesto con ellos, pida a la oficina que le asigne a esta propiedad.",
   "est.rej.choice.keepUntil": "Se guardan hasta el {date}.",
-  "est.rej.signedMeanwhile": "El cliente firmó el presupuesto mientras sus cambios esperaban la red: los cambios no se guardaron",
+  "est.rej.signedMeanwhile": "El cliente firmó el presupuesto mientras sus cambios esperaban la red: no entraron en él",
   "est.rej.signedMeanwhileWhy": "La firma del cliente se mantiene. Para cambiar el presupuesto, ábralo y elija «No firmar — cambiar»: el cliente tendrá que firmar de nuevo.",
   // visit payment refused by the server (#857 О1) — the tech hands it to the office
   "visit.rej.moneyInHand": "El dinero en mano no se registró: entregue el pago a la oficina",

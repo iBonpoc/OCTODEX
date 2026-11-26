@@ -179,12 +179,15 @@ describe("Б5: витрина «Окна» показывает ConfirmDialog и
 
 describe("#2715: хвосты проверки #2674", () => {
   const dict = (d: unknown) => d as Record<string, string>;
-  it("Ж6: кнопки окна — те же слова, что окно того же случая в редакторе (k1.copy / k1.reset), RU/EN/ES; кнопка карточки — «Сохранить правки…»", () => {
+  it("Ж6: кнопки окна — те же слова, что окно того же случая в редакторе (k1.copy / k1.reset), RU/EN/ES; кнопка карточки — «Сделать копию…» (не «Сохранить»: правки и так на телефоне — проверка дизайна #2715)", () => {
     for (const d of [ru, en, es].map(dict)) {
       expect(d["est.rej.choice.copy"]).toBe(d["k1.copy"]);
       expect(d["est.rej.choice.reset"]).toBe(d["k1.reset"]);
     }
-    expect(dict(ru)["est.rej.choice.open"]).toBe("Сохранить правки…");
+    expect(dict(ru)["est.rej.choice.open"]).toBe("Сделать копию…");
+    for (const d of [ru, en, es].map(dict)) expect(d["est.rej.choice.open"]).not.toMatch(/Сохран|Save|Guard/);
+    // the title no longer says «не сохранены» beside the hint «сохранены здесь» (review of #2674, Ж4 А)
+    expect(dict(ru)["est.rej.signedMeanwhile"]).toMatch(/в смету они не попали/);
   });
   it("Ж7: после копии тост называет смету и следующий шаг — отправить клиенту; номер неизвестен — прежний тост", () => {
     const toast = vi.fn();
@@ -206,21 +209,19 @@ describe("#2715: хвосты проверки #2674", () => {
     await done;
     expect(toast.mock.calls[0]![0]).toBe("offline.queued");
   });
-  it("Ж5 + находка «Разбор дел»: главная (жёлтая) — кнопка выбора по правкам и в «Требует внимания», и в профиле; «Открыть» при ней серая; значка копии нет", () => {
-    for (const f of ["app/(tabs)/triage.tsx", "features/StuckOps.tsx"]) {
-      // the tag of a Button up to its `/>` (the guard oneAccent.test.ts counts a Button with no `variant` as the filled one)
-      const tag = (needle: string) => {
-        const s = src(f);
-        const at = s.lastIndexOf("<Button", s.indexOf(needle));
-        return s.slice(at, s.indexOf("/>", s.indexOf(needle)));
-      };
-      const choose = tag("rejected-choose-");
-      expect(choose, `${f}: «Сохранить правки…» — главная`).not.toMatch(/\bvariant=/);
-      expect(choose, f).not.toMatch(/icon="copy"/);
-      expect(tag('"sync.rejected.open"'), f).toMatch(/variant=/);
-    }
-    // in «Требует внимания» «Открыть» stays the main step of a card that has no choice (the other refusals)
-    expect(src("app/(tabs)/triage.tsx")).toMatch(/rejChoice\.can\(rej\) \? "secondary" : undefined/);
+  it("Ж5 + находка «Разбор дел»: в «Требует внимания» главная (жёлтая) — выбор по правкам, «Открыть» при ней серая; в профиле (список карточек) — первая, но серая: один жёлтый на экран (DS §3.1 п.4); значка копии нет", () => {
+    // the tag of a Button up to its `/>` (the guard oneAccent.test.ts counts a Button with no `variant` as the filled one)
+    const tag = (f: string, needle: string) => {
+      const s = src(f);
+      const at = s.lastIndexOf("<Button", s.indexOf(needle));
+      return s.slice(at, s.indexOf("/>", s.indexOf(needle)));
+    };
+    const tri = "app/(tabs)/triage.tsx";
+    expect(tag(tri, "rejected-choose-"), "triage: главная").not.toMatch(/\bvariant=/);
+    expect(tag(tri, '"sync.rejected.open"')).toMatch(/variant=/);
+    expect(src(tri)).toMatch(/rejChoice\.can\(rej\) \? "secondary" : undefined/);
+    expect(tag("features/StuckOps.tsx", "rejected-choose-"), "профиль: серая").toMatch(/variant="secondary"/);
+    for (const f of [tri, "features/StuckOps.tsx"]) expect(tag(f, "rejected-choose-"), f).not.toMatch(/icon="copy"/);
   });
   it("М3: в профиле одно окно на экран — хук выбора в StuckOps, а не в каждой карточке", () => {
     const s = src("features/StuckOps.tsx");

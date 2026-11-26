@@ -111,8 +111,8 @@ function RejectedCard({ r, choice }: { r: RejectedOp; choice: ReturnType<typeof 
           {r.estimateEdit && rejectedKeepUntil(r.at) != null ? ` ${t("est.rej.choice.keepUntil", { date: day(new Date(rejectedKeepUntil(r.at)!).toISOString()) })}` : ""}
         </T>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
-          {/* #2715 Ж5: the main step is what to do with the edits — the same as in «Требует внимания» */}
-          {choice.can(r) ? <Button testID={`rejected-choose-${r.id}`} label={t("est.rej.choice.open")} onPress={() => void choice.choose(r)} /> : null}
+          {/* #2715: first, but grey — «Профиль и аккаунт» lists the cards: one yellow on a screen (DS §3.1 п.4); yellow in «Требует внимания» only */}
+          {choice.can(r) ? <Button testID={`rejected-choose-${r.id}`} label={t("est.rej.choice.open")} variant="secondary" onPress={() => void choice.choose(r)} /> : null}
           {rejectedOpens(r, role) ? <Button label={t("sync.rejected.open")} icon="chevronRight" variant="secondary" onPress={() => router.push(r.href as Href)} /> : null}
           {/* #2674 Б3: the edits are kept on this card — «Понятно» would throw them away without a word: it says «Сбросить» */}
           <Button
