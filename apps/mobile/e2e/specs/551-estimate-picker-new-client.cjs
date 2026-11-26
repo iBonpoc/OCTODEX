@@ -5,7 +5,9 @@
  * С3 КОГДА поиск в шторке «Nora Park» и «Новый клиент» ТОГДА имя и фамилия уже в форме; заполнена форма и «Создать» ТОГДА
  *    назад в ту же смету: новый клиент и его адрес выбраны, набранная позиция на месте; клиент есть в базе; в тосте нет
  *    «Вернуть» (смета уже держит клиента — crm-reviewer №1).
- * By testID (rule 19): `est-client-new`, `est-client-card`, `client-form`, `client-save`, `est-add-new`, `est-name-*`.
+ * С4 КОГДА «Новый клиент», набрано имя и «назад» (свайп iOS / «Назад» Android; в вебе — назад браузера) ТОГДА вопрос
+ *    «Выйти без сохранения?»; «Выйти» ТОГДА та же смета: позиция на месте, клиент не создан (#2853 + #2887).
+ * By testID (rule 19): `tpl-confirm-yes`, `est-client-new`, `est-client-card`, `client-form`, `client-save`, `est-add-new`, `est-name-*`.
  */
 const { pressEscUntilClosed } = require("../sheet.cjs");
 
@@ -45,6 +47,21 @@ exports.run = async (h) => {
   h.expect(await typed(), "С2: the typed line is still there");
   const db0 = await h.db();
   h.expect(!db0.customers.some((c) => /Nora/.test(c.name)), "С2: no client made");
+
+  // С4: a name typed in the form made from the estimate → «back» asks «Выйти без сохранения?»; «Выйти» → the same estimate
+  await tid("est-client-card").click();
+  await tid("est-client-new").click();
+  await tid("client-form").waitFor({ timeout: 8000 });
+  await field("Имя").fill("Quinn");
+  await p.goBack();
+  await tid("tpl-confirm-yes").waitFor({ state: "visible", timeout: 8000 });
+  h.expect(await tid("tpl-confirm-yes").isVisible(), "С4: the back over a typed name asks «Выйти без сохранения?»");
+  await tid("tpl-confirm-yes").click();
+  await onPath(/^\/estimate\/new$/, "С4: «Выйти» goes back to the estimate");
+  await tid("est-client-card").waitFor({ timeout: 8000 });
+  h.expect(await typed(), "С4: the typed line is still there");
+  const db4 = await h.db();
+  h.expect(!db4.customers.some((c) => /Quinn/.test(c.name)), "С4: no client made");
 
   // С3: a search that finds nobody → «Новый клиент»: the typed name is in the form; filled → «Создать»: back in the estimate
   await tid("est-client-card").click();
