@@ -19,7 +19,7 @@ exports.run = async (h) => {
   const total0 = await sums();
   const db0 = await h.db();
   const inv = db0.invoices.find((i) => i.totalCents - i.paidCents >= 5000 && db0.customers.some((c) => c.id === i.customerId));
-  h.expect(!!inv, "the demo has an invoice owing $50 or more");
+  h.expect(!!inv, "the demo has an invoice owing $50.00 or more");
   const cust = db0.customers.find((c) => c.id === inv.customerId);
   const advance = (id, cents) => ({ id, invoiceId: null, customerId: cust.id, amountCents: cents, method: "card", at: new Date().toISOString(), receiptNumber: `RCT-${id.slice(-3)}`, needsReview: true });
   await p.evaluate((list) => {
@@ -61,7 +61,7 @@ exports.run = async (h) => {
   const after = await h.db();
   const paid = after.payments.find((x) => x.id === "e2e-adv-190");
   h.expect(paid.invoiceId === inv.id && !paid.needsReview, "the advance is a payment of that invoice now");
-  h.expect(after.invoices.find((i) => i.id === inv.id).paidCents === inv.paidCents + 5000, "the invoice owes $50 less");
+  h.expect(after.invoices.find((i) => i.id === inv.id).paidCents === inv.paidCents + 5000, "the invoice owes $50.00 less");
 
   // 3) the second advance: refunded as any payment
   await h.go("/receipt/e2e-adv-191");
@@ -77,7 +77,7 @@ exports.run = async (h) => {
     const d = JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db;
     return (d?.advances || []).find((x) => x.id === "e2e-adv-191")?.refundedCents === 1000;
   }, null, { timeout: 5000 });
-  h.expect((await h.db()).advances.find((x) => x.id === "e2e-adv-191").amountCents === 1000, "$20 − $10 = $10 left");
+  h.expect((await h.db()).advances.find((x) => x.id === "e2e-adv-191").amountCents === 1000, "$20.00 − $10.00 = $10.00 left");
 
   // 4) a tech: no «Зачесть»
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));

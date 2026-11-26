@@ -33,7 +33,7 @@ exports.run = async (h) => {
   await tid("estimate-screen-sections-sign").first().click();
   await tid("sign-client-doc").waitFor({ timeout: 8000 });
   await tid("est-client-line-l-shown").waitFor({ timeout: 3000 });
-  h.expect((await tid("est-client-line-l-hidden").count()) === 0, "a line hidden from the client at $0 is not shown on site");
+  h.expect((await tid("est-client-line-l-hidden").count()) === 0, "a line hidden from the client at $0.00 is not shown on site");
   h.expect((await tid("est-client-line-l-zero").count()) === 0, "a quantity-0 line is not shown on site");
   const sub = (await tid("est-client-subtotal-S").innerText()).replace(/\s+/g, " ");
   h.expect(/Subtotal: Roof/.test(sub), `the subtotal reads in the client's language (es): ${sub}`);
@@ -72,7 +72,7 @@ exports.run = async (h) => {
   await p.waitForFunction((id) => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.estimates?.find((e) => e.id === id)?.status === "approved", EID, { timeout: 8000 });
   h.expect((await status()) === "approved", "signed by both");
   await tid("est-client-line-l-shown").waitFor({ timeout: 5000 });
-  h.expect((await tid("est-client-line-l-hidden").count()) === 0, "signed: the hidden $0 line is not shown");
+  h.expect((await tid("est-client-line-l-hidden").count()) === 0, "signed: the hidden $0.00 line is not shown");
   h.expect((await tid("est-client-line-l-zero").count()) === 0, "signed: the quantity-0 line is not shown");
   await h.shot("signed");
 };

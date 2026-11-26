@@ -43,7 +43,7 @@ exports.run = async (h) => {
   if (phone) {
     // the pinned bar: «Итого $1,000» is a figure, not a button — no sheet (founder 21.11, С5, #2387)
     await tid("est-bar-total").waitFor({ timeout: 3000 });
-    h.expect(/\$1,000(\.00)?(?![.\d])/.test(await tid("est-bar-total").innerText()), "the panel: «Итого $1,000»");
+    h.expect(/\$1,000(\.00)?(?![.\d])/.test(await tid("est-bar-total").innerText()), "the panel: «Итого $1,000.00»");
     h.expect((await tid("est-bar-total").getAttribute("role")) !== "button", "the bar's total is not a button");
   } else {
     h.expect((await count("est-bar-total")) === 0, "no panel from 820");
@@ -51,9 +51,9 @@ exports.run = async (h) => {
   // the totals card (every width): the «если включит» row and «Только для вас»
   const card = tid("est-card-breakdown");
   await card.scrollIntoViewIfNeeded();
-  h.expect(/\$1,500(\.00)?(?![.\d])/.test(await card.getByTestId("est-tot-ifAll").innerText()), "the card: «если включит — итог $1,500»");
+  h.expect(/\$1,500(\.00)?(?![.\d])/.test(await card.getByTestId("est-tot-ifAll").innerText()), "the card: «если включит — итог $1,500.00»");
   h.expect((await card.getByTestId("est-tot-own").count()) === 1, "the card: «Только для вас»");
-  h.expect(/\$1,200(\.00)?(?![.\d])/.test(await card.getByTestId("est-tot-cost").innerText()), "the card: the cost $1,200");
+  h.expect(/\$1,200(\.00)?(?![.\d])/.test(await card.getByTestId("est-tot-cost").innerText()), "the card: the cost $1,200.00");
   const profit = await card.getByTestId("est-tot-profit").innerText();
   h.expect(/в минус \$200(\.00)?(?![.\d])/.test(profit) && !/-/.test(profit), `the card: the profit in the red, one sign — the word (${profit})`);
   await h.shot("card");

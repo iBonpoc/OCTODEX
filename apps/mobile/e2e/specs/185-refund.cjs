@@ -56,7 +56,7 @@ exports.run = async (h) => {
   await next.click();
   await sheet.getByRole("button", { name: /^Вернуть \$10(\.00)?$/ }).click();
 
-  await p.getByText(/Возвращено \$10/).first().waitFor({ timeout: 5000 });
+  await p.getByText(/Возвращено \$10\.00/).first().waitFor({ timeout: 5000 });
   // the demo keeps its data a moment later: wait for it, not for seconds
   await p.waitForFunction((id) => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.payments?.find((x) => x.id === id)?.refundedCents === 1000, pay.id, { timeout: 5000 });
   const after = await h.db();

@@ -53,7 +53,7 @@ exports.run = async (h) => {
 
   // case 1: a final invoice part paid
   const shownA = await pay(h, a.id);
-  h.expect(/^\$300(\.00)?$/.test(shownA), `case 1: the screen shows the balance $300: ${shownA}`);
+  h.expect(/^\$300(\.00)?$/.test(shownA), `case 1: the screen shows the balance $300.00: ${shownA}`);
   db = await h.db();
   const va = db.visits.find((x) => x.id === a.id);
   h.expect(va.step === "paid" && va.payment?.amountCents === 30000, `case 1: paid what was shown: ${JSON.stringify(va.payment)}`);
@@ -63,12 +63,12 @@ exports.run = async (h) => {
 
   // case 2: a deposit billed, not paid
   const shownB = await pay(h, b.id);
-  h.expect(/^\$350(\.00)?$/.test(shownB), `case 2: the screen shows the contract less the deposit, $350: ${shownB}`);
+  h.expect(/^\$350(\.00)?$/.test(shownB), `case 2: the screen shows the contract less the deposit, $350.00: ${shownB}`);
   db = await h.db();
   const vb = db.visits.find((x) => x.id === b.id);
   h.expect(vb.step === "paid" && vb.payment?.amountCents === 35000, `case 2: paid what was shown: ${JSON.stringify(vb.payment)}`);
   const finB = db.invoices.filter((i) => i.jobId === b.jobId && i.kind === "final");
-  h.expect(finB.length === 1 && finB[0].totalCents === 35000 && finB[0].paidCents === 35000, `case 2: a new final invoice of $350: ${JSON.stringify(finB)}`);
+  h.expect(finB.length === 1 && finB[0].totalCents === 35000 && finB[0].paidCents === 35000, `case 2: a new final invoice of $350.00: ${JSON.stringify(finB)}`);
   h.expect(db.invoices.find((i) => i.id === "inv230b")?.paidCents === 0, "case 2: the deposit stays its own invoice");
   await h.shot("deposit");
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));

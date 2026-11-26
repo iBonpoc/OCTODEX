@@ -50,7 +50,7 @@ exports.run = async (h) => {
   await p.waitForFunction((s) => !!document.querySelector(`[data-testid="est-section-${s}"]`), sid, { timeout: 3000 });
   const order = await p.locator('[data-testid^="est-section-"], [data-testid^="est-line-"], [data-testid="est-sec-loose"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
   h.expect(order[0] === `est-section-${sid}` && order[1] === `est-line-${first}` && order[2] === "est-sec-loose", `the row stands under the heading, the other one is «без раздела» (${order.join(" ")})`);
-  h.expect(/\$10/.test(await tid(`est-section-${sid}`).innerText()), "the section total follows ($10)");
+  h.expect(/\$10\.00/.test(await tid(`est-section-${sid}`).innerText()), "the section total follows ($10.00)");
 
   // «Разложить по типам» and «Отменить»: only the layout goes back
   await line.fold(h);

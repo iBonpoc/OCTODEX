@@ -18,7 +18,7 @@ exports.run = async (h) => {
   // the card: the icon, then the words with the limit
   await tid("est-ca-warn").waitFor({ timeout: 3000 });
   h.expect((await count("est-ca-warn-icon")) === 1, "the warning has its icon on the card");
-  h.expect(/\$1,000\b/.test(await tid("est-ca-warn").innerText()), "the warning names the $1,000 limit");
+  h.expect(/\$1,000\.00\b/.test(await tid("est-ca-warn").innerText()), "the warning names the $1,000.00 limit");
   await h.shot("card");
 
   // 5 % = $1,000, the limit itself: no warning any more — the deposit is set right in its row (DS §8.7а, #2454)
