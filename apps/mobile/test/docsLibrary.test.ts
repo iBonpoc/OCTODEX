@@ -36,11 +36,13 @@ function walk(dir: string): string[] {
     return e.isDirectory() ? walk(p) : e.name.endsWith(".md") ? [p] : [];
   });
 }
+/** «Статус:» as a plain line, a quote line («> Статус:») or a list item («- **Статус:**») — the forms the library already uses. */
+const STATUS = /^(> ?|- )?(\*\*)?Статус:/;
 const hasHeader = (file: string) =>
   read(file)
     .split("\n")
     .slice(0, 8)
-    .some((l) => l.startsWith("Статус:"));
+    .some((l) => STATUS.test(l));
 
 describe("docs library: cover", () => {
   const cover = read(path.join(DOCS, "README.md"));
