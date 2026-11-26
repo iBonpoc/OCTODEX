@@ -57,10 +57,10 @@ export default function EditClient() {
   const seq = useRef(0);
   const line = (x: PhoneLine, k: string): PhoneLine & { k: string } => ({ ...x, k });
   const [phones, setPhones] = useState<(PhoneLine & { k: string })[]>(() => (c && mainPhonesOf(c).length ? mainPhonesOf(c) : [{ number: typed.phone, label: "mobile" as const }]).map((x, i) => line(x, `p${i}`)));
-  const [emails, setEmails] = useState<{ k: string; address: string }[]>(() => (c && mainEmailsOf(c).length ? mainEmailsOf(c) : [""]).map((address, i) => ({ k: `e${i}`, address })));
+  const [emails, setEmails] = useState<{ k: string; address: string }[]>(() => (c && mainEmailsOf(c).length ? mainEmailsOf(c) : [typed.email]).map((address, i) => ({ k: `e${i}`, address })));
   const nextKey = (pre: string) => `${pre}n${++seq.current}`;
   const [sourceOpen, setSourceOpen] = useState(false);
-  const [address, setAddress] = useState(p?.address ?? "");
+  const [address, setAddress] = useState(p?.address ?? (c ? "" : typed.street));
   const [city, setCity] = useState(p?.city ?? "");
   const [sourceId, setSourceId] = useState(c?.sourceId ?? store.db.sources.find((x) => x.active && x.name === "Referral")?.id ?? store.db.sources[0]?.id ?? "");
   const [billingOwn, setBillingOwn] = useState(!!c?.billing);

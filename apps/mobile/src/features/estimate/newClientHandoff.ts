@@ -33,13 +33,19 @@ export function takeNewClient(key: string): NewClient | null {
 
 /**
  * What was typed in the client sheet's search, for the new client's form (crm-reviewer №2, as iOS «Create New Contact» from
- * what is typed): mostly digits — the phone; anything else — the name, the first word the first name, the rest the last name.
+ * what is typed): mostly digits — the phone; an «@» — the e-mail; a house number and a word («12 Oak St») — the street; anything
+ * else — the name, the first word the first name, the rest the last name. An address or an e-mail never lands in the name (review
+ * of #2931).
  */
-export function splitTyped(q: string | undefined): { first: string; last: string; phone: string } {
+export type Typed = { first: string; last: string; phone: string; email: string; street: string };
+export function splitTyped(q: string | undefined): Typed {
+  const none: Typed = { first: "", last: "", phone: "", email: "", street: "" };
   const s = (q ?? "").trim().replace(/\s+/g, " ");
-  if (!s) return { first: "", last: "", phone: "" };
+  if (!s) return none;
   const digits = s.replace(/\D/g, "");
-  if (digits.length >= 3 && digits.length >= s.replace(/[\s()+.-]/g, "").length) return { first: "", last: "", phone: s };
+  if (digits.length >= 3 && digits.length >= s.replace(/[\s()+.-]/g, "").length) return { ...none, phone: s };
+  if (/^[^\s@]+@[^\s@]+$/.test(s)) return { ...none, email: s };
+  if (/^\d+[A-Za-z]?\s+\S{2,}/.test(s)) return { ...none, street: s };
   const [first, ...rest] = s.split(" ");
-  return { first, last: rest.join(" "), phone: "" };
+  return { ...none, first, last: rest.join(" ") };
 }

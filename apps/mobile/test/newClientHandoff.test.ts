@@ -36,19 +36,26 @@ describe("newClientHandoff (#2887)", () => {
 
 describe("splitTyped — the sheet's search goes into the new client's form (#2887, crm-reviewer №2)", () => {
   it("a name: the first word the first name, the rest the last name", () => {
-    expect(splitTyped("Linda Alv")).toEqual({ first: "Linda", last: "Alv", phone: "" });
-    expect(splitTyped("  Mary  Ann  Lee ")).toEqual({ first: "Mary", last: "Ann Lee", phone: "" });
-    expect(splitTyped("Kim")).toEqual({ first: "Kim", last: "", phone: "" });
+    expect(splitTyped("Linda Alv")).toEqual({ first: "Linda", last: "Alv", phone: "", email: "", street: "" });
+    expect(splitTyped("  Mary  Ann  Lee ")).toEqual({ first: "Mary", last: "Ann Lee", phone: "", email: "", street: "" });
+    expect(splitTyped("Kim")).toEqual({ first: "Kim", last: "", phone: "", email: "", street: "" });
   });
   it("digits: the phone", () => {
-    expect(splitTyped("(818) 555-0177")).toEqual({ first: "", last: "", phone: "(818) 555-0177" });
-    expect(splitTyped("8185550177")).toEqual({ first: "", last: "", phone: "8185550177" });
+    expect(splitTyped("(818) 555-0177")).toEqual({ first: "", last: "", phone: "(818) 555-0177", email: "", street: "" });
+    expect(splitTyped("8185550177")).toEqual({ first: "", last: "", phone: "8185550177", email: "", street: "" });
   });
   it("nothing typed: an empty form", () => {
-    expect(splitTyped("")).toEqual({ first: "", last: "", phone: "" });
-    expect(splitTyped(undefined)).toEqual({ first: "", last: "", phone: "" });
+    expect(splitTyped("")).toEqual({ first: "", last: "", phone: "", email: "", street: "" });
+    expect(splitTyped(undefined)).toEqual({ first: "", last: "", phone: "", email: "", street: "" });
   });
   it("a street number with words is a name search, not a phone", () => {
     expect(splitTyped("12 Oak").phone).toBe("");
+  });
+  it("an address goes to the street, never to the name (review of #2931)", () => {
+    expect(splitTyped("12 Oak St")).toEqual({ first: "", last: "", phone: "", email: "", street: "12 Oak St" });
+    expect(splitTyped(" 551  Elm ")).toEqual({ first: "", last: "", phone: "", email: "", street: "551 Elm" });
+  });
+  it("an e-mail goes to the e-mail, never to the name (review of #2931)", () => {
+    expect(splitTyped("nora@park.com")).toEqual({ first: "", last: "", phone: "", email: "nora@park.com", street: "" });
   });
 });
