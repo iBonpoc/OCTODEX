@@ -4707,7 +4707,7 @@ export const es: Dict = {
   "est.rej.choice.open": "Crear una copia…",
   "est.rej.choice.title": "El cliente firmó el presupuesto {date}, antes de sus cambios",
   "est.rej.choice.titleNoDate": "El cliente firmó el presupuesto antes de sus cambios",
-  "est.rej.choice.text": "Sus cambios esperaron la red y no se guardaron: la firma se mantiene. La copia es un borrador nuevo con sus cambios.",
+  "est.rej.choice.text": "Sus cambios están guardados en este teléfono, pero no entraron en el presupuesto: la firma se mantiene. La copia es un borrador nuevo con sus cambios.",
   "est.rej.choice.copy": "Crear una copia con los cambios",
   "est.rej.choice.reset": "Descartar los cambios",
   "est.rej.choice.later": "Más tarde",

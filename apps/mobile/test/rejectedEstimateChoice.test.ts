@@ -188,6 +188,8 @@ describe("#2715: хвосты проверки #2674", () => {
     for (const d of [ru, en, es].map(dict)) expect(d["est.rej.choice.open"]).not.toMatch(/Сохран|Save|Guard/);
     // the title no longer says «не сохранены» beside the hint «сохранены здесь» (review of #2674, Ж4 А)
     expect(dict(ru)["est.rej.signedMeanwhile"]).toMatch(/в смету они не попали/);
+    // the window does not say «не сохранились» beside the card's «сохранены здесь» (re-check of #2715 by design-reviewer)
+    for (const d of [ru, en, es].map(dict)) expect(d["est.rej.choice.text"]).not.toMatch(/не сохранились|were not saved|no se guardaron/);
   });
   it("Ж7: после копии тост называет смету и следующий шаг — отправить клиенту; номер неизвестен — прежний тост", () => {
     const toast = vi.fn();

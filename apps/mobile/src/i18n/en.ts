@@ -4707,7 +4707,7 @@ export const en: Dict = {
   "est.rej.choice.open": "Make a copy…",
   "est.rej.choice.title": "The client signed the estimate {date} — before your edits",
   "est.rej.choice.titleNoDate": "The client signed the estimate before your edits",
-  "est.rej.choice.text": "Your edits waited for the network and were not saved — the signature stays. The copy is a new draft with your edits.",
+  "est.rej.choice.text": "Your edits are kept on this phone but did not get into the estimate — the signature stays. The copy is a new draft with your edits.",
   "est.rej.choice.copy": "Make a copy with the changes",
   "est.rej.choice.reset": "Drop the changes",
   "est.rej.choice.later": "Later",
