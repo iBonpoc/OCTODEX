@@ -37,7 +37,9 @@ export interface ChoiceDeps {
   /** the editor of the new draft */
   open: (estimateId: string) => void;
   online: boolean;
-  t: (key: string) => string;
+  t: (key: string, params?: Record<string, unknown>) => string;
+  /** #2715 Ж7: the number of the signed estimate — the copy's toast says what it is a copy of and what to do next */
+  signedNumber?: string;
 }
 
 /** what a press in the window does (pure, unit-tested). «Позже» (or the way back) — nothing. */
@@ -49,9 +51,18 @@ export function runSignedMeanwhileChoice(key: string | null, r: RejectedOp, d: C
     // «Сделать копию» destroys nothing — a draft appears, the edits are kept in it: no «Вернуть» (rule 5 is for what is lost) and
     // online the copy is on the server at once, where the store's undo is too late. Taking the draft away is #2419 (delete a draft).
     // A second press finds no card (the store took it) → null above: one copy only
-    d.toast(d.online ? d.t("est.rej.choice.copied") : d.t("offline.queued"));
+    d.toast(d.online ? (d.signedNumber ? d.t("est.rej.choice.copiedOf", { n: d.signedNumber }) : d.t("est.rej.choice.copied")) : d.t("offline.queued"));
     d.open(made.estimateId);
   } else if (key === SIGNED_MEANWHILE_KEYS.reset) {
     d.toast(d.t("est.rej.choice.resetDone"), d.dismissRejected(r.id));
   }
+}
+
+/**
+ * #2715 М4: the press as a whole — the window, then what was chosen. What it acts on is read AFTER the answer (`deps()`), not
+ * from the render that opened the window: the network may come or go and the card may change while the window is open.
+ */
+export async function chooseSignedMeanwhile(ask: (q: ConfirmAsk) => Promise<string | null>, q: ConfirmAsk, r: RejectedOp, deps: () => ChoiceDeps): Promise<void> {
+  const key = await ask(q);
+  runSignedMeanwhileChoice(key, r, deps());
 }

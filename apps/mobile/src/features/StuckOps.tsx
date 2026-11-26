@@ -91,11 +91,10 @@ function StuckCard({ op }: { op: StuckOp }) {
  * a money change the server refused (docs/specs/23 §3): what it was and its amount, when, our own words (not the
  * server's English text, review #259), «Открыть» the record it was about, «Понятно» to take it away
  */
-function RejectedCard({ r }: { r: RejectedOp }) {
+function RejectedCard({ r, choice }: { r: RejectedOp; choice: ReturnType<typeof useRejectedEstimateChoice> }) {
   const { t, money, day, time } = useI18n();
   const { dismissRejected, role } = useStore();
   const toast = useToast();
-  const choice = useRejectedEstimateChoice();
   return (
     <Card status="bad">
       <View testID={`rejected-${r.id}`} style={{ gap: space[2] }}>
@@ -112,7 +111,8 @@ function RejectedCard({ r }: { r: RejectedOp }) {
           {r.estimateEdit && rejectedKeepUntil(r.at) != null ? ` ${t("est.rej.choice.keepUntil", { date: day(new Date(rejectedKeepUntil(r.at)!).toISOString()) })}` : ""}
         </T>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
-          {choice.can(r) ? <Button testID={`rejected-choose-${r.id}`} label={t("est.rej.choice.open")} icon="copy" variant="secondary" onPress={() => void choice.choose(r)} /> : null}
+          {/* #2715: first, but grey — «Профиль и аккаунт» lists the cards: one yellow on a screen (DS §3.1 п.4); yellow in «Требует внимания» only */}
+          {choice.can(r) ? <Button testID={`rejected-choose-${r.id}`} label={t("est.rej.choice.open")} variant="secondary" onPress={() => void choice.choose(r)} /> : null}
           {rejectedOpens(r, role) ? <Button label={t("sync.rejected.open")} icon="chevronRight" variant="secondary" onPress={() => router.push(r.href as Href)} /> : null}
           {/* #2674 Б3: the edits are kept on this card — «Понятно» would throw them away without a word: it says «Сбросить» */}
           <Button
@@ -123,7 +123,6 @@ function RejectedCard({ r }: { r: RejectedOp }) {
           />
         </View>
       </View>
-      {choice.dialog}
     </Card>
   );
 }
@@ -132,14 +131,17 @@ function RejectedCard({ r }: { r: RejectedOp }) {
 export function StuckOps() {
   const { t } = useI18n();
   const { stuckOps, rejectedOps } = useStore();
+  // #2715 М3: one window for the screen, not one per card
+  const choice = useRejectedEstimateChoice();
   return (
     <>
+      {choice.dialog}
       {rejectedOps.length ? (
         <>
           <SectionTitle title={t("sync.rejected.title")} />
           <CardList>
             {rejectedOps.map((r) => (
-              <RejectedCard key={r.id} r={r} />
+              <RejectedCard key={r.id} r={r} choice={choice} />
             ))}
           </CardList>
         </>
