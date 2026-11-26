@@ -1,6 +1,6 @@
 # ADR-006. Архитектура AI-помощника на Claude
 
-- **Статус:** Proposed — needs founder/tech review
+- **Статус:** предложено, не сделано · сверено с кодом 26.11.2026: вызова Claude в коде нет. Спецификация помощника — `../specs/43-ai-assistant.md`. Было: Proposed — needs founder/tech review
 - **Дата:** 03.11.2026
 - **Связано:** PRD `15-ai-assistant.md`, `04-domain-model.md` §8 (AiAction), `02a` §2, §6, `06-architecture.md` §9, §10.5; будущий `07-ai-assistant.md`
 

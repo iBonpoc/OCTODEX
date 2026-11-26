@@ -100,6 +100,6 @@ exports.run = async (h) => {
   const after = await h.db();
   const inv = after.invoices.filter((i) => i.jobId === job.id);
   const pays = after.payments.filter((x) => inv.some((i) => i.id === x.invoiceId));
-  h.expect(pays.length === 1 && pays[0].method === "zelle" && pays[0].amountCents === 42000, `one payment «zelle» of $420: ${JSON.stringify(pays.map((x) => [x.method, x.amountCents]))}`);
+  h.expect(pays.length === 1 && pays[0].method === "zelle" && pays[0].amountCents === 42000, `one payment «zelle» of $420.00: ${JSON.stringify(pays.map((x) => [x.method, x.amountCents]))}`);
   await h.shot("visit-paid");
 };

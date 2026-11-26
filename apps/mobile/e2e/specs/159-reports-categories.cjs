@@ -8,9 +8,9 @@
  */
 const { atMinute, dayKey, todayKey } = require("../companyTime.cjs");
 
-const whole = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-const cents2 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
-const money = (c) => (c % 100 === 0 ? whole.format(c / 100) : cents2.format(c / 100));
+// #2888: the app shows money always with cents (founder #2672)
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
+const money = (c) => usd.format(c / 100);
 
 exports.run = async (h) => {
   const p = h.page;
@@ -59,12 +59,12 @@ exports.run = async (h) => {
   // 2 leads today (the third is yesterday's), 1 won = 50 %; one job, two invoices before tax $1,500.01 → average $1,500.01
   h.expect(a.includes("Roof 159"), "direction name");
   h.expect(/Лиды\s+2\b/.test(a) && /Стали клиентами\s+1 · 50%/.test(a), `leads of Roof 159: ${a}`);
-  // the card's own figure: whole dollars, right before its label (not the «$1,500.01» of the average ticket)
-  h.expect(/(^|\n)\$1,500\s*\n\s*Выручка/.test(a), `revenue of Roof 159 = $1,500 (${a})`);
+  // the card's own figure, with cents (#2888: it used to round to «$1,500»), right before its label
+  h.expect(/(^|\n)\$1,500\.01\s*\n\s*Выручка/.test(a), `revenue of Roof 159 = $1,500.01 (${a})`);
   h.expect(a.includes(money(150001)), `average ticket $1,500.01 (${a})`);
   const old = await card("cat159old").innerText();
   h.expect(old.includes("в архиве"), "archived direction keeps its card, marked");
-  h.expect(/Смет отправлено\s+1\b/.test(old) && /Смет подписано\s+1 · \$1,234\b/.test(old), `archived: estimate sent and signed $1,234 (${old})`);
+  h.expect(/Смет отправлено\s+1\b/.test(old) && /Смет подписано\s+1 · \$1,234\.00\b/.test(old), `archived: estimate sent and signed $1,234.00 (${old})`);
 
   // the total = Σ before tax of every invoice sent today (the demo's own too)
   const db = await h.db();

@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import { getLocales } from "expo-localization";
-import { dec, roundCents } from "@octo/estimating-engine";
 import { usePersistentState } from "@/data/persist";
 import { dayKeyLabel, dayLabel, formatDayKey, getZone, timeLabel, zonedFormat, type DayKey } from "@/features/zone";
 import type { DictKey } from "./ru";
@@ -28,7 +27,7 @@ export interface I18nCtx {
   /** minutes in words: «4 ч», «1 ч 30 мин», «45 мин» (DS §4.5) */
   duration: (min: number) => string;
   money: (cents: number) => string;
-  /** whole dollars for tight places (KPI tiles) */
+  /** KPI tiles: the same as `money`, with cents (#2888; it used to round to whole dollars) */
   moneyWhole: (cents: number) => string;
   /** the time of a moment on the company's clock (features/zone.ts getZone), not the phone's (П4b) */
   time: (iso: string) => string;
@@ -40,8 +39,7 @@ export interface I18nCtx {
 
 const Ctx = createContext<I18nCtx | null>(null);
 
-/** Money and dates are always US formats ($, en-US) — the business operates in the US. */
-const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+/** Money and dates are always US formats ($, en-US) — the business operates in the US. Money always with cents (#2672, #2888). */
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLang, ready] = usePersistentState<Lang>("octo.lang.v1", deviceLang);
@@ -62,10 +60,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       duration: (min) => durationText(lang, min),
       // a negative amount with «−» (U+2212), not a hyphen (DS §4.5, #1427)
       money: moneyText,
-      moneyWhole: (cents) => {
-        const v = roundCents(dec(cents).div(100));
-        return v < 0 ? `−${usd.format(-v)}` : usd.format(v);
-      },
+      // #2888: the tiles too — with cents, never rounded to dollars (founder #2672); the name stays for its callers
+      moneyWhole: moneyText,
       time: (iso) => timeLabel(iso),
       day: (iso) => dayLabel(iso, locale),
       dayOf: (k) => dayKeyLabel(k, locale),

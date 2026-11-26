@@ -5,9 +5,9 @@ const { dayKey, todayKey } = require("../companyTime.cjs");
  * period or method filter to set — BUILD-SPEC §2.9); the sums of the groups are all the payments; a row → receipt → invoice.
  * Sales and the technician have no «Оплаты» (13 §4).
  */
-const whole = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-const cents2 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
-const money = (c) => (c % 100 === 0 ? whole.format(c / 100) : cents2.format(c / 100));
+// #2888: the app shows money always with cents (founder #2672)
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
+const money = (c) => usd.format(c / 100);
 const cents = (s) => Math.round(Number(s.replace(/[$,]/g, "")) * 100);
 
 exports.run = async (h) => {

@@ -50,7 +50,7 @@ exports.run = async (h) => {
   h.expect(/<td class="r">40′ 5″<\/td>/.test(pdf) && /<td class="r">19′ 2″<\/td>/.test(pdf), "the client's PDF: «40′ 5″», «19′ 2″»");
   h.expect(!/40\.4167/.test(pdf) && /<td class="r">3 ea<\/td>/.test(pdf), "the client's PDF: no decimal feet; «3 ea» as before");
   // the price column says what $12 is for (design review of #1748): «$12/ft» beside «40′ 5″», «$5» beside «3 ea»
-  h.expect(/<td class="r">\$12(\.00)?\/ft<\/td>/.test(pdf) && /<td class="r">\$5(\.00)?<\/td>/.test(pdf), "the client's PDF: the price of a foot line is «$12/ft», of «ea» — «$5»");
+  h.expect(/<td class="r">\$12(\.00)?\/ft<\/td>/.test(pdf) && /<td class="r">\$5(\.00)?<\/td>/.test(pdf), "the client's PDF: the price of a foot line is «$12.00/ft», of «ea» — «$5.00»");
 
   // the company's PDF of the same estimate
   await h.go("/estimate/e6");
