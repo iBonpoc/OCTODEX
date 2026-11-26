@@ -51,20 +51,20 @@ exports.run = async (h) => {
   await p.getByText("Сохранено", { exact: true }).locator("visible=true").first().waitFor({ timeout: 3000 });
 
   await vis("showcase-note-undo").getByRole("button").first().click();
-  const undo = p.getByRole("button", { name: "Отменить", exact: true }).locator("visible=true").first();
+  const undo = p.getByTestId("toast-undo").locator("visible=true").first();
   await undo.waitFor({ timeout: 3000 });
   // the toast ignores a tap in its first moments (the second tap of a double tap): press until it takes it and goes
   for (let i = 0; i < 20 && (await undo.count()) > 0; i++) {
     await undo.click({ timeout: 1000 }).catch(() => {});
     await settle(p, { quietMs: 100, maxMs: 500 });
   }
-  await p.getByText("Отменено раз: 1", { exact: true }).locator("visible=true").first().waitFor({ timeout: 3000 });
+  await p.getByText("Возвращено раз: 1", { exact: true }).locator("visible=true").first().waitFor({ timeout: 3000 });
 
   // the toast with «Отменить» stays about 5 seconds and goes by itself
   await vis("showcase-note-undo").getByRole("button").first().click();
   const t0 = Date.now();
-  await p.getByRole("button", { name: "Отменить", exact: true }).locator("visible=true").first().waitFor({ timeout: 3000 });
-  await p.getByRole("button", { name: "Отменить", exact: true }).waitFor({ state: "detached", timeout: 9000 });
+  await p.getByTestId("toast-undo").locator("visible=true").first().waitFor({ timeout: 3000 });
+  await p.getByTestId("toast-undo").waitFor({ state: "detached", timeout: 9000 });
   const lived = Date.now() - t0;
   h.expect(lived >= 4000 && lived <= 8000, `the «Отменить» toast lives about 5 s (${lived} ms)`);
 

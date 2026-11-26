@@ -6,6 +6,7 @@ import { useI18n } from "@/i18n";
 import { attentionHref, buildAttention, type AttentionItem } from "@/features/attention";
 import { canOpen } from "@/nav/roles";
 import { AttentionRows } from "@/features/AttentionCards";
+import { useRejectedEstimateChoice } from "@/features/RejectedEstimateChoice";
 import { subjectOf } from "@/features/attentionPeople";
 import { telHref } from "@/features/contactLinks";
 import { AssignSheet, ReplySheet, useTick } from "@/features/sheets";
@@ -23,9 +24,10 @@ import { waitParams } from "@/features/shortTime";
 /** Dispatcher home: one item at a time, most urgent first; resolve with one tap or snooze. */
 export default function Triage() {
   useTick();
-  const { t, money, dayOf } = useI18n();
+  const { t, money, dayOf, day } = useI18n();
   const { db, role, rejectedOps, dismissRejected, online, reviewVisitMissed, mode, snoozeAttention } = useStore();
   const toast = useToast();
+  const rejChoice = useRejectedEstimateChoice();
   const [snoozed, setSnoozed] = useState<string[]>([]);
   const [reply, setReply] = useState<string | null>(null);
   const [assign, setAssign] = useState<string | null>(null);
@@ -79,8 +81,23 @@ export default function Triage() {
       case "rejected":
         return (
           <>
+            {(() => {
+              const rej = rejectedOps.find((x) => x.id === it.refId);
+              return rej && rejChoice.can(rej) ? <Button testID={`rejected-choose-${rej.id}`} label={t("est.rej.choice.open")} icon="copy" variant="secondary" onPress={() => void rejChoice.choose(rej)} /> : null;
+            })()}
             {canOpen(role, attentionHref(it)) ? <Button label={t("sync.rejected.open")} icon="chevronRight" onPress={() => router.push(attentionHref(it) as Href)} /> : null}
-            <Button label={t("sync.rejected.ok")} icon="check" variant="secondary" onPress={() => toast.show(t("sync.rejected.dismissed"), dismissRejected(it.refId))} />
+            {/* #2674 Б3: the edits are kept on this card — «Понятно» would throw them away without a word: it says «Сбросить» */}
+            {(() => {
+              const kept = !!rejectedOps.find((x) => x.id === it.refId)?.estimateEdit;
+              return (
+                <Button
+                  label={t(kept ? "est.rej.choice.reset" : "sync.rejected.ok")}
+                  icon={kept ? "trash" : "check"}
+                  variant="secondary"
+                  onPress={() => toast.show(t(kept ? "est.rej.choice.resetDone" : "sync.rejected.dismissed"), dismissRejected(it.refId))}
+                />
+              );
+            })()}
           </>
         );
       // «Не сделано» on a finished visit (docs/specs/08 §8): open it, or «Просмотрено» with «Отменить» 5 s
@@ -103,6 +120,7 @@ export default function Triage() {
 
   return (
     <Screen title={t("triage.title")} help={t("help.triage")} hintKey="triage" fab="home" home>
+      {rejChoice.dialog}
       {!cur ? (
         <Empty icon="check" title={t("triage.done")} hint={t("triage.doneHint")} />
       ) : (
@@ -118,7 +136,7 @@ export default function Triage() {
             <T v="title">{cur.name || t(cur.label, waitParams(cur.params, t))}</T>
           </View>
           <T v="body" tone="mut">
-            {cur.name ? t(cur.label, waitParams(cur.params, t)) : cur.kind === "rejected" ? t(cur.hint ?? "sync.rejected.hint") : ""}
+            {cur.name ? t(cur.label, waitParams(cur.params, t)) : cur.kind === "rejected" ? `${t(cur.hint ?? "sync.rejected.hint")}${cur.hintUntil != null ? ` ${t("est.rej.choice.keepUntil", { date: day(new Date(cur.hintUntil).toISOString()) })}` : ""}` : ""}
           </T>
           {curWho ? (
             <T v="body" tone="mut">

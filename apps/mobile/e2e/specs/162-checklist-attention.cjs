@@ -34,7 +34,7 @@ exports.run = async (h) => {
   let v = (await h.db()).visits.find((x) => x.id === id);
   h.expect(!!v.checklistReviewedAt && !v.checklist.find((x) => x.id === "e162-r").done, "reviewed; the item is still not done");
   await p.getByRole("button", { name: "Просмотрено", exact: true }).waitFor({ state: "detached" });
-  await p.getByRole("button", { name: "Отменить", exact: true }).last().click();
+  await p.getByTestId("toast-undo").last().click();
   for (let i = 0; i < 20 && (await h.db()).visits.find((x) => x.id === id).checklistReviewedAt; i++) await p.waitForTimeout(150);
   h.expect(!(await h.db()).visits.find((x) => x.id === id).checklistReviewedAt, "«Отменить»: not reviewed again");
   await reviewed.waitFor();

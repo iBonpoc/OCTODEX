@@ -37,7 +37,7 @@ exports.run = async (h) => {
   await h.expectText(/2 мин/, "and its minutes");
 
   // «Отменить» (rule 5): the call leaves the list, the lead is back to its attempts (the queue — spec 95, offline)
-  await h.click("Отменить"); await p.waitForTimeout(500);
+  await p.getByTestId("toast-undo").locator("visible=true").last().click(); await p.waitForTimeout(500);
   db = await h.db();
   l2 = db.leads.find((l) => l.id === "l2");
   h.expect(!db.activities.some((x) => x.kind === "call" && x.subjectId === "l2"), "«Отменить»: the call is gone");
@@ -67,7 +67,7 @@ exports.run = async (h) => {
 
   // chips by outcome, the card opens the lead
   // the phone: the toast covers the chips for its 5 s — wait until it is gone
-  await p.getByRole("button", { name: "Отменить", exact: true }).last().waitFor({ state: "hidden", timeout: 8000 });
+  await p.getByTestId("toast-undo").last().waitFor({ state: "hidden", timeout: 8000 });
   await p.getByText("Не ответил · 1", { exact: true }).locator("visible=true").first().click(); await p.waitForTimeout(350);
   h.expect((await p.getByText("Поговорили", { exact: true }).locator("visible=true").count()) === 0, "the chip shows only missed calls");
   await h.shot("list");

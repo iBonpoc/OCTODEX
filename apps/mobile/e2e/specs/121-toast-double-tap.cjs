@@ -22,7 +22,7 @@ exports.run = async (h) => {
   h.expect(db.jobs.some((j) => j.title === "Gate latch"), "a double tap does not undo the new job");
 
   // a deliberate «Отменить» a moment later still works
-  const undo = p.getByRole("button", { name: "Отменить", exact: true }).last();
+  const undo = p.getByTestId("toast-undo").last();
   if ((await undo.count()) > 0 && (await undo.isVisible())) {
     await undo.click();
     await p.waitForTimeout(500);

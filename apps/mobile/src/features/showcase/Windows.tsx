@@ -75,6 +75,26 @@ export function WindowsSection() {
             variant="secondary"
             onPress={async () => setAnswer(await ask({ title: t("ds.confirm.q"), text: t("ds.confirm.text"), actions: [{ key: "back", label: t("ds.confirm.back"), tone: "cancel", testID: "showcase-confirm-back" }, { key: "yes", label: t("ds.confirm.yes"), tone: "danger", testID: "showcase-confirm-yes" }] }))}
           />
+          {/* #2657: the window of three — the step chosen on purpose (primary), another step, the way back (cancel); in a column */}
+          <View testID="showcase-confirm3">
+            <Button
+              label={t("ds.confirm3.show")}
+              variant="secondary"
+              onPress={async () =>
+                setAnswer(
+                  await ask({
+                    title: t("ds.confirm3.q"),
+                    text: t("ds.confirm3.text"),
+                    actions: [
+                      { key: "copy", label: t("ds.confirm3.copy"), tone: "primary", testID: "showcase-confirm3-copy" },
+                      { key: "reset", label: t("ds.confirm3.reset"), testID: "showcase-confirm3-reset" },
+                      { key: "later", label: t("ds.confirm3.later"), tone: "cancel", testID: "showcase-confirm3-later" },
+                    ],
+                  }),
+                )
+              }
+            />
+          </View>
           {answer !== null ? <View testID="showcase-confirm-answer"><T v="caption" tone="mut">{answer}</T></View> : null}
         </View>
       </Card>

@@ -49,7 +49,7 @@ exports.run = async (h) => {
   let db = await waitDb((d) => gut(d) && gut(d).enabled, "switched on is saved");
   h.expect(!gut(db).trialEndsAt, `the demo starts no trial of its own (${gut(db).trialEndsAt})`);
   await h.shot("trial");
-  await p.getByRole("button", { name: /Отменить/ }).first().click();
+  await p.getByTestId("toast-undo").first().click();
   await waitStatus(/^Не подключён$/, "«Отменить» takes it back");
   await waitDb((d) => !gut(d), "nothing stored after «Отменить»");
 

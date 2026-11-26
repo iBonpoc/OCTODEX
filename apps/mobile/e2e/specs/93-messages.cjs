@@ -41,7 +41,7 @@ exports.run = async (h) => {
   h.expect(!JSON.stringify(ev).includes("555-0187"), "the phone is not in the event");
 
   // «Отменить» (rule 5)
-  await h.click("Отменить"); await p.waitForTimeout(500);
+  await p.getByTestId("toast-undo").locator("visible=true").last().click(); await p.waitForTimeout(500);
   db = await h.db();
   h.expect(!db.activities.some((a) => a.kind === "sms" && a.contactId === PERSON), "«Отменить»: the event is gone");
 
@@ -51,7 +51,7 @@ exports.run = async (h) => {
   await sheet.getByRole("button", { name: "Отправить", exact: true }).evaluate((el) => { el.click(); el.click(); }); await p.waitForTimeout(600);
   db = await h.db();
   h.expect(db.activities.filter((a) => a.kind === "sms" && a.contactId === PERSON).length === 1, "a double tap: one message");
-  await p.getByRole("button", { name: "Отменить", exact: true }).last().waitFor({ state: "hidden", timeout: 8000 });
+  await p.getByTestId("toast-undo").last().waitFor({ state: "hidden", timeout: 8000 });
   await p.getByTestId(`thread-p-${PERSON}`).locator("visible=true").first().click(); await p.waitForTimeout(800);
   h.expect(new URL(p.url()).pathname === `/messages/p-${PERSON}`, `the card opens the conversation (${p.url()})`);
   await h.expectText(/Hola David/, "the text is in the conversation");

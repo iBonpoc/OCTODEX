@@ -32,7 +32,7 @@ exports.run = async (h) => {
   const q1 = await queue(p);
   h.expect(q1.length === before + 1, `the call waits in the queue (${before} → ${q1.length})`);
   // «Отменить»: the call leaves the queue and the list (rule 5)
-  await h.click("Отменить"); await p.waitForTimeout(500);
+  await p.getByTestId("toast-undo").locator("visible=true").last().click(); await p.waitForTimeout(500);
   h.expect((await queue(p)).length === before, "«Отменить»: the call left the queue");
   h.expect(!(await h.db()).activities.some((x) => x.kind === "call" && x.subjectId === "l3" && x.meta && x.meta.outcome === "answered" && x.at > new Date(Date.now() - 60000).toISOString()), "«Отменить»: the call is gone");
   // and once more, to keep

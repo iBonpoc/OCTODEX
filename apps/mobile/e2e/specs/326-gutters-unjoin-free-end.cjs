@@ -66,7 +66,7 @@ exports.run = async (h) => {
   await h.shot("split");
 
   // «Отменить» in the toast puts the points and the marks back
-  await h.click("Отменить");
+  await p.getByTestId("toast-undo").locator("visible=true").last().click();
   await W("undo restores the points", ([k, b0]) => { const g = ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt); return g.length === 3 && g.every((e) => !e.attrs.openEnds) && g.every((e) => { const o = b0.find((x) => x.id === e.id); const sm = (u, v) => Math.abs(u[0] - v[0]) < 1.5 && Math.abs(u[1] - v[1]) < 1.5; return o && sm(o.a, e.geom.a) && sm(o.b, e.geom.b); }); }, [KEY, before], { timeout: 8000 });
   h.expect((await rows()).every((r) => !r.open), "«Отменить»: the marks are gone, the corner is back");
 

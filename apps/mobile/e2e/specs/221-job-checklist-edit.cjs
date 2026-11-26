@@ -30,7 +30,7 @@ exports.run = async (h) => {
   const added = v.checklist[v.checklist.length - 1];
   h.expect(added.label === "Ladder on site" && added.required === true, `a new required item in v1: ${JSON.stringify(added)}`);
   h.expect((await visit("v7")).checklist.length === v7, "the later visit is not touched");
-  await p.getByRole("button", { name: "Отменить", exact: true }).last().click();
+  await p.getByTestId("toast-undo").last().click();
   v = await until("v1", (x) => x.checklist.length === before);
   h.expect(!v.checklist.some((c) => c.label === "Ladder on site"), "«Отменить» takes the item back");
 

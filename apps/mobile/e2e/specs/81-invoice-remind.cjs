@@ -51,7 +51,7 @@ exports.run = async (h) => {
   await invRemind(p);
   await p.locator('[aria-modal="true"]').filter({ hasText: "Напомнить клиенту" }).last().getByRole("button", { name: "Напомнить по SMS" }).click();
   await p.waitForTimeout(300);
-  await h.click("Отменить");
+  await p.getByTestId("toast-undo").locator("visible=true").last().click();
   await p.waitForTimeout(300);
   h.expect((await reminders()).length === 1, "«Отменить» takes the second reminder back");
 
