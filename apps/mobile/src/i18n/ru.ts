@@ -371,7 +371,7 @@ export const ru = {
   "offline.synced": "Сеть есть. Очередь отправлена: {n}",
   "offline.toggle": "Проверка: режим без сети",
 
-  "triage.title": "Разбор дел",
+  "triage.title": "Требует внимания",
   "triage.of": "{i} из {n}",
   "triage.done": "Всё разобрано",
   "triage.doneHint": "Новые дела появятся здесь сами.",

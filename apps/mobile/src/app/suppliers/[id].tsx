@@ -106,7 +106,7 @@ export default function SupplierScreen() {
   const terms: TermsKey = s.terms ?? "none";
 
   return (
-    <Screen form title={found ? t("sup.edit") : t("sup.new")} back={back}>
+    <Screen form title={found ? found.name || t("sup.edit") : t("sup.new")} back={back}>
       <FieldGroup>
         <View testID="sup-name">
           <TextField type="company" value={s.name} onChangeText={(v) => set({ name: v })} placeholder={t("sup.name")} label={t("sup.nameLabel")} field={form.field("name")} />

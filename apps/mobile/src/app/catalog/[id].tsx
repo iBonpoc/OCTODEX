@@ -109,7 +109,7 @@ export default function CatalogItemScreen() {
     );
 
   return (
-    <Screen title={found ? t("cat.edit") : t("cat.new")} back={back}>
+    <Screen title={found ? found.name || t("cat.edit") : t("cat.new")} back={back}>
       <FieldGroup>
         {/* «Тип ⌄» — a value of the form, a row with a menu (spec 56 §3 row 4), not a tab bar; who may not change the price of
             a material counted from its cost may not change its kind either (the server refuses it, #1971) */}

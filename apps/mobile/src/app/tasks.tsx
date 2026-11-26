@@ -75,7 +75,6 @@ export default function Tasks() {
       <ListScreen<Task>
         testID="tasks"
         title={t("task.title")}
-        count={openN}
         create={{ a11y: t("task.new"), items: [{ key: "task", label: t("task.new"), icon: "check", testID: "tasks-create-new" }] }}
         onCreate={newTask}
         search={{ placeholder: t("w6.task.search"), value: q, onChange: setQ }}

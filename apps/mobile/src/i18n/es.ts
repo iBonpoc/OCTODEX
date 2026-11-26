@@ -372,7 +372,7 @@ export const es: Dict = {
   "offline.synced": "Conectado. Cola enviada: {n}",
   "offline.toggle": "Prueba: modo sin conexión",
 
-  "triage.title": "Pendientes",
+  "triage.title": "Requiere atención",
   "triage.of": "{i} de {n}",
   "triage.done": "Todo al día",
   "triage.doneHint": "Los nuevos pendientes aparecerán aquí.",

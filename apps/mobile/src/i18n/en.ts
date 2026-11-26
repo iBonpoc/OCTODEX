@@ -372,7 +372,7 @@ export const en: Dict = {
   "offline.synced": "Back online. Queue sent: {n}",
   "offline.toggle": "Test: offline mode",
 
-  "triage.title": "Triage",
+  "triage.title": "Needs attention",
   "triage.of": "{i} of {n}",
   "triage.done": "All caught up",
   "triage.doneHint": "New items will appear here automatically.",

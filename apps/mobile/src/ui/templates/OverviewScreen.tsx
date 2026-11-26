@@ -104,8 +104,9 @@ export function OverviewScreen(p: OverviewScreenProps) {
   return (
     <Screen
       testID={p.testID}
-      title={g?.text ?? p.title}
-      head={{ kind: "root", kicker: g?.date, mini: g?.mini, avatar }}
+      title={p.title}
+      // DS §12.13 «Шапка» (#2841, #2844): the 30 title is the tab's word («Главная»); the greeting goes into the 13 line after the date
+      head={{ kind: "root", kicker: g ? [g.date, g.text].filter(Boolean).join(" · ") : undefined, mini: p.title, avatar }}
       home={p.home ?? true}
       headerIcons={p.headerIcons}
       right={tail}

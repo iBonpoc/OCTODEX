@@ -351,7 +351,8 @@ export default function VisitScreen() {
   const whoLine = customer?.name ?? db.leads.find((l) => l.id === v.leadId)?.name ?? day(v.start);
   const header = {
     testID: "visit-head",
-    title: t("visit.title"),
+    // DS §12.13 «Шапка» (#2841): the visit is named by itself — «Выезд 8:30–12:30», not the kind word alone
+    title: `${t("visit.title")} ${span}`,
     meta: [{ id: "client", label: whoLine }],
     status: { name: st.status, label: t(st.label) },
     amount: v.step === "signed" && due > 0 ? money(due) : isoDayKey(v.start) === todayKey() ? undefined : day(v.start),
@@ -359,7 +360,7 @@ export default function VisitScreen() {
   };
   const headSub = {
     line1: whoLine,
-    line2: [isoDayKey(v.start) === todayKey() ? undefined : day(v.start), span, techFirst, v.step === "signed" && due > 0 ? money(due) : undefined].filter(Boolean).join(" · "),
+    line2: [isoDayKey(v.start) === todayKey() ? undefined : day(v.start), techFirst, v.step === "signed" && due > 0 ? money(due) : undefined].filter(Boolean).join(" · "),
   };
 
   /* ---------- v2 макет 4: the work card — the job, its progress, the checklist cell with the timer, the step's buttons ---------- */

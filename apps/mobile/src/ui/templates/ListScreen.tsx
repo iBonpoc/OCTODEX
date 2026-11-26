@@ -21,9 +21,8 @@ import { shownGroups, templateLayout } from "./templateRules";
 import type { CreateAction, IconAction, MoreAction } from "./types";
 
 export interface ListScreenProps<T> {
+  /** the menu word of the list, exactly — no number (DS §12.13 «Шапка», #2841: the number is in the chip «Все N» and the group titles) */
   title: string;
-  /** «Клиенты · 24» */
-  count?: number;
   headerIcons?: IconAction[];
   create?: CreateAction;
   onCreate?: (key: string) => void;
@@ -58,7 +57,7 @@ export function ListScreen<T>(p: ListScreenProps<T>) {
   const searchOpen = always || opened || p.search.value !== "";
   const groups = shownGroups(p.groups);
   const layout = templateLayout("list", { back: !!p.back, icons: !!p.headerIcons?.length, create: !!p.create, more: !!p.more?.length, chips: !!p.chips, filters: !!p.filters, searchOpen, empty: groups.length === 0 });
-  const title = p.count === undefined ? p.title : `${p.title} · ${p.count}`;
+  const title = p.title;
   const searchIcon: IconAction = { icon: "search", a11y: t("tpl.searchIn", { x: p.title }), onPress: () => setOpened((o) => !o || p.search.value !== ""), testID: `${p.testID}-search` };
   const icons = always ? (p.headerIcons ?? []) : [searchIcon, ...(p.headerIcons ?? [])];
   const chips =
