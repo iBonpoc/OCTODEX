@@ -32,10 +32,23 @@ export function ConfirmDialog({ ask, onPick }: { ask: ConfirmAsk | null; onPick:
   const w = Math.min(width - 2 * space[6], component.alertMaxW);
   const back = ask?.actions.find((a) => a.tone === "cancel");
   const layout = ask ? confirmLayout(ask.actions) : null;
+  // the web: react-native-web's Modal closes on an Escape KEYUP — the keyup of the very Esc that asked (Screen's «up» on keydown)
+  // closed the question it had just opened when the window mounted between the two (#2774). Esc is the way back only for a
+  // press that went down while the question was up.
+  const escDown = useRef(false);
+  useEffect(() => {
+    if (Platform.OS !== "web" || !ask || typeof document === "undefined") return;
+    escDown.current = false;
+    const onDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") escDown.current = true;
+    };
+    document.addEventListener("keydown", onDown, true);
+    return () => document.removeEventListener("keydown", onDown, true);
+  }, [ask]);
   const titleId = "confirm-dialog-title";
   const textId = "confirm-dialog-text";
   return (
-    <Modal transparent visible={!!ask} animationType="none" onRequestClose={() => onPick(back ? back.key : null)} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
+    <Modal transparent visible={!!ask} animationType="none" onRequestClose={() => (Platform.OS !== "web" || escDown.current ? onPick(back ? back.key : null) : undefined)} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
       {/* the scrim: it does not close the question (DS Б3) */}
       <Animated.View entering={reduce ? undefined : FadeIn.duration(motion.durFast)} exiting={reduce ? undefined : FadeOut.duration(motion.durFast)} style={{ flex: 1, backgroundColor: c.scrim, alignItems: "center", justifyContent: "center" }}>
         {ask && layout ? (

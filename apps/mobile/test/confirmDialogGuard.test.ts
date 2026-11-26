@@ -15,7 +15,9 @@ describe("design system: ConfirmDialog (DS Б3, #2381)", () => {
   });
   it("the scrim does not close it; Esc / «Назад» is the way back", () => {
     const src = read("src", "ui", "confirmDialog.tsx");
-    expect(src).toMatch(/onRequestClose=\{\(\) => onPick\(back \? back\.key : null\)\}/);
+    expect(src).toMatch(/onRequestClose=\{\(\) => \(Platform\.OS !== "web" \|\| escDown\.current \? onPick\(back \? back\.key : null\) : undefined\)\}/);
+    // #2774: the web's Esc closes it only from a press that went down while it was up (not the keyup of the Esc that asked)
+    expect(src).toMatch(/if \(e\.key === "Escape"\) escDown\.current = true;/);
     expect(src).not.toMatch(/<Pressable[^>]*onPress/);
   });
   it("the estimate editor asks with useConfirm; a refused save keeps the edits and says so", () => {
