@@ -114,7 +114,15 @@ exports.run = async (h) => {
     const [cap, sum] = [tid("est-bar-total-caption"), tid("est-bar-total-sum")];
     h.expect((await cap.innerText()).trim() === `Итого · налог ${TAX}`, `${what}: the bar's caption line «Итого · налог ${TAX}» (${(await cap.innerText()).trim()})`);
     h.expect((await sum.innerText()).trim() === SUM, `${what}: the bar's sum ${SUM}`);
-    const [c, m, done, send, barBox] = [await cap.boundingBox(), await sum.boundingBox(), await box('[data-testid="ue-save"]'), await box('[data-testid="est-bar-send"]'), await box('[data-testid="ue-save-bar"]')];
+    // the bar measures its words in its first frames, then stands (one row or two): wait until it stands (≤ 3 s), then check
+    const geo = async () => [await cap.boundingBox(), await sum.boundingBox(), await box('[data-testid="ue-save"]'), await box('[data-testid="est-bar-send"]'), await box('[data-testid="ue-save-bar"]')];
+    await p.waitForFunction(() => {
+      const r = (id) => { const e = [...document.querySelectorAll(`[data-testid="${id}"]`)].find((x) => x.offsetParent !== null); return e ? e.getBoundingClientRect() : null; };
+      const off = (a, b) => !a || !b || a.right <= b.left + 1 || b.right <= a.left + 1 || a.bottom <= b.top + 1 || b.bottom <= a.top + 1;
+      const [c, m, d, s] = ["est-bar-total-caption", "est-bar-total-sum", "ue-save", "est-bar-send"].map(r);
+      return off(c, d) && off(c, s) && off(m, d) && off(m, s);
+    }, null, { timeout: 3000 });
+    const [c, m, done, send, barBox] = await geo();
     for (const [n, b] of [["caption", c], ["sum", m]]) {
       h.expect(apart(b, done) && apart(b, send), `${what}: the ${n} stands clear of «Готово» and «Отправить»`);
       h.expect(b.x >= barBox.x && b.x + b.width <= barBox.x + barBox.width + 1 && b.y >= barBox.y - 1 && b.y + b.height <= barBox.y + barBox.height + 1, `${what}: the ${n} is inside the bar`);
@@ -141,4 +149,41 @@ exports.run = async (h) => {
   await line.wholeBar(h);
   await wholeTotal("a sent one");
   await h.shot("long-total-sent");
+  if (phone) {
+    // М1 (round 2): two lines — «Отправить изменения» takes the rest of the row, «Готово» keeps its words' width
+    const [done, send, barBox] = [await box('[data-testid="ue-save"]'), await box('[data-testid="est-bar-send"]'), await box('[data-testid="ue-save-bar"]')];
+    h.expect(send.x + send.width >= barBox.x + barBox.width - 16 && send.x - (done.x + done.width) <= 14 && send.width > done.width, `the main one fills the row (${Math.round(done.x)}+${Math.round(done.width)} / ${Math.round(send.x)}+${Math.round(send.width)})`);
+    // М2: «Готово»'s edge is the `dash` token of the theme
+    const edge = await tid("ue-save").evaluate((e) => { const f = [e, ...e.querySelectorAll("*")].find((x) => parseFloat(getComputedStyle(x).borderTopWidth) > 0); return f ? getComputedStyle(f).borderTopColor : "none"; });
+    const dash = h.layout.theme === "dark" ? "rgb(147, 151, 158)" : "rgb(101, 104, 110)";
+    h.expect(edge === dash, `«Готово»'s edge is dash (${edge} / ${dash})`);
+  }
+  // Ж1 (round 2): scrolled to the very end, the last of the page («Заметка», «Условия») stands whole above the bar (the list's
+  // bottom room grows with the two-line bar); from 820 — inside the window
+  await p.evaluate(() => {
+    let e = document.querySelector('[data-testid="est-notes-terms"]');
+    while (e && !(e.scrollHeight > e.clientHeight + 50)) e = e.parentElement;
+    if (e) e.scrollTop = e.scrollHeight;
+  });
+  await p.waitForFunction(() => new Promise((r) => { let n = 0; const f = () => (++n > 12 ? r(true) : requestAnimationFrame(f)); f(); }), null, { timeout: 5000 });
+  {
+    const last = await tid("est-notes-terms").boundingBox();
+    const limit = phone ? (await box('[data-testid="ue-save-bar"]')).y : p.viewportSize().height;
+    h.expect(last.y + last.height <= limit + 1, `the end: «Условия» ends at ${Math.round(last.y + last.height)}, above ${Math.round(limit)}`);
+    await h.shot("end-sent");
+  }
+  // Ж3 (round 2): with edits «Отменить» is the last item of «⋯», after a line, not red
+  await line.wholeBar(h);
+  await line.addCustom(h, "Extra", 10);
+  await tid("est-menu").getByRole("button").first().click();
+  await tid("k1-cancel").waitFor({ timeout: 3000 });
+  {
+    const order = await p.evaluate(() => [...document.querySelectorAll('[data-testid="menu-items"] [data-testid]')].filter((e) => e.offsetParent !== null).map((e) => e.getAttribute("data-testid")));
+    const i = order.indexOf("k1-cancel");
+    h.expect(i > 0 && i === order.length - 1 && order[i - 1] === "menu-divider", `«Отменить» last, after a line (${order.join(", ")})`);
+    const colorOf = (id) => tid(id).evaluate((e) => getComputedStyle([...e.querySelectorAll("*")].find((x) => x.childElementCount === 0 && x.textContent.trim()) || e).color);
+    const [cancelInk, clientInk] = [await colorOf("k1-cancel"), await colorOf("est-menu-client")];
+    h.expect(cancelInk === clientInk, `«Отменить» is not red: the words of the other items (${cancelInk} / ${clientInk})`);
+  }
+  await pressEscUntilClosed(p);
 };

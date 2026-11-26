@@ -101,7 +101,13 @@ export function MainStep({
         ) : null}
       </View>
     ) : null;
+  // Ж2: two lines stick for the life of the bar (the editor) — no jumping between one line and two while a price is typed
+  const stuck = useRef(false);
+  const stacked = placement === "bar" && layout === "total" && stackedBar(room, stuck.current);
+  if (stacked) stuck.current = true;
   const byWords = placement === "bar" || fit;
+  // М1 (round 2): in the two-line bar the main one takes the row's remaining width, «Готово» keeps its words' width
+  const stackedMain = stacked;
   const button = (
     <Button
       testID={main.testID}
@@ -111,6 +117,7 @@ export function MainStep({
       disabled={main.disabled || phase === "spinner" || phase === "wait"}
       variant={outline || main.outline ? "secondary" : "primary"}
       full={!byWords}
+      grow={stackedMain}
     />
   );
   if (placement === "top")
@@ -120,7 +127,6 @@ export function MainStep({
         {reason}
       </View>
     );
-  const stacked = placement === "bar" && layout === "total" && stackedBar(room);
   // a stacked bar is taller than the capsule: it does not fold (the page's end would move under the finger)
   if (placement === "bar" && folded && total && onUnfold && !stacked)
     return (
@@ -166,7 +172,7 @@ export function MainStep({
           <View style={stacked ? { alignItems: "flex-start" } : { flex: 1, minWidth: 0, alignItems: "flex-start" }}>{left}</View>
           <View
             onLayout={(e) => { const right = Math.round(e.nativeEvent.layout.width); setRoom((f) => (f.right === right ? f : { ...f, right })); }}
-            style={{ flexDirection: "row", alignItems: "center", gap: space[3], flexShrink: 0, alignSelf: stacked ? "flex-end" : undefined }}
+            style={{ flexDirection: "row", alignItems: "center", gap: space[3], flexShrink: 0, alignSelf: stacked ? "stretch" : undefined }}
           >
             {/* #2935: an `outline` aside is the second step beside the main one («Готово» by «Отправить») — `outline` (a `secondary` is the bar's own `surf2`); else a quiet `ghost` («Отменить») */}
             {aside ? <Button testID={aside.testID} label={aside.label} onPress={aside.onPress} disabled={aside.disabled} variant={aside.outline ? "outline" : "ghost"} /> : null}

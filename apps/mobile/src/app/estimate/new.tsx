@@ -1110,8 +1110,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     ...(!signed && !tplEdit && doc.options.length < MAX_OPTIONS ? [{ key: "option", label: t("est.var.add"), icon: "copy" as const, testID: "est-add-option" }] : []),
     ...(option.lines.length ? [{ key: "rows", label: t("proto.est.rowsFull"), icon: "list" as const, selected: rowLook === "full", testID: "est-row-view" }] : []),
     { key: "client", label: t("est.client.on"), icon: "eye" as const, selected: clientScreen, testID: "est-menu-client" },
-    // #2935: the bar holds «Итого · Готово · Отправить» — «Отменить» (only with edits, #2381) is the last item here; it asks as before
-    ...(bar.cancel === "more" ? [{ key: "cancel", label: t("k1.cancel"), icon: "undo" as const, testID: "k1-cancel" }] : []),
+    // #2935: the bar holds «Итого · Готово · Отправить» — «Отменить» (only with edits, #2381) is the last item here, after a line (round 2 Ж3; not red: it asks, nothing is lost without the answer)
+    ...(bar.cancel === "more" ? [{ key: "cancel", label: t("k1.cancel"), icon: "undo" as const, group: true, testID: "k1-cancel" }] : []),
   ];
   const onMore = (k: string) => {
     if (k === "cancel") void cancelEdits();

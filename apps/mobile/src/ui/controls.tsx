@@ -45,7 +45,10 @@ export function Button({
   accessibilityLabel,
   selected,
   testID,
+  grow,
 }: {
+  /** takes the rest of its row (`flex: 1` of the touch target): the main one of a two-line editor bar (round 2 М1) */
+  grow?: boolean;
   label: string;
   onPress?: () => void;
   variant?: BtnVariant;
@@ -75,6 +78,7 @@ export function Button({
       onPress={onPress}
       disabled={disabled}
       visibleHeight={h}
+      containerStyle={grow ? { flex: 1 } : undefined}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       {...(selected !== undefined ? ({ accessibilityState: { selected, disabled: !!disabled }, "aria-pressed": selected } as object) : null)}
@@ -94,7 +98,7 @@ export function Button({
           alignItems: "center",
           justifyContent: "center",
           gap: space[2],
-          alignSelf: full ? "stretch" : "flex-start",
+          alignSelf: full || grow ? "stretch" : "flex-start",
         },
         style,
       ]}

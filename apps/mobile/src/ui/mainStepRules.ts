@@ -58,7 +58,10 @@ export function totalNeed(caption: number, sum: number, floor: number = shrinkFl
 
 /** the total gets its own line over the buttons when it and the buttons (`right`, natural) do not stand in one `row` (gap `space[3]`);
  *  nothing measured yet — one row */
-export function stackedBar(m: { row: number; right: number; need: number }): boolean {
+export function stackedBar(m: { row: number; right: number; need: number }, was = false): boolean {
+  // round 2 (Ж2): once two lines in an editing session, two lines until the editor is closed — typing a price never makes the
+  // bar jump between one line and two (the MainStep keeps `was` for its life: the editor's)
+  if (was) return true;
   if (!(m.row > 0 && m.right > 0 && m.need > 0)) return false;
   return m.need + space[3] + m.right > m.row;
 }

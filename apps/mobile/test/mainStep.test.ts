@@ -66,3 +66,13 @@ describe("the bar's total never cut", () => {
     expect(stackedBar({ row: 330, right: 208, need: 0 })).toBe(false);
   });
 });
+
+/** round 2 Ж2: once two lines, two lines until the editor closes — no jump while typing (red before: back to one line at once) */
+describe("the two-line bar holds (hysteresis)", () => {
+  it("a shorter sum after two lines keeps two lines; a fresh bar with the same numbers is one line", () => {
+    const short = { row: 330, right: 208, need: 100 };
+    expect(stackedBar(short, true)).toBe(true);
+    expect(stackedBar(short, false)).toBe(false);
+    expect(stackedBar({ row: 0, right: 0, need: 0 }, true)).toBe(true);
+  });
+});
