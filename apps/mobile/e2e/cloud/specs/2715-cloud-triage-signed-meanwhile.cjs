@@ -2,7 +2,7 @@
  * e2e 2715 (cloud) — the window «Клиент подписал смету …» from «Требует внимания» (/triage), tail Ж2 of the review of #2674;
  * the same window from «Профиль и аккаунт» is 2657. A card that holds the edits (`estimateEdit`, as the store writes it) is put into
  * the phone's list of refusals; by testID (rule 19):
- * - it is the top card of «Требует внимания», its main step «Сохранить правки…» (rejected-choose-*) opens the window (rej-choice);
+ * - it is the top card of «Требует внимания», its main step «Сделать копию…» (rejected-choose-*) opens the window (rej-choice);
  * - «Сделать копию с правками» opens the editor of a NEW DRAFT (/estimate/new?id=…), the copy reaches the server as a draft of the same
  *   client and title, and the card leaves «Требует внимания».
  * A second card (r-stay) is the top one once the first has gone — the check waits for it, not for seconds.
