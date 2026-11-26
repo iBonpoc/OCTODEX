@@ -1009,9 +1009,12 @@ export function Screen({
   }).current;
   /** the pinned row covers the top of the page: the sticky strip stops under it, a field scrolled to stops below it */
   const stickOff = overlay ? navInsets.safeTop + component.header.bar : 0;
+  // only when the chip changes: `tabs` is a new element on every render — on it, every re-render of a list (↓/↑ of the 1280 panel)
+  // scrolled the page back up to the strip and cut the open row's scrollIntoView short (#2737)
   useEffect(() => {
     if (tabs && offset.current > tabsY.current - stickOff) scrollRef.current?.scrollTo({ y: Math.max(0, tabsY.current - stickOff), animated: true });
-  }, [tabKey, tabs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabKey, !!tabs]);
   const column = { width: "100%" as const, maxWidth: layout.contentMax, alignSelf: "center" as const };
   // the page starts under the pinned row 48 (the big block's first 4 pt lie under the folded row's 52)
   const top = pinned ? space[3] : overlay ? navInsets.safeTop + (kind === "editor" ? component.header.bar + space[2] : component.header.row) : navInsets.top;
