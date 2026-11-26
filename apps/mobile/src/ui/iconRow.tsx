@@ -1,8 +1,9 @@
 import { View } from "react-native";
-import { component, radius, size } from "@octo/design-tokens";
+import { component, font, radius, size } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T } from "./primitives";
-import { ICON_ROW_LABEL_LINES, iconRowItems, type IconRowVariant } from "./iconRowRules";
+import { ICON_ROW_LABEL_LINES, iconRowCell, iconRowItems, type IconRowVariant } from "./iconRowRules";
+import { useFontScale } from "./fontScale";
 import type { IconAction } from "./templates/types";
 
 /** an IconRow action: the shared `IconAction` + its visible caption («Позвонить») and, when it cannot be done, why */
@@ -22,6 +23,11 @@ export function IconRow({ actions, variant = "row", testID }: { actions: IconRow
   if (problem && __DEV__) console.warn(problem);
   const inline = variant === "inline";
   const d = inline ? component.quickAction.inline : component.roundButton.quick;
+  // bigger system text: a cell as wide as its word, so a long one is not broken by syllables (#2761, `iconRowCell`)
+  const cell = iconRowCell(useFontScale(), component.quickAction.labelW, font.labelMaxScale);
+  const cellStyle = cell.equal
+    ? { flex: 1, maxWidth: cell.maxWidth, alignItems: "center" as const }
+    : { flexGrow: 1, flexShrink: 1, flexBasis: "auto" as const, maxWidth: cell.maxWidth, alignItems: "center" as const };
   return (
     <View testID={testID} style={{ flexDirection: "row", alignItems: "flex-start", gap: component.iconRow.gap, ...(inline ? null : { alignSelf: "stretch", justifyContent: "space-around" }) }}>
       {shown.map((a) => (
@@ -35,7 +41,7 @@ export function IconRow({ actions, variant = "row", testID }: { actions: IconRow
           accessibilityLabel={a.a11y}
           accessibilityHint={a.disabled ? a.reason : undefined}
           accessibilityState={{ disabled: !!a.disabled }}
-          containerStyle={inline ? undefined : { flex: 1, maxWidth: component.quickAction.labelW, alignItems: "center" }}
+          containerStyle={inline ? undefined : cellStyle}
           style={{ alignItems: "center", gap: component.iconRow.gap }}
         >
           {/* the circle is the look this component defines (BUILD-SPEC §1 QuickActions); the touch is the whole column */}
@@ -45,7 +51,7 @@ export function IconRow({ actions, variant = "row", testID }: { actions: IconRow
           </View>
           {!inline && a.label ? (
             // up to two lines, never «…»: «Напомнить» / «Записать в план» do not fit the 64 cell at 12 (wave 3); the circles stay on one line
-            <T v="micro" w="medium" tone="mut" numberOfLines={ICON_ROW_LABEL_LINES} center capped style={{ maxWidth: component.quickAction.labelW }}>
+            <T v="micro" w="medium" tone="mut" numberOfLines={ICON_ROW_LABEL_LINES} center capped style={{ maxWidth: cell.maxWidth }}>
               {a.label}
             </T>
           ) : null}
