@@ -6,6 +6,7 @@
 |---|---|
 | `00-roadmap.md` | `10-build-plan.md` §0, этапы 1–6 (правило 22), карта пути `15-story-map.md` |
 | `05-user-flows.md` | структура — спека `specs/13-app-structure.md`; пути — карта `15-story-map.md`; сценарии — `13-core-workflow-spec.md`, `specs/15-flows.md`; экраны — `screens/SCREEN-MAP.md`; вопросы Q — #2912, сверка сценариев — #2913 |
+| `16-audit-2026-11-04.md` | полный аудит `audit/2026-11-11-full-audit.md`, план `audit/2026-11-11-release-plan.md`, колонка «Покрытие» карты `15-story-map.md` §4; открытые находки — #2707 (Р3), #2900 (Р9, Р13, Р14) |
 | `02a-pricing-and-unit-economics.md` | спека `specs/44-plans-limits.md`, исследование `audit/2026-11-15-research/E-pricing-research.md` |
 
 Архивы внутри разделов: `adr/archive/` (ADR-003, ADR-008).

@@ -27,7 +27,7 @@
 | Модули ниш | `docs/03-prd/06-gutters-module.md` (PRD), `docs/specs/33-gutters-module.md` (спека), `docs/prototypes/gutters-*.html` (прототип) | что модуль добавляет к ядру и через какие слоты; ничего нишевого в ядре |
 | Техника | `docs/06-architecture.md`, `docs/adr/*`, `08-security.md`, `08a-seo.md` | как устроено и почему так |
 | Вид | `design/naryad-ds/DESIGN-SYSTEM.md` | единый документ дизайн-системы (вид и поведение); старые файлы папки и `docs/09-design-system.md` правилами не считаются |
-| Аудиты | `docs/16-audit-2026-11-04.md`, `docs/audit/*` | что проверено и что осталось открытым |
+| Аудиты | `docs/audit/*` (старая проверка 04.11 — `docs/archive/16-audit-2026-11-04.md`) | что проверено и что осталось открытым |
 | Справка | `docs/01-competitor-analysis.md`, `docs/market/*`, `docs/legal/*`, `docs/inputs/*` | конкуренты, право, внешние материалы |
 | Для основателя | `docs/11-setup-guide.md` | где что находится и что нажимать |
 
