@@ -1,5 +1,5 @@
 /**
- * e2e 549 — a «back» that is not the header's «×» does not drop the unsaved edits of an editor (#2853, rule 5, EditorScreen +
+ * e2e 552 — a «back» that is not the header's «×» does not drop the unsaved edits of an editor (#2853, rule 5, EditorScreen +
  * src/ui/templates/leaveGuard.ts). The browser's back stands here for the iOS back swipe and the Android system «Назад»: all
  * three are a removal of the screen that the editor holds while it is `dirty` (usePreventRemove).
  * С1 ДАНО новый лид без правок КОГДА «назад» браузера ТОГДА экран уходит без вопроса.
