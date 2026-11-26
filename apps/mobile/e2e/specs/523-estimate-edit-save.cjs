@@ -147,6 +147,17 @@ exports.run = async (h) => {
     else {
       // Esc in a field is not «leave the screen» (Screen's rule): out of the field first, then Esc — the way up
       await p.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
+      // #2774: the Esc that asks is let go only once the question is up — its keyup must not close it (react-native-web's Modal
+      // closes on an Escape keyup; under load the window mounted between the down and the up of one press and was gone at once)
+      await require("../sheet.cjs").sheetGone(p);
+      await p.keyboard.down("Escape");
+      await dialog("k1-close-ask");
+      await p.keyboard.up("Escape");
+      const gone = await require("../sheet.cjs").waited(p.getByTestId("k1-close-ask").waitFor({ state: "detached", timeout: 1000 }));
+      h.expect(!gone, "the Esc that asked does not close its own question when let go");
+      // an Esc pressed while the question is up is still its way back («Продолжить правку»): the edit stays; then asked again
+      await require("../sheet.cjs").pressEscUntilClosed(p, undefined, { tries: 1 });
+      h.expect((await titleInput().inputValue()) === "Правка 523 · ×" && (await hasEditDraft()), "Esc on the question: the way back, the edit stays");
       await require("../sheet.cjs").escOnPage(p);
     }
     await dialog("k1-close-ask");
