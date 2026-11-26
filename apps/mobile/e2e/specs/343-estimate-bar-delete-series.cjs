@@ -110,7 +110,7 @@ exports.run = async (h) => {
   await h.seed("octo.role.v1", "tech");
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await tid("est-add-new").waitFor({ timeout: 8000 });
-  h.expect(!(await line.editorMenuHas(h, "ue-save-send")) && (await tid("est-send-top").count()) === 0, "the tech: no «Отправить»");
+  h.expect(!(await line.editorMenuHas(h, "ue-save-send")) && (await tid("est-bar-send").count()) === 0, "the tech: no «Отправить»");
   h.expect(/Отправит офис/.test(await tid("est-bar-office").innerText()), "the tech: «Отправит офис»");
   await h.shot("tech");
   await h.seed("octo.role.v1", "director");

@@ -25,6 +25,23 @@ export const doneAction = (p: { existing: boolean; dirty: boolean; stale?: boole
   p.existing && !p.dirty && !(p.stale && p.status === "draft") ? "close" : "save";
 
 /**
+ * #2935 п.1 (founder 27.11: «Давай кнопку отправить вниз, как у Джобер»; replaces #2379 «Отправить — вверху» in this part): the pinned
+ * bar of the editor of a document that is sent to the client. Where sending is possible (the office's role, not signed, a line on
+ * it) the main yellow one at the bottom is «Отправить» and «Готово» is the second, unfilled, beside it; the header has no send icon
+ * (one place for one action). The bar holds «Итого», «Готово» and «Отправить» — no room for a fourth: «Отменить» (only with edits,
+ * #2381) then goes into «⋯». Where it is not possible — «Готово» stays the main one, «Отменить» beside it as before. No line yet —
+ * the first step adds one (#2387). The press of «Отправить» with no client says what is missing (DS §11 п.3: the main one is never
+ * off). Pure: test/editSession.test.ts; the screen — app/estimate/new.tsx, e2e 308.
+ */
+export type BarStep = "add" | "send" | "done";
+export const barSteps = (p: { mayShare: boolean; signed: boolean; hasLines: boolean; dirty: boolean }): { main: BarStep; second: "done" | null; cancel: "bar" | "more" | null } => {
+  if (!p.signed && !p.hasLines) return { main: "add", second: null, cancel: null };
+  const cancel = p.dirty && !p.signed;
+  if (p.mayShare && !p.signed) return { main: "send", second: "done", cancel: cancel ? "more" : null };
+  return { main: "done", second: null, cancel: cancel ? "bar" : null };
+};
+
+/**
  * What stands between the step and the edit:
  * - `go` — nothing;
  * - `signed` — the estimate got signed (`approved`): the edits cannot go into it;

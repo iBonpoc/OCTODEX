@@ -3,7 +3,7 @@
  * (the screen — e2e 523). Red before the module (no such file), green after; each case names the review point it closes.
  */
 import { describe, expect, it } from "vitest";
-import { doneAction, gateAtOpen, gateBeforeSave, markOf, takeMine } from "../src/features/estimate/editSession";
+import { barSteps, doneAction, gateAtOpen, gateBeforeSave, markOf, takeMine } from "../src/features/estimate/editSession";
 
 const est = (status: string, savedAt?: string) => ({ status, doc: savedAt === undefined ? {} : { savedAt } }) as never;
 
@@ -63,5 +63,25 @@ describe("unit:editSession — the conflict's answer", () => {
     expect(takeMine(null)).toBe(false);
     expect(takeMine("back")).toBe(false);
     expect(takeMine("theirs")).toBe(false);
+  });
+});
+
+describe("unit:editSession — the bar of the editor of a document sent to the client (#2935, «как у Джобер»)", () => {
+  const base = { mayShare: true, signed: false, hasLines: true, dirty: false };
+  it("sendable: the main one at the bottom is «Отправить», «Готово» the second (red before: «Готово» main, the send a header icon)", () => {
+    expect(barSteps(base)).toEqual({ main: "send", second: "done", cancel: null });
+  });
+  it("sendable with edits: «Отменить» goes into «⋯» (the bar holds «Итого · Готово · Отправить»)", () => {
+    expect(barSteps({ ...base, dirty: true })).toEqual({ main: "send", second: "done", cancel: "more" });
+  });
+  it("the tech (no send, #1113): «Готово» stays the main one, «Отменить» beside it with edits (#2381)", () => {
+    expect(barSteps({ ...base, mayShare: false })).toEqual({ main: "done", second: null, cancel: null });
+    expect(barSteps({ ...base, mayShare: false, dirty: true })).toEqual({ main: "done", second: null, cancel: "bar" });
+  });
+  it("signed: no send, no «Отменить» — «Готово» only", () => {
+    expect(barSteps({ ...base, signed: true, dirty: true })).toEqual({ main: "done", second: null, cancel: null });
+  });
+  it("no line yet: the first step adds one (#2387), nothing to send", () => {
+    expect(barSteps({ ...base, hasLines: false, dirty: true })).toEqual({ main: "add", second: null, cancel: null });
   });
 });

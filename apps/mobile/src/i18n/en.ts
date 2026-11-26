@@ -5577,6 +5577,9 @@ export const en: Dict = {
   "proto.est.depositShort": "deposit {amount}",
   "proto.est.done": "Done",
   "proto.est.saveSend": "Save and send",
+  // #2935 (founder 27.11, «как у Джобер»): the main step of the estimate editor's bar
+  "est.bar.send": "Send",
+  "ds.proto.sendBar": "Estimate bottom: Done · Send",
   "proto.est.add": "Add to estimate",
   "proto.est.rowsFull": "Detailed items",
   "proto.est.help": "Tap to edit · hold to reorder",

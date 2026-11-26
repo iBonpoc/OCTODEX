@@ -155,6 +155,16 @@ export function ProtoObject() {
           aside={{ label: t("k1.cancel"), onPress: said(t("k1.cancel")), testID: "showcase-main-aside" }}
         />
       </View>
+      {/* #2935 (founder 27.11, «как у Джобер»): the estimate editor's bar — «Итого» on the left, «Готово» (unfilled) before «Отправить» */}
+      <View style={{ gap: space[2] }}>
+        <T v="heading">{t("ds.proto.sendBar")}</T>
+        <MainStep
+          placement="bar"
+          main={{ label: t("est.bar.send"), onPress: said(t("est.bar.send")), testID: "showcase-main-send" }}
+          total={{ label: t("ue.total"), value: "$772.36", testID: "showcase-main-send-total" }}
+          aside={{ label: t("proto.est.done"), onPress: said(t("proto.est.done")), outline: true, testID: "showcase-main-send-done" }}
+        />
+      </View>
       <View style={{ gap: space[2] }}>
         <T v="heading">{t("ds.proto.outline")}</T>
         <MainStep placement="bar" main={{ label: t("ds.proto.restore"), onPress: said(t("ds.proto.restore")), outline: true, testID: "showcase-main-outline" }} />

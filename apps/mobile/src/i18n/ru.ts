@@ -5577,6 +5577,9 @@ export const ru = {
   "proto.est.depositShort": "депозит {amount}",
   "proto.est.done": "Готово",
   "proto.est.saveSend": "Сохранить и отправить",
+  // #2935 (founder 27.11, «как у Джобер»): the main step of the estimate editor's bar
+  "est.bar.send": "Отправить",
+  "ds.proto.sendBar": "Низ сметы: Готово · Отправить",
   "proto.est.add": "Добавить в смету",
   "proto.est.rowsFull": "Позиции подробно",
   "proto.est.help": "Нажать — правка · удержать — порядок",

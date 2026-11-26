@@ -45,6 +45,7 @@ export function MainStep({
   onUnfold,
   foldAdd,
   aside,
+  testIDBase,
 }: {
   main: MainAction;
   placement: "top" | "bar";
@@ -63,11 +64,16 @@ export function MainStep({
   /** #2363 q72 вариант Г (founder 21.11): beside the capsule a round «＋» — a new line from anywhere in a long list */
   foldAdd?: { a11y: string; onPress: () => void; testID?: string };
   /** #2381 (founder 21.11: «внизу „Готово“. И „Отменить“»): a quiet way back BEFORE the main button in the bar with the total —
-   *  `ghost` by its words («Отменить»); the total keeps its place on the left. Only when there is something to take back */
+   *  `ghost` by its words («Отменить»); the total keeps its place on the left. Only when there is something to take back.
+   *  #2935 (founder 27.11, «как у Джобер»): with `outline` it is the second step beside the main one — «Готово» (`secondary`) by «Отправить» */
   aside?: MainAction | null;
+  /** #2935: the bar's own ids (`<base>-bar`, `<base>-capsule`, `<base>-reason`) when the main one changes but the bar stays the
+   *  same place (the estimate: «Отправить» became the main one, the bar is still `ue-save-bar`); default — `main.testID` */
+  testIDBase?: string;
 }) {
   const { c } = useTheme();
   const phase = useLoadPhase(!!loading);
+  const base = testIDBase ?? main.testID;
   const { layout } = mainStepLayout({ second, total, reason: placement === "bar" ? main.reason : undefined });
   // #2405: the bar's fold moves (the capsule in, the card back up) only where it can fold; reduced motion — a cut
   const reduce = useReducedMotion();
@@ -80,7 +86,7 @@ export function MainStep({
   const reasonText = phase === "failed" ? failedLabel : main.reason;
   const reason =
     reasonText || phase === "spinner" ? (
-      <View testID={`${main.testID}-reason`} style={{ flexDirection: "row", alignItems: "center", gap: space[2], marginTop: placement === "top" ? component.mainStep.reasonGap : 0 }}>
+      <View testID={`${base}-reason`} style={{ flexDirection: "row", alignItems: "center", gap: space[2], marginTop: placement === "top" ? component.mainStep.reasonGap : 0 }}>
         {phase === "spinner" ? <ActivityIndicator color={c.mut} /> : null}
         {reasonText ? (
           <T v="caption" tone="mut" numberOfLines={placement === "bar" ? 2 : 1} style={{ flexShrink: 1 }}>
@@ -114,7 +120,7 @@ export function MainStep({
       <Animated.View entering={fold ? enter(fold.capsule.from, fold.capsule.ms) : undefined} exiting={fold ? FadeOut.duration(fold.outMs) : undefined} style={{ paddingBottom: rhythm.cardGap, height: component.figureRow.h + rhythm.cardGap, flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: space[2] }}>
         {foldAdd ? <IconButton icon="plus" label={foldAdd.a11y} onPress={foldAdd.onPress} testID={foldAdd.testID} /> : null}
         {/* rule 29: the capsule is the Button itself (secondary 40, zone 44) — the sum and «˄» */}
-        <Button testID={`${main.testID}-capsule`} label={total.value} icon="chevronUp" variant="secondary" onPress={onUnfold} accessibilityLabel={`${total.label} ${total.value}`} />
+        <Button testID={`${base}-capsule`} label={total.value} icon="chevronUp" variant="secondary" onPress={onUnfold} accessibilityLabel={`${total.label} ${total.value}`} />
       </Animated.View>
     );
   let left: ReactNode = reason;
@@ -127,7 +133,7 @@ export function MainStep({
     // (the Screen's footer already stands `rhythm.screen` from the sides); #2405: back from the capsule it comes up with its fade
     <Animated.View entering={fold ? enter(fold.card.from, fold.card.ms) : undefined} exiting={fold ? FadeOut.duration(fold.outMs) : undefined} style={{ paddingBottom: rhythm.cardGap }}>
       <View
-        testID={`${main.testID}-bar`}
+        testID={`${base}-bar`}
         style={{
           minHeight: component.figureRow.h,
           borderRadius: radius.card,
@@ -146,7 +152,8 @@ export function MainStep({
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: component.button.phone }}>
           <View style={{ flex: 1, minWidth: 0, alignItems: "flex-start" }}>{left}</View>
-          {aside ? <Button testID={aside.testID} label={aside.label} onPress={aside.onPress} variant="ghost" /> : null}
+          {/* #2935: an `outline` aside is the second step beside the main one («Готово» by «Отправить») — unfilled `secondary`; else a quiet `ghost` («Отменить») */}
+          {aside ? <Button testID={aside.testID} label={aside.label} onPress={aside.onPress} disabled={aside.disabled} variant={aside.outline ? "secondary" : "ghost"} /> : null}
           {button}
         </View>
       </View>

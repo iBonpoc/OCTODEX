@@ -2,8 +2,9 @@
  * e2e 308 — закреплённая панель сметы (РС-7c1, DS §8.9, #1169), every view; by testID (rule 19):
  * - a phone (390): the bar is pinned at the bottom (its one step in it), the content can be scrolled clear of it; from 820 there is no bar,
  *   the step stands in the column;
- * - never off (v2 #2350): with no line the step is «Добавить позицию» (it opens the price list); the round ➤ of the header is drawn once
- *   there is a line, «⋯» has no send (#2403); ➤ with no client says what is missing and takes the page there;
+ * - never off (v2 #2350): with no line the step is «Добавить позицию» (it opens the price list); once there is a line the bar's main one
+ *   is «Отправить» with «Готово» before it (#2935, «как у Джобер»; no send icon in the header), «⋯» has no send (#2403); «Отправить»
+ *   with no client says what is missing and takes the page there;
  * - the hint goes when ITS thing is there: no client → «Выберите клиента», the client chosen → gone (the empty list is another hint);
  * - the missing thing is scrolled into view ABOVE the bar;
  * - a double press saves once (one catalog item for the line that is sent to the catalog).
@@ -44,13 +45,19 @@ exports.run = async (h) => {
   await addBtn.click();
   await tid("est-catalog-picker").waitFor({ timeout: 3000 });
   await pressEscUntilClosed(p);
-  // no line: no ➤ in the header (#2403: sending is the round ➤ only, drawn once there is a line; «⋯» does not hold it) — nothing to send, nothing saved
+  // no line: no «Отправить» (#2935: the bar's main one once there is a line; «⋯» does not hold it) — nothing to send, nothing saved
   const before = ((await h.db()).estimates ?? []).length;
-  h.expect((await tid("est-send-top").count()) === 0, "no line: no ➤ in the header");
+  h.expect((await tid("est-bar-send").count()) === 0, "no line: no «Отправить»");
   h.expect(!(await line.editorMenuHas(h, "ue-save-send")), "«⋯» has no send");
-  // a line: the ➤ comes, a double press saves once
+  // a line: «Отправить» is the main one of the bar, «Готово» the second beside it (#2935, «как у Джобер»); a double press saves once
   await line.addCustom(h, "Work", 50);
-  await tid("est-send-top").locator("visible=true").first().waitFor({ timeout: 3000 });
+  await line.wholeBar(h);
+  await tid("est-bar-send").waitFor({ timeout: 3000 });
+  {
+    const [send, done] = [await tid("est-bar-send").boundingBox(), await tid("ue-save").boundingBox()];
+    h.expect(done.x + done.width <= send.x + 1 && Math.abs(done.y + done.height / 2 - (send.y + send.height / 2)) < 8, `one row: «Готово» before «Отправить» (${Math.round(done.x)} / ${Math.round(send.x)})`);
+    h.expect((await p.locator('[data-testid="estimate-editor"] [aria-label="Сохранить и отправить"], [data-testid="estimate-editor"] [aria-label="Отправить изменения"]').count()) === 0, "no send icon in the header");
+  }
   const id = (await p.locator('[data-testid^="est-line-"]').first().getAttribute("data-testid")).replace("est-line-", "");
   // «⋯ → Добавить в каталог» (E19): the item is made at once — a double press of «Готово» makes no second one
   const cat0 = ((await h.db()).catalog ?? []).length;
@@ -65,7 +72,7 @@ exports.run = async (h) => {
   await p.waitForFunction(() => !/\/estimate\/new/.test(location.pathname), null, { timeout: 8000 });
   h.expect(((await h.db()).catalog ?? []).length === cat0 + 1, "a double press made one catalog item, not two");
 
-  // no client: the picker stands first; closed, ➤ says «Выберите клиента»; choosing one takes that hint away
+  // no client: the picker stands first; closed, «Отправить» says «Выберите клиента»; choosing one takes that hint away
   await h.go("/estimate/new");
   await h.sheet().waitFor({ timeout: 8000 });
   await pressEscUntilClosed(p);
