@@ -1,0 +1,201 @@
+<title>GoRix — было | стало</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: one column of change cards (phone first); each card holds a 390-wide screenshot with a «Было | Стало» switch; side by side from 860px. */
+:root {
+  --bg: #ECEAE4;       /* warm graphite-paper, never pure white */
+  --surf: #F7F6F2;
+  --surf2: #E2DFD7;
+  --ink: #23231F;
+  --ink2: #63625B;
+  --line: #D3CFC4;
+  --acc: #E2B93B;      /* GoRix main-action yellow */
+  --acc-ink: #3A2E05;
+  --ok: #2F7A4B;
+  --info: #3E6A8F;
+  --f-head: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --f-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #1C1D1B; --surf: #262724; --surf2: #31322E; --ink: #EDEBE4; --ink2: #A6A49B; --line: #3B3C37;
+  --acc: #E2B93B; --acc-ink: #2A2104; --ok: #6CC28D; --info: #8DB5D8; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #1C1D1B; --surf: #262724; --surf2: #31322E; --ink: #EDEBE4; --ink2: #A6A49B; --line: #3B3C37;
+  --acc: #E2B93B; --acc-ink: #2A2104; --ok: #6CC28D; --info: #8DB5D8; color-scheme: dark }
+
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 48px; }
+.wrap { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+h1, h2, h3 { font-family: var(--f-head); text-wrap: balance; margin: 0; line-height: 1.2; }
+h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 21px; font-weight: 600; }
+h3 { font-size: 17px; font-weight: 600; }
+p { margin: 0; }
+a { color: inherit; text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+.sub { color: var(--ink2); }
+
+header.top { display: flex; flex-direction: column; gap: 12px; }
+.eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink2); font-weight: 600; }
+.totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.tot { background: var(--surf); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 2px; }
+.tot b { font-family: var(--f-head); font-size: 26px; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.tot span { font-size: 13px; color: var(--ink2); line-height: 1.3; }
+
+.controls { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.seg { display: inline-flex; background: var(--surf2); border-radius: 999px; padding: 3px; gap: 2px; }
+.seg button { font: 600 14px/1 var(--f-body); color: var(--ink2); background: transparent; border: 0; border-radius: 999px; padding: 0 14px; min-height: 36px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surf); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.seg.ba button[aria-pressed="true"][data-v="now"] { background: var(--acc); color: var(--acc-ink); }
+.ctl-label { font-size: 13px; color: var(--ink2); }
+
+nav.toc { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; }
+section { display: flex; flex-direction: column; gap: 16px; }
+.card { background: var(--surf); border-radius: 20px; padding: 18px 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--ink2); }
+.pr { display: inline-flex; align-items: center; font-weight: 600; color: var(--ink); background: var(--surf2); border-radius: 8px; padding: 1px 8px; text-decoration: none; font-variant-numeric: tabular-nums; }
+.state { font-size: 14px; color: var(--ink2); border-left: 3px solid var(--line); padding-left: 10px; }
+.pair { display: flex; flex-direction: column; gap: 8px; }
+.pair-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pair-head .lab { font-weight: 600; font-size: 14px; }
+.shots { display: grid; grid-template-columns: minmax(0, 390px); justify-content: center; gap: 12px; }
+figure { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+figure img { width: 100%; height: auto; border-radius: 14px; display: block; border: 1px solid var(--line); background: var(--surf2); aspect-ratio: 390 / 844; cursor: pointer; }
+figcaption { font-size: 12px; color: var(--ink2); text-align: center; font-variant-numeric: tabular-nums; }
+figcaption b { color: var(--ink); }
+.combo { overflow-x: auto; border-radius: 14px; border: 1px solid var(--line); }
+.combo img { display: block; max-width: none; height: min(72vh, 844px); width: auto; }
+.hint { font-size: 12px; color: var(--ink2); }
+@media (min-width: 860px) {
+  .side .shots { grid-template-columns: repeat(2, minmax(0, 390px)); }
+  .side .seg.ba { display: none; }
+}
+ul.plain { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px; }
+ul.plain li { background: var(--surf); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+footer { font-size: 13px; color: var(--ink2); display: flex; flex-direction: column; gap: 6px; }
+@media (prefers-reduced-motion: no-preference) { figure img { transition: opacity .15s; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">GoRix · 24–26 ноября 2026 · iPhone, ширина 390</div>
+    <h1>Было | стало</h1>
+    <p class="sub" id="lead"></p>
+    <div class="totals" id="totals"></div>
+  </header>
+
+  <div class="controls" role="group" aria-label="Вид снимков">
+    <span class="ctl-label">Тема снимков</span>
+    <div class="seg" id="theme-seg">
+      <button type="button" data-t="light" aria-pressed="true">Светлая</button>
+      <button type="button" data-t="dark" aria-pressed="false">Тёмная</button>
+    </div>
+  </div>
+
+  <nav class="toc" id="toc" aria-label="Оглавление"></nav>
+
+  <section id="merged" aria-labelledby="h-merged">
+    <h2 id="h-merged">Влито в main</h2>
+    <p class="sub">Слева или по кнопке «Было» — main перед влитием, «Стало» — main сразу после. Нажатие на снимок тоже переключает.</p>
+    <div id="merged-list" style="display:flex;flex-direction:column;gap:16px"></div>
+  </section>
+
+  <section id="pending" aria-labelledby="h-pending">
+    <h2 id="h-pending">Ждёт влития — как сейчас | как будет</h2>
+    <p class="sub">«Сейчас» — main 26 ноября вечером, «Будет» — ветка PR.</p>
+    <div id="pending-list" style="display:flex;flex-direction:column;gap:16px"></div>
+  </section>
+
+  <section id="noshot" aria-labelledby="h-noshot">
+    <h2 id="h-noshot">Влито без снимка</h2>
+    <p class="sub">Изменения, которые на демо-экране фотографом не показать. Проверять на телефоне.</p>
+    <ul class="plain" id="noshot-list"></ul>
+  </section>
+
+  <footer>
+    <span>Снимки — фотограф GoRix (<code>npm run shot</code>), демо-данные, четверг 20 ноября 12:00 по Лос-Анджелесу, язык RU, роль «директор». Время влития — по Лос-Анджелесу.</span>
+    <span>Исходник страницы и снимки — ветка <code>notes/before-after-2026-11-26</code>.</span>
+  </footer>
+</div>
+
+<script>
+const DATA = {"merged": [{"id": "estimate-25", "title": "Смета: карточка и редактор по карте аудита", "what": "Карточка сметы без значков-отправок: одно «Показать клиенту», «Позвонить», «Скопировать ссылку» ушла в «⋯». Шторка отправки без отсчёта «Отменить · 5». В редакторе «⋯» без второй «Отправить», «Добавить в каталог» — пункт в «⋯» позиции. Налог «%» сразу ставит ставку прошлой сметы. Клиента меняют только у черновика.", "prs": [2629, 2631, 2635, 2637, 2639, 2642, 2649, 2666], "when": "25 ноября, 3:34–12:37", "before": "44e8ad3", "after": "16195e3", "pairs": [{"label": "Карточка сметы EST-0005", "light": ["img/estimate-25-estimate-e5-light-was.jpg", "img/estimate-25-estimate-e5-light-now.jpg"], "dark": ["img/estimate-25-estimate-e5-dark-was.jpg", "img/estimate-25-estimate-e5-dark-now.jpg"]}, {"label": "Редактор сметы EST-0006", "light": ["img/estimate-25-estimate-new-id-e6-light-was.jpg", "img/estimate-25-estimate-new-id-e6-light-now.jpg"], "dark": ["img/estimate-25-estimate-new-id-e6-dark-was.jpg", "img/estimate-25-estimate-new-id-e6-dark-now.jpg"]}]}, {"id": "estimate-24", "title": "Смета: редактор 24 ноября", "what": "Способы добавить позицию — плитки 2×2 без «˅», «Вариант» ушёл в «⋯», «депозит» вместо «задаток». Деньги в редакторе всегда с центами. Меню позиции целиком, без «Выше/Ниже». Скрытая позиция — пунктирная рамка и «Скрыто от клиента». «Итого» над клавиатурой, пока печатают в итогах.", "prs": [2464, 2467, 2481, 2482, 2483], "when": "24 ноября, 3:30–11:00", "before": "0843b63", "after": "ad4e002", "pairs": [{"label": "Редактор сметы EST-0006", "light": ["img/estimate-24-estimate-new-id-e6-light-was.jpg", "img/estimate-24-estimate-new-id-e6-light-now.jpg"], "dark": ["img/estimate-24-estimate-new-id-e6-dark-was.jpg", "img/estimate-24-estimate-new-id-e6-dark-now.jpg"]}]}, {"id": "client-contract", "title": "Карточка клиента: остаток по договору", "what": "Остаток по договору считается одним правилом в карточке клиента и в блоке «Договор».", "prs": [2492], "when": "24 ноября, 22:05", "before": "0a6110a", "after": "f4789f4", "pairs": [{"label": "Клиент c1", "light": ["img/client-contract-client-c1-light-was.jpg", "img/client-contract-client-c1-light-now.jpg"], "dark": ["img/client-contract-client-c1-dark-was.jpg", "img/client-contract-client-c1-dark-now.jpg"]}]}, {"id": "badges", "title": "Плашки статусов: «черновик», размер слова, «Просрочен N дн»", "what": "У черновика свой значок, слово на плашке 13 pt, у просроченного счёта — «Просрочен N дн». Дизайн-система 1.42.0.", "prs": [2539], "when": "25 ноября, 2:42", "before": "fa15af2", "after": "44e8ad3", "pairs": [{"label": "Деньги", "light": ["img/badges-finance-light-was.jpg", "img/badges-finance-light-now.jpg"], "dark": ["img/badges-finance-dark-was.jpg", "img/badges-finance-dark-now.jpg"]}]}, {"id": "showcase", "title": "Витрина дизайн-системы, шаг 1", "what": "Токены снова в списке, тема переключается прямо в витрине, слова не рвутся, подписи «что это и где видно» правдивые, один зазор.", "prs": [2748], "when": "25 ноября, 17:38", "before": "05df39f", "after": "1459c86", "pairs": [{"label": "Настройки → Дизайн-система", "light": ["img/showcase-settings-design-system-light-was.jpg", "img/showcase-settings-design-system-light-now.jpg"], "dark": ["img/showcase-settings-design-system-dark-was.jpg", "img/showcase-settings-design-system-dark-now.jpg"]}, {"label": "Витрина → Цвета и текст", "light": ["img/showcase-settings-design-system-base-light-was.jpg", "img/showcase-settings-design-system-base-light-now.jpg"], "dark": ["img/showcase-settings-design-system-base-dark-was.jpg", "img/showcase-settings-design-system-base-dark-now.jpg"]}]}, {"id": "list-count", "title": "Число в заголовке списка", "what": "Число рядом с заголовком «Клиенты» и «Лиды» — сколько строк сейчас на экране, а не всего в базе.", "prs": [2820], "when": "25 ноября, 23:46", "before": "ddf1729", "after": "a2d7445", "pairs": [{"label": "Лиды", "light": ["img/list-count-leads-light-was.jpg", "img/list-count-leads-light-now.jpg"], "dark": ["img/list-count-leads-dark-was.jpg", "img/list-count-leads-dark-now.jpg"]}]}, {"id": "profile-role", "title": "Профиль: роль — поле со списком", "what": "Роль в профиле выбирается полем со списком, а не строкой кнопок, которая не помещалась.", "prs": [2834], "when": "26 ноября, 2:42", "before": "196db26", "after": "517e0b3", "pairs": [{"label": "Профиль и аккаунт", "light": ["img/profile-role-settings-profile-light-was.jpg", "img/profile-role-settings-profile-light-now.jpg"], "dark": ["img/profile-role-settings-profile-dark-was.jpg", "img/profile-role-settings-profile-dark-now.jpg"]}]}], "pending": [{"id": "header", "title": "Шапка экранов: одни правила на всех экранах", "pr": 2922, "issue": null, "what": "Заголовок называет то, что открыто; «Назад» без обрезки; число в заголовке списка уходит в чип «Все N»; «＋ Новая позиция» — круг «＋»; приветствие «Главной» строкой над заголовком. Изменились 19 экранов.", "state": "Принята основателем (#2935), ждёт влития после #2920.", "before": "main", "after": "gorix-header", "pairs": [{"label": "Главная", "light": ["img/header-today-light-was.jpg", "img/header-today-light-now.jpg"], "dark": ["img/header-today-dark-was.jpg", "img/header-today-dark-now.jpg"]}, {"label": "Клиенты", "light": ["img/header-clients-light-was.jpg", "img/header-clients-light-now.jpg"], "dark": ["img/header-clients-dark-was.jpg", "img/header-clients-dark-now.jpg"]}, {"label": "Счета", "light": ["img/header-invoice-light-was.jpg", "img/header-invoice-light-now.jpg"], "dark": ["img/header-invoice-dark-was.jpg", "img/header-invoice-dark-now.jpg"]}]}, {"id": "contrast", "title": "«Повышение контраста», пунктир, цифра на кружке «Лиды»", "pr": 2920, "issue": null, "what": "Включено «Повышение контраста» в iPhone — серые и жёлтые слова темнеют до 7:1, для работы на солнце. Обычный вид почти не меняется: пунктир открытого пункта заметнее, цифра на кружке «Лиды» 11 → 12.", "state": "Ждёт проверки; на снимках — обычный вид, без «Повышения контраста». Переключатель — в прототипе: https://claude.ai/artifact/5nXsj23mMxSBgVJXpZb96m", "before": "main", "after": "gorix-stage3", "pairs": [{"label": "Главная, кружок «Лиды» внизу", "light": ["img/contrast-today-light-was.jpg", "img/contrast-today-light-now.jpg"], "dark": ["img/contrast-today-dark-was.jpg", "img/contrast-today-dark-now.jpg"]}]}, {"id": "new-client", "title": "«⊕ Новый клиент» в выборе клиента новой сметы", "pr": 2931, "issue": null, "what": "Клиента нет в поиске — первой строкой «⊕ Новый клиент». Набранное («12 Oak St») переходит в нужное поле формы, после «Создать» — обратно в ту же смету.", "state": "Ждёт влития. Снимки из PR: слева как сейчас, в середине и справа — как будет.", "before": null, "after": null, "combo": [{"label": "Шторка «Клиент», поиск «12 Oak St»", "light": "img/pend-2931-390-light-before-after.jpg", "dark": "img/pend-2931-390-dark-before-after.jpg"}]}, {"id": "totals-390", "title": "Итоги сметы на узком телефоне", "pr": null, "issue": 2954, "what": "На 390 слово стоит рядом со своей суммой, переключатель «% · Выкл · $» — со своим полем, «＋» — в последней строке.", "state": "Прототип в ветке fix/2954-narrow-rows, PR ещё нет. Снимки из ветки: слева как сейчас, справа как будет.", "before": null, "after": null, "combo": [{"label": "Итоги сметы", "light": "img/pend-2954-390-light-totals-before-after.jpg", "dark": "img/pend-2954-390-dark-totals-before-after.jpg"}, {"label": "Повторяющиеся значения в форме", "light": "img/pend-2954-390-light-form-before-after.jpg", "dark": "img/pend-2954-390-dark-form-before-after.jpg"}]}], "noshot": [{"title": "Крупный шрифт: подписи быстрых действий целиком", "prs": [2832], "why": "На демо-экране разницы в пикселях нет — изменение видно в другом состоянии."}, {"title": "Лид после «Ответил»: без «Напомнить про смету»", "prs": [2827], "why": "На демо-экране разницы в пикселях нет — изменение видно в другом состоянии."}, {"title": "Окно «Клиент подписал версию от …»: «Сделать копию» / «Сбросить», главная кнопка, тост с номером", "prs": [2674, 2825, 2836], "why": "Открывается только когда сервер отказал правке, пока ждали сети — в демо его не вызвать."}, {"title": "Тост «Вернуть» вместо «Отменить» во всём приложении", "prs": [2756], "why": "Тост живёт 5 секунд после действия; слово сменилось, вид тот же."}, {"title": "Gutters: окно gutter — «Gutter № N», длина без «Применить», «фут + дюйм | мм», строки Elbow/Offset, «Закрыть | Сохранить», рулетка не прыгает", "prs": [2465, 2475, 2484, 2493, 2513, 2632, 2662], "why": "Окно открывается после рисования на холсте; фотограф пока не умеет рисовать."}, {"title": "«Разбор дел» → «Позже» → «Выбрать дату…»", "prs": [2257], "why": "Шторка внутри «Требует внимания»."}, {"title": "Поведение без нового вида: свайп «назад» не теряет правки, Esc в окне вопроса, список 1280, тексты ошибок денег на EN/ES, фото и файлы", "prs": [2891, 2818, 2816, 2886, 1703, 1691], "why": "Вид экранов не меняется."}]};
+const REPO = "https://github.com/iBonpoc/OCTODEX/";
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const prLink = (n) => `<a class="pr" href="${REPO}pull/${n}" target="_blank" rel="noopener">#${n}</a>`;
+const plural = (n, a, b, c) => { const m10 = n % 10, m100 = n % 100; return m10 === 1 && m100 !== 11 ? a : m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20) ? b : c; };
+
+let theme = "light";
+try { theme = localStorage.getItem("ba-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); } catch (e) {}
+
+function pairHTML(p, ids, words) {
+  const [was, now] = p[theme] || p.light || p.dark;
+  return `<div class="pair side" data-view="was">
+    <div class="pair-head"><span class="lab">${esc(p.label)}</span>
+      <div class="seg ba" role="group" aria-label="Было или стало">
+        <button type="button" data-v="was" aria-pressed="true">${words[0]}</button>
+        <button type="button" data-v="now" aria-pressed="false">${words[1]}</button>
+      </div></div>
+    <div class="shots">
+      <figure data-k="was"><img loading="lazy" alt="${esc(p.label)} — ${words[0].toLowerCase()}" src="${was}" data-was="1"><figcaption><b>${words[0]}</b> · ${esc(ids[0])}</figcaption></figure>
+      <figure data-k="now" hidden><img loading="lazy" alt="${esc(p.label)} — ${words[1].toLowerCase()}" src="${now}"><figcaption><b>${words[1]}</b> · ${esc(ids[1])}</figcaption></figure>
+    </div></div>`;
+}
+function comboHTML(c) {
+  return `<div class="pair"><div class="pair-head"><span class="lab">${esc(c.label)}</span></div>
+    <div class="combo"><img loading="lazy" alt="${esc(c.label)}: как сейчас и как будет" src="${c[theme] || c.light}"></div>
+    <span class="hint">Снимок шире экрана — листайте вбок.</span></div>`;
+}
+function render() {
+  const m = DATA.merged, pnd = DATA.pending, ns = DATA.noshot;
+  const prsMerged = new Set(m.flatMap((x) => x.prs)), prsNo = new Set(ns.flatMap((x) => x.prs));
+  document.getElementById("lead").textContent =
+    `За три дня в main влито ${prsMerged.size + prsNo.size} ${plural(prsMerged.size + prsNo.size, "изменение", "изменения", "изменений")} приложения. ` +
+    `${m.length} ${plural(m.length, "группа видна", "группы видны", "групп видны")} на снимках ниже, остальные — поведение или окна, которые демо не открывает. ` +
+    `Ещё ${pnd.length} ${plural(pnd.length, "изменение ждёт", "изменения ждут", "изменений ждут")} влития.`;
+  document.getElementById("totals").innerHTML =
+    `<div class="tot"><b>${prsMerged.size}</b><span>PR со снимками «было | стало»</span></div>` +
+    `<div class="tot"><b>${prsNo.size}</b><span>PR без снимка — список внизу</span></div>` +
+    `<div class="tot"><b>${pnd.length}</b><span>ждут влития</span></div>`;
+  document.getElementById("toc").innerHTML = [...m, ...pnd].map((x) => `<a href="#${x.id}">${esc(x.title)}</a>`).join("");
+  document.getElementById("merged-list").innerHTML = m.map((x) => `<article class="card" id="${x.id}">
+      <h3>${esc(x.title)}</h3>
+      <div class="meta">${x.prs.map(prLink).join("")}<span>· влито ${esc(x.when)}</span></div>
+      <p>${esc(x.what)}</p>
+      ${x.pairs.map((p) => pairHTML(p, [x.before, x.after], ["Было", "Стало"])).join("")}
+    </article>`).join("");
+  document.getElementById("pending-list").innerHTML = pnd.map((x) => `<article class="card" id="${x.id}">
+      <h3>${esc(x.title)}</h3>
+      <div class="meta">${x.pr ? prLink(x.pr) : `<a class="pr" href="${REPO}issues/${x.issue}" target="_blank" rel="noopener">задача #${x.issue}</a>`}</div>
+      <p>${esc(x.what)}</p>
+      <p class="state">${esc(x.state).replace(/(https:\/\/\S+)/g, '<a href="$1" target="_blank" rel="noopener">прототип</a>')}</p>
+      ${(x.pairs || []).map((p) => pairHTML(p, ["main", "ветка PR"], ["Сейчас", "Будет"])).join("")}
+      ${(x.combo || []).map(comboHTML).join("")}
+    </article>`).join("");
+  document.getElementById("noshot-list").innerHTML = ns.map((x) => `<li><b>${esc(x.title)}</b>
+      <div class="meta">${x.prs.map(prLink).join("")}</div><span class="sub">${esc(x.why)}</span></li>`).join("");
+  document.querySelectorAll("#theme-seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.t === theme)));
+}
+function setView(pair, v) {
+  pair.dataset.view = v;
+  pair.querySelectorAll(".seg.ba button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === v)));
+  if (!matchMedia("(min-width: 860px)").matches) pair.querySelectorAll("figure").forEach((f) => { f.hidden = f.dataset.k !== v; });
+}
+function syncLayout() {
+  const wide = matchMedia("(min-width: 860px)").matches;
+  document.querySelectorAll(".pair.side").forEach((p) => p.querySelectorAll("figure").forEach((f) => { f.hidden = wide ? false : f.dataset.k !== p.dataset.view; }));
+}
+document.addEventListener("click", (e) => {
+  const tb = e.target.closest("#theme-seg button");
+  if (tb) { theme = tb.dataset.t; try { localStorage.setItem("ba-theme", theme); } catch (er) {} render(); syncLayout(); return; }
+  const vb = e.target.closest(".seg.ba button");
+  if (vb) { setView(vb.closest(".pair"), vb.dataset.v); return; }
+  const img = e.target.closest(".pair.side figure img");
+  if (img && !matchMedia("(min-width: 860px)").matches) { const p = img.closest(".pair"); setView(p, p.dataset.view === "now" ? "was" : "now"); }
+});
+matchMedia("(min-width: 860px)").addEventListener("change", syncLayout);
+render(); syncLayout();
+</script>
