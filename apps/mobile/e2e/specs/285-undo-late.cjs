@@ -1,6 +1,6 @@
 /**
  * #1193 п.6 (DS §15.2): «Отменить» takes back only its own action; when the thing was changed since, nothing is taken
- * back and the same toast says «Уже не отменить: это успели изменить». Shown live in the showcase («Уведомления»), every
+ * back and the same toast says «Уже не вернуть: это успели изменить». Shown live in the showcase («Уведомления»), every
  * view. The store's own rule (all or nothing): test/undoOwn.test.ts, test/undoOwnStore.test.ts.
  */
 exports.run = async (h) => {
@@ -12,11 +12,11 @@ exports.run = async (h) => {
   const undo = vis("toast-undo");
   await undo.waitFor({ timeout: 3000 });
   // the toast ignores a tap in its first moments (the second tap of a double tap): press until it answers
-  for (let i = 0; i < 20 && (await p.getByText("Уже не отменить: это успели изменить").count()) === 0; i++) {
+  for (let i = 0; i < 20 && (await p.getByText("Уже не вернуть: это успели изменить").count()) === 0; i++) {
     if ((await undo.count()) === 0) break;
     await undo.click({ timeout: 1000 }).catch(() => {});
   }
-  await h.expectText(/Уже не отменить: это успели изменить/, "the late undo says so");
+  await h.expectText(/Уже не вернуть: это успели изменить/, "the late undo says so");
   h.expect((await p.getByTestId("toast-undo").locator("visible=true").count()) === 0, "the new toast has no «Отменить» of its own");
   await h.shot("undo-late");
 };

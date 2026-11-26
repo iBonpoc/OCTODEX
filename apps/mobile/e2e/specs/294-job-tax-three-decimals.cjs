@@ -34,7 +34,7 @@ exports.run = async (h) => {
   await h.shot("ny-tax");
 
   // «Отменить»: back to 8.88 % — the same basis points 888, the rate 8.88 again (not 8.875)
-  await p.getByRole("button", { name: /Отменить/ }).first().click();
+  await p.getByTestId("toast-undo").first().click();
   await jobIs(() => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.jobs?.find((j) => j.id === "j3")?.amountCents === 108880);
   h.expect((await job()).taxRatePpm !== 88750 && (await job()).taxRateBps === 888, "«Отменить»: 8.88 % again");
 

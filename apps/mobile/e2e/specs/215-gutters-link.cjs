@@ -57,7 +57,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await tid("link-sheet").count()) === 0, "the sheet closes");
   await waitFor(async () => (await tid("draw-lead").count()) === 1 && (await tid("draw-lead").innerText()).includes(lead.name), "the canvas shows the lead");
   await waitFor(async () => (await mOf(m1))?.leadId === lead.id, "the store: the measurement is the lead's");
-  h.expect((await p.getByRole("button", { name: "Отменить" }).count()) >= 1, "«Отменить» in the toast");
+  h.expect((await p.getByTestId("toast-undo").count()) >= 1, "«Отменить» in the toast");
 
   // to a client's only address
   const m2 = await draft();

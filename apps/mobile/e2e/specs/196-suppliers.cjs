@@ -74,7 +74,7 @@ exports.run = async (h) => {
   db = await dbWhen((d) => d.catalog.find((x) => x.id === ITEM)?.vendorTaxBps === 950);
   h.expect(db.catalog.find((x) => x.id === ITEM).vendorTaxBps === 950, "the item counts with the new tax at once, no question");
   await p.waitForTimeout(400); // the toast arms «Отменить» after ~0.3 s (lesson of №5)
-  await p.getByRole("button", { name: "Отменить" }).last().click();
+  await p.getByTestId("toast-undo").last().click();
   db = await dbWhen((d) => d.catalog.find((x) => x.id === ITEM)?.vendorTaxBps === 1025);
   h.expect(db.catalog.find((x) => x.id === ITEM).vendorTaxBps === 1025, "«Отменить»: the item's tax is back");
   db = await dbWhen((d) => d.suppliers.find((x) => x.id === zed.id)?.taxBps === 1025);
@@ -86,7 +86,7 @@ exports.run = async (h) => {
   db = await dbWhen((d) => d.suppliers.find((x) => x.id === zed.id)?.active === false);
   h.expect(db.suppliers.find((x) => x.id === zed.id).active === false, "archived");
   await p.waitForTimeout(400);
-  await p.getByRole("button", { name: "Отменить" }).last().click();
+  await p.getByTestId("toast-undo").last().click();
   db = await dbWhen((d) => d.suppliers.find((x) => x.id === zed.id)?.active === true);
   h.expect(db.suppliers.find((x) => x.id === zed.id).active === true, "«Отменить»: active again");
 

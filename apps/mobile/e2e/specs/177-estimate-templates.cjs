@@ -97,7 +97,7 @@ exports.run = async (h) => {
   await tid("est-tpl-archive").getByRole("button").click();
   await waitFor(async () => !!(await tpls())[0].archivedAt, "archived");
   h.expect((await tid(`est-tpl-${tpl.id}`).count()) === 0, "the card leaves the list");
-  await p.getByRole("button", { name: /Отменить|Undo|Deshacer/ }).first().click();
+  await p.getByTestId("toast-undo").first().click();
   await waitFor(async () => !(await tpls())[0].archivedAt, "«Отменить» brings it back");
 
   // a tech uses templates but does not make or change them

@@ -58,7 +58,7 @@ exports.run = async (h) => {
   h.expect((await p.getByTestId(`client-dup-${TWIN}`).count()) === 0, "no duplicate on the card any more");
 
   // «Отменить»: both as they were
-  await p.getByRole("button", { name: "Отменить" }).last().click();
+  await p.getByTestId("toast-undo").last().click();
   await p.getByTestId(`client-dup-${TWIN}`).locator("visible=true").first().waitFor({ timeout: 5000 });
   db = await dbWhen((d) => !d.customers.find((c) => c.id === TWIN)?.mergedIntoId);
   twin = db.customers.find((c) => c.id === TWIN);
