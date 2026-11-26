@@ -27,7 +27,7 @@ describe("reminder text — client's language", () => {
     setZone("America/Los_Angeles");
     const m = reminderMessage(db, inv, "Acme", "es", NOW);
     expect(m.text).toContain("tiene 9 días de atraso");
-    expect(m.text).toContain("$1,840");
+    expect(m.text).toContain("$1,840.00");
     expect(m.text).toContain("Zelle pay@acme.com");
     expect(m.text).toContain("Cheques a nombre de: Acme LLC");
     expect(m.subject).toBe("Recordatorio de pago INV-0101");
@@ -36,7 +36,7 @@ describe("reminder text — client's language", () => {
   it("en, not due yet: no «days late»", () => {
     setZone("America/Los_Angeles");
     const m = reminderMessage(db, { ...inv, dueDate: "2026-11-10" }, "Acme", "en", NOW);
-    expect(m.text).toMatch(/^Acme: a friendly reminder about invoice INV-0101 — balance \$1,840, due /);
+    expect(m.text).toMatch(/^Acme: a friendly reminder about invoice INV-0101 — balance \$1,840\.00, due /);
     expect(m.text).not.toContain("past due");
   });
   it("ru; no payment details → no «How to pay» line at all (#2017, was «Как оплатить: —»)", () => {

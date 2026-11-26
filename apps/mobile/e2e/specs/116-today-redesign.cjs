@@ -47,18 +47,18 @@ exports.run = async (h) => {
   }, { a: atMinute(today, 1), b: atMinute(addDays(today, -1), 1) });
   await h.go("/today");
   await todayUi.openDetails(p);
-  const card = p.getByRole("button", { name: /^Получено: \$1,000/ }).first();
+  const card = p.getByRole("button", { name: /^Получено: \$1,000\.00/ }).first();
   const cardLabel = (await card.getAttribute("aria-label")) ?? "";
-  h.expect(/▲ \$600 к вчерашнему дню/.test(cardLabel), `the change against yesterday, read with the card (${cardLabel})`);
-  h.expect(/Получено: .*\$400.*\$1,000/.test(cardLabel.split(". ").slice(1).join(". ")), `the chart is read with the card (${cardLabel})`);
-  await h.expectText(/▲ \$600 к вчерашнему дню/, "the change line on the card");
+  h.expect(/▲ \$600\.00 к вчерашнему дню/.test(cardLabel), `the change against yesterday, read with the card (${cardLabel})`);
+  h.expect(/Получено: .*\$400.*\$1,000\.00/.test(cardLabel.split(". ").slice(1).join(". ")), `the chart is read with the card (${cardLabel})`);
+  await h.expectText(/▲ \$600\.00 к вчерашнему дню/, "the change line on the card");
   const curBar = await chart.locator('[data-testid="chart-bar-current"]').boundingBox();
   const bars = await chart.locator('[data-testid="chart-bar"]').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
   h.expect(curBar && bars.length === 1 && Math.abs(bars[0] / curBar.height - 0.4) < 0.05, `yesterday's bar is 40 % of today's (${bars[0]} / ${curBar && curBar.height})`);
-  h.expect((await chart.innerText()).includes("$1,000"), "the current column carries its value");
+  h.expect((await chart.innerText()).includes("$1,000.00"), "the current column carries its value");
   await h.shot("known-money");
   // today's money is the tile «Получено сегодня»: it opens its figure for today
-  h.expect(/\$1,000/.test((await vis(p, "tile-received").getAttribute("aria-label")) ?? ""), "the tile «Получено сегодня» says $1,000");
+  h.expect(/\$1,000\.00/.test((await vis(p, "tile-received").getAttribute("aria-label")) ?? ""), "the tile «Получено сегодня» says $1,000.00");
   await vis(p, "tile-received").click();
   await p.waitForURL(/\/figures\/received\?period=today/);
 

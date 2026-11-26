@@ -66,7 +66,7 @@ exports.run = async (h) => {
     return it && it.attributes && it.attributes.work === "install" && it.attributes.story === "4";
   }, "the own item has the part's properties");
   await card("found", "labor.install.story4").waitFor({ timeout: 5000 });
-  h.expect(/\$7(\.00)? \/ ft/.test(await card("found", "labor.install.story4").innerText()), "story 4: found, its own $7 / ft");
+  h.expect(/\$7(\.00)? \/ ft/.test(await card("found", "labor.install.story4").innerText()), "story 4: found, its own $7.00 / ft");
 
   // one row: a test item
   await card("miss", "labor.tile").click();

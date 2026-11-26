@@ -77,6 +77,6 @@ exports.run = async (h) => {
   // «Вернуть»: the template's lines go, the edit stays
   h.expect(await line.undo(h), "«Вернуть» pressed");
   await p.waitForFunction(() => document.querySelectorAll('[data-testid^="est-line-"]').length === 2, null, { timeout: 3000 });
-  h.expect(/\$41\b/.test(await tid(`est-sum-${a}`).innerText()), "the edit made after it stays");
+  h.expect(/\$41\.00\b/.test(await tid(`est-sum-${a}`).innerText()), "the edit made after it stays");
   await h.shot("undone");
 };

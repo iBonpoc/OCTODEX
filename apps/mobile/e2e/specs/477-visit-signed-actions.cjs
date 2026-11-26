@@ -58,7 +58,7 @@ exports.run = async (h) => {
   await due.waitFor({ timeout: 8000 });
   // v2: the row «К оплате · $300» — the amount is the row's value
   const shown = ((await due.innerText()).match(/\$[\d,]+(\.\d\d)?/) ?? [""])[0];
-  h.expect(/^\$300(\.00)?$/.test(shown), `С4 the screen shows $300: ${shown}`);
+  h.expect(/^\$300(\.00)?$/.test(shown), `С4 the screen shows $300.00: ${shown}`);
   h.expect((await p.getByTestId("visit-close").locator("visible=true").count()) === 0, "С4 no «Закрыть выезд» while there is money to take");
   await p.getByTestId("visit-method-button").locator("visible=true").first().click();
   await p.getByTestId("visit-method-cash").locator("visible=true").first().click();

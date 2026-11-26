@@ -75,7 +75,7 @@ exports.run = async (h) => {
   await require("../estimateLine.cjs").editorMenu(h, "est-row-view");
   await p.locator('[data-testid^="est-times-"]').first().waitFor({ timeout: 5000 });
   const times = (await p.locator('[data-testid^="est-times-"]').locator("visible=true").allInnerTexts()).join(" | ");
-  h.expect(/\$150(\.00)? ×/.test(times) && !/\$99\b/.test(times), `the catalog line takes today's catalog price ($150, not $99): ${times}`);
+  h.expect(/\$150(\.00)? ×/.test(times) && !/\$99\.00\b/.test(times), `the catalog line takes today's catalog price ($150, not $99.00): ${times}`);
   h.expect(/\$7(\.00)? ×/.test(times), `the gone item keeps the template's price: ${times}`);
   h.expect((await p.getByTestId(/^est-checkprice-/).locator("visible=true").count()) === 1, "one line marked «нет в каталоге, проверьте цену»");
   await h.shot("builder");
