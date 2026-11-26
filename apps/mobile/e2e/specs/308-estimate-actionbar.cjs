@@ -120,8 +120,11 @@ exports.run = async (h) => {
       const r = (id) => { const e = [...document.querySelectorAll(`[data-testid="${id}"]`)].find((x) => x.offsetParent !== null); return e ? e.getBoundingClientRect() : null; };
       const off = (a, b) => !a || !b || a.right <= b.left + 1 || b.right <= a.left + 1 || a.bottom <= b.top + 1 || b.bottom <= a.top + 1;
       const [c, m, d, s] = ["est-bar-total-caption", "est-bar-total-sum", "ue-save", "est-bar-send"].map(r);
-      return off(c, d) && off(c, s) && off(m, d) && off(m, s);
-    }, null, { timeout: 3000 });
+      // it must STAND so for 10 frames running (the bar measures its words, then may go to two lines: a frame between is not the answer)
+      const ok = !!c && !!m && off(c, d) && off(c, s) && off(m, d) && off(m, s);
+      window.__barOk = ok ? (window.__barOk || 0) + 1 : 0;
+      return window.__barOk >= 10;
+    }, null, { timeout: 4000, polling: "raf" });
     const [c, m, done, send, barBox] = await geo();
     for (const [n, b] of [["caption", c], ["sum", m]]) {
       h.expect(apart(b, done) && apart(b, send), `${what}: the ${n} stands clear of «Готово» and «Отправить»`);
