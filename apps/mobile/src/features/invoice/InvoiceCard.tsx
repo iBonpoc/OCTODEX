@@ -274,10 +274,10 @@ export function InvoiceObject({ inv, back, pay: payNow, frame }: { inv: Invoice;
         back={back}
         header={{
           testID: "invoice-head",
-          title: who || `${t("inv.title")} ${number}`.trim(),
-          avatar: who ? initialsOf(who) : undefined,
+          // DS §12.13 «Шапка» (#2841, founder #2843 (а)): a document is named by its kind and number; who and what — the link under it
+          title: `${t("inv.title")} ${number}`.trim(),
           status: { name: chip.s, label: statusLabel },
-          link: { label: [t("proto.money.invoiceOf", { num: number }).trim(), job?.title].filter(Boolean).join(" · "), onPress: () => (job ? router.push(`/job/${job.id}`) : undefined) },
+          link: { label: [who, job?.title].filter(Boolean).join(" · ") || t("proto.money.invoiceOf", { num: number }).trim(), onPress: () => (inv.customerId ? router.push(`/client/${inv.customerId}`) : job ? router.push(`/job/${job.id}`) : undefined) },
           // «⌄»: who and what it is tied to, and its dates — once, here (П7, П9)
           details: (
             <View style={{ gap: space[2] }}>

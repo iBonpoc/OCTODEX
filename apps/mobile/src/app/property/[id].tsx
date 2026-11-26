@@ -247,8 +247,9 @@ export default function PropertyScreen() {
 
   return (
     <Screen
-      title={t("prop.card")}
-      head={{ kind: "object", sub: { line1: propertyTitle(p), line2: p.city || undefined } }}
+      // DS §12.13 «Шапка» (#2841): the object is named by itself — its address; the kind word and the city right of the rule
+      title={propertyTitle(p)}
+      head={{ kind: "object", sub: { line1: t("prop.card"), line2: p.city || undefined } }}
       back={back}
     >
       {overview}

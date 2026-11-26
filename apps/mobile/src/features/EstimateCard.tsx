@@ -473,7 +473,8 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
           testID: "estimate-head",
           // the number alone is the name (30 → 22,5, then «…»): with the work's title too it took the line and cut the status off;
           // the work goes into the line under it, after the client
-          title: e.number || e.title || t("est.detail"),
+          // DS §12.13 «Шапка» (#2841, founder #2843 (а)): «Смета EST-0005»; without a number — the work's title
+          title: e.number ? `${t("est.detail")} ${e.number}` : e.title || t("est.detail"),
           status: { name: st.s, label: t(st.l), draft: st.d },
           amount: money(e.totalCents),
           // «Linda Alvarez › · задаток $77.24» (object-cards): who, and what is taken before the work — once
