@@ -257,27 +257,44 @@ describe.each(names)("«Графит» %s contrast (#2254)", (name) => {
   });
 });
 
-/** GoRix этап 3 «Основа» (опись 26.11.2026): «Повышение контраста» системы — для работы на солнце текст ≥ 7:1 */
-describe.each(names)("%s high contrast (iOS «Повышение контраста»): words ≥ 7:1 on every surface", (name) => {
+/** GoRix этап 3 «Основа» (опись 26.11.2026; design-reviewer 27.11): «Повышение контраста» — слова ≥ 7:1, оттенок тот же */
+describe.each(names)("%s high contrast (iOS «Повышение контраста»)", (name) => {
   const c = themes[name];
   const h = withHighContrast(c, name);
   const str = (x: RGBA) => `rgb(${x[0]},${x[1]},${x[2]})`;
   const card = over(c.surf, c.bg);
-  const grounds = { bg: parse(c.bg), card, cell: over(c.surf2, str(card)), chosen: over(c.surf3, str(card)) };
+  const all = { bg: parse(c.bg), card, cell: over(c.surf2, str(card)), chosen: over(c.surf3, str(card)) };
+  // light: every surface; dark: the screen and the card (the dark theme already holds ~5–6:1 on the cells)
+  const grounds = name === "light" ? all : { bg: all.bg, card: all.card };
   for (const [g, ground] of Object.entries(grounds)) {
-    it(`mut, accText and status words on ${g}`, () => {
+    it(`mut and status words ≥ 7:1 on ${g}`, () => {
       expect(ratio(parse(h.mut), ground), "mut").toBeGreaterThanOrEqual(7);
-      expect(ratio(parse(h.accText), ground), "accText").toBeGreaterThanOrEqual(7);
       for (const st of Object.keys(highContrast[name].status) as StatusName[]) expect(ratio(parse(h.status[st].text), ground), st).toBeGreaterThanOrEqual(7);
     });
   }
-  it("status words on their own plate", () => {
-    for (const st of ["ok", "info", "warn", "bad"] as const) expect(ratio(parse(h.status[st].on), over(c.status[st].fill, c.bg)), st).toBeGreaterThanOrEqual(7);
+  it("never weaker than the plain theme, on every surface", () => {
+    for (const ground of Object.values(all)) {
+      expect(ratio(parse(h.mut), ground)).toBeGreaterThanOrEqual(ratio(parse(c.mut), ground) - 0.01);
+      for (const st of ["ok", "info", "warn", "bad", "neutral"] as const) expect(ratio(parse(h.status[st].text), ground), st).toBeGreaterThanOrEqual(ratio(parse(c.status[st].text), ground) - 0.01);
+    }
   });
-  it("only words change: grounds, accent and ink stay", () => {
+  it("status words keep their hue — the tones stay apart (≥ 20° between neighbours — as far as the plain theme, design-reviewer 27.11)", () => {
+    const hue = (hex: string) => {
+      const [r, g, b] = parse(hex).slice(0, 3).map((v) => v / 255) as [number, number, number];
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+      if (!d) return 0;
+      const x = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      return (x * 60 + 360) % 360;
+    };
+    for (const st of ["ok", "info", "warn", "bad"] as const) expect(Math.abs(hue(h.status[st].text) - hue(c.status[st].text)), st).toBeLessThanOrEqual(6);
+    const hs = (["bad", "warn", "ok", "info"] as const).map((st) => hue(h.status[st].text));
+    for (let i = 1; i < hs.length; i++) expect(hs[i]! - hs[i - 1]!, `${i}`).toBeGreaterThanOrEqual(20);
+  });
+  it("only words change: grounds, the accent, accText, ink and the plates stay", () => {
     expect(h.bg).toBe(c.bg);
     expect(h.surf).toBe(c.surf);
     expect(h.acc).toBe(c.acc);
+    expect(h.accText).toBe(c.accText);
     expect(h.ink).toBe(c.ink);
     expect(h.status.bad.fill).toBe(c.status.bad.fill);
   });

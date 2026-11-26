@@ -82,13 +82,12 @@
 
 | Токен | Светлая | Тёмная |
 | --- | --- | --- |
-| `hc.mut` | `#33353A` | `#DDDEE2` |
-| `hc.accText` | `#413408` | `#EFDEA8` |
-| `hc.status.ok` | `#113D21` | `#BFE8CD` |
-| `hc.status.info` | `#093B44` | `#C4E5EA` |
-| `hc.status.warn` | `#532B04` | `#F4DABF` |
-| `hc.status.bad` | `#631C16` | `#F9D7D3` |
-| `hc.status.neutral` | `#33353A` | `#DDDEE2` |
+| `hc.mut` | `#33353A` | `#BDC0C7` |
+| `hc.status.ok` | `#113D21` | `#86D3A0` |
+| `hc.status.info` | `#093B45` | `#89CAD5` |
+| `hc.status.warn` | `#542B04` | `#E8B780` |
+| `hc.status.bad` | `#641C16` | `#F3AFA7` |
+| `hc.status.neutral` | `#33353A` | `#BDC0C7` |
 
 ## Текст (`font`)
 
