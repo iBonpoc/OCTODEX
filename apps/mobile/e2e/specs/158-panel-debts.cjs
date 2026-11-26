@@ -77,6 +77,22 @@ exports.run = async (h) => {
   h.expect((await last.getAttribute("aria-current")) === "true", "↓ reached the last client");
   const lb = await last.boundingBox();
   h.expect(lb && lb.y >= 0 && lb.y + lb.height <= 420 + 1, `the last row is scrolled into view (${JSON.stringify(lb)})`);
+  // ↑ to a row already in view: the page stays (#2737 — a re-render of the list scrolled it back up to the chips strip,
+  // which under load cut the ↓ scroll short); the sign: no scroll at all within a second after the new address
+  const pageTop = () => p.evaluate((tid) => {
+    const r = [...document.querySelectorAll(`[data-testid="${tid}"]`)].find((x) => x.offsetParent !== null);
+    for (let e = r?.parentElement; e; e = e.parentElement) if (/(auto|scroll)/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight) return e.scrollTop;
+    return null;
+  }, lastTid);
+  const before = await pageTop();
+  await p.keyboard.press("ArrowUp");
+  h.expect(await openIs(h, idOf(ids[n - 2])), "↑ → the row before the last");
+  const moved = await waited(p.waitForFunction(([tid, y]) => {
+    const r = [...document.querySelectorAll(`[data-testid="${tid}"]`)].find((x) => x.offsetParent !== null);
+    for (let e = r?.parentElement; e; e = e.parentElement) if (/(auto|scroll)/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight) return Math.abs(e.scrollTop - y) > 1;
+    return false;
+  }, [lastTid, before], { timeout: 1000 }));
+  h.expect(!moved, `↑ to a row in view: the page stays at ${before} (now ${await pageTop()})`);
   await p.setViewportSize({ width: h.layout.width, height: h.layout.height ?? 900 });
 
   // the client's panel: «Изменить», no «＋» — as on the client's screen (prototype v6, #1343); one column of cards
