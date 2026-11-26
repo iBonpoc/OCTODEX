@@ -86,8 +86,8 @@ export function WindowsSection() {
                     title: t("ds.confirm3.q"),
                     text: t("ds.confirm3.text"),
                     actions: [
-                      { key: "copy", label: t("ds.confirm3.copy"), tone: "primary", testID: "showcase-confirm3-copy" },
-                      { key: "reset", label: t("ds.confirm3.reset"), testID: "showcase-confirm3-reset" },
+                      { key: "copy", label: t("est.rej.choice.copy"), tone: "primary", testID: "showcase-confirm3-copy" },
+                      { key: "reset", label: t("est.rej.choice.reset"), testID: "showcase-confirm3-reset" },
                       { key: "later", label: t("ds.confirm3.later"), tone: "cancel", testID: "showcase-confirm3-later" },
                     ],
                   }),
