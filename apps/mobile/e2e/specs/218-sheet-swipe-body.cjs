@@ -104,7 +104,18 @@ exports.run = async (h) => {
   for (let i = 0; i < 20 && !(top > 0); i++) { await p.waitForTimeout(100); top = await scroller.evaluate((e) => e.scrollTop); }
   h.expect(top > 0, "the wheel scrolls the sheet's form");
   [x, y] = await bodyPoint();
-  await drag(x, y + 20, 0, 220);
+  // the finger goes down where nothing presses (no button, no field): scrolled down, mid-width may be «Добавить контакт» (the form
+  // is shorter since #2954), and a drag that ends there would press it — this step checks the swipe, not a button
+  const free = await p.evaluate(([cx, top]) => {
+    for (let yy = top + 20; yy < top + 200; yy += 4) {
+      for (const xx of [cx, cx - 120, cx + 120, 22]) {
+        const e = document.elementFromPoint(xx, yy);
+        if (e && !e.closest('[role="button"], [role="radio"], [role="switch"], input, textarea, a')) return [xx, yy];
+      }
+    }
+    return [cx, top + 20];
+  }, [x, y]);
+  await drag(free[0], free[1], 0, 220);
   await p.waitForTimeout(500);
   h.expect(await isOpen(), "scrolled down: a swipe down does not close");
   await p.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2);

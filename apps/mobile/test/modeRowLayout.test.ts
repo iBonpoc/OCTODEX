@@ -1,23 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { component, space } from "@octo/design-tokens";
-import { modeRowOneLine } from "../src/ui/modeRowLayout";
+import { modeRowShape } from "../src/ui/modeRowLayout";
 
-// #2954 (founder 26.11: «почему это всё в отдельной строке?»): a totals row is one line where all of it fits, else two lines
-// «слово · сумма» / «переключатель · поле» — never the field and the sum hanging on a line of their own
-describe("modeRowOneLine — the totals row's layout (DS §8.7а, #2954)", () => {
-  const need = (sw: number) => component.modeRow.titleW + sw + component.modeRow.fieldW + component.modeRow.sumW + 3 * space[3];
-  it("a phone (390: the row is 326 wide, the switch ~200): two lines", () => {
-    expect(modeRowOneLine(326, 200)).toBe(false);
+// #2954 (founder 26.11: «Депозит, маленький переключатель… Текстовое поле 10% и итоговая сумма»): a totals row is ONE line on a
+// phone; two lines only when even the narrow parts do not fit (a large font)
+describe("modeRowShape — the totals row's layout (DS §8.7а, #2954)", () => {
+  const tog = component.modeToggle.cell * 3;
+  const g = 3 * space[2];
+  const lineNeed = component.modeToggle.titleMinW + tog + component.modeToggle.fieldNarrowW + component.modeToggle.sumMinW + g;
+  const wideNeed = component.modeRow.titleW + tog + component.modeRow.fieldW + component.modeRow.sumW + g;
+  it("a phone (390: the row is 326 wide): one line", () => {
+    expect(lineNeed).toBeLessThanOrEqual(326);
+    expect(modeRowShape(326, tog)).toBe("line");
   });
-  it("exactly enough room: one line; a point less: two", () => {
-    expect(modeRowOneLine(need(200), 200)).toBe(true);
-    expect(modeRowOneLine(need(200) - 1, 200)).toBe(false);
+  it("a wide row: one line with the word as a column", () => {
+    expect(modeRowShape(wideNeed, tog)).toBe("wide");
+    expect(modeRowShape(wideNeed - 1, tog)).toBe("line");
   });
-  it("a wide row (1280 column in one line): one line", () => {
-    expect(modeRowOneLine(700, 200)).toBe(true);
+  it("too narrow even for the narrow parts (a large font): two lines", () => {
+    expect(modeRowShape(lineNeed - 1, tog)).toBe("two");
   });
-  it("not measured yet: two lines (no jump on a phone)", () => {
-    expect(modeRowOneLine(0, 200)).toBe(false);
-    expect(modeRowOneLine(700, 0)).toBe(false);
+  it("not measured yet: one line (no jump on a phone)", () => {
+    expect(modeRowShape(0, tog)).toBe("line");
+    expect(modeRowShape(326, 0)).toBe("line");
   });
 });

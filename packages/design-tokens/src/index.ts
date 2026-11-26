@@ -201,6 +201,10 @@ export const component = {
   segmented: { h: 36, pad: 3 },
   /** DS §8.7а (founder 23.11, MAP §12 п.8): a totals row «Скидка / Налог / Депозит» — the value field right in the row, `fieldW` wide; the sum a right-aligned column `sumW` (the fields of the rows stand in one column) */
   modeRow: { fieldW: 96, sumW: 80, titleW: 112 },
+  /** DS §8.7а (#2954, founder 26.11: «маленький переключатель… как тоггловый: процент влево, вправо доллар, по центру серый
+   *  выключенный»): the totals row's switch as a toggle — a track of `cell` per position, `h` high, the knob `knob`; the whole
+   *  toggle answers (each position a zone `cell` × 44); one line on 390: word (flex, ≥ `titleMinW`) · toggle · field `fieldNarrowW` · sum */
+  modeToggle: { cell: 30, h: 30, knob: 24, titleMinW: 64, fieldNarrowW: 80, sumMinW: 64 },
   /** a tab of a screen (pill); `fadeW` — the row of view tabs fades this wide at an edge that has more tabs past it (DS §9 А1п, #1343) */
   tab: { h: 30, fadeW: 32 },
   /** DS §9 А5 (spec 56 §3.3, wave 1а): the knob 18 (was 16), pad 2 inside the 1-px edge */

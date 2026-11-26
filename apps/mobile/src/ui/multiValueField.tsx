@@ -162,9 +162,19 @@ export function MultiValueField<L extends string>({
                   <TextField type={valueType} value={r.value} onChangeText={(v) => onChange(r.id, { value: v })} placeholder={placeholder} label={typeName} testID={id ? `${id}-value` : undefined} />
                 )}
               </View>
-              {ro ? null : <IconButton bare icon="trash" label={removeLabel} onPress={() => onRemove(r.id)} testID={id ? `${id}-remove` : undefined} />}
-              {/* #2954 (founder 26.11: «почему это всё в отдельной строке?»): «＋» stands in the last row, after «🗑» — no line of its own */}
-              {ro || i !== rows.length - 1 ? null : <IconButton icon="plus" label={addLabel} onPress={onAdd} testID={testID ? `${testID}-add` : undefined} />}
+              {/* #2954 (founder 26.11: «почему это всё в отдельной строке?»): «＋» stands in the last row, after «🗑» and a gap — no line
+                  of its own; every row keeps both places, so the fields and the «🗑» stand in one column (design review). A lone empty
+                  row has no «🗑»: removing it would leave a bare «＋» (crm-reviewer) */}
+              {ro ? null : (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+                  <View style={{ width: size.hitMin, alignItems: "center" }}>
+                    {rows.length === 1 && !r.value.trim() ? null : <IconButton bare icon="trash" label={removeLabel} onPress={() => onRemove(r.id)} testID={id ? `${id}-remove` : undefined} />}
+                  </View>
+                  <View style={{ width: size.hitMin, alignItems: "center" }}>
+                    {i === rows.length - 1 ? <IconButton icon="plus" label={addLabel} onPress={onAdd} testID={testID ? `${testID}-add` : undefined} /> : null}
+                  </View>
+                </View>
+              )}
             </View>
             {note ? (
               <View testID={id ? `${id}-note` : undefined} style={{ marginLeft: size.hitMin + space[1] }}>
