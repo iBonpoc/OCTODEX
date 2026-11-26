@@ -4704,7 +4704,7 @@ export const en: Dict = {
   "pay.online.err.busy": "Too many tries. Please try again in {n} min.",
   // spec 35 §4д п.10 («Деньги и отчёты» №7)
   "est.rej.signatureLost": "The client's signature was not saved on the server",
-  "est.rej.choice.open": "Make a copy…",
+  "est.rej.choice.open": "Make a copy with the changes",
   "est.rej.choice.title": "The client signed the estimate {date} — before your edits",
   "est.rej.choice.titleNoDate": "The client signed the estimate before your edits",
   "est.rej.choice.text": "Your edits are kept on this phone but did not get into the estimate — the signature stays. The copy is a new draft with your edits.",
@@ -4714,7 +4714,7 @@ export const en: Dict = {
   "est.rej.choice.copied": "Copy ready — a draft",
   "est.rej.choice.copiedOf": "The copy of estimate {n} is ready — send it to the client",
   "est.rej.choice.resetDone": "Edits discarded",
-  "est.rej.choice.why": "Your edits are kept here and the client's signature stays. Make a copy of the estimate from them, or discard them.",
+  "est.rej.choice.why": "The client's signature stays; your edits did not reach the estimate and are kept here. The copy is a new draft with your edits.",
   "est.rej.choice.whyOffice": "Your edits are kept only on this phone, and the client's signature stays. To make a copy of the estimate from them, ask the office to assign you to this property.",
   "est.rej.choice.keepUntil": "Kept until {date}.",
   "est.rej.signedMeanwhile": "The client signed the estimate while your edits waited for the network — they did not get into it",

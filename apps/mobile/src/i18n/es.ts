@@ -4704,7 +4704,7 @@ export const es: Dict = {
   "pay.online.err.busy": "Demasiados intentos. Inténtelo de nuevo en {n} min.",
   // spec 35 §4д п.10 («Деньги и отчёты» №7)
   "est.rej.signatureLost": "La firma del cliente no se guardó en el servidor",
-  "est.rej.choice.open": "Crear una copia…",
+  "est.rej.choice.open": "Crear una copia con los cambios",
   "est.rej.choice.title": "El cliente firmó el presupuesto {date}, antes de sus cambios",
   "est.rej.choice.titleNoDate": "El cliente firmó el presupuesto antes de sus cambios",
   "est.rej.choice.text": "Sus cambios están guardados en este teléfono, pero no entraron en el presupuesto: la firma se mantiene. La copia es un borrador nuevo con sus cambios.",
@@ -4714,7 +4714,7 @@ export const es: Dict = {
   "est.rej.choice.copied": "Copia lista: un borrador",
   "est.rej.choice.copiedOf": "La copia del presupuesto {n} está lista: envíesela al cliente",
   "est.rej.choice.resetDone": "Cambios descartados",
-  "est.rej.choice.why": "Sus cambios están guardados aquí y la firma del cliente se mantiene. Haga una copia del presupuesto con ellos o descártelos.",
+  "est.rej.choice.why": "La firma del cliente se mantiene; sus cambios no llegaron al presupuesto y están guardados aquí. La copia es un borrador nuevo con sus cambios.",
   "est.rej.choice.whyOffice": "Sus cambios están guardados solo en este teléfono y la firma del cliente se mantiene. Para hacer una copia del presupuesto con ellos, pida a la oficina que le asigne a esta propiedad.",
   "est.rej.choice.keepUntil": "Se guardan hasta el {date}.",
   "est.rej.signedMeanwhile": "El cliente firmó el presupuesto mientras sus cambios esperaban la red: no entraron en él",
