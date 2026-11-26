@@ -2,6 +2,11 @@
 
 Собрал чат-мост на Mac по просьбе чата «Дизайн-система: перенос выбора основателя» (слово основателя 25.11). Только копии: на Mac ничего не удалено. Картинки — JPEG, длинная сторона ≤ 1280; исходники — в `~/GoRix/notes` и архиве `~/GoRix/archive/notes-images-2026-11-24.zip` (опись `docs/notes/MAC-ARCHIVE.md`). Пути внутри этой папки повторяют пути в `~/GoRix/notes` (кроме `side-session-notes/`).
 
+## Документы папки
+- `INVENTORY.md` — опись папки `~/GoRix` на Mac основателя (25.11.2026): что где лежит, ничего не удалено.
+- `STAND.md` — испытательный стенд GoRix на Mac, симулятор iPhone (запись 20.11.2026): что поставлено и как запустить.
+- `answers/` — ответы основателя из лент локальных чатов и сверка с журналом (`answers/README.md`, `MISSING*.md`).
+
 ## Что уже было в репозитории (не дублировал)
 - Журнал ответов основателя по дизайну: `docs/notes/review-v2/founder-answers-1.md`; его отзывы по окнам Gutters: `q10-gutters-menu/v3/FOUNDER-r2-feedback.md`, `q10-gutters-menu/after/FOUNDER-2026-11-22-feedback.md`.
 - Страницы вопросов (текст и варианты): `docs/notes/review-v2/q…q10/index.json`, `round1.json`, `round1/brief.md`, `round2/brief.md`.

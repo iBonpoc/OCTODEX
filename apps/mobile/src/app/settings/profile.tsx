@@ -9,7 +9,8 @@ import { useI18n } from "@/i18n";
 import { roleHome } from "@/nav/roles";
 import { goTo } from "@/nav/go";
 import { ClosedCompanies } from "@/features/ClosedCompanyView";
-import { Button, Segmented, StatusChip, TextField } from "@/ui/controls";
+import { Button, StatusChip, TextField } from "@/ui/controls";
+import { SelectField } from "@/ui/selectField";
 import { useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { Card, FieldGroup, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
@@ -115,9 +116,11 @@ export default function Profile() {
 
       {availableRoles.length > 1 ? (
         <Card>
-          <T v="heading">{t("more.role")}</T>
-          <Segmented<Role>
-            full
+          {/* a kept value of the settings is a field with a menu (DS А2, as «Тема» and «Язык», A16): four equal segments cut
+              «Диспет…», «Директ…» on 390 (#2829); a list of rows on the screen moved to another role on a stray tap */}
+          <SelectField<Role>
+            label={t("more.role")}
+            testID="profile-role"
             value={role}
             onChange={changeRole}
             items={(["tech", "dispatcher", "director", "sales"] as Role[]).filter((r) => availableRoles.includes(r)).map((r) => ({ key: r, label: t(`role.${r}`) }))}
