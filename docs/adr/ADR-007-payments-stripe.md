@@ -1,6 +1,6 @@
 # ADR-007. Платежи: Stripe Connect, идемпотентность, вебхуки, Tap to Pay, подписка
 
-- **Статус:** Proposed — needs founder/tech review
+- **Статус:** действует частично · сверено с кодом 26.11.2026. Есть серверные функции `stripe-connect`, `stripe-pay`, `stripe-refund`, `stripe-webhook`, ключ идемпотентности в `stripe-connect` и `stripe-pay`. Нет: настоящего Tap to Pay (в окне оплаты он записывается как оплата картой, `PaySheet.tsx:24`) и подписки. Было: Proposed — needs founder/tech review
 - **Дата:** 03.11.2026
 - **Закрывает:** Д3 (Tap to Pay) частично
 - **Связано:** PRD `09-invoices-payments.md`, `18-money-test-cases.md`, `04-domain-model.md` §6, `02a` §5, `06-architecture.md` §10.1
