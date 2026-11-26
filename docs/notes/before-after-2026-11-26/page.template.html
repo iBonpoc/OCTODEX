@@ -3,7 +3,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <style>
-/* Layout: one column of change cards (phone first); each card holds a 390-wide screenshot with a «Было | Стало» switch; side by side from 860px. */
+/* Layout: one column of change cards; each card holds pairs of 390-wide screenshots side by side (Было | Стало),
+   at every width including the phone. Tap a shot → large view, swipe or arrows to flip Было ↔ Стало. */
 :root {
   --bg: #ECEAE4;       /* warm graphite-paper, never pure white */
   --surf: #F7F6F2;
@@ -13,17 +14,19 @@
   --line: #D3CFC4;
   --acc: #E2B93B;      /* GoRix main-action yellow */
   --acc-ink: #3A2E05;
-  --ok: #2F7A4B;
-  --info: #3E6A8F;
+  --scrim: rgba(28, 29, 27, .985);
+  --lb-surf: #31322E;  /* large view is always dark, like Photos */
+  --lb-ink: #EDEBE4;
+  --lb-ink2: #A6A49B;
   --f-head: "Space Grotesk", "Inter", system-ui, sans-serif;
   --f-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #1C1D1B; --surf: #262724; --surf2: #31322E; --ink: #EDEBE4; --ink2: #A6A49B; --line: #3B3C37;
-  --acc: #E2B93B; --acc-ink: #2A2104; --ok: #6CC28D; --info: #8DB5D8; color-scheme: dark } }
+  --acc: #E2B93B; --acc-ink: #2A2104; --scrim: rgba(12, 12, 11, .985); color-scheme: dark } }
 :root[data-theme="dark"] {
   --bg: #1C1D1B; --surf: #262724; --surf2: #31322E; --ink: #EDEBE4; --ink2: #A6A49B; --line: #3B3C37;
-  --acc: #E2B93B; --acc-ink: #2A2104; --ok: #6CC28D; --info: #8DB5D8; color-scheme: dark }
+  --acc: #E2B93B; --acc-ink: #2A2104; --scrim: rgba(12, 12, 11, .985); color-scheme: dark }
 
 body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 48px; }
@@ -49,34 +52,48 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .seg { display: inline-flex; background: var(--surf2); border-radius: 999px; padding: 3px; gap: 2px; }
 .seg button { font: 600 14px/1 var(--f-body); color: var(--ink2); background: transparent; border: 0; border-radius: 999px; padding: 0 14px; min-height: 36px; cursor: pointer; }
 .seg button[aria-pressed="true"] { background: var(--surf); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
-.seg.ba button[aria-pressed="true"][data-v="now"] { background: var(--acc); color: var(--acc-ink); }
 .ctl-label { font-size: 13px; color: var(--ink2); }
 
 nav.toc { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; }
 section { display: flex; flex-direction: column; gap: 16px; }
+.list { display: flex; flex-direction: column; gap: 16px; }
 .card { background: var(--surf); border-radius: 20px; padding: 18px 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--ink2); }
 .pr { display: inline-flex; align-items: center; font-weight: 600; color: var(--ink); background: var(--surf2); border-radius: 8px; padding: 1px 8px; text-decoration: none; font-variant-numeric: tabular-nums; }
 .state { font-size: 14px; color: var(--ink2); border-left: 3px solid var(--line); padding-left: 10px; }
 .pair { display: flex; flex-direction: column; gap: 8px; }
-.pair-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pair-head .lab { font-weight: 600; font-size: 14px; }
-.shots { display: grid; grid-template-columns: minmax(0, 390px); justify-content: center; gap: 12px; }
-figure { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-figure img { width: 100%; height: auto; border-radius: 14px; display: block; border: 1px solid var(--line); background: var(--surf2); aspect-ratio: 390 / 844; cursor: pointer; }
-figcaption { font-size: 12px; color: var(--ink2); text-align: center; font-variant-numeric: tabular-nums; }
-figcaption b { color: var(--ink); }
+
+/* two shots side by side at every width */
+.shots { display: grid; grid-template-columns: repeat(2, minmax(0, 390px)); justify-content: center; gap: 10px; }
+.shot { margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: zoom-in; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.shot .cap { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--ink2); font-variant-numeric: tabular-nums; }
+.shot .cap b { font-family: var(--f-head); font-size: 15px; color: var(--ink); }
+.shot[data-k="now"] .cap b { box-shadow: inset 0 -3px 0 var(--acc); }
+.shot img { width: 100%; max-width: 100%; height: auto; border-radius: 12px; display: block; border: 1px solid var(--line); background: var(--surf2); aspect-ratio: 390 / 844; }
 .combo { overflow-x: auto; border-radius: 14px; border: 1px solid var(--line); }
 .combo img { display: block; max-width: none; height: min(72vh, 844px); width: auto; }
 .hint { font-size: 12px; color: var(--ink2); }
-@media (min-width: 860px) {
-  .side .shots { grid-template-columns: repeat(2, minmax(0, 390px)); }
-  .side .seg.ba { display: none; }
-}
+
 ul.plain { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px; }
 ul.plain li { background: var(--surf); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
 footer { font-size: 13px; color: var(--ink2); display: flex; flex-direction: column; gap: 6px; }
-@media (prefers-reduced-motion: no-preference) { figure img { transition: opacity .15s; } }
+
+/* large view */
+.lb { position: fixed; inset: 0; z-index: 20; background: var(--scrim); display: flex; flex-direction: column; gap: 10px;
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) max(12px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 12px) max(12px, env(safe-area-inset-left, 0px)); }
+.lb[hidden] { display: none; }
+.lb-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.lb-title { color: var(--lb-ink); font-weight: 600; font-size: 14px; min-width: 0; }
+.lb .seg { background: var(--lb-surf); }
+.lb .seg button { color: var(--lb-ink2); }
+.lb .seg button[aria-pressed="true"] { background: var(--acc); color: var(--acc-ink); }
+.lb-close { font: 600 14px/1 var(--f-body); min-height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--lb-surf); color: var(--lb-ink); cursor: pointer; }
+.lb-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; gap: 8px; touch-action: pan-y; }
+.lb-stage img { max-width: 100%; max-height: 100%; height: auto; width: auto; min-width: 0; object-fit: contain; border-radius: 14px; display: block; user-select: none; -webkit-user-drag: none; }
+.lb-arrow { flex: none; width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--lb-surf); color: var(--lb-ink); font-size: 20px; cursor: pointer; }
+.lb-cap { text-align: center; color: var(--lb-ink2); font-size: 13px; font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) { .lb-arrow { display: none; } }
 </style>
 
 <div class="wrap">
@@ -87,7 +104,7 @@ footer { font-size: 13px; color: var(--ink2); display: flex; flex-direction: col
     <div class="totals" id="totals"></div>
   </header>
 
-  <div class="controls" role="group" aria-label="Вид снимков">
+  <div class="controls" role="group" aria-label="Тема снимков">
     <span class="ctl-label">Тема снимков</span>
     <div class="seg" id="theme-seg">
       <button type="button" data-t="light" aria-pressed="true">Светлая</button>
@@ -99,14 +116,14 @@ footer { font-size: 13px; color: var(--ink2); display: flex; flex-direction: col
 
   <section id="merged" aria-labelledby="h-merged">
     <h2 id="h-merged">Влито в main</h2>
-    <p class="sub">Слева или по кнопке «Было» — main перед влитием, «Стало» — main сразу после. Нажатие на снимок тоже переключает.</p>
-    <div id="merged-list" style="display:flex;flex-direction:column;gap:16px"></div>
+    <p class="sub">Слева «Было» — main перед влитием, справа «Стало» — main сразу после. Нажмите на снимок — откроется крупно; там листайте пальцем или стрелками между «Было» и «Стало».</p>
+    <div class="list" id="merged-list"></div>
   </section>
 
   <section id="pending" aria-labelledby="h-pending">
-    <h2 id="h-pending">Ждёт влития — как сейчас | как будет</h2>
-    <p class="sub">«Сейчас» — main 26 ноября вечером, «Будет» — ветка PR.</p>
-    <div id="pending-list" style="display:flex;flex-direction:column;gap:16px"></div>
+    <h2 id="h-pending">Ждёт влития — сейчас | будет</h2>
+    <p class="sub">Слева «Сейчас» — main 26 ноября вечером, справа «Будет» — ветка PR.</p>
+    <div class="list" id="pending-list"></div>
   </section>
 
   <section id="noshot" aria-labelledby="h-noshot">
@@ -121,6 +138,23 @@ footer { font-size: 13px; color: var(--ink2); display: flex; flex-direction: col
   </footer>
 </div>
 
+<div class="lb" id="lb" hidden role="dialog" aria-modal="true" aria-labelledby="lb-title">
+  <div class="lb-top">
+    <span class="lb-title" id="lb-title"></span>
+    <div class="seg" id="lb-seg" role="group" aria-label="Какой снимок">
+      <button type="button" data-v="0" aria-pressed="true"></button>
+      <button type="button" data-v="1" aria-pressed="false"></button>
+    </div>
+    <button type="button" class="lb-close" id="lb-close">Закрыть</button>
+  </div>
+  <div class="lb-stage" id="lb-stage">
+    <button type="button" class="lb-arrow" data-step="-1" aria-label="Было">‹</button>
+    <img id="lb-img" alt="">
+    <button type="button" class="lb-arrow" data-step="1" aria-label="Стало">›</button>
+  </div>
+  <div class="lb-cap" id="lb-cap"></div>
+</div>
+
 <script>
 const DATA = /*DATA*/null;
 const REPO = "https://github.com/iBonpoc/OCTODEX/";
@@ -131,18 +165,15 @@ const plural = (n, a, b, c) => { const m10 = n % 10, m100 = n % 100; return m10 
 let theme = "light";
 try { theme = localStorage.getItem("ba-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); } catch (e) {}
 
+const PAIRS = []; // every side-by-side pair, for the large view
 function pairHTML(p, ids, words) {
   const [was, now] = p[theme] || p.light || p.dark;
-  return `<div class="pair side" data-view="was">
-    <div class="pair-head"><span class="lab">${esc(p.label)}</span>
-      <div class="seg ba" role="group" aria-label="Было или стало">
-        <button type="button" data-v="was" aria-pressed="true">${words[0]}</button>
-        <button type="button" data-v="now" aria-pressed="false">${words[1]}</button>
-      </div></div>
-    <div class="shots">
-      <figure data-k="was"><img loading="lazy" alt="${esc(p.label)} — ${words[0].toLowerCase()}" src="${was}" data-was="1"><figcaption><b>${words[0]}</b> · ${esc(ids[0])}</figcaption></figure>
-      <figure data-k="now" hidden><img loading="lazy" alt="${esc(p.label)} — ${words[1].toLowerCase()}" src="${now}"><figcaption><b>${words[1]}</b> · ${esc(ids[1])}</figcaption></figure>
-    </div></div>`;
+  const i = PAIRS.push({ label: p.label, srcs: [was, now], ids, words }) - 1;
+  const shot = (k, n) => `<button type="button" class="shot" data-k="${k}" data-pair="${i}" data-n="${n}" aria-label="${esc(p.label)} — ${words[n].toLowerCase()}, открыть крупно">
+      <span class="cap"><b>${words[n]}</b><span>${esc(ids[n])}</span></span>
+      <img loading="lazy" alt="${esc(p.label)} — ${words[n].toLowerCase()}" src="${n ? now : was}"></button>`;
+  return `<div class="pair"><div class="pair-head"><span class="lab">${esc(p.label)}</span></div>
+    <div class="shots">${shot("was", 0)}${shot("now", 1)}</div></div>`;
 }
 function comboHTML(c) {
   return `<div class="pair"><div class="pair-head"><span class="lab">${esc(c.label)}</span></div>
@@ -150,10 +181,12 @@ function comboHTML(c) {
     <span class="hint">Снимок шире экрана — листайте вбок.</span></div>`;
 }
 function render() {
+  PAIRS.length = 0;
   const m = DATA.merged, pnd = DATA.pending, ns = DATA.noshot;
   const prsMerged = new Set(m.flatMap((x) => x.prs)), prsNo = new Set(ns.flatMap((x) => x.prs));
+  const total = prsMerged.size + prsNo.size;
   document.getElementById("lead").textContent =
-    `За три дня в main влито ${prsMerged.size + prsNo.size} ${plural(prsMerged.size + prsNo.size, "изменение", "изменения", "изменений")} приложения. ` +
+    `За три дня в main влито ${total} ${plural(total, "изменение", "изменения", "изменений")} приложения. ` +
     `${m.length} ${plural(m.length, "группа видна", "группы видны", "групп видны")} на снимках ниже, остальные — поведение или окна, которые демо не открывает. ` +
     `Ещё ${pnd.length} ${plural(pnd.length, "изменение ждёт", "изменения ждут", "изменений ждут")} влития.`;
   document.getElementById("totals").innerHTML =
@@ -179,23 +212,56 @@ function render() {
       <div class="meta">${x.prs.map(prLink).join("")}</div><span class="sub">${esc(x.why)}</span></li>`).join("");
   document.querySelectorAll("#theme-seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.t === theme)));
 }
-function setView(pair, v) {
-  pair.dataset.view = v;
-  pair.querySelectorAll(".seg.ba button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === v)));
-  if (!matchMedia("(min-width: 860px)").matches) pair.querySelectorAll("figure").forEach((f) => { f.hidden = f.dataset.k !== v; });
+
+// large view: one pair, flip Было ↔ Стало by the switch, arrows, keys, a tap on the picture or a swipe
+const lb = document.getElementById("lb"), lbImg = document.getElementById("lb-img");
+let cur = null, side = 0, opener = null;
+function show(n) {
+  side = n;
+  const p = PAIRS[cur];
+  lbImg.src = p.srcs[n];
+  lbImg.alt = `${p.label} — ${p.words[n].toLowerCase()}`;
+  document.getElementById("lb-cap").textContent = `${p.words[n]} · ${p.ids[n]} · ${n + 1} из 2 · листайте или нажмите на снимок`;
+  document.querySelectorAll("#lb-seg button").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.v) === n)));
 }
-function syncLayout() {
-  const wide = matchMedia("(min-width: 860px)").matches;
-  document.querySelectorAll(".pair.side").forEach((p) => p.querySelectorAll("figure").forEach((f) => { f.hidden = wide ? false : f.dataset.k !== p.dataset.view; }));
+function openLB(i, n, from) {
+  cur = i; opener = from;
+  const p = PAIRS[i];
+  document.getElementById("lb-title").textContent = p.label;
+  document.querySelectorAll("#lb-seg button").forEach((b) => { b.textContent = p.words[Number(b.dataset.v)]; });
+  new Image().src = p.srcs[1 - n];
+  show(n);
+  lb.hidden = false; document.body.style.overflow = "hidden";
+  document.getElementById("lb-close").focus();
 }
+function closeLB() { lb.hidden = true; document.body.style.overflow = ""; if (opener) opener.focus(); }
+
 document.addEventListener("click", (e) => {
   const tb = e.target.closest("#theme-seg button");
-  if (tb) { theme = tb.dataset.t; try { localStorage.setItem("ba-theme", theme); } catch (er) {} render(); syncLayout(); return; }
-  const vb = e.target.closest(".seg.ba button");
-  if (vb) { setView(vb.closest(".pair"), vb.dataset.v); return; }
-  const img = e.target.closest(".pair.side figure img");
-  if (img && !matchMedia("(min-width: 860px)").matches) { const p = img.closest(".pair"); setView(p, p.dataset.view === "now" ? "was" : "now"); }
+  if (tb) { theme = tb.dataset.t; try { localStorage.setItem("ba-theme", theme); } catch (er) {} render(); return; }
+  const sh = e.target.closest(".shot");
+  if (sh) { openLB(Number(sh.dataset.pair), Number(sh.dataset.n), sh); return; }
+  if (lb.hidden) return;
+  const sb = e.target.closest("#lb-seg button");
+  if (sb) { show(Number(sb.dataset.v)); return; }
+  const ar = e.target.closest(".lb-arrow");
+  if (ar) { show(Number(ar.dataset.step) > 0 ? 1 : 0); return; }
+  if (e.target === lbImg) { if (!swiped) show(1 - side); swiped = false; return; }
+  if (e.target.closest("#lb-close") || e.target === lb || e.target.id === "lb-stage") closeLB();
 });
-matchMedia("(min-width: 860px)").addEventListener("change", syncLayout);
-render(); syncLayout();
+document.addEventListener("keydown", (e) => {
+  if (lb.hidden) return;
+  if (e.key === "Escape") closeLB();
+  else if (e.key === "ArrowLeft") show(0);
+  else if (e.key === "ArrowRight") show(1);
+});
+let x0 = null, swiped = false;
+const stage = document.getElementById("lb-stage");
+stage.addEventListener("touchstart", (e) => { x0 = e.touches[0].clientX; swiped = false; }, { passive: true });
+stage.addEventListener("touchend", (e) => {
+  if (x0 === null) return;
+  const dx = e.changedTouches[0].clientX - x0; x0 = null;
+  if (Math.abs(dx) > 40) { swiped = true; show(dx < 0 ? 1 : 0); }
+}, { passive: true });
+render();
 </script>
