@@ -44,6 +44,6 @@ exports.run = async (h, { seed, admin }) => {
   await h.go(`/catalog/${item.id}`);
   await p.getByTestId("catalog-supplier").locator("visible=true").first().getByText(`${tag} Supply`).waitFor({ timeout: 20000 });
   await p.getByTestId("sup-hist-0").locator("visible=true").first().waitFor({ timeout: 20000 });
-  h.expect(/\$11\.03/.test(await p.getByTestId("sup-hist-0").locator("visible=true").first().innerText()), "«История цен» from the server: $10 + 10.25%");
+  h.expect(/\$11\.03/.test(await p.getByTestId("sup-hist-0").locator("visible=true").first().innerText()), "«История цен» from the server: $10.00 + 10.25%");
   await h.shot("reloaded");
 };

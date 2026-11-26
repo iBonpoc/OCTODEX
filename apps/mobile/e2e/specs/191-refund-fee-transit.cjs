@@ -12,7 +12,7 @@ exports.run = async (h) => {
   await h.go("/payments");
   const db0 = await h.db();
   const base = db0.payments.find((x) => x.invoiceId && x.amountCents >= 10000);
-  h.expect(!!base, "the demo has a payment of $100 or more");
+  h.expect(!!base, "the demo has a payment of $100.00 or more");
   const id = "e2e-fee-191";
   await p.evaluate(([b, id]) => {
     const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
@@ -35,7 +35,7 @@ exports.run = async (h) => {
   const sheet = h.sheet();
   await sheet.getByTestId("refund-form").waitFor({ timeout: 5000 });
   const st = await sheet.innerText();
-  h.expect(/Сумма возврата \(до \$70(\.00)?\)/.test(st), `the limit is $100 − $30 on its way: ${st.slice(0, 120)}`);
+  h.expect(/Сумма возврата \(до \$70(\.00)?\)/.test(st), `the limit is $100.00 − $30.00 on its way: ${st.slice(0, 120)}`);
   h.expect(/Комиссия Stripe \$1\.75 не вернётся/.test(await sheet.getByTestId("refund-fee").innerText()), "the exact fee in the sheet");
   await sheet.getByRole("textbox").first().fill("71");
   await sheet.getByTestId("refund-above").waitFor({ timeout: 3000 });

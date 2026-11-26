@@ -34,8 +34,8 @@ exports.run = async (h) => {
   const sum = async (id) => ((await p.getByTestId(id).locator("visible=true").first().innerText()).match(/\$[\d,]+(\.\d\d)?/) ?? [""])[0];
   const owed = await sum("tile-owed");
   const received = await sum("tile-received");
-  h.expect(/^\$[\d,]+/.test(owed) && /^\$[\d,]+/.test(received) && owed !== "$0", `director's Today shows its amounts (owed ${owed}, received ${received})`);
-  const MONEY = [owed, received].filter((x) => x && x !== "$0");
+  h.expect(/^\$[\d,]+/.test(owed) && /^\$[\d,]+/.test(received) && owed !== "$0.00", `director's Today shows its amounts (owed ${owed}, received ${received})`);
+  const MONEY = [owed, received].filter((x) => x && x !== "$0.00");
   const PARTS = ["today-tiles", "today-attention", "tile-owed", "tile-received"];
 
   // the technician by a direct link: back to his own home with a toast, no company money on the way

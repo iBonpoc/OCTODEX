@@ -1,9 +1,9 @@
 /** Contract $3,420 (deposit $342 paid): bill balance, pay $1,000 + overpay attempt + rest; receipts; progress invoice. */
 exports.run = async (h) => {
   await h.go("/estimate/e5");
-  await h.expectText(/Договор \| \$3,420 \| Выставлено \| \$342 \| Оплачено \| \$342 \| Осталось получить \| \$3,078/, "statement before");
-  await h.page.getByRole("button", { name: /Выставить остаток \$3,078/ }).click(); await h.page.waitForTimeout(500);
-  await h.expectText(/Выставлено \| \$3,420/, "fully invoiced");
+  await h.expectText(/Договор \| \$3,420\.00 \| Выставлено \| \$342\.00 \| Оплачено \| \$342\.00 \| Осталось получить \| \$3,078\.00/, "statement before");
+  await h.page.getByRole("button", { name: /Выставить остаток \$3,078\.00/ }).click(); await h.page.waitForTimeout(500);
+  await h.expectText(/Выставлено \| \$3,420\.00/, "fully invoiced");
   await h.page.getByText(/Остаток по договору/).first().click(); await h.page.waitForTimeout(700);
   // v2 (#2350): the invoice's sum once — `invoice-balance` (what is owed, then the total and what came in; paid in full — what came in)
   const balance = async () => (await h.page.getByTestId("invoice-balance").locator("visible=true").first().innerText()).split("\n").join(" | ");
@@ -23,9 +23,9 @@ exports.run = async (h) => {
     await h.page.getByTestId("pay-receipt-done").last().click(); await h.page.waitForTimeout(600);
   };
   await pay("1000", "Zelle");
-  await expectBalance(/К оплате \| \$2,078 \|.*Сумма \$3,078 · Оплачено \$1,000/, "after $1,000: owed $2,078 of $3,078, $1,000 came in");
-  await pay("99999", "Чек"); // more than the balance → capped at $2,078
-  await expectBalance(/Оплачено полностью \| \$3,078/, "paid in full, overpayment capped");
+  await expectBalance(/К оплате \| \$2,078\.00 \|.*Сумма \$3,078\.00 · Оплачено \$1,000\.00/, "after $1,000.00: owed $2,078.00 of $3,078, $1,000.00 came in");
+  await pay("99999", "Чек"); // more than the balance → capped at $2,078.00
+  await expectBalance(/Оплачено полностью \| \$3,078\.00/, "paid in full, overpayment capped");
   h.expect((await h.page.getByTestId("invoice-take-payment").count()) === 0, "nothing left to take");
   const db = await h.db();
   const inv = db.invoices.find((i) => i.title === "Final balance" && i.jobId === "j1");

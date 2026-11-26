@@ -81,7 +81,7 @@ exports.run = async (h) => {
   h.expect(db.jobs.find((j) => j.id === job.id).status === "done", "«Да, выполнена» → done");
   // v2: the main step «Счёт на остаток», its reason the card's title; the contract $480 nothing of it paid
   h.expect(/по договору ещё не выставлено/.test(await now()), `offer to invoice the balance (${await now()})`);
-  h.expect((await p.getByTestId("job-now-trio").locator("visible=true").first().innerText()).split("\n")[0] === "$480", "the contract to bill is $480");
+  h.expect((await p.getByTestId("job-now-trio").locator("visible=true").first().innerText()).split("\n")[0] === "$480.00", "the contract to bill is $480.00");
   await h.shot("done");
   await p.getByTestId("job-next-rest").locator("visible=true").first().dblclick();
   await p.waitForFunction((jid) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.invoices ?? []).some((i) => i.jobId === jid), job.id);

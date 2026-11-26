@@ -44,7 +44,7 @@ exports.run = async (h) => {
   const lossCard = p.locator('[data-testid="list-card"]').filter({ hasText: LOSS }).first();
   await lossCard.scrollIntoViewIfNeeded();
   const lt = await lossCard.innerText();
-  h.expect(lt.includes("В убытке") && lt.includes("-11.1%") && /\$100(\.00)?\b/.test(lt), `loss sign, cost $100 and margin -11.1%: ${lt.slice(0, 240)}`);
+  h.expect(lt.includes("В убытке") && lt.includes("-11.1%") && /\$100(\.00)?\b/.test(lt), `loss sign, cost $100.00 and margin -11.1%: ${lt.slice(0, 240)}`);
   // the status edge: an absolute strip on the card's left side, a few px wide, full height
   const hasEdge = (loc) => loc.evaluate((e) => {
     const r = e.getBoundingClientRect();

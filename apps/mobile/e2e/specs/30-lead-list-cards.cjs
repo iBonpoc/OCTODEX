@@ -30,7 +30,7 @@ exports.run = async (h) => {
   // the row: the name and what is needed; no phone, no number, no price
   const txt = await tid("lead-row-l1").innerText();
   h.expect(txt.includes(kevin.name) && txt.includes(kevin.service), `the row says who and what: ${txt.slice(0, 160)}`);
-  for (const s of [kevin.number, kevin.phone, "$45"]) h.expect(!txt.includes(s), `no «${s}» on the row`);
+  for (const s of [kevin.number, kevin.phone, "$45.00"]) h.expect(!txt.includes(s), `no «${s}» on the row`);
   await h.shot("list");
 
   // SMS from the row vs from the lead page: the same

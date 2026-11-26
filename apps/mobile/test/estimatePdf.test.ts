@@ -115,7 +115,7 @@ describe("estimate PDF: in the client's language for every app language", () => 
     for (const client of DOC_LANGS) {
       const { db, e } = dbWith(client);
       const html = estimateHtml(portalFromEstimate(db, e, "Acme"), { lang: client });
-      expect(html).toContain("$240"); // 2 × $120
+      expect(html).toContain("$240.00"); // 2 × $120.00
       expect(html).toContain(docDay("2026-11-05T17:00:00Z"));
     }
     expect(docDay("2026-11-05T17:00:00Z")).toBe("11/05/2026");
@@ -216,10 +216,10 @@ describe("estimate PDF: in the client's language for every app language", () => 
   it("unit prices can be hidden (company setting)", () => {
     const { db, e } = dbWith("en");
     const p = portalFromEstimate(db, e, "Acme");
-    expect(estimateHtml(p, { lang: "en" })).toContain("$120");
+    expect(estimateHtml(p, { lang: "en" })).toContain("$120.00");
     const hidden = estimateHtml(p, { lang: "en", showUnitPrices: false });
-    expect(hidden).not.toContain("$120");
-    expect(hidden).toContain("$240");
+    expect(hidden).not.toContain("$120.00");
+    expect(hidden).toContain("$240.00");
   });
 
   it("three print styles change the layout, not the content", () => {
@@ -282,11 +282,11 @@ describe("estimate PDF: sections for the client (РС-7b, §5)", () => {
     db.estimates = db.estimates.map((x) => (x.id === e.id ? e2 : x));
     return portalFromEstimate(db, e2, "Acme");
   };
-  it("PDF of an unsigned estimate (the company's own): every add-on is there, «(add-on) + $40», and none is in the total", () => {
+  it("PDF of an unsigned estimate (the company's own): every add-on is there, «(add-on) + $40.00», and none is in the total", () => {
     const h = estimateHtml(portal(sectioned("Roof")), { lang: "en" });
     expect(h).toContain("Guards");
     expect(h).toContain("(add-on)");
-    expect(h).toContain(">+ $40<");
+    expect(h).toContain(">+ $40.00<");
     expect(h).toContain("$286.50"); // Roof's subtotal without the add-on
     expect(h).toContain("$336.50"); // the total: $286.50 + $50.00 — no add-on
     expect(h).not.toContain("$376.50");
@@ -294,12 +294,12 @@ describe("estimate PDF: sections for the client (РС-7b, §5)", () => {
   it("PDF of the client's page repeats their choice: the chosen add-on is in the lines and the total, like on the page", () => {
     const h = estimateHtml(portal(sectioned("Roof")), { lang: "en", choice: { optionId: "o1", addonIds: ["l3"] } });
     expect(h).toContain("Guards");
-    expect(h).not.toContain(">+ $40<");
+    expect(h).not.toContain(">+ $40.00<");
     expect(h).toContain("$326.50"); // Roof now: $286.50 + $40.00
     expect(h).toContain("$376.50"); // the total
     // another choice (none): the add-on is an offer again
     const none = estimateHtml(portal(sectioned("Roof")), { lang: "en", choice: { optionId: "o1", addonIds: [] } });
-    expect(none).toContain(">+ $40<");
+    expect(none).toContain(">+ $40.00<");
     expect(none).toContain("$336.50");
   });
   it("PDF of a signed estimate: only the signed choice — the chosen add-on in, the others not shown", () => {
@@ -416,7 +416,7 @@ describe("invoice of a cancelled job (wave 3a, findJob)", () => {
 });
 
 describe("#1219: a rate with three decimals on the client's document", () => {
-  it("8.875 % shows as «8.875%», the tax is $88.75 on $1000 (8.88 % would be $88.80)", () => {
+  it("8.875 % shows as «8.875%», the tax is $88.75 on $1000.00 (8.88 % would be $88.80)", () => {
     const { db, e } = dbWith("en");
     const ny = {
       ...doc,

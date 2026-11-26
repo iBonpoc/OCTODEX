@@ -13,7 +13,8 @@ exports.run = async (h) => {
   await h.go("/clients");
   const db = await h.db();
   const row = (id) => p.getByTestId(`client-row-${id}`).locator("visible=true").first();
-  const usd = (n) => { const d = n % 100 === 0 ? 0 : 2; return "$" + (n / 100).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }); };
+  // #2888: the app shows money always with cents (founder #2672)
+  const usd = (n) => "$" + (n / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const cents = (c) => {
     const inv = db.invoices.filter((i) => i.customerId === c.id && !i.void);
     const owed = inv.reduce((s, i) => s + Math.max(0, i.totalCents - i.paidCents), 0);

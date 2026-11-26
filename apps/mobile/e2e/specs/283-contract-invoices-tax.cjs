@@ -19,25 +19,25 @@ exports.run = async (h) => {
   await p.getByTestId("job-screen-sections-invoices").locator("visible=true").click();
   // v2 (#2350): the contract is the first figure of the «Сейчас» card's trio (said once — LAYOUT-RULES П7)
   const trio = (await p.getByTestId("job-now-trio").locator("visible=true").first().innerText()).split("\n");
-  h.expect(trio[0] === "$510", `the contract with its tax, the first figure of the job's «Сейчас» (${trio.join(" | ")})`);
+  h.expect(trio[0] === "$510.00", `the contract with its tax, the first figure of the job's «Сейчас» (${trio.join(" | ")})`);
 
   await p.getByTestId("statement-progress").click();
   await h.sheet().getByTestId("statement-progress-issue").click();
-  await h.expectText(/Выставлено \| \$255/, "a stage invoice of 50%");
+  await h.expectText(/Выставлено \| \$255\.00/, "a stage invoice of 50%");
   // the store writes its copy a moment after the screen shows it: wait for the invoices themselves
   const pick = async (n) => {
     await p.waitForFunction((k) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.invoices ?? []).filter((i) => i.jobId === "j3").length >= k, n);
     return ((await h.db())?.invoices ?? []).filter((i) => i.jobId === "j3");
   };
   let mine = await pick(1);
-  h.expect(mine.length === 1 && mine[0].totalCents === 25500 && mine[0].taxCents === 500 && mine[0].subtotalCents === 25000, `the stage invoice: $250 + $5 tax (${JSON.stringify(mine)})`);
+  h.expect(mine.length === 1 && mine[0].totalCents === 25500 && mine[0].taxCents === 500 && mine[0].subtotalCents === 25000, `the stage invoice: $250.00 + $5.00 tax (${JSON.stringify(mine)})`);
 
   await p.getByTestId("statement-bill-balance").click();
-  await h.expectText(/Выставлено \| \$510/, "the rest billed");
+  await h.expectText(/Выставлено \| \$510\.00/, "the rest billed");
   mine = await pick(2);
   const fin = mine.find((i) => i.kind === "final");
   h.expect(fin && fin.totalCents === 25500 && fin.taxCents === 500, `the balance takes the rest of the tax (${JSON.stringify(fin)})`);
-  h.expect(mine.reduce((s, i) => s + i.taxCents, 0) === 1000 && mine.reduce((s, i) => s + i.subtotalCents, 0) === 50000, "Σ tax = $10, revenue = $500");
+  h.expect(mine.reduce((s, i) => s + i.taxCents, 0) === 1000 && mine.reduce((s, i) => s + i.subtotalCents, 0) === 50000, "Σ tax = $10, revenue = $500.00");
   // nothing left to bill: no button bills above the contract
   h.expect((await p.getByTestId("statement-bill-balance").count()) + (await p.getByTestId("statement-progress").count()) === 0, "nothing left to bill");
   await h.shot("billed");
