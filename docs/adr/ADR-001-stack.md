@@ -1,6 +1,6 @@
 # ADR-001. Стек: Expo React Native + Next.js + Supabase
 
-- **Статус:** Proposed — needs founder/tech review
+- **Статус:** действует с поправкой · сверено с кодом 26.11.2026. Есть: одно приложение Expo Router (iOS, Android, веб — `apps/mobile`) и Supabase. Нет: Next.js — сайты не заведены, веб — это то же приложение. Новое решение о стеке — новым ADR «заменяет ADR-001» (#2709). Было: Proposed — needs founder/tech review
 - **Дата:** 03.11.2026
 - **Связано:** `06-architecture.md` §2, ADR-002, ADR-003
 
