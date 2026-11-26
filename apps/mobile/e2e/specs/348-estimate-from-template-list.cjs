@@ -71,7 +71,7 @@ exports.run = async (h) => {
 
   // no tax from the template: the total is the sum of the lines, 4 × $50 + 3 × $30 = $290
   // (the bar at the bottom on a phone, the totals beside the list from 820; with the tax it would be $319.73)
-  await p.waitForFunction(() => /\$290\b/.test(document.body.innerText) && !/\$319/.test(document.body.innerText), null, { timeout: 3000 });
+  await p.waitForFunction(() => /\$290\.00\b/.test(document.body.innerText) && !/\$319\.00/.test(document.body.innerText), null, { timeout: 3000 });
   await tid("ue-save").click();
   await p.waitForFunction(({ k, tpl }) => (JSON.parse(localStorage.getItem(k))?.db?.estimates ?? []).some((e) => e.templateId === tpl), { k: DB_KEY, tpl: TPL }, { timeout: 8000 });
   const saved = await p.evaluate(({ k, tpl }) => JSON.parse(localStorage.getItem(k)).db.estimates.find((e) => e.templateId === tpl), { k: DB_KEY, tpl: TPL });

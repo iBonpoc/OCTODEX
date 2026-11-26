@@ -27,13 +27,13 @@ exports.run = async (h) => {
   await vis('[data-testid^="est-qty-"]').first().locator("input").fill("3");
   const figures = vis('[data-testid^="est-figures-"]').first();
   await figures.waitFor({ timeout: 3000 });
-  h.expect(/\$30/.test(await figures.innerText()), `the sum of the open row: 3 × $10 (${await figures.innerText()})`);
+  h.expect(/\$30\.00/.test(await figures.innerText()), `the sum of the open row: 3 × $10.00 (${await figures.innerText()})`);
 
   // a second row; the first folds when the second opens, what is typed stays
   await tid("est-add-new").getByRole("button").click();
   await waitCount('[data-testid^="est-name-"]', 1, "one open row: one name field");
   const folded = await rows().first().innerText();
-  h.expect(/Gutter/.test(folded) && /\$30/.test(folded), `the first row folded: «Кратко» — its name and sum (${folded.replace(/\n/g, " ")})`);
+  h.expect(/Gutter/.test(folded) && /\$30\.00/.test(folded), `the first row folded: «Кратко» — its name and sum (${folded.replace(/\n/g, " ")})`);
 
   // a wrong quantity keeps the row open: the error, the other row does not open
   await vis('[data-testid^="est-name-"]').first().locator("input").fill("Hanger");

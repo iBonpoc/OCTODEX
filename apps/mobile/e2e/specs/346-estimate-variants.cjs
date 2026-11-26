@@ -40,14 +40,14 @@ exports.run = async (h) => {
   h.expect((await count('[data-testid^="est-line-"]')) === 1, "the copy has the same one line");
   const [good, better] = await totalIds();
   h.expect(!!good && !!better, "two totals under the segments");
-  h.expect((await totals()).every((x) => /\$100\b/.test(x)), `both totals $100 (${await totals()})`);
+  h.expect((await totals()).every((x) => /\$100\.00\b/.test(x)), `both totals $100.00 (${await totals()})`);
   h.expect(/Вы правите «Better»/.test(await tid("est-variants").innerText()), "the copy «Better» is the one edited");
 
   // a change in the copy: its total changes while typing, the first stays
   await vis('[data-testid^="est-line-"]').first().click();
   await vis('[data-testid^="est-price-"]').first().locator("input").fill("150");
-  await p.waitForFunction((id) => /\$150\b/.test(document.querySelector(`[data-testid="est-var-total-${id}"]`)?.textContent || ""), better, { timeout: 3000 });
-  h.expect(/\$100\b/.test(await tid(`est-var-total-${good}`).innerText()), "the first option's total stays $100");
+  await p.waitForFunction((id) => /\$150\.00\b/.test(document.querySelector(`[data-testid="est-var-total-${id}"]`)?.textContent || ""), better, { timeout: 3000 });
+  h.expect(/\$100\.00\b/.test(await tid(`est-var-total-${good}`).innerText()), "the first option's total stays $100.00");
   await line.fold(h);
   await h.shot("two");
 
@@ -55,7 +55,7 @@ exports.run = async (h) => {
   await tid(`est-var-total-${good}`).click();
   await p.waitForFunction(() => /Вы правите «Good»/.test(document.querySelector('[data-testid="est-variants"]')?.textContent || ""), null, { timeout: 3000 });
   const sum = await vis('[data-testid^="est-sum-"]').first().innerText();
-  h.expect(/\$100\b/.test(sum), `«Good» keeps $100 (${sum})`);
+  h.expect(/\$100\.00\b/.test(sum), `«Good» keeps $100.00 (${sum})`);
   h.expect((await count('[data-testid^="est-line-"]')) === 1, "«Good» has one line (the blank row did not stay)");
 
   // «?» — five steps and what is shared
@@ -120,7 +120,7 @@ exports.run = async (h) => {
   h.expect(await line.undo(h), "«Вернуть» pressed");
   await tid(`est-var-total-${better}`).waitFor({ timeout: 3000 });
   h.expect(JSON.stringify(await totalIds()) === JSON.stringify([good, better, third]), "back at its place");
-  h.expect(/\$150\b/.test(await tid(`est-var-total-${better}`).innerText()), "with its total");
+  h.expect(/\$150\.00\b/.test(await tid(`est-var-total-${better}`).innerText()), "with its total");
   h.expect((await count(`[data-testid="est-var-rec-${better}"]`)) === 1, "with its mark");
   await p.waitForFunction(() => /Вы правите «Premium»/.test(document.querySelector('[data-testid="est-variants"]')?.textContent || ""), null, { timeout: 3000 });
 };
