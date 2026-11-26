@@ -1,3 +1,4 @@
+import { space } from "@octo/design-tokens";
 import { useState } from "react";
 import { View } from "react-native";
 import { localUndo } from "@/data/undo";
@@ -57,7 +58,7 @@ export function ChoiceSection() {
   ];
   const doneN = Object.values(done).filter(Boolean).length;
   return (
-    <View testID="showcase-choice">
+    <View testID="showcase-choice" style={{ gap: space[3] }}>
       <SectionTitle title={`${t(s.title)} · ${s.ds}`} />
       <Card>
         <T v="heading">{t("ds.ch.row.title")}</T>

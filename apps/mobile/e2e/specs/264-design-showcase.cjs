@@ -4,12 +4,14 @@
  * - every section of the registry is a row; a tap opens its own screen, «Назад» returns to the list;
  * - «Основа»: the token groups of both themes are live values from packages/design-tokens (a motion token, a status colour);
  * - an unknown section goes back to the list; no horizontal overflow.
+ * - #2745 (founder 25.11, #2744): the token screens are rows again, a group of their own; the theme switch is on the list
+ *   and on every section; a long token value does not break the token's name letter by letter.
  */
 const { expectOneAccent } = require("../accent.cjs");
 
 const SECTIONS = ["buttons", "selectors", "windows", "notices", "haptics"];
-// the token tables are not rows any more (#2292: «Основа» is shown on examples on the «Графит» sheet); their addresses still open, folded at the end of the sheet
-const FOLDED = ["base", "motion", "spacing"];
+// #2745: the token screens are rows again (they were folded into the «Графит» sheet by #2292), in the group «Токены»
+const TOKENS = ["base", "spacing", "motion"];
 
 exports.run = async (h) => {
   const p = h.page;
@@ -19,7 +21,11 @@ exports.run = async (h) => {
   await vis("settings-design-system").getByText("Дизайн-система", { exact: true }).click();
   await vis("showcase-sections").waitFor({ timeout: 5000 });
   for (const id of SECTIONS) h.expect((await p.getByTestId(`showcase-row-${id}`).count()) === 1, `row ${id} is in the list`);
-  for (const id of FOLDED) h.expect((await p.getByTestId(`showcase-row-${id}`).count()) === 0, `row ${id} is not in the list any more`);
+  for (const id of TOKENS) h.expect((await p.getByTestId("showcase-sections-tokens").getByTestId(`showcase-row-${id}`).count()) === 1, `row ${id} is in the tokens group`);
+  h.expect((await p.getByTestId("showcase-sections").getByTestId("showcase-row-base").count()) === 0, "the tokens are not among the parts");
+
+  // #2745: the theme field on the first screen (DS §9 А16 — a stored value is a field «Тема ⌄»)
+  h.expect((await vis("showcase-theme").getByText("Тема", { exact: true }).count()) === 1, "the first screen has the field «Тема»");
 
   // a row opens its screen, «Назад» returns
   await vis("showcase-row-buttons").getByText("Кнопки", { exact: true }).click();
@@ -37,6 +43,17 @@ exports.run = async (h) => {
   const ok = await p.getByTestId("token-themes.status.ok.text").locator("xpath=../..").innerText();
   h.expect(/#[0-9A-Fa-f]{6}/.test(ok), `themes.status.ok.text shows a colour (${ok.replace(/\n/g, " ")})`);
   h.expect(/Только для модуля ниши/.test(await h.text()), "the niche module's own tokens carry their note");
+  // #2745: the header's sun / moon turns the other theme on in one tap (the same stored choice as Settings), and back
+  const want = h.layout.theme === "dark" ? "light" : "dark";
+  await vis("showcase-theme-toggle").click();
+  await p.waitForFunction((th) => JSON.parse(localStorage.getItem("octo.theme.v1") || "null") === th, want, { timeout: 5000 });
+  await vis("showcase-theme-toggle").click();
+  await p.waitForFunction((th) => JSON.parse(localStorage.getItem("octo.theme.v1") || "null") === th, h.layout.theme, { timeout: 5000 });
+  // #2745 (#2741 п.3): four colours as a value used to squeeze the name into a column of letters — the name stays one line
+  const name = p.getByTestId("token-themes.drawing.story").locator("visible=true").first();
+  const box = await name.boundingBox();
+  const line = await vis("token-themes.page").boundingBox();
+  h.expect(box && line && box.height <= line.height * 1.5, `a long value leaves the name on one line (${box?.height} vs ${line?.height})`);
 
   await h.go("/settings/design-system/motion");
   await vis("showcase-screen-motion").waitFor({ timeout: 5000 });

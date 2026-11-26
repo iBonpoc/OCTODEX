@@ -35,7 +35,7 @@ export function NoticesSection() {
   // leaving the screen puts the network back — only if this screen changed it (the demo queue must not be reset otherwise)
   useEffect(() => () => { if (was.current !== null) void setOnline(was.current); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <View testID="showcase-notices">
+    <View testID="showcase-notices" style={{ gap: space[3] }}>
       <SectionTitle title={`${t(s.title)} · ${s.ds}`} />
       {/* DS §13 (Н-65): the empty states, one wording each; the lists take them in later steps */}
       <View testID="showcase-states" style={{ gap: space[3] }}>
@@ -179,9 +179,6 @@ export function NoticesSection() {
         <View testID="showcase-note-demo">
           <DemoBadge always />
         </View>
-      </Card>
-      <Card>
-        <T v="caption" tone="mut">{t("ds.note.later")}</T>
       </Card>
     </View>
   );

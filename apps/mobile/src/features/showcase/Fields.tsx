@@ -1,3 +1,4 @@
+import { space } from "@octo/design-tokens";
 import { useState } from "react";
 import { FieldRow } from "@/ui/pairs";
 import { View } from "react-native";
@@ -36,7 +37,7 @@ export function FieldsSection() {
     if (v) setPhone(formatPhoneUS(v));
   };
   return (
-    <View testID="showcase-fields">
+    <View testID="showcase-fields" style={{ gap: space[3] }}>
       <SectionTitle title={`${t(s.title)} · ${s.ds}`} />
       <FieldGroup title={t("ds.fields.form")} testID="showcase-form">
         <T v="caption" tone="mut">{t("ds.fields.formHint")}</T>

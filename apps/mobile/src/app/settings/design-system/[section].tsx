@@ -8,6 +8,7 @@ import { Screen, SectionTitle } from "@/ui/surfaces";
 import { canSeeShowcase } from "@/features/showcase/access";
 import { SCREENS } from "@/features/showcase/registry";
 import { TokenSections } from "@/features/showcase/Tokens";
+import { ShowcaseThemeButton } from "@/features/showcase/ThemeSwitch";
 import { WindowsSection } from "@/features/showcase/Windows";
 import { SelectorsSection } from "@/features/showcase/Selectors";
 import { ButtonsSection } from "@/features/showcase/Buttons";
@@ -35,10 +36,12 @@ export default function DesignSystemSection() {
   // «Графит» (пилот #2254): without the switch its address goes back to the list
   if (s.pilot && flagRead && !graphite) return <Redirect href="/settings/design-system" />;
   // «Графит» is ONE sheet that only scrolls (#2292): its own screen, with the sticky strip
+  const back = () => (router.canGoBack() ? router.back() : router.replace("/settings/design-system"));
   if (s.id === "graphite")
     return <GraphiteSheet title={t(s.title)} caption={`${t("ds.rule", { ds: s.ds })} · ${t(s.where)}`} onBack={() => router.replace("/settings/design-system")} />;
   return (
-    <Screen title={t(s.title)} back={() => router.replace("/settings/design-system")}>
+    // #2745: the theme in the header — one tap at any place of the page; «‹» goes back to the same place of the list
+    <Screen title={t(s.title)} back={back} right={<ShowcaseThemeButton />}>
       <View testID={`showcase-screen-${s.id}`} style={{ gap: 0 }}>
         <T v="caption" tone="mut">{`${t("ds.rule", { ds: s.ds })} · ${t(s.where)}`}</T>
       </View>
