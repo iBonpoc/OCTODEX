@@ -47,6 +47,9 @@ sizes:
   object-header-max: 104
 ---
 
+> **Материал, не правило** (решение основателя 26.11.2026, #2878; разбор #2847). Правила вида и поведения — только `design/naryad-ds/DESIGN-SYSTEM.md` и `CLAUDE.md`; где этот файл расходится с ними — прав DS. Правило, которое есть только здесь, сначала переносится в DS (§2.3).
+
+
 # GoRix — visual identity for agents
 
 **Source of truth:** values live in `packages/design-tokens/src/index.ts`; behaviour and components in `design/naryad-ds/DESIGN-SYSTEM.md`; layout in `docs/design/LAYOUT-RULES.md`; screens in `docs/design/BUILD-SPEC.md`. This file is the short brief — when it disagrees with those, they win.
