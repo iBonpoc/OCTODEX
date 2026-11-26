@@ -160,7 +160,8 @@ function LeadsList() {
       <ListScreen<Lead>
         testID="leads"
         title={t("sales.leads")}
-        count={open.length}
+        // #2763 (DS §12 «Список»): the title counts what is shown — the chip and the search, not all open leads
+        count={list.length}
         create={{ a11y: t("quick.lead"), items: [{ key: "new", label: t("quick.lead"), icon: "leads", testID: "leads-create-new" }] }}
         onCreate={newLead}
         search={{ placeholder: t("lead.search"), value: q, onChange: setQ }}
