@@ -29,7 +29,7 @@
 | `c.surf3` | `#C4C5BF` | `#44464D` |
 | `c.hl` | `rgba(255,255,255,0.50)` | `rgba(255,255,255,0.05)` |
 | `c.off` | `#B7B8B2` | `#4A4D54` |
-| `c.dash` | `#6F7279` | `#8C9098` |
+| `c.dash` | `#65686E` | `#93979E` |
 | `c.tab` | `#E3E4DE` | `#1F2024` |
 | `c.toast` | `#26282C` | `#44464D` |
 | `c.onToast` | `#EEEFF1` | `#EEEFF1` |
@@ -77,6 +77,18 @@
 | `c.tape.markFill` | `#E2C15E` | `#E2C15E` |
 | `c.tape.markText` | `#1C1A12` | `#1C1A12` |
 | `c.tape.needle` | `#D70015` | `#FF453A` |
+
+## Повышение контраста (`highContrast`) — когда в системе включено «Повышение контраста»
+
+| Токен | Светлая | Тёмная |
+| --- | --- | --- |
+| `hc.mut` | `#33353A` | `#DDDEE2` |
+| `hc.accText` | `#413408` | `#EFDEA8` |
+| `hc.status.ok` | `#113D21` | `#BFE8CD` |
+| `hc.status.info` | `#093B44` | `#C4E5EA` |
+| `hc.status.warn` | `#532B04` | `#F4DABF` |
+| `hc.status.bad` | `#631C16` | `#F9D7D3` |
+| `hc.status.neutral` | `#33353A` | `#DDDEE2` |
 
 ## Текст (`font`)
 
@@ -445,7 +457,7 @@
 | `component.tabBar.icon` | 26 |
 | `component.tabBar.fade` | 18 |
 | `component.tabBar.badge` | 18 |
-| `component.tabBar.badgeText` | 11 |
+| `component.tabBar.badgeText` | 12 |
 | `component.queueLine.h` | 28 |
 | `component.quickAction.row` | 44 |
 | `component.quickAction.inline` | 36 |

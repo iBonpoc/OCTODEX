@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { component, graphite, print, themes, type ThemeName } from "../src/index";
+import { component, graphite, highContrast, print, themes, withHighContrast, type StatusName, type ThemeName } from "../src/index";
 
 /** WCAG 2.x contrast. Translucent colours are composited over the solid background first. */
 type RGBA = [number, number, number, number];
@@ -92,6 +92,7 @@ describe.each(names)("%s visual v2: accent text and tone, layers, tab bar (text 
   });
   it("the paler words on the yellow tile ≥ 4.5:1", () => expect(ratio(over(c.onAccMut, c.acc), parse(c.acc))).toBeGreaterThanOrEqual(4.5));
   it("the open checklist ring is seen on its cell (≥ 3:1)", () => expect(ratio(parse(c.dash), cell)).toBeGreaterThanOrEqual(3));
+  it("GoRix этап 3: the ring is seen on the chosen cell too (≥ 3:1; was 2.94 / 2.77)", () => expect(ratio(parse(c.dash), chosen)).toBeGreaterThanOrEqual(3));
   it("the layers go one way: bg → card → cell → chosen", () => {
     const l = [parse(c.bg), card, cell, chosen].map(lum);
     const up = name === "dark";
@@ -253,5 +254,31 @@ describe.each(names)("«Графит» %s contrast (#2254)", (name) => {
   });
   it("§2.9: the selected nav label on the glass ≥ 7", () => {
     for (const s of scene) expect(ratio(parse(g.text), over(g.glDim, rgb(over(g.gl, s))))).toBeGreaterThanOrEqual(7);
+  });
+});
+
+/** GoRix этап 3 «Основа» (опись 26.11.2026): «Повышение контраста» системы — для работы на солнце текст ≥ 7:1 */
+describe.each(names)("%s high contrast (iOS «Повышение контраста»): words ≥ 7:1 on every surface", (name) => {
+  const c = themes[name];
+  const h = withHighContrast(c, name);
+  const str = (x: RGBA) => `rgb(${x[0]},${x[1]},${x[2]})`;
+  const card = over(c.surf, c.bg);
+  const grounds = { bg: parse(c.bg), card, cell: over(c.surf2, str(card)), chosen: over(c.surf3, str(card)) };
+  for (const [g, ground] of Object.entries(grounds)) {
+    it(`mut, accText and status words on ${g}`, () => {
+      expect(ratio(parse(h.mut), ground), "mut").toBeGreaterThanOrEqual(7);
+      expect(ratio(parse(h.accText), ground), "accText").toBeGreaterThanOrEqual(7);
+      for (const st of Object.keys(highContrast[name].status) as StatusName[]) expect(ratio(parse(h.status[st].text), ground), st).toBeGreaterThanOrEqual(7);
+    });
+  }
+  it("status words on their own plate", () => {
+    for (const st of ["ok", "info", "warn", "bad"] as const) expect(ratio(parse(h.status[st].on), over(c.status[st].fill, c.bg)), st).toBeGreaterThanOrEqual(7);
+  });
+  it("only words change: grounds, accent and ink stay", () => {
+    expect(h.bg).toBe(c.bg);
+    expect(h.surf).toBe(c.surf);
+    expect(h.acc).toBe(c.acc);
+    expect(h.ink).toBe(c.ink);
+    expect(h.status.bad.fill).toBe(c.status.bad.fill);
   });
 });
