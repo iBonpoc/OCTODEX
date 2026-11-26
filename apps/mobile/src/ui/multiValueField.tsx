@@ -95,11 +95,11 @@ function KindButton<L extends string>({
 
 /**
  * Repeated values — phones, emails of a person (DS §9 А14а, spec 56 §3а.3; founder 21.11, #2350 «просто иконки… корзинка
- * удалить»): rows `[📞⌄] [value] [🗑]` and under them a compact «＋» (an `IconButton`, «Добавить телефон» for the screen reader),
- * always, also with no value. The type — the value's icon with a small arrow, a menu (Мобильный · Домашний · …; then, as its own
+ * удалить»): rows `[📞⌄] [value] [🗑]`, the last one ending in a compact «＋» (an `IconButton`, «Добавить телефон» for the screen reader;
+ * #2954 — no line of its own; with no row at all the «＋» stands alone). The type — the value's icon with a small arrow, a menu (Мобильный · Домашний · …; then, as its own
  * group, «Сделать основным»); the word only in the menu. The value — the screen's own (`renderValue`) or a `TextField` of
  * `valueType`. «🗑» — `IconButton` bare, zone 44, `ink` («Удалить номер»; the screen offers «Вернуть», rule 5). No words where
- * the icon is clear. The model stays the screen's: the first row is the main one. Width on 390: icon 44 + field + 🗑 40.
+ * the icon is clear. The model stays the screen's: the first row is the main one. Width on 390: icon 44 + field + 🗑 40 (+ «＋» 44 in the last row).
  */
 export function MultiValueField<L extends string>({
   rows,
@@ -163,6 +163,8 @@ export function MultiValueField<L extends string>({
                 )}
               </View>
               {ro ? null : <IconButton bare icon="trash" label={removeLabel} onPress={() => onRemove(r.id)} testID={id ? `${id}-remove` : undefined} />}
+              {/* #2954 (founder 26.11: «почему это всё в отдельной строке?»): «＋» stands in the last row, after «🗑» — no line of its own */}
+              {ro || i !== rows.length - 1 ? null : <IconButton icon="plus" label={addLabel} onPress={onAdd} testID={testID ? `${testID}-add` : undefined} />}
             </View>
             {note ? (
               <View testID={id ? `${id}-note` : undefined} style={{ marginLeft: size.hitMin + space[1] }}>
@@ -174,7 +176,7 @@ export function MultiValueField<L extends string>({
           </View>
         );
       })}
-      {ro ? null : (
+      {ro || rows.length ? null : (
         <View style={{ width: size.hitMin, alignItems: "center" }}>
           <IconButton icon="plus" label={addLabel} onPress={onAdd} testID={testID ? `${testID}-add` : undefined} />
         </View>
