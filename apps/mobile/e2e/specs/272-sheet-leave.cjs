@@ -191,6 +191,13 @@ exports.run = async (h) => {
           await frame();
         }
         const mid = Math.round((await panel().boundingBox()).y);
+        // #2817: the speed at the release is the last move's — 6 px over the time of one frame (the browser joins the moves of a
+        // frame). The «fit» sheet at 390 is 146 px: from a pull of 18 px it leaves at a frame under ~11 ms (18 + 6/dt × 100 > 73),
+        // and a busy browser gives such frames now and then. A slow finger stops before it lets go: wait until it has rested
+        // 60 ms (the sign we wait for is that time on the page's own clock), then the last move is 1 px → ~0.02 pt/ms, under
+        // sheetSlowVelocity; the long pull still leaves by its distance alone
+        await p.evaluate(() => new Promise((r) => { const t0 = performance.now(); const tick = () => (performance.now() - t0 >= 60 ? r() : requestAnimationFrame(tick)); requestAnimationFrame(tick); }));
+        await p.mouse.move(x, y + Math.floor((full * share) / 6) * 6 + 1);
         await p.mouse.up();
         return mid;
       };
