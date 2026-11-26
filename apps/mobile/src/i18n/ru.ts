@@ -2808,7 +2808,7 @@ export const ru = {
   "ds.scr.buttons": "Кнопки",
   "ds.scr.buttonsHint": "Все виды и состояния — нажимаются",
   "ds.scr.notices": "Уведомления",
-  "ds.scr.noticesHint": "Тосты, баннеры, «нет сети», пусто и «не найдено»",
+  "ds.scr.noticesHint": "Тосты, баннеры, «нет сети», пустые экраны и экраны «нет такого»",
   "ds.scr.motion": "Движение",
   "ds.scr.motionHint": "Длительности и кривые",
   "ds.scr.haptics": "Вибрация",

@@ -2809,7 +2809,7 @@ export const es: Dict = {
   "ds.scr.buttons": "Botones",
   "ds.scr.buttonsHint": "Todos los tipos y estados — se pulsan",
   "ds.scr.notices": "Avisos",
-  "ds.scr.noticesHint": "Avisos, banners, «sin red», vacío y «no encontrado»",
+  "ds.scr.noticesHint": "Avisos, banners, «sin red», pantallas vacías y ausentes",
   "ds.scr.motion": "Movimiento",
   "ds.scr.motionHint": "Duraciones y curvas",
   "ds.scr.haptics": "Vibración",
