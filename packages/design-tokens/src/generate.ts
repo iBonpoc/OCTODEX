@@ -34,10 +34,25 @@ export const GROUPS: { name: string; title: string; value: unknown }[] = [
 ];
 
 const cssName = (path: string) => "--" + path.replace(/\./g, "-").replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
-/** a number becomes px unless it is a ratio, a weight, a count or a time (those keep the raw number; the name says the unit) */
-const UNITLESS = /(weight|lineHeight|tracking|scale|Scale|opacity|ease|Ms$|^motion\.|\.z\.|^z\.|Steps|blur|cols|Cols|stroke|Stroke|max$|Max$|ratio|Ratio|liftScale)/;
-const cssValue = (path: string, v: Leaf) =>
-  typeof v === "number" && /tracking/.test(path) ? `${v}em` : typeof v === "number" && !UNITLESS.test(path) ? `${v}px` : String(v);
+/**
+ * The unit of a number in css, by the token's path (code review 26.11: a regex over all names gave «0.55px» opacities and
+ * unit-less durations). Only what is surely a length gets px, surely a time gets ms; everything else stays a plain number
+ * (a ratio, a count, a weight, a scroll threshold whose meaning the name does not tell) — read it in tokens.md and index.ts.
+ */
+const PX_GROUPS = /^(space|spaceHalf|rhythm|radius|breakpoint)\./;
+const LENGTH_END = /(^|\.)(h|w|height|width|radius|gap|pad|padL|padR|px|py|inset|icon|size|dot|maxW|min|row|bar|btn|border|hairline|line|track|edge|glyph|fab|logo|ring|circle|rule|thumb|md|sm|chevron|offsetY|blur|blurOverlay|minSize|contentMax|formMax|field|fieldPhone|hitMin|hitMinAndroid|controlLg|controlMd|controlMdPhone|controlSm|iconXs|iconSm|iconMd|iconLg|statusbarH|tabbarH|safeBottom|rowMin|rowMax|display|title|heading|body|button|caption|micro|input|figure|figureSm|badge|badgeText|fade|labelW|colW|timeW|valueW|valueCompactW|fieldW|sumW|titleW|tileMin|swatchField|swatchRow|actionW|actionFull|mark|splash|wait|about|intro|knob|bodySlop|fs)$/;
+const NOT_LENGTH = /(opacity|alpha|ratio|scale|Scale|velocity|weight|lineHeight|steps|Steps|stack|levels|cols|Cols|Em$|stops|damping|mass|stiffness|tilt|squash|maxChars|maxItems|maxRows|elevation|iconStroke|ease)/;
+export function cssUnit(path: string): "px" | "em" | "ms" | "" {
+  if (/tracking/.test(path)) return "em";
+  if (path.startsWith("motion.")) return /(dur[A-Z]|Ms$|delay|Delay|cycle|stagger|Stagger|timeout|Timeout)/.test(path.split(".").pop()!) ? "ms" : "";
+  if (NOT_LENGTH.test(path) || path.startsWith("z.") || path.startsWith("layout.gridCols")) return "";
+  if (PX_GROUPS.test(path)) return "px";
+  if (/^(size|font\.size|layout)\./.test(path) || path === "font.minSize") return "px";
+  if (/^c\.(blur|blurOverlay|shadow\.radius|shadow\.offsetY)$/.test(path)) return "px";
+  if (path.startsWith("component.") && LENGTH_END.test(path)) return "px";
+  return "";
+}
+const cssValue = (path: string, v: Leaf) => (typeof v === "number" ? `${v}${cssUnit(path)}` : String(v));
 
 const THEME_NAMES: ThemeName[] = ["light", "dark"];
 

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { GROUPS, cssName, flatten, renderCss, renderTable } from "../src/generate";
+import { GROUPS, cssName, cssUnit, flatten, renderCss, renderTable } from "../src/generate";
 import { themes } from "../src/index";
 
 /**
@@ -24,6 +24,32 @@ describe("GoRix tokens: the generated files equal index.ts", () => {
       expect(readFileSync(path, "utf8"), `${name} differs from index.ts — run npm run gen -w @octo/design-tokens`).toBe(want);
     });
   }
+  it("units by meaning (code review 26.11): lengths px, times ms, tracking em, ratios and counts bare", () => {
+    const css = renderCss();
+    for (const line of [
+      "--space-4: 16px;",
+      "--radius-card: 22px;",
+      "--size-hit-min: 44px;",
+      "--size-row-max: 60px;",
+      "--layout-content-max: 1200px;",
+      "--font-size-body: 15px;",
+      "--font-tracking-display: -0.02em;",
+      "--motion-dur-fast: 160ms;",
+      "--motion-long-press-ms: 500ms;",
+      "--motion-blink-steps: 4;",
+      "--component-dim-opacity: 0.45;",
+      "--component-chart-muted-opacity: 0.55;",
+      "--component-sheet-flick-velocity: 1;",
+      "--component-pair-char-em: 0.62;",
+      "--font-weight-bold: 700;",
+      "--layout-grid-cols-desktop: 3;",
+      "--z-toast: 8;",
+      "--c-blur: 20px;",
+    ])
+      expect(css, line).toContain(line);
+    expect(cssUnit("c.ground.stops.1.offset")).toBe("");
+    expect(cssUnit("component.header.plateAlpha")).toBe("");
+  });
   it("no two tokens share one css name", () => {
     const names = [...GROUPS.flatMap((g) => flatten(g.value, g.name)), ...flatten(themes.light, "c")].map(([p]) => cssName(p));
     expect(names.length - new Set(names).size).toBe(0);
