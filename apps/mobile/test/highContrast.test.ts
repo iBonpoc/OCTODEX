@@ -25,3 +25,22 @@ describe("high contrast: the system switch changes the words, not the look", () 
     });
   }
 });
+
+import { accEdgeFrame } from "../src/ui/accEdge";
+
+describe("#2935 п.2: the yellow fill gets its accEdge back only under «Повышение контраста»", () => {
+  it("light: off — no frame (#2363 F36); on — the accEdge frame", () => {
+    expect(accEdgeFrame(themes.light, false).borderWidth).toBe(0);
+    const on = accEdgeFrame(themes.light, true);
+    expect(on.borderWidth).toBeGreaterThan(0);
+    expect(on.borderColor).toBe(themes.light.accEdge);
+  });
+  it("dark: accEdge is transparent — no frame either way", () => {
+    expect(accEdgeFrame(themes.dark, true).borderWidth).toBe(0);
+    expect(accEdgeFrame(themes.dark, false).borderWidth).toBe(0);
+  });
+  it("the Button and the filled IconButton use it", () => {
+    const src = require("node:fs").readFileSync(require("node:path").join(__dirname, "../src/ui/controls.tsx"), "utf8");
+    expect(src.match(/accEdgeFrame\(c, highContrast\)/g)?.length).toBe(2);
+  });
+});
