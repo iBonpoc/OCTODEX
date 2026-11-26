@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { canSeeClientLink } from "@/features/estimateSign";
 import { Platform, View, type ViewStyle } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useIsFocused, useLocalSearchParams } from "expo-router";
 import { haptics } from "@/ui/haptics";
 import { component, motion, radius, rhythm, space, spaceHalf, size } from "@octo/design-tokens";
 import { LINE_GROUPS, activeLines, countedSections, discountBps, ppmToPctText, sectionSubtotals, taxRatePpm, type TaxSettings, type EstimateSection, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
@@ -13,6 +13,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { MAX_OPTIONS, linesFromCatalog, newLine, cloneOption, nextOptionName, recommend, withoutOption, costComplete, estimateTitle, exemptDoc, hasContent, lineMarks, newDoc, optionTotals, shownQty, uid } from "@/features/estimateDoc";
 import { LineMarks } from "@/features/LineMarks";
 import { ClientPicker, itemPrice, kindLabel } from "@/features/estimatePickers";
+import { handoffKey, takeNewClient } from "@/features/estimate/newClientHandoff";
 import { LineRow, rowFieldId, type RowAction, type RowApi } from "@/features/estimate/LineRow";
 import { useRowView } from "@/features/estimate/rowView";
 import { docMoney, rowSum } from "@/features/estimate/rowLine";
@@ -191,6 +192,24 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // number fields of the open row that hold text which is not a number (the line keeps the last right value): "<line>:<field>"
   const badFields = useRef(new Set<string>());
   const [clientPicker, setClientPicker] = useState(!customerId && !startOpen && !tplEdit && !draft);
+  /** the client of the estimate is picked (the sheet's row, or a new client made from it — #2887) */
+  const pickClient = (cid: string, pid: string) => {
+    // a new estimate: Terms nobody touched follow the new client's language; an edited text stays (spec 40 §4)
+    // (a draft saved before too — spec 40 §2.5, map S5: Terms of a draft follow its client; a sent one keeps its text)
+    if ((!existing || existing.status === "draft") && !tplEdit && cid !== customerId && doc.terms !== undefined)
+      setDoc((d) => ({ ...d, terms: store.estimateTermsOnClientChange(d.terms, { from: { customerId, leadId: leadOf }, to: { customerId: cid, leadId: leadOf } }) }));
+    setCustomerId(cid);
+    setPropertyId(pid);
+    setClientPicker(false);
+  };
+  // #2887: back from «Новый клиент» opened in the client sheet — the client made for THIS estimate is its client at once
+  const focused = useIsFocused();
+  useEffect(() => {
+    if (!focused) return;
+    const made = takeNewClient(handoffKey(estimateId));
+    if (made) pickClient(made.customerId, made.propertyId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focused, estimateId]);
   // every CHANGE of a new estimate is kept on the phone; opening it (a template's lines and name) is not a change
   // (#859 №1); nothing worth keeping — no draft (#760)
   const keyOfDrafts = drafts.key;
@@ -1610,13 +1629,10 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       <ClientPicker
         visible={clientPicker}
         onClose={() => setClientPicker(false)}
-        onPick={(cid, pid) => {
-          // a new estimate: Terms nobody touched follow the new client's language; an edited text stays (spec 40 §4)
-          // (a draft saved before too — spec 40 §2.5, map S5: Terms of a draft follow its client; a sent one keeps its text)
-          if ((!existing || existing.status === "draft") && !tplEdit && cid !== customerId && doc.terms !== undefined)
-            setDoc((d) => ({ ...d, terms: store.estimateTermsOnClientChange(d.terms, { from: { customerId, leadId: leadOf }, to: { customerId: cid, leadId: leadOf } }) }));
-          setCustomerId(cid);
-          setPropertyId(pid);
+        onPick={pickClient}
+        // #2887: «⊕ Новый клиент» — the form over this screen (it stays mounted: nothing typed is lost); the sheet goes first
+        onNew={store.role === "tech" ? undefined : () => {
+          afterClient.current = () => router.push(`/client/edit?for=${encodeURIComponent(handoffKey(estimateId))}`);
           setClientPicker(false);
         }}
         onExited={() => {

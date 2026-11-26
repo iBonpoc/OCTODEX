@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
+import { offerNewClient } from "@/features/estimate/newClientHandoff";
 import { useStore } from "@/data/store";
 import { companyState } from "@/features/companySetup";
 import type { BillingAddress, PhoneLabel } from "@/data/types";
@@ -41,7 +42,8 @@ import { EditorScreen } from "@/ui/templates";
  * Without `id` — a new client entered by hand (repeat customer, neighbor, phone call); it is active at once.
  */
 export default function EditClient() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  // `for` (#2887): opened from an estimate's client sheet — once made, the client goes back to that estimate
+  const { id, for: forKey } = useLocalSearchParams<{ id?: string; for?: string }>();
   const store = useStore();
   const { t } = useI18n();
   const toast = useToast();
@@ -102,7 +104,9 @@ export default function EditClient() {
       }
       // all or nothing (DS §15.2): the client and its name parts go back together, or neither
       toast.show(store.online ? t("clients.created", { name: shown }) : t("offline.queued"), store.undoTogether(undos));
-      router.replace(`/client/${r.id}`);
+      // #2887: made from an estimate — back to it (it takes the client and its property); else the new client's card
+      if (offerNewClient(forKey, { customerId: r.id, propertyId: r.propertyId }) && router.canGoBack()) router.back();
+      else router.replace(`/client/${r.id}`);
       return;
     }
     // «Без налога» (П-2a): only when it changed — a signed document never changes, new ones get the exempt profile
