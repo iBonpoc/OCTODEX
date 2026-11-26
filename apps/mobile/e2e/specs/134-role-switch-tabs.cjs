@@ -14,8 +14,11 @@ exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width >= 820;
   const path = () => new URL(p.url()).pathname;
+  // the role is a field with a menu in the profile (#2829): open it, pick the role
+  const KEY = { Мастер: "tech", Директор: "director", Диспетчер: "dispatcher", Продажи: "sales" };
   const role = async (name) => {
-    await p.getByText(name, { exact: true }).locator("visible=true").first().click();
+    await p.getByTestId("profile-role-button").locator("visible=true").first().click();
+    await p.getByTestId(`profile-role-${KEY[name]}`).locator("visible=true").last().click();
     await p.waitForTimeout(800);
   };
   // every tab, in an order that leaves each screen for another; «Главная» is the role's home. v2: the tabs are

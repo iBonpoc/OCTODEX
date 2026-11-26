@@ -12,7 +12,7 @@ describe("fitsSegment — a choice in one line, or a field with a menu (#1095)",
     expect(fitsSegment(["A", "A".repeat(SEGMENT_MAX_LABEL)])).toBe(true);
     expect(fitsSegment(["A", "A".repeat(SEGMENT_MAX_LABEL + 1)])).toBe(false);
   });
-  it("the sum counts the padding: four 10-letter options overflow a phone card (4×70 + 4×26 = 384 > 320), three do not (288)", () => {
+  it("the sum counts the padding: four 10-letter options overflow a phone card (4×80 + 4×26 = 424 > 320), three do not (318)", () => {
     expect(fitsSegment(Array(4).fill("1234567890"))).toBe(false);
     expect(fitsSegment(Array(3).fill("1234567890"))).toBe(true);
   });
@@ -25,6 +25,11 @@ describe("fitsSegment — a choice in one line, or a field with a menu (#1095)",
     expect(fitsSegment(["Instalación", "Reparación", "Limpieza de canaletas"])).toBe(false);
     expect(fitsSegment(["4512 Ventura Canyon Ave", "Nueva dirección"])).toBe(false);
     expect(fitsSegment(["Como el objeto", "Otra dirección"])).toBe(true);
+  });
+  // #2829: 7 px a letter said these fit (314 ≤ 320); measured at 13/600 they take 335 and were cut to «Диспет…», «Прода…»
+  it("#2829: the four roles do not fit one line on a phone (Russian is about 8 px a letter)", () => {
+    expect(fitsSegment(["Мастер", "Диспетчер", "Директор", "Продажи"])).toBe(false);
+    expect(fitsSegment(["Мастер", "Директор"])).toBe(true);
   });
   it("nothing to choose from is not a segment", () => {
     expect(fitsSegment([])).toBe(false);

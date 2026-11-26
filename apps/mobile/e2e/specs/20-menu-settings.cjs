@@ -25,7 +25,7 @@ exports.run = async (h) => {
   h.expect(p.url().endsWith("/settings"), `settings opened: ${p.url()}`);
   await h.expectText(/Вид и язык[\s\S]*Подсказки[\s\S]*Для проверки/, "settings groups in order");
   const app = await h.text();
-  h.expect(!/Аккаунт/.test(app) && !/Моя подпись для договоров/.test(app) && (await p.getByRole("tab", { name: "Мастер", exact: true }).count()) === 0, "no account, signature or role in «Настройки приложения»");
+  h.expect(!/Аккаунт/.test(app) && !/Моя подпись для договоров/.test(app) && (await p.getByTestId("profile-role").count()) === 0, "no account, signature or role in «Настройки приложения»");
 
   // theme switch works from Settings
   await p.getByRole("tab", { name: "Светлая", exact: true }).click(); await p.waitForTimeout(400);
@@ -42,11 +42,11 @@ exports.run = async (h) => {
 
   // the role switch (several roles) moves to that role's home — it is in the profile now
   await h.go("/settings/profile");
-  await p.getByRole("tab", { name: "Мастер", exact: true }).click(); await p.waitForTimeout(400);
+  await p.getByTestId("profile-role-button").locator("visible=true").first().click(); await p.getByTestId("profile-role-tech").locator("visible=true").last().click(); await p.waitForTimeout(400);
   await p.waitForTimeout(500);
   h.expect(p.url().endsWith("/visits"), `tech home: ${p.url()}`);
   await h.go("/settings/profile");
-  await p.getByRole("tab", { name: "Директор", exact: true }).click(); await p.waitForTimeout(400);
+  await p.getByTestId("profile-role-button").locator("visible=true").first().click(); await p.getByTestId("profile-role-director").locator("visible=true").last().click(); await p.waitForTimeout(400);
   await p.waitForTimeout(500);
   h.expect(p.url().endsWith("/today"), `director home: ${p.url()}`);
 
