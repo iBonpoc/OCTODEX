@@ -24,7 +24,7 @@ describe("the row of the list", () => {
     expect(leadRowLine(lead({ service: "Water heater" }), turn, { t, day })).toBe("Water heater · Encino");
   });
   it("no wait pill when it is not our reply", () => {
-    expect(leadWaitLabel({ kind: "wait", days: 3, action: "none", status: "neutral" }, t)).toBeNull();
+    expect(leadWaitLabel({ kind: "wait", days: 3, action: "none", status: "neutral", about: "estimate" }, t)).toBeNull();
   });
   it("in work: where it stands first", () => {
     const turn: LeadTurn = { kind: "noStep", status: "warn" };
@@ -50,8 +50,13 @@ describe("the one main step (object-cards «Порядок главной»)", (
   });
   it("no step → «Что дальше?»; waiting → remind, then «Потерян или подождать?»", () => {
     expect(leadStepOf(lead({ status: "replied" }), { kind: "noStep", status: "warn" }, o)).toBe("next");
-    expect(leadStepOf(lead({ status: "estimate_sent" }), { kind: "wait", days: 3, action: "remind", status: "warn" }, o)).toBe("remind");
-    expect(leadStepOf(lead({ status: "estimate_sent" }), { kind: "wait", days: 20, action: "lostOrWait", status: "warn" }, o)).toBe("lowOrWait");
+    expect(leadStepOf(lead({ status: "estimate_sent" }), { kind: "wait", days: 3, action: "remind", status: "warn", about: "estimate" }, o)).toBe("remind");
+    expect(leadStepOf(lead({ status: "estimate_sent" }), { kind: "wait", days: 20, action: "lostOrWait", status: "warn", about: "estimate" }, o)).toBe("lowOrWait");
+  });
+  it("#2760: waiting after only our message (no estimate) → «Что дальше?», never «Напомнить про смету»", () => {
+    for (const action of ["none", "remind"] as const)
+      expect(leadStepOf(lead({ status: "replied" }), { kind: "wait", days: 0, action, status: "neutral", about: "message" }, o)).toBe("next");
+    expect(leadStepOf(lead({ status: "replied" }), { kind: "wait", days: 20, action: "lostOrWait", status: "warn", about: "message" }, o)).toBe("lowOrWait");
   });
   it("booked: the office makes the estimate, the tech goes to the tasks", () => {
     const turn: LeadTurn = { kind: "step", status: "warn" };
@@ -70,6 +75,6 @@ describe("the wait in the row (wireframes-v2 №16, audit 2.3)", () => {
   it("in time — the first word of the line; late — the pill; not our reply — nowhere", () => {
     expect(leadWaitPlace({ kind: "reply", minutes: 4, attempts: 0, status: "info" })).toBe("line");
     expect(leadWaitPlace({ kind: "reply", minutes: 22, attempts: 0, status: "bad" })).toBe("pill");
-    expect(leadWaitPlace({ kind: "wait", days: 3, action: "none", status: "neutral" })).toBeNull();
+    expect(leadWaitPlace({ kind: "wait", days: 3, action: "none", status: "neutral", about: "estimate" })).toBeNull();
   });
 });

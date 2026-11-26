@@ -5531,6 +5531,7 @@ export const es: Dict = {
   "proto.leads.why.next": "Sin siguiente paso: elija uno",
   "proto.leads.why.noService": "No atendemos a este cliente: vea su ficha",
   "proto.leads.why.won": "El cliente potencial ya es cliente",
+  "proto.leads.why.waitMessage": "Ya respondió — esperamos al cliente. Elija el siguiente paso",
   "proto.leads.why.remind": "Presupuesto con el cliente {n} d sin respuesta",
   "proto.leads.why.reply": "El cliente espera {time}: los primeros {n} min deciden",
   "proto.leads.wroteIn": "escribió por {source}",
