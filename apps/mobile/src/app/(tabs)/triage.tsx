@@ -83,9 +83,20 @@ export default function Triage() {
           <>
             {(() => {
               const rej = rejectedOps.find((x) => x.id === it.refId);
-              return rej && rejChoice.can(rej) ? <Button testID={`rejected-choose-${rej.id}`} label={t("est.rej.choice.open")} icon="copy" variant="secondary" onPress={() => void rejChoice.choose(rej)} /> : null;
+              // #2715 Ж5: the main step is what to do with the edits (the estimate it opens is signed and has none of them)
+              return rej && rejChoice.can(rej) ? <Button testID={`rejected-choose-${rej.id}`} label={t("est.rej.choice.open")} onPress={() => void rejChoice.choose(rej)} /> : null;
             })()}
-            {canOpen(role, attentionHref(it)) ? <Button label={t("sync.rejected.open")} icon="chevronRight" onPress={() => router.push(attentionHref(it) as Href)} /> : null}
+            {canOpen(role, attentionHref(it)) ? (
+              <Button
+                label={t("sync.rejected.open")}
+                icon="chevronRight"
+                variant={(() => {
+                  const rej = rejectedOps.find((x) => x.id === it.refId);
+                  return rej && rejChoice.can(rej) ? "secondary" : undefined;
+                })()}
+                onPress={() => router.push(attentionHref(it) as Href)}
+              />
+            ) : null}
             {/* #2674 Б3: the edits are kept on this card — «Понятно» would throw them away without a word: it says «Сбросить» */}
             {(() => {
               const kept = !!rejectedOps.find((x) => x.id === it.refId)?.estimateEdit;

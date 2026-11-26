@@ -6,7 +6,7 @@
 import { describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { canChooseSignedMeanwhile, runSignedMeanwhileChoice, signedMeanwhileAsk, SIGNED_MEANWHILE_KEYS } from "../src/features/signedMeanwhileModel";
+import { canChooseSignedMeanwhile, chooseSignedMeanwhile, runSignedMeanwhileChoice, signedMeanwhileAsk, SIGNED_MEANWHILE_KEYS, type ChoiceDeps } from "../src/features/signedMeanwhileModel";
 import { buildAttention, rejectedHint } from "../src/features/attention";
 import type { DB, Role } from "../src/data/types";
 import { makeSeed } from "../src/data/seed";
@@ -174,5 +174,59 @@ describe("Б5: витрина «Окна» показывает ConfirmDialog и
     const w = src("features/showcase/Windows.tsx");
     expect(w).toContain("showcase-confirm3");
     expect(w).toContain('tone: "primary"');
+  });
+});
+
+describe("#2715: хвосты проверки #2674", () => {
+  const dict = (d: unknown) => d as Record<string, string>;
+  it("Ж6: кнопки окна — те же слова, что окно того же случая в редакторе (k1.copy / k1.reset), RU/EN/ES; кнопка карточки — «Сохранить правки…»", () => {
+    for (const d of [ru, en, es].map(dict)) {
+      expect(d["est.rej.choice.copy"]).toBe(d["k1.copy"]);
+      expect(d["est.rej.choice.reset"]).toBe(d["k1.reset"]);
+    }
+    expect(dict(ru)["est.rej.choice.open"]).toBe("Сохранить правки…");
+  });
+  it("Ж7: после копии тост называет смету и следующий шаг — отправить клиенту; номер неизвестен — прежний тост", () => {
+    const toast = vi.fn();
+    const d = { copyRejectedEstimate: () => ({ estimateId: "n1", undo: localUndo(() => {}) }), dismissRejected: () => localUndo(() => {}), toast, open: () => {}, online: true, t, signedNumber: "EST-0006" } as ChoiceDeps;
+    runSignedMeanwhileChoice(SIGNED_MEANWHILE_KEYS.copy, base, d);
+    expect(toast.mock.calls[0]![0]).toBe('est.rej.choice.copiedOf:{"n":"EST-0006"}');
+    for (const x of [ru, en, es].map(dict)) expect(x["est.rej.choice.copiedOf"]).toContain("{n}");
+    expect(dict(ru)["est.rej.choice.copiedOf"]).toMatch(/отправьте/);
+  });
+  it("М4: что делать, читается ПОСЛЕ ответа в окне — сеть пропала, пока окно было открыто → тост «без сети»", async () => {
+    let answer: (k: string | null) => void = () => {};
+    const ask = () => new Promise<string | null>((res) => (answer = res));
+    const toast = vi.fn();
+    let online = true;
+    const deps = () => ({ copyRejectedEstimate: () => ({ estimateId: "n1", undo: localUndo(() => {}) }), dismissRejected: () => localUndo(() => {}), toast, open: () => {}, online, t }) as ChoiceDeps;
+    const done = chooseSignedMeanwhile(ask, signedMeanwhileAsk(t, ""), base, deps);
+    online = false; // the network went while the window was open
+    answer(SIGNED_MEANWHILE_KEYS.copy);
+    await done;
+    expect(toast.mock.calls[0]![0]).toBe("offline.queued");
+  });
+  it("Ж5 + находка «Разбор дел»: главная (жёлтая) — кнопка выбора по правкам и в «Требует внимания», и в профиле; «Открыть» при ней серая; значка копии нет", () => {
+    for (const f of ["app/(tabs)/triage.tsx", "features/StuckOps.tsx"]) {
+      // the tag of a Button up to its `/>` (the guard oneAccent.test.ts counts a Button with no `variant` as the filled one)
+      const tag = (needle: string) => {
+        const s = src(f);
+        const at = s.lastIndexOf("<Button", s.indexOf(needle));
+        return s.slice(at, s.indexOf("/>", s.indexOf(needle)));
+      };
+      const choose = tag("rejected-choose-");
+      expect(choose, `${f}: «Сохранить правки…» — главная`).not.toMatch(/\bvariant=/);
+      expect(choose, f).not.toMatch(/icon="copy"/);
+      expect(tag('"sync.rejected.open"'), f).toMatch(/variant=/);
+    }
+    // in «Требует внимания» «Открыть» stays the main step of a card that has no choice (the other refusals)
+    expect(src("app/(tabs)/triage.tsx")).toMatch(/rejChoice\.can\(rej\) \? "secondary" : undefined/);
+  });
+  it("М3: в профиле одно окно на экран — хук выбора в StuckOps, а не в каждой карточке", () => {
+    const s = src("features/StuckOps.tsx");
+    expect(s.match(/useRejectedEstimateChoice\(\)/g)?.length).toBe(1);
+    expect(s.match(/\{choice\.dialog\}/g)?.length).toBe(1);
+    const card = s.slice(s.indexOf("function RejectedCard"), s.indexOf("export function StuckOps"));
+    expect(card).not.toMatch(/useRejectedEstimateChoice\(\)|choice\.dialog/);
   });
 });
