@@ -11,6 +11,7 @@ import { View } from "react-native";
 import { space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { MainStep, type MainStepTotal } from "../mainStep";
+import { Button } from "../controls";
 import { Screen, useFooterShown } from "../surfaces";
 import { ConfirmSheet, MoreButton, TemplateFrame } from "./parts";
 import { SECOND_KEY, moreItems, templateLayout } from "./templateRules";
@@ -49,7 +50,9 @@ export function EditorScreen(p: EditorScreenProps) {
   const secondShown = layout.bottom.includes("second") || layout.body.includes("second");
   const step = <MainStep placement="bar" main={p.save} second={secondShown ? p.second : null} total={p.total} />;
   const back = () => (p.dirty ? setLeave(true) : p.back());
-  const right = items.length ? <MoreButton items={items} onMore={onMore} testID={`${p.testID}-more`} /> : null;
+  // PROTOTYPE #2851 (б): iOS «Готово» top right; the pinned bottom step goes
+  const done = <Button label={t("st.done")} size="sm" variant="ghost" onPress={p.save.onPress} testID={`${p.testID}-done`} />;
+  const right = <>{done}{items.length ? <MoreButton items={items} onMore={onMore} testID={`${p.testID}-more`} /> : null}</>;
   const body = (
     <View style={{ gap: space[4] }}>
       {p.children}
@@ -65,7 +68,7 @@ export function EditorScreen(p: EditorScreenProps) {
           {body}
         </TemplateFrame>
       ) : (
-        <Screen testID={p.testID} title={p.title} head={{ kind: "editor", state: p.state }} back={back} right={right} onScrollBegin={p.onScrollBegin} form footer={layout.bottom.includes("main") ? step : undefined}>
+        <Screen testID={p.testID} title={p.title} head={{ kind: "editor", state: p.state }} back={back} right={right} onScrollBegin={p.onScrollBegin} form>
           {body}
         </Screen>
       )}
