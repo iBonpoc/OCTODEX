@@ -6,7 +6,7 @@
  * С4 форма открыта сама (без ключа) — ничего не оставляет.
  */
 import { describe, expect, it } from "vitest";
-import { handoffKey, offerNewClient, takeNewClient } from "../src/features/estimate/newClientHandoff";
+import { handoffKey, offerNewClient, splitTyped, takeNewClient } from "../src/features/estimate/newClientHandoff";
 
 describe("newClientHandoff (#2887)", () => {
   it("С1: the estimate takes the client made for it, with its property", () => {
@@ -31,5 +31,24 @@ describe("newClientHandoff (#2887)", () => {
   });
   it("the key is the estimate's own", () => {
     expect(handoffKey("abc")).toBe("estimate:abc");
+  });
+});
+
+describe("splitTyped — the sheet's search goes into the new client's form (#2887, crm-reviewer №2)", () => {
+  it("a name: the first word the first name, the rest the last name", () => {
+    expect(splitTyped("Linda Alv")).toEqual({ first: "Linda", last: "Alv", phone: "" });
+    expect(splitTyped("  Mary  Ann  Lee ")).toEqual({ first: "Mary", last: "Ann Lee", phone: "" });
+    expect(splitTyped("Kim")).toEqual({ first: "Kim", last: "", phone: "" });
+  });
+  it("digits: the phone", () => {
+    expect(splitTyped("(818) 555-0177")).toEqual({ first: "", last: "", phone: "(818) 555-0177" });
+    expect(splitTyped("8185550177")).toEqual({ first: "", last: "", phone: "8185550177" });
+  });
+  it("nothing typed: an empty form", () => {
+    expect(splitTyped("")).toEqual({ first: "", last: "", phone: "" });
+    expect(splitTyped(undefined)).toEqual({ first: "", last: "", phone: "" });
+  });
+  it("a street number with words is a name search, not a phone", () => {
+    expect(splitTyped("12 Oak").phone).toBe("");
   });
 });

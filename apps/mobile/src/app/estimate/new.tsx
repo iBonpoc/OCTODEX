@@ -141,6 +141,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const startInEditor = useRef(askedTemplates && !!draft);
   /** …or once the client is chosen, when the template was picked before the client («Сметы → ＋ → Из шаблона…») */
   const afterClient = useRef<(() => void) | null>(null);
+  // #2887: what was to follow the pick, kept while the new client's form is open
+  const pendingAfterNew = useRef<(() => void) | null>(null);
   /** #1304: a new estimate starts with the company's Terms in its client's language (a template never carries them, spec 40 §7);
    *  an estimate already saved keeps what it has — an old one without the key goes on showing the default (no key added) */
   /** the lead the estimate is for: its own (opened by id), or the one it is made from — /p/, the PDF and the card read the same */
@@ -207,7 +209,16 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   useEffect(() => {
     if (!focused) return;
     const made = takeNewClient(handoffKey(estimateId));
-    if (made) pickClient(made.customerId, made.propertyId);
+    if (!made) {
+      // back from the form without a client: nothing is to follow
+      pendingAfterNew.current = null;
+      return;
+    }
+    pickClient(made.customerId, made.propertyId);
+    const next = pendingAfterNew.current;
+    pendingAfterNew.current = null;
+    // two frames on, as after the sheet: the focus is back on this screen first
+    if (next) requestAnimationFrame(() => requestAnimationFrame(next));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focused, estimateId]);
   // every CHANGE of a new estimate is kept on the phone; opening it (a template's lines and name) is not a change
@@ -1631,8 +1642,12 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         onClose={() => setClientPicker(false)}
         onPick={pickClient}
         // #2887: «⊕ Новый клиент» — the form over this screen (it stays mounted: nothing typed is lost); the sheet goes first
-        onNew={store.role === "tech" ? undefined : () => {
-          afterClient.current = () => router.push(`/client/edit?for=${encodeURIComponent(handoffKey(estimateId))}`);
+        // not for the tech (no client form), not for an estimate of a lead (its client is made from the lead — crm-reviewer №6)
+        onNew={store.role === "tech" || leadOf ? undefined : (typed) => {
+          // what was to follow the pick (the cursor to the first quantity, «Из шаблона…») follows the new client instead (№3)
+          pendingAfterNew.current = afterClient.current;
+          const q = typed ? `&name=${encodeURIComponent(typed)}` : "";
+          afterClient.current = () => router.push(`/client/edit?for=${encodeURIComponent(handoffKey(estimateId))}${q}`);
           setClientPicker(false);
         }}
         onExited={() => {

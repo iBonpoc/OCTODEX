@@ -68,7 +68,7 @@ export function CatalogPicker({ visible, onClose, onPick, exclude }: { visible: 
  * Pick a client and one of their properties. `onNew` (#2887): «⊕ Новый клиент» the first row over the list (as «New Contact» in
  * iOS; ActionRow, DS §9 А14а) — the client is made without leaving the estimate.
  */
-export function ClientPicker({ visible, onClose, onPick, onNew, onExited }: { visible: boolean; onClose: () => void; onPick: (customerId: string, propertyId: string) => void; onNew?: () => void; onExited?: () => void }) {
+export function ClientPicker({ visible, onClose, onPick, onNew, onExited }: { visible: boolean; onClose: () => void; onPick: (customerId: string, propertyId: string) => void; onNew?: (typed: string) => void; onExited?: () => void }) {
   const { db } = useStore();
   const { t } = useI18n();
   const [q, setQ] = useState("");
@@ -80,7 +80,7 @@ export function ClientPicker({ visible, onClose, onPick, onNew, onExited }: { vi
       <View style={{ gap: space[3] }}>
         <TextField type="search" value={q} onChangeText={setQ} placeholder={t("clients.title")} icon="search" />
         <SheetScroll style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
-          {onNew ? <ActionRow icon="plusCircle" label={t("clients.new")} onPress={onNew} testID="est-client-new" /> : null}
+          {onNew ? <ActionRow icon="plusCircle" label={t("clients.new")} onPress={() => onNew(q.trim())} testID="est-client-new" /> : null}
           {onNew ? <Divider /> : null}
           {rows.length === 0 ? <StatusChip status="neutral" label={t("clients.empty")} /> : null}
           {rows.map(({ p, c }, i) => (

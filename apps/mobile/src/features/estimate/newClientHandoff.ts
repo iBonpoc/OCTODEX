@@ -30,3 +30,16 @@ export function takeNewClient(key: string): NewClient | null {
   waiting.delete(key);
   return c;
 }
+
+/**
+ * What was typed in the client sheet's search, for the new client's form (crm-reviewer №2, as iOS «Create New Contact» from
+ * what is typed): mostly digits — the phone; anything else — the name, the first word the first name, the rest the last name.
+ */
+export function splitTyped(q: string | undefined): { first: string; last: string; phone: string } {
+  const s = (q ?? "").trim().replace(/\s+/g, " ");
+  if (!s) return { first: "", last: "", phone: "" };
+  const digits = s.replace(/\D/g, "");
+  if (digits.length >= 3 && digits.length >= s.replace(/[\s()+.-]/g, "").length) return { first: "", last: "", phone: s };
+  const [first, ...rest] = s.split(" ");
+  return { first, last: rest.join(" "), phone: "" };
+}
