@@ -1578,7 +1578,7 @@ export function StoreProvider({
     void refresh();
     return true;
   };
-  const rejectedOps = mode === "cloud" ? rejectedMine(rejected, who) : [];
+  const rejectedOps = rejectedMine(rejected, who ?? { userId: "demo", companyId: "demo" }); // PROTO #2822: demo shows refusals (not for main)
   const dismissRejected = (id: ID): Undo => {
     const was = rejected.find((x) => x.id === id);
     setRejected((prev) => prev.filter((x) => x.id !== id));
