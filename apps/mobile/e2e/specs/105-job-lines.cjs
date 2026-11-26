@@ -56,7 +56,7 @@ exports.run = async (h) => {
   await p.getByText("Drywall patch", { exact: true }).locator("visible=true").first().click(); await p.waitForTimeout(400);
   await h.sheet().getByRole("button", { name: "Удалить позицию" }).click(); await p.waitForTimeout(400);
   h.expect((await job()).amountCents === 18000, "180.00 ≥ 150.00: the line is removed");
-  await p.getByRole("button", { name: /Отменить/ }).first().click(); await p.waitForTimeout(500);
+  await p.getByTestId("toast-undo").first().click(); await p.waitForTimeout(500);
   h.expect((await h.db()).jobLines.filter((l) => l.jobId === "j3").length === 2, "«Отменить» puts the line back");
   h.expect((await job()).amountCents === 22998, "and the total");
 

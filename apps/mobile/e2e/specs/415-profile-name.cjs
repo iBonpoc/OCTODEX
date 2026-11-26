@@ -34,7 +34,7 @@ exports.run = async (h) => {
   h.expect((await vis("profile-name-save").count()) === 0, "saved: no «Сохранить»");
 
   // «Отменить» on the toast ignores taps for the first moment (toastArmMs, e2e 121): tap until it takes the name back
-  const undo = p.getByRole("button", { name: "Отменить", exact: true }).last();
+  const undo = p.getByTestId("toast-undo").last();
   let back = false;
   for (let i = 0; i < 12 && !back; i++) {
     if ((await undo.count()) > 0) await undo.click({ timeout: 1000 }).catch(() => {});

@@ -77,7 +77,7 @@ exports.run = async (h) => {
   await waitDs(1, "the downspout is taken off");
   const withoutDs = (await viewTotal(p)).total;
   h.expect(withoutDs < withDs, `…and taking one off lowers it (${withDs} → ${withoutDs})`);
-  await p.getByRole("button", { name: /Отменить/ }).locator("visible=true").last().waitFor({ timeout: 3000 }); // the toast: it is undoable
+  await p.getByTestId("toast-undo").locator("visible=true").last().waitFor({ timeout: 3000 }); // the toast: it is undoable
   await stroke([b.x + b.width * 0.55, y3], [b.x + b.width * 0.8, y3 - 4]); // another change on the same row
   await p.waitForFunction((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt).length >= 4, KEY, { timeout: 8000 });
   const after = await dsOf();

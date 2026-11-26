@@ -1,5 +1,8 @@
 # ADR-008. Конвейер дизайн-токенов
 
+Статус: **заменён, в архиве** (25.11.2026, опись `docs/notes/2026-11-25-docs-inspection.md`, раздел `docs/adr/*`). Не правится.
+Чем заменён: дизайн-система «Наряд» — источник токенов `design/naryad-ds/tokens/*.css`, зеркало в TS `packages/design-tokens`, сторож `packages/design-tokens/test/mirror.test.ts` (правило 1 `CLAUDE.md`); вид и поведение — `design/naryad-ds/DESIGN-SYSTEM.md`, витрина — в приложении (Настройки → «Дизайн-система»). Style Dictionary, DTCG JSON, Tailwind и Style Lab не используются.
+
 - **Статус:** Proposed — needs founder/tech review
 - **Дата:** 03.11.2026
 - **Связано:** `09-design-system.md` («Токены: всё через них»), ADR-002, Style Lab (`design/*.html`)

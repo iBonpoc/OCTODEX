@@ -124,7 +124,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await count("line")) === 1 && (await count("circle")) === 0, "the run and its downspout are gone");
   // the toast ignores a tap in its first moment (src/ui/toastArm.ts: the second tap of a double tap is not «Отменить»)
   await p.waitForTimeout(600);
-  await p.getByRole("button", { name: /Отменить/ }).locator("visible=true").last().click();
+  await p.getByTestId("toast-undo").locator("visible=true").last().click();
   await waitFor(async () => (await count("line")) >= 2 && (await count("circle")) === 1, "«Отменить» brings them back");
   // the canvas's own «назад» / «вперёд»
   await tid("draw-undo").getByRole("button").click();

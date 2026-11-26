@@ -81,7 +81,7 @@ exports.run = async (h) => {
   await h.expectText(/Шаблон в архиве/, "the toast");
   for (let i = 0; i < 20 && !(await h.db()).checklistTemplates.find((x) => x.id === tpl.id).archivedAt; i++) await p.waitForTimeout(150);
   h.expect(!!(await h.db()).checklistTemplates.find((x) => x.id === tpl.id).archivedAt, "archived");
-  await p.getByRole("button", { name: "Отменить", exact: true }).last().click();
+  await p.getByTestId("toast-undo").last().click();
   for (let i = 0; i < 20 && (await h.db()).checklistTemplates.find((x) => x.id === tpl.id).archivedAt; i++) await p.waitForTimeout(150);
   h.expect(!(await h.db()).checklistTemplates.find((x) => x.id === tpl.id).archivedAt, "«Отменить» brings it back");
 
