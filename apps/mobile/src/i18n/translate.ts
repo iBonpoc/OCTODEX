@@ -2,6 +2,7 @@
  * Translation without React: the app's own language (useI18n) and the language of what goes to a client (tFor),
  * which are different (founder's rule 05.11.2026). Pure — tested in test/docLanguage.test.ts.
  */
+import { fmtUsd } from "@octo/estimating-engine";
 import { ru, type DictKey, type Dict } from "./ru";
 import { en } from "./en";
 import { es } from "./es";
@@ -57,13 +58,10 @@ export function durationText(lang: Lang, min: number): string {
   return m % 60 === 0 ? translate(lang, "time.h", { h: m / 60 }) : translate(lang, "time.hmin", { h: Math.floor(m / 60), m: m % 60 });
 }
 
-/** Money in US format (rule 7): «$1,234» when whole, «$1,234.56» with cents; a negative amount takes the minus sign «−» (U+2212, DS §4.5), not a hyphen. */
-const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-const usdCents = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+/** Money in US format (rule 7), ALWAYS with cents (founder #2672: «сумма должна быть с центами», #2888): «$1,840.00», «$772.36»;
+ *  a negative amount takes the minus sign «−» (U+2212, DS §4.5), not a hyphen. The engine's `fmtUsd` — one format for every screen. */
 export function moneyText(cents: number): string {
-  const a = Math.abs(cents);
-  const s = a % 100 === 0 ? usd.format(a / 100) : usdCents.format(a / 100);
-  return cents < 0 ? `−${s}` : s;
+  return fmtUsd(cents);
 }
 /** A signed number for a percent or a count: «−218.2», not «-218.2» (the minus sign U+2212, DS §4.5) */
 export const signedText = (n: number): string => (n < 0 ? `−${String(-n)}` : String(n));
