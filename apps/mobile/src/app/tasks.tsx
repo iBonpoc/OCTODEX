@@ -75,6 +75,8 @@ export default function Tasks() {
       <ListScreen<Task>
         testID="tasks"
         title={t("task.title")}
+        // DS §12.13 «Шапка» (#2841, ревью design/crm): no number in the title, no chips — the count is the line under it
+        subtitle={t("task.openN", { n: openN })}
         create={{ a11y: t("task.new"), items: [{ key: "task", label: t("task.new"), icon: "check", testID: "tasks-create-new" }] }}
         onCreate={newTask}
         search={{ placeholder: t("w6.task.search"), value: q, onChange: setQ }}

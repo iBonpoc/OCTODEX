@@ -69,6 +69,13 @@ export const en: Dict = {
   "fab.list.plan": "Schedule",
   "fab.list.calls": "Call",
   "fab.list.messages": "Message",
+  // DS §12.13 «Шапка» (#2841, ревью design/crm): «＋» has no word — VoiceOver says the action
+  "fab.a11y.clients": "New client",
+  "fab.a11y.tasks": "New task",
+  "fab.a11y.plan": "Add to schedule",
+  "fab.a11y.calls": "New call",
+  "fab.a11y.messages": "New message",
+  "money.newExpense": "New expense",
   // #1395: the short object on the card of an address, two buttons in a row on the phone («＋ Смета», not the long path.*New)
   "fab.obj.estimate": "Estimate",
   "fab.obj.job": "Job",
@@ -1683,6 +1690,8 @@ export const en: Dict = {
   "task.saved": "Task saved",
   "task.noDate": "No due date",
   "task.none": "No open tasks",
+  // DS §12.13 «Шапка» (#2841, ревью design/crm): the count of a list with no chips — a line under the title
+  "task.openN": "Open: {n}",
   "task.overdue": "Overdue",
   "task.what": "What to do",
   "task.whatPh": "e.g. call back and confirm the scope",

@@ -155,3 +155,12 @@ export function backLabel(label: string, href: string | undefined): { label: str
   const k = BACK_KIND.find(([re]) => re.test(href))?.[1];
   return k ? { kind: k } : { label };
 }
+
+/** DS §12.13 «Шапка» (#2841, ревью design/crm): a visit is named by its day — «Выезд · Fri, Nov 6» (the app's day, i18n `day`) */
+export function visitHeadTitle(kindWord: string, dayText: string): string {
+  return `${kindWord} · ${dayText}`;
+}
+/** the whole line under an object's name: what is known, joined by « · » («8:30–12:30 · Alex · Sarah Mitchell») — never cut */
+export function visitHeadLine(parts: (string | undefined | null | false)[]): string {
+  return parts.filter(Boolean).join(" · ");
+}

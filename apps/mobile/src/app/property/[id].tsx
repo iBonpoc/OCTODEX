@@ -12,7 +12,7 @@ import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
-import { canSeeGateCode, canSeeProperty, propertyMapQuery, propertyNow, propertyTitle } from "@/features/properties";
+import { canSeeGateCode, canSeeProperty, propertyMapQuery, propertyHead, propertyNow, propertyTitle } from "@/features/properties";
 import { isPropertyRow, propertyCounts, propertyRecords, propertyRowsFor, type PropertyRow } from "@/features/propertyRows";
 import { PropertySection, propertyRowLabel, RowCount } from "@/features/client/PropertySections";
 import { AddObject } from "@/features/client/AddObject";
@@ -247,9 +247,11 @@ export default function PropertyScreen() {
 
   return (
     <Screen
-      // DS §12.13 «Шапка» (#2841): the object is named by itself — its address; the kind word and the city right of the rule
-      title={propertyTitle(p)}
-      head={{ kind: "object", sub: { line1: t("prop.card"), line2: p.city || undefined } }}
+      // DS §12.13 «Шапка» (#2841, ревью design/crm): the object is named by its street, one line fitted like any title; the city,
+      // state and zip — a whole line under it (no column right of the rule, no «…»)
+      title={propertyHead(p).title}
+      subtitle={propertyHead(p).subtitle}
+      head={{ kind: "object" }}
       back={back}
     >
       {overview}

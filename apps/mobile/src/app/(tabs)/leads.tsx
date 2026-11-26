@@ -92,7 +92,8 @@ function LeadsList() {
   const wanted = (OLD[kept] ?? kept) as Chip;
   const chip: Chip = chips.includes(wanted) ? wanted : "open";
   const label = (c: Chip) => {
-    const n = c === "archive" || c === "open" ? 0 : pass[c]().length;
+    // «Все N» (DS §12.13 «Шапка», ревью design/crm #2841): the title has no number — the first chip says how many, as «Клиенты»
+    const n = c === "archive" ? 0 : pass[c]().length;
     return n ? `${t(CHIP_LABEL[c])} ${n}` : t(CHIP_LABEL[c]);
   };
   const list = pass[chip]().sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));

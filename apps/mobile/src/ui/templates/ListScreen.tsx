@@ -23,6 +23,8 @@ import type { CreateAction, IconAction, MoreAction } from "./types";
 export interface ListScreenProps<T> {
   /** the menu word of the list, exactly — no number (DS §12.13 «Шапка», #2841: the number is in the chip «Все N» and the group titles) */
   title: string;
+  /** a list with no chips says its count here — a line under the title («Открытых: 5», ревью design/crm #2841) */
+  subtitle?: string;
   headerIcons?: IconAction[];
   create?: CreateAction;
   onCreate?: (key: string) => void;
@@ -138,6 +140,7 @@ export function ListScreen<T>(p: ListScreenProps<T>) {
     <Screen
       testID={p.testID}
       title={title}
+      subtitle={p.subtitle}
       back={p.back}
       headerIcons={icons}
       right={tail}

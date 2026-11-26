@@ -68,6 +68,13 @@ export const ru = {
   "fab.list.plan": "В план",
   "fab.list.calls": "Звонок",
   "fab.list.messages": "Сообщение",
+  // DS §12.13 «Шапка» (#2841, ревью design/crm): «＋» has no word — VoiceOver says the action
+  "fab.a11y.clients": "Новый клиент",
+  "fab.a11y.tasks": "Новая задача",
+  "fab.a11y.plan": "Добавить в план",
+  "fab.a11y.calls": "Новый звонок",
+  "fab.a11y.messages": "Новое сообщение",
+  "money.newExpense": "Новый расход",
   // #1395: the short object on the card of an address, two buttons in a row on the phone («＋ Смета», not the long path.*New)
   "fab.obj.estimate": "Смета",
   "fab.obj.job": "Работа",
@@ -1682,6 +1689,8 @@ export const ru = {
   "task.saved": "Задача сохранена",
   "task.noDate": "Без срока",
   "task.none": "Открытых задач нет",
+  // DS §12.13 «Шапка» (#2841, ревью design/crm): the count of a list with no chips — a line under the title
+  "task.openN": "Открытых: {n}",
   "task.overdue": "Просрочено",
   "task.what": "Что сделать",
   "task.whatPh": "Например: перезвонить и уточнить объём",

@@ -1,5 +1,4 @@
 import { visitDueCents } from "@/features/visitDue";
-import { HeaderButton } from "@/ui/headerIcon";
 import { lateAfterOf } from "@/features/scheduleSettings";
 import { useState } from "react";
 import { Platform, View } from "react-native";
@@ -129,7 +128,8 @@ export default function Team() {
       back={back}
       help={t("team.help")}
       hintKey="team"
-      right={store.role === "director" ? <HeaderButton icon="plus" label={t("team.invite")} testID="team-invite" onPress={() => setOpen(true)} /> : undefined}
+      // DS §12.13 «Шапка» Д-шапка-6 (ревью design/crm #2841): «Пригласить» is the screen's main action, not a «создать» — said with its word
+      right={store.role === "director" ? <Button label={t("team.invite")} icon="plus" size="sm" onPress={() => setOpen(true)} /> : undefined}
     >
       {device === "phone" ? <CardList>{people.map(card)}</CardList> : <CardGrid>{people.map(card)}</CardGrid>}
       <Sheet visible={open} onClose={() => setOpen(false)} title={t("team.invite")}>

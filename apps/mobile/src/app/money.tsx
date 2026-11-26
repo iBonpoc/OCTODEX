@@ -70,7 +70,7 @@ export default function Money() {
       help={t("help.money")}
       hintKey="money"
       back={back}
-      right={<HeaderButton icon="plus" label={t("money.addExpense")} testID="expense-new" onPress={() => router.push("/expense/new")} />}
+      right={<HeaderButton icon="plus" label={t("money.newExpense")} testID="expense-new" onPress={() => router.push("/expense/new")} />}
     >
       {db.expenses.length === 0 ? <Empty icon="wallet" title={t("money.expenses")} /> : null}
       {db.expenses.length ? (
