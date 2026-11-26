@@ -14,8 +14,8 @@ import { useI18n } from "@/i18n";
 import { useToast } from "@/ui/overlays";
 import { canChooseSignedMeanwhile, runSignedMeanwhileChoice, SIGNED_MEANWHILE_KEYS, type ChoiceDeps } from "./signedMeanwhileModel";
 
-export function useRejectedEstimateChoice(): { dialog: ReactNode; can: (r: RejectedOp) => boolean; mayCopy: (r: RejectedOp) => boolean; choose: (r: RejectedOp) => Promise<void> } {
-  const { t } = useI18n();
+export function useRejectedEstimateChoice(): { dialog: ReactNode; can: (r: RejectedOp) => boolean; mayCopy: (r: RejectedOp) => boolean; choose: (r: RejectedOp) => Promise<void>; which: (r: RejectedOp) => string | null } {
+  const { t, day } = useI18n();
   const store = useStore();
   const { db, copyRejectedEstimate, dismissRejected, online } = store;
   const toast = useToast();
@@ -34,9 +34,20 @@ export function useRejectedEstimateChoice(): { dialog: ReactNode; can: (r: Rejec
     t: (k, p) => t(k as never, p as never),
   });
   // PROTO #2822 вариант А: one press — the copy at once and its editor; no window (the card already says what and why)
+  // PROTO #2822 (crm-reviewer блок 1): two quick presses before the redraw make one copy, not two
+  const busy = useRef(new Set<string>());
   const choose = async (r: RejectedOp) => {
+    if (busy.current.has(r.id)) return;
+    busy.current.add(r.id);
     const est = db.estimates.find((e) => r.href.endsWith(`/${e.id}`));
     runSignedMeanwhileChoice(SIGNED_MEANWHILE_KEYS.copy, r, { ...latest.current(), signedNumber: est?.number });
   };
-  return { dialog, can, mayCopy, choose };
+  // PROTO #2822 (оба ревьюера): which estimate, whose, signed when — on the card, before the one press
+  const which = (r: RejectedOp): string | null => {
+    const est = db.estimates.find((e) => r.href.endsWith(`/${e.id}`));
+    if (!est) return null;
+    const client = db.customers.find((c) => c.id === est.customerId)?.name ?? "";
+    return t("est.rej.choice.which" as never, { n: est.number ?? "", client, date: est.approval?.at ? day(est.approval.at) : "" } as never);
+  };
+  return { dialog, can, mayCopy, choose, which };
 }

@@ -107,13 +107,13 @@ function RejectedCard({ r, choice }: { r: RejectedOp; choice: ReturnType<typeof 
           <StatusChip status="bad" label={t("att.rejectedChip")} />
         </View>
         <T v="caption" tone="mut">
-          {`${day(r.at)} ${time(r.at)}`} · {t(rejectedHint(r, role, choice.mayCopy(r)))}
+          {(choice.can(r) && choice.which(r)) || `${day(r.at)} ${time(r.at)}`} · {t(rejectedHint(r, role, choice.mayCopy(r)))}
           {r.estimateEdit && rejectedKeepUntil(r.at) != null ? ` ${t("est.rej.choice.keepUntil", { date: day(new Date(rejectedKeepUntil(r.at)!).toISOString()) })}` : ""}
         </T>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
           {/* #2715: first, but grey — «Профиль и аккаунт» lists the cards: one yellow on a screen (DS §3.1 п.4); yellow in «Требует внимания» only */}
           {choice.can(r) ? <Button testID={`rejected-choose-${r.id}`} label={t("est.rej.choice.open")} variant="secondary" onPress={() => void choice.choose(r)} /> : null}
-          {rejectedOpens(r, role) ? <Button label={t("sync.rejected.open")} icon="chevronRight" variant="secondary" onPress={() => router.push(r.href as Href)} /> : null}
+          {rejectedOpens(r, role) ? <Button label={t(choice.can(r) ? ("est.rej.choice.openSigned" as never) : "sync.rejected.open")} icon="chevronRight" variant="secondary" onPress={() => router.push(r.href as Href)} /> : null}
           {/* #2674 Б3: the edits are kept on this card — «Понятно» would throw them away without a word: it says «Сбросить» */}
           <Button
             label={t(r.estimateEdit ? "est.rej.choice.reset" : "sync.rejected.ok")}

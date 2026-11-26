@@ -88,7 +88,7 @@ export default function Triage() {
             })()}
             {canOpen(role, attentionHref(it)) ? (
               <Button
-                label={t("sync.rejected.open")}
+                label={(() => { const rj = rejectedOps.find((x) => x.id === it.refId); return t(rj && rejChoice.can(rj) ? ("est.rej.choice.openSigned" as never) : "sync.rejected.open"); })()}
                 icon="chevronRight"
                 variant={(() => {
                   const rej = rejectedOps.find((x) => x.id === it.refId);
@@ -147,7 +147,7 @@ export default function Triage() {
             <T v="title">{cur.name || t(cur.label, waitParams(cur.params, t))}</T>
           </View>
           <T v="body" tone="mut">
-            {cur.name ? t(cur.label, waitParams(cur.params, t)) : cur.kind === "rejected" ? `${t(cur.hint ?? "sync.rejected.hint")}${cur.hintUntil != null ? ` ${t("est.rej.choice.keepUntil", { date: day(new Date(cur.hintUntil).toISOString()) })}` : ""}` : ""}
+            {cur.name ? t(cur.label, waitParams(cur.params, t)) : cur.kind === "rejected" ? `${(() => { const rj = rejectedOps.find((x) => x.id === cur.refId); const w = rj && rejChoice.can(rj) ? rejChoice.which(rj) : null; return w ? `${w}\n` : ""; })()}${t(cur.hint ?? "sync.rejected.hint")}${cur.hintUntil != null ? ` ${t("est.rej.choice.keepUntil", { date: day(new Date(cur.hintUntil).toISOString()) })}` : ""}` : ""}
           </T>
           {curWho ? (
             <T v="body" tone="mut">
