@@ -13,6 +13,7 @@ import Animated, {
 import { component, spaceHalf, font, motion, radius, space, statusGlyph, type StatusName, size as sizes } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { fillStyle } from "./fill";
+import { accEdgeFrame } from "./accEdge";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { SelectField } from "./selectField";
 import { FIELD, type FieldType } from "./fieldTypes";
@@ -57,7 +58,7 @@ export function Button({
   accessibilityLabel?: string;
   testID?: string;
 }) {
-  const { c } = useTheme();
+  const { c, highContrast } = useTheme();
   const { wide } = useDevice();
   const bar = size === "bar";
   const h = bar ? component.button.hit : component.button[size ?? (wide ? "md" : "phone")];
@@ -83,9 +84,9 @@ export function Button({
           ...(bar ? { paddingVertical: space[1] } : null),
           backgroundColor: bg,
           // v2: no frame on any button — the words identify it (WCAG 1.4.11 asks no edge of a control told by its label);
-          // #2363 F36: the yellow fill looks the same in both themes, the dark `accEdge` line in the light one is gone
-          borderWidth: 0,
-          borderColor: "transparent",
+          // #2363 F36: the yellow fill looks the same in both themes, the dark `accEdge` line in the light one is gone —
+          // except under the system's «Повышение контраста» (#2935 п.2): then the yellow fill gets its `accEdge` back
+          ...(variant === "primary" ? accEdgeFrame(c, highContrast) : { borderWidth: 0, borderColor: "transparent" }),
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "center",
@@ -130,7 +131,7 @@ export function IconButton({
   size?: "card";
   testID?: string;
 }) {
-  const { c } = useTheme();
+  const { c, highContrast } = useTheme();
   const s = size === "card" ? component.roundButton.card : component.roundButton.header;
   if (bare)
     return (
@@ -164,7 +165,7 @@ export function IconButton({
         justifyContent: "center",
         // v2: a round button is a cell on its card, no frame
         backgroundColor: filled ? c.acc : c.surf2,
-        borderWidth: 0,
+        ...(filled ? accEdgeFrame(c, highContrast) : { borderWidth: 0 }),
         // a toggle: off — no plate, `mut` icon; on — «Заливка» (the same as a chosen chip or tab)
         ...(active === false ? { backgroundColor: "transparent", borderWidth: 0 } : null),
         ...(active && !filled ? fillStyle(c) : null),

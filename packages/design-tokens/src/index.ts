@@ -350,8 +350,8 @@ export const component = {
   /** round buttons (visual v2): 40 in the header (on a `surf` card), `card` 32 inside a card, `quick` 44 in the quick-actions row with a 12 caption */
   roundButton: { header: 40, card: 32, quick: 44 },
   /** the phone's tab bar (visual v2): 56 (`size.tabbarH`) + the bottom zone; the icon `icon` 22 over the word 12; the top `fade` 18 fades into `tab` */
-  /** `badge` 18 — the red count on «Лиды» (founder 21.11, #2363 q78), its number `badgeText` 11 */
-  tabBar: { icon: 26, fade: 18, badge: 18, badgeText: 11 },
+  /** `badge` 18 — the red count on «Лиды» (founder 21.11, #2363 q78); its number `badgeText` 12 = `font.minSize` (GoRix этап 3: было 11, ниже минимума) */
+  tabBar: { icon: 26, fade: 18, badge: 18, badgeText: 12 },
   /** app-only (#2214, DS §15.3б): the offline queue's thin line over the tab bar — its height (the hit area grows to 44 by Press) */
   queueLine: { h: 28 },
   /** QuickActions / IconRow: `row` — a circle 44 with a 12 label under it, the cell `labelW` 64, between cells `gap` 8; `inline` — a circle 36 (zone 44) in the address line */
@@ -557,7 +557,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
     surf3: "#44464D",
     hl: "rgba(255,255,255,0.05)",
     off: "#4A4D54",
-    dash: "#8C9098",
+    dash: "#93979E", // GoRix этап 3 (опись 26.11): ≥ 3:1 и на выбранной ячейке surf3 (было 2.94)
     tab: "#1F2024",
     toast: "#44464D",
     onToast: "#EEEFF1",
@@ -607,7 +607,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
     surf3: "#C4C5BF",
     hl: "rgba(255,255,255,0.50)",
     off: "#B7B8B2",
-    dash: "#6F7279",
+    dash: "#65686E", // GoRix этап 3: ≥ 3:1 и на surf3 (было 2.77)
     tab: "#E3E4DE",
     toast: "#26282C",
     onToast: "#EEEFF1",
@@ -636,6 +636,34 @@ export const themes: Record<ThemeName, ThemeColors> = {
 /** Printed documents (estimate, invoice, receipt PDF): white paper, light-theme ink. Paper never follows the dark theme.
  *  Mirror of design/naryad-ds/tokens/print.css. Three document styles (docs/specs/07 §2.2 В, §3.4);
  *  the brand band colour is the company's setting (brand.color), tokens hold only sizes and positions. */
+/**
+ * GoRix этап 3 «Основа» (опись 26.11.2026, работа на улице): «Повышение контраста» — iOS «Настройки → Универсальный доступ →
+ * Дисплей и размер текста → Повышение контраста» (darker system colors), Android «Текст с высоким контрастом», веб
+ * `prefers-contrast: more`. Включено в системе — серые слова и слова статусов берут эти цвета: тот же оттенок, только
+ * светлота (design-reviewer 27.11: оттенки статусов должны остаться различимы). Светлая тема — ≥ 7:1 на всех поверхностях
+ * (bg, surf, surf2, surf3) и на заливке статуса; тёмная — ≥ 7:1 на экране и карточке (bg, surf), где живут слова.
+ * Жёлтые слова (`accText`) и красный кружок «Лиды» (правило 2, исключение 4) режим не трогает. Обычный вид не меняется.
+ * Проверяет contrast.test.ts.
+ */
+export const highContrast: Record<ThemeName, { mut: string; status: Record<StatusName, string> }> = {
+  dark: {
+    mut: "#BDC0C7",
+    status: { ok: "#86D3A0", info: "#89CAD5", warn: "#E8B780", bad: "#F3AFA7", neutral: "#BDC0C7" },
+  },
+  light: {
+    mut: "#33353A",
+    status: { ok: "#113D21", info: "#093B45", warn: "#542B04", bad: "#641C16", neutral: "#33353A" },
+  },
+};
+
+/** the theme's colours with «Повышение контраста» laid over them (the status word and its word-on-plate both take it) */
+export function withHighContrast(c: ThemeColors, name: ThemeName): ThemeColors {
+  const h = highContrast[name];
+  const status = { ...c.status } as ThemeColors["status"];
+  for (const k of Object.keys(h.status) as StatusName[]) status[k] = { ...c.status[k], text: h.status[k], on: k === "neutral" ? c.status[k].on : h.status[k] };
+  return { ...c, mut: h.mut, status };
+}
+
 export type PrintStyleName = "classic" | "modern" | "compact";
 export interface PrintStyle {
   fontPt: { title: number; heading: number; body: number; small: number };
@@ -715,5 +743,5 @@ export function statusGlyph(status: StatusName, draft?: boolean): "ok" | "info" 
 /** Estimate follow-up thresholds. Lead thresholds are company settings (apps/mobile/src/features/leadSettings.ts), not tokens. */
 export const timing = { estimateWarnDays: 2, estimateBadDays: 5 } as const;
 
-export const tokens = { font, space, spaceHalf, rhythm, radius, size, motion, z, component, breakpoint, layout, themes, statusIcon, timing, print, drawing, drawingPrint, shopSheet } as const;
+export const tokens = { font, space, spaceHalf, rhythm, radius, size, motion, z, component, breakpoint, layout, themes, highContrast, statusIcon, timing, print, drawing, drawingPrint, shopSheet } as const;
 export type Tokens = typeof tokens;
