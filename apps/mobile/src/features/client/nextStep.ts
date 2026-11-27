@@ -101,10 +101,12 @@ export type ClientSectionKey = "overview" | "work" | "estimates" | "money" | "vi
 /**
  * The sections a role sees: the tech — Обзор · Выезды · (Объекты) · Журнал (no money, no estimates, canSeeClientMoney); the office and
  * sales — Обзор · Работы · Сметы · (Счета, once there is money: an invoice, a payment, an advance or something left to bill) ·
- * Выезды · (Объекты) · Журнал. «Объекты» only with two places or more: one address is the header's panel and «Маршрут» (nothing twice, #2350).
+ * Выезды · (Объекты) · Журнал. «Объекты» from ONE place (#3068, founder 27.11: «заходить в объекты и видеть объект 1, объект 2…»):
+ * the access, the people, the notes and the jobs of a place live there and nowhere else, so a client with one place keeps them
+ * (crm-review: one address only → no gate code anywhere); no place — no section.
  */
-export function clientSectionKeys(role: Role, hasMoney: boolean, manyPlaces = true): ClientSectionKey[] {
-  const places: ClientSectionKey[] = manyPlaces ? ["places"] : [];
+export function clientSectionKeys(role: Role, hasMoney: boolean, placeCount = 1): ClientSectionKey[] {
+  const places: ClientSectionKey[] = placeCount > 0 ? ["places"] : [];
   if (role === "tech") return ["overview", "work", ...places, "log"];
   // #2363 q76 (founder 21.11: «А, Выезды»): the office sees the client's visits as their own section after «Счета» (visual v2 макет 3)
   return ["overview", "work", "estimates", ...(hasMoney ? (["money"] as const) : []), "visits", ...places, "log"];

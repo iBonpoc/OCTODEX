@@ -30,6 +30,7 @@ import { NotesBlock } from "@/features/NotesBlock";
 import { AdvancesBlock } from "@/features/payments/AdvancesBlock";
 import { ModulePlaces } from "@/modules/ModulePlaces";
 import { clientPlaceCtx } from "@/features/client/clientMeasure";
+import { placeNotesOf } from "@/features/client/placeNotes";
 import { ClientDupCards } from "@/features/client/ClientDuplicates";
 import { TaskSheet, type TaskDraft } from "@/features/tasks/TaskSheet";
 import { useDialThenAsk } from "@/features/comms/dial";
@@ -202,7 +203,7 @@ export function ClientOverview({ c, f, onSection, withNow }: {
               f.m.paidTotalCents > 0 ? <StatTile key="paid" testID="client-tile-paid" label={t("proto.client.tile.paid")} value={money(f.m.paidTotalCents)} icon="wallet" onPress={f.hasMoney ? () => onSection("money") : undefined} /> : null,
             ].filter(Boolean);
             return drawn.length ? (
-              <GroupedList testID="client-money">
+              <GroupedList testID="client-ov-money">
                 <ListGroup bare title={t("ov3061.money")}>
                   <StatGrid testID="client-tiles">{drawn}</StatGrid>
                 </ListGroup>
@@ -232,7 +233,7 @@ export function ClientOverview({ c, f, onSection, withNow }: {
           {openTasks.slice(0, 2).map((x) => (
             <GroupRow
               key={x.id}
-              testID={`client-task-${x.id}`}
+              testID={`client-ov-task-${x.id}`}
               lead={{ done: !!x.doneAt, onToggle: () => toggleTask(x), label: x.title, testID: `client-task-done-${x.id}` }}
               title={x.title}
               subtitle={x.dueAt ? when(x.dueAt) : undefined}
@@ -708,10 +709,7 @@ function PlaceCard({ p, n, f, onRoute, onCall, onSms }: { p: Property; n: number
   const seen = canSeeGateCode(db, f.role, p.id);
   const people = propertyPeople(db, p);
   const jobs = r.jobs.filter((j) => j.propertyId === p.id).sort((a, b) => Number(a.status === "done") - Number(b.status === "done") || b.id.localeCompare(a.id));
-  const notes = db.notes
-    .filter((x) => x.subjectType === "property" && x.subjectId === p.id && !(x as { deletedAt?: string }).deletedAt && (x.visibility === "team" || x.authorId === db.me))
-    .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.at.localeCompare(a.at));
-  const street = [p.address, p.unit].filter(Boolean).join(", ");
+  const notes = placeNotesOf(db.notes, p.id, db.me);
   const open = () => router.push(`/property/${p.id}`);
   return (
     // the review of #3060 (design): the label names the place («Home»), no label — «Объект N»; every record of the place its own frame
@@ -719,7 +717,8 @@ function PlaceCard({ p, n, f, onRoute, onCall, onSms }: { p: Property; n: number
     <ListGroup separate title={p.label || t("ov3068.place", { n })} testID={`client-property-${p.id}`}>
       <GroupRow
         lead={{ icon: "home2" }}
-        title={street || propertyTitle(p)}
+        // the one address rule (propertyTitle: «77 Maple Dr, #3») — never a line of its own here
+        title={propertyTitle(p)}
         subtitle={[p.place ? [p.place.city, [p.place.state, p.place.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ") : p.city, p.stories ? tn("ov3068.stories", p.stories, { n: p.stories }) : null].filter(Boolean).join(" · ")}
         actions={[{ icon: "navigate", a11y: `${t("client.route")}: ${propertyTitle(p)}`, onPress: () => onRoute(p), testID: `client-property-route-${p.id}` }]}
         onPress={open}
