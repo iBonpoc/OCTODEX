@@ -254,7 +254,41 @@ function pushArgv(stand, token, baseEnv = {}) {
     { ...baseEnv, GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader", GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${auth}` }];
 }
 
-module.exports = { pushArgv, md, FIELD_MAX, BODY_MAX, BUILD_IMAGE, buildArgv, LABEL, BRANCH, ALIAS, STAND_ISSUE, MAX_BREAKERS, BUILD_CMD, dependencyOf, plan, mergeAll, findBreaker, whereLine, manifest, renderIssue, gitMerger };
+/**
+ * The dist the container built goes out of the worktree only as plain files and directories (security review 2 of #3125): a
+ * symbolic link (dist/x.js → /proc/self/environ) would be followed on the runner by upload-artifact and put its secrets into a
+ * public artifact. lstat everywhere: the root must be a real directory, anything that is not a regular file or a directory
+ * (a link, a device, a pipe, a socket) stops the build. Files are copied by content.
+ */
+function copyDistSafe(src, dst) {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const root = fs.lstatSync(src);
+  if (!root.isDirectory()) throw new Error(`${src}: not a real directory (${root.isSymbolicLink() ? "a symbolic link" : "not a directory"})`);
+  const walk = (rel) => {
+    for (const name of fs.readdirSync(path.join(src, rel))) {
+      const r = path.join(rel, name);
+      const st = fs.lstatSync(path.join(src, r));
+      if (st.isDirectory()) walk(r);
+      else if (!st.isFile()) throw new Error(`dist/${r}: not a regular file or a directory — the stand takes only plain files`);
+    }
+  };
+  walk("");
+  fs.rmSync(dst, { recursive: true, force: true });
+  const copy = (rel) => {
+    fs.mkdirSync(path.join(dst, rel), { recursive: true });
+    for (const name of fs.readdirSync(path.join(src, rel))) {
+      const r = path.join(rel, name);
+      const st = fs.lstatSync(path.join(src, r));
+      if (st.isDirectory()) copy(r);
+      else if (st.isFile()) fs.writeFileSync(path.join(dst, r), fs.readFileSync(path.join(src, r)));
+      else throw new Error(`dist/${r}: changed while copied`);
+    }
+  };
+  copy("");
+}
+
+module.exports = { copyDistSafe, pushArgv, md, FIELD_MAX, BODY_MAX, BUILD_IMAGE, buildArgv, LABEL, BRANCH, ALIAS, STAND_ISSUE, MAX_BREAKERS, BUILD_CMD, dependencyOf, plan, mergeAll, findBreaker, whereLine, manifest, renderIssue, gitMerger };
 
 // ---------------------------------------------------------------------------------------------------------------------- CLI
 if (require.main === module) {
@@ -371,7 +405,7 @@ if (require.main === module) {
     if (!ok) throw new Error(`still no build after dropping ${MAX_BREAKERS} PRs: the stand stays as it was`);
     const stand = shaOf(list);
     if (built !== stand && !buildAt(stand)) throw new Error(`${stand} built before, not now`);
-    if (opt("dist")) { fs.rmSync(opt("dist"), { recursive: true, force: true }); fs.cpSync(path.join(wt, "apps/mobile/dist"), opt("dist"), { recursive: true }); }
+    if (opt("dist")) copyDistSafe(path.join(wt, "apps/mobile/dist"), opt("dist"));
     writeJson(opt("out") || "manifest-build.json", { stand, excluded });
     console.log(`built ${stand}; dropped ${excluded.map((e) => `#${e.number}`).join(" ") || "—"}`);
     if (env.GITHUB_OUTPUT) fs.appendFileSync(env.GITHUB_OUTPUT, `stand=${stand}\nchanged=${excluded.length ? "true" : "false"}\n`);

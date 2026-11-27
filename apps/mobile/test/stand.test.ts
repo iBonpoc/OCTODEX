@@ -6,7 +6,7 @@
  */
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -25,6 +25,7 @@ const S = require("../../../scripts/stand.cjs") as {
   manifest: (a: { mainSha: string; stand: string; included: Pr[]; skipped: Skip[]; at?: string }) =>
     { main: string; stand: string; at: string; included: Array<{ number: number; sha: string; title: string; where: string }>; skipped: Skip[] };
   renderIssue: (m: ReturnType<typeof S.manifest>, url: string) => string;
+  copyDistSafe: (src: string, dst: string) => void;
   pushArgv: (stand: string, token: string, env?: Record<string, string>) => [string[], Record<string, string>];
   md: (t: string) => string; FIELD_MAX: number; BODY_MAX: number;
   BUILD_IMAGE: string;
@@ -244,6 +245,42 @@ describe("stand: text from a PR is inert in the task body (review of #3125 п.3)
     expect(b).not.toMatch(/@user/);
     expect(b).toContain("**Стенд:** —");
     expect(b).toContain("- #6 — ");
+  });
+});
+
+describe("stand: the dist leaves the worktree only as plain files (security review 2 of #3125)", () => {
+  const base = mkdtempSync(join(tmpdir(), "stand-dist-"));
+  afterAll(() => rmSync(base, { recursive: true, force: true }));
+  const make = (name: string) => {
+    const d = join(base, name, "dist");
+    execFileSync("mkdir", ["-p", join(d, "assets")]);
+    writeFileSync(join(d, "index.html"), "<html>");
+    writeFileSync(join(d, "assets", "a.js"), "x");
+    return d;
+  };
+  it("plain files and directories are copied by content", () => {
+    const src = make("ok");
+    S.copyDistSafe(src, join(base, "ok-out"));
+    expect(readFileSync(join(base, "ok-out", "assets", "a.js"), "utf8")).toBe("x");
+  });
+  it("a symbolic link inside the dist (→ /proc/self/environ) stops the build, nothing is copied", () => {
+    const src = make("link");
+    symlinkSync("/proc/self/environ", join(src, "assets", "x.js"));
+    expect(() => S.copyDistSafe(src, join(base, "link-out"))).toThrow(/assets\/x\.js: not a regular file/);
+    expect(existsSync(join(base, "link-out"))).toBe(false);
+  });
+  it("a dist that is itself a symbolic link stops the build", () => {
+    const real = make("real");
+    symlinkSync(real, join(base, "root-link"));
+    expect(() => S.copyDistSafe(join(base, "root-link"), join(base, "root-out"))).toThrow(/not a real directory \(a symbolic link\)/);
+  });
+  it("stand.yml checks the dist again before upload-artifact", () => {
+    const yml = readFileSync(join(__dirname, "../../../.github/workflows/stand.yml"), "utf8");
+    const build = yml.slice(yml.indexOf("\n  build:"), yml.indexOf("\n  merge-again:"));
+    expect(build).toContain(`[ -z "$(find "$RUNNER_TEMP/stand-dist" ! -type f ! -type d)" ]`);
+    expect(build.indexOf("! -type f ! -type d")).toBeLessThan(build.indexOf("name: stand-dist"));
+    const src = readFileSync(join(__dirname, "../../../scripts/stand.cjs"), "utf8");
+    expect(src).not.toMatch(/fs\.cpSync/);
   });
 });
 
