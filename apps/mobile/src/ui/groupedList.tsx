@@ -39,13 +39,15 @@ export function groupRows(children: ReactNode): ReactNode[] {
 }
 
 /** One group: its title (and «Все ›»), the rows in one card with inset hairlines between them. */
-export function ListGroup({ title, count, all, children, inset = component.listRow.inset, bare, testID }: {
+export function ListGroup({ title, count, all, children, inset = component.listRow.inset, bare, separate, testID }: {
   title?: string;
   /** #2363 F08: the number of the group beside its title — the same CountPill as «Позиции 7» and «Выезды сегодня 6» */
   count?: number;
   /** visual v2 Главная (макет 1): the block's children stand as their own cards `rhythm.cardGap` 8 apart (tiles, FigureRows) — no
    *  card around them, no hairlines */
   bare?: boolean;
+  /** founder 27.11 (#3017, on the stand): each row is its OWN card `rhythm.cardGap` apart — no one card round the group, no hairlines */
+  separate?: boolean;
   /** «Все ›» on the right of the title: the whole list */
   all?: { label: string; onPress: () => void; testID?: string };
   children: ReactNode;
@@ -61,6 +63,14 @@ export function ListGroup({ title, count, all, children, inset = component.listR
       {title || all || count != null ? <GroupHead title={title ?? ""} count={count} countTestID={testID ? `${testID}-count` : undefined} all={all} /> : null}
       {bare ? (
         <View style={{ gap: rhythm.cardGap }}>{rows}</View>
+      ) : separate ? (
+        <View style={{ gap: rhythm.cardGap }}>
+          {rows.map((r, i) => (
+            <Card key={i} style={{ padding: 0, gap: 0, overflow: "hidden" }}>
+              {r}
+            </Card>
+          ))}
+        </View>
       ) : (
       <Card style={{ padding: 0, gap: 0 }}>
         {rows.map((r, i) => (
@@ -173,6 +183,11 @@ export type RowDone = { done: boolean; onToggle: (done: boolean) => void; label:
 
 export interface GroupRowProps {
   title: string;
+  /** #3017: a quiet fact in the title's own line, after the name — the phone («Sarah Mitchell  (626) 555-0142»); never cut: when the
+   *  two do not fit (a pill on the right), the phone goes under the name, the name is never cut for it */
+  titleNote?: string;
+  /** #3017: a third line under the subtitle — what is going on with it («Выезд сегодня · Panel upgrade»); no line when empty */
+  extra?: string;
   /** the line under the title: «работа · адрес · когда» */
   subtitle?: string;
   lead?: RowLead;
@@ -207,7 +222,7 @@ export interface GroupRowProps {
  * The inside of a GroupRow — the lead, the title 15/600 over its line 13 `mut`, the figure or columns, a StatusPill and «›» — for a
  * row whose press is its owner's (an estimate's line: it opens in place, it is held to be carried). One look for every row (#2387).
  */
-export function GroupRowBody({ title, subtitle, lead, value, cols, status, compact, wrap, selected, chevron, quiet, valueMark, padRight = space[4], below, ids }: Pick<GroupRowProps, "title" | "subtitle" | "lead" | "value" | "cols" | "status" | "compact" | "wrap" | "selected" | "chevron" | "valueMark"> & {
+export function GroupRowBody({ title, titleNote, extra, subtitle, lead, value, cols, status, compact, wrap, selected, chevron, quiet, valueMark, padRight = space[4], below, ids }: Pick<GroupRowProps, "title" | "titleNote" | "extra" | "subtitle" | "lead" | "value" | "cols" | "status" | "compact" | "wrap" | "selected" | "chevron" | "valueMark"> & {
   /** a row that counts for nothing now (a hidden line, a line on the client's choice): the title and the figure `mut` */
   quiet?: boolean;
   padRight?: number;
@@ -243,10 +258,15 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
         </View>
       ) : null}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <View testID={ids?.title}>
-          <T v="body" w="semibold" tone={check?.done || quiet ? "mut" : "ink"} numberOfLines={wrap || wordCol ? 2 : 1} style={check?.done ? { textDecorationLine: "line-through" } : undefined}>
+        <View testID={ids?.title} style={titleNote ? { flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", columnGap: space[2] } : undefined}>
+          <T v="body" w="semibold" tone={check?.done || quiet ? "mut" : "ink"} numberOfLines={wrap || wordCol ? 2 : 1} style={[check?.done ? { textDecorationLine: "line-through" } : null, titleNote ? { flexShrink: 1 } : null]}>
             {title}
           </T>
+          {titleNote ? (
+            <T v="caption" tone="mut" tabular numberOfLines={1} style={{ flexShrink: 0 }}>
+              {titleNote}
+            </T>
+          ) : null}
         </View>
         {subtitle ? (
           <View testID={ids?.subtitle}>
@@ -256,6 +276,11 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
               </T>
             </View>
           </View>
+        ) : null}
+        {extra ? (
+          <T v="caption" tone="mut" numberOfLines={1}>
+            {extra}
+          </T>
         ) : null}
         {below}
       </View>
@@ -303,16 +328,16 @@ export function GroupRowBody({ title, subtitle, lead, value, cols, status, compa
   );
 }
 
-export function GroupRow({ title, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, wrap, selected, chevron, valueTestID, valueMark, testID }: GroupRowProps) {
+export function GroupRow({ title, titleNote, extra, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, wrap, selected, chevron, valueTestID, valueMark, testID }: GroupRowProps) {
   const { c } = useTheme();
   const [down, setDown] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const more = rowActions(swipe);
-  const said = rowSaid({ title, subtitle, value: cols?.length ? cols.map((x) => `${x.label} ${x.value}`).join(", ") : value, status, when: lead && "time" in lead ? [lead.time, lead.sub].filter(Boolean).join(" ") : undefined });
+  const said = rowSaid({ title: titleNote ? `${title}, ${titleNote}` : title, subtitle: extra ? [subtitle, extra].filter(Boolean).join(", ") : subtitle, value: cols?.length ? cols.map((x) => `${x.label} ${x.value}`).join(", ") : value, status, when: lead && "time" in lead ? [lead.time, lead.sub].filter(Boolean).join(" ") : undefined });
   const onLong = more.length ? (e: GestureResponderEvent) => setMenu({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, w: 0, h: 0 }) : undefined;
   const onAction = (e: AccessibilityActionEvent) => more.find((a) => a.key === e.nativeEvent.actionName)?.onPress();
   const check = lead && "done" in lead ? lead : null;
-  const main = <GroupRowBody title={title} subtitle={subtitle} lead={lead} value={value} cols={cols} status={status} compact={compact} wrap={wrap} selected={selected} chevron={chevron} padRight={actions.length ? 0 : space[4]} ids={valueTestID ? { value: valueTestID } : undefined} valueMark={valueMark} />;
+  const main = <GroupRowBody title={title} titleNote={titleNote} extra={extra} subtitle={subtitle} lead={lead} value={value} cols={cols} status={status} compact={compact} wrap={wrap} selected={selected} chevron={chevron} padRight={actions.length ? 0 : space[4]} ids={valueTestID ? { value: valueTestID } : undefined} valueMark={valueMark} />;
   const tap = onPress || onLong ? (
     <Press
       onPress={onPress}
