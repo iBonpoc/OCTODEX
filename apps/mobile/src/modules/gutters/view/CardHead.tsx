@@ -11,7 +11,7 @@ import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
-import { estimateStatusView } from "@/features/estimateStatus";
+import { estimateView } from "@/features/estimateStatus";
 import { moduleActive, moduleHref } from "@/modules/registry";
 import { IconButton, StatusChip } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
@@ -115,7 +115,7 @@ export function CardHead({ m, drawn, onGone, onCrewDocs }: { m: MeasurementRow; 
   const who = client?.name ?? (lead ? t("mod.gutters.list.lead", { name: lead.name }) : t("mod.gutters.list.noClient"));
   const where = prop ? [prop.address, prop.city].filter(Boolean).join(", ") : lead?.address;
   const v = measurementState(db, m, drawn);
-  const est = v.estimate ? estimateStatusView(v.estimate.status) : null;
+  const est = v.estimate ? estimateView(v.estimate) : null;
 
   const whoRef = useRef<ElementRef<typeof View>>(null);
   const moreRef = useRef<ElementRef<typeof View>>(null);

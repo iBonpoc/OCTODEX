@@ -33,7 +33,7 @@ import { fmtLen } from "../canvas/format";
 import { fromElements } from "../canvas/model";
 import { gutterData, KEY, measurementOf } from "../data";
 import { autoEstimate as autoEstimateNow, clientLangOf, estimateAction, estimateOfMeasurement, estimateTarget, makeEstimate, ofMeasurement, otherEstimates, pageIdOf } from "../estimateLink";
-import { estimateStatusView } from "@/features/estimateStatus";
+import { estimateView } from "@/features/estimateStatus";
 import { CardHead } from "./CardHead";
 import { MeasurementObject } from "./MeasurementObject";
 import { GroupRow, ListGroup } from "@/ui/groupedList";
@@ -343,7 +343,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
             <View testID="view-next" style={{ gap: space[1] }}>
               <T v="body" w="semibold">{t(linkedTo.kind === "lead" ? "mod.gutters.card.atLead" : "mod.gutters.card.atClient", { name: linkedTo.name })}</T>
               {money$ && other && action.kind === "make" ? (
-                <View testID="view-next-other"><T v="caption" tone="mut">{t("mod.gutters.card.otherEst", { n: other.number ?? "", state: t(estimateStatusView(other.status).l) })}</T></View>
+                <View testID="view-next-other"><T v="caption" tone="mut">{t("mod.gutters.card.otherEst", { n: other.number ?? "", state: t(estimateView(other).l) })}</T></View>
               ) : null}
             </View>
           ) : null}
@@ -417,7 +417,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
             <ListGroup>
               {[
                 ...(m.updatedAt ? [{ key: "drawn", icon: "pencil" as const, title: t("mod.gutters.hist.drawn"), at: m.updatedAt }] : []),
-                ...estimates.map((e) => ({ key: e.id, icon: "invoice" as const, title: t("mod.gutters.hist.est", { n: e.number ?? "", state: t(estimateStatusView(e.status).l) }), at: e.sentAt ?? "" })),
+                ...estimates.map((e) => ({ key: e.id, icon: "invoice" as const, title: t("mod.gutters.hist.est", { n: e.number ?? "", state: t(estimateView(e).l) }), at: e.sentAt ?? "" })),
               ].sort((a, b) => b.at.localeCompare(a.at)).map((x) => (
                 <GroupRow key={x.key} compact lead={{ icon: x.icon }} title={x.title} subtitle={x.at ? day(x.at) : undefined} testID={`view-hist-${x.key}`} />
               ))}
@@ -564,7 +564,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   // «Сейчас» (#3028, as the lead's and the client's cards): why this step, the one button, a second one beside it
   const reason =
     action.kind === "needLead" ? t("mod.gutters.now.needLead")
-    : action.kind === "make" ? (other ? t("mod.gutters.card.otherEst", { n: other.number ?? "", state: t(estimateStatusView(other.status).l) }) : t("mod.gutters.now.make"))
+    : action.kind === "make" ? (other ? t("mod.gutters.card.otherEst", { n: other.number ?? "", state: t(estimateView(other).l) }) : t("mod.gutters.now.make"))
     : action.kind === "update" ? t("mod.gutters.now.update")
     : action.kind === "open" ? t(action.signed ? "mod.gutters.now.signed" : "mod.gutters.now.open")
     : t("mod.gutters.view.empty");

@@ -11,7 +11,7 @@ import { router, type Href } from "expo-router";
 import { usePersistentState } from "@/data/persist";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
-import { estimateStatusView } from "@/features/estimateStatus";
+import { estimateView } from "@/features/estimateStatus";
 import { moduleDef, moduleHref, moduleState, moduleTabs } from "@/modules/registry";
 import { Banner } from "@/ui/banner";
 import { useListPanel } from "@/nav/listPanel";
@@ -71,7 +71,7 @@ export default function MeasurementsScreen() {
     const v = m.view;
     if (v.state === "signed") return { tone: "ok", label: t("mod.gutters.list.s.signed") };
     if (v.state === "estimate" && v.estimate) {
-      const s = estimateStatusView(v.estimate.status);
+      const s = estimateView(v.estimate);
       return { tone: s.s, label: t(s.l), draft: s.d };
     }
     return { tone: "neutral", label: t(v.state === "unlinked" ? "mod.gutters.list.draft" : "mod.gutters.list.s.noEstimate"), draft: v.state === "unlinked" };
