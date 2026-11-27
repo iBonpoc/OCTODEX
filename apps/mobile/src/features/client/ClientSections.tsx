@@ -459,7 +459,7 @@ export function ClientVisits({ f, customerId }: { f: ClientFacts; customerId?: s
       {f.visits.length ? (
         <GroupedList>
           {/* #3022 / #3060: each record its own frame (DS §5.5) */}
-          <ListGroup separate title={t("ov3061.ahead")} count={ahead.length || undefined} testID="client-visits-ahead">
+          <ListGroup separate title={t("c3072.ahead")} count={ahead.length || undefined} testID="client-visits-ahead">
             {ahead.map((v) => row(v))}
           </ListGroup>
           <ListGroup separate title={t("c3072.past")} count={past.length || undefined} testID="client-visits-past">

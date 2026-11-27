@@ -5860,4 +5860,5 @@ export const es: Dict = {
   "c3072.closed": "Cerrados",
   "c3072.leads": "Leads",
   "c3072.allNotes": "Todas las notas · {n}",
+  "c3072.ahead": "Próximas",
 };
