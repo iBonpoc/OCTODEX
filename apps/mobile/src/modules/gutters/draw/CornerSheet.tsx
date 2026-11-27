@@ -52,7 +52,7 @@ export function CornerSheet({ d, f, cut, fmt, tape, splashOn, onKind, onSplash, 
         ]}
         value={f.kind === "bay" ? null : kind}
         onChange={onKind}
-        action={{ label: t("mod.gutters.draw.cornerSplitShort"), icon: "link", onPress: onSplit, testID: "corner-split" }}
+        action={{ label: t("mod.gutters.draw.cornerSplitShort"), icon: "unlink", onPress: onSplit, testID: "corner-split" }}
       />
       <T v="caption" tone="mut">{t("mod.gutters.draw.cornerNote")}</T>
       {/* the splash guard of an inside corner, right under its kind (reviews #3066: it goes into the estimate — not below the fold): a ToggleRow (DS А5) */}

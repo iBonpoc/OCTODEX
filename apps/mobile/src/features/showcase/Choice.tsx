@@ -103,7 +103,7 @@ export function ChoiceSection() {
             setCorner(k);
             setUnlinked(false);
           }}
-          action={{ label: t("ds.ch.tile.unlink"), icon: "link", onPress: () => setUnlinked(true) }}
+          action={{ label: t("ds.ch.tile.unlink"), icon: "unlink", onPress: () => setUnlinked(true) }}
         />
         {unlinked ? (
           <View testID="showcase-option-tile-unlinked">

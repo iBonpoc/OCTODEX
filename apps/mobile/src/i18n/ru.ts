@@ -3578,6 +3578,7 @@ export const ru = {
   "mod.gutters.draw.cornerBay": "эркер",
   "mod.gutters.draw.cornerSplash": "{k} · отбойник",
   "mod.gutters.draw.cornerSplitShort": "Разъединить",
+  "mod.gutters.draw.sideFlipped": "Сторона линии сменена: другие углы тоже ({n})",
   "mod.gutters.draw.cornerSplit": "Разъединить угол",
   "mod.gutters.draw.cornerSplit.done": "Угол разъединён: у каждого gutter свой End Cap",
   "mod.gutters.end.title": "Конец gutter",
