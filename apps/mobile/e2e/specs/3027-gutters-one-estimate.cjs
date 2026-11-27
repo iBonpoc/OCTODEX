@@ -4,7 +4,7 @@
  * A) a lead with nothing open: «Готово» → a draft estimate by itself, the measurement's section; a person's own line «Ремонт розетки» added;
  *    the drawing edited → «Готово» → the draft follows (more gutter), the outlet line stays as it was, still one estimate;
  * B) a lead whose estimate is SENT: a new measurement from the lead → «Готово» → it goes INTO that estimate (its section), the estimate stays
- *    the lead's one (its new version — the core saves a change of a sent estimate so), its own lines stay; «Открыть смету» on the card.
+ *    the lead's one (its new version), its own lines stay; the card says «Изменена после отправки» and the editor «Отправить изменения» (#3058).
  * Finds things by testID; waits on what it checks.
  */
 const { skipLength, openView, backToCanvas, savedOnce, freeLead } = require("../gutters.cjs");
@@ -92,6 +92,10 @@ exports.run = async (h) => {
   h.expect(!!secId && s2.doc.options[0].lines.filter(ofM(mid2)).every((l) => l.sectionId === secId) && (s2.doc.options[0].sections || []).some((x) => x.id === secId), "the drawing's lines in its own section");
   h.expect((await db()).estimates.filter((e) => e.leadId === sent.leadId && e.status !== "declined").length === d0.estimates.filter((e) => e.leadId === sent.leadId && e.status !== "declined").length, "no second estimate for the lead");
   await h.shot("joined-sent");
-  // its card: «Открыть смету» opens it — to look and send it again
+  // its card: «Открыть смету»; the estimate's state is the core's own word (#3058) — «Изменена после отправки», not a bare «Черновик»
   await tid("view-action-open").waitFor({ timeout: 8000 });
+  await waitFor(async () => /Изменена после отправки/.test(await p.locator("body").innerText()), "the card: «Изменена после отправки»");
+  // its editor: the client gets it by «Отправить изменения» (#2637, #3058)
+  await h.go(`/estimate/new?id=${encodeURIComponent(sent.id)}`);
+  await waitFor(async () => (await p.getByRole("button", { name: "Отправить изменения" }).locator("visible=true").count()) > 0, "the editor: «Отправить изменения»");
 };
