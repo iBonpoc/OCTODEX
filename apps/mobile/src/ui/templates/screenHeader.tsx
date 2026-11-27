@@ -607,6 +607,8 @@ export function HeadStatus({ status, icon, label, draft, onPress, testID }: { st
       <T v="caption" w="medium" tone="mut" numberOfLines={1} style={{ flexShrink: 1 }}>
         {label}
       </T>
+      {/* #3023: a status that changes from here says so — «⌄» after its word (the founder did not see it could be changed) */}
+      {onPress ? <Icon name="chevronDown" s={size.iconXs} color={c.mut} /> : null}
     </View>
   );
   return onPress ? (

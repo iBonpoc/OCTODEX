@@ -63,5 +63,18 @@ export function durationText(lang: Lang, min: number): string {
 export function moneyText(cents: number): string {
   return fmtUsd(cents);
 }
+/**
+ * Money on an overview (founder 27.11, #3029/#3030: «центы — только внутри документов»): KPI tiles, the rows of every list, the totals
+ * of «Главная», «Деньги», a client's overview — whole dollars, rounded half up on the cents («$1,840», «$1,375.50» → «$1,376»); under
+ * a dollar the cents stay («$0.45»: «$0» would say nothing). The documents (an estimate, an invoice, a receipt, the PDF, /p/, a supplier's
+ * order), the editor and every amount field keep `moneyText` with cents. Only the showing changes: the sums are whole cents (rule 8).
+ */
+export function moneyWholeText(cents: number): string {
+  const c = Math.round(cents);
+  const abs = Math.abs(c);
+  if (abs < 100) return fmtUsd(c);
+  const dollars = Math.floor((abs + 50) / 100);
+  return `${c < 0 ? "−" : ""}$${dollars.toLocaleString("en-US")}`;
+}
 /** A signed number for a percent or a count: «−218.2», not «-218.2» (the minus sign U+2212, DS §4.5) */
 export const signedText = (n: number): string => (n < 0 ? `−${String(-n)}` : String(n));

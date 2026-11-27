@@ -1,7 +1,7 @@
 /**
  * e2e 2993 — over the parts of «Деньги» ONE line of their own sums, not four tiles (founder 27.11: «четыре слишком много… три в одну
  * строку или убрать»; design/crm review: on «Сметы» and «Оплаты» the tiles showed the invoices' figures). The line is one row; its
- * figures have cents (#2672); on «Счета» «Просрочено» narrows the list to its group and shows it chosen, pressed again — every group.
+ * figures are whole dollars (an overview, founder #3029/#3030: cents only inside documents); on «Счета» «Просрочено» narrows the list to its group and shows it chosen, pressed again — every group.
  * Every view. By testID (rule 19): `money-tiles`, `money-tile-<k>`, `invoice-list-group-<g>`.
  */
 exports.run = async (h) => {
@@ -13,7 +13,7 @@ exports.run = async (h) => {
     const box = await tid("money-tiles").boundingBox();
     h.expect(box && box.height <= 48, `${route}: the sums are one line (${box && box.height})`);
     const txt = await tid("money-tiles").innerText();
-    h.expect(/\$[\d,]+\.\d\d/.test(txt), `${route}: the sums with cents (${txt})`);
+    h.expect(/\$[\d,]+/.test(txt) && !/\$[\d,]{4,}\.\d\d/.test(txt), `${route}: the sums in whole dollars (#3029) (${txt})`);
     h.expect((await p.locator('[data-testid^="money-tile-"]').locator("visible=true").count()) <= 2, `${route}: no wall of tiles`);
   }
   // «Счета»: «Просрочено» → only its group, chosen; again → all

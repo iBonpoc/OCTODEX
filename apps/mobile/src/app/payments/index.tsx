@@ -37,7 +37,7 @@ const WHEN_TITLE: Record<When, DictKey> = { today: "proto.money.g.today", week: 
 export default function Payments() {
   const { db, role } = useStore();
   const [q, setQ] = useState("");
-  const { t, money, day, time } = useI18n();
+  const { t, money, day, time, moneyWhole } = useI18n();
   const chips = useMoneyChips("payments");
   const { create, onCreate } = useMoneyCreate();
   if (!canSeePayments(role))
@@ -52,7 +52,7 @@ export default function Payments() {
   const all = paymentsIn(db, "all").items.filter((x) => matchPayment(db, x, q));
   const groups = WHEN.map((w) => {
     const rows = all.filter((x) => whenOf(x) === w);
-    return { key: w, title: `${t(WHEN_TITLE[w])} · ${money(sumCents(rows.map((x) => x.amountCents)))}`, rows: rows as (Payment | Advance)[] };
+    return { key: w, title: `${t(WHEN_TITLE[w])} · ${moneyWhole(sumCents(rows.map((x) => x.amountCents)))}`, rows: rows as (Payment | Advance)[] };
   });
   // spec 35 §4г: the clients' advances (no invoice) — their own group, outside every sum while they are «to check»
   const advances = ADVANCES_COLLECTED ? [] : (db.advances ?? []).filter((x) => matchPayment(db, { ...x, invoiceId: "" }, q));
@@ -70,7 +70,7 @@ export default function Payments() {
     // #3018 (founder #3017): 1 — the client · the way («Check #1042»); 2 — the address; 3 — the invoice · when · who took it
     const prop = db.properties.find((p) => p.customerId === x.customerId);
     const who = "receivedBy" in x && x.receivedBy ? memberName(db, x.receivedBy, t) : undefined;
-    const sub = [review, inv?.number, whenOf(x as Payment) === "today" ? time(x.at) : day(x.at), who, x.refundedCents ? t("mny.refunded", { amount: money(x.refundedCents) }) : undefined];
+    const sub = [review, inv?.number, whenOf(x as Payment) === "today" ? time(x.at) : day(x.at), who, x.refundedCents ? t("mny.refunded", { amount: moneyWhole(x.refundedCents) }) : undefined];
     return {
       key: x.id,
       testID: `payment-row-${x.id}`,
@@ -80,7 +80,7 @@ export default function Payments() {
       extra: sub.filter(Boolean).join(" · ") || undefined,
       figureRight: true,
       lead: { initials: initialsOf(c?.name) },
-      value: money(x.amountCents),
+      value: moneyWhole(x.amountCents),
       onPress: () => router.push(`/receipt/${x.id}`),
     };
   };

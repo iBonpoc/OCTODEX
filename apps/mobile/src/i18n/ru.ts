@@ -1321,7 +1321,7 @@ export const ru = {
   "client.lateCalls": "Не звонить после 18:00",
   "client.phonesInCard": "Телефоны и email людей клиента меняются в карточке, блок «Контакты».",
   "client.st.prospect": "Потенциальный",
-  "client.st.active": "Клиент",
+  "client.st.active": "Активный",
   "client.st.archived": "В архиве",
   "client.st.doNotService": "Не обслуживаем",
   "client.stHint.prospect": "Есть смета, ещё не подписал. Станет клиентом сам после подписи.",
@@ -2219,6 +2219,7 @@ export const ru = {
   "rpt.help": "Пять отчётов: кто должен, сколько собрано, сколько продано, какие источники и направления приносят выручку. Суммы считаются так же, как в счетах.",
   "rpt.monthLine": "Суммы — за этот месяц, «Кто должен» — на сегодня",
   "lst.ofTotal": "из {amount}",
+  "lst.moreN": "ещё {n}",
   "lst.numberPending": "№ после связи",
   "lst.reminded.one": "Напомнили {n} раз",
   "lst.reminded.few": "Напомнили {n} раза",
@@ -5782,6 +5783,7 @@ export const ru = {
   "oc.est.sentToday": "Отправлена сегодня · не подписана",
   "oc.est.sentAgo": "Отправлена {n} дн. назад · не подписана",
   "oc.est.noAnswer": "Без ответа · {n} дн. · не подписана",
+  "oc.client.forInvoices": "Для счетов",
 } as const;
 
 export type DictKey = keyof typeof ru;

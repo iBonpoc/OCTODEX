@@ -38,7 +38,7 @@ const NOBODY = "__nobody";
  */
 export default function Jobs() {
   const { db, role, mode } = useStore();
-  const { t, money, day, time } = useI18n();
+  const { t, money, day, time, moneyWhole } = useI18n();
   // the tech never sees amounts (spec 06 §7.6)
   const office = role !== "tech";
   const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));
@@ -91,7 +91,7 @@ export default function Jobs() {
         // with «Позвонить · Маршрут» on the right the phone in the name's line pushed the deeds into a 4th line: the call button IS the phone
         subtitle={p ? shortAddress(p.address, p.city) : undefined}
         // line 3 — the sum first, never cut (#2672; the tech never sees it), then when · what · who
-        extra={[office ? money(j.amountCents) : undefined, when, j.title, office ? who : undefined].filter(Boolean).join(" · ") || undefined}
+        extra={[office ? moneyWhole(j.amountCents) : undefined, when, j.title, office ? who : undefined].filter(Boolean).join(" · ") || undefined}
         wrap
         lead={{ initials: initialsOf(c?.name) }}
         // read only: a job has no hand moves (statusMoves) — the date comes from scheduling, «done» from the visit's payment

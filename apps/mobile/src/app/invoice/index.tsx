@@ -45,7 +45,7 @@ const GROUP_TITLE = { overdue: "proto.money.g.overdue", waiting: "proto.money.g.
 export default function Invoices() {
   const { f: fParam, customer, g: gParam } = useLocalSearchParams<{ f?: string; customer?: string; g?: string }>();
   const { db, role } = useStore();
-  const { t, tn, money, day } = useI18n();
+  const { t, tn, money, day, moneyWhole } = useI18n();
   const remind = useInvoiceRemind();
   const chips = useMoneyChips("invoices");
   const { create, onCreate } = useMoneyCreate();
@@ -69,7 +69,7 @@ export default function Invoices() {
   const canRemind = true;
   const groups = shown.map(({ g, items, all }) => ({
     key: g,
-    title: `${t(g === "paid" && owedOnly ? "proto.money.g.paidWeek" : GROUP_TITLE[g])} · ${money(sumCents(items.map((i) => (g === "paid" ? i.paidCents : invoiceBalance(i).owesCents))))}`,
+    title: `${t(g === "paid" && owedOnly ? "proto.money.g.paidWeek" : GROUP_TITLE[g])} · ${moneyWhole(sumCents(items.map((i) => (g === "paid" ? i.paidCents : invoiceBalance(i).owesCents))))}`,
     rows: items,
     // «Напомнить всем · N» — on the debtors' line (the List template has no main button; BUILD-SPEC §2.13)
     all:
@@ -99,7 +99,7 @@ export default function Invoices() {
     // #3018: line 3 — the sign, «из $2,000.00» when part is paid, when; the number is in the name's line, the address under it
     const job = db.jobs.find((j) => j.id === i.jobId);
     const prop = db.properties.find((x) => x.id === job?.propertyId) ?? db.properties.find((x) => x.customerId === i.customerId);
-    const partOf = owes > 0 && i.paidCents > 0 ? t("lst.ofTotal", { amount: money(i.totalCents) }) : undefined;
+    const partOf = owes > 0 && i.paidCents > 0 ? t("lst.ofTotal", { amount: moneyWhole(i.totalCents) }) : undefined;
     const sub = [partOf, when, late && remindersOf(db, i.id).length ? tn("lst.reminded", remindersOf(db, i.id).length) : undefined].filter(Boolean).join(" · ");
     return {
       key: i.id,
@@ -111,7 +111,7 @@ export default function Invoices() {
       figureRight: true,
       lead: { initials: initialsOf(c?.name) },
       // the rest to pay, big on the right (Jobber, HCP: the office calls by the balance)
-      value: money(owes > 0 ? owes : i.paidCents),
+      value: moneyWhole(owes > 0 ? owes : i.paidCents),
       status: owes > 0 && sign ? { status: sign.tone, label: t(sign.key, sign.params) } : undefined,
       onPress: () => panel.open(i.id),
       selected: i.id === panel.openId,

@@ -2220,6 +2220,7 @@ export const en: Dict = {
   "rpt.help": "Five reports: who owes, what was collected, what was sold, and which sources and directions bring revenue. Sums are counted the same way as on invoices.",
   "rpt.monthLine": "Sums for this month, “Who owes” as of today",
   "lst.ofTotal": "of {amount}",
+  "lst.moreN": "+{n} more",
   "lst.numberPending": "# after sync",
   "lst.reminded.one": "Reminded {n} time",
   "lst.reminded.few": "Reminded {n} times",
@@ -5781,4 +5782,5 @@ export const en: Dict = {
   "oc.est.sentToday": "Sent today · not signed",
   "oc.est.sentAgo": "Sent {n} d ago · not signed",
   "oc.est.noAnswer": "No answer · {n} d · not signed",
+  "oc.client.forInvoices": "For invoices",
 };
