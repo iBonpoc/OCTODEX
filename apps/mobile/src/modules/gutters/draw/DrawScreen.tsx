@@ -40,7 +40,8 @@ import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { isDoubleTap, tapRule, type LastTap } from "../canvas/doubleTap";
 import { blinkPlan, dimAt } from "../canvas/dsBlink";
 import { deleteTarget, hasCap, type PickedEnd } from "../canvas/endPick";
-import { adopt, dsFor, patchDs, patchRun, pruneStored, readDefaults, resetKind, runFor, storeDefaults, type NewDefaults } from "../canvas/toolDefaults";
+import { adopt, dsFor, likeElement, newDirty, patchDs, patchRun, pruneStored, readDefaults, resetKind, runFor, storeDefaults, type NewDefaults } from "../canvas/toolDefaults";
+import { ToggleRow } from "@/ui/toggleRow";
 import { CornerSheet } from "./CornerSheet";
 import { EndSheet } from "./EndSheet";
 import { autoDownspouts, autoManaged, commitAuto, refillChain, shortChains } from "../canvas/autoDs";
@@ -268,6 +269,10 @@ function DrawCanvas() {
   const [newDef, setNewDef] = useState<NewDefaults>({});
   /** «Новые желоба» / «Новые водостоки» open (a sheet on the phone, the side column wider) */
   const [newSheet, setNewSheet] = useState<Tool | null>(null);
+  /** the window «Новые …» edits a draft; «Сохранить» makes it the drawing's, «Закрыть» drops it (#2987: one window, one way to save) */
+  const [newDraft, setNewDraft] = useState<NewDefaults | null>(null);
+  /** «Новые — так же» in a gutter's / downspout's own window (#2987): on «Сохранить» the next ones are drawn like it */
+  const [alsoNew, setAlsoNew] = useState(false);
   /** 390: the sheet of the measurement's photos */
   const [photoSheet, setPhotoSheet] = useState(false);
   /** «Ещё»: «Вернуть» and where the toolbar sits — rare, off the main row (П20.8) */
@@ -873,6 +878,18 @@ function DrawCanvas() {
     setWin(null);
     if (w) setHist(winSave(w, cur.current.drawing, histRef.current));
   };
+  /** «Сохранить» of a gutter's / downspout's window: its edits kept, and with «Новые — так же» on the next ones drawn like it (#2987) */
+  const saveObj = () => {
+    const d = cur.current.drawing, id = cur.current.selected;
+    const run = d.runs.find((r) => r.id === id), ds = d.downspouts.find((x) => x.id === id);
+    if (alsoNew && run) setNewDef((x) => likeElement(cur.current.ch, x, { kind: "run", attrs: run.attrs }));
+    else if (alsoNew && ds) {
+      const { id: _i, runId: _r, atIn: _a, ...attrs } = ds;
+      setNewDef((x) => likeElement(cur.current.ch, x, { kind: "ds", attrs }));
+    }
+    setAlsoNew(false);
+    saveWin();
+  };
   /** «Не сохранять» (or «Закрыть» with no edit left): the drawing and its history as before the window */
   const discardWin = () => {
     const back = winDiscard(winRef.current);
@@ -916,6 +933,7 @@ function DrawCanvas() {
   useEffect(() => {
     if (winKeyRef.current === winKey) return;
     winKeyRef.current = winKey;
+    setAlsoNew(false);
     if (winRef.current) saveWin();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [winKey]);
@@ -977,32 +995,73 @@ function DrawCanvas() {
   const attrs = !sel ? null : (
     <>
       {"a" in sel ? <RunAttrsView key={sel.id} no={drawing.runs.findIndex((r) => r.id === sel.id) + 1} run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} /> : <DsAttrsView key={sel.id} rulesOver={rules.over} no={drawing.downspouts.findIndex((d) => d.id === sel.id) + 1} ds={sel} onAttrs={onDsAttrs} ch={ch} run={drawing.runs.find((r) => r.id === sel.runId)?.attrs} />}
+      {canSave ? (
+        <ToggleRow
+          testID="attr-also-new"
+          label={t("mod.gutters.draw.alsoNew")}
+          caption={t("a" in sel ? "mod.gutters.draw.alsoNewRun" : "mod.gutters.draw.alsoNewDs")}
+          value={alsoNew}
+          onChange={setAlsoNew}
+        />
+      ) : null}
       {elPhotos}
     </>
   );
   // «Новые желоба» / «Новые водостоки» (#1563 PR B): the rows of a gutter's / downspout's properties, for the new ones of this drawing
   const newTitle = newSheet === "line" ? t("mod.gutters.draw.newDefaults.runs") : t("mod.gutters.draw.newDefaults.ds");
-  const newOwn = newSheet === "line" ? newDef.run : newDef.ds;
-  /** the title (wider: in the column; the phone's sheet has it in its own header with «✕»), «Сбросить», and what it is for — on top, before
-   *  the rows: otherwise the column looks like the picked gutter's own properties (design-reviewer #1563 PR B) */
-  const newBody = (titled: boolean) => !newSheet ? null : (
+  /** what the window shows: its draft (opened with what the drawing uses now) */
+  const nd = newDraft ?? newDef;
+  const newOwn = newSheet === "line" ? nd.run : nd.ds;
+  const newEdited = newDirty(newDraft, newDef);
+  const openNew = (tl: Tool) => {
+    setSelected(null);
+    setNewDraft(cur.current.newDef);
+    setNewSheet(tl);
+  };
+  const closeNew = () => {
+    setNewSheet(null);
+    setNewDraft(null);
+  };
+  const saveNew = () => {
+    if (newDraft) setNewDef(newDraft);
+    closeNew();
+  };
+  /** 820/1280: «Закрыть» of the column with edits — the same question as a gutter's window (DS Б1/Б3) */
+  const closeNewPanel = async () => {
+    if (newEdited) {
+      const a = await askWin({
+        title: t("sheet.unsavedTitle"),
+        text: t("sheet.unsavedText"),
+        testID: "attr-win-ask",
+        actions: [
+          { key: "save", label: t("ue.save"), tone: "primary", testID: "attr-win-ask-save" },
+          { key: "discard", label: t("sheet.discard"), tone: "danger", testID: "attr-win-ask-discard" },
+          { key: "back", label: t("sheet.keepEditing"), tone: "cancel", testID: "attr-win-ask-back" },
+        ],
+      });
+      if (a === "save") return saveNew();
+      if (a !== "discard") return;
+    }
+    closeNew();
+  };
+  /** «Новые gutter» / «Новые downspout» (#2987, founder 27.11: «нужно продумать, какие должны открываться меню»): the same window as one
+   *  gutter's / downspout's — its title, what it is for, its rows, «Как в настройках компании»; «Закрыть / Сохранить» at the bottom */
+  const newBody = () => !newSheet ? null : (
     <View testID="draw-new-defaults" style={{ gap: space[4] }}>
       <View style={{ gap: space[1] }}>
-        <RowView style={{ alignItems: "center", justifyContent: "space-between", gap: space[2] }}>
-          {titled ? <T v="heading" w="semibold">{newTitle}</T> : <View />}
-          {newOwn ? (
-            <View testID="draw-new-defaults-reset">
-              <Button label={t("mod.gutters.draw.newDefaults.reset")} variant="ghost" size="sm" onPress={() => setNewDef((x) => resetKind(x, newSheet === "line" ? "run" : "ds"))} />
-            </View>
-          ) : null}
-        </RowView>
+        <T v="heading" w="semibold">{newTitle}</T>
         <T v="caption" tone="mut">{t("mod.gutters.draw.newDefaults.hint")}</T>
       </View>
       {newSheet === "line" ? (
-        <RunAttrsView forNew run={{ id: "new-run", a: [0, 0], b: [0, 0], attrs: runFor(ch, story, newDef) }} onAttrs={(p) => setNewDef((x) => patchRun(ch, x, p))} onLength={() => {}} ch={ch} />
+        <RunAttrsView forNew run={{ id: "new-run", a: [0, 0], b: [0, 0], attrs: runFor(ch, story, nd) }} onAttrs={(p) => setNewDraft((x) => patchRun(ch, x ?? newDef, p))} onLength={() => {}} ch={ch} />
       ) : (
-        <DsAttrsView forNew ds={{ ...dsFor(ch, newDef), id: "new-ds", runId: "", atIn: 0 }} onAttrs={(p) => setNewDef((x) => patchDs(ch, x, p))} ch={ch} run={runFor(ch, story, newDef)} />
+        <DsAttrsView forNew ds={{ ...dsFor(ch, nd), id: "new-ds", runId: "", atIn: 0 }} onAttrs={(p) => setNewDraft((x) => patchDs(ch, x ?? newDef, p))} ch={ch} run={runFor(ch, story, nd)} />
       )}
+      {newOwn ? (
+        <View testID="draw-new-defaults-reset" style={{ alignItems: "flex-start" }}>
+          <Button label={t("mod.gutters.draw.newDefaults.reset")} icon="undo" variant="secondary" size="sm" onPress={() => setNewDraft((x) => resetKind(x ?? newDef, newSheet === "line" ? "run" : "ds"))} />
+        </View>
+      ) : null}
     </View>
   );
   /** 820/1280: the panel is a column on the right, always there; the canvas and its bars stay left of it */
@@ -1138,7 +1197,9 @@ function DrawCanvas() {
   }, [store.loading, store.db, mId]);
   // a pick on the canvas shows its own properties: «новые» close (wider the column shows one thing at a time)
   useEffect(() => {
-    if (selected) setNewSheet(null);
+    if (!selected) return;
+    setNewSheet(null);
+    setNewDraft(null);
   }, [selected]);
   /** two taps on «Желоб» / «Водосток» in the toolbar: the properties of new ones (#1563 PR B); one tap picks the tool, as before */
   const toolTap = useRef<LastTap | null>(null);
@@ -1150,8 +1211,7 @@ function DrawCanvas() {
     const now = Date.now();
     if (isDoubleTap(toolTap.current, now, tl, motion.doubleTapMs)) {
       toolTap.current = null;
-      setSelected(null);
-      setNewSheet(tl);
+      openNew(tl);
       return;
     }
     toolTap.current = { at: now, id: tl };
@@ -1178,7 +1238,7 @@ function DrawCanvas() {
   // «⋯» (founder 09.11, #692 #690; spec 33 П24 Б5, Б6): link to another, unlink back to the drafts, delete the measurement
   const whoRef = useRef<React.ComponentRef<typeof View>>(null);
   const [whoAt, setWhoAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  type WhoKey = "fit" | "props" | "end0" | "end1" | "acc" | "layers" | "autods" | "relink" | "unlink" | "delete";
+  type WhoKey = "fit" | "newdef" | "props" | "end0" | "end1" | "acc" | "layers" | "autods" | "relink" | "unlink" | "delete";
   const linked = !!leadId || !!placeId;
   // the free ends of the picked gutter (a corner and a butted end have no cap to talk about; «без заглушки» stays one)
   const endRun0 = canSave ? drawing.runs.find((r) => r.id === selected) : undefined;
@@ -1194,6 +1254,8 @@ function DrawCanvas() {
     // gutter / downspout, and «Конец желоба» of each of its free ends (named by the letter the cap carries on the canvas)
     ...(canSave && sel && !wide ? [{ key: "props" as const, label: t("mod.gutters.attr.props") }] : []),
     ...endRows.map((r) => ({ key: `end${r.end}` as const, label: `${t("mod.gutters.end.title")} · ${r.side}` })),
+    // «Как рисовать новые» (#2987): what two taps on «Желоб» / «Водосток» in the toolbar open, as a row — no need to know the double tap
+    ...(canSave ? [{ key: "newdef" as const, label: t("mod.gutters.draw.newDefaults.item"), testID: "draw-who-newdef" }] : []),
     // no «Где панель» (founder 18.11, #2156: «Зачем она там?») — the toolbar moves by its grip; no «Точность замера» (#768, #1764)
     { key: "layers", label: t("mod.gutters.draw.layersItem") },
     // a measurement from before the automatic downspouts gets them only when asked (#1246): not silently, the estimate would change
@@ -1204,6 +1266,7 @@ function DrawCanvas() {
   const onWho = (k: WhoKey) => {
     if (k === "fit") { if (size.w) setView(fit(drawing, size)); return; }
     if (k === "props") return setSheet(true);
+    if (k === "newdef") return openNew(cur.current.tool);
     if (k === "end0" || k === "end1") return setEndSheet(endRun0 ? { id: endRun0.id, end: k === "end1" ? 1 : 0 } : null);
     if (k === "layers") return setMoreSheet(k);
     if (k === "autods") return placeAutoDs();
@@ -1619,15 +1682,13 @@ function DrawCanvas() {
         <View testID="draw-panel" style={{ position: "absolute", right: ins.right + space[3], top: ins.top + space[2], bottom: ins.bottom + space[3], width: component.panelW, padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd, gap: space[2] }}>
           {newSheet ? (
             <>
-              <RowView style={{ justifyContent: "flex-end" }}>
-                <View testID="draw-panel-close"><IconButton icon="close" label={t("mod.gutters.attr.close")} onPress={() => setNewSheet(null)} /></View>
-              </RowView>
-              <AttrBody>{newBody(true)}</AttrBody>
+              <AttrBody>{newBody()}</AttrBody>
+              <WinButtons onClose={() => void closeNewPanel()} onSave={saveNew} />
             </>
           ) : attrs ? (
             <>
               <AttrBody>{attrs}</AttrBody>
-              <WinButtons onClose={() => void closePanel()} onSave={() => { saveWin(); setSelected(null); }} />
+              <WinButtons onClose={() => void closePanel()} onSave={() => { saveObj(); setSelected(null); }} />
             </>
           ) : (
             <View style={{ flex: 1, gap: space[4] }}>
@@ -1643,13 +1704,19 @@ function DrawCanvas() {
         visible={!wide && sheet && !!attrs && !newSheet}
         onClose={() => { discardWin(); setSheet(false); }}
         dirty={winEdited}
-        onSave={() => { saveWin(); setSheet(false); }}
-        footer={<WinButtons onClose={() => { discardWin(); setSheet(false); }} onSave={() => { saveWin(); setSheet(false); }} />}
+        onSave={() => { saveObj(); setSheet(false); }}
+        footer={<WinButtons onClose={() => { discardWin(); setSheet(false); }} onSave={() => { saveObj(); setSheet(false); }} />}
       >
         <AttrBody inSheet>{attrs}</AttrBody>
       </Sheet>
-      <Sheet visible={!wide && !!newSheet} onClose={() => setNewSheet(null)} title={newSheet ? newTitle : undefined}>
-        <AttrBody inSheet>{newBody(false)}</AttrBody>
+      <Sheet
+        visible={!wide && !!newSheet}
+        onClose={closeNew}
+        dirty={newEdited}
+        onSave={saveNew}
+        footer={<WinButtons onClose={closeNew} onSave={saveNew} />}
+      >
+        <AttrBody inSheet>{newBody()}</AttrBody>
       </Sheet>
       {m ? <LinkSheet visible={linkSheet} onClose={() => setLinkSheet(false)} measurementId={m.id} /> : null}
       <DeleteMeasurementSheet visible={!!askDelete} on={askDelete ?? NO_ESTIMATES} onDelete={deleteNow} onClose={() => setAskDelete(null)} />
