@@ -37,6 +37,8 @@ import { goTo } from "@/nav/go";
 import { setFooterInset, setToastRight } from "@/ui/footerInset";
 import { fillStyle } from "@/ui/fill";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
+import { labelTurnDeg, toInner, toOuter, turned, turnPad } from "../canvas/outerTurn";
+import { withTiming } from "react-native-reanimated";
 import { isDoubleTap, tapRule, type LastTap } from "../canvas/doubleTap";
 import { blinkPlan, dimAt } from "../canvas/dsBlink";
 import { deleteTarget, hasCap, type PickedEnd } from "../canvas/endPick";
@@ -161,9 +163,9 @@ const dsSizeText = sizeText; // one format everywhere (#1916)
 const NO_VIEW: PlanView = { k: 1, ox: 0, oy: 0 };
 
 /** the chip with the angle beside a swung end: the same look and place as the live length of a new gutter */
-function SwingChip({ swing, view, box, gap }: { swing: { a: P; b: P; deg: number }; view: PlanView; box: { w: number; h: number; top: number }; gap: number }) {
+function SwingChip({ swing, view, box, gap, out = (q) => q }: { swing: { a: P; b: P; deg: number }; view: PlanView; box: { w: number; h: number; top: number }; gap: number; /** a point of the (maybe turned) canvas on the screen (#2988) */ out?: (q: [number, number]) => [number, number] }) {
   const [chip, setChip] = useState({ w: 0, h: 0 });
-  const a = toScreen(view, swing.a), b = toScreen(view, swing.b);
+  const a = out(toScreen(view, swing.a)), b = out(toScreen(view, swing.b));
   return (
     <View
       pointerEvents="none"
@@ -339,7 +341,29 @@ function DrawCanvas() {
     setView(v);
   }, []);
   // a pinch or a pan commits through `onTouchView`: the view is the person's even if the touch never reached the JS responder (#1667 review)
-  const canvas = useCanvasGestures(viewNow, onTouchView, live, 2, { lim: zoomLim, viewport: size.w > 0 ? size : { w: 390, h: 844 }, onEdge: () => haptics.selection() });
+  /** the turn of the canvas by two fingers (#2988, radians; 0 — north up): kept when the fingers lift — the labels turn back by it, «север вверх» shows */
+  const [turnRad, setTurnRad] = useState(0);
+  const canvas = useCanvasGestures(viewNow, onTouchView, live, 2, { lim: zoomLim, viewport: size.w > 0 ? size : { w: 390, h: 844 }, onEdge: () => haptics.selection() }, { onTurn: setTurnRad, onSnap: () => haptics.selection() });
+  /** where the canvas stands in the window: a finger's point on a turned canvas is read from its absolute place (#2988) */
+  const canvasBox = useRef<React.ComponentRef<typeof View>>(null);
+  const canvasAt = useRef<[number, number]>([0, 0]);
+  /**
+   * The finger's point on the drawing's surface (its own px, as `e.x, e.y` were): not turned — the event's own point, as ever; turned (#2988)
+   * — the absolute point → the canvas → the unturned frame (`toInner`) → less the live scale and shift. The same on an iPhone and the web
+   * (inside a turned view their local points differ)
+   */
+  const pt = (e: { x: number; y: number; absoluteX?: number; absoluteY?: number }): [number, number] => {
+    const th = live.r.value;
+    if (!th || e.absoluteX === undefined || e.absoluteY === undefined) return [e.x, e.y];
+    const q = toInner(th, live.cx.value, live.cy.value, e.absoluteX - canvasAt.current[0], e.absoluteY - canvasAt.current[1]);
+    const k = live.s.value || 1;
+    return [(q.x - live.tx.value) / k, (q.y - live.ty.value) / k];
+  };
+  /** «Север вверх» (spec 33 П39): back to 0° about the canvas's centre — the point at the centre stays (no shift is needed) */
+  const northUp = () => {
+    live.r.value = withTiming(0, { duration: reduce ? 0 : motion.durBase });
+    setTurnRad(0);
+  };
 
   // the latest values for gesture callbacks and the delayed save
   const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch, layers, autoDs, size, newDef });
@@ -529,10 +553,10 @@ function DrawCanvas() {
   const pan = usePanGesture(useJsGestureConfig<NonNullable<Parameters<typeof usePanGesture>[0]>>({
     runOnJS: true,
     maxPointers: 1,
-    simultaneousWith: [canvas.pinch, canvas.pan],
+    simultaneousWith: [canvas.pinch, canvas.pan, canvas.rot],
     onBegin: (e) => {
       setTouching(true);
-      downAt.current = [e.x, e.y];
+      downAt.current = pt(e);
       downTime.current = Date.now();
       threeShown.current = false;
       // held on an end, a corner or a downspout for longPressMs without moving: picked up AT ONCE, before the finger goes (#1272, founder
@@ -606,7 +630,7 @@ function DrawCanvas() {
     onUpdate: (e) => {
       const g = dragRef.current;
       if (!g) return;
-      const p = plan(e.x, e.y);
+      const p = plan(...pt(e));
       const d = cur.current.drawing;
       if (g.kind === "line" && g.pullable) {
         const run = g.pullable.before.runs.find((x) => x.id === g.pullable!.id);
@@ -680,7 +704,7 @@ function DrawCanvas() {
       // the final point is the lift itself; a cancelled stroke (a second finger came) keeps nothing
       const d = cur.current.drawing;
       const id = Crypto.randomUUID();
-      const next = finishStroke(g, d, plan(e.x, e.y), tolIn(), e.canceled, { id, attrs: runFor(cur.current.ch, cur.current.story, cur.current.newDef) });
+      const next = finishStroke(g, d, plan(...pt(e)), tolIn(), e.canceled, { id, attrs: runFor(cur.current.ch, cur.current.story, cur.current.newDef) });
       if (g.kind === "end" || g.kind === "ds" || g.kind === "pull" || g.kind === "corner") {
         if (e.canceled) setDrawing(g.before);
         else {
@@ -697,7 +721,7 @@ function DrawCanvas() {
       }
       // a line drawn over a gutter from one end to the other makes no second gutter on it (#1256): say so
       if (next === d && g.kind === "line") {
-        const b = endAt(d, g.a, plan(e.x, e.y), tolIn());
+        const b = endAt(d, g.a, plan(...pt(e)), tolIn());
         const why = e.canceled ? null : lineRefused(d, g.a, b, Number(cur.current.story) || 1, tolIn());
         if (why) {
           haptics.warning();
@@ -714,11 +738,11 @@ function DrawCanvas() {
         quickGrew.current = !!grown && got === grown;
       }
     },
-  }, [canvas.pinch, canvas.pan]));
+  }, [canvas.pinch, canvas.pan, canvas.rot]));
   // a tap: the downspout tool puts one on the nearest run; otherwise pick what is under the finger
   const tap = useTapGesture(useJsGestureConfig<NonNullable<Parameters<typeof useTapGesture>[0]>>({
     runOnJS: true,
-    simultaneousWith: [canvas.pinch, canvas.pan],
+    simultaneousWith: [canvas.pinch, canvas.pan, canvas.rot],
     onBegin: () => {
       liftTap.current = false;
     },
@@ -727,10 +751,11 @@ function DrawCanvas() {
       if (Date.now() - canvas.multiAt.current < MULTI_TAP_MS) { lastTap.current = null; return; } // the fingers of a pinch / two-finger pan lifting are not a tap (a pinch that ended over a length label opened its sheet)
       if (!holdIsTap(hold.current)) return; // a touch that picked something up (a hold) is not a tap: the release does not flip a cap or open a menu (#1272)
       const { drawing: d, tool: tl } = cur.current;
-      const p = plan(e.x, e.y);
+      const p = plan(...pt(e));
       // a tap on a label opens what it says (founder 09.11): a length → its length, a corner → the corner, the
       // fittings word over a downspout → its menu
-      const lab = cur.current.canSave ? sceneRef.current?.labels.find((l) => Math.abs(e.x - l.x) <= l.w / 2 && Math.abs(e.y - l.y) <= l.h / 2) : undefined;
+      const [ex, ey] = pt(e);
+      const lab = cur.current.canSave ? sceneRef.current?.labels.find((l) => Math.abs(ex - l.x) <= l.w / 2 && Math.abs(ey - l.y) <= l.h / 2) : undefined;
       // (the lift of a drag is a tap on the spot on the web: it opens no label it ended over — a downspout dragged under its own word, spec 170)
       if ((lab?.id.startsWith("len:") || lab?.id.startsWith("ds:")) && liftTap.current) return;
       if (lab?.id.startsWith("len:")) {
@@ -810,7 +835,7 @@ function DrawCanvas() {
         else setSheet(true); // the run's (or a downspout's) properties: a sheet on the phone, wider the panel is already open
       });
     },
-  }, [canvas.pinch, canvas.pan]));
+  }, [canvas.pinch, canvas.pan, canvas.rot]));
   const fingers = useSimultaneousGestures(pan, tap);
 
   const scene = useMemo(
@@ -1434,14 +1459,25 @@ function DrawCanvas() {
   const ghostLen = ghost ? Math.round(Math.hypot(ghost.b[0] - ghost.a[0], ghost.b[1] - ghost.a[1])) : 0;
   const gA = ghost && view ? toScreen(view, ghost.a) : null;
   const gB = ghost && view ? toScreen(view, ghost.b) : null;
+  /** a point of the canvas on the screen: the chips over the canvas stand where the turned drawing shows it (#2988) */
+  const outerPt = (q: [number, number]): [number, number] => {
+    if (!turned(turnRad)) return q;
+    const o = toOuter(turnRad, size.w / 2, size.h / 2, q[0], q[1]);
+    return [o.x, o.y];
+  };
+  const gAo = gA ? outerPt(gA) : null;
+  const gBo = gB ? outerPt(gB) : null;
+  /** the drawn layers reach past the canvas when it may turn (#2988): its corners are never empty */
+  const pad = size.w > 0 ? turnPad(size.w, size.h) : 0;
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }} testID="draw-screen" onStartShouldSetResponderCapture={() => { touched.current = true; return false; }}>
       {/* no edge swipe back on the canvas (founder 09.11): drawing from the left edge left the screen */}
       <Stack.Screen options={{ gestureEnabled: false, fullScreenGestureEnabled: false }} />
       {/* the drawing under everything */}
-      <View style={{ position: "absolute", left: 0, right: panelSide, top: 0, bottom: 0 }}>
+      <View ref={canvasBox} collapsable={false} onLayout={() => canvasBox.current?.measureInWindow((x: number, y: number) => { canvasAt.current = [x, y]; })} style={{ position: "absolute", left: 0, right: panelSide, top: 0, bottom: 0 }}>
         <CanvasView
+          turnable
           view={viewNow}
           onView={onTouchView}
           live={live}
@@ -1450,11 +1486,11 @@ function DrawCanvas() {
           gestures={canvas}
           testID="draw-canvas"
           // the grid (#1434): a screen-sized layer under the drawing, following the live view on the UI thread — not clipped on an iPhone
-          under={layers.grid && view && size.w > 0 ? <GridLayer live={live} size={size} minPx={space[6]} testID="draw-grid" /> : null}
+          under={layers.grid && view && size.w > 0 ? <GridLayer live={live} size={size} minPx={space[6]} pad={pad} testID="draw-grid" /> : null}
         >
           <GestureDetector gesture={fingers}>
             <View style={{ width: size.w, height: size.h }} testID="draw-surface">
-              {scene ? <SvgPainter scene={scene} w={size.w} h={size.h} testID="draw-svg" /> : null}
+              {scene ? <SvgPainter scene={scene} w={size.w} h={size.h} pad={pad} turnDeg={-labelTurnDeg(turnRad)} testID="draw-svg" /> : null}
               {gA && gB ? (
                 <View pointerEvents="none" style={{ position: "absolute", left: 0, top: 0 }}>
                   <Svg width={size.w} height={size.h}>
@@ -1498,6 +1534,10 @@ function DrawCanvas() {
             <View style={{ marginLeft: space[3] }}>
               <HelpButton title={t("mod.gutters.draw.help.q")} text={helpText(t)} testID="draw-help" />
             </View>
+            {/* «Север вверх» (#2988, spec 33 П39): only while the view is turned — one press brings it back to 0° (as the compass in Maps) */}
+            {turned(turnRad) ? (
+              <View testID="draw-north"><IconButton icon="navigate" label={t("mod.gutters.draw.northUp")} onPress={northUp} /></View>
+            ) : null}
             {/* no cloud when all is saved and sent: only «on the phone» (not sent yet / no connection), a tap says it in words (#507 → #1274) */}
             {canSave && !flat && (mark === "sending" || mark === "phone") ? (
               <View testID="draw-local">
@@ -1576,14 +1616,14 @@ function DrawCanvas() {
             const { width, height } = e.nativeEvent.layout;
             if (width !== ghostChip.w || height !== ghostChip.h) setGhostChip({ w: width, h: height });
           }}
-          style={{ position: "absolute", opacity: ghostChip.w ? 1 : 0, ...ghostChipAt(gA, gB, ghostChip, { w: size.w, h: size.h, top: ins.top + space[8] + space[6] }, dt.labelGap + dt.runWSel) }}
+          style={{ position: "absolute", opacity: ghostChip.w ? 1 : 0, ...ghostChipAt(gAo!, gBo!, ghostChip, { w: size.w, h: size.h, top: ins.top + space[8] + space[6] }, dt.labelGap + dt.runWSel) }}
         >
           <StatusChip status="neutral" label={fmtLen(ghostLen, ch.lenFormat)} />
         </View>
       ) : null}
 
       {/* the angle beside a free end being swung (#818): «90°» when it is held at a step */}
-      {swing && view ? <SwingChip swing={swing} view={view} box={{ w: size.w, h: size.h, top: ins.top + space[8] + space[6] }} gap={dt.labelGap + dt.runWSel} /> : null}
+      {swing && view ? <SwingChip swing={swing} view={view} box={{ w: size.w, h: size.h, top: ins.top + space[8] + space[6] }} gap={dt.labelGap + dt.runWSel} out={outerPt} /> : null}
 
       {/* bottom: the toolbar (bottom / right hand / left hand) and the $ — always at the bottom */}
       {/* where the toolbar sticks if let go now (founder 09.11): that edge outlined */}

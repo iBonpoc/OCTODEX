@@ -4279,6 +4279,7 @@ export const ru = {
   "mod.gutters.draw.newDefaults.runs": "Новые gutter",
   "mod.gutters.draw.newDefaults.ds": "Новые downspout",
   "mod.gutters.draw.newDefaults.hint": "Так будут рисоваться следующие на этом чертеже. Уже нарисованные не меняются.",
+  "mod.gutters.draw.northUp": "Север вверх",
   "mod.gutters.draw.newDefaults.item": "Как рисовать новые",
   "mod.gutters.draw.alsoNew": "Новые — так же",
   "mod.gutters.draw.alsoNewRun": "По «Сохранить» следующие gutter возьмут эти свойства",

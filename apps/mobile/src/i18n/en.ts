@@ -4279,6 +4279,7 @@ export const en: Dict = {
   "mod.gutters.draw.newDefaults.runs": "New gutters",
   "mod.gutters.draw.newDefaults.ds": "New downspouts",
   "mod.gutters.draw.newDefaults.hint": "The next ones on this drawing are drawn like this. What is already drawn does not change.",
+  "mod.gutters.draw.northUp": "North up",
   "mod.gutters.draw.newDefaults.item": "How to draw new ones",
   "mod.gutters.draw.alsoNew": "New ones the same",
   "mod.gutters.draw.alsoNewRun": "On «Save» the next gutters take these properties",

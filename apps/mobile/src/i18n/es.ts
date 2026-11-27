@@ -4279,6 +4279,7 @@ export const es: Dict = {
   "mod.gutters.draw.newDefaults.runs": "Canaletas nuevas",
   "mod.gutters.draw.newDefaults.ds": "Bajantes nuevas",
   "mod.gutters.draw.newDefaults.hint": "Así se dibujarán las siguientes en este dibujo. Lo ya dibujado no cambia.",
+  "mod.gutters.draw.northUp": "Norte arriba",
   "mod.gutters.draw.newDefaults.item": "Cómo dibujar las nuevas",
   "mod.gutters.draw.alsoNew": "Las nuevas igual",
   "mod.gutters.draw.alsoNewRun": "Al «Guardar» las siguientes canaletas toman estas propiedades",
