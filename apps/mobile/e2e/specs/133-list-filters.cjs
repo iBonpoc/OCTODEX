@@ -78,18 +78,21 @@ exports.run = async (h) => {
       await icon.click();
       const box = vis(p.getByTestId("filter-search-field")).first();
       await box.waitFor();
-      await p.waitForTimeout(400);
+      // wait for the sign, not a pause (e2eWaitGuard): the field's input has the focus
+      await box.locator("input").first().evaluate((el) => new Promise((r) => { if (document.activeElement === el) r(); else el.addEventListener("focus", () => r(), { once: true }); }));
       // the TextField's testID is on its frame: the input is inside it
       const field = box.locator("input").first();
       h.expect(await box.evaluate((el) => el.contains(document.activeElement)), `${L.path}: the open field has the focus`);
       const lane2 = await vis(bar.getByTestId("filter-lane")).first().boundingBox();
       const fb = await box.boundingBox();
       h.expect(lane2.y > fb.y + fb.height - 1, `${L.path}: the lane stays under the open field`);
-      await field.fill("zzzqqq"); await p.waitForTimeout(300);
+      // the rows on screen — counted in the page, so the wait is for the sign (e2eWaitGuard), not a pause
+      const rowsAre = (n) => p.waitForFunction(([sel, k]) => [...document.querySelectorAll(sel)].filter((e) => e.getClientRects().length > 0).length === k, [cardSel, n]);
+      await field.fill("zzzqqq"); await rowsAre(0).catch(() => {});
       h.expect((await vis(p.locator(cardSel)).count()) === 0, `${L.path}: the search narrows the list`);
-      await field.fill(""); await p.waitForTimeout(300);
+      await field.fill(""); await rowsAre(whole).catch(() => {});
       h.expect((await vis(p.locator(cardSel)).count()) === whole, `${L.path}: the list is whole again`);
-      await icon.click(); await p.waitForTimeout(400);
+      await icon.click(); await box.waitFor({ state: "hidden" });
     } else {
       // the search is an icon (founder 07.11): folded, it shares one row with the lane on every width
       const toggle = vis(bar.getByTestId("filter-search-toggle")).first();
