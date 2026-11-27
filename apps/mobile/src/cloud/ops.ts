@@ -30,6 +30,8 @@ export type Op =
   | { k: "visit.step"; visitId: string; to: VisitStep; at?: string }
   | { k: "photo.add"; id: string; visitId: string; jobId?: string; stage: "before" | "after"; uri?: string }
   | { k: "photo.remove"; id: string }
+  /** #3085: a photo of the client, no visit (files.customer_id); its bytes go the photo's way (uploadPhoto) */
+  | { k: "file.add"; id: string; customerId: string; uri?: string }
   /** #1431 «Повторить»: the file of a photo the cloud refused, sent again (its files row is already there) */
   | { k: "photo.retry"; id: string; visitId: string; uri: string }
   /** #1558: a receipt's bytes once the phone could prepare them (the files row went with expense.add) */
@@ -619,6 +621,11 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       if (op.to === "working") return run(supabase.from("visits").update({ work_started_at: new Date().toISOString() }).eq("id", op.visitId));
       // an inspection ends on site: completed (S10); a job visit with nothing to pay ends here too
       if (op.to === "done") return run(supabase.from("visits").update({ status: "completed" }).eq("id", op.visitId).eq("status", "on_site"));
+      return;
+    }
+    case "file.add": {
+      await run(ins("files", { id: op.id, company_id: c, kind: "photo", customer_id: op.customerId, taken_at: new Date().toISOString() }));
+      if (op.uri) return { photo: { id: op.id, failed: await uploadPhoto(c, op.id, op.uri) } };
       return;
     }
     case "photo.add": {
