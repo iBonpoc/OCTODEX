@@ -225,11 +225,8 @@ export function ActionRow({ label, onPress, icon, tone, inGroup, testID }: {
       accessibilityLabel={label}
       style={{ minHeight: size.hitMin, flexDirection: "row", alignItems: "center", gap: space[2], ...(inGroup ? { paddingHorizontal: space[4] } : null) }}
     >
-      {icon ? (
-        <View style={{ width: component.dockBtn, alignItems: "center" }}>
-          <Icon name={icon} s={component.valueIcon} color={color} />
-        </View>
-      ) : null}
+      {/* #3065 (leader 27.11, design review): the icon stands on the left edge of the fields above, not centred in a 40 column */}
+      {icon ? <Icon name={icon} s={component.valueIcon} color={color} /> : null}
       <T v="body" style={{ color }}>
         {label}
       </T>
