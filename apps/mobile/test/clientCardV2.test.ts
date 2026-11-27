@@ -43,6 +43,9 @@ describe("sections: one strip «Обзор · Работы · Сметы · Сч
     expect(clientSectionOf("people")).toBe("overview");
     expect(clientSectionOf(undefined)).toBe("overview");
   });
+  it("every section of today opens itself — «Выезды» is not folded into «Работы» (#3060 п.3: the chip «Выезды» opened «Работы»)", () => {
+    for (const k of clientSectionKeys("director", true, true)) expect(clientSectionOf(k)).toBe(k);
+  });
 });
 
 describe("the «Сейчас» card's three figures (visual v2: Смета · Оплачено · Остаток)", () => {

@@ -116,8 +116,10 @@ export function clientSectionOf(v: unknown): ClientSectionKey {
     case "work":
     case "jobs":
     case "leads":
-    case "visits":
       return "work";
+    // #2363 q76 made «Выезды» its own section: an address `?tab=visits` is that section, not «Работы» (#3060 п.3 — the chip opened «Работы»)
+    case "visits":
+      return "visits";
     case "estimates":
       return "estimates";
     case "money":
