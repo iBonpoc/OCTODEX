@@ -6,11 +6,12 @@ import { useStore } from "@/data/store";
 import { usePersistentState } from "@/data/persist";
 import type { Customer } from "@/data/types";
 import { canImportClients } from "@/features/client/importRun";
-import { clientHistory, clientMoneyOf, clientNextVisit, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, visibleClients } from "@/features/clients";
+import { canArchive, clientHistory, clientMoneyOf, clientNextVisit, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, visibleClients } from "@/features/clients";
 import { canSeeClientDups, clientDuplicates } from "@/features/clientDuplicates";
 import { clientListGroups } from "@/features/clientGroups";
 import { dayOffsetOf, isoDayKey } from "@/features/calendar";
 import { smsHref, telHref } from "@/features/contactLinks";
+import { clientListAddress } from "@/features/clientListAddress";
 import { pickerOptions } from "@/features/statusMoves";
 import { useI18n } from "@/i18n";
 import { ClientOverview, useAgo, useClientFacts } from "@/features/client/ClientSections";
@@ -37,7 +38,7 @@ const initials = (n: string) => n.split(/\s+/).filter(Boolean).map((p) => p[0]).
  * two on a long press and to VoiceOver (the web has no swipe). «＋» — a new client; «⋯» — import from CSV (the office's).
  */
 export default function Clients() {
-  const { t, money, day, time } = useI18n();
+  const { t, money, day, time, moneyWhole } = useI18n();
   const dw = useDayWord();
   const store = useStore();
   const { db, role } = store;
@@ -98,14 +99,16 @@ export default function Clients() {
     const nextDay = !next ? "" : dw(next.start); // #2363 F46: the one rule (features/dayWords.ts)
     const last = clientHistory(db, c.id, role)[0];
     const prop = db.properties.find((p) => p.customerId === c.id);
-    // one line «когда · что»: the next visit, else what happened last, else the address
+    // #3017 (founder 27.11: «я знаю его по адресу»): line 2 — the address; line 3 — what is going on: the next visit, else what
+    // happened last; no line for what is not there (no «—»)
+    // #3033: the billing address first, else the one property; several — the first and «ещё N» (clientListAddress)
+    const addr = clientListAddress(c.billing, db.properties.filter((p) => p.customerId === c.id), (n) => t("lst.moreN", { n }));
     const line = next
       ? [`${nextDay} ${time(next.start)}`, db.jobs.find((j) => j.id === next.jobId)?.title ?? t("plan.kind.inspection")].join(" · ")
       : last
-        ? [ago(last.at), t(last.title), last.detail].filter(Boolean).join(" · ")
-        : prop
-          ? [prop.address, prop.city].filter(Boolean).join(", ")
-          : undefined;
+        // what happened first, then when: «Оплата · RCT-0104 · сегодня» never reads as a deed for today (crm-review 27.11)
+        ? [t(last.title), last.detail, ago(last.at).toLowerCase()].filter(Boolean).join(" · ")
+        : undefined;
     const tel = telHref(c.phone);
     const toArchive = office && pickerOptions("customer", st).find((o) => o.status === "archived" && o.enabled && o.how !== "form");
     const sms = smsHref(c.phone);
@@ -113,10 +116,11 @@ export default function Clients() {
     const swipeLeft: SwipeAction[] = tel ? [{ key: "call", label: t("swipe.call"), icon: "phone", testID: `client-row-swipe-call-${c.id}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c.phone ?? "" }) }] : [];
     const swipeRight: SwipeAction[] = [
       ...(sms ? [{ key: "sms", label: t("cc.sms"), icon: "sms" as const, testID: `client-row-swipe-sms-${c.id}`, onPress: () => openContact({ kind: "sms", icon: "sms", url: sms, value: c.phone ?? "" }) }] : []),
-      ...(toArchive ? [{ key: "archive", label: t("swipe.archive"), icon: "box" as const, tone: "bad" as const, testID: `client-row-swipe-archive-${c.id}`, onPress: () => archive(c) }] : []),
+      ...(toArchive && canArchive(db, c.id) ? [{ key: "archive", label: t("swipe.archive"), icon: "box" as const, tone: "bad" as const, testID: `client-row-swipe-archive-${c.id}`, onPress: () => archive(c) }] : []),
     ];
     const status = overdue
-      ? { status: "bad" as const, label: t("proto.client.lateDays", { d: overdue.days }) }
+      // the word with the figure (rule 2, design-review 27.11): «Просрочен 9 дн», not a bare «9 дн»
+      ? { status: "bad" as const, label: t("w2m.due.late", { d: overdue.days }) }
       : st !== "active"
         ? { status: clientStatusChip[st].s, label: t(clientStatusChip[st].l) }
         : dups.get(c.id)?.length
@@ -126,12 +130,20 @@ export default function Clients() {
       key: c.id,
       testID: `client-row-${c.id}`,
       title: c.name,
-      subtitle: line,
+      // #3033 (founder 27.11): no phone in the list — the call button and the card have it; 1 — the name, the sum on the right with
+      // the status as its icon (no word; said to VoiceOver); 2 — the address; 3 — the deed
+      subtitle: addr ?? line,
+      addressLine: !!addr,
+      extra: addr ? line : undefined,
       lead: { initials: initials(c.name) },
       // one money figure: the debt; none — a call icon (BUILD-SPEC §2.3 table)
-      value: m && m.owesCents > 0 ? money(m.owesCents) : undefined,
-      status,
-      actions: !m?.owesCents && !status && tel ? [{ icon: "phone" as const, a11y: `${t("client.call")} ${c.name}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c.phone ?? "" }), testID: `client-row-call-${c.id}` }] : undefined,
+      value: m && m.owesCents > 0 ? moneyWhole(m.owesCents) : undefined,
+      status: status ? { ...status, iconOnly: true } : undefined,
+      valueTop: true,
+      // #3035: the client's own number under the sum
+      refNo: c.number || undefined,
+      // #3017: the call stays for a debtor too — they are called most (crm-review 27.11)
+      actions: tel ? [{ icon: "phone" as const, a11y: `${t("client.call")} ${c.name}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c.phone ?? "" }), testID: `client-row-call-${c.id}` }] : undefined,
       swipe: { left: swipeLeft, right: swipeRight },
       onPress: () => panel.open(c.id),
       selected: panel.openId === c.id,
@@ -141,8 +153,9 @@ export default function Clients() {
     <ListScreen<Customer>
       testID="clients"
       title={t("clients.title")}
+      // #3017 (founder 27.11, on the stand): each client its own card
+      separate
       // #2763 (DS §12 «Список»): the title counts what is shown — the chip and the search, not all of the kind
-      count={list.length}
       create={office ? { a11y: t("clients.new"), items: [{ key: "new", label: t("path.clientNew"), icon: "user", testID: "clients-create-new" }] } : undefined}
       onCreate={() => router.push("/client/edit")}
       search={{ placeholder: t("clients.search"), value: q, onChange: setQ }}

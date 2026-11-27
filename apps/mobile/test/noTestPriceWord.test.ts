@@ -52,6 +52,8 @@ describe("unit:noTestPriceWord — #1873", () => {
     const draft = beforeSend(db, { customerId: "c", status: "draft", doc });
     expect(draft.ok === false && draft.reason === "lines" && draft.issues.testPrice.length).toBe(1);
     expect(beforeSend(db, { customerId: "c", status: "sent", doc }).ok).toBe(true);
+    // #3058: a draft that went out before (edited after sending) — not reminded again
+    expect(beforeSend(db, { customerId: "c", status: "draft", doc, lastSentAt: "2026-11-25T18:00:00.000Z" }).ok).toBe(true);
   });
 
   it("the reminder's words: «Проверьте цены: в каталоге стоят примерные» (ru), the same key in every language", () => {

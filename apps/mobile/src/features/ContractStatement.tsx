@@ -15,7 +15,7 @@ import { ButtonPair } from "@/ui/pairs";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
-import { CardGrid, ListCard } from "@/ui/listCard";
+import { GroupRow, ListGroup } from "@/ui/groupedList";
 import { VoidInvoiceCards } from "@/features/invoice/VoidInvoice";
 import { invoiceTitle } from "@/features/invoiceTitle";
 
@@ -106,25 +106,26 @@ export function ContractStatement({
         ) : null}
       </Card>
       {invoices.length ? (
-        <CardGrid>
+        // #3022: the contract's invoices — each its own frame, the lists' row (#3017): «Депозит INV-0105 / Срок … / $342.00 · ✓ Оплачено»
+        <ListGroup separate testID="statement-invoices">
           {invoices.map((i) => {
             const chip = invoiceChip(i);
             return (
-              // the contract's invoices (06 «Серия B», B4): what it is for, number · due · paid part, total on the right, status chip
-              <ListCard
+              <GroupRow
                 key={i.id}
-                density="compact"
                 testID={`statement-invoice-${i.id}`}
-                lead={{ kind: "icon", icon: "invoice" }}
+                lead={{ icon: "invoice" }}
                 title={invoiceTitle(i, t)}
-                when={[i.number, t("money.due", { date: day(i.dueDate) }), i.paidCents > 0 && i.paidCents < i.totalCents ? t("inv.paidPart", { amount: money(i.paidCents) }) : undefined].filter(Boolean).join(" · ")}
+                titleNote={i.number || undefined}
+                subtitle={[t("money.due", { date: day(i.dueDate) }), i.paidCents > 0 && i.paidCents < i.totalCents ? t("inv.paidPart", { amount: money(i.paidCents) }) : undefined].filter(Boolean).join(" · ")}
+                figureRight
                 value={money(i.totalCents)}
-                status={{ tone: chip.s, label: t(chip.l, chip.p) }}
+                status={{ status: chip.s, label: t(chip.l, chip.p) }}
                 onPress={() => router.push(`/invoice/${i.id}`)}
               />
             );
           })}
-        </CardGrid>
+        </ListGroup>
       ) : null}
       <VoidInvoiceCards list={(db.voidInvoices ?? []).filter((i) => i.jobId === jobId)} testPrefix="statement" />
       {st.toInvoice > 0 && canBill(store.role) ? (

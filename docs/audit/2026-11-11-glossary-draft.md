@@ -125,7 +125,7 @@
 | 2.9 | filter: без ответа | Без ответа | No reply | Sin respuesta | — | `lead.f.waiting`, `att.noReplyDays` |
 | 2.10 | filter: закрытые | Закрытые | Closed | Cerrados | — | `lead.f.closed` |
 | 2.11 | отложен | Отложен | Snoozed | Pospuesto | RU «Позже» кнопкой | `lead.f.snoozed`, `toast.later` |
-| 2.12 | в архиве | В архиве | Archived | Archivado | — | `client.st.archived` |
+| 2.12 | неактивный (клиент) **[решено, #3040]** | Неактивный | Inactive | Inactivo | RU «В архиве» для клиента — заменено (основатель 27.11, #3040: статус `archived` клиента по-русски «Неактивный», фильтр «Неактивные», подпись «скрыт из списков, история сохраняется»; статус тот же) | `client.st.archived`, `clients.f.archived` |
 
 ### 2.2 Смета
 

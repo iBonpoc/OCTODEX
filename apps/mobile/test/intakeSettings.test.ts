@@ -4,7 +4,7 @@
  * requests come first, the rows of the journal keep only what the screen shows.
  */
 import { describe, expect, it } from "vitest";
-import { endpointFromRow, eventFromRow, formLink, heldFirst, heldReasonKey, readiness, READINESS_TONE, siteSnippet, type IntakeEndpoint } from "../src/features/intakeSettings";
+import { endpointFromRow, eventFromRow, formLink, formPreview, heldFirst, heldReasonKey, readiness, READINESS_TONE, siteSnippet, type IntakeEndpoint } from "../src/features/intakeSettings";
 
 const form = (enabled: boolean): IntakeEndpoint => ({ id: "e1", kind: "form", publicToken: "f".padEnd(33, "a"), tokenHint: "aaaa", sourceId: "s1", enabled, smsConsent: false, captcha: false, dailyLimit: 100 });
 
@@ -54,5 +54,19 @@ describe("intake settings", () => {
     expect(eventFromRow({ id: 2, endpoint_id: "e", received_at: "t", status: "accepted", name: null }).name).toBeUndefined();
     expect(endpointFromRow({ id: "x", kind: "webhook", token_hint: "beef", source_id: "s", enabled: true, sms_consent_enabled: false, captcha_required: false, daily_limit: 50 }))
       .toEqual({ id: "x", kind: "webhook", publicToken: undefined, tokenHint: "beef", sourceId: "s", enabled: true, smsConsent: false, captcha: false, dailyLimit: 50, rotatedAt: undefined });
+  });
+});
+
+describe("#3074 formPreview — «Открыть форму ›» and «Поделиться» by the form's state", () => {
+  const token = "f0123456789abcdef0123456789abcdef";
+  it("on: opens the page here in preview (nothing sent from it), sharing allowed", () => {
+    expect(formPreview({ enabled: true, publicToken: token })).toEqual({ href: `/f/${token}?preview=1`, off: false });
+  });
+  it("off: said, nothing opens, sharing warns (no dead link handed out)", () => {
+    expect(formPreview({ enabled: false, publicToken: token })).toEqual({ href: null, off: true });
+  });
+  it("no form or no link yet: nothing to open, nothing to warn about", () => {
+    expect(formPreview(undefined)).toEqual({ href: null, off: false });
+    expect(formPreview({ enabled: true, publicToken: null })).toEqual({ href: null, off: false });
   });
 });

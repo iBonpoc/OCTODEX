@@ -99,6 +99,11 @@ describe("«⋯» and the rest", () => {
     expect(asksFirst(items.at(-1))).toBe(true);
     expect(asksFirst(items[0])).toBe(false);
   });
+  it("a dangerous item that asks its own question (ownAsk) stays red and last, but is not asked twice (Gutters #3016)", () => {
+    const items = moreItems([{ key: "del", label: "Удалить замер", destructive: true, ownAsk: true }, { key: "arch", label: "Archive" }]);
+    expect(items.at(-1)).toMatchObject({ key: "del", destructive: true });
+    expect(asksFirst(items.at(-1))).toBe(false);
+  });
   it("«Нужно внимание» shows at most three rows", () => {
     expect(attentionRows([1, 2, 3, 4, 5])).toEqual({ shown: [1, 2, 3], more: 2 });
     expect(attentionRows([1]).more).toBe(0);

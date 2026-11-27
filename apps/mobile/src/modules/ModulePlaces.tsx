@@ -1,5 +1,5 @@
 /**
- * A module's place in a core screen (docs/specs/33-gutters-module.md П15.2): the buttons the company's usable modules add
+ * A module's place in a core screen (docs/specs/33-gutters-module.md П15.2): the rows «›» the company's usable modules add
  * here. No module switched on (or the trial over — founder О2) → nothing, the screen is as before. Home is «＋»
  * (nav/Fab.tsx), estimate and job get their place with their first content (C4b, C8).
  */
@@ -9,7 +9,7 @@ import { router, type Href } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
-import { Button } from "@/ui/controls";
+import { GroupRow, ListGroup } from "@/ui/groupedList";
 import { Sheet } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { ListRow } from "@/ui/surfaces";
@@ -39,13 +39,14 @@ export function ModulePlaces({ place, ctx }: { place: Exclude<ModulePlace, "home
   };
   return (
     <View style={{ gap: space[2] }}>
-      <View testID={`module-place-${place}`} style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
+      {/* DS §7.5 (#3064, #3065 п.11): a module's places are rows «›» of one group, as «Компания → Модули», not a row of buttons */}
+      <ListGroup testID={`module-place-${place}`}>
         {actions.map((a) => (
           <View key={`${a.module}-${a.id}`} testID={`module-${a.module}-${a.id}`}>
-            <Button label={t(a.labelKey)} icon={a.icon} variant="secondary" onPress={() => press(a)} />
+            <GroupRow title={t(a.labelKey)} lead={{ icon: a.icon }} chevron onPress={() => press(a)} />
           </View>
         ))}
-      </View>
+      </ListGroup>
       {noted?.noteKey ? (
         <View testID={`module-${noted.module}-${noted.id}-note`}>
           <T v="caption" tone="mut">{t(noted.noteKey)}</T>

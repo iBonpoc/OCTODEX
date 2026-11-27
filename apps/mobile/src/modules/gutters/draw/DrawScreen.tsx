@@ -37,10 +37,13 @@ import { goTo } from "@/nav/go";
 import { setFooterInset, setToastRight } from "@/ui/footerInset";
 import { fillStyle } from "@/ui/fill";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
+import { labelTurnDeg, toInner, toOuter, turned, turnPad } from "../canvas/outerTurn";
+import { withTiming } from "react-native-reanimated";
 import { isDoubleTap, tapRule, type LastTap } from "../canvas/doubleTap";
 import { blinkPlan, dimAt } from "../canvas/dsBlink";
 import { deleteTarget, hasCap, type PickedEnd } from "../canvas/endPick";
-import { adopt, dsFor, patchDs, patchRun, pruneStored, readDefaults, resetKind, runFor, storeDefaults, type NewDefaults } from "../canvas/toolDefaults";
+import { adopt, dsFor, likeElement, newDirty, patchDs, patchRun, pruneStored, readDefaults, resetKind, runFor, storeDefaults, type NewDefaults } from "../canvas/toolDefaults";
+import { ToggleRow } from "@/ui/toggleRow";
 import { CornerSheet } from "./CornerSheet";
 import { EndSheet } from "./EndSheet";
 import { autoDownspouts, autoManaged, commitAuto, refillChain, shortChains } from "../canvas/autoDs";
@@ -160,9 +163,9 @@ const dsSizeText = sizeText; // one format everywhere (#1916)
 const NO_VIEW: PlanView = { k: 1, ox: 0, oy: 0 };
 
 /** the chip with the angle beside a swung end: the same look and place as the live length of a new gutter */
-function SwingChip({ swing, view, box, gap }: { swing: { a: P; b: P; deg: number }; view: PlanView; box: { w: number; h: number; top: number }; gap: number }) {
+function SwingChip({ swing, view, box, gap, out = (q) => q }: { swing: { a: P; b: P; deg: number }; view: PlanView; box: { w: number; h: number; top: number }; gap: number; /** a point of the (maybe turned) canvas on the screen (#2988) */ out?: (q: [number, number]) => [number, number] }) {
   const [chip, setChip] = useState({ w: 0, h: 0 });
-  const a = toScreen(view, swing.a), b = toScreen(view, swing.b);
+  const a = out(toScreen(view, swing.a)), b = out(toScreen(view, swing.b));
   return (
     <View
       pointerEvents="none"
@@ -247,6 +250,9 @@ function DrawCanvas() {
   /** a cap picked on its own (#1855): the gutter is `selected`, this end its picked cap; gone when another thing is picked */
   const [pickedEnd, setPickedEnd] = useState<PickedEnd>(null);
   useEffect(() => { if (pickedEnd && pickedEnd.id !== selected) setPickedEnd(null); }, [selected, pickedEnd]);
+  /** a corner picked (#3066, spec 33-canvas-ui §3 «нажатие — выбрать угол»): the corner, not its gutter — nothing else is `selected` then */
+  const [pickedCorner, setPickedCorner] = useState<string | null>(null);
+  useEffect(() => { if (selected && pickedCorner) setPickedCorner(null); }, [selected, pickedCorner]);
   // the drawing changed (a gutter drawn, an end pulled, the length set): what is picked is the gutter, not its cap — the lift of a
   // stroke on the web is a tap on its end
   const drawnAt = useRef<{ d: unknown; at: number }>({ d: null, at: 0 });
@@ -268,6 +274,10 @@ function DrawCanvas() {
   const [newDef, setNewDef] = useState<NewDefaults>({});
   /** «Новые желоба» / «Новые водостоки» open (a sheet on the phone, the side column wider) */
   const [newSheet, setNewSheet] = useState<Tool | null>(null);
+  /** the window «Новые …» edits a draft; «Сохранить» makes it the drawing's, «Закрыть» drops it (#2987: one window, one way to save) */
+  const [newDraft, setNewDraft] = useState<NewDefaults | null>(null);
+  /** «Новые — так же» in a gutter's / downspout's own window (#2987): on «Сохранить» the next ones are drawn like it */
+  const [alsoNew, setAlsoNew] = useState(false);
   /** 390: the sheet of the measurement's photos */
   const [photoSheet, setPhotoSheet] = useState(false);
   /** «Ещё»: «Вернуть» and where the toolbar sits — rare, off the main row (П20.8) */
@@ -334,11 +344,33 @@ function DrawCanvas() {
     setView(v);
   }, []);
   // a pinch or a pan commits through `onTouchView`: the view is the person's even if the touch never reached the JS responder (#1667 review)
-  const canvas = useCanvasGestures(viewNow, onTouchView, live, 2, { lim: zoomLim, viewport: size.w > 0 ? size : { w: 390, h: 844 }, onEdge: () => haptics.selection() });
+  /** the turn of the canvas by two fingers (#2988, radians; 0 — north up): kept when the fingers lift — the labels turn back by it, «север вверх» shows */
+  const [turnRad, setTurnRad] = useState(0);
+  const canvas = useCanvasGestures(viewNow, onTouchView, live, 2, { lim: zoomLim, viewport: size.w > 0 ? size : { w: 390, h: 844 }, onEdge: () => haptics.selection() }, { onTurn: setTurnRad, onSnap: () => haptics.selection() });
+  /** where the canvas stands in the window: a finger's point on a turned canvas is read from its absolute place (#2988) */
+  const canvasBox = useRef<React.ComponentRef<typeof View>>(null);
+  const canvasAt = useRef<[number, number]>([0, 0]);
+  /**
+   * The finger's point on the drawing's surface (its own px, as `e.x, e.y` were): not turned — the event's own point, as ever; turned (#2988)
+   * — the absolute point → the canvas → the unturned frame (`toInner`) → less the live scale and shift. The same on an iPhone and the web
+   * (inside a turned view their local points differ)
+   */
+  const pt = (e: { x: number; y: number; absoluteX?: number; absoluteY?: number }): [number, number] => {
+    const th = live.r.value;
+    if (!th || e.absoluteX === undefined || e.absoluteY === undefined) return [e.x, e.y];
+    const q = toInner(th, live.cx.value, live.cy.value, e.absoluteX - canvasAt.current[0], e.absoluteY - canvasAt.current[1]);
+    const k = live.s.value || 1;
+    return [(q.x - live.tx.value) / k, (q.y - live.ty.value) / k];
+  };
+  /** «Север вверх» (spec 33 П39): back to 0° about the canvas's centre — the point at the centre stays (no shift is needed) */
+  const northUp = () => {
+    live.r.value = withTiming(0, { duration: reduce ? 0 : motion.durBase });
+    setTurnRad(0);
+  };
 
   // the latest values for gesture callbacks and the delayed save
-  const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch, layers, autoDs, size, newDef });
-  cur.current = { drawing, view, tool, story, selected, m, canSave, ch, layers, autoDs, size, newDef };
+  const cur = useRef({ drawing, view, tool, story, selected, pickedCorner, m, canSave, ch, layers, autoDs, size, newDef, wide });
+  cur.current = { drawing, view, tool, story, selected, pickedCorner, m, canSave, ch, layers, autoDs, size, newDef, wide };
   // the store of this render for the save that runs later (module.op through the core's queue)
   const storeRef = useRef(store);
   storeRef.current = store;
@@ -524,10 +556,10 @@ function DrawCanvas() {
   const pan = usePanGesture(useJsGestureConfig<NonNullable<Parameters<typeof usePanGesture>[0]>>({
     runOnJS: true,
     maxPointers: 1,
-    simultaneousWith: [canvas.pinch, canvas.pan],
+    simultaneousWith: [canvas.pinch, canvas.pan, canvas.rot],
     onBegin: (e) => {
       setTouching(true);
-      downAt.current = [e.x, e.y];
+      downAt.current = pt(e);
       downTime.current = Date.now();
       threeShown.current = false;
       // held on an end, a corner or a downspout for longPressMs without moving: picked up AT ONCE, before the finger goes (#1272, founder
@@ -601,7 +633,7 @@ function DrawCanvas() {
     onUpdate: (e) => {
       const g = dragRef.current;
       if (!g) return;
-      const p = plan(e.x, e.y);
+      const p = plan(...pt(e));
       const d = cur.current.drawing;
       if (g.kind === "line" && g.pullable) {
         const run = g.pullable.before.runs.find((x) => x.id === g.pullable!.id);
@@ -675,7 +707,7 @@ function DrawCanvas() {
       // the final point is the lift itself; a cancelled stroke (a second finger came) keeps nothing
       const d = cur.current.drawing;
       const id = Crypto.randomUUID();
-      const next = finishStroke(g, d, plan(e.x, e.y), tolIn(), e.canceled, { id, attrs: runFor(cur.current.ch, cur.current.story, cur.current.newDef) });
+      const next = finishStroke(g, d, plan(...pt(e)), tolIn(), e.canceled, { id, attrs: runFor(cur.current.ch, cur.current.story, cur.current.newDef) });
       if (g.kind === "end" || g.kind === "ds" || g.kind === "pull" || g.kind === "corner") {
         if (e.canceled) setDrawing(g.before);
         else {
@@ -692,7 +724,7 @@ function DrawCanvas() {
       }
       // a line drawn over a gutter from one end to the other makes no second gutter on it (#1256): say so
       if (next === d && g.kind === "line") {
-        const b = endAt(d, g.a, plan(e.x, e.y), tolIn());
+        const b = endAt(d, g.a, plan(...pt(e)), tolIn());
         const why = e.canceled ? null : lineRefused(d, g.a, b, Number(cur.current.story) || 1, tolIn());
         if (why) {
           haptics.warning();
@@ -709,11 +741,11 @@ function DrawCanvas() {
         quickGrew.current = !!grown && got === grown;
       }
     },
-  }, [canvas.pinch, canvas.pan]));
+  }, [canvas.pinch, canvas.pan, canvas.rot]));
   // a tap: the downspout tool puts one on the nearest run; otherwise pick what is under the finger
   const tap = useTapGesture(useJsGestureConfig<NonNullable<Parameters<typeof useTapGesture>[0]>>({
     runOnJS: true,
-    simultaneousWith: [canvas.pinch, canvas.pan],
+    simultaneousWith: [canvas.pinch, canvas.pan, canvas.rot],
     onBegin: () => {
       liftTap.current = false;
     },
@@ -722,20 +754,25 @@ function DrawCanvas() {
       if (Date.now() - canvas.multiAt.current < MULTI_TAP_MS) { lastTap.current = null; return; } // the fingers of a pinch / two-finger pan lifting are not a tap (a pinch that ended over a length label opened its sheet)
       if (!holdIsTap(hold.current)) return; // a touch that picked something up (a hold) is not a tap: the release does not flip a cap or open a menu (#1272)
       const { drawing: d, tool: tl } = cur.current;
-      const p = plan(e.x, e.y);
+      const p = plan(...pt(e));
       // a tap on a label opens what it says (founder 09.11): a length → its length, a corner → the corner, the
       // fittings word over a downspout → its menu
-      const lab = cur.current.canSave ? sceneRef.current?.labels.find((l) => Math.abs(e.x - l.x) <= l.w / 2 && Math.abs(e.y - l.y) <= l.h / 2) : undefined;
+      const [ex, ey] = pt(e);
+      const lab = cur.current.canSave ? sceneRef.current?.labels.find((l) => Math.abs(ex - l.x) <= l.w / 2 && Math.abs(ey - l.y) <= l.h / 2) : undefined;
       // (the lift of a drag is a tap on the spot on the web: it opens no label it ended over — a downspout dragged under its own word, spec 170)
       if ((lab?.id.startsWith("len:") || lab?.id.startsWith("ds:")) && liftTap.current) return;
       if (lab?.id.startsWith("len:")) {
         setSelected(lab.id.slice(4));
-        setLenEdit(lab.id.slice(4));
+        // 820/1280: the column on the right already holds this gutter's length (its tape) — no window over it, one place to edit
+        // (design-review #3066 №13); 390: the length window
+        if (!cur.current.wide) setLenEdit(lab.id.slice(4));
         return;
       }
       // (the lift of a drag of an end or a corner is a tap on the spot on the web: not a tap on its label, #818 review)
       if (lab?.id.startsWith("corner:") && liftTap.current) return;
       if (lab?.id.startsWith("corner:")) {
+        setSelected(null);
+        setPickedCorner(lab.id.slice(7));
         setCornerSheet(lab.id.slice(7));
         return;
       }
@@ -776,6 +813,15 @@ function DrawCanvas() {
       // a free end: not a corner, not butted to another gutter — and one with «без заглушки» stays one (its sheet brings the cap back)
       const freeEnd = h?.kind === "end" && !corner && (!!d.runs.find((r) => r.id === h.id)?.noCap?.[h.end] || runEnds(d, found)[h.id]?.[h.end]?.kind !== "join");
       if (tapped.act.do === "pick") {
+        // a tap on a corner picks the corner (#3066): a ring round its mark, the gutters stay as they are
+        if (corner) {
+          if (cur.current.pickedCorner !== corner.id) haptics.selection();
+          setSelected(null);
+          setPickedEnd(null);
+          setPickedCorner(corner.id);
+          return;
+        }
+        setPickedCorner(null);
         if ((h ? h.id : null) !== cur.current.selected) haptics.selection();
         setSelected(h ? h.id : null);
         // a tap on a free end with a cap picks the cap: 🗑 takes it off, not the gutter (#1855)
@@ -789,6 +835,19 @@ function DrawCanvas() {
         return;
       }
       if (tapped.act.do === "none" || !h) return;
+      if (corner) {
+        // the second tap on a corner: its sheet, the corner stays the picked one (#3066)
+        setSelected(null);
+        setPickedCorner(corner.id);
+        if (openTimer.current) clearTimeout(openTimer.current);
+        const cid = corner.id;
+        openTimer.current = afterTap(() => {
+          openTimer.current = null;
+          if (cur.current.pickedCorner !== cid || cur.current.tool !== tl) return;
+          setCornerSheet(cid);
+        });
+        return;
+      }
       setSelected(h.id);
       if (!cur.current.canSave && h.kind === "end") return;
       // the window opens a moment later (`durFast`): the browser sends the tap's `click` after the touch ends, to whatever lies under the finger
@@ -800,12 +859,11 @@ function DrawCanvas() {
         openTimer.current = null;
         // what was picked meanwhile or another tool: the tap that asked is no longer the person's wish
         if (cur.current.selected !== pickedId || cur.current.tool !== tl) return;
-        if (corner) setCornerSheet(corner.id);
-        else if (freeEnd && h.kind === "end") setEndSheet({ id: h.id, end: h.end });
+        if (freeEnd && h.kind === "end") setEndSheet({ id: h.id, end: h.end }); // (a corner opens above: #3066)
         else setSheet(true); // the run's (or a downspout's) properties: a sheet on the phone, wider the panel is already open
       });
     },
-  }, [canvas.pinch, canvas.pan]));
+  }, [canvas.pinch, canvas.pan, canvas.rot]));
   const fingers = useSimultaneousGestures(pan, tap);
 
   const scene = useMemo(
@@ -819,6 +877,7 @@ function DrawCanvas() {
             padX: space[1],
             gap: dt.labelGap,
             selected,
+            pickedCorner,
             lift: lifted,
             // О3: the colour is never the only sign — every run's label says its storey
             lenWithStory: true,
@@ -832,7 +891,7 @@ function DrawCanvas() {
             layers,
           })
         : null,
-    [drawing, view, size, selected, t, dim, fresh, ch.lenFormat, layers, lifted],
+    [drawing, view, size, selected, pickedCorner, t, dim, fresh, ch.lenFormat, layers, lifted],
   );
   sceneRef.current = scene;
 
@@ -841,7 +900,11 @@ function DrawCanvas() {
   // «· эт N» only with more than one storey on the drawing (#1666, DS §19а — as the lengths on the canvas, #1275)
   const many = manyStories(drawing.runs);
   const capPicked = !!sel && "a" in sel && !!pickedEnd && pickedEnd.id === sel.id && hasCap(drawing, pickedEnd.id, pickedEnd.end);
-  const selText = !sel
+  // a picked corner (#3066): «Corner · Outside · 90°» — the part's name and its kind as the supplier says them (#2979)
+  const pickedC = pickedCorner ? scene?.corners.find((k) => k.id === pickedCorner) : undefined;
+  const selText = pickedC
+    ? t("mod.gutters.draw.selCorner", { kind: t(`mod.gutters.attr.ck.${pickedC.kind}`), deg: pickedC.angleDeg })
+    : !sel
     ? null
     : capPicked
       ? t("mod.gutters.draw.selCap")
@@ -849,7 +912,7 @@ function DrawCanvas() {
       ? t(many ? "mod.gutters.draw.selRun" : "mod.gutters.draw.selRunOne", { len: fmtLen(runLengthIn(sel), ch.lenFormat), n: storyOf(sel.attrs.story) })
       : t(many ? "mod.gutters.draw.selDsKind" : "mod.gutters.draw.selDsKindOne", { kind: t(`mod.gutters.attr.kind.${dsKindOf(sel.shape, sel.dsStyle).key}`).replace("\n", " "), size: dsSizeText(sel.size), n: storyOf(drawing.runs.find((r) => r.id === sel.runId)?.attrs.story) });
   /** the picked downspout's kind icon on the bottom bar (#929): the kind seen at a glance, no colour */
-  const selDsIcon = sel && !("a" in sel) ? dsKindOf(sel.shape, sel.dsStyle).icon : null;
+  const selDsIcon = pickedC ? (pickedC.kind === "in" ? "cornerIn" : "cornerOut") : sel && !("a" in sel) ? dsKindOf(sel.shape, sel.dsStyle).icon : null;
 
   // the attribute panel (П21.8): every choice shows on the canvas at once; the window's choices are one draft (DS §7.3, winDraft.ts) —
   // «Сохранить» keeps them as one step of «Назад», «Закрыть» with edits asks «Сохранить изменения?»
@@ -872,6 +935,18 @@ function DrawCanvas() {
     winRef.current = null;
     setWin(null);
     if (w) setHist(winSave(w, cur.current.drawing, histRef.current));
+  };
+  /** «Сохранить» of a gutter's / downspout's window: its edits kept, and with «Новые — так же» on the next ones drawn like it (#2987) */
+  const saveObj = () => {
+    const d = cur.current.drawing, id = cur.current.selected;
+    const run = d.runs.find((r) => r.id === id), ds = d.downspouts.find((x) => x.id === id);
+    if (alsoNew && run) setNewDef((x) => likeElement(cur.current.ch, x, { kind: "run", attrs: run.attrs }));
+    else if (alsoNew && ds) {
+      const { id: _i, runId: _r, atIn: _a, ...attrs } = ds;
+      setNewDef((x) => likeElement(cur.current.ch, x, { kind: "ds", attrs }));
+    }
+    setAlsoNew(false);
+    saveWin();
   };
   /** «Не сохранять» (or «Закрыть» with no edit left): the drawing and its history as before the window */
   const discardWin = () => {
@@ -916,6 +991,7 @@ function DrawCanvas() {
   useEffect(() => {
     if (winKeyRef.current === winKey) return;
     winKeyRef.current = winKey;
+    setAlsoNew(false);
     if (winRef.current) saveWin();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [winKey]);
@@ -961,7 +1037,16 @@ function DrawCanvas() {
   const cut = corner ? cornerCut(drawing, corner) : null;
   const cornerKind = (kind: "in" | "out") => {
     // the sheet stays open (founder 09.11: a tap closed it) — the kind switches, the cut below follows
-    if (corner && corner.kind !== kind && corner.kind !== "bay") commit(flipFace(cur.current.drawing, corner.runs[0].id));
+    if (!corner || corner.kind === kind || corner.kind === "bay") return;
+    const before = cur.current.drawing;
+    const next = flipFace(before, corner.runs[0].id);
+    winCommit(next); // a draft of the corner's window: «Сохранить» keeps it, «Не сохранять» takes it back (DS §7.3, #3071)
+    // the whole line's side changed: its other corners changed too, under the window — say so (#3071, crm review №4); the window's
+    // «Закрыть → Не сохранять» takes it all back
+    const kinds = (x: Drawing) => new Map(findCorners(x).map((k) => [k.id, k.kind]));
+    const was = kinds(before), now = kinds(next);
+    const others = [...now].filter(([id, k]) => id !== corner.id && was.get(id) !== undefined && was.get(id) !== k).length;
+    if (others > 0) toast.show(t("mod.gutters.draw.sideFlipped", { n: others }));
   };
   // photos (П21.10): only of what the server has (a files row points at the measurement and its element — FK). The
   // module does not save (off, past the trial — founder О2): the photos it has are shown, nothing is added (M5e)
@@ -977,32 +1062,73 @@ function DrawCanvas() {
   const attrs = !sel ? null : (
     <>
       {"a" in sel ? <RunAttrsView key={sel.id} no={drawing.runs.findIndex((r) => r.id === sel.id) + 1} run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} /> : <DsAttrsView key={sel.id} rulesOver={rules.over} no={drawing.downspouts.findIndex((d) => d.id === sel.id) + 1} ds={sel} onAttrs={onDsAttrs} ch={ch} run={drawing.runs.find((r) => r.id === sel.runId)?.attrs} />}
+      {canSave ? (
+        <ToggleRow
+          testID="attr-also-new"
+          label={t("mod.gutters.draw.alsoNew")}
+          caption={t("a" in sel ? "mod.gutters.draw.alsoNewRun" : "mod.gutters.draw.alsoNewDs")}
+          value={alsoNew}
+          onChange={setAlsoNew}
+        />
+      ) : null}
       {elPhotos}
     </>
   );
   // «Новые желоба» / «Новые водостоки» (#1563 PR B): the rows of a gutter's / downspout's properties, for the new ones of this drawing
   const newTitle = newSheet === "line" ? t("mod.gutters.draw.newDefaults.runs") : t("mod.gutters.draw.newDefaults.ds");
-  const newOwn = newSheet === "line" ? newDef.run : newDef.ds;
-  /** the title (wider: in the column; the phone's sheet has it in its own header with «✕»), «Сбросить», and what it is for — on top, before
-   *  the rows: otherwise the column looks like the picked gutter's own properties (design-reviewer #1563 PR B) */
-  const newBody = (titled: boolean) => !newSheet ? null : (
+  /** what the window shows: its draft (opened with what the drawing uses now) */
+  const nd = newDraft ?? newDef;
+  const newOwn = newSheet === "line" ? nd.run : nd.ds;
+  const newEdited = newDirty(newDraft, newDef);
+  const openNew = (tl: Tool) => {
+    setSelected(null);
+    setNewDraft(cur.current.newDef);
+    setNewSheet(tl);
+  };
+  const closeNew = () => {
+    setNewSheet(null);
+    setNewDraft(null);
+  };
+  const saveNew = () => {
+    if (newDraft) setNewDef(newDraft);
+    closeNew();
+  };
+  /** 820/1280: «Закрыть» of the column with edits — the same question as a gutter's window (DS Б1/Б3) */
+  const closeNewPanel = async () => {
+    if (newEdited) {
+      const a = await askWin({
+        title: t("sheet.unsavedTitle"),
+        text: t("sheet.unsavedText"),
+        testID: "attr-win-ask",
+        actions: [
+          { key: "save", label: t("ue.save"), tone: "primary", testID: "attr-win-ask-save" },
+          { key: "discard", label: t("sheet.discard"), tone: "danger", testID: "attr-win-ask-discard" },
+          { key: "back", label: t("sheet.keepEditing"), tone: "cancel", testID: "attr-win-ask-back" },
+        ],
+      });
+      if (a === "save") return saveNew();
+      if (a !== "discard") return;
+    }
+    closeNew();
+  };
+  /** «Новые gutter» / «Новые downspout» (#2987, founder 27.11: «нужно продумать, какие должны открываться меню»): the same window as one
+   *  gutter's / downspout's — its title, what it is for, its rows, «Как в настройках компании»; «Закрыть / Сохранить» at the bottom */
+  const newBody = () => !newSheet ? null : (
     <View testID="draw-new-defaults" style={{ gap: space[4] }}>
       <View style={{ gap: space[1] }}>
-        <RowView style={{ alignItems: "center", justifyContent: "space-between", gap: space[2] }}>
-          {titled ? <T v="heading" w="semibold">{newTitle}</T> : <View />}
-          {newOwn ? (
-            <View testID="draw-new-defaults-reset">
-              <Button label={t("mod.gutters.draw.newDefaults.reset")} variant="ghost" size="sm" onPress={() => setNewDef((x) => resetKind(x, newSheet === "line" ? "run" : "ds"))} />
-            </View>
-          ) : null}
-        </RowView>
+        <T v="heading" w="semibold">{newTitle}</T>
         <T v="caption" tone="mut">{t("mod.gutters.draw.newDefaults.hint")}</T>
       </View>
       {newSheet === "line" ? (
-        <RunAttrsView forNew run={{ id: "new-run", a: [0, 0], b: [0, 0], attrs: runFor(ch, story, newDef) }} onAttrs={(p) => setNewDef((x) => patchRun(ch, x, p))} onLength={() => {}} ch={ch} />
+        <RunAttrsView forNew run={{ id: "new-run", a: [0, 0], b: [0, 0], attrs: runFor(ch, story, nd) }} onAttrs={(p) => setNewDraft((x) => patchRun(ch, x ?? newDef, p))} onLength={() => {}} ch={ch} />
       ) : (
-        <DsAttrsView forNew ds={{ ...dsFor(ch, newDef), id: "new-ds", runId: "", atIn: 0 }} onAttrs={(p) => setNewDef((x) => patchDs(ch, x, p))} ch={ch} run={runFor(ch, story, newDef)} />
+        <DsAttrsView forNew ds={{ ...dsFor(ch, nd), id: "new-ds", runId: "", atIn: 0 }} onAttrs={(p) => setNewDraft((x) => patchDs(ch, x ?? newDef, p))} ch={ch} run={runFor(ch, story, nd)} />
       )}
+      {newOwn ? (
+        <View testID="draw-new-defaults-reset" style={{ alignItems: "flex-start" }}>
+          <Button label={t("mod.gutters.draw.newDefaults.reset")} icon="undo" variant="secondary" size="sm" onPress={() => setNewDraft((x) => resetKind(x ?? newDef, newSheet === "line" ? "run" : "ds"))} />
+        </View>
+      ) : null}
     </View>
   );
   /** 820/1280: the panel is a column on the right, always there; the canvas and its bars stay left of it */
@@ -1033,7 +1159,22 @@ function DrawCanvas() {
     setDrawing(r.d);
     later.current();
   };
+  /** «Разъединить угол» (#933): two gutters with their own end caps; the toast brings it back — from the corner's window and from 🗑 with the corner picked (#3066) */
+  const splitAt = (cornerId: string) => {
+    if (winRef.current) saveWin(); // «Разъединить» is an action: what the window changed before it stays (DS §7.3, #3071)
+    const before = cur.current.drawing;
+    const f = findCorners(before).find((x) => x.id === cornerId);
+    setCornerSheet(null);
+    setPickedCorner(null);
+    if (!f) return;
+    const next = splitCorner(before, f, tolIn());
+    if (next === before) return;
+    commit(next, before);
+    toast.show(t("mod.gutters.draw.cornerSplit.done"), localUndo(() => commit(before, cur.current.drawing, true))); // put back as it was: no recount (#1264)
+  };
   const doDelete = () => {
+    // a picked corner: 🗑 takes the joint apart (crm-review #3066 №2) — the gutters stay, each with its own end cap; «Вернуть» on the toast
+    if (!selected && cur.current.pickedCorner) return splitAt(cur.current.pickedCorner);
     if (!selected) return;
     const target = deleteTarget(drawing, selected, pickedEnd);
     if (target?.kind === "cap") {
@@ -1138,7 +1279,9 @@ function DrawCanvas() {
   }, [store.loading, store.db, mId]);
   // a pick on the canvas shows its own properties: «новые» close (wider the column shows one thing at a time)
   useEffect(() => {
-    if (selected) setNewSheet(null);
+    if (!selected) return;
+    setNewSheet(null);
+    setNewDraft(null);
   }, [selected]);
   /** two taps on «Желоб» / «Водосток» in the toolbar: the properties of new ones (#1563 PR B); one tap picks the tool, as before */
   const toolTap = useRef<LastTap | null>(null);
@@ -1150,8 +1293,7 @@ function DrawCanvas() {
     const now = Date.now();
     if (isDoubleTap(toolTap.current, now, tl, motion.doubleTapMs)) {
       toolTap.current = null;
-      setSelected(null);
-      setNewSheet(tl);
+      openNew(tl);
       return;
     }
     toolTap.current = { at: now, id: tl };
@@ -1178,7 +1320,7 @@ function DrawCanvas() {
   // «⋯» (founder 09.11, #692 #690; spec 33 П24 Б5, Б6): link to another, unlink back to the drafts, delete the measurement
   const whoRef = useRef<React.ComponentRef<typeof View>>(null);
   const [whoAt, setWhoAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  type WhoKey = "fit" | "props" | "end0" | "end1" | "acc" | "layers" | "autods" | "relink" | "unlink" | "delete";
+  type WhoKey = "fit" | "newdef" | "props" | "end0" | "end1" | "acc" | "layers" | "autods" | "relink" | "unlink" | "delete";
   const linked = !!leadId || !!placeId;
   // the free ends of the picked gutter (a corner and a butted end have no cap to talk about; «без заглушки» stays one)
   const endRun0 = canSave ? drawing.runs.find((r) => r.id === selected) : undefined;
@@ -1194,6 +1336,8 @@ function DrawCanvas() {
     // gutter / downspout, and «Конец желоба» of each of its free ends (named by the letter the cap carries on the canvas)
     ...(canSave && sel && !wide ? [{ key: "props" as const, label: t("mod.gutters.attr.props") }] : []),
     ...endRows.map((r) => ({ key: `end${r.end}` as const, label: `${t("mod.gutters.end.title")} · ${r.side}` })),
+    // «Как рисовать новые» (#2987): what two taps on «Желоб» / «Водосток» in the toolbar open, as a row — no need to know the double tap
+    ...(canSave ? [{ key: "newdef" as const, label: t("mod.gutters.draw.newDefaults.item"), testID: "draw-who-newdef" }] : []),
     // no «Где панель» (founder 18.11, #2156: «Зачем она там?») — the toolbar moves by its grip; no «Точность замера» (#768, #1764)
     { key: "layers", label: t("mod.gutters.draw.layersItem") },
     // a measurement from before the automatic downspouts gets them only when asked (#1246): not silently, the estimate would change
@@ -1204,6 +1348,7 @@ function DrawCanvas() {
   const onWho = (k: WhoKey) => {
     if (k === "fit") { if (size.w) setView(fit(drawing, size)); return; }
     if (k === "props") return setSheet(true);
+    if (k === "newdef") return openNew(cur.current.tool);
     if (k === "end0" || k === "end1") return setEndSheet(endRun0 ? { id: endRun0.id, end: k === "end1" ? 1 : 0 } : null);
     if (k === "layers") return setMoreSheet(k);
     if (k === "autods") return placeAutoDs();
@@ -1334,7 +1479,7 @@ function DrawCanvas() {
       <View testID="draw-redo" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="redo" label={t("mod.gutters.draw.redoShort")} onPress={doRedo} grow={grow} below={at === "top"} /></View>
       {/* the bin (#1274, founder 12.11: «🗑 в панели, виден всегда, активен только при выборе»): «Отменить» for 5 s after (rule 5) */}
       {/* the bin without a pick: a `disabled` button is deaf to the long press that says its name, so the cell is not disabled — it answers nothing, and the state is said here */}
-      <View testID="draw-delete" {...({ "aria-disabled": !sel || undefined } as object)} style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="trash" label={t("mod.gutters.draw.delete")} onPress={doDelete} grow={grow} disabled={!sel} below={at === "top"} /></View>
+      <View testID="draw-delete" {...({ "aria-disabled": (!sel && !pickedC) || undefined } as object)} style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="trash" label={t("mod.gutters.draw.delete")} onPress={doDelete} grow={grow} disabled={!sel && !pickedC} below={at === "top"} /></View>
     </View>
   );
   // the summary chip: the parts are the engine's (rule 8) from the drawing as it is when the finger rests — not on every frame of a drag
@@ -1371,14 +1516,25 @@ function DrawCanvas() {
   const ghostLen = ghost ? Math.round(Math.hypot(ghost.b[0] - ghost.a[0], ghost.b[1] - ghost.a[1])) : 0;
   const gA = ghost && view ? toScreen(view, ghost.a) : null;
   const gB = ghost && view ? toScreen(view, ghost.b) : null;
+  /** a point of the canvas on the screen: the chips over the canvas stand where the turned drawing shows it (#2988) */
+  const outerPt = (q: [number, number]): [number, number] => {
+    if (!turned(turnRad)) return q;
+    const o = toOuter(turnRad, size.w / 2, size.h / 2, q[0], q[1]);
+    return [o.x, o.y];
+  };
+  const gAo = gA ? outerPt(gA) : null;
+  const gBo = gB ? outerPt(gB) : null;
+  /** the drawn layers reach past the canvas when it may turn (#2988): its corners are never empty */
+  const pad = size.w > 0 ? turnPad(size.w, size.h) : 0;
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }} testID="draw-screen" onStartShouldSetResponderCapture={() => { touched.current = true; return false; }}>
       {/* no edge swipe back on the canvas (founder 09.11): drawing from the left edge left the screen */}
       <Stack.Screen options={{ gestureEnabled: false, fullScreenGestureEnabled: false }} />
       {/* the drawing under everything */}
-      <View style={{ position: "absolute", left: 0, right: panelSide, top: 0, bottom: 0 }}>
+      <View ref={canvasBox} collapsable={false} onLayout={() => canvasBox.current?.measureInWindow((x: number, y: number) => { canvasAt.current = [x, y]; })} style={{ position: "absolute", left: 0, right: panelSide, top: 0, bottom: 0 }}>
         <CanvasView
+          turnable
           view={viewNow}
           onView={onTouchView}
           live={live}
@@ -1387,11 +1543,11 @@ function DrawCanvas() {
           gestures={canvas}
           testID="draw-canvas"
           // the grid (#1434): a screen-sized layer under the drawing, following the live view on the UI thread — not clipped on an iPhone
-          under={layers.grid && view && size.w > 0 ? <GridLayer live={live} size={size} minPx={space[6]} testID="draw-grid" /> : null}
+          under={layers.grid && view && size.w > 0 ? <GridLayer live={live} size={size} minPx={space[6]} pad={pad} testID="draw-grid" /> : null}
         >
           <GestureDetector gesture={fingers}>
             <View style={{ width: size.w, height: size.h }} testID="draw-surface">
-              {scene ? <SvgPainter scene={scene} w={size.w} h={size.h} testID="draw-svg" /> : null}
+              {scene ? <SvgPainter scene={scene} w={size.w} h={size.h} pad={pad} turnDeg={-labelTurnDeg(turnRad)} testID="draw-svg" /> : null}
               {gA && gB ? (
                 <View pointerEvents="none" style={{ position: "absolute", left: 0, top: 0 }}>
                   <Svg width={size.w} height={size.h}>
@@ -1513,14 +1669,14 @@ function DrawCanvas() {
             const { width, height } = e.nativeEvent.layout;
             if (width !== ghostChip.w || height !== ghostChip.h) setGhostChip({ w: width, h: height });
           }}
-          style={{ position: "absolute", opacity: ghostChip.w ? 1 : 0, ...ghostChipAt(gA, gB, ghostChip, { w: size.w, h: size.h, top: ins.top + space[8] + space[6] }, dt.labelGap + dt.runWSel) }}
+          style={{ position: "absolute", opacity: ghostChip.w ? 1 : 0, ...ghostChipAt(gAo!, gBo!, ghostChip, { w: size.w, h: size.h, top: ins.top + space[8] + space[6] }, dt.labelGap + dt.runWSel) }}
         >
           <StatusChip status="neutral" label={fmtLen(ghostLen, ch.lenFormat)} />
         </View>
       ) : null}
 
       {/* the angle beside a free end being swung (#818): «90°» when it is held at a step */}
-      {swing && view ? <SwingChip swing={swing} view={view} box={{ w: size.w, h: size.h, top: ins.top + space[8] + space[6] }} gap={dt.labelGap + dt.runWSel} /> : null}
+      {swing && view ? <SwingChip swing={swing} view={view} box={{ w: size.w, h: size.h, top: ins.top + space[8] + space[6] }} gap={dt.labelGap + dt.runWSel} out={outerPt} /> : null}
 
       {/* bottom: the toolbar (bottom / right hand / left hand) and the $ — always at the bottom */}
       {/* where the toolbar sticks if let go now (founder 09.11): that edge outlined */}
@@ -1572,8 +1728,8 @@ function DrawCanvas() {
             <Press
               testID="draw-summary"
               // «Дальше: водостоки» is a hint with its action (the downspout tool); the rest opens the measurement's «Просмотр»
-              onPress={() => { if (summary.kind === "nextDs") pick("ds"); else if (inStore) router.push(`${moduleHref("gutters", "view")}?m=${encodeURIComponent(inStore.id)}`); }}
-              disabled={!canSave || (summary.kind !== "nextDs" && !inStore)}
+              onPress={() => { if (pickedC && summary.kind === "selected") setCornerSheet(pickedC.id); else if (summary.kind === "nextDs") pick("ds"); else if (inStore) router.push(`${moduleHref("gutters", "view")}?m=${encodeURIComponent(inStore.id)}`); }}
+              disabled={!canSave || (summary.kind !== "nextDs" && !inStore && !pickedC)}
               visibleHeight={component.button.phone}
               accessibilityRole="button"
               accessibilityLabel={summaryA11y}
@@ -1614,20 +1770,27 @@ function DrawCanvas() {
         {row || at === "top" ? null : <View pointerEvents="box-none" style={{ alignItems: grow ? "stretch" : "center" }}>{tools}</View>}
       </View>
 
+      {/* «Север вверх» (#2988, spec 33 П39): only while the view is turned — one press brings it back to 0°. On the canvas, in the top right
+          corner under the header, as the compass in Maps: in the header it took the room of «Привязать» («При…» at 390, review of #3014) */}
+      {turned(turnRad) ? (
+        <View pointerEvents="box-none" style={{ position: "absolute", top: lay.current.header + space[2], right: ins.right + space[3] + panelSide }}>
+          <View testID="draw-north"><IconButton icon="navigate" label={t("mod.gutters.draw.northUp")} onPress={northUp} /></View>
+        </View>
+      ) : null}
       {/* 820/1280: the panel on the right (what is picked, or how to pick); 390: the sheet from «Свойства» */}
       {wide ? (
-        <View testID="draw-panel" style={{ position: "absolute", right: ins.right + space[3], top: ins.top + space[2], bottom: ins.bottom + space[3], width: component.panelW, padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd, gap: space[2] }}>
+        // the length window of a new gutter (it goes away on «Отменить») stands over the column: the column dims and takes no
+        // touch until it closes — one place to edit the length (design-review #3066 №13)
+        <View testID="draw-panel" pointerEvents={quick ? "none" : "auto"} accessibilityElementsHidden={!!quick} importantForAccessibility={quick ? "no-hide-descendants" : "auto"} style={{ opacity: quick ? component.dimOpacity : 1, position: "absolute", right: ins.right + space[3], top: ins.top + space[2], bottom: ins.bottom + space[3], width: component.panelW, padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd, gap: space[2] }}>
           {newSheet ? (
             <>
-              <RowView style={{ justifyContent: "flex-end" }}>
-                <View testID="draw-panel-close"><IconButton icon="close" label={t("mod.gutters.attr.close")} onPress={() => setNewSheet(null)} /></View>
-              </RowView>
-              <AttrBody>{newBody(true)}</AttrBody>
+              <AttrBody>{newBody()}</AttrBody>
+              <WinButtons onClose={() => void closeNewPanel()} onSave={saveNew} />
             </>
           ) : attrs ? (
             <>
               <AttrBody>{attrs}</AttrBody>
-              <WinButtons onClose={() => void closePanel()} onSave={() => { saveWin(); setSelected(null); }} />
+              <WinButtons onClose={() => void closePanel()} onSave={() => { saveObj(); setSelected(null); }} />
             </>
           ) : (
             <View style={{ flex: 1, gap: space[4] }}>
@@ -1643,13 +1806,19 @@ function DrawCanvas() {
         visible={!wide && sheet && !!attrs && !newSheet}
         onClose={() => { discardWin(); setSheet(false); }}
         dirty={winEdited}
-        onSave={() => { saveWin(); setSheet(false); }}
-        footer={<WinButtons onClose={() => { discardWin(); setSheet(false); }} onSave={() => { saveWin(); setSheet(false); }} />}
+        onSave={() => { saveObj(); setSheet(false); }}
+        footer={<WinButtons onClose={() => { discardWin(); setSheet(false); }} onSave={() => { saveObj(); setSheet(false); }} />}
       >
         <AttrBody inSheet>{attrs}</AttrBody>
       </Sheet>
-      <Sheet visible={!wide && !!newSheet} onClose={() => setNewSheet(null)} title={newSheet ? newTitle : undefined}>
-        <AttrBody inSheet>{newBody(false)}</AttrBody>
+      <Sheet
+        visible={!wide && !!newSheet}
+        onClose={closeNew}
+        dirty={newEdited}
+        onSave={saveNew}
+        footer={<WinButtons onClose={closeNew} onSave={saveNew} />}
+      >
+        <AttrBody inSheet>{newBody()}</AttrBody>
       </Sheet>
       {m ? <LinkSheet visible={linkSheet} onClose={() => setLinkSheet(false)} measurementId={m.id} /> : null}
       <DeleteMeasurementSheet visible={!!askDelete} on={askDelete ?? NO_ESTIMATES} onDelete={deleteNow} onClose={() => setAskDelete(null)} />
@@ -1671,7 +1840,15 @@ function DrawCanvas() {
           />
         ) : null}
       </Sheet>
-      <Sheet visible={canSave && !!corner} onClose={() => setCornerSheet(null)}>
+      {/* half the screen on the phone (#3071, design review №8): the corner on the canvas stays in view while its kind changes; pulled up — all of it */}
+      <Sheet
+        visible={canSave && !!corner}
+        onClose={() => { discardWin(); setCornerSheet(null); }}
+        height="medium"
+        dirty={winEdited}
+        onSave={() => { saveWin(); setCornerSheet(null); }}
+        footer={<WinButtons onClose={() => { discardWin(); setCornerSheet(null); }} onSave={() => { saveWin(); setCornerSheet(null); }} />}
+      >
         {corner ? (
           <CornerSheet
             d={drawing}
@@ -1681,16 +1858,9 @@ function DrawCanvas() {
             tape={tape}
             splashOn={!splashOff(drawing, corner)}
             onKind={cornerKind}
-            onSplash={(on) => commit(setCornerSplash(cur.current.drawing, corner, on))}
-            onSplit={() => {
-              const before = cur.current.drawing;
-              const next = splitCorner(before, corner, tolIn());
-              setCornerSheet(null);
-              if (next === before) return;
-              commit(next, before);
-              toast.show(t("mod.gutters.draw.cornerSplit.done"), localUndo(() => commit(before, cur.current.drawing, true))); // put back as it was: no recount (#1264)
-            }}
-            onAngle={(deg) => commit(setCornerAngle(cur.current.drawing, corner, deg))}
+            onSplash={(on) => winCommit(setCornerSplash(cur.current.drawing, corner, on))}
+            onSplit={() => splitAt(corner.id)}
+            onAngle={(deg) => winCommit(setCornerAngle(cur.current.drawing, corner, deg))}
           />
         ) : null}
       </Sheet>

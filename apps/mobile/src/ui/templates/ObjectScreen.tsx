@@ -17,6 +17,7 @@ import { MainStep, type MainStepTotal } from "../mainStep";
 import { ObjectHeader, objectHeadSub, type ObjectHeaderProps } from "../objectHeader";
 import { Card, Screen, useFooterShown } from "../surfaces";
 import { ViewTabs } from "../viewTabs";
+import { T } from "../primitives";
 import { CreateButton, MoreButton, TemplateFrame } from "./parts";
 import { SECOND_KEY, moreItems, templateLayout } from "./templateRules";
 import type { CreateAction, MainAction, MoreAction } from "./types";
@@ -53,6 +54,9 @@ export interface ObjectScreenProps<S extends string> {
    * «Sarah Mitchell / 8:30–12:30 · Alex»): a string `line2` is the quiet 13 line — no plate; default — `objectHeadSub(header)`
    */
   sub?: { line1?: string; line2?: ReactNode };
+  /** a whole line UNDER the name instead of the two lines right of the rule (DS §12.13 «Шапка», ревью design/crm #2841: the visit's
+   *  «8:30–12:30 · Alex · Sarah Mitchell» is never cut in a narrow column) */
+  subtitle?: string;
   /** what stands under the header instead of the quick actions row (макет 4 «Выезд»: «◷ Идёт · Код … · ☎ ✉ ◎») */
   lead?: ReactNode;
   /** the open section's content */
@@ -101,8 +105,17 @@ function useObjectParts<S extends string>(p: ObjectScreenProps<S>) {
     () => (p.sections.length ? <ViewTabs testID={`${p.testID}-sections`} items={p.sections} value={p.section} onChange={p.onSection} label={p.sectionsLabel} look={p.sectionsLook} /> : null),
     [p.sections, p.section, p.onSection, p.sectionsLabel, p.sectionsLook, p.testID],
   );
+  // the whole line under the name with the status (#3012/#3031 review: «Оплачено» stood a grey word without its icon — rule 2):
+  // the status with its icon first, then the line («✓ Оплачено · $342.00»); never cut — it wraps whole
+  const statusLine = p.subtitle && p.header.status ? (
+    <View testID={`${p.testID}-subtitle`} style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: space[1] }}>
+      {objectHeadSub(p.header).line2}
+      {p.subtitle ? <T v="caption" w="medium" tone="mut">{`· ${p.subtitle}`}</T> : null}
+    </View>
+  ) : null;
   const top = (
     <View style={{ gap: space[4] }}>
+      {statusLine}
       {/* v2 «Объект»: the quick actions stand right under the big block (its 4 + the column's 12 — v2 6 + 6), not a gap further */}
       <View style={{ gap: space[1] }}>
         <ObjectHeader {...p.header} inHead open={open} onToggle={setOpen} />
@@ -123,7 +136,7 @@ function useObjectParts<S extends string>(p: ObjectScreenProps<S>) {
   // v2 «Объект»: the name 30 | the rule | two lines; a client's «⌄» (the header has a panel) after the name
   const head = {
     kind: "object" as const,
-    sub: p.sub ?? objectHeadSub(p.header),
+    sub: p.subtitle !== undefined ? undefined : p.sub ?? objectHeadSub(p.header),
     expand: p.header.details
       ? { open, onToggle: setOpen, expandLabel: p.header.labels.expand, collapseLabel: p.header.labels.collapse, testID: `${p.header.testID}-toggle`, panel: p.header.contacts ?? <View testID={`${p.header.testID}-details`}><Card>{p.header.details}</Card></View> }
       : undefined,
@@ -156,6 +169,7 @@ function ObjectLive<S extends string>(p: ObjectScreenProps<S>) {
       footer={bar ?? undefined}
       testID={p.testID}
       title={p.header.title}
+      subtitle={p.header.status ? undefined : p.subtitle}
       head={head}
       back={p.back}
       right={right}

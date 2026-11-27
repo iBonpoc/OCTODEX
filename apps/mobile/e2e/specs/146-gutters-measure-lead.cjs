@@ -6,7 +6,7 @@
  * - a property → «Замер»: its own new measurement linked to it.
  * Finds things by testID; waits on what it checks.
  */
-const { skipLength, pressWhenStill, savedOnce } = require("../gutters.cjs");
+const { skipLength, pressWhenStill, savedOnce, editDrawing } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -72,7 +72,7 @@ exports.run = async (h) => {
   await measureBtn().getByRole("button").click();
   await waitFor(() => /\/module\/gutters\/view/.test(p.url()) && idInUrl() === mid, "the same measurement's card");
   await tid("view-screen").waitFor({ timeout: 8000 });
-  await pressWhenStill(tid("view-edit").getByRole("button"));
+  await editDrawing(p); // #2995: in «⋯» on the card's own screen
   await waitFor(() => /\/module\/gutters\/draw/.test(p.url()) && idInUrl() === mid, "«Править чертёж» → its canvas");
   await tid("draw-surface").waitFor({ timeout: 8000 });
   await waitFor(async () => (await runs()) === 1, "with its drawing");

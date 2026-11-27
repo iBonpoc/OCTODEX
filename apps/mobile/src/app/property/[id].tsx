@@ -12,7 +12,7 @@ import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
-import { canSeeGateCode, canSeeProperty, propertyMapQuery, propertyNow, propertyTitle } from "@/features/properties";
+import { canSeeGateCode, canSeeProperty, propertyMapQuery, propertyHead, propertyNow, propertyTitle } from "@/features/properties";
 import { isPropertyRow, propertyCounts, propertyRecords, propertyRowsFor, type PropertyRow } from "@/features/propertyRows";
 import { PropertySection, propertyRowLabel, RowCount } from "@/features/client/PropertySections";
 import { AddObject } from "@/features/client/AddObject";
@@ -49,7 +49,7 @@ export default function PropertyScreen() {
   const { id, s: sec } = useLocalSearchParams<{ id: string; s?: string }>();
   const store = useStore();
   const { db, role } = store;
-  const { t, money, day, time } = useI18n();
+  const { t, tn, money, day, time } = useI18n();
   const [sheet, setSheet] = useState<"edit" | "access" | null>(null);
   const [inspect, setInspect] = useState(false);
   const toast = useToast();
@@ -107,7 +107,7 @@ export default function PropertyScreen() {
             {p.kind ? <StatusChip status="neutral" label={t(`prop.kind.${p.kind}` as DictKey)} soft /> : null}
             {!p.label && !p.kind ? (
               <T v="caption" tone="mut" numberOfLines={1}>
-                {p.stories ? t("proto.client.stories", { n: p.stories }) : t("prop.card")}
+                {p.stories ? tn("ov3068.stories", p.stories, { n: p.stories }) : t("prop.card")}
               </T>
             ) : null}
           </RowView>
@@ -247,8 +247,11 @@ export default function PropertyScreen() {
 
   return (
     <Screen
-      title={t("prop.card")}
-      head={{ kind: "object", sub: { line1: propertyTitle(p), line2: p.city || undefined } }}
+      // DS §12.13 «Шапка» (#2841, ревью design/crm): the object is named by its street, one line fitted like any title; the city,
+      // state and zip — a whole line under it (no column right of the rule, no «…»)
+      title={propertyHead(p).title}
+      subtitle={propertyHead(p).subtitle}
+      head={{ kind: "object" }}
       back={back}
     >
       {overview}

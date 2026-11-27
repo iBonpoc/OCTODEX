@@ -47,6 +47,8 @@ export const NO_TAB_BAR = [
 export const WITH_TAB_BAR = [
   "index", "inbox",
   "calls", "catalog", "client/imports", "clients", "company",
+  // #3076 «Фото и файлы» клиента: a list of the client's photos — the bar stays, as on the client's card
+  "client/files/[id]",
   // founder 21.11 (#2350): an object's card keeps the bar (no pinned slab); its next step is in the «Сейчас» card
   "client/[id]", "job/[id]", "visit/[id]", "lead/[id]", "property/[id]",
   // a settings page saved from its sheet at once (no form to lose)

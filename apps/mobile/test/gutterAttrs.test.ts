@@ -43,9 +43,11 @@ describe("changeRun: зависимые поля", () => {
   it("ничего не поменялось — тот же объект (без пустого шага «Назад»)", () => {
     expect(changeRun(run.attrs, { size: "5" })).toBe(run.attrs);
   });
-  it("полукруглый: размер 7 → первый допустимый, крепление — shank по краю крыши", () => {
-    const a = changeRun({ ...run.attrs, size: "7" }, { profile: "half_round" });
+  it("полукруглый: размер 8 → первый допустимый, крепление — shank по краю крыши", () => {
+    const a = changeRun({ ...run.attrs, size: "8" }, { profile: "half_round" });
     expect(a.size).toBe("5");
+    // 7″ есть и у полукруглого (#2986): размер держится
+    expect(changeRun({ ...run.attrs, size: "7" }, { profile: "half_round" }).size).toBe("7");
     expect(a.hanger).toBe("hr_shank_fascia");
   });
   it("смена края крыши ставит набор по умолчанию; свой набор держится, пока край тот же", () => {

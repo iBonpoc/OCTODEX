@@ -178,6 +178,8 @@ export interface ModuleDef {
    *  coalesceKey was taken back): its payload now, or null — cannot (then that «Отменить» is too late) */
   rebuild?: (op: { kind: string; payload: Record<string, unknown> }, d: import("@/data/types").DB) => Record<string, unknown> | null;
   titleKey: DictKey;
+  /** #3065: the module's own mark on «Компания → Модули» (not the «Настройки» gear); none — the gear */
+  icon?: import("@/ui/primitives").IconKey;
   hintKey: DictKey;
   trialDays: number;
   /** the add-on's price a month (founder О1); payment itself is the step «Оплаты» */
@@ -232,6 +234,22 @@ export interface ModuleDef {
   starterWant?: (settings: unknown, match: Record<string, string>) => Record<string, string>;
   /** the text of «not saved: the trial is over» (a refused batch of this module's changes, spec 33 П21.1); params {count} */
   rejectedKey?: DictKey;
+  /**
+   * #3024: the module's own demo data for the demo's test client (DB.moduleData[key], its lines in that client's estimate…):
+   * the demo's seed only, never the cloud. Pure; returns the seed with its part added (the core's seed knows nothing of it).
+   */
+  demo?: (db: import("@/data/types").DB, client: DemoClient) => import("@/data/types").DB;
+}
+
+/** #3024: the demo's test client a module adds its demo data to (ids of the core's seed) */
+export interface DemoClient {
+  customerId: string;
+  propertyId: string;
+  leadId: string;
+  /** the open estimate a module may add its lines to */
+  estimateId: string;
+  /** when the estimate was written (ISO) */
+  at: string;
 }
 
 /** off — not switched on; trial — in the trial; paid — paid; unlimited — switched on, no term (the developer's company,
@@ -332,6 +350,9 @@ export function registerModule(def: ModuleDef): void {
 export const moduleDef = (key: string): ModuleDef | undefined => defs.get(key);
 /** every module the app has, in a stable order (by key) */
 export const allModules = (): ModuleDef[] => [...defs.values()].sort((a, b) => a.key.localeCompare(b.key));
+/** #3024: the demo's seed with every module's demo data (ModuleDef.demo), in the order of allModules */
+export const withModuleDemos = (db: import("@/data/types").DB, client: DemoClient): import("@/data/types").DB =>
+  allModules().reduce((d, m) => (m.demo ? m.demo(d, client) : d), db);
 /** the company's usable modules */
 export const activeModules = (company: Pick<Company, "modules"> | null | undefined, now = Date.now()): ModuleDef[] =>
   allModules().filter((d) => moduleActive(company, d.key, now));

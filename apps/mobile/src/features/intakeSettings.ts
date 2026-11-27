@@ -35,6 +35,17 @@ export interface IntakeEvent {
 export const formLink = (origin: string, token: string) => `${origin.replace(/\/+$/, "")}/f/${token}`;
 
 /**
+ * #3074 «Открыть форму ›» and «Поделиться» by the form's state (as «Preview form» of Jobber / Housecall Pro, but inside the app):
+ * on — the page opens here as the homeowner sees it, in preview (nothing can be sent from it), and the link may be shared;
+ * off — the page would say «not available»: the row says the form is off and opens nothing, sharing warns instead of handing
+ * out a dead link. No form (or no link yet) — nothing to open or share.
+ */
+export function formPreview(form: { enabled: boolean; publicToken?: string | null } | undefined): { href: string | null; off: boolean } {
+  if (!form?.publicToken) return { href: null, off: false };
+  return form.enabled ? { href: `/f/${form.publicToken}?preview=1`, off: false } : { href: null, off: true };
+}
+
+/**
  * The code for the contractor's own site: a plain link that opens the page in a new tab (no iframe: the app's site sets
  * no per-page frame rules, spec 34 §3в). Only the escaped link and the words go in: nothing to break their page.
  */

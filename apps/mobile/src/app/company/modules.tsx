@@ -17,6 +17,8 @@ import { Button, StatusChip } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen } from "@/ui/surfaces";
+import { GroupRow, ListGroup } from "@/ui/groupedList";
+import { ActionRow } from "@/ui/multiValueField";
 
 export default function CompanyModules() {
   const store = useStore();
@@ -35,14 +37,33 @@ export default function CompanyModules() {
   const saved = (key: Parameters<typeof t>[0]) => (store.online ? t(key) : t("offline.queued"));
   const noTerm = store.mode === "demo" || c.developerAccount === true;
 
+  // #3065 (founder 27.11, #3064; DS §7.5): no column of buttons — one main action in the card («Подключить»; an expired trial —
+  // «Оплатить», soon); the module's places are rows «›» of one group; «Отключить» — the last row of the group, a red word (the iOS
+  // «Удалить приложение» row; leader 27.11: crm-reviewer's advice). The office sees «Настройки» with «Только просмотр».
   const card = (d: ModuleDef) => {
     const v = moduleView(c.modules?.[d.key]);
     const title = t(d.titleKey);
+    const places = d.places?.settings?.({ role: store.role }, store.db.moduleData?.[d.key]) ?? [];
+    const main =
+      v.main === "start" || v.main === "resume" ? (
+        <View testID={`module-${d.key}-enable`}>
+          <Button
+            label={v.main === "start" ? (noTerm ? t("mod.startNoTerm") : t("mod.start", { days: d.trialDays })) : t("mod.resume")}
+            icon="check"
+            onPress={() => toast.show(saved(v.main === "start" ? (noTerm ? "mod.startedNoTerm" : "mod.started") : "mod.resumed"), store.enableModule(d.key))}
+          />
+        </View>
+      ) : v.main === "pay" ? (
+        <View testID={`module-${d.key}-pay`} style={{ gap: space[1] }}>
+          <Button label={t("mod.pay")} icon="wallet" disabled onPress={() => {}} />
+          <T v="caption" tone="mut">{t("mod.paySoon")}</T>
+        </View>
+      ) : null;
     return (
-      <View key={d.key} testID={`module-${d.key}`}>
+      <View key={d.key} testID={`module-${d.key}`} style={{ gap: space[3] }}>
         <Card>
           <RowView style={{ alignItems: "flex-start" }}>
-            <Icon name="settings" />
+            <Icon name={d.icon ?? "settings"} />
             <View style={{ flex: 1, gap: space[1] }}>
               <T v="heading">{title}</T>
               <T v="caption" tone="mut">{t(d.hintKey)}</T>
@@ -53,43 +74,35 @@ export default function CompanyModules() {
           </View>
           {noTerm ? null : <T v="caption" tone="mut">{t("mod.price", { days: d.trialDays, price: money(d.priceCentsMonthly) })}</T>}
           {v.locked ? <T v="caption">{t("mod.lockedHint")}</T> : null}
-          {/* the module's own card is its «settings» place: its tools that save nothing show for everyone, on or off (spec 33 П20.3) */}
-          {(d.places?.settings?.({ role: store.role }, store.db.moduleData?.[d.key]) ?? []).map((a) => (
-            <View key={a.id} testID={`module-${d.key}-${a.id}`}>
-              <Button label={t(a.labelKey)} icon={a.icon} variant="secondary" onPress={() => router.push(a.href as never)} />
-            </View>
-          ))}
-          {ro ? null : (
-            <View style={{ gap: space[2] }}>
-              {v.main === "start" || v.main === "resume" ? (
-                <View testID={`module-${d.key}-enable`}>
-                  <Button
-                    label={v.main === "start" ? (noTerm ? t("mod.startNoTerm") : t("mod.start", { days: d.trialDays })) : t("mod.resume")}
-                    icon="check"
-                    onPress={() => toast.show(saved(v.main === "start" ? (noTerm ? "mod.startedNoTerm" : "mod.started") : "mod.resumed"), store.enableModule(d.key))}
-                  />
-                </View>
-              ) : null}
-              {v.main === "pay" ? (
-                <View testID={`module-${d.key}-pay`} style={{ gap: space[1] }}>
-                  <Button label={t("mod.pay")} icon="wallet" disabled onPress={() => {}} />
-                  <T v="caption" tone="mut">{t("mod.paySoon")}</T>
-                </View>
-              ) : null}
-              {v.canDisable ? (
-                <View testID={`module-${d.key}-disable`}>
-                  <Button label={t("mod.disable")} variant="secondary" onPress={() => toast.show(saved("mod.disabled"), store.disableModule(d.key))} />
-                </View>
-              ) : null}
-            </View>
-          )}
+          {ro ? null : main}
         </Card>
+        {/* the module's own places (spec 33 П20.3): its tools that save nothing show for everyone, on or off — rows «›», not buttons */}
+        <ListGroup title={t("mod.places")} testID={`module-${d.key}-places`}>
+          {places.map((a) => (
+            <GroupRow
+              key={a.id}
+              testID={`module-${d.key}-${a.id}`}
+              title={t(a.labelKey)}
+              subtitle={ro && a.id === "settings" ? t("mod.readOnly") : undefined}
+              lead={{ icon: a.icon }}
+              chevron
+              onPress={() => router.push(a.href as never)}
+            />
+          ))}
+        </ListGroup>
+        {!ro && v.canDisable ? (
+          <ListGroup>
+            <View testID={`module-${d.key}-disable`}>
+              <ActionRow inGroup tone="bad" label={t("mod.disable")} onPress={() => toast.show(saved("mod.disabled"), store.disableModule(d.key))} />
+            </View>
+          </ListGroup>
+        ) : null}
       </View>
     );
   };
 
   return (
-    <Screen title={t("mod.title")} back={back} subtitle={t("schs.who")}>
+    <Screen title={t("mod.title")} back={back} subtitle={t("schs.who")} form>
       {ro ? <StatusChip status="info" label={t("fix.co.readOnly")} soft /> : null}
       <T v="caption" tone="mut">{t("mod.intro")}</T>
       {allModules().map(card)}

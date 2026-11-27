@@ -197,7 +197,8 @@ export function useHomeHeader() {
           },
         ]
       : []),
-    search,
+    // #3031: one search on «Главная» — 820/1280 have the field «Искать везде /» under the title (spec 56), so no circle as well
+    ...(wide ? [] : [search]),
     ...(role !== "tech" ? [{ icon: "bell" as IconKey, a11y: n ? t("nav.bellNew", { n }) : t("nav.bell"), onPress: () => router.push("/notifications"), testID: "home-bell", badge: n ? { n, dot: true } : undefined }] : []),
   ];
   const me = db.members.find((m) => m.id === db.me);

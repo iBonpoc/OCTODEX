@@ -36,7 +36,8 @@ exports.run = async (h) => {
   // «Счета»: owes / paid / still to bill once each, the invoice and the receipt
   await section("money");
   const money = await inner("client-money");
-  h.expect(/\$0\.00[\s\S]*Долг[\s\S]*\$582\.00[\s\S]*Оплачено/.test(money), `owes / paid (one word each, #1417): ${money.slice(0, 120)}`);
+  // whole dollars on an overview, cents only inside documents (#3029/#3030); under $1 keeps cents
+  h.expect(/\$0\.00[\s\S]*Долг[\s\S]*\$582(?![.\d])[\s\S]*Оплачено/.test(money), `owes / paid (one word each, #1417): ${money.slice(0, 120)}`);
   h.expect(/INV-0105/.test(money) && /RCT-0102/.test(money), "invoices: invoice and receipt");
 
   // «＋ → Новая задача» — the one task form (TaskSheet), the client is already «к чему»; open tasks live in «Журнал»
@@ -85,10 +86,10 @@ exports.run = async (h) => {
 
   // the status at the header — the one StatusPicker (DS §9 А10): archive at once; "do not service" asks for a reason
   await vis("client-header-status").click();
-  await h.sheet().getByRole("radio", { name: "В архиве" }).click();
+  await h.sheet().getByRole("radio", { name: "Неактивный", exact: true }).click();
   await sheetGone(p);
   await p.waitForFunction(() => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db.customers.find((c) => c.id === "c1")?.status === "archived", null, { timeout: 5000 });
-  h.expect(/В архиве/.test(await inner("client-header-status")), "archived from the picker");
+  h.expect(/Неактивный/.test(await inner("client-header-status")), "archived («Неактивный», #3040) from the picker");
   await vis("client-header-status").click();
   await h.sheet().getByRole("radio", { name: "Не обслуживаем" }).click();
   await h.sheet().getByPlaceholder("Почему не обслуживаем").waitFor({ timeout: 5000 });
