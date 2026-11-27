@@ -77,4 +77,20 @@ describe("StatusPill (visual v2 «Плашка статуса», 21.11)", () => 
     expect(s).toMatch(/component\.statusPill\.padL/);
     expect(s).toMatch(/st\.fill/);
   });
+  it("#2992 lists B: a sum and its status are ONE column on the right — the sum, the status under it (never side by side)", () => {
+    const s = src("groupedList.tsx");
+    expect(s).toMatch(/value && status \? \(/);
+    expect(s).toMatch(/alignItems: "flex-end", flexShrink: 0, gap: spaceHalf\.hair/);
+    // the side pill is drawn only when there is no bare sum to stand under
+    expect(s).toMatch(/status && !\(value && !cols\?\.length\) \? <StatusPill/);
+  });
+  it("#2993: a part of «Деньги» has ONE line of its sums, not the tiles (the tiles stay on the overview)", () => {
+    const read = (f: string) => readFileSync(join(__dirname, "..", "src", f), "utf8");
+    for (const f of ["app/estimates.tsx", "app/invoice/index.tsx", "app/payments/index.tsx"]) {
+      expect(read(f)).toMatch(/<MoneyTotal tab=/);
+      expect(read(f)).not.toMatch(/<MoneyTiles/);
+      expect(read(f)).not.toMatch(/w2m\.col\.sum/);
+    }
+    expect(read("features/moneyTabs.tsx")).toMatch(/<SummaryLine testID="money-tiles"/);
+  });
 });
