@@ -2920,7 +2920,7 @@ export const es: Dict = {
   "ds.vtabs.title": "Pestañas de vista que se desplazan (A1p)",
   "ds.vtabs.hint": "Pantalla de un objeto con 4+ secciones: todas las pestañas siempre están, el número es lo que espera una acción. La fila se desplaza de lado, la elegida queda al centro, el borde con más pestañas se desvanece; al abrir por primera vez la fila se mueve una vez.",
   "ds.sfade.title": "Fila lateral con desvanecido",
-  "ds.sfade.hint": "Una fila de chips más ancha que su sitio se desplaza de lado; el borde con más elementos se desvanece (como la fila de pestañas). Se ve en las fracciones de la ventana de longitud de Gutters.",
+  "ds.sfade.hint": "Una fila de chips más ancha que su sitio se desplaza de lado; el borde con más elementos se desvanece (como la fila de pestañas).",
   "ds.vtabs.picked": "Abierta: {name}",
   "ui.banner.tone.ok": "Correcto",
   "ui.banner.tone.info": "Información",
