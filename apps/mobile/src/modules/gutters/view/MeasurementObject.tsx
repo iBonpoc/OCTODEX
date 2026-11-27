@@ -65,8 +65,9 @@ export function MeasurementObject({ m, drawn, back, onGone, onEdit, onCrewDocs, 
   const more = [
     { key: "edit", label: t("mod.gutters.view.edit"), testID: "view-more-edit" },
     ...acts.whoItems,
-    // «Удалить замер» asks its own question (which estimates stand on it, #2013) or gives «Отменить»: not the frame's yes / no as well
-    ...acts.moreItems.map((i) => (i.key === "delete" ? { key: i.key, label: i.label, testID: i.testID } : i)),
+    // «Удалить замер» asks its own question (which estimates stand on it, #2013) or gives «Отменить»: red and last, but not the frame's
+    // yes / no as well (`ownAsk`, the object frame's flag)
+    ...acts.moreItems.map((i) => (i.key === "delete" ? { ...i, ownAsk: true } : i)),
   ];
   const onMore = (k: string) => (k === "edit" ? onEdit() : acts.onAction(k));
   const parent = client ? { label: t("mod.gutters.card.openClient"), href: `/client/${client.id}` } : lead ? { label: t("mod.gutters.card.openLead"), href: `/lead/${lead.id}` } : null;
