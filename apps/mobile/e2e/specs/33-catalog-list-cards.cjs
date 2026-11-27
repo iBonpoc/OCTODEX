@@ -39,9 +39,11 @@ exports.run = async (h) => {
   await h.go("/catalog");
   const lossCard = rowOf(p, LOSS);
   await lossCard.scrollIntoViewIfNeeded();
-  const lt = await lossCard.innerText();
+  // #3033: the status is its icon, its words the icon's label
+  const says = async (loc) => `${await loc.innerText()} ${(await loc.locator('[data-testid="row-status-icon"]').first().getAttribute("aria-label", { timeout: 1000 }).catch(() => null)) ?? ""}`;
+  const lt = await says(lossCard);
   h.expect(lt.includes("В убытке") && lt.includes("-11.1%") && /\$100(\.00)?\b/.test(lt), `loss sign, cost $100.00 and margin -11.1%: ${lt.slice(0, 240)}`);
-  h.expect(!(await card.innerText()).includes("В убытке"), "a row with a margin has no loss sign");
+  h.expect(!(await says(card)).includes("В убытке"), "a row with a margin has no loss sign");
   await h.shot("loss");
 
   // technician: price yes, cost and margin no, no loss sign

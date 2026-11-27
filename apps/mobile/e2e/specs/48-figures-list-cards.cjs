@@ -30,7 +30,7 @@ exports.run = async (h) => {
   h.expect(owedRows.length === fig.length, `as many open invoices in «Счета» as in «Ждёт оплаты» (${owedRows.length} / ${fig.length})`);
   for (const c of fig) {
     const k = key(c);
-    h.expect(owedRows.some((r) => r.includes(k.name) && r.includes(k.number) && r.includes(k.amount)), `invoice ${k.number} is the same in «Счета»: ${JSON.stringify(k)}`);
+    h.expect(owedRows.some((r) => r.includes(k.name) && r.includes(k.number.replace(/^INV-/, "")) /* #3046: short form under the lead */ && r.includes(k.amount)), `invoice ${k.number} is the same in «Счета»: ${JSON.stringify(k)}`);
   }
 
   // «Подписано» (month) = the same estimates as in «Сметы» (all of its groups)
