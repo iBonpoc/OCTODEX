@@ -37,10 +37,13 @@ import { goTo } from "@/nav/go";
 import { setFooterInset, setToastRight } from "@/ui/footerInset";
 import { fillStyle } from "@/ui/fill";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
+import { labelTurnDeg, toInner, toOuter, turned, turnPad } from "../canvas/outerTurn";
+import { withTiming } from "react-native-reanimated";
 import { isDoubleTap, tapRule, type LastTap } from "../canvas/doubleTap";
 import { blinkPlan, dimAt } from "../canvas/dsBlink";
 import { deleteTarget, hasCap, type PickedEnd } from "../canvas/endPick";
-import { adopt, dsFor, patchDs, patchRun, pruneStored, readDefaults, resetKind, runFor, storeDefaults, type NewDefaults } from "../canvas/toolDefaults";
+import { adopt, dsFor, likeElement, newDirty, patchDs, patchRun, pruneStored, readDefaults, resetKind, runFor, storeDefaults, type NewDefaults } from "../canvas/toolDefaults";
+import { ToggleRow } from "@/ui/toggleRow";
 import { CornerSheet } from "./CornerSheet";
 import { EndSheet } from "./EndSheet";
 import { autoDownspouts, autoManaged, commitAuto, refillChain, shortChains } from "../canvas/autoDs";
@@ -160,9 +163,9 @@ const dsSizeText = sizeText; // one format everywhere (#1916)
 const NO_VIEW: PlanView = { k: 1, ox: 0, oy: 0 };
 
 /** the chip with the angle beside a swung end: the same look and place as the live length of a new gutter */
-function SwingChip({ swing, view, box, gap }: { swing: { a: P; b: P; deg: number }; view: PlanView; box: { w: number; h: number; top: number }; gap: number }) {
+function SwingChip({ swing, view, box, gap, out = (q) => q }: { swing: { a: P; b: P; deg: number }; view: PlanView; box: { w: number; h: number; top: number }; gap: number; /** a point of the (maybe turned) canvas on the screen (#2988) */ out?: (q: [number, number]) => [number, number] }) {
   const [chip, setChip] = useState({ w: 0, h: 0 });
-  const a = toScreen(view, swing.a), b = toScreen(view, swing.b);
+  const a = out(toScreen(view, swing.a)), b = out(toScreen(view, swing.b));
   return (
     <View
       pointerEvents="none"
@@ -268,6 +271,10 @@ function DrawCanvas() {
   const [newDef, setNewDef] = useState<NewDefaults>({});
   /** «Новые желоба» / «Новые водостоки» open (a sheet on the phone, the side column wider) */
   const [newSheet, setNewSheet] = useState<Tool | null>(null);
+  /** the window «Новые …» edits a draft; «Сохранить» makes it the drawing's, «Закрыть» drops it (#2987: one window, one way to save) */
+  const [newDraft, setNewDraft] = useState<NewDefaults | null>(null);
+  /** «Новые — так же» in a gutter's / downspout's own window (#2987): on «Сохранить» the next ones are drawn like it */
+  const [alsoNew, setAlsoNew] = useState(false);
   /** 390: the sheet of the measurement's photos */
   const [photoSheet, setPhotoSheet] = useState(false);
   /** «Ещё»: «Вернуть» and where the toolbar sits — rare, off the main row (П20.8) */
@@ -334,7 +341,29 @@ function DrawCanvas() {
     setView(v);
   }, []);
   // a pinch or a pan commits through `onTouchView`: the view is the person's even if the touch never reached the JS responder (#1667 review)
-  const canvas = useCanvasGestures(viewNow, onTouchView, live, 2, { lim: zoomLim, viewport: size.w > 0 ? size : { w: 390, h: 844 }, onEdge: () => haptics.selection() });
+  /** the turn of the canvas by two fingers (#2988, radians; 0 — north up): kept when the fingers lift — the labels turn back by it, «север вверх» shows */
+  const [turnRad, setTurnRad] = useState(0);
+  const canvas = useCanvasGestures(viewNow, onTouchView, live, 2, { lim: zoomLim, viewport: size.w > 0 ? size : { w: 390, h: 844 }, onEdge: () => haptics.selection() }, { onTurn: setTurnRad, onSnap: () => haptics.selection() });
+  /** where the canvas stands in the window: a finger's point on a turned canvas is read from its absolute place (#2988) */
+  const canvasBox = useRef<React.ComponentRef<typeof View>>(null);
+  const canvasAt = useRef<[number, number]>([0, 0]);
+  /**
+   * The finger's point on the drawing's surface (its own px, as `e.x, e.y` were): not turned — the event's own point, as ever; turned (#2988)
+   * — the absolute point → the canvas → the unturned frame (`toInner`) → less the live scale and shift. The same on an iPhone and the web
+   * (inside a turned view their local points differ)
+   */
+  const pt = (e: { x: number; y: number; absoluteX?: number; absoluteY?: number }): [number, number] => {
+    const th = live.r.value;
+    if (!th || e.absoluteX === undefined || e.absoluteY === undefined) return [e.x, e.y];
+    const q = toInner(th, live.cx.value, live.cy.value, e.absoluteX - canvasAt.current[0], e.absoluteY - canvasAt.current[1]);
+    const k = live.s.value || 1;
+    return [(q.x - live.tx.value) / k, (q.y - live.ty.value) / k];
+  };
+  /** «Север вверх» (spec 33 П39): back to 0° about the canvas's centre — the point at the centre stays (no shift is needed) */
+  const northUp = () => {
+    live.r.value = withTiming(0, { duration: reduce ? 0 : motion.durBase });
+    setTurnRad(0);
+  };
 
   // the latest values for gesture callbacks and the delayed save
   const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch, layers, autoDs, size, newDef });
@@ -524,10 +553,10 @@ function DrawCanvas() {
   const pan = usePanGesture(useJsGestureConfig<NonNullable<Parameters<typeof usePanGesture>[0]>>({
     runOnJS: true,
     maxPointers: 1,
-    simultaneousWith: [canvas.pinch, canvas.pan],
+    simultaneousWith: [canvas.pinch, canvas.pan, canvas.rot],
     onBegin: (e) => {
       setTouching(true);
-      downAt.current = [e.x, e.y];
+      downAt.current = pt(e);
       downTime.current = Date.now();
       threeShown.current = false;
       // held on an end, a corner or a downspout for longPressMs without moving: picked up AT ONCE, before the finger goes (#1272, founder
@@ -601,7 +630,7 @@ function DrawCanvas() {
     onUpdate: (e) => {
       const g = dragRef.current;
       if (!g) return;
-      const p = plan(e.x, e.y);
+      const p = plan(...pt(e));
       const d = cur.current.drawing;
       if (g.kind === "line" && g.pullable) {
         const run = g.pullable.before.runs.find((x) => x.id === g.pullable!.id);
@@ -675,7 +704,7 @@ function DrawCanvas() {
       // the final point is the lift itself; a cancelled stroke (a second finger came) keeps nothing
       const d = cur.current.drawing;
       const id = Crypto.randomUUID();
-      const next = finishStroke(g, d, plan(e.x, e.y), tolIn(), e.canceled, { id, attrs: runFor(cur.current.ch, cur.current.story, cur.current.newDef) });
+      const next = finishStroke(g, d, plan(...pt(e)), tolIn(), e.canceled, { id, attrs: runFor(cur.current.ch, cur.current.story, cur.current.newDef) });
       if (g.kind === "end" || g.kind === "ds" || g.kind === "pull" || g.kind === "corner") {
         if (e.canceled) setDrawing(g.before);
         else {
@@ -692,7 +721,7 @@ function DrawCanvas() {
       }
       // a line drawn over a gutter from one end to the other makes no second gutter on it (#1256): say so
       if (next === d && g.kind === "line") {
-        const b = endAt(d, g.a, plan(e.x, e.y), tolIn());
+        const b = endAt(d, g.a, plan(...pt(e)), tolIn());
         const why = e.canceled ? null : lineRefused(d, g.a, b, Number(cur.current.story) || 1, tolIn());
         if (why) {
           haptics.warning();
@@ -709,11 +738,11 @@ function DrawCanvas() {
         quickGrew.current = !!grown && got === grown;
       }
     },
-  }, [canvas.pinch, canvas.pan]));
+  }, [canvas.pinch, canvas.pan, canvas.rot]));
   // a tap: the downspout tool puts one on the nearest run; otherwise pick what is under the finger
   const tap = useTapGesture(useJsGestureConfig<NonNullable<Parameters<typeof useTapGesture>[0]>>({
     runOnJS: true,
-    simultaneousWith: [canvas.pinch, canvas.pan],
+    simultaneousWith: [canvas.pinch, canvas.pan, canvas.rot],
     onBegin: () => {
       liftTap.current = false;
     },
@@ -722,10 +751,11 @@ function DrawCanvas() {
       if (Date.now() - canvas.multiAt.current < MULTI_TAP_MS) { lastTap.current = null; return; } // the fingers of a pinch / two-finger pan lifting are not a tap (a pinch that ended over a length label opened its sheet)
       if (!holdIsTap(hold.current)) return; // a touch that picked something up (a hold) is not a tap: the release does not flip a cap or open a menu (#1272)
       const { drawing: d, tool: tl } = cur.current;
-      const p = plan(e.x, e.y);
+      const p = plan(...pt(e));
       // a tap on a label opens what it says (founder 09.11): a length → its length, a corner → the corner, the
       // fittings word over a downspout → its menu
-      const lab = cur.current.canSave ? sceneRef.current?.labels.find((l) => Math.abs(e.x - l.x) <= l.w / 2 && Math.abs(e.y - l.y) <= l.h / 2) : undefined;
+      const [ex, ey] = pt(e);
+      const lab = cur.current.canSave ? sceneRef.current?.labels.find((l) => Math.abs(ex - l.x) <= l.w / 2 && Math.abs(ey - l.y) <= l.h / 2) : undefined;
       // (the lift of a drag is a tap on the spot on the web: it opens no label it ended over — a downspout dragged under its own word, spec 170)
       if ((lab?.id.startsWith("len:") || lab?.id.startsWith("ds:")) && liftTap.current) return;
       if (lab?.id.startsWith("len:")) {
@@ -805,7 +835,7 @@ function DrawCanvas() {
         else setSheet(true); // the run's (or a downspout's) properties: a sheet on the phone, wider the panel is already open
       });
     },
-  }, [canvas.pinch, canvas.pan]));
+  }, [canvas.pinch, canvas.pan, canvas.rot]));
   const fingers = useSimultaneousGestures(pan, tap);
 
   const scene = useMemo(
@@ -873,6 +903,18 @@ function DrawCanvas() {
     setWin(null);
     if (w) setHist(winSave(w, cur.current.drawing, histRef.current));
   };
+  /** «Сохранить» of a gutter's / downspout's window: its edits kept, and with «Новые — так же» on the next ones drawn like it (#2987) */
+  const saveObj = () => {
+    const d = cur.current.drawing, id = cur.current.selected;
+    const run = d.runs.find((r) => r.id === id), ds = d.downspouts.find((x) => x.id === id);
+    if (alsoNew && run) setNewDef((x) => likeElement(cur.current.ch, x, { kind: "run", attrs: run.attrs }));
+    else if (alsoNew && ds) {
+      const { id: _i, runId: _r, atIn: _a, ...attrs } = ds;
+      setNewDef((x) => likeElement(cur.current.ch, x, { kind: "ds", attrs }));
+    }
+    setAlsoNew(false);
+    saveWin();
+  };
   /** «Не сохранять» (or «Закрыть» with no edit left): the drawing and its history as before the window */
   const discardWin = () => {
     const back = winDiscard(winRef.current);
@@ -916,6 +958,7 @@ function DrawCanvas() {
   useEffect(() => {
     if (winKeyRef.current === winKey) return;
     winKeyRef.current = winKey;
+    setAlsoNew(false);
     if (winRef.current) saveWin();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [winKey]);
@@ -977,32 +1020,73 @@ function DrawCanvas() {
   const attrs = !sel ? null : (
     <>
       {"a" in sel ? <RunAttrsView key={sel.id} no={drawing.runs.findIndex((r) => r.id === sel.id) + 1} run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} /> : <DsAttrsView key={sel.id} rulesOver={rules.over} no={drawing.downspouts.findIndex((d) => d.id === sel.id) + 1} ds={sel} onAttrs={onDsAttrs} ch={ch} run={drawing.runs.find((r) => r.id === sel.runId)?.attrs} />}
+      {canSave ? (
+        <ToggleRow
+          testID="attr-also-new"
+          label={t("mod.gutters.draw.alsoNew")}
+          caption={t("a" in sel ? "mod.gutters.draw.alsoNewRun" : "mod.gutters.draw.alsoNewDs")}
+          value={alsoNew}
+          onChange={setAlsoNew}
+        />
+      ) : null}
       {elPhotos}
     </>
   );
   // «Новые желоба» / «Новые водостоки» (#1563 PR B): the rows of a gutter's / downspout's properties, for the new ones of this drawing
   const newTitle = newSheet === "line" ? t("mod.gutters.draw.newDefaults.runs") : t("mod.gutters.draw.newDefaults.ds");
-  const newOwn = newSheet === "line" ? newDef.run : newDef.ds;
-  /** the title (wider: in the column; the phone's sheet has it in its own header with «✕»), «Сбросить», and what it is for — on top, before
-   *  the rows: otherwise the column looks like the picked gutter's own properties (design-reviewer #1563 PR B) */
-  const newBody = (titled: boolean) => !newSheet ? null : (
+  /** what the window shows: its draft (opened with what the drawing uses now) */
+  const nd = newDraft ?? newDef;
+  const newOwn = newSheet === "line" ? nd.run : nd.ds;
+  const newEdited = newDirty(newDraft, newDef);
+  const openNew = (tl: Tool) => {
+    setSelected(null);
+    setNewDraft(cur.current.newDef);
+    setNewSheet(tl);
+  };
+  const closeNew = () => {
+    setNewSheet(null);
+    setNewDraft(null);
+  };
+  const saveNew = () => {
+    if (newDraft) setNewDef(newDraft);
+    closeNew();
+  };
+  /** 820/1280: «Закрыть» of the column with edits — the same question as a gutter's window (DS Б1/Б3) */
+  const closeNewPanel = async () => {
+    if (newEdited) {
+      const a = await askWin({
+        title: t("sheet.unsavedTitle"),
+        text: t("sheet.unsavedText"),
+        testID: "attr-win-ask",
+        actions: [
+          { key: "save", label: t("ue.save"), tone: "primary", testID: "attr-win-ask-save" },
+          { key: "discard", label: t("sheet.discard"), tone: "danger", testID: "attr-win-ask-discard" },
+          { key: "back", label: t("sheet.keepEditing"), tone: "cancel", testID: "attr-win-ask-back" },
+        ],
+      });
+      if (a === "save") return saveNew();
+      if (a !== "discard") return;
+    }
+    closeNew();
+  };
+  /** «Новые gutter» / «Новые downspout» (#2987, founder 27.11: «нужно продумать, какие должны открываться меню»): the same window as one
+   *  gutter's / downspout's — its title, what it is for, its rows, «Как в настройках компании»; «Закрыть / Сохранить» at the bottom */
+  const newBody = () => !newSheet ? null : (
     <View testID="draw-new-defaults" style={{ gap: space[4] }}>
       <View style={{ gap: space[1] }}>
-        <RowView style={{ alignItems: "center", justifyContent: "space-between", gap: space[2] }}>
-          {titled ? <T v="heading" w="semibold">{newTitle}</T> : <View />}
-          {newOwn ? (
-            <View testID="draw-new-defaults-reset">
-              <Button label={t("mod.gutters.draw.newDefaults.reset")} variant="ghost" size="sm" onPress={() => setNewDef((x) => resetKind(x, newSheet === "line" ? "run" : "ds"))} />
-            </View>
-          ) : null}
-        </RowView>
+        <T v="heading" w="semibold">{newTitle}</T>
         <T v="caption" tone="mut">{t("mod.gutters.draw.newDefaults.hint")}</T>
       </View>
       {newSheet === "line" ? (
-        <RunAttrsView forNew run={{ id: "new-run", a: [0, 0], b: [0, 0], attrs: runFor(ch, story, newDef) }} onAttrs={(p) => setNewDef((x) => patchRun(ch, x, p))} onLength={() => {}} ch={ch} />
+        <RunAttrsView forNew run={{ id: "new-run", a: [0, 0], b: [0, 0], attrs: runFor(ch, story, nd) }} onAttrs={(p) => setNewDraft((x) => patchRun(ch, x ?? newDef, p))} onLength={() => {}} ch={ch} />
       ) : (
-        <DsAttrsView forNew ds={{ ...dsFor(ch, newDef), id: "new-ds", runId: "", atIn: 0 }} onAttrs={(p) => setNewDef((x) => patchDs(ch, x, p))} ch={ch} run={runFor(ch, story, newDef)} />
+        <DsAttrsView forNew ds={{ ...dsFor(ch, nd), id: "new-ds", runId: "", atIn: 0 }} onAttrs={(p) => setNewDraft((x) => patchDs(ch, x ?? newDef, p))} ch={ch} run={runFor(ch, story, nd)} />
       )}
+      {newOwn ? (
+        <View testID="draw-new-defaults-reset" style={{ alignItems: "flex-start" }}>
+          <Button label={t("mod.gutters.draw.newDefaults.reset")} icon="undo" variant="secondary" size="sm" onPress={() => setNewDraft((x) => resetKind(x ?? newDef, newSheet === "line" ? "run" : "ds"))} />
+        </View>
+      ) : null}
     </View>
   );
   /** 820/1280: the panel is a column on the right, always there; the canvas and its bars stay left of it */
@@ -1138,7 +1222,9 @@ function DrawCanvas() {
   }, [store.loading, store.db, mId]);
   // a pick on the canvas shows its own properties: «новые» close (wider the column shows one thing at a time)
   useEffect(() => {
-    if (selected) setNewSheet(null);
+    if (!selected) return;
+    setNewSheet(null);
+    setNewDraft(null);
   }, [selected]);
   /** two taps on «Желоб» / «Водосток» in the toolbar: the properties of new ones (#1563 PR B); one tap picks the tool, as before */
   const toolTap = useRef<LastTap | null>(null);
@@ -1150,8 +1236,7 @@ function DrawCanvas() {
     const now = Date.now();
     if (isDoubleTap(toolTap.current, now, tl, motion.doubleTapMs)) {
       toolTap.current = null;
-      setSelected(null);
-      setNewSheet(tl);
+      openNew(tl);
       return;
     }
     toolTap.current = { at: now, id: tl };
@@ -1178,7 +1263,7 @@ function DrawCanvas() {
   // «⋯» (founder 09.11, #692 #690; spec 33 П24 Б5, Б6): link to another, unlink back to the drafts, delete the measurement
   const whoRef = useRef<React.ComponentRef<typeof View>>(null);
   const [whoAt, setWhoAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  type WhoKey = "fit" | "props" | "end0" | "end1" | "acc" | "layers" | "autods" | "relink" | "unlink" | "delete";
+  type WhoKey = "fit" | "newdef" | "props" | "end0" | "end1" | "acc" | "layers" | "autods" | "relink" | "unlink" | "delete";
   const linked = !!leadId || !!placeId;
   // the free ends of the picked gutter (a corner and a butted end have no cap to talk about; «без заглушки» stays one)
   const endRun0 = canSave ? drawing.runs.find((r) => r.id === selected) : undefined;
@@ -1194,6 +1279,8 @@ function DrawCanvas() {
     // gutter / downspout, and «Конец желоба» of each of its free ends (named by the letter the cap carries on the canvas)
     ...(canSave && sel && !wide ? [{ key: "props" as const, label: t("mod.gutters.attr.props") }] : []),
     ...endRows.map((r) => ({ key: `end${r.end}` as const, label: `${t("mod.gutters.end.title")} · ${r.side}` })),
+    // «Как рисовать новые» (#2987): what two taps on «Желоб» / «Водосток» in the toolbar open, as a row — no need to know the double tap
+    ...(canSave ? [{ key: "newdef" as const, label: t("mod.gutters.draw.newDefaults.item"), testID: "draw-who-newdef" }] : []),
     // no «Где панель» (founder 18.11, #2156: «Зачем она там?») — the toolbar moves by its grip; no «Точность замера» (#768, #1764)
     { key: "layers", label: t("mod.gutters.draw.layersItem") },
     // a measurement from before the automatic downspouts gets them only when asked (#1246): not silently, the estimate would change
@@ -1204,6 +1291,7 @@ function DrawCanvas() {
   const onWho = (k: WhoKey) => {
     if (k === "fit") { if (size.w) setView(fit(drawing, size)); return; }
     if (k === "props") return setSheet(true);
+    if (k === "newdef") return openNew(cur.current.tool);
     if (k === "end0" || k === "end1") return setEndSheet(endRun0 ? { id: endRun0.id, end: k === "end1" ? 1 : 0 } : null);
     if (k === "layers") return setMoreSheet(k);
     if (k === "autods") return placeAutoDs();
@@ -1371,14 +1459,25 @@ function DrawCanvas() {
   const ghostLen = ghost ? Math.round(Math.hypot(ghost.b[0] - ghost.a[0], ghost.b[1] - ghost.a[1])) : 0;
   const gA = ghost && view ? toScreen(view, ghost.a) : null;
   const gB = ghost && view ? toScreen(view, ghost.b) : null;
+  /** a point of the canvas on the screen: the chips over the canvas stand where the turned drawing shows it (#2988) */
+  const outerPt = (q: [number, number]): [number, number] => {
+    if (!turned(turnRad)) return q;
+    const o = toOuter(turnRad, size.w / 2, size.h / 2, q[0], q[1]);
+    return [o.x, o.y];
+  };
+  const gAo = gA ? outerPt(gA) : null;
+  const gBo = gB ? outerPt(gB) : null;
+  /** the drawn layers reach past the canvas when it may turn (#2988): its corners are never empty */
+  const pad = size.w > 0 ? turnPad(size.w, size.h) : 0;
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }} testID="draw-screen" onStartShouldSetResponderCapture={() => { touched.current = true; return false; }}>
       {/* no edge swipe back on the canvas (founder 09.11): drawing from the left edge left the screen */}
       <Stack.Screen options={{ gestureEnabled: false, fullScreenGestureEnabled: false }} />
       {/* the drawing under everything */}
-      <View style={{ position: "absolute", left: 0, right: panelSide, top: 0, bottom: 0 }}>
+      <View ref={canvasBox} collapsable={false} onLayout={() => canvasBox.current?.measureInWindow((x: number, y: number) => { canvasAt.current = [x, y]; })} style={{ position: "absolute", left: 0, right: panelSide, top: 0, bottom: 0 }}>
         <CanvasView
+          turnable
           view={viewNow}
           onView={onTouchView}
           live={live}
@@ -1387,11 +1486,11 @@ function DrawCanvas() {
           gestures={canvas}
           testID="draw-canvas"
           // the grid (#1434): a screen-sized layer under the drawing, following the live view on the UI thread — not clipped on an iPhone
-          under={layers.grid && view && size.w > 0 ? <GridLayer live={live} size={size} minPx={space[6]} testID="draw-grid" /> : null}
+          under={layers.grid && view && size.w > 0 ? <GridLayer live={live} size={size} minPx={space[6]} pad={pad} testID="draw-grid" /> : null}
         >
           <GestureDetector gesture={fingers}>
             <View style={{ width: size.w, height: size.h }} testID="draw-surface">
-              {scene ? <SvgPainter scene={scene} w={size.w} h={size.h} testID="draw-svg" /> : null}
+              {scene ? <SvgPainter scene={scene} w={size.w} h={size.h} pad={pad} turnDeg={-labelTurnDeg(turnRad)} testID="draw-svg" /> : null}
               {gA && gB ? (
                 <View pointerEvents="none" style={{ position: "absolute", left: 0, top: 0 }}>
                   <Svg width={size.w} height={size.h}>
@@ -1435,6 +1534,10 @@ function DrawCanvas() {
             <View style={{ marginLeft: space[3] }}>
               <HelpButton title={t("mod.gutters.draw.help.q")} text={helpText(t)} testID="draw-help" />
             </View>
+            {/* «Север вверх» (#2988, spec 33 П39): only while the view is turned — one press brings it back to 0° (as the compass in Maps) */}
+            {turned(turnRad) ? (
+              <View testID="draw-north"><IconButton icon="navigate" label={t("mod.gutters.draw.northUp")} onPress={northUp} /></View>
+            ) : null}
             {/* no cloud when all is saved and sent: only «on the phone» (not sent yet / no connection), a tap says it in words (#507 → #1274) */}
             {canSave && !flat && (mark === "sending" || mark === "phone") ? (
               <View testID="draw-local">
@@ -1513,14 +1616,14 @@ function DrawCanvas() {
             const { width, height } = e.nativeEvent.layout;
             if (width !== ghostChip.w || height !== ghostChip.h) setGhostChip({ w: width, h: height });
           }}
-          style={{ position: "absolute", opacity: ghostChip.w ? 1 : 0, ...ghostChipAt(gA, gB, ghostChip, { w: size.w, h: size.h, top: ins.top + space[8] + space[6] }, dt.labelGap + dt.runWSel) }}
+          style={{ position: "absolute", opacity: ghostChip.w ? 1 : 0, ...ghostChipAt(gAo!, gBo!, ghostChip, { w: size.w, h: size.h, top: ins.top + space[8] + space[6] }, dt.labelGap + dt.runWSel) }}
         >
           <StatusChip status="neutral" label={fmtLen(ghostLen, ch.lenFormat)} />
         </View>
       ) : null}
 
       {/* the angle beside a free end being swung (#818): «90°» when it is held at a step */}
-      {swing && view ? <SwingChip swing={swing} view={view} box={{ w: size.w, h: size.h, top: ins.top + space[8] + space[6] }} gap={dt.labelGap + dt.runWSel} /> : null}
+      {swing && view ? <SwingChip swing={swing} view={view} box={{ w: size.w, h: size.h, top: ins.top + space[8] + space[6] }} gap={dt.labelGap + dt.runWSel} out={outerPt} /> : null}
 
       {/* bottom: the toolbar (bottom / right hand / left hand) and the $ — always at the bottom */}
       {/* where the toolbar sticks if let go now (founder 09.11): that edge outlined */}
@@ -1619,15 +1722,13 @@ function DrawCanvas() {
         <View testID="draw-panel" style={{ position: "absolute", right: ins.right + space[3], top: ins.top + space[2], bottom: ins.bottom + space[3], width: component.panelW, padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd, gap: space[2] }}>
           {newSheet ? (
             <>
-              <RowView style={{ justifyContent: "flex-end" }}>
-                <View testID="draw-panel-close"><IconButton icon="close" label={t("mod.gutters.attr.close")} onPress={() => setNewSheet(null)} /></View>
-              </RowView>
-              <AttrBody>{newBody(true)}</AttrBody>
+              <AttrBody>{newBody()}</AttrBody>
+              <WinButtons onClose={() => void closeNewPanel()} onSave={saveNew} />
             </>
           ) : attrs ? (
             <>
               <AttrBody>{attrs}</AttrBody>
-              <WinButtons onClose={() => void closePanel()} onSave={() => { saveWin(); setSelected(null); }} />
+              <WinButtons onClose={() => void closePanel()} onSave={() => { saveObj(); setSelected(null); }} />
             </>
           ) : (
             <View style={{ flex: 1, gap: space[4] }}>
@@ -1643,13 +1744,19 @@ function DrawCanvas() {
         visible={!wide && sheet && !!attrs && !newSheet}
         onClose={() => { discardWin(); setSheet(false); }}
         dirty={winEdited}
-        onSave={() => { saveWin(); setSheet(false); }}
-        footer={<WinButtons onClose={() => { discardWin(); setSheet(false); }} onSave={() => { saveWin(); setSheet(false); }} />}
+        onSave={() => { saveObj(); setSheet(false); }}
+        footer={<WinButtons onClose={() => { discardWin(); setSheet(false); }} onSave={() => { saveObj(); setSheet(false); }} />}
       >
         <AttrBody inSheet>{attrs}</AttrBody>
       </Sheet>
-      <Sheet visible={!wide && !!newSheet} onClose={() => setNewSheet(null)} title={newSheet ? newTitle : undefined}>
-        <AttrBody inSheet>{newBody(false)}</AttrBody>
+      <Sheet
+        visible={!wide && !!newSheet}
+        onClose={closeNew}
+        dirty={newEdited}
+        onSave={saveNew}
+        footer={<WinButtons onClose={closeNew} onSave={saveNew} />}
+      >
+        <AttrBody inSheet>{newBody()}</AttrBody>
       </Sheet>
       {m ? <LinkSheet visible={linkSheet} onClose={() => setLinkSheet(false)} measurementId={m.id} /> : null}
       <DeleteMeasurementSheet visible={!!askDelete} on={askDelete ?? NO_ESTIMATES} onDelete={deleteNow} onClose={() => setAskDelete(null)} />

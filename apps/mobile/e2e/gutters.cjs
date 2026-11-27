@@ -84,8 +84,25 @@ async function pressWhenStill(btn) {
 }
 
 // «Править чертёж» on the review → back on the canvas
+// «Править чертёж» (#2995): on the measurement's own screen it is in «⋯» (the object frame); the 1280 panel of «Замеры» keeps its button
+async function editDrawing(p) {
+  const btn = p.getByTestId("view-edit").locator("visible=true").first();
+  if (await btn.count()) return pressWhenStill(btn.getByRole("button"));
+  await pressWhenStill(p.getByTestId("view-more").locator("visible=true").first().getByRole("button"));
+  await p.getByRole("menuitem", { name: "Править чертёж", exact: true }).click();
+}
+/** «Править чертёж» is offered (its button, or the item of «⋯» — the menu is opened and closed again) */
+async function canEditDrawing(p) {
+  if (await p.getByTestId("view-edit").locator("visible=true").count()) return true;
+  await pressWhenStill(p.getByTestId("view-more").locator("visible=true").first().getByRole("button"));
+  const item = p.getByRole("menuitem", { name: "Править чертёж", exact: true });
+  const has = await item.waitFor({ timeout: 3000 }).then(() => true, () => false);
+  await pressEscUntilClosed(p);
+  return has;
+}
+
 async function backToCanvas(p) {
-  await pressWhenStill(p.getByTestId("view-edit").locator("visible=true").first().getByRole("button"));
+  await editDrawing(p);
   await p.getByTestId("draw-surface").locator("visible=true").first().waitFor({ timeout: 8000 });
   await p.getByTestId("view-screen").locator("visible=true").first().waitFor({ state: "detached", timeout: 8000 });
 }
@@ -206,13 +223,27 @@ async function openAttrMore(p) {
   }
 }
 
-/** what a field shows (its button's text) */
+/**
+ * A field of tiles (the downspout's kind, the gutter's profile — founder 27.11, #2980 / #2986): no button, the tiles are `<id>-<key>`
+ * radios. The helpers below read and pick them the same way as a menu field.
+ */
+async function isTiles(p, id) {
+  return (await p.getByTestId(`${id}-button`).locator("visible=true").count()) === 0 && (await p.getByTestId(id).locator("visible=true").count()) > 0;
+}
+const tileSel = (id) => `[data-testid^="${id}-"][role="radio"]`;
+async function tileIds(p, id) {
+  return p.getByTestId(id).locator("visible=true").first().locator(tileSel(id)).evaluateAll((es) => es.map((e) => [e.getAttribute("data-testid"), e.getAttribute("aria-checked") === "true", e.getAttribute("aria-label") || e.innerText]));
+}
+
+/** what a field shows (its button's text; a tile field — the chosen tile's name) */
 async function attrShown(p, id) {
+  if (await isTiles(p, id)) return ((await tileIds(p, id)).find((x) => x[1])?.[2] ?? "").replace(/\s+/g, " ").trim();
   return (await p.getByTestId(`${id}-button`).locator("visible=true").first().innerText()).trim();
 }
 
 /** the keys a field offers: opens its menu or list, reads the items, closes it (attrClose) */
 async function attrKeys(p, id) {
+  if (await isTiles(p, id)) return (await tileIds(p, id)).map((x) => x[0].slice(id.length + 1));
   const button = p.getByTestId(`${id}-button`).locator("visible=true").first();
   await button.scrollIntoViewIfNeeded();
   await button.click();
@@ -225,6 +256,10 @@ async function attrKeys(p, id) {
 
 /** the key a field's MENU marks as chosen (read as selected): opens it, reads, closes it (attrClose) */
 async function attrChosen(p, id) {
+  if (await isTiles(p, id)) {
+    const on = (await tileIds(p, id)).filter((x) => x[1]);
+    return on.length === 1 ? on[0][0].slice(id.length + 1) : null;
+  }
   const button = p.getByTestId(`${id}-button`).locator("visible=true").first();
   await button.scrollIntoViewIfNeeded();
   await button.click();
@@ -238,6 +273,7 @@ async function attrChosen(p, id) {
 
 /** the open menu or list of a field closed by Esc (again while it stays: an Esc in its first frames is lost), then gone */
 async function attrClose(p, id) {
+  if (await isTiles(p, id)) return; // tiles open nothing
   const picker = p.getByTestId(`${id}-picker`).locator("visible=true");
   // a list (the colour field's, G1 PR2) is a sheet of its own over the window's: never Esc (on 390 it may reach the window under it,
   // and its backdrop is still moving); a menu — Esc
@@ -261,6 +297,14 @@ async function attrShut(p, id) {
 
 /** pick `key` in a field: opens its menu or list, taps the item, waits until it is gone; returns the item's name */
 async function pickAttr(p, id, key) {
+  if (await isTiles(p, id)) {
+    const tile = p.getByTestId(id).locator("visible=true").first().locator(`[data-testid="${id}-${key}"]`);
+    await tile.scrollIntoViewIfNeeded();
+    const name = ((await tile.getAttribute("aria-label")) || (await tile.innerText())).replace(/\s+/g, " ").trim();
+    await tile.click();
+    await p.waitForFunction(([x, k]) => [...document.querySelectorAll(`[data-testid="${x}-${k}"]`)].some((e) => e.getClientRects().length > 0 && e.getAttribute("aria-checked") === "true"), [id, key], { timeout: 5000 });
+    return name;
+  }
   const button = p.getByTestId(`${id}-button`).locator("visible=true").first();
   await button.scrollIntoViewIfNeeded();
   await button.click();
@@ -276,11 +320,7 @@ async function pickAttr(p, id, key) {
 /** the open downspout's kind (its menu is open): a field on top (#2412 G1); `key` — rectPlain, rectRibbed, roundPlain, roundRibbed */
 async function pickDsKind(p, key) {
   await p.getByTestId("attr-panel").locator("visible=true").first().waitFor({ timeout: 5000 });
-  const name = await pickAttr(p, "attr-ds-kind", key);
-  await p.waitForFunction((n) => {
-    const b = [...document.querySelectorAll('[data-testid="attr-ds-kind-button"]')].find((e) => e.getClientRects().length > 0);
-    return !!b && b.innerText.trim() === n;
-  }, name, { timeout: 5000 });
+  await pickAttr(p, "attr-ds-kind", key); // tiles (#2980): pickAttr waits until the tile is checked
 }
 
 // «Отменить» of a toast (v2, #2086): the word ignores a tap until it is armed (`aria-busy` false, motion.toastArmMs after the toast
@@ -309,4 +349,40 @@ async function winClose(p) {
   await p.getByTestId("attr-win-close").locator("visible=true").first().getByRole("button").click();
 }
 
-module.exports = { winSave, winClose, pressUndo, pickDsKind, pickAttr, attrShown, attrKeys, attrChosen, attrClose, attrShut, openAttrMore, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
+// «Документы бригады» (#2989): the cut and the shop drawings left the card's «Документы» — they are in «⋯ → Документы бригады». `docsFor` makes
+// the button `id` reachable: the crew's ones — that sheet open; the card's own («Чертёж», «Заказ материалов») — that sheet closed
+const shownNow = (p, id) => p.evaluate((x) => [...document.querySelectorAll(`[data-testid="${x}"]`)].some((e) => e.getClientRects().length > 0), id);
+// #3028: the measurement's own screen has sections — «Документы» stand on «Сметы», the photos on «Фото», the drawing and the parts on «Обзор».
+// A section is opened when what is asked for is not on the screen (the 1280 panel has no sections: nothing to press there)
+async function showSection(p, id) {
+  // the screen may still be coming in: wait until the thing asked for or the measurement's frame is there
+  await p.waitForFunction((x) => [...document.querySelectorAll(`[data-testid="${x}"], [data-testid="view-head"], [data-testid="list-panel"]`)].some((e) => e.getClientRects().length > 0), id, { timeout: 8000 }).catch(() => {});
+  if (await shownNow(p, id)) return;
+  const name = /^view-(docs|doc-|pdf-|estimates)/.test(id) ? /^Сметы/ : /^view-photo/.test(id) ? /^Фото/ : /^view-hist/.test(id) ? /^История/ : /^Обзор/;
+  const tab = p.getByRole("tab", { name }).locator("visible=true").first();
+  // the bottom bar's tabs are tabs too: wait for the section's own one a moment (none on the 1280 panel — then nothing to press)
+  await tab.waitFor({ timeout: 4000 }).catch(() => {});
+  if (!(await tab.count())) return;
+  // a screen sliding in drops a press on a moving tab: pressed when it stands, once more if the section did not come
+  for (let i = 0; i < 3; i++) {
+    await stands(tab);
+    await tab.click();
+    const ok = await p.waitForFunction((x) => [...document.querySelectorAll(`[data-testid="${x}"]`)].some((e) => e.getClientRects().length > 0), id, { timeout: 2500 }).then(() => true, () => false);
+    if (ok) return;
+  }
+}
+async function docsFor(p, id) {
+  const crew = /^view-(pdf|doc)-(crew|shop)$/.test(id);
+  const open = await shownNow(p, "view-crew-docs");
+  if (crew && !open) {
+    await p.getByTestId("view-more").locator("visible=true").first().getByRole("button").click();
+    await p.getByRole("menuitem", { name: "Документы бригады", exact: true }).click();
+    await p.getByTestId("view-crew-docs").locator("visible=true").first().waitFor({ timeout: 5000 });
+  } else if (!crew && open) {
+    await pressEscUntilClosed(p);
+    await p.waitForFunction(() => ![...document.querySelectorAll('[data-testid="view-crew-docs"]')].some((e) => e.getClientRects().length > 0), null, { timeout: 5000 });
+  }
+  if (!crew) await showSection(p, id);
+}
+
+module.exports = { showSection, editDrawing, canEditDrawing, docsFor, winSave, winClose, pressUndo, pickDsKind, pickAttr, attrShown, attrKeys, attrChosen, attrClose, attrShut, openAttrMore, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };

@@ -2,11 +2,11 @@
  * «Замеры» — the module's home (spec 33 П25.3 А, PR-H1; before П20.22, founder 09.11 версия 475; founder 11.11:
  * «открываешь модуль — там кнопка „Новый замер“, внутри — карточки замеров»): every measurement the phone has, the
  * drafts without a client too, newest first. The search (client, lead, address, phone) and the chips by the computed
- * state (П25.4) — the chip is kept on this device. One ListCard per measurement (rule 12; recipe `measurement`, spec 06).
+ * state (П25.4) — the chip is kept on this device. One row per measurement (rule 12; lists B #2992).
  * A card opens the measurement's card («Просмотр замера», `view`); 1280 — beside the list in the ListPanel.
  */
 import { useRef, useState, type ComponentRef } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { router, type Href } from "expo-router";
 import { usePersistentState } from "@/data/persist";
 import { useStore } from "@/data/store";
@@ -19,13 +19,17 @@ import { useDevice } from "@/theme/ThemeProvider";
 import { Button, IconButton } from "@/ui/controls";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
-import { CardGrid, ListCard, ListCardHeader, type CardSign, type CardStatus } from "@/ui/listCard";
-import type { FactKey } from "@/ui/listCardLayout";
+import { openContact, type CardSign, type CardStatus } from "@/ui/listCard";
+import { mapsUrl, type OS } from "@/ui/listCardLayout";
+import { telHref } from "@/features/contactLinks";
+import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
+import { estimateListAmount } from "@/features/estimateDoc";
 import { ListPanel } from "@/ui/listPanel";
-import { CardList, Empty, RowView, Screen } from "@/ui/surfaces";
+import { Empty, RowView, Screen } from "@/ui/surfaces";
 import { Menu } from "@/ui/overlays";
 import { asMeasurementFilter, filterMeasurements, MEASUREMENT_FILTERS, measurementList, type MeasurementFilter, type MeasurementItem } from "../measurements";
 import { MeasurementView } from "../view/ViewScreen";
+import { initialsOf } from "@/features/invoice/moneySummary";
 
 const CHIP: Record<MeasurementFilter, DictKey> = {
   all: "mod.gutters.list.f.all",
@@ -34,12 +38,10 @@ const CHIP: Record<MeasurementFilter, DictKey> = {
   estimate: "mod.gutters.list.f.estimate",
   signed: "mod.gutters.list.f.signed",
 };
-const COLUMNS: readonly FactKey[] = ["addr", "lines"];
-const COLUMNS_PANEL: readonly FactKey[] = ["addr"];
 
 export default function MeasurementsScreen() {
   const store = useStore();
-  const { t, day } = useI18n();
+  const { t, day, moneyWhole } = useI18n();
   const { device } = useDevice();
   const draw = moduleHref("gutters", "draw");
   const view = moduleHref("gutters", "view");
@@ -61,7 +63,8 @@ export default function MeasurementsScreen() {
     (id) => items.some((x) => x.id === id),
   );
   const openItem = panel.openId ? items.find((x) => x.id === panel.openId) : undefined;
-  const titleOf = (m: MeasurementItem) => (m.forKind === "lead" ? t("mod.gutters.list.lead", { name: m.forName ?? "" }) : (m.forName ?? t("mod.gutters.list.noClient")));
+  // #3028 (founder 26.11, the lists' rule #3017): who it is for by name (no «Лид:»), a draft for nobody — «Черновик» (its state says why)
+  const titleOf = (m: MeasurementItem) => m.forName ?? t("mod.gutters.list.draft");
 
   /** П25.4: the state's chip; an estimate's — the core's own words and tone of its status */
   const statusOf = (m: MeasurementItem): CardStatus => {
@@ -81,28 +84,44 @@ export default function MeasurementsScreen() {
     return out.length ? out : undefined;
   };
 
-  const desktop = device === "desktop";
-  const card = (m: MeasurementItem) => (
-    <ListCard
-      key={m.id}
-      testID={`measurement-${m.id}`}
-      title={titleOf(m)}
-      when={m.updatedAt ? day(m.updatedAt) : undefined}
-      lead={{ kind: "icon", icon: "pencil" }}
-      status={statusOf(m)}
-      signs={signsOf(m)}
-      facts={{
-        addr: m.address ?? undefined,
-        lines: t("mod.gutters.list.what", { runs: m.runs, ft: Math.round(m.lengthIn / 12), ds: m.downspouts }),
-      }}
-      // edge only for what needs action: the drawing changed after its estimate
-      edge={m.view.changed || m.view.engineChanged ? "warn" : null}
-      density={desktop ? "row" : "rich"}
-      columns={panel.openId ? COLUMNS_PANEL : COLUMNS}
-      selected={m.id === panel.openId}
-      onPress={() => panel.open(m.id)}
-    />
-  );
+  /**
+   * Lists B (#2992, founder 27.11): a measurement is a row of one group (rule 12) — the measure's icon · who it is for, «адрес ·
+   * пробеги · футы · водостоки» · on the right the estimate's sum (the office) or the day it was touched, under it the state; a
+   * drawing changed after its estimate says so first (warn, icon + word), as the old card's sign did.
+   */
+  const office = store.role !== "tech";
+  const row = (m: MeasurementItem) => {
+    const sign = signsOf(m)?.[0];
+    const st = statusOf(m);
+    const sum = office && m.view.estimate ? estimateListAmount(m.view.estimate) : undefined;
+    const tel = telHref(m.phone ?? undefined);
+    return (
+      <GroupRow
+        key={m.id}
+        testID={`measurement-${m.id}`}
+        title={titleOf(m)}
+        // the lists' one rule (founder #3033, #3038; «Списки» #3034): 1 — the name · [the state's icon] the estimate's sum (no cents, #3029)
+        // or a draft's day; 2 — the address, the town never cut; 3 — what is measured (feet, downspouts); on the right
+        // «Позвонить · Маршрут» — no phone in the row (the call button IS the phone); left — the initials, a draft — the measure's icon
+        subtitle={m.address ?? (m.forKind === "none" ? t("mod.gutters.list.noAddress") : undefined)}
+        addressLine={!!m.address}
+        // the state is the icon in line 1 (its word is the screen reader's, #3033): line 3 is what is measured, never cut to «2 do…»
+        extra={t("mod.gutters.list.what2", { ft: Math.round(m.lengthIn / 12), ds: m.downspouts })}
+        lead={m.forName ? { initials: initialsOf(m.forName) } : { icon: "measure" }}
+        value={sum ? moneyWhole(sum.cents) : m.updatedAt && !m.forName ? day(m.updatedAt) : undefined}
+        valueMark={!sum}
+        valueTop
+        wrap
+        status={sign ? { status: sign.tone, label: sign.label, iconOnly: true } : { status: st.tone, label: st.label, draft: st.draft, iconOnly: true }}
+        actions={[
+          ...(tel ? [{ icon: "phone" as const, a11y: `${t("client.call")} ${m.forName ?? ""}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: m.phone ?? "" }), testID: `mrow-call-${m.id}` }] : []),
+          ...(m.address ? [{ icon: "route" as const, a11y: `${t("client.route")}: ${m.address}`, onPress: () => openContact({ kind: "map", icon: "map", url: mapsUrl(m.address!, Platform.OS as OS), value: m.address! }), testID: `mrow-route-${m.id}` }] : []),
+        ]}
+        selected={m.id === panel.openId}
+        onPress={() => panel.open(m.id)}
+      />
+    );
+  };
   const pick = (x: MeasurementFilter) => setKept(x);
   const startNew = () => router.push(draw as Href);
   // «＋» in the header is secondary (DS §12.2, #1426): an icon of 36 on the phone, the word from 820; yellow is only the
@@ -170,7 +189,7 @@ export default function MeasurementsScreen() {
       {items.length === 0 ? (
         // DS §13 «Пусто — данных нет вообще»: the object's icon, the words, why, and the one button to start
         <Empty
-          icon="note"
+          icon="measure"
           testID="measurements-empty"
           title={t("mod.gutters.list.empty")}
           hint={t("mod.gutters.list.emptyHint")}
@@ -190,15 +209,12 @@ export default function MeasurementsScreen() {
           />
           {shown.length === 0 ? (
             <Empty icon="note" title={t("mod.gutters.list.emptyFilter")} action={f !== "all" ? <View testID="measurements-show-all"><Button label={t("mod.gutters.list.showAll")} variant="secondary" onPress={() => pick("all")} /></View> : undefined} />
-          ) : desktop ? (
-            <>
-              <ListCardHeader title={t("mod.gutters.list.colWho")} columns={panel.openId ? COLUMNS_PANEL : COLUMNS} />
-              <CardList>{shown.map(card)}</CardList>
-            </>
-          ) : device === "tablet" ? (
-            <CardGrid>{shown.map(card)}</CardGrid>
           ) : (
-            <CardList>{shown.map(card)}</CardList>
+            // spec 67 §8.9 п.1 (founder 25.11: «два списка»): «Черновики» — nobody yet, «Замеры» — for a lead or a client; each row its own frame
+            <GroupedList testID="measurements-list">
+              <ListGroup separate title={t("mod.gutters.list.gDrafts")} count={shown.filter((m) => m.forKind === "none").length} testID="measurements-drafts">{shown.filter((m) => m.forKind === "none").map(row)}</ListGroup>
+              <ListGroup separate title={t("mod.gutters.list.gLinked")} count={shown.filter((m) => m.forKind !== "none").length} testID="measurements-linked">{shown.filter((m) => m.forKind !== "none").map(row)}</ListGroup>
+            </GroupedList>
           )}
         </>
       )}

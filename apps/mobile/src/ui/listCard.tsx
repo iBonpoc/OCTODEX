@@ -622,6 +622,10 @@ export interface StatusPickerOption {
   enabled: boolean;
   /** "form": choosing it opens the existing form (reason / date) */
   form?: boolean;
+  /** what the status means, one quiet line under the row (#3023: «Активный — работаем», «Неактивный — скрыт из списков…») */
+  hint?: string;
+  /** why a not-enabled option cannot be chosen now (#3044: «Должен $850 — неактивным после оплаты»), instead of «автоматически» */
+  reason?: string;
 }
 
 export function StatusPicker({ visible, onExited, onClose, title, options, onPick }: {
@@ -642,8 +646,9 @@ export function StatusPicker({ visible, onExited, onClose, title, options, onPic
           const row = (
             <View style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: component.rowOption, paddingHorizontal: space[3], borderRadius: radius.field, backgroundColor: o.current ? c.surf2 : undefined }}>
               <Chip tone={o.tone} label={o.label} />
-              <View style={{ flex: 1 }}>
-                {!o.enabled && !o.current ? <Txt v="caption" color={c.mut}>{t("card.auto")}</Txt> : o.form ? <Txt v="caption" color={c.mut}>{t("card.byForm")}</Txt> : null}
+              <View style={{ flex: 1, paddingVertical: o.hint ? space[2] : 0 }}>
+                {o.hint ? <Txt v="caption" color={c.mut}>{o.hint}</Txt> : null}
+                {!o.enabled && !o.current ? <Txt v="caption" color={c.mut}>{o.reason ?? t("card.auto")}</Txt> : o.form ? <Txt v="caption" color={c.mut}>{t("card.byForm")}</Txt> : null}
               </View>
               {o.current ? <Icon name="check" s={size.iconMd} color={c.ink} /> : !o.enabled ? <Icon name="lock" s={size.iconSm} color={c.mut} /> : null}
             </View>
@@ -653,7 +658,7 @@ export function StatusPicker({ visible, onExited, onClose, title, options, onPic
               {row}
             </Pressable>
           ) : (
-            <View key={o.key} accessibilityRole="radio" accessibilityState={{ checked: o.current, disabled: !o.current }} accessibilityLabel={o.current ? o.label : `${o.label}, ${t("card.auto")}`}>
+            <View key={o.key} accessibilityRole="radio" accessibilityState={{ checked: o.current, disabled: !o.current }} accessibilityLabel={o.current ? o.label : `${o.label}, ${o.reason ?? t("card.auto")}`}>
               {row}
             </View>
           );

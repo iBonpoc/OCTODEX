@@ -9,7 +9,7 @@
  * - the lead has «Смета из замера»: nothing changed → it opens the same estimate, never a second one.
  * Finds things by testID; waits on what it checks (CHECKS §9).
  */
-const { skipLength, openView, backToCanvas, savedOnce } = require("../gutters.cjs");
+const { skipLength, openView, backToCanvas, savedOnce, showSection } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -60,7 +60,7 @@ exports.run = async (h) => {
   await tid("view-action-make").waitFor({ timeout: 5000 });
   h.expect((await tid("view-stale").count()) === 0, "nothing to move: no «Чертёж правили после сметы»");
   await h.shot("view-make");
-  await tid("view-action-make").getByRole("button").click();
+  await tid("view-action-make").click();
   await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 8000 });
   const eid = new URL(p.url()).searchParams.get("id");
   await p.locator('[data-testid^="ue-line-mark-module-"]').locator("visible=true").first().waitFor({ timeout: 8000 });
@@ -86,6 +86,7 @@ exports.run = async (h) => {
   await h.go(`/module/gutters/view?m=${encodeURIComponent(mid)}`);
   await tid("view-action-open").waitFor({ timeout: 8000 });
   h.expect((await tid("view-action-update").count()) === 0 && (await tid("view-stale").count()) === 0, "nothing changed: no «Перенести изменения»");
+  await showSection(p, "view-estimates"); // #3028: on «Сметы»
   h.expect((await tid("view-estimates").count()) === 1, "the estimates of the measurement under it (#707)");
   await backToCanvas(p);
   await drawRun(0.6);
@@ -93,7 +94,7 @@ exports.run = async (h) => {
   await tid("view-action-update").waitFor({ timeout: 8000 });
   await tid("view-stale").waitFor({ timeout: 3000 });
   await h.shot("view-update");
-  await tid("view-action-update").getByRole("button").click();
+  await tid("view-action-update").click();
   await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 8000 });
   h.expect(new URL(p.url()).searchParams.get("id") === eid, "the same estimate");
   await waitFor(async () => {

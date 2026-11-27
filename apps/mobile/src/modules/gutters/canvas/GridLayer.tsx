@@ -14,7 +14,7 @@ import { gridPaths, gridStepHyst, liveView } from "./grid";
 
 const APath = Animated.createAnimatedComponent(Path);
 
-export function GridLayer({ live, size, minPx, testID }: { live: Live; size: { w: number; h: number }; /** a minor cell is never finer than this on the screen, px */ minPx: number; testID?: string }) {
+export function GridLayer({ live, size, minPx, testID, pad = 0 }: { live: Live; size: { w: number; h: number }; /** a minor cell is never finer than this on the screen, px */ minPx: number; testID?: string; /** the grid reaches this far past the canvas on each side (#2988: a turned canvas has no empty corners) */ pad?: number }) {
   const { c } = useTheme();
   // the committed view (vk, vox, voy) and the live transform: both written by the canvas's settle in one step on the UI thread (#1403)
   const { tx, ty, s, fx, fy, vk, vox, voy } = live;
@@ -30,13 +30,13 @@ export function GridLayer({ live, size, minPx, testID }: { live: Live; size: { w
   );
   const paths = useDerivedValue(() => {
     const v = liveView(vk.value, vox.value, voy.value, s.value, tx.value, ty.value, fx.value, fy.value);
-    return gridPaths(v.k, v.ox, v.oy, size.w, size.h, minPx, step.value);
+    return gridPaths(v.k, v.ox + pad, v.oy + pad, size.w + 2 * pad, size.h + 2 * pad, minPx, step.value);
   });
   const minor = useAnimatedProps(() => ({ d: paths.value.minor }));
   const major = useAnimatedProps(() => ({ d: paths.value.major }));
   return (
-    <View pointerEvents="none" style={{ position: "absolute", left: 0, top: 0, width: size.w, height: size.h }}>
-      <Svg width={size.w} height={size.h} testID={testID}>
+    <View pointerEvents="none" style={{ position: "absolute", left: -pad, top: -pad, width: size.w + 2 * pad, height: size.h + 2 * pad }}>
+      <Svg width={size.w + 2 * pad} height={size.h + 2 * pad} testID={testID}>
         {/* paths, not lines — e2e counts lines; the major lines a little bolder */}
         <APath id="grid-minor" animatedProps={minor} stroke={c.bd} strokeWidth={drawing.runW / 4} fill="none" />
         <APath id="grid-major" animatedProps={major} stroke={c.bd} strokeWidth={drawing.runW / 2} fill="none" />

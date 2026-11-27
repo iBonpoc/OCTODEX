@@ -38,7 +38,6 @@ import { Button, IconButton, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, Empty, Screen, SectionTitle } from "@/ui/surfaces";
 import { fabItems } from "@/nav/sections";
-import { CardGrid, ListCard } from "@/ui/listCard";
 import { FilterBar } from "@/ui/filterBar";
 import { Banner } from "@/ui/banner";
 import { GroupRow, ListGroup } from "@/ui/groupedList";
@@ -81,7 +80,7 @@ export default function JobScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const store = useStore();
   const { db } = store;
-  const { t, money, day, time, duration } = useI18n();
+  const { t, money, moneyWhole, day, time, duration } = useI18n();
   const toast = useToast();
   const [tab, setTab] = useState<Section>("overview");
   const [filter, setFilter] = useState<JobHistoryFilter>("all");
@@ -222,8 +221,8 @@ export default function JobScreen() {
         ? { main: { label: t("w2b.job.rest"), onPress: invoiceRest, reason: t("job6.why.rest"), testID: "job-next-rest" } }
         : next && mine
           ? {
+              // #2995 (crm + design review 27.11): ONE button — «Начать выезд»; «Сообщить «В пути»» is in «⋯» (never two of a size)
               main: { label: t("job3.main.start"), onPress: () => openVisit(next.id), reason: t("proto.job.nextVisit", { when: nextWhen, who: nextWho }), testID: "job-next-start" },
-              second: { label: t("proto.job.enRoute"), onPress: enRoute, testID: "job-next-enroute" },
             }
           : next
             ? { main: { label: t("proto.job.openVisit"), onPress: () => openVisit(next.id), reason: t("proto.job.nextVisit", { when: nextWhen, who: nextWho }), testID: "job-next-open" } }
@@ -246,7 +245,7 @@ export default function JobScreen() {
   // «⋯»: rare and dangerous; the number of the job first (wireframe №6 «номер JOB — в ⋯»), «Отменить работу…» red and last
   const more: MoreAction = [
     { key: "number", label: t("proto.job.number", { no: jobNo }), icon: "copy", testID: "job-act-number" },
-    ...(next && office ? [{ key: "enRoute", label: t("job3.more.enRoute"), icon: "navigate" as const, testID: "job-act-enRoute" }] : []),
+    ...(next && (office || mine) ? [{ key: "enRoute", label: t("job3.more.enRoute"), icon: "navigate" as const, testID: "job-act-enRoute" }] : []),
     ...(payTo && step?.main.testID !== "job-next-pay" ? [{ key: "pay", label: t("job3.more.pay"), icon: "dollar" as const, testID: "job-act-pay" }] : []),
     ...(office && j.status !== "done" && j.status !== "unscheduled" && !awaiting && step?.main.testID !== "job-next-complete" ? [{ key: "complete", label: t("job3.done.complete"), icon: "check" as const, testID: "job-act-complete" }] : []),
     ...(next ? [{ key: "file", label: t("job3.more.file"), icon: "camera" as const, testID: "job-act-file" }] : []),
@@ -367,24 +366,24 @@ export default function JobScreen() {
         }
       />
       {visits.length ? (
-        <CardGrid>
+        // #3022 (founder 26.11: «заходишь в работы, там тоже списки… разделить»): each record its own frame, the lists' rows (#3017)
+        <ListGroup separate testID="job-visits">
           {visits.map((v) => {
             const vs = visitStatus(v, db.members, Date.now(), lateAfterOf(db), visitDueCents(db, v));
             const tech = db.members.find((m) => m.id === v.techId);
             return (
-              <ListCard
+              <GroupRow
                 key={v.id}
-                density="compact"
                 testID={`job-visit-${v.id}`}
-                lead={{ kind: "icon", icon: "calendar" }}
+                lead={{ icon: "calendar" }}
                 title={`${day(v.start)} · ${visitWhen(v, time, t("plan5.allDay"), false)}`}
-                when={[memberLabel(tech, t) ?? t("sch.noTech"), v.allDay ? undefined : duration(v.durationMin)].filter(Boolean).join(" · ")}
-                status={{ tone: vs.status, label: t(vs.label) }}
+                subtitle={[memberLabel(tech, t) ?? t("sch.noTech"), v.allDay ? undefined : duration(v.durationMin)].filter(Boolean).join(" · ")}
+                status={{ status: vs.status, label: t(vs.label) }}
                 onPress={() => openVisit(v.id)}
               />
             );
           })}
-        </CardGrid>
+        </ListGroup>
       ) : (
         <Empty icon="calendar" title={t("job3.noVisit")} />
       )}
@@ -396,22 +395,22 @@ export default function JobScreen() {
   const estimateCard = (e: Estimate) => {
     const v = estView[e.status];
     return (
-      <ListCard
+      <GroupRow
         key={e.id}
-        density="compact"
         testID={`job-estimate-${e.id}`}
-        lead={{ kind: "icon", icon: "invoice" }}
+        lead={{ icon: "invoice" }}
         title={e.title || e.number || t("cc.kind.estimate")}
-        when={e.title ? e.number : undefined}
-        value={money(e.totalCents)}
-        status={{ tone: v.s, label: t(v.l), draft: v.d }}
+        titleNote={e.title ? e.number : undefined}
+        figureRight
+        value={moneyWhole(e.totalCents)}
+        status={{ status: v.s, label: t(v.l), draft: v.d }}
         onPress={() => router.push(`/estimate/${e.id}`)}
       />
     );
   };
   const newEstimate = office && estimateHref && !j.estimateId && makes.some((m) => m.id === "estimate") ? () => router.push(estimateHref as never) : undefined;
   const estimatesSection = estimates.length ? (
-    <CardGrid>{estimates.map(estimateCard)}</CardGrid>
+    <ListGroup separate testID="job-estimates">{estimates.map(estimateCard)}</ListGroup>
   ) : (
     <View testID="job-money-no-estimate">
       <Empty
@@ -463,19 +462,18 @@ export default function JobScreen() {
         }
       />
       {expenses.length ? (
-        <CardGrid>
+        <ListGroup separate testID="job-expenses">
           {expenses.map((x) => (
-            <ListCard
+            <GroupRow
               key={x.id}
-              density="compact"
               testID={`job-expense-${x.id}`}
-              lead={{ kind: "icon", icon: "wallet" }}
+              lead={{ icon: "wallet" }}
               title={x.vendor}
-              when={`${t(`exp.cat.${x.category}` as DictKey)} · ${day(x.at)}`}
+              subtitle={`${t(`exp.cat.${x.category}` as DictKey)} · ${day(x.at)}`}
               value={money(x.amountCents)}
             />
           ))}
-        </CardGrid>
+        </ListGroup>
       ) : null}
     </>
   );
@@ -512,19 +510,18 @@ export default function JobScreen() {
         />
       </View>
       {items.length ? (
-        <CardGrid>
+        <ListGroup separate testID="job-history">
           {items.map((e) => (
-            <ListCard
+            <GroupRow
               key={e.id}
-              density="compact"
-              lead={{ kind: "icon", icon: e.icon }}
+              lead={{ icon: e.icon }}
               title={t(e.title)}
-              when={[day(e.at), e.reason ? t(e.reason) : undefined, e.detail].filter(Boolean).join(" · ")}
+              subtitle={[day(e.at), e.reason ? t(e.reason) : undefined, e.detail].filter(Boolean).join(" · ")}
               value={e.cents !== undefined ? money(e.cents) : undefined}
               onPress={e.href ? () => router.push(e.href as never) : undefined}
             />
           ))}
-        </CardGrid>
+        </ListGroup>
       ) : (
         <Empty icon="history" title={t("job3.h.empty")} />
       )}
@@ -581,12 +578,13 @@ export default function JobScreen() {
           // v2 «Bathroom remodel | vanity, toilet, tile»: the name before «:» is the big title, the rest the line right of the rule;
           // the status stands in the «Сейчас» card (a long word is never cut at the screen's edge, #2350)
           title: headName,
-          meta: headRest ? [{ id: "rest", label: headRest }] : undefined,
           // the sum is the «Сейчас» card's figures, the address its small line (nothing twice, #2350)
           link: c ? { label: c.name, onPress: () => router.push(`/client/${c.id}`) } : undefined,
           labels: { expand: t("proto.job.expand"), collapse: t("proto.job.collapse"), more: (n) => t("proto.job.moreN", { n }) },
         }}
         actions={actions}
+        // #2995 (layout review 27.11): the title's tail «vanity, toilet, tile» was cut right of the rule on 390 — a whole line under the name
+        subtitle={headRest || undefined}
         now={nowCard}
         sections={ordered.map((k) => ({ key: k, label: t(SECTION_LABEL[k]), count: counts[k] || undefined }))}
         section={current}

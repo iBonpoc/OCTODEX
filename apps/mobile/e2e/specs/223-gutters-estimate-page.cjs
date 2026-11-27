@@ -48,7 +48,7 @@ exports.run = async (h) => {
   await waitFor(() => !!new URL(p.url()).searchParams.get("m"), "saved: the address names the measurement");
   const mid = new URL(p.url()).searchParams.get("m");
   await openView(p);
-  await pressWhenStill(tid("view-action-make").getByRole("button"));
+  await pressWhenStill(tid("view-action-make"));
   await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 8000 });
   const eid = new URL(p.url()).searchParams.get("id");
   await waitFor(async () => !!(await pageOf(eid, mid)), "the estimate carries the drawing as its page");
@@ -114,7 +114,7 @@ exports.run = async (h) => {
   await tid("draw-surface").waitFor({ timeout: 8000 });
   await drawRun(0.7);
   await openView(p);
-  await pressWhenStill(tid("view-action-update").getByRole("button"));
+  await pressWhenStill(tid("view-action-update"));
   await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 8000 });
   h.expect(new URL(p.url()).searchParams.get("id") === eid, "the same estimate");
   await waitFor(async () => runsOn((await pageOf(eid, mid)) ?? { items: [] }) === 2, "the page now has two gutters");

@@ -50,7 +50,7 @@ exports.run = async (h) => {
   await p.waitForFunction(() => !!new URL(location.href).searchParams.get("m"), null, { timeout: 8000 });
   const mid = new URL(p.url()).searchParams.get("m");
   await openView(p);
-  await tid("view-action-make").getByRole("button").click();
+  await tid("view-action-make").click();
   await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 8000 });
   const eid = new URL(p.url()).searchParams.get("id");
   await p.waitForFunction(([k, m]) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.measurements || []).some((x) => x.id === m && x.status === "ready"), [DB_KEY, mid], { timeout: 8000 });
@@ -80,7 +80,8 @@ exports.run = async (h) => {
   // the measurements' list: the card says so too
   await h.go("/module/gutters/list");
   await tid(`measurement-${mid}`).waitFor({ timeout: 8000 });
-  h.expect(/Расчёт изменился/.test(await tid(`measurement-${mid}`).innerText()), "the card in the list of measurements says so");
+  // #3033: the state is the icon in line 1 of the row, its word the screen reader's label
+  h.expect(/Расчёт изменился/.test((await tid(`measurement-${mid}`).getByTestId("row-status-icon").first().getAttribute("aria-label")) || ""), "the card in the list of measurements says so");
 
   // «Обновить из замера»: the same estimate, the current version, no words
   await h.go(`/estimate/${eid}`);

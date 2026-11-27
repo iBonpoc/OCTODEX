@@ -79,7 +79,7 @@ describe("gate codes never reach the cache on the phone", () => {
     const d = base();
     d.properties = d.properties.map((p) => (p.id === "p1" ? { ...p, gateCode: "#1234" } : p));
     const { db, codes } = splitGateCodes(d);
-    expect(codes).toEqual({ p1: "#1234" });
+    expect(codes).toEqual({ p1: "#1234", p8: "1975" }); // p8: the test client's home (#3024)
     expect(JSON.stringify(db)).not.toContain("#1234");
     expect(withGateCodes(db, codes).properties.find((p) => p.id === "p1")?.gateCode).toBe("#1234");
   });

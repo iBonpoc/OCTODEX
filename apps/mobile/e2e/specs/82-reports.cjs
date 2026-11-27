@@ -15,7 +15,9 @@ exports.run = async (h) => {
   await h.go("/reports");
   const db = await h.db();
   const cards = p.locator('[data-testid="list-card"]');
-  h.expect((await cards.count()) === 5, "five reports (the 5th — «По направлениям», e2e 159)");
+  // lists B (#2992): the index is rows of one group (`rpt-row-<id>`); a report's own page keeps its cards
+  const rows = p.locator('[data-testid^="rpt-row-"]').locator("visible=true");
+  h.expect((await rows.count()) === 5, "five reports (the 5th — «По направлениям», e2e 159)");
   for (const s of ["Кто должен", "Собрано за период", "Продажи", "Источник лида → выручка"]) h.expect((await h.text()).includes(s), `report «${s}»`);
   await h.shot("index");
 
@@ -23,7 +25,7 @@ exports.run = async (h) => {
   const owes = (i) => Math.max(0, i.totalCents - i.paidCents);
   const owed = db.invoices.filter((i) => owes(i) > 0);
   const total = owed.reduce((s, i) => s + owes(i), 0);
-  await cards.filter({ hasText: "Кто должен" }).first().click();
+  await rows.filter({ hasText: "Кто должен" }).first().click();
   await p.waitForTimeout(600);
   h.expect(/\/reports\/owed/.test(p.url()), "opens «Кто должен»");
   await h.go("/reports/owed"); // the stack keeps the index mounted: count cards on a fresh page

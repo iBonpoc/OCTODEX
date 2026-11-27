@@ -13,9 +13,9 @@ const { listSearch } = require("../listSearch.cjs");
  */
 const LISTS = [
   // PR 5: «Каталог» (kinds, no sheet)
-  { path: "/catalog", search: "Поиск в каталоге" },
+  { path: "/catalog", search: "Поиск в каталоге", card: '[data-testid^="catalog-row-"]' },
   // PR 4: «Работы» — «Мастер» (people of the nearest open visit, «Не назначен») and «Направление» in the sheet
-  { path: "/jobs", search: "Клиент, адрес, работа, JOB", group: "Мастер" },
+  { path: "/jobs", search: "Клиент, адрес, работа, JOB", group: "Мастер", card: '[data-testid^="job-row-"]:not([data-testid^="job-row-call-"])' },
   // «Звонки» (one rule, director 07.11): the outcomes are the lane, no sheet; three calls of our own (the demo has one, no outcome)
   {
     path: "/calls",

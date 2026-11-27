@@ -93,6 +93,7 @@ export function ButtonsSection() {
         <T v="heading">{t("ds.btn.kinds")}</T>
         {sample("primary", t("ds.btn.primaryNote"), <Button label={t("ds.btn.primary")} onPress={press} />)}
         {sample("secondary", t("ds.btn.secondaryNote"), <Button label={t("ds.btn.secondary")} variant="secondary" onPress={press} />)}
+        {sample("outline", t("ds.btn.outlineNote"), <Button label={t("ds.btn.outline")} variant="outline" onPress={press} />)}
         {sample("ghost", t("ds.btn.ghostNote"), <Button label={t("ds.btn.ghost")} variant="ghost" onPress={press} />)}
         {sample("danger", t("ds.btn.dangerNote"), <Button label={t("ds.btn.danger")} variant="danger" onPress={press} />)}
         {sample("icon", t("ds.btn.iconNote"), <Button label={t("ds.btn.withIcon")} icon="plus" variant="secondary" onPress={press} />)}

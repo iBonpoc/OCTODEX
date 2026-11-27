@@ -9,6 +9,7 @@ import { moduleHref, type ModuleDef } from "../registry";
 import { asGutterData, clientStartFor, guttersOps, linkLead, loadGutters, measureHref, rebuildOp } from "./data";
 import { engineStaleMeasurements, staleMeasurements } from "./estimateLink";
 import { starterWant } from "./prices";
+import { guttersDemo } from "./demo";
 import { benchOfferedHere } from "./bench/visible";
 
 const draw = moduleHref("gutters", "draw");
@@ -150,6 +151,8 @@ const gutters: ModuleDef = {
     },
   ],
   rejectedKey: "mod.gutters.rejected",
+  // #3024: the measurement and its estimate lines of the demo's test client
+  demo: guttersDemo,
   // C5b (spec 33 П23.11): the drawing changed after the estimate → «Обновить из замера» (the review's «Перенести изменения в смету»)
   estimateNotes: (e, db) => {
     const m = staleMeasurements(db, e)[0];

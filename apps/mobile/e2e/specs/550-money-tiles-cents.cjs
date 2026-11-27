@@ -1,5 +1,6 @@
 /**
- * e2e 550 — the tiles show money with cents and the whole figure fits (#2888; founder #2672 «сумма должна быть с центами»,
+ * e2e 550 — the tiles show money in whole dollars (#3029/#3030, founder 27.11: cents only inside documents; was #2888/#2672)
+ * and the whole figure fits (
  * DS §4.5 «всегда с центами — везде»). Before: the tiles rounded to dollars («$1,840» for $1,839.60).
  * С1 ДАНО экраны с плитками сумм (Главная, Деньги, Отчёты, карточка клиента) КОГДА открыт экран ТОГДА каждая сумма на экране
  *    с центами («$1,840.00»), ни одной «$1,840» без центов.
@@ -10,7 +11,6 @@ const { waited } = require("../sheet.cjs");
 
 const SCREENS = [
   { path: "/today", ready: "tile-received" },
-  { path: "/finance", ready: "money-tile-owed" },
   { path: "/reports/collected?p=all", ready: null },
   { path: "/reports/sales?p=month", ready: null },
 ];
@@ -32,7 +32,8 @@ exports.run = async (h) => {
       const shown = (e) => e.getClientRects().length > 0;
       // the smallest elements whose own text is one amount
       const amounts = [...document.querySelectorAll("div, span")].filter((e) => shown(e) && e.children.length === 0 && /^[−-]?\$[\d,]+(\.\d+)?$/.test(e.textContent.trim()));
-      const noCents = amounts.map((e) => e.textContent.trim()).filter((t) => !/\.\d\d$/.test(t));
+      // #3029/#3030 (founder 27.11): a tile is an overview — whole dollars; cents only under a dollar («$0.45»)
+      const noCents = amounts.filter((e) => e.closest('[data-testid*="tile"]')).map((e) => e.textContent.trim()).filter((t) => /\.\d\d$/.test(t) && !/^[−-]?\$0\./.test(t));
       const cut = [];
       for (const e of amounts) {
         const tile = e.closest('[data-testid*="tile"]');
@@ -44,13 +45,10 @@ exports.run = async (h) => {
       return { n: amounts.length, noCents, cut, inTiles: amounts.filter((e) => e.closest('[data-testid*="tile"]')).length };
     });
     h.expect(r.n > 0, `${s.path}: the screen shows amounts`);
-    h.expect(r.noCents.length === 0, `${s.path}: every amount with cents (${r.noCents.join(", ")})`);
+    h.expect(r.noCents.length === 0, `${s.path}: every tile amount in whole dollars (${r.noCents.join(", ")})`);
     h.expect(r.cut.length === 0, `${s.path}: every tile figure fits its tile (${r.cut.join("; ")})`);
     if (s.ready) h.expect(r.inTiles > 0, `${s.path}: the tiles' figures are checked (${r.inTiles})`);
     if (s.client) clientTiles += r.inTiles;
   }
   h.expect(clientTiles > 0, `the client cards' tile figures are checked (${clientTiles})`);
-  await h.go("/finance");
-  await p.getByTestId("money-tile-owed").locator("visible=true").first().waitFor({ timeout: 8000 });
-  await h.shot("finance-tiles");
 };
