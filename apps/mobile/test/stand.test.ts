@@ -25,6 +25,7 @@ const S = require("../../../scripts/stand.cjs") as {
   manifest: (a: { mainSha: string; stand: string; included: Pr[]; skipped: Skip[]; at?: string }) =>
     { main: string; stand: string; at: string; included: Array<{ number: number; sha: string; title: string; where: string }>; skipped: Skip[] };
   renderIssue: (m: ReturnType<typeof S.manifest>, url: string) => string;
+  pushArgv: (stand: string, token: string, env?: Record<string, string>) => [string[], Record<string, string>];
   md: (t: string) => string; FIELD_MAX: number; BODY_MAX: number;
   BUILD_IMAGE: string;
   buildArgv: (a: { wt: string; cmd: string; subject: string; uid: number; gid: number }) => [string, string[]];
@@ -234,6 +235,24 @@ describe("stand: text from a PR is inert in the task body (review of #3125 п.3)
     expect(b).not.toMatch(/@user/);
     expect(b).toContain("**Стенд:** —");
     expect(b).toContain("- #6 — ");
+  });
+});
+
+describe("stand: the push token stays out of the arguments (review of #3125 п.7)", () => {
+  const [argv, env] = S.pushArgv("a".repeat(40), "ghs_SECRET", { PATH: "/bin" });
+  it("arguments: only push --force origin <sha>:refs/heads/stand/auto", () => {
+    expect(argv).toEqual(["push", "--force", "origin", `${"a".repeat(40)}:refs/heads/stand/auto`]);
+    expect(argv.join(" ")).not.toMatch(/SECRET|extraheader|basic/);
+  });
+  it("the token in GIT_CONFIG_*, only for github.com, the base environment kept", () => {
+    expect(env).toMatchObject({ PATH: "/bin", GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader" });
+    expect(Buffer.from(env.GIT_CONFIG_VALUE_0.replace("AUTHORIZATION: basic ", ""), "base64").toString()).toBe("x-access-token:ghs_SECRET");
+  });
+  it("the CLI pushes through pushArgv and prints the error without the command line", () => {
+    const src = readFileSync(join(__dirname, "../../../scripts/stand.cjs"), "utf8");
+    expect(src).toContain("pushArgv(r.stand, env.GH_TOKEN, process.env)");
+    expect(src).not.toMatch(/"-c", `http\.extraheader/);
+    expect(src).toContain('replace(/basic [A-Za-z0-9+/=]+/g, "basic ***")');
   });
 });
 

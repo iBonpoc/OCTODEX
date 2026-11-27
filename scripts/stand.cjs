@@ -236,7 +236,17 @@ function buildArgv({ wt, cmd, subject, uid, gid }) {
     "-v", `${wt}:/w`, "-w", "/w", BUILD_IMAGE, "bash", "-c", cmd]];
 }
 
-module.exports = { md, FIELD_MAX, BODY_MAX, BUILD_IMAGE, buildArgv, LABEL, BRANCH, ALIAS, STAND_ISSUE, MAX_BREAKERS, BUILD_CMD, dependencyOf, plan, mergeAll, findBreaker, whereLine, manifest, renderIssue, gitMerger };
+/**
+ * git push of the stand: the token goes in the environment (GIT_CONFIG_COUNT / KEY_0 / VALUE_0), never in the arguments, which
+ * any process of the runner can read and which an error message prints (review of #3125 п.7).
+ */
+function pushArgv(stand, token, baseEnv = {}) {
+  const auth = Buffer.from(`x-access-token:${token}`).toString("base64");
+  return [["push", "--force", "origin", `${stand}:refs/heads/${BRANCH}`],
+    { ...baseEnv, GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader", GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${auth}` }];
+}
+
+module.exports = { pushArgv, md, FIELD_MAX, BODY_MAX, BUILD_IMAGE, buildArgv, LABEL, BRANCH, ALIAS, STAND_ISSUE, MAX_BREAKERS, BUILD_CMD, dependencyOf, plan, mergeAll, findBreaker, whereLine, manifest, renderIssue, gitMerger };
 
 // ---------------------------------------------------------------------------------------------------------------------- CLI
 if (require.main === module) {
@@ -304,9 +314,12 @@ if (require.main === module) {
     console.log(`stand ${r.stand}: in ${r.included.map((p) => `#${p.number}`).join(" ") || "—"}; out ${m.skipped.map((s) => `#${s.number}`).join(" ") || "—"}`);
     if (flag("push")) {
       // only this job writes the branch: force, from scratch on main every time
-      const token = env.GH_TOKEN;
-      const auth = Buffer.from(`x-access-token:${token}`).toString("base64");
-      git(["-c", `http.extraheader=AUTHORIZATION: basic ${auth}`, "push", "--force", "origin", `${r.stand}:refs/heads/${BRANCH}`]);
+      const [a, e] = pushArgv(r.stand, env.GH_TOKEN, process.env);
+      try { run("git", a, { env: e }); } catch (err) {
+        // the error without the command line or the environment (review of #3125 п.7)
+        console.error(`::error::git push of the stand failed (exit ${err.status}): ${String(err.stderr || "").replace(/basic [A-Za-z0-9+/=]+/g, "basic ***").trim()}`);
+        process.exit(1);
+      }
     }
     if (env.GITHUB_OUTPUT) fs.appendFileSync(env.GITHUB_OUTPUT, `stand=${r.stand}\n`);
   } else if (cmd === "build") {
