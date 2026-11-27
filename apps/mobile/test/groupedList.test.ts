@@ -28,7 +28,9 @@ describe("GroupedList / GroupRow 56 (BUILD-SPEC §1)", () => {
   it("a wide column («Просрочен 9 дн») never lies over the subtitle: the columns do not shrink (a floor, not a fixed width), the text column shrinks and cuts with «…»", () => {
     for (const f of ["groupedList.tsx", "figures.tsx"]) {
       const s = src(f);
-      const col = s.slice(s.indexOf("alignItems: \"flex-end\""), s.indexOf("alignItems: \"flex-end\"") + 200);
+      // the columns' own block (#3035 put another right-aligned column — the sum with the number under it — before it)
+      const at = s.indexOf("alignItems: \"flex-end\"", Math.max(0, s.indexOf("cols.map(")));
+      const col = s.slice(at, at + 200);
       expect(col, f).toMatch(/minWidth: i < all\.length - 1 \? [A-Za-z.]*colW : undefined/);
       expect(col, f).toMatch(/flexShrink: 0/);
       expect(col, f).not.toMatch(/\bwidth: i < all/);

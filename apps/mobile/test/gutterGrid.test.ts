@@ -156,13 +156,16 @@ describe("#1434 guard: nothing on the canvas leans on `overflow: visible` of an 
     const layer = src("canvas/GridLayer.tsx");
     expect(layer).toMatch(/id="grid-minor"/);
     expect(layer).toMatch(/id="grid-major"/);
-    expect(layer).toMatch(/<Svg width=\{size\.w\} height=\{size\.h\}/);
+    // #2988: screen-sized plus the turn's pad on each side (a turned layer still covers the corners), never `overflow`
+    expect(layer).toMatch(/<Svg width=\{size\.w \+ 2 \* pad\} height=\{size\.h \+ 2 \* pad\}/);
     expect(layer).toMatch(/step\.value = gridStepHyst\(/); // #1477: the layer keeps its step with the margin
     expect(layer).toMatch(/gridPaths\([^)]*step\.value\)/);
     // the canvas draws it in `under` — before the Animated.View that scales — not among the children of the scaled layer
     const canvas = src("canvas/CanvasView.tsx");
     expect(canvas.indexOf("{under}")).toBeGreaterThan(-1);
-    expect(canvas.indexOf("{under}")).toBeLessThan(canvas.indexOf("<Animated.View"));
+    // #2988: with the turn both stand inside the turned layer — `under` still right before the scaled layer, in both ways (turnable or not)
+    expect(canvas.match(/\{under\}\s*<Animated\.View style=\{\[\{ width: size\.w, height: size\.h \}, st\]\}>\{children\}/g)?.length).toBe(2);
+    expect(canvas.match(/\{under\}/g)?.length).toBe(2);
     expect(src("draw/DrawScreen.tsx")).toMatch(/under=\{[^}]*<GridLayer/);
   });
   it("liveView is the canvas's own transform: CanvasView shifts by (f − c)(1 − s) + t, THEN scales by s about the centre (code-reviewer #1434)", () => {

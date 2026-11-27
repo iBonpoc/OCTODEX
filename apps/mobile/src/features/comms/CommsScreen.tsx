@@ -4,7 +4,8 @@ import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import type { CallOutcome } from "@/data/types";
 import { Button } from "@/ui/controls";
-import { FilterBar } from "@/ui/filterBar";
+import { FilterBar, useFilterHeader } from "@/ui/filterBar";
+import { useDevice } from "@/theme/ThemeProvider";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
 import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
@@ -39,8 +40,13 @@ export function CommsScreen({ kind }: { kind: CommsKind }) {
   const items = (calls && filter !== "all" ? all.filter((x) => x.outcome === filter) : all).filter((x) => matchComms(x, q));
   const count = (f: CallFilter) => (f === "all" ? all.length : all.filter((x) => x.outcome === f).length);
   const record = () => setLogging({});
+  const { device } = useDevice();
+  // #3031: the search is the header's first circle on a phone / tablet (one place on every list); 1280 keeps the field in the row
+  const fh = useFilterHeader({ search: { value: q }, testID: "calls" });
+  const filterHead = device === "desktop" ? undefined : fh;
   return (
     <Screen
+      headerIcons={filterHead?.icons}
       fab={calls ? "calls" : undefined}
       fabOn={calls ? { call: record } : undefined}
       title={t(calls ? "nav.calls" : "nav.messages")}
@@ -48,7 +54,7 @@ export function CommsScreen({ kind }: { kind: CommsKind }) {
       help={t(calls ? "help.calls" : "help.messages")}
     >
       {calls && all.length ? (
-        <FilterBar<CallFilter>
+        <FilterBar<CallFilter> header={filterHead?.state}
           value={filter}
           onChange={setFilter}
           search={{ value: q, onChange: setQ, placeholder: t("card.filter.searchCalls") }}
@@ -85,12 +91,15 @@ export function CommsScreen({ kind }: { kind: CommsKind }) {
                   <GroupRow
                     key={it.id}
                     testID={`comms-${it.id}`}
-                    title={it.person && it.person !== it.who ? `${it.person} · ${it.who}` : it.who || it.person || t("nav.comms.unknown")}
-                    titleNote={phone || undefined}
+                    // one name in line 1 (review: «Karen Whitaker · Daniel Wh…»); the client behind the person goes to line 3
+                    title={it.person || it.who || t("nav.comms.unknown")}
+                    // #3038: the client's rule — no phone in the line (the call is on the right); the time in the name's line
                     subtitle={where}
+                    addressLine
                     actions={back ? [{ icon: "phone", a11y: `${t("client.call")} ${it.who ?? ""}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel!, value: phone ?? "" }), testID: `calllog-back-${it.id}` }] : undefined}
                     extra={[
-                      t(it.kind === "call" ? "nav.comms.call" : it.kind === "sms" ? "nav.comms.sms" : "nav.comms.email"),
+                      it.person && it.person !== it.who ? it.who : undefined,
+                      calls ? undefined : t(it.kind === "call" ? "nav.comms.call" : it.kind === "sms" ? "nav.comms.sms" : "nav.comms.email"),
                       it.durationMin ? duration(it.durationMin) : undefined, // #2363 F42: the one rule of a length («1 ч 30 мин»)
                       it.by,
                       it.note,
@@ -98,7 +107,8 @@ export function CommsScreen({ kind }: { kind: CommsKind }) {
                     lead={{ icon: icon[it.kind] ?? "message" }}
                     value={time(it.at)}
                     valueMark={!o}
-                    status={o ? { status: o.tone, label: t(o.label) } : undefined}
+                    valueTop
+                    status={o ? { status: o.tone, label: t(o.label), iconOnly: true } : undefined}
                     onPress={it.href ? () => router.push(it.href as never) : undefined}
                   />
                 );

@@ -6,7 +6,8 @@ import { useI18n } from "@/i18n";
 import { jobStatusView } from "@/features/jobs";
 import { jobEstimateNumber, jobPeople, matchJob, nextVisitOf, visitPeople } from "@/features/jobList";
 import { categoryLabel } from "@/features/serviceCategories";
-import { FilterBar } from "@/ui/filterBar";
+import { FilterBar, useFilterHeader } from "@/ui/filterBar";
+import { useDevice } from "@/theme/ThemeProvider";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
 import { Empty, Screen } from "@/ui/surfaces";
@@ -89,10 +90,15 @@ export default function Jobs() {
         // #3018 (founder #3017): 1 — the client; 2 — the address; 3 — the sum (office) · when · what · who (not «me» to the tech)
         // with «Позвонить · Маршрут» on the right the phone in the name's line pushed the deeds into a 4th line: the call button IS the phone
         subtitle={p ? shortAddress(p.address, p.city) : undefined}
+        addressLine
         // line 3 — the sum first, never cut (#2672; the tech never sees it), then when · what · who
-        extra={[office ? moneyWhole(j.amountCents) : undefined, when, j.title, office ? who : undefined].filter(Boolean).join(" · ") || undefined}
+        // #3038: the client's rule — the sum (office) in the name's line
+        extra={[when, j.title, office ? who : undefined].filter(Boolean).join(" · ") || undefined}
+        value={office && j.amountCents > 0 ? moneyWhole(j.amountCents) : undefined}
+        valueTop
         wrap
         lead={{ initials: initialsOf(c?.name) }}
+        refNo={j.number || undefined}
         // read only: a job has no hand moves (statusMoves) — the date comes from scheduling, «done» from the visit's payment
         status={showStatus ? { status: st.status, label: t(st.label) } : undefined}
         // founder #3018: «Давай маршрут. А нельзя сделать несколько кнопок? Позвонить, маршрут» — two icons, call first (the order of
@@ -105,35 +111,41 @@ export default function Jobs() {
       />
     );
   };
+  const groups = [
+    ...(office && masters.length > 1
+      ? [{
+          key: "people",
+          title: t("card.filter.masters"),
+          options: [
+            ...masters.map((m) => ({ key: m.id, label: memberLabel(m, t) ?? m.name, count: base.filter((j) => peopleOf(j).includes(m.id)).length, on: who.includes(m.id) })),
+            { key: NOBODY, label: t("card.filter.nobody"), count: base.filter((j) => !peopleOf(j).length).length, on: who.includes(NOBODY) },
+          ],
+          onToggle: toggle(who, setWho),
+        }]
+      : []),
+    ...(office && trades.length > 1
+      ? [{
+          key: "trades",
+          title: t("card.filter.trades"),
+          options: trades.map((id) => ({ key: id, label: categoryLabel(db.serviceCategories.find((x) => x.id === id), t as never) || "—", count: base.filter((j) => j.serviceCategoryId === id).length, on: tradeOn.includes(id) })),
+          onToggle: toggle(tradeOn, setTrades),
+        }]
+      : []),
+  ];
+  const { device } = useDevice();
+  // #3031: the search is the header's first circle on a phone / tablet (one place on every list); 1280 keeps the field in the row
+  const fh = useFilterHeader({ search: { value: q }, groups, testID: "jobs" });
+  const filterHead = device === "desktop" ? undefined : fh;
   return (
-    <Screen title={t("jobs.title")} back={back} help={t("jobs.help")} hintKey="jobs">
+    <Screen
+      headerIcons={filterHead?.icons} title={t("jobs.title")} back={back} help={t("jobs.help")} hintKey="jobs">
       {/* spec 31 (variant Б): the search and «Фильтр» in one row, one lane of statuses; «Мастер», «Направление» in the sheet */}
-      <FilterBar<Filter>
+      <FilterBar<Filter> header={filterHead?.state}
         search={{ value: q, onChange: setQ, placeholder: t("card.filter.searchJobs") }}
         value={f}
         onChange={setF}
         items={LANE.map((k) => ({ key: k, label: k === "all" ? t("cat.all") : k === "cancelled" ? t("job.cancel.lane") : t(jobStatusView[k].label), count: count(k) }))}
-        groups={[
-          ...(office && masters.length > 1
-            ? [{
-                key: "people",
-                title: t("card.filter.masters"),
-                options: [
-                  ...masters.map((m) => ({ key: m.id, label: memberLabel(m, t) ?? m.name, count: base.filter((j) => peopleOf(j).includes(m.id)).length, on: who.includes(m.id) })),
-                  { key: NOBODY, label: t("card.filter.nobody"), count: base.filter((j) => !peopleOf(j).length).length, on: who.includes(NOBODY) },
-                ],
-                onToggle: toggle(who, setWho),
-              }]
-            : []),
-          ...(office && trades.length > 1
-            ? [{
-                key: "trades",
-                title: t("card.filter.trades"),
-                options: trades.map((id) => ({ key: id, label: categoryLabel(db.serviceCategories.find((x) => x.id === id), t as never) || "—", count: base.filter((j) => j.serviceCategoryId === id).length, on: tradeOn.includes(id) })),
-                onToggle: toggle(tradeOn, setTrades),
-              }]
-            : []),
-        ]}
+        groups={groups}
         onReset={() => { setWho([]); setTrades([]); }}
       />
       {list.length === 0 ? (

@@ -8,7 +8,8 @@ import type { CatalogItem, CatalogKind } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { kindLabel } from "@/features/estimatePickers";
 import { Button } from "@/ui/controls";
-import { FilterBar } from "@/ui/filterBar";
+import { FilterBar, useFilterHeader } from "@/ui/filterBar";
+import { useDevice } from "@/theme/ThemeProvider";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
 import { Empty, Screen } from "@/ui/surfaces";
@@ -18,7 +19,7 @@ import { catalogItemEconomics } from "@/features/estimateDoc";
 import { supplierName } from "@/features/suppliers";
 
 const KINDS: (CatalogKind | "all")[] = ["all", "service", "labor", "material", "kit"];
-const KIND_ICON: Record<CatalogKind, IconKey> = { service: "route", labor: "clock", material: "box", kit: "checklist" };
+const KIND_ICON: Record<CatalogKind, IconKey> = { service: "toolbox", labor: "clock", material: "box", kit: "checklist" };
 
 /** Company catalog: services, labor, materials and kits used in estimates. */
 export default function Catalog() {
@@ -70,14 +71,20 @@ export default function Catalog() {
         value={`${money(eco.priceCents)} / ${it.unit}`}
         // a long name («Debris haul-away (pickup load)») takes a second line, never «…» (Д-строка-2)
         wrap
-        status={costs && loss ? { status: "bad", label: t("card.sign.loss") } : undefined}
+        status={costs && loss ? { status: "bad", label: t("card.sign.loss"), iconOnly: true } : undefined}
+        valueTop
         onPress={canEdit ? () => router.push(`/catalog/${it.id}`) : undefined}
       />
     );
   };
 
+  const { device } = useDevice();
+  // #3031: the search is the header's first circle on a phone / tablet (one place on every list); 1280 keeps the field in the row
+  const fh = useFilterHeader({ search: { value: q }, testID: "catalog" });
+  const filterHead = device === "desktop" ? undefined : fh;
   return (
     <Screen
+      headerIcons={filterHead?.icons}
       title={t("cat.title")}
       back={back}
       help={t("cat.help")}
@@ -85,7 +92,7 @@ export default function Catalog() {
       right={canEdit ? <HeaderButton icon="plus" label={t("cat.new")} testID="cat-new" onPress={() => router.push(`/catalog/new${kind !== "all" ? `?kind=${kind}` : ""}`)} /> : undefined}
     >
       {/* spec 31 (variant Б): the search and one lane of kinds with counts; nothing in the sheet (no «Фильтр» button) */}
-      <FilterBar<CatalogKind | "all">
+      <FilterBar<CatalogKind | "all"> header={filterHead?.state}
         search={{ value: q, onChange: setQ, placeholder: t("ue.catalogSearch") }}
         value={kind}
         onChange={setKind}

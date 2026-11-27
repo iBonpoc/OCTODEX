@@ -10,7 +10,8 @@ import { sumCents } from "@octo/estimating-engine";
 import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
 import { useI18n, type Lang } from "@/i18n";
 import { Button, Segmented, StatusChip } from "@/ui/controls";
-import { FilterBar } from "@/ui/filterBar";
+import { FilterBar, useFilterHeader } from "@/ui/filterBar";
+import { useDevice } from "@/theme/ThemeProvider";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, Empty, ListRow, Screen, SectionTitle } from "@/ui/surfaces";
@@ -18,6 +19,8 @@ import { dayKeyIn, formatDayKey } from "@/features/zone";
 import { memberName } from "@/features/team";
 import { matchExpense } from "@/features/moneyLists";
 
+/** the kind of an expense as its row's icon */
+const CAT_ICON: Record<string, "box" | "truck" | "trash" | "wrench" | "tag"> = { materials: "box", fuel: "truck", dump: "trash", tools: "wrench", other: "tag" };
 /** «пт, 20 нояб.» → «Пт, 20 нояб.» */
 const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
 /** the month of an expense on the company's calendar (П4b), not the UTC month of its moment */
@@ -56,20 +59,26 @@ export default function Money() {
         testID={`expense-row-${x.id}`}
         title={x.vendor}
         // #3018 (founder #3017): 1 — the vendor · the kind; 2 — the work · the client; 3 — «Без чека» · who · the day; the sum on the right
-        titleNote={t(`exp.cat.${x.category}`)}
-        subtitle={job ? [job.title, client?.name].filter(Boolean).join(" · ") : undefined}
+        // #3038: 1 — the vendor + the sum; 2 — the kind · the work · the client; 3 — who; «Без чека» — the icon by the sum
+        subtitle={[t(`exp.cat.${x.category}`), job ? [job.title, client?.name].filter(Boolean).join(" · ") : undefined].filter(Boolean).join(" · ")}
         // the day is the group's title: line 3 says who
         extra={memberName(db, x.memberId, t) || undefined}
-        figureRight
-        lead={{ icon: receipt ? "camera" : "dollar" }}
+        valueTop
+        // the kind's icon (review #3038: «$» in every row told nothing); a missing receipt is the icon by the sum
+        lead={{ icon: CAT_ICON[x.category] ?? "tag" }}
         value={`−${moneyWhole(x.amountCents)}`}
-        status={mark ? { status: "neutral", label: mark } : undefined}
+        status={mark ? { status: "neutral", label: mark, iconOnly: true } : undefined}
       />
     );
   };
 
+  const { device } = useDevice();
+  // #3031: the search is the header's first circle on a phone / tablet (one place on every list); 1280 keeps the field in the row
+  const fh = useFilterHeader({ search: { value: q }, testID: "expenses" });
+  const filterHead = device === "desktop" ? undefined : fh;
   return (
     <Screen
+      headerIcons={filterHead?.icons}
       // «Расходы» only: invoices are a section of their own, /invoice (founder 07.11, spec 31 §7а)
       title={t("nav.expenses")}
       help={t("help.money")}
@@ -80,7 +89,7 @@ export default function Money() {
       {db.expenses.length === 0 ? <Empty icon="wallet" title={t("money.expenses")} /> : null}
       {db.expenses.length ? (
         <View style={{ gap: space[3] }}>
-          <FilterBar<string> items={[]} value="" onChange={() => undefined} search={{ value: q, onChange: setQ, placeholder: t("card.filter.searchExpenses") }} />
+          <FilterBar<string> header={filterHead?.state} items={[]} value="" onChange={() => undefined} search={{ value: q, onChange: setQ, placeholder: t("card.filter.searchExpenses") }} />
           {shown.length === 0 ? <Empty icon="search" title={t("card.emptyFilter")} /> : null}
           {/* the month's total once, as a line; the days are the groups with their sums (P23: one total, not «Расходы · $X» over «Ноябрь · $X») */}
           <GroupedList testID="expenses-list">

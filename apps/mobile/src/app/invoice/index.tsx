@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { shortAddress } from "@/features/shortAddress";
+import { telHref } from "@/features/contactLinks";
+import { openContact } from "@/ui/listCard";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import type { DB, Invoice } from "@/data/types";
@@ -102,19 +104,25 @@ export default function Invoices() {
     const job = db.jobs.find((j) => j.id === i.jobId);
     const prop = db.properties.find((x) => x.id === job?.propertyId) ?? db.properties.find((x) => x.customerId === i.customerId);
     const partOf = owes > 0 && i.paidCents > 0 ? t("lst.ofTotal", { amount: moneyWhole(i.totalCents) }) : undefined;
-    const sub = [partOf, when, late && remindersOf(db, i.id).length ? tn("lst.reminded", remindersOf(db, i.id).length) : undefined].filter(Boolean).join(" · ");
+    // #3038: the icon by the sum has no word — the overdue days are said in line 3 («Просрочен 12 дн»)
+    const lateWord = owes > 0 && sign?.tone === "bad" ? t(sign.key, sign.params) : undefined;
+    const sub = [lateWord, partOf, when, late && remindersOf(db, i.id).length ? tn("lst.reminded", remindersOf(db, i.id).length) : undefined].filter(Boolean).join(" · ");
     return {
       key: i.id,
       testID: `invoice-row-${i.id}`,
       title: c?.name ?? "—",
-      titleNote: i.number || undefined,
+      refNo: i.number || undefined,
       subtitle: prop ? shortAddress(prop.address, prop.city) : undefined,
+      addressLine: true,
       extra: sub || undefined,
-      figureRight: true,
+      valueTop: true,
+      // #3038 (review: «смете без ответа и просроченному счёту звонок нужнее всего»): the call on the right, as the client's
+      actions: telHref(c?.phone) ? [{ icon: "phone" as const, a11y: `${t("client.call")} ${c?.name ?? ""}`, onPress: () => openContact({ kind: "call", icon: "phone", url: telHref(c?.phone)!, value: c?.phone ?? "" }), testID: `invoice-call-${i.id}` }] : undefined,
       lead: { initials: initialsOf(c?.name) },
       // the rest to pay, big on the right (Jobber, HCP: the office calls by the balance)
       value: moneyWhole(owes > 0 ? owes : i.paidCents),
-      status: owes > 0 && sign ? { status: sign.tone, label: t(sign.key, sign.params) } : undefined,
+      // #3038: the client's rule — the sign as its icon by the sum (no word; said to VoiceOver)
+      status: owes > 0 && sign ? { status: sign.tone, label: t(sign.key, sign.params), iconOnly: true } : undefined,
       onPress: () => panel.open(i.id),
       selected: i.id === panel.openId,
       swipe:

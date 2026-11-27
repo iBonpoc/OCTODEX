@@ -438,7 +438,7 @@ function LeadTasks({ tasks, visitsOf, onEdit, onNew }: { tasks: Task[]; visitsOf
         <Empty icon="check" title={t("task.none")} action={<Button testID="lead-task-new" label={t("task.new")} icon="plus" variant="secondary" onPress={onNew} />} />
       )}
       <ListGroup title={t("task.doneList")}>{done.map(row)}</ListGroup>
-      <ListGroup title={t("lead.visits")} testID="lead-visits">
+      <ListGroup separate title={t("lead.visits")} testID="lead-visits">
         {visitsOf.map((v) => {
           const tech = db.members.find((m) => m.id === v.techId);
           const nobody = !liveAssignees(v, db.members).length;
@@ -472,7 +472,7 @@ function LeadEstimatesList({ list, onNew }: { list: Estimate[]; onNew?: () => vo
     );
   return (
     <View testID="lead-estimates">
-      <ListGroup title={t("client.estimates")} all={onNew ? { label: t("lead.makeEstimateShort"), onPress: onNew, testID: "lead-new-estimate" } : undefined}>
+      <ListGroup separate title={t("client.estimates")} all={onNew ? { label: t("lead.makeEstimateShort"), onPress: onNew, testID: "lead-new-estimate" } : undefined}>
         {list.map((e) => (
           <GroupRow
             key={e.id}

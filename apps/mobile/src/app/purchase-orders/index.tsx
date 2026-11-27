@@ -11,7 +11,7 @@ import type { PurchaseOrder } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { PO_DRAFT, PO_TONE, receivedCount } from "@/features/purchaseOrders";
 import { Button } from "@/ui/controls";
-import { FilterBar } from "@/ui/filterBar";
+import { FilterBar, useFilterHeader } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
 import { CardList, Empty, Screen } from "@/ui/surfaces";
@@ -62,14 +62,18 @@ export default function PurchaseOrders() {
       />
     );
   };
+  // #3031: the search is the header's first circle on a phone / tablet (one place on every list); 1280 keeps the field in the row
+  const fh = useFilterHeader({ search: { value: q }, testID: "po" });
+  const filterHead = device === "desktop" ? undefined : fh;
   return (
     <Screen
+      headerIcons={filterHead?.icons}
       title={t("po.title")}
       back={back}
       help={t("po.help")}
       right={db.purchaseOrdersLegacy ? undefined : <HeaderButton icon="plus" label={t("po.new")} testID="po-new" onPress={newOrder} />}
     >
-      <FilterBar<Lane>
+      <FilterBar<Lane> header={filterHead?.state}
         search={{ value: q, onChange: setQ, placeholder: t("po.title") }}
         value={lane}
         onChange={setLane}

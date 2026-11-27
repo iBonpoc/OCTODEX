@@ -58,8 +58,8 @@ exports.run = async (h) => {
   // the card (v2: the header's panel) shows the billing address among its facts and the new phone among the contacts
   await h.go("/client/c2");
   // #3023: «Для счетов» — the value, then its name under it
-  await p.getByTestId("client-billing").first().waitFor({ state: "attached", timeout: 8000 });
-  const rows = (await p.getByTestId("client-billing").first().innerText()).replace(/\s+/g, " ");
+  await p.getByTestId("client-for-invoices").first().waitFor({ state: "attached", timeout: 8000 });
+  const rows = (await p.getByTestId("client-for-invoices").first().innerText()).replace(/\s+/g, " ");
   h.expect(/PO Box 4512, Sherman Oaks, CA 91413\s*Адрес для счетов/.test(rows), `billing row (${rows})`);
   h.expect(/\(818\) 555-0177/.test(await p.getByTestId("client-people").first().innerText()), "the new phone in the contacts");
 
@@ -72,8 +72,8 @@ exports.run = async (h) => {
   const ce = (await h.db()).customers.find((x) => x.id === "c2");
   h.expect(ce.taxExempt === true && ce.taxExemptNote === "RC-4512", `tax exempt saved: ${JSON.stringify([ce.taxExempt, ce.taxExemptNote])}`);
   await h.go("/client/c2");
-  await p.getByTestId("client-billing").first().waitFor({ state: "attached", timeout: 8000 });
-  h.expect(/Без налога · RC-4512\s*Налог/.test(await p.getByTestId("client-billing").first().innerText()), "«Без налога» with the certificate on the card («Для счетов»)");
+  await p.getByTestId("client-for-invoices").first().waitFor({ state: "attached", timeout: 8000 });
+  h.expect(/Без налога · RC-4512\s*Налог/.test(await p.getByTestId("client-for-invoices").first().innerText()), "«Без налога» with the certificate on the card («Для счетов»)");
 
   // back to «same as the property»: billing cleared
   await h.go("/client/edit?id=c2");
