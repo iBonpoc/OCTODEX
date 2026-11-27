@@ -21,8 +21,8 @@ import { EstimateListCard } from "@/features/listCards";
 import { moduleActive, moduleHref } from "@/modules/registry";
 import { Button, IconButton, StatusChip } from "@/ui/controls";
 import { Banner } from "@/ui/banner";
-import { Icon, T } from "@/ui/primitives";
-import { HelpButton, Menu, useToast } from "@/ui/overlays";
+import { Icon, T, type IconKey } from "@/ui/primitives";
+import { HelpButton, Menu, Sheet, useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, ListRow, RowView, Screen } from "@/ui/surfaces";
 import { NotFound } from "@/ui/emptyStates";
 import { blueprint, sheetPage } from "./blueprint";
@@ -32,7 +32,8 @@ import { docWho } from "../docWho";
 import { fmtLen } from "../canvas/format";
 import { fromElements } from "../canvas/model";
 import { gutterData, KEY, measurementOf } from "../data";
-import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, ofMeasurement, pageIdOf } from "../estimateLink";
+import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, ofMeasurement, otherEstimates, pageIdOf } from "../estimateLink";
+import { estimateStatusView } from "@/features/estimateStatus";
 import { CardHead } from "./CardHead";
 import { MeasurePhotos } from "../draw/Photos";
 import { toMeasurement } from "../geometry";
@@ -109,6 +110,8 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   };
   // «Подробно» (П25.3 Б7): what the drawing is made of — folded; the sheet, the action and the documents come first
   const [details, setDetails] = useState(false);
+  /** «⋯ → Документы бригады» (#2989) */
+  const [crewDocs, setCrewDocs] = useState(false);
 
   // «Править чертёж»: back to the canvas it came from; from a lead or an estimate — the canvas opens
   const edit = () => {
@@ -196,6 +199,15 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   // the client's document: their estimate when there is one (its PDF carries the drawing's page, P4b) — only to those
   // who see the client's money; else the drawing without prices
   const clientEst = money$ ? estimateOfMeasurement(store.db, m.id) : undefined;
+  /** #2990: whom the measurement is linked to now (the client's address wins over the lead, as in the head) and an estimate they have without it */
+  const linkedTo = (() => {
+    const prop = m.propertyId ? store.db.properties.find((x) => x.id === m.propertyId) : undefined;
+    const cl = prop ? store.db.customers.find((c) => c.id === prop.customerId) : undefined;
+    if (cl) return { kind: "client" as const, name: cl.name, href: `/client/${cl.id}` };
+    const ld = m.leadId ? store.db.leads.find((l) => l.id === m.leadId) : undefined;
+    return ld ? { kind: "lead" as const, name: ld.name, href: `/lead/${ld.id}` } : null;
+  })();
+  const other = otherEstimates(store.db, m)[0];
   const clientLang = clientLangOf(store.db, m);
   /** «Открыть» — look first (#2157), «Отправить» — the file to send at once (a phone) */
   const pdf = (kind: "client" | "crew", how: "open" | "send" = "open") => {
@@ -258,7 +270,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
         onClose={() => setShopAt(null)}
       />
       <View testID="view-screen" style={{ gap: space[4] }}>
-        <CardHead m={m} drawn={drawing.runs.length > 0} onGone={onGone} />
+        <CardHead m={m} drawn={drawing.runs.length > 0} onGone={onGone} onCrewDocs={drawing.runs.length ? () => setCrewDocs(true) : undefined} />
         {/* 820 / 1280 on its own page: two columns — the sheet and the action on the left, the documents, the photos and
             the rest on the right (П25.3 Б); a phone and the 1280 panel — one column, the same order */}
         <View style={cols ? { flexDirection: "row", alignItems: "flex-start", gap: space[4] } : { gap: space[4] }}>
@@ -286,6 +298,16 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
           {money$ && action.kind === "needLead" ? (
             <View testID="view-action-link"><Button label={t("mod.gutters.view.link")} icon="user" onPress={() => setLinkOpen(true)} /></View>
           ) : null}
+          {/* what comes next once it is linked (#2990): whose it is now and where it shows, an estimate they already have without this
+              drawing, «Открыть лид / клиента» — one press there, the person stays where they worked */}
+          {linkedTo ? (
+            <View testID="view-next" style={{ gap: space[1] }}>
+              <T v="body" w="semibold">{t(linkedTo.kind === "lead" ? "mod.gutters.card.atLead" : "mod.gutters.card.atClient", { name: linkedTo.name })}</T>
+              {money$ && other && action.kind === "make" ? (
+                <View testID="view-next-other"><T v="caption" tone="mut">{t("mod.gutters.card.otherEst", { n: other.number ?? "", state: t(estimateStatusView(other.status).l) })}</T></View>
+              ) : null}
+            </View>
+          ) : null}
           {money$ && (action.kind === "make" || action.kind === "update" || action.kind === "open") ? (
             <View testID={`view-action-${action.kind === "open" && action.signed ? "signed" : action.kind}`} style={{ gap: space[2] }}>
               <Button
@@ -298,30 +320,45 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
               ) : null}
             </View>
           ) : null}
+          {money$ && other && action.kind === "make" ? (
+            <View testID="view-open-other"><Button label={t("mod.gutters.card.openEst", { n: other.number ?? "" })} variant="secondary" onPress={() => router.push(`/estimate/${other.id}` as Href)} /></View>
+          ) : null}
           <View testID="view-edit"><Button label={t("mod.gutters.view.edit")} icon="pencil" variant="secondary" onPress={edit} /></View>
+          {linkedTo ? (
+            <View testID="view-open-who" style={{ alignItems: "flex-start" }}>
+              <Button label={t(linkedTo.kind === "lead" ? "mod.gutters.card.openLead" : "mod.gutters.card.openClient")} icon="chevronRight" variant="ghost" onPress={() => router.push(linkedTo.href as Href)} />
+            </View>
+          ) : null}
         </View>
         </View>
         <View style={{ gap: space[4], ...(cols ? { flex: 1, minWidth: 0 } : {}) }}>
 
-        {/* «Документы» (П25.3 Б4): one card, a row per reader — the client's (the estimate, else the drawing without
-            prices, in the client's language), the crew's (the cut, the app's language). «Отправить» and the history — H3 */}
+        {/* «Документы» (#2989, founder 27.11: «должен быть просто чертёж и заказ материалов отдельно»; 25.11: «есть смета, к ней
+            прикреплён чертёж, и к ней заказ поставщику», spec 67 §8.9 п.4): two rows — «Чертёж» (no prices, the client's language) and
+            «Заказ материалов» (the supplier's, always EN; not for those who do not see the money). With an estimate they are its
+            attachments: the estimate first, «Прикреплено к смете …». The crew's cut and the shop drawings — «⋯ → Документы бригады»
+            until the job's card has them (#2729) */}
         {drawing.runs.length ? (
           <View testID="view-docs">
           <Card style={{ gap: space[1] }}>
-            <T v="heading" w="semibold">{t("mod.gutters.card.docs")}</T>
+            <T v="heading" w="semibold">{clientEst ? t("mod.gutters.card.attached", { n: clientEst.number ?? "" }) : t("mod.gutters.card.docs")}</T>
+            {clientEst ? (
+              <View testID="view-doc-estimate">
+                <ListRow title={t("mod.gutters.card.estRow", { n: clientEst.number ?? "" })} left={<Icon name="invoice" />} chevron onPress={() => router.push(`/estimate/${clientEst.id}` as Href)} />
+              </View>
+            ) : null}
             <DocRow
               id="client"
-              title={t("mod.gutters.card.docClient")}
-              sub={clientEst ? t("mod.gutters.card.docClientEst", { n: clientEst.number ?? "", lang: clientLang.toUpperCase() }) : t("mod.gutters.card.docClientDrawing", { lang: clientLang.toUpperCase() })}
+              icon="pencil"
+              title={t("mod.gutters.card.docDrawing")}
+              sub={clientEst ? t("mod.gutters.card.docDrawingEst", { n: clientEst.number ?? "", lang: clientLang.toUpperCase() }) : t("mod.gutters.card.docDrawingSub", { lang: clientLang.toUpperCase() })}
               openTestID="view-pdf-client"
-              onOpen={() => (clientEst ? router.push(`/estimate/${clientEst.id}` as Href) : pdf("client"))}
-              // the estimate is sent from its own screen; the drawing alone — from here
-              onSend={clientEst ? undefined : () => pdf("client", "send")}
+              onOpen={() => pdf("client")}
+              onSend={() => pdf("client", "send")}
             />
-            <DocRow id="crew" title={t("mod.gutters.card.docCrew")} sub={t("mod.gutters.card.docCrewSub", { n: spec.parts.length })} openTestID="view-pdf-crew" onOpen={() => pdf("crew")} onSend={() => pdf("crew", "send")} />
-            {/* one row, the paper is chosen on the press (founder 13.11: «объединить в одну»): 11 × 17, or the same sheets reduced to Letter */}
-            <DocRow id="shop" title={t("mod.gutters.shop.doc")} sub={t("mod.gutters.shop.docSize")} openTestID="view-pdf-shop" anchorRef={shopRef} onOpen={() => shopMenu("open")} onSend={() => shopMenu("send")} />
-            <DocRow id="shop-order" title={t("mod.gutters.shop.docOrder")} sub={t("mod.gutters.shop.docOrderSub")} openTestID="view-pdf-shop-order" onOpen={() => shop("order", "letter")} onSend={() => shop("order", "letter", "send")} />
+            {money$ ? (
+              <DocRow id="shop-order" icon="box" title={t("mod.gutters.shop.docOrder")} sub={t("mod.gutters.shop.docOrderSub")} openTestID="view-pdf-shop-order" onOpen={() => shop("order", "letter")} onSend={() => shop("order", "letter", "send")} />
+            ) : null}
           </Card>
           </View>
         ) : null}
@@ -444,6 +481,15 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
         </View>
       </View>
       <LinkSheet visible={linkOpen} onClose={() => setLinkOpen(false)} measurementId={m.id} />
+      {/* «Документы бригады» (#2989): the cut and the shop drawings, off the card — kept until the job's card has them (#2729) */}
+      <Sheet visible={crewDocs} onClose={() => setCrewDocs(false)} title={t("mod.gutters.card.crewDocs")}>
+        <View testID="view-crew-docs" style={{ gap: space[1] }}>
+          <T v="caption" tone="mut">{t("mod.gutters.card.crewDocsHint")}</T>
+          <DocRow id="crew" title={t("mod.gutters.card.docCrew")} sub={t("mod.gutters.card.docCrewSub", { n: spec.parts.length })} openTestID="view-pdf-crew" onOpen={() => pdf("crew")} onSend={() => pdf("crew", "send")} />
+          {/* one row, the paper is chosen on the press (founder 13.11: «объединить в одну»): 11 × 17, or the same sheets reduced to Letter */}
+          <DocRow id="shop" title={t("mod.gutters.shop.doc")} sub={t("mod.gutters.shop.docSize")} openTestID="view-pdf-shop" anchorRef={shopRef} onOpen={() => shopMenu("open")} onSend={() => shopMenu("send")} />
+        </View>
+      </Sheet>
     </>
   );
 }
@@ -451,7 +497,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
 /** a row of «Документы»: who reads it, what it is, «Открыть» (rule 12: rows of one object inside its card) */
 /** `anchorRef` — the place of the button, for a menu that opens at it. `onSend` — «Отправить» beside it, on a phone only (#2157:
  *  «Открыть» shows the document; on the web the print preview already saves it) */
-function DocRow({ id, title, sub, openTestID, onOpen, onSend, anchorRef }: { id: string; title: string; sub: string; openTestID: string; onOpen: () => void; onSend?: () => void; anchorRef?: RefObject<ElementRef<typeof View> | null> }) {
+function DocRow({ id, title, sub, openTestID, onOpen, onSend, anchorRef, icon = "invoice" }: { id: string; title: string; sub: string; openTestID: string; onOpen: () => void; onSend?: () => void; anchorRef?: RefObject<ElementRef<typeof View> | null>; /** what the document is (#2989, Н6: not «$» on every row) */ icon?: IconKey }) {
   const { t } = useI18n();
   const send = onSend && Platform.OS !== "web";
   return (
@@ -459,7 +505,7 @@ function DocRow({ id, title, sub, openTestID, onOpen, onSend, anchorRef }: { id:
       <ListRow
         title={title}
         subtitle={sub}
-        left={<Icon name="invoice" />}
+        left={<Icon name={icon} />}
         right={
           <RowView style={{ gap: space[1] }}>
             {send ? <View testID={`${openTestID}-send`}><IconButton icon="send" label={`${t("mod.gutters.card.send")}: ${title}`} onPress={onSend} /></View> : null}

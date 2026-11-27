@@ -118,9 +118,6 @@ export function LeadObject({ l, section, onSection, back, frame }: { l: Lead; se
     { icon: "sms", label: t("cc.sms"), a11y: `${t("cc.sms")} ${l.name}`, onPress: () => touch("sms", smsHref(l.phone)), disabled: !tel, reason: t("proto.leads.noPhone"), testID: "lead-sms" },
     { icon: "mail", label: t("proto.leads.mail"), a11y: `${t("lead.emailTo")} ${l.name}`, onPress: () => touch("email", mail), disabled: !mail, reason: t("proto.leads.noEmail"), testID: "lead-mail" },
     ...(addr ? [{ icon: "navigate" as const, label: t("client.route"), a11y: `${t("client.route")}: ${addr}`, onPress: () => Linking.openURL(mapsUrl(addr, Platform.OS as OS)).catch(() => {}), testID: "lead-route" }] : []),
-    ...(src?.kind === "marketplace"
-      ? [{ icon: "check" as const, label: t("proto.leads.answered"), a11y: t("lead.answeredIn", { source: src.name }), onPress: () => { touch("marketplace"); toast.show(q(t("proto.leads.answeredToast", { source: src.name }))); }, testID: "lead-answered" }]
-      : []),
   ];
 
   /* ---------- the one main step ---------- */
@@ -187,8 +184,8 @@ export function LeadObject({ l, section, onSection, back, frame }: { l: Lead; se
     }
   };
   const main = step ? mainOf(step) : undefined;
-  // «Потерян?» beside «Напомнить про смету» (object-cards: долго без ответа — вторая кнопка в ряд)
-  const second: MainAction | undefined = step === "remind" ? { testID: "lead-next-lost", label: t("proto.leads.lost"), onPress: () => setSheet("low") } : undefined;
+  // #2995 (crm + design review 27.11): the ONE step stands alone — «Потерян?» is in «⋯» (a rare, dangerous step)
+  const second: MainAction | undefined = undefined;
 
   /* ---------- «＋» and «⋯» ---------- */
   const open = isOpenLead(l);
@@ -208,9 +205,16 @@ export function LeadObject({ l, section, onSection, back, frame }: { l: Lead; se
     { key: "status", label: t("lead.status.title"), icon: "tag", testID: "lead-act-status" },
     ...(open && office ? [{ key: "won", label: t("lead.makeClient"), icon: "userCheck" as const, testID: "lead-act-client" }] : []),
     ...(open ? [isSnoozed(l) ? { key: "unsnooze", label: t("lead.unsnooze"), icon: "refresh" as const, testID: "lead-act-unsnooze" } : { key: "snooze", label: t("lead.snooze.title"), icon: "clock" as const, testID: "lead-act-snooze" }] : []),
+    // #2995: «Ответил» (a mark, not a contact) left the icon row — beside «Ответить» it read as the same verb
+    ...(src?.kind === "marketplace" ? [{ key: "answered", label: t("proto.leads.answered"), icon: "check" as const, testID: "lead-answered" }] : []),
+    ...(step === "remind" ? [{ key: "low", label: t("proto.leads.lost"), icon: "close" as const, testID: "lead-next-lost" }] : []),
     ...(open ? [{ key: "close", label: t("lead.closeTitle"), icon: "close" as const, testID: "lead-act-close" }] : []),
   ];
   const onMore = (k: string) => {
+    if (k === "answered" && src?.kind === "marketplace") {
+      touch("marketplace");
+      return toast.show(q(t("proto.leads.answeredToast", { source: src.name })));
+    }
     if (k === "unsnooze") return toast.show(q(t("lead.unsnoozed")), store.unsnoozeLead(l.id));
     setSheet(k as SheetName);
   };
@@ -252,6 +256,9 @@ export function LeadObject({ l, section, onSection, back, frame }: { l: Lead; se
     ) : (
       <View style={{ gap: space[6] }}>
         <LeadDups l={l} />
+        {/* add-on modules' place (docs/specs/33 П15): nothing unless a module is switched on. On top of «Обзор» (#2990, founder 27.11: a linked
+            measurement was two buttons under every event — not seen without scrolling) */}
+        <ModulePlaces place="lead" ctx={{ leadId: l.id, customerId: l.customerId, propertyId: l.propertyId }} />
         <LeadOverview l={l} />
         <ServiceCategoryRow value={l.serviceCategoryId} onChange={(id) => toast.show(t("dir.changed"), store.updateLead(l.id, { serviceCategoryId: id }))} />
         <ListGroup title={t("lead.recent")} all={events.length > 3 ? { label: t("lead.recent.all"), onPress: () => onSection("history"), testID: "lead-recent-all" } : undefined} testID="lead-recent">
@@ -259,8 +266,6 @@ export function LeadObject({ l, section, onSection, back, frame }: { l: Lead; se
             <GroupRow key={e.id} compact lead={{ icon: e.icon }} title={timelineText(e, t)} subtitle={`${day(e.at)} ${time(e.at)}`} testID={`lead-event-${e.id}`} />
           ))}
         </ListGroup>
-        {/* add-on modules' place (docs/specs/33 П15): nothing unless a module is switched on */}
-        <ModulePlaces place="lead" ctx={{ leadId: l.id, customerId: l.customerId, propertyId: l.propertyId }} />
       </View>
     );
 

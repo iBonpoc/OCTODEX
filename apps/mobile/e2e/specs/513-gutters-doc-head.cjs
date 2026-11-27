@@ -6,7 +6,7 @@
  *   client's property gave an address).
  * The web prints from a hidden frame: the spec reads the frame's HTML. Finds things by testID; waits on what it checks.
  */
-const { skipLength, openView, stands, sheetGone } = require("../gutters.cjs");
+const { skipLength, openView, stands, sheetGone, docsFor } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -40,6 +40,7 @@ exports.run = async (h) => {
       .then(() => true, () => false);
   /** press where the button stands, the paper's menu if any, and read the printed frame */
   const printVia = async (id, choice) => {
+    await docsFor(p, id); // #2989: the crew's documents are in «⋯ → Документы бригады»
     const btn = tid(id).getByRole("button");
     await btn.scrollIntoViewIfNeeded();
     await stands(btn);

@@ -233,7 +233,8 @@ function FitText({ v, tone, text, floor, testID, onNat }: { v: "title" | "captio
   const s = fitScale(nat, room, floor);
   const measuring = nat <= 0;
   return (
-    <View testID={testID} onLayout={(e) => setRoom(e.nativeEvent.layout.width)} style={{ flexShrink: 1, minWidth: 0, width: measuring ? undefined : nat, maxWidth: "100%" }}>
+    // #3004: the measuring layer (ten thousand wide) is clipped here, or the page scrolls sideways (the editor's «Итого · налог» on 390)
+    <View testID={testID} onLayout={(e) => setRoom(e.nativeEvent.layout.width)} style={{ flexShrink: 1, minWidth: 0, width: measuring ? undefined : nat, maxWidth: "100%", overflow: "hidden" }}>
       {/* the line's height (a space: no second copy of the words for the tests and the screen reader) */}
       <View aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ opacity: 0 }}>
         <T v={v}> </T>
