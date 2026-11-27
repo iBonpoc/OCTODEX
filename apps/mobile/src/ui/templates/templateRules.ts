@@ -140,3 +140,27 @@ export function attentionRows<T>(rows: T[]): { shown: T[]; more: number } {
 export function shownGroups<G extends { rows: unknown[] }>(groups: G[]): G[] {
   return groups.filter((g) => g.rows.length > 0);
 }
+
+/** DS §12.13 «Шапка» (#2841): the «‹» label is the parent's title; one longer than `BACK_MAX` letters is not cut with «…» — the
+ *  parent's KIND word stands instead («‹ Работа», not «‹ Bathroom remodel: vanity…»), as iOS turns a long back title into «Back» */
+export const BACK_MAX = 18;
+const BACK_KIND: [RegExp, BackKind][] = [
+  [/^\/job\//, "job"], [/^\/estimate\//, "estimate"], [/^\/invoice\//, "invoice"], [/^\/client\//, "client"], [/^\/lead\//, "lead"],
+  [/^\/property\//, "property"], [/^\/visit\//, "visit"], [/^\/receipt\//, "receipt"], [/^\/purchase-order\//, "order"],
+];
+export type BackKind = "job" | "estimate" | "invoice" | "client" | "lead" | "property" | "visit" | "receipt" | "order";
+/** the label as it is, or the parent's kind (the caller words it) when it is too long; an unknown parent keeps its label */
+export function backLabel(label: string, href: string | undefined): { label: string } | { kind: BackKind } {
+  if (label.length <= BACK_MAX || !href) return { label };
+  const k = BACK_KIND.find(([re]) => re.test(href))?.[1];
+  return k ? { kind: k } : { label };
+}
+
+/** DS §12.13 «Шапка» (#2841, ревью design/crm): a visit is named by its day — «Выезд · Fri, Nov 6» (the app's day, i18n `day`) */
+export function visitHeadTitle(kindWord: string, dayText: string): string {
+  return `${kindWord} · ${dayText}`;
+}
+/** the whole line under an object's name: what is known, joined by « · » («8:30–12:30 · Alex · Sarah Mitchell») — never cut */
+export function visitHeadLine(parts: (string | undefined | null | false)[]): string {
+  return parts.filter(Boolean).join(" · ");
+}
