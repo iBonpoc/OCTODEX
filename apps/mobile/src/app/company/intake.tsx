@@ -22,6 +22,8 @@ import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, CardList, Empty, Screen, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
+import { GroupRow, ListGroup } from "@/ui/groupedList";
+import { ActionRow } from "@/ui/multiValueField";
 
 export default function CompanyIntake() {
   const store = useStore();
@@ -126,12 +128,6 @@ export default function CompanyIntake() {
                     <Toggle label={t("intake.set.enabled")} on={form.enabled} onChange={(on) => run(() => setEndpoint(form.id, { enabled: on }))} />
                     <Toggle label={t("intake.set.smsBox")} on={form.smsConsent} onChange={(on) => run(() => setEndpoint(form.id, { smsConsent: on }))} />
                   </ReadOnly>
-                  <Button label={t("intake.set.copyLink")} icon="copy" variant="secondary" full onPress={() => copyText(link).then(() => toast.show(t("intake.set.copied")))} />
-                  <Button label={t("intake.set.share")} icon="send" variant="secondary" full onPress={() => shareText(t("intake.set.shareText"), link)} />
-                  <Button label={t("intake.set.copyCode")} icon="copy" variant="secondary" full
-                    onPress={() => copyText(siteSnippet(link, t("intake.title"))).then(() => toast.show(t("intake.set.copied")))} />
-                  <T v="caption" tone="mut">{t("intake.set.codeHint")}</T>
-                  <Button label={t("intake.set.rotate")} variant="ghost" onPress={() => setAsk(form)} disabled={busy} />
                 </View>
               ) : (
                 <View testID="intake-form-new" style={{ gap: space[3] }}>
@@ -142,6 +138,25 @@ export default function CompanyIntake() {
                 </View>
               )}
             </Card>
+            {/* #3065 (DS §7.5): the link's actions are rows of one group, not a column of buttons; «Новая ссылка» (the old one stops) —
+                the last row, a red word, asked first */}
+            {form ? (
+              <View style={{ gap: space[2] }}>
+                <ListGroup testID="intake-form-actions">
+                  <GroupRow testID="intake-copy-link" title={t("intake.set.copyLink")} lead={{ icon: "copy" }} onPress={() => void copyText(link).then(() => toast.show(t("intake.set.copied")))} />
+                  <GroupRow testID="intake-share" title={t("intake.set.share")} lead={{ icon: "send" }} onPress={() => shareText(t("intake.set.shareText"), link)} />
+                  <GroupRow testID="intake-copy-code" title={t("intake.set.copyCode")} subtitle={t("intake.set.codeHint")} wrap lead={{ icon: "copy" }}
+                    onPress={() => void copyText(siteSnippet(link, t("intake.title"))).then(() => toast.show(t("intake.set.copied")))} />
+                </ListGroup>
+                {busy ? null : (
+                  <ListGroup>
+                    <View testID="intake-rotate" style={{ paddingHorizontal: space[4] }}>
+                      <ActionRow tone="bad" label={t("intake.set.rotate")} onPress={() => setAsk(form)} />
+                    </View>
+                  </ListGroup>
+                )}
+              </View>
+            ) : null}
 
             <SectionTitle title={t("intake.set.hook")} />
             <Card>
