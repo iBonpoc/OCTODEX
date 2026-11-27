@@ -113,6 +113,8 @@ jobs:
           ref: main
           fetch-depth: 0
           persist-credentials: false
+      # NO cache here, ever (neither the npm one of setup-node nor the cache action): this job builds the code of the PRs in main, and a cache
+      # written here would be read by the checks of main and of every PR (security review of #3125 п.1; stand.test.ts guards it)
       - uses: actions/setup-node@v4
         with:
           node-version: 22

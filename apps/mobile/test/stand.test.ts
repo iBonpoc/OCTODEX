@@ -440,6 +440,16 @@ describe("stand.yml: who writes, where the code of the PRs runs, where the key i
     expect(job("merge-again")).not.toMatch(/npm |setup-node|secrets\./);
     for (const j of ["should", "build", "deploy"]) expect(job(j), j).not.toMatch(/contents: write/);
   });
+  it("build: setup-node without a cache, and the comment that says why stays (review 2 of #3125)", () => {
+    const b = job("build");
+    const setup = b.slice(b.indexOf("uses: actions/setup-node@"), b.indexOf("\n      - ", b.indexOf("uses: actions/setup-node@")));
+    expect(setup).toMatch(/node-version: 22/);
+    expect(setup).not.toMatch(/cache/);
+    expect(b).toMatch(/# NO cache here, ever[^\n]*\n[^\n]*\n\s+- uses: actions\/setup-node@v4/);
+    // nowhere in stand.yml: no job of the stand reads or writes a cache
+    const code = s.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+    expect(code).not.toMatch(/cache: |actions\/cache@|cache-dependency-path/);
+  });
   it("build: read-only, no key, no cache — the only job running code of the PRs", () => {
     const b = job("build");
     expect(b).toMatch(/permissions:\n\s+contents: read\n/);
