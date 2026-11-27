@@ -4252,6 +4252,7 @@ export const es: Dict = {
   "mod.gutters.draw.newDefaults.ds": "Para bajantes nuevas",
   "mod.gutters.draw.newDefaults.hint": "Así se dibujarán las siguientes en este dibujo (en este teléfono). Lo dibujado no cambia. «Restablecer» — como en la configuración de la empresa.",
   "mod.gutters.draw.newDefaults.reset": "Restablecer",
+  "mod.gutters.draw.northUp": "Norte arriba",
   "mod.gutters.draw.dsShort.title": "Falta una bajante",
   "mod.gutters.draw.dsShort.titleMany": "Faltan bajantes en {n} líneas",
   "mod.gutters.draw.dsShort.hint": "{run}: bajantes {have} de {need}",
