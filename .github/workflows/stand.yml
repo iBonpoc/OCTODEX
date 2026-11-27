@@ -44,7 +44,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name }}
-          WF: ${{ github.event.workflow_run.name }}
+          WF_PATH: ${{ github.event.workflow_run.path }}
+          HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          REPO: ${{ github.repository }}
           WF_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           WF_EVENT: ${{ github.event.workflow_run.event }}
           PR: ${{ github.event.workflow_run.pull_requests[0].number }}
@@ -54,8 +56,10 @@ jobs:
           case "$EVENT" in
             push|workflow_dispatch) [ "$REF" = "refs/heads/main" ] && go=true ;;
             workflow_run)
-              if [ "$WF_EVENT" = "pull_request" ] && [ "$WF_CONCLUSION" != "skipped" ] && [ "$WF_CONCLUSION" != "cancelled" ]; then
-                if [ "$WF" = "Stand trigger" ]; then go=true
+              # by the file, not the name (a fork may call its workflow «Stand trigger»), and only runs of this repository's branches
+              if [ "$WF_EVENT" = "pull_request" ] && [ "$HEAD_REPO" = "$REPO" ] && [ "$WF_CONCLUSION" != "skipped" ] && [ "$WF_CONCLUSION" != "cancelled" ]; then
+                if [ "$WF_PATH" = ".github/workflows/stand-trigger.yml" ]; then go=true
+                elif [ "$WF_PATH" != ".github/workflows/preview.yml" ]; then go=false
                 elif [[ "$PR" =~ ^[0-9]+$ ]] && gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq '.labels[].name' | grep -qx 'стенд'; then go=true; fi
               fi ;;
           esac

@@ -226,6 +226,43 @@ describe("stand: the code of the PRs is built only inside a throw-away container
   });
 });
 
+describe("stand.yml «should»: a workflow_run counts by its file and repository, not by its name (review of #3125 п.2)", () => {
+  const yml = readFileSync(join(__dirname, "../../../.github/workflows/stand.yml"), "utf8");
+  const should = yml.slice(yml.indexOf("\n  should:"), yml.indexOf("\n  merge:"));
+  const script = should.slice(should.indexOf("run: |") + 7).split("\n").map((l) => l.replace(/^ {10}/, "")).join("\n");
+  const dir = mkdtempSync(join(tmpdir(), "stand-should-"));
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  // a fake gh: the PR has the label «стенд»
+  writeFileSync(join(dir, "gh"), "#!/bin/bash\necho стенд\n", { mode: 0o755 });
+  const go = (e: Record<string, string>) => {
+    const out = join(dir, "out");
+    writeFileSync(out, "");
+    execFileSync("bash", ["-c", script], { env: { PATH: `${dir}:${process.env.PATH}`, GITHUB_OUTPUT: out, GITHUB_REPOSITORY: "o/r", REPO: "o/r", ...e } });
+    return readFileSync(out, "utf8").trim();
+  };
+  const run = { EVENT: "workflow_run", WF_EVENT: "pull_request", WF_CONCLUSION: "success", HEAD_REPO: "o/r", PR: "7" };
+  it("the stand trigger and a Preview of a labelled PR of this repository: go", () => {
+    expect(go({ ...run, WF_PATH: ".github/workflows/stand-trigger.yml" })).toBe("go=true");
+    expect(go({ ...run, WF_PATH: ".github/workflows/preview.yml" })).toBe("go=true");
+  });
+  it("a run from a fork, even of the same file: no", () => {
+    expect(go({ ...run, WF_PATH: ".github/workflows/stand-trigger.yml", HEAD_REPO: "fork/r" })).toBe("go=false");
+  });
+  it("another file of the same name «Stand trigger» / «Preview»: no", () => {
+    expect(go({ ...run, WF_PATH: ".github/workflows/evil.yml" })).toBe("go=false");
+  });
+  it("a cancelled or skipped run: no; push to main and a run by hand from main: go", () => {
+    expect(go({ ...run, WF_PATH: ".github/workflows/stand-trigger.yml", WF_CONCLUSION: "skipped" })).toBe("go=false");
+    expect(go({ EVENT: "push", REF: "refs/heads/main" })).toBe("go=true");
+    expect(go({ EVENT: "workflow_dispatch", REF: "refs/heads/other" })).toBe("go=false");
+  });
+  it("reads the file and the repository of the run, as preview-deploy.yml does", () => {
+    expect(should).toContain("WF_PATH: ${{ github.event.workflow_run.path }}");
+    expect(should).toContain("HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}");
+    expect(should).not.toContain("workflow_run.name");
+  });
+});
+
 describe("stand.yml: who writes, where the code of the PRs runs, where the key is", () => {
   const wf = (f: string) => readFileSync(join(__dirname, "../../../.github/workflows", f), "utf8");
   const s = wf("stand.yml");
