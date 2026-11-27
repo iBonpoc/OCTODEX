@@ -136,8 +136,8 @@ exports.run = async (h) => {
   h.expect((await tid("corner-sheet").count()) === 0, "a single tap on a corner opens no sheet");
   // #3066 (founder 27.11: «нажимаю на угол — выделяется не угол, а весь gutter»): the tap picks the CORNER — a ring round its mark, no gutter
   // picked (no halo on a line), the chip says «Corner · …»
-  await svg().locator('[id^="picked-c:"]').first().waitFor({ timeout: 3000 }).catch(() => {});
-  h.expect((await svg().locator('[id^="picked-c:"]').count()) === 1, "a single tap on a corner: the corner has the ring");
+  await svg().locator('[id^="picked-c:"]').first().waitFor({ timeout: 3000 }); // a single tap on a corner: the corner has the ring
+  h.expect((await svg().locator('[id^="picked-c:"]').count()) === 1, "a single tap on a corner: one ring");
   h.expect((await svg().locator('[id^="halo-"]').count()) === 0, "a single tap on a corner: no gutter is picked");
   await p.waitForFunction(() => /^Corner · (Outside|Inside|Bay) · \d+°/.test(([...document.querySelectorAll('[data-testid="draw-selected"]')].find((e) => e.getClientRects().length)?.textContent || "").trim()), null, { timeout: 3000 }).catch(() => h.expect(false, "the chip says «Corner · kind · N°»"));
   await pastDoubleTap(p);
