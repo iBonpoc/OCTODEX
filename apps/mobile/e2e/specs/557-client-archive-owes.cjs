@@ -5,6 +5,8 @@
  * - a paid-up client becomes «Неактивный» from the header and comes back «Активный» (the manual move back, map §5).
  * By testID / roles; waits on what it checks.
  */
+const { pressEscUntilClosed, sheetGone } = require("../sheet.cjs");
+
 exports.run = async (h) => {
   const p = h.page;
   const tid = (id) => p.getByTestId(id).locator("visible=true").first();
@@ -23,21 +25,23 @@ exports.run = async (h) => {
   const opt = h.sheet().getByRole("radio", { name: /Неактивный/ });
   await opt.waitFor({ timeout: 5000 });
   h.expect(/Должен \$[\d,]+(\.\d\d)? — неактивным после оплаты/.test((await opt.getAttribute("aria-label")) || ""), `the reason is said (${await opt.getAttribute("aria-label")})`);
-  await opt.click({ force: true });
-  await p.waitForTimeout(400);
-  h.expect((await status(debtor.id)) === "active", "a tap on the pale option changes nothing");
+  // the pale option is not a button: nothing to press (a pressable one would carry the role «radio» unchecked AND enabled)
+  h.expect((await opt.getAttribute("aria-disabled")) === "true", "the pale option cannot be chosen");
+  h.expect((await status(debtor.id)) === "active", "the debtor stays active");
   await h.shot("debtor-sheet");
-  await p.keyboard.press("Escape");
+  await pressEscUntilClosed(p);
 
   // the paid-up client: inactive and back
   await h.go(`/client/${free.id}`);
   await tid("client-header-status").click();
   await h.sheet().getByRole("radio", { name: /^Неактивный/ }).click();
+  await sheetGone(p);
   await p.waitForFunction(([k, id]) => (JSON.parse(localStorage.getItem(k) || "{}").db?.customers || []).find((c) => c.id === id)?.status === "archived", ["octo.db.v5", free.id], { timeout: 5000 });
   await tid("client-header-status").waitFor({ timeout: 5000 });
   h.expect(/Неактивный/.test(await tid("client-header-status").innerText()), "the header says «Неактивный»");
   await tid("client-header-status").click();
   await h.sheet().getByRole("radio", { name: /^Активный/ }).click();
+  await sheetGone(p);
   await p.waitForFunction(([k, id]) => ((JSON.parse(localStorage.getItem(k) || "{}").db?.customers || []).find((c) => c.id === id)?.status ?? "active") === "active", ["octo.db.v5", free.id], { timeout: 5000 });
   h.expect(true, "back to «Активный» by hand");
 };

@@ -1,7 +1,8 @@
 import { APP_NAME } from "@/config/product";
 import { findJob } from "@/data/jobs";
 import { useEffect, useState, type ReactElement, type ReactNode } from "react";
-import { View } from "react-native";
+import { Linking, View } from "react-native";
+import { cleanPhone, mailtoHref, smsHref } from "@/features/contactLinks";
 import { router } from "expo-router";
 import { canOpen } from "@/nav/roles";
 import { space } from "@octo/design-tokens";
@@ -124,26 +125,40 @@ export function InvoiceObject({ inv, back, pay: payNow, frame }: { inv: Invoice;
   const who = cust?.name ?? "";
   const of = (what: string) => (who ? t("proto.money.actOf", { what, who }) : what);
   const payStep: MainAction = { label: t("proto.money.main.pay", { amount: money(payCents) }), onPress: takePay, reason, testID: "invoice-take-payment" };
-  const main: MainAction | undefined =
-    step === "send"
-      ? { label: t("proto.money.main.send"), onPress: send!, reason, testID: "invoice-send" }
-      : step === "remind"
-        ? { label: t("proto.money.main.remind"), onPress: () => setRemindOpen(true), reason, testID: "invoice-remind-main" }
-        : step === "pay"
-          ? payStep
-          : undefined;
-  const second: MainAction | undefined = (step === "send" || step === "remind") && canPay ? { label: t("proto.money.second.pay"), onPress: takePay, testID: "invoice-take-payment-second" } : undefined;
+  const sendStep: MainAction | undefined = step === "send" ? { label: t("proto.money.main.send"), onPress: send!, reason, testID: "invoice-send" } : undefined;
+  const remindStep: MainAction | undefined = canRemind ? { label: t("proto.money.main.remind"), onPress: () => setRemindOpen(true), reason, testID: "invoice-remind-main" } : undefined;
+  // #3012 (founder 27.11 «сделай как надо», вариант А): «Принять оплату» is THE step of an unpaid invoice whoever may take it;
+  // sending and the reminder go into «⋯» (they write to the client by their sheet / the phone's app — never by one tap here)
+  const main: MainAction | undefined = canPay ? { ...payStep, reason: step === "pay" ? reason : t("proto.money.reason.due", { date: day(inv.dueDate) }) } : (sendStep ?? remindStep);
+  const second: MainAction | undefined = canPay ? (sendStep ?? remindStep) : sendStep && remindStep ? remindStep : undefined;
 
-  // QuickActions — the icon and its word (П6), what the main step is not: Оплата · Напомнить · Ссылка · PDF · Почта (≤ 5)
+  // #3012: the row is the person's, as on every object card (#2995): Позвонить · SMS · Почта — the phone's own apps to the client;
+  // nothing here sends the invoice. A missing contact is left out. PDF, the link and «Напомнить» are in «⋯»
+  const tel = cleanPhone(cust?.phone);
+  const smsTo = smsHref(cust?.phone);
+  const mailTo = mailtoHref(cust?.email);
+  const openUrl = (u: string) => void Linking.openURL(u).catch(() => undefined);
   const actions: IconRowItem[] = [
-    // «Оплата» stays an icon while «Принять» is the second step (an object puts its second step into «⋯» — the money must not hide there)
-    ...(canPay && step !== "pay" ? [{ icon: "dollar" as const, label: t("proto.money.act.pay"), a11y: of(t("inv.takePayment")), onPress: takePay, testID: "invoice-act-pay" }] : []),
-    ...(canRemind && step !== "remind" ? [{ icon: "bell" as const, label: t("proto.money.act.remind"), a11y: of(t("mny.remind")), onPress: () => setRemindOpen(true), testID: "invoice-remind" }] : []),
-    ...(link ? [{ icon: "link" as const, label: t("proto.money.act.link"), a11y: of(t("ue.copyLink")), onPress: () => void copyText(link).then(() => toast.show(t("team.copied"))).catch(() => {}), testID: "invoice-act-copy" }] : []),
-    { icon: "invoice" as const, label: t("proto.money.act.pdf"), a11y: of(t("ue.pdf")), onPress: () => void pdf(), testID: "invoice-act-pdf" },
-    ...(balance > 0 && sendEmail ? [{ icon: "mail" as const, label: t("proto.money.act.mail"), a11y: of(t("ue.sendEmail")), onPress: sendEmail, testID: "invoice-act-email" }] : []),
-    ...(balance > 0 && sendSms && step !== "send" ? [{ icon: "sms" as const, label: t("proto.money.act.sms"), a11y: of(t("ue.sendSms")), onPress: sendSms, testID: "invoice-act-sms" }] : []),
-  ].slice(0, 5);
+    ...(tel ? [{ icon: "phone" as const, label: t("client.call"), a11y: `${t("client.call")} ${who}`, onPress: () => openUrl(`tel:${tel}`), testID: "invoice-call" }] : []),
+    ...(smsTo ? [{ icon: "sms" as const, label: t("cc.sms"), a11y: `${t("cc.sms")} ${who}`, onPress: () => openUrl(smsTo), testID: "invoice-client-sms" }] : []),
+    ...(mailTo ? [{ icon: "mail" as const, label: t("cl6.writeMail"), a11y: `${t("cl6.writeMail")} ${who}`, onPress: () => openUrl(mailTo), testID: "invoice-client-mail" }] : []),
+  ];
+  const moreList = [
+    ...(canRemind && second?.testID !== "invoice-remind-main" && main?.testID !== "invoice-remind-main" ? [{ key: "remind", label: t("mny.remind"), icon: "bell" as const, testID: "invoice-remind" }] : []),
+    ...(balance > 0 && sendSms && step !== "send" ? [{ key: "sms", label: t("ue.sendSms"), icon: "sms" as const, testID: "invoice-act-sms" }] : []),
+    ...(balance > 0 && sendEmail ? [{ key: "email", label: t("ue.sendEmail"), icon: "mail" as const, testID: "invoice-act-email" }] : []),
+    ...(link ? [{ key: "link", label: t("ue.copyLink"), icon: "link" as const, testID: "invoice-act-copy" }] : []),
+    { key: "pdf", label: t("ue.pdf"), icon: "invoice" as const, testID: "invoice-act-pdf" },
+    ...(voiding.item ? [voiding.item] : []),
+  ];
+  const onMore = (k: string) => {
+    if (k === "void") return voiding.pick();
+    if (k === "remind") return setRemindOpen(true);
+    if (k === "sms") return sendSms?.();
+    if (k === "email") return sendEmail?.();
+    if (k === "link" && link) return void copyText(link).then(() => toast.show(t("team.copied"))).catch(() => {});
+    if (k === "pdf") return void pdf();
+  };
 
   const number = inv.number ?? "";
   const statusLabel = t(chip.l, chip.p);
@@ -294,15 +309,15 @@ export function InvoiceObject({ inv, back, pay: payNow, frame }: { inv: Invoice;
         actions={actions}
         // #2995 (layout review 27.11): «Просрочен…» was cut right of the rule on 390 — the status and the balance are one whole line
         // under the name («Просрочен 9 дн · $1,840.00»), never cut
-        subtitle={[statusLabel, balance > 0 ? money(balance) : undefined].filter(Boolean).join(" · ")}
+        subtitle={balance > 0 ? money(balance) : money(inv.totalCents)}
         main={main}
         second={second}
         sections={[]}
         section=""
         onSection={() => {}}
         sectionsLabel={t("proto.money.details")}
-        more={voiding.item ? [voiding.item] : []}
-        onMore={(k) => (k === "void" ? voiding.pick() : undefined)}
+        more={moreList}
+        onMore={onMore}
       >
         {body}
       </ObjectScreen>
