@@ -10,11 +10,10 @@ import { View } from "react-native";
 import { component, radius, size as sizes, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { Button, StatusChip, Toggle } from "@/ui/controls";
-import { fillStyle } from "@/ui/fill";
-import { Icon, Press, T } from "@/ui/primitives";
-import { RowView } from "@/ui/surfaces";
-import { SelectedCheck } from "@/ui/selectedCheck";
+import { OptionTiles } from "@/ui/optionTile";
+import { ToggleRow } from "@/ui/toggleRow";
+import { T } from "@/ui/primitives";
+import { Card, RowView } from "@/ui/surfaces";
 import { fmtLen, type LenFormat } from "../canvas/format";
 import { fmtDeg } from "../canvas/cornerPlan";
 import { cutAngleDeg, type CornerCutRun, type Drawing, type FoundCorner } from "../geometry";
@@ -40,44 +39,38 @@ export function CornerSheet({ d, f, cut, fmt, tape, splashOn, onKind, onSplash, 
   return (
     <View testID="corner-sheet" style={{ gap: space[3] }}>
       <T v="heading" w="semibold">{t("mod.gutters.draw.cornerTitle")}</T>
-      {f.kind === "bay" ? <T tone="mut">{t("mod.gutters.draw.cornerBay")}</T> : null}
-      {/* the kind: two pictures with their words (the diamond is hollow outside and has a dot inside, as on the canvas); the choice is the «Заливка» */}
-      <View testID="corner-kind"><RowView style={{ gap: space[2] }}>
-        {(["out", "in"] as const).map((k) => {
-          const on = kind === k;
-          const label = t(k === "in" ? "mod.gutters.attr.ck.in" : "mod.gutters.attr.ck.out");
-          return (
-            <View key={k} style={{ flex: 1 }}>
-              <Press
-                onPress={() => onKind(k)}
-                accessibilityRole="radio"
-                accessibilityLabel={label}
-                accessibilityState={{ selected: on, checked: on }}
-                {...({ "aria-checked": on } as object)}
-                visibleHeight={component.button.phone}
-                style={{ height: component.button.phone, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space[2], borderRadius: radius.pill, ...(on ? fillStyle(c) : { backgroundColor: "transparent" }), borderWidth: component.hairline, borderColor: on ? "transparent" : c.bd }}
-              >
-                <Icon name={k === "in" ? "cornerIn" : "cornerOut"} s={sizes.iconSm} color={on ? c.ink : c.mut} />
-                <T v="body" w="semibold" style={{ color: on ? c.ink : c.mut }}>{label}</T>
-                {on ? <SelectedCheck small /> : null}
-              </Press>
-            </View>
-          );
-        })}
-      </RowView></View>
+      {f.kind === "bay" ? <T tone="mut">{t("mod.gutters.attr.ck.bay")}</T> : null}
+      {/* the kind and «Разъединить» (DS §9 А2б — the corner is the tiles' first place; founder 16.11 «Наружный, внутренний и разъединить…
+          3 кнопки»; #3066 — it was an own pair of pills on Press, rule 29): two tiles to choose, the action apart; the names are the supplier's
+          (Berger «Miter - Outside or Inside», #2979) in every language */}
+      <OptionTiles
+        testID="corner-kind"
+        label={t("mod.gutters.draw.cornerTitle")}
+        items={[
+          { key: "out" as const, label: t("mod.gutters.attr.ck.out"), icon: "cornerOut" as const },
+          { key: "in" as const, label: t("mod.gutters.attr.ck.in"), icon: "cornerIn" as const },
+        ]}
+        value={f.kind === "bay" ? null : kind}
+        onChange={onKind}
+        action={{ label: t("mod.gutters.draw.cornerSplitShort"), icon: "unlink", onPress: onSplit, testID: "corner-split" }}
+      />
       <T v="caption" tone="mut">{t("mod.gutters.draw.cornerNote")}</T>
+      {/* the splash guard of an inside corner, right under its kind (reviews #3066: it goes into the estimate — not below the fold): a ToggleRow (DS А5) */}
+      {f.kind === "in" ? <ToggleRow testID="corner-splash" label={t("mod.gutters.draw.splash")} value={splashOn} onChange={onSplash} /> : null}
       {cut ? (
         <View testID="corner-cut" style={{ gap: space[2] }}>
           <View onLayout={(e) => setSketchW(e.nativeEvent.layout.width)}>
             {sketchW > 0 ? <CornerSketch d={d} f={f} cut={cut.runs} w={sketchW} angleDeg={cut.angleDeg} fmt={fmt} /> : null}
           </View>
+          {/* the key of the drawing (#3078): its numbers are the gutters of «Раскрой» below, where the lengths are */}
+          <View testID="corner-sketch-key"><T v="caption" tone="mut">{t("mod.gutters.draw.sketchKey")}</T></View>
           <RowView style={{ justifyContent: "space-between" }}>
             <T v="body" w="semibold">{t("mod.gutters.draw.cutTitle")}</T>
             <View testID="corner-cut-angle"><T v="caption" tone="mut">{t("mod.gutters.draw.cutAngle", { deg: cut.angleDeg })}</T></View>
           </RowView>
           {/* a card for each piece: along the wall · along the face · the cut */}
           {cut.runs.map((r) => (
-            <View key={r.id} testID={`corner-cut-${r.id}`} style={{ gap: space[2], padding: space[3], borderRadius: radius.card, borderWidth: component.hairline, borderColor: c.bd }}>
+            <View key={r.id} testID={`corner-cut-${r.id}`}><Card inner style={{ gap: space[2] }}>
               <T v="caption" w="semibold">{t("mod.gutters.draw.cutRun", { n: d.runs.findIndex((x) => x.id === r.id) + 1 })}</T>
               <RowView style={{ gap: space[3], alignItems: "flex-start" }}>
                 <View style={{ flex: 1 }}>
@@ -93,19 +86,11 @@ export function CornerSheet({ d, f, cut, fmt, tape, splashOn, onKind, onSplash, 
                   <View testID="cut-miter"><T v="body" tabular>{`${fmtDeg(cutAngleDeg(180 - cut.angleDeg))}°`}</T></View>
                 </View>
               </RowView>
-            </View>
+            </Card></View>
           ))}
           {/* the measure is rough: ONE line, at the bottom of the cut */}
         </View>
       ) : null}
-      {f.kind === "in" ? (
-        <RowView style={{ gap: space[3], justifyContent: "space-between" }}>
-          <T v="body" style={{ flex: 1 }}>{t("mod.gutters.draw.splash")}</T>
-          <View testID="corner-splash"><Toggle on={splashOn} onChange={onSplash} label={t("mod.gutters.draw.splash")} /></View>
-        </RowView>
-      ) : null}
-      {/* «Разъединить угол» (#933): two gutters with their own end caps; «Назад» and the toast bring it back */}
-      <View testID="corner-split"><Button label={t("mod.gutters.draw.cornerSplit")} variant="secondary" size="sm" onPress={onSplit} /></View>
       <CornerTriangle key={f.id} d={d} f={f} onAngle={onAngle} />
     </View>
   );

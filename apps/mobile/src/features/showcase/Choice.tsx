@@ -33,6 +33,7 @@ export function ChoiceSection() {
   const [who, setWho] = useState<Who | null>("crew");
   const [tags, setTags] = useState<Tag[]>(["vip"]);
   const [corner, setCorner] = useState<"out" | "in">("out");
+  const [dsKind, setDsKind] = useState<"rectPlain" | "rectRibbed" | "roundPlain" | "roundRibbed">("rectPlain");
   const [unlinked, setUnlinked] = useState(false);
   const [billing, setBilling] = useState(false);
   const [billTo, setBillTo] = useState<"manager" | "owner" | null>(null);
@@ -102,13 +103,27 @@ export function ChoiceSection() {
             setCorner(k);
             setUnlinked(false);
           }}
-          action={{ label: t("ds.ch.tile.unlink"), icon: "link", onPress: () => setUnlinked(true) }}
+          action={{ label: t("ds.ch.tile.unlink"), icon: "unlink", onPress: () => setUnlinked(true) }}
         />
         {unlinked ? (
           <View testID="showcase-option-tile-unlinked">
             <T v="caption">{t("ds.ch.tile.unlinked")}</T>
           </View>
         ) : null}
+        {/* a trade module's window (#2980): four tiles with icons, no action */}
+        <T v="caption" tone="mut">{t("ds.ch.tile.kindHint")}</T>
+        <OptionTiles
+          testID="showcase-option-tile-kind"
+          label={t("ds.ch.tile.kindLabel")}
+          items={[
+            { key: "rectPlain", label: t("ds.ch.tile.k.rectPlain"), icon: "dsRect" },
+            { key: "rectRibbed", label: t("ds.ch.tile.k.rectRibbed"), icon: "dsRectRibbed" },
+            { key: "roundPlain", label: t("ds.ch.tile.k.roundPlain"), icon: "dsRound" },
+            { key: "roundRibbed", label: t("ds.ch.tile.k.roundRibbed"), icon: "dsRoundRibbed" },
+          ]}
+          value={dsKind}
+          onChange={setDsKind}
+        />
       </Card>
       {/* a sample card like the others; what the row turns on is a menu field (a text field in a card is a form on a plate, DS §11 п.17) */}
       <Card>

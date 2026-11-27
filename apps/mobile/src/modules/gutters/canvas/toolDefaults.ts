@@ -42,6 +42,18 @@ export function resetKind(nd: NewDefaults, kind: "run" | "ds"): NewDefaults {
   return rest;
 }
 
+/**
+ * «Новые — так же» (#2987, founder 27.11): the window of one gutter / downspout, saved with the switch on — the next ones of this drawing are
+ * drawn like it. A gutter gives everything but its story (the story the next one is drawn on is the toolbar's «Эт»); a downspout gives all its
+ * attributes (not where it stands).
+ */
+export function likeElement(ch: Choices, nd: NewDefaults, el: { kind: "run"; attrs: RunAttrs } | { kind: "ds"; attrs: DsAttrs }): NewDefaults {
+  return el.kind === "run" ? patchRun(ch, nd, el.attrs) : patchDs(ch, nd, el.attrs);
+}
+
+/** the window «Новые …» was changed: its draft differs from what the drawing uses now («Закрыть» asks first, as a gutter's own window) */
+export const newDirty = (draft: NewDefaults | null, now: NewDefaults): boolean => !!draft && JSON.stringify(draft) !== JSON.stringify(now);
+
 /** the entries of measurements that are no longer there (deleted, or never saved) go */
 export function prune(map: DefaultsMap, live: ReadonlySet<string>): DefaultsMap {
   const keep = Object.entries(map).filter(([id]) => live.has(id));

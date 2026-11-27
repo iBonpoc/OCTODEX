@@ -206,13 +206,67 @@ async function openAttrMore(p) {
   }
 }
 
-/** what a field shows (its button's text) */
+/**
+ * A field of tiles (the downspout's kind, the gutter's profile — founder 27.11, #2980 / #2986): no button, the tiles are `<id>-<key>`
+ * radios. The helpers below read and pick them the same way as a menu field.
+ */
+async function isTiles(p, id) {
+  return (await p.getByTestId(`${id}-button`).locator("visible=true").count()) === 0 && (await p.getByTestId(id).locator("visible=true").count()) > 0;
+}
+const tileSel = (id) => `[data-testid^="${id}-"][role="radio"]`;
+async function tileIds(p, id) {
+  return p.getByTestId(id).locator("visible=true").first().locator(tileSel(id)).evaluateAll((es) => es.map((e) => [e.getAttribute("data-testid"), e.getAttribute("aria-checked") === "true", e.getAttribute("aria-label") || e.innerText]));
+}
+
+/**
+ * #3051 (founder 27.11: «проверь, чтобы плитки были одинаковые»): the tiles of a field are one width and one height (±1 px), and
+ * none of their words is cut. Returns a line saying what is wrong, or "" when all is well.
+ */
+async function tilesEven(p, id) {
+  return p.getByTestId(id).locator("visible=true").first().evaluate((root, x) => {
+    const tiles = [...root.querySelectorAll(`[data-testid^="${x}-"][role="radio"]`)];
+    if (tiles.length < 2) return `${x}: ${tiles.length} tile(s)`;
+    const r = tiles.map((t) => t.getBoundingClientRect());
+    const w = r.map((b) => Math.round(b.width)), h = r.map((b) => Math.round(b.height));
+    const cut = tiles.filter((t) => [t, ...t.querySelectorAll("*")].some((n) => n.scrollWidth > n.clientWidth + 1 || n.scrollHeight > n.clientHeight + 1)).map((t) => t.getAttribute("data-testid"));
+    const bad = [];
+    if (Math.max(...w) - Math.min(...w) > 1) bad.push(`widths ${w.join("/")}`);
+    if (Math.max(...h) - Math.min(...h) > 1) bad.push(`heights ${h.join("/")}`);
+    if (new Set(r.map((b) => Math.round(b.top))).size > 1) bad.push("not one row");
+    if (cut.length) bad.push(`cut: ${cut.join(",")}`);
+    return bad.length ? `${x}: ${bad.join("; ")}` : "";
+  }, id);
+}
+
+/**
+ * #3051: two fields in one row (Размер · Цвет, Низ · Верх, Материал · Толщина) stand side by side on one line, neither runs over the
+ * other, and neither value is cut («…»). Returns a line saying what is wrong, or "".
+ */
+async function pairFits(p, a, b) {
+  return p.evaluate(([x, y]) => {
+    const btn = (id) => [...document.querySelectorAll(`[data-testid="${id}-button"]`)].find((e) => e.getClientRects().length > 0);
+    const A = btn(x), B = btn(y);
+    if (!A || !B) return `${x} · ${y}: a field is missing`;
+    const ra = A.getBoundingClientRect(), rb = B.getBoundingClientRect();
+    const cut = (e) => [e, ...e.querySelectorAll("*")].some((n) => n.scrollWidth > n.clientWidth + 1);
+    const bad = [];
+    if (Math.abs(ra.top - rb.top) > 1) bad.push("not one line");
+    if (ra.right > rb.left + 0.5) bad.push("they overlap");
+    if (cut(A)) bad.push(`${x} cut («${A.innerText.trim()}»)`);
+    if (cut(B)) bad.push(`${y} cut («${B.innerText.trim()}»)`);
+    return bad.length ? `${x} · ${y}: ${bad.join("; ")}` : "";
+  }, [a, b]);
+}
+
+/** what a field shows (its button's text; a tile field — the chosen tile's name) */
 async function attrShown(p, id) {
+  if (await isTiles(p, id)) return ((await tileIds(p, id)).find((x) => x[1])?.[2] ?? "").replace(/\s+/g, " ").trim();
   return (await p.getByTestId(`${id}-button`).locator("visible=true").first().innerText()).trim();
 }
 
 /** the keys a field offers: opens its menu or list, reads the items, closes it (attrClose) */
 async function attrKeys(p, id) {
+  if (await isTiles(p, id)) return (await tileIds(p, id)).map((x) => x[0].slice(id.length + 1));
   const button = p.getByTestId(`${id}-button`).locator("visible=true").first();
   await button.scrollIntoViewIfNeeded();
   await button.click();
@@ -225,6 +279,10 @@ async function attrKeys(p, id) {
 
 /** the key a field's MENU marks as chosen (read as selected): opens it, reads, closes it (attrClose) */
 async function attrChosen(p, id) {
+  if (await isTiles(p, id)) {
+    const on = (await tileIds(p, id)).filter((x) => x[1]);
+    return on.length === 1 ? on[0][0].slice(id.length + 1) : null;
+  }
   const button = p.getByTestId(`${id}-button`).locator("visible=true").first();
   await button.scrollIntoViewIfNeeded();
   await button.click();
@@ -238,6 +296,7 @@ async function attrChosen(p, id) {
 
 /** the open menu or list of a field closed by Esc (again while it stays: an Esc in its first frames is lost), then gone */
 async function attrClose(p, id) {
+  if (await isTiles(p, id)) return; // tiles open nothing
   const picker = p.getByTestId(`${id}-picker`).locator("visible=true");
   // a list (the colour field's, G1 PR2) is a sheet of its own over the window's: never Esc (on 390 it may reach the window under it,
   // and its backdrop is still moving); a menu — Esc
@@ -261,6 +320,14 @@ async function attrShut(p, id) {
 
 /** pick `key` in a field: opens its menu or list, taps the item, waits until it is gone; returns the item's name */
 async function pickAttr(p, id, key) {
+  if (await isTiles(p, id)) {
+    const tile = p.getByTestId(id).locator("visible=true").first().locator(`[data-testid="${id}-${key}"]`);
+    await tile.scrollIntoViewIfNeeded();
+    const name = ((await tile.getAttribute("aria-label")) || (await tile.innerText())).replace(/\s+/g, " ").trim();
+    await tile.click();
+    await p.waitForFunction(([x, k]) => [...document.querySelectorAll(`[data-testid="${x}-${k}"]`)].some((e) => e.getClientRects().length > 0 && e.getAttribute("aria-checked") === "true"), [id, key], { timeout: 5000 });
+    return name;
+  }
   const button = p.getByTestId(`${id}-button`).locator("visible=true").first();
   await button.scrollIntoViewIfNeeded();
   await button.click();
@@ -276,11 +343,7 @@ async function pickAttr(p, id, key) {
 /** the open downspout's kind (its menu is open): a field on top (#2412 G1); `key` — rectPlain, rectRibbed, roundPlain, roundRibbed */
 async function pickDsKind(p, key) {
   await p.getByTestId("attr-panel").locator("visible=true").first().waitFor({ timeout: 5000 });
-  const name = await pickAttr(p, "attr-ds-kind", key);
-  await p.waitForFunction((n) => {
-    const b = [...document.querySelectorAll('[data-testid="attr-ds-kind-button"]')].find((e) => e.getClientRects().length > 0);
-    return !!b && b.innerText.trim() === n;
-  }, name, { timeout: 5000 });
+  await pickAttr(p, "attr-ds-kind", key); // tiles (#2980): pickAttr waits until the tile is checked
 }
 
 // «Отменить» of a toast (v2, #2086): the word ignores a tap until it is armed (`aria-busy` false, motion.toastArmMs after the toast
@@ -309,4 +372,20 @@ async function winClose(p) {
   await p.getByTestId("attr-win-close").locator("visible=true").first().getByRole("button").click();
 }
 
-module.exports = { winSave, winClose, pressUndo, pickDsKind, pickAttr, attrShown, attrKeys, attrChosen, attrClose, attrShut, openAttrMore, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
+// «Документы бригады» (#2989): the cut and the shop drawings left the card's «Документы» — they are in «⋯ → Документы бригады». `docsFor` makes
+// the button `id` reachable: the crew's ones — that sheet open; the card's own («Чертёж», «Заказ материалов») — that sheet closed
+const shownNow = (p, id) => p.evaluate((x) => [...document.querySelectorAll(`[data-testid="${x}"]`)].some((e) => e.getClientRects().length > 0), id);
+async function docsFor(p, id) {
+  const crew = /^view-(pdf|doc)-(crew|shop)$/.test(id);
+  const open = await shownNow(p, "view-crew-docs");
+  if (crew && !open) {
+    await p.getByTestId("view-more").locator("visible=true").first().getByRole("button").click();
+    await p.getByRole("menuitem", { name: "Документы бригады", exact: true }).click();
+    await p.getByTestId("view-crew-docs").locator("visible=true").first().waitFor({ timeout: 5000 });
+  } else if (!crew && open) {
+    await pressEscUntilClosed(p);
+    await p.waitForFunction(() => ![...document.querySelectorAll('[data-testid="view-crew-docs"]')].some((e) => e.getClientRects().length > 0), null, { timeout: 5000 });
+  }
+}
+
+module.exports = { docsFor, tilesEven, pairFits, winSave, winClose, pressUndo, pickDsKind, pickAttr, attrShown, attrKeys, attrChosen, attrClose, attrShut, openAttrMore, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };

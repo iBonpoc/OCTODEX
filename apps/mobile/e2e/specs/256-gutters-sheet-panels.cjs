@@ -6,7 +6,7 @@
  * - a measurement of one house stays one sheet: no panel titles.
  * Finds things by testID; waits on what it checks (no pauses).
  */
-const { openView, stands } = require("../gutters.cjs");
+const { openView, stands, docsFor } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -42,6 +42,7 @@ exports.run = async (h) => {
   };
   const sheetText = () => tid("view-svg").innerText();
   const printed = async (id) => {
+    await docsFor(p, id); // #2989: the crew's documents are in «⋯ → Документы бригады»
     await p.evaluate(() => {
       window.__pdf = null;
       for (const f of document.querySelectorAll("iframe")) f.dataset.seen = "1";
