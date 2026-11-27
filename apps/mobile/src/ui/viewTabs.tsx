@@ -6,7 +6,7 @@ import { component, motion, radius, size, space, spaceHalf } from "@octo/design-
 import { useTheme } from "@/theme/ThemeProvider";
 import { fillStyle } from "./fill";
 import { Icon, Press, T } from "./primitives";
-import { centerOffset, fadedEdges, nudgeDistance, stepStates } from "./viewTabsLogic";
+import { fadedEdges, nudgeDistance, stepStates, tailRoom, wholeOffset } from "./viewTabsLogic";
 
 /** the rows that have nudged already (one nudge per row and app run — «при первом открытии», DS §9 А1п) */
 const nudged = new Set<string>();
@@ -71,13 +71,16 @@ function Tabs<K extends string>({
   const [content, setContent] = useState(0);
   const [offset, setOffset] = useState(0);
   const ready = Object.keys(boxes).length === items.length && view > 0;
+  // #3060: room after the last tab, so the row can stop on a whole tab at its end too (no sliver «4» at the left edge)
+  const gapW = chips ? spaceHalf.tight : space[2];
+  const tail = ready ? tailRoom(items.map((it) => boxes[it.key]).filter((x): x is { x: number; w: number } => !!x), view) : 0;
 
   // the selected pill to the middle (a remembered tab past the edge comes into view too)
   useEffect(() => {
     const b = boxes[value];
     if (!ready || !b) return;
-    strip.current?.scrollTo({ x: centerOffset(b, view, content), animated: !reduce });
-  }, [value, ready, boxes, view, content, reduce]);
+    strip.current?.scrollTo({ x: wholeOffset(b, items.map((it) => boxes[it.key]).filter((x): x is { x: number; w: number } => !!x), view, content), animated: !reduce });
+  }, [value, ready, boxes, view, content, reduce, items]);
 
   // the one nudge: out and back, only when the row is longer than the screen
   useEffect(() => {
@@ -213,6 +216,7 @@ function Tabs<K extends string>({
             </Press>
           );
         })}
+        {tail > gapW ? <View pointerEvents="none" style={{ width: tail - gapW }} /> : null}
       </ScrollView>
       {Platform.OS !== "web" && edges.left ? edge("left") : null}
       {Platform.OS !== "web" && edges.right ? edge("right") : null}
