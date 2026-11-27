@@ -235,6 +235,46 @@ async function tileIds(p, id) {
   return p.getByTestId(id).locator("visible=true").first().locator(tileSel(id)).evaluateAll((es) => es.map((e) => [e.getAttribute("data-testid"), e.getAttribute("aria-checked") === "true", e.getAttribute("aria-label") || e.innerText]));
 }
 
+/**
+ * #3051 (founder 27.11: «проверь, чтобы плитки были одинаковые»): the tiles of a field are one width and one height (±1 px), and
+ * none of their words is cut. Returns a line saying what is wrong, or "" when all is well.
+ */
+async function tilesEven(p, id) {
+  return p.getByTestId(id).locator("visible=true").first().evaluate((root, x) => {
+    const tiles = [...root.querySelectorAll(`[data-testid^="${x}-"][role="radio"]`)];
+    if (tiles.length < 2) return `${x}: ${tiles.length} tile(s)`;
+    const r = tiles.map((t) => t.getBoundingClientRect());
+    const w = r.map((b) => Math.round(b.width)), h = r.map((b) => Math.round(b.height));
+    const cut = tiles.filter((t) => [t, ...t.querySelectorAll("*")].some((n) => n.scrollWidth > n.clientWidth + 1 || n.scrollHeight > n.clientHeight + 1)).map((t) => t.getAttribute("data-testid"));
+    const bad = [];
+    if (Math.max(...w) - Math.min(...w) > 1) bad.push(`widths ${w.join("/")}`);
+    if (Math.max(...h) - Math.min(...h) > 1) bad.push(`heights ${h.join("/")}`);
+    if (new Set(r.map((b) => Math.round(b.top))).size > 1) bad.push("not one row");
+    if (cut.length) bad.push(`cut: ${cut.join(",")}`);
+    return bad.length ? `${x}: ${bad.join("; ")}` : "";
+  }, id);
+}
+
+/**
+ * #3051: two fields in one row (Размер · Цвет, Низ · Верх, Материал · Толщина) stand side by side on one line, neither runs over the
+ * other, and neither value is cut («…»). Returns a line saying what is wrong, or "".
+ */
+async function pairFits(p, a, b) {
+  return p.evaluate(([x, y]) => {
+    const btn = (id) => [...document.querySelectorAll(`[data-testid="${id}-button"]`)].find((e) => e.getClientRects().length > 0);
+    const A = btn(x), B = btn(y);
+    if (!A || !B) return `${x} · ${y}: a field is missing`;
+    const ra = A.getBoundingClientRect(), rb = B.getBoundingClientRect();
+    const cut = (e) => [e, ...e.querySelectorAll("*")].some((n) => n.scrollWidth > n.clientWidth + 1);
+    const bad = [];
+    if (Math.abs(ra.top - rb.top) > 1) bad.push("not one line");
+    if (ra.right > rb.left + 0.5) bad.push("they overlap");
+    if (cut(A)) bad.push(`${x} cut («${A.innerText.trim()}»)`);
+    if (cut(B)) bad.push(`${y} cut («${B.innerText.trim()}»)`);
+    return bad.length ? `${x} · ${y}: ${bad.join("; ")}` : "";
+  }, [a, b]);
+}
+
 /** what a field shows (its button's text; a tile field — the chosen tile's name) */
 async function attrShown(p, id) {
   if (await isTiles(p, id)) return ((await tileIds(p, id)).find((x) => x[1])?.[2] ?? "").replace(/\s+/g, " ").trim();
@@ -385,4 +425,4 @@ async function docsFor(p, id) {
   if (!crew) await showSection(p, id);
 }
 
-module.exports = { showSection, editDrawing, canEditDrawing, docsFor, winSave, winClose, pressUndo, pickDsKind, pickAttr, attrShown, attrKeys, attrChosen, attrClose, attrShut, openAttrMore, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
+module.exports = { tilesEven, pairFits, showSection, editDrawing, canEditDrawing, docsFor, winSave, winClose, pressUndo, pickDsKind, pickAttr, attrShown, attrKeys, attrChosen, attrClose, attrShut, openAttrMore, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
