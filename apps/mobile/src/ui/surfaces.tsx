@@ -824,8 +824,10 @@ export function Screen({
           : undefined
       }
       right={rightRow}
-      help={kind === "editor" ? helpMark : undefined}
-      titleRef={kind === "editor" && !pinned ? titleRef : undefined}
+      help={kind === "editor" || (kind === "root" && !titleHidden) ? helpMark : undefined}
+      titleRef={(kind === "editor" || kind === "root") && !pinned ? titleRef : undefined}
+      // #3031 «А» (answer #3050): a tab's root has its title in the row, next to the avatar
+      root={kind === "root" && !titleHidden ? { title, titlePress: head?.kind === "root" ? head.titlePress : undefined } : undefined}
     />
   );
   // the big block 64 (root, object; an editor on 820/1280 with the pinned bar has its title here too)
@@ -840,7 +842,7 @@ export function Screen({
         trailing={head?.kind === "root" ? head.trailing : undefined}
         sub={objHead?.sub}
         expand={objHead?.expand}
-        help={helpMark}
+        help={kind === "root" ? undefined : helpMark}
       />
     );
   const header = (
