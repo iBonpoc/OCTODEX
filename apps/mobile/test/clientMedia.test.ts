@@ -1,6 +1,8 @@
 /** #3076 «Фото и файлы» клиента: the photos by visit (the newest first), a visit's photo kept as a file row counted once, the filter. */
 import { describe, expect, it } from "vitest";
 import { clientMediaOf, filterMedia, mediaChoices } from "../src/features/client/clientMedia";
+import { component, space } from "@octo/design-tokens";
+import { gridTile } from "../src/features/photoGrid";
 import type { FileItem, Job, Property, Visit } from "../src/data/types";
 
 const job = (id: string, propertyId: string): Job => ({ id, propertyId, title: id, status: "scheduled", amountCents: 0, customerId: "c1" }) as Job;
@@ -47,5 +49,19 @@ describe("filterMedia / mediaChoices", () => {
     const props = [prop("p1"), prop("p2"), prop("p3")];
     expect(mediaChoices(m, props, jobs, null).properties.map((p) => p.id)).toEqual(["p1", "p2"]);
     expect(mediaChoices(m, props, jobs, "p1").jobs.map((j) => j.id)).toEqual(["j1"]);
+  });
+});
+
+describe("gridTile (#3076: 4 in a row on a phone, more where photoThumb fits)", () => {
+  it("a phone: 4 tiles fill the width", () => {
+    const w = 334;
+    const s = gridTile(w);
+    expect(s).toBeGreaterThanOrEqual(component.photoThumb);
+    expect(4 * s + 3 * space[2]).toBeLessThanOrEqual(w);
+  });
+  it("a wide card: more columns, a tile never under photoThumb", () => {
+    const s = gridTile(900);
+    expect(s).toBeGreaterThanOrEqual(component.photoThumb);
+    expect(Math.floor((900 + space[2]) / (s + space[2]))).toBeGreaterThan(4);
   });
 });

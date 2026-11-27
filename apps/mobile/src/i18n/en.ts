@@ -5765,5 +5765,7 @@ export const en: Dict = {
   "c3076.k.receipt": "Receipt",
   "c3076.k.signature": "Signature",
   "c3076.k.drawing": "Drawing",
+  "c3076.ds.grid": "Photo grid",
+  "c3076.ds.gridHint": "The same thumbnails in rows, as in iOS Photos: the client's «Photos and files». A tap opens the photo.",
   "c3076.k.document": "Document",
 };
