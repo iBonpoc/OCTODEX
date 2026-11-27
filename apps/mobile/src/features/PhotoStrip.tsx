@@ -1,8 +1,9 @@
-import { useRef, useState, type ReactNode } from "react";
-import { Image, ScrollView, View } from "react-native";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Image, ScrollView, View, type ScrollViewInstance } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { liveUri, madeHere } from "./photoUri";
 import { gridTile } from "./photoGrid";
+import { needsPut, offsetOf, pageOf, stepPage } from "./photoPager";
 import { prepPicked, type PickedPhoto } from "@/data/photoShrink";
 import { canRetry, isPrepFail } from "@/data/photoUpload";
 import { useStore } from "@/data/store";
@@ -19,7 +20,7 @@ import { ListRow } from "@/ui/surfaces";
 const THUMB = component.photoThumb;
 
 /** Before/after photos. Camera on a phone; library/file picker on web. Tap a photo to view it or delete it. */
-export function PhotoStrip({ grid, photos, onAdd, onAddPreparing, onRemove, onRetry, onPrepare, title }: { /** #3076: the thumbnails wrap into rows (a grid, as iOS «Фото») instead of one strip that scrolls sideways — the client's «Фото и файлы» */ grid?: boolean; photos: Photo[]; /** none: the photos are only shown (no «Добавить фото» tile). Only a file made anew here (#1558) — never the original */ onAdd?: (uri: string, small?: true) => void; /** #1558: a photo that could not be made anew yet — kept on this phone as «preparing»; none: it is not added (a toast says to add it again) */ onAddPreparing?: (p: Extract<PickedPhoto, { preparing: unknown }>) => void; /** #1558 «Подготовить снова» on an «unreadable» photo (none: the store finds the visit by the photo) */ onPrepare?: (id: string) => void; onRemove?: (id: string) => void; /** #1431 «Повторить» on a photo the cloud did not take (its file is on this phone) */ onRetry?: (id: string) => void; /** the viewer's title when the photos are not a visit's before / after (a module's measurement) */ title?: string }) {
+export function PhotoStrip({ grid, caption, photos, onAdd, onAddPreparing, onRemove, onRetry, onPrepare, title }: { /** #3082: a line under the viewer's title — where the photos are from («выезд · дата · мастер») */ caption?: string; /** #3076: the thumbnails wrap into rows (a grid, as iOS «Фото») instead of one strip that scrolls sideways — the client's «Фото и файлы» */ grid?: boolean; photos: Photo[]; /** none: the photos are only shown (no «Добавить фото» tile). Only a file made anew here (#1558) — never the original */ onAdd?: (uri: string, small?: true) => void; /** #1558: a photo that could not be made anew yet — kept on this phone as «preparing»; none: it is not added (a toast says to add it again) */ onAddPreparing?: (p: Extract<PickedPhoto, { preparing: unknown }>) => void; /** #1558 «Подготовить снова» on an «unreadable» photo (none: the store finds the visit by the photo) */ onPrepare?: (id: string) => void; onRemove?: (id: string) => void; /** #1431 «Повторить» on a photo the cloud did not take (its file is on this phone) */ onRetry?: (id: string) => void; /** the viewer's title when the photos are not a visit's before / after (a module's measurement) */ title?: string }) {
   const { c } = useTheme();
   const { t } = useI18n();
   const toast = useToast();
@@ -34,6 +35,12 @@ export function PhotoStrip({ grid, photos, onAdd, onAddPreparing, onRemove, onRe
   // and a console error otherwise)
   const shown = photos.map((p) => ({ ...p, uri: liveUri(p.uri) }));
   const open = opened ? { ...opened, uri: liveUri(opened.uri) } : null;
+  // the viewer's title: the kind (or the owner's title) and, with more than one, «3 из 5» (#3082)
+  const viewTitle = (p: Photo | undefined, count = false) => {
+    const kind = title ?? (p?.kind === "after" ? t("visit.photosAfter") : t("visit.photosBefore"));
+    const i = p ? shown.findIndex((x) => x.id === p.id) : -1;
+    return count && shown.length > 1 && i >= 0 ? `${kind} · ${t("photo.nOf", { n: i + 1, total: shown.length })}` : kind;
+  };
   // #1431: photos the cloud did not take — said under the strip (StatusNote) and, with the reason, in the viewer
   // #1558: a photo «preparing» is not a failure — it goes on its own (its own note, info)
   const failedList = shown.filter((p) => p.upload && p.upload.failed !== "preparing");
@@ -118,14 +125,16 @@ export function PhotoStrip({ grid, photos, onAdd, onAddPreparing, onRemove, onRe
           {p.uri ? <Image source={{ uri: p.uri }} style={{ width: tile, height: tile }} /> : <Icon name="image" s={size.iconLg} color={c.mut} />}
         </Press>
       ))}
-      <Sheet visible={!!open} onClose={() => setOpen(null)} title={title ?? (open?.kind === "after" ? t("visit.photosAfter") : t("visit.photosBefore"))}>
-        <View style={{ height: component.mediaH * 2, borderRadius: radius.inner, overflow: "hidden", backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
-          {open?.uri ? (
-            <Image source={{ uri: open.uri }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
-          ) : (
-            <Icon name="image" s={size.iconLg} color={c.mut} />
-          )}
-        </View>
+      <Sheet visible={!!open} onClose={() => setOpen(null)} height="large" title={open ? viewTitle(open, true) : undefined}>
+        {caption ? (
+          <View testID="photo-view-caption">
+            <T v="caption" tone="mut">
+              {caption}
+            </T>
+          </View>
+        ) : null}
+        {/* #3082: the strip's photos page sideways (as iOS «Фото»); the title says «N из M» */}
+        <Pager photos={shown} at={Math.max(0, shown.findIndex((p) => p.id === open?.id))} onAt={(i) => shown[i] && shown[i]!.id !== open?.id && setOpen(shown[i]!)} label={(i) => viewTitle(shown[i])} />
         {open && openFailed?.failed === "preparing" ? (
           <StatusNote tone="info" v="body" testID="photo-prep-reason">
             {t("photoUp.prep.reason")}
@@ -209,3 +218,61 @@ function Strip({ grid, onWidth, children }: { grid?: boolean; onWidth: (w: numbe
   );
 }
 
+
+/**
+ * #3082 the viewer's photos side by side, one page each: a swipe (a paging scroll, the phone's own) moves to the next; the page
+ * shown follows the photo asked for (a tap on a thumbnail, «следующий не загружен», a rotation). VoiceOver: «adjustable» —
+ * swipe up / down for the next / the one before. The math is photoPager.ts.
+ */
+function Pager({ photos, at, onAt, label }: { photos: Photo[]; at: number; onAt: (i: number) => void; label: (i: number) => string }) {
+  const { c } = useTheme();
+  const [w, setW] = useState(0);
+  const ref = useRef<ScrollViewInstance>(null);
+  // the page in view (set by the scroll) and the width it was put there at; -1 — not put yet
+  const shownAt = useRef(-1);
+  const putAtW = useRef(0);
+  // the page asked for from outside (a tap, «следующий не загружен») or a new width: put it in view at once, without an animation.
+  // A page the swipe itself reached is already in view — scrolling there again would fight the finger (pageMoves in photoPager)
+  useEffect(() => {
+    if (!w || !needsPut(at, shownAt.current, w, putAtW.current)) return;
+    shownAt.current = at;
+    putAtW.current = w;
+    ref.current?.scrollTo({ x: offsetOf(at, w), animated: false });
+  }, [at, w]);
+  const h = component.mediaH * 2;
+  return (
+    <View
+      onLayout={(e) => setW(e.nativeEvent.layout.width)}
+      style={{ height: h, borderRadius: radius.inner, overflow: "hidden", backgroundColor: c.surf2 }}
+      accessible
+      accessibilityRole="adjustable"
+      accessibilityLabel={label(at)}
+      accessibilityValue={{ min: 1, max: photos.length, now: at + 1 }}
+      accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
+      onAccessibilityAction={(e) => onAt(stepPage(at, e.nativeEvent.actionName === "increment" ? 1 : -1, photos.length))}
+      testID="photo-pager"
+    >
+      <ScrollView
+        ref={ref}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        scrollsToTop={false}
+        scrollEventThrottle={16}
+        onScroll={(e) => {
+          const i = pageOf(e.nativeEvent.contentOffset.x, w, photos.length, Math.max(0, shownAt.current));
+          if (i !== shownAt.current) {
+            shownAt.current = i;
+            onAt(i);
+          }
+        }}
+      >
+        {photos.map((p) => (
+          <View key={p.id} style={{ width: w, height: h, alignItems: "center", justifyContent: "center" }} testID={`photo-page-${p.id}`}>
+            {p.uri ? <Image source={{ uri: p.uri }} style={{ width: "100%", height: "100%" }} resizeMode="contain" /> : <Icon name="image" s={size.iconLg} color={c.mut} />}
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}

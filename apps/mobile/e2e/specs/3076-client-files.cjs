@@ -59,9 +59,18 @@ exports.run = async (h) => {
 
   // a photo opens the viewer (read-only here: no «Удалить»)
   await p.getByTestId("photo-thumb-ph3").locator("visible=true").first().click();
-  await h.expectText(/Фото после/, "the viewer of an after photo");
+  // #3082: «N из M» in the title, where the photos are from under it
+  await h.expectText(/Фото после · 3 из 3/, "the viewer of an after photo, 3rd of the visit's 3");
+  h.expect(/Bathroom remodel/.test(await h.sheet().getByTestId("photo-view-caption").innerText()), "the caption names the job");
   h.expect((await h.sheet().getByRole("button", { name: /Удалить/ }).count()) === 0, "no delete in the client's files");
   await h.shot(3);
+  // #3082: paging sideways (a swipe on the phone; the same scroll here) — the title follows the page
+  await h.sheet().getByTestId("photo-pager").locator("div").filter({ has: p.getByTestId("photo-page-ph1") }).last().evaluate((el) => {
+    let s = el;
+    while (s && s.scrollWidth <= s.clientWidth) s = s.parentElement;
+    s.scrollTo({ left: 0 });
+  });
+  await h.expectText(/Фото до · 1 из 3/, "paged to the first photo");
   await pressEscUntilClosed(p);
 
   // the visit's row «›» opens the visit
