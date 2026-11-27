@@ -466,7 +466,7 @@ export function ClientVisits({ f }: { f: ClientFacts }) {
 }
 
 export function ClientWork({ f }: { c: Customer; f: ClientFacts }) {
-  const { t, money, day } = useI18n();
+  const { t, tn, money, day } = useI18n();
   const when = useWhen();
   const { db, r, office } = f;
   if (f.role === "tech") {
@@ -475,30 +475,38 @@ export function ClientWork({ f }: { c: Customer; f: ClientFacts }) {
   }
   const live = r.jobs.filter((j) => !j.cancelledAt && j.status !== "done");
   const closed = r.jobs.filter((j) => j.status === "done" || j.cancelledAt);
-  // one job, one group: its row and its visits under it (the estimate and the invoices are their own sections — nothing twice)
-  const project = (j: Job) => {
+  // #3060 (founder 27.11: «всё в одном блоке слито»; design + crm review): each job is its own frame; its visits are a line under it —
+  // «2 выезда · следующий вс, 29 нояб.» — the list of visits itself is the section «Выезды» (nothing twice)
+  const visitsLine = (j: Job) => {
     const vis = f.visits.filter((v) => v.jobId === j.id);
-    return (
-      <ListGroup key={j.id} testID={`client-project-${j.id}`}>
-        <GroupRow
-          testID={`client-job-${j.id}`}
-          lead={{ icon: "wrench" }}
-          title={j.title || j.number || t("cc.kind.job")}
-          subtitle={[t(jobStatusView[j.status].label), j.number, r.properties.length > 1 ? placeName(db, j) : null].filter(Boolean).join(" · ")}
-          value={office ? money(j.amountCents) : undefined}
-          onPress={() => router.push(`/job/${j.id}`)}
-        />
-        {vis.map((v) => (
-          <GroupRow compact key={v.id} testID={`client-visit-${v.id}`} lead={{ icon: "calendar" }} title={when(v.start)} subtitle={memberName(db, v.techId, t)} onPress={() => router.push(`/visit/${v.id}`)} />
-        ))}
-      </ListGroup>
-    );
+    if (!vis.length) return undefined;
+    const now = Date.now();
+    const next = vis.filter((v) => Date.parse(v.start) >= now).sort((a, b) => a.start.localeCompare(b.start))[0];
+    const last = vis.filter((v) => Date.parse(v.start) < now).sort((a, b) => b.start.localeCompare(a.start))[0];
+    const at = next ? t("c3060.nextVisit", { when: day(next.start) }) : last ? t("c3060.lastVisit", { when: day(last.start) }) : null;
+    return [tn("px1.visitsN", vis.length, { n: vis.length }), at].filter(Boolean).join(" · ");
   };
+  const project = (j: Job) => (
+    <GroupRow
+      key={j.id}
+      testID={`client-job-${j.id}`}
+      lead={{ icon: "wrench" }}
+      title={j.title || j.number || t("cc.kind.job")}
+      subtitle={[t(jobStatusView[j.status].label), j.number, r.properties.length > 1 ? placeName(db, j) : null].filter(Boolean).join(" · ")}
+      extra={visitsLine(j)}
+      // the sum in the name's own line (#3033), so the visits' line under it is not cut on 390
+      valueTop
+      value={office ? money(j.amountCents) : undefined}
+      onPress={() => router.push(`/job/${j.id}`)}
+    />
+  );
   return (
     <View style={{ gap: space[4] }} testID="client-work">
       {r.jobs.length === 0 && r.leads.length === 0 ? <Empty icon="wrench" title={t("client.empty.jobs")} hint={t("proto.client.noJobsHint")} /> : null}
       <GroupedList>
-        {live.map(project)}
+        <ListGroup separate testID="client-projects">
+          {live.map(project)}
+        </ListGroup>
         <ListGroup separate title={t("w2b.client.closedJobs", { n: closed.length })} testID="client-closed-jobs">
           {closed.map((j) => (
             <GroupRow

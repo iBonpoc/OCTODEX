@@ -5842,4 +5842,9 @@ export const en: Dict = {
   "ov3068.stories.many": "{n} stories",
   "ov3068.stories.other": "{n} stories",
   "ov3061.all": "All",
+  // #3060 «Работы»: the visits of a job as a line under it
+  "c3060.nextVisit": "next {when}",
+  "c3060.lastVisit": "last {when}",
+  "ds.proto.separate": "Each record — its own frame",
+  "ds.proto.separateExtra": "2 visits · next Sun, Nov 29",
 };
