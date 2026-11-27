@@ -13,8 +13,10 @@ exports.run = async (h) => {
   await h.go("/clients");
   const db = await h.db();
   const row = (id) => p.getByTestId(`client-row-${id}`).locator("visible=true").first();
-  // #2888: the app shows money always with cents (founder #2672)
-  const usd = (n) => "$" + (n / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // #3029/#3030 (founder 27.11): a list row is an overview — whole dollars
+  const usd = (n) => (n < 100 ? "$" + (n / 100).toFixed(2) : "$" + Math.floor((n + 50) / 100).toLocaleString("en-US"));
+  // #3033 (founder 27.11): the row's status is an icon without a word — its words are the icon's label (VoiceOver)
+  const said = async (id) => (await row(id).locator('[data-testid="row-status-icon"]').first().getAttribute("aria-label").catch(() => null)) ?? "";
   const cents = (c) => {
     const inv = db.invoices.filter((i) => i.customerId === c.id && !i.void);
     const owed = inv.reduce((s, i) => s + Math.max(0, i.totalCents - i.paidCents), 0);
@@ -59,7 +61,8 @@ exports.run = async (h) => {
   }, { ids: late.map((i) => i.id), due: addDays(todayKey(), -9) });
   await h.go("/clients");
   const lateTxt = await row(owes.id).innerText();
-  h.expect(/(^|\s)9 дн(\s|$)/.test(lateTxt) && money(lateTxt).length === 1, `overdue sign «9 дн» and still one figure: ${lateTxt.slice(0, 200)}`);
+  const lateSaid = await said(owes.id);
+  h.expect(/9 дн/.test(lateSaid) && !/Просрочен/.test(lateTxt) && money(lateTxt).length === 1, `overdue: the icon says «… 9 дн» (${lateSaid}), no word on the row, still one figure: ${lateTxt.slice(0, 200)}`);
   await h.shot("overdue");
 
   // the chips: one row, one checked, an empty filter has no «0»
@@ -82,7 +85,7 @@ exports.run = async (h) => {
   await h.go("/clients");
   await listChip(p, "clients", /^Потенциальные \d+$/).click();
   await row(target.id).waitFor();
-  h.expect(/Потенциальный/.test(await row(target.id).innerText()), "the prospect's status on its row");
+  h.expect(/Потенциальный/.test(await said(target.id)), "the prospect's status — its icon, said in words");
   // a long press opens the row's actions (the same as the swipe and VoiceOver's actions)
   const box = await row(target.id).boundingBox();
   await p.mouse.move(box.x + box.width / 3, box.y + box.height / 2);
