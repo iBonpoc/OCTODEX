@@ -11,6 +11,7 @@ import { canSeeClientDups, clientDuplicates } from "@/features/clientDuplicates"
 import { clientListGroups } from "@/features/clientGroups";
 import { dayOffsetOf, isoDayKey } from "@/features/calendar";
 import { smsHref, telHref } from "@/features/contactLinks";
+import { shortAddress } from "@/features/shortAddress";
 import { pickerOptions } from "@/features/statusMoves";
 import { useI18n } from "@/i18n";
 import { ClientOverview, useAgo, useClientFacts } from "@/features/client/ClientSections";
@@ -100,11 +101,12 @@ export default function Clients() {
     const prop = db.properties.find((p) => p.customerId === c.id);
     // #3017 (founder 27.11: «я знаю его по адресу»): line 2 — the address; line 3 — what is going on: the next visit, else what
     // happened last; no line for what is not there (no «—»)
-    const addr = prop ? [prop.address, prop.city].filter(Boolean).join(", ") : undefined;
+    const addr = prop ? shortAddress(prop.address, prop.city) : undefined;
     const line = next
       ? [`${nextDay} ${time(next.start)}`, db.jobs.find((j) => j.id === next.jobId)?.title ?? t("plan.kind.inspection")].join(" · ")
       : last
-        ? [ago(last.at), t(last.title), last.detail].filter(Boolean).join(" · ")
+        // what happened first, then when: «Оплата · RCT-0104 · сегодня» never reads as a deed for today (crm-review 27.11)
+        ? [t(last.title), last.detail, ago(last.at).toLowerCase()].filter(Boolean).join(" · ")
         : undefined;
     const tel = telHref(c.phone);
     const toArchive = office && pickerOptions("customer", st).find((o) => o.status === "archived" && o.enabled && o.how !== "form");
@@ -116,7 +118,8 @@ export default function Clients() {
       ...(toArchive ? [{ key: "archive", label: t("swipe.archive"), icon: "box" as const, tone: "bad" as const, testID: `client-row-swipe-archive-${c.id}`, onPress: () => archive(c) }] : []),
     ];
     const status = overdue
-      ? { status: "bad" as const, label: t("proto.client.lateDays", { d: overdue.days }) }
+      // the word with the figure (rule 2, design-review 27.11): «Просрочен 9 дн», not a bare «9 дн»
+      ? { status: "bad" as const, label: t("w2m.due.late", { d: overdue.days }) }
       : st !== "active"
         ? { status: clientStatusChip[st].s, label: t(clientStatusChip[st].l) }
         : dups.get(c.id)?.length
@@ -134,7 +137,8 @@ export default function Clients() {
       // one money figure: the debt; none — a call icon (BUILD-SPEC §2.3 table)
       value: m && m.owesCents > 0 ? money(m.owesCents) : undefined,
       status,
-      actions: !m?.owesCents && !status && tel ? [{ icon: "phone" as const, a11y: `${t("client.call")} ${c.name}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c.phone ?? "" }), testID: `client-row-call-${c.id}` }] : undefined,
+      // #3017: the call stays for a debtor too — they are called most (crm-review 27.11)
+      actions: tel ? [{ icon: "phone" as const, a11y: `${t("client.call")} ${c.name}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c.phone ?? "" }), testID: `client-row-call-${c.id}` }] : undefined,
       swipe: { left: swipeLeft, right: swipeRight },
       onPress: () => panel.open(c.id),
       selected: panel.openId === c.id,

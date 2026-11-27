@@ -4,6 +4,7 @@ import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useListPanel } from "@/nav/listPanel";
 import { ListPanel } from "@/ui/listPanel";
 import { LeadObject, leadSectionOf, type LeadSectionKey } from "@/features/lead/LeadCard";
+import { shortAddress } from "@/features/shortAddress";
 import { useStore } from "@/data/store";
 import { usePersistentState } from "@/data/persist";
 import type { Lead } from "@/data/types";
@@ -135,11 +136,12 @@ function LeadsList() {
       // #3017 (founder 27.11): line 1 — the name and the phone; line 2 — the address; line 3 — what is going on (how long the client
       // waits first, wireframes №16; late — the pill on the right, leadWaitPlace). No line for what is not there (no «—»)
       titleNote: l.phone || undefined,
-      subtitle: [l.address, l.city].filter(Boolean).join(", ") || undefined,
+      subtitle: shortAddress(l.address, l.city),
       extra: [place === "line" ? wait : null, leadRowLine({ ...l, city: "" }, turn, { t, day, source: sourceName(db, l.sourceId) })].filter(Boolean).join(" · ") || undefined,
       lead: { initials: initials(l.name) },
       // a closed or won lead says its status
-      status: wait && place === "pill" ? { status: turn.status, label: wait } : !isOpenLead(l) ? { status: sv.status, label: t(sv.label) } : undefined,
+      // the word with the figure (rule 2, design-review 27.11): «Без ответа 22 мин», not a bare «22 мин»
+      status: wait && place === "pill" ? { status: turn.status, label: t("lead.waiting", { time: wait }) } : !isOpenLead(l) ? { status: sv.status, label: t(sv.label) } : undefined,
       actions:
         isOpenLead(l) && tel
           ? [
