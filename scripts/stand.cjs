@@ -115,6 +115,7 @@ function mergeAll({ mainSha, order, deps = {}, merge, exclude = {} }) {
     if (d != null && out.has(d)) { skipped.push({ number: pr.number, sha: pr.sha, reason: `зависит от #${d}, он не вошёл` }); out.add(pr.number); continue; }
     const r = merge(current, pr);
     if (r.ok) { current = r.commit; included.push(pr); continue; }
+    if (r.reason) { skipped.push({ number: pr.number, sha: pr.sha, reason: r.reason }); out.add(pr.number); continue; }
     const files = [...new Set(r.files || [])].sort();
     const with_ = included.filter((p) => (p.files || []).some((f) => files.includes(f))).map((p) => `#${p.number}`);
     const list = files.length ? `, файлы ${files.slice(0, 5).map(md).join(", ")}${files.length > 5 ? ` и ещё ${files.length - 5}` : ""}` : "";
@@ -219,6 +220,9 @@ function gitMerger(cwd, date) {
       const out = String(err.stdout || "").split("\n").map((x) => x.trim()).filter(Boolean);
       return { ok: false, files: [...new Set(out.slice(1))] };
     }
+    // by the tree, not by the API's file list (it stops at 3000 files): what the merge adds under .github/workflows
+    const wf = git(["diff", "--name-only", base, tree, "--", ".github/workflows"]).split("\n").map((x) => x.trim()).filter(Boolean);
+    if (wf.length) return { ok: false, reason: `меняет .github/workflows (${wf.slice(0, 3).map(md).join(", ")}) — на стенд такие не берутся` };
     const commit = git(["commit-tree", tree, "-p", base, "-p", pr.sha, "-m", `stand: #${pr.number} ${pr.sha.slice(0, 7)}`]).trim();
     return { ok: true, commit };
   };

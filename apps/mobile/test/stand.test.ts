@@ -200,6 +200,14 @@ describe("stand: the real git merges (merge-tree, commit-tree) on a throw-away r
     expect(git("show", `${r.stand}:a.ts`)).toBe("a1");
     expect(git("show", `${r.stand}:c.ts`)).toBe("c");
     expect(S.mergeAll({ mainSha: main, order, merge }).stand).toBe(r.stand);
+    // a PR that changes .github/workflows is left out by the merged tree itself, whatever the API's file list said
+    git("checkout", "-q", "-b", "p4", main);
+    execFileSync("mkdir", ["-p", join(dir, ".github/workflows")]);
+    const h4 = commit({ ".github/workflows/x.yml": "on: push\n" }, "p4");
+    git("checkout", "-q", "main");
+    const r4 = S.mergeAll({ mainSha: main, order: [pr(4, { sha: h4, files: [] }), pr(5, { sha: h3, files: ["c.ts"] })], merge });
+    expect(nums(r4.included)).toEqual([5]);
+    expect(r4.skipped).toEqual([{ number: 4, sha: h4, reason: "меняет .github/workflows (.github/workflows/x.yml) — на стенд такие не берутся" }]);
     // a merge commit has both parents: main's history and the PR's
     expect(git("rev-list", "--parents", "-n", "1", r.stand).split(" ")).toHaveLength(3);
   });
