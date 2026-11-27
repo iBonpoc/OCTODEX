@@ -78,9 +78,7 @@ export default function CompanyModules() {
               <RowView>{pay}{disable}</RowView>
               <T v="caption" tone="mut">{t("mod.paySoon")}</T>
             </View>
-          ) : (
-            enable ?? disable
-          )}
+          ) : enable ? enable : disable}
         </Card>
         {/* the module's own places (spec 33 П20.3): its tools that save nothing show for everyone, on or off — rows «›», not buttons */}
         <ListGroup title={t("mod.places")} testID={`module-${d.key}-places`}>
