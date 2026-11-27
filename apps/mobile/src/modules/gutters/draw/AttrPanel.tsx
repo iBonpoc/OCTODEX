@@ -495,11 +495,12 @@ export function RunAttrsView({
       {forNew ? null : <Tape run={run} onLength={onLength} fmt={ch.lenFormat} />}
       <FieldRow>
         <SizePick key={`${run.id}.${a.profile}`} testID="attr-size" offered={ch.offer.sizes[a.profile]} sizes={sizes} known={SIZES_BY_PROFILE[a.profile]} label={inch} value={a.size} read={readOwnRunSize} hint="9″" onSize={(size) => onAttrs({ size })} />
-        {forNew ? null : <Choice label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />}
+        {/* «Для новых»: no storey — the colour takes its place, two short fields in one row (founder 27.11, #3015) */}
+        {forNew ? (MILL_ONLY.has(a.material) ? null : <ColorPick a={a} set={onAttrs} ch={ch} />) : <Choice label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />}
       </FieldRow>
       {/* the colour on a line of its own: in a row of three its name was cut to «Бе…» (design-review G1 PR2 №1, rule 2 — a sample always
           beside its whole name) */}
-      {MILL_ONLY.has(a.material) ? null : <ColorPick a={a} set={onAttrs} ch={ch} />}
+      {forNew || MILL_ONLY.has(a.material) ? null : <ColorPick a={a} set={onAttrs} ch={ch} />}
       {/* the profile by its cross-section (#2986): tiles, the names of the supplier's chart */}
       <Tiles label={t(k("profile"))} testID="attr-profile" items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)), icon: PROFILE_ICON[p] }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
       <More open0={false} id={run.id} label={t(k("moreRun"))}>
@@ -622,15 +623,18 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, run, forNew, no,
       <FieldRow>
         <SizePick key={`${ds.id}.${ds.shape}`} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} sizes={sizes} known={DS_SIZES[ds.shape]} label={dsSize} value={ds.size} read={(v) => readOwnDsSize(ds.shape, v)} hint={ds.shape === "round" ? "5″" : "3x5"} onSize={(size) => onAttrs({ size })} />
         {/* its own storey (G2 #2465): the length of the pipe follows it; written only when it differs from the gutter's (rule 16) */}
-        {forNew ? null : <Choice label={t(k("story"))} testID="attr-ds-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t(k("storyWin"), { n }) }))} value={String(dsStoryShown(ds, runStory)) as "1"} onChange={(n) => onAttrs(dsStoryPatch(runStory, Number(n)))} />}
+        {forNew ? (MILL_ONLY.has(ds.material) ? null : <ColorPick a={ds} set={onAttrs} ch={ch} run={run} />) : <Choice label={t(k("story"))} testID="attr-ds-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t(k("storyWin"), { n }) }))} value={String(dsStoryShown(ds, runStory)) as "1"} onChange={(n) => onAttrs(dsStoryPatch(runStory, Number(n)))} />}
       </FieldRow>
       {forNew ? null : <View testID="attr-ds-length-line"><T v="caption" tone="mut">{lenText}</T></View>}
       <Elbows ds={ds} onAttrs={onAttrs} />
       <Offsets ds={ds} onAttrs={onAttrs} />
+      {/* Низ · Верх: two short menus in one row (#3015) */}
+      <FieldRow>
       <Choice label={t(k("bottom"))} testID="attr-bottom" offered={ch.offer.bottoms} items={bottoms.map((b) => ({ key: b, label: t(k(`b.${b}`)), top: b === "none" }))} value={ds.bottom.kind} onChange={(kind) => onAttrs({ bottom: { ...ds.bottom, kind } })} />
       <Choice label={t(k("head"))} testID="attr-head" items={DS_HEADS.map((h) => ({ key: h, label: t(k(`h.${h}`)), top: h === "none" }))} value={head} onChange={(h) => onAttrs({ head: h === "none" ? undefined : h, funnel: undefined })} />
+      </FieldRow>
       <More open0={dsMoreSet(ds, run)} id={ds.id} label={t(k("moreDs"))}>
-        {MILL_ONLY.has(ds.material) ? null : <ColorPick a={ds} set={onAttrs} ch={ch} run={run} />}
+        {forNew || MILL_ONLY.has(ds.material) ? null : <ColorPick a={ds} set={onAttrs} ch={ch} run={run} />}
         <Stock a={ds} set={onAttrs} ch={ch} />
         <DsLength key={ds.id} ds={ds} onAttrs={onAttrs} />
         <DsRare key={`rare-${ds.id}`} ds={ds} onAttrs={onAttrs} />
