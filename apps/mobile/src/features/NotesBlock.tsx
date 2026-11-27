@@ -48,7 +48,6 @@ export function NotesBlock({ subjectType, subjectId, extraSubjects = [] }: { sub
                   {[author, `${day(n.at)} ${time(n.at)}`].filter(Boolean).join(" · ")}
                 </T>
                 {n.visibility === "private" ? <StatusChip status="neutral" label={t("notes.private")} /> : null}
-                {n.pinned ? <StatusChip status="info" label={t("notes.pinned")} /> : null}
               </RowView>
               <IconButton icon="pushpin" label={n.pinned ? t("notes.unpin") : t("notes.pin")} active={!!n.pinned} onPress={() => store.updateNote(n.id, { pinned: !n.pinned })} />
               {mine ? (
