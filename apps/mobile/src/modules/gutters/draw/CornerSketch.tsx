@@ -74,12 +74,12 @@ export function CornerSketch({ d, f, cut, w, angleDeg, fmt = "ftin" }: { d: Draw
    * a chip along a line (founder 09.11: the numbers overlapped): at the line's middle, turned with it (kept upright),
    * pushed off it along the normal `nu` (±1) by half its height and `gap`
    */
-  const chipBy = (mx: number, my: number, _u: [number, number], nu: [number, number], sign: 1 | -1, text: string, strong: boolean, key: string, gap: number) => {
-    // always level (#3071, design review №15: a turned number is hard to read on a phone — these are the sizes to cut by): the chip
-    // stands off the line by its own half-extent along the normal — half its width beside an upright gutter, half its height by a level one
-    const tw = labelWidth(text, FS, space[2]);
-    const reach = Math.abs(nu[0]) * (tw / 2) + Math.abs(nu[1]) * (th / 2) + gap;
-    return chip(mx + nu[0] * reach * sign, my + nu[1] * reach * sign, text, strong, key, 0);
+  const chipBy = (mx: number, my: number, u: [number, number], nu: [number, number], sign: 1 | -1, text: string, strong: boolean, key: string, gap: number) => {
+    const reach = th / 2 + gap;
+    let deg = (Math.atan2(u[1], u[0]) * 180) / Math.PI;
+    if (deg > 90) deg -= 180;
+    if (deg < -90) deg += 180;
+    return chip(mx + nu[0] * reach * sign, my + nu[1] * reach * sign, text, strong, key, deg);
   };
   const chip = (x: number, y: number, text: string, strong: boolean, key: string, deg = 0) => {
     const tw = labelWidth(text, FS, space[2]);
