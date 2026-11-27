@@ -9,6 +9,8 @@ import { checklistFor } from "@/features/checklist";
 import { DEMO_ZONE, demoToday, wallToInstant } from "@/features/zone";
 import { translate, type Lang } from "@/i18n/translate";
 import type { DictKey } from "@/i18n/ru";
+import { testClient } from "./seedTestClient";
+import { withModuleDemos } from "@/modules/registry";
 
 /** Test catalog for several trades. All prices are PLACEHOLDERS (badge "test price"). */
 const S = (id: string, name: string, unit: string, priceCents: number, kind: "service" | "labor" = "service"): CatalogItem => ({
@@ -170,8 +172,17 @@ export const DEMO_COMPANY: Company = {
 
 /** `lang` — the app's language when the demo starts: the demo checklist template comes in it (#1223) */
 export function makeSeed(lang: Lang = "en"): DB {
+  const { db, demo } = baseSeed(lang);
+  // #3024: each module adds its own part to the test client (ModuleDef.demo)
+  return withModuleDemos(db, demo);
+}
+/** the core's demo without the modules' parts (ModuleDef.demo) — for tests of a module that start from an empty slice */
+export const makeCoreSeed = (lang: Lang = "en"): DB => baseSeed(lang).db;
+function baseSeed(lang: Lang): { db: DB; demo: import("@/modules/registry").DemoClient } {
   const tpl = demoTemplate(lang);
-  return {
+  // #3024: one client with everything filled in (seedTestClient.ts)
+  const tc = testClient({ at, daysAgo, minutesAgo, hoursFromNow }, (prefix) => jobChecklist(tpl, prefix));
+  return { demo: tc.demo, db: {
     me: "m-alex",
     sources: SEED_SOURCES,
     tags: SEED_TAGS,
@@ -180,7 +191,7 @@ export function makeSeed(lang: Lang = "en"): DB {
     cancelledJobs: [],
     jobTypes: SEED_JOB_TYPES,
     files: [],
-    jobLines: [],
+    jobLines: tc.jobLines,
     calendarEvents: [],
     customFields: [],
     customFieldValues: [],
@@ -190,10 +201,12 @@ export function makeSeed(lang: Lang = "en"): DB {
     visitPoints: [],
     tasks: [
       { id: "t1", subjectType: "lead", subjectId: "l3", title: "Send the painting estimate", dueAt: hoursFromNow(20), assigneeId: "m-alex" },
+      ...tc.tasks,
     ],
     activities: [
       { id: "a1", subjectType: "lead", subjectId: "l3", kind: "call", at: minutesAgo(80), actorId: "m-alex" },
       { id: "a2", subjectType: "lead", subjectId: "l3", kind: "status", meta: { from: "new", to: "replied" }, at: minutesAgo(80), actorId: "m-alex" },
+      ...tc.activities,
     ],
     members: [
       { id: "m-alex", name: "Alex Petrov", initials: "AP", kind: "employee", roles: ["director", "dispatcher", "tech"], isOwner: true },
@@ -215,6 +228,7 @@ export function makeSeed(lang: Lang = "en"): DB {
       { id: "c5", number: "CLT-0005", name: "Maria Gonzalez", phone: "(562) 555-0133", sourceId: "src-website", balanceCents: 0 },
       { id: "c6", number: "CLT-0006", name: "James O'Connor", phone: "(424) 555-0199", sourceId: "src-google", balanceCents: 0 },
       { id: "c7", number: "CLT-0007", name: "Emily Park", phone: "(213) 555-0121", sourceId: "src-thumbtack", balanceCents: 0 },
+      tc.customer,
     ],
     properties: [
       { id: "p1", customerId: "c1", address: "1420 Oak Grove Ave", city: "Pasadena, CA 91103", stories: 2 },
@@ -225,6 +239,7 @@ export function makeSeed(lang: Lang = "en"): DB {
       { id: "p5", customerId: "c5", address: "3901 E 4th St", city: "Long Beach, CA 90814", stories: 1 },
       { id: "p6", customerId: "c6", address: "11350 Culver Blvd", city: "Culver City, CA 90230", stories: 3 },
       { id: "p7", customerId: "c7", address: "520 W Olive Ave", city: "Burbank, CA 91506", stories: 2 },
+      ...tc.properties,
     ],
     jobs: [
       { id: "j1", number: "JOB-0001", customerId: "c1", jobTypeId: "jt-install", propertyId: "p1", title: "Bathroom remodel: vanity, toilet, tile", status: "scheduled", amountCents: 342000, estimateId: "e5" },
@@ -234,6 +249,7 @@ export function makeSeed(lang: Lang = "en"): DB {
       { id: "j5", number: "JOB-0005", customerId: "c5", jobTypeId: "jt-service", propertyId: "p5", title: "Deep clean after move-out", status: "scheduled", amountCents: 156000 },
       { id: "j6", number: "JOB-0006", customerId: "c6", jobTypeId: "jt-install", propertyId: "p6", title: "Panel upgrade 200A", status: "scheduled", amountCents: 518000 },
       { id: "j8", number: "JOB-0008", customerId: "c1", jobTypeId: "jt-install", propertyId: "p1b", title: "TV mount + shelves", status: "done", amountCents: 24000 },
+      ...tc.jobs,
     ],
     checklistTemplates: [tpl],
     visits: [
@@ -270,6 +286,7 @@ export function makeSeed(lang: Lang = "en"): DB {
         id: "v7", jobId: "j1", techId: "m-alex", start: at(1, 9, 0), durationMin: 90, step: "scheduled",
         scope: ["Final walkthrough and touch-up"], checklist: [], photos: [], amountDueCents: 0,
       },
+      ...tc.visits,
     ],
     leads: [
       { id: "l1", number: "LEA-0001", assigneeId: "m-alex", name: "Kevin Brooks", phone: "(818) 555-0170", city: "Encino", sourceId: "src-thumbtack", receivedAt: minutesAgo(4), status: "new", costCents: 4500, service: "Water heater replacement", timeframe: "asap",
@@ -284,13 +301,14 @@ export function makeSeed(lang: Lang = "en"): DB {
       { id: "l5", number: "LEA-0005", assigneeId: "m-alex", name: "Linda Alvarez", phone: "(310) 555-0110", email: "lalvarez@example.com", city: "Santa Monica, CA 90405", address: "2207 Ocean Park Blvd",
         sourceId: "src-referral", receivedAt: daysAgo(17), lastActivityAt: daysAgo(16), status: "estimate_sent", customerId: "c3", propertyId: "p3",
         message: "Carpet removal, stair railing, a light fixture and haul-away after renovation." },
+      tc.lead,
     ],
     estimates: [
-      { id: "e1", customerId: "c6", propertyId: "p6", title: "Panel upgrade 200A", totalCents: 518000, status: "approved", sentAt: daysAgo(6), approvedAt: todayMinutesAgo(180) },
-      { id: "e2", customerId: "c7", propertyId: "p7", title: "Fence repair + new gate", totalCents: 298000, status: "sent", sentAt: daysAgo(3) },
-      { id: "e3", customerId: "c5", propertyId: "p5", title: "Deep clean after move-out", totalCents: 156000, status: "approved", sentAt: daysAgo(9), approvedAt: daysAgo(4) },
-      { id: "e4", customerId: "c3", propertyId: "p3", title: "Kitchen backsplash tile", totalCents: 264000, status: "sent", sentAt: daysAgo(6) },
-      { id: "e5", customerId: "c1", propertyId: "p1", title: "Bathroom remodel", totalCents: 342000, status: "approved", sentAt: daysAgo(12), approvedAt: daysAgo(8), depositCents: 34200, depositPaidAt: daysAgo(8) },
+      { id: "e1", number: "EST-0001", customerId: "c6", propertyId: "p6", title: "Panel upgrade 200A", totalCents: 518000, status: "approved", sentAt: daysAgo(6), approvedAt: todayMinutesAgo(180) },
+      { id: "e2", number: "EST-0002", customerId: "c7", propertyId: "p7", title: "Fence repair + new gate", totalCents: 298000, status: "sent", sentAt: daysAgo(3) },
+      { id: "e3", number: "EST-0003", customerId: "c5", propertyId: "p5", title: "Deep clean after move-out", totalCents: 156000, status: "approved", sentAt: daysAgo(9), approvedAt: daysAgo(4) },
+      { id: "e4", number: "EST-0004", customerId: "c3", propertyId: "p3", title: "Kitchen backsplash tile", totalCents: 264000, status: "sent", sentAt: daysAgo(6) },
+      { id: "e5", number: "EST-0005", customerId: "c1", propertyId: "p1", title: "Bathroom remodel", totalCents: 342000, status: "approved", sentAt: daysAgo(12), approvedAt: daysAgo(8), depositCents: 34200, depositPaidAt: daysAgo(8) },
       (() => {
         const doc = demoDoc();
         return {
@@ -298,6 +316,7 @@ export function makeSeed(lang: Lang = "en"): DB {
           sentAt: daysAgo(1), token: "demo0handyman0estimate0000000001", doc, ...summarize(doc),
         };
       })(),
+      ...tc.estimates,
     ],
     catalog: SEED_CATALOG,
     suppliers: SEED_SUPPLIERS,
@@ -318,6 +337,7 @@ export function makeSeed(lang: Lang = "en"): DB {
     notes: [
       { id: "n1", subjectType: "customer", subjectId: "c1", body: "Gate code 4512. Small dog in the backyard — call before entering.", visibility: "team", pinned: true, authorId: "m-alex", at: daysAgo(10) },
       { id: "n2", subjectType: "customer", subjectId: "c1", body: "Pays fast, asks for a discount every time.", visibility: "private", pinned: false, authorId: "m-alex", at: daysAgo(5) },
+      ...tc.notes,
     ],
     expenses: [
       { id: "x1", jobId: "j5", vendor: "Home Depot", category: "materials", amountCents: 41260, at: minutesAgo(300), memberId: "m-ivan" },
@@ -332,11 +352,13 @@ export function makeSeed(lang: Lang = "en"): DB {
       { id: "i4", number: "INV-0104", title: "Final balance", kind: "final", customerId: "c5", jobId: "j5", totalCents: 78000, paidCents: 78000, dueDate: daysAgo(0), paidAt: minutesAgo(60), method: "check", sentAt: daysAgo(1) },
       // contract EST "Bathroom remodel" $3,420: deposit invoiced and paid
       { id: "i5", number: "INV-0105", title: "Deposit", kind: "deposit", customerId: "c1", jobId: "j1", totalCents: 34200, paidCents: 34200, dueDate: daysAgo(8), paidAt: daysAgo(8), method: "card", sentAt: daysAgo(8) },
+      ...tc.invoices,
     ],
     payments: [
       { id: "pay3", invoiceId: "i3", customerId: "c1", amountCents: 24000, method: "zelle", at: todayMinutesAgo(140), receiptNumber: "RCT-0103", receivedBy: "m-ivan" },
       { id: "pay4", invoiceId: "i4", customerId: "c5", amountCents: 78000, method: "check", at: todayMinutesAgo(60), receiptNumber: "RCT-0104", reference: "Check #1042", receivedBy: "m-alex" },
       { id: "pay5", invoiceId: "i5", customerId: "c1", amountCents: 34200, method: "card", at: daysAgo(8), receiptNumber: "RCT-0102", receivedBy: "m-alex" },
+      ...tc.payments,
     ],
-  };
+  } };
 }

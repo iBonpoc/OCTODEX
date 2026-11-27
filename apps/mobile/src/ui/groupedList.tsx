@@ -191,6 +191,8 @@ export interface GroupRowProps {
   /** #3018 (design/crm review): a money list keeps its sum on the right, big — a column read top to bottom (Jobber, Wallet); with
    *  `titleNote` and without it the sum goes to line 3 (clients, leads, jobs: the right side is the call) */
   figureRight?: boolean;
+  /** #3033: the sum in the name's own line, at the right end (with the status icon when there is one) — the clients' list */
+  valueTop?: boolean;
   /** the line under the title: «работа · адрес · когда» */
   subtitle?: string;
   lead?: RowLead;
@@ -200,7 +202,9 @@ export interface GroupRowProps {
    *  Сумма $1,840»; each but the last at least `figureRow.colW` wide (a floor, not a fixed width: a wide word «Просрочен 9 дн» widens its column, never overlaps the line — the subtitle shrinks and is cut with «…») */
   cols?: FigureCol[];
   /** a StatusPill on the right */
-  status?: { status: StatusName; label: string; draft?: boolean };
+  /** `iconOnly` (founder #3033, on the stand): the status as its icon only — the shape of the icon tells the state, not the colour alone;
+   *  the words are said to VoiceOver (`label`); beside the sum on the right («⊗ $1,840») */
+  status?: { status: StatusName; label: string; draft?: boolean; iconOnly?: boolean };
   /** small quick actions on the right (call, SMS): ≤ 2, the label names the object (П6) */
   actions?: IconAction[];
   /** the swipe (native): `left` — revealed by a swipe right, `right` — by a swipe left; the same on a long press and to VoiceOver */
@@ -225,7 +229,7 @@ export interface GroupRowProps {
  * The inside of a GroupRow — the lead, the title 15/600 over its line 13 `mut`, the figure or columns, a StatusPill and «›» — for a
  * row whose press is its owner's (an estimate's line: it opens in place, it is held to be carried). One look for every row (#2387).
  */
-export function GroupRowBody({ title, titleNote, extra, figureRight, subtitle, lead, value, cols, status, compact, wrap, selected, chevron, quiet, valueMark, padRight = space[4], below, ids }: Pick<GroupRowProps, "title" | "titleNote" | "extra" | "figureRight" | "subtitle" | "lead" | "value" | "cols" | "status" | "compact" | "wrap" | "selected" | "chevron" | "valueMark"> & {
+export function GroupRowBody({ title, titleNote, extra, figureRight, valueTop, subtitle, lead, value, cols, status, compact, wrap, selected, chevron, quiet, valueMark, padRight = space[4], below, ids }: Pick<GroupRowProps, "title" | "titleNote" | "extra" | "figureRight" | "valueTop" | "subtitle" | "lead" | "value" | "cols" | "status" | "compact" | "wrap" | "selected" | "chevron" | "valueMark"> & {
   /** a row that counts for nothing now (a hidden line, a line on the client's choice): the title and the figure `mut` */
   quiet?: boolean;
   padRight?: number;
@@ -236,6 +240,7 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, subtitle, l
 }) {
   const { c } = useTheme();
   const check = lead && "done" in lead ? lead : null;
+  const top = !!value && !titleNote && (!!status?.iconOnly || !!valueTop);
   /** a column with a status word («Просрочен 9 дн», DS §3.3) is wide and never shrinks: the name takes a second line, the subtitle is cut first */
   const wordCol = !!cols?.some((x) => x.tone);
   const pad = { minHeight: compact ? component.rowCompact : component.listRow.h, paddingVertical: space[2], gap: space[3] };
@@ -261,14 +266,28 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, subtitle, l
         </View>
       ) : null}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <View testID={ids?.title} style={titleNote ? { flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", columnGap: space[2] } : undefined}>
-          <T v="body" w="semibold" tone={check?.done || quiet ? "mut" : "ink"} numberOfLines={wrap || wordCol ? 2 : 1} style={[check?.done ? { textDecorationLine: "line-through" } : null, titleNote ? { flexShrink: 1 } : null]}>
+        {/* #3033 (founder 27.11: «имя в одной строке и сумма в другом углу»): with an icon-only status the sum and its icon stand in the
+            name's own line, at the right end; lines 2–3 keep the whole width */}
+        <View testID={ids?.title} style={titleNote ? { flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", columnGap: space[2] } : top ? { flexDirection: "row", alignItems: "center", gap: space[2] } : undefined}>
+          <T v="body" w="semibold" tone={check?.done || quiet ? "mut" : "ink"} numberOfLines={wrap || wordCol || titleNote ? 2 : 1} style={[check?.done ? { textDecorationLine: "line-through" } : null, titleNote || top ? { flexShrink: 1 } : null]}>
             {title}
           </T>
           {titleNote ? (
             <T v="caption" tone="mut" tabular numberOfLines={1} style={{ flexShrink: 0 }}>
               {titleNote}
             </T>
+          ) : null}
+          {top ? (
+            <View testID={ids?.value} style={{ flexDirection: "row", alignItems: "center", gap: space[1], flexShrink: 0, marginLeft: "auto" }}>
+              {status?.iconOnly ? (
+                <View accessible accessibilityLabel={status.label} testID="row-status-icon">
+                  <Icon name={statusIcon[status.status]} s={size.iconSm} color={c.status[status.status].text} />
+                </View>
+              ) : null}
+              <T v="body" w="semibold" tabular tone={quiet ? "mut" : "ink"} numberOfLines={1}>
+                {value}
+              </T>
+            </View>
           ) : null}
         </View>
         {subtitle ? (
@@ -282,7 +301,9 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, subtitle, l
         ) : null}
         {/* #3017: with the phone in the name's line the right side keeps only the call — the status and the sum go to line 3
             («⊗ Просрочен 9 дн  $1,840.00 · Сегодня 1:30 PM · …»): the name, the phone and the address keep the whole width */}
-        {extra || (titleNote && (status || (value && !figureRight))) ? (
+        {/* #3026 (founder 27.11: «не помещается сумма… не помещается уведомление»; design/crm review — B): a card with a mark keeps
+            3 lines — line 3 is the sum and the mark, whole; the deeds then live in the object (Jobber, HCP: one mark in a list row) */}
+        {(titleNote && !figureRight && status ? false : !!extra) || (titleNote && (status || (value && !figureRight))) ? (
           // the deeds keep at least 40 % of the line; less left after the sum and the status — they take their own line (never «С…»);
           // the sum first and never cut (#2672, design-review 27.11)
           <RowView gap={space[2]} style={{ flexWrap: "wrap", rowGap: 0 }}>
@@ -292,7 +313,7 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, subtitle, l
               </T>
             ) : null}
             {titleNote && status ? <StatusPill status={status.status} label={status.label} draft={status.draft} /> : null}
-            {extra ? (
+            {extra && !(titleNote && !figureRight && status) ? (
               <T v="caption" tone="mut" numberOfLines={1} style={{ flexShrink: 1, flexGrow: 1, flexBasis: 0, minWidth: "40%" }}>
                 {extra}
               </T>
@@ -322,6 +343,7 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, subtitle, l
               </RowView>
             </View>
           ))
+        : top ? null
         : value && status ? (
             // #2992 (lists B, design/crm review 27.11): a sum and its status stand as ONE column on the right — the sum, under it the
             // status word with its icon (Jobber, Housecall Pro) — not side by side: the name keeps its room on 390
@@ -345,13 +367,18 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, subtitle, l
               )}
             </View>
           ) : null}
-      {status && !(value && !cols?.length) && !titleNote ? <StatusPill status={status.status} label={status.label} draft={status.draft} /> : null}
+      {status?.iconOnly && !value && !titleNote ? (
+        <View accessible accessibilityLabel={status.label} testID="row-status-icon">
+          <Icon name={statusIcon[status.status]} s={size.iconSm} color={c.status[status.status].text} />
+        </View>
+      ) : null}
+      {status && !status.iconOnly && !(value && !cols?.length) && !titleNote ? <StatusPill status={status.status} label={status.label} draft={status.draft} /> : null}
       {chevron ? <Icon name="chevronRight" s={size.iconSm} color={c.mut} /> : null}
     </RowView>
   );
 }
 
-export function GroupRow({ title, titleNote, extra, figureRight, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, wrap, selected, chevron, valueTestID, valueMark, testID }: GroupRowProps) {
+export function GroupRow({ title, titleNote, extra, figureRight, valueTop, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, wrap, selected, chevron, valueTestID, valueMark, testID }: GroupRowProps) {
   const { c } = useTheme();
   const [down, setDown] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -360,7 +387,7 @@ export function GroupRow({ title, titleNote, extra, figureRight, subtitle, lead,
   const onLong = more.length ? (e: GestureResponderEvent) => setMenu({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, w: 0, h: 0 }) : undefined;
   const onAction = (e: AccessibilityActionEvent) => more.find((a) => a.key === e.nativeEvent.actionName)?.onPress();
   const check = lead && "done" in lead ? lead : null;
-  const main = <GroupRowBody title={title} titleNote={titleNote} extra={extra} figureRight={figureRight} subtitle={subtitle} lead={lead} value={value} cols={cols} status={status} compact={compact} wrap={wrap} selected={selected} chevron={chevron} padRight={actions.length ? 0 : space[4]} ids={valueTestID ? { value: valueTestID } : undefined} valueMark={valueMark} />;
+  const main = <GroupRowBody title={title} titleNote={titleNote} extra={extra} figureRight={figureRight} valueTop={valueTop} subtitle={subtitle} lead={lead} value={value} cols={cols} status={status} compact={compact} wrap={wrap} selected={selected} chevron={chevron} padRight={actions.length ? 0 : space[4]} ids={valueTestID ? { value: valueTestID } : undefined} valueMark={valueMark} />;
   const tap = onPress || onLong ? (
     <Press
       onPress={onPress}

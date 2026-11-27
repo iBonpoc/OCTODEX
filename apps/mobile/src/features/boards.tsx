@@ -44,7 +44,7 @@ export const DONE_SHOWN = 5;
  */
 export function useEstimateList(q: string, allDone: boolean, onAllDone: () => void) {
   const { db, role, mode } = useStore();
-  const { t, money, day } = useI18n();
+  const { t, money, day, moneyWhole } = useI18n();
   const now = Date.now();
   const list = db.estimates
     .filter((e) => canSeeEstimate(db, { role, mode, me: db.me }, e.id))
@@ -92,7 +92,7 @@ export function useEstimateList(q: string, allDone: boolean, onAllDone: () => vo
       extra: [what, e.title].filter(Boolean).join(" · ") || undefined,
       figureRight: true,
       lead: { initials: initialsOf(c?.name) },
-      value: amount.from ? t("card.fromAmount", { amount: money(amount.cents) }) : money(amount.cents),
+      value: amount.from ? t("card.fromAmount", { amount: moneyWhole(amount.cents) }) : moneyWhole(amount.cents),
       onPress: () => router.push(`/estimate/${e.id}`),
       swipe: { left: [{ key: "open", label: t("swipe.open"), icon: "eye", full: true, onPress: () => router.push(`/estimate/${e.id}`), testID: `est-swipe-${e.id}` }] },
     };
