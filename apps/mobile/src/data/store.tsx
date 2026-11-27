@@ -20,6 +20,7 @@ import { applyOp, catalogCostChange, catalogItemChange, renewSession, sendVisitP
 import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
 import { defaultLeadAssignee } from "@/features/leadAssignee";
 import { keepLast, stepPending } from "@/features/location";
+import { canArchive } from "@/features/clients";
 import { canChangeEstimateClient } from "@/features/estimateStatus";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
@@ -2763,8 +2764,11 @@ export function StoreProvider({
       saveCustomerPeople,
       setCustomerTags: (id, tagIds) =>
         mutate("customer.tags", (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, tagIds } : c)) }), { k: "customer.tags", id, tagIds }),
+      // #3044: a client who owes is never made inactive — whatever screen asks (the header, the list's swipe); the screen says why
       setCustomerStatus: (id, status, reason) =>
-        mutate(
+        status === "archived" && !canArchive(dbRef.current, id)
+          ? NO_UNDO
+          : mutate(
           "customer.status",
           (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, status, statusReason: status === "do_not_service" ? reason : undefined } : c)) }),
           { k: "customer.status", id, status, reason: status === "do_not_service" ? reason : undefined },
