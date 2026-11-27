@@ -60,7 +60,7 @@ function plan({ prs, open = [], openHeads = {} }) {
     if ((p.files || []).some((f) => WORKFLOWS_RE.test(f))) { skipped.set(p.number, "меняет .github/workflows — на стенд такие не берутся"); continue; }
     const d = dependencyOf(p, openHeads);
     if (!d) continue;
-    if (d.number == null) { skipped.set(p.number, `база PR — ветка ${d.unknown}: не main и не ветка открытого PR`); continue; }
+    if (d.number == null) { skipped.set(p.number, `база PR — ветка ${md(d.unknown)}: не main и не ветка открытого PR`); continue; }
     if (d.number === p.number) continue;
     if (byNum.has(d.number)) deps[p.number] = d.number;
     else if (openSet.has(d.number) || d.how === "base") skipped.set(p.number, `зависит от #${d.number} — его нет на стенде (нет ярлыка «${LABEL}»)`);
@@ -117,7 +117,7 @@ function mergeAll({ mainSha, order, deps = {}, merge, exclude = {} }) {
     if (r.ok) { current = r.commit; included.push(pr); continue; }
     const files = [...new Set(r.files || [])].sort();
     const with_ = included.filter((p) => (p.files || []).some((f) => files.includes(f))).map((p) => `#${p.number}`);
-    const list = files.length ? `, файлы ${files.slice(0, 5).join(", ")}${files.length > 5 ? ` и ещё ${files.length - 5}` : ""}` : "";
+    const list = files.length ? `, файлы ${files.slice(0, 5).map(md).join(", ")}${files.length > 5 ? ` и ещё ${files.length - 5}` : ""}` : "";
     skipped.push({ number: pr.number, sha: pr.sha, reason: `конфликт с ${with_.length ? with_.join(", ") : "main"}${list}` });
     out.add(pr.number);
   }
@@ -162,8 +162,26 @@ function manifest({ mainSha, stand, included, skipped, at = new Date().toISOStri
 }
 
 /** The body of the pinned task «Стенд — ссылка и состав». */
+const FIELD_MAX = 200;
+const BODY_MAX = 60000; // GitHub takes 65536
+
+/**
+ * Text from a PR (title, «где смотреть», a reason with file names) made inert for the task body (review of #3125 п.3): one line,
+ * at most 200 characters, Markdown and HTML marks escaped, «@» broken with a zero-width space (no mention, no notification).
+ */
+function md(text) {
+  let t = String(text ?? "").replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").trim();
+  if (t.length > FIELD_MAX) t = t.slice(0, FIELD_MAX - 1) + "…";
+  return t.replace(/[\\`*_[\]()<>#|~!]/g, (c) => `\\${c}`).replace(/@/g, "@\u200b");
+}
+
+/** Our own reasons keep their «#N» links: what came from a PR in them (file and branch names) is escaped where they are made. */
+const line = (t) => { const x = String(t ?? "").replace(/[\r\n\t]+/g, " ").replace(/<!--|-->/g, ""); return x.length > 2 * FIELD_MAX ? x.slice(0, 2 * FIELD_MAX - 1) + "…" : x; };
+
 function renderIssue(m, url) {
-  const short = (s) => String(s || "").slice(0, 7);
+  const short = (s) => (/^[0-9a-f]{7,40}$/.test(String(s || "")) ? String(s).slice(0, 7) : "");
+  const n = (x) => (Number.isInteger(Number(x)) ? Number(x) : 0);
+  url = /^https:\/\/[a-z0-9-]+--stand\.expo\.app\/?$/.test(String(url || "")) ? url : "";
   const lines = [
     "<!-- stand.yml пишет это тело сам после каждой сборки: руками не править -->",
     `**Стенд:** ${url || "—"}`,
@@ -173,12 +191,13 @@ function renderIssue(m, url) {
     `### Вошли (${m.included.length})`,
   ];
   if (!m.included.length) lines.push("Только main: открытых PR с ярлыком «" + LABEL + "» нет или ни один не вошёл.");
-  for (const p of m.included) lines.push(`- #${p.number} \`${short(p.sha)}\` ${p.title}${p.where ? `\n  - где смотреть — что увидеть: ${p.where}` : "\n  - где смотреть — что увидеть: (в описании PR нет такой строки)"}`);
+  for (const p of m.included) lines.push(`- #${n(p.number)} \`${short(p.sha)}\` ${md(p.title)}${p.where ? `\n  - где смотреть — что увидеть: ${md(p.where)}` : "\n  - где смотреть — что увидеть: (в описании PR нет такой строки)"}`);
   lines.push("", `### Не вошли (${m.skipped.length})`);
   if (!m.skipped.length) lines.push("—");
-  for (const s of m.skipped) lines.push(`- #${s.number}${s.sha ? ` \`${short(s.sha)}\`` : ""} — ${s.reason}`);
+  for (const s of m.skipped) lines.push(`- #${n(s.number)}${short(s.sha) ? ` \`${short(s.sha)}\`` : ""} — ${line(s.reason)}`);
   lines.push("", "Как попасть на стенд: ярлык «" + LABEL + "» на PR. Пересборка — сама после каждого пуша в такой PR и каждого влития в main (#3117).");
-  return lines.join("\n");
+  const body = lines.join("\n");
+  return body.length > BODY_MAX ? body.slice(0, BODY_MAX) + "\n\n… (обрезано)" : body;
 }
 
 /**
@@ -217,7 +236,7 @@ function buildArgv({ wt, cmd, subject, uid, gid }) {
     "-v", `${wt}:/w`, "-w", "/w", BUILD_IMAGE, "bash", "-c", cmd]];
 }
 
-module.exports = { BUILD_IMAGE, buildArgv, LABEL, BRANCH, ALIAS, STAND_ISSUE, MAX_BREAKERS, BUILD_CMD, dependencyOf, plan, mergeAll, findBreaker, whereLine, manifest, renderIssue, gitMerger };
+module.exports = { md, FIELD_MAX, BODY_MAX, BUILD_IMAGE, buildArgv, LABEL, BRANCH, ALIAS, STAND_ISSUE, MAX_BREAKERS, BUILD_CMD, dependencyOf, plan, mergeAll, findBreaker, whereLine, manifest, renderIssue, gitMerger };
 
 // ---------------------------------------------------------------------------------------------------------------------- CLI
 if (require.main === module) {

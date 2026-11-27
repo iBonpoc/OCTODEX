@@ -25,6 +25,7 @@ const S = require("../../../scripts/stand.cjs") as {
   manifest: (a: { mainSha: string; stand: string; included: Pr[]; skipped: Skip[]; at?: string }) =>
     { main: string; stand: string; at: string; included: Array<{ number: number; sha: string; title: string; where: string }>; skipped: Skip[] };
   renderIssue: (m: ReturnType<typeof S.manifest>, url: string) => string;
+  md: (t: string) => string; FIELD_MAX: number; BODY_MAX: number;
   BUILD_IMAGE: string;
   buildArgv: (a: { wt: string; cmd: string; subject: string; uid: number; gid: number }) => [string, string[]];
   gitMerger: (cwd: string, date: string) => (base: string, p: Pr) => { ok: boolean; commit?: string; files?: string[] };
@@ -200,6 +201,39 @@ describe("stand: the real git merges (merge-tree, commit-tree) on a throw-away r
     expect(S.mergeAll({ mainSha: main, order, merge }).stand).toBe(r.stand);
     // a merge commit has both parents: main's history and the PR's
     expect(git("rev-list", "--parents", "-n", "1", r.stand).split(" ")).toHaveLength(3);
+  });
+});
+
+describe("stand: text from a PR is inert in the task body (review of #3125 п.3)", () => {
+  const evil = "@user [x](http://e) <!-- `code` **b** _i_ # h | t \\ ~s~ !";
+  it("Markdown and HTML marks escaped, «@» broken, one line", () => {
+    const t = S.md(`${evil}\nвторая строка`);
+    expect(t).not.toMatch(/(^|[^\\])[[\]()<>`*_#|~!]/);
+    expect(t).not.toMatch(/@(?!\u200b)/);
+    expect(t).not.toContain("\n");
+    expect(t).toContain("\\[x\\]\\(http://e\\)");
+    expect(t).toContain("\\<\\!--");
+  });
+  it("a field is cut to 200 characters, the body to the limit", () => {
+    expect(S.md("я".repeat(500)).length).toBeLessThanOrEqual(S.FIELD_MAX);
+    const many = Array.from({ length: 900 }, (_, i) => ({ number: i + 1, sha: "", reason: "x".repeat(300) }));
+    const b = S.renderIssue(S.manifest({ mainSha: "1".repeat(40), stand: "2".repeat(40), included: [], skipped: many }), "");
+    expect(b.length).toBeLessThanOrEqual(S.BODY_MAX + 20);
+  });
+  it("a file or branch name from a PR is escaped inside our reasons; our «#N» stays a link", () => {
+    const r = S.mergeAll({ mainSha: "M", order: [pr(1, { files: ["[x](http://e).ts"] }), pr(2, { files: ["[x](http://e).ts"] })], merge: fakeMerge() });
+    expect(r.skipped[0].reason).toBe("конфликт с #1, файлы \\[x\\]\\(http://e\\).ts");
+    expect(S.plan({ prs: [pr(3, { baseRef: "@user/[x]" })] }).skipped[0].reason).toContain("@\u200buser/\\[x\\]");
+  });
+  it("the body: the title and «где смотреть» from a PR come through escaped; a strange link or SHA is not shown", () => {
+    const m = S.manifest({ mainSha: "1".repeat(40), stand: "2".repeat(40), included: [pr(5, { title: evil, body: `Где смотреть: ${evil}` })],
+      skipped: [{ number: 6, sha: "x](http://e)", reason: "конфликт с #5" }] });
+    const b = S.renderIssue(m, "https://e.com/<script>");
+    expect(b).not.toContain("[x](http://e)");
+    expect(b).not.toContain("<!-- `code`");
+    expect(b).not.toMatch(/@user/);
+    expect(b).toContain("**Стенд:** —");
+    expect(b).toContain("- #6 — ");
   });
 });
 
