@@ -688,8 +688,6 @@ describe("design system: no column of buttons (DS §7.5, #3065)", () => {
     "features/showcase/ProtoV2.tsx": 1,
     "modules/ModulePlaces.tsx": 2,
     "modules/gutters/draw/AttrPanel.tsx": 1,
-    "modules/gutters/settings/SettingsScreen.tsx": 1,
-    "modules/gutters/view/ViewScreen.tsx": 1,
     "ui/confirmDialog.tsx": 2,
     "ui/dateField.tsx": 1,
   };
