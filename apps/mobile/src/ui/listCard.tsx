@@ -658,7 +658,8 @@ export function StatusPicker({ visible, onExited, onClose, title, options, onPic
               {row}
             </Pressable>
           ) : (
-            <View key={o.key} accessibilityRole="radio" accessibilityState={{ checked: o.current, disabled: !o.current }} accessibilityLabel={o.current ? o.label : `${o.label}, ${o.reason ?? t("card.auto")}`}>
+            // #3044: the web reads the state from aria-* (react-native-web drops accessibilityState on a View): «chosen» / «cannot be chosen»
+            <View key={o.key} accessibilityRole="radio" accessibilityState={{ checked: o.current, disabled: !o.current }} aria-checked={o.current} aria-disabled={!o.current} accessibilityLabel={o.current ? o.label : `${o.label}, ${o.reason ?? t("card.auto")}`}>
               {row}
             </View>
           );
