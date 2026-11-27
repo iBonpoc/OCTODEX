@@ -11,7 +11,7 @@ import { canSeeClientDups, clientDuplicates } from "@/features/clientDuplicates"
 import { clientListGroups } from "@/features/clientGroups";
 import { dayOffsetOf, isoDayKey } from "@/features/calendar";
 import { smsHref, telHref } from "@/features/contactLinks";
-import { shortAddress } from "@/features/shortAddress";
+import { clientListAddress } from "@/features/clientListAddress";
 import { pickerOptions } from "@/features/statusMoves";
 import { useI18n } from "@/i18n";
 import { ClientOverview, useAgo, useClientFacts } from "@/features/client/ClientSections";
@@ -101,7 +101,8 @@ export default function Clients() {
     const prop = db.properties.find((p) => p.customerId === c.id);
     // #3017 (founder 27.11: «я знаю его по адресу»): line 2 — the address; line 3 — what is going on: the next visit, else what
     // happened last; no line for what is not there (no «—»)
-    const addr = prop ? shortAddress(prop.address, prop.city) : undefined;
+    // #3033: the billing address first, else the one property; several — the first and «ещё N» (clientListAddress)
+    const addr = clientListAddress(c.billing, db.properties.filter((p) => p.customerId === c.id), (n) => t("lst.moreN", { n }));
     const line = next
       ? [`${nextDay} ${time(next.start)}`, db.jobs.find((j) => j.id === next.jobId)?.title ?? t("plan.kind.inspection")].join(" · ")
       : last
@@ -129,14 +130,15 @@ export default function Clients() {
       key: c.id,
       testID: `client-row-${c.id}`,
       title: c.name,
-      // #3017: the phone in the name's own line
-      titleNote: c.phone || undefined,
+      // #3033 (founder 27.11): no phone in the list — the call button and the card have it; 1 — the name, the sum on the right with
+      // the status as its icon (no word; said to VoiceOver); 2 — the address; 3 — the deed
       subtitle: addr ?? line,
       extra: addr ? line : undefined,
       lead: { initials: initials(c.name) },
       // one money figure: the debt; none — a call icon (BUILD-SPEC §2.3 table)
       value: m && m.owesCents > 0 ? moneyWhole(m.owesCents) : undefined,
-      status,
+      status: status ? { ...status, iconOnly: true } : undefined,
+      valueTop: true,
       // #3017: the call stays for a debtor too — they are called most (crm-review 27.11)
       actions: tel ? [{ icon: "phone" as const, a11y: `${t("client.call")} ${c.name}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c.phone ?? "" }), testID: `client-row-call-${c.id}` }] : undefined,
       swipe: { left: swipeLeft, right: swipeRight },
