@@ -5,7 +5,7 @@
  */
 import { seeCosts } from "@/features/access";
 import { APP_NAME } from "@/config/product";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ComponentRef } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space, component } from "@octo/design-tokens";
@@ -22,11 +22,12 @@ import { companyForPortal } from "@/cloud/portal";
 import { QtyField } from "@/features/fields";
 import { Button, ChoiceChips, IconButton, StatusChip, TextField, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { Sheet, useToast } from "@/ui/overlays";
+import { Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
 import { Card, Divider, Empty, ListRow, RowView, Screen } from "@/ui/surfaces";
 import { NotFound } from "@/ui/emptyStates";
 import { localUndo } from "@/data/undo";
 import { StatusNote } from "@/ui/statusNote";
+import { ButtonPair } from "@/ui/pairs";
 
 export default function PurchaseOrderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -57,6 +58,8 @@ export default function PurchaseOrderScreen() {
   const [pickItem, setPickItem] = useState(false);
   const [askCancel, setAskCancel] = useState(false);
   const [receiving, setReceiving] = useState<Record<string, string> | null>(null);
+  const [moreAt, setMoreAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const moreRef = useRef<ComponentRef<typeof View>>(null);
   const back = () =>
     router.canGoBack() ? router.back() : router.replace(canEditOrders(role) ? "/purchase-orders" : found?.jobId ? `/job/${found.jobId}` : "/");
   if (!found || !o) {
@@ -121,9 +124,22 @@ export default function PurchaseOrderScreen() {
     toast.show(store.online ? t("po.receivedToast") : t("offline.queued"), undo);
   };
   const canRecv = canReceive(role) && ["sent", "partially_received", "received"].includes(found.status);
+  const startReceive = () => setReceiving(Object.fromEntries(found.lines.map((l) => [l.id, l.receivedQty === "0" ? "" : l.receivedQty])));
+  // DS §7.5 (#3065): at most one main + one second button under the order; the rest — «⋯» in the header. Editing: «Отправить» +
+  // «Сохранить»; «Получено» (a sent order) and «Отменить заказ» — in «⋯». Not editing: «Получено» is the one main.
+  const canCancel = office && ["draft", "sent", "partially_received"].includes(found.status);
+  const items: MenuItem<"receive" | "cancel">[] = [
+    ...(edit && canRecv ? [{ key: "receive" as const, label: t("po.receive"), icon: "check" as const, testID: "po-receive" }] : []),
+    ...(canCancel ? [{ key: "cancel" as const, label: t("po.cancel"), icon: "close" as const, destructive: true, ownAsk: true, testID: "po-cancel" }] : []),
+  ];
+  const more = items.length ? (
+    <View ref={moreRef} collapsable={false} testID="po-more">
+      <IconButton icon="more" label={`${t("lead.more")}: ${title}`} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMoreAt({ x, y, w, h }))} />
+    </View>
+  ) : undefined;
 
   return (
-    <Screen form title={title} back={back} subtitle={[supName ?? t("po.noSupplier"), job ? job.title : t("po.stock")].join(" · ")}>
+    <Screen form title={title} back={back} right={more} subtitle={[supName ?? t("po.noSupplier"), job ? job.title : t("po.stock")].join(" · ")}>
       <Card>
         <RowView style={{ justifyContent: "space-between" }}>
           <View testID="po-status">
@@ -202,40 +218,31 @@ export default function PurchaseOrderScreen() {
         {total !== undefined ? <T v="heading" tabular>{t("po.total", { amount: money(total) })}</T> : null}
       </Card>
 
-      {edit && dirty ? (
-        <View testID="po-save">
-          <Button label={t("ue.save")} icon="check" variant="secondary" full disabled={dateBad} onPress={save} />
-        </View>
-      ) : null}
       {edit ? (
-        <View testID="po-send">
-          <Button
-            label={found.status === "sent" ? t("po.sendAgain", { n: found.revision + 1 }) : t("po.send")}
-            icon="send"
-            full
-            disabled={!o.supplierId || !o.lines.length || dateBad}
-            onPress={send}
-          />
+        <ButtonPair
+          ids={{ main: "po-send", second: "po-save" }}
+          main={{ label: found.status === "sent" ? t("po.sendAgain", { n: found.revision + 1 }) : t("po.send"), icon: "send", disabled: !o.supplierId || !o.lines.length || dateBad, onPress: send }}
+          second={dirty ? { label: t("ue.save"), icon: "check", variant: "secondary", disabled: dateBad, onPress: save } : null}
+        />
+      ) : canRecv ? (
+        <View testID="po-receive">
+          <Button label={t("po.receive")} icon="check" full onPress={startReceive} />
         </View>
       ) : null}
       {edit && !o.supplierId ? <T v="caption" tone="mut">{t("po.needSupplier")}</T> : null}
       {edit && !o.lines.length ? <T v="caption" tone="mut">{t("po.needLines")}</T> : null}
-      {canRecv ? (
-        <View testID="po-receive">
-          <Button
-            label={t("po.receive")}
-            icon="check"
-            variant={edit ? "secondary" : "primary"}
-            full
-            onPress={() => setReceiving(Object.fromEntries(found.lines.map((l) => [l.id, l.receivedQty === "0" ? "" : l.receivedQty])))}
-          />
-        </View>
-      ) : null}
-      {office && ["draft", "sent", "partially_received"].includes(found.status) ? (
-        <View testID="po-cancel">
-          <Button label={t("po.cancel")} icon="close" variant="ghost" full onPress={() => setAskCancel(true)} />
-        </View>
-      ) : null}
+      <Menu
+        visible={!!moreAt}
+        anchor={moreAt}
+        title={title}
+        items={items}
+        onSelect={(k) => {
+          setMoreAt(null);
+          if (k === "receive") startReceive();
+          else setAskCancel(true);
+        }}
+        onClose={() => setMoreAt(null)}
+      />
 
       <SupplierPicker
         visible={pickSup}

@@ -45,11 +45,11 @@ exports.run = async (h) => {
   h.expect((await h.sheet().getByRole("button", { name: "Каждый выезд на работу" }).count()) === 0, "an added template is not pressed again");
   // close by its own button and wait for it: Escape may not reach the sheet, and a swallowed wait hid that (CHECKS §9 п.3, сборка #419)
   await h.sheet().getByRole("button", { name: "Закрыть", exact: true }).last().click();
-  await p.getByTestId("chk-edit-1").last().getByRole("button", { name: /^Изменить/ }).waitFor({ state: "visible" });
+  await p.getByTestId("chk-edit-1-open").last().waitFor({ state: "visible" });
   await h.sheet().waitFor({ state: "detached", timeout: 5000 });
 
   // the text of an item (a new line pasted is cleaned) and «Обязательный» off — the director
-  await p.getByTestId("chk-edit-1").last().getByRole("button", { name: /^Изменить/ }).click();
+  await p.getByTestId("chk-edit-1-open").last().click();
   await h.sheet().getByText("Пункт чек-листа").waitFor();
   await h.sheet().getByRole("textbox").fill("Confirm scope\nwith the owner");
   await h.sheet().getByRole("switch", { name: "Обязательный" }).click();
@@ -77,7 +77,7 @@ exports.run = async (h) => {
 
   // «Убрать пункт» (an optional one — the office's) with «Отменить» (rule 5)
   const gone = v.checklist[1].id;
-  await p.getByTestId("chk-edit-1").last().getByRole("button", { name: /^Изменить/ }).click();
+  await p.getByTestId("chk-edit-1-open").last().click();
   await h.sheet().getByTestId("chk-edit-remove").getByRole("button").click();
   await h.expectText(/Пункт убран/, "the toast");
   v = await until((x) => !x.checklist.some((c) => c.id === gone));
@@ -91,14 +91,14 @@ exports.run = async (h) => {
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("dispatcher")));
   await h.go(`/visit/${ID}`);
   await visitAct(p, "visit-act-checklist");
-  await p.getByTestId("chk-edit-0").last().getByRole("button", { name: /^Изменить/ }).click();
+  await p.getByTestId("chk-edit-0-open").last().click();
   await h.sheet().getByText("Пункт чек-листа").waitFor();
   h.expect((await h.sheet().getByText("Снять «Обязательный» может только директор").count()) === 0, "an optional item: the dispatcher may make it required");
   await h.sheet().getByRole("switch", { name: "Обязательный" }).click();
   await h.sheet().getByTestId("chk-edit-save").getByRole("button").click();
   v = await until((x) => x.checklist[0].required === true);
   h.expect(v.checklist[0].required === true, "the dispatcher made it required");
-  await p.getByTestId("chk-edit-2").last().getByRole("button", { name: /^Изменить/ }).click();
+  await p.getByTestId("chk-edit-2-open").last().click();
   await h.sheet().getByText("Снять «Обязательный» может только директор").waitFor();
   h.expect((await h.sheet().getByRole("switch", { name: "Обязательный" }).count()) === 0, "no switch for a required item");
   await h.shot("dispatcher");
