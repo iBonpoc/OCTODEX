@@ -58,7 +58,8 @@ describe("who sees which clients", () => {
   it("office sees everyone; a tech only clients of own visits", () => {
     expect(visibleClients(db, "director")).toHaveLength(db.customers.length);
     const mine = visibleClients({ ...db, me: "m-ivan" }, "tech").map((c) => c.id);
-    const ivanJobs = db.visits.filter((v) => v.techId === "m-ivan").map((v) => v.jobId);
+    // everyone on the visit, not only the first (#3024: the test client's visit has Ivan second)
+    const ivanJobs = db.visits.filter((v) => (v.assigneeIds?.length ? v.assigneeIds : [v.techId]).includes("m-ivan")).map((v) => v.jobId).filter(Boolean);
     const expected = new Set(ivanJobs.map((j) => db.properties.find((p) => p.id === db.jobs.find((x) => x.id === j)!.propertyId)!.customerId));
     expect(new Set(mine)).toEqual(expected);
     expect(mine.length).toBeLessThan(db.customers.length);
