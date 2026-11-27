@@ -88,9 +88,7 @@ export default function Triage() {
           <>
             {/* #2715 Ж5: the main step is what to do with the edits (the estimate it opens is signed and has none of them) */}
             {rej && choose ? <Button testID={`rejected-choose-${rej.id}`} label={t("est.rej.choice.open")} onPress={() => void rejChoice.choose(rej)} /> : null}
-            {canOpen(role, attentionHref(it)) ? (
-              <Button label={t("sync.rejected.open")} icon="chevronRight" variant={choose ? "secondary" : undefined} onPress={() => router.push(attentionHref(it) as Href)} />
-            ) : null}
+            {/* #3064/#3065 (DS §7.5, no column of buttons): «Открыть» is the row «›» above (rejectedOpenRow), not a third button */}
             <Button
               label={t(kept ? "est.rej.choice.reset" : "sync.rejected.ok")}
               icon={kept ? "trash" : "check"}
@@ -147,6 +145,12 @@ export default function Triage() {
             <T v="heading" tabular>
               {money(cur.amountCents)}
             </T>
+          ) : null}
+          {/* #3064/#3065 (DS §7.5): a refused change opens its record by a row «›», the buttons keep one main + «Сбросить» */}
+          {cur.kind === "rejected" && canOpen(role, attentionHref(cur)) ? (
+            <View testID={`rejected-open-${cur.refId}`}>
+              <ListRow title={t("sync.rejected.open")} onPress={() => router.push(attentionHref(cur) as Href)} />
+            </View>
           ) : null}
           <RowView style={{ flexWrap: "wrap" }}>
             {actions(cur)}
