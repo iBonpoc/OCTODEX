@@ -85,7 +85,9 @@ export function useEstimateList(q: string, allDone: boolean, onAllDone: () => vo
       title: c?.name ?? "—",
       // #3018 (founder #3017: «знаю его по адресу»): 1 — the client · the number; 2 — the address of the work; 3 — what is with it · the
       // work; the sum on the right, big (a money list, design/crm review)
-      titleNote: e.number || undefined,
+      // the number is the server's (tg_assign_number on insert): a draft not yet synced (and the demo's seed) has none yet — say so,
+      // never a blank (founder #3018: «номер должен быть»; the numbering itself — #3019)
+      titleNote: e.number || t("lst.numberPending"),
       subtitle: prop ? shortAddress(prop.address, prop.city) : undefined,
       extra: [what, e.title].filter(Boolean).join(" · ") || undefined,
       figureRight: true,

@@ -97,7 +97,7 @@ export default function Catalog() {
         <GroupedList testID="catalog-list">
           {groups.map(([k, xs]) => (
             // the kind's title only on «Все» (otherwise the chip already says the kind)
-            <ListGroup key={k} title={kind === "all" ? t(kindLabel(k)) : undefined} count={kind === "all" ? xs.length : undefined} testID={`catalog-group-${k}`}>
+            <ListGroup key={k} separate title={kind === "all" ? t(kindLabel(k)) : undefined} count={kind === "all" ? xs.length : undefined} testID={`catalog-group-${k}`}>
               {xs.map(row)}
             </ListGroup>
           ))}
