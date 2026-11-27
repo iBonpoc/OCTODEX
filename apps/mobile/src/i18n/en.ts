@@ -5837,5 +5837,9 @@ export const en: Dict = {
   "ov3068.placeN": "Property {n} · {label}",
   "ov3068.allJobs": "All jobs · {n}",
   "ov3068.billingSame": "Same as property {n}",
+  "ov3068.stories.one": "{n} story",
+  "ov3068.stories.few": "{n} stories",
+  "ov3068.stories.many": "{n} stories",
+  "ov3068.stories.other": "{n} stories",
   "ov3061.all": "All",
 };

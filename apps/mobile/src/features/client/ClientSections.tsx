@@ -674,7 +674,7 @@ export function ClientPlaces({ c, f, onRoute }: { c: Customer; f: ClientFacts; o
  * the notes of the place (pinned first, two), the people on site, the jobs there (three, with their status; «Все работы · N»).
  */
 function PlaceCard({ p, n, f, onRoute }: { p: Property; n: number; f: ClientFacts; onRoute: (p: Property) => void }) {
-  const { t } = useI18n();
+  const { t, tn } = useI18n();
   const dw = useDayWord();
   const { db, r, office } = f;
   const seen = canSeeGateCode(db, f.role, p.id);
@@ -690,7 +690,7 @@ function PlaceCard({ p, n, f, onRoute }: { p: Property; n: number; f: ClientFact
       <GroupRow
         lead={{ icon: "home2" }}
         title={street || propertyTitle(p)}
-        subtitle={[p.place ? [p.place.city, [p.place.state, p.place.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ") : p.city, p.stories ? t("proto.client.stories", { n: p.stories }) : null].filter(Boolean).join(" · ")}
+        subtitle={[p.place ? [p.place.city, [p.place.state, p.place.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ") : p.city, p.stories ? tn("ov3068.stories", p.stories, { n: p.stories }) : null].filter(Boolean).join(" · ")}
         actions={[{ icon: "navigate", a11y: `${t("client.route")}: ${propertyTitle(p)}`, onPress: () => onRoute(p), testID: `client-property-route-${p.id}` }]}
         onPress={open}
       />
