@@ -5731,6 +5731,7 @@ export const ru = {
   "oc.est.sentToday": "Отправлена сегодня · не подписана",
   "oc.est.sentAgo": "Отправлена {n} дн. назад · не подписана",
   "oc.est.noAnswer": "Без ответа · {n} дн. · не подписана",
+  "oc.est.changedAfterSend": "Изменена после отправки",
   "oc.client.forInvoices": "Для счетов",
   "oc.client.archiveOwes": "Должен {amount} — неактивным после оплаты",
   "oc.client.archiveOwesNoSum": "Есть неоплаченный баланс — неактивным после оплаты",

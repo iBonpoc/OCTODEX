@@ -34,7 +34,7 @@ import { FieldError, useRequiredForm, useScreenScroll } from "@/ui/requiredForm"
 import { MainStep } from "@/ui/mainStep";
 import { CreateButton, MoreButton } from "@/ui/templates/parts";
 import type { MainAction } from "@/ui/templates";
-import { canChangeEstimateClient, estimateStatusView } from "@/features/estimateStatus";
+import { canChangeEstimateClient, changedAfterSend as changedAfterSendRule, estimateStatusView, estimateView, sentOnceAt } from "@/features/estimateStatus";
 import { useReducedMotion } from "react-native-reanimated";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { PickerSheet } from "@/ui/pickerSheet";
@@ -1032,7 +1032,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const dw = useDayWord();
   // #2363 F46 (founder 21.11): «сохранено 8:19» today, «сохранено вчера» the day before, else «сохранено пт, 19 нояб.» — no «позавчера»
   // #2363 F33: saved after it went to the client — the client has not seen these edits
-  const changedAfterSend = !!existing && existing.status !== "draft" && !!existing.sentAt && !!savedIso && savedIso > existing.sentAt;
+  // #3058: the one rule (features/estimateStatus) — also a draft that went out before and was saved since («Готово», a module's write)
+  const changedAfterSend = !!existing && changedAfterSendRule(existing);
   const savedWord = savedIso
     ? t("px3.est.saved", { time: dayKeyIn(savedIso) === todayKey() ? time(savedIso) : dw(savedIso, true) })
     : undefined;
@@ -1120,7 +1121,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       head={{ kind: "editor" }}
       title={tplEdit ? t("est.tpl.editTitle") : existing ? [t("ue.title"), existing.number].filter(Boolean).join(" ") : t("ue.newTitle")}
       // visual v2 №5: «Черновик · сохранено 8:19» (the version's own save time), «Демо» joins it in the header; no «?» by the title
-      subtitle={tplEdit ? undefined : existing ? [t(estimateStatusView(existing.status).l), changedAfterSend ? t("r1.est.changedAfterSend") : null, savedWord].filter(Boolean).join(" · ") : t("proto.est.autosave")}
+      subtitle={tplEdit ? undefined : existing ? [changedAfterSend && existing.status === "draft" ? t(estimateView(existing).l) : t(estimateStatusView(existing.status).l), changedAfterSend && existing.status !== "draft" ? t("r1.est.changedAfterSend") : null, savedWord].filter(Boolean).join(" · ") : t("proto.est.autosave")}
       back={back}
       onLeave={(proceed) => void close(proceed)}
       hintKey="estimate-builder"
@@ -1130,7 +1131,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         <RowView gap={space[2]}>
           {canSend && !signed && option.lines.length > 0 ? (
             <View testID="est-send-top">
-              <IconButton icon="send" label={existing && existing.status !== "draft" ? t("r1.est.sendChanges") : t("proto.est.saveSend")} onPress={() => void save(true)} />
+              <IconButton icon="send" label={existing && (existing.status !== "draft" || !!sentOnceAt(existing)) ? t("r1.est.sendChanges") : t("proto.est.saveSend")} onPress={() => void save(true)} />
             </View>
           ) : null}
           <MoreButton items={moreList} onMore={onMore} a11y={t("est.actions")} testID="est-menu" />

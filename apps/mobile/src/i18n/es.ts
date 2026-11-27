@@ -5730,6 +5730,7 @@ export const es: Dict = {
   "oc.est.sentToday": "Enviado hoy · sin firmar",
   "oc.est.sentAgo": "Enviado hace {n} d · sin firmar",
   "oc.est.noAnswer": "Sin respuesta · {n} d · sin firmar",
+  "oc.est.changedAfterSend": "Cambiado tras el envío",
   "oc.client.forInvoices": "Para facturas",
   "oc.client.archiveOwes": "Debe {amount}: inactivo tras el pago",
   "oc.client.archiveOwesNoSum": "Hay saldo pendiente: inactivo tras el pago",
