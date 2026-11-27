@@ -1534,10 +1534,6 @@ function DrawCanvas() {
             <View style={{ marginLeft: space[3] }}>
               <HelpButton title={t("mod.gutters.draw.help.q")} text={helpText(t)} testID="draw-help" />
             </View>
-            {/* «Север вверх» (#2988, spec 33 П39): only while the view is turned — one press brings it back to 0° (as the compass in Maps) */}
-            {turned(turnRad) ? (
-              <View testID="draw-north"><IconButton icon="navigate" label={t("mod.gutters.draw.northUp")} onPress={northUp} /></View>
-            ) : null}
             {/* no cloud when all is saved and sent: only «on the phone» (not sent yet / no connection), a tap says it in words (#507 → #1274) */}
             {canSave && !flat && (mark === "sending" || mark === "phone") ? (
               <View testID="draw-local">
@@ -1717,6 +1713,13 @@ function DrawCanvas() {
         {row || at === "top" ? null : <View pointerEvents="box-none" style={{ alignItems: grow ? "stretch" : "center" }}>{tools}</View>}
       </View>
 
+      {/* «Север вверх» (#2988, spec 33 П39): only while the view is turned — one press brings it back to 0°. On the canvas, in the top right
+          corner under the header, as the compass in Maps: in the header it took the room of «Привязать» («При…» at 390, review of #3014) */}
+      {turned(turnRad) ? (
+        <View pointerEvents="box-none" style={{ position: "absolute", top: lay.current.header + space[2], right: ins.right + space[3] + panelSide }}>
+          <View testID="draw-north"><IconButton icon="navigate" label={t("mod.gutters.draw.northUp")} onPress={northUp} /></View>
+        </View>
+      ) : null}
       {/* 820/1280: the panel on the right (what is picked, or how to pick); 390: the sheet from «Свойства» */}
       {wide ? (
         <View testID="draw-panel" style={{ position: "absolute", right: ins.right + space[3], top: ins.top + space[2], bottom: ins.bottom + space[3], width: component.panelW, padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd, gap: space[2] }}>
