@@ -32,7 +32,8 @@ exports.run = async (h) => {
   }
   // «Все»: now each row says its status in words
   await p.getByTestId("filter-lane-all").locator("visible=true").first().click();
-  await cardOf(job).getByText("Запланирована").first().waitFor({ timeout: 5000 });
+  // the sum stands in the name's line (#3038), so the status is its icon, the word is its label (#3033)
+  await cardOf(job).locator('[data-testid="row-status-icon"][aria-label="Запланирована"]').first().waitFor({ timeout: 5000 });
   h.expect(true, "on «Все» the row says its status");
   await h.shot("office");
 
