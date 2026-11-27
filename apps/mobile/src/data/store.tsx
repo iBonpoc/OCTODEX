@@ -21,6 +21,7 @@ import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, t
 import { defaultLeadAssignee } from "@/features/leadAssignee";
 import { keepLast, stepPending } from "@/features/location";
 import { canArchive } from "@/features/clients";
+import { laterIso } from "@/features/estimateStatus";
 import { canChangeEstimateClient } from "@/features/estimateStatus";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
@@ -2638,6 +2639,8 @@ export function StoreProvider({
               // «don't sign — change it»: the client signs the new version again (the old signature stays on the server)
               ...(prev?.status === "awaiting_countersign" ? { approval: undefined, signature: undefined } : {}),
               sentAt: prev?.status === "draft" ? prev.sentAt : undefined,
+              // #3058: an estimate that went out remembers it after an edit (the server keeps sent_version_id; the version's sent_at goes)
+              lastSentAt: laterIso(prev?.lastSentAt, prev?.sentAt),
               // a new estimate takes the direction of its lead / client / company (S16); an existing one keeps its own
               serviceCategoryId: prev ? prev.serviceCategoryId : inheritCategory(d, { kind: "estimate", leadId: leadId0, customerId }),
             };
