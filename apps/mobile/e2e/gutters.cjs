@@ -309,4 +309,20 @@ async function winClose(p) {
   await p.getByTestId("attr-win-close").locator("visible=true").first().getByRole("button").click();
 }
 
-module.exports = { winSave, winClose, pressUndo, pickDsKind, pickAttr, attrShown, attrKeys, attrChosen, attrClose, attrShut, openAttrMore, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
+// «Документы бригады» (#2989): the cut and the shop drawings left the card's «Документы» — they are in «⋯ → Документы бригады». `docsFor` makes
+// the button `id` reachable: the crew's ones — that sheet open; the card's own («Чертёж», «Заказ материалов») — that sheet closed
+const shownNow = (p, id) => p.evaluate((x) => [...document.querySelectorAll(`[data-testid="${x}"]`)].some((e) => e.getClientRects().length > 0), id);
+async function docsFor(p, id) {
+  const crew = /^view-(pdf|doc)-(crew|shop)$/.test(id);
+  const open = await shownNow(p, "view-crew-docs");
+  if (crew && !open) {
+    await p.getByTestId("view-more").locator("visible=true").first().getByRole("button").click();
+    await p.getByRole("menuitem", { name: "Документы бригады", exact: true }).click();
+    await p.getByTestId("view-crew-docs").locator("visible=true").first().waitFor({ timeout: 5000 });
+  } else if (!crew && open) {
+    await pressEscUntilClosed(p);
+    await p.waitForFunction(() => ![...document.querySelectorAll('[data-testid="view-crew-docs"]')].some((e) => e.getClientRects().length > 0), null, { timeout: 5000 });
+  }
+}
+
+module.exports = { docsFor, winSave, winClose, pressUndo, pickDsKind, pickAttr, attrShown, attrKeys, attrChosen, attrClose, attrShut, openAttrMore, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };

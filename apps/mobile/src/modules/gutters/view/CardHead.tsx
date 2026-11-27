@@ -19,17 +19,17 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
 import type { MeasurementRow } from "../canvas/model";
 import { duplicateMeasurement, KEY, relink } from "../data";
-import { deleteBlock, estimatesOn, removeMeasurementDetached } from "../estimateLink";
+import { deleteBlock, estimatesOn, otherEstimates, removeMeasurementDetached } from "../estimateLink";
 import type { ModuleEstimateStore } from "@/modules/registry";
 import { DeleteMeasurementSheet, NO_ESTIMATES } from "./DeleteMeasurementSheet";
 import { measurementState } from "../measurements";
 import { LinkSheet } from "../draw/LinkSheet";
 
 type Anchor = { x: number; y: number; w: number; h: number };
-type MoreKey = "dup" | "delete";
+type MoreKey = "dup" | "crew" | "delete";
 type WhoKey = "relink" | "unlink";
 
-export function CardHead({ m, drawn, onGone }: { m: MeasurementRow; drawn: boolean; /** the card's measurement was deleted: leave it */ onGone: () => void }) {
+export function CardHead({ m, drawn, onGone, onCrewDocs }: { m: MeasurementRow; drawn: boolean; /** the card's measurement was deleted: leave it */ onGone: () => void; /** «Документы бригады» (#2989): the cut and the shop drawings, off the card */ onCrewDocs?: () => void }) {
   const store = useStore();
   const deleter = { role: store.role, me: store.db.me };
   const { t } = useI18n();
@@ -57,6 +57,7 @@ export function CardHead({ m, drawn, onGone }: { m: MeasurementRow; drawn: boole
     else toast.show(t("mod.gutters.link.unlinked"), relink(store, m.id, null) ?? undefined);
   };
   const onMore = (k: MoreKey) => {
+    if (k === "crew") return onCrewDocs?.();
     if (k === "dup") {
       const r = duplicateMeasurement(store, m.id, uid);
       if (!r) return toast.show(t("mod.gutters.est.off"));
@@ -93,7 +94,7 @@ export function CardHead({ m, drawn, onGone }: { m: MeasurementRow; drawn: boole
   const stateChip =
     v.state === "signed" ? <StatusChip status="ok" label={t("mod.gutters.list.s.signed")} />
     : est ? <StatusChip status={est.s} draft={est.d} label={t(est.l)} />
-    : <StatusChip status="neutral" draft={v.state === "unlinked"} label={t(v.state === "unlinked" ? "mod.gutters.list.draft" : "mod.gutters.list.s.noEstimate")} />;
+    : <StatusChip status="neutral" draft={v.state === "unlinked"} label={t(v.state === "unlinked" ? "mod.gutters.list.draft" : otherEstimates(db, m).length ? "mod.gutters.card.noEstHere" : "mod.gutters.list.s.noEstimate")} />;
 
   const whoText = (
     <View style={{ flexShrink: 1, gap: space[1] }}>
@@ -123,7 +124,7 @@ export function CardHead({ m, drawn, onGone }: { m: MeasurementRow; drawn: boole
         ) : (
           <View testID="view-who" style={{ flexShrink: 1 }}>{whoText}</View>
         )}
-        {canSave ? (
+        {canSave || onCrewDocs ? (
           <View ref={moreRef} collapsable={false} testID="view-more">
             <IconButton icon="more" label={t("mod.gutters.card.more")} onPress={() => at(moreRef, setMoreAt)} />
           </View>
@@ -157,8 +158,12 @@ export function CardHead({ m, drawn, onGone }: { m: MeasurementRow; drawn: boole
         visible={!!moreAt}
         anchor={moreAt}
         items={[
-          { key: "dup" as const, label: t("mod.gutters.card.duplicate") },
-          { key: "delete" as const, label: t("mod.gutters.draw.mDelete"), destructive: true, testID: "view-more-delete" },
+          ...(onCrewDocs ? [{ key: "crew" as const, label: t("mod.gutters.card.crewDocs"), testID: "view-more-crew" }] : []),
+          // the module not active (S0b): the card only looks — the crew's documents, no copy, no delete
+          ...(canSave ? [
+            { key: "dup" as const, label: t("mod.gutters.card.duplicate") },
+            { key: "delete" as const, label: t("mod.gutters.draw.mDelete"), destructive: true, testID: "view-more-delete" },
+          ] : []),
         ]}
         onSelect={onMore}
         onClose={() => setMoreAt(null)}

@@ -2,10 +2,13 @@
  * e2e 396 — #1563 PR B (founder 14.11: «на таб-баре, когда нажимаю два раза на этот [желоб] или на даунспот — свойства»; spec
  * 33-gutters-canvas-ui «Двойное нажатие на инструмент»). Two taps on «Желоб» in the toolbar open «Для новых желобов»; a colour picked there is the
  * colour of every NEW gutter of this drawing, the gutter drawn before keeps its own; after a reload it is still there (kept on this phone);
- * «Сбросить» gives the company's back. The same for «Водосток» (a size). Every view. Finds things by testID; waits on what it checks.
+ * «Как в настройках компании» gives the company's back. The same for «Водосток» (a size). Every view. Finds things by testID; waits on what it checks.
+ * #2987 (founder 27.11, one window): «Новые …» is the same window as one gutter's — its title on top, no ✕, «Закрыть / Сохранить» at the bottom;
+ * a change is kept only by «Сохранить» («Закрыть» with a change asks, «Не сохранять» drops it); «⋯ → Как рисовать новые» opens it too;
+ * «Новые — так же» in a gutter's own window: saved with it on, the next gutter is drawn like it.
  */
-const { skipLength, pastDoubleTap, doubleTapUntil, pickAttr, attrShown, winSave } = require("../gutters.cjs");
-const { pressEscUntilClosed, sheetGone } = require("../sheet.cjs");
+const { skipLength, pastDoubleTap, doubleTapUntil, pickAttr, attrShown, winSave, winClose } = require("../gutters.cjs");
+const { sheetGone } = require("../sheet.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -31,14 +34,14 @@ exports.run = async (h) => {
     await pastDoubleTap(p);
     await doubleTapUntil(p, b.x + b.width / 2, b.y + b.height / 2, { fn: () => [...document.querySelectorAll('[data-testid="draw-new-defaults"]')].some((e) => e.getClientRects().length > 0), arg: null }, `two taps on «${tool}»: its new ones' properties`);
   };
+  const gone = () => p.waitForFunction(() => ![...document.querySelectorAll('[data-testid="draw-new-defaults"]')].some((e) => e.getClientRects().length > 0), null, { timeout: 5000 });
+  /** «Сохранить» of the window «Новые …» (#2987: the only way its change is kept) */
   const closeNew = async () => {
-    if (wide) await tid("draw-panel-close").getByRole("button").click();
-    else {
-      await pressEscUntilClosed(p);
-      await sheetGone(p);
-    }
-    await p.waitForFunction(() => ![...document.querySelectorAll('[data-testid="draw-new-defaults"]')].some((e) => e.getClientRects().length > 0), null, { timeout: 5000 });
+    await tid("attr-win-save").getByRole("button").click();
+    await gone();
+    await sheetGone(p);
   };
+  const asked = async () => (wide ? (await tid("attr-win-ask").count()) > 0 : (await p.getByText("Сохранить изменения?").locator("visible=true").count()) > 0);
   const dsOf = async () => (await els()).filter((e) => e.kind === "downspout");
   const waitDs = (n) => p.waitForFunction(([k, want]) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => !e.deletedAt && e.kind === "downspout").length === want, [KEY, n], { timeout: 8000 });
   /** a downspout's menu (it opens by itself when one is put) closed */
@@ -87,6 +90,17 @@ exports.run = async (h) => {
   await h.shot("new-runs");
   await closeNew();
 
+  // #2987: a change in «Новые …» without «Сохранить» is not kept — «Закрыть» asks, «Не сохранять» drops it
+  await openNew("line");
+  await choose("attr-color", "white");
+  await winClose(p);
+  for (let i = 0; i < 300 && !(await asked()); i++) await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => r())));
+  h.expect(await asked(), "«Закрыть» with a change asks «Сохранить изменения?»");
+  if (wide) await tid("attr-win-ask-discard").getByRole("button").click();
+  else await p.getByRole("button", { name: "Не сохранять" }).locator("visible=true").click();
+  await gone();
+  await sheetGone(p);
+
   // a new gutter is brown; the first one keeps white
   await stroke(0.6);
   await waitRuns(2);
@@ -104,10 +118,11 @@ exports.run = async (h) => {
   await tid("attr-ds-size").waitFor({ timeout: 5000 });
   await choose("attr-ds-size", "3x4");
   await p.waitForFunction(() => /3×4/.test(document.querySelector('[data-testid="draw-new-defaults"]')?.textContent || ""), null, { timeout: 5000 });
-  // the title: the phone's sheet has it in its header (with «✕»), wider the column has it on top
-  const title = wide ? await tid("draw-new-defaults").innerText() : await tid("sheet-title").innerText();
-  h.expect(/Для новых downspout/.test(title), `«Для новых downspout» (${JSON.stringify(title.slice(0, 60))})`);
-  if (!wide) h.expect((await tid("sheet-close").count()) === 1, "the phone's sheet has its «✕»");
+  // the title on top of the window, as a downspout's own; no ✕ — «Закрыть / Сохранить» at the bottom (#2987, DS §7.3)
+  const title = await tid("draw-new-defaults").innerText();
+  h.expect(/^Новые downspout/.test(title.trim()), `«Новые downspout» on top (${JSON.stringify(title.slice(0, 60))})`);
+  h.expect((await tid("sheet-close").count()) === 0 && (await tid("draw-panel-close").count()) === 0, "no ✕ in the window");
+  h.expect((await tid("attr-win-close").count()) === 1 && (await tid("attr-win-save").count()) === 1, "«Закрыть» and «Сохранить» at the bottom");
   await closeNew();
   // a new downspout is 3×4; the one put before keeps the company's size
   await putDs(0.6, 2);
@@ -118,8 +133,8 @@ exports.run = async (h) => {
   await p.reload();
   await tid("draw-surface").waitFor({ timeout: 8000 });
   await openNew("line");
-  h.expect((await chosen("attr-color")) === "Коричневый", `after a reload: «Для новых gutter» still brown (${await chosen("attr-color")})`);
-  // «Сбросить»: white again (as in the company's settings)
+  h.expect((await chosen("attr-color")) === "Коричневый", `after a reload: «Новые gutter» still brown (${await chosen("attr-color")})`);
+  // «Как в настройках компании»: white again (as in the company's settings), kept by «Сохранить»
   await tid("draw-new-defaults-reset").getByRole("button").click();
   await p.waitForFunction(() => !document.querySelector('[data-testid="draw-new-defaults-reset"]'), null, { timeout: 5000 });
   h.expect((await chosen("attr-color")) === "Белый", `«Сбросить»: the company's colour again (${await chosen("attr-color")})`);
@@ -132,11 +147,40 @@ exports.run = async (h) => {
   h.expect(newest.attrs.color === "white", `after «Сбросить»: a new gutter is white again (${newest.attrs.color})`);
   // «Для новых водостоков» after the reload: still 3×4; «Сбросить» — the company's size
   await openNew("ds");
-  h.expect(/3×4/.test(await chosen("attr-ds-size")), `after a reload: «Для новых downspout» still 3×4 (${await chosen("attr-ds-size")})`);
+  h.expect(/3×4/.test(await chosen("attr-ds-size")), `after a reload: «Новые downspout» still 3×4 (${await chosen("attr-ds-size")})`);
   await tid("draw-new-defaults-reset").getByRole("button").click();
   await p.waitForFunction(() => !document.querySelector('[data-testid="draw-new-defaults-reset"]'), null, { timeout: 5000 });
   h.expect(!/3×4/.test(await chosen("attr-ds-size")), "«Сбросить»: the company's size again");
   await closeNew();
+
+  // «⋯ → Как рисовать новые» (#2987): the same window, without knowing the double tap
+  await pastDoubleTap(p);
+  await tid("draw-who").getByRole("button").click();
+  await p.getByRole("menuitem", { name: "Как рисовать новые", exact: true }).click();
+  await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="draw-new-defaults"]')].some((e) => e.getClientRects().length > 0), null, { timeout: 5000 });
+  await closeNew();
+
+  // «Новые — так же» (#2987): a gutter made brown in its own window with the switch on — the next gutter is brown too
+  // the gutter drawn last (y 0.45) has no downspout on it: two taps on its middle open its own window
+  await pastDoubleTap(p);
+  await tid("draw-tool-line").getByRole("button").click();
+  await pastDoubleTap(p);
+  {
+    const sb = await p.getByTestId("draw-surface").boundingBox();
+    const at = await p.evaluate((id) => { const r = document.querySelector(`[id="face-${id}"]`)?.getBoundingClientRect(); return r ? [r.x + r.width * 0.6, r.y + r.height / 2] : null; }, newest.id);
+    const [x, yy] = at ?? [sb.x + sb.width * 0.45, sb.y + sb.height * 0.45];
+    await doubleTapUntil(p, x, yy, { fn: () => [...document.querySelectorAll('[data-testid="attr-panel"]')].some((e) => e.getBoundingClientRect().height > 0), arg: null }, "the gutter's own window");
+  }
+  h.expect(/Gutter/.test(await tid("attr-panel").first().innerText()), "a gutter's window (not a downspout's)");
+  await choose("attr-color", "brown");
+  await tid("attr-also-new").click();
+  await winSave(p);
+  const had = (await runs()).length;
+  await stroke(0.7);
+  await waitRuns(had + 1);
+  const ids = new Set([first.id, second.id, newest.id]);
+  const likeIt = (await runs()).filter((r) => !ids.has(r.id)).pop();
+  h.expect(likeIt && likeIt.attrs.color === "brown", `«Новые — так же»: the next gutter takes the colour (${likeIt && likeIt.attrs.color})`);
 
   // one tap on a tool still just picks it (no properties)
   await pastDoubleTap(p);
