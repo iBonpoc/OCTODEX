@@ -25,6 +25,7 @@ const S = require("../../../scripts/stand.cjs") as {
   manifest: (a: { mainSha: string; stand: string; included: Pr[]; skipped: Skip[]; at?: string }) =>
     { main: string; stand: string; at: string; included: Array<{ number: number; sha: string; title: string; where: string }>; skipped: Skip[] };
   renderIssue: (m: ReturnType<typeof S.manifest>, url: string) => string;
+  WORKTREE_GIT: string[];
   copyDistSafe: (src: string, dst: string) => void;
   pushArgv: (stand: string, token: string, env?: Record<string, string>) => [string[], Record<string, string>];
   md: (t: string) => string; FIELD_MAX: number; BODY_MAX: number;
@@ -323,6 +324,11 @@ describe("stand: the code of the PRs is built only inside a throw-away container
     expect(argv.slice(-4)).toEqual([S.BUILD_IMAGE, "bash", "-c", "npm ci"]);
     // the image is pinned by digest, never a moving tag alone (rule 17)
     expect(S.BUILD_IMAGE).toMatch(/^node:22-bookworm@sha256:[0-9a-f]{64}$/);
+  });
+  it("the worktree is checked out without LFS and its filters (review 2 of #3125)", () => {
+    expect(S.WORKTREE_GIT).toEqual(["-c", "filter.lfs.smudge=", "-c", "filter.lfs.process=", "-c", "filter.lfs.required=false"]);
+    const src = readFileSync(join(__dirname, "../../../scripts/stand.cjs"), "utf8");
+    expect(src).toContain('git([...WORKTREE_GIT, "worktree", "add", "--detach", wt, sha], { env: { ...process.env, GIT_LFS_SKIP_SMUDGE: "1" } })');
   });
   it("two containers: npm ci with the network, typecheck and expo export without it", () => {
     const [, install] = S.buildArgv({ wt: "/w", cmd: S.INSTALL_CMD, subject: "", uid: 1, gid: 1, network: true });

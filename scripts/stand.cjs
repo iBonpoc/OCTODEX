@@ -297,7 +297,10 @@ function copyDistSafe(src, dst) {
   copy("");
 }
 
-module.exports = { copyDistSafe, pushArgv, md, FIELD_MAX, BODY_MAX, BUILD_IMAGE, buildArgv, LABEL, BRANCH, ALIAS, STAND_ISSUE, MAX_BREAKERS, INSTALL_CMD, BUILD_CMD, dependencyOf, plan, mergeAll, findBreaker, whereLine, manifest, renderIssue, gitMerger };
+/** git options for the worktree checkout of the stand: the LFS filters are off (they would run on the runner, with its network). */
+const WORKTREE_GIT = ["-c", "filter.lfs.smudge=", "-c", "filter.lfs.process=", "-c", "filter.lfs.required=false"];
+
+module.exports = { WORKTREE_GIT, copyDistSafe, pushArgv, md, FIELD_MAX, BODY_MAX, BUILD_IMAGE, buildArgv, LABEL, BRANCH, ALIAS, STAND_ISSUE, MAX_BREAKERS, INSTALL_CMD, BUILD_CMD, dependencyOf, plan, mergeAll, findBreaker, whereLine, manifest, renderIssue, gitMerger };
 
 // ---------------------------------------------------------------------------------------------------------------------- CLI
 if (require.main === module) {
@@ -386,7 +389,8 @@ if (require.main === module) {
     const buildAt = (sha) => {
       built = sha;
       try { git(["worktree", "remove", "--force", wt]); } catch { /* none yet */ }
-      git(["worktree", "add", "--detach", wt, sha]);
+      // no LFS download, no filter of the PR's .gitattributes runs on the runner (review 2 of #3125)
+      git([...WORKTREE_GIT, "worktree", "add", "--detach", wt, sha], { env: { ...process.env, GIT_LFS_SKIP_SMUDGE: "1" } });
       const subject = git(["show", "-s", "--format=%s", m.main]);
       try {
         const ids = { wt, subject, uid: process.getuid(), gid: process.getgid() };
