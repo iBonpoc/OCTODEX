@@ -16,7 +16,8 @@ exports.run = async (h) => {
   const cardOf = (text) => p.locator('[data-testid="list-card"]').filter({ hasText: text }).first();
   const rowOf = (id) => p.getByTestId(`invoice-row-${id}`).locator("visible=true").first();
   const owes = (i) => Math.max(0, i.totalCents - i.paidCents);
-  const usd = (c) => `$${(c / 100).toLocaleString("en-US", c % 100 ? { minimumFractionDigits: 2 } : {})}`;
+  // #2888: the app shows money always with cents (founder #2672)
+  const usd = (c) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   // overdue invoice: words, number, amount, group
   const overdue = db.invoices.find((i) => i.paidCents < i.totalCents && dueKey(i.dueDate) < today);

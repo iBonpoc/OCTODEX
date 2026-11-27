@@ -10,7 +10,7 @@
  * - sales and the tech: no «Поставщики» (the account number), the address is closed to them.
  * Everything by testID (CHECKS §9 №2); waits for what it checks.
  */
-const ITEM = "cat-bracket"; // «Railing bracket», a test material of the demo (Home Depot, $10 + 10.25% + 10%)
+const ITEM = "cat-bracket"; // «Railing bracket», a test material of the demo (Home Depot, $10.00 + 10.25% + 10%)
 
 exports.run = async (h) => {
   const p = h.page;
@@ -45,7 +45,7 @@ exports.run = async (h) => {
   await h.sheet().getByTestId(`sup-pick-${zed.id}`).locator('[role="button"]').first().click();
   await p.getByTestId("catalog-supplier").locator("visible=true").first().getByText("Zed Supply (test)").waitFor({ timeout: 5000 });
   await field("catalog-sku").fill("ZB-1");
-  await h.expectText(/Цена в смете: \$12\.13/, "the item counts with the copied tax: $10 + 10.25% + 10%");
+  await h.expectText(/Цена в смете: \$12\.13/, "the item counts with the copied tax: $10.00 + 10.25% + 10%");
   // a new cost: $11 → $11 + 10.25% = $12.13, + 10% = $13.34 (the engine rounds each step)
   await field("catalog-cost").fill("11");
   await h.expectText(/Цена в смете: \$13\.34/, "the new cost counts");
@@ -62,7 +62,7 @@ exports.run = async (h) => {
   await h.expectText(/Сумма \| \$13\.34/, "a new estimate line counts with the supplier's tax");
   await h.go(`/catalog/${ITEM}`);
   await p.getByTestId("catalog-history").locator("visible=true").first().waitFor({ timeout: 5000 });
-  h.expect(/\$12\.13/.test(await p.getByTestId("sup-hist-0").locator("visible=true").first().innerText()), "«История цен» on the item: $11 + 10.25%");
+  h.expect(/\$12\.13/.test(await p.getByTestId("sup-hist-0").locator("visible=true").first().innerText()), "«История цен» on the item: $11.00 + 10.25%");
   await h.shot("item");
 
   // the supplier's card: its item, the history; a new tax → the item follows at once (#1834), then «Отменить»

@@ -7,7 +7,8 @@ const { dueKey, todayKey } = require("../companyTime.cjs");
  * - «Разбор»: the rest of the queue are cards that open their record;
  * - a technician never gets «Главная» of the office / «Разбор» (route guard → his visits, no tiles, no debts); no «…».
  */
-const whole = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+// #2888: the app shows money always with cents (founder #2672)
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
 
 exports.run = async (h) => {
   const p = h.page;
@@ -23,7 +24,7 @@ exports.run = async (h) => {
   const late = owed.filter((i) => dueKey(i.dueDate) < today);
   const sum = owed.reduce((s, i) => s + owes(i), 0);
   const tile = (await tid("tile-owed").innerText()).replace(/\n/g, " | ");
-  h.expect(tile.includes(whole.format(Math.round(sum / 100))), `«Должны» = ${whole.format(Math.round(sum / 100))}: ${tile}`);
+  h.expect(tile.includes(usd.format(sum / 100)), `«Должны» = ${usd.format(sum / 100)}: ${tile}`);
   if (late.length) h.expect(new RegExp(`${late.length} просроч`).test(tile), `«${late.length} просроч.» on the tile: ${tile}`);
   h.expect(!/…|\.\.\./.test(await tid("today-attention").innerText()), "no «…» in «Требует действия»");
   await h.shot("today");
@@ -61,6 +62,6 @@ exports.run = async (h) => {
     await tid("visits").waitFor({ timeout: 8000 });
     const body = await shownText();
     h.expect((await shownCount('[data-testid="tile-owed"]')) === 0 && (await shownCount('[data-testid="today-tiles"]')) === 0, `tech: no office tiles after ${path}`);
-    h.expect(!/Должны/.test(body) && !body.includes(whole.format(Math.round(sum / 100))), `tech sees no debts after ${path}`);
+    h.expect(!/Должны/.test(body) && !body.includes(usd.format(sum / 100)), `tech sees no debts after ${path}`);
   }
 };

@@ -61,12 +61,12 @@ exports.run = async (h) => {
   const after = await h.db();
   const inv = after.invoices.filter((i) => i.jobId === job.id);
   const pays = after.payments.filter((x) => inv.some((i) => i.id === x.invoiceId));
-  h.expect(pays.length === 1 && pays[0].amountCents === 50000 && pays[0].method === "cash", `one payment of $500 on the job (before: none): ${JSON.stringify(pays)}`);
+  h.expect(pays.length === 1 && pays[0].amountCents === 50000 && pays[0].method === "cash", `one payment of $500.00 on the job (before: none): ${JSON.stringify(pays)}`);
   h.expect(/^RCT-/.test(pays[0].receiptNumber ?? ""), `its receipt (${pays[0].receiptNumber})`);
-  h.expect(inv.reduce((s, i) => s + i.paidCents, 0) === 50000, `the invoice says $500 paid: ${JSON.stringify(inv)}`);
+  h.expect(inv.reduce((s, i) => s + i.paidCents, 0) === 50000, `the invoice says $500.00 paid: ${JSON.stringify(inv)}`);
 
   const now = await figures(h, customerId);
   h.expect(agree(now), `after: «Выставлено» = «Должен» + «Оплатил» (${JSON.stringify(now)})`);
-  h.expect(Math.abs(now.paid - before.paid - 50000) <= 100, `«Оплатил всего» grew by $500 (${before.paid} → ${now.paid})`);
+  h.expect(Math.abs(now.paid - before.paid - 50000) <= 100, `«Оплатил всего» grew by $500.00 (${before.paid} → ${now.paid})`);
   await h.shot("client-money");
 };
