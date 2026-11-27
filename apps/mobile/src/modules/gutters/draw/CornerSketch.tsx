@@ -169,7 +169,8 @@ export function CornerTriangle({ d, f, onAngle }: { d: Drawing; f: FoundCorner; 
       <Len label={t("mod.gutters.draw.triB")} value={b} onChange={setB} testID="tri-b" />
       <Len label={t("mod.gutters.draw.triC")} value={c3} onChange={setC} testID="tri-c" />
       <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
-        <View testID="tri-count"><Button label={t("mod.gutters.draw.triCount")} size="sm" onPress={count} /></View>
+        {/* secondary, not the accent (design-review #3066 №18, rule 2 «one accent»): the window's yellow is «Сохранить»; the on Splash guard is the switch's own `acc` (DS А5) */}
+        <View testID="tri-count"><Button label={t("mod.gutters.draw.triCount")} size="sm" variant="secondary" onPress={count} /></View>
         <View testID="tri-90"><Button label={t("mod.gutters.draw.tri90")} size="sm" variant="secondary" onPress={() => { counted.current = triKey(a, b, c3); setRes(90); onAngle(90); }} /></View>
         {res === "bad" ? <View testID="tri-bad"><StatusChip status="warn" label={t("mod.gutters.draw.triBad")} soft /></View> : null}
         {typeof res === "number" ? <View testID="tri-result"><StatusChip status="ok" label={t("mod.gutters.draw.cutAngle", { deg: res })} soft /></View> : null}
