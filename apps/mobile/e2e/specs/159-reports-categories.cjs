@@ -73,7 +73,7 @@ exports.run = async (h) => {
   const db = await h.db();
   const revenue = db.invoices.filter((i) => i.sentAt && dayKey(i.sentAt) === today).reduce((s, i) => s + (i.subtotalCents ?? i.totalCents), 0);
   const tot = await p.getByTestId("rpt-cat-total").locator("visible=true").first().innerText();
-  h.expect(tot.includes(whole(revenue)), `total revenue ${whole(revenue)} (${tot})`);
+  h.expect(tot.includes(money(revenue)), `total revenue ${money(revenue)} (${tot})`); // the report's total keeps cents
   // «Без направления» is its own card when today has a record without one
   const noneToday =
     db.leads.some((l) => !l.serviceCategoryId && dayKey(l.receivedAt) === today) ||
