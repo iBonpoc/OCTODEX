@@ -13,6 +13,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Button } from "@/ui/controls";
 import { Sheet, useToast } from "@/ui/overlays";
+import { ListRow } from "@/ui/surfaces";
 
 const THUMB = component.photoThumb;
 
@@ -134,15 +135,11 @@ export function PhotoStrip({ photos, onAdd, onAddPreparing, onRemove, onRetry, o
             {!open.uri && openFailed.failed !== "gone" ? ` ${t("photoUp.otherPhone")}` : ""}
           </StatusNote>
         ) : null}
+        {/* DS §7.5 (#3065): going to the next failed photo is a row «›», not a third button; the sheet keeps one main + one second */}
         {nextFailed ? (
-          <Button
-            label={t("photoUp.next", { i: failedAt + 1, n: failed })}
-            icon="chevronRight"
-            variant="secondary"
-            full
-            testID="photo-upload-next"
-            onPress={() => setOpen(nextFailed)}
-          />
+          <View testID="photo-upload-next">
+            <ListRow title={t("photoUp.next", { i: failedAt + 1, n: failed })} left={<Icon name="image" />} onPress={() => setOpen(nextFailed)} />
+          </View>
         ) : null}
         {/* the sheet's one main step (one filled accent, #2350): «Повторить», or «Подготовить снова» for «не открывается» — never both */}
         {open && ((onRetry && canRetry({ ...open, upload: openFailed })) || (openFailed?.failed === "unreadable" && open.uri)) ? (

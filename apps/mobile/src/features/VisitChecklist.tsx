@@ -20,6 +20,7 @@ import { ToggleRow } from "@/ui/toggleRow";
 import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, ListRow, RowView } from "@/ui/surfaces";
+import { GroupRow } from "@/ui/groupedList";
 import { type GuardedUndo } from "@/data/undo";
 
 /** the checklist card of a visit at work (or an inspection on site) */
@@ -239,31 +240,23 @@ export function ChecklistEditor({ v, title }: { v: Visit; title?: string }) {
             {t("chk3.empty")}
           </T>
         ) : null}
+        {/* DS §7.5 (#3065): an item is a row — a tap opens «Изменить», the order is two small arrows on the right (≤ 2 actions);
+            not a row of three buttons «Выше · Ниже · Изменить» */}
         {v.checklist.map((item, i) => (
-          <View key={item.id} testID={`chk-edit-${i}`} style={{ gap: space[1] }}>
-            <RowView gap={space[2]}>
-              {itemKind(item) === "photo" ? (
-                <Icon name="camera" s={size.iconSm} />
-              ) : (
-                <T v="body" tone="mut">
-                  ○
-                </T>
-              )}
-              <T v="body" style={{ flex: 1 }}>
-                {item.label}
-              </T>
-            </RowView>
-            <T v="caption" tone="mut">
-              {[itemRequired(item) ? t("chk3.requiredShort") : t("chk3.optional"), item.templateName ? t("chk3.from", { name: item.templateName }) : null].filter(Boolean).join(" · ")}
-            </T>
-            <RowView gap={space[2]}>
-              <Button label={t("chk3.up")} size="sm" variant="ghost" disabled={i === 0} accessibilityLabel={`${t("chk3.up")} · ${item.label}`}
-                onPress={() => say(t("chk3.moved"), store.moveVisitItem(v.id, item.id, -1))} />
-              <Button label={t("chk3.down")} size="sm" variant="ghost" disabled={i === v.checklist.length - 1} accessibilityLabel={`${t("chk3.down")} · ${item.label}`}
-                onPress={() => say(t("chk3.moved"), store.moveVisitItem(v.id, item.id, 1))} />
-              <View style={{ flex: 1 }} />
-              <Button label={t("chk3.edit")} size="sm" variant="secondary" accessibilityLabel={`${t("chk3.edit")} · ${item.label}`} onPress={() => setEditing(item)} />
-            </RowView>
+          <View key={item.id} testID={`chk-edit-${i}`}>
+            <GroupRow
+              testID={`chk-edit-${i}-open`}
+              title={item.label}
+              subtitle={[itemRequired(item) ? t("chk3.requiredShort") : t("chk3.optional"), item.templateName ? t("chk3.from", { name: item.templateName }) : null].filter(Boolean).join(" · ")}
+              lead={{ icon: itemKind(item) === "photo" ? "camera" : "checklist" }}
+              wrap
+              chevron
+              onPress={() => setEditing(item)}
+              actions={[
+                ...(i > 0 ? [{ icon: "chevronUp" as const, a11y: `${t("chk3.up")} · ${item.label}`, testID: `chk-edit-${i}-up`, onPress: () => say(t("chk3.moved"), store.moveVisitItem(v.id, item.id, -1)) }] : []),
+                ...(i < v.checklist.length - 1 ? [{ icon: "chevronDown" as const, a11y: `${t("chk3.down")} · ${item.label}`, testID: `chk-edit-${i}-down`, onPress: () => say(t("chk3.moved"), store.moveVisitItem(v.id, item.id, 1)) }] : []),
+              ]}
+            />
           </View>
         ))}
         <RowView>
