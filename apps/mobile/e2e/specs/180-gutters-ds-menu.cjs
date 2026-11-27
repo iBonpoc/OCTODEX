@@ -74,6 +74,19 @@ exports.run = async (h) => {
   h.expect(/^Как у gutter/.test(await attrShown(p, "attr-color")), "the colour: «Как у gutter»");
   h.expect((await tid("attr-finish").count()) === 0, "no painted / bare pair");
 
+  // a size of its own (founder 27.11, #2981): «Свой» last in the size field, whole inches typed under it; a bad one is said, not written
+  await pickIn("attr-ds-size", "@own");
+  const ownSize = tid("attr-ds-size-own").locator("input");
+  await ownSize.fill("3.5x5");
+  await tid("attr-ds-size-own-bad").waitFor({ timeout: 3000 });
+  h.expect((await els()).find((e) => e.kind === "downspout")?.attrs.size === "2x3", "3.5x5: said, not written");
+  await ownSize.fill("3x5");
+  await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.size === "3x5", "3x5 typed: the downspout is 3x5");
+  h.expect((await tid("attr-ds-size-own-bad").count()) === 0, "a good size: no warning");
+  await pickIn("attr-ds-size", "2x3");
+  await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.size === "2x3", "back to 2x3 from the list");
+  h.expect((await tid("attr-ds-size-own").count()) === 0, "a size of the list: the own field shut");
+
   // its own height (#1276; founder 27.11, #2985: «зачем для этого селектор»): a number of feet, empty — by the storey
   const own = tid("attr-ds-length").locator("input");
   h.expect((await tid("attr-ds-length-button").count()) === 0 && (await own.inputValue()) === "", "the own height: a number field, empty (by the storey)");
