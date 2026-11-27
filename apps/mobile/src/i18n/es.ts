@@ -5740,4 +5740,11 @@ export const es: Dict = {
   "k1.missingText": "Se eliminó en otro dispositivo. Los cambios siguen en el teléfono.",
   "k1.copyNew": "Crear un presupuesto nuevo con los cambios",
   "k1.wait": "Los datos aún se cargan: los cambios siguen en el teléfono",
+  /* #3074 «Открыть форму ›» в «Заявки с сайта» («Открытые карточки» №3) */
+  "c3074.open": "Abrir formulario",
+  "c3074.openHint": "Así lo ven sus clientes; desde la vista previa no se envía nada",
+  "c3074.shareOff": "El formulario está desactivado: el enlace no funciona. Actívelo primero.",
+  "c3074.copiedOff": "Copiado. El formulario está desactivado: no llegarán solicitudes hasta que lo active.",
+  "c3074.openOff": "El formulario está desactivado: los clientes no lo ven. Actívelo arriba para verlo.",
+  "c3074.previewNote": "Vista previa: así ven el formulario sus clientes. Desde aquí no se envía nada.",
 };

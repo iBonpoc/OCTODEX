@@ -11,6 +11,8 @@ import {
 import { Button, TextField } from "@/ui/controls";
 import { SelectField } from "@/ui/selectField";
 import { ToggleRow } from "@/ui/toggleRow";
+import { Banner } from "@/ui/banner";
+import { useToast } from "@/ui/overlays";
 import { Icon, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Card, CardList, Empty, FieldGroup, FormMain, RowView, Screen } from "@/ui/surfaces";
@@ -22,7 +24,11 @@ import { Card, CardList, Empty, FieldGroup, FormMain, RowView, Screen } from "@/
  * client's language (rule 7): ?lang= → the browser → the company's; EN / ES / RU chips change it.
  */
 export default function IntakePage() {
-  const params = useLocalSearchParams<{ token: string; lang?: string }>();
+  const params = useLocalSearchParams<{ token: string; lang?: string; preview?: string }>();
+  // #3074: «Открыть форму ›» of «Заявки с сайта» — the contractor looks at the page; the note is in the app's language (theirs,
+  // not the homeowner's), and nothing can be sent
+  const { t: appT } = useI18n();
+  const preview = params.preview === "1" ? appT("c3074.previewNote") : undefined;
   const token = String(params.token ?? "");
   const [form, setForm] = useState<IntakeForm | null | undefined>(undefined);
   const [failed, setFailed] = useState(false);
@@ -36,7 +42,8 @@ export default function IntakePage() {
       .then((f) => setForm(f))
       .catch(() => setFailed(true));
   }, [token, attempt]);
-  const back = router.canGoBack() ? () => router.back() : undefined;
+  // #3074: the contractor's preview always has a way back — to «Заявки с сайта» when there is nothing before it
+  const back = router.canGoBack() ? () => router.back() : params.preview === "1" ? () => router.replace("/company/intake") : undefined;
   if (!form) {
     // before the company is known: the browser's language (the parent's t would be the app's)
     return (
@@ -47,7 +54,7 @@ export default function IntakePage() {
   }
   return (
     <I18nOverride lang={lang ?? form.language}>
-      <IntakeBody token={token} form={form} lang={lang ?? form.language} setLang={setLang} back={back} search={params} />
+      <IntakeBody token={token} form={form} lang={lang ?? form.language} setLang={setLang} back={back} search={params} preview={preview} />
     </I18nOverride>
   );
 }
@@ -71,10 +78,14 @@ function IntakeState({ loading, failed, back, retry }: { loading: boolean; faile
 
 const EMPTY = { name: "", phone: "", email: "", address: "", city: "", state: "", zip: "", message: "", website: "" };
 
-function IntakeBody({ token, form, lang, setLang, back, search }: {
+function IntakeBody({ token, form, lang, setLang, back, search, preview }: {
   token: string; form: IntakeForm; lang: DocLang; setLang: (l: DocLang) => void; back?: () => void;
   search: Record<string, string | string[] | undefined>;
+  /** #3074: the contractor's preview — this note on top, «Отправить» sends nothing (says so) */
+  preview?: string;
 }) {
+  const toast = useToast();
+  const appNote = preview ?? "";
   const { t } = useI18n();
   const { c } = useTheme();
   // how long the page has been open, by this device's monotonic clock (a wrong phone time changes nothing)
@@ -102,6 +113,8 @@ function IntakeBody({ token, form, lang, setLang, back, search }: {
 
   const ready = canSend(f);
   const send = async () => {
+    // a preview never sends: the button looks as the homeowner's (#3074 design-reviewer), a tap says why nothing goes
+    if (preview) return void toast.show(appNote);
     if (!ready || sending.current) return; // a double tap sends once
     sending.current = true;
     setBusy(true);
@@ -122,6 +135,7 @@ function IntakeBody({ token, form, lang, setLang, back, search }: {
   return (
     <Screen form="center" title={t("intake.title")} back={back}>
       <CardList>
+        {preview ? <Banner tone="info" title={preview} testID="intake-preview" /> : null}
         {/* one rhythm under the title: languages → the company's card → the fields, 20 each (#1728; was 16 and 20) */}
         {/* the language of the form and of what the company sends back — a form value, a row with a menu (spec 56 §3 row 4) */}
         <View style={{ marginBottom: space[3] }}>

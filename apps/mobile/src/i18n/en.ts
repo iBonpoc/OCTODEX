@@ -5740,4 +5740,11 @@ export const en: Dict = {
   "k1.missingText": "It was deleted on another device. The changes stay on the phone.",
   "k1.copyNew": "Make a new estimate with the changes",
   "k1.wait": "The data is still loading — the changes stay on the phone",
+  /* #3074 «Открыть форму ›» в «Заявки с сайта» («Открытые карточки» №3) */
+  "c3074.open": "Open form",
+  "c3074.openHint": "As your clients see it; nothing is sent from the preview",
+  "c3074.shareOff": "The form is off — the link does not work. Turn the form on first.",
+  "c3074.copiedOff": "Copied. The form is off — no requests come in until you turn it on.",
+  "c3074.openOff": "The form is off: clients can't see it. Turn the form on above to look at it.",
+  "c3074.previewNote": "Preview: this is how clients see the form. Nothing is sent from here.",
 };
