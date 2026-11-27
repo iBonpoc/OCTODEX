@@ -83,7 +83,7 @@ exports.run = async (h) => {
   const big = p.getByTestId("portal-pay-online-a1830000-0000-4000-8000-000000000001");
   await big.scrollIntoViewIfNeeded();
   await big.getByRole("button").click();
-  await h.expectText(/Fake Payment Element: us_bank_account > card/, "from $1,000 ACH comes first");
+  await h.expectText(/Fake Payment Element: us_bank_account > card/, "from $1,000.00 ACH comes first");
   h.expect(asked.length === 1 && asked[0].token === TOKEN && asked[0].invoiceId === "a1830000-0000-4000-8000-000000000001" && Object.keys(asked[0]).length === 2,
     "the page sends only the link's token and the invoice — the amount is the server's");
   const st = await p.evaluate(() => window.__stripe);
@@ -104,7 +104,7 @@ exports.run = async (h) => {
   const small = p.getByTestId("portal-pay-online-a1830000-0000-4000-8000-000000000002");
   await small.scrollIntoViewIfNeeded();
   await small.getByRole("button").click();
-  await h.expectText(/Fake Payment Element: card > us_bank_account/, "below $1,000 a card comes first");
+  await h.expectText(/Fake Payment Element: card > us_bank_account/, "below $1,000.00 a card comes first");
   await h.expectText(/Pay \$500(?!\d)/, "…and its own sum, not the last invoice's");
   await p.getByTestId("stripe-close").getByRole("button").click();
   h.expect((await p.getByTestId("stripe-checkout").count()) === 0, "the panel closes");

@@ -58,9 +58,9 @@ describe("duration (DS §4.5)", () => {
 describe("money minus (DS §4.5)", () => {
   it("a negative amount: «−$78.50» with U+2212, never «-$78.50»", () => {
     expect(moneyText(-7850)).toBe("−$78.50");
-    expect(moneyText(-100)).toBe("−$1");
+    expect(moneyText(-100)).toBe("−$1.00");
     expect(moneyText(137510)).toBe("$1,375.10");
-    expect(moneyText(0)).toBe("$0");
+    expect(moneyText(0)).toBe("$0.00");
   });
   it("a negative percent: «−218.2», not «-218.2»", () => {
     expect(signedText(-218.2)).toBe("−218.2");

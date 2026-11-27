@@ -27,5 +27,5 @@ exports.run = async (h) => {
   await h.shot("totals");
   // a discount of $0 (on) reads «$0.00», the off one «—»
   await totals.fill(h, "est-discount-fixed", "0");
-  h.expect((await totals.sumIs(h, "est-discount-row", "$0.00")) === "$0.00", "a discount of $0 reads «$0.00»");
+  h.expect((await totals.sumIs(h, "est-discount-row", "$0.00")) === "$0.00", "a discount of $0.00 reads «$0.00»");
 };

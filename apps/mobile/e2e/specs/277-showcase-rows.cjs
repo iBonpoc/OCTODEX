@@ -21,7 +21,7 @@ exports.run = async (h) => {
   await vis("est-line-ds-l1").waitFor({ timeout: 3000 });
   h.expect((await p.getByTestId("est-trash-ds-l1").locator("visible=true").count()) === 0, "a folded row has no trash (v2 №5)");
   await vis("est-times-ds-l1").waitFor({ timeout: 3000 });
-  h.expect(/расход \$280/.test(await vis("est-spend-ds-l2").innerText()), "the hidden sample line: «расход $280»");
+  h.expect(/расход \$280\.00/.test(await vis("est-spend-ds-l2").innerText()), "the hidden sample line: «расход $280.00»");
   await vis("showcase-rows-line").getByText("Подробно", { exact: true }).click();
   await vis("est-times-ds-l1").waitFor({ timeout: 3000 });
   // the open row carries the trash in its header

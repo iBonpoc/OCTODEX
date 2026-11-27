@@ -40,7 +40,7 @@ exports.run = async (h) => {
   const ok = cards.filter({ hasText: "Одобрена" }).first();
   await ok.scrollIntoViewIfNeeded();
   const okText = await ok.innerText();
-  for (const s of [name(est), "$5,180", est.number].filter(Boolean)) h.expect(okText.includes(s), `approved card shows «${s}»: ${okText.slice(0, 200)}`);
+  for (const s of [name(est), "$5,180.00", est.number].filter(Boolean)) h.expect(okText.includes(s), `approved card shows «${s}»: ${okText.slice(0, 200)}`);
   h.expect(okText.includes("Запланировать работу"), "«Запланировать работу» is inside the card");
   const viewText = await cards.filter({ hasText: "Открыта" }).first().innerText();
   h.expect(viewText.includes(name(other)) && !viewText.includes("Запланировать работу"), `opened card: client, no «Запланировать работу»: ${viewText.slice(0, 160)}`);
@@ -66,10 +66,10 @@ exports.run = async (h) => {
   await h.go("/today");
   await p.waitForURL(/\/visits/, { timeout: 5000 });
   h.expect(new URL(p.url()).pathname === "/visits", `tech /today → /visits (got ${p.url()})`);
-  h.expect((await shownCount('[data-testid="notice-card"]')) === 0 && !(await shownText()).includes("$5,180"), "the technician sees no notices on his home");
+  h.expect((await shownCount('[data-testid="notice-card"]')) === 0 && !(await shownText()).includes("$5,180.00"), "the technician sees no notices on his home");
   await h.go("/notifications");
   await p.getByTestId("screen-title").locator("visible=true").first().waitFor({ timeout: 8000 });
-  h.expect((await shownCount('[data-testid="notice-card"]')) === 0 && !(await shownText()).includes("$5,180"), "the technician sees no client notices and no approved amount");
+  h.expect((await shownCount('[data-testid="notice-card"]')) === 0 && !(await shownText()).includes("$5,180.00"), "the technician sees no client notices and no approved amount");
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
 
   // «Отметить прочитанными» marks all read → they move under «Прочитанные», the bell's count drops

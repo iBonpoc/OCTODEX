@@ -5,6 +5,8 @@
 | Документ | Чем заменён |
 |---|---|
 | `00-roadmap.md` | `10-build-plan.md` §0, этапы 1–6 (правило 22), карта пути `15-story-map.md` |
+| `16-audit-2026-11-04.md` | полный аудит `audit/2026-11-11-full-audit.md`, план `audit/2026-11-11-release-plan.md`, колонка «Покрытие» карты `15-story-map.md` §4; открытые находки — #2707 (Р3), #2900 (Р9, Р13, Р14) |
+| `06-architecture.md` | короткий «как устроено сегодня» `../06-architecture.md` (сверен с кодом 26.11.2026) и статусы ADR `../adr/README.md`; несделанное — в ADR-004, ADR-006, ADR-007 и спеках; ссылки «`06-architecture.md` §N» из старых документов ведут сюда |
 | `02a-pricing-and-unit-economics.md` | спека `specs/44-plans-limits.md`, исследование `audit/2026-11-15-research/E-pricing-research.md` |
 
 Архивы внутри разделов: `adr/archive/` (ADR-003, ADR-008).

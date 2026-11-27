@@ -54,7 +54,7 @@ exports.run = async (h) => {
   await rest().waitFor({ timeout: 8000 });
   await rest().click();
   const b = await added("j498b", ["i498t", "i498d"], 3);
-  h.expect(b.inv?.kind === "final" && b.inv?.totalCents === 35000, `С2 standalone $200 + deposit $150: the rest $350 as a final: ${JSON.stringify(b.inv)}`);
+  h.expect(b.inv?.kind === "final" && b.inv?.totalCents === 35000, `С2 standalone $200.00 + deposit $150.00: the rest $350.00 as a final: ${JSON.stringify(b.inv)}`);
 
   // С3
   await h.go("/job/j498c");
@@ -62,5 +62,5 @@ exports.run = async (h) => {
   await rest().click();
   const c = await added("j498c", ["i498cd", "i498cs", "i498cf"], 4);
   const finals = c.db.invoices.filter((i) => i.jobId === "j498c" && i.kind === "final");
-  h.expect(finals.length === 1 && c.inv?.kind === "progress" && c.inv?.totalCents === 20000, `С3 the gap $200 as a progress invoice, still one final: ${JSON.stringify(c.inv)}`);
+  h.expect(finals.length === 1 && c.inv?.kind === "progress" && c.inv?.totalCents === 20000, `С3 the gap $200.00 as a progress invoice, still one final: ${JSON.stringify(c.inv)}`);
 };
