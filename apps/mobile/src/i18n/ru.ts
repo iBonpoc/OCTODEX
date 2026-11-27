@@ -5862,6 +5862,22 @@ export const ru = {
   "c3072.leads": "Лиды",
   "c3072.allNotes": "Все заметки · {n}",
   "c3072.ahead": "Впереди",
+  /* #3076 «Фото и файлы» клиента («Открытые карточки» №3) */
+  "c3076.title": "Фото и файлы",
+  "c3076.property": "Объект",
+  "c3076.job": "Работа",
+  "c3076.allProperties": "Все объекты",
+  "c3076.allJobs": "Все работы",
+  "c3076.files": "Файлы",
+  "c3076.visit": "Выезд",
+  "c3076.empty": "Фото и файлов пока нет",
+  "c3076.emptyHint": "Фото добавляются в карточке выезда",
+  "c3076.emptyFilter": "Здесь ничего нет",
+  "c3076.k.photo": "Фото",
+  "c3076.k.receipt": "Чек",
+  "c3076.k.signature": "Подпись",
+  "c3076.k.drawing": "Чертёж",
+  "c3076.k.document": "Документ",
 } as const;
 
 export type DictKey = keyof typeof ru;

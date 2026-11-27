@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Image, ScrollView, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { liveUri, madeHere } from "./photoUri";
@@ -18,7 +18,7 @@ import { ListRow } from "@/ui/surfaces";
 const THUMB = component.photoThumb;
 
 /** Before/after photos. Camera on a phone; library/file picker on web. Tap a photo to view it or delete it. */
-export function PhotoStrip({ photos, onAdd, onAddPreparing, onRemove, onRetry, onPrepare, title }: { photos: Photo[]; /** none: the photos are only shown (no «Добавить фото» tile). Only a file made anew here (#1558) — never the original */ onAdd?: (uri: string, small?: true) => void; /** #1558: a photo that could not be made anew yet — kept on this phone as «preparing»; none: it is not added (a toast says to add it again) */ onAddPreparing?: (p: Extract<PickedPhoto, { preparing: unknown }>) => void; /** #1558 «Подготовить снова» on an «unreadable» photo (none: the store finds the visit by the photo) */ onPrepare?: (id: string) => void; onRemove?: (id: string) => void; /** #1431 «Повторить» on a photo the cloud did not take (its file is on this phone) */ onRetry?: (id: string) => void; /** the viewer's title when the photos are not a visit's before / after (a module's measurement) */ title?: string }) {
+export function PhotoStrip({ grid, photos, onAdd, onAddPreparing, onRemove, onRetry, onPrepare, title }: { /** #3076: the thumbnails wrap into rows (a grid, as iOS «Фото») instead of one strip that scrolls sideways — the client's «Фото и файлы» */ grid?: boolean; photos: Photo[]; /** none: the photos are only shown (no «Добавить фото» tile). Only a file made anew here (#1558) — never the original */ onAdd?: (uri: string, small?: true) => void; /** #1558: a photo that could not be made anew yet — kept on this phone as «preparing»; none: it is not added (a toast says to add it again) */ onAddPreparing?: (p: Extract<PickedPhoto, { preparing: unknown }>) => void; /** #1558 «Подготовить снова» on an «unreadable» photo (none: the store finds the visit by the photo) */ onPrepare?: (id: string) => void; onRemove?: (id: string) => void; /** #1431 «Повторить» on a photo the cloud did not take (its file is on this phone) */ onRetry?: (id: string) => void; /** the viewer's title when the photos are not a visit's before / after (a module's measurement) */ title?: string }) {
   const { c } = useTheme();
   const { t } = useI18n();
   const toast = useToast();
@@ -70,7 +70,7 @@ export function PhotoStrip({ photos, onAdd, onAddPreparing, onRemove, onRetry, o
   };
   return (
     <>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space[2] }}>
+    <Strip grid={grid}>
       {onAdd ? (
         // the add tile (DS «Плитка добавления»): the size of a thumbnail, a one-line caption on every language, the frame
         // readable (≥ 3:1: `mut`), the icon never squeezed by a big font (the tile grows, not the icon shrinks)
@@ -168,7 +168,7 @@ export function PhotoStrip({ photos, onAdd, onAddPreparing, onRemove, onRetry, o
           />
         ) : null}
       </Sheet>
-    </ScrollView>
+    </Strip>
     {preparing ? (
       <StatusNote tone="info" testID="photo-prep-strip">
         {t("photoUp.prep.strip", { n: preparing })}
@@ -188,5 +188,18 @@ export function PhotoStrip({ photos, onAdd, onAddPreparing, onRemove, onRetry, o
       </Press>
     ) : null}
     </>
+  );
+}
+
+/** one strip that scrolls sideways, or (#3076) the same thumbnails wrapped into rows */
+function Strip({ grid, children }: { grid?: boolean; children: ReactNode }) {
+  return grid ? (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }} testID="photo-grid">
+      {children}
+    </View>
+  ) : (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space[2] }}>
+      {children}
+    </ScrollView>
   );
 }

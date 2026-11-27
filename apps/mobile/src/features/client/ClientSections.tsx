@@ -68,6 +68,7 @@ import { Sheet, useToast } from "@/ui/overlays";
 import { Empty, ListRow } from "@/ui/surfaces";
 import { ActionRow } from "@/ui/multiValueField";
 import { Icon } from "@/ui/primitives";
+import { clientMediaOf } from "@/features/client/clientMedia";
 import type { MainAction } from "@/ui/templates";
 
 /** what the five sections and the header share: read once per render of the client's screen */
@@ -808,7 +809,8 @@ export function ClientLog({ c, f }: { c: Customer; f: ClientFacts }) {
   const openT = r.tasks.filter((x) => !x.doneAt);
   const doneN = r.tasks.length - openT.length;
   const newTask = () => setTaskEdit({ subjectType: "customer", subjectId: c.id, title: "", assigneeId: db.me });
-  const files = r.photos.length + r.files.length;
+  // #3076: the same count as the screen «Фото и файлы» (a visit's photo kept also as a file row is one photo)
+  const files = clientMediaOf(db, f.visits, c.id, new Set(r.jobs.map((j) => j.id))).total;
   return (
     <View style={{ gap: space[4] }} testID="client-log">
       <View testID="client-notes">
@@ -851,7 +853,7 @@ export function ClientLog({ c, f }: { c: Customer; f: ClientFacts }) {
         ))}
         {files ? (
           <ListGroup separate>
-            <GroupRow lead={{ icon: "image" }} title={t("w2b.client.files", { n: files })} subtitle={t("client.photosHint")} />
+            <GroupRow lead={{ icon: "image" }} title={t("c3076.title")} value={String(files)} chevron onPress={() => router.push(`/client/files/${c.id}`)} testID="client-files-row" />
           </ListGroup>
         ) : null}
       </GroupedList>
