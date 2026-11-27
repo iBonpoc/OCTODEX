@@ -18,21 +18,25 @@ import { StatusChip } from "@/ui/controls";
 import type { IconRowItem } from "@/ui/iconRow";
 import { mapsUrl, type OS } from "@/ui/listCardLayout";
 import { ObjectScreen } from "@/ui/templates/ObjectScreen";
-import type { MainAction } from "@/ui/templates/types";
+import { initialsOf } from "@/features/invoice/moneySummary";
 import type { MeasurementRow } from "../canvas/model";
 import { otherEstimates } from "../estimateLink";
 import { measurementState } from "../measurements";
 import { useMeasurementActions } from "./CardHead";
 
-export function MeasurementObject({ m, drawn, back, onGone, onEdit, onCrewDocs, main, second, children }: {
+export function MeasurementObject<S extends string>({ m, drawn, back, onGone, onEdit, onCrewDocs, now, sections, section, onSection, children }: {
   m: MeasurementRow;
   drawn: boolean;
   back: () => void;
   onGone: () => void;
   onEdit: () => void;
   onCrewDocs?: () => void;
-  main?: MainAction;
-  second?: MainAction;
+  /** «Сейчас» with the one step (#3028, as the lead's and the client's cards) */
+  now: ReactNode;
+  /** «Обзор · Фото · Сметы · История» (spec 67 §8.9 п.3) */
+  sections: { key: S; label: string; count?: number }[];
+  section: S;
+  onSection: (k: S) => void;
   children: ReactNode;
 }) {
   const store = useStore();
@@ -42,8 +46,9 @@ export function MeasurementObject({ m, drawn, back, onGone, onEdit, onCrewDocs, 
   const prop = m.propertyId ? db.properties.find((p) => p.id === m.propertyId) : undefined;
   const client = prop ? db.customers.find((c) => c.id === prop.customerId) : undefined;
   const where = prop ? [prop.address, prop.city].filter(Boolean).join(", ") : lead?.address || undefined;
-  const title = client?.name ?? lead?.name ?? where ?? t("mod.gutters.list.noClient");
-  const kindWord = client ? t("mod.gutters.card.kindClient") : lead ? t("mod.gutters.card.kindLead") : undefined; // a draft: its state says «Черновик» once
+  const title = client?.name ?? lead?.name ?? where ?? t("mod.gutters.list.draft");
+  // #3028 (design-reviewer): the header says what the screen is — «Замер · лид», «Замер · клиент», a draft «Замер»
+  const kindWord = client ? t("mod.gutters.card.kindMClient") : lead ? t("mod.gutters.card.kindMLead") : t("mod.gutters.card.kindM");
   const v = measurementState(db, m, drawn);
   const est = v.estimate ? estimateStatusView(v.estimate.status) : null;
   const status =
@@ -56,11 +61,14 @@ export function MeasurementObject({ m, drawn, back, onGone, onEdit, onCrewDocs, 
     ...(v.engineChanged ? [<View key="e" testID={v.state === "signed" ? "view-engine-signed" : "view-engine-changed"}><StatusChip status="warn" label={t(v.state === "signed" ? "mod.gutters.list.s.engineSigned" : "mod.gutters.list.s.engine")} /></View>] : []),
   ];
   const acts = useMeasurementActions(m, onGone, onCrewDocs);
+  const parent = client ? { label: t("mod.gutters.card.openClient"), href: `/client/${client.id}` } : lead ? { label: t("mod.gutters.card.openLead"), href: `/lead/${lead.id}` } : null;
   const phone = cleanPhone(client?.phone ?? lead?.phone ?? "");
   const actions: IconRowItem[] = [
     { icon: "phone", label: t("client.call"), a11y: `${t("client.call")} ${title}`, onPress: () => void Linking.openURL(`tel:${phone}`).catch(() => {}), disabled: !phone, reason: t("proto.leads.noPhone"), testID: "view-call" },
     { icon: "sms", label: t("cc.sms"), a11y: `${t("cc.sms")} ${title}`, onPress: () => void Linking.openURL(smsHref(client?.phone ?? lead?.phone ?? "") ?? "").catch(() => {}), disabled: !phone, reason: t("proto.leads.noPhone"), testID: "view-sms" },
     ...(where ? [{ icon: "navigate" as const, label: t("client.route"), a11y: `${t("client.route")}: ${where}`, onPress: () => void Linking.openURL(mapsUrl(where, Platform.OS as OS)).catch(() => {}), testID: "view-route" }] : []),
+    // the parent object — a place in the row, not a loose «Открыть лид ›» line under the name (founder 26.11: «очень некрасивая вёрстка»)
+    ...(parent ? [{ icon: (client ? "user" : "inbox") as "user" | "inbox", label: t(client ? "mod.gutters.card.kindClient" : "mod.gutters.card.kindLead"), a11y: parent.label, onPress: () => router.push(parent.href as Href), testID: "view-open-who" }] : []),
   ];
   const more = [
     { key: "edit", label: t("mod.gutters.view.edit"), testID: "view-more-edit" },
@@ -70,10 +78,9 @@ export function MeasurementObject({ m, drawn, back, onGone, onEdit, onCrewDocs, 
     ...acts.moreItems.map((i) => (i.key === "delete" ? { ...i, ownAsk: true } : i)),
   ];
   const onMore = (k: string) => (k === "edit" ? onEdit() : acts.onAction(k));
-  const parent = client ? { label: t("mod.gutters.card.openClient"), href: `/client/${client.id}` } : lead ? { label: t("mod.gutters.card.openLead"), href: `/lead/${lead.id}` } : null;
   return (
     <>
-      <ObjectScreen<"none">
+      <ObjectScreen<S>
         testID="view"
         back={back}
         header={{
@@ -82,18 +89,18 @@ export function MeasurementObject({ m, drawn, back, onGone, onEdit, onCrewDocs, 
           ...(kindWord ? { kindWord } : {}),
           status,
           ...(where ? { address: { text: where, onPress: () => void Linking.openURL(mapsUrl(where, Platform.OS as OS)).catch(() => {}) } } : {}),
-          ...(parent ? { link: { label: parent.label, onPress: () => router.push(parent.href as Href) } } : {}),
+          ...(client || lead ? { avatar: initialsOf(title) } : {}),
           ...(flags.length ? { details: <View style={{ gap: space[2] }}>{flags}</View>, defaultOpen: false } : {}),
           labels: { expand: t("proto.client.expand"), collapse: t("proto.client.collapse"), more: (n) => t("cw4.moreTags", { n }) },
         }}
         // a draft without anyone: no one to call — no row (its one step is «Привязать…»)
         actions={lead || client ? actions : undefined}
-        main={main}
-        second={second}
-        sections={[]}
-        section="none"
-        onSection={() => {}}
+        now={now}
+        sections={sections}
+        section={section}
+        onSection={onSection}
         sectionsLabel={t("mod.gutters.view.title")}
+        sectionsLook="chips"
         more={more}
         onMore={onMore}
       >

@@ -36,6 +36,8 @@ import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, ofMe
 import { estimateStatusView } from "@/features/estimateStatus";
 import { CardHead } from "./CardHead";
 import { MeasurementObject } from "./MeasurementObject";
+import { GroupRow, ListGroup } from "@/ui/groupedList";
+import { NowCard } from "@/ui/nowCard";
 import { MeasurePhotos } from "../draw/Photos";
 import { toMeasurement } from "../geometry";
 import { dsLine, listPreview, PART_WORDS, partName, partQty, partView, sizeText } from "../prices";
@@ -77,6 +79,9 @@ export default function ViewScreen() {
  * The body of «Просмотр замера»: the screen above and the 1280 panel of «Замеры». `estimate` — «Смета из замера» /
  * «Обновить из замера» came with estimate=1: asked once (a press writes); `from` — "draw": «Править чертёж» goes back to that canvas.
  */
+/** the sections of the measurement's own screen (spec 67 §8.9 п.3) */
+export type MSection = "overview" | "photos" | "estimates" | "history";
+
 export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, panel, route }: { mid: string; estimate?: boolean; from?: string; /** the measurement was deleted from its card */ onGone: () => void; /** in the 1280 panel beside «Замеры»: one column */ panel?: boolean; /** its own screen (#2995): the object frame — the name, the row of actions, the one step, «⋯» */ route?: { back: () => void } }) {
   const store = useStore();
   const { device } = useDevice();
@@ -84,7 +89,9 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   const cols = device !== "phone" && !panel;
   /** its own screen (#2995): the head, the step and the actions are the object frame's, not the body's */
   const obj = !!route;
-  const { t, money } = useI18n();
+  /** a block of this section: the panel and the old card show every block, the object screen only its section's */
+  const on = (k: MSection) => !obj || section === k;
+  const { t, money, day } = useI18n();
   const toast = useToast();
   const g = gutterData(store.db);
   const found = mid ? measurementOf(g, mid) : null;
@@ -117,6 +124,8 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   const [details, setDetails] = useState(false);
   /** «⋯ → Документы бригады» (#2989) */
   const [crewDocs, setCrewDocs] = useState(false);
+  /** its own screen (#3028, spec 67 §8.9 п.3): the sections «Обзор · Фото · Сметы · История» */
+  const [section, setSection] = useState<MSection>("overview");
 
   // «Править чертёж»: back to the canvas it came from; from a lead or an estimate — the canvas opens
   const edit = () => {
@@ -280,6 +289,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
             the rest on the right (П25.3 Б); a phone and the 1280 panel — one column, the same order */}
         <View style={cols ? { flexDirection: "row", alignItems: "flex-start", gap: space[4] } : { gap: space[4] }}>
         <View style={{ gap: space[4], ...(cols ? { flex: 1, minWidth: 0 } : {}) }}>
+        {on("overview") ? (<>
         {/* came by a link to make / update the estimate: the question on top, above the content (DS Б9) — a press writes */}
         {ask && (action.kind === "make" || action.kind === "update") ? (
           <Banner
@@ -305,7 +315,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
           ) : null}
           {/* what comes next once it is linked (#2990): whose it is now and where it shows, an estimate they already have without this
               drawing, «Открыть лид / клиента» — one press there, the person stays where they worked */}
-          {linkedTo ? (
+          {!obj && linkedTo ? (
             <View testID="view-next" style={{ gap: space[1] }}>
               <T v="body" w="semibold">{t(linkedTo.kind === "lead" ? "mod.gutters.card.atLead" : "mod.gutters.card.atClient", { name: linkedTo.name })}</T>
               {money$ && other && action.kind === "make" ? (
@@ -331,13 +341,14 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
           {!obj && money$ && other && action.kind === "make" ? (
             <View testID="view-open-other"><Button label={t("mod.gutters.card.openEst", { n: other.number ?? "" })} variant="secondary" onPress={() => router.push(`/estimate/${other.id}` as Href)} /></View>
           ) : null}
-          {obj ? null : <View testID="view-edit"><Button label={t("mod.gutters.view.edit")} icon="pencil" variant="secondary" onPress={edit} /></View>}
+          <View testID="view-edit" style={obj ? { alignItems: "flex-start" } : undefined}><Button label={t("mod.gutters.view.edit")} icon="pencil" variant="secondary" onPress={edit} /></View>
           {!obj && linkedTo ? (
             <View testID="view-open-who" style={{ alignItems: "flex-start" }}>
               <Button label={t(linkedTo.kind === "lead" ? "mod.gutters.card.openLead" : "mod.gutters.card.openClient")} icon="chevronRight" variant="ghost" onPress={() => router.push(linkedTo.href as Href)} />
             </View>
           ) : null}
         </View>
+        </>) : null}
         </View>
         <View style={{ gap: space[4], ...(cols ? { flex: 1, minWidth: 0 } : {}) }}>
 
@@ -346,7 +357,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
             «Заказ материалов» (the supplier's, always EN; not for those who do not see the money). With an estimate they are its
             attachments: the estimate first, «Прикреплено к смете …». The crew's cut and the shop drawings — «⋯ → Документы бригады»
             until the job's card has them (#2729) */}
-        {drawing.runs.length ? (
+        {on("estimates") && drawing.runs.length ? (
           <View testID="view-docs">
           <Card style={{ gap: space[1] }}>
             <T v="heading" w="semibold">{clientEst ? t("mod.gutters.card.attached", { n: clientEst.number ?? "" }) : t("mod.gutters.card.docs")}</T>
@@ -371,11 +382,26 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
           </View>
         ) : null}
 
+        {on("photos") ? (
         <View testID="view-photos">
           <MeasurePhotos framed measurementId={m.id} testID="view-photo-strip" readOnly={!moduleActive(store.db.company, KEY)} />
         </View>
+        ) : null}
+        {/* «История» (#3028): what happened to the drawing and its estimates, newest first */}
+        {obj && section === "history" ? (
+          <View testID="view-history">
+            <ListGroup>
+              {[
+                ...(m.updatedAt ? [{ key: "drawn", icon: "pencil" as const, title: t("mod.gutters.hist.drawn"), at: m.updatedAt }] : []),
+                ...estimates.map((e) => ({ key: e.id, icon: "invoice" as const, title: t("mod.gutters.hist.est", { n: e.number ?? "", state: t(estimateStatusView(e.status).l) }), at: e.sentAt ?? "" })),
+              ].sort((a, b) => b.at.localeCompare(a.at)).map((x) => (
+                <GroupRow key={x.key} compact lead={{ icon: x.icon }} title={x.title} subtitle={x.at ? day(x.at) : undefined} testID={`view-hist-${x.key}`} />
+              ))}
+            </ListGroup>
+          </View>
+        ) : null}
 
-        {money$ && preview ? (
+        {on("overview") && money$ && preview ? (
           <Card style={{ gap: space[1] }}>
             <View testID="view-total" style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space[2] }}>
               <T v="caption" tone="mut">{t("mod.gutters.draw.moneyCaption")}</T>
@@ -385,13 +411,13 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
           </Card>
         ) : null}
 
-        {spec.runs.length ? (
+        {on("overview") && spec.runs.length ? (
           <View testID="view-details">
             <Button label={t(details ? "mod.gutters.card.detailsHide" : "mod.gutters.card.details")} icon={details ? "chevronRight" : "chevronDown"} variant="ghost" onPress={() => setDetails((x) => !x)} />
           </View>
         ) : null}
 
-        {details && spec.runs.length ? (
+        {on("overview") && details && spec.runs.length ? (
           <Card style={{ gap: space[2] }}>
             <T v="heading" w="semibold">{t("mod.gutters.view.runs")}</T>
             {spec.runs.map((r) => (
@@ -406,7 +432,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
           </Card>
         ) : null}
 
-        {details && spec.corners.length ? (
+        {on("overview") && details && spec.corners.length ? (
           <Card style={{ gap: space[2] }}>
             <T v="heading" w="semibold">{t("mod.gutters.view.corners")}</T>
             {spec.corners.map((c) => (
@@ -420,7 +446,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
           </Card>
         ) : null}
 
-        {details && spec.ds.length ? (
+        {on("overview") && details && spec.ds.length ? (
           <Card style={{ gap: space[2], ...(cols ? { maxWidth: layout.formMax } : {}) }}>
             <T v="heading" w="semibold">{t("mod.gutters.view.ds")}</T>
             {/* #1800 (founder 16.11: «водостоки — общее количество»): one row per kind of downspout — the supplier's name,
@@ -448,7 +474,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
           </Card>
         ) : null}
 
-        {details && spec.parts.length ? (
+        {on("overview") && details && spec.parts.length ? (
           <Card style={{ gap: space[5], ...(cols ? { maxWidth: layout.formMax } : {}) }}>
             <View testID="view-parts"><RowView style={{ alignItems: "center", gap: space[2] }}>
               <T v="heading" w="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>{t("mod.gutters.view.parts")}</T>
@@ -475,7 +501,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
         ) : null}
 
         {/* the estimates of this measurement (#707): compact cards */}
-        {money$ && estimates.length ? (
+        {on("estimates") && money$ && estimates.length ? (
           <View testID="view-estimates" style={{ gap: space[2] }}>
             <T v="heading" w="semibold">{t("mod.gutters.view.estimates")}</T>
             <CardList>
@@ -508,8 +534,22 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
       ? { label: t(action.kind === "make" ? "mod.gutters.est.make" : action.kind === "update" ? "mod.gutters.est.update" : "mod.gutters.est.open"), onPress: doEstimate, testID: `view-action-${action.kind === "open" && action.signed ? "signed" : action.kind}` }
       : undefined;
   const second = money$ && other && action.kind === "make" ? { label: t("mod.gutters.card.openEst", { n: other.number ?? "" }), onPress: () => router.push(`/estimate/${other.id}` as Href), testID: "view-open-other" } : undefined;
+  // «Сейчас» (#3028, as the lead's and the client's cards): why this step, the one button, a second one beside it
+  const reason =
+    action.kind === "needLead" ? t("mod.gutters.now.needLead")
+    : action.kind === "make" ? (other ? t("mod.gutters.card.otherEst", { n: other.number ?? "", state: t(estimateStatusView(other.status).l) }) : t("mod.gutters.now.make"))
+    : action.kind === "update" ? t("mod.gutters.now.update")
+    : action.kind === "open" ? t(action.signed ? "mod.gutters.now.signed" : "mod.gutters.now.open")
+    : t("mod.gutters.view.empty");
+  const now = <NowCard testID="view-now" kicker={t("proto.client.now")} title={reason} main={main} second={second} />;
+  const sections = [
+    { key: "overview" as const, label: t("mod.gutters.sec.overview") },
+    { key: "photos" as const, label: t("mod.gutters.sec.photos") },
+    { key: "estimates" as const, label: t("mod.gutters.sec.estimates"), ...(estimates.length ? { count: estimates.length } : {}) },
+    { key: "history" as const, label: t("mod.gutters.sec.history") },
+  ];
   return (
-    <MeasurementObject m={m} drawn={drawing.runs.length > 0} back={route.back} onGone={onGone} onEdit={edit} onCrewDocs={drawing.runs.length ? () => setCrewDocs(true) : undefined} main={main} second={second}>
+    <MeasurementObject m={m} drawn={drawing.runs.length > 0} back={route.back} onGone={onGone} onEdit={edit} onCrewDocs={drawing.runs.length ? () => setCrewDocs(true) : undefined} now={now} sections={sections} section={section} onSection={setSection}>
       {content}
     </MeasurementObject>
   );

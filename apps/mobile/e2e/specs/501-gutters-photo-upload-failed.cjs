@@ -4,6 +4,7 @@
  * mark goes, the others keep theirs. The phone's data holds a lead's measurement with three refused photos — refused with the file
  * here, too big with the file here, refused on another phone (no file here). Every view. Waits on what it checks; ids by testID.
  */
+const { showSection } = require("../gutters.cjs");
 const { pressEscUntilClosed, sheetGone } = require("../sheet.cjs");
 
 const KEY = "octo.db.v5";
@@ -45,6 +46,7 @@ exports.run = async (h) => {
 
   // ---- «Просмотр замера»: the strip says how many
   await h.go(`/module/gutters/view?m=${M}`);
+  await showSection(p, "view-photo-strip"); // #3028: on «Фото»
   await vis("view-photo-strip").waitFor({ timeout: 10000 });
   await vis("photo-upload-failed").waitFor({ timeout: 10000 });
   const note = await vis("photo-upload-failed").innerText();
@@ -75,6 +77,7 @@ exports.run = async (h) => {
 
   // a reload keeps the marks on this phone
   await h.go(`/module/gutters/view?m=${M}`);
+  await showSection(p, "view-photo-strip"); // #3028: on «Фото»
   await vis("photo-upload-failed").waitFor({ timeout: 10000 });
   h.expect((await vis("photo-upload-failed").innerText()).includes("Не загрузились в облако: 2"), "after a reload: still 2");
 };

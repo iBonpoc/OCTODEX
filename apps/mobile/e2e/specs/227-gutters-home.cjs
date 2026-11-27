@@ -76,8 +76,9 @@ exports.run = async (h) => {
     h.expect((await chip(name).count()) === 1 && new RegExp(`· ${n}$`).test((await chip(name).innerText()).trim()), `the chip «${name} · ${n}»`);
   }
   const text = async (id) => (await tid(`measurement-${id}`).innerText()).replace(/\n/g, " | ");
-  h.expect(/Без клиента/.test(await text("e2e227-draft")) && /Черновик/.test(await text("e2e227-draft")), `the draft: «Без клиента», «Черновик» (${await text("e2e227-draft")})`);
-  h.expect(/Лид: /.test(await text("e2e227-lead")) && /Без сметы/.test(await text("e2e227-lead")), `the lead's: «Лид: …», «Без сметы» (${await text("e2e227-lead")})`);
+  // #3028: a draft — «Черновик»; a lead's — its name (no «Лид:», #3017), «Без сметы»
+  h.expect(/Черновик/.test(await text("e2e227-draft")), `the draft: «Черновик» (${await text("e2e227-draft")})`);
+  h.expect((await text("e2e227-lead")).includes(lead.name) && /Без сметы/.test(await text("e2e227-lead")), `the lead's: its name, «Без сметы» (${await text("e2e227-lead")})`);
   h.expect((await text("e2e227-sent")).includes(client.name) && /Отправлена/.test(await text("e2e227-sent")), `the client's: its name, «Отправлена» (${await text("e2e227-sent")})`);
   h.expect(/Подписан/.test(await text("e2e227-signed")), `the signed one: «Подписан» (${await text("e2e227-signed")})`);
   await h.shot("all");

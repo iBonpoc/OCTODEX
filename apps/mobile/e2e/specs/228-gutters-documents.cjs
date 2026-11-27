@@ -12,7 +12,7 @@
  *   estimate says why not; a draft is deleted and «Отменить» brings it back.
  * Finds things by testID; waits on what it checks.
  */
-const { pressWhenStill, stands, pressUndo, docsFor } = require("../gutters.cjs");
+const { pressWhenStill, stands, pressUndo, docsFor, showSection } = require("../gutters.cjs");
 const { pressEscUntilClosed } = require("../sheet.cjs");
 const DB_KEY = "octo.db.v5";
 
@@ -83,6 +83,7 @@ exports.run = async (h) => {
   h.expect((await text("screen-title")).includes(client.name) && (await text("view-head-address")).includes(place.address), `whom for and where (${await text("screen-title")} / ${await text("view-head-address")})`);
   h.expect(/Подписан/.test(await text("view-head-status")), `the state (${await text("view-head-status")})`);
   h.expect((await tid("view-accuracy").count()) === 0, "no «Рулетка / Примерно» in the head (#768, #1764)"); // i18n-old: ok — checks the old words are gone
+  await showSection(p, "view-docs"); // #3028: «Документы» on «Сметы»
   await tid("view-docs").waitFor({ timeout: 5000 });
   await h.shot("head");
   h.expect(/Прикреплено к смете/.test(await text("view-docs")), `«Прикреплено к смете …» (${await text("view-docs")})`);
@@ -91,18 +92,20 @@ exports.run = async (h) => {
   await docsFor(p, "view-doc-crew");
   h.expect(/Для бригады/.test(await text("view-doc-crew")) && /деталей: \d+/.test(await text("view-doc-crew")), `the crew's: the cut, in «⋯ → Документы бригады» (${await text("view-doc-crew")})`);
   await docsFor(p, "view-docs");
+  await showSection(p, "view-photos"); // #3028: the photos on «Фото»
   h.expect((await tid("view-photos").count()) === 1, "the photos");
+  await showSection(p, "view-details"); // the drawing and the parts on «Обзор»
   h.expect((await tid("view-parts").count()) === 0, "the parts are folded");
   await pressWhenStill(tid("view-details").getByRole("button"));
   await tid("view-parts").waitFor({ timeout: 5000 });
   h.expect((await tid("view-run-2").count()) === 1, "«Подробно»: the gutters, the parts");
   if (wide) {
-    const a = await tid("view-drawing").boundingBox();
-    const d = await tid("view-docs").boundingBox();
-    h.expect(d.x > a.x + a.width - 2, "820 / 1280: the documents beside the sheet (two columns)");
+    // #3028: on its own screen the documents are a section of their own («Сметы»); two columns are the 1280 panel's (below)
+    h.expect((await tid("view-drawing").count()) === 1, "820 / 1280: the drawing on «Обзор»");
   }
   await h.shot("card");
   // the estimate's row: the estimate
+  await showSection(p, "view-doc-estimate"); // #3028: on «Сметы»
   await pressWhenStill(tid("view-doc-estimate").getByRole("button"));
   await waitFor(() => new RegExp(`/estimate/${est.id}$`).test(new URL(p.url()).pathname), `the client's document is the estimate (${p.url()})`);
 
@@ -138,7 +141,7 @@ exports.run = async (h) => {
   await tid("view-more").getByRole("button").click();
   await menu("Отвязать (в черновики)");
   await waitFor(async () => { const m = (await g()).measurements.find((x) => x.id === "e2e228-free"); return !!m && !m.propertyId && !m.leadId; }, "unlinked");
-  await waitFor(async () => /Без клиента/.test(await text("screen-title")) && /Черновик/.test(await text("view-head-status")), "the head: «Без клиента», «Черновик»");
+  await waitFor(async () => !(await text("screen-title")).includes(client.name) && /Черновик/.test(await text("view-head-status")), "the head: not the client's any more, «Черновик» (#3028: a draft is named by its address)");
 
   // a draft is deleted; «Отменить» brings it back
   await tid("view-more").getByRole("button").click();

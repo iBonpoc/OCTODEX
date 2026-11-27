@@ -9,7 +9,7 @@
  * - the lead has «Смета из замера»: nothing changed → it opens the same estimate, never a second one.
  * Finds things by testID; waits on what it checks (CHECKS §9).
  */
-const { skipLength, openView, backToCanvas, savedOnce } = require("../gutters.cjs");
+const { skipLength, openView, backToCanvas, savedOnce, showSection } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -86,6 +86,7 @@ exports.run = async (h) => {
   await h.go(`/module/gutters/view?m=${encodeURIComponent(mid)}`);
   await tid("view-action-open").waitFor({ timeout: 8000 });
   h.expect((await tid("view-action-update").count()) === 0 && (await tid("view-stale").count()) === 0, "nothing changed: no «Перенести изменения»");
+  await showSection(p, "view-estimates"); // #3028: on «Сметы»
   h.expect((await tid("view-estimates").count()) === 1, "the estimates of the measurement under it (#707)");
   await backToCanvas(p);
   await drawRun(0.6);
