@@ -236,7 +236,9 @@ function gitMerger(cwd, date) {
  * (ACTIONS_RUNTIME_TOKEN of the artifact and cache steps) or its files, so it cannot write the caches main reads. The container
  * gets no variable but SUBJECT, runs as the runner's user (the worktree stays removable) and is removed after the build.
  */
-const BUILD_IMAGE = "node:22-bookworm";
+// Pinned by digest (rule 17, checked 27.11.2026): the Docker Official Image library/node (Node.js Docker team), tag 22-bookworm,
+// Node 22.23.5, built 24.11.2026, the multi-platform index. A new digest only deliberately, after the same check.
+const BUILD_IMAGE = "node:22-bookworm@sha256:7c400d78797d8cbe3f6bb21d2227b86af4cd24b0014cc9f62ff989cc16de988e";
 function buildArgv({ wt, cmd, subject, uid, gid }) {
   return ["docker", ["run", "--rm", "--user", `${uid}:${gid}`, "-e", "HOME=/tmp", "-e", `SUBJECT=${subject}`,
     "-v", `${wt}:/w`, "-w", "/w", BUILD_IMAGE, "bash", "-c", cmd]];

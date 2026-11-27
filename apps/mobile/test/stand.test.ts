@@ -278,6 +278,8 @@ describe("stand: the code of the PRs is built only inside a throw-away container
     expect(argv).not.toContain("--privileged");
     expect(argv.join(" ")).not.toMatch(/docker\.sock|--network[= ]host|--pid|ACTIONS_|GITHUB_TOKEN/);
     expect(argv.slice(-4)).toEqual([S.BUILD_IMAGE, "bash", "-c", "npm ci"]);
+    // the image is pinned by digest, never a moving tag alone (rule 17)
+    expect(S.BUILD_IMAGE).toMatch(/^node:22-bookworm@sha256:[0-9a-f]{64}$/);
   });
   it("the CLI builds every candidate through buildArgv and passes the container no environment of the runner", () => {
     const src = readFileSync(join(__dirname, "../../../scripts/stand.cjs"), "utf8");
