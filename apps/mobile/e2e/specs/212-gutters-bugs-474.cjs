@@ -2,7 +2,7 @@
  * e2e 212 — ошибки основателя на версии 474 (через руководителя 09.11; docs/specs/33-gutters-canvas.md П20.20). Every view.
  * - a pinch whose first finger has moved before the second lands (always so on a phone): the drawing gets smaller —
  *   and again (two pinches), and nothing is drawn;
- * - the corner sheet: «наружный» / «внутренний» switch the kind and the sheet stays open;
+ * - the corner sheet: «Outside» / «Inside» switch the kind and the sheet stays open;
  * - the cut's small drawing is as wide as the sheet, with «стена …» / «лицевая …» chips and the arc with its degrees (no letters: #1276);
  *   the triangle says A, B, C in plain words;
  * - drawn on from a gutter's free end straight on → one gutter, its length the sum (no second line).
@@ -147,7 +147,7 @@ exports.run = async (h) => {
   await doubleTap(p, k.x + k.width / 2, k.y + k.height / 2);
   await tid("corner-sheet").waitFor({ timeout: 5000 });
   const kind0 = (await tid("corner-kind").locator('[aria-checked="true"]').innerText()).trim();
-  const other = kind0 === "наружный" ? "внутренний" : "наружный";
+  const other = kind0 === "Outside" ? "Inside" : "Outside";
   await tid("corner-kind").getByRole("radio", { name: other, exact: true }).click();
   await waitFor(async () => (await tid("corner-kind").locator('[aria-checked="true"]').innerText()).trim() === other, `switched to ${other}`);
   h.expect((await tid("corner-sheet").count()) === 1, "the sheet stays open");
@@ -173,7 +173,7 @@ exports.run = async (h) => {
   const cm = [deg.x, deg.y];
   const far = (qs) => qs.reduce((n, q) => n + Math.hypot(q.x - cm[0], q.y - cm[1]), 0) / qs.length;
   const faceOut = far(at(/^лицевая /)) > far(at(/^стена /));
-  h.expect(faceOut === (kind0 === "наружный"), `${kind0}: the face is ${kind0 === "наружный" ? "outside" : "inside"} the angle`);
+  h.expect(faceOut === (kind0 === "Outside"), `${kind0}: the face is ${kind0 === "Outside" ? "outside" : "inside"} the angle`);
   // 4) the triangle in plain words
   h.expect(/^A — /.test(await tid("tri-a").innerText()) && /^B — /.test(await tid("tri-b").innerText()) && /^C — /.test(await tid("tri-c").innerText()), "A, B, C in plain words");
   await h.shot("corner");
