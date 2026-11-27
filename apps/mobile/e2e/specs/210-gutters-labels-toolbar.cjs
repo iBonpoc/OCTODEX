@@ -82,7 +82,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await svg().locator('[id^="splash-"]').count()) === 0, "off: the mark is gone");
   await tid("corner-splash").click(); // a ToggleRow: the row is the switch (#3066)
   await waitFor(async () => (await svg().locator('[id^="splash-"]').count()) === 1, "on again: back");
-  await closeSheet();
+  await winSave(p); // the corner's window: «Сохранить» (DS §7.3, #3071)
 
   // a downspout; its fittings word → its menu; «Водосток» on it → its menu, no second one
   await tid("draw-tool-ds").getByRole("button").click();

@@ -14,9 +14,10 @@ import { Button, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
 import { asFields, tapeIn } from "../canvas/attrs";
-import { DENOM, fmtLen, type LenFormat } from "../canvas/format";
+import { DENOM, fmtLen, fracLabel, type LenFormat } from "../canvas/format";
 import { labelWidth } from "../canvas/labels";
-import { countOnKeyboardHide, triKey } from "./triangleCount";
+import { countOnKeyboardHide, lenFields, triKey, type Len as TriLen } from "./triangleCount";
+import { SelectField } from "@/ui/selectField";
 import { angleArc, cutPoint } from "../canvas/cornerPlan";
 import { angleFromTriangle, houseSides, runLengthIn, type CornerCutRun, type Drawing, type FoundCorner, type P } from "../geometry";
 
@@ -73,12 +74,12 @@ export function CornerSketch({ d, f, cut, w, angleDeg, fmt = "ftin" }: { d: Draw
    * a chip along a line (founder 09.11: the numbers overlapped): at the line's middle, turned with it (kept upright),
    * pushed off it along the normal `nu` (±1) by half its height and `gap`
    */
-  const chipBy = (mx: number, my: number, u: [number, number], nu: [number, number], sign: 1 | -1, text: string, strong: boolean, key: string, gap: number) => {
-    const reach = th / 2 + gap;
-    let deg = (Math.atan2(u[1], u[0]) * 180) / Math.PI;
-    if (deg > 90) deg -= 180;
-    if (deg < -90) deg += 180;
-    return chip(mx + nu[0] * reach * sign, my + nu[1] * reach * sign, text, strong, key, deg);
+  const chipBy = (mx: number, my: number, _u: [number, number], nu: [number, number], sign: 1 | -1, text: string, strong: boolean, key: string, gap: number) => {
+    // always level (#3071, design review №15: a turned number is hard to read on a phone — these are the sizes to cut by): the chip
+    // stands off the line by its own half-extent along the normal — half its width beside an upright gutter, half its height by a level one
+    const tw = labelWidth(text, FS, space[2]);
+    const reach = Math.abs(nu[0]) * (tw / 2) + Math.abs(nu[1]) * (th / 2) + gap;
+    return chip(mx + nu[0] * reach * sign, my + nu[1] * reach * sign, text, strong, key, 0);
   };
   const chip = (x: number, y: number, text: string, strong: boolean, key: string, deg = 0) => {
     const tw = labelWidth(text, FS, space[2]);
@@ -141,16 +142,21 @@ export function CornerSketch({ d, f, cut, w, angleDeg, fmt = "ftin" }: { d: Draw
   );
 }
 
-/** a length typed in feet and inches (inches may be decimal — to 1/16″) */
-function Len({ label, value, onChange, testID }: { label: string; value: { ft: string; inch: string }; onChange: (v: { ft: string; inch: string }) => void; testID: string }) {
+/** a length typed in feet and inches, the fraction picked from a short menu (#3071, design review №14: fractions, as everywhere — not «0.125») */
+const EIGHTHS16 = [0, 2, 4, 6, 8, 10, 12, 14] as const;
+function Len({ label, value, onChange, testID }: { label: string; value: TriLen; onChange: (v: TriLen) => void; testID: string }) {
   const { t } = useI18n();
+  const e16 = value.e16 ?? 0;
+  const fr = (k: number) => (k === 0 ? "0" : fracLabel(k));
+  const keys = (EIGHTHS16 as readonly number[]).includes(e16) ? [...EIGHTHS16] : [...EIGHTHS16, e16].sort((x, y) => x - y);
   return (
     <View testID={testID} style={{ gap: space[1] }}>
       <T v="caption" tone="mut">{label}</T>
-      <RowView style={{ gap: space[2] }}>
+      <RowView style={{ gap: space[2], alignItems: "center" }}>
         <View style={{ flex: 1 }}><TextField type="integer" value={value.ft} onChangeText={(ft) => onChange({ ...value, ft })} label={t("mod.gutters.attr.ft")} /></View>
         <T v="body" tone="mut">{t("mod.gutters.attr.ft")}</T>
-        <View style={{ flex: 1 }}><TextField type="number" value={value.inch} onChangeText={(inch) => onChange({ ...value, inch })} label={t("mod.gutters.attr.in")} /></View>
+        <View style={{ flex: 1 }}><TextField type="integer" value={value.inch} onChangeText={(inch) => onChange({ ...value, inch })} label={t("mod.gutters.attr.in")} /></View>
+        <View style={{ flex: 1 }}><SelectField bare label={t("mod.gutters.attr.fracMoreA11y")} testID={`${testID}-frac`} items={keys.map((k) => ({ key: String(k), label: fr(k) }))} value={String(e16)} onChange={(k) => onChange({ ...value, e16: Number(k) })} /></View>
         <T v="body" tone="mut">{t("mod.gutters.attr.in")}</T>
       </RowView>
     </View>
@@ -161,14 +167,14 @@ function Len({ label, value, onChange, testID }: { label: string; value: { ft: s
 export function CornerTriangle({ d, f, onAngle }: { d: Drawing; f: FoundCorner; onAngle: (deg: number) => void }) {
   const { t } = useI18n();
   const [r1, r2] = f.runs.map(({ id }) => d.runs.find((x) => x.id === id)!);
-  const [a, setA] = useState(asFields(runLengthIn(r1!)));
-  const [b, setB] = useState(asFields(runLengthIn(r2!)));
-  const [c3, setC] = useState({ ft: "", inch: "" });
+  const [a, setA] = useState<TriLen>(lenFields(runLengthIn(r1!)));
+  const [b, setB] = useState<TriLen>(lenFields(runLengthIn(r2!)));
+  const [c3, setC] = useState<TriLen>({ ft: "", inch: "", e16: 0 });
   const [res, setRes] = useState<number | null | "bad">(null);
   const counted = useRef<string | null>(null);
   const count = () => {
     counted.current = triKey(a, b, c3);
-    const A = tapeIn(a.ft, a.inch), B = tapeIn(b.ft, b.inch), C = tapeIn(c3.ft, c3.inch);
+    const A = tapeIn(a.ft, a.inch, a.e16), B = tapeIn(b.ft, b.inch, b.e16), C = tapeIn(c3.ft, c3.inch, c3.e16);
     const deg = A && B && C ? angleFromTriangle(A, B, C) : null;
     if (deg === null) return setRes("bad");
     setRes(deg);
