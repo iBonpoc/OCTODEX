@@ -80,7 +80,9 @@ export function useEstimateList(q: string, allDone: boolean, onAllDone: () => vo
           ? t("ue.viewed", { date: day(e.viewedAt) })
           : e.sentAt
             ? `${t("st.sent")} ${day(e.sentAt)}`
-            : t(estView[e.status].l);
+            : e.status === "draft"
+              ? undefined // the group «Черновики» says it (review #3038)
+              : t(estView[e.status].l);
     return {
       key: e.id,
       testID: `est-row-${e.id}`,

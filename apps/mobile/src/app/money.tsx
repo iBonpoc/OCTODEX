@@ -19,6 +19,8 @@ import { dayKeyIn, formatDayKey } from "@/features/zone";
 import { memberName } from "@/features/team";
 import { matchExpense } from "@/features/moneyLists";
 
+/** the kind of an expense as its row's icon */
+const CAT_ICON: Record<string, "box" | "truck" | "trash" | "wrench" | "tag"> = { materials: "box", fuel: "truck", dump: "trash", tools: "wrench", other: "tag" };
 /** «пт, 20 нояб.» → «Пт, 20 нояб.» */
 const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
 /** the month of an expense on the company's calendar (П4b), not the UTC month of its moment */
@@ -62,7 +64,8 @@ export default function Money() {
         // the day is the group's title: line 3 says who
         extra={memberName(db, x.memberId, t) || undefined}
         valueTop
-        lead={{ icon: receipt ? "camera" : "dollar" }}
+        // the kind's icon (review #3038: «$» in every row told nothing); a missing receipt is the icon by the sum
+        lead={{ icon: CAT_ICON[x.category] ?? "tag" }}
         value={`−${moneyWhole(x.amountCents)}`}
         status={mark ? { status: "neutral", label: mark, iconOnly: true } : undefined}
       />
