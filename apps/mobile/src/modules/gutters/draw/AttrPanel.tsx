@@ -342,6 +342,9 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
             </View>
             <FracText value={e16} testID="quick-length-frac" />
             <UnitPick unit={unit} onUnit={pickUnit} testID="quick-length-unit" />
+            {/* «Далее» — a step of the typing, with the fields (the phone's number pad has no «next» key, #1316); the window's own row below holds
+                two buttons only, «Отменить · Применить» (DS Б1а; founder 27.11, #3064 «никаких столбиков кнопок») */}
+            {stage !== "frac" ? <View testID="quick-length-next"><Button label={t(k("next"))} size="sm" variant="secondary" onPress={goNext} /></View> : null}
           </RowView>
           <FracPicker value={e16} onChange={(v) => { edited.current = true; restTouched.current = true; setE16(v); setBad(false); }} active={stage === "frac"} testID="quick-length-fracs" />
           <Pull ft={ft} inc={inc} e16={e16} onPull={(x) => { edited.current = true; restTouched.current = true; setFt(String(x.ft)); setInc(String(x.inch)); setE16(x.sixteenths); setBad(false); }} testID="quick-length-tape" />
@@ -358,8 +361,7 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
       <T v="caption" tone="mut">{t(k("quickDrawn"), { len: fmtLen(drawn, fmt) })}</T>
       {bad ? <View testID="quick-length-bad"><StatusChip status="warn" label={t(k(unit === "mm" ? "badLengthMm" : "badLength"))} soft /></View> : null}
       </ScrollView>
-      <RowView style={{ gap: space[2], justifyContent: "flex-end" }}>
-        {unit === "ftin" && stage !== "frac" ? <View testID="quick-length-next"><Button label={t(k("next"))} size="sm" variant="secondary" onPress={goNext} /></View> : null}
+      <RowView style={{ gap: space[2], justifyContent: "space-between" }}>
         <View testID="quick-length-cancel"><Button label={t(k("quickCancel"))} size="sm" variant="ghost" onPress={onCancel} /></View>
         <View testID="quick-length-apply"><Button label={t(k("apply"))} size="sm" onPress={apply} /></View>
       </RowView>
