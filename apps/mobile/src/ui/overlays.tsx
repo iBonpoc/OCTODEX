@@ -3,7 +3,7 @@ import { toastArmed } from "./toastArm";
 import { stackDrop, stackLife, stackReplace, stackShow, stackTop } from "./toastStack";
 import { useQueueLineHeight } from "./queueLineHeight";
 import { toastBottom, useFooterInset, useToastRight, wideToastBottom } from "./footerInset";
-import { fitMenuPlace, menuListHeight, menuScrollTo } from "./menuLayout";
+import { actionMenuWidth, fitMenuPlace, menuListHeight, menuScrollTo } from "./menuLayout";
 import { Fragment, createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ScreenScrollCtx } from "./requiredForm";
 import { AccessibilityInfo, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance } from "react-native";
@@ -63,6 +63,9 @@ export interface MenuItem<K extends string> {
   icon?: IconKey;
   selected?: boolean;
   destructive?: boolean;
+  /** a destructive item whose screen asks its own question (what goes with it — «Удалить замер», #2013): red and last, but the
+   *  template's «Удалить …?» is not asked again (two questions in a row, Gutters #3016) */
+  ownAsk?: boolean;
   /** pale (`dimOpacity`) but pressable: the press explains why it cannot be done */
   dim?: boolean;
   /** the first item of its own group (after a line): actions after the choices of a label menu — «Сделать основным» (DS §9 А14а) */
@@ -148,7 +151,7 @@ export function Menu<K extends string>({
   const open = visible && !!anchor;
   // the edges: 16 from the window, and clear of the notch and the home indicator (docs/specs/32)
   const e = { l: Math.max(insets.left, space[4]), r: Math.max(insets.right, space[4]), t: Math.max(insets.top, space[4]), b: Math.max(insets.bottom, space[4]) };
-  const w = Math.min(fit ? component.select.menuMaxW : matchWidth ? Math.min(Math.max(component.menuW, at.w), component.modalW) : component.menuW, winW - e.l - e.r);
+  const w = Math.min(fit ? component.select.menuMaxW : matchWidth ? Math.min(Math.max(component.menuW, at.w), component.modalW) : actionMenuWidth(items.map((it) => it.label)), winW - e.l - e.r);
   const left = Math.max(e.l, Math.min(at.x, winW - w - e.r));
   // a value menu: the right edge on the field's when the field is as wide as the menu can be; else from the field's left edge
   const fitPlace = fitMenuPlace({ x: at.x, w: at.w, winW, minW: Math.min(component.menuW, w), maxW: w, edgeL: e.l, edgeR: e.r });

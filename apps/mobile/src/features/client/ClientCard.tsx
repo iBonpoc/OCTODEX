@@ -24,6 +24,7 @@ import { callPlaceForClient } from "@/features/comms/comms";
 import { PeopleSheet, StatusSheet, TagsSheet } from "@/features/client/ClientSheets";
 import { newProperty, PropertySheet } from "@/features/client/PropertySheets";
 import { clientSectionKeys, jobChain, type ClientMainStep, type ClientSectionKey } from "@/features/client/nextStep";
+import { clientMeasureHref, clientPlaceCtx } from "@/features/client/clientMeasure";
 import { ClientContacts } from "@/features/client/ClientContacts";
 import { ClientDetails, ClientEstimates, ClientLog, ClientMoney, ClientNowCard, ClientOverview, ClientPlaces, ClientVisits, ClientWork, clientStepOf, useClientFacts } from "@/features/client/ClientSections";
 import { TaskSheet, type TaskDraft } from "@/features/tasks/TaskSheet";
@@ -79,15 +80,16 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
   const call = () => tel && dial(tel, () => callDone());
   const sms = (p?: Person) => (tel || p ? setWriting({ owner: { type: "customer", id: c.id }, person: p ?? main }) : mail ? Linking.openURL(mail).catch(() => {}) : undefined);
   const route = (p: Property) => Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(propertyMapQuery(p))}`).catch(() => {});
-  // the measure starts a new estimate for the client (where the module's drawing lives): the office's, when the client is served
-  const estimateHref = fabItems("client", role, { customerId: c.id }).find((i) => i.id === "estimate")?.href;
-  /** v2 «быстрые действия»: five icons 44 with their words; what cannot be done is dimmed with the reason (VoiceOver) */
+  // #2996: «Замер» is the measuring module's measurement (never a new estimate); no such module — no icon
+  const measureHref = canServe(db, c.id) ? clientMeasureHref(db, role, clientPlaceCtx(db, c.id, r.leadIds, r.properties)) : undefined;
+  /** v2 «быстрые действия»: five icons 44 with their words — one order on every object (#2995): Позвонить · SMS · Почта · Маршрут · Замер;
+   *  what cannot be done is dimmed with the reason (VoiceOver) */
   const quick: IconRowItem[] = [
     { icon: "phone", label: t("client.call"), a11y: `${t("client.call")} ${c.name}`, onPress: call, testID: "client-call", disabled: !tel, reason: t("w2b.client.noPhone") },
     { icon: "message", label: t("cc.sms"), a11y: `${t("cc.sms")} ${c.name}`, onPress: () => sms(), testID: "client-write", disabled: !tel || !main, reason: t("w2b.client.noPhone") },
-    { icon: "route", label: t("client.route"), a11y: place ? `${t("client.route")}: ${place.address}` : t("client.route"), onPress: () => place && route(place), testID: "client-route", disabled: !place, reason: t("w2b.client.noPlace") },
     { icon: "mail", label: t("cl6.writeMail"), a11y: `${t("cl6.writeMail")} ${c.name}`, onPress: () => mail && Linking.openURL(mail).catch(() => {}), testID: "client-mail", disabled: !mail, reason: t("w2b.client.noMail") },
-    ...(estimateHref && canServe(db, c.id) ? [{ icon: "measure" as const, label: t("w2b.client.measure"), a11y: `${t("w2b.client.measure")}: ${c.name}`, onPress: () => router.push(estimateHref as Href), testID: "client-measure" }] : []),
+    { icon: "route", label: t("client.route"), a11y: place ? `${t("client.route")}: ${place.address}` : t("client.route"), onPress: () => place && route(place), testID: "client-route", disabled: !place, reason: t("w2b.client.noPlace") },
+    ...(measureHref ? [{ icon: "measure" as const, label: t("w2b.client.measure"), a11y: `${t("w2b.client.measure")}: ${c.name}`, onPress: () => router.push(measureHref as Href), testID: "client-measure" }] : []),
   ];
 
   /* ---------- status ---------- */

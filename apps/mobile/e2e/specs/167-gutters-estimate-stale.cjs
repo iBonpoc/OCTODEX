@@ -56,7 +56,7 @@ exports.run = async (h) => {
   const mid = new URL(p.url()).searchParams.get("m");
   // «Готово» → «Просмотр замера» → «Сделать смету» (#698 #699)
   await openView(p);
-  await tid("view-action-make").getByRole("button").click();
+  await tid("view-action-make").click();
   await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 8000 });
   const eid = new URL(p.url()).searchParams.get("id");
   await waitFor(async () => (await gutters()).measurements.some((m) => m.id === mid && m.status === "ready"), "the measurement is ready");

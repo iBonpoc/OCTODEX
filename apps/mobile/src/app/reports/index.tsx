@@ -3,18 +3,16 @@ import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { canSeeReports, categoryReport, collectedReport, NO_CATEGORY, owedReport, REPORTS, salesReport, sourcesReport, type ReportId, REPORT_TITLE } from "@/features/reports";
 import type { IconKey } from "@/ui/primitives";
-import { CardGrid, ListCard } from "@/ui/listCard";
-import { useDevice } from "@/theme/ThemeProvider";
-import { CardList, Empty, Screen } from "@/ui/surfaces";
+import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
+import { Empty, Screen } from "@/ui/surfaces";
 
 const TITLE = REPORT_TITLE;
 const ICON: Record<ReportId, IconKey> = { owed: "invoice", collected: "wallet", sales: "chart", sources: "megaphone", categories: "toolbox" };
 
-/** «Ещё» → Отчёты v1 (wave 8, 13 §3.15; S14; «По направлениям» — step 12б, 18 §11): five reports, each a card with its headline number for this month. */
+/** «Ещё» → Отчёты v1 (wave 8, 13 §3.15; S14; «По направлениям» — step 12б, 18 §11): five reports, each a row with its headline number for this month. */
 export default function Reports() {
   const { db, role } = useStore();
   const { t, tn, moneyWhole } = useI18n();
-  const { device } = useDevice();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));
   if (!canSeeReports(role))
     return (
@@ -44,21 +42,26 @@ export default function Reports() {
       return { value: moneyWhole(c.total.revenueCents), label: t("mny.p.month"), note: dirs ? tn("rpt.cat.dirs", dirs) : t("rpt.cat.noDirs") };
     })(),
   };
-  const card = (id: ReportId) => (
-    <ListCard
+  // lists B (#2992): a report is a row of one group (rule 12) — its icon · the name, «из чего число · за какой срок» · the figure
+  const row = (id: ReportId) => (
+    <GroupRow
       key={id}
+      testID={`rpt-row-${id}`}
       title={t(TITLE[id])}
-      lead={{ kind: "icon", icon: ICON[id] }}
+      subtitle={head[id].note}
+      lead={{ icon: ICON[id] }}
       value={head[id].value}
-      valueLabel={head[id].label}
-      facts={{ desc: head[id].note }}
-      density="rich"
+      // a sum in the line («просрочено $1,840.00») and a long name are never cut (Д-строка-2, rule 31)
+      wrap
       onPress={() => router.push(`/reports/${id}`)}
     />
   );
   return (
-    <Screen title={t("rpt.title")} back={back} help={t("rpt.help")} hintKey="reports">
-      {device === "tablet" ? <CardGrid>{REPORTS.map(card)}</CardGrid> : <CardList>{REPORTS.map(card)}</CardList>}
+    // «за этот месяц» once, under the title — not «Месяц ·» in four rows of five (layout review 27.11, Д-строка-5)
+    <Screen title={t("rpt.title")} subtitle={t("rpt.monthLine")} back={back} help={t("rpt.help")} hintKey="reports">
+      <GroupedList testID="rpt-list">
+        <ListGroup>{REPORTS.map(row)}</ListGroup>
+      </GroupedList>
     </Screen>
   );
 }

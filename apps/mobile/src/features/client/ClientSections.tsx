@@ -29,6 +29,7 @@ import { leadStatusView, sourceName } from "@/features/leads";
 import { NotesBlock } from "@/features/NotesBlock";
 import { AdvancesBlock } from "@/features/payments/AdvancesBlock";
 import { ModulePlaces } from "@/modules/ModulePlaces";
+import { clientPlaceCtx } from "@/features/client/clientMeasure";
 import { ClientDupCards } from "@/features/client/ClientDuplicates";
 import { TaskSheet, type TaskDraft } from "@/features/tasks/TaskSheet";
 import { useDialThenAsk } from "@/features/comms/dial";
@@ -286,11 +287,7 @@ export function ClientOverview({ c, f, onSection, withNow }: {
       {/* add-on modules' place (spec 33 П24 А3): nothing unless a module is switched on */}
       <ModulePlaces
         place="client"
-        ctx={{
-          customerId: c.id,
-          leadIds: r.leadIds,
-          places: r.properties.map((p) => ({ id: p.id, address: p.address, ...(p.city ? { city: p.city } : {}), leadIds: db.leads.filter((l) => l.propertyId === p.id).map((l) => l.id) })),
-        }}
+        ctx={clientPlaceCtx(db, c.id, r.leadIds, r.properties)}
       />
     </View>
   );

@@ -50,7 +50,7 @@ exports.run = async (h) => {
   await p.waitForFunction(() => !!new URL(location.href).searchParams.get("m"), null, { timeout: 8000 });
   const mid = new URL(p.url()).searchParams.get("m");
   await openView(p);
-  await tid("view-action-make").getByRole("button").click();
+  await tid("view-action-make").click();
   await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 8000 });
   const eid = new URL(p.url()).searchParams.get("id");
   await p.waitForFunction(([k, m]) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.measurements || []).some((x) => x.id === m && x.status === "ready"), [DB_KEY, mid], { timeout: 8000 });

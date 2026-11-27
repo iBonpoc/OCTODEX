@@ -45,7 +45,7 @@ exports.run = async (h) => {
 
   // the index: five reports, the fifth opens «По направлениям»
   await h.go("/reports");
-  const cards = p.locator('[data-testid="list-card"]');
+  const cards = p.locator('[data-testid^="rpt-row-"]').locator("visible=true"); // lists B (#2992): rows
   await h.expectText(/По направлениям/, "the 5th report");
   h.expect((await cards.count()) === 5, "five reports");
   await h.shot("index");

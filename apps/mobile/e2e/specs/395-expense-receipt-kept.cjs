@@ -9,7 +9,7 @@ const AMOUNT = "47.31";
 exports.run = async (h) => {
   const p = h.page;
   const mine = async () => ((await h.db())?.expenses ?? []).find((x) => x.amountCents === 4731);
-  const card = () => p.locator('[data-testid="list-card"]').locator("visible=true").filter({ hasText: `$${AMOUNT}` }).first();
+  const card = () => p.locator('[data-testid^="expense-row-"]').locator("visible=true").filter({ hasText: `$${AMOUNT}` }).first();
 
   await h.go("/expense/new");
   const photo = p.getByTestId("expense-photo").locator("visible=true").first();
@@ -43,7 +43,7 @@ exports.run = async (h) => {
   // the check is not empty: an expense without a receipt does say «Без чека»
   const bare = raw.db.expenses.find((y) => !y.receiptUri && !y.receiptFileId);
   h.expect(!!bare, "the demo has an expense without a receipt");
-  const bareCard = p.locator('[data-testid="list-card"]').locator("visible=true").filter({ hasText: bare.vendor }).filter({ hasText: /Без чека/ });
+  const bareCard = p.locator('[data-testid^="expense-row-"]').locator("visible=true").filter({ hasText: bare.vendor }).filter({ hasText: /Без чека/ });
   h.expect((await bareCard.count()) > 0, "an expense without a receipt says «Без чека»");
   await h.shot("receipt-cloud-copy");
 };

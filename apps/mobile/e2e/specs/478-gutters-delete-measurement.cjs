@@ -35,7 +35,7 @@ exports.run = async (h) => {
   await p.waitForFunction(() => !!new URL(location.href).searchParams.get("m"), null, { timeout: 8000 });
   const mid = new URL(p.url()).searchParams.get("m");
   await openView(p);
-  await tid("view-action-make").getByRole("button").click();
+  await tid("view-action-make").click();
   await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 8000 });
   const eid = new URL(p.url()).searchParams.get("id");
   await p.waitForFunction(([k, id, m]) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.estimates ?? []).some((e) => e.id === id && (e.doc?.options ?? []).some((o) => o.lines.some((l) => l.source && l.source.measurementId === m))), [DB_KEY, eid, mid], { timeout: 8000 });

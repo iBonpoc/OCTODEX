@@ -49,7 +49,7 @@ exports.run = async (h) => {
     )
     .catch(() => h.expect(false, "the expense is saved with its receipt «preparing» (kept here, its row for the cloud)"));
   await h.go("/money");
-  const card = p.locator('[data-testid="list-card"]').locator("visible=true").filter({ hasText: "$39.91" }).first();
+  const card = p.locator('[data-testid^="expense-row-"]').locator("visible=true").filter({ hasText: "$39.91" }).first();
   await card.waitFor({ timeout: 8000 });
   h.expect(/Готовится/.test(await card.innerText()) && !/Без чека/.test(await card.innerText()), "the card: «Готовится», not «Без чека»");
 

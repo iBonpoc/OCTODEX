@@ -26,14 +26,14 @@ const RunLine = memo(function RunLine({ r, color, halo }: { r: SceneRun; color: 
 /** a downspout's mark (spec 33 П20.8): a disc of its storey's colour with an arrow down in the background's colour — the water goes down here;
  *  a plain dot was missed. Picked: a thick ring (one circle — e2e counts circles) */
 export const DS_MARK_R = drawing.dsR + drawing.nodeR;
-const DsMark = memo(function DsMark({ d, color, fill, halo }: { d: SceneDs; color: string; fill: string; halo: string }) {
+const DsMark = memo(function DsMark({ d, color, fill, halo, tr = 0 }: { d: SceneDs; color: string; fill: string; halo: string; /** the counter-turn of the words (#2988), degrees */ tr?: number }) {
   const [x, y] = d.at;
   const r = d.lifted ? DS_MARK_R * drawing.liftScale : DS_MARK_R; // picked up (#1272): the mark itself is bigger
   return (
     <G>
       <Circle cx={x} cy={y} r={r} fill={d.dim ? fill : color} stroke={d.selected || d.dim || d.lifted ? halo : fill} strokeWidth={d.selected || d.dim || d.lifted ? drawing.labelGap : drawing.runW / 2} />
       {/* «D1» inside (founder 08.11): the number, not an arrow */}
-      <SvgText x={x} y={y + FS * 0.35} fontSize={FS} fontFamily={font.families.semibold} fill={d.dim ? color : fill} textAnchor="middle">
+      <SvgText x={x} y={y + FS * 0.35} fontSize={FS} fontFamily={font.families.semibold} fill={d.dim ? color : fill} textAnchor="middle" transform={tr ? `rotate(${tr} ${x} ${y})` : undefined}>
         {d.text}
       </SvgText>
     </G>
@@ -42,7 +42,7 @@ const DsMark = memo(function DsMark({ d, color, fill, halo }: { d: SceneDs; colo
 
 /** an end cap: a square of its storey's colour with «L» / «R» (a rect, not a circle — e2e counts downspout circles) */
 export const CAP_HALF = drawing.dsR;
-const CapMark = memo(function CapMark({ k, color, fill, halo }: { k: SceneCap; color: string; fill: string; halo: string }) {
+const CapMark = memo(function CapMark({ k, color, fill, halo, tr = 0 }: { k: SceneCap; color: string; fill: string; halo: string; tr?: number }) {
   const [x, y] = k.at;
   // picked up (#1272): the point itself is bigger and brighter (a ring of the selection colour); a free end it can stick to has a ring too
   const half = k.lifted ? CAP_HALF * drawing.liftScale : CAP_HALF;
@@ -52,7 +52,7 @@ const CapMark = memo(function CapMark({ k, color, fill, halo }: { k: SceneCap; c
       {/* a picked gutter's free end is a handle (#504): a ring round the cap — a rect, not a circle (e2e counts circles) */}
       {k.selected ? <Rect id={`handle-${k.id}`} x={x - CAP_HALF - drawing.nodeR} y={y - CAP_HALF - drawing.nodeR} width={(CAP_HALF + drawing.nodeR) * 2} height={(CAP_HALF + drawing.nodeR) * 2} rx={radius.chip} fill="none" stroke={halo} strokeWidth={drawing.labelGap} /> : null}
       <Rect x={x - half} y={y - half} width={half * 2} height={half * 2} rx={radius.chip} fill={color} stroke={fill} strokeWidth={drawing.runW / 2} />
-      <SvgText x={x} y={y + FS * 0.35} fontSize={FS} fontFamily={font.families.semibold} fill={fill} textAnchor="middle">
+      <SvgText x={x} y={y + FS * 0.35} fontSize={FS} fontFamily={font.families.semibold} fill={fill} textAnchor="middle" transform={tr ? `rotate(${tr} ${x} ${y})` : undefined}>
         {k.side}
       </SvgText>
     </G>
@@ -78,9 +78,10 @@ const CornerMark = memo(function CornerMark({ k, color, fill, halo }: { k: Scene
   );
 });
 
-const Label = memo(function Label({ l, bg, ink }: { l: SceneLabel; bg: string; ink: string }) {
+const Label = memo(function Label({ l, bg, ink, tr = 0 }: { l: SceneLabel; bg: string; ink: string; tr?: number }) {
+  // a turned canvas (#2988): the label turns back about its own middle — its words stay level on the screen
   return (
-    <G id={`lbl-${l.id}`}>
+    <G id={`lbl-${l.id}`} transform={tr ? `rotate(${tr} ${l.x} ${l.y})` : undefined}>
       <Rect x={l.x - l.w / 2} y={l.y - l.h / 2} width={l.w} height={l.h} rx={radius.chip} fill={bg} />
       {/* a corner's degrees are small (founder 12.11: «маленькими буквами», #1275) */}
       <SvgText x={l.x} y={l.y + (l.kind === "corner" ? font.size.micro : FS) * 0.35} fontSize={l.kind === "corner" ? font.size.micro : FS} fontFamily={font.families.medium} fill={ink} textAnchor="middle">
@@ -92,12 +93,14 @@ const Label = memo(function Label({ l, bg, ink }: { l: SceneLabel; bg: string; i
 
 export const LABEL_FONT = FS;
 
-export function SvgPainter({ scene, w, h, testID }: { scene: Scene; w: number; h: number; testID?: string }) {
+export function SvgPainter({ scene, w, h, testID, pad = 0, turnDeg = 0 }: { scene: Scene; w: number; h: number; testID?: string; /** the drawing reaches this far past the canvas on each side (#2988: a turned canvas shows its corners) */ pad?: number; /** the canvas layer's turn, degrees: the words are turned back by it */ turnDeg?: number }) {
   const { c } = useTheme();
   const story = c.drawing.story;
+  const tr = turnDeg ? -turnDeg : 0;
   return (
-    // the grid is not here (#1434): its own screen-sized layer under this one (GridLayer), so the drawing needs no overflow
-    <Svg width={w} height={h} testID={testID}>
+    // the grid is not here (#1434): its own screen-sized layer under this one (GridLayer). With `pad` the sheet is bigger by it on every
+    // side and its coordinates the same (the viewBox starts at −pad): a turned canvas has no empty corners
+    <Svg width={w + 2 * pad} height={h + 2 * pad} viewBox={pad ? `${-pad} ${-pad} ${w + 2 * pad} ${h + 2 * pad}` : undefined} style={pad ? { position: "absolute", left: -pad, top: -pad } : undefined} testID={testID}>
       {scene.runs.map((r) => (
         <RunLine key={r.id} r={r} color={story[r.story - 1]!} halo={c.drawing.node} />
       ))}
@@ -105,13 +108,13 @@ export function SvgPainter({ scene, w, h, testID }: { scene: Scene; w: number; h
         <CornerMark key={k.id} k={k} color={c.drawing.node} fill={c.bg} halo={c.drawing.node} />
       ))}
       {scene.caps.map((k) => (
-        <CapMark key={k.id} k={k} color={story[k.story - 1]!} fill={c.bg} halo={c.drawing.node} />
+        <CapMark key={k.id} k={k} color={story[k.story - 1]!} fill={c.bg} halo={c.drawing.node} tr={tr} />
       ))}
       {scene.ds.map((d) => (
-        <DsMark key={d.id} d={d} color={story[d.story - 1]!} fill={c.bg} halo={c.drawing.node} />
+        <DsMark key={d.id} d={d} color={story[d.story - 1]!} fill={c.bg} halo={c.drawing.node} tr={tr} />
       ))}
       {scene.labels.map((l) => (
-        <Label key={l.id} l={l} bg={c.ov} ink={c.ink} />
+        <Label key={l.id} l={l} bg={c.ov} ink={c.ink} tr={tr} />
       ))}
     </Svg>
   );

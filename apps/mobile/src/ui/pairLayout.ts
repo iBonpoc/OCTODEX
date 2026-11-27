@@ -1,4 +1,4 @@
-import { component, font, space } from "@octo/design-tokens";
+import { component, font, layout, space } from "@octo/design-tokens";
 
 /**
  * Two side by side when they fit (founder 21.11.2026, #2350: «в стиле компакт… если две кнопки в столбик — я бы сделал две кнопки
@@ -6,7 +6,9 @@ import { component, font, space } from "@octo/design-tokens";
  * `FieldRow`) only measure their width and ask here.
  */
 
-export type PairLayout = "row" | "column";
+/** `words` — a wide column (≥ `layout.formMax`, 820/1280): the buttons stand in one row, each as wide as its words, from the left
+ *  (#2995, layout review 27.11: «Напомнить про смету» / «Начать выезд | В пути» were stretched to 1144 / 568) */
+export type PairLayout = "row" | "column" | "words";
 
 /** the width a button label takes in one line: the padding, the icon with its gap, the characters (`component.pair.charEm` of the font) */
 export function buttonNeed(label: string, icon: boolean): number {
@@ -19,6 +21,7 @@ export function buttonNeed(label: string, icon: boolean): number {
  * `width` 0 / undefined — not measured yet: the labels alone decide (the measure corrects it right after the first layout).
  */
 export function buttonPairLayout(buttons: readonly { label: string; icon?: boolean }[], width?: number): PairLayout {
+  if (width && width >= layout.formMax && buttons.length <= 2 && buttons.reduce((n, b) => n + buttonNeed(b.label, !!b.icon), 0) + space[2] * (buttons.length - 1) <= width) return "words";
   if (buttons.length !== 2) return "column";
   if (buttons.some((b) => b.label.length > component.pair.labelMax)) return "column";
   if (!width) return "row";

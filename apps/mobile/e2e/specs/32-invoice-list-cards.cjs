@@ -13,7 +13,7 @@ exports.run = async (h) => {
   await h.go("/invoice?f=owed");
   const db = await h.db();
   const today = todayKey(); // overdue = due before the company's today (П4b)
-  const cardOf = (text) => p.locator('[data-testid="list-card"]').filter({ hasText: text }).first();
+  const cardOf = (text) => p.locator('[data-testid^="expense-row-"]').locator("visible=true").filter({ hasText: text }).first();
   const rowOf = (id) => p.getByTestId(`invoice-row-${id}`).locator("visible=true").first();
   const owes = (i) => Math.max(0, i.totalCents - i.paidCents);
   // #2888: the app shows money always with cents (founder #2672)
@@ -41,7 +41,8 @@ exports.run = async (h) => {
     if (overdue.number) h.expect(!body.includes(overdue.number), "no invoices on «Расходы»");
     // the company's month (П4b), its name in the app's language as the other dates (#1427 041: «Ноябрь 2026 г.», not «November 2026»)
     const m = new Intl.DateTimeFormat("ru-RU", { timeZone: ZONE, month: "long", year: "numeric" }).format(new Date(x.at));
-    const month = m.charAt(0).toUpperCase() + m.slice(1);
+    // lists B (#2992, layout review): the month without «г.» — «Ноябрь 2026 · $…» over the days' groups
+    const month = (m.charAt(0).toUpperCase() + m.slice(1)).replace(/\s*г\.$/, "");
     h.expect(body.includes(month), `expenses grouped by month «${month}»`);
     const et = await cardOf(x.vendor).innerText();
     h.expect(et.includes(x.vendor), "expense card shows the vendor");

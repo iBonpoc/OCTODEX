@@ -6,7 +6,7 @@ import { setCornerMethod, setDsAttrs, setRunAttrs } from "../src/modules/gutters
 import { DEFAULT_DS_ATTRS, DEFAULT_RUN_ATTRS, fromElements, toElements } from "../src/modules/gutters/canvas/model";
 import { cornerChoiceOf, findCorners, toMeasurement, type Drawing } from "../src/modules/gutters/geometry";
 import {
-  choicesFor, colorName, MAX_PALETTE, MODULE_CHOICES, MODULE_OFFER, newDsAttrs, newRunAttrs, PALETTES, readPalette, readRules, readUse, RULE_NUMS, setPath, settingsFit, toggleOffer, toRulesOverride,
+  choicesFor, colorName, DEFAULT_PALETTE, MAX_PALETTE, PALETTE_ALL, MODULE_CHOICES, MODULE_OFFER, newDsAttrs, newRunAttrs, PALETTES, readPalette, readRules, readUse, RULE_NUMS, setPath, settingsFit, toggleOffer, toRulesOverride,
 } from "../src/modules/gutters/settings";
 
 describe("чтение настроек", () => {
@@ -14,7 +14,7 @@ describe("чтение настроек", () => {
     for (const raw of [undefined, null, {}, [], "x", 5]) {
       const ch = choicesFor(raw);
       expect(ch.offer).toEqual(MODULE_OFFER);
-      expect(ch.palette).toEqual([...COLORS]);
+      expect(ch.palette).toEqual([...DEFAULT_PALETTE]);
     }
     expect(MODULE_OFFER.profiles).toEqual([...PROFILES]);
     expect(MODULE_OFFER.materials).toEqual([...MATERIALS]);
@@ -56,8 +56,14 @@ describe("чтение настроек", () => {
     expect(colorName("a\nb")).toBeNull();
     expect(colorName("x".repeat(41))).toBeNull();
     expect(readPalette(["Black", "BLACK", "black "])).toEqual(["Black"]);
+    // #2983: no palette of its own — the module's words first (the defaults keep «white»), then the founder's full list, each name once
+    expect(DEFAULT_PALETTE.slice(0, COLORS.length)).toEqual([...COLORS]);
+    expect(DEFAULT_PALETTE.length).toBeGreaterThan(30);
+    expect(DEFAULT_PALETTE.length).toBeLessThanOrEqual(MAX_PALETTE);
+    for (const n of PALETTE_ALL) expect(DEFAULT_PALETTE.some((o) => o.toLowerCase() === n.toLowerCase())).toBe(true);
+    expect(new Set(DEFAULT_PALETTE.map((o) => o.toLowerCase())).size).toBe(DEFAULT_PALETTE.length);
     expect(readPalette(Array.from({ length: 80 }, (_, i) => `C${i}`))).toHaveLength(MAX_PALETTE);
-    expect(readPalette([])).toEqual([...COLORS]);
+    expect(readPalette([])).toEqual([...DEFAULT_PALETTE]);
     expect(PALETTES.berger).toHaveLength(8);
     expect(PALETTES.servicePartners).toHaveLength(24);
   });
@@ -86,7 +92,7 @@ describe("запись настроек", () => {
     expect(a.off).toEqual({ sizes: { k: ["9", "7"], box: ["8"] } });
     const b = toggleOffer(a, "sizes", "k", "7")!;
     expect(b.off).toEqual({ sizes: { k: ["9"], box: ["8"] } });
-    expect(choicesFor(a).offer.sizes.k).toEqual(["5", "6"]);
+    expect(choicesFor(a).offer.sizes.k).toEqual(["5", "6", "8"]);
   });
   it("новые размеры модуля появляются сами: хранится только снятое (ревью #372 №3)", () => {
     // компания сняла K 7″; модуль потом добавит K 8″ — в «не ставим» его нет, значит он будет предложен

@@ -7,7 +7,7 @@ import { ADVANCES_COLLECTED } from "@/features/payments/collected";
 import { useI18n, type DictKey } from "@/i18n";
 import { canSeePayments, paymentsIn } from "@/features/moneyLists";
 import { initialsOf } from "@/features/invoice/moneySummary";
-import { MoneyTiles, useMoneyChips, useMoneyCreate } from "@/features/moneyTabs";
+import { MoneyTotal, useMoneyChips, useMoneyCreate } from "@/features/moneyTabs";
 import type { GroupRowProps } from "@/ui/groupedList";
 import { Empty, Screen } from "@/ui/surfaces";
 import { ListScreen } from "@/ui/templates";
@@ -28,7 +28,7 @@ const WHEN_TITLE: Record<When, DictKey> = { today: "proto.money.g.today", week: 
 /**
  * «Деньги → Оплаты» — the List template (prototype v2 #2350, BUILD-SPEC §2.9): what came in, each with its receipt.
  * Payment → receipt → invoice → job → client. Owner, admin, office only (13 §4).
- * «Деньги» · search · «＋» → «Сметы · Счета · Оплаты» → the tiles → groups by the company's days «Сегодня · На этой неделе ·
+ * «Деньги» · search · «＋» → «Сметы · Счета · Оплаты» → one line «Получено» (MoneyTotal, #2993) → groups by the company's days «Сегодня · На этой неделе ·
  * В этом месяце · Раньше» with their sums (no period filter to set: the groups are the periods) → rows 56: initials, the client,
  * «способ · номер · день · INV», the sum once. Advances without an invoice — their own group, outside the sums (spec 35 §4г).
  */
@@ -63,8 +63,9 @@ export default function Payments() {
     // how it was paid once: a reference that already names the way («Check #1042») stands alone
     const how = t(`pay.${x.method}` as DictKey);
     const way = ref && (ref.toLowerCase().includes(x.method) || ref.toLowerCase().includes(how.toLowerCase())) ? ref : [how, ref].filter(Boolean).join(" ");
-    // visual v2 «цифры справа»: «Способ Карта · Сумма $678»; the line — the reference (when it is more than the way), the day, the invoice
-    const sub = [review, way !== how ? way : undefined, day(x.at), inv?.number, x.refundedCents ? t("mny.refunded", { amount: money(x.refundedCents) }) : undefined];
+    // #2992 (lists B): the sum alone on the right; the way («Чек #1042», «Zelle») leads the line, then the day and the invoice
+    // the group «Сегодня» already says the day (layout review 27.11, Д-строка-5)
+    const sub = [review, way, whenOf(x as Payment) === "today" ? undefined : day(x.at), inv?.number, x.refundedCents ? t("mny.refunded", { amount: money(x.refundedCents) }) : undefined];
     return {
       key: x.id,
       testID: `payment-row-${x.id}`,
@@ -72,7 +73,6 @@ export default function Payments() {
       subtitle: sub.filter(Boolean).join(" · "),
       lead: { initials: initialsOf(c?.name) },
       value: money(x.amountCents),
-      cols: [{ label: t("w2m.col.way"), value: how }, { label: t("w2m.col.sum"), value: money(x.amountCents) }],
       onPress: () => router.push(`/receipt/${x.id}`),
     };
   };
@@ -83,7 +83,7 @@ export default function Payments() {
       search={{ placeholder: t("card.filter.searchPayments"), value: q, onChange: setQ }}
       chips={chips}
       chipsAs="segment"
-      filters={<MoneyTiles />}
+      filters={<MoneyTotal tab="payments" />}
       create={create}
       onCreate={onCreate}
       groups={groups}

@@ -9,26 +9,32 @@ import { categoryLabel } from "@/features/serviceCategories";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
-import { CardList, Empty, Screen } from "@/ui/surfaces";
-import { CardGrid, ListCard, ListCardHeader } from "@/ui/listCard";
-import type { FactKey } from "@/ui/listCardLayout";
-import { useDevice } from "@/theme/ThemeProvider";
+import { Empty, Screen } from "@/ui/surfaces";
+import { openContact } from "@/ui/listCard";
+import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
+import { telHref } from "@/features/contactLinks";
+import { initialsOf } from "@/features/invoice/moneySummary";
 import { memberLabel } from "@/features/team";
 import { canSeeJob } from "@/features/access";
+import { dayKeyIn } from "@/features/zone";
 
 type Filter = JobStatus | "all" | "cancelled";
+/** «пт, 20 нояб.» → «Пт, 20 нояб.»: a day word as a group title */
+const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
 /** the lane of «Работы» (spec 31 §13): in the order of the work, «Все» last */
 const LANE: readonly Filter[] = ["unscheduled", "scheduled", "in_progress", "done", "all", "cancelled"];
 /** the «Не назначен» row of «Мастер» */
 const NOBODY = "__nobody";
-/** desktop row columns (docs/specs/06-list-cards.md, «Работы») */
-const COLUMNS: FactKey[] = ["addr", "work", "when", "resp"];
 
-/** All jobs by stage: waiting for a date → scheduled → in progress → done. Each job is a list card (spec 06, PR8). */
+/**
+ * All jobs by stage: waiting for a date → scheduled → in progress → done. Lists B (#2992, design/crm review 27.11): each job is a row
+ * of one group (rule 12) — initials · the client, «когда · что делаем» (the tech: «когда · адрес»: he drives there) · on the right
+ * the sum (the office) or «Позвонить» (the tech never sees amounts, spec 06 §7.6). The status word only where the chip does not
+ * already say it («Все», «Отменённые»). The nearest visit first.
+ */
 export default function Jobs() {
   const { db, role, mode } = useStore();
-  const { t, money, day } = useI18n();
-  const { device } = useDevice();
+  const { t, money, day, time } = useI18n();
   // the tech never sees amounts (spec 06 §7.6)
   const office = role !== "tech";
   const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));
@@ -59,36 +65,29 @@ export default function Jobs() {
   const passTrade = (j: Job) => !tradeOn.length || tradeOn.includes(j.serviceCategoryId ?? "");
   const list = base.filter((j) => matchJob(db, j, q) && passWho(j) && passTrade(j));
   const toggle = (ids: string[], set: (v: string[]) => void) => (id: string) => set(ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
-  const card = (j: Job) => {
+  const startOf = (j: Job) => nextVisitOf(db, j.id)?.start ?? "\uffff";
+  const rows = [...list].sort((a, b) => startOf(a).localeCompare(startOf(b)));
+  const showStatus = f === "all" || f === "cancelled";
+  const row = (j: Job) => {
     const p = db.properties.find((x) => x.id === j.propertyId);
     const c = db.customers.find((x) => x.id === p?.customerId);
     const v = nextVisitOf(db, j.id);
     const st = f === "cancelled" ? { status: "neutral" as const, label: "job.cancel.status" as const } : jobStatusView[j.status];
-    const addr = p ? `${p.address}, ${p.city}` : undefined;
-    const trade = categoryLabel(db.serviceCategories.find((x) => x.id === j.serviceCategoryId), t as never);
+    // the day is the group's title (layout review 27.11): the row says the hour only
+    const when = v && j.status !== "unscheduled" ? time(v.start) : undefined;
+    const who = visitPeople(db, v).map((m) => memberLabel(m, t)).filter(Boolean).join(", ") || undefined;
+    const tel = telHref(c?.phone);
     return (
-      <ListCard
+      <GroupRow
         key={j.id}
+        testID={`job-row-${j.id}`}
         title={c?.name ?? "—"}
-        lead={{ kind: "icon", icon: "wrench" }}
+        subtitle={[when, office ? j.title : p?.address ?? j.title, office ? who : undefined].filter(Boolean).join(" · ")}
+        lead={{ initials: initialsOf(c?.name) }}
         value={office ? money(j.amountCents) : undefined}
-        valueLabel={office ? t("card.val.total") : undefined}
         // read only: a job has no hand moves (statusMoves) — the date comes from scheduling, «done» from the visit's payment
-        status={{ tone: st.status, label: t(st.label) }}
-        trade={trade || undefined}
-        facts={{
-          phone: c?.phone,
-          email: c?.phone ? undefined : c?.email,
-          addr,
-          work: j.title,
-          when: v && j.status !== "unscheduled" ? day(v.start) : undefined,
-          resp: visitPeople(db, v).map((m) => memberLabel(m, t)).filter(Boolean).join(", ") || undefined,
-          links: jobEstimateNumber(db, j),
-        }}
-        // contact buttons only open the phone / map / mail: nothing is written
-        contact={{ phone: c?.phone, email: c?.email, addr }}
-        density={device === "desktop" ? "row" : "rich"}
-        columns={COLUMNS}
+        status={showStatus ? { status: st.status, label: t(st.label) } : undefined}
+        actions={!office && tel ? [{ icon: "phone", a11y: `${t("client.call")} ${c?.name ?? ""}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c?.phone ?? "" }), testID: `job-row-call-${j.id}` }] : undefined}
         onPress={() => router.push(`/job/${j.id}`)}
       />
     );
@@ -126,13 +125,18 @@ export default function Jobs() {
       />
       {list.length === 0 ? (
         <Empty icon="wrench" title={t("jobs.empty")} />
-      ) : device === "tablet" ? (
-        <CardGrid>{list.map(card)}</CardGrid>
       ) : (
-        <>
-          {device === "desktop" ? <ListCardHeader title={t("card.fact.client")} columns={COLUMNS} value={office ? t("card.val.total") : undefined} /> : null}
-          <CardList>{list.map(card)}</CardList>
-        </>
+        <GroupedList testID="jobs-list">
+          {[...rows.reduce((m, j) => {
+            const v = nextVisitOf(db, j.id);
+            const k = v && j.status !== "unscheduled" ? dayKeyIn(v.start) : "";
+            return m.set(k, [...(m.get(k) ?? []), j]);
+          }, new Map<string, Job[]>())].map(([k, js]) => (
+            <ListGroup key={k || "none"} title={k ? cap(day(nextVisitOf(db, js[0]!.id)!.start)) : t("task.noDate")} testID={`jobs-day-${k || "none"}`}>
+              {js.map(row)}
+            </ListGroup>
+          ))}
+        </GroupedList>
       )}
     </Screen>
   );

@@ -4,15 +4,15 @@
  * П25.3 Б, Г, PR-H2; «Отправить» и история — H3). Every view.
  * - the head says whom for and where (the client's name, the address), the state («Подписан» — the same word as on
  *   «Замеры») and how it was measured («Рулетка»);
- * - «Документы»: «Для клиента» — «Смета … и чертёж · EN», «Открыть» opens that estimate; «Для бригады» — the cut and the
- *   number of parts; the photos strip; the parts folded under «Подробно»;
+ * - «Документы» (#2989, founder 27.11): with an estimate — «Прикреплено к смете …»: the estimate's row opens it, «Чертёж» — «Уходит клиенту со
+ *   сметой … · EN»; «Для бригады» (the cut and the number of parts) is in «⋯ → Документы бригады»; the photos strip; the parts folded under «Подробно»;
  * - 820 / 1280 on its own page: two columns (the documents right of the sheet); the 1280 panel of «Замеры» — one column;
  * - no «Рулетка / Примерно» and no «Точность замера» (#768, #1764); «Дублировать» → the copy's card, «Без сметы», «Отменить» —
  *   the copy is gone; a press on whom → «Отвязать (в черновики)» → «Без клиента», «Черновик»; «Удалить» under a signed
  *   estimate says why not; a draft is deleted and «Отменить» brings it back.
  * Finds things by testID; waits on what it checks.
  */
-const { pressWhenStill, stands, pressUndo } = require("../gutters.cjs");
+const { pressWhenStill, stands, pressUndo, docsFor } = require("../gutters.cjs");
 const { pressEscUntilClosed } = require("../sheet.cjs");
 const DB_KEY = "octo.db.v5";
 
@@ -79,13 +79,18 @@ exports.run = async (h) => {
 
   // the head and «Документы» of a signed measurement
   await view("e2e228-signed");
-  h.expect((await text("view-who")).includes(client.name) && (await text("view-who")).includes(place.address), `whom for and where (${await text("view-who")})`);
-  h.expect(/Подписан/.test(await text("view-state")), `the state (${await text("view-state")})`);
+  // #2995: the object frame — the name is the screen's title, the address the header's line
+  h.expect((await text("screen-title")).includes(client.name) && (await text("view-head-address")).includes(place.address), `whom for and where (${await text("screen-title")} / ${await text("view-head-address")})`);
+  h.expect(/Подписан/.test(await text("view-head-status")), `the state (${await text("view-head-status")})`);
   h.expect((await tid("view-accuracy").count()) === 0, "no «Рулетка / Примерно» in the head (#768, #1764)"); // i18n-old: ok — checks the old words are gone
   await tid("view-docs").waitFor({ timeout: 5000 });
   await h.shot("head");
-  h.expect(/Для клиента/.test(await text("view-doc-client")) && /и чертёж · EN/.test(await text("view-doc-client")), `the client's: the estimate and the drawing, in English (${await text("view-doc-client")})`);
-  h.expect(/Для бригады/.test(await text("view-doc-crew")) && /деталей: \d+/.test(await text("view-doc-crew")), `the crew's: the cut (${await text("view-doc-crew")})`);
+  h.expect(/Прикреплено к смете/.test(await text("view-docs")), `«Прикреплено к смете …» (${await text("view-docs")})`);
+  h.expect(/Чертёж/.test(await text("view-doc-client")) && /со сметой .* · EN/.test(await text("view-doc-client")), `«Чертёж»: goes with the estimate, in English (${await text("view-doc-client")})`);
+  h.expect((await tid("view-doc-crew").count()) === 0, "no crew's document on the card (#2989)");
+  await docsFor(p, "view-doc-crew");
+  h.expect(/Для бригады/.test(await text("view-doc-crew")) && /деталей: \d+/.test(await text("view-doc-crew")), `the crew's: the cut, in «⋯ → Документы бригады» (${await text("view-doc-crew")})`);
+  await docsFor(p, "view-docs");
   h.expect((await tid("view-photos").count()) === 1, "the photos");
   h.expect((await tid("view-parts").count()) === 0, "the parts are folded");
   await pressWhenStill(tid("view-details").getByRole("button"));
@@ -97,8 +102,8 @@ exports.run = async (h) => {
     h.expect(d.x > a.x + a.width - 2, "820 / 1280: the documents beside the sheet (two columns)");
   }
   await h.shot("card");
-  // the client's «Открыть»: the estimate
-  await pressWhenStill(tid("view-pdf-client").getByRole("button"));
+  // the estimate's row: the estimate
+  await pressWhenStill(tid("view-doc-estimate").getByRole("button"));
   await waitFor(() => new RegExp(`/estimate/${est.id}$`).test(new URL(p.url()).pathname), `the client's document is the estimate (${p.url()})`);
 
   // «Удалить» under a signed estimate: the item is there, the press says why not
@@ -123,17 +128,17 @@ exports.run = async (h) => {
   const copy = mid();
   await tid("view-screen").waitFor({ timeout: 8000 });
   await waitFor(async () => { const x = await g(); return x.measurements.some((m) => m.id === copy && m.propertyId === place.id && m.status === "draft") && x.elements.filter((e) => e.measurementId === copy).length === 1; }, "a draft copy: the same address, its own gutter");
-  await waitFor(async () => /Без сметы/.test(await text("view-state")), "the copy has no estimate");
+  await waitFor(async () => /Без сметы/.test(await text("view-head-status")), "the copy has no estimate");
   await h.shot("copy");
   await pressUndo(p);
   await waitFor(async () => !(await g()).measurements.some((m) => m.id === copy), "«Отменить»: the copy is gone");
 
-  // whom → «Отвязать (в черновики)»
+  // «⋯ → Отвязать (в черновики)» (#2995: no menu of its own on the name)
   await view("e2e228-free");
-  await tid("view-who").getByRole("button").click();
+  await tid("view-more").getByRole("button").click();
   await menu("Отвязать (в черновики)");
   await waitFor(async () => { const m = (await g()).measurements.find((x) => x.id === "e2e228-free"); return !!m && !m.propertyId && !m.leadId; }, "unlinked");
-  await waitFor(async () => /Без клиента/.test(await text("view-who")) && /Черновик/.test(await text("view-state")), "the head: «Без клиента», «Черновик»");
+  await waitFor(async () => /Без клиента/.test(await text("screen-title")) && /Черновик/.test(await text("view-head-status")), "the head: «Без клиента», «Черновик»");
 
   // a draft is deleted; «Отменить» brings it back
   await tid("view-more").getByRole("button").click();
