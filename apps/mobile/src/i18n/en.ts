@@ -5745,4 +5745,8 @@ export const en: Dict = {
   "c3072.pickJob": "Which job is the visit for?",
   "c3072.noPrice": "No price",
   "c3072.newJob": "New job",
+  "c3072.active": "Active",
+  "c3072.closed": "Closed",
+  "c3072.leads": "Leads",
+  "c3072.allNotes": "All notes · {n}",
 };

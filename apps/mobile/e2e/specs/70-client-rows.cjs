@@ -42,7 +42,7 @@ exports.run = async (h) => {
   await tid("client-facts").waitFor({ state: "attached", timeout: 8000 });
   h.expect((await p.getByTestId("client-for-invoices").count()) === 0, "billing = the property: no «Для счетов» group");
   await objSection(p, S, "work");
-  h.expect(new RegExp(`Лиды · ${lindaLeads.length}\\b`).test(await tid("client-leads").innerText()), `«Лиды» counts ${lindaLeads.length}`);
+  h.expect(new RegExp(`Лиды\\s*${lindaLeads.length}\\b`).test(await tid("client-leads").innerText()), `«Лиды» counts ${lindaLeads.length}`);
   h.expect((await tid(`client-lead-${lindaLeads[0].id}`).innerText()).includes(lindaLeads[0].number), "lead in the list");
   await tid(`client-lead-${lindaLeads[0].id}`).click();
   await p.waitForURL((u) => u.pathname.includes(`/lead/${lindaLeads[0].id}`), { timeout: 8000 });

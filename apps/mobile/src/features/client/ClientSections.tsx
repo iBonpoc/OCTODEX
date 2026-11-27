@@ -531,7 +531,7 @@ export function ClientVisits({ f, customerId }: { f: ClientFacts; customerId?: s
   // a visit is planned on a job (docs/specs/03): one open job — its schedule; several — which one; none — a new job for the client
   const plan = () => {
     if (live.length === 1) return router.push(`/job/schedule?jobId=${live[0]!.id}` as Href);
-    if (!live.length) return router.push((customerId ? `/job/new?customerId=${customerId}` : "/job/new") as Href);
+    if (!live.length) return router.push((customerId ? `/job/new?customerId=${customerId}&then=schedule` : "/job/new?then=schedule") as Href);
     setPicking(true);
   };
   const row = useClientVisitRow(f);
@@ -558,7 +558,7 @@ export function ClientVisits({ f, customerId }: { f: ClientFacts; customerId?: s
               <ListRow title={j.title || j.number || t("cc.kind.job")} subtitle={[j.number, placeName(db, j)].filter(Boolean).join(" · ")} left={<Icon name="wrench" />} onPress={() => { setPicking(false); router.push(`/job/schedule?jobId=${j.id}` as Href); }} />
             </View>
           ))}
-          <ActionRow testID="client-visit-pick-new" label={t("c3072.newJob")} icon="plusCircle" onPress={() => { setPicking(false); router.push((customerId ? `/job/new?customerId=${customerId}` : "/job/new") as Href); }} />
+          <ActionRow testID="client-visit-pick-new" label={t("c3072.newJob")} icon="plusCircle" onPress={() => { setPicking(false); router.push((customerId ? `/job/new?customerId=${customerId}&then=schedule` : "/job/new?then=schedule") as Href); }} />
         </View>
       </Sheet>
     </View>
@@ -594,6 +594,8 @@ export function ClientWork({ c, f }: { c: Customer; f: ClientFacts }) {
       title={j.title || j.number || t("cc.kind.job")}
       subtitle={[t(jobStatusView[j.status].label), j.number, r.properties.length > 1 ? placeName(db, j) : null].filter(Boolean).join(" · ")}
       extra={visitsLine(j)}
+      // #3072 (design review, rule 2): the status as an icon — beside the sum in the name's line (#3033) — and its word first in the line
+      status={{ status: jobStatusView[j.status].status, label: t(jobStatusView[j.status].label) }}
       // the sum in the name's own line (#3033), so the visits' line under it is not cut on 390
       valueTop
       // #3072: a job without a price is «Без цены», not «$0.00» (reads as «free»)
@@ -606,10 +608,11 @@ export function ClientWork({ c, f }: { c: Customer; f: ClientFacts }) {
     <View style={{ gap: space[4] }} testID="client-work">
       {r.jobs.length === 0 && r.leads.length === 0 ? <Empty icon="wrench" title={t("client.empty.jobs")} hint={t("proto.client.noJobsHint")} /> : null}
       <GroupedList>
-        <ListGroup separate testID="client-projects">
+        {/* #3072 (design review): every group titled, its number a CountPill (as «Впереди», «Прошли») — not «· N» in the words */}
+        <ListGroup separate title={t("c3072.active")} count={live.length || undefined} testID="client-projects">
           {live.map(project)}
         </ListGroup>
-        <ListGroup separate title={t("w2b.client.closedJobs", { n: closed.length })} testID="client-closed-jobs">
+        <ListGroup separate title={t("c3072.closed")} count={closed.length || undefined} testID="client-closed-jobs">
           {closed.map((j) => (
             <GroupRow
               key={j.id}
@@ -617,7 +620,8 @@ export function ClientWork({ c, f }: { c: Customer; f: ClientFacts }) {
               lead={{ icon: "wrench" }}
               title={j.title || j.number || ""}
               titleNote={j.title ? j.number : undefined}
-              subtitle={[t(jobStatusView[j.status].label), r.properties.length > 1 ? placeName(db, j) : null].filter(Boolean).join(" · ")}
+              subtitle={r.properties.length > 1 ? placeName(db, j) ?? undefined : undefined}
+              status={{ status: jobStatusView[j.status].status, label: t(jobStatusView[j.status].label) }}
               figureRight
               value={j.amountCents ? money(j.amountCents) : t("c3072.noPrice")}
               valueMark={!j.amountCents}
@@ -625,7 +629,7 @@ export function ClientWork({ c, f }: { c: Customer; f: ClientFacts }) {
             />
           ))}
         </ListGroup>
-        <ListGroup separate title={t("w2b.client.leads", { n: r.leads.length })} testID="client-leads">
+        <ListGroup separate title={t("c3072.leads")} count={r.leads.length || undefined} testID="client-leads">
           {r.leads.map((l) => (
             <GroupRow
               key={l.id}

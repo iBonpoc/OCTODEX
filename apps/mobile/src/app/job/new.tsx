@@ -1,7 +1,7 @@
 import { scheduleSettingsOf } from "@/features/scheduleSettings";
 import { useMemo, useState } from "react";
 import { View } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, type Href } from "expo-router";
 import { haptics } from "@/ui/haptics";
 import { component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -29,7 +29,7 @@ const NEW = "__new";
  * «Сообщить клиенту?» as S9). Sales: only «Назначить позже». Offline: queued, «Новая работа» until the number comes.
  */
 export default function NewJob() {
-  const params = useLocalSearchParams<{ customerId?: string; propertyId?: string }>();
+  const params = useLocalSearchParams<{ customerId?: string; propertyId?: string; then?: string }>();
   const store = useStore();
   const { db } = store;
   const { t } = useI18n();
@@ -130,7 +130,8 @@ export default function NewJob() {
       return;
     }
     toast.show(store.online ? t("job3.new.created") : t("offline.queued"), undoAll());
-    router.replace(`/job/${job.id}`);
+    // #3072 (crm review): opened from «Запланировать выезд» — the new job goes straight to its schedule, one step less
+    router.replace(params.then === "schedule" ? (`/job/schedule?jobId=${job.id}` as Href) : `/job/${job.id}`);
   };
 
   const missing: DictKey | null = !clientOk ? "job3.new.needClient" : !addressOk ? "job3.new.needAddress" : !titleOk ? "job3.new.needTitle" : null;
