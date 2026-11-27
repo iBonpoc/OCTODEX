@@ -2218,6 +2218,7 @@ export const es: Dict = {
   "mny.adv.err.failed": "El anticipo aún no está aplicado. Toque de nuevo en un minuto",
   "rpt.title": "Informes",
   "rpt.help": "Cinco informes: quién debe, cuánto se cobró, cuánto se vendió y qué fuentes y líneas de trabajo traen ingresos. Las sumas se calculan igual que en las facturas.",
+  "rpt.monthLine": "Sumas de este mes, «Quién debe» a hoy",
   "rpt.none": "Ese informe no existe",
   "rpt.owed.title": "Quién debe",
   "rpt.owed.note": "Clientes: {n} · vencido {overdue}",

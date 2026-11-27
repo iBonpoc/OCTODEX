@@ -16,8 +16,11 @@ import { telHref } from "@/features/contactLinks";
 import { initialsOf } from "@/features/invoice/moneySummary";
 import { memberLabel } from "@/features/team";
 import { canSeeJob } from "@/features/access";
+import { dayKeyIn } from "@/features/zone";
 
 type Filter = JobStatus | "all" | "cancelled";
+/** «пт, 20 нояб.» → «Пт, 20 нояб.»: a day word as a group title */
+const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
 /** the lane of «Работы» (spec 31 §13): in the order of the work, «Все» last */
 const LANE: readonly Filter[] = ["unscheduled", "scheduled", "in_progress", "done", "all", "cancelled"];
 /** the «Не назначен» row of «Мастер» */
@@ -70,7 +73,8 @@ export default function Jobs() {
     const c = db.customers.find((x) => x.id === p?.customerId);
     const v = nextVisitOf(db, j.id);
     const st = f === "cancelled" ? { status: "neutral" as const, label: "job.cancel.status" as const } : jobStatusView[j.status];
-    const when = v && j.status !== "unscheduled" ? `${day(v.start)} ${time(v.start)}` : undefined;
+    // the day is the group's title (layout review 27.11): the row says the hour only
+    const when = v && j.status !== "unscheduled" ? time(v.start) : undefined;
     const who = visitPeople(db, v).map((m) => memberLabel(m, t)).filter(Boolean).join(", ") || undefined;
     const tel = telHref(c?.phone);
     return (
@@ -123,7 +127,15 @@ export default function Jobs() {
         <Empty icon="wrench" title={t("jobs.empty")} />
       ) : (
         <GroupedList testID="jobs-list">
-          <ListGroup>{rows.map(row)}</ListGroup>
+          {[...rows.reduce((m, j) => {
+            const v = nextVisitOf(db, j.id);
+            const k = v && j.status !== "unscheduled" ? dayKeyIn(v.start) : "";
+            return m.set(k, [...(m.get(k) ?? []), j]);
+          }, new Map<string, Job[]>())].map(([k, js]) => (
+            <ListGroup key={k || "none"} title={k ? cap(day(nextVisitOf(db, js[0]!.id)!.start)) : t("task.noDate")} testID={`jobs-day-${k || "none"}`}>
+              {js.map(row)}
+            </ListGroup>
+          ))}
         </GroupedList>
       )}
     </Screen>

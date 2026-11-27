@@ -41,7 +41,8 @@ exports.run = async (h) => {
     if (overdue.number) h.expect(!body.includes(overdue.number), "no invoices on «Расходы»");
     // the company's month (П4b), its name in the app's language as the other dates (#1427 041: «Ноябрь 2026 г.», not «November 2026»)
     const m = new Intl.DateTimeFormat("ru-RU", { timeZone: ZONE, month: "long", year: "numeric" }).format(new Date(x.at));
-    const month = m.charAt(0).toUpperCase() + m.slice(1);
+    // lists B (#2992, layout review): the month without «г.» — «Ноябрь 2026 · $…» over the days' groups
+    const month = (m.charAt(0).toUpperCase() + m.slice(1)).replace(/\s*г\.$/, "");
     h.expect(body.includes(month), `expenses grouped by month «${month}»`);
     const et = await cardOf(x.vendor).innerText();
     h.expect(et.includes(x.vendor), "expense card shows the vendor");

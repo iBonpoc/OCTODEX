@@ -16,7 +16,6 @@ import { InvoiceObject } from "@/features/invoice/InvoiceCard";
 import { useListPanel } from "@/nav/listPanel";
 import { ListPanel } from "@/ui/listPanel";
 import type { GroupRowProps } from "@/ui/groupedList";
-import { invoiceTitle } from "@/features/invoiceTitle";
 import { Empty, Screen } from "@/ui/surfaces";
 import { ListScreen } from "@/ui/templates";
 
@@ -90,14 +89,13 @@ export default function Invoices() {
     const sign = invoiceSigns(i, now, tz)[0];
     const left = i.dueDate ? daysBetween(dayKeyIn(now, tz), dueDayKey(i.dueDate, tz)) : 0;
     const late = owes > 0 && sign?.tone === "bad";
-    // #2992 (lists B): on the right the sum, under it the status only when it is news — «Просрочен 9 дн» (bad); a debt not yet due says
-    // «срок через N дн» in its line, a paid one — the day it was paid; no «Срок / Сумма» words in every row (DS §5.5)
-    const lateDays = owes > 0 && left < 0 ? -left : 0;
-    const when =
-      owes <= 0
-        ? i.paidAt ? `${t("w2m.col.paid")} ${day(i.paidAt)}` : undefined
-        : lateDays || late ? undefined : `${t("w2m.col.due")} ${left > 0 ? t("w2m.due.in", { d: left }) : t("w2m.due.today")}`;
-    const sub = [when, i.number, invoiceTitle(i, t), late ? t("proto.money.reminders", { n: remindersOf(db, i.id).length }) : undefined].filter(Boolean).join(" · ");
+    // #2992 (lists B): on the right the sum, under it the sign of the map §5 — the one rule `invoiceSigns` (listSigns.ts): «Просрочен
+    // N дн» (bad), «срок сегодня / завтра» (warn); a debt further off says «Срок N дн» in its line, a paid one — the day it was paid;
+    // no «Срок / Сумма» words in every row (DS §5.5)
+    // a paid one says «Оплачен <день>» — one word, kept by #1427 (e2e 78), though the group says «Оплачено» too
+    const when = owes <= 0 ? (i.paidAt ? `${t("w2m.col.paid")} ${day(i.paidAt)}` : undefined) : sign ? undefined : left > 0 ? `${t("w2m.col.due")} ${t("w2m.due.in", { d: left })}` : undefined;
+    // the number and when; the invoice's kind word («Остаток по договору») repeated in every row and cut it mid-word (layout review 27.11)
+    const sub = [when, i.number, late ? t("proto.money.reminders", { n: remindersOf(db, i.id).length }) : undefined].filter(Boolean).join(" · ");
     return {
       key: i.id,
       testID: `invoice-row-${i.id}`,
@@ -105,7 +103,7 @@ export default function Invoices() {
       subtitle: sub,
       lead: { initials: initialsOf(c?.name) },
       value: money(owes > 0 ? owes : i.paidCents),
-      status: lateDays || late ? { status: "bad", label: lateDays ? t("w2m.due.late", { d: lateDays }) : t(sign!.key, sign!.params) } : undefined,
+      status: owes > 0 && sign ? { status: sign.tone, label: t(sign.key, sign.params) } : undefined,
       onPress: () => panel.open(i.id),
       selected: i.id === panel.openId,
       swipe:
