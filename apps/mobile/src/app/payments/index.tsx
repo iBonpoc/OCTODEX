@@ -70,7 +70,9 @@ export default function Payments() {
     // #3018 (founder #3017): 1 — the client · the way («Check #1042»); 2 — the address; 3 — the invoice · when · who took it
     const prop = db.properties.find((p) => p.customerId === x.customerId);
     const who = "receivedBy" in x && x.receivedBy ? memberName(db, x.receivedBy, t) : undefined;
-    const sub = [review, inv?.number, whenOf(x as Payment) === "today" ? time(x.at) : day(x.at), who, x.refundedCents ? t("mny.refunded", { amount: moneyWhole(x.refundedCents) }) : undefined];
+    // review #3038: line 3 was cut — who took it lives in the receipt
+    void who;
+    const sub = [review, inv?.number, whenOf(x as Payment) === "today" ? time(x.at) : day(x.at), x.refundedCents ? t("mny.refunded", { amount: moneyWhole(x.refundedCents) }) : undefined];
     return {
       key: x.id,
       testID: `payment-row-${x.id}`,
