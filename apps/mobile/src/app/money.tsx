@@ -55,8 +55,12 @@ export default function Money() {
         key={x.id}
         testID={`expense-row-${x.id}`}
         title={x.vendor}
-        // the day is the group's title (layout review 27.11): the line keeps what the money went to — category · work/client · who
-        subtitle={[t(`exp.cat.${x.category}`), job ? [job.title, client?.name].filter(Boolean).join(" · ") : undefined, memberName(db, x.memberId, t)].filter(Boolean).join(" · ")}
+        // #3018 (founder #3017): 1 — the vendor · the kind; 2 — the work · the client; 3 — «Без чека» · who · the day; the sum on the right
+        titleNote={t(`exp.cat.${x.category}`)}
+        subtitle={job ? [job.title, client?.name].filter(Boolean).join(" · ") : undefined}
+        // the day is the group's title: line 3 says who
+        extra={memberName(db, x.memberId, t) || undefined}
+        figureRight
         lead={{ icon: receipt ? "camera" : "dollar" }}
         value={`−${money(x.amountCents)}`}
         status={mark ? { status: "neutral", label: mark } : undefined}
@@ -83,7 +87,7 @@ export default function Money() {
             {months.map(([m, xs]) => [
               <SectionTitle key={`t-${m}`} title={`${monthOf(m, lang).replace(/\s*г\.$/, "")} · ${money(sumCents(xs.map((x) => x.amountCents)))}`} />,
               ...[...xs.reduce((d, x) => d.set(dayKeyIn(x.at), [...(d.get(dayKeyIn(x.at)) ?? []), x]), new Map<string, Expense[]>())].map(([k, ds]) => (
-                <ListGroup key={k} title={`${cap(day(ds[0]!.at))} · −${money(sumCents(ds.map((x) => x.amountCents)))}`} testID={`expenses-day-${k}`}>
+                <ListGroup key={k} separate title={`${cap(day(ds[0]!.at))} · −${money(sumCents(ds.map((x) => x.amountCents)))}`} testID={`expenses-day-${k}`}>
                   {ds.map(expenseRow)}
                 </ListGroup>
               )),

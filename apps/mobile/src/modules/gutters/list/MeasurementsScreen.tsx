@@ -95,7 +95,9 @@ export default function MeasurementsScreen() {
         key={m.id}
         testID={`measurement-${m.id}`}
         title={titleOf(m)}
-        subtitle={[m.address ?? undefined, t("mod.gutters.list.what", { runs: m.runs, ft: Math.round(m.lengthIn / 12), ds: m.downspouts })].filter(Boolean).join(" · ")}
+        // #3018 (founder #3017): 2 — the address; 3 — what is drawn (the module's own words)
+        subtitle={m.address ?? undefined}
+        extra={t("mod.gutters.list.what", { runs: m.runs, ft: Math.round(m.lengthIn / 12), ds: m.downspouts })}
         lead={{ icon: "pencil" }}
         value={sum ? money(sum.cents) : m.updatedAt ? day(m.updatedAt) : undefined}
         valueMark={!sum}
@@ -194,7 +196,7 @@ export default function MeasurementsScreen() {
             <Empty icon="note" title={t("mod.gutters.list.emptyFilter")} action={f !== "all" ? <View testID="measurements-show-all"><Button label={t("mod.gutters.list.showAll")} variant="secondary" onPress={() => pick("all")} /></View> : undefined} />
           ) : (
             <GroupedList testID="measurements-list">
-              <ListGroup>{shown.map(row)}</ListGroup>
+              <ListGroup separate>{shown.map(row)}</ListGroup>
             </GroupedList>
           )}
         </>

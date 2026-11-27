@@ -188,6 +188,9 @@ export interface GroupRowProps {
   titleNote?: string;
   /** #3017: a third line under the subtitle — what is going on with it («Выезд сегодня · Panel upgrade»); no line when empty */
   extra?: string;
+  /** #3018 (design/crm review): a money list keeps its sum on the right, big — a column read top to bottom (Jobber, Wallet); with
+   *  `titleNote` and without it the sum goes to line 3 (clients, leads, jobs: the right side is the call) */
+  figureRight?: boolean;
   /** the line under the title: «работа · адрес · когда» */
   subtitle?: string;
   lead?: RowLead;
@@ -222,7 +225,7 @@ export interface GroupRowProps {
  * The inside of a GroupRow — the lead, the title 15/600 over its line 13 `mut`, the figure or columns, a StatusPill and «›» — for a
  * row whose press is its owner's (an estimate's line: it opens in place, it is held to be carried). One look for every row (#2387).
  */
-export function GroupRowBody({ title, titleNote, extra, subtitle, lead, value, cols, status, compact, wrap, selected, chevron, quiet, valueMark, padRight = space[4], below, ids }: Pick<GroupRowProps, "title" | "titleNote" | "extra" | "subtitle" | "lead" | "value" | "cols" | "status" | "compact" | "wrap" | "selected" | "chevron" | "valueMark"> & {
+export function GroupRowBody({ title, titleNote, extra, figureRight, subtitle, lead, value, cols, status, compact, wrap, selected, chevron, quiet, valueMark, padRight = space[4], below, ids }: Pick<GroupRowProps, "title" | "titleNote" | "extra" | "figureRight" | "subtitle" | "lead" | "value" | "cols" | "status" | "compact" | "wrap" | "selected" | "chevron" | "valueMark"> & {
   /** a row that counts for nothing now (a hidden line, a line on the client's choice): the title and the figure `mut` */
   quiet?: boolean;
   padRight?: number;
@@ -279,15 +282,16 @@ export function GroupRowBody({ title, titleNote, extra, subtitle, lead, value, c
         ) : null}
         {/* #3017: with the phone in the name's line the right side keeps only the call — the status and the sum go to line 3
             («⊗ Просрочен 9 дн  $1,840.00 · Сегодня 1:30 PM · …»): the name, the phone and the address keep the whole width */}
-        {extra || (titleNote && (status || value)) ? (
-          // the deeds keep at least 40 % of the line; less left after the status and the sum — they take their own line (never «С…»)
+        {extra || (titleNote && (status || (value && !figureRight))) ? (
+          // the deeds keep at least 40 % of the line; less left after the sum and the status — they take their own line (never «С…»);
+          // the sum first and never cut (#2672, design-review 27.11)
           <RowView gap={space[2]} style={{ flexWrap: "wrap", rowGap: 0 }}>
-            {titleNote && status ? <StatusPill status={status.status} label={status.label} draft={status.draft} /> : null}
-            {titleNote && value ? (
+            {titleNote && value && !figureRight ? (
               <T v="caption" w="semibold" tabular numberOfLines={1} style={{ flexShrink: 0 }}>
                 {value}
               </T>
             ) : null}
+            {titleNote && status ? <StatusPill status={status.status} label={status.label} draft={status.draft} /> : null}
             {extra ? (
               <T v="caption" tone="mut" numberOfLines={1} style={{ flexShrink: 1, flexGrow: 1, flexBasis: 0, minWidth: "40%" }}>
                 {extra}
@@ -297,7 +301,13 @@ export function GroupRowBody({ title, titleNote, extra, subtitle, lead, value, c
         ) : null}
         {below}
       </View>
-      {titleNote ? null : cols?.length
+      {titleNote && figureRight && value ? (
+        <View testID={ids?.value} style={{ flexShrink: 0 }}>
+          <T v="body" w="bold" tabular tone={quiet ? "mut" : "ink"} numberOfLines={1}>
+            {value}
+          </T>
+        </View>
+      ) : titleNote ? null : cols?.length
         ? cols.map((x, i, all) => (
             <View key={x.label} style={{ alignItems: "flex-end", flexShrink: 0, minWidth: i < all.length - 1 ? component.figureRow.colW : undefined }}>
               <T v="micro" tone="mut" numberOfLines={1}>
@@ -341,7 +351,7 @@ export function GroupRowBody({ title, titleNote, extra, subtitle, lead, value, c
   );
 }
 
-export function GroupRow({ title, titleNote, extra, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, wrap, selected, chevron, valueTestID, valueMark, testID }: GroupRowProps) {
+export function GroupRow({ title, titleNote, extra, figureRight, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, wrap, selected, chevron, valueTestID, valueMark, testID }: GroupRowProps) {
   const { c } = useTheme();
   const [down, setDown] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -350,7 +360,7 @@ export function GroupRow({ title, titleNote, extra, subtitle, lead, value, cols,
   const onLong = more.length ? (e: GestureResponderEvent) => setMenu({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, w: 0, h: 0 }) : undefined;
   const onAction = (e: AccessibilityActionEvent) => more.find((a) => a.key === e.nativeEvent.actionName)?.onPress();
   const check = lead && "done" in lead ? lead : null;
-  const main = <GroupRowBody title={title} titleNote={titleNote} extra={extra} subtitle={subtitle} lead={lead} value={value} cols={cols} status={status} compact={compact} wrap={wrap} selected={selected} chevron={chevron} padRight={actions.length ? 0 : space[4]} ids={valueTestID ? { value: valueTestID } : undefined} valueMark={valueMark} />;
+  const main = <GroupRowBody title={title} titleNote={titleNote} extra={extra} figureRight={figureRight} subtitle={subtitle} lead={lead} value={value} cols={cols} status={status} compact={compact} wrap={wrap} selected={selected} chevron={chevron} padRight={actions.length ? 0 : space[4]} ids={valueTestID ? { value: valueTestID } : undefined} valueMark={valueMark} />;
   const tap = onPress || onLong ? (
     <Press
       onPress={onPress}

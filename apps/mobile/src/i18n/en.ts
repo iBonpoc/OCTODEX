@@ -2219,6 +2219,7 @@ export const en: Dict = {
   "rpt.title": "Reports",
   "rpt.help": "Five reports: who owes, what was collected, what was sold, and which sources and directions bring revenue. Sums are counted the same way as on invoices.",
   "rpt.monthLine": "Sums for this month, “Who owes” as of today",
+  "lst.ofTotal": "of {amount}",
   "rpt.none": "No such report",
   "rpt.owed.title": "Who owes",
   "rpt.owed.note": "Clients: {n} · overdue {overdue}",
