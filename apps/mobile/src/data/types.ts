@@ -705,6 +705,9 @@ export interface Estimate {
   totalCents: number;
   status: EstimateStatus;
   sentAt?: string;
+  /** #3058: when the last version that WENT to the client was sent — kept after an edit turns the estimate back into a draft (the server
+   *  keeps estimates.sent_version_id; the new version has no sent_at). App-only: the cloud reads it from the sent version, no column */
+  lastSentAt?: string;
   /** when this estimate was last SAVED by a phone: the document's own mark; for one saved before it existed — the time it was sent, else
    *  estimates.updated_at (that one moves with a client's view, so it is the last resort) */
   savedAt?: string;
