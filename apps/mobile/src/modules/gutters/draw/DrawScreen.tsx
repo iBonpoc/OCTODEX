@@ -1013,6 +1013,8 @@ function DrawCanvas() {
   const nd = newDraft ?? newDef;
   const newOwn = newSheet === "line" ? nd.run : nd.ds;
   const newEdited = newDirty(newDraft, newDef);
+  /** a properties window is open (the sheet on 390, the column's window on 820/1280): its «Сохранить» is the screen's one accent */
+  const winShown = !!newSheet || (!!attrs && (wide || sheet));
   const openNew = (tl: Tool) => {
     setSelected(null);
     setNewDraft(cur.current.newDef);
@@ -1522,7 +1524,8 @@ function DrawCanvas() {
           ) : null}
           {inStore ? (
             // the header's buttons are one height (DS §19а: «высота кнопки 36»; founder 16.11, #1752: «Готово другого размера»)
-            <View testID="draw-done"><Button label={t("mod.gutters.view.done")} size="phone" onPress={() => void done()} /></View>
+            // while a window is open its «Сохранить» is the one accent (rule 2, DS §7.3): «Готово» steps back to secondary (#3090 п.3, review #3007)
+            <View testID="draw-done"><Button label={t("mod.gutters.view.done")} variant={winShown ? "secondary" : "primary"} size="phone" onPress={() => void done()} /></View>
           ) : null}
         </RowView>
         {canSave ? null : (

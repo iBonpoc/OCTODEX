@@ -27,7 +27,8 @@ describe("dsMoreSet", () => {
     expect(dsMoreSet({ ...rect, finish: "painted", color: "White" }, { finish: "painted", color: "White" })).toBe(false);
   });
   it("its own length, a rare part or its own colour — open", () => {
-    expect(dsMoreSet({ ...rect, heightIn: 144 })).toBe(true);
+    // its own height is not under «Ещё» any more (#3090 п.4): it does not open it
+    expect(dsMoreSet({ ...rect, heightIn: 144 })).toBe(false);
     expect(dsMoreSet({ ...rect, diverter: true })).toBe(true);
     expect(dsMoreSet({ ...rect, finish: "painted", color: "Black" }, { finish: "painted", color: "White" })).toBe(true);
   });

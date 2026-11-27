@@ -79,7 +79,11 @@ exports.run = async (h) => {
   await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.size === "2x3", "the downspout is in the store, 2x3");
   await pickIn("attr-ds-size", "@own");
   const ownSize = tid("attr-ds-size-own").locator("input");
+  await ownSize.fill("3.5x");
+  await waitFor(async () => (await ownSize.inputValue()) === "3.5x", "the field holds what is typed");
+  h.expect((await tid("attr-ds-size-own-bad").count()) === 0, "while typing: no warning yet (#3090 п.7)");
   await ownSize.fill("3.5x5");
+  await ownSize.blur(); // said when the field is left, not at every key (#3090 п.7)
   await tid("attr-ds-size-own-bad").waitFor({ timeout: 3000 });
   h.expect((await els()).find((e) => e.kind === "downspout")?.attrs.size === "2x3", "3.5x5: said, not written");
   await ownSize.fill("3x5");
@@ -95,6 +99,7 @@ exports.run = async (h) => {
   await own.fill("20");
   await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.heightIn === 240, "20 ft typed: the downspout's own height is 240″");
   await own.fill("500");
+  await own.blur();
   await tid("attr-ds-length-bad").waitFor({ timeout: 3000 });
   h.expect((await els()).find((e) => e.kind === "downspout")?.attrs.heightIn === 240, "500 ft: said, not written");
   await own.fill("");

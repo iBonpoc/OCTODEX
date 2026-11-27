@@ -19,8 +19,8 @@ const bare = (x: { finish?: "mill" | "painted"; color?: string }) => (x.finish ?
 /** the downspout's colour differs from its gutter's («Как у gutter» is the default) */
 export const ownColor = (ds: DsShownIn, run?: RunPaint) => !!run && (bare(ds) !== bare(run) || (!bare(ds) && ds.color !== run.color));
 
-/** «Ещё» of a downspout opens by itself when something under it is set: its own length, colour, the rare parts */
-export const dsMoreSet = (ds: DsShownIn, run?: RunPaint) => !!(ds.heightIn || ds.reducers?.length || ds.diverter || ds.outletScreen || ownColor(ds, run));
+/** «Ещё» of a downspout opens by itself when something under it is set: its colour, the rare parts (its own height is above it, #3090) */
+export const dsMoreSet = (ds: DsShownIn, run?: RunPaint) => !!(ds.reducers?.length || ds.diverter || ds.outletScreen || ownColor(ds, run));
 
 /**
  * The rare rows (not on the chart for every kind): Reducer — only while set; «Cutoff with Diverter» — a square corrugated
