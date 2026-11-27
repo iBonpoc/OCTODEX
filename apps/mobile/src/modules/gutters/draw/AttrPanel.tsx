@@ -493,6 +493,9 @@ export function RunAttrsView({
       {/* the length of the line in the company's format (and in feet when it is another): the window's title no longer carries it (v43: «линия · 3,810 мм · 12′ 6″») */}
       {forNew ? null : <View testID="attr-line-len"><T v="caption" tone="mut">{t(k("lineLen"), { len: lineLenText(run.lengthIn ?? drawnLengthIn(run), ch.lenFormat) })}</T></View>}
       {forNew ? null : <Tape run={run} onLength={onLength} fmt={ch.lenFormat} />}
+      {/* the profile by its cross-section (#2986): tiles, the names of the supplier's chart; first —
+          the sizes offered follow it, and under «Размер» it fell under the window's buttons (crm + design review #3007) */}
+      <Tiles label={t(k("profile"))} testID="attr-profile" items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)), icon: PROFILE_ICON[p] }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
       <FieldRow>
         <SizePick key={`${run.id}.${a.profile}`} testID="attr-size" offered={ch.offer.sizes[a.profile]} sizes={sizes} known={SIZES_BY_PROFILE[a.profile]} label={inch} value={a.size} read={readOwnRunSize} hint="9″" onSize={(size) => onAttrs({ size })} />
         {/* «Для новых»: no storey — the colour takes its place, two short fields in one row (founder 27.11, #3015) */}
@@ -501,8 +504,6 @@ export function RunAttrsView({
       {/* the colour on a line of its own: in a row of three its name was cut to «Бе…» (design-review G1 PR2 №1, rule 2 — a sample always
           beside its whole name) */}
       {forNew || MILL_ONLY.has(a.material) ? null : <ColorPick a={a} set={onAttrs} ch={ch} />}
-      {/* the profile by its cross-section (#2986): tiles, the names of the supplier's chart */}
-      <Tiles label={t(k("profile"))} testID="attr-profile" items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)), icon: PROFILE_ICON[p] }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
       <More open0={false} id={run.id} label={t(k("moreRun"))}>
         {/* G2 (#2412): the hangers of the chart by name (NAMES-41) need the model's new kits — the list shows the kits there are */}
         <Choice list label={t(k("hanger"))} testID="attr-hanger" offered={hangerKitsFor(a.profile, ch)} items={kits.map((id) => ({ key: id, label: t(k(`k.${id}`)), leading: { icon: "channel" as const } }))} value={a.hanger} onChange={(hanger) => onAttrs({ hanger })} />
