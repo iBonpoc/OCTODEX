@@ -299,7 +299,7 @@ describe("stand.yml «should»: a workflow_run counts by its file and repository
   const go = (e: Record<string, string>) => {
     const out = join(dir, "out");
     writeFileSync(out, "");
-    execFileSync("bash", ["-c", script], { env: { PATH: `${dir}:${process.env.PATH}`, GITHUB_OUTPUT: out, GITHUB_REPOSITORY: "o/r", REPO: "o/r", ...e } });
+    execFileSync("bash", ["-c", script], { env: { ...process.env, EVENT: "", REF: "", WF_PATH: "", HEAD_REPO: "", PATH: `${dir}:${process.env.PATH}`, GITHUB_OUTPUT: out, GITHUB_REPOSITORY: "o/r", REPO: "o/r", ...e } });
     return readFileSync(out, "utf8").trim();
   };
   const run = { EVENT: "workflow_run", WF_EVENT: "pull_request", WF_CONCLUSION: "success", HEAD_REPO: "o/r", PR: "7" };
