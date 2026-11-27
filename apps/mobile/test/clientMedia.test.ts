@@ -17,6 +17,7 @@ const files: FileItem[] = [
   { id: "d1", kind: "document", jobId: "j2", at: "2026-11-24T10:00:00Z" },
   { id: "r1", kind: "receipt", customerId: "c1", at: "2026-11-26T10:00:00Z" },
   { id: "other", kind: "document", jobId: "jx", at: "2026-11-26T10:00:00Z" },
+  { id: "l1", kind: "photo", customerId: "c1", at: "2026-11-27T10:00:00Z", uri: "file:///l1.jpg" },
 ];
 const db = { jobs, files };
 const m = clientMediaOf(db, visits, "c1", new Set(["j1", "j2"]));
@@ -28,7 +29,10 @@ describe("clientMediaOf", () => {
   });
   it("a visit's photo kept as a file row is counted once; another client's file is not here", () => {
     expect(m.files.map((f) => f.id)).toEqual(["r1", "d1"]);
-    expect(m.total).toBe(3 + 2);
+    expect(m.total).toBe(3 + 1 + 2);
+  });
+  it("#3085: the client's photo without a visit is a photo of its own group, not a file row", () => {
+    expect(m.loose.map((f) => f.id)).toEqual(["l1"]);
   });
 });
 
@@ -38,6 +42,7 @@ describe("filterMedia / mediaChoices", () => {
     const f = filterMedia(m, { propertyId: "p2", jobId: null }, jobOf);
     expect(f.groups.map((g) => g.visit.id)).toEqual(["v2"]);
     expect(f.files.map((x) => x.id)).toEqual(["d1"]);
+    expect(f.loose).toEqual([]);
     expect(f.total).toBe(2);
   });
   it("a job keeps only its own", () => {

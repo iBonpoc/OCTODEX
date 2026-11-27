@@ -5873,7 +5873,7 @@ export const es: Dict = {
   "c3076.files": "Archivos",
   "c3076.visit": "Visita",
   "c3076.empty": "Aún no hay fotos ni archivos",
-  "c3076.emptyHint": "Las fotos se agregan en la visita",
+  "c3076.emptyHint": "Agregue una foto con «＋» arriba o en la visita",
   "c3076.emptyFilter": "No hay nada aquí",
   "c3076.k.photo": "Foto",
   "c3076.k.receipt": "Recibo",
@@ -5881,5 +5881,9 @@ export const es: Dict = {
   "c3076.k.drawing": "Dibujo",
   "c3076.ds.grid": "Cuadrícula de fotos",
   "c3076.ds.gridHint": "Las mismas miniaturas en filas, como en Fotos de iOS: «Fotos y archivos» del cliente. Un toque abre la foto.",
+  "c3076.before": "Antes",
+  "c3076.after": "Después",
+  "c3076.loose": "Fotos del cliente",
+  "c3076.add": "Agregar foto",
   "c3076.k.document": "Documento",
 };
