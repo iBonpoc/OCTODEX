@@ -49,7 +49,7 @@ exports.run = async (h) => {
   await totals.mode(h, "est-discount-row", "off");
   await totals.mode(h, "est-discount-row", "fixed");
   await sumIs("est-discount-row", "−$25.00");
-  h.expect((await totals.sumOf(h, "est-discount-row")) === "−$25.00", "«Выкл.» and back: the typed $25 comes back");
+  h.expect((await totals.sumOf(h, "est-discount-row")) === "−$25.00", "«Выкл.» and back: the typed $25.00 comes back");
 
   // the deposit: «%» starts at 10 % of $175.00 = $17.50; «$» starts empty ($0.00), the person types it; «Выкл.» — «—»
   await totals.mode(h, "est-deposit-row", "pct");

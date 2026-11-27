@@ -27,7 +27,7 @@ exports.run = async (h) => {
   await vis('[data-testid^="est-qty-"]').first().locator("input").fill("3");
   // the price typed: the sum changes before the field is left
   await vis(`[data-testid="est-price-${a}"] input`).first().fill("10");
-  await p.waitForFunction((id) => /\$30\b/.test(document.querySelector(`[data-testid="est-figures-${id}"]`)?.textContent || ""), a, { timeout: 3000 });
+  await p.waitForFunction((id) => /\$30\.00\b/.test(document.querySelector(`[data-testid="est-figures-${id}"]`)?.textContent || ""), a, { timeout: 3000 });
   // one row of numbers: the quantity, the unit and the price stand side by side
   const box = async (id) => (await vis(`[data-testid="${id}"]`).first().boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 };
   const [q, u, pr] = [await box(`est-qty-${a}`), await box(`est-unit-${a}-button`), await box(`est-price-${a}`)];
@@ -47,8 +47,8 @@ exports.run = async (h) => {
   // «Кратко» by default (visual v2 №5): the name, «3 ea × $10.00» under it, the sum — not «Подробно»'s «$10.00 × 3 ea»; no profit or cost
   const folded = await tid(`est-line-${a}`).innerText();
   const briefTimes = await tid(`est-times-${a}`).innerText();
-  h.expect(/Gutter clean/.test(folded) && /\$30\b/.test(folded) && /^3 ea × \$10\.00$/.test(briefTimes.trim()), `«Кратко»: the name, «3 ea × $10.00» and the sum (${folded.replace(/\n/g, " ")})`);
-  h.expect(!/прибыль|себестоим|\$4\b/i.test(folded), "a folded row never shows profit or cost");
+  h.expect(/Gutter clean/.test(folded) && /\$30\.00\b/.test(folded) && /^3 ea × \$10\.00$/.test(briefTimes.trim()), `«Кратко»: the name, «3 ea × $10.00» and the sum (${folded.replace(/\n/g, " ")})`);
+  h.expect(!/прибыль|себестоим|\$4\.00\b/i.test(folded), "a folded row never shows profit or cost");
   await h.shot("brief");
 
   // «Подробно»: «$10.00 × 3 ea»; kept after a reload

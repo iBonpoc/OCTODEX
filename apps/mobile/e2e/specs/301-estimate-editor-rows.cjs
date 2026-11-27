@@ -51,7 +51,7 @@ exports.run = async (h) => {
   await p.waitForFunction((i) => document.querySelector(`[data-testid="est-name-${i}"] input`)?.value === "Railing bracket", id, { timeout: 4000 });
   // (the price field takes the new value a frame after the name: wait for it, then say what stands)
   const priceNow = await p.waitForFunction((i) => document.querySelector(`[data-testid="est-price-${i}"] input`)?.value === "12.13", id, { timeout: 3000 }).then(() => "12.13", () => vis(`[data-testid="est-price-${id}"] input`).first().inputValue());
-  h.expect(priceNow === "12.13", `replaced: the catalog price ($12.13) stands, not the old $10 (${priceNow})`);
+  h.expect(priceNow === "12.13", `replaced: the catalog price ($12.13) stands, not the old $10.00 (${priceNow})`);
 
   // the cost field: «abc» keeps the row open; empty is «unknown»
   await vis(`[data-testid="est-cost-${id}"] input`).first().fill("abc");

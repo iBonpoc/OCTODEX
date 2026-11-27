@@ -48,18 +48,18 @@ exports.run = async (h) => {
   h.expect(/Materials/.test(await tid("est-client-section-RM").innerText()), "the subsection is named by the dictionary");
   h.expect(await tid("est-client-other").isVisible(), "«Other items» stands");
   const money = (s) => s.replace(/\s+/g, " ");
-  h.expect(/\$1,750\b/.test(money(await tid("est-client-subtotal-R").innerText())), "the section's subtotal without the add-on ($900 + $850)");
+  h.expect(/\$1,750\.00\b/.test(money(await tid("est-client-subtotal-R").innerText())), "the section's subtotal without the add-on ($900.00 + $850.00)");
   const order = await p.evaluate(() => [...document.querySelectorAll('[data-testid^="est-client-"]')].map((e) => e.getAttribute("data-testid")));
   const at = (id) => order.indexOf(id);
   h.expect(at("est-client-line-l2") < at("est-client-line-l3") && at("est-client-line-l3") < at("est-client-subtotal-R") && at("est-client-subtotal-R") < at("est-client-other") && at("est-client-other") < at("est-client-line-l4"), `the add-on stands in its own section, before the subtotal and «Other items» (${order.join(" ")})`);
   // the PDF before any choice: the add-on is an offer, «+ $400», not in the total
   let pdf = await pdfHtml("portal-pdf");
-  h.expect(/Leaf guards/.test(pdf) && />\+ \$400</.test(pdf) && /<td class="r">\$1,900<\/td>/.test(pdf), "the client's PDF without a choice: the add-on is an offer, the total is without it ($1,900)");
+  h.expect(/Leaf guards/.test(pdf) && />\+ \$400\.00</.test(pdf) && /<td class="r">\$1,900\.00<\/td>/.test(pdf), "the client's PDF without a choice: the add-on is an offer, the total is without it ($1,900.00)");
   // choose the add-on: the subtotal moves, the PDF repeats the choice
   await tid("est-client-line-l3").getByRole("switch").click();
-  await p.waitForFunction(() => /\$2,150\b/.test((document.querySelector('[data-testid="est-client-subtotal-R"]')?.textContent ?? "").replace(/\s+/g, " ")), null, { timeout: 4000 });
+  await p.waitForFunction(() => /\$2,150\.00\b/.test((document.querySelector('[data-testid="est-client-subtotal-R"]')?.textContent ?? "").replace(/\s+/g, " ")), null, { timeout: 4000 });
   pdf = await pdfHtml("portal-pdf");
-  h.expect(!/>\+ \$400</.test(pdf) && /<td class="r">\$400<\/td>/.test(pdf) && /<td class="r">\$2,300<\/td>/.test(pdf), "the client's PDF repeats the choice: the add-on in the lines ($400) and the total ($2,300)");
+  h.expect(!/>\+ \$400\.00</.test(pdf) && /<td class="r">\$400\.00<\/td>/.test(pdf) && /<td class="r">\$2,300\.00<\/td>/.test(pdf), "the client's PDF repeats the choice: the add-on in the lines ($400.00) and the total ($2,300.00)");
 
   // the company's PDF of an unsigned estimate: every add-on offered, none in the total; the title escaped
   await h.go("/estimate/e6");
@@ -67,5 +67,5 @@ exports.run = async (h) => {
   pdf = await pdfHtml(() => estAct(p, "pdf"));
   h.expect(/Roof &lt;b&gt;bold&lt;\/b&gt;/.test(pdf) && !/Roof <b>bold<\/b>/.test(pdf), "the PDF escapes the title");
   h.expect(/Roof &lt;b&gt;bold&lt;\/b&gt; subtotal/.test(pdf), "and its subtotal line");
-  h.expect(/Leaf guards/.test(pdf) && />\+ \$400</.test(pdf) && /<td class="r">\$1,900<\/td>/.test(pdf), "the company's PDF: the add-on offered, not in the total");
+  h.expect(/Leaf guards/.test(pdf) && />\+ \$400\.00</.test(pdf) && /<td class="r">\$1,900\.00<\/td>/.test(pdf), "the company's PDF: the add-on offered, not in the total");
 };

@@ -12,8 +12,9 @@ exports.run = async (h) => {
   const db = await h.db();
   const live = db.invoices.filter((i) => i.totalCents > i.paidCents);
   const owed = live.reduce((s, i) => s + i.totalCents - i.paidCents, 0);
-  const whole = `$${Math.round(owed / 100).toLocaleString("en-US")}`;
-  h.expect((await tid("money-tile-owed").innerText()).includes(whole), `«Должны» says ${whole}`);
+  // #2888: the tile with cents, never rounded to dollars (founder #2672)
+  const sum = `$${(owed / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  h.expect((await tid("money-tile-owed").innerText()).includes(sum), `«Должны» says ${sum}`);
   await tid("money-tile-estimates").waitFor({ timeout: 3000 });
   h.expect((await p.getByTestId("money-tiles-small").locator("visible=true").count()) === 1, "the three small tiles");
   // «К оплате»: the overdue one first, «−N дн»
