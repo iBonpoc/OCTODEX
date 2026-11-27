@@ -5734,4 +5734,9 @@ export const es: Dict = {
   "oc.client.forInvoices": "Para facturas",
   "oc.client.archiveOwes": "Debe {amount}: inactivo tras el pago",
   "oc.client.archiveOwesNoSum": "Hay saldo pendiente: inactivo tras el pago",
+  // #3060 «Работы»: the visits of a job as a line under it
+  "c3060.nextVisit": "próxima {when}",
+  "c3060.lastVisit": "última {when}",
+  "ds.proto.separate": "Cada registro — su propio marco",
+  "ds.proto.separateExtra": "2 visitas · próxima dom, 29 nov",
 };

@@ -5735,6 +5735,11 @@ export const ru = {
   "oc.client.forInvoices": "Для счетов",
   "oc.client.archiveOwes": "Должен {amount} — неактивным после оплаты",
   "oc.client.archiveOwesNoSum": "Есть неоплаченный баланс — неактивным после оплаты",
+  // #3060 «Работы»: the visits of a job as a line under it
+  "c3060.nextVisit": "следующий {when}",
+  "c3060.lastVisit": "последний {when}",
+  "ds.proto.separate": "Каждая запись — своя рамка",
+  "ds.proto.separateExtra": "2 выезда · следующий вс, 29 нояб.",
 } as const;
 
 export type DictKey = keyof typeof ru;

@@ -5734,4 +5734,9 @@ export const en: Dict = {
   "oc.client.forInvoices": "For invoices",
   "oc.client.archiveOwes": "Owes {amount} — inactive once paid",
   "oc.client.archiveOwesNoSum": "An unpaid balance — inactive once paid",
+  // #3060 «Работы»: the visits of a job as a line under it
+  "c3060.nextVisit": "next {when}",
+  "c3060.lastVisit": "last {when}",
+  "ds.proto.separate": "Each record — its own frame",
+  "ds.proto.separateExtra": "2 visits · next Sun, Nov 29",
 };
