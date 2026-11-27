@@ -1125,7 +1125,21 @@ function DrawCanvas() {
     setDrawing(r.d);
     later.current();
   };
+  /** «Разъединить угол» (#933): two gutters with their own end caps; the toast brings it back — from the corner's window and from 🗑 with the corner picked (#3066) */
+  const splitAt = (cornerId: string) => {
+    const before = cur.current.drawing;
+    const f = findCorners(before).find((x) => x.id === cornerId);
+    setCornerSheet(null);
+    setPickedCorner(null);
+    if (!f) return;
+    const next = splitCorner(before, f, tolIn());
+    if (next === before) return;
+    commit(next, before);
+    toast.show(t("mod.gutters.draw.cornerSplit.done"), localUndo(() => commit(before, cur.current.drawing, true))); // put back as it was: no recount (#1264)
+  };
   const doDelete = () => {
+    // a picked corner: 🗑 takes the joint apart (crm-review #3066 №2) — the gutters stay, each with its own end cap; «Вернуть» on the toast
+    if (!selected && cur.current.pickedCorner) return splitAt(cur.current.pickedCorner);
     if (!selected) return;
     const target = deleteTarget(drawing, selected, pickedEnd);
     if (target?.kind === "cap") {
@@ -1430,7 +1444,7 @@ function DrawCanvas() {
       <View testID="draw-redo" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="redo" label={t("mod.gutters.draw.redoShort")} onPress={doRedo} grow={grow} below={at === "top"} /></View>
       {/* the bin (#1274, founder 12.11: «🗑 в панели, виден всегда, активен только при выборе»): «Отменить» for 5 s after (rule 5) */}
       {/* the bin without a pick: a `disabled` button is deaf to the long press that says its name, so the cell is not disabled — it answers nothing, and the state is said here */}
-      <View testID="draw-delete" {...({ "aria-disabled": !sel || undefined } as object)} style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="trash" label={t("mod.gutters.draw.delete")} onPress={doDelete} grow={grow} disabled={!sel} below={at === "top"} /></View>
+      <View testID="draw-delete" {...({ "aria-disabled": (!sel && !pickedC) || undefined } as object)} style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="trash" label={t("mod.gutters.draw.delete")} onPress={doDelete} grow={grow} disabled={!sel && !pickedC} below={at === "top"} /></View>
     </View>
   );
   // the summary chip: the parts are the engine's (rule 8) from the drawing as it is when the finger rests — not on every frame of a drag
@@ -1670,8 +1684,8 @@ function DrawCanvas() {
             <Press
               testID="draw-summary"
               // «Дальше: водостоки» is a hint with its action (the downspout tool); the rest opens the measurement's «Просмотр»
-              onPress={() => { if (summary.kind === "nextDs") pick("ds"); else if (inStore) router.push(`${moduleHref("gutters", "view")}?m=${encodeURIComponent(inStore.id)}`); }}
-              disabled={!canSave || (summary.kind !== "nextDs" && !inStore)}
+              onPress={() => { if (pickedC && summary.kind === "selected") setCornerSheet(pickedC.id); else if (summary.kind === "nextDs") pick("ds"); else if (inStore) router.push(`${moduleHref("gutters", "view")}?m=${encodeURIComponent(inStore.id)}`); }}
+              disabled={!canSave || (summary.kind !== "nextDs" && !inStore && !pickedC)}
               visibleHeight={component.button.phone}
               accessibilityRole="button"
               accessibilityLabel={summaryA11y}
@@ -1784,14 +1798,7 @@ function DrawCanvas() {
             splashOn={!splashOff(drawing, corner)}
             onKind={cornerKind}
             onSplash={(on) => commit(setCornerSplash(cur.current.drawing, corner, on))}
-            onSplit={() => {
-              const before = cur.current.drawing;
-              const next = splitCorner(before, corner, tolIn());
-              setCornerSheet(null);
-              if (next === before) return;
-              commit(next, before);
-              toast.show(t("mod.gutters.draw.cornerSplit.done"), localUndo(() => commit(before, cur.current.drawing, true))); // put back as it was: no recount (#1264)
-            }}
+            onSplit={() => splitAt(corner.id)}
             onAngle={(deg) => commit(setCornerAngle(cur.current.drawing, corner, deg))}
           />
         ) : null}

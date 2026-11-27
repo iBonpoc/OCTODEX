@@ -3562,7 +3562,7 @@ export const es: Dict = {
   "mod.gutters.draw.splash": "Splash guard",
   "mod.gutters.draw.cutTitle": "Corte",
   "mod.gutters.draw.cutAngle": "esquina {deg}°",
-  "mod.gutters.draw.cutRun": "Canaleta {n}",
+  "mod.gutters.draw.cutRun": "Gutter {n}",
   "mod.gutters.draw.cutWallCol": "Por la pared",
   "mod.gutters.draw.cutFaceCol": "Por el frente",
   "mod.gutters.draw.cutMiter": "Corte",
@@ -3772,7 +3772,7 @@ export const es: Dict = {
   "mod.gutters.attr.unitPick": "Unidad: {u} — cambiar",
   "mod.gutters.attr.colorAsRun": "Igual que la canaleta ({c})",
   "mod.gutters.attr.offsetOwn": "Propio",
-  "mod.gutters.attr.quickTitle": "Largo de la canaleta",
+  "mod.gutters.attr.quickTitle": "Largo del gutter",
   "mod.gutters.attr.quickDrawn": "Según el dibujo: {len}",
   // module M7b: company settings (spec 33 П22)
   "mod.gutters.attr.notOffered": "no se ofrece",
