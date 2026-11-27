@@ -222,8 +222,8 @@ export default function JobScreen() {
         ? { main: { label: t("w2b.job.rest"), onPress: invoiceRest, reason: t("job6.why.rest"), testID: "job-next-rest" } }
         : next && mine
           ? {
+              // #2995 (crm + design review 27.11): ONE button — «Начать выезд»; «Сообщить «В пути»» is in «⋯» (never two of a size)
               main: { label: t("job3.main.start"), onPress: () => openVisit(next.id), reason: t("proto.job.nextVisit", { when: nextWhen, who: nextWho }), testID: "job-next-start" },
-              second: { label: t("proto.job.enRoute"), onPress: enRoute, testID: "job-next-enroute" },
             }
           : next
             ? { main: { label: t("proto.job.openVisit"), onPress: () => openVisit(next.id), reason: t("proto.job.nextVisit", { when: nextWhen, who: nextWho }), testID: "job-next-open" } }
@@ -246,7 +246,7 @@ export default function JobScreen() {
   // «⋯»: rare and dangerous; the number of the job first (wireframe №6 «номер JOB — в ⋯»), «Отменить работу…» red and last
   const more: MoreAction = [
     { key: "number", label: t("proto.job.number", { no: jobNo }), icon: "copy", testID: "job-act-number" },
-    ...(next && office ? [{ key: "enRoute", label: t("job3.more.enRoute"), icon: "navigate" as const, testID: "job-act-enRoute" }] : []),
+    ...(next && (office || mine) ? [{ key: "enRoute", label: t("job3.more.enRoute"), icon: "navigate" as const, testID: "job-act-enRoute" }] : []),
     ...(payTo && step?.main.testID !== "job-next-pay" ? [{ key: "pay", label: t("job3.more.pay"), icon: "dollar" as const, testID: "job-act-pay" }] : []),
     ...(office && j.status !== "done" && j.status !== "unscheduled" && !awaiting && step?.main.testID !== "job-next-complete" ? [{ key: "complete", label: t("job3.done.complete"), icon: "check" as const, testID: "job-act-complete" }] : []),
     ...(next ? [{ key: "file", label: t("job3.more.file"), icon: "camera" as const, testID: "job-act-file" }] : []),
@@ -581,12 +581,13 @@ export default function JobScreen() {
           // v2 «Bathroom remodel | vanity, toilet, tile»: the name before «:» is the big title, the rest the line right of the rule;
           // the status stands in the «Сейчас» card (a long word is never cut at the screen's edge, #2350)
           title: headName,
-          meta: headRest ? [{ id: "rest", label: headRest }] : undefined,
           // the sum is the «Сейчас» card's figures, the address its small line (nothing twice, #2350)
           link: c ? { label: c.name, onPress: () => router.push(`/client/${c.id}`) } : undefined,
           labels: { expand: t("proto.job.expand"), collapse: t("proto.job.collapse"), more: (n) => t("proto.job.moreN", { n }) },
         }}
         actions={actions}
+        // #2995 (layout review 27.11): the title's tail «vanity, toilet, tile» was cut right of the rule on 390 — a whole line under the name
+        subtitle={headRest || undefined}
         now={nowCard}
         sections={ordered.map((k) => ({ key: k, label: t(SECTION_LABEL[k]), count: counts[k] || undefined }))}
         section={current}

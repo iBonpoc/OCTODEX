@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { component, space } from "@octo/design-tokens";
+import { component, layout, space } from "@octo/design-tokens";
 import { buttonNeed, buttonPairLayout, fieldRowLayout } from "../src/ui/pairLayout";
 
 const PHONE = 390 - space[4] * 2; // the content of a 390 phone (the screen's gutters)
@@ -19,10 +19,11 @@ describe("unit:pairLayout — two buttons", () => {
     expect(buttonPairLayout([{ label: "Save" }, { label: "Not now" }])).toBe("row");
     expect(buttonPairLayout([{ label: "Save" }, { label: "Not now" }], 0)).toBe("row");
   });
-  it("a label longer than pair.labelMax keeps the column, whatever the width", () => {
+  it("a label longer than pair.labelMax keeps the column at any width under layout.formMax (from it — by words, #2995)", () => {
     const long = "x".repeat(component.pair.labelMax + 1);
-    expect(buttonPairLayout([{ label: "Save" }, { label: long }], 2000)).toBe("column");
-    expect(buttonPairLayout([{ label: "x".repeat(component.pair.labelMax) }, { label: "Ok" }], 2000)).toBe("row");
+    expect(buttonPairLayout([{ label: "Save" }, { label: long }], layout.formMax - 1)).toBe("column");
+    expect(buttonPairLayout([{ label: "x".repeat(component.pair.labelMax) }, { label: "Ok" }], layout.formMax - 1)).toBe("row");
+    expect(buttonPairLayout([{ label: "Save" }, { label: long }], 2000)).toBe("words");
   });
   it("one, three or none — never a pair", () => {
     expect(buttonPairLayout([{ label: "Save" }], PHONE)).toBe("column");
@@ -71,5 +72,17 @@ describe("unit:pairLayout — the screens use the rule, not their own rows", () 
     const ev = src("features/EventForm.tsx");
     expect(ev).toMatch(/<DateField[\s\S]*beside=/);
     expect(ev).toMatch(/<ButtonPair/);
+  });
+});
+
+describe("a wide column: by words (#2995)", () => {
+  it("from layout.formMax the pair — and a single button — stand by their words, not stretched", () => {
+    expect(buttonPairLayout([{ label: "Напомнить про смету" }, { label: "Потерян?" }], 1144)).toBe("words");
+    expect(buttonPairLayout([{ label: "Начать выезд" }, { label: "В пути" }], 1136)).toBe("words");
+    expect(buttonPairLayout([{ label: "Выставить остаток $3,078.00", icon: true }], 1176)).toBe("words");
+  });
+  it("a phone keeps its halves or the column", () => {
+    expect(buttonPairLayout([{ label: "Начать выезд" }, { label: "В пути" }], 342)).toBe("row");
+    expect(buttonPairLayout([{ label: "Напомнить про смету" }, { label: "Потерян?" }], 342)).toBe("column");
   });
 });
