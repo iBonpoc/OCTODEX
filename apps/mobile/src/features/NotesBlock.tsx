@@ -9,6 +9,7 @@ import { T } from "@/ui/primitives";
 import { Menu, useToast } from "@/ui/overlays";
 import { Card, RowView, SectionTitle } from "@/ui/surfaces";
 import { memberName } from "@/features/team";
+import { ActionRow } from "@/ui/multiValueField";
 
 /** Notes on a lead / client / property / job: "team" (everyone) or "only me" (author). Pinned first. */
 export function NotesBlock({ subjectType, subjectId, extraSubjects = [] }: { subjectType: NoteSubject; subjectId: string; extraSubjects?: { type: NoteSubject; id: string }[] }) {
@@ -17,6 +18,8 @@ export function NotesBlock({ subjectType, subjectId, extraSubjects = [] }: { sub
   const { t, day, time } = useI18n();
   const toast = useToast();
   const [body, setBody] = useState("");
+  // #3072 (design review): a long feed of notes pushes the tasks and the log away — the pinned and the 3 latest, then «Все заметки»
+  const [all, setAll] = useState(false);
   const [vis, setVis] = useState<"team" | "private">("team");
   // «Кто видит» opens its menu at the composer (the icon lives inside the field)
   const composer = useRef<React.ComponentRef<typeof View>>(null);
@@ -66,7 +69,7 @@ export function NotesBlock({ subjectType, subjectId, extraSubjects = [] }: { sub
           ]}
         />
       </View>
-      {notes.map((n) => {
+      {(all ? notes : notes.filter((n, i) => n.pinned || i < notes.filter((x) => x.pinned).length + 3)).map((n) => {
         const author = memberName(db, n.authorId, t);
         return (
           <Card key={n.id} inner>
@@ -89,6 +92,9 @@ export function NotesBlock({ subjectType, subjectId, extraSubjects = [] }: { sub
           </Card>
         );
       })}
+      {!all && notes.length > notes.filter((x) => x.pinned).length + 3 ? (
+        <ActionRow testID="notes-all" label={t("c3072.allNotes", { n: notes.length })} onPress={() => setAll(true)} />
+      ) : null}
       <Menu<"pin" | "delete">
         visible={!!moreAt}
         anchor={moreAt?.box ?? null}

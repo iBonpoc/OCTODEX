@@ -5856,6 +5856,10 @@ export const ru = {
   "c3072.pickJob": "К какой работе выезд?",
   "c3072.noPrice": "Без цены",
   "c3072.newJob": "Новая работа",
+  "c3072.active": "Активные",
+  "c3072.closed": "Закрытые",
+  "c3072.leads": "Лиды",
+  "c3072.allNotes": "Все заметки · {n}",
 } as const;
 
 export type DictKey = keyof typeof ru;
