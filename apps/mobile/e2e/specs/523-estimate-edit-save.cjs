@@ -315,7 +315,9 @@ exports.run = async (h) => {
   // «Отменить» twice then «Отменить изменения»: ONE way back — to the estimate it was opened from, never past it (a check that fails
   // if the way back runs twice); the editor opened in the app (its own history), from the estimate's «Изменить»
   await h.go(`/estimate/${ID}`);
-  await tid("estimate-screen-actions").getByTestId("est-act-edit").first().click();
+  // «Изменить» lives in «⋯» (#2997: the icon row is the person's — Позвонить · SMS · Почта · PDF)
+  await tid("estimate-screen-more").getByRole("button").first().click();
+  await tid("est-act-edit").click();
   await tid("ue-title").waitFor({ timeout: 8000 });
   await titleInput().fill("Правка 523 · дважды");
   await waitDraft(true);
