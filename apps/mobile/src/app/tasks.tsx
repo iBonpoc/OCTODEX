@@ -69,6 +69,9 @@ export default function Tasks() {
       extra: [hourRight ? undefined : at, who].filter(Boolean).join(" · ") || undefined,
       value: hourRight ? at : undefined,
       valueMark: hourRight,
+      valueTop: true,
+      // a task's name may take two lines (review: «Call Daniel about the estim…»)
+      wrap: true,
       // the DoneCircle on the left (the row's neighbour, not inside its press): a tap marks it done or brings it back, with «Отменить»
       lead: { done: !!x.doneAt, onToggle: () => toggle(x), label: `${t(x.doneAt ? "task.undo" : "w6.task.doneBtn")}: ${x.title}`, testID: `task-done-${x.id}` },
       // #2350: a swipe right marks it done (or brings a done one back) — the same toggle as the button, with «Отменить»

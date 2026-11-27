@@ -133,6 +133,7 @@ export default function Clients() {
       // #3033 (founder 27.11): no phone in the list — the call button and the card have it; 1 — the name, the sum on the right with
       // the status as its icon (no word; said to VoiceOver); 2 — the address; 3 — the deed
       subtitle: addr ?? line,
+      addressLine: !!addr,
       extra: addr ? line : undefined,
       lead: { initials: initials(c.name) },
       // one money figure: the debt; none — a call icon (BUILD-SPEC §2.3 table)

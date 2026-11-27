@@ -11,6 +11,8 @@ import { estimateListAmount } from "@/features/estimateDoc";
 import { initialsOf } from "@/features/invoice/moneySummary";
 import { router } from "expo-router";
 import { shortAddress } from "@/features/shortAddress";
+import { telHref } from "@/features/contactLinks";
+import { openContact } from "@/ui/listCard";
 import type { GroupRowProps } from "@/ui/groupedList";
 
 /** status chip of an estimate — the one place for it (lists, client and property documents) */
@@ -89,8 +91,12 @@ export function useEstimateList(q: string, allDone: boolean, onAllDone: () => vo
       // never a blank (founder #3018: «номер должен быть»; the numbering itself — #3019)
       refNo: e.number || t("lst.numberPending"),
       subtitle: prop ? shortAddress(prop.address, prop.city) : undefined,
+      addressLine: true,
       extra: [what, e.title].filter(Boolean).join(" · ") || undefined,
-      figureRight: true,
+      // #3038 «одно правило с клиентом»: the sum in the name's line (valueTop), the number under it on line 2
+      valueTop: true,
+      // #3038 (review: «смете без ответа и просроченному счёту звонок нужнее всего»): the call on the right, as the client's
+      actions: telHref(c?.phone) ? [{ icon: "phone" as const, a11y: `${t("client.call")} ${c?.name ?? ""}`, onPress: () => openContact({ kind: "call", icon: "phone", url: telHref(c?.phone)!, value: c?.phone ?? "" }), testID: `est-call-${e.id}` }] : undefined,
       lead: { initials: initialsOf(c?.name) },
       value: amount.from ? t("card.fromAmount", { amount: moneyWhole(amount.cents) }) : moneyWhole(amount.cents),
       onPress: () => router.push(`/estimate/${e.id}`),

@@ -89,8 +89,12 @@ export default function Jobs() {
         // #3018 (founder #3017): 1 — the client; 2 — the address; 3 — the sum (office) · when · what · who (not «me» to the tech)
         // with «Позвонить · Маршрут» on the right the phone in the name's line pushed the deeds into a 4th line: the call button IS the phone
         subtitle={p ? shortAddress(p.address, p.city) : undefined}
+        addressLine
         // line 3 — the sum first, never cut (#2672; the tech never sees it), then when · what · who
-        extra={[office ? moneyWhole(j.amountCents) : undefined, when, j.title, office ? who : undefined].filter(Boolean).join(" · ") || undefined}
+        // #3038: the client's rule — the sum (office) in the name's line
+        extra={[when, j.title, office ? who : undefined].filter(Boolean).join(" · ") || undefined}
+        value={office && j.amountCents > 0 ? moneyWhole(j.amountCents) : undefined}
+        valueTop
         wrap
         lead={{ initials: initialsOf(c?.name) }}
         refNo={j.number || undefined}
