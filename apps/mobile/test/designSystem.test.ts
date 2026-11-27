@@ -101,7 +101,6 @@ describe("design system: components", () => {
     "features/PhotoStrip.tsx": 2,
     "features/estimate/SwipeRow.tsx": 1,
     "features/showcase/Rows.tsx": 1,
-    "modules/gutters/draw/CornerSheet.tsx": 1,
     "modules/gutters/draw/DrawScreen.tsx": 2,
     "modules/gutters/draw/FracPicker.tsx": 1,
     "modules/gutters/settings/SettingsScreen.tsx": 1,
