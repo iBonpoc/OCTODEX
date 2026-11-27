@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { usableItems } from "@/features/catalogMatch";
 import { seeCosts } from "@/features/access";
-import { View } from "react-native";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
 import type { CatalogItem, CatalogKind } from "@/data/types";
@@ -11,12 +10,9 @@ import { Button } from "@/ui/controls";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
-import { CardList, Empty, Screen } from "@/ui/surfaces";
-import { CardGrid, ListCard } from "@/ui/listCard";
+import { Empty, Screen } from "@/ui/surfaces";
+import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
 import type { IconKey } from "@/ui/primitives";
-import { T } from "@/ui/primitives";
-import { useDevice } from "@/theme/ThemeProvider";
-import { space } from "@octo/design-tokens";
 import { catalogItemEconomics } from "@/features/estimateDoc";
 import { supplierName } from "@/features/suppliers";
 
@@ -44,34 +40,36 @@ export default function Catalog() {
   const canEdit = role !== "tech";
   // #1837: the cost, the margin and «в убыток» only for who sees our costs (the server's app.can_view_costs), not by role
   const costs = seeCosts(db, role, mode);
-  const { device } = useDevice();
   // groups by kind only when «All» is chosen (otherwise the chip already says the kind)
   const groups = KINDS.filter((k): k is CatalogKind => k !== "all").map((k) => [k, items.filter((x) => x.kind === k)] as const).filter(([, xs]) => xs.length);
-  const card = (it: CatalogItem) => {
+  /**
+   * Lists B (#2992): an item is a row of its kind's group (rule 12) — the kind's icon · the name, «поставщик · себестоимость · маржа»
+   * (only what is known: no «Себестоимость —» tiles in every card) · on the right the price per unit; a loss — «В убыток» under it.
+   */
+  const row = (it: CatalogItem) => {
     // money only through the estimates chat's function (engine inside); the tech sees the selling price, never cost or margin (spec 06 §7.6)
     const eco = catalogItemEconomics(it, db.catalog);
     const loss = eco.marginPct !== null && eco.marginPct.startsWith("-");
     const tax = it.vendorTaxBps ? t("card.vendorTax", { pct: (it.vendorTaxBps / 100).toString() }) : "";
+    const line = [
+      // spec 36: the supplier's name from the list, else the old text
+      supplierName(db, it) ? [supplierName(db, it), tax].filter(Boolean).join(" · ") : undefined,
+      it.kind === "kit" && it.components?.length ? t("card.kitItems", { n: it.components.length }) : undefined,
+      costs && eco.costCents !== null ? `${t("card.fig.cost")} ${money(eco.costCents)}` : undefined,
+      costs && eco.marginPct !== null ? `${t("card.fig.margin")} ${eco.marginPct}%` : undefined,
+      it.description,
+    ].filter(Boolean).join(" · ");
     return (
-      <ListCard
+      <GroupRow
         key={it.id}
+        testID={`catalog-row-${it.id}`}
         title={it.name}
-        lead={{ kind: "icon", icon: KIND_ICON[it.kind] }}
+        subtitle={line || undefined}
+        lead={{ icon: KIND_ICON[it.kind] }}
         value={`${money(eco.priceCents)} / ${it.unit}`}
-        signs={costs && loss ? [{ tone: "bad", label: t("card.sign.loss") }] : undefined}
-        edge={costs && loss ? "bad" : null}
-        tags={[t(kindLabel(it.kind))]}
-        facts={{
-          // spec 36: the supplier's name from the list, else the old text
-          supplier: supplierName(db, it) ? [supplierName(db, it), tax].filter(Boolean).join(" · ") : undefined,
-          lines: it.kind === "kit" && it.components?.length ? t("card.kitItems", { n: it.components.length }) : undefined,
-          desc: it.description,
-        }}
-        // both tiles always, «—» when unknown: rows of equal height on the tablet grid
-        figures={costs ? [
-          { label: t("card.fig.cost"), value: eco.costCents === null ? "—" : money(eco.costCents) },
-          { label: t("card.fig.margin"), value: eco.marginPct === null ? "—" : `${eco.marginPct}%`, tone: loss ? "bad" : undefined },
-        ] : undefined}
+        // a long name («Debris haul-away (pickup load)») takes a second line, never «…» (Д-строка-2)
+        wrap
+        status={costs && loss ? { status: "bad", label: t("card.sign.loss") } : undefined}
         onPress={canEdit ? () => router.push(`/catalog/${it.id}`) : undefined}
       />
     );
@@ -95,15 +93,14 @@ export default function Catalog() {
       {items.length === 0 ? (
         <Empty icon="note" title={t("cat.empty")} />
       ) : (
-        <>
+        <GroupedList testID="catalog-list">
           {groups.map(([k, xs]) => (
-            <View key={k} style={{ gap: space[2] }}>
-              {kind === "all" ? <T v="caption" w="semibold" tone="mut">{`${t(kindLabel(k))} · ${xs.length}`}</T> : null}
-              {/* the catalog is not a queue: cards on a grid on tablet (2) and desktop (3), tiles stay visible */}
-              {device === "phone" ? <CardList>{xs.map(card)}</CardList> : <CardGrid>{xs.map(card)}</CardGrid>}
-            </View>
+            // the kind's title only on «Все» (otherwise the chip already says the kind)
+            <ListGroup key={k} title={kind === "all" ? t(kindLabel(k)) : undefined} count={kind === "all" ? xs.length : undefined} testID={`catalog-group-${k}`}>
+              {xs.map(row)}
+            </ListGroup>
           ))}
-        </>
+        </GroupedList>
       )}
     </Screen>
   );

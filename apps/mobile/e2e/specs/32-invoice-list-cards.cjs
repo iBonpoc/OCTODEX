@@ -13,7 +13,7 @@ exports.run = async (h) => {
   await h.go("/invoice?f=owed");
   const db = await h.db();
   const today = todayKey(); // overdue = due before the company's today (П4b)
-  const cardOf = (text) => p.locator('[data-testid="list-card"]').filter({ hasText: text }).first();
+  const cardOf = (text) => p.locator('[data-testid^="expense-row-"]').locator("visible=true").filter({ hasText: text }).first();
   const rowOf = (id) => p.getByTestId(`invoice-row-${id}`).locator("visible=true").first();
   const owes = (i) => Math.max(0, i.totalCents - i.paidCents);
   // #2888: the app shows money always with cents (founder #2672)
