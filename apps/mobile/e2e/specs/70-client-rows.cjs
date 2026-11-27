@@ -40,7 +40,7 @@ exports.run = async (h) => {
   await h.go("/client/c3");
   const lindaLeads = db0.leads.filter((l) => l.customerId === "c3");
   await tid("client-facts").waitFor({ state: "attached", timeout: 8000 });
-  h.expect((await p.getByTestId("client-billing").count()) === 0, "billing = the property: no «Для счетов» group");
+  h.expect((await p.getByTestId("client-for-invoices").count()) === 0, "billing = the property: no «Для счетов» group");
   await objSection(p, S, "work");
   h.expect(new RegExp(`Лиды · ${lindaLeads.length}\\b`).test(await tid("client-leads").innerText()), `«Лиды» counts ${lindaLeads.length}`);
   h.expect((await tid(`client-lead-${lindaLeads[0].id}`).innerText()).includes(lindaLeads[0].number), "lead in the list");
@@ -80,7 +80,7 @@ exports.run = async (h) => {
   h.expect((await p.getByTestId(`${S}-sections-money`).count()) === 0, "tech: no invoices section");
   await objSection(p, S, "work");
   h.expect((await p.getByTestId("client-leads").count()) === 0, "tech: no leads");
-  h.expect((await p.getByTestId("client-billing").count()) === 0, "tech: no billing");
+  h.expect((await p.getByTestId("client-for-invoices").count()) === 0, "tech: no billing");
   await h.go("/client/c2?s=invoices");
   await tid(`${S}-sections`).waitFor({ timeout: 8000 });
   h.expect(!/INV-/.test(await h.text()), "tech: the invoices list is not opened by address");
