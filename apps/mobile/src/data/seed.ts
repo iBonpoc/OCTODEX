@@ -173,8 +173,18 @@ export const DEMO_COMPANY: Company = {
 /** `lang` — the app's language when the demo starts: the demo checklist template comes in it (#1223) */
 export function makeSeed(lang: Lang = "en"): DB {
   const { db, demo } = baseSeed(lang);
-  // #3024: each module adds its own part to the test client (ModuleDef.demo)
-  return withModuleDemos(db, demo);
+  // #3024: each module adds its own part to the test client (ModuleDef.demo) — not in the e2e runs (they count their own)
+  return moduleDemosOff() ? db : withModuleDemos(db, demo);
+}
+/** the e2e runner's mark (e2e/run.cjs): the demo starts without the modules' demo data — a spec counts the measurements it
+ *  draws itself, never the test client's (#3024). The founder's demo and the stand have no mark: the data is there. */
+export const NO_MODULE_DEMO_KEY = "octo.e2e.noModuleDemo.v1";
+function moduleDemosOff(): boolean {
+  try {
+    return typeof localStorage !== "undefined" && localStorage.getItem(NO_MODULE_DEMO_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 /** the core's demo without the modules' parts (ModuleDef.demo) — for tests of a module that start from an empty slice */
 export const makeCoreSeed = (lang: Lang = "en"): DB => baseSeed(lang).db;
