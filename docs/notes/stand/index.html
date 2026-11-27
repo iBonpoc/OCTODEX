@@ -1,0 +1,178 @@
+<title>GoRix — стенд</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="apple-mobile-web-app-title" content="GoRix стенд">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+<style>
+/* Layout: one column for the phone — the big door to the live stand, then the remark slip, then the remarks with their status. Colours mirror the «Наряд» tokens. */
+:root{
+  --page:#CBCCC6; --bg:#D6D7D1; --surf:#E3E4DE; --ink:#17181B; --mut:#42454B; --line:rgba(23,24,27,.14);
+  --acc:#E2C15E; --onAcc:#1C1A12;
+  --ok:#2F7A4B; --okBg:rgba(47,122,75,.14); --info:#2D5F9E; --infoBg:rgba(45,95,158,.13);
+  --warn:#8A5A00; --warnBg:rgba(196,140,20,.20); --bad:#A33A2E;
+  --f-body:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#1F2024; --bg:#26282C; --surf:#303237; --ink:#EEEFF1; --mut:#B3B6BE; --line:rgba(238,239,241,.14);
+  --ok:#7CCB97; --okBg:rgba(124,203,151,.14); --info:#8DB6F0; --infoBg:rgba(141,182,240,.14);
+  --warn:#E9C46A; --warnBg:rgba(233,196,106,.16); --bad:#F08A7C; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --page:#1F2024; --bg:#26282C; --surf:#303237; --ink:#EEEFF1; --mut:#B3B6BE; --line:rgba(238,239,241,.14);
+  --ok:#7CCB97; --okBg:rgba(124,203,151,.14); --info:#8DB6F0; --infoBg:rgba(141,182,240,.14);
+  --warn:#E9C46A; --warnBg:rgba(233,196,106,.16); --bad:#F08A7C; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--page);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px;max-width:560px;margin:0 auto;display:grid;gap:18px}
+button,input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+h1{margin:0;font-size:26px;font-weight:800;letter-spacing:-.01em}
+.sub{margin:4px 0 0;color:var(--mut);font-size:14px}
+.door{display:flex;align-items:center;justify-content:center;gap:10px;min-height:64px;border-radius:18px;background:var(--acc);color:var(--onAcc);font-weight:800;font-size:19px;text-decoration:none}
+.door[aria-disabled="true"]{opacity:.5;pointer-events:none}
+.doorMeta{font-size:12.5px;color:var(--mut);text-align:center;margin-top:-8px;overflow-wrap:anywhere}
+.stats{display:flex;gap:6px;flex-wrap:wrap}
+.stat{display:inline-flex;align-items:baseline;gap:6px;font-size:13px;color:var(--mut);background:var(--surf);border-radius:999px;padding:5px 11px}
+.stat b{color:var(--ink);font-size:15px;font-variant-numeric:tabular-nums}
+.slip{background:var(--bg);border-radius:16px;padding:14px;display:grid;gap:10px}
+.slip h2,.list h2{margin:0;font-size:18px;font-weight:800}
+label.l{font-size:12px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.field{display:grid;gap:5px}
+input[type=text],textarea{width:100%;background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:16px;min-height:44px}
+textarea{min-height:110px;resize:vertical;line-height:1.4}
+.seg{display:inline-flex;background:var(--surf);border-radius:999px;padding:3px;gap:2px;justify-self:start}
+.seg button{border:0;background:transparent;border-radius:999px;padding:7px 14px;font-size:13px;font-weight:700;color:var(--mut);cursor:pointer;min-height:36px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.act{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.btn{border:0;border-radius:12px;min-height:44px;padding:0 20px;font-weight:700;font-size:15px;cursor:pointer;background:var(--acc);color:var(--onAcc)}
+.btn:disabled{opacity:.45;cursor:default}
+.hint{font-size:12.5px;color:var(--mut)}
+.banner{background:var(--warnBg);border-radius:12px;padding:10px 12px;font-size:13.5px}
+.list{display:grid;gap:10px}
+.rems{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.rem{background:var(--bg);border-radius:12px;padding:10px 12px;display:grid;gap:6px}
+.rem .scr{font-weight:700;font-size:14px}
+.rem p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14.5px}
+.meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--mut)}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;border-radius:999px;padding:3px 9px}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.s-new{color:var(--mut);background:var(--line)}
+.s-accepted{color:var(--info);background:var(--infoBg)}
+.s-in_work{color:var(--warn);background:var(--warnBg)}
+.s-pair_ready,.s-merged{color:var(--ok);background:var(--okBg)}
+.reply{font-size:13px;border-left:2px solid var(--line);padding-left:8px}
+.rem a{color:var(--info);font-weight:700}
+.del{border:0;background:transparent;color:var(--bad);font-size:12px;font-weight:700;cursor:pointer;padding:4px 0;margin-left:auto}
+.empty{color:var(--mut);font-size:14px;margin:0}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>GoRix — стенд</h1>
+    <p class="sub">Живая версия приложения со всеми правками, которые ждут влития. Откройте её, посмотрите экран и напишите здесь, что поправить.</p>
+  </header>
+
+  <a class="door" id="door" aria-disabled="true" href="#" target="_blank" rel="noopener">Открыть стенд ›</a>
+  <div class="doorMeta" id="doorMeta">Ссылка на стенд появится здесь сама, когда GitHub соберёт сайт.</div>
+
+  <div class="stats" id="stats"></div>
+  <div class="banner" id="banner" hidden></div>
+
+  <section class="slip" aria-labelledby="slipH">
+    <h2 id="slipH">Замечание</h2>
+    <div class="field"><label class="l" for="scr">Какой экран</label>
+      <input type="text" id="scr" placeholder="Например: смета, клиент, план" autocomplete="off"></div>
+    <div class="field"><label class="l" for="txt">Что поправить</label>
+      <textarea id="txt" placeholder="Отступ, размер, слово, лишняя кнопка…"></textarea></div>
+    <div class="seg" role="group" aria-label="Тема, в которой смотрели">
+      <button type="button" id="th-light" aria-pressed="true">Светлая</button>
+      <button type="button" id="th-dark" aria-pressed="false">Тёмная</button>
+    </div>
+    <div class="act"><button class="btn" id="save" type="button" disabled>Сохранить</button><span class="hint" id="hint"></span></div>
+  </section>
+
+  <section class="list" aria-labelledby="listH">
+    <h2 id="listH">Ваши замечания</h2>
+    <p class="empty" id="empty">Пока замечаний нет. Первое появится здесь сразу после «Сохранить».</p>
+    <ul class="rems" id="rems"></ul>
+  </section>
+</div>
+
+<script>
+(() => {
+const $ = (id) => document.getElementById(id);
+const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
+const ls = { get(k){ try { return localStorage.getItem(k); } catch { return null; } }, set(k,v){ try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} } };
+const STATUS = { new: "Отправлено", accepted: "Принято", in_work: "В работе", pair_ready: "Пара готова — смотрите", merged: "Влито" };
+let db = null, remarks = [], theme = "light", stand = { url: $("door").getAttribute("href"), commit: null };
+
+$("scr").value = ls.get("stand.scr") || ""; $("txt").value = ls.get("stand.txt") || "";
+const sync = () => { $("save").disabled = !db || !$("txt").value.trim(); };
+$("scr").addEventListener("input", () => { ls.set("stand.scr", $("scr").value || null); $("hint").textContent = ""; sync(); });
+$("txt").addEventListener("input", () => { ls.set("stand.txt", $("txt").value || null); $("hint").textContent = ""; sync(); });
+const setTheme = (t) => { theme = t; $("th-light").setAttribute("aria-pressed", String(t === "light")); $("th-dark").setAttribute("aria-pressed", String(t === "dark")); };
+$("th-light").addEventListener("click", () => setTheme("light")); $("th-dark").addEventListener("click", () => setTheme("dark"));
+
+$("save").addEventListener("click", async () => {
+  const text = $("txt").value.trim(); if (!text || !db) return;
+  $("save").disabled = true; $("hint").textContent = "Сохраняю…";
+  try {
+    await db.collection("remarks").add({ screen: $("scr").value.trim() || null, text, theme, createdAt: new Date().toISOString(), status: "new", issue: null, link: null, reply: null, standCommit: stand.commit || null });
+    $("txt").value = ""; ls.set("stand.txt", null); $("hint").textContent = "Сохранено";
+  } catch (e) {
+    $("hint").textContent = e && e.code === "permission_denied" ? "Нет права записи: откройте страницу из своего аккаунта Claude." : "Не сохранилось — проверьте связь и нажмите ещё раз. Текст остался в поле.";
+  }
+  sync();
+});
+
+const fmt = (iso) => { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString("ru-RU", { timeZone: "America/Los_Angeles", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + " LA"; };
+
+function render() {
+  const rs = [...remarks].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  $("rems").replaceChildren(...rs.map(item));
+  $("empty").hidden = rs.length > 0;
+  const n = (k) => remarks.filter((r) => (r.status || "new") === k).length;
+  const st = [["Замечаний", remarks.length], ["Ждут", n("new")], ["В работе", n("accepted") + n("in_work")], ["Пара готова", n("pair_ready")], ["Влито", n("merged")]];
+  $("stats").replaceChildren(...st.map(([l, v]) => { const s = el("span", "stat"); s.append(el("span", null, l), el("b", null, db ? String(v) : "…")); return s; }));
+}
+function item(r) {
+  const li = el("li", "rem");
+  const s = r.status && STATUS[r.status] ? r.status : "new";
+  let label = STATUS[s]; if (s === "in_work" && r.issue) label += " #" + r.issue;
+  const meta = el("div", "meta");
+  meta.append(el("span", "pill s-" + s, label), el("span", null, fmt(r.createdAt) + (r.theme ? " · " + (r.theme === "dark" ? "тёмная" : "светлая") : "")));
+  if (s !== "in_work" && r.issue) meta.append(el("span", null, "#" + r.issue));
+  if (s === "new" && db) {
+    const del = el("button", "del", "Удалить"); del.type = "button";
+    del.addEventListener("click", async () => {
+      if (del.dataset.armed !== "1") { del.dataset.armed = "1"; del.textContent = "Точно удалить?"; setTimeout(() => { del.dataset.armed = ""; del.textContent = "Удалить"; }, 4000); return; }
+      del.disabled = true; try { await db.doc("remarks/" + r.id).delete(); } catch { del.disabled = false; del.textContent = "Не удалилось"; }
+    });
+    meta.append(del);
+  }
+  li.append(meta);
+  if (r.screen) li.append(el("div", "scr", String(r.screen)));
+  li.append(el("p", null, String(r.text || "")));
+  if (r.reply) li.append(el("div", "reply", String(r.reply)));
+  if (typeof r.link === "string" && r.link.startsWith("https://")) { const a = el("a", null, s === "pair_ready" ? "Смотреть пару «Сейчас | Будет» ›" : "Ссылка ›"); a.href = r.link; a.target = "_blank"; a.rel = "noopener"; li.append(a); }
+  return li;
+}
+function showStand() {
+  if (typeof stand.url === "string" && stand.url.startsWith("https://")) { $("door").href = stand.url; $("door").removeAttribute("aria-disabled"); }
+  if (stand.note) $("doorMeta").textContent = String(stand.note);
+}
+function off(msg) { $("banner").hidden = false; $("banner").textContent = msg; sync(); render(); }
+render();
+
+(async () => {
+  const timer = setTimeout(() => { if (!db) off("Замечания здесь не сохраняются: откройте страницу в Claude, войдя в свой аккаунт. Кнопка «Открыть стенд» работает."); }, 10000);
+  try { db = window.claude && window.claude.use ? await window.claude.use("db") : null; } catch { db = null; }
+  if (!db) { clearTimeout(timer); off("Замечания здесь не сохраняются: откройте страницу в Claude, войдя в свой аккаунт. Кнопка «Открыть стенд» работает."); return; }
+  sync();
+  // the stand's current address lives in the store: the leader changes it without a new version of this page
+  db.doc("config/stand").onSnapshot((d) => { if (d.exists) { stand = { ...stand, ...d.data() }; showStand(); } }, () => {});
+  db.collection("remarks").onSnapshot((snap) => { clearTimeout(timer); $("banner").hidden = true; remarks = snap.docs.map((d) => ({ id: d.id, ...d.data() })); render(); },
+    () => { clearTimeout(timer); off("Замечания сейчас не загрузились. Обновите страницу через минуту; черновик остался в поле."); });
+})();
+})();
+</script>
