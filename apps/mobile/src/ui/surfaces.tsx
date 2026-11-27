@@ -30,7 +30,7 @@ import Svg, { Defs, Ellipse, LinearGradient, RadialGradient, Rect, Stop } from "
 import { component, layout, motion, radius, rhythm, size, space, spaceHalf, z, type StatusName } from "@octo/design-tokens";
 import Animated, { Easing, FadeIn, FadeOut, cancelAnimation, runOnJS, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
 import { HeaderAvatar, HeaderBack, HeaderBar, HeaderBig, HeaderClose, HeaderParent, HeaderPlate, HeaderScroll, type HeadSpec } from "./templates/screenHeader";
-import { panelCloses, pauseTarget, settleTarget, stickShift, type HeaderKind } from "./templates/headerMath";
+import { foldEnd, panelCloses, pauseTarget, settleTarget, stickShift, type HeaderKind } from "./templates/headerMath";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
@@ -904,6 +904,7 @@ export function Screen({
           ? (e) => {
               tabsY.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height;
               tabsTop.value = tabsY.current;
+              setTabsAt(tabsY.current);
             }
           : undefined
       }
@@ -929,6 +930,8 @@ export function Screen({
   /** the page's scroll and where the sticky strip lies on the page — shared values the header and the strip read on the UI thread */
   const scrollY = useSharedValue(0);
   const tabsTop = useSharedValue(0);
+  /** the same place for the render: the page under the strip keeps scroll room for the whole fold (#3031) */
+  const [tabsAt, setTabsAt] = useState(0);
   /** the web: when a person last scrolled the page themselves (the wheel, a finger, the keys) */
   const userScrollAt = useRef(0);
   useEffect(() => {
@@ -1020,6 +1023,9 @@ export function Screen({
   }).current;
   /** the pinned row covers the top of the page: the sticky strip stops under it, a field scrolled to stops below it */
   const stickOff = overlay ? navInsets.safeTop + component.header.bar : 0;
+  // a short tabbed page ends where the strip sticks: when that comes before the fold's end (#3031: the header has no empty line
+  // over the title any more), the page keeps the rest as room, so the header still folds whole and the small title comes in
+  const foldRoom = overlay && tabs && tabsAt > 0 ? Math.max(0, foldEnd(kind) - (tabsAt - stickOff)) : 0;
   // only when the chip changes: `tabs` is a new element on every render — on it, every re-render of a list (↓/↑ of the 1280 panel)
   // scrolled the page back up to the strip and cut the open row's scrollIntoView short (#2737)
   useEffect(() => {
@@ -1200,7 +1206,7 @@ export function Screen({
                 </View>
                 </Animated.View>
               ) : null}
-              {tabs ? <View style={[column, { gap: space[3], paddingTop: space[2], minHeight: winH - top - navInsets.bottom - (pinned ? barH : 0) - stickOff }]}>{below}</View> : null}
+              {tabs ? <View style={[column, { gap: space[3], paddingTop: space[2], minHeight: winH - top - navInsets.bottom - (pinned ? barH : 0) - stickOff + foldRoom }]}>{below}</View> : null}
             </Animated.ScrollView>
           </KeyboardAvoidingView>
         ) : (

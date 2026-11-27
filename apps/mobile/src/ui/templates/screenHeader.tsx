@@ -330,6 +330,13 @@ export function HeaderBar({
           </View>
         ) : (
           <>
+            {/* #3031: a root's «Демо» stands in the row right after the avatar (founder 26.11: «возле кружочка AR», «не будет двигать
+                весь контент») — no line of its own over the title; it fades as the header folds, the dot on the avatar takes over */}
+            {!parent && kind === "root" && demo.shown ? (
+              <Animated.View pointerEvents={stage > 0 ? "none" : "box-none"} style={[{ position: "absolute", left: 0, right: 0, flexDirection: "row", alignItems: "center" }, kick]}>
+                <DemoPlate />
+              </Animated.View>
+            ) : null}
             {parent ? (
               <Animated.View pointerEvents={stage > 0 ? "none" : "box-none"} style={[{ position: "absolute", left: 0, right: 0, flexDirection: "row", alignItems: "center", gap: space[2] }, kick]}>
                 <Press testID="hdr-parent" onPress={parent.onPress} accessibilityRole="link" accessibilityLabel={parent.label} containerStyle={{ flexShrink: 1 }} style={{ minHeight: size.hitMin, justifyContent: "center" }}>
@@ -513,15 +520,13 @@ export function HeaderBig({
   ) : null;
   const body =
     kind === "root" ? (
-      <View style={{ minHeight: H.big, justifyContent: "flex-end", paddingTop: spaceHalf.hair, paddingBottom: space[1] }}>
-        {kicker || demo.shown ? (
+      // #3031: no empty line over the title — the 13 line is there only with words (the date); «Демо» went into the row
+      <View style={{ minHeight: kicker ? H.big : undefined, justifyContent: "flex-end", paddingTop: spaceHalf.hair, paddingBottom: space[1] }}>
+        {kicker ? (
           <Animated.View style={[{ flexDirection: "row", alignItems: "center", gap: space[2] }, kickLook]}>
-            {kicker ? (
-              <T v="caption" w="semibold" tone="mut" numberOfLines={1} style={{ flexShrink: 1 }}>
-                {kicker}
-              </T>
-            ) : null}
-            <DemoPlate />
+            <T v="caption" w="semibold" tone="mut" numberOfLines={1} style={{ flexShrink: 1 }}>
+              {kicker}
+            </T>
           </Animated.View>
         ) : null}
         <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
@@ -548,7 +553,9 @@ export function HeaderBig({
         </View>
       </View>
     ) : (
-      <View style={{ minHeight: H.big, flexDirection: "row", alignItems: "center", gap: space[3], paddingTop: spaceHalf.hair, paddingBottom: space[1] }}>
+      // #3031: the 64 is the room of the two lines right of the rule; a list or a form without them (Расходы, Настройки) has the
+      // title right under the row — no empty band over it
+      <View style={{ minHeight: (sub && (sub.line1 || sub.line2)) || expand ? H.big : undefined, flexDirection: "row", alignItems: "center", gap: space[3], paddingTop: spaceHalf.hair, paddingBottom: space[1] }}>
         {/* the name keeps its room first (up to two thirds of the line); the two lines take what is left and cut with «…»;
             with no two lines the name has the whole line (e2e 457: «Настройки приложения» was cut at 66 % on 390) */}
         <Animated.View style={[{ flexDirection: "row", alignItems: "center", gap: space[2], flexShrink: 0, maxWidth: sub && (sub.line1 || sub.line2) ? "66%" : "100%", transformOrigin: "left center" }, titleLook]}>
