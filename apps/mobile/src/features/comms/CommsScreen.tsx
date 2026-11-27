@@ -7,17 +7,20 @@ import { Button } from "@/ui/controls";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
-import { ListCard } from "@/ui/listCard";
-import { CardList, Empty, Screen } from "@/ui/surfaces";
+import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
+import { Empty, Screen } from "@/ui/surfaces";
+import { dayKeyIn } from "@/features/zone";
 import type { IconKey } from "@/ui/primitives";
 import { CALL_OUTCOME, CALL_OUTCOMES, commsLog, matchComms, type CommsKind } from "./comms";
 import { CallSheet, type CallPreset } from "./CallSheet";
 
 const icon: Record<string, IconKey> = { call: "phone", sms: "sms", email: "mail" };
 type CallFilter = "all" | CallOutcome;
+/** «сегодня» → «Сегодня»: a day word as a group title */
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
- * «Звонки» / «Сообщения» (docs/specs/13 §2.1, §2.1.1; 20 §7): what was done from the app, one card per call or message.
+ * «Звонки» / «Сообщения» (docs/specs/13 §2.1, §2.1.1; 20 §7): what was done from the app, one row per call or message (lists B #2992).
  * Calls (6-2): the person, the outcome (icon + word), minutes, who called; «＋ Записать звонок». Over the list — the one rule
  * of spec 31: the magnifier (who, person, note) and the outcomes as the lane; the outcome is kept on this device, the search is not.
  */
@@ -59,28 +62,35 @@ export function CommsScreen({ kind }: { kind: CommsKind }) {
           action={calls ? <Button label={t("w6.call.title")} icon="phone" variant="secondary" onPress={record} /> : undefined}
         />
       ) : (
-        <CardList>
-          {items.map((it) => {
-            const o = it.outcome ? CALL_OUTCOME[it.outcome] : undefined;
-            return (
-              <ListCard
-                key={it.id}
-                testID={`comms-${it.id}`}
-                title={it.person && it.person !== it.who ? `${it.person} · ${it.who}` : it.who || it.person || t("nav.comms.unknown")}
-                when={`${day(it.at)} · ${time(it.at)}`}
-                lead={{ kind: "icon", icon: icon[it.kind] ?? "message" }}
-                status={o ? { tone: o.tone, label: t(o.label) } : undefined}
-                tags={[
-                  t(it.kind === "call" ? "nav.comms.call" : it.kind === "sms" ? "nav.comms.sms" : "nav.comms.email"),
-                  ...(it.durationMin ? [duration(it.durationMin)] : []), // #2363 F42: the one rule of a length («1 ч 30 мин»)
-                  ...(it.by ? [it.by] : []),
-                ]}
-                facts={it.note ? { last: it.note } : undefined}
-                onPress={it.href ? () => router.push(it.href as never) : undefined}
-              />
-            );
-          })}
-        </CardList>
+        // lists B (#2992): rows of the day's group (rule 12) — the kind's icon · who, «вид · минуты · кто · заметка» · on the right
+        // the time, under it the outcome (icon + word); the day is the group's title, said once
+        <GroupedList testID="calllog-list">
+          {[...items.reduce((m, it) => m.set(dayKeyIn(it.at), [...(m.get(dayKeyIn(it.at)) ?? []), it]), new Map<string, typeof items>())].map(([k, xs]) => (
+            <ListGroup key={k} title={cap(day(xs[0]!.at))} testID={`calllog-day-${k}`}>
+              {xs.map((it) => {
+                const o = it.outcome ? CALL_OUTCOME[it.outcome] : undefined;
+                return (
+                  <GroupRow
+                    key={it.id}
+                    testID={`comms-${it.id}`}
+                    title={it.person && it.person !== it.who ? `${it.person} · ${it.who}` : it.who || it.person || t("nav.comms.unknown")}
+                    subtitle={[
+                      t(it.kind === "call" ? "nav.comms.call" : it.kind === "sms" ? "nav.comms.sms" : "nav.comms.email"),
+                      it.durationMin ? duration(it.durationMin) : undefined, // #2363 F42: the one rule of a length («1 ч 30 мин»)
+                      it.by,
+                      it.note,
+                    ].filter(Boolean).join(" · ")}
+                    lead={{ icon: icon[it.kind] ?? "message" }}
+                    value={time(it.at)}
+                    valueMark={!o}
+                    status={o ? { status: o.tone, label: t(o.label) } : undefined}
+                    onPress={it.href ? () => router.push(it.href as never) : undefined}
+                  />
+                );
+              })}
+            </ListGroup>
+          ))}
+        </GroupedList>
       )}
       <CallSheet preset={logging} onClose={() => setLogging(null)} />
     </Screen>

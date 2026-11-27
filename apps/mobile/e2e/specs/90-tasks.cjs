@@ -19,7 +19,8 @@ exports.run = async (h) => {
   const wide = h.layout.width > 390;
   const m = menuApi(h);
   const plus = () => listCreate(p, "tasks", "tasks-create-new");
-  const count = async (n, what) => h.expectText(new RegExp(`Задачи · ${n}( |\\||$)`), what);
+  // Д-шапка-7 (#2841): the title is the menu word without a number; a list with no chips says its count in a line under it
+  const count = async (n, what) => h.expectText(new RegExp(`Открытых: ${n}( |\\||$)`), what);
 
   // «Ещё» → «Задачи»
   await h.go("/today");
