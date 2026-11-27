@@ -36,7 +36,8 @@ exports.run = async (h) => {
   // «Счета»: owes / paid / still to bill once each, the invoice and the receipt
   await section("money");
   const money = await inner("client-money");
-  h.expect(/\$0\.00[\s\S]*Долг[\s\S]*\$582\.00[\s\S]*Оплачено/.test(money), `owes / paid (one word each, #1417): ${money.slice(0, 120)}`);
+  // whole dollars on an overview, cents only inside documents (#3029/#3030); under $1 keeps cents
+  h.expect(/\$0\.00[\s\S]*Долг[\s\S]*\$582(?![.\d])[\s\S]*Оплачено/.test(money), `owes / paid (one word each, #1417): ${money.slice(0, 120)}`);
   h.expect(/INV-0105/.test(money) && /RCT-0102/.test(money), "invoices: invoice and receipt");
 
   // «＋ → Новая задача» — the one task form (TaskSheet), the client is already «к чему»; open tasks live in «Журнал»
