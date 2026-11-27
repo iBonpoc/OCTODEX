@@ -5810,6 +5810,16 @@ export const ru = {
   "oc.client.forInvoices": "Для счетов",
   "oc.client.archiveOwes": "Должен {amount} — неактивным после оплаты",
   "oc.client.archiveOwesNoSum": "Есть неоплаченный баланс — неактивным после оплаты",
+  // #3061 «Обзор» клиента: группы с заголовками, закреплённая заметка — кто, когда, кто видит, «Открепить»
+  "ov3061.important": "Важно знать",
+  "ov3061.ahead": "Впереди",
+  "ov3061.tasks": "Задачи",
+  "ov3061.money": "Деньги",
+  "ov3061.pinnedTeam": "{who} · {when} · видят все",
+  "ov3061.pinnedMine": "{who} · {when} · видите только вы",
+  "ov3061.unpin": "Открепить заметку",
+  "ov3061.unpinned": "Заметка откреплена",
+  "ov3061.all": "Все",
 } as const;
 
 export type DictKey = keyof typeof ru;

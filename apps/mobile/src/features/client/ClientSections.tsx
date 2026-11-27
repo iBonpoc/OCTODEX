@@ -128,6 +128,9 @@ const initials = (n: string) => n.split(/\s+/).filter(Boolean).map((p) => p[0]).
 
 /* ============================== Обзор ============================== */
 
+/** #3061: the overview's look on the stand — «A» no tiles (crm-review, recommended), «B» a «Деньги» group with cents (design-review) */
+const OVERVIEW_LOOK: "A" | "B" = "A";
+
 export function ClientOverview({ c, f, onSection, withNow }: {
   c: Customer;
   f: ClientFacts;
@@ -138,19 +141,12 @@ export function ClientOverview({ c, f, onSection, withNow }: {
   const { t, money, moneyWhole, time } = useI18n();
   const ago = useAgo();
   const when = useWhen();
+  const store = useStore();
+  const toast = useToast();
   const { db, r, office } = f;
   const money$ = canSeeClientMoney(f.role);
-  // what the «Сейчас» card already says is not said again (#2350): its job's figures (debt / to bill / paid), its visit
+  // #3061: no tiles in variant A — the money is the «Сейчас» card's and the «Счета» tab's (crm-review: the tiles argued with the card)
   const nowJob = f.now && (f.now.kind === "working" || f.now.kind === "scheduled") ? f.now.job : undefined;
-  const covered = new Set<ClientTile>([
-    ...(nowJob && jobFigures(nowJob, r.invoices) ? (["toBill", "paid", "debt"] as const) : []),
-    ...(f.now?.kind === "overdue" ? (["debt"] as const) : []),
-    // the next visit is a row of «впереди» (or the card's own) — never a tile beside it saying the same
-    "nextVisit",
-  ]);
-  const shownTiles = clientTileKeys(f.role, f.state, f.toBillCents).filter((k) => !covered.has(k));
-  // a lone tile is a wall of one: the line it would say is in the sections (v2 «тройка цифр», not a 2×2 of leftovers)
-  const tiles = shownTiles;
   const nowJobs = r.jobs.filter((j) => j.status !== "done" && !j.cancelledAt && j.id !== nowJob?.id);
   // the visits ahead (v2 «Сегодня 8:30–12:30 · Bathroom remodel · Alex»): the next two, not the one the card holds
   const nowVisitId = f.now && (f.now.kind === "working" || f.now.kind === "scheduled") ? f.now.visit.id : undefined;
@@ -158,54 +154,22 @@ export function ClientOverview({ c, f, onSection, withNow }: {
   void nowVisitId;
   const ahead = f.visits.filter((v) => isOpenVisit(v) && dayOffsetOf(isoDayKey(v.start)) >= 0).slice(0, 2);
   // the pinned notes of the client (v2 «Gate code 4512 · small dog / закреплено · видят мастера»): the warm plate first
-  const pinned = db.notes.filter((n) => n.subjectType === "customer" && n.subjectId === c.id && n.pinned && !(n as { deletedAt?: string }).deletedAt);
+  // #3061 (crm-review): only what the viewer may read — the team's notes and his own private ones (the same rule as NotesBlock)
+  const pinned = db.notes.filter((n) => n.subjectType === "customer" && n.subjectId === c.id && n.pinned && !(n as { deletedAt?: string }).deletedAt && (n.visibility === "team" || n.authorId === db.me));
   const aheadRow = useAheadRow(f);
   const openTasks = r.tasks.filter((x) => !x.doneAt);
-  const done = r.jobs.filter((j) => j.status === "done").sort((a, b) => b.id.localeCompare(a.id))[0];
   const place = r.properties.find((p) => p.accessNotes || p.gateCode) ;
   const gateSeen = place ? canSeeGateCode(db, f.role, place.id) : false;
-  const lastTalk = f.talks[0];
-  const [main] = peopleOf(c);
-
-  const tile = (k: ClientTile): ReactNode => {
-    switch (k) {
-      case "debt":
-        return <StatTile key={k} testID="client-tile-debt" label={t("proto.client.tile.debt")} value={moneyWhole(f.m.owesCents)} icon="invoice" warn={f.overdue ? t("card.sign.overdueDays", { d: f.overdue.days }) : undefined} onPress={() => onSection("money")} />;
-      case "paid":
-        return <StatTile key={k} testID="client-tile-paid" label={t("proto.client.tile.paid")} value={moneyWhole(f.m.paidTotalCents)} icon="wallet" onPress={money$ && f.hasMoney ? () => onSection("money") : undefined} />;
-      case "toBill":
-        return <StatTile key={k} testID="client-tile-tobill" label={t("proto.client.tile.toBill")} value={moneyWhole(f.toBillCents)} icon="doc" onPress={() => onSection("money")} />;
-      case "nextVisit":
-        return f.nextVisit ? (
-          <StatTile key={k} testID="client-tile-next" label={`${t("proto.client.tile.next")} · ${dayWord(f.nextVisit.start)}`} value={time(f.nextVisit.start)} icon="calendar" onPress={() => router.push(`/visit/${f.nextVisit!.id}`)} />
-        ) : null;
-      case "contact":
-        return lastTalk ? <StatTile key={k} testID="client-tile-contact" label={`${t("proto.client.tile.contact")} · ${t(lastTalk.title)}`} value={ago(lastTalk.at)} icon="phone" onPress={() => onSection("log")} /> : null;
-      case "reminded": {
-        const since = r.invoices.filter((i) => i.sentAt && i.paidCents < i.totalCents).map((i) => i.sentAt!).sort()[0];
-        const n = since ? f.talks.filter((h) => h.at >= since).length : 0;
-        return <StatTile key={k} testID="client-tile-reminded" label={`${t("proto.client.tile.reminded")}${n ? ` · ${ago(f.talks[0]!.at)}` : ""}`} value={n ? String(n) : t("proto.client.never")} icon="bell" onPress={() => onSection("log")} />;
-      }
-      case "lastJob":
-        return done ? <StatTile key={k} testID="client-tile-lastjob" label={`${t("proto.client.tile.lastJob")} · ${done.title}`} value={done.number ?? "—"} icon="wrench" onPress={() => router.push(`/job/${done.id}`)} /> : null;
-      case "approved": {
-        const ok = r.estimates.filter((e) => e.status === "approved").length;
-        return r.estimates.length ? <StatTile key={k} testID="client-tile-approved" label={t("proto.client.tile.approved")} value={`${ok}/${r.estimates.length}`} icon="check" onPress={() => onSection("work")} /> : null;
-      }
-      case "source":
-        return c.sourceId ? <StatTile key={k} testID="client-tile-source" label={t("proto.client.tile.source")} value={sourceName(db, c.sourceId)} icon="star" /> : null;
-      case "gate":
-        return place?.gateCode ? <StatTile key={k} testID="client-tile-gate" label={t("proto.client.tile.gate")} value={gateSeen ? place.gateCode : "•••"} warn={gateSeen ? undefined : t("proto.client.gateLater")} icon="key" /> : null;
-      case "onSite":
-        return main ? <StatTile key={k} testID="client-tile-onsite" label={t("proto.client.tile.onSite")} value={main.name.split(" ")[0] ?? main.name} icon="user" /> : null;
-      case "tomorrow": {
-        const tm = f.visits.find((v) => isOpenVisit(v) && dayOffsetOf(isoDayKey(v.start)) === 1);
-        return tm ? <StatTile key={k} testID="client-tile-tomorrow" label={t("common.tomorrow")} value={time(tm.start)} icon="calendar" onPress={() => router.push(`/visit/${tm.id}`)} /> : null;
-      }
-    }
-  };
   const dw = useDayWord();
-  const dayWord = (iso: string) => dw(iso);
+  // #3061 (founder: «кто это закрепил? как это закрепить?»): the note says who wrote it, when and who sees it; «Открепить» — one tap
+  // on the row's pin, with «Вернуть» (rule 5); pinning — the pin of a note in «Журнал»
+  const pinLine = (n: (typeof pinned)[number]) =>
+    t(n.visibility === "team" ? "ov3061.pinnedTeam" : "ov3061.pinnedMine", { who: memberName(db, n.authorId, t)?.split(" ")[0] ?? "—", when: dw(n.at) });
+  const unpin = (id: string) => toast.show(t("ov3061.unpinned"), store.updateNote(id, { pinned: false }));
+  const toggleTask = (x: (typeof openTasks)[number]) => {
+    const res = store.saveTask({ ...x, doneAt: x.doneAt ? undefined : new Date().toISOString() });
+    toast.show(t("task.done"), res.undo);
+  };
 
   // archive: on the client's screen the «Сейчас» card says it with its «Вернуть в активные»; «не обслуживаем» has no step — the plate
   const plate =
@@ -227,16 +191,19 @@ export function ClientOverview({ c, f, onSection, withNow }: {
           is its own frame (#3017, #3022) — the overview's note, gate code and visits ahead too.
           #2363 F12/F20/F21: the pinned note, the access words and the visits ahead — quiet:
           a gate code is not a status, so no warm fill; the note takes 2 lines, never cut in the middle of a word */}
+      {/* #3061: every group says what it is — «Важно знать» (the pinned notes, the access), «Впереди» (the visits) — no row without
+          its title; every record its own frame (#3060) */}
       <GroupedList testID="client-top">
-        <ListGroup separate testID="client-top-group">
+        <ListGroup separate title={t("ov3061.important")} testID="client-top-group">
           {pinned.map((n) => (
             <GroupRow
               key={n.id}
               testID={`client-pinned-${n.id}`}
-              lead={{ icon: "key" }}
+              lead={{ icon: "note" }}
               wrap
-              title={n.body.split("\n")[0]!}
-              subtitle={t(n.visibility === "team" ? "px2.cv.pinnedTeam" : "px2.cv.pinnedMine")}
+              title={n.body}
+              subtitle={pinLine(n)}
+              actions={office || n.authorId === db.me ? [{ icon: "pushpin", a11y: t("ov3061.unpin"), onPress: () => unpin(n.id), testID: `client-unpin-${n.id}` }] : undefined}
               onPress={() => onSection("log")}
             />
           ))}
@@ -250,15 +217,27 @@ export function ClientOverview({ c, f, onSection, withNow }: {
               onPress={r.properties.length > 1 ? () => onSection("places") : () => router.push(`/property/${place.id}`)}
             />
           ) : null}
+        </ListGroup>
+        <ListGroup separate title={t("ov3061.ahead")} testID="client-ahead">
           {ahead.map((v) => aheadRow(v))}
         </ListGroup>
       </GroupedList>
-      {(() => {
-        // only the tiles that have something to say; a lone one is dropped (its line is in the sections)
-        // (a tile whose value says nothing — «$0» — draws nothing: StatTile's own rule, statShown)
-        const drawn = tiles.map(tile).filter((n): n is ReactElement<{ value: string }> => !!n && statShown(String((n as ReactElement<{ value: string }>).props.value)));
-        return drawn.length >= 2 ? <StatGrid testID="client-tiles">{drawn}</StatGrid> : null;
-      })()}
+      {OVERVIEW_LOOK === "B" && office
+        ? (() => {
+            // #3061 вариант Б (design-review): «Деньги» — долг и оплачено, с центами (#2672); нечего сказать — нет блока
+            const drawn = [
+              f.m.owesCents > 0 ? <StatTile key="debt" testID="client-tile-debt" label={t("proto.client.tile.debt")} value={money(f.m.owesCents)} icon="invoice" warn={f.overdue ? t("card.sign.overdueDays", { d: f.overdue.days }) : undefined} onPress={() => onSection("money")} /> : null,
+              f.m.paidTotalCents > 0 ? <StatTile key="paid" testID="client-tile-paid" label={t("proto.client.tile.paid")} value={money(f.m.paidTotalCents)} icon="wallet" onPress={f.hasMoney ? () => onSection("money") : undefined} /> : null,
+            ].filter(Boolean);
+            return drawn.length ? (
+              <GroupedList testID="client-money">
+                <ListGroup bare title={t("ov3061.money")}>
+                  <StatGrid testID="client-tiles">{drawn}</StatGrid>
+                </ListGroup>
+              </GroupedList>
+            ) : null;
+          })()
+        : null}
       <ClientDupCards c={c} />
       {/* a new client: the «Сейчас» card says «Работ пока нет» with its «Новая смета»; the panel of the 1280 list says it here */}
       {withNow && f.state === "new" && !r.estimates.length ? <Empty icon="wrench" title={t("proto.client.noJobs")} hint={t("proto.client.noJobsHint")} testID="client-new-empty" /> : null}
@@ -276,11 +255,20 @@ export function ClientOverview({ c, f, onSection, withNow }: {
               onPress={() => router.push(`/job/${j.id}`)}
             />
           ))}
+        </ListGroup>
+        <ListGroup separate title={t("ov3061.tasks")} count={openTasks.length > 2 ? openTasks.length : undefined} testID="client-tasks">
           {openTasks.slice(0, 2).map((x) => (
-            <GroupRow key={x.id} testID={`client-task-${x.id}`} lead={{ icon: "check" }} title={x.title} subtitle={[t("proto.client.task"), x.dueAt ? when(x.dueAt) : null].filter(Boolean).join(" · ")} onPress={() => onSection("log")} />
+            <GroupRow
+              key={x.id}
+              testID={`client-task-${x.id}`}
+              lead={{ done: !!x.doneAt, onToggle: () => toggleTask(x), label: x.title, testID: `client-task-done-${x.id}` }}
+              title={x.title}
+              subtitle={x.dueAt ? when(x.dueAt) : undefined}
+              onPress={() => onSection("log")}
+            />
           ))}
         </ListGroup>
-        <ListGroup separate title={t("proto.client.lastTalk")} all={{ label: t("proto.client.allLog"), onPress: () => onSection("log"), testID: "client-log-all" }} testID="client-last-talk">
+        <ListGroup separate title={t("proto.client.lastTalk")} all={{ label: t("ov3061.all"), onPress: () => onSection("log"), testID: "client-log-all" }} testID="client-last-talk">
           {f.talks.slice(0, 2).map((h) => (
             <GroupRow key={h.id} lead={{ icon: h.icon }} title={t(h.title)} subtitle={[ago(h.at), h.detail].filter(Boolean).join(" · ")} />
           ))}
@@ -327,7 +315,8 @@ function useAheadRow(f: ClientFacts) {
         key={v.id}
         testID={`client-ahead-${v.id}`}
         lead={{ icon: "calendar" }}
-        title={today ? `${dayWord} ${bareTime(time(v.start))}–${bareTime(time(end))}` : `${dayWord} ${bareTime(time(v.start))}`}
+        // #3061 (both reviews): the time in full, «1:00 PM» — never a bare «1:00» that reads as the night (rule 7)
+        title={today ? `${dayWord} ${bareTime(time(v.start))}–${time(end)}` : `${dayWord} · ${time(v.start)}`}
         subtitle={line || undefined}
         status={today ? todayPill : undefined}
         cols={today ? undefined : [{ label: t("px2.cv.dur"), value: duration(v.durationMin) }]}

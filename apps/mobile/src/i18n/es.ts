@@ -5809,4 +5809,14 @@ export const es: Dict = {
   "oc.client.forInvoices": "Para facturas",
   "oc.client.archiveOwes": "Debe {amount}: inactivo tras el pago",
   "oc.client.archiveOwesNoSum": "Hay saldo pendiente: inactivo tras el pago",
+  // #3061 resumen del cliente
+  "ov3061.important": "Para tener en cuenta",
+  "ov3061.ahead": "Próximo",
+  "ov3061.tasks": "Tareas",
+  "ov3061.money": "Dinero",
+  "ov3061.pinnedTeam": "{who} · {when} · la ve el equipo",
+  "ov3061.pinnedMine": "{who} · {when} · solo usted la ve",
+  "ov3061.unpin": "Desfijar la nota",
+  "ov3061.unpinned": "Nota desfijada",
+  "ov3061.all": "Todo",
 };

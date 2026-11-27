@@ -5809,4 +5809,14 @@ export const en: Dict = {
   "oc.client.forInvoices": "For invoices",
   "oc.client.archiveOwes": "Owes {amount} — inactive once paid",
   "oc.client.archiveOwesNoSum": "An unpaid balance — inactive once paid",
+  // #3061 the client's overview
+  "ov3061.important": "Good to know",
+  "ov3061.ahead": "Coming up",
+  "ov3061.tasks": "Tasks",
+  "ov3061.money": "Money",
+  "ov3061.pinnedTeam": "{who} · {when} · team sees it",
+  "ov3061.pinnedMine": "{who} · {when} · only you see it",
+  "ov3061.unpin": "Unpin the note",
+  "ov3061.unpinned": "Note unpinned",
+  "ov3061.all": "All",
 };
