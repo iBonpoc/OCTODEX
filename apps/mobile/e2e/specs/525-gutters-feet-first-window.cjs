@@ -69,16 +69,24 @@ exports.run = async (h) => {
   const whole = Number(newFt) * 12;
   await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === whole), `kept: ${newFt}′ 0″ (${JSON.stringify((await runs()).map((r) => r.geom?.lengthIn))})`);
 
-  // again, from its length label: the inches typed, then the feet → the inches stay
+  // again, from its length label: the inches typed, then the feet → the inches stay (390). 820/1280 (#3080, design-review #3066 №13):
+  // the label picks the gutter, its length is in the column — no window opens again
+  const wide = (p.viewportSize()?.width ?? 0) > 390;
   const lab = await p.getByTestId("draw-svg").first().locator('[id^="lbl-len:"]').filter({ hasText: `${newFt}′` }).first().boundingBox();
   await p.mouse.click(lab.x + lab.width / 2, lab.y + lab.height / 2);
-  await tid("quick-length").waitFor({ timeout: 5000 });
-  await field("quick-length-in").fill("7");
-  await field("quick-length-ft").fill(String(Number(newFt) + 1));
-  await settle(p);
-  h.expect((await field("quick-length-in").inputValue()) === "7", "opened again: the feet keep the inches");
-  await tid("quick-length-apply").getByRole("button").click();
-  await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === (Number(newFt) + 1) * 12 + 7), `kept: ${Number(newFt) + 1}′ 7″`);
+  if (!wide) {
+    await tid("quick-length").waitFor({ timeout: 5000 });
+    await field("quick-length-in").fill("7");
+    await field("quick-length-ft").fill(String(Number(newFt) + 1));
+    await settle(p);
+    h.expect((await field("quick-length-in").inputValue()) === "7", "opened again: the feet keep the inches");
+    await tid("quick-length-apply").getByRole("button").click();
+    await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === (Number(newFt) + 1) * 12 + 7), `kept: ${Number(newFt) + 1}′ 7″`);
+  } else {
+    await waitFor(async () => (await field("attr-length-ft").inputValue().catch(() => "")) === newFt, `the column holds ${newFt} ft`);
+    await settle(p);
+    h.expect((await tid("quick-length").count()) === 0, "820/1280: a label tapped opens no length window");
+  }
 
   // #2446: a SECOND gutter, its first window: the inches typed (then a fraction), THEN the feet → the inches and the fraction stay
   const known = (await runs()).length;
