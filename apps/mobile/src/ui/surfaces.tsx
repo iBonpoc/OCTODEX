@@ -859,9 +859,12 @@ export function Screen({
       {big}
       <UpdateBar />
       {subtitle && kind !== "editor" ? (
-        <T v="body" tone="mut">
-          {subtitle}
-        </T>
+        // the line under the title («Открытых: 5», Д-шапка-7): its own testID — the tests read it, not its words
+        <View testID={testID ? `${testID}-subtitle` : undefined}>
+          <T v="body" tone="mut">
+            {subtitle}
+          </T>
+        </View>
       ) : null}
       {/* spec 42 S34: the company's name ▾ (two or more companies); a company not loaded here yet, offline — what to do */}
       {home ? <CompanyLine /> : null}

@@ -22,8 +22,8 @@ import type { CreateAction, IconAction, MoreAction } from "./types";
 export interface OverviewScreenProps {
   /** the screen's name (the tests, VoiceOver, the tab) and its 30 title («Главная»), with or without `greeting` */
   title: string;
-  /** the root header of a role's «Главная» (v2 «Корень вкладки»): the avatar on the left (→ «Ещё»), the date in the 13 line, «Доброе
-   *  утро, Алекс» as the 30 title; folded — «Сегодня, 20 нояб.» (`mini`) */
+  /** the root header of a role's «Главная» (v2 «Корень вкладки»): the avatar on the left (→ «Ещё»), the 13 line «дата · Доброе утро,
+   *  Алекс» over the 30 title «Главная» (`overviewHead`, #2922); folded — «Сегодня, 20 нояб.» (`mini`, DS §12.13) */
   greeting?: { initials: string; text?: string; date: string; mini?: string; onAvatar?: () => void; avatarLabel: string };
   /** a role's «Главная» (default): the company line «Компания ▾» and its «not loaded yet» under the head, the sync badge; `false` — not */
   home?: boolean;
@@ -109,7 +109,7 @@ export function OverviewScreen(p: OverviewScreenProps) {
       testID={p.testID}
       title={head.title}
       // DS §12.13 «Шапка» (#2841, #2844): the 30 title is the tab's word («Главная»); the greeting goes into the 13 line after the date
-      head={{ kind: "root", kicker: head.kicker, mini: head.title, avatar }}
+      head={{ kind: "root", kicker: head.kicker, mini: g?.mini ?? head.title, avatar }}
       home={p.home ?? true}
       headerIcons={p.headerIcons}
       right={tail}
