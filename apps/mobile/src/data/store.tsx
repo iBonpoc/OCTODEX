@@ -583,6 +583,11 @@ const nextReceipt = (d: DB): string => {
   const max = d.payments.reduce((m, p) => Math.max(m, Number(p.receiptNumber?.replace(/\D/g, "") ?? 0)), 100);
   return `RCT-${String(max + 1).padStart(4, "0")}`;
 };
+/** #3019 (founder 26.11: «номер должен быть»): the next local estimate number (demo); in the cloud the server assigns EST-… */
+const nextEstimateNumber = (d: DB): string => {
+  const max = d.estimates.reduce((m, e) => Math.max(m, Number(/^EST-(\d+)$/.exec(e.number ?? "")?.[1] ?? 0)), 0);
+  return `EST-${String(max + 1).padStart(4, "0")}`;
+};
 const nextInvoiceNumber = (d: DB): string => {
   const max = d.invoices.reduce((m, i) => Math.max(m, Number(i.number?.replace(/\D/g, "") ?? 0)), 100);
   return `INV-${String(max + 1).padStart(4, "0")}`;
@@ -2622,6 +2627,8 @@ export function StoreProvider({
             const next: Estimate = {
               ...(prev ?? {}),
               id, customerId, propertyId, title, doc, status: "draft", ...sum, leadId: leadId0 ?? prev?.leadId,
+              // #3019: a new demo estimate gets its number at once (the cloud's comes from the server on insert)
+              ...(!prev && modeRef.current === "demo" ? { number: nextEstimateNumber(d) } : {}),
               // who made it (the server's created_by: a tech keeps seeing his own, estimates_select — #1138)
               createdBy: prev ? prev.createdBy : d.me,
               savedAt,
