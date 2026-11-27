@@ -673,11 +673,8 @@ describe("design system: no column of buttons (DS §7.5, #3065)", () => {
   const ts = require("typescript") as typeof import("typescript");
   const BUTTON_COLUMNS_LEFT: Record<string, number> = {
     "app/(tabs)/triage.tsx": 1,
-    "app/auth/sign-in.tsx": 2,
-    "app/company/intake.tsx": 1,
-    "app/estimate/new.tsx": 1,
+    "app/estimate/new.tsx": 1, // stays: founder 23.11 (audit MAP wave 1 п.6, picture n09) — the four ways to add, two pairs over the lines
     "app/purchase-order/[id].tsx": 1,
-    "features/CompanyTerms.tsx": 1,
     "features/PhotoStrip.tsx": 1,
     "features/RelatedBlock.tsx": 1,
     "features/StuckOps.tsx": 1,
@@ -690,8 +687,8 @@ describe("design system: no column of buttons (DS §7.5, #3065)", () => {
     "modules/gutters/draw/AttrPanel.tsx": 1,
     "modules/gutters/settings/SettingsScreen.tsx": 1,
     "modules/gutters/view/ViewScreen.tsx": 1,
-    "ui/confirmDialog.tsx": 2,
-    "ui/dateField.tsx": 1,
+    "ui/confirmDialog.tsx": 2, // stays: a dialog may have three answers in a column (HIG Alerts; «Сохранить изменения?», DS §7.5)
+    "ui/dateField.tsx": 1, // the quick days «Сегодня · Завтра · Без даты» are a choice, not actions — goes when they become ChoiceChips
   };
   type N = import("typescript").Node;
   const tagOf = (n: N) => (ts.isJsxElement(n) ? n.openingElement.tagName.getText() : ts.isJsxSelfClosingElement(n) ? n.tagName.getText() : null);
