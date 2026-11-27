@@ -4,7 +4,7 @@
  * colour of every NEW gutter of this drawing, the gutter drawn before keeps its own; after a reload it is still there (kept on this phone);
  * «Сбросить» gives the company's back. The same for «Водосток» (a size). Every view. Finds things by testID; waits on what it checks.
  */
-const { skipLength, pastDoubleTap, doubleTapUntil, pickAttr, attrShown, winSave } = require("../gutters.cjs");
+const { skipLength, pastDoubleTap, doubleTapUntil, pickAttr, attrShown, winSave, pairFits, tilesEven } = require("../gutters.cjs");
 const { pressEscUntilClosed, sheetGone } = require("../sheet.cjs");
 const KEY = "octo.db.v5";
 
@@ -84,6 +84,9 @@ exports.run = async (h) => {
   h.expect((await tid("attr-length").count()) === 0 && (await tid("attr-story").count()) === 0, "no length and no story among the new gutters' rows");
   await choose("attr-color", "brown");
   await p.waitForFunction(() => /Brown/.test(document.querySelector('[data-testid="draw-new-defaults"]')?.textContent || ""), null, { timeout: 5000 });
+  // #3015 / #3051: «Для новых» — Размер · Цвет in one line, nothing cut; the profile tiles even
+  { const bad = await pairFits(p, "attr-size", "attr-color"); h.expect(bad === "", `size · colour in one line (${bad || "ok"})`); }
+  { const bad = await tilesEven(p, "attr-profile"); h.expect(bad === "", `the profile tiles are even (${bad})`); }
   await h.shot("new-runs");
   await closeNew();
 

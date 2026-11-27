@@ -672,8 +672,9 @@ function SizePick({ testID, sizes, known, value, offered, label, read, onSize, h
       />
       {ownOpen ? (
         <View style={{ gap: space[1] }}>
-          <View testID={`${testID}-own`}>
-            <TextField type="text" value={own} placeholder={hint} label={t(k("sizeOwn"))} onChangeText={(v) => { setOwn(v); const s = read(v); setBad(s === null); if (s !== null) onSize(s); }} />
+          <View testID={`${testID}-own`} style={{ gap: space[1] }}>
+            <T v="caption" tone="mut" numberOfLines={1}>{t(k("sizeOwnLabel"))}</T>
+            <TextField type="text" value={own} placeholder={hint} label={t(k("sizeOwnLabel"))} onChangeText={(v) => { setOwn(v); const s = read(v); setBad(s === null); if (s !== null) onSize(s); }} />
           </View>
           {bad && own.trim() !== "" ? <View testID={`${testID}-own-bad`}><StatusChip status="warn" label={t(k("badOwnSize"), { hint })} soft /></View> : null}
         </View>
@@ -693,7 +694,9 @@ function DsLength({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<Ds
   const [bad, setBad] = useState(false);
   return (
     <View style={{ gap: space[1] }}>
-      <View testID="attr-ds-length">
+      <View testID="attr-ds-length" style={{ gap: space[1] }}>
+        {/* the label over the field, as every field of the window has it (TextField's own label is the screen reader's) */}
+        <T v="caption" tone="mut" numberOfLines={1}>{t(k("dsLength"))}</T>
         <TextField
           type="number" value={text} suffix="ft" placeholder={t(k("heightAuto"))} label={t(k("dsLength"))}
           onChangeText={(v) => {
