@@ -11,7 +11,8 @@ import type { IconKey } from "../primitives";
  * `outline` — the main one outlined (`secondary`) when the step is not about selling («Вернуть в активные», «Изменить смету»; BUILD-SPEC §1
  * MainStepBar «контурная») — still the one main step of the screen, only quieter.
  */
-export type MainAction = { label: string; onPress: () => void; reason?: string; disabled?: boolean; outline?: boolean; testID: string };
+/** `a11y` — what VoiceOver reads when it says more than the words (the estimate's «Отправить» reads «Сохранить и отправить»); default — `label` */
+export type MainAction = { label: string; onPress: () => void; reason?: string; disabled?: boolean; outline?: boolean; a11y?: string; testID: string };
 
 /**
  * A round icon button (header icons, IconRow): `a11y` is required — the label names the object («Позвонить David Kim», П6).

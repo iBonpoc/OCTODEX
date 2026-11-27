@@ -2843,6 +2843,8 @@ export const ru = {
   "ds.btn.pairLong": "Длинная надпись — кнопки столбцом",
   "ds.btn.secondary": "Вторичная",
   "ds.btn.secondaryNote": "Рядом с главной: surf2 и рамка",
+  "ds.btn.outline": "Обводка",
+  "ds.btn.outlineNote": "Без заливки, тонкая рамка `dash`: вторая рядом с главной на ячейке `surf2` («Готово» в низу сметы)",
   "ds.btn.ghost": "Тихая",
   "ds.btn.ghostNote": "Без заливки: «Отменить», «Назад»",
   "ds.btn.danger": "Опасная",
@@ -5577,6 +5579,9 @@ export const ru = {
   "proto.est.depositShort": "депозит {amount}",
   "proto.est.done": "Готово",
   "proto.est.saveSend": "Сохранить и отправить",
+  // #2935 (founder 27.11, «как у Джобер»): the main step of the estimate editor's bar
+  "est.bar.send": "Отправить",
+  "ds.proto.sendBar": "Низ сметы: Готово · Отправить",
   "proto.est.add": "Добавить в смету",
   "proto.est.rowsFull": "Позиции подробно",
   "proto.est.help": "Нажать — правка · удержать — порядок",
