@@ -1,0 +1,821 @@
+{
+ "screens": [
+  {
+   "id": "today",
+   "route": "/today",
+   "title": "Главная (сводка дня)",
+   "group": "Главная",
+   "file": "today",
+   "note": null
+  },
+  {
+   "id": "figures_leads_period_month",
+   "route": "/figures/leads?period=month",
+   "title": "Цифры: новые лиды за месяц",
+   "group": "Главная",
+   "file": "figures_leads_period_month",
+   "note": null
+  },
+  {
+   "id": "triage",
+   "route": "/triage",
+   "title": "Разбор дел",
+   "group": "Главная",
+   "file": "triage",
+   "note": null
+  },
+  {
+   "id": "visits",
+   "route": "/visits",
+   "title": "Выезды сегодня",
+   "group": "Главная",
+   "file": "visits",
+   "note": null
+  },
+  {
+   "id": "notifications",
+   "route": "/notifications",
+   "title": "Уведомления",
+   "group": "Главная",
+   "file": "notifications",
+   "note": null
+  },
+  {
+   "id": "search_q_mitchell",
+   "route": "/search?q=mitchell",
+   "title": "Поиск",
+   "group": "Главная",
+   "file": "search_q_mitchell",
+   "note": null
+  },
+  {
+   "id": "more",
+   "route": "/more",
+   "title": "Ещё (меню)",
+   "group": "Главная",
+   "file": "more",
+   "note": null
+  },
+  {
+   "id": "tasks",
+   "route": "/tasks",
+   "title": "Задачи",
+   "group": "Главная",
+   "file": "tasks",
+   "note": null
+  },
+  {
+   "id": "leads",
+   "route": "/leads",
+   "title": "Лиды (список)",
+   "group": "Лиды",
+   "file": "leads",
+   "note": null
+  },
+  {
+   "id": "lead_l1",
+   "route": "/lead/l1",
+   "title": "Лид",
+   "group": "Лиды",
+   "file": "lead_l1",
+   "note": null
+  },
+  {
+   "id": "lead_new",
+   "route": "/lead/new",
+   "title": "Новый лид",
+   "group": "Лиды",
+   "file": "lead_new",
+   "note": null
+  },
+  {
+   "id": "clients",
+   "route": "/clients",
+   "title": "Клиенты (список)",
+   "group": "Клиенты",
+   "file": "clients",
+   "note": null
+  },
+  {
+   "id": "client_c1",
+   "route": "/client/c1",
+   "title": "Клиент",
+   "group": "Клиенты",
+   "file": "client_c1",
+   "note": null
+  },
+  {
+   "id": "property_p1",
+   "route": "/property/p1",
+   "title": "Объект (адрес)",
+   "group": "Клиенты",
+   "file": "property_p1",
+   "note": null
+  },
+  {
+   "id": "client_edit_id_c1",
+   "route": "/client/edit?id=c1",
+   "title": "Данные клиента",
+   "group": "Клиенты",
+   "file": "client_edit_id_c1",
+   "note": null
+  },
+  {
+   "id": "client_edit",
+   "route": "/client/edit",
+   "title": "Новый клиент",
+   "group": "Клиенты",
+   "file": "client_edit",
+   "note": null
+  },
+  {
+   "id": "client_import",
+   "route": "/client/import",
+   "title": "Импорт из CSV",
+   "group": "Клиенты",
+   "file": "client_import",
+   "note": null
+  },
+  {
+   "id": "client_imports",
+   "route": "/client/imports",
+   "title": "Импорты",
+   "group": "Клиенты",
+   "file": "client_imports",
+   "note": null
+  },
+  {
+   "id": "messages",
+   "route": "/messages",
+   "title": "Сообщения",
+   "group": "Сообщения и звонки",
+   "file": "messages",
+   "note": null
+  },
+  {
+   "id": "messages_c_c1",
+   "route": "/messages/c-c1",
+   "title": "Переписка с клиентом",
+   "group": "Сообщения и звонки",
+   "file": "messages_c_c1",
+   "note": null
+  },
+  {
+   "id": "calls",
+   "route": "/calls",
+   "title": "Звонки",
+   "group": "Сообщения и звонки",
+   "file": "calls",
+   "note": null
+  },
+  {
+   "id": "estimates",
+   "route": "/estimates",
+   "title": "Сметы (Деньги → Сметы)",
+   "group": "Сметы",
+   "file": "estimates",
+   "note": null
+  },
+  {
+   "id": "estimate_new",
+   "route": "/estimate/new",
+   "title": "Новая смета: выбор клиента",
+   "group": "Сметы",
+   "file": "estimate_new",
+   "note": null
+  },
+  {
+   "id": "estimate_new_id_e6",
+   "route": "/estimate/new?id=e6",
+   "title": "Редактор сметы",
+   "group": "Сметы",
+   "file": "estimate_new_id_e6",
+   "note": null
+  },
+  {
+   "id": "estimate_e5",
+   "route": "/estimate/e5",
+   "title": "Смета (просмотр)",
+   "group": "Сметы",
+   "file": "estimate_e5",
+   "note": null
+  },
+  {
+   "id": "estimate_signature",
+   "route": "/estimate/signature",
+   "title": "Моя подпись",
+   "group": "Сметы",
+   "file": "estimate_signature",
+   "note": null
+  },
+  {
+   "id": "estimate_templates",
+   "route": "/estimate/templates",
+   "title": "Шаблоны смет",
+   "group": "Сметы",
+   "file": "estimate_templates",
+   "note": null
+  },
+  {
+   "id": "finance",
+   "route": "/finance",
+   "title": "Деньги (обзор)",
+   "group": "Деньги",
+   "file": "finance",
+   "note": null
+  },
+  {
+   "id": "invoice",
+   "route": "/invoice",
+   "title": "Счета",
+   "group": "Деньги",
+   "file": "invoice",
+   "note": null
+  },
+  {
+   "id": "invoice_f_paid",
+   "route": "/invoice?f=paid",
+   "title": "Счета: оплаченные",
+   "group": "Деньги",
+   "file": "invoice_f_paid",
+   "note": null
+  },
+  {
+   "id": "invoice_i5",
+   "route": "/invoice/i5",
+   "title": "Счёт",
+   "group": "Деньги",
+   "file": "invoice_i5",
+   "note": null
+  },
+  {
+   "id": "payments",
+   "route": "/payments",
+   "title": "Оплаты",
+   "group": "Деньги",
+   "file": "payments",
+   "note": null
+  },
+  {
+   "id": "receipt_pay5",
+   "route": "/receipt/pay5",
+   "title": "Квитанция",
+   "group": "Деньги",
+   "file": "receipt_pay5",
+   "note": null
+  },
+  {
+   "id": "money",
+   "route": "/money",
+   "title": "Расходы",
+   "group": "Деньги",
+   "file": "money",
+   "note": null
+  },
+  {
+   "id": "expense_new",
+   "route": "/expense/new",
+   "title": "Расход по чеку",
+   "group": "Деньги",
+   "file": "expense_new",
+   "note": null
+  },
+  {
+   "id": "reports",
+   "route": "/reports",
+   "title": "Отчёты",
+   "group": "Отчёты",
+   "file": "reports",
+   "note": null
+  },
+  {
+   "id": "reports_owed",
+   "route": "/reports/owed",
+   "title": "Кто должен",
+   "group": "Отчёты",
+   "file": "reports_owed",
+   "note": null
+  },
+  {
+   "id": "reports_collected_p_all",
+   "route": "/reports/collected?p=all",
+   "title": "Собрано за период",
+   "group": "Отчёты",
+   "file": "reports_collected_p_all",
+   "note": null
+  },
+  {
+   "id": "reports_sales",
+   "route": "/reports/sales",
+   "title": "Продажи",
+   "group": "Отчёты",
+   "file": "reports_sales",
+   "note": null
+  },
+  {
+   "id": "reports_sources_p_all",
+   "route": "/reports/sources?p=all",
+   "title": "Источник лида → выручка",
+   "group": "Отчёты",
+   "file": "reports_sources_p_all",
+   "note": null
+  },
+  {
+   "id": "reports_categories_p_all",
+   "route": "/reports/categories?p=all",
+   "title": "По направлениям",
+   "group": "Отчёты",
+   "file": "reports_categories_p_all",
+   "note": null
+  },
+  {
+   "id": "plan",
+   "route": "/plan",
+   "title": "План",
+   "group": "Работы, выезды, план",
+   "file": "plan",
+   "note": null
+  },
+  {
+   "id": "jobs",
+   "route": "/jobs",
+   "title": "Работы",
+   "group": "Работы, выезды, план",
+   "file": "jobs",
+   "note": null
+  },
+  {
+   "id": "job_j1",
+   "route": "/job/j1",
+   "title": "Работа",
+   "group": "Работы, выезды, план",
+   "file": "job_j1",
+   "note": null
+  },
+  {
+   "id": "job_new",
+   "route": "/job/new",
+   "title": "Новая работа",
+   "group": "Работы, выезды, план",
+   "file": "job_new",
+   "note": null
+  },
+  {
+   "id": "job_schedule_jobId_j1",
+   "route": "/job/schedule?jobId=j1",
+   "title": "Запланировать работу",
+   "group": "Работы, выезды, план",
+   "file": "job_schedule_jobId_j1",
+   "note": null
+  },
+  {
+   "id": "visit_v1",
+   "route": "/visit/v1",
+   "title": "Выезд (запланирован)",
+   "group": "Работы, выезды, план",
+   "file": "visit_v1",
+   "note": null
+  },
+  {
+   "id": "visit_v4",
+   "route": "/visit/v4",
+   "title": "Выезд (идёт)",
+   "group": "Работы, выезды, план",
+   "file": "visit_v4",
+   "note": null
+  },
+  {
+   "id": "module_gutters_draw",
+   "route": "/module/gutters/draw",
+   "title": "Рисунок замера",
+   "group": "Gutters",
+   "file": "module_gutters_draw",
+   "note": "Модуль Gutters в демо не подключён — видна подсказка «Как рисовать»."
+  },
+  {
+   "id": "module_gutters_list",
+   "route": "/module/gutters/list",
+   "title": "Замеры",
+   "group": "Gutters",
+   "file": "module_gutters_list",
+   "note": null
+  },
+  {
+   "id": "module_gutters_start_customer_c1",
+   "route": "/module/gutters/start?customer=c1",
+   "title": "Замер: выбор адреса",
+   "group": "Gutters",
+   "file": "module_gutters_start_customer_c1",
+   "note": null
+  },
+  {
+   "id": "module_gutters_view",
+   "route": "/module/gutters/view",
+   "title": "Просмотр замера (без замера)",
+   "group": "Gutters",
+   "file": "module_gutters_view",
+   "note": "Без номера замера — состояние «не найден». Замер с данными в демо не снять (#2974)."
+  },
+  {
+   "id": "module_gutters_settings",
+   "route": "/module/gutters/settings",
+   "title": "Настройки Gutters",
+   "group": "Gutters",
+   "file": "module_gutters_settings",
+   "note": null
+  },
+  {
+   "id": "module_gutters_prices",
+   "route": "/module/gutters/prices",
+   "title": "Цены и прайс",
+   "group": "Gutters",
+   "file": "module_gutters_prices",
+   "note": null
+  },
+  {
+   "id": "catalog",
+   "route": "/catalog",
+   "title": "Каталог",
+   "group": "Каталог и поставщики",
+   "file": "catalog",
+   "note": null
+  },
+  {
+   "id": "catalog_cat_haul",
+   "route": "/catalog/cat-haul",
+   "title": "Позиция каталога",
+   "group": "Каталог и поставщики",
+   "file": "catalog_cat_haul",
+   "note": null
+  },
+  {
+   "id": "suppliers",
+   "route": "/suppliers",
+   "title": "Поставщики",
+   "group": "Каталог и поставщики",
+   "file": "suppliers",
+   "note": null
+  },
+  {
+   "id": "suppliers_sup_hd",
+   "route": "/suppliers/sup-hd",
+   "title": "Поставщик",
+   "group": "Каталог и поставщики",
+   "file": "suppliers_sup_hd",
+   "note": null
+  },
+  {
+   "id": "purchase_orders",
+   "route": "/purchase-orders",
+   "title": "Заказы поставщикам",
+   "group": "Каталог и поставщики",
+   "file": "purchase_orders",
+   "note": null
+  },
+  {
+   "id": "purchase_order_po_demo_1",
+   "route": "/purchase-order/po-demo-1",
+   "title": "Заказ поставщику",
+   "group": "Каталог и поставщики",
+   "file": "purchase_order_po_demo_1",
+   "note": null
+  },
+  {
+   "id": "company",
+   "route": "/company",
+   "title": "Настройки компании",
+   "group": "Компания",
+   "file": "company",
+   "note": null
+  },
+  {
+   "id": "company_profile",
+   "route": "/company/profile",
+   "title": "Название и реквизиты",
+   "group": "Компания",
+   "file": "company_profile",
+   "note": null
+  },
+  {
+   "id": "company_schedule",
+   "route": "/company/schedule",
+   "title": "Расписание",
+   "group": "Компания",
+   "file": "company_schedule",
+   "note": null
+  },
+  {
+   "id": "company_leads",
+   "route": "/company/leads",
+   "title": "Лиды (настройка)",
+   "group": "Компания",
+   "file": "company_leads",
+   "note": null
+  },
+  {
+   "id": "company_intake",
+   "route": "/company/intake",
+   "title": "Приём заявок",
+   "group": "Компания",
+   "file": "company_intake",
+   "note": null
+  },
+  {
+   "id": "company_payments",
+   "route": "/company/payments",
+   "title": "Онлайн-оплата",
+   "group": "Компания",
+   "file": "company_payments",
+   "note": null
+  },
+  {
+   "id": "company_modules",
+   "route": "/company/modules",
+   "title": "Модули",
+   "group": "Компания",
+   "file": "company_modules",
+   "note": null
+  },
+  {
+   "id": "company_checklists",
+   "route": "/company/checklists",
+   "title": "Чек-листы",
+   "group": "Компания",
+   "file": "company_checklists",
+   "note": null
+  },
+  {
+   "id": "company_checklist_tpl_job",
+   "route": "/company/checklist/tpl-job",
+   "title": "Чек-лист: каждый выезд",
+   "group": "Компания",
+   "file": "company_checklist_tpl_job",
+   "note": null
+  },
+  {
+   "id": "company_licenses",
+   "route": "/company/licenses",
+   "title": "Лицензии",
+   "group": "Компания",
+   "file": "company_licenses",
+   "note": null
+  },
+  {
+   "id": "company_trades",
+   "route": "/company/trades",
+   "title": "Направления работ",
+   "group": "Компания",
+   "file": "company_trades",
+   "note": null
+  },
+  {
+   "id": "team",
+   "route": "/team",
+   "title": "Команда",
+   "group": "Компания",
+   "file": "team",
+   "note": null
+  },
+  {
+   "id": "settings",
+   "route": "/settings",
+   "title": "Настройки приложения",
+   "group": "Настройки",
+   "file": "settings",
+   "note": null
+  },
+  {
+   "id": "settings_profile",
+   "route": "/settings/profile",
+   "title": "Профиль и аккаунт",
+   "group": "Настройки",
+   "file": "settings_profile",
+   "note": null
+  },
+  {
+   "id": "settings_delete_account",
+   "route": "/settings/delete-account",
+   "title": "Удалить учётную запись",
+   "group": "Настройки",
+   "file": "settings_delete_account",
+   "note": null
+  },
+  {
+   "id": "help",
+   "route": "/help",
+   "title": "Помощь и поддержка",
+   "group": "Настройки",
+   "file": "help",
+   "note": null
+  },
+  {
+   "id": "legal_terms",
+   "route": "/legal/terms",
+   "title": "Условия использования",
+   "group": "Настройки",
+   "file": "legal_terms",
+   "note": null
+  },
+  {
+   "id": "legal_privacy",
+   "route": "/legal/privacy",
+   "title": "Политика конфиденциальности",
+   "group": "Настройки",
+   "file": "legal_privacy",
+   "note": null
+  },
+  {
+   "id": "settings_design_system",
+   "route": "/settings/design-system",
+   "title": "Дизайн-система",
+   "group": "Дизайн-система (витрина)",
+   "file": "settings_design_system",
+   "note": null
+  },
+  {
+   "id": "settings_design_system_base",
+   "route": "/settings/design-system/base",
+   "title": "Цвета и шрифты",
+   "group": "Дизайн-система (витрина)",
+   "file": "settings_design_system_base",
+   "note": null
+  },
+  {
+   "id": "settings_design_system_buttons",
+   "route": "/settings/design-system/buttons",
+   "title": "Кнопки",
+   "group": "Дизайн-система (витрина)",
+   "file": "settings_design_system_buttons",
+   "note": null
+  },
+  {
+   "id": "settings_design_system_selectors",
+   "route": "/settings/design-system/selectors",
+   "title": "Селекторы",
+   "group": "Дизайн-система (витрина)",
+   "file": "settings_design_system_selectors",
+   "note": null
+  },
+  {
+   "id": "settings_design_system_windows",
+   "route": "/settings/design-system/windows",
+   "title": "Окна: шторки",
+   "group": "Дизайн-система (витрина)",
+   "file": "settings_design_system_windows",
+   "note": null
+  },
+  {
+   "id": "settings_design_system_notices",
+   "route": "/settings/design-system/notices",
+   "title": "Уведомления",
+   "group": "Дизайн-система (витрина)",
+   "file": "settings_design_system_notices",
+   "note": null
+  },
+  {
+   "id": "settings_design_system_motion",
+   "route": "/settings/design-system/motion",
+   "title": "Движение и время",
+   "group": "Дизайн-система (витрина)",
+   "file": "settings_design_system_motion",
+   "note": null
+  },
+  {
+   "id": "settings_design_system_haptics",
+   "route": "/settings/design-system/haptics",
+   "title": "Вибрация",
+   "group": "Дизайн-система (витрина)",
+   "file": "settings_design_system_haptics",
+   "note": null
+  },
+  {
+   "id": "settings_design_system_rows",
+   "route": "/settings/design-system/rows",
+   "title": "Строки и списки сметы",
+   "group": "Дизайн-система (витрина)",
+   "file": "settings_design_system_rows",
+   "note": null
+  },
+  {
+   "id": "settings_design_system_fields",
+   "route": "/settings/design-system/fields",
+   "title": "Поля ввода",
+   "group": "Дизайн-система (витрина)",
+   "file": "settings_design_system_fields",
+   "note": null
+  },
+  {
+   "id": "settings_design_system_choice",
+   "route": "/settings/design-system/choice",
+   "title": "Выбор",
+   "group": "Дизайн-система (витрина)",
+   "file": "settings_design_system_choice",
+   "note": null
+  },
+  {
+   "id": "settings_design_system_spacing",
+   "route": "/settings/design-system/spacing",
+   "title": "Отступы, радиусы, размеры",
+   "group": "Дизайн-система (витрина)",
+   "file": "settings_design_system_spacing",
+   "note": null
+  },
+  {
+   "id": "auth_sign_in",
+   "route": "/auth/sign-in",
+   "title": "Вход в GoRix",
+   "group": "Вход и регистрация",
+   "file": "auth_sign_in",
+   "note": null
+  },
+  {
+   "id": "auth_company",
+   "route": "/auth/company",
+   "title": "Ваша компания",
+   "group": "Вход и регистрация",
+   "file": "auth_company",
+   "note": null
+  },
+  {
+   "id": "auth_trade",
+   "route": "/auth/trade",
+   "title": "Чем вы занимаетесь?",
+   "group": "Вход и регистрация",
+   "file": "auth_trade",
+   "note": null
+  },
+  {
+   "id": "auth_terms",
+   "route": "/auth/terms",
+   "title": "Условия (при входе)",
+   "group": "Вход и регистрация",
+   "file": "auth_terms",
+   "note": null
+  },
+  {
+   "id": "auth_invite_token_a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+   "route": "/auth/invite?token=a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+   "title": "Приглашение в команду",
+   "group": "Вход и регистрация",
+   "file": "auth_invite_token_a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+   "note": null
+  },
+  {
+   "id": "p_demo0handyman0estimate0000000001",
+   "route": "/p/demo0handyman0estimate0000000001",
+   "title": "Смета для клиента (страница /p)",
+   "group": "Страницы клиента",
+   "file": "p_demo0handyman0estimate0000000001",
+   "note": null
+  },
+  {
+   "id": "f_f00000000000000000000000000000000",
+   "route": "/f/f00000000000000000000000000000000",
+   "title": "Форма заявки (страница /f)",
+   "group": "Страницы клиента",
+   "file": "f_f00000000000000000000000000000000",
+   "note": "В демо без сети форма показывает ошибку связи; с сетью — поля заявки."
+  }
+ ],
+ "missing": [
+  {
+   "group": "Gutters",
+   "title": "Рисунок с линиями, рулетка, итог замера",
+   "why": "в демо модуль не подключён и замеров нет — нужен нарисованный замер"
+  },
+  {
+   "group": "Gutters",
+   "title": "Просмотр готового замера и смета из замера",
+   "why": "нет замера в демо"
+  },
+  {
+   "group": "Сметы",
+   "title": "Окно «Отправить смету» и окно предпросмотра PDF",
+   "why": "открывается только после действия на смете"
+  },
+  {
+   "group": "Деньги",
+   "title": "Окно приёма оплаты (карта, чек, Zelle)",
+   "why": "открывается только после действия на счёте"
+  },
+  {
+   "group": "Сметы",
+   "title": "Подпись клиента во весь экран",
+   "why": "открывается после «Подписать» на странице клиента"
+  },
+  {
+   "group": "Дизайн-система (витрина)",
+   "title": "Пилот «Графит»",
+   "why": "выключен в демо: адрес возвращает в список витрины"
+  },
+  {
+   "group": "Вход и регистрация",
+   "title": "Ввод кода из письма",
+   "why": "нужен настоящий вход по почте"
+  }
+ ],
+ "meta": {
+  "commit": "d1e6f61",
+  "when": "чт 20 ноября 2026, 12:00 LA"
+ }
+}

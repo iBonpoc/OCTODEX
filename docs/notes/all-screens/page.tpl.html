@@ -1,0 +1,342 @@
+<title>Все экраны GoRix</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a contact sheet of the app's phone screens — sticky control bar, chapters by app section, one tall frame per screen with its remark slip under it. Colours mirror the «Наряд» tokens. */
+:root{
+  --page:#CBCCC6; --bg:#D6D7D1; --surf:#E3E4DE; --ink:#17181B; --mut:#42454B; --line:rgba(23,24,27,.14);
+  --acc:#E2C15E; --onAcc:#1C1A12;
+  --ok:#2F7A4B; --okBg:rgba(47,122,75,.14); --info:#2D5F9E; --infoBg:rgba(45,95,158,.13);
+  --warn:#8A5A00; --warnBg:rgba(196,140,20,.20); --bad:#A33A2E; --badBg:rgba(163,58,46,.13);
+  --shade:rgba(10,11,13,.92);
+  --f-body:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --r:14px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#1F2024; --bg:#26282C; --surf:#303237; --ink:#EEEFF1; --mut:#B3B6BE; --line:rgba(238,239,241,.14);
+  --ok:#7CCB97; --okBg:rgba(124,203,151,.14); --info:#8DB6F0; --infoBg:rgba(141,182,240,.14);
+  --warn:#E9C46A; --warnBg:rgba(233,196,106,.16); --bad:#F08A7C; --badBg:rgba(240,138,124,.14); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --page:#1F2024; --bg:#26282C; --surf:#303237; --ink:#EEEFF1; --mut:#B3B6BE; --line:rgba(238,239,241,.14);
+  --ok:#7CCB97; --okBg:rgba(124,203,151,.14); --info:#8DB6F0; --infoBg:rgba(141,182,240,.14);
+  --warn:#E9C46A; --warnBg:rgba(233,196,106,.16); --bad:#F08A7C; --badBg:rgba(240,138,124,.14); color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--page);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));max-width:1320px;margin:0 auto}
+button,input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+/* top bar */
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.bar .wrap{padding-block:12px 10px;display:grid;gap:10px}
+.row1{display:flex;align-items:center;gap:10px}
+h1{font-size:20px;font-weight:800;letter-spacing:-.01em;margin:0;flex:1;min-width:0;text-wrap:balance}
+.seg{display:inline-flex;background:var(--surf);border-radius:999px;padding:3px;gap:2px;flex:none}
+.seg button{border:0;background:transparent;border-radius:999px;padding:7px 12px;font-size:13px;font-weight:700;color:var(--mut);cursor:pointer;min-height:36px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.search{display:flex;align-items:center;gap:8px;background:var(--surf);border-radius:12px;padding:0 12px;min-height:44px}
+.search svg{flex:none;opacity:.6}
+.search input{border:0;background:transparent;outline:0;flex:1;min-width:0;font-size:16px;padding:10px 0}
+.stats{display:flex;gap:6px;flex-wrap:wrap}
+.stat{display:inline-flex;align-items:baseline;gap:6px;font-size:13px;color:var(--mut);background:var(--surf);border-radius:999px;padding:5px 11px;border:0;cursor:pointer}
+.stat b{color:var(--ink);font-size:15px;font-variant-numeric:tabular-nums}
+.stat[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.stat[aria-pressed="true"] b{color:var(--bg)}
+.chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding-inline:max(16px,env(safe-area-inset-left,0px))}
+.chips::-webkit-scrollbar{display:none}
+.chips a{flex:none;font-size:13px;font-weight:600;color:var(--ink);text-decoration:none;background:transparent;border:1px solid var(--line);border-radius:999px;padding:6px 11px;white-space:nowrap}
+.chips a span{color:var(--mut);font-weight:500;margin-left:4px}
+
+/* sections */
+main .wrap{padding-block:14px 48px;display:grid;gap:22px}
+.lead{color:var(--mut);font-size:14px;max-width:62ch;margin:0}
+.lead strong{color:var(--ink)}
+section.group{display:grid;gap:12px;scroll-margin-top:160px}
+.ghead{display:flex;align-items:baseline;gap:10px;border-bottom:1px solid var(--line);padding-bottom:6px}
+.ghead h2{margin:0;font-size:19px;font-weight:800}
+.ghead span{color:var(--mut);font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.card{background:var(--bg);border-radius:var(--r);padding:12px;display:grid;gap:10px;align-content:start;min-width:0}
+.ct{display:grid;gap:2px}
+.ct h3{margin:0;font-size:16px;font-weight:700;text-wrap:balance}
+.route{font-family:var(--f-mono);font-size:11.5px;color:var(--mut);overflow-wrap:anywhere}
+.shot{display:block;border:0;padding:0;background:var(--surf);border-radius:12px;overflow:hidden;cursor:zoom-in;width:100%;max-width:420px;justify-self:center;aspect-ratio:390/844}
+.shot img{display:block;width:100%;height:100%;object-fit:cover}
+.note{font-size:13px;color:var(--mut);background:var(--surf);border-radius:10px;padding:8px 10px;margin:0}
+label.l{font-size:12px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+textarea{width:100%;min-height:88px;resize:vertical;background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:16px;line-height:1.4}
+.act{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.btn{border:0;border-radius:12px;min-height:44px;padding:0 18px;font-weight:700;font-size:15px;cursor:pointer;background:var(--acc);color:var(--onAcc)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.hint{font-size:12.5px;color:var(--mut)}
+.rems{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.rem{background:var(--surf);border-radius:10px;padding:9px 10px;display:grid;gap:6px}
+.rem p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}
+.meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--mut)}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;border-radius:999px;padding:3px 9px}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.s-new{color:var(--mut);background:var(--line)}
+.s-accepted{color:var(--info);background:var(--infoBg)}
+.s-in_work{color:var(--warn);background:var(--warnBg)}
+.s-pair_ready{color:var(--ok);background:var(--okBg)}
+.s-merged{color:var(--ok);background:var(--okBg)}
+.reply{font-size:13px;color:var(--ink);border-left:2px solid var(--line);padding-left:8px}
+.rem a{color:var(--info);font-weight:700}
+.del{border:0;background:transparent;color:var(--bad);font-size:12px;font-weight:700;cursor:pointer;padding:4px 0;margin-left:auto}
+.missing{background:var(--bg);border-radius:var(--r);padding:14px;display:grid;gap:8px}
+.missing h2{margin:0;font-size:19px;font-weight:800}
+.missing ul{margin:0;padding-left:18px;display:grid;gap:6px;font-size:14px}
+.missing li span{color:var(--mut)}
+.empty{color:var(--mut);text-align:center;padding:40px 0}
+.banner{background:var(--warnBg);color:var(--ink);border-radius:12px;padding:10px 12px;font-size:13.5px}
+
+/* full screen */
+.lb{position:fixed;inset:0;z-index:20;background:var(--shade);display:grid;grid-template-rows:auto 1fr;padding:calc(env(safe-area-inset-top,0px) + 8px) max(12px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 12px) max(12px,env(safe-area-inset-left,0px));gap:8px}
+.lb .top{display:flex;align-items:center;gap:10px;color:#EEEFF1}
+.lb .top b{flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lb .x{border:0;background:#EEEFF1;color:#17181B;border-radius:999px;min-width:44px;min-height:44px;font-size:20px;font-weight:700;cursor:pointer}
+.lb .seg{background:#303237}.lb .seg button{color:#B3B6BE}.lb .seg button[aria-pressed="true"]{background:#EEEFF1;color:#17181B}
+.lb .img{min-height:0;overflow:auto;display:flex;justify-content:center;align-items:flex-start;-webkit-overflow-scrolling:touch}
+.lb img{width:min(100%,560px);height:auto;border-radius:10px}
+@media (prefers-reduced-motion:no-preference){.card{transition:background .15s}}
+</style>
+
+<header class="bar">
+  <div class="wrap">
+    <div class="row1">
+      <h1>Все экраны GoRix</h1>
+      <div class="seg" role="group" aria-label="Тема снимков">
+        <button id="th-light" type="button" aria-pressed="true">Светлая</button>
+        <button id="th-dark" type="button" aria-pressed="false">Тёмная</button>
+      </div>
+    </div>
+    <label class="search"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="Найти экран: смета, клиент, /invoice…" autocomplete="off"></label>
+    <nav class="chips" id="chips" aria-label="Разделы"></nav>
+  </div>
+</header>
+
+<main><div class="wrap" id="main">
+  <div class="stats" id="stats" aria-label="Замечания"></div>
+  <p class="lead" id="lead"></p>
+  <div id="banner" class="banner" hidden></div>
+  <div id="groups"></div>
+  <p class="empty" id="empty" hidden>Ничего не нашлось. Попробуйте другое слово.</p>
+  <section class="missing" id="missing"></section>
+</div></main>
+
+<div class="lb" id="lb" hidden role="dialog" aria-modal="true" aria-label="Снимок во весь экран">
+  <div class="top"><b id="lb-t"></b>
+    <div class="seg" role="group" aria-label="Тема"><button id="lb-light" type="button">Светлая</button><button id="lb-dark" type="button">Тёмная</button></div>
+    <button class="x" id="lb-x" type="button" aria-label="Закрыть">×</button></div>
+  <div class="img" id="lb-img"><img id="lb-i" alt=""></div>
+</div>
+
+<script type="application/json" id="catalog">__CATALOG__</script>
+<script>
+(() => {
+const CAT = JSON.parse(document.getElementById("catalog").textContent);
+const META = CAT.meta;
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const store = { get(k){ try { return localStorage.getItem(k); } catch { return null; } }, set(k,v){ try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} } };
+
+const STATUS = { new: "Отправлено", accepted: "Принято", in_work: "В работе", pair_ready: "Пара готова — смотрите", merged: "Влито" };
+let theme = store.get("shots.theme") === "dark" ? "dark" : "light";
+let filter = null;          // null | "with" | status key
+let remarks = [];           // [{id, ...data}]
+let db = null, dbState = "loading";
+const cards = new Map();    // screen id → {card, list, btn, ta}
+
+$("lead").innerHTML = "";
+$("lead").append("Снимки приложения с ", Object.assign(el("strong", null, `main · ${META.commit}`)), `, ширина 390, демо-данные, роль — директор, время — ${META.when}. Нажмите на снимок — откроется во весь экран. Под снимком напишите, что поправить в вёрстке, и нажмите «Сохранить»: руководитель заберёт замечание в задачу и отметит здесь статус.`);
+
+// chips + groups
+const groups = [...new Set(CAT.screens.map((s) => s.group))];
+const gEls = new Map();
+for (const g of groups) {
+  const items = CAT.screens.filter((s) => s.group === g);
+  const gid = "g-" + groups.indexOf(g);
+  const a = el("a", null, g); a.href = "#" + gid; a.append(el("span", null, String(items.length)));
+  a.addEventListener("click", (e) => { e.preventDefault(); document.getElementById(gid).scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); });
+  $("chips").append(a);
+  const sec = el("section", "group"); sec.id = gid;
+  const head = el("div", "ghead"); head.append(el("h2", null, g), el("span", null, `${items.length} экр.`));
+  const grid = el("div", "grid");
+  sec.append(head, grid);
+  for (const s of items) grid.append(buildCard(s));
+  $("groups").append(sec);
+  gEls.set(g, sec);
+}
+
+function src(s, t) { return `shots/${s.file}__${t}.jpg`; }
+
+function buildCard(s) {
+  const card = el("article", "card"); card.dataset.hay = (s.title + " " + s.route + " " + s.group).toLowerCase();
+  const ct = el("div", "ct"); ct.append(el("h3", null, s.title), el("div", "route", s.route));
+  const shot = el("button", "shot"); shot.type = "button"; shot.setAttribute("aria-label", "Открыть во весь экран: " + s.title);
+  const img = el("img"); img.loading = "lazy"; img.decoding = "async"; img.width = 780; img.height = 1688; img.alt = s.title; img.src = src(s, theme);
+  shot.append(img); shot.addEventListener("click", () => openLb(s));
+  card.append(ct, shot);
+  if (s.note) card.append(el("p", "note", s.note));
+  const taId = "r-" + s.id;
+  const lab = el("label", "l", "Замечание"); lab.htmlFor = taId;
+  const ta = el("textarea"); ta.id = taId; ta.placeholder = "Что поправить: отступ, размер, слово, лишняя кнопка…";
+  ta.value = store.get("draft." + s.id) || "";
+  const act = el("div", "act");
+  const btn = el("button", "btn", "Сохранить"); btn.type = "button";
+  const hint = el("span", "hint");
+  act.append(btn, hint);
+  const list = el("ul", "rems");
+  card.append(lab, ta, act, list);
+  const sync = () => { btn.disabled = !ta.value.trim() || !db; };
+  ta.addEventListener("input", () => { store.set("draft." + s.id, ta.value || null); hint.textContent = ""; sync(); });
+  btn.addEventListener("click", () => save(s, ta, btn, hint));
+  sync();
+  cards.set(s.id, { card, list, btn, ta, img, sync, s });
+  return card;
+}
+
+async function save(s, ta, btn, hint) {
+  const text = ta.value.trim(); if (!text || !db) return;
+  btn.disabled = true; hint.textContent = "Сохраняю…";
+  try {
+    await db.collection("remarks").add({ screen: s.id, route: s.route, title: s.title, text, theme, createdAt: new Date().toISOString(), status: "new", issue: null, link: null, reply: null, shotCommit: META.commit });
+    ta.value = ""; store.set("draft." + s.id, null); hint.textContent = "Сохранено";
+  } catch (e) {
+    hint.textContent = e && e.code === "permission_denied" ? "Нет права записи: откройте страницу из своего аккаунта Claude." : "Не сохранилось — проверьте связь и нажмите ещё раз. Текст остался в поле.";
+  }
+  cards.get(s.id).sync();
+}
+
+function fmt(iso) {
+  const d = new Date(iso); if (isNaN(d)) return "";
+  return d.toLocaleString("ru-RU", { timeZone: "America/Los_Angeles", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + " LA";
+}
+
+function renderRemarks() {
+  const by = new Map();
+  for (const r of remarks) { if (!by.has(r.screen)) by.set(r.screen, []); by.get(r.screen).push(r); }
+  for (const [id, c] of cards) {
+    const rs = (by.get(id) || []).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    c.list.replaceChildren(...rs.map(remItem));
+    c.card.dataset.statuses = rs.map((r) => r.status || "new").join(" ");
+    c.card.dataset.has = rs.length ? "1" : "";
+  }
+  // counters
+  const n = (k) => remarks.filter((r) => (r.status || "new") === k).length;
+  const stats = [
+    [null, "Замечаний", remarks.length],
+    ["new", "Ждут", n("new")],
+    ["work", "В работе", n("accepted") + n("in_work")],
+    ["pair_ready", "Пара готова", n("pair_ready")],
+    ["merged", "Влито", n("merged")],
+  ];
+  $("stats").replaceChildren(...stats.map(([k, label, v]) => {
+    const b = el("button", "stat"); b.type = "button"; b.setAttribute("aria-pressed", String(filter === (k || "with") && !!remarks.length));
+    b.append(el("span", null, label), el("b", null, dbState === "loading" ? "…" : String(v)));
+    b.title = k ? "Показать только эти экраны" : "Показать экраны с замечаниями";
+    b.addEventListener("click", () => { const key = k || "with"; filter = filter === key ? null : key; applyFilter(); renderRemarks(); });
+    return b;
+  }));
+  applyFilter();
+}
+
+function remItem(r) {
+  const li = el("li", "rem");
+  const meta = el("div", "meta");
+  const st = r.status && STATUS[r.status] ? r.status : "new";
+  let label = STATUS[st];
+  if (st === "in_work" && r.issue) label += " #" + r.issue;
+  meta.append(el("span", "pill s-" + st, label), el("span", null, fmt(r.createdAt) + (r.theme ? " · " + (r.theme === "dark" ? "тёмная" : "светлая") : "")));
+  if (st !== "in_work" && r.issue) meta.append(el("span", null, "#" + r.issue));
+  if (st === "new" && db) {
+    const del = el("button", "del", "Удалить"); del.type = "button";
+    del.addEventListener("click", async () => {
+      if (del.dataset.armed !== "1") { del.dataset.armed = "1"; del.textContent = "Точно удалить?"; setTimeout(() => { del.dataset.armed = ""; del.textContent = "Удалить"; }, 4000); return; }
+      del.disabled = true;
+      try { await db.doc("remarks/" + r.id).delete(); } catch { del.disabled = false; del.textContent = "Не удалилось"; }
+    });
+    meta.append(del);
+  }
+  li.append(meta, el("p", null, String(r.text || "")));
+  if (r.reply) li.append(el("div", "reply", String(r.reply)));
+  if (typeof r.link === "string" && r.link.startsWith("https://")) {
+    const a = el("a", null, st === "pair_ready" ? "Смотреть пару «Сейчас | Будет» ›" : "Ссылка ›"); a.href = r.link; a.target = "_blank"; a.rel = "noopener";
+    li.append(a);
+  }
+  return li;
+}
+
+function applyFilter() {
+  const q = $("q").value.trim().toLowerCase();
+  let shown = 0;
+  for (const [, c] of cards) {
+    let ok = !q || c.card.dataset.hay.includes(q);
+    if (ok && filter) {
+      const sts = (c.card.dataset.statuses || "").split(" ").filter(Boolean);
+      if (filter === "with") ok = sts.length > 0;
+      else if (filter === "work") ok = sts.includes("accepted") || sts.includes("in_work");
+      else ok = sts.includes(filter);
+    }
+    c.card.hidden = !ok; if (ok) shown++;
+  }
+  for (const [, sec] of gEls) sec.hidden = ![...sec.querySelectorAll(".card")].some((x) => !x.hidden);
+  $("empty").hidden = shown > 0;
+  $("missing").hidden = !!(q || filter);
+}
+$("q").addEventListener("input", applyFilter);
+
+// theme of the shots
+function setTheme(t) {
+  theme = t; store.set("shots.theme", t);
+  $("th-light").setAttribute("aria-pressed", String(t === "light")); $("th-dark").setAttribute("aria-pressed", String(t === "dark"));
+  for (const [, c] of cards) c.img.src = src(c.s, t);
+  if (lbScreen) showLb();
+}
+$("th-light").addEventListener("click", () => setTheme("light"));
+$("th-dark").addEventListener("click", () => setTheme("dark"));
+
+// full screen
+let lbScreen = null, lbTheme = "light", lastFocus = null;
+function openLb(s) { lbScreen = s; lbTheme = theme; lastFocus = document.activeElement; $("lb").hidden = false; document.body.style.overflow = "hidden"; showLb(); $("lb-x").focus(); }
+function showLb() { $("lb-t").textContent = lbScreen.title; $("lb-i").src = src(lbScreen, lbTheme); $("lb-i").alt = lbScreen.title; $("lb-light").setAttribute("aria-pressed", String(lbTheme === "light")); $("lb-dark").setAttribute("aria-pressed", String(lbTheme === "dark")); }
+function closeLb() { $("lb").hidden = true; lbScreen = null; document.body.style.overflow = ""; lastFocus && lastFocus.focus && lastFocus.focus(); }
+$("lb-x").addEventListener("click", closeLb);
+$("lb-light").addEventListener("click", () => { lbTheme = "light"; showLb(); });
+$("lb-dark").addEventListener("click", () => { lbTheme = "dark"; showLb(); });
+$("lb-img").addEventListener("click", (e) => { if (e.target === $("lb-img")) closeLb(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && lbScreen) closeLb(); });
+
+// screens without a shot
+const mh = el("h2", null, "Снимка нет"); const ml = el("ul");
+for (const m of CAT.missing) { const li = el("li"); li.append(el("b", null, `${m.group}: ${m.title}`), " ", el("span", null, "— " + m.why)); ml.append(li); }
+$("missing").append(mh, el("p", "hint", "Эти экраны в демо не открыть одним адресом. Если хотите посмотреть какой-то из них — напишите замечание на ближайшем экране, снимем отдельно."), ml);
+setTheme(theme);
+renderRemarks();
+
+// the shared store of remarks
+(async () => {
+  const timer = setTimeout(() => { if (dbState === "loading") { dbState = "off"; offline(); } }, 10000);
+  try { db = window.claude && window.claude.use ? await window.claude.use("db") : null; } catch { db = null; }
+  if (!db) { clearTimeout(timer); dbState = "off"; offline(); return; }
+  for (const [, c] of cards) c.sync();
+  db.collection("remarks").onSnapshot((snap) => {
+    clearTimeout(timer); dbState = "ok"; $("banner").hidden = true;
+    remarks = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderRemarks();
+  }, () => { clearTimeout(timer); dbState = "off"; offline("Замечания сейчас не загрузились. Обновите страницу через минуту; черновики в полях сохранены на этом телефоне."); });
+})();
+function offline(msg) {
+  $("banner").hidden = false;
+  $("banner").textContent = msg || "Замечания здесь не сохраняются: откройте страницу в Claude, войдя в свой аккаунт. Черновики в полях останутся на этом телефоне.";
+  for (const [, c] of cards) c.sync();
+  renderRemarks();
+}
+})();
+</script>
