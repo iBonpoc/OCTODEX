@@ -5818,5 +5818,9 @@ export const es: Dict = {
   "ov3061.pinnedMine": "{who} · {when} · solo usted la ve",
   "ov3061.unpin": "Desfijar la nota",
   "ov3061.unpinned": "Nota desfijada",
+  "ov3068.place": "Propiedad {n}",
+  "ov3068.placeN": "Propiedad {n} · {label}",
+  "ov3068.allJobs": "Todos los trabajos · {n}",
+  "ov3068.billingSame": "Igual que la propiedad {n}",
   "ov3061.all": "Todo",
 };

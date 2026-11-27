@@ -5818,5 +5818,9 @@ export const en: Dict = {
   "ov3061.pinnedMine": "{who} · {when} · only you see it",
   "ov3061.unpin": "Unpin the note",
   "ov3061.unpinned": "Note unpinned",
+  "ov3068.place": "Property {n}",
+  "ov3068.placeN": "Property {n} · {label}",
+  "ov3068.allJobs": "All jobs · {n}",
+  "ov3068.billingSame": "Same as property {n}",
   "ov3061.all": "All",
 };
