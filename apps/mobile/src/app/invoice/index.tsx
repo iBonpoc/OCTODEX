@@ -31,7 +31,9 @@ function matchInvoice(db: DB, i: Invoice, q: string): boolean {
 }
 
 const WEEK_DAYS = 7;
-const GROUP_TITLE = { overdue: "proto.money.g.overdue", waiting: "proto.money.g.waiting", paid: "proto.money.g.paid" } as const;
+// crm-review 27.11 (via «Открытые карточки»): «Должны» here was the overdue only, on «Главная» — all unpaid: one word, two sums —
+// the group is «Просрочено», as the part of the total line over it
+const GROUP_TITLE = { overdue: "proto.money.tile.overdue", waiting: "proto.money.g.waiting", paid: "proto.money.g.paid" } as const;
 
 /**
  * «Деньги → Счета» and «Кто должен» — the List template (prototype v2 #2350, BUILD-SPEC §2.9, §2.13, wireframes-v2 №17).
