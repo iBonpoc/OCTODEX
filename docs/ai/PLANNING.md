@@ -22,7 +22,7 @@
 | Работа чатов | `docs/ai/DIRECTOR.md`, `WORKER.md`, `CHECKS.md`, этот файл | руководитель, исполнитель, проверки, проектирование |
 | Продукт | `docs/02-product-vision.md`, `docs/archive/02a-pricing-and-unit-economics.md`, `docs/archive/00-roadmap.md` | для кого, зачем, тарифы, фазы |
 | Требования | `docs/03-prd/*` (`mvp-scope.md`, `00-decisions-for-founder.md`, `18-money-test-cases.md`) | что должен уметь каждый модуль; решения основателя; денежные примеры |
-| Сущности и пути | `docs/04-domain-model.md`, `05-user-flows.md`, `13-core-workflow-spec.md` | словарь сущностей, сценарии, основной путь лид → оплата |
+| Сущности и пути | `docs/04-domain-model.md`, `13-core-workflow-spec.md` (старые сценарии — `docs/archive/05-user-flows.md`) | словарь сущностей, сценарии, основной путь лид → оплата |
 | Спеки шагов | `docs/14-leads-spec.md` (образец), `docs/specs/*` | точное описание шага: варианты, решение, стыки, тесты |
 | Модули ниш | `docs/03-prd/06-gutters-module.md` (PRD), `docs/specs/33-gutters-module.md` (спека), `docs/prototypes/gutters-*.html` (прототип) | что модуль добавляет к ядру и через какие слоты; ничего нишевого в ядре |
 | Техника | `docs/06-architecture.md`, `docs/adr/*`, `08-security.md`, `08a-seo.md` | как устроено и почему так |
