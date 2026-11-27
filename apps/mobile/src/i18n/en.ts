@@ -2893,7 +2893,7 @@ export const en: Dict = {
   "ds.vtabs.title": "View tabs that scroll (A1p)",
   "ds.vtabs.hint": "An object's screen with 4+ sections: every tab is always there, the number is what waits for an action. The row scrolls sideways, the selected tab comes to the middle, an edge with more fades; on the first open the row nudges once.",
   "ds.sfade.title": "Sideways row with a fade",
-  "ds.sfade.hint": "A row of chips wider than its place scrolls sideways; the edge with more past it fades (as the row of tabs). Seen in the Gutters length window fractions.",
+  "ds.sfade.hint": "A row of chips wider than its place scrolls sideways; the edge with more past it fades (as the row of tabs).",
   "ds.vtabs.picked": "Open: {name}",
   "ui.banner.tone.ok": "Success",
   "ui.banner.tone.info": "Information",
