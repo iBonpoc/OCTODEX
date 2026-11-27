@@ -133,8 +133,11 @@ function LeadsList() {
       key: l.id,
       testID: `lead-row-${l.id}`,
       title: l.name || "—",
-      // how long the client waits — the first word of the line (wireframes №16); late — the pill on the right (leadWaitPlace)
-      subtitle: [place === "line" ? wait : null, leadRowLine(l, turn, { t, day, source: sourceName(db, l.sourceId) })].filter(Boolean).join(" · "),
+      // #3017 (founder 27.11): line 1 — the name and the phone; line 2 — the address; line 3 — what is going on (how long the client
+      // waits first, wireframes №16; late — the pill on the right, leadWaitPlace). No line for what is not there (no «—»)
+      titleNote: l.phone || undefined,
+      subtitle: [l.address, l.city].filter(Boolean).join(", ") || undefined,
+      extra: [place === "line" ? wait : null, leadRowLine({ ...l, city: "" }, turn, { t, day, source: sourceName(db, l.sourceId) })].filter(Boolean).join(" · ") || undefined,
       lead: { initials: initials(l.name) },
       // a closed or won lead says its status
       status: wait && place === "pill" ? { status: turn.status, label: wait } : !isOpenLead(l) ? { status: sv.status, label: t(sv.label) } : undefined,
@@ -161,6 +164,8 @@ function LeadsList() {
       <ListScreen<Lead>
         testID="leads"
         title={t("sales.leads")}
+        // #3017 (founder 27.11, on the stand): each lead its own card
+        separate
         // #2763 (DS §12 «Список»): the title counts what is shown — the chip and the search, not all open leads
         create={{ a11y: t("quick.lead"), items: [{ key: "new", label: t("quick.lead"), icon: "leads", testID: "leads-create-new" }] }}
         onCreate={newLead}

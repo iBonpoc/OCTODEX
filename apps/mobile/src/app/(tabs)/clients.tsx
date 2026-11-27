@@ -98,14 +98,14 @@ export default function Clients() {
     const nextDay = !next ? "" : dw(next.start); // #2363 F46: the one rule (features/dayWords.ts)
     const last = clientHistory(db, c.id, role)[0];
     const prop = db.properties.find((p) => p.customerId === c.id);
-    // one line «когда · что»: the next visit, else what happened last, else the address
+    // #3017 (founder 27.11: «я знаю его по адресу»): line 2 — the address; line 3 — what is going on: the next visit, else what
+    // happened last; no line for what is not there (no «—»)
+    const addr = prop ? [prop.address, prop.city].filter(Boolean).join(", ") : undefined;
     const line = next
       ? [`${nextDay} ${time(next.start)}`, db.jobs.find((j) => j.id === next.jobId)?.title ?? t("plan.kind.inspection")].join(" · ")
       : last
         ? [ago(last.at), t(last.title), last.detail].filter(Boolean).join(" · ")
-        : prop
-          ? [prop.address, prop.city].filter(Boolean).join(", ")
-          : undefined;
+        : undefined;
     const tel = telHref(c.phone);
     const toArchive = office && pickerOptions("customer", st).find((o) => o.status === "archived" && o.enabled && o.how !== "form");
     const sms = smsHref(c.phone);
@@ -126,7 +126,10 @@ export default function Clients() {
       key: c.id,
       testID: `client-row-${c.id}`,
       title: c.name,
-      subtitle: line,
+      // #3017: the phone in the name's own line
+      titleNote: c.phone || undefined,
+      subtitle: addr ?? line,
+      extra: addr ? line : undefined,
       lead: { initials: initials(c.name) },
       // one money figure: the debt; none — a call icon (BUILD-SPEC §2.3 table)
       value: m && m.owesCents > 0 ? money(m.owesCents) : undefined,
@@ -141,6 +144,8 @@ export default function Clients() {
     <ListScreen<Customer>
       testID="clients"
       title={t("clients.title")}
+      // #3017 (founder 27.11, on the stand): each client its own card
+      separate
       // #2763 (DS §12 «Список»): the title counts what is shown — the chip and the search, not all of the kind
       create={office ? { a11y: t("clients.new"), items: [{ key: "new", label: t("path.clientNew"), icon: "user", testID: "clients-create-new" }] } : undefined}
       onCreate={() => router.push("/client/edit")}
