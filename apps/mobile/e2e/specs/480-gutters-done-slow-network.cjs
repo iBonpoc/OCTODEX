@@ -4,7 +4,7 @@
  * only after 30 s (the browser holds them — page.route, no sleeping), «Готово» opens «Просмотр замера» at once and the measurement is
  * in the phone's data. Finds things by testID and the store; waits on what it checks.
  */
-const { skipLength, savedOnce } = require("../gutters.cjs");
+const { skipLength, savedOnce, editDrawing } = require("../gutters.cjs");
 const { settle } = require("../settle.cjs");
 const DB_KEY = "octo.db.v5";
 
@@ -56,7 +56,7 @@ exports.run = async (h) => {
   // С2: no network at all
   // (the app is loaded: the network goes now, the canvas is opened inside the app — «Править чертёж»)
   await p.context().setOffline(true);
-  await tid("view-edit").first().getByRole("button").click();
+  await editDrawing(p); // #2995: in «⋯» on the card's own screen
   await draw(0.6);
   await doneWithin(2000, "С2: no network");
   // the phone's copy is written a moment after a change (or when the page is left): wait for it, not for a time

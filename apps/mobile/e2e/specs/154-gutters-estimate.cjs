@@ -60,7 +60,7 @@ exports.run = async (h) => {
   await tid("view-action-make").waitFor({ timeout: 5000 });
   h.expect((await tid("view-stale").count()) === 0, "nothing to move: no «Чертёж правили после сметы»");
   await h.shot("view-make");
-  await tid("view-action-make").getByRole("button").click();
+  await tid("view-action-make").click();
   await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 8000 });
   const eid = new URL(p.url()).searchParams.get("id");
   await p.locator('[data-testid^="ue-line-mark-module-"]').locator("visible=true").first().waitFor({ timeout: 8000 });
@@ -93,7 +93,7 @@ exports.run = async (h) => {
   await tid("view-action-update").waitFor({ timeout: 8000 });
   await tid("view-stale").waitFor({ timeout: 3000 });
   await h.shot("view-update");
-  await tid("view-action-update").getByRole("button").click();
+  await tid("view-action-update").click();
   await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 8000 });
   h.expect(new URL(p.url()).searchParams.get("id") === eid, "the same estimate");
   await waitFor(async () => {

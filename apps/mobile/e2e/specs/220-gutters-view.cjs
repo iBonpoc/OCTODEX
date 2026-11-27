@@ -10,7 +10,7 @@
  * - a technician opens the same review: the drawing and the list, no money — no total, no estimate action.
  * Finds things by testID; waits on what it checks.
  */
-const { skipLength, closeDsMenu, openView, backToCanvas, pressWhenStill } = require("../gutters.cjs");
+const { skipLength, closeDsMenu, openView, backToCanvas, pressWhenStill, canEditDrawing } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -108,7 +108,7 @@ exports.run = async (h) => {
   await tid("view-run-1").waitFor({ timeout: 5000 });
   h.expect((await tid("view-total").count()) === 0 && (await tid("view-test-prices").count()) === 0, "a technician sees no total");
   h.expect((await p.locator('[data-testid^="view-action-"]').locator("visible=true").count()) === 0, "a technician: no estimate action");
-  h.expect((await tid("view-edit").count()) === 1, "a technician can go back to the drawing");
+  h.expect(await canEditDrawing(p), "a technician can go back to the drawing (#2995: «⋯ → Править чертёж»)");
   await h.shot("view-tech");
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
 };

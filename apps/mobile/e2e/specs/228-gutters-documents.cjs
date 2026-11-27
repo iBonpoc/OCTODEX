@@ -79,8 +79,9 @@ exports.run = async (h) => {
 
   // the head and «Документы» of a signed measurement
   await view("e2e228-signed");
-  h.expect((await text("view-who")).includes(client.name) && (await text("view-who")).includes(place.address), `whom for and where (${await text("view-who")})`);
-  h.expect(/Подписан/.test(await text("view-state")), `the state (${await text("view-state")})`);
+  // #2995: the object frame — the name is the screen's title, the address the header's line
+  h.expect((await text("screen-title")).includes(client.name) && (await text("view-head-address")).includes(place.address), `whom for and where (${await text("screen-title")} / ${await text("view-head-address")})`);
+  h.expect(/Подписан/.test(await text("view-head-status")), `the state (${await text("view-head-status")})`);
   h.expect((await tid("view-accuracy").count()) === 0, "no «Рулетка / Примерно» in the head (#768, #1764)"); // i18n-old: ok — checks the old words are gone
   await tid("view-docs").waitFor({ timeout: 5000 });
   await h.shot("head");
@@ -127,17 +128,17 @@ exports.run = async (h) => {
   const copy = mid();
   await tid("view-screen").waitFor({ timeout: 8000 });
   await waitFor(async () => { const x = await g(); return x.measurements.some((m) => m.id === copy && m.propertyId === place.id && m.status === "draft") && x.elements.filter((e) => e.measurementId === copy).length === 1; }, "a draft copy: the same address, its own gutter");
-  await waitFor(async () => /Без сметы/.test(await text("view-state")), "the copy has no estimate");
+  await waitFor(async () => /Без сметы/.test(await text("view-head-status")), "the copy has no estimate");
   await h.shot("copy");
   await pressUndo(p);
   await waitFor(async () => !(await g()).measurements.some((m) => m.id === copy), "«Отменить»: the copy is gone");
 
-  // whom → «Отвязать (в черновики)»
+  // «⋯ → Отвязать (в черновики)» (#2995: no menu of its own on the name)
   await view("e2e228-free");
-  await tid("view-who").getByRole("button").click();
+  await tid("view-more").getByRole("button").click();
   await menu("Отвязать (в черновики)");
   await waitFor(async () => { const m = (await g()).measurements.find((x) => x.id === "e2e228-free"); return !!m && !m.propertyId && !m.leadId; }, "unlinked");
-  await waitFor(async () => /Без клиента/.test(await text("view-who")) && /Черновик/.test(await text("view-state")), "the head: «Без клиента», «Черновик»");
+  await waitFor(async () => /Без клиента/.test(await text("screen-title")) && /Черновик/.test(await text("view-head-status")), "the head: «Без клиента», «Черновик»");
 
   // a draft is deleted; «Отменить» brings it back
   await tid("view-more").getByRole("button").click();

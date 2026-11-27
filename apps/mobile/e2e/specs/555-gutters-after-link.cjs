@@ -57,7 +57,7 @@ exports.run = async (h) => {
 
   // no one yet: no «what next» line
   h.expect((await tid("view-next").count()) === 0, "a draft: no «what next» line");
-  await pressWhenStill(tid("view-action-link").getByRole("button"));
+  await pressWhenStill(tid("view-action-link"));
   await tid("link-sheet").waitFor({ timeout: 5000 });
   await tid("link-search").locator("input").fill(lead.name.split(" ")[0]);
   await tid(`link-lead-${lead.id}`).waitFor({ timeout: 3000 });
@@ -69,12 +69,13 @@ exports.run = async (h) => {
   await tid("view-next").waitFor({ timeout: 5000 });
   h.expect((await text("view-next")).includes(`Замер в карточке лида ${lead.name}`), `whose it is now (${await text("view-next")})`);
   h.expect((await text("view-next-other")).includes(est.number) && /без этого чертежа/.test(await text("view-next-other")), `the lead's estimate without this drawing (${await text("view-next-other")})`);
-  h.expect(/Без сметы из замера/.test(await text("view-state")), `the chip is not a bare «Без сметы» (${await text("view-state")})`);
+  h.expect(/Без сметы из замера/.test(await text("view-head-status")), `the state is not a bare «Без сметы» (${await text("view-head-status")})`);
   h.expect((await tid("view-action-make").count()) === 1, "«Сделать смету» from the measurement is still the main step");
   await h.shot("after-link");
 
   // «Открыть лид» → the lead; back; «Открыть EST-…» → that estimate
-  await pressWhenStill(tid("view-open-who").getByRole("button"));
+  // #2995: the parent link of the object frame's header
+  await pressWhenStill(tid("view-head-link"));
   await waitFor(() => new URL(p.url()).pathname === `/lead/${lead.id}`, `«Открыть лид» opens the lead (${p.url()})`);
   // the lead's card: the measurement's buttons on top of «Обзор», above the events (not at the very bottom)
   await tid("module-place-lead").waitFor({ timeout: 8000 });
@@ -82,8 +83,9 @@ exports.run = async (h) => {
   h.expect(!!mp && !!ev && mp.y < ev.y, `the measurement is above the lead's events (${mp && Math.round(mp.y)} < ${ev && Math.round(ev.y)})`);
   await h.shot("lead");
   await p.goBack();
-  await tid("view-open-other").waitFor({ timeout: 8000 });
-  h.expect((await text("view-open-other")).includes(`Открыть ${est.number}`), `«Открыть ${est.number}» (${await text("view-open-other")})`);
-  await pressWhenStill(tid("view-open-other").getByRole("button"));
+  // the second step is in «⋯» (one step on an object, #2995)
+  await tid("view-head").waitFor({ timeout: 8000 });
+  await pressWhenStill(tid("view-more").getByRole("button"));
+  await p.getByRole("menuitem", { name: `Открыть ${est.number}`, exact: true }).click();
   await waitFor(() => new RegExp(`/estimate/${est.id}$`).test(new URL(p.url()).pathname), `«Открыть ${est.number}» opens it (${p.url()})`);
 };

@@ -3699,6 +3699,8 @@ export const es: Dict = {
   "mod.gutters.card.openLead": "Abrir prospecto",
   "mod.gutters.card.openClient": "Abrir cliente",
   "mod.gutters.card.noEstHere": "Sin presupuesto de la medición",
+  "mod.gutters.card.kindLead": "Prospecto",
+  "mod.gutters.card.kindClient": "Cliente",
   "mod.gutters.card.docs": "Documentos",
   "mod.gutters.card.docClient": "Para el cliente",
   "mod.gutters.card.docClientEst": "Presupuesto {n} y dibujo · {lang}",

@@ -7,7 +7,7 @@
  * - «Новый замер» opens an empty canvas; a second drawing makes a second card, the newest first.
  * Finds things by testID; waits on what it checks.
  */
-const { skipLength, pressWhenStill } = require("../gutters.cjs");
+const { skipLength, pressWhenStill, editDrawing } = require("../gutters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -60,7 +60,7 @@ exports.run = async (h) => {
   await h.shot("list");
   await cards().first().click();
   await tid("view-screen").waitFor({ timeout: 8000 });
-  await pressWhenStill(tid("view-edit").getByRole("button"));
+  await editDrawing(p); // #2995: in «⋯» on the card's own screen
   await tid("draw-surface").waitFor({ timeout: 8000 });
   await waitFor(async () => (await lines()) === 2, "it opens the same drawing");
 
