@@ -3815,6 +3815,8 @@ export const es: Dict = {
   "mod.gutters.attr.moreDs": "Más",
   "mod.gutters.attr.dsLength": "Altura propia",
   "mod.gutters.attr.badDsOwn": "Altura de 1 a 100 ft",
+  "mod.gutters.attr.sizeOwn": "Propio",
+  "mod.gutters.attr.badOwnSize": "Tamaño propio — pulgadas enteras, p. ej. {hint}",
   "mod.gutters.attr.heightAuto": "Por piso",
   "mod.gutters.attr.reducer": "Reducir a",
   "mod.gutters.attr.reducerNone": "Sin reducción",

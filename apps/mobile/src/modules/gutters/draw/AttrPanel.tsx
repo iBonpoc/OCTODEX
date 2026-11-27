@@ -24,11 +24,12 @@ import { Icon, Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Menu, useSheetClose } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
-import { COLORS, ELBOW_STYLES, PROFILE_ICON, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, boughtElbowCounts, dsStoryPatch, dsStoryShown, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import { COLORS, ELBOW_STYLES, PROFILE_ICON, SIZES_BY_PROFILE, DS_SIZES, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, boughtElbowCounts, dsStoryPatch, dsStoryShown, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
 import { colorChoices } from "./colorChoices";
 import { dsMoreSet, dsRareShown } from "./attrShown";
 import { dsOwnFt } from "./dsOwnFt";
+import { readOwnDsSize, readOwnRunSize } from "../canvas/ownSize";
 import { FracPicker } from "./FracPicker";
 import { FRAC_SLOT } from "./fracSlot";
 import { feetResetsRest, inchesComplete, inchesTooBig, mmDraft, nextStage, tapeDraft, unitPickStep, type EntryStage } from "./lengthEntry";
@@ -388,6 +389,42 @@ function FieldRow({ children }: { children: React.ReactNode }) {
 }
 
 /**
+ * The size field with «Свой» last (founder 27.11, #2981): a size of its own is typed under the field — whole inches, read at once
+ * (a good one goes in, anything else says so and goes in nowhere). Its part is not in the price list: the estimate line says
+ * «нет цены» (answer in #2981). A size of its own already set is one of the field's values, the field open on it.
+ */
+function SizePick({ testID, sizes, known, value, offered, label, read, onSize, hint }: { testID: string; sizes: string[]; /** the module's sizes: any other is one of its own */ known: readonly string[]; value: string; offered?: readonly string[]; label: (s: string) => string; read: (text: string) => string | null; onSize: (s: string) => void; hint: string }) {
+  const { t } = useI18n();
+  const std = known.includes(value);
+  const [ownOpen, setOwnOpen] = useState(!std);
+  const [own, setOwn] = useState(std ? "" : value);
+  const [bad, setBad] = useState(false);
+  return (
+    <View style={{ gap: space[2] }}>
+      <Choice
+        label={t(k("size"))} testID={testID} offered={offered}
+        items={[...sizes.filter((x) => std || x !== value).map((x) => ({ key: x, label: label(x) })), { key: "@own", label: t(k("sizeOwn")) }]}
+        value={ownOpen ? "@own" : value}
+        onChange={(v) => {
+          if (v === "@own") return setOwnOpen(true);
+          setOwnOpen(false);
+          setBad(false);
+          onSize(v);
+        }}
+      />
+      {ownOpen ? (
+        <View style={{ gap: space[1] }}>
+          <View testID={`${testID}-own`}>
+            <TextField type="text" value={own} placeholder={hint} label={t(k("sizeOwn"))} onChangeText={(v) => { setOwn(v); const s = read(v); setBad(s === null); if (s !== null) onSize(s); }} />
+          </View>
+          {bad && own.trim() !== "" ? <View testID={`${testID}-own-bad`}><StatusChip status="warn" label={t(k("badOwnSize"), { hint })} soft /></View> : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/**
  * A value picked by sight (founder 27.11, #2980 / #2986: «должен быть не селектор, это должны быть иконки»): the label over a
  * row of tiles, an icon over the name each (DS §9 А2б, the places of the list). The tiles are `<testID>-<key>`.
  */
@@ -493,7 +530,7 @@ export function RunAttrsView({
       {forNew ? null : <View testID="attr-line-len"><T v="caption" tone="mut">{t(k("lineLen"), { len: lineLenText(run.lengthIn ?? drawnLengthIn(run), ch.lenFormat) })}</T></View>}
       {forNew ? null : <Tape run={run} onLength={onLength} fmt={ch.lenFormat} />}
       <FieldRow>
-        <Choice label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
+        <SizePick key={`${run.id}.${a.profile}`} testID="attr-size" offered={ch.offer.sizes[a.profile]} sizes={sizes} known={SIZES_BY_PROFILE[a.profile]} label={inch} value={a.size} read={readOwnRunSize} hint="9″" onSize={(size) => onAttrs({ size })} />
         {forNew ? null : <Choice label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />}
       </FieldRow>
       {/* the colour on a line of its own: in a row of three its name was cut to «Бе…» (design-review G1 PR2 №1, rule 2 — a sample always
@@ -619,7 +656,7 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, run, forNew, no,
           the shared field has a padding the mock's has not — the words come first) */}
       <DsKindPick ds={ds} onAttrs={onAttrs} ch={ch} />
       <FieldRow>
-        <Choice label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
+        <SizePick key={`${ds.id}.${ds.shape}`} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} sizes={sizes} known={DS_SIZES[ds.shape]} label={dsSize} value={ds.size} read={(v) => readOwnDsSize(ds.shape, v)} hint={ds.shape === "round" ? "5″" : "3x5"} onSize={(size) => onAttrs({ size })} />
         {/* its own storey (G2 #2465): the length of the pipe follows it; written only when it differs from the gutter's (rule 16) */}
         {forNew ? null : <Choice label={t(k("story"))} testID="attr-ds-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t(k("storyWin"), { n }) }))} value={String(dsStoryShown(ds, runStory)) as "1"} onChange={(n) => onAttrs(dsStoryPatch(runStory, Number(n)))} />}
       </FieldRow>

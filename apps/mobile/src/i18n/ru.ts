@@ -3815,6 +3815,8 @@ export const ru = {
   "mod.gutters.attr.moreDs": "Ещё",
   "mod.gutters.attr.dsLength": "Своя высота",
   "mod.gutters.attr.badDsOwn": "Высота от 1 до 100 ft",
+  "mod.gutters.attr.sizeOwn": "Свой",
+  "mod.gutters.attr.badOwnSize": "Свой размер — целые дюймы, например {hint}",
   "mod.gutters.attr.heightAuto": "По этажу",
   "mod.gutters.attr.reducer": "Переход в размер",
   "mod.gutters.attr.reducerNone": "Без перехода",

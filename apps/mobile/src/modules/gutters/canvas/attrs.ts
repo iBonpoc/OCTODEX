@@ -11,6 +11,7 @@ import { DEFAULT_HANGER_KITS, DEFAULT_WALL_KIT_BY_WALL, DEFAULT_WALL_KITS, bendO
 import type { DrawnDownspout, DrawnRun } from "../geometry";
 import type { Choices } from "../settings";
 import { DENOM, MM_OF, MM_PER_IN, type LenUnit } from "./format";
+import { isOwnDsSize, isOwnRunSize } from "./ownSize";
 
 export type RunAttrs = DrawnRun["attrs"];
 export type DsAttrs = Omit<DrawnDownspout, "id" | "runId" | "atIn">;
@@ -143,7 +144,9 @@ export function changeRun(a: RunAttrs, patch: Partial<RunAttrs>, ch?: Choices): 
   let n: RunAttrs = { ...a, ...patch };
   const profile = pick(PROFILES, n.profile)!;
   n.profile = profile;
-  if (!SIZES_BY_PROFILE[profile].includes(n.size)) n.size = firstOf(ch?.offer.sizes[profile], SIZES_BY_PROFILE[profile], ch?.run.profile === profile ? ch.run.size : undefined);
+  // a size of its own (#2981) stays while the profile does
+  const ownKept = isOwnRunSize(n.size) && (patch.profile === undefined || patch.profile === a.profile);
+  if (!SIZES_BY_PROFILE[profile].includes(n.size) && !ownKept) n.size = firstOf(ch?.offer.sizes[profile], SIZES_BY_PROFILE[profile], ch?.run.profile === profile ? ch.run.size : undefined);
   const gauges = GAUGES_BY_MATERIAL[n.material];
   if (gauges) {
     if (!gauges.length) delete n.gauge;
@@ -173,7 +176,8 @@ export function changeDs(a: DsAttrs, patch: Partial<DsAttrs>, ch?: Choices): DsA
   let n: DsAttrs = { ...a, ...patch };
   const shape = pick(DS_SHAPES, n.shape)!;
   n.shape = shape;
-  if (!DS_SIZES[shape].includes(n.size)) n.size = firstOf(ch?.offer.dsSizes[shape], DS_SIZES[shape], ch?.ds.shape === shape ? ch.ds.size : undefined);
+  const dsOwnKept = isOwnDsSize(shape, n.size) && (patch.shape === undefined || patch.shape === a.shape); // #2981
+  if (!DS_SIZES[shape].includes(n.size) && !dsOwnKept) n.size = firstOf(ch?.offer.dsSizes[shape], DS_SIZES[shape], ch?.ds.shape === shape ? ch.ds.size : undefined);
   const gauges = GAUGES_BY_MATERIAL[n.material];
   if (gauges && n.gauge && !gauges.includes(n.gauge)) n.gauge = firstOf(ch?.offer.gauges[n.material], gauges);
   if (gauges && !gauges.length) delete n.gauge;
