@@ -213,10 +213,11 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
           title: c.name,
           avatar: initials(c.name),
           // v2 макет 3: «◷ Активный» — the clock for an active client
-          status: { name: chip.s, label: statusWord, icon: status === "active" ? "clock" : undefined, onPress: office && statusOptions.length ? () => setPicking(true) : undefined },
+          // #3023: the status changes from here — the word with «⌄» (HeadStatus); an active client — the ok mark (the clock read «ждёт»)
+          status: { name: chip.s, label: statusWord, onPress: office && statusOptions.length ? () => setPicking(true) : undefined },
           // the line right of the rule (v2 «Клиент · VIP», the founder 21.11 «нет разделения Клиент · VIP»): what it is and its first
           // tag — never «VIP · Постоя…»; all of them are in «⋯ Метки»
-          kindWord: t("client.card"),
+          // #3023 (founder: «дублируется слово клиент»): no kind word — «‹ Клиенты» says it; the first tag only
           meta: headTags([...tags.map((x) => ({ id: x.id, label: tagLabel(x, t) })), ...(noLateCallsNow(db, c) ? [{ id: "late", label: t("client.lateCalls") }] : [])]).slice(0, 1),
           details: <ClientDetails c={c} f={f} onCall={(p) => callDone(p)} onSms={(p) => sms(p)} onRoute={route} />,
           // v2 «⌄ в свёрнутой»: the contacts, one row 48 each, over the page
@@ -243,7 +244,7 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
         visible={picking}
         onClose={() => setPicking(false)}
         title={t("client.statusTitle")}
-        options={statusOptions.map((x) => ({ key: x, tone: clientStatusChip[x].s, label: t(clientStatusChip[x].l), current: x === status, enabled: true, form: x === "do_not_service" }))}
+        options={statusOptions.map((x) => ({ key: x, tone: clientStatusChip[x].s, label: t(clientStatusChip[x].l), current: x === status, enabled: true, form: x === "do_not_service", hint: t(`client.stHint.${x}` as DictKey) }))}
         onPick={(k) => chooseStatus(k as CustomerStatus)}
       />
       <PeopleSheet visible={sheet === "people"} customer={c} onClose={() => setSheet(null)} />

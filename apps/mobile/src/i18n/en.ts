@@ -5730,4 +5730,5 @@ export const en: Dict = {
   "oc.est.sentToday": "Sent today · not signed",
   "oc.est.sentAgo": "Sent {n} d ago · not signed",
   "oc.est.noAnswer": "No answer · {n} d · not signed",
+  "oc.client.forInvoices": "For invoices",
 };
