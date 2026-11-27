@@ -9,7 +9,7 @@ const SCREENS = [
 ];
 /** screens that redirect by design: screen → the path it ends on (empty: nothing yet — filled from the first run, #800) */
 // by design: the «Графит» sheet is behind the pilot switch (off by default) — its address goes back to the list; the sheet itself is e2e 520 on all 6 views
-const REDIRECTS = { "/settings/design-system/graphite": true };
+const REDIRECTS = { "/settings/design-system/graphite": true, "/finance": true }; // #3025: /finance → /invoice (one «Деньги»)
 /** a screen's words for a record or page that is missing (the app shows them instead of a crash) */
 const NOT_THERE = /не найден[аоы]?|не существует|Такого документа нет|not found|doesn't exist|404/i;
 /** screens where such words are by design (an empty search, an empty list) */
