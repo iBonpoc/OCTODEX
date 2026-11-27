@@ -36,6 +36,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
+      contents: read
       pull-requests: read
     outputs:
       go: ${{ steps.go.outputs.go }}
@@ -58,9 +59,12 @@ jobs:
             workflow_run)
               # by the file, not the name (a fork may call its workflow «Stand trigger»), and only runs of this repository's branches
               if [ "$WF_EVENT" = "pull_request" ] && [ "$HEAD_REPO" = "$REPO" ] && [ "$WF_CONCLUSION" != "skipped" ] && [ "$WF_CONCLUSION" != "cancelled" ]; then
-                if [ "$WF_PATH" = ".github/workflows/stand-trigger.yml" ]; then go=true
-                elif [ "$WF_PATH" != ".github/workflows/preview.yml" ]; then go=false
-                elif [[ "$PR" =~ ^[0-9]+$ ]] && gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq '.labels[].name' | grep -qx 'стенд'; then go=true; fi
+                # the file of the trigger comes from the PR's branch, so its word is not enough (review 2 of #3125): the PR has
+                # «стенд» now, or (label taken off, PR closed) it is on the stand now — a merge «stand: #N» in stand/auto
+                if [ "$WF_PATH" != ".github/workflows/stand-trigger.yml" ] && [ "$WF_PATH" != ".github/workflows/preview.yml" ]; then go=false
+                elif ! [[ "$PR" =~ ^[0-9]+$ ]]; then go=false
+                elif gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq '.labels[].name' | grep -qx 'стенд'; then go=true
+                elif [ "$WF_PATH" = ".github/workflows/stand-trigger.yml" ] && gh api "repos/$GITHUB_REPOSITORY/compare/main...stand/auto" --jq '.commits[].commit.message' 2>/dev/null | grep -q "^stand: #$PR "; then go=true; fi
               fi ;;
           esac
           echo "go=$go" | tee -a "$GITHUB_OUTPUT"

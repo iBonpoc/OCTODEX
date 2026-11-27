@@ -355,8 +355,15 @@ describe("stand.yml «should»: a workflow_run counts by its file and repository
   const script = should.slice(should.indexOf("run: |") + 7).split("\n").map((l) => l.replace(/^ {10}/, "")).join("\n");
   const dir = mkdtempSync(join(tmpdir(), "stand-should-"));
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
-  // a fake gh: the PR has the label «стенд»
-  writeFileSync(join(dir, "gh"), "#!/bin/bash\necho стенд\n", { mode: 0o755 });
+  // a fake gh: PR 7 has the label «стенд»; PR 8 has none but is on the stand (stand/auto holds «stand: #8 …»); PR 9 neither
+  writeFileSync(join(dir, "gh"), [
+    "#!/bin/bash",
+    'case "$*" in',
+    '  *pulls/7*) echo стенд ;;',
+    '  *pulls/*) echo другое ;;',
+    '  *compare/main...stand/auto*) printf "stand: #8 abcdef0\\nstand: #12 1234567\\n" ;;',
+    "esac",
+  ].join("\n") + "\n", { mode: 0o755 });
   const go = (e: Record<string, string>) => {
     const out = join(dir, "out");
     writeFileSync(out, "");
@@ -367,6 +374,14 @@ describe("stand.yml «should»: a workflow_run counts by its file and repository
   it("the stand trigger and a Preview of a labelled PR of this repository: go", () => {
     expect(go({ ...run, WF_PATH: ".github/workflows/stand-trigger.yml" })).toBe("go=true");
     expect(go({ ...run, WF_PATH: ".github/workflows/preview.yml" })).toBe("go=true");
+  });
+  it("the trigger's file comes from the PR's branch: without the label it counts only for a PR on the stand now (review 2)", () => {
+    const t = { ...run, WF_PATH: ".github/workflows/stand-trigger.yml" };
+    expect(go({ ...t, PR: "8" })).toBe("go=true"); // label taken off / closed: leaves the stand
+    expect(go({ ...t, PR: "9" })).toBe("go=false"); // never on the stand, no label: nothing to rebuild
+    expect(go({ ...t, PR: "1" })).toBe("go=false"); // «stand: #12» is not #1
+    expect(go({ ...run, WF_PATH: ".github/workflows/preview.yml", PR: "8" })).toBe("go=false"); // a push to a PR without the label
+    expect(go({ ...t, PR: "x" })).toBe("go=false");
   });
   it("a run from a fork, even of the same file: no", () => {
     expect(go({ ...run, WF_PATH: ".github/workflows/stand-trigger.yml", HEAD_REPO: "fork/r" })).toBe("go=false");
