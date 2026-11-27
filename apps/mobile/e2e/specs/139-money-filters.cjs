@@ -15,8 +15,8 @@ exports.run = async (h) => {
 
   // «Расходы»
   await h.go("/money");
-  const bar = vis(p.getByTestId("filter-bar")).first();
-  await bar.waitFor();
+  // #3031: on 390/820 the magnifier is the header's first circle (the bar draws nothing until it opens), 1280 keeps the bar
+  await vis(p.locator(card)).first().waitFor();
   const all = await vis(p.locator(card)).count();
   h.expect(all === db.expenses.length && all > 1, `every expense is a card (${all})`);
   const vendor = db.expenses[0].vendor;
