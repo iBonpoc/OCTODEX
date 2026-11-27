@@ -48,7 +48,7 @@ describe("old saved data after an app update", () => {
     expect(sarah.number).toBe("CLT-0001");
     expect(sarah.tagIds).toEqual(["tag-vip", "tag-regular"]);
     expect(peopleOf(sarah).map((p) => p.name)).toEqual(["Sarah Mitchell", "Tom Mitchell"]);
-    expect(db.customers.find((c) => c.id === "mine")!.number).toBe("CLT-0008");
+    expect(db.customers.find((c) => c.id === "mine")!.number).toBe("CLT-0009"); // after the test client CLT-0008 (#3024)
     // the cloud keeps what the server sends: no demo tags, no invented numbers
     const cloud = normalizeDB(d as unknown as DB, "cloud");
     expect(cloud.tags).toEqual([]);
@@ -105,7 +105,7 @@ describe("wave П-1: old saved data without the new fields", () => {
     const db = normalizeDB(d, "demo");
     expect(db.jobs.find((j) => j.id === "j1")).toMatchObject({ number: "JOB-0001", customerId: "c1" });
     expect(db.jobs.find((j) => j.id === "j8")).toMatchObject({ number: "JOB-0008", customerId: "c1" });
-    expect(db.jobs.find((j) => j.id === "j-local")).toMatchObject({ number: "JOB-0009", customerId: "c2" });
+    expect(db.jobs.find((j) => j.id === "j-local")).toMatchObject({ number: "JOB-0012", customerId: "c2" }); // after the test client's JOB-0011 (#3024)
     expect(new Set(db.jobs.map((j) => j.number)).size).toBe(db.jobs.length);
     expect(db.jobTypes?.map((t) => t.seedKey)).toEqual(["install", "repair", "service", "warranty", "other"]);
     expect(db.cancelledJobs).toEqual([]);
