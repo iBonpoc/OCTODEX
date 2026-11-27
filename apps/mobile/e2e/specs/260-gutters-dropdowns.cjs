@@ -24,17 +24,23 @@ exports.run = async (h) => {
   if (!wide) await openProps(p);
   await tid("attr-panel").waitFor({ timeout: 5000 });
   await openAttrMore(p); // the material and the gauge are under «Ещё» (#2412 G1)
-  for (const f of ["attr-material", "attr-profile", "attr-size", ...((await tid("attr-gauge-button").count()) ? ["attr-gauge"] : [])]) {
+  for (const f of ["attr-material", "attr-size", ...((await tid("attr-gauge-button").count()) ? ["attr-gauge"] : [])]) {
     await tid(`${f}-button`).waitFor({ timeout: 5000 });
     h.expect((await tid(f).getByRole("radio").count()) === 0, `${f}: closed — a field, no chips`);
   }
   // the size field shares its row (Размер · Цвет · Этаж): narrower than a full row
   const size = await tid("attr-size-button").boundingBox();
   const mat = await tid("attr-material-button").boundingBox();
-  h.expect(size.width < mat.width * 0.8, `the size field is narrower than the full row (${Math.round(size.width)} vs ${Math.round(mat.width)})`);
-  // a pick closes the menu and the field shows it
+  const full = await tid("attr-color-button").boundingBox(); // the colour has a row of its own
+  h.expect(size.width < full.width * 0.8, `the size field is narrower than the full row (${Math.round(size.width)} vs ${Math.round(full.width)})`);
+  // the material and the gauge share one row (founder 27.11, #2984: «в одну линию на одной строке»)
+  if (await tid("attr-gauge-button").count()) {
+    const g = await tid("attr-gauge-button").boundingBox();
+    h.expect(Math.abs(g.y - mat.y) < 2 && g.x > mat.x + mat.width - 1, `material · gauge in one row (${Math.round(mat.y)} / ${Math.round(g.y)})`);
+  }
+  // the profile: tiles with icons (#2986) — a pick checks it and the window says it
   const profiles = await attrKeys(p, "attr-profile");
-  h.expect(profiles.length >= 2, `the profile menu opens (${profiles.length})`);
+  h.expect(profiles.length >= 2 && (await tid("attr-profile-button").count()) === 0, `the profile tiles (${profiles.length})`);
   const before = await attrChosen(p, "attr-profile");
   const other = profiles.find((k) => k !== before);
   const name = await pickAttr(p, "attr-profile", other);

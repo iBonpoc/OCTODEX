@@ -83,7 +83,7 @@ exports.run = async (h) => {
   await openNew("line");
   h.expect((await tid("attr-length").count()) === 0 && (await tid("attr-story").count()) === 0, "no length and no story among the new gutters' rows");
   await choose("attr-color", "brown");
-  await p.waitForFunction(() => /Коричнев/.test(document.querySelector('[data-testid="draw-new-defaults"]')?.textContent || ""), null, { timeout: 5000 });
+  await p.waitForFunction(() => /Brown/.test(document.querySelector('[data-testid="draw-new-defaults"]')?.textContent || ""), null, { timeout: 5000 });
   await h.shot("new-runs");
   await closeNew();
 
@@ -118,11 +118,11 @@ exports.run = async (h) => {
   await p.reload();
   await tid("draw-surface").waitFor({ timeout: 8000 });
   await openNew("line");
-  h.expect((await chosen("attr-color")) === "Коричневый", `after a reload: «Для новых gutter» still brown (${await chosen("attr-color")})`);
+  h.expect((await chosen("attr-color")) === "Brown", `after a reload: «Для новых gutter» still brown (${await chosen("attr-color")})`);
   // «Сбросить»: white again (as in the company's settings)
   await tid("draw-new-defaults-reset").getByRole("button").click();
   await p.waitForFunction(() => !document.querySelector('[data-testid="draw-new-defaults-reset"]'), null, { timeout: 5000 });
-  h.expect((await chosen("attr-color")) === "Белый", `«Сбросить»: the company's colour again (${await chosen("attr-color")})`);
+  h.expect((await chosen("attr-color")) === "White", `«Сбросить»: the company's colour again (${await chosen("attr-color")})`);
   await closeNew();
   // a gutter drawn now is white again (between the two that are there after the reload fitted them to the screen)
   const before = (await runs()).length;

@@ -109,7 +109,8 @@ describe("choice controls (DS §21.2 п.27, spec 56 §9.3)", () => {
   // company's markup (percent only, CHECK of spec 55).
   const PLACES: Record<string, string[]> = {
     PctUsdField: ["features/showcase/Choice.tsx"],
-    OptionTiles: ["features/showcase/Choice.tsx"],
+    // + the Gutters windows: the downspout's kind and the gutter's profile by their icons (founder 27.11, #2980 / #2986)
+    OptionTiles: ["features/showcase/Choice.tsx", "modules/gutters/draw/AttrPanel.tsx"],
   };
   for (const [name, allowed] of Object.entries(PLACES)) {
     it(`п.27.12: <${name} only in the places of the list`, () => {
