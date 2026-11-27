@@ -9,7 +9,7 @@ const CONTAINERS = [
   769, 770, 771, 772, 773, 774, 775, // old epics Э0–Э6, kept as task folders
   1341, // Э5 continued
   1542, 2431, // stage 1 «Надёжность» (part 2 — #1542 hit GitHub's 100 sub-issue limit)
-  1878, 2432, // stage 2 «Главный путь» (part 2 — same limit)
+  1878, 2432, 3096, // stage 2 «Главный путь» (parts 2 and 3 — same limit)
   1879, // stage 3 «Gutters»
   1880, 1526, // stage 4 «Люди и компании»
   1881, 1544, // stage 5 «ИИ-помощник и сканеры»

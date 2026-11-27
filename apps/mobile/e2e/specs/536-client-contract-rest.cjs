@@ -41,7 +41,7 @@ exports.run = async (h) => {
   await h.go("/client/c536?tab=money");
   await seen("client-money-figures").waitFor({ timeout: 8000 });
   const figures = (await seen("client-money-figures").innerText()).replace(/\s+/g, " ");
-  h.expect(figures.includes("$400") && !figures.includes("$200"), `С1 «Ещё выставить» $400 — the standalone $200 does not lower the contract's rest: ${figures}`);
+  h.expect(figures.includes("$400.00") && !figures.includes("$200.00"), `С1 «Ещё выставить» $400.00 — the standalone $200.00 does not lower the contract's rest: ${figures}`);
   await seen("client-next-bill").waitFor({ timeout: 8000 });
   await h.shot("client-to-bill-400");
 
@@ -51,14 +51,14 @@ exports.run = async (h) => {
   await seen("job-screen-sections-invoices").click();
   await seen("statement-bill-balance").waitFor({ timeout: 8000 });
   const invoiced = (await seen("statement-invoiced").innerText()).replace(/\s+/g, " ");
-  h.expect(/\$100(\.00)?(?!\d)/.test(invoiced) && !invoiced.includes("$300"), `С2 «Выставлено» — the contract's deposit $100 only: ${invoiced}`);
+  h.expect(/\$100(\.00)?(?!\d)/.test(invoiced) && !invoiced.includes("$300.00"), `С2 «Выставлено» — the contract's deposit $100.00 only: ${invoiced}`);
   const button = (await seen("statement-bill-balance").innerText()).replace(/\s+/g, " ");
-  h.expect(/\$400(\.00)?(?!\d)/.test(button), `С2 «Выставить остаток» carries the client card's $400: ${button}`);
+  h.expect(/\$400(\.00)?(?!\d)/.test(button), `С2 «Выставить остаток» carries the client card's $400.00: ${button}`);
   // the standalone invoice is still in the job's list — extra work is shown, only not counted
   h.expect((await p.getByTestId("statement-invoice-i536s").count()) > 0, "С2 the standalone invoice stays in the job's list");
   await h.shot("statement-400");
   await seen("statement-bill-balance").click();
   await p.waitForFunction((k) => (JSON.parse(localStorage.getItem(k) || "null")?.db?.invoices ?? []).filter((i) => i.jobId === "j536").length === 3, KEY, { timeout: 8000 });
   const after = (await h.db()).invoices.filter((i) => i.jobId === "j536" && !["i536d", "i536s"].includes(i.id));
-  h.expect(after.length === 1 && after[0].kind === "final" && after[0].totalCents === 40000, `С2 one final for $400: ${JSON.stringify(after.map((i) => [i.kind, i.totalCents]))}`);
+  h.expect(after.length === 1 && after[0].kind === "final" && after[0].totalCents === 40000, `С2 one final for $400.00: ${JSON.stringify(after.map((i) => [i.kind, i.totalCents]))}`);
 };

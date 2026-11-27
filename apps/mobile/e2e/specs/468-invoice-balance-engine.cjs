@@ -5,8 +5,9 @@
  * Set from a page without the app.
  */
 const { atMinute, todayKey } = require("../companyTime.cjs");
-const whole = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-const money = (c) => whole.format(c / 100);
+// #2888: the app shows money always with cents (founder #2672)
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
+const money = (c) => usd.format(c / 100);
 const setRole = (h, r) => h.seed("octo.role.v1", r); // from a page without the app (CHECKS §9 №12)
 const { settle } = require("../settle.cjs");
 const owes = (i) => Math.max(0, i.totalCents - i.paidCents);
@@ -48,7 +49,7 @@ exports.run = async (h) => {
   await money_tab();
   const cardB = p.getByTestId(`job-invoice-${over.id}`).locator("visible=true");
   const textB = await cardB.innerText();
-  h.expect(textB.includes("$0") && !/-\$/.test(textB), "job: the overpaid invoice owes $0, never a negative sum");
+  h.expect(textB.includes("$0.00") && !/-\$/.test(textB), "job: the overpaid invoice owes $0, never a negative sum");
 
   // the receipt: the same balance after the payment
   await h.go("/receipt/pay-e468");
@@ -68,10 +69,10 @@ exports.run = async (h) => {
   await h.expectText(/INV-E468A/, "client page: the partly paid invoice");
   const page = await h.text();
   h.expect(!/-\$|\$-/.test(page), "client page: no negative sum");
-  h.expect(new RegExp("INV-E468A[\\s\\S]*\\$242[\\s\\S]*INV-E468B").test(page), "client page: the partly paid invoice shows what is left, $242");
+  h.expect(new RegExp("INV-E468A[\\s\\S]*\\$242\.00[\\s\\S]*INV-E468B").test(page), "client page: the partly paid invoice shows what is left, $242.00");
   h.expect((await p.getByRole("button", { name: "Pay by card" }).count()) === 1, "client page: one pay button — the overpaid invoice has none");
   await p.getByRole("button", { name: "Pay by card" }).first().click();
-  const payNow = h.sheet().getByRole("button", { name: /Pay \$242/ });
+  const payNow = h.sheet().getByRole("button", { name: /Pay \$242\.00/ });
   await payNow.waitFor();
   await payNow.click();
   await payNow.waitFor({ state: "hidden" }); // the sheet left: the payment is booked

@@ -4,9 +4,9 @@ const { todayKey, dayKey } = require("../companyTime.cjs");
  * the invoice leaves the debts and the debts go down by exactly that amount. Prototype v2 (#2350): by testID — the invoice's main
  * step `invoice-take-payment`, the rows `invoice-row-<id>` / `payment-row-<id>`, the tiles «Ждёт оплаты» + «Просрочено».
  */
-const whole = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-const cents2 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
-const money = (c) => (c % 100 === 0 ? whole.format(c / 100) : cents2.format(c / 100));
+// #2888: the app shows money always with cents (founder #2672)
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
+const money = (c) => usd.format(c / 100);
 const cents = (s) => Math.round(Number(s.replace(/[$,]/g, "")) * 100);
 
 exports.run = async (h) => {

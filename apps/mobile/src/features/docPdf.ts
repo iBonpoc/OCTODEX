@@ -11,7 +11,7 @@ import { APP_NAME } from "@/config/product";
 import { findJob } from "@/data/jobs";
 import { contractInvoices, isContractKind } from "@/features/contractKind";
 import { print as P, type PrintStyleName } from "@octo/design-tokens";
-import { contractStatement, invoiceOwes } from "@octo/estimating-engine";
+import { contractStatement, fmtUsd, invoiceOwes } from "@octo/estimating-engine";
 import { licenseLine, type PortalData } from "@/cloud/portal";
 import type { DB, Invoice, Payment } from "@/data/types";
 import type { DictKey } from "@/i18n";
@@ -25,10 +25,8 @@ export interface DocOpts {
 }
 
 export const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);
-const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-const usdCents = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
-/** $ amounts, US format, the same for every client language */
-export const docMoney = (cents: number) => (cents % 100 === 0 ? usd.format(cents / 100) : usdCents.format(cents / 100));
+/** $ amounts, US format, the same for every client language, always with cents (#2672, #2888): the engine's `fmtUsd` */
+export const docMoney = (cents: number) => fmtUsd(cents);
 /**
  * 11/05/2026 — US numeric date, the same for every client language. A calendar day (YYYY-MM-DD) goes as it is;
  * a moment is shown on the company's day: its zone when given (E2b-2), else the app's company zone (zone.ts, П4b) —

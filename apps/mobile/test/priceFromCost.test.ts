@@ -74,7 +74,7 @@ describe("unit:priceFromCost — the price counted by the server (#1807)", () =>
     expect(items).toHaveLength(1);
     const it0 = items[0]!;
     expect(it0).toMatchObject({ kind: "priceRecalc", refId: "m1", name: "Coil", status: "warn", label: "price.recalc.att" });
-    expect(it0.params).toMatchObject({ who: "Sam Sales", sent: "$65", kept: "$60" });
+    expect(it0.params).toMatchObject({ who: "Sam Sales", sent: "$65.00", kept: "$60.00" });
     expect(attentionHref(it0)).toBe("/catalog/m1");
     expect(buildAttention(db(), "director", NOW).some((x) => x.id === "recalc-m1")).toBe(true);
   });

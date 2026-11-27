@@ -6,9 +6,9 @@
  * - «Продажи», «Источник лида → выручка» open with their numbers;
  * - CSV — the owner only: the owner sees «Выгрузить CSV», the office opens reports without it; sales and tech — closed.
  */
-const whole = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-const cents2 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
-const money = (c) => (c % 100 === 0 ? whole.format(c / 100) : cents2.format(c / 100));
+// #2888: the app shows money always with cents (founder #2672)
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
+const money = (c) => usd.format(c / 100);
 
 exports.run = async (h) => {
   const p = h.page;
