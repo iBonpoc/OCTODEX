@@ -6,7 +6,7 @@
  * A card opens the measurement's card («Просмотр замера», `view`); 1280 — beside the list in the ListPanel.
  */
 import { useRef, useState, type ComponentRef } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { router, type Href } from "expo-router";
 import { usePersistentState } from "@/data/persist";
 import { useStore } from "@/data/store";
@@ -19,7 +19,9 @@ import { useDevice } from "@/theme/ThemeProvider";
 import { Button, IconButton } from "@/ui/controls";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
-import type { CardSign, CardStatus } from "@/ui/listCard";
+import { openContact, type CardSign, type CardStatus } from "@/ui/listCard";
+import { mapsUrl, type OS } from "@/ui/listCardLayout";
+import { telHref } from "@/features/contactLinks";
 import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
 import { estimateListAmount } from "@/features/estimateDoc";
 import { ListPanel } from "@/ui/listPanel";
@@ -39,7 +41,7 @@ const CHIP: Record<MeasurementFilter, DictKey> = {
 
 export default function MeasurementsScreen() {
   const store = useStore();
-  const { t, day, money } = useI18n();
+  const { t, day, moneyWhole } = useI18n();
   const { device } = useDevice();
   const draw = moduleHref("gutters", "draw");
   const view = moduleHref("gutters", "view");
@@ -92,23 +94,29 @@ export default function MeasurementsScreen() {
     const sign = signsOf(m)?.[0];
     const st = statusOf(m);
     const sum = office && m.view.estimate ? estimateListAmount(m.view.estimate) : undefined;
+    const tel = telHref(m.phone ?? undefined);
     return (
       <GroupRow
         key={m.id}
         testID={`measurement-${m.id}`}
         title={titleOf(m)}
-        // #3028 (#3017, design + crm 27.11): 1 — the name · the phone; 2 — the address (a draft: «Без адреса»); 3 — what is measured, in the
-        // feet and the downspouts a contractor knows it by; left — the initials of whom it is for, a draft — the measurement's own icon
-        titleNote={m.phone ?? undefined}
+        // the lists' one rule (founder #3033, #3038; «Списки» #3034): 1 — the name · [the state's icon] the estimate's sum (no cents, #3029)
+        // or a draft's day; 2 — the address, the town never cut; 3 — what is measured (feet, downspouts); on the right
+        // «Позвонить · Маршрут» — no phone in the row (the call button IS the phone); left — the initials, a draft — the measure's icon
         subtitle={m.address ?? (m.forKind === "none" ? t("mod.gutters.list.noAddress") : undefined)}
+        addressLine={!!m.address}
+        // the state is the icon in line 1 (its word is the screen reader's, #3033): line 3 is what is measured, never cut to «2 do…»
         extra={t("mod.gutters.list.what2", { ft: Math.round(m.lengthIn / 12), ds: m.downspouts })}
         lead={m.forName ? { initials: initialsOf(m.forName) } : { icon: "measure" }}
-        // the estimate's sum on the right, big (as «Сметы»); a linked one without it — line 3 holds its state and what is measured, no
-        // date to push them onto a fourth line; a draft keeps its day on the right (it is found by when it was drawn)
-        value={sum ? money(sum.cents) : !m.phone && m.updatedAt ? day(m.updatedAt) : undefined}
+        value={sum ? moneyWhole(sum.cents) : m.updatedAt && !m.forName ? day(m.updatedAt) : undefined}
         valueMark={!sum}
-        figureRight={!!sum}
-        status={sign ? { status: sign.tone, label: sign.label } : { status: st.tone, label: st.label, draft: st.draft }}
+        valueTop
+        wrap
+        status={sign ? { status: sign.tone, label: sign.label, iconOnly: true } : { status: st.tone, label: st.label, draft: st.draft, iconOnly: true }}
+        actions={[
+          ...(tel ? [{ icon: "phone" as const, a11y: `${t("client.call")} ${m.forName ?? ""}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: m.phone ?? "" }), testID: `mrow-call-${m.id}` }] : []),
+          ...(m.address ? [{ icon: "route" as const, a11y: `${t("client.route")}: ${m.address}`, onPress: () => openContact({ kind: "map", icon: "map", url: mapsUrl(m.address!, Platform.OS as OS), value: m.address! }), testID: `mrow-route-${m.id}` }] : []),
+        ]}
         selected={m.id === panel.openId}
         onPress={() => panel.open(m.id)}
       />
