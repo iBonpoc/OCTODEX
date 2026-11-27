@@ -134,10 +134,29 @@ exports.run = async (h) => {
   await p.mouse.click(...k);
   await frames();
   h.expect((await tid("corner-sheet").count()) === 0, "a single tap on a corner opens no sheet");
+  // #3066 (founder 27.11: «нажимаю на угол — выделяется не угол, а весь gutter»): the tap picks the CORNER — a ring round its mark, no gutter
+  // picked (no halo on a line), the chip says «Corner · …»
+  await svg().locator('[id^="picked-c:"]').first().waitFor({ timeout: 3000 }); // a single tap on a corner: the corner has the ring
+  h.expect((await svg().locator('[id^="picked-c:"]').count()) === 1, "a single tap on a corner: one ring");
+  h.expect((await svg().locator('[id^="halo-"]').count()) === 0, "a single tap on a corner: no gutter is picked");
+  await p.waitForFunction(() => /^Corner · (Outside|Inside|Bay) · \d+°/.test(([...document.querySelectorAll('[data-testid="draw-selected"]')].find((e) => e.getClientRects().length)?.textContent || "").trim()), null, { timeout: 3000 }).catch(() => h.expect(false, "the chip says «Corner · kind · N°»"));
   await pastDoubleTap(p);
   await doubleTap(p, k[0], k[1]);
   await tid("corner-sheet").waitFor({ timeout: 5000 });
+  h.expect((await svg().locator('[id^="halo-"]').count()) === 0, "the corner's sheet: still no gutter picked");
   await closeSheet();
+  // the chip of the picked corner opens its window too (crm-review #3066 №1: one tap + the chip, no 300 ms to catch)
+  await tid("draw-summary").click();
+  await tid("corner-sheet").waitFor({ timeout: 5000 });
+  await closeSheet();
+  // 🗑 with the corner picked takes the joint apart: the gutters stay, the corner is gone, «Вернуть» on the toast (crm-review #3066 №2)
+  h.expect(!(await tid("draw-delete").getAttribute("aria-disabled")), "a picked corner: 🗑 is on");
+  await tid("draw-delete").getByRole("button").click();
+  await p.waitForFunction(() => !document.querySelector('[data-testid="draw-svg"] [id^="c:"]'), null, { timeout: 5000 });
+  h.expect((await svg().locator("line:not([id^=halo])").count()) >= 2, "🗑 on a corner: both gutters stay");
+  await h.expectText(/Угол разъединён/, "the toast says so");
+  await tid("draw-undo").getByRole("button").click(); // «Назад» puts the corner back
+  await svg().locator('[id^="c:"]').first().waitFor({ timeout: 5000 });
 
   // — the empty place: two taps show the whole drawing
   const width = async () => (await svg().locator('[id^="halo-"], [id^="face-"]').first().boundingBox()).width;

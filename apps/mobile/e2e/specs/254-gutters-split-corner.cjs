@@ -59,7 +59,7 @@ exports.run = async (h) => {
   await canvasAt(p, k.x + k.width / 2, k.y + k.height / 2);
   await doubleTap(p, k.x + k.width / 2, k.y + k.height / 2);
   await tid("corner-sheet").waitFor({ timeout: 5000 });
-  await tid("corner-split").getByRole("button").click();
+  await tid("corner-split").click(); // the action tile «Разъединить» (DS §9 А2б, #3066)
   await tid("corner-sheet").waitFor({ state: "detached", timeout: 5000 });
   await sheetGone(p);
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="draw-svg"] [id^="c:"], svg [id^="c:"]').length === 0, null, { timeout: 5000 });

@@ -101,7 +101,6 @@ describe("design system: components", () => {
     "features/PhotoStrip.tsx": 2,
     "features/estimate/SwipeRow.tsx": 1,
     "features/showcase/Rows.tsx": 1,
-    "modules/gutters/draw/CornerSheet.tsx": 1,
     "modules/gutters/draw/DrawScreen.tsx": 2,
     "modules/gutters/draw/FracPicker.tsx": 1,
     "modules/gutters/settings/SettingsScreen.tsx": 1,
@@ -673,18 +672,8 @@ describe("design system: no column of buttons (DS §7.5, #3065)", () => {
   const ts = require("typescript") as typeof import("typescript");
   const BUTTON_COLUMNS_LEFT: Record<string, number> = {
     "app/estimate/new.tsx": 1, // stays: founder 23.11 (audit MAP wave 1 п.6, picture n09) — the four ways to add, two pairs over the lines
-    "app/purchase-order/[id].tsx": 1,
-    "features/PhotoStrip.tsx": 1,
-    "features/RelatedBlock.tsx": 1,
-    "features/VisitChecklist.tsx": 1,
-    "features/VisitForm.tsx": 2,
-    "features/lead/LeadSheets.tsx": 3,
     "features/showcase/Buttons.tsx": 2, // stays: the «wrong» example of §7.5 on purpose; the two ButtonPair samples (row | column) side by side
     "features/showcase/ProtoV2.tsx": 1,
-    "modules/ModulePlaces.tsx": 2,
-    "modules/gutters/draw/AttrPanel.tsx": 1,
-    "modules/gutters/settings/SettingsScreen.tsx": 1,
-    "modules/gutters/view/ViewScreen.tsx": 1,
     "ui/confirmDialog.tsx": 2, // stays: a dialog may have three answers in a column (HIG Alerts; «Сохранить изменения?», DS §7.5)
     "ui/dateField.tsx": 1, // the quick days «Сегодня · Завтра · Без даты» are a choice, not actions — goes when they become ChoiceChips
   };

@@ -226,7 +226,8 @@ function UnitPick({ unit, onUnit, testID }: { unit: LenUnit; onUnit: (u: LenUnit
   const ref = useRef<React.ComponentRef<typeof View>>(null);
   const waiting = useRef(false);
   const [at, setAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  const word = unit === "ftin" || unit === "in" ? t(k("in")) : t(k(`unit.${unit}`));
+  // by the title (#3071) it names the whole unit — «фут + дюйм ⌄» is the unit's choice, never read as the inches' label (#3078, design review №12)
+  const word = unit === "in" ? t(k("in")) : t(k(`unit.${unit}`));
   return (
     <>
       <View ref={ref} collapsable={false}>
@@ -328,10 +329,14 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
     // the body scrolls, the buttons stay under it in view (the input window gives it its room — InputWindow `scroll={false}`)
     <View testID="quick-length" style={{ gap: space[3], flexShrink: 1 }}>
       <ScrollView keyboardShouldPersistTaps="handled" style={{ flexShrink: 1 }} contentContainerStyle={{ gap: space[3] }} showsVerticalScrollIndicator={false}>
-      <T v="heading" w="semibold">{t(k("quickTitle"))}</T>
+      {/* the unit choice stands by the title (design-review #3066 №2): the fields' row keeps room for «Далее», nothing jumps */}
+      <RowView style={{ gap: space[2], alignItems: "center", justifyContent: "space-between" }}>
+        <T v="heading" w="semibold" style={{ flexShrink: 1 }}>{t(k("quickTitle"))}</T>
+        {unit === "ftin" ? <UnitPick unit={unit} onUnit={pickUnit} testID="quick-length-unit" /> : null}
+      </RowView>
       {unit === "ftin" ? (
         <>
-          <RowView style={{ gap: space[2], flexWrap: "wrap", alignItems: "center" }}>
+          <RowView style={{ gap: space[1], alignItems: "center" }}>
             <View style={{ width: component.qtyFieldW }} testID="quick-length-ft">
               <TextField type="integer" value={ft} onChangeText={(v) => { edit(setFt)(v); if (feetResetsRest({ firstOpen: start === undefined, restTouched: restTouched.current })) { setInc("0"); setE16(0); } }} label={t(k("ft"))} onSubmit={goNext} onFocus={() => setStage("ft")} chain autoFocus selectOnFocus />
             </View>
@@ -340,7 +345,12 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
               <TextField type="number" value={inc} onChangeText={(v) => { restTouched.current = true; edit(setInc)(v); const big = inchesTooBig(v); setBad(big); setStage(inchesComplete(v) && !big ? "frac" : "in"); }} label={t(k("in"))} onSubmit={stage === "frac" ? apply : goNext} onFocus={() => setStage((s0) => (s0 === "frac" ? s0 : "in"))} focusNow={inFocus} chain selectOnFocus />
             </View>
             <FracText value={e16} testID="quick-length-frac" />
-            <UnitPick unit={unit} onUnit={pickUnit} testID="quick-length-unit" />
+            {/* «Далее» — a step of the typing, with the fields (the phone's number pad has no «next» key, #1316); the window's own row below holds
+                two buttons only, «Отменить · Применить» (DS Б1а; founder 27.11, #3064 «никаких столбиков кнопок»). At the fraction it is not needed:
+                its place stays (disabled, no testID), so the rows under it never jump (design-review #3066 №2) */}
+            {stage !== "frac"
+              ? <View testID="quick-length-next" style={{ marginLeft: "auto" }}><Button label={t(k("next"))} variant="secondary" onPress={goNext} /></View>
+              : <View style={{ marginLeft: "auto" }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Button label={t(k("next"))} variant="secondary" disabled onPress={goNext} /></View>}
           </RowView>
           <FracPicker value={e16} onChange={(v) => { edited.current = true; restTouched.current = true; setE16(v); setBad(false); }} active={stage === "frac"} testID="quick-length-fracs" />
           <Pull ft={ft} inc={inc} e16={e16} onPull={(x) => { edited.current = true; restTouched.current = true; setFt(String(x.ft)); setInc(String(x.inch)); setE16(x.sixteenths); setBad(false); }} testID="quick-length-tape" />
@@ -357,10 +367,9 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
       <T v="caption" tone="mut">{t(k("quickDrawn"), { len: fmtLen(drawn, fmt) })}</T>
       {bad ? <View testID="quick-length-bad"><StatusChip status="warn" label={t(k(unit === "mm" ? "badLengthMm" : "badLength"))} soft /></View> : null}
       </ScrollView>
-      <RowView style={{ gap: space[2], justifyContent: "flex-end" }}>
-        {unit === "ftin" && stage !== "frac" ? <View testID="quick-length-next"><Button label={t(k("next"))} size="sm" variant="secondary" onPress={goNext} /></View> : null}
-        <View testID="quick-length-cancel"><Button label={t(k("quickCancel"))} size="sm" variant="ghost" onPress={onCancel} /></View>
-        <View testID="quick-length-apply"><Button label={t(k("apply"))} size="sm" onPress={apply} /></View>
+      <RowView style={{ gap: space[2], justifyContent: "space-between" }}>
+        <View testID="quick-length-cancel"><Button label={t(k("quickCancel"))} variant="ghost" onPress={onCancel} /></View>
+        <View testID="quick-length-apply"><Button label={t(k("apply"))} onPress={apply} /></View>
       </RowView>
     </View>
   );

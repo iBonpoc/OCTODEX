@@ -134,6 +134,7 @@ import {
   type PurchaseOrder,
   type ItemVariant,
   type Photo,
+  type FileItem,
 } from "./types";
 import { cleanEstimateTemplate, canEditEstimateTemplates } from "@/features/estimateTemplate";
 import { cleanName } from "@/features/nameAsk";
@@ -306,6 +307,8 @@ interface StoreCtx {
   advanceVisit: (id: ID) => Undo;
   /** #1558: only a file made anew here (`prepPicked`) — or the original kept on this phone as «preparing» (never sent) */
   addPhoto: (visitId: ID, kind: "before" | "after", photo?: string | PickedPhoto) => Undo;
+  /** #3085: a photo of the client (from the client by SMS or mail): on the client, no visit; only a file made anew here (`prepPicked`) */
+  addClientFile: (customerId: ID, uri: string) => Undo;
   toggleCheck: (visitId: ID, itemId: ID) => Undo;
   removePhoto: (visitId: ID, photoId: ID) => Undo;
   /** #1431 «Повторить»: a photo the cloud refused is sent again — made anew first (#1558: the file on this phone may be
@@ -1866,6 +1869,11 @@ export function StoreProvider({
         );
       },
       addPhoto: addPhotoFn,
+      addClientFile: (customerId, uri) => {
+        const id = uid();
+        const file: FileItem = { id, kind: "photo", customerId, at: new Date().toISOString(), uri };
+        return mutate("file.add", (d) => ({ ...d, files: [...(d.files ?? []), file] }), { k: "file.add", id, customerId, uri });
+      },
       toggleCheck: (visitId, itemId) => {
         const item = dbRef.current.visits.find((x) => x.id === visitId)?.checklist.find((c) => c.id === itemId);
         return checkItemFn(visitId, itemId, !item?.done);

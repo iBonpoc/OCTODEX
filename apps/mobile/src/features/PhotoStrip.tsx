@@ -1,8 +1,10 @@
-import { useRef, useState } from "react";
-import { Image, ScrollView, View } from "react-native";
-import * as ImagePicker from "expo-image-picker";
-import { liveUri, madeHere } from "./photoUri";
-import { prepPicked, type PickedPhoto } from "@/data/photoShrink";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Image, ScrollView, View, type ScrollViewInstance } from "react-native";
+import { liveUri } from "./photoUri";
+import { gridTile } from "./photoGrid";
+import { needsPut, offsetOf, pageOf, stepPage } from "./photoPager";
+import type { PickedPhoto } from "@/data/photoShrink";
+import { usePhotoPick } from "./usePhotoPick";
 import { canRetry, isPrepFail } from "@/data/photoUpload";
 import { useStore } from "@/data/store";
 import { StatusNote } from "@/ui/statusNote";
@@ -12,22 +14,32 @@ import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Button } from "@/ui/controls";
-import { Sheet, useToast } from "@/ui/overlays";
+import { Sheet } from "@/ui/overlays";
+import { ListRow } from "@/ui/surfaces";
 
 const THUMB = component.photoThumb;
 
 /** Before/after photos. Camera on a phone; library/file picker on web. Tap a photo to view it or delete it. */
-export function PhotoStrip({ photos, onAdd, onAddPreparing, onRemove, onRetry, onPrepare, title }: { photos: Photo[]; /** none: the photos are only shown (no «Добавить фото» tile). Only a file made anew here (#1558) — never the original */ onAdd?: (uri: string, small?: true) => void; /** #1558: a photo that could not be made anew yet — kept on this phone as «preparing»; none: it is not added (a toast says to add it again) */ onAddPreparing?: (p: Extract<PickedPhoto, { preparing: unknown }>) => void; /** #1558 «Подготовить снова» on an «unreadable» photo (none: the store finds the visit by the photo) */ onPrepare?: (id: string) => void; onRemove?: (id: string) => void; /** #1431 «Повторить» on a photo the cloud did not take (its file is on this phone) */ onRetry?: (id: string) => void; /** the viewer's title when the photos are not a visit's before / after (a module's measurement) */ title?: string }) {
+export function PhotoStrip({ grid, caption, photos, onAdd, onAddPreparing, onRemove, onRetry, onPrepare, title }: { /** #3082: a line under the viewer's title — where the photos are from («выезд · дата · мастер») */ caption?: string; /** #3076: the thumbnails wrap into rows (a grid, as iOS «Фото») instead of one strip that scrolls sideways — the client's «Фото и файлы» */ grid?: boolean; photos: Photo[]; /** none: the photos are only shown (no «Добавить фото» tile). Only a file made anew here (#1558) — never the original */ onAdd?: (uri: string, small?: true) => void; /** #1558: a photo that could not be made anew yet — kept on this phone as «preparing»; none: it is not added (a toast says to add it again) */ onAddPreparing?: (p: Extract<PickedPhoto, { preparing: unknown }>) => void; /** #1558 «Подготовить снова» on an «unreadable» photo (none: the store finds the visit by the photo) */ onPrepare?: (id: string) => void; onRemove?: (id: string) => void; /** #1431 «Повторить» on a photo the cloud did not take (its file is on this phone) */ onRetry?: (id: string) => void; /** the viewer's title when the photos are not a visit's before / after (a module's measurement) */ title?: string }) {
   const { c } = useTheme();
   const { t } = useI18n();
-  const toast = useToast();
   const store = useStore();
   const prepareAgain = onPrepare ?? ((id: string) => store.preparePhotoAgain({ photoId: id }));
   const [opened, setOpen] = useState<Photo | null>(null);
+  // #3076: in the grid the thumbnails fill the width — 4 in a row on a phone, more where `photoThumb` fits more (no new size: the
+  // width is the container's, the least size is `photoThumb`)
+  const [gridW, setGridW] = useState(0);
+  const tile = grid && gridW ? gridTile(gridW) : THUMB;
   // a `blob:` of a page that is gone (web, after a reload) is shown as the picture sign, never loaded (an empty preview
   // and a console error otherwise)
   const shown = photos.map((p) => ({ ...p, uri: liveUri(p.uri) }));
   const open = opened ? { ...opened, uri: liveUri(opened.uri) } : null;
+  // the viewer's title: the kind (or the owner's title) and, with more than one, «3 из 5» (#3082)
+  const viewTitle = (p: Photo | undefined, count = false) => {
+    const kind = title ?? (p?.kind === "after" ? t("visit.photosAfter") : t("visit.photosBefore"));
+    const i = p ? shown.findIndex((x) => x.id === p.id) : -1;
+    return count && shown.length > 1 && i >= 0 ? `${kind} · ${t("photo.nOf", { n: i + 1, total: shown.length })}` : kind;
+  };
   // #1431: photos the cloud did not take — said under the strip (StatusNote) and, with the reason, in the viewer
   // #1558: a photo «preparing» is not a failure — it goes on its own (its own note, info)
   const failedList = shown.filter((p) => p.upload && p.upload.failed !== "preparing");
@@ -38,38 +50,10 @@ export function PhotoStrip({ photos, onAdd, onAddPreparing, onRemove, onRetry, o
   // the refused ones only (director 14.11, #1431 вариант А)
   const failedAt = open ? failedList.findIndex((p) => p.id === open.id) : -1;
   const nextFailed = failedAt >= 0 && failed > 1 ? failedList[(failedAt + 1) % failed] : undefined;
-  // a second tap while the photo is being made smaller does nothing (no second picker, no photo twice)
-  const busy = useRef(false);
-  const pick = async () => {
-    if (busy.current) return;
-    busy.current = true;
-    try {
-      await pickOne();
-    } finally {
-      busy.current = false;
-    }
-  };
-  const pickOne = async () => {
-    const perm = await ImagePicker.requestCameraPermissionsAsync().catch(() => null);
-    const res =
-      perm?.granted
-        ? await ImagePicker.launchCameraAsync({ quality: 1 }).catch(() => null)
-        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 1 }).catch(() => null);
-    if (!res || res.canceled) return;
-    // made anew once here, before the photo is kept and queued (#642); the original is never sent (#1558)
-    const got = await prepPicked(res);
-    if (!got) return;
-    if ("uri" in got) {
-      madeHere(got.uri);
-      onAdd?.(got.uri, got.small);
-    } else if (onAddPreparing) {
-      madeHere(got.preparing.uri);
-      onAddPreparing(got);
-    } else toast.show(t("photoUp.prep.notAdded"));
-  };
+  const pick = usePhotoPick(onAdd, onAddPreparing);
   return (
     <>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space[2] }}>
+    <Strip grid={grid} onWidth={setGridW}>
       {onAdd ? (
         // the add tile (DS «Плитка добавления»): the size of a thumbnail, a one-line caption on every language, the frame
         // readable (≥ 3:1: `mut`), the icon never squeezed by a big font (the tile grows, not the icon shrinks)
@@ -107,19 +91,33 @@ export function PhotoStrip({ photos, onAdd, onAddPreparing, onRemove, onRetry, o
           accessibilityRole="button"
           accessibilityLabel={`${title ?? (p.kind === "after" ? t("visit.photosAfter") : t("visit.photosBefore"))}, ${t("photo.nOf", { n: i + 1, total: shown.length })}${p.upload ? `, ${t(p.upload.failed === "preparing" ? "photoUp.prep.chip" : "photoUp.a11y")}` : ""}`}
           testID={`photo-thumb-${p.id}`}
-          style={{ width: THUMB, height: THUMB, borderRadius: radius.inner, overflow: "hidden", backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}
+          style={{ width: tile, height: tile, borderRadius: radius.inner, overflow: "hidden", backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}
         >
-          {p.uri ? <Image source={{ uri: p.uri }} style={{ width: THUMB, height: THUMB }} /> : <Icon name="image" s={size.iconLg} color={c.mut} />}
+          {p.uri ? <Image source={{ uri: p.uri }} style={{ width: tile, height: tile }} /> : <Icon name="image" s={size.iconLg} color={c.mut} />}
         </Press>
-      ))}
-      <Sheet visible={!!open} onClose={() => setOpen(null)} title={title ?? (open?.kind === "after" ? t("visit.photosAfter") : t("visit.photosBefore"))}>
-        <View style={{ height: component.mediaH * 2, borderRadius: radius.inner, overflow: "hidden", backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
-          {open?.uri ? (
-            <Image source={{ uri: open.uri }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
-          ) : (
-            <Icon name="image" s={size.iconLg} color={c.mut} />
-          )}
-        </View>
+      )).map((thumb, i) =>
+        // #3085: in the grid a visit's photo says «До» / «После» under it (a word, no colour); the owner's own title — none
+        grid && !title ? (
+          <View key={shown[i]!.id} style={{ width: tile, gap: space[1] }}>
+            {thumb}
+            <T v="caption" tone="mut" numberOfLines={1}>
+              {shown[i]!.kind === "after" ? t("c3076.after") : t("c3076.before")}
+            </T>
+          </View>
+        ) : (
+          thumb
+        ),
+      )}
+      <Sheet visible={!!open} onClose={() => setOpen(null)} height="large" title={open ? viewTitle(open, true) : undefined}>
+        {caption ? (
+          <View testID="photo-view-caption">
+            <T v="caption" tone="mut">
+              {caption}
+            </T>
+          </View>
+        ) : null}
+        {/* #3082: the strip's photos page sideways (as iOS «Фото»); the title says «N из M» */}
+        <Pager photos={shown} at={Math.max(0, shown.findIndex((p) => p.id === open?.id))} onAt={(i) => shown[i] && shown[i]!.id !== open?.id && setOpen(shown[i]!)} label={(i) => viewTitle(shown[i])} />
         {open && openFailed?.failed === "preparing" ? (
           <StatusNote tone="info" v="body" testID="photo-prep-reason">
             {t("photoUp.prep.reason")}
@@ -133,16 +131,6 @@ export function PhotoStrip({ photos, onAdd, onAddPreparing, onRemove, onRetry, o
             {t(`photoUp.reason.${openFailed.failed}`)}
             {!open.uri && openFailed.failed !== "gone" ? ` ${t("photoUp.otherPhone")}` : ""}
           </StatusNote>
-        ) : null}
-        {nextFailed ? (
-          <Button
-            label={t("photoUp.next", { i: failedAt + 1, n: failed })}
-            icon="chevronRight"
-            variant="secondary"
-            full
-            testID="photo-upload-next"
-            onPress={() => setOpen(nextFailed)}
-          />
         ) : null}
         {/* the sheet's one main step (one filled accent, #2350): «Повторить», or «Подготовить снова» for «не открывается» — never both */}
         {open && ((onRetry && canRetry({ ...open, upload: openFailed })) || (openFailed?.failed === "unreadable" && open.uri)) ? (
@@ -158,6 +146,12 @@ export function PhotoStrip({ photos, onAdd, onAddPreparing, onRemove, onRetry, o
             }}
           />
         ) : null}
+        {/* DS §7.5 (#3065): going to the next failed photo is a row «›» under the main step, not a third button; the sheet keeps one main + one second */}
+        {nextFailed ? (
+          <View testID="photo-upload-next">
+            <ListRow title={t("photoUp.next", { i: failedAt + 1, n: failed })} left={<Icon name="image" />} onPress={() => setOpen(nextFailed)} />
+          </View>
+        ) : null}
         {onRemove && open ? (
           <Button
             label={t("photo.delete")}
@@ -171,7 +165,7 @@ export function PhotoStrip({ photos, onAdd, onAddPreparing, onRemove, onRetry, o
           />
         ) : null}
       </Sheet>
-    </ScrollView>
+    </Strip>
     {preparing ? (
       <StatusNote tone="info" testID="photo-prep-strip">
         {t("photoUp.prep.strip", { n: preparing })}
@@ -191,5 +185,77 @@ export function PhotoStrip({ photos, onAdd, onAddPreparing, onRemove, onRetry, o
       </Press>
     ) : null}
     </>
+  );
+}
+
+/** one strip that scrolls sideways, or (#3076) the same thumbnails wrapped into rows */
+function Strip({ grid, onWidth, children }: { grid?: boolean; onWidth: (w: number) => void; children: ReactNode }) {
+  return grid ? (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }} testID="photo-grid" onLayout={(e) => onWidth(e.nativeEvent.layout.width)}>
+      {children}
+    </View>
+  ) : (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space[2] }}>
+      {children}
+    </ScrollView>
+  );
+}
+
+
+/**
+ * #3082 the viewer's photos side by side, one page each: a swipe (a paging scroll, the phone's own) moves to the next; the page
+ * shown follows the photo asked for (a tap on a thumbnail, «следующий не загружен», a rotation). VoiceOver: «adjustable» —
+ * swipe up / down for the next / the one before. The math is photoPager.ts.
+ */
+function Pager({ photos, at, onAt, label }: { photos: Photo[]; at: number; onAt: (i: number) => void; label: (i: number) => string }) {
+  const { c } = useTheme();
+  const [w, setW] = useState(0);
+  const ref = useRef<ScrollViewInstance>(null);
+  // the page in view (set by the scroll) and the width it was put there at; -1 — not put yet
+  const shownAt = useRef(-1);
+  const putAtW = useRef(0);
+  // the page asked for from outside (a tap, «следующий не загружен») or a new width: put it in view at once, without an animation.
+  // A page the swipe itself reached is already in view — scrolling there again would fight the finger (pageMoves in photoPager)
+  useEffect(() => {
+    if (!w || !needsPut(at, shownAt.current, w, putAtW.current)) return;
+    shownAt.current = at;
+    putAtW.current = w;
+    ref.current?.scrollTo({ x: offsetOf(at, w), animated: false });
+  }, [at, w]);
+  const h = component.mediaH * 2;
+  return (
+    <View
+      onLayout={(e) => setW(e.nativeEvent.layout.width)}
+      style={{ height: h, borderRadius: radius.inner, overflow: "hidden", backgroundColor: c.surf2 }}
+      accessible
+      accessibilityRole="adjustable"
+      accessibilityLabel={label(at)}
+      accessibilityValue={{ min: 1, max: photos.length, now: at + 1 }}
+      accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
+      onAccessibilityAction={(e) => onAt(stepPage(at, e.nativeEvent.actionName === "increment" ? 1 : -1, photos.length))}
+      testID="photo-pager"
+    >
+      <ScrollView
+        ref={ref}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        scrollsToTop={false}
+        scrollEventThrottle={16}
+        onScroll={(e) => {
+          const i = pageOf(e.nativeEvent.contentOffset.x, w, photos.length, Math.max(0, shownAt.current));
+          if (i !== shownAt.current) {
+            shownAt.current = i;
+            onAt(i);
+          }
+        }}
+      >
+        {photos.map((p) => (
+          <View key={p.id} style={{ width: w, height: h, alignItems: "center", justifyContent: "center" }} testID={`photo-page-${p.id}`}>
+            {p.uri ? <Image source={{ uri: p.uri }} style={{ width: "100%", height: "100%" }} resizeMode="contain" /> : <Icon name="image" s={size.iconLg} color={c.mut} />}
+          </View>
+        ))}
+      </ScrollView>
+    </View>
   );
 }

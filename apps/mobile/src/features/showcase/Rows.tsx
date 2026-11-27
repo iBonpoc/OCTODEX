@@ -258,6 +258,14 @@ export function RowsSection() {
           <PhotoStrip photos={[]} onAdd={() => {}} />
         </View>
       </Card>
+      <Card>
+        {/* #3076: the same thumbnails wrapped into rows — the client's «Фото и файлы» (DS §8.6а) */}
+        <View testID="showcase-rows-photoGrid" style={{ gap: space[1] }}>
+          <T v="heading">{t("c3076.ds.grid")}</T>
+          <T v="caption" tone="mut">{t("c3076.ds.gridHint")}</T>
+          <PhotoStrip grid photos={["g1", "g2", "g3", "g4", "g5", "g6"].map((id, i) => ({ id, kind: i < 3 ? "before" : "after" }))} />
+        </View>
+      </Card>
       <TaxSample />
       <LineSample />
       <SwipeSample />

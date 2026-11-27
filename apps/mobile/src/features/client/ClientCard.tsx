@@ -172,8 +172,9 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
   };
 
   /* ---------- the strip ---------- */
-  const keys = clientSectionKeys(role, f.hasMoney, r.properties.length > 1);
-  const current: ClientSectionKey = keys.includes(section) ? section : "overview";
+  const keys = clientSectionKeys(role, f.hasMoney, r.properties.length > 0);
+  // a tech has no «Выезды» of their own: an address `?tab=visits` opens «Работы», where the visits are (#3060 п.3)
+  const current: ClientSectionKey = keys.includes(section) ? section : section === "visits" && keys.includes("work") ? "work" : "overview";
   const workN = office ? r.jobs.length : f.visits.length;
   const sections = useMemo(
     () =>
@@ -195,9 +196,9 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
     ) : current === "money" ? (
       <ClientMoney c={c} f={f} />
     ) : current === "visits" ? (
-      <ClientVisits f={f} />
+      <ClientVisits f={f} customerId={c.id} />
     ) : current === "places" ? (
-      <ClientPlaces c={c} f={f} onRoute={route} />
+      <ClientPlaces c={c} f={f} onRoute={route} onCall={(p) => callDone(p)} onSms={(p) => sms(p)} />
     ) : current === "log" ? (
       <ClientLog c={c} f={f} />
     ) : (

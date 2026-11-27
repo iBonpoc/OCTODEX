@@ -15,7 +15,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { WEB_APP_URL } from "@/config/backend";
 import { fetchIntakeStatus } from "@/cloud/intake";
 import { createEndpoint, decideEvent, listEndpoints, listEvents, rotateEndpoint, setEndpoint } from "@/cloud/intakeSettings";
-import { formLink, heldFirst, heldReasonKey, readiness, READINESS_TONE, siteSnippet, type IntakeEndpoint, type IntakeEvent } from "@/features/intakeSettings";
+import { formLink, formPreview, heldFirst, heldReasonKey, readiness, READINESS_TONE, siteSnippet, type IntakeEndpoint, type IntakeEvent } from "@/features/intakeSettings";
 import { copyText, shareText } from "@/features/sendEstimate";
 import { Button, ChoiceChips, ReadOnly, StatusChip, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -78,6 +78,7 @@ export default function CompanyIntake() {
   const hook = eps?.find((e) => e.kind === "webhook");
   const ready = readiness(status, form, director);
   const link = form?.publicToken ? formLink(origin, form.publicToken) : "";
+  const preview = formPreview(form);
   const run = async (fn: () => Promise<void>, done?: string) => {
     if (!store.online) return toast.show(t("intake.set.needOnline"));
     if (latch.current) return; // a double tap runs once (review #422 №3)
@@ -142,10 +143,16 @@ export default function CompanyIntake() {
             {form ? (
               <View style={{ gap: space[2] }}>
                 <ListGroup testID="intake-form-actions">
-                  <GroupRow testID="intake-copy-link" title={t("intake.set.copyLink")} subtitle={link} lead={{ icon: "copy" }} onPress={() => void copyText(link).then(() => toast.show(t("intake.set.copied")))} />
-                  <GroupRow testID="intake-share" title={t("intake.set.share")} lead={{ icon: "send" }} onPress={() => shareText(t("intake.set.shareText"), link)} />
-                  <GroupRow testID="intake-copy-code" title={t("intake.set.copyCode")} subtitle={t("intake.set.codeHint")} wrap lead={{ icon: "copy" }}
-                    onPress={() => void copyText(siteSnippet(link, t("intake.title"))).then(() => toast.show(t("intake.set.copied")))} />
+                  {/* #3074: the form as the homeowner sees it (preview — nothing is sent from it); off — said, nothing opens (the server
+                      shows no page of an off form); no link yet — no row. A copy while off still copies (the code goes on a site ahead),
+                      its toast says the link does not work yet — one rule for the three rows */}
+                  {preview.href || preview.off ? <GroupRow testID="intake-open-form" title={t("c3074.open")} subtitle={preview.off ? t("intake.set.formOff") : t("c3074.openHint")} wrap lead={{ icon: "eye" }}
+                    chevron={!!preview.href} onPress={() => (preview.href ? router.push(preview.href as never) : toast.show(t("c3074.openOff")))} /> : null}
+                  <GroupRow testID="intake-copy-link" title={t("intake.set.copyLink")} subtitle={form.enabled ? link : t("intake.set.formOff")} wrap lead={{ icon: "link" }}
+                    onPress={() => void copyText(link).then(() => toast.show(preview.off ? t("c3074.copiedOff") : t("intake.set.copiedLink")))} />
+                  <GroupRow testID="intake-share" title={t("intake.set.share")} subtitle={form.enabled ? undefined : t("intake.set.formOff")} wrap lead={{ icon: "share" }} onPress={() => (preview.off ? toast.show(t("c3074.shareOff")) : shareText(t("intake.set.shareText"), link))} />
+                  <GroupRow testID="intake-copy-code" title={t("intake.set.copyCode")} subtitle={form.enabled ? t("intake.set.codeHint") : t("intake.set.formOff")} wrap lead={{ icon: "doc" }}
+                    onPress={() => void copyText(siteSnippet(link, t("intake.title"))).then(() => toast.show(preview.off ? t("c3074.copiedOff") : t("intake.set.copiedCode")))} />
                 </ListGroup>
                 {/* while it saves the row stays where it is, off (nothing jumps under the finger, DS §14.4) */}
                 <ReadOnly value={busy}>

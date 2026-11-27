@@ -39,7 +39,7 @@ describe("the inches are typed to the end → the cursor goes to the fraction", 
 
 describe("the fraction buttons (FracPicker): eighths in the main row, the odd sixteenths behind «1/16»", () => {
   it("fifteen fractions in two rows of eight; every fraction 0..15 is on exactly one row", async () => {
-    const { EIGHTHS, ODD_SIXTEENTHS } = await import("../src/modules/gutters/draw/FracPicker");
+    const { EIGHTHS, ODD_SIXTEENTHS } = await import("../src/modules/gutters/draw/fracSlot");
     expect(EIGHTHS).toHaveLength(8);
     expect(ODD_SIXTEENTHS).toHaveLength(8);
     for (let e = 0; e < 16; e++) {
@@ -49,7 +49,7 @@ describe("the fraction buttons (FracPicker): eighths in the main row, the odd si
     }
   });
   it("an even number of sixteenths is an eighth (its key in the main row); an odd one is not", async () => {
-    const { eighthKey } = await import("../src/modules/gutters/draw/FracPicker");
+    const { eighthKey } = await import("../src/modules/gutters/draw/fracSlot");
     expect(eighthKey(0)).toBe("0");
     expect(eighthKey(10)).toBe("5"); // ⅝
     expect(eighthKey(14)).toBe("7");

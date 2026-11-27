@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { helpBack, helpClosed, helpOpen, pageSwitch, sheetHeader } from "../src/ui/sheetHelp";
-import { fadeMask, SCROLL_FADE } from "../src/ui/scrollFadeLogic";
+import { fadeMask, SCROLL_FADE, SCROLL_FADE_X } from "../src/ui/scrollFadeLogic";
 
 const help = { body: "what it is" };
 
@@ -51,6 +51,13 @@ describe("sheet help page", () => {
     expect(m.size).toBe("100% 100%, 16px 100%");
     expect(m.position).toBe("0 0, 100% 0");
     expect(fadeMask(false, true, 0)!.image).toMatch(/#000 0px/);
+  });
+  it("a row that scrolls sideways fades at its left / right by tab.fadeW, never keeps a scroll bar strip (#3080, design-review #3066 №11)", () => {
+    expect(fadeMask(false, false, 0, true)).toBeNull();
+    const m = fadeMask(true, true, 16, true)!;
+    expect(m.image).toBe(`linear-gradient(to right, transparent 0, #000 ${SCROLL_FADE_X}px, #000 calc(100% - ${SCROLL_FADE_X}px), transparent 100%)`);
+    expect(m.size).toBe("100% 100%");
+    expect(fadeMask(false, true, 0, true)!.image).toMatch(/^linear-gradient\(to right, transparent 0, #000 0px/);
   });
   it("the fade keeps only its two flags as state: a scroll frame that changes nothing renders nothing", () => {
     const src = readFileSync(join(__dirname, "../src/ui/scrollFade.tsx"), "utf8");

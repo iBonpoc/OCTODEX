@@ -49,7 +49,7 @@ export default function PropertyScreen() {
   const { id, s: sec } = useLocalSearchParams<{ id: string; s?: string }>();
   const store = useStore();
   const { db, role } = store;
-  const { t, money, day, time } = useI18n();
+  const { t, tn, money, day, time } = useI18n();
   const [sheet, setSheet] = useState<"edit" | "access" | null>(null);
   const [inspect, setInspect] = useState(false);
   const toast = useToast();
@@ -107,7 +107,7 @@ export default function PropertyScreen() {
             {p.kind ? <StatusChip status="neutral" label={t(`prop.kind.${p.kind}` as DictKey)} soft /> : null}
             {!p.label && !p.kind ? (
               <T v="caption" tone="mut" numberOfLines={1}>
-                {p.stories ? t("proto.client.stories", { n: p.stories }) : t("prop.card")}
+                {p.stories ? tn("ov3068.stories", p.stories, { n: p.stories }) : t("prop.card")}
               </T>
             ) : null}
           </RowView>

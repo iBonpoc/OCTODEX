@@ -8,19 +8,19 @@ import { uid } from "@/features/estimateDoc";
 import { useMemo, useState } from "react";
 import { Linking, View } from "react-native";
 import { router } from "expo-router";
-import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { LEAD_FUNNEL, LEAD_INTERESTS, type CallOutcome, type Lead, type LeadInterest } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { Labeled } from "@/features/fields";
+import { ActionRow } from "@/ui/multiValueField";
 import { isClosedLead, isOpenLead, isSnoozed, leadStatusView, missingForEstimate, type MissingItem } from "@/features/leads";
 import { leadSettingsOf } from "@/features/leadSettings";
 import { bookStart, dayAtHour, snoozeUntil, SNOOZE_MONTHS, BOOK_DAYS } from "@/features/lead/bookRules";
 import { Button, ChoiceChips, IconButton, Stepper, Steps, TextField } from "@/ui/controls";
 import { ButtonPair } from "@/ui/pairs";
-import { T } from "@/ui/primitives";
+import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, RowView } from "@/ui/surfaces";
+import { Card, ListRow, RowView } from "@/ui/surfaces";
 import { smsWithBody } from "./LeadParts";
 
 const useQ = () => {
@@ -66,7 +66,7 @@ export function NextStepSheet({
   l, visible, onClose, onBook, onEstimate, onCloseLead, office,
 }: { l: Lead; visible: boolean; onClose: () => void; onBook: () => void; onEstimate: () => void; onCloseLead: () => void; office: boolean }) {
   const store = useStore();
-  const { t } = useI18n();
+  const { t, day, time } = useI18n();
   const toast = useToast();
   const q = useQ();
   const remindIn = (days: number) => {
@@ -84,11 +84,14 @@ export function NextStepSheet({
         />
       ) : null}
       <Labeled label={t("lead.next.remind")}>
-        <RowView style={{ flexWrap: "wrap" }}>
+        {/* DS §7.5: the three terms are rows of one choice, not a row of buttons */}
+        <View testID="lead-next-remind">
           {[1, 3, 7].map((n) => (
-            <Button key={n} label={t("lead.next.inDays", { n })} variant="secondary" size="sm" onPress={() => remindIn(n)} />
+            <View key={n} testID={`lead-next-remind-${n}`}>
+              <ListRow title={t("lead.next.inDays", { n })} left={<Icon name="clock" />} right={<T v="caption" tone="mut">{`${day(dayAtHour(n, 9))} · ${time(dayAtHour(n, 9))}`}</T>} chevron={false} onPress={() => remindIn(n)} />
+            </View>
           ))}
-        </RowView>
+        </View>
       </Labeled>
       <RowView style={{ flexWrap: "wrap" }}>
         <Button label={t("lead.next.close")} icon="close" variant="ghost" size="sm" onPress={() => { onClose(); onCloseLead(); }} />
@@ -165,14 +168,16 @@ export function StatusSheet({
       ) : null}
       <T v="caption" tone="mut">{t("lead.status.auto")}</T>
       {isOpenLead(l) ? (
-        <View style={{ gap: space[2] }}>
-          {onMakeClient ? <Button label={t("lead.makeClient")} icon="check" variant="secondary" full onPress={() => { onClose(); onMakeClient(); }} /> : null}
+        // DS §7.5: the rare status actions are rows of the sheet's menu (rule 12), not a column of buttons
+        <View testID="lead-status-actions">
+          {onMakeClient ? <ListRow title={t("lead.makeClient")} left={<Icon name="check" />} onPress={() => { onClose(); onMakeClient(); }} /> : null}
           {isSnoozed(l) ? (
-            <Button label={t("lead.unsnooze")} icon="refresh" variant="secondary" full onPress={() => { toast.show(q(t("lead.unsnoozed")), store.unsnoozeLead(l.id)); onClose(); }} />
+            <ListRow title={t("lead.unsnooze")} left={<Icon name="refresh" />} chevron={false} onPress={() => { toast.show(q(t("lead.unsnoozed")), store.unsnoozeLead(l.id)); onClose(); }} />
           ) : (
-            <Button label={t("lead.snooze.title")} icon="clock" variant="secondary" full onPress={() => { onClose(); onSnooze(); }} />
+            <ListRow title={t("lead.snooze.title")} left={<Icon name="clock" />} onPress={() => { onClose(); onSnooze(); }} />
           )}
-          <Button label={t("lead.closeTitle")} icon="close" variant="ghost" full onPress={() => { onClose(); onCloseLead(); }} />
+          {/* the dangerous one — last, a red word (DS §7.5), as iOS Contacts' red row */}
+          <ActionRow testID="lead-status-close" label={t("lead.closeTitle")} tone="bad" onPress={() => { onClose(); onCloseLead(); }} />
         </View>
       ) : isClosedLead(l) ? (
         <Button label={t("lead.reopen")} icon="refresh" full onPress={() => { toast.show(q(t("lead.reopened", { name: l.name })), store.reopenLead(l.id)); onClose(); }} />
@@ -234,11 +239,14 @@ export function MissingBlock({ l, onAdd }: { l: Lead; onAdd: (what: "contact" | 
   return (
     <Card status="warn">
       <T v="heading">{t("lead.missing.title")}</T>
-      <RowView style={{ flexWrap: "wrap" }}>
+      {/* DS §7.5, §9 А14а: each missing item is an action row «⊕ …» (iOS Contacts «add phone») that opens its sheet, not a row of buttons */}
+      <View testID="lead-missing">
         {missing.map((m) => (
-          <Button key={m} label={`+ ${t(MISSING_KEYS[m])}`} size="sm" variant="secondary" onPress={() => onAdd(sheetOf(m))} />
+          <View key={m} testID={`lead-missing-${m}`}>
+            <ActionRow label={t(MISSING_KEYS[m])} icon="plusCircle" onPress={() => onAdd(sheetOf(m))} />
+          </View>
         ))}
-      </RowView>
+      </View>
     </Card>
   );
 }

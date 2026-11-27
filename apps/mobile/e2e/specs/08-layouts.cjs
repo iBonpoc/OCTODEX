@@ -1,7 +1,7 @@
 /** Every screen (all routes in src/app) at 390 / 820 / 1280 in dark and light: no horizontal overflow; screenshots in e2e/out. */
 const SCREENS = [
   "/today", "/figures/leads?period=month", "/triage", "/leads", "/visits", "/plan", "/messages", "/messages/c-c1", "/calls", "/tasks", "/clients", "/more", "/notifications", "/search?q=mitchell",
-  "/lead/l1", "/lead/new", "/client/c1", "/property/p1", "/client/edit?id=c1", "/client/edit", "/client/import", "/client/imports",
+  "/lead/l1", "/lead/new", "/client/c1", "/client/files/c1", "/property/p1", "/client/edit?id=c1", "/client/edit", "/client/import", "/client/imports",
   "/module/gutters/draw", "/module/gutters/list", "/module/gutters/start?customer=c1", "/module/gutters/view", "/module/gutters/settings", "/module/gutters/prices", "/estimate/new?id=e6", "/estimate/e5", "/estimate/signature", "/estimates", "/p/demo0handyman0estimate0000000001", "/f/f00000000000000000000000000000000",
   "/jobs", "/job/j1", "/job/new", "/job/schedule?jobId=j1", "/visit/v1",
   "/money", "/finance", "/invoice", "/invoice?f=paid", "/payments", "/reports", "/reports/owed", "/reports/collected?p=all", "/reports/sales", "/reports/sources?p=all", "/reports/categories?p=all", "/invoice/i5", "/receipt/pay5", "/expense/new",
