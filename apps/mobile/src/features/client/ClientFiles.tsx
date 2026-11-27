@@ -77,7 +77,7 @@ export function ClientFiles({ c }: { c: Customer }) {
             onPress={() => router.push(`/visit/${g.visit.id}`)}
           />
           <View style={{ padding: space[3] }}>
-            <PhotoStrip grid photos={g.photos} />
+            <PhotoStrip grid photos={g.photos} caption={[g.job?.title, day(g.visit.start), memberName(db, g.visit.techId, t)].filter(Boolean).join(" · ")} />
           </View>
         </ListGroup>
       ))}
