@@ -674,7 +674,6 @@ describe("design system: no column of buttons (DS §7.5, #3065)", () => {
     "app/estimate/new.tsx": 1, // stays: founder 23.11 (audit MAP wave 1 п.6, picture n09) — the four ways to add, two pairs over the lines
     "features/showcase/Buttons.tsx": 2, // stays: the «wrong» example of §7.5 on purpose; the two ButtonPair samples (row | column) side by side
     "features/showcase/ProtoV2.tsx": 1,
-    "modules/ModulePlaces.tsx": 2,
     "ui/confirmDialog.tsx": 2, // stays: a dialog may have three answers in a column (HIG Alerts; «Сохранить изменения?», DS §7.5)
     "ui/dateField.tsx": 1, // the quick days «Сегодня · Завтра · Без даты» are a choice, not actions — goes when they become ChoiceChips
   };
