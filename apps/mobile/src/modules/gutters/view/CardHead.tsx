@@ -29,6 +29,78 @@ type Anchor = { x: number; y: number; w: number; h: number };
 type MoreKey = "dup" | "crew" | "delete";
 type WhoKey = "relink" | "unlink";
 
+/**
+ * What the measurement's card can do (#2995: one place for the card's own head on the 1280 panel and the object screen's «⋯»): relink /
+ * unlink, the crew's documents, duplicate, delete (a signed estimate on it — the item is there, the press says why not), and the sheets
+ * these open. The module not active (S0b): only the crew's documents.
+ */
+export function useMeasurementActions(m: MeasurementRow, onGone: () => void, onCrewDocs?: () => void) {
+  const store = useStore();
+  const deleter = { role: store.role, me: store.db.me };
+  const { t } = useI18n();
+  const toast = useToast();
+  const db = store.db;
+  const canSave = moduleActive(db.company, KEY);
+  const linked = !!m.leadId || !!m.propertyId;
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [askDelete, setAskDelete] = useState<ReturnType<typeof estimatesOn> | null>(null);
+  /** one deletion at a time: a second press writes nothing and never puts an empty «Отменить» over the first one's (rule 5) */
+  const deleting = useRef(false);
+  const doDelete = () => {
+    setAskDelete(null);
+    if (deleting.current) return;
+    // asked again at the press: signed meanwhile (the client on /p/) or not this person's to change — never deleted
+    const block = deleteBlock(store.db, m.id, deleter);
+    if (block) return toast.show(t(block === "signed" ? "mod.gutters.draw.deleteSigned" : "mod.gutters.del.notYours"));
+    deleting.current = true;
+    const undo = removeMeasurementDetached(store as unknown as ModuleEstimateStore, m.id, deleter);
+    if (!undo) {
+      deleting.current = false;
+      return toast.show(t("mod.gutters.est.off"));
+    }
+    onGone();
+    toast.show(t("mod.gutters.draw.mDeleted"), undo);
+  };
+  const onAction = (k: string) => {
+    if (k === "relink") return setLinkOpen(true);
+    if (k === "unlink") return toast.show(t("mod.gutters.link.unlinked"), relink(store, m.id, null) ?? undefined);
+    if (k === "crew") return onCrewDocs?.();
+    if (k === "dup") {
+      const r = duplicateMeasurement(store, m.id, uid);
+      if (!r) return toast.show(t("mod.gutters.est.off"));
+      toast.show(t("mod.gutters.card.copied"), r.undo);
+      router.push(`${moduleHref("gutters", "view")}?m=${encodeURIComponent(r.id)}` as Href);
+      return;
+    }
+    if (k !== "delete") return;
+    const block = deleteBlock(db, m.id, deleter);
+    if (block) return toast.show(t(block === "signed" ? "mod.gutters.draw.deleteSigned" : "mod.gutters.del.notYours"));
+    // an open estimate stands on it: asked first (#2013), the question holds what it said while it goes out; none — at once
+    const on = estimatesOn(db, m.id);
+    if (on.drafts.length || on.sent.length) return setAskDelete(on);
+    doDelete();
+  };
+  const whoItems = canSave && linked ? [
+    { key: "relink", label: t("mod.gutters.link.relink"), testID: "view-more-relink" },
+    { key: "unlink", label: t("mod.gutters.link.unlink"), testID: "view-more-unlink" },
+  ] : [];
+  const moreItems = [
+    ...(onCrewDocs ? [{ key: "crew", label: t("mod.gutters.card.crewDocs"), testID: "view-more-crew" }] : []),
+    // the module not active (S0b): the card only looks — the crew's documents, no copy, no delete
+    ...(canSave ? [
+      { key: "dup", label: t("mod.gutters.card.duplicate") },
+      { key: "delete", label: t("mod.gutters.draw.mDelete"), destructive: true, testID: "view-more-delete" },
+    ] : []),
+  ];
+  const sheets = (
+    <>
+      <LinkSheet visible={linkOpen} onClose={() => setLinkOpen(false)} measurementId={m.id} />
+      <DeleteMeasurementSheet visible={!!askDelete} on={askDelete ?? NO_ESTIMATES} onDelete={doDelete} onClose={() => setAskDelete(null)} />
+    </>
+  );
+  return { canSave, linked, whoItems, moreItems, onAction, sheets, openLink: () => setLinkOpen(true) };
+}
+
 export function CardHead({ m, drawn, onGone, onCrewDocs }: { m: MeasurementRow; drawn: boolean; /** the card's measurement was deleted: leave it */ onGone: () => void; /** «Документы бригады» (#2989): the cut and the shop drawings, off the card */ onCrewDocs?: () => void }) {
   const store = useStore();
   const deleter = { role: store.role, me: store.db.me };

@@ -84,8 +84,25 @@ async function pressWhenStill(btn) {
 }
 
 // «Править чертёж» on the review → back on the canvas
+// «Править чертёж» (#2995): on the measurement's own screen it is in «⋯» (the object frame); the 1280 panel of «Замеры» keeps its button
+async function editDrawing(p) {
+  const btn = p.getByTestId("view-edit").locator("visible=true").first();
+  if (await btn.count()) return pressWhenStill(btn.getByRole("button"));
+  await pressWhenStill(p.getByTestId("view-more").locator("visible=true").first().getByRole("button"));
+  await p.getByRole("menuitem", { name: "Править чертёж", exact: true }).click();
+}
+/** «Править чертёж» is offered (its button, or the item of «⋯» — the menu is opened and closed again) */
+async function canEditDrawing(p) {
+  if (await p.getByTestId("view-edit").locator("visible=true").count()) return true;
+  await pressWhenStill(p.getByTestId("view-more").locator("visible=true").first().getByRole("button"));
+  const item = p.getByRole("menuitem", { name: "Править чертёж", exact: true });
+  const has = await item.waitFor({ timeout: 3000 }).then(() => true, () => false);
+  await pressEscUntilClosed(p);
+  return has;
+}
+
 async function backToCanvas(p) {
-  await pressWhenStill(p.getByTestId("view-edit").locator("visible=true").first().getByRole("button"));
+  await editDrawing(p);
   await p.getByTestId("draw-surface").locator("visible=true").first().waitFor({ timeout: 8000 });
   await p.getByTestId("view-screen").locator("visible=true").first().waitFor({ state: "detached", timeout: 8000 });
 }
@@ -348,4 +365,4 @@ async function docsFor(p, id) {
   }
 }
 
-module.exports = { docsFor, winSave, winClose, pressUndo, pickDsKind, pickAttr, attrShown, attrKeys, attrChosen, attrClose, attrShut, openAttrMore, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
+module.exports = { editDrawing, canEditDrawing, docsFor, winSave, winClose, pressUndo, pickDsKind, pickAttr, attrShown, attrKeys, attrChosen, attrClose, attrShut, openAttrMore, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };

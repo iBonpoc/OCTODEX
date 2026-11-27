@@ -35,6 +35,7 @@ import { gutterData, KEY, measurementOf } from "../data";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, ofMeasurement, otherEstimates, pageIdOf } from "../estimateLink";
 import { estimateStatusView } from "@/features/estimateStatus";
 import { CardHead } from "./CardHead";
+import { MeasurementObject } from "./MeasurementObject";
 import { MeasurePhotos } from "../draw/Photos";
 import { toMeasurement } from "../geometry";
 import { dsLine, listPreview, PART_WORDS, partName, partQty, partView, sizeText } from "../prices";
@@ -63,6 +64,8 @@ export default function ViewScreen() {
   const lead = m?.leadId ? store.db.leads.find((l) => l.id === m.leadId) : undefined;
   const addr = m?.propertyId ? store.db.properties.find((p) => p.id === m.propertyId) : undefined;
   const back = () => (router.canGoBack() ? router.back() : router.replace(moduleHref("gutters", "list") as Href));
+  // #2995 (the open cards' one frame, ObjectScreen): a found measurement is an object screen of its own; «not found» stays a plain screen
+  if (m) return <MeasurementView key={mid} mid={mid} estimate={params.estimate === "1"} from={params.from} onGone={back} route={{ back }} />;
   return (
     <Screen title={t("mod.gutters.view.title")} subtitle={lead?.name ?? addr?.address} back={back} help={t("mod.gutters.view.help")}>
       <MeasurementView key={mid} mid={mid} estimate={params.estimate === "1"} from={params.from} onGone={back} />
@@ -74,11 +77,13 @@ export default function ViewScreen() {
  * The body of «Просмотр замера»: the screen above and the 1280 panel of «Замеры». `estimate` — «Смета из замера» /
  * «Обновить из замера» came with estimate=1: asked once (a press writes); `from` — "draw": «Править чертёж» goes back to that canvas.
  */
-export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, panel }: { mid: string; estimate?: boolean; from?: string; /** the measurement was deleted from its card */ onGone: () => void; /** in the 1280 panel beside «Замеры»: one column */ panel?: boolean }) {
+export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, panel, route }: { mid: string; estimate?: boolean; from?: string; /** the measurement was deleted from its card */ onGone: () => void; /** in the 1280 panel beside «Замеры»: one column */ panel?: boolean; /** its own screen (#2995): the object frame — the name, the row of actions, the one step, «⋯» */ route?: { back: () => void } }) {
   const store = useStore();
   const { device } = useDevice();
   const { c } = useTheme();
   const cols = device !== "phone" && !panel;
+  /** its own screen (#2995): the head, the step and the actions are the object frame's, not the body's */
+  const obj = !!route;
   const { t, money } = useI18n();
   const toast = useToast();
   const g = gutterData(store.db);
@@ -256,7 +261,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     (how === "open" ? openShopPdf : saveShopPdf)(shopHtml(sheets, shopFileName(tt, kind, dw.who), paper), shopFileName(tt, kind, dw.who), shopPagePt(sheets, paper)).catch(() => toast.show(t("err.pdfSave")));
   };
 
-  return (
+  const content = (
     <>
       <Menu
         visible={!!shopAt}
@@ -270,7 +275,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
         onClose={() => setShopAt(null)}
       />
       <View testID="view-screen" style={{ gap: space[4] }}>
-        <CardHead m={m} drawn={drawing.runs.length > 0} onGone={onGone} onCrewDocs={drawing.runs.length ? () => setCrewDocs(true) : undefined} />
+        {obj ? null : <CardHead m={m} drawn={drawing.runs.length > 0} onGone={onGone} onCrewDocs={drawing.runs.length ? () => setCrewDocs(true) : undefined} />}
         {/* 820 / 1280 on its own page: two columns — the sheet and the action on the left, the documents, the photos and
             the rest on the right (П25.3 Б); a phone and the 1280 panel — one column, the same order */}
         <View style={cols ? { flexDirection: "row", alignItems: "flex-start", gap: space[4] } : { gap: space[4] }}>
@@ -295,7 +300,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
 
         {/* the main action by the state (#699) and «Править чертёж» */}
         <View style={{ gap: space[2] }}>
-          {money$ && action.kind === "needLead" ? (
+          {!obj && money$ && action.kind === "needLead" ? (
             <View testID="view-action-link"><Button label={t("mod.gutters.view.link")} icon="user" onPress={() => setLinkOpen(true)} /></View>
           ) : null}
           {/* what comes next once it is linked (#2990): whose it is now and where it shows, an estimate they already have without this
@@ -308,7 +313,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
               ) : null}
             </View>
           ) : null}
-          {money$ && (action.kind === "make" || action.kind === "update" || action.kind === "open") ? (
+          {!obj && money$ && (action.kind === "make" || action.kind === "update" || action.kind === "open") ? (
             <View testID={`view-action-${action.kind === "open" && action.signed ? "signed" : action.kind}`} style={{ gap: space[2] }}>
               <Button
                 label={t(action.kind === "make" ? "mod.gutters.est.make" : action.kind === "update" ? "mod.gutters.est.update" : "mod.gutters.est.open")}
@@ -320,11 +325,14 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
               ) : null}
             </View>
           ) : null}
-          {money$ && other && action.kind === "make" ? (
+          {obj && action.kind === "update" ? (
+            <View testID="view-stale"><T v="caption" tone="mut">{t("mod.gutters.view.stale")}</T></View>
+          ) : null}
+          {!obj && money$ && other && action.kind === "make" ? (
             <View testID="view-open-other"><Button label={t("mod.gutters.card.openEst", { n: other.number ?? "" })} variant="secondary" onPress={() => router.push(`/estimate/${other.id}` as Href)} /></View>
           ) : null}
-          <View testID="view-edit"><Button label={t("mod.gutters.view.edit")} icon="pencil" variant="secondary" onPress={edit} /></View>
-          {linkedTo ? (
+          {obj ? null : <View testID="view-edit"><Button label={t("mod.gutters.view.edit")} icon="pencil" variant="secondary" onPress={edit} /></View>}
+          {!obj && linkedTo ? (
             <View testID="view-open-who" style={{ alignItems: "flex-start" }}>
               <Button label={t(linkedTo.kind === "lead" ? "mod.gutters.card.openLead" : "mod.gutters.card.openClient")} icon="chevronRight" variant="ghost" onPress={() => router.push(linkedTo.href as Href)} />
             </View>
@@ -491,6 +499,19 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
         </View>
       </Sheet>
     </>
+  );
+  if (!obj || !route) return content;
+  // #2995: the one step by the state (#699) — under the name and its row of actions; a second one («Открыть EST-…») goes into «⋯»
+  const main = !money$ ? undefined
+    : action.kind === "needLead" ? { label: t("mod.gutters.view.link"), onPress: () => setLinkOpen(true), testID: "view-action-link" }
+    : action.kind === "make" || action.kind === "update" || action.kind === "open"
+      ? { label: t(action.kind === "make" ? "mod.gutters.est.make" : action.kind === "update" ? "mod.gutters.est.update" : "mod.gutters.est.open"), onPress: doEstimate, testID: `view-action-${action.kind === "open" && action.signed ? "signed" : action.kind}` }
+      : undefined;
+  const second = money$ && other && action.kind === "make" ? { label: t("mod.gutters.card.openEst", { n: other.number ?? "" }), onPress: () => router.push(`/estimate/${other.id}` as Href), testID: "view-open-other" } : undefined;
+  return (
+    <MeasurementObject m={m} drawn={drawing.runs.length > 0} back={route.back} onGone={onGone} onEdit={edit} onCrewDocs={drawing.runs.length ? () => setCrewDocs(true) : undefined} main={main} second={second}>
+      {content}
+    </MeasurementObject>
   );
 }
 

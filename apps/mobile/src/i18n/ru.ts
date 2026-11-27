@@ -3698,6 +3698,8 @@ export const ru = {
   "mod.gutters.card.openLead": "Открыть лид",
   "mod.gutters.card.openClient": "Открыть клиента",
   "mod.gutters.card.noEstHere": "Без сметы из замера",
+  "mod.gutters.card.kindLead": "Лид",
+  "mod.gutters.card.kindClient": "Клиент",
   "mod.gutters.card.docs": "Документы",
   "mod.gutters.card.docClient": "Для клиента",
   "mod.gutters.card.docClientEst": "Смета {n} и чертёж · {lang}",
