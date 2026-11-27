@@ -1080,7 +1080,7 @@ function DrawCanvas() {
   const nd = newDraft ?? newDef;
   const newOwn = newSheet === "line" ? nd.run : nd.ds;
   const newEdited = newDirty(newDraft, newDef);
-  /** a properties window is open (the sheet on 390, the column's window on 820/1280): its «Сохранить» is the screen's one accent */
+  /** a properties window is open (the sheet on 390, the column's window on 820/1280): «Готово» steps aside for its «Закрыть | Сохранить» */
   const winShown = !!newSheet || (!!attrs && (wide || sheet));
   const openNew = (tl: Tool) => {
     setSelected(null);
@@ -1619,10 +1619,11 @@ function DrawCanvas() {
               <IconButton icon="more" label={t("mod.gutters.draw.whoMenu")} onPress={() => whoRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setWhoAt({ x, y, w, h }))} />
             </View>
           ) : null}
-          {inStore ? (
+          {/* hidden while a properties window is open (#3090 п.3, review #3007/#3090): the window has its own way out — «Закрыть | Сохранить»;
+              «Готово» beside them was a second accent and a third exit that kept the window's draft without asking */}
+          {inStore && !winShown ? (
             // the header's buttons are one height (DS §19а: «высота кнопки 36»; founder 16.11, #1752: «Готово другого размера»)
-            // while a window is open its «Сохранить» is the one accent (rule 2, DS §7.3): «Готово» steps back to secondary (#3090 п.3, review #3007)
-            <View testID="draw-done"><Button label={t("mod.gutters.view.done")} variant={winShown ? "secondary" : "primary"} size="phone" onPress={() => void done()} /></View>
+            <View testID="draw-done"><Button label={t("mod.gutters.view.done")} size="phone" onPress={() => void done()} /></View>
           ) : null}
         </RowView>
         {canSave ? null : (

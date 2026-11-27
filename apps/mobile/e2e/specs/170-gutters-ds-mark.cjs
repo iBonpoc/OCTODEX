@@ -81,10 +81,12 @@ exports.run = async (h) => {
   h.expect(cuts.length >= 2 && !cuts.some(Boolean), "a count row's value is not cut («75°», «2″» whole)");
   await waitFor(async () => JSON.stringify((await live("downspout"))[0]?.attrs?.offsets) === JSON.stringify([{ lengthIn: 2, qty: 1, style: "B" }]), "the store: one 2″ offset of style B");
   // v43 PR D: the downspout's own storey — the pipe's length follows it; written only when it differs from the gutter's
-  await waitFor(async () => /\b10 ft\b/.test(await tid("attr-ds-length-line").innerText()), "the line under the row: 10 ft on the gutter's storey");
+  // the height by the storey is said in the empty «Своя высота» field (#3090: no line of its own under it)
+  const auto = () => tid("attr-ds-length").locator("input").getAttribute("placeholder");
+  await waitFor(async () => /\b10$/.test((await auto()) || ""), "the empty own height: 10 by the gutter's storey");
   await pickAttr(p, "attr-ds-story", "2");
   await waitFor(async () => (await live("downspout"))[0]?.attrs?.story === 2, "the store: the downspout's own storey 2");
-  await waitFor(async () => /\b20 ft\b/.test(await tid("attr-ds-length-line").innerText()), "the line: 20 ft (by the storeys, no sticks)");
+  await waitFor(async () => /\b20$/.test((await auto()) || ""), "the empty own height: 20 (by the storeys, no sticks)");
   await pickAttr(p, "attr-ds-story", "1");
   await waitFor(async () => (await live("downspout"))[0]?.attrs?.story === undefined, "the store: back to the gutter's storey — no key written");
   await h.shot("ds");

@@ -99,8 +99,10 @@ exports.run = async (h) => {
   await own.fill("20");
   await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.heightIn === 240, "20 ft typed: the downspout's own height is 240″");
   await own.fill("500");
-  await own.blur();
+  // «Сохранить» with a bad value does not close the window silently (#3090, crm-review): it stays and says why
+  await tid("attr-win-save").getByRole("button").click();
   await tid("attr-ds-length-bad").waitFor({ timeout: 3000 });
+  h.expect((await panel().count()) === 1, "500 ft and «Сохранить»: the window stays");
   h.expect((await els()).find((e) => e.kind === "downspout")?.attrs.heightIn === 240, "500 ft: said, not written");
   await own.fill("");
   await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.heightIn === undefined, "emptied: by the storey, no own height");
