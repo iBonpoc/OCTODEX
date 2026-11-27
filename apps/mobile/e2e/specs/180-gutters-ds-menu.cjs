@@ -75,6 +75,8 @@ exports.run = async (h) => {
   h.expect((await tid("attr-finish").count()) === 0, "no painted / bare pair");
 
   // a size of its own (founder 27.11, #2981): «Свой» last in the size field, whole inches typed under it; a bad one is said, not written
+  // (the store is written a moment after the downspout is put: read it there first, or «not written» reads an empty store — CHECKS §9)
+  await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.size === "2x3", "the downspout is in the store, 2x3");
   await pickIn("attr-ds-size", "@own");
   const ownSize = tid("attr-ds-size-own").locator("input");
   await ownSize.fill("3.5x5");
