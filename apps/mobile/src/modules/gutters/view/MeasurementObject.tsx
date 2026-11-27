@@ -13,7 +13,7 @@ import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { cleanPhone, smsHref } from "@/features/contactLinks";
-import { estimateStatusView } from "@/features/estimateStatus";
+import { estimateView } from "@/features/estimateStatus";
 import { StatusChip } from "@/ui/controls";
 import type { IconRowItem } from "@/ui/iconRow";
 import { mapsUrl, type OS } from "@/ui/listCardLayout";
@@ -50,7 +50,7 @@ export function MeasurementObject<S extends string>({ m, drawn, back, onGone, on
   // #3028 (design-reviewer): the header says what the screen is — «Замер · лид», «Замер · клиент», a draft «Замер»
   const kindWord = client ? t("mod.gutters.card.kindMClient") : lead ? t("mod.gutters.card.kindMLead") : t("mod.gutters.card.kindM");
   const v = measurementState(db, m, drawn);
-  const est = v.estimate ? estimateStatusView(v.estimate.status) : null;
+  const est = v.estimate ? estimateView(v.estimate) : null;
   const status =
     v.state === "signed" ? { name: "ok" as const, label: t("mod.gutters.list.s.signed") }
     : est ? { name: est.s, label: t(est.l), ...(est.d ? { draft: true } : {}) }
