@@ -27,6 +27,12 @@ exports.run = async (h) => {
   await tid("module-gutters-enable").getByRole("button").click();
   await tid("module-gutters-status").filter({ hasText: /^Без срока/ }).waitFor({ timeout: 5000 });
 
+  // the demo's test client has a measurement since #3024 (ModuleDef.demo): this spec starts from none
+  await h.go("/today");
+  const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));
+  raw.db.moduleData = { ...raw.db.moduleData, gutters: { ...(raw.db.moduleData?.gutters || {}), measurements: [], elements: [] } };
+  await h.seed("octo.db.v5", raw);
+
   // an empty list: the Empty state with its own main button
   await h.go("/module/gutters/list");
   await tid("measurements-empty").waitFor({ timeout: 8000 });

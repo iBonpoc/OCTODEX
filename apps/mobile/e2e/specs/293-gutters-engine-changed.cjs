@@ -80,7 +80,8 @@ exports.run = async (h) => {
   // the measurements' list: the card says so too
   await h.go("/module/gutters/list");
   await tid(`measurement-${mid}`).waitFor({ timeout: 8000 });
-  h.expect(/Расчёт изменился/.test(await tid(`measurement-${mid}`).innerText()), "the card in the list of measurements says so");
+  // #3033: the state is the icon in line 1 of the row, its word the screen reader's label
+  h.expect(/Расчёт изменился/.test((await tid(`measurement-${mid}`).getByTestId("row-status-icon").first().getAttribute("aria-label")) || ""), "the card in the list of measurements says so");
 
   // «Обновить из замера»: the same estimate, the current version, no words
   await h.go(`/estimate/${eid}`);
