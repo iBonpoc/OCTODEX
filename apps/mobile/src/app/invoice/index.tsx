@@ -107,7 +107,7 @@ export default function Invoices() {
       key: i.id,
       testID: `invoice-row-${i.id}`,
       title: c?.name ?? "—",
-      titleNote: i.number || undefined,
+      refNo: i.number || undefined,
       subtitle: prop ? shortAddress(prop.address, prop.city) : undefined,
       extra: sub || undefined,
       figureRight: true,
