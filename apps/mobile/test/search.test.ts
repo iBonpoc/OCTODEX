@@ -41,7 +41,12 @@ describe("unit:search — numbers", () => {
   });
   it("the technician finds by number only the jobs of his visits", () => {
     const mine = new Set(db.visits.filter((v) => (v.assigneeIds ?? []).includes(db.me) || v.techId === db.me).map((v) => v.jobId));
-    for (const j of db.jobs.filter((x) => x.number)) expect(searchAll(db, j.number!, "tech").jobs.length, j.number).toBe(mine.has(j.id) ? 1 : 0);
+    // a number finds its own job when it is his, and never a job that is not his (JOB-0001 also finds his JOB-0010: the same digits first, #3024)
+    for (const j of db.jobs.filter((x) => x.number)) {
+      const found = searchAll(db, j.number!, "tech").jobs.map((h) => h.id);
+      expect(found.includes(j.id), j.number).toBe(mine.has(j.id));
+      expect(found.every((id) => mine.has(id)), j.number).toBe(true);
+    }
   });
   it("bare digits search every prefix at once", () => {
     const r = searchAll(db, "0103", "director");
