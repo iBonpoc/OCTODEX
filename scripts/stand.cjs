@@ -25,9 +25,14 @@ const ALIAS = "stand";
 const STAND_ISSUE = 3123; // «Стенд — ссылка и состав», pinned; its body is written by stand.yml
 const MAX_BREAKERS = 3; // the build job drops at most this many PRs; then the stand stays as it was
 const WORKFLOWS_RE = /^\.github\/workflows\//;
-/** The build of the stand in its worktree (as preview.yml, plus typecheck); STAND_BUILD_CMD replaces it only in the smoke test. */
+/**
+ * The build of the stand in its worktree (as preview.yml, plus typecheck), in two containers (security review 2 of #3125):
+ * the install with the network, the build without it (--network none, Expo offline). STAND_INSTALL_CMD / STAND_BUILD_CMD
+ * replace them only in the smoke test.
+ */
+const INSTALL_CMD = `set -e
+npm ci --no-audit --no-fund`;
 const BUILD_CMD = `set -e
-npm ci --no-audit --no-fund
 npm run typecheck
 cd apps/mobile
 node scripts/setBuild.cjs "" --message "$SUBJECT"
@@ -239,8 +244,12 @@ function gitMerger(cwd, date) {
 // Pinned by digest (rule 17, checked 27.11.2026): the Docker Official Image library/node (Node.js Docker team), tag 22-bookworm,
 // Node 22.23.5, built 24.11.2026, the multi-platform index. A new digest only deliberately, after the same check.
 const BUILD_IMAGE = "node:22-bookworm@sha256:7c400d78797d8cbe3f6bb21d2227b86af4cd24b0014cc9f62ff989cc16de988e";
-function buildArgv({ wt, cmd, subject, uid, gid }) {
-  return ["docker", ["run", "--rm", "--user", `${uid}:${gid}`, "-e", "HOME=/tmp", "-e", `SUBJECT=${subject}`,
+function buildArgv({ wt, cmd, subject, uid, gid, network = false }) {
+  return ["docker", ["run", "--rm", "--user", `${uid}:${gid}`,
+    // no capabilities, no setuid, bounded processes and memory; the network only for npm ci
+    "--cap-drop=ALL", "--security-opt=no-new-privileges", "--pids-limit=4096", "--memory=7g",
+    ...(network ? [] : ["--network", "none"]),
+    "-e", "HOME=/tmp", "-e", `SUBJECT=${subject}`, "-e", "EXPO_OFFLINE=1", "-e", "EXPO_NO_TELEMETRY=1", "-e", "CI=1",
     "-v", `${wt}:/w`, "-w", "/w", BUILD_IMAGE, "bash", "-c", cmd]];
 }
 
@@ -288,7 +297,7 @@ function copyDistSafe(src, dst) {
   copy("");
 }
 
-module.exports = { copyDistSafe, pushArgv, md, FIELD_MAX, BODY_MAX, BUILD_IMAGE, buildArgv, LABEL, BRANCH, ALIAS, STAND_ISSUE, MAX_BREAKERS, BUILD_CMD, dependencyOf, plan, mergeAll, findBreaker, whereLine, manifest, renderIssue, gitMerger };
+module.exports = { copyDistSafe, pushArgv, md, FIELD_MAX, BODY_MAX, BUILD_IMAGE, buildArgv, LABEL, BRANCH, ALIAS, STAND_ISSUE, MAX_BREAKERS, INSTALL_CMD, BUILD_CMD, dependencyOf, plan, mergeAll, findBreaker, whereLine, manifest, renderIssue, gitMerger };
 
 // ---------------------------------------------------------------------------------------------------------------------- CLI
 if (require.main === module) {
@@ -380,8 +389,11 @@ if (require.main === module) {
       git(["worktree", "add", "--detach", wt, sha]);
       const subject = git(["show", "-s", "--format=%s", m.main]);
       try {
-        const [c, a] = buildArgv({ wt, cmd: env.STAND_BUILD_CMD || BUILD_CMD, subject, uid: process.getuid(), gid: process.getgid() });
-        run(c, a, { stdio: "inherit", env: { PATH: process.env.PATH, HOME: process.env.HOME } });
+        const ids = { wt, subject, uid: process.getuid(), gid: process.getgid() };
+        for (const step of [{ cmd: env.STAND_INSTALL_CMD || INSTALL_CMD, network: true }, { cmd: env.STAND_BUILD_CMD || BUILD_CMD, network: false }]) {
+          const [c, a] = buildArgv({ ...ids, ...step });
+          run(c, a, { stdio: "inherit", env: { PATH: process.env.PATH, HOME: process.env.HOME } });
+        }
         return true;
       } catch { return false; }
     };

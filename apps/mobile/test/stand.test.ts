@@ -29,7 +29,8 @@ const S = require("../../../scripts/stand.cjs") as {
   pushArgv: (stand: string, token: string, env?: Record<string, string>) => [string[], Record<string, string>];
   md: (t: string) => string; FIELD_MAX: number; BODY_MAX: number;
   BUILD_IMAGE: string;
-  buildArgv: (a: { wt: string; cmd: string; subject: string; uid: number; gid: number }) => [string, string[]];
+  buildArgv: (a: { wt: string; cmd: string; subject: string; uid: number; gid: number; network?: boolean }) => [string, string[]];
+  INSTALL_CMD: string; BUILD_CMD: string;
   gitMerger: (cwd: string, date: string) => (base: string, p: Pr) => { ok: boolean; commit?: string; files?: string[] };
 };
 const pr = (number: number, more: Partial<Pr> = {}): Pr => ({ number, sha: String(number).padStart(40, "a"), title: `PR ${number}`, body: "", baseRef: "main", headRef: `b${number}`, files: [`f${number}.ts`], ...more });
@@ -311,17 +312,32 @@ describe("stand: the code of the PRs is built only inside a throw-away container
     expect(argv.filter((a) => a === "-v")).toHaveLength(1);
     expect(argv[argv.indexOf("--user") + 1]).toBe("1001:118");
     const vars = argv.flatMap((a, i) => (argv[i - 1] === "-e" ? [a.split("=")[0]] : []));
-    expect(vars).toEqual(["HOME", "SUBJECT"]);
+    expect(vars).toEqual(["HOME", "SUBJECT", "EXPO_OFFLINE", "EXPO_NO_TELEMETRY", "CI"]);
+    // review 2: no capabilities, no setuid, bounded; the build itself without the network
+    for (const f of ["--cap-drop=ALL", "--security-opt=no-new-privileges"]) expect(argv).toContain(f);
+    expect(argv.some((a) => /^--pids-limit=\d+$/.test(a))).toBe(true);
+    expect(argv.some((a) => /^--memory=\d+g$/.test(a))).toBe(true);
+    expect(argv[argv.indexOf("--network") + 1]).toBe("none");
     expect(argv).not.toContain("--privileged");
-    expect(argv.join(" ")).not.toMatch(/docker\.sock|--network[= ]host|--pid|ACTIONS_|GITHUB_TOKEN/);
+    expect(argv.join(" ")).not.toMatch(/docker\.sock|--network[= ]host|--pid[= ]|ACTIONS_|GITHUB_TOKEN/);
     expect(argv.slice(-4)).toEqual([S.BUILD_IMAGE, "bash", "-c", "npm ci"]);
     // the image is pinned by digest, never a moving tag alone (rule 17)
     expect(S.BUILD_IMAGE).toMatch(/^node:22-bookworm@sha256:[0-9a-f]{64}$/);
   });
+  it("two containers: npm ci with the network, typecheck and expo export without it", () => {
+    const [, install] = S.buildArgv({ wt: "/w", cmd: S.INSTALL_CMD, subject: "", uid: 1, gid: 1, network: true });
+    expect(install).not.toContain("--network");
+    expect(install).toContain("--cap-drop=ALL");
+    expect(S.INSTALL_CMD).toMatch(/npm ci/);
+    expect(S.BUILD_CMD).not.toMatch(/npm (ci|install)/);
+    expect(S.BUILD_CMD).toMatch(/npm run typecheck[\s\S]*npx expo export --platform web/);
+    const src = readFileSync(join(__dirname, "../../../scripts/stand.cjs"), "utf8");
+    expect(src).toContain("{ cmd: env.STAND_INSTALL_CMD || INSTALL_CMD, network: true }, { cmd: env.STAND_BUILD_CMD || BUILD_CMD, network: false }");
+  });
   it("the CLI builds every candidate through buildArgv and passes the container no environment of the runner", () => {
     const src = readFileSync(join(__dirname, "../../../scripts/stand.cjs"), "utf8");
     const build = src.slice(src.indexOf('} else if (cmd === "build")'), src.indexOf('} else if (cmd === "issue")'));
-    expect(build).toContain("buildArgv({ wt,");
+    expect(build).toContain("buildArgv({ ...ids, ...step })");
     expect(build).toContain("env: { PATH: process.env.PATH, HOME: process.env.HOME }");
     expect(build).not.toMatch(/run\("bash"/);
   });
