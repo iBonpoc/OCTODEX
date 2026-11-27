@@ -3802,7 +3802,6 @@ export const ru = {
   "mod.gutters.attr.elbowRowRound": "Elbow",
   "mod.gutters.attr.offsetRow": "Offset {s}",
   "mod.gutters.attr.offsetRowRound": "Offset",
-  "mod.gutters.attr.storyWin": "{n} эт.",
   "mod.gutters.attr.dsLenStory": "Высота {ft} ft",
   "mod.gutters.attr.dsLenRoof": "Труба на нижнюю крышу — своей высоты нет, задайте «Свою высоту»",
   "mod.gutters.attr.badOffset": "Вылет от 1/16″ до 24″",

@@ -91,7 +91,14 @@ exports.run = async (h) => {
   { const bad = await pairFits(p, "attr-size", "attr-color"); h.expect(bad === "", `size · colour in one line (${bad || "ok"})`); }
   { const bad = await tilesEven(p, "attr-profile"); h.expect(bad === "", `the profile tiles are even (${bad})`); }
   await h.shot("new-runs");
+  // #3090 п.3 (rule 2, one accent): while the window is open its «Сохранить» is the accent, «Готово» in the header is not; closed — it is again
+  // the button's fill: the first layer under the testID that has one (the pressable itself is clear)
+  const bg = (id) => p.evaluate((i) => { const r = [...document.querySelectorAll(`[data-testid="${i}"]`)].find((e) => e.getClientRects().length > 0); const c = r ? [r, ...r.querySelectorAll("*")].map((e) => getComputedStyle(e).backgroundColor).find((x) => x && x !== "rgba(0, 0, 0, 0)" && x !== "transparent") : ""; return c || ""; }, id);
+  const accent = await bg("attr-win-save");
+  h.expect(accent !== "" && (await bg("draw-done")) !== accent, `a window open: «Готово» is not the accent (${await bg("draw-done")} vs ${accent})`);
   await closeNew();
+  { const t0 = Date.now(); while ((await bg("draw-done")) !== accent && Date.now() - t0 < 5000) await p.waitForTimeout(100); }
+  h.expect((await bg("draw-done")) === accent, "the window closed: «Готово» is the accent again");
 
   // #2987: a change in «Новые …» without «Сохранить» is not kept — «Закрыть» asks, «Не сохранять» drops it
   await openNew("line");

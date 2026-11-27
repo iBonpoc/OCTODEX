@@ -3802,7 +3802,6 @@ export const en: Dict = {
   "mod.gutters.attr.elbowRowRound": "Elbow",
   "mod.gutters.attr.offsetRow": "Offset {s}",
   "mod.gutters.attr.offsetRowRound": "Offset",
-  "mod.gutters.attr.storyWin": "{n} fl.",
   "mod.gutters.attr.dsLenStory": "Height {ft} ft",
   "mod.gutters.attr.dsLenRoof": "Onto the lower roof — no height of its own; set «Own height»",
   "mod.gutters.attr.badOffset": "Offset from 1/16″ to 24″",
