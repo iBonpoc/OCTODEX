@@ -4252,6 +4252,7 @@ export const ru = {
   "mod.gutters.draw.newDefaults.ds": "Для новых downspout",
   "mod.gutters.draw.newDefaults.hint": "Так будут нарисованы следующие на этом чертеже (на этом телефоне). Нарисованное не меняется. «Сбросить» — как в настройках компании.",
   "mod.gutters.draw.newDefaults.reset": "Сбросить",
+  "mod.gutters.draw.northUp": "Север вверх",
   "mod.gutters.draw.dsShort.title": "Не хватает downspout",
   "mod.gutters.draw.dsShort.titleMany": "Не хватает downspout на {n} линиях",
   "mod.gutters.draw.dsShort.hint": "{run}: downspout {have} из {need}",

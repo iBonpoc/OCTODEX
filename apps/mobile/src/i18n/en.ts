@@ -4252,6 +4252,7 @@ export const en: Dict = {
   "mod.gutters.draw.newDefaults.ds": "For new downspouts",
   "mod.gutters.draw.newDefaults.hint": "The next ones on this drawing (on this phone) are drawn like this. What is drawn does not change. «Reset» — as in company settings.",
   "mod.gutters.draw.newDefaults.reset": "Reset",
+  "mod.gutters.draw.northUp": "North up",
   "mod.gutters.draw.dsShort.title": "A downspout is missing",
   "mod.gutters.draw.dsShort.titleMany": "Downspouts missing on {n} lines",
   "mod.gutters.draw.dsShort.hint": "{run}: downspouts {have} of {need}",
