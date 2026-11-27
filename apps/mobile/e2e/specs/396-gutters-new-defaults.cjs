@@ -97,8 +97,8 @@ exports.run = async (h) => {
   const accent = await bg("attr-win-save");
   h.expect(accent !== "" && (await bg("draw-done")) !== accent, `a window open: «Готово» is not the accent (${await bg("draw-done")} vs ${accent})`);
   await closeNew();
-  { const t0 = Date.now(); while ((await bg("draw-done")) !== accent && Date.now() - t0 < 5000) await p.waitForTimeout(100); }
-  h.expect((await bg("draw-done")) === accent, "the window closed: «Готово» is the accent again");
+  await p.waitForFunction((a) => { const r = [...document.querySelectorAll('[data-testid="draw-done"]')].find((e) => e.getClientRects().length > 0); return !!r && [r, ...r.querySelectorAll("*")].map((e) => getComputedStyle(e).backgroundColor).find((x) => x && x !== "rgba(0, 0, 0, 0)" && x !== "transparent") === a; }, accent, { timeout: 5000 });
+  h.expect(true, "the window closed: «Готово» is the accent again");
 
   // #2987: a change in «Новые …» without «Сохранить» is not kept — «Закрыть» asks, «Не сохранять» drops it
   await openNew("line");
