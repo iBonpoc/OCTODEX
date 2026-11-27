@@ -5739,4 +5739,9 @@ export const en: Dict = {
   "c3060.lastVisit": "last {when}",
   "ds.proto.separate": "Each record — its own frame",
   "ds.proto.separateExtra": "2 visits · next Sun, Nov 29",
+  // #3072 the client's «Выезды»
+  "c3072.plan": "Schedule a visit",
+  "c3072.past": "Past",
+  "c3072.pickJob": "Which job is the visit for?",
+  "c3072.noPrice": "No price",
 };
