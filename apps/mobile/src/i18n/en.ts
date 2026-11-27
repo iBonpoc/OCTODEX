@@ -5832,4 +5832,11 @@ export const en: Dict = {
   "ov3061.unpin": "Unpin the note",
   "ov3061.unpinned": "Note unpinned",
   "ov3061.all": "All",
+  /* #3074 «Открыть форму ›» в «Заявки с сайта» («Открытые карточки» №3) */
+  "c3074.open": "Open form",
+  "c3074.openHint": "As your clients see it; nothing is sent from the preview",
+  "c3074.shareOff": "The form is off — the link does not work. Turn the form on first.",
+  "c3074.copiedOff": "Copied. The form is off — no requests come in until you turn it on.",
+  "c3074.openOff": "The form is off: clients can't see it. Turn the form on above to look at it.",
+  "c3074.previewNote": "Preview: this is how clients see the form. Nothing is sent from here.",
 };

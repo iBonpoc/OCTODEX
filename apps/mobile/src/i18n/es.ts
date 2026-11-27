@@ -5832,4 +5832,11 @@ export const es: Dict = {
   "ov3061.unpin": "Desfijar la nota",
   "ov3061.unpinned": "Nota desfijada",
   "ov3061.all": "Todo",
+  /* #3074 «Открыть форму ›» в «Заявки с сайта» («Открытые карточки» №3) */
+  "c3074.open": "Abrir formulario",
+  "c3074.openHint": "Así lo ven sus clientes; desde la vista previa no se envía nada",
+  "c3074.shareOff": "El formulario está desactivado: el enlace no funciona. Actívelo primero.",
+  "c3074.copiedOff": "Copiado. El formulario está desactivado: no llegarán solicitudes hasta que lo active.",
+  "c3074.openOff": "El formulario está desactivado: los clientes no lo ven. Actívelo arriba para verlo.",
+  "c3074.previewNote": "Vista previa: así ven el formulario sus clientes. Desde aquí no se envía nada.",
 };
