@@ -14,6 +14,7 @@ const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 const MIN = 60 * 1000;
 
 exports.run = async (h) => {
+  const says = async (loc) => `${await loc.innerText()} ${(await loc.locator('[data-testid="row-status-icon"]').first().getAttribute("aria-label", { timeout: 1000 }).catch(() => null)) ?? ""}`; // #3033: the status icon has no word — its words are its label
   const p = h.page;
   const vis = (id) => p.getByTestId(id).locator("visible=true").first();
   /** the visit's only photo as the phone keeps it */
@@ -49,9 +50,9 @@ exports.run = async (h) => {
     )
     .catch(() => h.expect(false, "the expense is saved with its receipt «preparing» (kept here, its row for the cloud)"));
   await h.go("/money");
-  const card = p.locator('[data-testid^="expense-row-"]').locator("visible=true").filter({ hasText: "$39.91" }).first();
+  const card = p.locator('[data-testid^="expense-row-"]').locator("visible=true").filter({ hasText: "$40" }).first(); // #3029: a list row shows whole dollars ($39.91 → $40)
   await card.waitFor({ timeout: 8000 });
-  h.expect(/Готовится/.test(await card.innerText()) && !/Без чека/.test(await card.innerText()), "the card: «Готовится», not «Без чека»");
+  h.expect(/Готовится/.test(await says(card)) && !/Без чека/.test(await says(card)), "the card: «Готовится», not «Без чека»");
 
   // ---- a visit's photo
   await h.go("/today");

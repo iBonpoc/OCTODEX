@@ -7,9 +7,10 @@ const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 const AMOUNT = "47.31";
 
 exports.run = async (h) => {
+  const says = async (loc) => `${await loc.innerText()} ${(await loc.locator('[data-testid="row-status-icon"]').first().getAttribute("aria-label", { timeout: 1000 }).catch(() => null)) ?? ""}`; // #3033: the status icon has no word — its words are its label
   const p = h.page;
   const mine = async () => ((await h.db())?.expenses ?? []).find((x) => x.amountCents === 4731);
-  const card = () => p.locator('[data-testid^="expense-row-"]').locator("visible=true").filter({ hasText: `$${AMOUNT}` }).first();
+  const card = () => p.locator('[data-testid^="expense-row-"]').locator("visible=true").filter({ hasText: `$${Math.round(Number(AMOUNT))}` }).first(); // #3029: a list row shows whole dollars
 
   await h.go("/expense/new");
   const photo = p.getByTestId("expense-photo").locator("visible=true").first();
@@ -29,7 +30,7 @@ exports.run = async (h) => {
   // after a reload
   await h.go("/money");
   await card().waitFor({ timeout: 8000 });
-  h.expect(!/Без чека/.test(await card().innerText()), "after a reload: the card has its receipt");
+  h.expect(!/Без чека/.test(await says(card())), "after a reload: the card has its receipt");
   await h.shot("receipt-kept");
 
   // a phone with only the cloud's copy: the expense knows its receipt's file, not a local picture
@@ -39,11 +40,11 @@ exports.run = async (h) => {
   await h.seed("octo.db.v5", raw);
   await h.go("/money");
   await card().waitFor({ timeout: 8000 });
-  h.expect(!/Без чека/.test(await card().innerText()), "the cloud's copy (another phone): the card has its receipt, not «Без чека»");
+  h.expect(!/Без чека/.test(await says(card())), "the cloud's copy (another phone): the card has its receipt, not «Без чека»");
   // the check is not empty: an expense without a receipt does say «Без чека»
   const bare = raw.db.expenses.find((y) => !y.receiptUri && !y.receiptFileId);
   h.expect(!!bare, "the demo has an expense without a receipt");
-  const bareCard = p.locator('[data-testid^="expense-row-"]').locator("visible=true").filter({ hasText: bare.vendor }).filter({ hasText: /Без чека/ });
+  const bareCard = p.locator('[data-testid^="expense-row-"]').locator("visible=true").filter({ hasText: bare.vendor }).filter({ has: p.locator('[data-testid="row-status-icon"][aria-label*="Без чека"]') });
   h.expect((await bareCard.count()) > 0, "an expense without a receipt says «Без чека»");
   await h.shot("receipt-cloud-copy");
 };

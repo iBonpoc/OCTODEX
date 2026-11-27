@@ -34,7 +34,8 @@ exports.run = async (h) => {
     h.expect(m, `the group «${title}» names its sum`);
     const ids = await group.first().locator('[data-testid^="payment-row-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid").slice("payment-row-".length)));
     const own = db.payments.filter((x) => ids.includes(x.id)).reduce((s, x) => s + x.amountCents, 0);
-    h.expect(cents(m[1]) === own, `«${title}» = the sum of its rows ${money(own)}`);
+    // #3029: the group's title is an overview — whole dollars
+    h.expect(m[1] === whole(own), `«${title}» = the sum of its rows ${whole(own)}`);
     sum += own;
   }
   h.expect(sum === all, `the groups hold all the payments: ${money(sum)} = ${money(all)}`);

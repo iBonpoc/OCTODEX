@@ -194,6 +194,9 @@ export interface GroupRowProps {
   /** #3035 (founder 27.11; design/crm review — В): the object's own number («CLT-0008», «EST-0006»), right-aligned in line 2 under
    *  the sum, `micro` `mut`, never cut — the address gives way; a linked document's number stays in line 3 */
   refNo?: string;
+  /** #3038 (review 27.11: «пропадает город»): the subtitle is an address «street, town» — the street gives way («4512 Ventura Can…,
+   *  Sherman Oaks»), the town is never cut */
+  addressLine?: boolean;
   /** #3033: the sum in the name's own line, at the right end (with the status icon when there is one) — the clients' list */
   valueTop?: boolean;
   /** the line under the title: «работа · адрес · когда» */
@@ -232,7 +235,7 @@ export interface GroupRowProps {
  * The inside of a GroupRow — the lead, the title 15/600 over its line 13 `mut`, the figure or columns, a StatusPill and «›» — for a
  * row whose press is its owner's (an estimate's line: it opens in place, it is held to be carried). One look for every row (#2387).
  */
-export function GroupRowBody({ title, titleNote, extra, figureRight, valueTop, refNo, subtitle, lead, value, cols, status, compact, wrap, selected, chevron, quiet, valueMark, padRight = space[4], below, ids }: Pick<GroupRowProps, "title" | "titleNote" | "extra" | "figureRight" | "valueTop" | "refNo" | "subtitle" | "lead" | "value" | "cols" | "status" | "compact" | "wrap" | "selected" | "chevron" | "valueMark"> & {
+export function GroupRowBody({ title, titleNote, extra, figureRight, valueTop, refNo, addressLine, subtitle, lead, value, cols, status, compact, wrap, selected, chevron, quiet, valueMark, padRight = space[4], below, ids }: Pick<GroupRowProps, "title" | "titleNote" | "extra" | "figureRight" | "valueTop" | "refNo" | "addressLine" | "subtitle" | "lead" | "value" | "cols" | "status" | "compact" | "wrap" | "selected" | "chevron" | "valueMark"> & {
   /** a row that counts for nothing now (a hidden line, a line on the client's choice): the title and the figure `mut` */
   quiet?: boolean;
   padRight?: number;
@@ -306,7 +309,16 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, valueTop, r
         {subtitle || refLine2 ? (
           <View testID={ids?.subtitle} style={refLine2 ? { flexDirection: "row", alignItems: "baseline", gap: space[2] } : undefined}>
             <View testID={ids?.subtitleInner} style={refLine2 ? { flex: 1, minWidth: 0 } : undefined}>
-              {subtitle ? (
+              {subtitle && addressLine && subtitle.lastIndexOf(", ") > 0 ? (
+                <View style={{ flexDirection: "row", minWidth: 0 }}>
+                  <T v="caption" tone="mut" tabular numberOfLines={1} style={{ flexShrink: 1 }}>
+                    {subtitle.slice(0, subtitle.lastIndexOf(", "))}
+                  </T>
+                  <T v="caption" tone="mut" tabular numberOfLines={1} style={{ flexShrink: 0 }}>
+                    {subtitle.slice(subtitle.lastIndexOf(", "))}
+                  </T>
+                </View>
+              ) : subtitle ? (
                 <T v="caption" tone="mut" tabular numberOfLines={wrap ? 2 : 1}>
                   {subtitle}
                 </T>
@@ -403,7 +415,7 @@ export function GroupRowBody({ title, titleNote, extra, figureRight, valueTop, r
   );
 }
 
-export function GroupRow({ title, titleNote, extra, figureRight, valueTop, refNo, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, wrap, selected, chevron, valueTestID, valueMark, testID }: GroupRowProps) {
+export function GroupRow({ title, titleNote, extra, figureRight, valueTop, refNo, addressLine, subtitle, lead, value, cols, status, actions = [], swipe, onPress, compact, wrap, selected, chevron, valueTestID, valueMark, testID }: GroupRowProps) {
   const { c } = useTheme();
   const [down, setDown] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -412,7 +424,7 @@ export function GroupRow({ title, titleNote, extra, figureRight, valueTop, refNo
   const onLong = more.length ? (e: GestureResponderEvent) => setMenu({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, w: 0, h: 0 }) : undefined;
   const onAction = (e: AccessibilityActionEvent) => more.find((a) => a.key === e.nativeEvent.actionName)?.onPress();
   const check = lead && "done" in lead ? lead : null;
-  const main = <GroupRowBody title={title} titleNote={titleNote} extra={extra} figureRight={figureRight} valueTop={valueTop} refNo={refNo} subtitle={subtitle} lead={lead} value={value} cols={cols} status={status} compact={compact} wrap={wrap} selected={selected} chevron={chevron} padRight={actions.length ? 0 : space[4]} ids={valueTestID ? { value: valueTestID } : undefined} valueMark={valueMark} />;
+  const main = <GroupRowBody title={title} titleNote={titleNote} extra={extra} figureRight={figureRight} valueTop={valueTop} refNo={refNo} addressLine={addressLine} subtitle={subtitle} lead={lead} value={value} cols={cols} status={status} compact={compact} wrap={wrap} selected={selected} chevron={chevron} padRight={actions.length ? 0 : space[4]} ids={valueTestID ? { value: valueTestID } : undefined} valueMark={valueMark} />;
   const tap = onPress || onLong ? (
     <Press
       onPress={onPress}

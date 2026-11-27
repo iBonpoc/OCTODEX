@@ -46,7 +46,8 @@ exports.run = async (h) => {
     h.expect(body.includes(month), `expenses grouped by month «${month}»`);
     const et = await cardOf(x.vendor).innerText();
     h.expect(et.includes(x.vendor), "expense card shows the vendor");
-    if (!x.receiptUri) h.expect(et.includes("Без чека"), "«Без чека» tag when there is no receipt");
+    const says = async (loc) => `${await loc.innerText()} ${(await loc.locator('[data-testid="row-status-icon"]').first().getAttribute("aria-label", { timeout: 1000 }).catch(() => null)) ?? ""}`; // #3033: the status icon has no word — its words are its label
+    if (!x.receiptUri) h.expect((await says(cardOf(x.vendor))).includes("Без чека"), "«Без чека» (the icon's words) when there is no receipt");
   }
 
   // «Принять оплату» (the long press / the swipe of the row) opens the invoice with the payment sheet (the row itself writes nothing)

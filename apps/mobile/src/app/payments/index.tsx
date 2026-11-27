@@ -70,16 +70,19 @@ export default function Payments() {
     // #3018 (founder #3017): 1 — the client · the way («Check #1042»); 2 — the address; 3 — the invoice · when · who took it
     const prop = db.properties.find((p) => p.customerId === x.customerId);
     const who = "receivedBy" in x && x.receivedBy ? memberName(db, x.receivedBy, t) : undefined;
-    const sub = [review, inv?.number, whenOf(x as Payment) === "today" ? time(x.at) : day(x.at), who, x.refundedCents ? t("mny.refunded", { amount: moneyWhole(x.refundedCents) }) : undefined];
+    // review #3038: line 3 was cut — who took it lives in the receipt
+    void who;
+    const sub = [review, inv?.number, whenOf(x as Payment) === "today" ? time(x.at) : day(x.at), x.refundedCents ? t("mny.refunded", { amount: moneyWhole(x.refundedCents) }) : undefined];
     return {
       key: x.id,
       testID: `payment-row-${x.id}`,
       title: c?.name ?? "—",
-      titleNote: way || undefined,
       refNo: x.receiptNumber || undefined,
       subtitle: prop ? shortAddress(prop.address, prop.city) : undefined,
-      extra: sub.filter(Boolean).join(" · ") || undefined,
-      figureRight: true,
+      addressLine: true,
+      // #3038: the client's rule — 1 the client + the sum; 2 the address + RCT; 3 the way · the invoice · when · who
+      extra: [way, ...sub].filter(Boolean).join(" · ") || undefined,
+      valueTop: true,
       lead: { initials: initialsOf(c?.name) },
       value: moneyWhole(x.amountCents),
       onPress: () => router.push(`/receipt/${x.id}`),

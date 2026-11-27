@@ -19,7 +19,7 @@ import { catalogItemEconomics } from "@/features/estimateDoc";
 import { supplierName } from "@/features/suppliers";
 
 const KINDS: (CatalogKind | "all")[] = ["all", "service", "labor", "material", "kit"];
-const KIND_ICON: Record<CatalogKind, IconKey> = { service: "route", labor: "clock", material: "box", kit: "checklist" };
+const KIND_ICON: Record<CatalogKind, IconKey> = { service: "toolbox", labor: "clock", material: "box", kit: "checklist" };
 
 /** Company catalog: services, labor, materials and kits used in estimates. */
 export default function Catalog() {
@@ -71,7 +71,8 @@ export default function Catalog() {
         value={`${money(eco.priceCents)} / ${it.unit}`}
         // a long name («Debris haul-away (pickup load)») takes a second line, never «…» (Д-строка-2)
         wrap
-        status={costs && loss ? { status: "bad", label: t("card.sign.loss") } : undefined}
+        status={costs && loss ? { status: "bad", label: t("card.sign.loss"), iconOnly: true } : undefined}
+        valueTop
         onPress={canEdit ? () => router.push(`/catalog/${it.id}`) : undefined}
       />
     );

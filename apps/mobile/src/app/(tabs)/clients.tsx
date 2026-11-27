@@ -6,7 +6,7 @@ import { useStore } from "@/data/store";
 import { usePersistentState } from "@/data/persist";
 import type { Customer } from "@/data/types";
 import { canImportClients } from "@/features/client/importRun";
-import { clientHistory, clientMoneyOf, clientNextVisit, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, visibleClients } from "@/features/clients";
+import { canArchive, clientHistory, clientMoneyOf, clientNextVisit, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, visibleClients } from "@/features/clients";
 import { canSeeClientDups, clientDuplicates } from "@/features/clientDuplicates";
 import { clientListGroups } from "@/features/clientGroups";
 import { dayOffsetOf, isoDayKey } from "@/features/calendar";
@@ -116,7 +116,7 @@ export default function Clients() {
     const swipeLeft: SwipeAction[] = tel ? [{ key: "call", label: t("swipe.call"), icon: "phone", testID: `client-row-swipe-call-${c.id}`, onPress: () => openContact({ kind: "call", icon: "phone", url: tel, value: c.phone ?? "" }) }] : [];
     const swipeRight: SwipeAction[] = [
       ...(sms ? [{ key: "sms", label: t("cc.sms"), icon: "sms" as const, testID: `client-row-swipe-sms-${c.id}`, onPress: () => openContact({ kind: "sms", icon: "sms", url: sms, value: c.phone ?? "" }) }] : []),
-      ...(toArchive ? [{ key: "archive", label: t("swipe.archive"), icon: "box" as const, tone: "bad" as const, testID: `client-row-swipe-archive-${c.id}`, onPress: () => archive(c) }] : []),
+      ...(toArchive && canArchive(db, c.id) ? [{ key: "archive", label: t("swipe.archive"), icon: "box" as const, tone: "bad" as const, testID: `client-row-swipe-archive-${c.id}`, onPress: () => archive(c) }] : []),
     ];
     const status = overdue
       // the word with the figure (rule 2, design-review 27.11): «Просрочен 9 дн», not a bare «9 дн»
@@ -133,6 +133,7 @@ export default function Clients() {
       // #3033 (founder 27.11): no phone in the list — the call button and the card have it; 1 — the name, the sum on the right with
       // the status as its icon (no word; said to VoiceOver); 2 — the address; 3 — the deed
       subtitle: addr ?? line,
+      addressLine: !!addr,
       extra: addr ? line : undefined,
       lead: { initials: initials(c.name) },
       // one money figure: the debt; none — a call icon (BUILD-SPEC §2.3 table)
