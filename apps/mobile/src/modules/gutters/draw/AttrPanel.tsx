@@ -389,42 +389,6 @@ function FieldRow({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * The size field with «Свой» last (founder 27.11, #2981): a size of its own is typed under the field — whole inches, read at once
- * (a good one goes in, anything else says so and goes in nowhere). Its part is not in the price list: the estimate line says
- * «нет цены» (answer in #2981). A size of its own already set is one of the field's values, the field open on it.
- */
-function SizePick({ testID, sizes, known, value, offered, label, read, onSize, hint }: { testID: string; sizes: string[]; /** the module's sizes: any other is one of its own */ known: readonly string[]; value: string; offered?: readonly string[]; label: (s: string) => string; read: (text: string) => string | null; onSize: (s: string) => void; hint: string }) {
-  const { t } = useI18n();
-  const std = known.includes(value);
-  const [ownOpen, setOwnOpen] = useState(!std);
-  const [own, setOwn] = useState(std ? "" : value);
-  const [bad, setBad] = useState(false);
-  return (
-    <View style={{ gap: space[2] }}>
-      <Choice
-        label={t(k("size"))} testID={testID} offered={offered}
-        items={[...sizes.filter((x) => std || x !== value).map((x) => ({ key: x, label: label(x) })), { key: "@own", label: t(k("sizeOwn")) }]}
-        value={ownOpen ? "@own" : value}
-        onChange={(v) => {
-          if (v === "@own") return setOwnOpen(true);
-          setOwnOpen(false);
-          setBad(false);
-          onSize(v);
-        }}
-      />
-      {ownOpen ? (
-        <View style={{ gap: space[1] }}>
-          <View testID={`${testID}-own`}>
-            <TextField type="text" value={own} placeholder={hint} label={t(k("sizeOwn"))} onChangeText={(v) => { setOwn(v); const s = read(v); setBad(s === null); if (s !== null) onSize(s); }} />
-          </View>
-          {bad && own.trim() !== "" ? <View testID={`${testID}-own-bad`}><StatusChip status="warn" label={t(k("badOwnSize"), { hint })} soft /></View> : null}
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-/**
  * A value picked by sight (founder 27.11, #2980 / #2986: «должен быть не селектор, это должны быть иконки»): the label over a
  * row of tiles, an icon over the name each (DS §9 А2б, the places of the list). The tiles are `<testID>-<key>`.
  */
@@ -675,6 +639,42 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, run, forNew, no,
         <Choice list label={t(k("wallKit"))} testID="attr-wall-kit" offered={wallKitsFor(ds.shape, w.wall, ch)} items={wallKits.map((id) => ({ key: id, label: t(k(`wk.${id}`)), leading: { icon: "downspout" as const } }))} value={w.kit} onChange={(kit) => onAttrs({ wall: kit })} />
       </More>
     </>
+  );
+}
+
+/**
+ * The size field with «Свой» last (founder 27.11, #2981): a size of its own is typed under the field — whole inches, read at once
+ * (a good one goes in, anything else says so and goes in nowhere). Its part is not in the price list: the estimate line says
+ * «нет цены» (answer in #2981). A size of its own already set is one of the field's values, the field open on it.
+ */
+function SizePick({ testID, sizes, known, value, offered, label, read, onSize, hint }: { testID: string; sizes: string[]; /** the module's sizes: any other is one of its own */ known: readonly string[]; value: string; offered?: readonly string[]; label: (s: string) => string; read: (text: string) => string | null; onSize: (s: string) => void; hint: string }) {
+  const { t } = useI18n();
+  const std = known.includes(value);
+  const [ownOpen, setOwnOpen] = useState(!std);
+  const [own, setOwn] = useState(std ? "" : value);
+  const [bad, setBad] = useState(false);
+  return (
+    <View style={{ gap: space[2] }}>
+      <Choice
+        label={t(k("size"))} testID={testID} offered={offered}
+        items={[...sizes.filter((x) => std || x !== value).map((x) => ({ key: x, label: label(x) })), { key: "@own", label: t(k("sizeOwn")) }]}
+        value={ownOpen ? "@own" : value}
+        onChange={(v) => {
+          if (v === "@own") return setOwnOpen(true);
+          setOwnOpen(false);
+          setBad(false);
+          onSize(v);
+        }}
+      />
+      {ownOpen ? (
+        <View style={{ gap: space[1] }}>
+          <View testID={`${testID}-own`}>
+            <TextField type="text" value={own} placeholder={hint} label={t(k("sizeOwn"))} onChangeText={(v) => { setOwn(v); const s = read(v); setBad(s === null); if (s !== null) onSize(s); }} />
+          </View>
+          {bad && own.trim() !== "" ? <View testID={`${testID}-own-bad`}><StatusChip status="warn" label={t(k("badOwnSize"), { hint })} soft /></View> : null}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
