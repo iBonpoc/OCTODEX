@@ -23,6 +23,7 @@ import { fillStyle } from "@/ui/fill";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useToast } from "@/ui/overlays";
 import { Card, ListRow, RowView, Screen } from "@/ui/surfaces";
+import { SelectField } from "@/ui/selectField";
 import { DS_BOTTOMS, DS_SHAPES, DS_SIZES, DS_STYLES, GAUGES_BY_MATERIAL, MATERIALS, MILL_ONLY, PROFILES, SIZES_BY_PROFILE, WALL_KITS_BY_WALL, WALLS } from "../canvas/attrs";
 import { fmtLen, LEN_FORMATS } from "../canvas/format";
 import { useColorLabel } from "../draw/AttrPanel";
@@ -184,6 +185,11 @@ export default function GutterSettingsScreen() {
   // the field's testID: «gset-ds-style» for dsStyle (the others are «gset-ds-<key>»)
   const setDs = (key: string, v: unknown) => put(`gset-ds-${key === "dsStyle" ? "style" : key}`, ["ds", key], v);
   const setPalette = (list: string[] | undefined) => put("gset-palette", ["palette"], list);
+  /** which whole palette the list is now (#3065): a supplier's, the module's own (none set), else the company's own list (no value) */
+  type PalKey = "berger" | "sp" | "module";
+  const same = (a: readonly string[] | undefined, b: readonly string[]) => !!a && a.length === b.length && a.every((x, i) => x === b[i]);
+  const settingsPalette = Array.isArray((raw as { palette?: unknown } | undefined)?.palette) ? ((raw as { palette: string[] }).palette) : undefined;
+  const palNow: PalKey | null = settingsPalette === undefined ? "module" : same(settingsPalette, PALETTES.berger) ? "berger" : same(settingsPalette, PALETTES.servicePartners) ? "sp" : null;
   const setRule = (key: string, v: unknown) => {
     // rule 16, step 1: write the old field too, so a phone with the old app does not buy differently: «без запаса» is the old `wastePct: 0`; on again — the old default 10 %
     if (key === "wasteFt") {
@@ -321,18 +327,20 @@ export default function GutterSettingsScreen() {
                   </View>
                 </RowView>
                 <FieldWarn at="gset-palette" />
+                {/* #3065 (founder #3064: «никаких столбиков кнопок»): the supplier's palette is one choice, not a row of three buttons */}
+                <SelectField<PalKey>
+                  label={t(k("palFrom"))}
+                  testID="gset-palette-from"
+                  value={palNow}
+                  placeholder={t(k("palOwn"))}
+                  items={[
+                    { key: "berger", label: t(k("palOf"), { name: PALETTE_NAMES.berger, n: PALETTES.berger.length }) },
+                    { key: "sp", label: t(k("palOf"), { name: PALETTE_NAMES.servicePartners, n: PALETTES.servicePartners.length }) },
+                    { key: "module", label: t(k("palModule")) },
+                  ]}
+                  onChange={(x) => setPalette(x === "berger" ? [...PALETTES.berger] : x === "sp" ? [...PALETTES.servicePartners] : undefined)}
+                />
                 <T v="caption" tone="mut">{t(k("paletteFrom"))}</T>
-                <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
-                  <View testID="gset-palette-berger">
-                    <Button label={t(k("palOf"), { name: PALETTE_NAMES.berger, n: PALETTES.berger.length })} size="sm" variant="secondary" onPress={() => setPalette([...PALETTES.berger])} />
-                  </View>
-                  <View testID="gset-palette-sp">
-                    <Button label={t(k("palOf"), { name: PALETTE_NAMES.servicePartners, n: PALETTES.servicePartners.length })} size="sm" variant="secondary" onPress={() => setPalette([...PALETTES.servicePartners])} />
-                  </View>
-                  <View testID="gset-palette-module">
-                    <Button label={t(k("palModule"))} size="sm" variant="ghost" onPress={() => setPalette(undefined)} />
-                  </View>
-                </RowView>
               </>
             )}
           </Part>

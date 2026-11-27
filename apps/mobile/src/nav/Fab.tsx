@@ -119,7 +119,8 @@ export function Fab({ placement, bottom = 0, right = space[4], ...p }: FabProps 
   if (!items.length) return null;
   const one = items.length === 1 ? items[0]! : undefined;
   // a list's button names its object: «＋ Клиент», not «Создать» (DS §12.2, #1395); «Главная» keeps its own words
-  const label = LIST_FABS.includes(p.set) ? t(`fab.list.${p.set}` as DictKey) : one ? t(one.label) : t("nav.create");
+  // DS §12.13 «Шапка» (#2841, ревью design/crm): the «＋» has no word — its label is the action («Новый клиент»), not the object alone
+  const label = LIST_FABS.includes(p.set) ? t(`fab.a11y.${p.set}` as DictKey) : one ? t(one.label) : t("nav.create");
   const press = () => (one ? run(one) : setOpen(true));
   const sheet = one ? null : <FabSheet {...p} visible={open} onClose={() => setOpen(false)} />;
   if (placement === "header") {

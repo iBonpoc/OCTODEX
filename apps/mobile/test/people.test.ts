@@ -75,7 +75,7 @@ describe("peopleByCustomer (database rows → people)", () => {
 
 describe("nextClientNumber (demo; the server numbers clients in the cloud)", () => {
   it("next after the highest CLT number", () => {
-    expect(nextClientNumber(makeSeed())).toBe("CLT-0008");
+    expect(nextClientNumber(makeSeed())).toBe("CLT-0009"); // after the test client CLT-0008 (#3024)
     expect(nextClientNumber({ ...makeSeed(), customers: [] })).toBe("CLT-0001");
   });
 });

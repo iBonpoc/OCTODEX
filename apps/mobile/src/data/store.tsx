@@ -20,6 +20,8 @@ import { applyOp, catalogCostChange, catalogItemChange, renewSession, sendVisitP
 import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
 import { defaultLeadAssignee } from "@/features/leadAssignee";
 import { keepLast, stepPending } from "@/features/location";
+import { canArchive } from "@/features/clients";
+import { laterIso } from "@/features/estimateStatus";
 import { canChangeEstimateClient } from "@/features/estimateStatus";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
@@ -582,6 +584,11 @@ const upsert = <T extends { id: string }>(list: T[], it: T): T[] => (list.some((
 const nextReceipt = (d: DB): string => {
   const max = d.payments.reduce((m, p) => Math.max(m, Number(p.receiptNumber?.replace(/\D/g, "") ?? 0)), 100);
   return `RCT-${String(max + 1).padStart(4, "0")}`;
+};
+/** #3019 (founder 26.11: «номер должен быть»): the next local estimate number (demo); in the cloud the server assigns EST-… */
+const nextEstimateNumber = (d: DB): string => {
+  const max = d.estimates.reduce((m, e) => Math.max(m, Number(/^EST-(\d+)$/.exec(e.number ?? "")?.[1] ?? 0)), 0);
+  return `EST-${String(max + 1).padStart(4, "0")}`;
 };
 const nextInvoiceNumber = (d: DB): string => {
   const max = d.invoices.reduce((m, i) => Math.max(m, Number(i.number?.replace(/\D/g, "") ?? 0)), 100);
@@ -2622,6 +2629,8 @@ export function StoreProvider({
             const next: Estimate = {
               ...(prev ?? {}),
               id, customerId, propertyId, title, doc, status: "draft", ...sum, leadId: leadId0 ?? prev?.leadId,
+              // #3019: a new demo estimate gets its number at once (the cloud's comes from the server on insert)
+              ...(!prev && modeRef.current === "demo" ? { number: nextEstimateNumber(d) } : {}),
               // who made it (the server's created_by: a tech keeps seeing his own, estimates_select — #1138)
               createdBy: prev ? prev.createdBy : d.me,
               savedAt,
@@ -2630,6 +2639,8 @@ export function StoreProvider({
               // «don't sign — change it»: the client signs the new version again (the old signature stays on the server)
               ...(prev?.status === "awaiting_countersign" ? { approval: undefined, signature: undefined } : {}),
               sentAt: prev?.status === "draft" ? prev.sentAt : undefined,
+              // #3058: an estimate that went out remembers it after an edit (the server keeps sent_version_id; the version's sent_at goes)
+              lastSentAt: laterIso(prev?.lastSentAt, prev?.sentAt),
               // a new estimate takes the direction of its lead / client / company (S16); an existing one keeps its own
               serviceCategoryId: prev ? prev.serviceCategoryId : inheritCategory(d, { kind: "estimate", leadId: leadId0, customerId }),
             };
@@ -2763,8 +2774,11 @@ export function StoreProvider({
       saveCustomerPeople,
       setCustomerTags: (id, tagIds) =>
         mutate("customer.tags", (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, tagIds } : c)) }), { k: "customer.tags", id, tagIds }),
+      // #3044: a client who owes is never made inactive — whatever screen asks (the header, the list's swipe); the screen says why
       setCustomerStatus: (id, status, reason) =>
-        mutate(
+        status === "archived" && !canArchive(dbRef.current, id)
+          ? NO_UNDO
+          : mutate(
           "customer.status",
           (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, status, statusReason: status === "do_not_service" ? reason : undefined } : c)) }),
           { k: "customer.status", id, status, reason: status === "do_not_service" ? reason : undefined },

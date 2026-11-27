@@ -42,8 +42,9 @@ describe("swipe on the header: when it takes hold", () => {
     expect(expandSwipeStart(0, slop - 1, slop, false)).toBe("wait");
     expect(expandSwipeStart(0, -(slop + 1), slop, false)).toBe("fail");
   });
-  it("open: up activates, down fails", () => {
-    expect(expandSwipeStart(0, -(slop + 1), slop, true)).toBe("activate");
+  it("open: the finger is the page's scroll — never ours, up or down (#3060: the panel was pulled back while scrolling)", () => {
+    expect(expandSwipeStart(0, -(slop + 1), slop, true)).toBe("fail");
+    expect(expandSwipeStart(0, -(slop * 10), slop, true)).toBe("fail");
     expect(expandSwipeStart(0, slop + 1, slop, true)).toBe("fail");
   });
   it("sideways is not ours (a quick action, a strip)", () => {

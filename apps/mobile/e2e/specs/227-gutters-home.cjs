@@ -76,10 +76,16 @@ exports.run = async (h) => {
     h.expect((await chip(name).count()) === 1 && new RegExp(`· ${n}$`).test((await chip(name).innerText()).trim()), `the chip «${name} · ${n}»`);
   }
   const text = async (id) => (await tid(`measurement-${id}`).innerText()).replace(/\n/g, " | ");
-  h.expect(/Без клиента/.test(await text("e2e227-draft")) && /Черновик/.test(await text("e2e227-draft")), `the draft: «Без клиента», «Черновик» (${await text("e2e227-draft")})`);
-  h.expect(/Лид: /.test(await text("e2e227-lead")) && /Без сметы/.test(await text("e2e227-lead")), `the lead's: «Лид: …», «Без сметы» (${await text("e2e227-lead")})`);
-  h.expect((await text("e2e227-sent")).includes(client.name) && /Отправлена/.test(await text("e2e227-sent")), `the client's: its name, «Отправлена» (${await text("e2e227-sent")})`);
-  h.expect(/Подписан/.test(await text("e2e227-signed")), `the signed one: «Подписан» (${await text("e2e227-signed")})`);
+  // #3033: the state is the icon in line 1 — its word is the screen reader's label
+  const state = async (id) => (await tid(`measurement-${id}`).getByTestId("row-status-icon").first().getAttribute("aria-label")) || "";
+  // the lists' one rule (#3033, #3038): no phone in the row — the call is the button on the right; a draft for nobody has none
+  h.expect(!(await text("e2e227-lead")).includes(lead.phone) && (await tid("mrow-call-e2e227-lead").count()) === 1, `the lead's row: no phone, a call button (${await text("e2e227-lead")})`);
+  h.expect((await tid("mrow-call-e2e227-draft").count()) === 0, "a draft for nobody: no call");
+  // #3028: a draft — «Черновик»; a lead's — its name (no «Лид:», #3017), «Без сметы»
+  h.expect(/Черновик/.test(await text("e2e227-draft")), `the draft: «Черновик» (${await text("e2e227-draft")})`);
+  h.expect((await text("e2e227-lead")).includes(lead.name) && /Без сметы/.test(await state("e2e227-lead")), `the lead's: its name, «Без сметы» (${await text("e2e227-lead")})`);
+  h.expect((await text("e2e227-sent")).includes(client.name) && /Отправлена/.test(await state("e2e227-sent")), `the client's: its name, «Отправлена» (${await text("e2e227-sent")})`);
+  h.expect(/Подписан/.test(await state("e2e227-signed")), `the signed one: «Подписан» (${await state("e2e227-signed")})`);
   await h.shot("all");
 
   // a chip shows its cards; it is kept on this device

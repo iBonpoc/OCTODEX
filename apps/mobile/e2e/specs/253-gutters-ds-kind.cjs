@@ -8,7 +8,7 @@
  * - «Назад» takes the last pick back.
  * No fixed pauses: it waits on what it checks.
  */
-const { skipLength, pickAttr, attrKeys, attrChosen, attrClose, winSave } = require("../gutters.cjs");
+const { skipLength, pickAttr, attrKeys, attrChosen, attrClose, winSave, tilesEven, pairFits, openAttrMore } = require("../gutters.cjs");
 const { sheetGone } = require("../sheet.cjs");
 const KEY = "octo.db.v5";
 
@@ -66,23 +66,34 @@ exports.run = async (h) => {
   await pickAttr(p, "attr-ds-kind", "rectRibbed");
   await stored("the store: rect + corrugated", "a.shape === 'rect' && a.dsStyle === 'corrugated'");
   await tid("draw-selected-kind").waitFor({ timeout: 5000 });
-  h.expect(/ребристый/.test(await bar()) && /2×3/.test(await bar()), `the bar names the kind and the size (${await bar()})`);
+  h.expect(/Corrugated/.test(await bar()) && /2×3/.test(await bar()), `the bar names the kind and the size (${await bar()})`);
 
   await pickAttr(p, "attr-ds-kind", "roundRibbed");
   await stored("the store: round + corrugated, a round size", "a.shape === 'round' && a.dsStyle === 'corrugated' && a.size === '3'");
-  h.expect(/Круглый ребристый/.test(await bar()) && /3″/.test(await bar()), `the bar: round, ribbed, 3″ (${await bar()})`);
+  h.expect(/Corrugated\s+Round/.test(await bar()) && /3″/.test(await bar()), `the bar: round, corrugated, 3″ (${await bar()})`);
   h.expect((await attrChosen(p, "attr-ds-kind")) === "roundRibbed", "the picked kind is marked in the menu");
 
   await pickAttr(p, "attr-ds-kind", "roundPlain");
   await stored("the store: round + plain", "a.shape === 'round' && (a.dsStyle === 'plain' || a.dsStyle === undefined)");
-  // no item's words run over its frame (the menu open)
-  await tid("attr-ds-kind-button").click();
-  const items = p.getByRole("menu").locator('[data-testid^="attr-ds-kind-"]').locator("visible=true");
-  await items.first().waitFor({ timeout: 5000 });
-  const over = await items.evaluateAll((es) => es.filter((e) => e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1).map((e) => e.getAttribute("data-testid")));
-  h.expect(over.length === 0 && (await items.count()) === 4, `four items, none overflows (${over.join(",")})`);
+  // four tiles with icons (founder 27.11, #2980: «не селектор, это должны быть иконки»); no tile's words run over its frame
+  const items = tid("attr-ds-kind").locator('[data-testid^="attr-ds-kind-"][role="radio"]');
+  const over = await items.evaluateAll((es) => es.filter((e) => e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1 || !e.querySelector("svg")).map((e) => e.getAttribute("data-testid")));
+  h.expect(over.length === 0 && (await items.count()) === 4, `four tiles with an icon each, none overflows (${over.join(",")})`);
+  h.expect((await tid("attr-ds-kind-button").count()) === 0, "the kind is no menu field any more");
+  // #3051: the tiles are one width and height, in one row; the pairs stand in one line, nothing cut — with the longest words
+  { const bad = await tilesEven(p, "attr-ds-kind"); h.expect(bad === "", `the kind tiles are even (${bad})`); }
+  await pickAttr(p, "attr-head", "conductor"); // «Leader head» — the longest top
+  { const bad = await pairFits(p, "attr-ds-size", "attr-ds-story"); h.expect(bad === "", `size · storey in one line (${bad || "ok"})`); }
+  // every bottom beside the longest top: none is cut
+  for (const key of await attrKeys(p, "attr-bottom")) {
+    await pickAttr(p, "attr-bottom", key);
+    const bad = await pairFits(p, "attr-bottom", "attr-head");
+    h.expect(bad === "", `Низ · Верх in one line with «${key}» (${bad || "ok"})`);
+  }
+  await openAttrMore(p);
+  if (await tid("attr-gauge-button").count()) { const bad = await pairFits(p, "attr-material", "attr-gauge"); h.expect(bad === "", `material · gauge (${bad || "ok"})`); }
+  await h.shot("pairs");
   await h.shot("kinds");
-  await attrClose(p, "attr-ds-kind");
 
   // «Сохранить» keeps the window's picks as ONE step (DS §7.3, #2412 PR3): one «Назад» takes them all back — smooth rectangular again
   await winSave(p);

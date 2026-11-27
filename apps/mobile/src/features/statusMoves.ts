@@ -56,6 +56,15 @@ export const MOVES: Record<MoveEntity, Record<string, Move[]>> = {
       { to: "archived", how: "direct", via: "setCustomerStatus" },
       { to: "do_not_service", how: "form", via: "setCustomerStatus" },
     ],
+    // #3044 (map §5: «active — вручную»): back from inactive; «не обслуживаем» lifted (owner / admin / office — the server's T58)
+    archived: [
+      { to: "active", how: "direct", via: "setCustomerStatus" },
+      { to: "do_not_service", how: "form", via: "setCustomerStatus" },
+    ],
+    do_not_service: [
+      { to: "active", how: "direct", via: "setCustomerStatus" },
+      { to: "archived", how: "direct", via: "setCustomerStatus" },
+    ],
   },
   task: {
     open: [{ to: "done", how: "direct", via: "saveTask" }],
@@ -72,7 +81,8 @@ export const MOVES: Record<MoveEntity, Record<string, Move[]>> = {
 /** Statuses only the app sets (story map §5 «Кто меняет»): never a manual target. */
 export const SYSTEM_ONLY: Record<MoveEntity, readonly string[]> = {
   lead: ["new", "estimate_sent"],
-  customer: ["prospect", "active"],
+  // #3044: «active» is set by hand too (map §5:222 — back from inactive or «не обслуживаем»); only «prospect» is the app's alone
+  customer: ["prospect"],
   task: [],
   estimate: ESTIMATE_STATUSES,
   job: JOB_STATUSES,

@@ -113,3 +113,30 @@ describe("unit:attention — the amount of an overdue invoice (#1995)", () => {
     expect(overdueOf({ paidCents: 190000 })).toBeUndefined();
   });
 });
+
+/** #2932 (К1, права): «нет ответа N дней» по смете — только у тех, кто ведёт продажу (director / dispatcher / sales,
+ * как просроченные счета); монтажник смет клиенту не шлёт и не догоняет — пункта у него нет */
+describe("unit:attention — «no reply N days» estimate by role (#2932)", () => {
+  const NOW = Date.parse("2026-06-15T19:00:00Z");
+  const sentDb = (): DB => {
+    const db = makeSeed();
+    const e0 = db.estimates[0];
+    const sentAt = new Date(NOW - 20 * 86400000).toISOString();
+    return { ...db, estimates: [{ ...e0, status: "sent", sentAt, validUntil: undefined, linkRevokedAt: undefined }, ...db.estimates.slice(1)] } as DB;
+  };
+  const estOf = (role: Role) => {
+    const db = sentDb();
+    return buildAttention(db, role, NOW).find((x) => x.kind === "estimate" && x.id === `est-${db.estimates[0].id}`);
+  };
+  it("ДАНО смета отправлена 20 дней назад. КОГДА директор, диспетчер, продажи. ТОГДА пункт est-… с суммой сметы", () => {
+    const total = sentDb().estimates[0].totalCents;
+    for (const r of ["director", "dispatcher", "sales"] as const) {
+      const i = estOf(r);
+      expect(i, r).toBeDefined();
+      expect(i!.amountCents).toBe(total);
+    }
+  });
+  it("ДАНО та же смета. КОГДА монтажник. ТОГДА пункта нет", () => {
+    expect(estOf("tech")).toBeUndefined();
+  });
+});

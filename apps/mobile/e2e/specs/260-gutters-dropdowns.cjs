@@ -3,7 +3,7 @@
  * (#677 founder 09.11: «Материал, профиль, толщина — селекторы»; «Строка "Размер" слишком широкая»). Every view.
  * Finds things by testID; waits on what it checks (no pauses).
  */
-const { openProps, skipLength, pickAttr, attrShown, attrKeys, attrChosen, openAttrMore } = require("../gutters.cjs");
+const { openProps, skipLength, pickAttr, attrShown, attrKeys, attrChosen, openAttrMore, tilesEven, pairFits } = require("../gutters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -24,17 +24,25 @@ exports.run = async (h) => {
   if (!wide) await openProps(p);
   await tid("attr-panel").waitFor({ timeout: 5000 });
   await openAttrMore(p); // the material and the gauge are under «Ещё» (#2412 G1)
-  for (const f of ["attr-material", "attr-profile", "attr-size", ...((await tid("attr-gauge-button").count()) ? ["attr-gauge"] : [])]) {
+  for (const f of ["attr-material", "attr-size", ...((await tid("attr-gauge-button").count()) ? ["attr-gauge"] : [])]) {
     await tid(`${f}-button`).waitFor({ timeout: 5000 });
     h.expect((await tid(f).getByRole("radio").count()) === 0, `${f}: closed — a field, no chips`);
   }
   // the size field shares its row (Размер · Цвет · Этаж): narrower than a full row
   const size = await tid("attr-size-button").boundingBox();
   const mat = await tid("attr-material-button").boundingBox();
-  h.expect(size.width < mat.width * 0.8, `the size field is narrower than the full row (${Math.round(size.width)} vs ${Math.round(mat.width)})`);
-  // a pick closes the menu and the field shows it
+  const full = await tid("attr-color-button").boundingBox(); // the colour has a row of its own
+  h.expect(size.width < full.width * 0.8, `the size field is narrower than the full row (${Math.round(size.width)} vs ${Math.round(full.width)})`);
+  // the material and the gauge share one row (founder 27.11, #2984), Размер · Этаж too — side by side, nothing cut (#3051)
+  for (const [x, y] of [["attr-size", "attr-story"], ...((await tid("attr-gauge-button").count()) ? [["attr-material", "attr-gauge"]] : [])]) {
+    const bad = await pairFits(p, x, y);
+    h.expect(bad === "", `pair in one line (${bad || `${x} · ${y}`})`);
+  }
+  // #3051: the profile tiles are one width and height, in one row
+  { const bad = await tilesEven(p, "attr-profile"); h.expect(bad === "", `the profile tiles are even (${bad})`); }
+  // the profile: tiles with icons (#2986) — a pick checks it and the window says it
   const profiles = await attrKeys(p, "attr-profile");
-  h.expect(profiles.length >= 2, `the profile menu opens (${profiles.length})`);
+  h.expect(profiles.length >= 2 && (await tid("attr-profile-button").count()) === 0, `the profile tiles (${profiles.length})`);
   const before = await attrChosen(p, "attr-profile");
   const other = profiles.find((k) => k !== before);
   const name = await pickAttr(p, "attr-profile", other);

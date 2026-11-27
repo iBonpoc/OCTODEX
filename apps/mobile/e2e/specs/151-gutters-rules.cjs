@@ -8,7 +8,7 @@
  * - the office reads the rules, cannot change them.
  * Finds things by testID; waits on what it checks.
  */
-const { openProps, skipLength, pickAttr, pickDsKind, attrChosen, attrShown, openAttrMore, winSave } = require("../gutters.cjs");
+const { openProps, skipLength, pickAttr, pickDsKind, attrChosen, attrShown, attrClose, openAttrMore, winSave } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 
@@ -112,7 +112,12 @@ exports.run = async (h) => {
   await openAttrs();
   // the diverter belongs to a square corrugated downspout (NAMES-41): the window offers it only there
   await pickDsKind(p, "rectRibbed");
-  const leader = await pickAttr(p, "attr-head", "conductor"); // «Верх» is on top: a list
+  // «Верх» is on top: three short words — a menu at the field, not a big list (founder 27.11, #2982: «странный большой селектор»)
+  await tid("attr-head-button").click();
+  await p.getByRole("menu").locator('[data-testid="attr-head-conductor"]').locator("visible=true").waitFor({ timeout: 5000 });
+  h.expect((await tid("attr-head-picker").count()) === 0, "«Верх»: a menu, no list sheet");
+  await attrClose(p, "attr-head");
+  const leader = await pickAttr(p, "attr-head", "conductor");
   await more();
   await tid("attr-diverter").click(); // a ToggleRow: the row is the switch
   await waitFor(async () => {
@@ -140,9 +145,10 @@ exports.run = async (h) => {
   // and the corner: pick the first run (its middle) — the corner kept its own method
   if (!wide) await closeAttrs();
   const mid = await svg().locator("line:not([id^=halo])").first().evaluate((l) => {
-    const r = l.ownerSVGElement.getBoundingClientRect();
+    // #2988: the sheet reaches `pad` past the canvas and its viewBox starts at −pad — the line's own screen matrix, not the sheet's corner
     const n = (k) => Number(l.getAttribute(k));
-    return [r.x + (n("x1") + n("x2")) / 2, r.y + (n("y1") + n("y2")) / 2];
+    const q = new DOMPoint((n("x1") + n("x2")) / 2, (n("y1") + n("y2")) / 2).matrixTransform(l.getScreenCTM());
+    return [q.x, q.y];
   });
   await p.mouse.click(mid[0], mid[1]);
   await waitFor(async () => /Gutter/.test((await tid("draw-selected").count()) ? await tid("draw-selected").innerText() : ""), "a run picked");

@@ -8,7 +8,7 @@
  * Finds things by testID; waits on what it checks.
  */
 const { estMore, estAct, estHas } = require("../estimateMenu.cjs");
-const { skipLength, openView, savedOnce } = require("../gutters.cjs");
+const { freeLead, autoEstimateOf, skipLength, openView, savedOnce } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -32,7 +32,7 @@ exports.run = async (h) => {
   };
 
   await h.go("/today");
-  const lead = (await db()).leads.find((l) => l.propertyId) || (await db()).leads[0];
+  const lead = freeLead(await db()); // #3027: no open estimate of its own — «Готово» makes a new one
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
   await p.waitForFunction((k) => !!(JSON.parse(localStorage.getItem(k) || "null") || {}).db?.company?.modules?.gutters?.enabled, DB_KEY, { timeout: 8000 });
@@ -50,9 +50,8 @@ exports.run = async (h) => {
   await p.waitForFunction(() => !!new URL(location.href).searchParams.get("m"), null, { timeout: 8000 });
   const mid = new URL(p.url()).searchParams.get("m");
   await openView(p);
-  await tid("view-action-make").getByRole("button").click();
-  await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 8000 });
-  const eid = new URL(p.url()).searchParams.get("id");
+  // #3027: «Готово» made the estimate by itself
+  const eid = await autoEstimateOf(p, mid);
   await p.waitForFunction(([k, m]) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.measurements || []).some((x) => x.id === m && x.status === "ready"), [DB_KEY, mid], { timeout: 8000 });
 
   // the lines carry the engine's version; nothing is said while it is the current one
@@ -80,7 +79,8 @@ exports.run = async (h) => {
   // the measurements' list: the card says so too
   await h.go("/module/gutters/list");
   await tid(`measurement-${mid}`).waitFor({ timeout: 8000 });
-  h.expect(/Расчёт изменился/.test(await tid(`measurement-${mid}`).innerText()), "the card in the list of measurements says so");
+  // #3033: the state is the icon in line 1 of the row, its word the screen reader's label
+  h.expect(/Расчёт изменился/.test((await tid(`measurement-${mid}`).getByTestId("row-status-icon").first().getAttribute("aria-label")) || ""), "the card in the list of measurements says so");
 
   // «Обновить из замера»: the same estimate, the current version, no words
   await h.go(`/estimate/${eid}`);

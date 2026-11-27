@@ -1,6 +1,6 @@
 /**
- * Карточка сметы по принятой карте (estimate-audit/MAP.md п.4, #2640): под шапкой только безопасные значки
- * «Изменить» · «PDF» · «Показать клиенту» — ничего не уходит клиенту одним нажатием; «Позвонить» — второй кнопкой.
+ * Карточка сметы (estimate-audit/MAP.md п.4, #2640; ряд пересобран по слову основателя #2994 — #2995/#2997): под шапкой ряд как у
+ * всех объектов — Позвонить · SMS · Почта · PDF; ничего не уходит клиенту одним нажатием (SMS/Почта открывают приложение телефона).
  */
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
@@ -16,10 +16,17 @@ describe("карточка сметы: значки под шапкой (#2640)"
     // the old «Ссылка» icon (it sent at once) — exact: «est-act-copy-link» is the menu item of #2652
     expect(src).not.toMatch(/est-act-copy(?!-link)/);
   });
-  it("ряд: Изменить · PDF · Показать клиенту; «Показать клиенту» одно — в «⋯» его нет", () => {
-    expect(row.indexOf("est-act-edit")).toBeLessThan(row.indexOf("est-act-pdf"));
-    expect(row.indexOf("est-act-pdf")).toBeLessThan(row.indexOf("est-act-client"));
-    expect(src).toContain('x.key !== "client"');
+  it("ряд (#2995/#2997, слово основателя #2994): Позвонить · SMS · Почта · PDF; «Изменить» и «Показать клиенту» — в «⋯»", () => {
+    const at = (id: string) => row.indexOf(id);
+    expect(at("est-call")).toBeGreaterThan(-1);
+    expect(at("est-call")).toBeLessThan(at("est-client-sms"));
+    expect(at("est-client-sms")).toBeLessThan(at("est-client-mail"));
+    expect(at("est-client-mail")).toBeLessThan(at("est-act-pdf"));
+    for (const id of ["est-act-edit", "est-act-client"]) expect(row, id).not.toContain(id);
+    // SMS и Почта открывают приложение телефона клиенту — смету они не шлют (MAP §4: ничего не уходит одним нажатием)
+    expect(src).toContain("const sms = smsHref(customer?.phone)");
+    expect(src).toContain("const mail = mailtoHref(customer?.email)");
+    expect(src).toContain('actions.filter((x) => x.key !== "pdf")');
     expect((ru as Record<string, string>)["ue.openClient"]).toBe("Показать клиенту");
   });
   it("«Скопировать ссылку» (#2652): пункт «⋯» только у отправленной и дальше, с токеном, без отзыва; копирует, а не отправляет", () => {
@@ -29,9 +36,9 @@ describe("карточка сметы: значки под шапкой (#2640)"
     expect(src).toContain("copyText(clientLink(e.token))");
     expect((ru as Record<string, string>)["est.menu.copyLink"]).toBe("Скопировать ссылку");
   });
-  it("«Позвонить» — второе действие отправленной сметы (по DS объекта — в «⋯»), звонок — tel:", () => {
-    expect(src).toContain('testID: "est-call"');
-    expect(src).toContain("tel:${phone.replace(");
-    expect(src).toContain("const second = callSecond ?? signSecond");
+  it("«Позвонить» — значок ряда (звонок — tel:), не вторая кнопка", () => {
+    expect(row).toContain('testID: "est-call"');
+    expect(row).toContain("open(`tel:${tel}`)");
+    expect(src).not.toContain("callSecond");
   });
 });

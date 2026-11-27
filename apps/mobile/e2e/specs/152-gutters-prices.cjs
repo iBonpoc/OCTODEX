@@ -47,7 +47,7 @@ exports.run = async (h) => {
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
   await waitFor(async () => !!(await mod()).enabled, "on");
-  await tid("module-gutters-prices").getByRole("button").click();
+  await tid("module-gutters-prices").click(); // #3065: the module's places are rows «›» now, the row is the press
   await p.waitForURL(/\/module\/gutters\/prices$/, { timeout: 5000 });
   await tid("gpr-screen").waitFor({ timeout: 5000 });
   h.expect((await tid("gpr-ro").count()) === 0 && (await tid("gpr-locked").count()) === 0, "the director in the trial changes them");

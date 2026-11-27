@@ -235,8 +235,11 @@ describe("#2715: хвосты проверки #2674", () => {
     };
     const tri = "app/(tabs)/triage.tsx";
     expect(tag(tri, "rejected-choose-"), "triage: главная").not.toMatch(/\bvariant=/);
-    expect(tag(tri, '"sync.rejected.open"')).toMatch(/variant=/);
-    expect(src(tri)).toMatch(/variant=\{choose \? "secondary" : undefined\}/);
+    // #3064/#3065 (DS §7.5, no column of buttons): «Открыть» is a row «›» (ListRow), not a button, on both screens
+    for (const f of [tri, "features/StuckOps.tsx"]) {
+      expect(src(f), f).toMatch(/<ListRow title=\{t\("sync\.rejected\.open"\)\}/);
+      expect(src(f), f).not.toMatch(/<Button label=\{t\("sync\.rejected\.open"\)\}/);
+    }
     expect(tag("features/StuckOps.tsx", "rejected-choose-"), "профиль: серая").toMatch(/variant="secondary"/);
     for (const f of [tri, "features/StuckOps.tsx"]) expect(tag(f, "rejected-choose-"), f).not.toMatch(/icon="copy"/);
   });

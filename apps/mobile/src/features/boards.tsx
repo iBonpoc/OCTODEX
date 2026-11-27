@@ -4,12 +4,15 @@ import { useStore } from "@/data/store";
 import type { DB, Estimate, EstimateStatus } from "@/data/types";
 import { ESTIMATE_GROUPS, estimateGroup, type EstimateFilter } from "@/features/listGroups";
 import { useI18n, type DictKey } from "@/i18n";
-import { estimateStatusView } from "@/features/estimateStatus";
+import { estimateStatusView, estimateView } from "@/features/estimateStatus";
 import { canSeeEstimate } from "@/features/access";
 import { estimateSigns } from "@/features/listSigns";
 import { estimateListAmount } from "@/features/estimateDoc";
 import { initialsOf } from "@/features/invoice/moneySummary";
 import { router } from "expo-router";
+import { shortAddress } from "@/features/shortAddress";
+import { telHref } from "@/features/contactLinks";
+import { openContact } from "@/ui/listCard";
 import type { GroupRowProps } from "@/ui/groupedList";
 
 /** status chip of an estimate — the one place for it (lists, client and property documents) */
@@ -43,7 +46,7 @@ export const DONE_SHOWN = 5;
  */
 export function useEstimateList(q: string, allDone: boolean, onAllDone: () => void) {
   const { db, role, mode } = useStore();
-  const { t, money, day } = useI18n();
+  const { t, money, day, moneyWhole } = useI18n();
   const now = Date.now();
   const list = db.estimates
     .filter((e) => canSeeEstimate(db, { role, mode, me: db.me }, e.id))
@@ -62,12 +65,15 @@ export function useEstimateList(q: string, allDone: boolean, onAllDone: () => vo
   });
   const row = (e: Estimate): GroupRowProps & { key: string } => {
     const c = db.customers.find((x) => x.id === e.customerId);
+    const prop = db.properties.find((x) => x.id === e.propertyId);
     const sign = estimateSigns(e, now)[0];
     const amount = estimateListAmount(e);
     // what is with it now, once: the sign («Без ответа 6 дн»), else the last event, else its status word
     // an estimate waiting for OUR signature says so first: it is in «Нужно действие» for that, not for how long it was silent
-    const what = e.status === "awaiting_countersign"
-      ? t(estView[e.status].l)
+    // #3058: a sent estimate changed after (a draft again) says «Изменена после отправки» — the same word as its header
+    const view = estimateView(e);
+    const what = e.status === "awaiting_countersign" || view !== estView[e.status]
+      ? t(view.l)
       : sign
       ? t(sign.key, sign.params)
       : e.approval
@@ -76,14 +82,27 @@ export function useEstimateList(q: string, allDone: boolean, onAllDone: () => vo
           ? t("ue.viewed", { date: day(e.viewedAt) })
           : e.sentAt
             ? `${t("st.sent")} ${day(e.sentAt)}`
-            : t(estView[e.status].l);
+            : e.status === "draft"
+              ? undefined // the group «Черновики» says it (review #3038)
+              : t(estView[e.status].l);
     return {
       key: e.id,
       testID: `est-row-${e.id}`,
       title: c?.name ?? "—",
-      subtitle: [what, e.title].filter(Boolean).join(" · "),
+      // #3018 (founder #3017: «знаю его по адресу»): 1 — the client · the number; 2 — the address of the work; 3 — what is with it · the
+      // work; the sum on the right, big (a money list, design/crm review)
+      // the number is the server's (tg_assign_number on insert): a draft not yet synced (and the demo's seed) has none yet — say so,
+      // never a blank (founder #3018: «номер должен быть»; the numbering itself — #3019)
+      refNo: e.number || undefined, // under the lead (#3046): no number yet — nothing there (the numbering — #3019)
+      subtitle: prop ? shortAddress(prop.address, prop.city) : undefined,
+      addressLine: true,
+      extra: [what, e.title].filter(Boolean).join(" · ") || undefined,
+      // #3038 «одно правило с клиентом»: the sum in the name's line (valueTop), the number under it on line 2
+      valueTop: true,
+      // #3038 (review: «смете без ответа и просроченному счёту звонок нужнее всего»): the call on the right, as the client's
+      actions: telHref(c?.phone) ? [{ icon: "phone" as const, a11y: `${t("client.call")} ${c?.name ?? ""}`, onPress: () => openContact({ kind: "call", icon: "phone", url: telHref(c?.phone)!, value: c?.phone ?? "" }), testID: `est-call-${e.id}` }] : undefined,
       lead: { initials: initialsOf(c?.name) },
-      value: amount.from ? t("card.fromAmount", { amount: money(amount.cents) }) : money(amount.cents),
+      value: amount.from ? t("card.fromAmount", { amount: moneyWhole(amount.cents) }) : moneyWhole(amount.cents),
       onPress: () => router.push(`/estimate/${e.id}`),
       swipe: { left: [{ key: "open", label: t("swipe.open"), icon: "eye", full: true, onPress: () => router.push(`/estimate/${e.id}`), testID: `est-swipe-${e.id}` }] },
     };

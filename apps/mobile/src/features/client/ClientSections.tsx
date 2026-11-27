@@ -29,6 +29,7 @@ import { leadStatusView, sourceName } from "@/features/leads";
 import { NotesBlock } from "@/features/NotesBlock";
 import { AdvancesBlock } from "@/features/payments/AdvancesBlock";
 import { ModulePlaces } from "@/modules/ModulePlaces";
+import { clientPlaceCtx } from "@/features/client/clientMeasure";
 import { ClientDupCards } from "@/features/client/ClientDuplicates";
 import { TaskSheet, type TaskDraft } from "@/features/tasks/TaskSheet";
 import { useDialThenAsk } from "@/features/comms/dial";
@@ -127,6 +128,9 @@ const initials = (n: string) => n.split(/\s+/).filter(Boolean).map((p) => p[0]).
 
 /* ============================== Обзор ============================== */
 
+/** #3061: the overview's look on the stand — «A» no tiles (crm-review, recommended), «B» a «Деньги» group with cents (design-review) */
+const OVERVIEW_LOOK: "A" | "B" = "A";
+
 export function ClientOverview({ c, f, onSection, withNow }: {
   c: Customer;
   f: ClientFacts;
@@ -137,74 +141,25 @@ export function ClientOverview({ c, f, onSection, withNow }: {
   const { t, money, moneyWhole, time } = useI18n();
   const ago = useAgo();
   const when = useWhen();
+  const store = useStore();
+  const toast = useToast();
   const { db, r, office } = f;
   const money$ = canSeeClientMoney(f.role);
-  // what the «Сейчас» card already says is not said again (#2350): its job's figures (debt / to bill / paid), its visit
+  // #3061: no tiles in variant A — the money is the «Сейчас» card's and the «Счета» tab's (crm-review: the tiles argued with the card)
   const nowJob = f.now && (f.now.kind === "working" || f.now.kind === "scheduled") ? f.now.job : undefined;
-  const covered = new Set<ClientTile>([
-    ...(nowJob && jobFigures(nowJob, r.invoices) ? (["toBill", "paid", "debt"] as const) : []),
-    ...(f.now?.kind === "overdue" ? (["debt"] as const) : []),
-    // the next visit is a row of «впереди» (or the card's own) — never a tile beside it saying the same
-    "nextVisit",
-  ]);
-  const shownTiles = clientTileKeys(f.role, f.state, f.toBillCents).filter((k) => !covered.has(k));
-  // a lone tile is a wall of one: the line it would say is in the sections (v2 «тройка цифр», not a 2×2 of leftovers)
-  const tiles = shownTiles;
   const nowJobs = r.jobs.filter((j) => j.status !== "done" && !j.cancelledAt && j.id !== nowJob?.id);
   // the visits ahead (v2 «Сегодня 8:30–12:30 · Bathroom remodel · Alex»): the next two, not the one the card holds
   const nowVisitId = f.now && (f.now.kind === "working" || f.now.kind === "scheduled") ? f.now.visit.id : undefined;
   // v2 макет 3: the card's own visit is a row too — the card holds the job, the rows the days (not the visit twice: the card has no visit line)
   void nowVisitId;
   const ahead = f.visits.filter((v) => isOpenVisit(v) && dayOffsetOf(isoDayKey(v.start)) >= 0).slice(0, 2);
-  // the pinned notes of the client (v2 «Gate code 4512 · small dog / закреплено · видят мастера»): the warm plate first
-  const pinned = db.notes.filter((n) => n.subjectType === "customer" && n.subjectId === c.id && n.pinned && !(n as { deletedAt?: string }).deletedAt);
   const aheadRow = useAheadRow(f);
   const openTasks = r.tasks.filter((x) => !x.doneAt);
-  const done = r.jobs.filter((j) => j.status === "done").sort((a, b) => b.id.localeCompare(a.id))[0];
-  const place = r.properties.find((p) => p.accessNotes || p.gateCode) ;
-  const gateSeen = place ? canSeeGateCode(db, f.role, place.id) : false;
-  const lastTalk = f.talks[0];
-  const [main] = peopleOf(c);
-
-  const tile = (k: ClientTile): ReactNode => {
-    switch (k) {
-      case "debt":
-        return <StatTile key={k} testID="client-tile-debt" label={t("proto.client.tile.debt")} value={moneyWhole(f.m.owesCents)} icon="invoice" warn={f.overdue ? t("card.sign.overdueDays", { d: f.overdue.days }) : undefined} onPress={() => onSection("money")} />;
-      case "paid":
-        return <StatTile key={k} testID="client-tile-paid" label={t("proto.client.tile.paid")} value={moneyWhole(f.m.paidTotalCents)} icon="wallet" onPress={money$ && f.hasMoney ? () => onSection("money") : undefined} />;
-      case "toBill":
-        return <StatTile key={k} testID="client-tile-tobill" label={t("proto.client.tile.toBill")} value={moneyWhole(f.toBillCents)} icon="doc" onPress={() => onSection("money")} />;
-      case "nextVisit":
-        return f.nextVisit ? (
-          <StatTile key={k} testID="client-tile-next" label={`${t("proto.client.tile.next")} · ${dayWord(f.nextVisit.start)}`} value={time(f.nextVisit.start)} icon="calendar" onPress={() => router.push(`/visit/${f.nextVisit!.id}`)} />
-        ) : null;
-      case "contact":
-        return lastTalk ? <StatTile key={k} testID="client-tile-contact" label={`${t("proto.client.tile.contact")} · ${t(lastTalk.title)}`} value={ago(lastTalk.at)} icon="phone" onPress={() => onSection("log")} /> : null;
-      case "reminded": {
-        const since = r.invoices.filter((i) => i.sentAt && i.paidCents < i.totalCents).map((i) => i.sentAt!).sort()[0];
-        const n = since ? f.talks.filter((h) => h.at >= since).length : 0;
-        return <StatTile key={k} testID="client-tile-reminded" label={`${t("proto.client.tile.reminded")}${n ? ` · ${ago(f.talks[0]!.at)}` : ""}`} value={n ? String(n) : t("proto.client.never")} icon="bell" onPress={() => onSection("log")} />;
-      }
-      case "lastJob":
-        return done ? <StatTile key={k} testID="client-tile-lastjob" label={`${t("proto.client.tile.lastJob")} · ${done.title}`} value={done.number ?? "—"} icon="wrench" onPress={() => router.push(`/job/${done.id}`)} /> : null;
-      case "approved": {
-        const ok = r.estimates.filter((e) => e.status === "approved").length;
-        return r.estimates.length ? <StatTile key={k} testID="client-tile-approved" label={t("proto.client.tile.approved")} value={`${ok}/${r.estimates.length}`} icon="check" onPress={() => onSection("work")} /> : null;
-      }
-      case "source":
-        return c.sourceId ? <StatTile key={k} testID="client-tile-source" label={t("proto.client.tile.source")} value={sourceName(db, c.sourceId)} icon="star" /> : null;
-      case "gate":
-        return place?.gateCode ? <StatTile key={k} testID="client-tile-gate" label={t("proto.client.tile.gate")} value={gateSeen ? place.gateCode : "•••"} warn={gateSeen ? undefined : t("proto.client.gateLater")} icon="key" /> : null;
-      case "onSite":
-        return main ? <StatTile key={k} testID="client-tile-onsite" label={t("proto.client.tile.onSite")} value={main.name.split(" ")[0] ?? main.name} icon="user" /> : null;
-      case "tomorrow": {
-        const tm = f.visits.find((v) => isOpenVisit(v) && dayOffsetOf(isoDayKey(v.start)) === 1);
-        return tm ? <StatTile key={k} testID="client-tile-tomorrow" label={t("common.tomorrow")} value={time(tm.start)} icon="calendar" onPress={() => router.push(`/visit/${tm.id}`)} /> : null;
-      }
-    }
-  };
   const dw = useDayWord();
-  const dayWord = (iso: string) => dw(iso);
+  const toggleTask = (x: (typeof openTasks)[number]) => {
+    const res = store.saveTask({ ...x, doneAt: x.doneAt ? undefined : new Date().toISOString() });
+    toast.show(t("task.done"), res.undo);
+  };
 
   // archive: on the client's screen the «Сейчас» card says it with its «Вернуть в активные»; «не обслуживаем» has no step — the plate
   const plate =
@@ -222,45 +177,40 @@ export function ClientOverview({ c, f, onSection, withNow }: {
   return (
     <View style={{ gap: space[4] }} testID="client-overview">
       {plate}
-      {/* #2363 F12/F20/F21: the pinned note, the access words and the visits ahead — rows of ONE group (rule 12), quiet:
+      {/* #3060 (founder 27.11: «всё в одном блоке слито… или все вместе, или все раздельно»): every record of every section of the client
+          is its own frame (#3017, #3022) — the overview's note, gate code and visits ahead too.
+          #2363 F12/F20/F21: the pinned note, the access words and the visits ahead — quiet:
           a gate code is not a status, so no warm fill; the note takes 2 lines, never cut in the middle of a word */}
+      {/* #3061: every group says what it is — «Важно знать» (the pinned notes, the access), «Впереди» (the visits) — no row without
+          its title; every record its own frame (#3060) */}
       <GroupedList testID="client-top">
-        <ListGroup testID="client-top-group">
-          {pinned.map((n) => (
-            <GroupRow
-              key={n.id}
-              testID={`client-pinned-${n.id}`}
-              lead={{ icon: "key" }}
-              wrap
-              title={n.body.split("\n")[0]!}
-              subtitle={t(n.visibility === "team" ? "px2.cv.pinnedTeam" : "px2.cv.pinnedMine")}
-              onPress={() => onSection("log")}
-            />
-          ))}
-          {place && (place.accessNotes || place.gateCode) ? (
-            <GroupRow
-              testID="client-access"
-              lead={{ icon: "key" }}
-              wrap
-              title={place.gateCode ? (gateSeen ? t("proto.client.gateIs", { code: place.gateCode }) : t("proto.client.gateLater")) : t("proto.client.access")}
-              subtitle={[place.accessNotes, r.properties.length > 1 ? propertyTitle(place) : null].filter(Boolean).join(" · ") || undefined}
-              onPress={r.properties.length > 1 ? () => onSection("places") : () => router.push(`/property/${place.id}`)}
-            />
-          ) : null}
+        {/* #3068 (founder 27.11: «в обзоре не нравится… важно знать… код ворот… заметка… прикреплена, откреплена»): no «Важно знать» —
+            the access, the people and the notes of a place are in «Объекты», the client's pinned notes first in «Журнал» */}
+        <ListGroup separate title={t("ov3061.ahead")} testID="client-ahead">
           {ahead.map((v) => aheadRow(v))}
         </ListGroup>
       </GroupedList>
-      {(() => {
-        // only the tiles that have something to say; a lone one is dropped (its line is in the sections)
-        // (a tile whose value says nothing — «$0» — draws nothing: StatTile's own rule, statShown)
-        const drawn = tiles.map(tile).filter((n): n is ReactElement<{ value: string }> => !!n && statShown(String((n as ReactElement<{ value: string }>).props.value)));
-        return drawn.length >= 2 ? <StatGrid testID="client-tiles">{drawn}</StatGrid> : null;
-      })()}
+      {OVERVIEW_LOOK === "B" && office
+        ? (() => {
+            // #3061 вариант Б (design-review): «Деньги» — долг и оплачено, с центами (#2672); нечего сказать — нет блока
+            const drawn = [
+              f.m.owesCents > 0 ? <StatTile key="debt" testID="client-tile-debt" label={t("proto.client.tile.debt")} value={money(f.m.owesCents)} icon="invoice" warn={f.overdue ? t("card.sign.overdueDays", { d: f.overdue.days }) : undefined} onPress={() => onSection("money")} /> : null,
+              f.m.paidTotalCents > 0 ? <StatTile key="paid" testID="client-tile-paid" label={t("proto.client.tile.paid")} value={money(f.m.paidTotalCents)} icon="wallet" onPress={f.hasMoney ? () => onSection("money") : undefined} /> : null,
+            ].filter(Boolean);
+            return drawn.length ? (
+              <GroupedList testID="client-money">
+                <ListGroup bare title={t("ov3061.money")}>
+                  <StatGrid testID="client-tiles">{drawn}</StatGrid>
+                </ListGroup>
+              </GroupedList>
+            ) : null;
+          })()
+        : null}
       <ClientDupCards c={c} />
       {/* a new client: the «Сейчас» card says «Работ пока нет» with its «Новая смета»; the panel of the 1280 list says it here */}
       {withNow && f.state === "new" && !r.estimates.length ? <Empty icon="wrench" title={t("proto.client.noJobs")} hint={t("proto.client.noJobsHint")} testID="client-new-empty" /> : null}
       <GroupedList testID="client-overview-groups">
-        <ListGroup title={t("proto.client.inWork")} testID="client-in-work">
+        <ListGroup separate title={t("proto.client.inWork")} testID="client-in-work">
           {nowJobs.map((j) => (
             <GroupRow
               key={j.id}
@@ -273,11 +223,20 @@ export function ClientOverview({ c, f, onSection, withNow }: {
               onPress={() => router.push(`/job/${j.id}`)}
             />
           ))}
+        </ListGroup>
+        <ListGroup separate title={t("ov3061.tasks")} count={openTasks.length > 2 ? openTasks.length : undefined} testID="client-tasks">
           {openTasks.slice(0, 2).map((x) => (
-            <GroupRow key={x.id} testID={`client-task-${x.id}`} lead={{ icon: "check" }} title={x.title} subtitle={[t("proto.client.task"), x.dueAt ? when(x.dueAt) : null].filter(Boolean).join(" · ")} onPress={() => onSection("log")} />
+            <GroupRow
+              key={x.id}
+              testID={`client-task-${x.id}`}
+              lead={{ done: !!x.doneAt, onToggle: () => toggleTask(x), label: x.title, testID: `client-task-done-${x.id}` }}
+              title={x.title}
+              subtitle={x.dueAt ? when(x.dueAt) : undefined}
+              onPress={() => onSection("log")}
+            />
           ))}
         </ListGroup>
-        <ListGroup title={t("proto.client.lastTalk")} all={{ label: t("proto.client.allLog"), onPress: () => onSection("log"), testID: "client-log-all" }} testID="client-last-talk">
+        <ListGroup separate title={t("proto.client.lastTalk")} all={{ label: t("ov3061.all"), onPress: () => onSection("log"), testID: "client-log-all" }} testID="client-last-talk">
           {f.talks.slice(0, 2).map((h) => (
             <GroupRow key={h.id} lead={{ icon: h.icon }} title={t(h.title)} subtitle={[ago(h.at), h.detail].filter(Boolean).join(" · ")} />
           ))}
@@ -286,11 +245,7 @@ export function ClientOverview({ c, f, onSection, withNow }: {
       {/* add-on modules' place (spec 33 П24 А3): nothing unless a module is switched on */}
       <ModulePlaces
         place="client"
-        ctx={{
-          customerId: c.id,
-          leadIds: r.leadIds,
-          places: r.properties.map((p) => ({ id: p.id, address: p.address, ...(p.city ? { city: p.city } : {}), leadIds: db.leads.filter((l) => l.propertyId === p.id).map((l) => l.id) })),
-        }}
+        ctx={clientPlaceCtx(db, c.id, r.leadIds, r.properties)}
       />
     </View>
   );
@@ -328,7 +283,8 @@ function useAheadRow(f: ClientFacts) {
         key={v.id}
         testID={`client-ahead-${v.id}`}
         lead={{ icon: "calendar" }}
-        title={today ? `${dayWord} ${bareTime(time(v.start))}–${bareTime(time(end))}` : `${dayWord} ${bareTime(time(v.start))}`}
+        // #3061 (both reviews): the time in full, «1:00 PM» — never a bare «1:00» that reads as the night (rule 7)
+        title={today ? `${dayWord} ${bareTime(time(v.start))}–${time(end)}` : `${dayWord} · ${time(v.start)}`}
         subtitle={line || undefined}
         status={today ? todayPill : undefined}
         cols={today ? undefined : [{ label: t("px2.cv.dur"), value: duration(v.durationMin) }]}
@@ -492,7 +448,8 @@ export function ClientVisits({ f }: { f: ClientFacts }) {
       <Empty icon="calendar" title={t("prop.noVisits")} />
     ) : (
       <GroupedList testID="client-visits">
-        <ListGroup>
+        {/* #3022 (founder 26.11: «там тоже нужно разделить все списки»): each record its own frame, as the lists (#3017) */}
+        <ListGroup separate>
           {[...f.visits].reverse().map((v) => (
             <GroupRow
               key={v.id}
@@ -509,7 +466,7 @@ export function ClientVisits({ f }: { f: ClientFacts }) {
 }
 
 export function ClientWork({ f }: { c: Customer; f: ClientFacts }) {
-  const { t, money, day } = useI18n();
+  const { t, tn, money, day } = useI18n();
   const when = useWhen();
   const { db, r, office } = f;
   if (f.role === "tech") {
@@ -518,51 +475,62 @@ export function ClientWork({ f }: { c: Customer; f: ClientFacts }) {
   }
   const live = r.jobs.filter((j) => !j.cancelledAt && j.status !== "done");
   const closed = r.jobs.filter((j) => j.status === "done" || j.cancelledAt);
-  // one job, one group: its row and its visits under it (the estimate and the invoices are their own sections — nothing twice)
-  const project = (j: Job) => {
+  // #3060 (founder 27.11: «всё в одном блоке слито»; design + crm review): each job is its own frame; its visits are a line under it —
+  // «2 выезда · следующий вс, 29 нояб.» — the list of visits itself is the section «Выезды» (nothing twice)
+  const visitsLine = (j: Job) => {
     const vis = f.visits.filter((v) => v.jobId === j.id);
-    return (
-      <ListGroup key={j.id} testID={`client-project-${j.id}`}>
-        <GroupRow
-          testID={`client-job-${j.id}`}
-          lead={{ icon: "wrench" }}
-          title={j.title || j.number || t("cc.kind.job")}
-          subtitle={[t(jobStatusView[j.status].label), j.number, r.properties.length > 1 ? placeName(db, j) : null].filter(Boolean).join(" · ")}
-          value={office ? money(j.amountCents) : undefined}
-          onPress={() => router.push(`/job/${j.id}`)}
-        />
-        {vis.map((v) => (
-          <GroupRow compact key={v.id} testID={`client-visit-${v.id}`} lead={{ icon: "calendar" }} title={when(v.start)} subtitle={memberName(db, v.techId, t)} onPress={() => router.push(`/visit/${v.id}`)} />
-        ))}
-      </ListGroup>
-    );
+    if (!vis.length) return undefined;
+    const now = Date.now();
+    const next = vis.filter((v) => Date.parse(v.start) >= now).sort((a, b) => a.start.localeCompare(b.start))[0];
+    const last = vis.filter((v) => Date.parse(v.start) < now).sort((a, b) => b.start.localeCompare(a.start))[0];
+    const at = next ? t("c3060.nextVisit", { when: day(next.start) }) : last ? t("c3060.lastVisit", { when: day(last.start) }) : null;
+    return [tn("px1.visitsN", vis.length, { n: vis.length }), at].filter(Boolean).join(" · ");
   };
+  const project = (j: Job) => (
+    <GroupRow
+      key={j.id}
+      testID={`client-job-${j.id}`}
+      lead={{ icon: "wrench" }}
+      title={j.title || j.number || t("cc.kind.job")}
+      subtitle={[t(jobStatusView[j.status].label), j.number, r.properties.length > 1 ? placeName(db, j) : null].filter(Boolean).join(" · ")}
+      extra={visitsLine(j)}
+      // the sum in the name's own line (#3033), so the visits' line under it is not cut on 390
+      valueTop
+      value={office ? money(j.amountCents) : undefined}
+      onPress={() => router.push(`/job/${j.id}`)}
+    />
+  );
   return (
     <View style={{ gap: space[4] }} testID="client-work">
       {r.jobs.length === 0 && r.leads.length === 0 ? <Empty icon="wrench" title={t("client.empty.jobs")} hint={t("proto.client.noJobsHint")} /> : null}
       <GroupedList>
-        {live.map(project)}
-        <ListGroup title={t("w2b.client.closedJobs", { n: closed.length })} testID="client-closed-jobs">
+        <ListGroup separate testID="client-projects">
+          {live.map(project)}
+        </ListGroup>
+        <ListGroup separate title={t("w2b.client.closedJobs", { n: closed.length })} testID="client-closed-jobs">
           {closed.map((j) => (
             <GroupRow
               key={j.id}
               testID={`client-job-${j.id}`}
               lead={{ icon: "wrench" }}
               title={j.title || j.number || ""}
-              subtitle={[t(jobStatusView[j.status].label), j.number, r.properties.length > 1 ? placeName(db, j) : null].filter(Boolean).join(" · ")}
+              titleNote={j.title ? j.number : undefined}
+              subtitle={[t(jobStatusView[j.status].label), r.properties.length > 1 ? placeName(db, j) : null].filter(Boolean).join(" · ")}
+              figureRight
               value={money(j.amountCents)}
               onPress={() => router.push(`/job/${j.id}`)}
             />
           ))}
         </ListGroup>
-        <ListGroup title={t("w2b.client.leads", { n: r.leads.length })} testID="client-leads">
+        <ListGroup separate title={t("w2b.client.leads", { n: r.leads.length })} testID="client-leads">
           {r.leads.map((l) => (
             <GroupRow
               key={l.id}
               testID={`client-lead-${l.id}`}
               lead={{ icon: "inbox" }}
               title={l.service ?? l.name ?? l.number ?? ""}
-              subtitle={[l.number, day(l.receivedAt)].filter(Boolean).join(" · ")}
+              titleNote={l.service || l.name ? l.number : undefined}
+              subtitle={day(l.receivedAt)}
               status={{ status: leadStatusView[l.status].status, label: t(leadStatusView[l.status].label) }}
               onPress={() => router.push(`/lead/${l.id}`)}
             />
@@ -577,22 +545,24 @@ export function ClientWork({ f }: { c: Customer; f: ClientFacts }) {
 
 /** the client's estimates, newest first: the title, the number and when, the sum and the status (visual v2 «Сметы 1») */
 export function ClientEstimates({ f }: { f: ClientFacts }) {
-  const { t, money, day } = useI18n();
+  const { t, moneyWhole, day } = useI18n();
   const list = [...f.r.estimates].sort((a, b) => (b.savedAt ?? b.sentAt ?? "").localeCompare(a.savedAt ?? a.sentAt ?? ""));
   return (
     <View style={{ gap: space[4] }} testID="client-estimates">
       {list.length === 0 ? (
         <Empty icon="doc" title={t("client.empty.estimates")} />
       ) : (
-        <ListGroup>
+        <ListGroup separate>
           {list.map((e) => (
             <GroupRow
               key={e.id}
               testID={`client-estimate-${e.id}`}
               lead={{ icon: "doc" }}
               title={e.title || e.number || t("cc.kind.estimate")}
-              subtitle={[e.title ? e.number : null, e.sentAt ? day(e.sentAt) : null].filter(Boolean).join(" · ") || undefined}
-              value={money(e.totalCents)}
+              titleNote={e.title ? e.number : undefined}
+              subtitle={e.sentAt ? day(e.sentAt) : undefined}
+              figureRight
+              value={moneyWhole(e.totalCents)}
               status={{ status: estView[e.status].s, label: t(estView[e.status].l), draft: estView[e.status].d }}
               onPress={() => router.push(`/estimate/${e.id}`)}
             />
@@ -621,7 +591,7 @@ export function ClientMoney({ c, f }: { c: Customer; f: ClientFacts }) {
         ]}
       />
       <GroupedList>
-        <ListGroup title={t("client.invoices")} testID="client-invoices">
+        <ListGroup separate title={t("client.invoices")} testID="client-invoices">
           {r.invoices.map((inv) => {
             const ic = invoiceChip(inv);
             return (
@@ -629,24 +599,28 @@ export function ClientMoney({ c, f }: { c: Customer; f: ClientFacts }) {
                 key={inv.id}
                 testID={`client-invoice-${inv.id}`}
                 lead={{ icon: "invoice" }}
-                title={[inv.number, (inv.title && invoiceTitle(inv, t)) || null].filter(Boolean).join(" · ") || t("cc.kind.invoice")}
+                title={(inv.title && invoiceTitle(inv, t)) || inv.number || t("cc.kind.invoice")}
+                titleNote={inv.title ? inv.number : undefined}
                 subtitle={[findJob(db, inv.jobId)?.title, inv.sentAt ? day(inv.sentAt) : null].filter(Boolean).join(" · ")}
-                value={money(inv.totalCents)}
+                figureRight
+                value={moneyWhole(inv.totalCents)}
                 status={{ status: ic.s, label: t(ic.l, ic.p) }}
                 onPress={() => router.push(`/invoice/${inv.id}`)}
               />
             );
           })}
         </ListGroup>
-        <ListGroup title={t("client.receipts")} testID="client-receipts">
+        <ListGroup separate title={t("client.receipts")} testID="client-receipts">
           {[...r.receipts].sort((a, b) => b.at.localeCompare(a.at)).map((p) => (
             <GroupRow
               key={p.id}
               testID={`client-receipt-${p.id}`}
               lead={{ icon: "dollar" }}
-              title={[p.receiptNumber ?? t("rcpt.title"), t(`pay.${p.method}` as DictKey)].join(" · ")}
+              title={t(`pay.${p.method}` as DictKey)}
+              titleNote={p.receiptNumber ?? t("rcpt.title")}
               subtitle={[day(p.at), p.receivedBy ? t("proto.client.takenBy", { who: memberName(db, p.receivedBy, t) ?? "—" }) : null].filter(Boolean).join(" · ")}
-              value={money(p.amountCents)}
+              figureRight
+              value={moneyWhole(p.amountCents)}
               onPress={() => router.push(`/receipt/${p.id}`)}
             />
           ))}
@@ -677,40 +651,96 @@ export function ClientPlaces({ c, f, onRoute }: { c: Customer; f: ClientFacts; o
         />
       ) : (
         <GroupedList>
-          {r.properties.map((p) => {
-            const seen = canSeeGateCode(db, f.role, p.id);
-            const people = propertyPeople(db, p);
-            const jobs = r.jobs.filter((j) => j.propertyId === p.id);
-            const open = jobs.filter((j) => j.status !== "done" && !j.cancelledAt).length;
-            return (
-              <ListGroup key={p.id} testID={`client-property-${p.id}`}>
-                <GroupRow
-                  lead={{ icon: "home2" }}
-                  title={propertyTitle(p)}
-                  subtitle={[p.city, p.label, p.stories ? t("proto.client.stories", { n: p.stories }) : null].filter(Boolean).join(" · ")}
-                  actions={[{ icon: "navigate", a11y: `${t("client.route")}: ${propertyTitle(p)}`, onPress: () => onRoute(p), testID: `client-property-route-${p.id}` }]}
-                  onPress={() => router.push(`/property/${p.id}`)}
-                />
-                {p.gateCode ? (
-                  <GroupRow compact lead={{ icon: "key" }} title={seen ? t("proto.client.gateIs", { code: p.gateCode }) : t("proto.client.tile.gate")} subtitle={seen ? (office ? t("proto.client.gateRule") : undefined) : t("proto.client.gateLater")} testID={`client-property-gate-${p.id}`} />
-                ) : null}
-                {p.accessNotes ? <GroupRow compact lead={{ icon: "alert" }} title={t("proto.client.access")} subtitle={p.accessNotes} /> : null}
-                {people.length ? <GroupRow compact lead={{ icon: "users" }} title={t("proto.client.onSite")} subtitle={people.map((x) => x.name).join(" · ")} /> : null}
-                {jobs.length ? (
-                  <GroupRow compact lead={{ icon: "wrench" }} title={t("proto.client.jobsHere", { n: jobs.length })} subtitle={open ? t("prop.openJobs", { n: open }) : undefined} onPress={() => router.push(`/property/${p.id}`)} />
-                ) : null}
-              </ListGroup>
-            );
-          })}
+          {r.properties.map((p, i) => <PlaceCard key={p.id} p={p} n={i + 1} f={f} onRoute={onRoute} />)}
           {office ? (
-            <ListGroup testID="client-billing">
-              <GroupRow lead={{ icon: "invoice" }} title={t("client.row.billing")} subtitle={c.billing ? billingLine(c.billing) : t("client.row.billingSame")} onPress={() => router.push(`/client/edit?id=${c.id}`)} />
+            // #3068 (crm/design review): the billing address is the client's, under its own title; the same as a place — said so
+            <ListGroup title={t("client.row.billing")} testID="client-billing">
+              <GroupRow
+                lead={{ icon: "invoice" }}
+                title={c.billing ? billingLine(c.billing) : propertyTitle(r.properties[0]!)}
+                subtitle={c.billing ? undefined : t("ov3068.billingSame", { n: 1 })}
+                chevron
+                onPress={() => router.push(`/client/edit?id=${c.id}`)}
+              />
+            </ListGroup>
+          ) : null}
+          {add ? (
+            <ListGroup testID="client-places-add">
+              <GroupRow lead={{ icon: "plus" }} title={t("prop.add")} onPress={add} testID="client-add-property" />
             </ListGroup>
           ) : null}
         </GroupedList>
       )}
       <PropertySheet value={newProp} onClose={() => setNewProp(null)} />
     </View>
+  );
+}
+
+/**
+ * #3068 (founder 27.11: «объект 1, объект 2… адрес, по нему какие-то комментарии, доступы на объекте, имена, работы»): one card a place,
+ * under its title «Объект 1 · Home» — the address with the route, the access (the gate code by its rights, the words of the way in),
+ * the notes of the place (pinned first, two), the people on site, the jobs there (three, with their status; «Все работы · N»).
+ */
+function PlaceCard({ p, n, f, onRoute }: { p: Property; n: number; f: ClientFacts; onRoute: (p: Property) => void }) {
+  const { t, tn } = useI18n();
+  const dw = useDayWord();
+  const { db, r, office } = f;
+  const seen = canSeeGateCode(db, f.role, p.id);
+  const people = propertyPeople(db, p);
+  const jobs = r.jobs.filter((j) => j.propertyId === p.id).sort((a, b) => Number(a.status === "done") - Number(b.status === "done") || b.id.localeCompare(a.id));
+  const notes = db.notes
+    .filter((x) => x.subjectType === "property" && x.subjectId === p.id && !(x as { deletedAt?: string }).deletedAt && (x.visibility === "team" || x.authorId === db.me))
+    .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.at.localeCompare(a.at));
+  const street = [p.address, p.unit].filter(Boolean).join(", ");
+  const open = () => router.push(`/property/${p.id}`);
+  return (
+    // the review of #3060 (design): the label names the place («Home»), no label — «Объект N»; every record of the place its own frame
+    // (#3060 «или все вместе, или все раздельно»), the kind said first in its line («Доступ · …», «Заметка · …»)
+    <ListGroup separate title={p.label || t("ov3068.place", { n })} testID={`client-property-${p.id}`}>
+      <GroupRow
+        lead={{ icon: "home2" }}
+        title={street || propertyTitle(p)}
+        subtitle={[p.place ? [p.place.city, [p.place.state, p.place.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ") : p.city, p.stories ? tn("ov3068.stories", p.stories, { n: p.stories }) : null].filter(Boolean).join(" · ")}
+        actions={[{ icon: "navigate", a11y: `${t("client.route")}: ${propertyTitle(p)}`, onPress: () => onRoute(p), testID: `client-property-route-${p.id}` }]}
+        onPress={open}
+      />
+      {p.gateCode || p.accessNotes ? (
+        <GroupRow
+          lead={{ icon: "key" }}
+          wrap
+          title={p.gateCode ? (seen ? t("proto.client.gateIs", { code: p.gateCode }) : t("proto.client.gateLater")) : t("proto.client.access")}
+          subtitle={p.gateCode ? [t("proto.client.access"), p.accessNotes].filter(Boolean).join(" · ") : p.accessNotes || undefined}
+          testID={`client-property-gate-${p.id}`}
+        />
+      ) : null}
+      {notes.slice(0, 2).map((x) => (
+        <GroupRow
+          key={x.id}
+          testID={`client-property-note-${x.id}`}
+          lead={{ icon: x.pinned ? "pushpin" : "note" }}
+          wrap
+          title={x.body}
+          subtitle={`${t("proto.client.note")} · ${t(x.visibility === "team" ? "ov3061.pinnedTeam" : "ov3061.pinnedMine", { who: memberName(db, x.authorId, t)?.split(" ")[0] ?? "—", when: dw(x.at) })}`}
+          onPress={open}
+        />
+      ))}
+      {people.map((x) => (
+        <GroupRow key={x.id} testID={`client-property-person-${x.id}`} lead={{ icon: "user" }} title={x.name} subtitle={t("proto.client.onSite")} />
+      ))}
+      {jobs.slice(0, 3).map((j) => (
+        <GroupRow
+          key={j.id}
+          wrap
+          testID={`client-property-job-${j.id}`}
+          lead={{ icon: "wrench" }}
+          title={j.title || j.number || t("cc.kind.job")}
+          subtitle={[j.number, jobVisitLine(f.visits, j, t)].filter(Boolean).join(" · ") || undefined}
+          status={{ status: jobStatusView[j.status].status, label: t(jobStatusView[j.status].label) }}
+          onPress={() => router.push(`/job/${j.id}`)}
+        />
+      ))}
+      {jobs.length > 3 ? <GroupRow compact lead={{ icon: "wrench" }} title={t("ov3068.allJobs", { n: jobs.length })} chevron onPress={open} testID={`client-property-jobs-${p.id}`} /> : null}
+    </ListGroup>
   );
 }
 
@@ -747,6 +777,7 @@ export function ClientLog({ c, f }: { c: Customer; f: ClientFacts }) {
       </View>
       <GroupedList testID="client-feed">
         <ListGroup
+          separate
           title={t("client.row.tasks")}
           all={office ? { label: t("task.new"), onPress: newTask, testID: "client-task-new" } : undefined}
           testID="client-tasks-open"
@@ -765,7 +796,7 @@ export function ClientLog({ c, f }: { c: Customer; f: ClientFacts }) {
           {doneN ? <GroupRow compact key="done" testID="client-tasks-done" lead={{ icon: "history" }} title={t("client.doneTasks", { n: doneN })} onPress={() => router.push("/tasks")} /> : null}
         </ListGroup>
         {days.map(([k, hs]) => (
-          <ListGroup key={k} title={k}>
+          <ListGroup separate key={k} title={k}>
             {hs.map((h) => (
               <GroupRow
                 key={h.id}
@@ -780,7 +811,7 @@ export function ClientLog({ c, f }: { c: Customer; f: ClientFacts }) {
           </ListGroup>
         ))}
         {files ? (
-          <ListGroup>
+          <ListGroup separate>
             <GroupRow lead={{ icon: "image" }} title={t("w2b.client.files", { n: files })} subtitle={t("client.photosHint")} />
           </ListGroup>
         ) : null}
@@ -852,12 +883,20 @@ export function ClientDetails({ c, f, onCall, onSms, onRoute }: { c: Customer; f
           />
         ))}
       </ListGroup>
-      <ListGroup title={t("proto.client.facts")} testID="client-facts">
-        {c.number ? <GroupRow compact title={t("proto.client.number")} subtitle={c.number} /> : null}
-        {office && c.sourceId ? <GroupRow compact title={t("proto.client.tile.source")} subtitle={sourceName(db, c.sourceId)} /> : null}
-        {office ? <GroupRow compact title={t("proto.client.tax")} subtitle={c.taxExempt ? [t("client.f.taxExempt"), c.taxExemptNote].filter(Boolean).join(" · ") : t("proto.client.taxed")} /> : null}
-        {office ? <GroupRow compact title={t("client.row.billing")} subtitle={c.billing ? billingLine(c.billing) : t("client.row.billingSame")} /> : null}
-      </ListGroup>
+      {/* #3023 (founder: «сведения пересобрать… адрес для счетов, налог»; design review 27.11): what the invoices need — only when it is
+          not the default (a billing address of its own, no sales tax); the value large, its name small under it, as iOS Contacts */}
+      {office && (c.billing || c.taxExempt) ? (
+        <ListGroup title={t("oc.client.forInvoices")} testID="client-for-invoices">
+          {c.billing ? <GroupRow compact title={billingLine(c.billing)} subtitle={t("client.row.billing")} /> : null}
+          {c.taxExempt ? <GroupRow compact title={[t("client.f.taxExempt"), c.taxExemptNote].filter(Boolean).join(" · ")} subtitle={t("proto.client.tax")} /> : null}
+        </ListGroup>
+      ) : null}
+      {c.number || (office && c.sourceId) ? (
+        <ListGroup title={t("proto.client.facts")} testID="client-facts">
+          {c.number ? <GroupRow compact title={c.number} subtitle={t("proto.client.number")} /> : null}
+          {office && c.sourceId ? <GroupRow compact title={sourceName(db, c.sourceId)} subtitle={t("proto.client.tile.source")} /> : null}
+        </ListGroup>
+      ) : null}
       {statusOf(c) === "do_not_service" ? <StatusChip status="bad" label={t("client.noServiceHint")} /> : null}
     </View>
   );

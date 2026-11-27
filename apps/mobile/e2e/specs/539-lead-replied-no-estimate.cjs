@@ -14,6 +14,9 @@ exports.run = async (h) => {
   await tid("lead-next-reply").waitFor();
   h.expect(((await h.db())?.estimates ?? []).every((e) => e.leadId !== "l1"), "the demo lead has no estimate");
 
+  // #2995: «Ответил» is a mark, not a contact — it lives in «⋯» (the icon row is Позвонить · SMS · Почта · Маршрут)
+  h.expect((await tid("lead-screen-actions").getByTestId("lead-answered").count()) === 0, "«Ответил» is not in the icon row");
+  await tid("lead-screen-more").getByRole("button").first().click();
   await tid("lead-answered").click();
   await p.waitForFunction(([k]) => JSON.parse(localStorage.getItem(k) ?? "{}")?.db?.leads?.find((x) => x.id === "l1")?.status === "replied", [DB_KEY], { timeout: 5000 });
   h.expect((await lead())?.status === "replied", "«Ответил» → the lead is replied");

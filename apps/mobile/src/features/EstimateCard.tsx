@@ -29,13 +29,16 @@ import { Button, IconButton, Segmented, StatusChip, TextField } from "@/ui/contr
 import { T } from "@/ui/primitives";
 import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, RowView, SectionTitle } from "@/ui/surfaces";
-import { canChangeEstimateCategory, estimateStatusView, isEstimateEditable } from "@/features/estimateStatus";
+import { canChangeEstimateCategory, estimateStatusView, estimateView, isEstimateEditable, sentOnceAt } from "@/features/estimateStatus";
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
 import { canCountersign, canManageLink, canSeeClientLink, canSignDraftOnSite, hisWarning, mySignature } from "@/features/estimateSign";
 import { EstimateReasonSheet } from "@/features/EstimateReasonSheet";
 import { StatusNote } from "@/ui/statusNote";
 import type { IconRowItem } from "@/ui/iconRow";
 import { ObjectScreen, type MainAction, type MoreAction } from "@/ui/templates";
+import { estimateRemind } from "@/features/estimateRemind";
+import { leadSettingsOf } from "@/features/leadSettings";
+import { cleanPhone, mailtoHref, smsHref } from "@/features/contactLinks";
 
 
 /** under the estimate's title (its screen and the panel on 1280): «client · address, city» */
@@ -77,7 +80,8 @@ function useEstimateCore(e: Estimate, openSend?: boolean) {
   const [tplOpen, setTplOpen] = useState(false);
   const customer = db.customers.find((c) => c.id === e.customerId);
   const property = db.properties.find((p) => p.id === e.propertyId);
-  const st = estimateStatusView(e.status);
+  // #3058: a draft that went out before reads «Изменена после отправки»
+  const st = estimateView(e);
   const q = (msg: string) => (store.online ? msg : t("offline.queued"));
   const universal = isUniversal(e);
   const facts = [
@@ -92,7 +96,7 @@ function useEstimateCore(e: Estimate, openSend?: boolean) {
   const job = db.jobs.find((j) => j.estimateId === e.id);
 
   // C5 for the PDF (spec 33 П23.10): an unsigned estimate's PDF goes to the client by hand — the same check as «Отправить»
-  const pdfIssues = (e.status === "draft" || e.status === "sent") && e.doc ? sendIssues(e.doc, { firstSend: e.status === "draft" }) : null;
+  const pdfIssues = (e.status === "draft" || e.status === "sent") && e.doc ? sendIssues(e.doc, { firstSend: e.status === "draft" && !sentOnceAt(e) }) : null;
   // C5b (spec 33 П23.11): the modules' words on an open estimate (e.g. «the measurement changed after it»)
   const notes = estimateNotes(db, e);
   const pdf = (checked = false) => {
@@ -339,13 +343,24 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
   const onSign = sections.length > 0 && section === "sign";
   const toSchedule = e.status === "approved" && !!job && visits.length === 0 && planner;
   const sentOn = e.sentAt ? t("proto.est.reason.sentOn", { date: day(e.sentAt) }) : undefined;
+  // #2997, спека 68 В8 (в): «Напомнить» видна всегда; до срока компании (remindDays) — тихая, со счётом дней; срок прошёл — главная
+  const remind = estimateRemind(e, leadSettingsOf(db.company).remindDays);
+  const sentReason = !remind
+    ? sentOn
+    : remind.overdue
+      ? t("oc.est.noAnswer", { n: remind.days })
+      : e.viewedAt
+        ? t("proto.est.reason.viewed", { date: day(e.viewedAt) })
+        : remind.days === 0
+          ? t("oc.est.sentToday")
+          : t("oc.est.sentAgo", { n: remind.days });
 
-  // ONE main step by the state (object-cards «Смета»); in «Подпись на месте» the signature's own button is the step
-  const main: MainAction | undefined = onSign
-    ? undefined
-    : canSend
+  // ONE main step by the state (object-cards «Смета»), always under the header (спека 68 В1 (а), #2997): it stands on both
+  // sections, so the strip under it never moves; in «Подпись на месте» the signature's own button is the yellow one — the step is quiet there
+  const mainOf = (): MainAction | undefined =>
+    canSend
       ? e.status === "sent"
-        ? { label: t("proto.est.main.remind"), onPress: () => setSendOpen(true), reason: e.viewedAt ? t("proto.est.reason.viewed", { date: day(e.viewedAt) }) : sentOn, testID: "est-send" }
+        ? { label: t("proto.est.main.remind"), onPress: () => setSendOpen(true), reason: sentReason, outline: !remind?.overdue, testID: "est-send" }
         : { label: t("ue.send"), onPress: () => setSendOpen(true), reason: t("proto.est.reason.notSeen"), testID: "est-send" }
       : countersign && signer
         ? {
@@ -363,29 +378,32 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
         : toSchedule
           ? { label: t("sch.title"), onPress: () => router.push(`/job/schedule?jobId=${job!.id}`), reason: t("ue.toSchedule"), testID: "est-schedule-main" }
           : undefined;
+  const step = mainOf();
+  const main: MainAction | undefined = step && onSign ? { ...step, outline: true } : step;
   // a second step goes into «⋯» on an object: «Подписать здесь» — the client is beside you
   const signSecond: MainAction | undefined = signHere && !onSign && canCountersign(db, db.me) ? { label: t("proto.est.second.signHere"), onPress: () => setSection("sign"), testID: "est-sign-here" } : undefined;
-  // MAP «S»: the second button is «Позвонить» — the client's own phone, only when there is one; nothing goes out by itself
-  const phone = customer?.phone;
-  const callSecond: MainAction | undefined = canSend && e.status === "sent" && !onSign && phone ? { label: t("proto.visit.call"), onPress: () => void Linking.openURL(`tel:${phone.replace(/[^\d+]/g, "")}`).catch(() => undefined), testID: "est-call" } : undefined;
-  const second = callSecond ?? signSecond;
+  const second = signSecond;
 
   const who = customer?.name ?? "";
   const of = (what: string) => (who ? t("proto.money.actOf", { what, who }) : what);
-  // QuickActions — the icon and its word (П6), only the safe ones (MAP §4): Изменить · PDF · Показать клиенту. Nothing here sends
-  // by a single tap: sending is the main step («Отправить» / «Напомнить») and its sheet
-  const showClient = actions.some((x) => x.key === "client");
+  // #2995 / #2997 (design + crm review 27.11): the row is the same on every object — the person first: Позвонить · SMS · Почта, then
+  // the estimate's PDF (shown to the client on site). A missing contact is left out, not dimmed. Nothing here sends the estimate:
+  // SMS and Почта open the phone's own app to the client; sending is the main step and its sheet. «Изменить», «Показать клиенту» — in «⋯»
+  const tel = cleanPhone(customer?.phone);
+  const sms = smsHref(customer?.phone);
+  const mail = mailtoHref(customer?.email);
+  const open = (url: string) => void Linking.openURL(url).catch(() => undefined);
   const iconActions: IconRowItem[] = [
-    ...(canEdit ? [{ icon: "pencil" as const, label: t("ue.edit"), a11y: of(t("ue.edit")), onPress: () => act("edit"), testID: "est-act-edit" }] : []),
+    ...(tel ? [{ icon: "phone" as const, label: t("client.call"), a11y: `${t("client.call")} ${who}`, onPress: () => open(`tel:${tel}`), testID: "est-call" }] : []),
+    ...(sms ? [{ icon: "sms" as const, label: t("cc.sms"), a11y: `${t("cc.sms")} ${who}`, onPress: () => open(sms), testID: "est-client-sms" }] : []),
+    ...(mail ? [{ icon: "mail" as const, label: t("cl6.writeMail"), a11y: `${t("cl6.writeMail")} ${who}`, onPress: () => open(mail), testID: "est-client-mail" }] : []),
     ...(universal ? [{ icon: "invoice" as const, label: t("proto.money.act.pdf"), a11y: of(t("ue.pdf")), onPress: () => pdf(), testID: "est-act-pdf" }] : []),
-    ...(showClient ? [{ icon: "eye" as const, label: t("ue.openClient"), a11y: of(t("ue.openClient")), onPress: () => act("client"), testID: "est-act-client" }] : []),
   ];
   const moreList: MoreAction = [
-    ...actions.filter((x) => x.key !== "edit" && x.key !== "pdf" && x.key !== "client").map(({ key, label, icon, destructive, testID }) => ({ key, label, icon, destructive, testID })),
+    ...actions.filter((x) => x.key !== "pdf").map(({ key, label, icon, destructive, testID }) => ({ key, label, icon, destructive, testID })),
     // MAP §4: the link — only in «⋯» and only from «sent» on (the draft has none); a plain copy: nothing is sent, the status stays
     ...(universal && maySend && e.token && !e.linkRevokedAt && e.status !== "draft" && e.status !== "declined" ? [{ key: "copyLink", label: t("est.menu.copyLink"), icon: "link" as const, testID: "est-act-copy-link" }] : []),
     // «Подписать здесь» keeps its place in «⋯» when «Позвонить» holds the second step
-    ...(callSecond && signSecond ? [{ key: "signHere", label: signSecond.label, icon: "pencil" as const, testID: "est-sign-here" }] : []),
     ...(countersign && manage ? [{ key: "reopen", label: t("est.reopen.button"), icon: "pencil" as const, testID: "est-act-reopen" }, { key: "decline", label: t("est.decline.button"), icon: "close" as const, testID: "est-act-decline" }] : []),
   ];
   const onMore = (k: string) => {
@@ -402,6 +420,8 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
   const address = [property?.address, property?.city].filter(Boolean).join(", ");
   const details = (
     <View style={{ gap: space[2] }}>
+      {/* the work's title: the line under the name keeps only who and the deposit — never cut (#2997) */}
+      {e.number && e.title ? <T v="body">{e.title}</T> : null}
       {address ? (
         <T v="caption" tone="mut">
           {address}
@@ -459,7 +479,8 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
         </View>
       ) : null}
       {onSign ? (countersign ? <CountersignCard e={e} onAsk={setAsk} /> : <OnSiteSign e={e} />) : docView}
-      {!onSign && job && e.status === "approved" ? <ContractStatement jobId={job.id} /> : null}
+      {/* #2997: before the work is done the rest is not billed from the estimate — the statement's buttons are quiet (one accent) */}
+      {!onSign && job && e.status === "approved" ? <ContractStatement jobId={job.id} quiet={job.status !== "done"} /> : null}
       {!onSign && e.status === "approved" && !job && e.depositCents && e.depositPaidAt ? <StatusNote tone="ok">{t("est.depositPaid")}</StatusNote> : null}
     </>
   );
@@ -473,17 +494,17 @@ export function EstimateObject({ e, openSend, back }: { e: Estimate; openSend?: 
           testID: "estimate-head",
           // the number alone is the name (30 → 22,5, then «…»): with the work's title too it took the line and cut the status off;
           // the work goes into the line under it, after the client
-          title: e.number || e.title || t("est.detail"),
+          // DS §12.13 «Шапка» (#2841, founder #2843 (а)): «Смета EST-0005»; without a number — the work's title
+          title: e.number ? `${t("est.detail")} ${e.number}` : e.title || t("est.detail"),
           status: { name: st.s, label: t(st.l), draft: st.d },
           amount: money(e.totalCents),
           // «Linda Alvarez › · задаток $77.24» (object-cards): who, and what is taken before the work — once
-          link: customer ? { label: [customer.name, e.number ? e.title : "", e.depositCents ? t("proto.est.depositShort", { amount: money(e.depositCents) }) : ""].filter(Boolean).join(" · "), onPress: () => router.push(`/client/${customer.id}`) } : undefined,
+          link: customer ? { label: [customer.name, e.depositCents ? t("proto.est.depositShort", { amount: money(e.depositCents) }) : ""].filter(Boolean).join(" · "), onPress: () => router.push(`/client/${customer.id}`) } : undefined,
           details,
           labels: { expand: t("ds.proto.expand"), collapse: t("ds.proto.collapse"), more: (n) => t("ds.proto.moreN", { n }) },
         }}
         actions={iconActions}
         main={main}
-        mainBelowSections
         second={second}
         sections={sections}
         section={section}

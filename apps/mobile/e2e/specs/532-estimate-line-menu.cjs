@@ -43,11 +43,10 @@ exports.run = async (h) => {
     h.expect(!r.shifts, "«Выше» / «Ниже» are not items of the menu (the «Переместить» sheet has them)");
     if (id === ids[0]) {
       const mv = await iconOf(id, "move");
-      sendIcon = await p.evaluate(() => {
-        const b = [...document.querySelectorAll("button, [role=button]")].find((e) => /Отправить|Сохранить и отправить/.test(e.getAttribute("aria-label") || "") && e.getBoundingClientRect().height > 0);
-        return b ? [...b.querySelectorAll("svg path")].map((x) => x.getAttribute("d")).join("|") : null;
-      });
-      h.expect(!!mv && !!sendIcon && mv !== sendIcon, "«Переместить» has not the icon of «Отправить»");
+      // #2935: «Отправить» is a button by its words at the bottom now (no ➤ on the screen) — the icon «send» of the tokens
+      // (packages/design-tokens/src/icons.ts) is compared instead
+      sendIcon = "M20.5 3.5 3.5 10.5l7 3 3 7ZM20.5 3.5l-10 10";
+      h.expect(!!mv && !mv.includes(sendIcon), "«Переместить» has not the icon of «Отправить»");
       await h.shot("menu");
     }
     await pressEscUntilClosed(p, vis('[data-testid="menu-items"]'));

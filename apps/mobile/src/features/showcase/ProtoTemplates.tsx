@@ -97,7 +97,6 @@ export function ProtoTemplates() {
         preview
         testID="tpl-list"
         title={t("ds.tpl.clients")}
-        count={found.length}
         create={create}
         onCreate={pick}
         search={{ placeholder: t("ds.tpl.searchClients"), value: query, onChange: setQuery }}

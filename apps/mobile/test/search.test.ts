@@ -33,14 +33,20 @@ describe("unit:search — numbers", () => {
   });
   it("JOB-0001 → the job (failed before: jobs were searched by text only)", () => {
     const r = searchAll(db, "JOB-0001", "director");
-    expect(r.jobs.map((h) => h.id)).toEqual(["j1"]);
+    // the exact number first; #3024: the test client's JOB-0010 / JOB-0011 start with the same digits
+    expect(r.jobs[0]?.id).toBe("j1");
     expect(r.jobs[0]).toMatchObject({ number: "JOB-0001", why: { kind: "number" }, href: "/job/j1" });
     expect(ids("job-2").jobs).toEqual(["j2"]);
     expect(searchAll(db, "0003", "director").jobs.some((h) => h.number === "JOB-0003")).toBe(true);
   });
   it("the technician finds by number only the jobs of his visits", () => {
     const mine = new Set(db.visits.filter((v) => (v.assigneeIds ?? []).includes(db.me) || v.techId === db.me).map((v) => v.jobId));
-    for (const j of db.jobs.filter((x) => x.number)) expect(searchAll(db, j.number!, "tech").jobs.length, j.number).toBe(mine.has(j.id) ? 1 : 0);
+    // a number finds its own job when it is his, and never a job that is not his (JOB-0001 also finds his JOB-0010: the same digits first, #3024)
+    for (const j of db.jobs.filter((x) => x.number)) {
+      const found = searchAll(db, j.number!, "tech").jobs.map((h) => h.id);
+      expect(found.includes(j.id), j.number).toBe(mine.has(j.id));
+      expect(found.every((id) => mine.has(id)), j.number).toBe(true);
+    }
   });
   it("bare digits search every prefix at once", () => {
     const r = searchAll(db, "0103", "director");

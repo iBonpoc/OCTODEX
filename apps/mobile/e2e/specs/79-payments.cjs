@@ -5,9 +5,10 @@ const { dayKey, todayKey } = require("../companyTime.cjs");
  * period or method filter to set — BUILD-SPEC §2.9); the sums of the groups are all the payments; a row → receipt → invoice.
  * Sales and the technician have no «Оплаты» (13 §4).
  */
-// #2888: the app shows money always with cents (founder #2672)
+// #3029/#3030 (founder 27.11): a list row is an overview — whole dollars (`whole`); `money` with cents — for the documents
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
 const money = (c) => usd.format(c / 100);
+const whole = (c) => (Math.abs(c) < 100 ? `$${(Math.abs(c) / 100).toFixed(2)}` : `$${Math.floor((Math.abs(Math.round(c)) + 50) / 100).toLocaleString("en-US")}`);
 const cents = (s) => Math.round(Number(s.replace(/[$,]/g, "")) * 100);
 
 exports.run = async (h) => {
@@ -20,7 +21,7 @@ exports.run = async (h) => {
   h.expect((await rows.count()) === db.payments.length, `one row per payment (${await rows.count()} / ${db.payments.length})`);
   for (const x of db.payments) {
     const txt = await p.getByTestId(`payment-row-${x.id}`).locator("visible=true").first().innerText();
-    h.expect(txt.includes(money(x.amountCents)), `the row of ${x.id} shows its sum ${money(x.amountCents)} (${txt.replace(/\n/g, " | ")})`);
+    h.expect(txt.includes(whole(x.amountCents)), `the row of ${x.id} shows its sum ${whole(x.amountCents)} (${txt.replace(/\n/g, " | ")})`);
   }
   // the groups' sums: each its own rows, together all the payments
   const all = db.payments.reduce((s, x) => s + x.amountCents, 0);
@@ -33,7 +34,8 @@ exports.run = async (h) => {
     h.expect(m, `the group «${title}» names its sum`);
     const ids = await group.first().locator('[data-testid^="payment-row-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid").slice("payment-row-".length)));
     const own = db.payments.filter((x) => ids.includes(x.id)).reduce((s, x) => s + x.amountCents, 0);
-    h.expect(cents(m[1]) === own, `«${title}» = the sum of its rows ${money(own)}`);
+    // #3029: the group's title is an overview — whole dollars
+    h.expect(m[1] === whole(own), `«${title}» = the sum of its rows ${whole(own)}`);
     sum += own;
   }
   h.expect(sum === all, `the groups hold all the payments: ${money(sum)} = ${money(all)}`);

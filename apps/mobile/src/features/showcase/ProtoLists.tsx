@@ -129,6 +129,12 @@ export function ProtoLists() {
           />
           <GroupRow compact title={DEMO[2]!.name} subtitle={DEMO[2]!.line} lead={{ icon: "calendar" }} onPress={said(DEMO[2]!.name)} testID="showcase-row-compact" />
         </ListGroup>
+        {/* DS §5.5 (#3017, #3060): the records of an object's section — each its own frame `rhythm.cardGap` apart (`separate`), no
+            hairlines; a job's visits are its third line, not rows inside its frame */}
+        <ListGroup separate title={t("ds.proto.separate")} testID="showcase-group-separate">
+          <GroupRow title={DEMO[0]!.name} subtitle={DEMO[0]!.line} extra={t("ds.proto.separateExtra")} lead={{ icon: "wrench" }} value={DEMO[0]!.cents} onPress={said(DEMO[0]!.name)} testID="showcase-row-separate-1" />
+          <GroupRow title={DEMO[1]!.name} subtitle={DEMO[1]!.line} lead={{ icon: "wrench" }} value={DEMO[1]!.cents} onPress={said(DEMO[1]!.name)} testID="showcase-row-separate-2" />
+        </ListGroup>
         {/* the hour column (as in the Plan) and a task's DoneCircle — the circle is the row's neighbour, not inside its press */}
         <ListGroup title={t("ds.proto.rowLeads")} inset={component.listRow.timeW + space[4] + space[3]}>
           <GroupRow title={DEMO[0]!.name} subtitle={DEMO[0]!.line} lead={{ time: "8:30", sub: "AM" }} onPress={said(DEMO[0]!.name)} testID="showcase-row-time" />

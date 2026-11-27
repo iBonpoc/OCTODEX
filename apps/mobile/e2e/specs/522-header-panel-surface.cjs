@@ -6,7 +6,7 @@ exports.run = async (h) => {
   const p = h.page;
   // the folded-bar panel is the phone's (820/1280 keep the pinned address bar and the in-flow panel)
   if (h.layout.width >= 820) return;
-  await h.go("/finance");
+  await h.go("/invoice");
   const db = await h.db();
   const est = db.estimates.find((e) => e.status === "sent") ?? db.estimates[0];
   await h.go(`/estimate/${est.id}`);
@@ -14,6 +14,14 @@ exports.run = async (h) => {
   // fold the header: the page goes up
   await p.mouse.move(200, 500);
   await p.mouse.wheel(0, 600);
+  // wait for the page to have gone up and to STAND (CHECKS §9 №3): a scroll that lands after the tap (> 8) closes the panel it opened
+  await p.waitForFunction(() => {
+    const y = Math.max(0, ...[...document.querySelectorAll("div")].map((d) => d.scrollTop));
+    const w = window;
+    const same = y > 0 && w.__y522 === y;
+    w.__y522 = y;
+    return same;
+  }, null, { timeout: 5000, polling: 200 });
   const toggle = p.getByTestId("hdr-bar-expand").locator("visible=true").first();
   await toggle.waitFor({ timeout: 5000 });
   await toggle.dispatchEvent("click");

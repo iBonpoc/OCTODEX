@@ -45,7 +45,6 @@ describe("choice controls (DS §21.2 п.27, spec 56 §9.3)", () => {
     "features/LegalAgree.tsx": 2,
     "features/estimate/OptionsCard.tsx": 2,
     "features/showcase/Rows.tsx": 1,
-    "modules/gutters/draw/CornerSheet.tsx": 1,
     "modules/gutters/settings/SettingsScreen.tsx": 2,
     "ui/controls.tsx": 4,
     "ui/filterBar.tsx": 2,
@@ -87,7 +86,6 @@ describe("choice controls (DS §21.2 п.27, spec 56 §9.3)", () => {
     "features/PushSettings.tsx": 2,
     "features/estimate/LineRow.tsx": 1,
     "features/showcase/Haptics.tsx": 1,
-    "modules/gutters/draw/CornerSheet.tsx": 1,
     "modules/gutters/draw/DrawScreen.tsx": 1,
     "modules/gutters/settings/SettingsScreen.tsx": 1,
   };
@@ -109,7 +107,8 @@ describe("choice controls (DS §21.2 п.27, spec 56 §9.3)", () => {
   // company's markup (percent only, CHECK of spec 55).
   const PLACES: Record<string, string[]> = {
     PctUsdField: ["features/showcase/Choice.tsx"],
-    OptionTiles: ["features/showcase/Choice.tsx"],
+    // + the Gutters windows: the downspout's kind and the gutter's profile by their icons (founder 27.11, #2980 / #2986)
+    OptionTiles: ["features/showcase/Choice.tsx", "modules/gutters/draw/AttrPanel.tsx", "modules/gutters/draw/CornerSheet.tsx"],
   };
   for (const [name, allowed] of Object.entries(PLACES)) {
     it(`п.27.12: <${name} only in the places of the list`, () => {
