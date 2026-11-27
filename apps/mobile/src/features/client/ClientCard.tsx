@@ -196,7 +196,7 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
     ) : current === "money" ? (
       <ClientMoney c={c} f={f} />
     ) : current === "visits" ? (
-      <ClientVisits f={f} />
+      <ClientVisits f={f} customerId={c.id} />
     ) : current === "places" ? (
       <ClientPlaces c={c} f={f} onRoute={route} />
     ) : current === "log" ? (

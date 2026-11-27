@@ -1874,7 +1874,7 @@ export const ru = {
   "card.moreReasons": "ещё причин: {n}",
   "card.val.paid": "оплачен",
   "card.val.deposit": "депозит",
-  "prop.h.visit": "Визит",
+  "prop.h.visit": "Выезд",
   "prop.h.estimate": "Смета",
   "prop.h.note": "Заметка",
   "prop.noHistory": "Здесь пока ничего не было",
@@ -5848,6 +5848,11 @@ export const ru = {
   "c3060.lastVisit": "последний {when}",
   "ds.proto.separate": "Каждая запись — своя рамка",
   "ds.proto.separateExtra": "2 выезда · следующий вс, 29 нояб.",
+  // #3072 the client's «Выезды»
+  "c3072.plan": "Запланировать выезд",
+  "c3072.past": "Прошли",
+  "c3072.pickJob": "К какой работе выезд?",
+  "c3072.noPrice": "Без цены",
 } as const;
 
 export type DictKey = keyof typeof ru;

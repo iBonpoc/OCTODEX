@@ -10,7 +10,7 @@
  */
 import { useState, type ReactElement, type ReactNode } from "react";
 import { Linking, View } from "react-native";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { findJob } from "@/data/jobs";
@@ -64,8 +64,10 @@ import { GroupedList, GroupRow, ListGroup } from "@/ui/groupedList";
 import { NowCard } from "@/ui/nowCard";
 import { StatGrid, StatTile } from "@/ui/statTile";
 import { statShown } from "@/ui/statTileLogic";
-import { useToast } from "@/ui/overlays";
-import { Empty } from "@/ui/surfaces";
+import { Sheet, useToast } from "@/ui/overlays";
+import { Empty, ListRow } from "@/ui/surfaces";
+import { ActionRow } from "@/ui/multiValueField";
+import { Icon } from "@/ui/primitives";
 import type { MainAction } from "@/ui/templates";
 
 /** what the five sections and the header share: read once per render of the client's screen */
@@ -440,38 +442,79 @@ export function projectStep(e: Estimate | undefined, j: Job, invoices: Invoice[]
 }
 
 /** «Выезды» — the client's visits, newest first (the tech's «Работы», the office's own section — #2363 q76) */
-export function ClientVisits({ f }: { f: ClientFacts }) {
-  const { t } = useI18n();
-  const when = useWhen();
-  const { db } = f;
-  return f.visits.length === 0 ? (
-      <Empty icon="calendar" title={t("prop.noVisits")} />
-    ) : (
-      <GroupedList testID="client-visits">
-        {/* #3022 (founder 26.11: «там тоже нужно разделить все списки»): each record its own frame, as the lists (#3017) */}
-        <ListGroup separate>
-          {[...f.visits].reverse().map((v) => (
-            <GroupRow
-              key={v.id}
-              testID={`client-visit-${v.id}`}
-              lead={{ icon: "calendar" }}
-              title={findJob(db, v.jobId)?.title ?? t("prop.h.visit")}
-              subtitle={[when(v.start), memberName(db, v.techId, t)].filter(Boolean).join(" · ")}
-              onPress={() => router.push(`/visit/${v.id}`)}
-            />
-          ))}
-        </ListGroup>
-      </GroupedList>
+export function ClientVisits({ f, customerId }: { f: ClientFacts; customerId?: string }) {
+  const { t, day, time, duration } = useI18n();
+  const { db, r } = f;
+  const [picking, setPicking] = useState(false);
+  // #3072 (design + crm review of #3060): «Впереди» and «Прошли» apart, each visit with its status (icon + word), all its people;
+  // the row (design review): the job is the title, «вс, 29 нояб. · 1:00–3:00 PM · Alex, Dmitry» the line, the status on the right
+  const now = Date.now();
+  const endOf = (v: Visit) => new Date(v.start).getTime() + (v.durationMin || 0) * 60_000;
+  const ahead = f.visits.filter((v) => !v.closed && endOf(v) >= now).sort((a, b) => a.start.localeCompare(b.start));
+  const past = f.visits.filter((v) => !ahead.includes(v)).sort((a, b) => b.start.localeCompare(a.start));
+  const planner = f.role === "director" || f.role === "dispatcher";
+  const live = r.jobs.filter((j) => !j.cancelledAt && j.status !== "done");
+  // a visit is planned on a job (docs/specs/03): one open job — its schedule; several — which one; none — a new job for the client
+  const plan = () => {
+    if (live.length === 1) return router.push(`/job/schedule?jobId=${live[0]!.id}` as Href);
+    if (!live.length) return router.push((customerId ? `/job/new?customerId=${customerId}` : "/job/new") as Href);
+    setPicking(true);
+  };
+  const row = (v: Visit) => {
+    const job = findJob(db, v.jobId);
+    const st = visitStatus(v, db.members, now, lateAfterOf(db));
+    const people = (v.assigneeIds?.length ? v.assigneeIds : [v.techId]).map((id) => memberName(db, id, t)?.split(" ")[0]).filter(Boolean).join(", ");
+    const end = new Date(endOf(v)).toISOString();
+    return (
+      <GroupRow
+        key={v.id}
+        testID={`client-visit-${v.id}`}
+        lead={{ icon: "calendar" }}
+        title={job?.title ?? t("visit.title")}
+        subtitle={[v.allDay ? day(v.start) : `${day(v.start)} · ${bareTime(time(v.start))}–${time(end)}`, people, r.properties.length > 1 && job ? placeName(db, job) : null].filter(Boolean).join(" · ")}
+        status={{ status: st.status, label: t(st.label) }}
+        // the day and the time are never cut beside the status word on 390 (#3072): two lines when they must
+        wrap
+        onPress={() => router.push(`/visit/${v.id}`)}
+      />
     );
+  };
+  const add = planner ? <ActionRow testID="client-visit-plan" label={t("c3072.plan")} icon="plusCircle" onPress={plan} /> : null;
+  return (
+    <View style={{ gap: space[4] }} testID="client-visits">
+      {f.visits.length === 0 ? <Empty icon="calendar" title={t("prop.noVisits")} action={add ?? undefined} /> : null}
+      {f.visits.length ? (
+        <GroupedList>
+          {/* #3022 / #3060: each record its own frame (DS §5.5) */}
+          <ListGroup separate title={t("ov3061.ahead")} count={ahead.length || undefined} testID="client-visits-ahead">
+            {ahead.map(row)}
+          </ListGroup>
+          {add}
+          <ListGroup separate title={t("c3072.past")} count={past.length || undefined} testID="client-visits-past">
+            {past.map(row)}
+          </ListGroup>
+        </GroupedList>
+      ) : null}
+      <Sheet visible={picking} onClose={() => setPicking(false)} title={t("c3072.pickJob")}>
+        <View testID="client-visit-pick">
+          {live.map((j) => (
+            <View key={j.id} testID={`client-visit-pick-${j.id}`}>
+              <ListRow title={j.title || j.number || t("cc.kind.job")} subtitle={[j.number, placeName(db, j)].filter(Boolean).join(" · ")} left={<Icon name="wrench" />} onPress={() => { setPicking(false); router.push(`/job/schedule?jobId=${j.id}` as Href); }} />
+            </View>
+          ))}
+        </View>
+      </Sheet>
+    </View>
+  );
 }
 
-export function ClientWork({ f }: { c: Customer; f: ClientFacts }) {
+export function ClientWork({ c, f }: { c: Customer; f: ClientFacts }) {
   const { t, tn, money, day } = useI18n();
   const when = useWhen();
   const { db, r, office } = f;
   if (f.role === "tech") {
     // the tech: his own visits only (client-card.html §7 «Работы» → «Выезды»)
-    return <ClientVisits f={f} />;
+    return <ClientVisits f={f} customerId={c.id} />;
   }
   const live = r.jobs.filter((j) => !j.cancelledAt && j.status !== "done");
   const closed = r.jobs.filter((j) => j.status === "done" || j.cancelledAt);
@@ -496,7 +539,9 @@ export function ClientWork({ f }: { c: Customer; f: ClientFacts }) {
       extra={visitsLine(j)}
       // the sum in the name's own line (#3033), so the visits' line under it is not cut on 390
       valueTop
-      value={office ? money(j.amountCents) : undefined}
+      // #3072: a job without a price is «Без цены», not «$0.00» (reads as «free»)
+      value={office ? (j.amountCents ? money(j.amountCents) : t("c3072.noPrice")) : undefined}
+      valueMark={!j.amountCents}
       onPress={() => router.push(`/job/${j.id}`)}
     />
   );
@@ -517,7 +562,8 @@ export function ClientWork({ f }: { c: Customer; f: ClientFacts }) {
               titleNote={j.title ? j.number : undefined}
               subtitle={[t(jobStatusView[j.status].label), r.properties.length > 1 ? placeName(db, j) : null].filter(Boolean).join(" · ")}
               figureRight
-              value={money(j.amountCents)}
+              value={j.amountCents ? money(j.amountCents) : t("c3072.noPrice")}
+              valueMark={!j.amountCents}
               onPress={() => router.push(`/job/${j.id}`)}
             />
           ))}
