@@ -16,7 +16,7 @@ import { useStore } from "@/data/store";
 import { peopleOf } from "@/data/people";
 import type { Customer, CustomerStatus, Person, Property } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
-import { canServe, clientStatusChip, noLateCallsNow, statusChoices, tagLabel, tagsOf } from "@/features/clients";
+import { archiveOwes, canArchive, canServe, clientStatusChip, noLateCallsNow, statusChoices, tagLabel, tagsOf } from "@/features/clients";
 import { CallSheet, type CallPreset } from "@/features/comms/CallSheet";
 import { useDialThenAsk } from "@/features/comms/dial";
 import { MessageSheet, type MessagePreset } from "@/features/comms/MessageSheet";
@@ -57,7 +57,7 @@ export const stepTestID = (s: ClientMainStep | null) => (s?.kind === "estimate" 
 export function ClientObject({ c, section, onSection, back }: { c: Customer; section: ClientSectionKey; onSection: (k: ClientSectionKey) => void; back: () => void }) {
   const store = useStore();
   const { db, role } = store;
-  const { t } = useI18n();
+  const { t, money } = useI18n();
   const toast = useToast();
   const f = useClientFacts(c);
   const { r, office, status } = f;
@@ -94,6 +94,9 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
 
   /* ---------- status ---------- */
   const statusOptions = statusChoices(status, role);
+  // #3044: a client who owes is not made inactive — the office sees the sum, the others only that a balance is open
+  const owes = archiveOwes(db, c.id);
+  const archiveWhy = owes > 0 ? (office ? t("oc.client.archiveOwes", { amount: money(owes) }) : t("oc.client.archiveOwesNoSum")) : undefined;
   const chooseStatus = (st: CustomerStatus) => {
     setPicking(false);
     if (st === status) return;
@@ -244,7 +247,7 @@ export function ClientObject({ c, section, onSection, back }: { c: Customer; sec
         visible={picking}
         onClose={() => setPicking(false)}
         title={t("client.statusTitle")}
-        options={statusOptions.map((x) => ({ key: x, tone: clientStatusChip[x].s, label: t(clientStatusChip[x].l), current: x === status, enabled: true, form: x === "do_not_service", hint: t(`client.stHint.${x}` as DictKey) }))}
+        options={statusOptions.map((x) => ({ key: x, tone: clientStatusChip[x].s, label: t(clientStatusChip[x].l), current: x === status, enabled: x !== "archived" || canArchive(db, c.id), reason: x === "archived" ? archiveWhy : undefined, form: x === "do_not_service", hint: t(`client.stHint.${x}` as DictKey) }))}
         onPick={(k) => chooseStatus(k as CustomerStatus)}
       />
       <PeopleSheet visible={sheet === "people"} customer={c} onClose={() => setSheet(null)} />
