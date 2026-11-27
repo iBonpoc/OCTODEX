@@ -7,6 +7,7 @@ import { visitContext, visitPropertyId } from "@/data/selectors";
 import { VISIT_STEPS, type DB, type ID, type Lead, type Member, type Role, type Visit, type VisitStep } from "@/data/types";
 import { dayKeyIn, dayNumber, getZone, keyOfNumber, minuteIn, wallToInstant, weekdayOf, type DayKey } from "./zone";
 import { BUSINESS_HOURS_DEFAULT, dayIn, hoursOn, SCHEDULE_SETTINGS_DEFAULT, type BusinessHours } from "./scheduleSettings";
+import { sentOnceAt } from "@/features/estimateStatus";
 
 type Db = Pick<DB, "visits" | "jobs" | "leads">;
 
@@ -438,7 +439,8 @@ export function inspectionsNoEstimate(
   for (const [pid, vs] of byProp) {
     if (vs.some((v) => !inspectionPassed(v, now))) continue;
     const last = vs.sort((a, b) => b.start.localeCompare(a.start))[0]!;
-    if (db.estimates.some((e) => e.propertyId === pid && (e.status === "draft" || (!!e.sentAt && e.sentAt >= last.start)))) continue;
+    // #3059: a sent one edited since (a draft again) is covered by the draft; the moment it went out — sentOnceAt
+    if (db.estimates.some((e) => { const at = sentOnceAt(e); return e.propertyId === pid && (e.status === "draft" || (!!at && at >= last.start)); })) continue;
     const customerId = db.properties.find((p) => p.id === pid)?.customerId;
     if (customerId && due(last)) out.push({ v: last, customerId });
   }
