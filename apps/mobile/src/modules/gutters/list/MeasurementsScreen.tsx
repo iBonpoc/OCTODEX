@@ -27,6 +27,7 @@ import { Empty, RowView, Screen } from "@/ui/surfaces";
 import { Menu } from "@/ui/overlays";
 import { asMeasurementFilter, filterMeasurements, MEASUREMENT_FILTERS, measurementList, type MeasurementFilter, type MeasurementItem } from "../measurements";
 import { MeasurementView } from "../view/ViewScreen";
+import { initialsOf } from "@/features/invoice/moneySummary";
 
 const CHIP: Record<MeasurementFilter, DictKey> = {
   all: "mod.gutters.list.f.all",
@@ -60,7 +61,8 @@ export default function MeasurementsScreen() {
     (id) => items.some((x) => x.id === id),
   );
   const openItem = panel.openId ? items.find((x) => x.id === panel.openId) : undefined;
-  const titleOf = (m: MeasurementItem) => (m.forKind === "lead" ? t("mod.gutters.list.lead", { name: m.forName ?? "" }) : (m.forName ?? t("mod.gutters.list.noClient")));
+  // #3028 (founder 26.11, the lists' rule #3017): who it is for by name (no «Лид:»), a draft for nobody — «Черновик» (its state says why)
+  const titleOf = (m: MeasurementItem) => m.forName ?? t("mod.gutters.list.draft");
 
   /** П25.4: the state's chip; an estimate's — the core's own words and tone of its status */
   const statusOf = (m: MeasurementItem): CardStatus => {
@@ -95,12 +97,17 @@ export default function MeasurementsScreen() {
         key={m.id}
         testID={`measurement-${m.id}`}
         title={titleOf(m)}
-        // #3018 (founder #3017): 2 — the address; 3 — what is drawn (the module's own words)
-        subtitle={m.address ?? undefined}
-        extra={t("mod.gutters.list.what", { runs: m.runs, ft: Math.round(m.lengthIn / 12), ds: m.downspouts })}
-        lead={{ icon: "pencil" }}
-        value={sum ? money(sum.cents) : m.updatedAt ? day(m.updatedAt) : undefined}
+        // #3028 (#3017, design + crm 27.11): 1 — the name · the phone; 2 — the address (a draft: «Без адреса»); 3 — what is measured, in the
+        // feet and the downspouts a contractor knows it by; left — the initials of whom it is for, a draft — the measurement's own icon
+        titleNote={m.phone ?? undefined}
+        subtitle={m.address ?? (m.forKind === "none" ? t("mod.gutters.list.noAddress") : undefined)}
+        extra={t("mod.gutters.list.what2", { ft: Math.round(m.lengthIn / 12), ds: m.downspouts })}
+        lead={m.forName ? { initials: initialsOf(m.forName) } : { icon: "measure" }}
+        // the estimate's sum on the right, big (as «Сметы»); a linked one without it — line 3 holds its state and what is measured, no
+        // date to push them onto a fourth line; a draft keeps its day on the right (it is found by when it was drawn)
+        value={sum ? money(sum.cents) : !m.phone && m.updatedAt ? day(m.updatedAt) : undefined}
         valueMark={!sum}
+        figureRight={!!sum}
         status={sign ? { status: sign.tone, label: sign.label } : { status: st.tone, label: st.label, draft: st.draft }}
         selected={m.id === panel.openId}
         onPress={() => panel.open(m.id)}
@@ -174,7 +181,7 @@ export default function MeasurementsScreen() {
       {items.length === 0 ? (
         // DS §13 «Пусто — данных нет вообще»: the object's icon, the words, why, and the one button to start
         <Empty
-          icon="note"
+          icon="measure"
           testID="measurements-empty"
           title={t("mod.gutters.list.empty")}
           hint={t("mod.gutters.list.emptyHint")}
@@ -195,8 +202,10 @@ export default function MeasurementsScreen() {
           {shown.length === 0 ? (
             <Empty icon="note" title={t("mod.gutters.list.emptyFilter")} action={f !== "all" ? <View testID="measurements-show-all"><Button label={t("mod.gutters.list.showAll")} variant="secondary" onPress={() => pick("all")} /></View> : undefined} />
           ) : (
+            // spec 67 §8.9 п.1 (founder 25.11: «два списка»): «Черновики» — nobody yet, «Замеры» — for a lead or a client; each row its own frame
             <GroupedList testID="measurements-list">
-              <ListGroup separate>{shown.map(row)}</ListGroup>
+              <ListGroup separate title={t("mod.gutters.list.gDrafts")} count={shown.filter((m) => m.forKind === "none").length} testID="measurements-drafts">{shown.filter((m) => m.forKind === "none").map(row)}</ListGroup>
+              <ListGroup separate title={t("mod.gutters.list.gLinked")} count={shown.filter((m) => m.forKind !== "none").length} testID="measurements-linked">{shown.filter((m) => m.forKind !== "none").map(row)}</ListGroup>
             </GroupedList>
           )}
         </>

@@ -5,7 +5,7 @@
  * - the card says whose it is now («Замер в карточке лида …»), that the lead already has «смета EST-… · <state> — без этого чертежа», the state
  *   chip is «Без сметы из замера» (not a bare «Без сметы»), «Открыть EST-…» opens that estimate, «Открыть лид» opens the lead — where the
  *   measurement stands on top of «Обзор», above the events;
- * - «Документы» (#2989): only «Чертёж» and «Заказ материалов» on the card; «⋯ → Документы бригады» has the cut and the shop drawings.
+ * - #3028: the card is the object frame — the name, «Замер · лид», «Сейчас» with the step, the sections; «Документы» (#2989) on «Сметы»: only «Чертёж» and «Заказ материалов» on the card; «⋯ → Документы бригады» has the cut and the shop drawings.
  * Finds things by testID; waits on what it checks.
  */
 const { skipLength, openView, pressWhenStill, docsFor } = require("../gutters.cjs");
@@ -44,7 +44,8 @@ exports.run = async (h) => {
   await skipLength(p);
   await openView(p);
 
-  // «Документы» (#2989): «Чертёж» and «Заказ материалов» only
+  // #3028: the card's sections «Обзор · Фото · Сметы · История»; «Документы» (#2989) are on «Сметы»: «Чертёж» and «Заказ материалов» only
+  await p.getByRole("tab", { name: /^Сметы/ }).first().click();
   await tid("view-docs").waitFor({ timeout: 8000 });
   const cardDocs = await p.getByTestId("view-docs").locator("visible=true").first().locator('[data-testid^="view-doc-"]').evaluateAll((es) => es.map((e) => e.dataset.testid));
   h.expect(JSON.stringify(cardDocs) === JSON.stringify(["view-doc-client", "view-doc-shop-order"]), `the card: «Чертёж» and «Заказ материалов» only (${cardDocs})`);
@@ -55,8 +56,8 @@ exports.run = async (h) => {
   await docsFor(p, "view-docs");
   await sheetGone(p);
 
-  // no one yet: no «what next» line
-  h.expect((await tid("view-next").count()) === 0, "a draft: no «what next» line");
+  // no one yet: «Сейчас» says so, its one step is «Привязать…»
+  h.expect(/без клиента/.test(await text("view-now")), `a draft: «Сейчас» says it has no client (${await text("view-now")})`);
   await pressWhenStill(tid("view-action-link"));
   await tid("link-sheet").waitFor({ timeout: 5000 });
   await tid("link-search").locator("input").fill(lead.name.split(" ")[0]);
@@ -65,17 +66,17 @@ exports.run = async (h) => {
   await waitFor(async () => (await tid("link-sheet").count()) === 0, "the sheet closes");
   await sheetGone(p);
 
-  // what the card says now
-  await tid("view-next").waitFor({ timeout: 5000 });
-  h.expect((await text("view-next")).includes(`Замер в карточке лида ${lead.name}`), `whose it is now (${await text("view-next")})`);
-  h.expect((await text("view-next-other")).includes(est.number) && /без этого чертежа/.test(await text("view-next-other")), `the lead's estimate without this drawing (${await text("view-next-other")})`);
+  // what the card says now: the lead's name on top, «Замер · лид»; «Сейчас» — the estimate the lead has without this drawing
+  await waitFor(async () => (await text("screen-title")).includes(lead.name), "the lead's name on top");
+  h.expect(/Замер · лид/.test(await text("screen-head-big")), `«Замер · лид» (${await text("screen-head-big")})`);
+  h.expect((await text("view-now")).includes(est.number) && /без этого чертежа/.test(await text("view-now")), `«Сейчас»: the lead's estimate without this drawing (${await text("view-now")})`);
   h.expect(/Без сметы из замера/.test(await text("view-head-status")), `the state is not a bare «Без сметы» (${await text("view-head-status")})`);
   h.expect((await tid("view-action-make").count()) === 1, "«Сделать смету» from the measurement is still the main step");
   await h.shot("after-link");
 
   // «Открыть лид» → the lead; back; «Открыть EST-…» → that estimate
-  // #2995: the parent link of the object frame's header
-  await pressWhenStill(tid("view-head-link"));
+  // #3028: «Лид» is a place in the row of actions (no loose «Открыть лид ›» line)
+  await pressWhenStill(tid("view-open-who"));
   await waitFor(() => new URL(p.url()).pathname === `/lead/${lead.id}`, `«Открыть лид» opens the lead (${p.url()})`);
   // the lead's card: the measurement's buttons on top of «Обзор», above the events (not at the very bottom)
   await tid("module-place-lead").waitFor({ timeout: 8000 });
@@ -83,9 +84,8 @@ exports.run = async (h) => {
   h.expect(!!mp && !!ev && mp.y < ev.y, `the measurement is above the lead's events (${mp && Math.round(mp.y)} < ${ev && Math.round(ev.y)})`);
   await h.shot("lead");
   await p.goBack();
-  // the second step is in «⋯» (one step on an object, #2995)
-  await tid("view-head").waitFor({ timeout: 8000 });
-  await pressWhenStill(tid("view-more").getByRole("button"));
-  await p.getByRole("menuitem", { name: `Открыть ${est.number}`, exact: true }).click();
+  // the second step stands beside the main one in «Сейчас» (#3028)
+  await tid("view-open-other").waitFor({ timeout: 8000 });
+  await pressWhenStill(tid("view-open-other"));
   await waitFor(() => new RegExp(`/estimate/${est.id}$`).test(new URL(p.url()).pathname), `«Открыть ${est.number}» opens it (${p.url()})`);
 };

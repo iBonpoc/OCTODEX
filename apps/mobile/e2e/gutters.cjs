@@ -352,6 +352,25 @@ async function winClose(p) {
 // «Документы бригады» (#2989): the cut and the shop drawings left the card's «Документы» — they are in «⋯ → Документы бригады». `docsFor` makes
 // the button `id` reachable: the crew's ones — that sheet open; the card's own («Чертёж», «Заказ материалов») — that sheet closed
 const shownNow = (p, id) => p.evaluate((x) => [...document.querySelectorAll(`[data-testid="${x}"]`)].some((e) => e.getClientRects().length > 0), id);
+// #3028: the measurement's own screen has sections — «Документы» stand on «Сметы», the photos on «Фото», the drawing and the parts on «Обзор».
+// A section is opened when what is asked for is not on the screen (the 1280 panel has no sections: nothing to press there)
+async function showSection(p, id) {
+  // the screen may still be coming in: wait until the thing asked for or the measurement's frame is there
+  await p.waitForFunction((x) => [...document.querySelectorAll(`[data-testid="${x}"], [data-testid="view-head"], [data-testid="list-panel"]`)].some((e) => e.getClientRects().length > 0), id, { timeout: 8000 }).catch(() => {});
+  if (await shownNow(p, id)) return;
+  const name = /^view-(docs|doc-|pdf-|estimates)/.test(id) ? /^Сметы/ : /^view-photo/.test(id) ? /^Фото/ : /^view-hist/.test(id) ? /^История/ : /^Обзор/;
+  const tab = p.getByRole("tab", { name }).locator("visible=true").first();
+  // the bottom bar's tabs are tabs too: wait for the section's own one a moment (none on the 1280 panel — then nothing to press)
+  await tab.waitFor({ timeout: 4000 }).catch(() => {});
+  if (!(await tab.count())) return;
+  // a screen sliding in drops a press on a moving tab: pressed when it stands, once more if the section did not come
+  for (let i = 0; i < 3; i++) {
+    await stands(tab);
+    await tab.click();
+    const ok = await p.waitForFunction((x) => [...document.querySelectorAll(`[data-testid="${x}"]`)].some((e) => e.getClientRects().length > 0), id, { timeout: 2500 }).then(() => true, () => false);
+    if (ok) return;
+  }
+}
 async function docsFor(p, id) {
   const crew = /^view-(pdf|doc)-(crew|shop)$/.test(id);
   const open = await shownNow(p, "view-crew-docs");
@@ -363,6 +382,7 @@ async function docsFor(p, id) {
     await pressEscUntilClosed(p);
     await p.waitForFunction(() => ![...document.querySelectorAll('[data-testid="view-crew-docs"]')].some((e) => e.getClientRects().length > 0), null, { timeout: 5000 });
   }
+  if (!crew) await showSection(p, id);
 }
 
-module.exports = { editDrawing, canEditDrawing, docsFor, winSave, winClose, pressUndo, pickDsKind, pickAttr, attrShown, attrKeys, attrChosen, attrClose, attrShut, openAttrMore, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
+module.exports = { showSection, editDrawing, canEditDrawing, docsFor, winSave, winClose, pressUndo, pickDsKind, pickAttr, attrShown, attrKeys, attrChosen, attrClose, attrShut, openAttrMore, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
