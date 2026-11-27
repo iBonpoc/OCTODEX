@@ -3,6 +3,9 @@ import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { useDevice } from "@/theme/ThemeProvider";
 import { StatGrid, StatTile } from "@/ui/statTile";
+import { SummaryLine, type SummaryItem } from "@/ui/summaryLine";
+import { canSeeEstimate } from "@/features/access";
+import { moneyOverview } from "@/features/payments/overview";
 import type { IconKey } from "@/ui/primitives";
 import type { CreateAction } from "@/ui/templates";
 import { canSeeInvoiceList, canSeePayments } from "@/features/moneyLists";
@@ -91,4 +94,32 @@ export function MoneyTiles({ selected, onSelect }: { selected?: MoneyTile; onSel
       ))}
     </StatGrid>
   );
+}
+
+/**
+ * #2993, #2992 (founder 27.11: «четыре слишком много… три в одну строку или убрать»; design- and crm-reviewer: the tiles of a list
+ * repeated the invoices' figures on «Сметы» and «Оплаты»): over a part of «Деньги» — ONE line of its own sums (SummaryLine, DS
+ * «Строка фактов», §5.1 «итог денежного списка»), the tiles stay on the overview «Деньги» only. «Сметы»: open and how many wait;
+ * «Счета»: waiting · overdue (each a button — it narrows the list, pressed again — all); «Оплаты»: received this month.
+ * The testIDs of the tiles stay (`money-tiles`, `money-tile-<k>`): the figures are the same engine sums (moneySummary).
+ */
+export function MoneyTotal({ tab, selected, onSelect }: { tab: MoneyTab; selected?: MoneyTile; onSelect?: (k: MoneyTile | undefined) => void }) {
+  const { db, role, mode } = useStore();
+  const { t, tn, money } = useI18n();
+  if (!canSeeInvoiceList(role)) return null;
+  const items: SummaryItem[] = [];
+  if (tab === "estimates") {
+    const o = moneyOverview(db, db.estimates.filter((e) => canSeeEstimate(db, { role, mode, me: db.me }, e.id)));
+    if (o.estimates.n) items.push({ label: t("px3.money.est"), value: money(o.estimates.cents), testID: "money-tile-estimates" });
+    if (o.estimates.waiting) items.push({ label: "", value: tn("px3.money.waitN", o.estimates.waiting), status: "warn", testID: "money-tile-waitReply" });
+  } else {
+    const s = moneySummary(db);
+    if (tab === "invoices") {
+      const tap = (k: MoneyTile) => (onSelect ? () => onSelect(selected === k ? undefined : k) : undefined);
+      if (s.waiting.n) items.push({ label: t("proto.money.tile.waiting"), value: money(s.waiting.cents), onPress: tap("waiting"), testID: "money-tile-waiting" });
+      if (s.overdue.n) items.push({ label: t("proto.money.tile.overdue"), value: money(s.overdue.cents), status: "bad", onPress: tap("overdue"), testID: "money-tile-overdue" });
+    } else if (s.received.n) items.push({ label: t("proto.money.tile.received"), value: `${money(s.received.cents)} · ${tn("px1.payN", s.received.n)}`, testID: "money-tile-received" });
+  }
+  if (!items.length) return null;
+  return <SummaryLine testID="money-tiles" items={items} />;
 }
