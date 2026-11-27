@@ -19,14 +19,16 @@ import type { PickerItem } from "@/ui/pickerSheet";
 import { SelectField } from "@/ui/selectField";
 import { ColorField } from "@/ui/colorField";
 import { ToggleRow } from "@/ui/toggleRow";
+import { OptionTiles } from "@/ui/optionTile";
 import { Icon, Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Menu, useSheetClose } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
-import { COLORS, ELBOW_STYLES, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, boughtElbowCounts, dsStoryPatch, dsStoryShown, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import { COLORS, ELBOW_STYLES, PROFILE_ICON, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, boughtElbowCounts, dsStoryPatch, dsStoryShown, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
 import { colorChoices } from "./colorChoices";
 import { dsMoreSet, dsRareShown } from "./attrShown";
+import { dsOwnFt } from "./dsOwnFt";
 import { FracPicker } from "./FracPicker";
 import { FRAC_SLOT } from "./fracSlot";
 import { feetResetsRest, inchesComplete, inchesTooBig, mmDraft, nextStage, tapeDraft, unitPickStep, type EntryStage } from "./lengthEntry";
@@ -386,6 +388,19 @@ function FieldRow({ children }: { children: React.ReactNode }) {
 }
 
 /**
+ * A value picked by sight (founder 27.11, #2980 / #2986: «должен быть не селектор, это должны быть иконки»): the label over a
+ * row of tiles, an icon over the name each (DS §9 А2б, the places of the list). The tiles are `<testID>-<key>`.
+ */
+function Tiles<K extends string>({ label, testID, items, value, onChange }: { label: string; testID: string; items: { key: K; label: string; icon: React.ComponentProps<typeof OptionTiles>["items"][number]["icon"] }[]; value: K; onChange: (v: K) => void }) {
+  return (
+    <View style={{ gap: space[1] }}>
+      <T v="caption" tone="mut" numberOfLines={1}>{label}</T>
+      <OptionTiles label={label} testID={testID} items={items} value={value} onChange={onChange} />
+    </View>
+  );
+}
+
+/**
  * The colour (founder 09.11): one choice — «Без покраски» is one of them (no separate painted / bare buttons: a colour
  * picked is painted). A downspout also has «Как у gutter» — its gutter's colour, the default, and it follows the gutter.
  * Copper and zinc are bare only. «Как у gutter» and «Без покраски» — their own group first (DS §9б.6).
@@ -411,10 +426,10 @@ function Stock<A extends { material: string; gauge?: string }>({ a, set, ch }: {
   const materials = withCurrent(ch.offer.materials, a.material);
   const gauges = withCurrent(ch.offer.gauges[a.material] ?? [], a.gauge);
   return (
-    <>
+    <FieldRow>
       <Choice label={t(k("material"))} testID="attr-material" offered={ch.offer.materials} items={materials.map((m) => ({ key: m, label: t(k(`m.${m}`)) }))} value={a.material} onChange={(material) => set({ material } as Partial<A>)} />
       {gauges.length ? <Choice label={t(k("gauge"))} testID="attr-gauge" offered={ch.offer.gauges[a.material]} items={gauges.map((g) => ({ key: g, label: g }))} value={a.gauge ?? gauges[0]!} onChange={(gauge) => set({ gauge } as Partial<A>)} /> : null}
-    </>
+    </FieldRow>
   );
 }
 
@@ -484,7 +499,8 @@ export function RunAttrsView({
       {/* the colour on a line of its own: in a row of three its name was cut to «Бе…» (design-review G1 PR2 №1, rule 2 — a sample always
           beside its whole name) */}
       {MILL_ONLY.has(a.material) ? null : <ColorPick a={a} set={onAttrs} ch={ch} />}
-      <Choice label={t(k("profile"))} testID="attr-profile" offered={ch.offer.profiles} items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)) }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
+      {/* the profile by its cross-section (#2986): tiles, the names of the supplier's chart */}
+      <Tiles label={t(k("profile"))} testID="attr-profile" items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)), icon: PROFILE_ICON[p] }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
       <More open0={false} id={run.id} label={t(k("moreRun"))}>
         {/* G2 (#2412): the hangers of the chart by name (NAMES-41) need the model's new kits — the list shows the kits there are */}
         <Choice list label={t(k("hanger"))} testID="attr-hanger" offered={hangerKitsFor(a.profile, ch)} items={kits.map((id) => ({ key: id, label: t(k(`k.${id}`)), leading: { icon: "channel" as const } }))} value={a.hanger} onChange={(hanger) => onAttrs({ hanger })} />
@@ -571,10 +587,10 @@ function DsKindPick({ ds, onAttrs, ch }: { ds: DrawnDownspout; onAttrs: (p: Part
   const cur = dsKindOf(ds.shape, ds.dsStyle);
   const shown = DS_KINDS.filter((x) => x.key === cur.key || ch.offer.dsStyles.includes(x.style));
   return (
-    <Choice
+    <Tiles
       label={t(k("dsKind"))}
       testID="attr-ds-kind"
-      items={shown.map((x) => ({ key: x.key, label: t(k(`kind.${x.key}`)).replace("\n", " ") }))}
+      items={shown.map((x) => ({ key: x.key, label: t(k(`kind.${x.key}`)), icon: x.icon }))}
       value={cur.key}
       onChange={(key) => { const x = DS_KINDS.find((d) => d.key === key)!; onAttrs({ shape: x.shape, dsStyle: x.style }); }}
     />
@@ -611,35 +627,44 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, run, forNew, no,
       <Elbows ds={ds} onAttrs={onAttrs} />
       <Offsets ds={ds} onAttrs={onAttrs} />
       <Choice label={t(k("bottom"))} testID="attr-bottom" offered={ch.offer.bottoms} items={bottoms.map((b) => ({ key: b, label: t(k(`b.${b}`)), top: b === "none" }))} value={ds.bottom.kind} onChange={(kind) => onAttrs({ bottom: { ...ds.bottom, kind } })} />
-      <Choice list label={t(k("head"))} testID="attr-head" items={DS_HEADS.map((h) => ({ key: h, label: t(k(`h.${h}`)), top: h === "none", ...(h === "none" ? {} : { leading: { icon: "downspout" as const } }) }))} value={head} onChange={(h) => onAttrs({ head: h === "none" ? undefined : h, funnel: undefined })} />
+      <Choice label={t(k("head"))} testID="attr-head" items={DS_HEADS.map((h) => ({ key: h, label: t(k(`h.${h}`)), top: h === "none" }))} value={head} onChange={(h) => onAttrs({ head: h === "none" ? undefined : h, funnel: undefined })} />
       <More open0={dsMoreSet(ds, run)} id={ds.id} label={t(k("moreDs"))}>
         {MILL_ONLY.has(ds.material) ? null : <ColorPick a={ds} set={onAttrs} ch={ch} run={run} />}
         <Stock a={ds} set={onAttrs} ch={ch} />
+        <DsLength key={ds.id} ds={ds} onAttrs={onAttrs} />
+        <DsRare key={`rare-${ds.id}`} ds={ds} onAttrs={onAttrs} />
+        {/* the wall and its bracket last (founder 27.11, #2985: «крепление к стене ниже опустить») */}
         <Choice label={t(k("wall"))} testID="attr-wall" items={WALLS.map((x) => ({ key: x, label: t(k(`w.${x}`)) }))} value={w.wall} onChange={(wall) => onAttrs({ wall })} />
         <Choice list label={t(k("wallKit"))} testID="attr-wall-kit" offered={wallKitsFor(ds.shape, w.wall, ch)} items={wallKits.map((id) => ({ key: id, label: t(k(`wk.${id}`)), leading: { icon: "downspout" as const } }))} value={w.kit} onChange={(kit) => onAttrs({ wall: kit })} />
-        <DsLength ds={ds} onAttrs={onAttrs} />
-        <DsRare key={ds.id} ds={ds} onAttrs={onAttrs} />
       </More>
     </>
   );
 }
 
-/** the downspout's length (#1276, founder 12.11: «размер, цвет и длина — выпадающими»): by the storey, or a number of feet — it was a stepper behind «Ещё» */
-const DS_LENGTHS_FT = [6, 8, 9, 10, 12, 14, 16, 18, 20, 24, 28, 30, 35, 40, 50, 60] as const;
+/**
+ * The downspout's own height (#1276; founder 27.11, #2985: «что такое длина, я не понимаю. И зачем для этого селектор»): a number
+ * of feet, empty — by the storey (the line above says which). It was a menu of 16 lengths named «Длина». Read at once: a good
+ * number (1–100 ft) goes in, anything else says so and goes in nowhere; emptied — back to the storey.
+ */
 function DsLength({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void }) {
   const { t } = useI18n();
-  const cur = Math.round((ds.heightIn ?? 0) / 12);
-  const fts: number[] = [...DS_LENGTHS_FT];
-  if (cur && !fts.includes(cur)) fts.push(cur); // a length set before (or by the stepper of old) stays pickable
-  fts.sort((x, y) => x - y);
+  const [text, setText] = useState(ds.heightIn ? String(Math.round((ds.heightIn / 12) * 2) / 2) : "");
+  const [bad, setBad] = useState(false);
   return (
-    <Choice
-      label={t(k("dsLength"))}
-      testID="attr-ds-length"
-      items={[{ key: "0", label: t(k("heightAuto")), top: true }, ...fts.map((n) => ({ key: String(n), label: `${n}′` }))]}
-      value={String(cur)}
-      onChange={(v) => onAttrs({ heightIn: Number(v) ? Number(v) * 12 : undefined })}
-    />
+    <View style={{ gap: space[1] }}>
+      <View testID="attr-ds-length">
+        <TextField
+          type="number" value={text} suffix="ft" placeholder={t(k("heightAuto"))} label={t(k("dsLength"))}
+          onChangeText={(v) => {
+            setText(v);
+            const n = dsOwnFt(v);
+            setBad(n === "bad");
+            if (n !== "bad") onAttrs({ heightIn: n === null ? undefined : n * 12 });
+          }}
+        />
+      </View>
+      {bad ? <View testID="attr-ds-length-bad"><StatusChip status="warn" label={t(k("badDsOwn"))} soft /></View> : null}
+    </View>
   );
 }
 

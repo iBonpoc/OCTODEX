@@ -206,13 +206,27 @@ async function openAttrMore(p) {
   }
 }
 
-/** what a field shows (its button's text) */
+/**
+ * A field of tiles (the downspout's kind, the gutter's profile — founder 27.11, #2980 / #2986): no button, the tiles are `<id>-<key>`
+ * radios. The helpers below read and pick them the same way as a menu field.
+ */
+async function isTiles(p, id) {
+  return (await p.getByTestId(`${id}-button`).locator("visible=true").count()) === 0 && (await p.getByTestId(id).locator("visible=true").count()) > 0;
+}
+const tileSel = (id) => `[data-testid^="${id}-"][role="radio"]`;
+async function tileIds(p, id) {
+  return p.getByTestId(id).locator("visible=true").first().locator(tileSel(id)).evaluateAll((es) => es.map((e) => [e.getAttribute("data-testid"), e.getAttribute("aria-checked") === "true", e.getAttribute("aria-label") || e.innerText]));
+}
+
+/** what a field shows (its button's text; a tile field — the chosen tile's name) */
 async function attrShown(p, id) {
+  if (await isTiles(p, id)) return ((await tileIds(p, id)).find((x) => x[1])?.[2] ?? "").replace(/\s+/g, " ").trim();
   return (await p.getByTestId(`${id}-button`).locator("visible=true").first().innerText()).trim();
 }
 
 /** the keys a field offers: opens its menu or list, reads the items, closes it (attrClose) */
 async function attrKeys(p, id) {
+  if (await isTiles(p, id)) return (await tileIds(p, id)).map((x) => x[0].slice(id.length + 1));
   const button = p.getByTestId(`${id}-button`).locator("visible=true").first();
   await button.scrollIntoViewIfNeeded();
   await button.click();
@@ -225,6 +239,10 @@ async function attrKeys(p, id) {
 
 /** the key a field's MENU marks as chosen (read as selected): opens it, reads, closes it (attrClose) */
 async function attrChosen(p, id) {
+  if (await isTiles(p, id)) {
+    const on = (await tileIds(p, id)).filter((x) => x[1]);
+    return on.length === 1 ? on[0][0].slice(id.length + 1) : null;
+  }
   const button = p.getByTestId(`${id}-button`).locator("visible=true").first();
   await button.scrollIntoViewIfNeeded();
   await button.click();
@@ -238,6 +256,7 @@ async function attrChosen(p, id) {
 
 /** the open menu or list of a field closed by Esc (again while it stays: an Esc in its first frames is lost), then gone */
 async function attrClose(p, id) {
+  if (await isTiles(p, id)) return; // tiles open nothing
   const picker = p.getByTestId(`${id}-picker`).locator("visible=true");
   // a list (the colour field's, G1 PR2) is a sheet of its own over the window's: never Esc (on 390 it may reach the window under it,
   // and its backdrop is still moving); a menu — Esc
@@ -261,6 +280,14 @@ async function attrShut(p, id) {
 
 /** pick `key` in a field: opens its menu or list, taps the item, waits until it is gone; returns the item's name */
 async function pickAttr(p, id, key) {
+  if (await isTiles(p, id)) {
+    const tile = p.getByTestId(id).locator("visible=true").first().locator(`[data-testid="${id}-${key}"]`);
+    await tile.scrollIntoViewIfNeeded();
+    const name = ((await tile.getAttribute("aria-label")) || (await tile.innerText())).replace(/\s+/g, " ").trim();
+    await tile.click();
+    await p.waitForFunction(([x, k]) => [...document.querySelectorAll(`[data-testid="${x}-${k}"]`)].some((e) => e.getClientRects().length > 0 && e.getAttribute("aria-checked") === "true"), [id, key], { timeout: 5000 });
+    return name;
+  }
   const button = p.getByTestId(`${id}-button`).locator("visible=true").first();
   await button.scrollIntoViewIfNeeded();
   await button.click();
@@ -276,11 +303,7 @@ async function pickAttr(p, id, key) {
 /** the open downspout's kind (its menu is open): a field on top (#2412 G1); `key` — rectPlain, rectRibbed, roundPlain, roundRibbed */
 async function pickDsKind(p, key) {
   await p.getByTestId("attr-panel").locator("visible=true").first().waitFor({ timeout: 5000 });
-  const name = await pickAttr(p, "attr-ds-kind", key);
-  await p.waitForFunction((n) => {
-    const b = [...document.querySelectorAll('[data-testid="attr-ds-kind-button"]')].find((e) => e.getClientRects().length > 0);
-    return !!b && b.innerText.trim() === n;
-  }, name, { timeout: 5000 });
+  await pickAttr(p, "attr-ds-kind", key); // tiles (#2980): pickAttr waits until the tile is checked
 }
 
 // «Отменить» of a toast (v2, #2086): the word ignores a tap until it is armed (`aria-busy` false, motion.toastArmMs after the toast

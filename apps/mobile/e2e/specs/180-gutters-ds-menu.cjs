@@ -74,12 +74,16 @@ exports.run = async (h) => {
   h.expect(/^Как у gutter/.test(await attrShown(p, "attr-color")), "the colour: «Как у gutter»");
   h.expect((await tid("attr-finish").count()) === 0, "no painted / bare pair");
 
-  // the length is a field (#1276): «по этажу» by default, a number of feet on a pick, back to «по этажу»
-  h.expect(/^По этажу/.test(await attrShown(p, "attr-ds-length")), "the length: a field, «По этажу» by default");
-  await pickIn("attr-ds-length", "20");
-  await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.heightIn === 240, "20′ picked: the downspout's own height is 240″");
-  await pickIn("attr-ds-length", "0");
-  await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.heightIn === undefined, "«По этажу»: no own height");
+  // its own height (#1276; founder 27.11, #2985: «зачем для этого селектор»): a number of feet, empty — by the storey
+  const own = tid("attr-ds-length").locator("input");
+  h.expect((await tid("attr-ds-length-button").count()) === 0 && (await own.inputValue()) === "", "the own height: a number field, empty (by the storey)");
+  await own.fill("20");
+  await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.heightIn === 240, "20 ft typed: the downspout's own height is 240″");
+  await own.fill("500");
+  await tid("attr-ds-length-bad").waitFor({ timeout: 3000 });
+  h.expect((await els()).find((e) => e.kind === "downspout")?.attrs.heightIn === 240, "500 ft: said, not written");
+  await own.fill("");
+  await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.heightIn === undefined, "emptied: by the storey, no own height");
 
   // offsets: 1, then 4″ (the menu has the stocked 1, 2, 4″ — «Расход v2» Н4 — and «Свой»), then its own 2½″
   await tid("attr-offset-qty").getByRole("button", { name: /\+1$/ }).click();
