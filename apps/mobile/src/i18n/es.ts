@@ -5727,4 +5727,7 @@ export const es: Dict = {
   "k1.missingText": "Se eliminó en otro dispositivo. Los cambios siguen en el teléfono.",
   "k1.copyNew": "Crear un presupuesto nuevo con los cambios",
   "k1.wait": "Los datos aún se cargan: los cambios siguen en el teléfono",
+  "oc.est.sentToday": "Enviado hoy · sin firmar",
+  "oc.est.sentAgo": "Enviado hace {n} d · sin firmar",
+  "oc.est.noAnswer": "Sin respuesta · {n} d · sin firmar",
 };

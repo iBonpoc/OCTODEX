@@ -5727,4 +5727,7 @@ export const en: Dict = {
   "k1.missingText": "It was deleted on another device. The changes stay on the phone.",
   "k1.copyNew": "Make a new estimate with the changes",
   "k1.wait": "The data is still loading — the changes stay on the phone",
+  "oc.est.sentToday": "Sent today · not signed",
+  "oc.est.sentAgo": "Sent {n} d ago · not signed",
+  "oc.est.noAnswer": "No answer · {n} d · not signed",
 };
